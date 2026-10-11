@@ -155,7 +155,9 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             o.brake = (float) c->brake;
             o.boostMul = (float) c->boostMul;
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;
-            o.spin = (float) c->spin;
+            // A drift's slip is the same cosmetic body yaw as the whirl: the
+            // car travels along its heading, the body is drawn turned in.
+            o.spin = (float) (c->spin + c->slip);
             o.scrub = c->onWall ? 1.0f : 0.0f;
             // The sim's own body, so the kick rectangle grows with the monster
             // transform exactly as the collision footprint does.

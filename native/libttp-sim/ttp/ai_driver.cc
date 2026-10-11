@@ -92,6 +92,14 @@ const Persona AI_PERSONALITIES[7] = {
 // the full bot: no cup races it, because the item and dodge fixes made the full
 // bot quicker than the field the cups were balanced against.
 static const double AI_TIER_SKILL[4] = {0.0, 0.3, 0.4, 0.6};
+// A cup bot's chance to drift a corner is its skill × AI_DRIFT_PER_SKILL, so
+// the Beach bot (skill 0) never drifts and Playroom's most often; the full bot
+// (skill 1) never does either. Rolled once per corner it brakes for. A drifting bot drives the player's rule (Game::update): it brakes
+// as ever, which past half lock becomes the drift, and holds that brake until
+// its steer eases under DRIFT_EXIT_STEER on the way out of the corner.
+static const double AI_DRIFT_PER_SKILL = 1.4;
+static const double DRIFT_EXIT_STEER = 0.3;
+static const uint32_t DRIFT_RNG_SALT = 0x9e3779b9u;
 
 double aiSkillForTier(int tier) {
   if (tier < 1 || tier > 4) return 1.0;
@@ -351,7 +359,9 @@ AiController::AiController(double caution, double lookahead, double gain, double
       gain_(gain),
       laneBias_(laneBias),
       skill_(clampd(skill, 0, 1)),
-      rng_(seed ? seed : 1u) {}
+      rng_(seed ? seed : 1u),
+      driftChance_(skill_ > 0 && skill_ < 1 ? js_min(1.0, skill_ * AI_DRIFT_PER_SKILL) : 0),
+      driftRng_((seed ? seed : 1u) ^ DRIFT_RNG_SALT) {}
 
 Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   if (--weaveT_ <= 0) {
@@ -417,6 +427,14 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   out.hasS = true; out.s = s;
   out.hasB = true; out.b = corner;
   out.hasU = true; out.u = useSeq_;
+  if (driftChance_ > 0) {
+    // one roll per corner, as its braking begins
+    if (corner > 0 && !cornering_) driftCorner_ = driftRng_.next() < driftChance_;
+    const bool exiting = std::fabs(s) < DRIFT_EXIT_STEER;
+    cornering_ = corner > 0 || (car.drifting && !exiting);
+    out.hasD = true; out.d = driftCorner_ ? 1 : 0;
+    if (driftCorner_ && car.drifting) out.b = exiting ? 0 : 1;
+  }
   return out;
 }
 

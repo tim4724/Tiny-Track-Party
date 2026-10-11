@@ -80,7 +80,7 @@ typedef struct TtpCarInput {
      * point is written against that curve. */
     float steerYaw;
     float monster;  /* 1 = monster-truck transform active */
-    float spin;     /* spin-out whirl angle (rad) — cosmetic body yaw + skid scribbles */
+    float spin;     /* spin-out whirl + drift slip (rad) — cosmetic body yaw + skid scribbles */
     float scrub;    /* 1 = grinding the wall/curb (snapshot onWall) — full-strength skids */
     /* Collision half-extents in the car's own frame (world units): the
      * truck's while `monster`. The cone/sign kick tests the marker against

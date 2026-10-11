@@ -343,6 +343,14 @@ target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings
 ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
+# ---- Behaviour: the drift gesture --------------------------------------------
+# No golden trace drifts; this holds what the gesture means (the hold, the
+# locked side, the line, the release, bots).
+add_executable(drift_check simtest/drift_check.cc)
+target_link_libraries(drift_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(drift_check)
+add_test(NAME drift COMMAND drift_check)
+
 # ---- Behaviour: car-to-car contact ------------------------------------------
 # The traces PIN contact, they do not judge it — corner clipping and rear-end
 # chatter both lived under a green corpus. Judged against an oracle built from

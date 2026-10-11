@@ -218,5 +218,34 @@ export const DEV_TRACKS = {
       { u: 0.63, lat: -1.0 }, { u: 0.63, lat: 1.0 },                // a pillar gate
       { u: 0.66, lat: 0 }                                           // one dead centre
     ]
+  },
+  // THE DRIFT TEST — the catalogue's tightest corners, nothing else
+  // (?track=drift&bots=0, with phones or ?solo).
+  //
+  // Each corner is PORTED: an arc at the real corner's apex radius through its
+  // real turn, which reproduces the racing line the road allows through it
+  // (outside-inside-outside) — the radius that decides whether full lock holds
+  // the corner (~6.5 world at racing speed). Units here are authored, half of
+  // world. Angles give up to ~4° each so the lap closes; the two long straights
+  // were solved for that closure, every other one is a short setup. Flat and
+  // furniture-free, so a lost corner is the driving and nothing else.
+  drift: {
+    name: 'Drift',
+    segments: [
+      { kind: 'straight', length: 12.6202 },                        // grid straight
+      { kind: 'arc', radius: 1.6, angle: -113.5714 },               // Cloverleaf kink (117°)
+      { kind: 'straight', length: 13.1501 },
+      { kind: 'arc', radius: 1.35, angle: -122.5714 },              // Sidewinder kink (126°), the tightest
+      { kind: 'straight', length: 3 },
+      { kind: 'arc', radius: 1.7, angle: 104.4286 },                // Crag kink (101°)
+      { kind: 'straight', length: 3 },
+      { kind: 'arc', radius: 2.6, angle: -113.5714 },               // Wash (117°)
+      { kind: 'straight', length: 3 },
+      { kind: 'arc', radius: 2.05, angle: -107.5714 },              // Tangle kink (111°)
+      { kind: 'straight', length: 3 },
+      { kind: 'arc', radius: 1.85, angle: 115.4286 },               // Pretzel kink (112°)
+      { kind: 'straight', length: 3 },
+      { kind: 'arc', radius: 1.35, angle: -122.5714 }               // Sidewinder kink again
+    ]
   }
 };

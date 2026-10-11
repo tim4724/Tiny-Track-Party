@@ -42,6 +42,12 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     { key: 'item', label: 'Item roulette', hint: 'every box rolls this', type: 'select',
       options: itemIds.map((id) => ({ value: id, label: id })) },
     { key: 'bots', label: 'Bots', hint: 'cap the CPU fill · live launch', type: 'int', min: 0 },
+    // Live, from the next launch: race any track with a cup's bots (Beach 0,
+    // Snow 0.3, Backyard/Canyon 0.4, Playroom 0.6) — a dev track's are the full
+    // bot otherwise, which never drifts.
+    { key: 'botskill', label: 'Bot skill', hint: 'override the cup, next launch on · live',
+      ...knob((n) => sim.debugBotSkill(n), 0.05,
+        { min: -1, max: 1, format: (n) => (n < 0 ? 'cup decides' : n.toFixed(2)) }) },
     { section: 'Driving feel' },
     // Live: re-shapes the tilt→steer curve mid-race (no reload). 1 = linear scaling;
     // higher = gentler near centre, sharper toward full lock. The engine reads it
@@ -80,6 +86,21 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     { key: 'curbimpact', label: 'Curb impact', hint: 'speed lost per radian the wall turns (0 = only the cap bills) · live',
       ...knob((n) => sim.debugCurbImpact(n), 0.1,
         { min: 0, max: 4, format: (n) => n.toFixed(1) }) },
+    // Live: the drift's feel (the DRIFT_* constants in ttp/game.cc) — how tight
+    // its line is, how fast the line follows the lean, the speed it holds, and
+    // how long letting go takes to blend back into plain steering.
+    { key: 'drifttight', label: 'Drift tightness', hint: 'scales the drift line ends (1 = radius 6 leaning in, 18 easing off) · live',
+      ...knob((n) => sim.debugDriftTight(n), 0.05,
+        { min: 0.5, max: 2, format: (n) => n.toFixed(2) + '×' }) },
+    { key: 'driftsmooth', label: 'Drift smoothing', hint: 'how slowly the line follows the lean · live',
+      ...knob((n) => sim.debugDriftSmooth(n), 0.05,
+        { min: 0, max: 1, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
+    { key: 'driftspeed', label: 'Drift speed', hint: 'speed a drift holds, share of top speed · live',
+      ...knob((n) => sim.debugDriftFloor(n), 0.01,
+        { min: 0.4, max: 1, format: (n) => Math.round(n * 100) + '%' }) },
+    { key: 'driftrelease', label: 'Drift release', hint: 'blend back to steering after the brake · live',
+      ...knob((n) => sim.debugDriftRelease(n), 0.05,
+        { min: 0, max: 1.5, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
     { section: 'Track' },
     { key: 'track', label: 'Preselect', type: 'select',
       options: trackList.map((t) => ({ value: t.id, label: t.name })) },

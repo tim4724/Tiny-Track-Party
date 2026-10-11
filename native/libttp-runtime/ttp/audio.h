@@ -108,6 +108,7 @@ struct Car {
   double spin = 0;
   bool monster = false;
   bool onWall = false;
+  double drift = 0;          // the sim's Car::driftMix, 0..1 (not on the snapshot)
 };
 
 // An in-flight rocket. `pos` is the rocket's WORLD point, resolved the same way

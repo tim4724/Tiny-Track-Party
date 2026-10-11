@@ -90,7 +90,7 @@ Value raceDigest(const std::string& trackId, std::string& err) {
   if (!build_race_track_by_id(trackId, LAPS, seedFor(trackId), bt, err)) return Value();
 
   std::vector<PlayerDesc> players;
-  for (const Persona& p : PERSONAS) players.push_back(PlayerDesc{Id::Str(p.id), false, Stats{}});
+  for (const Persona& p : PERSONAS) players.push_back(PlayerDesc{Id::Str(p.id), false, Stats{}, true});
 
   Game game(players, bt.game, [](const Event&) {});
   std::vector<AiController> ais;

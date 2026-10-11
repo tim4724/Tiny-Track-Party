@@ -319,7 +319,7 @@ struct RuntimeSession {
   std::vector<PlayerDesc> gridPlayers() const {
     if (!seats.empty()) return seats;
     std::vector<PlayerDesc> players = humans;
-    for (const auto& b : bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+    for (const auto& b : bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats, true});
     return players;
   }
 };
@@ -767,6 +767,7 @@ void ttp_audio_frame(double nowMs) {
     a.spin = c.spin;
     a.monster = c.monsterT > 0;
     a.onWall = c.onWall;
+    a.drift = c.driftMix;
     cars.push_back(std::move(a));
   }
 
@@ -1012,7 +1013,7 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         // See ttp/race_flow.h, BotSpec::player.
         b.player = json::truthy(it->second->find("player"));
         if (st && st->type == Value::OBJ) { b.hasStats = true; b.stats = statsOf(*st); }
-        const PlayerDesc pd{b.id, b.hasStats, b.stats};
+        const PlayerDesc pd{b.id, b.hasStats, b.stats, true};
         rs->seats.push_back(pd);
         if (b.player) rs->humans.push_back(pd);
         rs->bots.push_back(std::move(b));
@@ -1335,6 +1336,10 @@ double ttp_debug_curb_speed(double frac) { return debugCurbSpeed(frac); }
 double ttp_debug_curb_turn(double rate) { return debugCurbTurn(rate); }
 double ttp_debug_curb_turn_max(double rate) { return debugCurbTurnMax(rate); }
 double ttp_debug_curb_impact(double k) { return debugCurbImpact(k); }
+double ttp_debug_drift_tight(double scale) { return debugDriftTight(scale); }
+double ttp_debug_drift_smooth(double sec) { return debugDriftSmooth(sec); }
+double ttp_debug_drift_floor(double floor) { return debugDriftFloor(floor); }
+double ttp_debug_drift_release(double sec) { return debugDriftRelease(sec); }
 
 
 // =============================================================================

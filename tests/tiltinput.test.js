@@ -9,9 +9,9 @@ const assert = require('node:assert/strict');
 
 // TiltInput is a browser ES module but is written to construct headlessly (window/
 // document guards). Load it dynamically like the other suites.
-let TiltInput, SENSOR_SETTLE_MS;
+let TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS;
 test.before(async () => {
-  ({ TiltInput, SENSOR_SETTLE_MS } = await import('../public/controller/TiltInput.js'));
+  ({ TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS } = await import('../public/controller/TiltInput.js'));
 });
 
 // _screenAngle reads the `screen` global; set/clear it around each case so the
@@ -189,6 +189,32 @@ test('buttons mode: the ‹+› chord brakes at full level with the steer centre
   t.pressSteer('left', false); t._tick();
   assert.equal(out.at(-1).b, 0, 'lifting one thumb releases the brake');
   assert.equal(out.at(-1).s, 1, '…and the still-held › steers again');
+});
+
+test('buttons mode: thumbs landing inside the chord window still brake straight', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.setMode('buttons');
+  t.pressSteer('left', true, 1000);
+  t.pressSteer('right', true, 1000 + CHORD_SIMUL_MS - 1);
+  t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [0, 1], 'a near-simultaneous chord brakes straight');
+});
+
+test('buttons mode: adding the other button to a held steer keeps the first side and brakes', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.setMode('buttons');
+  t.pressSteer('left', true, 1000);
+  t.pressSteer('right', true, 1000 + CHORD_SIMUL_MS + 50);
+  t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-1, 1], 'held ‹ keeps its lock under the brake');
+  t.pressSteer('right', false, 1400); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-1, 0], 'lifting › releases only the brake');
+  t.pressSteer('left', false, 1500);
+  t.pressSteer('right', true, 1600);
+  t.pressSteer('left', true, 1900); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [1, 1], '…and the mirror image');
 });
 
 test('buttons mode ignores the tilt sensor entirely', () => {

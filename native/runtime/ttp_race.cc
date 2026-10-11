@@ -100,8 +100,12 @@ race::FieldWorld worldWithCap(const char* botCapJson) {
 
 // The CPU fill's skill for a race on `trackId`: its cup's difficulty through
 // ttp::AI_TIER_SKILL. A track in no cup (the dev tracks) races the full bot,
-// which aiSkillForTier answers for the 0 a cup-less track gets.
+// which aiSkillForTier answers for the 0 a cup-less track gets — unless the
+// DEBUG override (ttp_debug_bot_skill) names one, so a dev track can race a
+// cup's bots.
+static double g_botSkillOverride = -1;
 double botSkillFor(const std::string& trackId) {
+  if (g_botSkillOverride >= 0) return g_botSkillOverride;
   return ttp::aiSkillForTier(rtui::shippedCupDifficulty(trackId));
 }
 
@@ -998,4 +1002,9 @@ const char* ttp_race_auto_pause_live_json(int sessionHandle, int roomHandle,
   dec.action = json::str_field(d, "action");
   dec.autoPaused = json::truthy(d.find("autoPaused"));
   return put(g_bufAutoPause, wrapEffects(race::autoPauseEffects(dec)));
+}
+
+double ttp_debug_bot_skill(double skill) {
+  g_botSkillOverride = skill < 0 ? -1 : (skill > 1 ? 1 : skill);
+  return -1;
 }

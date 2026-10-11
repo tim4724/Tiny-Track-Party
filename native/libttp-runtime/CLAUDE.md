@@ -126,7 +126,8 @@ the exact drift root rule 1 exists to stop.
 the track's cup difficulty (authored per cup in `tracks.js`): `ttp_race.cc`
 resolves it per launch into `FieldWorld::botSkill`, so this layer stays
 catalogue-agnostic. Skill is
-behaviour (line, wobble, kerb mistakes), never top speed: bots stay flat-out.
+behaviour (line, wobble, kerb mistakes, how often it drifts a corner), never
+top speed: bots stay flat-out.
 The bot spec carries `skill` only below 1, so full-skill launches and every
 recording keep their shape.
 

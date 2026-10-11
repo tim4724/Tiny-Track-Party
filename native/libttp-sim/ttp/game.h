@@ -36,6 +36,9 @@ struct Input {
   bool hasS = false; double s = 0;
   bool hasB = false; double b = 0;   // number form only (fixtures never send boolean)
   bool hasU = false; double u = 0;
+  // May this car drift (Game::update)? Only an AiController sends it; a phone
+  // never does, so a human's car keeps the drift it is born with.
+  bool hasD = false; double d = 0;
 };
 
 struct Pose { Vec3 pos, forward, up; };
@@ -78,6 +81,19 @@ struct Car {
   bool curbLimSet = false;
   double curbLim = 0;
   bool onWall = false;
+  // Drift (Game::update).
+  //   driftOk     — may drift: a human always, a bot only while its controller
+  //                 says so (Input::d), which is what PlayerDesc::bot defaults
+  //   drifting    — the drift is held (brake down)
+  //   driftDir    — its locked side in INPUT space (sign of steer)
+  //   driftMix    — how much of the drift is in force: rises in, fades out
+  //   driftK      — the line it drives: curvature (1/world units), eased
+  //   driftK0/driftLean0 — the curvature and lean it started on, which that
+  //                 lean keeps (the lean is read relative to it)
+  //   slip        — the body's cosmetic angle off its travel, in heading space
+  bool driftOk = true;
+  bool drifting = false;
+  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
 };
 
 struct Zone { double s, lat, radius; };  // oil hazard (circle)
@@ -114,7 +130,9 @@ struct GameTrack {
   std::vector<BananaRt> bananas;  // authored (dev tracks); .id/.respawn/.liveAt filled by ctor
 };
 
-struct PlayerDesc { Id id; bool hasStats = false; Stats stats; };
+// bot: an AiController drives this car. A bot drifts only when its controller
+// allows it (Input::d), so a bot fed recorded inputs replays exactly.
+struct PlayerDesc { Id id; bool hasStats = false; Stats stats; bool bot = false; };
 
 class AiController;  // ai_driver.h
 class RacingLine;    // ai_driver.h
@@ -152,6 +170,14 @@ double debugCurbSpeed(double frac);
 double debugCurbTurn(double rate);
 double debugCurbTurnMax(double rate);
 double debugCurbImpact(double k);
+// DEBUG, likewise: the drift's line tightness (a scale on its curvatures), how
+// fast the line follows the lean (s), the speed floor it holds (fraction of
+// vmax), and how long letting go takes to blend it back into plain steering
+// (s); see the DRIFT_* constants in game.cc.
+double debugDriftTight(double scale);
+double debugDriftSmooth(double sec);
+double debugDriftFloor(double floor);
+double debugDriftRelease(double sec);
 
 // That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies
 // its turn rate by. Sim-side this is one line of one function, so it lived

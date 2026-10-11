@@ -223,12 +223,12 @@ bool traceThroughAbi(const std::string& path) {
   const int h = ttp_session_begin(trackId.c_str(), seed, laps, nullptr);
   if (h <= 0) { fail("ttp_session_begin returned " + std::to_string(h)); return false; }
 
-  // Cars are added as humans (the ABI is fed every recorded input) UNLESS the
-  // trace is ai-live, in which case its bots are added with ttp_add_bot and
+  // Humans are fed every recorded input. Bots are added with ttp_add_bot and
   // ttp_update drives them INSIDE the wasm from their persona knobs — the exact
-  // path the shipped game runs, and the only way this check exercises it.
-  const bool aiLive = header.has("aiLive") && header.find("aiLive")->b;
-
+  // path the shipped game runs — in every trace, ai-live or not: a bot is a
+  // different car to the sim (it never drifts), and the ABI seats one only by
+  // driving it, so a bot fed its recorded inputs as a human would not be the
+  // car the trace recorded.
   std::vector<std::pair<std::string, std::string>> keyToIdJson;  // String(id) -> id JSON
   std::vector<std::string> botKeys;                              // driven in-wasm, inputs skipped
   for (const Value& r : header.find("roster")->arr) {
@@ -238,7 +238,7 @@ bool traceThroughAbi(const std::string& path) {
     keyToIdJson.emplace_back(key, idJson);
 
     const Value* kind = r.find("kind");
-    if (aiLive && kind && kind->str == "bot") {
+    if (kind && kind->str == "bot") {
       const Value* caution = r.find("caution");
       const Value* laneBias = r.find("laneBias");
       const Value* aiSeed = r.find("aiSeed");

@@ -55,7 +55,12 @@ export async function init() {
     debugCurbSpeed: c('ttp_debug_curb_speed', 'number', ['number']),
     debugCurbTurn: c('ttp_debug_curb_turn', 'number', ['number']),
     debugCurbTurnMax: c('ttp_debug_curb_turn_max', 'number', ['number']),
-    debugCurbImpact: c('ttp_debug_curb_impact', 'number', ['number'])
+    debugCurbImpact: c('ttp_debug_curb_impact', 'number', ['number']),
+    debugDriftTight: c('ttp_debug_drift_tight', 'number', ['number']),
+    debugDriftSmooth: c('ttp_debug_drift_smooth', 'number', ['number']),
+    debugDriftFloor: c('ttp_debug_drift_floor', 'number', ['number']),
+    debugDriftRelease: c('ttp_debug_drift_release', 'number', ['number']),
+    debugBotSkill: c('ttp_debug_bot_skill', 'number', ['number'])
   };
   const v = JSON.parse(fn.version());
   console.info(`[native:sim] ${JSON.stringify(v)}`);
@@ -71,6 +76,14 @@ export function debugCurbSpeed(n) { return fn ? fn.debugCurbSpeed(n) : 0; }
 export function debugCurbTurn(n) { return fn ? fn.debugCurbTurn(n) : 0; }
 export function debugCurbTurnMax(n) { return fn ? fn.debugCurbTurnMax(n) : 0; }
 export function debugCurbImpact(n) { return fn ? fn.debugCurbImpact(n) : 0; }
+// The drift's feel, the same way: line tightness, how fast the line follows the
+// lean, speed floor, and the blend back into plain steering after the brake.
+export function debugDriftTight(n) { return fn ? fn.debugDriftTight(n) : 0; }
+export function debugDriftSmooth(n) { return fn ? fn.debugDriftSmooth(n) : 0; }
+export function debugDriftFloor(n) { return fn ? fn.debugDriftFloor(n) : 0; }
+export function debugDriftRelease(n) { return fn ? fn.debugDriftRelease(n) : 0; }
+// The CPU fill's skill for the next launches (-1 = the track's cup decides).
+export function debugBotSkill(n) { return fn ? fn.debugBotSkill(n) : -1; }
 
 const idJson = (id) => JSON.stringify(id);
 // ttp_session_start's "no countdown" sentinel (any negative — see its header):

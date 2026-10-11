@@ -382,7 +382,9 @@ Capture captureTrace(const std::string& dir, const std::string& file) {
     p.id = idFrom(r.find("id"));
     // The generator adds EVERY roster entry through ttp_add_human — bots
     // included — and drives them from the recorded inputs. The hash check below
-    // is what proves that reproduces the recorded race.
+    // is what proves that reproduces the recorded race. A bot is still marked
+    // one, because the sim never lets a bot drift.
+    p.bot = r.find("kind") && r.find("kind")->str == "bot";
     if (const Value* st = r.find("stats")) {
       p.hasStats = true;
       if (const Value* x = st->find("accel")) p.stats.accel = x->num;

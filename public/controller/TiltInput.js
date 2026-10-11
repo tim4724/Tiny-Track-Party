@@ -34,8 +34,10 @@
 //
 // BUTTON steering mode (setMode('buttons')): the sensor is ignored and the two
 // on-screen ‹ › buttons steer BINARY — full lock left/right, no ramp (ramps were
-// tried and read as two steps anyway). Holding BOTH is the brake. Same {s,b,u}
-// frame either way; the display never knows which mode a phone is in.
+// tried and read as two steps anyway). Holding BOTH is the brake: pressed
+// together it brakes straight, one added to the other keeps steering toward the
+// first (see CHORD_SIMUL_MS). Same {s,b,u} frame either way; the display never
+// knows which mode a phone is in.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
 // Space/Down brake. Steer = tip + keys (so the loop is testable headlessly).
@@ -67,6 +69,13 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 export const SMOOTH = 0.5;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
+
+// Two thumbs aimed at "both at once" land 20-60 ms apart and rarely past 100 ms,
+// while adding the brake to a held steer comes a deliberate beat later. Inside
+// this window the ‹ › chord brakes straight; outside it the first-held side keeps
+// steering, so a corner can be braked into (which the sim reads as a drift).
+// Decided on the second press, so it never delays an input.
+export const CHORD_SIMUL_MS = 100;
 
 // How long a listening page has to receive its first USABLE sample before the
 // sensor is declared absent. Nothing waits on it — the phone is optimistically
@@ -123,6 +132,7 @@ export class TiltInput {
     this._key = 0;         // keyboard steer (-1/0/1)
     this._keyL = false; this._keyR = false;
     this._btnL = false; this._btnR = false; // on-screen ‹ › steer buttons (buttons mode)
+    this._btnLAt = 0; this._btnRAt = 0;     // …and when each went down (the chord rule)
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
@@ -320,8 +330,16 @@ export class TiltInput {
   }
 
   // The ‹ › buttons' contribution: ±1 while exactly one is held. Both held is
-  // the BRAKE chord — steer reads centre so the car slows straight.
-  _btnSteer() { return (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0); }
+  // the BRAKE chord: pressed together (CHORD_SIMUL_MS) steer reads centre so the
+  // car slows straight; one added to the other keeps the first side's lock.
+  _btnSteer() {
+    if (this._btnL && this._btnR) {
+      const lead = this._btnRAt - this._btnLAt; // > 0: ‹ went down first
+      if (Math.abs(lead) < CHORD_SIMUL_MS) return 0;
+      return lead > 0 ? -1 : 1;
+    }
+    return (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
+  }
   _btnBrake() { return this._btnL && this._btnR ? BRAKE_LEVEL : 0; }
 
   // current steer (for the on-screen steer indicator)
@@ -339,9 +357,16 @@ export class TiltInput {
   }
 
   // On-screen ‹ › steer buttons (buttons mode): held → full lock that side,
-  // both → brake. Emits on the edge, same as every other button.
-  pressSteer(side, on) {
-    if (side === 'left') this._btnL = !!on; else this._btnR = !!on;
+  // both → brake (see _btnSteer). Emits on the edge, same as every other button.
+  // `now` is injectable so the chord window is testable without a clock.
+  pressSteer(side, on, now = performance.now()) {
+    if (side === 'left') {
+      if (on && !this._btnL) this._btnLAt = now;
+      this._btnL = !!on;
+    } else {
+      if (on && !this._btnR) this._btnRAt = now;
+      this._btnR = !!on;
+    }
     if (this._timer) this._tick();
   }
 

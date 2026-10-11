@@ -41,7 +41,7 @@ namespace {
 // only ever consulted from inside AiController::drive, so a test that asks the Game
 // for its line directly passes even with the bug in place.
 std::vector<double> raceDigest(const GameTrack& track, int frames) {
-  const std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), false, Stats{}}};
+  const std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), false, Stats{}, true}};
   Game game(players, track, [](const Event&) {});
   AiController ai(1.0, LOOKAHEAD, STEER_GAIN, 0.0, 1u);
   std::vector<double> out;

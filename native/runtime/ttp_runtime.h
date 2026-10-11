@@ -172,6 +172,16 @@ TTP_ABI double ttp_debug_curb_speed(double frac);
 TTP_ABI double ttp_debug_curb_turn(double rate);
 TTP_ABI double ttp_debug_curb_turn_max(double rate);
 TTP_ABI double ttp_debug_curb_impact(double k);
+// DEBUG: the drift's tightness, smoothing, speed floor and release blend, live
+// (ttp/game.h debugDrift*), same conventions.
+TTP_ABI double ttp_debug_drift_tight(double scale);
+TTP_ABI double ttp_debug_drift_smooth(double sec);
+TTP_ABI double ttp_debug_drift_floor(double floor);
+TTP_ABI double ttp_debug_drift_release(double sec);
+// DEBUG: the CPU fill's skill for every launch from now on (0..1), whatever the
+// track's cup says; negative restores the cup's. Answers -1 (the "cup decides"
+// default) so the panel's knob reads its default by resetting.
+TTP_ABI double ttp_debug_bot_skill(double skill);
 
 // ---- Grand Prix / cup series (GrandPrix.js CupSeries twin) ------------------
 // The series layer ABOVE a race: points, standings order, race chaining. Handles

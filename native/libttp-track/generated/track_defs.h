@@ -1714,6 +1714,23 @@ constexpr BananaDef kBananas_showroom[] = {
   { 0x1.2e147ae147ae1p-1, 0x1.ccccccccccccdp-1 },
 };
 
+constexpr SegDef kS_drift[] = {
+  { SegKind::Straight, 0x1.93d8adab9f55ap+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.999999999999ap+0, -0x1.c6491d14e3bcdp+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.a4cd9e83e425bp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.599999999999ap+0, -0x1.ea491d14e3bcdp+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.b333333333333p+0, 0x1.a1b6e2eb1c433p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.4cccccccccccdp+1, -0x1.c6491d14e3bcdp+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.0666666666666p+1, -0x1.ae491d14e3bcdp+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.d99999999999ap+0, 0x1.cdb6e2eb1c433p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+  { SegKind::Arc, 0x0p+0, 0x1.599999999999ap+0, -0x1.ea491d14e3bcdp+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
+};
+
 constexpr TrackDef TTP_TRACKS[] = {
   { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0 },
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0 },
@@ -1739,11 +1756,12 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0 },
   { "gym", "Gym", nullptr, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3 },
   { "showroom", "Showroom", nullptr, true, nullptr, 0, kW_showroom, 19, 0x1.4p+1, 0x0p+0, kOils_showroom, 2, kPads_showroom, 2, kBoxes_showroom, 5, kPoles_showroom, 3, kBananas_showroom, 3 },
+  { "drift", "Drift", nullptr, false, kS_drift, 14, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
 };
 // The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).
 constexpr int TTP_TRACK_COUNT = 20;
 // Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.
-constexpr int TTP_TRACK_TOTAL = 24;
+constexpr int TTP_TRACK_TOTAL = 25;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.

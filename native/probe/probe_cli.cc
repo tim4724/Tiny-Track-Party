@@ -132,7 +132,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
     st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
     st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
   }
-  std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st}};
+  std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st, true}};
   Game game(players, bt.game, [](const Event&) {}, g_item);
   AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED,
                   g_skill);
@@ -305,7 +305,7 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
         Stats st;
         st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
         st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-        players.push_back(PlayerDesc{Id::Num((double)slot), true, st});
+        players.push_back(PlayerDesc{Id::Num((double)slot), true, st, true});
       }
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
@@ -435,7 +435,7 @@ int runCost(const std::string& only, uint32_t seed, int cars) {
         Stats st;
         st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
         st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-        players.push_back(PlayerDesc{Id::Num((double)i), true, st});
+        players.push_back(PlayerDesc{Id::Num((double)i), true, st, true});
       }
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
