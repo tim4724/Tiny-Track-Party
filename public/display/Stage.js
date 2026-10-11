@@ -100,6 +100,12 @@ const tagName = (c, id) => c.name || ('P' + id);
 
 const MAX_BUFFER_H = 2160;
 
+// DEV. `?cars=dash-plus,bolt-plus,carve-plus,rumble-plus` draws roster car i
+// with concept car i instead (public/assets/concepts/, the asset gallery's
+// Concept cars). Only the GLB fetched changes: names, stats, thumbnails and
+// everything C++ decides stay the roster's. An empty entry keeps that car.
+const CONCEPT_CARS = (new URLSearchParams(location.search).get('cars') || '').split(',');
+
 // The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
 // the one path allowed past MAX_BUFFER_H, and a fat-fingered 30 in a URL is a
 // buffer allocation that takes the tab down rather than a slow frame.
@@ -516,7 +522,8 @@ export class Stage {
       return {
         id, carIndex,
         color: this.colors[(c.colorIndex ?? 0) % this.colors.length],
-        model: models[carIndex % (models.length || 1)] || null
+        model: (CONCEPT_CARS[carIndex] && `concept:${CONCEPT_CARS[carIndex]}`)
+          || models[carIndex % (models.length || 1)] || null
       };
     });
   }

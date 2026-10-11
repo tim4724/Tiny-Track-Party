@@ -622,17 +622,14 @@ def bolt_plus():
 
 
 def rumble_plus():
-    """Rumble with a touch more: a ducktail with endplates and a gurney, round
-    lamps and a grille on the bonnet's face, bonnet louvres, tail lamps."""
+    """Rumble with a touch more: round lamps and a grille on the bonnet's
+    face, bonnet louvres, tail lamps."""
     body, nodes = kit_base('vehicle-vintage-racer')
-    S, P = Surface(body), PURPLE
+    S = Surface(body)
     parts = [body]
     round_lamps(S, parts, (0.075,), 0.232, 0.021)
     parts.append(S.patch('grille', 'y+', (-0.04, 0.04, 0.205, 0.255), INK))
     louvres(S, parts, 0.025, 0.08, (0.20, 0.24, 0.28))
-    parts.append(profile('ducktail', 0.085, [(-0.37, 0.236), (-0.44, 0.232), (-0.445, 0.258), (-0.38, 0.252)], P, 0.006))
-    endplates(parts, P, 0.09, [(-0.37, 0.225), (-0.445, 0.225), (-0.445, 0.27), (-0.375, 0.262)])
-    gurney(parts, 0.085, -0.445, 0.258)
     tail_lamps(S, parts, 0.03, 0.075, 0.175, 0.205)
     return join(parts, 'body'), nodes
 

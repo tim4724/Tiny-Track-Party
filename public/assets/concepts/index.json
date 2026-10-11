@@ -41,8 +41,8 @@
   },
   {
    "name": "rumble-plus",
-   "tris": 1328,
-   "note": "Rumble with a touch more: a ducktail with endplates and a gurney, round lamps and a grille on the bonnet's face, bonnet louvres, tail lamps.",
+   "tris": 1248,
+   "note": "Rumble with a touch more: round lamps and a grille on the bonnet's face, bonnet louvres, tail lamps.",
    "base": "vehicle-vintage-racer"
   }
  ]
