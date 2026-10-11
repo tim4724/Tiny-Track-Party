@@ -3,46 +3,46 @@
  "models": [
   {
    "name": "concept-buggy",
-   "tris": 1740,
+   "tris": 2356,
    "note": "RC off-road buggy: cab-forward shell, roll cage, open engine and knobby tyres, with the wing, round lamps and nose louvres."
   },
   {
    "name": "concept-rally",
-   "tris": 1692,
+   "tris": 1908,
    "note": "Rally hatch: boxy shell with flared arches, with a roof spoiler, two driving lamps on the bumper, a bonnet scoop and a grille."
   },
   {
    "name": "concept-gt",
-   "tris": 1448,
-   "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, with a full-width wing, wedge lamps, tail lamps and bonnet louvres."
+   "tris": 1796,
+   "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, with a full-width wing, fender lamps, tail lamps and bonnet louvres."
   },
   {
    "name": "concept-pip",
-   "tris": 1808,
+   "tris": 2376,
    "note": "Bubble micro car: short rounded shell, glass bubble with a painted cap and chrome bumpers, with frog-eye lamps, a lip spoiler and bonnet louvres."
   },
   {
    "name": "dash-plus",
-   "tris": 1236,
+   "tris": 1517,
    "note": "Dash with a touch more: a slatted rear screen, tail lamps above the bumper, square lamps, a grille, a bonnet scoop.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "bolt-plus",
-   "tris": 1272,
-   "note": "Bolt with a touch more: endplates on the front wing, louvres on the nose and the airbox, tail lamps on a dark panel.",
+   "tris": 1602,
+   "note": "Bolt with a touch more: endplates on the front wing, louvres on the nose and the airbox, tail lamps in a dark panel.",
    "base": "vehicle-speedster"
   },
   {
    "name": "carve-plus",
-   "tris": 1608,
-   "note": "Carve with a touch more: twin round lamps at both ends, the tail's on a dark panel, a grille, louvres on the bonnet and the roof, a rear screen.",
+   "tris": 2004,
+   "note": "Carve with a touch more: twin round lamps at both ends, the tail's in a dark panel, a grille, louvres on the bonnet and the roof, a rear screen.",
    "base": "vehicle-racer"
   },
   {
    "name": "rumble-plus",
-   "tris": 1320,
-   "note": "Rumble with a touch more: round lamps and a grille on the bonnet's face, louvres on the bonnet and the tail deck, tail lamps.",
+   "tris": 1733,
+   "note": "Rumble with a touch more: round lamps and a grille in the bonnet's face, louvres on the bonnet and the tail deck, tail lamps.",
    "base": "vehicle-vintage-racer"
   }
  ]

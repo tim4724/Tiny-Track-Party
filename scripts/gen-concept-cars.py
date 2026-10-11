@@ -61,10 +61,16 @@ def mesh_obj(name, bm):
     return link(bpy.data.objects.new(name, me))
 
 
+def shade(swatch):
+    """A swatch pinned to its darkest texel: the paint in shadow, for a
+    recess that should read as moulded into the body rather than black."""
+    return (swatch[0], swatch[1], 1)
+
+
 def tag(obj, swatch):
     """Give every face of obj the material slot standing for `swatch`."""
     if swatch not in SWATCHES:
-        mat = bpy.data.materials.new(f"sw_{swatch[0]}_{swatch[1]}")
+        mat = bpy.data.materials.new('sw_' + '_'.join(map(str, swatch)))
         mat['swatch'] = list(swatch)
         SWATCHES[swatch] = mat
     obj.data.materials.clear()
@@ -221,10 +227,10 @@ def paint_uvs(obj):
         mat = me.materials[p.material_index]
         if mat is None or 'swatch' not in mat:
             continue  # kept from a source GLB: its UVs are already the kit's
-        row, col = mat['swatch']
+        row, col, *dark = mat['swatch']
         for li in p.loop_indices:
             z = me.vertices[me.loops[li].vertex_index].co.z
-            t = min(max((z - zlo) / span, 0.0), 1.0)
+            t = 0.0 if dark else min(max((z - zlo) / span, 0.0), 1.0)
             v = row * 0.25 + 0.025 + 0.2 * (1.0 - t)
             uv.data[li].uv = ((col + 0.5) / 16.0, 1.0 - v)
 
@@ -314,29 +320,144 @@ def merge_slots(obj):
 # stay plain — the roster's as the kit made them, no endplates, no gurney.
 # Nothing else is added — no mirrors, side glass, pipes, roundels, canards or
 # diffusers — so the extras stay few and read at chase-cam size.
+#
+# Details are SET INTO the body, never laid on it: a lamp is a lens in a dark
+# pocket, a vent or a grille is a slot cut into the panel, a window is sunk
+# into the roofline. A plate on the surface reads as a sticker glued on; a cut
+# is framed by the body's own edge. Only parts that really stand proud (a
+# scoop, a lamp pod, a driving lamp) are added as shapes.
 
-def louvres(S, parts, x0, x1, ys, w=0.007):
-    """Vent slits across the bonnet, a set each side of the centre line."""
+FACES = {'x+': (0, 1), 'x-': (0, -1), 'y+': (1, 1), 'y-': (1, -1), 'z+': (2, 1)}
+
+
+class Surface:
+    """Raycasts onto a body, so details sit in its real faces. A face is the
+    side a ray comes in from ('y+' is the nose); a point on it is named by
+    the other two coordinates, in x, y, z order. Recesses are queued on
+    `cutters` and cut by carve(); lenses go on `parts`."""
+
+    def __init__(self, obj):
+        self.bvh = BVHTree.FromObject(obj, bpy.context.evaluated_depsgraph_get())
+
+    def ray(self, face, a, b):
+        axis, sign = FACES[face]
+        o = [a, b]
+        o.insert(axis, sign * 3.0)
+        d = [0.0, 0.0, 0.0]
+        d[axis] = -sign
+        loc, n, _, _ = self.bvh.ray_cast(Vector(o), Vector(d))
+        if loc is None:
+            raise ValueError(f"nothing under {face} at {a:.3f}, {b:.3f}")
+        return loc, n
+
+    def height(self, x, y):
+        return self.ray('z+', x, y)[0].z
+
+    def slab(self, name, face, rect, swatch, outer, inner):
+        """A plate over rect = (a0, a1, b0, b1), each corner projected onto the
+        surface, from `outer` above it to `inner` below it along the normal."""
+        a0, a1, b0, b1 = rect
+        pts = []
+        for a in (a0, a1):
+            for b in (b0, b1):
+                loc, n = self.ray(face, a, b)
+                pts += [loc + n * outer, loc - n * inner]
+        return hull(name, pts, swatch, 0)
+
+    def cut(self, cutters, name, face, rect, swatch, depth=0.008):
+        """A RECESS over rect, `depth` deep: walls and floor in swatch."""
+        cutters.append(self.slab(name, face, rect, swatch, 0.03, depth))
+
+    def lens(self, parts, name, face, rect, swatch, floor):
+        """A flat lens standing on a recess's floor to just under its mouth."""
+        parts.append(self.slab(name, face, rect, swatch, -0.003, floor + 0.002))
+
+    def lamp(self, cutters, parts, name, face, rect, swatch, depth=0.01, rim=0.004):
+        """A square lamp: a dark pocket over rect, the lens a rim smaller."""
+        self.cut(cutters, f'{name}Pocket', face, rect, INK, depth)
+        (a0, a1), (b0, b1) = sorted(rect[:2]), sorted(rect[2:])
+        self.lens(parts, name, face, (a0 + rim, a1 - rim, b0 + rim, b1 - rim), swatch, depth)
+
+    def disc_lens(self, parts, name, face, a, b, r, swatch, floor):
+        loc, n = self.ray(face, a, b)
+        parts.append(cyl(name, loc - n * (floor + 0.002), loc - n * 0.003, r, swatch, 12))
+
+    def socket(self, cutters, parts, name, face, a, b, r, swatch, depth=0.01):
+        """A round lamp: a dark pocket a rim wider than its lens."""
+        loc, n = self.ray(face, a, b)
+        cutters.append(cyl(f'{name}Pocket', loc - n * depth, loc + n * 0.03, r * 1.3, INK, 12))
+        self.disc_lens(parts, name, face, a, b, r, swatch, depth)
+
+
+def carve(body, cutters):
+    """Cut every queued recess out of body (an exact boolean): the cutters'
+    faces become the recesses' walls and floors, in the cutters' swatches."""
+    coll = bpy.data.collections.new('cutters')
+    bpy.context.scene.collection.children.link(coll)
+    for c in cutters:
+        for owner in c.users_collection:
+            owner.objects.unlink(c)
+        coll.objects.link(c)
+    m = body.modifiers.new('carve', 'BOOLEAN')
+    m.operation = 'DIFFERENCE'
+    m.operand_type = 'COLLECTION'
+    m.collection = coll
+    m.solver = 'EXACT'
+    m.material_mode = 'TRANSFER'
+    m.use_hole_tolerant = True
+    bpy.context.view_layer.objects.active = body
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    for c in cutters:
+        bpy.data.objects.remove(c)
+    # The cut re-triangulates the faces it crosses, and interpolated custom
+    # normals crease across them. Re-derive: area-weighted, so the big flat
+    # faces stay flat and the chamfers stay soft; the recess walls sharp.
+    for p in body.data.polygons:
+        p.use_smooth = True
+    body.data.set_sharp_from_angle(angle=math.radians(60))
+    w = body.modifiers.new('normals', 'WEIGHTED_NORMAL')
+    w.mode = 'FACE_AREA'
+    w.weight = 100
+    w.keep_sharp = True
+    bpy.ops.object.modifier_apply(modifier=w.name)
+
+
+def louvres(S, cutters, x0, x1, ys, swatch, w=0.007, depth=0.006):
+    """Vent slots cut across a top surface, a set each side of the centre."""
     for s in (-1, 1):
         for i, y in enumerate(ys):
-            parts.append(S.patch(f'louvre{s}{i}', 'z+', (s * x0, s * x1, y - w, y + w), INK, 0.003))
+            S.cut(cutters, f'louvre{s}{y}', 'z+', (s * x0, s * x1, y - w, y + w), swatch, depth)
 
 
-def round_lamps(S, parts, xs, z, r):
+def round_lamps(S, cutters, parts, xs, z, r):
     for s in (-1, 1):
         for x in xs:
-            parts.append(S.disc(f'head{s}{x}', 'y+', s * x, z, r, WHITE))
+            S.socket(cutters, parts, f'head{s}{x}', 'y+', s * x, z, r, WHITE)
 
 
-def tail_lamps(S, parts, x0, x1, z0, z1):
+def tail_lamps(S, cutters, parts, x0, x1, z0, z1):
     for s in (-1, 1):
-        parts.append(S.patch(f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED, 0.006))
+        S.lamp(cutters, parts, f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED)
+
+
+def tail_panel(S, cutters, parts, rect, lenses, depth=0.012):
+    """A dark panel recessed across the tail, the lamp lenses on its floor —
+    what red lamps need to read on a red or busy tail."""
+    S.cut(cutters, 'tailPanel', 'y-', rect, INK, depth)
+    for s in (-1, 1):
+        x0, x1, z0, z1 = lenses
+        S.lens(parts, f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED, depth)
 
 
 def shell(parts):
-    """Join the shell built so far, and a Surface to seat details on it."""
+    """Join the shell built so far, with a Surface to seat details in it."""
     body = join(parts, 'body')
-    return body, Surface(body), [body]
+    return body, Surface(body), [body], []
+
+
+def finish(body, parts, cutters):
+    carve(body, cutters)
+    return join(parts, 'body')
 
 
 def buggy():
@@ -361,11 +482,11 @@ def buggy():
     parts.append(profile('wing', 0.19, [(-0.32, 0.355), (-0.44, 0.335), (-0.44, 0.355), (-0.32, 0.375)], P, 0.008))
     for s in (-1, 1):
         parts.append(box(f'strut{s}', (s * 0.06 - 0.008, -0.38, 0.2), (s * 0.06 + 0.008, -0.35, 0.35), CHARCOAL))
-    body, S, parts = shell(parts)
-    round_lamps(S, parts, (0.07,), 0.145, 0.02)
-    louvres(S, parts, 0.03, 0.09, (0.24, 0.27, 0.30))
-    tail_lamps(S, parts, 0.14, 0.18, 0.13, 0.16)
-    body = join(parts, 'body')
+    body, S, parts, cutters = shell(parts)
+    round_lamps(S, cutters, parts, (0.07,), 0.145, 0.018)
+    louvres(S, cutters, 0.03, 0.09, (0.24, 0.27, 0.30), shade(P))
+    tail_lamps(S, cutters, parts, 0.14, 0.18, 0.125, 0.16)
+    body = finish(body, parts, cutters)
     fl = knobby_wheel('wheelF', 0.115, 0.095)
     rl = knobby_wheel('wheelR', 0.13, 0.12)
     paint_uvs(fl)
@@ -415,27 +536,24 @@ def rally():
         parts.append(side_pillar(f'bpil{s}', s, (0.212, -0.12, 0.258), (0.172, -0.13, 0.378), P))
         parts.append(side_pillar(f'cpil{s}', s, (0.212, -0.365, 0.258), (0.172, -0.33, 0.378), P, 0.05))
     parts.append(profile('spoiler', 0.17, [(-0.33, 0.395), (-0.42, 0.385), (-0.42, 0.405), (-0.33, 0.41)], P, 0.006))
-    body, S, parts = shell(parts)
+    body, S, parts, cutters = shell(parts)
     for s in (-1, 1):
-        parts.append(S.patch(f'head{s}', 'y+', (s * 0.14, s * 0.215, 0.165, 0.205), WHITE))
+        S.lamp(cutters, parts, f'head{s}', 'y+', (s * 0.14, s * 0.215, 0.163, 0.205), WHITE)
         parts.append(cyl(f'lampCan{s}', (s * 0.09, 0.44, 0.185), (s * 0.09, 0.47, 0.185), 0.03, CHARCOAL, 10))
-        parts.append(disc(f'lamp{s}', (s * 0.09, 0.47, 0.185), (0, 1, 0), 0.022, 0.006, WHITE, 10))
-    parts.append(S.patch('grille', 'y+', (-0.11, 0.11, 0.155, 0.205), INK))
+        parts.append(cyl(f'lamp{s}', (s * 0.09, 0.465, 0.185), (s * 0.09, 0.4715, 0.185), 0.022, WHITE, 10))
+    S.cut(cutters, 'grille', 'y+', (-0.11, 0.11, 0.155, 0.205), INK, 0.01)
     h = S.height(0, 0.33)
     parts.append(profile('scoop', 0.06, [(0.33, h - 0.004), (0.33, h + 0.024), (0.22, h + 0.02),
                                          (0.19, S.height(0, 0.19) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.048, 0.33, h + 0.003), (0.048, 0.334, h + 0.019), INK))
-    # red on red needs a dark panel to read as lamps
     # corners on the tail's flat: on the bevel they would bury the panel's middle
-    parts.append(S.patch('tailPanel', 'y-', (-0.205, 0.205, 0.172, 0.214), INK, 0.003))
-    for s in (-1, 1):
-        parts.append(S.patch(f'tail{s}', 'y-', (s * 0.13, s * 0.195, 0.18, 0.206), LAMP_RED, 0.007))
-    return join(parts, 'body'), kit_wheel_set(0.19, 0.26, -0.26)
+    tail_panel(S, cutters, parts, (-0.205, 0.205, 0.172, 0.214), (0.13, 0.195, 0.18, 0.206))
+    return finish(body, parts, cutters), kit_wheel_set(0.19, 0.26, -0.26)
 
 
 def gt():
     """Le Mans GT: long low wedge, tinted bubble cockpit over fender humps,
-    with a full-width wing, wedge lamps, tail lamps and bonnet louvres."""
+    with a full-width wing, fender lamps, tail lamps and bonnet louvres."""
     P = SKY
     parts = []
     parts.append(box('floor', (-0.215, -0.44, 0.05), (0.215, 0.46, 0.095), CHARCOAL))
@@ -446,20 +564,18 @@ def gt():
                                                     (0.12, 0.10)], P, 0.016, cx=s * 0.205))
         parts.append(profile(f'rfender{s}', 0.05, [(-0.10, 0.10), (-0.16, 0.235), (-0.30, 0.265), (-0.42, 0.245),
                                                    (-0.45, 0.10)], P, 0.016, cx=s * 0.205))
-        parts.append(hull(f'head{s}', [(s * 0.17, 0.40, 0.165), (s * 0.235, 0.385, 0.165), (s * 0.17, 0.36, 0.198),
-                                        (s * 0.235, 0.345, 0.198), (s * 0.17, 0.40, 0.155), (s * 0.235, 0.39, 0.155)],
-                          WHITE, 0))
     parts.append(taper('canopy', (0.155, -0.21, 0.19, 0.19), (0.11, -0.13, 0.03, 0.325), INK, 0.012))
     parts.append(taper('roof', (0.116, -0.145, 0.025, 0.318), (0.104, -0.13, 0.01, 0.34), P, 0.01))
     parts.append(profile('wing', 0.212, [(-0.38, 0.345), (-0.47, 0.335), (-0.47, 0.35), (-0.38, 0.36)], CHARCOAL, 0.005))
     for s in (-1, 1):
         parts.append(box(f'strut{s}', (s * 0.09 - 0.008, -0.44, 0.2), (s * 0.09 + 0.008, -0.41, 0.34), CHARCOAL))
+    body, S, parts, cutters = shell(parts)
     for s in (-1, 1):
-        parts.append(box(f'tail{s}', (s * 0.07, -0.456, 0.17), (s * 0.18, -0.448, 0.19), LAMP_RED))
-    parts.append(box('grille', (-0.09, 0.465, 0.09), (0.09, 0.472, 0.115), INK))
-    body, S, parts = shell(parts)
-    louvres(S, parts, 0.035, 0.12, (0.31, 0.34, 0.37))
-    return join(parts, 'body'), kit_wheel_set(0.195, 0.27, -0.27)
+        S.lamp(cutters, parts, f'head{s}', 'y+', (s * 0.172, s * 0.232, 0.15, 0.188), WHITE)
+    tail_lamps(S, cutters, parts, 0.07, 0.18, 0.163, 0.193)
+    S.cut(cutters, 'grille', 'y+', (-0.09, 0.09, 0.09, 0.112), INK, 0.01)
+    louvres(S, cutters, 0.035, 0.12, (0.31, 0.34, 0.37), INK)
+    return finish(body, parts, cutters), kit_wheel_set(0.195, 0.27, -0.27)
 
 
 def pip():
@@ -478,20 +594,21 @@ def pip():
         parts.append(cyl(f'eyePod{s}', (s * 0.12, 0.22, 0.25), (s * 0.12, 0.31, 0.27), 0.05, P, 12))
         parts.append(disc(f'eyeRing{s}', (s * 0.12, 0.305, 0.27), (0, 1, 0.2), 0.05, 0.012, CHROME, 12))
         parts.append(disc(f'eyeLens{s}', (s * 0.12, 0.315, 0.272), (0, 1, 0.2), 0.036, 0.006, WHITE, 12))
-        parts.append(box(f'tail{s}', (s * 0.12 - 0.025, -0.366, 0.17), (s * 0.12 + 0.025, -0.352, 0.21), LAMP_RED))
     parts += tube('fbumper', [(-0.2, 0.30, 0.10), (-0.17, 0.375, 0.11), (0.17, 0.375, 0.11), (0.2, 0.30, 0.10)], 0.014, CHROME)
     parts += tube('rbumper', [(-0.2, -0.29, 0.10), (-0.17, -0.37, 0.11), (0.17, -0.37, 0.11), (0.2, -0.29, 0.10)], 0.014, CHROME)
-    parts.append(box('grille', (-0.06, 0.355, 0.14), (0.06, 0.37, 0.175), INK))
-    body, S, parts = shell(parts)
-    louvres(S, parts, 0.012, 0.055, (0.265, 0.29, 0.315), 0.006)
-    return join(parts, 'body'), kit_wheel_set(0.18, 0.22, -0.2, r=0.105)
+    body, S, parts, cutters = shell(parts)
+    tail_lamps(S, cutters, parts, 0.095, 0.145, 0.165, 0.205)
+    S.cut(cutters, 'grille', 'y+', (-0.06, 0.06, 0.14, 0.175), INK, 0.01)
+    louvres(S, cutters, 0.012, 0.055, (0.265, 0.29, 0.315), shade(P), 0.006)
+    return finish(body, parts, cutters), kit_wheel_set(0.18, 0.22, -0.2, r=0.105)
 
 
 # ------------------------------------------------------- roster cars, plus
 
 def kit_base(model):
     """A roster car as the start of a model: its body (UVs kept, its height
-    range remembered for the parts added to it) and its wheel and axle nodes."""
+    range remembered for the parts added to it), a Surface on it, and its
+    wheel and axle nodes."""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(KIT, model + '.glb'))
     new = [o for o in bpy.data.objects if o not in before]
@@ -499,125 +616,82 @@ def kit_base(model):
     zs = [v.co.z for v in body.data.vertices]
     body['zrange'] = (min(zs), max(zs))
     nodes = [(o.name.split('.')[0], o.data, tuple(o.location)) for o in new if o is not body]
-    return body, nodes
-
-
-FACES = {'x+': (0, 1), 'x-': (0, -1), 'y+': (1, 1), 'y-': (1, -1), 'z+': (2, 1)}
-
-
-class Surface:
-    """Raycasts onto a body, so details sit on its real faces. A face is the
-    side a ray comes in from ('y+' is the nose); a point on it is named by
-    the other two coordinates, in x, y, z order."""
-
-    def __init__(self, obj):
-        self.bvh = BVHTree.FromObject(obj, bpy.context.evaluated_depsgraph_get())
-
-    def ray(self, face, a, b):
-        axis, sign = FACES[face]
-        o = [a, b]
-        o.insert(axis, sign * 3.0)
-        d = [0.0, 0.0, 0.0]
-        d[axis] = -sign
-        loc, n, _, _ = self.bvh.ray_cast(Vector(o), Vector(d))
-        if loc is None:
-            raise ValueError(f"nothing under {face} at {a:.3f}, {b:.3f}")
-        return loc, n
-
-    def height(self, x, y):
-        return self.ray('z+', x, y)[0].z
-
-    def patch(self, name, face, rect, swatch, proud=0.004, depth=0.012):
-        """A plate over the face, corners rect = (a0, a1, b0, b1) each projected
-        onto the surface — a lamp or a vent on whatever slope is there."""
-        a0, a1, b0, b1 = rect
-        pts = []
-        for a in (a0, a1):
-            for b in (b0, b1):
-                loc, n = self.ray(face, a, b)
-                pts += [loc + n * proud, loc - n * depth]
-        return hull(name, pts, swatch, 0)
-
-    def disc(self, name, face, a, b, r, swatch, proud=0.006, seg=12):
-        loc, n = self.ray(face, a, b)
-        return disc(name, loc - n * 0.004, n, r, proud + 0.004, swatch, seg)
+    return body, Surface(body), nodes
 
 
 def dash_plus():
     """Dash with a touch more: a slatted rear screen, tail lamps above the
     bumper, square lamps, a grille, a bonnet scoop."""
-    body, nodes = kit_base('vehicle-racer-low')
-    S, P = Surface(body), GREEN
-    parts = [body]
+    body, S, nodes = kit_base('vehicle-racer-low')
+    P = GREEN
+    parts, cutters = [body], []
     for s in (-1, 1):
-        parts.append(S.patch(f'head{s}', 'y+', (s * 0.10, s * 0.165, 0.222, 0.252), WHITE))
-    parts.append(S.patch('grille', 'y+', (-0.07, 0.07, 0.218, 0.248), INK))
+        S.lamp(cutters, parts, f'head{s}', 'y+', (s * 0.10, s * 0.165, 0.22, 0.254), WHITE)
+    S.cut(cutters, 'grille', 'y+', (-0.07, 0.07, 0.218, 0.25), INK, 0.01)
     h = S.height(0, 0.275)
     parts.append(profile('scoop', 0.055, [(0.275, h - 0.004), (0.275, h + 0.022), (0.19, h + 0.022),
                                           (0.17, S.height(0, 0.17) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.042, 0.275, h + 0.003), (0.042, 0.279, h + 0.017), INK))
-    # the fastback is what the chase cam looks down on: a screen under slats
-    parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS))
+    # the fastback is what the chase cam looks down on: a screen sunk under
+    # body-coloured slats
+    S.cut(cutters, 'rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS, 0.008)
     for i, y in enumerate((-0.162, -0.195, -0.228)):
-        parts.append(S.patch(f'slat{i}', 'z+', (-0.106, 0.106, y - 0.007, y + 0.007), INK, 0.008))
-    # the upright strip between the bumper and the spoiler, on a dark band;
-    # corners inside it, or they land on the bumper and the side bevels
-    parts.append(S.patch('tailPanel', 'y-', (-0.158, 0.158, 0.219, 0.243), INK, 0.003))
-    tail_lamps(S, parts, 0.07, 0.15, 0.222, 0.24)
-    return join(parts, 'body'), nodes
+        S.lens(parts, f'slat{i}', 'z+', (-0.102, 0.102, y - 0.007, y + 0.007), P, 0.008)
+    # the upright strip between the bumper and the spoiler; corners inside
+    # it, or they land on the bumper and the side bevels
+    tail_panel(S, cutters, parts, (-0.158, 0.158, 0.219, 0.243), (0.07, 0.15, 0.222, 0.24), 0.01)
+    body = finish(body, parts, cutters)
+    return body, nodes
 
 
 def carve_plus():
-    """Carve with a touch more: twin round lamps at both ends, the tail's on a
+    """Carve with a touch more: twin round lamps at both ends, the tail's in a
     dark panel, a grille, louvres on the bonnet and the roof, a rear screen."""
-    body, nodes = kit_base('vehicle-racer')
-    S, P = Surface(body), BLUE
-    parts = [body]
-    round_lamps(S, parts, (0.115, 0.158), 0.236, 0.018)
-    louvres(S, parts, 0.035, 0.13, (0.185, 0.215, 0.245))
-    parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
-    louvres(S, parts, 0.035, 0.115, (-0.03, -0.06, -0.09))
-    parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS))
+    body, S, nodes = kit_base('vehicle-racer')
+    P = BLUE
+    parts, cutters = [body], []
+    round_lamps(S, cutters, parts, (0.115, 0.158), 0.236, 0.016)
+    louvres(S, cutters, 0.035, 0.13, (0.185, 0.215, 0.245), shade(P))
+    louvres(S, cutters, 0.035, 0.115, (-0.03, -0.06, -0.09), shade(P))
+    S.cut(cutters, 'grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK, 0.01)
+    S.cut(cutters, 'rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS, 0.006)
     # the tail under the wing is what the chase cam sees most: the front's
     # twin lamps and grille, mirrored
-    parts.append(S.patch('tailPanel', 'y-', (-0.165, 0.165, 0.232, 0.292), INK, 0.003))
+    S.cut(cutters, 'tailPanel', 'y-', (-0.165, 0.165, 0.232, 0.292), INK, 0.012)
     for s in (-1, 1):
         for x in (0.08, 0.13):
-            parts.append(S.disc(f'tail{s}{x}', 'y-', s * x, 0.262, 0.019, LAMP_RED, 0.008))
-    return join(parts, 'body'), nodes
+            S.disc_lens(parts, f'tail{s}{x}', 'y-', s * x, 0.262, 0.019, LAMP_RED, 0.012)
+    return finish(body, parts, cutters), nodes
 
 
 def bolt_plus():
     """Bolt with a touch more: endplates on the front wing, louvres on the
-    nose and the airbox, tail lamps on a dark panel."""
-    body, nodes = kit_base('vehicle-speedster')
-    S, P = Surface(body), RED
-    parts = [body]
+    nose and the airbox, tail lamps in a dark panel."""
+    body, S, nodes = kit_base('vehicle-speedster')
+    P = RED
+    parts, cutters = [body], []
     for s in (-1, 1):
         parts.append(profile(f'fplate{s}', 0.006, [(0.31, 0.07), (0.43, 0.07), (0.43, 0.165), (0.33, 0.155)],
                              P, 0, cx=s * 0.226))
-    louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
+    louvres(S, cutters, 0.025, 0.075, (0.13, 0.16, 0.19), shade(P))
     # behind the wing only the airbox's top shows to the chase cam
-    louvres(S, parts, 0.012, 0.048, (-0.09, -0.11, -0.13), 0.005)
-    # red lamps on a red-orange tail need a dark panel to read; the tail
-    # block is only +-0.06 wide, wider corners land on the side pods
-    parts.append(S.patch('tailPanel', 'y-', (-0.055, 0.055, 0.236, 0.284), INK, 0.003))
-    tail_lamps(S, parts, 0.012, 0.048, 0.245, 0.275)
-    return join(parts, 'body'), nodes
+    louvres(S, cutters, 0.012, 0.048, (-0.09, -0.11, -0.13), shade(STEEL), 0.005)
+    # the tail block is only +-0.06 wide; wider corners land on the side pods
+    tail_panel(S, cutters, parts, (-0.055, 0.055, 0.236, 0.284), (0.012, 0.048, 0.245, 0.275))
+    return finish(body, parts, cutters), nodes
 
 
 def rumble_plus():
-    """Rumble with a touch more: round lamps and a grille on the bonnet's
+    """Rumble with a touch more: round lamps and a grille in the bonnet's
     face, louvres on the bonnet and the tail deck, tail lamps."""
-    body, nodes = kit_base('vehicle-vintage-racer')
-    S = Surface(body)
-    parts = [body]
-    round_lamps(S, parts, (0.075,), 0.232, 0.021)
-    parts.append(S.patch('grille', 'y+', (-0.04, 0.04, 0.205, 0.255), INK))
-    louvres(S, parts, 0.025, 0.08, (0.20, 0.24, 0.28))
-    louvres(S, parts, 0.02, 0.07, (-0.22, -0.26, -0.30))
-    tail_lamps(S, parts, 0.03, 0.075, 0.175, 0.205)
-    return join(parts, 'body'), nodes
+    body, S, nodes = kit_base('vehicle-vintage-racer')
+    parts, cutters = [body], []
+    round_lamps(S, cutters, parts, (0.075,), 0.232, 0.018)
+    S.cut(cutters, 'grille', 'y+', (-0.04, 0.04, 0.205, 0.255), INK, 0.01)
+    louvres(S, cutters, 0.025, 0.08, (0.20, 0.24, 0.28), shade(STEEL))
+    louvres(S, cutters, 0.02, 0.07, (-0.22, -0.26, -0.30), shade(PURPLE))
+    tail_lamps(S, cutters, parts, 0.03, 0.075, 0.175, 0.205)
+    return finish(body, parts, cutters), nodes
 
 
 def mirrored_pair(obj):
