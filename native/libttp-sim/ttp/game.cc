@@ -161,9 +161,16 @@ static const double MONSTER_VMAX_MUL = 1.25;
 // Every flight falls under GRAVITY, several times a toy car's honest one: at
 // these speeds a true arc floats, and sends a car metres off the catalogue's
 // sharper hills. With no kick off a crest, it sets both how high a car goes
-// and how long it stays up — and how much speed a hill asks for: at 20 a
-// player cresting crag at 80% of top speed barely left the road.
-static const double GRAVITY = 16.0;
+// and how long it stays up, and how much speed a hill asks for.
+static const double GRAVITY = 12.0;
+// Over a crest, an extra pull back toward the road that grows with height
+// (1/s^2). Honest crest flight grows with the SQUARE of speed: no gravity let
+// a player cresting crag at 80% of top speed leave the road without sending a
+// flat-out car too high (0.07 against 0.46 at 20, 0.22 against 0.73 at 16).
+// This pull leaves a small hop almost untouched and reins a big one in, so
+// the spread is about 2x (0.21 at 80%, 0.44 flat-out). Crest only, so a
+// kicker, which leaves its lip already in the air, flies under GRAVITY alone.
+static const double CREST_PULL = 80.0;
 // Below this height off the deck a car still drives as grounded: a crest taken
 // just fast enough lifts it by millimetres, which nothing should notice.
 static const double AIR_MIN = 0.02;
@@ -1234,7 +1241,7 @@ void Game::update(double dtMs) {
     // Landing is neutral: the car keeps its speed and pays nothing.
     double ramp = kickerFloor(c.totalS);
     double k = tableAt(crestK_, c.totalS);
-    double lift = c.v * c.v * k - GRAVITY;
+    double lift = c.v * c.v * k - GRAVITY - (k > 0 ? CREST_PULL * c.h : 0);
     if (c.h <= ramp && lift <= 0) {
       c.h = ramp;
       c.vh = ramp > 0 ? c.v * (KICKER_RISE / KICKER_LEN) : 0;
