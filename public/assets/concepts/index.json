@@ -3,28 +3,28 @@
  "models": [
   {
    "name": "concept-buggy",
-   "tris": 1752,
+   "tris": 1740,
    "note": "RC off-road buggy: cab-forward shell, roll cage, open engine and knobby tyres, with the wing, round lamps and nose louvres."
   },
   {
    "name": "concept-rally",
-   "tris": 1704,
+   "tris": 1692,
    "note": "Rally hatch: boxy shell with flared arches, with a roof spoiler, two driving lamps on the bumper, a bonnet scoop and a grille."
   },
   {
    "name": "concept-gt",
-   "tris": 1460,
+   "tris": 1448,
    "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, with a full-width wing, wedge lamps, tail lamps and bonnet louvres."
   },
   {
    "name": "concept-pip",
-   "tris": 1820,
+   "tris": 1808,
    "note": "Bubble micro car: short rounded shell, glass bubble with a painted cap and chrome bumpers, with frog-eye lamps, a lip spoiler and bonnet louvres."
   },
   {
    "name": "dash-plus",
-   "tris": 1264,
-   "note": "Dash with a touch more: a gurney on its spoiler, tail lamps above the bumper, square lamps, a grille, bonnet and roof scoops, a rear screen.",
+   "tris": 1200,
+   "note": "Dash with a touch more: tail lamps above the bumper, square lamps, a grille, a bonnet scoop, a rear screen.",
    "base": "vehicle-racer-low"
   },
   {
@@ -35,8 +35,8 @@
   },
   {
    "name": "carve-plus",
-   "tris": 1456,
-   "note": "Carve with a touch more: a gurney on the wing, twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
+   "tris": 1444,
+   "note": "Carve with a touch more: twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
    "base": "vehicle-racer"
   },
   {
