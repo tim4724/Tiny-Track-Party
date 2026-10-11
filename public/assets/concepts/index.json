@@ -3,12 +3,12 @@
  "models": [
   {
    "name": "concept-buggy",
-   "tris": 1776,
+   "tris": 1752,
    "note": "RC off-road buggy: cab-forward shell, roll cage, open engine and knobby tyres, with the wing, round lamps and nose louvres."
   },
   {
    "name": "concept-rally",
-   "tris": 1728,
+   "tris": 1704,
    "note": "Rally hatch: boxy shell with flared arches, with a roof spoiler, two driving lamps on the bumper, a bonnet scoop and a grille."
   },
   {
@@ -23,20 +23,20 @@
   },
   {
    "name": "dash-plus",
-   "tris": 1288,
-   "note": "Dash with a touch more: endplates and a gurney on its spoiler, tail lamps across its back, square lamps, a grille, bonnet and roof scoops, a rear screen.",
+   "tris": 1264,
+   "note": "Dash with a touch more: a gurney on its spoiler, tail lamps above the bumper, square lamps, a grille, bonnet and roof scoops, a rear screen.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "bolt-plus",
-   "tris": 1224,
-   "note": "Bolt with a touch more: endplates on both wings, nose louvres, tail lamps on a dark panel.",
+   "tris": 1200,
+   "note": "Bolt with a touch more: endplates on the front wing, nose louvres, tail lamps on a dark panel.",
    "base": "vehicle-speedster"
   },
   {
    "name": "carve-plus",
-   "tris": 1480,
-   "note": "Carve with a touch more: wing endplates and a gurney, twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
+   "tris": 1456,
+   "note": "Carve with a touch more: a gurney on the wing, twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
    "base": "vehicle-racer"
   },
   {

@@ -309,9 +309,9 @@ def merge_slots(obj):
 
 # ======================================================================= cars
 #
-# One vocabulary across the set, Carve plus's: a WING with endplates and a
-# gurney, LAMPS front and back, and HOOD detail (a grille, louvres or a
-# scoop). Nothing else is added — no mirrors, side glass, pipes, roundels,
+# One vocabulary across the set, Carve plus's: a WING with a gurney and no
+# endplates, LAMPS front and back (tail lamps always a pair), and HOOD detail
+# (a grille, louvres or a scoop). Nothing else is added — no mirrors, side glass, pipes, roundels,
 # canards or diffusers — so the extras stay few and read at chase-cam size.
 
 def louvres(S, parts, x0, x1, ys, w=0.007):
@@ -330,12 +330,6 @@ def round_lamps(S, parts, xs, z, r):
 def tail_lamps(S, parts, x0, x1, z0, z1):
     for s in (-1, 1):
         parts.append(S.patch(f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED, 0.006))
-
-
-def endplates(parts, swatch, half_x, side):
-    """A wing's endplates: the side profile [(y, z), ...] at +-half_x."""
-    for s in (-1, 1):
-        parts.append(profile(f'plate{s}', 0.006, side, swatch, 0, cx=s * half_x))
 
 
 def gurney(parts, half_x, y, z):
@@ -371,7 +365,6 @@ def buggy():
     parts.append(profile('wing', 0.19, [(-0.32, 0.355), (-0.44, 0.335), (-0.44, 0.355), (-0.32, 0.375)], P, 0.008))
     for s in (-1, 1):
         parts.append(box(f'strut{s}', (s * 0.06 - 0.008, -0.38, 0.2), (s * 0.06 + 0.008, -0.35, 0.35), CHARCOAL))
-    endplates(parts, CHARCOAL, 0.195, [(-0.45, 0.31), (-0.45, 0.38), (-0.31, 0.39), (-0.33, 0.33)])
     gurney(parts, 0.19, -0.44, 0.355)
     body, S, parts = shell(parts)
     round_lamps(S, parts, (0.07,), 0.145, 0.02)
@@ -427,7 +420,6 @@ def rally():
         parts.append(side_pillar(f'bpil{s}', s, (0.212, -0.12, 0.258), (0.172, -0.13, 0.378), P))
         parts.append(side_pillar(f'cpil{s}', s, (0.212, -0.365, 0.258), (0.172, -0.33, 0.378), P, 0.05))
     parts.append(profile('spoiler', 0.17, [(-0.33, 0.395), (-0.42, 0.385), (-0.42, 0.405), (-0.33, 0.41)], P, 0.006))
-    endplates(parts, P, 0.176, [(-0.33, 0.375), (-0.425, 0.375), (-0.425, 0.42), (-0.34, 0.42)])
     gurney(parts, 0.17, -0.42, 0.405)
     body, S, parts = shell(parts)
     for s in (-1, 1):
@@ -466,8 +458,9 @@ def gt():
     parts.append(taper('canopy', (0.155, -0.21, 0.19, 0.19), (0.11, -0.13, 0.03, 0.325), INK, 0.012))
     parts.append(taper('roof', (0.116, -0.145, 0.025, 0.318), (0.104, -0.13, 0.01, 0.34), P, 0.01))
     parts.append(profile('wing', 0.212, [(-0.38, 0.345), (-0.47, 0.335), (-0.47, 0.35), (-0.38, 0.36)], CHARCOAL, 0.005))
-    endplates(parts, P, 0.215, [(-0.38, 0.26), (-0.47, 0.27), (-0.47, 0.36), (-0.39, 0.355)])
     gurney(parts, 0.212, -0.47, 0.35)
+    for s in (-1, 1):
+        parts.append(box(f'strut{s}', (s * 0.09 - 0.008, -0.44, 0.2), (s * 0.09 + 0.008, -0.41, 0.34), CHARCOAL))
     for s in (-1, 1):
         parts.append(box(f'tail{s}', (s * 0.07, -0.456, 0.17), (s * 0.18, -0.448, 0.19), LAMP_RED))
     parts.append(box('grille', (-0.09, 0.465, 0.09), (0.09, 0.472, 0.115), INK))
@@ -559,9 +552,8 @@ class Surface:
 
 
 def dash_plus():
-    """Dash with a touch more: endplates and a gurney on its spoiler, tail
-    lamps across its back, square lamps, a grille, bonnet and roof scoops, a
-    rear screen."""
+    """Dash with a touch more: a gurney on its spoiler, tail lamps above the
+    bumper, square lamps, a grille, bonnet and roof scoops, a rear screen."""
     body, nodes = kit_base('vehicle-racer-low')
     S, P = Surface(body), GREEN
     parts = [body]
@@ -578,17 +570,16 @@ def dash_plus():
                                              (-0.09, r - 0.004)], P, 0.006))
     parts.append(box('roofMouth', (-0.038, 0.03, r + 0.002), (0.038, 0.034, r + 0.016), INK))
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS))
-    endplates(parts, P, 0.25, [(-0.30, 0.29), (-0.43, 0.29), (-0.43, 0.37), (-0.31, 0.365)])
     gurney(parts, 0.244, -0.428, 0.344)
-    # the tail under the spoiler hides from the chase cam: the lamps ride
-    # the spoiler's back instead, on a dark band
-    parts.append(S.patch('tailPanel', 'y-', (-0.21, 0.21, 0.304, 0.336), INK, 0.003))
-    tail_lamps(S, parts, 0.10, 0.19, 0.309, 0.331)
+    # the upright strip between the bumper and the spoiler, on a dark band;
+    # corners inside it, or they land on the bumper and the side bevels
+    parts.append(S.patch('tailPanel', 'y-', (-0.158, 0.158, 0.219, 0.243), INK, 0.003))
+    tail_lamps(S, parts, 0.07, 0.15, 0.222, 0.24)
     return join(parts, 'body'), nodes
 
 
 def carve_plus():
-    """Carve with a touch more: wing endplates and a gurney, twin round lamps,
+    """Carve with a touch more: a gurney on the wing, twin round lamps,
     a grille, louvres on the bonnet and the roof, a rear screen, tail lamps."""
     body, nodes = kit_base('vehicle-racer')
     S, P = Surface(body), BLUE
@@ -596,7 +587,6 @@ def carve_plus():
     round_lamps(S, parts, (0.115, 0.158), 0.236, 0.018)
     louvres(S, parts, 0.035, 0.13, (0.185, 0.215, 0.245))
     parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
-    endplates(parts, P, 0.25, [(-0.335, 0.37), (-0.445, 0.37), (-0.445, 0.455), (-0.345, 0.45)])
     gurney(parts, 0.244, -0.442, 0.425)
     louvres(S, parts, 0.035, 0.115, (-0.03, -0.06, -0.09))
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS))
@@ -605,7 +595,7 @@ def carve_plus():
 
 
 def bolt_plus():
-    """Bolt with a touch more: endplates on both wings, nose louvres, tail
+    """Bolt with a touch more: endplates on the front wing, nose louvres, tail
     lamps on a dark panel."""
     body, nodes = kit_base('vehicle-speedster')
     S, P = Surface(body), RED
@@ -613,7 +603,6 @@ def bolt_plus():
     for s in (-1, 1):
         parts.append(profile(f'fplate{s}', 0.006, [(0.31, 0.07), (0.43, 0.07), (0.43, 0.165), (0.33, 0.155)],
                              P, 0, cx=s * 0.226))
-    endplates(parts, P, 0.226, [(-0.34, 0.30), (-0.445, 0.30), (-0.445, 0.405), (-0.34, 0.40)])
     louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
     # red lamps on a red-orange tail need a dark panel to read
     parts.append(S.patch('tailPanel', 'y-', (-0.105, 0.105, 0.236, 0.284), INK, 0.003))
