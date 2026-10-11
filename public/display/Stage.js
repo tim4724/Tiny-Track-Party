@@ -292,7 +292,7 @@ export class Stage {
     // is the one place that tells it the scale the buffer was sized at — a
     // resize is not guaranteed to follow boot, so a HUD built after it would
     // report that scale as 1 for the whole session.
-    this.perf = new PerfHud(this.container, this._canvas);
+    this.perf = new PerfHud(this._canvas);
     if (params.get('perf') === '1') this.perf.show();
     // The scale is decided from the perf HUD's own measurements, so it has to
     // keep measuring with the panel hidden — which is the ordinary state.

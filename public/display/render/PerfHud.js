@@ -115,7 +115,7 @@ export class PerfHud {
   // grabbing it first would hand Filament a context IT did not configure. The
   // context is acquired lazily on the first instrumented frame, which by
   // construction is after boot().
-  constructor(container, canvas) {
+  constructor(canvas) {
     bindPerf();
     this._canvas = canvas;
     this._visible = false;
@@ -170,7 +170,9 @@ export class PerfHud {
       + 'border-radius:3px;background:rgba(255,255,255,0.05)';
     el.appendChild(text);
     el.appendChild(scope);
-    (container || document.body).appendChild(el);
+    // On <body>, not in #scene: that is a stacking context at z-index 0, and the
+    // lobby above it would paint over the panel whatever its own z-index.
+    document.body.appendChild(el);
     this._el = el;
     this._text = text;
     this._ctx = scope.getContext('2d');
