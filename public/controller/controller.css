@@ -1253,15 +1253,19 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Legend — shadowless caption rows on the stage, so the chips read as a legend
    for the demo, never as another row of buttons. Rows swap with the picked
-   mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM. */
+   mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM, and both
+   DRIFT with the mode's own caption. The rows stack as one block, centred
+   on the stage, with the fixed-size chips (and so the captions) aligned. */
 .settings-legend {
-  flex: none; display: flex; align-items: center; justify-content: center;
-  gap: 0.35rem 1.4rem; flex-wrap: wrap;   /* rows sit close: one legend, not two items */
+  flex: none; display: flex; flex-direction: column; align-items: flex-start;
+  gap: 0.35rem;   /* rows sit close: one legend, not three items */
   padding: 0.2rem 0.4rem;
 }
 .settings-card .help-ctrl--chord { display: none; }
 .settings-card.is-buttons .help-ctrl--chord { display: flex; }
-.settings-card.is-buttons .help-ctrl--brake { display: none; }
+.settings-card.is-buttons .help-ctrl--brake,
+.settings-card.is-buttons .drift-cap--tilt,
+.settings-card:not(.is-buttons) .drift-cap--buttons { display: none; }
 
 /* "Got it" closes the sheet from the foot of the column, sized by its label
    on the lobby corner's own floor (.lobby-go .btn) so the two read as the
@@ -1484,6 +1488,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .help-chip--brake { color: #fff; background: var(--danger); }
 .help-chip--item  { color: #fff; background: var(--item); }
 .help-chip--steer { color: #fff; background: var(--blue); }
+.help-chip--drift { color: #fff; background: var(--blue); }   /* the demo's .demo-drift sticker */
 .help-chip--steer .steer-glyph { font-size: 0.8rem; border-radius: 1px; }
 .help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
 
@@ -1648,7 +1653,7 @@ body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
 @media (max-height: 356px) {
   .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; }
   .settings-title, .demo-title { font-size: 1.15rem; }
-  .settings-legend { gap: 0.3rem 1rem; }
+  .settings-legend { gap: 0.3rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
 /* One more step, for a small phone whose browser bar is up. The card's height

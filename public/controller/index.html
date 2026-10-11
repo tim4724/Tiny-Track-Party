@@ -292,8 +292,9 @@
       <!-- The stage — the picked mode's animated demo phone under a headline
            naming the mode, with the legend attached beneath: everything here is
            information, everything in the column is a choice. Legend rows swap
-           with the mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM.
-           Each demo ends its loop on a drift, tagged by the DRIFT sticker. -->
+           with the mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM,
+           and both end on DRIFT, whose chip is the sticker the demo pops when its
+           loop ends on a drift. -->
       <div class="demo-stage">
         <h3 class="demo-title"><span class="demo-title--tilt">Tilt steering</span><span class="demo-title--buttons">Button steering</span></h3>
         <div class="steer-demo steer-demo--tilt" aria-hidden="true">
@@ -332,7 +333,7 @@
         <div class="settings-legend">
           <div class="help-ctrl help-ctrl--chord">
             <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
-            <span class="help-ctrl__cap">Hold both to brake. Hold one, then add the other, to drift</span>
+            <span class="help-ctrl__cap">Hold both to brake</span>
           </div>
           <div class="help-ctrl">
             <span class="help-chip help-chip--item">ITEM</span>
@@ -340,7 +341,11 @@
           </div>
           <div class="help-ctrl help-ctrl--brake">
             <span class="help-chip help-chip--brake">BRAKE</span>
-            <span class="help-ctrl__cap">Hold to slow. Hold while steering to drift</span>
+            <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
+          </div>
+          <div class="help-ctrl">
+            <span class="help-chip help-chip--drift">DRIFT</span>
+            <span class="help-ctrl__cap"><span class="drift-cap--tilt">Brake while steering</span><span class="drift-cap--buttons">Hold one, add the other</span></span>
           </div>
         </div>
       </div>
