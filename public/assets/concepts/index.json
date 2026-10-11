@@ -1,0 +1,49 @@
+{
+ "_readme": "Written by scripts/gen-concept-cars.py; read by the asset gallery.",
+ "models": [
+  {
+   "name": "concept-buggy",
+   "tris": 2280,
+   "note": "RC off-road buggy: cab-forward shell, roll cage, open engine, big wing, coil-over shocks and knobby tyres."
+  },
+  {
+   "name": "concept-rally",
+   "tris": 2084,
+   "note": "Rally hatch: boxy shell, flared arches, light pod on the bumper, roof scoop and spoiler, mud flaps, door roundels."
+  },
+  {
+   "name": "concept-gt",
+   "tris": 1728,
+   "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, shark fin into a full-width wing, splitter and diffuser, roundels."
+  },
+  {
+   "name": "concept-pip",
+   "tris": 1900,
+   "note": "Bubble micro car: short rounded shell, glass bubble with a painted cap, frog-eye lamps, chrome bumper hoops and a spare wheel on the tail."
+  },
+  {
+   "name": "dash-plus",
+   "tris": 1340,
+   "note": "Dash with a touch more: lamps and grille, a bonnet scoop, side and rear glass, mirrors, pod intakes, tail lamps and twin pipes.",
+   "base": "vehicle-racer-low"
+  },
+  {
+   "name": "bolt-plus",
+   "tris": 1612,
+   "note": "Bolt with a touch more: wing endplates fore and aft, suspension arms, an open cockpit with a screen, mirrors on stalks, intakes, a nose roundel, exhausts under the wing and a rain light on its pylon.",
+   "base": "vehicle-speedster"
+  },
+  {
+   "name": "carve-plus",
+   "tris": 1600,
+   "note": "Carve with a touch more: twin round lamps, bonnet louvres, wing endplates and gurney, canards, diffuser, side and rear glass.",
+   "base": "vehicle-racer"
+  },
+  {
+   "name": "rumble-plus",
+   "tris": 1800,
+   "note": "Rumble with a touch more: chrome radiator, lamps on stalks, bonnet straps and louvres, a side exhaust, an open cockpit with a headrest fairing, a fuel cap, tail roundels and a tail lamp.",
+   "base": "vehicle-vintage-racer"
+  }
+ ]
+}

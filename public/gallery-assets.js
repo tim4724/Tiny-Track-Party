@@ -341,9 +341,15 @@ async function buildLegend() {
 // them in .cache/, see that script's header), so everything here has to survive
 // them being absent. That is the empty state below rather than an error — on a
 // fresh worktree it is the normal condition.
-let kitModels = null;   // [{ id, name, tris, inGame }] in field order, once fetched
-let kitLayout = [];     // the renderer's answer, same order
-let kitRows = [];       // the row elements, same order
+//
+// The CONCEPT CARS stand in the same field, ahead of the kits: candidates
+// modelled for this game (scripts/gen-concept-cars.py), each "plus" beside the
+// roster car it builds on, so the two can be judged side by side.
+let kitModels = null;      // [{ id, name, tris, inGame }] in field order, once fetched
+let conceptModels = null;  // the same shape, plus each one's `note`
+let fieldModels = [];      // what the field was last built from
+let kitLayout = [];        // the renderer's answer, same order as the rows
+let kitRows = [];          // the row elements
 
 function kitEmpty(message) {
   const p = document.createElement('p');
@@ -376,9 +382,23 @@ async function loadKitModels() {
   return out;
 }
 
-function matching() {
+async function loadConceptModels() {
+  const index = await (await fetch('/assets/concepts/index.json')).json();
+  const out = [];
+  for (const m of index.models) {
+    if (m.base) {
+      out.push({ id: m.base, kit: 'Roster', name: m.base, tris: '', inGame: m.base,
+                 note: `As it ships today, for comparison with ${m.name}.` });
+    }
+    out.push({ id: `concept:${m.name}`, kit: 'Concept cars', name: m.name, tris: m.tris,
+               inGame: null, note: m.note });
+  }
+  return out;
+}
+
+function matching(models) {
   const q = kitFilter.value.trim().toLowerCase();
-  return q ? kitModels.filter((m) => m.name.toLowerCase().includes(q)) : kitModels;
+  return q ? models.filter((m) => m.name.toLowerCase().includes(q)) : models;
 }
 
 // Build the field, then the list of what is in it. A rebuild is a scene build
@@ -387,18 +407,22 @@ function matching() {
 async function buildKitField() {
   const s = showroom();
   if (!s) return;
-  if (!kitModels) {
+  if (state.assetConcepts && !conceptModels) conceptModels = await loadConceptModels();
+  if (state.assetKits && !kitModels) {
     kitEmpty('Loading the kits…');
     try {
       kitModels = await loadKitModels();
     } catch (_) {
-      kitEmpty('The kits are not on this machine yet. Run `npm run fetch:kits` and reload — '
-        + 'it downloads the three CC0 kits into .cache/ (~20 MB, they are not in the tree).');
-      return;
+      if (!state.assetConcepts) {
+        kitEmpty('The kits are not on this machine yet. Run `npm run fetch:kits` and reload — '
+          + 'it downloads the three CC0 kits into .cache/ (~20 MB, they are not in the tree).');
+        return;
+      }
     }
   }
-  const shown = matching();
-  kitCount.textContent = `${shown.length} of ${kitModels.length} models`;
+  fieldModels = [...(state.assetConcepts ? conceptModels : []), ...(state.assetKits ? kitModels || [] : [])];
+  const shown = matching(fieldModels);
+  kitCount.textContent = `${shown.length} of ${fieldModels.length} models`;
   kitEmpty(`Standing ${shown.length} models…`);
   kitLayout = await s.kits(shown.map((m) => m.id));
   buildKitList(shown);
@@ -422,6 +446,12 @@ function buildKitList(shown) {
     tris.className = 'kit-row__tris';
     tris.textContent = `${m.tris}`;
     row.append(name, tris);
+    if (m.note) {
+      const note = document.createElement('span');
+      note.className = 'kit-row__note';
+      note.textContent = m.note;
+      row.append(note);
+    }
     row.addEventListener('click', () => {
       const s = showroom();
       if (s) s.lookAtKit(kitLayout[i]);
@@ -441,12 +471,13 @@ function buildKitList(shown) {
 let filterTimer = 0;
 kitFilter.addEventListener('input', () => {
   clearTimeout(filterTimer);
-  if (state.assetKits) filterTimer = setTimeout(buildKitField, 450);
+  if (state.assetKits || state.assetConcepts) filterTimer = setTimeout(buildKitField, 450);
 });
 
-Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', () => {
-  kitSheet.hidden = !state.assetKits;
-  if (state.assetKits) {
+function syncField() {
+  const on = !!(state.assetKits || state.assetConcepts);
+  kitSheet.hidden = !on;
+  if (on) {
     buildKitField();
   } else {
     // Tear the field down rather than leaving it standing out of sight: it is
@@ -455,8 +486,10 @@ Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', () => {
     const s = showroom();
     if (s) { s.kits([]); s.home(); }
   }
-});
-kitSheet.hidden = !state.assetKits;
+}
+Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', syncField);
+Gallery.bindCheckbox(state, 'asset-concepts', 'assetConcepts', syncField);
+kitSheet.hidden = !(state.assetKits || state.assetConcepts);
 
 
 // ---- boot -------------------------------------------------------------------
@@ -500,7 +533,7 @@ whenReady((s) => {
   // LAST, and the one that does not collapse into the build above: it has
   // several hundred models to fetch first, and it flies the camera when it
   // lands. A page reloaded with the field up comes back up standing in it.
-  if (state.assetKits) buildKitField();
+  if (state.assetKits || state.assetConcepts) buildKitField();
 });
 
 Gallery.initMobileOptionsToggle();
