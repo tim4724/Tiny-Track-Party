@@ -208,82 +208,91 @@
   </div>
 
   <!-- Settings popup — frosted glass like #pause-overlay/#conn, sits ABOVE the
-       lobby and BELOW #conn (z 17) so a dropped link always wins. One setting
-       (the steering input mode, tilt vs buttons) plus the animated how-to-drive
-       demo for whichever mode is picked — it doubles as the tutorial and
-       auto-shows ONCE per device on first lobby entry (localStorage
+       lobby and BELOW #conn (z 17) so a dropped link always wins. Two labelled
+       groups in a LEFT column — this phone's steering, then the TV's own
+       settings — with "Got it" at its foot, and the animated how-to-drive demo
+       for the picked mode on the RIGHT. The demo doubles as the tutorial: the
+       sheet auto-shows ONCE per device on first lobby entry (localStorage
        'tinytrack_seen_help'); the gear buttons reopen it. The motion-permission
        recovery is a SEPARATE popup (#motion-overlay). Wiring in modals.js. -->
   <div id="settings-overlay" class="hidden" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <!-- .is-buttons (set by refreshSettingsCard) flips the demo + captions to
-         button steering; the default card teaches tilt. -->
+    <!-- .is-buttons (set by refreshSettingsCard) flips the demo, its headline
+         and the legend to button steering; the default card teaches tilt. -->
     <div id="settings-card" class="settings-card">
-      <div class="settings-head">
+      <!-- Every setting is a row: its name on the left, its control on the
+           right. A choice between two named options is a two-way pill with the
+           recommended one first; on/off is a switch, on to the right. Each group
+           is labelled OUTSIDE its box, so a locked box (below) dims while its
+           heading stays readable. -->
+      <div class="settings-col">
+        <!-- The dialog's name; on the shortest screens it is for assistive
+             tech only (controller.css), where the rows need the height. -->
         <h2 id="settings-title" class="settings-title">Settings</h2>
-      </div>
-
-      <!-- Steering mode — pick LEFT, watch RIGHT. "Steering" heads the group
-           itself; the seg is a column of two plain radio rows (a drawn dot +
-           the mode's name, nothing else — the animated demo beside them does
-           ALL the teaching); the picked row tints toward your livery. The
-           demo phones live on the STAGE — one per mode, .is-buttons
-           (refreshSettingsCard) showing the picked one. Tilt twists like a
-           steering wheel with the strip sliding in lockstep; buttons takes
-           turns pressing ‹ › with the strip snapping full-side. -->
-      <div class="seg" role="radiogroup" aria-labelledby="steering-label">
-        <span id="steering-label" class="seg-label">Steering</span>
-        <button id="input-tilt" type="button" class="mode-card" role="radio" aria-checked="true">
-          <span class="mode-card__name">Tilt</span>
-          <!-- Badge text is re-resolved on every open by refreshSettingsCard
-               ("Not available" + disabled card on a device with no motion
-               sensor); the literal below is what the gallery scenario shows. -->
-          <span class="mode-card__badge">Recommended</span>
-        </button>
-        <button id="input-buttons" type="button" class="mode-card" role="radio" aria-checked="false">
-          <span class="mode-card__name">Buttons</span>
-        </button>
-      </div>
-
-      <!-- TV sound — HOST ONLY (refreshSettingsCard hides it for everyone else;
-           the display's C++ verdict re-checks host anyway). It controls the BIG
-           SCREEN, not this phone: it sends SET_SOUND and renders the snapshot's
-           soundOn — so the TV's own mute button and this switch stay in step.
-           The row carries "TV" in its own label rather than under a group
-           heading. A "TV" kicker over a group of one spent a whole row of a
-           card that runs out of height at 320px to introduce a single switch;
-           it can come back the day there is a second TV setting. The Host
-           sticker rides the same row for the same reason: a player read "TV
-           sound" as this phone's sound until it said whose control it is. -->
-      <div id="tv-seg" class="seg seg--tv hidden">
-        <div class="tv-row">
-          <span class="tv-row__label"><span id="sound-label" class="tv-row__name">TV sound</span><span class="host-chip">Host</span></span>
-          <button id="sound-toggle" type="button" class="switch" role="switch"
-                  aria-checked="true" aria-labelledby="sound-label"></button>
-        </div>
-        <!-- TV picture — only where the TV OFFERS it: the snapshot's frameRate is
-             absent on a display that holds 1080@60, and this row hides with it.
-             Sharp is half the TV's rate for a sharper picture; the small print
-             is the TV's own pair (60/30, or 50/25 on a 50 Hz set), filled by
-             refreshSettingsCard. -->
-        <div id="rate-row" class="tv-row hidden">
-          <span class="tv-row__label"><span id="rate-label" class="tv-row__name">TV picture</span></span>
-          <div class="rate-pick" role="radiogroup" aria-labelledby="rate-label">
-            <button id="rate-full" type="button" class="rate-pick__opt" role="radio" aria-checked="true">
-              <span class="rate-pick__name">Smooth</span><span id="rate-full-hz" class="rate-pick__hz">60 fps</span>
-            </button>
-            <button id="rate-half" type="button" class="rate-pick__opt" role="radio" aria-checked="false">
-              <span class="rate-pick__name">Sharp</span><span id="rate-half-hz" class="rate-pick__hz">30 fps</span>
-            </button>
+        <div class="set-group" role="group" aria-labelledby="phone-group-label">
+          <h3 class="set-group__head set-group__head--phone">
+            <svg class="set-group__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="6.5" width="19" height="11" rx="3"/><path d="M5.5 10v4"/></svg>
+            <span id="phone-group-label">Your phone</span>
+          </h3>
+          <div class="set-box">
+            <div class="set-row">
+              <span class="set-row__label">
+                <span id="steering-label" class="set-row__name">Steering</span>
+                <!-- Re-resolved on every open by refreshSettingsCard: on a device
+                     with no motion sensor Tilt is disabled and this says why. -->
+                <span id="steer-note" class="set-row__note">Tilt is recommended</span>
+              </span>
+              <div class="seg-pick" role="radiogroup" aria-labelledby="steering-label">
+                <button id="input-tilt" type="button" class="seg-pick__opt" role="radio" aria-checked="true">Tilt</button>
+                <button id="input-buttons" type="button" class="seg-pick__opt" role="radio" aria-checked="false">Buttons</button>
+              </div>
+            </div>
           </div>
         </div>
+
+        <!-- The TV's settings control the BIG SCREEN, not this phone, and only
+             the host may change them (the display's C++ verdict re-checks). Every
+             phone sees them, so a player can tell why the TV is quiet; on a
+             non-host phone the box is LOCKED (refreshSettingsCard: .is-locked,
+             controls disabled) and the chip reads "Host only" with a lock;
+             on the host's own it reads "You're the host". Sound sends SET_SOUND
+             and renders the snapshot's soundOn, so the TV's own mute button and
+             this switch stay in step. -->
+        <div id="tv-seg" class="set-group" role="group" aria-labelledby="tv-group-label">
+          <h3 class="set-group__head">
+            <svg class="set-group__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6"/></svg>
+            <span id="tv-group-label">TV</span>
+            <span class="host-chip"><svg class="host-chip__lock" viewBox="0 0 10 11" aria-hidden="true" focusable="false"><rect x="1" y="4.5" width="8" height="6" rx="1.5"/><path d="M2.8 4.5V3.2a2.2 2.2 0 0 1 4.4 0v1.3"/></svg><span class="host-chip__you">You're the host</span><span class="host-chip__only">Host only</span></span>
+          </h3>
+          <div class="set-box">
+            <div class="set-row">
+              <span id="sound-label" class="set-row__name">Sound</span>
+              <button id="sound-toggle" type="button" class="switch" role="switch"
+                      aria-checked="true" aria-labelledby="sound-label"></button>
+            </div>
+            <!-- Graphics — only where the TV OFFERS it: the snapshot's frameRate
+                 is absent on a display that holds 1080@60, and this row hides
+                 with it. Quality is half the TV's rate for a sharper picture; its
+                 small print is the TV's own half rate (30, or 25 on a 50 Hz set),
+                 filled by refreshSettingsCard. -->
+            <div id="rate-row" class="set-row hidden">
+              <span id="rate-label" class="set-row__name">Graphics</span>
+              <div class="seg-pick" role="radiogroup" aria-labelledby="rate-label">
+                <button id="rate-full" type="button" class="seg-pick__opt" role="radio" aria-checked="true">Performance</button>
+                <button id="rate-half" type="button" class="seg-pick__opt" role="radio" aria-checked="false">Quality<span id="rate-half-hz" class="seg-pick__hz">30 fps</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
       </div>
 
-      <!-- The stage — a sunken surface (surface-2, "not a control") holding the
-           picked mode's animated demo phone with the legend attached beneath:
-           everything on it is information, everything in the seg is a choice.
-           Legend rows swap with the mode: tilt teaches ITEM + BRAKE, buttons
-           the ‹ › chord + ITEM. -->
+      <!-- The stage — the picked mode's animated demo phone under a headline
+           naming the mode, with the legend attached beneath: everything here is
+           information, everything in the column is a choice. Legend rows swap
+           with the mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM. -->
       <div class="demo-stage">
+        <h3 class="demo-title"><span class="demo-title--tilt">Tilt steering</span><span class="demo-title--buttons">Button steering</span></h3>
         <div class="steer-demo steer-demo--tilt" aria-hidden="true">
           <div class="phone-lean">
             <div class="phone-frame">
@@ -330,15 +339,13 @@
           </div>
         </div>
       </div>
-
-      <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
     </div>
   </div>
 
   <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
        when the tilt sensor is blocked (iOS denied), with the live recovery path. A
        device with no sensor at all never sees it — it is put on button steering (main.js onMotionState)
-       and the settings card's Tilt row reads "Not available" instead. Sits above
+       and the settings card's Tilt option is disabled with a note saying why. Sits above
        #settings-overlay (z 18) but below #conn. Title, copy + the primary button's
        action come from tilt.motionState (see refreshMotionPopup / motionHelpCopy).
        Once iOS has denied, that button RELOADS (the only way to re-raise the

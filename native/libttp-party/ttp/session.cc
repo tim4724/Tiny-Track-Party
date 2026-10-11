@@ -117,7 +117,7 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
   // recorded before the key existed replay byte-identically; the shell always
   // hands a bool, and a phone reading an old display treats absent as ON.
   copyKey(out, input, "soundOn");
-  // The host's Smooth/Sharp choice — present only where the display offers it
+  // The host's Performance/Quality choice — present only where the display offers it
   // ({half, fullHz, halfHz}); absent hides the phone's row.
   copyKey(out, input, "frameRate");
 

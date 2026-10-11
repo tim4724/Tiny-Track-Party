@@ -765,7 +765,7 @@ int main() {
       // ---- THE HOST'S HALF RATE: the same ladder at half the anchor rate ----
       //
       // Never the rule's choice (the block above), only the host's: the phone's
-      // Sharp option. It lays out the same rungs at twice the anchor divisor
+      // Quality option. It lays out the same rungs at twice the anchor divisor
       // with no rate step, so the rule spends the doubled budget on pixels.
       RenderScaleLimits half = kHD;
       half.halfRate = true;

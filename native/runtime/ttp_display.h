@@ -186,7 +186,7 @@ TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
  * "assume 60". */
 TTP_ABI double ttp_display_scale_panel_ms(void);
 
-/* THE HOST'S "SHARP" CHOICE: 1 lays the ladder out at half the anchor rate
+/* THE HOST'S "QUALITY" CHOICE: 1 lays the ladder out at half the anchor rate
  * (30 on a 60 Hz panel, 25 on a 50 Hz one), 0 puts it back. The next
  * ttp_display_scale_poll answers the move — same rung, the other divisor — so
  * a shell performs it exactly as it performs any other point, which means a

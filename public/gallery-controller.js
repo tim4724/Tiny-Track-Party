@@ -21,6 +21,7 @@ var CONTROLLER_CARDS = [
   { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
   { key: 'settings',         title: 'Settings (tilt)',    perColor: true },
   { key: 'settings-buttons', title: 'Settings (buttons)', perColor: true },
+  { key: 'settings-player',  title: 'Settings (not host)', perColor: true },
   { key: 'motion-blocked',  title: 'Motion blocked',  perColor: true },
   { key: 'countdown',       title: 'Countdown',       perColor: true },
   { key: 'playing',         title: 'Driving (tilt)',  perColor: true },

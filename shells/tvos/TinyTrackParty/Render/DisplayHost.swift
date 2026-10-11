@@ -262,7 +262,7 @@ final class DisplayHost {
 
     /// How many vsyncs one rendered frame spans — the divisor half of the
     /// operating point `adaptScale` performs. 1 everywhere but the host's
-    /// Sharp choice, which asks for every other tick.
+    /// Quality choice, which asks for every other tick.
     ///
     /// Only the RENDER half is paced: `onFrame` (the sim) still runs every
     /// tick, so steering keeps the panel's cadence and only the picture's
@@ -602,7 +602,7 @@ final class DisplayHost {
     /// does on the other two shells.
     ///
     /// BOTH HALVES ARE PERFORMED: the divisor moves on a 120 Hz panel with the
-    /// headroom for its rate step, and on the host's Sharp choice; either way
+    /// headroom for its rate step, and on the host's Quality choice; either way
     /// it arrives as an ordinary point.
     private func adaptScale(_ link: CADisplayLink) {
         guard Self.scalePin == 0, isAttached else { return }
@@ -639,7 +639,7 @@ final class DisplayHost {
     /// The period is a fact only the shell has, and undeclared the fold assumes
     /// 60 Hz — so the 50 Hz PAL match mode `start()` describes is scored against
     /// a budget the box can never meet and reads amber however idle it is. The
-    /// divisor is 1 unless the host chose Sharp, and a paced tick that does not
+    /// divisor is 1 unless the host chose Quality, and a paced tick that does not
     /// draw is a chosen cadence, not a skip.
     ///
     /// `duration` AND NOT the `cadence` above, which is the wrong number for
@@ -661,7 +661,7 @@ final class DisplayHost {
         ttp_perf_pacing(ms, Int32(presentDivisor))
     }
 
-    /// The host's Sharp choice: the rule lays its ladder out at half the panel
+    /// The host's Quality choice: the rule lays its ladder out at half the panel
     /// rate, and the next `adaptScale` paces the answer like any other point.
     func halfRate(_ on: Bool) { ttp_display_scale_half_rate(on ? 1 : 0) }
 

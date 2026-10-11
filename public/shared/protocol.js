@@ -77,7 +77,7 @@ var MSG = {
                                 //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}],stars:{earned,total}} (lobby only; absent, not null, elsewhere —
                                 //   the couch's DERIVED star record, composed display-side off the wasm catalogue; phones draw it, never re-derive it),
                                 //   frameRate:{half,fullHz,halfHz} (ABSENT unless the display could not hold 1080@60 — the host's
-                                //   Smooth/Sharp row shows only when it is present; the Hz are the panel's, so 60/30 or 50/25) }.
+                                //   Graphics row shows only when it is present; the Hz are the panel's, so 60/30 or 50/25) }.
                                 //   trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Pushed live
                                 //   on change, replayed to each (re)joiner right after `joined`. Car images load by id from the web host.
 

@@ -33,11 +33,11 @@ const { test, expect } = require('./helpers');
 // A small landscape phone with browser chrome, and the same again narrower.
 const SHORT = [{ width: 844, height: 300 }, { width: 667, height: 280 }];
 // The floor of the whole set: a Z Fold cover screen (280x653) turned landscape
-// with the browser bar up. The lobby has to FIT here — that is what the cap
-// floors and the sub-270px tier in controller.css are for — but Settings is
-// explicitly allowed to scroll below ~320px (its own tier says so, and the
-// scrolling path has its own test), so the sheet's no-scroll claim stops at
-// SHORT and everything else runs down to here.
+// with the browser bar up. Everything has to FIT here — the lobby through the
+// cap floors and the sub-270px tier in controller.css, the Settings sheet
+// through its short-screen tiers (its headings step out, the overlay gives back
+// its margins). Below this the sheet may scroll, and the scrolling path has its
+// own test.
 const FLOOR = { width: 653, height: 232 };
 const LOBBY = [...SHORT, FLOOR];
 
@@ -121,9 +121,11 @@ for (const vp of LOBBY) {
   });
 }
 
-// `settings-buttons` is also the sheet at its TALLEST: it shows the TV picture
-// row a display offers only when it could not hold 1080@60.
-for (const vp of SHORT) for (const scenario of ['settings', 'settings-buttons']) {
+// `settings-buttons` and `settings-player` are the sheet at its TALLEST: they show the Graphics
+// row a display offers only when it could not hold 1080@60 (the player's locked).
+// It holds down to FLOOR: its headings give their lines up below 300 and 270,
+// and the overlay its margins below 300 (controller.css), so that it does.
+for (const vp of LOBBY) for (const scenario of ['settings', 'settings-buttons', 'settings-player']) {
   const at = `${vp.width}x${vp.height}`;
 
   test(`short viewport ${at}: the whole Settings sheet fits (${scenario})`, async ({ page }) => {
@@ -136,7 +138,7 @@ for (const vp of SHORT) for (const scenario of ['settings', 'settings-buttons'])
     const card = page.locator('#settings-card');
     expect(await card.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeLessThanOrEqual(1);
 
-    const [head] = await boxes(page, '.settings-head');
+    const [head] = await boxes(page, '.settings-col');
     expect(head.top).toBeGreaterThanOrEqual(0);
     const [done] = await boxes(page, '#settings-done');
     expect(done.bottom).toBeLessThanOrEqual(vp.height);
@@ -147,10 +149,11 @@ for (const vp of SHORT) for (const scenario of ['settings', 'settings-buttons'])
 // for — and scrolling is exactly the state in which the focus seed can move it,
 // because "Got it" is the card's LAST control. The fit tests above cannot see
 // this: at their heights the card does not overflow, so it cannot be scrolled
-// and `scrollTop === 0` would hold with the fix reverted.
-test('very short viewport: Settings opens at its title even once the card must scroll', async ({ page }) => {
-  await page.setViewportSize({ width: 568, height: 240 });
-  await page.goto('/controller/index.html?scenario=settings&color=0');
+// and `scrollTop === 0` would hold with the fix reverted. It takes the sheet's
+// tallest face (the Graphics row up): the plain one fits even here.
+test('very short viewport: Settings opens at its top even once the card must scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 568, height: 200 });
+  await page.goto('/controller/index.html?scenario=settings-buttons&color=0');
   await page.waitForSelector('#settings-card');
 
   const card = page.locator('#settings-card');
@@ -158,7 +161,7 @@ test('very short viewport: Settings opens at its title even once the card must s
   expect(await card.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeGreaterThan(0);
   expect(await card.evaluate((e) => e.scrollTop)).toBe(0);
 
-  const [head] = await boxes(page, '.settings-head');
+  const [head] = await boxes(page, '.settings-col');
   expect(head.top).toBeGreaterThanOrEqual(0);
 });
 

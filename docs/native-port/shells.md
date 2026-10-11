@@ -474,7 +474,7 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
 
     **PACE ANY DIVISOR, EVEN ON A 60 Hz PANEL.** The rule never halves a 60 Hz
     panel's rate on its own judgement, but the HOST may: the phone's TV picture
-    row (Smooth / Sharp) sends SET_FRAME_RATE, `ttp_net_controller_action`
+    row (Performance / Quality) sends SET_FRAME_RATE, `ttp_net_controller_action`
     answers `set-frame-rate`, and the shell performs it with
     `ttp_display_scale_half_rate`, persists the flag, calls the same function
     with it at boot, and republishes. The answer then arrives from the poll as

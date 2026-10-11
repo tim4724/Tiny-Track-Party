@@ -269,12 +269,14 @@ export function runControllerScenario(opts) {
       break;
 
     case 'settings':
-    case 'settings-buttons': {
-      // Settings popup over the lobby, for the gallery — both faces: the tilt
-      // demo (default) and the buttons demo ('settings-buttons'). modals.js owns
-      // the live open/close (and its auto-show is suppressed in scenario mode),
-      // so here we just lay out the host lobby and pop the overlay open with the
-      // card flipped to the right mode (mirrors refreshSettingsCard). Motion
+    case 'settings-buttons':
+    case 'settings-player': {
+      // Settings popup over the lobby, for the gallery — the host's two faces:
+      // the tilt demo (default) and the buttons demo ('settings-buttons'), and a
+      // phone that is NOT the host ('settings-player'), whose TV group is locked.
+      // modals.js owns the live open/close (and its auto-show is suppressed in
+      // scenario mode), so here we just lay out the lobby and pop the overlay
+      // open with the card set the way refreshSettingsCard would. Motion
       // recovery is its own scenario below.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
@@ -290,14 +292,16 @@ export function runControllerScenario(opts) {
       el('settings-card').classList.toggle('is-buttons', buttons);
       el('input-tilt').setAttribute('aria-checked', String(!buttons));
       el('input-buttons').setAttribute('aria-checked', String(buttons));
-      // This is the HOST's card, so the TV section shows with Sound on
-      // (mirrors refreshSettingsCard's host branch).
-      el('tv-seg').classList.remove('hidden');
+      // Sound is on; only the player's card locks the TV group (mirrors
+      // refreshSettingsCard).
+      const locked = scenario === 'settings-player';
+      el('tv-seg').classList.toggle('is-locked', locked);
+      for (const id of ['sound-toggle', 'rate-full', 'rate-half']) el(id).disabled = locked;
       el('sound-toggle').setAttribute('aria-checked', 'true');
-      // The buttons face doubles as a TV that could not hold 1080@60, so the
-      // gallery shows the TV picture row too (the snapshot's frameRate present);
-      // the tilt face shows the common case, where it is absent.
-      el('rate-row').classList.toggle('hidden', !buttons);
+      // The buttons and player faces double as a TV that could not hold
+      // 1080@60, so they show the Graphics row too (the snapshot's frameRate
+      // present); the tilt face shows the common case, where it is absent.
+      el('rate-row').classList.toggle('hidden', scenario === 'settings');
       el('settings-overlay').classList.remove('hidden');
       el('settings-overlay').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;

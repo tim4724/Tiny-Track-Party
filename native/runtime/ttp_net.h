@@ -177,7 +177,7 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
  * A shell that drops the verdict leaves the host phone's Sound row showing a
  * setting it cannot change — see the `soundOn` field on the lobby frame.
  *
- * "set-frame-rate" carries the host's Smooth/Sharp choice ({half}): perform it
+ * "set-frame-rate" carries the host's Performance/Quality choice ({half}): perform it
  * with ttp_display_scale_half_rate, persist it, republish. The lobby frame's
  * `frameRate` echoes it, and is composed here off the render-scale controller
  * rather than supplied by the shell — it is absent wherever the display holds

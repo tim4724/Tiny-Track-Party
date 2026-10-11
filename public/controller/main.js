@@ -236,7 +236,7 @@ initModals({
   isHost: () => amHost,
   getSoundOn: () => displaySoundOn,
   setSoundOn: (on) => { displaySoundOn = on; net.send(MSG.SET_SOUND, { on }); },
-  // The host-only Smooth/Sharp row, the same optimistic shape.
+  // The host-only Graphics row (Performance / Quality), the same optimistic shape.
   getFrameRate: () => displayFrameRate,
   setHalfRate: (half) => {
     if (displayFrameRate) displayFrameRate = { ...displayFrameRate, half };

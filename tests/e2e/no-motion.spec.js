@@ -18,18 +18,18 @@ async function expectButtonsForcedWithReason(phone) {
   await expect(phone.locator('#settings-overlay')).toBeVisible();
   await expect(phone.locator('#motion-overlay')).toBeHidden();
 
-  // The Tilt row survives as the explanation — disabled, badge flipped. A
+  // Tilt survives as the explanation — disabled, its note saying why. A
   // granted-but-silent sensor only gets there once the no-sample window ends.
   const { SENSOR_SETTLE_MS } = await import('../../public/controller/TiltInput.js');
   await expect(phone.locator('#input-tilt')).toBeDisabled({ timeout: SENSOR_SETTLE_MS + 5000 });
-  await expect(phone.locator('#input-tilt .mode-card__badge')).toHaveText('Not available');
+  await expect(phone.locator('#steer-note')).toHaveText("Tilt isn't available");
 
   // The phone was put on the mode that works here, and the card shows it.
   await expect(phone.locator('#input-buttons')).toHaveAttribute('aria-checked', 'true');
   await expect(phone.locator('#settings-card')).toHaveClass(/is-buttons/);
 }
 
-test('no DeviceOrientationEvent at all: buttons forced, Settings shows Tilt as Not available, no popup', async ({ page, browser }) => {
+test('no DeviceOrientationEvent at all: buttons forced, Settings shows Tilt as not available, no popup', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
   // Hand-rolled join (vs helpers.joinController): this phone must lose its
@@ -48,13 +48,13 @@ test('no DeviceOrientationEvent at all: buttons forced, Settings shows Tilt as N
 
   await expectButtonsForcedWithReason(phone);
 
-  // Dismiss; reopening the card keeps the row unavailable (it re-renders from
+  // Dismiss; reopening the card keeps Tilt unavailable (it re-renders from
   // motionState on every open, not from the first-run beat).
   await phone.click('#settings-done');
   await expect(phone.locator('#settings-overlay')).toBeHidden();
   await phone.click('#settings-btn');
   await expect(phone.locator('#input-tilt')).toBeDisabled();
-  await expect(phone.locator('#input-tilt .mode-card__badge')).toHaveText('Not available');
+  await expect(phone.locator('#steer-note')).toHaveText("Tilt isn't available");
 });
 
 test('a sensor that is granted but silent lands in the same place, on the card already open', async ({ page, browser }) => {
@@ -99,7 +99,7 @@ test('a sensor that answers late takes the open card back to Tilt', async ({ pag
   await phone.evaluate(() => window.dispatchEvent(
     new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 })));
   await expect(phone.locator('#input-tilt')).toBeEnabled();
-  await expect(phone.locator('#input-tilt .mode-card__badge')).toHaveText('Recommended');
+  await expect(phone.locator('#steer-note')).toHaveText('Tilt is recommended');
   await expect(phone.locator('#input-tilt')).toHaveAttribute('aria-checked', 'true');
   await expect(phone.locator('#settings-card')).not.toHaveClass(/is-buttons/);
 });

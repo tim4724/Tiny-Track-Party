@@ -1015,7 +1015,7 @@ class DisplayHost(
     fun camera(mode: Int) = Ttp.ttp_display_camera(mode)
 
     /**
-     * The host's Sharp choice: the rule lays its ladder out at half the panel
+     * The host's Quality choice: the rule lays its ladder out at half the panel
      * rate. Nothing else here changes — the next `ttp_display_scale_poll`
      * answers the move and [adaptScale] paces it like any divisor.
      */

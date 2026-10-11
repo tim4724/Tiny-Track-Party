@@ -188,7 +188,7 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
-  // The host's Smooth/Sharp choice, read off the display's one render-scale
+  // The host's Performance/Quality choice, read off the display's one render-scale
   // controller — ABSENT unless this device has proved it cannot hold the
   // anchor (offersHalfRate), which is what keeps the phone's row hidden on
   // every display that holds 1080@60.

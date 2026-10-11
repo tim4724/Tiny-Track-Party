@@ -335,7 +335,7 @@ class GameCoordinator(
         // sound can play. Same key, same meaning, different store.
         audio.muted = prefs.getBoolean(MUTED_KEY, false)
         audio.start()
-        // The host's Smooth/Sharp choice, remembered like the mute (the web's
+        // The host's Performance/Quality choice, remembered like the mute (the web's
         // key). A scenario starts at full rate, as the web's test surfaces do.
         halfRate = !Scenarios.active && prefs.getBoolean(HALF_RATE_KEY, false)
         display.halfRate(halfRate)
@@ -468,7 +468,7 @@ class GameCoordinator(
     }
 
     /**
-     * The host phone's Smooth/Sharp row (`set-frame-rate`): half the panel rate
+     * The host phone's Graphics row (`set-frame-rate`): half the panel rate
      * for a sharper picture. The engine applies it and decides whether the row
      * is offered at all (the snapshot's `frameRate`, composed in C++); this
      * shell only remembers it, and republishes so the row shows the change.

@@ -17,15 +17,19 @@ test('the host\'s Sound switch and the TV\'s mute button flip one state', async 
   await expect(page.locator('#mute-btn')).toBeVisible();
   await expect(page.locator('#mute-btn')).toHaveAttribute('aria-pressed', 'false');
 
-  // Non-host: no TV section — the display would refuse the message anyway.
+  // Non-host: the TV group shows the live state but is LOCKED — the display
+  // would refuse the message anyway.
   await bob.click('#settings-btn');
   await expect(bob.locator('#settings-card')).toBeVisible();
-  await expect(bob.locator('#tv-seg')).toBeHidden();
+  await expect(bob.locator('#tv-seg')).toHaveClass(/is-locked/);
+  await expect(bob.locator('#sound-toggle')).toBeDisabled();
+  await expect(bob.locator('#sound-toggle')).toHaveAttribute('aria-checked', 'true');
   await bob.click('#settings-done');
 
-  // Host: the TV section is there, its Sound switch showing the live state (on).
+  // Host: the TV group is unlocked, its Sound switch showing the live state (on).
   await alice.click('#settings-btn');
-  await expect(alice.locator('#tv-seg')).toBeVisible();
+  await expect(alice.locator('#tv-seg')).not.toHaveClass(/is-locked/);
+  await expect(alice.locator('#sound-toggle')).toBeEnabled();
   await expect(alice.locator('#sound-toggle')).toHaveAttribute('aria-checked', 'true');
 
   // Phone → TV: flipping the switch mutes the display (button flips, device
