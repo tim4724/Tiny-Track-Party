@@ -449,7 +449,7 @@ def rally():
 
 def gt():
     """Le Mans GT: long low wedge, tinted bubble cockpit over fender humps,
-    with a full-width wing, wedge lamps, a tail strip and bonnet louvres."""
+    with a full-width wing, wedge lamps, tail lamps and bonnet louvres."""
     P = SKY
     parts = []
     parts.append(box('floor', (-0.215, -0.44, 0.05), (0.215, 0.46, 0.095), CHARCOAL))
@@ -468,7 +468,8 @@ def gt():
     parts.append(profile('wing', 0.212, [(-0.38, 0.345), (-0.47, 0.335), (-0.47, 0.35), (-0.38, 0.36)], CHARCOAL, 0.005))
     endplates(parts, P, 0.215, [(-0.38, 0.26), (-0.47, 0.27), (-0.47, 0.36), (-0.39, 0.355)])
     gurney(parts, 0.212, -0.47, 0.35)
-    parts.append(box('tailStrip', (-0.18, -0.456, 0.17), (0.18, -0.448, 0.19), LAMP_RED))
+    for s in (-1, 1):
+        parts.append(box(f'tail{s}', (s * 0.07, -0.456, 0.17), (s * 0.18, -0.448, 0.19), LAMP_RED))
     parts.append(box('grille', (-0.09, 0.465, 0.09), (0.09, 0.472, 0.115), INK))
     body, S, parts = shell(parts)
     louvres(S, parts, 0.035, 0.12, (0.31, 0.34, 0.37))
@@ -592,8 +593,8 @@ def carve_plus():
 
 
 def bolt_plus():
-    """Bolt with a touch more: endplates on both wings and a gurney, a rain
-    light, nose louvres and an airbox mouth."""
+    """Bolt with a touch more: endplates on both wings and a gurney, nose
+    louvres, tail lamps."""
     body, nodes = kit_base('vehicle-speedster')
     S, P = Surface(body), RED
     parts = [body]
@@ -603,31 +604,23 @@ def bolt_plus():
     endplates(parts, P, 0.226, [(-0.34, 0.30), (-0.445, 0.30), (-0.445, 0.405), (-0.34, 0.40)])
     gurney(parts, 0.22, -0.438, 0.375)
     louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
-    parts.append(S.patch('airbox', 'y+', (-0.04, 0.04, 0.33, 0.365), INK))
-    parts.append(S.patch('rain', 'y-', (-0.022, 0.022, 0.255, 0.29), LAMP_RED))
+    tail_lamps(S, parts, 0.035, 0.085, 0.245, 0.275)
     return join(parts, 'body'), nodes
 
 
 def rumble_plus():
-    """Rumble with a touch more: a chrome radiator, lamps on stalks, bonnet
-    straps and louvres, a tail lamp."""
+    """Rumble with a touch more: a ducktail with endplates and a gurney, round
+    lamps and a grille on the bonnet's face, bonnet louvres, tail lamps."""
     body, nodes = kit_base('vehicle-vintage-racer')
-    S = Surface(body)
+    S, P = Surface(body), PURPLE
     parts = [body]
-    parts.append(S.patch('radiator', 'y+', (-0.085, 0.085, 0.15, 0.255), CHROME))
-    parts.append(S.patch('core', 'y+', (-0.068, 0.068, 0.165, 0.24), INK, 0.006))
-    for i, x in enumerate((-0.034, 0.0, 0.034)):
-        parts.append(S.patch(f'bar{i}', 'y+', (x - 0.005, x + 0.005, 0.165, 0.24), CHROME, 0.009))
-    for s in (-1, 1):
-        face = 'x+' if s > 0 else 'x-'
-        parts.append(cyl(f'lampStalk{s}', (s * 0.09, 0.37, 0.215), (s * 0.135, 0.37, 0.25), 0.007, CHARCOAL, 6))
-        parts.append(cyl(f'lamp{s}', (s * 0.135, 0.35, 0.255), (s * 0.135, 0.405, 0.255), 0.034, CHROME, 12))
-        parts.append(disc(f'lens{s}', (s * 0.135, 0.404, 0.255), (0, 1, 0), 0.026, 0.006, WHITE, 12))
-        for i, y in enumerate((0.18, 0.22, 0.26, 0.30)):
-            parts.append(S.patch(f'louvre{s}{i}', face, (y - 0.01, y + 0.01, 0.212, 0.236), INK, 0.003))
-    for i, y in enumerate((0.19, 0.31)):
-        parts.append(S.patch(f'strap{i}', 'z+', (-0.1, 0.1, y - 0.009, y + 0.009), LEATHER, 0.004))
-    parts.append(S.disc('tailLamp', 'y-', 0, 0.2, 0.017, LAMP_RED, 0.006, 10))
+    round_lamps(S, parts, (0.075,), 0.232, 0.021)
+    parts.append(S.patch('grille', 'y+', (-0.04, 0.04, 0.205, 0.255), INK))
+    louvres(S, parts, 0.025, 0.08, (0.20, 0.24, 0.28))
+    parts.append(profile('ducktail', 0.085, [(-0.37, 0.236), (-0.44, 0.232), (-0.445, 0.258), (-0.38, 0.252)], P, 0.006))
+    endplates(parts, P, 0.09, [(-0.37, 0.225), (-0.445, 0.225), (-0.445, 0.27), (-0.375, 0.262)])
+    gurney(parts, 0.085, -0.445, 0.258)
+    tail_lamps(S, parts, 0.03, 0.075, 0.175, 0.205)
     return join(parts, 'body'), nodes
 
 
