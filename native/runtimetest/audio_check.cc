@@ -795,6 +795,8 @@ bool checkDriftVoice() {
   expect(cornering.corner == 1 && cornering.drift == 0, "a hard corner is the squeal, no drift voice");
   expect(entering.corner > 0 && entering.drift > 0, "the two cross over as the drift blends in");
   return ok;
+}
+
 // Landings are decided off car height, which no recorded snapshot carries, so
 // the corpus can never reach them. Stated here instead: a car coming down hard
 // thumps once on the frame it lands, a skim off a crest makes no sound, and a
