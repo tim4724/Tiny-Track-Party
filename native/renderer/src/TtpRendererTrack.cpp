@@ -1834,6 +1834,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const uint32_t rim = packLinear(srgbToLinear(0x2a2735), 1.0f, 0.0f);
         for (const math::float4& s : mShadowSpots) {
             // spot = { worldX, worldZ, radius, casterHeight }.
+            if (s.w <= 0) continue;   // a footprint only: nothing to cast
             // key from (2,12,1.5): shadow shifts opposite, scaled by height.
             const float ox = -2.0f / 12.0f * s.w, oz = -1.5f / 12.0f * s.w;
             const float cx = s.x + ox, cz = s.y + oz;

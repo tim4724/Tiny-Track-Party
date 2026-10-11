@@ -373,12 +373,12 @@ Theme playroomTheme() {
   // The toy train, as the Holiday Kit's own set on a ring of its own rails
   // (scripts/gen-trainset.mjs). ONE composed model, because a train set is one
   // object to a player and a dozen to a scatter: dropped in as pieces this
-  // channel would strew rails across the floor. Sparse and near its own size —
-  // the set is nearly two car lengths across, and the scatter's clearance from
-  // the road does not scale with the model.
+  // channel would strew rails across the floor. Drawn at a fixed 2x, because
+  // the kit's train is smaller than its cars and should stand at least as
+  // big as them; a ring that size is a landmark, so it is sparse.
   t.props.models = { "trainset" };
   t.props.scatterDensity = 0.03f;
-  t.props.scatter = { { 0, 1.0f, 0.85f, 0.15f } };
+  t.props.scatter = { { 0, 1.0f, 2.0f } };
   return t;
 }
 

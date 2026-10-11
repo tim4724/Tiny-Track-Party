@@ -1498,7 +1498,7 @@ private:
     filament::math::mat4f mWindmillBase{};
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
-    std::vector<filament::math::float4> mShadowSpots; // x, z, radius, height
+    std::vector<filament::math::float4> mShadowSpots; // x, z, radius, height (0: no disc)
     Mesh mGroundShadows;
     Mesh mClutter;   // near-field flowers (rand2 stream)
     Mesh mBalloon;   // hot-air balloon (theme.balloon — grass/sunset hero)

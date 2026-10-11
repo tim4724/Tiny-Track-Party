@@ -41,8 +41,8 @@ const TEXTURE = 'Textures/holiday-colormap.png';
 
 // The set. RADIUS is the rail centreline; a straight is 0.5 long and 0.3 wide,
 // and the train pieces are ~0.35-0.7 long, so this is a toy about 3.5 units
-// across — one and a half car lengths, which is the size a playroom landmark
-// wants to be beside a car.
+// across at scale 1. The theme scales the whole set up (theme.cc), so pick
+// sizes here for the train, not for the floor.
 const RADIUS = 1.6;
 const RAIL = 'trainset-rail-detailed-straight';
 const RAIL_LEN = 0.5;

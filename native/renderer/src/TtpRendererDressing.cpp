@@ -197,6 +197,18 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
     }
 }
 
+// The node a prop model may name "spin" (the toy train's pivot), in one
+// instance; null when the model has none. It carries no mesh, so it is found
+// by name rather than through the parse.
+static utils::Entity spinNode(const gltfio::FilamentAsset* asset,
+        const gltfio::FilamentInstance* inst) {
+    for (size_t e = 0; e < inst->getEntityCount(); e++) {
+        const char* nm = asset->getName(inst->getEntities()[e]);
+        if (nm && std::strcmp(nm, "spin") == 0) return inst->getEntities()[e];
+    }
+    return {};
+}
+
 // Trackside props (theme.props): a scattered set-dressing pass, instanced from
 // the generated prop-*.glb kit pieces (scripts/gen-props.mjs). Own seeded
 // stream — the scenery, clutter and landmark scatters are untouched by
@@ -208,6 +220,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         seed = seed * 1664525u + 1013904223u;
         return (double) seed / 4294967296.0;
     };
+    const float ROAD_CLEAR = 1.0f;   // the least a prop keeps off the deck
     const auto isClearP = [&](float x, float z, float m) {
         for (const auto& s : tb.samples) {
             const float half = s.width / 2 + m;
@@ -230,7 +243,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                 const float lat = side * (f.width / 2 + 2.8f + (float) rnd() * 8.0f);
                 const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 2.0f;
                 const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 2.0f;
-                if (!isClearP(x, z, 1.0f)) continue;
+                if (!isClearP(x, z, ROAD_CLEAR)) continue;
                 const double roll = rnd();
                 double acc = 0;
                 const TrackBin::PropStamp* e = &tb.prScatter.back();
@@ -261,6 +274,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     // rule below cannot run until the assets are here. Pools are sized to the
     // candidates; what the rule then drops leaves the scene.
     std::vector<float> reach(tb.prModelCount, 0.0f);  // half-footprint at scale 1
+    std::vector<bool> spins(tb.prModelCount, false);
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         size_t count = 0;
         for (const auto& p : placements) if (p.slot == m) count++;
@@ -270,6 +284,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         if (!mPropAssets[m]) continue;
         const filament::Aabb bb = mPropAssets[m]->getBoundingBox();
         reach[m] = 0.5f * std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
+        spins[m] = !mPropAssets[m]->getFirstEntityByName("spin").isNull();
         // The buildScenery metal fix: the shared matte read on every piece.
         for (auto* inst : mPropInstances[m]) {
             MaterialInstance* const* mis = inst->getMaterialInstances();
@@ -292,11 +307,16 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     //
     // A loser is DROPPED, never nudged: the scatter's shape is its seeded
     // stream, and moving a placement walks it into the next one.
+    //
+    // The road test is redone at the prop's own footprint: the candidate pass
+    // only held the CENTRE off the deck, which a crate clears and a big model
+    // does not.
     const float CLEAR = 0.35f;   // daylight between two things that both stand
     std::vector<size_t> kept;
     for (size_t i = 0; i < placements.size(); i++) {
         const Placement& p = placements[i];
         const float pr = reach[p.slot] * p.s;   // what this prop covers
+        if (!isClearP(p.x, p.z, std::max(ROAD_CLEAR, pr))) continue;
         bool clash = false;
         for (const float4& spot : mShadowSpots) {
             const float dx = p.x - spot.x, dz = p.z - spot.y;
@@ -305,7 +325,9 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         }
         if (clash) continue;
         kept.push_back(i);
-        mShadowSpots.push_back({ p.x, p.z, pr, p.h });
+        // A model that moves registers its footprint for the clash test but
+        // no height, so no baked disc is drawn under it.
+        mShadowSpots.push_back({ p.x, p.z, pr, spins[p.slot] ? 0.0f : p.h });
     }
 
     // Pose what survived; the rest leave the scene. Parked under the floor
@@ -325,11 +347,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
             // drives its rails (scripts/gen-trainset.mjs). Collected here
             // because that is where the instances are; per frame it is one
             // transform each and nothing else in the set moves.
-            for (size_t e = 0; e < mPropInstances[m][k]->getEntityCount(); e++) {
-                const utils::Entity ent = mPropInstances[m][k]->getEntities()[e];
-                const char* nm = mPropAssets[m]->getName(ent);
-                if (nm && std::strcmp(nm, "spin") == 0) mPropSpins.push_back(ent);
-            }
+            const utils::Entity spin = spinNode(mPropAssets[m], mPropInstances[m][k]);
+            if (!spin.isNull()) mPropSpins.push_back(spin);
             k++;
         }
         for (size_t j = k; j < mPropInstances[m].size(); j++) {
@@ -1985,16 +2004,24 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     if (keyIt == mAssetMeshKey.end()) return;
     const auto meshIt = mGlbMeshCache.find(keyIt->second);
     if (meshIt == mGlbMeshCache.end() || meshIt->second.empty()) return;
-    // A model with an animated "spin" node (the toy train) moves under a
-    // static merge; mirror it per frame instead. The node itself may carry no
-    // mesh, so ask the ASSET, not the parse.
-    if (!const_cast<gltfio::FilamentAsset*>(asset)
-                ->getFirstEntityByName("spin").isNull()) {
-        dynamic = true;
-    }
     auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
     const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
     if (!nEnt) return;
+    // A model with an animated "spin" node (the toy train) moves under a
+    // static merge, so what hangs under that node is mirrored per frame
+    // instead. Only that: the train set's rails are most of its pixels, stand
+    // still, and bake like any other dressing. Instance 0 answers for all:
+    // the slots are the same in every instance.
+    const utils::Entity* ents = insts[0]->getEntities();
+    const utils::Entity spin = spinNode(asset, insts[0]);
+    const auto underSpin = [&](utils::Entity ent) {
+        if (spin.isNull()) return false;
+        for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
+            if (tcm.getEntity(ti) == spin) return true;
+        }
+        return false;
+    };
     // The kit colour table for this model, keyed by the same bytes hash; a
     // model it does not know keeps the instanced, live-lit draw.
     const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
@@ -2046,7 +2073,9 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         const ttp::kitcolors::Mesh* colors = (colorModel && node->mesh >= 0
                 && (uint32_t) node->mesh < colorModel->meshCount)
                 ? &colorModel->meshes[node->mesh] : nullptr;
-        buildMergedGroup(mMergedDress, sources, node->prims, dynamic,
+        const bool moves = dynamic || std::any_of(slots.begin(), slots.end(),
+                [&](size_t e) { return underSpin(ents[e]); });
+        buildMergedGroup(mMergedDress, sources, node->prims, moves,
                 kFeatDressing, colors);
     }
 }
