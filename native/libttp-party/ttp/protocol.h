@@ -121,8 +121,8 @@ inline const std::vector<std::string> CAR_NAMES = {"Dash", "Bolt", "Carve", "Rum
 // workflow live on the JS source of truth (protocol.js CAR_STATS).
 inline const std::vector<CarStat> CAR_STATS = {
     {1.01, 1.01, 1.04, 0.94, 0.44, 0.26},  // Dash    balanced
-    {1.02, 1.06, 0.88, 0.88, 0.44, 0.28},  // Bolt    bad turn
-    {1.03, 0.97, 1.24, 0.82, 0.44, 0.26},  // Carve   bad vmax
+    {1.03, 1.06, 0.88, 0.82, 0.44, 0.28},  // Bolt    bad turn
+    {0.98, 0.97, 1.24, 1.12, 0.44, 0.26},  // Carve   bad vmax
     {0.93, 1.00, 1.08, 1.42, 0.44, 0.28},  // Rumble  bad accel
 };
 
