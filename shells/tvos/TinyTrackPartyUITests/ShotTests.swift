@@ -46,6 +46,12 @@ final class ShotTests: XCTestCase {
                  hold: String? = nil) {
         let app = XCUIApplication()
         app.launchArguments = ["-ttpScenario", id]
+        // SILENT. A capture is a run of races on whoever's machine or TV took it.
+        // The game's own mute (GameCoordinator.mutedKey) set from the argument
+        // domain: it wins over the stored value and is never written back, so a
+        // player's real mute choice on the box survives the capture. Mute draws
+        // nothing on the TV, so the pictures are unchanged.
+        app.launchArguments += ["-tinytrack_sound_muted_v1", "YES"]
         // The card's seat count and circuit, when the table pins them
         // (`params.players`, `params.track`); the harness reads both the way it
         // reads the scenario.

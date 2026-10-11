@@ -154,7 +154,7 @@ export const GALLERY_SCENARIOS = [
   // of a hit is the renderer's and fades while the hold settles, so a strike is
   // shot in flight.
   { id: 'rocket', key: 'racing', title: 'Rocket strike', animated: true, store: 6,
-    params: { track: 'flurry', players: 2, seed: 1 }, hold: { simMs: 58650 } },
+    params: { track: 'tangle', players: 4, seed: 1 }, hold: { simMs: 35850 } },
   { id: 'monster', key: 'racing', title: 'Monster truck', animated: true, store: 8,
     params: { track: 'driftwood', players: 4, seed: 1 }, hold: { simMs: 43600 } },
   // The scripted-beat cards (pause, a dropped seat, a finisher) hold too, and the

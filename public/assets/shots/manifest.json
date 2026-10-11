@@ -20,12 +20,12 @@
       "file": "tvos/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 438026,
-      "capturedAt": "2026-10-09T17:13:55.573Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 437799,
+      "capturedAt": "2026-10-11T07:10:14.894Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "countdown",
@@ -406,12 +406,12 @@
       "file": "tvos/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 384346,
-      "capturedAt": "2026-10-09T17:13:57.076Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 386758,
+      "capturedAt": "2026-10-11T07:10:15.860Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "monster",
@@ -514,12 +514,12 @@
       "file": "tvos/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 380989,
-      "capturedAt": "2026-10-09T17:13:56.378Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 389240,
+      "capturedAt": "2026-10-11T07:10:15.312Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "race-backyard",
@@ -550,12 +550,12 @@
       "file": "tvos/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 369272,
-      "capturedAt": "2026-10-09T17:13:56.072Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 370190,
+      "capturedAt": "2026-10-11T07:10:15.036Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "race-beach",
@@ -586,12 +586,12 @@
       "file": "tvos/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 188455,
-      "capturedAt": "2026-10-09T17:13:56.550Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 172925,
+      "capturedAt": "2026-10-11T07:10:15.444Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "race-canyon",
@@ -622,12 +622,12 @@
       "file": "tvos/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 407749,
-      "capturedAt": "2026-10-09T17:13:56.714Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 408392,
+      "capturedAt": "2026-10-11T07:10:15.589Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "race-playroom",
@@ -658,12 +658,12 @@
       "file": "tvos/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 262902,
-      "capturedAt": "2026-10-09T17:13:56.215Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 261217,
+      "capturedAt": "2026-10-11T07:10:15.170Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "race-snow",
@@ -910,12 +910,12 @@
       "file": "tvos/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 252232,
-      "capturedAt": "2026-10-09T17:13:56.904Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 380306,
+      "capturedAt": "2026-10-11T07:18:48.570Z",
+      "gitSha": "f7b36c87",
+      "deviceName": "TTP shots harmonic",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
     },
     {
       "scenario": "rocket",
@@ -923,9 +923,9 @@
       "file": "web/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 166109,
-      "capturedAt": "2026-10-10T10:24:50.658Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 249932,
+      "capturedAt": "2026-10-11T07:20:28.701Z",
+      "gitSha": "f7b36c87"
     },
     {
       "scenario": "welcome",
