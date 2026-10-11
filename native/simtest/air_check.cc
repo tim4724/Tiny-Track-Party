@@ -86,6 +86,29 @@ int main() {
     check(c.v == vIn, "landing is free: the car keeps its full speed");
   }
 
+  // ---- a boost flies further off a kicker, never higher ----------------------
+  {
+    double peak[2], land[2];
+    for (int boosted = 0; boosted < 2; boosted++) {
+      Game game(one, bt.game, [](const Event&) {});
+      Car& c = *game.cars()[0];
+      place(c, K - 4.0, 0, c.vmax);
+      if (boosted) { c.v = c.vmax * 1.6; c.boostMul = 1.6; c.boostT = 5; }
+      peak[boosted] = 0;
+      bool up = false;
+      for (int i = 0; i < 240; i++) {
+        game.update(DT);
+        peak[boosted] = std::fmax(peak[boosted], c.h);
+        if (c.h > 0 && c.totalS > K + KICKER_LEN) up = true;
+        if (up && c.h == 0) { land[boosted] = c.totalS; break; }
+      }
+    }
+    // Within a step's sampling of the wedge: the boosted car crosses more of it
+    // per frame, so it leaves the lip from a slightly different height.
+    check(std::fabs(peak[1] - peak[0]) < 0.05, "a boosted car leaves a kicker no higher than a flat-out one");
+    check(land[1] > land[0] + 2, "and lands further down the road");
+  }
+
   // ---- steering in the air ---------------------------------------------------
   // The same tilt from the same spot, once on the deck and once a metre up: the
   // airborne heading must turn by AIR_STEER of the grounded one.

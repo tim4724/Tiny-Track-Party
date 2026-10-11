@@ -1244,7 +1244,9 @@ void Game::update(double dtMs) {
     double lift = c.v * c.v * k - GRAVITY - (k > 0 ? CREST_PULL * c.h : 0);
     if (c.h <= ramp && lift <= 0) {
       c.h = ramp;
-      c.vh = ramp > 0 ? c.v * (KICKER_RISE / KICKER_LEN) : 0;
+      // The climb a kicker gives counts the car's speed only up to its own top
+      // speed: a boost flies further off the lip, never higher.
+      c.vh = ramp > 0 ? js_min(c.v, c.vmax) * (KICKER_RISE / KICKER_LEN) : 0;
       c.pitch = ramp > 0 ? KICKER_PITCH : 0;
     } else {
       c.vh += lift * dt;
