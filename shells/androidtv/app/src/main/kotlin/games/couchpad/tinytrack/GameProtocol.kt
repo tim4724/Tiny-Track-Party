@@ -103,17 +103,12 @@ class GameProtocol private constructor(
 
     companion object {
         /**
-         * Where the phones load the controller from when nothing overrides it.
-         *
-         * The fallback is the deploy every push produces
-         * (`.github/workflows/preview.yml` builds
-         * `https://tinytrack-<branch>.couchpad.games` for every branch, `main`
-         * included) — a real, reachable origin rather than an invented hostname,
-         * so a shell run with no configuration still shows a QR that works.
-         *
-         * It is NOT the right value for a shipping build.
+         * Where the phones load the controller from: the production origin. To
+         * test a branch on the box, edit this to its preview deploy
+         * (`https://tinytrack-<branch>.couchpad.games`,
+         * `.github/workflows/preview.yml`) for that build only.
          */
-        const val DEFAULT_BASE_URL = "https://tinytrack-main.couchpad.games"
+        const val DEFAULT_BASE_URL = "https://tinytrack.couchpad.games"
 
         /**
          * Parse the manifest once at boot. Main thread, like every `ttp_*` call.

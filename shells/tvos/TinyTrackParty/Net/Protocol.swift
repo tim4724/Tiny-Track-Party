@@ -185,20 +185,15 @@ struct GameProtocol {
 
     /// Where the phones load the controller from when nothing overrides it.
     ///
-    /// The Info.plist key is the seam a build sets: TestFlight, a LAN dev server
-    /// and the App Store build all point somewhere different, and none of them is
-    /// a code change. The fallback is the deploy every push produces
-    /// (`.github/workflows/preview.yml` builds
-    /// `https://tinytrack-<branch>.couchpad.games` for every branch, `main`
-    /// included) — a real, reachable origin rather than an invented hostname, so
-    /// a shell run with no configuration still shows a QR that works.
-    ///
-    /// It is NOT the right value for a shipping build. Set `TTPBaseURL`.
+    /// The Info.plist key is the seam a build sets: a LAN dev server or a branch's
+    /// preview deploy (`https://tinytrack-<branch>.couchpad.games`,
+    /// `.github/workflows/preview.yml`) is a build setting, not a code change.
+    /// Without it, the production origin.
     static var defaultBaseURL: URL {
         if let text = Bundle.main.object(forInfoDictionaryKey: "TTPBaseURL") as? String,
            let url = URL(string: text), url.scheme != nil {
             return url
         }
-        return URL(string: "https://tinytrack-main.couchpad.games")!
+        return URL(string: "https://tinytrack.couchpad.games")!
     }
 }

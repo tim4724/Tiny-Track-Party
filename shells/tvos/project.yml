@@ -175,9 +175,6 @@ targets:
         # carry it PARKS in App Store Connect waiting for the answer, and cannot
         # reach a TestFlight tester until someone opens the web UI.
         ITSAppUsesNonExemptEncryption: false
-        # Where the phones load the controller from (Protocol.swift's seam).
-        # Without this the app falls back to the per-push preview deploy.
-        TTPBaseURL: https://tinytrack.couchpad.games
         # The fonts are the web's variable woff2 baked to static TTFs
         # (scripts/gen-fonts.py). CoreText cannot read woff2, and a named face
         # beats building a variation descriptor at every call site.

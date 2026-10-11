@@ -27,7 +27,7 @@ struct TinyTrackPartyApp: App {
     /// like re-evaluating a body.
     ///
     /// The origin is `GameProtocol.defaultBaseURL` — the `TTPBaseURL` Info.plist
-    /// key if a build sets one, else the branch preview deploy. A TV app has no
+    /// key if a build sets one, else the production origin. A TV app has no
     /// origin of its own, and the phones have to load the controller from
     /// somewhere.
     @StateObject private var game = GameCoordinator(baseURL: GameProtocol.defaultBaseURL)

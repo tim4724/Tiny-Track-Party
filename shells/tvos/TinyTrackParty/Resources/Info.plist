@@ -44,8 +44,6 @@
 	<string>Connects directly to the phones on your network for lower-latency steering, and lets phones nearby find this room without scanning the code. Without it, both still work over the internet relay.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app does not use the microphone. A networking library references the API.</string>
-	<key>TTPBaseURL</key>
-	<string>https://tinytrack.couchpad.games</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fredoka-Light.ttf</string>
