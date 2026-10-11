@@ -544,8 +544,8 @@ class Surface:
 
 
 def dash_plus():
-    """Dash with a touch more: tail lamps above the bumper, square lamps, a
-    grille, a bonnet scoop, a rear screen."""
+    """Dash with a touch more: a slatted rear screen, tail lamps above the
+    bumper, square lamps, a grille, a bonnet scoop."""
     body, nodes = kit_base('vehicle-racer-low')
     S, P = Surface(body), GREEN
     parts = [body]
@@ -556,8 +556,10 @@ def dash_plus():
     parts.append(profile('scoop', 0.055, [(0.275, h - 0.004), (0.275, h + 0.022), (0.19, h + 0.022),
                                           (0.17, S.height(0, 0.17) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.042, 0.275, h + 0.003), (0.042, 0.279, h + 0.017), INK))
-    # the fastback is what the chase cam looks down on
+    # the fastback is what the chase cam looks down on: a screen under slats
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS))
+    for i, y in enumerate((-0.162, -0.195, -0.228)):
+        parts.append(S.patch(f'slat{i}', 'z+', (-0.106, 0.106, y - 0.007, y + 0.007), INK, 0.008))
     # the upright strip between the bumper and the spoiler, on a dark band;
     # corners inside it, or they land on the bumper and the side bevels
     parts.append(S.patch('tailPanel', 'y-', (-0.158, 0.158, 0.219, 0.243), INK, 0.003))
@@ -566,7 +568,8 @@ def dash_plus():
 
 
 def carve_plus():
-    """Carve with a touch more: twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps."""
+    """Carve with a touch more: twin round lamps at both ends, the tail's on a
+    dark panel, a grille, louvres on the bonnet and the roof, a rear screen."""
     body, nodes = kit_base('vehicle-racer')
     S, P = Surface(body), BLUE
     parts = [body]
@@ -575,13 +578,18 @@ def carve_plus():
     parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
     louvres(S, parts, 0.035, 0.115, (-0.03, -0.06, -0.09))
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS))
-    tail_lamps(S, parts, 0.105, 0.175, 0.245, 0.275)
+    # the tail under the wing is what the chase cam sees most: the front's
+    # twin lamps and grille, mirrored
+    parts.append(S.patch('tailPanel', 'y-', (-0.165, 0.165, 0.232, 0.292), INK, 0.003))
+    for s in (-1, 1):
+        for x in (0.08, 0.13):
+            parts.append(S.disc(f'tail{s}{x}', 'y-', s * x, 0.262, 0.019, LAMP_RED, 0.008))
     return join(parts, 'body'), nodes
 
 
 def bolt_plus():
-    """Bolt with a touch more: endplates on the front wing, nose louvres, tail
-    lamps on a dark panel."""
+    """Bolt with a touch more: endplates on the front wing, louvres on the
+    nose and the airbox, tail lamps on a dark panel."""
     body, nodes = kit_base('vehicle-speedster')
     S, P = Surface(body), RED
     parts = [body]
@@ -589,21 +597,25 @@ def bolt_plus():
         parts.append(profile(f'fplate{s}', 0.006, [(0.31, 0.07), (0.43, 0.07), (0.43, 0.165), (0.33, 0.155)],
                              P, 0, cx=s * 0.226))
     louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
-    # red lamps on a red-orange tail need a dark panel to read
-    parts.append(S.patch('tailPanel', 'y-', (-0.105, 0.105, 0.236, 0.284), INK, 0.003))
-    tail_lamps(S, parts, 0.03, 0.09, 0.245, 0.275)
+    # behind the wing only the airbox's top shows to the chase cam
+    louvres(S, parts, 0.012, 0.048, (-0.09, -0.11, -0.13), 0.005)
+    # red lamps on a red-orange tail need a dark panel to read; the tail
+    # block is only +-0.06 wide, wider corners land on the side pods
+    parts.append(S.patch('tailPanel', 'y-', (-0.055, 0.055, 0.236, 0.284), INK, 0.003))
+    tail_lamps(S, parts, 0.012, 0.048, 0.245, 0.275)
     return join(parts, 'body'), nodes
 
 
 def rumble_plus():
     """Rumble with a touch more: round lamps and a grille on the bonnet's
-    face, bonnet louvres, tail lamps."""
+    face, louvres on the bonnet and the tail deck, tail lamps."""
     body, nodes = kit_base('vehicle-vintage-racer')
     S = Surface(body)
     parts = [body]
     round_lamps(S, parts, (0.075,), 0.232, 0.021)
     parts.append(S.patch('grille', 'y+', (-0.04, 0.04, 0.205, 0.255), INK))
     louvres(S, parts, 0.025, 0.08, (0.20, 0.24, 0.28))
+    louvres(S, parts, 0.02, 0.07, (-0.22, -0.26, -0.30))
     tail_lamps(S, parts, 0.03, 0.075, 0.175, 0.205)
     return join(parts, 'body'), nodes
 
