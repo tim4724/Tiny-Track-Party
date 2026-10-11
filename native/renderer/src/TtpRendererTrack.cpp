@@ -2003,7 +2003,7 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
     PhaseLog phases;
     applyRoster(*mTrack, roster);
     const uint32_t carCount = (uint32_t) mTrack->carColors.size();
-    // Cars: the real GLB when the shell provided "car<i>.glb" (gltfio +
+    // Cars: the real GLB when the shell provided the slot's model (gltfio +
     // ubershaders, textures via stb), else a roster-coloured box marker.
     mCars.resize(carCount);
     mCarAssets.assign(carCount, nullptr);
@@ -2016,127 +2016,138 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
         if (!buildCarSlot(c)) return false;
     }
     phases.mark("cars");
-    // Monster chassis pool (one per car): the kit monster truck with its cab
-    // node collapsed — the transformed player's own car body seats the slot
-    // per frame (MonsterRig's graft; gunmetal recolour is later polish).
-    mMonsterAsset = loadInstancedProp("vehicle-monster-truck.glb", carCount, mMonsterInstances);
-    mMonsterGhostAsset = loadInstancedProp("monster-ghost.glb", carCount, mMonsterGhostInstances);
-    // Both pools land IN the scene (loadInstancedProp adds them), so seed the
-    // membership state to "in" — the first frame takes them straight back out.
-    mMonsterIn.assign(carCount, 1);
-    mMonsterGhostIn.assign(carCount, 1);
-    // MonsterRig keeps only the kit's frame: the `cab` goes (the player's body
-    // takes its place) AND so does `chassis-trim` — the round shock pods over
-    // the wheels plus the rear spoiler bar. Leaving the trim in made the native
-    // truck read a size bulkier than the JS one.
-    const auto collapseNodes = [&](gltfio::FilamentAsset* asset) {
-        if (!asset) return;
-        auto& tcmC = mEngine->getTransformManager();
-        std::vector<utils::Entity> hits(carCount * 4);
-        for (const char* nm : { "cab", "chassis-trim" }) {
-            const size_t n = asset->getEntitiesByName(nm, hits.data(), hits.size());
-            for (size_t i = 0; i < n; i++) {
-                tcmC.setTransform(tcmC.getInstance(hits[i]), mat4f::scaling(float3{ 0.001f }));
+    // THE POOLS SIZED BY THE COUNT ALONE — the monster rig and its ghost, the
+    // boost streaks — are built for a new count only (releaseFieldPools). A
+    // field of the size they were built for takes them back as releaseField
+    // left them: out of the scene, as a fresh build's first frame would.
+    const bool newPools = mFieldPoolCars != (int) carCount;
+    if (newPools) {
+        releaseFieldPools();
+        // Monster chassis pool (one per car): the kit monster truck with its cab
+        // node collapsed — the transformed player's own car body seats the slot
+        // per frame (MonsterRig's graft; gunmetal recolour is later polish).
+        mMonsterAsset = loadInstancedProp(kMonsterGlb, carCount, mMonsterInstances);
+        mMonsterGhostAsset = loadInstancedProp(kMonsterGhostGlb, carCount, mMonsterGhostInstances);
+        // Both pools land IN the scene (loadInstancedProp adds them), so seed the
+        // membership state to "in" — the first frame takes them straight back out.
+        mMonsterIn.assign(carCount, 1);
+        mMonsterGhostIn.assign(carCount, 1);
+        // MonsterRig keeps only the kit's frame: the `cab` goes (the player's body
+        // takes its place) AND so does `chassis-trim` — the round shock pods over
+        // the wheels plus the rear spoiler bar. Leaving the trim in made the native
+        // truck read a size bulkier than the JS one.
+        const auto collapseNodes = [&](gltfio::FilamentAsset* asset) {
+            if (!asset) return;
+            auto& tcmC = mEngine->getTransformManager();
+            std::vector<utils::Entity> hits(carCount * 4);
+            for (const char* nm : { "cab", "chassis-trim" }) {
+                const size_t n = asset->getEntitiesByName(nm, hits.data(), hits.size());
+                for (size_t i = 0; i < n; i++) {
+                    tcmC.setTransform(tcmC.getInstance(hits[i]), mat4f::scaling(float3{ 0.001f }));
+                }
             }
+        };
+        collapseNodes(mMonsterAsset);
+        collapseNodes(mMonsterGhostAsset);
+        if (mMonsterGhostAsset) {
+            auto& tcmG = mEngine->getTransformManager();
+            for (auto* inst : mMonsterGhostInstances) {
+                if (!inst) continue;
+                tcmG.setTransform(tcmG.getInstance(inst->getRoot()),
+                        mat4f::translation(float3{ 0, -1000, 0 }));
+            }
+            // The ghost GLB already carries alpha 0.5 on its material (ghostGlb
+            // patches the JSON), so it only needs the same chassis-only recolour —
+            // its tyres keep their colour at half opacity, like the JS clone does.
+            recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
+                    math::float4{ srgbToLinear(0x565b63), 0.5f });
         }
-    };
-    collapseNodes(mMonsterAsset);
-    collapseNodes(mMonsterGhostAsset);
-    if (mMonsterGhostAsset) {
-        auto& tcmG = mEngine->getTransformManager();
-        for (auto* inst : mMonsterGhostInstances) {
-            if (!inst) continue;
-            tcmG.setTransform(tcmG.getInstance(inst->getRoot()),
-                    mat4f::translation(float3{ 0, -1000, 0 }));
-        }
-        // The ghost GLB already carries alpha 0.5 on its material (ghostGlb
-        // patches the JSON), so it only needs the same chassis-only recolour —
-        // its tyres keep their colour at half opacity, like the JS clone does.
-        recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
-                math::float4{ srgbToLinear(0x565b63), 0.5f });
-    }
-    if (mMonsterAsset) {
-        const filament::Aabb mb = mMonsterAsset->getBoundingBox();
-        mMonsterHalfLen = (mb.max.z - mb.min.z) * 0.5f;
-        // The rig's wheels, per instance — these are what turn while the
-        // monster is up (the car's own are scaled to nothing). Rest
-        // translations are kept so the roll spins each tyre IN PLACE, and the
-        // roll axis sign is measured off a rear wheel exactly as the car's is.
-        auto& tcmW = mEngine->getTransformManager();
-        auto& rcmW = mEngine->getRenderableManager();
-        mMonsterWheels.assign(mMonsterInstances.size(), {});
-        for (size_t i = 0; i < mMonsterInstances.size(); i++) {
-            gltfio::FilamentInstance* inst = mMonsterInstances[i];
-            if (!inst) continue;
-            MonsterWheels& mw = mMonsterWheels[i];
-            const utils::Entity* ents = inst->getEntities();
-            for (size_t k = 0; k < inst->getEntityCount(); k++) {
-                const char* nm = mMonsterAsset->getName(ents[k]);
-                if (!nm) continue;
-                utils::Entity* slot = nullptr;
-                float3* rest = nullptr;
-                if (!std::strcmp(nm, "wheel-fl")) { slot = &mw.fl; rest = &mw.flT; }
-                else if (!std::strcmp(nm, "wheel-fr")) { slot = &mw.fr; rest = &mw.frT; }
-                else if (!std::strcmp(nm, "wheel-bl")) { slot = &mw.bl; rest = &mw.blT; }
-                else if (!std::strcmp(nm, "wheel-br")) { slot = &mw.br; rest = &mw.brT; }
-                if (!slot) continue;
-                *slot = ents[k];
-                *rest = tcmW.getTransform(tcmW.getInstance(ents[k]))[3].xyz;
-            }
-            if (!mw.bl.isNull()) {
-                const mat4f local = tcmW.getTransform(tcmW.getInstance(mw.bl));
-                const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
-                mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
-            }
-            // Fat monster tyre, measured once off a rear wheel — the same box
-            // answers both questions. RADIUS: roll rate is travel/radius, so the
-            // big wheels have to turn SLOWER than the car's for the same ground
-            // speed. CONTACT WIDTH: measured exactly as the car's is
-            // (loadCarAsset), so the rubber it lays down is as fat as it is.
-            if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
-                const auto ri = rcmW.getInstance(mw.bl);
-                if (ri) {
-                    const filament::Box bx = rcmW.getAxisAlignedBoundingBox(ri);
-                    const mat4f wm = tcmW.getWorldTransform(tcmW.getInstance(mw.bl));
-                    float lo = 1e9f, hi = -1e9f;
-                    for (int sx = -1; sx <= 1; sx += 2)
-                        for (int sy = -1; sy <= 1; sy += 2)
-                            for (int sz = -1; sz <= 1; sz += 2) {
-                                const float3 corner = bx.center + bx.halfExtent
-                                        * float3{ (float) sx, (float) sy, (float) sz };
-                                const float y = (wm * float4{ corner, 1 }).y;
-                                lo = std::min(lo, y);
-                                hi = std::max(hi, y);
-                            }
-                    mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
-                    const float wx = bx.halfExtent.x * 2, wz = bx.halfExtent.z * 2;
-                    if (wx > 0 && wz > 0) {
-                        mMonsterSkidWidth = std::min(0.24f,
-                                std::max(0.06f, std::min(wx, wz)));
+        if (mMonsterAsset) {
+            const filament::Aabb mb = mMonsterAsset->getBoundingBox();
+            mMonsterHalfLen = (mb.max.z - mb.min.z) * 0.5f;
+            // The rig's wheels, per instance — these are what turn while the
+            // monster is up (the car's own are scaled to nothing). Rest
+            // translations are kept so the roll spins each tyre IN PLACE, and the
+            // roll axis sign is measured off a rear wheel exactly as the car's is.
+            auto& tcmW = mEngine->getTransformManager();
+            auto& rcmW = mEngine->getRenderableManager();
+            mMonsterWheels.assign(mMonsterInstances.size(), {});
+            for (size_t i = 0; i < mMonsterInstances.size(); i++) {
+                gltfio::FilamentInstance* inst = mMonsterInstances[i];
+                if (!inst) continue;
+                MonsterWheels& mw = mMonsterWheels[i];
+                const utils::Entity* ents = inst->getEntities();
+                for (size_t k = 0; k < inst->getEntityCount(); k++) {
+                    const char* nm = mMonsterAsset->getName(ents[k]);
+                    if (!nm) continue;
+                    utils::Entity* slot = nullptr;
+                    float3* rest = nullptr;
+                    if (!std::strcmp(nm, "wheel-fl")) { slot = &mw.fl; rest = &mw.flT; }
+                    else if (!std::strcmp(nm, "wheel-fr")) { slot = &mw.fr; rest = &mw.frT; }
+                    else if (!std::strcmp(nm, "wheel-bl")) { slot = &mw.bl; rest = &mw.blT; }
+                    else if (!std::strcmp(nm, "wheel-br")) { slot = &mw.br; rest = &mw.brT; }
+                    if (!slot) continue;
+                    *slot = ents[k];
+                    *rest = tcmW.getTransform(tcmW.getInstance(ents[k]))[3].xyz;
+                }
+                if (!mw.bl.isNull()) {
+                    const mat4f local = tcmW.getTransform(tcmW.getInstance(mw.bl));
+                    const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
+                    mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
+                }
+                // Fat monster tyre, measured once off a rear wheel — the same box
+                // answers both questions. RADIUS: roll rate is travel/radius, so the
+                // big wheels have to turn SLOWER than the car's for the same ground
+                // speed. CONTACT WIDTH: measured exactly as the car's is
+                // (loadCarAsset), so the rubber it lays down is as fat as it is.
+                if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
+                    const auto ri = rcmW.getInstance(mw.bl);
+                    if (ri) {
+                        const filament::Box bx = rcmW.getAxisAlignedBoundingBox(ri);
+                        const mat4f wm = tcmW.getWorldTransform(tcmW.getInstance(mw.bl));
+                        float lo = 1e9f, hi = -1e9f;
+                        for (int sx = -1; sx <= 1; sx += 2)
+                            for (int sy = -1; sy <= 1; sy += 2)
+                                for (int sz = -1; sz <= 1; sz += 2) {
+                                    const float3 corner = bx.center + bx.halfExtent
+                                            * float3{ (float) sx, (float) sy, (float) sz };
+                                    const float y = (wm * float4{ corner, 1 }).y;
+                                    lo = std::min(lo, y);
+                                    hi = std::max(hi, y);
+                                }
+                        mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
+                        const float wx = bx.halfExtent.x * 2, wz = bx.halfExtent.z * 2;
+                        if (wx > 0 && wz > 0) {
+                            mMonsterSkidWidth = std::min(0.24f,
+                                    std::max(0.06f, std::min(wx, wz)));
+                        }
                     }
                 }
             }
+            // Neutral gunmetal frame (MonsterRig's recolour) — CHASSIS ONLY. The
+            // whole truck shares one `colormap` material, so recolouring every
+            // instance flattened the TYRES to the same grey too: with no tread or
+            // hub shading left on them, the wheels look painted on and their
+            // rotation is invisible. The JS clones the material for the chassis
+            // mesh alone and drops its map, so do the same here — a per-primitive
+            // instance on that renderable, with the atlas neutralised by a white
+            // 1×1 so the flat colour is all that's left.
+            // MONSTER_CHASSIS_COLOR 0x565b63, through sRGB→linear: baseColorFactor
+            // is a LINEAR glTF factor, and the eyeballed 0.42/0.44/0.50 that used to
+            // sit here is that colour's *sRGB* triple — four times too bright once
+            // the shader stopped ignoring it (it never ran until the loader learned
+            // node names).
+            const float3 chassis = srgbToLinear(0x565b63);
+            recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
+                    math::float4{ chassis, 1.0f });
         }
-        // Neutral gunmetal frame (MonsterRig's recolour) — CHASSIS ONLY. The
-        // whole truck shares one `colormap` material, so recolouring every
-        // instance flattened the TYRES to the same grey too: with no tread or
-        // hub shading left on them, the wheels look painted on and their
-        // rotation is invisible. The JS clones the material for the chassis
-        // mesh alone and drops its map, so do the same here — a per-primitive
-        // instance on that renderable, with the atlas neutralised by a white
-        // 1×1 so the flat colour is all that's left.
-        // MONSTER_CHASSIS_COLOR 0x565b63, through sRGB→linear: baseColorFactor
-        // is a LINEAR glTF factor, and the eyeballed 0.42/0.44/0.50 that used to
-        // sit here is that colour's *sRGB* triple — four times too bright once
-        // the shader stopped ignoring it (it never ran until the loader learned
-        // node names).
-        const float3 chassis = srgbToLinear(0x565b63);
-        recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
-                math::float4{ chassis, 1.0f });
     }
     phases.mark("monsters");
     mWheelTrails.assign(carCount * 4, {}); // each wheel's run on the rubber layer
-    if (mBlendMaterial) {
+    mStreakSeed.resize(carCount);
+    for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
+    for (Streak& st : mStreaks) { st.dead = true; st.alpha = 0; } // a kept pool's race state
+    if (newPools && mBlendMaterial) {
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
         // along X, facing +Y) carrying makeStreakTexture — an ellipse
         // (rx 24, ry 3 on a 64×16 canvas) blurred by 3px, so it's soft at both
@@ -2146,8 +2157,6 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
         // it. Axial-billboarded per cell, cycled front→back while boosting.
         mStreaks.assign(carCount * 4, {});
         mStreakMeshes.resize(carCount * 4);
-        mStreakSeed.resize(carCount);
-        for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
         const float3 STREAKC = srgbToLinear(ttp::rt::boost_shades(mTrack->boostCol).streak);
         {
             const BlurKernel blur(3.0f);
@@ -2216,6 +2225,7 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
     for (uint32_t c = 0; c < carCount; c++) buildCarGhost(c);
 
     pumpTextures(); // the same pump as buildStatic's, for the field's own loads
+    mFieldPoolCars = (int) carCount; // keyed only once whole: a failed build retries
     phases.mark("streaks+ghosts");
     phases.print("ttp build phases: field");
     return true;

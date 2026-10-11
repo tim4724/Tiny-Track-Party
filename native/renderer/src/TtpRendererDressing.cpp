@@ -1569,7 +1569,7 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     // bytes); buildStatic marks the dressing for regrouping once at its end.
     // Pools this covers that buildDressingMerge does NOT merge (the item boxes
     // and their fade twins, the monster pools) just carry an unused cache entry.
-    const uint64_t meshKey = glbBytesKey(it->second);
+    const uint64_t meshKey = glbKey(it->first, it->second);
     mAssetMeshKey[asset] = meshKey;
     glbMeshes(meshKey, it->second);
     // Point every instance at instance 0's materials. gltfio hands each

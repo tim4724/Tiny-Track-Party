@@ -361,18 +361,19 @@ object SceneStaging {
     // -- what still has to be fetched ---------------------------------------
 
     /**
-     * The per-slot car GLBs and their 50%-alpha ghost twins, appended to [want]
-     * in the plan's vocabulary: `car<slot>.glb` tagged by the MODEL its bytes
-     * come from, since that is the only thing about a slot that changes them. A
-     * slot with no model tags as `""` so a later pick reads as a change rather
-     * than as "unchanged".
+     * The car GLBs and their 50%-alpha ghost twins, appended to [want] in the
+     * plan's vocabulary: `car-model<carIndex>.glb` once per model the field
+     * drives, tagged by the kit model its bytes come from. Named by MODEL, not
+     * slot, so a grid reordered for the start hands nothing over
+     * (`ttp_display.h`).
      */
     private fun carWants(roster: List<RosterSlot>, want: JSONArray): JSONArray {
-        roster.forEachIndexed { slot, car ->
-            want.put(JSONObject().put("name", "car$slot.glb").put("tag", car.model))
+        for (car in roster.distinctBy { it.carIndex }) {
+            val name = "car-model${car.carIndex}.glb"
+            want.put(JSONObject().put("name", name).put("tag", car.model))
             if (car.model.isNotEmpty()) {
-                want.put(JSONObject().put("name", "car$slot-ghost.glb").put("tag", car.model)
-                    .put("from", "car$slot.glb"))
+                want.put(JSONObject().put("name", "car-model${car.carIndex}-ghost.glb")
+                    .put("tag", car.model).put("from", name))
             }
         }
         return want

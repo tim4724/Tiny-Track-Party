@@ -398,17 +398,19 @@ enum SceneStaging {
 
     // MARK: - What still has to be fetched
 
-    /// The per-slot car GLBs and their 50%-alpha ghost twins, in the plan's
-    /// vocabulary: `car<slot>.glb` tagged by the MODEL its bytes come from,
-    /// since that is the only thing about a slot that changes them. A slot with
-    /// no model tags as `""` so a later pick reads as a change.
+    /// The car GLBs and their 50%-alpha ghost twins, in the plan's vocabulary:
+    /// `car-model<carIndex>.glb` once per model the field drives, tagged by the
+    /// kit model its bytes come from. Named by MODEL, not slot, so a grid
+    /// reordered for the start hands nothing over (`ttp_display.h`).
     private static func carWants(_ roster: [RosterSlot]) -> [[String: Any]] {
         var want: [[String: Any]] = []
-        for (slot, car) in roster.enumerated() {
-            want.append(["name": "car\(slot).glb", "tag": car.model])
+        var seen = Set<Int>()
+        for car in roster where seen.insert(car.carIndex).inserted {
+            let name = "car-model\(car.carIndex).glb"
+            want.append(["name": name, "tag": car.model])
             if !car.model.isEmpty {
-                want.append(["name": "car\(slot)-ghost.glb", "tag": car.model,
-                             "from": "car\(slot).glb"])
+                want.append(["name": "car-model\(car.carIndex)-ghost.glb", "tag": car.model,
+                             "from": name])
             }
         }
         return want

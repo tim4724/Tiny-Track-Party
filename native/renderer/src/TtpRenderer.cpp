@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <chrono>
@@ -241,9 +242,14 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
     if (want != mAssetWantTag.end()) mAssetTag[name] = want->second;
     else mAssetTag.erase(name);
     // …and whatever was memoised ABOUT the old bytes goes with them. This is the
-    // one place an asset's content changes, which is what lets assetTextures key
-    // its memo by name instead of by a hash of every byte.
+    // one place an asset's content changes, which is what lets assetTextures and
+    // glbKey key their memos by name instead of by a hash of every byte.
     mAssetUriCache.erase(name);
+    mGlbKeyOf.erase(name);
+    // The count-keyed pools are built out of these two (buildField).
+    if (!std::strcmp(name, kMonsterGlb) || !std::strcmp(name, kMonsterGhostGlb)) {
+        mFieldPoolCars = -1;
+    }
     return true;
 }
 
@@ -708,8 +714,10 @@ void TtpRenderer::drainGravesBlocking() {
 void TtpRenderer::applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster) {
     const size_t n = roster.size();
     out.carColors.resize(n);
+    out.carModels.resize(n);
     for (size_t i = 0; i < n; i++) {
         out.carColors[i] = roster[i].colorABGR;
+        out.carModels[i] = roster[i].carIndex;
     }
 }
 
@@ -1147,12 +1155,15 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 // TtpRendererDressing.cpp).
 // ---------------------------------------------------------------------------
 
-uint64_t TtpRenderer::glbBytesKey(const std::vector<uint8_t>& glb) {
+uint64_t TtpRenderer::glbKey(const std::string& name, const std::vector<uint8_t>& glb) {
     // FNV-1a over the bytes: the same bytes are the same model, which is the
     // whole grouping rule. Never 0 — every caller reserves 0 for "none".
+    // Memoised by name, which provideAsset drops with the bytes it replaces.
+    const auto it = mGlbKeyOf.find(name);
+    if (it != mGlbKeyOf.end()) return it->second;
     uint64_t key = 14695981039346656037ull;
     for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
-    return key ? key : 1;
+    return mGlbKeyOf[name] = key ? key : 1;
 }
 
 const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
@@ -1771,9 +1782,10 @@ int TtpRenderer::backendId() const {
     return mEngine ? (int) mEngine->getBackend() : 0;
 }
 
-// The field's teardown: every car slot and what is sized by the field. A
-// field rebuild (rebuildField) and ttp_display_release come through here alone;
-// the static scene stays up under its key.
+// The field's teardown: every car slot and what is sized by the field, bar the
+// count-keyed pools (releaseFieldPools). A field rebuild (rebuildField) and
+// ttp_display_release come through here alone; the static scene stays up
+// under its key.
 void TtpRenderer::releaseField() {
     if (!mEngine) return;
     // A released scene is unsettled by definition — the next build re-arms, and
@@ -1786,20 +1798,20 @@ void TtpRenderer::releaseField() {
     destroyMergedGroups(mMergedCars);
     mCarMergeDirty = false;
     for (auto& m : mCars) destroyMesh(m);
-    for (auto& m : mStreakMeshes) destroyMesh(m);
-    // The streak ring's other slots, after every renderable that could draw
-    // them; slot 0 was the mesh's own vb. Their bytes are buried like any
-    // mesh's (MeshGrave) — the last write may not have been uploaded yet.
-    for (Streak& st : mStreaks) {
-        for (size_t k = 1; k < st.ringVbs.size(); k++) mEngine->destroy(st.ringVbs[k]);
-        st.ringVbs.clear();
-        for (auto& rv : st.ringVerts) {
-            Mesh grave;
-            grave.verts.swap(rv);
-            buryMeshBuffers(grave);
+    // The count-keyed pools stay for the next field (releaseFieldPools), but
+    // OUT OF THE SCENE: a frame drawn before that build must not show a
+    // monster or a streak the last race left up.
+    for (size_t i = 0; i < mMonsterIn.size(); i++) {
+        if (i < mMonsterInstances.size()) {
+            setInstanceInScene(mMonsterInstances[i], mMonsterIn[i], false);
         }
-        st.ringVerts.clear();
     }
+    for (size_t i = 0; i < mMonsterGhostIn.size(); i++) {
+        if (i < mMonsterGhostInstances.size()) {
+            setInstanceInScene(mMonsterGhostInstances[i], mMonsterGhostIn[i], false);
+        }
+    }
+    for (auto& m : mStreakMeshes) setMeshInScene(m, false);
     // THE SHADOW FITS SURVIVE: a footprint is a fact about the KIT, not about
     // this race, so a cup's four races fit them once. Only the per-SLOT
     // pointers into the store are per-roster.
@@ -1816,23 +1828,51 @@ void TtpRenderer::releaseField() {
     }
     mCarModelKey.clear();
     mCarGhostKey.clear();
-    // The monster pools are the field's two loadInstancedProp assets, so
-    // their mesh-key entries go with them: a freed pointer left in the map
-    // could match the next asset allocated at that address.
-    mAssetMeshKey.erase(mMonsterAsset);
-    mAssetMeshKey.erase(mMonsterGhostAsset);
-    dropAsset(mMonsterAsset);
-    dropAsset(mMonsterGhostAsset);
-    for (auto* mi : mFieldMatInstances) mEngine->destroy(mi); // after their renderables
-    mFieldMatInstances.clear();
     mCars.clear();
     mCarAssets.clear();
     mCarGhostAssets.clear();
     mCarWheels.clear();
     mMonsterViews.clear();
+    mCarGhostIn.clear();
+    mStreakSeed.clear();
+    mCarBasis.clear();
+    mCarBasisInv.clear();
+    mWheelTrails.clear();
+    mDecalProjHint.clear();
+    mLastCar0 = {};
+    mLastCarN = {};
+}
+
+// The pools sized by the field's car COUNT and nothing else — the monster rig
+// and its ghost, the boost streaks. releaseField keeps them for a field of the
+// same size; this frees them, from a build of another count (buildField) or
+// with the static scene (releaseScene), whose boost colour the streaks wear.
+void TtpRenderer::releaseFieldPools() {
+    for (auto& m : mStreakMeshes) destroyMesh(m);
+    // The streak ring's other slots, after every renderable that could draw
+    // them; slot 0 was the mesh's own vb. Their bytes are buried like any
+    // mesh's (MeshGrave) — the last write may not have been uploaded yet.
+    for (Streak& st : mStreaks) {
+        for (size_t k = 1; k < st.ringVbs.size(); k++) mEngine->destroy(st.ringVbs[k]);
+        st.ringVbs.clear();
+        for (auto& rv : st.ringVerts) {
+            Mesh grave;
+            grave.verts.swap(rv);
+            buryMeshBuffers(grave);
+        }
+        st.ringVerts.clear();
+    }
+    // The monster pools are loadInstancedProp assets, so their mesh-key
+    // entries go with them: a freed pointer left in the map could match the
+    // next asset allocated at that address.
+    mAssetMeshKey.erase(mMonsterAsset);
+    mAssetMeshKey.erase(mMonsterGhostAsset);
+    dropAsset(mMonsterAsset);
+    dropAsset(mMonsterGhostAsset);
+    for (auto* mi : mMonsterMatInstances) mEngine->destroy(mi); // after their renderables
+    mMonsterMatInstances.clear();
     mMonsterInstances.clear();
     mMonsterGhostInstances.clear();
-    mCarGhostIn.clear();
     mMonsterIn.clear();
     mMonsterGhostIn.clear();
     mMonsterWheels.clear();
@@ -1841,13 +1881,7 @@ void TtpRenderer::releaseField() {
     mMonsterHalfLen = 0;
     mStreaks.clear();
     mStreakMeshes.clear();
-    mStreakSeed.clear();
-    mCarBasis.clear();
-    mCarBasisInv.clear();
-    mWheelTrails.clear();
-    mDecalProjHint.clear();
-    mLastCar0 = {};
-    mLastCarN = {};
+    mFieldPoolCars = -1;
 }
 
 // What one race leaves on the static scene, put back the way a fresh build
@@ -1879,6 +1913,7 @@ void TtpRenderer::releaseScene() {
     if (!mEngine) return;
     const auto tRelease = std::chrono::steady_clock::now();
     releaseField();
+    releaseFieldPools();
     releaseStatic();
     // `graves` is the standing guard on the burial: it climbs during a build,
     // which presents no frames, and must be back at 0 at rest. A number that

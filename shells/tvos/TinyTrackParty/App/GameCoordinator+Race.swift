@@ -208,9 +208,10 @@ extension GameCoordinator {
         if state.screen != .race && !lobbyDemo.willRebuild(for: id) { rebuildScene() }
     }
 
+    /// The track is placed by the demo when it is about to build anyway (see `setTrack`).
     func fadeToLobby(placeTrack shouldPlace: Bool) {
         sceneCars = []
-        if shouldPlace { rebuildScene() } else { display.release() }
+        if !shouldPlace { display.release() } else if !lobbyDemo.willRebuild(for: trackId) { rebuildScene() }
         lobbyDemo.refresh()
     }
 

@@ -40,9 +40,9 @@ extern "C" {
 typedef struct TtpRosterCar {
     uint32_t colorABGR;   /* livery, premultiplied-alpha-free 0xAABBGGRR */
     /* Which kit model this slot drives. The renderer never resolves it to a
-     * file — the shell fetches the GLB and provides it as car<slot>.glb — but a
-     * re-roster (ttp_display_reroster) needs to know whether a slot's MODEL
-     * changed. */
+     * file — the shell fetches the GLB and provides it as
+     * car-model<carIndex>.glb — and a re-roster (ttp_display_reroster) needs
+     * to know whether a slot's MODEL changed. */
     int32_t carIndex;
 } TtpRosterCar;
 

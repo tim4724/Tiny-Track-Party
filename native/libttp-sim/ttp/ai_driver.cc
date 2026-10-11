@@ -118,12 +118,16 @@ RacingLine::RacingLine(Centerline& centerline) {
     return b < RL_MIN_ROOM ? 0 : b;
   };
 
+  // The sweep is the whole solve's cost: no % in it (a libcall on the 32-bit
+  // Android box) and the per-point constant computed once, by the same expression.
+  std::vector<double> pull(n);
+  for (int i = 0; i < n; i++) pull[i] = kappa[i] * h * h / 2;
   std::vector<double> e(n, 0.0);
   auto relax = [&](const std::vector<double>& bound, int iters) {
     for (int it = 0; it < iters; it++) {
-      for (int i = 0; i < n; i++) {
-        double want = (e[(i - 1 + n) % n] + e[(i + 1) % n]) / 2 - kappa[i] * h * h / 2;
-        e[i] = clampd(want, -bound[i], bound[i]);
+      for (int i = 0, prev = n - 1; i < n; prev = i++) {
+        const int next = i + 1 == n ? 0 : i + 1;
+        e[i] = clampd((e[prev] + e[next]) / 2 - pull[i], -bound[i], bound[i]);
       }
     }
   };

@@ -334,8 +334,8 @@ resident one rebuilds only the FIELD.** The key is the shim's
 latches — shadows, the bench, the model variants, the kit field — whose setters
 drop it on a change (`dropStaticKey`). The track, its dressing, the sky and the
 sun bake stay up across a join, a leave, a race launch and a restart; `rebuildField`
-rebuilds the cars and what is sized by them, and `resetRace` puts back what a race
-left on the static scene (rubber, kicked cones, collected boxes, bursts).
+rebuilds the cars, and `resetRace` puts back what a race left on the static
+scene (rubber, kicked cones, collected boxes, bursts).
 `ttp_display_release` drops the field alone, so the static scene holds its GPU
 memory until another track builds or the renderer goes.
 
@@ -343,11 +343,18 @@ memory until another track builds or the renderer goes.
   (`setVisibleLayers` 0x02: cars cast nothing). A static piece that varies with
   the field is silently kept stale — a scene lit by, or dressed for, the last
   field. Keep a thing by what it varies on.
-- **Whatever `buildField` makes, `releaseField` frees** — the monster chassis'
-  duplicated instances and the pools' `mAssetMeshKey` entries included. A field
-  resource left on a scene-scoped list piles up once per rebuild until the track
-  changes. `loadInstancedProp` does not dirty the dressing merge (only
-  `buildStatic` does), or every field rebuild would regroup the whole dressing.
+- **Whatever `buildField` makes, `releaseField` frees — unless it is keyed, and
+  then its key does.** What depends on the car COUNT alone (the monster rig and
+  its ghost, the boost streaks) is kept for a field of the same size and freed
+  in one place, `releaseFieldPools`: by a build of another count, after new
+  bytes for a monster GLB (`provideAsset`) and with the static scene. Kept is
+  not left up — `releaseField` takes it out of the scene, because frames draw
+  between a release and the next build — and the build puts its per-race state
+  back. Either way the monster chassis' duplicated instances
+  and the pools' `mAssetMeshKey` entries go with their owner: a field resource
+  left on a scene-scoped list piles up once per rebuild until the track changes.
+  `loadInstancedProp` does not dirty the dressing merge (only `buildStatic`
+  does), or every field rebuild would regroup the whole dressing.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
   `buildField` each log their phases (`PhaseLog`). The sun bake is most of a
   static build on the weak box, and its time is GPU waits (`flushAndWait` between

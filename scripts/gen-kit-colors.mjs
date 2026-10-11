@@ -16,7 +16,7 @@
 // factor it reads back from the instance at bake time. Stored as linear u8,
 // the quantisation every hand-built sheet's vertex colour already carries.
 //
-// Keyed by the FNV-1a of the GLB's bytes, the identity TtpRenderer::glbBytesKey
+// Keyed by the FNV-1a of the GLB's bytes, the identity TtpRenderer::glbKey
 // gives every cached model, so a GLB that changes without this being re-run
 // simply misses the table and its copies light live — the gate is
 // tests/codegen-freshness.test.js.
@@ -29,7 +29,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = path.join(ROOT, 'public/assets/toycar');
 const OUT = path.join(ROOT, 'native/renderer/generated/kit_colors.h');
 
-// FNV-1a 64 over the bytes, the way glbBytesKey spells it (never 0).
+// FNV-1a 64 over the bytes, the way glbKey spells it (never 0).
 const fnv1a64 = (bytes) => {
   let h = 14695981039346656037n;
   for (const b of bytes) { h ^= BigInt(b); h = (h * 1099511628211n) & 0xffffffffffffffffn; }

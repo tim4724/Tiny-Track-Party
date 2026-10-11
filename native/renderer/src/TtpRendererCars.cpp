@@ -38,7 +38,7 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
                 if (white && own->getMaterial()->hasParameter("baseColorMap")) {
                     own->setParameter("baseColorMap", white, smp);
                 }
-                mFieldMatInstances.push_back(own); // released with the field
+                mMonsterMatInstances.push_back(own); // freed with the monster pools
                 rcm.setMaterialInstanceAt(ri, p, own);
             }
         }
@@ -208,14 +208,22 @@ void TtpRenderer::registerAssetUris(filament::gltfio::FilamentAsset* asset) {
     }
 }
 
-bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) {
+// The asset a slot's body (and its ghost) is provided under: named by the
+// MODEL, so a reordered grid finds the bytes it already holds (ttp_display.h).
+static std::string carAssetName(const std::vector<int32_t>& models, uint32_t c, bool ghost) {
+    const int32_t model = models.size() > c ? models[c] : 0;
+    return "car-model" + std::to_string(model) + (ghost ? "-ghost.glb" : ".glb");
+}
+
+bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
+        const std::vector<uint8_t>& glb) {
     ensureAssetLoader();
     // ALREADY PARSED? The body a previous scene left parked is this model's, is
     // already uploaded, and needs no re-dressing (mBodyPool says why). Putting
     // its entities back in the scene is the whole of the reuse — everything
     // below this point runs identically for a fresh parse and a parked one,
     // because all of it reads the asset rather than the bytes.
-    const uint64_t modelKey = glbBytesKey(glb);
+    const uint64_t modelKey = glbKey(name, glb);
     gltfio::FilamentAsset* asset = takeAsset(modelKey);
     if (!asset) {
         asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
@@ -246,8 +254,8 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     if (mCarWheels.size() <= index) mCarWheels.resize(index + 1);
     CarWheels& w = mCarWheels[index];
     auto& tcm = mEngine->getTransformManager();
-    const auto grab = [&](const char* name, utils::Entity& e, float3& t) {
-        e = asset->getFirstEntityByName(name);
+    const auto grab = [&](const char* node, utils::Entity& e, float3& t) {
+        e = asset->getFirstEntityByName(node);
         if (!e.isNull()) {
             const mat4f local = tcm.getTransform(tcm.getInstance(e));
             t = local[3].xyz;
@@ -477,12 +485,12 @@ void TtpRenderer::pumpTextures() {
     }
 }
 
-// One car slot's body: the real GLB when the shell provided "car<c>.glb"
+// One car slot's body: the real GLB when the shell provided its model's
 // (gltfio + ubershaders, textures via stb), else a roster-coloured box
 // marker. Split out of buildField so reroster() can rebuild one slot.
 bool TtpRenderer::buildCarSlot(uint32_t c) {
-    const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
-    if (glb != mAssets.end() && loadCarAsset(c, glb->second)) return true;
+    const auto glb = mAssets.find(carAssetName(mTrack->carModels, c, false));
+    if (glb != mAssets.end() && loadCarAsset(c, glb->first, glb->second)) return true;
     Mesh& m = mCars[c];
     destroyMesh(m); // a re-dress replaces the live marker; empty on a fresh build
     const uint32_t col = (mTrack->carColors.size() > c) ? mTrack->carColors[c] : 0xff888888u;
@@ -557,11 +565,11 @@ bool TtpRenderer::reroster(const std::vector<TtpRosterCar>& roster,
 void TtpRenderer::buildCarGhost(uint32_t c) {
     if (mCarAssets.size() <= c || !mCarAssets[c]) return;
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 1; // in scene below; frame 1 re-parks it
-    const auto ghost = mAssets.find("car" + std::to_string(c) + "-ghost.glb");
+    const auto ghost = mAssets.find(carAssetName(mTrack->carModels, c, true));
     if (ghost == mAssets.end()) return;
     // Keyed by the GHOST's own bytes, not the body's: it is a different
     // container (the 50%-alpha clone), so it is a different model to the pool.
-    const uint64_t ghostKey = glbBytesKey(ghost->second);
+    const uint64_t ghostKey = glbKey(ghost->first, ghost->second);
     gltfio::FilamentAsset* ga = takeAsset(ghostKey);
     if (!ga) {
         ga = mAssetLoader->createAsset(

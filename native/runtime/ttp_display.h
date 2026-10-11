@@ -226,17 +226,19 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * needs. `wantJson` is, in fetch order:
  *
  *   [{"name":"scenery0.glb","tag":"tree"},
- *    {"name":"car0.glb","tag":"vehicle-racer"},
- *    {"name":"car0-ghost.glb","tag":"vehicle-racer","from":"car0.glb"}]
+ *    {"name":"car-model2.glb","tag":"vehicle-racer"},
+ *    {"name":"car-model2-ghost.glb","tag":"vehicle-racer","from":"car-model2.glb"}]
  *
  * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in your own vocabulary — a kit
- * model's base name, a texture's authored URI. Not the asset name: `car3.glb` is
- * different bytes when slot 3 picks a different model, while
- * `Textures/colormap.png` never is. A slot with no model tags as "" so a later
- * pick reads as a change. `from` names what a DERIVED asset is made out of (a
- * ghost's model), and a wanted derivative always brings its source back with it
- * — otherwise the answer would ask you to derive from bytes it just told you not
- * to fetch.
+ * model's base name, a texture's authored URI. Not the asset name:
+ * `scenery3.glb` is different bytes when the biome changes, while
+ * `Textures/colormap.png` never is. A car is named by its MODEL
+ * (car-model<carIndex>.glb, once however many slots drive it), never by its
+ * slot: a grid reordered for the start would otherwise hand every body over
+ * again. A car with no model tags as "" and is fetched by no shell.
+ * `from` names what a DERIVED asset is made out of (a ghost's model), and a
+ * wanted derivative always brings its source back with it — otherwise the
+ * answer would ask you to derive from bytes it just told you not to fetch.
  *
  * The answer is the subset to fetch, as a JSON array of names, and the tags are
  * REMEMBERED: the ttp_display_asset calls that follow stamp them, so nothing
@@ -368,8 +370,8 @@ TTP_ABI const char* ttp_display_kit_field_layout(void);
  * Every race start comes through here, since a Grand Prix chains four tracks
  * and even a restart wants the skid ribbons, kicked cones and collected boxes
  * back at their opening state. A build of the track whose STATIC scene is still
- * resident (see ttp_display_release) rebuilds only the field — the cars and
- * what is sized by them — and puts the static scene back at that opening
+ * resident (see ttp_display_release) rebuilds only the field — the cars —
+ * and puts the static scene back at that opening
  * state; the preview camera's orbit and the cosmetic clock run on. Any other
  * track builds whole. Returns 1 on success, 0 on refusal (no display, an
  * unknown trackId, a failed scene build — ttp_last_error says which). */
@@ -382,7 +384,7 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * preview's orbit back to its start bearing, and it must not pay a track
  * re-mesh and shadow re-bake for a livery.
  *
- * The shell re-provides car<slot>.glb for a slot whose model changed BEFORE
+ * The shell provides car-model<carIndex>.glb for a model it newly drives BEFORE
  * calling (fetching is its job, as at build); everything else — which slots
  * changed, whether a change is a model reload or just a re-dress of the
  * markers — is decided here (ttp/roster.h planReroster).

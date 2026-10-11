@@ -1617,9 +1617,10 @@ class GameCoordinator(
         if (state.screen != GameState.Screen.RACE && !lobbyDemo.willRebuild(id)) rebuildScene()
     }
 
+    /** The track is placed by the demo when it is about to build anyway (see [setTrack]). */
     fun fadeToLobby(shouldPlace: Boolean) {
         sceneCars = emptyList()
-        if (shouldPlace) rebuildScene() else display.release()
+        if (!shouldPlace) display.release() else if (!lobbyDemo.willRebuild(trackId)) rebuildScene()
         lobbyDemo.refresh()
     }
 

@@ -244,7 +244,7 @@ public:
     //
     // THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in the caller's vocabulary —
     // a kit model's base name, a texture's authored URI. Not the asset name:
-    // `car3.glb` is different bytes when slot 3 picks a different model, while
+    // `scenery3.glb` is different bytes when the biome changes, while
     // `Textures/colormap.png` never is.
     struct AssetWant {
         std::string name;
@@ -367,7 +367,7 @@ public:
     bool rebuildField(const std::vector<TtpRosterCar>& roster);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
     // count, camera state and cosmetic clocks untouched. `remodel` slots reload
-    // their GLB (the shell re-provided car<slot>.glb first) plus ghost and
+    // their GLB (the shell provided the new model's first) plus ghost and
     // shadow fit; `redress` slots rebuild only what wears the livery.
     // Which slots go in which list is planReroster's call (ttp/roster.h) — this
     // performs it. False = no scene to re-dress or a slot failed; the caller
@@ -378,6 +378,8 @@ public:
     // Tear down the field alone; the static scene stays resident under its
     // key until a build of another key or the destructor frees it.
     void releaseField();
+    // …and the pools keyed by the field's car count, which releaseField keeps.
+    void releaseFieldPools();
     // Both halves — meshes, glTF assets, lights, sky, material instances —
     // back to bare engine. The engine, views, materials and provided asset
     // bytes survive.
@@ -1542,13 +1544,19 @@ private:
     // procedural, so it's a mesh per marker rather than a GLB instance.
     std::vector<Mesh> mSignMeshes;
     // Monster chassis pool (MonsterRig: cab dropped, car body seats the slot).
+    static constexpr const char* kMonsterGlb = "vehicle-monster-truck.glb";
+    static constexpr const char* kMonsterGhostGlb = "monster-ghost.glb";
     filament::gltfio::FilamentAsset* mMonsterAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mMonsterInstances;
     filament::gltfio::FilamentAsset* mMonsterGhostAsset = nullptr; // 50%-alpha fade variant
     std::vector<filament::gltfio::FilamentInstance*> mMonsterGhostInstances;
-    // The chassis recolour's duplicates (recolourMonsterChassis): FIELD-owned,
-    // so releaseField frees them — on the scene's list they piled up per rebuild.
-    std::vector<filament::MaterialInstance*> mFieldMatInstances;
+    // The chassis recolour's duplicates (recolourMonsterChassis): owned by the
+    // monster pools, so releaseFieldPools frees them — on the scene's list they
+    // piled up per rebuild.
+    std::vector<filament::MaterialInstance*> mMonsterMatInstances;
+    // The car count the monster and streak pools were built for; -1 = build
+    // them again (none yet, a monster GLB re-provided, a build that failed).
+    int mFieldPoolCars = -1;
     // The RIG's own wheels, per instance. While the monster is up the car's
     // wheels are collapsed and these are the ones on the ground, so they take
     // over the roll/steer cosmetics (the JS swaps c.frontWheels/backWheels to
@@ -1656,8 +1664,8 @@ private:
     // is exactly the read the plan above exists to skip.
     //
     // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
-    // glbBytesKey, a byte-at-a-time FNV over the whole buffer, so consulting the
-    // cache re-read every model it was there to avoid re-reading. That is ~1.2 MB
+    // a byte-at-a-time FNV over the whole buffer, so consulting the cache
+    // re-read every model it was there to avoid re-reading. That is ~1.2 MB
     // a build in play and tens of megabytes in the gallery's kit field. The name
     // is exact because provideAsset is the only place an asset's bytes change,
     // and it drops the entry.
@@ -1801,7 +1809,7 @@ private:
             const std::function<filament::math::float3(const filament::math::float3&)>& transform,
             const std::function<uint32_t(const filament::math::float3&)>& colorAt,
             bool lit = false);
-    bool loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb);
+    bool loadCarAsset(uint32_t index, const std::string& name, const std::vector<uint8_t>& glb);
     // One car slot's scene pieces, shared verbatim between buildField and
     // reroster(). Each reads the roster fields off mTrack and assumes the
     // per-car containers are already sized to the field.
@@ -1893,7 +1901,7 @@ private:
     // usually unchanged across a build: a Grand Prix is four races on one grid,
     // and the lobby rebuilds on every join, pick and launch.
     //
-    // KEYED BY THE BYTES, NEVER BY THE SLOT. `glbBytesKey` is the model
+    // KEYED BY THE BYTES, NEVER BY THE SLOT. `glbKey` is the model
     // identity everything per-model here uses; keying by slot is the exact bug
     // that once dropped a car's shadow to a generic shape when the next race
     // moved it.
@@ -1946,7 +1954,10 @@ private:
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
     // Which parse an instanced dressing asset was loaded from (scene scope).
     std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
-    static uint64_t glbBytesKey(const std::vector<uint8_t>& glb);
+    // The model identity of asset `name` (whose bytes are `glb`), memoised
+    // by name for the same reason mAssetUriCache is.
+    uint64_t glbKey(const std::string& name, const std::vector<uint8_t>& glb);
+    std::unordered_map<std::string, uint64_t> mGlbKeyOf;
     const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
             const std::vector<uint8_t>& glb);
     bool buildMergedGroup(std::vector<MergedGroup>& out,

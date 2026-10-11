@@ -512,19 +512,23 @@ export class Display {
     return !!this._fn.reroster(JSON.stringify(this._slots(roster)));
   }
 
-  // The per-slot car GLBs and their 50%-alpha ghost twins, as the plan's
-  // vocabulary: car<slot>.glb tagged by the MODEL its bytes come from, since
-  // that is the only thing about a slot that changes them. A slot with no model
-  // tags as "" so a later pick reads as a change. `model` never crosses the ABI.
+  // The car GLBs and their 50%-alpha ghost twins, as the plan's vocabulary:
+  // car-model<carIndex>.glb once per model the field drives, tagged by the kit
+  // model its bytes come from. Named by MODEL, not slot, so a grid reordered
+  // for the start hands nothing over (ttp_display.h). `model` never crosses
+  // the ABI.
   _carWants(roster) {
-    const want = [];
-    (roster || []).forEach((r, i) => {
-      want.push({ name: `car${i}.glb`, tag: r.model || '' });
+    const want = new Map();
+    for (const r of roster || []) {
+      const name = `car-model${r.carIndex ?? 0}.glb`;
+      if (want.has(name)) continue;
+      want.set(name, { name, tag: r.model || '' });
       if (r.model) {
-        want.push({ name: `car${i}-ghost.glb`, tag: r.model, from: `car${i}.glb` });
+        const ghost = `car-model${r.carIndex ?? 0}-ghost.glb`;
+        want.set(ghost, { name: ghost, tag: r.model, from: name });
       }
-    });
-    return want;
+    }
+    return [...want.values()];
   }
 
   // Fetch and hand over exactly what the engine says it still needs, then derive

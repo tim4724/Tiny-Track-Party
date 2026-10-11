@@ -244,6 +244,7 @@ struct TtpRenderer::TrackBin {
     float deckGap = 0, deckLine = 0;
     static constexpr float kDashW = 0.18f;
     std::vector<uint32_t> carColors;
+    std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
     uint32_t pal[7]; // asphalt line dash kerbA kerbB skirt shoulder (sRGB)
     float kerbW = 0.22f, kerbH = 0.20f;
     bool edgeLines = true;
