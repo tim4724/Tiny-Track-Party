@@ -297,22 +297,25 @@ var CAR_NAMES = [
 //     auto-slow: a low-turn car carrying too much speed washes WIDE into the
 //     curb (brake yourself); a grippy one rails the same bend and scrubs less
 //     speed steering.
-//   - accel bills per RECOVERY (launch, wall hit, knock, spin): nearly free
-//     alone, constant in traffic — where the derived mass pays it back, which is
-//     what makes Rumble's pairing self-balancing.
+//   - accel bills per RECOVERY (launch, wall hit, knock, spin): nearly free in
+//     lap time alone or packed, but it is the hole players FEEL, so a deep one
+//     reads as "slow car" even when the points say otherwise.
+//   - mass is close to pace-neutral in the packed probe (bots do not seek
+//     contact), so its slope in carMass is set for how clearly a crash READS —
+//     the push splits by inverse mass — not for points. Steepen the slope rather
+//     than giving one car its own mass.
 //   - the balanced car sits slightly ABOVE baseline: the specialists' packages
 //     all net positive, so an exactly-1.0 car finishes last.
 // After ANY edit here — or to the engine's base TURN_RATE / STEER_SCRUB, which
 // set how much of a lap turn bills — re-run `npm run probe:cars` and judge the
 // --nobrake variant of both modes: Bolt should win the flowing tracks solo,
-// Carve the twisty ones, Dash the technical middle and never be worst; Rumble
-// reads slow ALONE — its value is the scrum, visible only to the packed probe.
-function carMass(accel) { return Math.round((1 + 3.3 * (1 - accel)) * 100) / 100; }
+// Carve the twisty ones, Dash the technical middle and never be worst.
+function carMass(accel) { return Math.round((1 + 6 * (1 - accel)) * 100) / 100; }
 var CAR_STATS = [
   { accel: 1.01, vmax: 1.01, turn: 1.04, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — the balanced pick: no hole, never punished, never the best
   { accel: 1.02, vmax: 1.06, turn: 0.88, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the fastest: top-speed king, BAD TURN (washes wide in tight corners) and light enough to shove
   { accel: 1.03, vmax: 0.97, turn: 1.24, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails bends, never washes out, BAD VMAX — tops out early on every straight
-  { accel: 0.93, vmax: 1.00, turn: 1.08, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove, priced for the scrum
+  { accel: 0.93, vmax: 1.00, turn: 1.08, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove
 ].map(function (c) { c.mass = carMass(c.accel); return c; });
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash
