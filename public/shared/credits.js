@@ -76,7 +76,7 @@ export const ASSET_CREDITS = [
   },
   {
     section: '3D models',
-    title: 'Nature Kit 2.3 (desert and camp scenery)',
+    title: 'Nature Kit 2.3 (palms, cacti and the camp tent)',
     author: 'Kenney',
     license: 'CC0 1.0',
     url: 'https://kenney.nl/assets/nature-kit',
@@ -84,7 +84,7 @@ export const ASSET_CREDITS = [
   },
   {
     section: '3D models',
-    title: 'Holiday Kit 1.0 (the winter set dressing)',
+    title: 'Holiday Kit 1.0 (the snow scenery and the toy train set)',
     author: 'Kenney',
     license: 'CC0 1.0',
     url: 'https://kenney.nl/assets/holiday-kit',
