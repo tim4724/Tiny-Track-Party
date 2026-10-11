@@ -331,6 +331,16 @@ struct LinkPlan {
 };
 LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double maxAttempts);
 
+// What a TV shell going to the BACKGROUND (Home, an app switch) does to the
+// room: keep it, or end it. Kept, the shell detaches its socket WITHOUT
+// close_room and rejoins slot 0 on return — the relay holds a hostless room for
+// its grace, the phones wait on "waiting for the big screen", and a live race
+// stays frozen by the link-down auto-pause until the rejoin thaws it. Only a
+// room with a CONNECTED seat is worth keeping: the relay deletes a room with no
+// live member the moment our socket goes, so an empty lobby ends exactly as it
+// always did. The web never asks — closing a tab is the party ending.
+bool keep_room_on_background(bool inRoom, bool anyConnected);
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 // A different DEVICE claims a dropped seat by carrying its old peerIndex as the
@@ -349,11 +359,12 @@ ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,
                      bool oldDisconnected);
 
 // Post-reload reconciliation, against the peer list the relay hands back in
-// `joined`. Seats the relay no longer knows are expired; peers it knows that we
-// do not are seated with placeholder identities (each phone re-HELLOs when it
-// sees the display return, restoring its name). Slot 0 is us and is never a
-// seat. Duplicates in the relay's list collapse — the second sighting would find
-// the seat already taken.
+// `joined`. Seats the relay no longer knows are `expire` (the walk takes each as
+// its peer_left would: freed in the lobby, reserved mid-game); peers it knows
+// that we do not are seated with placeholder identities (each phone re-HELLOs
+// when it sees the display return, restoring its name). Slot 0 is us and is
+// never a seat. Duplicates in the relay's list collapse — the second sighting
+// would find the seat already taken.
 //
 // The caller then publishes: this fresh flow is now the authority, so the live
 // push clears every phone's reconnect overlay and the next joiner is not

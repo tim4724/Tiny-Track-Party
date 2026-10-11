@@ -795,6 +795,11 @@ jbyteArray n_ttp_net_lobby_frame(JNIEnv* env, jclass, jint a0, jint a1, jbyteArr
     return toBytes(env, ttp_net_lobby_frame((int) a0, (int) a1, s2.get()));
 }
 
+jbyteArray n_ttp_net_on_background_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_net_on_background_json((int) a0));
+}
+
 jbyteArray n_ttp_net_on_close_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jdouble a3, jdouble a4) {
     (void) env;
     return toBytes(env, ttp_net_on_close_json((int) a0, (int) a1, (int) a2, (double) a3, (double) a4));
@@ -1239,6 +1244,11 @@ jbyteArray n_ttp_ui_catalogue_json(JNIEnv* env, jclass) {
     return toBytes(env, ttp_ui_catalogue_json());
 }
 
+jbyteArray n_ttp_ui_chooser_tracks_json(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_ui_chooser_tracks_json());
+}
+
 jint n_ttp_ui_configure(JNIEnv* env, jclass, jbyteArray a0) {
     CStr s0(env, a0);
     return (jint) ttp_ui_configure(s0.get());
@@ -1509,6 +1519,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_net_join_url", "([B[B[B[B)[B", (void*) n_ttp_net_join_url },
     { "ttp_net_liveness_json", "(IID)[B", (void*) n_ttp_net_liveness_json },
     { "ttp_net_lobby_frame", "(II[B)[B", (void*) n_ttp_net_lobby_frame },
+    { "ttp_net_on_background_json", "(I)[B", (void*) n_ttp_net_on_background_json },
     { "ttp_net_on_close_json", "(IIIDD)[B", (void*) n_ttp_net_on_close_json },
     { "ttp_net_on_open_json", "(I)[B", (void*) n_ttp_net_on_open_json },
     { "ttp_net_on_peer_message_json", "(II[B[BID)[B", (void*) n_ttp_net_on_peer_message_json },
@@ -1594,6 +1605,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_track_sweep_json", "([BD)[B", (void*) n_ttp_track_sweep_json },
     { "ttp_ui_back_effect", "([BII)[B", (void*) n_ttp_ui_back_effect },
     { "ttp_ui_catalogue_json", "()[B", (void*) n_ttp_ui_catalogue_json },
+    { "ttp_ui_chooser_tracks_json", "()[B", (void*) n_ttp_ui_chooser_tracks_json },
     { "ttp_ui_configure", "([B)I", (void*) n_ttp_ui_configure },
     { "ttp_ui_cover", "([BI)[B", (void*) n_ttp_ui_cover },
     { "ttp_ui_cup_field_tint_pct", "()I", (void*) n_ttp_ui_cup_field_tint_pct },

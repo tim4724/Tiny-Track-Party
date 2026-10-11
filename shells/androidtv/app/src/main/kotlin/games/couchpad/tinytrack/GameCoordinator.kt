@@ -159,6 +159,7 @@ class GameCoordinator(
     private var intermissionTask: Runnable? = null
     private var intermissionTicker: Runnable? = null
     private var intermissionDeadline = 0.0
+    private var resultsDue = 0.0
 
     init {
         assets = AssetStore(context.assets)
@@ -232,6 +233,7 @@ class GameCoordinator(
             boot()
         } else {
             rebuildScene()
+            rearmTimers()
         }
     }
 
@@ -314,13 +316,13 @@ class GameCoordinator(
         // the specification:
         //
         //   cars   [{id, name, stats:{accel,vmax,turn,mass}}]
-        //   tracks [{id, name, svg, cup, cupName, cupDifficulty}]
+        //   tracks [{id, name, svg, cup, cupName, cupDifficulty}]  (C++'s, whole)
         //
         // The tvOS shell shipped `cars` as bare model-id STRINGS and spelled the
         // packed map `p` and the difficulty `level`, which is why a scanned phone
         // drew a car picker with no images, a track list with no maps and no cup
         // selector at all. Four symptoms, one shape.
-        setChooser(catalogue)
+        setChooser()
 
         // THE CAMERA RIG FOR A SURFACE WITH NO CELLS, pushed once and never again:
         // with cells the renderer runs a chase cam per cell and this is ignored,
@@ -423,27 +425,14 @@ class GameCoordinator(
         return JSONObject().put("cups", out).put("stars", catalogue.optJSONObject("stars") ?: JSONObject())
     }
 
-    /**
-     * The cars and tracks halves, composed ONCE (the first call, at boot) and
-     * reused: the catalogue's ids, names, cups and stats never move at runtime —
-     * only `progress` does — and [chooserTracks] runs a full native TrackBuilder
-     * per catalogue track, which `persist-progression` must not re-run on the
-     * main thread while the results board is up and the next circuit is being
-     * meshed. The web performer recomposes only `progress` for the same reason.
-     * The cached arrays are never mutated.
-     */
-    private var chooserCarsCache: JSONArray? = null
-    private var chooserTracksCache: JSONArray? = null
-
-    private fun setChooser(catalogue: JSONObject) {
-        val cars = chooserCarsCache ?: chooserCars().also { chooserCarsCache = it }
-        val tracks = chooserTracksCache
-            ?: chooserTracks(catalogue).also { chooserTracksCache = it }
+    private fun setChooser() {
         requireOK(
             Ttp.ttp_net_configure(TtpJson.arg(JSONObject()
-                .put("cars", cars)
+                .put("cars", chooserCars())
                 .put("colors", JSONArray(proto.carColors))
-                .put("tracks", tracks)
+                // The track list, packed maps and cup fields included, is the
+                // engine's: baked beside the track defs, so nothing is built here.
+                .put("tracks", TtpJson.arr(Ttp.ttp_ui_chooser_tracks_json()))
                 .put("progress", progressChooser())
                 .toString())) != 0,
             "configuring the chooser payload")
@@ -495,7 +484,7 @@ class GameCoordinator(
         if (progress != null && progress !== JSONObject.NULL) {
             prefs.edit().putString(PROGRESS_KEY, progress.toString()).apply()
         }
-        setChooser(TtpJson.obj(Ttp.ttp_ui_catalogue_json()))
+        setChooser()
         // AND THE COUCH'S OWN SHELF. Publishing the new stars to four phones while
         // the television still shows the old ones is the shape of bug the ledger
         // warns about: the reward arc ends up existing only where nobody is looking.
@@ -545,54 +534,6 @@ class GameCoordinator(
                     .put("vmax", s.optDouble("vmax", 0.0))
                     .put("turn", s.optDouble("turn", 0.0))
                     .put("mass", s.optDouble("mass", 0.0))))
-        }
-        return out
-    }
-
-    /**
-     * The chooser's track list: what the phone draws a mini-map from, and what it
-     * groups into cups.
-     *
-     * The pack is native (`ttp_schematic_pack` over `ttp_track_schematic_json`), so
-     * this shell holds no projection — the web reads a prebaked table instead, but
-     * both run the same C++ over the same track, so the maps agree.
-     *
-     * `cup` and `cupName` are load-bearing rather than decoration: the phone's mode
-     * picker IS `trackCatalog.find((t) => t.cup)`, so a list without them offers
-     * single races only and the cup selector never appears.
-     */
-    private fun chooserTracks(catalogue: JSONObject): JSONArray {
-        val cupNames = HashMap<String, String>()
-        val cups = catalogue.optJSONArray("cups") ?: JSONArray()
-        for (i in 0 until cups.length()) {
-            val c = cups.optJSONObject(i) ?: continue
-            val id = c.optString("id")
-            if (id.isNotEmpty()) cupNames[id] = TtpJson.optStr(c, "name") ?: id
-        }
-        // `catalog`, not `tracks`. That is the key `ttp_ui_configure` takes and
-        // therefore the key the catalogue answers with — reading the wrong one
-        // yields an empty list, and an empty list is a lobby with no track to race
-        // and no error anywhere.
-        val catalog = catalogue.optJSONArray("catalog") ?: JSONArray()
-        val out = JSONArray()
-        for (i in 0 until catalog.length()) {
-            val t = catalog.optJSONObject(i) ?: continue
-            val id = t.optString("id").ifEmpty { continue }
-            val schematic = TtpJson.obj(Ttp.ttp_track_schematic_json(TtpJson.arg(id)))
-            // eps 0 asks for the TUNED default (0.35), chosen so straights
-            // reproduce and corners do not clip. Passing a number overrides that
-            // tuning — the tvOS shell sent 0.6 and drew coarser maps than the web
-            // for no reason anyone had decided.
-            val packed = TtpJson.str(
-                Ttp.ttp_schematic_pack(TtpJson.arg(schematic.optString("d")), 0.0)) ?: ""
-            val cup = TtpJson.optStr(t, "cup")
-            out.put(JSONObject()
-                .put("id", id)
-                .put("name", TtpJson.optStr(t, "name") ?: id)
-                .put("svg", packed)
-                .put("cup", cup ?: JSONObject.NULL)
-                .put("cupName", cup?.let { cupNames[it] } ?: JSONObject.NULL)
-                .put("cupDifficulty", t.optInt("cupDifficulty")))
         }
         return out
     }
@@ -664,29 +605,41 @@ class GameCoordinator(
     // -- app lifecycle -------------------------------------------------------
 
     /**
-     * The app left the screen, and on this platform that IS the party ending —
-     * the web's `pagehide` rule. See [PartyNet.shutdown] for why it must be wired
-     * to something; [MainActivity.onStop] is the hook.
+     * The app left the screen ([MainActivity.onStop]: Home, an app switch). A room
+     * with a connected seat is KEPT — the socket detaches without `close_room`,
+     * the link reads down, and a live race stays frozen by the auto-pause until
+     * [resume] rejoins. An empty one ends ([PartyNet.shutdown]). The background
+     * walk decides which; BACK ends the party on its own road ([endParty]).
      */
     fun suspend() {
         if (suspended) return
         suspended = true
-        // THE LAN RECORD COMES DOWN FIRST. [net.shutdown] below closes the room,
-        // and a record that outlives it costs a player a tap into a room that is
-        // already gone.
+        // THE LAN RECORD COMES DOWN FIRST. Nothing is watching the room until the
+        // rejoin, and a record that outlives an ended one costs a player a tap
+        // into a room that is already gone.
         syncAdvertisement()
         // The mix goes with the frame loop: nothing will update a voice's level once
         // the Choreographer callback is gone, so a held one sounds forever.
         audio.silence()
         lobbyDemo.stop()
-        net.shutdown()
-        clearJoinTicket()
+        holdTimers()
+        // A scenario never started the net (see [boot]), so it has no
+        // room to keep or end, and nothing to dial on the way back.
+        if (!Scenarios.active) net.suspend()
+        if (!net.roomKept) clearJoinTicket()
     }
 
     /**
+     * BACK out of the lobby: the party ends HERE, explicitly. On API 31+ BACK at
+     * the root moves the task to the back without finishing it, so the `onStop`
+     * that follows cannot tell it from Home — and Home keeps the party.
+     */
+    fun endParty() = net.shutdown()
+
+    /**
      * The process is going away for good — [MainActivity.onDestroy]. [suspend]
-     * ends a PARTY and runs on every trip to the home screen; this releases what
-     * outlives one.
+     * runs on every trip to the home screen and at most ends a PARTY; this
+     * releases what outlives one.
      */
     fun release() {
         advertiser.withdraw()
@@ -739,17 +692,17 @@ class GameCoordinator(
     }
 
     /**
-     * Back on screen, with a fresh room.
-     *
-     * Any race that was running belongs to a party that no longer exists — its
-     * phones were told the room closed — so the session goes before the lobby comes
-     * back. Leaving it up would put a HUD over cars nobody can steer.
+     * Back on screen. A kept room is rejoined and its race thaws on the relay's
+     * `joined`; an ended one comes back fresh, and its race goes with it through
+     * [PartyNet.onRoomGone] — as does a kept room that died while we were away.
      */
     fun resume() {
         if (!suspended) return
         suspended = false
-        if (sessionHandle != 0) returnToLobby()
-        net.resumeWithFreshRoom()
+        // The timers come back with the scene they act on: a background that
+        // destroyed the surface re-arms them in [displayReady], once rebuilt.
+        if (display.hasScene) rearmTimers()
+        if (!Scenarios.active) net.resume()
         refreshLobby()
     }
 
@@ -958,16 +911,17 @@ class GameCoordinator(
             state.clearError()
             syncAdvertisement()
         }
-        net.onRoomGone = { clearJoinTicket() }
+        // The room died under us (the relay's 4001, a refused rejoin, or the
+        // fresh room [resume] dials after an ended party). Its phones are gone,
+        // so a race it was running goes first — a HUD over cars nobody can steer
+        // is the alternative — then the fresh party's lobby.
+        net.onRoomGone = {
+            if (sessionHandle != 0) returnToLobby()
+            clearJoinTicket()
+            landOnFreshLobby()
+        }
         net.onRosterChanged = { refreshLobby() }
         net.onRaceAbandoned = { returnToLobby() }
-        net.onClose = { roomClosed ->
-            if (roomClosed) {
-                if (sessionHandle != 0) returnToLobby()
-                clearJoinTicket()
-                landOnFreshLobby()
-            }
-        }
         // The display's OWN link (`set-link`): the overlay, and a re-ask of the
         // auto-pause rule, which reads the link through its own seam — a link that
         // is down freezes a live race rather than letting it run blind, and the
@@ -1733,6 +1687,7 @@ class GameCoordinator(
             endFlourish()
         }
         resultsTask = end
+        resultsDue = nowMs() + ms
         main.postDelayed(end, ms.toLong())
     }
 
@@ -1754,6 +1709,25 @@ class GameCoordinator(
         }
         intermissionTicker = ticker
         main.post(ticker)
+    }
+
+    /**
+     * The background: the main Looper keeps running these until the freezer
+     * stops the process, and an intermission that fired then would launch the
+     * next race with no surface and no phones. [rearmTimers] puts them back on
+     * their own deadlines, and only once a scene is up: an advance with none
+     * answers "none" and would never be asked again.
+     */
+    private fun holdTimers() {
+        listOfNotNull(resultsTask, intermissionTask, intermissionTicker).forEach { main.removeCallbacks(it) }
+    }
+
+    private fun rearmTimers() {
+        holdTimers()
+        val now = nowMs()
+        resultsTask?.let { main.postDelayed(it, maxOf(0.0, resultsDue - now).toLong()) }
+        intermissionTask?.let { main.postDelayed(it, maxOf(0.0, intermissionDeadline - now).toLong()) }
+        intermissionTicker?.let { main.post(it) }
     }
 
     /**

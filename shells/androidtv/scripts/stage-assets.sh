@@ -234,10 +234,9 @@ cp "$ROOT/public/assets/brand/icon.png" "$MIP/ic_launcher.png"
 cp "$ROOT/public/assets/brand/icon-adaptive-back.png" "$MIP/ic_launcher_background.png"
 cp "$ROOT/public/assets/brand/icon-adaptive-fore.png" "$MIP/ic_launcher_foreground.png"
 
-# NOT staged: public/shared/trackSchematics.js, the web's prebaked mini-maps.
-# That bake exists so a browser need not run the projection; this app HAS the
-# projection (ttp_track_schematic_json, and ttp_schematic_pack for the packed
-# form the phones' chooser payload rides). Copying it would be a second source
-# for something the engine already answers.
+# NOT staged: public/shared/trackSchematics.js, the PHONE's copy of the baked
+# mini-maps. The engine carries the same bake (ttp_track_schematic_json, and
+# ttp_ui_chooser_tracks_json for the packed form the phones' chooser payload
+# rides). Copying it would be a second source for something the engine answers.
 
 say "$(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1) -> app/src/main/assets"

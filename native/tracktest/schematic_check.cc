@@ -7,7 +7,12 @@
 // live geometry by tests/track.test.js. This binary rebuilds each track through
 // libttp-track's own TrackBuilder and has to reproduce those bytes exactly — the
 // projection, the toFixed rounding, the path spelling, the RDP survivors and the
-// base64. It is not C++ agreeing with C++.//
+// base64. It is not C++ agreeing with C++.
+//
+// It also holds generated/track_maps.h, the bake the shells draw, to this
+// library's projection of every catalogue track — the drift gate for that
+// header, and one that IS C++ agreeing with C++, on purpose.
+//
 // --record RE-EMITS, IT DOES NOT REGENERATE. `--record <fixture> --out=<f>`
 // rebuilds each case from its recorded id/path and writes the corpus back with
 // the C++'s answers; record_schematic holds the result byte-identical. It cannot
@@ -32,6 +37,7 @@
 #include "corpus_diff.h"
 #include "corpus_record.h"
 #include "generated/track_defs.h"
+#include "generated/track_maps.h"
 #include "ttp/canonical.h"
 #include "ttp/json_read.h"
 #include "ttp/schematic.h"
@@ -236,6 +242,30 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::printf("schematic corpus: %d tracks, %d codec cases, %d failures\n", tracks, codec, failures);
+  // THE BAKE. generated/track_maps.h is what every shell draws and the phones'
+  // chooser carries; it must be exactly this library's answer for every track
+  // the catalogue ships now, which the frozen corpus above cannot speak for.
+  if (TTP_TRACK_MAP_COUNT != TTP_TRACK_COUNT) {
+    std::fprintf(stderr, "FAIL: track_maps.h bakes %d tracks, the catalogue ships %d\n",
+                 TTP_TRACK_MAP_COUNT, TTP_TRACK_COUNT);
+    failures++;
+  }
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    const std::string id = TTP_TRACKS[i].id;
+    const TrackMapDef* m = find_track_map(id);
+    if (!m) {
+      std::fprintf(stderr, "FAIL %s: no baked map in generated/track_maps.h\n", id.c_str());
+      failures++;
+      continue;
+    }
+    const sch::Schematic s = sch::build(build_race_track(TTP_TRACKS[i], 3, 1));
+    const std::string who = "map " + id + " (stale? see scripts/gen-track-schematics.js's header)";
+    bool ok = report("baked", who, schematicValue(s), schematicValue(sch::baked(*m)));
+    ok &= report("baked packed", who, Value::Str(sch::pack(s.d)), Value::Str(m->packed));
+    if (!ok) failures++;
+  }
+
+  std::printf("schematic corpus: %d tracks, %d codec cases, %d baked maps, %d failures\n",
+              tracks, codec, TTP_TRACK_COUNT, failures);
   return failures ? 1 : 0;
 }

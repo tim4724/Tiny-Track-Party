@@ -98,8 +98,9 @@ async function waitForRoom(logPath, timeout = 60000, notThis = null) {
 }
 
 /**
- * HOME, not force-stop. The party ending is `onStop`'s job, and a SIGKILL would
- * skip it — which is the very behaviour this check exists to assert.
+ * HOME, not force-stop. What leaving does to the party is `onStop`'s job, and a
+ * SIGKILL would skip it — which is the very behaviour this check exists to
+ * assert.
  */
 function backgroundApp() {
   adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
@@ -355,30 +356,46 @@ async function main() {
   await alice.waitFor(() => (alice.snapshot.players || []).length === 1, 'the roster to shrink');
   check('a closed socket frees the seat in the lobby', (alice.snapshot.players || []).length === 1);
 
-  // ---- THE PARTY ENDS WITH THE APP ----------------------------------------
+  // ---- HOME KEEPS A SEATED PARTY -----------------------------------------
   //
-  // The display leaving the screen IS the party ending. Without it the room
-  // lingers for the relay's ~2 min hostless grace, and a phone sits on a dead
-  // party with no idea; worse, the next launch dials the corpse back and can serve
-  // a stale board to somebody who just scanned a fresh code. On tvOS the method
-  // that does this shipped complete and CALLED BY NOTHING.
-  console.log('\n== the viewer leaves the app ==');
+  // Home is not the end of a party: with a phone seated the app detaches WITHOUT
+  // close_room, the relay holds the room for its hostless grace, and the phone
+  // waits on "waiting for the big screen". Coming back rejoins the SAME room as
+  // slot 0, seat and all — the surface is rebuilt and the race rebound.
+  console.log('\n== the viewer presses Home ==');
   backgroundApp();
+  let away = true;
+  try {
+    await alice.waitFor(() => alice.displayAway, 'the display to leave the room', 20000);
+  } catch { away = false; }
+  check('Home leaves the room without ending it', away && alice.closed == null,
+    alice.closed ? `close code ${alice.closed.code}` : away ? '' : 'no peer_left(0)');
+  foregroundApp();
+  let rejoined = true;
+  try {
+    await alice.waitFor(() => !alice.displayAway, 'the display to rejoin', 45000);
+  } catch { rejoined = false; }
+  const kept = await waitForRoom(logPath, 1000).catch(() => null);
+  check('coming back rejoins the SAME room', rejoined && kept?.room === room && alice.closed == null,
+    `was ${room}, now ${kept?.room}`);
+  check('the seat survived the absence', rejoined && alice.seat != null,
+    `${(alice.snapshot?.players || []).length} seat(s)`);
+
+  // ---- BACK ENDS IT ---------------------------------------------------------
+  //
+  // BACK out of the lobby ends the party explicitly: on API 31+ it only moves
+  // the task to the back, an onStop exactly like Home's, so without the explicit
+  // close_room it would keep the room too. Every phone gets the terminal 4001 at
+  // once — 4001 is no auto-reconnect and a party-over overlay; any other code
+  // puts the phone into a retry loop against a room that will never answer.
+  console.log('\n== the viewer presses BACK ==');
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
   let closedInTime = true;
   try {
     await alice.waitFor(() => alice.closed != null, 'the room to close behind us', 20000);
   } catch { closedInTime = false; }
-  check('the room closes when the app leaves the screen', closedInTime,
-    closedInTime ? `close code ${alice.closed?.code}` :
-      'the room outlived the app — phones sit on a dead party until the relay’s ~2 min grace');
-  if (closedInTime) {
-    // 4001 is the relay's room-closed code and is TERMINAL on the controller: no
-    // auto-reconnect, a party-over overlay, and the only move left is to scan
-    // again. Any other code puts the phone into a retry loop against a room that
-    // will never answer.
-    check('phones are told the party ENDED, not that they dropped', alice.closed?.code === 4001,
-      `code ${alice.closed?.code}`);
-  }
+  check('BACK ends the party, and the phone is told so', closedInTime && alice.closed?.code === 4001,
+    closedInTime ? `close code ${alice.closed?.code}` : 'the room outlived BACK');
   alice.close();
 
   // ---- AND COMING BACK IS A NEW PARTY -------------------------------------

@@ -136,6 +136,12 @@ shell.
 The projection behind the schematic bake rounds through JS `toFixed`, which printf
 cannot reproduce — it routes through double-conversion's `ToFixed` (V8's own).
 
+**The mini-maps are a build-time product.** `scripts/gen-track-schematics.js`
+writes `libttp-track/generated/track_maps.h` beside `track_defs.h`, packed forms
+included, so a catalogue id's map is a lookup and the phones' chooser list
+(`ttp_ui_chooser_tracks_json`) builds and simplifies nothing at boot. The
+`schematic` ctest holds the header to the projection of every catalogue track.
+
 Node reads geometry through `scripts/native-track.mjs` over the shipped wasm.
 
 ## Building

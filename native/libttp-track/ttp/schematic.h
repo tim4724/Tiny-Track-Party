@@ -4,8 +4,9 @@
 //
 //   schematic(track)  project a built track's centreline to the X/Z plane and
 //                     fit it into a padded 256-unit square as one closed SVG
-//                     path. Runs OFFLINE (the maps are baked), and is what a TV
-//                     shell with no baked JS would call.
+//                     path. Runs OFFLINE: scripts/gen-track-schematics.js bakes
+//                     the catalogue's maps into generated/track_maps.h, and
+//                     baked() reads one back without building anything.
 //   pack(d, eps)      the transport codec: simplify with Ramer-Douglas-Peucker,
 //                     quantize each survivor to two bytes, base64. A full loop is
 //                     ~877 points (~180 KiB of SVG text), far past the relay's
@@ -13,10 +14,12 @@
 //                     lands ~3.9 KiB.
 //   unpack(b64)       the phone's half, back to {viewBox, d, start}.
 //
-// unpack is here for completeness and for the round-trip gate, NOT because a
-// shell needs it: phones stay on the JS controller on all three TV platforms, so
-// public/shared/schematicCodec.js's unpackSchematic is the one that ships to a
-// player. The display's half — pack — is what moved.
+// pack runs OFFLINE too: the generator bakes each catalogue map's packed form
+// into generated/track_maps.h (through ttp_schematic_pack), and the `schematic`
+// ctest demands it back. unpack is here for completeness and for the round-trip
+// gate, NOT because a shell needs it: phones stay on the JS controller on all
+// three TV platforms, so public/shared/schematicCodec.js's unpackSchematic is
+// the one that ships to a player.
 //
 // FLOATING POINT. The projection is JS Number arithmetic and rounds through
 // Number.prototype.toFixed, which is NOT printf: toFixed picks the integer n
@@ -41,6 +44,7 @@
 #include "ttp/trackbuilder.h"
 
 namespace ttp {
+struct TrackMapDef;
 namespace schematic {
 
 // The viewBox square == the uint8 range: a coordinate IS a byte, so the pack
@@ -81,6 +85,10 @@ struct Schematic {
 // centreline's), x across and z down — any consistent orientation reads fine as
 // a schematic.
 Schematic build(const RaceTrack& track);
+
+// A catalogue track's map as baked (generated/track_maps.h) — build()'s answer
+// for that track, which the `schematic` ctest holds it to.
+Schematic baked(const TrackMapDef& m);
 
 // The snapshot codec. `d` is a schematic's path; the RDP runs on the SMOOTH
 // sub-integer points and only the survivors are rounded to bytes, because

@@ -137,12 +137,11 @@ cp "$TVOS/Generated/materials"/*.filamat "$OUT/materials/"
 # three implementations of the look).
 cp "$ROOT/public/shared/design-tokens.json" "$OUT/"
 
-# NOT staged: public/shared/trackSchematics.js, the web's prebaked mini-maps.
-# That bake exists so a browser need not run the projection; this app has the
-# projection itself (`ttp_track_schematic_json`, and `ttp_schematic_pack` for the
-# packed form the phones' chooser payload rides). Copying the bake would be a
-# second source for something the wasm already answers — the exact shape of
-# drift the manifest rule exists to stop.
+# NOT staged: public/shared/trackSchematics.js, the PHONE's copy of the baked
+# mini-maps. The engine carries the same bake (`ttp_track_schematic_json`, and
+# `ttp_ui_chooser_tracks_json` for the packed form the phones' chooser payload
+# rides). Copying it would be a second source for something the engine already
+# answers — the exact shape of drift the manifest rule exists to stop.
 
 # The screenshot runner's scenario list, baked from the same table the web
 # gallery renders. Swift rather than a resource, because the runner needs it

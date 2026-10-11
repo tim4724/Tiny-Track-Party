@@ -52,7 +52,8 @@ export async function init() {
     supports: mod.cwrap('ttp_track_supports_json', 'string', ['string']),
     sweep: mod.cwrap('ttp_track_sweep_json', 'string', ['string', 'number']),
     frames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string']),
-    schematic: mod.cwrap('ttp_track_schematic_json', 'string', ['string'])
+    schematic: mod.cwrap('ttp_track_schematic_json', 'string', ['string']),
+    pack: mod.cwrap('ttp_schematic_pack', 'string', ['string', 'number'])
   };
 }
 
@@ -172,7 +173,9 @@ export function trackFrames(defOrId, sList) {
 }
 
 // The track's top-down schematic — {viewBox, d, start, proj} — projected into the
-// 256-unit square by libttp-track's own ttp::schematic.
+// 256-unit square by libttp-track's own ttp::schematic. A DESCRIPTOR builds and
+// projects; an ID answers out of the bake compiled into the wasm
+// (generated/track_maps.h), which is why the bake itself passes descriptors.
 //
 // THE KEY ORDER IS RESPELLED, and it is not cosmetic fussiness. The ABI emits
 // canonical (sorted) JSON, but public/shared/trackSchematics.js is a GENERATED
@@ -183,10 +186,17 @@ export function trackFrames(defOrId, sList) {
 // the historical order is restored here, and the bake stays byte-identical —
 // which is also what keeps `node scripts/gen-track-schematics.js` an honest
 // no-op check rather than a diff.
-export function trackSchematic(trackId) {
-  const { viewBox, d, start, proj } = JSON.parse(fn.schematic(trackId));
+export function trackSchematic(defOrId) {
+  const json = ready().schematic(idOrDescriptorArg(defOrId));
+  if (!json) throw new Error('trackSchematic: no map for this track');
+  const { viewBox, d, start, proj } = JSON.parse(json);
   const { minX, minZ, scale, offX, offZ } = proj;
   return { viewBox, d, start, proj: { minX, minZ, scale, offX, offZ } };
+}
+
+// A schematic path's packed chooser form (ttp_schematic_pack at its tuned eps).
+export function schematicPack(d) {
+  return ready().pack(d, 0);
 }
 
 function idOrDescriptorArg(defOrId) {

@@ -115,7 +115,7 @@ const DERIVED = [
     what: 'public/shared/genTracks.js',
     from: 'scripts/track-gen.mjs + the native builder',
     gen: 'scripts/gen-tracks.mjs',
-    then: 'node scripts/gen-track-schematics.js   # the schematics bake off these waypoints',
+    then: 'node scripts/gen-track-schematics.js && native/scripts/build-runtime-web.sh   # the maps bake off these waypoints',
   },
 ];
 

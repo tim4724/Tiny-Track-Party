@@ -76,7 +76,8 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change", "set-link"};
+    "game-message", "race-abandoned", "track-change", "set-link",
+    "detach-socket", "shutdown"};
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -323,7 +324,7 @@ NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
 // One scratch buffer per walk, the file's own rule (see the block above).
 std::string g_bufOpen, g_bufCreateTimeout, g_bufProtocol, g_bufClose, g_bufPeerMsg,
     g_bufSelectDraw, g_bufSetTrack, g_bufLiveness, g_bufSeen, g_bufHostApply,
-    g_bufStateApply, g_bufPick, g_bufReconnect;
+    g_bufStateApply, g_bufPick, g_bufReconnect, g_bufBackground;
 
 const Value kUndef;  // JS `undefined`, for absent-key comparisons
 const Value& orUndef(const Value* v) { return v ? *v : kUndef; }
@@ -433,13 +434,21 @@ void dropSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
 }
 
 // _expireSeat: free a seat for good — clear its reconnect card and drop the
-// player. The relay closing the room (4001), the post-reload resync, and the
+// player. The relay closing the room (4001), a resync in the lobby, and the
 // lobby freeing every seat still reserved.
 void expireSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
   pushPeerOp(effects, "clear-reconnect", id);
   if (!flow->has(id)) return;
   pushPeerOp(effects, "close-fastlane", id);
   flow->removePlayer(id);  // emits rosterchange (and its last-seen stamp goes)
+}
+
+// The room is gone, so every seat goes with it: nobody carries a seat into the
+// fresh room, and the playerleave each one emits forfeits its car.
+void expireEverySeatWalk(RoomFlow* flow, Value& effects) {
+  std::vector<PeerId> ids;
+  for (const Value& p : flow->listValue().arr) ids.push_back(peerIdOf(p.find("peerIndex")));
+  for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
 }
 
 // _addPeer: the seat rule is add_peer_plan's; lowestFreeSlot stays RoomFlow's,
@@ -867,9 +876,11 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
     pushOp(effects, "clear-create-timer");
     const Value* room = mfind(msg, "room");
     st.roomCode = (room && room->type == Value::STR) ? room->str : "";
-    // Post-reload reconciliation: seats the relay no longer knows are expired,
-    // peers it knows that we don't are seated with placeholder identities.
-    // The set logic is resync_plan's; both halves are performed here.
+    // Reconciliation after a reload, a reconnect or a background: peers it
+    // knows that we don't are seated with placeholder identities, and seats it
+    // no longer knows went while we were away, so they go as a peer_left would
+    // have taken them (freed in the lobby, reserved mid-game with a reconnect
+    // QR). The set logic is resync_plan's; both halves are performed here.
     std::vector<double> rosterIds;
     {
       const Value roster = flow->listValue();
@@ -883,7 +894,12 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
         for (const Value& e : peers->arr)
           if (e.type == Value::NUM) relayPeers.push_back(e.num);
     const ns::ResyncPlan plan = ns::resync_plan(rosterIds, relayPeers);
-    for (double id : plan.expire) expireSeatWalk(flow, PeerId::Num(id), effects);
+    const bool free = ns::presence_action(ns::room_state_of(flow->stateName())) ==
+                      ns::PresenceAction::FREE;
+    for (double id : plan.expire) {
+      if (free) expireSeatWalk(flow, PeerId::Num(id), effects);
+      else dropSeatWalk(flow, PeerId::Num(id), effects);
+    }
     for (double idx : plan.add) addPeerWalk(flow, PeerId::Num(idx), nowMs, effects);
     // Overwrite the snapshot retained from before the reload: this fresh flow
     // is now the authority, so the live push clears every phone's reconnect
@@ -909,13 +925,18 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
       }
     }
   } else if (t == "error") {
-    // A join refused while we hold a room code means the room is gone (the
-    // relay expired it while this tab was closed/asleep). Fall back to a fresh
-    // room instead of erroring forever on a dead one.
+    // A join refused while we hold a room code means the room is gone ("Room
+    // not found": the relay expired it while this display was closed, asleep or
+    // in the background) or lost to us ("Room is full": a newcomer took the
+    // socket we freed). Either way the party it held is over — the phones got
+    // their 4001 or are in a room we cannot reach — so it ends exactly as a
+    // closed room does: forget, expire every seat, dial fresh. A cold boot's
+    // crash-recovery join has no seats yet, so there it is forget-and-dial.
     if (!st.roomCode.empty() && !st.inRoom) {
       pushOp(effects, "forget-room");
       st.roomCode.clear();
       st.instance.clear();
+      expireEverySeatWalk(flow, effects);
       pushOp(effects, "connect-fresh");
     } else if (!st.inRoom) {
       // The CREATE was rejected (bad url template, server error): without a
@@ -953,13 +974,31 @@ const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced, 
     // fresh room (close_room sends no peer_lefts, so without this the old
     // roster would haunt the new lobby). Cleared here, not on 'created', so a
     // plain reconnect's regathered roster stays intact.
-    std::vector<PeerId> ids;
-    const Value roster = flow->listValue();
-    for (const Value& p : roster.arr) ids.push_back(peerIdOf(p.find("peerIndex")));
-    for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
+    expireEverySeatWalk(flow, effects);
     pushOp(effects, "connect-fresh");
   }
   return answer(g_bufClose, std::move(effects));
+}
+
+const char* ttp_net_on_background_json(int roomHandle) {
+  RoomFlow* flow = ttp_room_flow(roomHandle);
+  NetState& st = netStateOf(roomHandle);
+  Value effects = Value::Arr();
+  // IN the room, not merely holding a code: a scenario's seats are connected
+  // with no relay behind them, and a room still dialling has nothing to keep.
+  if (!ns::keep_room_on_background(st.inRoom, flow && flow->connectedCount() > 0)) {
+    pushOp(effects, "shutdown");
+    return answer(g_bufBackground, std::move(effects));
+  }
+  // Kept: the room code stays, so the return's open walk JOINS it and the
+  // joined walk resyncs. The link reads exactly as a plain close's does, which
+  // is what freezes a live race now — before the first frame back — and what
+  // the relay's joined thaws.
+  st.inRoom = false;
+  pushOp(effects, "detach-socket");
+  const ns::LinkPlan plan = ns::link_after_close(false, false, 0, 0);
+  if (plan.change) setLink(st, plan.state, 0, 0, plan.button, effects);
+  return answer(g_bufBackground, std::move(effects));
 }
 
 const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,

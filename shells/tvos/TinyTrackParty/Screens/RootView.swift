@@ -42,9 +42,9 @@ struct TinyTrackPartyApp: App {
         Tokens.load()
     }
 
-    /// The app's own visibility, and the closest thing this platform has to
-    /// `pagehide` — see `GameCoordinator.suspend()` for why the party ends here
-    /// rather than on termination.
+    /// The app's own visibility — see `GameCoordinator.suspend()` for what
+    /// leaving the screen does to the party, and why it is hooked here rather
+    /// than on termination.
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -52,18 +52,18 @@ struct TinyTrackPartyApp: App {
             .onChange(of: scenePhase) { _, phase in
                 // TWO LIFETIMES, and they end on different phases.
                 //
-                // THE PARTY ends on `.background` only. `.inactive` is the
-                // transient state tvOS passes through in BOTH directions (and
-                // while a system overlay is up), so tearing the room down there
-                // would end a party every time a dialog appeared.
+                // THE PARTY detaches (or, empty, ends) on `.background` only.
+                // `.inactive` is the transient state tvOS passes through in BOTH
+                // directions (and while a system overlay is up), so dropping the
+                // socket there would blip a party every time a dialog appeared.
                 //
                 // THE FRAME LOOP idles on `.inactive`, which is EARLIER on
                 // purpose: a backgrounded app may not drive Metal, and by the
                 // time `.background` arrives the screen is already gone. Running
                 // through the handover is what killed the surface permanently —
                 // see `DisplayHost.setPaused`. Waking it is the mirror, after
-                // `resume()` has restaged the lobby so the first frame drawn is
-                // of the fresh room rather than the dead one.
+                // `resume()` has redialled, so the first frame drawn is of the
+                // room the display is going back to.
                 switch phase {
                 case .background:
                     game.display.setPaused(true)
@@ -334,14 +334,13 @@ struct RootView: View {
     /// A focus stop that draws nothing, so the countdown and a live race have
     /// something for the remote to land on.
     ///
-    /// **WITHOUT IT, MENU ENDS THE PARTY.** Menu and Play/Pause ride the focus
+    /// **WITHOUT IT, MENU LEAVES THE RACE.** Menu and Play/Pause ride the focus
     /// chain, and a race shows nothing focusable — the HUD is display-only on
     /// purpose. With no focused view the press never reached `onExitCommand`,
-    /// so tvOS took it: the app went Home and `suspend()` closed the room,
-    /// where the back table says a live race PAUSES. It is the lobby's
-    /// `focusPark` for the same reason. It steps aside while the pause overlay
-    /// or a results board is up, so their own default focus takes over and
-    /// Select never lands on nothing.
+    /// so tvOS took it and the app went Home, where the back table says a live
+    /// race PAUSES. It is the lobby's `focusPark` for the same reason. It steps
+    /// aside while the pause overlay or a results board is up, so their own
+    /// default focus takes over and Select never lands on nothing.
     ///
     /// `RaceRemoteTests` (`npm run check:tvos-race-remote`) holds it.
     private var raceFocusPark: some View {
@@ -371,11 +370,11 @@ struct RootView: View {
     /// And on this platform the LOBBY is that root. The web has the welcome
     /// board behind it, so its Menu means "end the party and go back one"; this
     /// shell dropped that board (see the switch above), so there is nothing
-    /// behind the lobby to go back to and Menu belongs to tvOS. The party still
-    /// ends the moment the app leaves the screen — `scenePhase == .background`
-    /// above calls `GameCoordinator.suspend()`, which is this platform's
-    /// pagehide. NOT on termination: tvOS suspends a backgrounded app and may
-    /// kill it later without ever delivering one.
+    /// behind the lobby to go back to and Menu belongs to tvOS. Leaving is then
+    /// the same `.background` as Home, and `GameCoordinator.suspend()` treats it
+    /// the same way: a seated party is kept for the return, an empty one ends.
+    /// tvOS has no quit gesture to tell the two apart, and a returning TV is
+    /// what both most often are.
     private var backAction: (() -> Void)? {
         switch TTP.strOrEmpty(ttp_ui_back_effect(state.screen.rawValue,
                                                  state.paused ? 1 : 0,

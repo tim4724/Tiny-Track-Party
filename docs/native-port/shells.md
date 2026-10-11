@@ -41,8 +41,10 @@ audience:
   `ttp_race_personas_json` (aiPersonas.js — and NO shell calls this one: the CPU
   roster reaches every platform by `ttp_race_configure` being handed no
   `personas` key at all, which the ABI reads as libttp-sim's own table).
-- **Authoring tools** — the `ttp_track_*` reads and the schematic decode half,
-  banner-marked in `ttp_runtime.h`. Node scripts only; a shell binds none.
+- **Authoring tools** — the `ttp_track_*` reads and the schematic codec,
+  banner-marked in `ttp_runtime.h`. Node scripts only; a shell binds none but
+  `ttp_track_schematic_json` (the baked mini-maps) and its path reader
+  `ttp_schematic_points_json`.
 - **Dev/gallery** — the display's showcase/bench/debug latches, documented in
   place as off the shipping path.
 
@@ -268,6 +270,21 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    `.background`); by the time a platform says "backgrounded" the screen is
    already gone. The party's own lifetime stays separate, because the transient
    phase is also what a system dialog produces.
+
+   **Leaving the screen keeps a seated party.** On the LATER phase a shell runs
+   `ttp_net_on_background_json` and performs it: `detach-socket` closes the
+   socket without `close_room` and keeps the room file, `shutdown` is the old
+   party end for an empty room. On return it redials a kept room through its
+   ordinary connect, or runs the room-closed walk for an ended one; the walks do
+   the rest, including ending the party when the kept room died meanwhile. What a
+   kept room owes beyond that is platform-shaped: a surface the background
+   destroyed must come back BOUND to the live session (Android's display core
+   goes with its surface), a main-loop timer that would advance a cup with no
+   surface is held and re-armed against its deadline once the scene is back,
+   and a back gesture the platform turns into that same background (Android's
+   BACK at the root on API 31+) has to end the party explicitly first.
+   `check:tvos-party` and `check:androidtv-party` assert the same room, seat and
+   all, after Home.
 
    **Boot must not hold the first frame hostage.** Whatever the shell's boot does
    — configure, stage assets, build the preview track, dial the relay — it runs

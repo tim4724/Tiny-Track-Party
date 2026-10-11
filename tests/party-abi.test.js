@@ -305,6 +305,7 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     onClose: cw('ttp_net_on_close_json', 'string',
       ['number', 'number', 'number', 'number', 'number']),
     reconnect: cw('ttp_net_reconnect_json', 'string', ['number']),
+    onBackground: cw('ttp_net_on_background_json', 'string', ['number']),
     onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
     setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
@@ -483,6 +484,21 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   assert.ok(closedOps.indexOf('close-fastlane') < closedOps.indexOf('connect-fresh'),
     'seats are expired BEFORE the fresh dial');
   assert.equal(roster().length, 0, 'no seat haunts the fresh lobby');
+
+  // The TV going to the background: an empty room ends as ever, a seated one is
+  // KEPT (detached, link down) and the return joins the same code. A room that
+  // died meanwhile refuses the join, and that ends the party like a 4001.
+  net.onProtocol(h, 'created', '{"room":"BGRM"}', 7000);
+  assert.deepEqual(ops(net.onBackground(h)), ['shutdown']);
+  net.onProtocol(h, 'peer_joined', '{"index":3}', 7100);
+  drain();
+  assert.deepEqual(walk(net.onBackground(h)).effects, [
+    { op: 'detach-socket' },
+    { op: 'set-link', state: 'reconnecting', attempt: 0, max: 0, button: false }]);
+  assert.deepEqual(walk(net.onOpen(h)).effects[0], { op: 'join-room', room: 'BGRM' });
+  assert.deepEqual(ops(net.onProtocol(h, 'error', '{"message":"Room not found"}', 7200)),
+    ['forget-room', 'clear-reconnect', 'close-fastlane', 'connect-fresh']);
+  assert.equal(roster().length, 0, 'a dead room takes its seats with it');
 
   sim.dispose(s);
   room.dispose(h);

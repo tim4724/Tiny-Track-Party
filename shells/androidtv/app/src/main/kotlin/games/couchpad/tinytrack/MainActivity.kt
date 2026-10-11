@@ -248,7 +248,7 @@ class MainActivity : ComponentActivity() {
                     game.state.infoPath = game.state.infoPath.dropLast(1)
                     return
                 }
-                when (TtpJson.strOrEmpty(Ttp.ttp_ui_back_effect(
+                when (val effect = TtpJson.strOrEmpty(Ttp.ttp_ui_back_effect(
                     TtpJson.arg(game.state.screen.name.lowercase()),
                     if (game.state.paused) 1 else 0,
                     if (game.raceEnded) 1 else 0))) {
@@ -256,8 +256,11 @@ class MainActivity : ComponentActivity() {
                     // press belongs to the system (leave the app). Re-enable after
                     // the synchronous re-dispatch: on API 31+ a root launcher
                     // activity is moved to back, not finished, so this callback
-                    // must survive for the relaunch.
+                    // must survive for the relaunch — and that move is an onStop
+                    // like Home's, which KEEPS a seated party, so the party BACK
+                    // ends is ended here first.
                     "swallow", "end-party" -> {
+                        if (effect == "end-party") game.endParty()
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
                         isEnabled = true
@@ -295,7 +298,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The app left the screen, and on this platform that IS the party ending.
+     * The app left the screen: [GameCoordinator.suspend] keeps a seated party
+     * (detached, rejoined on [onStart]) and ends an empty one.
      *
      * ONSTOP, NOT ONDESTROY. Android may kill a stopped process without ever
      * calling onDestroy, so a destroy hook alone would miss the ordinary case (the

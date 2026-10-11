@@ -225,8 +225,9 @@ add_test(NAME trackbuilder
 # per-track expectations are public/shared/trackSchematics.js — committed, baked
 # by the JS trackSchematic(), and already held to the live geometry by
 # tests/track.test.js — so this rebuilds each track through the native
-# TrackBuilder and must reproduce bytes the JS wrote. Not C++ agreeing with C++,
-# and there is no --record mode.
+# TrackBuilder and must reproduce bytes the JS wrote. Not C++ agreeing with C++.
+# It also holds generated/track_maps.h (the baked maps every shell draws) to the
+# projection of every catalogue track — that header's drift gate.
 #
 # The projection rounds through Number.prototype.toFixed, which printf cannot
 # reproduce; the port routes it through double-conversion's ToFixed (the same

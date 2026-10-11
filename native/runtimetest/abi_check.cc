@@ -3939,6 +3939,102 @@ void netWalksMatchMultiCallPath() {
                    Value::Arr(), "reconnect/after-eviction");
   }
 
+  // --- the background: a seated room is KEPT and rejoined; a dead one ends ---
+  {
+    const int bg = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
+    const auto ops = [](std::initializer_list<Value> list) {
+      Value a = Value::Arr();
+      for (const Value& e : list) a.push(e);
+      return a;
+    };
+    Value reconnecting = bareEffect("set-link");
+    reconnecting.set("state", Value::Str("reconnecting"));
+    reconnecting.set("attempt", Value::Num(0));
+    reconnecting.set("max", Value::Num(0));
+    reconnecting.set("button", Value::Bool(false));
+    Value joinBG = bareEffect("join-room");
+    joinBG.set("room", Value::Str("BGRM"));
+    Value watchdog = bareEffect("arm-create-watchdog");
+    watchdog.set("delayMs", Value::Num(8000));
+
+    ttp_net_on_protocol_json(bg, "created", "{\"room\":\"BGRM\"}", 0);
+    // An empty lobby: the relay deletes a memberless room, so it ends as ever.
+    literalEffects(walkOf(ttp_net_on_background_json(bg), "background empty"),
+                   ops({bareEffect("shutdown")}), "background/empty-room");
+    check(!ttp_net_link_down(bg), "background: an ended party leaves the link alone");
+
+    ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":1}", 0);
+    ttp_room_events_json(bg);
+    literalEffects(walkOf(ttp_net_on_background_json(bg), "background seated"),
+                   ops({bareEffect("detach-socket"), reconnecting}),
+                   "background/seated");
+    check(ttp_net_link_down(bg), "background: the kept room's link reads down (the race freezes)");
+    literalEffects(walkOf(ttp_net_on_open_json(bg), "open after background"),
+                   ops({joinBG, watchdog}), "background/return-joins-the-same-room");
+    walkOf(ttp_net_on_protocol_json(bg, "joined", "{\"room\":\"BGRM\",\"peers\":[0,1]}", 0),
+           "joined after background");
+    check(std::strstr(ttp_room_list_json(bg), "\"peerIndex\":1") != nullptr,
+          "background: the seat survives the rejoin");
+    check(!ttp_net_link_down(bg), "background: joined thaws the link");
+
+    // Away past the relay's grace: the join is refused, and the party ends like
+    // a closed room — forget, expire every seat, dial fresh.
+    walkOf(ttp_net_on_background_json(bg), "background again");
+    walkOf(ttp_net_on_open_json(bg), "open again");
+    ttp_room_events_json(bg);
+    literalEffects(walkOf(ttp_net_on_protocol_json(bg, "error",
+                                                   "{\"message\":\"Room not found\"}", 0),
+                          "error after background"),
+                   ops({bareEffect("forget-room"), peerEffect("clear-reconnect", 1),
+                        peerEffect("close-fastlane", 1), bareEffect("connect-fresh")}),
+                   "background/dead-room-ends-the-party");
+    check(std::strcmp(ttp_room_list_json(bg), "[]") == 0,
+          "background: no seat survives a dead room");
+
+    // Mid-race, a phone that left while we were away is RESERVED on the
+    // rejoin, as its peer_left would have reserved it, not freed.
+    const int mid = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
+    ttp_net_on_protocol_json(mid, "created", "{\"room\":\"BGR3\"}", 0);
+    ttp_net_on_protocol_json(mid, "peer_joined", "{\"index\":1}", 0);
+    ttp_net_on_protocol_json(mid, "peer_joined", "{\"index\":2}", 0);
+    ttp_room_transition_to(mid, "countdown");
+    ttp_room_transition_to(mid, "playing");
+    ttp_room_events_json(mid);
+    walkOf(ttp_net_on_background_json(mid), "background mid-race");
+    walkOf(ttp_net_on_open_json(mid), "open mid-race");
+    const Value midRace = walkOf(
+        ttp_net_on_protocol_json(mid, "joined", "{\"room\":\"BGR3\",\"peers\":[0,1]}", 0),
+        "joined mid-race");
+    bool reserved = false;
+    for (const Value& e : at(midRace, "effects").arr)
+      reserved = reserved || json::str_field(e, "op") == "show-reconnect";
+    check(reserved && ttp_room_flow(mid)->has(PeerId::Num(2)) &&
+              ttp_room_flow(mid)->isDisconnected(PeerId::Num(2)),
+          "background: a racer who left meanwhile keeps a reserved seat");
+    ttp_room_dispose(mid);
+
+    // A seat that is only RESERVED holds no relay socket, so it keeps nothing.
+    ttp_net_on_protocol_json(bg, "created", "{\"room\":\"BGR2\"}", 0);
+    ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":3}", 0);
+    ttp_room_flow(bg)->markDisconnected(PeerId::Num(3));
+    ttp_room_events_json(bg);
+    literalEffects(walkOf(ttp_net_on_background_json(bg), "background reserved only"),
+                   ops({bareEffect("shutdown")}), "background/reserved-seats-only");
+    ttp_room_dispose(bg);
+
+    // A COLD BOOT is untouched: the crash-recovery join into a dead room has no
+    // roster yet, so the refusal forgets and dials, exactly as before.
+    const int cold = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
+    ttp_net_restore_room(cold, "OLDR", "");
+    walkOf(ttp_net_on_open_json(cold), "cold open");
+    literalEffects(walkOf(ttp_net_on_protocol_json(cold, "error",
+                                                   "{\"message\":\"Room not found\"}", 0),
+                          "cold error"),
+                   ops({bareEffect("forget-room"), bareEffect("connect-fresh")}),
+                   "error/cold-boot-dead-room");
+    ttp_room_dispose(cold);
+  }
+
   ttp_room_dispose(twin.room);
   ttp_room_dispose(walkRoom);
   ttp_net_configure("");  // leave no configured chooser behind

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "generated/track_defs.h"
+#include "generated/track_maps.h"
 #include "ttp/ai_driver.h"
 #include "ttp/audio.h"
 #include "ttp/contract.h"
@@ -1759,20 +1760,25 @@ void schematicInto(const ttp::schematic::Schematic& s, Value& o) {
 }
 }  // namespace
 
-// Memoized per track id: each answer is a whole track build, and a TV shell
-// asks for every map at boot and again for the lobby's minis. Laps and seed only
-// stamp the built track, never its centreline, so the build takes the same
-// 3 laps / seed 1 as track_by_id_or_descriptor.
-const char* ttp_track_schematic_json(const char* trackId) {
-  static std::map<std::string, std::string> memo;
-  if (!trackId) return nullptr;
-  if (const auto hit = memo.find(trackId); hit != memo.end()) return hit->second.c_str();
-  const TrackDef* def = find_track_def(trackId);
-  if (!def) return nullptr;
-  const RaceTrack rt = build_race_track(*def, 3, 1u);
+// An id answers out of the bake (generated/track_maps.h) and builds nothing; a
+// descriptor builds and projects, which is how that bake is made.
+const char* ttp_track_schematic_json(const char* trackIdOrDescriptor) {
+  static std::string out;
+  if (!trackIdOrDescriptor) return nullptr;
+  ttp::schematic::Schematic s;
+  if (trackIdOrDescriptor[0] == '{') {
+    const TrackCache* cached = track_by_id_or_descriptor(trackIdOrDescriptor);
+    if (!cached) return nullptr;
+    s = ttp::schematic::build(cached->rt);
+  } else {
+    const TrackMapDef* m = find_track_map(trackIdOrDescriptor);
+    if (!m) return nullptr;
+    s = ttp::schematic::baked(*m);
+  }
   Value v;
-  schematicInto(ttp::schematic::build(rt), v);
-  return memo.emplace(trackId, canonical_stringify(v)).first->second.c_str();
+  schematicInto(s, v);
+  out = canonical_stringify(v);
+  return out.c_str();
 }
 
 const char* ttp_schematic_pack(const char* pathD, double eps) {

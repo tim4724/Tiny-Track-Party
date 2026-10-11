@@ -291,6 +291,8 @@ class DisplayHost(
             val safeY = Tokens.number("safe-frac-y")
             if (safeX != null && safeY != null) Ttp.ttp_display_safe_insets(safeX, safeY)
             flushPendingAssets()
+            Ttp.ttp_display_bind(boundSession)
+            Ttp.ttp_display_hold(if (held) 1 else 0)
             start()
             onSurfaceReady?.invoke()
             // A RECREATED surface comes back at the VIEW's size, not the size
@@ -949,7 +951,19 @@ class DisplayHost(
     // -- what to draw --------------------------------------------------------
 
     /** The session whose cars this display draws; 0 between races (an empty track). */
-    fun bind(session: Int) = Ttp.ttp_display_bind(session)
+    fun bind(session: Int) {
+        boundSession = session
+        Ttp.ttp_display_bind(session)
+    }
+
+    /**
+     * What [bind] and [hold] last said, because the binding lives in the core
+     * `surfaceDestroyed` deletes: a race kept across Home comes back on a fresh
+     * core, and without these it draws no cars (or whips the chase camera behind
+     * the results glass). Re-applied on every create, like the scale.
+     */
+    private var boundSession = 0
+    private var held = false
 
     /**
      * The cars that own a split-screen cell, in cell order. Everything else in the
@@ -975,7 +989,10 @@ class DisplayHost(
      * flag with no rendering, so without a hold the just-finished human's chase
      * camera is seen whipping across the track behind the results glass).
      */
-    fun hold(held: Boolean) = Ttp.ttp_display_hold(if (held) 1 else 0)
+    fun hold(held: Boolean) {
+        this.held = held
+        Ttp.ttp_display_hold(if (held) 1 else 0)
+    }
 
     /**
      * A rocket detonation, queued for the NEXT frame. The renderer cannot infer

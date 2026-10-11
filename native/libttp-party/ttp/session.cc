@@ -342,6 +342,10 @@ LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double
   return p;
 }
 
+bool keep_room_on_background(bool inRoom, bool anyConnected) {
+  return inRoom && anyConnected;
+}
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,

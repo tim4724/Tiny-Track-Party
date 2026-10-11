@@ -56,6 +56,7 @@ function ui_() {
       resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
       seriesInfoLive: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
       catalogue: c('ttp_ui_catalogue_json', 'string', []),
+      chooserTracks: c('ttp_ui_chooser_tracks_json', 'string', []),
       progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
       progressJson: c('ttp_ui_progress_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
@@ -120,6 +121,7 @@ function ui_() {
     return {
       CUPS, TRACK_LIST, protocol,
       catalogue: () => JSON.parse(raw.catalogue()),
+      chooserTracks: () => JSON.parse(raw.chooserTracks()),
       progressLoad: (json, unlockAll) => raw.progressLoad(json || '', unlockAll ? 1 : 0),
       progressJson: () => raw.progressJson(),
       backEffect: (s, paused, ended) => raw.backEffect(s, paused ? 1 : 0, ended ? 1 : 0),
@@ -281,6 +283,20 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     assert.ok(!ids.has(dev), `dev track "${dev}" must not appear in the catalogue`);
   }
   assert.ok(Object.keys(DEV_TRACKS).length > 0, 'premise: there are dev tracks to exclude');
+});
+
+// The phones' chooser list is the engine's whole answer now, maps packed at bake
+// time — so it must be the authored catalogue, and each map the PHONE's own codec
+// packing the phone's own copy of the bake (the two copies the generator writes).
+test('the chooser track list is the catalogue with its maps packed', async () => {
+  const u = await ui_();
+  const { TRACK_LIST } = await load('public/shared/tracks.js');
+  const { TRACK_SCHEMATICS } = await load('public/shared/trackSchematics.js');
+  const { packSchematic } = await load('public/shared/schematicCodec.js');
+  assert.deepEqual(u.chooserTracks(), TRACK_LIST.map((t) => ({
+    id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+    svg: packSchematic(TRACK_SCHEMATICS[t.id])
+  })));
 });
 
 // The progression exports through the SHIPPED wasm — the abi ctest gates the

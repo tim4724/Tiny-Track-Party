@@ -4,20 +4,15 @@ import SwiftUI
 /// stroked as the toy "track ribbon" (a wide white casing under a narrow ink
 /// road), on a cup-tinted field.
 ///
-/// **WHERE THE GEOMETRY COMES FROM, AND WHERE IT DOES NOT.** This shell asks
-/// `ttp_track_schematic_json(trackId)`, which builds the track with
-/// the real `ttp::build_race_track` and projects its centreline into a padded
-/// 256-unit square as one closed SVG path. The web display does NOT do this — it
-/// reads the prebaked `public/shared/trackSchematics.js`, because a browser
-/// rebuilding 20 tracks at boot to redraw data that never changes would be work
-/// for nothing. That bake is deliberately NOT staged into this bundle
-/// (`stage-assets.sh` says so at the line that does not copy it): the projection
-/// is native now, the wasm/static library already answers it, and shipping the
-/// bake alongside would be a second source for one fact — the exact drift the
-/// manifest rule exists to stop.
-///
-/// The COST of asking rather than reading a bake is a track build per map, once:
-/// the C++ keeps each answer. `Geometry.load` caches the parse: see its note.
+/// **WHERE THE GEOMETRY COMES FROM.** This shell asks
+/// `ttp_track_schematic_json(trackId)`, which answers the track's map out of
+/// the bake compiled into the engine (`generated/track_maps.h`): the centreline
+/// projected into a padded 256-unit square as one closed SVG path, built by
+/// nothing at runtime. The web display reads the same answer. The JS copy of
+/// that bake (`public/shared/trackSchematics.js`) is the PHONE's and is
+/// deliberately NOT staged into this bundle (`stage-assets.sh` says so at the
+/// line that does not copy it): shipping it alongside would be a second source
+/// for one fact. `Geometry.load` caches the parse: see its note.
 ///
 /// The SVG rendering itself is shell-owned by decision (ledger 3.6, "the
 /// schematic SVG rendering, car thumbnails, cup tint"), which is what this file
@@ -59,11 +54,11 @@ extension Schematic.Geometry {
 
     /// Where the C ABI's answers are kept, keyed by track id.
     ///
-    /// The C++ keeps each track's answer, so only the first call builds the
-    /// track; this keeps the JSON decode and the `ttp_schematic_points_json`
-    /// parse, which a SwiftUI body (run many times per state change) would
-    /// otherwise repeat on every redraw. A schematic is immutable for the life
-    /// of the build, so one answer per track id is all there will ever be.
+    /// The C++ answer is a lookup; this keeps the JSON decode and the
+    /// `ttp_schematic_points_json` parse, which a SwiftUI body (run many times
+    /// per state change) would otherwise repeat on every redraw. A schematic is
+    /// immutable for the life of the build, so one answer per track id is all
+    /// there will ever be.
     ///
     /// The value is a DOUBLE optional on purpose — a cached `nil` (unknown track
     /// id, or a projection this parser could not read) must not be retried on
@@ -226,7 +221,7 @@ struct SchematicMap: View {
     let cupId: String?
 
     /// Resolved off the C ABI in `.task`, never in `body`. A body must be cheap
-    /// and may run at any time; a first `ttp_track_schematic_json` builds a track.
+    /// and may run at any time; a first load parses the full-resolution path.
     @State private var geometry: Schematic.Geometry?
 
     // viewBox units — `theme.css`'s `--track-map-*`, authored against the 256

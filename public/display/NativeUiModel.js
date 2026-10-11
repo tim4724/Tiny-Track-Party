@@ -41,6 +41,7 @@ export async function init() {
   fn = {
     configure: c('ttp_ui_configure', 'number', ['string']),
     catalogue: c('ttp_ui_catalogue_json', 'string', []),
+    chooserTracks: c('ttp_ui_chooser_tracks_json', 'string', []),
     progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
     progressJson: c('ttp_ui_progress_json', 'string', []),
     previewProgress: c('ttp_ui_preview_progress_json', 'string', []),
@@ -101,6 +102,10 @@ export function configure({ maxPlayers, carCount, cups, catalog }) {
 // `catalog` is CUPS order flattened, which is the order every picker draws and
 // the order the model's own contract depends on.
 export function catalogue() { return JSON.parse(fn.catalogue()); }
+
+// The phones' chooser track list, maps already packed (baked into the wasm):
+// [{id, name, cup, cupName, cupDifficulty, svg}], the `tracks` the snapshot carries.
+export function chooserTracks() { return JSON.parse(fn.chooserTracks()); }
 
 // ---- the couch's progression record -----------------------------------------
 // The shell PERSISTS the blob and DECIDES nothing about it: hand whatever

@@ -63,8 +63,8 @@ export function backgroundApp({ sim = false } = {}) {
 /// Bring the game back to the front WITHOUT `--terminate-existing`, so this is a
 /// genuine resume of the suspended process rather than a cold launch. The
 /// distinction is the whole point: a cold launch would exercise
-/// `restoreRoom()`, and what needs proving is that coming back from a
-/// backgrounded party warms a fresh room.
+/// `restoreRoom()`, and what needs proving is what coming back from a
+/// backgrounded party does: rejoin a kept room, or warm a fresh one.
 export function foregroundApp({ sim = false } = {}) {
   if (sim) { sh('xcrun', ['simctl', 'launch', 'booted', BUNDLE_ID]); return; }
   sh('xcrun', ['devicectl', 'device', 'process', 'launch', '--device', resolveDevicectlId(), BUNDLE_ID]);

@@ -117,7 +117,10 @@ permanent browser code with no native twin.
 The projection half is retired. The bake is native now:
 `scripts/gen-track-schematics.js` reads it out of the wasm and reproduces the
 committed `trackSchematics.js` BYTE-IDENTICALLY, which is why the historical key
-order is respelled on the Node side.
+order is respelled on the Node side. The same run writes the engine's copy
+(`native/libttp-track/generated/track_maps.h`, packed forms included), which is
+what every DISPLAY draws and the phones' chooser carries; `trackSchematics.js`
+survives for the phone's no-relay preview, which has no wasm to ask.
 
 ## The join QR
 

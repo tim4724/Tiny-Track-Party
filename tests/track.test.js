@@ -348,13 +348,17 @@ test('every named track has a display name and a geometry source', () => {
 // The precomputed schematics (shared/trackSchematics.js — used by the no-relay
 // gallery preview) must match what the live geometry produces, or the preview
 // shows stale maps. trackSchematic is deterministic, so a freshly-built track
-// reproduces the committed SVG exactly; if it doesn't, the generator wasn't re-run.
+// (passed as its DESCRIPTOR, which builds) reproduces the committed SVG exactly;
+// if it doesn't, the generator wasn't re-run. An ID answers out of the engine's
+// copy of the bake, which must be the same maps.
 test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
   assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
     'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
   for (const t of TRACK_LIST) {
-    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(t.id),
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(t),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
+    assert.deepEqual(trackSchematic(t.id), TRACK_SCHEMATICS[t.id],
+      `the wasm's baked map for "${t.id}" differs — regenerate, then native/scripts/build-runtime-web.sh`);
   }
 });
 

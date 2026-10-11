@@ -139,6 +139,21 @@ TTP_ABI int ttp_ui_configure(const char* json);
  * nothing from it. */
 TTP_ABI const char* ttp_ui_catalogue_json(void);
 
+/* The phones' chooser TRACK list — the `tracks` key ttp_net_configure carries:
+ *
+ *   [{"id","name","cup","cupName","cupDifficulty","svg"}, ...]
+ *
+ * in catalogue order, `svg` being the track's map packed for the snapshot
+ * (ttp_schematic_pack's form). The maps are BAKED beside the track defs
+ * (generated/track_maps.h), so this builds and simplifies nothing: a shell
+ * hands it straight to ttp_net_configure. Always the shipped tables, like the
+ * catalogue above.
+ *
+ * `cup` and `cupName` are load-bearing: the phone's mode picker IS
+ * `trackCatalog.find((t) => t.cup)`, so a list without them offers single
+ * races only. */
+TTP_ABI const char* ttp_ui_chooser_tracks_json(void);
+
 /* ---- the couch's progression record -----------------------------------------
  *
  * The star record persists ON THE SHELL (localStorage / NSUserDefaults) but is

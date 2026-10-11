@@ -28,7 +28,7 @@ import { resultsView, intermissionSecs, previewBoard, previewProgress, progressL
 import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
-import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
+import { trackSchematic } from './NativeSchematic.js';
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
@@ -146,7 +146,7 @@ const statsFor = (i) => (window.carStats ? window.carStats(i) : undefined);
 // whole-layout shot always carries a readable map of the line. The path is the exact
 // SVG the phones' track picker renders, and its baked `proj` maps world x/z onto it.
 function buildMinimap(parent, trackId, field, colors) {
-  const schem = TRACK_SCHEMATICS[trackId];
+  const schem = trackSchematic(trackId);
   if (!schem || !schem.d || !schem.proj) return null;
   const old = parent.querySelector('#track-minimap');
   if (old) old.remove();
@@ -315,7 +315,7 @@ export function runDisplayScenario(opts, ctx) {
   // the tour card derive their stars and lock exactly as live play does.
   progressLoad(previewProgress(), false);
   const PREVIEW_PROGRESS = catalogue();
-  const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
+  const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: trackSchematic(t.id) }));
   const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog);
 
   // ?picked=<mode> → the pick the preview shows. A matching ?track=<id> aims the

@@ -108,7 +108,13 @@ export class ControllerNet extends GameNet {
         this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
-        this.onStatus('error', msg.message);
+        // Once joined, a send to a vacant slot 0 means the big screen is away (a
+        // TV on Home, a Wi-Fi blip): prod answers every 1 Hz ping with this until
+        // the display rejoins or the relay's hostless grace closes the room
+        // (4001). That is display-gone, not a refused join — inside the CouchPad
+        // shell any other error ends the session.
+        if (this.peerIndex != null && msg.message === 'Target peer not found') this.onStatus('display_gone');
+        else this.onStatus('error', msg.message);
       } else if (type === 'peer_left' && msg.index === 0) {
         this.onStatus('display_gone');
       } else if (type === 'peer_joined' && msg.index === 0) {

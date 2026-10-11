@@ -17,11 +17,11 @@ import androidx.compose.ui.graphics.drawscope.withTransform
  * `.track-map` — a circuit's centreline as a mini schematic, the mark the lobby's
  * race card and the phone's picker both wear.
  *
- * **The projection is C++'s.** `ttp_track_schematic_json` builds the track and
- * projects its centreline into a padded 256-unit square as ONE closed SVG path,
- * plus the start line's point on it. Nothing here samples geometry, chooses a
- * scale, or decides where the start dot goes — this file is the two strokes and
- * the dot, in the widths `theme.css` states.
+ * **The projection is C++'s.** `ttp_track_schematic_json` answers the track's
+ * baked map — its centreline projected into a padded 256-unit square as ONE
+ * closed SVG path, plus the start line's point on it. Nothing here samples
+ * geometry, chooses a scale, or decides where the start dot goes — this file is
+ * the two strokes and the dot, in the widths `theme.css` states.
  *
  * ## Why this exists at all
  *

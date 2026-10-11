@@ -64,9 +64,12 @@ final class PartyNet {
     /// `(roomCode, joinUrl)` — the join ticket. The URL is `ttp_net_join_url`'s;
     /// only the QR BITMAP is this platform's (decision D3).
     var onRoomReady: ((String, String) -> Void)?
-    /// The room this display was advertising is gone (the `forget-room` effect):
-    /// the join ticket must come DOWN now, not when the next room warms, or a
-    /// phone scans a dead code while the replacement dials.
+    /// The room this display was advertising is gone and a fresh one is
+    /// dialling (the `connect-fresh` effect, which always follows `forget-room`):
+    /// the relay closed it, a rejoin was refused, or `resume()` is replacing a
+    /// room `shutdown()` ended. The join ticket must come DOWN now, not when the
+    /// next room warms, or a phone scans a dead code while the replacement
+    /// dials — and whatever the dead room was running goes with it.
     var onRoomGone: (() -> Void)?
     /// The roster moved: re-read it off `roomHandle` with
     /// `ttp_ui_roster_seats_room_json`. Deliberately carries no payload — the
@@ -75,8 +78,6 @@ final class PartyNet {
     /// The `race-abandoned` effect: no racer connected, mid-race or on the
     /// results board.
     var onRaceAbandoned: (() -> Void)?
-    /// The socket closed. `true` means the ROOM died (4001) rather than the link.
-    var onClose: ((Bool) -> Void)?
     /// The `set-link` effect: the display's OWN link as the viewer should see
     /// it. `connected` takes the overlay down.
     var onLink: ((LinkView) -> Void)?
@@ -190,8 +191,12 @@ final class PartyNet {
     private var createTimer: Timer?
     private var reconnectTimer: Timer?
 
-    /// The app is going away; nothing may reconnect.
+    /// The socket was closed on purpose (`shutdown`, `detach`); nothing may
+    /// reconnect.
     private var shuttingDown = false
+    /// The background walk detached the socket and KEPT the room: `resume()`
+    /// rejoins it.
+    private(set) var roomKept = false
     /// Re-entrancy guard on the event drain (see `drainRoomEvents`).
     private var draining = false
 
@@ -348,22 +353,16 @@ final class PartyNet {
         let roomClosed = meta?["roomClosed"] as? Bool == true
         let replaced = meta?["replaced"] as? Bool == true
 
-        if !shuttingDown {
-            // The ROOM half is the walk's: on roomClosed it forgets the room,
-            // expires every seat (close_room sends no peer_lefts, so the old
-            // roster would haunt the fresh lobby) and answers connect-fresh —
-            // that order is load-bearing and lives in C++ now. The kit's own
-            // counters go in verbatim: what the viewer sees (`set-link`) is
-            // answered off them, never re-derived here.
-            walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, roomClosed ? 1 : 0,
-                                                      replaced ? 1 : 0, reconnectAttempt,
-                                                      maxReconnectAttempts)))
-        }
-        // AFTER the walk, deliberately: the coordinator's room-closed landing
-        // seeds a fresh default pick, and the seed's null sender is only the
-        // host once the walk has emptied the roster.
-        onClose?(roomClosed)
         guard !shuttingDown else { return }
+        // The ROOM half is the walk's: on roomClosed it forgets the room,
+        // expires every seat (close_room sends no peer_lefts, so the old roster
+        // would haunt the fresh lobby) and answers connect-fresh — that order is
+        // load-bearing and lives in C++ now. The kit's own counters go in
+        // verbatim: what the viewer sees (`set-link`) is answered off them,
+        // never re-derived here.
+        walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, roomClosed ? 1 : 0,
+                                                  replaced ? 1 : 0, reconnectAttempt,
+                                                  maxReconnectAttempts)))
         if o["willReconnect"] as? Bool == true { scheduleReconnect() }
     }
 
@@ -405,29 +404,37 @@ final class PartyNet {
         }
     }
 
-    /// Come back from the suspension `shutdown()` ended the party in.
+    /// The app went to the background (Home, an app switch, Menu at the lobby
+    /// root). Whether the party survives is the background walk's: a room with
+    /// a connected seat answers `detach-socket`, anything else `shutdown`.
+    func suspend() {
+        walk(TTP.strOrEmpty(ttp_net_on_background_json(roomHandle)))
+    }
+
+    /// Back on screen. A KEPT room is redialled through the ordinary
+    /// `connect()`: the open walk joins it as slot 0, and `joined` resyncs the
+    /// roster and thaws the race — or, if the room died meanwhile, the refused
+    /// join ends the party and dials fresh.
     ///
-    /// A FRESH room, deliberately, rather than a rejoin: we told the relay to
-    /// close the old one, so dialling it again would spend a round trip to be
-    /// told "Room not found" and would put a dead code on a 1080p screen in the
-    /// meantime. It is the same rule the web runs on a reload — the display
-    /// going away IS the party ending, so coming back is a new party.
-    ///
-    /// The teardown is the room-closed walk (forget the room, expire the old
-    /// roster, dial fresh) — the same road the relay's own 4001 takes, minus the
-    /// kit's close bookkeeping, because no socket closed here: it was closed and
-    /// DETACHED on the way out.
+    /// A room `shutdown()` ended comes back as a FRESH one, through the
+    /// room-closed walk (forget, expire the old roster, dial fresh) — the road
+    /// the relay's own 4001 takes, minus the kit's close bookkeeping, because no
+    /// socket closed here. Dialling the old code would only be told "Room not
+    /// found", with a dead code on a 1080p screen meanwhile.
     ///
     /// The crash-recovery blob is a different road and is untouched here: a
-    /// crash runs no `shutdown()` at all, so the next LAUNCH goes through
+    /// crash runs neither, so the next LAUNCH goes through
     /// `start()`/`restoreRoom()` and regathers the party that outlived us.
-    func resumeWithFreshRoom() {
+    func resume() {
         shuttingDown = false
         shouldReconnect = true
         reconnectAttempt = 0
-        // The suspension closed every RTC link (shutdown); the phones' kits
-        // re-offer on their next `joined`. Nothing to restore here.
-        walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, 1, 0, 0, 0)))
+        if roomKept {
+            roomKept = false
+            connect()
+        } else {
+            walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, 1, 0, 0, 0)))
+        }
     }
 
     /// The connection overlay's RECONNECT. The walk decides — only the gave-up
@@ -437,10 +444,13 @@ final class PartyNet {
         walk(TTP.strOrEmpty(ttp_net_reconnect_json(roomHandle)))
     }
 
-    /// The app going away IS the party ending.
+    /// The party ending for good: a background with nobody seated (the
+    /// background walk's `shutdown` — the relay deletes a memberless room the
+    /// moment our socket goes, so there is nothing to keep).
     ///
-    /// Same teardown, plus: stop every timer and suppress reconnection, so a
-    /// close arriving on the way out cannot warm a room nobody will ever see.
+    /// Same teardown as `closeRoom()`, plus: stop every timer and suppress
+    /// reconnection, so a close arriving on the way out cannot warm a room
+    /// nobody will ever see.
     ///
     /// The saved blob is dropped ONLY once the `close_room` has flushed. That
     /// asymmetry is the whole crash-recovery story: a room the relay was told
@@ -451,14 +461,7 @@ final class PartyNet {
     /// into a party-regathering recovery. The web cannot make this distinction —
     /// `pagehide` gives it no completion — and keeps the blob either way.
     func shutdown() {
-        shuttingDown = true
-        shouldReconnect = false
-        livenessTimer?.invalidate(); livenessTimer = nil
-        createTimer?.invalidate(); createTimer = nil
-        reconnectTimer?.invalidate(); reconnectTimer = nil
-        // Backgrounded: close every RTC link promptly (HexStacker's rule too),
-        // so the phones' watchdogs notice and re-offer on the way back in.
-        fastlane.closeAll()
+        goQuiet()
         guard socket.isOpen else { socket.close(); return }
         socket.send(TTP.strOrEmpty(ttp_framing_encode_close_room())) { [weak self] flushed in
             guard let self else { return }
@@ -466,13 +469,39 @@ final class PartyNet {
             // STILL SHUTTING DOWN, or this close belongs to somebody else. The
             // flush completion is deferred — a backgrounded app's URLSession
             // tasks are suspended, so it can land AFTER the wake — and by then
-            // `resumeWithFreshRoom` has dialled a NEW socket through the same
+            // `resume()` has dialled a NEW socket through the same
             // `RelaySocket`. Closing here would then detach the live connection
             // silently: `close()` reports nothing, so no reconnect is scheduled
             // and the room never warms again.
             guard self.shuttingDown else { return }
             self.socket.close()
         }
+    }
+
+    /// The `detach-socket` effect: `shutdown()` without telling the relay. No
+    /// `close_room` and the room file stays, so `resume()` rejoins slot 0 with
+    /// the same secret. Closed synchronously and DETACHED — the generation moves
+    /// on, so a late close from this socket is never reported — and the close
+    /// frame tells the relay at once if it leaves before tvOS suspends us; if it
+    /// does not, the relay's idle reap does, and a rejoin replaces the stale
+    /// socket anyway.
+    private func detach() {
+        goQuiet()
+        roomKept = true
+        socket.close()
+    }
+
+    /// Everything but the socket stops: nothing may reconnect, the link's timers
+    /// go, and every RTC link closes promptly (HexStacker's rule too) so the
+    /// phones' watchdogs notice and re-offer on the way back in. The socket is
+    /// the caller's to close.
+    private func goQuiet() {
+        shuttingDown = true
+        shouldReconnect = false
+        livenessTimer?.invalidate(); livenessTimer = nil
+        createTimer?.invalidate(); createTimer = nil
+        reconnectTimer?.invalidate(); reconnectTimer = nil
+        fastlane.closeAll()
     }
 
     // MARK: - The walk
@@ -553,10 +582,6 @@ final class PartyNet {
             forgetRoomFile()
             roomCode = nil
             instance = nil
-            // The advertised room is gone: the join ticket comes down NOW, not
-            // when the replacement warms, or its QR stays scannable for as long
-            // as the fresh create takes.
-            onRoomGone?()
 
         case "room-ready":
             announceRoomReady()
@@ -570,8 +595,12 @@ final class PartyNet {
         case "reset-reconnect-count":
             reconnectAttempt = 0
 
+        // The advertised room is gone: the join ticket comes down NOW, not when
+        // the replacement warms, or its QR stays scannable for as long as the
+        // fresh create takes.
         case "connect-fresh":
             connect()
+            onRoomGone?()
 
         case "fail-attempt":
             failAttempt()
@@ -581,6 +610,12 @@ final class PartyNet {
 
         case "set-link":
             onLink?(LinkView(e))
+
+        case "detach-socket":
+            detach()
+
+        case "shutdown":
+            shutdown()
 
         // The frame data arrives composed (PONG, the self-heartbeat) — this
         // side puts it on the socket and adds nothing.
@@ -674,6 +709,7 @@ final class PartyNet {
         "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
         "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
         "game-message", "race-abandoned", "track-change", "set-link",
+        "detach-socket", "shutdown",
     ]
 
     private func announceRoomReady() {

@@ -12,7 +12,7 @@
 // So the assertions here are about the WIRE a phone actually sees, and are
 // deliberately the ones a person would make holding a handset: can I join, is
 // there something to pick, does the big screen answer, and when the app goes
-// away does the room go with it.
+// away and comes back is my seat still there.
 //
 // USAGE
 //   node scripts/tvos-party-check.mjs                 # device (auto-detected)
@@ -68,7 +68,8 @@ async function main() {
   // launch correctly REJOINS the old room, stale seats and all. That is the
   // right product behaviour and the wrong starting state for a check: it opens
   // on somebody else's party, with a host that is not us. Backgrounding first
-  // ends the party properly and drops the blob, so the launch below is cold.
+  // ends that (by now phoneless) party properly and drops the blob, so the
+  // launch below is cold.
   backgroundApp({ sim: SIM });
   await sleep(2500);
   // SIM ONLY: plant a crash-recovery blob naming a room the relay never had, so
@@ -343,45 +344,44 @@ async function main() {
   await alice.waitFor(() => (alice.snapshot.players || []).length === 1, 'the roster to shrink');
   check('a closed socket frees the seat in the lobby', (alice.snapshot.players || []).length === 1);
 
-  // ---- THE PARTY ENDS WITH THE APP ----------------------------------------
+  // ---- HOME KEEPS A SEATED PARTY -----------------------------------------
   //
-  // The web's rule is that the display tab exiting IS the party ending: pagehide
-  // fires close_room, so every phone gets a terminal 4001 and shows "party
-  // over" AT ONCE. Without it the room lingers for the relay's ~2 min hostless
-  // grace, and a phone sits on a dead party with no idea; worse, the next launch
-  // dials the corpse back and can serve a stale board to somebody who just
-  // scanned a fresh code.
+  // Home is not the end of a party: with a phone seated the app detaches WITHOUT
+  // close_room, the relay holds the room for its hostless grace, and the phone
+  // waits on "waiting for the big screen". Coming back rejoins the SAME room as
+  // slot 0, seat and all. A close frame that does not leave before tvOS
+  // suspends us is the relay's idle reap instead, hence the long wait.
   console.log('\n== the viewer leaves the app ==');
   backgroundApp({ sim: SIM });
-  let closedInTime = true;
+  let away = true;
   try {
-    await alice.waitFor(() => alice.closed != null, 'the room to close behind us', 20000);
-  } catch {
-    closedInTime = false;
-  }
-  check('the room closes when the app leaves the screen', closedInTime,
-    closedInTime ? `close code ${alice.closed?.code}` :
-      'the room outlived the app — phones sit on a dead party until the relay’s ~2 min ' +
-      'grace, and then read "that race has ended" while a fresh QR is on the TV');
-  if (closedInTime) {
-    // 4001 is the relay's room-closed code and is TERMINAL on the controller:
-    // no auto-reconnect, a party-over overlay, and the only move left is to
-    // scan again. Any other code puts the phone into a retry loop against a
-    // room that will never answer.
-    check('phones are told the party ENDED, not that they dropped', alice.closed?.code === 4001,
-      `code ${alice.closed?.code}`);
-  }
-  alice.close();
+    await alice.waitFor(() => alice.displayAway, 'the display to leave the room', 30000);
+  } catch { away = false; }
+  check('leaving the app leaves the room without ending it', away && alice.closed == null,
+    alice.closed ? `close code ${alice.closed.code}` : away ? '' : 'no peer_left(0)');
+  foregroundApp({ sim: SIM });
+  let rejoined = true;
+  try {
+    await alice.waitFor(() => !alice.displayAway, 'the display to rejoin', 45000);
+  } catch { rejoined = false; }
+  const kept = await waitForRoom(logPath, 1000).catch(() => null);
+  check('coming back rejoins the SAME room', rejoined && kept?.room === room && alice.closed == null,
+    `was ${room}, now ${kept?.room}`);
+  check('the seat survived the absence', rejoined && alice.seat != null,
+    `${(alice.snapshot?.players || []).length} seat(s)`);
 
-  // ---- AND COMING BACK IS A NEW PARTY -------------------------------------
+  // ---- AN EMPTY PARTY ENDS WITH THE APP -----------------------------------
   //
-  // The other half of the same bug. Once the room is closed, returning to the
-  // app has to warm a FRESH one: dialling the room we just told the relay to
-  // close would spend a round trip being refused and would put a dead code on
-  // the screen in the meantime — so somebody scanning the QR they can SEE gets
-  // "that race has ended", which is precisely the report this check was written
-  // for.
-  console.log('\n== the viewer comes back ==');
+  // With nobody seated there is nothing to keep — the relay deletes a memberless
+  // room the moment our socket goes — so coming back has to warm a FRESH room:
+  // dialling the dead one would spend a round trip being refused and put a dead
+  // code on the screen meanwhile, so somebody scanning the QR they can SEE would
+  // get "that race has ended".
+  alice.close();
+  await sleep(3000);   // the relay's peer_left reaches the display; nothing here can observe it
+  console.log('\n== the viewer leaves an empty lobby, and comes back ==');
+  backgroundApp({ sim: SIM });
+  await sleep(3000);
   foregroundApp({ sim: SIM });
   let fresh = null;
   try {

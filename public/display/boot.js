@@ -12,16 +12,16 @@
 // Still JS by design: rendering, HUD, and the transport I/O (WebSocket /
 // RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
 import { loadBiomes } from '../shared/biomes.js';
-import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import * as ui from './NativeUiModel.js';
+import * as schem from './NativeSchematic.js';
 
 // A track is an ID here, and nothing more. The geometry is built inside the
 // engine — by the sim when a race begins (ttp_session_begin) and by the renderer
 // when the scene is built (ttp_display_build) — from the SAME C++ TrackBuilder,
 // on the same descriptor codegen'd into the wasm. The browser used to carry a
 // second builder purely to feed the renderer and to draw these mini-maps; the
-// mini-maps are baked ahead of time now (shared/trackSchematics.js, regenerated
-// by `npm run gen:schematics`) and nothing on this page integrates a track.
+// mini-maps are baked into the wasm now (`npm run gen:schematics`) and nothing
+// on this page integrates a track.
 //
 // `entry` is what the rest of the display passes around as "the track": the
 // catalogue row plus the lap count the session reads off it.
@@ -43,7 +43,7 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
   // to the lobby. It answers in ORDERED EFFECT LISTS and main.js's `perform` walks
   // them — the order is the contract, so nothing there may reorder or skip.
   const flow = await import('./NativeRaceFlow.js');
-  await Promise.all([sim.init(), audio.init(), ui.init(), flow.init()]);
+  await Promise.all([sim.init(), audio.init(), ui.init(), flow.init(), schem.init()]);
 
   // The world the UI model resolves ids against, handed over ONCE. Authored data
   // — it changes when the game ships, not while it runs — so it is set here
@@ -62,8 +62,12 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
   const built = new Map(trackList.map((t) => [t.id, trackEntry(t, totalLaps)]));
   const trackCatalog = trackList.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-    svg: TRACK_SCHEMATICS[t.id]
+    svg: schem.trackSchematic(t.id)
   }));
+
+  // The phones' chooser tracks, maps already packed by the bake: one C++ answer,
+  // the same one both TV shells hand ttp_net_configure.
+  const trackChooser = ui.chooserTracks();
 
   // The same once-at-boot handover for the orchestration layer's world. Two things
   // about it are worth knowing:
@@ -85,39 +89,16 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
   // the HUD boost chip's accent. The palette itself never leaves C++.
   const biomes = await loadBiomes();
 
-  const [room, conn, lane, sess, schem] = await Promise.all([
+  const [room, conn, lane, sess] = await Promise.all([
     import('./NativeRoomFlow.js'),
     import('./NativePartyConnection.js'),
     import('./NativePartyFastlane.js'),
     // The SESSION POLICY: the room snapshot, the seat rules, the message guards,
     // the self-heartbeat, the seat claim. DisplayNet performs its answers.
-    import('./NativeSessionModel.js'),
-    // ...and the track-map codec the snapshot's chooser payload is packed with.
-    import('./NativeSchematic.js')
+    import('./NativeSessionModel.js')
   ]);
   // One shared wasm module backs all of these (nativeRuntime.js memoizes it).
-  await Promise.all([room.init(), conn.init(), lane.init(), sess.init(), schem.init()]);
-
-  // The reduced maps the phones' picker renders: the baked full-res schematic,
-  // RDP-simplified and uint8-packed by the native codec so the whole catalogue
-  // fits the relay's 16 KiB set_state cap.
-  // A track with no baked schematic loses its mini-map and nothing else. The two
-  // lists cannot disagree in a shipped build — trackList comes from the wasm's
-  // codegen'd catalogue and the bake comes from the same shared/tracks.js, and
-  // tests/ui-model.test.js plus native-artifact gate the pair — but they are two
-  // artifacts now rather than one module, so a dev mid-rebuild can hold a wasm
-  // the bake has not caught up with. That should cost a picture, not the page.
-  const trackChooser = trackList.flatMap((t) => {
-    const baked = TRACK_SCHEMATICS[t.id];
-    if (!baked) {
-      console.error(`[display] no baked schematic for "${t.id}" — run npm run gen:schematics`);
-      return [];
-    }
-    return [{
-      id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-      svg: schem.pack(baked.d)
-    }];
-  });
+  await Promise.all([room.init(), conn.init(), lane.init(), sess.init()]);
 
   // Car id/name/handling stats for the phones' chooser (images load by id from
   // the web host), and the livery hex palette so a phone's dots always match the

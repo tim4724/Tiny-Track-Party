@@ -226,8 +226,8 @@ TTP_ABI void ttp_gp_rekey(int h, const char* oldIdJson, const char* newIdJson);
 // five track reads serve the Node authoring/audit scripts (which reach the
 // shipped wasm through scripts/native-track.mjs), and the schematic codec's
 // decode half serves the PHONE-side round-trip gate. A platform shell binds
-// nothing here except ttp_track_schematic_json (a TV shell with no baked
-// maps) and ttp_schematic_pack/points (the chooser payload). See
+// nothing here except ttp_track_schematic_json (the lobby's mini-maps) and
+// ttp_schematic_points_json (its path reader). See
 // docs/native-port/shells.md for the authoritative shell set.
 // ============================================================================
 
@@ -308,23 +308,25 @@ TTP_ABI const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double
 TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* sListJson);
 
 // ---- the top-down schematic + its snapshot codec ----------------------------
-// libttp-track/ttp/schematic.h. Three separate jobs, and only the middle one is
-// on a shipping path today.
+// libttp-track/ttp/schematic.h.
 //
-// ttp_track_schematic_json builds the track and projects its centreline into a
+// ttp_track_schematic_json is a track's map: its centreline projected into a
 // padded 256-unit square as one closed SVG path:
 //   {"viewBox":"0 0 256 256","d":"M x y L x y … Z","start":{"x","y"}|null,
 //    "proj":{"minX","minZ","scale","offX","offZ"}}
 // `proj` is the world->map transform, so an overlay can plot LIVE positions onto
 // the same map; it is ABSENT (not zeroed) for a track with no samples, exactly
-// as the JS early return leaves it. This is the call a TV shell with no baked
-// maps makes; the web display reads the prebaked shared/trackSchematics.js
-// instead, because building 20 tracks at boot to redraw data that never changes
-// would be work for nothing. NULL for an unknown track. Each track's answer is
-// built once per process.
-TTP_ABI const char* ttp_track_schematic_json(const char* trackId);
+// as the JS early return leaves it.
+//
+// A catalogue ID answers out of the bake (generated/track_maps.h, written by
+// scripts/gen-track-schematics.js) and builds nothing; it is what every shell's
+// lobby draws from. A DESCRIPTOR (an argument starting with '{', as
+// ttp_track_supports_json takes) builds and projects, and is how that bake is
+// made. NULL for a dev track, an unknown id or a refused descriptor.
+TTP_ABI const char* ttp_track_schematic_json(const char* trackIdOrDescriptor);
 
-// The transport codec, and the piece the LOBBY SNAPSHOT actually spends. A full
+// The transport codec the LOBBY SNAPSHOT's maps are packed with — at bake time:
+// a shell reads them already packed from ttp_ui_chooser_tracks_json. A full
 // loop is ~877 points (~180 KiB of SVG text), far past the relay's 16 KiB
 // set_state cap: simplify with Ramer-Douglas-Peucker, quantize each survivor to
 // two bytes (a coordinate IS a byte — VIEW is 256, so this is a round, not a

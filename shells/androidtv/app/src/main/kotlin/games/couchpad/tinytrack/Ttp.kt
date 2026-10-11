@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 243 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 245 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -150,6 +150,7 @@ object Ttp {
     external fun ttp_net_join_url(base: ByteArray?, room: ByteArray?, instance: ByteArray?, platform: ByteArray?): ByteArray?
     external fun ttp_net_liveness_json(roomHandle: Int, sessionHandle: Int, nowMs: Double): ByteArray?
     external fun ttp_net_lobby_frame(roomHandle: Int, sessionHandle: Int, fieldsJson: ByteArray?): ByteArray?
+    external fun ttp_net_on_background_json(roomHandle: Int): ByteArray?
     external fun ttp_net_on_close_json(roomHandle: Int, roomClosed: Int, replaced: Int, attempt: Double, maxAttempts: Double): ByteArray?
     external fun ttp_net_on_open_json(roomHandle: Int): ByteArray?
     external fun ttp_net_on_peer_message_json(roomHandle: Int, sessionHandle: Int, fromJson: ByteArray?, msgJson: ByteArray?, isSignal: Int, nowMs: Double): ByteArray?
@@ -230,11 +231,12 @@ object Ttp {
     external fun ttp_track_frames_json(trackIdOrDescriptor: ByteArray?, sListJson: ByteArray?): ByteArray?
     external fun ttp_track_json(trackId: ByteArray?, laps: Int, seed: Int): ByteArray?
     external fun ttp_track_point(h: Int, s: Double, lat: Double, out3: DoubleArray): Int
-    external fun ttp_track_schematic_json(trackId: ByteArray?): ByteArray?
+    external fun ttp_track_schematic_json(trackIdOrDescriptor: ByteArray?): ByteArray?
     external fun ttp_track_supports_json(trackIdOrDescriptor: ByteArray?): ByteArray?
     external fun ttp_track_sweep_json(trackIdOrDescriptor: ByteArray?, step: Double): ByteArray?
     external fun ttp_ui_back_effect(screen: ByteArray?, paused: Int, raceEnded: Int): ByteArray?
     external fun ttp_ui_catalogue_json(): ByteArray?
+    external fun ttp_ui_chooser_tracks_json(): ByteArray?
     external fun ttp_ui_configure(json: ByteArray?): Int
     external fun ttp_ui_cover(screen: ByteArray?, scenePainted: Int): ByteArray?
     external fun ttp_ui_cup_field_tint_pct(): Int

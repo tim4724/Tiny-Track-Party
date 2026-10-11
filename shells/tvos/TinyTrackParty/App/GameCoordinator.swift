@@ -235,7 +235,7 @@ final class GameCoordinator: ObservableObject {
         // The chooser payload the phones pick from. Set ONCE here, and again
         // only when a banked cup moves its progress key (persistProgression).
         // The shape is a wire contract with the phone — see configureChooser.
-        configureChooser(catalogue, "configuring the chooser payload")
+        configureChooser("configuring the chooser payload")
 
         // THE CAMERA RIG FOR A SURFACE WITH NO CELLS, pushed once and never
         // again: with cells the renderer runs a chase cam per cell and this is
@@ -452,7 +452,7 @@ final class GameCoordinator: ObservableObject {
         // derived from it, so this is the one place the answer actually changes.
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
         refreshCupShelf(catalogue)
-        configureChooser(catalogue, "recomposing the chooser after a banked cup")
+        configureChooser("recomposing the chooser after a banked cup")
         net.publishSnapshot()
     }
 
@@ -482,11 +482,13 @@ final class GameCoordinator: ObservableObject {
     /// records that had neither. `Start race` then did nothing because it
     /// stays disabled until a pick resolves a trackId, and nothing was
     /// pickable. Four symptoms, one shape.
-    private func configureChooser(_ catalogue: [String: Any], _ what: String) {
+    private func configureChooser(_ what: String) {
         requireOK(ttp_net_configure(TTP.json([
             "cars": chooserCars(),
             "colors": proto.carColors,
-            "tracks": chooserTracks(catalogue),
+            // Packed maps and cup fields included, and built by nothing: the
+            // engine's list, baked beside the track defs.
+            "tracks": TTP.arr(ttp_ui_chooser_tracks_json()),
             "progress": progressChooser()
         ])) != 0, what)
     }
@@ -512,44 +514,6 @@ final class GameCoordinator: ObservableObject {
                     "turn": s["turn"] ?? 0,
                     "mass": s["mass"] ?? 0
                 ]
-            ]
-        }
-    }
-
-    /// The chooser's track list: what the phone draws a mini-map from, and what
-    /// it groups into cups.
-    ///
-    /// The pack is native (`ttp_schematic_pack` over `ttp_track_schematic_json`),
-    /// so this shell holds no projection — the web reads a prebaked table
-    /// instead, but both run the same C++ over the same track, so the maps agree.
-    ///
-    /// `cup` and `cupName` are load-bearing rather than decoration: the phone's
-    /// mode picker IS `trackCatalog.find((t) => t.cup)`, so a list without them
-    /// offers single races only and the cup selector never appears.
-    private func chooserTracks(_ catalogue: [String: Any]) -> [[String: Any]] {
-        // `catalog`, not `tracks`. That is the key `ttp_ui_configure` takes and
-        // therefore the key the catalogue answers with — reading the wrong one
-        // yields an empty list, and an empty list is a lobby with no track to
-        // race and no error anywhere.
-        let cupNames = (catalogue["cups"] as? [[String: Any]] ?? []).reduce(into: [String: String]()) {
-            if let id = $1["id"] as? String { $0[id] = $1["name"] as? String ?? id }
-        }
-        return (catalogue["catalog"] as? [[String: Any]] ?? []).compactMap { t in
-            guard let id = t["id"] as? String else { return nil }
-            let schematic = TTP.obj(ttp_track_schematic_json(id))
-            // eps 0 asks for the TUNED default (0.35), chosen so straights
-            // reproduce and corners do not clip. Passing a number here overrides
-            // that tuning — this shell used to send 0.6 and drew coarser maps
-            // than the web for no reason anyone had decided.
-            let packed = TTP.str(ttp_schematic_pack(schematic["d"] as? String ?? "", 0))
-            let cup = t["cup"] as? String
-            return [
-                "id": id,
-                "name": t["name"] as? String ?? id,
-                "svg": packed ?? "",
-                "cup": cup.map { $0 as Any } ?? NSNull(),
-                "cupName": cup.flatMap { cupNames[$0] }.map { $0 as Any } ?? NSNull(),
-                "cupDifficulty": t["cupDifficulty"] as? Int ?? 0
             ]
         }
     }
@@ -620,14 +584,15 @@ final class GameCoordinator: ObservableObject {
 
     /// The landing after the room itself died under us — host `close_room`
     /// never fires here (this shell has no UI road to it: Menu at the lobby
-    /// root belongs to tvOS), so the callers are the relay's hostless grace and
-    /// a dead-socket fallback. `PartyNet` has already self-healed into a fresh
-    /// room by the time this runs; the display's job is the boot landing again:
-    /// the lobby previewing the remembered circuit, so the attract demo stands
-    /// up exactly as a launch would stand it up (the race card stays down until
-    /// the fresh party's host picks). Landing on `.welcome` instead is how this
-    /// shell once wedged — that screen pins the backdrop down and nothing after
-    /// `boot()` ever showed the lobby again.
+    /// root belongs to tvOS), so the callers are the relay's hostless grace, a
+    /// refused rejoin and the fresh room after an ended party. `PartyNet` has
+    /// already self-healed into a fresh room by the time this runs; the
+    /// display's job is the boot landing again: the lobby previewing the
+    /// remembered circuit, so the attract demo stands up exactly as a launch
+    /// would stand it up (the race card stays down until the fresh party's host
+    /// picks). Landing on `.welcome` instead is how this shell once wedged —
+    /// that screen pins the backdrop down and nothing after `boot()` ever showed
+    /// the lobby again.
     func landOnFreshLobby() {
         show(.lobby)
         previewLastCircuit()
@@ -635,29 +600,30 @@ final class GameCoordinator: ObservableObject {
 
     // MARK: - App lifecycle
 
-    /// The app left the screen, and on this platform that IS the party ending.
-    ///
-    /// It is the web's `pagehide` rule, and it has to be wired to SOMETHING here
-    /// or it is not a rule at all: `PartyNet.shutdown()` shipped fully written,
-    /// documented as running "on termination", and called by nothing. The room
-    /// therefore outlived the app every time, and the consequences are not
-    /// subtle — a phone still holding the old code sits on a dead party until
-    /// the relay's ~2 min hostless grace closes it with a 4001, which is exactly
-    /// the "that race has ended" board a viewer sees after scanning what they
-    /// believe is a fresh QR.
+    /// The app left the screen (Home, an app switch, Menu at the lobby root).
+    /// A room with a connected seat is KEPT: the socket detaches without
+    /// `close_room`, the link reads down, and a live race stays frozen by the
+    /// auto-pause until `resume()` rejoins — the frame loop only paused, so the
+    /// scene is still there. An empty room ends (`PartyNet.shutdown()`), which
+    /// it has to be wired to: that method once shipped called by nothing, and
+    /// every exit leaked a room for the relay's ~2 min hostless grace. The
+    /// background walk decides which.
     ///
     /// BACKGROUND, NOT TERMINATE, is the hook. tvOS suspends a backgrounded app
     /// and may kill it later without ever delivering `willTerminate`, so a
     /// termination hook alone would miss the ordinary case (the viewer presses
-    /// Home). The socket dies on suspension either way — the only choice is
-    /// whether the relay is TOLD, and telling it is what turns a two-minute
-    /// zombie into an immediate, honest "party over" on every phone.
+    /// Home). The socket dies on suspension either way — closing it ourselves
+    /// hands the phones an immediate peer_left(0) instead of the relay's idle
+    /// reap. A process killed while away regathers its phones into the lobby
+    /// through the room file on the next launch; the race lived in memory.
     func suspend() {
         guard !suspended else { return }
         suspended = true
         lobbyDemo.stop()
-        net.shutdown()
-        clearJoinTicket()
+        // A scenario never started the net (see `boot`), so it has no room to
+        // keep or end, and nothing to dial on the way back.
+        if Scenarios.requested == nil { net.suspend() }
+        if !net.roomKept { clearJoinTicket() }
     }
 
     /// The ticket comes down the moment its room is dead, not when the next one
@@ -702,16 +668,14 @@ final class GameCoordinator: ObservableObject {
         advertiser.advertise(room: room)
     }
 
-    /// Back on screen, with a fresh room.
-    ///
-    /// Any race that was running belongs to a party that no longer exists — its
-    /// phones were told the room closed — so the session goes before the lobby
-    /// comes back. Leaving it up would put a HUD over cars nobody can steer.
+    /// Back on screen. A kept room is rejoined and its race thaws on the
+    /// relay's `joined`; an ended one comes back fresh, and its race goes with
+    /// it through `net.onRoomGone` — as does a kept room that died while we
+    /// were away.
     func resume() {
         guard suspended else { return }
         suspended = false
-        if sessionHandle != 0 { returnToLobby() }
-        net.resumeWithFreshRoom()
+        if Scenarios.requested == nil { net.resume() }
         refreshLobby()
     }
 

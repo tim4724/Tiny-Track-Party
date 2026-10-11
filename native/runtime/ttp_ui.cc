@@ -28,12 +28,14 @@
 #include <string>
 #include <vector>
 
+#include "generated/track_maps.h"
 #include "ttp/canonical.h"
 #include "ttp/grand_prix.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
 #include "ttp/preview.h"
 #include "ttp/progression.h"
+#include "ttp/race_track.h"  // find_track_def + generated/track_defs.h: the cup table
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
 // The live room and the live race, through the two seams that hand over plain
@@ -87,7 +89,7 @@ std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
     g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
     g_bufSeriesGp, g_bufBoardLive, g_bufViewLive, g_bufFreeze, g_bufResultsAction,
-    g_bufProgress, g_bufPreviewProgress, g_bufPreviewBoard;
+    g_bufProgress, g_bufPreviewProgress, g_bufPreviewBoard, g_bufChooser;
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -371,6 +373,29 @@ const char* ttp_ui_catalogue_json(void) {
   stars.set("total", Value::Num(progression::starsTotal(cupIds)));
   out.set("stars", std::move(stars));
   return put(g_bufCatalogue, out);
+}
+
+const char* ttp_ui_chooser_tracks_json(void) {
+  // ui::shippedCatalog()'s walk, read straight off the cup table: every row is
+  // in a cup, so none of the catalogue's nulls can occur here.
+  Value rows = Value::Arr();
+  for (int i = 0; i < TTP_CUP_COUNT; i++) {
+    const CupDef& c = TTP_CUPS[i];
+    for (int t = 0; t < c.nTracks; t++) {
+      const TrackDef* def = find_track_def(c.tracks[t]);
+      if (!def) continue;
+      const TrackMapDef* m = find_track_map(def->id);
+      Value v = Value::Obj();
+      v.set("id", Value::Str(def->id));
+      v.set("name", Value::Str(def->name));
+      v.set("cup", Value::Str(c.id));
+      v.set("cupName", Value::Str(c.name));
+      v.set("cupDifficulty", Value::Num((double) c.difficulty));
+      v.set("svg", Value::Str(m ? m->packed : ""));
+      rows.push(std::move(v));
+    }
+  }
+  return put(g_bufChooser, rows);
 }
 
 // ---- the couch's progression record ------------------------------------------

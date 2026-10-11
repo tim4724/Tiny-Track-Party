@@ -58,7 +58,8 @@ extern "C" {
  *                                                    mid-race)
  *    "colors": ["#rrggbb", ...],                     the livery palette
  *    "tracks": [{"id","name","cup",...,"svg"}, ...]} the reduced schematics,
- *                                                    LOBBY ONLY (the bulk)
+ *                                                    LOBBY ONLY (the bulk) —
+ *                                                    ttp_ui_chooser_tracks_json
  *
  * OPAQUE: this layer never looks inside it, which is what lets the conformance
  * corpus carry a synthetic one. Set once at boot for the same reason
@@ -266,6 +267,13 @@ TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
  *                                            auto-pause rule here: a link that
  *                                            is down freezes a live race
  *                                            (ttp_net_link_down below).
+ *   detach-socket                            close every peer's RTC link, stop
+ *                                            the timers and close the socket
+ *                                            WITHOUT close_room, keeping the
+ *                                            room file: the return dials the
+ *                                            same room and joins slot 0
+ *   shutdown                                 the shell's party-ending teardown
+ *                                            (close_room, then the socket)
  *
  * NO clear-standings. The results board is room-retained (ttp_room.h), so the
  * statechange walk drops it with a store and lets its own `publish` carry the
@@ -290,8 +298,11 @@ TTP_ABI const char* ttp_net_on_open_json(int roomHandle);
 /* The watchdog expired. fail-attempt unless an answer landed meanwhile. */
 TTP_ABI const char* ttp_net_create_timeout_json(int roomHandle);
 
-/* A relay protocol frame: created / joined (post-reload reconciliation
- * included) / peer_joined / peer_left / error. */
+/* A relay protocol frame: created / joined (the roster reconciled against the
+ * relay's peers: a seat it lost while we were away goes as its peer_left would
+ * have taken it) / peer_joined / peer_left / error. A join refused while
+ * holding a room code ("Room not found", "Room is full") ends the party like a
+ * closed room: forget it, expire every seat, dial fresh. */
 TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
                                              const char* msgJson, double nowMs);
 
@@ -307,6 +318,18 @@ TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
  * viewer sees (`set-link`, the rule is session.h's link_after_close). */
 TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced,
                                           double attempt, double maxAttempts);
+
+/* A TV shell left the screen (Home, an app switch — tvOS `.background`,
+ * Android `onStop`). Whether the room is KEPT is session.h's
+ * keep_room_on_background: with a connected seat the answer is detach-socket
+ * and the `set-link` a plain close shows (the link-down auto-pause freezes a
+ * live race before the first frame back); with none it is `shutdown`, the
+ * party ending as it always did. Coming back
+ * needs no walk of its own: a kept room is redialled through the ordinary
+ * connect, whose open walk joins it and whose joined walk resyncs and thaws —
+ * and a room that died meanwhile answers the join with an error, which ends
+ * the party below. The web never calls this: pagehide is the party ending. */
+TTP_ABI const char* ttp_net_on_background_json(int roomHandle);
 
 /* The overlay's RECONNECT button. Answers effects only from the gave-up state
  * (`set-link` disconnected WITH a button): reset the kit's attempt counter so

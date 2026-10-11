@@ -92,6 +92,7 @@ class PartyNet(
             "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
             "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
             "game-message", "race-abandoned", "track-change", "set-link",
+            "detach-socket", "shutdown",
         )
 
     }
@@ -102,9 +103,12 @@ class PartyNet(
     var onRoomReady: ((String, String) -> Unit)? = null
 
     /**
-     * The room this display was advertising is gone (the `forget-room` effect):
-     * the join ticket must come DOWN now, not when the next room warms, or a phone
-     * scans a dead code while the replacement dials.
+     * The room this display was advertising is gone and a fresh one is dialling
+     * (the `connect-fresh` effect, which always follows `forget-room`): the relay
+     * closed it, a rejoin was refused, or [resume] is replacing a room [shutdown]
+     * ended. The join ticket must come DOWN now, not when the next room warms, or
+     * a phone scans a dead code while the replacement dials — and whatever the
+     * dead room was running goes with it.
      */
     var onRoomGone: (() -> Unit)? = null
 
@@ -121,8 +125,6 @@ class PartyNet(
      */
     var onRaceAbandoned: (() -> Unit)? = null
 
-    /** The socket closed. `true` means the ROOM died (4001) rather than the link. */
-    var onClose: ((Boolean) -> Unit)? = null
     /** The `set-link` effect: the display's OWN link as the viewer should see it. */
     var onLink: ((GameState.LinkView) -> Unit)? = null
 
@@ -260,8 +262,12 @@ class PartyNet(
     private var createWatchdog: Runnable? = null
     private var reconnectRunnable: Runnable? = null
 
-    /** The app is going away; nothing may reconnect. */
+    /** The socket was closed on purpose ([shutdown], [detach]); nothing may reconnect. */
     private var shuttingDown = false
+
+    /** The background walk detached the socket and KEPT the room: [resume] rejoins it. */
+    var roomKept = false
+        private set
 
     /** Re-entrancy guard on the event drain (see [drainRoomEvents]). */
     private var draining = false
@@ -512,22 +518,15 @@ class PartyNet(
         val roomClosed = meta?.optBoolean("roomClosed") == true
         val replaced = meta?.optBoolean("replaced") == true
 
-        if (!shuttingDown) {
-            // The ROOM half is the walk's: on roomClosed it forgets the room,
-            // expires every seat (close_room sends no peer_lefts, so the old roster
-            // would haunt the fresh lobby) and answers connect-fresh — that order
-            // is load-bearing and lives in C++ now. The kit's own counters go in
-            // verbatim: what the viewer sees (`set-link`) is answered off them,
-            // never re-derived here.
-            walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(
-                roomHandle, if (roomClosed) 1 else 0, if (replaced) 1 else 0,
-                reconnectAttempt, maxAttempts)))
-        }
-        // AFTER the walk, deliberately: the coordinator's room-closed landing seeds
-        // a fresh default pick, and the seed's null sender is only the host once
-        // the walk has emptied the roster.
-        onClose?.invoke(roomClosed)
         if (shuttingDown) return
+        // The ROOM half is the walk's: on roomClosed it forgets the room, expires
+        // every seat (close_room sends no peer_lefts, so the old roster would haunt
+        // the fresh lobby) and answers connect-fresh — that order is load-bearing
+        // and lives in C++ now. The kit's own counters go in verbatim: what the
+        // viewer sees (`set-link`) is answered off them, never re-derived here.
+        walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(
+            roomHandle, if (roomClosed) 1 else 0, if (replaced) 1 else 0,
+            reconnectAttempt, maxAttempts)))
         if (o.optBoolean("willReconnect")) scheduleReconnect()
     }
 
@@ -574,23 +573,41 @@ class PartyNet(
     }
 
     /**
-     * Come back from the suspension [shutdown] ended the party in.
+     * The app left the screen (Home, an app switch). Whether the party survives is
+     * the background walk's: a room with a connected seat answers `detach-socket`
+     * ([detach]), anything else `shutdown`. A party BACK already ended has nothing
+     * left to background.
+     */
+    fun suspend() {
+        if (shuttingDown) return
+        walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_background_json(roomHandle)))
+    }
+
+    /**
+     * Back on screen. A KEPT room is redialled through the ordinary [connect]: the
+     * open walk joins it as slot 0, and `joined` resyncs the roster and thaws the
+     * race — or, if the room died meanwhile, the refused join ends the party and
+     * dials fresh.
      *
-     * A FRESH room, deliberately, rather than a rejoin: we told the relay to close
-     * the old one, so dialling it again would spend a round trip to be told "Room
-     * not found" and would put a dead code on a 1080p screen in the meantime. It is
-     * the same rule the web runs on a reload — the display going away IS the party
-     * ending, so coming back is a new party.
+     * A room [shutdown] ended comes back as a FRESH one, through the room-closed
+     * walk: we told the relay to close the old one, so dialling it again would
+     * spend a round trip to be told "Room not found" and put a dead code on a
+     * 1080p screen in the meantime.
      *
      * The crash-recovery blob is a different road and is untouched here: a crash
-     * runs no [shutdown] at all, so the next LAUNCH goes through [start] /
-     * [restoreRoom] and regathers the party that outlived us.
+     * runs neither, so the next LAUNCH goes through [start] / [restoreRoom] and
+     * regathers the party that outlived us.
      */
-    fun resumeWithFreshRoom() {
+    fun resume() {
         shuttingDown = false
         shouldReconnect = true
         reconnectAttempt = 0.0
-        walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(roomHandle, 1, 0, 0.0, 0.0)))
+        if (roomKept) {
+            roomKept = false
+            connect()
+        } else {
+            walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(roomHandle, 1, 0, 0.0, 0.0)))
+        }
     }
 
     /**
@@ -603,10 +620,13 @@ class PartyNet(
     }
 
     /**
-     * The app going away IS the party ending.
+     * The party ending for good: BACK out of the lobby, or a background with
+     * nobody seated (the background walk's `shutdown` — the relay deletes a
+     * memberless room the moment our socket goes, so there is nothing to keep).
      *
-     * Same teardown, plus: stop every timer and suppress reconnection, so a close
-     * arriving on the way out cannot warm a room nobody will ever see.
+     * Same teardown as [closeRoom], plus: stop every timer and suppress
+     * reconnection, so a close arriving on the way out cannot warm a room nobody
+     * will ever see.
      *
      * The saved blob is dropped ONLY once the `close_room` has gone out. That
      * asymmetry is the whole crash-recovery story: a room the relay was told about
@@ -621,14 +641,7 @@ class PartyNet(
      * television. A method nothing invokes reads as implemented.
      */
     fun shutdown() {
-        shuttingDown = true
-        shouldReconnect = false
-        cancel(livenessTick); livenessTick = null
-        cancel(createWatchdog); createWatchdog = null
-        cancel(reconnectRunnable); reconnectRunnable = null
-        // Backgrounded: close every RTC link promptly, so the phones' watchdogs
-        // notice and re-offer on the way back in.
-        fastlane.closeAll()
+        goQuiet()
         if (!socket.isOpen) { socket.close(); return }
         socket.send(TtpJson.strOrEmpty(Ttp.ttp_framing_encode_close_room())) { sent ->
             if (sent) forgetRoomFile()
@@ -636,6 +649,33 @@ class PartyNet(
             // goes. `close()` would cancel it outright.
             socket.closeGracefully()
         }
+    }
+
+    /**
+     * The `detach-socket` effect: [shutdown] without telling the relay. No
+     * `close_room` and the room file stays, so [resume] rejoins slot 0 with the
+     * same secret. GRACEFUL, so the relay sees our close at once and the phones
+     * get peer_left(0) now rather than at its idle reap — and the socket's
+     * generation moves on, so a late close from it is never reported.
+     */
+    private fun detach() {
+        goQuiet()
+        roomKept = true
+        socket.closeGracefully()
+    }
+
+    /**
+     * Everything but the socket stops: nothing may reconnect, the link's timers
+     * go, and every RTC link closes promptly so the phones' watchdogs notice and
+     * re-offer on the way back in. The socket is the caller's to close.
+     */
+    private fun goQuiet() {
+        shuttingDown = true
+        shouldReconnect = false
+        cancel(livenessTick); livenessTick = null
+        cancel(createWatchdog); createWatchdog = null
+        cancel(reconnectRunnable); reconnectRunnable = null
+        fastlane.closeAll()
     }
 
     /**
@@ -737,10 +777,6 @@ class PartyNet(
                 forgetRoomFile()
                 roomCode = null
                 instance = null
-                // The advertised room is gone: the join ticket comes down NOW, not
-                // when the replacement warms, or its QR stays scannable for as long
-                // as the fresh create takes.
-                onRoomGone?.invoke()
             }
 
             "room-ready" -> announceRoomReady()
@@ -752,13 +788,23 @@ class PartyNet(
 
             "reset-reconnect-count" -> reconnectAttempt = 0.0
 
-            "connect-fresh" -> connect()
+            // The advertised room is gone: the join ticket comes down NOW, not when
+            // the replacement warms, or its QR stays scannable for as long as the
+            // fresh create takes.
+            "connect-fresh" -> {
+                connect()
+                onRoomGone?.invoke()
+            }
 
             "fail-attempt" -> failAttempt()
 
             "reconnect" -> reconnectNow()
 
             "set-link" -> onLink?.invoke(GameState.LinkView.from(e))
+
+            "detach-socket" -> detach()
+
+            "shutdown" -> shutdown()
 
             // The frame data arrives composed (PONG, the self-heartbeat) — this
             // side puts it on the socket and adds nothing.

@@ -25,9 +25,19 @@ extension GameCoordinator {
             self.syncAdvertisement()
         }
 
-        // The advertised room is gone (fresh-room fallback): the ticket comes
-        // down before the replacement dials, so nobody scans a dead code.
-        net.onRoomGone = { [weak self] in self?.clearJoinTicket() }
+        // The room itself died under us (the relay's hostless grace, a refused
+        // rejoin, or the fresh room `resume()` dials after an ended party).
+        // Terminal for the ROOM, not for us: PartyNet is already dialling a
+        // fresh one, so the display's job is a fresh party's lobby. A race the
+        // dead room stranded is wound down first — the session is disposed and
+        // the flow flipped before the lobby comes up — and the ticket comes
+        // down before the replacement warms, so nobody scans a dead code.
+        net.onRoomGone = { [weak self] in
+            guard let self else { return }
+            if self.sessionHandle != 0 { self.returnToLobby() }
+            self.clearJoinTicket()
+            self.landOnFreshLobby()
+        }
 
         // Any roster movement: a join, a rename, a car pick, a ready toggle, a
         // drop. The seat grid is re-read off the ROOM HANDLE rather than from a
@@ -37,18 +47,6 @@ extension GameCoordinator {
         // Every participant gone while someone waits, past the grace window.
         // The policy is RoomFlow's; performing it is returning to the lobby.
         net.onRaceAbandoned = { [weak self] in self?.returnToLobby() }
-
-        // The room itself died (the relay's hostless grace, or a dead socket).
-        // Terminal for the ROOM, not for us: PartyNet self-heals into a fresh
-        // one, so the display's job is a fresh party's lobby. A race the dead
-        // room stranded is wound down first, same as `resume()` does — the
-        // session is disposed and the flow flipped before the lobby comes up.
-        net.onClose = { [weak self] roomClosed in
-            guard let self, roomClosed else { return }
-            if self.sessionHandle != 0 { self.returnToLobby() }
-            self.clearJoinTicket()
-            self.landOnFreshLobby()
-        }
 
         // The display's OWN link (the `set-link` effect): the overlay, and a
         // re-ask of the auto-pause rule, which reads the link through its own

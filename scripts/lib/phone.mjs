@@ -43,6 +43,7 @@ export class Phone {
     this.fromDisplay = [];       // every direct message the display sent us
     this.relayErrors = [];
     this.closed = null;          // {code} once the socket closes
+    this.displayAway = false;    // between the display's peer_left and its return
     this._waiters = [];
   }
 
@@ -156,6 +157,10 @@ export class Phone {
         break;
       case 'error':
         this.relayErrors.push(m.message);
+        break;
+      case 'peer_left':
+      case 'peer_joined':
+        if (m.index === 0) this.displayAway = m.type === 'peer_left';
         break;
       default:
         break;

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "double-conversion/double-conversion.h"
+#include "generated/track_maps.h"
 #include "ttp/jsmath.h"
 #include "ttp/jsonnum.h"
 
@@ -230,6 +231,17 @@ Schematic build(const RaceTrack& track) {
   out.proj.scale = z0(js_fixed(scale, 4));
   out.proj.offX = z0(js_fixed(offX, 2));
   out.proj.offZ = z0(js_fixed(offZ, 2));
+  return out;
+}
+
+Schematic baked(const TrackMapDef& m) {
+  Schematic out;
+  out.viewBox = kViewBox;
+  out.d = m.d;
+  out.hasStart = true;
+  out.start = Point{m.startX, m.startY};
+  out.hasProj = true;
+  out.proj = Projection{m.minX, m.minZ, m.scale, m.offX, m.offZ};
   return out;
 }
 

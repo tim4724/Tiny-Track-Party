@@ -139,7 +139,17 @@ const NET_PERFORMERS = {
   // The display's OWN link, for the connection overlay. The payload is the
   // whole view ({state, attempt, max, button}); the game layer draws it and
   // re-asks the auto-pause rule, which reads the link through its own seam.
-  'set-link': (n, e) => n.onLinkChange(e)
+  'set-link': (n, e) => n.onLinkChange(e),
+  // The background walk's ops (ttp_net_on_background_json). This page never
+  // runs that walk — pagehide is the party ending here — but every op a walk
+  // can emit has a performer, and these are the TV shells' acts spelled for
+  // this socket: detach keeps the sessionStorage room, so a connect rejoins it.
+  'detach-socket': (n) => {
+    if (n.fastlane) n.fastlane.closeAll();
+    n._stopTimers();
+    if (n.party) n.party.close();
+  },
+  'shutdown': (n) => n.shutdown()
   // NO clear-standings. The results board is room-retained (ttp_room.h), so the
   // statechange walk drops it with a store and its own `publish` carries the
   // change — this shell holds no board to null out.
@@ -557,11 +567,15 @@ export class DisplayNet extends GameNet {
   // room outlives us and the sessionStorage rejoin (ROOM_KEY above) turns the
   // next load into a party-regathering crash recovery instead.
   shutdown() {
-    if (this._livenessTimer) { clearInterval(this._livenessTimer); this._livenessTimer = null; }
-    clearTimeout(this._createTimer);
+    this._stopTimers();
     if (!this.party) return; // test/gallery/solo surfaces never opened the relay
     this.party.closeRoom();
     this.party.close();
+  }
+
+  _stopTimers() {
+    if (this._livenessTimer) { clearInterval(this._livenessTimer); this._livenessTimer = null; }
+    clearTimeout(this._createTimer);
   }
 
   broadcast(data) { if (this.party) this.party.broadcast(data); }

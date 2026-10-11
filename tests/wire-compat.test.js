@@ -959,32 +959,28 @@ test('asym: a null `to` MEANS something different in each implementation', async
   host.close();
 });
 
-test('asym: prod answers a send to a vanished slot with an error the phone treats as fatal', async () => {
-  // WHAT THIS BREAKS AT A REAL PARTY: phones PING slot 0 at 1 Hz. Any window
-  // where the display's socket is gone produces exactly this frame. The phone
-  // routes EVERY error string through onStatus('error', message)
-  // (controller/Net.js, onProtocol's 'error' branch), and inside the CouchPad shell anything other than
-  // 'Room not found'/'Room is full' maps to endSession('game_ended') — the
-  // launcher tears down the WebView. Structurally unreachable in E2E: the stub
-  // has no such error at all.
+test('asym: prod answers a send to a vanished slot with an error, and a joined phone reads it as display-gone', async () => {
+  // Phones PING slot 0 at 1 Hz, so any window where the display's socket is
+  // gone (a TV on Home, a tab asleep, a network blip) produces exactly this
+  // frame. Inside the CouchPad shell an 'error' status other than 'Room not
+  // found'/'Room is full' maps to endSession('game_ended') and the launcher
+  // tears the WebView down — so a JOINED phone must route this one to
+  // display_gone (the waiting overlay), never to error. Structurally
+  // unreachable in E2E: the stub has no such error at all.
   const { relay, host, room } = await bringUpDisplay();
   const { net, seen: pseen } = await bringUpPhone(relay, room);
 
-  // The display's socket goes away (tab asleep, network blip).
+  // The display's socket goes away.
   host.close();
   assert.equal(relay.rooms.get(room).members[0].ws, undefined, 'slot 0 is vacant but the room lives');
 
   // The phone's next 1 Hz PING targets slot 0.
+  const before = relay.log.length;
   net.party.sendTo(0, { type: 'ping', t: 1 });
-  const err = pseen.status.find((s) => s.s === 'error');
-  assert.ok(err, 'prod answered with an error frame');
-  assert.equal(err.info, 'Target peer not found');
-
-  // The exact discrimination the shell makes. Nothing in this repo owns that
-  // mapping — it lives in the launcher — so this test pins the INPUT to it.
-  const SHELL_SURVIVABLE = new Set(['Room not found', 'Room is full']);
-  assert.equal(SHELL_SURVIVABLE.has(err.info), false,
-    'this is the class of error that ends a CouchPad session');
+  assert.ok(relay.log.slice(before).some((e) => e.dir === 's2c' && e.text.includes('Target peer not found')),
+    'prod answered with an error frame');
+  assert.equal(pseen.status.some((s) => s.s === 'error'), false, 'nothing session-ending reached the phone');
+  assert.equal(pseen.status.at(-1).s, 'display_gone');
 
   net.disconnect();
 });
@@ -1192,13 +1188,45 @@ test('asym: the hostless grace is the most likely real-party ending and has no E
 
   // AND — the finding this test exists for. Every one of those 119 pings targeted
   // a vacant slot 0, so prod answered every one with "Target peer not found".
-  // The phone routes each through onStatus('error'), and in the CouchPad shell
-  // anything outside {Room not found, Room is full} ends the session. So on prod
-  // the WebView is torn down about one second after the TV goes away — the room's
-  // two-minute grace, and the reconnect it exists to allow, is dead code from the
-  // phone's point of view. Neither the E2E stub nor any corpus can produce this.
-  const targetErrors = phone.seen.status.filter((s) => s.s === 'error' && s.info === 'Target peer not found');
-  assert.equal(targetErrors.length, 119, 'one session-ending error per second of grace');
+  // Read as an error, the CouchPad shell ended the session about one second
+  // after the TV went away and the grace was dead code from the phone's side;
+  // the phone reads it as display-gone, so the whole grace is spent waiting.
+  // Neither the E2E stub nor any corpus can produce this.
+  assert.equal(phone.seen.status.filter((s) => s.s === 'error').length, 0,
+    'no session-ending error in two minutes of grace');
+  assert.equal(phone.seen.status.filter((s) => s.s === 'display_gone').length, 120,
+    'peer_left(0) and every unanswered ping read as the big screen being away');
+});
+
+test('wire: a TV that goes to the background keeps its room, and the phone waits it out', async () => {
+  // The TV shells' Home (ttp_net_on_background_json): a seated room detaches
+  // WITHOUT close_room, and the return dials the same code as slot 0. Driven
+  // here through the web display's performers for the same walk, against the
+  // modelled relay and a real phone.
+  const { relay, net, room } = await bringUpRealDisplay();
+  const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'bg-1' });
+  const seat = phone.net.peerIndex;
+  // The display's OWN module instance — the walk reads the room's net state.
+  const { loadNativeRuntime } = await import(require('node:url')
+    .pathToFileURL(path.join(H.ROOT, 'public/display/nativeRuntime.js')).href);
+  const background = (await loadNativeRuntime()).cwrap('ttp_net_on_background_json', 'string', ['number']);
+
+  net._walk(net.flow.runWalk(() => background(net.flow.handle)));
+  await H.flush();
+  assert.ok(relay.rooms.has(room), 'no close_room: the relay holds the room');
+  assert.equal(phone.seen.status.at(-1).s, 'display_gone', 'the phone saw peer_left(0)');
+  phone.net.party.sendTo(0, { type: 'ping', t: 1 });
+  assert.equal(phone.seen.status.at(-1).s, 'display_gone', 'a ping into the gap is still display-gone');
+
+  net._connect();   // the return: the shells redial through the ordinary connect
+  await H.flush();
+  assert.equal(net.roomCode, room, 'the same room, rejoined');
+  assert.equal(phone.seen.status.some((s) => s.s === 'error' || s.s === 'room_closed'), false,
+    'nothing ended the phone\'s session');
+  const me = lastLobby(phone).players.find((p) => p.peerIndex === seat);
+  assert.ok(me && me.connected && me.name === 'Ada', 'the seat survived the absence, name and all');
+
+  phone.net.disconnect();
 });
 
 test('asym: a terminal close RESETS the C++ adapter\'s attempt counter, unlike the kit', async () => {

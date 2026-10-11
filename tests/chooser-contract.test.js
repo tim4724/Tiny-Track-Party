@@ -27,6 +27,11 @@
 // shell to the web's key set rather than to a list retyped here, which would be
 // a third source of the same fact and would rot the same way.
 //
+// The TRACKS half is no longer any shell's to spell: every shell hands over
+// ttp_ui_chooser_tracks_json whole, and tests/ui-model.test.js pins that
+// answer's shape and content. What is left to check here is that each shell
+// does hand it over, and the cars, which each shell still composes.
+//
 // It reads the Swift and the Kotlin as TEXT, which is crude and deliberate:
 // nothing else in this repo can see a .swift or .kt file and a .js file at
 // once, and the alternative to a crude gate here is the none that let this ship.
@@ -92,33 +97,30 @@ const android = existsSync(path.join(ROOT, ANDROID_FILE)) ? read(ANDROID_FILE) :
 // (a picker bar reading `undefined` draws nothing). Flattening the key sets is
 // what lets one comparison cover the wrapper and its contents together.
 const webCars = jsKeys(slice(webBoot, 'const carChooser = carModels.map', '\n  // The cup list is NOT handed back'));
-const webTracks = jsKeys(slice(webBoot, 'const trackChooser = trackList.flatMap', '\n  // Car id/name/handling stats'));
-const tvosCars = tvos && swiftKeys(slice(tvos, 'private func chooserCars()', '\n    /// The chooser\'s track list'));
-const tvosTracks = tvos && swiftKeys(slice(tvos, 'private func chooserTracks(', '\n    // MARK: - Screens'));
-const androidCars = android && kotlinKeys(slice(android,
-  'private fun chooserCars()', '\n     * The chooser\'s track list'));
-const androidTracks = android && kotlinKeys(slice(android,
-  'private fun chooserTracks(', '\n    // -- screens'));
+const tvosCars = tvos && swiftKeys(slice(tvos, 'private func chooserCars()', '\n    // MARK: - Screens'));
+const androidCars = android && kotlinKeys(slice(android, 'private fun chooserCars()', '\n    // -- screens'));
 
 // A guard on the extraction itself. Every assertion below is a set comparison,
 // and two empty sets compare equal — so an anchor that silently stops matching
 // (a rename, a reordered file) would turn this whole file green while testing
 // nothing at all.
 test('the extraction actually found the payload shapes', () => {
-  const shapes = [['web cars', webCars], ['web tracks', webTracks]];
-  if (tvos) shapes.push(['tvOS cars', tvosCars], ['tvOS tracks', tvosTracks]);
-  if (android) shapes.push(['Android cars', androidCars], ['Android tracks', androidTracks]);
+  const shapes = [['web cars', webCars]];
+  if (tvos) shapes.push(['tvOS cars', tvosCars]);
+  if (android) shapes.push(['Android cars', androidCars]);
   for (const [name, keys] of shapes) {
     assert.ok(keys.size >= 3, `${name}: extracted ${keys.size} keys — the anchor has drifted`);
   }
   // The fields the controller INDEXES on, named here so the gate states the
-  // contract rather than only comparing two shells to each other. `svg` is the
-  // packed mini-map, `cup` is what the mode picker groups by
-  // (`trackCatalog.find((t) => t.cup)`), `stats` is the picker's bars.
+  // contract rather than only comparing shells to each other. `stats` is the
+  // picker's bars.
   for (const k of ['id', 'name', 'stats']) assert.ok(webCars.has(k), `web cars lost "${k}"`);
-  for (const k of ['id', 'name', 'svg', 'cup', 'cupName']) {
-    assert.ok(webTracks.has(k), `web tracks lost "${k}"`);
-  }
+});
+
+test('every shell hands over the engine\'s track list', () => {
+  assert.match(webBoot, /const trackChooser = ui\.chooserTracks\(\)/);
+  if (tvos) assert.match(tvos, /"tracks": TTP\.arr\(ttp_ui_chooser_tracks_json\(\)\)/);
+  if (android) assert.match(android, /\.put\("tracks", TtpJson\.arr\(Ttp\.ttp_ui_chooser_tracks_json\(\)\)\)/);
 });
 
 test('the tvOS shell writes the same car chooser keys as the web', () => {
@@ -128,23 +130,9 @@ test('the tvOS shell writes the same car chooser keys as the web', () => {
     'the phone reads these by name (public/controller/main.js), so a mismatch is a blank car picker');
 });
 
-test('the tvOS shell writes the same track chooser keys as the web', () => {
-  if (!tvos) return;
-  assert.deepEqual([...tvosTracks].sort(), [...webTracks].sort(),
-    'shells/tvos GameCoordinator.chooserTracks() and public/display/boot.js trackChooser disagree — ' +
-    'missing `svg` is a lobby with no mini-maps, missing `cup` is no cup selector at all');
-});
-
 test('the Android shell writes the same car chooser keys as the web', () => {
   if (!android) return;
   assert.deepEqual([...androidCars].sort(), [...webCars].sort(),
     'shells/androidtv GameCoordinator.chooserCars() and public/display/boot.js carChooser disagree — ' +
     'the phone reads these by name (public/controller/main.js), so a mismatch is a blank car picker');
-});
-
-test('the Android shell writes the same track chooser keys as the web', () => {
-  if (!android) return;
-  assert.deepEqual([...androidTracks].sort(), [...webTracks].sort(),
-    'shells/androidtv GameCoordinator.chooserTracks() and public/display/boot.js trackChooser disagree — ' +
-    'missing `svg` is a lobby with no mini-maps, missing `cup` is no cup selector at all');
 });

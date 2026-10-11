@@ -128,10 +128,28 @@ When the room dies — host close, or the relay's hostless grace after the displ
 vanishes — every member socket closes with 4001, which is **TERMINAL**: no
 auto-reconnect, and controllers bail to a party-over overlay.
 
-**The display tab exiting IS the party ending.** `pagehide` shuts the room down,
-including on a reload, which therefore boots into a fresh room. The sessionStorage
-rejoin remains as CRASH recovery only: no pagehide means the room survives and the
-reloaded display regathers the party.
+**On the web, the display tab exiting IS the party ending.** `pagehide` shuts the
+room down, including on a reload, which therefore boots into a fresh room. The
+sessionStorage rejoin remains as CRASH recovery only: no pagehide means the room
+survives and the reloaded display regathers the party.
+
+**On a TV, leaving the screen is not.** Home and an app switch are routinely
+accidental and routinely undone, so the TV shells run the background walk
+(`ttp_net_on_background_json`, the rule is session.h's `keep_room_on_background`):
+a room with a connected seat DETACHES — no `close_room`, room file kept, link set
+down so a live race freezes — and the return redials it through the ordinary
+connect, whose `joined` resyncs and thaws; a phone that left meanwhile is taken
+as its `peer_left` would have been (seat reserved mid-game, freed in the lobby).
+The relay's hostless grace is the only clock: nothing on a backgrounded TV can
+time anything out, and phones wait on "waiting for the big screen" (which is
+also what a joined phone makes of the relay's "Target peer not found" while slot
+0 is vacant). An empty room ends as the web's does, because the relay deletes a
+memberless room the moment our socket goes. A room that died while we were away
+answers the rejoin with an error, and the error walk ends that party like a
+4001: forget, expire every seat, dial fresh. Ending the party on purpose is the
+shell's own road (Android's BACK sends `close_room` before the system takes the
+press). A process killed while away regathers its phones into the lobby through
+the room file; the race lived in memory and is not persisted.
 
 ## protocol.h
 

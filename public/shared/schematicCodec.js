@@ -1,12 +1,13 @@
-// schematicCodec.js — the track-map transport codec: the display PACKS a
-// schematic into the room snapshot, the phone UNPACKS it into an <svg> path.
+// schematicCodec.js — the track-map transport codec: a schematic is PACKED into
+// the room snapshot, and the phone UNPACKS it into an <svg> path.
 //
-// SHARED because both halves of the party run it, and they are not the same
-// program. The display side has a native twin — libttp-track/ttp/schematic.cc,
-// reached through NativeSchematic.js — and the tvOS and Android shells will pack
-// with that and never load this file. The PHONE side has no twin and never will:
-// phones stay on the JS controller on all three TV platforms, so unpackSchematic
-// is permanent browser code.
+// No display packs at runtime: the packed form is BAKED by
+// scripts/gen-track-schematics.js through the native pack
+// (libttp-track/ttp/schematic.cc) and handed out by ttp_ui_chooser_tracks_json.
+// packSchematic survives only for the phone's no-relay preview
+// (controller/TestHarness.js) and the tests. The PHONE's unpack has no twin and
+// never will: phones stay on the JS controller on all three TV platforms, so
+// unpackSchematic is permanent browser code.
 //
 // That is why this is in shared/ rather than display/. It used to live in
 // display/trackSchematic.js, which meant controller/main.js — the one part of
