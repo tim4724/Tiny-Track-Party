@@ -54,23 +54,20 @@ object QRCode {
                 // it and shrink the modules for nothing.
                 EncodeHintType.MARGIN to 1,
             )
-            // Ask for the module grid at its natural size first, so the scale below
-            // can be an exact integer. Passing TARGET_PIXELS straight in lets ZXing
-            // pick a non-integer multiple and land module edges mid-pixel.
-            val small = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 1, 1, hints)
-            val modules = maxOf(small.width, 1)
-            val scale = maxOf(1, TARGET_PIXELS / modules)
-            val side = modules * scale
-            val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, side, side, hints)
-
-            val pixels = IntArray(side * side)
-            for (y in 0 until side) {
-                val row = y * side
-                for (x in 0 until side) {
-                    pixels[row + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE
-                }
+            // Encode the module grid at its natural size (one pixel per module),
+            // then scale it by an exact integer with filtering OFF, so every module
+            // edge lands on a pixel edge. Passing TARGET_PIXELS straight in lets
+            // ZXing pick a non-integer multiple and land module edges mid-pixel;
+            // encoding again at the scaled size gives these same pixels at the cost
+            // of a second encode and a million-pixel loop.
+            val grid = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 1, 1, hints)
+            val modules = grid.width
+            val pixels = IntArray(modules * modules) { i ->
+                if (grid[i % modules, i / modules]) Color.BLACK else Color.WHITE
             }
-            Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888)
+            val small = Bitmap.createBitmap(pixels, modules, modules, Bitmap.Config.ARGB_8888)
+            val side = modules * maxOf(1, TARGET_PIXELS / modules)
+            Bitmap.createScaledBitmap(small, side, side, false)
         } catch (_: Throwable) {
             null
         }

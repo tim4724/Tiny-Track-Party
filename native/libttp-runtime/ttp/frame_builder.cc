@@ -5,7 +5,6 @@
 
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
-#include "ttp/race_flow.h"
 #include "ttp/showcase.h"
 #include "ttp/util.h"
 
@@ -217,9 +216,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     int mode = d.camMode;
     bool chase = false;
     if (covered) {
-        std::vector<bool> player(cars.size());
-        for (size_t i = 0; i < cars.size(); i++) player[i] = !race::isDemoCpu(d.roster[i].str);
-        d.coverage.step(dt, outCars, live, player);
+        d.coverage.step(dt, outCars, live, d.rosterPlayers);
         if (d.coverage.cut) {
             d.follow = {};
             d.coverChase = {};

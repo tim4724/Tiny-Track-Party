@@ -83,6 +83,8 @@ struct DisplayState {
     // The same slots as the renderer dressed them — ttp_display_reroster's diff
     // base (ttp/roster.h planReroster). Set with `roster`, updated on re-roster.
     std::vector<TtpRosterCar> rosterCars;
+    // Which slots a person owns (ttp/roster.h), for the coverage's CHASE.
+    std::vector<bool> rosterPlayers;
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
     float chaseHeight = CHASE_HEIGHT;   // ttp_display_debug_chase_pitch; authored otherwise

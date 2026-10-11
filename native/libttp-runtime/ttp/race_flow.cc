@@ -1,5 +1,6 @@
 #include "ttp/race_flow.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -51,7 +52,6 @@ const char* key(Op op) {
     case Op::SERIES_ADVANCE: return "series-advance";
     case Op::CLEAR_SERIES: return "clear-series";
     case Op::SET_TRACK_FROM_SERIES: return "set-track-from-series";
-    case Op::PLACE_TRACK: return "place-track";
     case Op::SET_TRACK: return "set-track";
     case Op::DISPOSE_SESSION: return "dispose-session";
     case Op::CLEAR_FIELD: return "clear-field";
@@ -292,37 +292,28 @@ std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const Fi
     DemoEntry e;
     // A player who never picked drives the car their LIVERY maps to.
     e.carIndex = h.carIndex.has ? h.carIndex : OptNum::Of(h.colorIndex);
-    e.id = "demo-" + h.peerIndex.key();
     e.name = h.name;
     e.colorIndex = h.colorIndex;
     e.stats = carStatsAt(w.carStats, e.carIndex);
+    e.player = true;
     field.push_back(std::move(e));
   }
-  const size_t humanCount = field.size();
-
-  std::vector<Human> asHumans;
-  asHumans.reserve(field.size());
-  for (const DemoEntry& f : field) {
-    Human h;
-    h.peerIndex = Id::Str(f.id);
-    h.name = f.name;
-    h.colorIndex = f.colorIndex;
-    h.carIndex = f.carIndex;
-    asHumans.push_back(std::move(h));
-  }
-  for (const CpuSeat& s : cpuSeats(asHumans, w)) {
+  for (const CpuSeat& s : cpuSeats(humans, w)) {
     DemoEntry e;
-    e.id = DEMO_CPU_PREFIX + std::to_string(s.n);
     e.colorIndex = s.colorIndex;
     e.carIndex = OptNum::Of(s.carIndex);
     e.stats = s.stats;
     field.push_back(std::move(e));
   }
-  // Persona by FINAL GRID INDEX so they spread across the whole field; each CPU
-  // also takes THAT persona's name, so its HUD name matches how it drives.
+  // Livery order, so a slot keeps its id, its persona and its place on the
+  // grid whoever is driving it (race_flow.h).
+  std::stable_sort(field.begin(), field.end(), [](const DemoEntry& a, const DemoEntry& b) {
+    return a.colorIndex < b.colorIndex;
+  });
   for (size_t i = 0; i < field.size(); i++) {
+    field[i].id = "demo-" + std::to_string(i);
     if (!w.personas.empty()) field[i].persona = w.personas[i % w.personas.size()];
-    if (i >= humanCount) field[i].name = field[i].persona.name;
+    if (!field[i].player) field[i].name = field[i].persona.name;
   }
   return field;
 }
@@ -337,6 +328,7 @@ std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trac
     out += ":";
     // JS template-interpolates the raw value, so a null carIndex spells "null".
     out += field[i].carIndex.has ? js_number_to_string(field[i].carIndex.v) : "null";
+    if (field[i].player) out += ":p";
   }
   return out;
 }
@@ -725,11 +717,10 @@ AdvanceResult advanceSeriesRace(const AdvanceInput& in) {
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   r.effects.push_back(mk(Op::SERIES_ADVANCE));
   // publishes + selects (track/totalLaps swap). Outside the lobby the select
-  // skips its scene crossfade (there is no preview to fade), and a chained start
-  // has no lobby step — so the new circuit is placed explicitly and the results
-  // overlay covers the pop.
+  // only re-aims the shell's track, and nothing places it here: the launch that
+  // follows builds it at reset-scene-cars, with the new field. Placing it here
+  // too built every chained start's scene twice, the first with the old field.
   r.effects.push_back(mk(Op::SET_TRACK_FROM_SERIES));
-  r.effects.push_back(mk(Op::PLACE_TRACK));
   return r;
 }
 

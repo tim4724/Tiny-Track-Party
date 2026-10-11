@@ -9,9 +9,10 @@ import org.json.JSONObject
  * One slot of the field, as the RENDERER needs it — the shape
  * `ttp_display_build` takes, plus the one field that never crosses.
  *
- * `id`, `name`, `carIndex` and `color` go across whole and C++ decides
- * everything about them: the livery's ABGR word, how the marker is dressed. All
- * of it is `libttp-runtime/ttp/roster.h`'s, its only reader.
+ * `id`, `name`, `carIndex`, `color` and `player` go across whole and C++
+ * decides everything about them: the livery's ABGR word, how the marker is
+ * dressed, which car the lobby's coverage films. All of it is
+ * `libttp-runtime/ttp/roster.h`'s, its only reader.
  *
  * [model] is the exception and the reason this type exists rather than a bare
  * map: it names GLB BYTES to fetch, and fetching is the platform's job. It is
@@ -24,6 +25,7 @@ data class RosterSlot(
     val color: String,
     /** A toy-car kit base name from `protocol.js`'s `CAR_MODELS`. */
     val model: String,
+    val player: Boolean,
 )
 
 /**
@@ -281,21 +283,8 @@ object SceneStaging {
         //    object) and the palette comes from the biome latched at step 2.
         //
         //    PREDICATE polarity: 1 is built.
-        val slots = JSONArray()
-        for (car in roster) {
-            slots.put(
-                JSONObject()
-                    // boxed(), never the id's text: a seat that joined as the
-                    // JSON number 3 must not be re-encoded as the string "3".
-                    // They are two different players to ttp::parse_scalar_id.
-                    .put("id", car.id.boxed())
-                    .put("name", car.name)
-                    .put("carIndex", car.carIndex)
-                    .put("color", car.color)
-            )
-        }
         Trace.beginSection("ttp:build.native")
-        val built = Ttp.ttp_display_build(TtpJson.arg(trackId), TtpJson.arg(slots.toString()))
+        val built = Ttp.ttp_display_build(TtpJson.arg(trackId), TtpJson.arg(slotsJson(roster)))
         Trace.endSection()
         step(4)
         if (built == 0) {
@@ -317,7 +306,7 @@ object SceneStaging {
      * lobby car pick must not snap the orbit back to its start bearing or pay a
      * track re-mesh for a livery.
      *
-     * `false` means it was NOT a re-dress — no scene, a join/leave/reorder — and
+     * `false` means it was NOT a re-dress — no scene, a changed id list — and
      * the caller performs the full [build].
      */
     fun redress(roster: List<RosterSlot>, display: DisplayHost, store: AssetStore): Boolean {
@@ -328,14 +317,26 @@ object SceneStaging {
         Trace.beginSection("ttp:redress")
         fetchPlanned(carWants(roster, JSONArray()), display, store)
         Trace.endSection()
+        return Ttp.ttp_display_reroster(TtpJson.arg(slotsJson(roster))) != 0
+    }
+
+    /** The roster as [build] and [redress] hand it over, in slot order. */
+    private fun slotsJson(roster: List<RosterSlot>): String {
         val slots = JSONArray()
         for (car in roster) {
             slots.put(
-                JSONObject().put("id", car.id.boxed()).put("name", car.name)
-                    .put("carIndex", car.carIndex).put("color", car.color)
+                JSONObject()
+                    // boxed(), never the id's text: a seat that joined as the
+                    // JSON number 3 must not be re-encoded as the string "3".
+                    // They are two different players to ttp::parse_scalar_id.
+                    .put("id", car.id.boxed())
+                    .put("name", car.name)
+                    .put("carIndex", car.carIndex)
+                    .put("color", car.color)
+                    .put("player", car.player)
             )
         }
-        return Ttp.ttp_display_reroster(TtpJson.arg(slots.toString())) != 0
+        return slots.toString()
     }
 
     // -- bytes --------------------------------------------------------------

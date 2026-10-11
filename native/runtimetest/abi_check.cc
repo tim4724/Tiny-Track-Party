@@ -4835,8 +4835,9 @@ void raceLiveWalks() {
     for (size_t i = 0; ids && i < want.size(); i++)
       ids = json::str_field(at(got, "field").arr[i], "id") == want[i].id &&
             json::str_field(at(at(got, "field").arr[i], "persona"), "name") ==
-                want[i].persona.name;
-    check(ids, "…with the demo ids and the by-grid-index personas the rule assigns");
+                want[i].persona.name &&
+            json::truthy(at(got, "field").arr[i], "player") == want[i].player;
+    check(ids, "…with the demo ids, the by-grid-index personas and the player marks the rule assigns");
     // tidepool is a Beach Cup track: the demo drives at the skill a race
     // there hands its CPU fill (the launch case asserts the same tier).
     const Value* skill = got.find("skill");

@@ -92,14 +92,17 @@ function(ttp_emscripten_cli target)
 endfunction()
 
 # ---- Vendored fdlibm, native build ------------------------------------------
-# The same sources the JS engine shipped as WASM, which is what the corpus was
-# recorded against (see vendor/fdlibm/VENDOR.md). Entry points are renamed ttp_fd_* via -D so
-# the static lib never collides with system libm symbols; internal cross-calls
-# (atan2→atan, pow/hypot→sqrt, k_rem_pio2→floor/scalbn) rename consistently
-# because the -D rewrites every occurrence in every TU.
+# The transcendentals the math corpus was recorded against (see
+# vendor/fdlibm/VENDOR.md). Entry points are renamed ttp_fd_* via -D so the
+# static lib never collides with system libm symbols; internal cross-calls
+# (atan2→atan, k_rem_pio2→floor/scalbn) rename consistently because the -D
+# rewrites every occurrence in every TU. sqrt alone is NOT renamed: pow/hypot
+# call the platform's, which IEEE 754 makes correctly rounded, so it is
+# bit-identical to fdlibm's bit-by-bit e_sqrt.c, and that loop was most of
+# every track build.
 set(TTP_FDLIBM_RENAMES
   sin=ttp_fd_sin cos=ttp_fd_cos atan2=ttp_fd_atan2 atan=ttp_fd_atan
-  exp=ttp_fd_exp pow=ttp_fd_pow hypot=ttp_fd_hypot sqrt=ttp_fd_sqrt
+  exp=ttp_fd_exp pow=ttp_fd_pow hypot=ttp_fd_hypot
   fabs=ttp_fd_fabs floor=ttp_fd_floor scalbn=ttp_fd_scalbn
   copysign=ttp_fd_copysign
 )

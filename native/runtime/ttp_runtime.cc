@@ -374,8 +374,8 @@ static const char* EMPTY_ARR = "[]";
 //
 // The racing line is primed HERE rather than left to build on first use, because
 // first use is the first frame a bot drives — the GO! beat, the exact frame the
-// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
-// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
+// player first touches the throttle. Solving it costs milliseconds against a
+// microsecond steady frame, so it read as a stutter on the start line. It is pure
 // precomputation over a centerline that cannot change, so every trace hashes
 // identically either way.
 static void buildBots(RuntimeSession& rs) {
@@ -1754,16 +1754,20 @@ void schematicInto(const ttp::schematic::Schematic& s, Value& o) {
 }
 }  // namespace
 
-const char* ttp_track_schematic_json(const char* trackId, int laps, uint32_t seed) {
-  static std::string out;
+// Memoized per track id: each answer is a whole track build, and a TV shell
+// asks for every map at boot and again for the lobby's minis. Laps and seed only
+// stamp the built track, never its centreline, so the build takes the same
+// 3 laps / seed 1 as track_by_id_or_descriptor.
+const char* ttp_track_schematic_json(const char* trackId) {
+  static std::map<std::string, std::string> memo;
   if (!trackId) return nullptr;
+  if (const auto hit = memo.find(trackId); hit != memo.end()) return hit->second.c_str();
   const TrackDef* def = find_track_def(trackId);
   if (!def) return nullptr;
-  const RaceTrack rt = build_race_track(*def, laps, seed);
+  const RaceTrack rt = build_race_track(*def, 3, 1u);
   Value v;
   schematicInto(ttp::schematic::build(rt), v);
-  out = canonical_stringify(v);
-  return out.c_str();
+  return memo.emplace(trackId, canonical_stringify(v)).first->second.c_str();
 }
 
 const char* ttp_schematic_pack(const char* pathD, double eps) {

@@ -58,15 +58,6 @@ private val START_RING_W get() = Tokens.number("track-map-start-ring") ?: 0f
 
 object TrackMap {
 
-    /**
-     * `laps`/`seed` only stamp the built track and no geometry depends on them;
-     * 3/1 is the convention every other caller in this shell uses
-     * (`GameCoordinator.chooserTracks`), and a schematic that disagreed with the
-     * phone's would be two maps of one circuit.
-     */
-    private const val LAPS = 3
-    private const val SEED = 1
-
     /** One parsed path per track id. The projection is deterministic, so this is
      *  a pure cache of work, not of state. */
     private val cache = HashMap<String, Shape?>()
@@ -74,7 +65,7 @@ object TrackMap {
     class Shape(val path: Path, val start: Offset?)
 
     fun shape(trackId: String): Shape? = cache.getOrPut(trackId) {
-        val d = TtpJson.obj(Ttp.ttp_track_schematic_json(TtpJson.arg(trackId), LAPS, SEED))
+        val d = TtpJson.obj(Ttp.ttp_track_schematic_json(TtpJson.arg(trackId)))
         val pathD = d.optString("d").ifEmpty { return@getOrPut null }
         // androidx.core.graphics.PathParser, the same reader ItemIcon uses for the
         // shared item SVGs — the schematic's grammar is M/L/Z, which is a strict

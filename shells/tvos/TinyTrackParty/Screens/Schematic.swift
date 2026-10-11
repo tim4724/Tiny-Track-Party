@@ -5,7 +5,7 @@ import SwiftUI
 /// road), on a cup-tinted field.
 ///
 /// **WHERE THE GEOMETRY COMES FROM, AND WHERE IT DOES NOT.** This shell asks
-/// `ttp_track_schematic_json(trackId, laps, seed)`, which builds the track with
+/// `ttp_track_schematic_json(trackId)`, which builds the track with
 /// the real `ttp::build_race_track` and projects its centreline into a padded
 /// 256-unit square as one closed SVG path. The web display does NOT do this — it
 /// reads the prebaked `public/shared/trackSchematics.js`, because a browser
@@ -16,8 +16,8 @@ import SwiftUI
 /// bake alongside would be a second source for one fact — the exact drift the
 /// manifest rule exists to stop.
 ///
-/// The COST of asking rather than reading a bake is a track build per map, which
-/// is why `Geometry.load` caches: see its note.
+/// The COST of asking rather than reading a bake is a track build per map, once:
+/// the C++ keeps each answer. `Geometry.load` caches the parse: see its note.
 ///
 /// The SVG rendering itself is shell-owned by decision (ledger 3.6, "the
 /// schematic SVG rendering, car thumbnails, cup tint"), which is what this file
@@ -59,13 +59,11 @@ extension Schematic.Geometry {
 
     /// Where the C ABI's answers are kept, keyed by track id.
     ///
-    /// A cache and not a convenience: `ttp_track_schematic_json` BUILDS THE
-    /// TRACK, so an uncached call from a SwiftUI body — which may run many times
-    /// per state change — would put a whole track build on the lobby's frame
-    /// path, next to a live 3D preview. (The same mistake cost this tree 14
-    /// seconds of test wall clock once, in an audit ABI that rebuilt its track
-    /// per call.) A schematic is immutable for the life of the build, so one
-    /// answer per track id is all there will ever be: 20 tracks, ~1 KB each.
+    /// The C++ keeps each track's answer, so only the first call builds the
+    /// track; this keeps the JSON decode and the `ttp_schematic_points_json`
+    /// parse, which a SwiftUI body (run many times per state change) would
+    /// otherwise repeat on every redraw. A schematic is immutable for the life
+    /// of the build, so one answer per track id is all there will ever be.
     ///
     /// The value is a DOUBLE optional on purpose — a cached `nil` (unknown track
     /// id, or a projection this parser could not read) must not be retried on
@@ -73,11 +71,6 @@ extension Schematic.Geometry {
     @MainActor private static var cache: [String: Schematic.Geometry?] = [:]
 
     /// Project `trackId`, or nil if the track is unknown to this build.
-    ///
-    /// `laps: 1, seed: 0` — the same arguments `GameCoordinator.chooserTracks`
-    /// passes when it packs the phones' copy of these maps. Neither affects the
-    /// centreline; they are the track builder's, and passing anything else here
-    /// would draw the lobby a different map from the one the phones hold.
     @MainActor
     static func load(trackId: String) -> Schematic.Geometry? {
         if let hit = cache[trackId] { return hit }
@@ -89,7 +82,7 @@ extension Schematic.Geometry {
     @MainActor
     private static func build(_ trackId: String) -> Schematic.Geometry? {
         guard !trackId.isEmpty else { return nil }
-        let json = TTP.obj(ttp_track_schematic_json(trackId, 1, 0))
+        let json = TTP.obj(ttp_track_schematic_json(trackId))
         guard let d = json["d"] as? String else { return nil }
         // The READER IS THE LIBRARY'S. `pack()` has always run one over a path;
         // it simply had no export, so this shell grew a second SVG parser for a
@@ -233,7 +226,7 @@ struct SchematicMap: View {
     let cupId: String?
 
     /// Resolved off the C ABI in `.task`, never in `body`. A body must be cheap
-    /// and may run at any time; `ttp_track_schematic_json` is neither.
+    /// and may run at any time; a first `ttp_track_schematic_json` builds a track.
     @State private var geometry: Schematic.Geometry?
 
     // viewBox units — `theme.css`'s `--track-map-*`, authored against the 256

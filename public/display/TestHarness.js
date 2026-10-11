@@ -411,11 +411,11 @@ export function runDisplayScenario(opts, ctx) {
   // drives are one draw.
   const raceField = () => benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
 
-  // The lobby demo's shape (buildDemoField): the roster first, the CPU fill
-  // behind it, and EVERY entry driven by the persona at its final grid index —
-  // the fill carries that persona's name — exactly what flow.demoLive answers
-  // off a live room. There is no walk to call for it: demoLive needs a room
-  // handle, and no scenario here has one.
+  // The lobby demo's shape (buildDemoField): the roster and the CPU fill in
+  // livery order, EVERY entry driven by the persona at its grid slot — the fill
+  // carries that persona's name — exactly what flow.demoLive answers off a live
+  // room. There is no walk to call for it: demoLive needs a room handle, and no
+  // scenario here has one.
   const modelCount = () => (window.CAR_MODELS || []).length || 4;
   function demoGrid(slots) {
     const grid = slots.map((s) => ({ slot: s, human: true, name: FAKE_NAMES[s],
@@ -425,10 +425,12 @@ export function runDisplayScenario(opts, ctx) {
     for (let i = 0; grid.length < fieldSize; i++) {
       if (used.includes(i)) continue;   // lowest free livery, cpuSeats' own rule
       used.push(i);
-      grid.push({ slot: i, human: false, name: AI_PERSONALITIES[grid.length % AI_PERSONALITIES.length].name,
-                  carIndex: i % modelCount() });
+      grid.push({ slot: i, human: false, carIndex: i % modelCount() });
     }
-    return grid.map((g, n) => ({ ...g, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length] }));
+    return grid.sort((a, b) => a.slot - b.slot).map((g, n) => {
+      const persona = AI_PERSONALITIES[n % AI_PERSONALITIES.length];
+      return { ...g, persona, name: g.human ? g.name : persona.name };
+    });
   }
   // Board previews list the players on top — the fake-points drama is authored
   // on their names — with the CPU fill trailing.
@@ -468,7 +470,7 @@ export function runDisplayScenario(opts, ctx) {
   function startAttractDemo(slots) {
     const field = demoGrid(slots).map((g) => ({
       id: g.slot, colorIndex: g.slot, carIndex: g.carIndex, name: g.name, stats: statsFor(g.carIndex),
-      persona: g.persona
+      persona: g.persona, player: g.human
     }));
     const demo = new LobbyDemo(ctx.scene);
     // The SAME automation hook live play publishes (main.js), so one E2E
@@ -823,8 +825,8 @@ export function runDisplayScenario(opts, ctx) {
   //
   // NOTHING HERE KEEPS ITS OWN COPY OF THE SEQUENCE. showBoard is the real
   // results renderer, showCountdownBanner the real banner, the scene work is
-  // Stage.prepare / setTrack / rebuild IN THE ORDER THE WALKS EMIT IT
-  // (place-track, hide-results, reset-scene-cars, create-session, bind-session,
+  // Stage.prepare / rebuild IN THE ORDER THE WALKS EMIT IT
+  // (hide-results, reset-scene-cars, create-session, bind-session,
   // start-countdown), the flag freezes and paints in endRace's order, the two
   // waits are the layer's own flourishMs and intermissionMs, and
   // the countdown is a REAL countdown-mode session: it ticks at the sim's 1 Hz
@@ -1083,12 +1085,11 @@ export function runDisplayScenario(opts, ctx) {
       const audible = !inIframe && !!window.__audio && !!window.__audioDecide;
       const sfx = (cmds) => { if (audible) window.__audio.apply(cmds); };
 
-      // The launch, performed in the walks' own order. The two rebuild triggers
-      // (setTrack, rebuild) come out as no-ops when the board above already
-      // prepared this circuit — which is the whole point of the preview.
+      // The launch, performed in the walks' own order. Both rebuild triggers
+      // come out as no-ops when the board above already prepared this circuit,
+      // which is the whole point of the preview.
       function launch() {
         const t = entry(cup.tracks[leg]);
-        scene.setTrack(t);                                    // place-track
         hideResults();                // hide-results
         for (const id of [...scene.cars.keys()]) scene.removeCar(id);
         field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
@@ -1181,11 +1182,13 @@ export function runDisplayScenario(opts, ctx) {
       }
 
       const log = raceLog();
-      launch();
       // FROM THE TOP, in place: the same launch on the same first leg, for the trailer
       // editor's backward seek. A simulation only runs forward, so a rewind is this
-      // plus a wind — and this is what makes it a wind rather than a page boot.
-      const restart = () => { leg = firstLeg; launch(); };
+      // plus a wind — and this is what makes it a wind rather than a page boot. The
+      // setTrack is the one scene step no walk emits: the first leg has no board
+      // before it to prepare its circuit.
+      const restart = () => { leg = firstLeg; scene.setTrack(entry(cup.tracks[leg])); launch(); };
+      restart();
       // The mix is decided on Stage's frame clock, like the footer above and for the
       // same reason: the decision layer spaces its screeches and lap chimes by it, and
       // under a capture gate a wall-clock read spans hundreds of ms per frame.

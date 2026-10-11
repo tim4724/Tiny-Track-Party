@@ -279,6 +279,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     g_disp->built = true;
     g_disp->roster = roster.ids;
     g_disp->rosterCars = roster.cars; // ttp_display_reroster's diff base
+    g_disp->rosterPlayers = roster.players;
     ttp::rt::newField(*g_disp);
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
@@ -304,6 +305,7 @@ int ttp_display_reroster(const char* rosterJson) {
     ttp::rt::Roster prev;
     prev.ids = g_disp->roster;
     prev.cars = g_disp->rosterCars;
+    prev.players = g_disp->rosterPlayers;
     // The decision is libttp-runtime's (ctested); this file only performs it.
     const ttp::rt::RerosterPlan plan = ttp::rt::planReroster(prev, next);
     if (!plan.ok) {
@@ -316,9 +318,10 @@ int ttp_display_reroster(const char* rosterJson) {
     }
     // Deliberately NOT touched: sceneT, orbitAngle, chase, steerBar, framing.
     // The scene never went away, so nothing about the cameras did either —
-    // except that the lobby's coverage cuts to the car just picked.
+    // except that the lobby's coverage cuts to the car just picked or joined.
     g_disp->rosterCars = next.cars;
-    g_disp->coverage.featured = plan.firstChanged();
+    g_disp->rosterPlayers = next.players;
+    g_disp->coverage.featured = plan.featured;
     return 1;
 }
 
@@ -501,6 +504,7 @@ void ttp_display_release(void) {
     g_disp->built = false;
     g_disp->roster.clear();
     g_disp->rosterCars.clear();
+    g_disp->rosterPlayers.clear();
     ttp::rt::newField(*g_disp);
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();

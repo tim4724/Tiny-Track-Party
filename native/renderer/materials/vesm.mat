@@ -14,8 +14,9 @@
 // softness the bake did not put here, which was learnt the hard way: the map's
 // resolution, the runtime tap count and a cubic reconstruction filter were each
 // built and measured, and each left a hard edge exactly as hard. So this pass
-// is SEPARABLE and runs twice — two 81-tap passes reach a sigma a single 9x9
-// never could, and cost 162 taps where the square would have cost 6561.
+// is SEPARABLE and runs twice — two passes of one row each reach a sigma a
+// single 9x9 never could, at twice a row's taps where the square costs a row's
+// taps squared.
 //
 // Reversed depth. Our map holds 1 at the light and 0 at the far plane (see
 // bakeShadowMap), so an occluder IN FRONT of a receiver has the GREATER value.
@@ -67,14 +68,15 @@ fragment {
         // exponent and the compare window were each measured) because none of
         // them adds back a texel the bake never sampled.
         //
-        // So: taps at exactly one source texel. R is deliberately generous —
-        // the catalogue's widest sigma is 6.4 texels (skyline), needing 3 sigma
-        // = 19 — because everything narrower simply weights its outer taps to
-        // nothing and the bake is measurably free (797 ms vs 804 ms of track
-        // load at fifteen times the shipped tap count). Keeping it at 40 also
-        // keeps bakeShadowMap's sigma <= R/3 clamp off the shipped path; that
-        // clamp exists so an unusually fine map truncates the Gaussian rather
-        // than silently stretching the taps back out into a comb.
+        // So: taps at exactly one source texel, out to 5 sigma, where a tap
+        // weighs e^-12.5 of the centre's — below anything the half-float target
+        // can hold. The reach follows the sigma this pass is given (a uniform, so
+        // the loop stays in uniform control flow): a fixed reach ran every texel
+        // of the map through dozens of taps that weigh nothing, at the same GPU
+        // cost on every track. R is only the CEILING, and it is what
+        // bakeShadowMap's sigma <= R/3 clamp is written against; that clamp
+        // exists so an unusually fine map truncates the Gaussian rather than
+        // silently stretching the taps back out into a comb.
         //
         // Only exp(-k*d) may be averaged, never d. On the first pass the source
         // is still raw depth, so the exponential is applied per TAP, before the
@@ -82,10 +84,11 @@ fragment {
         highp vec2 uv = variable_uv.xy;
         highp float k = materialParams.k;
         const int R = 40;
+        int r = min(R, int(ceil(5.0 * materialParams.sigma)));
         highp float inv2s2 = 1.0 / (2.0 * materialParams.sigma * materialParams.sigma);
         float sum = 0.0;
         float wsum = 0.0;
-        for (int i = -R; i <= R; i++) {
+        for (int i = -r; i <= r; i++) {
             highp vec2 o = materialParams.dir * float(i) * materialParams.texel;
             float s = texture(materialParams_src, uv + o).r;
             float v = materialParams.fromDepth > 0.5 ? exp(-k * s) : s;

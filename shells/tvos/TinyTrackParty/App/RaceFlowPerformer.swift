@@ -199,16 +199,12 @@ struct RaceFlowPerformer {
             game.clearIntermission()
 
         // ---- the cup chain ------------------------------------------------
-        // The series ops (advance, clear, set-track-from-series, rekey, the
-        // points banking) are EXECUTOR-OWNED now: the cup lives behind the
-        // room handle and the walks perform them inside the wasm. Only the
-        // platform ops below ever reach this switch.
-
-        case "place-track":
-            // Explicit because a chained start has NO lobby step: selecting a
-            // track outside the lobby skips the scene swap, so the new circuit is
-            // placed here and the results overlay covers the pop.
-            game.placeTrack()
+        // No op of its own reaches this switch. The series ops (advance,
+        // clear, set-track-from-series, rekey, the points banking) are
+        // EXECUTOR-OWNED: the cup lives behind the room handle and the walks
+        // perform them inside the wasm. The next circuit arrives as the merged
+        // track-change, and the launch's reset-scene-cars builds it with the
+        // new field.
 
         // ---- teardown -----------------------------------------------------
         case "dispose-session":
@@ -289,7 +285,7 @@ struct RaceFlowPerformer {
         "start-music", "stop-music", "stop-voices",
         "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
         "broadcast-standings", "arm-results", "show-results",
-        "arm-intermission", "clear-intermission", "place-track",
+        "arm-intermission", "clear-intermission",
         "dispose-session", "fade-to-lobby", "remove-scene-car",
         "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",
         "return-to-lobby", "close-room", "clear-pick", "render-lobby-pick",
@@ -315,13 +311,17 @@ struct SceneCar {
     /// Kept nullable: a player who never picked drives car 0 but is not the same
     /// input as one who picked it.
     let carIndex: Int?
+    /// False only for the lobby attract field's CPU fill (`ttp/roster.h`).
+    let player: Bool
 
-    init(id: EngineIdentity, colorIndex: Int, name: String, cell: Bool, carIndex: Int?) {
+    init(id: EngineIdentity, colorIndex: Int, name: String, cell: Bool, carIndex: Int?,
+         player: Bool = true) {
         self.id = id
         self.colorIndex = colorIndex
         self.name = name
         self.cell = cell
         self.carIndex = carIndex
+        self.player = player
     }
 
     init?(json: Any) {
@@ -331,5 +331,6 @@ struct SceneCar {
         self.name = d["name"] as? String ?? ""
         self.cell = d["cell"] as? Bool ?? false
         self.carIndex = (d["carIndex"] as? Double).map(Int.init)
+        self.player = true
     }
 }

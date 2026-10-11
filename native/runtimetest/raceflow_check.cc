@@ -249,6 +249,7 @@ Value demoVal(const race::DemoEntry& d) {
   v.set("carIndex", valOf(d.carIndex));
   v.set("stats", d.stats);
   v.set("persona", personaVal(d.persona));
+  v.set("player", Value::Bool(d.player));
   return v;
 }
 Value carVal(const race::SceneCar& c) {
@@ -350,7 +351,6 @@ Value effectVal(const race::Effect& e) {
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
     case race::Op::SET_TRACK_FROM_SERIES:
-    case race::Op::PLACE_TRACK:
     case race::Op::DISPOSE_SESSION:
     case race::Op::CLEAR_FIELD:
     case race::Op::SYNC_STATE:
@@ -476,7 +476,6 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SHOW_RESULTS:
     case race::Op::SET_TRACK_FROM_SERIES:
-    case race::Op::PLACE_TRACK:
     case race::Op::STOP_CAR_AUDIO:
     case race::Op::SYNC_STATE:
     case race::Op::SERIES_REKEY:
@@ -559,6 +558,7 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
         d.id = json::str_field(e, "id");
         d.colorIndex = static_cast<int>(json::num_field(e, "colorIndex"));
         d.carIndex = numOf(e.find("carIndex"));
+        d.player = json::truthy(e, "player");
         f.push_back(std::move(d));
       }
     }

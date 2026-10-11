@@ -66,8 +66,8 @@ port links the **same** vendored `src/*.c` natively under strict FP flags.
 
 `Math.sqrt` is **exact IEEE-754 everywhere** (correctly rounded) and stays on
 native `Math.sqrt` / `std::sqrt` — it is not routed through the mathlib. Sites:
-`Vec3.js:60,88`, `Game.js:1233`, `TrackBuilder.js:612`. `e_sqrt.c` is vendored
-only for `pow`/`hypot`'s internal use.
+`Vec3.js:60,88`, `Game.js:1233`, `TrackBuilder.js:612`. fdlibm's `pow`/`hypot`
+call the platform's `sqrt` too (`native/vendor/fdlibm/VENDOR.md`).
 
 **Gate.** `tests/fixtures/math-corpus.jsonl` (header + 4317 cases, hex64
 big-endian, canonical-NaN class) is replayed by the `mathlib_corpus` ctest
@@ -378,8 +378,8 @@ match the corpus, do not special-case beyond it.
 
 ## 6. Compiler flags per target
 
-The emscripten build (`native/scripts/build-mathlib.sh`) is the established
-reference; the native targets must match its FP behaviour.
+The flags are `ttp_strict_fp` in `native/CMakeLists.txt`. The emscripten build
+is the established reference; the native targets must match its FP behaviour.
 
 | Target | Flags |
 |---|---|

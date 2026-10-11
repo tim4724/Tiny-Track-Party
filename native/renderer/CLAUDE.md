@@ -356,9 +356,9 @@ memory until another track builds or the renderer goes.
   `loadInstancedProp` does not dirty the dressing merge (only `buildStatic`
   does), or every field rebuild would regroup the whole dressing.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
-  `buildField` each log their phases (`PhaseLog`). The sun bake is most of a
-  static build on the weak box, and its time is GPU waits (`flushAndWait` between
-  blur passes), not CPU.
+  `buildField` each log their phases (`PhaseLog`).
+- **A bake never `flushAndWait`s**: its GPU time belongs behind the thread that
+  pumps frames and the relay. `bakeShadowMap`'s header has the ordering argument.
 - **TIME A REBUILD, NOT A PROCESS'S FIRST BUILD.** That one pays pipeline creation
   and the kit's texture decode once; read a phase's split off a second build in
   the same process. A cache of parsed assets buys the warm rebuild's phase, never

@@ -1189,9 +1189,9 @@ jint n_ttp_track_point(JNIEnv* env, jclass, jint a0, jdouble a1, jdouble a2, jdo
     return rc;
 }
 
-jbyteArray n_ttp_track_schematic_json(JNIEnv* env, jclass, jbyteArray a0, jint a1, jint a2) {
+jbyteArray n_ttp_track_schematic_json(JNIEnv* env, jclass, jbyteArray a0) {
     CStr s0(env, a0);
-    return toBytes(env, ttp_track_schematic_json(s0.get(), (int) a1, (uint32_t) a2));
+    return toBytes(env, ttp_track_schematic_json(s0.get()));
 }
 
 jbyteArray n_ttp_track_supports_json(JNIEnv* env, jclass, jbyteArray a0) {
@@ -1559,7 +1559,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_track_frames_json", "([B[B)[B", (void*) n_ttp_track_frames_json },
     { "ttp_track_json", "([BII)[B", (void*) n_ttp_track_json },
     { "ttp_track_point", "(IDD[D)I", (void*) n_ttp_track_point },
-    { "ttp_track_schematic_json", "([BII)[B", (void*) n_ttp_track_schematic_json },
+    { "ttp_track_schematic_json", "([B)[B", (void*) n_ttp_track_schematic_json },
     { "ttp_track_supports_json", "([B)[B", (void*) n_ttp_track_supports_json },
     { "ttp_track_sweep_json", "([BD)[B", (void*) n_ttp_track_sweep_json },
     { "ttp_ui_back_effect", "([BII)[B", (void*) n_ttp_ui_back_effect },

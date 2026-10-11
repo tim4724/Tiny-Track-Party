@@ -310,8 +310,9 @@ TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const
 // as the JS early return leaves it. This is the call a TV shell with no baked
 // maps makes; the web display reads the prebaked shared/trackSchematics.js
 // instead, because building 20 tracks at boot to redraw data that never changes
-// would be work for nothing. NULL for an unknown track.
-TTP_ABI const char* ttp_track_schematic_json(const char* trackId, int laps, uint32_t seed);
+// would be work for nothing. NULL for an unknown track. Each track's answer is
+// built once per process.
+TTP_ABI const char* ttp_track_schematic_json(const char* trackId);
 
 // The transport codec, and the piece the LOBBY SNAPSHOT actually spends. A full
 // loop is ~877 points (~180 KiB of SVG text), far past the relay's 16 KiB

@@ -38,6 +38,8 @@
 #include <string>
 #include <vector>
 
+#include "generated/track_defs.h"  // TTP_TRACK_COUNT: the cap is sized to it
+
 namespace ttp {
 namespace rt {
 
@@ -71,11 +73,15 @@ struct BlobPlan {
 // answer an effect list instead of a dozen getters.
 BlobPlan planBlob(const BlobRequest& in);
 
-// How many blobs the store keeps. EIGHT holds a cup's four circuits plus the
-// lobby browsing around them at a few megabytes of disk; a cache with no cap is
-// a disk leak. Public so a test states the number rather than infers it, and so
-// the ONE place it lives is here (root rule 1).
-constexpr uint32_t kBlobKeep = 8;
+// How many blobs the store keeps. It is sized to the CATALOGUE, not to a cup:
+// Random's no-repeat bag and World Tour visit every track before they revisit
+// one, and a session spanning several cups comes back to tracks it left long
+// ago, so a cap under the track count evicts each blob just before it is wanted
+// and every visit bakes cold. The slack is for the biome and showcase keys the
+// galleries add; a cache with no cap is a disk leak.
+// Public so a test states the number rather than infers it, and so the ONE
+// place it lives is here (root rule 1).
+constexpr uint32_t kBlobKeep = TTP_TRACK_COUNT + 4;
 
 }  // namespace rt
 }  // namespace ttp

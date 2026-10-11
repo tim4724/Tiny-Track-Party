@@ -332,6 +332,11 @@ void testParseRoster() {
     check(r.cars[2].colorABGR == 0xFF888888u && r.cars[2].carIndex == 0,
           "a slot with only an id still builds — grey, first model");
   }
+  check(r.players == std::vector<bool>{ true, true, true },
+        "a slot with no `player` key is a player's: only the attract fill says otherwise");
+  check(rt::parseRoster("[{\"id\":\"demo-0\",\"player\":false}]").players
+            == std::vector<bool>{ false },
+        "`player: false` marks a CPU slot");
 }
 
 // ---------------------------------------------------------------------------
@@ -380,14 +385,33 @@ void testPlanReroster() {
   check(both.ok && both.remodel == std::vector<uint32_t>{ 0 } && both.redress.empty(),
         "a slot changing model AND livery is listed once, as a remodel");
 
-  // The car a phone just picked, which the lobby's coverage cuts to.
-  check(same.firstChanged() == -1, "firstChanged: nothing changed, no car");
-  check(model.firstChanged() == 0, "firstChanged: the remodelled slot");
-  check(dress.firstChanged() == 1, "firstChanged: the re-dressed slot");
-  rt::RerosterPlan mixed;
-  mixed.remodel = {2};
-  mixed.redress = {1};
-  check(mixed.firstChanged() == 1, "firstChanged: the LOWEST slot, whichever list holds it");
+  // The car a phone just picked or joined in, which the lobby's coverage cuts to.
+  check(same.featured == -1, "featured: nothing changed, no car");
+  check(model.featured == 0, "featured: the remodelled slot");
+  check(dress.featured == 1, "featured: the re-dressed slot");
+  check(rt::planReroster(base, roster(
+            "[{\"id\":1,\"carIndex\":0,\"color\":\"#ff0000\"},"
+            " {\"id\":\"ai-0\",\"carIndex\":2,\"color\":\"#445566\"}]")).featured == 0,
+        "featured: the LOWEST changed slot, whichever list holds it");
+
+  // The attract field's slots keep their ids whoever drives them, so a join
+  // is a CPU slot turning into a player's — a re-dress even when its car and
+  // livery happen to match, and featured; a leave hands one back, never featured.
+  const rt::Roster fill = roster(
+      "[{\"id\":\"demo-0\",\"carIndex\":0,\"color\":\"#112233\",\"player\":false},"
+      " {\"id\":\"demo-1\",\"carIndex\":1,\"color\":\"#445566\",\"player\":false}]");
+  const rt::Roster joined = roster(
+      "[{\"id\":\"demo-0\",\"carIndex\":0,\"color\":\"#112233\",\"player\":false},"
+      " {\"id\":\"demo-1\",\"carIndex\":1,\"color\":\"#445566\"}]");
+  const rt::RerosterPlan join = rt::planReroster(fill, joined);
+  check(join.ok && join.remodel.empty() && join.redress.empty() && join.featured == 1,
+        "a join is a re-dress that features the joiner's slot");
+  const rt::Roster left = roster(
+      "[{\"id\":\"demo-0\",\"carIndex\":0,\"color\":\"#112233\",\"player\":false},"
+      " {\"id\":\"demo-1\",\"carIndex\":3,\"color\":\"#445566\",\"player\":false}]");
+  const rt::RerosterPlan leave = rt::planReroster(joined, left);
+  check(leave.ok && leave.remodel == std::vector<uint32_t>{ 1 } && leave.featured == -1,
+        "a leave re-dresses the slot back to the fill and features nobody");
 }
 
 // ---------------------------------------------------------------------------

@@ -19,8 +19,9 @@ final class LobbyDemo {
     private var handle: Int32 = 0
     /// What the running demo was built from, for the in-place swap check: the
     /// re-dress path only qualifies while the TRACK and the car-id SET both
-    /// stand (a join/leave or a track switch reorders slots, which is a full
-    /// build by the renderer's own contract).
+    /// stand (a field changing size or a track switch is a full build by the
+    /// renderer's own contract; a join or leave on a full grid keeps the ids,
+    /// which are slots).
     private var field: [[String: Any]] = []
     private var track: String = ""
     /// The cheap signature of what is currently on screen. `ttp_race_demo_sig`
@@ -56,13 +57,14 @@ final class LobbyDemo {
     /// then `scene.bindSession`) — it just does them in one method.
     var onField: (([Any]) -> Void)?
 
-    /// Same track, same set of cars, only the PICKS changed (a player switched
-    /// their car or livery): hand the new field over for an in-place re-dress
+    /// Same track, same set of cars, only the PICKS or DRIVERS changed (a car or
+    /// livery pick, or a phone joining or leaving, which turns a CPU's slot into
+    /// theirs or back): hand the new field over for an in-place re-dress
     /// (`ttp_display_reroster`) so the demo race keeps driving and the preview
     /// camera keeps its orbit phase — the web's `swapCar` road. The session is
-    /// deliberately NOT restarted: the new handling stats only land on the next
-    /// full rebuild, exactly as on the web (handling differences are invisible
-    /// in eye-candy, and re-seating would pop the field back to the grid).
+    /// deliberately NOT restarted: the sim car keeps its slot's handling stats
+    /// until the next restart, exactly as on the web (re-seating would pop the
+    /// field back to the grid).
     var onRedress: (([Any]) -> Void)?
 
     /// Whether a `refresh()` right now would stand a new attract race up on
@@ -97,9 +99,10 @@ final class LobbyDemo {
         if sig == signature, handle != 0 { return }
 
         let fresh = (live["field"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
-        // Same track + same set of cars → swap the picks in place (see
-        // `onRedress`); anything else is a full teardown and rebuild.
-        if handle != 0, track == self.track, sameCarSet(fresh, field) {
+        // Same track + same field size (the ids are grid slots) → swap the picks
+        // and drivers in place (see `onRedress`); anything else is a full
+        // teardown and rebuild.
+        if handle != 0, track == self.track, fresh.count == field.count {
             field = fresh
             signature = sig
             onRedress?(fresh)
@@ -112,14 +115,6 @@ final class LobbyDemo {
         self.track = track
         // The CPU skill a real race on this track uses, for every demo car.
         start(field: fresh, track: track, skill: live["skill"] as? Double ?? 1)
-    }
-
-    /// The two fields cover the exact same set of car ids, so only liveries,
-    /// models or names could have changed — the cue to swap in place.
-    private func sameCarSet(_ a: [[String: Any]], _ b: [[String: Any]]) -> Bool {
-        guard a.count == b.count else { return false }
-        let ids = Set(b.compactMap { $0["id"] as? String })
-        return a.allSatisfy { ($0["id"] as? String).map(ids.contains) ?? false }
     }
 
     func stop() {

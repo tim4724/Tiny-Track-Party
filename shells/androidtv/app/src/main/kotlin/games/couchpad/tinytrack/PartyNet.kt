@@ -58,8 +58,11 @@ class PartyNet(
     companion object {
         private const val TAG = "PartyNet"
 
-        /** See [reportInbound]. One 30 Hz frame is 33.3 ms; this clears it. */
-        private const val SLOW_INBOUND_MS = 50.0
+        /**
+         * See [reportInbound]. One 30 Hz frame is 33.3 ms; this clears it. The
+         * coordinator's own timers log against it too ([GameCoordinator.logSlow]).
+         */
+        const val SLOW_INBOUND_MS = 50.0
 
         /**
          * This shell's CouchPad `cpp` value (CONTRACT §6). The join URL is the

@@ -225,7 +225,7 @@ object Ttp {
     external fun ttp_track_frames_json(trackIdOrDescriptor: ByteArray?, sListJson: ByteArray?): ByteArray?
     external fun ttp_track_json(trackId: ByteArray?, laps: Int, seed: Int): ByteArray?
     external fun ttp_track_point(h: Int, s: Double, lat: Double, out3: DoubleArray): Int
-    external fun ttp_track_schematic_json(trackId: ByteArray?, laps: Int, seed: Int): ByteArray?
+    external fun ttp_track_schematic_json(trackId: ByteArray?): ByteArray?
     external fun ttp_track_supports_json(trackIdOrDescriptor: ByteArray?): ByteArray?
     external fun ttp_track_sweep_json(trackIdOrDescriptor: ByteArray?, step: Double): ByteArray?
     external fun ttp_ui_back_effect(screen: ByteArray?, paused: Int, raceEnded: Int): ByteArray?

@@ -531,9 +531,7 @@ final class GameCoordinator: ObservableObject {
         }
         return (catalogue["catalog"] as? [[String: Any]] ?? []).compactMap { t in
             guard let id = t["id"] as? String else { return nil }
-            // laps/seed only stamp the built track and no geometry depends on
-            // them; 3/1 is the convention every other caller uses.
-            let schematic = TTP.obj(ttp_track_schematic_json(id, 3, 1))
+            let schematic = TTP.obj(ttp_track_schematic_json(id))
             // eps 0 asks for the TUNED default (0.35), chosen so straights
             // reproduce and corners do not clip. Passing a number here overrides
             // that tuning — this shell used to send 0.6 and drew coarser maps

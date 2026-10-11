@@ -19,9 +19,8 @@ const DEMO_SEED = 0x5eed; // base for the bots' wander streams — lobby determi
 
 // A lap count no car reaches, so the demo race never finishes: nobody drops into
 // the coasting no-items victory-lap mode and catch-up keeps the field bunched.
-// Accepted trade-offs of never finishing: the DNF ladder never arms (it waits for
-// a first finisher), and a mid-demo car swap's new handling stats only land on the
-// next full rebuild (join/leave/track switch) — both invisible in eye-candy.
+// The accepted trade-off of never finishing: the DNF ladder never arms (it waits
+// for a first finisher), invisible in eye-candy.
 const ENDLESS_LAPS = 1e9;
 
 // The native sim is initialised once at boot by main.js (top-level await), so this is
@@ -35,7 +34,7 @@ export class LobbyDemo {
   constructor(scene) {
     this.scene = scene;
     this.track = null;
-    this.field = [];        // [{ id, colorIndex, carIndex, name, stats, persona }]
+    this.field = [];        // [{ id, colorIndex, carIndex, name, stats, persona, player }]
     this.engine = null;
     this._ids = [];         // scene car ids we own, so stop() removes exactly ours
     this.sig = null;        // caller-supplied field/track signature (skip no-op rebuilds)
@@ -60,7 +59,7 @@ export class LobbyDemo {
     ensureSim().then(() => {
       if (epoch !== this._epoch) return;
       this.engine = this._buildEngine();
-      for (const p of field) this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex });
+      for (const p of field) this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex, player: p.player });
       this.scene.bindSession(this.engine.h); // the renderer draws this session's cars
       this.active = true;
     }).catch((e) => console.warn('[LobbyDemo] native sim unavailable — no attract race', e));
@@ -87,22 +86,23 @@ export class LobbyDemo {
     return engine;
   }
 
-  // Swap one car's model/livery WITHOUT restarting the demo race: the sim keeps
-  // driving, and the re-registration below lands in Stage._rebuild as a
+  // Swap one car's model/livery/driver WITHOUT restarting the demo race: the sim
+  // keeps driving, and the re-registration below lands in Stage._rebuild as a
   // roster-only change — an in-place re-dress (ttp_display_reroster) that swaps
   // the model in its slot while the scene, the skids and the preview camera's
-  // orbit phase all stay put. Used when a player changes their lobby car pick.
-  // The new handling stats only land on the next full rebuild (join/leave/track
-  // switch): the native ABI has no re-stat hook, and re-seating the car in a fresh
-  // session would pop the whole field back to the grid, which is the visible cost the
-  // attract loop is avoiding. Handling differences are invisible in eye-candy anyway.
-  swapCar(id, { colorIndex, carIndex, name, stats }) {
+  // orbit phase all stay put. Used for a lobby car pick, and for a join or a
+  // leave, which on a full grid hand a CPU's slot to a player or back (the ids
+  // are grid slots — ttp_race.h). The sim car keeps the slot's handling stats
+  // until the next restart (a track switch): the native ABI has no re-stat hook,
+  // and re-seating the car in a fresh session would pop the whole field back to
+  // the grid, which is the visible cost the attract loop is avoiding.
+  swapCar(id, { colorIndex, carIndex, name, stats, player }) {
     if (!this.engine || !this.engine.hasCar(id)) return;
     const rec = this.field.find((p) => p.id === id); // keep our field record current for that later rebuild
-    if (rec) { rec.colorIndex = colorIndex; rec.carIndex = carIndex; rec.name = name; rec.stats = stats; }
+    if (rec) Object.assign(rec, { colorIndex, carIndex, name, stats, player });
     // In place, NOT removeCar + addCar: re-adding would move the car to the end
     // of the roster, and a reordered roster is a full build (slot identity).
-    this.scene.updateCar(id, { colorIndex, carIndex, name });
+    this.scene.updateCar(id, { colorIndex, carIndex, name, player });
   }
 
   // One frame-loop tick (driven by Stage.onFrame; dt in seconds). A no-op until

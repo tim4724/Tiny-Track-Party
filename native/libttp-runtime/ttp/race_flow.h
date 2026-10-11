@@ -91,7 +91,7 @@ enum class Op {
   STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
   BROADCAST_STANDINGS, APPLY_RACE_POINTS, ARM_RESULTS, SHOW_RESULTS,
   ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
-  CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
+  CLEAR_SERIES, SET_TRACK_FROM_SERIES, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
   RETURN_TO_LOBBY, CLOSE_ROOM, CLEAR_PICK, RENDER_LOBBY_PICK,
@@ -277,10 +277,16 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
 // path a shell actually ships.
 std::vector<Human> benchPlayers(int n, const FieldWorld& w);
 
-// The attract field. Same CPU fill, different ids, and one extra rule: persona
-// by FINAL GRID INDEX so they spread across the whole field, with each CPU
-// taking that persona's name so its HUD name matches how it drives. Humans
-// keep their own name but still drive on a persona — no phones steer here.
+// The attract field. Same CPU fill, in LIVERY order, with ids by grid slot
+// ("demo-<slot>") and persona by slot so they spread across the whole field;
+// each CPU takes that persona's name so its HUD name matches how it drives.
+// Humans keep their own name but still drive on a persona — no phones steer
+// here — and `player` is what tells their cars from the fill.
+//
+// The ids are by SLOT so a join or a leave keeps them: a full grid holds every
+// livery once, so a joiner takes over the slot of the CPU wearing their livery
+// and the shell re-dresses that car in the running demo instead of restarting
+// it. A field that does change shape (a bot cap) still changes the id set.
 struct DemoEntry {
   std::string id;
   std::string name;
@@ -288,17 +294,13 @@ struct DemoEntry {
   OptNum carIndex;
   Value stats = Value::Null();
   Persona persona;
+  bool player = false;
 };
 std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const FieldWorld& w);
 
-// What every CPU id in the attract field starts with ("demo-cpu-<n>"), and the
-// test for it: the lobby's coverage camera reads it to tell the players' cars
-// from the fill.
-inline constexpr const char* DEMO_CPU_PREFIX = "demo-cpu-";
-inline bool isDemoCpu(const std::string& id) { return id.rfind(DEMO_CPU_PREFIX, 0) == 0; }
-
 // Cheap signature of what the demo renders, so a refresh can skip a no-op
-// rebuild. Track + each car's id/livery/model; a rename alone won't re-grid.
+// rebuild. Track + each car's id/livery/model/player; a rename alone won't
+// re-grid.
 std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trackId);
 
 // ---- the series behind a start ----------------------------------------------

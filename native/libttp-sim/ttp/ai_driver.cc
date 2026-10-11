@@ -55,7 +55,13 @@ static const double SEEK_REACH = 2.0;
 static const double SEEK_ON_LINE = 0.6;  // of the box radius: the line already takes it
 
 static const double RL_STEP = 1.25;
-static const int RL_ITERS = 800;
+// The line relaxes by projected SOR: each point over-steps toward its neighbours'
+// mean by RL_OMEGA, so it settles in a fraction of plain Gauss-Seidel's sweeps. A
+// solve stops once no point moves more than RL_SETTLED m in a sweep; RL_MAX_SWEEPS
+// only bounds a track that never settles.
+static const double RL_OMEGA = 1.9;
+static const double RL_SETTLED = 1e-4;
+static const int RL_MAX_SWEEPS = 1000;
 static const double RL_LAT_MARGIN = 0.3;
 static const double RL_EDGE = 0.5;
 static const double RL_FALLBACK_HALF = 1.5;
@@ -123,12 +129,17 @@ RacingLine::RacingLine(Centerline& centerline) {
   std::vector<double> pull(n);
   for (int i = 0; i < n; i++) pull[i] = kappa[i] * h * h / 2;
   std::vector<double> e(n, 0.0);
-  auto relax = [&](const std::vector<double>& bound, int iters) {
-    for (int it = 0; it < iters; it++) {
+  auto relax = [&](const std::vector<double>& bound) {
+    for (int sweep = 0; sweep < RL_MAX_SWEEPS; sweep++) {
+      double moved = 0;
       for (int i = 0, prev = n - 1; i < n; prev = i++) {
         const int next = i + 1 == n ? 0 : i + 1;
-        e[i] = clampd((e[prev] + e[next]) / 2 - pull[i], -bound[i], bound[i]);
+        double want = (e[prev] + e[next]) / 2 - pull[i];
+        double v = clampd(e[i] + RL_OMEGA * (want - e[i]), -bound[i], bound[i]);
+        moved = js_max(moved, std::fabs(v - e[i]));
+        e[i] = v;
       }
+      if (moved <= RL_SETTLED) return;
     }
   };
 
@@ -150,7 +161,7 @@ RacingLine::RacingLine(Centerline& centerline) {
 
   std::vector<double> bound(n);
   for (int i = 0; i < n; i++) bound[i] = boundFor(std::fabs(kappa[i]), i);
-  relax(bound, RL_ITERS);
+  relax(bound);
   std::vector<double> kLine = measure();
 
   int PAD = (int)js_max(2.0, js_round(4 / h));
@@ -176,7 +187,7 @@ RacingLine::RacingLine(Centerline& centerline) {
     if (bound[i] > 0) bound[i] = boundFor(js_max(std::fabs(kappa[i]), kLine[i]), i);
     e[i] = clampd(e[i], -bound[i], bound[i]);
   }
-  relax(bound, RL_ITERS / 2);
+  relax(bound);
   kLine = measure();
 
   std::vector<double> k(n);

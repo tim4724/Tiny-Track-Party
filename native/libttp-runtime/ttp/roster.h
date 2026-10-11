@@ -34,16 +34,22 @@ namespace ttp {
 namespace rt {
 
 // A parsed roster, split the way the two consumers want it: the frame builder
-// tracks SLOTS by id, and the renderer dresses them. Both vectors are in slot
-// order and always the same length.
+// tracks SLOTS by id, and the renderer dresses them. `players` marks the slots
+// a person owns, which the lobby's coverage films first. All three vectors are
+// in slot order and always the same length.
 struct Roster {
   std::vector<ScalarId> ids;
   std::vector<TtpRosterCar> cars;
+  std::vector<bool> players;
 };
 
 // Parse ttp_display_build's roster argument:
 //
-//   [{"id": <scalar>, "carIndex": <n>, "color": "#rrggbb"}, …]
+//   [{"id": <scalar>, "carIndex": <n>, "color": "#rrggbb", "player": <bool>}, …]
+//
+// `player` is optional and defaults to true; only the attract field's CPU fill
+// sets it false, because its ids are grid slots and say nothing about who is
+// driving.
 //
 // Lenient in the ABI's usual way — a malformed argument yields an EMPTY roster
 // rather than a failure, because a scene with no liveries is a better answer
@@ -57,25 +63,21 @@ Roster parseRoster(const char* json);
 // on every leg can pin it:
 //
 //   - ok requires the SAME slots in the SAME order: slot identity is baked into
-//     the scene (cameras, HUD readback, held poses all go by slot), so a
-//     join/leave/reorder is never a re-dress.
+//     the scene (cameras, HUD readback, held poses all go by slot), so an id
+//     list that changes (a race's join or leave, a reorder) is never a re-dress.
 //   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB and
 //     ghost are rebuilt, and its shadow re-points at the new model's fit
 //     (fitted on that model's first load, then kept by model across scenes).
 //   - `redress` — slots whose livery changed under the same model: only what
 //     wears it (a GLB-less slot's box marker) is rebuilt.
+//   - `featured` — the lowest PLAYER slot that a car pick re-dressed or a
+//     joiner took over from the fill, or -1: the car the lobby's coverage
+//     cuts to. A slot handed back to the fill is never featured.
 struct RerosterPlan {
   bool ok = false;
   std::vector<uint32_t> remodel;
   std::vector<uint32_t> redress;
-
-  // The lowest slot this changes, or -1: the car a phone just picked, which
-  // the lobby's coverage cuts to.
-  int firstChanged() const {
-    const int a = remodel.empty() ? -1 : (int) remodel[0];
-    const int b = redress.empty() ? -1 : (int) redress[0];
-    return a < 0 ? b : b < 0 ? a : a < b ? a : b;
-  }
+  int featured = -1;
 };
 RerosterPlan planReroster(const Roster& prev, const Roster& next);
 

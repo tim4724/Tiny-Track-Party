@@ -390,15 +390,16 @@ function refreshLobbyDemo() {
   const { field, sig, skill } = flow.demoLive(net.flow.handle, selectedTrackId, _qBots);
   if (lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
 
-  // Same track + same set of cars, only the picks changed (a player switched their
-  // car) → swap those models in place so the demo race keeps running, no re-grid.
-  // Anything else (join/leave, track switch, first start) is a build — of the
-  // field alone when the track did not change.
-  if (lobbyDemo.active && lobbyDemo.track === track && sameCarSet(field, lobbyDemo.field)) {
-    const prevById = new Map(lobbyDemo.field.map((p) => [p.id, p]));
-    for (const p of field) {
-      const prev = prevById.get(p.id);
-      if (prev && (prev.carIndex !== p.carIndex || prev.colorIndex !== p.colorIndex || prev.name !== p.name)) {
+  // Same track + same field size (the ids are grid slots), so only the picks or
+  // drivers changed (a car pick, or a join or leave on a full grid) → swap those
+  // cars in place so the demo race keeps running, no re-grid. Anything else (a
+  // field changing size, a track switch, first start) is a build — of the field
+  // alone when the track did not change.
+  if (lobbyDemo.active && lobbyDemo.track === track && field.length === lobbyDemo.field.length) {
+    for (const [i, p] of field.entries()) {
+      const prev = lobbyDemo.field[i];
+      if (prev.carIndex !== p.carIndex || prev.colorIndex !== p.colorIndex
+          || prev.name !== p.name || prev.player !== p.player) {
         lobbyDemo.swapCar(p.id, p);
       }
     }
@@ -406,14 +407,6 @@ function refreshLobbyDemo() {
     return;
   }
   lobbyDemo.start(track, field, sig, skill);
-}
-
-// True when two demo fields cover the exact same set of car ids (so only liveries/
-// models could have changed) — the cue to swap in place rather than rebuild.
-function sameCarSet(a, b) {
-  if (a.length !== b.length) return false;
-  const ids = new Set(b.map((p) => p.id));
-  return a.every((p) => ids.has(p.id));
 }
 
 // Roster changes (join/leave/car-pick) arrive in bursts as players fiddle; debounce
@@ -982,11 +975,6 @@ const RACE_PERFORMERS = {
     prepareNextTrack();
   },
   'clear-intermission': () => clearSeriesTimers(),
-  // A chained start has no lobby step, so the new circuit is placed explicitly
-  // (selectTrack outside the lobby skips the scene swap) — the results overlay
-  // covers the pop. Usually already meshed by prepareNextTrack, in which case
-  // this and the reset below both come out as no-ops.
-  'place-track': () => scene.setTrack(track),
   // endParty's teardown — closeRoom bails every phone terminally while the
   // display's own 4001 self-heals into a FRESH room (Net.js onClose
   // {roomClosed}, which also clears the roster), so the next NEW GAME
@@ -1195,12 +1183,14 @@ function clearSeriesTimers() {
 // the countdown is already ticking over the OLD circuit while the thread is
 // busy, which is the stutter and the stale track this exists to remove.
 //
-// The field is the same one the launch will build (the AI fill is a function of
-// the connected humans, not of the race seed), so the launch's reset-scene-cars
-// re-adds the same roster onto the prepared scene and both of its rebuild
-// triggers fall out as no-ops. If a player joins or leaves in the meantime the
-// roster moves, the launch rebuilds, and we are back to the old behaviour
-// rather than a wrong scene.
+// It is also the only place the chained start's circuit reaches the scene: the
+// advance's track-change re-aims `track` outside the lobby, where selectTrack
+// does not build, and the launch's reset-scene-cars rebuilds whatever circuit
+// the scene holds. The field is the same one the launch will build (the AI fill
+// is a function of the connected humans, not of the race seed), so that rebuild
+// re-adds the same roster onto the prepared scene and falls out as a no-op. If
+// a player joins or leaves in the meantime the roster moves, the launch
+// rebuilds, and we are back to the old behaviour rather than a wrong scene.
 //
 // WHICH circuit is next is the series', never guessed here. Fire-and-forget:
 // nothing waits on it, and a prepare still in flight when the host taps "Next

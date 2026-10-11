@@ -223,6 +223,7 @@ Value demoVal(const race::DemoEntry& d) {
   v.set("carIndex", valOf(d.carIndex));
   v.set("stats", d.stats);
   v.set("persona", personaVal(d.persona));
+  v.set("player", Value::Bool(d.player));
   return v;
 }
 Value carVal(const race::SceneCar& c) {
@@ -326,7 +327,6 @@ Value effectVal(const race::Effect& e) {
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
     case race::Op::SET_TRACK_FROM_SERIES:
-    case race::Op::PLACE_TRACK:
     case race::Op::DISPOSE_SESSION:
     case race::Op::CLEAR_FIELD:
     case race::Op::SYNC_STATE:

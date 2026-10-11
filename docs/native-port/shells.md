@@ -394,9 +394,9 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
 13. **WHEN the scene is built.** A build blocks the thread long enough to be
-    seen, and a cup's chained start (`advance`) performs `place-track` with the
-    countdown already running — so a shell that meshes there shows the OUTGOING
-    circuit under the count and then hitches. Mesh the next circuit when the
+    seen, and a cup's chained start (`advance`) builds the circuit its merged
+    `track-change` named at the launch's `reset-scene-cars` — so a shell that
+    meshes only there pays the whole build at the start. Mesh it when the
     intermission arms instead: the results board is opaque enough to hide the
     swap, and the field the launch will build is a pure function of the
     connected humans, so the prepared scene is the one it wants. The web
@@ -552,10 +552,11 @@ the work, or the work is decided against and moves to **Decided, not owed**
 below. The first is owed by BOTH TV shells; the second is Android's.
 
 - **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
-  does it: a cup's chained start shows the outgoing circuit under the count and
-  then hitches. The web reference is `prepareNextTrack()` plus `Stage.prepare`;
-  there is no `prepare` call anywhere in either shell. On Android's GPU a build
-  is seconds, which makes it the most visible item here.
+  does it: both build the next circuit at the launch's `reset-scene-cars`, so a
+  cup's chained start pays the whole build after the board comes down, before
+  the gated countdown. The web reference is `prepareNextTrack()` plus
+  `Stage.prepare`; there is no `prepare` call anywhere in either shell. On
+  Android's GPU a build is seconds, which makes it the most visible item here.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

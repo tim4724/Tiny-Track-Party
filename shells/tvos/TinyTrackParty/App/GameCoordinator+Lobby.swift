@@ -133,7 +133,7 @@ extension GameCoordinator {
     /// The attract grid, as the scene's roster. `cell: false` throughout: the
     /// lobby draws one overview camera over the whole track, not a split screen.
     ///
-    /// The ids here are the demo layer's own (`demo-<peer>`, `demo-cpu-<n>`),
+    /// The ids here are the demo layer's own grid slots (`demo-<slot>`),
     /// namespaced by `ttp_race_demo_live_json` precisely so they cannot
     /// collide with the integer phone slots the real race rebuilds its field from.
     func setDemoSceneCars(_ field: [Any]) {
@@ -141,7 +141,8 @@ extension GameCoordinator {
         rebuildScene()
     }
 
-    /// The demo's in-place pick swap: same slots, new liveries/models/names.
+    /// The demo's in-place swap: same slots, new liveries/models/names/drivers —
+    /// a car pick, or a join or leave on a full grid (the demo ids are slots).
     /// `ttp_display_reroster` keeps the meshes, the baked shadows and the
     /// preview camera's orbit phase — the full rebuild this used to pay is why
     /// choosing a car on a phone visibly snapped the lobby camera back to its
@@ -164,7 +165,8 @@ extension GameCoordinator {
                             colorIndex: Int(p["colorIndex"] as? Double ?? 0),
                             name: p["name"] as? String ?? "",
                             cell: false,
-                            carIndex: (p["carIndex"] as? Double).map(Int.init))
+                            carIndex: (p["carIndex"] as? Double).map(Int.init),
+                            player: p["player"] as? Bool ?? true)
         }
     }
 

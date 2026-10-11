@@ -50,6 +50,8 @@ Roster parseRoster(const char* json) {
     car.colorABGR = liveryABGR(color && color->type == Value::STR ? color->str : std::string());
     car.carIndex = carIndex && carIndex->type == Value::NUM ? (int32_t) carIndex->num : 0;
     out.cars.push_back(car);
+    const Value* player = e.find("player");
+    out.players.push_back(!player || player->type != Value::BOOL || player->b);
   }
   return out;
 }
@@ -65,10 +67,12 @@ RerosterPlan planReroster(const Roster& prev, const Roster& next) {
   for (size_t i = 0; i < next.cars.size(); i++) {
     const TtpRosterCar& a = prev.cars[i];
     const TtpRosterCar& b = next.cars[i];
-    if (a.carIndex != b.carIndex) {
-      plan.remodel.push_back((uint32_t) i);
-    } else if (a.colorABGR != b.colorABGR) {
-      plan.redress.push_back((uint32_t) i);
+    const bool remodel = a.carIndex != b.carIndex;
+    const bool redress = !remodel && a.colorABGR != b.colorABGR;
+    if (remodel) plan.remodel.push_back((uint32_t) i);
+    if (redress) plan.redress.push_back((uint32_t) i);
+    if (plan.featured < 0 && next.players[i] && (remodel || redress || !prev.players[i])) {
+      plan.featured = (int) i;
     }
   }
   return plan;

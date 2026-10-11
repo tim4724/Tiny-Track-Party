@@ -52,7 +52,7 @@ export async function init() {
     supports: mod.cwrap('ttp_track_supports_json', 'string', ['string']),
     sweep: mod.cwrap('ttp_track_sweep_json', 'string', ['string', 'number']),
     frames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string']),
-    schematic: mod.cwrap('ttp_track_schematic_json', 'string', ['string', 'number', 'number'])
+    schematic: mod.cwrap('ttp_track_schematic_json', 'string', ['string'])
   };
 }
 
@@ -172,9 +172,7 @@ export function trackFrames(defOrId, sList) {
 }
 
 // The track's top-down schematic — {viewBox, d, start, proj} — projected into the
-// 256-unit square by libttp-track's own ttp::schematic. Laps and seed touch
-// furniture, never the centreline the map is drawn from, so any values give the
-// same map.
+// 256-unit square by libttp-track's own ttp::schematic.
 //
 // THE KEY ORDER IS RESPELLED, and it is not cosmetic fussiness. The ABI emits
 // canonical (sorted) JSON, but public/shared/trackSchematics.js is a GENERATED
@@ -185,8 +183,8 @@ export function trackFrames(defOrId, sList) {
 // the historical order is restored here, and the bake stays byte-identical —
 // which is also what keeps `node scripts/gen-track-schematics.js` an honest
 // no-op check rather than a diff.
-export function trackSchematic(trackId, { laps = 3, seed = 1 } = {}) {
-  const { viewBox, d, start, proj } = JSON.parse(fn.schematic(trackId, laps, seed));
+export function trackSchematic(trackId) {
+  const { viewBox, d, start, proj } = JSON.parse(fn.schematic(trackId));
   const { minX, minZ, scale, offX, offZ } = proj;
   return { viewBox, d, start, proj: { minX, minZ, scale, offX, offZ } };
 }

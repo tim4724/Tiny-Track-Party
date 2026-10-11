@@ -172,15 +172,11 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "clear-intermission" -> game.clearIntermission()
 
             // ---- the cup chain ------------------------------------------------
-            // The series ops (advance, clear, set-track-from-series, rekey, the
-            // points banking) are EXECUTOR-OWNED: the cup lives behind the room
-            // handle and the walks perform them inside the wasm. Only the platform
-            // ops below ever reach this switch.
-
-            // Explicit because a chained start has NO lobby step: selecting a track
-            // outside the lobby skips the scene swap, so the new circuit is placed
-            // here and the results overlay covers the pop.
-            "place-track" -> game.placeTrack()
+            // No op of its own reaches this switch. The series ops (advance, clear,
+            // set-track-from-series, rekey, the points banking) are EXECUTOR-OWNED:
+            // the cup lives behind the room handle and the walks perform them inside
+            // the wasm. The next circuit arrives as the merged track-change, and the
+            // launch's reset-scene-cars builds it with the new field.
 
             // ---- teardown -----------------------------------------------------
             "dispose-session" -> game.disposeSession()   // constraint 4
@@ -241,7 +237,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "start-music", "stop-music", "stop-voices",
             "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
             "broadcast-standings", "arm-results", "show-results",
-            "arm-intermission", "clear-intermission", "place-track",
+            "arm-intermission", "clear-intermission",
             "dispose-session", "fade-to-lobby", "remove-scene-car",
             "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",
             "return-to-lobby", "close-room", "clear-pick", "render-lobby-pick",
@@ -271,6 +267,8 @@ data class SceneCar(
      * input as one who picked it.
      */
     val carIndex: Int?,
+    /** False only for the lobby attract field's CPU fill (`ttp/roster.h`). */
+    val player: Boolean = true,
 ) {
     companion object {
         fun list(a: JSONArray?): List<SceneCar> {

@@ -3,12 +3,11 @@ import Foundation
 /// One slot of the field, as the RENDERER needs it — the shape
 /// `ttp_display_build` takes, plus the one field that never crosses.
 ///
-/// `id`, `name`, `carIndex` and `color` go across whole and the C++ side decides
-/// everything about them: the livery's ABGR word, the name plate's characters,
-/// how high that plate sits on this model's back panel. All of it is
-/// `libttp-runtime/ttp/roster.h`'s, which is its only reader. It used to be a
-/// version-stamped "track.bin" byte buffer packed by hand in each shell, agreeing
-/// with the renderer by comment.
+/// `id`, `name`, `carIndex`, `color` and `player` go across whole and the C++
+/// side decides everything about them: the livery's ABGR word, which car the
+/// lobby's coverage films. All of it is `libttp-runtime/ttp/roster.h`'s, which
+/// is its only reader. It used to be a version-stamped "track.bin" byte buffer
+/// packed by hand in each shell, agreeing with the renderer by comment.
 ///
 /// `model` is the exception and the reason this type exists rather than a bare
 /// dictionary: it names GLB BYTES to fetch, and fetching is the platform's job.
@@ -22,6 +21,7 @@ struct RosterSlot {
     /// (`vehicle-racer-low`, `vehicle-speedster`, `vehicle-racer`,
     /// `vehicle-vintage-racer`).
     let model: String
+    let player: Bool
 }
 
 /// Getting bytes to the renderer, in the right order.
@@ -295,14 +295,7 @@ enum SceneStaging {
         //
         //    PREDICATE polarity: 1 is built (the outcome-style returns were
         //    retired with the polarity zoo — `ttp_abi.h`).
-        let slots: [[String: Any]] = roster.map {
-            // `numericOrString` rather than the id's text: a seat that joined as
-            // the JSON number 3 must not be re-encoded as the string "3". They
-            // are two different players to `ttp::parse_scalar_id`.
-            ["id": $0.id.numericOrString, "name": $0.name,
-             "carIndex": $0.carIndex, "color": $0.color]
-        }
-        guard ttp_display_build(trackId, TTP.json(slots)) != 0 else {
+        guard ttp_display_build(trackId, slotsJson(roster)) != 0 else {
             throw Failure.buildRejected(trackId)
         }
         step(3)
@@ -322,7 +315,7 @@ enum SceneStaging {
     ///
     /// Model swaps need their GLBs re-provided first (fetching is this side's
     /// job, exactly as at build); whether a change qualifies is C++'s call.
-    /// `false` means it was NOT a re-dress — no scene, a join/leave/reorder —
+    /// `false` means it was NOT a re-dress — no scene, a changed id list —
     /// and the caller performs the full `build`.
     static func redress(roster: [RosterSlot], display: DisplayHost, store: AssetStore) async -> Bool {
         guard display.hasScene else { return false }
@@ -330,11 +323,18 @@ enum SceneStaging {
         // re-dress free: a ready toggle, a rename, a welcome and a seat expiry
         // all move the roster without moving a single byte.
         _ = await fetchPlanned(carWants(roster), display: display, store: store)
-        let slots: [[String: Any]] = roster.map {
+        return ttp_display_reroster(slotsJson(roster)) != 0
+    }
+
+    /// The roster as `build` and `redress` hand it over, in slot order.
+    private static func slotsJson(_ roster: [RosterSlot]) -> String {
+        TTP.json(roster.map {
+            // `numericOrString` rather than the id's text: a seat that joined as
+            // the JSON number 3 must not be re-encoded as the string "3". They
+            // are two different players to `ttp::parse_scalar_id`.
             ["id": $0.id.numericOrString, "name": $0.name,
-             "carIndex": $0.carIndex, "color": $0.color]
-        }
-        return ttp_display_reroster(TTP.json(slots)) != 0
+             "carIndex": $0.carIndex, "color": $0.color, "player": $0.player] as [String: Any]
+        })
     }
 
     // MARK: - The biome

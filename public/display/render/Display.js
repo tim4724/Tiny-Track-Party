@@ -565,7 +565,7 @@ export class Display {
   // between what crosses and what stays).
   _slots(roster) {
     return (roster || []).map((r) => ({
-      id: r.id, carIndex: r.carIndex ?? 0, color: r.color || ''
+      id: r.id, carIndex: r.carIndex ?? 0, color: r.color || '', player: r.player
     }));
   }
 

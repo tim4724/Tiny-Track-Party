@@ -575,9 +575,7 @@ class GameCoordinator(
         for (i in 0 until catalog.length()) {
             val t = catalog.optJSONObject(i) ?: continue
             val id = t.optString("id").ifEmpty { continue }
-            // laps/seed only stamp the built track and no geometry depends on them;
-            // 3/1 is the convention every other caller uses.
-            val schematic = TtpJson.obj(Ttp.ttp_track_schematic_json(TtpJson.arg(id), 3, 1))
+            val schematic = TtpJson.obj(Ttp.ttp_track_schematic_json(TtpJson.arg(id)))
             // eps 0 asks for the TUNED default (0.35), chosen so straights
             // reproduce and corners do not clip. Passing a number overrides that
             // tuning — the tvOS shell sent 0.6 and drew coarser maps than the web
@@ -849,6 +847,7 @@ class GameCoordinator(
      * launch — nothing sequenced here.
      */
     fun advanceSeriesRace() {
+        val started = System.nanoTime()
         val d = TtpJson.obj(Ttp.ttp_race_advance_live_json(
             net.roomHandle, if (display.hasScene) 1 else 0,
             Random.nextInt().toUInt().toDouble(),
@@ -858,6 +857,7 @@ class GameCoordinator(
             "advance" -> { run(d); armCountdown(d) }
             else -> Unit                            // "none"
         }
+        logSlow("advance", started)
     }
 
     /**
@@ -1106,9 +1106,11 @@ class GameCoordinator(
             // walk paint the cards and hand the phones the board. Without the
             // hold there is nothing to watch: when the last human is also the
             // last car, raceOver() is already true on this frame.
+            val started = System.nanoTime()
             flourishing = true
             Ttp.ttp_hold_end(sessionHandle, 1)
             run(TtpJson.obj(Ttp.ttp_race_flag_live_json(sessionHandle, net.roomHandle)))
+            logSlow("flag", started)
         }
     }
 
@@ -1129,16 +1131,31 @@ class GameCoordinator(
      */
     private fun endFlourish() {
         if (!flourishing || sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
+        val started = System.nanoTime()
         flourishing = false
         Ttp.ttp_hold_end(sessionHandle, 0)
         display.hold(true)
         fastForwarding = true
         Ttp.ttp_fast_forward(sessionHandle)
+        val forwardMs = (System.nanoTime() - started) / 1_000_000
         // Drained here rather than left for the next frame: the burst queues every
         // remaining finish AND the race's end, and the next ttp_update would
         // overwrite the queue.
         drainRaceEvents()
         fastForwarding = false
+        logSlow("results (fast-forward $forwardMs ms, then the drain)", started)
+    }
+
+    /**
+     * The race-end and cup-advance walks' answer to [PartyNet.reportInbound]: a
+     * timer or the remote starts them, so no inbound frame's timing names the
+     * stall. A phone's series-next is also timed there; the advance logs anyway,
+     * so its every caller is covered from one site.
+     */
+    private fun logSlow(label: String, startedNs: Long) {
+        val ms = (System.nanoTime() - startedNs) / 1_000_000.0
+        if (ms < PartyNet.SLOW_INBOUND_MS) return
+        Log.w(TAG, String.format(java.util.Locale.ROOT, "slow %s: %.1f ms", label, ms))
     }
 
     private fun paintHUD(slots: List<DisplayHost.HudSlot>) {
@@ -1406,7 +1423,8 @@ class GameCoordinator(
     }
 
     /**
-     * The demo's in-place pick swap: same slots, new liveries/models/names.
+     * The demo's in-place swap: same slots, new liveries/models/names/drivers —
+     * a car pick, or a join or leave on a full grid (the demo ids are slots).
      * `ttp_display_reroster` keeps the meshes, the baked shadows and the preview
      * camera's orbit phase — the full rebuild this used to pay is why choosing a car
      * on a phone visibly snapped the lobby camera back to its start bearing.
@@ -1429,6 +1447,7 @@ class GameCoordinator(
                 cell = false,
                 carIndex = if (p.has("carIndex") && !p.isNull("carIndex"))
                     p.optInt("carIndex") else null,
+                player = p.optBoolean("player", true),
             )
         }
 
@@ -1573,6 +1592,7 @@ class GameCoordinator(
             carIndex = it.carIndex ?: 0,
             color = proto.carColors.getOrElse(it.colorIndex) { "" },
             model = proto.carModels.getOrElse(it.carIndex ?: 0) { proto.carModels[0] },
+            player = it.player,
         )
     }
 
@@ -1593,8 +1613,6 @@ class GameCoordinator(
             state.boostAccent = Ttp.ttp_theme_boost_icon(TtpJson.arg(display.biome))
         }
     }
-
-    fun placeTrack() = rebuildScene()
 
     /**
      * Swap the circuit the lobby previews and the next race builds.

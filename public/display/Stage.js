@@ -516,7 +516,8 @@ export class Stage {
       return {
         id, carIndex,
         color: this.colors[(c.colorIndex ?? 0) % this.colors.length],
-        model: models[carIndex % (models.length || 1)] || null
+        model: models[carIndex % (models.length || 1)] || null,
+        player: c.player
       };
     });
   }
@@ -545,8 +546,8 @@ export class Stage {
           // always a full build, while a roster-only change on a live scene is
           // offered to ttp_display_reroster first — an in-place re-dress that
           // keeps the meshes, the baked shadows and the preview camera's orbit
-          // phase. Whether it qualifies is C++'s call; a refusal (join/leave,
-          // reorder) just falls through to the build below.
+          // phase. Whether it qualifies is C++'s call; a refusal (a changed
+          // id list) just falls through to the build below.
           const variants = this._variants || {};
           // The KIT FIELD is a SCENE input, not a roster one: it is meshed at
           // build, and its models are a fetch list this side owns.
@@ -662,7 +663,9 @@ export class Stage {
     // selector match every tick was only ever finding what we already had. The
     // _*Text fields are the last string written to each, so an unchanged value
     // costs a comparison instead of a DOM write (see setCarHud).
-    const c = { name, colorIndex, carIndex, finished: false, reconnecting: false,
+    // `player` is false only for the attract fill (ttp/roster.h): undefined
+    // leaves the roster key out, and the engine reads an absent key as a player.
+    const c = { name, colorIndex, carIndex, player: opts.player, finished: false, reconnecting: false,
                 label: null, placeEl: null, placeTextEl: null, lapTextEl: null,
                 itemEl: null, finPlaceEl: null, finTimeEl: null,
                 _placeText: null, _lapText: null, _finPlaceText: null, _finTimeText: null,
@@ -724,10 +727,10 @@ export class Stage {
     if (cell && !this._order.includes(id)) this._order.push(id);
     // The renderer bakes a car's model and livery into its slot, so any change
     // to the field goes through _rebuild — which routes it to an in-place
-    // re-dress when only the dressing changed (a car pick on the same seats)
-    // and to a field rebuild when the field changed shape (the lobby's
-    // attract race starting a tick after the track lands, phones joining and
-    // leaving mid-lobby, the race grid replacing the whole demo field).
+    // re-dress when only the dressing changed (a car pick on the same seats, a
+    // phone joining or leaving the lobby's full attract grid) and to a field
+    // rebuild when the field changed shape (the attract race starting a tick
+    // after the track lands, the race grid replacing the whole demo field).
     this._rebuild();
   }
 
@@ -761,15 +764,16 @@ export class Stage {
     return true;
   }
 
-  // Change a registered car's model/livery/name IN PLACE — same slot, same
+  // Change a registered car's model/livery/name/driver IN PLACE — same slot, same
   // insertion order. The order is the point: removing and re-adding the car
   // would push its slot to the end of the roster, and a REORDERED roster is a
   // field rebuild by design (planReroster refuses it), where this lands as
   // a re-dress that leaves every car and its camera rig alone.
-  updateCar(id, { colorIndex, carIndex, name } = {}) {
+  updateCar(id, { colorIndex, carIndex, name, player } = {}) {
     const c = this.cars.get(id);
     if (!c) return false;
     if (colorIndex != null) c.colorIndex = colorIndex;
+    if (player != null) c.player = player;
     if (carIndex != null) {
       c.carIndex = carIndex;
       // the monster chip's cab follows the MODEL, so a re-pick retints it

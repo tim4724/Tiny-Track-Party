@@ -226,9 +226,9 @@ struct FollowCam {
 // No whole-track shot in the cycle: from that far the race is specks on a map,
 // and the lobby's track card already shows the layout.
 //
-// A car pick on a phone (a slot re-dressed by ttp_display_reroster) cuts
-// straight to CHASE on that car, whatever is on screen: the player sees the
-// car they just chose, driving.
+// A car pick on a phone, or a phone joining (both a player's slot re-dressed
+// by ttp_display_reroster), cuts straight to CHASE on that car, whatever is on
+// screen: the player sees the car they just chose, driving.
 // ---------------------------------------------------------------------------
 enum class Shot { WIDE, LEAD, PACK, CHASE };
 constexpr float COVER_HOLD_BATTLE = 10.0f, COVER_HOLD_CHASE = 8.0f;
@@ -242,7 +242,7 @@ struct Coverage {
     Shot shot = Shot::WIDE;
     float held = 0;       // seconds on this shot
     int subject = -1;     // CHASE's car, or PACK's focus (-1: the whole field)
-    int featured = -1;    // a slot to cut to CHASE on at the next step (a car pick)
+    int featured = -1;    // a slot to cut to CHASE on at the next step (a pick or join)
     uint32_t beat = 0;    // where in the cycle the shot is
     uint32_t turn = 0;    // chase shots taken, so the subject rotates
     bool cut = false;     // the last step changed the shot: its rig starts fresh

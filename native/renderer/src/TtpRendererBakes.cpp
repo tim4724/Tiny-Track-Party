@@ -23,19 +23,22 @@
 // so the ESM itself is a local of this function and nothing samples it in a
 // frame. Filament's own shadow machinery is off entirely.
 void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
-    // MOST OF A STATIC BUILD IS THIS FUNCTION on the Android reference box, so
-    // its own parts have to be separable before anything can be done about it.
+    // ITS PHASES ARE LOGGED (PhaseLog): on the Android reference box this is a
+    // large slice of a cold static build, and its parts have to be separable
+    // before anything can be done about it.
     //
-    // AND THE SPLIT SAYS THE CPU IS DOING NOTHING. Recording each pass costs 0 ms;
-    // nearly all of it is the two `flushAndWait` calls below. This function does
-    // not compute, it WAITS for the GPU to finish work it has already submitted
-    // — on the thread that also runs the frame loop and the relay's message
-    // pump, which is why a phone's tap queues behind it.
+    // IT RECORDS AND SUBMITS; IT NEVER WAITS. Each pass samples the target the
+    // pass before it wrote, and each bake-local is destroyed straight after the
+    // pass that last samples it. Filament orders both in its command stream — a
+    // sample after the write it reads, a destroy after the last command using
+    // it — so the GPU works the bake off behind this thread, which also runs the
+    // frame loop and the relay's message pump. A `flushAndWait` between the blur
+    // passes once held this thread for the whole GPU bake, and a phone's tap
+    // queued behind it.
     //
-    // It is written this way because each blur pass reads the previous one's
-    // target, and draining the pipeline is the simplest way to order that. The
-    // price is paid once per STATIC scene (buildScene): a join, a race launch or
-    // a restart on the same track rebuilds the field alone and never reaches here.
+    // The price is paid once per STATIC scene (buildScene): a join, a race launch
+    // or a restart on the same track rebuilds the field alone and never reaches
+    // here.
     PhaseLog bake;
     // THE CASTERS ARE THE STATIC SCENE, AND CARS CAST NOTHING (setVisibleLayers
     // 0x02 below), so the maps are a function of `key` and nothing in a build
@@ -220,9 +223,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
         constexpr uint32_t ESM_SM = 1024;
 
         // TWO PASSES, one per axis. Separating it is what makes a wide kernel
-        // affordable: sigma is what the penumbra inherits, and reaching a useful
-        // sigma with the old single-pass square would have cost (6·sigma)²
-        // taps a texel. Two 81-tap passes cost 162.
+        // affordable: sigma is what the penumbra inherits, and a single-pass
+        // square costs a row's taps SQUARED where two passes cost twice a row.
         //
         // The penumbra is specified in WORLD units so the edge is equally soft
         // on the smallest circuit and the largest; esm.texel converts it to
@@ -252,7 +254,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
         // so it spans [e^-8, 1] = [3.4e-4, 1] — comfortably inside half's
         // normals, at ~0.1% RELATIVE error, which is nothing against a penumbra
         // that ramps over several texels. Only the STORED field is half; the
-        // per-tap exponential and the 81-tap sum are computed at full precision
+        // per-tap exponential and the tap sum are computed at full precision
         // in the shader either way.
         Texture* out = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
@@ -329,15 +331,9 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
                 qv->setShadowingEnabled(false);
                 qv->setFrustumCullingEnabled(false);
                 mRenderer->setClearOptions(eco);
-                // RECORDING is free; the WAIT below is where the time goes.
-                // Both halves are marked so the split cannot be misread as CPU
-                // work — see the note on flushAndWait above.
-                bake.mark("blurRecord");
                 mRenderer->renderStandaloneView(qv);
                 mRenderer->setClearOptions(eprev);
-                // Both passes read a texture the next step destroys or writes.
-                mEngine->flushAndWait();
-                bake.mark("blurWait");
+                bake.mark("blur");
                 mEngine->destroy(qv);
                 mEngine->destroy(ert);
                 qs->remove(q);

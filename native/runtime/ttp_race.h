@@ -129,15 +129,18 @@ TTP_ABI const char* ttp_race_effect_ops_json(void);
 /* ---- the lobby attract demo ---------------------------------------------- */
 
 /* The lobby attract grid, off the live room: the seated players plus CPU
- * racers topping the field up, demo ids ("demo-<peer>", "demo-cpu-<n>"),
- * persona by FINAL grid index so they spread across the whole field — plus the
- * cheap signature of what that grid renders (track + each car's
- * id/livery/model), so a refresh can compare and skip a no-op rebuild. A
- * rename alone will not re-grid. `skill` is the bot skill a real race on this
- * track hands its CPU fill (its cup's tier); the shell gives it to every demo
- * car's bot spec, so the lobby drives like the cup it previews.
- *   -> {"field":[{"id","name","colorIndex","carIndex","stats","persona"},...],
- *       "sig":"...","skill":n} */
+ * racers topping the field up, in livery order with ids by grid slot
+ * ("demo-<slot>") and persona by slot so they spread across the whole field,
+ * `player` marking the seated players' cars — plus the cheap signature of what
+ * that grid renders (track + each car's id/livery/model/player), so a refresh
+ * can compare and skip a no-op rebuild. A rename alone will not re-grid. The
+ * ids survive a join or a leave on a full grid, so the shell re-dresses the
+ * running demo (`player` rides its roster) rather than restarting it.
+ * `skill` is the bot skill a real race on this track hands its CPU fill (its
+ * cup's tier); the shell gives it to every demo car's bot spec, so the lobby
+ * drives like the cup it previews.
+ *   -> {"field":[{"id","name","colorIndex","carIndex","stats","persona",
+ *                 "player"},...], "sig":"...","skill":n} */
 TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
                                             const char* botCapJson);
 

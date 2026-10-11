@@ -352,7 +352,8 @@ TTP_ABI const char* ttp_display_kit_field_layout(void);
  * rosterJson is the field in SLOT order — the ONE thing about a race that only
  * the shell knows, since the sim's cars carry no livery and no display name:
  *
- *   [{"id": <scalar>, "name": "…", "carIndex": <n>, "color": "#rrggbb"}, …]
+ *   [{"id": <scalar>, "name": "…", "carIndex": <n>, "color": "#rrggbb",
+ *     "player": <bool, optional, default true>}, …]
  *
  * The renderer bakes each car's model and livery into its slot here, so this is
  * what lets every later frame put each car back in ITS slot by identity rather
@@ -378,9 +379,10 @@ TTP_ABI const char* ttp_display_kit_field_layout(void);
 TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
 
 /* Re-dress the BUILT scene's car slots in place: same rosterJson shape as
- * ttp_display_build, same slot ids in the same order, with only models and
- * liveries changed. The scene, the camera state and the cosmetic clocks are
- * untouched — which is the whole point: a lobby car pick must not snap the
+ * ttp_display_build, same slot ids in the same order, with only models,
+ * liveries and `player` changed. The scene, the camera state and the cosmetic
+ * clocks are untouched — which is the whole point: a lobby car pick, or a
+ * phone joining the attract race (whose ids are grid slots), must not snap the
  * preview's orbit back to its start bearing, and it must not pay a track
  * re-mesh and shadow re-bake for a livery.
  *
@@ -390,7 +392,7 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * markers — is decided here (ttp/roster.h planReroster).
  *
  * Returns 1 when it re-dressed. 0 means this was NOT a re-dress — no scene, a
- * join/leave/reorder, a slot that failed to rebuild — and the shell performs
+ * changed id list, a slot that failed to rebuild — and the shell performs
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
@@ -644,7 +646,8 @@ TTP_ABI void ttp_display_dividers(int enabled);
 #define TTP_CAM_FREE   3  /* inspector: the shell drives, via ttp_display_look */
 #define TTP_CAM_FOLLOW 4  /* trailer: a low camera outside the circuit on the lead battle */
 #define TTP_CAM_COVERAGE 5  /* lobby: hard cuts between the race's battles and chases;
-                             * a re-dressed slot (a car pick) cuts to its car */
+                             * a player's slot re-dressed (a car pick or a join)
+                             * cuts to its car */
 TTP_ABI void ttp_display_camera(int mode);
 
 /* Free-cam pose (TTP_CAM_FREE only): eye + look target in world units. */

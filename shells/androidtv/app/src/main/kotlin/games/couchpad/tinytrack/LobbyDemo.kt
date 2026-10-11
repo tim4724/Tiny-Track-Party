@@ -25,8 +25,8 @@ class LobbyDemo {
     /**
      * What the running demo was built from, for the in-place swap check: the
      * re-dress path only qualifies while the TRACK and the car-id SET both stand
-     * (a join/leave or a track switch reorders slots, which is a full build by the
-     * renderer's own contract).
+     * (a field changing size or a track switch is a full build by the renderer's
+     * own contract; a join or leave on a full grid keeps the ids, which are slots).
      */
     private var field: List<JSONObject> = emptyList()
     private var track = ""
@@ -64,13 +64,13 @@ class LobbyDemo {
     var onField: ((JSONArray) -> Unit)? = null
 
     /**
-     * Same track, same set of cars, only the PICKS changed (a player switched
-     * their car or livery): hand the new field over for an in-place re-dress
+     * Same track, same set of cars, only the PICKS or DRIVERS changed (a car or
+     * livery pick, or a phone joining or leaving, which turns a CPU's slot into
+     * theirs or back): hand the new field over for an in-place re-dress
      * (`ttp_display_reroster`) so the demo race keeps driving and the preview
-     * camera keeps its orbit phase. The session is deliberately NOT restarted: the
-     * new handling stats only land on the next full rebuild, exactly as on the web
-     * (handling differences are invisible in eye-candy, and re-seating would pop
-     * the field back to the grid).
+     * camera keeps its orbit phase. The session is deliberately NOT restarted:
+     * the sim car keeps its slot's handling stats until the next restart, exactly
+     * as on the web (re-seating would pop the field back to the grid).
      */
     var onRedress: ((JSONArray) -> Unit)? = null
 
@@ -108,9 +108,9 @@ class LobbyDemo {
         val rawField = live.optJSONArray("field") ?: JSONArray()
         val fresh = (0 until rawField.length()).mapNotNull { rawField.optJSONObject(it) }
 
-        // Same track + same set of cars → swap the picks in place; anything else is
-        // a full teardown and rebuild.
-        if (handle != 0 && t == track && sameCarSet(fresh, field)) {
+        // Same track + same field size (the ids are grid slots) → swap the picks
+        // and drivers in place; anything else is a full teardown and rebuild.
+        if (handle != 0 && t == track && fresh.size == field.size) {
             field = fresh
             signature = sig
             onRedress?.invoke(rawField)
@@ -123,16 +123,6 @@ class LobbyDemo {
         track = t
         // The CPU skill a real race on this track uses, for every demo car.
         start(rawField, t, live.optDouble("skill", 1.0))
-    }
-
-    /**
-     * The two fields cover the exact same set of car ids, so only liveries, models
-     * or names could have changed — the cue to swap in place.
-     */
-    private fun sameCarSet(a: List<JSONObject>, b: List<JSONObject>): Boolean {
-        if (a.size != b.size) return false
-        val ids = b.mapNotNull { it.opt("id")?.toString() }.toSet()
-        return a.all { it.opt("id")?.toString() in ids }
     }
 
     fun stop() {

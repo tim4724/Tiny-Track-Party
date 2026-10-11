@@ -132,7 +132,8 @@ extension GameCoordinator {
                        name: $0.name,
                        carIndex: $0.carIndex ?? 0,
                        color: proto.carColors[safe: $0.colorIndex] ?? "",
-                       model: proto.carModels[safe: $0.carIndex ?? 0] ?? proto.carModels[0])
+                       model: proto.carModels[safe: $0.carIndex ?? 0] ?? proto.carModels[0],
+                       player: $0.player)
         }
     }
 
@@ -176,8 +177,6 @@ extension GameCoordinator {
         }
     }
 
-    func placeTrack() { rebuildScene() }
-
     /// Swap the circuit the lobby previews and the next race builds.
     ///
     /// **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation:
@@ -202,9 +201,9 @@ extension GameCoordinator {
         // The pick is what lifts the paper off the lobby (see refreshBackdrop):
         // before it there is no scene to show, after it there is.
         refreshBackdrop()
-        // The lobby's build belongs to the demo; a race's belongs to the flow's
-        // own `place-track`. What is left here is the boot seed and the
-        // screenshot harness, neither of which has a demo running.
+        // The lobby's build belongs to the demo; a race's belongs to the
+        // launch's `reset-scene-cars`. What is left here is the boot seed and
+        // the screenshot harness, neither of which has a demo running.
         if state.screen != .race && !lobbyDemo.willRebuild(for: id) { rebuildScene() }
     }
 
