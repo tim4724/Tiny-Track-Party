@@ -123,6 +123,7 @@ function closeTrailer(popped = false) {
   return true;
 }
 el('trailer-btn').addEventListener('click', openTrailer);
+el('device-trailer').addEventListener('click', openTrailer);   // the phone landing's picture
 el('trailer-close').addEventListener('click', () => closeTrailer());
 trailerVideo.addEventListener('ended', () => closeTrailer());
 trailer.addEventListener('click', (e) => { if (e.target === trailer) closeTrailer(); });   // the glass, not the film

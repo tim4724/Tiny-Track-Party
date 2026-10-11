@@ -50,22 +50,55 @@
        into the next (see #scene-snap). The lobby + race sections layer on top of it. -->
   <div id="scene" class="is-dim"></div>
 
-  <!-- Device chooser — the display URL opened on a phone-sized screen. The race
-       runs on a big screen while phones steer, so a cramped viewport most likely
-       means someone followed the wrong link while trying to JOIN a game. Offer
-       the fork instead of booting a TV layout they can't use. Hidden on big
-       screens and once dismissed (display.css media query + the
-       html.device-choice-dismissed class); main.js defers opening a room until
-       a choice is made, so a stray phone visit never spawns a ghost room.
+  <!-- Device chooser: the display URL opened on a phone-sized screen. It is
+       also the game's LANDING PAGE, because a phone is how almost everybody
+       arrives from a link, a share or the App Store's website and support
+       links. So it pitches the game first (picture, trailer, the three steps) and offers
+       the fork after: send the link to a big screen, or run the big screen
+       here. A cramped viewport can also mean someone trying to JOIN, hence the
+       scan hint. Hidden on big screens and once dismissed (display.css media
+       query + the html.device-choice-dismissed class); main.js defers opening
+       a room until a choice is made, so a stray phone visit never spawns a
+       ghost room. The hero image is loading="lazy" so a big screen, where this
+       is display:none, never fetches it.
        role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
        containment we don't implement (no focus trap) — tabbing out lands on
        the benign lobby behind, which the screen reader can then read honestly. -->
   <div id="device-choice" role="dialog" aria-labelledby="device-choice-title">
-    <div class="device-card card">
-      <h1 id="device-choice-title">Tiny Track <span>Party</span></h1>
-      <p>This page is the <strong>big screen</strong> — it runs the race while everyone steers with their phone.</p>
-      <p>Joining a party? Scan the QR code on your group’s big screen instead.</p>
-      <button id="device-continue" class="btn btn--brand">Use this device as the big screen</button>
+    <div class="landing">
+      <h1 id="device-choice-title" class="wordmark landing__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></h1>
+      <p class="landing__tag">Toy car racing for 1 - 4 players</p>
+      <button id="device-trailer" class="landing__hero" aria-label="Play the trailer">
+        <img src="/assets/brand/tv/shelf/split.jpg" alt="Four players racing toy cars in split screen" width="1920" height="1080" loading="lazy" />
+        <!-- A drawn triangle, not the ▶ character: iOS sets that glyph with
+             emoji metrics and it sits off the disc's centre. -->
+        <span class="landing__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></span>
+      </button>
+      <!-- How a party starts, in order. The picture and the trailer already show
+           the game itself, so this says only what they cannot. -->
+      <ol class="landing__steps">
+        <li class="landing__step card"><span class="landing__num" aria-hidden="true">1</span><span><strong>Open it on a big screen</strong><span>TV, laptop or tablet</span></span></li>
+        <li class="landing__step card"><span class="landing__num" aria-hidden="true">2</span><span><strong>Everyone scans the QR code</strong><span>your phone is the controller</span></span></li>
+        <li class="landing__step card"><span class="landing__num" aria-hidden="true">3</span><span><strong>Tilt or tap to steer</strong><span>first across the line wins</span></span></li>
+      </ol>
+      <button id="device-share" class="btn btn--brand landing__share">
+        <span id="device-share-host" class="landing__host">tinytrack.couchpad.games</span>
+        <span id="device-share-sub" class="landing__share-sub">Send it to your big screen</span>
+      </button>
+      <!-- The welcome board's grass, as a block in the flow rather than a band
+           at a fixed height, so its edge can never cut through a link. -->
+      <div class="landing__ground">
+        <button id="device-continue" class="landing__continue">Use this phone as the big screen</button>
+        <p class="landing__contact"><a href="mailto:info@couchpad.games">info@couchpad.games</a></p>
+        <!-- The same legal footer as the welcome board (tests/credits.test.js
+             pins every copy to one list). -->
+        <footer class="site-foot landing__foot">
+          <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
+          <a href="/licenses.html">Licenses</a>
+          <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
+          <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
+        </footer>
+      </div>
     </div>
   </div>
 

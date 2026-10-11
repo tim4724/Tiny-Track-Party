@@ -299,17 +299,17 @@ test('every served license text is intact', () => {
   assert.deepEqual(served.sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
 });
 
-// The legal footer exists twice (welcome board + licenses page) as plain markup
-// on purpose: a footer that needs JS to name its imprint is a footer that can
-// fail to. This is what keeps the two copies one footer.
-test('the welcome board and the licenses page carry the same legal footer', () => {
-  const footerOf = (rel) => {
+// The legal footer exists several times (welcome board, the phone landing,
+// licenses page) as plain markup on purpose: a footer that needs JS to name its
+// imprint is a footer that can fail to. This is what keeps every copy one footer.
+test('every legal footer carries the same links', () => {
+  const footersOf = (rel) => {
     const html = fs.readFileSync(path.join(PUBLIC_DIR, rel), 'utf8');
-    const m = /<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/.exec(html);
-    assert.ok(m, `${rel} has no .site-foot footer`);
-    return m[1];
+    const all = [...html.matchAll(/<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/g)].map((m) => m[1]);
+    assert.ok(all.length, `${rel} has no .site-foot footer`);
+    return all;
   };
-  const pages = ['display/index.html', 'licenses.html'].map((rel) => [rel, footerOf(rel)]);
+  const pages = ['display/index.html', 'licenses.html'].flatMap((rel) => footersOf(rel).map((f) => [rel, f]));
   const want = [
     'https://github.com/tim4724/Tiny-Track-Party',
     '/licenses.html',

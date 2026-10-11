@@ -528,6 +528,8 @@ html {
    the corner chrome (12), the toast (13) and the boot cover (15); under the
    overlays that interrupt (pause 20, link 25, device chooser 30). */
 #trailer { z-index: 18; --trailer-pad: clamp(1rem, 6vh, 4rem); padding: var(--trailer-pad) 0; }
+/* Opened from the phone landing, it has to play over the landing itself. */
+html:not(.device-choice-dismissed) #trailer { z-index: 31; }
 #trailer video {
   /* Always 16:9: as wide as 80vw (which leaves the close button's corner clear
      of the film) or the height between the paddings allows. No pixel cap: on a
@@ -541,9 +543,14 @@ html {
   border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-card);      /* a 3px-bordered card (theme.css's rule) */
 }
+/* A portrait screen (the phone landing) centres the film far below the close
+   button's corner, so the 80vw clearance only costs width: go nearly edge to edge. */
+@media (orientation: portrait) { html:not(.device-choice-dismissed) #trailer video { width: calc(100vw - 1.25rem); } }
 .trailer__close { position: absolute; top: var(--safe-y); right: var(--safe-x); }
 /* The debug gear floats over every layer (debugPanel.css); not over the film. */
 #trailer:not(.hidden) ~ .dbg-fab { display: none; }
+/* The phone landing is the public face of the page: no dev gear over it. */
+html:not(.device-choice-dismissed) .dbg-fab { display: none; }
 
 /* Legal footer (.site-foot lives in theme.css) — pinned along the bottom of the
    title board rather than sitting in its centred column, so it never pushes the
@@ -561,7 +568,7 @@ html {
      against green. */
   color: var(--ink-2);
 }
-.welcome__foot a { color: var(--ink); text-decoration-color: rgba(42, 39, 53, 0.45); }
+.welcome__foot a, .landing__contact a, .landing__foot a { color: var(--ink); text-decoration-color: rgba(42, 39, 53, 0.45); }
 
 /* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
    and the race (split-screen). The lobby/race sections layer on top. ---- */
@@ -1061,30 +1068,128 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 .link-status:empty { display: none; }
 .link-card .btn { min-width: 11rem; }
 
-/* ---- Device chooser ---- the display URL opened on a phone-sized screen
-   (see #device-choice in index.html). Hidden by default; the media query below
-   surfaces it on cramped viewports until a choice is made. Size-only triggers
-   (no pointer/hover filters): the "run the big screen here OR join on your
-   phone" fork applies to any small window, and continuing is one tap away.
-   main.js adds html.device-choice-dismissed on "continue" AND at boot on big
-   screens / dev surfaces, so a mid-session window resize can never resurface
-   the chooser over a live lobby or race. */
+/* ---- Device chooser / phone landing ---- the display URL opened on a
+   phone-sized screen (see #device-choice in index.html). Hidden by default; the
+   media query below surfaces it on cramped viewports until a choice is made.
+   Size-only triggers (no pointer/hover filters): the "run the big screen here
+   OR send it to one" fork applies to any small window, and continuing is one
+   tap away. main.js adds html.device-choice-dismissed on "continue" AND at boot
+   on big screens / dev surfaces, so a mid-session window resize can never
+   resurface the chooser over a live lobby or race.
+   A full-screen board, so it sits on paper; it scrolls, because a landscape
+   phone is under 400px tall and the pitch is not. */
 #device-choice {
   display: none; position: fixed; inset: 0; z-index: 30;
-  align-items: center; justify-content: center;
-  padding: 1.2rem;
-  background: rgba(255, 246, 235, 0.85); backdrop-filter: blur(10px);
+  justify-content: center;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--paper);
 }
-.device-card {
+.landing {
   display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: 1rem; padding: 2rem 1.6rem; max-width: 26rem;
+  gap: 1.1rem; width: 100%; max-width: 30rem; min-height: 100%;
+  padding: 2rem 1.2rem 0;
+  margin: auto 0;   /* centred when it fits, top-aligned scroll when it does not */
 }
-.device-card h1 {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: 2.2rem; line-height: 0.98; margin: 0; color: var(--ink);
+/* No blue tap flash on the phone page: every control here shows its own press
+   (the controller page does the same). */
+#device-choice * { -webkit-tap-highlight-color: transparent; }
+
+/* The welcome board's grass (theme.css .scene__grass and the two hills behind
+   it), drawn by the block that holds the last links. It spans the screen,
+   whatever the column's width, and its edge sits a fixed distance above the
+   first link, however tall the page above it is. The hill colours are
+   .scene__sky's in theme.css. */
+.landing__ground {
+  position: relative; z-index: 0;   /* a stacking context, so the -z grass and hills paint under the links */
+  width: 100vw; margin-top: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
+  padding: 4.2rem 1.2rem 1.4rem;
 }
-.device-card h1 span { color: var(--brand); }
-.device-card p { margin: 0; color: var(--ink-2); font-weight: 700; }
+/* The hills take the block's top 1.6rem and the grass starts under them, so
+   nothing reaches up into the share button above. */
+.landing__ground::before {
+  content: ''; position: absolute; inset: 1.6rem 0 0; z-index: -1;
+  background: var(--grass);
+  border-radius: 50% 50% 0 0 / 2.4rem 2.4rem 0 0;
+}
+.landing__ground::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4rem; z-index: -2;
+  background:
+    radial-gradient(ellipse 48% 100% at 14% 100%, #d3edbb 98%, transparent 100%),
+    radial-gradient(ellipse 52% 100% at 88% 100%, #e0f3cd 98%, transparent 100%);
+}
+.landing__wordmark { font-size: 2.6rem; margin: 0; transform: rotate(-2deg); }
+.landing__tag { text-wrap: balance; margin: 0; color: var(--ink-2); font-weight: 700; font-size: 1.05rem; max-width: 22rem; }
+
+/* The picture is the trailer's play button: a die-cut sticker with a hard
+   shadow and a slight tilt the other way from the wordmark. */
+.landing__hero {
+  position: relative; display: block; width: 100%;
+  padding: 0; border: 3px solid var(--ink); border-radius: var(--r-lg);
+  overflow: hidden; background: var(--ink);
+  box-shadow: var(--shadow-card); transform: rotate(1deg);
+  cursor: pointer;
+}
+.landing__hero img { display: block; width: 100%; height: auto; }
+/* A narrow screen gives the picture most of its width back: it bleeds into
+   the side padding. */
+@media (max-width: 30rem) { .landing__hero { width: calc(100% + 1.2rem); } }
+/* The disc is the picture's push-button: the .btn ledge, sunk onto while the
+   picture is pressed (theme.css .btn has the press timing's reasoning). */
+.landing__play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: grid; place-items: center;
+  width: 3.6rem; height: 3.6rem;
+  border: 3px solid var(--ink); border-radius: var(--r-pill);
+  background: var(--red);
+  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
+  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease;
+}
+.landing__hero:active .landing__play {
+  transform: translate(-50%, calc(-50% + var(--btn-sink)));
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+  transition: none;
+}
+.landing__hero:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.landing__play svg { width: 1.9rem; height: 1.9rem; fill: #fff; }
+
+/* The three steps: white sticker rows (.card), each led by a numbered disc in
+   the next chrome colour. */
+.landing__steps {
+  display: flex; flex-direction: column; gap: 0.65rem;
+  width: 100%; margin: 0.3rem 0 0; padding: 0; list-style: none; text-align: left;
+}
+.landing__step {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 0.9rem 0.6rem 0.6rem;
+  box-shadow: var(--shadow-pop);
+}
+.landing__step > span:last-child { display: flex; flex-direction: column; }
+.landing__step strong { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--ink); }
+.landing__step strong + span { font-weight: 700; font-size: 0.85rem; color: var(--ink-2); }
+.landing__num {
+  flex: none; display: grid; place-items: center;
+  width: 2.4rem; height: 2.4rem;
+  border: 3px solid var(--ink); border-radius: var(--r-pill);
+  background: var(--num); color: #fff;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;
+}
+.landing__step:nth-child(1) { --num: var(--red); }
+.landing__step:nth-child(2) { --num: var(--green); }
+.landing__step:nth-child(3) { --num: var(--blue); }
+
+.landing__share { display: flex; flex-direction: column; gap: 0.15rem; width: 100%; margin-top: 0.4rem; text-transform: none; }
+.landing__host { font-size: 1.2rem; overflow-wrap: anywhere; }
+.landing__share-sub { font-size: 0.85rem; opacity: 0.9; }
+.landing__continue {
+  background: none; border: 0; padding: 0.3rem;
+  font: inherit; font-weight: 700; color: var(--ink);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+.landing__contact { margin: 0.4rem 0 0; color: var(--ink-3); font-weight: 700; font-size: 0.85rem; }
+.landing__foot { margin-top: 0.2rem; }
+
 @media (max-width: 700px), (max-height: 500px) {
   html:not(.device-choice-dismissed) #device-choice { display: flex; }
 }
