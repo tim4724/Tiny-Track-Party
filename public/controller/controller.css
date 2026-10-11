@@ -1063,10 +1063,12 @@ input[type=text]:disabled { opacity: 0.6; }
   position: relative;
   width: 100%; max-width: 46rem; height: 100%; max-height: 100%; overflow-y: auto;
   display: grid;
-  /* The column takes the width its rows need — a name, a pill, nothing that
-     wraps — and the stage takes the rest. The column is the one with
-     something to lose: squeezed, a pill's label would break. */
-  grid-template-columns: auto minmax(0, 1fr);
+  /* The column is the sheet's point, so it takes the larger share, and never
+     less than its rows need (a name, a pill, nothing that wraps): squeezed, a
+     pill's label would break. The floor is MAX-content because a 1fr 1fr
+     pill's min-content under-reports its laid-out width. The stage takes the
+     rest; its demo has width to spare at every zoom (see --demo-zoom). */
+  grid-template-columns: minmax(max-content, 4fr) minmax(0, 3fr);
   grid-template-areas: 'col stage';
   gap: 1.1rem;
   padding: 0.9rem 1.2rem;
@@ -1124,14 +1126,26 @@ input[type=text]:disabled { opacity: 0.6; }
 .set-row__note {
   font-weight: 700; font-size: 0.75rem; line-height: 1.2; color: var(--ink-2); white-space: nowrap;
 }
+/* Steering is the setting every player has and the one they come here for,
+   so its row stacks: the name and note share one line, and the pill below
+   takes the box's whole width. It is sized to stand about as tall as
+   "Got it" (.btn), its labels a step larger: the sheet's two big controls,
+   of a size. */
+.set-row--stack { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+.set-row--stack .set-row__label { flex-direction: row; align-items: baseline; gap: 0.6rem; }
+/* contain: it TAKES the box's width rather than setting it — its big labels
+   would otherwise raise the column's max-content floor (.settings-card). */
+.set-row--stack .seg-pick { flex: none; contain: inline-size; }
+.set-row--stack .seg-pick__opt { min-height: 2.75rem; padding-inline: 0.8rem; font-size: 1.35rem; }
 
 /* A choice between two named options — a die-cut pill, the recommended option
    first; the picked half fills brand green inside an ink ring, like a switch
-   that is on. Both halves share the width, so the pill is as wide as twice its
-   longest label. */
+   that is on. It fills its row beside the name, the halves sharing the width
+   evenly, so it reads as the row's control rather than a chip at its end;
+   it never gets narrower than twice its longest label. */
 .seg-pick {
   position: relative; isolation: isolate;
-  flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px;
+  flex: 1 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-pill);
 }
 /* The green is ONE thumb that SLIDES to the picked half rather than two
@@ -1147,11 +1161,14 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .seg-pick:has(> .seg-pick__opt:last-child[aria-checked='true'])::before { transform: translateX(calc(100% + 3px)); }
 .seg-pick:not(:has([aria-checked='true']))::before { display: none; }
+/* Grid, not flex: a baseline-aligned flex line packs to the top, while one
+   grid row keeps a label and its small print on a baseline AND centres in
+   the min-height. */
 .seg-pick__opt {
-  display: flex; align-items: baseline; justify-content: center; gap: 0.3rem;
-  min-height: 2.1rem; padding: 0.45rem 0.6rem; box-sizing: border-box;
+  display: grid; grid-auto-flow: column; align-items: baseline; place-content: center; gap: 0.3rem;
+  min-height: 2.35rem; padding: 0.45rem 0.6rem; box-sizing: border-box;
   border: 0; border-radius: var(--r-pill); background: transparent; cursor: pointer;
-  font-family: var(--font-display); font-weight: 700; font-size: 1rem; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1;
   color: var(--ink); white-space: nowrap;
   transition: color 0.2s ease;
 }
@@ -1183,21 +1200,21 @@ input[type=text]:disabled { opacity: 0.6; }
 .set-group.is-locked .set-box { opacity: 0.45; }
 
 .switch {
-  position: relative; flex: none; width: 3.6rem; height: 1.9rem; padding: 0;
+  position: relative; flex: none; width: 4.4rem; height: 2.4rem; padding: 0;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-pill);
   cursor: pointer;
   transition: background 0.12s;
 }
 .switch:disabled { cursor: default; }
 .switch::after {
-  content: ''; position: absolute; top: 50%; left: 0.14rem;
-  width: 1.3rem; height: 1.3rem; box-sizing: border-box;
+  content: ''; position: absolute; top: 50%; left: 0.2rem;
+  width: 1.75rem; height: 1.75rem; box-sizing: border-box;
   transform: translateY(-50%);
   background: #fff; border: 3px solid var(--ink); border-radius: var(--r-pill);
   transition: left 0.12s;
 }
 .switch[aria-checked='true'] { background: var(--brand); }
-.switch[aria-checked='true']::after { left: calc(100% - 1.44rem); }
+.switch[aria-checked='true']::after { left: calc(100% - 1.95rem); }
 
 /* The stage — the picked mode's demo phone under a headline naming the mode,
    the legend attached beneath. No box of its own: a hairline parts it from the
@@ -1616,18 +1633,23 @@ body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
   .settings-done { padding-block: 0.5em; }
   .settings-col { gap: 0.45rem; }
 }
-/* Shorter still, the sheet's HEADINGS give their lines to the rows and the
-   demo, in the order they matter least: first the sheet's own title (the
-   Graphics row only fits below 300px without it), then "Your phone" (Steering
-   says whose it is) and the demo's headline (the phone and its legend say
-   which mode). "TV" stays at every height: it carries the host chip. Each
-   stays readable to assistive tech. */
-@media (max-height: 300px) {
-  .settings-title {
+/* Short of height, the sheet's HEADINGS give their lines to the controls
+   before any control gets smaller, in the order they matter least: first
+   the sheet's own title, then "Your phone" (Steering says whose it is) and the
+   demo's headline (the phone and its legend say which mode). "TV" stays at
+   every height: it carries the host chip. Each stays readable to assistive
+   tech. The sheet that shows the Graphics row runs short first, so "Your
+   phone" leaves it with the title, and at the floor its Steering un-stacks
+   (below). */
+@media (max-height: 430px) {
+  .settings-title,
+  .settings-card:has(#rate-row:not(.hidden)) .set-group__head--phone {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  /* …and the sheet takes back the overlay's floored margins (see
+}
+@media (max-height: 300px) {
+  /* Below here the sheet takes back the overlay's floored margins (see
      --overlay-bottom): here the card hopping as an Android nav bar fades in
      is the lesser cost than a sheet that scrolls. A real safe area still
      wins. */
@@ -1641,6 +1663,13 @@ body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
+  /* With every heading already gone, the Graphics sheet still cannot fit a
+     stacked Steering here: the row un-stacks into a plain row like the others
+     (.set-row and its pill at their base sizes). */
+  .settings-card:has(#rate-row:not(.hidden)) .set-row--stack { flex-direction: row; align-items: center; gap: 0.9rem; }
+  .settings-card:has(#rate-row:not(.hidden)) .set-row--stack .set-row__label { flex-direction: column; align-items: stretch; gap: 0.1rem; }
+  .settings-card:has(#rate-row:not(.hidden)) .set-row--stack .seg-pick { flex: 1 0 auto; }
+  .settings-card:has(#rate-row:not(.hidden)) .set-row--stack .seg-pick__opt { min-height: 2.35rem; padding-inline: 0.6rem; font-size: 1.15rem; }
 }
 
 /* Below here a cup tile cannot hold two lines of name, its stars AND its own

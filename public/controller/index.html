@@ -220,13 +220,13 @@
          and the legend to button steering; the default card teaches tilt. -->
     <div id="settings-card" class="settings-card">
       <!-- Every setting is a row: its name on the left, its control on the
-           right. A choice between two named options is a two-way pill with the
-           recommended one first; on/off is a switch, on to the right. Each group
-           is labelled OUTSIDE its box, so a locked box (below) dims while its
-           heading stays readable. -->
+           right; Steering alone stacks (below). A choice between two named
+           options is a two-way pill with the recommended one first; on/off is
+           a switch, on to the right. Each group is labelled OUTSIDE its box,
+           so a locked box (below) dims while its heading stays readable. -->
       <div class="settings-col">
-        <!-- The dialog's name; on the shortest screens it is for assistive
-             tech only (controller.css), where the rows need the height. -->
+        <!-- The dialog's name; on a phone's landscape height it is for
+             assistive tech only (controller.css): the controls need the room. -->
         <h2 id="settings-title" class="settings-title">Settings</h2>
         <div class="set-group" role="group" aria-labelledby="phone-group-label">
           <h3 class="set-group__head set-group__head--phone">
@@ -234,7 +234,9 @@
             <span id="phone-group-label">Your phone</span>
           </h3>
           <div class="set-box">
-            <div class="set-row">
+            <!-- The one row everyone uses, so it stacks: its pill takes the
+                 full width under the name, at the sheet's largest size. -->
+            <div class="set-row set-row--stack">
               <span class="set-row__label">
                 <span id="steering-label" class="set-row__name">Steering</span>
                 <!-- Re-resolved on every open by refreshSettingsCard: on a device
