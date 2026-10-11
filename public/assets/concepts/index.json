@@ -23,20 +23,20 @@
   },
   {
    "name": "dash-plus",
-   "tris": 1212,
-   "note": "Dash with a touch more: endplates and a gurney on its spoiler, square lamps, a grille and a bonnet scoop, tail lamps.",
+   "tris": 1288,
+   "note": "Dash with a touch more: endplates and a gurney on its spoiler, tail lamps across its back, square lamps, a grille, bonnet and roof scoops, a rear screen.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "bolt-plus",
    "tris": 1224,
-   "note": "Bolt with a touch more: endplates on both wings and a gurney, nose louvres, tail lamps.",
+   "note": "Bolt with a touch more: endplates on both wings, nose louvres, tail lamps on a dark panel.",
    "base": "vehicle-speedster"
   },
   {
    "name": "carve-plus",
-   "tris": 1396,
-   "note": "Carve with a touch more: wing endplates and a gurney, twin round lamps, a grille and bonnet louvres, tail lamps.",
+   "tris": 1480,
+   "note": "Carve with a touch more: wing endplates and a gurney, twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
    "base": "vehicle-racer"
   },
   {
