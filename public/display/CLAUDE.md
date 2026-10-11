@@ -206,16 +206,13 @@ step this machine may never take. NEW GAME's click carries the fullscreen unlock
 which is what makes a mid-boot window change ordinary rather than exotic;
 `tests/e2e/boot-resize.spec.js` holds that window open on purpose.
 
-**A SCENE BUILD IS TWO MEASUREMENTS THIS SIDE OWES.** `_rebuild` stamps
-`_sceneBuiltAt` after a full `setTrack` (never after a reroster — that is the
-same scene re-dressed), clears the perf window, and drops `_prevScale` /
-`_prevCostMs`. The first shortens the rule's up-hold while a scale is still
-finding a new scene's level. The last two are the rule's COST MODEL: it fits
-`fixed + fill * s²` from two observations at two scales and solves for the rung
-that fits the budget, and a fit whose two points straddle a scene change
-measures a slope belonging to neither, so it must not survive one. Both reached
-the tree as Kotlin-side latches that fixed one platform and left this one
-exposed.
+**A SCENE BUILD IS ONE CALL AND ONE RESET THIS SIDE OWES.** After a full
+`setTrack` (never after a reroster — that is the same scene re-dressed),
+`_rebuild` calls `scaleScene` and clears the perf window. The call starts the
+rule's grace, inside which nothing steps down (a scene's first seconds are its
+assembly, not its cost), and drops the rule's COST MODEL observation: it fits
+`fixed + fill * s²` from two observations at two scales, and a fit whose two
+points straddle a scene change measures a slope belonging to neither.
 
 **There is no device probe, and there must not be one.** A UA string lies and
 `WEBGL_debug_renderer_info` is going away; what is measured is this device

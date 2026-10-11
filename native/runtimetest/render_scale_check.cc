@@ -66,9 +66,7 @@ constexpr RenderScaleLimits kHD{0.0, 1.0, 1080.0, kHz60};
 // A 4K panel that can present 120.
 constexpr RenderScaleLimits k4K120{0.0, 1.0, 2160.0, kHz120};
 constexpr double kLongHold = 60.0;
-// Seconds since the SCENE was built. Past kScaleRecoverSec, so every case
-// above the recovery block below is judged by the steady-state up-hold —
-// which is what they were all written against.
+// Seconds since the SCENE was built: past its grace (kScaleSceneGraceSec).
 constexpr double kSettled = 600.0;
 // "no previous observation at another scale" — the boot state, and what every
 // case that is not ABOUT the cost model passes.
@@ -199,10 +197,13 @@ int main() {
     check(renderScaleStep(top, late, kLongHold,
                           ttp::rt::kScaleSceneGraceSec, none, k4K).scale < top.scale,
           "…and DOES once the scene has had time to settle");
-    // The guard is the fallback's alone: a device with a timer climbs back out
-    // of a premature drop, so it is not made to wait for a rescue.
-    check(renderScaleStep(top, gpuAt(30.0), kLongHold, 1.0, none, k4K).scale < top.scale,
-          "a GPU timer still rescues inside the grace, because it can climb back");
+    // A device with a timer waits too: it could climb back, but only after a
+    // lap-sized hold.
+    check(renderScaleStep(top, gpuAt(30.0), kLongHold, 1.0, none, k4K).scale == top.scale,
+          "a GPU timer does not step down inside the grace either");
+    check(renderScaleStep(top, gpuAt(30.0), kLongHold, ttp::rt::kScaleSceneGraceSec, none,
+                          k4K).scale < top.scale,
+          "…and does once it is up");
   }
 
   // ---- the RUNGS -----------------------------------------------------------
@@ -372,35 +373,6 @@ int main() {
     for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K, 0.0);
     nearly(sh.at.scale, 1.0, "a lighter scene climbs back to native from a probe");
   }
-  {
-    // THE RECOVERY WINDOW HAS TO OUTLAST THE CLIMB, and this walks a real clock
-    // rather than pinning sinceScene at 0 — which is what let the window sit two
-    // steps short of the list without any case noticing.
-    //
-    // sinceChange is ONE evidence window, not kLongHold: that is what a climb
-    // actually looks like (a step, a second, the next step), and it is the only
-    // way the recovery hold is what decides. Handing over a long tenure would
-    // satisfy the 28 s hold too and the window would make no difference — which
-    // is exactly how the first version of this case passed against the bug.
-    //
-    // On the panel with the LONGEST list: a 120 Hz one, where the rate step adds
-    // an entry the ladder's own rung count cannot see.
-    const auto light = [](double x) { return 0.5 + 1.5 * x * x; };
-    RenderScalePoint at{540.0 / 2160.0, 2};   // as if a heavy scene floored it
-    RenderScaleSample prev{0.0, 0.0};
-    double t = 0.0;
-    for (int i = 0; i < ttp::rt::kScaleMaxPoints + 3; i++) {
-      const double ms = light(at.scale);
-      const RenderScalePoint next = renderScaleStep(
-          at, gpuAt(ms), ttp::rt::kScaleUpRecoverHoldSec, t, prev, k4K120);
-      if (next.scale != at.scale) prev = RenderScaleSample{at.scale, ms};
-      at = next;
-      t += ttp::rt::kScaleUpRecoverHoldSec;
-    }
-    nearly(at.scale * 2160.0, 2160.0, "the window outlasts a bottom-to-top climb");
-    check(at.divisor == 1, "…rate step included, which the rung count could not cover");
-  }
-
   {
     // A PANEL THE LADDER DOES NOT NAME still climbs to its OWN native
     // resolution, not to the highest ladder value under it. A browser window is
@@ -728,119 +700,37 @@ int main() {
       check(fast.ctl.point().divisor == slow.ctl.point().divisor, "…nor the rate it picks");
     }
     {
-      // A SCENE HAS NO TENURE IT DID NOT EARN. A box driven to a low rung by a
-      // load that then lifts sits behind the LAP-sized up-hold — correct
-      // mid-race, and wrong for a race that inherited a lobby's floor. The
-      // build restarts the tenure, and the climb runs at one evidence window a
-      // step instead of one lap.
+      // A NEW SCENE DOES NOT SHORTEN THE CLIMB: no race is cheaper than the
+      // lobby, so the point a build inherits is never one to climb out of.
       Box b;
       b.gpuMs = 30.0;                          // hopeless at 60 Hz
-      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
+      double movedAt = 0.0;
+      for (int i = 0; i < 6; i++) { b.ticks(180); if (b.poll(k4K)) movedAt = b.t; }
       const double floored = b.lines(k4K);
       check(floored < 2160.0, "an expensive scene falls off native");
 
-      b.gpuMs = 1.0;                           // …and the load lifts
-      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
-      nearly(b.lines(k4K), floored,
-             "past the recovery window a climb waits out the lap-sized hold");
-
+      b.gpuMs = 1.0;                           // …and the load lifts, with a new scene
       b.ctl.scene(b.t);
-      for (int i = 0; i < 5; i++) { b.ticks(180); b.poll(k4K); }
-      check(b.lines(k4K) > floored,
-            "a new scene climbs back at one evidence window a step");
+      b.mon.reset();
+      while (b.t + 3000.0 < movedAt + ttp::rt::kScaleUpHoldSec * 1000.0) { b.ticks(180); b.poll(k4K); }
+      nearly(b.lines(k4K), floored, "a scene build does not shorten the lap-sized up-hold");
     }
     {
-      // ---- A SPLIT STARTS WHERE THE LAST SPLIT OF ITS SIZE SETTLED ----------
-      //
-      // The climb is lap-sized and a race opens on its own vista, so a split
-      // that inherits the lobby's point pays a switch it cannot avoid. The
-      // controller remembers, per cell count, the point a split held longest;
-      // a one-cell scene (the lobby, a solo race) remembers nothing and starts
-      // at whatever was in force.
-      //
-      // The grid is declared AFTER the build, as ttp_display_frame does on
-      // every frame. Every assertion below is on a jump the rule cannot make
-      // by itself — a fresh scene with no observation probes ONE rung — so a
-      // recall is told apart from the rule's own move.
+      // A SCENE'S FIRST SECONDS ARE NOT ITS COST, with a GPU timer too: a race
+      // that is slow while it assembles keeps its point.
       Box b;
-      // A build, as the display core and the shell do it: the scene, and the
-      // window (ttp_perf_reset), which still describes the last scene's frames.
-      const auto build = [&]() {
-        b.ctl.scene(b.t);
-        b.mon.reset();
-      };
-      // A scene that costs `fixed + fill * s^2` settles: pixels must cost
-      // something, or the rule rightly reads a flat cost as "pixels are not
-      // the cost" and declines to climb on it. Two minutes of polls: past the
-      // recovery window a climb takes one kScaleUpHoldSec per rung, and the
-      // floor is four rungs under a 4K panel's native.
-      const auto settle = [&](int cells, double fixedMs, double fillMs) {
-        build();
-        b.ctl.cells(cells);
-        for (int i = 0; i < 40; i++) {
-          const double s = b.ctl.point().scale;
-          b.gpuMs = fixedMs + fillMs * s * s;
-          b.ticks(180);
-          b.poll(k4K);
-        }
-      };
-      const double kCheap = 1.0, kCheapFill = 4.0;   // native costs 5 ms
-      const double kDear = 30.0;                     // late at every point
-
-      // A four-way split the box cannot hold above the floor.
-      settle(4, kDear, 0.0);
-      const double splitLines = b.lines(k4K);
-      check(splitLines <= 720.0, "an expensive split settles low");
-
-      // The lobby climbs back to native in between.
-      settle(1, kCheap, kCheapFill);
-      nearly(b.lines(k4K), 2160.0, "a cheap one-cell scene climbs to native");
-
-      // The next four-way split, built at the lobby's native: no recall until
-      // its frames declare the grid, then a MOVE to the split's memory before
-      // any evidence, which is the point.
-      build();
-      b.ticks(90);   // past the poll cadence, so what this poll does is the rule's
-      b.poll(k4K);
-      nearly(b.lines(k4K), 2160.0, "no recall before the new scene's frames have declared their grid");
-      b.ctl.cells(4);
-      b.ticks(90);
-      RenderScalePoint out{0, 0};
-      check(b.poll(k4K, &out), "a split starts where the last split of its size settled: a move");
-      nearly(out.scale * k4K.baseLines, splitLines, "…at the point that split held longest");
-
-      // A two-way split is a different memory: nothing pulls it down to the
-      // four-way split's point.
-      settle(1, kCheap, kCheapFill);
-      build();
-      b.ctl.cells(2);
       b.gpuMs = 1.0;
-      b.ticks(90);
-      check(!b.poll(k4K), "a two-way split does not inherit the four-way memory: no move");
-      nearly(b.lines(k4K), 2160.0, "…it stays at the point in force");
-
-      // A one-cell scene keeps no memory: a solo scene that settled low does
-      // not pull the next one-cell scene down. The climb back goes through a
-      // split, so no one-cell scene in between could have overwritten it.
-      settle(1, kDear, 0.0);
-      check(b.lines(k4K) <= 720.0, "an expensive one-cell scene settles low");
-      settle(2, kCheap, kCheapFill);
-      nearly(b.lines(k4K), 2160.0, "…and a cheap split climbs back");
-      build();
-      b.ctl.cells(1);
-      b.ticks(90);
+      for (int i = 0; i < 4; i++) { b.ticks(180); b.poll(k4K); }
+      nearly(b.lines(k4K), 2160.0, "a cheap scene holds native");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.gpuMs = 30.0;
+      b.ticks(180);                            // 3 s into the new scene
       b.poll(k4K);
-      nearly(b.lines(k4K), 2160.0, "a one-cell scene starts at the point in force, never a memory");
-
-      // A build the shell abandons before a frame — no cells declared, no
-      // poll — neither records nor erases a memory.
-      build();                                 // abandoned: a second passes…
-      b.ticks(60);                             // …with no frame and no poll
-      build();
-      b.ctl.cells(4);
-      b.ticks(90);
+      nearly(b.lines(k4K), 2160.0, "a build's first seconds step nothing down");
+      b.ticks(180);                            // 6 s
       b.poll(k4K);
-      nearly(b.lines(k4K), splitLines, "an abandoned build leaves the split's memory intact");
+      check(b.lines(k4K) < 2160.0, "…and past the grace a late scene steps down");
     }
     {
       // ---- 540 IS THE FLOOR AT EVERY CELL COUNT -----------------------------
@@ -861,7 +751,6 @@ int main() {
       for (int cells = 3; cells <= 4; cells++) {
         Box b;
         b.gpuMs = 26.0;                        // late at every resolution
-        b.ctl.cells(cells);
         for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(kHD); }
         nearly(b.lines(kHD), 540.0, "a late split falls to the bottom rung");
         check(b.ctl.point().divisor == 1, "…at the panel's own rate, never half of it");
@@ -894,27 +783,22 @@ int main() {
       check(n == 5, "a 120 Hz panel at half rate takes no rate step");
       for (int i = 0; i < n; i++) check(list[i].divisor == 4, "…every rung at 30");
 
-      // A FLIP CARRIES THE RESOLUTION where the model can climb from it. The
-      // divisor-aware lookup would floor a point from the other rate to the
-      // bottom rung; the rate is the move. (A fresh hold: nothing else moves.)
-      const RenderScalePoint at720{720.0 / 1080.0, 1};
-      RenderScalePoint p = renderScaleStep(at720, gpuAt(10.0), 0.0, kSettled, kNoFit, half);
-      nearly(p.scale * kHD.baseLines, 720.0, "with a timer, flipping to half rate keeps the rung");
-      check(p.divisor == 2, "…and halves the rate on the very next poll");
-      p = renderScaleStep(p, gpuAt(10.0), 0.0, kSettled, kNoFit, kHD);
-      nearly(p.scale * kHD.baseLines, 720.0, "flipping back keeps it too");
-      check(p.divisor == 1, "…at the panel's own rate");
-
-      // WITH NO TIMER NOTHING CAN CLIMB (the fallback only steps down), so a
-      // carried rung would be Sharp at half the rate for the same picture. The
-      // flip lands on the anchor instead, as a boot does, and the fallback
-      // rescues from there.
+      // A FLIP LANDS ON THE ANCHOR, as a boot does: a step down takes seconds
+      // and a step up a lap, so the new budget is found from above. On the
+      // very next poll, whatever the holds say, timer or not.
       const RenderScaleCost quiet{0.0, 0, 0.0, 0.0, 0};
-      p = renderScaleStep(RenderScalePoint{540.0 / 1080.0, 1}, quiet, 0.0, kSettled, kNoFit, half);
-      nearly(p.scale * kHD.baseLines, 1080.0, "with no timer, Sharp starts at the anchor's 1080");
-      check(p.divisor == 2, "…at 30");
-      p = renderScaleStep(RenderScalePoint{540.0 / 2160.0, 1}, quiet, 0.0, kSettled, kNoFit,
-                          RenderScaleLimits{0.0, 1.0, 2160.0, kHz60, true});
+      for (const RenderScaleCost& c : {gpuAt(10.0), quiet}) {
+        RenderScalePoint p = renderScaleStep(RenderScalePoint{540.0 / 1080.0, 1}, c, 0.0, 0.0,
+                                             kNoFit, half);
+        nearly(p.scale * kHD.baseLines, 1080.0, "flipping to half rate lands on 1080");
+        check(p.divisor == 2, "…at 30, on the very next poll");
+        p = renderScaleStep(p, c, 0.0, 0.0, kNoFit, kHD);
+        nearly(p.scale * kHD.baseLines, 1080.0, "flipping back lands on 1080 too");
+        check(p.divisor == 1, "…at the panel's own rate");
+      }
+      const RenderScalePoint p = renderScaleStep(RenderScalePoint{540.0 / 2160.0, 1}, quiet, 0.0,
+                                                 kSettled, kNoFit,
+                                                 RenderScaleLimits{0.0, 1.0, 2160.0, kHz60, true});
       nearly(p.scale * 2160.0, 1080.0, "…and on a 4K panel, the anchor and not native");
     }
     {
@@ -946,18 +830,15 @@ int main() {
       b.ctl.setHalfRate(true);
       RenderScalePoint out{0, 0};
       b.ticks(180, kHz60);
-      // The 540@60 window it was settled on already prices the rung above at
-      // the new budget (the fit survives a rate change), so the flip may take
-      // that rung in the same move.
       check(b.poll(kHD, &out) && out.divisor == 2, "the host's choice is performed on the next poll");
-      check(out.scale * kHD.baseLines <= 720.0 + 1e-9, "…climbing at most one rung with it");
       drive(b, 10, kHD);
-      nearly(b.lines(kHD), 1080.0, "at half rate the doubled budget climbs to 1080");
+      nearly(b.lines(kHD), 1080.0, "at half rate the doubled budget holds 1080");
       check(b.ctl.point().divisor == 2, "…and stays at 30");
 
       b.ctl.setHalfRate(false);
       drive(b, 4, kHD);
       check(b.ctl.point().divisor == 1, "switching back returns to the panel's rate");
+      nearly(b.lines(kHD), 540.0, "…and steps back down to what it holds there");
       check(b.ctl.offersHalfRate(), "…and the choice stays offered for the life of the process");
 
       // A device that holds the anchor is never offered it — not at native on

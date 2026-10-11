@@ -662,7 +662,7 @@ add_library(libttp_runtime STATIC
   # Apple TV and an Android box can be compared on one race.
   libttp-runtime/ttp/perf_stats.cc
   # The adaptive render scale's STATE — the window it folds off the readout, the
-  # running present floor, the cost model's observation and the tenure clocks.
+  # running present floor, the cost model's observation and the move and scene clocks.
   # The RULE beside it (ttp/render_scale.h) is header-only and pure; this is
   # what three shells used to hold by hand, in three languages, with a
   # percentile formula each.
@@ -1042,7 +1042,7 @@ set(TTP_APP_SOURCES
   # to it gets checked.
   runtime/ttp_theme.cc
   # The adaptive render scale: the rule's STATE (the window it folds, the
-  # running present floor, the cost model's observation, the tenure clocks) and
+  # running present floor, the cost model's observation, the move and scene clocks) and
   # the shim over it. Deciding how big the buffer should be names neither a
   # platform API nor the renderer, so both are here rather than beside
   # ttp_display_core.cc — same argument as the biome ABI above.

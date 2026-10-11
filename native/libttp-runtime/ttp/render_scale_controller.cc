@@ -3,41 +3,9 @@
 namespace ttp {
 namespace rt {
 
-// Add the current tenure span to the point in force, and start the next.
-void RenderScaleController::credit(double untilMs) {
-  const double ms = untilMs - tenureMs_;
-  tenureMs_ = untilMs;
-  if (ms <= 0) return;
-  for (int i = 0; i < tenures_; i++) {
-    if (tenure_[i].point.scale == point_.scale && tenure_[i].point.divisor == point_.divisor) {
-      tenure_[i].ms += ms;
-      return;
-    }
-  }
-  if (tenures_ < (int) (sizeof(tenure_) / sizeof(tenure_[0]))) {
-    tenure_[tenures_++] = Tenure{point_, ms};
-  }
-}
-
 void RenderScaleController::scene(double tMs) {
-  // THE SCENE THAT JUST ENDED, if it was a split (remembers()), is remembered
-  // by the point it held longest — only if its frames ever declared a grid, so
-  // a build the shell abandoned before a frame does not overwrite a real
-  // memory with the point it inherited.
-  if (cellsKnown_ && remembers(cells_)) {
-    credit(tMs);
-    int best = -1;
-    for (int i = 0; i < tenures_; i++) {
-      if (best < 0 || tenure_[i].ms > tenure_[best].ms) best = i;
-    }
-    if (best >= 0) memory_[cells_] = tenure_[best].point;
-  }
-  tenures_ = 0;
-  tenureMs_ = tMs;
   sceneMs_ = tMs;
   prev_ = RenderScaleSample{0.0, 0.0};
-  recall_ = true;
-  cellsKnown_ = false;   // the grid is the new scene's frames' to declare
 }
 
 bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
@@ -56,29 +24,6 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
     if (limits.max > 0.0) point_.scale = limits.max;
   }
 
-  // A SPLIT STARTS WHERE THE LAST SPLIT OF ITS SIZE SETTLED — once its frames
-  // have said how many cells it has. The window describes the old buffer and
-  // goes, exactly as on any other move.
-  if (recall_ && cellsKnown_) {
-    recall_ = false;
-    if (remembers(cells_) && memory_[cells_].divisor > 0) {
-      RenderScalePoint p = memory_[cells_];
-      if (limits.max > 0.0 && p.scale > limits.max) p.scale = limits.max;
-      if (limits.min > 0.0 && p.scale < limits.min) p.scale = limits.min;
-      if (p.scale != point_.scale || p.divisor != point_.divisor) {
-        // The span before the recall belongs to the inherited point, not to
-        // this scene: the ledger starts here.
-        tenureMs_ = tMs;
-        point_ = p;
-        prev_ = RenderScaleSample{0.0, 0.0};
-        movedMs_ = tMs;
-        mon.reset();
-        if (out) *out = point_;
-        return true;
-      }
-    }
-  }
-
   const perf::Readout r = mon.fold();
 
   // The device's own fastest present, folded one window at a time. It has to
@@ -90,13 +35,6 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   panelMs_ = limits.panelMs > 0 ? limits.panelMs : floorMs_;
   limits.panelMs = panelMs_;
   limits.halfRate = halfRate();
-
-  // The host flipped the rate: tenure starts again under the new budget, so
-  // the climb into it is not held a lap per rung (kScaleUpRecoverHoldSec).
-  if (rateMoved_) {
-    rateMoved_ = false;
-    sceneMs_ = tMs;
-  }
 
   // BELOW THE ANCHOR, at full rate, for kHalfRateOfferSec on end — counted
   // from when it first fell below, so a step from 720 to 540 does not restart it.
@@ -143,19 +81,11 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // measurement prices another's. Only on a RESOLUTION move — two points at one
   // scale determine nothing.
   if (next.scale != point_.scale) prev_ = RenderScaleSample{point_.scale, cost.gpuP95Ms};
-  credit(tMs);
   point_ = next;
   movedMs_ = tMs;
   mon.reset();
   if (out) *out = point_;
   return true;
-}
-
-void RenderScaleController::setHalfRate(bool on) {
-  if (on == halfRate_) return;
-  halfRate_ = on;
-  rateMoved_ = true;
-  for (RenderScalePoint& p : memory_) p = RenderScalePoint{};
 }
 
 int RenderScaleController::rateHz(bool half) const {

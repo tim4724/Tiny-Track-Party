@@ -98,8 +98,7 @@ inline constexpr double kMinPresentMs = 4.0;
 // Seconds a scale must hold before it may move again. Falling is a rescue;
 // rising is a luxury, and the picture changing under a player is the cost of it.
 inline constexpr double kScaleDownHoldSec = 2.5;
-// A SCENE'S FIRST SECONDS ARE NOT ITS COST, and on the FALLBACK path that
-// distinction is permanent rather than merely wasteful.
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, so no step DOWN is taken on them.
 //
 // Staging a scene keeps costing after the build returns: shader compiles, first
 // uploads, the shadow bake. Measured on an A10X, a SOLO race — which holds 60
@@ -107,13 +106,9 @@ inline constexpr double kScaleDownHoldSec = 2.5;
 // ~2.6 s and was clean by 3.6 s. The late-present fallback read that as a device
 // that could not hold its rung, dropped one, and then had no way back: it may
 // only ever step DOWN (see the signals note at the top), so a scene's assembly
-// cost became the resolution for the rest of the process.
-//
-// FALLBACK ONLY, and the asymmetry is the whole point. A device with a GPU timer
-// that drops here climbs back out as soon as the fit says the rung fits, so the
-// mistake costs it one hold; a device without one pays for the life of the
-// process. What may not be undone must not be decided on frames that describe a
-// scene still assembling itself.
+// cost became the resolution for the rest of the process. A device with a GPU
+// timer can climb back, but only after a lap-sized hold (kScaleUpHoldSec), so a
+// race that was slow for its first seconds would spend most of a lap soft.
 //
 // Longer than the measured tail, because the failure modes are not symmetric:
 // too short is a permanent unnecessary downgrade, too long is a few seconds of
@@ -129,41 +124,14 @@ inline constexpr double kScaleSceneGraceSec = 5.0;
 // pumped between two rungs for whole races, paying a buffer reallocation hitch
 // at every move. At 28 s the scale climbs at most once per lap (catalogue lap
 // times run 45-75 s), so the window that qualifies the climb has seen most of
-// the circuit. The cost is NOT cosmetic on its own, which is what the recovery
-// pair below is for: a lap-sized hold per rung is a climb measured in MINUTES,
-// and a scale inherited from a scene that no longer exists starts that climb
-// from wherever the old scene left it.
+// the circuit.
+//
+// ONE HOLD, WHATEVER THE SCENE. A scene build does not shorten it: no race is
+// cheaper than the lobby's attract, so a race never has a climb to make that
+// the lobby's point would hold it out of, and a short hold after every build
+// made a box that cannot hold the anchor climb back into it and fail again on
+// each lobby track change — two buffer reallocations per pick.
 inline constexpr double kScaleUpHoldSec = 28.0;
-// A SCALE HAS NO TENURE IN A SCENE IT DID NOT SETTLE IN, and for the first
-// `kScaleRecoverSec` after a build the up-hold is one evidence window instead
-// of a lap. The UP hold only: a rescue is already 2.5 s, and a scene change is
-// not a reason to drop a picture faster.
-//
-// The lobby legitimately floors the scale — the attract demo behind the boards
-// is one of the heaviest pictures the game draws — and the race that follows is
-// a different scene with a different cost. Without this the race inherits the
-// lobby's floor and thaws ONE RUNG PER 28 SECONDS: four rungs to the race's own
-// level is most of a three-lap race spent soft, and a full climb from the floor
-// is over five minutes. The measurement that says so is the reference Android
-// box; the browser is exposed to exactly the same arithmetic and had no shell
-// mitigation at all, which is why this is the RULE's and not a shell's.
-//
-// WHY A WINDOW RATHER THAN "UNTIL IT SETTLES". Settling is history, and this
-// function is pure — deliberately, so every leg's ctest can execute it as
-// arithmetic. A window is the honest approximation: it is sized to the longest
-// climb the ladder can ask for (one rung per poll, kScaleLadderCount rungs) and
-// then gets out of the way. Inside it the pumping kScaleUpHoldSec exists to
-// stop is possible again for a few seconds; it lands on the countdown and the
-// opening straight rather than mid-race, it is bounded below by the down step
-// 2.5 s behind it, and it is a far smaller cost than the whole race spent at
-// the lobby's floor.
-//
-// One evidence window. A shell polls about once a second and the rule ignores a
-// window under kMinSignalFrames, so what actually paces the climb is EVIDENCE
-// arriving, not this number; it is here to say that a recovery rung needs no
-// more than that. kScaleRecoverSec is derived from the ladder's own length,
-// below, where the rungs are.
-inline constexpr double kScaleUpRecoverHoldSec = 1.0;
 // Below this the answer is "no change": a step the eye cannot see is not worth a
 // buffer reallocation, and it is what stops a scale pinned at a limit from
 // re-deciding every poll.
@@ -358,9 +326,9 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 // SAME ladder out at half the anchor rate — 30 on a 60 Hz panel, 25 on a 50 Hz
 // one — with no rate step above it, and the rule then climbs the rungs against
 // that doubled budget exactly as it does at full rate. It is never entered on
-// the rule's own judgement: a half-rate escape the rule chose for itself was
-// built and removed (the input latency, and every entry being a move that costs
-// a hitch), and a preference a person picked on purpose is a different thing.
+// the rule's own judgement — that costs every player input latency, and every
+// entry a hitch — but a preference a person picked on purpose is a different
+// thing.
 //
 // ABOVE the anchor, the rate goes first. A 120 Hz panel with the headroom to
 // drive it should, and spending that headroom on pixels instead is what a fixed
@@ -384,23 +352,8 @@ inline constexpr double kAnchorHz = 60.0;
 
 // The most operating points a surface can offer: every ladder rung that fits
 // under the ceiling, the ceiling itself, and the rate step above the anchor.
-// Sizes the caller's array AND the recovery window below, so the two cannot
-// disagree about how long the ladder is.
+// Sizes the caller's array.
 inline constexpr int kScaleMaxPoints = kScaleLadderCount + 2;
-
-// How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
-// has the why). DERIVED, because what it has to cover is the longest climb the
-// list can ask for — bottom to top is one step short of the point count, at one
-// step per evidence window — and a window shorter than that strands the last
-// steps behind a lap-sized hold, which is most of the problem it exists to fix.
-//
-// COUNT THE OPERATING POINTS, NOT THE RUNGS. It was the rungs once, and that was
-// already wrong by two the moment the list grew a ceiling entry and a rate step:
-// 5 rungs read as a 4 s window while a 120 Hz panel's list needs 6 steps, so the
-// top of the climb sat behind the 28 s hold on exactly the panels the rate step
-// was added for.
-inline constexpr double kScaleRecoverSec =
-        (double) (kScaleMaxPoints - 1) * kScaleUpRecoverHoldSec;
 
 struct RenderScalePoint {
   double scale;
@@ -424,6 +377,11 @@ inline int anchorDivisor(RenderScaleLimits b) {
   return d < 1 ? 1 : d;
 }
 
+// The anchor's 1080 lines as a scale of this surface.
+inline double anchorScale(RenderScaleLimits b) {
+  return kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
+}
+
 // The divisor every rung up to the anchor runs at: the anchor's own, or twice
 // it when the host asked for half rate.
 inline int baseDivisor(RenderScaleLimits b) {
@@ -438,7 +396,7 @@ inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   // == base where there is no faster rate — and at half rate, where the whole
   // point is to spend the budget on pixels rather than frames.
   const int fast = b.halfRate ? base : (base > 1 ? base - 1 : 1);
-  const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
+  const double anchor = anchorScale(b);
   int m = 0;
   for (int i = 0; i < n; i++) {
     if (r[i] <= anchor + 1e-9) out[m++] = RenderScalePoint{r[i], base};
@@ -464,7 +422,7 @@ inline bool belowAnchor(RenderScalePoint p, RenderScaleLimits b) {
   RenderScalePoint list[kScaleMaxPoints];
   const int n = operatingPoints(b, list);
   const int base = anchorDivisor(b);
-  const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
+  const double anchor = anchorScale(b);
   double top = 0.0;
   for (int i = 0; i < n; i++) {
     // Ascending, so the last one that is not above the anchor.
@@ -608,9 +566,8 @@ inline bool presentsOnCadence(const RenderScaleCost& cost, double budgetMs) {
 // measurement against a rate nobody had picked yet.
 //
 // `sinceChangeSec` is how long the current point has been in force;
-// `sinceSceneSec` how long the current SCENE has. Both are measurements a shell
-// already holds, and neither is an opinion: which hold each is judged against is
-// decided here (kScaleUpRecoverHoldSec).
+// `sinceSceneSec` how long the current SCENE has: nothing steps down inside
+// its grace (kScaleSceneGraceSec).
 //
 // With no signal at all the answer is the current point, clamped — which is also
 // the answer while a hold is still running.
@@ -624,40 +581,28 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
   if (n <= 0) return current;
 
   const double clamped = std::min(std::max(current.scale, limits.min), limits.max);
+  int at = pointAtOrBelow(RenderScalePoint{clamped, current.divisor}, list, n);
   // A POINT FROM THE OTHER RATE — the host just flipped `halfRate` — has no
-  // entry in this list, and the divisor-aware lookup would floor it to the
-  // bottom rung. Its RESOLUTION carries across instead: the rate change is the
-  // move, and the rungs are then climbed or given up at the new budget.
-  int divisor = list[0].divisor;
-  for (int i = 0; i < n; i++) {
-    if (list[i].divisor == current.divisor) divisor = current.divisor;
-  }
-  int at = pointAtOrBelow(RenderScalePoint{clamped, divisor}, list, n);
-  const double gpuMs = cost.gpuFrames >= kMinSignalFrames ? cost.gpuP95Ms : 0.0;
-  // …EXCEPT WHERE NOTHING CAN CLIMB. With no GPU timer the fallback only ever
-  // steps down, so a carried rung is the best the new rate will ever see, and
-  // Sharp would halve the rate for the same picture. There the flip lands on
-  // the anchor (1080 lines, or the ceiling under it) — where a boot starts, and
-  // for the same reason: the fallback rescues downward if it cannot hold it.
-  if (divisor != current.divisor && !(gpuMs > 0.0)) {
-    const double anchor = kAnchorLines / (limits.baseLines > 0.0 ? limits.baseLines : kAnchorLines);
-    for (int i = at + 1; i < n; i++) {
+  // entry in this list. It lands on the anchor (1080 lines, or the ceiling
+  // under it), where a boot starts and for the same reason: a step down takes
+  // seconds and a step up a lap, so the new budget is found from above.
+  bool listed = false;
+  for (int i = 0; i < n; i++) listed = listed || list[i].divisor == current.divisor;
+  if (!listed) {
+    const double anchor = anchorScale(limits);
+    at = 0;
+    for (int i = 1; i < n; i++) {
       if (list[i].divisor == list[0].divisor && list[i].scale <= anchor + 1e-9) at = i;
     }
   }
-
-  // A scale inherited from a scene that no longer exists has no tenure in this
-  // one, so the climb back to THIS scene's level runs at one evidence window
-  // per step rather than one lap per step.
-  const double upHold = sinceSceneSec < kScaleRecoverSec
-          ? kScaleUpRecoverHoldSec : kScaleUpHoldSec;
+  const double gpuMs = cost.gpuFrames >= kMinSignalFrames ? cost.gpuP95Ms : 0.0;
   const RenderScaleFit fit = fitCost(clamped, gpuMs, prev);
   int to = at;
 
   if (gpuMs > 0.0) {
     const double budget = pointBudgetMs(list[at], limits);
     if (gpuMs > kScaleDownShare * budget && sinceChangeSec >= kScaleDownHoldSec
-        && !presentsOnCadence(cost, budget)) {
+        && sinceSceneSec >= kScaleSceneGraceSec && !presentsOnCadence(cost, budget)) {
       // LATE, so retreat — and the MEASUREMENT outranks the model. Without a fit
       // it is one step; with one it is straight to a point predicted to hold,
       // but never nowhere: a model that says the current point is fine while the
@@ -673,7 +618,7 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
-    } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= upHold) {
+    } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= kScaleUpHoldSec) {
       // NOTHING MEASURED AT ANOTHER SCALE YET, so PROBE. A model needs two
       // scales to exist and a scale only moves when something asks it to, so
       // refusing to climb with no data is a deadlock: the scene changes, the
@@ -711,7 +656,7 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
                   && gpuMs <= kScaleTargetShare * pointBudgetMs(list[at + 1], limits)))) {
         to = at + 1;
       }
-    } else if (fit.ok && sinceChangeSec >= upHold) {
+    } else if (fit.ok && sinceChangeSec >= kScaleUpHoldSec) {
       // CLIMB ONLY INTO A POINT THE MODEL SAYS FITS. This is the whole of the
       // anti-oscillation argument, and it holds at any step width: the step is
       // never taken unless the cost it will land at is predicted under the
@@ -733,11 +678,6 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
     // and a device with no GPU timer has no milliseconds to fit a model from
     // either, so there is no branch that raises. It also may not change the
     // rate, for the probe's reason — this path cannot predict what that buys.
-    //
-    // AND NOT WHILE THE SCENE IS STILL ASSEMBLING (kScaleSceneGraceSec): a step
-    // taken here is one this path can never take back, so it may not be taken on
-    // shader compiles and first uploads. The GPU-timer arm above has no such
-    // guard because it can climb back out.
     if (at > 0 && list[at - 1].divisor == list[at].divisor) to = at - 1;
   }
 

@@ -129,10 +129,9 @@ TTP_ABI void ttp_display_destroy(void);
  *
  * Two things follow, and neither is the shell's to judge. The cost model's
  * previous observation is dropped, because a fit whose two points straddle a
- * scene change measures a slope belonging to neither. And the scale's TENURE
- * restarts, which is what lets the rule shorten its own up-hold for a scene the
- * scale has not settled in yet — without it a race inherits the lobby's floor
- * and thaws one rung per lap. Drop the readout's window with ttp_perf_reset
+ * scene change measures a slope belonging to neither. And nothing steps down
+ * for the scene's first seconds, which are its assembly and not its cost
+ * (kScaleSceneGraceSec). Drop the readout's window with ttp_perf_reset
  * alongside: the lobby attract and a race are different pictures. */
 TTP_ABI void ttp_display_scale_scene(double tMs);
 

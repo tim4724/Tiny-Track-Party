@@ -20,7 +20,7 @@ buffer should be from what the last window of frames cost, and every platform
 meets the same spread of devices. It is TWO files — `render_scale.h`, the pure
 rule, and `render_scale_controller.{h,cc}`, the state around it: the window it
 folds off the readout's monitor, the running fastest present, the cost model's
-observation and the tenure clocks. A shell names its BAND and its panel period
+observation and the move and scene clocks. A shell names its BAND and its panel period
 and performs the answer; it holds nothing else, because three shells that held
 that state by hand had already drifted to three different percentile formulas.
 

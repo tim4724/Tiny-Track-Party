@@ -667,21 +667,14 @@ class DisplayHost(
             nameTags?.setSlots(this.roster)
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
             // the clear on a scale move, one level up: the windows describe a
-            // scene that no longer exists.
-            //
-            // The scale's own TENURE is not voided here, and this shell no
-            // longer decides what a fresh scene is worth. It hands over WHEN the
-            // scene was built and the rule shortens the up-hold itself
-            // (kScaleUpRecoverHoldSec) — because the browser is exposed to the
-            // identical arithmetic (a floored lobby handing the race a scale it
-            // then thaws one rung per lap) and had no mitigation at all while
-            // this one lived in Kotlin.
+            // scene that no longer exists. What a fresh scene is worth (its
+            // grace before any step down) is the rule's, not this shell's.
             // The window goes for the reason `ttp_perf.h` names: the lobby
             // attract and a race are different pictures, so a percentile that
             // straddles a build describes neither.
             PerfMonitor.reset()
             Ttp.ttp_display_scale_scene(System.nanoTime() / 1_000_000.0)
-            // EVERY BUILD, because a build resets the scale's tenure AND drops the
+            // EVERY BUILD, because a build restarts the scale's grace AND drops the
             // cost model — so a shell rebuilding a scene nothing asked it to
             // rebuild shows up as a scaler that will not settle, and the two are
             // indistinguishable without this line.

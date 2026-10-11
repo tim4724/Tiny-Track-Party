@@ -47,12 +47,8 @@ namespace rt {
 inline constexpr double kScalePollMs = 1000.0;
 
 // How long the display must stay below the anchor before the host is offered
-// half rate (offersHalfRate). Shorter than an up-hold on purpose: every scene
-// build shortens the up-hold (kScaleUpRecoverHoldSec), so a box that cannot
-// hold the anchor climbs back to it and fails again after each one, and in a
-// lobby whose previewed track keeps changing it is never below the anchor for
-// a whole up-hold. A step down already took a window of evidence, so this
-// only has to outlast a scene build's dip.
+// half rate (offersHalfRate) — long enough that one late window is not the
+// verdict, short enough that the lobby offers it before a race has started.
 inline constexpr double kHalfRateOfferSec = 10.0;
 
 class RenderScaleController {
@@ -79,35 +75,13 @@ class RenderScaleController {
   double panelMs() const { return panelMs_; }
 
   // A NEW SCENE. Drops the cost model's observation — a fit whose two points
-  // straddle a scene change measures a slope belonging to neither — and
-  // restamps the tenure the rule shortens its up-hold against
-  // (kScaleUpRecoverHoldSec). The window itself is the shell's to drop, with
-  // ttp_perf_reset, for the reason ttp_perf.h names. It also closes the
-  // ledger of the scene that just ended and arms the recall for the one
-  // beginning, which fires on the first poll after that scene's frames have
-  // declared their grid (cells()).
-  //
-  // A SPLIT STARTS WHERE THE LAST SPLIT OF ITS SIZE SETTLED. The climb is
-  // lap-sized by design (kScaleUpHoldSec), and a race starts on its own vista
-  // — every cell down the start straight — so the recovery window after a
-  // build sees only late seconds and climbs nothing, and a split that inherits
-  // the lobby's resolution pays a switch it cannot avoid. So the point a split
-  // held LONGEST is remembered per cell count and the next split of that size
-  // starts there; tracks differ far less than cell counts do
-  // (docs/perf/androidtv-frame-map.md, 2026-09-09). A ONE-CELL scene keeps no
-  // memory and starts at whatever was in force: the lobby, the gallery and a
-  // solo race all draw one cell, so a shared memory would make each recall
-  // the other's point on every switch between them.
+  // straddle a scene change measures a slope belonging to neither — and starts
+  // the scene's grace, inside which nothing steps down (kScaleSceneGraceSec).
+  // The point carries over: no race is cheaper than the lobby's attract, so a
+  // race starts where the lobby settled and steps down if it has to. The
+  // window itself is the shell's to drop, with ttp_perf_reset, for the reason
+  // ttp_perf.h names.
   void scene(double tMs);
-
-  // HOW MANY CELLS the surface is split into, which keys the memory (scene()
-  // above). The rule itself takes no cell count. It is not a shell's fact
-  // either: the grid belongs to the frame builder, so `ttp_display_frame`
-  // declares it here.
-  void cells(int n) {
-    cells_ = n < 0 ? 0 : n;
-    cellsKnown_ = true;   // the first frame after a build says what the grid is
-  }
 
   // Re-decide, at most once per kScalePollMs. Answers whether the point MOVED,
   // and writes the new one to `out`.
@@ -129,19 +103,16 @@ class RenderScaleController {
 
   // THE HOST'S RATE CHOICE (render_scale.h, `halfRate`), restored by the shell
   // at boot and flipped from the host phone. The next poll performs it as a
-  // move of its own — the same rung at the other rate — and the climb that
-  // follows runs on the short post-build hold, because the new budget is a new
-  // scene as far as tenure goes. The split memory is dropped with it: every
-  // point in it was settled at the other rate.
-  void setHalfRate(bool on);
-  bool halfRate() const { return halfRate_ && sharpFits(); }
+  // move of its own, landing on the anchor at the other rate (renderScaleStep).
+  void setHalfRate(bool on) { halfRate_ = on; }
+  bool halfRate() const { return halfRate_ && halfRateFits(); }
 
   // WHETHER THE HOST PHONE SHOWS THE CHOICE. Only a device that cannot hold
   // the anchor gets it: one that has stayed below it (belowAnchor) for
   // kHalfRateOfferSec, in the lobby as much as in a race — and from then on
   // for the life of the process, so the option never appears and vanishes
   // between races. Always while half rate is on, so it can be switched back.
-  bool offersHalfRate() const { return sharpFits() && (offered_ || halfRate_); }
+  bool offersHalfRate() const { return halfRateFits() && (offered_ || halfRate_); }
 
   // The present rate each choice means on this panel, for the phone's labels:
   // 60 and 30 on a 60 Hz TV, 50 and 25 on a 50 Hz one.
@@ -155,31 +126,8 @@ class RenderScaleController {
   // at 2.0 as though they cost that at 1.0 — poisoning the cost model's first
   // observation — and its first move would halve the canvas nobody asked it to
   // touch. Both TV shells have a ceiling of 1.0 and see no difference.
-  int cells_ = 0;
-  bool cellsKnown_ = false;
-  bool adopted_ = false;
-  // The scene's tenure ledger: how long each point was in force since the
-  // build, so scene() can remember the one it held longest. A scene runs
-  // under one band, so it can visit at most the band's operating points; a
-  // recalled point outside them (the band moved) takes one more slot.
-  struct Tenure { RenderScalePoint point; double ms; };
-  Tenure tenure_[kScaleMaxPoints + 1] = {};
-  int tenures_ = 0;
-  // The start of the current tenure span. Separate from movedMs_ on purpose:
-  // the ledger restarts at a scene build, the rule's own holds do not — a
-  // scene that opens on something hopeless retreats on the same clock it
-  // always did.
-  double tenureMs_ = 0;
-  void credit(double untilMs);
-  // The memory itself: the point each split size last settled at, indexed by
-  // cell count, divisor 0 for none. In-process only — a fresh launch's first
-  // split of each size starts at the lobby's point. Sized past any grid the
-  // frame builder makes (four players); a larger one would keep no memory.
-  static constexpr int kMemoryCells = 8;
-  static bool remembers(int cells) { return cells >= 2 && cells < kMemoryCells; }
-  RenderScalePoint memory_[kMemoryCells] = {};
-  bool recall_ = false;
   RenderScalePoint point_{1.0, 1};
+  bool adopted_ = false;
   RenderScaleSample prev_{0.0, 0.0};
   double floorMs_ = 0;     // presentBaseline's running answer
   double panelMs_ = 0;
@@ -192,11 +140,10 @@ class RenderScaleController {
   // presents a window, right at kMinSignalFrames — the present-record veto and
   // the whole no-timer fallback go deaf, and at 240 Hz the GPU term with them.
   // Elsewhere a stored choice is kept and simply not applied, or offered.
-  bool sharpFits() const {
+  bool halfRateFits() const {
     return anchorDivisor(RenderScaleLimits{0.0, 0.0, 0.0, panelMs_}) == 1;
   }
   bool halfRate_ = false;
-  bool rateMoved_ = false;   // setHalfRate since the last poll
   bool offered_ = false;
   double belowMs_ = -1.0;    // when it last fell below the anchor, -1 while not
 };

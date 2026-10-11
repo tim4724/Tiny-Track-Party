@@ -593,7 +593,7 @@ resolution AND a divisor as one operating point, ordered around a desired
 1080@60: below it resolution gives way and the rate does not, above it the rate
 goes first, so a 120 Hz panel with the headroom to drive it will. This box has no
 such headroom and sits below the anchor, so on it the rate stays at the panel's
-own — unless the HOST picks Sharp on the phone, which lays the same ladder out at
+own — unless the HOST picks Quality on the phone, which lays the same ladder out at
 half the rate (`ttp_display_scale_half_rate`, `GameCoordinator.setHalfRate`).
 This box is what the choice exists for: below the anchor is exactly where the
 phone offers it.
@@ -621,19 +621,14 @@ stays red however healthy the run is stops being read. It is re-declared at the
 HUD tick, because both halves move under a running app: the divisor from the rule
 or the pin, the period from an HDMI mode change.
 
-A scene change SHORTENS the up-hold, and that decision is the RULE's, not this
-shell's. The lobby legitimately floors the scale (the attract behind the boards
-is one of the heaviest pictures), and without it the race inherits that floor
-and `kScaleUpHoldSec` thaws it one rung per 28 s — most of a race spent soft
-when the race COULD afford more. What this file owes is one measurement:
-`DisplayHost.build` stamps `sceneBuiltNanos` and `adaptScale` passes
-`sinceSceneSec`; `kScaleUpRecoverHoldSec` in `ttp/render_scale.h` does the rest.
-
-It lived here as a `recoveryClimb` latch first, and that is the cautionary half.
-The browser reads the same rule off the same ladder with the same lap-sized
-hold, so it had the identical failure and no mitigation at all — a shell that
-solves a rule's problem in its own language solves it for one platform and hides
-it on the others. Root `CLAUDE.md` rule 2, from the shell side.
+A scene build carries the point over and changes no hold: no race is cheaper
+than the lobby's attract, so a race starts where the lobby settled and steps
+down if it has to. A short up-hold after each build would climb back into a
+point this box cannot hold on every lobby track change, paying a resize each
+way. What a build does buy is a grace in which
+nothing steps down (`kScaleSceneGraceSec`), because a race's first seconds are
+its assembly. `DisplayHost.build` calls `ttp_display_scale_scene` and
+`PerfMonitor.reset()`; the rule does the rest.
 
 ## The picture at a reduced resolution
 

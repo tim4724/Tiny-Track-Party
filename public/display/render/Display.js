@@ -351,7 +351,7 @@ export class Display {
   safeInsets(fx, fy) { this._fn.safeInsets(fx, fy); }
 
   // A NEW SCENE, on the same clock the perf samples carry. The rule drops its
-  // cost model and restarts the scale's tenure; neither is ours to judge.
+  // cost model and starts the scene's grace; neither is ours to judge.
   scaleScene(tMs) { this._fn.scaleScene(tMs); }
 
   // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
@@ -363,7 +363,7 @@ export class Display {
   // Everything it decides FROM — the window, the percentiles, the fastest
   // present, the cost model's observation, the clocks — is C++'s and folds off
   // the same monitor PerfHud feeds. See ttp_display_scale_poll.
-  // The host's Sharp choice: the ladder at half the panel rate. The next
+  // The host's Quality choice: the ladder at half the panel rate. The next
   // scalePoll answers it as an ordinary move, which Stage already performs.
   scaleHalfRate(on) { this._fn.scaleHalfRate(on ? 1 : 0); }
 

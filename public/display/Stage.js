@@ -572,7 +572,7 @@ export class Stage {
             this._rosterSig = rosterSig;
             // A FULL BUILD ONLY. The reroster path above is an in-place re-dress
             // of the same scene — same meshes, same cost — so it inherits its own
-            // scale legitimately and must not re-arm the recovery hold.
+            // scale legitimately and must not re-arm the scene's grace.
             this.display.scaleScene(
                 typeof performance !== 'undefined' ? performance.now() : 0);
             // …and the window describes the scene that just went away, exactly as
