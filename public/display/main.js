@@ -185,11 +185,11 @@ const {
 // the display paints.
 const colorPalette = CAR_COLORS.slice();
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
-// catalogue and built like any track — but only the ONE requested id, and only in a
-// ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
-// collision track): a LIVE lobby preselecting one would offer phones a track their
-// picker catalog doesn't contain.
-if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
+// catalogue and built like any track — but only the ONE requested id, and only when
+// a URL names it: a ?scenario= test surface, ?solo, or a live lobby (so phones can
+// drive a test range such as 'drift'). The live pick is preselected to it, though
+// the phones' picker never lists it — picking anything else there leaves it.
+if (_qTrack && !built.has(_qTrack)) {
   // Dev ranges are in the wasm's track table too (gen-track-defs-header.mjs
   // carries DEV_TRACKS past the catalogue), so this only has to name one.
   const _devDef = DEV_TRACKS[_qTrack];
