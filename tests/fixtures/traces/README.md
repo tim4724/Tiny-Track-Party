@@ -49,6 +49,11 @@ What now watches the behaviour these bytes no longer judge is `contact_check`
 that check asserts it is right, against an oracle built from `Car::pose` rather
 than from the collider.
 
+On 2026-10-11 hills began launching fast cars (crest lift, `Game::update`).
+Only skysnake's trace takes a crest fast enough, so only it and the catalogue
+sweep were re-emitted. With the crest term zeroed, both old recordings replay
+exactly, so crest lift is the only thing that moved them. `air_check` (the
+`air` ctest) is what judges the flights.
 On 2026-10-13 `Centerline::projectNear` stopped stepping as if every point sat on
 the centreline. On a hairpin's outer curb that step returned its own hint, so a
 car pinned there froze in place — and every trace recorded the freeze without

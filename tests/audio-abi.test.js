@@ -109,7 +109,7 @@ test('the cue codes name cues the device can actually play', async () => {
   assert.deepEqual(names, [
     'pickup', 'roulette', 'banana_drop', 'monster_inflate', 'monster_deflate',
     'banana_slip', 'rocket_hit', 'screech', 'lap', 'join', 'countdown',
-    'boost', 'corner', 'brake', 'engine_putt', 'rocket_fire', 'drift'
+    'boost', 'corner', 'brake', 'engine_putt', 'rocket_fire', 'drift', 'land'
   ]);
   assert.equal(cuePtr(0), 0, 'code 0 is "no cue", not the first one');
   assert.equal(cuePtr(-1), 0, 'nothing below the table');

@@ -80,6 +80,7 @@ struct TrackDef {
   const FurnDef* boxes; int nBoxes;
   const FurnDef* poles; int nPoles;
   const BananaDef* bananas; int nBananas;
+  const FurnDef* kickers; int nKickers;   // u only: a kicker spans the road
 };
 
 // A CUP: a curated, ordered set of tracks, and the catalogue's own arrangement.
@@ -122,6 +123,15 @@ struct Hazard { double s, lat, radius; };          // cones never present on shi
 struct Box { double s, lat, radius; };
 struct Banana { double s, lat; };
 struct LoopStart { double s, width; };
+struct Kicker { double s; };                        // arclength of the ramp's FOOT
+
+// A kicker ramp's shape, in world units: a wedge across the whole road that
+// climbs KICKER_RISE over KICKER_LEN of arclength from its foot to its lip.
+// Here because it is geometry two layers must agree on — the sim rides a car
+// up this slope and launches it off the lip, and the renderer draws the wedge
+// the car is seen to ride.
+inline constexpr double KICKER_LEN = 1.6;
+inline constexpr double KICKER_RISE = 0.32;
 
 struct Pad {                                        // disc OR strip (shape:'strip')
   double s, lat;
@@ -166,6 +176,7 @@ struct RaceTrack {
   std::vector<Box> boxes;
   std::vector<Pole> poles;
   std::vector<Banana> bananas;
+  std::vector<Kicker> kickers;
 };
 
 // buildTrack + identity + resolveFurniture, matching record-trace.mjs

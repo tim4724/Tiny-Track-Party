@@ -67,6 +67,11 @@ inline constexpr double LAP_GAP_MS = 350;      // min spacing between lap chimes
 // A wall-grind only counts as a scrub above this speed — below it the car is
 // leaning on the barrier, not scraping along it.
 inline constexpr double SCRUB_SPD_MIN = 0.35;
+// A landing's thump scales with how fast the car came down (m/s): silent at
+// LAND_SOFT, a few centimetres' skim off a crest, and full at LAND_HARD, about
+// a boosted kicker's drop.
+inline constexpr double LAND_SOFT = 0.8;
+inline constexpr double LAND_HARD = 3.0;
 
 // The monster-truck engine: the same recorded loop, pitch down, a touch louder,
 // top end muffled.
@@ -109,6 +114,8 @@ struct Car {
   bool monster = false;
   bool onWall = false;
   double drift = 0;          // the sim's Car::driftMix, 0..1 (not on the snapshot)
+  double air = 0;            // height off the deck (sim Car::h)
+  double airRate = 0;        // and its rate, negative coming down (Car::vh)
 };
 
 // An in-flight rocket. `pos` is the rocket's WORLD point, resolved the same way
@@ -265,6 +272,8 @@ class Decider {
   std::vector<std::string> voices_;   // 'cue:id' of every voice believed to be running
   std::vector<Id> rockets_;           // rocket ids that had a jet voice last frame
   std::vector<Id> seen_;              // scratch: this frame's rocket ids
+  // Cars in the air last frame, each with the rate it was coming down at.
+  std::vector<std::pair<Id, double>> airborne_, airNext_;
   Listeners humans_;                  // scratch: the listeners, rebuilt per frame
   double lastScreech_;
   double lastLap_;

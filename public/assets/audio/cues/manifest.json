@@ -1,14 +1,14 @@
 {
   "version": 2,
   "generatedBy": "scripts/bake-cues.mjs",
-  "renderer": "chromium 148.0.7778.96 / OfflineAudioContext",
+  "renderer": "chromium 153.0.8010.12 / OfflineAudioContext",
   "sampleRate": 48000,
   "bitDepth": 16,
   "encoding": "pcm_s16le/wav",
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "0b9b917af6b1f04abfb879bac48ea568d19e8e84730bfad649b459aa277ccb3d",
+    "sharedSha256": "ae84842762037c40bdb0dfa65a75abb6e61e759ff793afabf1d09c30c519da94",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -95,7 +95,7 @@
           "body60Sec": 0.770375,
           "peak": 0.269997,
           "rms": 0.104844,
-          "sha256": "cf3f1c36242c16245d878f7d70c5437413e6c925b3b199d325585179ec5b0a73",
+          "sha256": "15c22732896a56d09651bad419167e1be172ebb44ce4aefba103d7e3bfcc1d14",
           "jitterDurationDriftMs": [
             -24.624871,
             25.346435
@@ -252,7 +252,7 @@
           "body60Sec": 1,
           "peak": 0.261757,
           "rms": 0.050722,
-          "sha256": "e85655cf3446a806487cc60d0845698e34fefb24ac66c5ad8cd9e0d8cfe27469",
+          "sha256": "89c61d0fcfcea5f97b24e974bdaf2c9a5fd63cf0a8670a01266c40283fa5ec6f",
           "bandpassHz": 950,
           "Q": 3,
           "gateLfoHz": 11,
@@ -290,7 +290,7 @@
           "body60Sec": 1,
           "peak": 0.296762,
           "rms": 0.068835,
-          "sha256": "7f6a2db67a08fafded4f8b0975e98a87dc254d42186ca3bf52efdf06fa4185e3",
+          "sha256": "14ad166481b4a59ed4a2e4f41be38d6a7f9fa8b70b2180f029fcb55f6d0d3881",
           "bandpassHz": 1207,
           "Q": 5,
           "lfoHz": 6,
@@ -306,7 +306,7 @@
           "body60Sec": 1,
           "peak": 0.299692,
           "rms": 0.070823,
-          "sha256": "42100ddaead5e35bacc7c774c798702d09f974421c51d2742c39244df359e059",
+          "sha256": "3fbdd5dd67b712b594863e4250c4ba05e75d0ee893b4b8138ae54eb25a4bd68a",
           "bandpassHz": 1287.5,
           "Q": 5,
           "lfoHz": 6,
@@ -322,7 +322,7 @@
           "body60Sec": 1,
           "peak": 0.318247,
           "rms": 0.074085,
-          "sha256": "35d7d78e00c46667b00bd4ce930318539c80f5c32a8da000c5057373828826fe",
+          "sha256": "603d608820a22616b4df56a95147a3697b3a258ac29b2dc6dfc3eed37893441b",
           "bandpassHz": 1375,
           "Q": 5,
           "lfoHz": 6,
@@ -338,7 +338,7 @@
           "body60Sec": 1,
           "peak": 0.299234,
           "rms": 0.077013,
-          "sha256": "6f5f4063a723041cc1d37fa7a3f93f39a9a6c86bc3f7ca04935b669bc5c04d89",
+          "sha256": "f2d96b440fec947881cf05eb39b79e8057bfa8f1f6ad0500614f920df8103875",
           "bandpassHz": 1462.5,
           "Q": 5,
           "lfoHz": 6,
@@ -354,7 +354,7 @@
           "body60Sec": 1,
           "peak": 0.304788,
           "rms": 0.079281,
-          "sha256": "3b86b8f506af3df14ca6336cab0cade60585ed5c49893d4520cb3bdf7a422d91",
+          "sha256": "af30bd7f069a6c794669d96fe28d2517870a332f3fc27a58ba8f1c198811d9aa",
           "bandpassHz": 1550,
           "Q": 5,
           "lfoHz": 6,
@@ -401,7 +401,7 @@
           "body60Sec": 0.307396,
           "peak": 0.428938,
           "rms": 0.059172,
-          "sha256": "4cd5811c8e9b9d48eb726ddea8d8366139f927479fb77257eab004734060a689",
+          "sha256": "7adf492fdad65317ec82893239a98538ef3799c4cc0075e3eb430b7d790299dc",
           "jitterDurationDriftMs": [
             -7.524578,
             7.656105
@@ -541,6 +541,57 @@
       "variant": "risingtwo",
       "sourceSha256": "e4a8bbf50945807ddc7a7a5896286a927e15a0dddd1f75c910f94c5df0952e29"
     },
+    "land": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "land.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 9744,
+          "durationSec": 0.203,
+          "body60Sec": 0.107958,
+          "peak": 0.279489,
+          "rms": 0.043432,
+          "sha256": "7efb16262d32da608428c25b3d50cb057e8e39d6f0ff0b5f4ebf159964e45ff4",
+          "jitterDurationDriftMs": [
+            -5.779016,
+            5.948354
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "f 260 Hz",
+              "fTo 120 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.012,
+                "driftMs": [
+                  -0.341617,
+                  0.351627
+                ]
+              }
+            ],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "thud",
+      "sourceSha256": "b952e63826c8c1ab89bbf21e199105095ac054c2a671f4e1ad4137510aa1728d"
+    },
     "lap": {
       "kind": "one-shot",
       "files": [
@@ -553,7 +604,7 @@
           "body60Sec": 0.375208,
           "peak": 0.327433,
           "rms": 0.052709,
-          "sha256": "4b02792e7deeba18290e6040efadd8410d8a6d41ce4e2f64ebb27695f01434fa",
+          "sha256": "f77838ce25a61467972534d7887da9bcf03629bad79d3ae31d546c34d4237fd6",
           "jitterDurationDriftMs": [
             -13.892413,
             14.299491
@@ -602,7 +653,7 @@
           "body60Sec": 0.332729,
           "peak": 0.189825,
           "rms": 0.054225,
-          "sha256": "28b9b914f65a3b8f12d203eea8f6d0b1a387aaa47c646b4fd714b02b2d8d9cff",
+          "sha256": "77ddfa757c299e4aaf6121b3e9937cab646f4d8a0b44632d37df74abcc241eb4",
           "jitterDurationDriftMs": [
             -9.780764,
             10.009378
@@ -832,12 +883,12 @@
           "file": "rocket_hit.wav",
           "channels": 2,
           "sampleRate": 44100,
-          "frames": 75637,
-          "durationSec": 1.715125,
-          "body60Sec": 1.670068,
+          "frames": 74690,
+          "durationSec": 1.693651,
+          "body60Sec": 1.648413,
           "peak": 0.413434,
-          "rms": 0.026862,
-          "sha256": "e28da65c5f348c3ebdd41f565ee9a0ffca636f5eb1da9e293f7b4996df9f40c1",
+          "rms": 0.027031,
+          "sha256": "9904e1de7e029e9a0a8d67adc777de82cf45ddf7d3a1f3034f3b65c5a077881d",
           "note": "the shipped CC0 explosion, baked WITH playSample's 4 ms/60 ms de-click envelope and gain 0.6 so no shell has to reimplement them. Stereo, at the recording's own 44.1 kHz — resampling a shipped recording to 48 k would change it for no gain."
         }
       ],
@@ -911,7 +962,7 @@
           "body60Sec": 0.126021,
           "peak": 0.18891,
           "rms": 0.030438,
-          "sha256": "931d0002a2571064fddf2480eeae6cf99e6aafd649f0c279e4dde83860701557",
+          "sha256": "af0a207e4c3939f4fb0da64571132fbe45de2ee1539170c2613ef7ec3423f533",
           "jitterDurationDriftMs": [
             -5.921356,
             6.094865

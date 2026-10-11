@@ -127,6 +127,7 @@ const ONESHOTS = [
   { name: 'screech', cue: 'screech', method: 'play', spread: 0.5,
     note: 'the most repetition-exposed cue in the game (~7×/s under SCREECH_GAP_MS) and the strongest argument for keeping playback-rate jitter.' },
   { name: 'join', cue: 'join', method: 'play', spread: 0.5 },
+  { name: 'land', cue: 'land', method: 'play', spread: 0.5 },
   { name: 'rocket_hit', cue: 'rocket_hit', method: 'play', spread: 0, channels: 2,
     needsSamples: ['explosionPunch'], sampleRate: 44100,
     note: 'the shipped CC0 explosion, baked WITH playSample\'s 4 ms/60 ms de-click envelope and gain 0.6 so no shell has to reimplement them. Stereo, at the recording\'s own 44.1 kHz — resampling a shipped recording to 48 k would change it for no gain.' },

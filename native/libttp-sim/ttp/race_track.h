@@ -90,6 +90,7 @@ inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_
   for (const ttp::Pole& p : rt.poles) g.poles.push_back(PoleRt{p.s, p.lat, p.radius});
   for (const Banana& b : rt.bananas)
     g.bananas.push_back(BananaRt{0, b.s, b.lat, Id::None(), 0, true, 0, false});
+  for (const Kicker& k : rt.kickers) g.kickers.push_back(k.s);
   return true;
 }
 

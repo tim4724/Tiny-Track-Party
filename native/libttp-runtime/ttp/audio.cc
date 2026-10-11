@@ -160,6 +160,16 @@ double platform_random() {
 // the decider
 // ---------------------------------------------------------------------------
 
+namespace {
+Command cue(const char* name, double gain) {
+  Command c;
+  c.kind = Command::CUE;
+  c.name = name;
+  c.gain = gain;
+  return c;
+}
+}  // namespace
+
 Decider::Decider(std::function<double()> rng)
     : rng_(rng ? std::move(rng) : std::function<double()>(&platform_random)),
       lastScreech_(-std::numeric_limits<double>::infinity()),
@@ -255,6 +265,23 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     if (!live) voice(out, "rocket_fire", id, 0, nullptr);
   }
   rockets_ = seen_;
+
+  // Landing: a car in the air last frame and down on this one thumps, louder
+  // the harder it came down, by distance like any world cue. Read off the
+  // frames rather than raised as a sim event, because a landing is no part of
+  // the race contract. A skim off a crest lands too softly to be worth a cue.
+  airNext_.clear();
+  for (const Car& c : cars) {
+    if (c.air > 0) { airNext_.emplace_back(c.id, c.airRate); continue; }
+    for (const auto& a : airborne_) {
+      if (!(a.first == c.id)) continue;
+      const double hard = clamp01((-a.second - LAND_SOFT) / (LAND_HARD - LAND_SOFT));
+      const double g = audibility(c.hasPos ? &c.pos : nullptr, humans_) * hard;
+      if (g > 0) out.push_back(cue("land", g));
+      break;
+    }
+  }
+  airborne_.swap(airNext_);
   humans_.clear();  // it points into the caller's `cars`; never hold that past the call
 }
 
@@ -279,16 +306,6 @@ void Decider::lap(std::vector<Command>& out, double nowMs) {
   c.gain = 1;
   out.push_back(std::move(c));
 }
-
-namespace {
-Command cue(const char* name, double gain) {
-  Command c;
-  c.kind = Command::CUE;
-  c.name = name;
-  c.gain = gain;
-  return c;
-}
-}  // namespace
 
 void Decider::event(const ttp::Event& e, const Point* pos, const Listeners& humans,
                     const AiIds& aiIds, double nowMs, std::vector<Command>& out) {

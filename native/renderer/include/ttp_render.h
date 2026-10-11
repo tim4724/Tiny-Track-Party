@@ -105,6 +105,13 @@ typedef struct TtpCarInput {
     float trackS, trackLat;
     /* The drift's hop (frame_builder's driftHop), in world units off the seat. */
     float hop;
+    /* OFF THE DECK: the sim's height above it along its up (world units, on a
+     * kicker ramp or in a flight) and the body's pitch against the deck (rad,
+     * + = nose up). Applied on top of the deck seat, so the seat fit, the
+     * wheel travel and the ground shadow stay on the deck below. Both 0 on the
+     * deck; the pitch drops to 0 on the frame a car lands, and the renderer
+     * eases the body down to it. */
+    float air, airPitch;
 } TtpCarInput;
 
 typedef struct TtpViewInput {
@@ -250,7 +257,7 @@ typedef struct TtpFrameInput {
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 13u
+#define TTP_FRAME_INPUT_VERSION 14u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);

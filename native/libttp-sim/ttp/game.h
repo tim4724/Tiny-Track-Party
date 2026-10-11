@@ -96,6 +96,14 @@ struct Car {
   bool drifting = false;
   double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
   double driftT = 0;
+  // Height above the deck, along its up, and its rate. Non-zero only on a
+  // kicker ramp and in the flight off its lip; the pose carries it.
+  double h = 0, vh = 0;
+  // The body's pitch against the deck under it (rad, + = nose up): the wedge's
+  // angle on a kicker; in the air, the angle the car left at as the road turns
+  // away beneath it, tipping back toward the road. Cosmetic; the renderer
+  // eases it the rest of the way on landing.
+  double pitch = 0;
 };
 
 struct Zone { double s, lat, radius; };  // oil hazard (circle)
@@ -130,6 +138,7 @@ struct GameTrack {
   std::vector<BoxRt> boxes;   // .cooldown/.row filled by ctor
   std::vector<PoleRt> poles;
   std::vector<BananaRt> bananas;  // authored (dev tracks); .id/.respawn/.liveAt filled by ctor
+  std::vector<double> kickers;    // each ramp's FOOT arclength (ttp::Kicker)
 };
 
 // bot: an AiController drives this car. A bot drifts only when its controller
@@ -306,6 +315,8 @@ class Game {
   bool enterZonesPads(Car& c);
   bool inStrip(const Car& c, const PadRt& z) const;
   bool inZone(const Car& c, double zs, double zlat, double radius) const;
+  double kickerFloor(double totalS) const;
+  double tableAt(const std::vector<double>& t, double totalS) const;
   void applyPad(Car& c);
   void enterBox(Car& c);
   double placeT(const Car& c) const;
@@ -337,6 +348,11 @@ class Game {
   std::vector<BoxRt> boxes_;
   std::vector<PoleRt> poles_;
   std::vector<BananaRt> bananas_;
+  std::vector<double> kickers_;
+  // The deck's crest curvature (1/m, + where the road bends away from its own
+  // up) at every CREST_STEP of arclength, built once per race: a car's flight
+  // reads it every frame.
+  std::vector<double> crestK_;
   long bananaSeq_ = 0;
   // bananaSeq_ when this step began. A banana with a later id was dropped in this
   // step and hits nobody until the next one, so it reaches at least one rendered

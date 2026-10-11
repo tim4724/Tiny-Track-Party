@@ -760,7 +760,9 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // takes the smooth best fit and each wheel takes its own
                 // residual, which is also how the real thing works.
                 const float3 mid = (deck[0] + deck[1] + deck[2] + deck[3]) * 0.25f;
-                carPos = mid + up * RIDE_HEIGHT;
+                // Off the deck (a kicker), the body rides the sim's height
+                // above this seat; the travel below still measures from it.
+                carPos = mid + up * (RIDE_HEIGHT + c.air);
                 for (int k = 0; k < 4; k++) wheelDeck[k] = deck[k];
                 seatMid = mid;
                 seated = true;
@@ -781,6 +783,27 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // the answer by the square of the warp angle — under a millimetre on
             // anything in the catalogue — so this stays a single step, and stays
             // a pure function of the frame's input.
+        }
+        // Landing squash: on touchdown the body drops into its springs and
+        // rebounds, deeper the faster it came down, so a hop lands with weight.
+        // The wheel travel below measures from the deck, so the wheels stay put
+        // while the body dips. The descent rate is read off the frames, the
+        // last airborne one's being the speed it hit at.
+        if (i < mCarWheels.size()) {
+            constexpr float SQUASH_KICK = 0.35f, SQUASH_K = 360.0f, SQUASH_D = 17.0f;
+            constexpr float SQUASH_MAX = 0.06f;
+            CarWheels& w = mCarWheels[i];
+            const float dt = std::max(input.dt, 1e-3f);
+            if (c.air > 0) w.airRate = (c.air - w.prevAir) / dt;
+            else if (w.prevAir > 0) w.squashV += SQUASH_KICK * std::min(0.0f, w.airRate);
+            w.prevAir = c.air;
+            w.squashV += (-SQUASH_K * w.squash - SQUASH_D * w.squashV) * dt;
+            w.squash = std::max(-SQUASH_MAX, w.squash + w.squashV * dt);
+            carPos += up * w.squash;
+            // The body's angle eases toward the sim's, so a car that lands
+            // nose-up settles its nose onto the deck instead of snapping flat.
+            constexpr float AIR_PITCH_RATE = 14.0f;
+            w.airPitch += (c.airPitch - w.airPitch) * (1.0f - std::exp(-AIR_PITCH_RATE * dt));
         }
         // Jitter diagnostics (ttp_display_debug_decals). Second differences: a
         // car driving smoothly over a smooth deck has a near-constant first
@@ -816,9 +839,15 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             static const mat4f FLIP = mat4f::rotation(M_PI, float3{ 0, 1, 0 });
             // Spin-out whirl (oil, lightning): the JS yaws the whole model by
             // c.spin on top of its base yaw (car.rotation.y = baseYaw + spin).
+            // Off the deck the body pitches about its own right axis; a
+            // positive turn there would drop the nose, hence the sign.
+            const float airPitch = i < mCarWheels.size() ? mCarWheels[i].airPitch : c.airPitch;
+            const mat4f mAir = (airPitch != 0)
+                    ? m * mat4f::rotation(-airPitch, float3{ 1, 0, 0 })
+                    : m;
             const mat4f base = (c.spin != 0)
-                    ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
-                    : m * FLIP;
+                    ? mAir * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
+                    : mAir * FLIP;
             // Body lean + weight transfer — SceneRenderer setCarPose, with one
             // deliberate departure: the JS smoothed lean 0.2/frame, which made
             // the steering cue's wall-clock lag double at 30 fps; lean is now
@@ -1050,8 +1079,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // the fit above cannot run without them.
                 if (seated) {
                     for (int k = 0; k < 4; k++) {
-                        const float3 seat = carPos + right * w.wheelOff[k].x
-                                + fwd * w.wheelOff[k].z;
+                        const float3 seat = carPos - up * c.air
+                                + right * w.wheelOff[k].x + fwd * w.wheelOff[k].z;
                         const float t = dot(wheelDeck[k] - seat, up);
                         travelLocal[k] = std::min(TRAVEL_MAX, std::max(-TRAVEL_MAX, t))
                                 / std::max(1e-4f, w.assetScale);

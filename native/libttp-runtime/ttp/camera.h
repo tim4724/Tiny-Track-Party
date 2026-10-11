@@ -38,6 +38,10 @@ namespace rt {
 // read oil and boost paint, which a playtest at 10.5 struggled to see.
 constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.69f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
+// How much of a kicker hop the rig rides. All of it pins the car to one spot on
+// screen and the jump does not read; none of it lets a boosted hop climb out of
+// the top of the frame from this close.
+constexpr float CHASE_AIR_FOLLOW = 0.5f;
 // The player's OWN monster truck is taller than the eye: at the race pitch its
 // roof sits on the horizon and hides the road just ahead. So while it is active
 // the rig pulls BACK by MONSTER_CAM_BACK and UP by MONSTER_CAM_RISE. Pulling

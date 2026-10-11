@@ -1952,6 +1952,46 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         const float3 planeP = p.cPos - n * 0.34f; // deck thickness
         column(p.x, p.z, p.radius, tb.groundY - 0.1f, p.cPos.y + 1.0f, &planeP, &n);
     }
+    // Kicker ramps: a wedge across the road from its foot on the deck to its
+    // lip KICKER_RISE up, swept along the deck so it follows whatever the road
+    // does under it. The slope wears the boost pad's colour, the flanks and the
+    // lip face the structures'. Every face keeps its own vertices so the
+    // normals stay flat, and is wound to face out (slope up, lip forward).
+    const uint32_t slopeC = packLinear(
+            srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
+    const auto face = [&](const float3& a, const float3& b, const float3& c,
+            const float3& d, uint32_t col) {
+        const uint32_t base = (uint32_t) mStructures.verts.size();
+        for (const float3& p : { a, b, c, d }) mStructures.verts.push_back({ p.x, p.y, p.z, col });
+        mStructures.idx.insert(mStructures.idx.end(),
+                { base, base + 1, base + 2, base, base + 2, base + 3 });
+    };
+    for (const float k : tb.kickers) {
+        constexpr int SLICES = 6;
+        constexpr float SINK = 0.02f;
+        float3 top[2][SLICES + 1], foot[2][SLICES + 1];
+        for (int j = 0; j <= SLICES; j++) {
+            const float t = (float) j / SLICES;
+            const TrackBin::Sample f = tb.frameAt(k + t * (float) ttp::KICKER_LEN);
+            // The slope runs from SINK under the deck to the lip, so it crosses
+            // the deck along a line instead of lying coplanar with it.
+            const float h = t * ((float) ttp::KICKER_RISE + SINK) - SINK;
+            for (int side = 0; side < 2; side++) {
+                const float3 edge = f.pos + f.lat * (side ? 0.5f : -0.5f) * f.width;
+                top[side][j] = edge + f.up * h;
+                foot[side][j] = edge - f.up * SINK;
+            }
+        }
+        for (int j = 0; j < SLICES; j++) {
+            face(top[0][j], top[1][j], top[1][j + 1], top[0][j + 1], slopeC);
+            // Each flank wound to face OUT: a baked vertex light has no
+            // back-face flip, so a face wound inward bakes dark.
+            face(foot[0][j], top[0][j], top[0][j + 1], foot[0][j + 1], sc);
+            face(foot[1][j], foot[1][j + 1], top[1][j + 1], top[1][j], sc);
+        }
+        face(foot[0][SLICES], top[0][SLICES], top[1][SLICES], foot[1][SLICES], sc);
+    }
+
     // STATIC SHADOW RECEIVERS, both: baked vertex light, one tap of their own
     // visibility map (vground.mat, through staticInstance). The zero uvs only
     // feed the material's albedo, which for them is white.

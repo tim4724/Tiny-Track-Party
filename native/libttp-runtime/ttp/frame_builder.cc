@@ -1,5 +1,6 @@
 #include "ttp/frame_builder.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -177,6 +178,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // lap away from its own shadow.
             o.trackS = (float) c->totalS;
             o.trackLat = (float) c->lat;
+            // The body's own angle against the deck (Car::pitch): the wedge's up
+            // a kicker, and in the air the angle it left at, tipping toward the
+            // road. Capped so a long flight never stands the car up.
+            o.air = (float) c->h;
+            constexpr double AIR_PITCH_MAX = 0.45;
+            o.airPitch = (float) std::max(-AIR_PITCH_MAX, std::min(AIR_PITCH_MAX, c->pitch));
         }
         // A hold that OUTLIVED the field it was taken on lands here, because the
         // memcpy above only fires while the sizes still match: a seat expiring
@@ -276,7 +283,10 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // for seconds, which is how this became visible; a held car is at
             // rest, so the rig settles into its parked shot and stays there.
             if (c) {
-                cam.update(fromHeld ? heldPose(outCars[subject]) : c->pose,
+                ttp::Pose rig = fromHeld ? heldPose(outCars[subject]) : c->pose;
+                const float air = outCars[subject].air;
+                if (air > 0) rig.pos.addScaledVector(rig.up, -(1 - CHASE_AIR_FOLLOW) * air);
+                cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);
             }
