@@ -28,8 +28,8 @@ export const GALLERY_SCENARIOS = [
   { id: 'lobby-empty', key: 'lobby-empty', title: 'Lobby (waiting)', animated: true,
     params: { track: 'tidepool' } },
   {
-    id: 'lobby-track', key: 'lobby', title: 'Lobby (track picked)',
-    hostVariant: true, animated: true, params: { picked: 'track', track: 'driftwood' }
+    id: 'lobby-cup', key: 'lobby', title: 'Lobby (cup picked)',
+    hostVariant: true, animated: true, params: { picked: 'cup', track: 'tidepool' }
   },
   {
     id: 'lobby-tour', key: 'lobby', title: 'Lobby (tour picked)',

@@ -126,8 +126,7 @@ extension GameCoordinator {
         // back as an empty dictionary and `CupSlot.init?` refuses. So an absent
         // card is a real absence rather than a card with nothing in it. The
         // STORED pick crosses verbatim — it is already the model's own shape.
-        // `veiled()` is the shell's random-family secrecy (see its note).
-        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_json(TTP.json(pick))))?.veiled()
+        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_json(TTP.json(pick))))
     }
 
     /// The attract grid, as the scene's roster. `cell: false` throughout: the

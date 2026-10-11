@@ -365,10 +365,14 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
     assert.equal(slot.cupId, t.cup, `${t.id} must tint with its own cup`);
     assert.deepEqual(slot.maps, [{ trackId: t.id }]);
   }
-  // The random sticker never names a track — the mini carries the draw instead.
-  const rnd = ui.cupSlot({ mode: 'random', trackId: TRACK_LIST[3].id, cups: CUPS, catalog });
+  // Random spoils nothing, not even the drawn race 1: a fixed run is one
+  // numbered "?" chip per race, an endless run one unnumbered chip.
+  const rnd = ui.cupSlot({ mode: 'random', trackId: TRACK_LIST[3].id, randomRaces: 4, cups: CUPS, catalog });
   assert.equal(rnd.nameKey, 'random');
   assert.equal(rnd.name, null);
+  assert.deepEqual(rnd.maps, [1, 2, 3, 4].map((n) => ({ trackId: null, n })));
+  const endless = ui.cupSlot({ mode: 'random', trackId: TRACK_LIST[3].id, randomRaces: 0, cups: CUPS, catalog });
+  assert.deepEqual(endless.maps, [{ trackId: null }]);
 
   // The World Tour: the card shows the WHOLE ladder, one chip per cup in cup
   // (difficulty) order — ALL undrawn ("?"), the already-drawn first race
@@ -388,6 +392,8 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
     'each chip wears its cup, in cup order');
   assert.deepEqual(tour.maps.map((m) => !!m.locked), CUPS.map((c) => c.id === 'rooftop'),
     'the locked cup rides as a teaser chip, marked and nothing else');
+  assert.deepEqual(tour.maps.map((m) => m.n), [...openCups.map((_, i) => i + 1), undefined],
+    'the races are numbered in running order; the teaser is not a race');
 });
 
 test('the cup chip names the next race out of the shipped catalogue', async () => {

@@ -5377,7 +5377,8 @@ void raceLiveWalks() {
             .c_str());
     const std::string wantSlot =
         "{\"cupId\":null,"
-        "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"alpine\",\"trackId\":null}],"
+        "\"maps\":[{\"cup\":\"beach\",\"n\":1,\"trackId\":null},"
+        "{\"cup\":\"alpine\",\"n\":2,\"trackId\":null}],"
         "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";
     check(slot == wantSlot, "tour: the race card spells the per-cup chips\n  want " + wantSlot +
                                 "\n  got  " + slot);
@@ -5462,7 +5463,8 @@ void raceLiveWalks() {
         "{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"tidepool\",\"randomRaces\":2}");
     const std::string wantL =
         "{\"cupId\":null,"
-        "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"snow\",\"trackId\":null},"
+        "\"maps\":[{\"cup\":\"beach\",\"n\":1,\"trackId\":null},"
+        "{\"cup\":\"snow\",\"n\":2,\"trackId\":null},"
         "{\"cup\":\"rooftop\",\"locked\":true,\"trackId\":null}],"
         "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";
     check(lslot == wantL, "lock: the tour card teases the locked cup\n  want " + wantL +

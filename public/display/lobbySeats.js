@@ -88,12 +88,13 @@ function buildSeat(p) {
 // live lobby and the gallery preview for the same no-drift reason, both through
 // renderLobbyPick below. Two states:
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
-//   picked   : { name, races?, raceCount?, maps?, cupId? }
+//   picked   : { name, races?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
 //              schematics (maps = [{ svg?, n?, q?, glyph?, cup?, locked? }] — 4
 //              numbered minis for a cup, 1 for an exact track, the tour's five
-//              per-cup chips; cupId biome-tints their fields exactly like the
-//              phone picker, a chip's own `cup` outranks it; a q chip shows
+//              per-cup chips, a random run's "?" boxes; `n` badges a chip with
+//              its running order; cupId biome-tints their fields exactly like
+//              the phone picker, a chip's own `cup` outranks it; a q chip shows
 //              `glyph` or "?"; a locked chip is the tour's teaser for a locked
 //              cup — padlock on sunken paper, counted by no races pill), and
 //              the races pill
@@ -102,20 +103,10 @@ export function renderCupSlot(slotEl, state) {
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
   if (!picked) return;
   slotEl.querySelector('.cup-sticker').textContent = state.name;
-  // The couch's star badge for this pick (cup cards only; null hides it —
-  // the tour, random and exact-track cards carry none).
-  const starsEl = slotEl.querySelector('.cup-stars');
-  starsEl.classList.toggle('hidden', state.stars == null);
-  starsEl.textContent = '';
-  if (state.stars != null) starsEl.appendChild(starRow(state.stars));
   const mapsEl = slotEl.querySelector('.cup-maps');
-  // The model names the KNOWN circuits (a chip with q and no svg is an undrawn
-  // race). A counted card shows one box per race, so boxes past the known maps
-  // pad out as "?" placeholders — that's the random card's not-yet-drawn races.
-  // A known chip whose schematic is missing (dev mid-rebuild) still just costs
-  // its picture.
+  // A known chip whose schematic is missing (dev mid-rebuild) just costs its
+  // picture.
   const maps = (state.maps || []).filter((m) => m && (m.q || m.svg || m.locked));
-  if (state.raceCount) while (maps.length < state.raceCount) maps.push({ q: true });
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
   mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
@@ -140,6 +131,7 @@ export function renderCupSlot(slotEl, state) {
       tile.classList.add('cup-maps__tile--q');
       tile.style.background = m.cup ? cupTint(m.cup, FIELD_TINT) : neutralTint(FIELD_TINT);
       const q = document.createElement('span');
+      q.className = 'cup-maps__glyph';
       q.textContent = m.glyph || '?';
       tile.appendChild(q);
     } else {
@@ -170,40 +162,17 @@ export function renderCupSlot(slotEl, state) {
 // `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
-// `progress` is the snapshot's progress shape ({cups:[{id,stars,…}]}) or null —
-// it dresses the card with the couch's stars, merged SHELL-SIDE so the frozen
-// ui corpus's cupSlot answers stay untouched (stars are not catalogue data).
-// Only a CUP card wears one: the stars are the cups' reward arc, so the tour,
-// random and exact-track cards all go bare.
-export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
+// The card carries no stars: the Cups shelf right under it shows every cup's.
+export function renderLobbyPick(slotEl, pick, trackCatalog) {
   if (!slotEl) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
-  const starsFor = (m) => {
-    if (!progress || !m) return null;
-    if (m.nameKey === 'cup' && m.cupId) {
-      const row = (progress.cups || []).find((c) => c.id === m.cupId);
-      return row ? row.stars : 0;
-    }
-    return null;
-  };
   const m = cupSlot(pick);
   renderCupSlot(slotEl, m && {
     name: NAME_COPY[m.nameKey] || m.name || '?',
-    stars: starsFor(m),
     races: RACES_COPY[m.racesKey](m.raceCount),
-    // raceCount sizes the maps grid (renderCupSlot pads a counted card's
-    // not-yet-drawn races with "?" boxes); endless is a single ∞ box. RANDOM
-    // only — a cup's racesKey is 'count' too, and a cup card must never pad
-    // (a chip with a missing schematic just costs its picture, not a "?").
-    raceCount: m.nameKey === 'random' && m.racesKey === 'count' ? m.raceCount : null,
-    // Random spoils nothing: a counted card is raceCount grey "?" boxes (an
-    // empty list here — renderCupSlot's raceCount padding builds them all)
-    // and endless is one grey box carrying ∞; even the drawn race 1 isn't the
-    // card's to sell. A veil here rather than in the model — the frozen ui
-    // corpus pins cupSlot's random answers to the drawn chip.
-    maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
-      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId && !x.locked,
-        n: x.n, cup: x.cup, locked: x.locked })),
+    // An undrawn chip is a "?" box; endless random's lone one carries ∞.
+    maps: m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId && !x.locked,
+      glyph: m.racesKey === 'endless' ? '∞' : undefined, n: x.n, cup: x.cup, locked: x.locked })),
     cupId: m.cupId   // biome-tints the mini fields, like the phone picker
   });
 }

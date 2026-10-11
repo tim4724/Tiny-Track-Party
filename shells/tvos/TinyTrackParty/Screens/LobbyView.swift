@@ -39,13 +39,14 @@ struct LobbyView: View {
     var body: some View {
         ZStack {
             backdrop
+            // ON THE OVERSCAN TOKEN, not tvOS's own ~90-point safe area: the web
+            // and Android lay this board out on `--safe-frac-x/y`, and inside the
+            // system inset every card here sat further in and read smaller than
+            // its two siblings.
             band
-            // Inside the safe area, unlike the backdrop. tvOS's own margins are
-            // ~90 points on a side, which is already the web's 4.5vw gutter, so
-            // this adds only enough to keep the sticker tilts and their hard
-            // shadows off the edge of the picture.
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+                .padding(.horizontal, LobbyViewMetrics.safeX)
+                .padding(.vertical, LobbyViewMetrics.safeY)
+                .ignoresSafeArea()
 
             infoBand
             focusPark
@@ -88,11 +89,12 @@ struct LobbyView: View {
                 .accessibilityIdentifier("info-button")
                 .accessibilityLabel(Copy.info)
             }
-            .padding(.top, 4)
-            .padding(.trailing, 16)
+            .padding(.top, LobbyViewMetrics.safeY)
+            .padding(.trailing, LobbyViewMetrics.safeX)
             .focusSection()
             Spacer()
         }
+        .ignoresSafeArea()
     }
 
     /// A focus stop that draws nothing, holding the remote at the foot of the
@@ -247,9 +249,9 @@ struct LobbyView: View {
 @MainActor
 private struct InfoGlyph: View {
     /// Small on purpose. It is the least important thing on the board and must
-    /// not compete with the join code; at 56 points it is still a comfortable
-    /// remote target and legible across a room.
-    static let diameter: CGFloat = 56
+    /// not compete with the join code; at 54 points (Android's) it is still a
+    /// comfortable remote target and legible across a room.
+    static let diameter: CGFloat = 54
 
     var body: some View {
         Image(systemName: "info")
@@ -316,8 +318,8 @@ private struct JoinTicket: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            StickerCard(tint: Tokens.surface, rotation: -1.2, padding: LobbyViewMetrics.cardPadding) {
-                VStack(spacing: 10) {
+            StickerCard(tint: Tokens.surface, rotation: -1.2, padding: LobbyViewMetrics.ticketPadding) {
+                VStack(spacing: 8) {
                     // `dieCut: false` — the badge's white edge is invisible on a
                     // white card, which is exactly why `.ticket__wordmark`
                     // zeroes the text stroke. Same face, same tilt, no edge.
@@ -407,7 +409,7 @@ private struct JoinTicket: View {
         let split = lines
         return VStack(spacing: 2) {
             Text(split.host)
-                .font(Fonts.display(22, weight: .semibold))
+                .font(Fonts.display(LobbyViewMetrics.urlSize, weight: .semibold))
                 .foregroundStyle(Tokens.ink)
                 // The web wraps this `anywhere` rather than truncating, because
                 // an ellipsis eats the tail and the tail is the room code. A
@@ -418,14 +420,17 @@ private struct JoinTicket: View {
                 .lineLimit(2)
             if let code = split.code {
                 Text(code)
-                    .font(Fonts.display(32, weight: .bold))
-                    .tracking(32 * 0.04)
+                    .font(Fonts.display(LobbyViewMetrics.urlSize * 1.45, weight: .bold))
+                    .tracking(LobbyViewMetrics.urlSize * 1.45 * 0.04)
                     .foregroundStyle(Tokens.accent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             }
         }
         .multilineTextAlignment(.center)
+        // `.ticket__urlbox { min-height: 3.4em }`: the box holds its final
+        // footprint before the code arrives.
+        .frame(minHeight: LobbyViewMetrics.urlSize * 3.4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(joinURL)
     }
@@ -457,17 +462,18 @@ private struct JoinTicket: View {
 /// it will run and a races pill.
 ///
 /// Every field is `ttp_ui_cup_slot_json`'s, including the NUMBERING of the maps
-/// (`n` = 1...4) — a cup's running order is the GP menu at a glance, and the
-/// model owns it. This view looks nothing up and counts nothing.
+/// (`n` = 1...N on every fixed run) — the running order is the menu at a
+/// glance, and the model owns it. This view looks nothing up and counts nothing.
 @MainActor
 private struct CupCard: View {
     let slot: GameState.CupSlot
 
-    private static let mapGap: CGFloat = 10
+    private static let mapGap: CGFloat = 7
+    private static let pillSize: CGFloat = 15
 
     var body: some View {
         StickerCard(tint: Tokens.surface, rotation: 1.2, padding: LobbyViewMetrics.cardPadding) {
-            VStack(spacing: 12) {
+            VStack(spacing: 11) {
                 sticker
                 maps
                 racesPill
@@ -509,7 +515,7 @@ private struct CupCard: View {
     /// The web's `.cup-maps` box-count layouts, not mode hooks: ONE map at 72%
     /// width for an exact pick, 2-wide for a cup's four, 3-wide for the tour's
     /// five (the ladder itself), 4-wide for the long random card's strip of
-    /// pips. The count comes from the model (or the veil); this only chooses
+    /// pips. The count comes from the model; this only chooses
     /// how to arrange what it was handed.
     @ViewBuilder
     private var maps: some View {
@@ -530,7 +536,9 @@ private struct CupCard: View {
         // -6, -6), which is the sticker idiom: a number slapped on the corner
         // rather than inset into the picture.
         Group {
-            if let trackId = map.trackId {
+            if map.locked {
+                LockedTile()
+            } else if let trackId = map.trackId {
                 // A chip's own `cup` outranks the card-level tint, exactly as
                 // renderCupSlot resolves it.
                 SchematicMap(trackId: trackId, cupId: map.cup ?? slot.cupId)
@@ -540,19 +548,20 @@ private struct CupCard: View {
         }
         .overlay(alignment: .topLeading) {
             // The web omits the badge when the model sends no `n` (an exact
-            // track has nothing to number). `GameState.Map.n` cannot be nil,
-            // so 0 stands in for absent.
-            if map.n > 0 { badge(map.n).offset(x: -9, y: -9) }
+            // track and an endless run have nothing to number).
+            // `GameState.Map.n` cannot be nil, so 0 stands in for absent.
+            if map.n > 0 { badge(map.n).offset(x: -8, y: -8) }
         }
     }
 
+    /// `.cup-maps__n`: a 20 pt digit in a 30 pt ink disc, the same geometry on
+    /// every platform.
     private func badge(_ n: Int) -> some View {
         Text("\(n)")
-            .font(Fonts.display(16, weight: .semibold))
+            .font(Fonts.display(20, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 8)
-            .background(Capsule().fill(Tokens.ink))
+            .frame(width: 30, height: 30)
+            .background(Circle().fill(Tokens.ink))
     }
 
     /// `.cup-races` — an OUTLINE pill (ink on paper), which is not the kit's
@@ -560,11 +569,11 @@ private struct CupCard: View {
     /// pill is a label, this is a quiet fact about the card it sits on.
     private var racesPill: some View {
         Text(Copy.races(slot.racesKey, count: slot.raceCount).uppercased())
-            .font(Fonts.display(19, weight: .semibold))
-            .tracking(19 * 0.1)
+            .font(Fonts.display(Self.pillSize, weight: .semibold))
+            .tracking(Self.pillSize * 0.1)
             .foregroundStyle(Tokens.ink)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 18)
+            .padding(.vertical, Self.pillSize * 0.3)
+            .padding(.horizontal, Self.pillSize * 0.95)
             .background(
                 Capsule()
                     .fill(Tokens.surface)
@@ -593,6 +602,27 @@ private struct QuestionTile: View {
                 // one of the long card's eight small ones (the CSS's 34cqw).
                 Text(glyph)
                     .font(Fonts.display(geo.size.width * 0.34, weight: .bold))
+                    .foregroundStyle(Tokens.ink)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous))
+        .stickerOutline(Sticker.hairlineBorder, radius: Sticker.radiusSmall)
+        .accessibilityHidden(true)   // the races pill counts the run in words
+    }
+}
+
+/// The tour's teaser for a locked cup (`.cup-maps__tile--locked`): the "?"
+/// tile's anatomy on sunken paper with a padlock where the glyph would be — a
+/// rung on the ladder, not a race.
+@MainActor
+private struct LockedTile: View {
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Tokens.surface2
+                Image(systemName: "lock.fill")
+                    .font(.system(size: geo.size.width * 0.34, weight: .bold))
                     .foregroundStyle(Tokens.ink)
             }
         }
@@ -641,7 +671,7 @@ private struct CupShelf: View {
         // label ROW is height this rail cannot spare — the web found that at
         // 720p, where it pushed the fifth cup off the shelf.
         .overlay(alignment: .topLeading) {
-            StickerPill(Copy.cupsShelf(earned: earned, of: total), size: 15)
+            StickerPill(Copy.cupsShelf(earned: earned, of: total), size: 14)
                 .accessibilityLabel(Copy.cupsShelfSpoken(earned: earned, of: total))
                 .offset(x: 14, y: -13)
         }
@@ -656,16 +686,15 @@ private struct CupShelf: View {
             // identity to advertise yet.
             if cup.locked {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Tokens.ink2)
             } else {
                 Circle()
                     .fill(Self.swatch(cup.color))
-                    .frame(width: 14, height: 14)
-                    .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: 2))
+                    .frame(width: 13, height: 13)
             }
             Text(Self.shortName(cup.name))
-                .font(Fonts.display(23, weight: .bold))
+                .font(Fonts.display(21, weight: .bold))
                 // Locked RECEDES IN PLACE. It cannot take a sunken fill: inside
                 // one card that reads as a hole punched in the paper.
                 .foregroundStyle(cup.locked ? Tokens.ink2 : Tokens.ink)
@@ -679,7 +708,7 @@ private struct CupShelf: View {
                 HStack(spacing: 5) {
                     StarRow(earned: 1, total: 1)
                     Text("\(cup.unlockDone)/\(cup.unlockNeed)")
-                        .font(Fonts.display(20, weight: .bold))
+                        .font(Fonts.display(18, weight: .bold))
                         .foregroundStyle(Tokens.ink2)
                 }
                 .accessibilityElement(children: .ignore)
@@ -734,10 +763,10 @@ private struct StarRow: View {
     private func star(filled: Bool) -> some View {
         ZStack {
             Image(systemName: "star.fill")
-                .font(.system(size: 21))
+                .font(.system(size: 16))
                 .foregroundStyle(Tokens.ink)
             Image(systemName: "star.fill")
-                .font(.system(size: 15))
+                .font(.system(size: 11.5))
                 .foregroundStyle(filled ? Tokens.red : .white)
         }
         .opacity(filled ? 1 : 0.35)
@@ -781,11 +810,10 @@ private struct SeatDock: View {
 private struct SeatCard: View {
     let seat: GameState.Seat
 
-    /// The web's card is `clamp(100px, 9.5vw, 134px)`, authored for a monitor at
-    /// arm's length. This is the same call `Sticker.swift` made for `.chip` and
-    /// `.pill`: opened up for the sofa, where a 134-point card with a 21-point
-    /// name on it is a smudge.
-    private static let width: CGFloat = 150
+    /// The web's `clamp(100px, 9.5vw, 134px)` at 1920, and Android's: one dock
+    /// size on all three platforms.
+    private static let width: CGFloat = 134
+    private static let nameSize: CGFloat = 21
 
     var body: some View {
         VStack(spacing: 2) {
@@ -793,8 +821,7 @@ private struct SeatCard: View {
             name
         }
         .padding(.horizontal, 8)
-        .padding(.top, 7)
-        .padding(.bottom, 9)
+        .padding(.vertical, 7)
         .frame(width: Self.width)
         .background(background)
         .overlay(alignment: .topTrailing) { marker }
@@ -822,7 +849,7 @@ private struct SeatCard: View {
     /// there is no colour dot on this card: the type is the swatch.
     private var name: some View {
         Text(seat.open ? Copy.openSeat : seat.name)
-            .font(Fonts.display(26, weight: .bold))
+            .font(Fonts.display(Self.nameSize, weight: .bold))
             .foregroundStyle(seat.open ? Tokens.ink3 : Tokens.car(seat.colorIndex))
             .multilineTextAlignment(.center)
             .lineLimit(2)
@@ -831,8 +858,8 @@ private struct SeatCard: View {
             // then the same from "Open" through to a name that wraps, so the
             // dock cannot jump when someone called "Alexandra Smith" joins.
             //
-            // THE BOX IS THE FONT'S, not a guess at it. This was `26 * 1.15 * 2`
-            // — a made-up 1.15 leading — and Fredoka at 26 is taller than that,
+            // THE BOX IS THE FONT'S, not a guess at it. This was `size * 1.15 * 2`
+            // — a made-up 1.15 leading — and Fredoka is taller than that,
             // so the glyphs overflowed a box too short for them and every label
             // on the dock was cut off at the baseline. "Open" and every player
             // name, on every screenshot this shell has taken.
@@ -842,7 +869,7 @@ private struct SeatCard: View {
             // greedy top band, and a VStack under pressure compresses its
             // children rather than overflowing.
             .fixedSize(horizontal: false, vertical: true)
-            .frame(height: Fonts.lineHeight(26, weight: .bold) * 2)
+            .frame(height: Fonts.lineHeight(Self.nameSize, weight: .bold) * 2)
     }
 
     @ViewBuilder
@@ -870,9 +897,9 @@ private struct SeatCard: View {
     @ViewBuilder
     private var marker: some View {
         if seat.host {
-            hostStar.offset(x: 12, y: -14)
+            hostStar.offset(x: 11, y: -14)
         } else if seat.ready {
-            readyCheck.offset(x: 10, y: -10)
+            readyCheck.offset(x: 9, y: -10)
         }
     }
 
@@ -881,9 +908,9 @@ private struct SeatCard: View {
     /// look actually lives in.
     private var readyCheck: some View {
         Image(systemName: "checkmark")
-            .font(.system(size: 20, weight: .heavy))
+            .font(.system(size: 14, weight: .heavy))
             .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
+            .frame(width: 26, height: 26)
             .background(Circle().fill(Tokens.green))
             .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: Sticker.hairlineBorder))
             .accessibilityLabel(Copy.ready)
@@ -905,10 +932,10 @@ private struct SeatCard: View {
     private var hostStar: some View {
         ZStack {
             Image(systemName: "star.fill")
-                .font(.system(size: 40))
+                .font(.system(size: 31))
                 .foregroundStyle(Tokens.ink)
             Image(systemName: "star.fill")
-                .font(.system(size: 32))
+                .font(.system(size: 25))
                 .foregroundStyle(Color(red: 1, green: 200.0 / 255, blue: 61.0 / 255))
         }
         // Two stacked glyphs are two elements to VoiceOver, and one of them is a
@@ -924,22 +951,26 @@ private struct SeatCard: View {
 ///
 /// Constants rather than a `GeometryReader`, because the widths ARE constants
 /// here: tvOS is always 1920x1080 POINTS whatever the box outputs (ledger 2.6),
-/// so the web's `clamp()`s each resolve to one number (the left rail's 27vw
-/// clamps to 430, the right rail's 17vw to 270, the column gap's 2vw to 36). A
-/// reader would also make the QR's size depend on a layout pass that has not
-/// happened on the first frame, which is the pop the web's `aspect-ratio`
-/// reservation exists to avoid.
-///
-/// The rails are NARROWER than the web's clamps, and the reason is vertical, not
-/// horizontal: a rail has to fit inside tvOS's ~960 points of safe height, and
-/// the QR is square, so every point of ticket width is also a point of ticket
-/// height.
+/// so the web's `clamp()`s each resolve to one number — the same numbers
+/// Android's `LobbyScreen` resolves them to, so the three boards match. A reader
+/// would also make the QR's size depend on a layout pass that has not happened
+/// on the first frame, which is the pop the web's `aspect-ratio` reservation
+/// exists to avoid.
 private enum LobbyViewMetrics {
+    /// The board's overscan margin, `--safe-frac-x/y` of the 1920x1080 canvas.
+    static let safeX: CGFloat = Tokens.number("safe-frac-x") * 1920
+    static let safeY: CGFloat = Tokens.number("safe-frac-y") * 1080
     static let cardPadding: CGFloat = 16
-    static let ticketWidth: CGFloat = 340
-    static let cupWidth: CGFloat = 300
+    /// `.ticket`'s `padding: 0.85rem` — a thin paper margin, so the QR fills the card.
+    static let ticketPadding: CGFloat = 14
+    /// The two rails, `min(clamp(240px, 26vw, 440px), 38vh)` and
+    /// `min(clamp(220px, 24vw, 460px), 32vh)` at 1920x1080.
+    static let ticketWidth: CGFloat = 410
+    static let cupWidth: CGFloat = 346
+    /// `.ticket__urlbox`'s type scale; the room code is 1.45em of it.
+    static let urlSize: CGFloat = 17
     /// What is left inside each card. The QR takes the whole of the ticket's.
-    static let ticketInner: CGFloat = ticketWidth - 2 * cardPadding
+    static let ticketInner: CGFloat = ticketWidth - 2 * ticketPadding
     static let cupInner: CGFloat = cupWidth - 2 * cardPadding
 }
 

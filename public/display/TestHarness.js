@@ -309,14 +309,14 @@ export function runDisplayScenario(opts, ctx) {
 
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
-  // The fabricated couch dresses the card's stars and the shelf below, so
-  // gallery-lobby.spec can pin dressings only the right payload produces.
-  // The couch is ttp_ui_preview_progress_json's, loaded like a saved record so
-  // the shelf and the card derive their stars and lock exactly as live play does.
+  // The fabricated couch dresses the shelf below, so gallery-lobby.spec can pin
+  // dressings only the right payload produces. The couch is
+  // ttp_ui_preview_progress_json's, loaded like a saved record so the shelf and
+  // the tour card derive their stars and lock exactly as live play does.
   progressLoad(previewProgress(), false);
   const PREVIEW_PROGRESS = catalogue();
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
-  const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
+  const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog);
 
   // ?picked=<mode> → the pick the preview shows. A matching ?track=<id> aims the
   // card at that circuit (and its cup) so the card names what the 3D preview is

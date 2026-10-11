@@ -1376,7 +1376,7 @@ class GameCoordinator(
     fun refreshCupSlot() {
         val pick = net.pick
         state.cupSlot = GameState.CupSlot.from(
-            TtpJson.obj(Ttp.ttp_ui_cup_slot_json(TtpJson.arg(pick.toString()))))?.veiled()
+            TtpJson.obj(Ttp.ttp_ui_cup_slot_json(TtpJson.arg(pick.toString()))))
     }
 
     private fun setDemoSceneCars(field: JSONArray) {

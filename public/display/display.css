@@ -267,7 +267,7 @@ html {
 /* the glyph tracks its own BOX, not the card: a third of the tile whether
    that tile is the endless card's lone big square or one of the long card's
    eight small ones */
-.cup-maps__tile--q span { font-size: 34cqw; }
+.cup-maps__glyph { font-size: 34cqw; }
 /* the tour's teaser for a locked cup: the "?" box anatomy on sunken paper,
    a padlock where the glyph would be — a rung on the ladder, not a race */
 .cup-maps__tile--locked {
@@ -277,12 +277,14 @@ html {
   background: var(--surface-2);
 }
 .cup-maps__tile--locked .lock-glyph { width: 34%; height: auto; }
+/* the running-order badge: at 1920 wide a 20px digit in a 30px ink disc,
+   hung 8px off the tile's corner */
 .cup-maps__n {
-  position: absolute; top: -6px; left: -6px;
-  min-width: 1.5em; text-align: center;
-  font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; line-height: 1.5em;
-  color: #fff; background: var(--ink); border-radius: var(--r-pill);
-  padding: 0 0.3em;
+  position: absolute; top: -0.4em; left: -0.4em;
+  width: 1.5em; height: 1.5em; text-align: center;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(14px, 1.05vw, 20px); line-height: 1.5em;
+  color: #fff; background: var(--ink); border-radius: 50%;
 }
 .cup-races {
   font-family: var(--font-display); font-weight: 600; font-size: 0.78rem;
@@ -315,7 +317,7 @@ html {
 .ticket-rail:has(#qr.is-in) .tagline { opacity: 1; }
 
 /* "Cups" — the couch's star shelf, at the bottom of the right rail under the
-   "Up next" card (whose pick these stars dress). ONE sticker card of
+   "Up next" card. ONE sticker card of
    short-name rows (renderCupShelf strips the " Cup" suffix) rather than a
    stack of separate pills: five pills with five outlines, five drops and a gap
    between each read as five things scattered down the corner, and the shelf is
@@ -354,8 +356,6 @@ html {
 .cup-shelf__row--locked { color: var(--ink-2); }
 .cup-shelf__row--locked .starcount { margin-left: auto; font-size: 0.85em; }
 .cup-shelf__row--locked .starrow { margin-left: 0; font-size: 1em; }
-/* the cup slot's star badge, between the sticker and the minis */
-.cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
 
 /* Seat dock — a horizontal row of sticker seat cards across the bottom of the
    board, and the floor the two rails stop at. Room is capped at 4 players, so

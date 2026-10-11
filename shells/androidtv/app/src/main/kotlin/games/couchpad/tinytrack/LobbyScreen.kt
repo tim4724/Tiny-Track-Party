@@ -189,7 +189,7 @@ fun LobbyScreen(state: GameState) {
                 // HIDDEN ENTIRELY pre-pick — not an empty card, not a
                 // placeholder. The model answers null until the host has picked,
                 // and an empty sticker would promise a card with nothing to say.
-                state.cupSlot?.let { CupCard(it, state.cups) }
+                state.cupSlot?.let { CupCard(it) }
                 Spacer(Modifier.weight(1f))
                 if (state.cups.isNotEmpty()) CupShelf(state.cups, state.starsEarned, state.starsTotal)
             }
@@ -425,15 +425,8 @@ private fun joinHost(joinUrl: String, roomCode: String): String {
 // -- (b) the race card ------------------------------------------------------
 
 @Composable
-private fun CupCard(slot: GameState.CupSlot, cups: List<GameState.CupRow>) {
-    // THE COUCH'S STARS FOR THIS PICK, merged SHELL-SIDE exactly as the web merges
-    // them (`renderLobbyPick`'s `starsFor`) — stars are progression, not catalogue
-    // data, so the frozen ui corpus's cupSlot answers stay untouched. Only a CUP
-    // card wears them: the tour, random and exact-track cards all go bare.
-    val stars = if (slot.nameKey == "cup" && slot.cupId != null) {
-        cups.firstOrNull { it.id == slot.cupId }?.stars ?: 0
-    } else null
-
+private fun CupCard(slot: GameState.CupSlot) {
+    // No stars on the card: the Cups shelf right under it shows every cup's.
     StickerCard(Modifier.fillMaxWidth(), rotation = 1.2f, padding = 16.dp) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -443,7 +436,6 @@ private fun CupCard(slot: GameState.CupSlot, cups: List<GameState.CupRow>) {
             // WHICH circuit. As plain ink text the headline was quieter than the
             // races caption under it.
             StickerBadge(cupName(slot))
-            stars?.let { StarRow(it, size = 20.dp) }
 
             if (slot.maps.isNotEmpty()) {
                 // A GRID, not a row. `.cup-maps` is `repeat(2, 1fr)`, widening to 3
@@ -535,41 +527,48 @@ private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
         map.trackId == null -> cupTint(map.cup)
         else -> map.cup?.let { cupTint(it) } ?: cardTint ?: cupTint(null)
     }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .background(field, shape)
-            .stickerOutline(Sticker.hairlineBorder, shape),
-        contentAlignment = Alignment.Center,
-    ) {
-        BoxWithConstraints {
-            // `34cqw` — the glyph tracks its own BOX, so it is a third of the tile
-            // whether that tile is the endless card's lone big square or one of a
-            // long run's eight small ones.
-            val glyph = maxWidth * 0.34f
-            when {
-                map.locked -> LockGlyph(size = maxWidth * 0.34f)
-                map.trackId == null ->
-                    // FULL INK. At ink-3 the "?" was low-contrast against its own
-                    // fill, which made an undrawn race look like a disabled one.
-                    StickerText(map.glyph, size = glyph, color = Tokens.ink, lineHeight = 1f)
-                else -> TrackMapCanvas(map.trackId, Modifier.fillMaxSize())
+    Box(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .background(field, shape)
+                .stickerOutline(Sticker.hairlineBorder, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            BoxWithConstraints {
+                // `34cqw` — the glyph tracks its own BOX, so it is a third of the tile
+                // whether that tile is the endless card's lone big square or one of a
+                // long run's eight small ones.
+                val glyph = maxWidth * 0.34f
+                when {
+                    map.locked -> LockGlyph(size = maxWidth * 0.34f)
+                    map.trackId == null ->
+                        // FULL INK. At ink-3 the "?" was low-contrast against its own
+                        // fill, which made an undrawn race look like a disabled one.
+                        StickerText(map.glyph, size = glyph, color = Tokens.ink, lineHeight = 1f)
+                    else -> TrackMapCanvas(map.trackId, Modifier.fillMaxSize())
+                }
             }
         }
         // `.cup-maps__n` — a badge hung OFF the tile's top-left corner, white on
         // solid ink. Printed in the tile's CENTRE it was standing where the map
         // belongs, which is how a card came to show a "1" instead of a circuit.
+        // It is the OUTER box's child, drawn after the tile: `Modifier.border`
+        // paints over its own content, so inside the outlined tile the outline's
+        // corner ran through the number. A 20 dp digit in a 30 dp ink disc: the
+        // same geometry on every platform.
         if (map.n > 0) {
             Box(
                 Modifier
                     .align(Alignment.TopStart)
-                    .offset(x = (-6).dp, y = (-6).dp)
-                    .background(Tokens.ink, RoundedCornerShape(percent = 50))
-                    .padding(horizontal = 7.dp, vertical = 1.dp),
+                    .offset(x = (-8).dp, y = (-8).dp)
+                    .size(30.dp)
+                    .background(Tokens.ink, RoundedCornerShape(percent = 50)),
+                contentAlignment = Alignment.Center,
             ) {
-                StickerText(map.n.toString(), size = 15.dp, weight = Fonts.semibold,
-                    color = Color.White)
+                StickerText(map.n.toString(), size = 20.dp, weight = Fonts.semibold,
+                    color = Color.White, lineHeight = 1f)
             }
         }
     }

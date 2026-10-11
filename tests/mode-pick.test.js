@@ -116,14 +116,6 @@ test('EVERY random-family tap deals a fresh draw — the keep rule is retired', 
     + 'its tracks (the random family is veiled now)');
 });
 
-test('random resolves a concrete trackId, so the card has a map to draw', () => {
-  // `cupSlot`'s random branch pushes ONE map chip and it is the pick's own
-  // trackId. Leave it null and the card renders an empty frame.
-  const model = read('native/libttp-runtime/ttp/ui_model.cc');
-  const i = model.indexOf('if (mode == PickMode::RANDOM)');
-  assert.match(model.slice(i, model.indexOf('return true;', i)), /out\.maps\.push_back\(MapChip\{trackId,/);
-});
-
 // ---- no shell grows a copy back ----------------------------------------------
 
 test('the tvOS shell performs the pick and re-derives none of it', () => {

@@ -244,14 +244,13 @@ class GameState {
         data class Map(
             val index: Int,
             /**
-             * Null is an UNDRAWN race — the "?" chip. The tour's chips all say so
-             * (the drawn first race included, so the card spoils nothing), and the
-             * shell's own random veil manufactures the rest.
+             * Null is an UNDRAWN race — the "?" chip. The tour's and random's chips
+             * all say so (the drawn first race included, so the card spoils nothing).
              */
             val trackId: String?,
             /**
-             * A cup's running order (1..4); 0 stands in for absent — an exact track
-             * has nothing to number, and neither does a "?" chip.
+             * The race's running order on a fixed run (1..N); 0 stands in for absent
+             * — an exact track and an endless run have nothing to number.
              */
             val n: Int,
             /**
@@ -270,29 +269,6 @@ class GameState {
             val glyph: String,
         )
 
-        /**
-         * The web's random veil (`renderLobbyPick`) and its "?" padding
-         * (`renderCupSlot`), folded.
-         *
-         * RANDOM SPOILS NOTHING: a counted card is `raceCount` grey "?" boxes,
-         * endless one grey ∞ box — even the drawn race 1 is not the card's to sell.
-         * The veil lives HERE rather than in the model because the frozen ui corpus
-         * pins cupSlot's random answers to the drawn chip. RANDOM ONLY: a cup's
-         * racesKey is 'count' too, and a cup card must never pad — its chips are
-         * the model's, "?" placeholders (the tour) included.
-         */
-        fun veiled(): CupSlot {
-            if (nameKey != "random") return this
-            val veil = if (racesKey == "endless") {
-                listOf(Map(0, null, 0, null, locked = false, glyph = "∞"))
-            } else {
-                (0 until maxOf(raceCount, 0)).map {
-                    Map(it, null, 0, null, locked = false, glyph = "?")
-                }
-            }
-            return copy(maps = veil)
-        }
-
         companion object {
             fun from(d: JSONObject): CupSlot? {
                 if (d.length() == 0) return null
@@ -309,17 +285,17 @@ class GameState {
                         // empty, so the "?" chip would never draw and the tile would
                         // ask the schematic for a track named "null".
                         trackId = TtpJson.optStr(m, "trackId"),
-                        // 0 stands in for absent (the web tests `m.n != null`): a
-                        // cup numbers its maps 1..4, nothing else numbers anything,
-                        // and an i+1 default badges "1" onto single-map cards the
-                        // web leaves bare.
+                        // 0 stands in for absent (the web tests `m.n != null`):
+                        // only a fixed run numbers its chips, and an i+1 default
+                        // badges "1" onto single-map cards the web leaves bare.
                         n = m.optInt("n", 0),
                         cup = TtpJson.optStr(m, "cup"),
                         // The tour's ladder shows its LOCKED rungs. Undecoded, a
                         // locked cup painted as an ordinary undrawn "?" — the one
                         // distinction the chip row exists to draw.
                         locked = m.optBoolean("locked"),
-                        glyph = "?",
+                        // Endless random's lone undrawn chip carries ∞.
+                        glyph = if (d.optString("racesKey") == "endless") "∞" else "?",
                     )
                 }
                 return CupSlot(

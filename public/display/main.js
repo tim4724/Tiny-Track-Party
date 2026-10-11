@@ -836,7 +836,7 @@ function renderRoster(rosterSize, hostPeerIndex) {
 // gallery preview so the two cannot drift. The scan hint under the ticket stays
 // up for the whole lobby — joining is possible until the race starts.
 function renderPick() {
-  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog, progressChooser());
+  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
 }
 
 // The race rail's "Cups" shelf, from the wasm-stamped catalogue. Refreshed

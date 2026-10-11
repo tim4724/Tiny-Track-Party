@@ -98,17 +98,20 @@ final class GameState: ObservableObject {
 
         struct Map: Identifiable {
             let index: Int
-            /// Nil is an UNDRAWN race — the "?" chip. The tour's chips all say
-            /// so (the drawn first race included, so the card spoils nothing),
-            /// and the shell's own random veil manufactures the rest.
+            /// Nil is an UNDRAWN race — the "?" chip. The tour's and random's
+            /// chips all say so (the drawn first race included, so the card
+            /// spoils nothing).
             let trackId: String?
-            /// A cup's running order (1...4); 0 stands in for absent — an exact
-            /// track has nothing to number, and neither does a "?" chip.
+            /// The race's running order on a fixed run (1...N); 0 stands in for
+            /// absent — an exact track and an endless run have nothing to number.
             let n: Int
             /// The undrawn chip's own cup wash (the tour's ladder). Nil on a
             /// "?" chip means the picker's neutral grey — an unknown must not
             /// borrow the drawn race's colour.
             let cup: String?
+            /// A LOCKED rung of the tour's ladder: not a race, so it is never
+            /// numbered and draws a padlock rather than a "?".
+            let locked: Bool
             /// What a "?" chip shows: "?" unless the chip says otherwise (the
             /// endless card carries ∞).
             let glyph: String
@@ -408,13 +411,14 @@ extension GameState.CupSlot {
                 // empty-string id would ask SchematicMap for a track that
                 // does not exist instead of drawing the "?" chip.
                 trackId: (m["trackId"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                // 0 stands in for absent (the web tests `m.n != null`): a cup
-                // numbers its maps 1...4, nothing else numbers anything, and
-                // the old i+1 default here badged "1" onto single-map cards
-                // the web leaves bare.
+                // 0 stands in for absent (the web tests `m.n != null`): only a
+                // fixed run numbers its chips, and the old i+1 default here
+                // badged "1" onto single-map cards the web leaves bare.
                 n: Int(m["n"] as? Double ?? 0),
                 cup: m["cup"] as? String,
-                glyph: "?")
+                locked: m["locked"] as? Bool ?? false,
+                // Endless random's lone undrawn chip carries ∞.
+                glyph: d["racesKey"] as? String == "endless" ? "∞" : "?")
         }
         self.init(nameKey: d["nameKey"] as? String ?? "",
                   name: d["name"] as? String,
@@ -422,25 +426,6 @@ extension GameState.CupSlot {
                   raceCount: Int(d["raceCount"] as? Double ?? 0),
                   maps: maps,
                   cupId: d["cupId"] as? String)
-    }
-
-    /// The web's random veil (`renderLobbyPick`) and its "?" padding
-    /// (`renderCupSlot`), folded — this shell has one consumer where the web
-    /// splits the card renderer out for the gallery preview.
-    ///
-    /// RANDOM SPOILS NOTHING: a counted card is `raceCount` grey "?" boxes,
-    /// endless one grey ∞ box — even the drawn race 1 is not the card's to
-    /// sell. The veil lives HERE rather than in the model because the frozen
-    /// ui corpus pins cupSlot's random answers to the drawn chip. RANDOM
-    /// ONLY: a cup's racesKey is 'count' too, and a cup card must never pad —
-    /// its chips are the model's, "?" placeholders (the tour) included.
-    func veiled() -> GameState.CupSlot {
-        guard nameKey == "random" else { return self }
-        let veil: [Map] = racesKey == "endless"
-            ? [Map(index: 0, trackId: nil, n: 0, cup: nil, glyph: "∞")]
-            : (0..<max(raceCount, 0)).map { Map(index: $0, trackId: nil, n: 0, cup: nil, glyph: "?") }
-        return GameState.CupSlot(nameKey: nameKey, name: name, racesKey: racesKey,
-                                 raceCount: raceCount, maps: veil, cupId: cupId)
     }
 }
 

@@ -56,7 +56,7 @@ for (const q of [
 // The progression dressings — pinned against the synthesized mid-game payload
 // (five stars, the Playroom locked one short of six). Only the right shape produces
 // these: a renamed progress field degrades to a starless shelf, not a throw.
-test('gallery lobby: the cup shelf and the pick card carry the couch stars', async ({ page }) => {
+test('gallery lobby: the cup shelf carries the couch stars', async ({ page }) => {
   await page.goto('/?scenario=lobby&players=2&picked=cup');
   await expectAttractLobby(page);
   // The shelf: one row per cup, the locked Playroom trailing its progress.
@@ -66,6 +66,6 @@ test('gallery lobby: the cup shelf and the pick card carry the couch stars', asy
   await expect(page.locator('.cup-shelf__row--locked .starcount')).toHaveText('5/6');
   // The label tab carries the couch's total.
   await expect(page.locator('.cup-shelf__label')).toHaveText('Cups ★ 5/15');
-  // The pick card wears the picked cup's stars (Beach = 3 in the synthesis).
-  await expect(page.locator('.cup-stars .star:not(.star--off)')).toHaveCount(3);
+  // The pick card wears none: the shelf under it already shows them.
+  await expect(page.locator('.cup-slot .star')).toHaveCount(0);
 });

@@ -569,7 +569,7 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
   const auto chipVal = [](const ui::MapChip& m) {
     Value e = Value::Obj();
     e.set("trackId", valOf(m.trackId));
-    if (m.n.has) e.set("n", Value::Num(m.n.v));   // only a cup numbers its minis
+    if (m.n.has) e.set("n", Value::Num(m.n.v));   // only a fixed run numbers its chips
     if (m.cup.has) e.set("cup", Value::Str(m.cup.v));   // only the tour cups its chips
     return e;
   };

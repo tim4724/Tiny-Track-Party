@@ -4,7 +4,7 @@
 //
 //   npm run shots:androidtv                 # the paired TV box
 //   npm run shots:androidtv-emu             # the Television_4K_Android_TV AVD
-//   node scripts/capture-shots-androidtv.mjs --serial emulator-5554 --only lobby-track
+//   node scripts/capture-shots-androidtv.mjs --serial emulator-5554 --only lobby-cup
 //
 // How the app side works — the intent extras, the TtpShot readiness protocol,
 // and why `am start -S` is safe here and nowhere else — is

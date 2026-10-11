@@ -258,10 +258,10 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     return true;
   }
   if (mode == PickMode::RANDOM) {
-    // A surprise series: the sticker sells the MODE, the mini shows this round's
-    // draw (which is also what the lobby preview is orbiting). Only race 1 is
-    // known here — the rest of a fixed card is drawn as the series runs — so the
-    // card promises a COUNT where a cup shows its four circuits.
+    // A surprise series: the sticker sells the MODE and the card SPOILS NOTHING,
+    // not even the race 1 draw the lobby preview is orbiting. A fixed run is one
+    // numbered "?" chip per race, an endless one a single unnumbered chip; the
+    // card-level cupId still names the draw's cup.
     //
     // randomRaces is the run length the room SETTLED on: 0 endless, a positive
     // integer that many races. The wire's default for an absent length is applied
@@ -277,7 +277,13 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.name = OptStr::None();
     out.racesKey = endless ? RacesKey::ENDLESS : RacesKey::COUNT;
     out.raceCount = endless ? OptNum::None() : OptNum::Of(randomRaces.v);
-    out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
+    if (endless) {
+      out.maps.push_back(MapChip{OptStr::None(), OptNum::None(), OptStr::None()});
+    } else {
+      for (int i = 1; i <= static_cast<int>(randomRaces.v); i++) {
+        out.maps.push_back(MapChip{OptStr::None(), OptNum::Of(i), OptStr::None()});
+      }
+    }
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
   }
@@ -286,15 +292,16 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     // (difficulty) order — and the card SPOILS NONE of it. Every race, the
     // already-drawn first included, is an undrawn "?" chip carrying only its
     // cup id, so the shell tints each placeholder with that cup's colour and
-    // the card reads as the ladder itself. The card-level cupId stays null
-    // (no single cup owns it).
+    // the card reads as the ladder itself, numbered in running order. The
+    // card-level cupId stays null (no single cup owns it).
     out = CupSlot{};
     out.nameKey = NameKey::TOUR;
     out.name = OptStr::None();
     out.racesKey = RacesKey::COUNT;
     out.raceCount = OptNum::Of(static_cast<double>(cups.size()));
-    for (const Cup& c : cups) {
-      out.maps.push_back(MapChip{OptStr::None(), OptNum::None(), OptStr::Of(c.id)});
+    for (size_t i = 0; i < cups.size(); i++) {
+      out.maps.push_back(MapChip{OptStr::None(), OptNum::Of(static_cast<double>(i + 1)),
+                                 OptStr::Of(cups[i].id)});
     }
     out.cupId = OptStr::None();
     return true;

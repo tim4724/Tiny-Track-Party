@@ -378,7 +378,7 @@ object Scenarios {
             // Assigning `state.cupSlot` directly instead would photograph a cup card
             // floating on PAPER, and would hide the defect that costs most: a picked
             // lobby with no 3D preview behind it.
-            "lobby-track", "lobby-tour", "lobby-random" -> {
+            "lobby-cup", "lobby-tour", "lobby-random" -> {
                 previewProgress(game)
                 game.show(GameState.Screen.LOBBY)
                 game.net.fakeRoom(ROOM_CODE)
@@ -389,17 +389,18 @@ object Scenarios {
                 // one the first time either changed.
                 game.net.applyPick(
                     when (id) {
-                        "lobby-track" -> JSONObject().put("mode", "track")
-                            .put("trackId", trackOverride ?: "driftwood")
+                        "lobby-cup" -> JSONObject().put("mode", "cup").put("cupId", firstCupId()
+                            ?: throw IllegalStateException("the shipped catalogue has no cups"))
                         "lobby-tour" -> JSONObject().put("mode", "tour")
                         else -> JSONObject().put("mode", "random").put("randomRaces", 4)
                     }
                 )
                 // The random pick's draw belongs to the ROOM BAG (entropy-seeded), so
                 // the photographed circuit is pinned AFTER the pick, through the same
-                // set-track walk a cup advance takes: the MODE stays random, only the
-                // preview is made deterministic.
-                if (id != "lobby-track") game.net.setTrack(trackOverride ?: "powder")
+                // set-track walk a cup advance takes: the MODE stays what was picked,
+                // only the preview is made deterministic. A cup previews its own
+                // first race.
+                if (id != "lobby-cup") game.net.setTrack(trackOverride ?: "powder")
                 // The scripted seats go on LAST. The pick's track-change refreshes
                 // the lobby off the (empty, relay-less) room, and a refresh after
                 // this write would photograph four Open placeholders instead of the

@@ -221,8 +221,11 @@ enum Scenarios {
             state.link = LinkView(["state": gaveUp ? "disconnected" : "reconnecting",
                                    "attempt": gaveUp ? 0 : 3, "max": 5, "button": gaveUp])
 
-        case "lobby-tour", "lobby-track", "lobby-random":
+        case "lobby-cup", "lobby-tour", "lobby-random":
             previewProgress(game)
+            guard let firstCupId = state.cups.first?.id else {
+                preconditionFailure("the shipped catalogue has no cups")
+            }
             game.show(.lobby)
             fakeJoin(state, code: "TEST")
             // THROUGH THE PICK WALK, not around it. A harness may fabricate its
@@ -240,8 +243,8 @@ enum Scenarios {
             game.net.applyPick(
                 id == "lobby-tour"
                     ? ["mode": "tour"]
-                    : id == "lobby-track"
-                    ? ["mode": "track", "trackId": track ?? "driftwood"]
+                    : id == "lobby-cup"
+                    ? ["mode": "cup", "cupId": firstCupId]
                     : ["mode": "random", "randomRaces": 4])
             // The RANDOM FAMILY's draw is the ROOM BAG's now (entropy-seeded),
             // and the World Tour is in it — so the harness pins the photographed
@@ -249,7 +252,8 @@ enum Scenarios {
             // advance takes. The mode stays what was picked; only the preview is
             // made deterministic, which is what stops the gallery churning a
             // different card every capture.
-            if id != "lobby-track" { game.net.setTrack(track ?? "powder") }
+            // A cup previews its own first race.
+            if id != "lobby-cup" { game.net.setTrack(track ?? "powder") }
             // The scripted seats go on LAST: the pick's track-change refreshes
             // the lobby off the (empty, relay-less) room, and a refresh after
             // this write would photograph four Open placeholders instead of the

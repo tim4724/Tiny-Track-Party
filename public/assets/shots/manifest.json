@@ -7,12 +7,12 @@
       "file": "androidtv/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 440683,
-      "capturedAt": "2026-10-09T17:16:24.870Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 465781,
+      "capturedAt": "2026-10-11T10:29:47.394Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "countdown",
@@ -20,12 +20,12 @@
       "file": "tvos/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 437799,
-      "capturedAt": "2026-10-11T07:10:14.894Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 456003,
+      "capturedAt": "2026-10-11T10:45:45.944Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "countdown",
@@ -33,9 +33,9 @@
       "file": "web/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 303792,
-      "capturedAt": "2026-10-10T10:20:30.448Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 303879,
+      "capturedAt": "2026-10-11T10:23:15.065Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "disconnected",
@@ -43,12 +43,12 @@
       "file": "androidtv/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 27446,
-      "capturedAt": "2026-10-09T17:25:58.305Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 25844,
+      "capturedAt": "2026-10-11T10:36:00.747Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "disconnected",
@@ -56,12 +56,12 @@
       "file": "tvos/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 8078,
-      "capturedAt": "2026-10-09T17:13:57.550Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 8090,
+      "capturedAt": "2026-10-11T10:45:46.736Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "disconnected",
@@ -69,9 +69,9 @@
       "file": "web/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13000,
-      "capturedAt": "2026-10-10T10:25:40.740Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 13066,
+      "capturedAt": "2026-10-11T10:28:03.541Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "finished",
@@ -79,12 +79,12 @@
       "file": "androidtv/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56636,
-      "capturedAt": "2026-10-09T17:27:13.173Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 55978,
+      "capturedAt": "2026-10-11T10:36:47.335Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "finished",
@@ -92,12 +92,12 @@
       "file": "tvos/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 55680,
-      "capturedAt": "2026-10-09T17:13:58.102Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 54752,
+      "capturedAt": "2026-10-11T10:45:47.005Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "finished",
@@ -105,9 +105,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 53400,
-      "capturedAt": "2026-10-10T10:25:46.392Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 53544,
+      "capturedAt": "2026-10-11T10:28:09.221Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "info",
@@ -115,12 +115,12 @@
       "file": "androidtv/info.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 32840,
-      "capturedAt": "2026-10-09T17:28:07.458Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 30402,
+      "capturedAt": "2026-10-11T10:37:23.040Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "info",
@@ -128,12 +128,12 @@
       "file": "tvos/info.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 33288,
-      "capturedAt": "2026-10-09T17:13:58.679Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 31880,
+      "capturedAt": "2026-10-11T10:45:47.292Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "intermission",
@@ -141,12 +141,12 @@
       "file": "androidtv/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 23948,
-      "capturedAt": "2026-10-09T17:27:43.131Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 21420,
+      "capturedAt": "2026-10-11T10:37:05.259Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "intermission",
@@ -154,12 +154,12 @@
       "file": "tvos/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18060,
-      "capturedAt": "2026-10-09T17:13:58.389Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 17106,
+      "capturedAt": "2026-10-11T10:45:47.145Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "intermission",
@@ -167,9 +167,9 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19976,
-      "capturedAt": "2026-10-10T10:25:54.919Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 19960,
+      "capturedAt": "2026-10-11T10:28:17.760Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "licenses",
@@ -177,12 +177,12 @@
       "file": "androidtv/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 25614,
-      "capturedAt": "2026-10-09T17:28:14.026Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 24460,
+      "capturedAt": "2026-10-11T10:37:28.122Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "licenses",
@@ -190,12 +190,12 @@
       "file": "tvos/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 25912,
-      "capturedAt": "2026-10-09T17:13:58.803Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 24980,
+      "capturedAt": "2026-10-11T10:45:47.368Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "licenses",
@@ -203,9 +203,45 @@
       "file": "web/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48994,
-      "capturedAt": "2026-10-10T10:26:02.424Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 49422,
+      "capturedAt": "2026-10-11T10:28:25.157Z",
+      "gitSha": "ac7e10f3"
+    },
+    {
+      "scenario": "lobby-cup",
+      "platform": "androidtv",
+      "file": "androidtv/lobby-cup.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 62968,
+      "capturedAt": "2026-10-11T10:49:58.630Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
+    },
+    {
+      "scenario": "lobby-cup",
+      "platform": "tvos",
+      "file": "tvos/lobby-cup.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 62394,
+      "capturedAt": "2026-10-11T10:50:14.521Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
+      "deviceKind": "simulator",
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
+    },
+    {
+      "scenario": "lobby-cup",
+      "platform": "web",
+      "file": "web/lobby-cup.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 62264,
+      "capturedAt": "2026-10-11T10:23:05.765Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "lobby-empty",
@@ -213,12 +249,12 @@
       "file": "androidtv/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 55184,
-      "capturedAt": "2026-10-09T17:15:32.982Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 52294,
+      "capturedAt": "2026-10-11T10:29:17.334Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-empty",
@@ -226,12 +262,12 @@
       "file": "tvos/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 52070,
-      "capturedAt": "2026-10-09T17:13:54.909Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 51758,
+      "capturedAt": "2026-10-11T10:45:45.622Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "lobby-empty",
@@ -239,9 +275,9 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 54124,
-      "capturedAt": "2026-10-10T10:20:17.690Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 52750,
+      "capturedAt": "2026-10-11T10:23:02.042Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "lobby-loading",
@@ -249,12 +285,12 @@
       "file": "androidtv/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18258,
-      "capturedAt": "2026-10-09T17:15:22.645Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 17126,
+      "capturedAt": "2026-10-11T10:29:09.792Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-loading",
@@ -262,12 +298,12 @@
       "file": "tvos/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 17844,
-      "capturedAt": "2026-10-09T17:13:54.727Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 16324,
+      "capturedAt": "2026-10-11T10:45:45.536Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "lobby-loading",
@@ -276,8 +312,8 @@
       "w": 1280,
       "h": 720,
       "bytes": 18784,
-      "capturedAt": "2026-10-10T10:20:14.097Z",
-      "gitSha": "eb1c63d2"
+      "capturedAt": "2026-10-11T10:22:58.414Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "lobby-random",
@@ -285,12 +321,12 @@
       "file": "androidtv/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 52490,
-      "capturedAt": "2026-10-09T17:16:06.410Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 59448,
+      "capturedAt": "2026-10-11T10:29:38.455Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-random",
@@ -298,12 +334,12 @@
       "file": "tvos/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47518,
-      "capturedAt": "2026-10-09T17:13:55.415Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 56682,
+      "capturedAt": "2026-10-11T10:45:45.885Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "lobby-random",
@@ -311,9 +347,9 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 54530,
-      "capturedAt": "2026-10-10T10:20:28.563Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 54120,
+      "capturedAt": "2026-10-11T10:23:13.155Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "lobby-tour",
@@ -321,12 +357,12 @@
       "file": "androidtv/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 63240,
-      "capturedAt": "2026-10-09T17:15:55.194Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 60576,
+      "capturedAt": "2026-10-11T10:29:30.858Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-tour",
@@ -334,12 +370,12 @@
       "file": "tvos/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 58556,
-      "capturedAt": "2026-10-09T17:13:55.258Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 60478,
+      "capturedAt": "2026-10-11T10:45:45.796Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "lobby-tour",
@@ -347,45 +383,9 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 60112,
-      "capturedAt": "2026-10-10T10:20:24.912Z",
-      "gitSha": "eb1c63d2"
-    },
-    {
-      "scenario": "lobby-track",
-      "platform": "androidtv",
-      "file": "androidtv/lobby-track.webp",
-      "w": 1280,
-      "h": 720,
-      "bytes": 60288,
-      "capturedAt": "2026-10-09T17:15:44.478Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
-    },
-    {
-      "scenario": "lobby-track",
-      "platform": "tvos",
-      "file": "tvos/lobby-track.webp",
-      "w": 1280,
-      "h": 720,
-      "bytes": 57792,
-      "capturedAt": "2026-10-09T17:13:55.070Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
-      "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
-    },
-    {
-      "scenario": "lobby-track",
-      "platform": "web",
-      "file": "web/lobby-track.webp",
-      "w": 1280,
-      "h": 720,
-      "bytes": 56096,
-      "capturedAt": "2026-10-10T10:20:21.272Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 60120,
+      "capturedAt": "2026-10-11T10:23:09.417Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "monster",
@@ -393,12 +393,12 @@
       "file": "androidtv/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 388891,
-      "capturedAt": "2026-10-09T17:25:16.727Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 414091,
+      "capturedAt": "2026-10-11T10:35:35.453Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "monster",
@@ -406,12 +406,12 @@
       "file": "tvos/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 386758,
-      "capturedAt": "2026-10-11T07:10:15.860Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 408159,
+      "capturedAt": "2026-10-11T10:45:46.509Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "monster",
@@ -419,9 +419,9 @@
       "file": "web/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 255967,
-      "capturedAt": "2026-10-10T10:25:35.647Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 256804,
+      "capturedAt": "2026-10-11T10:27:58.398Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "paused",
@@ -429,12 +429,12 @@
       "file": "androidtv/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 32130,
-      "capturedAt": "2026-10-09T17:25:39.552Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 31846,
+      "capturedAt": "2026-10-11T10:35:49.128Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "paused",
@@ -442,12 +442,12 @@
       "file": "tvos/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 30194,
-      "capturedAt": "2026-10-09T17:13:57.268Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 32786,
+      "capturedAt": "2026-10-11T10:45:46.600Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "paused",
@@ -455,9 +455,9 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14478,
-      "capturedAt": "2026-10-10T10:25:37.618Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 14524,
+      "capturedAt": "2026-10-11T10:28:00.419Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "podium",
@@ -465,12 +465,12 @@
       "file": "androidtv/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 25312,
-      "capturedAt": "2026-10-09T17:27:59.464Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 22972,
+      "capturedAt": "2026-10-11T10:37:17.434Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "podium",
@@ -478,12 +478,12 @@
       "file": "tvos/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19302,
-      "capturedAt": "2026-10-09T17:13:58.535Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 17992,
+      "capturedAt": "2026-10-11T10:45:47.213Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "podium",
@@ -491,9 +491,9 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 21218,
-      "capturedAt": "2026-10-10T10:26:01.265Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 21194,
+      "capturedAt": "2026-10-11T10:28:24.022Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "race-backyard",
@@ -501,12 +501,12 @@
       "file": "androidtv/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 384182,
-      "capturedAt": "2026-10-09T17:20:44.825Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 420094,
+      "capturedAt": "2026-10-11T10:32:31.936Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "race-backyard",
@@ -514,12 +514,12 @@
       "file": "tvos/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 389240,
-      "capturedAt": "2026-10-11T07:10:15.312Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 411922,
+      "capturedAt": "2026-10-11T10:45:46.286Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "race-backyard",
@@ -527,9 +527,9 @@
       "file": "web/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 253690,
-      "capturedAt": "2026-10-10T10:22:42.070Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 258718,
+      "capturedAt": "2026-10-11T10:25:27.627Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "race-beach",
@@ -537,12 +537,12 @@
       "file": "androidtv/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 374848,
-      "capturedAt": "2026-10-09T17:17:58.684Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 400496,
+      "capturedAt": "2026-10-11T10:30:42.757Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "race-beach",
@@ -550,12 +550,12 @@
       "file": "tvos/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 370190,
-      "capturedAt": "2026-10-11T07:10:15.036Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 391245,
+      "capturedAt": "2026-10-11T10:45:46.175Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "race-beach",
@@ -563,9 +563,9 @@
       "file": "web/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 242889,
-      "capturedAt": "2026-10-10T10:21:06.034Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 243152,
+      "capturedAt": "2026-10-11T10:23:50.852Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "race-canyon",
@@ -573,12 +573,12 @@
       "file": "androidtv/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 188103,
-      "capturedAt": "2026-10-09T17:21:54.821Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 184687,
+      "capturedAt": "2026-10-11T10:33:31.128Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "race-canyon",
@@ -586,12 +586,12 @@
       "file": "tvos/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 172925,
-      "capturedAt": "2026-10-11T07:10:15.444Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 181743,
+      "capturedAt": "2026-10-11T10:45:46.337Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "race-canyon",
@@ -599,9 +599,9 @@
       "file": "web/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 113435,
-      "capturedAt": "2026-10-10T10:23:31.468Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 104001,
+      "capturedAt": "2026-10-11T10:26:16.979Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "race-playroom",
@@ -609,12 +609,12 @@
       "file": "androidtv/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 407465,
-      "capturedAt": "2026-10-09T17:22:33.657Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 436940,
+      "capturedAt": "2026-10-11T10:34:00.278Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "race-playroom",
@@ -622,12 +622,12 @@
       "file": "tvos/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 408392,
-      "capturedAt": "2026-10-11T07:10:15.589Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 426101,
+      "capturedAt": "2026-10-11T10:45:46.392Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "race-playroom",
@@ -635,9 +635,9 @@
       "file": "web/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 267798,
-      "capturedAt": "2026-10-10T10:23:50.601Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 267842,
+      "capturedAt": "2026-10-11T10:26:36.111Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "race-snow",
@@ -645,12 +645,12 @@
       "file": "androidtv/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 264950,
-      "capturedAt": "2026-10-09T17:18:57.563Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 283867,
+      "capturedAt": "2026-10-11T10:31:20.279Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "race-snow",
@@ -658,12 +658,12 @@
       "file": "tvos/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 261217,
-      "capturedAt": "2026-10-11T07:10:15.170Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 278966,
+      "capturedAt": "2026-10-11T10:45:46.225Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "race-snow",
@@ -671,9 +671,9 @@
       "file": "web/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 174081,
-      "capturedAt": "2026-10-10T10:21:37.147Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 172655,
+      "capturedAt": "2026-10-11T10:24:22.635Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "racing",
@@ -681,12 +681,12 @@
       "file": "androidtv/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 58184,
-      "capturedAt": "2026-10-09T17:16:46.026Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 57150,
+      "capturedAt": "2026-10-11T10:30:00.665Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "racing",
@@ -694,12 +694,12 @@
       "file": "tvos/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57888,
-      "capturedAt": "2026-10-09T17:13:55.755Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 56400,
+      "capturedAt": "2026-10-11T10:45:46.034Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "racing",
@@ -707,9 +707,9 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 54820,
-      "capturedAt": "2026-10-10T10:20:36.892Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 54946,
+      "capturedAt": "2026-10-11T10:23:21.482Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "racing-sidewinder",
@@ -717,12 +717,12 @@
       "file": "androidtv/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 52184,
-      "capturedAt": "2026-10-09T17:17:12.631Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 51140,
+      "capturedAt": "2026-10-11T10:30:13.341Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "racing-sidewinder",
@@ -730,12 +730,12 @@
       "file": "tvos/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51874,
-      "capturedAt": "2026-10-09T17:13:55.924Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 50870,
+      "capturedAt": "2026-10-11T10:45:46.122Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "racing-sidewinder",
@@ -743,9 +743,9 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49418,
-      "capturedAt": "2026-10-10T10:20:43.188Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 49974,
+      "capturedAt": "2026-10-11T10:23:27.976Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "reconnect",
@@ -753,12 +753,12 @@
       "file": "androidtv/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 77436,
-      "capturedAt": "2026-10-09T17:26:22.636Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 75532,
+      "capturedAt": "2026-10-11T10:36:13.516Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "reconnect",
@@ -766,12 +766,12 @@
       "file": "tvos/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 73330,
-      "capturedAt": "2026-10-09T17:13:57.748Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 72214,
+      "capturedAt": "2026-10-11T10:45:46.829Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "reconnect",
@@ -779,9 +779,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 69886,
-      "capturedAt": "2026-10-10T10:25:42.646Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 69698,
+      "capturedAt": "2026-10-11T10:28:05.456Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "reconnect-solo",
@@ -789,12 +789,12 @@
       "file": "androidtv/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47914,
-      "capturedAt": "2026-10-09T17:26:45.808Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 45398,
+      "capturedAt": "2026-10-11T10:36:29.977Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "reconnect-solo",
@@ -802,12 +802,12 @@
       "file": "tvos/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45616,
-      "capturedAt": "2026-10-09T17:13:57.926Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 45200,
+      "capturedAt": "2026-10-11T10:45:46.915Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "reconnect-solo",
@@ -815,9 +815,9 @@
       "file": "web/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42720,
-      "capturedAt": "2026-10-10T10:25:44.492Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 42800,
+      "capturedAt": "2026-10-11T10:28:07.329Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "reconnecting",
@@ -825,12 +825,12 @@
       "file": "androidtv/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 28402,
-      "capturedAt": "2026-10-09T17:25:48.564Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 26856,
+      "capturedAt": "2026-10-11T10:35:55.112Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "reconnecting",
@@ -838,12 +838,12 @@
       "file": "tvos/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 7712,
-      "capturedAt": "2026-10-09T17:13:57.402Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 7602,
+      "capturedAt": "2026-10-11T10:45:46.668Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "reconnecting",
@@ -851,9 +851,9 @@
       "file": "web/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13126,
-      "capturedAt": "2026-10-10T10:25:39.192Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 13102,
+      "capturedAt": "2026-10-11T10:28:01.979Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "results",
@@ -861,12 +861,12 @@
       "file": "androidtv/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 24018,
-      "capturedAt": "2026-10-09T17:27:25.128Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 20846,
+      "capturedAt": "2026-10-11T10:36:53.142Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "results",
@@ -874,12 +874,12 @@
       "file": "tvos/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 15554,
-      "capturedAt": "2026-10-09T17:13:58.250Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Apple TV 4K (3rd generation)",
+      "bytes": 15004,
+      "capturedAt": "2026-10-11T10:45:47.078Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "results",
@@ -887,9 +887,9 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18066,
-      "capturedAt": "2026-10-10T10:25:48.646Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 17864,
+      "capturedAt": "2026-10-11T10:28:11.500Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "rocket",
@@ -897,12 +897,12 @@
       "file": "androidtv/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 252367,
-      "capturedAt": "2026-10-09T17:24:01.756Z",
-      "gitSha": "44fb1b37",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5650"
+      "bytes": 411088,
+      "capturedAt": "2026-10-11T10:34:43.785Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "rocket",
@@ -910,12 +910,12 @@
       "file": "tvos/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 380306,
-      "capturedAt": "2026-10-11T07:18:48.570Z",
-      "gitSha": "f7b36c87",
-      "deviceName": "TTP shots harmonic",
+      "bytes": 401477,
+      "capturedAt": "2026-10-11T10:45:46.454Z",
+      "gitSha": "ac7e10f3",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "FDBB4EF9-78F1-484A-BFC2-F323B8CECEC2"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "rocket",
@@ -923,9 +923,9 @@
       "file": "web/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 249932,
-      "capturedAt": "2026-10-11T07:20:28.701Z",
-      "gitSha": "f7b36c87"
+      "bytes": 249838,
+      "capturedAt": "2026-10-11T10:27:13.346Z",
+      "gitSha": "ac7e10f3"
     },
     {
       "scenario": "welcome",
@@ -933,9 +933,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19776,
-      "capturedAt": "2026-10-10T10:20:12.885Z",
-      "gitSha": "eb1c63d2"
+      "bytes": 19806,
+      "capturedAt": "2026-10-11T10:22:57.156Z",
+      "gitSha": "ac7e10f3"
     }
   ]
 }

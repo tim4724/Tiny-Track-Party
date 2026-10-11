@@ -283,10 +283,12 @@ const char* key(NameKey k);
 const char* key(RacesKey k);
 
 // A circuit to draw as a mini, BY TRACK ID; the schematic payload is the
-// shell's to look up. A cup numbers them (n = 1..4) — that numbering is the GP
-// menu at a glance and belongs to the model. A chip with NO trackId is an
-// undrawn race — the shell shows a "?" placeholder — and `cup` (the tour's
-// per-race cup) is what lets it wear that cup's colour anyway.
+// shell's to look up. Every card with a FIXED run numbers its chips in running
+// order (a cup's 1..4, the tour's ladder, a counted random run) — that numbering
+// is the menu at a glance and belongs to the model; an exact track and an
+// endless run have nothing to number. A chip with NO trackId is an undrawn
+// race — the shell shows a "?" placeholder — and `cup` (the tour's per-race
+// cup) is what lets it wear that cup's colour anyway.
 struct MapChip {
   OptStr trackId;
   OptNum n;

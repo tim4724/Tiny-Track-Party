@@ -154,7 +154,7 @@ test('a picked lobby scenario stages the TRACK, not just the card', () => {
   // in principle — the surface that exists to verify the look was verifying a
   // composition the live board never produces.
   const src = shell('shells/tvos/TinyTrackParty/Harness/Scenarios.swift');
-  const i = src.indexOf('case "lobby-tour"');
+  const i = src.indexOf('case "lobby-cup"');
   assert.ok(i > 0, 'the picked-lobby scenarios have moved');
   const body = src.slice(i, src.indexOf('case "countdown"', i));
   // The pick WALK is the live path: its track-change effect stages the scene
@@ -168,7 +168,7 @@ test('a picked lobby scenario stages the TRACK, not just the card', () => {
 test('every tvOS scenario case names a real gallery id', async () => {
   // THE DRIFT THIS FILE ALREADY CARRIED. The harness dispatches on the gallery
   // table's `id`, but four of its labels had been written against the web
-  // harness's `key` instead — `lobby` and `lobby-cup`, neither of which is an id
+  // harness's `key` instead — `lobby` and `lobby-cup`, neither of which was an id at the time
   // — so `lobby-tour`, `racing-sidewinder` and `chain` fell through to
   // `default` and the capture reported three screens as ones this platform does
   // not have. A case nothing dispatches to is silent by construction; only the
