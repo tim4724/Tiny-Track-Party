@@ -1437,9 +1437,11 @@ input[type=text]:disabled { opacity: 0.6; }
   0%, 23.9%, 74%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
   24%, 73.9% { transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8); }
 }
+/* BRAKE darkens by colour, not filter: an animated filter inside the tilt
+   phone's 3D slab crashes Linux WebKit (the webkit-controller-layout spec). */
 @keyframes mini-press-brake {
-  0%, 41.9%, 72%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
-  42%, 71.9% { transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8); }
+  0%, 41.9%, 72%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); background: var(--danger); }
+  42%, 71.9% { transform: translateY(2px) scale(0.95); box-shadow: none; background: color-mix(in srgb, var(--danger) 80%, var(--ink)); }
 }
 @keyframes steer-snap {
   0%, 23.9%, 84%, 100% { transform: translateX(-50%); }
