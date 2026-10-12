@@ -1379,6 +1379,31 @@ at 540 is clean (1-3 skips a race); 720 is 0.4 ms over on its heavy seconds.
   with overlapping ranges, pretzel 540 12.28 -> 12.31; typical frames -0.3..-0.5
   ms at 720 only. Not proposed upstream.
 
+## What 720 at four players would cost (2026-10-12, later)
+
+Build `cf9ccb22`, Vulkan, 4P pinned 1280x720, pretzel, three interleaved races
+an arm, heavy p50 (the seconds the rule judges). The rule retreats past 15.0 ms
+and climbs only into a rung predicted under 14.2, so holding 720 needs ~2.1 ms
+off a 17.1 ms heavy frame and reaching it ~2.9.
+
+| arm | heavy delta |
+|---|---|
+| no sky / no cars / no effects | -0.87 / -1.09 / -0.53 |
+| road decals channel (`ROAD_DECALS`) | **-2.19** |
+| ... of which the car-shadow blob (`NO_DECAL_BLOB`) | -1.43 |
+| ... of which the decal profiles / the statics | -0.67 / -0.34 |
+| rubber / paint / deck sun-vis taps | -0.40 / -0.82 / -0.96 |
+| fog / grade / fog per vertex | -0.25 / -0.91 / -0.38 |
+
+The car shadow's GPU half is its TAP, not its upload: tap off -1.53, raster and
+upload off +0.03 (that half is ~0.7 ms of frame-thread CPU). Of the tap, the
+B-spline under the stamps is ~0.5 (bilinear-only arm 16.27). A per-chunk bounds
+gate in front of the probe (exact: the layer reads zero outside the stamps) was
+built, verified pixel-identical on a mid-race 4P frame, and measured NULL: the
+chunks under each camera are the ones holding that cell's own car and its pack,
+so the gate is open over nearly all of the visible deck. No pixel-identical cut
+found reaches 2.1 ms; the shadow stays (user decision), so 4P stays at 540.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
