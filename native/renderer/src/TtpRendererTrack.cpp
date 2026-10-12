@@ -314,9 +314,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // where it means anything: the strips with BOTH endpoints at y == 0. The
     // kerbs, the outer skirts and the underside get an out-of-band v no decal's
     // half-extent can reach. DERIVED from the profile rather than tagged onto
-    // STRIPS by hand, so it cannot drift when the section changes; and the sweep
-    // never shares a vert across quads, so it is a per-quad constant with
-    // nothing to interpolate across. A FULL-WIDTH decal is safe now too: a
+    // STRIPS by hand, so it cannot drift when the section changes; and v is in
+    // the key a corner is shared by, so it is a per-quad constant with nothing
+    // to interpolate across. A FULL-WIDTH decal is safe now too: a
     // launch strip may fill the deck edge to edge without climbing a kerb.
     constexpr float OFF_DECK_LAT = 1000.0f;
 
@@ -377,16 +377,52 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         tans[i] = frames[(i + 1) % N].pos - frames[(i + N - 1) % N].pos;
     }
 
-    // Sweep: indexed QUADS — 4 verts + 6 indices per strip per ring pair,
-    // per-vert AO from its own profile point. The sweep EMITS each quad with
-    // its own corners (crisp paint bands, hard profile corners, per-quad
-    // colour and deck flag); the exact weld below then shares only corners
-    // identical in every attribute, so none of that changes.
+    // Sweep: indexed QUADS — 4 corners + 6 indices per strip per ring pair,
+    // per-vert AO from its own profile point. Each quad is laid with its own
+    // corners (crisp paint bands, hard profile corners, per-quad colour and
+    // deck flag), and a corner becomes a NEW vertex only when no corner
+    // already laid is identical in every attribute, so none of that changes.
+    // Each cell shades a shared corner once instead of once per quad.
+    //
+    // THE WELD IS BY CONSTRUCTION. Two corners can only be equal at the same
+    // profile point of the same ring under the same UNWRAPPED u (the start
+    // line's seam stays split, see uIdx) — short of a road narrower than its
+    // painted lines, where two profile points coincide. At most four corners
+    // land at one point (two strips meet there, from the quads on either side
+    // of the ring), so a corner is compared with those few rather than hashed
+    // against the whole ribbon. `roadRemap` answers corner -> vertex for the
+    // far ribbon, which is laid over the corners' numbering. The baked light
+    // below is a function of the normal alone, so it cannot split what this
+    // merged.
     static const int VSEQ_PT[4] = { 0, 1, 1, 0 };   // a@i, b@i, b@ni, a@ni
-    mRoad.verts.reserve((size_t) N * 16 * 4);
-    mRoad.normals.reserve((size_t) N * 16 * 4);
-    mRoad.uvs.reserve((size_t) N * 16 * 4);
+    constexpr uint32_t kNone = ~0u;
+    std::vector<std::array<uint32_t, 4>> laidAt((size_t) (N + 1) * 16,
+            { kNone, kNone, kNone, kNone });
+    std::vector<uint32_t> roadRemap;
+    roadRemap.reserve((size_t) N * 16 * 4);
+    mRoad.verts.reserve((size_t) N * 16 * 3);   // a little over half the corners survive
+    mRoad.normals.reserve((size_t) N * 16 * 3);
+    mRoad.uvs.reserve((size_t) N * 16 * 3);
     mRoad.idx.reserve((size_t) N * 16 * 6);
+    const auto lay = [&](uint32_t u, int pt, const Vertex& v, const float3& n,
+            const math::float2& uv) {
+        std::array<uint32_t, 4>& here = laidAt[(size_t) u * 16 + pt];
+        for (const uint32_t k : here) {
+            if (k != kNone && !std::memcmp(&mRoad.verts[k], &v, sizeof v)
+                    && !std::memcmp(&mRoad.normals[k], &n, sizeof n)
+                    && !std::memcmp(&mRoad.uvs[k], &uv, sizeof uv)) {
+                return k;
+            }
+        }
+        const uint32_t k = (uint32_t) mRoad.verts.size();
+        mRoad.verts.push_back(v);
+        mRoad.normals.push_back(n);
+        mRoad.uvs.push_back(uv);
+        for (uint32_t& slot : here) {
+            if (slot == kNone) { slot = k; break; }
+        }
+        return k;
+    };
     std::vector<uint32_t> quadKey((size_t) N * 16);
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
@@ -421,13 +457,11 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 return len > 1e-9f ? n / len : frames[ring].up;
             };
             const float3 nA = stripNormal(i), nB = stripNormal(ni);
-            const uint32_t base = (uint32_t) mRoad.verts.size();
+            uint32_t corner[4];
             for (int v = 0; v < 4; v++) {
                 const int pt = VSEQ_PT[v] ? st.b : st.a;
                 const uint32_t ri = ringIdx[v];
                 const float3 p = pointAt(ri, pt);
-                mRoad.verts.push_back({ p.x, p.y, p.z, packLinear(cb, AO[pt]) });
-                mRoad.normals.push_back(ri == i ? nA : nB);
                 // TRACK SPACE, for vroad.mat: u is arclength, v is RAW WORLD
                 // LAT. This is what lets a decal be shaded into the deck instead
                 // of floated over it — the fragment already knows where it is on
@@ -441,34 +475,25 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // anyway. Raw lat has no second quantity to agree with.
                 // Off the deck, v is the out-of-band sentinel instead — see the
                 // DECK FLAG note above.
-                mRoad.uvs.push_back({ (float) uIdx[v] / N * L,
-                        onDeck ? P[pt].sign * halfAt(ri) + P[pt].off
-                               : OFF_DECK_LAT });
+                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packLinear(cb, AO[pt]) },
+                        ri == i ? nA : nB,
+                        { (float) uIdx[v] / N * L,
+                          onDeck ? P[pt].sign * halfAt(ri) + P[pt].off : OFF_DECK_LAT });
+                roadRemap.push_back(corner[v]);
             }
             // The soup's two triangles, verbatim: (a@i, b@i, b@ni) then
             // (a@i, b@ni, a@ni) — the (i,a)-(i+1,b) diagonal project() splits
             // by. Keep the order: same winding, same provoking vertex per
             // triangle, so the rasterizer sees exactly what the soup drew.
-            const uint32_t quad[6] = { base, base + 1, base + 2,
-                                       base, base + 2, base + 3 };
+            const uint32_t quad[6] = { corner[0], corner[1], corner[2],
+                                       corner[0], corner[2], corner[3] };
             mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
         }
     }
     // BAKED VERTEX LIGHT (ambient, NoL), evaluated once here instead of per
     // vertex per frame — it reads no map, so it is final at build whatever the
-    // sun bake later does. Before the weld, which keys on it.
+    // sun bake later does.
     bakeVertexLight(mRoad);
-    // The soup shares nothing: each quad owns its four corners, so every
-    // corner along a run of one colour is drawn twice and each cell shades
-    // both. Welded on every attribute (and the normal bakeRoadVis reads), the
-    // ribbon keeps its triangles (buildMesh reorders them
-    // only within each chunk) and every value the rasterizer interpolates. Its
-    // point-set readers (the AMB_FLAKE floor raster, the shadow bake's fit)
-    // take a max or bound per point, which a merge of exact duplicates cannot
-    // change; the far ribbon below is built over the soup's numbering and
-    // mapped through `roadRemap`.
-    std::vector<uint32_t> roadRemap;
-    weldExact(mRoad, true, &roadRemap);
     // Chunked by RINGS, each chunk with its own bounds, so a chase camera pays
     // for the stretch of circuit it can actually see instead of all ~59k
     // triangles of it — per cell, every frame.

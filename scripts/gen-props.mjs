@@ -6,7 +6,8 @@
 //
 // The props are PROCEDURAL SOURCE, not sourced art: re-run this script after
 // editing a builder below and commit the .glb outputs. Palette points are
-// pixel coordinates into the 512x512 colormap's 32px flat cells.
+// pixel coordinates on Kenney's original 512x512 grid (32px flat cells); only
+// the UV they become matters, so the shipped atlas's size does not.
 //
 // Usage: node scripts/gen-props.mjs
 

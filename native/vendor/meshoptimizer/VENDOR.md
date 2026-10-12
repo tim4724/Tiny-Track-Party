@@ -10,9 +10,9 @@ the pin this was taken from).
 
 Every Filament SDK slice we build (web, Android, tvOS) installs and links
 `libmeshoptimizer.a`, but no SDK installs its header, and CI builds the renderer
-against an SDK install with no checkout beside it. The renderer calls two
-functions (`meshopt_simplify`, `meshopt_simplifyScale`) for the static meshes'
-far forms (`TtpRenderer::farForm`), so the header is all it needs.
+against an SDK install with no checkout beside it. The renderer only calls
+into the library (the vertex-cache order and the far forms' simplifier), so
+the header is all it needs.
 
 ## Updating
 

@@ -306,11 +306,18 @@ const std::vector<uint8_t>* TtpRenderer::asset(const char* name) const {
 // Reorders one range's triangles, in place, so a shared corner is shaded once
 // rather than again for every triangle that reaches it after it left the GPU's
 // post-transform reuse window. The deck as generated re-shaded both new corners
-// of every triangle. `vertexCount` is the whole buffer's, since a range indexes
-// into all of it.
-static void reorderForVertexReuse(uint32_t* idx, size_t n, size_t vertexCount) {
-    const std::vector<uint32_t> src(idx, idx + n);   // the optimiser reads a copy
-    meshopt_optimizeVertexCache(idx, src.data(), n, vertexCount);
+// of every triangle. The optimiser clears per-vertex tables as long as the
+// vertex count it is given, so a range is rebased onto the window of vertices
+// it spans: a chunked mesh would otherwise pay its whole buffer once per chunk.
+// The order it picks depends on the adjacency, not on the labels.
+static void reorderForVertexReuse(uint32_t* idx, size_t n) {
+    if (!n) return;
+    const auto [lo, hi] = std::minmax_element(idx, idx + n);
+    const uint32_t base = *lo, span = *hi - *lo + 1;
+    std::vector<uint32_t> src(idx, idx + n);   // the optimiser reads a copy
+    for (uint32_t& k : src) k -= base;
+    meshopt_optimizeVertexCache(idx, src.data(), n, span);
+    for (size_t i = 0; i < n; i++) idx[i] += base;
 }
 
 // Only an OPAQUE draw may be reordered: a blended one composites in triangle
@@ -353,7 +360,7 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // one. Every rasterised value is unchanged, and so is the triangle order
     // until the reorder below.
     const bool welded = (fold || m.weld) && !lit && !uv && !baked;
-    if (welded) weldExact(m, false);
+    if (welded) weldExact(m);
     m.layout = Mesh::Layout{ lit, uv, baked };
     const uint8_t uvSlot = m.layout.uvSlot();
     const uint8_t customSlot = m.layout.customSlot();
@@ -423,11 +430,9 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // docs/perf/androidtv-frame-map.md (2026-10-09).
     if (isOpaque(mi)) {
         for (size_t i = 0; i < ranges.size(); i++) {
-            reorderForVertexReuse(m.idx.data() + ranges[i].first * 3,
-                    ranges[i].second * 3, m.verts.size());
+            reorderForVertexReuse(m.idx.data() + ranges[i].first * 3, ranges[i].second * 3);
             if (far[i].farCnt) {
-                reorderForVertexReuse(m.idx.data() + far[i].farOff, far[i].farCnt,
-                        m.verts.size());
+                reorderForVertexReuse(m.idx.data() + far[i].farOff, far[i].farCnt);
             }
         }
     }
@@ -519,15 +524,12 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     return r;
 }
 
-void TtpRenderer::weldExact(Mesh& m, bool keyNormals, std::vector<uint32_t>* remapOut) {
-    // The key is every attribute the vertex carries to the GPU, bit for bit,
-    // plus its normal where a later CPU pass still reads it (the road's light
-    // re-fill); a folded sheet's normals are spent and must not split it.
+void TtpRenderer::weldExact(Mesh& m) {
+    // The key is every attribute the vertex carries to the GPU, bit for bit —
+    // its position and colour; buildMesh only welds a mesh that has nothing
+    // else. A folded sheet's normals are spent and must not split it.
     const size_t nv = m.verts.size();
-    const bool nrm = m.normals.size() == nv, uv = m.uvs.size() == nv;
-    const bool c0 = m.custom0.size() == nv;
-    constexpr size_t kMaxWords = 4 + 3 + 2 + 2;
-    using Key = std::array<uint32_t, kMaxWords>;
+    using Key = std::array<uint32_t, sizeof(Vertex) / 4>;
     struct Hash {
         size_t operator()(const Key& k) const {
             uint64_t h = 14695981039346656037ull;
@@ -541,27 +543,21 @@ void TtpRenderer::weldExact(Mesh& m, bool keyNormals, std::vector<uint32_t>* rem
     std::vector<uint32_t> keep;
     keep.reserve(nv);
     for (size_t i = 0; i < nv; i++) {
-        Key k{};
-        std::memcpy(&k[0], &m.verts[i], sizeof(Vertex));
-        if (keyNormals && nrm) std::memcpy(&k[4], &m.normals[i], sizeof(float3));
-        if (uv) std::memcpy(&k[7], &m.uvs[i], sizeof(math::float2));
-        if (c0) std::memcpy(&k[9], &m.custom0[i], sizeof(math::half4));
+        Key k;
+        std::memcpy(k.data(), &m.verts[i], sizeof(Vertex));
         const auto [it, fresh] = slot.emplace(k, (uint32_t) keep.size());
         if (fresh) keep.push_back((uint32_t) i);
         remap[i] = it->second;
     }
-    if (remapOut) *remapOut = remap;
     if (keep.size() == nv) return;
     for (uint32_t& k : m.idx) k = remap[k];
     const auto compact = [&](auto& a) {
         if (a.size() != nv) return;
         for (size_t i = 0; i < keep.size(); i++) a[i] = a[keep[i]];
-        a.erase(a.begin() + (std::ptrdiff_t) keep.size(), a.end());   // half4 has no default
+        a.erase(a.begin() + (std::ptrdiff_t) keep.size(), a.end());
     };
     compact(m.verts);
     compact(m.normals);
-    compact(m.uvs);
-    compact(m.custom0);
 }
 
 VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
@@ -1373,7 +1369,7 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
             // The same material the merged draw is built with, below.
             const size_t primIndex = (size_t) (&sp - prims.data());
             if (isOpaque(rcm.getMaterialInstanceAt(ri0, primIndex))) {
-                reorderForVertexReuse(mp.idx.data(), mp.idx.size(), nv);
+                reorderForVertexReuse(mp.idx.data(), mp.idx.size());
             }
             mp.vb = VertexBuffer::Builder()
                     .vertexCount((uint32_t) nv)

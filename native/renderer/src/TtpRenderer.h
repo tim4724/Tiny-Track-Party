@@ -1683,12 +1683,9 @@ private:
             // its own bounds and frustum culling ON. 0 = one renderable, no
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
-    // Merge the vertices equal in every attribute they carry (and, with
-    // keyNormals, in their CPU normal too), keeping each one's first slot and
-    // the triangle order. `remapOut` answers old index -> new, for an index
-    // list built over the old numbering.
-    static void weldExact(Mesh& m, bool keyNormals,
-            std::vector<uint32_t>* remapOut = nullptr);
+    // Merge the vertices equal in position and colour, keeping each one's
+    // first slot and the triangle order. For a mesh that carries nothing else.
+    static void weldExact(Mesh& m);
     // One range's simplified far form, appended to m.idx (buildMesh's own).
     // `scale` is meshopt's for the whole vertex set; `lockBorder` keeps a
     // range's open edges where a neighbouring range shares them.

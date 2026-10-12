@@ -196,6 +196,10 @@ void TtpRenderer::ensureAssetLoader() {
 // — the shell provides those bytes under that exact name; register them so
 // loadResources finds them (no filesystem here). mAssets outlives the loader,
 // so the descriptors carry no release callback.
+// gltfio decodes and uploads a GLB's textures afresh on every loadResources, so
+// the shared atlas is paid once per kit model loaded: that is why the kit's
+// atlases ship as a 4x box downscale of Kenney's 512 originals, which keeps
+// every flat cell whole. Do not put the originals back.
 void TtpRenderer::registerAssetUris(filament::gltfio::FilamentAsset* asset) {
     const char* const* uris = asset->getResourceUris();
     for (size_t u = 0; u < asset->getResourceUriCount(); u++) {
