@@ -77,8 +77,9 @@ class RenderScaleController {
   // A NEW SCENE. Drops the cost model's observation — a fit whose two points
   // straddle a scene change measures a slope belonging to neither — and starts
   // the scene's grace, inside which nothing steps down (kScaleSceneGraceSec).
-  // The point carries over: no race is cheaper than the lobby's attract, so a
-  // race starts where the lobby settled and steps down if it has to. The
+  // The point carries over and holds: a race starts where the lobby settled and
+  // steps down if it has to, and nothing climbs on no evidence until the scene
+  // has run an up-hold of its own (renderScaleStep's probe). The
   // window itself is the shell's to drop, with ttp_perf_reset, for the reason
   // ttp_perf.h names.
   void scene(double tMs);

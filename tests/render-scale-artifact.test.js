@@ -153,7 +153,7 @@ test('the ceiling is the BAND\'s, adopted without moving the shell\'s buffer', a
     `the first move must not land below the surface's own resolution: ${b.scale}`);
 });
 
-test('a scene build restarts the tenure the climb is paced by', async () => {
+test('a new scene holds the point it inherits for an up-hold, then climbs', async () => {
   const b = await box();
   b.gpuMs = 30;                                    // hopeless against 16.7 ms
   for (let i = 0; i < 6; i++) { b.ticks(180); b.poll(BAND_4K); }
@@ -166,11 +166,14 @@ test('a scene build restarts the tenure the climb is paced by', async () => {
     'past the recovery window a climb waits out the lap-sized hold');
 
   // What a shell owes on a build: this call, and ttp_perf_reset beside it.
+  // Each round below is 180 ticks, three seconds at 60 Hz; the up-hold is 28.
   b.fn.scene(b.t);
   b.fn.reset();
-  for (let i = 0; i < 5; i++) { b.ticks(180); b.poll(BAND_4K); }
-  assert.ok(b.lines(BAND_4K) > floored,
-    'a new scene climbs back at one evidence window a step');
+  for (let i = 0; i < 9; i++) { b.ticks(180); b.poll(BAND_4K); }
+  assert.equal(b.lines(BAND_4K), floored,
+    'a new scene keeps the point it inherited through its own up-hold');
+  for (let i = 0; i < 3; i++) { b.ticks(180); b.poll(BAND_4K); }
+  assert.ok(b.lines(BAND_4K) > floored, '…and then climbs');
 });
 
 test('a poll that decides nothing leaves the window alone', async () => {

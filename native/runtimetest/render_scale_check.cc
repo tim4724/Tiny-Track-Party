@@ -363,15 +363,20 @@ int main() {
   {
     // THE SCENE GETTING CHEAPER, which the recovery path exists for. The shell
     // drops its previous observation (it belongs to a scene that no longer
-    // exists), so the rule PROBES its way back to a model and climbs on it.
+    // exists), so the rule PROBES its way back to a model and climbs on it —
+    // once the new scene has held the point it inherited for an up-hold.
     const auto heavy = [](double s) { return 2.0 + 20.0 * s * s; };
     const auto light = [](double s) { return 1.0 + 3.0 * s * s; };
     Shell sh;
     for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K);
     check(sh.at.scale < 1.0, "the heavy scene really did soften it");
+    const double inherited = sh.at.scale;
     sh.prev = RenderScaleSample{0.0, 0.0};      // what a scene build does
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K, 0.0);
-    nearly(sh.at.scale, 1.0, "a lighter scene climbs back to native from a probe");
+    sh.poll(light(sh.at.scale), k4K, 0.0);
+    sh.poll(light(sh.at.scale), k4K, ttp::rt::kScaleUpHoldSec - 1.0);
+    nearly(sh.at.scale, inherited, "a new scene keeps its point through its first up-hold");
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K, ttp::rt::kScaleUpHoldSec);
+    nearly(sh.at.scale, 1.0, "…and then climbs back to native from a probe");
   }
   {
     // A PANEL THE LADDER DOES NOT NAME still climbs to its OWN native
@@ -391,7 +396,7 @@ int main() {
     const auto light = [](double x) { return 1.0 + 2.0 * x * x; };
     Shell sh;
     sh.at = RenderScalePoint{540.0 / 909.0, 1};
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), web, 0.0);
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), web);
     nearly(sh.lines(web), 1818.0, "and a device with the headroom climbs all the way to it");
   }
 
@@ -471,14 +476,15 @@ int main() {
   {
     // END TO END, on the sequence a race actually walks: a heavy lobby steps the
     // point down across the rate step, the race's scene build drops the
-    // observation, and the cheap race that follows has to find 120 again.
+    // observation, and the cheap race that follows has to find 120 again once
+    // it has held the point it inherited for an up-hold.
     const auto heavy = [](double s) { return 4.0 + 32.0 * s * s; };
     const auto light = [](double s) { return 1.0 + 2.0 * s * s; };
     Shell sh;
     for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K120);
     check(sh.at.divisor == 2, "the lobby really did put it on the 60 Hz half of the ladder");
     sh.prev = RenderScaleSample{0.0, 0.0};        // what a scene build does
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K120, 0.0);
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K120, ttp::rt::kScaleUpHoldSec);
     check(sh.at.divisor == 1, "and the race after it climbs back to the panel's rate");
     nearly(sh.lines(k4K120), 2160.0, "…and on to native, as on any other ladder");
   }
@@ -714,6 +720,26 @@ int main() {
       b.mon.reset();
       while (b.t + 3000.0 < movedAt + ttp::rt::kScaleUpHoldSec * 1000.0) { b.ticks(180); b.poll(k4K); }
       nearly(b.lines(k4K), floored, "a scene build does not shorten the lap-sized up-hold");
+    }
+    {
+      // A NEW SCENE KEEPS THE POINT IT INHERITS, however long ago the last move
+      // was. The build drops the observation, so a lobby that settled minutes
+      // ago used to probe on the first poll after every track change.
+      Box b;
+      b.gpuMs = 30.0;                          // the same at every scale: nothing to fit
+      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
+      const double settled = b.lines(k4K);
+      check(settled < 2160.0, "an expensive scene falls off native");
+      for (int i = 0; i < 12; i++) { b.ticks(180); b.poll(k4K); }   // well past the up-hold
+      nearly(b.lines(k4K), settled, "…and, with nothing to fit, stays");
+      const double built = b.t;
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.gpuMs = 1.0;                           // a new scene with all the headroom there is
+      while (b.t + 3000.0 < built + ttp::rt::kScaleUpHoldSec * 1000.0) { b.ticks(180); b.poll(k4K); }
+      nearly(b.lines(k4K), settled, "a new scene holds its point through its own up-hold");
+      for (int i = 0; i < 4; i++) { b.ticks(180); b.poll(k4K); }
+      check(b.lines(k4K) > settled, "…and then climbs");
     }
     {
       // A SCENE'S FIRST SECONDS ARE NOT ITS COST, with a GPU timer too: a race

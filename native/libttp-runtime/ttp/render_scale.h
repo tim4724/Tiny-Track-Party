@@ -567,7 +567,8 @@ inline bool presentsOnCadence(const RenderScaleCost& cost, double budgetMs) {
 //
 // `sinceChangeSec` is how long the current point has been in force;
 // `sinceSceneSec` how long the current SCENE has: nothing steps down inside
-// its grace (kScaleSceneGraceSec).
+// its grace (kScaleSceneGraceSec), and nothing probes up inside its first
+// up-hold (kScaleUpHoldSec).
 //
 // With no signal at all the answer is the current point, clamped — which is also
 // the answer while a hold is still running.
@@ -618,12 +619,19 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
-    } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= kScaleUpHoldSec) {
+    } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= kScaleUpHoldSec
+               && sinceSceneSec >= kScaleUpHoldSec) {
       // NOTHING MEASURED AT ANOTHER SCALE YET, so PROBE. A model needs two
       // scales to exist and a scale only moves when something asks it to, so
       // refusing to climb with no data is a deadlock: the scene changes, the
       // shell drops the previous observation (a fit across two scenes measures a
       // slope belonging to neither), and nothing would ever move again.
+      //
+      // A NEW SCENE KEEPS THE POINT IT INHERITS for an up-hold of its own.
+      // The build drops the observation, so without this every track change
+      // in a lobby that had long settled probed on the next poll — a climb on
+      // no evidence and, on a box that cannot hold it, a retreat 2.5 s later:
+      // two buffer resizes, one of them under the countdown.
       //
       // ONLY WHEN THERE IS NO OBSERVATION — see hasPrevObservation. A refused
       // FIT is not missing data, it is data saying pixels are not the cost, and
