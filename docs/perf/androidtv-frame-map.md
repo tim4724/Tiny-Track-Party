@@ -1350,6 +1350,35 @@ board 43.7 -> 48.3 C against a 76.2 C first threshold, SoC max 56 C against 95,
 the GPU's cooling device at 0 throughout. GPU busy at 4P/540 tidepool, from the
 driver's own `gpu_work_period` events: 63%. The box emits no `gpu_frequency`.
 
+## Re-baseline, group map and two nulls (2026-10-12)
+
+Build `7924d565` (release, `speed-profile` compiled), Vulkan, three races an arm
+unless noted, 60-75 s counted.
+
+**Where the rule operates, adaptive:** 1P and 2P sit at 1280x720 (heavy GPU p50
+tidepool 11.3 / 9.6-10.0, glacier 12.1-12.6 / 10.0-10.4); 4P at 960x540 (tidepool
+10.9-12.3, glacier 11.2-11.3 — glacier no longer falls to 480). Skips cluster in
+a race's first seconds, stepping down from the lobby's 720.
+
+**Groups at 4P pinned 720, pretzel** (heavy p50, median of 3): all 17.08; no road
+10.54 (-6.5); no terrain 15.14 (-1.9 — the bit is ground, sky dome, hills, water,
+pillars, berms and gantry, so mostly ground and sky fill); no dressing 15.56
+(-1.5); no far forms 18.69 (+1.6, they pay); no merge 17.44 (+0.4, it pays).
+
+**Fixed + fill, 4P pretzel, all features:** heavy 12.6 / 16.9 / 23.1 / 30.5 at
+540 / 720 / 900 / 1080 lines fits `6.6 + 23.9 s^2` ms within 0.3 everywhere. 4P
+at 540 is clean (1-3 skips a race); 720 is 0.4 ms over on its heavy seconds.
+
+**Nulls:**
+- GPU clock ramp: `cmd power set-fixed-performance-mode-enabled` off vs on, 4P
+  pretzel 540: heavy 12.5-12.7 vs 12.5-12.8, skips 2-3 vs 0-4. The devfreq nodes
+  are not readable from adb. No game-category or performance-hint work.
+- Scoping the swap chain's FIRST pass to its viewport (a scratch fork patch on
+  top of the later-view clear, gated by a property, verified active and
+  pixel-correct): heavy pretzel 720 16.54 -> 16.53, tidepool 720 14.94 -> 14.65
+  with overlapping ranges, pretzel 540 12.28 -> 12.31; typical frames -0.3..-0.5
+  ms at 720 only. Not proposed upstream.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
