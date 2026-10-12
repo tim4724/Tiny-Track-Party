@@ -69,18 +69,67 @@ inline void raster_tri(std::vector<float>& a, int W, int H,
     const int x1 = std::min(W - 1, (int) std::ceil(std::max(ax, std::max(bx, cx))));
     const int y0 = std::max(0, (int) std::floor(std::min(ay, std::min(by, cy))));
     const int y1 = std::min(H - 1, (int) std::ceil(std::max(ay, std::max(by, cy))));
+    if (x0 > x1) return;
     const auto edge = [](float e0x, float e0y, float e1x, float e1y, float px, float py) {
         return (e1x - e0x) * (py - e0y) - (e1y - e0y) * (px - e0x);
     };
+    // A ROW'S COVERED TEXELS ARE ONE RUN, so each row finds the run's two ends
+    // and fills between them, rather than testing every texel of the box.
+    // Testing every texel was the bake's whole cost, and it sat on the cold
+    // boot: the supersampled boxes of a car's triangles overlap many times
+    // over, and each texel paid up to three edge tests — on the Android box's
+    // 32-bit cores, a VFP compare apiece. This pays a few tests per row.
+    //
+    // It is the SAME SET, in rounded arithmetic and not only in real numbers.
+    // Along a row only `px - e0x` varies, and every step after it — a rounded
+    // subtract, a rounded multiply by a fixed B, a rounded subtract from a
+    // fixed A — is monotone, so each edge's `>= 0` holds on a prefix of the row
+    // (B > 0) or a suffix (B < 0), or on all of it or none (B == 0). The run
+    // is where the three meet. Each end is found by the SAME test, walked from
+    // where the edge crosses the row in real numbers; that estimate only says
+    // where to start, so its rounding can cost a step and never a texel. (The
+    // monotone steps are the unfused ones: every target compiling this carries
+    // ttp_strict_fp's -ffp-contract=off, the renderer through libttp_track.)
+    // The `carfootprint` ctest holds this to a frozen per-texel copy bit for
+    // bit.
+    const float e[3][4] = { { ax, ay, bx, by }, { bx, by, cx, cy }, { cx, cy, ax, ay } };
+    float slope[3];   // dx/dy along each edge, for the walk's start only
+    for (int k = 0; k < 3; k++) {
+        const float B = e[k][3] - e[k][1];
+        slope[k] = B != 0.0f ? (e[k][2] - e[k][0]) / B : 0.0f;
+    }
     for (int y = y0; y <= y1; y++) {
         const float py = (float) y + 0.5f;
-        for (int x = x0; x <= x1; x++) {
-            const float px = (float) x + 0.5f;
-            if (edge(ax, ay, bx, by, px, py) >= 0
-                    && edge(bx, by, cx, cy, px, py) >= 0
-                    && edge(cx, cy, ax, ay, px, py) >= 0) {
-                a[(size_t) y * W + x] = 1.0f;
+        int lo = x0, hi = x1;   // the run so far, inclusive
+        for (int k = 0; k < 3 && lo <= hi; k++) {
+            const float* E = e[k];
+            const auto in = [&](int x) {
+                return edge(E[0], E[1], E[2], E[3], (float) x + 0.5f, py) >= 0;
+            };
+            const float B = E[3] - E[1];
+            if (B == 0.0f) {
+                if (!in(lo)) hi = lo - 1;
+                continue;
             }
+            // Bounds first, so a NaN crossing lands on one of them.
+            const float g = std::min(hi + 1.0f,
+                    std::max(lo - 1.0f, E[0] + slope[k] * (py - E[1]) - 0.5f));
+            int x = (int) g;
+            if (B > 0.0f) {          // a prefix: find its last texel
+                x = std::min(std::max(x, lo - 1), hi);
+                while (x < hi && in(x + 1)) x++;
+                while (x >= lo && !in(x)) x--;
+                hi = x;
+            } else {                 // a suffix: find its first
+                x = std::min(std::max(x, lo), hi + 1);
+                while (x > lo && in(x - 1)) x--;
+                while (x <= hi && !in(x)) x++;
+                lo = x;
+            }
+        }
+        if (lo <= hi) {
+            float* row = a.data() + (size_t) y * W;
+            std::fill(row + lo, row + hi + 1, 1.0f);
         }
     }
 }

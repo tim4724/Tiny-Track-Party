@@ -192,9 +192,15 @@ inline uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
 // nameable from in here or not at all. Diagnostic only: a clock read per phase
 // on a path that runs once per scene.
 struct PhaseLog {
+    // A BUILD'S PHASE ENDS BY HANDING ITS COMMANDS TO THE DRIVER THREAD. Filament
+    // queues a build's uploads until something flushes, and nothing does until
+    // the build returns — so the driver sat idle through the whole build and then
+    // uploaded all of it in front of the first frame. flush() does not wait.
+    filament::Engine* engine = nullptr;
     std::vector<std::pair<const char*, double>> phases;
     std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();
     void mark(const char* name) {
+        if (engine) engine->flush();
         const auto now = std::chrono::steady_clock::now();
         phases.emplace_back(name, std::chrono::duration<double, std::milli>(now - at).count());
         at = now;

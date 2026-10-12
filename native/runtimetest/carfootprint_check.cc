@@ -17,6 +17,9 @@
 //     cars have all but identical AABBs.
 //   * FAILURE IS EMPTY. Nothing to rasterize answers {} so the caller can fall
 //     back, rather than a blank mask that draws as a car with no shadow.
+//   * THE RUN RASTER IS THE PER-TEXEL RASTER. raster_tri fills each row's run
+//     between two walked ends; it must cover exactly the texels a test of
+//     every texel would, or every car's fit moves.
 //
 // The geometry is synthesized here, so the check needs no fixture and cannot
 // rot with the asset kit.
@@ -63,6 +66,37 @@ float frozenRoundedRect(float u, float v, float overscan,
     const float e = std::max(1e-4f, soft);
     const float t = std::min(1.0f, std::max(0.0f, (e - d) / (2.0f * e)));
     return t * t * (3.0f - 2.0f * t);
+}
+
+// FROZEN: raster_tri as it tested every texel of the triangle's box, before it
+// became a per-row run. Same rule as frozenRoundedRect above: the run raster
+// must reproduce it to the bit, and this copy does not follow a change there.
+void frozenRasterTri(std::vector<float>& a, int W, int H,
+        float ax, float ay, float bx, float by, float cx, float cy) {
+    const float area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+    if (area == 0.0f) return;
+    if (area < 0.0f) {
+        std::swap(bx, cx);
+        std::swap(by, cy);
+    }
+    const int x0 = std::max(0, (int) std::floor(std::min(ax, std::min(bx, cx))));
+    const int x1 = std::min(W - 1, (int) std::ceil(std::max(ax, std::max(bx, cx))));
+    const int y0 = std::max(0, (int) std::floor(std::min(ay, std::min(by, cy))));
+    const int y1 = std::min(H - 1, (int) std::ceil(std::max(ay, std::max(by, cy))));
+    const auto edge = [](float e0x, float e0y, float e1x, float e1y, float px, float py) {
+        return (e1x - e0x) * (py - e0y) - (e1y - e0y) * (px - e0x);
+    };
+    for (int y = y0; y <= y1; y++) {
+        const float py = (float) y + 0.5f;
+        for (int x = x0; x <= x1; x++) {
+            const float px = (float) x + 0.5f;
+            if (edge(ax, ay, bx, by, px, py) >= 0
+                    && edge(bx, by, cx, cy, px, py) >= 0
+                    && edge(cx, cy, ax, ay, px, py) >= 0) {
+                a[(size_t) y * W + x] = 1.0f;
+            }
+        }
+    }
 }
 
 uint32_t bitsOf(float f) {
@@ -237,6 +271,58 @@ int main() {
         expect(car_footprint_mask(far.data(), far.size() / 2,
                        fidx.data(), fidx.size(), 0.275f, 0.438f, s).empty(),
                 "empty: geometry off the frame");
+    }
+
+    // ── THE RUN RASTER IS THE PER-TEXEL RASTER, TO THE BIT ──────────────────
+    // Seeded triangles of every shape the walk has a branch for: off the
+    // frame, tiny, slivers, vertices on texel centres and corners (edges
+    // through sample points, where `>= 0` is decided by a rounding), level
+    // and vertical edges, and near-level ones whose real-number crossing is
+    // far from where the rounded test flips.
+    {
+        const int W = 48, H = 96;
+        uint32_t seed = 0x2545F491u;
+        const auto rnd = [&](float lo, float hi) {
+            seed = seed * 1664525u + 1013904223u;
+            return lo + (hi - lo) * (float) (seed >> 8) / 16777216.0f;
+        };
+        long bad = 0, drawn = 0;
+        std::vector<float> want((size_t) W * H), got((size_t) W * H);
+        for (int i = 0; i < 30000; i++) {
+            float p[6];
+            const int kind = i % 6;
+            for (int k = 0; k < 3; k++) {
+                p[k * 2] = rnd(-6.0f, W + 6.0f);
+                p[k * 2 + 1] = rnd(-6.0f, H + 6.0f);
+            }
+            if (kind == 1) {          // tiny
+                for (int k = 1; k < 3; k++) {
+                    p[k * 2] = p[0] + rnd(-3.0f, 3.0f);
+                    p[k * 2 + 1] = p[1] + rnd(-3.0f, 3.0f);
+                }
+            } else if (kind == 2) {   // a sliver off the a-b midpoint
+                p[4] = 0.5f * (p[0] + p[2]) + rnd(-0.3f, 0.3f);
+                p[5] = 0.5f * (p[1] + p[3]) + rnd(-0.3f, 0.3f);
+            } else if (kind == 3) {   // on texel centres (odd) and corners (even)
+                for (float& c : p) c = std::floor(c * 2.0f) * 0.5f;
+            } else if (kind == 4) {   // a level edge and a vertical one
+                p[3] = p[1];
+                p[4] = p[2];
+            } else if (kind == 5) {   // a long, nearly level edge
+                p[3] = p[1] + rnd(-1e-3f, 1e-3f);
+            }
+            std::fill(want.begin(), want.end(), 0.0f);
+            std::fill(got.begin(), got.end(), 0.0f);
+            frozenRasterTri(want, W, H, p[0], p[1], p[2], p[3], p[4], p[5]);
+            ttp::rt::footprint_detail::raster_tri(got, W, H,
+                    p[0], p[1], p[2], p[3], p[4], p[5]);
+            if (std::memcmp(want.data(), got.data(), want.size() * sizeof(float))) bad++;
+            for (const float v : want) {
+                if (v != 0.0f) { drawn++; break; }
+            }
+        }
+        expect(bad == 0, "raster: the run raster covers exactly the per-texel set");
+        expect(drawn > 10000, "raster: most seeded triangles cover something");
     }
 
     // ── THE CHEAP SHAPE ─────────────────────────────────────────────────────

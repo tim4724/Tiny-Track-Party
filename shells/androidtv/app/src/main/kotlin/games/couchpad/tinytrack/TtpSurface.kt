@@ -21,6 +21,15 @@ import android.view.Surface
 internal object TtpSurface {
 
     /**
+     * Start the engine before there is a [Surface] — the driver comes up on
+     * Filament's own thread while this one draws the boot cover, and the next
+     * [nativeCreate] on the same backend collects it rather than starting
+     * another. A no-op while a display is up or an engine is already started.
+     * Same thread as [nativeCreate]: only the thread that started it may take it.
+     */
+    external fun nativePrepare(vulkan: Boolean, pipelineCacheFile: ByteArray)
+
+    /**
      * Bind the engine to a live [Surface]. `width`/`height` are the surface's
      * PHYSICAL pixels and must equal the buffer size the holder was given — the
      * two are what `ttp_display_cell_rects` answers in, so a disagreement puts

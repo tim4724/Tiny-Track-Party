@@ -716,11 +716,23 @@ GL; then the device must advertise Vulkan 1.1 via
 on Android, so no-ICD and 1.0-only boxes go GL from launch one instead of
 after two dead boots; then the SPIR-V blob set must be in the APK; then the
 boot canary — two Vulkan boots that never presented a frame and every later
-launch runs GL until a reinstall). The decision is made at surface create and carried into
-`nativeCreate` as a parameter — the shared `ttp_display_create` ABI cannot grow
-a platform-private argument — and `DisplayHost` retries the create on GL in the
-same call when the Vulkan engine refuses, so a refusing driver still shows a
-picture. The same call carries the file a Vulkan engine keeps its compiled
+launch runs GL until a reinstall). The decision is made when `DisplayHost` is
+constructed and carried into `nativePrepare` and `nativeCreate` as a parameter
+— the shared `ttp_display_create` ABI cannot grow a platform-private argument —
+and `DisplayHost` retries the create on GL in the same call when the Vulkan
+engine refuses, so a refusing driver still shows a picture.
+
+**THE ENGINE IS STARTED BEFORE THE SURFACE EXISTS.** A Filament engine needs no
+window until its swap chain, and the surface only arrives after Compose's first
+frame and the posted attach above — so `DisplayHost`'s constructor starts it
+(`nativePrepare`, `TtpRenderer::prepare`: Filament's async build), the driver
+comes up on Filament's own thread while main draws the cover, and the first
+`surfaceChanged` collects it, waiting only for what is left. Main still makes
+every `ttp_*` call: Filament hands the engine back only on the thread that
+started it. A later surface (Home and back) builds its engine there, as before,
+because `ttp_display_destroy` still deletes the renderer. The canary is marked
+at the prepare, before the driver starts, so a driver that kills the process
+still counts. Both calls carry the file a Vulkan engine keeps its compiled
 pipelines in between runs, under `codeCacheDir`, which Android empties on an app
 update so a build with new materials never starts from the last one's. A Vulkan
 engine reads the SPIR-V twins from `assets/materials-vk/`

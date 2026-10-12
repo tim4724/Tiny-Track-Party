@@ -7,6 +7,9 @@
 #include <string>
 #include <utility>
 #include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 
 #include "TtpRendererImpl.h"
 #include "../generated/kit_colors.h"
@@ -104,10 +107,9 @@ void persistPipelineCache(filament::backend::Platform& platform, std::string con
 }  // namespace
 #endif
 
-TtpRenderer::TtpRenderer() = default;
-
-bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
-        uint32_t width, uint32_t height) {
+// Every engine's recipe: init builds it on the spot, and on Android prepare
+// starts it ahead of the window.
+static Engine::Builder engineBuilder(backend::Backend backend) {
     // The skid stamp pass only runs on frames that commit a trail segment, so
     // its FrameGraph depth transient (a deck-sized ~16 MB texture) sits unused
     // for a frame or two between passes. The texture cache's default max age
@@ -147,6 +149,20 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
+    return builder;
+}
+
+TtpRenderer::TtpRenderer() = default;
+
+#if defined(__ANDROID__)
+struct TtpRenderer::PendingEngine {
+    std::mutex lock;
+    std::condition_variable ready;
+    void* token = nullptr;
+};
+
+void TtpRenderer::prepare(backend::Backend backend) {
+    Engine::Builder builder = engineBuilder(backend);
 #if defined(TTP_VK_PLATFORM_OVERRIDE)
     // The framebuffer-eviction override above. A provided platform is
     // caller-owned and must outlive the engine, so it is a member destroyed
@@ -157,7 +173,35 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         builder.platform(mVkPlatform.get());
     }
 #endif
-    mEngine = builder.build();
+    // Filament answers on a thread of its own once the driver is up, or has
+    // failed. Only the token crosses: the engine is taken on THIS thread.
+    mPending = std::make_shared<PendingEngine>();
+    builder.build([pending = mPending](void* token) {
+        std::lock_guard<std::mutex> hold(pending->lock);
+        pending->token = token;
+        pending->ready.notify_one();
+    });
+}
+
+Engine* TtpRenderer::collectEngine() {
+    std::shared_ptr<PendingEngine> pending = std::move(mPending);
+    std::unique_lock<std::mutex> hold(pending->lock);
+    pending->ready.wait(hold, [&] { return pending->token != nullptr; });
+    hold.unlock();
+    // FEngine::init runs here, on the caller's thread; a driver that failed
+    // has its thread joined and answers null.
+    return Engine::getEngine(pending->token);
+}
+#endif
+
+bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
+        uint32_t width, uint32_t height) {
+#if defined(__ANDROID__)
+    if (!mPending) prepare(backend);
+    mEngine = collectEngine();
+#else
+    mEngine = engineBuilder(backend).build();
+#endif
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
         // cones — and each instance was its own draw call. Filament can merge
@@ -246,9 +290,9 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
     // glbKey key their memos by name instead of by a hash of every byte.
     mAssetUriCache.erase(name);
     mGlbKeyOf.erase(name);
-    // The count-keyed pools are built out of these two (buildField).
+    // The monster pools are built out of these two (buildField).
     if (!std::strcmp(name, kMonsterGlb) || !std::strcmp(name, kMonsterGhostGlb)) {
-        mFieldPoolCars = -1;
+        mMonsterPoolCars = -1;
     }
     return true;
 }
@@ -1772,9 +1816,9 @@ int TtpRenderer::backendId() const {
 }
 
 // The field's teardown: every car slot and what is sized by the field, bar the
-// count-keyed pools (releaseFieldPools). A field rebuild (rebuildField) and
-// ttp_display_release come through here alone; the static scene stays up
-// under its key.
+// count-keyed pools (releaseMonsterPools, releaseStreakPool). A field rebuild
+// (rebuildField) and ttp_display_release come through here alone; the static
+// scene stays up under its key.
 void TtpRenderer::releaseField() {
     if (!mEngine) return;
     // A released scene is unsettled by definition — the next build re-arms, and
@@ -1787,9 +1831,9 @@ void TtpRenderer::releaseField() {
     destroyMergedGroups(mMergedCars);
     mCarMergeDirty = false;
     for (auto& m : mCars) destroyMesh(m);
-    // The count-keyed pools stay for the next field (releaseFieldPools), but
-    // OUT OF THE SCENE: a frame drawn before that build must not show a
-    // monster or a streak the last race left up.
+    // The count-keyed pools stay for the next field (releaseMonsterPools,
+    // releaseStreakPool), but OUT OF THE SCENE: a frame drawn before that
+    // build must not show a monster or a streak the last race left up.
     for (size_t i = 0; i < mMonsterIn.size(); i++) {
         if (i < mMonsterInstances.size()) {
             setInstanceInScene(mMonsterInstances[i], mMonsterIn[i], false);
@@ -1832,25 +1876,13 @@ void TtpRenderer::releaseField() {
     mLastCarN = {};
 }
 
-// The pools sized by the field's car COUNT and nothing else — the monster rig
-// and its ghost, the boost streaks. releaseField keeps them for a field of the
-// same size; this frees them, from a build of another count (buildField) or
-// with the static scene (releaseScene), whose boost colour the streaks wear.
-void TtpRenderer::releaseFieldPools() {
-    for (auto& m : mStreakMeshes) destroyMesh(m);
-    // The streak ring's other slots, after every renderable that could draw
-    // them; slot 0 was the mesh's own vb. Their bytes are buried like any
-    // mesh's (MeshGrave) — the last write may not have been uploaded yet.
-    for (Streak& st : mStreaks) {
-        for (size_t k = 1; k < st.ringVbs.size(); k++) mEngine->destroy(st.ringVbs[k]);
-        st.ringVbs.clear();
-        for (auto& rv : st.ringVerts) {
-            Mesh grave;
-            grave.verts.swap(rv);
-            buryMeshBuffers(grave);
-        }
-        st.ringVerts.clear();
-    }
+// The pools sized by the field's car COUNT — the monster rig and its ghost,
+// the boost streaks. releaseField keeps both for a field of the same size.
+// The monster pools are made of the count and their GLB bytes alone, so a new
+// scene keeps them too: they go for a build of another count (buildField) or
+// with the renderer. The streaks are made in the scene's boost colour, so
+// releaseScene drops them as well.
+void TtpRenderer::releaseMonsterPools() {
     // The monster pools are loadInstancedProp assets, so their mesh-key
     // entries go with them: a freed pointer left in the map could match the
     // next asset allocated at that address.
@@ -1868,9 +1900,27 @@ void TtpRenderer::releaseFieldPools() {
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;
     mMonsterHalfLen = 0;
+    mMonsterPoolCars = -1;
+}
+
+void TtpRenderer::releaseStreakPool() {
+    for (auto& m : mStreakMeshes) destroyMesh(m);
+    // The streak ring's other slots, after every renderable that could draw
+    // them; slot 0 was the mesh's own vb. Their bytes are buried like any
+    // mesh's (MeshGrave) — the last write may not have been uploaded yet.
+    for (Streak& st : mStreaks) {
+        for (size_t k = 1; k < st.ringVbs.size(); k++) mEngine->destroy(st.ringVbs[k]);
+        st.ringVbs.clear();
+        for (auto& rv : st.ringVerts) {
+            Mesh grave;
+            grave.verts.swap(rv);
+            buryMeshBuffers(grave);
+        }
+        st.ringVerts.clear();
+    }
     mStreaks.clear();
     mStreakMeshes.clear();
-    mFieldPoolCars = -1;
+    mStreakPoolCars = -1;
 }
 
 // What one race leaves on the static scene, put back the way a fresh build
@@ -1896,13 +1946,14 @@ void TtpRenderer::resetRace() {
     mDeckDecalsLast.clear();
 }
 
-// Both halves, back to bare engine + materials + provided bytes: the
-// destructor's teardown, and a build of a different key.
+// Both halves, back to bare engine + materials + provided bytes, bar the
+// monster pools (releaseMonsterPools): the destructor's teardown, and a build
+// of a different key.
 void TtpRenderer::releaseScene() {
     if (!mEngine) return;
     const auto tRelease = std::chrono::steady_clock::now();
     releaseField();
-    releaseFieldPools();
+    releaseStreakPool();
     releaseStatic();
     // `graves` is the standing guard on the burial: it climbs during a build,
     // which presents no frames, and must be back at 0 at rest. A number that
@@ -2068,6 +2119,15 @@ void TtpRenderer::releaseStatic() {
 }
 
 TtpRenderer::~TtpRenderer() {
+#if defined(__ANDROID__)
+    // Prepared and never given a window: the engine still has its driver
+    // thread to stop, and nothing else of this renderer was made.
+    if (mPending) {
+        mEngine = collectEngine();
+        if (mEngine) Engine::destroy(&mEngine);
+        return;
+    }
+#endif
     if (!mEngine) return;
     releaseScene();
     // The engine is going away, so no frame will ever age these out. This is
@@ -2077,6 +2137,8 @@ TtpRenderer::~TtpRenderer() {
     // The parked bodies go with the loader that made them, and only here: a
     // scene release parks, it does not destroy.
     drainBodyPool();
+    // Likewise the monster pools, which outlive a scene.
+    releaseMonsterPools();
     // Engine-lifetime, like the parsed-kit cache: outlives every scene, so it
     // is this destructor's to free and no releaseScene's.
     for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);

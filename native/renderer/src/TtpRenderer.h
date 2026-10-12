@@ -179,6 +179,14 @@ public:
     // Before init: the file the Vulkan backend keeps its compiled pipelines in
     // between runs. Unset keeps them in memory, as every other backend does.
     void setPipelineCacheFile(std::string path) { mPipelineCacheFile = std::move(path); }
+    // Start the engine before there is a window, and return at once: the
+    // driver (Vulkan instance and device, the pipeline cache read, or the EGL
+    // context) comes up on Filament's own thread while the shell's main thread
+    // gets on with its first frames, and init() collects it, waiting only for
+    // whatever is left. No window is needed until init's createSwapChain. The
+    // backend init is later handed must be this one. Call it on the thread init
+    // runs on — Filament hands the engine back only there.
+    void prepare(filament::backend::Backend backend);
 #endif
     void resize(uint32_t width, uint32_t height);
     // Skip the sun's shadow bake for every scene built from here on. The bake is
@@ -378,8 +386,11 @@ public:
     // Tear down the field alone; the static scene stays resident under its
     // key until a build of another key or the destructor frees it.
     void releaseField();
-    // …and the pools keyed by the field's car count, which releaseField keeps.
-    void releaseFieldPools();
+    // …and the pools keyed by the field's car count, which releaseField keeps:
+    // the monster rig and its ghost, kept across scenes too, and the boost
+    // streaks, which wear the scene's boost colour.
+    void releaseMonsterPools();
+    void releaseStreakPool();
     // Both halves — meshes, glTF assets, lights, sky, material instances —
     // back to bare engine. The engine, views, materials and provided asset
     // bytes survive.
@@ -596,6 +607,10 @@ private:
     // TtpRenderer::init) — caller-owned, so it outlives the engine here.
     std::unique_ptr<filament::backend::Platform> mVkPlatform;
     std::string mPipelineCacheFile;
+    // prepare()'s engine until init or the destructor collects it.
+    struct PendingEngine;
+    std::shared_ptr<PendingEngine> mPending;
+    filament::Engine* collectEngine();
 #endif
     filament::SwapChain* mSwapChain = nullptr;
     filament::Renderer* mRenderer = nullptr;
@@ -1551,12 +1566,16 @@ private:
     filament::gltfio::FilamentAsset* mMonsterGhostAsset = nullptr; // 50%-alpha fade variant
     std::vector<filament::gltfio::FilamentInstance*> mMonsterGhostInstances;
     // The chassis recolour's duplicates (recolourMonsterChassis): owned by the
-    // monster pools, so releaseFieldPools frees them — on the scene's list they
+    // monster pools, so releaseMonsterPools frees them — on the scene's list they
     // piled up per rebuild.
     std::vector<filament::MaterialInstance*> mMonsterMatInstances;
-    // The car count the monster and streak pools were built for; -1 = build
-    // them again (none yet, a monster GLB re-provided, a build that failed).
-    int mFieldPoolCars = -1;
+    // The car count the monster pools were built for; -1 = build them again
+    // (none yet, a monster GLB re-provided). Nothing else they are made of
+    // varies, so a new scene keeps them.
+    int mMonsterPoolCars = -1;
+    // The same for the boost streaks, which a new scene also drops: their
+    // vertices carry its boost colour. -1 likewise after a build that failed.
+    int mStreakPoolCars = -1;
     // The RIG's own wheels, per instance. While the monster is up the car's
     // wheels are collapsed and these are the ones on the ground, so they take
     // over the roll/steer cosmetics (the JS swaps c.frontWheels/backWheels to

@@ -6,8 +6,9 @@ import android.util.Log
 import java.io.File
 
 /**
- * Which Filament backend this launch builds — decided ONCE, at surface create,
- * because an engine cannot switch backends later.
+ * Which Filament backend this launch builds — decided ONCE, when [DisplayHost]
+ * starts the engine ahead of the surface, because an engine cannot switch
+ * backends later.
  *
  * VULKAN IS THE DEFAULT on this shell: measured on the reference box it takes
  * the 4-player GPU median from ~27 ms to ~17 (shells/androidtv/CLAUDE.md,

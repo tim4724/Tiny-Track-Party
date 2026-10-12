@@ -46,6 +46,20 @@ static bool gUseVulkan = false;
 // TtpRenderer::setPipelineCacheFile's path, carried like gUseVulkan.
 static std::string gPipelineCacheFile;
 
+// An engine started before its window (nativePrepare), and the backend it was
+// started on. The next ttp_display_create takes it instead of starting one.
+static TtpRenderer* gPrepared = nullptr;
+static bool gPreparedVulkan = false;
+
+// The JNI byte[] path as UTF-8 (shells/androidtv/CLAUDE.md, rule 3: never a
+// jstring).
+static std::string utf8(JNIEnv* env, jbyteArray bytes) {
+    const jsize n = bytes ? env->GetArrayLength(bytes) : 0;
+    std::string out((size_t) n, '\0');
+    if (n > 0) env->GetByteArrayRegion(bytes, 0, n, reinterpret_cast<jbyte*>(out.data()));
+    return out;
+}
+
 // The platform sliver over the shared core: just the window.
 struct AndroidDisplay : ttp::rt::DisplayCore {
     // ACQUIRED, unlike the tvOS layer, which is merely held. A SurfaceHolder can
@@ -86,8 +100,19 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     // first time the scaler steps.
     ANativeWindow_acquire(window);
 
-    auto* renderer = new TtpRenderer();
-    renderer->setPipelineCacheFile(gPipelineCacheFile);
+    // The prepared engine if it is on the backend asked for, else a fresh one;
+    // either way gPrepared is spent. A refused Vulkan prepare is the caller's
+    // GL retry, which then starts its own.
+    TtpRenderer* renderer = gPrepared;
+    gPrepared = nullptr;
+    if (renderer && gPreparedVulkan != gUseVulkan) {
+        delete renderer;
+        renderer = nullptr;
+    }
+    if (!renderer) {
+        renderer = new TtpRenderer();
+        renderer->setPipelineCacheFile(gPipelineCacheFile);
+    }
     if (!renderer->init(gUseVulkan ? filament::backend::Backend::VULKAN
                                    : filament::backend::Backend::OPENGL,
                         window, width, height)) {
@@ -125,19 +150,30 @@ void ttp_display_destroy(void) {
 // regenerating the bridge can never silently drop the one function without
 // which nothing draws at all.
 
+// THE ENGINE NEEDS NO WINDOW UNTIL ITS SWAP CHAIN, and the surface arrives
+// only after Compose's first frame — so the driver (the Vulkan instance and
+// device, the pipeline cache read, or the EGL context) is started here, from
+// onCreate, on Filament's own thread, and the create that follows collects it.
+// Every ttp_* call stays on main: this thread only starts it and only it takes
+// it back. A display already up, or an engine already started, is left alone.
+JNIEXPORT void JNICALL
+Java_games_couchpad_tinytrack_TtpSurface_nativePrepare(
+        JNIEnv* env, jclass, jboolean vulkan, jbyteArray pipelineCacheFile) {
+    if (ttp::rt::displayCore() || gPrepared) return;
+    gPrepared = new TtpRenderer();
+    gPrepared->setPipelineCacheFile(utf8(env, pipelineCacheFile));
+    gPreparedVulkan = vulkan == JNI_TRUE;
+    gPrepared->prepare(gPreparedVulkan ? filament::backend::Backend::VULKAN
+                                       : filament::backend::Backend::OPENGL);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
         JNIEnv* env, jclass, jobject surface, jint width, jint height,
         jboolean vulkan, jbyteArray pipelineCacheFile) {
     if (!surface) return JNI_FALSE;
     gUseVulkan = vulkan == JNI_TRUE;
-    // UTF-8 bytes, never a jstring (shells/androidtv/CLAUDE.md, rule 3).
-    const jsize pathBytes = pipelineCacheFile ? env->GetArrayLength(pipelineCacheFile) : 0;
-    gPipelineCacheFile.assign((size_t) pathBytes, '\0');
-    if (pathBytes > 0) {
-        env->GetByteArrayRegion(pipelineCacheFile, 0, pathBytes,
-                reinterpret_cast<jbyte*>(gPipelineCacheFile.data()));
-    }
+    gPipelineCacheFile = utf8(env, pipelineCacheFile);
     // fromSurface RETURNS an acquired window; ttp_display_create acquires again
     // for its own reference, so this one is released either way below.
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);

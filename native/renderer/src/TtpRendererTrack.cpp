@@ -1006,7 +1006,7 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
 
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
-    PhaseLog phases;
+    PhaseLog phases{ mEngine };
 
     TrackBin tb;
     applyTheme(tb, theme);
@@ -2033,7 +2033,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
 
 bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
     if (!mTrack) return false;
-    PhaseLog phases;
+    PhaseLog phases{ mEngine };
     applyRoster(*mTrack, roster);
     const uint32_t carCount = (uint32_t) mTrack->carColors.size();
     // Cars: the real GLB when the shell provided the slot's model (gltfio +
@@ -2049,13 +2049,13 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
         if (!buildCarSlot(c)) return false;
     }
     phases.mark("cars");
-    // THE POOLS SIZED BY THE COUNT ALONE — the monster rig and its ghost, the
-    // boost streaks — are built for a new count only (releaseFieldPools). A
-    // field of the size they were built for takes them back as releaseField
-    // left them: out of the scene, as a fresh build's first frame would.
-    const bool newPools = mFieldPoolCars != (int) carCount;
-    if (newPools) {
-        releaseFieldPools();
+    // THE POOLS SIZED BY THE COUNT — the monster rig and its ghost, the boost
+    // streaks — are built for a new count only (releaseMonsterPools,
+    // releaseStreakPool), and the streaks for a new scene too. A field of the
+    // size they were built for takes them back as releaseField left them: out
+    // of the scene, as a fresh build's first frame would.
+    if (mMonsterPoolCars != (int) carCount) {
+        releaseMonsterPools();
         // Monster chassis pool (one per car): the kit monster truck with its cab
         // node collapsed — the transformed player's own car body seats the slot
         // per frame (MonsterRig's graft; gunmetal recolour is later polish).
@@ -2174,13 +2174,16 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
             recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
                     math::float4{ chassis, 1.0f });
         }
+        mMonsterPoolCars = (int) carCount;
     }
     phases.mark("monsters");
     mWheelTrails.assign(carCount * 4, {}); // each wheel's run on the rubber layer
     mStreakSeed.resize(carCount);
     for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
     for (Streak& st : mStreaks) { st.dead = true; st.alpha = 0; } // a kept pool's race state
-    if (newPools && mBlendMaterial) {
+    const bool newStreaks = mStreakPoolCars != (int) carCount;
+    if (newStreaks) releaseStreakPool();
+    if (newStreaks && mBlendMaterial) {
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
         // along X, facing +Y) carrying makeStreakTexture — an ellipse
         // (rx 24, ry 3 on a 64×16 canvas) blurred by 3px, so it's soft at both
@@ -2258,7 +2261,7 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
     for (uint32_t c = 0; c < carCount; c++) buildCarGhost(c);
 
     pumpTextures(); // the same pump as buildStatic's, for the field's own loads
-    mFieldPoolCars = (int) carCount; // keyed only once whole: a failed build retries
+    mStreakPoolCars = (int) carCount; // keyed only once whole: a failed build retries
     phases.mark("streaks+ghosts");
     phases.print("ttp build phases: field");
     return true;

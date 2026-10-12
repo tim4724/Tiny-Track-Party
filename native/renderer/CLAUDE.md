@@ -344,15 +344,18 @@ memory until another track builds or the renderer goes.
   the field is silently kept stale — a scene lit by, or dressed for, the last
   field. Keep a thing by what it varies on.
 - **Whatever `buildField` makes, `releaseField` frees — unless it is keyed, and
-  then its key does.** What depends on the car COUNT alone (the monster rig and
-  its ghost, the boost streaks) is kept for a field of the same size and freed
-  in one place, `releaseFieldPools`: by a build of another count, after new
-  bytes for a monster GLB (`provideAsset`) and with the static scene. Kept is
-  not left up — `releaseField` takes it out of the scene, because frames draw
-  between a release and the next build — and the build puts its per-race state
-  back. Either way the monster chassis' duplicated instances
-  and the pools' `mAssetMeshKey` entries go with their owner: a field resource
-  left on a scene-scoped list piles up once per rebuild until the track changes.
+  then its key does.** What depends on the car COUNT (the monster rig and its
+  ghost, the boost streaks) is kept for a field of the same size and freed by a
+  build of another count. The monster pools vary on nothing else, so they
+  outlive the static scene too: besides a new count, only new bytes for a
+  monster GLB (`provideAsset`) or the destructor free them
+  (`releaseMonsterPools`). The streaks wear the scene's boost colour, so
+  `releaseScene` frees them (`releaseStreakPool`). Kept is not left up —
+  `releaseField` takes it out of the scene, because frames draw between a
+  release and the next build — and the build puts its per-race state back.
+  Either way the monster chassis' duplicated instances and the pools'
+  `mAssetMeshKey` entries go with their owner: a field resource left on a
+  scene-scoped list piles up once per rebuild until the track changes.
   `loadInstancedProp` does not dirty the dressing merge (only `buildStatic`
   does), or every field rebuild would regroup the whole dressing.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and

@@ -104,6 +104,17 @@ class DisplayHost(
     /** A Vulkan boot has marked its canary and not yet presented a frame. */
     private var vkCanaryArmed = false
 
+    /** The prepared engine's attempt is marked; the create that takes it must not count it again. */
+    private var attemptMarked = false
+
+    /**
+     * Where a Vulkan engine keeps its compiled pipelines between runs: the CODE
+     * cache, which Android empties when the app is updated, so a build with new
+     * materials never starts from the last one's pipelines.
+     */
+    private val pipelineCacheFile =
+        File(view.context.codeCacheDir, "vk-pipeline-cache.bin").path.toByteArray()
+
     /**
      * Fired EVERY time a surface comes into existence, not just the first.
      *
@@ -229,6 +240,18 @@ class DisplayHost(
 
     init {
         view.holder.addCallback(this)
+        // THE ENGINE STARTS NOW, NOT AT THE SURFACE: it needs no window until its
+        // swap chain, so its driver comes up on Filament's thread while the cover
+        // draws, and the first `surfaceChanged` collects it (shells/androidtv/
+        // CLAUDE.md, "Vulkan"). The canary is marked BEFORE the driver starts: a
+        // driver that brings the process down must still count.
+        val vulkan = VulkanPolicy.useVulkan(view.context)
+        if (vulkan) {
+            VulkanPolicy.markAttempt(view.context)
+            vkCanaryArmed = true
+            attemptMarked = true
+        }
+        TtpSurface.nativePrepare(vulkan, pipelineCacheFile)
     }
 
     // -- SurfaceHolder.Callback ---------------------------------------------
@@ -241,17 +264,16 @@ class DisplayHost(
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         if (!hasSurface) {
-            // The backend, decided HERE and nowhere else (VulkanPolicy has the
-            // gates). A Vulkan engine that refuses to create falls straight
-            // back to GL in the same call — the player sees a picture either
-            // way — and the refusal keeps its canary count, so a driver that
-            // refuses twice stops being asked.
+            // The backend: VulkanPolicy's one answer per process, the one the
+            // engine was prepared on. A Vulkan engine that refuses to create
+            // falls straight back to GL in the same call — the player sees a
+            // picture either way — and the refusal keeps its canary count, so a
+            // driver that refuses twice stops being asked.
             var vulkan = VulkanPolicy.useVulkan(view.context)
-            // The CODE cache: Android empties it when the app is updated, so a
-            // build with new materials never starts from the last one's pipelines.
-            val pipelines = File(view.context.codeCacheDir, "vk-pipeline-cache.bin").path.toByteArray()
+            val pipelines = pipelineCacheFile
             if (vulkan) {
-                VulkanPolicy.markAttempt(view.context)
+                if (!attemptMarked) VulkanPolicy.markAttempt(view.context)
+                attemptMarked = false
                 vkCanaryArmed = true
                 if (!TtpSurface.nativeCreate(holder.surface, width, height, true, pipelines)) {
                     Log.e(TAG, "Vulkan engine refused ${width}x$height — retrying on GL")
