@@ -238,9 +238,9 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         // lobby orbit stand, so the preview camera does not snap on a join.
         if (!r.rebuildField(roster.cars)) return 0;
     } else {
-        // laps and seed do not reach the geometry — build_race_track only stamps
-        // them onto RaceTrack.totalLaps/.seed, and the renderer reads neither.
-        const ttp::RaceTrack geo = ttp::build_race_track(*def, 1, 0u);
+        // laps and seed do not reach the geometry — they are only stamped onto
+        // RaceTrack.totalLaps/.seed, and the renderer reads neither.
+        const ttp::RaceTrack geo = ttp::build_catalogue_track(*def, 1, 0u);
         // The gallery's showroom resolves through showcase_theme instead: the
         // SAME palette this line would have produced, carrying every biome's
         // vocabulary (ttp_display_showcase). Nothing on the shipping path takes

@@ -320,11 +320,17 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // launch strip may fill the deck edge to edge without climbing a kerb.
     constexpr float OFF_DECK_LAT = 1000.0f;
 
-    const auto pointAt = [&](uint32_t i, int j) {
+    // Every ring's profile points, once: the sweep, the strip normals and the
+    // far ribbon's chord test each read the same points many times over.
+    std::vector<float3> ringPts((size_t) N * 16);
+    for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
-        const float l = P[j].sign * halfAt(i) + P[j].off;
-        return f.pos + f.up * P[j].y + f.lat * l;
-    };
+        for (int j = 0; j < 16; j++) {
+            const float l = P[j].sign * halfAt(i) + P[j].off;
+            ringPts[(size_t) i * 16 + j] = f.pos + f.up * P[j].y + f.lat * l;
+        }
+    }
+    const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * 16 + j]; };
 
     // Kerb stripes banded by each kerb edge's own arclength, even-band snap.
     struct KerbDist { std::vector<float> d; float eff; };
@@ -552,14 +558,15 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             if (r == runEnd) return quadBase(r - 1, s) + (bSide ? 2u : 3u);
             return quadBase(r, s) + (bSide ? 1u : 0u);
         };
+        std::vector<uint32_t> bounds[16], ra, rb;
         for (uint32_t r0 = 0; r0 < N; r0 += kRoadChunkRings) {
             const uint32_t r1 = std::min(N, r0 + kRoadChunkRings);
             const uint32_t off = (uint32_t) mRoadFarIdx.size();
             // Each strip's run boundaries first: the rings where its runs
             // start, plus the chunk's end.
-            std::vector<uint32_t> bounds[16];
             for (int s = 0; s < 16; s++) {
                 const Strip& st = STRIPS[s];
+                bounds[s].clear();
                 uint32_t i = r0;
                 while (i < r1) {
                     bounds[s].push_back(i);
@@ -587,7 +594,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 const std::vector<uint32_t>& own = bounds[s];
                 for (size_t k = 0; k + 1 < own.size(); k++) {
                     const uint32_t i = own[k], j = own[k + 1];
-                    std::vector<uint32_t> ra{ i }, rb{ i };
+                    ra.assign(1, i);
+                    rb.assign(1, i);
                     for (uint32_t r : ba) if (r > i && r < j) ra.push_back(r);
                     for (uint32_t r : bb) if (r > i && r < j) rb.push_back(r);
                     ra.push_back(j); rb.push_back(j);

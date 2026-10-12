@@ -527,27 +527,20 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
 void TtpRenderer::weldExact(Mesh& m) {
     // The key is every attribute the vertex carries to the GPU, bit for bit —
     // its position and colour; buildMesh only welds a mesh that has nothing
-    // else. A folded sheet's normals are spent and must not split it.
+    // else. A folded sheet's normals are spent and must not split it. meshopt
+    // numbers the unique vertices in order of first appearance, which keeps
+    // each one's first slot; the order it is handed is the vertices' own,
+    // padded to whole triangles (its precondition) with the last one again.
     const size_t nv = m.verts.size();
-    using Key = std::array<uint32_t, sizeof(Vertex) / 4>;
-    struct Hash {
-        size_t operator()(const Key& k) const {
-            uint64_t h = 14695981039346656037ull;
-            for (const uint32_t x : k) { h ^= x; h *= 1099511628211ull; }
-            return (size_t) h;
-        }
-    };
-    std::unordered_map<Key, uint32_t, Hash> slot;
-    slot.reserve(nv);
+    std::vector<uint32_t> order(nv + (3 - nv % 3) % 3, (uint32_t) nv - 1);
+    for (size_t i = 0; i < nv; i++) order[i] = (uint32_t) i;
     std::vector<uint32_t> remap(nv);
+    const size_t unique = meshopt_generateVertexRemap(remap.data(), order.data(), order.size(),
+            m.verts.data(), nv, sizeof(Vertex));
     std::vector<uint32_t> keep;
-    keep.reserve(nv);
+    keep.reserve(unique);
     for (size_t i = 0; i < nv; i++) {
-        Key k;
-        std::memcpy(k.data(), &m.verts[i], sizeof(Vertex));
-        const auto [it, fresh] = slot.emplace(k, (uint32_t) keep.size());
-        if (fresh) keep.push_back((uint32_t) i);
-        remap[i] = it->second;
+        if (remap[i] == keep.size()) keep.push_back((uint32_t) i);
     }
     if (keep.size() == nv) return;
     for (uint32_t& k : m.idx) k = remap[k];

@@ -34,6 +34,24 @@ inline const TrackDef* find_track_def(const std::string& id) {
   return nullptr;
 }
 
+// A catalogue track's geometry, kept for the last one asked for: a track change
+// builds the same track for the session and again for the display, and the
+// geometry is a function of the definition alone (laps and seed are only
+// stamped on). Keyed by find_track_def's pointer, so only a catalogue entry may
+// come here.
+inline RaceTrack build_catalogue_track(const TrackDef& def, int laps, uint32_t seed) {
+  static const TrackDef* lastDef = nullptr;
+  static RaceTrack last;
+  if (&def != lastDef) {
+    last = build_race_track(def, laps, seed);
+    lastDef = &def;
+  }
+  RaceTrack rt = last;
+  rt.totalLaps = laps;
+  rt.seed = seed;
+  return rt;
+}
+
 // The built track's ring as the Centerline the sim navigates by. Split out of
 // build_race_track_by_id because it is the one conversion everyone needs (the
 // wear planner, wear_check) — a private copy per caller is the drift this
@@ -55,7 +73,7 @@ inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_
                                    BuiltRaceTrack& out, std::string& err) {
   const TrackDef* def = find_track_def(trackId);
   if (!def) { err = "unknown trackId '" + trackId + "'"; return false; }
-  RaceTrack rt = build_race_track(*def, laps, seed);
+  RaceTrack rt = build_catalogue_track(*def, laps, seed);
 
   out.centerline = make_centerline(rt);
 
