@@ -1,6 +1,7 @@
 package games.couchpad.tinytrack
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -55,13 +56,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
- * How long the lobby's paper takes to get out of the way, in ms.
- *
- * NAMED because the boot cover has to outlast it: [GameCoordinator]'s first-paint
- * handler holds the cover for exactly this long, so lifting it can never uncover
- * a fade in progress — which is the opening reading as three steps (title,
- * wallpaper, circuit) where it should be two. Two places, one number; tvOS spells
- * the same pair `LobbyView.backdropFade`.
+ * How long the lobby's paper takes to get out of the way, in ms — except under
+ * the boot cover, where it SNAPS: a fade nobody can see would only hold the cover
+ * up for its length, and a cover lifted on a fade half-run reads as three steps
+ * (title, wallpaper, circuit) where it should be two. tvOS spells it
+ * `LobbyView.backdropFade`.
  */
 const val BACKDROP_FADE_MS = 450
 
@@ -134,7 +133,8 @@ fun LobbyScreen(state: GameState) {
         // this has nothing to switch off — it gets out of the way. `sceneVisible`
         // is set by the coordinator, never derived here.
         val paper by animateFloatAsState(
-            if (state.sceneVisible) 0f else 1f, tween(BACKDROP_FADE_MS), label = "backdrop",
+            if (state.sceneVisible) 0f else 1f,
+            if (state.cover == "boot") snap() else tween(BACKDROP_FADE_MS), label = "backdrop",
         )
         if (paper > 0f) PaperStage(Modifier.alpha(paper))
 

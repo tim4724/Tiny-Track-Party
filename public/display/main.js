@@ -286,13 +286,18 @@ const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   // lifting the cover on the build is the flash it exists to remove.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     scenePainted = true;
-    // THE ORDER AND THE DELAY ARE BOTH THE POINT. Revealing the backdrop is a
-    // fade of #scene in over the paper diorama, so doing both at once uncovers
-    // that fade half-run and the opening reads as THREE steps — title, diorama,
-    // track — where it should be two. The diorama starts getting out of the way
-    // immediately, UNDER the cover, and the cover is held until it has gone.
+    // THE DIORAMA GOES WITHOUT ITS FADE, UNDER THE COVER, AND THE COVER LIFTS ON
+    // THIS FRAME. Revealing the backdrop is otherwise a fade of #scene in over
+    // the paper diorama, and lifting the cover on it half-run reads as THREE
+    // steps — title, diorama, track — where it should be two. Holding the cover
+    // for the fade was the other answer, and it spent that long on an animation
+    // nobody could see.
+    const sc = el('scene');
+    sc.style.transition = 'none';
     updateBackdrop();
-    setTimeout(updateCover, sceneFadeMs());
+    sc.getBoundingClientRect();   // commit the opacity before the transition returns
+    sc.style.transition = '';
+    updateCover();
   }));
 });
 
@@ -341,17 +346,6 @@ function backdropShow3D() {
 // one and that welcome never does — and all this side contributes is whether a
 // frame has been painted. Test surfaces are exempt for the same reason they own
 // the backdrop: they drive their own scene and would sit under a cover forever.
-// How long #scene takes to fade in, READ OFF THE ELEMENT rather than re-typed:
-// the number lives in display.css (`#scene { transition: opacity … }`) and the
-// cover has to outlast it. A stylesheet that retunes the fade retunes this with
-// it. Falls back to 0 rather than to a guess — a cover that lifts early is a
-// cosmetic miss, one that never lifts is a dead app.
-function sceneFadeMs() {
-  const v = getComputedStyle(el('scene')).transitionDuration || '';
-  const secs = parseFloat(v.split(',')[0]);
-  return Number.isFinite(secs) ? secs * 1000 : 0;
-}
-
 function updateCover() {
   if (_isTestMode) return;
   el('cover').classList.toggle('hidden', ui.cover(currentScreen, scenePainted) !== 'boot');

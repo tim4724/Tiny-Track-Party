@@ -971,16 +971,10 @@ class GameCoordinator(
         // Fires once, when a built scene first reaches the glass. At boot the
         // preview pick lands long before the pixels do, so without this nothing
         // ever re-asks and the boot cover would stay up for the whole lobby —
-        // the mirror of the flash it exists to stop.
-        //
-        // DELAYED BY THE FADE, and the delay is the point. Revealing the backdrop
-        // is a [BACKDROP_FADE_MS] fade of the lobby's paper off the live scene;
-        // lift the cover the moment the scene paints and it uncovers that fade
-        // half-run, so the opening reads as THREE steps — title, wallpaper,
-        // circuit — where it should be two. The fade runs UNDER the cover and the
-        // cover outlasts it. The wait is free: it is spent on an animation nobody
-        // was meant to watch. tvOS holds its cover the same way.
-        display.onFirstPaint = { main.postDelayed({ refreshCover() }, BACKDROP_FADE_MS.toLong()) }
+        // the mirror of the flash it exists to stop. The paper under the cover
+        // has already SNAPPED away (LobbyScreen's backdrop), so the title hands
+        // straight over to the circuit on this frame. tvOS lifts the same way.
+        display.onFirstPaint = { refreshCover() }
     }
 
     /**

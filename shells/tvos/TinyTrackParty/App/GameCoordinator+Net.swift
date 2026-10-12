@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// The coordinator's net edge: what a relay event makes the game do.
 ///
@@ -145,20 +146,16 @@ extension GameCoordinator {
         // ever asks the backdrop question again and the paper would stay up for
         // the whole lobby (the mirror of the flash it exists to stop).
         display.onFirstPaint = { [weak self] in
-            // THE ORDER AND THE DELAY ARE BOTH THE POINT. The backdrop reveal is
-            // a 0.45 s fade of the lobby's paper off the live scene, so doing
-            // both at once uncovers that fade half-run: the opening then reads
-            // as THREE steps — title, wallpaper, track — where it should be two.
-            //
-            // So the paper starts getting out of the way immediately, UNDER the
-            // splash, and the splash is held until it has gone. The wait is free:
-            // it is spent on an animation nobody can see, and what the viewer
-            // gets is the title handing straight over to the circuit.
-            self?.refreshBackdrop()
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(LobbyView.backdropFade))
-                self?.refreshCover()
-            }
+            // THE PAPER GOES WITHOUT ITS FADE, UNDER THE SPLASH, AND THE SPLASH
+            // LIFTS ON THE SAME PAINT. The reveal is otherwise a 0.45 s fade of
+            // the paper off the live scene, and lifting the splash on it half-run
+            // reads as THREE steps — title, wallpaper, track — where it should be
+            // two. Holding the splash for the fade was the other answer, and it
+            // spent that long on an animation nobody could see.
+            var snap = Transaction()
+            snap.disablesAnimations = true
+            withTransaction(snap) { self?.refreshBackdrop() }
+            self?.refreshCover()
         }
     }
 

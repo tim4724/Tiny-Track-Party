@@ -133,10 +133,9 @@ struct LobbyView: View {
     /// surface is a sibling at the bottom of the app's ZStack and keeps drawing
     /// underneath, so this view has nothing to switch off — it gets out of the
     /// way. `sceneVisible` is set by the coordinator, never derived here.
-    /// How long the paper takes to get out of the way. NAMED because the boot
-    /// cover has to outlast it — `GameCoordinator`'s first-paint handler holds
-    /// the splash for exactly this long, so lifting it never uncovers a fade in
-    /// progress. Two places, one number.
+    /// How long the paper takes to get out of the way — except at boot, where
+    /// `GameCoordinator`'s first-paint handler takes it away unanimated under the
+    /// splash and lifts the splash on the same paint.
     static let backdropFade: Double = 0.45
 
     private var backdrop: some View {
