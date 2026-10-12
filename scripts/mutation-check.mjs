@@ -53,7 +53,7 @@ const BUILD = path.join(ROOT, (args.find((a) => a.startsWith('--build-dir=')) ||
 // Spread across every layer on purpose: a harness that only mutated the newest code
 // would tell us nothing about whether the ORIGINAL gates still bite.
 // ---------------------------------------------------------------------------
-const MUTATIONS = [
+export const MUTATIONS = [
   // ---- mathlib + serializer: the foundations everything else trusts.
   {
     name: 'mathlib/sin-perturbed',
@@ -83,15 +83,19 @@ const MUTATIONS = [
   {
     name: 'sim/steer-scrub-weakened',
     file: 'native/libttp-sim/ttp/game.cc',
-    find: 'STEER_SCRUB = 0.28',
-    replace: 'STEER_SCRUB = 0.27',
+    // At the use site, not the declaration: a retune of the constant must not
+    // strand the anchor (it did, from 0.28 to 0.35).
+    find: 'STEER_SCRUB * steerIn * steerIn',
+    replace: '(STEER_SCRUB - 0.01) * steerIn * steerIn',
     expect: 'replay_tidepool-4bots-600f-seed42',
   },
   {
     name: 'sim/pole-collision-never-runs',
     file: 'native/libttp-sim/ttp/game.cc',
-    find: 'for (Car* c : list) for (const PoleRt& p : poles_) collidePole(*c, p);',
-    replace: '',
+    // An empty body, not an empty string: deleting the statement would hand the
+    // `if` above it the curb pin that follows.
+    find: 'for (const PoleRt& p : poles_) collidePole(*c, p);',
+    replace: '{}',
     expect: 'hazards',
   },
   {
@@ -342,21 +346,22 @@ const MUTATIONS = [
     expect: 'frame_builder',
   },
   {
-    name: 'camera/ref-aspect-moved',
+    name: 'camera/race-cell-takes-the-surface-aspect',
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
-    // What "the single-player reference" IS. Move it and every cell draws the
-    // car at the wrong size, consistently, so nothing looks obviously broken.
-    find: 'REF_ASPECT = 16.0f / 9.0f',
-    replace: 'REF_ASPECT = 4.0f / 3.0f',
+    // A race cell is a tile of the FITTED picture, whose shape only the caller
+    // knows. Measuring the surface instead is right at one player on 16:9 —
+    // every ordinary fixture — and wrong for every split.
+    find: '? cellAspect',
+    replace: '? (float) d.width / (float) (d.height ? d.height : 1)',
     expect: 'frame_builder',
   },
   {
-    name: 'camera/frame-lock-exponent',
+    name: 'camera/split-cell-crops',
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
-    // How the width fraction enters the lens. Identity at widthFrac == 1, so a
-    // single-player check can never see it — only a split cell can.
-    find: 'FRAME_LOCK = 1.0f',
-    replace: 'FRAME_LOCK = 2.0f',
+    // The lens rule: a cell is a small screen, not a crop of a big one. A fov
+    // scaled by the layout is identity at one cell, so only a split can see it.
+    find: 'v.fov = cam.fov;',
+    replace: 'v.fov = cam.fov / (float) d.cells.size();',
     expect: 'frame_builder',
   },
   {
@@ -676,4 +681,5 @@ function main() {
   }
 }
 
-main();
+// tests/mutation-anchors.test.js imports the list; only a run vandalises the tree.
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

@@ -206,7 +206,10 @@ packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
 
 `npm run mutation-check` audits the SUITE rather than the code — weekly and on
 demand, never on PRs. It breaks the engine many ways and requires the matching
-ctest to go red for each; gates have been found blind this way.
+ctest to go red for each; gates have been found blind this way. Its anchors
+are held on every `npm test` by `tests/mutation-anchors.test.js`, so a commit
+that moves the code a mutation patches fails there, not weeks later in the
+weekly run.
 
 A second check used to revive the JS twin, re-record the golden traces and demand
 byte identity, on the theory that parity evidence stayed renewable while it passed.
