@@ -1347,16 +1347,19 @@ private:
     uint32_t mCarShadowW = 0, mCarShadowH = 0;
     uint32_t mCarShadowPing = 0;           // which of the pair takes the NEXT upload
     std::vector<SkidRect> mCarShadowDirty; // this frame's stamp rects (unwrapped x)
-    // THE TWO FRAMES BEFORE THIS ONE'S, and they exist because of the ping-pong.
-    // A texture takes an upload every OTHER frame, so the one about to be
-    // written was last correct two frames ago — and what changed since is the
-    // regions this frame stamped, the regions last frame stamped (which this
-    // frame's erase zeroed), and the frame before that's. Uploading only the
-    // current rects leaves each texture holding the other's stale stamps, which
-    // reads on screen as the shadow strobing between two positions. Vulkan's
-    // one texture keeps the same history (uploadCarShadow).
-    std::vector<SkidRect> mCarShadowWas[2];
-    uint32_t mCarShadowWasAt = 0;
+    // WHAT EACH TEXTURE HAS NOT SEEN YET. Every region the CPU buffer changes
+    // — a stamp, and the erase that zeroes it next advance — is owed to BOTH
+    // textures of the pair until each takes it in an upload; an upload flushes
+    // its own texture's list. This replaced a fixed "last three frames of
+    // rects" history, which assumed one advance per draw: the raster and the
+    // erase run on EVERY advance (ttp_display_advance, the paced picture's
+    // undrawn ticks) while the upload runs only on drawn frames, so under a
+    // divisor the texture about to be written had last been correct more
+    // advances ago than the history covered and kept a stale stamp — the
+    // shadow strobing between its position and an old one, every other drawn
+    // frame, on the web whenever the buffer was paced. Vulkan's one texture
+    // uses list 0 alone.
+    std::vector<SkidRect> mCarShadowPending[2];
     bool mCarShadowUpload = false;         // the CPU buffer changed since the last upload
     // The shape the raster stamps, PER MODEL: the rounded rect fitted to the
     // car's own top-down outline (ttp/car_footprint.h), rasterized on the CPU

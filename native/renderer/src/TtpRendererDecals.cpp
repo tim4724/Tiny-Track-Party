@@ -474,8 +474,7 @@ void TtpRenderer::buildCarShadowLayer(float trackLength) {
         // agreed and the dirty-rect upload has nothing to catch up on. The
         // history MUST go with them: a rect measured against the old layer's
         // width would upload the wrong strip of the new one.
-        for (auto& l : mCarShadowWas) l.clear();
-        mCarShadowWasAt = 0;
+        for (auto& l : mCarShadowPending) l.clear();
         // 1, not 0: the instances below bind tex[0], so the FIRST upload must
         // land on tex[1] — starting at 0 respecified the very texture the
         // driver was reading, once per scene, which is the exact in-flight
@@ -538,11 +537,17 @@ void TtpRenderer::eraseCarShadow() {
         }
         mCarShadowUpload = true;
     }
-    // Hand this list to the upload's history before dropping it: what the erase
-    // just zeroed is a region that changed, and the texture this frame uploads
-    // into has not seen it yet (mCarShadowWas).
-    mCarShadowWas[mCarShadowWasAt & 1] = std::move(mCarShadowDirty);
-    mCarShadowWasAt++;
+    // What the erase just zeroed is a region that changed: owed to both
+    // textures until each uploads it (mCarShadowPending). A list that grows
+    // past the budget collapses to the whole level — the merge would anyway,
+    // and nothing then depends on how many undrawn advances went by.
+    for (auto& l : mCarShadowPending) {
+        if (l.size() + mCarShadowDirty.size() > 64) {
+            l.assign(1, SkidRect{ 0, 0, (int) mCarShadowW, (int) mCarShadowH });
+        } else {
+            l.insert(l.end(), mCarShadowDirty.begin(), mCarShadowDirty.end());
+        }
+    }
     mCarShadowDirty.clear();
 }
 
@@ -624,14 +629,16 @@ void TtpRenderer::rasterCarShadowStamp(const float3& origin, const float3& fwd,
     // already antialiased. The footprint is the shape's (u, v) gradient per
     // layer texel, read off the first half-stamp's triangle: tp[0] is shape
     // (0, 0), tp[1] is (0, 0.5), tp[3] is (1, 0).
-    // THE STORED RAMP WANTS TO BE WIDE, not tight to the texel. The shader
-    // takes the tail cut on the INTERPOLATED value, so a smooth field gives a
-    // sub-texel edge position that slides continuously (the signed-distance
-    // trick); a ramp sized to half a texel quantises the edge to the grid
-    // instead and measured 30% MORE flicker than the outline masks did. So the
-    // floor is the texel footprint — below it the raster would alias — and the
-    // target is `blur`, converted into the footprint's own units (the frame is
-    // `w` wide and its footprint 1/overscan of that).
+    // THE STORED RAMP IS LINEAR AND WIDE, not tight to the texel. The shader
+    // takes the band on the INTERPOLATED value, so a field that is a plane
+    // across the edge gives a sub-texel edge position that slides
+    // continuously under the raster's per-frame re-landing (bilinear is exact
+    // on a plane — RoundedRectEval::ramp says why the smoothstep field it
+    // replaced boiled); a ramp sized to half a texel quantises the edge to the
+    // grid instead and measured 30% MORE flicker than the outline masks did.
+    // So the floor is the texel footprint — below it the raster would alias —
+    // and the target is `blur`, converted into the footprint's own units (the
+    // frame is `w` wide and its footprint 1/overscan of that).
     const float ex1 = tp[1].x - tp[0].x, ey1 = tp[1].y - tp[0].y;
     const float ex2 = tp[3].x - tp[0].x, ey2 = tp[3].y - tp[0].y;
     const float det = ex1 * ey2 - ex2 * ey1;
@@ -733,7 +740,7 @@ void TtpRenderer::rasterCarShadowStamp(const float3& origin, const float3& fwd,
                     const float lat = ((float) y + 0.5f) * dly - mSkidLatHalf;
                     const float u = u0 + du * lat, v = v0 + dv * lat;
                     if (rr.zero(u, v)) continue;
-                    col[(size_t) (y - yStart) * cols] = rr(u, v);
+                    col[(size_t) (y - yStart) * cols] = rr.ramp(u, v);
                 }
             }
         }
@@ -819,33 +826,30 @@ void TtpRenderer::rasterCarShadowStamp(const float3& origin, const float3& fwd,
 // flicker fix needed, and the events are far fewer than the 16-24 it feared
 // because the rects MERGE (a pack sits in one place).
 //
-// THREE FRAMES OF RECTS, because of the pair: the texture written was last
-// correct two frames ago, and what changed since is this frame's stamps, last
-// frame's (which this frame's erase zeroed) and the one before that's. Miss one
-// and each texture keeps the other's stale stamps — the shadow strobes between
-// two positions. One texture needs only two of them (it was correct one upload
-// ago); it takes the same three, so every backend uploads the rects and the
-// event count that were priced.
+// EACH TEXTURE IS OWED EVERY CHANGE SINCE ITS OWN LAST UPLOAD
+// (mCarShadowPending), not a fixed number of frames' rects: the raster and the
+// erase run on every advance and the upload only on drawn frames, so a paced
+// picture puts more advances than frames between two uploads of one texture,
+// and a history counted in frames left it a stale stamp to strobe against.
 //
 // The copies are mandatory: the CPU buffer is mutated again next frame and
 // native drivers read uploads asynchronously.
 void TtpRenderer::uploadCarShadow() {
     if (!mCarShadowTex[0] || !mCarShadowUpload || mCarShadowPix.empty()) return;
     mCarShadowUpload = false;
-    Texture* t = !mCarShadowTex[1]
-            ? mCarShadowTex[0] : mCarShadowTex[mCarShadowPing & 1];
+    const uint32_t which = !mCarShadowTex[1] ? 0 : (mCarShadowPing & 1);
+    Texture* t = mCarShadowTex[which];
     const int W = (int) mCarShadowW, H = (int) mCarShadowH;
 
-    // The union of the three frames, merged under the copy budget
-    // (kUploadEventTexels): a pack shares one event.
+    // This frame's stamps plus everything this texture is still owed, merged
+    // under the copy budget (kUploadEventTexels): a pack shares one event.
     std::vector<SkidRect> rects;
     const auto add = [&](const SkidRect& r) {
         if (r.x1 > r.x0 && r.y1 > r.y0) rects.push_back(r);
     };
     for (const SkidRect& r : mCarShadowDirty) add(r);
-    for (const auto& list : mCarShadowWas) {
-        for (const SkidRect& r : list) add(r);
-    }
+    for (const SkidRect& r : mCarShadowPending[which]) add(r);
+    mCarShadowPending[which].clear();
     mergeUploadRects(rects);
     for (const SkidRect& r : rects) {
         const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
