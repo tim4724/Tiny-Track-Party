@@ -300,9 +300,11 @@ fraction of the drawn cost and the next drawn frame is what every-frame drawing
 would have shown. `onFrame(dt, nowMs)` carries the loop's own clock, dt summed,
 which under a gate is the sim's time rather than the wall's.
 
-The capture scripts must run HEADED: headless Chromium is SwiftShader, headed gets
-ANGLE-on-Metal, and under SwiftShader a full-resolution frame is slow enough that
-the 50 ms dt clamp stops the race advancing.
+A capture that RUNS A RACE must run headed: headless Chromium is SwiftShader,
+headed gets ANGLE-on-Metal, and under SwiftShader a full-resolution frame is slow
+enough that the 50 ms dt clamp stops the race advancing. A still (a scenario that
+holds, the free-cam inspector) renders the same picture headless, so stay
+headless there — a headed run opens a window on the user's screen.
 
 ## Measuring frame cost
 
