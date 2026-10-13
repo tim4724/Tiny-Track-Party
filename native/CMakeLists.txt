@@ -948,6 +948,15 @@ add_test(NAME record_theme
     -DEXTRA=${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
+# ---- Behaviour: no catalogue corner folds its kerb ---------------------------
+# Every catalogue track against its own biome's kerb: a corner whose radius is
+# under the road's half-width plus kerb draws a pinched V. The generator rounds
+# with a road-only margin; this holds the result to the real kerbs.
+add_executable(track_fold_check runtimetest/track_fold_check.cc)
+target_link_libraries(track_fold_check PRIVATE libttp_runtime libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(track_fold_check)
+add_test(NAME track_fold COMMAND track_fold_check)
+
 # ---- Behavioural: the asphalt-patch planner over the catalogue ---------------
 # Class-2, no corpus (wear never existed in JS). Pins determinism, the planner's
 # own placement rules (every patch on the deck and off the boost pads), and that

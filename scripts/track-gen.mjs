@@ -9,6 +9,8 @@
 //   3. solveElevation(...)— relax a smooth periodic height profile that lifts one strand
 //                           over the other at every crossing and returns to ground (y[0]=0,
 //                           y≥0, Δ≥1.2 per crossing); bails on a runaway "knot".
+//   4. roundTightCorners  — no corner's radius under ~1.4 road half-widths (CORNER FLOOR);
+//                           `classic` is exempt, being frozen provenance.
 // Because the plan closes by construction and elevation is solved on top, the two never
 // fight. bakeSeed() returns the resolved waypoints (with y/bridge) that tracks.js imports.
 //
@@ -24,6 +26,8 @@
 import { init as initNativeTrack, buildTrack, trackSweep, trackFrames, SCALE } from './native-track.mjs';
 await initNativeTrack();
 const DEG = Math.PI / 180;
+// An angle difference brought into (-pi, pi].
+const wrapPi = (d) => { while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
 export const mulberry32 = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
@@ -355,7 +359,7 @@ function worstHeadingStep(frames) {
   for (const f of frames) {
     if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || f.width > 5.4) { prev = null; continue; }
     const hd = Math.atan2(f.tangent.x, f.tangent.z);
-    if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worst = Math.max(worst, Math.abs(d)); }
+    if (prev != null) worst = Math.max(worst, Math.abs(wrapPi(hd - prev)));
     prev = hd;
   }
   return worst;
@@ -449,9 +453,7 @@ function gantryHeadroom(t, s0, f) {
 
 // |curvature| from a pair of frames straddling a point, ±h world units apart.
 const curvatureFrom = (a, b, h) => {
-  let d = Math.atan2(b.tangent.x, b.tangent.z) - Math.atan2(a.tangent.x, a.tangent.z);
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
+  const d = wrapPi(Math.atan2(b.tangent.x, b.tangent.z) - Math.atan2(a.tangent.x, a.tangent.z));
   return Math.abs(d / (2 * h));
 };
 
@@ -591,7 +593,69 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {
     return { prof, plan, flat, wpPairs, h, wps, anchor: k };
   };
 
-  return anchor ? chooseAnchor(plan0, resolveAt) : resolveAt(0);
+  const r = anchor ? chooseAnchor(plan0, resolveAt) : resolveAt(0);
+  if (prof !== PROFILES.classic) roundTightCorners(r.wps, r.h);   // classic is frozen provenance
+  return r;
+}
+
+// ---- CORNER FLOOR ----
+// A corner whose radius is under the road's half-width has no inside: the inner edge,
+// its kerb and the car's inner curb all sit past the corner's centre, so the ribbon
+// folds them into a point the renderer draws as a pinched V. The closing Hermite tail
+// (closeCourse) makes exactly that wherever the lap's end pose meets its start at a
+// sharp angle, at both of the tail's ends. So once a track is resolved, every spot
+// where |k| * halfWidth passes ROAD_FOLD_MAX is rounded: the waypoints nearest it
+// relax toward their neighbours until the BUILT track (the engine's own spline)
+// clears. Only x/z move, so heights, banks, widths and the waypoint count — which the
+// seeded decoration indexes — stay put, and a track with no such corner comes out
+// byte-identical.
+//
+// ROAD_FOLD_MAX leaves headroom for the kerb; the `track_fold` ctest holds every
+// catalogue track to its real one.
+const ROAD_FOLD_MAX = 0.7;
+// Each pass moves a waypoint a quarter of the way to its neighbours' midpoint, all
+// from one snapshot (a Jacobi step): a gentle step keeps the rounding local, and a
+// corner that has not cleared after RELAX_PASSES is not converging.
+const RELAX = 0.25, RELAX_PASSES = 200;
+
+function foldSpots(wps, h) {
+  const frames = trackSweep({ waypoints: roundWps(wps, h) }, 0.1);
+  const spots = [];
+  let prevH = null, prevS = 0;
+  for (const f of frames) {
+    if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5) { prevH = null; continue; } // vertical stunt
+    const hd = Math.atan2(f.tangent.x, f.tangent.z);
+    if (prevH != null) {
+      const dh = wrapPi(hd - prevH);
+      if (Math.abs(dh / (f.s - prevS)) * f.width / 2 > ROAD_FOLD_MAX) spots.push(f.pos);
+    }
+    prevH = hd; prevS = f.s;
+  }
+  return spots;
+}
+
+function roundTightCorners(wps, h) {
+  const m = wps.length;
+  for (let pass = 0; pass < RELAX_PASSES; pass++) {
+    const spots = foldSpots(wps, h);
+    if (!spots.length) return;
+    const moving = new Set();
+    for (const p of spots) {
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < m; i++) {
+        const d = Math.hypot(wps[i].x * SCALE - p.x, wps[i].z * SCALE - p.z);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      moving.add(best);
+    }
+    const was = wps.map((p) => ({ x: p.x, z: p.z }));
+    for (const i of moving) {
+      const a = was[(i - 1 + m) % m], b = was[(i + 1) % m];
+      wps[i].x += RELAX * ((a.x + b.x) / 2 - wps[i].x);
+      wps[i].z += RELAX * ((a.z + b.z) / 2 - wps[i].z);
+    }
+  }
+  throw new Error('roundTightCorners: a corner would not round out');
 }
 
 // Resolve a seed → rounded waypoints with baked y/bridge/w/bank (what tracks.js imports).
@@ -626,9 +690,7 @@ export function measureTrack(t, source) {
     if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5) { prevH = null; continue; } // vertical stunt — no plan heading
     const h = Math.atan2(f.tangent.x, f.tangent.z);
     if (prevH != null) {
-      let dh = h - prevH;
-      while (dh > Math.PI) dh -= 2 * Math.PI;
-      while (dh < -Math.PI) dh += 2 * Math.PI;
+      const dh = wrapPi(h - prevH);
       stations.push({ s, k: dh / (s - prevS) }); // signed plan curvature, rad/world-unit
       totTurn += Math.abs(dh);
     }
@@ -766,9 +828,7 @@ export function placeFurniture(source, { oils = 2 } = {}) {
   }
   for (let i = 0; i < N; i++) {
     const a = st[i], b = st[(i + 1) % N];
-    let dh = b.h - a.h;
-    while (dh > Math.PI) dh -= 2 * Math.PI;
-    while (dh < -Math.PI) dh += 2 * Math.PI;
+    const dh = wrapPi(b.h - a.h);
     a.k = Math.abs(dh) / STEP;
   }
   const wrapI = (i) => ((i % N) + N) % N;
