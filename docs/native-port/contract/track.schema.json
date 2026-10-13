@@ -112,7 +112,7 @@
         },
         "length": { "type": "number", "description": "Same value as the track's top-level `length`." }
       },
-      "description": "The centerline (native/libttp-track/ttp/centerline.h); this schema describes its serializable DATA, which is what crosses the ABI. A port must also reproduce its methods, pinned numerically by the golden traces: sampleAt(s) (fresh frame {pos, tangent, up, lateral, width}; s wraps mod length; non-uniform Catmull-Rom position with the spline's own derivative as tangent; up lerped + renormalized; lateral = tangent x up), projectNear(point, sHint, maxStep) (Newton projection onto the local strand returning {s, lat, frame} with s accumulated and NOT wrapped, hard-clamped to sHint +- maxStep), and widthAt(s)."
+      "description": "The centerline (native/libttp-track/ttp/centerline.h); this schema describes its serializable DATA, which is what crosses the ABI. A port must also reproduce its methods, pinned numerically by the golden traces: sampleAt(s) (fresh frame {pos, tangent, up, lateral, width}; s wraps mod length; non-uniform Catmull-Rom position with the spline's own derivative as tangent; up lerped + renormalized; lateral = tangent x up), projectNear(point, sHint, maxStep) (foot-finding by a Newton step then secants, onto the local strand, returning {s, lat, frame} with s accumulated and NOT wrapped, hard-clamped to sHint +- maxStep), and widthAt(s)."
     },
     "length": {
       "type": "number",

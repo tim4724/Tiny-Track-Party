@@ -99,15 +99,24 @@ Frame Centerline::sampleAt(double s) {
   return out;
 }
 
+// The foot is the root of g(s) = (point - pos(s)) . tangent(s). Stepping by g
+// alone assumes its slope is -1, which holds only ON the centreline: at lateral
+// offset lat it is -(1 + lat*k), k > 0 toward the outside, so at lat*k = 1 (a
+// hairpin's outer curb) that step returns sHint and the car hangs
+// (simtest/curb_hang_check.cc). Only the first step assumes the slope; every
+// later one is a secant through the last two probes, which measures it.
 ProjectResult Centerline::projectNear(const Vec3& point, double sHint, double maxStep) {
   double lo = sHint - maxStep, hi = sHint + maxStep;
-  double s = sHint;
+  double s = sHint, sPrev = 0, gPrev = 0;
   for (int i = 0; i < 8; i++) {
     Frame& f = sampleInto(s, scratch_);            // pooled probe — never escapes
     double along = d_.copy(point).sub(f.pos).dot(f.tangent);
-    s += along;
-    if (s < lo) s = lo; else if (s > hi) s = hi;   // clamp every step
     if (std::fabs(along) < 1e-6) break;
+    // The first step, or a flat secant, falls back to the plain step.
+    double step = i > 0 && along != gPrev ? -along * (s - sPrev) / (along - gPrev) : along;
+    sPrev = s; gPrev = along;
+    s += step;
+    if (s < lo) s = lo; else if (s > hi) s = hi;   // clamp every step
   }
   Frame frame = sampleAt(s);                        // fresh frame the caller owns
   double lat = d_.copy(point).sub(frame.pos).dot(frame.lateral);

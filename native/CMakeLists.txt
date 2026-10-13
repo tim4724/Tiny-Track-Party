@@ -196,8 +196,9 @@ add_test(NAME mathlib_corpus
 # ---- Conformance: the track sampler corpus ----------------------------------
 # Replays tests/fixtures/track-sampler-corpus.jsonl (scripts/
 # gen-track-sampler-corpus.mjs) against libttp-track's Centerline — sampleAt,
-# widthAt, projectNear — demanding identical bit patterns. Isolates track-math
-# divergence before whole-race trace replay.
+# widthAt, projectNear — demanding identical bit patterns (projectNear: the same
+# foot, to a tolerance; see the check's header). Isolates track-math divergence
+# before whole-race trace replay.
 add_executable(sampler_check tracktest/sampler_check.cc)
 target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(sampler_check)
@@ -351,6 +352,14 @@ add_executable(drift_check simtest/drift_check.cc)
 target_link_libraries(drift_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(drift_check)
 add_test(NAME drift COMMAND drift_check)
+
+# ---- Behaviour: no hang on a hairpin's outer curb ----------------------------
+# The traces recorded the hang without seeing it; this asserts the projection's
+# contract over the catalogue and that a hands-off car never freezes.
+add_executable(curb_hang_check simtest/curb_hang_check.cc)
+target_link_libraries(curb_hang_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(curb_hang_check)
+add_test(NAME curb_hang COMMAND curb_hang_check)
 
 # ---- Behaviour: car-to-car contact ------------------------------------------
 # The traces PIN contact, they do not judge it — corner clipping and rear-end

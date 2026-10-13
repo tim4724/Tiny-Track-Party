@@ -3,6 +3,12 @@
 // the standalone sampler oracle from docs/native-port/plan.md Track S step 2, so
 // track-math mismatches isolate here before whole-race trace replay ever runs.
 //
+// Except `project`: projectNear left the JS's iteration on purpose (its plain
+// Newton step hung cars on a hairpin's outer curb; see centerline.cc), so the
+// two reach the same foot by different steps and agree only to the iteration's
+// own convergence. Those cases are held to PROJECT_TOL metres instead — still
+// evidence that the C++ finds the foot the JS found, no longer of its bits.
+//
 // Corpus format (scripts/gen-track-sampler-corpus.mjs), all doubles as
 // 16-hex-digit big-endian bit patterns like math-corpus.jsonl:
 //   line 1        header {"tracks":[...],"cases":N,"mathlib":...}  (skipped)
@@ -13,6 +19,7 @@
 //                 {"track":id,"q":"project","p":[3 hex],"sHint":hex,"maxStep":hex,"out":[s,lat]}
 // Parsing is a few string scans, deliberately dependency-free (no JSON lib).
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -120,13 +127,24 @@ ttp::Vec3 vec_from(const std::vector<uint64_t>& h, size_t base) {
 int g_spew = 0;
 const int kSpewCap = 20;
 
+// Metres. Each iteration stops once its step is under 1e-6, so the two feet
+// agree to about that; the tolerance leaves margin over it.
+const double PROJECT_TOL = 1e-5;
+double g_worstProjectDev = 0;  // the largest project deviation seen, for the summary
+
 // Compare a run's produced doubles against the expected hex64 bit patterns
-// (exact uint64 equality — ±0 must match, the JS side wrote real bit patterns).
-// Returns true on full match; on mismatch prints up to kSpewCap diagnostics.
+// (exact uint64 equality — ±0 must match, the JS side wrote real bit patterns),
+// or within `tol` when it is non-zero. Returns true on a match; on a mismatch
+// prints up to kSpewCap diagnostics.
 bool compare(const std::string& track, const std::string& q, long idx,
-             const std::vector<double>& got, const std::vector<uint64_t>& want) {
+             const std::vector<double>& got, const std::vector<uint64_t>& want, double tol) {
   bool ok = got.size() == want.size();
-  for (size_t k = 0; ok && k < want.size(); k++) ok = bits_of(got[k]) == want[k];
+  for (size_t k = 0; ok && k < want.size(); k++) {
+    if (tol == 0) { ok = bits_of(got[k]) == want[k]; continue; }
+    double dev = std::fabs(got[k] - double_of(want[k]));
+    if (dev > g_worstProjectDev) g_worstProjectDev = dev;
+    ok = dev <= tol;
+  }
   if (ok) return true;
   if (g_spew < kSpewCap) {
     g_spew++;
@@ -253,12 +271,13 @@ int main(int argc, char** argv) {
     }
 
     checked++;
-    if (!compare(id, q, idx, got, want)) failed++;
+    if (!compare(id, q, idx, got, want, q == "project" ? PROJECT_TOL : 0)) failed++;
     idx++;
   }
 
-  std::printf("track sampler corpus: %ld cases checked, %ld failed (sample %ld, width %ld, project %ld)\n",
-              checked, failed, per_q[0], per_q[1], per_q[2]);
+  std::printf("track sampler corpus: %ld cases checked, %ld failed (sample %ld, width %ld, project %ld; "
+              "project worst %.1e m, tolerance %.0e)\n", checked, failed, per_q[0], per_q[1], per_q[2],
+              g_worstProjectDev, PROJECT_TOL);
   if (tracks.size() < 1) { std::fprintf(stderr, "no tracks parsed\n"); return 2; }
   if (per_q[0] < 1 || per_q[1] < 1 || per_q[2] < 1) {
     std::fprintf(stderr, "corpus missing a query kind (sample/width/project)\n");
