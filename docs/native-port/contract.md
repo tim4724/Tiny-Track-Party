@@ -285,7 +285,7 @@ output shape. Everything is world units. Fields:
   on: `sampleAt(s)` (fresh interpolated frame `{pos, tangent, up, lateral,
   width}`, s wraps mod length, non-uniform Catmull-Rom position with the
   spline's own derivative as tangent), `projectNear(point, sHint, maxStep)`
-  (Newton projection returning `{s, lat, frame}` with s accumulated, NOT
+  (secant projection returning `{s, lat, frame}` with s accumulated, NOT
   wrapped, and hard-clamped to sHint +- maxStep), and `widthAt(s)`. The track
   schema describes the serializable sample data; a port must reproduce the
   interpolation and projection semantics, which the golden traces pin down

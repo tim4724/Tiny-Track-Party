@@ -78,6 +78,16 @@ export const MUTATIONS = [
     replace: 'const Sample& pD = a[idx(i + 3)];',
     expect: 'track_sampler',
   },
+  {
+    // Back to the step the JS took, which hung cars on a hairpin's outer curb.
+    // The traces would go red too, but only because the bits moved; curb_hang
+    // is the gate that says it is WRONG.
+    name: 'centerline/projection-plain-step',
+    file: 'native/libttp-track/ttp/centerline.cc',
+    find: 'double step = i > 0 && along != gPrev ? -along * (s - sPrev) / (along - gPrev) : along;',
+    replace: 'double step = along;',
+    expect: 'curb_hang',
+  },
 
   // ---- the sim core.
   {

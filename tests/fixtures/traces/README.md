@@ -49,6 +49,16 @@ What now watches the behaviour these bytes no longer judge is `contact_check`
 that check asserts it is right, against an oracle built from `Car::pose` rather
 than from the collider.
 
+On 2026-10-13 `Centerline::projectNear` stopped stepping as if every point sat on
+the centreline. On a hairpin's outer curb that step returned its own hint, so a
+car pinned there froze in place — and every trace recorded the freeze without
+judging it. The new step finds the same foot to a few micrometres, so every trace
+moved by that much and no more: same events, same inputs, except skysnake, which
+amplifies it into a few frames of shifted events late in lap two (the same frame
+and count as an unrelated 1e-6 nudge to the old code produces; finish order
+unchanged). The catalogue sweep and the audio corpus followed. `curb_hang` is
+the check that asserts the behaviour.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.

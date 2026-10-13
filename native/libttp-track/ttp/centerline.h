@@ -1,10 +1,11 @@
 // Centerline — a closed polyline
 // of oriented frames (pos, tangent, up, lateral) with cumulative arclength,
-// interpolated with a non-uniform Catmull-Rom spline. Every method mirrors the
+// interpolated with a non-uniform Catmull-Rom spline. The sampler mirrors the
 // JS operation order exactly; the scratch-buffer reuse is an allocation
-// optimization only (results identical), but the Newton loop's step/clamp/break
-// ORDER and the `|| 1e-6` falsy-guards on segment spans DO change results and
-// are transliterated faithfully. See docs/native-port/fp-profile.md.
+// optimization only (results identical), but the `|| 1e-6` falsy-guards on
+// segment spans DO change results and are transliterated faithfully. The
+// projection left the JS on purpose (see projectNear). See
+// docs/native-port/fp-profile.md.
 #pragma once
 
 #include <cstddef>
