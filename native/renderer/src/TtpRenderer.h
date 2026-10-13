@@ -75,22 +75,21 @@ struct CarShadowTuning {
     // the interpolated field (the signed-distance trick); taking it in the
     // raster instead measured 44% MORE edge flicker on identical gated frames.
     //
-    // **A WIDE MEDIUM BAND OVER A WIDE FIELD IS THE LOOK**, and both ends are
-    // load-bearing against a defect the band's WIDTH controls. The road mesh
-    // interpolates uv0 linearly per triangle, so the tap's read coordinate has
-    // a GRADIENT JUMP at every triangle edge; the stored field's flat core
-    // reads flat through any such kink, but wherever the field has gradient
-    // the kink prints as a Mach-band crease — under a yawed car, "diagonal
-    // bands through the shadow" (user-reported; the layer READBACK was clean,
-    // which is what pinned the read side, and neither density nor a
-    // project()-placed stamp moved it). So the visible skirt has to be narrow
-    // relative to the stamp: `remapLo` clips the wide faint tail where the
-    // creases have the most area, `remapHi` saturating at mid-field pulls the
-    // visible transition tight. The band stays WIDE — the die-cut's narrow
-    // band (0.39..0.61) is the other cliff, a slope steep enough to facet on
-    // the bilinear texel grid and to amplify the raster's per-frame sub-texel
-    // re-landing into edge boil. 0.2..0.8 is the middle: outline defined,
-    // tail clipped, slope ~1.7 against the die-cut's ~4.5.
+    // **A WIDE MEDIUM BAND OVER A WIDE FIELD IS THE LOOK.** It was tuned
+    // against a read-side crease: the road mesh interpolates uv0 linearly per
+    // triangle, so the tap's coordinate has a GRADIENT JUMP at every edge, and
+    // through a field stored SMOOTH in uv that jump printed as a Mach band
+    // wherever the field had gradient — "diagonal bands through the shadow"
+    // under a yawed car. The raster now writes the field through the mesh's
+    // own uv0 → world map (rasterCarShadowStamp), so the stored field carries
+    // the same kinks and the read cancels them; the band is kept as the look
+    // it settled into. `remapLo` clips the faint tail, `remapHi` saturating
+    // at mid-field pulls the visible transition tight. The band stays WIDE —
+    // the die-cut's narrow band (0.39..0.61) is the other cliff, a slope
+    // steep enough to facet on the bilinear texel grid and to amplify the
+    // raster's per-frame sub-texel re-landing into edge boil. 0.2..0.8 is
+    // the middle: outline defined, tail clipped, slope ~1.7 against the
+    // die-cut's ~4.5.
     float remapLo = 0.2f;
     float remapHi = 0.8f;
     // The LAYER's own density, and THE FLICKER LIVES HERE. Both size the
@@ -1373,23 +1372,9 @@ private:
     // thing that differs, and the fit is what carries it.
     std::unordered_map<uint64_t, ttp::rt::RoundedFit> mCarShadowFits;
     std::vector<uint64_t> mCarShadowMaskOfSlot;  // slot -> model key (0 = none)
-    // ONE STAMP'S COVERAGE, resolved before it touches the layer.
-    //
-    // **THE TRIANGLES MUST NOT ACCUMULATE INTO EACH OTHER.** A stamp is four
-    // triangles with three shared internal edges, and the two triangles either
-    // side of a shared edge evaluate it from DIFFERENT vertex pairs — which are
-    // exact negations only in exact arithmetic. In floating point both can
-    // claim the same texel, write it twice, and double its alpha. That is a
-    // darker band along every diagonal, written into the layer, which is why no
-    // amount of blur, no change of shape and no change of probe surface touched
-    // it: the extra ink is really there.
-    //
-    // So the triangles resolve by MAX into this, and the finished stamp is
-    // added to the layer once. Two different CARS still add — that is a real
-    // pile-up and the shader's cap bounds it — but a stamp can no longer
-    // overlap itself.
+    // One stamp's coverage, evaluated by column (rasterCarShadowStamp says
+    // why) and composited into the layer by row.
     std::vector<float> mStampCov;
-    int mStampX0 = 0, mStampY0 = 0, mStampW = 0, mStampH = 0;
     // The resolution the outline is rasterized at for the fit. Every fitted
     // rect is measured at it, so changing it changes every car's shadow.
     static constexpr int kCarShadowMaskW = 64, kCarShadowMaskH = 128;
@@ -1422,15 +1407,15 @@ private:
     bool roadHasCarShadow() const;  // hasParameter("carShadow")
     void bindCarShadow(filament::MaterialInstance* mi, filament::Texture* t);
     void eraseCarShadow();          // zero last frame's rects in the CPU buffer
-    // One car's stamp: six deckFoot-projected points rasterized as TWO warped
-    // quads with the fitted shape evaluated across them — the bending of track
-    // space lives INSIDE the stamp, second-order per slice, instead of
-    // smearing it axis-aligned.
-    void rasterCarShadowStamp(const filament::math::float2* sl, float carS, float alpha,
-            const ttp::rt::RoundedFit& fit);
-    void rasterCarShadowTri(const filament::math::float2* p,
-            const filament::math::float2* uv, float alpha,
-            const ttp::rt::RoundedFit& fit);
+    // One car's stamp, evaluated texel by texel through the road mesh's own
+    // uv0 -> world map (TrackBin::deckTriAt) in the frame the body is drawn
+    // in: (origin, fwd, right, up) with the stamp's half-extents along fwd
+    // and right. `hint` is the car's ring hint for project(), which places
+    // the texel box.
+    void rasterCarShadowStamp(const filament::math::float3& origin,
+            const filament::math::float3& fwd, const filament::math::float3& right,
+            const filament::math::float3& up, float halfF, float halfR,
+            float carS, float alpha, const ttp::rt::RoundedFit& fit, int* hint);
     void uploadCarShadow();         // the dirty-rect upload (+ the pair's rebind)
     // Allocate the layer's texture(s) for a track of this length.
     void buildCarShadowLayer(float trackLength);

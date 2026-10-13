@@ -1179,20 +1179,6 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 wF = length(wF) > 1e-5f ? normalize(wF)
                                         : normalize(f0.tangent() * cs + f0.lat * sn);
                 const float3 wR = normalize(cross(aUp, wF));
-                // SIX PROBES: the stamp's four corners plus the two long-edge
-                // midpoints, each run through `deckFoot` to its (s, lat). They
-                // are the warped-quad raster's vertices, so the deck's bending
-                // of track space lives inside one half-stamp instead of
-                // first-order across the whole one.
-                float2 stampSL[6];
-                for (int k = 0; k < 6; k++) {
-                    const float fk = (float) (k % 3) - 1.0f;    // -1, 0, +1 along fwd
-                    const float rk = k < 3 ? -1.0f : 1.0f;      // left / right edge
-                    const float3 corner = aPos + wF * (fk * halfF) + wR * (rk * halfR);
-                    float ks = c.trackS, kl = c.trackLat;
-                    mTrack->deckFoot(corner, ks, kl);
-                    stampSL[k] = { ks, kl };
-                }
                 // Load shift folded into the stamp's peak alpha, one
                 // expression for the CPU entry and the raster.
                 const float blobA = mShadowTune.ao
@@ -1205,7 +1191,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     // THE CAR'S OWN FIT, not one shape for the field. The
                     // four roster models share a bounding box, so this is the
                     // only place they can be told apart.
-                    rasterCarShadowStamp(stampSL, carS, blobA, carShadowFitFor(i));
+                    rasterCarShadowStamp(aPos, wF, wR, aUp, halfF, halfR, carS,
+                            blobA, carShadowFitFor(i), &mDecalProjHint[i]);
                 }
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
