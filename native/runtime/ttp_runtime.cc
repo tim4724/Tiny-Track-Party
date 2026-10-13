@@ -647,10 +647,10 @@ void audioFlush() {
 const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
-  "boost", "corner", "brake", "engine_putt", "rocket_fire",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_ROCKET_FIRE,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_DRIFT,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {

@@ -1605,8 +1605,8 @@ void audioThroughAbi() {
   check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
         && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
         "TTP_CUE_ENGINE_PUTT names the engine loop");
-  check(ttp_audio_cue_id(TTP_CUE_ROCKET_FIRE) != nullptr, "the last code names a cue");
-  check(ttp_audio_cue_id(TTP_CUE_ROCKET_FIRE + 1) == nullptr, "and nothing past it");
+  check(ttp_audio_cue_id(TTP_CUE_DRIFT) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_DRIFT + 1) == nullptr, "and nothing past it");
   {
     Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
     check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),

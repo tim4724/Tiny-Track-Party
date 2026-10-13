@@ -134,8 +134,7 @@ const ONESHOTS = [
 
 // Sustained voices. Each is a 1.000 s loop — the cached noise source is exactly
 // ctx.sampleRate frames, so a 1 s loop reproduces the runtime's own seam, and
-// both LFOs in the set are integer Hz (corner 6, brake 11) so the window closes
-// at LFO phase 0.
+// every LFO in the set is integer Hz so the window closes at LFO phase 0.
 //
 // The output gain is NOT baked in: each stop is divided by the voice's analytic
 // gain at its level, so the file is the unit-gain TIMBRE and the player applies
@@ -155,6 +154,13 @@ const VOICES = {
     levelInvariant: true,
     param: () => ({ bandpassHz: 950, Q: 3, gateLfoHz: 11, gateRange: [0.1, 1] }),
     note: 'ONE file. Nothing but the output gain moves with level — the 950 Hz Q3 bandpass and the 11 Hz gate LFO are static — so a single unit-gain loop plus the (divided-out) gain is exact, not an approximation.',
+  },
+  drift: {
+    variant: 'grain',
+    levels: [1],
+    levelInvariant: true,
+    param: () => ({ bandpassHz: [760, 1520], Q: [4, 7], wobbleLfoHz: 3, flutterLfoHz: 17 }),
+    note: 'ONE file, like brake: both bands, the 3 Hz wobble and the 17 Hz flutter are static, so only the (divided-out) output gain moves with level.',
   },
   boost: {
     variant: 'smooth',

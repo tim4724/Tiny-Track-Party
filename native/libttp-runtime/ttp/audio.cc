@@ -223,10 +223,12 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     voice(out, "boost", c.id, clamp01((c.boostMul - 1) / 0.6), nullptr);
     // Tire squeal from hard steering at speed, squared so gentle corrections
     // stay silent; a spinning car's wheels aren't gripping, so no squeal.
-    // A drift squeals at full whatever the lean, and its held brake is not a
-    // brake, so the brake voice gives way to it.
+    // A drift has its own voice, which the squeal and the brake give way to:
+    // its held brake is not a brake, and its lean is not a corner.
     const double fastGate = clamp01((c.spd - 0.45) / 0.3);
-    voice(out, "corner", c.id, truthy(c.spin) ? 0 : js_max(c.steer * c.steer, c.drift) * fastGate, nullptr);
+    const double tyreGate = truthy(c.spin) ? 0 : fastGate;
+    voice(out, "corner", c.id, js_max(c.steer * c.steer, c.drift) * (1 - c.drift) * tyreGate, nullptr);
+    voice(out, "drift", c.id, c.drift * tyreGate, nullptr);
     voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4), nullptr);
     // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
     // While a monster truck, the same loop deepens into a big-truck growl.

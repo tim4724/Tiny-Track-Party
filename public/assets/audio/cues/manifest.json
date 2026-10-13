@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "cea8a7c5dac81b019a3dc942cca76d721aaa19e0a96680dccc9dab12568a3aad",
+    "sharedSha256": "0b9b917af6b1f04abfb879bac48ea568d19e8e84730bfad649b459aa277ccb3d",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -437,6 +437,47 @@
       },
       "variant": "marimba",
       "sourceSha256": "966d84d6f441a23dd99ae13e8cdc3185242e9559a263ca1645e235581c566d6f"
+    },
+    "drift": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "grain",
+      "playback": {
+        "gainFormula": "0.124 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "drift.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.243812,
+          "rms": 0.052056,
+          "sha256": "5b6f6ff45bce6898eb881461a5dd3d5f7b4cda12fead8fdc198dc2e7b8529d4b",
+          "bandpassHz": [
+            760,
+            1520
+          ],
+          "Q": [
+            4,
+            7
+          ],
+          "wobbleLfoHz": 3,
+          "flutterLfoHz": 17,
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like brake: both bands, the 3 Hz wobble and the 17 Hz flutter are static, so only the (divided-out) output gain moves with level.",
+      "sourceSha256": "053c43e61a0a3df8e3520e3f60ba96fffc3f6952ed47ff7b9cb9131d4d929f8f"
     },
     "engine_putt": {
       "kind": "passthrough",

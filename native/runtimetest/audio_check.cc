@@ -764,7 +764,41 @@ int runCorpus(const std::string& corpusPath, const std::string& traceDir,
   return passed == cases ? 0 : 1;
 }
 
+// The drift's own voice, which no corpus world reaches (a corpus car never
+// drifts): a drifting human's tyres are the drift voice and the corner squeal
+// gives way to it, while a hard corner without a drift is the squeal alone.
+bool checkDriftVoice() {
+  struct Levels { double corner = 0, drift = 0; };
+  auto levels = [](double steer, double drift) {
+    au::Decider dec;
+    au::Car c;
+    c.id = Id::Num(1);
+    c.spd = 0.9; c.steer = steer; c.drift = drift;
+    std::vector<au::Command> out;
+    dec.frame({ c }, {}, au::AiIds(), 0, out);
+    Levels l;
+    for (const au::Command& cmd : out) {
+      if (cmd.kind != au::Command::VOICE) continue;
+      if (std::strcmp(cmd.name, "corner") == 0) l.corner = cmd.level;
+      if (std::strcmp(cmd.name, "drift") == 0) l.drift = cmd.level;
+    }
+    return l;
+  };
+  const Levels drifting = levels(1, 1);
+  const Levels cornering = levels(1, 0);
+  const Levels entering = levels(1, 0.5);
+  bool ok = true;
+  auto expect = [&](bool cond, const char* what) {
+    if (!cond) { std::fprintf(stderr, "FAIL drift voice: %s\n", what); ok = false; }
+  };
+  expect(drifting.corner == 0 && drifting.drift == 1, "a full drift is the drift voice, no squeal");
+  expect(cornering.corner == 1 && cornering.drift == 0, "a hard corner is the squeal, no drift voice");
+  expect(entering.corner > 0 && entering.drift > 0, "the two cross over as the drift blends in");
+  return ok;
+}
+
 int main(int argc, char** argv) {
+  if (!checkDriftVoice()) return 1;
   std::string fixture, outPath;
   if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
     // The traces directory is still needed: the trace cases record only the

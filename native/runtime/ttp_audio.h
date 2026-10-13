@@ -85,6 +85,7 @@ extern "C" {
 #define TTP_CUE_BRAKE           14
 #define TTP_CUE_ENGINE_PUTT     15
 #define TTP_CUE_ROCKET_FIRE     16
+#define TTP_CUE_DRIFT           17
 
 /* TtpAudioCmd.flags */
 #define TTP_AUD_F_GO  1u /* COUNTDOWN: the GO beat rather than a tick           */

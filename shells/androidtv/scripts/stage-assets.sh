@@ -12,7 +12,7 @@
 # the end rather than stating one here that the next asset would falsify):
 #   toycar/     GLB + PNG — the renderer's whole model kit
 #   toycar/thumbs/  the lobby's 2D car stills
-#   audio/cues/ 28 WAV + manifest — pre-baked; the shell only plays them
+#   audio/cues/ 29 WAV + manifest — pre-baked; the shell only plays them
 #   audio/engine_loop.ogg — the one passthrough voice with live DSP
 #   audio/music/ the race-music catalogue, ~62 MB (see below)
 #   items/      the four shared item SVGs

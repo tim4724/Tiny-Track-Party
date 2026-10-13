@@ -228,6 +228,7 @@ export const DEFAULT_PICKS = {
   boost: 'smooth',
   corner: 'squeal',
   brake: 'rubber',
+  drift: 'grain',           // Tim's pick from the drift sound lineup (2026-10-13)
   banana_drop: 'plop',
   banana_slip: 'dizzy',
   monster_inflate: 'turbo', // Tim's gallery pick (2026-06-21)
@@ -438,6 +439,67 @@ export const CUES = [
               const at = ctx.currentTime;
               out.gain.setTargetAtTime(0.0001, at, 0.06);
               try { src.stop(at + 0.4); lfo.stop(at + 0.4); } catch (_) { /* already stopped */ }
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'drift',
+    label: 'Drift',
+    desc: 'STATE-DRIVEN: the drift\'s own tyre voice, lower and rougher than the corner squeal; the squeal and the brake give way to it. Rises with the drift, gone when it ends. Slider = drift mix.',
+    continuous: true,
+    variants: [
+      {
+        id: 'grain', label: 'rough grain',
+        start(ctx, dest) {
+          // Two noise bands, a low one wobbling slowly, with a fast grain
+          // flutter over both: scrubbing rubber rather than a squeal, as loud
+          // as the squeal it replaces (A-weighted).
+          // Both LFOs are integer Hz so the baked 1 s loop closes in phase.
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 760;
+          lo.Q.value = 4;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 1520;
+          hi.Q.value = 7;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.45;
+          const wobble = ctx.createOscillator();
+          wobble.frequency.value = 3;
+          const wobbleDepth = ctx.createGain();
+          wobbleDepth.gain.value = 35;
+          wobble.connect(wobbleDepth);
+          wobbleDepth.connect(lo.frequency);
+          const grain = ctx.createGain();
+          grain.gain.value = 0.7;
+          const flutter = ctx.createOscillator();
+          flutter.frequency.value = 17;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.3;
+          flutter.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); wobble.start(t); flutter.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.124 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); wobble.stop(at + 0.4); flutter.stop(at + 0.4); } catch (_) { /* already stopped */ }
             }
           };
         }
