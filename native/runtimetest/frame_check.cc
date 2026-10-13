@@ -167,6 +167,8 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
   checkF(o.monster, c.monsterT > 0 ? 1.0f : 0.0f, what + ".monster");
   checkF(o.spin, (float)c.spin, what + ".spin");
   checkF(o.scrub, c.onWall ? 1.0f : 0.0f, what + ".scrub");
+  if (c.drifting) checkF(o.hop, rt::driftHop((float) c.driftT), what + ".hop");
+  else check(o.hop == 0, what + " hops only in a drift");
   // The kick rectangle is the sim's CURRENT footprint: the truck's while it
   // is a monster, the car's rest stats otherwise.
   if (c.monsterT > 0) {
@@ -426,8 +428,10 @@ void testAtRest() {
   c.up = {0.0f, 1.0f, 0.0f};
   c.spd = 0.8f; c.steer = -0.4f; c.steerYaw = -0.3f; c.brake = 0.6f; c.boostMul = 1.9f;
   c.monster = 1.0f; c.spin = 2.5f; c.scrub = 1.0f;
+  c.hop = 0.1f;
 
   rt::atRest(c);
+  check(c.hop == 0, "atRest lands a hop");
 
   check(c.pos.x == 1.5f && c.pos.y == 2.25f && c.pos.z == -3.75f, "atRest keeps the position");
   check(c.forward.x == 0.5f && c.up.y == 1.0f, "atRest keeps the orientation");
@@ -2362,6 +2366,15 @@ void testNameTagCover() {
   check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), deck, cover)), "the bridge deck hides a rival under it");
 }
 
+// The drift's hop: one parabola off the deck that peaks halfway and is back
+// down after DRIFT_HOP_TIME.
+void testDriftHop() {
+  check(rt::driftHop(0) == 0, "the hop starts on the deck");
+  checkF(rt::driftHop(rt::DRIFT_HOP_TIME / 2), rt::DRIFT_HOP_HEIGHT, "the hop peaks at its height halfway");
+  check(rt::driftHop(rt::DRIFT_HOP_TIME / 4) < rt::DRIFT_HOP_HEIGHT, "…and rises toward it");
+  check(rt::driftHop(rt::DRIFT_HOP_TIME) == 0 && rt::driftHop(1) == 0, "the hop is back on the deck after its time");
+}
+
 int main() {
   BuiltRaceTrack bt;
   std::string err;
@@ -2376,6 +2389,7 @@ int main() {
   testPlanReroster();
   testCameraMath();
   testAtRest();
+  testDriftHop();
   testCarsAndRoster(bt.game);
   testHold(bt.game);
   testHeldChaseCam(bt.game);

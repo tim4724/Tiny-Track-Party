@@ -103,6 +103,8 @@ typedef struct TtpCarInput {
      * trackS is the ACCUMULATED arclength (laps included, as the sim keeps it);
      * every reader wraps it itself. */
     float trackS, trackLat;
+    /* The drift's hop (frame_builder's driftHop), in world units off the seat. */
+    float hop;
 } TtpCarInput;
 
 typedef struct TtpViewInput {
@@ -248,7 +250,7 @@ typedef struct TtpFrameInput {
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 12u
+#define TTP_FRAME_INPUT_VERSION 13u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);

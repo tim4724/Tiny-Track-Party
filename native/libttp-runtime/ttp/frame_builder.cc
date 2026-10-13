@@ -22,7 +22,13 @@ void newField(DisplayState& d) {
 // Drop every motion cue but keep the pose — what "held" means (ttp_display_hold).
 void atRest(TtpCarInput& c) {
     c.spd = c.steer = c.steerYaw = c.brake = c.spin = c.scrub = 0;
+    c.hop = 0;
     c.boostMul = 1;
+}
+
+float driftHop(float t) {
+    const float u = t / DRIFT_HOP_TIME;
+    return u > 0 && u < 1 ? DRIFT_HOP_HEIGHT * 4 * u * (1 - u) : 0.0f;
 }
 
 // The pose a HELD car is drawn at, read back out of the frame's own car input so
@@ -158,6 +164,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // A drift's slip is the same cosmetic body yaw as the whirl: the
             // car travels along its heading, the body is drawn turned in.
             o.spin = (float) (c->spin + c->slip);
+            if (c->drifting) o.hop = driftHop((float) c->driftT);
             o.scrub = c->onWall ? 1.0f : 0.0f;
             // The sim's own body, so the kick rectangle grows with the monster
             // transform exactly as the collision footprint does.

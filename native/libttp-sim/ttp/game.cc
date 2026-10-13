@@ -1070,12 +1070,14 @@ void Game::update(double dtMs) {
     else if (!c.drifting && std::fabs(c.steer) >= DRIFT_STEER_MIN && c.v >= DRIFT_SPEED_MIN * c.vmax) {
       c.drifting = true;
       c.driftDir = js_sign(c.steer);
+      c.driftT = 0;
       // start on the curvature the car is already turning at, at this lean
       c.driftK = c.driftK0 = std::fabs(steerShape(c.steer)) * c.turn * steerAuthority(c) / c.v;
       c.driftLean0 = std::fabs(c.steer);
     }
     if (c.drifting) {
       c.driftMix = js_min(1.0, c.driftMix + dt / DRIFT_ENTER_T);
+      c.driftT += dt;
     } else if (c.driftMix > 0) {
       c.driftMix = g_driftRelease > 0 ? js_max(0.0, c.driftMix - dt / g_driftRelease) : 0;
     }

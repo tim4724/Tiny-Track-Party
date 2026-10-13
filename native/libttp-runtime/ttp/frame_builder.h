@@ -61,6 +61,15 @@ static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3
 // (controller.css), so the two ends of the same reading lag alike.
 constexpr float STEER_BAR_TAU = 0.05f;
 
+// The drawn HOP a drift starts with, so the moment it takes reads on screen:
+// the whole car lifts DRIFT_HOP_HEIGHT world units and lands DRIFT_HOP_TIME
+// seconds later, on a parabola. Kept small (Mario Kart's is a few percent of
+// the kart): our chase camera sits close and low, so a bigger one reads as a
+// jump. driftHop answers the lift `t` seconds into a drift.
+constexpr float DRIFT_HOP_HEIGHT = 0.02f;
+constexpr float DRIFT_HOP_TIME = 0.18f;
+float driftHop(float t);
+
 // Everything the display owns that is not the renderer or the platform surface.
 struct DisplayState {
     // The surface, in its own physical pixels — the only unit this struct

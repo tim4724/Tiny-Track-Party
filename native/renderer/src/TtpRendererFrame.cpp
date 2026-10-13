@@ -806,8 +806,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         }
         carPosW[i] = carPos;
         float carS = 0, carLat = 0;   // this car's spot on the ribbon, projected once
+        // The drift's hop lifts the ROOT, wheels and all, while carPos stays
+        // on the seat: the wheel travel below is measured from the seat, so
+        // the tyres leave the deck with the body instead of reaching down to
+        // it, and the shadow stays where the car will land.
         const mat4f m{ float4{ right, 0 }, float4{ up, 0 }, float4{ fwd, 0 },
-                       float4{ carPos, 1 } };
+                       float4{ carPos + up * c.hop, 1 } };
         if (mCarAssets.size() > i && mCarAssets[i]) {
             static const mat4f FLIP = mat4f::rotation(M_PI, float3{ 0, 1, 0 });
             // Spin-out whirl (oil, lightning): the JS yaws the whole model by
@@ -2035,7 +2039,8 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             WheelTrail* trails = &mWheelTrails[i * 4];
             const float spd = c.spd; // NORMALIZED v/vmax, like the JS snapshot
             const bool scrub = c.scrub > 0.5f;
-            if (spd <= 0.05f && !scrub) {
+            // A hopping car's tyres are off the deck: no rubber until it lands.
+            if ((spd <= 0.05f && !scrub) || c.hop > 0) {
                 for (int wi = 0; wi < 4; wi++) trails[wi].seeded = false;
                 continue;
             }

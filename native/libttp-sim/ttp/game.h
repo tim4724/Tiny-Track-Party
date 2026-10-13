@@ -91,9 +91,11 @@ struct Car {
   //   driftK0/driftLean0 — the curvature and lean it started on, which that
   //                 lean keeps (the lean is read relative to it)
   //   slip        — the body's cosmetic angle off its travel, in heading space
+  //   driftT      — seconds since this drift started (cosmetic: the drawn hop)
   bool driftOk = true;
   bool drifting = false;
   double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
+  double driftT = 0;
 };
 
 struct Zone { double s, lat, radius; };  // oil hazard (circle)
