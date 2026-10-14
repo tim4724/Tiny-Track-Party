@@ -1466,6 +1466,40 @@ go to 18.5 ms with no clean second. This box's composer takes two app layers,
 full stop. **What is left for 720 at four players** is ~1 ms of heavy seconds
 inside the Filament frame itself.
 
+**The road's channels on the shipped build** (`f2e3d937`, 4P pinned 720
+pretzel, one arm each paired per second against the base arm; the sweep lost
+its box after five arms, so paint, grade and fog are from the 2026-10-12
+table): the car-shadow channel whole (`NO_DECAL_BLOB`) **-1.54 ms** and skips
+68 -> 16; profiles (`NO_DECAL_PROFILE`) -0.75; rubber -0.71; the deck's
+sun-vis tap -0.57. The blob is the one item left that is bigger than the
+noise, and its cost is the probe tap and the B-spline branch, not the raster
+or the upload (2026-10-12: tap off -1.53, raster+upload off +0.03).
+
+**The B-spline branch, split (same day, cross-build arms alternated on one
+box, two rounds each, per-second pairing against the shipped arm):**
+
+| arm | heavy delta vs shipped |
+|---|---|
+| A: branch present, gate never true (`cs > 2.0`) | +0.03 / -0.37 (null) |
+| B: branch deleted (bilinear only) | -0.6..-0.8 (-0.80, -0.72, -0.69, -0.60, -0.41, -0.71), skips 54/45/30/55/65/37 vs 93/79/58/83/77/96 |
+| C1: `textureSize()` replaced by a uniform | null |
+| C2: the branch's coordinate maths hoisted onto every fragment | **+2.5..+3.0**, skips 355 |
+| D: branch body reduced to ONE tap | about half of B's gain |
+
+So the branch costs ~0.6 ms of a heavy second by EXISTING: half for holding
+any texture sample inside divergent control flow, half for its body, while
+what it executes on the stamp rims costs nothing measurable since the gate
+moved. C2 is the sharpest number this GPU has given: two vec2 divides plus
+~20 highp ops on every road fragment are 2.5-3 ms, so the divide pipe is the
+currency and the branch is the only place those divides may live. There is
+no pixel-identical restructuring left; dropping the filter is a look trade
+(bilinear's Mach bands on the shadow ramp, the 2026-10-13 report), priced
+here at ~0.6 ms. The one softener measured: the layer at 512 rows instead of
+256 (bilinear's bands shrink fourfold across lat; along s the 4096-wide cap
+already binds) costs the GPU nothing over B (15.68 vs 15.58 heavy, same
+skips) and the frame thread's `cars` phase 0.8 -> 1.1 ms typical. Undecided;
+the shipped build keeps the B-spline.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
