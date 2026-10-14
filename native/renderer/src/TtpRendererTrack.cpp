@@ -1229,28 +1229,47 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 .build(*mEngine);
         mScene->setIndirectLight(mAmbient);
 
-        // THE SKY, in the one place that can bake it: the skybox samples are
-        // scaled by frameUniforms.iblLuminance on the way out, so the bake has
-        // to pre-divide by it, and that value does not exist until the line
-        // above has run. Both factors are Filament's own, read back from it
-        // rather than recomputed — the same pair fogColorGraded uses, for the
-        // same reason.
-        const float lum = mCamera
-                ? mAmbient->getIntensity() * Exposure::exposure(*mCamera) : 0.0f;
-        Skybox::Builder sb;
-        if (Texture* const sky = skyCubemap(tb.sky, lum)) {
-            sb.environment(sky);
-        } else {
-            // NEVER NO SKYBOX. The bake needs a luminance to pre-divide by, and
-            // a scene without one would otherwise show the view's clear colour
-            // as its sky. The gradient's own HORIZON band, flat, is the closest
-            // single colour to what should be there — and the CONSTANT path is
-            // the one skybox.mat does NOT scale by iblLuminance, so it is
-            // graded and handed over as it is.
-            sb.color(float4{ gradeSrgb(skyLinear(tb.sky[1])), 1.0f });
+        // THE SKY DOME (TtpRenderer.h, mSkyDome): the biome's elevation
+        // gradient as graded vertex colours on a unit sphere, 49 rings so the
+        // pow() curve between rings is a straight segment under a code value
+        // of the cubemap it replaced. Placed and scaled per cell in
+        // renderCells. Not a caster (buildMesh's default layer), so the sun
+        // bake never sees it; not fogged (vsky.mat); never culled, its box
+        // holds the eye.
+        const auto vsky = mAssets.find("vsky.filamat");
+        if (!mSkyMaterial && vsky != mAssets.end()) {
+            mSkyMaterial = Material::Builder()
+                    .package(vsky->second.data(), vsky->second.size())
+                    .build(*mEngine);
         }
-        mSkybox = sb.build(*mEngine);
-        mScene->setSkybox(mSkybox);
+        if (mSkyMaterial) {
+            const float3 top = skyLinear(tb.sky[0]), hor = skyLinear(tb.sky[1]),
+                         low = skyLinear(tb.sky[2]);
+            constexpr int R = 48, S = 32;
+            mSkyDome.verts.clear();
+            mSkyDome.idx.clear();
+            for (int r = 0; r <= R; r++) {
+                const float el = ((float) r / R - 0.5f) * (float) M_PI;   // nadir .. zenith
+                const float t = std::sin(el), ce = std::cos(el);
+                const float3 c = t >= 0
+                        ? mix(hor, top, std::pow(t, 0.65f))
+                        : mix(hor, low, std::min(1.0f, -t * 3.0f));
+                const uint32_t col = packLinear(gradeSrgb(c), 1.0f);
+                for (int sg = 0; sg <= S; sg++) {
+                    const float az = (float) sg / S * 2.0f * (float) M_PI;
+                    mSkyDome.verts.push_back({ ce * std::cos(az), t, ce * std::sin(az), col });
+                }
+            }
+            for (int r = 0; r < R; r++) {
+                for (int sg = 0; sg < S; sg++) {
+                    const uint32_t q = (uint32_t) (r * (S + 1) + sg), p = q + S + 1;
+                    for (uint32_t ix : { q, p, q + 1, q + 1, p, p + 1 }) {
+                        mSkyDome.idx.push_back((decltype(mSkyDome.idx)::value_type) ix);
+                    }
+                }
+            }
+            buildMesh(mSkyDome, true, sceneInstance(mSkyMaterial));
+        }
     }
 
     // Furniture: item boxes at their authored anchors (availability reconciled
@@ -2287,59 +2306,6 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
 // wherever iblLuminance is under it, which a normalised format would clip. 64
 // a face is plenty — the skybox samples with MagFilter::LINEAR over a gradient
 // with no high-frequency content in it.
-filament::Texture* TtpRenderer::skyCubemap(const uint32_t sky[3], float lum) {
-    if (!mEngine || !(lum > 0.0f)) return nullptr;
-    uint64_t key = 14695981039346656037ull;
-    for (int i = 0; i < 3; i++) { key ^= sky[i]; key *= 1099511628211ull; }
-    // The luminance is part of the bake, so it is part of the key.
-    uint32_t lumBits; std::memcpy(&lumBits, &lum, sizeof(lumBits));
-    key ^= lumBits; key *= 1099511628211ull;
-    const auto it = mSkyCubemaps.find(key);
-    if (it != mSkyCubemaps.end()) return it->second;
-
-    const float3 top = skyLinear(sky[0]), hor = skyLinear(sky[1]),
-                 low = skyLinear(sky[2]);
-
-    constexpr uint32_t N = 64;
-    const size_t face = (size_t) N * N;
-    auto* const pix = new float[face * 6 * 4];
-    for (uint32_t f = 0; f < 6; f++) {
-        for (uint32_t y = 0; y < N; y++) {
-            for (uint32_t x = 0; x < N; x++) {
-                const float u = 2.0f * ((float) x + 0.5f) / N - 1.0f;
-                const float v = 2.0f * ((float) y + 0.5f) / N - 1.0f;
-                float3 d;
-                switch (f) {   // GL cubemap face order: +X -X +Y -Y +Z -Z
-                    case 0:  d = {  1.0f,    -v,    -u }; break;
-                    case 1:  d = { -1.0f,    -v,     u }; break;
-                    case 2:  d = {     u,  1.0f,     v }; break;
-                    case 3:  d = {     u, -1.0f,    -v }; break;
-                    case 4:  d = {     u,    -v,  1.0f }; break;
-                    default: d = {    -u,    -v, -1.0f }; break;
-                }
-                const float t = normalize(d).y;   // -1 nadir .. 1 zenith
-                const float3 c = t >= 0
-                        ? mix(hor, top, std::pow(t, 0.65f))
-                        : mix(hor, low, std::min(1.0f, -t * 3.0f));
-                const float3 g = gradeSrgb(c) / lum;
-                float* const px = pix + ((size_t) f * face + (size_t) y * N + x) * 4;
-                px[0] = g.x; px[1] = g.y; px[2] = g.z; px[3] = 1.0f;
-            }
-        }
-    }
-    Texture* const tex = Texture::Builder()
-            .width(N).height(N).levels(1)
-            .sampler(Texture::Sampler::SAMPLER_CUBEMAP)
-            .format(Texture::InternalFormat::RGBA16F)
-            .build(*mEngine);
-    tex->setImage(*mEngine, 0, 0, 0, 0, N, N, 6,
-            Texture::PixelBufferDescriptor(pix, face * 6 * 4 * sizeof(float),
-                    Texture::Format::RGBA, Texture::Type::FLOAT,
-                    [](void* p, size_t, void*) { delete[] static_cast<float*>(p); }));
-    mSkyCubemaps.emplace(key, tex);
-    return tex;
-}
-
 bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const std::vector<TtpRosterCar>& roster,
         const ttp::rt::WearPlan& wear) {

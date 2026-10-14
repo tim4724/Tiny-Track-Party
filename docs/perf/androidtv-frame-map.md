@@ -1547,6 +1547,27 @@ bilinear fetch, the cheapest a textured shadow can be, and the vertex term it
 replaced lost anything narrower than a lane. Dropping the channel outright is
 the only lever left, as a look trade (the lite tier).
 
+### Three look-neutral ideas, priced (2026-10-14, evening)
+
+Probe APKs against the shipped build, 4P pinned 720 pretzel, two interleaved
+rounds, per-second pairing (heavy-30% p50, round 1 / round 2):
+
+| probe | heavy delta | verdict |
+|---|---|---|
+| **the sky as a vertex-gradient dome** in place of the cubemap skybox | **-0.53 / -0.69**, skips 91/101 -> 62/57, clean 55/56 -> 64/61 of 75 | SHIPPED |
+| the grade taken at the vertex on vcolor (the flat sheets) | +0.02 / +0.30 | null: three LUT taps per vertex cost what they saved per fragment, and a lighting crease would have graded wrong |
+| the car-shadow probe fed from the rubber's fetch (the ceiling of a merged two-channel deck layer) | -0.36 / -0.05 | null; the frame map's 2026-09 "not worth building" stands on Vulkan at 720 too |
+
+The sky: `skyCubemap` baked a 64-texel cubemap of an elevation gradient and
+Filament's Skybox sampled it on every sky pixel, which in a vista is most of
+the cell. The dome (`vsky.mat`, `mSkyDome`) carries the same gradient as
+graded 8-bit vertex colours on a 49-ring unit sphere that renderCells moves
+to each cell's eye and scales to 0.9 of that view's far plane, so the
+world-origin dome's old clipping hole cannot recur. The feature-mask "sky"
+arm (`kFeatSky`) never covered the skybox — it is clouds, haze, fliers and
+the balloon — so the earlier "no sky -0.87" was those; the skybox's own
+price was unmeasured until this probe.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

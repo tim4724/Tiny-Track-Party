@@ -15,7 +15,6 @@
 #include <filament/RenderTarget.h>
 #include <filament/Renderer.h>
 #include <filament/Scene.h>
-#include <filament/Skybox.h>
 #include <filament/Texture.h>
 #include <filament/TextureSampler.h>
 #include <filament/SwapChain.h>
@@ -94,10 +93,11 @@ constexpr uint32_t LAWN_SRGB = 0x6aa84f;
 // pale wedge over the track — the JS clouds/balloon are fog:false). 520 leaves
 // a minimum camera distance of ~420.
 //
-// THE DOME THAT USED TO SIT OUT HERE IS GONE (TtpRenderer.h, mSkyCubemaps).
-// Pushing it out to 600 for this same fog rule is what put it past CAM_FAR and
-// punched a moving circular hole in the sky; the gradient is a skybox now, drawn
-// at infinity, which this rule cannot reach and no far plane can clip.
+// THE SKY DOME IS NOT SUBJECT TO THIS RULE (TtpRenderer.h, mSkyDome): it is
+// centred on each cell's camera and scaled to that view's far plane, so its
+// distance from the eye is fixed and no far plane can clip it. Pushing a
+// world-origin dome out to 600 for this same fog rule is what used to punch a
+// moving circular hole in the sky.
 constexpr float SKY_BAND = 520.0f;
 
 // sRGB 0xrrggbb → linear float3, matching THREE.Color's conversion — the JS

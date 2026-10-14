@@ -136,7 +136,6 @@ class Renderer;
 class View;
 class Scene;
 class Camera;
-class Skybox;
 class Texture;
 class RenderTarget;
 class Material;
@@ -616,22 +615,24 @@ private:
     filament::View* mView = nullptr; // single default view (no-views fallback)
     filament::Scene* mScene = nullptr;
     filament::Camera* mCamera = nullptr;
-    filament::Skybox* mSkybox = nullptr;
-    // THE SKY IS A SKYBOX, NOT A DOME. It used to be a gradient sphere of
-    // radius SKY_R centred on the WORLD ORIGIN, and the far plane is measured
-    // from the CAMERA — so the moment a car left the origin the far side of the
-    // dome sat beyond CAM_FAR and was clipped, leaving a circular hole with the
-    // flat backstop showing through, sliding around as you drove. No radius
-    // fixes that: bigger puts more of it past the plane, smaller walks the
-    // camera through the shell. A skybox is drawn at infinity and cannot be
-    // clipped at all, so the failure mode does not exist.
+    // THE SKY IS A DOME CENTRED ON EACH CELL'S CAMERA (vsky.mat): a unit
+    // sphere carrying the biome's elevation gradient as graded vertex colours,
+    // which renderCells moves to the cell's eye and scales to that view's own
+    // far plane before every render(). Two earlier shapes, and why not them:
     //
-    // Cubemaps are ENGINE-LIFETIME and keyed by the three authored sky colours
-    // — coarser than track|biome, so one bake serves every track in a cup that
-    // shares a sky. They outlive releaseScene the way the parsed-kit cache
-    // does; the Skybox object in front of them is per-scene and owns nothing.
-    std::unordered_map<uint64_t, filament::Texture*> mSkyCubemaps;
-    filament::Texture* skyCubemap(const uint32_t sky[3], float lum);
+    // - A dome of fixed radius centred on the WORLD ORIGIN: the far plane is
+    //   measured from the camera, so once a car left the origin the dome's far
+    //   side was clipped and a circular hole slid around the sky. Centred on
+    //   the eye and sized from the view's farZ, no radius is ever past the
+    //   plane and the camera is never through the shell.
+    // - Filament's Skybox over a cubemap of the same gradient (2026-10-14):
+    //   its full-screen draw samples the cubemap on every sky pixel through
+    //   the skybox material, ~0.6 ms of a 4P 720 heavy second on the Android
+    //   box, where a vista is mostly sky. The dome's fragment is a varying
+    //   read. Same picture to the eye (the gradient is 8-bit per vertex, 49
+    //   rings, where the cubemap was 64 texels a face).
+    filament::Material* mSkyMaterial = nullptr;   // renderer-lifetime, like vroadvis
+    Mesh mSkyDome;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     // Cheap-matte live-lit (vlit.mat, custom Lambert): the meshes that MOVE.
     // Every static lit surface bakes its light instead (custom0, bakeLight).

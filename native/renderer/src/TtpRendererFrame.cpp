@@ -2688,6 +2688,15 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             cam->setModelMatrix(world);
             cam->setProjection(views[i].fov, views[i].aspect,
                     views[i].nearZ, views[i].farZ, Camera::Fov::VERTICAL);
+            // The sky dome rides THIS cell's eye and far plane (TtpRenderer.h,
+            // mSkyDome): 0.9 of farZ keeps every point of it inside the plane
+            // and past everything the world holds.
+            if (!mSkyDome.entity.isNull()) {
+                auto& tcmSky = mEngine->getTransformManager();
+                tcmSky.setTransform(tcmSky.getInstance(mSkyDome.entity),
+                        mat4f::translation(world[3].xyz)
+                        * mat4f::scaling(float3{ views[i].farZ * 0.9f }));
+            }
             // Fog rides the VIEW: the race cells, the lobby's perimeter orbit
             // and the overview each run their own ramp, and the gallery runs
             // none (fogFar <= fogNear).

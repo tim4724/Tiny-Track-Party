@@ -2011,6 +2011,7 @@ void TtpRenderer::releaseStatic() {
     }
     destroyMesh(mGround);
     destroyMesh(mGroundProxy);
+    destroyMesh(mSkyDome);
     destroyMesh(mHills);
     destroyMesh(mBalloon);
     destroyMesh(mGantry);
@@ -2088,7 +2089,6 @@ void TtpRenderer::releaseStatic() {
     }
     mSun = {};
     if (mAmbient) { mScene->setIndirectLight(nullptr); mEngine->destroy(mAmbient); mAmbient = nullptr; }
-    if (mSkybox) { mScene->setSkybox(nullptr); mEngine->destroy(mSkybox); mSkybox = nullptr; }
 
     // Pools and per-scene state, back to their constructed values.
     mBoxInstances.clear();
@@ -2158,10 +2158,6 @@ TtpRenderer::~TtpRenderer() {
     drainBodyPool();
     // Likewise the monster pools, which outlive a scene.
     releaseMonsterPools();
-    // Engine-lifetime, like the parsed-kit cache: outlives every scene, so it
-    // is this destructor's to free and no releaseScene's.
-    for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);
-    mSkyCubemaps.clear();
     // A staged blob's unlanded reads are LEAKED on purpose, and retireStaged
     // already states the trade: the driver may still be writing into that
     // buffer and there is no tick left to complete it. The textures they were
@@ -2223,6 +2219,7 @@ TtpRenderer::~TtpRenderer() {
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
     if (mVisMaterial) mEngine->destroy(mVisMaterial);
     if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
+    if (mSkyMaterial) mEngine->destroy(mSkyMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (View* v : mCellViews) mEngine->destroy(v);
     for (utils::Entity e : mCellCameraEntities) {

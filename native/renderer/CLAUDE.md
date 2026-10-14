@@ -592,7 +592,15 @@ Android box) it steadies the tail and leaves the median; on a submission-bound o
   platforms, a null on the Android box, a win only on the Apple TV — and the hunt
   rule is "improves the weakest device". A two-drawable CAMetalLayer dropped
   frames at 4P 4K.
-- **A cheaper antialias.** `ttp_display_antialias` is a switch whose saving is the
+- **The sky is a dome at the eye, not a skybox.** Filament's Skybox samples a
+cubemap on every sky pixel through its own material, ~0.6 ms of a 4P 720 heavy
+second on the Android box; `vsky.mat` over `mSkyDome` writes a varying. The dome
+is centred on each cell's camera and scaled to that view's far plane in
+renderCells, which is the only placement that can never be clipped (the
+world-origin dome's hole; `TtpRenderer.h`, mSkyDome). It is not a caster and not
+fogged, and it is not on the `kFeatSky` arm, which is the sky's CONTENT.
+
+**A cheaper antialias.** `ttp_display_antialias` is a switch whose saving is the
   offscreen scene BUFFER, not the FXAA filter, so a shorter span or a 3-tap filter
   chases the small half: the decision is BINARY. **Both TV shells turn it off**;
   the web keeps it. What vpresent's custom shader buys is the pass count.
