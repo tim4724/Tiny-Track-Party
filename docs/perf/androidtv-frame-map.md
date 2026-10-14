@@ -1500,6 +1500,53 @@ already binds) costs the GPU nothing over B (15.68 vs 15.58 heavy, same
 skips) and the frame thread's `cars` phase 0.8 -> 1.1 ms typical. Undecided;
 the shipped build keeps the B-spline.
 
+### Scenery shadow on the deck: where it falls, and a per-chunk gate (2026-10-14, later)
+
+The user's question: the road rarely carries a cast shadow (the gantry at
+the line, a crossing, a loop over the road below), so can the deck's sun-vis
+tap be paid only there? Measured first on the maps themselves (a scratch
+probe read each track's bake blob out of the web page's store and took the
+darkest texel per column of the deck map, `vroadvis.mat`'s track-space R8):
+
+| cup | deck chunks white within 2/255 (take no tap) |
+|---|---|
+| sea: tidepool, cove, driftwood, riptide | 28-30 of ~31 |
+| grass: ribbon, pretzel, tangle, cloverleaf, wash | 23-30 of ~36 |
+| canyon: gulch, crag, sidewinder | 31-32 of 37 |
+| snow: powder, flurry, glacier, avalanche | 0 (77-97% of the lap carries shadow) |
+| sky: skysnake, skyline, helix, gauntlet | 6-21 |
+
+Pretzel's shadow is the gantry, the crossing at 208-233 u and three 7 u
+bands: 11% of the lap. The tolerance matters: the blur's tail leaves 253-254
+over a quarter of a sunny lap, so an exact-white test halves the count; two
+code values of the SUN term is under one code value of the graded pixel.
+
+**The gate, built and measured (session scratch `visgate.patch`, not
+shipped):** per column of the deck map the darkest texel, from the blob's
+bytes on import or a staged readPixels after a fresh bake, and a chunk whose
+columns (plus one each side, the bilinear footprint) are all lit is handed
+`invSunVisLatSpan = 0`, the shader's own "no map" branch. Verified engaged
+on the web (0/35 at build, 26/35 once the scan lands, 26/35 from a warm
+import) and on the box (tidepool 26 of 32 chunks). 4P pinned 720, per-second
+pairing against the shipped build, heavy seconds: pretzel -0.14 / -0.25 /
+-0.16, tidepool 0.00 / -0.18. Consistent in sign, ~0.15 ms, under the
+instrument's resolution: the same shape the rubber-tap gate measured on
+2026-09-04 ("the deck is the near chunks"), because what is on screen is the
+few chunks under the cars, not the lap.
+
+**Where the shadow arm's price actually sits:** on the gate build, with the
+deck's tap off on 30 of 32 tidepool chunks, the `kFeatRoadShadow` arm still
+read -0.29 / -0.52 ms heavy. That arm also rebinds the GROUND's and the
+STRUCTURES' 512^2 light-space maps to 1x1 white, so the -0.57..-0.96 it has
+read all along is three taps, mostly the ground's. A per-tile gate on the
+ground would capture its white 48 u tiles only: 2-5 of 8-12 per track by the
+same probe (the world is ~3x3 tiles), so ~0.1-0.2 ms at best. Not built.
+
+What the special case cannot be: the tap on a shadowed chunk is one R8
+bilinear fetch, the cheapest a textured shadow can be, and the vertex term it
+replaced lost anything narrower than a lane. Dropping the channel outright is
+the only lever left, as a look trade (the lite tier).
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

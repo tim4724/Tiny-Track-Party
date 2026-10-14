@@ -148,7 +148,13 @@ would have rejected each entry in turn. **Build it from the same bound the loop
 tests** (`rect.zw`), or the box clips a stamp the loop would have drawn. The
 paint list's box was the second one, and it was worth ~0.7 ms of a 4P 720 heavy
 second on the Android box (the frame map, 2026-10-14) — a uniform-bounded loop
-that early-outs per entry is not free on a GPU with few ALUs.
+that early-outs per entry is not free on a GPU with few ALUs. **A per-chunk
+gate on a deck TAP is not the same lever**: the deck on screen is the few
+chunks under the cars, so disarming most of the lap moves nothing (the rubber
+tap, 2026-09-04; the sun-vis tap, 2026-10-14, ~0.15 ms with 26 of 32 chunks
+white). And `kFeatRoadShadow` prices three maps at once — it rebinds the
+ground's and the structures' maps to 1x1 white — so read its arm as the
+ground's tap first, not the deck's.
 
 **The car-shadow B-spline's probe gate sits at 0.6 x remapLo, not just above
 zero.** The stored field is a linear ramp (`rasterCarShadowStamp`), on which the
