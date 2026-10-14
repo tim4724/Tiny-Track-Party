@@ -72,6 +72,9 @@ inline constexpr double SCRUB_SPD_MIN = 0.35;
 // a boosted kicker's drop.
 inline constexpr double LAND_SOFT = 0.8;
 inline constexpr double LAND_HARD = 3.0;
+// Off the deck the tyres unload and the engine flares: its level rises by this
+// for the whole flight (the device glides the pitch in and out).
+inline constexpr double ENGINE_FLARE = 0.15;
 
 // The monster-truck engine: the same recorded loop, pitch down, a touch louder,
 // top end muffled.
@@ -116,6 +119,7 @@ struct Car {
   double drift = 0;          // the sim's Car::driftMix, 0..1 (not on the snapshot)
   double air = 0;            // height off the deck (sim Car::h)
   double airRate = 0;        // and its rate, negative coming down (Car::vh)
+  bool airborne = false;     // from the sim's AIR_MIN up (ttp/game.h)
 };
 
 // An in-flight rocket. `pos` is the rocket's WORLD point, resolved the same way

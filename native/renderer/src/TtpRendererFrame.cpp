@@ -804,6 +804,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // nose-up settles its nose onto the deck instead of snapping flat.
             constexpr float AIR_PITCH_RATE = 14.0f;
             w.airPitch += (c.airPitch - w.airPitch) * (1.0f - std::exp(-AIR_PITCH_RATE * dt));
+            // The wheels drop as the tyres unload, quickly; on the way down
+            // the deck pushes them back up (the min below), so a landing
+            // compresses them before the squash takes the body.
+            constexpr float AIR_DROOP = 0.04f, AIR_DROOP_RATE = 20.0f;
+            const float droopTo = c.airborne > 0.5f ? AIR_DROOP : 0.0f;
+            w.droop += (droopTo - w.droop) * (1.0f - std::exp(-AIR_DROOP_RATE * dt));
         }
         // Jitter diagnostics (ttp_display_debug_decals). Second differences: a
         // car driving smoothly over a smooth deck has a near-constant first
@@ -1081,7 +1087,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     for (int k = 0; k < 4; k++) {
                         const float3 seat = carPos - up * c.air
                                 + right * w.wheelOff[k].x + fwd * w.wheelOff[k].z;
-                        const float t = dot(wheelDeck[k] - seat, up);
+                        const float t = dot(wheelDeck[k] - seat, up)
+                                - std::min(w.droop, c.air);
                         travelLocal[k] = std::min(TRAVEL_MAX, std::max(-TRAVEL_MAX, t))
                                 / std::max(1e-4f, w.assetScale);
                     }
@@ -1187,8 +1194,14 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 // The stamp quad's halves in the CAR's frame: forward, right.
-                const float halfF = fl * sz * mShadowTune.overscan * 0.5f;
-                const float halfR = fw * sx * mShadowTune.overscan * 0.5f;
+                // Off the deck the shadow pales by up to AIR_SHADOW_FADE and
+                // spreads by up to AIR_SHADOW_SPREAD, all of it by AIR_LOOK_H
+                // up: the cue that says how high a car is.
+                constexpr float AIR_LOOK_H = 0.5f, AIR_SHADOW_FADE = 0.3f, AIR_SHADOW_SPREAD = 0.1f;
+                const float lift = std::min(1.0f, c.air / AIR_LOOK_H);
+                const float spread = 1.0f + AIR_SHADOW_SPREAD * lift;
+                const float halfF = fl * sz * spread * mShadowTune.overscan * 0.5f;
+                const float halfR = fw * sx * spread * mShadowTune.overscan * 0.5f;
                 // Heading against the track frame at carS. `bm` already carries
                 // the spin-out whirl, so the shadow keeps whirling.
                 const TrackBin::Sample f0 = mTrack->frameAt(carS);
@@ -1211,7 +1224,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // Load shift folded into the stamp's peak alpha, one
                 // expression for the CPU entry and the raster.
                 const float blobA = mShadowTune.ao
-                        * (1.0f + mShadowTune.loadGain * load);
+                        * (1.0f + mShadowTune.loadGain * load)
+                        * (1.0f - AIR_SHADOW_FADE * lift);
                 // Gated by the decal ablation arm — raster AND (via
                 // mCarShadowUpload) the upload drop out, so the arm prices
                 // the whole channel; applyRoadDebug zeroes the tap to match.
@@ -2089,6 +2103,9 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             cw.skidHold = raw > cw.skidHold
                     ? std::min(raw, cw.skidHold + input.dt / SKID_ATTACK)
                     : std::max(raw, cw.skidHold - input.dt / SKID_RELEASE);
+            // Tyres off the deck mark nothing, and the mark cuts rather than
+            // fading: touching down lays a fresh one through the attack.
+            if (c.airborne > 0.5f) cw.skidHold = 0;
             const float strength = cw.skidHold;
             // Wheel contact patches from the posed wheel nodes (whirl included,
             // lean/dive not — JS wheels are children of the yawed car, not the

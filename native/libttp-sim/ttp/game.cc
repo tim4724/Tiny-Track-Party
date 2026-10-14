@@ -171,9 +171,6 @@ static const double GRAVITY = 12.0;
 // the spread is about 2x (0.21 at 80%, 0.44 flat-out). Crest only, so a
 // kicker, which leaves its lip already in the air, flies under GRAVITY alone.
 static const double CREST_PULL = 80.0;
-// Below this height off the deck a car still drives as grounded: a crest taken
-// just fast enough lifts it by millimetres, which nothing should notice.
-static const double AIR_MIN = 0.02;
 // Steering authority off the deck, as a fraction of the ground's: a tilt still
 // nudges the landing but cannot turn the car around in the air.
 static const double AIR_STEER = 0.35;

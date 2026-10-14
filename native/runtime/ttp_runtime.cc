@@ -774,6 +774,7 @@ void ttp_audio_frame(double nowMs) {
     a.drift = c.driftMix;
     a.air = c.h;
     a.airRate = c.vh;
+    a.airborne = c.h >= AIR_MIN;
     cars.push_back(std::move(a));
   }
 

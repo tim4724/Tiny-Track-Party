@@ -235,14 +235,16 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     // stay silent; a spinning car's wheels aren't gripping, so no squeal.
     // A drift has its own voice, which the squeal and the brake give way to:
     // its held brake is not a brake, and its lean is not a corner.
+    // Tyres off the deck make none of the three.
     const double fastGate = clamp01((c.spd - 0.45) / 0.3);
-    const double tyreGate = truthy(c.spin) ? 0 : fastGate;
+    const double ground = c.airborne ? 0 : 1;
+    const double tyreGate = truthy(c.spin) ? 0 : fastGate * ground;
     voice(out, "corner", c.id, js_max(c.steer * c.steer, c.drift) * (1 - c.drift) * tyreGate, nullptr);
     voice(out, "drift", c.id, c.drift * tyreGate, nullptr);
-    voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4), nullptr);
+    voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4) * ground, nullptr);
     // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
     // While a monster truck, the same loop deepens into a big-truck growl.
-    voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2),
+    voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2) + (c.airborne ? ENGINE_FLARE : 0),
           c.monster ? &MONSTER_ENGINE_MOD : nullptr);
   }
   // the nearest scrub owns the shared throttle

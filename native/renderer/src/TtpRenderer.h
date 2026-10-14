@@ -993,6 +993,7 @@ private:
         float prevAir = 0, airRate = 0;            // last frame's height off the deck, and its rate
         float squash = 0, squashV = 0;             // landing spring: body offset along up (<= 0)
         float airPitch = 0;                        // the body's eased pitch against the deck
+        float droop = 0;                           // how far the wheels hang, eased (AIR_DROOP)
         float accelNorm = 0;                       // forward-bite 0..1 — launch-scratch skids read it
         filament::math::float3 lastPos{};          // wheel-roll travel measurement
         bool hasLastPos = false;

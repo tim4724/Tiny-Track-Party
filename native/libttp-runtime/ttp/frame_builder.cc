@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "ttp/audio.h"
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
@@ -182,6 +183,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // a kicker, and in the air the angle it left at, tipping toward the
             // road. Capped so a long flight never stands the car up.
             o.air = (float) c->h;
+            o.airborne = c->h >= AIR_MIN ? 1.0f : 0.0f;
             constexpr double AIR_PITCH_MAX = 0.45;
             o.airPitch = (float) std::max(-AIR_PITCH_MAX, std::min(AIR_PITCH_MAX, c->pitch));
         }
@@ -285,7 +287,22 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             if (c) {
                 ttp::Pose rig = fromHeld ? heldPose(outCars[subject]) : c->pose;
                 const float air = outCars[subject].air;
-                if (air > 0) rig.pos.addScaledVector(rig.up, -(1 - CHASE_AIR_FOLLOW) * air);
+                const float vh = fromHeld ? 0.0f : (float) c->vh;
+                if (air <= 0 && cam.prevAir > 0) {
+                    const float hard = std::max(0.0f, std::min(1.0f, (float) (
+                            (-cam.prevVh - audio::LAND_SOFT) / (audio::LAND_HARD - audio::LAND_SOFT))));
+                    cam.dipDepth = CAM_LAND_DIP * hard;
+                    cam.dipT = 0;
+                }
+                cam.prevAir = air;
+                cam.prevVh = vh;
+                float dip = 0;
+                if (cam.dipT >= 0) {
+                    const float x = cam.dipT / CAM_DIP_T;
+                    dip = cam.dipDepth * x * std::exp(1 - x);
+                    cam.dipT = x > 8 ? -1 : cam.dipT + dt;
+                }
+                rig.pos.addScaledVector(rig.up, -(1 - CHASE_AIR_FOLLOW) * air - dip);
                 cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);

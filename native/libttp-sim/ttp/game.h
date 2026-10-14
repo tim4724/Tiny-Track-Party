@@ -165,6 +165,12 @@ inline constexpr double STEER_SIGN = -1;
 inline constexpr double MONSTER_HALF_LEN = 0.572;
 inline constexpr double MONSTER_HALF_WID = MONSTER_HALF_LEN * 0.3125 / 0.4375;
 
+// Below this height off the deck a car still drives as grounded: a crest taken
+// just fast enough lifts it by millimetres, which nothing should notice. In the
+// header because what a flight LOOKS and SOUNDS like keys off the same line:
+// tyres that leave no rubber, a squeal that stops, an engine that flares.
+inline constexpr double AIR_MIN = 0.02;
+
 // Live-tunable steering-response exponent. Module-global — shared by every
 // Game, not per-instance — and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
 // and ignores non-finite input, matching the JS `Number.isFinite` guard.
