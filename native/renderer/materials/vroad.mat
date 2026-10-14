@@ -33,7 +33,7 @@ material {
     //
     // uvs = the deck layers' track-space uvs, computed PER VERTEX so each
     // layer read samples a bare varying (a NON-DEPENDENT read the GPU can
-    // issue before the shader runs): .xy the rubber layer's,
+    // issue before the shader runs): .xy the rubber and car-shadow layers',
     // .xz the sun-visibility map's (same u; only v differs, and the vis map
     // is a render target, so its v is flipped per backend). All affine in
     // uv0, so interpolating them equals computing them per fragment up to
@@ -113,10 +113,11 @@ material {
         // (docs/perf/androidtv-4p-plan.md, Phase 5), after every
         // arithmetic-level cut inside it measured zero.
         //
-        // So the car shadows are not a uniform list: they are their own
-        // blended draws over the deck (vshadow.mat, one per car), and this
-        // material pays nothing for them. What is a uniform list is the
-        // PROFILE kind:
+        // So the car shadows are not a uniform list: they are a per-frame
+        // CPU-rasterized TRACK-SPACE R8 layer (the rubber layer's exact idiom
+        // — TtpRenderer::rasterCarShadowStamp) and this material pays ONE
+        // bilinear tap for all eight, at the uv the rubber tap already
+        // computes. What is a uniform list is the PROFILE kind:
         // a shape the shader evaluates (rect/ellipse, a two-segment falloff,
         // an optional chevron grid), three vec4s per entry.
         //
@@ -178,6 +179,42 @@ material {
         //       (the pads that did are paint now); the field is here because
         //       paintStamp reads one layout for both channels.
         { type : float4[8], name : profShape },
+
+        // — the car shadows: ONE tap of a per-frame CPU-rasterized layer —
+        //
+        // TtpRenderer rasterizes each car's fitted shape as a WARPED QUAD into
+        // a small track-space R8 texture every frame (deckFoot projects the
+        // stamp's corners and long-edge midpoints) and this material pays one
+        // bilinear tap at the rubber tap's own uv. The layer is TRANSIENT
+        // (erased and re-laid per frame) and PING-PONGED so the upload never
+        // lands on the texture the driver is reading — see
+        // TtpRenderer::uploadCarShadow.
+        //
+        // The curvilinear objection — painting in (s, lat) bends the shape
+        // around corners, and uv0's per-triangle kinks ripple through a SHARP
+        // edge — is answered by structure: the stored field is wide and
+        // smooth, and the warp lives INSIDE one stamp (two slices), so the
+        // residual bending error is second-order.
+        //
+        // rgb = the blob ink, in linear (CarShadowTuning::ink — one colour
+        // for every car shadow). w = the ENABLE and the CAP on summed
+        // coverage: 0 while no layer exists (no track, torn down, or the
+        // ablation arm), else the darkest two stacked shadows may go.
+        { type : float4, name : maskInk },
+        // The layer: u = s / trackLength (REPEAT carries the lap wrap),
+        // v = lat across ±skidLatHalf (CLAMP; the outer rows stay empty, so
+        // kerbs' and underside's out-of-band v reads zero) — the rubber
+        // layer's exact mapping, so the tap reuses its uv. The channel is
+        // shape coverage × the stamp's peak alpha, folded at raster time.
+        // Single level, LINEAR.
+        { type : sampler2d, name : carShadow },
+        // The carShadow tap's TAIL-CUT REMAP: smoothstep(x, y, coverage), in
+        // absolute alpha (TtpRenderer::shadowRemapParam). x is where the
+        // field's tail is cut and the band to y is the anti-flicker slack a
+        // razor edge cannot have (the raster moves sub-texel every frame).
+        // y > x always: a degenerate smoothstep is UB. z is the B-spline's
+        // probe gate — shadowRemapParam says why it sits under x.
+        { type : float3, name : carShadowRemap },
 
         // — the paint channel: the deck's OWN surface (repairs, boost pads) —
         // Identical entry layout to the decal arrays above and painted by the
@@ -439,6 +476,75 @@ fragment {
             float ink = skidInk(variable_uvs.xy);
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
+        }
+        // The car shadows, BEFORE the profiles, so a boost aura composites
+        // OVER the shadow — at the near-opaque blob depth, shadow-over-aura
+        // turned the aura's designed ~1.8 Hz pulse into a visible wave around
+        // the blob's hard edge. The PROBE tap below sits in uniform control
+        // flow (its guard is a uniform). min() against maskInk.w caps two
+        // stacked shadows instead of letting saturating-add run darker.
+        float csw = materialParams.maskInk.w;
+        if (csw > 0.0) {
+            // SMOOTH the tap: bilinear interpolation is C0 — its GRADIENT
+            // kinks at every texel boundary, and over the stamp's smooth ramp
+            // those kinks print as Mach bands on the texel grid, the
+            // density-dependent half of the "diagonal bands through the
+            // shadow" report (the uv0 half is the remap band's job). The cure
+            // is a bicubic B-SPLINE through four bilinear fetches
+            // (Sigg-Hadwiger): C2 across texel boundaries, and its ~one-texel
+            // softening is welcome on a shadow.
+            //
+            // THE ONE-TAP QUINTIC-WARP TRICK IS REFUTED HERE — tried first,
+            // and it printed WORSE bands than raw bilinear. Warping the
+            // fractional coordinate flattens the interpolation at texel
+            // centres and steepens it between them, which is right for texel
+            // art and exactly wrong for a smooth field: a ramp spanning N
+            // texels terraces into N visible micro-bands. Do not bring it
+            // back for any gradient-content layer.
+            // GATED on a cheap probe tap: the layer is a few thousand inked
+            // texels in megatexels of empty deck, and ungated the B-spline's
+            // four fetches ran on every road fragment — +2.1 ms of the 4P
+            // frame on the Android box. Bilinear-zero fragments take the
+            // probe's answer; only the stamp neighbourhoods pay the filter,
+            // and the branch is coherent everywhere but the stamps' edges.
+            // Where bilinear reads 0 the B-spline could read at most the
+            // outer texel ring's faint tail, which sits under the remap
+            // band's clip — the gate is visually lossless with the band on.
+            // textureLod 0: the layer is single-level, so this is exactly
+            // what an implicit sample picks, and it carries no lodBias.
+            float cs = textureLod(materialParams_carShadow, variable_uvs.xy, 0.0).r;
+            // textureLod, NOT texture(): the `cs` gate makes this branch
+            // NON-UNIFORM, where an implicit-derivative sample is UB — the
+            // whole renderer's rule (CLAUDE.md trap #5), and the exact
+            // mistake that made this same shadow blink on ANGLE-Metal once.
+            // The layer is single-level, so LOD 0 is what an implicit sample
+            // would pick anyway.
+            if (cs > materialParams.carShadowRemap.z) {
+                highp vec2 ts = vec2(textureSize(materialParams_carShadow, 0));
+                highp vec2 p = variable_uvs.xy * ts - 0.5;
+                highp vec2 i = floor(p);
+                highp vec2 f = p - i;
+                highp vec2 f2 = f * f;
+                highp vec2 f3 = f2 * f;
+                highp vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+                highp vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+                highp vec2 w3 = f3 / 6.0;
+                highp vec2 g0 = w0 + w1;
+                highp vec2 g1 = 1.0 - g0;
+                highp vec2 c0 = (i + 0.5 - 1.0 + w1 / g0) / ts;
+                highp vec2 c1 = (i + 0.5 + 1.0 + w3 / g1) / ts;
+                cs = g0.x * (g0.y * textureLod(materialParams_carShadow, c0, 0.0).r
+                           + g1.y * textureLod(materialParams_carShadow, vec2(c0.x, c1.y), 0.0).r)
+                   + g1.x * (g0.y * textureLod(materialParams_carShadow, vec2(c1.x, c0.y), 0.0).r
+                           + g1.y * textureLod(materialParams_carShadow, c1, 0.0).r);
+            }
+            // A WIDE band (0.2..0.8 of peak) over a wide stored field —
+            // CarShadowTuning's remap block holds the whole argument (tail
+            // clipped where the uv0 kinks band, slope far from the die-cut's
+            // facet cliff).
+            float a = cs * smoothstep(materialParams.carShadowRemap.x,
+                    materialParams.carShadowRemap.y, cs);
+            base = mix(base, materialParams.maskInk.rgb, min(a, csw));
         }
         // A box in front of the loop — see profBounds. Exact, not conservative:
         // a box IS the union of the per-entry windows its loop tests, so a

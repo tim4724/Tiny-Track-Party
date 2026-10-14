@@ -667,10 +667,11 @@ const char* const* TtpRenderer::profileNames() {
 void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars,
         uint32_t nCars, std::vector<float3>& carPosW, std::vector<DeckDecal>& auraDecals) {
     auto& tcm = mEngine->getTransformManager();
-    // The shadow draws start every frame empty — unconditionally, ablation
-    // arm included, so a car that vanished (or a channel switched off
-    // mid-run) leaves nothing behind. Each car places its own below.
-    hideCarShadowDraws();
+    // The car-shadow layer is TRANSIENT: last frame's stamps are erased
+    // before this frame lays its own — unconditionally, ablation arm
+    // included, so a car that vanished (or a channel switched off mid-run)
+    // leaves nothing behind. The stamps themselves are laid per car below.
+    if (mCarShadowTex[0]) eraseCarShadow();
     for (uint32_t i = 0; i < nCars; i++) {
         const TtpCarInput& c = cars[i];
         float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
@@ -1178,14 +1179,18 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             mDecalProjHint[i] = mTrack->ringHint(carS);
             // The CPU entry below is READBACK ONLY — the
             // ttp_display_debug_decals row the warp bench reads, with the
-            // conform diagnostics riding its shape field. The pass draws
-            // (TtpRenderer.h, mCarShadowVb); a scene without its material
-            // gets no shadow, no row, and those slots go to the auras.
-            if (mRoadInst && !mCarShadowMi.empty()
+            // conform diagnostics riding its shape field. The layer draws, so
+            // a track whose layer failed to allocate gets no shadow, no row,
+            // and those slots go to the auras.
+            if (mRoadInst && mCarShadowTex[0]
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
-                // ON THE ROAD'S OWN SURFACE (vshadow.mat): the strip sits on
-                // the deck with the wet sheet's depth bias, so a tyre in
-                // front wins the depth test and nothing floats.
+                // SHADED INTO THE ROAD, like the aura below: the shadow's
+                // fragment IS a road fragment, so nothing floats and nothing
+                // can slice the bottom of a tyre — the band a lifted sheet
+                // paints across every wheel from a low camera, because ALL
+                // blended geometry draws after ALL opaque geometry (Filament's
+                // pass bits outrank renderable priority) and the sheet wins
+                // the depth test in front of the tyre's bottom slice.
                 const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 // The stamp quad's halves in the CAR's frame: forward, right.
@@ -1217,19 +1222,20 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                                         : normalize(f0.tangent() * cs + f0.lat * sn);
                 const float3 wR = normalize(cross(aUp, wF));
                 // Load shift folded into the stamp's peak alpha, one
-                // expression for the CPU entry and the pass.
+                // expression for the CPU entry and the raster.
                 const float blobA = mShadowTune.ao
                         * (1.0f + mShadowTune.loadGain * load)
                         * (1.0f - AIR_SHADOW_FADE * lift);
-                // Gated by the decal ablation arm and its blob sub-arm: a
-                // slot left unplaced draws nothing, so the arm prices the
-                // whole channel. THE CAR'S OWN FIT, not one shape for the
-                // field: the four roster models share a bounding box, so
-                // this is the only place they can be told apart.
+                // Gated by the decal ablation arm — raster AND (via
+                // mCarShadowUpload) the upload drop out, so the arm prices
+                // the whole channel; applyRoadDebug zeroes the tap to match.
                 if ((mRoadMask & kFeatRoadDecals)
                         && !(mDecalDebug & kDebugNoDecalBlob)) {
-                    placeCarShadow(i, aPos, wF, wR, halfF, halfR, carS, blobA,
-                            carShadowFitFor(i));
+                    // THE CAR'S OWN FIT, not one shape for the field. The
+                    // four roster models share a bounding box, so this is the
+                    // only place they can be told apart.
+                    rasterCarShadowStamp(aPos, wF, wR, aUp, halfF, halfR, carS,
+                            blobA, carShadowFitFor(i), &mDecalProjHint[i]);
                 }
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
@@ -1906,6 +1912,10 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     // rewrites are a per-frame CPU cost the world bucket alone cannot attribute.
     const double tDecal = ttpNowMs();
     uploadDeckDecals();
+    // The car-shadow layer's upload (and the pair's rebind, off Vulkan) rides
+    // the same profile slot: it is this frame's other decal upload, and a
+    // decalUp spike should cover both suspects.
+    uploadCarShadow();
     mProfile[kProfDecalUp] = ttpNowMs() - tDecal;
 }
 
@@ -2981,7 +2991,6 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     // enough for the shadow to ghost through it (renderCars).
     std::vector<DeckDecal> auraDecals;
     renderCars(input, cars, nCars, carPosW, auraDecals);
-    flushCarShadows();
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
     renderWorld(input, cars, nCars, carPosW, auraDecals);
     mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];

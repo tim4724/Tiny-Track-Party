@@ -1580,41 +1580,6 @@ arm (`kFeatSky`) never covered the skybox — it is clouds, haze, fliers and
 the balloon — so the earlier "no sky -0.87" was those; the skybox's own
 price was unmeasured until this probe.
 
-### The car shadow as a pass (2026-10-14, night)
-
-The user asked for the shadow both better and cheaper. The road-space layer
-(a per-frame CPU raster, dirty-rect uploads, one tap on every road fragment
-plus a B-spline under the stamps) was 1.5 ms of a 4P 720 heavy second on the
-GPU and 0.6 ms of the frame thread, and its artefacts were the texel grid:
-bands from the reconstruction, shiver from the stamp re-landing each frame.
-The pass draws each car's shadow as its own blended geometry on the deck.
-The ladder, every rung measured against the shipped build at 4P pinned 720
-pretzel, interleaved pairs, heavy-30% p50 (the frame thread's `cars` phase
-0.8 -> 0.2 ms on every rung):
-
-| rung | heavy delta | lesson |
-|---|---|---|
-| the road's own ring bands under each car, shape per fragment | +4.5 | fragments are the cost |
-| the road's own cells (ring x strip) under each car | +3.3 | a lane has no inner column: a cell is half the road wide |
-| same cells, trivial fragment | +1.8 | the shape maths was 1.5 of it; the fill the rest |
-| same cells, the shape as a car-locked texture, one tap | +0.6..+1.1 | still the fill |
-| one cell per car (the draw-overhead floor) | -1.5 | the 32 draws cost nothing |
-| **the stamp's own quad strips, texture, one tap** | **-0.1 heavy, -0.4 all seconds, 6 pairs** | shipped |
-
-Three traps on the way, each worth knowing: a `float3, precision : high`
-material parameter read back at a tenth of its scale on the box's Vulkan and
-not on the web's GL (declare float4); Filament's reversed depth makes a
-hand-set LE compare pass over everything in front (keep the material's
-default); and a scene rebuild creates fresh instances, so a per-slot "what is
-bound" memory must reset with the draws or the race after the lobby binds no
-stamp. The polygon offset is the wet sand sheet's (-1, -1).
-
-The look: the pass has no grid, so the bilinear bands and the shiver are
-gone and the B-spline question is moot. Tone and spread were matched to the
-layer on a frozen lobby frame (the alpha remapped for the display-space
-blend, the baked ramp twice the raster's), and the user judged the probe on
-the TV before the layer was deleted.
-
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

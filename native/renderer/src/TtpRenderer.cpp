@@ -1720,8 +1720,9 @@ void TtpRenderer::applyRoadDebug() {
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
         if (!(mRoadMask & kFeatRoadDecals)) {
-            // The car shadow rides this arm in renderCars (the pass leaves
-            // every slot unplaced); here it is the profile loop.
+            // The car shadow rides this arm through the tap's maskInk.w; its
+            // raster + upload drop out on the same bit in renderCars.
+            if (roadHasCarShadow()) mi->setParameter("maskInk", shadowInkParam(false));
             mi->setParameter("profCount", 0);
         }
         if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
@@ -1729,6 +1730,9 @@ void TtpRenderer::applyRoadDebug() {
         // The decal sub-arms. STATICS acts upstream (the gather), so only the
         // loop with a shader-side count and the tap need an override here.
         if (mDecalDebug & kDebugNoDecalProfile) mi->setParameter("profCount", 0);
+        if ((mDecalDebug & kDebugNoDecalBlob) && roadHasCarShadow()) {
+            mi->setParameter("maskInk", shadowInkParam(false));
+        }
         // THE ROAD HALF OF THIS ARM IS LIVE AGAIN. It was structurally zero
         // while the deck's sun visibility was vertex data, and it is one
         // bilinear tap of the track-space bake now (vroadvis.mat) — so the arm
@@ -1771,6 +1775,14 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
+    // The car shadow's filter: the remap rides the one ink funnel, so a flip
+    // re-states it on every live road instance (new scenes read the flag
+    // through shadowRemapParam at build).
+    const bool bilinear = (mask & kDebugBlobBilinear) != 0;
+    if (bilinear != mBlobBilinear) {
+        mBlobBilinear = bilinear;
+        applyShadowInk();
+    }
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
@@ -1804,6 +1816,12 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         // span to 0, and it has no per-frame writer, so nothing else would ever
         // put it back — and applyRoadDebug returns early once the mask is whole.
         mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
+        // The carShadow tap back on (the profile list restores itself through
+        // the cleared lastProf on the next uploadDeckDecals; the tap has no
+        // per-frame writer, so its restore is here).
+        if (roadHasCarShadow()) {
+            mi->setParameter("maskInk", shadowInkParam(mCarShadowTex[0] != nullptr));
+        }
         mi->setParameter("paintCount", paintN);   // written once per track
     };
     for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastProf);
@@ -1992,17 +2010,6 @@ void TtpRenderer::releaseStatic() {
     destroyMergedGroups(mMergedDress);
     mDressMergeDirty = false;
     mAssetMeshKey.clear();
-    // The shadow draw shares the road's vertices: its entity and its own index
-    // buffer go; the instances are scene instances.
-    if (!mCarShadowEntity.isNull()) {
-        mScene->remove(mCarShadowEntity);
-        mEngine->getRenderableManager().destroy(mCarShadowEntity);
-        utils::EntityManager::get().destroy(mCarShadowEntity);
-        mCarShadowEntity = utils::Entity{};
-    }
-    mCarShadowMi.clear();
-    if (mCarShadowIb) { mEngine->destroy(mCarShadowIb); mCarShadowIb = nullptr; }
-    if (mCarShadowVb) { mEngine->destroy(mCarShadowVb); mCarShadowVb = nullptr; }
     destroyMesh(mRoad);
     if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
     {
@@ -2047,6 +2054,17 @@ void TtpRenderer::releaseStatic() {
     mSkidMipsDirty = false;
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
+    // The car-shadow layer is per-track like the rubber (its width is the lap
+    // length).
+    for (auto*& t : mCarShadowTex) {
+        if (t) { mEngine->destroy(t); t = nullptr; }
+    }
+    std::vector<uint8_t>().swap(mCarShadowPix);
+    mCarShadowDirty.clear();
+    for (auto& l : mCarShadowPending) l.clear();
+    mCarShadowW = mCarShadowH = 0;
+    mCarShadowPing = 0;
+    mCarShadowUpload = false;
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     releaseAmbientCull();   // its parked renderables hold mPollen.vb
@@ -2210,9 +2228,6 @@ TtpRenderer::~TtpRenderer() {
     if (mVisMaterial) mEngine->destroy(mVisMaterial);
     if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mSkyMaterial) mEngine->destroy(mSkyMaterial);
-    if (mShadowMaterial) mEngine->destroy(mShadowMaterial);
-    for (const auto& [_, tex] : mCarShadowStampTex) mEngine->destroy(tex);
-    mCarShadowStampTex.clear();
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (View* v : mCellViews) mEngine->destroy(v);
     for (utils::Entity e : mCellCameraEntities) {
