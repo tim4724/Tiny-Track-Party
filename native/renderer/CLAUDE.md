@@ -322,9 +322,10 @@ opacity so lines do not ghost through it.
   top-left-rule into `mSkidPix` (additive, saturating) and the dirty rects upload
   on EVERY frame that commits a stamp, before `beginFrame`. A throttle lagged the
   trail's head behind the tyre and bought nothing (`renderSkids`).
-- **The ribbon is anchored a rolling radius AHEAD of the wheel node**, because
-  permanent additive ink cannot be drawn ahead and rewritten; the lead hides the
-  `SKID_SEG_MIN` commit distance under the tyre.
+- **The ribbon is anchored at the wheel's contact patch, with NO lead along the
+  body axis.** Permanent additive ink cannot be drawn ahead and rewritten, so the
+  head lags by up to `SKID_SEG_MIN`, under the tyre. A body-axis lead lands the
+  mark beside the path whenever the body is yawed off its travel (drift, spin-out).
 - **Ink is permanent until the race-restart wipe.** A decay pass was the layer's
   whole recurring GPU cost. **Do not add a per-frame fullscreen pass here without
   measuring on the weakest shell** — the mip refresh is throttled for exactly

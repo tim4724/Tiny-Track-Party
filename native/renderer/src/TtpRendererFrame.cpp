@@ -2095,39 +2095,14 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
             const float halfW = (mwp && mMonsterSkidWidth > 0
                     ? mMonsterSkidWidth * rs : cw.skidWidth) / 2;
-            // The ribbon is anchored at the tyre's LEADING ground contact, not
-            // at the contact patch centre: the head runs one rolling radius
-            // ahead of the wheel node, which is exactly where the wheel's own
-            // ground silhouette ends. A trail head can only ever LAG (ink is
-            // additive and permanent, so nothing may be drawn ahead of the
-            // wheel and rewritten), and the lead buys a radius of lag that
-            // falls under the tyre and cannot be seen — the SEG_MIN commit
-            // distance fits inside it whole. It does not hide arbitrary
-            // latency: at VMAX one 60 Hz frame of travel is already wider than
-            // the radius, so an upload throttle still shows.
-            // The whole ribbon shifts by this, head and tail together, so the
-            // mark traces the same curve — only its phase along that curve
-            // moves, by at most a third of a car length.
-            // Model space faces −Z (FLIP maps it to the car's forward), and
-            // taking it off poseSpun rather than off `fwd` keeps a spun-out
-            // car's scribbles leading its own wheels.
-            //
-            // BOUNDED HERE rather than where either radius is measured, and
-            // that is the point: both come off a wheel node's AABB in shell-
-            // provided GLB bytes, and the same radius ALSO divides the roll
-            // animation, where a clamp would silently retime the spin. Only
-            // this use is a position, so only this use needs the ceiling — a
-            // mismeasured wheel may spin wrong, but it may not float ink off
-            // the tyre. The kit measures 0.125 and the monster rig 0.188, so
-            // the cap is slack on everything shipped; it exists to make the
-            // bound above a fact rather than a property of the assets.
-            constexpr float LEAD_MAX = 0.3f;
-            const float3 leadDir = normalize((poseSpun * float4{ 0, 0, -1, 0 }).xyz);
-            const float lead = std::min(LEAD_MAX, wheelRadiusFor(cw, mwp != nullptr));
+            // Anchored at the wheel node's ground point (the contact patch
+            // centre), with NO lead along the body axis: a body yawed off its
+            // travel (drift slip, spin-out) would put any such shift ACROSS
+            // the trail. The head lags by the commit distance (see the block
+            // above), which stays under the tyre.
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
-                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz
-                        + leadDir * lead;
+                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
                 if (st.projHint < 0 && mDecalProjHint.size() > i) {
                     st.projHint = mDecalProjHint[i]; // seed from the car
                 }
