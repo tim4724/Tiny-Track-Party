@@ -1452,14 +1452,19 @@ pass, so nothing is stored; the Vulkan device offers `VK_EXT_shader_tile_image`,
 `VK_KHR_shader_float16_int8`, `VK_EXT_image_compression_control_swapchain`
 and `VK_EXT_global_priority` — none of them a lever here.
 
-**What is left for 720 at four players** is now ~1 ms of heavy seconds, and
-the one untried structural item is the HUD window: a Compose/HWUI window
-redrawn every frame for the name tags costs ~1.5-2 ms of GPU outside
-Filament's timer (the 2026-10-03 sections). Drawing the tags and the HUD
-stickers from Filament into a SECOND 1080p swap chain would remove the HWUI
-frame and the GL/Vulkan interleave, but it is a shell rewrite of the race HUD
-and it rides on the box's composer taking two app layers plus an empty
-window, which is unmeasured.
+**The HUD window is CLOSED as a lever, measured the same day.** On the
+shipped build, `debug.ttp.tags 0` cuts the window's HWUI frames from 605 to
+24 per 10 s and changes nothing the race can feel: heavy p50 15.69/16.33 and
+15.58/16.51 (tags on/off), skips 70/68 and 47/83 per 75 s, per-second pairing
+-0.34/+0.56 on the heavy seconds — a null, where the 2026-09-28 reading was
++2.3 ms. The window erase and the retained HUD layers collected that cost.
+And a Filament overlay surface for the tags could not have shipped anyway: a
+third app layer (a translucent media-overlay SurfaceView drawn once) reads
+`visible_layer:3 commit_layer:2 gles:[1,2]` in the composer table — the
+overlay AND the window fall to GPU composition — and the race's heavy seconds
+go to 18.5 ms with no clean second. This box's composer takes two app layers,
+full stop. **What is left for 720 at four players** is ~1 ms of heavy seconds
+inside the Filament frame itself.
 
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 

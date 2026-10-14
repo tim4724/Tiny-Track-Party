@@ -36,18 +36,20 @@ import kotlin.math.sqrt
  * drifts beneath them, as on the web.
  *
  * **WHAT IT COSTS.** Anything in the app window that changes every frame makes
- * HWUI render a window frame every vsync on the same GPU as the race, and at 4
- * cells that is visible in the worst second. About half of it is the window being
- * GL while the race is Vulkan, which no app can choose. The tags still move on
- * EVERY presented frame (user decision: a tag updating at a different rate from
- * the car under it reads as broken). Measured and rejected as no cheaper or
- * worse: one child View per tag (a window frame at all is the cost, not its
- * size), a translucent SurfaceView of its own (this box's composer overlays
- * only two layers, so a third forces GPU composition), and drawing the tags
- * inside the Filament frame at native resolution (the full-size present alone
- * costs more than the whole window). What the window paints UNDER the tags was
- * a lever: see GameWindow.kt. `debug.ttp.tags 0` ([PerfDebug]) turns them off
- * for the A/B.
+ * HWUI render a window frame every vsync on the same GPU as the race. That
+ * used to be visible in a 4-cell worst second; since the window clears only
+ * what it drew (GameWindow.kt) and the race HUD's groups are retained, the
+ * tags on or off measure the SAME race (docs/perf/androidtv-frame-map.md,
+ * 2026-10-14: 605 vs 24 window frames per 10 s, no change in GPU time or
+ * skips). The tags move on EVERY presented frame (user decision: a tag
+ * updating at a different rate from the car under it reads as broken).
+ * Measured and rejected as no cheaper or worse: one child View per tag (a
+ * window frame at all is the cost, not its size), a translucent SurfaceView
+ * of its own (this box's composer overlays only two app layers — a third
+ * sends it AND the window to GPU composition, re-measured 2026-10-14), and
+ * drawing the tags inside the Filament frame at native resolution (the
+ * full-size present alone costs more than the whole window).
+ * `debug.ttp.tags 0` ([PerfDebug]) turns them off for the A/B.
  */
 class NameTagView(context: Context, maxPlayers: Int) : View(context) {
 
