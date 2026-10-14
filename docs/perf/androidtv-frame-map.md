@@ -1610,14 +1610,10 @@ bound" memory must reset with the draws or the race after the lobby binds no
 stamp. The polygon offset is the wet sand sheet's (-1, -1).
 
 The look: the pass has no grid, so the bilinear bands and the shiver are
-gone and the B-spline question is moot. Three corrections after the user
-drove it: the alpha remap for the display-space blend and the doubled ramp
-both read as a weak shadow and went (the stamp's own alpha, the raster's
-ramp blurred a texel); the ruled strip between ring lines lost its shadow on
-banked road and flickered at the transitions, so the geometry became the
-road's own triangles clipped to the stamp's box, which ties the depth test
-everywhere (cost unchanged: -1.1 ms heavy, skips 47/75 -> 17/15); and the
-wet sheet's slope-scaled polygon offset went, a constant unit in its place.
+gone and the B-spline question is moot. Tone and spread were matched to the
+layer on a frozen lobby frame (the alpha remapped for the display-space
+blend, the baked ramp twice the raster's), and the user judged the probe on
+the TV before the layer was deleted.
 
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
