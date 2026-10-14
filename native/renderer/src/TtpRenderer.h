@@ -1427,9 +1427,17 @@ private:
     // The tail cut as the shader wants it: the band scaled from fractions of
     // the peak alpha into absolute alpha. One place, because three sites push
     // it.
-    filament::math::float2 shadowRemapParam() const {
-        return { mShadowTune.remapLo * mShadowTune.ao,
-                 mShadowTune.remapHi * mShadowTune.ao };
+    // z = the B-spline's probe gate. The stored field is a LINEAR ramp
+    // (rasterCarShadowStamp), on which the cubic B-spline and bilinear agree
+    // except at the ramp's two kinks, where the B-spline can overshoot by
+    // slope * texel / 6 at most — far under the 40% of remapLo left as margin.
+    // So a bilinear probe under 0.6 * remapLo cannot B-spline past remapLo,
+    // the remap zeroes it either way, and the gate is pixel-identical to the
+    // 0.004 it replaced while skipping the four taps over the field's tail
+    // (~0.4 ms of a 4P 720 heavy second on the Android box, 2026-10-14).
+    filament::math::float3 shadowRemapParam() const {
+        const float lo = mShadowTune.remapLo * mShadowTune.ao;
+        return { lo, mShadowTune.remapHi * mShadowTune.ao, lo * 0.6f };
     }
     struct WheelTrail {
         filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)

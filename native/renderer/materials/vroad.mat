@@ -31,14 +31,21 @@ material {
     // fragment separately — multiplying a tap into the FINISHED light would
     // darken the ambient floor with it and take a shadowed deck to black.
     //
-    // layerUV.xy and visUV.xy are the deck layers' track-space uvs, computed
-    // PER VERTEX so each layer read samples a bare varying (a NON-DEPENDENT
-    // read the GPU can issue before the shader runs). Both are affine in uv0,
-    // so interpolating them equals computing them per fragment up to fp32
-    // rounding. highp: u = s/L at fp16 steps 4 texels of an 8k layer.
-    variables : [ fog, sun,
-        { name : layerUV, precision : high },
-        { name : visUV, precision : high } ],
+    // uvs = the deck layers' track-space uvs, computed PER VERTEX so each
+    // layer read samples a bare varying (a NON-DEPENDENT read the GPU can
+    // issue before the shader runs): .xy the rubber and car-shadow layers',
+    // .xz the sun-visibility map's (same u; only v differs, and the vis map
+    // is a render target, so its v is flipped per backend). All affine in
+    // uv0, so interpolating them equals computing them per fragment up to
+    // fp32 rounding. highp: u = s/L at fp16 steps 4 texels of an 8k layer.
+    // ONE varying for the three, not two: on a tiler every varying component
+    // is parameter-buffer bytes per vertex and an iterator per fragment.
+    variables : [ fog, sun, { name : uvs, precision : high } ],
+    // The deck is built in world units on an identity transform, so the model
+    // matrix is a multiply by one on every vertex of the scene's biggest mesh.
+    // `world` skips it. It needs Filament's camera-at-origin shift OFF
+    // (TtpRenderer::init), or world-domain vertices land offset by the camera.
+    vertexDomain : world,
     requires : [
         color,
         // (s, lat) in world units — see above
@@ -205,8 +212,9 @@ material {
         // absolute alpha (TtpRenderer::shadowRemapParam). x is where the
         // field's tail is cut and the band to y is the anti-flicker slack a
         // razor edge cannot have (the raster moves sub-texel every frame).
-        // y > x always: a degenerate smoothstep is UB.
-        { type : float2, name : carShadowRemap },
+        // y > x always: a degenerate smoothstep is UB. z is the B-spline's
+        // probe gate — shadowRemapParam says why it sits under x.
+        { type : float3, name : carShadowRemap },
 
         // — the paint channel: the deck's OWN surface (repairs, boost pads) —
         // Identical entry layout to the decal arrays above and painted by the
@@ -215,6 +223,8 @@ material {
         // renderer writes these once at build, per chunk, in the same
         // chunk-local s frame as profRect.
         { type : int, name : paintCount },
+        // The list's bounding box, as profBounds is for the decals.
+        { type : float4, name : paintBounds, precision : high },
         { type : float4[8], name : paintRect, precision : high },
         { type : float4[8], name : paintColor },
         //   xyz as profShape; w = CHEVRON grid, packed as cols*10 + rows (cols
@@ -448,17 +458,22 @@ fragment {
         // the ink texture's lat span, clamps to an edge row the stamper never
         // writes, and reads zero ink — the deck flag for free.
         //
-        // variable_layerUV.xy serves BOTH track-space layers (rubber, and the
+        // variable_uvs.xy serves BOTH track-space layers (rubber, and the
         // car-shadow tap below) — the shadow layer is deliberately built on the
         // rubber layer's exact lat span so no second mapping exists to drift.
         // The vertex stage computes it; see `variables`.
-        if (materialParams.paintCount > 0) base = deckPaint(base, sLocal, tc.y);
+        if (materialParams.paintCount > 0) {
+            highp vec4 pb = materialParams.paintBounds;
+            if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
+                base = deckPaint(base, sLocal, tc.y);
+            }
+        }
         float lh = materialParams.skidLatHalf;
         if (lh > 0.0) {
             // The layer is a CPU-rasterized UPLOAD (row 0 = -latHalf), not a
             // render target, so the read is raw — uploads have no
             // per-backend flip. See tests/render-target-uv.test.js.
-            float ink = skidInk(variable_layerUV.xy);
+            float ink = skidInk(variable_uvs.xy);
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
@@ -497,16 +512,16 @@ fragment {
             // band's clip — the gate is visually lossless with the band on.
             // textureLod 0: the layer is single-level, so this is exactly
             // what an implicit sample picks, and it carries no lodBias.
-            float cs = textureLod(materialParams_carShadow, variable_layerUV.xy, 0.0).r;
+            float cs = textureLod(materialParams_carShadow, variable_uvs.xy, 0.0).r;
             // textureLod, NOT texture(): the `cs` gate makes this branch
             // NON-UNIFORM, where an implicit-derivative sample is UB — the
             // whole renderer's rule (CLAUDE.md trap #5), and the exact
             // mistake that made this same shadow blink on ANGLE-Metal once.
             // The layer is single-level, so LOD 0 is what an implicit sample
             // would pick anyway.
-            if (cs > 0.004) {
+            if (cs > materialParams.carShadowRemap.z) {
                 highp vec2 ts = vec2(textureSize(materialParams_carShadow, 0));
-                highp vec2 p = variable_layerUV.xy * ts - 0.5;
+                highp vec2 p = variable_uvs.xy * ts - 0.5;
                 highp vec2 i = floor(p);
                 highp vec2 f = p - i;
                 highp vec2 f2 = f * f;
@@ -557,7 +572,7 @@ fragment {
         // which is what lets the uv stay affine and come from the vertex stage.
         float vis = 1.0;
         if (materialParams.invSunVisLatSpan > 0.0) {
-            vis = textureLod(materialParams_sunVis, variable_visUV.xy, 0.0).r;
+            vis = textureLod(materialParams_sunVis, vec2(variable_uvs.x, variable_uvs.z), 0.0).r;
         }
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(
@@ -596,8 +611,8 @@ vertex {
         // alone: it is a render target, the rubber and shadow layers are uploads.
         highp vec2 tc = material.uv0;
         highp float u = tc.x * materialParams.invTrackLength;
-        material.layerUV = vec4(u, tc.y * materialParams.invSkidLatSpan + 0.5, 0.0, 0.0);
-        material.visUV = vec4(uvToRenderTargetUV(vec2(u,
-                tc.y * materialParams.invSunVisLatSpan + 0.5)), 0.0, 0.0);
+        material.uvs = vec4(u, tc.y * materialParams.invSkidLatSpan + 0.5,
+                uvToRenderTargetUV(vec2(u, tc.y * materialParams.invSunVisLatSpan + 0.5)).y,
+                0.0);
     }
 }

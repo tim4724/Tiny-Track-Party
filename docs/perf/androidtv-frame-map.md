@@ -1404,6 +1404,63 @@ chunks under each camera are the ones holding that cell's own car and its pack,
 so the gate is open over nearly all of the visible deck. No pixel-identical cut
 found reaches 2.1 ms; the shadow stays (user decision), so 4P stays at 540.
 
+## A fresh look: two pixel-identical cuts, the vertex side pays, three nulls (2026-10-14)
+
+Build `d0350d0e` and its experiment builds, Vulkan, 4P pinned 1280x720,
+pretzel, 75 s counted. Every reading below is an INTERLEAVED pair — on one
+install flipped by a mask bit, or two installs alternated — and the cost is
+read two ways: the heavy-30% p50 of each arm, and a PER-SECOND pairing of the
+two timelines (same seed, so second N of both arms is the same stretch of lap),
+which resolves ~0.3 ms where the heavy-30% figure needs three pairs. The box
+drifts about a millisecond across a morning (17.6 -> 15.9 for one build), so
+nothing here is an absolute.
+
+**Shipped, pixel-identical by construction, heavy p50 per pair:**
+
+| change | pairs (changed vs stock) | heavy delta | skips per 75 s |
+|---|---|---|---|
+| paint loop gets a bounds box (`paintBounds`, as `profBounds`) | per-second paired against two stock arms | **-0.6 / -0.8** | 177 vs 180-184 |
+| car-shadow B-spline gated at 0.6 x remapLo instead of 0.004 | same | **-0.4 / -0.4** | 171 vs 180-184 |
+| both + (a null, below) in one arm | 17.37/17.63, 16.47/17.31, 16.47/17.35 | -0.26 / -0.84 / -0.88 | 172/118/112 vs 198/190/200 |
+| deck + ground in `vertexDomain : world`, camera-at-origin OFF, road uvs in one varying | 16.11/17.01, 15.84/16.55, 16.04/16.75 | **-0.90 / -0.71 / -0.71** | 109/76/78 vs 161/121/133 |
+| **all three shipped, against the original behaviour** | 16.35/17.28, 16.12/17.44, 16.05/17.80 | **-0.93 / -1.32 / -1.75** | 92/90/76 vs 201/216/235; clean 57-59 vs 38-41 of 75 |
+
+The gate holds because the stored shadow field is a linear ramp, on which the
+cubic B-spline and bilinear agree except at the kinks (overshoot under
+slope x texel / 6), so a probe under 0.6 x remapLo cannot cross remapLo and
+the remap zeroes it either way. The vertex change removes one dynamic UBO
+matrix load and a mat4 x vec3 per vertex on the scene's two biggest meshes;
+the road's vertex SPIR-V went 26 -> 20 arithmetic ops, the ground's 23 -> 16.
+It needed `d.view.camera_at_origin` off, and that property is registered in
+FView's constructor: set before the first View exists it is a silent no-op,
+and the arm read 10 ms against 17 because the deck had left the screen.
+Photograph an arm that reads too good.
+
+**Nulls, so nobody re-derives them:** a mip chain on the three sun-visibility
+maps sampled trilinear (+0.18 / -0.44 / -0.33 heavy, +0.1..+0.3 over all
+seconds; it also softens the far shadow — not taken); the ground albedo tap
+without anisotropy (+0.05 / -0.18, so aniso 4 is free); a world-domain twin
+of vcolor for the static sheets and baked kit runs (+0.53 / -0.43 / -0.30 —
+the dressing's vertices are not where the vertex cost is).
+
+**Checked and closed:** SurfaceFlinger composites both app layers on the
+hardware composer (`dumpsys SurfaceFlinger`: `DEV` for the 1280x720
+SurfaceView and the 1920x1080 window; `compressed: false` on every buffer);
+the swap chain's depth image is a plain device-local image (no transient /
+lazy allocation) but the frame graph discards it at the end of every cell's
+pass, so nothing is stored; the Vulkan device offers `VK_EXT_shader_tile_image`,
+`VK_KHR_shader_float16_int8`, `VK_EXT_image_compression_control_swapchain`
+and `VK_EXT_global_priority` — none of them a lever here.
+
+**What is left for 720 at four players** is now ~1 ms of heavy seconds, and
+the one untried structural item is the HUD window: a Compose/HWUI window
+redrawn every frame for the name tags costs ~1.5-2 ms of GPU outside
+Filament's timer (the 2026-10-03 sections). Drawing the tags and the HUD
+stickers from Filament into a SECOND 1080p swap chain would remove the HWUI
+frame and the GL/Vulkan interleave, but it is a shell rewrite of the race HUD
+and it rides on the box's composer taking two app layers plus an empty
+window, which is unmeasured.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

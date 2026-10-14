@@ -1446,7 +1446,9 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                         TextureSampler::MagFilter::LINEAR);
                 smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
                 smp.setWrapModeT(TextureSampler::WrapMode::REPEAT);
-                smp.setAnisotropy(4.0f); // three sets the same on every ground texture
+                // 4, the same on every ground texture. Priced on the Android box
+                // (2026-10-14, 4P 720): aniso off is a null, so it is free.
+                smp.setAnisotropy(4.0f);
                 gmi->setParameter("albedo", mGroundTex, smp);
             }
             if (!buildMesh(mGround, true, gmi)) return false;

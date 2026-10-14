@@ -19,6 +19,7 @@
 // the far forms' simplifier and the vertex-reuse order.
 #include <meshoptimizer.h>
 
+#include <filament/DebugRegistry.h>
 #include <utils/Log.h>
 
 // __has_include on bluevk, not just __ANDROID__: CI's android link leg
@@ -239,6 +240,22 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     mRenderer->setClearOptions(clear);
     mScene = mEngine->createScene();
     mView = mEngine->createView();
+    // NO CAMERA-AT-ORIGIN SHIFT. Filament defaults to translating the whole
+    // world so the camera sits at the origin (precision for large worlds; this
+    // one is a few hundred units across, where fp32 is already 1e-4 u). With
+    // it on, a `vertexDomain : world` material (vroad, vground) lands every
+    // vertex offset by the camera, since the shift is folded into each
+    // renderable's model matrix and a world-domain vertex skips that matrix.
+    // Off, user world and world coincide, and those two materials skip a mat4
+    // multiply per vertex on the scene's biggest meshes.
+    //
+    // AFTER THE FIRST VIEW, not after the engine: Filament registers the
+    // property in FView's constructor, and a set before that is a silent no-op
+    // (it measured as the road vanishing into a shifted ground plane).
+    if (!mEngine->getDebugRegistry().setProperty("d.view.camera_at_origin", false)) {
+        utils::slog.e << "ttp: d.view.camera_at_origin not settable — "
+                "world-domain materials will render displaced" << utils::io::endl;
+    }
     mCameraEntity = utils::EntityManager::get().create();
     mCamera = mEngine->createCamera(mCameraEntity);
     mView->setCamera(mCamera);

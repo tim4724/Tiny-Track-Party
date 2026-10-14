@@ -28,6 +28,9 @@
 // straight through.
 material {
     name : TtpVground,
+    // Every receiver (ground, structures, berms) is built in world units on an
+    // identity transform — vroad.mat says why `world` is worth it.
+    vertexDomain : world,
     variables : [
         // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the baked
         // ambient. sun.xyz = the sun term at full visibility; suv.xy = the
@@ -95,8 +98,10 @@ vertex {
 
     void materialVertex(inout MaterialVertexInputs material) {
         vec4 c0 = getCustom0();
-        highp vec3 uwp = (getUserWorldFromWorldMatrix()
-                * material.worldPosition).xyz;
+        // World IS user world: TtpRenderer::init turns Filament's camera-at-
+        // origin shift off, so getUserWorldFromWorldMatrix() is the identity
+        // and the vertex is spared that mat4 multiply.
+        highp vec3 uwp = material.worldPosition.xyz;
         // uvToRenderTargetUV is mandatory: the map is an offscreen target and
         // Metal-family backends store it flipped (ttp_sunvis.inc has the story).
         highp vec2 suv = uvToRenderTargetUV(

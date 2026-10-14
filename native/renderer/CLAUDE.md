@@ -142,10 +142,19 @@ channel (below) is written straight to the chunk instances.
    and any instrumented reshape of the shader moved it; when CPU inputs check out
    at the failing moment, suspect the sample.
 
-**One box gates the loop.** `profBounds` is the union of the entries' own reject
-windows, so it is exact: a fragment it rejects would have rejected each entry in
-turn. **Build it from the same bound the loop tests** (`rect.zw`), or the box clips
-a stamp the loop would have drawn.
+**One box gates each loop.** `profBounds` and `paintBounds` are the union of
+their entries' own reject windows, so they are exact: a fragment a box rejects
+would have rejected each entry in turn. **Build it from the same bound the loop
+tests** (`rect.zw`), or the box clips a stamp the loop would have drawn. The
+paint list's box was the second one, and it was worth ~0.7 ms of a 4P 720 heavy
+second on the Android box (the frame map, 2026-10-14) — a uniform-bounded loop
+that early-outs per entry is not free on a GPU with few ALUs.
+
+**The car-shadow B-spline's probe gate sits at 0.6 x remapLo, not just above
+zero.** The stored field is a linear ramp (`rasterCarShadowStamp`), on which the
+cubic reconstruction and bilinear agree except at the kinks, so a probe under
+the gate cannot cross the remap's cut and the picture is identical; the four
+taps over the field's tail were ~0.4 ms. `shadowRemapParam` owns the number.
 
 **Chevrons are SDFs**, so the pads move without an atlas. The apex must LEAD or
 every chevron reads as a brake marking. A pad is **flat paint** — a radial
@@ -487,6 +496,19 @@ reaches under it. Run an arm at a PINNED render scale at TWO resolutions, or the
 halves cannot be told apart; measure the fixed half with the scale near the floor.
 `ttp_display_gpu_ms` is REAL on that backend. `shells/androidtv/CLAUDE.md` carries
 the method; the frame map carries the numbers.
+
+**The fixed half is vertex ALU on the deck and the ground, and a vertex is
+cheaper in the WORLD domain.** `vroad` and `vground` declare `vertexDomain :
+world`, which skips the model matrix (a dynamic UBO load and a mat4 multiply per
+vertex) — worth ~0.8 ms of a 4P 720 heavy second on the Android box, where the
+same twin for the dressing sheets measured nothing (the frame map, 2026-10-14).
+Two contracts keep it honest: every mesh those two materials draw is built in
+world units on an IDENTITY transform, and `TtpRenderer::init` turns Filament's
+camera-at-origin shift off (`d.view.camera_at_origin`), AFTER the first View is
+created, because that is where Filament registers the property — set earlier it
+is a silent no-op and every world-domain vertex lands offset by the camera. With
+the shift off, user world and world coincide (`getUserWorldFromWorldMatrix()` is
+the identity), which vground's vertex stage relies on.
 
 **The fixed half is the scene being SUBMITTED, and it has no single hot spot** —
 not the deck's vertex count, its draw count, the overlay pass or the present. Do

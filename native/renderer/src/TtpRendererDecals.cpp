@@ -504,7 +504,7 @@ void TtpRenderer::applyShadowInk() {
     mShadowInkLinear = srgbToLinear(mShadowTune.ink);
     if (!roadHasCarShadow()) return;
     const math::float4 v = shadowInkParam(mCarShadowTex[0] != nullptr);
-    const math::float2 remap = shadowRemapParam();
+    const math::float3 remap = shadowRemapParam();
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
         mi->setParameter("maskInk", v);
@@ -1149,18 +1149,28 @@ void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& we
     // tb, not mTrack: buildStatic only adopts the bin at the very end, so
     // during the build mTrack is still the track this one replaces.
     const float L = tb.length;
+    // The BOX in front of the loop is the union of the per-entry reject
+    // windows (uploadDeckDecals builds the profile list's the same way): a
+    // fragment outside it would have rejected every entry, so the box is exact.
     const auto writeTo = [&](MaterialInstance* mi, float mid, float halfSpan) {
         DeckDecal sel[kMaxChunkPaint];
         const int n = foldToChunk(paint, mid, halfSpan, L, sel, kMaxChunkPaint);
+        float4 box{ 1e9f, -1e9f, 1e9f, -1e9f };
         if (n > 0) {
             float4 rect[kMaxChunkPaint], col[kMaxChunkPaint], shape[kMaxChunkPaint];
             for (int i = 0; i < n; i++) {
                 rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
+                const float4& r = sel[i].rect;
+                box.x = std::min(box.x, r.x - r.z);
+                box.y = std::max(box.y, r.x + r.z);
+                box.z = std::min(box.z, r.y - r.w);
+                box.w = std::max(box.w, r.y + r.w);
             }
             mi->setParameter("paintRect", rect, (size_t) n);
             mi->setParameter("paintColor", col, (size_t) n);
             mi->setParameter("paintShape", shape, (size_t) n);
         }
+        mi->setParameter("paintBounds", box);
         mi->setParameter("paintCount", n);
         return n;
     };
@@ -1290,6 +1300,9 @@ void TtpRenderer::bindRoadVisMap(MaterialInstance* mi) {
     if (!mi) return;
     Texture* tex = mRoadVisMap ? mRoadVisMap : whiteTexture();
     if (!tex) return;
+    // Level 0 only, on purpose: a mip chain on this 4k-wide map, sampled
+    // trilinear, measured a null on the Android box (2026-10-14, 4P 720
+    // pretzel, three interleaved pairs) and softens the far shadow.
     TextureSampler smp(TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);
     smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
