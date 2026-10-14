@@ -879,6 +879,11 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * included — the trade where the eye can resolve it:
  * TTP_FEAT_ALL | this = 0x800DFFC. */
 #define TTP_DEBUG_LOD_ALL 0x8000000
+/* SET draws the car shadow with BILINEAR reconstruction only: the B-spline
+ * branch under the stamps (vroad.mat) is gated unreachable, which is the look
+ * of the ~0.6 ms trade priced on 2026-10-14 (Mach bands on the shadow ramp).
+ * TTP_FEAT_ALL | this = 0x200DFFC; a look knob, not an ablation. */
+#define TTP_DEBUG_BLOB_BILINEAR 0x2000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 /* DEBUG: tilt every chase rig to `deg` below level by raising or lowering the

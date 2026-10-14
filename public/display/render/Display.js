@@ -48,6 +48,10 @@ export const FEAT = {
   GRADE: 0x4000, FOG_VERTEX: 0x8000,
   ALL: 0xDFFC,
 };
+// The TTP_DEBUG_* knobs above FEAT's range are not mirrored here (the test
+// holds this table to the TTP_FEAT_* set); they ride ?features= as the raw
+// mask, e.g. ?features=0x200DFFC for TTP_DEBUG_BLOB_BILINEAR, the car shadow
+// drawn bilinear-only — a LOOK knob for judging the B-spline trade live.
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp

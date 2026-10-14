@@ -1498,7 +1498,9 @@ here at ~0.6 ms. The one softener measured: the layer at 512 rows instead of
 256 (bilinear's bands shrink fourfold across lat; along s the 4096-wide cap
 already binds) costs the GPU nothing over B (15.68 vs 15.58 heavy, same
 skips) and the frame thread's `cars` phase 0.8 -> 1.1 ms typical. Undecided;
-the shipped build keeps the B-spline.
+the shipped build keeps the B-spline. **To judge it live:** `TTP_DEBUG_BLOB_BILINEAR`
+gates the branch unreachable, so `?features=0x200DFFC` against `?features=0xDFFC`
+(or `debug.ttp.features` on the box) is the before/after in the running game.
 
 ### Scenery shadow on the deck: where it falls, and a per-chunk gate (2026-10-14, later)
 

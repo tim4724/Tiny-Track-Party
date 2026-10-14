@@ -780,6 +780,11 @@ private:
     static constexpr uint32_t kDebugNoLod = 0x1000000;
     static constexpr uint32_t kDebugLodAll = 0x8000000;
     bool mLodOff = false, mLodAll = false;
+    // TTP_DEBUG_BLOB_BILINEAR: the car shadow's B-spline branch gated
+    // unreachable (shadowRemapParam's z), so the bilinear-only look can be
+    // seen live against the shipped one.
+    static constexpr uint32_t kDebugBlobBilinear = 0x2000000;
+    bool mBlobBilinear = false;
     // Ditto for the whole-lap fallback chunk.
     std::vector<DeckDecal> mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
@@ -1438,7 +1443,9 @@ private:
     // (~0.4 ms of a 4P 720 heavy second on the Android box, 2026-10-14).
     filament::math::float3 shadowRemapParam() const {
         const float lo = mShadowTune.remapLo * mShadowTune.ao;
-        return { lo, mShadowTune.remapHi * mShadowTune.ao, lo * 0.6f };
+        // z is the B-spline probe gate; 2 is above any sample, so the branch
+        // never runs (the debug knob's bilinear-only look).
+        return { lo, mShadowTune.remapHi * mShadowTune.ao, mBlobBilinear ? 2.0f : lo * 0.6f };
     }
     struct WheelTrail {
         filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)

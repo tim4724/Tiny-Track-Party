@@ -1775,6 +1775,14 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
+    // The car shadow's filter: the remap rides the one ink funnel, so a flip
+    // re-states it on every live road instance (new scenes read the flag
+    // through shadowRemapParam at build).
+    const bool bilinear = (mask & kDebugBlobBilinear) != 0;
+    if (bilinear != mBlobBilinear) {
+        mBlobBilinear = bilinear;
+        applyShadowInk();
+    }
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
