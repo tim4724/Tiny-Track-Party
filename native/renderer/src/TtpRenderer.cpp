@@ -2032,8 +2032,7 @@ void TtpRenderer::releaseStatic() {
     }
     std::vector<uint8_t>().swap(mCarShadowPix);
     mCarShadowDirty.clear();
-    for (auto& l : mCarShadowWas) l.clear();
-    mCarShadowWasAt = 0;
+    for (auto& l : mCarShadowPending) l.clear();
     mCarShadowW = mCarShadowH = 0;
     mCarShadowPing = 0;
     mCarShadowUpload = false;

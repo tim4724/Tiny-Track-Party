@@ -122,10 +122,17 @@ channel (below) is written straight to the chunk instances.
    strips with both endpoints at ground level, or the underside takes every decal.
 3. A `MaterialInstance` from `sceneInstance()` is scene-scoped, so a member holding
    one must be nulled in `releaseStatic()`.
-4. A per-frame decal centre must agree with **what the rasterizer computes from
-   uv0** — the road's own ring polyline, the ring-plane blend, then the exact
-   per-triangle interpolation, because uv0 kinks at every diagonal. Every cheaper
-   approximation saw-toothed the shadow; `project()`'s comment has the ladder.
+4. Anything placed in track space must agree with **what the rasterizer
+   computes from uv0** — the road's own ring polyline, the ring-plane blend,
+   then the exact per-triangle interpolation, because uv0 kinks at every
+   diagonal. Every cheaper approximation saw-tooths at ring-crossing rate;
+   `project()`'s comment has the ladder, and the smooth surface `deckFoot`
+   walks is one more rung of it (right for seating a body, wrong for placing
+   paint — it cost the car shadow a visible shiver through every bend). A
+   per-frame STAMP goes further than its centre: the layer is written texel by
+   texel through the mesh's own uv0 → world map (`TrackBin::deckTriAt`), so
+   the stored field is the world-space shape sampled on the deck's grid and
+   the mesh's kinks cancel on the read.
 5. **A texture sample under NON-UNIFORM control flow must be `textureLod`,
    never `texture()`** — an implicit-derivative sample there is undefined
    behaviour, and the rule is the whole renderer's (vroad's car-shadow taps, the
@@ -204,10 +211,19 @@ measured is the durable half:
   global pool ranked by distance to the nearest camera starves some player's own
   car the moment a bot drafts another player.
 
-**Track-space creases are a READ-side defect.** uv0 is interpolated linearly per
-triangle, so wherever the stored field has gradient the kink prints as a crease.
-A `project()`-placed stamp (a write-side fix) was built and bought nothing; the
-remap band in `CarShadowTuning` is what answers it.
+**The stamp is written through the mesh's own uv0 → world map, texel by
+texel** (`rasterCarShadowStamp` + `TrackBin::deckTriAt`), not placed by its
+corners. The shader reads the layer at uv0, interpolated linearly per road
+triangle, so a texel is seen exactly where the MESH puts its (s, lat) — and a
+stamp laid from any other placement (the smooth surface, the ring-plane blend)
+slides against the car in a sawtooth at ring-crossing rate, zero at each ring
+and 0.05-0.2 u mid-quad on a bend; the shiver through corners and drifts.
+Evaluating the fitted shape in the car's frame at each texel's mesh point
+removes it by construction, and also stores the field with the mesh's own
+kinks, so the uv0 gradient jumps that printed as creases through a smooth
+field cancel on the read. (Placing only the CENTRE through `project()` was
+tried earlier and bought nothing — the kinks live inside the stamp.) The
+remap band in `CarShadowTuning` stays as the look.
 
 **THE BLOB'S SHAPE IS A ROUNDED RECT FITTED TO EACH MODEL'S OWN OUTLINE —
 four corners for every car, by the user's eye** (`ttp/car_footprint.h`,

@@ -474,8 +474,7 @@ void TtpRenderer::buildCarShadowLayer(float trackLength) {
         // agreed and the dirty-rect upload has nothing to catch up on. The
         // history MUST go with them: a rect measured against the old layer's
         // width would upload the wrong strip of the new one.
-        for (auto& l : mCarShadowWas) l.clear();
-        mCarShadowWasAt = 0;
+        for (auto& l : mCarShadowPending) l.clear();
         // 1, not 0: the instances below bind tex[0], so the FIRST upload must
         // land on tex[1] — starting at 0 respecified the very texture the
         // driver was reading, once per scene, which is the exact in-flight
@@ -538,199 +537,241 @@ void TtpRenderer::eraseCarShadow() {
         }
         mCarShadowUpload = true;
     }
-    // Hand this list to the upload's history before dropping it: what the erase
-    // just zeroed is a region that changed, and the texture this frame uploads
-    // into has not seen it yet (mCarShadowWas).
-    mCarShadowWas[mCarShadowWasAt & 1] = std::move(mCarShadowDirty);
-    mCarShadowWasAt++;
+    // What the erase just zeroed is a region that changed: owed to both
+    // textures until each uploads it (mCarShadowPending). A list that grows
+    // past the budget collapses to the whole level — the merge would anyway,
+    // and nothing then depends on how many undrawn advances went by.
+    for (auto& l : mCarShadowPending) {
+        if (l.size() + mCarShadowDirty.size() > 64) {
+            l.assign(1, SkidRect{ 0, 0, (int) mCarShadowW, (int) mCarShadowH });
+        } else {
+            l.insert(l.end(), mCarShadowDirty.begin(), mCarShadowDirty.end());
+        }
+    }
     mCarShadowDirty.clear();
 }
 
-// One triangle of a car-shadow stamp: texel space, the same top-left rule and
-// per-row x wrap as rasterSkidTri, but instead of a flat interpolated ink it
-// carries the shape's (u, v) per vertex — linear per triangle, exactly what the
-// GPU would interpolate — and evaluates the fitted rounded rect at each covered
-// texel. Saturating ADD like the rubber; the cap on the summed result is the
-// shader's (CarShadowTuning::cap via maskInk.w), not the raster's.
-// y clamps to [1, H-2]: the outer rows are the CLAMP rows the shader's
-// out-of-band v relies on staying empty.
-void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float alpha,
-        const ttp::rt::RoundedFit& fit) {
-    if (mStampW <= 0 || mStampH <= 0) return;
-    const float area = (p[1].x - p[0].x) * (p[2].y - p[0].y)
-                     - (p[2].x - p[0].x) * (p[1].y - p[0].y);
-    if (area == 0.0f) return;
-    const float2 a = p[0];
-    const float2 b = area > 0 ? p[1] : p[2];
-    const float2 c = area > 0 ? p[2] : p[1];
-    const float2 ua = uv[0];
-    const float2 ub = area > 0 ? uv[1] : uv[2];
-    const float2 uc = area > 0 ? uv[2] : uv[1];
-    const float inv = 1.0f / std::fabs(area);
-    // Clipped to the SCRATCH; the layer's own row clamp and the x wrap are the
-    // composite's job now (rasterCarShadowStamp).
-    const int y0 = std::max(mStampY0, (int) std::ceil(
-            std::min(a.y, std::min(b.y, c.y)) - 0.5f));
-    const int y1 = std::min(mStampY0 + mStampH - 1, (int) std::floor(
-            std::max(a.y, std::max(b.y, c.y)) - 0.5f + 1.0f));
-    const int x0 = std::max(mStampX0, (int) std::ceil(
-            std::min(a.x, std::min(b.x, c.x)) - 0.5f));
-    const int x1 = std::min(mStampX0 + mStampW - 1, (int) std::floor(
-            std::max(a.x, std::max(b.x, c.x)) - 0.5f + 1.0f));
-    const auto edge = [](const float2& e0, const float2& e1, float px, float py) {
-        return (e1.x - e0.x) * (py - e0.y) - (e1.y - e0.y) * (px - e0.x);
-    };
-    const auto topLeft = [](const float2& e0, const float2& e1) {
-        return (e0.y == e1.y && e1.x < e0.x) || e1.y > e0.y;
-    };
-    const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
-    // The shape's uv GRADIENT per layer texel, constant over the triangle —
-    // the texel footprint the edge ramp below is sized from.
-    const float ex1 = b.x - a.x, ey1 = b.y - a.y;
-    const float ex2 = c.x - a.x, ey2 = c.y - a.y;
-    const float du1 = ub.x - ua.x, dv1 = ub.y - ua.y;
-    const float du2 = uc.x - ua.x, dv2 = uc.y - ua.y;
-    const float det = ex1 * ey2 - ex2 * ey1;
-    const float id = det != 0.0f ? 1.0f / det : 0.0f;
-    const float dudx = (du1 * ey2 - du2 * ey1) * id, dvdx = (dv1 * ey2 - dv2 * ey1) * id;
-    const float dudy = (du2 * ex1 - du1 * ex2) * id, dvdy = (dv2 * ex1 - dv1 * ex2) * id;
-    // THE SHAPE NEEDS NO FILTER, which is most of why it is cheap: the edge
-    // ramp is sized from the texel footprint the gradients above already give,
-    // so ONE evaluation is already antialiased.
-    // THE STORED RAMP WANTS TO BE WIDE, not tight to the texel. The shader
-    // takes the tail cut on the INTERPOLATED value, so a smooth field gives a
-    // sub-texel edge position that slides continuously (the signed-distance
-    // trick); a ramp sized to half a texel quantises the edge to the grid
-    // instead and measured 30% MORE flicker than the outline masks did. So the
-    // floor is the texel footprint — below it the raster would alias — and the
-    // target is `blur`, converted into the footprint's own units (the frame is
-    // `w` wide and its footprint 1/overscan of that).
-    const float texelRamp = 0.5f * mShadowTune.overscan
-            * (std::fabs(dudx) + std::fabs(dudy)
-             + std::fabs(dvdx) + std::fabs(dvdy));
-    const float soft = std::max(1e-3f, std::max(texelRamp,
-            mShadowTune.blur * 2.0f * mShadowTune.overscan));
-    // The evaluator is built once per triangle rather than per texel, and the
-    // overscan margin past the ramp, a large share of the texels inside the
-    // quad, is proved empty without evaluating it: zero() answers true only
-    // where the evaluator would be exactly +0, and max() of that into a store
-    // that is already >= +0 changes nothing.
-    const ttp::rt::RoundedRectEval rr(mShadowTune.overscan, fit.corner, soft,
-            fit.fillXTail, fit.fillXNose, fit.fillZ);
-    for (int y = y0; y <= y1; y++) {
-        float* row = mStampCov.data() + (size_t) (y - mStampY0) * mStampW;
-        const float py = (float) y + 0.5f;
-        for (int x = x0; x <= x1; x++) {
-            const float px = (float) x + 0.5f;
-            const float eAB = edge(a, b, px, py);
-            const float eBC = edge(b, c, px, py);
-            const float eCA = edge(c, a, px, py);
-            if ((eAB > 0 || (eAB == 0 && tlAB))
-                    && (eBC > 0 || (eBC == 0 && tlBC))
-                    && (eCA > 0 || (eCA == 0 && tlCA))) {
-                // Barycentric uv: eBC weighs vertex a, eCA weighs b, eAB c.
-                const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
-                const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
-                const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
-                if (rr.zero(mu, mv)) continue;
-                const float cov = rr(mu, mv);
-                // MAX, never add: two triangles of one stamp may both claim
-                // a texel on their shared edge (mStampCov says why), and
-                // adding there is the diagonal banding.
-                float& dst = row[x - mStampX0];
-                dst = std::max(dst, std::max(0.0f, cov * alpha));
-            }
-        }
-    }
-}
-
-// One car's stamp into the layer. `sl` is the SIX deckFoot-projected points
-// the cull-window measurement in renderCars already computes — the four
-// corners plus the two long-edge midpoints — as (s, lat), s ABSOLUTE (the
-// fold to unwrapped texel x happens here, against carS). Rasterized as TWO
-// warped quads (four triangles): the deck's bending of track space then
-// lives INSIDE each half-stamp, where it is second-order — the worst
-// catalogue corner bows a straight car edge by ~L²/8R ≈ 0.13 u over the full
-// stamp, and slicing once halves the sag to well under a texel. The
-// per-triangle diagonal is the same linearization the GPU applies to uv0
-// itself, so there is no finer truth to chase.
-void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha,
-        const ttp::rt::RoundedFit& fit) {
+// One car's stamp into the layer, EVALUATED THROUGH THE MESH'S OWN uv0 MAP.
+//
+// The shader reads this layer at uv0, which the GPU interpolates linearly per
+// road triangle: the texel at (s, lat) is seen at the world point the MESH
+// puts there and nowhere else. Writing the shape at any other placement —
+// the smooth deck surface's (deckFoot), the ring-plane blend — is a
+// write/read disagreement, and under a driving car that disagreement is a
+// SAWTOOTH at ring-crossing rate: zero at every ring, growing mid-quad to
+// 0.05-0.2 u on a bend and more off centre, then snapping back (measured on
+// sidewinder with the readback: one to three texels of slide along the car
+// every 0.48 u, the stamp's corners warping by more). That was the shadow
+// "shivering" through corners and drifts.
+//
+// So each texel is taken the other way round. Its (s, lat) names the road
+// triangle a fragment with that uv0 lies in (TrackBin::deckQuadAt + deckTri,
+// the inverse of project()'s exact field); that triangle's affine map takes
+// it to the world point the GPU will show it at; and the fitted rounded rect
+// is evaluated in the CAR'S OWN FRAME there. The stored field is then exactly
+// the world-space shape sampled on the deck's uv grid, kinks included — the
+// kinks are the mesh's own, so read back through the same mesh they cancel.
+// Nothing about the pose is approximated: (origin, fwd, right) is the frame
+// the body is drawn in, and the cull-window geometry the old two-quad raster
+// linearised across is simply gone.
+//
+// It is also CHEAPER than the triangle raster it replaces (the eight-car
+// frame half measured 0.133 -> 0.111 ms on the web reference): walked by
+// column, each triangle's run is known in closed form (the column walk below
+// says how), the map composed per triangle is kept across the columns of
+// its ring, and a texel costs one FMA per axis before `rr.zero` skips the
+// overscan margin unevaluated. Each texel is evaluated ONCE, so the stamp
+// needs no max-resolve; the scratch only turns the column walk into a row
+// composite.
+//
+// The texel box is the six stamp vertices through project() — the FORWARD
+// map of the same field — padded by a texel: an edge's image between two
+// vertices is piecewise linear and bows by well under a texel.
+//
+// Under the far ribbon a chunk's uv0 is affine across RUNS of rings, so a car
+// more than ~17 u from every camera has its shadow placed against the fine
+// ribbon's map rather than the one drawn there; the run tolerance is small
+// and so is that car on screen.
+void TtpRenderer::rasterCarShadowStamp(const float3& origin, const float3& fwd,
+        const float3& right, const float3& up, float halfF, float halfR,
+        float carS, float alpha, const ttp::rt::RoundedFit& fit, int* hint) {
     if (!mTrack || mCarShadowPix.empty() || mSkidLatHalf <= 0.0f) return;
     const float L = mTrack->length;
-    if (L <= 0.0f) return;
-    const float texW = (float) mCarShadowW, texH = (float) mCarShadowH;
+    if (L <= 0.0f || halfF <= 0.0f || halfR <= 0.0f) return;
+    const int W = (int) mCarShadowW, H = (int) mCarShadowH;
+    const float texW = (float) W, texH = (float) H;
     const float u0 = (carS - L * std::floor(carS / L)) / L;
-    float2 tp[6], tuv[6];
+    // The six stamp vertices — four corners plus the two long-edge midpoints
+    // — in texel space, x unwrapped against the car (the short way round).
+    float2 tp[6];
+    float xmin = 0, xmax = 0, ymin = 0, ymax = 0;
     for (int k = 0; k < 6; k++) {
-        float ds = sl[k].x - carS;
-        ds -= L * std::round(ds / L);           // the short way round the lap
-        tp[k] = { (u0 + ds / L) * texW,
-                  (sl[k].y / mSkidLatHalf * 0.5f + 0.5f) * texH };
-        // The shape's frame: u across the car (left edge k<3, right k>=3), v
-        // along it (fk -1, 0, +1 → 0, 0.5, 1), so v = 1 is the NOSE. Getting v
-        // backwards is the one sign that shows on a symmetric car — which is
-        // why car_footprint.h states the convention and a ctest pins it.
-        tuv[k] = { k < 3 ? 0.0f : 1.0f, (float) (k % 3) * 0.5f };
-    }
-    // The stamp's rect, one texel padded — next frame's erase, this frame's
-    // upload flag, and the scratch's own extent. Computed BEFORE rasterizing
-    // now, because the triangles resolve into that scratch.
-    float xmin = tp[0].x, xmax = tp[0].x, ymin = tp[0].y, ymax = tp[0].y;
-    for (int k = 1; k < 6; k++) {
+        const float fk = (float) (k % 3) - 1.0f;    // -1, 0, +1 along fwd
+        const float rk = k < 3 ? -1.0f : 1.0f;      // left / right edge
+        const float3 corner = origin + fwd * (fk * halfF) + right * (rk * halfR);
+        float ks = carS, kl = 0.0f;
+        mTrack->project(corner, up, ks, kl, hint);
+        float ds = ks - carS;
+        ds -= L * std::round(ds / L);
+        tp[k] = { (u0 + ds / L) * texW, (kl / mSkidLatHalf * 0.5f + 0.5f) * texH };
+        if (k == 0) { xmin = xmax = tp[k].x; ymin = ymax = tp[k].y; }
         xmin = std::min(xmin, tp[k].x); xmax = std::max(xmax, tp[k].x);
         ymin = std::min(ymin, tp[k].y); ymax = std::max(ymax, tp[k].y);
     }
-    SkidRect r{ (int) std::floor(xmin) - 1, (int) std::floor(ymin) - 1,
-                (int) std::ceil(xmax) + 1, (int) std::ceil(ymax) + 1 };
+    // One texel padded: next frame's erase, this frame's upload rect, and
+    // the box walked below.
+    const SkidRect r{ (int) std::floor(xmin) - 1, (int) std::floor(ymin) - 1,
+                      (int) std::ceil(xmax) + 1, (int) std::ceil(ymax) + 1 };
+    if (r.x1 <= r.x0 || r.y1 <= r.y0) return;
 
-    // ONE STAMP, RESOLVED BY MAX, THEN ADDED ONCE. mStampCov carries the whole
-    // argument; the short version is that four triangles sharing three edges
-    // cannot be allowed to accumulate into each other.
-    const int H = (int) mCarShadowH;
-    mStampX0 = r.x0;
-    mStampY0 = r.y0;
-    mStampW = r.x1 - r.x0;
-    mStampH = r.y1 - r.y0;
-    if (mStampW <= 0 || mStampH <= 0) return;
-    mStampCov.assign((size_t) mStampW * mStampH, 0.0f);
-    static const int quads[2][4] = { { 0, 1, 4, 3 }, { 1, 2, 5, 4 } };
-    for (const auto& q : quads) {
-        const float2 t1[3] = { tp[q[0]], tp[q[1]], tp[q[2]] };
-        const float2 u1[3] = { tuv[q[0]], tuv[q[1]], tuv[q[2]] };
-        rasterCarShadowTri(t1, u1, alpha, fit);
-        const float2 t2[3] = { tp[q[0]], tp[q[2]], tp[q[3]] };
-        const float2 u2[3] = { tuv[q[0]], tuv[q[2]], tuv[q[3]] };
-        rasterCarShadowTri(t2, u2, alpha, fit);
+    // THE SHAPE NEEDS NO FILTER, which is most of why it is cheap: the edge
+    // ramp is sized from the texel footprint, so ONE evaluation per texel is
+    // already antialiased. The footprint is the shape's (u, v) gradient per
+    // layer texel, read off the first half-stamp's triangle: tp[0] is shape
+    // (0, 0), tp[1] is (0, 0.5), tp[3] is (1, 0).
+    // THE STORED RAMP IS LINEAR AND WIDE, not tight to the texel. The shader
+    // takes the band on the INTERPOLATED value, so a field that is a plane
+    // across the edge gives a sub-texel edge position that slides
+    // continuously under the raster's per-frame re-landing (bilinear is exact
+    // on a plane — RoundedRectEval::ramp says why the smoothstep field it
+    // replaced boiled); a ramp sized to half a texel quantises the edge to the
+    // grid instead and measured 30% MORE flicker than the outline masks did.
+    // So the floor is the texel footprint — below it the raster would alias —
+    // and the target is `blur`, converted into the footprint's own units (the
+    // frame is `w` wide and its footprint 1/overscan of that).
+    const float ex1 = tp[1].x - tp[0].x, ey1 = tp[1].y - tp[0].y;
+    const float ex2 = tp[3].x - tp[0].x, ey2 = tp[3].y - tp[0].y;
+    const float det = ex1 * ey2 - ex2 * ey1;
+    const float id = det != 0.0f ? 1.0f / det : 0.0f;
+    const float dudx = -ey1 * id, dvdx = 0.5f * ey2 * id;
+    const float dudy = ex1 * id, dvdy = -0.5f * ex2 * id;
+    const float texelRamp = 0.5f * mShadowTune.overscan
+            * (std::fabs(dudx) + std::fabs(dudy) + std::fabs(dvdx) + std::fabs(dvdy));
+    const float soft = std::max(1e-3f, std::max(texelRamp,
+            mShadowTune.blur * 2.0f * mShadowTune.overscan));
+    const ttp::rt::RoundedRectEval rr(mShadowTune.overscan, fit.corner, soft,
+            fit.fillXTail, fit.fillXNose, fit.fillZ);
+
+    // EVALUATE BY COLUMN. A column of the box is one arclength, so one ring
+    // quad and one t: its strip bounds are eight lerps, and inside each strip
+    // the column meets the diagonal at ONE lat — above it the texels lie in
+    // (A, B, C), below in (A, C, D). So a column is a few runs, each of them
+    // known in closed form, against the several a ROW would need (a row
+    // crosses a ring every few texels and every diagonal once). The affine
+    // map composed for a triangle is kept for the next columns in the same
+    // ring, and at a fixed s the map is one FMA per axis in lat. Columns
+    // write a dense scratch (the layer's rows are a page apart, and a column
+    // walk straight into it would thrash L1); the composite below is the
+    // same saturating add by row the rubber layer uses.
+    const float dsx = L / texW;                      // arclength per column
+    const float dly = 2.0f * mSkidLatHalf / texH;    // lat per row
+    const int yStart = std::max(r.y0, 1), yEnd = std::min(r.y1, H - 1);
+    const int cols = r.x1 - r.x0, rows = yEnd - yStart;
+    if (cols <= 0 || rows <= 0) return;
+    mStampCov.assign((size_t) cols * rows, 0.0f);
+    // Row index whose centre lat is the first at or past `lat`.
+    const auto rowAt = [&](float lat) {
+        return (int) std::ceil((lat + mSkidLatHalf) / dly - 0.5f);
+    };
+    // The composed maps, keyed by ring slot (rings from the box's first,
+    // counted on), strip and side. A box spans a handful of rings; one
+    // past the slots is composed and not kept.
+    constexpr int kSlots = 16;
+    uint8_t valid[kSlots][7][2] = {};
+    float coef[kSlots][7][2][6];
+    TrackBin::DeckQuad quad;
+    TrackBin::DeckTri tri;
+    const float invR = 0.5f / halfR, invF = 0.5f / halfF;
+    int ring0 = -1;
+    for (int cx = 0; cx < cols; cx++) {
+        float sw = ((float) (r.x0 + cx) + 0.5f) * dsx;
+        sw -= L * std::floor(sw / L);
+        const int ring = mTrack->deckRingAt(sw);
+        if (ring < 0) break;
+        if (ring0 < 0) ring0 = ring;
+        if (ring != quad.ring) mTrack->deckQuadAt(ring, quad);
+        int slot = ring - ring0;
+        if (slot < 0) slot += (int) mTrack->rings.size();
+        const float span = quad.sb - quad.sa;
+        const float t = span > 0 ? std::min(1.0f, std::max(0.0f, (sw - quad.sa) / span)) : 0.0f;
+        float bnd[8];
+        for (int k = 0; k < 8; k++) bnd[k] = quad.bA[k] + (quad.bB[k] - quad.bA[k]) * t;
+        float* const col = mStampCov.data() + cx;
+        for (int j = 0; j < 7; j++) {
+            const int yLo = std::max(yStart, rowAt(bnd[j]));
+            const int yHi = std::min(yEnd, rowAt(bnd[j + 1]));
+            if (yLo >= yHi) continue;
+            const int yD = std::min(yHi, std::max(yLo,
+                    rowAt(mTrack->deckDiagonalLat(quad, j, t))));
+            // Lower run [yLo, yD) is (A, C, D), upper [yD, yHi) is (A, B, C).
+            for (int side = 1; side >= 0; side--) {
+                const int ya = side ? yLo : yD, yb = side ? yD : yHi;
+                if (ya >= yb) continue;
+                float local[6];
+                float* c = slot < kSlots ? coef[slot][j][side] : local;
+                if (slot >= kSlots || !valid[slot][j][side]) {
+                    // Barycentric (w1, w2) over the uv triangle are affine
+                    // in (s, lat); the car-frame coordinates are affine in
+                    // world; compose the two.
+                    mTrack->deckTri(quad, j, side, tri);
+                    const float e1x = tri.U[1].x - tri.U[0].x, e1y = tri.U[1].y - tri.U[0].y;
+                    const float e2x = tri.U[2].x - tri.U[0].x, e2y = tri.U[2].y - tri.U[0].y;
+                    const float d = e1x * e2y - e2x * e1y;
+                    if (std::fabs(d) < 1e-12f) continue;
+                    const float idet = 1.0f / d;
+                    const float w1s = e2y * idet, w1l = -e2x * idet;
+                    const float w2s = -e1y * idet, w2l = e1x * idet;
+                    const float3 W0 = tri.W[0] - origin;
+                    const float3 W1 = tri.W[1] - tri.W[0], W2 = tri.W[2] - tri.W[0];
+                    const float r0 = dot(W0, right), r1 = dot(W1, right), r2 = dot(W2, right);
+                    const float f0 = dot(W0, fwd), f1 = dot(W1, fwd), f2 = dot(W2, fwd);
+                    c[1] = (w1s * r1 + w2s * r2) * invR;
+                    c[2] = (w1l * r1 + w2l * r2) * invR;
+                    c[0] = 0.5f + r0 * invR - c[1] * tri.U[0].x - c[2] * tri.U[0].y;
+                    c[4] = (w1s * f1 + w2s * f2) * invF;
+                    c[5] = (w1l * f1 + w2l * f2) * invF;
+                    c[3] = 0.5f + f0 * invF - c[4] * tri.U[0].x - c[5] * tri.U[0].y;
+                    if (slot < kSlots) valid[slot][j][side] = 1;
+                }
+                // At this column's s the map is affine in lat alone.
+                const float u0 = c[0] + c[1] * sw, du = c[2];
+                const float v0 = c[3] + c[4] * sw, dv = c[5];
+                for (int y = ya; y < yb; y++) {
+                    const float lat = ((float) y + 0.5f) * dly - mSkidLatHalf;
+                    const float u = u0 + du * lat, v = v0 + dv * lat;
+                    if (rr.zero(u, v)) continue;
+                    col[(size_t) (y - yStart) * cols] = rr.ramp(u, v);
+                }
+            }
+        }
     }
+
     // COMPOSITE. The layer's outer rows stay empty (the shader's CLAMP relies
-    // on it) and x wraps at the lap seam. The tail cut is the SHADER's, on the
-    // interpolated field (CarShadowTuning::remapLo).
-    // The wrapped x of the stamp's first column, once: the columns are
-    // consecutive, so each row counts on from it instead of paying two
-    // software divides a texel on the armv7 box. Never `% 0` — a zero-width
-    // layer has no rows to write either (H is 0 with it).
-    const int W = (int) mCarShadowW;
-    const int wx0 = W > 0 ? ((mStampX0 % W) + W) % W : 0;
-    for (int sy = 0; sy < mStampH; sy++) {
-        const int y = mStampY0 + sy;
-        if (y < 1 || y > H - 2) continue;
-        const float* src = mStampCov.data() + (size_t) sy * mStampW;
-        uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
-        for (int sx = 0, wx = wx0; sx < mStampW;
+    // on it) and x wraps at the lap seam. The tail cut is the SHADER's, on
+    // the interpolated field (CarShadowTuning::remapLo). The wrapped x of the
+    // first column, once: the columns are consecutive, so each row counts on
+    // from it instead of paying two software divides a texel on the armv7
+    // box. Never `% 0` — a zero-width layer has no rows either (H is 0).
+    const int wx0 = W > 0 ? ((r.x0 % W) + W) % W : 0;
+    for (int sy = 0; sy < rows; sy++) {
+        const float* src = mStampCov.data() + (size_t) sy * cols;
+        uint8_t* row = mCarShadowPix.data() + (size_t) (yStart + sy) * W;
+        for (int sx = 0, wx = wx0; sx < cols;
                 sx++, wx = (wx + 1 == W) ? 0 : wx + 1) {
-            const float a = src[sx];
+            const float a = src[sx] * alpha;
             if (a <= 0.0f) continue;
-            // lroundf, without the libm call: `a` is positive and finite here
-            // (the raster's max(0, ·) eats a NaN) and `s` a few hundred at
-            // most, so truncation plus the exact fraction rounds half away
-            // from zero exactly as lroundf does. Never (int) (s + 0.5f), which
-            // rounds 0.49999997 up. The fraction must stay one rounded product
-            // minus `add`: ttp_strict_fp's -ffp-contract=off, which reaches
-            // this file through libttp_track, is what keeps it from fusing.
-            const float s = a * 255.0f;
-            int add = (int) s;
-            if (s - (float) add >= 0.5f) add++;
+            // lroundf, without the libm call: `a` is positive and finite
+            // here (the raster stores a smoothstep; a NaN never reaches the
+            // store because zero() answers false for it and rr() clamps)
+            // and `sc` a few hundred at most, so truncation plus the exact
+            // fraction rounds half away from zero exactly as lroundf does.
+            // Never (int) (sc + 0.5f), which rounds 0.49999997 up. The
+            // fraction must stay one rounded product minus `add`:
+            // ttp_strict_fp's -ffp-contract=off, which reaches this file
+            // through libttp_track, is what keeps it from fusing.
+            const float sc = a * 255.0f;
+            int add = (int) sc;
+            if (sc - (float) add >= 0.5f) add++;
             if (add <= 0) continue;
             row[wx] = (uint8_t) std::min(255, (int) row[wx] + add);
         }
@@ -785,33 +826,30 @@ void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha
 // flicker fix needed, and the events are far fewer than the 16-24 it feared
 // because the rects MERGE (a pack sits in one place).
 //
-// THREE FRAMES OF RECTS, because of the pair: the texture written was last
-// correct two frames ago, and what changed since is this frame's stamps, last
-// frame's (which this frame's erase zeroed) and the one before that's. Miss one
-// and each texture keeps the other's stale stamps — the shadow strobes between
-// two positions. One texture needs only two of them (it was correct one upload
-// ago); it takes the same three, so every backend uploads the rects and the
-// event count that were priced.
+// EACH TEXTURE IS OWED EVERY CHANGE SINCE ITS OWN LAST UPLOAD
+// (mCarShadowPending), not a fixed number of frames' rects: the raster and the
+// erase run on every advance and the upload only on drawn frames, so a paced
+// picture puts more advances than frames between two uploads of one texture,
+// and a history counted in frames left it a stale stamp to strobe against.
 //
 // The copies are mandatory: the CPU buffer is mutated again next frame and
 // native drivers read uploads asynchronously.
 void TtpRenderer::uploadCarShadow() {
     if (!mCarShadowTex[0] || !mCarShadowUpload || mCarShadowPix.empty()) return;
     mCarShadowUpload = false;
-    Texture* t = !mCarShadowTex[1]
-            ? mCarShadowTex[0] : mCarShadowTex[mCarShadowPing & 1];
+    const uint32_t which = !mCarShadowTex[1] ? 0 : (mCarShadowPing & 1);
+    Texture* t = mCarShadowTex[which];
     const int W = (int) mCarShadowW, H = (int) mCarShadowH;
 
-    // The union of the three frames, merged under the copy budget
-    // (kUploadEventTexels): a pack shares one event.
+    // This frame's stamps plus everything this texture is still owed, merged
+    // under the copy budget (kUploadEventTexels): a pack shares one event.
     std::vector<SkidRect> rects;
     const auto add = [&](const SkidRect& r) {
         if (r.x1 > r.x0 && r.y1 > r.y0) rects.push_back(r);
     };
     for (const SkidRect& r : mCarShadowDirty) add(r);
-    for (const auto& list : mCarShadowWas) {
-        for (const SkidRect& r : list) add(r);
-    }
+    for (const SkidRect& r : mCarShadowPending[which]) add(r);
+    mCarShadowPending[which].clear();
     mergeUploadRects(rects);
     for (const SkidRect& r : rects) {
         const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);

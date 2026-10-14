@@ -189,7 +189,22 @@ struct RoundedRectEval {
                 && std::isfinite(fillZ) && fillZ > 0.0f;
     }
 
+    // The edge as a SMOOTHSTEP over the ramp: the fit's coverage field (the
+    // carfootprint check pins it).
     float operator()(float u, float v) const {
+        const float t = ramp(u, v);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    // The edge as a LINEAR ramp, 1 inside to 0 outside over the same width —
+    // what the shadow LAYER stores. Bilinear (and B-spline) reconstruction
+    // reproduces a linear function exactly, so wherever the field is a plane
+    // (the straight sides, most of the outline) the interpolated edge sits at
+    // its true sub-texel position however the stamp lands on the grid; the
+    // smoothstep field above is curved there, and its reconstruction error
+    // moved with the landing — a per-frame edge boil. The look's smoothstep
+    // is applied by the shader's remap band on the interpolated value.
+    float ramp(float u, float v) const {
         // Centre and scale so the footprint is |q| <= 1 on both axes. The width
         // interpolates tail (v = 0) to nose (v = 1), so unequal ends make the
         // four-cornered shape a symmetric trapezoid; the bent frame means `d`
@@ -207,9 +222,7 @@ struct RoundedRectEval {
         const float outside = std::sqrt(mx * mx + my * my);
         const float inside = std::min(std::max(bx, by), 0.0f);
         const float d = outside + inside - r;
-        // A smoothstep over the ramp, so the edge lands soft.
-        const float t = std::min(1.0f, std::max(0.0f, (e - d) / twoE));
-        return t * t * (3.0f - 2.0f * t);
+        return std::min(1.0f, std::max(0.0f, (e - d) / twoE));
     }
 
     // True only where operator() is EXACTLY +0, so a caller that would only
