@@ -426,7 +426,11 @@ void TtpRenderer::buildCarShadowDraws() {
             .castShadows(false);
     for (size_t k = 0; k < kCarShadowDraws; k++) {
         MaterialInstance* mi = sceneInstance(mShadowMaterial);
-        mi->setPolygonOffset(-1.0f, -1.0f);
+        // The vertices lie on the road's own planes, so the depth test ties;
+        // one constant unit covers the rounding of a different vertex set on
+        // the same plane. No slope term: on a face seen at a grazing angle it
+        // grows into whole units and pushes the shadow in front of the car.
+        mi->setPolygonOffset(0.0f, -1.0f);
         mCarShadowMi.push_back(mi);
         builder.material(k, mi)
                .geometry(k, RenderableManager::PrimitiveType::TRIANGLES, mCarShadowVb, mCarShadowIb, 0, 0);
@@ -443,12 +447,32 @@ void TtpRenderer::hideCarShadowDraws() {
     mCarShadowRange.assign(kCarShadowDraws, { 0, 0 });
 }
 
-// Lay slot `slot`'s strip and hand the shader the car's frame, fit and stamp.
-// The box: the yawed quad's extents along and across the track plus the
-// ramp, clamped to the deck's width (the shadow stops at the edge; the kerb
-// is raised geometry and would hide it anyway). Rows on every ring line the
-// box crosses and at its two ends; a row's two vertices sit at the box's
-// lateral bounds on that ring line, or on the ruled patch between lines.
+// Lay slot `slot`'s geometry and hand the shader the car's frame, fit and
+// stamp. The box: the yawed quad's extents along and across the track plus
+// the ramp, clamped to the deck's width (the shadow stops at the edge; the
+// kerb is raised geometry and would hide it anyway). The geometry: the
+// road's own triangles under that box, clipped to it (TtpRenderer.h,
+// mCarShadowVb).
+namespace {
+struct ClipV { float t, l; };   // along the ring cell (0..1), and lat
+// Sutherland-Hodgman against one half-plane: keep where f(v) >= 0.
+template <typename F>
+int clipPoly(const ClipV* in, int n, ClipV* out, F f) {
+    int m = 0;
+    for (int i = 0; i < n; i++) {
+        const ClipV& p = in[i];
+        const ClipV& q = in[(i + 1) % n];
+        const float fp = f(p), fq = f(q);
+        if (fp >= 0.0f) out[m++] = p;
+        if ((fp >= 0.0f) != (fq >= 0.0f)) {
+            const float w = fp / (fp - fq);
+            out[m++] = { p.t + (q.t - p.t) * w, p.l + (q.l - p.l) * w };
+        }
+    }
+    return m;
+}
+}  // namespace
+
 void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3& fwd,
         const float3& right, float halfF, float halfR, float carS, float alpha,
         const ttp::rt::RoundedFit& fit) {
@@ -469,44 +493,66 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
     const float h = f0.width * 0.5f;
     const float l0 = std::max(-h, carLat - reachL), l1 = std::min(h, carLat + reachL);
     if (l1 <= l0) return;
-    // Rows in UNWRAPPED arclength from s0; the ring index wraps.
-    const float s0 = carS - reachS, s1 = carS + reachS;
     const float ringLen = L / (float) N;
-    const uint32_t base = (uint32_t) mCarShadowPos.size();
-    if (base + kCarShadowRows * 2 > kCarShadowVtxCap) return;
-    const auto row = [&](float s) {
-        float w = std::fmod(s, L);
-        if (w < 0) w += L;
-        int i = (int) (w / ringLen);
-        i = i < 0 ? 0 : (i >= N ? N - 1 : i);
+    const float s0 = carS - reachS, s1 = carS + reachS;   // unwrapped
+    const int i0 = (int) std::floor(s0 / ringLen), i1 = (int) std::floor(s1 / ringLen);
+    const uint32_t off = (uint32_t) mCarShadowIdx.size();
+    TrackBin::DeckQuad q;
+    for (int ii = i0; ii <= i1 && ii - i0 <= 2 * kCarShadowRings; ii++) {
+        const int i = ((ii % N) + N) % N;
         const int j = (i + 1) % N;
-        const float t = std::min(1.0f, std::max(0.0f, w / ringLen - (float) i));
-        const TrackBin::Sample& A = mTrack->rings[(size_t) i];
-        const TrackBin::Sample& B = mTrack->rings[(size_t) j];
+        mTrack->deckQuadAt(i, q);
+        // The box's share of this cell, as t along it.
+        const float ta = std::max(0.0f, (s0 - (float) ii * ringLen) / ringLen);
+        const float tb = std::min(1.0f, (s1 - (float) ii * ringLen) / ringLen);
+        if (tb <= ta) continue;
         const math::half4& la = mRingLight[(size_t) i];
         const math::half4& lb = mRingLight[(size_t) j];
-        const float4 lf = mix(float4{ (float) la.x, (float) la.y, (float) la.z, (float) la.w },
-                              float4{ (float) lb.x, (float) lb.y, (float) lb.z, (float) lb.w }, t);
-        const math::half4 light{ lf.x, lf.y, lf.z, lf.w };
-        for (const float l : { l0, l1 }) {
-            mCarShadowPos.push_back(mix(A.pos + A.lat * l, B.pos + B.lat * l, t));
-            mCarShadowC0.push_back(light);
+        const float4 lightA{ (float) la.x, (float) la.y, (float) la.z, (float) la.w };
+        const float4 lightB{ (float) lb.x, (float) lb.y, (float) lb.z, (float) lb.w };
+        for (int k = 0; k < 7; k++) {   // the deck's seven strips, bounds k..k+1
+            if (std::max(q.bA[k + 1], q.bB[k + 1]) <= l0 || std::min(q.bA[k], q.bB[k]) >= l1) continue;
+            // The cell's two triangles, (a@i, b@i, b@ni) and (a@i, b@ni, a@ni),
+            // in (t, lat) with their world corners — the road's own soup.
+            const ClipV Alo{ 0.0f, q.bA[k] }, Ahi{ 0.0f, q.bA[k + 1] };
+            const ClipV Blo{ 1.0f, q.bB[k] }, Bhi{ 1.0f, q.bB[k + 1] };
+            const float3 WAlo = q.posA + q.latA * q.bA[k], WAhi = q.posA + q.latA * q.bA[k + 1];
+            const float3 WBlo = q.posB + q.latB * q.bB[k], WBhi = q.posB + q.latB * q.bB[k + 1];
+            const ClipV* tris[2][3] = { { &Alo, &Ahi, &Bhi }, { &Alo, &Bhi, &Blo } };
+            const float3* wtri[2][3] = { { &WAlo, &WAhi, &WBhi }, { &WAlo, &WBhi, &WBlo } };
+            for (int tri = 0; tri < 2; tri++) {
+                ClipV poly[8], tmp[8];
+                int n = 3;
+                for (int c = 0; c < 3; c++) poly[c] = *tris[tri][c];
+                n = clipPoly(poly, n, tmp, [&](const ClipV& v) { return v.t - ta; });
+                n = clipPoly(tmp, n, poly, [&](const ClipV& v) { return tb - v.t; });
+                n = clipPoly(poly, n, tmp, [&](const ClipV& v) { return v.l - l0; });
+                n = clipPoly(tmp, n, poly, [&](const ClipV& v) { return l1 - v.l; });
+                if (n < 3) continue;
+                if (mCarShadowPos.size() + (size_t) n > kCarShadowVtxCap
+                        || mCarShadowIdx.size() + (size_t) (n - 2) * 3 > kCarShadowIdxCap) break;
+                // Barycentric in (t, lat) — uv0 is affine over the triangle,
+                // so this IS the map the rasterizer interpolates.
+                const ClipV& P0 = *tris[tri][0]; const ClipV& P1 = *tris[tri][1]; const ClipV& P2 = *tris[tri][2];
+                const float det = (P1.t - P0.t) * (P2.l - P0.l) - (P2.t - P0.t) * (P1.l - P0.l);
+                if (std::fabs(det) < 1e-12f) continue;
+                const uint32_t base = (uint32_t) mCarShadowPos.size();
+                for (int c = 0; c < n; c++) {
+                    const ClipV& v = poly[c];
+                    const float w1 = ((v.t - P0.t) * (P2.l - P0.l) - (P2.t - P0.t) * (v.l - P0.l)) / det;
+                    const float w2 = ((P1.t - P0.t) * (v.l - P0.l) - (v.t - P0.t) * (P1.l - P0.l)) / det;
+                    const float w0 = 1.0f - w1 - w2;
+                    mCarShadowPos.push_back(*wtri[tri][0] * w0 + *wtri[tri][1] * w1 + *wtri[tri][2] * w2);
+                    const float4 lf = mix(lightA, lightB, v.t);
+                    mCarShadowC0.push_back(math::half4{ lf.x, lf.y, lf.z, lf.w });
+                }
+                for (int c = 1; c + 1 < n; c++) {
+                    mCarShadowIdx.push_back(base);
+                    mCarShadowIdx.push_back(base + (uint32_t) c);
+                    mCarShadowIdx.push_back(base + (uint32_t) c + 1);
+                }
+            }
         }
-    };
-    row(s0);
-    // Every ring line strictly inside (s0, s1), in order.
-    const int k0 = (int) std::floor(s0 / ringLen) + 1;
-    const int k1 = (int) std::ceil(s1 / ringLen) - 1;
-    int rows = 1;
-    for (int k = k0; k <= k1 && rows < (int) kCarShadowRows - 1; k++, rows++) {
-        row((float) k * ringLen);
-    }
-    row(s1);
-    rows++;
-    const uint32_t off = (uint32_t) mCarShadowIdx.size();
-    for (int r = 0; r + 1 < rows; r++) {
-        const uint32_t a0 = base + (uint32_t) r * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
-        for (const uint32_t ix : { a0, b0, a1, a1, b0, b1 }) mCarShadowIdx.push_back(ix);
     }
     mCarShadowRange[slot] = { off, (uint32_t) mCarShadowIdx.size() - off };
     MaterialInstance* mi = mCarShadowMi[slot];
@@ -571,18 +617,42 @@ Texture* TtpRenderer::carShadowStamp(uint64_t key, const ttp::rt::RoundedFit& fi
     const auto it = mCarShadowStampTex.find(key);
     if (it != mCarShadowStampTex.end()) return it->second;
     constexpr uint32_t N = 128;
-    // Twice the raster's ramp: the layer's edge also carried a texel of
-    // bilinear reconstruction and the B-spline's own softening, which a
-    // car-locked texture sampled at its own resolution does not.
-    const float soft = std::max(1e-3f, mShadowTune.blur * 4.0f * mShadowTune.overscan);
+    const float soft = std::max(1e-3f, mShadowTune.blur * 2.0f * mShadowTune.overscan);
     const ttp::rt::RoundedRectEval rr(mShadowTune.overscan, fit.corner, soft,
             fit.fillXTail, fit.fillXNose, fit.fillZ);
-    uint8_t* px = (uint8_t*) malloc((size_t) N * N);
+    std::vector<float> f((size_t) N * N), g((size_t) N * N);
     for (uint32_t y = 0; y < N; y++) {
         for (uint32_t x = 0; x < N; x++) {
             const float u = ((float) x + 0.5f) / N, v = ((float) y + 0.5f) / N;
-            const float f = (x == 0 || y == 0 || x == N - 1 || y == N - 1) ? 0.0f : rr.ramp(u, v);
-            px[(size_t) y * N + x] = (uint8_t) std::lround(std::min(1.0f, std::max(0.0f, f)) * 255.0f);
+            f[(size_t) y * N + x] = rr.ramp(u, v);
+        }
+    }
+    // A texel of blur (two 3x3 box passes, ~a gaussian of one texel): the
+    // layer's read carried that much reconstruction, and it also smooths the
+    // distance field's own creases along the corners' diagonals, which a
+    // wide ramp printed as faint lines through the shadow.
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t y = 0; y < N; y++) {
+            for (uint32_t x = 0; x < N; x++) {
+                float acc = 0.0f;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        const int xx = std::min<int>(N - 1, std::max(0, (int) x + dx));
+                        const int yy = std::min<int>(N - 1, std::max(0, (int) y + dy));
+                        acc += f[(size_t) yy * N + xx];
+                    }
+                }
+                g[(size_t) y * N + x] = acc / 9.0f;
+            }
+        }
+        f.swap(g);
+    }
+    uint8_t* px = (uint8_t*) malloc((size_t) N * N);
+    for (uint32_t y = 0; y < N; y++) {
+        for (uint32_t x = 0; x < N; x++) {
+            // The outermost texels stay zero: CLAMP samples outside the quad read nothing.
+            const float v = (x == 0 || y == 0 || x == N - 1 || y == N - 1) ? 0.0f : f[(size_t) y * N + x];
+            px[(size_t) y * N + x] = (uint8_t) std::lround(std::min(1.0f, std::max(0.0f, v)) * 255.0f);
         }
     }
     Texture* tex = Texture::Builder()

@@ -180,21 +180,25 @@ UNDER its own car's shadow — accepted when the pass replaced the tap.
 ## The car contact shadow: one draw per car, on the road's own surface
 
 **EVERY car's contact shadow is a blended draw of its own** (`vshadow.mat`,
-`placeCarShadow`): a strip of rows over the stamp's box in track space — a row
-on every ring line the box crosses plus its two ends, two vertices a row at the
-box's lateral bounds — with the fitted rounded rect sampled from a texture
+`placeCarShadow`): the road's own triangles under the stamp's box in track
+space, clipped to that box, with the fitted rounded rect sampled from a texture
 locked to the car's frame. It replaced a track-space R8 layer that was
 CPU-rasterized and uploaded every frame and tapped (with a B-spline under the
 stamps) on every road fragment; the frame map (2026-10-14) has the whole
 ladder. What the pass is built on, and why each piece is what it is:
 
-- **The geometry is on the deck's own surface.** On a ring line the strip's
-  vertices are the deck's own edge points (`rings[i].pos + lat * l`); between
-  lines the strip is the ruled patch the deck's two triangles chord, and the
-  wet sheet's polygon offset (`setPolygonOffset(-1, -1)`) covers that sliver.
-  A tyre in front wins the depth test. Filament's depth is REVERSED: the
-  material's default compare is already "nearer or equal", and a hand-set LE
-  let every fragment pass over the cars.
+- **The geometry IS the deck's own planes.** Per ring cell and per deck
+  strip the box touches, the cell's two triangles are clipped in (t, lat) to
+  the box and each clipped corner mapped through that triangle's affine map
+  (`TrackBin::deckQuadAt` gives the corners), so the depth test ties
+  everywhere and one constant unit of polygon offset covers the rounding. A
+  ruled strip between ring lines was tried first: where the deck twists it
+  sat behind the road's chord, a banked stretch lost its shadows and the ends
+  flickered. No slope-scaled offset either: on a face seen at a grazing angle
+  it grows into whole units and pushes the shadow in front of the car. A tyre
+  in front wins the depth test. Filament's depth is REVERSED: the material's
+  default compare is already "nearer or equal", and a hand-set LE let every
+  fragment pass over the cars.
 - **The road's own cells cannot be the geometry.** The cross-section has no
   vertex column inside a lane, so the tightest cell under a car is half the
   road wide; drawn that way the pass cost +1.8 ms of a 4P 720 heavy second
@@ -206,13 +210,15 @@ ladder. What the pass is built on, and why each piece is what it is:
   run) is sampled at (u, v) the VERTEX stage emits, since the stamp's
   coordinates are affine in world position. Evaluated per fragment the same
   shape was 1.5 ms. Locked to the car, nothing re-lands on a road grid frame to
-  frame: no bands, no shiver, no filter to pay for. The baked ramp is twice the
-  raster's, standing in for the texel of reconstruction blur the layer's read
-  carried.
+  frame: no bands, no shiver, no filter to pay for. The baked field is the
+  raster's ramp blurred by a texel (the reconstruction the layer's read
+  carried; it also hides the distance field's creases along the corners'
+  diagonals). A ramp twice as wide read as a weak shadow with a small core.
 - **Lit and graded per vertex** from the deck's mean baked light per ring
-  (`mRingLight`), fogged and premultiplied per fragment like vblend; the blend
-  lands in display space, so the alpha is remapped by (1 - a)^(1/2.2) to
-  match the linear mix the layer did before grading.
+  (`mRingLight`), fogged and premultiplied per fragment like vblend. The blend
+  lands in display space; a remap of the alpha to the linear mix's weight
+  matched the layer on paper and read too weak on the TV, so the stamp's own
+  alpha is the look.
 - **A rebuilt scene's instances know no stamp**: the per-slot memory of which
   model is bound (`mCarShadowStampBound`) is reset with the draws, or the race
   after the lobby draws nothing.

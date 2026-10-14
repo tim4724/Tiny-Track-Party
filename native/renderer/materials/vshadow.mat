@@ -57,10 +57,9 @@ fragment {
         float a = min(cs * smoothstep(materialParams.fill.x, materialParams.fill.y, cs),
                 materialParams.extent.w);
         // The blend lands AFTER the grade, in display space, where the layer
-        // mixed the ink into the deck BEFORE it; a near-black ink at the same
-        // alpha reads much darker here. (1 - a)^(1/2.2) is the display-space
-        // weight that matches the linear mix; the cubic is its series.
-        a = a * (0.4545 + a * (0.1240 + a * 0.0639));
+        // mixed the ink into the deck BEFORE it. A remap to the linear mix's
+        // display weight ((1 - a)^(1/2.2)) matched the layer on paper and read
+        // too weak on the TV; the stamp's own alpha is the look (2026-10-14).
         // Grade (done at the vertex), then premultiply, same as vblend: a
         // straight colour at alpha 0 ADDED itself over the whole cell.
         material.baseColor = vec4(ttpFogMix(variable_inkd.xyz, variable_fog.x) * a, a);

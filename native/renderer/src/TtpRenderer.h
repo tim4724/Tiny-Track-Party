@@ -1366,19 +1366,19 @@ private:
     // Rings a stamp may span, each way, on the longest car at the widest yaw;
     // a row per ring line crossed plus the two ends.
     static constexpr int kCarShadowRings = 12;
-    static constexpr size_t kCarShadowRows = 2 * kCarShadowRings + 2;
-    static constexpr size_t kCarShadowVtxCap = kCarShadowDraws * kCarShadowRows * 2;
-    static constexpr size_t kCarShadowIdxCap = kCarShadowDraws * (kCarShadowRows - 1) * 6;
+    static constexpr size_t kCarShadowVtxCap = kCarShadowDraws * 512;
+    static constexpr size_t kCarShadowIdxCap = kCarShadowDraws * 1024;
     // ONE renderable, a primitive per car slot, over ONE vertex and ONE index
-    // buffer rebuilt each frame (flushCarShadows): per car the stamp's box in
-    // track space as a strip of rows — one on every ring line the box
-    // crosses, plus its two ends — two vertices a row at the box's lateral
-    // bounds. On a ring line the vertices ARE on the deck's own edge; between
-    // lines the strip is the ruled patch the deck's two triangles chord, and
-    // the polygon offset (the wet sheet's) covers that sliver. It is the
-    // stamp's own area: the road's own cells, with no column inside a lane,
-    // were half the road wide, and that fill alone cost a millisecond more
-    // than the layer (the frame map, 2026-10-14).
+    // buffer rebuilt each frame (flushCarShadows): per car, the road's OWN
+    // triangles under the stamp's box, CLIPPED to it. For every ring cell the
+    // box spans and every deck strip it touches, the cell's two triangles are
+    // clipped in (t, lat) to the box and each clipped corner is mapped through
+    // that triangle's affine map, so every vertex lies on a plane the road
+    // itself rasterizes and the depth test ties everywhere. The two earlier
+    // shapes failed on depth: the road's whole cells were half a lane wide
+    // (a millisecond more than the layer), and a ruled strip between ring
+    // lines sat behind the road's chord where the deck twists, so a banked
+    // stretch had no shadow and its ends flickered (the frame map, 2026-10-14).
     utils::Entity mCarShadowEntity;
     std::vector<filament::MaterialInstance*> mCarShadowMi;
     filament::VertexBuffer* mCarShadowVb = nullptr;
