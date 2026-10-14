@@ -98,7 +98,7 @@ struct ParsedTrackDef {
   std::string id;
   std::vector<SegDef> segs;
   std::vector<WptDef> wpts;
-  std::vector<FurnDef> oils, pads, boxes, poles;
+  std::vector<FurnDef> oils, pads, boxes, poles, kickers;
   std::vector<BananaDef> bananas;
 };
 
@@ -223,6 +223,7 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
         out.lat = numOr(b, "lat", 0);
         return true;
       })) return false;
+  if (!parseList(desc, "kickers", p.kickers, parseFurn)) return false;
 
   p.def.segs = p.segs.empty() ? nullptr : p.segs.data();
   p.def.nSegs = (int) p.segs.size();
@@ -238,6 +239,8 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
   p.def.nPoles = (int) p.poles.size();
   p.def.bananas = p.bananas.empty() ? nullptr : p.bananas.data();
   p.def.nBananas = (int) p.bananas.size();
+  p.def.kickers = p.kickers.empty() ? nullptr : p.kickers.data();
+  p.def.nKickers = (int) p.kickers.size();
   return true;
 }
 
@@ -647,10 +650,10 @@ void audioFlush() {
 const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
-  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_DRIFT,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_LAND,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {
@@ -769,6 +772,9 @@ void ttp_audio_frame(double nowMs) {
     a.monster = c.monsterT > 0;
     a.onWall = c.onWall;
     a.drift = c.driftMix;
+    a.air = c.h;
+    a.airRate = c.vh;
+    a.airborne = c.h >= AIR_MIN;
     cars.push_back(std::move(a));
   }
 

@@ -8,6 +8,7 @@
 #include "ttp/dmath.h"
 #include "ttp/jsmath.h"
 #include "ttp/jsonnum.h"
+#include "ttp/trackbuilder.h"
 
 namespace ttp {
 
@@ -156,6 +157,30 @@ static const double MONSTER_DUR_MIN = 4.0;
 static const double MONSTER_DUR_MAX = 8.0;
 static const double MONSTER_MASS_MUL = 8.0;
 static const double MONSTER_VMAX_MUL = 1.25;
+// ---- air (kicker ramps and crests) ----
+// Every flight falls under GRAVITY, several times a toy car's honest one: at
+// these speeds a true arc floats, and sends a car metres off the catalogue's
+// sharper hills. With no kick off a crest, it sets how fast a car must take a
+// hill to leave it, how high it goes and how long it stays up.
+static const double GRAVITY = 12.0;
+// Over a crest, an extra pull back toward the road that grows with height
+// (1/s^2). Crest height grows with the SQUARE of speed, so no gravity alone
+// lets a car raced normally leave a hill without sending a flat-out one too
+// high; this pull leaves a small hop almost untouched and reins a big one in.
+// Tune it, not GRAVITY, to move crest hops. Crest only, so a kicker, which
+// leaves its lip already in the air, flies under GRAVITY alone.
+static const double CREST_PULL = 80.0;
+// Two cars further apart in height than this pass over each other.
+static const double AIR_CLEAR = 0.35;
+// How fast an airborne body tips toward the road's angle (1/s). Held at its
+// takeoff angle, a car flying off a crest lands leaning back by the whole of
+// the slope; easing toward the deck, it noses forward through the flight and
+// can never pass the road's own angle.
+static const double AIR_TIP = 5.0;
+// Arclength step of the crest-curvature table.
+static const double CREST_STEP = 0.25;
+// The body's angle riding a kicker's wedge.
+static const double KICKER_PITCH = dmath::atan2(KICKER_RISE, KICKER_LEN);
 // A monster bats the car it spins out ASIDE, off its own line, so a victim
 // shedding speed in its spin is not caught and shoved again. vlat decays at
 // KNOCK_DAMP, so this carries the victim MONSTER_KNOCK / KNOCK_DAMP = 1 m
@@ -308,6 +333,21 @@ Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
     poles_.push_back(PoleRt{p.s, p.lat, p.radius ? p.radius : 0.45});
   for (const BananaRt& b : track.bananas)
     bananas_.push_back(BananaRt{++bananaSeq_, b.s, b.lat, Id::None(), 0, true, 0, false});
+  kickers_ = track.kickers;
+  // Crest curvature: how fast the tangent turns away from the deck's up,
+  // differenced across CURV_PROBE either side. Positive over a hill; negative
+  // in a dip and all the way round a loop, which is why loops never launch.
+  {
+    int n = (int)std::ceil(length_ / CREST_STEP);
+    crestK_.resize(n);
+    for (int i = 0; i < n; i++) {
+      double s = i * CREST_STEP;
+      Frame f = centerline_->sampleAt(s);
+      Frame a = centerline_->sampleAt(s - CURV_PROBE);
+      Frame b = centerline_->sampleAt(s + CURV_PROBE);
+      crestK_[i] = a.tangent.sub(b.tangent).dot(f.up) / (2 * CURV_PROBE);
+    }
+  }
 
   for (size_t i = 0; i < players.size(); i++) {
     const PlayerDesc& desc = players[i];
@@ -968,7 +1008,9 @@ void Game::resolveCollisions(double dt) {
   for (int pass = 0; pass < COLLIDE_PASSES; pass++) {
     for (size_t i = 0; i < list.size(); i++)
       for (size_t j = i + 1; j < list.size(); j++)
-        if (list[i]->finished == list[j]->finished) collidePair(*list[i], *list[j]);
+        if (list[i]->finished == list[j]->finished
+            && std::fabs(list[i]->h - list[j]->h) < AIR_CLEAR)
+          collidePair(*list[i], *list[j]);
     if (!poles_.empty())
       for (Car* c : list)
         if (!c->finished)
@@ -1003,9 +1045,31 @@ void Game::recomputePoses() {
     double run = chord.addScaledVector(up, -rise).length();
     if (run > 1e-6) forward.addScaledVector(up, rise / run).normalize();
     c.pose.pos = f.pos.clone().addScaledVector(f.lateral, c.lat);
+    c.pose.pos.addScaledVector(up, c.h);
     c.pose.forward = forward;
     c.pose.up = up;
   }
+}
+
+// The ramp surface under a car: how far up a kicker's wedge it is, or 0 off
+// every kicker (the deck itself).
+double Game::kickerFloor(double totalS) const {
+  for (double k : kickers_) {
+    double d = std::fmod(std::fmod(totalS - k, length_) + length_, length_);
+    if (d < KICKER_LEN) return KICKER_RISE * d / KICKER_LEN;
+  }
+  return 0;
+}
+
+// The crest curvature under a car's arclength, interpolated in the table.
+double Game::crestAt(double totalS) const {
+  const std::vector<double>& t = crestK_;
+  double x = std::fmod(std::fmod(totalS, length_) + length_, length_) / CREST_STEP;
+  int n = (int)t.size();
+  int i = (int)x;
+  double f = x - i;
+  i %= n;
+  return t[i] + (t[(i + 1) % n] - t[i]) * f;
 }
 
 void Game::rank() {
@@ -1040,9 +1104,11 @@ void Game::update(double dtMs) {
       c.spin += (SPIN_TURNS * 2 * PI / SPIN_TIME) * dt;
       if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
     }
+    // Oil, bananas and pads lie ON the deck, so a car in the air clears them.
+    bool grounded = c.h < AIR_MIN;
     {
-      bool oil = enterZonesOil(c);
-      bool ban = enterBanana(c);
+      bool oil = grounded && enterZonesOil(c);
+      bool ban = grounded && enterBanana(c);
       if ((oil || ban) && c.monsterT <= 0) {
         if (!spinning) c.spin = 0;
         c.spinT = SPIN_TIME; spinning = true;
@@ -1055,7 +1121,7 @@ void Game::update(double dtMs) {
       c.pickupAge += dt;
       if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; useItemImpl(c); }
       else if (c.wantUse && c.item.empty()) c.wantUse = false;
-      if (!spinning && enterZonesPads(c)) applyPad(c);
+      if (!spinning && grounded && enterZonesPads(c)) applyPad(c);
     }
     if (c.finished || elapsed_ > LAUNCH_GATE) enterBox(c);
 
@@ -1127,6 +1193,8 @@ void Game::update(double dtMs) {
       double driftIn = c.driftDir * c.driftK * c.v / (c.turn * authority);
       steerIn += (driftIn - steerIn) * c.driftMix;
     }
+    // after the drift's line, so a drift steers less in the air too
+    if (!grounded) authority *= AIR_STEER;
     double steerHeading = c.heading + STEER_SIGN * steerIn * c.turn * authority * dt;
 
     double prevTotal = c.totalS;
@@ -1151,6 +1219,35 @@ void Game::update(double dtMs) {
     // The collision passes run in world space off this frame — cached here
     // because the integration has already paid for it.
     cacheColFrame(c, hit.frame);
+
+    // Off the deck, measured from the road. A kicker's wedge carries the car
+    // up at its slope times its speed. Over a crest nothing kicks it: the car
+    // carries on along its own line and the road bends away beneath it, so its
+    // height accelerates by v^2*k - GRAVITY (k the crest curvature) and it
+    // leaves the deck only when the road falls away faster than gravity pulls
+    // it down. In a dip or a loop that term is negative and the deck holds it.
+    // On the sharper humps that happens a little before the summit, on purpose:
+    // holding the car to the top and releasing it there puts the whole pull
+    // into one instant, which reads as a hop off the crest.
+    // In the air the body leaves at the angle it had, so against a road that
+    // turns away under it the car pitches nose-up by k per metre travelled,
+    // and tips back toward the road's angle at AIR_TIP.
+    // Landing is neutral: the car keeps its speed and pays nothing.
+    double ramp = kickerFloor(c.totalS);
+    double k = crestAt(c.totalS);
+    double lift = c.v * c.v * k - GRAVITY - (k > 0 ? CREST_PULL * c.h : 0);
+    if (c.h <= ramp && lift <= 0) {
+      c.h = ramp;
+      // The climb a kicker gives counts the car's speed only up to its own top
+      // speed: a boost flies further off the lip, never higher.
+      c.vh = ramp > 0 ? js_min(c.v, c.vmax) * (KICKER_RISE / KICKER_LEN) : 0;
+      c.pitch = ramp > 0 ? KICKER_PITCH : 0;
+    } else {
+      c.vh += lift * dt;
+      c.h += c.vh * dt;
+      c.pitch += (k * c.v - AIR_TIP * c.pitch) * dt;
+      if (c.h <= ramp) { c.h = ramp; c.vh = 0; }
+    }
 
     if (c.finished) continue;
 

@@ -160,6 +160,16 @@ double platform_random() {
 // the decider
 // ---------------------------------------------------------------------------
 
+namespace {
+Command cue(const char* name, double gain) {
+  Command c;
+  c.kind = Command::CUE;
+  c.name = name;
+  c.gain = gain;
+  return c;
+}
+}  // namespace
+
 Decider::Decider(std::function<double()> rng)
     : rng_(rng ? std::move(rng) : std::function<double()>(&platform_random)),
       lastScreech_(-std::numeric_limits<double>::infinity()),
@@ -225,14 +235,16 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     // stay silent; a spinning car's wheels aren't gripping, so no squeal.
     // A drift has its own voice, which the squeal and the brake give way to:
     // its held brake is not a brake, and its lean is not a corner.
+    // Tyres off the deck make none of the three.
     const double fastGate = clamp01((c.spd - 0.45) / 0.3);
-    const double tyreGate = truthy(c.spin) ? 0 : fastGate;
+    const double ground = c.airborne ? 0 : 1;
+    const double tyreGate = truthy(c.spin) ? 0 : fastGate * ground;
     voice(out, "corner", c.id, js_max(c.steer * c.steer, c.drift) * (1 - c.drift) * tyreGate, nullptr);
     voice(out, "drift", c.id, c.drift * tyreGate, nullptr);
-    voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4), nullptr);
+    voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4) * ground, nullptr);
     // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
     // While a monster truck, the same loop deepens into a big-truck growl.
-    voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2),
+    voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2) + (c.airborne ? ENGINE_FLARE : 0),
           c.monster ? &MONSTER_ENGINE_MOD : nullptr);
   }
   // the nearest scrub owns the shared throttle
@@ -255,6 +267,23 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     if (!live) voice(out, "rocket_fire", id, 0, nullptr);
   }
   rockets_ = seen_;
+
+  // Landing: a car in the air last frame and down on this one thumps, louder
+  // the harder it came down, by distance like any world cue. Read off the
+  // frames rather than raised as a sim event, because a landing is no part of
+  // the race contract. A skim off a crest lands too softly to be worth a cue.
+  airNext_.clear();
+  for (const Car& c : cars) {
+    if (c.air > 0) { airNext_.emplace_back(c.id, c.airRate); continue; }
+    for (const auto& a : airborne_) {
+      if (!(a.first == c.id)) continue;
+      const double hard = landHardness(a.second);
+      const double g = audibility(c.hasPos ? &c.pos : nullptr, humans_) * hard;
+      if (g > 0) out.push_back(cue("land", g));
+      break;
+    }
+  }
+  airborne_.swap(airNext_);
   humans_.clear();  // it points into the caller's `cars`; never hold that past the call
 }
 
@@ -279,16 +308,6 @@ void Decider::lap(std::vector<Command>& out, double nowMs) {
   c.gain = 1;
   out.push_back(std::move(c));
 }
-
-namespace {
-Command cue(const char* name, double gain) {
-  Command c;
-  c.kind = Command::CUE;
-  c.name = name;
-  c.gain = gain;
-  return c;
-}
-}  // namespace
 
 void Decider::event(const ttp::Event& e, const Point* pos, const Listeners& humans,
                     const AiIds& aiIds, double nowMs, std::vector<Command>& out) {

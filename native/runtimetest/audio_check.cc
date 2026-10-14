@@ -797,8 +797,86 @@ bool checkDriftVoice() {
   return ok;
 }
 
+// The air, which no corpus world reaches either (a snapshot carries no height):
+// tyres off the deck make no sound, and the engine flares for the flight.
+bool checkAirVoices() {
+  struct Levels { double tyres = 0, engine = 0; };
+  auto levels = [](bool airborne) {
+    au::Decider dec;
+    au::Car c;
+    c.id = Id::Num(1);
+    c.spd = 0.9; c.steer = 1; c.brake = 1; c.airborne = airborne;
+    std::vector<au::Command> out;
+    dec.frame({ c }, {}, au::AiIds(), 0, out);
+    Levels l;
+    for (const au::Command& cmd : out) {
+      if (cmd.kind != au::Command::VOICE) continue;
+      if (std::strcmp(cmd.name, "engine_putt") == 0) l.engine = cmd.level;
+      else if (std::strcmp(cmd.name, "boost") != 0) l.tyres += cmd.level;
+    }
+    return l;
+  };
+  const Levels deck = levels(false), air = levels(true);
+  bool ok = true;
+  auto expect = [&](bool cond, const char* what) {
+    if (!cond) { std::fprintf(stderr, "FAIL air voices: %s\n", what); ok = false; }
+  };
+  expect(deck.tyres > 0 && air.tyres == 0, "tyres squeal on the deck and are silent in the air");
+  expect(air.engine == deck.engine + au::ENGINE_FLARE, "the engine flares in the air");
+  return ok;
+}
+
+// Landings are decided off car height, which no recorded snapshot carries, so
+// the corpus can never reach them. Stated here instead: a car coming down hard
+// thumps once on the frame it lands, a skim off a crest makes no sound, and a
+// car that never left the deck makes none either.
+int landingChecks() {
+  int fails = 0;
+  const auto lands = [](double rate) {
+    au::Decider dec([]() { return 0.0; });
+    au::Car c;
+    c.id = ttp::Id::Num(1);
+    c.hasPos = true;
+    std::vector<au::Command> out;
+    int n = 0;
+    double gain = 0;
+    const auto step = [&](double air, double airRate) {
+      c.air = air;
+      c.airRate = airRate;
+      out.clear();
+      dec.frame({c}, {}, au::AiIds{}, 0, out);
+      for (const au::Command& cmd : out)
+        if (cmd.kind == au::Command::CUE && std::string(cmd.name) == "land") { n++; gain = cmd.gain; }
+    };
+    step(0, 0);
+    step(0.3, 1.0);
+    step(0.1, rate);
+    step(0, 0);
+    step(0, 0);
+    return std::make_pair(n, gain);
+  };
+  const auto hard = lands(-3.5), soft = lands(-0.5);
+  if (hard.first != 1 || !(hard.second > 0)) { std::fprintf(stderr, "FAIL a hard landing thumps once\n"); fails++; }
+  if (soft.first != 0) { std::fprintf(stderr, "FAIL a skim off a crest lands silently\n"); fails++; }
+  {
+    au::Decider dec([]() { return 0.0; });
+    au::Car c;
+    c.id = ttp::Id::Num(1);
+    c.hasPos = true;
+    std::vector<au::Command> out;
+    for (int i = 0; i < 3; i++) dec.frame({c}, {}, au::AiIds{}, 0, out);
+    for (const au::Command& cmd : out)
+      if (cmd.kind == au::Command::CUE && std::string(cmd.name) == "land") {
+        std::fprintf(stderr, "FAIL a car on the deck never lands\n");
+        fails++;
+        break;
+      }
+  }
+  return fails;
+}
+
 int main(int argc, char** argv) {
-  if (!checkDriftVoice()) return 1;
+  if (!checkDriftVoice() || !checkAirVoices()) return 1;
   std::string fixture, outPath;
   if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
     // The traces directory is still needed: the trace cases record only the
@@ -814,5 +892,6 @@ int main(int argc, char** argv) {
                          "       audio_check --record <corpus> --out=<file> <traces-dir>\n");
     return 2;
   }
+  if (landingChecks()) return 1;
   return runCorpus(argv[1], argv[2], "");
 }

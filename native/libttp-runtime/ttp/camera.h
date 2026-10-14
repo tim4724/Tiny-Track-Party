@@ -38,6 +38,15 @@ namespace rt {
 // read oil and boost paint, which a playtest at 10.5 struggled to see.
 constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.69f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
+// How much of a kicker hop the rig rides. All of it pins the car to one spot on
+// screen and the jump does not read; none of it lets a boosted hop climb out of
+// the top of the frame from this close.
+constexpr float CHASE_AIR_FOLLOW = 0.5f;
+// A landing dips the eye by up to CAM_LAND_DIP and lifts it back in one motion,
+// no ring, peaking CAM_DIP_T after touchdown. It scales with how hard the car
+// came down, by the landing cue's own measure (audio.h landHardness), so a skim
+// off a crest dips nothing.
+constexpr float CAM_LAND_DIP = 0.06f, CAM_DIP_T = 0.08f;
 // The player's OWN monster truck is taller than the eye: at the race pitch its
 // roof sits on the horizon and hides the road just ahead. So while it is active
 // the rig pulls BACK by MONSTER_CAM_BACK and UP by MONSTER_CAM_RISE. Pulling
@@ -88,6 +97,9 @@ struct ChaseCam {
     V3 pos, target;
     float fov = BASE_FOV;
     float monsterBlend = 0;  // eased 0..1 toward the monster rig
+    // The landing dip (frame_builder): the last frame's height and climb rate
+    // (a landing is read off them), the dip's clock (-1 = none running) and depth.
+    float prevAir = 0, prevVh = 0, dipT = -1, dipDepth = 0;
     bool init = false;  // first update snaps, so it doesn't lag in from the origin
 
     // height / rise / back are the authored rig unless a debug slider moved them.

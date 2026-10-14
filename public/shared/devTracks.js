@@ -161,6 +161,10 @@ export const DEV_TRACKS = {
     ],
     bananas: [
       { u: 0.63, lat: 0 }, { u: 0.665, lat: -0.9 }, { u: 0.70, lat: 0.9 }
+    ],
+    // A kicker ramp past the bananas: a full-speed car lands before the bend.
+    kickers: [
+      { u: 0.712 }
     ]
   },
   // The ASSET GALLERY's stage (/gallery-assets.html). Not a driving surface: a

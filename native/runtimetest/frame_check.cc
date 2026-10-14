@@ -169,6 +169,7 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
   checkF(o.scrub, c.onWall ? 1.0f : 0.0f, what + ".scrub");
   if (c.drifting) checkF(o.hop, rt::driftHop((float) c.driftT), what + ".hop");
   else check(o.hop == 0, what + " hops only in a drift");
+  checkF(o.airborne, c.h >= AIR_MIN ? 1.0f : 0.0f, what + ".airborne");
   // The kick rectangle is the sim's CURRENT footprint: the truck's while it
   // is a monster, the car's rest stats otherwise.
   if (c.monsterT > 0) {

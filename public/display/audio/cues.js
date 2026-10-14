@@ -238,7 +238,8 @@ export const DEFAULT_PICKS = {
   join: 'risingtwo',
   engine_putt: 'realloop', // the recorded engine loop, pitch-shifted by speed (Tim, 2026-06-13)
   rocket_fire: 'jet',      // rocket FLIGHT — continuous airy jet loop, held for the whole air time
-  rocket_hit: 'punch'      // rocket detonation — punchy CC0 explosion sample
+  rocket_hit: 'punch',     // rocket detonation — punchy CC0 explosion sample
+  land: 'thud'             // a car comes down off a hop
   // Cut after auditioning: 'ready' (the roulette's reveal pop already lands
   // that beat), 'final_lap' (redundant with the lap chime) and 'finish' (the
   // chequered-flag crossing plays the ordinary lap chime — the results screen
@@ -741,6 +742,23 @@ export const CUES = [
               bp.frequency.setTargetAtTime(950 + l * 1500, at, 0.08); },   // brighter as it nears
             stop() { const at = ctx.currentTime; out.gain.setTargetAtTime(0.0001, at, 0.06); try { src.stop(at + 0.3); } catch (_) { /* stopped */ } }
           };
+        }
+      }
+    ]
+  },
+  {
+    id: 'land',
+    label: 'Landing',
+    desc: 'A car comes back down off a kicker or a hill. One-shot; the host scales it by how hard it came down and by distance to the nearest player.',
+    variants: [
+      {
+        id: 'thud', label: 'A · thud',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.5);
+          tone(ctx, dest, t, { f: 150 * j, to: 55 * j, dur: 0.12, type: 'sine', vol: 0.32, a: 0.003 });
+          noise(ctx, dest, t, { dur: 0.06, f: 260, fTo: 120, Q: 0.8, vol: 0.16, a: 0.002, type: 'lowpass' });
+          knock(ctx, dest, t + 0.012, 300 * j, 0.06);
+          return 0.2;
         }
       }
     ]

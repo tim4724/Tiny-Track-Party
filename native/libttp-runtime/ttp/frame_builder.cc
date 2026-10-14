@@ -1,8 +1,10 @@
 #include "ttp/frame_builder.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
+#include "ttp/audio.h"
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
@@ -177,6 +179,13 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // lap away from its own shadow.
             o.trackS = (float) c->totalS;
             o.trackLat = (float) c->lat;
+            o.air = (float) c->h;
+            o.airborne = c->h >= AIR_MIN ? 1.0f : 0.0f;
+            // The body's own angle against the deck (Car::pitch): the wedge's up
+            // a kicker, and in the air the angle it left at, tipping toward the
+            // road. Capped so a long flight never stands the car up.
+            constexpr double AIR_PITCH_MAX = 0.45;
+            o.airPitch = (float) std::max(-AIR_PITCH_MAX, std::min(AIR_PITCH_MAX, c->pitch));
         }
         // A hold that OUTLIVED the field it was taken on lands here, because the
         // memcpy above only fires while the sizes still match: a seat expiring
@@ -276,7 +285,25 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // for seconds, which is how this became visible; a held car is at
             // rest, so the rig settles into its parked shot and stays there.
             if (c) {
-                cam.update(fromHeld ? heldPose(outCars[subject]) : c->pose,
+                ttp::Pose rig = fromHeld ? heldPose(outCars[subject]) : c->pose;
+                const float air = outCars[subject].air;
+                const float vh = fromHeld ? 0.0f : (float) c->vh;
+                if (air <= 0 && cam.prevAir > 0) {
+                    const float hard = (float) audio::landHardness(cam.prevVh);
+                    cam.dipDepth = CAM_LAND_DIP * hard;
+                    cam.dipT = 0;
+                }
+                cam.prevAir = air;
+                cam.prevVh = vh;
+                float dip = 0;
+                if (cam.dipT >= 0) {
+                    const float x = cam.dipT / CAM_DIP_T;
+                    dip = cam.dipDepth * x * std::exp(1 - x);
+                    // done by 8 peak-times, where x*e^(1-x) is under 0.1%
+                    cam.dipT = x > 8 ? -1 : cam.dipT + dt;
+                }
+                rig.pos.addScaledVector(rig.up, -(1 - CHASE_AIR_FOLLOW) * air - dip);
+                cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);
             }

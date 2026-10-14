@@ -956,6 +956,9 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
         out.poles.push_back({ (float) p.s, (float) p.lat, (float) p.radius });
     }
 
+    out.kickers.clear();
+    for (const ttp::Kicker& k : geo.kickers) out.kickers.push_back((float) k.s);
+
     out.pillars.clear();
     for (const ttp::Pillar& p : geo.pillars) {
         out.pillars.push_back({ (float) p.x, (float) p.z, (float) p.baseY,

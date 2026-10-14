@@ -543,6 +543,8 @@ void resolveFurniture(RaceTrack& b, const TrackDef& def) {
     const BananaDef& p = def.bananas[i];
     b.bananas.push_back({u2s(p.u), p.lat});
   }
+  b.kickers.clear();
+  for (int i = 0; i < def.nKickers; i++) b.kickers.push_back({u2s(def.kickers[i].u)});
 }
 
 }  // namespace

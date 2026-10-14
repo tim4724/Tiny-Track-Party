@@ -96,6 +96,14 @@ struct Car {
   bool drifting = false;
   double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
   double driftT = 0;
+  // Height above the deck, along its up, and its rate. Non-zero only on a
+  // kicker ramp and in the flight off its lip; the pose carries it.
+  double h = 0, vh = 0;
+  // The body's pitch against the deck under it (rad, + = nose up): the wedge's
+  // angle on a kicker; in the air, the angle the car left at as the road turns
+  // away beneath it, tipping back toward the road. Cosmetic; the renderer
+  // eases it the rest of the way on landing.
+  double pitch = 0;
 };
 
 struct Zone { double s, lat, radius; };  // oil hazard (circle)
@@ -130,6 +138,7 @@ struct GameTrack {
   std::vector<BoxRt> boxes;   // .cooldown/.row filled by ctor
   std::vector<PoleRt> poles;
   std::vector<BananaRt> bananas;  // authored (dev tracks); .id/.respawn/.liveAt filled by ctor
+  std::vector<double> kickers;    // each ramp's FOOT arclength (ttp::Kicker)
 };
 
 // bot: an AiController drives this car. A bot drifts only when its controller
@@ -155,6 +164,16 @@ inline constexpr double STEER_SIGN = -1;
 // tests/devtrack.test.js holds the shape to the GLB.
 inline constexpr double MONSTER_HALF_LEN = 0.572;
 inline constexpr double MONSTER_HALF_WID = MONSTER_HALF_LEN * 0.3125 / 0.4375;
+
+// Below this height off the deck a car still drives as grounded: a crest taken
+// just fast enough lifts it by millimetres, which nothing should notice. In the
+// header because what a flight LOOKS and SOUNDS like keys off the same line:
+// tyres that leave no rubber, a squeal that stops, an engine that flares.
+inline constexpr double AIR_MIN = 0.02;
+// Steering authority off the deck, as a fraction of the ground's: enough that a
+// tilt visibly moves a car through a short crest hop, too little to turn it
+// around on a kicker's long flight.
+inline constexpr double AIR_STEER = 0.7;
 
 // Live-tunable steering-response exponent. Module-global — shared by every
 // Game, not per-instance — and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
@@ -306,6 +325,8 @@ class Game {
   bool enterZonesPads(Car& c);
   bool inStrip(const Car& c, const PadRt& z) const;
   bool inZone(const Car& c, double zs, double zlat, double radius) const;
+  double kickerFloor(double totalS) const;
+  double crestAt(double totalS) const;
   void applyPad(Car& c);
   void enterBox(Car& c);
   double placeT(const Car& c) const;
@@ -337,6 +358,11 @@ class Game {
   std::vector<BoxRt> boxes_;
   std::vector<PoleRt> poles_;
   std::vector<BananaRt> bananas_;
+  std::vector<double> kickers_;
+  // The deck's crest curvature (1/m, + where the road bends away from its own
+  // up) at every CREST_STEP of arclength, built once per race: a car's flight
+  // reads it every frame.
+  std::vector<double> crestK_;
   long bananaSeq_ = 0;
   // bananaSeq_ when this step began. A banana with a later id was dropped in this
   // step and hits nobody until the next one, so it reaches at least one rendered

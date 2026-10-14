@@ -360,6 +360,13 @@ add_executable(curb_hang_check simtest/curb_hang_check.cc)
 target_link_libraries(curb_hang_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(curb_hang_check)
 add_test(NAME curb_hang COMMAND curb_hang_check)
+# ---- Behaviour: the air (kicker ramps and crests) ---------------------------
+# The corpora pin flights without judging them, and no catalogue track carries
+# a kicker at all. See the file header.
+add_executable(air_check simtest/air_check.cc)
+target_link_libraries(air_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(air_check)
+add_test(NAME air COMMAND air_check)
 
 # ---- Behaviour: car-to-car contact ------------------------------------------
 # The traces PIN contact, they do not judge it — corner clipping and rear-end

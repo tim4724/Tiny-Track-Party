@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "0b9b917af6b1f04abfb879bac48ea568d19e8e84730bfad649b459aa277ccb3d",
+    "sharedSha256": "ae84842762037c40bdb0dfa65a75abb6e61e759ff793afabf1d09c30c519da94",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -540,6 +540,57 @@
       },
       "variant": "risingtwo",
       "sourceSha256": "e4a8bbf50945807ddc7a7a5896286a927e15a0dddd1f75c910f94c5df0952e29"
+    },
+    "land": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "land.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 9744,
+          "durationSec": 0.203,
+          "body60Sec": 0.107958,
+          "peak": 0.279489,
+          "rms": 0.043432,
+          "sha256": "7efb16262d32da608428c25b3d50cb057e8e39d6f0ff0b5f4ebf159964e45ff4",
+          "jitterDurationDriftMs": [
+            -5.779016,
+            5.948354
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "f 260 Hz",
+              "fTo 120 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.012,
+                "driftMs": [
+                  -0.341617,
+                  0.351627
+                ]
+              }
+            ],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "thud",
+      "sourceSha256": "b952e63826c8c1ab89bbf21e199105095ac054c2a671f4e1ad4137510aa1728d"
     },
     "lap": {
       "kind": "one-shot",
