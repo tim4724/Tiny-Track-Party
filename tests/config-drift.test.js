@@ -132,6 +132,7 @@ test('TiltInput spends the manifest steering numbers', () => {
   assert.equal(tilt.ROLL_LOCK, S.ROLL_LOCK_DEG, 'TiltInput ROLL_LOCK drifted from protocol.STEER.ROLL_LOCK_DEG');
   assert.equal(tilt.DEADZONE, S.DEADZONE, 'TiltInput DEADZONE drifted from protocol.STEER.DEADZONE');
   assert.equal(tilt.SMOOTH, S.SMOOTH, 'TiltInput SMOOTH drifted from protocol.STEER.SMOOTH');
+  assert.equal(tilt.DRIFT_LEAN, S.DRIFT_LEAN, 'TiltInput DRIFT_LEAN drifted from protocol.STEER.DRIFT_LEAN');
 });
 
 test('InputGate spends the manifest steering numbers', () => {

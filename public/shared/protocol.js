@@ -247,6 +247,11 @@ var STEER = {
   // WIRE. Baseline cadence for sub-strong news: an unconfirmed steering change
   // never waits longer than this to reach the wire.
   SEND_INTERVAL_MS: 100,
+  // DISPLAY + PHONE. The lean a held DRIFT has to reach for a drift to start
+  // (the sim's DRIFT_STEER_MIN). Buttons mode's two-thumb hold sends exactly
+  // this lean toward the first thumb down, so adding the second thumb to a held
+  // steer still starts a drift — and holds the line the car was turning on.
+  DRIFT_LEAN: 0.5,
   // WIRE. Hard floor between ANY two CONTROL sends. Every InputGate tier waits
   // at least this long, so the wire rate is provably bounded at 1000/this
   // msgs/s — sized to the strictest platform message budget in sight

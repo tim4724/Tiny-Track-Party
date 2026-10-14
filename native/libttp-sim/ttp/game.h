@@ -99,6 +99,8 @@ struct Car {
   //   driftK0/driftLean0 — the curvature and lean it started on, which that
   //                 lean keeps (the lean is read relative to it)
   //   driftV0     — the speed it started at, as a share of vmax (the speed it holds)
+  //   turnIn      — the shaped steer the car last turned on, drift included:
+  //                 the curvature a drift starts on
   //   slip        — the body's cosmetic angle off its travel, in heading space
   //   hopT        — seconds since the car last hopped (cosmetic: the drawn hop),
   //                 which a press of the button, a drift's start and a drift
@@ -106,7 +108,7 @@ struct Car {
   bool brakeIsDrift = false;
   bool driftOk = true;
   bool drifting = false;
-  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, driftV0 = 1, slip = 0;
+  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, driftV0 = 1, turnIn = 0, slip = 0;
   double hopT = HOP_TIME;
   // Height above the deck, along its up, and its rate. Non-zero only on a
   // kicker ramp and in the flight off its lip; the pose carries it.

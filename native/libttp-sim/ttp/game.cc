@@ -63,8 +63,13 @@ static const double STEER_SCRUB = 0.35;
 // is a radius, so speed does not move it, and driftK eases toward the lean over
 // DRIFT_SMOOTH, so a held phone's wobble averages out. The drift holds a speed
 // instead of the steer scrub: DRIFT_SPEED_FLOOR of the speed it started at,
-// less DRIFT_SLOW for every unit of speed that start was short of full, so a
-// drift thrown at a crawl costs far more than one carried in at pace.
+// less DRIFT_SLOW for every unit of speed that start was short of full. So a
+// drift pays when it is started before the corner has cost any speed: hold the
+// button ahead of the turn-in and the drift takes the moment the lean passes
+// DRIFT_STEER_MIN. It starts on the curvature the car was ALREADY turning at,
+// whatever the lean that frame: buttons mode adds its second thumb as a
+// DRIFT_STEER_MIN lean (protocol.js STEER.DRIFT_LEAN), and the line must not
+// open up under it.
 //
 // driftMix carries the drift in and out: it rises over DRIFT_ENTER_T (the hop,
 // so locking the side cannot jerk the car) and fades over DRIFT_RELEASE_T after
@@ -75,15 +80,15 @@ static const double STEER_SCRUB = 0.35;
 //
 // The car still travels along its heading — no grip is added; DRIFT_SLIP only
 // turns the drawn body further into the corner.
-static const double DRIFT_STEER_MIN = 0.5;
+static const double DRIFT_STEER_MIN = 0.5;   // == protocol STEER.DRIFT_LEAN (protocol_check)
 static const double DRIFT_SPEED_MIN = 0;     // fraction of vmax to start one
 static const double DRIFT_V_MIN = 1;         // world units/s: below this a line means nothing
-static const double DRIFT_SLOW = 0.5;        // the extra cost of a slow start
+static const double DRIFT_SLOW = 0;          // the extra cost of a slow start
 static const double DRIFT_FLIP = 0.5;        // counter-lean that flips the side
 static const double DRIFT_K_IN = 1.0 / 6;    // 1/world units, at the base turn stat
 static const double DRIFT_K_OUT = 1.0 / 18;
 static const double DRIFT_SMOOTH = 0.2;      // s, the line's ease toward the lean
-static const double DRIFT_SPEED_FLOOR = 0.85;  // fraction of vmax a drift holds
+static const double DRIFT_SPEED_FLOOR = 0.95;  // share of its starting speed a drift holds
 static const double DRIFT_ENTER_T = 0.25;
 static const double DRIFT_RELEASE_T = 0.4;
 static const double DRIFT_SLIP = 0.5;        // rad at DRIFT_K_IN
@@ -1179,8 +1184,8 @@ void Game::update(double dtMs) {
       c.driftDir = js_sign(c.steer);
       c.driftV0 = c.v / c.vmax;
       if (c.hopT >= HOP_TIME) c.hopT = 0;
-      // start on the curvature the car is already turning at, at this lean
-      c.driftK = c.driftK0 = std::fabs(steerShape(c.steer)) * c.turn * steerAuthority(c) / c.v;
+      // start on the curvature the car is already turning at
+      c.driftK = c.driftK0 = std::fabs(c.turnIn) * c.turn * steerAuthority(c) / c.v;
       c.driftLean0 = std::fabs(c.steer);
     } else if (c.drifting && c.steer * c.driftDir < 0 && std::fabs(c.steer) >= g_driftFlip
                && c.v >= DRIFT_V_MIN) {
@@ -1249,6 +1254,7 @@ void Game::update(double dtMs) {
     }
     // after the drift's line, so a drift steers less in the air too
     if (!grounded) authority *= AIR_STEER;
+    c.turnIn = steerIn;
     double steerHeading = c.heading + STEER_SIGN * steerIn * c.turn * authority * dt;
 
     double prevTotal = c.totalS;

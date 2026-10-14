@@ -2,8 +2,9 @@
 //
 // No golden trace drifts, so this is what says the control means what it says:
 // a player's button never brakes and every press hops the car; held with a hard
-// steer it drifts, at any speed, holding a share of the speed it started at
-// that is smaller the slower it started; a hard counter-lean flips its side and
+// steer it drifts, at any speed, on the line the car was already turning,
+// holding a share of the speed it started at (smaller the slower it started,
+// when the slow-start cost is on); a hard counter-lean flips its side and
 // a soft one only eases the line, which never straightens; it rises in and
 // fades out; and a bot's brake is still a brake, drifting only when its
 // controller allows it — which cup bots do on some corners.
@@ -153,6 +154,22 @@ int main() {
     check(ease.car->driftK < k0 && ease.car->driftK > 0, "easing off widens the line, never straight");
   }
 
+  // A drift starts on the line the car is already turning, whatever the lean
+  // on the frame it starts: a held full lock with the second thumb added as a
+  // DRIFT_LEAN lean (buttons mode) keeps full lock's curvature, and holding
+  // that lean holds it.
+  {
+    Rig r(false);
+    r.car->lat = 1.5;
+    r.drive(1, 0, 6);
+    const double full = std::fabs(r.car->turnIn) * r.car->turn / r.car->v;
+    r.drive(debugDriftSteer(-1), 1, 1);
+    check(r.car->drifting, "the second thumb's lean starts a drift");
+    check(std::fabs(r.car->driftK0 - full) < full * 0.05, "…on the full-lock line the car was turning");
+    r.drive(debugDriftSteer(-1), 1, 20);
+    check(std::fabs(r.car->driftK - r.car->driftK0) < r.car->driftK0 * 0.05, "holding that lean holds the line");
+  }
+
   // The line is holdable on tilt: a wobbling lean barely moves it, where an
   // unsmoothed line follows every wobble.
   {
@@ -214,20 +231,28 @@ int main() {
     check(!light.car->drifting && appliedBrake(*light.car) == 0, "the button with a light lean neither drifts nor brakes");
   }
 
-  // A drift starts at any speed, and one started slow holds a smaller share
-  // of its speed than one carried in at pace; a start speed restores the gate.
+  // A drift starts at any speed and holds its floor's share of the speed it
+  // started at, never more; with the slow-start cost on, one started slow
+  // holds a smaller share than one carried in at pace. A start speed restores
+  // the gate.
   {
-    Rig slow(false), fast(false), gated(false);
-    slow.car->v = slow.car->vmax * 0.4;
-    slow.car->lat = fast.car->lat = 1.5;  // room to turn before the curb
-    slow.drive(1, 1, 30);
-    fast.drive(1, 1, 30);
-    check(!slow.car->onWall && !fast.car->onWall, "(the slow-drift test stays off the curb)");
-    check(slow.car->drifting, "a drift starts at a crawl");
-    check(slow.car->v / slow.car->vmax < 0.4 * debugDriftFloor(-1) - 0.02,
-          "a slow drift sheds more than the floor's share of its speed");
-    check(slow.car->v / (0.4 * slow.car->vmax) < fast.car->v / (0.9 * fast.car->vmax),
-          "…a bigger share than a drift carried in at pace");
+    auto drifted = [](double v0, double slowCost) {
+      debugDriftSlow(slowCost);
+      Rig r(false);
+      r.car->v = r.car->vmax * v0;
+      r.car->lat = 1.5;  // room to turn before the curb
+      r.drive(1, 1, 30);
+      check(!r.car->onWall && r.car->drifting, "(the slow-drift test drifts, off the curb)");
+      debugDriftSlow(-1);
+      return r.car->v / (v0 * r.car->vmax);  // the share of its start it holds
+    };
+    const double floor = debugDriftFloor(-1);
+    const double slow = drifted(0.4, -1), fast = drifted(0.9, -1);
+    check(std::fabs(slow - floor) < 0.01 && std::fabs(fast - floor) < 0.01,
+          "a drift holds its floor's share of the speed it started at, slow or fast");
+    check(drifted(0.4, 0.5) < drifted(0.9, 0.5) - 0.1,
+          "with the slow-start cost on, a slow drift holds a smaller share than one at pace");
+    Rig gated(false);
     debugDriftMinSpeed(0.5);
     gated.car->v = gated.car->vmax * 0.3;
     gated.drive(1, 1, 5);

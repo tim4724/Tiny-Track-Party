@@ -93,8 +93,9 @@ export function resetHeldItem() {
 }
 
 // --- the ‹ › steer buttons (buttons mode) ---
-// Held → full lock that side; BOTH held is the drift chord, confirmed by the
-// same continuous rumble the tilt-mode DRIFT runs (one motor, one meaning).
+// Held → full lock that side; BOTH held is the drift chord, which stays held
+// until both are up (TiltInput) and is confirmed by the same continuous rumble
+// the tilt-mode DRIFT runs (one motor, one meaning).
 const _steerHeld = { left: false, right: false };
 
 function pressSteer(side, on) {
@@ -102,9 +103,9 @@ function pressSteer(side, on) {
   _steerHeld[side] = on;
   el(side === 'left' ? 'steer-left' : 'steer-right').classList.toggle('held', on);
   _tilt.pressSteer(side, on);
-  const braking = _steerHeld.left && _steerHeld.right;
-  if (braking) _haptics.startLoop(); else _haptics.stopLoop();
-  if (on && !braking) _buzz(12);             // light tick on a steer press; the chord gets the rumble
+  const drifting = _tilt.btnDriftHeld;
+  if (drifting) _haptics.startLoop(); else _haptics.stopLoop();
+  if (on && !drifting) _buzz(12);            // light tick on a steer press; the chord gets the rumble
 }
 
 function releaseSteerButtons() {

@@ -95,6 +95,19 @@ int main(int argc, char** argv) {
     passed++;
   }
 
+  // ---- …and so is the lean a drift starts at ---------------------------------
+  // debugDriftSteer(-1) restores and answers game.cc's DRIFT_STEER_MIN literal.
+  cases++;
+  const double simDriftLean = debugDriftSteer(-1);
+  if (simDriftLean != protocol::STEER_DRIFT_LEAN) {
+    std::fprintf(stderr,
+                 "FAIL driftLean  libttp-sim game.cc DRIFT_STEER_MIN has drifted from the "
+                 "protocol manifest\n  expected %.17g\n  actual   %.17g\n",
+                 protocol::STEER_DRIFT_LEAN, simDriftLean);
+  } else {
+    passed++;
+  }
+
   std::printf("protocol corpus: %d/%d cases passed\n", passed, cases);
   return passed == cases ? 0 : 1;
 }

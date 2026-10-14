@@ -9,9 +9,9 @@ const assert = require('node:assert/strict');
 
 // TiltInput is a browser ES module but is written to construct headlessly (window/
 // document guards). Load it dynamically like the other suites.
-let TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS;
+let TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS, DRIFT_LEAN;
 test.before(async () => {
-  ({ TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS } = await import('../public/controller/TiltInput.js'));
+  ({ TiltInput, SENSOR_SETTLE_MS, CHORD_SIMUL_MS, DRIFT_LEAN } = await import('../public/controller/TiltInput.js'));
 });
 
 // _screenAngle reads the `screen` global; set/clear it around each case so the
@@ -165,7 +165,7 @@ test('the ACTION use-counter wraps at 256 (matches the display fire-on-change pr
   assert.equal(t._useCount, 0, 'the wrapping counter returns to 0 after 256 presses');
 });
 
-// ---- button steering mode: binary ±1, both-held = brake, sensor ignored ----
+// ---- button steering mode: binary ±1, both-held = DRIFT (latched), sensor ignored ----
 
 test('buttons mode: ‹/› steer binary full lock, release returns to exact 0', () => {
   const out = [];
@@ -179,42 +179,50 @@ test('buttons mode: ‹/› steer binary full lock, release returns to exact 0',
   assert.equal(out.at(-1).s, 0, 'released lands on exactly 0');
 });
 
-test('buttons mode: the ‹+› chord brakes at full level with the steer centred', () => {
+test('buttons mode: the ‹+› chord holds DRIFT with the steer centred, latched until both are up', () => {
   const out = [];
   const t = new TiltInput({ onControl: (c) => out.push(c) });
   t.setMode('buttons');
   t.pressSteer('left', true); t.pressSteer('right', true); t._tick();
-  assert.equal(out.at(-1).b, 1, 'both held = full brake');
-  assert.equal(out.at(-1).s, 0, 'the chord steers nothing (the car slows straight)');
+  assert.equal(out.at(-1).b, 1, 'both held = DRIFT');
+  assert.equal(out.at(-1).s, 0, 'the chord steers nothing (armed, straight on)');
+  assert.equal(t.btnDriftHeld, true, 'the chord latches DRIFT');
   t.pressSteer('left', false); t._tick();
-  assert.equal(out.at(-1).b, 0, 'lifting one thumb releases the brake');
-  assert.equal(out.at(-1).s, 1, '…and the still-held › steers again');
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [1, 1], 'lifting one thumb keeps DRIFT and steers the other side');
+  t.pressSteer('right', false); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [0, 0], 'both up lets DRIFT go');
+  assert.equal(t.btnDriftHeld, false);
+  t.pressSteer('right', true); t._tick();
+  assert.equal(out.at(-1).b, 0, 'one thumb alone is only steering');
 });
 
-test('buttons mode: thumbs landing inside the chord window still brake straight', () => {
+test('buttons mode: thumbs landing inside the chord window arm a drift straight', () => {
   const out = [];
   const t = new TiltInput({ onControl: (c) => out.push(c) });
   t.setMode('buttons');
   t.pressSteer('left', true, 1000);
   t.pressSteer('right', true, 1000 + CHORD_SIMUL_MS - 1);
   t._tick();
-  assert.deepEqual([out.at(-1).s, out.at(-1).b], [0, 1], 'a near-simultaneous chord brakes straight');
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [0, 1], 'a near-simultaneous chord goes straight, DRIFT held');
 });
 
-test('buttons mode: adding the other button to a held steer keeps the first side and brakes', () => {
+test('buttons mode: adding the other button to a held steer drifts on the first side, and the thumbs steer it', () => {
   const out = [];
   const t = new TiltInput({ onControl: (c) => out.push(c) });
   t.setMode('buttons');
   t.pressSteer('left', true, 1000);
   t.pressSteer('right', true, 1000 + CHORD_SIMUL_MS + 50);
   t._tick();
-  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-1, 1], 'held ‹ keeps its lock under the brake');
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-DRIFT_LEAN, 1], 'both: DRIFT_LEAN toward the first thumb, DRIFT held');
   t.pressSteer('right', false, 1400); t._tick();
-  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-1, 0], 'lifting › releases only the brake');
-  t.pressSteer('left', false, 1500);
-  t.pressSteer('right', true, 1600);
-  t.pressSteer('left', true, 1900); t._tick();
-  assert.deepEqual([out.at(-1).s, out.at(-1).b], [1, 1], '…and the mirror image');
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [-1, 1], 'the inside thumb alone: full lock in, still drifting');
+  t.pressSteer('right', true, 1500); t.pressSteer('left', false, 1600); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [1, 1], 'the outside thumb alone: full counter-lock, still drifting (the flip)');
+  t.pressSteer('right', false, 1700); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [0, 0], 'both up ends it');
+  t.pressSteer('right', true, 1800);
+  t.pressSteer('left', true, 2100); t._tick();
+  assert.deepEqual([out.at(-1).s, out.at(-1).b], [DRIFT_LEAN, 1], '…and the mirror image');
 });
 
 test('buttons mode ignores the tilt sensor entirely', () => {

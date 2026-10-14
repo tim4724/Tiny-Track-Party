@@ -28,16 +28,20 @@
 // the page keeps watching for a first real sample and gives up on it in the
 // background (see _watchForSample) rather than holding the join for it.
 //
-// Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
-// as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
-// the car all the way down to a standstill.
+// DRIFT: a held button, sent as the wire's brake field `b` (BRAKE_LEVEL). A
+// player's car never brakes with it: the sim hops the car on every press and,
+// held while steering past DRIFT_LEAN, drifts (ttp/game.cc).
 //
 // BUTTON steering mode (setMode('buttons')): the sensor is ignored and the two
 // on-screen ‹ › buttons steer BINARY — full lock left/right, no ramp (ramps were
-// tried and read as two steps anyway). Holding BOTH is the brake: pressed
-// together it brakes straight, one added to the other keeps steering toward the
-// first (see CHORD_SIMUL_MS). Same {s,b,u} frame either way; the display never
-// knows which mode a phone is in.
+// tried and read as two steps anyway). Holding BOTH is DRIFT, and it LATCHES:
+// it stays held until both thumbs are up, so the buttons can steer the drift
+// the way a lean does. While both are down the steer is DRIFT_LEAN toward the
+// first thumb down — the line the car was on — or centre if they landed
+// together (see CHORD_SIMUL_MS), which arms a drift on a straight. One thumb
+// alone is full lock that side: the inside one tightens the drift, the outside
+// one flips it. Same {s,b,u} frame either way; the display never knows which
+// mode a phone is in.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
 // Space/Down brake. Steer = tip + keys (so the loop is testable headlessly).
@@ -67,14 +71,17 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // dropped outright: raw wobble (1-2° over ROLL_LOCK) clears GATE_THRESHOLD, so
 // an unfiltered stream would chatter packets from a phone lying still.
 export const SMOOTH = 0.5;
+// The lean a drift starts at — the manifest's STEER.DRIFT_LEAN, pinned by
+// config-drift like the three above. Buttons mode's two-thumb hold sends it.
+export const DRIFT_LEAN = 0.5;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
 // Two thumbs aimed at "both at once" land 20-60 ms apart and rarely past 100 ms,
-// while adding the brake to a held steer comes a deliberate beat later. Inside
-// this window the ‹ › chord brakes straight; outside it the first-held side keeps
-// steering, so a corner can be braked into (which the sim reads as a drift).
-// Decided on the second press, so it never delays an input.
+// while adding DRIFT to a held steer comes a deliberate beat later. Inside this
+// window the ‹ › chord arms a drift straight; outside it the first-held side
+// keeps its line at DRIFT_LEAN, so a corner can be drifted into. Decided on the
+// second press, so it never delays an input.
 export const CHORD_SIMUL_MS = 100;
 
 // How long a listening page has to receive its first USABLE sample before the
@@ -133,6 +140,7 @@ export class TiltInput {
     this._keyL = false; this._keyR = false;
     this._btnL = false; this._btnR = false; // on-screen ‹ › steer buttons (buttons mode)
     this._btnLAt = 0; this._btnRAt = 0;     // …and when each went down (the chord rule)
+    this._btnLatch = false;                 // DRIFT held by the chord, until both are up
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
@@ -272,6 +280,7 @@ export class TiltInput {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
     this._btnL = this._btnR = false; // a held ‹/› must not survive into the next race
+    this._btnLatch = false;
     // …and neither must a held key whose keyup the page missed (window blurred
     // over race end): a stale _key/_brakeKey would steer/brake the next race.
     this._keyL = this._keyR = false; this._key = 0;
@@ -330,17 +339,20 @@ export class TiltInput {
   }
 
   // The ‹ › buttons' contribution: ±1 while exactly one is held. Both held is
-  // the BRAKE chord: pressed together (CHORD_SIMUL_MS) steer reads centre so the
-  // car slows straight; one added to the other keeps the first side's lock.
+  // the DRIFT chord: pressed together (CHORD_SIMUL_MS) steer reads centre and
+  // the car goes on straight, armed; one added to the other leans DRIFT_LEAN
+  // toward the first.
   _btnSteer() {
     if (this._btnL && this._btnR) {
       const lead = this._btnRAt - this._btnLAt; // > 0: ‹ went down first
       if (Math.abs(lead) < CHORD_SIMUL_MS) return 0;
-      return lead > 0 ? -1 : 1;
+      return lead > 0 ? -DRIFT_LEAN : DRIFT_LEAN;
     }
     return (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
   }
-  _btnBrake() { return this._btnL && this._btnR ? BRAKE_LEVEL : 0; }
+  _btnBrake() { return this._btnLatch ? BRAKE_LEVEL : 0; }
+  // Is the chord holding DRIFT? (driveSurface runs the hold rumble off it.)
+  get btnDriftHeld() { return this._btnLatch; }
 
   // current steer (for the on-screen steer indicator)
   get state() {
@@ -352,12 +364,14 @@ export class TiltInput {
   setMode(mode) {
     this.mode = mode === 'buttons' ? 'buttons' : 'tilt';
     this._btnL = this._btnR = false;
+    this._btnLatch = false;
     this._steer = 0;
     if (this._timer) this._tick();
   }
 
   // On-screen ‹ › steer buttons (buttons mode): held → full lock that side,
-  // both → brake (see _btnSteer). Emits on the edge, same as every other button.
+  // both → DRIFT, latched until both are up (see _btnSteer). Emits on the edge,
+  // same as every other button.
   // `now` is injectable so the chord window is testable without a clock.
   pressSteer(side, on, now = performance.now()) {
     if (side === 'left') {
@@ -367,6 +381,8 @@ export class TiltInput {
       if (on && !this._btnR) this._btnRAt = now;
       this._btnR = !!on;
     }
+    if (this._btnL && this._btnR) this._btnLatch = true;
+    else if (!this._btnL && !this._btnR) this._btnLatch = false;
     if (this._timer) this._tick();
   }
 
