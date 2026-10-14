@@ -35,10 +35,10 @@ const NULL_PARTY = {
 // Keys we own — preventDefault stops arrows/Space from scrolling the page.
 const STEER_L = new Set(['ArrowLeft', 'KeyA']);
 const STEER_R = new Set(['ArrowRight', 'KeyD']);
-const BRAKE = new Set(['ArrowDown', 'KeyS']);
+const DRIFT = new Set(['ArrowDown', 'KeyS']);   // the wire's b: a player's car drifts with it
 const ITEM = new Set(['KeyQ', 'Space']);
 const SWALLOW = new Set([
-  ...STEER_L, ...STEER_R, ...BRAKE, ...ITEM,
+  ...STEER_L, ...STEER_R, ...DRIFT, ...ITEM,
   'ArrowUp', 'KeyW', 'Enter',
 ]);
 
@@ -92,7 +92,7 @@ export class DebugSolo {
     let s = 0;
     if (down(STEER_L)) s -= 1;
     if (down(STEER_R)) s += 1;
-    return { s, b: down(BRAKE) ? 1 : 0, u: this.useSeq };
+    return { s, b: down(DRIFT) ? 1 : 0, u: this.useSeq };
   }
 
   _bindKeys() {
@@ -146,7 +146,7 @@ export class DebugSolo {
       'pointer-events:none;font:600 12px/1.4 Nunito,system-ui,sans-serif;color:#fff;' +
       'background:rgba(11,15,23,.55);padding:6px 12px;border-radius:999px;' +
       'letter-spacing:.02em;white-space:nowrap;backdrop-filter:blur(2px)';
-    hint.textContent = 'SOLO DEBUG — WASD / arrows drive · S brake · Q / Space item · Enter race · R reset';
+    hint.textContent = 'SOLO DEBUG — WASD / arrows drive · S drift · Q / Space item · Enter race · R reset';
     document.body.appendChild(hint);
   }
 }

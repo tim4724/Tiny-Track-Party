@@ -28,6 +28,11 @@ namespace ttp {
 // A car id. NONE = null/absent (an ownerless banana, a target-less rocket).
 using Id = ScalarId;
 
+// How long a car's drawn hop lasts (s): the sim only starts one (Car::hopT),
+// the frame builder draws it (rt::driftHop), and a hop still in the air is
+// not started again.
+constexpr double HOP_TIME = 0.18;
+
 struct Stats { double accel = 1, vmax = 1, turn = 1, mass = 1, halfLen = 0.44, halfWid = 0.26; };
 
 // A processInput / AI-drive message. Fields are applied only when present with
@@ -82,20 +87,27 @@ struct Car {
   double curbLim = 0;
   bool onWall = false;
   // Drift (Game::update).
+  //   brakeIsDrift — a human's: its brake input (Car::brake, as the wire sent
+  //                 it) is the DRIFT button and never brakes while it races
+  //                 (appliedBrake); a bot brakes with it (PlayerDesc::bot)
   //   driftOk     — may drift: a human always, a bot only while its controller
   //                 says so (Input::d), which is what PlayerDesc::bot defaults
-  //   drifting    — the drift is held (brake down)
+  //   drifting    — the drift is held (button or brake down)
   //   driftDir    — its locked side in INPUT space (sign of steer)
   //   driftMix    — how much of the drift is in force: rises in, fades out
   //   driftK      — the line it drives: curvature (1/world units), eased
   //   driftK0/driftLean0 — the curvature and lean it started on, which that
   //                 lean keeps (the lean is read relative to it)
+  //   driftV0     — the speed it started at, as a share of vmax (the speed it holds)
   //   slip        — the body's cosmetic angle off its travel, in heading space
-  //   driftT      — seconds since this drift started (cosmetic: the drawn hop)
+  //   hopT        — seconds since the car last hopped (cosmetic: the drawn hop),
+  //                 which a press of the button, a drift's start and a drift
+  //                 changing side each do
+  bool brakeIsDrift = false;
   bool driftOk = true;
   bool drifting = false;
-  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
-  double driftT = 0;
+  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, driftV0 = 1, slip = 0;
+  double hopT = HOP_TIME;
   // Height above the deck, along its up, and its rate. Non-zero only on a
   // kicker ramp and in the flight off its lip; the pose carries it.
   double h = 0, vh = 0;
@@ -194,11 +206,18 @@ double debugCurbImpact(double k);
 // DEBUG, likewise: the drift's line tightness (a scale on its curvatures), how
 // fast the line follows the lean (s), the speed floor it holds (fraction of
 // vmax), and how long letting go takes to blend it back into plain steering
-// (s); see the DRIFT_* constants in game.cc.
+// (s); the lean and the speed (fraction of vmax) it starts at, how much more a
+// drift started slow costs (fraction of vmax per unit of speed short of full),
+// and the counter-lean that flips its side (above 1 = locked); see the DRIFT_*
+// constants in game.cc.
 double debugDriftTight(double scale);
 double debugDriftSmooth(double sec);
 double debugDriftFloor(double floor);
 double debugDriftRelease(double sec);
+double debugDriftSteer(double lean);
+double debugDriftMinSpeed(double frac);
+double debugDriftSlow(double k);
+double debugDriftFlip(double lean);
 
 // That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies
 // its turn rate by. Sim-side this is one line of one function, so it lived
@@ -209,6 +228,12 @@ double debugDriftRelease(double sec);
 // car, so it is a function instead. Not inline: the shape must not depend on
 // which translation unit asks.
 double steerShape(double s);
+
+// How much of a car's brake input actually brakes: a bot's all of it, a
+// player's none while it races (that input is its DRIFT button, game.cc) and
+// all of it once finished, when the victory-lap autopilot drives it. The sim's
+// speed and everything drawn or heard as braking read this, never Car::brake.
+inline double appliedBrake(const Car& c) { return c.brakeIsDrift && !c.finished ? 0 : c.brake; }
 
 // The item vocabulary a box can yield, in ROLL-TABLE order: index i is the item
 // ITEM_PLACE_TABLE's column i weights, and `roll` walks the two together.

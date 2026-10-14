@@ -1,10 +1,12 @@
 // Drift check — the Mario Kart drift behind Game::update's DRIFT_* block.
 //
 // No golden trace drifts, so this is what says the control means what it says:
-// a held brake with a hard steer at speed drifts on a LOCKED side, the lean only
-// picks the line inside a band that never straightens, it rises in and fades
-// out, a straight, slow or light-lean brake is still a brake, and a bot drifts
-// only when its controller allows it — which cup bots do on some corners.
+// a player's button never brakes and every press hops the car; held with a hard
+// steer it drifts, at any speed, holding a share of the speed it started at
+// that is smaller the slower it started; a hard counter-lean flips its side and
+// a soft one only eases the line, which never straightens; it rises in and
+// fades out; and a bot's brake is still a brake, drifting only when its
+// controller allows it — which cup bots do on some corners.
 // Assertions rather than a corpus, like hazard_check.
 
 #include <cmath>
@@ -66,6 +68,12 @@ struct Rig {
   }
 };
 
+// The share of vmax a drift started at `v0` (a share of vmax) holds, at the
+// authored knobs.
+double driftHold(double v0) {
+  return std::fmax(0.0, debugDriftFloor(-1) - debugDriftSlow(-1) * (1 - v0)) * v0;
+}
+
 // How far the car has turned toward a positive-steer corner since `h0`.
 double turned(const Car& c, double h0) { return STEER_SIGN * (c.heading - h0); }
 
@@ -79,36 +87,55 @@ double yawed(const Car& c, const Vec3& f0) {
 }  // namespace
 
 int main() {
-  // A held brake with a hard steer at speed drifts toward the steer, holds its
-  // speed floor instead of braking, and turns further than full lock alone.
+  // The button held with a hard steer drifts toward the steer, holds a share of
+  // its starting speed instead of braking, and turns further than full lock.
   {
     Rig drift(false), lock(false);
     const double h0 = drift.car->heading;
     drift.drive(1, 0, 4);
     drift.drive(1, 1, 20);
-    check(drift.car->drifting && drift.car->driftDir == 1, "a held brake while steering hard drifts toward the steer");
+    check(drift.car->drifting && drift.car->driftDir == 1, "the button held while steering hard drifts toward the steer");
     check(drift.car->driftMix == 1, "the drift is fully in after its rise");
-    check(drift.car->v > drift.car->vmax * (debugDriftFloor(-1) - 0.02),
-          "a drift holds its speed floor instead of braking toward a stop");
+    check(drift.car->v > drift.car->vmax * (driftHold(drift.car->driftV0) - 0.02),
+          "a drift holds a share of its starting speed instead of braking toward a stop");
     check(STEER_SIGN * drift.car->slip > 0, "the drawn body slips into the corner");
     lock.drive(1, 0, 24);
     check(turned(*drift.car, h0) > turned(*lock.car, h0),
           "a drift turns the car further than full lock in the same time");
   }
 
-  // The side is locked: no lean straightens it, and leaning out only widens it.
+  // A soft counter-lean only eases the line: no lean short of the flip
+  // straightens it, and leaning out only widens it.
   {
+    const double soft = -0.6 * debugDriftFlip(-1);
     Rig in(false), out(false);
     in.car->lat = out.car->lat = 1.5;  // room to turn before the curb
     in.drive(1, 1, 16);
     out.drive(1, 1, 16);
     const Vec3 fIn = in.car->pose.forward, fOut = out.car->pose.forward;
     in.drive(1, 1, 6);
-    out.drive(-1, 1, 6);
-    check(!in.car->onWall && !out.car->onWall, "(the lock test stays off the curb)");
-    check(out.car->drifting && out.car->driftDir == 1, "leaning out does not flip or end the drift");
+    out.drive(soft, 1, 6);
+    check(!in.car->onWall && !out.car->onWall, "(the lean-out test stays off the curb)");
+    check(out.car->drifting && out.car->driftDir == 1, "a soft counter-lean does not flip or end the drift");
     check(yawed(*out.car, fOut) > 0, "leaning out still turns into the drift's side");
     check(yawed(*in.car, fIn) > yawed(*out.car, fOut), "leaning in turns tighter than leaning out");
+  }
+
+  // A hard counter-lean flips the drift to that side, with a hop, swinging
+  // through straight rather than snapping across; locked, it does not.
+  {
+    Rig flip(false), locked(false);
+    flip.car->lat = locked.car->lat = 0;
+    flip.drive(1, 1, 16);
+    flip.drive(-1, 1, 1);
+    check(flip.car->drifting && flip.car->driftDir == -1, "a hard counter-lean flips the drift's side");
+    check(flip.car->hopT < HOP_TIME, "…and the car hops as it flips");
+    check(flip.car->driftK < flip.car->driftK0, "…easing into the new line rather than snapping onto it");
+    debugDriftFlip(2);
+    locked.drive(1, 1, 16);
+    locked.drive(-1, 1, 6);
+    check(locked.car->drifting && locked.car->driftDir == 1, "with the flip past full lean, the side stays locked");
+    debugDriftFlip(-1);
   }
 
   // The lean is read relative to the one the drift started on: holding it keeps
@@ -170,25 +197,53 @@ int main() {
     check(r.car->driftMix == 0, "the release blend ends in plain steering");
   }
 
-  // A brake held straight, or too slow, or with a light lean, is a brake.
+  // A player's button never brakes. Every press hops the car, held straight or
+  // with a light lean it does nothing more, and it hops once per press.
   {
-    Rig straight(false), slow(false), light(false);
+    Rig straight(false), light(false);
+    const double v0 = straight.car->v;
+    straight.drive(0, 1, 1);
+    check(straight.car->hopT < HOP_TIME, "pressing the button hops the car");
     straight.drive(0, 1, 30);
-    check(!straight.car->drifting && straight.car->v < straight.car->vmax * 0.7,
-          "a brake held straight brakes");
-    slow.car->v = slow.car->vmax * 0.3;
-    slow.drive(1, 1, 5);
-    check(!slow.car->drifting, "a brake below the drift speed is a brake");
+    check(!straight.car->drifting && straight.car->v >= v0, "the button held straight does not brake");
+    check(straight.car->hopT > HOP_TIME, "a held button hops once, not again and again");
+    straight.drive(0, 0, 1);
+    straight.drive(0, 1, 1);
+    check(straight.car->hopT < HOP_TIME, "each new press hops again");
     light.drive(0.3, 1, 5);
-    check(!light.car->drifting, "a brake with a light lean is a brake");
+    check(!light.car->drifting && appliedBrake(*light.car) == 0, "the button with a light lean neither drifts nor brakes");
+  }
+
+  // A drift starts at any speed, and one started slow holds a smaller share
+  // of its speed than one carried in at pace; a start speed restores the gate.
+  {
+    Rig slow(false), fast(false), gated(false);
+    slow.car->v = slow.car->vmax * 0.4;
+    slow.car->lat = fast.car->lat = 1.5;  // room to turn before the curb
+    slow.drive(1, 1, 30);
+    fast.drive(1, 1, 30);
+    check(!slow.car->onWall && !fast.car->onWall, "(the slow-drift test stays off the curb)");
+    check(slow.car->drifting, "a drift starts at a crawl");
+    check(slow.car->v / slow.car->vmax < 0.4 * debugDriftFloor(-1) - 0.02,
+          "a slow drift sheds more than the floor's share of its speed");
+    check(slow.car->v / (0.4 * slow.car->vmax) < fast.car->v / (0.9 * fast.car->vmax),
+          "…a bigger share than a drift carried in at pace");
+    debugDriftMinSpeed(0.5);
+    gated.car->v = gated.car->vmax * 0.3;
+    gated.drive(1, 1, 5);
+    check(!gated.car->drifting, "under a start speed, a slow hold does not drift");
+    debugDriftMinSpeed(-1);
   }
 
   // A bot drifts only while its controller allows it (Input::d): by default its
   // brake is a brake, which is what keeps every recorded bot replaying exactly.
   {
-    Rig bot(true), allowed(true);
+    Rig bot(true), allowed(true), straight(true);
     bot.drive(1, 1, 10);
     check(!bot.car->drifting, "a bot's brake is only a brake by default");
+    straight.drive(0, 1, 30);
+    check(straight.car->v < straight.car->vmax * 0.7 && straight.car->hopT >= HOP_TIME,
+          "a bot's brake brakes, and does not hop");
     Input in;
     in.hasS = true; in.s = 1; in.hasB = true; in.b = 1; in.hasD = true; in.d = 1;
     for (int i = 0; i < 10; i++) { allowed.game->processInput(Id::Num(0), in); allowed.game->update(DT); }

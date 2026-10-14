@@ -87,20 +87,33 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
       ...knob((n) => sim.debugCurbImpact(n), 0.1,
         { min: 0, max: 4, format: (n) => n.toFixed(1) }) },
     // Live: the drift's feel (the DRIFT_* constants in ttp/game.cc) — how tight
-    // its line is, how fast the line follows the lean, the speed it holds, and
-    // how long letting go takes to blend back into plain steering.
+    // its line is, how fast the line follows the lean, the speed it holds, how
+    // long letting go takes to blend back into plain steering, and what starts
+    // one, what a slow one costs and what flips its side.
     { key: 'drifttight', label: 'Drift tightness', hint: 'scales the drift line ends (1 = radius 6 leaning in, 18 easing off) · live',
       ...knob((n) => sim.debugDriftTight(n), 0.05,
         { min: 0.5, max: 2, format: (n) => n.toFixed(2) + '×' }) },
     { key: 'driftsmooth', label: 'Drift smoothing', hint: 'how slowly the line follows the lean · live',
       ...knob((n) => sim.debugDriftSmooth(n), 0.05,
         { min: 0, max: 1, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
-    { key: 'driftspeed', label: 'Drift speed', hint: 'speed a drift holds, share of top speed · live',
+    { key: 'driftspeed', label: 'Drift speed', hint: 'speed a drift holds, share of the speed it started at · live',
       ...knob((n) => sim.debugDriftFloor(n), 0.01,
         { min: 0.4, max: 1, format: (n) => Math.round(n * 100) + '%' }) },
-    { key: 'driftrelease', label: 'Drift release', hint: 'blend back to steering after the brake · live',
+    { key: 'driftrelease', label: 'Drift release', hint: 'blend back to steering after letting go · live',
       ...knob((n) => sim.debugDriftRelease(n), 0.05,
         { min: 0, max: 1.5, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
+    { key: 'driftsteer', label: 'Drift start lean', hint: 'how hard you must steer for the held button to drift · live',
+      ...knob((n) => sim.debugDriftSteer(n), 0.05,
+        { min: 0.05, max: 1, format: (n) => Math.round(n * 100) + '%' }) },
+    { key: 'driftminv', label: 'Drift start speed', hint: 'slowest a drift starts, share of top speed (0 = always) · live',
+      ...knob((n) => sim.debugDriftMinSpeed(n), 0.05,
+        { min: 0, max: 0.9, format: (n) => (n === 0 ? 'always' : Math.round(n * 100) + '%') }) },
+    { key: 'driftslow', label: 'Slow drift cost', hint: 'extra speed a drift started slow sheds (0 = same share as fast) · live',
+      ...knob((n) => sim.debugDriftSlow(n), 0.05,
+        { min: 0, max: 1.5, format: (n) => n.toFixed(2) }) },
+    { key: 'driftflip', label: 'Drift side flip', hint: 'counter-lean that switches the drift side (over 100% = locked) · live',
+      ...knob((n) => sim.debugDriftFlip(n), 0.05,
+        { min: 0, max: 1.05, format: (n) => (n > 1 ? 'locked' : Math.round(n * 100) + '%') }) },
     { section: 'Track' },
     { key: 'track', label: 'Preselect', type: 'select',
       options: trackList.map((t) => ({ value: t.id, label: t.name })) },

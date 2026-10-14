@@ -123,8 +123,8 @@
        270:34 shape), with pause + settings in a row beside it — there is no
        height for a fixed top-corner button column. The mode class (mode-tilt /
        mode-buttons, set by setInputMode in driveSurface.js) decides which of
-       the controls below show: tilt = ITEM left, BRAKE right (thumb columns);
-       buttons = three equal ‹ / ITEM / › in a row, hold both ‹ › to brake. -->
+       the controls below show: tilt = ITEM left, DRIFT right (thumb columns);
+       buttons = three equal ‹ / ITEM / › in a row, hold both ‹ › to drift. -->
   <section id="game" class="hidden mode-tilt">
     <div id="drive-hud" class="hidden">
       <!-- Top row: player name left, settings + pause FAR RIGHT. No place/lap on
@@ -148,7 +148,7 @@
         <div class="hud-under">
           <div class="hud-hint">
             <span class="hud-hint__tilt">Tilt your phone to steer</span>
-            <span class="hud-hint__buttons">Hold left + right to brake</span>
+            <span class="hud-hint__buttons">Hold left + right to drift</span>
           </div>
           <button id="motion-tip" class="motion-tip hidden" type="button">Tilt steering is off. Tap to fix.</button>
         </div>
@@ -157,7 +157,7 @@
         <button id="steer-left" class="steerbtn" aria-label="Steer left"><span class="steer-glyph steer-glyph--l"></span></button>
         <button id="action-btn" class="action" disabled aria-label="Use item">ITEM</button>
         <button id="steer-right" class="steerbtn" aria-label="Steer right"><span class="steer-glyph steer-glyph--r"></span></button>
-        <button id="brake-btn" class="brake">BRAKE</button>
+        <button id="brake-btn" class="brake">DRIFT</button>
       </div>
     </div>
     <!-- Pause overlay — frosted glass with the same choices as the big screen -->
@@ -291,9 +291,9 @@
 
       <!-- The stage — the picked mode's animated demo phone under a headline
            naming the mode, with the legend attached beneath: everything here is
-           information, everything in the column is a choice. Legend rows swap
-           with the mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM,
-           and both end on DRIFT, whose chip is the sticker the demo pops when its
+           information, everything in the column is a choice. The legend is ITEM
+           + DRIFT in both modes, and only DRIFT's caption swaps (tilt: the button,
+           buttons: the ‹ › chord); its chip is the sticker the demo pops when its
            loop ends on a drift. -->
       <div class="demo-stage">
         <h3 class="demo-title"><span class="demo-title--tilt">Tilt steering</span><span class="demo-title--buttons">Button steering</span></h3>
@@ -306,7 +306,7 @@
                 <div class="mini-steer"><div class="mini-steer__fill"></div></div>
                 <div class="mini-controls">
                   <span class="mini-btn mini-btn--item">ITEM</span>
-                  <span class="mini-btn mini-btn--brake">BRAKE</span>
+                  <span class="mini-btn mini-btn--brake">DRIFT</span>
                 </div>
               </div>
             </div>
@@ -331,21 +331,13 @@
           <span class="demo-drift">DRIFT</span>
         </div>
         <div class="settings-legend">
-          <div class="help-ctrl help-ctrl--chord">
-            <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
-            <span class="help-ctrl__cap">Hold both to brake</span>
-          </div>
           <div class="help-ctrl">
             <span class="help-chip help-chip--item">ITEM</span>
             <span class="help-ctrl__cap">Tap to use a pickup</span>
           </div>
-          <div class="help-ctrl help-ctrl--brake">
-            <span class="help-chip help-chip--brake">BRAKE</span>
-            <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
-          </div>
           <div class="help-ctrl">
             <span class="help-chip help-chip--drift">DRIFT</span>
-            <span class="help-ctrl__cap"><span class="drift-cap--tilt">Brake while steering</span><span class="drift-cap--buttons">Hold one, add the other</span></span>
+            <span class="help-ctrl__cap"><span class="drift-cap--tilt">Hold while steering</span><span class="drift-cap--buttons">Hold one, add the other</span></span>
           </div>
         </div>
       </div>

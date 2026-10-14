@@ -162,13 +162,12 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
     check(std::fabs(o.steerYaw) < std::fabs(o.steer),
           what + ".steerYaw is SHAPED — the wheels must not lead the car mid-range");
   }
-  checkF(o.brake, (float)c.brake, what + ".brake");
+  checkF(o.brake, (float)appliedBrake(c), what + ".brake");
   checkF(o.boostMul, (float)c.boostMul, what + ".boostMul");
   checkF(o.monster, c.monsterT > 0 ? 1.0f : 0.0f, what + ".monster");
   checkF(o.spin, (float)c.spin, what + ".spin");
   checkF(o.scrub, c.onWall ? 1.0f : 0.0f, what + ".scrub");
-  if (c.drifting) checkF(o.hop, rt::driftHop((float) c.driftT), what + ".hop");
-  else check(o.hop == 0, what + " hops only in a drift");
+  checkF(o.hop, rt::driftHop((float) c.hopT), what + ".hop");
   checkF(o.airborne, c.h >= AIR_MIN ? 1.0f : 0.0f, what + ".airborne");
   // The kick rectangle is the sim's CURRENT footprint: the truck's while it
   // is a monster, the car's rest stats otherwise.

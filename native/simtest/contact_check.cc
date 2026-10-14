@@ -329,15 +329,18 @@ int main() {
   //
   // SHOVE_DECEL applies only off the brake. A driver who brakes the instant a
   // shove lands must still get the full BRAKE_DECEL, or contact would read as
-  // a stuck throttle.
+  // a stuck throttle. Bots, because only a bot has a brake (a player's button
+  // drifts).
   {
     BuiltRaceTrack bt = track("tidepool");
-    Game game(field(2), bt.game, [](const Event&) {});
+    std::vector<PlayerDesc> bots = field(2);
+    for (PlayerDesc& d : bots) d.bot = true;
+    Game game(bots, bt.game, [](const Event&) {});
     Car& a = *game.cars()[0];
     Car& b = *game.cars()[1];
     a.totalS = 30.0; a.lat = 0; a.v = 12.0; a.vlat = 0; a.heading = 0;
     b.totalS = -80.0;                       // far away: this is about one car
-    a.shoveT = 1.0;                         // longer than any shove the sim grants
+    a.shoveT = 1.0;                       // longer than any shove the sim grants
     Input brake;
     brake.hasB = true;
     brake.b = 1.0;

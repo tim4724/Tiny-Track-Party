@@ -1,5 +1,5 @@
 // The drive surface: everything that turns the phone into a controller once a
-// race is live — the steer bar, the mode's controls (tilt: BRAKE + ACTION;
+// race is live — the steer bar, the mode's controls (tilt: DRIFT + ACTION;
 // buttons: ‹ / ACTION / ›), and the held-item badge that gates ACTION. Grouped
 // because they share one idea: the player's eyes are on the big screen, not
 // here, so every control confirms itself by FEEL (a buzz, a rumble) rather than
@@ -50,7 +50,7 @@ export function startDriving(playerName) {
 
 export function stopDriving() {
   _tilt.stop();
-  _haptics.stopLoop(); // never leave the motor humming if BRAKE was held at race end
+  _haptics.stopLoop(); // never leave the motor humming if DRIFT was held at race end
   if (steerRaf) cancelAnimationFrame(steerRaf);
   steerRaf = null;
   releaseSteerButtons();
@@ -93,8 +93,8 @@ export function resetHeldItem() {
 }
 
 // --- the ‹ › steer buttons (buttons mode) ---
-// Held → full lock that side; BOTH held is the brake chord, confirmed by the
-// same continuous rumble the tilt-mode BRAKE runs (one motor, one meaning).
+// Held → full lock that side; BOTH held is the drift chord, confirmed by the
+// same continuous rumble the tilt-mode DRIFT runs (one motor, one meaning).
 const _steerHeld = { left: false, right: false };
 
 function pressSteer(side, on) {
@@ -129,9 +129,11 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
     el(id).addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
   }
 
-  // BRAKE — held = brake at the fixed rate, released = release. A continuous
-  // rumble runs while it's held: the player's eyes-free confirmation they're
-  // braking (they're watching the car on the main display, not the phone).
+  // DRIFT — the wire's brake field, which a player's car reads as the drift
+  // button (ttp/game.cc): every press hops the car, and held while steering it
+  // drifts. A continuous rumble runs while it's held: the player's eyes-free
+  // confirmation the button is down (they're watching the car on the main
+  // display, not the phone).
   const brakeBtn = el('brake-btn');
   const pressBrake = (on) => {
     on ? _haptics.startLoop() : _haptics.stopLoop();

@@ -22,6 +22,7 @@
 
 #include "ttp/camera.h"
 #include "ttp/framing.h"
+#include "ttp/game.h"  // HOP_TIME
 #include "ttp/ground_grid.h"
 #include "ttp/name_tags.h"
 #include "ttp/scalar_id.h"
@@ -61,13 +62,15 @@ static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3
 // (controller.css), so the two ends of the same reading lag alike.
 constexpr float STEER_BAR_TAU = 0.05f;
 
-// The drawn HOP a drift starts with, so the moment it takes reads on screen:
-// the whole car lifts DRIFT_HOP_HEIGHT world units and lands DRIFT_HOP_TIME
-// seconds later, on a parabola. Kept small (Mario Kart's is a few percent of
-// the kart): our chase camera sits close and low, so a bigger one reads as a
-// jump. driftHop answers the lift `t` seconds into a drift.
+// The drawn HOP a press of the drift button, a drift's start and a drift
+// changing side each make (Car::hopT), so every one reads on screen: the whole
+// car lifts DRIFT_HOP_HEIGHT world units and lands DRIFT_HOP_TIME seconds
+// later, on a parabola. Kept small (Mario Kart's is a few percent of the
+// kart): our chase camera sits close and low, so a bigger one reads as a jump.
+// The time is the sim's, which will not start a hop still in the air.
+// driftHop answers the lift `t` seconds into a hop.
 constexpr float DRIFT_HOP_HEIGHT = 0.02f;
-constexpr float DRIFT_HOP_TIME = 0.18f;
+constexpr float DRIFT_HOP_TIME = (float) ttp::HOP_TIME;
 float driftHop(float t);
 
 // Everything the display owns that is not the renderer or the platform surface.

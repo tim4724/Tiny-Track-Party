@@ -60,6 +60,10 @@ export async function init() {
     debugDriftSmooth: c('ttp_debug_drift_smooth', 'number', ['number']),
     debugDriftFloor: c('ttp_debug_drift_floor', 'number', ['number']),
     debugDriftRelease: c('ttp_debug_drift_release', 'number', ['number']),
+    debugDriftSteer: c('ttp_debug_drift_steer', 'number', ['number']),
+    debugDriftMinSpeed: c('ttp_debug_drift_min_speed', 'number', ['number']),
+    debugDriftSlow: c('ttp_debug_drift_slow', 'number', ['number']),
+    debugDriftFlip: c('ttp_debug_drift_flip', 'number', ['number']),
     debugBotSkill: c('ttp_debug_bot_skill', 'number', ['number'])
   };
   const v = JSON.parse(fn.version());
@@ -77,11 +81,16 @@ export function debugCurbTurn(n) { return fn ? fn.debugCurbTurn(n) : 0; }
 export function debugCurbTurnMax(n) { return fn ? fn.debugCurbTurnMax(n) : 0; }
 export function debugCurbImpact(n) { return fn ? fn.debugCurbImpact(n) : 0; }
 // The drift's feel, the same way: line tightness, how fast the line follows the
-// lean, speed floor, and the blend back into plain steering after the brake.
+// lean, speed floor, the blend back into plain steering after letting go, and
+// the start lean, start speed, slow-start cost and side-flip lean.
 export function debugDriftTight(n) { return fn ? fn.debugDriftTight(n) : 0; }
 export function debugDriftSmooth(n) { return fn ? fn.debugDriftSmooth(n) : 0; }
 export function debugDriftFloor(n) { return fn ? fn.debugDriftFloor(n) : 0; }
 export function debugDriftRelease(n) { return fn ? fn.debugDriftRelease(n) : 0; }
+export function debugDriftSteer(n) { return fn ? fn.debugDriftSteer(n) : 0; }
+export function debugDriftMinSpeed(n) { return fn ? fn.debugDriftMinSpeed(n) : 0; }
+export function debugDriftSlow(n) { return fn ? fn.debugDriftSlow(n) : 0; }
+export function debugDriftFlip(n) { return fn ? fn.debugDriftFlip(n) : 0; }
 // The CPU fill's skill for the next launches (-1 = the track's cup decides).
 export function debugBotSkill(n) { return fn ? fn.debugBotSkill(n) : -1; }
 

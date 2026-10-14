@@ -160,13 +160,13 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // the wheels cannot drift from the car by a retyped exponent or by a
             // ulp of some other leg's pow.
             o.steerYaw = (float) (ttp::STEER_SIGN * ttp::steerShape(c->steer));
-            o.brake = (float) c->brake;
+            o.brake = (float) ttp::appliedBrake(*c);
             o.boostMul = (float) c->boostMul;
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;
             // A drift's slip is the same cosmetic body yaw as the whirl: the
             // car travels along its heading, the body is drawn turned in.
             o.spin = (float) (c->spin + c->slip);
-            if (c->drifting) o.hop = driftHop((float) c->driftT);
+            o.hop = driftHop((float) c->hopT);
             o.scrub = c->onWall ? 1.0f : 0.0f;
             // The sim's own body, so the kick rectangle grows with the monster
             // transform exactly as the collision footprint does.

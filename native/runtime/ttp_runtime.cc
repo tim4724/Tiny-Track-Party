@@ -766,7 +766,7 @@ void ttp_audio_frame(double nowMs) {
     a.pos = audioPoint(c.pose.pos);
     a.spd = c.v / c.vmax;
     a.steer = STEER_SIGN * c.steer;
-    a.brake = c.brake;
+    a.brake = appliedBrake(c);
     a.boostMul = c.boostMul;
     a.spin = c.spin;
     a.monster = c.monsterT > 0;
@@ -1347,6 +1347,10 @@ double ttp_debug_drift_tight(double scale) { return debugDriftTight(scale); }
 double ttp_debug_drift_smooth(double sec) { return debugDriftSmooth(sec); }
 double ttp_debug_drift_floor(double floor) { return debugDriftFloor(floor); }
 double ttp_debug_drift_release(double sec) { return debugDriftRelease(sec); }
+double ttp_debug_drift_steer(double lean) { return debugDriftSteer(lean); }
+double ttp_debug_drift_min_speed(double frac) { return debugDriftMinSpeed(frac); }
+double ttp_debug_drift_slow(double k) { return debugDriftSlow(k); }
+double ttp_debug_drift_flip(double lean) { return debugDriftFlip(lean); }
 
 
 // =============================================================================

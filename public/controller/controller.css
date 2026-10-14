@@ -746,7 +746,7 @@ input[type=text]:disabled { opacity: 0.6; }
 #game { align-items: stretch; justify-content: flex-start; }
 /* Both modes share one vertical rhythm: the stretchy MID row (the steer bar
    floats with its space around it vertically), then the controls row at a fixed
-   share of the height. Only the columns differ: tilt = ITEM | BRAKE sharing the
+   share of the height. Only the columns differ: tilt = ITEM | DRIFT sharing the
    width, buttons = ‹ | ITEM | ›. */
 #drive-hud {
   flex: 1; min-height: 0;
@@ -866,12 +866,12 @@ input[type=text]:disabled { opacity: 0.6; }
      (driveSurface.js), so the paint must not trail the steering it reports. */
   transition: transform 0s, box-shadow 0s, filter 0s, opacity 0.15s;
 }
-/* tilt mode: ITEM is the left thumb column, BRAKE the right (PURPLE = items,
-   RED = brake, everywhere in the chrome) */
+/* tilt mode: ITEM is the left thumb column, DRIFT the right (PURPLE = items,
+   BLUE = drift, everywhere in the chrome) */
 #action-btn.action { grid-area: item; background: var(--item); font-size: 1.4rem; letter-spacing: 0.06em; }
 #action-btn.action:disabled { opacity: 0.4; filter: grayscale(0.4); }
-#brake-btn.brake { grid-area: brake; background: var(--danger); font-size: 1.5rem; letter-spacing: 0.08em; }
-/* buttons mode: ‹ / ITEM / › in three EQUAL columns; BRAKE is the ‹ › chord */
+#brake-btn.brake { grid-area: brake; background: var(--blue); font-size: 1.5rem; letter-spacing: 0.08em; }
+/* buttons mode: ‹ / ITEM / › in three EQUAL columns; DRIFT is the ‹ › chord */
 .steerbtn { background: var(--blue); }
 #steer-left { grid-area: left; }
 #steer-right { grid-area: right; }
@@ -1252,18 +1252,14 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* Legend — shadowless caption rows on the stage, so the chips read as a legend
-   for the demo, never as another row of buttons. Rows swap with the picked
-   mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM, and both
-   DRIFT with the mode's own caption. The rows stack as one block, centred
+   for the demo, never as another row of buttons. Both modes teach ITEM +
+   DRIFT, and DRIFT's caption swaps with the picked mode. The rows stack as one block, centred
    on the stage, with the fixed-size chips (and so the captions) aligned. */
 .settings-legend {
   flex: none; display: flex; flex-direction: column; align-items: flex-start;
   gap: 0.35rem;   /* rows sit close: one legend, not three items */
   padding: 0.2rem 0.4rem;
 }
-.settings-card .help-ctrl--chord { display: none; }
-.settings-card.is-buttons .help-ctrl--chord { display: flex; }
-.settings-card.is-buttons .help-ctrl--brake,
 .settings-card.is-buttons .drift-cap--tilt,
 .settings-card:not(.is-buttons) .drift-cap--buttons { display: none; }
 
@@ -1283,7 +1279,7 @@ input[type=text]:disabled { opacity: 0.6; }
    with the strip filling the matching side in lockstep. Buttons: the phone
    holds still while the ‹ › minis take turns pressing and the strip SNAPS
    between full lock left/right. Both loops end on a DRIFT: tilt holds right
-   lock and presses BRAKE, buttons hold › and add ‹, while the .demo-drift
+   lock and presses DRIFT, buttons hold › and add ‹, while the .demo-drift
    sticker pops beside the phone. */
 /* a fixed box (see --demo-zoom), so the twist's swing can't shimmy the legend
    below; it gives way only when the stage is shorter than the block */
@@ -1350,7 +1346,7 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 /* Both mini layouts mirror the REAL HUD: the strip centred in the stretchy top
    band, the mode's controls in a bottom row taking over half the screen, as
-   the real pads do. tilt: ITEM | BRAKE share the width; buttons: ‹ | ITEM | ›
+   the real pads do. tilt: ITEM | DRIFT share the width; buttons: ‹ | ITEM | ›
    in three equal columns. */
 .phone-inner { grid-template-rows: 1fr 30px; }
 .mini-steer { grid-column: 1 / -1; grid-row: 1; align-self: center; justify-self: center; width: 66%; }
@@ -1422,7 +1418,7 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: 0 1.5px 0 var(--btn-ledge);
 }
 .mini-btn--item  { background: var(--item); }
-.mini-btn--brake { background: var(--danger); }
+.mini-btn--brake { background: var(--blue); }
 .mini-btn--steer { background: var(--blue); }
 .mini-btn .steer-glyph { font-size: 10px; border-radius: 1px; }
 /* ‹ › minis press on the same 4.2s clock as the strip, each change one
@@ -1441,11 +1437,11 @@ input[type=text]:disabled { opacity: 0.6; }
   0%, 23.9%, 74%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
   24%, 73.9% { transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8); }
 }
-/* BRAKE darkens by colour, not filter: an animated filter inside the tilt
+/* DRIFT darkens by colour, not filter: an animated filter inside the tilt
    phone's 3D slab crashes Linux WebKit (the webkit-controller-layout spec). */
 @keyframes mini-press-brake {
-  0%, 41.9%, 72%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); background: var(--danger); }
-  42%, 71.9% { transform: translateY(2px) scale(0.95); box-shadow: none; background: color-mix(in srgb, var(--danger) 80%, var(--ink)); }
+  0%, 41.9%, 72%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); background: var(--blue); }
+  42%, 71.9% { transform: translateY(2px) scale(0.95); box-shadow: none; background: color-mix(in srgb, var(--blue) 80%, var(--ink)); }
 }
 @keyframes steer-snap {
   0%, 23.9%, 84%, 100% { transform: translateX(-50%); }
@@ -1454,7 +1450,7 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 /* ONE tilt timeline, shared by the twist and the strip so their
    correspondence is readable: HOLD full-left through 0–10%, swing, HOLD
-   full-right through 30–72% (pressing BRAKE from 42%: the drift), swing back,
+   full-right through 30–72% (pressing DRIFT from 42%: the drift), swing back,
    HOLD left again from 92%. Without the holds the sine motion never rests and
    the eye can't verify the two agree. */
 @keyframes phone-twist {
@@ -1477,19 +1473,16 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Caption rows — compact, shadowless labels rather than a second set of controls. */
 .help-ctrl { display: flex; flex-direction: row; align-items: center; gap: 0.55rem; text-align: left; }
-/* one FIXED pill size for every chip — ITEM, BRAKE and the ‹ › chord read as
-   the same kind of thing (sized to the widest label, BRAKE) */
+/* one FIXED pill size for every chip — ITEM and DRIFT read as the same kind
+   of thing (sized to the widest label, DRIFT) */
 .help-chip {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   width: 4.4rem; height: 1.7rem; box-sizing: border-box; padding: 0; flex: none;
   font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em;
   border-radius: var(--r-pill);
 }
-.help-chip--brake { color: #fff; background: var(--danger); }
 .help-chip--item  { color: #fff; background: var(--item); }
-.help-chip--steer { color: #fff; background: var(--blue); }
 .help-chip--drift { color: #fff; background: var(--blue); }   /* the demo's .demo-drift sticker */
-.help-chip--steer .steer-glyph { font-size: 0.8rem; border-radius: 1px; }
 .help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
 
 /* ---- Motion-blocked popup ----
