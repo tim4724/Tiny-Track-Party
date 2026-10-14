@@ -161,6 +161,12 @@ zero.** The stored field is a linear ramp (`rasterCarShadowStamp`), on which the
 cubic reconstruction and bilinear agree except at the kinks, so a probe under
 the gate cannot cross the remap's cut and the picture is identical; the four
 taps over the field's tail were ~0.4 ms. `shadowRemapParam` owns the number.
+**The B-spline itself stays, and a still cannot judge it** (2026-10-14): frozen
+frames with and without it differ by a few code values, but in motion the stamp
+re-lands on a new texel each frame and bilinear's slope kinks pulse as bands
+where the B-spline's curve holds. Judge a reconstruction filter on the TV, in a
+race, with each variant drawn in its own colour (`TTP_DEBUG_BLOB_BILINEAR`), never
+from screenshots.
 
 **Chevrons are SDFs**, so the pads move without an atlas. The apex must LEAD or
 every chevron reads as a brake marking. A pad is **flat paint** — a radial

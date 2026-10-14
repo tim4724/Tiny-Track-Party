@@ -1498,9 +1498,19 @@ here at ~0.6 ms. The one softener measured: the layer at 512 rows instead of
 256 (bilinear's bands shrink fourfold across lat; along s the 4096-wide cap
 already binds) costs the GPU nothing over B (15.68 vs 15.58 heavy, same
 skips) and the frame thread's `cars` phase 0.8 -> 1.1 ms typical. Undecided;
-the shipped build keeps the B-spline. **To judge it live:** `TTP_DEBUG_BLOB_BILINEAR`
-gates the branch unreachable, so `?features=0x200DFFC` against `?features=0xDFFC`
-(or `debug.ttp.features` on the box) is the before/after in the running game.
+the shipped build keeps the B-spline. **DECIDED (2026-10-14, evening): it
+stays.** `TTP_DEBUG_BLOB_BILINEAR` gates the branch unreachable, so
+`?features=0x200DFFC` against `?features=0xDFFC` (or `debug.ttp.features` on the
+box) is the before/after in the running game. A frozen 1080 web frame differed
+by at most 5/255 at a few hundred pixels, and TV stills with the shadow at
+full-opacity red showed a smooth fade both ways — the B-spline does nothing a
+still can see. In MOTION it does: a probe build that drew the stamp red with
+the B-spline and blue without, flipped every 10 s in a race the user watched on
+the TV, read "blue has pulsating bands, red is smoother; both jitter". The
+stamp re-lands on a new texel each frame, and bilinear's slope kinks move with
+it while the B-spline's smooth curve does not. The 0.6 ms is temporal
+stability, and it is kept. The jitter common to both (the re-landing itself) is
+a separate, open item.
 
 ### Scenery shadow on the deck: where it falls, and a per-chunk gate (2026-10-14, later)
 
