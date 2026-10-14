@@ -500,6 +500,26 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // vertex per frame — it reads no map, so it is final at build whatever the
     // sun bake later does.
     bakeVertexLight(mRoad);
+    buildCarShadowDraws();
+    // The ring's mean baked light, for the car-shadow rows (TtpRenderer.h,
+    // mRingLight): the deck-level points of the cross-section, 4..11.
+    mRingLight.assign(N, math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
+    for (uint32_t u = 0; u < N; u++) {
+        float4 acc{ 0.0f };
+        int cnt = 0;
+        for (int pt = 4; pt <= 11; pt++) {
+            for (const uint32_t k : laidAt[(size_t) u * 16 + pt]) {
+                if (k == kNone || k >= mRoad.custom0.size()) continue;
+                const math::half4& h = mRoad.custom0[k];
+                acc += float4{ (float) h.x, (float) h.y, (float) h.z, (float) h.w };
+                cnt++;
+            }
+        }
+        if (cnt) {
+            acc /= (float) cnt;
+            mRingLight[u] = math::half4{ acc.x, acc.y, acc.z, acc.w };
+        }
+    }
     // Chunked by RINGS, each chunk with its own bounds, so a chase camera pays
     // for the stretch of circuit it can actually see instead of all ~59k
     // triangles of it — per cell, every frame.
@@ -673,16 +693,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
-            // The carShadow layer is created after the rubber layer below
-            // (the two share a lat span) and re-bound there.
             bindSkidLayer(mi);
-            if (roadHasCarShadow()) {
-                bindCarShadow(mi, mCarShadowTex[0]);
-                mi->setParameter("maskInk", shadowInkParam(false));
-                if (mi->getMaterial()->hasParameter("carShadowRemap")) {
-                    mi->setParameter("carShadowRemap", shadowRemapParam());
-                }
-            }
             rcm.setMaterialInstanceAt(ri, 0, mi);
             chunk.mi = mi;
             chunk.sMin = sMin;
@@ -1547,8 +1558,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         for (RoadChunk& rc : mRoadChunks) {
             if (rc.mi) bindSkidLayer(rc.mi);
         }
-
-        if (mSkidTex) buildCarShadowLayer(tb.length);
     }
 
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's
@@ -2388,6 +2397,13 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
                 .package(vroadvis->second.data(), vroadvis->second.size())
                 .build(*mEngine);
     }
+    // The car shadow's pass material (vshadow.mat; TtpRenderer.h, mCarShadowDraws).
+    const auto vshadow = mAssets.find("vshadow.filamat");
+    if (!mShadowMaterial && vshadow != mAssets.end()) {
+        mShadowMaterial = Material::Builder()
+                .package(vshadow->second.data(), vshadow->second.size())
+                .build(*mEngine);
+    }
     const auto vpoint = mAssets.find("vpoint.filamat");
     if (!mPointMaterial && vpoint != mAssets.end()) {
         mPointMaterial = Material::Builder()
@@ -2458,7 +2474,8 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
         gs.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
         for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mRoadMaterial,
                              mGlbMaterial, mGlbFadeMaterial, mGroundMaterial,
-                             mPointMaterial, mCloudMaterial, mBurstMaterial }) {
+                             mPointMaterial, mCloudMaterial, mBurstMaterial,
+                             mShadowMaterial }) {
             if (m && m->hasParameter("gradeLut")) {
                 m->setDefaultParameter("gradeLut", mGradeLut, gs);
             }

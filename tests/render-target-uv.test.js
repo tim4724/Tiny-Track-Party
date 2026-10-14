@@ -85,11 +85,10 @@ const UPLOADED_SAMPLERS = new Set([
   // accumulating attachments is why it no longer is — see the mSkidPix
   // comment in TtpRenderer.h before ever moving it back.
   'skidLayer',
-  // The car-shadow layer: the rubber's idiom, per frame — CPU-rasterized
-  // stamps, whole-level setImage into a ping-pong pair
-  // (TtpRenderer::rasterCarShadowStamp / uploadCarShadow). Never a render
-  // target, same A10X law as the rubber.
-  'carShadow'
+  // The car shadow's stamp: the fitted shape's ramp field baked once per car
+  // model and uploaded (TtpRenderer::carShadowStamp), sampled by vshadow's
+  // one tap at a car-frame uv. Never a render target.
+  'stamp'
 ]);
 
 const materials = () => readdirSync(MATERIALS).filter((f) => /\.(mat|inc)$/.test(f));
