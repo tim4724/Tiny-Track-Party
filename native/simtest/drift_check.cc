@@ -42,14 +42,15 @@ struct Rig {
   std::unique_ptr<Game> game;
   Car* car = nullptr;
 
-  explicit Rig(bool bot) {
+  explicit Rig(bool bot, double turn = 1) {
     std::string err;
     if (!build_race_track_by_id("tidepool", 3, 42u, bt, err)) {
       std::fprintf(stderr, "FAIL build tidepool: %s\n", err.c_str());
       std::exit(2);
     }
-    game = std::make_unique<Game>(std::vector<PlayerDesc>{PlayerDesc{Id::Num(0), false, Stats{}, bot}},
-                                  bt.game);
+    Stats st;
+    st.turn = turn;
+    game = std::make_unique<Game>(std::vector<PlayerDesc>{PlayerDesc{Id::Num(0), true, st, bot}}, bt.game);
     car = game->cars()[0].get();
     car->totalS = 30.0;
     car->lat = 0.0;
@@ -233,12 +234,12 @@ int main() {
 
   // A drift starts at any speed and holds its floor's share of the speed it
   // started at, never more; with the slow-start cost on, one started slow
-  // holds a smaller share than one carried in at pace. A start speed restores
-  // the gate.
+  // holds a smaller share than one carried in at pace. A poorer handler's
+  // floor is lower. A start speed restores the gate.
   {
-    auto drifted = [](double v0, double slowCost) {
+    auto drifted = [](double v0, double slowCost, double turn = 1) {
       debugDriftSlow(slowCost);
-      Rig r(false);
+      Rig r(false, turn);
       r.car->v = r.car->vmax * v0;
       r.car->lat = 1.5;  // room to turn before the curb
       r.drive(1, 1, 30);
@@ -252,6 +253,9 @@ int main() {
           "a drift holds its floor's share of the speed it started at, slow or fast");
     check(drifted(0.4, 0.5) < drifted(0.9, 0.5) - 0.1,
           "with the slow-start cost on, a slow drift holds a smaller share than one at pace");
+    const double poor = drifted(0.9, -1, 0.88), good = drifted(0.9, -1, 1.24);
+    check(poor < fast - 0.02 && fast < good - 0.01 && good < 1,
+          "a poorer handler holds a smaller share, a better one a larger share, never all of it");
     Rig gated(false);
     debugDriftMinSpeed(0.5);
     gated.car->v = gated.car->vmax * 0.3;

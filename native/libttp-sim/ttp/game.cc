@@ -63,7 +63,12 @@ static const double STEER_SCRUB = 0.35;
 // is a radius, so speed does not move it, and driftK eases toward the lean over
 // DRIFT_SMOOTH, so a held phone's wobble averages out. The drift holds a speed
 // instead of the steer scrub: DRIFT_SPEED_FLOOR of the speed it started at,
-// less DRIFT_SLOW for every unit of speed that start was short of full. So a
+// less DRIFT_SLOW for every unit of speed that start was short of full. The
+// floor's cost grows with the fourth power of how short of the base turn stat
+// the car is: the steer scrub bills a poor handler most (it needs the most
+// lock for a corner), and a drift that cost every car alike deleted that hole,
+// turning the top-speed car into the best car once it drifted. The power is
+// priced with `probe_cli matrix --drift` against the flat-out matrix. So a
 // drift pays when it is started before the corner has cost any speed: hold the
 // button ahead of the turn-in and the drift takes the moment the lean passes
 // DRIFT_STEER_MIN. It starts on the curvature the car was ALREADY turning at,
@@ -88,7 +93,7 @@ static const double DRIFT_FLIP = 0.5;        // counter-lean that flips the side
 static const double DRIFT_K_IN = 1.0 / 6;    // 1/world units, at the base turn stat
 static const double DRIFT_K_OUT = 1.0 / 18;
 static const double DRIFT_SMOOTH = 0.2;      // s, the line's ease toward the lean
-static const double DRIFT_SPEED_FLOOR = 0.95;  // share of its starting speed a drift holds
+static const double DRIFT_SPEED_FLOOR = 0.94;  // share of its starting speed a drift holds, at turn stat 1
 static const double DRIFT_ENTER_T = 0.25;
 static const double DRIFT_RELEASE_T = 0.4;
 static const double DRIFT_SLIP = 0.5;        // rad at DRIFT_K_IN
@@ -1217,10 +1222,12 @@ void Game::update(double dtMs) {
                      ? (c.driftLean0 >= 1 ? kIn : k0 + (lean - c.driftLean0) / (1 - c.driftLean0) * (kIn - k0))
                      : kOut + lean / c.driftLean0 * (k0 - kOut);
       c.driftK += g_driftSmooth > 0 ? (k - c.driftK) * (1 - dmath::exp(-dt / g_driftSmooth)) : k - c.driftK;
-      // the speed it holds, as a share of vmax: the floor of what it started
-      // at, less again the slower that start was
+      // the speed it holds, as a share of vmax: the car's floor of what it
+      // started at, less again the slower that start was
       const double v0 = js_max(0.0, js_min(1.0, c.driftV0));
-      const double hold = js_max(0.0, g_driftFloor - g_driftSlow * (1 - v0)) * v0;
+      const double r = TURN_RATE / c.turn, r2 = r * r;
+      const double floor = 1 - (1 - g_driftFloor) * r2 * r2;
+      const double hold = js_max(0.0, floor - g_driftSlow * (1 - v0)) * v0;
       if (!boosting) scrubEff += ((1 - hold) - scrubEff) * c.driftMix;
     }
     double slipTo = c.driftMix * STEER_SIGN * c.driftDir * DRIFT_SLIP * js_min(1.0, c.driftK / DRIFT_K_IN);

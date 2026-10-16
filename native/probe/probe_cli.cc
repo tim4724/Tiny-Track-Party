@@ -27,8 +27,11 @@
 //   probe_cli cost               CPU cost of a sim frame (see runCost)
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
-//   probe_cli <mode> --nobrake   force b=0: humans hold flat-out, so this is the
-//                                pace/balance the couch actually sees
+//   probe_cli <mode> --nobrake   force b=0: the flat-out pace/balance of a
+//                                player who never drifts
+//   probe_cli <mode> --drift     the seats are players (their button drifts) who
+//                                press into every hard corner and let go on the
+//                                way out: the pace/balance of a player who drifts
 //   probe_cli laptime --json     one JSON object per track (probe-difficulty.mjs)
 //   probe_cli <mode> --skill=X   bot skill 0..1 (AI_TIER_SKILL; default 1, the full bot)
 //   probe_cli laptime --item=ID  every box rolls ID: what each item is worth to a solo lap
@@ -73,6 +76,7 @@ using ttp::AI_PERSONALITIES;
 constexpr uint32_t DEFAULT_AI_SEED = 1;
 // --skill: every bot this run drives. 1 = the full bot.
 double g_skill = 1.0;
+bool g_drift = false;  // --drift: the seats are players and drive driveBotNoBrake's drift rule
 std::string g_item;  // --item=: every box rolls this (Game forceItem), "" = the roll table
 
 std::string mmss(double secs) {
@@ -101,16 +105,19 @@ std::string padStart(const std::string& s, size_t n) {
 
 // Game::driveBot minus the brake: the AI decides steering and item use as in a
 // real race, but the applied brake is forced to 0 — the flat-out driving humans
-// actually do. `out` still reports the ASKED brake so brakeFrac keeps measuring
-// what the track demands rather than what was applied. Relies on the same roster
-// guarantee the rest of this file does: cars() is insertion order, so slot i is
-// Id::Num(i).
+// actually do. Under --drift the button is held from a hard steer at pace until
+// the steer eases, as a player drifts a corner. `out` still reports the ASKED
+// brake so brakeFrac keeps measuring what the track demands rather than what
+// was applied. Relies on the same roster guarantee the rest of this file does:
+// cars() is insertion order, so slot i is Id::Num(i).
 bool driveBotNoBrake(Game& game, size_t slot, AiController& ai, Input* out) {
   Car* c = game.cars()[slot].get();
   if (!c || c->finished) return false;
   Input m = ai.drive(*c, *game.centerline(), game);
   if (out) *out = m;
   m.b = 0;
+  m.hasD = false;
+  if (g_drift && (c->drifting ? std::fabs(m.s) >= 0.3 : std::fabs(m.s) >= 0.55 && c->v >= 0.5 * c->vmax)) m.b = 1;
   game.processInput(Id::Num((double)slot), m);
   return true;
 }
@@ -132,7 +139,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
     st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
     st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
   }
-  std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st, true}};
+  std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st, !g_drift}};
   Game game(players, bt.game, [](const Event&) {}, g_item);
   AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED,
                   g_skill);
@@ -305,7 +312,7 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
         Stats st;
         st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
         st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-        players.push_back(PlayerDesc{Id::Num((double)slot), true, st, true});
+        players.push_back(PlayerDesc{Id::Num((double)slot), true, st, !g_drift});
       }
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
@@ -484,6 +491,7 @@ int main(int argc, char** argv) {
     else if (a.compare(0, 7, "--seed=") == 0) seed = (uint32_t)std::strtoul(a.substr(7).c_str(), nullptr, 10);
     else if (a == "--json") json = true;
     else if (a == "--nobrake") noBrake = true;
+    else if (a == "--drift") g_drift = noBrake = true;
     else if (a.compare(0, 8, "--skill=") == 0) g_skill = std::strtod(a.substr(8).c_str(), nullptr);
     else if (a.compare(0, 7, "--item=") == 0) g_item = a.substr(7);
     else if (a.compare(0, 7, "--cars=") == 0) cars = (int)std::strtol(a.substr(7).c_str(), nullptr, 10);
@@ -497,6 +505,6 @@ int main(int argc, char** argv) {
   if (mode == "cost") return runCost(only, seed, cars);
   std::fprintf(stderr,
                "usage: probe_cli <laptime|matrix|packed|cost> [--track=ID] [--seed=N] "
-               "[--cars=N] [--skill=X] [--item=ID] [--nobrake] [--json]\n");
+               "[--cars=N] [--skill=X] [--item=ID] [--nobrake|--drift] [--json]\n");
   return 2;
 }
