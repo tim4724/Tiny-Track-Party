@@ -2,8 +2,10 @@
 //
 // No golden trace drifts, so this is what says the control means what it says:
 // a player's button never brakes and every press hops the car; held with a hard
-// steer it drifts, at any speed, on the line the car was already turning,
-// holding a share of the speed it started at (smaller the slower it started,
+// steer it drifts, at any speed, starting on the line the car was already
+// turning, then steering the line each lean settles to in plain steering, and
+// closing toward one tight line for every car while held at full lock; it
+// holds a share of the speed it started at (smaller the slower it started,
 // when the slow-start cost is on); a hard counter-lean flips its side and
 // a soft one only eases the line, which never straightens; it rises in and
 // fades out; and a bot's brake is still a brake, drifting only when its
@@ -35,6 +37,10 @@ void check(bool ok, const std::string& what) {
 }
 
 const double DT = 1000.0 / 60.0;
+// game.cc's DRIFT_K_TIGHT (the line held lock closes to) and, under it, the
+// widest a full lock's plain line gets for any car at the authored stats.
+const double DRIFT_K_TIGHT_ALL = 1.0 / 4.5;
+const double DRIFT_K_LOCK_MIN = 1.0 / 9;
 
 // One car alone on tidepool's opening straight, at racing speed.
 struct Rig {
@@ -132,7 +138,7 @@ int main() {
     flip.drive(-1, 1, 1);
     check(flip.car->drifting && flip.car->driftDir == -1, "a hard counter-lean flips the drift's side");
     check(flip.car->hopT < HOP_TIME, "…and the car hops as it flips");
-    check(flip.car->driftK < flip.car->driftK0, "…easing into the new line rather than snapping onto it");
+    check(flip.car->driftK < 0.5 * DRIFT_K_LOCK_MIN, "…easing into the new line rather than snapping onto it");
     debugDriftFlip(2);
     locked.drive(1, 1, 16);
     locked.drive(-1, 1, 6);
@@ -140,25 +146,47 @@ int main() {
     debugDriftFlip(-1);
   }
 
-  // The lean is read relative to the one the drift started on: holding it keeps
-  // the line the car was already on (an absolute map dived for the inner curb),
-  // leaning further in tightens it, easing off widens it.
+  // A lean steers the line it settles to in plain steering — a drift that
+  // turned tighter at the same lean put players on the inner curb — and easing
+  // off widens it, never to straight.
   {
-    Rig hold(false), in(false), ease(false);
-    for (Rig* r : { &hold, &in, &ease }) { r->car->lat = 1.5; r->drive(0.6, 0, 4); r->drive(0.6, 1, 2); }
-    const double k0 = hold.car->driftK0;
-    hold.drive(0.6, 1, 30);
-    in.drive(1, 1, 30);
-    ease.drive(0.3, 1, 30);
-    check(std::fabs(hold.car->driftK - k0) < k0 * 0.02, "holding the starting lean keeps the starting line");
-    check(in.car->driftK > k0 * 1.2, "leaning further in tightens the line");
-    check(ease.car->driftK < k0 && ease.car->driftK > 0, "easing off widens the line, never straight");
+    Rig hold(false), ease(false);
+    for (Rig* r : { &hold, &ease }) { r->car->lat = 1.5; r->drive(0.7, 0, 4); r->drive(0.7, 1, 2); }
+    hold.drive(0.7, 1, 40);
+    ease.drive(0.3, 1, 40);
+    const Car& c = *hold.car;
+    const double shaped = steerShape(0.7);
+    const double plain = shaped * c.turn / (c.vmax * (1 - 0.35 * shaped * shaped));  // STEER_SCRUB
+    check(std::fabs(c.driftK - plain) < plain * 0.02, "a lean drifts the line it settles to without the drift");
+    check(ease.car->driftK < c.driftK && ease.car->driftK >= 1.0 / 18 - 1e-9, "easing off widens the line, never straight");
+  }
+
+  // Held at full lock the line keeps closing toward one tight line, the same
+  // for the poorest handler as the best, so a well-driven drift makes every
+  // turn in any car; easing off lock opens it again quickly.
+  {
+    auto lockedFor = [](double turn, int frames) {
+      Rig r(false, turn);
+      r.car->lat = 1.5;
+      r.drive(1, 1, frames);
+      return r.car->driftK;
+    };
+    const int full = (int) std::ceil(debugDriftTighten(-1) * 60) + 15;
+    const double lockLine = lockedFor(1, 12), half = lockedFor(1, full / 2), tight = lockedFor(1, full);
+    check(lockLine < half && half < tight, "held lock keeps closing the line");
+    check(std::fabs(tight - DRIFT_K_TIGHT_ALL) < DRIFT_K_TIGHT_ALL * 0.02, "…to the tight line");
+    check(std::fabs(lockedFor(0.88, full) - tight) < tight * 0.02 && std::fabs(lockedFor(1.24, full) - tight) < tight * 0.02,
+          "every car's held lock closes to the same tight line");
+    Rig r(false);
+    r.car->lat = 1.5;
+    r.drive(1, 1, full);
+    r.drive(0.8, 1, 20);
+    check(r.car->driftK < tight * 0.75, "easing off lock opens the line again");
   }
 
   // A drift starts on the line the car is already turning, whatever the lean
   // on the frame it starts: a held full lock with the second thumb added as a
-  // DRIFT_LEAN lean (buttons mode) keeps full lock's curvature, and holding
-  // that lean holds it.
+  // DRIFT_LEAN lean (buttons mode) does not jerk the line open.
   {
     Rig r(false);
     r.car->lat = 1.5;
@@ -166,9 +194,7 @@ int main() {
     const double full = std::fabs(r.car->turnIn) * r.car->turn / r.car->v;
     r.drive(debugDriftSteer(-1), 1, 1);
     check(r.car->drifting, "the second thumb's lean starts a drift");
-    check(std::fabs(r.car->driftK0 - full) < full * 0.05, "…on the full-lock line the car was turning");
-    r.drive(debugDriftSteer(-1), 1, 20);
-    check(std::fabs(r.car->driftK - r.car->driftK0) < r.car->driftK0 * 0.05, "holding that lean holds the line");
+    check(std::fabs(r.car->driftK - full) < full * 0.15, "…on the full-lock line the car was turning");
   }
 
   // The line is holdable on tilt: a wobbling lean barely moves it, where an
@@ -242,7 +268,9 @@ int main() {
       Rig r(false, turn);
       r.car->v = r.car->vmax * v0;
       r.car->lat = 1.5;  // room to turn before the curb
-      r.drive(1, 1, 30);
+      // short of lock (the line, not its tightening), and long enough for a
+      // slow start to shed its share before the curb
+      r.drive(0.8, 1, v0 < 0.5 ? 60 : 30);
       check(!r.car->onWall && r.car->drifting, "(the slow-drift test drifts, off the curb)");
       debugDriftSlow(-1);
       return r.car->v / (v0 * r.car->vmax);  // the share of its start it holds

@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 249 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 250 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -45,6 +45,7 @@ object Ttp {
     external fun ttp_debug_drift_smooth(sec: Double): Double
     external fun ttp_debug_drift_steer(lean: Double): Double
     external fun ttp_debug_drift_tight(scale: Double): Double
+    external fun ttp_debug_drift_tighten(sec: Double): Double
     external fun ttp_display_advance(dtSeconds: Double): Int
     external fun ttp_display_antialias(on: Int)
     external fun ttp_display_asset(name: ByteArray?, bytes: ByteArray?): Int

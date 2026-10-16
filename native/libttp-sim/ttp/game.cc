@@ -53,15 +53,17 @@ static const double STEER_SCRUB = 0.35;
 //
 // The side is set when the drift starts. A counter-lean short of DRIFT_FLIP
 // only eases the line; one past it flips the drift to that side, with a hop.
-// From the start the lean picks a LINE, not a turn rate, that no lean ever
-// straightens. The lean is read
-// RELATIVE to the one the drift started on: that lean keeps the curvature the
-// car already had (driftK0), leaning further in tightens toward DRIFT_K_IN and
-// easing off widens toward DRIFT_K_OUT (both scaled by the car's turn stat).
-// Relative, because every lean that can start a drift sits near full lock: an
-// absolute map dived the car into the inner curb the moment it began. The line
-// is a radius, so speed does not move it, and driftK eases toward the lean over
-// DRIFT_SMOOTH, so a held phone's wobble averages out. The drift holds a speed
+// From the start the lean picks a LINE, not a turn rate: the radius that lean
+// settles to in plain steering (driftLine), never wider than DRIFT_K_OUT. So a
+// drift steers the line the player already knows: one that turned tighter
+// than plain steering at the same lean put every player who leaned as usual
+// on the inner curb. Held at full lock (DRIFT_LOCK) the line keeps closing,
+// over DRIFT_TIGHTEN_T, toward DRIFT_K_TIGHT, which is one radius for every
+// car and tighter than the catalogue's tightest corner: a well-driven drift
+// makes every turn in any car. Easing off lock opens it again over
+// DRIFT_SMOOTH. The line is a radius, so speed does not move it, and it eases
+// toward the lean over DRIFT_SMOOTH, so a held phone's wobble averages out.
+// The drift holds a speed
 // instead of the steer scrub: DRIFT_SPEED_FLOOR of the speed it started at,
 // less DRIFT_SLOW for every unit of speed that start was short of full. The
 // floor's cost grows with the fourth power of how short of the base turn stat
@@ -71,10 +73,8 @@ static const double STEER_SCRUB = 0.35;
 // priced with `probe_cli matrix --drift` against the flat-out matrix. So a
 // drift pays when it is started before the corner has cost any speed: hold the
 // button ahead of the turn-in and the drift takes the moment the lean passes
-// DRIFT_STEER_MIN. It starts on the curvature the car was ALREADY turning at,
-// whatever the lean that frame: buttons mode adds its second thumb as a
-// DRIFT_STEER_MIN lean (protocol.js STEER.DRIFT_LEAN), and the line must not
-// open up under it.
+// DRIFT_STEER_MIN. It starts on the curvature the car was ALREADY turning at
+// and eases from there to the lean's line, so the start never jerks it.
 //
 // driftMix carries the drift in and out: it rises over DRIFT_ENTER_T (the hop,
 // so locking the side cannot jerk the car) and fades over DRIFT_RELEASE_T after
@@ -90,13 +90,15 @@ static const double DRIFT_SPEED_MIN = 0;     // fraction of vmax to start one
 static const double DRIFT_V_MIN = 1;         // world units/s: below this a line means nothing
 static const double DRIFT_SLOW = 0;          // the extra cost of a slow start
 static const double DRIFT_FLIP = 0.5;        // counter-lean that flips the side
-static const double DRIFT_K_IN = 1.0 / 6;    // 1/world units, at the base turn stat
-static const double DRIFT_K_OUT = 1.0 / 18;
+static const double DRIFT_K_OUT = 1.0 / 18;  // 1/world units: the widest line
+static const double DRIFT_K_TIGHT = 1.0 / 4.5;  // the line held lock closes to, every car
+static const double DRIFT_LOCK = 0.95;       // the lean that counts as full lock
+static const double DRIFT_TIGHTEN_T = 0.8;   // s at full lock from lock's line to the tight one
 static const double DRIFT_SMOOTH = 0.2;      // s, the line's ease toward the lean
 static const double DRIFT_SPEED_FLOOR = 0.94;  // share of its starting speed a drift holds, at turn stat 1
 static const double DRIFT_ENTER_T = 0.25;
 static const double DRIFT_RELEASE_T = 0.4;
-static const double DRIFT_SLIP = 0.5;        // rad at DRIFT_K_IN
+static const double DRIFT_SLIP = 0.5;        // rad at DRIFT_K_TIGHT
 static const double DRIFT_SLIP_RATE = 8.0;   // 1/s ease of the drawn slip
 // ---- contact ----
 // The collider's rectangle IS the Kenney mesh AABB — CAR_STATS halfLen/halfWid,
@@ -217,6 +219,7 @@ static double g_wallImpact = WALL_IMPACT;
 // The drift's live copies, moved only by the debugDrift* knobs — traces never move them.
 static double g_driftTight = 1;
 static double g_driftSmooth = DRIFT_SMOOTH;
+static double g_driftTighten = DRIFT_TIGHTEN_T;
 static double g_driftFloor = DRIFT_SPEED_FLOOR;
 static double g_driftRelease = DRIFT_RELEASE_T;
 static double g_driftSteer = DRIFT_STEER_MIN;
@@ -227,6 +230,10 @@ static double g_driftFlip = DRIFT_FLIP;
 double debugDriftTight(double scale) {
   g_driftTight = scale < 0 ? 1 : scale;
   return 1;
+}
+double debugDriftTighten(double sec) {
+  g_driftTighten = sec < 0 ? DRIFT_TIGHTEN_T : sec;
+  return DRIFT_TIGHTEN_T;
 }
 double debugDriftSmooth(double sec) {
   g_driftSmooth = sec < 0 ? DRIFT_SMOOTH : sec;
@@ -1190,17 +1197,15 @@ void Game::update(double dtMs) {
       c.driftV0 = c.v / c.vmax;
       if (c.hopT >= HOP_TIME) c.hopT = 0;
       // start on the curvature the car is already turning at
-      c.driftK = c.driftK0 = std::fabs(c.turnIn) * c.turn * steerAuthority(c) / c.v;
-      c.driftLean0 = std::fabs(c.steer);
+      c.driftK = c.driftLine = std::fabs(c.turnIn) * c.turn * steerAuthority(c) / c.v;
+      c.driftTighten = 0;
     } else if (c.drifting && c.steer * c.driftDir < 0 && std::fabs(c.steer) >= g_driftFlip
                && c.v >= DRIFT_V_MIN) {
       // the other side, from a standing line: the curvature eases in from
       // straight, so the car swings through rather than snapping across
       c.driftDir = js_sign(c.steer);
       if (c.hopT >= HOP_TIME) c.hopT = 0;
-      c.driftK0 = std::fabs(steerShape(c.steer)) * c.turn * steerAuthority(c) / c.v;
-      c.driftK = 0;
-      c.driftLean0 = std::fabs(c.steer);
+      c.driftK = c.driftLine = c.driftTighten = 0;
     }
     if (c.drifting) {
       c.driftMix = js_min(1.0, c.driftMix + dt / DRIFT_ENTER_T);
@@ -1213,15 +1218,18 @@ void Game::update(double dtMs) {
     double steerIn = steerShape(steerEff);
     double scrubEff = boosting ? 0 : STEER_SCRUB * steerIn * steerIn;
     if (c.driftMix > 0) {
-      // + leans into the drift's side; no lean reaches straight
-      double lean = js_max(0.0, js_min(1.0, steerEff * c.driftDir));
-      double scale = g_driftTight * c.turn / TURN_RATE;
-      double kIn = DRIFT_K_IN * scale, kOut = DRIFT_K_OUT * scale;
-      double k0 = js_max(kOut, js_min(kIn, c.driftK0));
-      double k = lean >= c.driftLean0
-                     ? (c.driftLean0 >= 1 ? kIn : k0 + (lean - c.driftLean0) / (1 - c.driftLean0) * (kIn - k0))
-                     : kOut + lean / c.driftLean0 * (k0 - kOut);
-      c.driftK += g_driftSmooth > 0 ? (k - c.driftK) * (1 - dmath::exp(-dt / g_driftSmooth)) : k - c.driftK;
+      // + leans into the drift's side: the line that lean settles to in plain
+      // steering (its steer scrub included), no wider than DRIFT_K_OUT
+      const double lean = js_max(0.0, js_min(1.0, steerEff * c.driftDir));
+      const double shaped = steerShape(lean);
+      const double k = js_max(DRIFT_K_OUT, shaped * c.turn / (c.vmax * (1 - STEER_SCRUB * shaped * shaped)));
+      const double ease = g_driftSmooth > 0 ? 1 - dmath::exp(-dt / g_driftSmooth) : 1;
+      c.driftLine += (k - c.driftLine) * ease;
+      // held lock closes the line toward the tight one; easing off opens it
+      if (lean >= DRIFT_LOCK) c.driftTighten = g_driftTighten > 0 ? js_min(1.0, c.driftTighten + dt / g_driftTighten) : 1;
+      else c.driftTighten -= c.driftTighten * ease;
+      const double kTight = DRIFT_K_TIGHT * g_driftTight;
+      c.driftK = c.driftLine + js_max(0.0, kTight - c.driftLine) * c.driftTighten;
       // the speed it holds, as a share of vmax: the car's floor of what it
       // started at, less again the slower that start was
       const double v0 = js_max(0.0, js_min(1.0, c.driftV0));
@@ -1230,7 +1238,7 @@ void Game::update(double dtMs) {
       const double hold = js_max(0.0, floor - g_driftSlow * (1 - v0)) * v0;
       if (!boosting) scrubEff += ((1 - hold) - scrubEff) * c.driftMix;
     }
-    double slipTo = c.driftMix * STEER_SIGN * c.driftDir * DRIFT_SLIP * js_min(1.0, c.driftK / DRIFT_K_IN);
+    double slipTo = c.driftMix * STEER_SIGN * c.driftDir * DRIFT_SLIP * js_min(1.0, c.driftK / DRIFT_K_TIGHT);
     if (slipTo != 0 || c.slip != 0) {
       c.slip += (slipTo - c.slip) * (1 - dmath::exp(-DRIFT_SLIP_RATE * dt));
       if (slipTo == 0 && std::fabs(c.slip) < 1e-3) c.slip = 0;

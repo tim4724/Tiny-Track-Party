@@ -232,6 +232,11 @@ jdouble n_ttp_debug_drift_tight(JNIEnv* env, jclass, jdouble a0) {
     return (jdouble) ttp_debug_drift_tight((double) a0);
 }
 
+jdouble n_ttp_debug_drift_tighten(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jdouble) ttp_debug_drift_tighten((double) a0);
+}
+
 jint n_ttp_display_advance(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jint) ttp_display_advance((double) a0);
@@ -1435,6 +1440,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_debug_drift_smooth", "(D)D", (void*) n_ttp_debug_drift_smooth },
     { "ttp_debug_drift_steer", "(D)D", (void*) n_ttp_debug_drift_steer },
     { "ttp_debug_drift_tight", "(D)D", (void*) n_ttp_debug_drift_tight },
+    { "ttp_debug_drift_tighten", "(D)D", (void*) n_ttp_debug_drift_tighten },
     { "ttp_display_advance", "(D)I", (void*) n_ttp_display_advance },
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },

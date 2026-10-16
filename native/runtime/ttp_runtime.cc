@@ -1351,6 +1351,7 @@ double ttp_debug_drift_steer(double lean) { return debugDriftSteer(lean); }
 double ttp_debug_drift_min_speed(double frac) { return debugDriftMinSpeed(frac); }
 double ttp_debug_drift_slow(double k) { return debugDriftSlow(k); }
 double ttp_debug_drift_flip(double lean) { return debugDriftFlip(lean); }
+double ttp_debug_drift_tighten(double sec) { return debugDriftTighten(sec); }
 
 
 // =============================================================================

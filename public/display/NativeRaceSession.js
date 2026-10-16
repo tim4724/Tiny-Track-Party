@@ -64,6 +64,7 @@ export async function init() {
     debugDriftMinSpeed: c('ttp_debug_drift_min_speed', 'number', ['number']),
     debugDriftSlow: c('ttp_debug_drift_slow', 'number', ['number']),
     debugDriftFlip: c('ttp_debug_drift_flip', 'number', ['number']),
+    debugDriftTighten: c('ttp_debug_drift_tighten', 'number', ['number']),
     debugBotSkill: c('ttp_debug_bot_skill', 'number', ['number'])
   };
   const v = JSON.parse(fn.version());
@@ -91,6 +92,7 @@ export function debugDriftSteer(n) { return fn ? fn.debugDriftSteer(n) : 0; }
 export function debugDriftMinSpeed(n) { return fn ? fn.debugDriftMinSpeed(n) : 0; }
 export function debugDriftSlow(n) { return fn ? fn.debugDriftSlow(n) : 0; }
 export function debugDriftFlip(n) { return fn ? fn.debugDriftFlip(n) : 0; }
+export function debugDriftTighten(n) { return fn ? fn.debugDriftTighten(n) : 0; }
 // The CPU fill's skill for the next launches (-1 = the track's cup decides).
 export function debugBotSkill(n) { return fn ? fn.debugBotSkill(n) : -1; }
 

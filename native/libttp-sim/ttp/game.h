@@ -95,9 +95,10 @@ struct Car {
   //   drifting    — the drift is held (button or brake down)
   //   driftDir    — its locked side in INPUT space (sign of steer)
   //   driftMix    — how much of the drift is in force: rises in, fades out
-  //   driftK      — the line it drives: curvature (1/world units), eased
-  //   driftK0/driftLean0 — the curvature and lean it started on, which that
-  //                 lean keeps (the lean is read relative to it)
+  //   driftK      — the line it drives: curvature (1/world units)
+  //   driftLine   — the lean's line, eased: what plain steering settles to
+  //   driftTighten — how far held lock has closed driftLine toward the tight
+  //                 line, 0..1
   //   driftV0     — the speed it started at, as a share of vmax (the speed it holds)
   //   turnIn      — the shaped steer the car last turned on, drift included:
   //                 the curvature a drift starts on
@@ -108,7 +109,7 @@ struct Car {
   bool brakeIsDrift = false;
   bool driftOk = true;
   bool drifting = false;
-  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, driftV0 = 1, turnIn = 0, slip = 0;
+  double driftDir = 0, driftMix = 0, driftK = 0, driftLine = 0, driftTighten = 0, driftV0 = 1, turnIn = 0, slip = 0;
   double hopT = HOP_TIME;
   // Height above the deck, along its up, and its rate. Non-zero only on a
   // kicker ramp and in the flight off its lip; the pose carries it.
@@ -220,6 +221,7 @@ double debugDriftSteer(double lean);
 double debugDriftMinSpeed(double frac);
 double debugDriftSlow(double k);
 double debugDriftFlip(double lean);
+double debugDriftTighten(double sec);
 
 // That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies
 // its turn rate by. Sim-side this is one line of one function, so it lived
