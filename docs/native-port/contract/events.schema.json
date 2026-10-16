@@ -2,13 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tinytrack.couchpad.games/contract/events.schema.json",
   "title": "Game race event",
-  "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly seven kinds. See docs/native-port/contract.md.",
+  "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly eight kinds. See docs/native-port/contract.md.",
   "oneOf": [
     { "$ref": "#/$defs/spin" },
     { "$ref": "#/$defs/monster_end" },
     { "$ref": "#/$defs/finish" },
     { "$ref": "#/$defs/lap" },
     { "$ref": "#/$defs/pickup" },
+    { "$ref": "#/$defs/item_ready" },
     { "$ref": "#/$defs/item_use" },
     { "$ref": "#/$defs/rocket_expire" }
   ],
@@ -45,6 +46,16 @@
         "id": { "$ref": "#/$defs/carId" }
       },
       "description": "The monster-truck transform timer lapses; the car morphs back."
+    },
+    "item_ready": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "item_ready" },
+        "id": { "$ref": "#/$defs/carId" }
+      },
+      "description": "A live car's box item has finished its reveal and is usable. Emitted once per box pickup, on the update the gate opens and BEFORE any item_use a press buffered during the reveal fires on that same update; the shells land the roulette on it. Not emitted for an item set by giveItem (it starts usable)."
     },
     "finish": {
       "type": "object",

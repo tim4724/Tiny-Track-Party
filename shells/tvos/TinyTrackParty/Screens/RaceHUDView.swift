@@ -52,12 +52,15 @@ struct RaceHUDView: View {
     /// baked into `CellHUD`, because `cells` is rebuilt by the ~6 Hz poll and a
     /// baked tick would land up to a poll interval after the pickup it triggers.
     let itemPickupTick: [EngineIdentity: Int]
+    /// `GameState.itemReadyTick`, threaded the same way for the same reason.
+    let itemReadyTick: [EngineIdentity: Int]
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             ForEach(cells) {
                 CellChrome(cell: $0, boostAccent: boostAccent,
-                           itemTick: itemPickupTick[$0.car] ?? 0)
+                           itemTick: itemPickupTick[$0.car] ?? 0,
+                           readyTick: itemReadyTick[$0.car] ?? 0)
             }
         }
         // The rects describe the SURFACE, whose origin is the screen's, so this
@@ -85,6 +88,8 @@ private struct CellChrome: View {
     let boostAccent: UInt32
     /// This car's pickup counter, already resolved from the map by the caller.
     let itemTick: Int
+    /// …and its reveal-gate counter, likewise.
+    let readyTick: Int
 
     /// `.cell-label`'s `margin: 0.7rem`. Points, not pixels: tvOS is always
     /// 1920x1080 POINTS whatever the box outputs, and the web's chrome is
@@ -148,7 +153,7 @@ private struct CellChrome: View {
         VStack(alignment: .leading, spacing: 8) {
             NameChip(name: cell.name, colorIndex: cell.colorIndex)
             ItemSlot(item: cell.item, boostAccent: boostAccent,
-                     carIndex: cell.carIndex, tick: itemTick)
+                     carIndex: cell.carIndex, tick: itemTick, readyTick: readyTick)
         }
         // `.cell-label__name`'s `max-width: 14em`, imposed HERE rather than on
         // the chip. A `maxWidth` frame in SwiftUI FILLS to its maximum, so
@@ -252,6 +257,9 @@ private struct ItemSlot: View {
     let carIndex: Int
     /// This car's `itemPickupTick` entry, bumped once per fresh pickup.
     let tick: Int
+    /// This car's `itemReadyTick` entry: the sim's reveal gate opened, so a
+    /// spin still going lands now rather than on its own late timer.
+    let readyTick: Int
 
     /// `clamp(112px, 10vw, 152px)` on a 1920-wide display: 10vw is 192, so the
     /// clamp lands on its 152 ceiling. VIEWPORT width, not cell width — the slot
@@ -359,6 +367,7 @@ private struct ItemSlot: View {
             }
         }
         .task(id: Trigger(item: item, tick: tick)) { await spin() }
+        .onChange(of: readyTick) { if rolling != nil { land() } }
     }
 
     private struct Trigger: Equatable {
@@ -386,7 +395,13 @@ private struct ItemSlot: View {
             // tracks return to their resting pose on their own, which is the
             // whole reason there is no state to put back any more.
             if Task.isCancelled { rolling = nil; return }
+            // `readyTick` already landed it.
+            if rolling == nil { return }
         }
+        land()
+    }
+
+    private func land() {
         rolling = nil
         landed += 1
     }

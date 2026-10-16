@@ -88,7 +88,7 @@ enum class Op {
   REVEAL_CHROME, HOLD_CHROME, RESET_SCENE_CARS, CREATE_SESSION, TRANSITION,
   BIND_SESSION, PAINT_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
-  STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
+  STOP_VOICES, ITEM_PICKUP, ITEM_READY, ROCKET_IMPACT, ROCKET_EXPIRE,
   BROADCAST_STANDINGS, APPLY_RACE_POINTS, ARM_RESULTS, SHOW_RESULTS,
   ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, SET_TRACK, DISPOSE_SESSION,
@@ -193,7 +193,7 @@ struct Effect {
   std::string str;        // screen | to | trackId | biome | item
   OptStr forceItem;       // create-session, null when there is no ?item override
 
-  Id id, id2;             // item-pickup/rocket-impact/remove/stop-car-audio; rekey pairs
+  Id id, id2;             // item-pickup/item-ready/rocket-impact/remove/stop-car-audio; rekey pairs
   double s = 0, lat = 0;  // rocket-expire's track point
 
   std::vector<SceneCar> cars;      // reset-scene-cars

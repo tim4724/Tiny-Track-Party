@@ -303,7 +303,8 @@ struct RootView: View {
     private var raceChrome: some View {
         ZStack {
             RaceHUDView(cells: state.cells, boostAccent: state.boostAccent,
-                        itemPickupTick: state.itemPickupTick)
+                        itemPickupTick: state.itemPickupTick,
+                        itemReadyTick: state.itemReadyTick)
 
             CountdownView(text: state.countdown)
 

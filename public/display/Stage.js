@@ -892,6 +892,16 @@ export class Stage {
     this._rouletteChip(c, item);
   }
 
+  // The sim's reveal gate opened (the 'item-ready' effect). A reel still
+  // spinning lands NOW: a press buffered during the spin fires on this same
+  // tick, and the timers below only ever run late, never early.
+  itemReady(id) {
+    const c = this.cars.get(id);
+    if (!c || !c._chipTimer) return;
+    clearTimeout(c._chipTimer); c._chipTimer = null;
+    this._landChip(c.itemEl, c._chipItem);
+  }
+
   // Slot-machine the cell's item slot: flick through the item ICONS,
   // decelerating, then land on `item` with a pop. Self-driven so it animates
   // faster than the ~6 Hz HUD poll; cancelled on change/teardown.
@@ -903,13 +913,17 @@ export class Stage {
       this._paintSlot(el, ITEM_KEYS[i % ITEM_KEYS.length], true); i++; n++;
       if (n >= TOTAL) { // land on the real item
         c._chipTimer = null;
-        this._paintSlot(el, item, false);
-        el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+        this._landChip(el, item);
         return;
       }
       c._chipTimer = setTimeout(spin, 35 + n * 16); // decelerate ~35ms → ~165ms
     };
     spin();
+  }
+
+  _landChip(el, item) {
+    this._paintSlot(el, item, false);
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   }
 
   // Where this frame's split-screen cells are, as [{ x, y, w, h }, …] in CSS

@@ -148,6 +148,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
 
             // ---- in-race effects --------------------------------------------
             "item-pickup" -> EngineId.from(e.opt("id"))?.let { game.itemPickup(it) }
+            "item-ready" -> EngineId.from(e.opt("id"))?.let { game.itemReady(it) }
             "rocket-impact" -> EngineId.from(e.opt("id"))?.let { game.display.burst(it, 0.0, 0.0) }
             "rocket-expire" ->
                 game.display.burst(null, e.optDouble("s", 0.0), e.optDouble("lat", 0.0))
@@ -235,7 +236,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "paint-hud", "start-countdown", "show-countdown",
             "broadcast-countdown", "refresh-auto-pause", "persist-progression",
             "start-music", "stop-music", "stop-voices",
-            "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
+            "stop-car-audio", "item-pickup", "item-ready", "rocket-impact", "rocket-expire",
             "broadcast-standings", "arm-results", "show-results",
             "arm-intermission", "clear-intermission",
             "dispose-session", "fade-to-lobby", "remove-scene-car",

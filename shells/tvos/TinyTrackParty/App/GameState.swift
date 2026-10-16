@@ -340,6 +340,11 @@ final class GameState: ObservableObject {
     /// the counter the HUD animates off.
     @Published var itemPickupTick: [EngineIdentity: Int] = [:]
 
+    /// Bumped when the sim's reveal gate opens on a car's item (`item-ready`):
+    /// a slot still spinning lands on it, because a press buffered during the
+    /// spin fires on that same tick.
+    @Published var itemReadyTick: [EngineIdentity: Int] = [:]
+
     /// The last thing that went wrong, and the ONLY channel this app has for
     /// saying so.
     ///

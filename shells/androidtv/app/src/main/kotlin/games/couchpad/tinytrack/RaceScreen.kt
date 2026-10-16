@@ -118,6 +118,7 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
                 accent = state.boostAccent,
                 carIndex = cell.carIndex,
                 tick = state.itemPickupTick[cell.car] ?: 0,
+                ready = state.itemReadyTick[cell.car] ?: 0,
             )
         }
 
@@ -256,7 +257,7 @@ private fun NameChip(name: String, colorIndex: Int) {
  * (2026-10-09).
  */
 @Composable
-private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
+private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int, ready: Int) {
     // `clamp(112px, 10vw, 152px)` on a 1920-wide display: 10vw is 192, so the clamp
     // lands on its 152 ceiling. VIEWPORT width, not cell width — the slot is the
     // same size in a four-way split as it is full screen.
@@ -279,9 +280,15 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
         for (n in 1..8) {
             rolling = keys[(n - 1) % keys.size]
             delay((35 + n * 16).toLong())
+            if (rolling == null) return@LaunchedEffect // `ready` already landed it
         }
         rolling = null
     }
+    // The sim's reveal gate opened: a spin still going lands NOW, because a press
+    // buffered during it fires on this same tick and the delays only run late.
+    // The value at mount is not a gate opening.
+    val readyAtMount = remember { ready }
+    LaunchedEffect(ready) { if (ready != readyAtMount) rolling = null }
 
     Box(
         Modifier

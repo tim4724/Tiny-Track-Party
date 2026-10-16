@@ -292,6 +292,7 @@ Value effectVal(const race::Effect& e) {
       v.set("id", e.id.toValue());
       v.set("item", Value::Str(e.str));
       break;
+    case race::Op::ITEM_READY:
     case race::Op::ROCKET_IMPACT:
     case race::Op::REMOVE_SCENE_CAR:
     case race::Op::STOP_CAR_AUDIO: v.set("id", e.id.toValue()); break;

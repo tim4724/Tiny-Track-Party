@@ -62,6 +62,11 @@ by float noise, which a long packed race (skysnake, the catalogue sweep)
 amplifies exactly as far as an unrelated perturbation of the old code does: to
 judge such a diff, perturb the old code and compare. The audio corpus followed.
 `curb_hang` is the check that asserts the behaviour.
+On 2026-10-16 the sim began announcing the end of an item's reveal (`item_ready`,
+`Game::update`), so the shells' roulette lands before a buffered press can fire.
+The re-emit ADDS that event and moves nothing else: every other field of every
+line is identical, and the audio corpus did not move (no cue hears it).
+`item_reveal` is the check that asserts the ordering.
 
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the

@@ -41,6 +41,7 @@ const char* key(Op op) {
     case Op::STOP_MUSIC: return "stop-music";
     case Op::STOP_VOICES: return "stop-voices";
     case Op::ITEM_PICKUP: return "item-pickup";
+    case Op::ITEM_READY: return "item-ready";
     case Op::ROCKET_IMPACT: return "rocket-impact";
     case Op::ROCKET_EXPIRE: return "rocket-expire";
     case Op::BROADCAST_STANDINGS: return "broadcast-standings";
@@ -611,6 +612,11 @@ Effects raceEvent(const RaceEvent& ev, bool fastForwarding, bool humansAllDone) 
     // slot, so no spin.
     if (ev.type == "pickup" && !ev.finished) {
       e = mk(Op::ITEM_PICKUP); e.id = ev.id; e.str = ev.item; out.push_back(e);
+    }
+    // The sim's reveal gate opened: the roulette lands NOW if it is still
+    // spinning, because a press buffered during the reel fires on this tick.
+    if (ev.type == "item_ready") {
+      e = mk(Op::ITEM_READY); e.id = ev.id; out.push_back(e);
     }
     // Rocket strike: a one-shot impact burst on the target.
     if (ev.type == "spin" && ev.cause == "rocket") {

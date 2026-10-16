@@ -161,6 +161,9 @@ struct RaceFlowPerformer {
         case "item-pickup":
             if let id = EngineIdentity.from(e["id"]) { game.itemPickup(id) }
 
+        case "item-ready":
+            if let id = EngineIdentity.from(e["id"]) { game.itemReady(id) }
+
         case "rocket-impact":
             if let id = EngineIdentity.from(e["id"]) {
                 game.display.burst(id: id, s: 0, lat: 0)
@@ -283,7 +286,7 @@ struct RaceFlowPerformer {
         "paint-hud", "start-countdown", "show-countdown",
         "broadcast-countdown", "refresh-auto-pause", "persist-progression",
         "start-music", "stop-music", "stop-voices",
-        "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
+        "stop-car-audio", "item-pickup", "item-ready", "rocket-impact", "rocket-expire",
         "broadcast-standings", "arm-results", "show-results",
         "arm-intermission", "clear-intermission",
         "dispose-session", "fade-to-lobby", "remove-scene-car",

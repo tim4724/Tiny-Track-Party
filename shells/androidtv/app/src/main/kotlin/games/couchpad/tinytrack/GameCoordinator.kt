@@ -1626,6 +1626,10 @@ class GameCoordinator(
         state.itemPickupTick[id] = (state.itemPickupTick[id] ?: 0) + 1
     }
 
+    fun itemReady(id: EngineId) {
+        state.itemReadyTick[id] = (state.itemReadyTick[id] ?: 0) + 1
+    }
+
     // -- results --------------------------------------------------------------
 
     // NOTHING ABOUT THE BOARD IS COMPOSED HERE. The cup points are banked and the

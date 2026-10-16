@@ -345,6 +345,14 @@ target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings
 ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
+# ---- Behaviour: the item reveal gate -----------------------------------------
+# The traces carry the events but assert no ordering; this holds the one the
+# shells' roulette relies on (see the file header).
+add_executable(item_reveal_check simtest/item_reveal_check.cc)
+target_link_libraries(item_reveal_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(item_reveal_check)
+add_test(NAME item_reveal COMMAND item_reveal_check)
+
 # ---- Behaviour: the drift gesture --------------------------------------------
 # No golden trace drifts; this holds what the gesture means (the hold, the
 # locked side, the line, the release, bots).

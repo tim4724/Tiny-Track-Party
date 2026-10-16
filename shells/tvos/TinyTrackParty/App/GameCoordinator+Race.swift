@@ -257,6 +257,10 @@ extension GameCoordinator {
         state.itemPickupTick[id] = (state.itemPickupTick[id] ?? 0) + 1
     }
 
+    func itemReady(_ id: EngineIdentity) {
+        state.itemReadyTick[id] = (state.itemReadyTick[id] ?? 0) + 1
+    }
+
     // MARK: - Results
 
     // NOTHING ABOUT THE BOARD IS COMPOSED HERE. The cup points are banked and

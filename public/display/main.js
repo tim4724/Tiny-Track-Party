@@ -951,6 +951,7 @@ const RACE_PERFORMERS = {
   'stop-music': () => sfx(audioDecide.stopMusic()),
   'stop-voices': () => sfx(audioDecide.stopVoices()),
   'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(); },
+  'item-ready': (e) => scene.itemReady(e.id),
   'rocket-impact': (e) => scene.rocketImpact(e.id),
   'rocket-expire': (e) => scene.rocketExpire(e.s, e.lat),
   // The board itself was composed and RETAINED behind the room inside the walk

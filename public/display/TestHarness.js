@@ -71,10 +71,11 @@ function logDeal(log) {
 }
 
 // The per-event effects a live race PERFORMS, mirrored from the decision race_flow.cc
-// makes in raceEvent(): a live car's pickup spins its cell roulette, a rocket strike
-// bursts on the victim, a whiff bursts where the rocket died. The walk that decides
-// them takes a room, and these previews have none — so this is the one place the
-// harness performs a race_flow rule by hand, and it performs it for EVERY live preview:
+// makes in raceEvent(): a live car's pickup spins its cell roulette and its reveal
+// gate lands it, a rocket strike bursts on the victim, a whiff bursts where the rocket
+// died. The walk that decides them takes a room, and these previews have none — so
+// this is the one place the harness performs a race_flow rule by hand, and it performs
+// it for EVERY live preview:
 // the trailer films them as the game, and a race that spun its cars without a fireball
 // or left its item slots empty was not the game. Renderer calls only — nothing here is
 // audio; the decision layer hears the same events itself. Every event also lands in
@@ -82,6 +83,7 @@ function logDeal(log) {
 function raceEventPerformer(scene, log) {
   return (ev) => {
     if (ev.type === 'pickup' && !ev.finished) scene.itemPickup(ev.id, ev.item);
+    else if (ev.type === 'item_ready') scene.itemReady(ev.id);
     else if (ev.type === 'spin' && ev.cause === 'rocket') scene.rocketImpact(ev.id);
     else if (ev.type === 'rocket_expire') scene.rocketExpire(ev.s, ev.lat);
     log.events.push({ deal: log.deal, t: (log.frameMs - log.dealAtMs) / 1000,

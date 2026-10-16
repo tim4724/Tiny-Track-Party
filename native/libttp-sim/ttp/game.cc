@@ -264,7 +264,7 @@ Value Event::toValue() const {
   else if (type == "pickup") { o.set("item", Value::Str(item)); o.set("finished", Value::Bool(finished)); }
   else if (type == "item_use") o.set("item", Value::Str(item));
   else if (type == "rocket_expire") { o.set("s", Value::Num(s)); o.set("lat", Value::Num(lat)); }
-  // monster_end: just {type,id}
+  // monster_end, item_ready: just {type,id}
   return o;
 }
 
@@ -1118,7 +1118,13 @@ void Game::update(double dtMs) {
     }
 
     if (!c.finished) {
+      const bool revealing = c.pickupAge < ITEM_USE_READY;
       c.pickupAge += dt;
+      // The reveal is over: the shells land the roulette on this beat, so the
+      // buffered press below can never fire an item the reel is still hiding.
+      if (revealing && c.pickupAge >= ITEM_USE_READY) {
+        Event e; e.type = "item_ready"; e.id = c.id; emit(e);
+      }
       if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; useItemImpl(c); }
       else if (c.wantUse && c.item.empty()) c.wantUse = false;
       if (!spinning && grounded && enterZonesPads(c)) applyPad(c);

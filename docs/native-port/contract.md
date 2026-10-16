@@ -128,7 +128,7 @@ C++, so they pin regression rather than the port —
 untouched is the coverage they were built with, since each line's own recorded
 input is what gets fed back through: the whole event vocabulary and the endgame
 path, not just early-race physics (two starter slices plus a full skysnake race
-exercising all seven event kinds, all four spin causes, rocket flight, the
+exercising all eight event kinds, all four spin causes, rocket flight, the
 monster transform, lap counting across the s = 0 seam, and every car finishing
 inside the budget).
 
@@ -218,7 +218,7 @@ Per-car `CarSnap`:
 Schema: [events.schema.json](contract/events.schema.json). Events are
 synchronous calls from inside `Game.update()`; all payloads are plain data.
 `id` is the car id in every event except `rocket_expire`, where it is the
-ROCKET's id. Exactly seven kinds:
+ROCKET's id. Exactly eight kinds:
 
 | type | payload | when |
 |---|---|---|
@@ -227,6 +227,7 @@ ROCKET's id. Exactly seven kinds:
 | `finish` | `{id, rank, time}` | car crosses the line on its final lap; `rank` = 1-based finish order, `time` = seconds. The race is over when the LAST car's finish arrives (hosts may also poll RaceSession's `raceOver` getter) |
 | `lap` | `{id, lap}` | non-final line crossing; `lap` = completed-lap count (NOT the display lap). The first crossing from the s < 0 grid emits nothing |
 | `pickup` | `{id, item, finished}` | item box collected; on a finished car with a full slot, `item` is the HELD item (no reroll) and `finished` is true |
+| `item_ready` | `{id}` | a box item's reveal is over and it is usable; once per box pickup, before the `item_use` a press buffered during the reveal fires on the same update. The shells land the roulette on it |
 | `item_use` | `{id, item}` | fired BEFORE the effect applies; `item` is the slot being fired |
 | `rocket_expire` | `{id, s, lat}` | rocket self-destructs without a hit; `id` = rocket id, `s` wrapped to [0, length) |
 
