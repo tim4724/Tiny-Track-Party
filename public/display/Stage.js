@@ -26,6 +26,7 @@ import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { CAM, Display, RECT_STRIDE, TAG_STRIDE, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
+import { PresentPacer } from './presentPacer.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
 
@@ -270,16 +271,17 @@ export class Stage {
     // it before the first frame, and the rule adopts the same ceiling on its
     // first poll).
     this._autoScale = Infinity;
-    // `_divisor` is "render every Nth rAF callback" and is the other half of the
+    // `_divisor` is "present every Nth vsync" and is the other half of the
     // point — 2 on a 120 Hz display holding the desired 1080@60, 1 once the
-    // device proves it can drive 120.
+    // device proves it can drive 120. Which callbacks that is, is `_pacer`'s —
+    // by time off the stamps, never by counting callbacks (presentPacer.js).
     //
     // The SIM still ticks on every callback: only the picture is paced, so
     // steering keeps the display's full cadence and what doubles is picture
     // latency, not input latency. (The Android shell paces the same way, for the
     // same reason — see its vsyncInterval.)
     this._divisor = 1;
-    this._vsyncCount = 0;
+    this._pacer = new PresentPacer();
     this._pendingDt = 0;
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
@@ -1407,9 +1409,10 @@ export class Stage {
     // the skipped callbacks rather than dropped, because the renderer's own
     // clock (box bob, cloud drift, skid decay, camera damping) is cosmetic and
     // would otherwise run at a fraction speed whenever the divisor is above 1.
-    this._vsyncCount++;
+    // The period goes over only while the callback cadence fits it: after a
+    // stall the average holds the stall itself, and an unknown period draws.
     this._pendingDt += dt;
-    if (this._divisor > 1 && this._vsyncCount % this._divisor !== 0) {
+    if (!this._pacer.due(t, fits ? this._periodMs : 0, this._divisor)) {
       this._scheduleNext();
       return;
     }

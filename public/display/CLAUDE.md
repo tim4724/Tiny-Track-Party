@@ -170,6 +170,18 @@ decay, camera damping) is cosmetic and would otherwise run at a fraction speed.
 So on a 120 Hz display holding 1080@60, steering keeps its full 120 Hz cadence
 and what doubles is picture latency, not input latency.
 
+**And it paces by TIME, never by counting callbacks** (`presentPacer.js`). The
+TV shells count ticks because their ticks are vsyncs; rAF is the one tick that
+arrives a vsync late under load, and counting callbacks made every late one a
+three-vsync picture — including the half that landed on a callback which was
+not due to draw, where the next callback was already two vsyncs past the last
+present and was skipped for being odd. The sim was in perfect step throughout,
+and the slip sits under the readout's budget granularity, so no counter saw it.
+A callback draws when the whole-vsync distance from the last present, read off
+the stamps, reaches the divisor; the slips that land on the due callback itself
+still cost a long picture, because no callback existed on the due vsync.
+`tests/present-pacer.test.js` drives slipped trains through both rules.
+
 **The panel's period is read off the device, not asked for.** There is no
 reliable web API for refresh rate, but `_presentFloor` already is the fastest
 present this device has produced. It is sticky, so the first unpaced frames learn
