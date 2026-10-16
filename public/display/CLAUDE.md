@@ -157,8 +157,9 @@ ONE decision.** `Stage._adaptScale` polls `ttp_display_scale_poll` every frame
 and gets `[scale, divisor]` back when the point moves, because frame rate and
 resolution are two ways of spending the same GPU milliseconds and a shell taking
 one answer and ignoring the other would be arbitrating between them itself. The
-desired spot is **1080 lines at 60 Hz**: below it resolution gives way and the
-rate does not, above it the rate goes first. The rule is
+rule only ever moves the resolution: the present rate is the panel's own, a
+120 Hz panel is priced per vsync and pays in pixels to hold it, and the divisor
+is 2 only on the host's Quality choice. The rule is
 `native/libttp-runtime/ttp/render_scale.h` and the state around it —
 the window, the percentiles, the fastest present, the cost model, the clocks —
 is `render_scale_controller.h`; this side names the band, resizes, and paces.
@@ -167,8 +168,8 @@ is `render_scale_controller.h`; this side names the band, resizes, and paces.
 rAF callback and gates only the draw, accumulating the skipped callbacks' dt into
 the frame that does draw — the renderer's clock (box bob, cloud drift, skid
 decay, camera damping) is cosmetic and would otherwise run at a fraction speed.
-So on a 120 Hz display holding 1080@60, steering keeps its full 120 Hz cadence
-and what doubles is picture latency, not input latency.
+So at the host's half rate on a 120 Hz display, steering keeps its full 120 Hz
+cadence and what doubles is picture latency, not input latency.
 
 **And it paces by TIME, never by counting callbacks** (`presentPacer.js`). The
 TV shells count ticks because their ticks are vsyncs; rAF is the one tick that
@@ -183,11 +184,12 @@ still cost a long picture, because no callback existed on the due vsync.
 `tests/present-pacer.test.js` drives slipped trains through both rules.
 
 **The panel's period is read off the device, not asked for.** There is no
-reliable web API for refresh rate, but `_presentFloor` already is the fastest
-present this device has produced. It is sticky, so the first unpaced frames learn
-8.3 ms on a 120 Hz display before pacing could hide it; and a machine that has
-never presented faster than 16.7 there reports 16.7 and gets treated as 60 Hz,
-which is what it was going to run at anyway.
+reliable web API for refresh rate, so the controller learns it as the running
+minimum over windows of the tick series' MEDIAN interval (the p05 was one
+jitter's width under the vsync under load, `render_scale_controller.cc`). It is
+sticky downward, and it is only the frame budget: a machine whose loop never
+keeps up at 120 reports 16.7, is priced as 60 Hz, and presents on whatever
+vsyncs its frames make, which is what it was going to do anyway.
 
 **A SCALE HERE IS A MULTIPLIER ON CSS PIXELS, NOT A FRACTION OF THE PANEL**, and
 the rule is shared with a shell for which it is the opposite. `_scaleBand`'s

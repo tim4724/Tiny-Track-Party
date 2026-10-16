@@ -590,14 +590,12 @@ on the picture that matters.
 **THE PRESENT RATE IS THE RULE'S NOW, and `debug.ttp.hz` is a PIN over it**
 (`pinVsyncInterval`, not a setter — a setter would be overwritten a second
 later and the knob would look broken). `ttp_display_scale_poll` answers a
-resolution AND a divisor as one operating point, ordered around a desired
-1080@60: below it resolution gives way and the rate does not, above it the rate
-goes first, so a 120 Hz panel with the headroom to drive it will. This box has no
-such headroom and sits below the anchor, so on it the rate stays at the panel's
-own — unless the HOST picks Quality on the phone, which lays the same ladder out at
-half the rate (`ttp_display_scale_half_rate`, `GameCoordinator.setHalfRate`).
-This box is what the choice exists for: below the anchor is exactly where the
-phone offers it.
+resolution AND a divisor as one operating point. The rule only ever moves the
+resolution: the rate stays the panel's own, on every panel — unless the HOST
+picks Quality on the phone, which lays the same ladder out at half the rate
+(`ttp_display_scale_half_rate`, `GameCoordinator.setHalfRate`). This box is
+what the choice exists for: it sits below the 1080-line anchor, which is
+exactly where the phone offers it.
 
 **A PIN IS DECLARED AS A PERIOD, NOT AS A DIVISOR** (`rulePanelMs`). The rule
 owns the divisor half of the point and multiplies the period it is given by the

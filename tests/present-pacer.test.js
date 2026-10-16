@@ -1,7 +1,7 @@
 'use strict';
 // The web's present pacer, driven with rAF stamp trains.
 //
-// WHAT IT PINS. With the render scale's divisor at 2 on a 120 Hz panel, a rAF
+// WHAT IT PINS. At the host's half rate on a 120 Hz panel (divisor 2), a rAF
 // callback that arrives one vsync late costs a three-vsync picture ONLY when
 // it is the callback that was due to draw — no callback existed on the due
 // vsync, so no gate can do better. A slip on the other callback costs nothing:

@@ -154,8 +154,7 @@ void rates() {
 
 // ---- pacing: a chosen cadence is not damage ---------------------------------
 void pacing() {
-  // A 120 Hz screen with the rule anchored on divisor 2 — the NORMAL operating
-  // point there, and the state a developer's own monitor is in. Half the ticks
+  // A 120 Hz screen at the host's half rate, divisor 2. Half the ticks
   // deliberately do not draw. Undeclared this reads as sixty skipped presents.
   const double kHz120 = 1000.0 / 120;
   Monitor paced;

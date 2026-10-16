@@ -360,8 +360,8 @@ class DisplayHost(
     /**
      * How many vsyncs one rendered frame spans: 1 presents every vsync, 2 every
      * other — a LOCKED, evenly-paced half rate. On a 60 Hz TV that is 60 and 30;
-     * on a 120 Hz one it is 120 and 60, and 2 is what holds the desired 1080@60
-     * there.
+     * on a 120 Hz one it is 120 and 60. The rule itself never halves it; 2 is
+     * the host's Quality choice (or the pin below).
      *
      * THE RULE OWNS THIS, not the shell: it is half of the operating point
      * `ttp_display_scale_poll` answers, alongside the resolution, because the
@@ -401,8 +401,8 @@ class DisplayHost(
     /**
      * The divisor half of the rule's last answered operating point
      * ([adaptScale]), 1 until it has answered. Tracked even while pinned, so
-     * unpinning restores the rule's own cadence — a 120 Hz panel holding the
-     * anchor at divisor 2 gets its 2 back, not a blanket 1.
+     * unpinning restores the rule's own cadence — a box at the host's half
+     * rate gets its 2 back, not a blanket 1.
      */
     private var ruleDivisor = 1
 

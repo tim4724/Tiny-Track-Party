@@ -69,9 +69,9 @@ class RenderScaleController {
   // the three loops ticks at the panel's own rate whether or not the frame drew
   // — that is what makes `hz` a different number from `fps` — so ticks are
   // where a panel period can be learned, while presents run at whatever cadence
-  // the rule most recently CHOSE. Learning the period off presents would read a
-  // deliberate divisor of 2 as a 60 Hz panel and never offer the rate step
-  // again.
+  // the host most recently CHOSE. Learning the period off presents would read
+  // the host's half rate as a 60 Hz panel and price every frame against double
+  // the budget.
   double panelMs() const { return panelMs_; }
 
   // A NEW SCENE. Drops the cost model's observation — a fit whose two points
@@ -106,17 +106,18 @@ class RenderScaleController {
   // at boot and flipped from the host phone. The next poll performs it as a
   // move of its own, landing on the anchor at the other rate (renderScaleStep).
   void setHalfRate(bool on) { halfRate_ = on; }
-  bool halfRate() const { return halfRate_ && halfRateFits(); }
+  bool halfRate() const { return halfRate_; }
 
   // WHETHER THE HOST PHONE SHOWS THE CHOICE. Only a device that cannot hold
   // the anchor gets it: one that has stayed below it (belowAnchor) for
   // kHalfRateOfferSec, in the lobby as much as in a race — and from then on
   // for the life of the process, so the option never appears and vanishes
   // between races. Always while half rate is on, so it can be switched back.
-  bool offersHalfRate() const { return halfRateFits() && (offered_ || halfRate_); }
+  bool offersHalfRate() const { return offered_ || halfRate_; }
 
   // The present rate each choice means on this panel, for the phone's labels:
-  // 60 and 30 on a 60 Hz TV, 50 and 25 on a 50 Hz one.
+  // 60 and 30 on a 60 Hz TV, 50 and 25 on a 50 Hz one, 120 and 60 on a 120 Hz
+  // panel.
   int rateHz(bool half) const;
 
  private:
@@ -135,15 +136,6 @@ class RenderScaleController {
   double movedMs_ = 0;
   double sceneMs_ = 0;
   double lastPollMs_ = 0;
-  // HALF RATE ONLY WHERE THE WINDOW CAN STILL JUDGE IT: a panel whose anchor
-  // is every vsync (up to ~90 Hz — every television). The readout's window is
-  // kWindow TICKS, so half the anchor on a 120 Hz panel is every 4th tick, 30
-  // presents a window, right at kMinSignalFrames — the present-record veto and
-  // the whole no-timer fallback go deaf, and at 240 Hz the GPU term with them.
-  // Elsewhere a stored choice is kept and simply not applied, or offered.
-  bool halfRateFits() const {
-    return anchorDivisor(RenderScaleLimits{0.0, 0.0, 0.0, panelMs_}) == 1;
-  }
   bool halfRate_ = false;
   bool offered_ = false;
   double belowMs_ = -1.0;    // when it last fell below the anchor, -1 while not

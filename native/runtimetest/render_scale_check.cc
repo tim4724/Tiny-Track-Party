@@ -23,7 +23,6 @@ using ttp::rt::latePresentRatio;
 using ttp::rt::presentBaseline;
 using ttp::rt::RenderScaleCost;
 using ttp::rt::RenderScaleLimits;
-using ttp::rt::anchorDivisor;
 using ttp::rt::operatingPoints;
 using ttp::rt::pointBudgetMs;
 using ttp::rt::RenderScalePoint;
@@ -107,10 +106,8 @@ struct Shell {
         renderScaleStep(at, gpuAt(ms), kLongHold, sinceScene, prev, b);
     if (next.scale != at.scale || next.divisor != at.divisor) {
       // ONLY ON A RESOLUTION MOVE, exactly as RenderScaleController::poll does
-      // it — two points at one scale determine no slope. A harness that
-      // recorded one on a rate move would hand the model an observation the
-      // shipped controller never has, and the rate step's own recovery is
-      // precisely the case that turns on which of the two is true.
+      // it — two points at one scale determine no slope, and a half-rate flip
+      // is a same-scale move.
       if (next.scale != at.scale) prev = RenderScaleSample{at.scale, ms};
       at = next;
       moves++;
@@ -244,50 +241,22 @@ int main() {
     nearly(l[n - 1].scale * 2160.0, 2160.0, "best is native");
   }
   {
+    // THE RATE IS THE PANEL'S OWN ON EVERY PANEL — the rule never moves the
+    // divisor (the ladder's comment has the decision). A 120 Hz panel offers
+    // the same rungs as a 60 Hz one, each priced per vsync.
     RenderScalePoint l[8];
     const int n = operatingPoints(k4K120, l);
-    // 540@60, 720@60, 1080@60, then the RATE step, then 1620@120, 2160@120.
-    check(n == 6, "a 120 Hz 4K panel offers six — the same rungs plus a rate step");
-    nearly(l[0].scale * 2160.0, 540.0, "540 first");
-    check(l[0].divisor == 2 && l[1].divisor == 2 && l[2].divisor == 2,
-          "everything at or below the anchor runs at 60 Hz, not 120");
-    nearly(l[2].scale * 2160.0, 1080.0, "the anchor is 1080 lines");
-    nearly(l[3].scale * 2160.0, 1080.0, "and the step ABOVE it is the SAME picture…");
-    check(l[3].divisor == 1, "…at twice the rate — rate before pixels");
-    nearly(l[4].scale * 2160.0, 1620.0, "only then does resolution climb again");
-    check(l[4].divisor == 1 && l[5].divisor == 1, "…at the faster rate");
-  }
-  // BELOW the anchor the rate never gives way. A tilt-steered party game pays
-  // for a halved present rate in input latency, on every player.
-  {
-    RenderScalePoint l[8];
-    const int n = operatingPoints(k4K120, l);
-    for (int i = 0; i < n; i++) {
-      if (l[i].scale * 2160.0 < 1080.0 - 1e-9) {
-        check(l[i].divisor == anchorDivisor(k4K120), "no point under the anchor halves the rate");
-      }
+    check(n == 5, "a 120 Hz 4K panel offers the same five points");
+    for (int i = 0; i < n; i++) check(l[i].divisor == 1, "…every one at the panel's own 120");
+    nearly(l[2].scale * 2160.0, 1080.0, "the anchor is still 1080 lines");
+    const RenderScaleLimits hz144{0.0, 1.0, 1440.0, 1000.0 / 144.0};
+    const RenderScaleLimits small{0.0, 1.0, 700.0, kHz120};
+    for (const RenderScaleLimits& b : {k4K, hz144, small}) {
+      const int m = operatingPoints(b, l);
+      for (int i = 0; i < m; i++) check(l[i].divisor == 1, "…and so on every other panel and surface");
     }
   }
-  // The divisor nearest 60 on each panel, which is what the anchor means.
-  nearly((double) anchorDivisor(k4K), 1.0, "a 60 Hz panel presents every vsync");
-  nearly((double) anchorDivisor(k4K120), 2.0, "a 120 Hz panel presents every other one");
-  {
-    const RenderScaleLimits hz144{0.0, 1.0, 1440.0, 1000.0 / 144.0};
-    nearly((double) anchorDivisor(hz144), 2.0, "a 144 Hz panel takes 72, the closest it offers");
-    const RenderScaleLimits hz50{0.0, 1.0, 1080.0, 20.0};
-    nearly((double) anchorDivisor(hz50), 1.0,
-           "and a 50 Hz PAL box runs at 50 — a shell may not name a rate its panel lacks");
-  }
-  // A window too short to show the anchor is never "above the desired spot", so
-  // it never buys frames it has no pixels to fill.
-  {
-    RenderScalePoint l[8];
-    const RenderScaleLimits small{0.0, 1.0, 700.0, kHz120};
-    const int n = operatingPoints(small, l);
-    for (int i = 0; i < n; i++) check(l[i].divisor == 2, "a sub-1080 surface takes no rate step");
-  }
-  // The budget IS the present interval, which is what makes a rate step and a
-  // resolution step comparable at all.
+  // The budget IS the present interval.
   nearly(pointBudgetMs(RenderScalePoint{1.0, 1}, k4K120), kHz120, "divisor 1 on 120 Hz is 8.3 ms");
   nearly(pointBudgetMs(RenderScalePoint{1.0, 2}, k4K120), 2.0 * kHz120, "divisor 2 is 16.7");
 
@@ -426,67 +395,42 @@ int main() {
   }
 
   // ---- 120 Hz --------------------------------------------------------------
+  //
+  // THE RATE IS THE PANEL'S OWN AND ONLY PIXELS GIVE WAY. A 120 Hz panel is
+  // priced per vsync: a frame that fits 8.3 ms runs native at 120, one that
+  // does not gives up rungs to hold 120, and one that cannot make it on any
+  // rung sits at the floor presenting as it can.
   {
-    // A DEVICE THAT CAN DRIVE 120 SHOULD. Cheap frames: 3 ms flat at native,
-    // which fits an 8.3 ms budget everywhere, so it should end at 2160@120.
     const auto cost = [](double s) { return 1.0 + 2.0 * s * s; };
     Shell sh;
     for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
-    check(sh.at.divisor == 1, "a device with the headroom takes the panel's 120 Hz");
-    nearly(sh.lines(k4K120), 2160.0, "…at full resolution");
+    check(sh.at.divisor == 1, "a 120 Hz panel presents every vsync");
+    nearly(sh.lines(k4K120), 2160.0, "…at full resolution when the frame fits 8.3 ms");
   }
   {
-    // AND ONE THAT CANNOT, MUST NOT. 12 ms at 1080 fits 16.7 but not 8.3, so the
-    // rate step is refused and it holds the anchor rather than shredding pixels
-    // to chase a rate. This is the case a naive `budget = panel period` gets
-    // wrong: it would drop to 540 to reach 120.
+    // 12 ms at 1080 fits 16.7 but not 8.3. The rule used to hold 1080 on every
+    // other vsync here; it now pays in pixels and keeps the panel's rate.
     const auto cost = [](double s) { return 4.0 + 32.0 * s * s; };
     Shell sh;
     for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
-    check(sh.at.divisor == 2, "a device without it stays at 60 Hz");
-    check(sh.lines(k4K120) >= 1080.0 - 1e-9, "…and keeps the anchor's picture");
+    check(sh.at.divisor == 1, "a frame that cannot make the vsync at 1080 keeps the rate");
+    check(sh.lines(k4K120) < 1080.0, "…and pays in resolution");
+    check(sh.lines(k4K120) >= 540.0 - 1e-9, "…never below the floor");
   }
   {
-    // A 120 Hz PANEL WITH A WEAK GPU falls DOWN the resolution rungs at 60 Hz,
-    // never below the anchor at 120 — the rate is not a rescue.
-    const auto cost = [](double s) { return 6.0 + 40.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
-    check(sh.at.divisor == 2, "a struggling device on a 120 Hz panel runs 60, not 120");
-    check(sh.lines(k4K120) < 1080.0, "…and pays in resolution, which is the stated trade");
-  }
-  {
-    // THE RATE STEP MUST NOT BE A ONE-WAY DOOR. Falling across it is a
-    // same-scale move and records no observation, a scene build clears whatever
-    // one there was, and the probe is the only branch that can move without
-    // one — so while it refused every rate change, the anchor was a trap. A
-    // browser on a 120 Hz laptop sat at 1080@60 for the life of the page with
-    // the GPU at a seventh of its budget.
-    //
-    // The pixels do not change, which is the whole permission: the millisecond
-    // measured HERE is the millisecond it costs THERE.
-    const RenderScalePoint anchor{1080.0 / 2160.0, 2};
-    const RenderScalePoint up =
-        renderScaleStep(anchor, gpuAt(2.5), kLongHold, kSettled, kNoFit, k4K120);
-    check(up.divisor == 1, "a clean anchor at half rate climbs back to the panel's own");
-    nearly(up.scale, anchor.scale, "…buying the rate, not pixels");
-    check(renderScaleStep(anchor, gpuAt(12.0), kLongHold, kSettled, kNoFit, k4K120).divisor == 2,
-          "…and a frame that does not fit the halved budget stays where it is");
-  }
-  {
-    // END TO END, on the sequence a race actually walks: a heavy lobby steps the
-    // point down across the rate step, the race's scene build drops the
-    // observation, and the cheap race that follows has to find 120 again once
-    // it has held the point it inherited for an up-hold.
+    // END TO END, on the sequence a race actually walks: a heavy lobby walks
+    // the point down, the race's scene build drops the observation, and the
+    // cheap race that follows climbs back to native once it has held the point
+    // it inherited for an up-hold.
     const auto heavy = [](double s) { return 4.0 + 32.0 * s * s; };
     const auto light = [](double s) { return 1.0 + 2.0 * s * s; };
     Shell sh;
     for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K120);
-    check(sh.at.divisor == 2, "the lobby really did put it on the 60 Hz half of the ladder");
+    check(sh.lines(k4K120) < 1080.0, "the lobby really did walk it down");
     sh.prev = RenderScaleSample{0.0, 0.0};        // what a scene build does
     for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K120, ttp::rt::kScaleUpHoldSec);
-    check(sh.at.divisor == 1, "and the race after it climbs back to the panel's rate");
-    nearly(sh.lines(k4K120), 2160.0, "…and on to native, as on any other ladder");
+    nearly(sh.lines(k4K120), 2160.0, "and the race after it climbs back to native");
+    check(sh.at.divisor == 1, "…at the panel's rate throughout");
   }
 
   // ---- the controller ------------------------------------------------------
@@ -506,6 +450,7 @@ int main() {
       int everyNth = 1;
       int tick = 0;
       double gpuMs = -1;   // <= 0: no timer, like WebKit
+      double jitterMs = 0; // stamps land this far either side of the vsync, zero-mean
 
       void ticks(int n, double panel = kHz60) {
         // WORK THAT OVERRUNS THE PERIOD MISSES THE VSYNC. A box whose GPU takes
@@ -518,11 +463,14 @@ int main() {
         const int forced = gpuMs > 0.0 ? (int) std::ceil(gpuMs / panel) : 1;
         const int cadence = std::max(everyNth, std::max(forced, 1));
         for (int i = 0; i < n; i++) {
+          // A stamp early, on time, or late — in turn, so a window's median is
+          // the vsync period while its p05 is a jitter's width under it.
+          const double j = jitterMs * (double) ((tick % 3) - 1);
           t += panel;
           const bool drew = (++tick % cadence) == 0;
           ttp::rt::perf::Sample s;
-          s.tMs = t;
-          s.intervalMs = panel;   // the LOOP's cadence, unaffected by a skip
+          s.tMs = t + j;
+          s.intervalMs = panel + j;   // the LOOP's cadence, unaffected by a skip
           s.presented = drew;
           s.cpuMs = -1;
           s.gpuMs = drew ? gpuMs : -1;
@@ -547,6 +495,17 @@ int main() {
       b.ticks(180);
       b.poll(RenderScaleLimits{0.0, 1.0, 2160.0, 0.0});
       nearly(b.ctl.panelMs(), kHz60, "no declared period: learned from the tick series");
+    }
+    {
+      // …FROM THE TICKS' MEDIAN, NOT THEIR P05. Stamps jitter around the vsync,
+      // ±2 ms with the main thread loaded, so one window's p05 on a 120 Hz
+      // panel is a 154 Hz panel's period, and a floor that only falls would
+      // price every frame against it for the life of the page.
+      Box b;
+      b.jitterMs = 1.8;
+      b.ticks(360, kHz120);
+      b.poll(RenderScaleLimits{0.0, 1.0, 2160.0, 0.0});
+      nearly(b.ctl.panelMs(), kHz120, "a jittering 120 Hz tick series still teaches 8.3 ms");
     }
     {
       // THE CEILING IS THE BAND'S, ADOPTED ON THE FIRST POLL. A browser on a
@@ -631,12 +590,13 @@ int main() {
       check(b.mon.size() == 0, "…and the window that decided it goes with the buffer");
     }
     {
-      // A CHOSEN CADENCE IS NOT A LATE ONE. On a 120 Hz panel the rule anchors
-      // at divisor 2 to hold 60, so presents are deliberately two vsyncs apart.
-      // Lateness is judged against the cadence CHOSEN — the floor times the
-      // divisor — and without that multiply this box retreats every hold, all
-      // the way to the bottom rung, while presenting perfectly.
+      // A CHOSEN CADENCE IS NOT A LATE ONE. At the host's half rate on a 120 Hz
+      // panel presents are deliberately two vsyncs apart. Lateness is judged
+      // against the cadence CHOSEN — the floor times the divisor — and without
+      // that multiply this box retreats every hold, all the way to the bottom
+      // rung, while presenting perfectly.
       Box b;
+      b.ctl.setHalfRate(true);
       for (int i = 0; i < 10; i++) {
         const double sc = b.ctl.point().scale;
         b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
@@ -644,7 +604,7 @@ int main() {
         b.ticks(360, kHz120);                   // 3 s, past the down hold
         b.poll(k4K120);
       }
-      check(b.ctl.point().divisor == 2, "a 120 Hz box without the headroom runs 60");
+      check(b.ctl.point().divisor == 2, "the host's half rate on a 120 Hz box is 60");
       check(b.lines(k4K120) >= 1080.0 - 1e-9,
             "…at the anchor's picture, not shredded to the floor by its own pacing");
     }
@@ -653,16 +613,16 @@ int main() {
       //
       // The fallback (no GPU timer) may only step DOWN, so a rescue it should
       // not have made is permanent for the life of the scene. Lateness is
-      // therefore judged against the cadence the rule CHOSE — the device's own
-      // fastest present times the divisor — and not against one raw vsync.
+      // therefore judged against the cadence CHOSEN — the device's own fastest
+      // present times the divisor — and not against one raw vsync.
       //
-      // REACHABLE, though it takes both halves: the divisor only ever moves on
-      // the GPU arm, and `ttp_display_gpu_ms` answers 0 whenever a query has not
-      // come back. So a box settles at 120 Hz/divisor 2 with a timer, the timer
-      // goes quiet, and the fallback inherits a point it did not pick. Without
-      // the multiply it reads its own deliberate 60 fps as a ratio of 2.0 and
-      // walks the ladder to the floor while presenting perfectly.
+      // REACHABLE: `ttp_display_gpu_ms` answers 0 whenever a query has not come
+      // back, so a box at the host's half rate with a timer sees the timer go
+      // quiet and the fallback inherits the point. Without the multiply it
+      // reads its own deliberate 60 fps as a ratio of 2.0 and walks the ladder
+      // to the floor while presenting perfectly.
       Box b;
+      b.ctl.setHalfRate(true);
       for (int i = 0; i < 10; i++) {
         const double sc = b.ctl.point().scale;
         b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
@@ -670,7 +630,7 @@ int main() {
         b.ticks(360, kHz120);
         b.poll(k4K120);
       }
-      check(b.ctl.point().divisor == 2 && b.everyNth == 2, "settled at the anchor rate");
+      check(b.ctl.point().divisor == 2 && b.everyNth == 2, "settled at half rate");
       const double settled = b.lines(k4K120);
       b.gpuMs = -1;   // the timer goes quiet; the point stays where it was
       for (int i = 0; i < 8; i++) { b.ticks(360, kHz120); b.poll(k4K120); }
@@ -788,11 +748,11 @@ int main() {
       }
     }
     {
-      // ---- THE HOST'S HALF RATE: the same ladder at half the anchor rate ----
+      // ---- THE HOST'S HALF RATE: the same ladder at half the panel's rate ----
       //
       // Never the rule's choice (the block above), only the host's: the phone's
-      // Quality option. It lays out the same rungs at twice the anchor divisor
-      // with no rate step, so the rule spends the doubled budget on pixels.
+      // Quality option. It lays out the same rungs at every other vsync, so the
+      // rule spends the doubled budget on pixels.
       RenderScaleLimits half = kHD;
       half.halfRate = true;
       RenderScalePoint list[kScaleMaxPoints];
@@ -806,8 +766,8 @@ int main() {
       RenderScaleLimits fast = k4K120;
       fast.halfRate = true;
       n = operatingPoints(fast, list);
-      check(n == 5, "a 120 Hz panel at half rate takes no rate step");
-      for (int i = 0; i < n; i++) check(list[i].divisor == 4, "…every rung at 30");
+      check(n == 5, "a 120 Hz panel at half rate offers the same five rungs");
+      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…every one at 60 there");
 
       // A FLIP LANDS ON THE ANCHOR, as a boot does: a step down takes seconds
       // and a step up a lap, so the new budget is found from above. On the
@@ -886,25 +846,28 @@ int main() {
       pal.poll(RenderScaleLimits{0.0, 1.0, 1080.0, 20.0});
       check(pal.ctl.rateHz(false) == 50 && pal.ctl.rateHz(true) == 25, "a 50 Hz panel names 50 and 25");
 
-      // NOT ABOVE ~90 Hz. Half the anchor on a 120 Hz panel is every 4th tick:
-      // 30 presents in the readout's 120-tick window, at kMinSignalFrames, so
-      // the present veto and the no-timer fallback would go deaf. A box there
-      // that settles below the anchor is not offered it, and a stored choice
-      // (another screen, same browser) is kept but not applied.
+      // A 120 Hz BOX IS OFFERED IT TOO, and there the choice means 60: the same
+      // ladder at every other vsync, which is the picture a party game wants
+      // when the panel's own rate cannot be held at the anchor.
       Box fast120;
       for (int i = 0; i < 20; i++) {
         const double s = fast120.ctl.point().scale;
-        fast120.gpuMs = 14.0 + 8.0 * s * s;   // late at 1080@60 on a 4K surface
+        fast120.gpuMs = 14.0 + 8.0 * s * s;   // never fits 8.3 ms on any rung
         fast120.everyNth = fast120.ctl.point().divisor;
         fast120.ticks(360, kHz120);
         fast120.poll(k4K120);
       }
       check(fast120.lines(k4K120) < 1080.0, "a 120 Hz box that cannot hold the anchor settles below it");
-      check(!fast120.ctl.offersHalfRate(), "…and is still not offered half rate");
+      check(fast120.ctl.offersHalfRate(), "…and is offered half rate like any other");
+      check(fast120.ctl.rateHz(false) == 120 && fast120.ctl.rateHz(true) == 60, "…named as 120 and 60");
       fast120.ctl.setHalfRate(true);
-      for (int i = 0; i < 4; i++) { fast120.ticks(360, kHz120); fast120.poll(k4K120); }
-      check(fast120.ctl.point().divisor <= 2, "a stored choice is not applied at 120 Hz");
-      check(!fast120.ctl.offersHalfRate() && !fast120.ctl.halfRate(), "…nor offered, nor reported as on");
+      for (int i = 0; i < 4; i++) {
+        fast120.everyNth = fast120.ctl.point().divisor;
+        fast120.ticks(360, kHz120);
+        fast120.poll(k4K120);
+      }
+      check(fast120.ctl.point().divisor == 2 && fast120.ctl.halfRate(), "the choice is performed as every other vsync");
+      check(fast120.lines(k4K120) > 540.0, "…and the doubled budget buys back pixels");
     }
   }
 

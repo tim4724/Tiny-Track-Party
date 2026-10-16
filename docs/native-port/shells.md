@@ -428,13 +428,12 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     width its UI framework could not see change). A fraction has no partner to
     disagree with.
 
-15. **The operating point, measured.** Neither the buffer size nor the present
-    rate is the panel's: a shell polls `ttp_display_scale_poll` every frame and
-    takes back BOTH — a resolution and a present divisor, ordered around a
-    desired 1080@60 (below it resolution gives way, above it the rate goes
-    first). One call for the pair, because they are two ways of spending the
-    same milliseconds and a shell honouring one and not the other would be
-    arbitrating the trade itself.
+15. **The operating point, measured.** The buffer size is not the panel's: a
+    shell polls `ttp_display_scale_poll` every frame and takes back a
+    resolution AND a present divisor. The rule only ever moves the resolution —
+    the rate is the panel's own, priced per vsync — and the divisor is 2 only
+    on the host's Quality choice; one call for the pair, so a shell performs
+    both halves of one decision and arbitrates nothing itself.
 
     **THE STATE IS NOT YOURS EITHER.** The window, the percentiles, the running
     fastest present, the cost model's observation and the clocks the holds are

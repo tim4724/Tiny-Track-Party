@@ -111,8 +111,8 @@ const MAX_SUPERSAMPLE = 8;
 // THE LOAD MUST ARRIVE AFTER THE PANEL PERIOD IS KNOWN, or the demo lands
 // exactly on the one case the fallback cannot see. `presentBaseline` learns the
 // device's own FASTEST present and only ever lowers it, so a page that is
-// heavy from frame one has a p05 equal to its p95, reads as a perfectly steady
-// cadence however slow it is, and never adapts — render_scale.h says so at the
+// heavy from frame one has a median equal to its p95, reads as a perfectly
+// steady cadence however slow it is, and never adapts — render_scale.h says so at the
 // fallback, and names cheap screens (a welcome board, a lobby) as where an
 // honest period gets learned. Measured here before this existed: 4200x2700 at
 // 1.5 fps, floor learned as 642 ms, ratio 1.09, no step, forever.
@@ -272,9 +272,9 @@ export class Stage {
     // first poll).
     this._autoScale = Infinity;
     // `_divisor` is "present every Nth vsync" and is the other half of the
-    // point — 2 on a 120 Hz display holding the desired 1080@60, 1 once the
-    // device proves it can drive 120. Which callbacks that is, is `_pacer`'s —
-    // by time off the stamps, never by counting callbacks (presentPacer.js).
+    // point — 1 at the panel's own rate, 2 only on the host's Quality choice.
+    // Which callbacks that is, is `_pacer`'s — by time off the stamps, never
+    // by counting callbacks (presentPacer.js).
     //
     // The SIM still ticks on every callback: only the picture is paced, so
     // steering keeps the display's full cadence and what doubles is picture

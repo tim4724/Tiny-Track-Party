@@ -34,11 +34,10 @@ TTP_ABI void ttp_perf_reset(void);
  * the render-scale rule's divisor, "present every Nth vsync" (0 or 1 = every
  * one).
  *
- * WITHOUT IT A PACED BOX READS RED FOREVER, which is the state a developer's
- * own 120 Hz screen is in: the rule anchors on divisor 2 there to hold 60, so
- * half the ticks deliberately do not draw, and a readout that cannot tell a
- * chosen cadence from a missed one scores every one of them as damage. The
- * budget follows the divisor and is never tighter than 60 Hz.
+ * WITHOUT IT A PACED BOX READS RED FOREVER: at the host's half rate half the
+ * ticks deliberately do not draw, and a readout that cannot tell a chosen
+ * cadence from a missed one scores every one of them as damage. The budget
+ * follows the divisor and is never tighter than 60 Hz.
  *
  * Declare it whenever either moves. Both are facts only the shell has. */
 TTP_ABI void ttp_perf_pacing(double panelMs, int divisor);

@@ -601,9 +601,8 @@ final class DisplayHost {
     /// reach below the bottom rung, and never mean a different picture than it
     /// does on the other two shells.
     ///
-    /// BOTH HALVES ARE PERFORMED: the divisor moves on a 120 Hz panel with the
-    /// headroom for its rate step, and on the host's Quality choice; either way
-    /// it arrives as an ordinary point.
+    /// BOTH HALVES ARE PERFORMED: the divisor moves on the host's Quality
+    /// choice, and it arrives as an ordinary point.
     private func adaptScale(_ link: CADisplayLink) {
         guard Self.scalePin == 0, isAttached else { return }
         var out = [Double](repeating: 0, count: 2)

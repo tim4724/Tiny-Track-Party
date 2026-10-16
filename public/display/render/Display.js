@@ -348,9 +348,10 @@ export class Display {
   // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
   // which is also the answer while a hold or the poll cadence is running.
   //
-  // ONE call for both halves because they are one decision: the rule trades
-  // frame rate against resolution around a desired 1080@60, so a caller taking
-  // one answer and ignoring the other would be arbitrating between them itself.
+  // ONE call for both halves because they are one decision: the rule only ever
+  // moves the resolution (the divisor is 2 only on the host's Quality choice),
+  // and a caller taking one answer and ignoring the other would be arbitrating
+  // between them itself.
   // Everything it decides FROM — the window, the percentiles, the fastest
   // present, the cost model's observation, the clocks — is C++'s and folds off
   // the same monitor PerfHud feeds. See ttp_display_scale_poll.

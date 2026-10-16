@@ -94,13 +94,10 @@ TTP_ABI void ttp_display_destroy(void);
 /* THE ADAPTIVE RENDER SCALE — how big the surface should be AND how often to
  * present it, decided from what the last window of frames cost.
  *
- * ONE DECISION FOR BOTH. Frame rate and resolution are two ways of spending the
- * same GPU milliseconds, and ttp/render_scale.h lays them out as a single
- * ordered list of operating points around a desired spot of 1080 lines at
- * 60 Hz: below it resolution gives way and the rate does not, above it the rate
- * goes first. A shell that could take one answer and skip the other would be
- * arbitrating between them itself, which is the whole thing this layer exists
- * to prevent.
+ * ONE DECISION FOR BOTH. The rule (ttp/render_scale.h) only ever moves the
+ * resolution: the divisor is 1 on every panel and 2 only on the host's Quality
+ * choice. The two still cross as one answer, so a shell performs one decision
+ * and never arbitrates between its halves itself.
  *
  * THE STATE IS NOT THE SHELL'S EITHER, and that is what these three calls are.
  * The window the percentiles come from, the running fastest present, the
@@ -157,11 +154,10 @@ TTP_ABI void ttp_display_scale_scene(double tMs);
  *                          LINE COUNTS (720, 1080, …), so this is what makes
  *                          one mean the same picture on every platform.
  *   panelMs                the panel's own present period, ONE VSYNC: 16.7 on a
- *                          60 Hz TV, 8.3 on a 120 Hz one. Without it the rule
- *                          cannot know what a rate step is worth, and a fixed
- *                          60 Hz budget spends a 120 Hz panel's headroom on
- *                          pixels every time. Pass 0 where the platform has no
- *                          honest answer (a browser has no refresh-rate API)
+ *                          60 Hz TV, 8.3 on a 120 Hz one. It is the frame
+ *                          budget: a 120 Hz panel is priced per vsync and holds
+ *                          its rate with pixels. Pass 0 where the platform has
+ *                          no honest answer (a browser has no refresh-rate API)
  *                          and it is learned from the tick series instead.
  *
  * A shell that has measured nothing gets 0 and keeps what it has. THE POINT IN
@@ -172,10 +168,9 @@ TTP_ABI void ttp_display_scale_scene(double tMs);
  *
  * A shell may override the divisor half (a sweep pinning a present rate) and
  * still let the resolution adapt. The rule then prices lateness against the
- * cadence IT chose rather than the pinned one — which on a 60 Hz panel is no
- * divergence at all, because anchorDivisor is 1 there and the operating-point
- * list holds no other unless the host chose half rate (below). Above 60 Hz, or
- * at half rate, pin both or neither. */
+ * cadence IT chose rather than the pinned one — which is no divergence at all,
+ * because the rule's own divisor is 1 on every panel unless the host chose half
+ * rate (below). At half rate, pin both or neither. */
 TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
                                    double baseLines, double panelMs, double* out2);
 
@@ -186,11 +181,11 @@ TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
  * "assume 60". */
 TTP_ABI double ttp_display_scale_panel_ms(void);
 
-/* THE HOST'S "QUALITY" CHOICE: 1 lays the ladder out at half the anchor rate
- * (30 on a 60 Hz panel, 25 on a 50 Hz one), 0 puts it back. The next
- * ttp_display_scale_poll answers the move — same rung, the other divisor — so
- * a shell performs it exactly as it performs any other point, which means a
- * shell that paces by divisor needs nothing new.
+/* THE HOST'S "QUALITY" CHOICE: 1 lays the ladder out at half the panel's rate
+ * (30 on a 60 Hz panel, 25 on a 50 Hz one, 60 on a 120 Hz one), 0 puts it
+ * back. The next ttp_display_scale_poll answers the move — same rung, the
+ * other divisor — so a shell performs it exactly as it performs any other
+ * point, which means a shell that paces by divisor needs nothing new.
  *
  * Perform the `set-frame-rate` verdict (ttp_net.h) with it, PERSIST the flag,
  * and call it once at boot with the persisted value: the choice is the

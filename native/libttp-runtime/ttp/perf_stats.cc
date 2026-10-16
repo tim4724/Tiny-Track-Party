@@ -61,9 +61,9 @@ Stat foldVals(std::vector<double>& xs) {
   if (xs.empty()) return st;
   std::sort(xs.begin(), xs.end());
   st.has = true;
-  // p05 has ONE reader: the render scale's present floor wants the device's own
-  // FASTEST present, and the raw minimum is not it — a pair of ticks inside one
-  // vsync, or one bad timestamp, and the minimum is half the period forever.
+  // p05 is readout-only now: the render scale learns the panel period off the
+  // MEDIAN (render_scale_controller.cc says why not this). It stays on the line
+  // for the eye, and because the readout's keys are a cross-shell contract.
   st.p05 = at(xs, 0.05);
   st.p50 = at(xs, 0.5);
   st.p95 = at(xs, 0.95);
@@ -116,10 +116,9 @@ Readout Monitor::fold() const {
 
   // THE BUDGET IS THE OPERATING POINT'S, NOT THE PANEL'S, and never tighter
   // than 60 Hz. `divisor` is "present every Nth vsync" (ttp/render_scale.h) and
-  // it is a CHOICE, not a fault: at 120 Hz the rule anchors on 2 to hold 60,
-  // and a shell may pin 2 on a 60 Hz panel to spend a doubled budget on
-  // resolution. Scoring either as a failure painted an idle machine red
-  // forever, which is the state a developer's own screen is in.
+  // it is a CHOICE, not a fault: the host's half rate is 2, and a shell may
+  // pin 2 on a 60 Hz panel to spend a doubled budget on resolution. Scoring
+  // either as a failure painted a paced machine red forever.
   //
   // The floor is what keeps the 144 Hz trap shut: a fast panel does not make a
   // perfectly good 16.7 ms frame cost 240% of budget. 60+ is good, and below is

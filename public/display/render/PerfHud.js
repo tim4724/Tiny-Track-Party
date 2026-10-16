@@ -253,8 +253,8 @@ export class PerfHud {
   // What this shell is AIMING AT: the panel's own present period (one vsync)
   // and the render-scale rule's divisor, "present every Nth vsync". Both are
   // facts only Stage has and both are CHOICES rather than faults — a divisor of
-  // 2 on a 120 Hz screen is holding 60 deliberately, and a readout that cannot
-  // tell that from a missed frame scores every skipped tick as damage. See
+  // 2 is the host's half rate, deliberate, and a readout that cannot tell that
+  // from a missed frame scores every skipped tick as damage. See
   // ttp_perf.h; the budget follows the divisor and never goes tighter than 60.
   pacing(panelMs, divisor) {
     paced = [panelMs, divisor];

@@ -24,7 +24,7 @@
 // constant forever. Measured against the device's own fastest present rather
 // than against 60 Hz, it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode:
 // those present at their own steady cadence, and a ratio of 1 is a ratio of 1
-// whatever that cadence is. ABOVE the anchor rate that same arithmetic inverts,
+// whatever that cadence is. ABOVE 60 Hz that same arithmetic inverts,
 // which is why the reference is floored at 60 (latePresentRatio) — a 120 Hz
 // laptop holding a solid 60 is not a device that is late twice over. What it
 // CANNOT do is prove headroom — a plateau
@@ -67,13 +67,13 @@ struct RenderScaleLimits {
   double max;
   double baseLines;
   // The panel's OWN present period in milliseconds — one vsync, not one frame.
-  // 16.7 on a 60 Hz TV, 8.3 on a 120 Hz one. The budget is this times whichever
-  // divisor the operating point runs at, which is why the rule can trade frame
-  // RATE against resolution at all; a hard-coded 60 could only ever spend a
-  // 120 Hz panel's headroom on pixels. 0 or absent means "assume 60".
+  // 16.7 on a 60 Hz TV, 8.3 on a 120 Hz one. The budget is this times the
+  // operating point's divisor — 1 at the panel's own rate, 2 at the host's
+  // half rate — so a 120 Hz panel is priced per vsync and holds its rate with
+  // pixels. 0 or absent means "assume 60".
   double panelMs;
   // THE ONE INPUT THAT IS NOT A FACT ABOUT THE SURFACE: the host asked for the
-  // sharper picture at half the anchor rate (the phone's "Sharp" option). The
+  // sharper picture at half the panel's rate (the phone's "Sharp" option). The
   // rule never chooses it — see the operating points — and a shell never sets
   // it either; RenderScaleController holds the choice and fills it in.
   bool halfRate = false;
@@ -304,39 +304,44 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 
 // ---- the operating points ----------------------------------------------------
 //
-// ONE ORDERED AXIS, NOT TWO CONTROLLERS. Frame rate and resolution are both ways
-// of spending the same GPU milliseconds, and a rule with a knob for each has to
-// arbitrate between them every poll. Instead they are laid out as a single list
-// of (resolution, present divisor) pairs from worst to best, and the rule picks
-// the highest entry the cost model says fits. Stepping "up" may buy pixels or
-// may buy frames; which one is decided HERE, once, by the order of the list.
+// ONE ORDERED AXIS: the list is (resolution, present divisor) pairs from worst
+// to best, and the rule picks the highest entry the cost model says fits.
 //
-// 1080 LINES AT 60 Hz IS THE DESIRED SPOT, and the list is built around it:
+// THE RATE IS THE PANEL'S OWN, AND ONLY PIXELS GIVE WAY:
 //
-//   540@60   720@60   1080@60   1080@120   1620@120   2160@120
-//                        ^anchor    ^ rate first, then pixels
+//   540   720   1080   1620   2160      every rung at divisor 1, one vsync of budget
+//               ^anchor
 //
-// BELOW the anchor, resolution gives way and the rate does not: a party game
-// steered by tilting a phone pays for a halved present rate in input latency,
-// on every player, which is a worse trade than a softer picture. (`debug.ttp.hz`
-// can still pin 30 Hz on the Android shell, as a measurement knob — it is not a
-// point of this list.)
+// A party game steered by tilting a phone pays for a halved present rate in
+// picture latency, on every player, which is a worse trade than a softer
+// picture. (`debug.ttp.hz` can still pin 30 Hz on the Android shell, as a
+// measurement knob — it is not a point of this list.)
 //
-// THE HOST MAY MAKE THE OTHER TRADE, and only the host: `halfRate` lays the
-// SAME ladder out at half the anchor rate — 30 on a 60 Hz panel, 25 on a 50 Hz
-// one — with no rate step above it, and the rule then climbs the rungs against
-// that doubled budget exactly as it does at full rate. It is never entered on
-// the rule's own judgement — that costs every player input latency, and every
-// entry a hitch — but a preference a person picked on purpose is a different
-// thing.
+// THE RULE NEVER MOVES THE RATE — decided 2026-10-15, after it did. The list
+// used to anchor a fast panel at 1080 lines on every other vsync and climb to
+// the panel's own rate on measured headroom, which needed the divisor read off
+// the panel period, and the web is the one shell that cannot declare one: its
+// period is learned from rAF stamps, and one misread window paced a healthy
+// race to every third vsync for the life of the page. So the divisor is never
+// the rule's. A 120 Hz panel is priced per vsync and gives up pixels to hold
+// it; a frame that cannot make the vsync on any rung presents on alternate
+// vsyncs at an uneven cadence, and that is the accepted trade — panels above
+// 60 Hz are driven by hardware that holds them. The learned period survives
+// only as the budget, where a misread costs an uneven cadence, not a wrong
+// divisor.
 //
-// ABOVE the anchor, the rate goes first. A 120 Hz panel with the headroom to
-// drive it should, and spending that headroom on pixels instead is what a fixed
-// 60 Hz budget silently did: a 6 ms frame reads as 36% of 16.7 ms, the rule
-// calls it headroom, climbs until the frame costs 15 ms, and the 120 Hz panel
-// now presents 60. The whole reason panelMs is an input is to stop that.
+// 1080 LINES IS THE ANCHOR: the point a half-rate flip lands on, and the bar
+// under which the host is offered the choice (belowAnchor).
+//
+// THE HOST MAY HALVE THE RATE, and only the host: `halfRate` lays the SAME
+// ladder out at divisor 2 — 30 on a 60 Hz panel, 25 on a 50 Hz one, 60 on a
+// 120 Hz one — and the rule then climbs the rungs against that doubled budget
+// exactly as it does at full rate. It is never entered on the rule's own
+// judgement, but a preference a person picked on purpose is a different thing.
 inline constexpr double kAnchorLines = 1080.0;
-inline constexpr double kAnchorHz = 60.0;
+// The panel rate assumed where none is known, and the floor the fallback's
+// lateness bar sits on (latePresentRatio).
+inline constexpr double kDefaultPanelHz = 60.0;
 
 // NOTHING SITS BELOW THE BOTTOM RUNG, HOWEVER MANY CELLS. A split costs more
 // to submit than solo at any resolution, so a weak box with four cells can miss
@@ -351,9 +356,8 @@ inline constexpr double kAnchorHz = 60.0;
 // the rule takes no cell count, and the list is the ladder's on every grid.
 
 // The most operating points a surface can offer: every ladder rung that fits
-// under the ceiling, the ceiling itself, and the rate step above the anchor.
-// Sizes the caller's array.
-inline constexpr int kScaleMaxPoints = kScaleLadderCount + 2;
+// under the ceiling, and the ceiling itself. Sizes the caller's array.
+inline constexpr int kScaleMaxPoints = kScaleLadderCount + 1;
 
 struct RenderScalePoint {
   double scale;
@@ -362,19 +366,8 @@ struct RenderScalePoint {
 
 // A frame's budget at this operating point: one present interval.
 inline double pointBudgetMs(const RenderScalePoint& p, RenderScaleLimits b) {
-  const double panel = b.panelMs > 0.0 ? b.panelMs : 1000.0 / kAnchorHz;
+  const double panel = b.panelMs > 0.0 ? b.panelMs : 1000.0 / kDefaultPanelHz;
   return panel * (double) p.divisor;
-}
-
-// Which divisor lands nearest the anchor rate on this panel: 1 on a 60 Hz TV, 2
-// on a 120 Hz one, 2 on a 144 Hz monitor (72 Hz, the closest it can offer), 4 on
-// a 240 Hz one. A 50 Hz panel in PAL mode answers 1 and runs at 50, which is the
-// honest answer — a shell may not name a rate its panel cannot present.
-inline int anchorDivisor(RenderScaleLimits b) {
-  const double panel = b.panelMs > 0.0 ? b.panelMs : 1000.0 / kAnchorHz;
-  const double hz = 1000.0 / panel;
-  int d = (int) (hz / kAnchorHz + 0.5);
-  return d < 1 ? 1 : d;
 }
 
 // The anchor's 1080 lines as a scale of this surface.
@@ -382,51 +375,34 @@ inline double anchorScale(RenderScaleLimits b) {
   return kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
 }
 
-// The divisor every rung up to the anchor runs at: the anchor's own, or twice
-// it when the host asked for half rate.
+// The divisor every rung runs at: the panel's own, or every other vsync when
+// the host asked for half rate. Whatever the panel: a 120 Hz one presents 120,
+// or 60 at the host's choice.
 inline int baseDivisor(RenderScaleLimits b) {
-  return anchorDivisor(b) * (b.halfRate ? 2 : 1);
+  return b.halfRate ? 2 : 1;
 }
 
-// The list, ascending. At most one entry per rung plus one for the rate step.
+// The list, ascending: one entry per rung, all at the one divisor.
 inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   double r[kScaleMaxPoints];
   const int n = rungScales(b, r);
   const int base = baseDivisor(b);
-  // == base where there is no faster rate — and at half rate, where the whole
-  // point is to spend the budget on pixels rather than frames.
-  const int fast = b.halfRate ? base : (base > 1 ? base - 1 : 1);
-  const double anchor = anchorScale(b);
-  int m = 0;
-  for (int i = 0; i < n; i++) {
-    if (r[i] <= anchor + 1e-9) out[m++] = RenderScalePoint{r[i], base};
-  }
-  // The rate step sits directly above the anchor — but only where the anchor is
-  // actually reachable on this surface. A window too short to show 1080 lines is
-  // never "above the desired spot", so it never buys frames it cannot fill.
-  if (fast != base && m > 0 && out[m - 1].scale >= anchor - 1e-9) {
-    out[m++] = RenderScalePoint{anchor, fast};
-  }
-  for (int i = 0; i < n; i++) {
-    if (r[i] > anchor + 1e-9) out[m++] = RenderScalePoint{r[i], fast};
-  }
-  return m;
+  for (int i = 0; i < n; i++) out[i] = RenderScalePoint{r[i], base};
+  return n;
 }
 
-// Is `p` below the sharpest point this surface offers at the ANCHOR RATE —
-// 1080 lines, or the ceiling where the surface is shorter than that? A device
-// that has settled there cannot hold the desired spot, and it is the only kind
-// the half-rate choice is offered to (RenderScaleController::offersHalfRate).
+// Is `p` below the anchor — 1080 lines, or the ceiling where the surface is
+// shorter than that? A device that has settled there cannot hold the desired
+// picture, and it is the only kind the half-rate choice is offered to
+// (RenderScaleController::offersHalfRate).
 inline bool belowAnchor(RenderScalePoint p, RenderScaleLimits b) {
-  b.halfRate = false;
-  RenderScalePoint list[kScaleMaxPoints];
-  const int n = operatingPoints(b, list);
-  const int base = anchorDivisor(b);
+  double r[kScaleMaxPoints];
+  const int n = rungScales(b, r);
   const double anchor = anchorScale(b);
   double top = 0.0;
   for (int i = 0; i < n; i++) {
     // Ascending, so the last one that is not above the anchor.
-    if (list[i].divisor == base && list[i].scale <= anchor + 1e-9) top = list[i].scale;
+    if (r[i] <= anchor + 1e-9) top = r[i];
   }
   return p.scale < top - 1e-9;
 }
@@ -436,7 +412,7 @@ inline bool belowAnchor(RenderScalePoint p, RenderScaleLimits b) {
 inline int pointAtOrBelow(RenderScalePoint p, const RenderScalePoint* l, int n) {
   int at = 0;
   for (int i = 0; i < n; i++) {
-    if (l[i].scale <= p.scale + 1e-9 && l[i].divisor >= p.divisor) at = i;
+    if (l[i].scale <= p.scale + 1e-9) at = i;
   }
   return at;
 }
@@ -457,9 +433,9 @@ inline int pointForBudget(int from, const RenderScaleFit& f,
 struct RenderScaleCost {
   // p95 GPU time in MILLISECONDS, straight off the backend's timer, and how many
   // frames carried a result. <= 0 where there is no timer. Deliberately not a
-  // share of budget: the budget is what this layer decides when it picks a
-  // present rate, so a share handed in would be normalised against a rate nobody
-  // had chosen. It is also what makes the cost model survive a rate change.
+  // share of budget: the budget is the point's own (panel period times
+  // divisor), so a share handed in would be renormalised against it. It is also
+  // what makes the cost model survive the host's half-rate flip.
   double gpuP95Ms;
   int gpuFrames;
   // p95 frame interval and how many frames it was taken over, plus the bar
@@ -480,13 +456,16 @@ struct RenderScaleCost {
 // It has to outlive the stats window, and that is the whole subtlety of the
 // fallback signal. A ratio taken inside one window is blind to the case it
 // exists for: a device slow enough that EVERY frame in the window is slow has a
-// p05 equal to its p95, reads as a perfectly steady cadence, and never adapts.
+// median equal to its p95, reads as a perfectly steady cadence, and never adapts.
 // Kept across windows, the cheap screens (a welcome board, a lobby) are where an
 // honest vsync period gets learned. It also survives a resolution change, since
 // the panel's period does not depend on what we draw at.
-inline double presentBaseline(double prevFloorMs, double p05Ms) {
-  if (!(p05Ms >= kMinPresentMs)) return prevFloorMs;
-  return (prevFloorMs >= kMinPresentMs && prevFloorMs < p05Ms) ? prevFloorMs : p05Ms;
+//
+// `windowMs` is one window's figure for its cadence — the controller hands over
+// the tick series' MEDIAN, and render_scale_controller.cc says why not its p05.
+inline double presentBaseline(double prevFloorMs, double windowMs) {
+  if (!(windowMs >= kMinPresentMs)) return prevFloorMs;
+  return (prevFloorMs >= kMinPresentMs && prevFloorMs < windowMs) ? prevFloorMs : windowMs;
 }
 
 // How late this device is running, as a multiple of its own fastest present:
@@ -503,7 +482,7 @@ inline double latePresentRatio(const RenderScaleCost& cost) {
   //
   // The note at the top of this file argues the fastest present is the right
   // reference because it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode.
-  // That is true and it only covers panels SLOWER than the anchor; above it the
+  // That is true and it only covers panels slower than 60 Hz; above it the
   // same arithmetic inverts. A 120 Hz laptop holding a solid 60 has a floor of
   // 8.3 and a p95 of 16.7, which is a ratio of 2.0 — "a whole period late", every
   // window, forever. Measured on the artifact: 2160 lines to 1080 in nine
@@ -515,15 +494,16 @@ inline double latePresentRatio(const RenderScaleCost& cost) {
   // GPU timer prices the anchor properly through pointBudgetMs and never comes
   // here.
   //
-  // kAnchorHz AND NOT perf_stats.h's kGoodHz, which is the same 60 — deliberately,
-  // and the two are worth keeping apart until something forces the question. This
-  // header is the pure rule: it includes <algorithm> and nothing else, which is
-  // what lets every leg's ctest execute it as arithmetic, and perf_stats.h drags
-  // in <string>, <vector> and canonical.h. The rate the LADDER is anchored on and
-  // the bar a READOUT scores against are also two questions, even where one
-  // number answers both. If they ever have to move together, extract the 60 —
-  // do not make the rule depend on the readout to get it.
-  const double bar = std::max(cost.presentFloorMs, 1000.0 / kAnchorHz);
+  // kDefaultPanelHz AND NOT perf_stats.h's kGoodHz, which is the same 60 —
+  // deliberately, and the two are worth keeping apart until something forces
+  // the question. This header is the pure rule: it includes <algorithm> and
+  // nothing else, which is what lets every leg's ctest execute it as
+  // arithmetic, and perf_stats.h drags in <string>, <vector> and canonical.h.
+  // The 60 the rule assumes and the bar a READOUT scores against are also two
+  // questions, even where one number answers both. If they ever have to move
+  // together, extract the 60 — do not make the rule depend on the readout to
+  // get it.
+  const double bar = std::max(cost.presentFloorMs, 1000.0 / kDefaultPanelHz);
   return cost.presentP95Ms / bar;
 }
 
@@ -561,9 +541,9 @@ inline bool presentsOnCadence(const RenderScaleCost& cost, double budgetMs) {
 // where we are and what the last window of frames cost.
 //
 // `cost.gpuP95Ms` is RAW MILLISECONDS now, not a share. A share is already an
-// opinion about the budget, and the budget is exactly what this function decides
-// by choosing a divisor; a shell handing one over would be renormalising the
-// measurement against a rate nobody had picked yet.
+// opinion about the budget, and the budget is the point's own (panel period
+// times divisor); a shell handing one over would be renormalising the
+// measurement against it.
 //
 // `sinceChangeSec` is how long the current point has been in force;
 // `sinceSceneSec` how long the current SCENE has: nothing steps down inside
@@ -584,16 +564,15 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
   const double clamped = std::min(std::max(current.scale, limits.min), limits.max);
   int at = pointAtOrBelow(RenderScalePoint{clamped, current.divisor}, list, n);
   // A POINT FROM THE OTHER RATE — the host just flipped `halfRate` — has no
-  // entry in this list. It lands on the anchor (1080 lines, or the ceiling
-  // under it), where a boot starts and for the same reason: a step down takes
-  // seconds and a step up a lap, so the new budget is found from above.
-  bool listed = false;
-  for (int i = 0; i < n; i++) listed = listed || list[i].divisor == current.divisor;
-  if (!listed) {
+  // entry in this list (every entry shares one divisor). It lands on the anchor
+  // (1080 lines, or the ceiling under it), where a boot starts and for the same
+  // reason: a step down takes seconds and a step up a lap, so the new budget is
+  // found from above.
+  if (list[0].divisor != current.divisor) {
     const double anchor = anchorScale(limits);
     at = 0;
     for (int i = 1; i < n; i++) {
-      if (list[i].divisor == list[0].divisor && list[i].scale <= anchor + 1e-9) at = i;
+      if (list[i].scale <= anchor + 1e-9) at = i;
     }
   }
   const double gpuMs = cost.gpuFrames >= kMinSignalFrames ? cost.gpuP95Ms : 0.0;
@@ -636,40 +615,12 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // ONLY WHEN THERE IS NO OBSERVATION — see hasPrevObservation. A refused
       // FIT is not missing data, it is data saying pixels are not the cost, and
       // probing on it pumps between two rungs for the life of the scene.
-      //
-      // A PROBE MAY NOT GUESS AT THE RATE. A guess that halves the present
-      // interval is one a player feels in the steering rather than sees in the
-      // picture, so a rate step bought with pixels is only ever taken on a model.
-      //
-      // A PURE RATE STEP IS NOT A GUESS, and barring it made the anchor a trap.
-      // The entry above the anchor holds the SAME pixels at half the present
-      // interval, so the millisecond measured here IS what it costs there and
-      // only the budget changes — arithmetic, not a model, which is why this arm
-      // may take it while the one below may not. Without it the step was
-      // ONE-WAY: falling across it is a same-scale move, so the controller
-      // records no observation (render_scale_controller.cc), a scene build
-      // clears whatever one it had, and nothing could raise the rate again —
-      // no fit to climb on, and the only branch that can move without a fit
-      // refusing to. Measured in a browser on a 120 Hz laptop: a lobby heavy
-      // enough to walk the point down to 1080@60, then every race after it
-      // pinned there with the GPU at 15% of a 16.7 ms budget, for the life of
-      // the page.
-      //
-      // It cannot pump: the climb needs kScaleTargetShare of the budget above
-      // and the retreat needs kScaleDownShare of the same budget, so the two
-      // are the ordinary deadband apart.
-      if (at + 1 < n
-          && (list[at + 1].divisor == list[at].divisor
-              || (list[at + 1].scale <= list[at].scale + 1e-9
-                  && gpuMs <= kScaleTargetShare * pointBudgetMs(list[at + 1], limits)))) {
-        to = at + 1;
-      }
+      if (at + 1 < n) to = at + 1;
     } else if (fit.ok && sinceChangeSec >= kScaleUpHoldSec) {
       // CLIMB ONLY INTO A POINT THE MODEL SAYS FITS. This is the whole of the
       // anti-oscillation argument, and it holds at any step width: the step is
       // never taken unless the cost it will land at is predicted under the
-      // target of ITS OWN budget — which is what makes the rate step and the
-      // resolution step comparable at all.
+      // target of ITS OWN budget.
       //
       // ONE STEP, not straight to the best that fits: the fit is taken over a
       // window that saw one stretch of a lap, and cost swings ~4 ms around a
@@ -684,9 +635,8 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
              && sinceSceneSec >= kScaleSceneGraceSec) {
     // DOWN ONLY on the fallback: a steady cadence is not evidence of headroom,
     // and a device with no GPU timer has no milliseconds to fit a model from
-    // either, so there is no branch that raises. It also may not change the
-    // rate, for the probe's reason — this path cannot predict what that buys.
-    if (at > 0 && list[at - 1].divisor == list[at].divisor) to = at - 1;
+    // either, so there is no branch that raises.
+    if (at > 0) to = at - 1;
   }
 
   if (to < 0) to = 0;

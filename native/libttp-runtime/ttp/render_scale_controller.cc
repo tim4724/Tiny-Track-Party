@@ -26,12 +26,18 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
 
   const perf::Readout r = mon.fold();
 
-  // The device's own fastest present, folded one window at a time. It has to
-  // outlive the window, and that is the whole subtlety of the fallback signal:
-  // a device slow enough that EVERY frame in one window is slow has a p05 equal
-  // to its p95, reads as a perfectly steady cadence, and would never adapt. Off
-  // the TICK series — panelMs() says why.
-  floorMs_ = presentBaseline(floorMs_, r.frame.p05);
+  // The device's own fastest present, folded one window at a time (presentBaseline
+  // says why it outlives the window). Off the TICK series — panelMs() says why.
+  //
+  // THE MEDIAN, NOT THE P05, and a stamp's jitter is why. rAF stamps sit ±1 ms
+  // around the vsync on an idle Mac and ±2 ms with the main thread loaded, so
+  // one window's p05 on a 120 Hz panel read 6.5 ms — and a floor that only
+  // ever falls then believed in a 154 Hz panel for the life of the page, and
+  // priced every frame against it. Jitter is symmetric, so the median of a
+  // window that keeps up IS the period; a window that does not keep up has a
+  // slower median, and the running minimum across windows ignores it exactly
+  // as it ignored a slow p05.
+  floorMs_ = presentBaseline(floorMs_, r.frame.p50);
   panelMs_ = limits.panelMs > 0 ? limits.panelMs : floorMs_;
   limits.panelMs = panelMs_;
   limits.halfRate = halfRate();
@@ -53,19 +59,12 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
       r.gpu.has ? r.gpu.p95 : 0.0, r.gpu.n,
       r.present.has ? r.present.p95 : 0.0,
       // THE FLOOR TIMES THE DIVISOR: what lateness is judged against is the
-      // cadence we CHOSE, not the panel's raw period. Without it a deliberate
-      // present-every-other-vsync reads as a ratio of 2.0 and the fallback path
-      // rescues a healthy device downward, once every hold, to the floor.
-      //
-      // IT AGREES WITH latePresentRatio's OWN 60 Hz FLOOR BY CONSTRUCTION, and
-      // that is worth knowing rather than tidying: the divisor is anchorDivisor,
-      // which is round(hz/60), so `floor * divisor` lands within a rounding of
-      // 1000/60 on every panel the ladder can name. The two guards are therefore
-      // not catchable apart by any reachable configuration — there is no
-      // mutation for this line for that reason. They are kept as two because
-      // they say two different things, and only the other one covers the case
-      // that actually bit (a 120 Hz panel at divisor 1, where this multiplies
-      // by one and does nothing).
+      // cadence we CHOSE, not the panel's raw period. Without it the host's
+      // deliberate present-every-other-vsync reads as a ratio of 2.0 and the
+      // fallback path rescues a healthy device downward, once every hold, to
+      // the floor. At the panel's own rate this multiplies by one; the 60 Hz
+      // floor latePresentRatio then puts under the bar is the other guard, and
+      // the one that covers a 120 Hz panel presenting a steady 60.
       floorMs_ * static_cast<double>(point_.divisor),
       r.present.n};
 
@@ -91,11 +90,11 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
 int RenderScaleController::rateHz(bool half) const {
   RenderScaleLimits b{0.0, 0.0, 0.0, panelMs_};
   b.halfRate = half;
-  // A LEARNED period is a p05 of rAF ticks and lands a millisecond either side
-  // of the panel's, which would label a 60 Hz TV "63 fps". Snap to the panel
-  // rate it is nearest to; a declared period is already one of these.
+  // A LEARNED period is the median of rAF ticks and can land a fraction of a
+  // millisecond off the panel's, which would label a 60 Hz TV "61 fps". Snap to
+  // the panel rate it is nearest to; a declared period is already one of these.
   static constexpr double kPanelHz[] = {50.0, 60.0, 75.0, 90.0, 100.0, 120.0, 144.0, 165.0, 240.0};
-  double hz = 1000.0 / (panelMs_ > 0.0 ? panelMs_ : 1000.0 / kAnchorHz);
+  double hz = 1000.0 / (panelMs_ > 0.0 ? panelMs_ : 1000.0 / kDefaultPanelHz);
   for (double k : kPanelHz) {
     if (hz > k * 0.95 && hz < k * 1.05) hz = k;
   }

@@ -508,8 +508,19 @@ export const MUTATIONS = [
     // times too generous.
     name: 'render-scale/floor-learned-from-presents',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'floorMs_ = presentBaseline(floorMs_, r.frame.p05);',
-    replace: 'floorMs_ = presentBaseline(floorMs_, r.present.p05);',
+    find: 'floorMs_ = presentBaseline(floorMs_, r.frame.p50);',
+    replace: 'floorMs_ = presentBaseline(floorMs_, r.present.p50);',
+    expect: 'render_scale',
+  },
+  {
+    // …and off the ticks' MEDIAN. rAF stamps jitter ±2 ms around the vsync under
+    // load, so a window's p05 on a 120 Hz panel reads as a 154 Hz one — and the
+    // floor only falls, so every frame is priced against it for the life of
+    // the page.
+    name: 'render-scale/floor-learned-from-the-p05',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'floorMs_ = presentBaseline(floorMs_, r.frame.p50);',
+    replace: 'floorMs_ = presentBaseline(floorMs_, r.frame.p05);',
     expect: 'render_scale',
   },
   {
@@ -539,7 +550,7 @@ export const MUTATIONS = [
     // nothing wrong from 2160 lines to 1080 and never gives them back.
     name: 'render-scale/late-ratio-vs-raw-floor',
     file: 'native/libttp-runtime/ttp/render_scale.h',
-    find: 'const double bar = std::max(cost.presentFloorMs, 1000.0 / kAnchorHz);',
+    find: 'const double bar = std::max(cost.presentFloorMs, 1000.0 / kDefaultPanelHz);',
     replace: 'const double bar = cost.presentFloorMs;',
     expect: 'render_scale',
   },
