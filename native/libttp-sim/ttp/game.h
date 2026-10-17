@@ -163,7 +163,8 @@ inline constexpr double MONSTER_HALF_WID = MONSTER_HALF_LEN * 0.3125 / 0.4375;
 inline constexpr double AIR_MIN = 0.02;
 // Steering authority off the deck, as a fraction of the ground's: enough that a
 // tilt visibly moves a car through a short crest hop, too little to turn it
-// around on a kicker's long flight.
+// around on a kicker's long flight. It costs no speed: the steer scrub is a
+// tyre's, and the tyres are off the road (game.cc).
 inline constexpr double AIR_STEER = 0.7;
 // The steer and the fraction of vmax past which the brake slides a grounded
 // car (game.cc). In the header because a bot brakes at them to slide a corner,

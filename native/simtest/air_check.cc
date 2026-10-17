@@ -114,7 +114,7 @@ int main() {
   // airborne heading must turn by AIR_STEER of the grounded one.
   {
     const double S = 28.0;  // the main straight, clear of every kicker
-    double turned[2];
+    double turned[2], kept[2], vmax = 0;
     for (int air = 0; air < 2; air++) {
       Game game(one, bt.game, [](const Event&) {});
       Car& c = *game.cars()[0];
@@ -124,10 +124,17 @@ int main() {
       game.processInput(c.id, in);
       game.update(DT);
       turned[air] = std::fabs(c.heading);
+      kept[air] = c.v;
+      vmax = c.vmax;
     }
     const double ratio = turned[1] / turned[0];
     check(turned[0] > 0 && std::fabs(ratio - AIR_STEER) < 0.05,
           "a car in the air turns by AIR_STEER of what it turns on the deck");
+    // The tilt costs the airborne car nothing: the scrub is a tyre's, and the
+    // tyres are off the road. The deck car is the control that proves the
+    // scrub exists.
+    check(kept[0] < vmax, "the control car on the deck scrubs speed for its tilt");
+    check(kept[1] == vmax, "a car in the air keeps its full speed under full lock");
   }
 
   // ---- the deck's hazards are cleared ----------------------------------------

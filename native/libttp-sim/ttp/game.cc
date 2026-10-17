@@ -1146,6 +1146,10 @@ void Game::update(double dtMs) {
       const double hold = js_min(1.0, SLIDE_HOLD * dmath::pow(c.turn / TURN_RATE, SLIDE_HOLD_POW));
       if (!boosting) scrubEff = STEER_SCRUB * billed * billed * (1 - hold);
     }
+    // Tyres off the deck scrub nothing: a tilt held through a flight still
+    // steers (at AIR_STEER) but costs no speed, so a tilt never slows a car
+    // in flight.
+    if (!grounded) scrubEff = 0;
     double slipTo = c.driftMix * STEER_SIGN * DRIFT_SLIP * js_max(-1.0, js_min(1.0, steerIn));
     if (slipTo != 0 || c.slip != 0) {
       c.slip += (slipTo - c.slip) * (1 - dmath::exp(-DRIFT_SLIP_RATE * dt));
