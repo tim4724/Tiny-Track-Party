@@ -1840,6 +1840,35 @@ only channel over a millisecond and it has no dominant member; what the box
 has left is the rule's retreat on a handful of skipped frames, per player
 count — the decision the afternoon's record already names.
 
+**The three unbadged costs (2026-10-17, late): the deck, the empty frame,
+the name tags.** Main `eca93da5`, 4P pinned 720 pretzel Vulkan, interleaved
+pairs, milliseconds SAVED against both base runs (base heavy 12.98 and 13.22):
+
+| arm | all seconds | base's heaviest 30% | heavy p50 |
+|---|---|---|---|
+| the deck off (`TTP_FEAT_ROAD` clear) | 3.7 to 4.0 | 2.8 to 4.1 | 8.4 |
+| every content group off (the empty frame) | 8.7 | 8.4 to 8.9 | 2.6 to 2.7 |
+| name tags off (`debug.ttp.tags 0`) | 0.0 to 0.1 | -1.1 to 0.0 | 13.1 |
+
+So the deck is the largest single item at about 3.8 ms, after its fragment
+has shrunk to two taps and a mix — that is its AREA at this fill rate, with
+the far ribbon already proving its vertex count is not the cost (`LOD_ALL`
+null, afternoon). The name tags' every-frame window redraw, 2.3 ms on
+2026-09-28, is gone since the window stopped clearing what it did not draw
+(2e57a2f7): null now, close that item. The empty frame — four passes, their
+clears and the sky dome's full-cell fill — is 2.6 to 2.7 ms at four
+players, and by player count (every group off, pinned 720, light / heavy
+p50): 1P 1.05 / 1.44, 2P 1.04 / 1.58, 3P 1.39 / 2.18, 4P 2.16 / 2.7. The
+slope is about 0.4 ms per extra cell, ~1.2 ms at four players, which is the
+one lever over a millisecond left in the renderer and it is a FORK-level one:
+one render pass with four viewports instead of a pass per View. The first
+cell's 1.0 to 1.4 is the dome's fill, one pass and the present.
+
+The heavy second, assembled: deck 3.8, the empty frame 2.7 (1.2 of it the
+extra passes), terrain 1.5, dressing 0.8, decals 0.8, cars 0.7, rubber 0.4,
+sun-vis 0.3, the rest under 0.3 each — about 11.5 of 13, the remainder the
+interactions an ablation cannot see.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
