@@ -1580,6 +1580,76 @@ arm (`kFeatSky`) never covered the skybox — it is clouds, haze, fliers and
 the balloon — so the earlier "no sky -0.87" was those; the skybox's own
 price was unmeasured until this probe.
 
+### The car shadow as a pass (2026-10-14, night)
+
+The user asked for the shadow both better and cheaper. The road-space layer
+(a per-frame CPU raster, dirty-rect uploads, one tap on every road fragment
+plus a B-spline under the stamps) was 1.5 ms of a 4P 720 heavy second on the
+GPU and 0.6 ms of the frame thread, and its artefacts were the texel grid:
+bands from the reconstruction, shiver from the stamp re-landing each frame.
+The pass draws each car's shadow as its own blended geometry on the deck.
+The ladder, every rung measured against the shipped build at 4P pinned 720
+pretzel, interleaved pairs, heavy-30% p50 (the frame thread's `cars` phase
+0.8 -> 0.2 ms on every rung):
+
+| rung | heavy delta | lesson |
+|---|---|---|
+| the road's own ring bands under each car, shape per fragment | +4.5 | fragments are the cost |
+| the road's own cells (ring x strip) under each car | +3.3 | a lane has no inner column: a cell is half the road wide |
+| same cells, trivial fragment | +1.8 | the shape maths was 1.5 of it; the fill the rest |
+| same cells, the shape as a car-locked texture, one tap | +0.6..+1.1 | still the fill |
+| one cell per car (the draw-overhead floor) | -1.5 | the 32 draws cost nothing |
+| **the stamp's own quad strips, texture, one tap** | **-0.1 heavy, -0.4 all seconds, 6 pairs** | shipped |
+
+Three traps on the way, each worth knowing: a `float3, precision : high`
+material parameter read back at a tenth of its scale on the box's Vulkan and
+not on the web's GL (declare float4); Filament's reversed depth makes a
+hand-set LE compare pass over everything in front (keep the material's
+default); and a scene rebuild creates fresh instances, so a per-slot "what is
+bound" memory must reset with the draws or the race after the lobby binds no
+stamp. The polygon-offset bias of this build was the failure the 2026-10-17
+section below replaces.
+
+The look: the pass has no grid, so the bilinear bands and the shiver are
+gone and the B-spline question is moot. Three corrections after the user
+drove it: the alpha remap for the display-space blend and the doubled ramp
+both read as a weak shadow and went (the stamp's own alpha, the raster's
+ramp blurred a texel); the ruled strip between ring lines lost its shadow on
+banked road and flickered at the transitions, so the geometry became the
+road's own triangles clipped to the stamp's box, which ties the depth test
+everywhere (cost unchanged: -1.1 ms heavy, skips 47/75 -> 17/15); and the
+wet sheet's slope-scaled polygon offset went, a constant unit in its place.
+
+### The pass, reinstated (2026-10-17)
+
+The clipped-geometry build was reverted the night it shipped: on the web the
+shadow was "a complete mess". Reproduced on the web with the pass re-applied
+to main: a constant polygon offset of one unit is UNDER the rounding between
+the two triangulations of the same plane, so the shadow lost the depth test
+over most of its area (a stippled remnant on ANGLE-Metal, z-fighting on the
+user's GPU). The bias is now a shrink of every vertex toward the eye by 3e-4
+of its distance in the vertex shader (screen position unchanged, depth in
+front by construction, early-z kept). Then the geometry was clipped in the
+stamp's own (u, v) to the baked field's support, instead of the padded
+track-space box (a yawed car's box is twice its quad, and the margin on top).
+
+4P pinned 720, Vulkan, pretzel, 75 s counted, heavy-30% p50 / clean seconds,
+the layer build (`478c8e03`) and the pass installs alternated:
+
+| arm | run 1 | run 2 |
+|---|---|---|
+| the road-space layer (shipped before) | 15.94 / 60 | 16.05 / 59 |
+| the pass, box-clipped (the reverted geometry, bias fixed) | 15.03 / 67 | |
+| **the pass, clipped to the stamp's support** | **14.61 / 65** | **14.25 / 71** |
+| the pass build, shadow off (`NO_DECAL_BLOB`) | 13.99 / 74 | 13.99 / 71 |
+
+So the layer's channel is ~2 ms of a heavy second here, the box-clipped pass
+~1, the support-clipped pass 0.3-0.6; against the layer the shipped pass is
+-1.4..-1.8 ms heavy and -1.6..-2.0 over all seconds, skips ~75 -> ~20 per
+75 s. `TTP_DEBUG_SHADOW_SOLID` (0x4000000) draws every stamp as an opaque
+black die-cut of its fitted rect, which is how the placement was checked on
+the box and the web.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

@@ -854,8 +854,8 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * that sub-arm alone.
  *   NO_DECAL_PROFILE  the profile loop: boost auras, oil slicks, item discs.
  *   NO_DECAL_STATICS  only the statics (slicks, item discs); auras stay.
- *   NO_DECAL_BLOB     the carShadow layer — raster, upload and the whole-deck
- *                     shader tap. Attribution only: cars lose their shadows.
+ *   NO_DECAL_BLOB     the car-shadow pass (one draw per car, vshadow.mat).
+ *                     Attribution only: cars lose their shadows.
  *   DECAL_CAPS_HALF   the per-chunk profile fold cap, halved.
  * 0x10000 and 0x200000..0x800000 are HOLES: they were the masked car shadow's
  * probes, deleted with it (2026-10-06). Never reuse them — the masks below and
@@ -874,11 +874,12 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * included — the trade where the eye can resolve it:
  * TTP_FEAT_ALL | this = 0x800DFFC. */
 #define TTP_DEBUG_LOD_ALL 0x8000000
-/* SET draws the car shadow with BILINEAR reconstruction only: the B-spline
- * branch under the stamps (vroad.mat) is gated unreachable, which is the look
- * of the ~0.6 ms trade priced on 2026-10-14 (Mach bands on the shadow ramp).
- * TTP_FEAT_ALL | this = 0x200DFFC; a look knob, not an ablation. */
-#define TTP_DEBUG_BLOB_BILINEAR 0x2000000
+/* 0x2000000 is unused (was TTP_DEBUG_BLOB_BILINEAR, deleted). */
+/* SET draws every car shadow as an OPAQUE BLACK die-cut of its fitted rect
+ * (vshadow.mat with the band at the ramp's half line): the probe for judging
+ * the shadow pass's placement, depth and seams by eye, on a TV, in a race.
+ * TTP_FEAT_ALL | this = 0x400DFFC. A look knob, not an ablation. */
+#define TTP_DEBUG_SHADOW_SOLID 0x4000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 /* DEBUG: tilt every chase rig to `deg` below level by raising or lowering the

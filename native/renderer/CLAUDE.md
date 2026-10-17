@@ -128,14 +128,11 @@ channel (below) is written straight to the chunk instances.
    diagonal. Every cheaper approximation saw-tooths at ring-crossing rate;
    `project()`'s comment has the ladder, and the smooth surface `deckFoot`
    walks is one more rung of it (right for seating a body, wrong for placing
-   paint — it cost the car shadow a visible shiver through every bend). A
-   per-frame STAMP goes further than its centre: the layer is written texel by
-   texel through the mesh's own uv0 → world map (`TrackBin::deckTriAt`), so
-   the stored field is the world-space shape sampled on the deck's grid and
-   the mesh's kinks cancel on the read.
+   paint — it cost the car shadow a visible shiver through every bend, back
+   when it was a track-space layer; it is its own pass now, see below).
 5. **A texture sample under NON-UNIFORM control flow must be `textureLod`,
    never `texture()`** — an implicit-derivative sample there is undefined
-   behaviour, and the rule is the whole renderer's (vroad's car-shadow taps, the
+   behaviour, and the rule is the whole renderer's (the deck's layer taps, the
    ESM decode in `ttp_sunvis.inc`, vpresent's FXAA span taps). Every map involved
    is single-level, so LOD 0 is what an implicit sample would pick. On ANGLE's
    Metal backend the UB read as a car shadow intermittently rendering nothing,
@@ -155,18 +152,6 @@ tap, 2026-09-04; the sun-vis tap, 2026-10-14, ~0.15 ms with 26 of 32 chunks
 white). And `kFeatRoadShadow` prices three maps at once — it rebinds the
 ground's and the structures' maps to 1x1 white — so read its arm as the
 ground's tap first, not the deck's.
-
-**The car-shadow B-spline's probe gate sits at 0.6 x remapLo, not just above
-zero.** The stored field is a linear ramp (`rasterCarShadowStamp`), on which the
-cubic reconstruction and bilinear agree except at the kinks, so a probe under
-the gate cannot cross the remap's cut and the picture is identical; the four
-taps over the field's tail were ~0.4 ms. `shadowRemapParam` owns the number.
-**The B-spline itself stays, and a still cannot judge it** (2026-10-14): frozen
-frames with and without it differ by a few code values, but in motion the stamp
-re-lands on a new texel each frame and bilinear's slope kinks pulse as bands
-where the B-spline's curve holds. Judge a reconstruction filter on the TV, in a
-race, with each variant drawn in its own colour (`TTP_DEBUG_BLOB_BILINEAR`), never
-from screenshots.
 
 **Chevrons are SDFs**, so the pads move without an atlas. The apex must LEAD or
 every chevron reads as a brake marking. A pad is **flat paint** — a radial
@@ -189,71 +174,79 @@ repairs after, so decoration falls off a dense chunk rather than a marker. The
 decal list's order is COMPOSITING order — statics, then auras, then item blobs —
 because a decal mix REPLACES what is under it; since order is also cap priority,
 a full chunk drops the item blobs before the auras. The CAR shadows are not in the
-list: they are the carShadow tap, composited BEFORE every decal so an aura lands
-over its own car's shadow.
+list: they are their own pass (below), drawn after the deck, so an aura lands
+UNDER its own car's shadow — accepted when the pass replaced the tap.
 
-## The car contact shadow: one blob, one tap
+## The car contact shadow: one draw per car, on the road's own surface
 
-**EVERY car's contact shadow is the BLOB — one bilinear tap of the carShadow
-layer — at every cell count.** The layer is a small track-space R8 texture the
-renderer CPU-rasterizes per frame (the rubber layer's idiom: same (s, lat)
-mapping and lat span, so the tap reuses the rubber uv) and re-uploads by **DIRTY
-RECT**, merged per frame, into a **ping-pong pair** on GL and Metal and **ONE
-texture bound once** on Vulkan (`uploadCarShadow` has both arguments).
+**EVERY car's contact shadow is a blended draw of its own** (`vshadow.mat`,
+`placeCarShadow`): the road's own triangles under the stamp's box in track
+space, clipped to that box, with the fitted rounded rect sampled from a texture
+locked to the car's frame. It replaced a track-space R8 layer that was
+CPU-rasterized and uploaded every frame and tapped (with a B-spline under the
+stamps) on every road fragment; the frame map (2026-10-14) has the whole
+ladder. What the pass is built on, and why each piece is what it is:
 
-- **No per-frame path may re-point a road instance's sampler**: on Vulkan each
-  re-point rebuilds every road instance's descriptor set.
-- **The dirty rects are three frames deep** for the pair: a texture written every
-  OTHER frame was last correct two frames ago, and a missed frame's rects strobe
-  the shadow between two positions. Vulkan keeps the same history.
+- **The geometry IS the deck's own planes.** Per ring cell and per deck
+  strip the box touches, the cell's two triangles are clipped in (t, lat) to
+  the box and each clipped corner mapped through that triangle's affine map
+  (`TrackBin::deckQuadAt` gives the corners), so the depth test is a tie
+  that a bias must break. A ruled strip between ring lines was tried first:
+  where the deck twists it sat behind the road's chord, a banked stretch
+  lost its shadows and the ends flickered. **The clip is to the stamp's
+  SUPPORT in (u, v)**, not to a track-space box: the baked field's non-zero
+  texel box (`CarShadowStamp::support`) is affine over each road triangle,
+  so clipping there is exact, and every fragment a box adds beyond it is
+  paid for nothing — a yawed car's box is twice its quad, and that clip was
+  about half the pass's cost on the box (the frame map, 2026-10-17).
+- **The depth bias is a shrink toward the eye in the vertex shader, not a
+  polygon offset.** Each vertex moves a fixed fraction of its distance along
+  its own eye ray (`vshadow.mat`): the screen position is unchanged, the
+  depth lands in front of the road's by that fraction at every grazing angle
+  on every backend, and early depth culling stays on. The two polygon offsets
+  both failed: one constant unit is under the rounding between the two
+  triangulations of the same plane, so the shadow lost the depth test over
+  most of its area (a stippled remnant on the web, "a complete mess" on
+  another GPU), and a slope term grows past the car on a face seen at a
+  grazing angle. A tyre in front still wins the depth test: the shrink is a
+  millimetre at three units. Filament's depth is REVERSED: the material's
+  default compare is already "nearer or equal", and a hand-set LE let every
+  fragment pass over the cars. `TTP_DEBUG_SHADOW_SOLID` draws every stamp as
+  an opaque black die-cut of its fitted rect, which is how placement, depth
+  and seams are judged by eye on a TV.
+- **The road's own cells cannot be the geometry.** The cross-section has no
+  vertex column inside a lane, so the tightest cell under a car is half the
+  road wide; drawn that way the pass cost +1.8 ms of a 4P 720 heavy second
+  with a trivial shader, and +3.3 with the real one. Fragments are the whole
+  cost of this pass — the eight draws measured nothing — so the geometry must
+  be the stamp's own area.
+- **The shape is a texture, not arithmetic.** The rounded rect's ramp field
+  (`carShadowStamp`, one 128-square R8 per car MODEL, mip-mapped, kept for the
+  run) is sampled at (u, v) the VERTEX stage emits, since the stamp's
+  coordinates are affine in world position. Evaluated per fragment the same
+  shape was 1.5 ms. Locked to the car, nothing re-lands on a road grid frame to
+  frame: no bands, no shiver, no filter to pay for. The baked field is the
+  raster's ramp blurred by a texel (the reconstruction the layer's read
+  carried; it also hides the distance field's creases along the corners'
+  diagonals). A ramp twice as wide read as a weak shadow with a small core.
+- **Lit and graded per vertex** from the deck's mean baked light per ring
+  (`mRingLight`), fogged and premultiplied per fragment like vblend. The blend
+  lands in display space; a remap of the alpha to the linear mix's weight
+  matched the layer on paper and read too weak on the TV, so the stamp's own
+  alpha is the look.
+- **A rebuilt scene's instances know no stamp**: the per-slot memory of which
+  model is bound (`mCarShadowStampBound`) is reset with the draws, or the race
+  after the lobby draws nothing.
 - Each car also pushes a READBACK-ONLY entry (`DeckDecal::car`, folded into no
   chunk) so `ttp_display_debug_decals` and the warp bench can read the car rows.
 
-**The deck's layer reads sample a bare varying.** vroad's rubber, car-shadow and
-sun-vis uvs are affine in uv0, so the VERTEX stage computes them (`layerUV`,
-`visUV`) and each read is non-dependent — one the GPU can issue before the
-fragment shader runs. A new deck-layer tap belongs in a varying too; arithmetic on
-the uv in the fragment makes the read dependent again.
-
-**The masked silhouette path was built, priced and deleted; git history has it,
-and its probe bits are holes in `ttp_display.h` — do not hunt for them.** What it
-measured is the durable half:
-
-- **The cost was the per-entry DYNAMICALLY-INDEXED UNIFORM READS in divergent
-  flow** — the declared-size law (below) seen from the execution side. Five
-  escapes were built and refuted (`docs/perf/androidtv-4p-plan.md`, Phase 5):
-  shading those fragments costs the same wherever they are issued, so do not
-  file such a cost as "pass structure". Nothing spellable inside a per-entry
-  loop collects it.
-- **A per-chunk loop costs its BOUNDS BOX, not its entry count.** Two cars in one
-  chunk multiply the fragments entering the loop as well as the iterations each
-  runs, so raise a per-chunk cap only behind a tighter per-entry reject.
-- **A budget shared by split-screen views must be a PER-VIEW round robin.** A
-  global pool ranked by distance to the nearest camera starves some player's own
-  car the moment a bot drafts another player.
-
-**The stamp is written through the mesh's own uv0 → world map, texel by
-texel** (`rasterCarShadowStamp` + `TrackBin::deckTriAt`), not placed by its
-corners. The shader reads the layer at uv0, interpolated linearly per road
-triangle, so a texel is seen exactly where the MESH puts its (s, lat) — and a
-stamp laid from any other placement (the smooth surface, the ring-plane blend)
-slides against the car in a sawtooth at ring-crossing rate, zero at each ring
-and 0.05-0.2 u mid-quad on a bend; the shiver through corners and drifts.
-Evaluating the fitted shape in the car's frame at each texel's mesh point
-removes it by construction, and also stores the field with the mesh's own
-kinks, so the uv0 gradient jumps that printed as creases through a smooth
-field cancel on the read. (Placing only the CENTRE through `project()` was
-tried earlier and bought nothing — the kinks live inside the stamp.) The
-remap band in `CarShadowTuning` stays as the look.
-
-**THE BLOB'S SHAPE IS A ROUNDED RECT FITTED TO EACH MODEL'S OWN OUTLINE —
+**THE SHAPE IS A ROUNDED RECT FITTED TO EACH MODEL'S OWN OUTLINE —
 four corners for every car, by the user's eye** (`ttp/car_footprint.h`,
 executed on every leg by the `carfootprint` ctest). The model's triangles are
 projected top-down and rasterized on the CPU out of the same GLB bytes the
 merged draw groups already decode — no parse, no GPU pass, no readback — and
 the fit (fill across, fill along, corner radius) is one pass over that coverage.
-The raster evaluates the rect in CLOSED FORM and skips the texels its `zero()`
-proves empty. A fitted k-gon and an outline-mask arm were built and not chosen
+A fitted k-gon and an outline-mask arm were built and not chosen
 (`CarShadowTuning`'s header says why).
 
 **The AABB cannot do this job, which is the whole reason the footprint exists.**
@@ -272,42 +265,22 @@ to nothing at all. That is why the outline is captured and fitted once, at
 load (`bakeCarFootprint`), which refuses a capture whose extent does not
 straddle the origin rather than let it fail silently.
 
-**The blob costs on BOTH sides, and they move on different levers.** The GPU
-half is the tap block; the CPU half is the raster and upload. Density (texels per
-unit) scales the CPU half only. Price the half you are spending on — an arm with a
-zero coverage cap (`CarShadowTuning::cap`) gates the tap while the raster and
-upload keep running. Only the Android box can price this channel; it is free on a
-desktop GPU.
+**The edge is a WIDE MEDIUM BAND cut in the SHADER over a wide field**; both
+cliffs beside it are measured, and `CarShadowTuning` carries them. **The band
+must stay non-empty** (`remapHi > remapLo`): a degenerate smoothstep is UB.
 
-**THE LAYER'S DENSITY IS THE FLICKER, and it is the first thing to reach for.**
-The raster re-lands every stamp at a new sub-texel offset each frame, so a coarse
-grid cannot hold an edge still. It saturates at the shipped density (the width
-clamps against the driver's texture ceiling). The edge itself is a WIDE MEDIUM
-BAND cut in the SHADER over a wide field; both cliffs beside it are measured, and
-`CarShadowTuning` carries them. **The band must stay non-empty**
-(`remapHi > remapLo`): a degenerate smoothstep is UB.
+**Judge a shadow change on the TV, in a race, with each variant in its own
+colour — never from stills.** A reconstruction filter the road-space layer
+once carried read identical in frozen frames and pulsed bands in motion; the
+pass was judged the same way (a colour per variant, `debug.ttp.features`
+flipped live, and `TTP_DEBUG_SHADOW_SOLID`). **When a decal channel draws
+nothing, suspect the TEXTURE CONTENT first**: stage tints cannot reach inside a
+sample. A TRANSLUCENT bake into an R8 array layer once rendered ZERO coverage on
+the PowerVR driver while logging success. A bake that renders nothing has to SAY
+so.
 
-**Diagnose a shadow artifact from the BYTES, never from pixels.** Reading the
-layer back is what pinned the creases to the read side, and reading the mask back
-was the only way to tell a WRONG shape from one too small to read. Add such a
-readback for the job rather than guess. **Measuring flicker** needs ONE gated
-frame re-rendered once per arm (`display.frame()` draws without advancing the
-sim), scored down each arm's own sequence, cars hidden, rubber wiped — scoring arms
-one after another lets the scenery the car passes swamp the effect.
-
-**When a decal channel draws nothing, suspect the TEXTURE CONTENT first**: stage
-tints cannot reach inside a sample. A TRANSLUCENT bake into an R8 array layer once
-rendered ZERO coverage on the PowerVR driver while logging success. A bake that
-renders nothing has to SAY so.
-
-**The stamp is laid from six `deckFoot`-projected points a frame, never from a
-track-space reach.** The reach a stamp needs is an ARCLENGTH, and the deck's
-iso-arclength lines FAN on a bend, so a constant reach cut the stamp's nose or tail
-along a ring plane on bending tracks (and never on skyline, which rolls rather
-than bends — the tell). The points are laid from the plane the car SITS on, and
-they ARE the warped quad the raster draws. **Shortcut:** through a FLAT bend the
-stamp's world projection is rigid, so a stamp that changes shape there is a
-placement bug — no pixel work needed.
+**The stamp's box is laid from the plane the car SITS on**: a stamp that
+changes shape through a flat bend is a placement bug — no pixel work needed.
 
 ## The shader path, the views, and the rubber
 
@@ -622,7 +595,7 @@ sheet's STEP).
 
 **A dynamically-indexed uniform ARRAY costs whether or not the loop runs, and it
 costs by DECLARED SIZE** (`vroad.mat` has the readings). That is why the car
-shadows left the list for the carShadow tap, which declares no array, and why
+shadows left the list for their own pass, which declares no array, and why
 widening the profile arrays to take far cars was a loss. **Raising a cap is
 measurable in the frame**; `tests/road-decal-caps.test.js` holds the material's
 array sizes and each loop's clamp to the C++ constants.

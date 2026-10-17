@@ -97,7 +97,7 @@ enum SceneStaging {
     static let materialNames = ["vcolor", "vblend", "vlit", "vroad",
                                 "vglb", "vglbfade", "vpoint", "vcloud", "vground",
                                 "vvis", "vroadvis", "vpresent", "vesm",
-                                "vburst", "voverlay", "vsky"]
+                                "vburst", "voverlay", "vsky", "vshadow"]
 
     /// The GLBs every scene needs whatever the track and the biome are: the
     /// track's own furniture, and the truck a monster item turns a car into. The
