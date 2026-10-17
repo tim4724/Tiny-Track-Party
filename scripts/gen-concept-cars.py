@@ -61,6 +61,24 @@ CARS = {
     'carkit-kart-ooli': ('kart-ooli', 'Kart with its driver.', None),
     'carkit-kart-oopi': ('kart-oopi', 'Kart with its driver.', None),
     'carkit-kart-oozi': ('kart-oozi', 'Kart with its driver.', None),
+    # The ROLE candidates: one Car Kit body per roster role, its look pushed
+    # towards the role's stats (see TWEAKS), standing beside the car it replaces.
+    'role-dash': ('police', 'Dash (balanced): the police car as it is.', 'vehicle-racer-low'),
+    'role-bolt': ('sedan-sports', 'Bolt (fastest, light, poor turn): the sports sedan lowered and '
+                  'stretched.', 'vehicle-speedster'),
+    'role-carve': ('hatchback-sports', 'Carve (corner king, low top speed): the sports hatchback in blue, '
+                   'shortened.', 'vehicle-racer'),
+    'role-rumble': ('suv', 'Rumble (heavy, slow launch): the SUV in purple.', 'vehicle-vintage-racer'),
+}
+
+# Per-car edits on top of the conversion: `paint` moves Car Kit swatches
+# {(row, col): (row, col)} before the palette mapping, `shape` scales the body
+# (never the wheels) by (along the car, up from the ground), the wheels
+# sliding with its length.
+TWEAKS = {
+    'role-bolt': {'shape': (1.08, 0.82)},
+    'role-carve': {'paint': {(1, 7): (1, 15), (1, 6): (1, 14)}, 'shape': (0.82, 1.0)},
+    'role-rumble': {'paint': {(1, 7): (0, 3), (1, 6): (0, 2)}},
 }
 
 
@@ -123,23 +141,33 @@ def palette_map(src_path):
     return {k: min(((d, err(v, dv)) for d, dv in dst.items()), key=lambda x: x[1]) for k, v in src.items()}
 
 
-def remap_uvs(mesh, pmap, used):
-    """Move every UV onto the toy-kit swatch its Car Kit swatch maps to,
-    keeping its place inside the swatch (so a gradient stays a gradient)."""
+def move_swatches(mesh, swatch_of):
+    """Move every UV to the swatch swatch_of((row, col)) names (None: leave
+    it), keeping its place inside the swatch (so a gradient stays a
+    gradient). Both atlases are the same 16 x 4 grid."""
     for layer in mesh.uv_layers:
         for d in layer.data:
             u, gv = d.uv[0], 1.0 - d.uv[1]
             col, row = min(int(u * 16), 15), min(int(gv * 4), 3)
-            (r2, c2), e = pmap[(row, col)]
-            used[(row, col)] = ((r2, c2), e)
-            d.uv = ((c2 + u * 16 - col) / 16, 1.0 - (r2 + gv * 4 - row) / 4)
+            to = swatch_of((row, col))
+            if to:
+                r2, c2 = to
+                d.uv = ((c2 + u * 16 - col) / 16, 1.0 - (r2 + gv * 4 - row) / 4)
+
+
+def remap_uvs(mesh, pmap, used):
+    """Move every UV onto the toy-kit swatch its Car Kit swatch maps to."""
+    def to(key):
+        used[key] = pmap[key]
+        return pmap[key][0]
+    move_swatches(mesh, to)
 
 
 # ------------------------------------------------------------------- convert
 
-def convert(model, pmap, used):
+def convert(model, pmap, used, paint=None, shape=(1.0, 1.0)):
     """Import a Car Kit model and return (body, [(wheel name, mesh, loc)]),
-    turned, scaled and remapped."""
+    turned, scaled, tweaked (see TWEAKS) and remapped."""
     zf = car_kit()
     extracted(zf, GLB_DIR + 'Textures/colormap.png')  # so the import finds it
     before = set(bpy.data.objects)
@@ -154,14 +182,18 @@ def convert(model, pmap, used):
         o.matrix_world = Matrix.Identity(4)
         o.data = o.data.copy()  # wheels share meshes; each takes its own transform
         o.data.transform(turn @ worlds[o])
-        remap_uvs(o.data, pmap, used)
         role = WHEELS.get(o.name.split('.')[0])
+        if not role:
+            if paint:
+                move_swatches(o.data, paint.get)
+            o.data.transform(Matrix.Diagonal((1.0, shape[0], shape[1], 1.0)))
+        remap_uvs(o.data, pmap, used)
         if role:
             # the wheel spins about its own centre: that is where its node goes
             vs = [v.co for v in o.data.vertices]
             c = [(min(v[i] for v in vs) + max(v[i] for v in vs)) / 2 for i in range(3)]
             o.data.transform(Matrix.Translation((-c[0], -c[1], -c[2])))
-            wheels.append((role, o.data, tuple(c)))
+            wheels.append((role, o.data, (c[0], c[1] * shape[0], c[2])))
         else:
             body_parts.append(o)
     bpy.ops.object.select_all(action='DESELECT')
@@ -241,7 +273,7 @@ def kit_material(path):
 
 def build(name, pmap, used):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    body, wheels = convert(CARS[name][0], pmap, used)
+    body, wheels = convert(CARS[name][0], pmap, used, **TWEAKS.get(name, {}))
     for o in list(bpy.data.objects):
         if o is not body:
             bpy.data.objects.remove(o)

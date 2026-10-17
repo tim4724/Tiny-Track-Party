@@ -79,6 +79,30 @@
    "name": "carkit-kart-oozi",
    "tris": 2726,
    "note": "Car Kit 3.1 kart-oozi: Kart with its driver."
+  },
+  {
+   "name": "role-dash",
+   "tris": 2304,
+   "note": "Car Kit 3.1 police: Dash (balanced): the police car as it is.",
+   "base": "vehicle-racer-low"
+  },
+  {
+   "name": "role-bolt",
+   "tris": 2088,
+   "note": "Car Kit 3.1 sedan-sports: Bolt (fastest, light, poor turn): the sports sedan lowered and stretched.",
+   "base": "vehicle-speedster"
+  },
+  {
+   "name": "role-carve",
+   "tris": 2088,
+   "note": "Car Kit 3.1 hatchback-sports: Carve (corner king, low top speed): the sports hatchback in blue, shortened.",
+   "base": "vehicle-racer"
+  },
+  {
+   "name": "role-rumble",
+   "tris": 2474,
+   "note": "Car Kit 3.1 suv: Rumble (heavy, slow launch): the SUV in purple.",
+   "base": "vehicle-vintage-racer"
   }
  ]
 }
