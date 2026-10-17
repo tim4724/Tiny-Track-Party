@@ -2,7 +2,38 @@
 // the merged draws. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
+#include <gltfio/TextureProvider.h>
 #include <utils/Log.h>
+
+#include <set>
+
+namespace {
+// gltfio asks for a base-colour atlas as an sRGB texture, which the GPU would
+// decode to linear on every sample. The scene is authored in display space
+// (TtpRendererImpl.h): the atlas's bytes ARE the albedo vglb multiplies, so
+// every texture is created as plain RGBA8 — the flag is dropped on the way in
+// and the stb decoder behind this does the rest unchanged.
+class DisplayTextureProvider final : public filament::gltfio::TextureProvider {
+public:
+    explicit DisplayTextureProvider(TextureProvider* inner) : mInner(inner) {}
+    ~DisplayTextureProvider() override { delete mInner; }
+    Texture* pushTexture(const uint8_t* data, size_t byteCount, const char* mimeType,
+            TextureFlags) override {
+        return mInner->pushTexture(data, byteCount, mimeType, TextureFlags::NONE);
+    }
+    Texture* popTexture() override { return mInner->popTexture(); }
+    void updateQueue() override { mInner->updateQueue(); }
+    const char* getPushMessage() const override { return mInner->getPushMessage(); }
+    const char* getPopMessage() const override { return mInner->getPopMessage(); }
+    void waitForCompletion() override { mInner->waitForCompletion(); }
+    void cancelDecoding() override { mInner->cancelDecoding(); }
+    size_t getPushedCount() const override { return mInner->getPushedCount(); }
+    size_t getPoppedCount() const override { return mInner->getPoppedCount(); }
+    size_t getDecodedCount() const override { return mInner->getDecodedCount(); }
+private:
+    TextureProvider* mInner;
+};
+} // namespace
 
 
 // Repaint the monster truck's CHASSIS (only) to one flat neutral, per instance.
@@ -33,7 +64,8 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
                 MaterialInstance* own = MaterialInstance::duplicate(src, "monster-chassis");
                 if (!own) continue;
                 if (own->getMaterial()->hasParameter("baseColorFactor")) {
-                    own->setParameter("baseColorFactor", rgba);
+                    // Display space: the factor is encoded like every other.
+                    own->setParameter("baseColorFactor", math::float4{ encodeSrgb(rgba.xyz), rgba.w });
                 }
                 if (white && own->getMaterial()->hasParameter("baseColorMap")) {
                     own->setParameter("baseColorMap", white, smp);
@@ -187,9 +219,33 @@ void TtpRenderer::ensureAssetLoader() {
     // it to nullptr bought nothing and cost a warning on every renderer build.
     rc.normalizeSkinningWeights = true;
     mResourceLoader = new gltfio::ResourceLoader(rc);
-    mStbProvider = gltfio::createStbProvider(mEngine);
+    mStbProvider = new DisplayTextureProvider(gltfio::createStbProvider(mEngine));
     mResourceLoader->addTextureProvider("image/png", mStbProvider);
     mResourceLoader->addTextureProvider("image/jpeg", mStbProvider);
+}
+
+// gltfio fills baseColorFactor from the glTF, in LINEAR, on every material
+// instance it creates. The scene is authored in display space
+// (TtpRendererImpl.h), so the factor is encoded here, once, right after the
+// asset is made — every later writer of a factor (the biome recolour, the box
+// tint, the monster chassis, the fade twins) encodes its own. A set, because
+// one MaterialInstance serves many primitives and must not be encoded twice.
+void TtpRenderer::displayKitFactors(gltfio::FilamentAsset* asset) {
+    if (!asset) return;
+    auto& rcm = mEngine->getRenderableManager();
+    std::set<MaterialInstance*> seen;
+    const utils::Entity* ents = asset->getEntities();
+    for (size_t e = 0; e < asset->getEntityCount(); e++) {
+        const auto ri = rcm.getInstance(ents[e]);
+        if (!ri) continue;
+        for (size_t p = 0, n = rcm.getPrimitiveCount(ri); p < n; p++) {
+            MaterialInstance* mi = rcm.getMaterialInstanceAt(ri, p);
+            if (!mi || !seen.insert(mi).second) continue;
+            if (!mi->getMaterial()->hasParameter("baseColorFactor")) continue;
+            const math::float4 f = mi->getParameter<math::float4>("baseColorFactor");
+            mi->setParameter("baseColorFactor", math::float4{ encodeSrgb(f.xyz), f.w });
+        }
+    }
 }
 
 // The kit GLBs reference their texture by EXTERNAL uri (Textures/colormap.png)
@@ -238,6 +294,7 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
             return false;
         }
         asset->releaseSourceData();
+        displayKitFactors(asset);
         snapshotRestPose(asset);
     }
     mScene->addEntities(asset->getEntities(), asset->getEntityCount());
@@ -583,6 +640,7 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
             return;
         }
         ga->releaseSourceData();
+        displayKitFactors(ga);
         snapshotRestPose(ga);
     }
     if (mCarGhostKey.size() <= c) mCarGhostKey.resize(c + 1, 0);

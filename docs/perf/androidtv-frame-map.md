@@ -1736,6 +1736,36 @@ ms per second (two in-install pairs): the whole -1.1 was the chunks under the
 cars drawn as chords, which is where the shadow broke. With a working shadow
 the aggressive far form buys nothing, so that lever is closed as well.
 
+**The scene authored in display space (2026-10-17, evening).** The one
+channel the grade's ablation arm had priced (-0.8 heavy) was made real, and
+then some: every colour a scene material reads now arrives exposed and
+sRGB-encoded (vertex colours, texture bytes, colour parameters, and two baked
+light terms per receiver vertex mixed through the visibility tap), so no
+fragment encodes, and the live-lit vertex stage is the one encode left
+(`native/renderer/CLAUDE.md`, "Colour"). The look was judged first with a
+probe of the one approximation — the receivers' light sum mixed in display
+space — on PAUSED web frames with a noise floor (fifteen frames over four
+tracks, probe vs shipped mean 0.01-0.10 levels, noise 0.01-0.05; flipping the
+grade itself reads 48), then the real build against the committed web
+reference stills, same frame: the countdown grid at mean 2.7 levels, nothing
+visible side by side.
+
+Vulkan, 4P pinned 1280x720, pretzel, two interleaved pairs against main
+`7edd5d0c`, per-second pairing:
+
+| pair | display-space vs main, all seconds | main's heaviest 30% | heavy p50 | clean of 75 | skips |
+|---|---|---|---|---|---|
+| 1 | -1.50 ms | -1.60 ms | 12.92 vs 14.65 | 74 vs 69 | 2 vs 23 |
+| 2 | -1.44 ms | -1.29 ms | 12.86 vs 14.42 | 74 vs 68 | 2 vs 21 |
+
+Nearly twice the ablation arm, because the arm only skipped the taps: the
+build also retires the per-fragment matte shading of everything live-lit
+(cars, props, the kit's instanced copies, their SH and N·L per fragment), the
+shadow pass's per-vertex LUT, and the receivers' per-vertex sun term. Two
+ADAPTIVE 4P pretzel races on it held 720 for the whole race, heavy p50
+12.6-12.8, 97-98 clean seconds of 99, one skip-second each — against the
+2-of-5 retreats and 3-6 skip-seconds the base read the same afternoon.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

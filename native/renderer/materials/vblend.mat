@@ -8,14 +8,10 @@ material {
     shadingModel : unlit,
     culling : none,
     blending : transparent,
-    depthWrite : false,
-    parameters : [
-        { type : sampler2d, name : gradeLut }
-    ]
+    depthWrite : false
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
@@ -27,9 +23,9 @@ fragment {
         // into a solid one: clouds rendered as flat white blobs, the boost aura
         // as a hard teal disc, and skid marks came out LIGHTER than the road.
         material.baseColor = getColor();
-        // Graded BEFORE the premultiply, so what gets scaled by alpha is the
-        // displayed colour — the scene buffer holds sRGB now (ttp_grade.inc).
-        material.baseColor.rgb = ttpFogMix(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
+        // The vertex colour is the displayed colour already (packShown), so
+        // what alpha scales is what the sRGB scene buffer blends.
+        material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;
     }
 }
 

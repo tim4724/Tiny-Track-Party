@@ -61,8 +61,7 @@ material {
         { type : float, name : lite },
         { type : float2, name : floorOrigin, precision : high },
         { type : float, name : floorInvSpan, precision : high },
-        { type : sampler2d, name : floorTex },
-        { type : sampler2d, name : gradeLut }
+        { type : sampler2d, name : floorTex }
     ]
 }
 
@@ -117,7 +116,6 @@ vertex {
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
@@ -127,7 +125,7 @@ fragment {
         // makeSnowflakeTexture's stops: 1.0 at the centre, 0.9 at 0.4, 0 at 1.
         float a = d < 0.4 ? 1.0 - 0.25 * d : 0.9 * (1.0 - (d - 0.4) / 0.6);
         material.baseColor.a *= clamp(a, 0.0, 1.0);
-        // Grade, then premultiply, same as vblend (see ttp_grade.inc).
-        material.baseColor.rgb = ttpFogMix(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
+        // Premultiply, same as vblend: the vertex colour is displayed already.
+        material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;
     }
 }

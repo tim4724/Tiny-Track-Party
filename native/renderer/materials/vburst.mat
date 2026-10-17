@@ -44,8 +44,7 @@ material {
     flipUV : false,
     parameters : [
         { type : float2, name : ring },
-        { type : float4, name : tint },
-        { type : sampler2d, name : gradeLut }
+        { type : float4, name : tint }
     ]
 }
 
@@ -65,7 +64,6 @@ vertex {
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
@@ -74,10 +72,10 @@ fragment {
         // Additive blending is ONE/ONE here, so the alpha has to be folded in
         // by hand — three's AdditiveBlending is SrcAlpha/One, i.e. exactly this.
         //
-        // AND THE SUM IS NOW IN GAMMA SPACE, because the scene buffer holds sRGB
-        // (ttp_grade.inc). Two half-bright flashes over each other reach white
-        // here where in linear they reached about 0.7 — a blast blows out sooner
-        // than it used to. That is the visible price of moving the grade.
-        material.baseColor.rgb = ttpFogMixAdd(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
+        // AND THE SUM IS IN GAMMA SPACE, because the scene buffer holds sRGB and
+        // the vertex colour is displayed already (packShown). Two half-bright
+        // flashes over each other reach white here where in linear they reached
+        // about 0.7 — a blast blows out sooner than a linear sum would.
+        material.baseColor.rgb = ttpFogMixAdd(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;
     }
 }

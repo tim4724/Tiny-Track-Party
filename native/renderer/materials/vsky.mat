@@ -1,7 +1,7 @@
-// The sky dome: the biome's elevation gradient baked per vertex, already
-// graded (TtpRenderer::buildScene bakes it with gradeSrgb, the same curve the
-// cubemap used to carry), so the fragment writes the vertex colour as it is —
-// no grade taps, no fog: the dome sits past the fog's cut-off by construction.
+// The sky dome: the biome's elevation gradient baked per vertex as a SHOWN
+// colour (packShown, the curve every displayed colour carries), so the
+// fragment writes the vertex colour as it is — no fog either: the dome sits
+// past the fog's cut-off by construction.
 //
 // A full sphere, so no clear colour ever shows: the cells' cameras sit at its
 // centre (TtpRendererFrame.cpp places it per cell) and it is scaled to each

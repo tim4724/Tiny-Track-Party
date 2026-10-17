@@ -559,13 +559,15 @@ re-derive them:
 | rebooting the box and measuring cold | 3% against warm, so this device is NOT thermally throttled and a long session's readings are trustworthy |
 
 **THE sRGB SWAP CHAIN IS A LOSS ON THIS DRIVER, and it is the most surprising
-number here.** `ttpGrade`'s three `pow`s per fragment are the biggest single
-item left in a race frame — deleting the encode outright takes a live 1280x720
-frame from ~18 ms of GPU to ~15.7 — so moving it into the ROP looks like free
-money. `EGL_KHR_gl_colorspace` is present, Filament honours the flag, and the
-picture comes out CORRECT. It also comes out at **~21.5 ms**: the driver's sRGB
-surface path costs more than the shader maths it replaces, by more than the
-maths costs. Whatever EGL config it selects is not the fast one.
+number here.** When the grade was three `pow`s per fragment it was the biggest
+single item left in a race frame — deleting the encode outright took a live
+1280x720 frame from ~18 ms of GPU to ~15.7 — so moving it into the ROP looked
+like free money. `EGL_KHR_gl_colorspace` is present, Filament honours the flag,
+and the picture comes out CORRECT. It also comes out at **~21.5 ms**: the
+driver's sRGB surface path costs more than the shader maths it replaced, by
+more than the maths cost. Whatever EGL config it selects is not the fast one.
+(The encode is gone from the fragment stage since: the scene is authored in
+display space, `native/renderer/CLAUDE.md`.)
 
 So the encode has to stay in the shader here, and the ~2 ms it costs is a real
 item with no cheap collection: an approximation is not cheaper either (a
@@ -798,9 +800,9 @@ from memory. The pinned Filament (a change proposed upstream) clears a later
 view's viewport instead whenever it overlaps no earlier view's this frame: it
 still holds the first view's clear colour, so the pixels are identical
 (docs/perf/androidtv-frame-map.md has what it bought). Keep the cells from
-overlapping, or they go back to loading. Also refuted: the sRGB-swapchain ROP encode (the grade is
-a LUT, the prize is ~1 ms of fill, and it flips translucent blending
-gamma→linear — a look change); the engine's feature flags (nothing
+overlapping, or they go back to loading. Also refuted: the sRGB-swapchain ROP encode (the prize was
+~1 ms of fill when the grade was a LUT, and it flips translucent blending
+gamma→linear — a look change; the fragment encode is gone altogether now); the engine's feature flags (nothing
 Vulkan-tunable exists). What remains above the road's own shader is
 RESOLUTION — the ladder — and nothing else on this GPU.
 

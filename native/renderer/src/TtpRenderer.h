@@ -511,12 +511,15 @@ private:
         // field vcloud shapes them from). Most meshes are position + colour, so
         // UVs stay out of the shared vertex.
         std::vector<filament::math::float2> uvs;
-        // Optional BAKED per-vertex matte light, (ambient.rgb, NoL) — every
-        // static shadow RECEIVER (the road, the ground, the structures, the
-        // berms), filled by bakeVertexLight. Non-empty ⇒ buildMesh feeds
-        // CUSTOM0 INSTEAD of TANGENTS (nothing at draw time reads the normal).
-        // Alive for the run like every CPU copy here.
-        std::vector<filament::math::half4> custom0;
+        // Optional BAKED per-vertex matte light, DISPLAY-ENCODED: custom0.xyz
+        // the ambient term, custom1.xyz ambient + sun (the receiver's fragment
+        // mixes the two through its visibility tap), custom0.w the raw NoL the
+        // visibility bakes read — every static shadow RECEIVER
+        // (the road, the ground, the structures, the berms), filled by
+        // bakeVertexLight. Non-empty ⇒ buildMesh feeds CUSTOM0/1 INSTEAD of
+        // TANGENTS (nothing at draw time reads the normal). Alive for the run
+        // like every CPU copy here.
+        std::vector<filament::math::half4> custom0, custom1;
         // OPT-IN for a STATIC lit sheet: buildMesh folds the matte light into
         // the vertex colours (bakedMatteLight) and draws it UNLIT, so nothing
         // at draw time transforms a normal or shades a fragment. Only a mesh
@@ -552,6 +555,7 @@ private:
         struct Layout {
             bool lit = false, uv = false, baked = false;
             uint8_t uvSlot() const { return lit ? 2 : 1; }
+            // custom0's slot; custom1 is the next one.
             uint8_t customSlot() const {
                 return (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
             }
@@ -936,6 +940,9 @@ private:
     GridDims gridDims(uint32_t n) const;
     // MonsterRig's gunmetal frame: repaint the chassis primitive only, since
     // the whole truck shares one material and the tyres must keep their colour.
+    // Encode a freshly made asset's base-colour factors for display (the
+    // definition says why and where).
+    void displayKitFactors(filament::gltfio::FilamentAsset* asset);
     void recolourMonsterChassis(filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& instances,
             const filament::math::float4& rgba);
@@ -1321,8 +1328,6 @@ private:
     // its ramp from mSkidTexelS per scene, so a diagonal mark gets SOFTER
     // rather than blockier.
     uint32_t mMaxTextureDim = 8192;
-    // The grade's sRGB curve as a 1024-entry table — ttp_grade.inc has why.
-    filament::Texture* mGradeLut = nullptr;
     bool mSkidWipe = false;    // clear the layer on the next stamp pass (race restart)
     // The layer's mip refresh (see the stamp block): stamps land in mip 0; the
     // chain regenerates at most ~7 Hz so minified marks stop scintillating
@@ -1995,7 +2000,8 @@ private:
     };
     MatteRig matteRig(const TrackBin& tb) const;
     // The matte light a static sheet's vertices are folded with at build
-    // (Mesh::bakeLight): ttpMatteShade's CPU twin at visibility 1, pre-exposed
+    // (Mesh::bakeLight): the CPU twin of ttpMatteAmbient + ttpMatteSunTerm at
+    // visibility 1, pre-exposed
     // exactly as the shader's frame uniforms are. buildStatic sets it
     // before the first sheet is built. bakeVertexLight is the same twin for the
     // shadow RECEIVERS, which keep their light in CUSTOM0 because their sun term
@@ -2009,9 +2015,11 @@ private:
     BakeRig mBakeRig;
     filament::math::float4 matteTerms(const filament::math::float3& n) const;
     filament::math::float3 bakedMatteLight(const filament::math::float3& n) const;
-    // A shadow receiver's smooth light — ttpMatteAmbient and NoL, the CPU twin
-    // of ttp_shade.inc — into m.custom0 as (ambient.rgb, NoL), one per vertex,
-    // from m.normals. Visibility is not in it: that is a baked map's tap.
+    // A shadow receiver's smooth light — ttpMatteAmbient and the sun term, the
+    // CPU twin of ttp_shade.inc — into m.custom0 (ambient, and NoL in .w for
+    // the bakes) and m.custom1 (ambient + sun), both display-encoded
+    // (displayLight), one per vertex, from m.normals. Visibility is not in it:
+    // that is a baked map's tap.
     void bakeVertexLight(Mesh& m) const;
     // Hand the ESM + its world→light matrix to one of the bake's instances.
     void bindShadowMap(filament::MaterialInstance* mi, const SunEsm& esm);
@@ -2112,11 +2120,10 @@ public:
     // TTP_DEBUG_NO_MERGE — SET takes the merged draw groups apart, so a sweep
     // prices the merging itself as interleaved arms on one launch.
     static constexpr uint32_t kFeatNoMerge = 0x2000;
-    // The two channels that ride a Filament VIEW GLOBAL instead of a material
-    // parameter, because eleven materials include the .inc each one lives in
-    // (see ttp_grade.inc). kFeatFogVertex is NOT a finer kFeatFog: that one
-    // moves the fog's parameters and cannot reach ttpFogFactor's own maths.
-    static constexpr uint32_t kFeatGrade = 0x4000;
+    // A channel that rides a Filament VIEW GLOBAL instead of a material
+    // parameter, because every material includes the .inc it lives in
+    // (ttp_fog.inc). kFeatFogVertex is NOT a finer kFeatFog: that one moves
+    // the fog's parameters and cannot reach ttpFogFactor's own maths.
     static constexpr uint32_t kFeatFogVertex = 0x8000;
     // TTP_DEBUG_NO_DECAL_* / DECAL_CAPS_HALF — kFeatRoadDecals decomposed
     // into its sub-arms, inverted like kFeatNoMerge (ttp_display.h's comment
@@ -2140,7 +2147,7 @@ private:
     uint32_t mDecalDebug = 0;
     bool mFogOn = true;
     // The ablation view-global, in the sense the shaders read it: ZERO is the
-    // shipped picture, so a View nobody set renders correctly (ttp_grade.inc).
+    // shipped picture, so a View nobody set renders correctly (ttp_fog.inc).
     filament::math::float4 mDebugGlobals{ 0.0f, 0.0f, 0.0f, 0.0f };
     void applyDebugGlobals(filament::View* v) const;
     bool mFeatureTagged = false;

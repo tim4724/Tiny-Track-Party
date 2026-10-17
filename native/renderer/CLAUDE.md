@@ -229,8 +229,9 @@ ladder. What the pass is built on, and why each piece is what it is:
   raster's ramp blurred by a texel (the reconstruction the layer's read
   carried; it also hides the distance field's creases along the corners'
   diagonals). A ramp twice as wide read as a weak shadow with a small core.
-- **Lit and graded per vertex** from the deck's mean baked light per ring
-  (`mRingLight`), fogged and premultiplied per fragment like vblend. The blend
+- **Lit per vertex, in display space,** from the deck's mean baked full
+  light per ring (`mRingLight`, encoded like every light term) times the
+  encoded ink, fogged and premultiplied per fragment like vblend. The blend
   lands in display space; a remap of the alpha to the linear mix's weight
   matched the layer on paper and read too weak on the TV, so the stamp's own
   alpha is the look.
@@ -281,6 +282,34 @@ so.
 
 **The stamp's box is laid from the plane the car SITS on**: a stamp that
 changes shape through a flat bend is a placement bug — no pixel work needed.
+
+## Colour: the scene is authored in display space
+
+**No material encodes anything per fragment.** Every colour a scene material
+reads is already what the panel shows — sRGB, pre-exposed — and the fragment
+stage multiplies and mixes: a vertex colour (`packAlbedo` / `packShown`), a
+texture's bytes (every colour texture is plain RGBA8, the kit atlas through
+`DisplayTextureProvider`), a colour parameter (`encodeSrgb` at the setter,
+`displayKitFactors` for what gltfio sets), a baked light term (`displayLight`
+in `bakeVertexLight`, two per receiver vertex: ambient, and ambient plus sun,
+mixed through the visibility tap in the fragment). The one shader-side encode
+is the live-lit VERTEX stage's (`ttpMatteLightDisplay`), for what moves.
+`TtpRendererImpl.h`'s header carries the argument, the exactness, and what is
+only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
+
+- **A new colour input states which it is.** An albedo (something a light term
+  multiplies) encodes without the exposure; a colour shown as it is (an unlit
+  material's vertex colour, the skybox, the fog) carries it. A light term is
+  never clamped — the clip belongs on the product, in the 8-bit buffer.
+- **A new colour texture is RGBA8, never SRGB8_A8**: the decode the sampler
+  would do is exactly the step this removes.
+- **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
+  sampled the way the GPU samples them; the merged bake decodes them to
+  multiply the light and encodes the product once.
+- **Blends, fog and the deck's compositing happen in gamma space**, as they
+  did when the grade was per fragment; the frame map (2026-10-17) has the
+  paused-frame comparison that priced the receivers' penumbra mix at the
+  noise floor.
 
 ## The shader path, the views, and the rubber
 
@@ -396,9 +425,10 @@ static scene, filters it into an ESM, decodes that into the visibility maps, and
 destroys it — nothing samples the ESM in a frame (`ttp_sunvis.inc` is included by
 the bake materials alone). A lit material that MOVES (vlit) receives no shadow.
 
-The receivers' light (`(ambient.rgb, NoL)` in custom0) is one CPU fill,
-`bakeVertexLight`, the twin of `ttp_shade.inc`'s smooth terms; the sun's colour
-stays a frame uniform rebuilt from the baked NoL. Their maps differ by
+The receivers' light (custom0 the encoded ambient with the raw NoL in .w for
+the bakes, custom1 the encoded ambient plus sun) is one CPU fill,
+`bakeVertexLight`, the twin of `ttp_shade.inc`'s smooth terms. Their maps
+differ by
 parameterisation, and the reasons are the rule:
 
 - **The GROUND** (vground.mat) taps a map on the LIGHT's own grid (vvis.mat
@@ -572,10 +602,11 @@ Android box) it steadies the tail and leaves the median; on a submission-bound o
   four back costs more than all of it saves (`--aa 1` is that shape). **Price a
   pass by running it, never by fitting a per-pass term** over a resolution sweep;
   the overlay pass is the counter-example.
-- **An sRGB surface in place of the grade LUT**: pixel-correct on all three
-  platforms, a null on the Android box, a win only on the Apple TV — and the hunt
-  rule is "improves the weakest device". A two-drawable CAMetalLayer dropped
-  frames at 4P 4K.
+- **An sRGB surface in place of a per-fragment encode**: pixel-correct on all
+  three platforms, a null on the Android box, a win only on the Apple TV — and
+  the hunt rule is "improves the weakest device". A two-drawable CAMetalLayer
+  dropped frames at 4P 4K. Moot now that no fragment encodes (above), kept
+  because the swap-chain reading itself still holds.
 - **The sky is a dome at the eye, not a skybox.** Filament's Skybox samples a
 cubemap on every sky pixel through its own material, ~0.6 ms of a 4P 720 heavy
 second on the Android box; `vsky.mat` over `mSkyDome` writes a varying. The dome
@@ -589,7 +620,8 @@ fogged, and it is not on the `kFeatSky` arm, which is the sky's CONTENT.
   chases the small half: the decision is BINARY. **Both TV shells turn it off**;
   the web keeps it. What vpresent's custom shader buys is the pass count.
 - **Approximating a transcendental** over a full-screen surface: a fitted
-  replacement for the sRGB `pow` measured no faster.
+  replacement for the sRGB `pow` measured no faster — which is why the encode
+  left the fragment stage altogether (above) rather than getting cheaper.
 
 **THE FOG IS OURS, PER VERTEX** (`ttp_fog.inc`), and the view's fog is off.
 Filament's costs a SHADER VARIANT (a cubemap sampler and a pow behind branches this

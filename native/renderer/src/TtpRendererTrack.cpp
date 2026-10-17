@@ -446,7 +446,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_GAP: cb = tb.edgeLines ? ASPHALT : SHOULDER; break;
                 default: cb = ASPHALT; break;
             }
-            quadKey[(size_t) i * 16 + s] = packLinear(cb, 1.0f);
+            quadKey[(size_t) i * 16 + s] = packAlbedo(cb, 1.0f);
             const uint32_t ringIdx[4] = { i, i, ni, ni };
             // uv0's arclength must NOT wrap with the ring index. ringIdx uses
             // ni = (i+1) % N, so on the last strip it is 0 and u would sweep from
@@ -481,7 +481,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // anyway. Raw lat has no second quantity to agree with.
                 // Off the deck, v is the out-of-band sentinel instead — see the
                 // DECK FLAG note above.
-                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packLinear(cb, AO[pt]) },
+                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, AO[pt]) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
                           onDeck ? P[pt].sign * halfAt(ri) + P[pt].off : OFF_DECK_LAT });
@@ -496,13 +496,15 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
         }
     }
-    // BAKED VERTEX LIGHT (ambient, NoL), evaluated once here instead of per
+    // BAKED VERTEX LIGHT (encoded ambient and ambient + sun, plus the NoL the
+    // visibility bake reads), evaluated once here instead of per
     // vertex per frame — it reads no map, so it is final at build whatever the
     // sun bake later does.
     bakeVertexLight(mRoad);
     buildCarShadowDraws();
-    // The ring's mean baked light, for the car-shadow rows (TtpRenderer.h,
-    // mRingLight): the deck-level points of the cross-section, 4..11.
+    // The ring's mean baked light at full visibility, display-encoded, for
+    // the car-shadow rows (TtpRenderer.h, mRingLight): the deck-level points
+    // of the cross-section, 4..11.
     mRingLight.assign(N, math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
     for (uint32_t u = 0; u < N; u++) {
         float4 acc{ 0.0f };
@@ -510,7 +512,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         for (int pt = 4; pt <= 11; pt++) {
             for (const uint32_t k : laidAt[(size_t) u * 16 + pt]) {
                 if (k == kNone || k >= mRoad.custom0.size()) continue;
-                const math::half4& h = mRoad.custom0[k];
+                const math::half4& h = mRoad.custom1[k];   // ambient + sun, encoded
                 acc += float4{ (float) h.x, (float) h.y, (float) h.z, (float) h.w };
                 cnt++;
             }
@@ -836,7 +838,10 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
     }
     Texture* tex = Texture::Builder()
             .width(S).height(S).levels(9) // 256² down to 1×1
-            .format(Texture::InternalFormat::SRGB8_A8)
+            // RGBA8, not SRGB8_A8: the canvas is authored in sRGB bytes and
+            // the scene is authored in display space (TtpRendererImpl.h), so
+            // the sample IS the albedo vground multiplies.
+            .format(Texture::InternalFormat::RGBA8)
             .sampler(Texture::Sampler::SAMPLER_2D)
             // GEN_MIPMAPPABLE is not in DEFAULT, and generateMipmaps() asserts
             // on it. Mips are not optional here: this is a 33-u tile stretched
@@ -881,7 +886,7 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
     const auto quadW = [&](const float3& a, const float3& b, const float3& c,
             const float3& d, const float3& col) {
         const uint32_t base = (uint32_t) mGantry.verts.size();
-        const uint32_t cc = packLinear(col, 1.0f);
+        const uint32_t cc = packAlbedo(col, 1.0f);
         for (const float3& p : { a, b, c, d }) mGantry.verts.push_back({ p.x, p.y, p.z, cc });
         mGantry.idx.insert(mGantry.idx.end(),
                 { base, base + 1, base + 2, base + 2, base + 1, base + 3 });
@@ -893,8 +898,8 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
             const float3& col, float aoLo, float aoHi) {
         const int SEG = 16; // FinishGate's CylinderGeometry radial count
         const uint32_t base = (uint32_t) mGantry.verts.size();
-        const uint32_t cLo = packLinear(col, aoLo);
-        const uint32_t cHi = packLinear(col, aoHi);
+        const uint32_t cLo = packAlbedo(col, aoLo);
+        const uint32_t cHi = packAlbedo(col, aoHi);
         for (int j = 0; j <= SEG; j++) {
             const float a = (float) j / SEG * 2.0f * (float) M_PI;
             const float dx = std::cos(a), dz = std::sin(a);
@@ -950,7 +955,7 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
         // the pylon top with a visible crease).
         const int RINGS = 4, SEG = 12;
         const uint32_t capBase = (uint32_t) mGantry.verts.size();
-        const uint32_t domeC = packLinear(FINIAL_C, 1.0f);
+        const uint32_t domeC = packAlbedo(FINIAL_C, 1.0f);
         for (int r = 0; r <= RINGS; r++) {
             const float phi = (float) r / RINGS * (float) M_PI / 2;
             const float rr = std::cos(phi) * 0.30f, yy = std::sin(phi) * 0.30f;
@@ -1163,7 +1168,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const float3 hc = srgbToLinear(
                     tb.hillColors.empty() ? 0x8cc578u
                                           : tb.hillColors[i % tb.hillColors.size()]);
-            const uint32_t col = packLinear(hc, 1.0f);
+            const uint32_t col = packAlbedo(hc, 1.0f);
             const float cyw = std::cos(yaw), syw = std::sin(yaw);
             const auto rot = [&](const float3& p) {
                 return float3{ p.x * cyw + p.z * syw, p.y, -p.x * syw + p.z * cyw };
@@ -1267,7 +1272,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 const float3 c = t >= 0
                         ? mix(hor, top, std::pow(t, 0.65f))
                         : mix(hor, low, std::min(1.0f, -t * 3.0f));
-                const uint32_t col = packLinear(gradeSrgb(c), 1.0f);
+                const uint32_t col = packShown(c, 1.0f);
                 for (int sg = 0; sg <= S; sg++) {
                     const float az = (float) sg / S * 2.0f * (float) M_PI;
                     mSkyDome.verts.push_back({ ce * std::cos(az), t, ce * std::sin(az), col });
@@ -1337,7 +1342,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         MaterialInstance* const* mats = inst->getMaterialInstances();
         for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
             if (!mats[mi]->getMaterial()->hasParameter("baseColorFactor")) continue;
-            mats[mi]->setParameter("baseColorFactor", math::float4{ kBoxTint, 1.0f });
+            mats[mi]->setParameter("baseColorFactor", math::float4{ kBoxTintFactor, 1.0f });
         }
     }
     mBananaAsset = loadInstancedProp("item-banana.glb", 8, mBananaInstances);
@@ -1369,7 +1374,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     // only complete once the landmark spots have carved their clearings.
     {
         const float G = 400.0f, TILE = kGroundTile;
-        const uint32_t white = packLinear(float3{ 1, 1, 1 }, 1.0f);
+        const uint32_t white = packAlbedo(float3{ 1, 1, 1 }, 1.0f);
         // A flat sheet, SUBDIVIDED. The step is not about shape — the sheet is
         // flat — it is about the FOG, which is evaluated per VERTEX now
         // (ttp_fog.inc) and therefore interpolates linearly between them. The
@@ -1630,7 +1635,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                         delete (std::vector<math::half>*) user;
                     }, px));
         }
-        const uint32_t tint = packLinear(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
+        const uint32_t tint = packShown(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
         // THREE vertices per particle, all carrying the SAME seed: the corner
         // in uv0 is what vpoint.mat spreads along the camera's right/up, so the
         // sprite faces every cell's camera — and the fragment cuts the unit
@@ -1693,7 +1698,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // it out along the camera axes, so the CPU only ever moves the
             // burst centre. uv0 = (angle in turns, side across the width).
             Mesh& ring = mBurstMeshes[bi];
-            const uint32_t rc = packLinear(srgbToLinear(0xffe6b0), 1.0f, 1.0f);
+            const uint32_t rc = packShown(srgbToLinear(0xffe6b0), 1.0f, 1.0f);
             const int SEG = 36;
             for (int j = 0; j <= SEG; j++) {
                 const float u = (float) j / SEG;
@@ -1716,7 +1721,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // the sphere's own geometry and its transform scale are the shape.
             Mesh& ball = mBurstBalls[bi];
             appendSphere(ball, 10, 7, [](const float3& p) { return p; },
-                    [&](const float3&) { return packLinear(srgbToLinear(0xffe0a8), 1.0f, 1.0f); });
+                    [&](const float3&) { return packShown(srgbToLinear(0xffe0a8), 1.0f, 1.0f); });
             ball.uvs.assign(ball.verts.size(), math::float2{ 0, 0 });
             mBurstBallMats[bi] = sceneInstance(mBurstMaterial);
             mBurstBallMats[bi]->setParameter("ring", math::float2{ 0, 0 });
@@ -1727,8 +1732,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     // Baked lawn shadows: one merged mesh of soft ink discs at the collected
     // caster spots, displaced along the key-light slant like a real bake.
     if (mBlendMaterial && !mShadowSpots.empty()) {
-        const uint32_t core = packLinear(srgbToLinear(0x2a2735), 1.0f, 0.30f);
-        const uint32_t rim = packLinear(srgbToLinear(0x2a2735), 1.0f, 0.0f);
+        const uint32_t core = packShown(srgbToLinear(0x2a2735), 1.0f, 0.30f);
+        const uint32_t rim = packShown(srgbToLinear(0x2a2735), 1.0f, 0.0f);
         for (const math::float4& s : mShadowSpots) {
             // spot = { worldX, worldZ, radius, casterHeight }.
             if (s.w <= 0) continue;   // a footprint only: nothing to cast
@@ -1742,7 +1747,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // dips under the drawn ground. Half the span, a quarter the sag.
             constexpr float LIFT = 0.03f;
             const int SEG = 14;
-            const uint32_t mid = packLinear(srgbToLinear(0x2a2735), 1.0f, 0.15f);
+            const uint32_t mid = packShown(srgbToLinear(0x2a2735), 1.0f, 0.15f);
             const uint32_t base = (uint32_t) mGroundShadows.verts.size();
             mGroundShadows.verts.push_back(
                     { cx, groundSurfaceY(tb, cx, cz) + LIFT, cz, core });
@@ -1780,7 +1785,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     {
         const auto rocketPart = [&](Mesh& m, const Prim& prim, float lx, float ly,
                 float lz, uint32_t hex, float shade = 1.0f) {
-            const uint32_t c = packLinear(srgbToLinear(hex), shade);
+            const uint32_t c = packShown(srgbToLinear(hex), shade);
             const uint32_t base = (uint32_t) m.verts.size();
             for (const float3& v : prim.v) {
                 m.verts.push_back({ (v.x + lx) * 1.12f, (v.y + ly) * 1.12f,
@@ -1822,7 +1827,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 // nothing, which is what stops them merging when the rocket is
                 // small and moving.
                 constexpr float FR = 0.046f, FH = 0.135f, FY0 = -0.182f;
-                const uint32_t fc = packLinear(srgbToLinear(0xffe86b), 1.0f, 0.90f);
+                const uint32_t fc = packShown(srgbToLinear(0xffe86b), 1.0f, 0.90f);
                 const Prim flame = applyPre(primCone(FR, FH, 14),
                         mat4f::rotation((float) M_PI, float3{ 1, 0, 0 }));
                 for (const float3& v : flame.v) {
@@ -1862,7 +1867,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const int gore = ((int) std::floor(
                     (std::atan2(cz3, cx3) + (float) M_PI) / (2.0f * (float) M_PI) * GORES))
                     % GORES;
-            const uint32_t col = packLinear(PANELS[gore % 2], 1.0f);
+            const uint32_t col = packAlbedo(PANELS[gore % 2], 1.0f);
             for (const float3& p : { a, b, c }) {
                 m.verts.push_back({ p.x, p.y * 1.08f, p.z, col });
                 m.normals.push_back(normalize(p));
@@ -1886,7 +1891,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 m.idx.push_back((uint32_t) m.idx.size());
             }
         };
-        const uint32_t RIG = packLinear(srgbToLinear(0x6f5a40), 1.0f);
+        const uint32_t RIG = packAlbedo(srgbToLinear(0x6f5a40), 1.0f);
         for (int s = 0; s < 8; s++) {
             const float a1 = (float) s / 8 * 2.0f * (float) M_PI;
             const float a2 = (float) (s + 1) / 8 * 2.0f * (float) M_PI;
@@ -1898,7 +1903,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                                                std::sin((a1 + a2) / 2) });
             pushQuad(t1, b1, t2, b2, n, RIG);
         }
-        const uint32_t BSK = packLinear(srgbToLinear(0x8a6f4d), 1.0f);
+        const uint32_t BSK = packAlbedo(srgbToLinear(0x8a6f4d), 1.0f);
         const float bx = 0.21f, by0 = -1.76f, by1 = -1.44f;
         const float3 c000{ -bx, by0, -bx }, c100{ bx, by0, -bx },
                      c010{ -bx, by1, -bx }, c110{ bx, by1, -bx },
@@ -2021,7 +2026,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // clouds loom oversized). DEF_CLOUDS aspect is 0.42.
             const float sw = w * tb.cloudScale;
             puffQuad(mClouds[i], sw, sw * tb.cloudAspect,
-                    packLinear(cloudTint, 1.0f, tb.cloudOpacity));
+                    packShown(cloudTint, 1.0f, tb.cloudOpacity));
             if (!buildMesh(mClouds[i], true, mCloudMaterial->getDefaultInstance())) {
                 return false;
             }
@@ -2041,7 +2046,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             mHazePos[i] = { std::cos(a) * r, 9.0f + (i % 3) * 7, std::sin(a) * r };
             const float sw = (95.0f + (i % 3) * 28) * tb.hazeScale;
             puffQuad(mHaze[i], sw, sw * 0.14f, // HAZE_ASPECT — banks, not puffs
-                    packLinear(hazeTint, 1.0f, tb.hazeOpacity));
+                    packShown(hazeTint, 1.0f, tb.hazeOpacity));
             // Priority 5 draws a bank AFTER the clouds (default 4). Both write
             // no depth, so the blend pass's order is the whole of what decides
             // which composites over which, and a bank is the nearer sheet.
@@ -2255,7 +2260,7 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
                         const float x = (float) j / NV - 0.5f;  // across the width
                         const float z = (float) i2 / NU - 0.5f; // along travel
                         m.verts.push_back({ x, 0, z,
-                                packLinear(STREAKC, 1.0f, a / 255.0f) });
+                                packShown(STREAKC, 1.0f, a / 255.0f) });
                         m.local.push_back({ x, z, a });
                     }
                 }
@@ -2312,8 +2317,9 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
 // screen-identical") — so a cubemap holds all of it, and a skybox draws it at
 // infinity where no far plane can reach it.
 //
-// PRE-GRADED, because the skybox material is FILAMENT'S and cannot include
-// ttp_grade.inc — it writes what it samples straight out. And PRE-DIVIDED by
+// PRE-GRADED, like every colour the scene reads (TtpRendererImpl.h) — the
+// skybox material is FILAMENT'S and writes what it samples straight out. And
+// PRE-DIVIDED by
 // iblLuminance, exactly as fogColorGraded is and for the same reason: the
 // sampled path ends in `sky.rgb *= frameUniforms.iblLuminance`. Reading
 // skybox.mat's `featureLevel: 0` as "that branch is compiled out" is wrong —
@@ -2447,47 +2453,6 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
         mOverlayMaterial = Material::Builder()
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
-    }
-    // THE GRADE'S CURVE AS A TABLE — see ttp_grade.inc for why a texture beats a
-    // `pow` here. Built once, handed to every
-    // material that grades as a MATERIAL default, because the instances are made
-    // in a dozen places while the Materials are all built right here.
-    if (!mGradeLut) {
-        auto* px = new std::vector<uint8_t>(1024);
-        for (int i = 0; i < 1024; i++) {
-            const float c = (float) i / 1023.0f;
-            const float e = c <= 0.0031308f ? c * 12.92f
-                                            : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
-            (*px)[(size_t) i] = (uint8_t) std::lround(
-                    std::min(1.0f, std::max(0.0f, e)) * 255.0f);
-        }
-        mGradeLut = Texture::Builder().width(1024).height(1).levels(1)
-                .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE)
-                .build(*mEngine);
-        if (mGradeLut) {
-            mGradeLut->setImage(*mEngine, 0,
-                    Texture::PixelBufferDescriptor(px->data(), px->size(),
-                            Texture::Format::R, Texture::Type::UBYTE,
-                            [](void*, size_t, void* u) { delete (std::vector<uint8_t>*) u; },
-                            px));
-        } else {
-            delete px;
-        }
-    }
-    if (mGradeLut) {
-        TextureSampler gs(TextureSampler::MinFilter::LINEAR,
-                TextureSampler::MagFilter::LINEAR);
-        gs.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        gs.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mRoadMaterial,
-                             mGlbMaterial, mGlbFadeMaterial, mGroundMaterial,
-                             mPointMaterial, mCloudMaterial, mBurstMaterial,
-                             mShadowMaterial }) {
-            if (m && m->hasParameter("gradeLut")) {
-                m->setDefaultParameter("gradeLut", mGradeLut, gs);
-            }
-        }
     }
     // EVERY MATERIAL, NOT THREE. vglbfade, vburst and voverlay each carried a
     // prewarm of their own, added one at a time as someone felt its first-use

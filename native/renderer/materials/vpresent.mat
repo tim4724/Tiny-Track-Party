@@ -1,4 +1,4 @@
-// The present pass: scene buffer → graded, antialiased pixels on the canvas.
+// The present pass: scene buffer → antialiased pixels on the canvas.
 //
 // WHY WE OWN THIS. Filament's post-processing chain costs TWO full-screen
 // passes on this backend: colour grading (tonemap + exposure + sRGB) and then
@@ -21,21 +21,21 @@
 // from the other end: what earns the custom material is collapsing Filament's
 // per-view chain into one pass, not being a better FXAA. Do not "simplify" it
 // for speed (0.3 ms is the ceiling on that), and do not delete it in favour of
-// Filament's chain without also undoing ttp_grade.inc — that chain would tonemap
-// a buffer the scene materials have already graded.
+// Filament's chain — that chain would tonemap a buffer that already holds
+// displayed colour (TtpRendererImpl.h, "authored in display space").
 //
 // It is a straight port of SceneRenderer's _matPresent (grade → sRGB → FXAA on
-// the graded values), which also removes a parity variable: the diff was
+// the displayed values), which also removes a parity variable: the diff was
 // judging three's FXAA against Filament's, two different filters over two
 // slightly different tonemaps. Same filter now, same order, same constants.
 //
-// THE GRADE IS NO LONGER HERE. It moved into the scene materials
-// (ttp_grade.inc), so the buffer this samples already holds displayed sRGB and
-// every tap below is a plain fetch. FXAA still blends displayed colours, which
-// is the whole reason the encode had to be in front of the taps rather than
-// after the blend — it just happens a pass earlier now. `exposure` went with
-// it: the constant lives in ttp_grade.inc and, for the two colours Filament's
-// own shaders write (skybox, fog), in TtpRenderer's kGradeExposure.
+// THE GRADE IS NO LONGER HERE, OR ANYWHERE PER FRAGMENT. The scene is authored
+// in display space (TtpRendererImpl.h): every material's inputs arrive encoded,
+// so the buffer this samples already holds displayed sRGB and every tap below
+// is a plain fetch. FXAA still blends displayed colours, which is the whole
+// reason the encode had to be in front of the taps rather than after the
+// blend. `exposure` went with it: kGradeExposure in TtpRendererImpl.h and
+// TTP_GRADE_EXPOSURE in ttp_shade.inc.
 //
 // vertexDomain:device — the three vertices ARE the clip-space fullscreen
 // triangle, no camera transform. The colour goes in `emissive` (with w=0, which
@@ -66,8 +66,8 @@ vertex {
 }
 
 fragment {
-    // The displayed colour at a uv. The scene materials already graded it (see
-    // ttp_grade.inc), so this is the fetch and nothing else — but every tap
+    // The displayed colour at a uv. The scene materials wrote it displayed
+    // (display-space inputs), so this is the fetch and nothing else — but every tap
     // still goes through here, because what FXAA is allowed to blend is
     // DISPLAYED colour, and that constraint is the reason the encode is where
     // it is rather than a free choice.
@@ -77,7 +77,7 @@ fragment {
     // half a frame on a mobile GPU). The scene buffer is a single-level render
     // target bound with a non-mipmap filter, so LOD 0 is what an implicit sample
     // would have picked anyway.
-    vec3 graded(highp vec2 uv) {
+    vec3 displayed(highp vec2 uv) {
         return textureLod(materialParams_scene, uv, 0.0).rgb;
     }
 
@@ -107,11 +107,11 @@ fragment {
 
         highp vec2 uv = variable_uv.xy;
         highp vec2 texel = materialParams.texel;
-        vec3 mC = graded(uv);
-        vec3 nw = graded(uv + vec2(-1.0, -1.0) * texel);
-        vec3 ne = graded(uv + vec2( 1.0, -1.0) * texel);
-        vec3 sw = graded(uv + vec2(-1.0,  1.0) * texel);
-        vec3 se = graded(uv + vec2( 1.0,  1.0) * texel);
+        vec3 mC = displayed(uv);
+        vec3 nw = displayed(uv + vec2(-1.0, -1.0) * texel);
+        vec3 ne = displayed(uv + vec2( 1.0, -1.0) * texel);
+        vec3 sw = displayed(uv + vec2(-1.0,  1.0) * texel);
+        vec3 se = displayed(uv + vec2( 1.0,  1.0) * texel);
         float lM = dot(mC, LUMA);
         float lNW = dot(nw, LUMA), lNE = dot(ne, LUMA), lSW = dot(sw, LUMA), lSE = dot(se, LUMA);
         float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
@@ -139,8 +139,8 @@ fragment {
         float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
         dir = clamp(dir * rcp, -SPAN_MAX, SPAN_MAX) * texel;
 
-        vec3 rgbA = 0.5 * (graded(uv + dir * (1.0 / 3.0 - 0.5)) + graded(uv + dir * (2.0 / 3.0 - 0.5)));
-        vec3 rgbB = rgbA * 0.5 + 0.25 * (graded(uv + dir * -0.5) + graded(uv + dir * 0.5));
+        vec3 rgbA = 0.5 * (displayed(uv + dir * (1.0 / 3.0 - 0.5)) + displayed(uv + dir * (2.0 / 3.0 - 0.5)));
+        vec3 rgbB = rgbA * 0.5 + 0.25 * (displayed(uv + dir * -0.5) + displayed(uv + dir * 0.5));
         float lB = dot(rgbB, LUMA);
         // rgbB samples the wider span; if it overshoots the local luma range it
         // has strayed off the edge, so use the safer narrow blend rgbA.

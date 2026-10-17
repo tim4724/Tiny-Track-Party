@@ -67,12 +67,13 @@
 // nothing at all.
 material {
     name : TtpVglb,
-    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the matte
+    // light, display-encoded (ttp_shade.inc, ttpMatteLightDisplay).
     variables : [ fog ],
     requires : [
         // the base colour atlas coordinate
         uv0,
-        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        // the world normal the vertex stage's Lambert term needs
         tangents
     ],
     shadingModel : unlit,
@@ -99,14 +100,11 @@ material {
         { type : float, name : metallicFactor },
         { type : float, name : roughnessFactor },
         { type : float, name : normalScale },
-        { type : float, name : aoStrength },
-        { type : sampler2d, name : gradeLut }
+        { type : float, name : aoStrength }
     ]
 }
 
 fragment {
-    #include "ttp_shade.inc"
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
     #include "ttp_glb.inc"
 
@@ -115,18 +113,22 @@ fragment {
         // Unlit adds `emissive` to `baseColor`; all the shading goes in the
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
-        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpFogMix(ttpGrade(ttpMatteShade(
-                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
+        // Display-encoded albedo (ttp_glb.inc) times the vertex stage's encoded
+        // light. emissive.w = 0 → no second exposure.
+        material.emissive = vec4(ttpFogMix(ttpGlbBaseColor().rgb * variable_fog.yzw, variable_fog.x), 0.0);
     }
 }
 
 vertex {
+    #include "ttp_shade.inc"
     #include "ttp_fog.inc"
 
-    // The fog factor is the only thing this stage exists for: per vertex, so the
-    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    // The fog factor in .x and, in .yzw, this vertex's matte light ENCODED FOR
+    // DISPLAY (ttpMatteLightDisplay): the fragment multiplies it into the
+    // albedo and grades nothing. Per vertex is per face for the kit — its
+    // vertices are split at every edge — and smooth over metres elsewhere.
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
+                ttpMatteLightDisplay(normalize(material.worldNormal)));
     }
 }

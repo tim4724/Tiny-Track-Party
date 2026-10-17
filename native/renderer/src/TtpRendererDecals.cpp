@@ -613,7 +613,7 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
         mi->setParameter("extent", float4{ 1.0f / halfR, 1.0f / halfF, alpha, mShadowTune.cap });
         mi->setParameter("fill", float4{ mShadowTune.remapLo * mShadowTune.ao,
                 mShadowTune.remapHi * mShadowTune.ao, 0.0f, 0.0f });
-        mi->setParameter("ink", float4{ mShadowInkLinear, 0.0f });
+        mi->setParameter("ink", float4{ encodeSrgb(mShadowInkLinear), 0.0f });   // display space
     }
     // The model's stamp, rebound only when the slot's model changes.
     if (mCarShadowStampBound[slot] != key) {
@@ -781,12 +781,12 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
     mi->setParameter("invSkidLatSpan",
             (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
-    // rgb = the pool's SKID_COLOR, converted by the same srgbToLinear as
-    // everything else; a = the cap on summed ink — two crossing trails darken
+    // rgb = the pool's SKID_COLOR as the deck wants it, display-encoded (its
+    // own bytes); a = the cap on summed ink — two crossing trails darken
     // (1-(1-a)^2 composited to ~0.48 when they were meshes), a donut spot
     // saturates there instead of going black.
     mi->setParameter("skidColor",
-            math::float4{ srgbToLinear(0x241f1c), 0.48f });
+            math::float4{ srgbUnit(0x241f1c), 0.48f });
 }
 
 // The deck's own instance, created on first use so the road (built before the
@@ -985,7 +985,8 @@ void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& we
         if (n > 0) {
             float4 rect[kMaxChunkPaint], col[kMaxChunkPaint], shape[kMaxChunkPaint];
             for (int i = 0; i < n; i++) {
-                rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
+                rect[i] = sel[i].rect; shape[i] = sel[i].shape;
+                col[i] = { encodeSrgb(sel[i].color.xyz), sel[i].color.w };   // display space
                 const float4& r = sel[i].rect;
                 box.x = std::min(box.x, r.x - r.z);
                 box.y = std::max(box.y, r.x + r.z);
@@ -1056,7 +1057,8 @@ void TtpRenderer::uploadDeckDecals() {
             float4 rect[kMaxProfileDeckDecals], col[kMaxProfileDeckDecals],
                     shape[kMaxProfileDeckDecals];
             for (int i = 0; i < np; i++) {
-                rect[i] = prof[i].rect; col[i] = prof[i].color; shape[i] = prof[i].shape;
+                rect[i] = prof[i].rect; shape[i] = prof[i].shape;
+                col[i] = { encodeSrgb(prof[i].color.xyz), prof[i].color.w };   // display space
                 const float4& r = prof[i].rect;
                 pBounds.x = std::min(pBounds.x, r.x - r.z);
                 pBounds.y = std::max(pBounds.y, r.x + r.z);
@@ -1262,7 +1264,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                 const float hl = L / 2;
                 const auto face = [&](const float3& a, const float3& b, const float3& c,
                         const float3& d, uint32_t hex) {
-                    const uint32_t col = packLinear(srgbToLinear(hex), 1.0f);
+                    const uint32_t col = packAlbedo(srgbToLinear(hex), 1.0f);
                     const uint32_t base = (uint32_t) m.verts.size();
                     for (const float3& p : { a, b, c, d }) m.verts.push_back({ p.x, p.y, p.z, col });
                     m.idx.insert(m.idx.end(), { base, base + 2, base + 1,
@@ -1270,7 +1272,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                 };
                 const auto tri3 = [&](const float3& a, const float3& b, const float3& c,
                         uint32_t hex) {
-                    const uint32_t col = packLinear(srgbToLinear(hex), 1.0f);
+                    const uint32_t col = packAlbedo(srgbToLinear(hex), 1.0f);
                     const uint32_t base = (uint32_t) m.verts.size();
                     for (const float3& p : { a, b, c }) m.verts.push_back({ p.x, p.y, p.z, col });
                     m.idx.insert(m.idx.end(), { base, base + 1, base + 2 });
@@ -1352,7 +1354,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                 band(SCR_HI, SCR_HW_HI, SCR_LO, SCR_HW_LO, ZCUT, PANEL_FACE); // windscreen
                 const auto lamp = [&](float cu) {
                     constexpr int SEG = 12;
-                    const uint32_t col = packLinear(srgbToLinear(PANEL_FACE), 1.0f);
+                    const uint32_t col = packAlbedo(srgbToLinear(PANEL_FACE), 1.0f);
                     const uint32_t base = (uint32_t) m.verts.size();
                     const float3 c0 = vert(cu, CAR_Y + LAMP_V, ZCUT);
                     m.verts.push_back({ c0.x, c0.y, c0.z, col });
@@ -1417,7 +1419,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                     const float a1 = (float) (k + 1) / HINGE_SEG * TAU;
                     const float3 A = barrel(-HINGE_HW, a0), B = barrel(HINGE_HW, a0);
                     const float3 C = barrel(-HINGE_HW, a1), D = barrel(HINGE_HW, a1);
-                    const uint32_t col = packLinear(srgbToLinear(PANEL_WALL), 1.0f);
+                    const uint32_t col = packAlbedo(srgbToLinear(PANEL_WALL), 1.0f);
                     const uint32_t base = (uint32_t) m.verts.size();
                     for (const float3& p : { A, B, C, D }) {
                         m.verts.push_back({ p.x, p.y, p.z, col });

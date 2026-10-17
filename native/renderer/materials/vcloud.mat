@@ -23,14 +23,10 @@ material {
     culling : none,
     blending : transparent,
     depthWrite : false,
-    flipUV : false,
-    parameters : [
-        { type : sampler2d, name : gradeLut }
-    ]
+    flipUV : false
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
     // Coverage of one blurred disc. A gaussian blur of a hard edge is an erf:
@@ -58,8 +54,8 @@ fragment {
         clear *= 1.0 - 0.95 * ttpDisc(p, vec2(46.0, 42.0), 10.0);
         // The vertex alpha is the sprite's own opacity (theme.clouds/haze).
         material.baseColor.a *= 1.0 - clear;
-        // Grade, then premultiply, same as vblend (see ttp_grade.inc).
-        material.baseColor.rgb = ttpFogMix(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
+        // Premultiply, same as vblend: the vertex colour is displayed already.
+        material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;
     }
 }
 

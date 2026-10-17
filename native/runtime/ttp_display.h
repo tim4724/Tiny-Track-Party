@@ -831,18 +831,19 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * every surface. Filament's fog is composited INSIDE each surface shader, so it
  * cannot be ablated by hiding a group — it needs a bit of its own. */
 #define TTP_FEAT_FOG      0x1000 /* the distance fog every surface composites */
-/* Two more scene-wide channels, both of which had NO bit and so could not be
- * ranked against anything (the 2026-08-23 plan's phase 2). They ride a Filament
- * VIEW GLOBAL rather than a material parameter — eleven materials would each
- * have had to declare and bind one otherwise; see ttp_grade.inc.
+/* One more scene-wide channel, which had NO bit and so could not be ranked
+ * against anything (the 2026-08-23 plan's phase 2). It rides a Filament VIEW
+ * GLOBAL rather than a material parameter — every material would have had to
+ * declare and bind one otherwise; see ttp_fog.inc. 0x4000 was the per-fragment
+ * grade's bit until the scene was authored in display space and the grade
+ * ceased to exist (TtpRendererImpl.h).
  *
  * FOG_VERTEX is NOT a finer TTP_FEAT_FOG. That bit moves the fog's PARAMETERS
  * (density, onset), so ttpFogFactor's length() and exp() run in both of its
  * arms and neither can see them; this one skips the function. Clearing both
  * bits is the only arm that removes the fog term entirely. */
-#define TTP_FEAT_GRADE      0x4000 /* ttpGrade's three dependent LUT taps, per shaded fragment */
 #define TTP_FEAT_FOG_VERTEX 0x8000 /* ttpFogFactor's per-vertex length() + exp() */
-#define TTP_FEAT_ALL      0xDFFC
+#define TTP_FEAT_ALL      0x9FFC
 /* An INVERTED ablation knob, deliberately outside the TTP_FEAT_ namespace
  * (TTP_FEAT_ALL is gated to be the OR of every TTP_FEAT_* bit, and a bit that
  * DISABLES something would poison every restore): setting it takes the merged
@@ -869,18 +870,18 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 /* SET keeps every far form off in every cell — the deck's far ribbon and the
  * static meshes' simplified ones (TtpRenderer::chooseLods) — so a sweep prices
  * them as interleaved arms on one launch. Inverted like TTP_DEBUG_NO_MERGE, and
- * SEVEN hex digits wide: the arm is TTP_FEAT_ALL | this = 0x100DFFC.
- * (0x10DFFC is CAPS_HALF.) */
+ * SEVEN hex digits wide: the arm is TTP_FEAT_ALL | this = 0x1009FFC.
+ * (0x109FFC is CAPS_HALF.) */
 #define TTP_DEBUG_NO_LOD 0x1000000
 /* SET draws EVERY far form in every cell, the near ones under the cars
  * included — the trade where the eye can resolve it:
- * TTP_FEAT_ALL | this = 0x800DFFC. */
+ * TTP_FEAT_ALL | this = 0x8009FFC. */
 #define TTP_DEBUG_LOD_ALL 0x8000000
 /* 0x2000000 is unused (was TTP_DEBUG_BLOB_BILINEAR, deleted). */
 /* SET draws every car shadow as an OPAQUE BLACK die-cut of its fitted rect
  * (vshadow.mat with the band at the ramp's half line): the probe for judging
  * the shadow pass's placement, depth and seams by eye, on a TV, in a race.
- * TTP_FEAT_ALL | this = 0x400DFFC. A look knob, not an ablation. */
+ * TTP_FEAT_ALL | this = 0x4009FFC. A look knob, not an ablation. */
 #define TTP_DEBUG_SHADOW_SOLID 0x4000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 

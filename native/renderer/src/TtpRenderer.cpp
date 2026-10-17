@@ -392,24 +392,23 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
     // BAKED per-vertex light (every static shadow receiver, bakeVertexLight):
-    // CUSTOM0 replaces TANGENTS — the material reads no normal at draw time,
+    // CUSTOM0/1 replace TANGENTS — the material reads no normal at draw time,
     // and the qtangent was a 16-byte fetch per vertex on the scene's biggest
     // mesh.
     const bool baked = !m.custom0.empty();
     // A static sheet folds its light into its colours and draws unlit (see
     // Mesh::bakeLight). Measured on the Android box the lit vertex was the
     // dressing's cost — ~28 ns against the deck's ~7 baked — not the fragment.
+    // The sheet arrives with ALBEDO bytes (packAlbedo) and leaves with SHOWN
+    // ones (packShown): the product is encoded here, once, exactly.
     const bool fold = m.bakeLight && !baked && !m.normals.empty()
             && materialInstance == nullptr && mBakeRig.valid;
     if (fold) {
         m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
         for (size_t i = 0; i < m.verts.size(); i++) {
             Vertex& v = m.verts[i];
-            const float3 lin{ (float) (v.abgr & 0xff) / 255.0f,
-                              (float) ((v.abgr >> 8) & 0xff) / 255.0f,
-                              (float) ((v.abgr >> 16) & 0xff) / 255.0f };
             const float alpha = (float) (v.abgr >> 24) / 255.0f;
-            v.abgr = packLinear(lin * bakedMatteLight(m.normals[i]), 1.0f, alpha);
+            v.abgr = packShown(unpackAlbedo(v.abgr) * bakedMatteLight(m.normals[i]), 1.0f, alpha);
         }
     }
     const bool lit = !baked && !fold && !m.normals.empty() && mLitMaterial != nullptr;
@@ -435,8 +434,12 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     if (baked) {
         m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
+        m.custom1.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
         m.vb->setBufferAt(*mEngine, customSlot, VertexBuffer::BufferDescriptor(
                 m.custom0.data(), m.custom0.size() * sizeof(math::half4),
+                nullptr));
+        m.vb->setBufferAt(*mEngine, (uint8_t) (customSlot + 1), VertexBuffer::BufferDescriptor(
+                m.custom1.data(), m.custom1.size() * sizeof(math::half4),
                 nullptr));
     }
     if (lit) {
@@ -618,7 +621,7 @@ VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::L
     VertexBuffer::Builder vbb;
     vbb.vertexCount(vertexCount)
             .bufferCount((uint8_t)
-                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 1 : 0)))
+                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 2 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
@@ -636,6 +639,8 @@ VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::L
     }
     if (l.baked) {
         vbb.attribute(VertexAttribute::CUSTOM0, l.customSlot(),
+                VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+        vbb.attribute(VertexAttribute::CUSTOM1, (uint8_t) (l.customSlot() + 1),
                 VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
     }
     return vbb.build(*mEngine);
@@ -1076,16 +1081,20 @@ float3 TtpRenderer::bakedMatteLight(const float3& n) const {
     return t.xyz + mBakeRig.sunPre * t.w;
 }
 
-// The SMOOTH halves only. The sun's COLOUR is a frame uniform, so the receiver's
-// vertex stage rebuilds the sun term from this NoL through ttpMatteSunTerm and
-// there is still one spelling of the constant; VISIBILITY is the one term that
-// is not smooth, so it comes from a baked map's tap. Arithmetic over the mesh's
-// own normals: it reads no map and completes inside the build on every backend.
+// The SMOOTH halves only, each ENCODED FOR DISPLAY (TtpRendererImpl.h): the
+// ambient alone in custom0.xyz, ambient + sun in custom1.xyz, so the fragment
+// can mix the two through VISIBILITY — the one term that is not smooth, which
+// comes from a baked map's tap. custom0.w keeps the raw NoL: the visibility
+// BAKES read it (vvis.mat's slope bias and edge-on fade, vroadvis.mat's
+// probe), not the frame. Arithmetic over the mesh's own normals: it reads no
+// map and completes inside the build on every backend.
 void TtpRenderer::bakeVertexLight(Mesh& m) const {
     m.custom0.resize(m.verts.size(), math::half4{ 0.0f });
+    m.custom1.resize(m.verts.size(), math::half4{ 0.0f });
     for (size_t i = 0; i < m.verts.size(); i++) {
-        m.custom0[i] = math::half4{
-                matteTerms(i < m.normals.size() ? m.normals[i] : float3{ 0, 1, 0 }) };
+        const float4 t = matteTerms(i < m.normals.size() ? m.normals[i] : float3{ 0, 1, 0 });
+        m.custom0[i] = math::half4{ displayLight(t.xyz), t.w };
+        m.custom1[i] = math::half4{ displayLight(t.xyz + mBakeRig.sunPre * t.w), 0.0f };
     }
 }
 
@@ -1114,7 +1123,7 @@ Texture* TtpRenderer::whiteTexture() {
         static const uint8_t WHITE[4] = { 255, 255, 255, 255 };
         mWhiteTex = Texture::Builder()
                 .width(1).height(1).levels(1)
-                .format(Texture::InternalFormat::SRGB8_A8)
+                .format(Texture::InternalFormat::RGBA8)   // display space: bytes are what is sampled
                 .sampler(Texture::Sampler::SAMPLER_2D)
                 .build(*mEngine);
         if (mWhiteTex) {
@@ -1237,10 +1246,10 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
 }
 
 // The baked form of one run (MergedGroup::baked): every copy's vertices in
-// world space, coloured with the kit table's texture colour times the LIVE
-// instance's baseColorFactor (the biome's recolour lands there, not in the
-// GLB) times the matte light of the copy's own world normal, as one unlit
-// mesh. Refuses — and the caller falls back to the instanced draw — when the
+// world space, coloured with the kit table's texture colour (the atlas's own
+// sRGB bytes) times the LIVE instance's baseColorFactor (the biome's recolour
+// lands there, not in the GLB) times the matte light of the copy's own world
+// normal, as one unlit mesh in display space. Refuses — and the caller falls back to the instanced draw — when the
 // table and the decoded geometry disagree about a count, so a regenerated GLB
 // can never be drawn with another model's colours.
 bool TtpRenderer::bakeMergedRun(MergedGroup& g,
@@ -1259,7 +1268,10 @@ bool TtpRenderer::bakeMergedRun(MergedGroup& g,
         }
         const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri0, p);
         if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
-        factor[p] = mi->getParameter<float4>("baseColorFactor").xyz;
+        // The live factor is display-encoded (displayKitFactors); the bake
+        // multiplies in linear and encodes the product once, so decode it.
+        const float3 f = mi->getParameter<float4>("baseColorFactor").xyz;
+        factor[p] = { srgbChannel(f.x), srgbChannel(f.y), srgbChannel(f.z) };
     }
     const uint8_t layer = rcm.getLayerMask(ri0);
     Mesh& m = g.baked;
@@ -1280,10 +1292,11 @@ bool TtpRenderer::bakeMergedRun(MergedGroup& g,
                         sp.pos[i * 3 + 2], 1.0f }).xyz;
                 const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
                         sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
-                const float3 lin = float3{ rgb[i * 3] / 255.0f, rgb[i * 3 + 1] / 255.0f,
-                        rgb[i * 3 + 2] / 255.0f } * factor[p];
+                const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
+                        srgbChannel(rgb[i * 3 + 1] / 255.0f),
+                        srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
                 m.verts.push_back({ pw.x, pw.y, pw.z,
-                        packLinear(lin * bakedMatteLight(nw), 1.0f) });
+                        packShown(lin * bakedMatteLight(nw), 1.0f) });
             }
             for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
         }
@@ -1765,8 +1778,7 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mDecalDebug = mask & kDebugDecalAll;
     mFogOn = (mask & kFeatFog) != 0;
     // INVERTED on the way to the shaders: they read "ablate", so that a View
-    // nobody has touched draws the shipped picture (ttp_grade.inc's note).
-    mDebugGlobals.x = (mask & kFeatGrade) ? 0.0f : 1.0f;
+    // nobody has touched draws the shipped picture (ttp_fog.inc's note).
     mDebugGlobals.y = (mask & kFeatFogVertex) ? 0.0f : 1.0f;
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;

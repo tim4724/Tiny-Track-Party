@@ -17,8 +17,8 @@
 material {
     name : TtpVvis,
     requires : [
-        // (ambient.rgb, NoL) — the receiver's baked vertex light; only NoL is
-        // read, for the slope bias and the edge-on fade.
+        // (encoded ambient, NoL) — the receiver's baked vertex light; only the
+        // NoL in .w is read, for the slope bias and the edge-on fade.
         custom0
     ],
     variables : [ nol ],

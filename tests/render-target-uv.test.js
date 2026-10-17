@@ -73,12 +73,6 @@ const UPLOADED_SAMPLERS = new Set([
   // vpoint's flake floor: the max-height grid, Texture::setImage in
   // buildScene's ambient block.
   'floorTex',
-  // The grade's sRGB curve as a 1024-entry table: filled and uploaded once in
-  // buildScene, then bound to every grading material as a MATERIAL default. A
-  // 1D table indexed by a colour channel, so it has no uv orientation to get
-  // wrong at all — but it still has to be classified, which is the point of
-  // the check.
-  'gradeLut',
   // The rubber layer: CPU-rasterized stamps uploaded as dirty rects
   // (TtpRenderer::renderSkids / uploadSkidRects), sampled by vroad's tap.
   // It WAS a render target; the A10X's below-the-API misbehaviour around

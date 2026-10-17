@@ -51,7 +51,7 @@ object PerfDebug {
     private const val TAG = "TtpPerfDebug"
 
     /** `ttp_display.h`'s TTP_FEAT_ALL. One source; `tests/feature-bits.test.js` pins this mirror. */
-    private const val TTP_FEAT_ALL = 0xDFFC
+    private const val TTP_FEAT_ALL = 0x9FFC
 
     /** 0, not -1: the panel really is down at launch, so an unset property is a no-op. */
     private var lastPerf = 0

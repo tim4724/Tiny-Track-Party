@@ -35,7 +35,10 @@
 // fog it is meant to be dissolving into (fogFor's cutOffDistance).
 //
 // THE ABLATION SWITCH (TTP_FEAT_FOG_VERTEX) takes .y of the view global
-// ttp_grade.inc documents, and it is the only way to price THIS function: the
+// (`frameUniforms.custom[0]`, per View, set once per frame by
+// TtpRenderer::applyDebugGlobals and readable from both shader stages by every
+// material without declaring anything; the sense is "ablate", so a View nobody
+// touched draws the shipped picture), and it is the only way to price THIS function: the
 // existing TTP_FEAT_FOG arm moves fog PARAMETERS, so the `length` and the `exp`
 // below are paid either way and no arm could ever see them. That is what made
 // "drop the per-vertex sqrt" a proposal nobody could check. Returning 0 here

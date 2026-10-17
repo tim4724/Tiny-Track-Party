@@ -24,12 +24,12 @@
 // crest, dip and bank without anything being conformed to anything.
 material {
     name : TtpVroad,
-    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
-    // fog.x + the ambient term in .yzw, and the sun term in `sun`.xyz. The same
-    // layout vground carries, for the same reason: the deck's visibility is a
-    // per-fragment tap now, so the two halves of the light have to reach the
-    // fragment separately — multiplying a tap into the FINISHED light would
-    // darken the ambient floor with it and take a shadowed deck to black.
+    // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the ambient
+    // term and `sun`.xyz = ambient + sun, both DISPLAY-ENCODED (vground.mat
+    // has the rule). The two halves reach the fragment separately because the
+    // deck's visibility is a per-fragment tap: multiplying a tap into the
+    // FINISHED light would darken the ambient floor with it and take a
+    // shadowed deck to black.
     //
     // uvs = the deck layers' track-space uvs, computed PER VERTEX so each
     // layer read samples a bare varying (a NON-DEPENDENT read the GPU can
@@ -51,13 +51,14 @@ material {
         // (s, lat) in world units — see above
         uv0,
         // The matte light's SMOOTH HALVES, baked per road vertex at track build
-        // (TtpRenderer::bakeVertexLight, the CPU twin of ttpMatteAmbient): .xyz is
-        // the ambient term, .w is NoL. Every input is static per track, so
-        // re-evaluating them per vertex PER FRAME bought nothing. Baking them
-        // also retired `tangents` — nothing in either stage reads the normal
-        // now, which drops a 16-byte qtangent fetch per vertex on the scene's
-        // biggest mesh (buildMesh feeds CUSTOM0 instead of TANGENTS when this
-        // attribute is required).
+        // (TtpRenderer::bakeVertexLight, the CPU twin of ttpMatteAmbient):
+        // custom0 is the ambient term, custom1 ambient + sun, both encoded for
+        // display. Every input is static per track, so re-evaluating them per
+        // vertex PER FRAME bought nothing. Baking them also retired `tangents`
+        // — nothing in either stage reads the normal now, which drops a
+        // 16-byte qtangent fetch per vertex on the scene's biggest mesh
+        // (buildMesh feeds CUSTOM0/1 instead of TANGENTS when they are
+        // required).
         //
         // VISIBILITY IS NOT IN HERE, and that is the point. It used to be —
         // custom0 held the finished ambient + sun × vis — and it was the one
@@ -65,7 +66,8 @@ material {
         // ~2.15 u of each lane with no vertex column, so a cast shadow narrower
         // than that was interpolated away. It comes from a track-space tap now
         // (sunVis, below); vroadvis.mat carries the full argument.
-        custom0
+        custom0,
+        custom1
     ],
     shadingModel : unlit,
     culling : none,
@@ -217,13 +219,11 @@ material {
         // rgb = SKID_COLOR in linear (srgbToLinear stays C++-side, one source),
         // a = the cap on summed ink, so crossing trails darken but a donut spot
         // cannot go pure black.
-        { type : float4, name : skidColor },
-        { type : sampler2d, name : gradeLut }
+        { type : float4, name : skidColor }
     ]
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
     // Distance from p to the segment ab. Four instructions, and it is what lets
@@ -330,7 +330,7 @@ fragment {
             // Fade with the entry's own rim so a chevron never ends in mid-air
             // past the edge of the disc or strip it belongs to.
             float edge = 1.0 - smoothstep(0.90, 0.995, d);
-            base = mix(base, vec3(0.9911, 0.9137, 0.6105),
+            base = mix(base, vec3(0.9961, 0.9611, 0.8039),   // the chevron ink, sRGB-encoded like every deck colour
                     clamp((1.0 - smoothstep(LW * 0.65, LW, best)) * edge, 0.0, 1.0));
         }
         return base;
@@ -466,11 +466,11 @@ fragment {
         if (materialParams.invSunVisLatSpan > 0.0) {
             vis = textureLod(materialParams_sunVis, vec2(variable_uvs.x, variable_uvs.z), 0.0).r;
         }
-        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(
-                ttpFogMix(ttpGrade(base
-                        * (variable_fog.yzw + variable_sun.xyz * vis)),
-                        variable_fog.x), 0.0);
+        // The composited deck colour times the light, its two halves mixed
+        // through the visibility here, in display space — every input above
+        // was encoded on the CPU. emissive.w = 0 → no second exposure.
+        vec3 lit = base * mix(variable_fog.yzw, variable_sun.xyz, vis);
+        material.emissive = vec4(ttpFogMix(lit, variable_fog.x), 0.0);
     }
 }
 
@@ -490,14 +490,11 @@ vertex {
     // every input is static per track: the sun is fixed, the deck never moves,
     // and the cars cast blob decals rather than ESM shadows.
     // TtpRenderer::bakeVertexLight evaluates the identical ttpMatteAmbient once
-    // per track and this stage is left with a move; the sun term is one
-    // multiply off frameUniforms, which is where vground takes its own from.
-    // The baked NoL is ttpMatteSunTerm's whole input, so the one spelling in
-    // ttp_shade.inc still owns the constant.
+    // per track, with and without the sun, encodes both for display, and this
+    // stage is left with a move.
     void materialVertex(inout MaterialVertexInputs material) {
-        vec4 c0 = getCustom0();
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), c0.xyz);
-        material.sun = vec4(ttpMatteSunTerm(c0.w), 0.0);
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), getCustom0().xyz);
+        material.sun = vec4(getCustom1().xyz, 0.0);
         // The deck layers' uvs (see `variables`), exactly the expressions the
         // fragment used to evaluate. uvToRenderTargetUV belongs to the vis map
         // alone: it is a render target, the rubber layer is an upload.

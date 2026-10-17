@@ -27,11 +27,12 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const PAIRS = [
   {
     what: 'the grade exposure',
-    // Cannot be a material parameter: the two things C++ grades for itself are
-    // the SKYBOX colour and the FOG colour, and both are consumed by Filament's
-    // OWN shaders (Skybox's constant colour, and the fog composite inside
-    // surface_main.fs). Neither can be handed one of our uniforms.
-    shader: { file: 'materials/ttp_grade.inc', re: /const float TTP_GRADE_EXPOSURE = ([\d.]+);/ },
+    // The scene is authored in display space: the C++ encodes every baked
+    // light term, vertex colour and colour parameter, and the one shader-side
+    // encode left is the live-lit vertex stage's (ttp_shade.inc). Both carry
+    // the exposure, and a split between them tilts what moves against what
+    // does not.
+    shader: { file: 'materials/ttp_shade.inc', re: /const float TTP_GRADE_EXPOSURE = ([\d.]+);/ },
     cpp: { file: 'src/TtpRendererImpl.h', re: /constexpr float kGradeExposure = ([\d.]+)f;/ }
   }
 ];
@@ -44,8 +45,8 @@ test('a constant spelled in both a shader and the C++ agrees', () => {
     assert.ok(c, `${p.what}: not found in ${p.cpp.file} — did the spelling move?`);
     assert.equal(Number(s[1]), Number(c[1]),
       `${p.what} disagrees: ${p.shader.file} says ${s[1]}, ${p.cpp.file} says ${c[1]}. `
-      + 'The shader half grades every scene material; the C++ half grades the skybox '
-      + 'and fog colours Filament\'s own shaders consume. A split between them tilts '
-      + 'those two against the whole rest of the frame.');
+      + 'The shader half encodes the light of everything that moves; the C++ half '
+      + 'encodes everything baked, plus the skybox and fog colours Filament\'s own '
+      + 'shaders consume. A split between them tilts one against the other.');
   }
 });

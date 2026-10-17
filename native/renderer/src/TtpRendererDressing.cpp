@@ -140,7 +140,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
                 for (const auto& t : tb.modelTints[m]) {
                     if (t.name == nm) {
                         mis[i]->setParameter("baseColorFactor",
-                                float4{ srgbToLinear(t.rgb), 1.0f });
+                                float4{ srgbUnit(t.rgb), 1.0f });   // display space: the hex's own bytes
                     }
                 }
             }
@@ -175,7 +175,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         };
         const float INV = 1.0f / std::sqrt(1 + T * T);
         for (const Boulder& b : boulders) {
-            const uint32_t col = packLinear(srgbToLinear(b.grey), b.shade);
+            const uint32_t col = packAlbedo(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
             const float by = footprintY(tb, b.x, b.z, b.rr);
             for (const auto& face : F) {
@@ -383,7 +383,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     };
     int geoms = 0;
     const auto put = [&](Prim p, const mat4f& m, uint32_t hex, float shade) {
-        const uint32_t c = packLinear(srgbToLinear(hex), shade);
+        const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
         const uint32_t base = (uint32_t) mClutter.verts.size();
         for (const float3& v : p.v) {
             const float3 w = (m * float4{ v, 1 }).xyz;
@@ -806,7 +806,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const mat4f m = mat4f::translation(float3{ sp.x, gy, sp.z })
                 * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 })
                 * mat4f::translation(float3{ lx, ly, lz });
-        const uint32_t c = packLinear(srgbToLinear(hex), shade);
+        const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
         const uint32_t base = (uint32_t) mLandmarks.verts.size();
         for (const float3& v : prim.v) {
             const float3 w = (m * float4{ v, 1 }).xyz;
@@ -944,7 +944,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 * rotY(yaw) * rotZ(HEEL);
         const auto bpart = [&](Prim prim, float lx, float ly, float lz, uint32_t hex) {
             const mat4f m = frame * mat4f::translation(float3{ lx, ly, lz });
-            const uint32_t c = packLinear(srgbToLinear(hex), 1.0f);
+            const uint32_t c = packAlbedo(srgbToLinear(hex), 1.0f);
             const uint32_t base = (uint32_t) mLandmarks.verts.size();
             for (const float3& v : prim.v) {
                 const float3 w = (m * float4{ v, 1 }).xyz;
@@ -1147,7 +1147,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                         : PANELS[(size_t) std::floor(
                                 ((std::atan2(ctr.z, ctr.x) + (float) M_PI)
                                         / (2 * (float) M_PI)) * 6) % 6];
-                const uint32_t col = packLinear(srgbToLinear(hex), 1.0f);
+                const uint32_t col = packAlbedo(srgbToLinear(hex), 1.0f);
                 const uint32_t base = (uint32_t) mLandmarks.verts.size();
                 for (const float3& v : { a, b, c }) {
                     const float3 w = (m * float4{ v, 1 }).xyz;
@@ -1187,7 +1187,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                     const int gore = (int) std::floor(
                             ((std::atan2(ctr.z, ctr.x) + (float) M_PI)
                                     / (2 * (float) M_PI)) * 10) % 2;
-                    const uint32_t col = packLinear(
+                    const uint32_t col = packAlbedo(
                             srgbToLinear(gore ? 0xe4604a : 0xf7f0e2),
                             inner ? 0.72f : 1.0f);
                     const uint32_t base = (uint32_t) mLandmarks.verts.size();
@@ -1302,7 +1302,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             // facing axis (the JS registers it with the per-track anim list).
             {
                 const auto rpart = [&](const Prim& prim, uint32_t hex, float shade) {
-                    const uint32_t c = packLinear(srgbToLinear(hex), shade);
+                    const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
                     const uint32_t base = (uint32_t) mWindmill.verts.size();
                     for (const float3& v : prim.v) {
                         mWindmill.verts.push_back({ v.x, v.y, v.z, c });
@@ -1393,7 +1393,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                                         });
                                 m.verts.push_back({ (float) k / NX - 0.5f,
                                                     0.5f - (float) j / NY, 0,
-                                                    packLinear(srgbToLinear(0xeef2f6),
+                                                    packShown(srgbToLinear(0xeef2f6),
                                                             1.0f, cov) });
                             }
                         }
@@ -1559,6 +1559,7 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         return nullptr;
     }
     asset->releaseSourceData();
+    displayKitFactors(asset);
     for (auto* inst : out) {
         mScene->addEntities(inst->getEntities(), inst->getEntityCount());
         // Props and scenery are not shadow casters in the JS either (each
@@ -1745,7 +1746,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     {
         const uint32_t wet = tb.waterWet;
         ringMesh(mWet, [](int ri) { return WET[ri][0]; }, 5, false, -0.05f, [&](int ri) {
-            return packLinear(srgbToLinear(wet), 1.0f, WET[ri][1]);
+            return packShown(srgbToLinear(wet), 1.0f, WET[ri][1]);
         });
         MaterialInstance* mi = sceneInstance(mBlendMaterial);
         mi->setPolygonOffset(-1.0f, -1.0f);
@@ -1755,7 +1756,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
         ringMesh(mWater, [](int ri) { return BANDS[ri][0]; }, 9, true, 0.0f, [&](int ri) {
             const float t = BANDS[ri][1];
             const float3 c = t <= 1 ? mix(foam, shallow, t) : mix(shallow, deep, t - 1);
-            return packLinear(c, WATER_SHADE, BANDS[ri][2]);
+            return packShown(c, WATER_SHADE, BANDS[ri][2]);
         });
         // The JS sheet is Lambert, but it's FLAT and horizontal, so its shading
         // is one constant — folded into the vertex colours instead, since the
@@ -1820,7 +1821,7 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
     // Birds: 4 sprites of a 2:1 double-arc glyph (64×32 canvas, 4.5px stroke).
     if (tb.birdCount > 0) {
         mBirds.resize(std::min(tb.birdCount, 4u));
-        const uint32_t col = packLinear(srgbToLinear(tb.birdTint), 1.0f, 1.0f);
+        const uint32_t col = packShown(srgbToLinear(tb.birdTint), 1.0f, 1.0f);
         const auto toLocal = [](float2 p) {
             return float3{ (p.x - 32.0f) / 64.0f, (16.0f - p.y) / 32.0f, 0 };
         };
@@ -1843,8 +1844,8 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
             Mesh& m = mKites[i];
             const uint32_t tint = tb.kiteTints.empty()
                     ? 0xffffffu : tb.kiteTints[i % tb.kiteTints.size()];
-            const uint32_t col = packLinear(srgbToLinear(tint), 1.0f, 1.0f);
-            const uint32_t colT = packLinear(srgbToLinear(tint), 1.0f, 0.9f);
+            const uint32_t col = packShown(srgbToLinear(tint), 1.0f, 1.0f);
+            const uint32_t colT = packShown(srgbToLinear(tint), 1.0f, 0.9f);
             const float2 D[4] = { { 32, 2 }, { 48, 18 }, { 32, 40 }, { 16, 18 } };
             const uint32_t base = (uint32_t) m.verts.size();
             for (const float2& p : D) {
@@ -1873,7 +1874,7 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
             { 0, 0, 0.55f }, { 0.42f, 0.17f, -0.5f }, { 0, 0.02f, -0.5f },
             { 0, 0, 0.55f }, { 0, -0.2f, -0.42f }, { 0, 0.02f, -0.5f },
         };
-        const uint32_t col = packLinear(srgbToLinear(tb.planeTint), 1.0f);
+        const uint32_t col = packAlbedo(srgbToLinear(tb.planeTint), 1.0f);
         for (const float3& v : TRIS) mPlane.verts.push_back({ v.x, v.y, v.z, col });
         for (uint32_t t = 0; t < 3; t++) {
             mPlane.idx.insert(mPlane.idx.end(), { t * 3, t * 3 + 1, t * 3 + 2,
@@ -1893,7 +1894,7 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
 // hill" under gate0's overpass).
 void TtpRenderer::buildStructures(const TrackBin& tb) {
     const float3 STRUCT = srgbToLinear(tb.structureCol);
-    const uint32_t sc = packLinear(STRUCT, 1.0f);
+    const uint32_t sc = packAlbedo(STRUCT, 1.0f);
     // Vertical cylinder, optionally with its top clipped to a plane (the loop
     // shafts meet the deck's angled underside flush instead of poking through).
     const auto column = [&](float x, float z, float r, float y0, float y1,
@@ -1957,7 +1958,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     // does under it. The slope wears the boost pad's colour, the flanks and the
     // lip face the structures'. Every face keeps its own vertices so the
     // normals stay flat, and is wound to face out (slope up, lip forward).
-    const uint32_t slopeC = packLinear(
+    const uint32_t slopeC = packAlbedo(
             srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
     const auto face = [&](const float3& a, const float3& b, const float3& c,
             const float3& d, uint32_t col) {
@@ -2021,7 +2022,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         const uint32_t base = (uint32_t) mBerms.verts.size();
         for (const float3& p : { a, b, c, d }) {
             mBerms.verts.push_back({ p.x, p.y, p.z,
-                    packLinear(groundColorAt(p.x), 1.0f) });
+                    packAlbedo(groundColorAt(p.x), 1.0f) });
         }
         mBerms.idx.insert(mBerms.idx.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
     };

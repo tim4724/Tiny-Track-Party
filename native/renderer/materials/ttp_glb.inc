@@ -13,7 +13,10 @@ vec4 ttpGlbBaseColor() {
     // builds it to be applied that way round. Identity for everything this kit
     // ships (see vglb.mat), but the flag that asks for it is set on all of them.
     highp vec2 uv = (vec3(getUV0(), 1.0) * materialParams.baseColorUvMatrix).xy;
-    // The atlas is bound as sRGB by gltfio, so this sample is already linear. An
-    // untextured glTF material gets a white 1x1 here and rides on its factor.
+    // DISPLAY SPACE, both halves (TtpRendererImpl.h): the atlas is bound as
+    // plain RGBA8 (TtpRenderer's texture provider), so the sample IS its sRGB
+    // bytes, and the factor was encoded by displayKitFactors when gltfio set
+    // it (every later writer encodes its own). An untextured glTF material
+    // gets a white 1x1 here and rides on its factor.
     return materialParams.baseColorFactor * texture(materialParams_baseColorMap, uv);
 }

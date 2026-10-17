@@ -114,9 +114,10 @@ TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {
 // The fog colour to hand Filament, pre-graded.
 //
 // FOG IS NOT A POST PASS HERE — surface_main.fs composites it inside every
-// surface shader, right after material() returns — so with the grade moved into
-// the materials (ttp_grade.inc) the value it blends toward has to be sRGB too,
-// or every distant surface fades toward a colour that skipped the encode.
+// surface shader, right after material() returns — so with the scene authored
+// in display space (TtpRendererImpl.h) the value it blends toward has to be
+// sRGB too, or every distant surface fades toward a colour that skipped the
+// encode.
 //
 // The awkward part is the iblLuminance divide, and it is not avoidable: the
 // shader's last step before compositing is `fogColor *= iblLuminance`, so what
@@ -152,7 +153,7 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
     // inscattering pow behind uniform branches this scene never takes, for one
     // exponential's worth of work (18 ms of a 79 ms frame on the reference
-    // Android box; see ttp_grade.inc's ttpFog, which reproduces it for a
+    // Android box; see ttp_fog.inc's ttpFogFactor, which reproduces it for a
     // fraction). Everything below is still filled in because
     // ColorPassDescriptorSet::prepareFog runs whether or not the variant does, so
     // these ARE the uniforms our own fog reads.
@@ -186,9 +187,9 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
 // Filament's own post chain — an old asset set still renders, just slower.
 void TtpRenderer::ensureSceneTarget() {
     if (!mPresentMaterial || !mWidth || !mHeight || mSceneRT) return;
-    // RGBA8, holding sRGB. THE FORMAT FOLLOWS THE CONTENT, and the content
-    // changed: the scene materials grade themselves now (ttp_grade.inc), so
-    // what lands here is displayed colour, not radiance.
+    // RGBA8, holding sRGB. THE FORMAT FOLLOWS THE CONTENT: the scene is
+    // authored in display space (TtpRendererImpl.h), so what lands here is
+    // displayed colour, not radiance.
     //
     // This was R11F_G11F_B10F while the buffer held LINEAR, for a real reason —
     // a linear 8-bit step becomes a whole visible sRGB step once something
@@ -231,8 +232,8 @@ void TtpRenderer::ensurePresentQuad() {
     if (mPresentInstance || !mPresentMaterial) return;
     {
         mPresentInstance = mPresentMaterial->createInstance();
-        // No exposure parameter any more — the grade is the scene materials'
-        // (kGradeExposure / ttp_grade.inc), and this pass only antialiases.
+        // No exposure parameter — the scene's inputs carry it (kGradeExposure,
+        // TtpRendererImpl.h), and this pass only antialiases.
         // The fullscreen triangle, in clip space (vertexDomain:device), exactly
         // as Filament builds its own: one triangle, no camera, no transform.
         static const math::float4 verts[3] = {
@@ -334,8 +335,8 @@ void TtpRenderer::ensureCells(uint32_t count) {
             // cell. Say no once instead.
             v->setShadowingEnabled(false);
             v->setScreenSpaceRefractionEnabled(false);
-            // Post OFF, always: the cells write their own graded sRGB into the
-            // shared scene buffer (ttp_grade.inc) and vpresent antialiases the
+            // Post OFF, always: the cells write displayed sRGB into the shared
+            // scene buffer (display-space inputs) and vpresent antialiases the
             // lot in ONE pass, instead of Filament's two per cell (see
             // vpresent.mat).
             //
@@ -1699,7 +1700,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 for (size_t mi = 0; mi < fadeInst->getMaterialInstanceCount(); mi++) {
                     if (mats[mi]->getMaterial()->hasParameter("baseColorFactor")) {
                         mats[mi]->setParameter("baseColorFactor",
-                                math::float4{ kBoxTint, alpha });
+                                math::float4{ kBoxTintFactor, alpha });
                     }
                 }
             } else if (!avail) {

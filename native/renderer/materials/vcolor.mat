@@ -6,20 +6,17 @@ material {
         color
     ],
     shadingModel : unlit,
-    culling : none,
-    parameters : [
-        { type : sampler2d, name : gradeLut }
-    ]
+    culling : none
 }
 
 fragment {
-    #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
+    // The vertex colour is the displayed colour (packShown, TtpRendererImpl.h).
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor();
-        material.baseColor.rgb = ttpFogMix(ttpGrade(material.baseColor.rgb), variable_fog.x);
+        material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x);
     }
 }
 

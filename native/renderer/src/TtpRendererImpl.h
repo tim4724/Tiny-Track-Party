@@ -136,20 +136,57 @@ inline float3 skyLinear(uint32_t rgb) {
     return float3{ srgbChannel(once.x), srgbChannel(once.y), srgbChannel(once.z) };
 }
 
-// THE GRADE, on the CPU. MIRRORED FROM ttp_grade.inc — read that file first; it
-// carries what moving the grade into the scene materials bought and what it
-// cost. Only two colours need this side of it, and both for the same reason:
-// they are written by shaders that are FILAMENT'S, not ours, so they cannot
-// include the shader half. The skybox (a flat colour behind the gradient dome)
-// and the fog (composited inside every surface shader, after material() has
-// already returned an sRGB value).
-constexpr float kGradeExposure = 1.1f;   // == ttp_grade.inc's TTP_GRADE_EXPOSURE
-inline float gradeChannel(float linear) {
-    const float c = std::max(linear * kGradeExposure, 0.0f);
-    const float s = c <= 0.0031308f ? c * 12.92f
-                                    : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
-    return std::min(std::max(s, 0.0f), 1.0f);
+// THE SCENE IS AUTHORED IN DISPLAY SPACE. Every colour a scene material reads
+// — a vertex colour, a texture's bytes, a colour parameter, a baked light term
+// — is already what the panel shows (sRGB, pre-exposed), and the fragment
+// stage only MULTIPLIES and MIXES. No material encodes anything per fragment.
+//
+// Why that is exact where it matters: the sRGB curve is a power law (its toe
+// and offset aside), so enc(a * b) == enc(a) * enc(b): a surface's light and
+// its albedo can each be encoded on their own and multiplied in the shader.
+// The exposure rides the LIGHT (displayLight), never the albedo (encodeSrgb),
+// so a product carries it exactly once; a colour drawn as-is, by an unlit
+// material, carries it itself (gradeSrgb / packShown). A light term is NOT
+// clamped at 1 — a sunlit face reaches 1.1x and the clip happens where it
+// always did, on the product, in the 8-bit scene buffer.
+//
+// What is only NEAR exact: the sRGB toe and the 0.055 offset make the product
+// of two encodes differ from the encode of the product by a few levels in the
+// darks (a 0.02 albedo under full light: +4 of 255), and a static receiver's
+// light sum is mixed through its shadow map in display space, which moves the
+// middle of a penumbra by 3-6 levels under this game's soft sun. Both were
+// judged on paused frames against the per-fragment grade they replaced and
+// read at the noise floor (docs/perf/androidtv-frame-map.md, 2026-10-17).
+//
+// What it replaced: `ttp_grade.inc`, three dependent LUT taps per shaded
+// fragment, 0.8 ms of a four-player 720 heavy second on the Android box. The
+// same reasoning is why the skybox and the fog colour were always pre-graded
+// here: Filament's own shaders consume them and could not include ours.
+// "Grade" in these names is the display exposure the encode carries — what the
+// per-fragment grade used to apply — and the names stayed with the constant.
+constexpr float kGradeExposure = 1.1f;   // == ttp_shade.inc's TTP_GRADE_EXPOSURE
+// linear → sRGB, no exposure, NOT clamped above 1: a colour the shader
+// MULTIPLIES by a light term (an albedo, a tint, a shadow's ink). A factor over
+// 1 (kBoxTint) stays over 1.
+inline float encodeSrgb(float linear) {
+    const float c = std::max(linear, 0.0f);
+    return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
 }
+inline float3 encodeSrgb(const float3& linear) {
+    return { encodeSrgb(linear.x), encodeSrgb(linear.y), encodeSrgb(linear.z) };
+}
+// An authored sRGB hex as the albedo the shader wants: its own bytes.
+inline float3 srgbUnit(uint32_t rgb) {
+    return { ((rgb >> 16) & 0xff) / 255.0f, ((rgb >> 8) & 0xff) / 255.0f, (rgb & 0xff) / 255.0f };
+}
+// A LIGHT term: exposed, encoded, and NOT clamped (see above).
+inline float displayLight(float linear) { return encodeSrgb(linear * kGradeExposure); }
+inline float3 displayLight(const float3& linear) {
+    return { displayLight(linear.x), displayLight(linear.y), displayLight(linear.z) };
+}
+// A colour SHOWN as it is (an unlit vertex colour, the skybox, the fog):
+// exposed, encoded, clamped.
+inline float gradeChannel(float linear) { return std::min(displayLight(linear), 1.0f); }
 inline float3 gradeSrgb(const float3& linear) {
     return { gradeChannel(linear.x), gradeChannel(linear.y), gradeChannel(linear.z) };
 }
@@ -193,12 +230,32 @@ struct BlurKernel {
 // mixHex and four retyped coefficients, and the shade that had no pad to keep it
 // honest (the wind streak) had drifted to a hardcoded near-white.
 
-inline uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
-    const auto b = [&](float v) -> uint32_t {
-        const float x = std::min(1.0f, std::max(0.0f, v));
-        return (uint32_t) std::lround(x * 255.0f);
+// The vertex colour, packed ABGR — in DISPLAY SPACE (above). Two spellings,
+// because which one a mesh wants is a fact about the material that draws it:
+//   packAlbedo — a colour a light term multiplies in the shader (vlit), in the
+//                receivers (vground, vroad), or at build (a bakeLight sheet,
+//                which buildMesh folds into packShown); `ao` darkens it in
+//                linear before the encode.
+//   packShown  — a colour drawn as it is by an unlit material (vcolor, vblend,
+//                vcloud, vpoint, vburst, vsky): exposed, encoded, clamped.
+inline uint32_t packAbgr(const float3& enc, float alpha) {
+    const auto b = [](float v) -> uint32_t {
+        return (uint32_t) std::lround(std::min(1.0f, std::max(0.0f, v)) * 255.0f);
     };
-    return (b(alpha) << 24) | (b(lin.z * ao) << 16) | (b(lin.y * ao) << 8) | b(lin.x * ao);
+    return (b(alpha) << 24) | (b(enc.z) << 16) | (b(enc.y) << 8) | b(enc.x);
+}
+inline uint32_t packAlbedo(const float3& lin, float ao, float alpha = 1.0f) {
+    return packAbgr(encodeSrgb(lin * ao), alpha);
+}
+inline uint32_t packShown(const float3& lin, float ao, float alpha = 1.0f) {
+    return packAbgr(gradeSrgb(lin * ao), alpha);
+}
+// The inverse of packAlbedo's encode, for buildMesh's fold: the sRGB bytes
+// back to linear, where the light multiplies.
+inline float3 unpackAlbedo(uint32_t abgr) {
+    return { srgbChannel((float) (abgr & 0xff) / 255.0f),
+             srgbChannel((float) ((abgr >> 8) & 0xff) / 255.0f),
+             srgbChannel((float) ((abgr >> 16) & 0xff) / 255.0f) };
 }
 
 // WHERE A BUILD'S TIME GOES, as one log line of named phases. A scene build
@@ -841,6 +898,9 @@ constexpr float kBlobShadowAlpha = 0.4f;
 // material, so a channel too low to clip once lit tints them: this G and B
 // trade faintly peach stars under warm light for a more vibrant body.
 constexpr float3 kBoxTint{ 2.35f, 1.6f, 1.58f };
+// ...as the base-colour FACTOR the box's instances carry: display-encoded,
+// like every factor (displayKitFactors).
+inline const float3 kBoxTintFactor = encodeSrgb(kBoxTint);
 
 
 // The car ground shadow's ink, opacity and coverage cap live in
