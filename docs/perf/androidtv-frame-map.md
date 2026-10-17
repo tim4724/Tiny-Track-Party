@@ -1766,6 +1766,80 @@ ADAPTIVE 4P pretzel races on it held 720 for the whole race, heavy p50
 12.6-12.8, 97-98 clean seconds of 99, one skip-second each — against the
 2-of-5 retreats and 3-6 skip-seconds the base read the same afternoon.
 
+**After the display-space build (2026-10-17, night): the operating points,
+the map re-taken, and two structural probes.** Every build here is main
+`eca93da5` exactly (before the decoration and set-piece commits that
+followed it), Vulkan, the full mask `0x9FFC` (`TTP_FEAT_ALL` since that
+commit; the "no grade" arm of the afternoon's table had the same value under
+the old mask). Deltas below are MILLISECONDS SAVED per frame, positive =
+cheaper than base; a single run resolves about 0.4 ms (the afternoon's base
+spread), so a channel under that is a reading, not a verdict.
+
+The ADAPTIVE operating points, 100 s counted, pretzel for one to three
+players and glacier for four:
+
+| players, track | at 1080 | then | heavy p50 at the settled rung | clean |
+|---|---|---|---|---|
+| 1, pretzel | 17 s, 0.7 skips/s | 720 | 8.1 ms | 82 of 83 |
+| 2, pretzel | 30 s, 0.3 skips/s | 720 | 7.5 ms | 69 of 69 |
+| 3, pretzel | 16 s, 0.3 skips/s | 720 | 9.9 ms | 82 of 83 |
+| 4, glacier | never | 720 all race | 11.9 ms | 97 of 99 |
+
+One to three players repeat at 1080 the shape four players had at 720 in the
+afternoon: the opening pack skips, the rule retreats, and the race settles a
+rung down with 40-55% of the budget idle. Whether 1080 could hold is the
+`fixed + fill * s^2` split the rule itself fits (`render_scale.h`): with the
+box's fixed half near 4 ms (the 540/720 pair of the evening) the 720 fill is
+3.5 ms for two players and 5.9 for three, which at 2.25x the pixels puts two
+players near 12 ms heavy at 1080 and three near 17 — so two is the one a
+tolerant rule could keep, three is not.
+
+The channel map re-taken, 4P pinned 720 pretzel, one run per arm paired per
+second against both base runs (base heavy 13.27 and 13.03), the terrain
+group as `tagFeatures` builds it (ground sheet, hills, water and wet sand,
+structures, berms, the lawn shadow discs, the gantry):
+
+| arm | all seconds | base's heaviest 30% |
+|---|---|---|
+| no terrain | 1.4 to 1.5 | 1.7 to 2.0 |
+| no dressing | 0.7 to 0.8 | 0.9 |
+| no road decals (statics, auras, blobs AND the shadow pass) | 0.7 to 0.85 | 0.5 to 0.8 |
+| no cars | 0.6 to 0.75 | 0.6 to 0.9 |
+| no rubber tap | 0.35 to 0.45 | 0.2 to 0.25 |
+| no sun-vis taps | 0.25 to 0.35 | 0.2 to 0.4 |
+| no paint loop | 0.1 to 0.2 | 0.3 to 0.4 |
+| no effects | 0.15 to 0.25 | 0.1 to 0.25 |
+| no sky | 0.15 to 0.25 | -0.25 to 0.1 |
+
+The paint loop reads lower than the afternoon's 0.5 (unpaired, a different
+build), consistent with the grade's removal having shortened the deck's
+fragment, though nothing here measures that mechanism directly.
+
+**Probe: the deck's loops compiled OUT (null).** A second road Material
+specialised with a `lean` constant (Filament material constants: one
+package, two Materials) drops the paint and profile loops AND their uniform
+arrays from the program; every chunk drew with it. Two pairs: 0.1 and -0.2
+saved against the bases, while the old gate arms (no paint + no decals bits)
+save 1.0 — the decals bit also hides the shadow pass. So removing the loops
+together with their arrays bought nothing measurable at 4P/720 on pretzel,
+and the per-chunk material split that would have justified is closed. The
+probe cannot separate the arrays' presence from the loops', and it says
+nothing about the 2026-08 readings behind the array rule
+(`native/renderer/CLAUDE.md`), which were taken on a longer fragment.
+
+**Probe: the terrain group by member (nothing).** Build-time skips, saved
+against the bases: no hills 0.0 / -0.15, no ground sheet 0.1 / 0.2, no lawn
+discs 0.1 / 0.3, no structures and berms 0.1 / 0.5 — against the whole
+group's 1.3 / 1.4 in the same series. The cost is spread over every member
+at the noise floor; the group is the fill it covers.
+
+Both probes were temporary builds: the `lean` constant, the member skips and
+the mask bits they borrowed (the holes `0x10000`, `0x200000..0x800000` and
+`0x2000000`) are not in the tree, and the holes stay unused. Terrain is the
+only channel over a millisecond and it has no dominant member; what the box
+has left is the rule's retreat on a handful of skipped frames, per player
+count — the decision the afternoon's record already names.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps

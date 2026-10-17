@@ -493,8 +493,12 @@ the per-frame path needs to actually CHANGE per frame.
 renderables at a time and `scripts/perf-features.mjs` reads the GPU timer around
 each arm; run it before optimising anything, because the answer is lopsided:
 
-- The **road** alone costs more than the rest of the scene together; terrain, set
-  dressing, sky billboards and the effect pools are about the empty-scene floor.
+- The **road** alone costs more than the rest of the scene together on the web.
+  On the Android box after the display-space change the map is flatter: terrain
+  (the fill the ground, hills, berms and structures cover, no member of it
+  dominant) is the largest channel, then dressing, decals and cars within a
+  millisecond of each other, and sky and effects in the noise (the frame map,
+  2026-10-17 night).
 - **Cars are a net NEGATIVE**: they occlude more deck than they cost to draw. On
   this scene, anything that keeps a road fragment from being shaded is worth more
   than anything that makes a car cheaper.
@@ -663,7 +667,10 @@ sheet's STEP).
 **A dynamically-indexed uniform ARRAY costs whether or not the loop runs, and it
 costs by DECLARED SIZE** (`vroad.mat` has the readings). That is why the car
 shadows left the list for their own pass, which declares no array, and why
-widening the profile arrays to take far cars was a loss. **Raising a cap is
+widening the profile arrays to take far cars was a loss. Those readings were
+taken on a longer fragment: after the display-space change, compiling the
+deck's loops and arrays out altogether read null at 4P/720 (the frame map,
+2026-10-17 night), so measure before spending on this rule again. **Raising a cap is
 measurable in the frame**; `tests/road-decal-caps.test.js` holds the material's
 array sizes and each loop's clamp to the C++ constants.
 
