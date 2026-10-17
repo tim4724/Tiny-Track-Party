@@ -391,6 +391,18 @@ does it settle"; interleaved runs at a pinned scale answer "what does this
 feature cost". It joins no phones and touches no relay: the bench seats its own
 players, so a measurement no longer depends on a service on the internet.
 
+**THE BOX IS ONE DEVICE SHARED BY EVERY WORKTREE AND EVERY SESSION.** The
+bench measures whatever is installed, and an install or a launch from another
+session lands in the middle of a run as a cold-start spike or a different
+build under the same name. So before installing to it or benching on it: list
+the other live sessions (`ListAgents`) and ask the ones that look active on
+this tree whether they hold the box (`SendMessage`); say what you are about to
+install and for how long. While a run of yours is in progress, answer such a
+request with when you will be done rather than silence. When you finish, leave
+the box in a stated state — which build is installed, and whether the user
+still needs it for manual testing — and tell whoever asked. A dev APK is
+cheap to reinstall; a bench series interrupted halfway is not.
+
 **MEASURE AT A PINNED SCALE, AND SET THE MASK EVERY TIME.** Two traps have cost
 an experiment each. `debug.ttp.features` is a SYSTEM PROPERTY that survives a
 force-stop, so an arm that does not set it silently inherits the last one. And

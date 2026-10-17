@@ -155,7 +155,7 @@ Fonts are self-hosted variable woff2 (SIL OFL) so the CSP keeps `font-src 'self'
 | `public/shared/CLAUDE.md` | the protocol manifest, design tokens as data, the schematic codec |
 | `scripts/CLAUDE.md` | the bakes: the capture seam and its two invisible traps, naming, what gates each output |
 | `public/assets/audio/CLAUDE.md` | cues are generated, music is acquired; the MP3 and re-encode traps |
-| `shells/androidtv/CLAUDE.md` | the Android TV app: one thread, the generated JNI bridge, byte[] strings, the authored-pixel density override |
+| `shells/androidtv/CLAUDE.md` | the Android TV app: one thread, the generated JNI bridge, byte[] strings, the authored-pixel density override, sharing the one box between sessions |
 | `docs/native-port/shells.md` | the audited ledger of what a new TV platform still owes |
 
 ## Dev loop
