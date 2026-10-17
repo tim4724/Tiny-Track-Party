@@ -30,6 +30,7 @@ import sys
 import urllib.request
 import zipfile
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 KIT = os.path.join(REPO, 'public', 'assets', 'toycar')
@@ -604,6 +605,148 @@ def four_by_four(wheels):
     axle(wheels, 'wheel-truck', ry, tx, r, 0.16, False)
 
 
+# ====================================================================== remix
+#
+# The ROSTER cars as they ship, given the Car Kit's level of detail and
+# nothing else: their bodies, stance and identities stay (they are sized for
+# the chase camera, and Bolt and Rumble show their front wheels to it). Car
+# Kit wheels with coloured rims at the same size, light glass in place of the
+# dark slate windows, block lamps front and back, a grille. Details are kit
+# blocks standing a little proud of the body's real faces (raycast), never
+# thin plates.
+
+FACES = {'x+': (0, 1), 'x-': (0, -1), 'y+': (1, 1), 'y-': (1, -1), 'z+': (2, 1)}
+
+
+class Surface:
+    """Raycasts onto a body, so details sit on its real faces. A face is the
+    side a ray comes in from ('y+' is the nose); a point on it is named by
+    the other two coordinates, in x, y, z order."""
+
+    def __init__(self, obj):
+        self.bvh = BVHTree.FromObject(obj, bpy.context.evaluated_depsgraph_get())
+
+    def at(self, face, a, b):
+        axis, sign = FACES[face]
+        o = [a, b]
+        o.insert(axis, sign * 3.0)
+        d = [0.0, 0.0, 0.0]
+        d[axis] = -sign
+        loc = self.bvh.ray_cast(Vector(o), Vector(d))[0]
+        if loc is None:
+            raise ValueError(f"nothing under {face} at {a:.3f}, {b:.3f}")
+        return loc[axis]
+
+    def block(self, name, face, rect, sw, out=0.016, depth=0.03, lens=None):
+        """A block over rect = (a0, a1, b0, b1) standing `out` proud of the
+        face found under its centre, `depth` into the body; `lens` colours
+        only its outer face."""
+        axis, sign = FACES[face]
+        (a0, a1), (b0, b1) = sorted(rect[:2]), sorted(rect[2:])
+        at = self.at(face, (a0 + a1) / 2, (b0 + b1) / 2)
+        lo, hi = [a0, b0], [a1, b1]
+        lo.insert(axis, min(at - sign * depth, at + sign * out))
+        hi.insert(axis, max(at - sign * depth, at + sign * out))
+        o = box(name, lo, hi, sw, 0.006)
+        if lens:
+            d = [0, 0, 0]
+            d[axis] = sign
+            paint(o, d, lens)
+        return o
+
+    def pair(self, name, face, xr, zr, sw, **kw):
+        """A left and right pair of blocks over |x| in xr, z in zr."""
+        for s in (-1, 1):
+            self.block(f'{name}{s}', face, (*xs(s, *xr), *zr), sw, **kw)
+
+
+def glass_windows(body):
+    """The kit's dark slate windows (toy swatch 3, 5) as light glass (2, 13),
+    pinned a quarter down its gradient: glass facing the sky washes white."""
+    uv = body.data.uv_layers.active.data
+    for p in body.data.polygons:
+        u, v = uv[p.loop_indices[0]].uv
+        if (int((1 - v) * 4), int(u * 16)) == (3, 5):
+            for li in p.loop_indices:
+                uv[li].uv = (13.5 / 16, 1 - (0.5 + 0.03 + 0.19 * 0.75))
+
+
+def dash_remix(S):
+    """Dash, the roster's low racer: Car Kit wheels, light glass, block
+    head and tail lamps, a grille."""
+    S.pair('head', 'y+', (0.10, 0.16), (0.219, 0.25), 'lamp')
+    S.block('grille', 'y+', (-0.0625, 0.0625, 0.219, 0.25), 'black', out=0.008)
+    S.pair('tail', 'y-', (0.094, 0.156), (0.219, 0.25), 'tail')
+
+
+def bolt_remix(S):
+    """Bolt, the roster's open-wheel speedster: Car Kit racing wheels, nose
+    lamps, tail lamps on a bar."""
+    S.pair('head', 'y+', (0.03, 0.08), (0.135, 0.17), 'lamp')
+    S.block('tailBar', 'y-', (-0.1, 0.1, 0.198, 0.258), 'trim', out=0.012)
+    S.pair('tail', 'y-', (0.03, 0.085), (0.21, 0.246), 'tail', out=0.024)
+
+
+def carve_remix(S):
+    """Carve, the roster's racer: Car Kit racing wheels, light glass, block
+    head and tail lamps, a grille."""
+    S.pair('head', 'y+', (0.094, 0.156), (0.225, 0.27), 'lamp')
+    S.block('grille', 'y+', (-0.0625, 0.0625, 0.225, 0.27), 'black', out=0.008)
+    S.pair('tail', 'y-', (0.094, 0.156), (0.25, 0.30), 'tail')
+
+
+def rumble_remix(S):
+    """Rumble, the roster's vintage racer: Car Kit wheels, block lamps
+    beside a grille, tail lamps."""
+    S.pair('head', 'y+', (0.06, 0.11), (0.2, 0.245), 'lamp')
+    S.block('grille', 'y+', (-0.035, 0.035, 0.195, 0.25), 'black', out=0.008)
+    S.pair('tail', 'y-', (0.035, 0.08), (0.17, 0.21), 'tail')
+
+
+# name -> (builder, the roster car it remixes, the Car Kit wheel it wears)
+REMIX = {
+    'remix-dash': (dash_remix, 'vehicle-racer-low', 'wheel-default'),
+    'remix-bolt': (bolt_remix, 'vehicle-speedster', 'wheel-racing'),
+    'remix-carve': (carve_remix, 'vehicle-racer', 'wheel-racing'),
+    'remix-rumble': (rumble_remix, 'vehicle-vintage-racer', 'wheel-default'),
+}
+
+
+def remix(fn, base, wheel_kind, pmap, used):
+    """A roster car, its details added: (body, [(node name, mesh, loc)])."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(KIT, base + '.glb'))
+    new = [o for o in bpy.data.objects if o not in before]
+    body = next(o for o in new if o.parent is None)
+    nodes = [(o.name.split('.')[0], o.data, tuple(o.matrix_world.translation)) for o in new if o is not body]
+    for o in new:
+        if o is not body:
+            bpy.data.objects.remove(o)
+    body.matrix_world = Matrix.Identity(4)
+    have = set(bpy.data.objects)
+    fn(Surface(body))
+    glass_windows(body)
+    dg = bpy.context.evaluated_depsgraph_get()
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    for o in [o for o in bpy.data.objects if o not in have]:
+        me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+        me.transform(o.matrix_world)
+        remap_uvs(me, pmap, used)
+        bm.from_mesh(me)
+        bpy.data.meshes.remove(me)
+        bpy.data.objects.remove(o)
+    bm.to_mesh(body.data)
+    bm.free()
+    wheels = []
+    for name, me, loc in nodes:
+        if name.startswith('wheel-'):
+            me = kit_wheel(wheel_kind, loc[2], 0.125, loc[0] < 0)
+            remap_uvs(me, pmap, used)
+        wheels.append((name, me, loc))
+    return body, wheels
+
+
 # name -> (builder, the roster car whose role it takes). The note is the
 # builder's docstring.
 DESIGNS = {
@@ -643,6 +786,8 @@ def build(name, pmap, used):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     if name in DESIGNS:
         body, wheels = design(DESIGNS[name][0], pmap, used)
+    elif name in REMIX:
+        body, wheels = remix(*REMIX[name], pmap, used)
     else:
         body, wheels = convert(CARS[name][0], pmap, used, **TWEAKS.get(name, {}))
     for o in list(bpy.data.objects):
@@ -674,6 +819,10 @@ def write_index(tris):
         if count is not None:
             models.append({'name': name, 'tris': count, 'base': base,
                            'note': 'Designed from Car Kit parts. ' + ' '.join(fn.__doc__.split())})
+    for name, (fn, base, kind) in REMIX.items():
+        count = tris.get(name, old.get(name, {}).get('tris'))
+        if count is not None:
+            models.append({'name': name, 'tris': count, 'base': base, 'note': ' '.join(fn.__doc__.split())})
     with open(path, 'w') as f:
         json.dump({'_readme': 'Written by scripts/gen-concept-cars.py; read by the asset gallery.',
                    'models': models}, f, indent=1)
@@ -685,7 +834,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     pmap = palette_map(extracted(car_kit(), GLB_DIR + 'Textures/colormap.png'))
     used = {}
-    write_index({name: build(name, pmap, used) for name in argv or list(CARS) + list(DESIGNS)})
+    write_index({name: build(name, pmap, used) for name in argv or list(CARS) + list(DESIGNS) + list(REMIX)})
     for src, (dst, e) in sorted(used.items(), key=lambda kv: -kv[1][1]):
         print(f'palette: Car Kit {src} -> toy kit {dst}, error {e:.3f}')
 

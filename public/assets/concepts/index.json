@@ -175,6 +175,30 @@
    "tris": 3856,
    "base": "vehicle-vintage-racer",
    "note": "Designed from Car Kit parts. Rumble, the heavy one: an open 4x4 on truck tyres, bull bar, roll cage with a light bar, the spare on its tail."
+  },
+  {
+   "name": "remix-dash",
+   "tris": 1740,
+   "base": "vehicle-racer-low",
+   "note": "Dash, the roster's low racer: Car Kit wheels, light glass, block head and tail lamps, a grille."
+  },
+  {
+   "name": "remix-bolt",
+   "tris": 1736,
+   "base": "vehicle-speedster",
+   "note": "Bolt, the roster's open-wheel speedster: Car Kit racing wheels, nose lamps, tail lamps on a bar."
+  },
+  {
+   "name": "remix-carve",
+   "tris": 1744,
+   "base": "vehicle-racer",
+   "note": "Carve, the roster's racer: Car Kit racing wheels, light glass, block head and tail lamps, a grille."
+  },
+  {
+   "name": "remix-rumble",
+   "tris": 1720,
+   "base": "vehicle-vintage-racer",
+   "note": "Rumble, the roster's vintage racer: Car Kit wheels, block lamps beside a grille, tail lamps."
   }
  ]
 }
