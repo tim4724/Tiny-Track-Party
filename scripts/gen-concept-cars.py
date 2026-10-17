@@ -69,16 +69,30 @@ CARS = {
     'role-carve': ('hatchback-sports', 'Carve (corner king, low top speed): the sports hatchback in blue, '
                    'shortened.', 'vehicle-racer'),
     'role-rumble': ('suv', 'Rumble (heavy, slow launch): the SUV in purple.', 'vehicle-vintage-racer'),
+    # The same four with the body narrowed between bigger wheels, so the
+    # chase camera sees the front wheels steer (a Car Kit body covers them).
+    'narrow-dash': ('police', 'Dash: the police car, narrow body between bigger wheels.', 'vehicle-racer-low'),
+    'narrow-bolt': ('sedan-sports', 'Bolt: the sports sedan, narrow, lowered and stretched.', 'vehicle-speedster'),
+    'narrow-carve': ('hatchback-sports', 'Carve: the sports hatchback in blue, narrow and shortened.',
+                     'vehicle-racer'),
+    'narrow-rumble': ('suv', 'Rumble: the SUV in purple, narrow on the biggest wheels.', 'vehicle-vintage-racer'),
 }
 
 # Per-car edits on top of the conversion: `paint` moves Car Kit swatches
 # {(row, col): (row, col)} before the palette mapping, `shape` scales the body
 # (never the wheels) by (along the car, up from the ground), the wheels
-# sliding with its length.
+# sliding with its length; `width` scales the body across, `tyres` the wheels
+# about their own centres (the body rides up with them).
+BLUE_PAINT = {(1, 7): (1, 15), (1, 6): (1, 14)}
+PURPLE_PAINT = {(1, 7): (0, 3), (1, 6): (0, 2)}
 TWEAKS = {
     'role-bolt': {'shape': (1.08, 0.82)},
-    'role-carve': {'paint': {(1, 7): (1, 15), (1, 6): (1, 14)}, 'shape': (0.82, 1.0)},
-    'role-rumble': {'paint': {(1, 7): (0, 3), (1, 6): (0, 2)}},
+    'role-carve': {'paint': BLUE_PAINT, 'shape': (0.82, 1.0)},
+    'role-rumble': {'paint': PURPLE_PAINT},
+    'narrow-dash': {'width': 0.58, 'tyres': 1.12},
+    'narrow-bolt': {'width': 0.58, 'tyres': 1.12, 'shape': (1.08, 0.85)},
+    'narrow-carve': {'width': 0.6, 'tyres': 1.12, 'paint': BLUE_PAINT, 'shape': (0.82, 1.0)},
+    'narrow-rumble': {'width': 0.62, 'tyres': 1.22, 'paint': PURPLE_PAINT},
 }
 
 
@@ -165,7 +179,7 @@ def remap_uvs(mesh, pmap, used):
 
 # ------------------------------------------------------------------- convert
 
-def convert(model, pmap, used, paint=None, shape=(1.0, 1.0)):
+def convert(model, pmap, used, paint=None, shape=(1.0, 1.0), width=1.0, tyres=1.0):
     """Import a Car Kit model and return (body, [(wheel name, mesh, loc)]),
     turned, scaled, tweaked (see TWEAKS) and remapped."""
     zf = car_kit()
@@ -176,6 +190,9 @@ def convert(model, pmap, used, paint=None, shape=(1.0, 1.0)):
     xs = [(o.matrix_world @ v.co).x for o in new for v in o.data.vertices]
     turn = Matrix.Rotation(math.pi, 4, 'Z') @ Matrix.Scale(TARGET_WIDTH / (max(xs) - min(xs)), 4)
     worlds = {o: o.matrix_world.copy() for o in new}
+    # the wheels' radius (a wheel's centre height): bigger tyres lift the body by its growth
+    radius = min(max((turn @ worlds[o] @ v.co).z for v in o.data.vertices) / 2
+                 for o in new if o.name.split('.')[0] in WHEELS)
     body_parts, wheels = [], []
     for o in new:
         o.parent = None
@@ -186,14 +203,16 @@ def convert(model, pmap, used, paint=None, shape=(1.0, 1.0)):
         if not role:
             if paint:
                 move_swatches(o.data, paint.get)
-            o.data.transform(Matrix.Diagonal((1.0, shape[0], shape[1], 1.0)))
+            o.data.transform(Matrix.Diagonal((width, shape[0], shape[1], 1.0)))
+            o.data.transform(Matrix.Translation((0.0, 0.0, radius * (tyres - 1.0))))
         remap_uvs(o.data, pmap, used)
         if role:
             # the wheel spins about its own centre: that is where its node goes
             vs = [v.co for v in o.data.vertices]
             c = [(min(v[i] for v in vs) + max(v[i] for v in vs)) / 2 for i in range(3)]
             o.data.transform(Matrix.Translation((-c[0], -c[1], -c[2])))
-            wheels.append((role, o.data, (c[0], c[1] * shape[0], c[2])))
+            o.data.transform(Matrix.Scale(tyres, 4))
+            wheels.append((role, o.data, (c[0], c[1] * shape[0], c[2] * tyres)))
         else:
             body_parts.append(o)
     bpy.ops.object.select_all(action='DESELECT')

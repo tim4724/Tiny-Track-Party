@@ -103,6 +103,30 @@
    "tris": 2474,
    "note": "Car Kit 3.1 suv: Rumble (heavy, slow launch): the SUV in purple.",
    "base": "vehicle-vintage-racer"
+  },
+  {
+   "name": "narrow-dash",
+   "tris": 2304,
+   "note": "Car Kit 3.1 police: Dash: the police car, narrow body between bigger wheels.",
+   "base": "vehicle-racer-low"
+  },
+  {
+   "name": "narrow-bolt",
+   "tris": 2088,
+   "note": "Car Kit 3.1 sedan-sports: Bolt: the sports sedan, narrow, lowered and stretched.",
+   "base": "vehicle-speedster"
+  },
+  {
+   "name": "narrow-carve",
+   "tris": 2088,
+   "note": "Car Kit 3.1 hatchback-sports: Carve: the sports hatchback in blue, narrow and shortened.",
+   "base": "vehicle-racer"
+  },
+  {
+   "name": "narrow-rumble",
+   "tris": 2474,
+   "note": "Car Kit 3.1 suv: Rumble: the SUV in purple, narrow on the biggest wheels.",
+   "base": "vehicle-vintage-racer"
   }
  ]
 }
