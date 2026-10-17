@@ -38,7 +38,7 @@ test('the welcome board footer leads to a licenses page that renders its credits
   // section is the same row form, so a song is an .entry like anything else.
   await expect(page.locator('.entry__title', { hasText: 'Beachfront Celebration' })).toBeVisible();
   await expect(page.locator('.entry__title', { hasText: 'Toy Car Kit' })).toBeVisible();
-  await expect(page.locator('.entry__title', { hasText: 'Filament' })).toBeVisible();
+  await expect(page.locator('.entry__title', { hasText: /^Filament/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
