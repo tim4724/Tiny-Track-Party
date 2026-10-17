@@ -68,10 +68,9 @@ static const double DRIFT_SLIP = 0.3;        // rad at full lock
 static const double DRIFT_SLIP_RATE = 8.0;   // 1/s ease of the drawn slip
 // ---- contact ----
 // The collider's rectangle IS the Kenney mesh AABB — CAR_STATS halfLen/halfWid,
-// measured off the meshes — so the shrink is pure tolerance: every centimetre
-// of it is interpenetration the sim cannot see. It buys the rounded corners of
-// a body that is not really a rectangle, and nothing else.
-static const double COLLIDE_SHRINK = 0.98;
+// measured off the meshes — with no tolerance: the toy bodies are boxes, and
+// the widest part of the open-wheel cars is the tyres, so any shrink reads as
+// wheels resting inside each other.
 // Contact is resolved by sequential impulses: each pass re-runs SAT on the
 // positions the last one left, and the `vrel < 0` guard means only the first
 // pass that finds a pair closing applies an impulse, so passes cost geometry,
@@ -80,7 +79,11 @@ static const double COLLIDE_SHRINK = 0.98;
 // buried, and the depth that survives keeps falling until about here. The
 // price is ~0.8 us of a ~10 us sim frame per pass, measured at 8 cars.
 static const int COLLIDE_PASSES = 4;
-static const double COLLIDE_SLOP = 0.01;     // resting overlap: no jitter about zero
+// The resting overlap, and ALSO how long a contact persists while a pair drifts
+// apart: at 2 mm a monster's plough broke and re-caught its victim (two jolts),
+// at 5 mm the knock took a frame longer to clear it. 1 cm is the contact
+// check's operating point, not a tolerance to trim.
+static const double COLLIDE_SLOP = 0.01;
 static const double RESTITUTION = 0.12;
 // Below this closing speed a contact is DEAD: no bounce at all. Restitution is
 // what breaks a contact every frame, and a broken contact cannot push — the
@@ -476,10 +479,18 @@ Game::HalfExtents Game::halfExtents(const Car& c) const {
   return {c.halfLen, c.halfWid};
 }
 
+// The yaw the body is DRAWN at, and so the one it collides at: the heading plus
+// the drift's slip. The slip is cosmetic to the travel but not to the shape —
+// at full slide it swings the tail about 13 cm past the heading's rectangle,
+// which is how the rear wheels went through the outer kerb. The spin stays
+// out: see cacheColFrame.
+double Game::bodyYaw(const Car& c) const { return c.heading + c.slip; }
+
 Game::FP Game::footprint(const Car& c) const {
   HalfExtents e = halfExtents(c);
   double hl = e.len, hw = e.wid;
-  double ch = std::fabs(dmath::cos(c.heading)), sh = std::fabs(dmath::sin(c.heading));
+  double yaw = bodyYaw(c);
+  double ch = std::fabs(dmath::cos(yaw)), sh = std::fabs(dmath::sin(yaw));
   return {hl * sh + hw * ch, hw};
 }
 
@@ -780,11 +791,12 @@ void Game::cacheColFrame(Car& c, const Frame& f) {
   c.colTan = f.tangent;
   c.colLat = f.lateral;
   c.colS = c.totalS;
-  // The body follows the HEADING, never the spin: a spin-out is drawn, not
-  // driven (the car still travels along its heading), and a rectangle turning
-  // with it would pulse its reach by a quarter metre, shoving anything in
-  // contact four times a second.
-  c.colFwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
+  // The body follows the DRAWN yaw (bodyYaw: heading plus the drift's slip),
+  // never the spin: a spin-out is drawn, not driven (the car still travels
+  // along its heading), and a rectangle turning with it would pulse its reach
+  // by a quarter metre, shoving anything in contact four times a second. The
+  // slip is slow and bounded, so the rectangle it turns is the one on screen.
+  c.colFwd = f.tangent.clone().applyAxisAngle(f.up, bodyYaw(c));
   c.colRight = c.colFwd.clone().cross(f.up);
   // Curvature IN THE ROAD PLANE — the only component that stretches a lateral
   // offset. d(lateral)/ds . tangent is -k by construction; a loop's vertical
@@ -809,8 +821,8 @@ Vec3 Game::colWorld(const Car& c) const {
 // from a to b, and the depth along it.
 Game::Hit Game::satRects(const Car& a, const Car& b) const {
   HalfExtents ea = halfExtents(a), eb = halfExtents(b);
-  double hla = ea.len * COLLIDE_SHRINK, hwa = ea.wid * COLLIDE_SHRINK;
-  double hlb = eb.len * COLLIDE_SHRINK, hwb = eb.wid * COLLIDE_SHRINK;
+  double hla = ea.len, hwa = ea.wid;
+  double hlb = eb.len, hwb = eb.wid;
   // b's body axes as seen in a's plane. Normalized because the two cars' ground
   // planes tilt apart on a bank or a crest, which shortens the projection.
   Vec3 d = colWorld(b).sub(colWorld(a));

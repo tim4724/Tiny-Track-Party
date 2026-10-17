@@ -48,10 +48,14 @@ const double DT = 1000.0 / 60.0;
 // How deeply two cars overlap AS DRAWN, in world metres; zero when clear. The
 // rectangles are compared in a's ground plane, which is exact while the pair is
 // on the same piece of road and meaningless when it is not — hence sameDeck.
-// FULL half-extents: COLLIDE_SHRINK is the collider's tolerance, not the body.
+// FULL half-extents: the oracle measures the body, not what the collider resolves.
 double drawnOverlap(const Game& g, const Car& a, const Car& b) {
-  const Vec3 fa = a.pose.forward, ra = a.pose.forward.clone().cross(a.pose.up);
-  const Vec3 fb = b.pose.forward, rb = b.pose.forward.clone().cross(b.pose.up);
+  // The renderer yaws the body by spin + slip on top of the pose (frame_builder's
+  // `o.spin`), so the drawn rectangle is the pose's turned by the same amount.
+  const Vec3 fa = a.pose.forward.clone().applyAxisAngle(a.pose.up, a.spin + a.slip);
+  const Vec3 ra = fa.clone().cross(a.pose.up);
+  const Vec3 fb = b.pose.forward.clone().applyAxisAngle(b.pose.up, b.spin + b.slip);
+  const Vec3 rb = fb.clone().cross(b.pose.up);
   const Game::HalfExtents ea = g.halfExtents(a), eb = g.halfExtents(b);
   const double hla = ea.len, hwa = ea.wid;
   const double hlb = eb.len, hwb = eb.wid;
@@ -234,16 +238,15 @@ int main() {
                 if (truth <= 0.0 && acted) phantom++;
               }
     }
-    // The residual misses are shallow BY CONSTRUCTION: the collider's rectangle
-    // is COLLIDE_SHRINK smaller than the body, so an overlap inside that
-    // tolerance is a contact it is meant to ignore. Nothing DEEP may be missed,
-    // and nothing clear may be touched. Before the world-space frame: 6182 deep
-    // misses reaching 0.383 m.
+    // The residual misses are shallow BY CONSTRUCTION: the collider rests a
+    // pair COLLIDE_SLOP (1 cm) deep on purpose, and the body's rounded corners
+    // are not modelled. Nothing DEEP may be missed, and nothing clear may be
+    // touched. Before the world-space frame: 6182 deep misses reaching 0.383 m.
     check(deepMissed == 0, "no overlap deeper than 8 cm goes undetected ("
                                + std::to_string(deepMissed) + " missed, worst "
                                + std::to_string(worstMiss) + " m)");
-    check(worstMiss < 0.04, "the deepest missed overlap is inside the collider's own "
-                            "tolerance (" + std::to_string(worstMiss) + " m)");
+    check(worstMiss < 0.02, "the deepest missed overlap is within the slop band ("
+                            + std::to_string(worstMiss) + " m)");
     check(phantom == 0, "the collider never acts on a pair that is visibly clear ("
                             + std::to_string(phantom) + " phantom contacts)");
     std::printf("  sweep: %ld cases, %ld overlapping, %ld missed (%ld deep, worst %.3f m), "

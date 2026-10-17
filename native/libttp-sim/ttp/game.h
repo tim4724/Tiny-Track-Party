@@ -81,7 +81,8 @@ struct Car {
   // The slide (Game::update): the brake with a steer at speed.
   //   drifting    — sliding now (the brake is held)
   //   driftMix    — how much of the look is in force: rises in, fades out
-  //   slip        — the body's cosmetic angle off its travel, in heading space
+  //   slip        — the body's angle off its travel, in heading space: drawn
+  //                 and collided at (bodyYaw), never driven
   //   driftT      — seconds since this slide started (cosmetic: the drawn hop)
   bool drifting = false;
   double driftMix = 0, slip = 0;
@@ -305,6 +306,8 @@ class Game {
   void rank();
 
   double curbLimit(double width) const;
+  // The yaw the body is drawn AND collided at: heading plus the drift's slip.
+  double bodyYaw(const Car& c) const;
   struct FP { double side, restSide; };
   FP footprint(const Car& c) const;
   void cacheColFrame(Car& c, const Frame& f);
