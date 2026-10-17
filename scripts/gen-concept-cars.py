@@ -469,6 +469,19 @@ def xs(s, a, b):
     return tuple(sorted((s * a, s * b)))
 
 
+def bar(name, lo, hi, sw='trim'):
+    """A chunky square bar: the kit has no thin rods, so a tube, a strut or a
+    cage is a block about 0.04 thick."""
+    return box(name, lo, hi, sw, 0.006)
+
+
+
+def lamp_block(name, lo, hi, face='y+'):
+    """A lamp: a trim block whose outer face is the lens."""
+    o = box(name, lo, hi, 'trim', 0.006)
+    return paint(o, (0, 1 if face == 'y+' else -1, 0), 'lamp' if face == 'y+' else 'tail')
+
+
 def hot_rod(wheels):
     """Dash, the all-rounder: a hot-rod roadster, long bonnet and upright
     grille, small front wheels on an exposed axle, big rear ones."""
@@ -477,16 +490,19 @@ def hot_rod(wheels):
     cab = section('cab', [(0.08, 0.14, 0.08, 0.28, 0.12), (-0.30, 0.14, 0.08, 0.29, 0.12),
                           (-0.42, 0.11, 0.10, 0.26, 0.09)], P)
     paint(cab, (0, 0, 1), 'black', x=(-0.10, 0.10), y=(-0.22, 0.04))
-    paint(box('grille', (-0.08, 0.42, 0.10), (0.08, 0.46, 0.28), 'trim', 0.01), (0, 1, 0), 'dark',
-          x=(-0.055, 0.055), z=(0.12, 0.26))
-    box('screen', (-0.13, 0.03, 0.29), (0.13, 0.045, 0.36), 'glass', 0.004)
-    cyl('axle', (-0.15, fy, 0.105), (0.15, fy, 0.105), 0.012, 'trim', 6)
+    paint(box('grille', (-0.09, 0.42, 0.09), (0.09, 0.48, 0.29), 'trim', 0.012), (0, 1, 0), 'dark',
+          x=(-0.06, 0.06), z=(0.12, 0.26))
+    box('screen', (-0.13, 0.02, 0.28), (0.13, 0.05, 0.36), 'glass', 0.006)
+    bar('screenTop', (-0.145, 0.015, 0.35), (0.145, 0.055, 0.385))
+    bar('axle', (-0.15, fy - 0.02, 0.085), (0.15, fy + 0.02, 0.125))
     for s in (-1, 1):
-        paint(cab, (0, -1, 0), 'tail', x=xs(s, 0.05, 0.09), z=(0.20, 0.24))
-        paint(cyl(f'lamp{s}', (s * 0.115, 0.41, 0.235), (s * 0.115, 0.46, 0.235), 0.03, 'trim'), (0, 1, 0), 'lamp')
-        cyl(f'stalk{s}', (s * 0.08, 0.43, 0.2), (s * 0.115, 0.43, 0.23), 0.008, 'trim', 6)
-        cyl(f'header{s}', (s * 0.095, 0.30, 0.14), (s * 0.12, -0.12, 0.10), 0.014, 'trim', 8)
-        cyl(f'post{s}', (s * 0.13, 0.04, 0.27), (s * 0.13, 0.04, 0.37), 0.008, 'trim', 6)
+        paint(cab, (0, -1, 0), 'tail', x=xs(s, 0.04, 0.10), z=(0.19, 0.25))
+        lo, hi = xs(s, 0.09, 0.16)
+        lamp_block(f'lamp{s}', (lo, 0.40, 0.19), (hi, 0.47, 0.26))
+        lo, hi = xs(s, 0.12, 0.145)
+        bar(f'screenSide{s}', (lo, 0.015, 0.28), (hi, 0.055, 0.37))
+        lo, hi = xs(s, 0.13, 0.175)
+        bar(f'pipe{s}', (lo, -0.20, 0.07), (hi, 0.10, 0.11))
     axle(wheels, 'wheel-default', fy, 0.18, 0.105, 0.10, True)
     axle(wheels, 'wheel-default', ry, 0.19, 0.135, 0.17, False)
 
@@ -499,18 +515,22 @@ def roadster(wheels):
                           (0.12, 0.12, 0.06, 0.25, 0.105), (0.32, 0.09, 0.07, 0.215, 0.075),
                           (0.47, 0.06, 0.085, 0.175, 0.045)], P)
     paint(tub, (0, 0, 1), 'black', x=(-0.085, 0.085), y=(-0.17, 0.07))
-    paint(tub, (0, 1, 0), 'dark', x=(-0.04, 0.04), z=(0.10, 0.16))
-    profile('headrest', 0.035, [(-0.18, 0.25), (-0.18, 0.30), (-0.24, 0.31), (-0.36, 0.24)], P)
-    box('screen', (-0.1, 0.075, 0.245), (0.1, 0.088, 0.31), 'glass', 0.004)
+    paint(tub, (0, 1, 0), 'dark', x=(-0.045, 0.045), z=(0.10, 0.165))
+    profile('headrest', 0.05, [(-0.18, 0.25), (-0.18, 0.31), (-0.25, 0.32), (-0.37, 0.24)], P)
+    box('screen', (-0.1, 0.065, 0.24), (0.1, 0.095, 0.32), 'glass', 0.006)
+    bar('screenTop', (-0.11, 0.06, 0.31), (0.11, 0.10, 0.34))
     for s in (-1, 1):
-        paint(tub, (0, -1, 0), 'tail', x=xs(s, 0.045, 0.08), z=(0.17, 0.21))
-        arc(f'fender{s}', s * tx, fy, r, r + 0.012, 0.012, 0.07, 20, 150, P)
-        arc(f'rearwing{s}', s * tx, ry, r * 1.04, r * 1.04 + 0.014, 0.012, 0.08, 40, 150, P, 6)
+        lo, hi = xs(s, 0.045, 0.09)
+        box(f'tail{s}', (lo, -0.425, 0.165), (hi, -0.405, 0.215), 'tail', 0.004)
+        arc(f'fender{s}', s * tx, fy, r, r + 0.012, 0.024, 0.075, 20, 150, P)
+        arc(f'rearwing{s}', s * tx, ry, r * 1.04, r * 1.04 + 0.014, 0.024, 0.085, 40, 150, P, 6)
         lo, hi = xs(s, 0.11, tx - 0.075)
-        box(f'web{s}', (lo, ry - 0.05, 0.215), (hi, ry + 0.05, 0.235), P)
-        cyl(f'arm{s}', (s * 0.10, fy, r), (s * (tx - 0.07), fy, r), 0.012, 'trim', 6)
-        paint(cyl(f'lamp{s}', (s * 0.13, 0.39, 0.205), (s * 0.13, 0.45, 0.205), 0.03, 'trim'), (0, 1, 0), 'lamp')
-        cyl(f'pipe{s}', (s * 0.128, -0.18, 0.095), (s * 0.128, 0.10, 0.095), 0.016, 'trim', 8)
+        box(f'web{s}', (lo, ry - 0.06, 0.21), (hi, ry + 0.06, 0.24), P)
+        bar(f'arm{s}', (lo, fy - 0.02, r - 0.02), (hi, fy + 0.02, r + 0.02))
+        lo, hi = xs(s, 0.035, 0.085)
+        lamp_block(f'lamp{s}', (lo, 0.36, 0.20), (hi, 0.43, 0.245))
+        lo, hi = xs(s, 0.115, 0.155)
+        bar(f'pipe{s}', (lo, -0.20, 0.075), (hi, 0.10, 0.115))
     axle(wheels, 'wheel-racing', fy, tx, r, 0.13, True)
     axle(wheels, 'wheel-racing', ry, tx, r * 1.04, 0.15, False)
 
@@ -524,22 +544,25 @@ def buggy(wheels):
                           (0.42, 0.10, 0.10, 0.165, 0.08)], P)
     paint(tub, (0, 0, 1), 'black', x=(-0.11, 0.11), y=(-0.17, 0.07))
     for s in (-1, 1):
-        paint(tub, (0, -1, 0), 'tail', x=xs(s, 0.07, 0.11), z=(0.14, 0.18))
-        arc(f'flareF{s}', s * tx, fy, 0.12, 0.135, 0.014, 0.075, 25, 155, P)
-        arc(f'flareR{s}', s * tx, ry, 0.13, 0.145, 0.014, 0.085, 25, 155, P)
+        paint(tub, (0, -1, 0), 'tail', x=xs(s, 0.07, 0.115), z=(0.135, 0.185))
+        arc(f'flareF{s}', s * tx, fy, 0.12, 0.135, 0.024, 0.08, 25, 155, P)
+        arc(f'flareR{s}', s * tx, ry, 0.13, 0.145, 0.024, 0.09, 25, 155, P)
         lo, hi = xs(s, 0.12, tx - 0.07)
-        box(f'webF{s}', (lo, fy - 0.07, 0.19), (hi, fy + 0.07, 0.21), P)
+        box(f'webF{s}', (lo, fy - 0.07, 0.19), (hi, fy + 0.07, 0.215), P)
         lo, hi = xs(s, 0.13, tx - 0.08)
-        box(f'webR{s}', (lo, ry - 0.08, 0.19), (hi, ry + 0.08, 0.21), P)
-        lo, hi = xs(s, 0.02, 0.10)
-        box(f'seat{s}', (lo, -0.17, 0.2), (hi, -0.13, 0.3), 'seat')
-        cyl(f'hoopPost{s}', (s * 0.12, -0.19, 0.2), (s * 0.12, -0.19, 0.37), 0.012, 'trim', 6)
-        cyl(f'brace{s}', (s * 0.12, -0.19, 0.37), (s * 0.10, -0.33, 0.2), 0.01, 'trim', 6)
-        paint(cyl(f'lamp{s}', (s * 0.07, 0.31, 0.215), (s * 0.07, 0.36, 0.215), 0.026, 'trim'), (0, 1, 0), 'lamp')
-        cyl(f'exhaust{s}', (s * 0.04, -0.36, 0.15), (s * 0.04, -0.45, 0.17), 0.014, 'trim', 8)
-    cyl('hoopTop', (-0.12, -0.19, 0.37), (0.12, -0.19, 0.37), 0.012, 'trim', 6)
-    box('engine', (-0.08, -0.42, 0.12), (0.08, -0.33, 0.22), 'trim')
-    box('screen', (-0.12, 0.085, 0.215), (0.12, 0.097, 0.29), 'glass', 0.004)
+        box(f'webR{s}', (lo, ry - 0.08, 0.19), (hi, ry + 0.08, 0.215), P)
+        lo, hi = xs(s, 0.015, 0.11)
+        box(f'seat{s}', (lo, -0.18, 0.2), (hi, -0.12, 0.32), 'seat')
+        lo, hi = xs(s, 0.105, 0.145)
+        bar(f'hoopPost{s}', (lo, -0.22, 0.2), (hi, -0.18, 0.39))
+        lo, hi = xs(s, 0.04, 0.10)
+        lamp_block(f'lamp{s}', (lo, 0.30, 0.20), (hi, 0.36, 0.25))
+        lo, hi = xs(s, 0.02, 0.06)
+        bar(f'exhaust{s}', (lo, -0.47, 0.13), (hi, -0.40, 0.17))
+    bar('hoopTop', (-0.145, -0.22, 0.355), (0.145, -0.18, 0.395))
+    box('engine', (-0.09, -0.43, 0.12), (0.09, -0.32, 0.24), 'trim')
+    box('screen', (-0.12, 0.075, 0.21), (0.12, 0.105, 0.29), 'glass', 0.006)
+    bar('screenTop', (-0.13, 0.07, 0.28), (0.13, 0.11, 0.31))
     axle(wheels, 'wheel-default', fy, tx, 0.12, 0.13, True)
     axle(wheels, 'wheel-default', ry, tx, 0.13, 0.16, False)
 
@@ -552,25 +575,27 @@ def four_by_four(wheels):
     tub = section('tub', [(0.40, 0.13, 0.17, 0.30, 0.12), (0.10, 0.15, 0.17, 0.32, 0.14),
                           (-0.40, 0.15, 0.17, 0.31, 0.14)], P)
     paint(tub, (0, 0, 1), 'black', x=(-0.12, 0.12), y=(-0.28, 0.02))
-    box('bumper', (-0.15, 0.42, 0.14), (0.15, 0.47, 0.19), 'trim')
-    box('rbumper', (-0.15, -0.46, 0.14), (0.15, -0.41, 0.19), 'trim')
-    cyl('barTop', (-0.11, 0.455, 0.31), (0.11, 0.455, 0.31), 0.012, 'trim', 6)
+    box('bumper', (-0.16, 0.42, 0.13), (0.16, 0.48, 0.20), 'trim')
+    box('rbumper', (-0.16, -0.47, 0.13), (0.16, -0.41, 0.20), 'trim')
+    bar('barTop', (-0.11, 0.44, 0.29), (0.11, 0.48, 0.33))
+    for y0 in (-0.10, -0.32):
+        bar(f'cageTop{y0}', (-0.145, y0, 0.37), (0.145, y0 + 0.04, 0.41))
     for s in (-1, 1):
-        paint(tub, (0, 1, 0), 'lamp', x=xs(s, 0.06, 0.11), z=(0.24, 0.28))
-        lo, hi = xs(s, 0.08, 0.13)
-        box(f'tailLamp{s}', (lo, -0.415, 0.25), (hi, -0.40, 0.29), 'tail', 0.003)
-        cyl(f'barPost{s}', (s * 0.08, 0.455, 0.19), (s * 0.11, 0.455, 0.31), 0.012, 'trim', 6)
-        arc(f'flareF{s}', s * tx, fy, r, r + 0.015, 0.014, 0.085, 35, 145, P)
-        arc(f'flareR{s}', s * tx, ry, r, r + 0.015, 0.014, 0.085, 35, 145, P)
-        for y in (-0.06, -0.30):
-            cyl(f'cage{s}{y}', (s * 0.13, y, 0.31), (s * 0.12, y, 0.44), 0.012, 'trim', 6)
-        cyl(f'cageSide{s}', (s * 0.12, -0.06, 0.44), (s * 0.12, -0.30, 0.44), 0.012, 'trim', 6)
-        lo, hi = xs(s, 0.02, 0.11)
-        box(f'seat{s}', (lo, -0.24, 0.3), (hi, -0.19, 0.4), 'seat')
-    for y in (-0.06, -0.30):
-        cyl(f'cageTop{y}', (-0.12, y, 0.44), (0.12, y, 0.44), 0.012, 'trim', 6)
-    paint(box('lightbar', (-0.11, -0.075, 0.445), (0.11, -0.045, 0.47), 'dark', 0.004), (0, 1, 0), 'lamp',
-          x=(-0.10, 0.10), z=(0.449, 0.466))
+        paint(tub, (0, 1, 0), 'lamp', x=xs(s, 0.05, 0.115), z=(0.235, 0.285))
+        lo, hi = xs(s, 0.07, 0.13)
+        box(f'tailLamp{s}', (lo, -0.415, 0.245), (hi, -0.395, 0.295), 'tail', 0.004)
+        lo, hi = xs(s, 0.07, 0.11)
+        bar(f'barPost{s}', (lo, 0.44, 0.20), (hi, 0.48, 0.31))
+        arc(f'flareF{s}', s * tx, fy, r, r + 0.015, 0.024, 0.09, 35, 145, P)
+        arc(f'flareR{s}', s * tx, ry, r, r + 0.015, 0.024, 0.09, 35, 145, P)
+        lo, hi = xs(s, 0.105, 0.145)
+        for y0 in (-0.10, -0.32):
+            bar(f'cagePost{s}{y0}', (lo, y0, 0.31), (hi, y0 + 0.04, 0.40))
+        bar(f'cageSide{s}', (lo, -0.32, 0.37), (hi, -0.06, 0.41))
+        lo, hi = xs(s, 0.015, 0.11)
+        box(f'seat{s}', (lo, -0.26, 0.3), (hi, -0.19, 0.38), 'seat')
+    paint(box('lightbar', (-0.12, -0.10, 0.41), (0.12, -0.05, 0.45), 'dark', 0.006), (0, 1, 0), 'lamp',
+          x=(-0.105, 0.105), z=(0.415, 0.445))
     spare = bpy.data.objects.new('spare', kit_wheel('wheel-truck', 0.09, 0.08, False))
     bpy.context.scene.collection.objects.link(spare)
     spare.rotation_euler.z = -math.pi / 2

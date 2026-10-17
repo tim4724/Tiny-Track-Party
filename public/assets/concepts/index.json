@@ -154,25 +154,25 @@
   },
   {
    "name": "new-dash",
-   "tris": 1968,
+   "tris": 2084,
    "base": "vehicle-racer-low",
    "note": "Designed from Car Kit parts. Dash, the all-rounder: a hot-rod roadster, long bonnet and upright grille, small front wheels on an exposed axle, big rear ones."
   },
   {
    "name": "new-bolt",
-   "tris": 2556,
+   "tris": 2608,
    "base": "vehicle-speedster",
    "note": "Designed from Car Kit parts. Bolt, the fastest and lightest: a Seven-style roadster, long nose, cycle fenders over the front wheels, a headrest fairing, side pipes."
   },
   {
    "name": "new-carve",
-   "tris": 2784,
+   "tris": 2884,
    "base": "vehicle-racer",
    "note": "Designed from Car Kit parts. Carve, the corner king: a short dune buggy, wheels at the corners under open flares, a roll bar and the engine out the back."
   },
   {
    "name": "new-rumble",
-   "tris": 3592,
+   "tris": 3856,
    "base": "vehicle-vintage-racer",
    "note": "Designed from Car Kit parts. Rumble, the heavy one: an open 4x4 on truck tyres, bull bar, roll cage with a light bar, the spare on its tail."
   }
