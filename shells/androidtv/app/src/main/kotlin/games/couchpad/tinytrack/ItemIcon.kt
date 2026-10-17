@@ -109,6 +109,16 @@ object ItemIcon {
         Canvas(modifier) { doc.draw(this, accent, car) }
     }
 
+    /**
+     * Parse every icon at scene build rather than on the first item box's frames:
+     * a parse is an asset read and an XML walk on the frame's own thread. Colour
+     * is applied at draw time, so one parse per key is the whole warm-up. tvOS's
+     * `ItemIcon.prewarm` is the twin.
+     */
+    fun prewarm() {
+        for (key in ItemVocabulary.keys) source(key)
+    }
+
     private fun source(key: String): Doc? = sources.getOrPut(key) { Optional(readDoc(key)) }.value
 
     private fun readDoc(key: String): Doc? {

@@ -1562,6 +1562,8 @@ class GameCoordinator(
             // with this track's deck rather than to match the scenery, so it can
             // only be read once the build has resolved which biome won.
             state.boostAccent = Ttp.ttp_theme_boost_icon(TtpJson.arg(display.biome))
+
+            ItemIcon.prewarm()
         }
     }
 

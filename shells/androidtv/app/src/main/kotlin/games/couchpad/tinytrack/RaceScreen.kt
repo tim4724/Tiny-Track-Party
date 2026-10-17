@@ -324,9 +324,10 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int, ready
  * The item vocabulary, DERIVED from the ABI rather than mirrored. `ttp_item_id`
  * names the id a box roll can yield and answers null past the end, so walking it
  * is the same move the audio device makes for its cue table. A shell that walks
- * the export cannot drift in the first place.
+ * the export cannot drift in the first place. Not private: `ItemIcon.prewarm`
+ * walks the same list.
  */
-private object ItemVocabulary {
+internal object ItemVocabulary {
     val keys: List<String> by lazy {
         val out = ArrayList<String>()
         var code = 1
