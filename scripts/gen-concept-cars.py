@@ -422,59 +422,44 @@ def side_pillar(name, s, a, b, swatch, inset=0.03):
     return hull(name, pts, swatch, 0)
 
 
-def mirrored_pair(obj):
-    """The left-side twin of a right wheel object's mesh (hubcap facing -x)."""
-    me = obj.data.copy()
-    me.transform(Matrix.Scale(-1, 4, (1, 0, 0)))
-    me.flip_normals()
-    return me
-
-
 # ======================================================================= toys
 #
 # What makes these read as TOYS rather than scale models, shared by the set:
 #   * chibi proportions: fat wheels, short overhangs, an oversized cabin;
 #   * a die-cast's two pieces: a painted shell sitting on a dark chassis tray
 #     whose ends are chunky steel bumpers;
-#   * fat tyres with a big light hubcap (chrome, the swatch the seat marks
-#     tint on a player's car, inside their 0.062 rim circle);
-#   * fenders that bulge out over the wheels.
+#   * flat-topped fender blocks standing over the wheels, which stay in view.
+# Everything else is the kit's: its own wheel (scaled per axle), and its crisp
+# single chamfer — a big bevel rounds a shell into another kit's toy.
 # Each car then owns ONE silhouette, judged from the chase camera (behind and
 # above): what it sees is the roof, the rear deck and the tail face.
 
+KIT_R, KIT_W = 0.125, 0.125  # the kit wheel's radius and width
 
-def toy_wheel(name, r, w, knobs=0):
-    """A fat toy tyre with chamfered shoulders and a big hubcap on its +x
-    face; `knobs` adds chunky tread blocks round the tread."""
-    pts = []
-    seg = 10
-    for x, rr in ((-w / 2, r * 0.78), (-w / 2 + w * 0.2, r), (w / 2 - w * 0.2, r), (w / 2, r * 0.78)):
-        for i in range(seg):
-            a = 2 * math.pi * (i + 0.5) / seg
-            pts.append((x, rr * math.cos(a), rr * math.sin(a)))
-    parts = [hull(f"{name}-tyre", pts, TYRE, 0, angle=40)]
-    if knobs:
-        rr = r * 0.9
-        for i in range(knobs):
-            a = 2 * math.pi * i / knobs
-            ca, sa = math.cos(a), math.sin(a)
-            hw = r * 0.17
-            kp = [(x, q * sa + t * ca, q * ca - t * sa)
-                  for q in (rr, r * 1.07) for t in (-hw, hw) for x in (-w * 0.42, w * 0.42)]
-            parts.append(hull(f"{name}-knob{i}", kp, TYRE, 0))
-    parts.append(disc(f"{name}-cap", (w / 2 - 0.006, 0, 0), (1, 0, 0), min(r * 0.56, 0.07), 0.014, CHROME, 10))
-    parts.append(disc(f"{name}-hub", (w / 2 + 0.006, 0, 0), (1, 0, 0), r * 0.17, 0.012, TYRE, 6))
-    w_obj = join(parts, name)
-    paint_uvs(w_obj)
-    return w_obj
+
+def kit_wheel(r, w):
+    """The kit's wheel meshes (left, right) scaled to radius r, width w:
+    baked, not a node scale, since the renderer rewrites the wheel nodes'
+    transforms."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(KIT, 'vehicle-racer.glb'))
+    new = [o for o in bpy.data.objects if o not in before]
+    left = next(o for o in new if o.name.startswith('wheel-fl')).data.copy()
+    right = next(o for o in new if o.name.startswith('wheel-fr')).data.copy()
+    for o in new:
+        bpy.data.objects.remove(o)
+    for me in (left, right):
+        me.transform(Matrix.Diagonal((w / KIT_W, r / KIT_R, r / KIT_R, 1)))
+    return left, right
 
 
 def wheel_set(xs, front, rear):
-    """Four wheels: front/rear = (y, toy_wheel object, radius)."""
+    """Four kit wheels at +-xs: front/rear = (y, radius, width)."""
     out = []
-    for tag_, (y, obj, r) in (('f', front), ('b', rear)):
-        out.append((f'wheel-{tag_}l', mirrored_pair(obj), (-xs, y, r)))
-        out.append((f'wheel-{tag_}r', obj.data, (xs, y, r)))
+    for tag_, (y, r, w) in (('f', front), ('b', rear)):
+        left, right = kit_wheel(r, w)
+        out.append((f'wheel-{tag_}l', left, (-xs, y, r)))
+        out.append((f'wheel-{tag_}r', right, (xs, y, r)))
     return out
 
 
@@ -482,25 +467,24 @@ def tray(parts, hx, y0, y1, bump_hx, z=(0.06, 0.12), bz=(0.075, 0.155), bd=0.06,
     """The die-cast's chassis: a dark tray under the shell, a chunky steel
     bumper at either end."""
     parts.append(box('tray', (-hx, y0 + bd * 0.5, z[0]), (hx, y1 - bd * 0.5, z[1]), CHARCOAL))
-    parts.append(box('fbump', (-bump_hx, y1 - bd, bz[0]), (bump_hx, y1, bz[1]), swatch, 0.018))
-    parts.append(box('rbump', (-bump_hx, y0, bz[0]), (bump_hx, y0 + bd, bz[1]), swatch, 0.018))
+    parts.append(box('fbump', (-bump_hx, y1 - bd, bz[0]), (bump_hx, y1, bz[1]), swatch, 0.012))
+    parts.append(box('rbump', (-bump_hx, y0, bz[0]), (bump_hx, y0 + bd, bz[1]), swatch, 0.012))
 
 
-def arch(name, s, y, cx, hx, r, swatch, top=None, z0=0.11, bev=0.022):
-    """A fender bulging out over the wheel at y: a rounded arch profile
-    centred on x = s*cx, `hx` thick."""
-    t = top if top is not None else 2 * r + 0.012
-    reach = r * 1.15
-    side = [(y + reach, z0), (y + reach * 0.85, t - 0.05), (y + reach * 0.45, t), (y - reach * 0.45, t),
-            (y - reach * 0.85, t - 0.05), (y - reach, z0)]
+def fender(name, s, y, cx, hx, r, swatch, top=None, bev=0.012):
+    """A flat-topped fender block over the wheel at y, centred on x = s*cx,
+    `hx` thick: from the axle up, its ends sloped clear of the tyre."""
+    t = top if top is not None else 2 * r + 0.02
+    reach = r * 1.2
+    side = [(y + reach, r), (y + reach * 0.7, t), (y - reach * 0.7, t), (y - reach, r)]
     return profile(name, hx, side, swatch, bev, cx=s * cx)
 
 
-def greenhouse(parts, P, bottom, top, roof_t=0.022, pillars=(), bev=0.012):
+def greenhouse(parts, P, bottom, top, roof_t=0.022, pillars=(), bev=0.01):
     """An oversized glass cabin with a painted roof cap and pillar bands.
     bottom/top = (halfX, yBack, yFront, z) as taper(); pillars = y pairs
     (y at the belt, y at the roof) for each band."""
-    parts.append(taper('glass', bottom, top, GLASS, 0.01))
+    parts.append(taper('glass', bottom, top, GLASS, 0.008))
     hx, yb, yf, z = top
     parts.append(taper('roof', (hx + 0.006, yb - 0.008, yf + 0.008, z - 0.004),
                        (hx - 0.004, yb + 0.004, yf - 0.004, z + roof_t), P, bev))
@@ -511,73 +495,73 @@ def greenhouse(parts, P, bottom, top, roof_t=0.022, pillars=(), bev=0.012):
 
 
 def bumper_car():
-    """The classic toy coupe: round-shouldered shell on a dark tray, a big
-    glass cabin, fat fenders, a ducktail, steel bumpers and block lamps."""
+    """The classic toy coupe: a square-shouldered shell on a dark tray, a big
+    glass cabin, block fenders, a ducktail, steel bumpers and block lamps."""
     P = GREEN
     parts = []
     tray(parts, 0.17, -0.44, 0.44, 0.215)
-    parts.append(profile('shell', 0.2, [(0.41, 0.11), (0.42, 0.2), (0.37, 0.245), (0.12, 0.262), (-0.3, 0.27),
-                                        (-0.41, 0.25), (-0.42, 0.11)], P, 0.035))
+    parts.append(profile('shell', 0.19, [(0.41, 0.11), (0.42, 0.21), (0.38, 0.25), (-0.4, 0.265),
+                                         (-0.42, 0.25), (-0.42, 0.11)], P, 0.016))
     for s in (-1, 1):
         for y in (0.25, -0.25):
-            parts.append(arch(f'arch{s}{y}', s, y, 0.205, 0.045, 0.13, P))
-    greenhouse(parts, P, (0.17, -0.27, 0.12, 0.255), (0.14, -0.21, 0.02, 0.395),
+            parts.append(fender(f'arch{s}{y}', s, y, 0.2, 0.05, 0.13, P, top=0.275))
+    greenhouse(parts, P, (0.17, -0.27, 0.12, 0.26), (0.145, -0.21, 0.02, 0.395),
                pillars=((0.115, 0.02), (-0.075, -0.075), (-0.262, -0.205)))
-    parts.append(profile('duck', 0.185, [(-0.32, 0.262), (-0.43, 0.3), (-0.445, 0.29), (-0.43, 0.24)], P, 0.012))
+    parts.append(profile('duck', 0.18, [(-0.33, 0.265), (-0.43, 0.3), (-0.445, 0.3), (-0.44, 0.25)], P, 0.008))
     body, S, parts = shell(parts)
     lamps(S, parts, 'head', 'y+', (0.1, 0.17), (0.17, 0.22), WHITE)
     parts.append(S.block('grille', 'y+', (-0.07, 0.07, 0.165, 0.215), INK, out=0.01))
     lamps(S, parts, 'tail', 'y-', (0.09, 0.165), (0.18, 0.225), LAMP_RED)
-    w = toy_wheel('w', 0.13, 0.1)
-    return join(parts, 'body'), wheel_set(0.19, (0.25, w, 0.13), (-0.25, w, 0.13))
+    return join(parts, 'body'), wheel_set(0.19, (0.25, 0.13, 0.12), (-0.25, 0.13, 0.12))
 
 
 def comet():
-    """A land-speed streamliner: a long teardrop on a dark keel, a glass
-    bubble, a tall tail fin, fat pods over big rear wheels and small front
+    """A land-speed streamliner: a long faceted wedge on a dark keel, a glass
+    canopy, a tall tail fin, block pods over big rear wheels and small front
     wheels out on their own."""
     P = RED
     parts = []
-    parts.append(box('keel', (-0.12, -0.42, 0.06), (0.12, 0.40, 0.11), CHARCOAL, 0.01))
+    parts.append(box('keel', (-0.12, -0.42, 0.06), (0.12, 0.4, 0.11), CHARCOAL, 0.008))
     pts = []
-    for y, hx, z0, z1 in ((0.47, 0.06, 0.09, 0.13), (0.3, 0.13, 0.085, 0.2), (0.02, 0.17, 0.085, 0.26),
-                          (-0.3, 0.17, 0.085, 0.255), (-0.45, 0.13, 0.09, 0.22)):
+    for y, hx, z0, z1 in ((0.47, 0.07, 0.09, 0.13), (0.2, 0.15, 0.085, 0.22),
+                          (-0.3, 0.17, 0.085, 0.255), (-0.45, 0.15, 0.09, 0.235)):
         pts += [(s * hx, y, z) for s in (-1, 1) for z in (z0, z1)]
-    parts.append(hull('hull', pts, P, 0.03))
+    parts.append(hull('hull', pts, P, 0.014))
     for s in (-1, 1):
-        parts.append(arch(f'pod{s}', s, -0.24, 0.2, 0.06, 0.145, P, top=0.29))
-        parts.append(arch(f'cyc{s}', s, 0.27, 0.19, 0.04, 0.11, P, top=0.245, z0=0.17))
+        parts.append(fender(f'pod{s}', s, -0.24, 0.2, 0.065, 0.145, P, top=0.3))
         x0, x1 = sorted((s * 0.11, s * 0.17))
         parts.append(box(f'arm{s}', (x0, 0.24, 0.1), (x1, 0.3, 0.13), CHARCOAL))
-    parts.append(hull('bubble', [(s * hx, y, z) for s in (-1, 1) for y, hx, z in
-                                 ((0.2, 0.06, 0.23), (0.12, 0.1, 0.3), (-0.02, 0.1, 0.33), (-0.12, 0.08, 0.32),
-                                  (-0.18, 0.06, 0.255))], GLASS, 0.02))
-    parts.append(profile('fin', 0.018, [(-0.12, 0.25), (-0.38, 0.43), (-0.455, 0.43), (-0.455, 0.22)], P, 0.012))
+    parts.append(hull('canopy', [(s * hx, y, z) for s in (-1, 1) for y, hx, z in
+                                 ((0.2, 0.07, 0.21), (0.08, 0.1, 0.31), (-0.1, 0.09, 0.32),
+                                  (-0.18, 0.07, 0.25))], GLASS, 0.01))
+    parts.append(profile('fin', 0.02, [(-0.12, 0.25), (-0.38, 0.43), (-0.455, 0.43), (-0.455, 0.22)], P, 0.008))
     body, S, parts = shell(parts)
     lamps(S, parts, 'head', 'y+', (0.025, 0.06), (0.1, 0.125), WHITE, out=0.01)
     lamps(S, parts, 'tail', 'y-', (0.045, 0.11), (0.15, 0.19), LAMP_RED, out=0.02)
-    parts.append(S.block('jet', 'y-', (-0.04, 0.04, 0.11, 0.16), INK, out=0.012))
-    wf = toy_wheel('wf', 0.11, 0.08)
-    wr = toy_wheel('wr', 0.145, 0.12)
-    return join(parts, 'body'), wheel_set(0.205, (0.27, wf, 0.11), (-0.24, wr, 0.145))
+    parts.append(S.block('jet', 'y-', (-0.035, 0.035, 0.11, 0.16), INK, out=0.012))
+    return join(parts, 'body'), wheel_set(0.205, (0.27, 0.11, 0.09), (-0.24, 0.145, 0.14))
 
 
 def scout():
-    """A stubby rally scout on chunky tread: a tall boxy shell, dark flares,
+    """A stubby rally scout on fat wheels: a tall boxy shell, dark flares,
     a roof light bar and the spare wheel strapped on its tail."""
     P = BLUE
     parts = []
     tray(parts, 0.17, -0.4, 0.42, 0.215, bz=(0.07, 0.17), bd=0.07)
-    parts.append(profile('shell', 0.195, [(0.37, 0.12), (0.38, 0.235), (0.31, 0.27), (-0.36, 0.28),
-                                         (-0.375, 0.265), (-0.375, 0.12)], P, 0.03))
+    parts.append(profile('shell', 0.19, [(0.37, 0.12), (0.38, 0.24), (0.33, 0.27), (-0.37, 0.28),
+                                        (-0.375, 0.12)], P, 0.014))
     for s in (-1, 1):
         for y in (0.24, -0.23):
-            parts.append(arch(f'flare{s}{y}', s, y, 0.205, 0.05, 0.14, CHARCOAL, top=0.27, bev=0.016))
-    greenhouse(parts, P, (0.175, -0.355, 0.11, 0.27), (0.16, -0.34, 0.0, 0.42), roof_t=0.02,
-               pillars=((0.095, 0.0), (-0.12, -0.12), (-0.34, -0.325)))
-    parts.append(box('lightbar', (-0.13, -0.02, 0.44), (0.13, 0.05, 0.48), CHARCOAL, 0.01))
+            parts.append(fender(f'flare{s}{y}', s, y, 0.2, 0.055, 0.14, CHARCOAL, top=0.29, bev=0.01))
+    greenhouse(parts, P, (0.175, -0.355, 0.11, 0.275), (0.165, -0.345, 0.0, 0.42), roof_t=0.02,
+               pillars=((0.095, 0.0), (-0.12, -0.12), (-0.34, -0.33)))
+    parts.append(box('lightbar', (-0.13, -0.02, 0.44), (0.13, 0.05, 0.48), CHARCOAL, 0.008))
     for s in (-1, 1):
         parts.append(box(f'barfoot{s}', (s * 0.11 - 0.012, 0.0, 0.43), (s * 0.11 + 0.012, 0.03, 0.445), CHARCOAL))
+    # the spare: a tyre on the tail with the kit wheel's dish and hub
+    parts.append(cyl('spare', (0, -0.375, 0.235), (0, -0.445, 0.235), 0.1, TYRE, 12))
+    parts.append(disc('spareDish', (0, -0.445, 0.235), (0, -1, 0), 0.06, 0.006, CHARCOAL, 12))
+    parts.append(disc('spareHub', (0, -0.45, 0.235), (0, -1, 0), 0.03, 0.008, CHROME, 6))
     body, S, parts = shell(parts)
     for i, x in enumerate((-0.1, -0.035, 0.035, 0.1)):
         parts.append(paint_face(box(f'spot{i}', (x - 0.026, 0.045, 0.445), (x + 0.026, 0.06, 0.475), WHITE, 0.004),
@@ -585,45 +569,35 @@ def scout():
     lamps(S, parts, 'head', 'y+', (0.1, 0.17), (0.185, 0.235), WHITE)
     parts.append(S.block('grille', 'y+', (-0.07, 0.07, 0.18, 0.24), INK, out=0.01))
     lamps(S, parts, 'tail', 'y-', (0.145, 0.185), (0.17, 0.25), LAMP_RED, out=0.016)
-    spare = toy_wheel('spare', 0.095, 0.06, knobs=8)
-    spare.data.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
-    spare.location = (0, -0.408, 0.235)
-    # the body's UVs are painted after the join: one layer, not the wheel's
-    spare.data.uv_layers.remove(spare.data.uv_layers[0])
-    w = toy_wheel('w', 0.14, 0.115, knobs=9)
-    body = join(parts + [spare], 'body')
-    return body, wheel_set(0.195, (0.24, w, 0.14), (-0.23, w, 0.14))
+    return join(parts, 'body'), wheel_set(0.195, (0.24, 0.14, 0.13), (-0.23, 0.14, 0.13))
 
 
 def brute():
     """A toy hot rod: a narrow nose on skinny front wheels, a chrome blower
-    through the bonnet, a chopped cab, and huge slicks under fat fenders."""
+    through the bonnet, a chopped cab, and huge slicks under block fenders."""
     P = PURPLE
     parts = []
-    parts.append(box('frame', (-0.1, -0.42, 0.065), (0.1, 0.42, 0.12), CHARCOAL, 0.01))
+    parts.append(box('frame', (-0.1, -0.42, 0.065), (0.1, 0.42, 0.12), CHARCOAL, 0.008))
     pts = []
-    for y, hx, z0, z1 in ((0.43, 0.11, 0.1, 0.215), (0.05, 0.135, 0.09, 0.255), (-0.1, 0.18, 0.09, 0.27),
-                          (-0.43, 0.18, 0.09, 0.265)):
+    for y, hx, z0, z1 in ((0.43, 0.11, 0.1, 0.215), (-0.08, 0.18, 0.09, 0.27), (-0.43, 0.18, 0.09, 0.265)):
         pts += [(s * hx, y, z) for s in (-1, 1) for z in (z0, z1)]
-    parts.append(hull('body', pts, P, 0.028))
-    parts.append(box('rbump', (-0.2, -0.47, 0.08), (0.2, -0.41, 0.15), STEEL, 0.018))
+    parts.append(hull('body', pts, P, 0.014))
+    parts.append(box('rbump', (-0.2, -0.47, 0.08), (0.2, -0.41, 0.15), STEEL, 0.012))
     for s in (-1, 1):
-        parts.append(arch(f'fender{s}', s, -0.25, 0.205, 0.07, 0.155, P, top=0.33))
-        parts.append(box(f'axle{s}', (min(s * 0.09, s * 0.16), 0.25, 0.09), (max(s * 0.09, s * 0.16), 0.29, 0.12),
-                         CHARCOAL))
-    parts.append(box('grille', (-0.085, 0.43, 0.09), (0.085, 0.465, 0.24), CHROME, 0.012))
-    parts.append(box('blower', (-0.075, 0.1, 0.22), (0.075, 0.3, 0.31), CHROME, 0.016))
-    parts.append(paint_face(box('hat', (-0.055, 0.15, 0.3), (0.055, 0.28, 0.36), CHARCOAL, 0.01), 'y+', INK))
+        parts.append(fender(f'fender{s}', s, -0.25, 0.205, 0.075, 0.155, P, top=0.335))
+        x0, x1 = sorted((s * 0.09, s * 0.16))
+        parts.append(box(f'axle{s}', (x0, 0.25, 0.09), (x1, 0.29, 0.12), CHARCOAL))
+    parts.append(box('grille', (-0.085, 0.43, 0.09), (0.085, 0.465, 0.24), CHROME, 0.01))
+    parts.append(box('blower', (-0.075, 0.1, 0.22), (0.075, 0.3, 0.31), CHROME, 0.01))
+    parts.append(paint_face(box('hat', (-0.055, 0.15, 0.3), (0.055, 0.28, 0.36), CHARCOAL, 0.008), 'y+', INK))
     greenhouse(parts, P, (0.165, -0.3, -0.04, 0.27), (0.15, -0.27, -0.1, 0.37), roof_t=0.022,
                pillars=((-0.055, -0.11), (-0.282, -0.255)))
     body, S, parts = shell(parts)
     for s in (-1, 1):
         x0, x1 = sorted((s * 0.1, s * 0.155))
-        parts.append(paint_face(box(f'lamp{s}', (x0, 0.39, 0.2), (x1, 0.45, 0.255), CHROME, 0.01), 'y+', WHITE))
+        parts.append(paint_face(box(f'lamp{s}', (x0, 0.39, 0.2), (x1, 0.45, 0.255), CHROME, 0.008), 'y+', WHITE))
     lamps(S, parts, 'tail', 'y-', (0.1, 0.165), (0.19, 0.24), LAMP_RED)
-    wf = toy_wheel('wf', 0.1, 0.075)
-    wr = toy_wheel('wr', 0.155, 0.14)
-    return join(parts, 'body'), wheel_set(0.205, (0.27, wf, 0.1), (-0.25, wr, 0.155))
+    return join(parts, 'body'), wheel_set(0.205, (0.27, 0.1, 0.085), (-0.25, 0.155, 0.15))
 
 
 def hauler():
@@ -632,22 +606,22 @@ def hauler():
     P = ORANGE
     parts = []
     tray(parts, 0.17, -0.44, 0.44, 0.22, bz=(0.07, 0.165), bd=0.065)
-    parts.append(profile('nose', 0.2, [(0.42, 0.11), (0.425, 0.235), (0.37, 0.265), (0.1, 0.275), (0.1, 0.11)],
-                         P, 0.032))
-    parts.append(box('cab', (-0.2, -0.08, 0.11), (0.2, 0.12, 0.275), P, 0.03))
+    parts.append(profile('nose', 0.195, [(0.42, 0.11), (0.425, 0.24), (0.38, 0.27), (0.1, 0.275), (0.1, 0.11)],
+                         P, 0.016))
+    parts.append(box('cab', (-0.195, -0.08, 0.11), (0.195, 0.12, 0.275), P, 0.016))
     greenhouse(parts, P, (0.18, -0.08, 0.13, 0.27), (0.165, -0.075, 0.06, 0.41), roof_t=0.022)
-    parts.append(box('bed', (-0.2, -0.42, 0.11), (0.2, -0.08, 0.17), CHARCOAL, 0.012))
+    parts.append(box('bed', (-0.195, -0.42, 0.11), (0.195, -0.08, 0.17), CHARCOAL, 0.008))
     for s in (-1, 1):
-        x0, x1 = sorted((s * 0.155, s * 0.2))
-        parts.append(box(f'wall{s}', (x0, -0.42, 0.15), (x1, -0.07, 0.27), P, 0.016))
-    parts.append(box('gate', (-0.2, -0.43, 0.15), (0.2, -0.385, 0.265), P, 0.016))
-    parts.append(box('crate', (-0.1, -0.33, 0.16), (0.06, -0.17, 0.27), TAN, 0.012))
+        x0, x1 = sorted((s * 0.155, s * 0.195))
+        parts.append(box(f'wall{s}', (x0, -0.42, 0.15), (x1, -0.07, 0.27), P, 0.01))
+    parts.append(box('gate', (-0.195, -0.43, 0.15), (0.195, -0.385, 0.265), P, 0.01))
+    parts.append(box('crate', (-0.1, -0.33, 0.16), (0.06, -0.17, 0.27), TAN, 0.008))
     for s in (-1, 1):
         for y in (0.25, -0.25):
-            parts.append(arch(f'arch{s}{y}', s, y, 0.21, 0.04, 0.135, P, top=0.285))
+            parts.append(fender(f'arch{s}{y}', s, y, 0.205, 0.045, 0.135, P, top=0.29))
     for s in (-1, 1):
         parts.append(box(f'post{s}', (s * 0.16 - 0.016, -0.115, 0.26), (s * 0.16 + 0.016, -0.085, 0.43), CHARCOAL))
-    parts.append(box('rollbar', (-0.18, -0.12, 0.42), (0.18, -0.08, 0.455), CHARCOAL, 0.008))
+    parts.append(box('rollbar', (-0.18, -0.12, 0.42), (0.18, -0.08, 0.455), CHARCOAL, 0.006))
     body, S, parts = shell(parts)
     for s in (-1, 1):
         x0, x1 = sorted((s * 0.04, s * 0.11))
@@ -655,39 +629,36 @@ def hauler():
     lamps(S, parts, 'head', 'y+', (0.11, 0.175), (0.18, 0.23), WHITE)
     parts.append(S.block('grille', 'y+', (-0.08, 0.08, 0.165, 0.235), INK, out=0.01))
     lamps(S, parts, 'tail', 'y-', (0.13, 0.185), (0.2, 0.25), LAMP_RED, out=0.014)
-    w = toy_wheel('w', 0.135, 0.11)
-    return join(parts, 'body'), wheel_set(0.195, (0.25, w, 0.135), (-0.25, w, 0.135))
+    return join(parts, 'body'), wheel_set(0.195, (0.25, 0.135, 0.12), (-0.25, 0.135, 0.12))
 
 
 def bug():
-    """A round toy bug: a domed shell, four fat round fenders with the
-    headlamps in the front pair, running boards and a tiny rear screen."""
+    """A toy bug: a faceted dome over a short shell, four block fenders with
+    the headlamps on the front pair, running boards, a dark engine vent."""
     P = GOLD
     parts = []
     tray(parts, 0.15, -0.42, 0.42, 0.19, bz=(0.08, 0.14), bd=0.05)
-    parts.append(profile('shell', 0.165, [(0.39, 0.1), (0.41, 0.16), (0.37, 0.215), (0.22, 0.255),
-                                          (-0.3, 0.27), (-0.39, 0.235), (-0.41, 0.17), (-0.39, 0.1)], P, 0.04))
-    parts.append(profile('dome', 0.15, [(0.2, 0.25), (0.1, 0.35), (0.0, 0.395), (-0.13, 0.4), (-0.25, 0.37),
-                                        (-0.32, 0.31), (-0.32, 0.25)], GLASS, 0.035))
-    parts.append(profile('cap', 0.12, [(0.07, 0.37), (0.0, 0.405), (-0.13, 0.41), (-0.25, 0.375), (-0.27, 0.36)],
-                         P, 0.02))
+    parts.append(profile('shell', 0.165, [(0.39, 0.1), (0.41, 0.19), (0.3, 0.25), (-0.33, 0.265),
+                                          (-0.41, 0.2), (-0.39, 0.1)], P, 0.016))
+    parts.append(profile('dome', 0.15, [(0.2, 0.25), (0.08, 0.37), (-0.16, 0.395), (-0.3, 0.33),
+                                        (-0.32, 0.25)], GLASS, 0.012))
+    parts.append(profile('cap', 0.125, [(0.05, 0.37), (0.02, 0.4), (-0.16, 0.41), (-0.25, 0.37)], P, 0.01))
     for s in (-1, 1):
-        parts.append(side_pillar(f'bp{s}', s, (0.15, -0.05, 0.27), (0.13, -0.06, 0.395), P))
-        parts.append(profile(f'cpil{s}', 0.02, [(-0.2, 0.26), (-0.2, 0.37), (-0.32, 0.3), (-0.32, 0.26)], P, 0.0,
+        parts.append(side_pillar(f'bp{s}', s, (0.15, -0.05, 0.27), (0.13, -0.06, 0.39), P))
+        parts.append(profile(f'cpil{s}', 0.02, [(-0.2, 0.26), (-0.2, 0.38), (-0.32, 0.31), (-0.32, 0.26)], P, 0.0,
                              cx=s * 0.13))
     for s in (-1, 1):
         for y in (0.25, -0.25):
-            parts.append(arch(f'fender{s}{y}', s, y, 0.19, 0.06, 0.13, P, top=0.29, bev=0.03))
+            parts.append(fender(f'fender{s}{y}', s, y, 0.19, 0.06, 0.125, P, top=0.285))
         x0, x1 = sorted((s * 0.15, s * 0.225))
-        parts.append(box(f'board{s}', (x0, -0.12, 0.095), (x1, 0.12, 0.125), STEEL, 0.01))
+        parts.append(box(f'board{s}', (x0, -0.12, 0.095), (x1, 0.12, 0.125), STEEL, 0.008))
     body, S, parts = shell(parts)
     for s in (-1, 1):
         x0, x1 = sorted((s * 0.165, s * 0.225))
-        parts.append(paint_face(box(f'eye{s}', (x0, 0.335, 0.225), (x1, 0.39, 0.275), CHROME, 0.012), 'y+', WHITE))
+        parts.append(paint_face(box(f'eye{s}', (x0, 0.31, 0.235), (x1, 0.365, 0.285), CHROME, 0.008), 'y+', WHITE))
     parts.append(S.block('vent', 'y-', (-0.06, 0.06, 0.19, 0.23), INK, out=0.01))
     lamps(S, parts, 'tail', 'y-', (0.085, 0.145), (0.165, 0.215), LAMP_RED)
-    w = toy_wheel('w', 0.125, 0.1)
-    return join(parts, 'body'), wheel_set(0.19, (0.25, w, 0.125), (-0.25, w, 0.125))
+    return join(parts, 'body'), wheel_set(0.19, (0.25, 0.125, 0.115), (-0.25, 0.125, 0.115))
 
 
 # name -> (builder, the roster car whose role it would take). The order is

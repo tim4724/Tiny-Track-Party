@@ -3,37 +3,37 @@
  "models": [
   {
    "name": "toy-bumper",
-   "tris": 1396,
-   "note": "The classic toy coupe: round-shouldered shell on a dark tray, a big glass cabin, fat fenders, a ducktail, steel bumpers and block lamps.",
+   "tris": 1644,
+   "note": "The classic toy coupe: a square-shouldered shell on a dark tray, a big glass cabin, block fenders, a ducktail, steel bumpers and block lamps.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "toy-comet",
-   "tris": 1252,
-   "note": "A land-speed streamliner: a long teardrop on a dark keel, a glass bubble, a tall tail fin, fat pods over big rear wheels and small front wheels out on their own.",
+   "tris": 1416,
+   "note": "A land-speed streamliner: a long faceted wedge on a dark keel, a glass canopy, a tall tail fin, block pods over big rear wheels and small front wheels out on their own.",
    "base": "vehicle-speedster"
   },
   {
    "name": "toy-scout",
-   "tris": 2248,
-   "note": "A stubby rally scout on chunky tread: a tall boxy shell, dark flares, a roof light bar and the spare wheel strapped on its tail.",
+   "tris": 1940,
+   "note": "A stubby rally scout on fat wheels: a tall boxy shell, dark flares, a roof light bar and the spare wheel strapped on its tail.",
    "base": "vehicle-racer"
   },
   {
    "name": "toy-brute",
-   "tris": 1284,
-   "note": "A toy hot rod: a narrow nose on skinny front wheels, a chrome blower through the bonnet, a chopped cab, and huge slicks under fat fenders.",
+   "tris": 1584,
+   "note": "A toy hot rod: a narrow nose on skinny front wheels, a chrome blower through the bonnet, a chopped cab, and huge slicks under block fenders.",
    "base": "vehicle-vintage-racer"
   },
   {
    "name": "toy-hauler",
-   "tris": 1680,
+   "tris": 1936,
    "note": "A toy pickup: a short cab over a chunky nose, an open bed with a crate in it, a roll bar with lamps behind the cab, big steel bumpers."
   },
   {
    "name": "toy-bug",
-   "tris": 1444,
-   "note": "A round toy bug: a domed shell, four fat round fenders with the headlamps in the front pair, running boards and a tiny rear screen."
+   "tris": 1668,
+   "note": "A toy bug: a faceted dome over a short shell, four block fenders with the headlamps on the front pair, running boards, a dark engine vent."
   }
  ]
 }
