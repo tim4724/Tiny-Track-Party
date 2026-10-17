@@ -2676,13 +2676,13 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             cam->setProjection(views[i].fov, views[i].aspect,
                     views[i].nearZ, views[i].farZ, Camera::Fov::VERTICAL);
             // The sky dome rides THIS cell's eye and far plane (TtpRenderer.h,
-            // mSkyDome): 0.9 of farZ keeps every point of it inside the plane
-            // and past everything the world holds.
+            // mSkyDome): SKY_DOME_SHARE of farZ keeps every point of it inside
+            // the plane and past everything the world holds.
             if (!mSkyDome.entity.isNull()) {
                 auto& tcmSky = mEngine->getTransformManager();
                 tcmSky.setTransform(tcmSky.getInstance(mSkyDome.entity),
                         mat4f::translation(world[3].xyz)
-                        * mat4f::scaling(float3{ views[i].farZ * 0.9f }));
+                        * mat4f::scaling(float3{ views[i].farZ * SKY_DOME_SHARE }));
             }
             // Fog rides the VIEW: the race cells, the lobby's perimeter orbit
             // and the overview each run their own ramp, and the gallery runs
@@ -2812,28 +2812,35 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
 // Everything that turns toward the active camera between render() calls:
 // bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
 // about their length axis toward it, and the sky sprites (clouds, balloon)
-// are fitted between this cell's fog cutoff and its far plane. camPos is THIS
+// are fitted between this cell's fog cutoff and its sky dome. camPos is THIS
 // cell's camera position, farZ its far plane.
 void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
     auto& tcm = mEngine->getTransformManager();
     // Slide a sky sprite along its sight line, scaling by the same factor, so
     // its whole extent sits past the fog cutoff (where a vertex flips to the
-    // sky colour) and inside farZ (where the plane slices it): direction and
-    // angular size are unchanged (SKY_BAND in TtpRendererImpl.h has the why).
-    // `reach` is the sprite's farthest point from its centre, so the window is
-    // [FOG_CUTOFF + reach, farZ - reach]; it is never empty here (the biggest
-    // cloud reaches ~100 u against a 200 u gap), and if it were the fog bound
-    // would win, since a sliced edge is the lesser of the two artefacts.
-    const auto fitSkyBand = [&](float3& p, float& scale, float reach) {
-        const float3 d = p - camPos;
-        const float dist = length(d);
-        if (dist <= 0.0f) return;
-        const float dMin = FOG_CUTOFF + reach;
-        const float dMax = std::max(dMin, farZ - reach);
-        const float fit = std::min(std::max(dist, dMin), dMax);
-        if (fit != dist) {
-            const float t = fit / dist;
-            p = camPos + d * t;
+    // sky colour) and inside the sky DOME: direction and angular size are
+    // unchanged (SKY_BAND in TtpRendererImpl.h has the why).
+    //
+    // THE DOME, NOT THE FAR PLANE, IS THE OUTER BOUND. It is opaque and writes
+    // depth at SKY_DOME_SHARE of farZ, so anything past it is hidden whole. A
+    // fit to farZ parked the smaller grass clouds between the two, behind the
+    // dome, and they popped in as the car drove toward them. A facet's centre
+    // sits inside the sphere it is cut from by the cosines of its half-angles.
+    //
+    // The slide is a scaling about the eye, so every distance in the sprite
+    // scales with it: `near`/`far` are its nearest and farthest points from
+    // the eye as posed, and the window is exact. It is never empty here (a
+    // cloud spans a few percent of its distance, far less than the gap from
+    // FOG_CUTOFF to the dome); if it were the fog bound would win, since a
+    // hidden edge is the lesser of the two artefacts.
+    const float dome = SKY_DOME_SHARE * farZ * std::cos((float) M_PI / SKY_DOME_SEGS)
+            * std::cos((float) M_PI / (2 * SKY_DOME_RINGS));
+    const auto fitSkyBand = [&](float3& p, float& scale, float near, float far) {
+        if (near <= 0.0f) return;
+        const float tMin = FOG_CUTOFF / near;
+        const float t = std::min(std::max(1.0f, tMin), std::max(tMin, dome / far));
+        if (t != 1.0f) {
+            p = camPos + (p - camPos) * t;
             scale *= t;
         }
     };
@@ -2848,7 +2855,8 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
         const float y = mBalloonY + std::sin(mTime * 0.11f) * 1.4f;
         float3 p{ std::cos(a) * r * k, y * k, std::sin(a) * r * k };
         float s = mBalloonSize * k;
-        fitSkyBand(p, s, mBalloonExt * s);
+        const float dist = length(p - camPos), reach = mBalloonExt * s;
+        fitSkyBand(p, s, dist - reach, dist + reach);
         tcm.setTransform(tcm.getInstance(mBalloon.entity),
                 mat4f::translation(p) * mat4f::scaling(float3{ s }));
     }
@@ -2930,11 +2938,19 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
         // floor keeps the transform invertible at the wrap itself.
         const float edge = std::min(1.0f, (wrap - std::fabs(p0.x)) / 40.0f);
         sk *= std::max(1e-3f, edge * edge * (3.0f - 2.0f * edge));
-        // The quad's reach is its half-diagonal: verts[0] is a corner of the
-        // authored quad, which the pose scales by sk.
-        const Vertex& c0 = mClouds[ci].verts[0];
-        fitSkyBand(p, sk, length(float3{ c0.px, c0.py, c0.pz }) * sk);
+        // The quad's corners as posed (the slide keeps the yaw): its nearest
+        // and farthest points from the eye, where a reach either side of the
+        // centre overstated the span several times over.
         const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+        const float cy = std::cos(yaw), sy = std::sin(yaw);
+        float near = 1e30f, far = 0;
+        for (const Vertex& v : mClouds[ci].verts) {
+            const float3 q = p + float3{ v.px * cy + v.pz * sy, v.py, -v.px * sy + v.pz * cy } * sk;
+            const float dq = length(q - camPos);
+            near = std::min(near, dq);
+            far = std::max(far, dq);
+        }
+        fitSkyBand(p, sk, near, far);
         tcm.setTransform(tcm.getInstance(mClouds[ci].entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
                 * mat4f::scaling(float3{ sk }));

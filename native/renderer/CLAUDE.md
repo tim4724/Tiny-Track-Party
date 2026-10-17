@@ -648,6 +648,10 @@ is centred on each cell's camera and scaled to that view's far plane in
 renderCells, which is the only placement that can never be clipped (the
 world-origin dome's hole; `TtpRenderer.h`, mSkyDome). It is not a caster and not
 fogged, and it is not on the `kFeatSky` arm, which is the sky's CONTENT.
+Being opaque, it hides whatever is behind it, so the sky SPRITES (clouds,
+balloon) are fitted inside the dome (`SKY_DOME_SHARE`), never just inside the
+far plane: between the two a cloud is hidden whole and pops in as the car
+drives toward it.
 
 **A cheaper antialias.** `ttp_display_antialias` is a switch whose saving is the
   offscreen scene BUFFER, not the FXAA filter, so a shorter span or a 3-tap filter

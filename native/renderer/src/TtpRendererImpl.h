@@ -106,7 +106,7 @@ constexpr float FOG_CUTOFF = 400.0f;
 // four tracks roam past 130 u). The band only PLACES a sprite;
 // orientCellBillboards then slides it along its own sight line for each cell,
 // at the same angular size, until its whole extent is past FOG_CUTOFF and
-// inside farZ.
+// inside the sky dome (SKY_DOME_SHARE), which hides whatever is behind it.
 //
 // THE SKY DOME IS NOT SUBJECT TO THIS RULE (TtpRenderer.h, mSkyDome): it is
 // centred on each cell's camera and scaled to that view's far plane, so its
@@ -114,6 +114,12 @@ constexpr float FOG_CUTOFF = 400.0f;
 // world-origin dome out to 600 for this same fog rule is what used to punch a
 // moving circular hole in the sky.
 constexpr float SKY_BAND = 520.0f;
+// The sky dome's radius as a share of the view's far plane: inside the plane at
+// every point, and the outer bound of the sky sprites' fit. Its facet counts
+// (elevation rings, azimuth segments) set how far inside that sphere its flat
+// faces sit, which the fit has to clear too.
+constexpr float SKY_DOME_SHARE = 0.9f;
+constexpr int SKY_DOME_RINGS = 48, SKY_DOME_SEGS = 32;
 
 // sRGB 0xrrggbb → linear float3, matching THREE.Color's conversion — the JS
 // ribbon feeds LINEAR vertex colours, and parity depends on doing the same.

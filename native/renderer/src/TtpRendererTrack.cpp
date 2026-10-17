@@ -1263,7 +1263,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         if (mSkyMaterial) {
             const float3 top = skyLinear(tb.sky[0]), hor = skyLinear(tb.sky[1]),
                          low = skyLinear(tb.sky[2]);
-            constexpr int R = 48, S = 32;
+            constexpr int R = SKY_DOME_RINGS, S = SKY_DOME_SEGS;
             mSkyDome.verts.clear();
             mSkyDome.idx.clear();
             for (int r = 0; r <= R; r++) {
