@@ -839,6 +839,18 @@ double ttp_display_debug_monster_back(double units) {
     return ttp::rt::MONSTER_CAM_BACK;
 }
 
+const char* ttp_display_debug_live_dressing(void) {
+    static std::string buf;
+    ttp::Value o = ttp::Value::Obj();
+    if (g_disp && g_disp->renderer) {
+        for (const auto& [model, draws] : g_disp->renderer->debugLiveDressing()) {
+            o.set(model, ttp::Value::Num(draws));
+        }
+    }
+    ttp::canonical_stringify_into(o, buf);
+    return buf.c_str();
+}
+
 const char* ttp_display_debug_decals(void) {
     static std::string json;
     json = "[";

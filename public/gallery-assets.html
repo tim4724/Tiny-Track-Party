@@ -93,11 +93,25 @@
        what matches. -->
   <aside class="kits" id="kit-sheet" hidden>
     <div class="kits__bar">
+      <select id="kit-set" hidden><option value="">All kits</option></select>
       <input type="search" id="kit-filter" placeholder="Filter by name…" autocomplete="off">
       <span class="kits__count" id="kit-count"></span>
     </div>
     <div id="kit-body"></div>
   </aside>
+  <!-- Deciding a SHORTLIST, one model at a time: the camera stands on it, and a
+       verdict moves on to the next undecided one. Y / N / ← / → as well. -->
+  <div class="decide" id="kit-decide" hidden>
+    <button type="button" class="decide__step" id="kit-prev" title="Previous (←)">‹</button>
+    <div class="decide__what">
+      <span class="decide__name" id="kit-decide-name"></span>
+      <span class="decide__meta" id="kit-decide-meta"></span>
+    </div>
+    <button type="button" class="decide__btn decide__btn--no" id="kit-no">No <kbd>N</kbd></button>
+    <button type="button" class="decide__btn decide__btn--yes" id="kit-yes">Yes <kbd>Y</kbd></button>
+    <button type="button" class="decide__step" id="kit-next" title="Next (→)">›</button>
+    <span class="decide__tally" id="kit-tally"></span>
+  </div>
 </section>
 
 <script src="/shared/protocol.js?v=__APP_V__"></script>

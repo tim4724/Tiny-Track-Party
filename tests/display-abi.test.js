@@ -237,7 +237,9 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   // A track's SET PIECES are the one channel keyed by the track, not the biome.
   const setModels = M.cwrap('ttp_theme_set_models', 'string', ['string']);
   const { TRACKS } = await import('../public/shared/tracks.js');
-  const placed = Object.keys(TRACKS).flatMap((id) => JSON.parse(setModels(id)));
+  const { DEV_TRACKS } = await import('../public/shared/devTracks.js');
+  const placed = [...Object.keys(TRACKS), ...Object.keys(DEV_TRACKS)]
+    .flatMap((id) => JSON.parse(setModels(id)));
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
   const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps, ...placed]);
@@ -254,6 +256,32 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   assert.equal(inv.landmarks.length, 15, 'every hero landmark kind is staged');
   assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
     'the legend spans kinds no single biome carries');
+});
+
+// ---- a decoration is cheap ---------------------------------------------------
+// A biome prop is stamped many times a lap and drawn in every cell that sees it,
+// while what it has to carry at the verge is a silhouette. The kit authors a
+// barrel or a skateboard with as many vertices as a whole car, so a model over
+// the cap is slimmed (scripts/slim-kit-models.mjs) or not planted. The toy train
+// set is the one exception: an animated ring of track, sparse by design, whose
+// spin subtree a decimation would break.
+const PROP_VERTEX_CAP = 400;
+test('every biome prop stays under the decoration vertex cap', async () => {
+  const M = await load();
+  const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
+  const propModels = M.cwrap('ttp_theme_prop_models', 'string', ['string']);
+  const heavy = [];
+  for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
+    for (const m of JSON.parse(propModels(nameAt(i)))) {
+      if (m === 'trainset') continue;
+      const b = fs.readFileSync(path.join(ROOT, 'public/assets/toycar', `${m}.glb`));
+      const j = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString());
+      const v = j.meshes.flatMap((x) => x.primitives)
+        .reduce((s, p) => s + j.accessors[p.attributes.POSITION].count, 0);
+      if (v > PROP_VERTEX_CAP) heavy.push(`${m} (${v})`);
+    }
+  }
+  assert.deepEqual([...new Set(heavy)], [], `over ${PROP_VERTEX_CAP} vertices`);
 });
 
 // ---- the CPU roster is one table ---------------------------------------------

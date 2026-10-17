@@ -145,6 +145,7 @@ export class Display {
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
+      debugLiveDressing: mod.cwrap('ttp_display_debug_live_dressing', 'string', []),
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
@@ -754,6 +755,7 @@ export class Display {
 
   // Per-decal diagnostic rows for the warp bench (see TestHarness.runWarpBench).
   debugDecals() { return JSON.parse(this._fn.debugDecals() || '[]'); }
+  debugLiveDressing() { return JSON.parse(this._fn.debugLiveDressing() || '{}'); }
   // Decal isolation — see ttp_display.h. Hiding the bodies and wiping the laid
   // rubber is what makes a contact shadow readable at all; without it every
   // dark pixel near a car is one of three things.

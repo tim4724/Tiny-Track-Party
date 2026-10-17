@@ -126,11 +126,14 @@ struct PropStamp {
   uint32_t slot = 0;     // index into PropsSpec::models
   float w = 0;           // scatter weight; a biome's w's sum to 1
   float s0 = 1, s1 = 0;  // stamp scale = s0 + rand() * s1
-  // FACE THE ROAD instead of taking the scatter's random yaw. For a prop with a
-  // front — the snowman is the one that carries it today — a random turn is a
-  // coin flip on whether the chase camera ever sees that front, and the camera
-  // only ever comes down the road.
+  // FACE THE CARS instead of taking the scatter's random yaw. For a prop with a
+  // front (a snowman, a cannon) a random turn is a coin flip on whether the
+  // chase camera ever sees that front, and the camera only ever comes down the
+  // road. The renderer turns it to the oncoming cars (buildProps).
   bool face = false;
+  // STAND ON THE VERGE, a step off the kerb, instead of in the scatter's band
+  // (3 to 11 units out), where anything smaller than a car is a few pixels.
+  bool verge = false;
 };
 struct PropsSpec {
   std::vector<std::string> models;  // prop<i>.glb slot order (the scenery rule)

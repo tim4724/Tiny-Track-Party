@@ -91,12 +91,15 @@ PropsSpec gardenProps() {
   PropsSpec p;
   // The tent is Nature Kit, which is authored small — a third of a car length —
   // so it is staged at better than twice its own size to read as something you
-  // could camp in beside a toy car. The generated crate and bale are already at
-  // world scale and are not.
-  p.models = { "prop-hay", "prop-crate", "tent-open" };
-  p.scatterDensity = 0.1f;
-  p.scatter = { { 0, 0.55f, 0.85f, 0.4f }, { 1, 0.25f, 0.9f, 0.25f },
-                { 2, 0.2f, 2.0f, 0.5f } };
+  // could camp in beside a toy car. The generated crate and bale are already
+  // at world scale and are not. Hay bales line the kerb the way they line a
+  // real one, among road-works lights (City Kit Roads, authored at street
+  // scale, so well over twice its size). Only here: road works mean something
+  // on a country road, and nothing on a beach, a ski run or a bedroom floor.
+  p.models = { "prop-hay", "prop-crate", "tent-open", "construction-light" };
+  p.scatterDensity = 0.28f;
+  p.scatter = { { 0, 0.40f, 0.85f, 0.4f, false, true }, { 1, 0.22f, 0.9f, 0.25f },
+                { 2, 0.22f, 2.0f, 0.5f }, { 3, 0.16f, 2.4f, 0.4f, true, true } };
   return p;
 }
 
@@ -189,11 +192,17 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
-  // Washed-up freight: a few crates above the tide line. No fence — the coast
-  // stays open to the water.
-  t.props.models = { "prop-crate" };
-  t.props.scatterDensity = 0.07f;
-  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  // Washed-up freight and a pirate cove's leavings above the tide line. No
+  // fence — the coast stays open to the water. The Pirate Kit is authored large
+  // against a toy car (its barrel is taller than one), so its pieces stand at
+  // about half size, and the small ones stand on the verge.
+  t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
+                     "pirate-cannon", "pirate-rowboat", "pirate-flag" };
+  t.props.scatterDensity = 0.28f;
+  t.props.scatter = { { 0, 0.10f, 0.9f, 0.3f }, { 1, 0.20f, 0.42f, 0.12f, false, true },
+                      { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
+                      { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
+                      { 6, 0.12f, 0.5f, 0.15f } };
   return t;
 }
 
@@ -244,10 +253,14 @@ Theme canyonTheme() {
                 { CL_PEBBLES, 0.28f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
-  // Supply crates by the road.
-  t.props.models = { "prop-crate" };
-  t.props.scatterDensity = 0.06f;
-  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  // Supply crates and barrels by the road, among sandstone rocks and stone
+  // heaps (Survival Kit, Mini Forest — both authored small, so they stand well
+  // over their own size). The crates and barrels are on the verge, where they
+  // read; the barrel is the beach's, at the beach's size.
+  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones" };
+  t.props.scatterDensity = 0.24f;
+  t.props.scatter = { { 0, 0.22f, 0.9f, 0.3f, false, true }, { 1, 0.26f, 0.42f, 0.12f, false, true },
+                      { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.22f, 1.4f, 0.5f } };
   return t;
 }
 
@@ -306,13 +319,15 @@ Theme snowTheme() {
   // is here rather than in the landmark list it used to head, because a scatter
   // gives several a lap where a landmark gives one a track — and it is the same
   // object either way.
-  t.props.models = { "snowman", "sled", "snow-pile", "rocks-medium", "rocks-large" };
-  t.props.scatterDensity = 0.14f;
-  t.props.scatter = { { 0, 0.2f, 1.0f, 0.3f, true },   // snowman, facing the road
-                      { 1, 0.2f, 1.0f, 0.3f },        // sled
-                      { 2, 0.25f, 1.0f, 0.6f },       // drift
-                      { 3, 0.25f, 0.9f, 0.4f },       // rock cluster
-                      { 4, 0.1f, 0.85f, 0.35f } };    // the big one, sparingly
+  t.props.models = { "snowman", "sled", "snow-pile", "rocks-medium", "rocks-large",
+                     "snow-bunker" };
+  t.props.scatterDensity = 0.34f;
+  t.props.scatter = { { 0, 0.18f, 1.0f, 0.3f, true, true },  // snowman, at the kerb facing the cars
+                      { 1, 0.16f, 1.0f, 0.3f, false, true }, // sled, left by the road
+                      { 2, 0.20f, 1.0f, 0.6f },        // drift
+                      { 3, 0.20f, 0.9f, 0.4f },        // rock cluster
+                      { 4, 0.08f, 0.85f, 0.35f },      // the big one, sparingly
+                      { 5, 0.18f, 1.0f, 0.3f } };      // snow bunker
   return t;
 }
 
@@ -376,9 +391,13 @@ Theme playroomTheme() {
   // channel would strew rails across the floor. Drawn at a fixed 2x, because
   // the kit's train is smaller than its cars and should stand at least as
   // big as them; a ring that size is a landmark, so it is sparse.
-  t.props.models = { "trainset" };
-  t.props.scatterDensity = 0.03f;
-  t.props.scatter = { { 0, 1.0f, 2.0f } };
+  // A skateboard left on the floor is a real one beside a toy car, so it
+  // stands at three and a half times its kit size, by the road.
+  t.props.models = { "trainset", "skateboard" };
+  // The ring keeps its own rate (0.03 a candidate) under the skateboard's
+  // density: at 2.8k vertices it is the heaviest thing the scatter plants.
+  t.props.scatterDensity = 0.12f;
+  t.props.scatter = { { 0, 0.25f, 2.0f }, { 1, 0.75f, 3.5f, 0.5f, false, true } };
   return t;
 }
 

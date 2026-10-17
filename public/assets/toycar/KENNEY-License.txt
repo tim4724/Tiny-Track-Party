@@ -29,8 +29,9 @@
 		------------------------------
 
 	This folder also contains models from Kenney's Nature Kit (2.3),
-	Holiday Kit (1.0) and Pirate Kit (2.1) — same author, same CC0
-	license as above.
+	Holiday Kit (1.0), Pirate Kit (2.1), Survival Kit (2.0),
+	Mini Forest (1.0), Mini Skate (2.0) and City Kit (Roads) (2.2) —
+	same author, same CC0 license as above.
 
 	Which file came from which kit (and under which original name) is
 	SOURCES.json, beside this one.

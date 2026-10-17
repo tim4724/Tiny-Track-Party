@@ -2088,6 +2088,13 @@ public:
     void setDressSheets(bool on);
     void applyDressSheets();
     void forEachDressSheet(const std::function<void(const Mesh&)>& fn) const;
+    // DEBUG: the STATIC dressing still drawing live-lit after the merge — per
+    // model, how many draws missed the bake. Every way a model falls off the
+    // baked path (an undecodable GLB, ambiguous node names, a colour table
+    // that disagrees with the geometry) is silent on the glass and costs
+    // vertex shading in every cell, so the scene budget gate reads this.
+    // What moves (a spin subtree, the cone pool) is not counted.
+    std::vector<std::pair<std::string, int>> debugLiveDressing() const;
     void debugWipeSkids() { mSkidWipe = true; }
     // FEATURE ABLATION — the per-feature cost map's only instrument.
     //

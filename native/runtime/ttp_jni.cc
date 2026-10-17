@@ -332,6 +332,11 @@ void n_ttp_display_debug_hide_cars(JNIEnv* env, jclass, jint a0) {
     ttp_display_debug_hide_cars((int) a0);
 }
 
+jbyteArray n_ttp_display_debug_live_dressing(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_debug_live_dressing());
+}
+
 jdouble n_ttp_display_debug_monster_back(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jdouble) ttp_display_debug_monster_back((double) a0);
@@ -1427,6 +1432,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_debug_decals", "()[B", (void*) n_ttp_display_debug_decals },
     { "ttp_display_debug_features", "(I)V", (void*) n_ttp_display_debug_features },
     { "ttp_display_debug_hide_cars", "(I)V", (void*) n_ttp_display_debug_hide_cars },
+    { "ttp_display_debug_live_dressing", "()[B", (void*) n_ttp_display_debug_live_dressing },
     { "ttp_display_debug_monster_back", "(D)D", (void*) n_ttp_display_debug_monster_back },
     { "ttp_display_debug_monster_pitch", "(D)D", (void*) n_ttp_display_debug_monster_pitch },
     { "ttp_display_debug_wipe_skids", "()V", (void*) n_ttp_display_debug_wipe_skids },

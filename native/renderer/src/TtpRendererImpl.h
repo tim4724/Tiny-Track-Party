@@ -349,7 +349,7 @@ struct TtpRenderer::TrackBin {
     // prop<i>.glb by slot.
     uint32_t prModelCount = 0;
     float prDensity = 0;
-    struct PropStamp { uint32_t slot; float w, s0, s1; bool face; };
+    struct PropStamp { uint32_t slot; float w, s0, s1; bool face, verge; };
     std::vector<PropStamp> prScatter;
     // The track's set pieces (theme.set), bound as set<i>.glb by slot.
     uint32_t setModelCount = 0;

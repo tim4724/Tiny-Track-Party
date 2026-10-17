@@ -53,8 +53,11 @@ test('each entry names a kit model or the script that generates it', () => {
   }
 });
 
+// Only kits something ships from: the fetcher also lists candidates the kit
+// browser stages, which ship nothing and so are credited nowhere.
 test('the fetcher and the licenses page agree on the kits', () => {
-  for (const kit of fetcherKits()) {
+  const shipped = new Set(Object.values(SOURCES.models).map((s) => s.kit).filter(Boolean));
+  for (const kit of fetcherKits().filter((k) => shipped.has(k.id))) {
     const credit = ASSET_CREDITS.find((c) => c.url === kit.url.replace(/\/media\/pages\/assets\/([\w-]+)\/.*$/, '/assets/$1'));
     assert.ok(credit, `${kit.label}: no credit in shared/credits.js points at ${kit.id}`);
     assert.ok(credit.title.startsWith(`${kit.label} ${kit.version}`),

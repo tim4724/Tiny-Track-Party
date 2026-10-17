@@ -18,10 +18,10 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 // vendored dependency, served via the remap below. Restricted to .js so
 // package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
-// The three Kenney kits the game's models are PICKED FROM, for the asset
-// gallery's kit browser. `npm run fetch:kits` fills this (a cache: gitignored
-// and dockerignored, so it is never in an image), which is why the route below
-// is allowed to 404 — the gallery reads that as "not fetched" and says so.
+// The Kenney kits the game's models are PICKED FROM, and candidates for more,
+// for the asset gallery's kit browser. `npm run fetch:kits` fills this (a
+// cache: gitignored and dockerignored, so it is never in an image), which is
+// why the route below is allowed to 404 — the gallery reads that as "not fetched" and says so.
 const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 const APP_VERSION = require('../package.json').version;
 // The image copies this one file of `scripts/` (see the Dockerfile), so the route
@@ -217,6 +217,35 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // The kit browser's yes/no verdicts on a shortlist, kept beside the kit cache
+  // they judge (`npm run fetch:kits`) so the next step can read them off disk.
+  // Dev only, like the cache: no image has it. Body: { key, verdict } with
+  // verdict 'yes' | 'no' | null (null clears).
+  if (urlPath === '/api/kit-verdicts' && !IS_PROD) {
+    const file = path.join(KITS_DIR, 'verdicts.json');
+    const read = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return {}; } };
+    if (req.method === 'GET') { sendJson(res, 200, read()); return; }
+    if (req.method !== 'POST') { sendJson(res, 405, { error: 'GET or POST' }); return; }
+    let body = '';
+    req.on('data', (d) => { body += d; if (body.length > 4096) req.destroy(); });
+    req.on('end', () => {
+      let msg;
+      try { msg = JSON.parse(body); } catch (_) { sendJson(res, 400, { error: 'bad json' }); return; }
+      if (typeof msg.key !== 'string' || !/^[\w-]+~[\w-]+\/[\w.-]+$/.test(msg.key)
+          || ![null, 'yes', 'no'].includes(msg.verdict)) {
+        sendJson(res, 400, { error: 'want { key: "cup~kit/model", verdict: "yes"|"no"|null }' });
+        return;
+      }
+      const all = read();
+      if (msg.verdict) all[msg.key] = msg.verdict; else delete all[msg.key];
+      try { fs.writeFileSync(file, `${JSON.stringify(all, null, 2)}\n`); } catch (_) {
+        sendJson(res, 500, { error: 'no kit cache to write into' }); return;
+      }
+      sendJson(res, 200, all);
+    });
+    return;
+  }
+
   // --- route remaps ---
   if (urlPath === '/') {
     urlPath = '/display/index.html';
@@ -247,7 +276,7 @@ const server = http.createServer((req, res) => {
     // Nothing may load one of these at play time, because this cache exists on
     // one laptop and in no image.
     const rest = urlPath.slice('/kits'.length);
-    if (!/^\/index\.json$/.test(rest)
+    if (!/^\/(index|shortlist)\.json$/.test(rest)
         && !/^\/[\w-]+\/previews\/[\w.-]+\.png$/.test(rest)
         && !/^\/[\w-]+\/models\/[\w.-]+\.glb$/.test(rest)) {
       res.writeHead(404); res.end('Not Found'); return;
@@ -256,10 +285,17 @@ const server = http.createServer((req, res) => {
     lookupPath = rest;
   }
 
-  const filePath = path.join(baseDir, lookupPath);
+  let filePath = path.join(baseDir, lookupPath);
   // Directory-traversal guard. The trailing separator is load-bearing.
   if (!filePath.startsWith(baseDir + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
 
+  // A kit the game has not shipped from yet keeps its palette in the kit cache
+  // (`npm run fetch:kits`), under the name its staged models reference — so the
+  // kit browser draws them coloured. Dev only: no image has the cache.
+  if (!IS_PROD && /^\/assets\/toycar\/Textures\/[\w-]+\.png$/.test(urlPath)
+      && !fs.existsSync(filePath)) {
+    filePath = path.join(KITS_DIR, 'textures', path.basename(urlPath));
+  }
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }
 

@@ -73,6 +73,88 @@ const KITS = [
     models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
     // The holiday kit's reason: a third palette under the same relative URI.
     colormap: 'Textures/pirate-colormap.png'
+  },
+  // Kits the decorations ship from (chosen in the kit browser's shortlists).
+  // Each palette sits under a name of its own in public/assets/toycar/Textures.
+  {
+    id: 'survival', label: 'Survival Kit', version: '2.0',
+    url: 'https://kenney.nl/media/pages/assets/survival-kit/4065a8185b-1712149243/kenney_survival-kit.zip',
+    sha256: 'c3586341b5932c87eb43d75d915434f47daed168b17ed36a03e8ca9977c7443e',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: 'Textures/survival-colormap.png', palette: 'Models/GLB format/Textures/colormap.png'
+  },
+  {
+    id: 'mini-forest', label: 'Mini Forest', version: '1.0',
+    url: 'https://kenney.nl/media/pages/assets/mini-forest/44a89aed7f-1784024079/kenney_mini-forest_1.0.zip',
+    sha256: '8691614018075a66458e35915b8c358c2e6178648aedadafcdf313b924aa6581',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: 'Textures/mini-forest-colormap.png', palette: 'Models/GLB format/Textures/colormap.png'
+  },
+  {
+    id: 'mini-skate', label: 'Mini Skate', version: '2.0',
+    url: 'https://kenney.nl/media/pages/assets/mini-skate/00b0c2b304-1791798670/kenney_mini-skate.zip',
+    sha256: '0ded0e7f95cdc2c0513a41986fde49977e7d1f4fa8653b375a5c7e909ef9d74a',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: 'Textures/mini-skate-colormap.png', palette: 'Models/GLB format/Textures/colormap.png'
+  },
+  {
+    id: 'city-roads', label: 'City Kit (Roads)', version: '2.2',
+    url: 'https://kenney.nl/media/pages/assets/city-kit-roads/74288c9459-1791628607/kenney_city-kit-roads.zip',
+    sha256: '374a4552115cbd11b4ec5c930ee31a533562dc78a09af249a655d03f7ea3b959',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: 'Textures/city-roads-colormap.png', palette: 'Models/GLB format/Textures/colormap.png'
+  },
+  // CANDIDATES for dressing the tracks, browsed but not shipped from. Each
+  // carries its own palette under the shared `Textures/colormap.png` name, so
+  // each is re-pointed at a name of its own, and `palette` is that palette's
+  // path in the zip: extract keeps it in the cache, where the dev server finds
+  // it for the kit browser (server/index.js). Shipping a model from one of
+  // these copies its palette into public/assets/toycar/Textures with it.
+  {
+    id: 'fantasy-town', label: 'Fantasy Town Kit', version: '2.0',
+    url: 'https://kenney.nl/media/pages/assets/fantasy-town-kit/efe948d309-1754222374/kenney_fantasy-town-kit_2.0.zip',
+    sha256: '1a7530c09f4d2fa2cdee259876f089334f8b1f27fa86a0c4f54ef86cdd8676ef',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: 'Textures/town-colormap.png', palette: 'Models/GLB format/Textures/colormap.png'
+  },
+  ...[
+    ['watercraft', 'Watercraft Kit', '2.1', 'watercraft-kit/a335cfed49-1713519620/kenney_watercraft-pack.zip', 'cd1470c1cf441c7f46d0944ae6d0d897242365dc97677c5079b3238965d659f3'],
+    ['food', 'Food Kit', '2.0', 'food-kit/83086fa91c-1719418518/kenney_food-kit.zip', 'cdad90853682499b94c9fda2f87678b24bfd8f3264e0ed323f6b6a27fd7c6f6f'],
+    ['brick', 'Brick Kit', '1.0', 'brick-kit/46a22f3d08-1716981002/kenney_brick-kit.zip', 'b303d293c278fab713eed28395829b18513b171d2562f7f518c3355c2896861a'],
+    ['minigolf', 'Minigolf Kit', '3.1', 'minigolf-kit/3ae60d8b01-1741163874/kenney_minigolf-kit.zip', '74b7bf5cf82bf8a5225319ade1284600c64f9482ae66f0ccf1f22d2212d5a952'],
+    ['tower-defense', 'Tower Defense Kit', '2.1', 'tower-defense-kit/a402493eaa-1726471567/kenney_tower-defense-kit.zip', 'd4c887680b709218315e4e1c17ae18c160635dcdfc4199763eeba97c02c77f00'],
+    ['city-suburban', 'City Kit (Suburban)', '2.0', 'city-kit-suburban/2c871b7af2-1745479373/kenney_city-kit-suburban_20.zip', '5869c35cf30b1c87bdb2d197b6d325eebadd2ef08ea27f04797e8e08d77a9a39'],
+    ['train', 'Train Kit', '1.1', 'train-kit/cf8521d625-1727040883/kenney_train-kit.zip', 'cf50d77e8cbacbf38dd50826d4bce5392db8e4f67373d3c4e583b0ed0e474475'],
+    ['mini-characters', 'Mini Characters', '1.0', 'mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip', '9e1d48e6d7b8479ebbe84df71eb5bd8e1b3f0da546dea641890dccc8a02d0999'],
+    ['platformer', 'Platformer Kit', '4.1', 'platformer-kit/1585cf62b4-1775122253/kenney_platformer-kit.zip', '899605d237367688c6b42e41fff2206c0fb8d626163158294556353f7baa7c1b'],
+    ['graveyard', 'Graveyard Kit', '5.0', 'graveyard-kit/ba8d4b4517-1760691807/kenney_graveyard-kit_5.0.zip', '1a93613f2e5675f3310acf49ec9ef13ae7adeb756ac3b205bfb6cc9311a81062'],
+    ['castle', 'Castle Kit', '2.0', 'castle-kit/a395102d20-1711543616/kenney_castle-kit.zip', '921f3f73927bb23106cae34bc21d5ab4b033a9fc120475e96f714a406e3169df'],
+    ['coaster', 'Coaster Kit', '1.0', 'coaster-kit/546fdc554f-1731487890/kenney_coaster-kit.zip', '7723d02e3ea822371e12e14722e72d572fdb0384c1379c1469e0598a371f5c7a'],
+    ['car', 'Car Kit', '3.1', 'car-kit/1a312ec241-1775131960/kenney_car-kit.zip', 'fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4'],
+    ['mini-market', 'Mini Market', '1.0', 'mini-market/463f38da51-1729865423/kenney_mini-market.zip', '6f2e69090e359204ace43e4c98dc3fb8639b75e423109672b5c890d194c45203'],
+    ['cube-pets', 'Cube Pets', '1.0', 'cube-pets/44e58e945f-1774520254/kenney_cube-pets_1.0.zip', 'b3bdc99a2ec92c687b875718c5d01e9231d2711ed0e2845f295b474bb42a1283'],
+    ['city-commercial', 'City Kit (Commercial)', '2.1', 'city-kit-commercial/a742d900eb-1753115042/kenney_city-kit-commercial_2.1.zip', 'f8b09b081c2bb88bcc126e2dec1cb40fd0dad7e7e591b6c26aaefe96fb35276b'],
+    ['marble', 'Marble Kit', '2.0', 'marble-kit/56fd69e5ed-1716385090/kenney_marble-kit.zip', '4a289fe77fa4e71b943fb9a0df828a7987e62f665083ea9237d0bd9acd0b6dcb'],
+    ['mini-arcade', 'Mini Arcade', '1.2', 'mini-arcade/ece1e8f320-1721638600/kenney_mini-arcade.zip', '2acfe5cb44d392e834f77cf5488528c7cd45427cdf5fb941ce99856276158c19'],
+  ].map(([id, label, version, page, sha256]) => ({
+    id, label, version, sha256,
+    url: `https://kenney.nl/media/pages/assets/${page}`,
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    colormap: `Textures/${id}-colormap.png`, palette: 'Models/GLB format/Textures/colormap.png'
+  })),
+  // The two 2018 kits: untextured flat materials (Racing embeds a few images),
+  // GLBs under "GLTF format", four compass previews per model like Nature.
+  {
+    id: 'furniture', label: 'Furniture Kit', version: '1.0',
+    url: 'https://kenney.nl/media/pages/assets/furniture-kit/440e0608a4-1677580847/kenney_furniture-kit.zip',
+    sha256: 'e67652d0932cee41683f74711c03d3e192a2af9979ef8e6b237711f5482d46b0',
+    models: 'Models/GLTF format/*.glb', previews: 'Isometric/*_NE.png', previewSuffix: '_NE'
+  },
+  {
+    id: 'racing', label: 'Racing Kit', version: '1.0',
+    url: 'https://kenney.nl/media/pages/assets/racing-kit/933b8fd9fd-1677580949/kenney_racing-kit.zip',
+    sha256: '8a71ea16219315a01d00d5a90c4f6b5c090faddbc56d80ecf727e2b3b853c6c0',
+    models: 'Models/GLTF format/*.glb', previews: 'Isometric/*_NE.png', previewSuffix: '_NE'
   }
 ];
 
@@ -151,7 +233,19 @@ async function extract(kit) {
     .filter((f) => f.endsWith('.glb')).map((f) => path.join(dir, 'models', f));
   await run('node', [path.join(ROOT, 'scripts/fix-glb-scene-roots.mjs'), ...glbs]);
   if (kit.colormap) {
-    await run('node', [path.join(ROOT, 'scripts/replace-glb-colormap.js'), kit.colormap, ...glbs]);
+    // A kit can carry the odd untextured model (Marble does); it has no palette to re-point.
+    const textured = [];
+    for (const g of glbs) {
+      const buf = await readFile(g);
+      if (JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8')).images?.length) textured.push(g);
+    }
+    await run('node', [path.join(ROOT, 'scripts/replace-glb-colormap.js'), kit.colormap, ...textured]);
+  }
+  if (kit.palette) {
+    const tex = path.join(CACHE, 'textures');
+    await mkdir(tex, { recursive: true });
+    await run('unzip', ['-qoj', zip, kit.palette, '-d', tex]);
+    await rename(path.join(tex, path.basename(kit.palette)), path.join(tex, path.basename(kit.colormap)));
   }
 
   const previews = new Set(await readdir(path.join(dir, 'previews')));
@@ -167,7 +261,11 @@ async function extract(kit) {
 
 async function main() {
   await mkdir(ZIPS, { recursive: true });
-  const done = !FORCE && await exists(path.join(CACHE, 'index.json'));
+  // Per KIT: one already in the index (and on disk) keeps its entry, so adding
+  // a kit to the list extracts only that kit.
+  const indexPath = path.join(CACHE, 'index.json');
+  const prior = !FORCE && await exists(indexPath)
+    ? JSON.parse(await readFile(indexPath, 'utf8')).kits : [];
 
   const index = { kits: [] };
   for (const kit of KITS) {
@@ -184,19 +282,19 @@ async function main() {
         + 'before touching the hash.');
     }
     if (VERIFY_ONLY) { console.log(`✓ ${kit.label} ${kit.version}`); continue; }
-    if (done) { console.log(`✓ ${kit.label} ${kit.version} (cached)`); continue; }
+    const cached = prior.find((k) => k.id === kit.id && k.version === kit.version);
+    if (cached && await exists(path.join(CACHE, kit.id))) {
+      index.kits.push(cached);
+      console.log(`✓ ${kit.label} ${kit.version} (cached)`);
+      continue;
+    }
     const built = await extract(kit);
     index.kits.push(built);
     console.log(`✓ ${kit.label} ${kit.version} — ${built.models.length} models`);
   }
 
-  if (VERIFY_ONLY || done) {
-    if (done && !VERIFY_ONLY) {
-      console.log(`\nAlready extracted in ${path.relative(ROOT, CACHE)} — --force re-extracts.`);
-    }
-    return;
-  }
-  await writeFile(path.join(CACHE, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
+  if (VERIFY_ONLY) return;
+  await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`);
   const total = index.kits.reduce((n, k) => n + k.models.length, 0);
   console.log(`\n${total} models in ${path.relative(ROOT, CACHE)}.`
     + '\nStand them up at /gallery-assets.html with "Kit field" ticked.');

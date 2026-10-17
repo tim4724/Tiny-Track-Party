@@ -25,6 +25,7 @@
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
     "mutation-check": "node scripts/mutation-check.mjs",
     "perf:race": "node scripts/perf-race.mjs",
+    "budget:scene": "node scripts/scene-budget.mjs",
     "pretest:e2e": "node scripts/require-e2e-deps.mjs",
     "probe:cars": "node scripts/build-probe.mjs && native/build/probe_cli matrix && native/build/probe_cli packed",
     "probe:cost": "node scripts/build-probe.mjs && native/build/probe_cli cost",

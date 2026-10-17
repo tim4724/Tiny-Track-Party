@@ -777,6 +777,14 @@ TTP_ABI double ttp_display_gpu_ms(void);
  * is one arithmetic check instead of a guess. */
 TTP_ABI const char* ttp_display_debug_decals(void);
 
+/* DEBUG: the STATIC dressing that is still drawing LIVE-LIT after the merge,
+ * as a JSON object of GLB name -> draws that missed the bake ("{}" when every
+ * static copy baked, or with no scene). Read once the scene has drawn a frame:
+ * the merge runs at the end of the first one. A model off the baked path is
+ * silent on the glass and pays vertex shading in every cell — this is how
+ * scripts/scene-budget.mjs fails it by name. */
+TTP_ABI const char* ttp_display_debug_live_dressing(void);
+
 // Decal isolation, for looking at a deck stamp on its own: hide every car body,
 // and wipe the laid rubber. A contact shadow is otherwise a dark patch under an
 // opaque car on a deck carrying dark tyre trails, which is unreadable — see the

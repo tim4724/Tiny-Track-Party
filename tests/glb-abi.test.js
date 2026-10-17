@@ -176,10 +176,14 @@ test('ttp_glb_image_uris: the scenery models name the textures the shell must pr
       seen.add(u);
     }
   }
+  // Both TV shells stage the whole Textures/ directory, so what the models ask
+  // for and what is in it must be the same set: a missing palette draws white,
+  // an unused one is dead weight in every app bundle.
   assert.deepEqual(
     [...seen].sort(),
-    ['Textures/colormap.png', 'Textures/holiday-colormap.png', 'Textures/pirate-colormap.png'],
-    'the kit references a texture nothing stages'
+    readdirSync(path.join(TOYCAR, 'Textures')).filter((f) => f.endsWith('.png'))
+      .map((f) => `Textures/${f}`).sort(),
+    'the kit references a texture nothing stages, or stages one nothing references'
   );
 
   // The names are RELATIVE and authored, because that exact string is the key

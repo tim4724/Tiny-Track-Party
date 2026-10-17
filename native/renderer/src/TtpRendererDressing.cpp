@@ -230,7 +230,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         return true;
     };
 
-    struct Placement { uint32_t slot; float x, y, z, s, yaw, h; };
+    struct Placement { uint32_t slot; float x, y, z, s, yaw; };
     std::vector<Placement> placements;
 
     // Scattered pieces, the buildScenery idiom: a candidate every 9u per side,
@@ -240,10 +240,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
             const TrackBin::Sample f = tb.frameAt(d);
             for (const int side : { -1, 1 }) {
                 if (rnd() > tb.prDensity) continue;
-                const float lat = side * (f.width / 2 + 2.8f + (float) rnd() * 8.0f);
-                const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 2.0f;
-                const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 2.0f;
-                if (!isClearP(x, z, ROAD_CLEAR)) continue;
+                const float out = (float) rnd(), jx = (float) rnd() - 0.5f,
+                            jz = (float) rnd() - 0.5f;
                 const double roll = rnd();
                 double acc = 0;
                 const TrackBin::PropStamp* e = &tb.prScatter.back();
@@ -251,17 +249,28 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                     acc += p.w;
                     if (roll < acc) { e = &p; break; }
                 }
+                // The verge band starts where the clearance test lets a
+                // centre stand, so a slim post lands a step off the kerb.
+                const float lat = side * (e->verge ? f.width / 2 + ROAD_CLEAR + 0.2f + out * 0.8f
+                                                   : f.width / 2 + 2.8f + out * 8.0f);
+                const float jit = e->verge ? 0.4f : 2.0f;
+                const float x = f.pos.x + f.lat.x * lat + jx * jit;
+                const float z = f.pos.z + f.lat.z * lat + jz * jit;
+                if (!isClearP(x, z, ROAD_CLEAR)) continue;
                 const float s = e->s0 + (float) rnd() * e->s1;
                 // The roll is consumed either way, so a prop that faces the
                 // road does not reshuffle the scatter behind it.
                 const float spun = (float) rnd() * 2.0f * (float) M_PI;
-                // Facing = square to the deck, looking across it: the lateral
-                // axis, negated on the side the prop stands. Same frame the
-                // procedural snowman used to face itself by.
+                // Facing = turned to the cars as they COME: mostly back down
+                // the road, a little across it (about 63 degrees off square).
+                // A car sees a verge prop from well up the road, so square to
+                // the deck it saw only a profile until the prop was gone.
+                const float3 tg = f.tangent();
                 const float yaw = e->face
-                        ? std::atan2(-f.lat.x * side, -f.lat.z * side) : spun;
+                        ? std::atan2(-0.5f * f.lat.x * side - tg.x, -0.5f * f.lat.z * side - tg.z)
+                        : spun;
                 const float py = footprintY(tb, x, z, 0.45f * s);
-                placements.push_back({ e->slot, x, py, z, s, yaw, 0.6f * s });
+                placements.push_back({ e->slot, x, py, z, s, yaw });
             }
         }
     }
@@ -275,6 +284,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     // candidates; what the rule then drops leaves the scene.
     std::vector<float> reach(tb.prModelCount, 0.0f);  // half-footprint at scale 1
     std::vector<bool> spins(tb.prModelCount, false);
+    std::vector<bool> casts(tb.prModelCount, false);
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         size_t count = 0;
         for (const auto& p : placements) if (p.slot == m) count++;
@@ -285,6 +295,10 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         const filament::Aabb bb = mPropAssets[m]->getBoundingBox();
         reach[m] = 0.5f * std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
         spins[m] = !mPropAssets[m]->getFirstEntityByName("spin").isNull();
+        // A FLAT model (a snow drift, a slab) casts no baked disc: a disc as
+        // wide as its footprint shows as a dark rim around something that
+        // barely rises off the ground, which on snow reads as a hole.
+        casts[m] = !spins[m] && bb.max.y - bb.min.y >= 0.6f * reach[m];
         // The buildScenery metal fix: the shared matte read on every piece.
         for (auto* inst : mPropInstances[m]) {
             MaterialInstance* const* mis = inst->getMaterialInstances();
@@ -325,9 +339,9 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         }
         if (clash || inSetFoot(p.x, p.z, pr + CLEAR)) continue;
         kept.push_back(i);
-        // A model that moves registers its footprint for the clash test but
-        // no height, so no baked disc is drawn under it.
-        mShadowSpots.push_back({ p.x, p.z, pr, spins[p.slot] ? 0.0f : p.h });
+        // A model that moves, or a flat one, registers its footprint for the
+        // clash test but no height, so no baked disc is drawn under it.
+        mShadowSpots.push_back({ p.x, p.z, pr, casts[p.slot] ? 0.6f * p.s : 0.0f });
     }
 
     // Pose what survived; the rest leave the scene. Parked under the floor
@@ -1796,11 +1810,11 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
             // past the fog the far rings only need to reach the sky.
             const float t = fade ? std::min(1.0f, std::fabs(off) / SHORE_FADE) : 0.0f;
             const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
-            const uint32_t c = colAt(ri);
+            const uint32_t col = colAt(ri);
             for (int si = 0; si <= SEG; si++) {
                 const float r = shoreR[si] * (1 - t) + outer * t
                         + off * (1 + (swashF[si] - 1) * sw);
-                m.verts.push_back({ cosA[si] * r, y + lift, sinA[si] * r, c });
+                m.verts.push_back({ cosA[si] * r, y + lift, sinA[si] * r, col });
             }
         }
         const uint32_t verts = SEG + 1;
@@ -2224,4 +2238,53 @@ void TtpRenderer::buildDressingMerge() {
         mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
     }
     mergeInstancedSet(mConeAsset, mConeInstances, true);
+}
+
+std::vector<std::pair<std::string, int>> TtpRenderer::debugLiveDressing() const {
+    std::vector<std::pair<std::string, int>> out;
+    if (!mScene || !mEngine) return out;
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    // An instanced (unbaked) static group drew its sources out of the scene,
+    // so its copies are found through the group, not the scene.
+    std::unordered_map<uint32_t, int> instancedBy;   // source entity id -> copies
+    for (const MergedGroup& g : mMergedDress) {
+        if (g.dynamic || g.prims.empty() || g.sources.empty()) continue;
+        instancedBy[g.sources[0].getId()] = (int) g.sources.size();
+    }
+    const auto family = [&](const std::vector<gltfio::FilamentAsset*>& assets,
+            const std::vector<std::vector<gltfio::FilamentInstance*>>& insts) {
+        for (size_t m = 0; m < assets.size() && m < insts.size(); m++) {
+            const gltfio::FilamentAsset* asset = assets[m];
+            if (!asset || insts[m].empty() || !insts[m][0]) continue;
+            int live = 0;
+            for (const auto* in : insts[m]) {
+                const utils::Entity spin = spinNode(asset, in);
+                for (size_t e = 0; e < in->getEntityCount(); e++) {
+                    const utils::Entity ent = in->getEntities()[e];
+                    if (!rcm.getInstance(ent)) continue;
+                    const auto group = instancedBy.find(ent.getId());
+                    if (group != instancedBy.end()) { live += group->second; continue; }
+                    if (!mScene->hasEntity(ent)) continue;
+                    bool moves = false;
+                    for (auto ti = tcm.getInstance(ent); ti && !spin.isNull();
+                            ti = tcm.getInstance(tcm.getParent(ti))) {
+                        if (tcm.getEntity(ti) == spin) { moves = true; break; }
+                    }
+                    if (!moves) live++;
+                }
+            }
+            if (!live) continue;
+            std::string name = "?";
+            const auto key = mAssetMeshKey.find(asset);
+            for (const auto& [n, k] : mGlbKeyOf) {
+                if (key != mAssetMeshKey.end() && k == key->second) { name = n; break; }
+            }
+            out.emplace_back(name, live);
+        }
+    };
+    family(mSceneryAssets, mSceneryInstances);
+    family(mPropAssets, mPropInstances);
+    family(mSetAssets, mSetInstances);
+    return out;
 }

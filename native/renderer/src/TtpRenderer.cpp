@@ -834,7 +834,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.prDensity = th.props.scatterDensity;
     out.prScatter.clear();
     for (const ttp::rt::PropStamp& p : th.props.scatter) {
-        out.prScatter.push_back({ p.slot, p.w, p.s0, p.s1, p.face });
+        out.prScatter.push_back({ p.slot, p.w, p.s0, p.s1, p.face, p.verge });
     }
 
     out.lmKinds = th.landmarks;

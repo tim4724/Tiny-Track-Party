@@ -223,6 +223,10 @@ object SceneStaging {
         sceneryModels.forEachIndexed { slot, model ->
             want.put(JSONObject().put("name", "scenery$slot.glb").put("tag", model))
         }
+        // The biome's trackside props, same slot contract (prop<i>.glb).
+        TtpJson.strings(Ttp.ttp_theme_prop_models(TtpJson.arg(resolved))).forEachIndexed { slot, model ->
+            want.put(JSONObject().put("name", "prop$slot.glb").put("tag", model))
+        }
         // The track's own set pieces, same slot contract (set<i>.glb).
         TtpJson.strings(Ttp.ttp_theme_set_models(TtpJson.arg(trackId))).forEachIndexed { slot, model ->
             want.put(JSONObject().put("name", "set$slot.glb").put("tag", model))

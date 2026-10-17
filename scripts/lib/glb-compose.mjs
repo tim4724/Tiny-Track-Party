@@ -27,6 +27,26 @@ export function readGlb(file) {
   return { json, bin };
 }
 
+// A glTF document and its binary buffer as GLB bytes, both chunks padded to
+// the 4-byte alignment the container requires.
+export function encodeGlb(json, bin) {
+  let text = JSON.stringify(json);
+  while (text.length % 4) text += ' ';
+  const jsonBytes = Buffer.from(text, 'utf8');
+  const binBytes = Buffer.concat([bin, Buffer.alloc((4 - (bin.length % 4)) % 4)]);
+  const glb = Buffer.alloc(12 + 8 + jsonBytes.length + 8 + binBytes.length);
+  glb.writeUInt32LE(GLB_MAGIC, 0);
+  glb.writeUInt32LE(2, 4);
+  glb.writeUInt32LE(glb.length, 8);
+  glb.writeUInt32LE(jsonBytes.length, 12);
+  glb.writeUInt32LE(JSON_CHUNK, 16);
+  jsonBytes.copy(glb, 20);
+  glb.writeUInt32LE(binBytes.length, 20 + jsonBytes.length);
+  glb.writeUInt32LE(BIN_CHUNK, 24 + jsonBytes.length);
+  binBytes.copy(glb, 28 + jsonBytes.length);
+  return glb;
+}
+
 export function createComposer({ generator, texture }) {
   // One output glTF, built by appending each source whole and remapping its
   // indices. Every piece is the same kit with the same single material, so the
@@ -111,18 +131,22 @@ export function createComposer({ generator, texture }) {
   // One placement of an already-loaded source: a node carrying the transform,
   // with the source's own roots as its children. glTF allows a node to be the
   // child of only ONE parent, so a repeated piece gets a fresh copy of its
-  // root nodes — cheap, since a root is a transform and a mesh index, not
-  // geometry.
+  // WHOLE node subtree — a copy of the root alone would hand its children a
+  // second parent, which importers reject outright. Cheap either way: a node is
+  // a transform and a mesh index, not geometry.
   //
   // Returns the placement node, so a caller can put it under a pivot instead
   // of straight on the scene. `scale` is uniform and written only when set, so
   // a composition that never scales keeps the train set's exact bytes.
+  function copyTree(i) {
+    const n = { ...out.nodes[i] };
+    if (n.children) n.children = n.children.map(copyTree);
+    out.nodes.push(n);
+    return out.nodes.length - 1;
+  }
   function place(roots, { x, z, yaw, y = 0, scale, scene = true }) {
     const half = yaw / 2;
-    const kids = roots.map((r) => {
-      out.nodes.push({ ...out.nodes[r] });
-      return out.nodes.length - 1;
-    });
+    const kids = roots.map(copyTree);
     const node = {
       translation: [x, y, z],
       rotation: [0, Math.sin(half), 0, Math.cos(half)],  // yaw about +y
@@ -168,19 +192,7 @@ export function createComposer({ generator, texture }) {
 
     const bin = Buffer.concat(binParts, binLen);
     out.buffers = [{ byteLength: bin.length }];
-    let text = JSON.stringify(out);
-    while (text.length % 4) text += ' ';           // chunks are 4-byte aligned
-    const jsonBytes = Buffer.from(text, 'utf8');
-    const glb = Buffer.alloc(12 + 8 + jsonBytes.length + 8 + bin.length);
-    glb.writeUInt32LE(GLB_MAGIC, 0);
-    glb.writeUInt32LE(2, 4);
-    glb.writeUInt32LE(glb.length, 8);
-    glb.writeUInt32LE(jsonBytes.length, 12);
-    glb.writeUInt32LE(JSON_CHUNK, 16);
-    jsonBytes.copy(glb, 20);
-    glb.writeUInt32LE(bin.length, 20 + jsonBytes.length);
-    glb.writeUInt32LE(BIN_CHUNK, 24 + jsonBytes.length);
-    bin.copy(glb, 28 + jsonBytes.length);
+    const glb = encodeGlb(out, bin);
     writeFileSync(file, glb);
 
     // Triangles AS PLACED: a piece's geometry is stored once but drawn once per

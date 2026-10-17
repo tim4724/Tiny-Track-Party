@@ -231,6 +231,13 @@ enum SceneStaging {
         for (slot, name) in sceneryModels.enumerated() {
             want.append(["name": "scenery\(slot).glb", "tag": name])
         }
+        // The biome's trackside props, same slot contract (prop<i>.glb).
+        let biomeProps = showcase
+            ? TTP.arr(ttp_theme_showcase_prop_models()).compactMap { $0 as? String }
+            : TTP.arr(ttp_theme_prop_models(resolved)).compactMap { $0 as? String }
+        for (slot, name) in biomeProps.enumerated() {
+            want.append(["name": "prop\(slot).glb", "tag": name])
+        }
         // The track's own set pieces, same slot contract (set<i>.glb).
         let setModels = TTP.arr(ttp_theme_set_models(trackId)).compactMap { $0 as? String }
         for (slot, name) in setModels.enumerated() {

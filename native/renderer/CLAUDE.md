@@ -598,11 +598,28 @@ things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of
 their oriented footprints (`mSetFeet`): they are authored, so they win their
-ground. What a piece costs at draw time is its vertices in the cells that see
-it, so a heavy one belongs where few cells look at once, and is priced on the
-box's 4P heavy seconds like any other geometry. A composed model whose node
-names point at two meshes is REFUSED by the merge and draws live-lit with
-nothing to say so, which is why `scripts/lib/glb-compose.mjs` renames them.
+ground. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
+that see it, so a heavy one belongs where few cells look at once, and is
+priced on the box's 4P heavy seconds like any other geometry. A composed
+model whose node names point at two meshes is REFUSED by the merge and draws
+live-lit with nothing to say so, which is why `scripts/lib/glb-compose.mjs`
+renames them; a kit model shipped whole can carry the same flaw (the budget
+names it).
+
+**New world content is priced on the host first, the box once per batch.**
+`npm run budget:scene` counts what each cell submits over a whole lap (the
+count is decided in this C++ before any backend sees it, so it transfers to
+the box) and fails a track whose worst frame grows, a shipped track's 4P frame
+over the baseline's `ceiling`, and any static dressing the merge left live-lit
+(`ttp_display_debug_live_dressing` names it). The ceiling is a box fact, the
+worst frame a track may have while 4P still holds, so it moves only on a box
+reading. Over budget: move it off the vista (what every cell sees down the
+straight), then make it lighter. Never a per-fragment term, a blended material
+or a new material.
+A biome PROP is capped per model before it is priced at all
+(`tests/display-abi.test.js`): it is stamped many times a lap, and the kit
+authors a barrel with a car's vertices. `scripts/slim-kit-models.mjs`
+decimates a kit model from the ratio SOURCES.json records for it.
 
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one
