@@ -1900,6 +1900,12 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         pushQuad(c000, c001, c100, c101, { 0, -1, 0 }, BSK);
         pushQuad(c010, c011, c110, c111, { 0, 1, 0 }, BSK);
         if (!buildMesh(m)) return false;
+        // How far the unit mesh reaches from its origin, so the per-cell pose
+        // can keep the whole balloon inside the far plane (orientCellBillboards).
+        mBalloonExt = 0;
+        for (const Vertex& v : m.verts) {
+            mBalloonExt = std::max(mBalloonExt, length(float3{ v.px, v.py, v.pz }));
+        }
         auto& tcmB = mEngine->getTransformManager();
         tcmB.setTransform(tcmB.getInstance(m.entity),
                 mat4f::translation(float3{ 0, -1000, 0 }));

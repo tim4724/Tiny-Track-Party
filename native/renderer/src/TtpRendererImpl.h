@@ -93,6 +93,14 @@ constexpr uint32_t LAWN_SRGB = 0x6aa84f;
 // pale wedge over the track — the JS clouds/balloon are fog:false). 520 leaves
 // a minimum camera distance of ~420.
 //
+// THE BAND IS MEASURED FROM THE ORIGIN, THE FAR PLANE FROM THE EYE. The race
+// camera's far plane is CAM_FAR (600) and the chase cam roams to the circuit's
+// rim, over 170 u out on the big tracks, so a sprite on the far side of the
+// origin sits PAST the plane and is sliced by it as the car drives (a cloud
+// wiping in and out with a hard edge). The band only PLACES a sprite;
+// orientCellBillboards then fits it inside each cell's far plane along its own
+// sight line, at the same angular size.
+//
 // THE SKY DOME IS NOT SUBJECT TO THIS RULE (TtpRenderer.h, mSkyDome): it is
 // centred on each cell's camera and scaled to that view's far plane, so its
 // distance from the eye is fixed and no far plane can clip it. Pushing a

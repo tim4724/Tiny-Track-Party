@@ -848,9 +848,10 @@ private:
     void destroySceneTarget();
 
     // The per-cell scene mutations the cell loop runs between render() calls:
-    // billboards turn toward camPos, and the monster ghost swap keys on "does
-    // THIS cell want the ghost". Both take one cell and must — see the bodies.
-    void orientCellBillboards(const filament::math::float3& camPos);
+    // billboards turn toward camPos, the sky sprites (clouds, balloon) are
+    // fitted inside farZ (SKY_BAND), and the monster ghost swap keys on "does
+    // THIS cell want the ghost". All take one cell and must — see the bodies.
+    void orientCellBillboards(const filament::math::float3& camPos, float farZ);
     void applyMonsterGhosts(uint32_t cell);
 
     // The 2D cell overlay — the split-screen dividers and the per-player steer
@@ -1534,6 +1535,7 @@ private:
     Mesh mClutter;   // near-field flowers (rand2 stream)
     Mesh mBalloon;   // hot-air balloon (theme.balloon — grass/sunset hero)
     float mBalloonY = 44, mBalloonSize = 6; // theme.balloon orbit height + scale
+    float mBalloonExt = 0; // the unit mesh's reach from its origin (read at build)
     float mHillSf = 1; // hill-ring push-out factor (balloon orbit radius scales with it)
     filament::gltfio::FilamentAsset* mConeAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mConeInstances;

@@ -1406,19 +1406,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     // phase offset from whenever this renderer booted vs the driving scene.
     // (mCloudPos holds the authored INITIAL; the per-view pass adds drift.)
 
-    // Hot-air balloon: a very slow lap of the horizon at cloud height
-    // (stepBalloon — bearing 2.4 + t·0.012, thermal breathe sin(t·0.11)·1.4),
-    // pushed past the fog cutoff with the cloud trick (JS fog:false).
-    if (!mBalloon.entity.isNull()) {
-        const float r = 112.0f * mHillSf;
-        const float k = r < SKY_BAND ? SKY_BAND / r : 1.0f;
-        const float a = 2.4f + mTime * 0.012f;
-        const float y = mBalloonY + std::sin(mTime * 0.11f) * 1.4f;
-        tcm.setTransform(tcm.getInstance(mBalloon.entity),
-                mat4f::translation(float3{ std::cos(a) * r * k, y * k, std::sin(a) * r * k })
-                * mat4f::scaling(float3{ mBalloonSize * k }));
-    }
-
     // The paper dart glides its lazy banked circle (stepPaperPlane), riding the
     // hill push-out like the balloon. (The birds and kites are SPRITES — they
     // re-aim per cell, down with the cloud billboards.)
@@ -2712,7 +2699,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // Fliers, haze, clouds and boost streaks all turn toward THIS
             // cell's camera between render() calls (single-threaded rendering
             // executes each render() immediately, the JS sprite way).
-            orientCellBillboards(world[3].xyz);
+            orientCellBillboards(world[3].xyz, views[i].farZ);
             if (ambCull) {
                 auto& rcm = mEngine->getRenderableManager();
                 if (const auto ri = rcm.getInstance(mPollen.entity)) {
@@ -2818,9 +2805,39 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
 
 // Everything that turns toward the active camera between render() calls:
 // bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
-// about their length axis toward it. camPos is THIS cell's camera position.
-void TtpRenderer::orientCellBillboards(const float3& camPos) {
+// about their length axis toward it, and the sky sprites (clouds, balloon)
+// are fitted inside this cell's far plane. camPos is THIS cell's camera
+// position, farZ its far plane.
+void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
     auto& tcm = mEngine->getTransformManager();
+    // Slide a sky sprite toward the eye along its sight line, scaling by the
+    // same factor, until centre plus reach is inside farZ: direction and
+    // angular size are unchanged (SKY_BAND in TtpRendererImpl.h has the why).
+    const auto fitFarPlane = [&](float3& p, float& scale, float reach) {
+        const float3 d = p - camPos;
+        const float dist = length(d);
+        const float dMax = farZ - reach;
+        if (dist > dMax && dist > 0.0f) {
+            const float t = dMax / dist;
+            p = camPos + d * t;
+            scale *= t;
+        }
+    };
+    // Hot-air balloon: a very slow lap of the horizon at cloud height
+    // (stepBalloon — bearing 2.4 + t·0.012, thermal breathe sin(t·0.11)·1.4),
+    // pushed past the fog cutoff with the cloud trick (JS fog:false). Not a
+    // billboard, but posed here because the fit above is per cell.
+    if (!mBalloon.entity.isNull()) {
+        const float r = 112.0f * mHillSf;
+        const float k = r < SKY_BAND ? SKY_BAND / r : 1.0f;
+        const float a = 2.4f + mTime * 0.012f;
+        const float y = mBalloonY + std::sin(mTime * 0.11f) * 1.4f;
+        float3 p{ std::cos(a) * r * k, y * k, std::sin(a) * r * k };
+        float s = mBalloonSize * k;
+        fitFarPlane(p, s, mBalloonExt * s);
+        tcm.setTransform(tcm.getInstance(mBalloon.entity),
+                mat4f::translation(p) * mat4f::scaling(float3{ s }));
+    }
     // Fliers ride the same per-cell billboard trick as the clouds. Birds
     // circle their roosts with a wing-beat that squashes the glyph's height
     // (SceneRenderer's flap); kites bob around their anchors and sway on the
@@ -2889,8 +2906,12 @@ void TtpRenderer::orientCellBillboards(const float3& camPos) {
                 + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
         const float len = std::max(1.0f, length(p0));
         const float k = SKY_BAND / len;
-        const float3 p = p0 * k;
-        const float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
+        float3 p = p0 * k;
+        float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
+        // The quad's reach is its half-diagonal: verts[0] is a corner of the
+        // authored quad, which the pose scales by sk.
+        const Vertex& c0 = mClouds[ci].verts[0];
+        fitFarPlane(p, sk, length(float3{ c0.px, c0.py, c0.pz }) * sk);
         const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
         tcm.setTransform(tcm.getInstance(mClouds[ci].entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
