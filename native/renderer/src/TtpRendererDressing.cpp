@@ -109,6 +109,11 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             }
         }
     }
+    // Out of the berms, filtered after the stream so no other roll moves: the
+    // corridor test above predates the berms and keeps only a small margin off
+    // the kerb.
+    std::erase_if(placements, [&](const Placement& p) { return inBerm(tb, p.x, p.z, 0); });
+    std::erase_if(boulders, [&](const Boulder& b) { return inBerm(tb, b.x, b.z, b.rr); });
 
     // Trees/bushes: one instanced asset per scenery model.
     mSceneryAssets.resize(tb.scModelCount, nullptr);
@@ -227,7 +232,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
         }
-        return true;
+        return !inBerm(tb, x, z, m);
     };
 
     struct Placement { uint32_t slot; float x, y, z, s, yaw; };
@@ -250,8 +255,10 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                     if (roll < acc) { e = &p; break; }
                 }
                 // The verge band starts where the clearance test lets a
-                // centre stand, so a slim post lands a step off the kerb.
-                const float lat = side * (e->verge ? f.width / 2 + ROAD_CLEAR + 0.2f + out * 0.8f
+                // centre stand, so a slim post lands a step off the kerb, or
+                // off the foot of the berm under a raised deck.
+                const float kerb = std::max(f.width / 2, bermEdge(tb, f.pos.x, f.pos.z));
+                const float lat = side * (e->verge ? kerb + ROAD_CLEAR + 0.2f + out * 0.8f
                                                    : f.width / 2 + 2.8f + out * 8.0f);
                 const float jit = e->verge ? 0.4f : 2.0f;
                 const float x = f.pos.x + f.lat.x * lat + jx * jit;
@@ -269,8 +276,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                 const float yaw = e->face
                         ? std::atan2(-0.5f * f.lat.x * side - tg.x, -0.5f * f.lat.z * side - tg.z)
                         : spun;
-                const float py = footprintY(tb, x, z, 0.45f * s);
-                placements.push_back({ e->slot, x, py, z, s, yaw });
+                placements.push_back({ e->slot, x, 0.0f, z, s, yaw });   // y: grounded below
             }
         }
     }
@@ -285,6 +291,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     std::vector<float> reach(tb.prModelCount, 0.0f);  // half-footprint at scale 1
     std::vector<bool> spins(tb.prModelCount, false);
     std::vector<bool> casts(tb.prModelCount, false);
+    std::vector<float> tall(tb.prModelCount, 0.0f);   // height at scale 1
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         size_t count = 0;
         for (const auto& p : placements) if (p.slot == m) count++;
@@ -294,6 +301,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         if (!mPropAssets[m]) continue;
         const filament::Aabb bb = mPropAssets[m]->getBoundingBox();
         reach[m] = 0.5f * std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
+        tall[m] = bb.max.y - bb.min.y;
         spins[m] = !mPropAssets[m]->getFirstEntityByName("spin").isNull();
         // A FLAT model (a snow drift, a slab) casts no baked disc: a disc as
         // wide as its footprint shows as a dark rim around something that
@@ -328,9 +336,16 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     const float CLEAR = 0.35f;   // daylight between two things that both stand
     std::vector<size_t> kept;
     for (size_t i = 0; i < placements.size(); i++) {
-        const Placement& p = placements[i];
+        Placement& p = placements[i];
         const float pr = reach[p.slot] * p.s;   // what this prop covers
         if (!isClearP(p.x, p.z, std::max(ROAD_CLEAR, pr))) continue;
+        // Grounded at the LOWEST point under its own footprint (footprintSpan),
+        // so the downhill edge never hangs; the uphill edge is then that much
+        // inside the hill. Past a quarter of the prop's height it reads as
+        // buried, and the prop is dropped like any other loser.
+        const float2 ground = footprintSpan(tb, p.x, p.z, pr);
+        if (ground.y - ground.x > 0.25f * tall[p.slot] * p.s) continue;
+        p.y = ground.x;
         bool clash = false;
         for (const float4& spot : mShadowSpots) {
             const float dx = p.x - spot.x, dz = p.z - spot.y;
@@ -1623,6 +1638,38 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
     return false;
 }
 
+// How far past its top a berm ring's slope lands: the flare grows with height
+// for a constant slope angle (buildHills). A template only because TrackBin is
+// private to the renderer, out of a file-scope function's reach.
+template <typename Ring> static float bermFlare(const Ring& r, float groundY) {
+    return 0.6f + 0.8f * std::max(0.0f, std::max(r.topL, r.topR) - groundY);
+}
+
+// Rings sit a sim sample apart, so the union of their discs is the berm's
+// footprint to within a few centimetres.
+bool TtpRenderer::inBerm(const TrackBin& tb, float x, float z, float margin) const {
+    for (const auto& run : tb.berms) {
+        for (const auto& r : run) {
+            const float dx = x - r.cx, dz = z - r.cz, lim = r.halfW + bermFlare(r, tb.groundY) + margin;
+            if (dx * dx + dz * dz < lim * lim) return true;
+        }
+    }
+    return false;
+}
+
+float TtpRenderer::bermEdge(const TrackBin& tb, float x, float z) const {
+    // Rings sit a sim sample apart, so the nearest within half a unit is the
+    // one beside this point; none means no berm here.
+    float edge = 0, best = 0.5f * 0.5f;
+    for (const auto& run : tb.berms) {
+        for (const auto& r : run) {
+            const float dx = x - r.cx, dz = z - r.cz, d2 = dx * dx + dz * dz;
+            if (d2 < best) { best = d2; edge = r.halfW + bermFlare(r, tb.groundY); }
+        }
+    }
+    return edge;
+}
+
 // Instanced prop pool (item boxes, bananas): one shared GLB, `count` instances,
 // each posed independently via its root. Unused pool entries park underground.
 gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
@@ -2094,7 +2141,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     // slope angle).
     const float gy = tb.groundY;
     const auto corners = [&](const TrackBin::BermRing& r, float3 out[4]) {
-        const float flare = 0.6f + 0.8f * std::max(0.0f, std::max(r.topL, r.topR) - gy);
+        const float flare = bermFlare(r, gy);
         const float hw = r.halfW, ox = r.lx, oz = r.lz;
         out[0] = { r.cx - ox * (hw + flare), gy, r.cz - oz * (hw + flare) };
         out[1] = { r.cx - ox * hw, r.topL, r.cz - oz * hw };

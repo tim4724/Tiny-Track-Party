@@ -602,7 +602,10 @@ things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of
 their oriented footprints (`mSetFeet`): they are authored, so they win their
-ground. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
+ground. The scatters keep out of the grass berms the same way (`inBerm`), since
+they ground a piece on the terrain beneath one; the verge band starts at the
+berm's foot, and a prop is grounded under its model's own footprint and
+dropped, never sunk, where its uphill edge would bury a quarter of its height. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
 that see it, so a heavy one belongs where few cells look at once, and is
 priced on the box's 4P heavy seconds like any other geometry. A composed
 model whose node names point at two meshes is REFUSED by the merge and draws

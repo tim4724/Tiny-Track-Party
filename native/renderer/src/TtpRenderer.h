@@ -931,6 +931,8 @@ private:
     void buildTerrainGrid(const TrackBin& tb);
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
+    // The lowest and highest surface points under the same probes.
+    filament::math::float2 footprintSpan(const TrackBin& tb, float x, float z, float r) const;
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
@@ -1473,6 +1475,12 @@ private:
     struct SetFoot { float x, z, ax, az, hx, hz; };  // centre, +X axis, half extents
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // The grass BERMS under raised deck reach a few units past the kerb, and
+    // the scatters ground a piece on the terrain beneath them, so one standing
+    // on a berm's flank is half inside it. inBerm is that keep-out; bermEdge
+    // is how far out the berm beside a centreline point reaches (0 = none).
+    bool inBerm(const TrackBin& tb, float x, float z, float margin) const;
+    float bermEdge(const TrackBin& tb, float x, float z) const;
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;

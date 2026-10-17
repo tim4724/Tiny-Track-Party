@@ -200,12 +200,17 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
 // footprint, so a slope-centre height can't leave the downhill edge hanging
 // in silhouette on a dune face.
 float TtpRenderer::footprintY(const TrackBin& tb, float x, float z, float r) const {
-    float y = groundSurfaceY(tb, x, z);
+    return footprintSpan(tb, x, z, r).x;
+}
+
+float2 TtpRenderer::footprintSpan(const TrackBin& tb, float x, float z, float r) const {
+    float2 span{ groundSurfaceY(tb, x, z) };
     for (const auto& o : { float2{ r, 0 }, float2{ -r, 0 },
                            float2{ 0, r }, float2{ 0, -r } }) {
-        y = std::min(y, groundSurfaceY(tb, x + o.x, z + o.y));
+        const float y = groundSurfaceY(tb, x + o.x, z + o.y);
+        span = { std::min(span.x, y), std::max(span.y, y) };
     }
-    return y;
+    return span;
 }
 
 float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
