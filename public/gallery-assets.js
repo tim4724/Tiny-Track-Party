@@ -343,8 +343,8 @@ async function buildLegend() {
 // fresh worktree it is the normal condition.
 //
 // The CONCEPT CARS stand in the same field, ahead of the kits: candidates
-// modelled for this game (scripts/gen-concept-cars.py), each "plus" beside the
-// roster car it builds on, so the two can be judged side by side.
+// modelled for this game (scripts/gen-concept-cars.py), each beside the
+// roster car whose role it would take, so the two can be judged side by side.
 let kitModels = null;      // [{ id, name, tris, inGame }] in field order, once fetched
 let conceptModels = null;  // the same shape, plus each one's `note`
 let fieldModels = [];      // what the field was last built from
