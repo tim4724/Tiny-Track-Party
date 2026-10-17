@@ -24,7 +24,8 @@
 #
 # To upgrade Filament: tag the new fork commit and push the TAG, change
 # FILAMENT_COMMIT, run native/scripts/build-runtime-web.sh, and commit pin +
-# .filamat blobs + wasm TOGETHER — materials are MATERIAL_VERSION-locked to the
-# tree, so a half upgrade fails at load time in the browser.
+# .filamat blobs + wasm + the licence texts the build regenerates under
+# public/assets/licenses/ TOGETHER — materials are MATERIAL_VERSION-locked to
+# the tree, so a half upgrade fails at load time in the browser.
 FILAMENT_REMOTE=https://github.com/tim4724/filament.git
 FILAMENT_COMMIT=a5e892f299bb11ca2ee17451b28e4869d757a29f

@@ -178,11 +178,11 @@
       "w": 1280,
       "h": 720,
       "bytes": 24636,
-      "capturedAt": "2026-10-17T15:15:14.260Z",
-      "gitSha": "7ea6c5be",
-      "deviceName": "TTP_ToyBox_TV_agent3",
+      "capturedAt": "2026-10-17T17:27:36.679Z",
+      "gitSha": "36e867e8",
+      "deviceName": "HexStacker_TV_36",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "licenses",
@@ -191,11 +191,11 @@
       "w": 1280,
       "h": 720,
       "bytes": 24686,
-      "capturedAt": "2026-10-17T15:22:28.076Z",
-      "gitSha": "7ea6c5be",
-      "deviceName": "TTP Toy Box tvOS 4",
+      "capturedAt": "2026-10-17T17:27:36.175Z",
+      "gitSha": "36e867e8",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "6FF7D3CC-1F85-47EE-AA35-2BFDBA3F2F76"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "licenses",
@@ -203,9 +203,9 @@
       "file": "web/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 41026,
-      "capturedAt": "2026-10-17T15:16:47.898Z",
-      "gitSha": "7ea6c5be"
+      "bytes": 39060,
+      "capturedAt": "2026-10-17T17:22:23.211Z",
+      "gitSha": "36e867e8"
     },
     {
       "scenario": "lobby-cup",

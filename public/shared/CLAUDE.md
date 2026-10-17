@@ -100,9 +100,12 @@ what the tree already maintains for its own reasons — an asset arrives with it
 license file, vendored C sits in `native/vendor/`, vendored browser JS is what
 eslint refuses to lint, npm runtime deps ship with the server — never from a
 second list that could rot in its own right. Anything baked in from a PINNED
-upstream (Filament, Emscripten) has no path here and is undiscoverable by
-construction; `assets/licenses/SOURCES.md` carries the obligation to re-fetch
-those when the pin moves, and that is the one part still resting on prose.
+upstream (Filament and the third-party code it compiles in, Emscripten and the
+musl inside the wasm) has no path here and is undiscoverable by construction,
+so its notices are DERIVED instead: `scripts/gen-upstream-licenses.mjs` reads
+them out of the pinned checkouts, the web build runs it, and the same test
+diffs the served copies wherever the checkouts exist
+(`assets/licenses/SOURCES.md`).
 
 The page groups by TYPE, and `SECTION_ORDER` is the list of types there are —
 so an entry in a section missing from it would be dropped off the page in

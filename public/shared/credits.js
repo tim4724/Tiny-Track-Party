@@ -24,12 +24,16 @@ import { assetUrl } from './assetUrl.js';
 //                 that discharges this; a bare upstream link does not.
 //   courtesy    — CC0 asks for nothing; we credit anyway.
 // `url` is the canonical text of the license itself (not the project).
+// 'Mixed permissive' is the one id with no single text: it is the bundle of
+// MIT, Apache-2.0, BSD and zlib licences Filament compiles into the engine,
+// served as one notice, so its url is the directory those licences live in.
 export const LICENSES = {
   'CC-BY 4.0':    { obligation: 'attribution', url: 'https://creativecommons.org/licenses/by/4.0/' },
   'SIL OFL 1.1':  { obligation: 'notice',      url: 'https://openfontlicense.org/open-font-license-official-text/' },
   'Apache-2.0':   { obligation: 'notice',      url: 'https://www.apache.org/licenses/LICENSE-2.0' },
   'MIT':          { obligation: 'notice',      url: 'https://opensource.org/license/mit' },
   'BSD-3-Clause': { obligation: 'notice',      url: 'https://opensource.org/license/bsd-3-clause' },
+  'Mixed permissive': { obligation: 'notice',  url: 'https://github.com/google/filament/tree/main/third_party' },
   'CC0 1.0':      { obligation: 'courtesy',    url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
 };
 
@@ -55,7 +59,9 @@ export function licenseInfo(id) {
 // contains) and if a third-party surface in the tree is named by no credit at
 // all (something ships uncredited). Omit it only where there is nothing local
 // to point at — Filament and Emscripten are pinned upstream and bake into the
-// wasm, so they have no path of their own.
+// wasm, so they have no path of their own; their notices, and those of what
+// they bundle, are DERIVED from the pinned checkouts instead
+// (scripts/gen-upstream-licenses.mjs, diffed by tests/credits.test.js).
 //
 // `url` points at the work. `notice` is the served copy of the license text,
 // and belongs on exactly the entries whose license DEMANDS one travel with the
@@ -76,7 +82,7 @@ export const ASSET_CREDITS = [
   },
   {
     section: '3D models',
-    title: 'Nature Kit 2.3 (palms, cacti and the camp tent)',
+    title: 'Nature Kit 2.3',
     author: 'Kenney',
     license: 'CC0 1.0',
     url: 'https://kenney.nl/assets/nature-kit',
@@ -84,7 +90,7 @@ export const ASSET_CREDITS = [
   },
   {
     section: '3D models',
-    title: 'Holiday Kit 1.0 (the snow scenery and the toy train set)',
+    title: 'Holiday Kit 1.0',
     author: 'Kenney',
     license: 'CC0 1.0',
     url: 'https://kenney.nl/assets/holiday-kit',
@@ -142,12 +148,35 @@ export const ASSET_CREDITS = [
     notice: assetUrl('/assets/licenses/filament-LICENSE.txt'),
   },
   {
+    // The third-party code Filament compiles into the engine, as one served
+    // bundle with one text per library: the set is FILAMENT_BUNDLED in
+    // scripts/gen-upstream-licenses.mjs, which derives the text from the
+    // pinned checkout. The ONE entry with no `author`: a bundle of works names
+    // no single one, and each text inside carries its own copyright line. The
+    // page and both TV boards show nothing in the author's place.
+    section: 'Software',
+    title: 'Libraries bundled with Filament (glTF, Draco, Basis, zstd and more)',
+    license: 'Mixed permissive',
+    url: 'https://github.com/google/filament/tree/main/third_party',
+    notice: assetUrl('/assets/licenses/filament-third-party-LICENSES.txt'),
+  },
+  {
     section: 'Software',
     title: 'Emscripten (compiles the engine to wasm)',
     author: 'The Emscripten authors',
     license: 'MIT',
     url: 'https://emscripten.org',
     notice: assetUrl('/assets/licenses/emscripten-LICENSE.txt'),
+  },
+  {
+    // Emscripten links its own C library into the wasm, and musl's MIT notice
+    // is a file of its own, not part of Emscripten's.
+    section: 'Software',
+    title: 'musl (the C library inside the wasm)',
+    author: 'Rich Felker, et al.',
+    license: 'MIT',
+    url: 'https://musl.libc.org',
+    notice: assetUrl('/assets/licenses/musl-COPYRIGHT.txt'),
   },
   {
     section: 'Software',

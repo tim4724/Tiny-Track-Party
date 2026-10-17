@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -183,6 +185,7 @@ private val CARD_GAP = 24.dp
  * as wide as the list, and a lazy list clips at its bounds. Blue is what "you are
  * here" looks like across this whole info branch.
  */
+@OptIn(ExperimentalLayoutApi::class) // FlowRow
 @Composable
 private fun LicenseRow(
     entry: Legal.Entry,
@@ -219,15 +222,19 @@ private fun LicenseRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(15.dp),
     ) {
-        // Title then author on one baseline; a title too long for the line
-        // ellipsises and the author keeps its place beside it.
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+        // Author beside the title while both fit, else whole on a line under it
+        // (FlowRow moves it as one item). The title alone still ellipsises at
+        // the row's width. No author (a bundle of works, credits.js) leaves
+        // the title.
+        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(15.dp)) {
             StickerText(entry.title, size = 24.dp, weight = Fonts.semibold, color = Tokens.ink,
                 modifier = Modifier.alignByBaseline().weight(1f, fill = false))
             // ink-2, not ink-3: the author is half of what the attribution
             // actually says, and the quiet grey nearly vanishes on the pick wash.
-            StickerText(entry.author, size = 19.5.dp, weight = Fonts.bold, color = Tokens.ink2,
-                body = true, modifier = Modifier.alignByBaseline())
+            if (entry.author.isNotEmpty()) {
+                StickerText(entry.author, size = 19.5.dp, weight = Fonts.bold, color = Tokens.ink2,
+                    body = true, modifier = Modifier.alignByBaseline())
+            }
         }
 
         // A GREY LABEL on both faces. It is the one token on the row that means

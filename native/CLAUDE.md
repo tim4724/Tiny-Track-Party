@@ -151,11 +151,12 @@ fork plus emsdk, both fetched on first run. The fork commit is pinned in
 `native/filament.pin`, resolved by `scripts/filament-checkout.sh` (sourced by
 every platform's artifact build) into an immutable version-addressed checkout —
 never a shared mutable tree, which a concurrent build once paid for. Upgrading
-Filament is one commit: bump the pin, rebuild, ship pin + blobs + wasm together;
-the `check:artifact` test fails a mixed-toolchain artifact via the Filament
-commit stamped into `BUILD_STAMP.json`. CMake only adds the renderer under
-`-DFILAMENT_SDK`, which CI lacks — so CI's wasm leg link-checks the browser ABI
-against a sim-only build of the same target.
+Filament is one commit: bump the pin, rebuild, ship pin + blobs + wasm + the
+licence texts the build regenerates (`public/assets/licenses/SOURCES.md`)
+together; the `check:artifact` test fails a mixed-toolchain artifact via the
+Filament commit stamped into `BUILD_STAMP.json`. CMake only adds the renderer
+under `-DFILAMENT_SDK`, which CI lacks — so CI's wasm leg link-checks the
+browser ABI against a sim-only build of the same target.
 
 Rebuild and commit the artifacts after touching anything here (root rule 6);
 `node native/scripts/runtime-source-hash.mjs --files` lists what is hashed.

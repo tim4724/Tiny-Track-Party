@@ -85,14 +85,19 @@
    drops the licence chip onto its own line (and gives the title the full row)
    rather than squeezing a title into two words per line. */
 .entry__what { flex: 1 1 12rem; min-width: 0; }
+/* Inside it, title and author are flex items so the author moves as ONE piece:
+   beside the title while it fits, else on a line of its own under it. Inline,
+   a wrap put half the author's name beside the title and half below. */
+.entry__what { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.5rem; }
 .entry__title {
   font-family: var(--font-display); font-weight: 600; color: var(--ink); text-decoration: none;
   border-bottom: 2px solid transparent;
+  min-width: 0;
 }
 .entry__title:hover { border-bottom-color: var(--sec); }
 .entry__author {
   font-weight: 700; font-size: 0.86rem; color: var(--ink-2);
-  margin-left: 0.5rem;
+  white-space: nowrap;
 }
 /* The entry's one link to its terms (licenseChip()). A grey label: the section's
    colour is the card's, and twenty coloured chips in it would out-shout the

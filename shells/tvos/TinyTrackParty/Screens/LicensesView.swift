@@ -156,19 +156,19 @@ private struct LicenseRow: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 21, style: .continuous)
         return HStack(spacing: 15) {
-            HStack(alignment: .firstTextBaseline, spacing: 15) {
-                // The title gives way first: a long one ellipsises, and the
-                // author beside it — half of what the attribution says — stays.
-                Text(entry.title)
-                    .font(Fonts.display(24, weight: .semibold))
-                    .foregroundStyle(Tokens.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(entry.author)
-                    .font(Fonts.body(19.5, weight: .bold))
-                    .foregroundStyle(Tokens.ink2)
-                    .lineLimit(1)
-                    .fixedSize()
+            // Author beside the title while both fit, else whole on a line under
+            // it. The title alone still ellipsises at the row's width.
+            // ViewThatFits judges the first layout by the title's FULL width,
+            // so a long title is what sends the row to the second.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 15) {
+                    title
+                    author
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    title
+                    author
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -191,6 +191,27 @@ private struct LicenseRow: View {
         }
         .animation(.easeOut(duration: 0.12), value: focused)
         .accessibilityElement(children: .combine)
+    }
+
+    private var title: some View {
+        Text(entry.title)
+            .font(Fonts.display(24, weight: .semibold))
+            .foregroundStyle(Tokens.ink)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    // ink-2, not ink-3: the author is half of what the attribution says, and
+    // the quiet grey nearly vanishes on the pick wash. No author at all (a
+    // bundle of works, credits.js) draws nothing in its place.
+    @ViewBuilder private var author: some View {
+        if !entry.author.isEmpty {
+            Text(entry.author)
+                .font(Fonts.body(19.5, weight: .bold))
+                .foregroundStyle(Tokens.ink2)
+                .lineLimit(1)
+                .fixedSize()
+        }
     }
 }
 

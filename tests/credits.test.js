@@ -17,12 +17,14 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 let RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS;
 let ASSET_CREDITS;
 let creditsFor, LICENSES, OBLIGATION_IDS, SECTION_ORDER;
+let upstream;
 test.before(async () => {
   ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/musicCatalogue.js'));
   ({
     ASSET_CREDITS,
     creditsFor, LICENSES, OBLIGATION_IDS, SECTION_ORDER,
   } = await import('../public/shared/credits.js'));
+  upstream = await import('../scripts/gen-upstream-licenses.mjs');
 });
 
 test('every RACE_MUSIC song carries full attribution fields', () => {
@@ -86,9 +88,13 @@ test('creditsFor() lists every unique song exactly once, as required credits', (
   assert.ok(music.entries.some((e) => e.required), 'the CC-BY songs keep their required credits');
 });
 
+// A bundle of many works ('Mixed permissive') is the one credit allowed no
+// author: it names no single one, and each text inside carries its own.
 test('static asset credits are complete', () => {
   for (const e of ASSET_CREDITS) {
-    for (const field of ['section', 'title', 'author', 'license', 'url']) {
+    const fields = ['section', 'title', 'license', 'url'];
+    if (e.license !== 'Mixed permissive') fields.push('author');
+    for (const field of fields) {
       assert.ok(e[field], `'${e.title || '?'}' is missing '${field}'`);
     }
   }
@@ -241,9 +247,7 @@ test('every third-party surface in the tree is credited, and every credit still 
 });
 
 // Served notices whose original is IN this tree are copies of it, and a bumped
-// dependency has to bring its license along. (The Filament and Emscripten texts
-// are fetched from their pinned upstream and have no local original to compare
-// against — public/assets/licenses/SOURCES.md carries that obligation instead.)
+// dependency has to bring its license along.
 test('the served notices are byte-identical to the sources they were copied from', () => {
   const copies = [
     ['native/vendor/fdlibm/LICENSE.md', 'public/assets/licenses/openlibm-LICENSE.md'],
@@ -253,6 +257,31 @@ test('the served notices are byte-identical to the sources they were copied from
   for (const [src, served] of copies) {
     assert.ok(fs.readFileSync(path.join(ROOT, src)).equals(fs.readFileSync(path.join(ROOT, served))),
       `${served} has drifted from ${src} — re-copy it`);
+  }
+});
+
+// The notices whose original is a PINNED UPSTREAM (Filament and what it
+// bundles, Emscripten and the musl inside it) are derived from the checkouts
+// the artifact is built from, by the generator the web build runs. Those
+// checkouts are not in the tree, so this is not a codegen-freshness entry: it
+// diffs on a machine that has them and skips where it cannot look, the way the
+// tvOS SwiftPM check does. The web build is what keeps them current everywhere.
+test('the served upstream notices match the pinned checkouts they derive from', (t) => {
+  const filament = upstream.filamentCheckout();
+  const emscripten = upstream.emscriptenRoot();
+  if (!filament && !emscripten) {
+    t.skip('neither the pinned Filament checkout nor the pinned emsdk is on this machine — '
+      + 'native/scripts/build-runtime-web.sh fetches both');
+    return;
+  }
+  const derived = {
+    ...(filament ? upstream.deriveFilament(filament) : {}),
+    ...(emscripten ? upstream.deriveEmscripten(emscripten) : {}),
+  };
+  for (const [name, text] of Object.entries(derived)) {
+    const served = fs.readFileSync(path.join(PUBLIC_DIR, 'assets', 'licenses', name), 'utf8');
+    assert.ok(served === text,
+      `${name} has drifted from the pinned checkout — run node scripts/gen-upstream-licenses.mjs`);
   }
 });
 
@@ -282,7 +311,11 @@ test('every served license text is intact', () => {
     'meshoptimizer-LICENSE.txt': /Permission is hereby granted, free of charge/,
     'qrcode-generator-LICENSE.txt': /The above copyright notice and this permission notice/,
     'filament-LICENSE.txt': /Apache License[\s\S]*Version 2\.0, January 2004/,
+    // The bundle holds every library the generator lists, in its order.
+    'filament-third-party-LICENSES.txt': new RegExp(
+      upstream.FILAMENT_BUNDLED.map((lib) => `^${lib.dir}: `).join('[\\s\\S]*'), 'm'),
     'emscripten-LICENSE.txt': /University of Illinois\/NCSA Open Source License/,
+    'musl-COPYRIGHT.txt': /musl as a whole is licensed under the following standard MIT license/,
   };
   const dir = path.join(PUBLIC_DIR, 'assets', 'licenses');
   for (const [file, mark] of Object.entries(marks)) {

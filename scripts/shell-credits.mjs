@@ -26,11 +26,12 @@ import { creditsFor, licenseInfo } from '../public/shared/credits.js';
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Credits for code the BROWSER runs and no packaged app does: the wasm
-// toolchain (a shell compiles the same C++ natively) and the in-page QR encoder
-// (every shell has a platform encoder). Matched on the title PREFIX, and a
-// prefix that matches nothing is an error rather than a silent no-op, so
-// renaming a credit cannot quietly re-add it to a TV.
-export const WEB_ONLY = ['Emscripten', 'qrcode-generator'];
+// toolchain and the C library it links in (a shell compiles the same C++
+// natively against the platform's libc) and the in-page QR encoder (every
+// shell has a platform encoder). Matched on the title PREFIX, and a prefix that
+// matches nothing is an error rather than a silent no-op, so renaming a credit
+// cannot quietly re-add it to a TV.
+export const WEB_ONLY = ['Emscripten', 'musl', 'qrcode-generator'];
 
 // The canonical text of a licence that obliges NO notice, one copy per licence
 // id, so that every row on a TV board can be opened and read.
@@ -60,6 +61,7 @@ export const SHARED_NOTICES = {
   'OFL-Fredoka.txt': 'public/assets/fonts/OFL-Fredoka.txt',
   'OFL-Nunito.txt': 'public/assets/fonts/OFL-Nunito.txt',
   'filament-LICENSE.txt': 'public/assets/licenses/filament-LICENSE.txt',
+  'filament-third-party-LICENSES.txt': 'public/assets/licenses/filament-third-party-LICENSES.txt',
   'openlibm-LICENSE.md': 'public/assets/licenses/openlibm-LICENSE.md',
   'double-conversion-LICENSE.txt': 'public/assets/licenses/double-conversion-LICENSE.txt',
   'meshoptimizer-LICENSE.txt': 'public/assets/licenses/meshoptimizer-LICENSE.txt',
@@ -100,7 +102,10 @@ export function entries(platformOnly) {
       out.push({
         section: group.section,
         title: e.title,
-        author: e.author,
+        // Empty, never absent: a bundle of works has no author (credits.js),
+        // and a board shows nothing in its place rather than reading a key
+        // that may not be there.
+        author: e.author ?? '',
         license: e.license,
         licenseURL: licenseURL(e.license, platformOnly),
         url: e.url,

@@ -18,6 +18,7 @@
     "dev": "node --watch server/index.js",
     "fetch:kits": "node scripts/fetch-kits.mjs",
     "fetch:music": "node scripts/fetch-music.mjs",
+    "gen:licenses": "node scripts/gen-upstream-licenses.mjs",
     "gen:schematics": "node scripts/gen-track-schematics.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

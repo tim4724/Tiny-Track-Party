@@ -63,6 +63,11 @@ if ! cmp -s "$FILAMENT_SRC/third_party/meshoptimizer/src/meshoptimizer.h" \
     exit 1
 fi
 
+# The licence texts the binary owes to the two pinned toolchains, regenerated
+# here because this is where both checkouts exist; commit them with the wasm
+# (public/assets/licenses/SOURCES.md).
+node "$ROOT/scripts/gen-upstream-licenses.mjs"
+
 # --- 3. materials -----------------------------------------------------------
 # opengl/mobile, via the shared compiler script — an Android TV build wants the
 # SAME two arguments (GLES3 is GLES3), tvOS wants -a metal.

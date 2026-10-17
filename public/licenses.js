@@ -39,7 +39,8 @@ function entryRow(entry) {
   // the license chip stays on the row rather than being pushed under it.
   const what = el('span', 'entry__what');
   what.appendChild(link(entry.url, 'entry__title', entry.title));
-  what.appendChild(el('span', 'entry__author', entry.author));
+  // A bundle of many works names no one author (credits.js), so the row shows none.
+  if (entry.author) what.appendChild(el('span', 'entry__author', entry.author));
   row.appendChild(what);
   row.appendChild(licenseChip(entry));
   return row;
