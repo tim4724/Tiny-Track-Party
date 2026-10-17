@@ -147,7 +147,7 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     View::FogOptions fog{};
     fog.color = color;
     fog.heightFalloff = 0.0f;
-    fog.cutOffDistance = 400.0f; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
+    fog.cutOffDistance = FOG_CUTOFF; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
     // ALWAYS DISABLED, AND THE OPTIONS STILL MATTER. `enabled` selects Filament's
     // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
     // inscattering pow behind uniform branches this scene never takes, for one
@@ -2805,19 +2805,27 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
 // Everything that turns toward the active camera between render() calls:
 // bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
 // about their length axis toward it, and the sky sprites (clouds, balloon)
-// are fitted inside this cell's far plane. camPos is THIS cell's camera
-// position, farZ its far plane.
+// are fitted between this cell's fog cutoff and its far plane. camPos is THIS
+// cell's camera position, farZ its far plane.
 void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
     auto& tcm = mEngine->getTransformManager();
-    // Slide a sky sprite toward the eye along its sight line, scaling by the
-    // same factor, until centre plus reach is inside farZ: direction and
+    // Slide a sky sprite along its sight line, scaling by the same factor, so
+    // its whole extent sits past the fog cutoff (where a vertex flips to the
+    // sky colour) and inside farZ (where the plane slices it): direction and
     // angular size are unchanged (SKY_BAND in TtpRendererImpl.h has the why).
-    const auto fitFarPlane = [&](float3& p, float& scale, float reach) {
+    // `reach` is the sprite's farthest point from its centre, so the window is
+    // [FOG_CUTOFF + reach, farZ - reach]; it is never empty here (the biggest
+    // cloud reaches ~100 u against a 200 u gap), and if it were the fog bound
+    // would win, since a sliced edge is the lesser of the two artefacts.
+    const auto fitSkyBand = [&](float3& p, float& scale, float reach) {
         const float3 d = p - camPos;
         const float dist = length(d);
-        const float dMax = farZ - reach;
-        if (dist > dMax && dist > 0.0f) {
-            const float t = dMax / dist;
+        if (dist <= 0.0f) return;
+        const float dMin = FOG_CUTOFF + reach;
+        const float dMax = std::max(dMin, farZ - reach);
+        const float fit = std::min(std::max(dist, dMin), dMax);
+        if (fit != dist) {
+            const float t = fit / dist;
             p = camPos + d * t;
             scale *= t;
         }
@@ -2833,7 +2841,7 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
         const float y = mBalloonY + std::sin(mTime * 0.11f) * 1.4f;
         float3 p{ std::cos(a) * r * k, y * k, std::sin(a) * r * k };
         float s = mBalloonSize * k;
-        fitFarPlane(p, s, mBalloonExt * s);
+        fitSkyBand(p, s, mBalloonExt * s);
         tcm.setTransform(tcm.getInstance(mBalloon.entity),
                 mat4f::translation(p) * mat4f::scaling(float3{ s }));
     }
@@ -2900,17 +2908,25 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
         // its current direction (drift moves it in authored space, like the
         // JS). Size keeps the k^0.55 softening CALIBRATED AT THE 405 BAND,
         // rescaled to the farther SKY_BAND so the angular look is unchanged.
+        const float wrap = 300.0f;
         float3 p0 = mCloudPos[ci];
-        p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + 300.0f, 600.0f)
-                + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
+        p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + wrap, 2 * wrap)
+                + 2 * wrap, 2 * wrap) - wrap; // JS drift, closed-form
         const float len = std::max(1.0f, length(p0));
         const float k = SKY_BAND / len;
         float3 p = p0 * k;
         float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
+        // The wrap at x = ±wrap is a JUMP to the other side of the sky, so the
+        // sprite's scale smoothsteps to nothing over the last 40 u before it
+        // (about a minute at the drift speed) and back in on the far side,
+        // instead of vanishing from one spot and appearing in another. The
+        // floor keeps the transform invertible at the wrap itself.
+        const float edge = std::min(1.0f, (wrap - std::fabs(p0.x)) / 40.0f);
+        sk *= std::max(1e-3f, edge * edge * (3.0f - 2.0f * edge));
         // The quad's reach is its half-diagonal: verts[0] is a corner of the
         // authored quad, which the pose scales by sk.
         const Vertex& c0 = mClouds[ci].verts[0];
-        fitFarPlane(p, sk, length(float3{ c0.px, c0.py, c0.pz }) * sk);
+        fitSkyBand(p, sk, length(float3{ c0.px, c0.py, c0.pz }) * sk);
         const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
         tcm.setTransform(tcm.getInstance(mClouds[ci].entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })

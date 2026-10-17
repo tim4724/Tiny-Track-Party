@@ -87,19 +87,26 @@ constexpr uint32_t kOilCones = 4;
 // Lawn base — makeLawnTexture's flat ground colour (#6aa84f); the stripe/grain
 // texture detail is later work.
 constexpr uint32_t LAWN_SRGB = 0x6aa84f;
-// Clouds/balloon push-out radius. Filament's fog is CAMERA-relative and chase
-// cams roam up to ~100u from the origin, so sky content any nearer than this
-// could pass within the 400 fog cutoff of a cell's camera and render FOGGED (a
-// pale wedge over the track — the JS clouds/balloon are fog:false). 520 leaves
-// a minimum camera distance of ~420.
+// Where the distance fog stops (fogFor's cutOffDistance, ttp_fog.inc's far
+// exit): sky content beyond it renders unfogged, the JS clouds/balloon's
+// fog:false. Inside it the fog is already near-opaque, so a sprite that crosses
+// it does not fade, it FLIPS to the fog colour — the sky colour, on most
+// biomes — and vanishes.
+constexpr float FOG_CUTOFF = 400.0f;
+// Clouds/balloon push-out radius: past FOG_CUTOFF from a camera near the
+// origin, inside CAM_FAR from it.
 //
-// THE BAND IS MEASURED FROM THE ORIGIN, THE FAR PLANE FROM THE EYE. The race
-// camera's far plane is CAM_FAR (600) and the chase cam roams to the circuit's
-// rim, over 170 u out on the big tracks, so a sprite on the far side of the
-// origin sits PAST the plane and is sliced by it as the car drives (a cloud
-// wiping in and out with a hard edge). The band only PLACES a sprite;
-// orientCellBillboards then fits it inside each cell's far plane along its own
-// sight line, at the same angular size.
+// THE BAND IS MEASURED FROM THE ORIGIN, FOG AND THE FAR PLANE FROM THE EYE. The
+// chase cam roams to the circuit's rim, over 170 u out on the big tracks (nine
+// of the twenty catalogue tracks pass 115 u). So on the far side of the origin a
+// sprite sits PAST the 600 u far plane and is sliced by it as the car drives (a
+// cloud wiping in and out with a hard edge), and on the NEAR side it sits
+// INSIDE the fog cutoff and flips to the sky colour (a cloud that disappears
+// and comes back as the car turns; seen on the Backyard cup, where three of the
+// four tracks roam past 130 u). The band only PLACES a sprite;
+// orientCellBillboards then slides it along its own sight line for each cell,
+// at the same angular size, until its whole extent is past FOG_CUTOFF and
+// inside farZ.
 //
 // THE SKY DOME IS NOT SUBJECT TO THIS RULE (TtpRenderer.h, mSkyDome): it is
 // centred on each cell's camera and scaled to that view's far plane, so its

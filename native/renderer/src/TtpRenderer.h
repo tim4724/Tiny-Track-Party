@@ -828,8 +828,9 @@ private:
 
     // The per-cell scene mutations the cell loop runs between render() calls:
     // billboards turn toward camPos, the sky sprites (clouds, balloon) are
-    // fitted inside farZ (SKY_BAND), and the monster ghost swap keys on "does
-    // THIS cell want the ghost". All take one cell and must — see the bodies.
+    // fitted between FOG_CUTOFF and farZ (SKY_BAND), and the monster ghost
+    // swap keys on "does THIS cell want the ghost". All take one cell and
+    // must — see the bodies.
     void orientCellBillboards(const filament::math::float3& camPos, float farZ);
     void applyMonsterGhosts(uint32_t cell);
 
