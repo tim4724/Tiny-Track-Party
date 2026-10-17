@@ -292,7 +292,7 @@ thing:
   bars, not 1920x540.
 - The steer bar and the cell dividers are the RENDERER's (`voverlay.mat`).
   Drawing them here doubles them. The line: **cell-anchored and textless goes to
-  the renderer; anything carrying type or sticker chrome stays here.**
+  the renderer; anything carrying type or chrome stays here.**
 - The HUD layer takes **no window insets**, and does not need any: each cell
   answers with TWO rects, and the second is already the first inset by the TV
   overscan margin (`ttp_display_safe_insets`, pushed once at surface create).
@@ -876,11 +876,20 @@ this one either.
 
 ## Look
 
-Compose for layout, animation and focus; **no `androidx.tv:tv-material`**.
-Sticker Bash is flat colour on warm paper with thick warm-ink outlines and hard
-zero-blur offset shadows, so every visual is custom drawing and a Material
-component library would be fought at every step. What a TV needs from Compose is
-the focus system, and that is in `foundation`.
+Compose for layout, animation and focus; **no `androidx.tv:tv-material`**. The
+Toy Box is six flat roles (`theme.css`'s header; `Sticker.kt` is the kit), so
+every visual is custom drawing and a Material component library would be fought
+at every step. What a TV needs from Compose is the focus system, and that is in
+`foundation`. FOCUS is the TV's whole pointer, so where the web shows
+`--focus-ring` on `:focus-visible` only, every focusable here wears it (or, on a
+row a list would clip, the same blue as an inset edge) whenever it holds focus.
+
+**THIS SHELL IS DELIBERATELY SIMPLER THAN THE OTHER TWO** (the user's call, for
+the box above): no blur anywhere, no per-frame animation added for a look, and
+any translucent layer over the live race kept small. Where the web blurs (the
+frost, the scan hint, the open seats, the lap pill, the countdown strip) this
+draws the tint alone; the frost goes on a touch thicker to make up for it
+(`Sticker.frost`). The item slot shows a landed item without the web's 1.8x pop.
 
 `Tokens.kt` reads the staged `design-tokens.json` — the same file the web's CSS is
 baked to. **No colour or length that exists in that file may be spelled again in
@@ -891,22 +900,20 @@ there is none — a TODO in this shell claimed one did not exist while `ttp_ui.h
 was recording that the FIRST TV shell had made the same claim and copied the
 table anyway.
 
-Three Compose behaviours that quietly break sticker chrome, all found by putting
-a shot beside the browser's:
+Compose behaviours that quietly break chrome, all found by putting a shot beside
+the browser's:
 
-- **`Modifier.alpha` CLIPS.** It is `graphicsLayer(alpha, clip = true)`, and every
-  sticker's hard drop is drawn OUTSIDE its own bounds by `drawBehind` — so an
-  alpha wrapper cuts the shadow off entirely. Fold the opacity into the colours
-  instead, or use `graphicsLayer { this.alpha = … }`, which does not clip.
+- **`Modifier.alpha` CLIPS.** It is `graphicsLayer(alpha, clip = true)`, so
+  anything drawn OUTSIDE its own bounds under it — the focus ring, a seat's
+  corner mark — is cut off. Fold the opacity into the colours instead, or use
+  `graphicsLayer { this.alpha = … }`, which does not clip.
 - **`Box` does not pass its minimum constraints down** (`propagateMinConstraints`
   is false) and aligns `TopStart`. A `defaultMinSize` handed to a composable that
   wraps its content in a Box inflates the WRAPPER: the visible face stays at its
   natural width and the surplus becomes dead space beside it.
-- **Draw modifiers run in CHAIN ORDER**, and `hardShadow` is a `drawBehind` —
-  behind everything AFTER it in the chain, not behind the composable. Chained
-  after `background`, it stamps the offset shape ON TOP of the face. Every sticker
-  in the kit puts `hardShadow` first; the one place that did not rendered a whole
-  results board as flat grey bars.
+- **Draw modifiers run in CHAIN ORDER**: a `drawBehind` is behind everything
+  AFTER it in the chain, not behind the composable, so the focus ring goes
+  before the face's `background` or it is painted over.
 - **`focusable()` ON A SCROLL CONTAINER IS AN ANR.** A focusable asks its nearest
   scrollable ancestor to reveal its own bounds when it takes focus, so
   `verticalScroll(state).focusable()` on ONE modifier chain asks a container to
@@ -917,19 +924,17 @@ a shot beside the browser's:
   content inside it. This is the shape every d-pad-scrolled page wants (see
   `LicensesScreen.LicenseText`), so it will come up again.
 
-**The full-screen boards are a FLAT paper wash, and that is the finished look.**
-The web's `#pause-overlay` and `#results` also blur the frozen race behind them;
-this shell does not, and will not. The mechanism is why, and it is permanent:
-that picture is the SurfaceView, composited by SurfaceFlinger in a layer BELOW
-the app window, so no `RenderEffect` or modifier anywhere in the view hierarchy
-can ever see it — unreachable from Compose is not the same as impossible, but
-every route out of Compose costs more than the difference is worth. Both boards
-carry the right wash already (`--paper`, values in `public/display/display.css`);
-the results board's paper is nearly opaque, so the race barely reaches the eye
-and the board is near-indistinguishable from the web's — the more translucent
-pause overlay is the only board where the delta reads at all.
-The scene's edge vignette is decided the same way and is not Android's alone:
-see `docs/native-port/shells.md` (Decided, not owed).
+**The frost is a FLAT wash, and that is the finished look.** The web's frost
+(pause, link, results) blurs the frozen race behind it; this shell does not, and
+will not. The mechanism is why, and it is permanent: that picture is the
+SurfaceView, composited by SurfaceFlinger in a layer BELOW the app window, so no
+`RenderEffect` or modifier anywhere in the view hierarchy can ever see it —
+unreachable from Compose is not the same as impossible, but every route out of
+Compose costs more than the difference is worth. Unblurred at the token's 0.88
+the race, HUD chips and all, read through as a sharp ghost, which is why
+`Sticker.frost` lays the same colour at 0.94. The scene's edge vignette is
+decided the same way and is not Android's alone: see `docs/native-port/shells.md`
+(Decided, not owed).
 
 ## The info board
 

@@ -136,6 +136,10 @@ TTP_ABI void ttp_fast_forward(int h);                                        // 
 // human across is often the last car, raceOver() is true on that frame, and the
 // race is over before a single frame of the flourish can be drawn.
 TTP_ABI void ttp_hold_end(int h, int on);                                    // RaceSession::holdEnd
+// THE CURTAIN CALL: step a race that has ENDED, so the field keeps driving
+// behind the results board rather than freezing. Muted, and it queues nothing:
+// the race is decided, so nothing a victory lap does is an event.
+TTP_ABI void ttp_coast(int h, double dtMs);                                  // RaceSession::coast
 
 // ---- pause / state ----------------------------------------------------------
 

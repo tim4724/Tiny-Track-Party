@@ -205,6 +205,21 @@ for (const scenario of ['playing', 'playing-buttons', 'lobby-host', 'intermissio
 }
 
 // ...while the one field that takes typing keeps it.
+// The settings groups are fieldsets whose outline the browser cuts round the
+// legend. A flex legend STRETCHES to the fieldset's width in WebKit (Chromium
+// shrink-wraps it), and the cut then took the whole top edge of the ring; it
+// shipped that way to an iPhone SE before anyone saw it.
+test('webkit settings: each group caption is only as wide as its words', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=settings-player&color=0');
+  await page.waitForSelector('#settings-card');
+  const groups = await page.$$eval('.set-group', (els) => els.map((g) => {
+    const legend = g.querySelector('legend');
+    return { group: g.getBoundingClientRect().width, legend: legend.getBoundingClientRect().width };
+  }));
+  expect(groups).toHaveLength(2);
+  for (const g of groups) expect(g.legend).toBeLessThan(g.group * 0.6);
+});
+
 test('webkit: the name field stays selectable', async ({ page }) => {
   await page.goto('/controller/index.html?scenario=name');
   expect(await page.locator('#name-input').evaluate((e) => getComputedStyle(e).webkitUserSelect)).not.toBe('none');

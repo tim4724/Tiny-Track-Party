@@ -173,6 +173,10 @@ extension Schematic {
         assert(!cupColor.isEmpty, "no cup colours in the catalogue — was ttp_ui_configure called?")
     }
 
+    /// `.cup-maps__tile`'s corner, which every tile on the cup slot shares —
+    /// the maps, the "?" tiles and the locked rung.
+    static let tileRadius: CGFloat = 14
+
     /// A cup-less catalogue keeps the old default green.
     private static let cupColorFallback: UInt32 = 0x7FBF63
 
@@ -187,19 +191,30 @@ extension Schematic {
     /// answer — mixing the same pair in linear light comes out visibly darker.
     @MainActor
     static func fieldTint(cupId: String?) -> Color {
-        wash(cupId.flatMap { cupColor[$0] } ?? cupColorFallback)
+        wash(cupId.flatMap { cupColor[$0] } ?? cupColorFallback, fieldShare)
     }
 
     /// `trackPicker.js`'s NEUTRAL_COLOR as the same 26% wash — the unknown-cup
     /// "?" chips wear it (`neutralTint(FIELD_TINT)`), so "belongs to no cup" is
     /// one colour on the TV, the web card and the phone's 🎲 tile. NOT the
     /// `fieldTint(nil)` fallback, which is the cup-less catalogue's old green.
-    static var neutralTint: Color { wash(0x8C8398) }
+    static var neutralTint: Color { wash(neutralColor, fieldShare) }
 
-    private static func wash(_ rgb: UInt32) -> Color {
+    private static let neutralColor: UInt32 = 0x8C8398
+
+    /// The cup slot's name LABEL (`.cup-sticker`): the pick's cup colour at 34%
+    /// toward white, or the neutral grey for a run that belongs to no cup (the
+    /// random family, the tour). `lobbySeats.js` hands the CSS `cupTint(id, 100)`
+    /// or `neutralTint(100)` and the CSS mixes it, which is this.
+    @MainActor
+    static func labelTint(cupId: String?) -> Color {
+        wash(cupId.map { cupColor[$0] ?? cupColorFallback } ?? neutralColor, 0.34)
+    }
+
+    private static func wash(_ rgb: UInt32, _ share: Double) -> Color {
         let mix = { (channel: UInt32) -> Double in
             let c = Double((rgb >> channel) & 0xFF) / 255
-            return c * fieldShare + (1 - fieldShare)   // the other side of the mix is #fff
+            return c * share + (1 - share)   // the other side of the mix is #fff
         }
         return Color(red: mix(16), green: mix(8), blue: mix(0))
     }
@@ -208,7 +223,7 @@ extension Schematic {
 // MARK: - The tile
 
 /// One mini-map as the lobby draws it: cup-tinted field, white casing, ink road,
-/// a dot on the start/finish line, inside a hairline sticker frame.
+/// a dot on the start/finish line. No frame: the field's own tint is the edge.
 ///
 /// The two strokes are the whole "track ribbon" look and they are ONE path drawn
 /// twice — a wide white one under a narrow dark one. Drawing an outline instead
@@ -260,8 +275,7 @@ struct SchematicMap: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous))
-        .stickerOutline(Sticker.hairlineBorder, radius: Sticker.radiusSmall)
+        .clipShape(RoundedRectangle(cornerRadius: Schematic.tileRadius, style: .continuous))
         // `.task(id:)` and not `.onAppear`: the cup slot re-uses these tiles as
         // the host changes their pick, so the load has to re-run when the id
         // moves under a view that never left the screen.

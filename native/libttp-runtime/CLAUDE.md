@@ -78,6 +78,10 @@ itself, and the field carries on (`Game` already drives a finished car round a
 victory lap). `endRace` is the far end — it banks the points, lands the board and
 arms the intermission, whose clock therefore starts AFTER the flourish so a
 chained race keeps its whole budget.
+Nor does the board freeze the race. Behind it the shell steps the ended session
+with `ttp_coast`: every car is home and on its victory lap, the step is muted and
+whatever it raises is dropped, so the picture under the glass stays alive until
+the next race or the lobby takes the scene.
 
 The freeze is deliberately NOT an effect. `endRace` runs off the `_raceEnd` event,
 and that event is raised BY the burst that resolves the cars still running, so a

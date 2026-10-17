@@ -1,9 +1,9 @@
-// Generates public/shared/design-tokens.json — the Sticker Bash design tokens as
+// Generates public/shared/design-tokens.json — the Toy Box design tokens as
 // machine-readable DATA, extracted from the ONE place they are authored:
 // public/shared/theme.css's `:root` block.
 //
 // WHY THIS DIRECTION. architecture.md's mitigation for three implementations of
-// the sticker look is "ship the design tokens as DATA so all three consume the
+// the look is "ship the design tokens as DATA so all three consume the
 // same table the CSS does". The obvious reading is a JSON source with the CSS
 // generated from it. That was deliberately inverted, for four reasons:
 //
@@ -134,7 +134,18 @@ function fnRgba(css) {
   const c = raw.slice(0, 3).map(Number);
   return [c[0], c[1], c[2], raw.length > 3 ? Number(raw[3]) : 1];
 }
-const rgbaOf = (v) => (HEX.test(v) ? hexRgba(v) : RGB.test(v) ? fnRgba(v) : null);
+// `color-mix(in srgb, A p%, B)` — the CHOICE washes are a chrome colour mixed
+// toward white, and baking the mix here (rather than re-typing its hex) keeps
+// the wash moving with the colour it is a wash of. sRGB, as CSS mixes it:
+// per channel, p of A plus the rest of B, alpha likewise.
+const MIX = /^color-mix\(in srgb,\s*(.+?)\s+(\d*\.?\d+)%\s*,\s*(.+?)\)$/;
+function mixRgba(css) {
+  const [, a, pct, b] = MIX.exec(css);
+  const ca = rgbaOf(a), cb = rgbaOf(b), p = Number(pct) / 100;
+  if (!ca || !cb) return null;
+  return ca.map((v, i) => (i < 3 ? Math.round(v * p + cb[i] * (1 - p)) : Number((v * p + cb[i] * (1 - p)).toFixed(4))));
+}
+const rgbaOf = (v) => (HEX.test(v) ? hexRgba(v) : RGB.test(v) ? fnRgba(v) : MIX.test(v) ? mixRgba(v) : null);
 
 // Follow var() aliases to the literal they end at. Cycles and dangling
 // references throw: a token that resolves to nothing is a broken stylesheet, and

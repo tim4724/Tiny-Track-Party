@@ -126,10 +126,6 @@ enum Copy {
     /// quiet, so the column never goes ragged.
     static func gained(_ n: Int) -> String { "+\(n)" }
 
-    /// A results/podium name with the AI tag. Bots keep the tag everywhere —
-    /// beating them is the story of a short-handed cup.
-    static func name(_ name: String, ai: Bool) -> String { ai ? name + cpuSuffix : name }
-
     /// The countdown banner. `n > 0` is the digit, `0` is GO, anything below is
     /// the banner going away. (`main.js`, driven by
     /// `ttp_race_countdown_tick_json`.)
@@ -149,6 +145,8 @@ enum Copy {
     /// Hangs under the join ticket for the whole lobby — joining stays possible
     /// until the race starts.
     static let scanPrompt = "Scan the code with your phone!"
+    /// The ticket's URL line until the room opens (`.ticket__wait`).
+    static let loading = "Loading…"
     /// An unfilled seat. `ttp_ui_seat_grid_json` pads the grid with these; the
     /// padding is the model's job so three shells cannot pad differently.
     static let openSeat = "Open"
@@ -201,6 +199,8 @@ enum Copy {
     static let finished = "FINISHED"
     /// GO is the beat the race actually starts on, not a beat before it.
     static let go = "GO!"
+    /// The GO beat's cell on the countdown strip, which is too small for the "!".
+    static let goStep = "GO"
     /// The reconnect card's subtitle, under the dropped player's name and over
     /// their rejoin QR. It takes the same cell slot as the FINISHED card, and
     /// FINISHED wins if a car is somehow both.
@@ -235,11 +235,9 @@ enum Copy {
     /// secs + ellipsis` — three literals around two values, exactly as the web
     /// builds it, so the sentence reads the same on both screens.
     static let nextUp = "Next up: "
-    static let startingIn = " — starting in "
+    static let startingIn = " · starting in "
     static let ellipsis = "…"
-
-    // MARK: - Shared
-
-    /// Appended to every AI name on the results list and the podium.
-    static let cpuSuffix = " (CPU)"
+    /// The tag after every AI name on the results list and the podium. Bots
+    /// keep it everywhere — beating them is the story of a short-handed cup.
+    static let cpu = "CPU"
 }

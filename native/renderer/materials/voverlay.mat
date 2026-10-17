@@ -1,12 +1,12 @@
 // The 2D cell overlay: the split-screen dividers and the per-player steer bar.
 //
 // WHY THE RENDERER DRAWS THESE AT ALL. architecture.md keeps the HUD in the
-// shells because the Sticker Bash look is a UI-TOOLKIT problem — variable-font
-// shaping, sticker chrome, transitions — and Filament is not one. The line that
-// admits exactly these two and nothing else:
+// shells because the chrome is a UI-TOOLKIT problem (variable-font shaping,
+// cards, transitions) and Filament is not one. The line that admits exactly
+// these two and nothing else:
 //
 //     cell-anchored AND textless -> renderer
-//     anything carrying type or sticker chrome -> shell
+//     anything carrying type or card chrome -> shell
 //
 // A rounded rect with a translating fill has no type in it, is pinned to a cell
 // whose geometry is already C++ (ttp_grid_cell), and is the ONLY HUD element
@@ -16,23 +16,29 @@
 // item slot, the FINISHED card and the reconnect QR all stay in the shell.
 //
 // ONE MATERIAL, TWO SHAPES, because the whole bar composites in one fragment:
-//   border == 0  a plain rect in `ink` — a divider rule
-//   border >  0  the steer bar: ink border ring, `surface` interior, the 40 %
-//                centre tick, then the livery fill, in that paint order
-// Doing it in one pass is not (only) about draw calls: .cell-steer's children
-// composite over KNOWN opaque colours, so the tick's 40 % and the fill's edges
-// can be mixed here in sRGB — exactly the arithmetic the browser did — instead
-// of being blended against the framebuffer in whatever space it happens to be.
+//   pad == 0  a plain rect in `ink`: a divider rule
+//   pad >  0  the steer bar, the Toy Box way (the phone's .steer__track is its
+//             twin): a GLASS pill, `ink` at its own alpha with no outline; a
+//             thin `tick` at the centre; then the livery fill, a flat pill
+//             INSET by `pad` on every side. It is read, never pressed, so it
+//             wears glass and paint, never plastic.
+// The three layers composite HERE, premultiplied src-over in that order, and
+// the quad hands the framebuffer one premultiplied colour. So the tick and the
+// fill's antialiased edges mix against the glass exactly as CSS mixes a child
+// over its parent, and only the glass itself (and each outer edge's coverage)
+// really blends with the race under it.
 //
 // COLOUR SPACE. This draws straight onto the swap chain with post-processing
-// off — after the present pass where there is one, and otherwise inside each
-// race cell's own pass, last in its blend order (TtpRenderer::drawOverlay has
-// the fold) — so a value written here IS the on-panel sRGB value, and the only
-// real framebuffer blend left (the shapes' antialiased edges; the divider
-// itself is opaque black) blends sRGB against sRGB,
-// like CSS compositing. Authoring in the scene's linear space and letting
-// vpresent grade it would blend in LINEAR instead, which is a visibly different
-// answer: ink at 40 % over white is 0.67 in sRGB and 0.81 in linear.
+// off (after the present pass where there is one, and otherwise inside each
+// race cell's own pass, last in its blend order; TtpRenderer::drawOverlay has
+// the fold) so a value written here IS the on-panel sRGB value, and the
+// framebuffer blend that is left (the see-through glass over the race, and the
+// shapes' antialiased edges; the divider itself is opaque black) blends sRGB
+// against sRGB, like CSS compositing. The glass is where that matters: it is a
+// real translucent layer over the scene now, and authoring it in the scene's
+// linear space and letting vpresent grade it would blend in LINEAR instead,
+// which is a visibly different answer: ink at 50 % over white is about 0.58 in
+// sRGB and 0.73 in linear, a much paler glass.
 //
 // Units are DEVICE pixels throughout, with no UI unit anywhere: drawOverlay
 // derives the bar from the cell's and the screen's heights, and the rules'
@@ -40,19 +46,26 @@
 // so nothing here needs a scale from the shell. Every px-valued parameter and
 // the varying carry it at high precision: a mediump float has ~4 px of slack at
 // 4 K, which would smear a 4 px rule.
+//
+// EVERY VECTOR PARAMETER IS A float4, used or not. A highp float3 in a block
+// like this read back at the wrong scale on the Android box's Vulkan
+// (vshadow.mat, 2026-10-14) while GL was right; float4 sidesteps the layout
+// question rather than relying on which neighbour a float3 happens to have.
 material {
     name : TtpVoverlay,
     parameters : [
         // the quad's own size, so the vertex stage can hand the fragment real
         // pixels rather than a 0..1 corner
         { type : float2, name : size,    precision : high },
-        // x radius, y border width, z centre-tick width (all device px)
-        { type : float3, name : shape,   precision : high },
-        // the moving fill: x left edge (local px), y width, z corner radius
-        { type : float3, name : fill,    precision : high },
-        { type : float4, name : ink },     // --ink, with the divider's alpha in w
-        { type : float3, name : surface }, // --surface
-        { type : float3, name : bar }      // --c: this player's livery
+        // x radius, y fill inset (0 = a divider), z centre-tick width, w unused
+        // (all device px)
+        { type : float4, name : shape,   precision : high },
+        // the moving fill: x left edge (local px), y width, z corner radius,
+        // w unused
+        { type : float4, name : fill,    precision : high },
+        { type : float4, name : ink },   // the glass (or the rule), alpha in w
+        { type : float4, name : tick },  // the centre tick, alpha in w
+        { type : float4, name : bar }    // --c: this player's livery, w unused
     ],
     variables : [ uv ],
     shadingModel : unlit,
@@ -93,7 +106,7 @@ vertex {
         material.clipSpaceTransform = toClip
                 * getUserWorldFromWorldMatrix() * getWorldFromModelMatrix();
         // Carrying the local PIXEL coordinate is what lets every measurement
-        // below be a CSS number straight off display.css.
+        // below be a pixel number straight off drawOverlay's composition.
         material.uv.xy = getPosition().xy * materialParams.size;
     }
 }
@@ -117,38 +130,32 @@ fragment {
         prepareMaterial(material);
         highp vec2 h = materialParams.size * 0.5;
         highp vec2 p = variable_uv.xy - h;
-        highp float border = materialParams.shape.y;
+        highp float pad = materialParams.shape.y;
+        float outer = cov(sdBox(p, h, materialParams.shape.x));
 
-        float a = cov(sdBox(p, h, materialParams.shape.x)) * materialParams.ink.w;
-        vec3 c = materialParams.ink.rgb;
+        // Premultiplied throughout, like vblend: Filament's `transparent`
+        // blending works in premultiplied alpha, so a straight-alpha colour
+        // would add its full value at the antialiased edges and turn every
+        // curve into a hard one.
+        vec4 o = vec4(materialParams.ink.rgb, 1.0) * materialParams.ink.w;
 
-        if (border > 0.0) {
-            // .cell-steer: 4 px ink border, --surface interior, overflow hidden.
-            // The interior's corner radius is the outer one less the border,
-            // which is how CSS curves an inner edge.
-            float inner = cov(sdBox(p, h - border, materialParams.shape.x - border));
-            c = mix(c, materialParams.surface, inner);
+        if (pad > 0.0) {
+            // The tick: centred on the bar and as tall as the fill, painted
+            // UNDER it, so it shows only where the fill has moved off centre.
+            highp float t = materialParams.shape.z * 0.5;
+            float tick = clamp(t - abs(p.x) + 0.5, 0.0, 1.0)
+                    * cov(abs(p.y) - (h.y - pad)) * materialParams.tick.w;
+            o = vec4(materialParams.tick.rgb, 1.0) * tick + o * (1.0 - tick);
 
-            // .cell-steer::before — a 3 px rule at the padding box's midpoint
-            // (left: 50%), ink at 40 % over the surface it sits on. It paints
-            // BEFORE the fill and is covered by it wherever they overlap, which
-            // is most of the travel: the fill is half the inner width, centred.
-            highp float x = variable_uv.x;
-            float tick = clamp(min(x - h.x, h.x + materialParams.shape.z - x) + 0.5,
-                    0.0, 1.0) * inner;
-            c = mix(c, mix(materialParams.surface, materialParams.ink.rgb, 0.4), tick);
-
-            // .cell-steer__fill — the pill that tracks raw phone tilt, clipped
-            // to the interior by `inner` (the parent's overflow: hidden).
-            highp vec2 fh = vec2(materialParams.fill.y * 0.5, h.y - border);
+            // The fill: the pill that tracks raw phone tilt. Inset by `pad` on
+            // every side, and drawOverlay's travel stops it `pad` short of
+            // either end, so even full lock leaves glass showing past it.
+            highp vec2 fh = vec2(materialParams.fill.y * 0.5, h.y - pad);
             highp vec2 fc = vec2(materialParams.fill.x + fh.x, h.y);
-            c = mix(c, materialParams.bar,
-                    cov(sdBox(variable_uv.xy - fc, fh, materialParams.fill.z)) * inner);
+            float f = cov(sdBox(variable_uv.xy - fc, fh, materialParams.fill.z));
+            o = vec4(materialParams.bar.rgb, 1.0) * f + o * (1.0 - f);
         }
 
-        // Premultiplied, like vblend: Filament's `transparent` blending works in
-        // premultiplied alpha, so a straight-alpha colour would add its full
-        // value at the antialiased edges and turn every curve into a hard one.
-        material.baseColor = vec4(c * a, a);
+        material.baseColor = o * outer;
     }
 }

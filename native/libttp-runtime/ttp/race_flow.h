@@ -532,10 +532,11 @@ struct EndRaceInput {
   double intermissionMs = 0;
   double nowMs = 0;
 };
-// The flourish is over. NOW the field freezes, the cup banks its points, the
-// board goes up — and, mid-cup, the intermission clock starts, measured from
-// here so a chained race gets its full budget rather than the flourish eating
-// into it.
+// The flourish is over. NOW the race is decided (the shell resolves the cars
+// still running, then lets the field coast behind the board on ttp_coast), the
+// cup banks its points, the board goes up, and, mid-cup, the intermission
+// clock starts, measured from here so a chained race gets its full budget
+// rather than the flourish eating into it.
 Effects endRace(const EndRaceInput& in);
 
 // ---- the cup chain -----------------------------------------------------------

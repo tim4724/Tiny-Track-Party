@@ -10,20 +10,45 @@
 // renders through these functions cannot drift from live play by construction.
 const el = (id) => document.getElementById(id);
 
-// The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
-// beat, the banner fades over the next via .is-go). n < 0: banner gone. The
-// beat's SOUND is the wasm's — it taps the same tick — so there is no cue call.
-const CD_COPY = { go: 'GO!' };  // the GO beat's copy; numerals ride the effect
+// The countdown banner: one white disc carrying the beat, and under it a glass
+// strip of every beat with the current one lit. n > 0: "3/2/1". n === 0: "GO!"
+// (the race starts this beat; the disc goes green and the banner fades over
+// the next via .is-go). n < 0: banner gone. The beat's SOUND is the wasm's —
+// it taps the same tick — so there is no cue call.
+const CD_COPY = { go: 'GO!', goStep: 'GO' };  // the GO beat's copy; numerals ride the effect
 export function showCountdownBanner(e) {
   const cd = el('countdown');
   // `go` IS the beat semantics (the effect carries it); no third spelling of
   // "n === 0 means GO" here.
-  cd.textContent = e.go ? CD_COPY.go : e.n > 0 ? String(e.n) : '';
+  const on = e.go || e.n > 0;
+  // The strip is laid out on the way in, from the launch's own count (the same
+  // number main.js launchArgs hands the session), so a resumed count still
+  // shows the beats it already passed.
+  if (on && cd.classList.contains('hidden')) paintSteps(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
+  cd.classList.toggle('hidden', !on);
+  el('countdown-num').textContent = e.go ? CD_COPY.go : on ? String(e.n) : '';
+  cd.dataset.n = e.go ? '0' : String(e.n);   // display.css centres a "1" by eye
   cd.classList.toggle('is-go', e.go);
+  for (const s of el('countdown-steps').children) {
+    s.classList.toggle('is-now', s.dataset.n === String(e.go ? 0 : e.n));
+  }
   // slap each numeral in (re-add .slap around a reflow so the animation restarts
   // on the same element); GO! keeps its own is-go fade-out.
-  cd.classList.remove('slap');
-  if (e.slap) { void cd.offsetWidth; cd.classList.add('slap'); }
+  const disc = cd.querySelector('.cd-disc');
+  disc.classList.remove('slap');
+  if (e.slap) { void disc.offsetWidth; disc.classList.add('slap'); }
+}
+
+function paintSteps(count) {
+  const box = el('countdown-steps');
+  box.textContent = '';
+  for (let n = count; n >= 0; n--) {
+    const s = document.createElement('span');
+    s.className = n ? 'cd-step' : 'cd-step cd-step--go';
+    s.dataset.n = String(n);
+    s.textContent = n ? String(n) : CD_COPY.goStep;
+    box.appendChild(s);
+  }
 }
 
 // ---- the results board ------------------------------------------------------
@@ -156,10 +181,18 @@ function buildRow(row, colors, i) {
   const nm = document.createElement('span');
   nm.className = 'res-name';
   nm.style.setProperty('--c', colors[row.colorIndex] || 'inherit');
-  nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
+  nm.textContent = row.name;
+  li.append(nm);
+  // A bot says so in a small grey tag after its name rather than in the name.
+  if (row.ai) {
+    const cpu = document.createElement('span');
+    cpu.className = 'res-cpu';
+    cpu.textContent = 'CPU';
+    li.append(cpu);
+  }
   const trail = document.createElement('span');
   trail.className = 'res-trail';
-  li.append(nm, trail);
+  li.append(trail);
   fillTrail(trail, row);
   return li;
 }

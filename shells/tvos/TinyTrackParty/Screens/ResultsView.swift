@@ -84,16 +84,14 @@ struct RaceResultsView: View {
 
     var body: some View {
         ZStack {
-            // The same frosted glass as the pause overlay, one step more opaque
-            // (`rgba(255, 246, 235, 0.92)`): the race is frozen behind it and
-            // this board is what the room is looking at now. The GLASS reaches
-            // the bezel; the board itself stays inside the TV's safe area.
-            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
-            Rectangle().fill(Tokens.paper.opacity(0.92)).ignoresSafeArea()
+            // FROST over the live scene, the same surface as the pause overlay:
+            // see-through on purpose, because behind it is the race that just
+            // ended and, between cup races, the next track coming in. The frost
+            // reaches the bezel; the board itself stays inside the safe area.
+            Frost()
 
-            // NO CARD. `#results` is a flex column on the paper wash and nothing
-            // else — the title, the list and the button sit BARE on it, which is
-            // what lets the white rows read as stickers laid on paper.
+            // The title, the one paper card of rows, the footer and the button
+            // stand straight on the frost.
             VStack(spacing: 16) {
                 title
                 sub
@@ -211,10 +209,10 @@ struct RaceResultsView: View {
 
     /// TWO TITLE STATES, and the podium's is the SMALLER of them, because it
     /// wears a box: `#results h2` is 4.6rem (73.6 authored px) plain, while
-    /// `.is-champs h2` drops to 3.4rem (54.4) and reserves the sticker's padding
-    /// and a TRANSPARENT border from its first frame. The celebration is then
-    /// paint only — fill, border colour, shadow and a rotation, none of which
-    /// cost layout — so nothing under it moves while the rows are mid-glide.
+    /// `.is-champs h2` drops to 3.4rem (54.4) and reserves the label's padding
+    /// from its first frame. The celebration is then paint only — the red
+    /// LABEL's tint and text and a rotation, none of which cost layout — so
+    /// nothing under it moves while the rows are mid-glide.
     private var title: some View {
         let champs = settled && view.podium
         // The CUT turns the heading to "Standings", never to a champion: a
@@ -225,18 +223,13 @@ struct RaceResultsView: View {
         let size = view.podium ? Self.titleSize : Self.titleSizePlain
         return Text(Copy.title(key, cupName: view.cupName))
             .font(Fonts.display(size, weight: .bold))
-            .foregroundStyle(champs ? Color.white : Tokens.ink)
+            .foregroundStyle(champs ? Tokens.red.mixed(0.78, with: Sticker.labelInk) : Tokens.ink)
             .padding(.vertical, Self.titleSize * 0.25)
             .padding(.horizontal, Self.titleSize * 0.7)
             .background(
                 RoundedRectangle(cornerRadius: Sticker.radiusLarge, style: .continuous)
-                    .fill(champs ? Tokens.red : Color.clear)
-                    .hardShadow(champs ? Sticker.cardShadow : .zero)
+                    .fill(champs ? Tokens.red.mixed(0.20, with: .white) : Color.clear)
             )
-            // Reserved on every board, so the champs border lands as colour
-            // rather than as 4 points of new layout.
-            .stickerOutline(Sticker.border, radius: Sticker.radiusLarge,
-                            color: champs ? Tokens.ink : Color.clear)
             .rotationEffect(.degrees(champs ? -2 : 0))
             .animation(.spring(response: 0.42, dampingFraction: 0.55), value: champs)
     }
@@ -279,18 +272,30 @@ struct RaceResultsView: View {
         // column can only move a row within its own.
         return ZStack(alignment: .topLeading) {
             ForEach(Array(live.enumerated()), id: \.element.row.id) { i, entry in
-                BoardRow(rank: i + 1, live: entry, settled: settled)
+                // The rule ABOVE each row parts it from the one before, so the
+                // top of each column has none, and neither does the row under
+                // the leader's washed one (`li:first-child + li`).
+                BoardRow(rank: i + 1, live: entry, settled: settled,
+                         leader: i == 0, ruled: i % perColumn != 0 && i != 1)
                     .frame(width: width)
                     .offset(x: CGFloat(i / perColumn) * (width + Self.columnGap),
-                            y: CGFloat(i % perColumn) * (Self.rowHeight + Self.rowGap))
+                            y: CGFloat(i % perColumn) * Self.rowHeight)
                     // Of two rows that cross, the climber ENDS higher, so
                     // stacking by rank passes it in front, as on the web.
                     .zIndex(Double(-i))
             }
         }
         .frame(width: CGFloat(columns) * width + CGFloat(max(0, columns - 1)) * Self.columnGap,
-               height: Self.rowsHeight(perColumn), alignment: .topLeading)
+               height: Self.rowHeight * CGFloat(perColumn), alignment: .topLeading)
         .opacity(listOpacity)
+        // The board is ONE paper card and the rows are printed on it, ruled
+        // apart by a hairline: rows that each looked like a button were the
+        // sticker board's problem. The card holds still through the cut; only
+        // the rows on it dip.
+        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .background(RoundedRectangle(cornerRadius: Sticker.radiusLarge, style: .continuous)
+            .fill(Tokens.surface))
     }
 
     // MARK: - The intermission footer
@@ -304,16 +309,20 @@ struct RaceResultsView: View {
         if view.intermission {
             ZStack {
                 if let next = view.next, settled {
-                    // "Next up: Gulch — starting in 8…", assembled from three
+                    // "Next up: Gulch · starting in 8…", assembled from three
                     // literals around two values exactly as the web assembles
-                    // it, so the sentence reads the same on both screens.
+                    // it, so the sentence reads the same on both screens. A
+                    // LABEL in ink-2: a fact about the board, not a control.
                     (Text(Copy.nextUp)
                         + Text(next.trackName).font(Fonts.display(24, weight: .bold)).foregroundColor(Tokens.ink)
                         + Text(Copy.startingIn)
                         + Text(String(intermissionSecs ?? next.secs))
                         + Text(Copy.ellipsis))
                         .font(Fonts.body(24, weight: .heavy))
-                        .foregroundStyle(Tokens.ink2)
+                        .foregroundStyle(Tokens.ink2.mixed(0.78, with: Sticker.labelInk))
+                        .padding(.vertical, 24 * 0.45)
+                        .padding(.horizontal, 24 * 1.1)
+                        .background(Capsule().fill(Tokens.ink2.mixed(0.20, with: .white)))
                 }
             }
             .frame(height: Self.footerHeight)
@@ -330,7 +339,7 @@ struct RaceResultsView: View {
     /// own live `series` object, so those two can in principle disagree. They
     /// cannot here.
     private var primaryButton: some View {
-        StickerButton(Copy.newGame(view.newGameKey), tint: Tokens.brand, size: 30) {
+        StickerButton(Copy.newGame(view.newGameKey), tint: Tokens.brand, size: 28) {
             if view.newGameKey == "next_race" { onNextRace() } else { onNewGame() }
         }
         .focused($focus, equals: .primary)
@@ -366,18 +375,14 @@ struct RaceResultsView: View {
 
     /// Up to this many rows the board stays one column; above it, two.
     private static let oneColumnMax = 5
-    /// Between the two columns, and the reserved footer's height.
-    private static let columnGap: CGFloat = 24
-    private static let footerHeight: CGFloat = 34
-    /// One row's height and the gap between two. `#results-list li` measures ~60
-    /// authored px. Fixed rather than content-sized, so the BOARD cannot resize
-    /// under a re-sort.
-    fileprivate static let rowHeight: CGFloat = 60
-    private static let rowGap: CGFloat = 8
-
-    fileprivate static func rowsHeight(_ n: Int) -> CGFloat {
-        rowHeight * CGFloat(n) + rowGap * CGFloat(max(0, n - 1))
-    }
+    /// Between the two columns (`column-gap: 2rem`), and the reserved footer's
+    /// height (the "Next up" label).
+    private static let columnGap: CGFloat = 32
+    private static let footerHeight: CGFloat = 56
+    /// One row's height, its rule included: `#results-list li` measures ~52
+    /// authored px. Rows touch — the hairline is what parts them. Fixed rather
+    /// than content-sized, so the BOARD cannot resize under a re-sort.
+    fileprivate static let rowHeight: CGFloat = 52
 }
 
 // MARK: - A row as it stands right now
@@ -417,6 +422,11 @@ private struct BoardRow: View {
     let rank: Int
     let live: LiveRow
     let settled: Bool
+    /// The top of the table, washed in the celebration red so the eye finds it
+    /// first (`li:first-child`).
+    let leader: Bool
+    /// Draws the hairline above itself (`border-top`).
+    let ruled: Bool
 
     private var row: GameState.ResultsView.Row { live.row }
 
@@ -436,26 +446,43 @@ private struct BoardRow: View {
             // printing "9" beside a seat that has no result ranks it against
             // people who do.
             rankChip
-            // NO SWATCH. The livery rides the NAME — a disc beside an ink name
+            // NO SWATCH. The livery rides the NAME (mixed 80% with ink, so the
+            // palest liveries still read on white) — a disc beside an ink name
             // moves the one colour on the row off the one word that identifies
             // its owner. THE BODY FACE, like the rest of the row: only the rank
             // numeral opts into the display face.
-            Text(Copy.name(row.name, ai: row.ai))
-                .font(Fonts.body(Self.type, weight: .heavy))
-                .foregroundStyle(Tokens.car(row.colorIndex))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                Text(row.name)
+                    .font(Fonts.body(Self.type, weight: .heavy))
+                    .foregroundStyle(Tokens.car(row.colorIndex).mixed(0.8, with: Tokens.ink))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if row.ai { cpuTag }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             trailing
         }
         .frame(height: RaceResultsView.rowHeight)
         .padding(.horizontal, 12)
         .background(
-            RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous)
-                .fill(Tokens.surface)
-                .hardShadow(Sticker.popShadow)
+            RoundedRectangle(cornerRadius: Schematic.tileRadius, style: .continuous)
+                .fill(leader ? Tokens.red.mixed(0.12, with: .white) : Color.clear)
         )
-        .stickerOutline(Sticker.border, radius: Sticker.radiusSmall)
+        .overlay(alignment: .top) {
+            if ruled { Rectangle().fill(Tokens.hairline).frame(height: 2) }
+        }
+    }
+
+    /// `.res-cpu`: a bot's tag — small, grey, after the name.
+    private var cpuTag: some View {
+        Text(Copy.cpu)
+            .font(Fonts.body(Self.type * 0.5, weight: .heavy))
+            .tracking(Self.type * 0.5 * 0.08)
+            .foregroundStyle(Tokens.ink3)
+            .padding(.vertical, Self.type * 0.5 * 0.3)
+            .padding(.horizontal, Self.type * 0.5 * 0.7)
+            .background(Capsule().fill(Tokens.surface2))
+            .fixedSize()
     }
 
     private var medal: Int? { settled ? row.medal : nil }
@@ -464,8 +491,8 @@ private struct BoardRow: View {
         // A PILL, not a disc: `li::before` is `min-width: 1.6em` with
         // `0.05em 0.45em` of padding and a pill radius.
         Text(row.joining ? "\u{2013}" : String(rank))
-            .font(Fonts.display(Self.type, weight: .bold))
-            .foregroundStyle(medal == nil ? Tokens.ink2 : .white)
+            .font(Fonts.display(Self.type, weight: .semibold))
+            .foregroundStyle(medal == nil ? Tokens.ink3 : .white)
             .monospacedDigit()
             .padding(.horizontal, Self.type * 0.45)
             .padding(.vertical, Self.type * 0.05)
@@ -484,7 +511,9 @@ private struct BoardRow: View {
     @ViewBuilder
     private var trailing: some View {
         if row.joining {
-            cell(Copy.nextRace, width: Self.type * 8, color: Tokens.ink3)
+            // The lap clock's colour (`li.is-joining .res-time`). The web also
+            // sets it italic; no italic Nunito face ships in this bundle.
+            cell(Copy.nextRace, width: Self.type * 8, color: Tokens.ink2)
         } else {
             // WHICH CELL A BEAT SPEAKS IN is the row's KIND, and the cells it
             // has nothing to say in are still THERE, empty, holding their width:

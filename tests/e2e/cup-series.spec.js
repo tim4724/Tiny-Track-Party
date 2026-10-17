@@ -37,15 +37,14 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await expect(page.locator('#results-next')).toContainText(BEACH[race].charAt(0).toUpperCase() + BEACH[race].slice(1));
     await expect(alice.locator('#newgame-btn')).toHaveText('Next race ▸');
     await expect(bob.locator('#result-wait')).toContainText('starting soon');
-    // The next circuit is MESHED UNDER THIS BOARD (main.js prepareNextTrack), not
-    // under the countdown that follows it — a scene build blocks the main thread
-    // for a few hundred ms, and performed at the chained start that is a stutter
-    // with the countdown already ticking over the OUTGOING track. A timeout here
-    // means the prepare stopped happening.
-    await page.waitForFunction((id) => window.__scene._track.id === id, BEACH[race], { timeout: 15000 });
+    // The board stands over the race just run, still driving its victory laps
+    // (ttp_coast), not over a preview of the next circuit: that one is meshed
+    // at the chained start, under a still (main.js prepareNextTrack).
+    expect(await page.evaluate(() => window.__scene._track.id)).toBe(BEACH[race - 1]);
     await alice.click('#newgame-btn');
     await waitForRacing(page);
     expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[race]);
+    expect(await page.evaluate(() => window.__scene._track.id)).toBe(BEACH[race]);
     // The cell HUD (name/item/place/lap) must come back in EVERY chained race.
     // The bug: reset-scene-cars recreates the CSS-hidden HUD elements, and when
     // the new layout signature matches Stage's placement latch (same seats,

@@ -34,23 +34,21 @@ struct InfoView: View {
                 Wordmark(size: 64)
 
                 HStack(alignment: .top, spacing: 72) {
-                    LegalCard(title: Copy.privacy, url: Legal.privacyURL, rotation: -1.4)
-                    LegalCard(title: Copy.imprint, url: Legal.imprintURL, rotation: 1.4)
+                    LegalCard(title: Copy.privacy, url: Legal.privacyURL)
+                    LegalCard(title: Copy.imprint, url: Legal.imprintURL)
                 }
 
                 // The ONE focusable thing on this board, so the focus engine
                 // seats the remote here on arrival with nothing to arbitrate —
-                // which is also why it is drawn as a PRIMARY and not as the
-                // kit's quiet ghost: a board with a single control has no
-                // louder sibling for a quiet one to be quieter than, and the
-                // white ghost read as decoration beside two white cards. Blue,
-                // like the ⓘ that opened this board and the cards' own labels.
+                // which is also why it is drawn as the board's ACTION and not as
+                // a quiet choice: a board with a single control has no louder
+                // sibling for a quiet one to be quieter than, and a white choice
+                // read as decoration beside two white cards. Blue, like the
+                // cards' own labels.
                 NavigationLink(value: GameState.InfoRoute.licenses) {
                     Text(Copy.licenses)
-                        .font(Fonts.display(34, weight: .bold))
-                        .foregroundStyle(.white)
                 }
-                .buttonStyle(StickerLinkStyle(tint: Tokens.blue))
+                .buttonStyle(StickerButtonStyle(tint: Tokens.blue, size: 34))
                 // Both for the same reasons `StickerButton` states: the system
                 // focus slab is sized to the layout frame rather than the drawn
                 // face and photographs as a dark rectangle behind the board, and
@@ -78,8 +76,8 @@ struct InfoView: View {
     }
 }
 
-/// One legal page as a sticker card: its name, the QR that opens it on a phone,
-/// and the URL in full underneath.
+/// One legal page as a paper card: its name as a label, the QR that opens it on
+/// a phone, and the URL in full underneath.
 ///
 /// Display-only, deliberately NOT focusable. There is nothing for the remote to
 /// do to a QR code, and a focusable card would put two more stops between the
@@ -88,10 +86,9 @@ struct InfoView: View {
 private struct LegalCard: View {
     let title: String
     let url: String
-    let rotation: Double
 
     var body: some View {
-        StickerCard(tint: Tokens.surface, rotation: rotation, padding: InfoView.cardPadding) {
+        StickerCard(padding: InfoView.cardPadding) {
             VStack(spacing: 14) {
                 StickerPill(title, tint: Tokens.blue, size: 22)
                 qr
@@ -113,8 +110,8 @@ private struct LegalCard: View {
     /// Square whether or not Core Image produced anything, so a card that fails
     /// to encode still holds the layout rather than collapsing around its label.
     /// Filtered and antialiased for the same reason the lobby ticket's is: this
-    /// is a downscale onto a rotated card, where point sampling makes a code
-    /// ragged rather than crisp (see `LobbyView.qrPanel`).
+    /// is a downscale, where point sampling makes a code ragged rather than
+    /// crisp (see `LobbyView.qrPanel`).
     @ViewBuilder
     private var qr: some View {
         let side = InfoView.cardWidth - 2 * InfoView.cardPadding
@@ -126,52 +123,6 @@ private struct LegalCard: View {
                 .frame(width: side, height: side)
         } else {
             Color.clear.frame(width: side, height: side)
-        }
-    }
-}
-
-/// `StickerButton`'s face for a `NavigationLink`.
-///
-/// The kit's button is a `Button` with an action, and a push is a link — tvOS
-/// restores focus onto a link when its page pops, which an action-plus-state
-/// button does not get for free. Rather than fork the look, this style draws
-/// the same ledge, lift and press the sticker kit's own style draws.
-struct StickerLinkStyle: ButtonStyle {
-    var tint: Color = Tokens.brand
-
-    func makeBody(configuration: Configuration) -> some View {
-        Face(configuration: configuration, tint: tint)
-    }
-
-    private struct Face: View {
-        let configuration: StickerLinkStyle.Configuration
-        let tint: Color
-
-        @Environment(\.isFocused) private var isFocused
-
-        var body: some View {
-            let pressed = configuration.isPressed
-            let drop = Sticker.buttonDrop
-            let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-
-            return ZStack(alignment: .top) {
-                shape.fill(Tokens.btnLedge)
-                    .offset(y: drop)
-                configuration.label
-                    .padding(.vertical, 27)     // .btn is 0.8em/1.2em at 34pt
-                    .padding(.horizontal, 41)
-                    .background(
-                        shape.fill(tint)
-                            .hardShadow(isFocused ? Sticker.focusShadow : .zero)
-                    )
-                    .stickerOutline(Sticker.border, radius: Sticker.radius)
-                    .offset(y: pressed ? Sticker.buttonSink : 0)
-            }
-            .padding(.bottom, drop)
-            .brightness(isFocused ? Sticker.focusBrightness : 0)
-            .scaleEffect(isFocused ? Sticker.focusScale : 1)
-            .animation(.easeOut(duration: 0.06), value: pressed)
-            .animation(.easeOut(duration: 0.12), value: isFocused)
         }
     }
 }

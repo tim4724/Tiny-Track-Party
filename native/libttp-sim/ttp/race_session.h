@@ -51,6 +51,12 @@ class RaceSession {
   // layer's, and this only has to not end while one is running.
   void holdEnd(bool on) { holdingEnd_ = on; }
   bool holdingEnd() const { return holdingEnd_; }
+  // THE CURTAIN CALL. A FINISHED race keeps moving behind the results board:
+  // every car that is home drives itself (the victory-lap autopilot above), so
+  // the field circulates instead of freezing on the frame the race was decided.
+  // Only the cars move. The race is over, so nothing here can end, time or
+  // finish anything; what the step raises is the caller's to discard.
+  void coast(double dtMs) { if (ended_ && !disposed_) engine_->update(dtMs); }
   bool forceRemoveCar(const Id& id);
   bool rekeyCar(const Id& oldId, const Id& newId) { return engine_->rekeyCar(oldId, newId); }
   Value getResults() { return engine_->getResults(); }
@@ -88,6 +94,7 @@ class RaceSession {
   bool ended_ = false;
   bool paused_ = false;
   bool holdingEnd_ = false;   // see holdEnd: the flourish is running
+  bool disposed_ = false;      // ended by dispose(), not by a finish: coast() stops
 };
 
 }  // namespace ttp

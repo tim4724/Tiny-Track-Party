@@ -17,13 +17,9 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
-// Each cup owns a COLOUR, and it appears only on the PICKED tile — an unpicked one is
-// plain white paper. That's the lobby's existing idiom rather than a new one: the car
-// strip right above leaves its unpicked cars white and marks your pick by tinting it
-// toward your livery with a hard shadow under it (.car-opt--mine). Reusing it verbatim
-// keeps the two rows speaking one language, and it needs no chrome colour of its own —
-// a green ring said "green" louder than it said "picked", and fought the cup colour
-// underneath it.
+// Each cup owns a COLOUR, worn on its tile's band (BAND_TINT below). The pick is
+// marked the way the car page marks it, by washing the whole tile, here in the
+// cup's own colour (.mode-opt--mine), so the two pages speak one language.
 //
 // These are authored, not derived. They started life pulled from each biome's first
 // horizon-hill colour — the same source the 3D world themes from — on the theory that
@@ -116,15 +112,24 @@ const TOUR_LABEL = 'World Tour';
 const randomRuns = () => {
   const m = randomManifest();
   return [
-    { key: 'tour', label: TOUR_LABEL, sub: 'one per cup', pick: { mode: 'tour' } },
-    { key: 'card', label: `${m.DEFAULT} Races`, sub: 'random draw', pick: { mode: 'random', randomRaces: m.DEFAULT } },
-    { key: 'endless', label: 'Endless Run', sub: 'random draw', pick: { mode: 'random', randomRaces: 0 } }
+    { key: 'tour', label: TOUR_LABEL, sub: 'One per cup', icon: 'globe', pick: { mode: 'tour' } },
+    { key: 'card', label: `${m.DEFAULT} Races`, sub: 'Random draw', icon: 'shuffle', pick: { mode: 'random', randomRaces: m.DEFAULT } },
+    { key: 'endless', label: 'Endless Run', sub: 'Random draw', icon: 'loop', pick: { mode: 'random', randomRaces: 0 } }
   ];
 };
 
-// How much colour a surface wears; `pct` is how much survives a mix with white.
-const PICK_TINT  = 72;  // the pick, worn loud
-const REST_TINT  = 20;  // every OTHER cup tile: enough colour to name the cup, quiet enough that the pick still shouts
+// How much colour a tile's BAND wears; `pct` is how much survives a mix with
+// white. One strength for every tile, picked or not: the pick is the tile's
+// own wash in your livery (controller.css .mode-opt--mine), so the cup's colour only has
+// to name the cup, and a cup is the same colour wherever it appears.
+const BAND_TINT = 60;
+// The PICKED tile is washed whole in the same colour, a step paler than its
+// band so the band still reads on it: the pick is the cup's own colour turned
+// up, and the other tiles stay white. A finger on a tile washes it paler
+// still in that colour, so the press shows what the pick will be; the pick's
+// ring is the colour itself (controller.css, the shared tile rule).
+const PICK_TINT = 34;
+const PRESS_TINT = 16;
 // The schematic's field. Exported, and the one tint here that leaves JS: the
 // display's cup slot paints the same minis, and the C++ ui model serves it as
 // cupFieldTintPct() — tests/ui-model.test.js pins the two equal.
@@ -271,7 +276,42 @@ export function lockGlyph() {
   return s;
 }
 
-// One TILE of the grid: the name over its trail (stars for a cup, the run's
+// The BAND's picture: white line drawings on the cup's colour. A cup draws its
+// own four circuits (their casings alone, so they read as icons rather than as
+// maps); a random run draws its shape; a locked cup its padlock. A band with
+// nothing on it read as a loading placeholder.
+const ICONS = {
+  globe: ['M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17z', 'M3.5 12h17', 'M12 3.5c3.5 3 3.5 14 0 17', 'M12 3.5c-3.5 3-3.5 14 0 17'],
+  shuffle: ['M3 7h4l10 10h4', 'M3 17h4L17 7h4', 'M18.5 4.5L21 7l-2.5 2.5', 'M18.5 14.5L21 17l-2.5 2.5'],
+  loop: ['M12 12c-3-4.5-9-4.5-9 0s6 4.5 9 0s9-4.5 9 0s-6 4.5-9 0z'],
+  lock: ['M7 11V8a5 5 0 0 1 10 0v3', 'M5.5 11h13v9.5h-13z']
+};
+function bandIcon(name) {
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('class', 'mode-opt__icon');
+  s.setAttribute('aria-hidden', 'true');
+  for (const d of ICONS[name]) {
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d);
+    s.appendChild(p);
+  }
+  return s;
+}
+// The art sits in a wrapper of its own because the band is a size container
+// (controller.css): only a DESCENDANT can be laid out by the band's shape.
+function buildBand({ maps, icon }) {
+  const band = document.createElement('span');
+  band.className = 'mode-opt__band';
+  const art = document.createElement('span');
+  art.className = 'mode-opt__art';
+  if (maps) for (const svg of maps) art.appendChild(schematicSvg(svg));
+  else art.appendChild(bandIcon(icon));
+  band.appendChild(art);
+  return band;
+}
+
+// One TILE of the grid: its band, the name under it, and its trail (stars for a cup, the run's
 // shape for a random tile, unlock progress in stars for a locked cup).
 //
 // Split into BUILD and DRESS on purpose. The whole picker used to be rebuilt
@@ -281,29 +321,22 @@ export function lockGlyph() {
 // are built once per catalogue and re-dressed in place, exactly as the car
 // strip does it (shared/carPicker.js), so the element you press outlives the
 // press.
-function buildTile(label, locked) {
+function buildTile({ label, locked, maps, icon }) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'mode-opt';
   btn.setAttribute('aria-label', label);
+  btn.appendChild(buildBand(locked ? { icon: 'lock' } : { maps, icon }));
   if (locked) {
     btn.appendChild(lockGlyph());
     btn.setAttribute('aria-haspopup', 'dialog');   // it opens the stars popup
   }
+  // ONE line, ellipsised: the band above is what gives every tile the same
+  // shape, so the name no longer has to be set as two lines to keep the grid
+  // straight (tests/e2e/lobby-tile-grid.spec.js measures it).
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
-  // SET as two lines, not wrapped into them: the last word goes below the rest,
-  // so every cup reads "<Biome>" over "Cup" and the six tiles are one shape.
-  // Left to wrap, the short names sat on one line and the long ones on two, and
-  // the grid read as ragged however it was aligned. The tile reserves the second
-  // line either way (controller.css .mode-opt), so this costs no height.
-  // aria-label on the button carries the name unbroken.
-  const cut = label.lastIndexOf(' ');
-  // The space stays IN the text (a trailing space before a break renders as
-  // nothing), so the tile still reads "Beach Cup" to a text search — dropping it
-  // gave "BeachCup", which every by-text locator in the suite stopped matching.
-  if (cut > 0) lab.append(label.slice(0, cut + 1), document.createElement('br'), label.slice(cut + 1));
-  else lab.textContent = label;
+  lab.textContent = label;
   btn.appendChild(lab);
   return btn;
 }
@@ -311,16 +344,17 @@ function buildTile(label, locked) {
 // Everything that changes without changing the tile's SHAPE: which mark it
 // wears, what its trail says, and what a tap does. `mine` marks the current pick
 // with its own colour.
-function dressTile(btn, { trail, locked, mine, tint, pickTint, canPick, onTap }) {
+function dressTile(btn, { trail, locked, mine, tint, wash, press, color, canPick, onTap }) {
   btn.classList.toggle('mode-opt--mine', !!mine);
   btn.classList.toggle('mode-opt--locked', !!locked);
-  // EVERY tile wears its cup's colour, so the grid reads as the ladder it is
-  // rather than six identical white cards. That means the fill can no longer BE
-  // the pick mark the way it was when only one tile had one — the mark is now
-  // the STEP UP in the same hue, PICK_TINT against REST_TINT, which is a
-  // stronger signal than a colour/no-colour split and keeps a cup one colour
-  // wherever it appears. A locked cup takes no fill at all: it is not a choice.
-  btn.style.background = locked ? '' : (mine ? pickTint : tint) || '';
+  // EVERY tile's band wears its cup's colour, so the grid reads as the ladder
+  // it is. A locked cup takes no colour at all: it is not a choice.
+  btn.querySelector('.mode-opt__band').style.background = locked ? '' : tint || '';
+  // Carried on every tile: the press wears --tile-press, the pick the wash and
+  // a ring of --tile-c (controller.css, the shared tile rule).
+  btn.style.setProperty('--tile-wash', wash || '');
+  btn.style.setProperty('--tile-press', press || '');
+  btn.style.setProperty('--tile-c', color || '');
   if (mine) btn.setAttribute('aria-current', 'true');
   else btn.removeAttribute('aria-current');
   btn.disabled = !canPick;
@@ -450,12 +484,15 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
     const p = progressOf(g.id);
     return {
       key: g.id, label: g.name, locked,
+      maps: g.items.map((t) => t.svg).filter(Boolean),
       // A locked tile trails its unlock progress; an open one its stars.
       trail: () => (locked ? lockTrail((p && p.unlockDone) || 0, (p && p.unlockNeed) || 0)
         : starRow(starsOf(g.id))),
       mine: !locked && sel.mode === 'cup' && sel.cupId === g.id,
-      tint: cupTint(g.id, REST_TINT),
-      pickTint: cupTint(g.id, PICK_TINT),
+      tint: cupTint(g.id, BAND_TINT),
+      wash: cupTint(g.id, PICK_TINT),
+      press: cupTint(g.id, PRESS_TINT),
+      color: cupTint(g.id, 100),
       // A locked cup is not a choice, but it is the tile a curious player taps:
       // it opens the stars popup, which says what unlocks it. It never picks.
       onTap: locked ? onStarsInfo : () => pick({ mode: 'cup', cupId: g.id })
@@ -471,7 +508,7 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
   for (const r of randomRuns()) {
     const tour = r.key === 'tour';
     tiles.push({
-      key: r.key, label: r.label, locked: false,
+      key: r.key, label: r.label, locked: false, icon: r.icon,
       trail: () => subSpan(r.sub),
       // The endless tile owns length 0 and the card tile owns every other
       // length, rather than the card matching its own number: the display
@@ -479,11 +516,13 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
       // and an unmarked grid is worse than a tile whose label rounds.
       mine: r.key === 'tour' ? sel.mode === 'tour'
         : sel.mode === 'random' && (r.key === 'endless' ? randomRaces === 0 : randomRaces !== 0),
-      // Belonging to no cup, they have no colour of their own — a neutral grey
-      // stands in so they still wear the same fill-and-drop mark the cups do.
-      // The tour belongs to all of them instead, and wears one band of each.
-      tint: tour ? tourBands(openCups, REST_TINT) : towardWhite(NEUTRAL_COLOR, REST_TINT),
-      pickTint: tour ? tourBands(openCups, PICK_TINT) : towardWhite(NEUTRAL_COLOR, PICK_TINT),
+      // Belonging to no cup, they have no colour of their own: a neutral grey
+      // stands in. The tour belongs to all of them instead, and wears one band
+      // of each.
+      tint: tour ? tourBands(openCups, BAND_TINT) : towardWhite(NEUTRAL_COLOR, 22),
+      wash: tour ? tourBands(openCups, PICK_TINT) : towardWhite(NEUTRAL_COLOR, PICK_TINT),
+      press: tour ? tourBands(openCups, PRESS_TINT) : towardWhite(NEUTRAL_COLOR, PRESS_TINT),
+      color: NEUTRAL_COLOR,
       // Not filtered on the same pick: every random-family tap deals fresh
       // track(s) on the display, which is the whole gesture.
       onTap: () => pick({ ...r.pick })
@@ -499,7 +538,7 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
     const fresh = document.createElement('div');
     fresh.className = 'racelist';
     fresh.dataset.sig = gridSig;
-    for (const t of tiles) fresh.appendChild(buildTile(t.label, t.locked));
+    for (const t of tiles) fresh.appendChild(buildTile(t));
     if (grid) gridEl.replaceChild(fresh, grid); else gridEl.insertBefore(fresh, gridEl.firstChild);
     grid = fresh;
   }

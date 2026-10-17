@@ -1,6 +1,7 @@
 package games.couchpad.tinytrack
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -34,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -92,16 +92,14 @@ fun LicensesScreen(state: GameState) {
             Modifier.fillMaxSize(),
             state = state.licensesList,
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            // Room for the focused row's heavier edge and its hard shadow: both sit
-            // OUTSIDE the row's own box, and a lazy list clips at its bounds.
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 4.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         ) {
             itemsIndexed(Legal.entries, key = { _, e -> e.section + "/" + e.title }) { i, entry ->
                 Column {
                     if (i == 0 || Legal.entries[i - 1].section != entry.section) {
                         Spacer(Modifier.height(if (i == 0) 0.dp else 18.dp))
-                        StickerPill(entry.section, tint = Tokens.purple, size = 20.dp)
+                        LabelPill(entry.section, tint = Tokens.purple, size = 20.dp)
                         Spacer(Modifier.height(12.dp))
                     }
                     LicenseRow(
@@ -118,14 +116,12 @@ fun LicensesScreen(state: GameState) {
  * One credit: what it is and who made it on the left, what it is licensed under
  * on the right — the same two columns the web page's `.entry` row has.
  *
- * **FOCUS FILLS THE ROW BLUE**, and it has to go that far. The kit's every other
- * control says focus by lifting and brightening, and neither is available here: a
- * row is as wide as the list, so `Sticker.focusScale` pushes it past the list's
- * bounds, WHICH CLIP, and brightening a white sticker on warm paper does nothing
- * you can see from a sofa. So the row swaps face and type together, the way the
- * lobby's ⓘ does when the remote lands on it: blue is what "you are here" looks
- * like across this whole info branch, it is a chrome colour the theme allows, and
- * it needs no room the row does not already have.
+ * A CHOICE: white with the faint edge. **FOCUS WASHES IT `--pick` AND RINGS IT
+ * BLUE**, the picked look, and the ring is drawn INSIDE the row as a heavier edge
+ * rather than outside it as the kit's [focusRing]: a row is as wide as the list,
+ * and a lazy list clips at its bounds. Blue is what "you are here" looks like
+ * across this whole info branch, and it needs no room the row does not already
+ * have.
  *
  * Every row opens, because every entry has a text behind it. It used to branch
  * on `notice`, leaving CC0 and CC-BY rows focusable but inert; what that cost was
@@ -143,12 +139,12 @@ private fun LicenseRow(
 
     Row(
         modifier
-            // `hardShadow` FIRST, so the drop lands behind the face rather than
-            // stamped on top of it (draw modifiers run in chain order).
             .fillMaxWidth()
-            .hardShadow(if (focused) Sticker.focusShadow else Sticker.popShadow, shape)
-            .background(if (focused) Tokens.blue else Tokens.surface, shape)
-            .stickerOutline(if (focused) Sticker.border else Sticker.hairlineBorder, shape)
+            .background(if (focused) Tokens.pick else Tokens.surface, shape)
+            .then(
+                if (focused) Modifier.border(Sticker.focusRingWidth, Tokens.blue, shape)
+                else Modifier.border(Sticker.edgeWidth, Tokens.edge, shape)
+            )
             .onFocusChanged { focused = it.isFocused }
             // `clickable` IS focusable, so the row must not ALSO be
             // `focusable()` — that is two focus targets in one row, and the
@@ -163,26 +159,16 @@ private fun LicenseRow(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StickerText(
-                entry.title,
-                size = 26.dp,
-                color = if (focused) Color.White else Tokens.ink,
-            )
-            StickerText(
-                entry.author,
-                size = 20.dp,
-                weight = Fonts.semibold,
-                // Not `ink-3` on blue: the quiet grey a white card wants is barely
-                // there against it, and the author is half of what the attribution
-                // actually says.
-                color = if (focused) Color.White.copy(alpha = 0.85f) else Tokens.ink3,
-            )
+            StickerText(entry.title, size = 26.dp, color = Tokens.ink)
+            // ink-2, not ink-3: the author is half of what the attribution
+            // actually says, and the quiet grey nearly vanishes on the pick wash.
+            StickerText(entry.author, size = 20.dp, weight = Fonts.semibold, color = Tokens.ink2)
         }
 
-        // The pill stays INK on both faces. It is the one token on the row that
-        // means something specific (the licence), and a pill that recoloured with
-        // the focus would read as part of the highlight.
-        StickerPill(entry.license, tint = Tokens.ink, size = 17.dp)
+        // A neutral LABEL on both faces. It is the one token on the row that means
+        // something specific (the licence), and a label that recoloured with the
+        // focus would read as part of the highlight.
+        LabelPill(entry.license, size = 17.dp)
 
         // The chevron says the row opens, which every row now does. Kept rather
         // than dropped: it is the only mark on the row that says a press does
@@ -191,7 +177,7 @@ private fun LicenseRow(
             "›",
             modifier = Modifier.width(18.dp),
             size = 28.dp,
-            color = if (focused) Color.White else Tokens.ink3,
+            color = if (focused) Tokens.blue else Tokens.ink3,
         )
     }
 }
@@ -290,8 +276,8 @@ private fun LicenseText(text: String) {
 }
 
 /**
- * The chrome both legal boards wear: paper, a title sticker, and the body under
- * it.
+ * The chrome both legal boards wear: paper, an ink title (`/licenses.html`'s
+ * heading), and the body under it.
  *
  * Paper rather than floating over the live 3D, because these are full-screen
  * BOARDS in the project's own sense: chrome floats bare over the scene, boards
@@ -312,7 +298,7 @@ private fun LegalBoard(title: String, content: @Composable () -> Unit) {
                 .padding(horizontal = 60.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            StickerBadge(title, tint = Tokens.red, size = 40.dp, rotation = -1.2f)
+            StickerText(title, size = 48.dp)
             content()
         }
     }

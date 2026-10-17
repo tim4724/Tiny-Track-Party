@@ -34,13 +34,6 @@ final class NameTagView: UIView {
     /// the image is only ever scaled down.
     private static let fontSize: CGFloat = 28.8
 
-    /// The slim sticker's outline and corner are 2/3 of the chips', at the usual
-    /// size; drawn at the closest size, that is 2/3 * 4/3 of them.
-    private static let slim: CGFloat = 8.0 / 9.0
-
-    /// The tag's tilt, `rotate(-2deg)`.
-    private static let tilt: CGFloat = -2 * .pi / 180
-
     private struct TagImage {
         let name: String
         let colorIndex: Int
@@ -139,7 +132,7 @@ final class NameTagView: UIView {
             }
             layer.position = CGPoint(x: CGFloat(tags[o + 2]) * w, y: CGFloat(tags[o + 3]) * h)
             let k = CGFloat(tags[o + 4])
-            layer.setAffineTransform(CGAffineTransform(scaleX: k, y: k).rotated(by: Self.tilt))
+            layer.setAffineTransform(CGAffineTransform(scaleX: k, y: k))
             layer.opacity = tags[o + 5]
             if placed >= visible { layer.isHidden = false }
             placed += 1
@@ -161,59 +154,52 @@ final class NameTagView: UIView {
         return l
     }
 
-    /// `.name-tag` and its tail, drawn once: the SLIM sticker. The box is the CSS
-    /// box: `padding: 0.1em 0.42em` around a line-height-1 line, inside an outline
-    /// and corners `slim` of the chips', semibold, and NO shadow. The tail is the
-    /// web's two triangles: an ink one hung from the inner edge of the bottom
-    /// outline, then the livery one lifted by the outline times sqrt(2), which on
-    /// 45-degree sides is one outline width, so the ink runs unbroken round the tip.
+    /// `.name-tag` and its tail, drawn once: a livery PILL with white semibold
+    /// type, no outline, no shadow, no tilt — the Toy Box keeps the tags solid on
+    /// purpose (whose car is whose) and flat like everything else. The box is the
+    /// CSS box, `padding: 0.14em 0.55em 0.18em` round a line-height-1 line. The
+    /// tail is one livery triangle, `0.6em + 2b` wide and `0.3em + b` tall
+    /// (`b` the old outline, 2px at the closest size), tucked a point under the
+    /// pill so no seam shows, its tip flattened like every corner here.
     private static func draw(name: String, colorIndex: Int) -> TagImage {
         let em = fontSize
-        let border = Sticker.border * slim
-        let radius = Sticker.radiusSmall * slim
+        let b: CGFloat = 2 * 4 / 3
         let font = Fonts.uiDisplay(em, weight: .semibold)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
         let text = name as NSString
         let textW = ceil(text.size(withAttributes: attrs).width)
 
-        let boxW = textW + 0.84 * em + 2 * border
-        let boxH = em * 1.2 + 2 * border
-        let tailH = 0.3 * em + border
-        let tailW = 2 * tailH
-        let canvas = CGSize(width: boxW, height: boxH - border + tailH)
+        let boxW = textW + 1.1 * em
+        let boxH = em * 1.32
+        let tailTop = boxH - 1
+        let tailH = 0.3 * em + b
+        let tailW = 0.6 * em + 2 * b
+        let canvas = CGSize(width: boxW, height: tailTop + tailH)
 
-        let ink = Tokens.uiColor("ink")
         let livery = Tokens.uiCar(colorIndex)
         let format = UIGraphicsImageRendererFormat()
         format.scale = UIScreen.main.scale
         format.opaque = false
         let image = UIGraphicsImageRenderer(size: canvas, format: format).image { _ in
-            let box = CGRect(x: 0, y: 0, width: boxW, height: boxH)
-            ink.setFill()
-            UIBezierPath(roundedRect: box, cornerRadius: radius).fill()
             livery.setFill()
-            UIBezierPath(roundedRect: box.insetBy(dx: border, dy: border),
-                         cornerRadius: max(0, radius - border)).fill()
+            UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: boxW, height: boxH),
+                         cornerRadius: boxH / 2).fill()
 
-            func tail(top: CGFloat, color: UIColor) {
-                let x0 = (boxW - tailW) / 2
-                let p = UIBezierPath()
-                p.move(to: CGPoint(x: x0, y: top))
-                p.addLine(to: CGPoint(x: x0 + tailW, y: top))
-                p.addLine(to: CGPoint(x: x0 + 0.54 * tailW, y: top + 0.92 * tailH))
-                p.addLine(to: CGPoint(x: x0 + 0.46 * tailW, y: top + 0.92 * tailH))
-                p.close()
-                color.setFill()
-                p.fill()
-            }
-            tail(top: boxH - border, color: ink)
-            tail(top: boxH - border - border * 2.squareRoot(), color: livery)
+            // `clip-path: polygon(0 0, 100% 0, 54% 92%, 46% 92%)`.
+            let x0 = (boxW - tailW) / 2
+            let p = UIBezierPath()
+            p.move(to: CGPoint(x: x0, y: tailTop))
+            p.addLine(to: CGPoint(x: x0 + tailW, y: tailTop))
+            p.addLine(to: CGPoint(x: x0 + 0.54 * tailW, y: tailTop + 0.92 * tailH))
+            p.addLine(to: CGPoint(x: x0 + 0.46 * tailW, y: tailTop + 0.92 * tailH))
+            p.close()
+            p.fill()
 
             // Centred on the line box the CSS lays out: one em tall, the glyphs'
             // ascender-to-descender span centred inside it.
-            let lineTop = border + 0.1 * em
+            let lineTop = 0.14 * em
             let glyphH = font.ascender - font.descender
-            text.draw(at: CGPoint(x: border + 0.42 * em, y: lineTop + (em - glyphH) / 2), withAttributes: attrs)
+            text.draw(at: CGPoint(x: 0.55 * em, y: lineTop + (em - glyphH) / 2), withAttributes: attrs)
         }
         // Stage._paintNameTags: the box's bottom sits 0.4em above the projected
         // point, which leaves the tail's tip just clear of the car.

@@ -133,11 +133,6 @@ object Copy {
      */
     fun gained(n: Int): String = "+$n"
 
-    /**
-     * A results/podium name with the AI tag. Bots keep the tag everywhere —
-     * beating them is the story of a short-handed cup.
-     */
-    fun name(name: String, ai: Boolean): String = if (ai) name + cpuSuffix else name
 
     /**
      * The countdown banner. `n > 0` is the digit, `0` is GO, anything below is
@@ -223,6 +218,8 @@ object Copy {
 
     /** GO is the beat the race actually starts on, not a beat before it. */
     const val go = "GO!"
+    /** The same beat as a step on the countdown strip (`CD_COPY.goStep`). */
+    const val goStep = "GO"
 
     /**
      * The reconnect card's subtitle, under the dropped player's name and over
@@ -280,6 +277,10 @@ object Copy {
 
     // -- shared -------------------------------------------------------------
 
-    /** Appended to every AI name on the results list and the podium. */
-    const val cpuSuffix = " (CPU)"
+    /**
+     * The small grey tag after every AI name on the results list and the podium
+     * (`.res-cpu`), a label beside the name rather than part of it. Bots keep the
+     * tag everywhere — beating them is the story of a short-handed cup.
+     */
+    const val cpuTag = "CPU"
 }

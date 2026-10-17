@@ -21,7 +21,7 @@ import SwiftUI
 /// rects. Drawing them here would double them, and the second copy would drift.
 /// The line is exact and worth keeping in mind before adding anything:
 /// **cell-anchored AND textless goes to the renderer; anything carrying type or
-/// sticker chrome stays here.** That is why the bar and the dividers are there
+/// card chrome stays here.** That is why the bar and the dividers are there
 /// and the place ordinal, the name chip, the item slot, the FINISHED card and
 /// the reconnect QR are here.
 ///
@@ -157,7 +157,7 @@ private struct CellChrome: View {
         }
         // `.cell-label__name`'s `max-width: 14em`, imposed HERE rather than on
         // the chip. A `maxWidth` frame in SwiftUI FILLS to its maximum, so
-        // putting it on the chip would stretch the sticker to 490 points behind
+        // putting it on the chip would stretch the pill to 490 points behind
         // a three-letter name; putting it on the column instead leaves the chip
         // shrink-wrapped (Text takes the smaller of its ideal and the proposal)
         // and still truncates a long name rather than letting it run across the
@@ -167,8 +167,12 @@ private struct CellChrome: View {
 
     // MARK: Top-right — place over lap
 
-    /// `.cell-rank`: a white sticker badge for the ordinal over an ink
-    /// "LAP 2/3" pill, the pair right-aligned and leaning +1.5°.
+    /// `.cell-rank`: a white paper badge for the ordinal over a GLASS
+    /// "LAP 2/3" pill, the pair right-aligned.
+    ///
+    /// The lap pill is the glass tint without the web's backdrop blur. Behind it
+    /// is the live race at full rate, and a blur re-run per cell per frame is GPU
+    /// time spent on a cosmetic the 55% tint already gives the white type.
     private var rankReadout: some View {
         VStack(alignment: .trailing, spacing: 7) {
             // A cell whose car has no live HUD row this tick reports 0 — that
@@ -181,30 +185,33 @@ private struct CellChrome: View {
                 Text(Copy.ordinal(cell.place))
                     .font(Fonts.display(46, weight: .bold))
                     .foregroundStyle(Tokens.ink)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 21)
-                    .background(
-                        RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous)
-                            .fill(Tokens.surface)
-                            .hardShadow(Sticker.popShadow)
-                    )
-                    .stickerOutline(Sticker.border, radius: Sticker.radiusSmall)
+                    .padding(.vertical, 46 * 0.22)
+                    .padding(.horizontal, 46 * 0.5)
+                    .background(RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
+                        .fill(Tokens.surface))
             }
             if cell.totalLaps > 0 {
-                StickerPill(Copy.lap(cell.lap, of: cell.totalLaps), tint: Tokens.ink, size: 18)
+                Text(Copy.lap(cell.lap, of: cell.totalLaps).uppercased())
+                    .font(Fonts.display(18, weight: .semibold))
+                    .tracking(18 * 0.12)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.vertical, 18 * 0.32)
+                    .padding(.horizontal, 18 * 0.9)
+                    .background(Capsule().fill(Tokens.glass))
             }
         }
-        .rotationEffect(.degrees(1.5))
     }
 }
 
 // MARK: - The name chip
 
-/// `.cell-label__name` — the player's name on a sticker FILLED with their livery,
-/// white text. Filled rather than livery text on white (which this was, and which
-/// the phone never did): across a four-way split the thing you hunt for is your
-/// own cell, and a solid block of your colour is found in peripheral vision where
-/// coloured GLYPHS are not.
+/// `.cell-label__name` — the player's name on a pill FILLED with their livery,
+/// white text: one of the two things the Toy Box keeps solid on purpose. Filled
+/// rather than livery text on white (which this was, and which the phone never
+/// did): across a four-way split the thing you hunt for is your own cell, and a
+/// solid block of your colour is found in peripheral vision where coloured
+/// GLYPHS are not.
 private struct NameChip: View {
     let name: String
     let colorIndex: Int
@@ -222,15 +229,10 @@ private struct NameChip: View {
             .foregroundStyle(.white)
             .lineLimit(1)
             .truncationMode(.tail)
-            .padding(.vertical, Self.size * 0.3)
-            .padding(.horizontal, Self.size * 0.55)
-            .background(
-                RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous)
-                    .fill(Tokens.car(colorIndex))
-                    .hardShadow(Sticker.popShadow)
-            )
-            .stickerOutline(Sticker.border, radius: Sticker.radiusSmall)
-            .rotationEffect(.degrees(-2))
+            .padding(.top, Self.size * 0.28)
+            .padding(.bottom, Self.size * 0.32)
+            .padding(.horizontal, Self.size * 0.75)
+            .background(Capsule().fill(Tokens.car(colorIndex)))
     }
 }
 
@@ -266,7 +268,7 @@ private struct ItemSlot: View {
     /// is the same size in a four-way split as it is full screen, exactly as on
     /// the web.
     private static let side: CGFloat = 152
-    private static let corner: CGFloat = 26
+    private static let corner: CGFloat = 28
 
     /// Which key the roulette is showing right now, or nil when it is resting on
     /// `item`.
@@ -289,23 +291,17 @@ private struct ItemSlot: View {
     }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
         ZStack {
             if let key = shown {
-                RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
-                    .fill(Tokens.surface)
-                    .hardShadow(Sticker.popShadow)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
-                            .strokeBorder(Tokens.ink, lineWidth: Sticker.border)
-                    )
-                    .overlay(icon(key))
+                shape.fill(Tokens.surface).overlay(icon(key))
             } else {
-                // The empty slot: `border: 4px dashed color-mix(ink 45%,
-                // transparent)`, no fill and no shadow, so it reads as a
-                // reserved space rather than as a sticker.
-                RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
-                    .strokeBorder(Tokens.ink.opacity(0.45),
-                                  style: StrokeStyle(lineWidth: Sticker.border, dash: [10, 8]))
+                // The empty slot: a faint glass well under a dashed white rim
+                // (`rgba(24, 28, 44, 0.18)`, `3px dashed rgba(255,255,255,0.75)`),
+                // so it reads as a reserved space rather than as a card.
+                shape.fill(Tokens.glass(alpha: 0.18))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.75),
+                                                style: StrokeStyle(lineWidth: 3, dash: [9, 7])))
             }
         }
         .frame(width: Self.side, height: Self.side)
@@ -466,8 +462,9 @@ private struct FinishedCard: View {
     let cell: GameState.CellHUD
 
     var body: some View {
-        StickerCard(tint: Tokens.surface, rotation: -1.5, padding: 20) {
-            VStack(spacing: 6) {
+        StickerCard(padding: 0) {
+            VStack(spacing: 10) {
+                // A LABEL in the player's livery.
                 StickerPill(Copy.finished, tint: Tokens.car(cell.colorIndex), size: 20)
                 Text(Copy.ordinal(cell.place))
                     .font(Fonts.display(54, weight: .bold))
@@ -479,6 +476,8 @@ private struct FinishedCard: View {
                         .monospacedDigit()
                 }
             }
+            .padding(.vertical, 27)
+            .padding(.horizontal, 42)
         }
     }
 
@@ -523,7 +522,7 @@ private struct ReconnectCard: View {
     @State private var code: CGImage?
 
     var body: some View {
-        StickerCard(tint: Tokens.surface, rotation: -1.5, padding: 18) {
+        StickerCard(padding: 27) {
             VStack(spacing: qrSide * 0.04) {
                 Text(Copy.disconnected.uppercased())
                     .font(Fonts.display(titleSize, weight: .bold))

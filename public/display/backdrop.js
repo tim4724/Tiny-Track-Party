@@ -104,3 +104,26 @@ export function crossfadeBackdrop(stage, mid, { show3D, stillValid }) {
     });
   }));
 }
+
+// Into a cup's next race: freeze the finished race as a still, blurred the way
+// the standings board's frost washed it, start `swap` underneath it NOW, and
+// dissolve the still once the swap lands. Unlike the lobby's crossfade above
+// the swap is never deferred or dropped (the chained start needs the next
+// circuit built whatever happens), so the still is a cover, never a gate.
+export function dissolveInto(stage, swap) {
+  const sc = el('scene');
+  const old = el('scene-snap'); if (old) old.remove();
+  const still = sc ? stage.snapshot() : null;
+  if (still) { still.id = 'scene-snap'; still.classList.add('is-soft'); sc.appendChild(still); }
+  const done = Promise.resolve(swap());
+  if (still) {
+    const fade = () => {
+      still.classList.add('is-fading');
+      // Gone once its fade has run, and the fade's length is the CSS's own
+      // (#scene-snap.is-soft), read off the element rather than re-typed.
+      setTimeout(() => still.remove(), parseFloat(getComputedStyle(still).transitionDuration) * 1000);
+    };
+    done.then(fade, fade);
+  }
+  return done;
+}

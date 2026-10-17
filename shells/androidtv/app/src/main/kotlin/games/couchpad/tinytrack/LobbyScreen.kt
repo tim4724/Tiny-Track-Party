@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -188,7 +189,7 @@ fun LobbyScreen(state: GameState) {
                 Spacer(Modifier.weight(1f))
                 // HIDDEN ENTIRELY pre-pick — not an empty card, not a
                 // placeholder. The model answers null until the host has picked,
-                // and an empty sticker would promise a card with nothing to say.
+                // and an empty card would promise a pick with nothing to say.
                 state.cupSlot?.let { CupCard(it) }
                 Spacer(Modifier.weight(1f))
                 if (state.cups.isNotEmpty()) CupShelf(state.cups, state.starsEarned, state.starsTotal)
@@ -232,15 +233,15 @@ fun LobbyScreen(state: GameState) {
 }
 
 /**
- * The ⓘ: a round sticker badge with a drawn "i" in it.
+ * The ⓘ: a CHOICE, the web's `.icon-btn` — a round white key with the faint edge
+ * and a drawn "i" in it.
  *
  * DRAWN, not typed: the glyph is a dot over a stem, which is two primitives and
  * no dependency on a font having a legible dotted lowercase i at badge size — the
  * same call `StarRow` and `LockGlyph` make beside it.
  *
- * Focus is the kit's own: brighten, lift, deepen the drop. It is a small target
- * in a corner, so it takes the FULL blue face when focused rather than only the
- * lift — the same "you are here" blue every board in this branch wears.
+ * Focused it is washed in `--pick` and ringed, the same "you are here" every
+ * control in this branch wears.
  */
 @Composable
 private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -249,9 +250,9 @@ private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .size(diameter)
-            .hardShadow(if (focused) Sticker.focusShadow else Sticker.popShadow, CircleShape)
-            .background(if (focused) Tokens.blue else Tokens.surface, CircleShape)
-            .stickerOutline(Sticker.border, CircleShape)
+            .focusRing(focused, diameter / 2, gap = 3.dp)
+            .background(if (focused) Tokens.pick else Tokens.surface, CircleShape)
+            .border(Sticker.edgeWidth, Tokens.edge, CircleShape)
             .onFocusChanged { focused = it.isFocused }
             // The badge is icon-only, so this is the whole announcement.
             .semantics { contentDescription = Copy.info }
@@ -262,18 +263,22 @@ private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        val ink = if (focused) Color.White else Tokens.ink
+        val ink = Tokens.ink
         Canvas(Modifier.size(diameter)) {
             // A DrawScope is in PHYSICAL pixels — the density override buys the
             // layout tree its authored dp and buys a Canvas body nothing.
-            val px = 1.dp.toPx()
-            val cx = size.width / 2f
-            drawCircle(ink, radius = 3.2f * px, center = Offset(cx, size.height * 0.31f))
+            // The same two shapes at the same fractions of the key as tvOS's
+            // InfoGlyph: the dot's centre at 0.29, the bar 0.44-0.74 including
+            // its round caps (which a line's endpoints do not count).
+            val d = size.width
+            val cx = d / 2f
+            val bar = d * 0.155f
+            drawCircle(ink, radius = d * 0.085f, center = Offset(cx, d * 0.29f))
             drawLine(
                 ink,
-                Offset(cx, size.height * 0.44f),
-                Offset(cx, size.height * 0.74f),
-                strokeWidth = 6.4f * px,
+                Offset(cx, d * 0.44f + bar / 2f),
+                Offset(cx, d * 0.74f - bar / 2f),
+                strokeWidth = bar,
                 cap = StrokeCap.Round,
             )
         }
@@ -296,16 +301,15 @@ private fun JoinTicket(state: GameState) {
 
 @Composable
 private fun TicketCard(state: GameState, open: Boolean) {
-    StickerCard(rotation = -1.2f, padding = TICKET_PAD) {
+    // `.ticket`'s `padding: 0.85rem 0.85rem 1rem` — a thin paper margin, so the QR
+    // fills the card.
+    PaperCard(padding = TICKET_PAD) {
         Column(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().padding(bottom = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // The masthead's wordmark takes NO die-cut edge: a white cut on a white
-            // card is invisible, which is what `.ticket__wordmark` zeroes the stroke
-            // for.
-            Wordmark(size = 38.dp, dieCut = false)
+            Wordmark(size = 38.dp)
 
             // A BARE SQUARE, not a framed panel. `#qr` is a canvas with a 6px radius
             // and NO border — while the room warms it is simply white paper, which
@@ -357,12 +361,12 @@ private fun TicketCard(state: GameState, open: Boolean) {
                             color = Tokens.ink, maxLines = 2, center = true,
                         )
                         if (state.roomCode.isNotEmpty()) {
-                            // `.ticket__cd` — the ACCENT, and the only part of the
+                            // `.ticket__cd` — in BLUE, and the only part of the
                             // ticket that changes per party. In ink it read as a
                             // heading detached from any address.
                             StickerText(
                                 state.roomCode, size = URL_SIZE * 1.45f,
-                                color = Tokens.accent, tracking = 0.04f,
+                                color = Tokens.blue, tracking = 0.08f,
                             )
                         }
                     }
@@ -373,31 +377,32 @@ private fun TicketCard(state: GameState, open: Boolean) {
 }
 
 /**
- * The scan hint: its own quiet white sticker hanging under the ticket, as on
- * tvOS (`LobbyView.scanHint`) and the web (`.tagline`).
+ * The scan hint: a GLASS readout hanging under the ticket, as on tvOS
+ * (`LobbyView.scanHint`) and the web (`.tagline`) — white type on the dark
+ * tint, over the live preview it floats on.
+ *
+ * NO BLUR, which the web adds (`backdrop-filter: blur(12px)`): the picture behind
+ * is the SurfaceView, which nothing in the view tree can sample, and the tint
+ * alone reads the same at this size.
  *
  * HELD BACK UNTIL THERE IS SOMETHING TO SCAN (`.ticket-rail:has(#qr.is-in)
  * .tagline`): a board that says "scan the code" over a blank white square is
  * instructing the room to scan nothing. Hidden through a `graphicsLayer` alpha,
- * which keeps its box (so the ticket does not re-centre when it appears) and,
- * unlike `Modifier.alpha`, does not clip the hard drop.
+ * which keeps its box, so the ticket does not re-centre when it appears.
  */
 @Composable
 private fun ScanHint(open: Boolean) {
-    val shape = RoundedCornerShape(Sticker.radius)
     Box(
         Modifier
             // One line, overhanging the ticket rather than wrapping (tvOS's
             // `fixedSize()`).
             .wrapContentWidth(unbounded = true)
             .graphicsLayer { alpha = if (open) 1f else 0f }
-            .tilt(-2f)
-            .hardShadow(Sticker.popShadow, shape)
-            .background(Tokens.surface, shape)
-            .stickerOutline(Sticker.border, shape)
+            .background(Tokens.glass, RoundedCornerShape(Sticker.radius))
+            // `padding: 0.6em 1.1em` at the hint's 22.
             .padding(vertical = 13.dp, horizontal = 24.dp),
     ) {
-        StickerText(Copy.scanPrompt, size = 22.dp, weight = Fonts.semibold, color = Tokens.ink)
+        StickerText(Copy.scanPrompt, size = 22.dp, weight = Fonts.semibold, color = Color.White)
     }
 }
 
@@ -427,15 +432,13 @@ private fun joinHost(joinUrl: String, roomCode: String): String {
 @Composable
 private fun CupCard(slot: GameState.CupSlot) {
     // No stars on the card: the Cups shelf right under it shows every cup's.
-    StickerCard(Modifier.fillMaxWidth(), rotation = 1.2f, padding = 16.dp) {
+    // `.cup-slot__pick`'s `padding: 0.9rem 0.8rem 1rem` and `gap: 0.65rem`.
+    PaperCard(Modifier.fillMaxWidth(), padding = 15.dp, horizontalPadding = 13.dp) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(11.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // THE CARD'S LOUDEST ELEMENT, and it has to be: this card exists to say
-            // WHICH circuit. As plain ink text the headline was quieter than the
-            // races caption under it.
-            StickerBadge(cupName(slot))
+            CupNameLabel(cupName(slot), slot.cupId)
 
             if (slot.maps.isNotEmpty()) {
                 // A GRID, not a row. `.cup-maps` is `repeat(2, 1fr)`, widening to 3
@@ -456,10 +459,30 @@ private fun CupCard(slot: GameState.CupSlot) {
             }
 
             // THE CARD'S FOOTER, under the tiles — `.cup-races` is the last thing in
-            // the pick's markup. Above them, the card's two chrome tokens stacked at
-            // the top and pushed the picture to the bottom.
-            StickerPillOutlined(Copy.races(slot.racesKey, slot.raceCount), size = 15.dp)
+            // the pick's markup. A quiet LABEL the CSS spells by hand: ink-2 on the
+            // sunken surface rather than the tint recipe.
+            LabelPill(Copy.races(slot.racesKey, slot.raceCount), size = 15.dp,
+                face = Tokens.surface2, ink = Tokens.ink2)
         }
+    }
+}
+
+/**
+ * `.cup-sticker` — the cup's name as a LABEL in the cup's OWN colour, because
+ * nothing here is pressed: the colour mixed 34% into white, the words in ink (the
+ * label recipe's darkened type turns muddy on a pale cup colour, Beach's sand). A
+ * run that belongs to no cup takes the neutral wash, exactly as its tiles do.
+ */
+@Composable
+private fun CupNameLabel(name: String, cupId: String?) {
+    val size = 27.dp   // `clamp(1.2rem, 1.8vw, 1.7rem)` at 1920
+    Box(
+        Modifier
+            .background(cupTint(cupId, 34.0), RoundedCornerShape(percent = 50))
+            .padding(top = size * 0.35f, bottom = size * 0.4f,
+                start = size * 0.85f, end = size * 0.85f),
+    ) {
+        StickerText(name, size = size, color = Tokens.ink, lineHeight = 1.05f)
     }
 }
 
@@ -493,9 +516,11 @@ private fun MapGrid(slot: GameState.CupSlot, cols: Int) {
  * in the Backyard cup's lawn green, dressed as a cup they have nothing to do
  * with. `trackPicker.js` has kept the pair apart as `cupTint`/`neutralTint` all
  * along; this shell is what made the second one exist over here.
+ *
+ * [pct] is how much of the colour survives: the field's shared share by default,
+ * 100 for a shelf dot, 34 for the name label (`.cup-sticker`).
  */
-private fun cupTint(cupId: String?): Color {
-    val pct = Ttp.ttp_ui_cup_field_tint_pct().toDouble()
+private fun cupTint(cupId: String?, pct: Double = Ttp.ttp_ui_cup_field_tint_pct().toDouble()): Color {
     val rgb = if (cupId.isNullOrEmpty()) Ttp.ttp_ui_neutral_tint_rgb(pct)
         else Ttp.ttp_ui_cup_tint_rgb(TtpJson.arg(cupId), pct)
     return Color(rgb or 0xFF000000.toInt())
@@ -514,11 +539,12 @@ private fun cupName(slot: GameState.CupSlot): String = when (slot.nameKey) {
  */
 @Composable
 private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
-    val shape = RoundedCornerShape(Sticker.radiusSmall)
+    // `border-radius: 14px`, a literal in the CSS too: a tile is a flat field with
+    // no outline, its corner a step softer than `--r-sm`.
+    val shape = RoundedCornerShape(14.dp)
     // THREE cases, not two. A LOCKED rung is the tour's teaser: sunken PAPER under a
     // padlock, which shows the ladder without selling it as a race (the races pill
-    // never counts it) — `--surface-2`, the warm cream, not a cold ink wash, or it
-    // reads as a disabled control beside four warm siblings. An UNDRAWN race takes
+    // never counts it) — `--surface-2`, the out-of-reach grey. An UNDRAWN race takes
     // its OWN cup's colour when the chip names one and the picker's cup-less
     // fallback when it does not — never the card's tint, because an unknown must not
     // borrow the drawn race's colour.
@@ -532,8 +558,7 @@ private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .background(field, shape)
-                .stickerOutline(Sticker.hairlineBorder, shape),
+                .background(field, shape),
             contentAlignment = Alignment.Center,
         ) {
             BoxWithConstraints {
@@ -554,10 +579,7 @@ private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
         // `.cup-maps__n` — a badge hung OFF the tile's top-left corner, white on
         // solid ink. Printed in the tile's CENTRE it was standing where the map
         // belongs, which is how a card came to show a "1" instead of a circuit.
-        // It is the OUTER box's child, drawn after the tile: `Modifier.border`
-        // paints over its own content, so inside the outlined tile the outline's
-        // corner ran through the number. A 20 dp digit in a 30 dp ink disc: the
-        // same geometry on every platform.
+        // A 20 dp digit in a 30 dp ink disc: the same geometry on every platform.
         if (map.n > 0) {
             Box(
                 Modifier
@@ -592,7 +614,8 @@ private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
 @Composable
 private fun CupShelf(cups: List<GameState.CupRow>, starsEarned: Int, starsTotal: Int) {
     Box(Modifier.fillMaxWidth()) {
-        StickerCard(Modifier.fillMaxWidth(), rotation = -1f, padding = 12.dp) {
+        // `.cup-shelf`'s `padding: 0.55rem 0.9rem 0.45rem`.
+        PaperCard(Modifier.fillMaxWidth(), padding = 8.dp, horizontalPadding = 14.dp) {
             Column(Modifier.fillMaxWidth()) {
                 for ((i, cup) in cups.withIndex()) {
                     Row(
@@ -607,10 +630,12 @@ private fun CupShelf(cups: List<GameState.CupRow>, starsEarned: Int, starsTotal:
                         if (cup.locked) {
                             LockGlyph(size = 15.dp, color = Tokens.ink2)
                         } else {
+                            // `.dot` at `0.65rem`: the cup's colour at FULL
+                            // strength, not the tiles' washed field.
                             Box(
                                 Modifier
-                                    .size(13.dp)
-                                    .background(cupDot(cup.id), CircleShape)
+                                    .size(11.dp)
+                                    .background(cupTint(cup.id, 100.0), CircleShape)
                             )
                         }
                         StickerText(
@@ -641,17 +666,13 @@ private fun CupShelf(cups: List<GameState.CupRow>, starsEarned: Int, starsTotal:
                 }
             }
         }
-        // The `.pill` tab riding the card's top-left corner, drawn OVER it so the
-        // card's own outline runs behind the label.
-        Box(Modifier.align(Alignment.TopStart).offset(x = 14.dp, y = (-13).dp)) {
-            StickerPill(Copy.cupsShelf(starsEarned, starsTotal), tint = Tokens.ink, size = 14.dp)
+        // The `.pill` tab riding the card's top-left corner, drawn OVER it.
+        Box(Modifier.align(Alignment.TopStart).offset(x = 11.dp, y = (-12).dp)) {
+            LabelPill(Copy.cupsShelf(starsEarned, starsTotal), size = 14.dp)
         }
     }
 }
 
-/** A shelf dot is the cup's colour at FULL strength — not the tiles' washed field. */
-private fun cupDot(cupId: String): Color =
-    Color(Ttp.ttp_ui_cup_tint_rgb(TtpJson.arg(cupId), 100.0) or 0xFF000000.toInt())
 
 // -- (c) the seat dock ------------------------------------------------------
 
@@ -685,30 +706,24 @@ private fun SeatCard(seat: GameState.Seat, model: String?) {
         Modifier
             .width(SEAT_WIDTH)
             // A HELD seat whose phone dropped is DIMMED, deliberately not removed —
-            // the seat is still theirs to come back to.
-            .alpha(if (seat.off) 0.5f else 1f)
-            // Every other card leans; the tilt alternates so the dock reads as a
-            // row of stickers rather than a table.
-            .tilt(if (seat.index % 2 == 0) -1.4f else 1.4f),
+            // the seat is still theirs to come back to. A layer alpha, not
+            // `Modifier.alpha`, which clips the corner mark hanging off the card.
+            .graphicsLayer { alpha = if (seat.off) 0.5f else 1f },
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 // AN OPEN SEAT KEEPS THE FULL FOOTPRINT and changes only its skin:
-                // translucent white so the scene shows through, a DASHED 45%-ink
-                // rule, and no drop at all. Drawn as a solid opaque card with the
-                // full ink outline and a hard shadow, four empty seats read as a row
-                // of buttons the viewer is meant to press.
-                .then(
-                    if (seat.open) Modifier.dashedOutline(
-                        Sticker.border, Sticker.radius, Tokens.ink.copy(alpha = 0.45f))
-                    else Modifier.hardShadow(Sticker.popShadow, shape)
-                )
-                .background(
-                    if (seat.open) Color.White.copy(alpha = 0.5f) else Tokens.surface, shape)
-                .then(
-                    if (seat.open) Modifier else Modifier.stickerOutline(Sticker.border, shape))
-                .padding(horizontal = 8.dp, vertical = 7.dp),
+                // a GLASS placeholder (`.seat--open`, `rgba(24, 28, 44, 0.28)`, a
+                // literal there too) so the scene shows through. As white paper,
+                // four empty seats read as four cards with nobody on them.
+                //
+                // NO BLUR behind it, which the web adds: what is behind is the
+                // SurfaceView, out of reach of anything in this window, and the
+                // tint alone holds the shape.
+                .background(if (seat.open) OPEN_SEAT_GLASS else Tokens.surface, shape)
+                // `.seat`'s `padding: 0.45rem 0.5rem 0.55rem`.
+                .padding(start = 8.dp, end = 8.dp, top = 7.dp, bottom = 9.dp),
         ) {
             Column(
                 Modifier.fillMaxWidth(),
@@ -723,8 +738,9 @@ private fun SeatCard(seat: GameState.Seat, model: String?) {
                         CarThumbImage(model, Modifier.fillMaxSize())
                     }
                 }
-                // THE NAME CARRIES THE LIVERY (`.seat__name { color: var(--c) }`),
-                // and its box reserves two lines however short the name is, so the
+                // THE NAME CARRIES THE LIVERY (`.seat__name`, the livery 80% into
+                // ink so a pale one still reads on paper), and its box reserves two
+                // lines however short the name is, so the
                 // card's height never depends on what is in it. maxLines = 2 because
                 // `.seat__label` clamps at two and breaks at the space — a long name
                 // stacks rather than ellipsising.
@@ -735,7 +751,8 @@ private fun SeatCard(seat: GameState.Seat, model: String?) {
                     StickerText(
                         if (seat.open) Copy.openSeat else seat.name,
                         size = SEAT_NAME_SIZE,
-                        color = if (seat.open) Tokens.ink3 else Tokens.car(seat.colorIndex),
+                        color = if (seat.open) Color.White.copy(alpha = 0.85f)
+                            else liveryInk(seat.colorIndex),
                         maxLines = 2,
                     )
                 }
@@ -746,59 +763,56 @@ private fun SeatCard(seat: GameState.Seat, model: String?) {
         // collide. No text: the web draws a check and a star, and a purple "HOST"
         // pill put a chrome colour into a dock that has none.
         if (!seat.open) {
+            val corner = Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-13).dp)
             when {
-                seat.host -> HostStar(Modifier.align(Alignment.TopEnd).offset(x = 11.dp, y = (-14).dp))
-                seat.ready -> ReadyCheck(Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-10).dp))
+                seat.host -> SeatMark(Tokens.ink, corner) { HostStar() }
+                seat.ready -> SeatMark(Tokens.green, corner) { ReadyTick() }
             }
-        }
-    }
-}
-
-/** `.seat__ready` — a green disc with a white tick and an ink ring. */
-@Composable
-private fun ReadyCheck(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(26.dp)
-            .background(Tokens.green, CircleShape)
-            .stickerOutline(Sticker.hairlineBorder, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(18.dp)) {
-            val p = Path().apply {
-                moveTo(size.width * 0.2f, size.height * 0.52f)
-                lineTo(size.width * 0.42f, size.height * 0.74f)
-                lineTo(size.width * 0.82f, size.height * 0.28f)
-            }
-            drawPath(p, Color.White, style = Stroke(
-                width = size.minDimension * 0.19f,
-                cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }
 
 /**
- * `.seat__host` — the gold star with an ink stroke.
- *
- * The one place a gold survives the chrome veto, and it survives it on the web
- * too: `#ffc83d` is a raw literal in `display.css`, not a token, precisely because
- * it is this mark and nothing else. Matching it is what keeps the two docks
- * comparable; inventing a fifth chrome colour for it would not.
+ * The seat's corner disc (`.seat__ready`, `.seat__host`): a 1.6rem disc in
+ * [fill] with a white glyph, set off the card by a 3px white ring
+ * (`box-shadow: 0 0 0 3px #fff`) — drawn as a larger white disc behind it, the
+ * ring being outside the 26 px the CSS sizes.
  */
 @Composable
-private fun HostStar(modifier: Modifier = Modifier) {
-    val gold = Color(0xFFFFC83D)
-    val ink = Tokens.ink
-    Canvas(modifier.size(31.dp)) {
+private fun SeatMark(fill: Color, modifier: Modifier, glyph: @Composable () -> Unit) {
+    Box(
+        modifier.size(32.dp).background(Color.White, CircleShape).padding(3.dp)
+            .background(fill, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { glyph() }
+}
+
+/** The ready mark's tick, at 70% of the disc. */
+@Composable
+private fun ReadyTick() {
+    Canvas(Modifier.size(18.dp)) {
+        val p = Path().apply {
+            moveTo(size.width * 0.2f, size.height * 0.52f)
+            lineTo(size.width * 0.42f, size.height * 0.74f)
+            lineTo(size.width * 0.82f, size.height * 0.28f)
+        }
+        drawPath(p, Color.White, style = Stroke(
+            width = size.minDimension * 0.19f,
+            cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+/** The host mark's white star, at 62% of the disc. No gold: the Toy Box draws the
+ *  host on ink, which keeps the dock's one mark out of the vetoed palette. */
+@Composable
+private fun HostStar() {
+    Canvas(Modifier.size(16.dp)) {
         val p = androidx.core.graphics.PathParser.createPathFromPathData(
             "M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"
         ).asComposePath()
         val s = size.minDimension / 24f
         drawContext.transform.scale(s, s, Offset.Zero)
-        // `paint-order: stroke fill` — the ink runs UNDER the gold, so the stroke
-        // reads as an outline around the star rather than as a rule across it.
-        drawPath(p, ink, style = Stroke(width = 3.4f, join = StrokeJoin.Round))
-        drawPath(p, gold)
+        drawPath(p, Color.White)
     }
 }
 
@@ -835,6 +849,10 @@ private val RACE_RAIL_TOP_CLEAR = INFO_BADGE_DIAMETER + 10.dp
 
 /** `.ticket`'s `padding: 0.85rem` — a thin paper margin, so the QR fills the card. */
 private val TICKET_PAD = 14.dp
+
+/** `.seat--open`'s glass, `rgba(24, 28, 44, 0.28)` — lighter than `--glass`, a
+ *  literal in the CSS too. */
+private val OPEN_SEAT_GLASS = Color(24, 28, 44).copy(alpha = 0.28f)
 
 /** `.ticket__urlbox`'s type scale; the room code is 1.45em of it. */
 private val URL_SIZE = 17.dp

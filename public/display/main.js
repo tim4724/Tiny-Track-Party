@@ -22,7 +22,7 @@ import { bootEngine, trackEntry, progressChooser } from './boot.js';
 // drive these same functions so a preview cannot drift from live play.
 import { showCountdownBanner, renderResults, hideResults } from './raceOverlays.js';
 // The lobby's 3D backdrop: reveal + the track→track crossfade state machine.
-import { setBackdrop3D, crossfadeBackdrop } from './backdrop.js';
+import { setBackdrop3D, crossfadeBackdrop, dissolveInto } from './backdrop.js';
 // TV-surface furniture with no stake in the race: the auto-hiding chrome, the
 // fullscreen toggle, the copy toast. Importing this module installs them.
 import { revealRaceChrome, holdRaceChrome, enterFullscreen, showToast, copyText } from './chrome.js';
@@ -517,12 +517,16 @@ const pushHeldItems = () => {
 // never hang on a build that will not arrive.
 let pendingCountdown = null;
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
-let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
+let raceEnded = false;      // race over → the field coasts behind the (translucent) results overlay until the next race
 let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
 
 scene.onFrame = (dt) => {
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
-  if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
+  // THE CURTAIN CALL: a finished race does not freeze behind its board. Every
+  // car is home and drives its own victory lap (ttp_coast), muted and raising
+  // nothing, until the next race or the lobby takes the scene.
+  if (raceEnded) { session.coast(dt * 1000); return; }
+  if (paused || autoPaused) return; // frozen: cars hold their last pose
   // THE COUNTDOWN GATE. A launch answers with two lists and this is where the
   // second one lands: the grid is already dressed, framed and painted, and
   // "3, 2, 1" waits here until the scene has stopped assembling itself. The
@@ -967,7 +971,6 @@ const RACE_PERFORMERS = {
     seriesDeadline = e.deadline;
     seriesTimer = setTimeout(advanceSeriesRace, e.ms);
     intermissionTicker = setInterval(renderIntermissionCountdown, 500);
-    prepareNextTrack();
   },
   'clear-intermission': () => clearSeriesTimers(),
   // endParty's teardown — closeRoom bails every phone terminally while the
@@ -993,13 +996,10 @@ const RACE_PERFORMERS = {
   },
   // ALWAYS place the track, not only on the effect's `placeTrack`. That flag
   // answers "did the PICK move" (a random re-roll, a cup rewind), which was the
-  // only way the scene could be showing the wrong circuit — until prepareNextTrack
-  // gave the shell its own reason to have moved it. Reaching the lobby straight
-  // from an intermission board does exactly that: the room left mid-intermission
-  // (or emptied on the podium) with the pick still on the race just run, so
-  // the layer says there is nothing to place — while the scene is sitting on the
-  // speculatively-meshed NEXT race. The lobby then attracts on a circuit its own
-  // card does not name. Placing
+  // only reason the layer knows of, while the shell moves the scene on its own
+  // too (prepareNextTrack meshes a cup's next circuit ahead of its launch). A
+  // lobby that trusted the flag could attract on a circuit its card does not
+  // name. Placing
   // unconditionally costs nothing when the scene is already right (Stage skips
   // an unchanged signature), and the promise goes back to the crossfade so the
   // still holds until the swap lands instead of uncovering the old one.
@@ -1062,11 +1062,8 @@ function launchArgs() {
 
 // Hold a launch's countdown until the scene it will be driven on has settled,
 // and perform it when it has. Both launch paths (the lobby start, the cup chain)
-// arm through here, so a chained race waits exactly as a lobby start does.
-//
-// prepareNextTrack still earns its keep alongside this and is not superseded by
-// it: meshing under the intermission board leaves the gate with nothing to wait
-// for, where this only stops the wait being spent on the countdown.
+// arm through here, so a chained race waits exactly as a lobby start does, and
+// a chained start's build (prepareNextTrack) is waited out here under its still.
 function armCountdown(effects) {
   pendingCountdown = (effects && effects.length)
       ? { effects, at: performance.now() } : null;
@@ -1129,9 +1126,12 @@ function advanceSeriesRace() {
   // ONE walk: verdict, the series advanced, the pick re-aimed at the cup's
   // next circuit AND the launch — RESULTS → COUNTDOWN with nothing sequenced
   // here. Phones that sat out flip to the wheel off the COUNTDOWN republish.
+  const series = flow.seriesState(net.flow.handle);
+  const next = series && series.nextTrack;
   const d = flow.advanceSeriesRace(net.flow.handle, sceneReady, launchArgs());
   if (d.action === 'return-to-lobby') { returnToLobby(); return; } // everyone left mid-intermission
   if (d.action !== 'advance') return;
+  prepareNextTrack(next);
   perform(d.effects);
   armCountdown(d.countdownEffects);
 }
@@ -1159,6 +1159,7 @@ function endFlourish() {
   session.fastForwardToEnd(); // runs to raceOver, queueing the end events
   drainRaceEvents();          // ...decided muted: the burst is skipping, not racing
   fastForwarding = false;
+  freezeCars(false);          // the jump is done, under the board's fade: coast on
 }
 
 // Every exit from the results screen clears these, and the flourish timer is one
@@ -1171,12 +1172,12 @@ function clearSeriesTimers() {
   clearInterval(intermissionTicker); intermissionTicker = null;
 }
 
-// Mesh the cup's next circuit NOW, under the intermission board, instead of
-// under the countdown that follows it. A scene build blocks the main thread for
-// a few hundred ms and the results overlay is near-opaque paper, so the swap is
-// both invisible and free here; performed at the chained start it is neither —
-// the countdown is already ticking over the OLD circuit while the thread is
-// busy, which is the stutter and the stale track this exists to remove.
+// Mesh the cup's next circuit at the chained start, under cover. The board
+// stays on the race that was just run (it coasts behind the glass) rather than
+// on a turntable of the next one, so the swap waits for the advance: the
+// finished race freezes into a still blurred like the board, the board goes,
+// the launch's countdown is held on the scene settling (armCountdown), and the
+// still dissolves into the new grid once the build lands.
 //
 // It is also the only place the chained start's circuit reaches the scene: the
 // advance's track-change re-aims `track` outside the lobby, where selectTrack
@@ -1187,13 +1188,11 @@ function clearSeriesTimers() {
 // a player joins or leaves in the meantime the roster moves, the launch
 // rebuilds, and we are back to the old behaviour rather than a wrong scene.
 //
-// WHICH circuit is next is the series', never guessed here. Fire-and-forget:
-// nothing waits on it, and a prepare still in flight when the host taps "Next
-// race" early is picked up by Stage's own rebuild queue.
-function prepareNextTrack() {
-  const series = flow.seriesState(net.flow.handle);
-  const next = series && series.nextTrack;
-  if (next && built.has(next)) scene.prepare(built.get(next));
+// WHICH circuit is next is the series', never guessed here, and it has to be
+// read BEFORE the advance walk, which moves the series on.
+function prepareNextTrack(next) {
+  if (!(next && built.has(next))) return;
+  dissolveInto(scene, () => scene.prepare(built.get(next)));
 }
 
 // ---- race events ----

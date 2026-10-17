@@ -120,6 +120,7 @@ bool RaceSession::forceRemoveCar(const Id& id) {
 void RaceSession::dispose() {
   countdown_.reset();
   ended_ = true;
+  disposed_ = true;
   racing_ = false;
   paused_ = false;
 }

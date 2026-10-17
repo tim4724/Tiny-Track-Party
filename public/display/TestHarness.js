@@ -24,6 +24,7 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // of both in template literals, and the lobby's twin had already drifted to a
 // screen that no longer existed by the time anyone noticed.
 import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
+import { dissolveInto } from './backdrop.js';
 import { resultsView, intermissionSecs, previewBoard, previewProgress, progressLoad, catalogue } from './NativeUiModel.js';
 import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -818,11 +819,10 @@ export function runDisplayScenario(opts, ctx) {
   // of those is a MOMENT rather than a picture — no still shows a board arriving
   // late, and no assertion reads the join between them as well as an eye does.
   //
-  // The chained start is the part with nothing to hide behind: the next circuit
-  // has to already be on screen when the board comes down. Live play meshes it
-  // UNDER the board (main.js prepareNextTrack → Stage.prepare) so the start has
-  // nothing left to build; done at the start instead, the countdown ticks over
-  // the OUTGOING circuit and then hitches. This loops the lot around a cup's
+  // The board stands over the race that was just run, still driving its victory
+  // laps (ttp_coast), and the chained start swaps the circuit under a blurred
+  // still of it (main.js prepareNextTrack → backdrop dissolveInto), dissolving
+  // into the next grid once the build lands. This loops the lot around a cup's
   // four tracks.
   //
   // NOTHING HERE KEEPS ITS OWN COPY OF THE SEQUENCE. showBoard is the real
@@ -1148,24 +1148,31 @@ export function runDisplayScenario(opts, ctx) {
       // The flourish's far end, in main.js's order: drop the hold, freeze the
       // picture, THEN resolve whatever is still running — the burst draws no
       // frames, so every remaining car teleports to the line and the freeze is
-      // what keeps that off screen. Then the board.
+      // what keeps that off screen. Then the board, and the field coasts on.
       function endFlourish() {
         engine.holdEnd(false);
         scene.hold(true);
         engine.fastForwardToEnd();
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
-        sfx(window.__audioDecide.stopVoices());   // a frozen frame holds no voices open
+        sfx(window.__audioDecide.stopVoices());   // the curtain call is muted
+        scene.hold(false);
         board();
       }
 
-      // The board arrives a flourish later, fading up over the held finish frame
-      // (display.css) — and the NEXT circuit is meshed behind it.
+      // The board arrives a flourish later, fading up over the race, which
+      // keeps driving behind it.
       function board() {
         sfx(window.__audioDecide.stopMusic());                // …with the board
         showBoard(previewBoard('intermission', ctx.track.trackId, players, seedOpt.seed ?? 1, leg));   // show-results
         leg = (leg + 1) % cup.tracks.length;
-        scene.prepare(entry(cup.tracks[leg]));
         phase = 'board'; phaseMs = 0;                         // arm-intermission
+      }
+
+      // The chained start: the next circuit meshed under a still of this one
+      // (main.js advanceSeriesRace → prepareNextTrack), then the launch.
+      function advance() {
+        dissolveInto(scene, () => scene.prepare(entry(cup.tracks[leg])));
+        launch();
       }
 
       // The board's "starting in N…", ticked exactly as the live shell ticks it
@@ -1203,7 +1210,8 @@ export function runDisplayScenario(opts, ctx) {
           phaseMs += ms;
           const remain = intermissionMs() - phaseMs;
           tickNextSecs(remain);
-          if (remain <= 0) launch();
+          if (remain <= 0) { advance(); return; }
+          engine.coast(ms);                                   // the curtain call
           return;
         }
         if (phase === 'flourish') {

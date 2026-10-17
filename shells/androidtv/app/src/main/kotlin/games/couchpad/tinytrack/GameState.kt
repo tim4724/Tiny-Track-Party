@@ -362,6 +362,10 @@ class GameState {
 
     /** "3" / "2" / "1" / "GO!" / null. */
     var countdown by mutableStateOf<String?>(null)
+
+    /** The last launch's count (`start-countdown`'s `seconds`), which the
+     *  countdown strip lays its beats out from; 0 until a launch names one. */
+    var countdownSteps by mutableStateOf(0)
     var paused by mutableStateOf(false)
 
     /**

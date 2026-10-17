@@ -126,11 +126,23 @@ the stamped hash is over bytes, so comment-only edits count.
 
 ## Look and feel
 
-UI is the **"Sticker Bash"** theme: die-cut stickers on the TV glass — flat
-colour on warm paper, thick warm-ink outlines (`--ink`, never `#000`), hard
-zero-blur offset shadows, slight rotations. Chrome colours are
+The web UI is the **"Toy Box"** theme: six roles, each meaning the same thing
+on the phone and the TV, so what a thing looks like says what it does. **Paper**
+(white cards) is what you read; **frost** is every full-screen layer on both
+screens, never a card on a scrim; an **action** is the one solid colour button
+per screen; a **choice** is everything else you press, white with a faint edge
+(picked = washed and ringed in the colour it picks, pressed = a paler wash of
+that colour, out of reach = flat grey; on the phone that colour is your livery); a **label** is a tinted pill,
+never a solid fill; **glass** is only dark readouts over the live 3D view,
+never something you press. Everything is flat: no ledges, no drop shadows.
+The driving pads and the name tags over the race keep a solid colour on
+purpose. `theme.css`'s header is the full statement. Chrome colours are
 **red/green/blue/purple ONLY** — yellow/amber and pink are vetoed in chrome
 (liveries only; celebration is RED).
+Both TV shells draw the same roles from the baked tokens (`design-tokens.json`);
+Android TV is deliberately simpler — no blur and no per-frame chrome animation,
+its frost a little more opaque to make up for the missing blur
+(`shells/androidtv/CLAUDE.md`).
 
 Design tokens and reusable bits (`.card .btn .chip .pill .field`, the `.wordmark`
 badge, the `.scene` paper stage) live in `public/shared/theme.css`, `<link>`ed by

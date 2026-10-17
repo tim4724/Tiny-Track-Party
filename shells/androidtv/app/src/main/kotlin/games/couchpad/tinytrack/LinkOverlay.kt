@@ -22,46 +22,41 @@ import androidx.compose.ui.unit.dp
  * unless the slot was taken over by another display, a RECONNECT that
  * `ttp_net_reconnect_json` answers.
  *
- * Same glass as [PauseOverlay], for the same reason: the two are one surface at
- * two moments. The button takes focus when it appears: nothing else on the glass
- * is focusable in the gave-up state, so without this the D-pad could not reach it.
+ * The same FROST as [PauseOverlay], for the same reason: the two are one surface
+ * at two moments, and neither is a card on a scrim. The button takes focus when
+ * it appears: nothing else on the frost is focusable in the gave-up state, so
+ * without this the D-pad could not reach it.
  */
 @Composable
 fun LinkOverlay(link: GameState.LinkView, game: GameCoordinator) {
     UnboundedContent()
     Box(
-        Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.72f)),
+        Modifier.fillMaxSize().background(Sticker.frost),
         contentAlignment = Alignment.Center,
     ) {
-        StickerCard(rotation = 0f, padding = 48.dp) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                StickerText(
-                    if (link.state == "disconnected") Copy.disconnected else Copy.reconnecting,
-                    size = 54.dp,
-                )
-                // Attempt 0 is the heartbeat's unnumbered immediate retry: heading
-                // only, as on the web.
-                if (link.state == "reconnecting" && link.attempt > 0) {
-                    StickerText(
-                        Copy.attempt(link.attempt, link.max),
-                        size = 26.dp,
-                        color = Tokens.ink.copy(alpha = 0.7f),
-                    )
-                }
-                if (link.button) {
-                    val focus = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { focus.requestFocus() }
-                    StickerButton(
-                        Copy.reconnectLabel,
-                        modifier = Modifier.focusRequester(focus)
-                            .defaultMinSize(minWidth = BUTTON_MIN_WIDTH),
-                        tint = Tokens.green,
-                        size = BUTTON_SIZE,
-                    ) { game.reconnectLink() }
-                }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(26.dp),
+        ) {
+            StickerText(
+                if (link.state == "disconnected") Copy.disconnected else Copy.reconnecting,
+                size = OVERLAY_TITLE_SIZE,
+            )
+            // Attempt 0 is the heartbeat's unnumbered immediate retry: heading
+            // only, as on the web. `.link-status` at 1.8rem.
+            if (link.state == "reconnecting" && link.attempt > 0) {
+                StickerText(Copy.attempt(link.attempt, link.max), size = 29.dp, color = Tokens.ink2)
+            }
+            if (link.button) {
+                val focus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { focus.requestFocus() }
+                ActionButton(
+                    Copy.reconnectLabel,
+                    modifier = Modifier.focusRequester(focus)
+                        .defaultMinSize(minWidth = OVERLAY_BUTTON_MIN_WIDTH),
+                    tint = Tokens.green,
+                    size = OVERLAY_BUTTON_SIZE,
+                ) { game.reconnectLink() }
             }
         }
     }

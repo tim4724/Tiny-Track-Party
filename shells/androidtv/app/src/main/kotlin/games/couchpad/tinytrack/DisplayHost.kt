@@ -294,7 +294,7 @@ class DisplayHost(
             // (960x540), on one of the circuit's expensive open vistas: 3.3 ms
             // of GPU — about one whole rung of render scale. 960x540 with hard
             // edges holds a flat 60 there while 960x540 filtered drops frames,
-            // and on flat colour with thick ink outlines the extra pixels beat
+            // and on flat colour with hard edges the extra pixels beat
             // the filter: the scale ladder makes the upscale an exact whole
             // ratio, whose softening is uniform and still.
             //

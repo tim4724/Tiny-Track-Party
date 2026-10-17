@@ -227,7 +227,7 @@ section.stage iframe {
 .legend__group li { color: #d5d5ee; }
 .legend__note { color: #6f7699; margin-top: 6px; }
 /* The item-chip group: real rendered chips, not captions. Each chip mimics the
-   HUD's sticker slot (paper ground, ink border) so the icons are judged on the
+   HUD's item slot (a white ground) so the icons are judged on the
    surface they actually ship on, not on this panel's dark glass. */
 .legend__icons { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
 .legend__icon {

@@ -71,21 +71,20 @@ fun InfoScreen(state: GameState) {
             Spacer(Modifier.height(44.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(72.dp)) {
-                LegalCard(Copy.privacy, Legal.privacyUrl, -1.4f, cardWidth, cardPadding)
-                LegalCard(Copy.imprint, Legal.imprintUrl, 1.4f, cardWidth, cardPadding)
+                LegalCard(Copy.privacy, Legal.privacyUrl, cardWidth, cardPadding)
+                LegalCard(Copy.imprint, Legal.imprintUrl, cardWidth, cardPadding)
             }
             Spacer(Modifier.height(44.dp))
 
             // THE ONE FOCUSABLE THING ON THIS BOARD, so it takes focus on arrival
             // and the viewer's natural first press — OK, not a direction — goes
-            // somewhere. Drawn as a PRIMARY and not as the kit's quiet ghost: a
-            // board with a single control has no louder sibling for a quiet one to
-            // be quieter than, and a white ghost reads as decoration beside two
-            // white cards. Blue, like the ⓘ that opened this board and the cards'
-            // own labels.
+            // somewhere. The board's ACTION, not a white choice: a board with a
+            // single control has no louder sibling for a quiet one to be quieter
+            // than, and a white button reads as decoration beside two white
+            // cards. Blue, like the cards' own labels.
             val focus = remember { FocusRequester() }
             LaunchedEffect(Unit) { focus.requestFocus() }
-            StickerButton(
+            ActionButton(
                 Copy.licenses,
                 modifier = Modifier.focusRequester(focus),
                 tint = Tokens.blue,
@@ -112,22 +111,22 @@ fun InfoScreen(state: GameState) {
 }
 
 /**
- * One legal page as a sticker card: its name, the QR that opens it on a phone,
- * and the URL in full underneath.
+ * One legal page as a PAPER card: its name as a label, the QR that opens it on a
+ * phone, and the URL in full underneath.
  *
  * Display-only, deliberately NOT focusable. There is nothing for the remote to do
  * to a QR code, and a focusable card would put two more stops between the board
  * arriving and the licenses button the remote actually wants.
  */
 @Composable
-private fun LegalCard(title: String, url: String, rotation: Float, width: Dp, padding: Dp) {
-    StickerCard(Modifier.width(width), rotation = rotation, padding = padding) {
+private fun LegalCard(title: String, url: String, width: Dp, padding: Dp) {
+    PaperCard(Modifier.width(width), padding = padding) {
         Column(
             Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            StickerPill(title, tint = Tokens.blue, size = 22.dp)
+            LabelPill(title, tint = Tokens.blue, size = 22.dp)
 
             // Square whether or not ZXing produced anything, so a card that fails
             // to encode still holds the layout rather than collapsing around its

@@ -25,8 +25,8 @@ export function hideConn() { el('conn').classList.add('hidden'); }
 
 // Relay error strings (Party-Server) → copy a party guest can act on.
 function friendlyRelayError(msg) {
-  if (msg === 'Room not found') return 'That race has ended — scan a fresh QR code on the big screen.';
-  if (msg === 'Room is full') return 'This race is full — wait for a free seat, then try again.';
+  if (msg === 'Room not found') return 'That race has ended. Scan a fresh QR code on the big screen.';
+  if (msg === 'Room is full') return 'This race is full. Wait for a free seat, then try again.';
   return 'Error: ' + msg;
 }
 
@@ -41,20 +41,20 @@ export function linkCopy(state, info) {
     case 'lost':
       return {
         status: 'Connection lost.',
-        conn: { title: 'Connection lost', msg: 'Scan the QR on the big screen to take your seat back — or try again here.', retry: true, leave: true }
+        conn: { title: 'Connection lost', msg: 'Scan the QR on the big screen to take your seat back, or try again here.', retry: true, leave: true }
       };
     // The room is gone for good (host ended the party, or the big screen never
     // came back) — no retry button: reconnecting would only bounce off "Room not
     // found". Exiting to the start screen is the only move left.
     case 'room_closed':
       return {
-        status: 'That race has ended — scan a fresh QR code on the big screen.',
+        status: 'That race has ended. Scan a fresh QR code on the big screen.',
         conn: { title: 'Race over', msg: 'The party on the big screen has ended. Scan a fresh QR code to join the next one!', retry: false, leave: true }
       };
     case 'display_gone':
       return {
         status: 'Waiting for the big screen…',
-        conn: { title: 'Waiting for the big screen…', msg: 'The host’s screen dropped — hang tight, it’ll reconnect you.', retry: false, leave: true }
+        conn: { title: 'Waiting for the big screen…', msg: 'The host’s screen dropped. Hang tight, it’ll reconnect you.', retry: false, leave: true }
       };
     case 'replaced':
       return {

@@ -19,6 +19,8 @@ var CONTROLLER_CARDS = [
   { key: 'lobby-race-waiting', title: 'Lobby (host, waiting to start)', perColor: true },
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
   { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
+  { key: 'stars',           title: 'Stars (popup)',   perColor: true },
+  { key: 'settings-intro',   title: 'How to drive (first run)', perColor: true },
   { key: 'settings',         title: 'Settings (tilt)',    perColor: true },
   { key: 'settings-buttons', title: 'Settings (buttons)', perColor: true },
   { key: 'settings-player',  title: 'Settings (not host)', perColor: true },

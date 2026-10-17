@@ -111,7 +111,7 @@ fun RootScreen(game: GameCoordinator) {
         // The overlays, in paint order. Each is a conditional insertion, and
         // each is UnboundedContent: the window under a race erases only the
         // HUD's retained groups and the name tags (GameWindow.kt).
-        CountdownOverlay(state)
+        CountdownOverlay(state, game.proto.countdownSeconds)
 
         // THE BOARD FADES UP, because it no longer arrives at the flag: the race's
         // end holds the frozen finish frame for the flourish (race_flow.h

@@ -64,17 +64,19 @@ function trapTab(overlay, e) {
 const restoreFocus = (node) => { if (node && node.focus) node.focus(); };
 
 // ---- Settings popup ----
-// Auto-shows ONCE per device on first lobby entry (it teaches the controls); the
-// gear buttons (lobby + game) reopen it. _settingsReturnFocus is the element
+// Auto-shows ONCE per device on first lobby entry, as "How to drive" (.is-intro):
+// the steering choice and the demo only, since the TV's settings mean nothing
+// to someone who has not raced yet. The gear buttons (lobby + game) reopen it
+// whole, as Settings. _settingsReturnFocus is the element
 // focused before opening, so closing returns focus to it.
 let _settingsReturnFocus = null;
 
 const settingsOpen = () => !el('settings-overlay').classList.contains('hidden');
 
-// Sync the card to the CURRENT input mode: the pill's checked side and the
-// .is-buttons class that flips the demo phone, its headline and the legend.
+// Sync the card to the CURRENT input mode: the Steering row's checked side and
+// the .is-buttons class that flips the demo phone, its headline and the legend.
 // On a device with no motion sensor (main.js forced buttons) Tilt is disabled
-// outright and the note under Steering says why — a pickable-looking Tilt
+// outright and its small print says why — a pickable-looking Tilt
 // would only lead into a recovery popup with no recovery.
 function refreshSettingsCard() {
   const buttons = _getInputMode() === 'buttons';
@@ -83,16 +85,15 @@ function refreshSettingsCard() {
   el('input-buttons').setAttribute('aria-checked', String(buttons));
   const noTilt = _tilt.motionState === 'unsupported';
   el('input-tilt').disabled = noTilt;
-  el('steer-note').textContent = noTilt ? "Tilt isn't available" : 'Tilt is recommended';
+  el('steer-note').textContent = noTilt ? 'not available' : 'recommended';
   // The TV group — the DISPLAY's settings. Every phone sees what they are; only
   // the host's may change them (the display's verdict re-checks, so locking
   // here is UX, not the gate). Sound renders the snapshot's soundOn.
   const locked = !_isHost();
   el('tv-seg').classList.toggle('is-locked', locked);
-  el('sound-toggle').disabled = locked;
-  el('rate-full').disabled = locked;
-  el('rate-half').disabled = locked;
-  el('sound-toggle').setAttribute('aria-checked', String(_getSoundOn()));
+  for (const id of ['sound-off', 'sound-on', 'rate-full', 'rate-half']) el(id).disabled = locked;
+  el('sound-on').setAttribute('aria-checked', String(_getSoundOn()));
+  el('sound-off').setAttribute('aria-checked', String(!_getSoundOn()));
   // Graphics exists only where the TV offers it (the snapshot's frameRate);
   // Quality's small print is the TV's own half rate.
   const rate = _getFrameRate();
@@ -120,8 +121,9 @@ export function refreshMotionState() {
   if (motionOpen() && _tilt.motionState === 'unsupported') closeMotionPopup();
 }
 
-function openSettings() {
+function openSettings(intro = false) {
   _settingsReturnFocus = document.activeElement;
+  el('settings-card').classList.toggle('is-intro', intro);
   setDemoNames(_playerName());   // both demo phones read as "your phone" (livery via --car)
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
@@ -149,7 +151,7 @@ function setDemoNames(name) {
 
 function maybeAutoShowSettings() {
   if (inScenario() || helpSeen() || settingsOpen()) return;
-  openSettings();    // show first, THEN stamp — a throw before it shows can't burn the once
+  openSettings(true);    // show first, THEN stamp — a throw before it shows can't burn the once
   markHelpSeen();
 }
 
@@ -310,7 +312,7 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   el('settings-done').addEventListener('click', () => { _buzz(15); closeSettings(); });
   el('settings-overlay').addEventListener('keydown', (e) => trapTab(el('settings-overlay'), e));
 
-  // The steering-mode seg. Picking Tilt (re-)requests motion permission INSIDE
+  // The Steering row. Picking Tilt (re-)requests motion permission INSIDE
   // this tap (the iOS gesture rule); if the sensor stays blocked, surface the
   // recovery popup right away rather than letting the player discover it
   // mid-race. Picking Buttons needs nothing from the platform.
@@ -334,13 +336,17 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     }
   });
 
-  // The Sound switch — optimistic like every lobby control: send, render, and
-  // let the next LOBBY_UPDATE (the display echoes soundOn) be the truth.
-  el('sound-toggle').addEventListener('click', () => {
+  // Off / On — optimistic like every lobby control: send, render, and let the
+  // next LOBBY_UPDATE (the display echoes soundOn) be the truth. A tap on the
+  // picked one is a no-op.
+  const pickSound = (on) => {
+    if (_getSoundOn() === on) return;
     _buzz(15);
-    _setSoundOn(!_getSoundOn());
+    _setSoundOn(on);
     refreshSettingsCard();
-  });
+  };
+  el('sound-off').addEventListener('click', () => pickSound(false));
+  el('sound-on').addEventListener('click', () => pickSound(true));
 
   // Performance / Quality — the same optimistic shape; a tap on the picked one is a no-op.
   const pickRate = (half) => {

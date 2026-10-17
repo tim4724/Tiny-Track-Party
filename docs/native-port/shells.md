@@ -242,8 +242,7 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    the display CSS (the decisions are already gone from all three); the
    SwiftUI screens under `shells/tvos/TinyTrackParty/Screens/` are the second
    implementation to crib from. Consume
-   `public/shared/design-tokens.json` rather than re-authoring the sticker
-   palette.
+   `public/shared/design-tokens.json` rather than re-authoring the palette.
    The couch's PROGRESSION is part of this surface: read the persisted blob at
    boot and hand it to `ttp_ui_progress_load` (NSUserDefaults on tvOS — the web
    reference is main.js's `PROGRESS_KEY`), perform the race walks'
@@ -584,15 +583,13 @@ below. The first is owed by BOTH TV shells; the second is Android's.
 Two web looks a TV shell will notice it lacks. Neither is coming; do not
 re-open them as work.
 
-- **Frosting behind the full-screen boards** (Android). The flat paper wash IS
-  the look. Compose cannot reach the picture it would blur — the frozen race is
-  a SurfaceView composited by SurfaceFlinger in a layer BELOW the app window —
+- **The frost's blur** (Android). Every full-screen layer is the frost colour
+  with NO blur, laid a touch thicker than the token to make up for it, and that
+  IS the look. Compose cannot reach the picture it would blur — the frozen race
+  is a SurfaceView composited by SurfaceFlinger in a layer BELOW the app window —
   so what is left is a whole-window blur toggled per board (API 31+, and off
-  outright on low-end boxes) or a renderer pass, and neither earns its cost
-  against what it buys: the results board's paper is nearly opaque, so almost
-  none of the race shows through and the board is near-indistinguishable from
-  the web's. The more translucent pause overlay is the one board where the
-  difference reads at all. The
+  outright on low-end boxes) or a renderer pass, and neither earns its cost on
+  the box this shell is built for (the user's call: no blur in any form). The
   mechanism is the durable half and lives in `shells/androidtv/CLAUDE.md`
   (Look).
 - **The scene's edge vignette** — WEB-ONLY, permanently, and that is a

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,13 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.GraphicsLayerScope
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.DrawStyle
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
@@ -57,10 +54,11 @@ import kotlinx.coroutines.delay
  * RENDERER's (`materials/voverlay.mat`), from these same rects. Drawing them here
  * would double them, and the second copy would drift. The line is exact:
  * **cell-anchored AND textless goes to the renderer; anything carrying type or
- * sticker chrome stays here.**
+ * chrome stays here.**
  *
- * Chrome over the live race view floats BARE — no paper, no panel. Paper
- * backgrounds are for full-screen boards only.
+ * Chrome over the live race view floats BARE — no panel behind it. The roles it
+ * draws in are the theme's: the name chip is the livery, solid on purpose; the
+ * place, the item and the cell cards are PAPER; the lap is GLASS.
  *
  * Nothing in here is focusable. A TV's focus system drives the whole UI, and a HUD
  * element that could take focus would steal it from the pause overlay, which is
@@ -144,16 +142,14 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
 }
 
 /**
- * The place badge over the lap pill, tilted as one. Its own composable, taking
- * only the three numbers it shows, so a cell recomposing for its item or for
- * anyone's pickup skips it and its retained layer is not re-rendered.
+ * The place badge over the lap pill. Its own composable, taking only the three
+ * numbers it shows, so a cell recomposing for its item or for anyone's pickup
+ * skips it and its retained layer is not re-rendered.
  */
 @Composable
 private fun PlaceColumn(place: Int, lap: Int, totalLaps: Int, modifier: Modifier) {
     Column(
-        modifier
-            .retainedLayer(TILT_PAD)
-            .tilt(1.5f),
+        modifier.retainedLayer(LAYER_PAD),
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
@@ -162,35 +158,50 @@ private fun PlaceColumn(place: Int, lap: Int, totalLaps: Int, modifier: Modifier
         // stops a Grand Prix swapping tracks under the HUD from painting
         // "0th, lap 0".
         if (place > 0) {
-            val shape = RoundedCornerShape(Sticker.radiusSmall)
+            // `.cell-rank__place` — PAPER: the ordinal on a white card.
+            val size = 46.dp
             Box(
                 Modifier
-                    .hardShadow(Sticker.popShadow, shape)
-                    .background(Tokens.surface, shape)
-                    .stickerOutline(Sticker.border, shape)
-                    .padding(vertical = 10.dp, horizontal = 21.dp)
+                    .background(Tokens.surface, RoundedCornerShape(Sticker.radius))
+                    .padding(vertical = size * 0.22f, horizontal = size * 0.5f)
             ) {
-                StickerText(Copy.ordinal(place), size = 46.dp)
+                StickerText(Copy.ordinal(place), size = size, modifier = Modifier.lineBox(size))
             }
         }
-        if (totalLaps > 0) {
-            StickerPill(Copy.lap(lap, totalLaps), tint = Tokens.ink, tracking = 0.12f)
-        }
+        if (totalLaps > 0) LapPill(Copy.lap(lap, totalLaps))
     }
 }
 
 /**
- * A sticker group rendered into a RETAINED offscreen layer: HWUI keeps the
+ * `.cell-rank__lap` — GLASS: white caps on the dark tint, a readout over the live
+ * view and nothing to press. Small, so it is the one translucent layer on the race
+ * screen this box pays for; the web's blur behind it is out of reach here (the
+ * picture is the SurfaceView) and the tint alone reads the same at this size.
+ */
+@Composable
+private fun LapPill(text: String) {
+    val size = 18.dp
+    Box(
+        Modifier
+            .background(Tokens.glass, RoundedCornerShape(percent = 50))
+            .padding(vertical = size * 0.32f, horizontal = size * 0.9f)
+    ) {
+        StickerText(text.uppercase(), size = size, weight = Fonts.semibold,
+            color = Color.White, tracking = 0.12f)
+    }
+}
+
+/**
+ * A chrome group rendered into a RETAINED offscreen layer: HWUI keeps the
  * texture across window frames and re-renders it only when this subtree's
  * display list changes (a place, a lap, an item), so a steady frame composites
  * one quad instead of replaying the group's strokes, fills and text.
  *
- * The layer carries NO transform. The tilt goes inside it, so the shapes and
- * type are rasterized rotated at final pixels and the layer lands 1:1 at an
- * integer position (Compose layout is integer px) rather than being resampled.
- * A layer clips to its node, so it is grown by [pad] on every side to hold the
- * hard drop and the rotated corners, and the growth is hidden from layout: the
- * parent measures and places the group exactly where it was.
+ * The layer carries NO transform, so it lands 1:1 at an integer position
+ * (Compose layout is integer px) rather than being resampled. A layer clips to
+ * its node, so it is grown by [pad] on every side to hold the antialiased edge,
+ * and the growth is hidden from layout: the parent measures and places the group
+ * exactly where it was.
  */
 private fun Modifier.retainedLayer(pad: Dp, block: GraphicsLayerScope.() -> Unit = {}): Modifier =
     layout { measurable, constraints ->
@@ -204,37 +215,32 @@ private fun Modifier.retainedLayer(pad: Dp, block: GraphicsLayerScope.() -> Unit
         .erasedBounds()
         .padding(pad)
 
-/**
- * Room around a TILTED group: the widest chip (14em of 35 px, ~530 px) turned 2
- * degrees lifts its corners ~9.3 px, plus the 3 px pop drop and an AA pixel.
- */
-private val TILT_PAD = 16.dp
+/** Room around a retained group for its antialiased edge, and nothing else: the
+ *  groups are flat and level, so no drop or rotated corner reaches past them. */
+private val LAYER_PAD = 2.dp
 
 /**
- * `.cell-label__name` — the player's name on a sticker FILLED with their livery,
- * white text. Filled rather than livery text on white (which this was, and which
- * the phone never did): across a four-way split the thing you hunt for is your own
- * cell, and a solid block of your colour is found in peripheral vision where
- * coloured GLYPHS are not.
+ * `.cell-label__name` — the player's name on a pill FILLED with their livery,
+ * white text. One of the two things the Toy Box keeps solid on purpose: across a
+ * four-way split the thing you hunt for is your own cell, and a solid block of
+ * your colour is found in peripheral vision where coloured GLYPHS are not.
  */
 @Composable
 private fun NameChip(name: String, colorIndex: Int) {
     val size = 35.dp
-    val shape = RoundedCornerShape(Sticker.radiusSmall)
     Box(
         Modifier
-            .retainedLayer(TILT_PAD)
-            .tilt(-2f)
-            .hardShadow(Sticker.popShadow, shape)
-            .background(Tokens.car(colorIndex), shape)
-            .stickerOutline(Sticker.border, shape)
-            .padding(vertical = size * 0.3f, horizontal = size * 0.55f)
+            .retainedLayer(LAYER_PAD)
+            .background(Tokens.car(colorIndex), RoundedCornerShape(percent = 50))
+            // `padding: 0.28em 0.75em 0.32em`.
+            .padding(top = size * 0.28f, bottom = size * 0.32f,
+                start = size * 0.75f, end = size * 0.75f)
     ) {
         StickerText(
             name, size = size, color = Color.White,
             // `max-width: 14em`, so a long name truncates rather than running
             // across the cell into the next player's picture.
-            modifier = Modifier.widthIn(max = size * 14),
+            modifier = Modifier.widthIn(max = size * 14).lineBox(size),
         )
     }
 }
@@ -262,7 +268,8 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int, ready
     // lands on its 152 ceiling. VIEWPORT width, not cell width — the slot is the
     // same size in a four-way split as it is full screen.
     val side = 152.dp
-    val corner = 26.dp
+    // `border-radius: 28px`, a literal in the CSS too.
+    val corner = 28.dp
     val shape = RoundedCornerShape(corner)
 
     var rolling by remember { mutableStateOf<String?>(null) }
@@ -292,20 +299,18 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int, ready
 
     Box(
         Modifier
-            // Its own retained layer, room enough for the 3 px drop.
-            .retainedLayer(8.dp)
+            // Its own retained layer.
+            .retainedLayer(LAYER_PAD)
             .size(side)
             .then(
-                if (shown != null) Modifier
-                    .hardShadow(Sticker.popShadow, shape)
-                    .background(Tokens.surface, shape)
-                    .stickerOutline(Sticker.border, shape)
-                // The empty slot reads as a RESERVED SPACE rather than a sticker:
-                // no fill, no shadow, and a DASHED rule. `border: 4px dashed
-                // color-mix(ink 45%, transparent)`.
-                else Modifier.dashedOutline(
-                    Sticker.border, corner, Tokens.ink.copy(alpha = 0.45f)
-                )
+                // Holding an item, the slot is PAPER: the icon on a white card.
+                if (shown != null) Modifier.background(Tokens.surface, shape)
+                // Empty, it reads as a RESERVED SPACE over the live view: a faint
+                // dark tint and a DASHED white rule (`.cell-label__item.is-empty`,
+                // literals there too).
+                else Modifier
+                    .background(Color(24, 28, 44).copy(alpha = 0.18f), shape)
+                    .dashedOutline(3.dp, corner, Color.White.copy(alpha = 0.75f))
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -349,25 +354,22 @@ internal object ItemVocabulary {
 @Composable
 private fun FinishedCard(cell: GameState.CellHUD) {
     UnboundedContent()
-    // `.cell-finish`'s padding is ASYMMETRIC — 20.8 vertical by 35.2 horizontal —
-    // so the card is noticeably wider than its stack. Uniform, it hugged.
-    StickerCard(rotation = -1.5f, padding = 21.dp, horizontalPadding = 35.dp) {
+    // `.cell-finish`'s padding is ASYMMETRIC — 27.2 vertical by 41.6 horizontal at
+    // 1920 — so the card is noticeably wider than its stack. Uniform, it hugged.
+    PaperCard(padding = 27.dp, horizontalPadding = 42.dp) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
         ) {
-            // `.cell-finish__badge` carries the ink rule every other sticker does;
-            // a bare `.pill` does not, and without it the badge was the one token on
-            // the screen with no outline.
-            Box(Modifier.stickerOutline(Sticker.hairlineBorder, RoundedCornerShape(percent = 50))) {
-                StickerPill(Copy.finished, tint = Tokens.car(cell.colorIndex), size = 20.dp,
-                    tracking = 0.16f)
-            }
-            StickerText(Copy.ordinal(cell.place), size = 54.dp)
+            // `.cell-finish__badge` — a LABEL in the player's livery.
+            LabelPill(Copy.finished, tint = Tokens.car(cell.colorIndex), size = 20.dp,
+                tracking = 0.16f)
+            StickerText(Copy.ordinal(cell.place), size = 54.dp, modifier = Modifier.lineBox(54.dp))
             // A car can be FINISHED with no recorded time — a forfeit resolved at
             // the flag — and the card prints nothing rather than "0.0s" for it.
             cell.finishTime?.let {
-                StickerText(Copy.seconds(it), size = 22.dp, color = Tokens.ink2, body = true)
+                StickerText(Copy.seconds(it), size = 22.dp, weight = Fonts.extraBold,
+                    color = Tokens.ink2, body = true)
             }
         }
     }
@@ -398,7 +400,7 @@ private fun ReconnectCard(cell: GameState.CellHUD) {
     // the ~6 Hz HUD poll, and a QR encode is not something to run six times a
     // second in a layout pass.
     val bitmap = remember(cell.reconnectUrl) { cell.reconnectUrl?.let { QRCode.bitmap(it) } }
-    StickerCard(rotation = -1.5f, padding = 18.dp) {
+    PaperCard(padding = 18.dp) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(qrSide * 0.04f),
@@ -437,9 +439,12 @@ private fun ReconnectCard(cell: GameState.CellHUD) {
  * The LAST text is held, because the exit is triggered BY the countdown going
  * null: drawing `state.countdown` would render nothing for the whole exit and
  * "GO!" would vanish instead of fading.
+ *
+ * [defaultSteps] is the protocol's count, for a banner no launch has laid out
+ * (`window.COUNTDOWN_SECONDS` on the web).
  */
 @Composable
-fun CountdownOverlay(state: GameState) {
+fun CountdownOverlay(state: GameState, defaultSteps: Int) {
     val shown = state.screen == GameState.Screen.RACE && state.countdown != null
     var lastCount by remember { mutableStateOf("") }
     state.countdown?.let { lastCount = it }
@@ -456,133 +461,152 @@ fun CountdownOverlay(state: GameState) {
     }
     if (present) {
         UnboundedContent()
-        Box(Modifier.graphicsLayer { alpha = fade.value }) { CountdownBanner(lastCount) }
+        val steps = if (state.countdownSteps > 0) state.countdownSteps else defaultSteps
+        Box(Modifier.graphicsLayer { alpha = fade.value }) { CountdownBanner(lastCount, steps) }
     }
 }
 
 /**
- * The countdown banner: "3" / "2" / "1" / "GO!". The beat is the model's
+ * The countdown banner (`#countdown`): the beat on a white PAPER disc tipped a
+ * few degrees like a toy's dial, and under it a GLASS strip of every beat with
+ * the current one lit. GO! turns the disc green. The beat is the model's
  * (`show-countdown`), and its SOUND is the wasm's, so there is no cue call here.
  *
  * Takes the TEXT, not the state: the caller holds the last non-null value so the
- * banner still has something to draw while it fades out. See RootScreen.
+ * banner still has something to draw while it fades out.
+ *
+ * OPAQUE, apart from the strip. The disc is the one large piece of chrome over
+ * the live race, and a solid fill is the cheap way to draw it here; it is up for
+ * three beats and changes only on a beat.
  */
 @Composable
-fun CountdownBanner(text: String) {
+fun CountdownBanner(text: String, steps: Int) {
     if (text.isEmpty()) return
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // DIE-CUT, like everything else on this glass. `#countdown` is
-        // `-webkit-text-stroke: 12px #fff` with `paint-order: stroke fill`, plus a
-        // hard `drop-shadow(6px 6px 0 var(--shadow-ink))`. The white cut is not
-        // decoration: the numeral lands over the dark road, over a place badge and
-        // over a name chip, and without it the glyph merges into all three — over
-        // the cars it very nearly disappeared.
-        //
-        // One STROKED copy behind the fill, at the CSS width: the stroke is
-        // centred on the outline and the fill covers its inner half, as with
-        // `paint-order: stroke fill`. Not `Wordmark`'s ring of offset copies: a
-        // beat changes the text, and each copy is a text node to recompose, lay
-        // out and draw — sixteen of them cost the box whole frames at every beat,
-        // GO included, while the field is already moving.
-        val edge = COUNTDOWN_SIZE * (12f / 280.8f) / 2f
-        val drop = COUNTDOWN_SIZE * (6f / 280.8f)
-        Box(contentAlignment = Alignment.Center) {
-            // The hard ink drop first, so the white cut sits over it — and offset by
-            // the EDGE PLUS the drop, because the CSS casts its `drop-shadow` from
-            // the already-outlined glyph (`paint-order: stroke fill` runs first). At
-            // the drop alone the ink copy lands entirely inside the white ring and
-            // never emerges, which reads as a numeral lying flat on the glass.
-            CountdownGlyph(text, Tokens.shadowInk, Modifier.graphicsLayer {
-                translationX = (edge + drop).toPx(); translationY = (edge + drop).toPx()
-            })
-            val cut = with(LocalDensity.current) {
-                Stroke(width = (edge * 2).toPx(), join = StrokeJoin.Round)
-            }
-            CountdownGlyph(text, Color.White, drawStyle = cut)
-            // ONE COLOUR FOR EVERY BEAT, GO included: `#countdown { color: var(--ink) }`,
-            // and `.is-go` adds only an opacity/scale fade. Painting GO red gave the
-            // banner a role the web's never takes, and made the last beat read as a
-            // different object from the three before it.
-            CountdownGlyph(text, Tokens.ink)
+    val go = text == Copy.go
+    val n = if (go) 0 else text.toIntOrNull() ?: return
+    Box(Modifier.fillMaxSize()) {
+        // `.cd-disc`: 34vh across, `margin-top: -4vh` inside a centring flex box,
+        // which lifts its centre by half that.
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .offset(y = -(AUTHORED_HEIGHT * 0.02f).dp)
+                .size((AUTHORED_HEIGHT * 0.34f).dp)
+                .tilt(-4f)
+                .background(if (go) Tokens.brand else Tokens.surface, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            // `.cd-num` at 24vh, lifted by half its 1.5vh margin; GO! at 13vh. A
+            // "1" centred by its box reads right of centre (its flag reaches
+            // left), so it moves left by 0.045em, as on the web.
+            val size = (AUTHORED_HEIGHT * (if (go) 0.13f else 0.24f)).dp
+            StickerText(
+                text, size = size, color = if (go) Color.White else Tokens.ink,
+                lineHeight = 1f,
+                modifier = Modifier.offset(
+                    x = if (n == 1) -size * 0.045f else 0.dp,
+                    y = if (go) 0.dp else -(AUTHORED_HEIGHT * 0.0075f).dp,
+                ),
+            )
+        }
+        // `.cd-steps`: centred, `4vh` above the bottom safe edge.
+        val vh = AUTHORED_HEIGHT / 100f
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = Tokens.safeMarginY + (4 * vh).dp)
+                .background(Tokens.glass, RoundedCornerShape(percent = 50))
+                .padding((1 * vh).dp),
+            horizontalArrangement = Arrangement.spacedBy((0.8f * vh).dp),
+        ) {
+            for (k in steps downTo 0) CountdownStep(k, now = k == n, vh)
         }
     }
 }
 
-/** One stamp of the numeral. AXIS-ALIGNED: `#countdown` carries no transform, and
- *  the per-numeral slap settles at `rotate(0deg)` — a permanently leaning digit is
- *  the entrance frozen. */
+/** One `.cd-step`: a disc per number and a wider pill for GO. The lit one is
+ *  white with ink (GO's goes green); the rest are white type at 70% on a 14%
+ *  white wash, literals in the CSS too. */
 @Composable
-private fun CountdownGlyph(text: String, color: Color, modifier: Modifier = Modifier,
-                           drawStyle: DrawStyle? = null) {
-    StickerText(text, size = COUNTDOWN_SIZE, color = color, modifier = modifier,
-        drawStyle = drawStyle)
+private fun CountdownStep(k: Int, now: Boolean, vh: Float) {
+    val goStep = k == 0
+    Box(
+        Modifier
+            .size(width = ((if (goStep) 9f else 6.4f) * vh).dp, height = (6.4f * vh).dp)
+            .background(
+                when {
+                    now && goStep -> Tokens.brand
+                    now -> Color.White
+                    else -> Color.White.copy(alpha = 0.14f)
+                },
+                RoundedCornerShape(percent = 50),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        val size = (2.8f * vh).dp
+        StickerText(
+            if (goStep) Copy.goStep else k.toString(),
+            size = size, lineHeight = 1f,
+            color = when {
+                now && goStep -> Color.White
+                now -> Tokens.ink
+                else -> Color.White.copy(alpha = 0.7f)
+            },
+            modifier = Modifier.padding(end = if (k == 1) size * 0.09f else 0.dp),
+        )
+    }
 }
-
-/** `font-size: 26vh` on a 1080-high board. */
-private val COUNTDOWN_SIZE = 281.dp
 
 // -- the pause overlay ------------------------------------------------------
 
+/**
+ * The pause screen: FROST with the content straight on it, never a card on a
+ * scrim — the same screen as the phone's pause.
+ *
+ * NO BLUR, which the web's frost has (`backdrop-filter: var(--frost-blur)`): the
+ * picture behind is the SurfaceView, composited by SurfaceFlinger in a layer
+ * BELOW the app window, so nothing in the view hierarchy can sample it, and every
+ * route out of Compose costs more than the difference is worth. [Sticker.frost]
+ * lays the wash a touch thicker to make up for it.
+ */
 @Composable
 fun PauseOverlay(game: GameCoordinator) {
     UnboundedContent()
     Box(
-        // BRIGHT FROSTED PAPER, not a dark veil. `#pause-overlay` is
-        // `rgba(255,246,235,0.72)` — the same warm glass the results board uses —
-        // so the frozen race washes OUT toward paper and the card reads as sitting
-        // on something lit. Scrimming with ink at 45% inverted the value of the
-        // whole screen: the place badge's white paper fell from 255 to 166.
-        //
-        // (The web adds `backdrop-filter: blur(10px)`. There is no equivalent here:
-        // Compose's RenderEffect blurs its own subtree, and what is behind this is
-        // a SurfaceView composited by SurfaceFlinger in a layer BELOW the app
-        // window — nothing in the view hierarchy can reach it. The flat wash is the
-        // DECIDED look, not a gap waiting on a blur: see `docs/native-port/shells.md`,
-        // "Decided, not owed".)
-        Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.72f)),
+        Modifier.fillMaxSize().background(Sticker.frost),
         contentAlignment = Alignment.Center,
     ) {
-        // LEVEL. `.pause-card` carries no transform and neither does `.card` — every
-        // other sticker leans, and this one deliberately does not: it is a modal the
-        // viewer has to read, not a thing slapped onto the glass.
-        StickerCard(rotation = 0f, padding = 48.dp) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(32.dp),
-            ) {
-                StickerText(Copy.paused, size = 54.dp)
-                // TAKE FOCUS. A TV has no pointer, so an unfocused screen is a
-                // DEAD screen: nothing lifts, and the viewer's natural first press
-                // — OK, not a direction — goes nowhere. Both tvOS twins use
-                // `.defaultFocus` for this reason; nothing in this shell requested
-                // focus at all, and these two are its only focusable controls.
-                val focus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { focus.requestFocus() }
-                // A ROW. `.pause-card__btns` is `display: flex; gap: 1rem;
-                // justify-content: center` — the two choices sit side by side, which
-                // is what keeps the card landscape and reads as a choice rather than
-                // as a list. Stacked, the same two buttons turned the card portrait.
-                // `size = BUTTON_SIZE` on both: StickerButton's DEFAULT is the
-                // welcome board's CTA scale, and its padding is em-relative, so
-                // taking the default here carried the whole box with the type and
-                // made the buttons outweigh the card's own title.
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StickerButton(
-                        Copy.continueLabel,
-                        modifier = Modifier.focusRequester(focus)
-                            .defaultMinSize(minWidth = BUTTON_MIN_WIDTH),
-                        tint = Tokens.green,
-                        size = BUTTON_SIZE,
-                    ) { game.resumeRace() }
-                    // GHOST — the quiet secondary. An ink-filled primary here reads
-                    // as the LOUD option beside a green Continue, which is a
-                    // different button rather than a quieter one.
-                    StickerButton(
-                        Copy.newGameLabel,
-                        modifier = Modifier.defaultMinSize(minWidth = BUTTON_MIN_WIDTH),
-                        ghost = true, size = BUTTON_SIZE,
-                    ) { game.returnToLobby() }
-                }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(32.dp),
+        ) {
+            StickerText(Copy.paused, size = OVERLAY_TITLE_SIZE)
+            // TAKE FOCUS. A TV has no pointer, so an unfocused screen is a
+            // DEAD screen: nothing is lit, and the viewer's natural first press
+            // — OK, not a direction — goes nowhere. Both tvOS twins use
+            // `.defaultFocus` for this reason; nothing in this shell requested
+            // focus at all, and these two are its only focusable controls.
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            // A ROW. `.pause-card__btns` is two EQUAL columns with a 1rem gap —
+            // the two choices sit side by side, which reads as a choice rather
+            // than as a list.
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ActionButton(
+                    Copy.continueLabel,
+                    modifier = Modifier.focusRequester(focus)
+                        .defaultMinSize(minWidth = OVERLAY_BUTTON_MIN_WIDTH),
+                    tint = Tokens.green,
+                    size = OVERLAY_BUTTON_SIZE,
+                ) { game.resumeRace() }
+                // A CHOICE — the quiet second option, white with the edge. An
+                // ink-filled button here reads as the LOUD option beside a green
+                // Continue, which is a different button rather than a quieter one.
+                ActionButton(
+                    Copy.newGameLabel,
+                    modifier = Modifier.defaultMinSize(minWidth = OVERLAY_BUTTON_MIN_WIDTH),
+                    choice = true, size = OVERLAY_BUTTON_SIZE,
+                ) { game.returnToLobby() }
             }
         }
     }
@@ -591,11 +615,17 @@ fun PauseOverlay(game: GameCoordinator) {
 /**
  * `.btn`'s own scale, `font-size: 1.15rem`.
  *
- * [StickerButton]'s default is the WELCOME board's CTA (34 dp), and its padding is
+ * [ActionButton]'s default is the WELCOME board's CTA (34 dp), and its padding is
  * em-relative — so taking the default on an ordinary button carries the whole box
  * with the type and the control ends up outweighing whatever it is under.
  */
 internal val BUTTON_SIZE = 18.dp
 
-/** `.pause-card__btns .btn { min-width: 9rem }`, so the pair reads as a matched set. */
-internal val BUTTON_MIN_WIDTH = 144.dp
+/** The full-screen overlays' title, `.pause-card h2` / `.link-card h2` at 4.6rem. */
+internal val OVERLAY_TITLE_SIZE = 74.dp
+
+/** The overlays' buttons "step up to TV size": `clamp(1.25rem, 2.3vw, 1.9rem)`. */
+internal val OVERLAY_BUTTON_SIZE = 30.dp
+
+/** `.pause-card__btns .btn { min-width: 9em }`, so the pair reads as a matched set. */
+internal val OVERLAY_BUTTON_MIN_WIDTH = OVERLAY_BUTTON_SIZE * 9

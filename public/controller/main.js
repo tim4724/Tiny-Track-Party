@@ -230,7 +230,7 @@ initModals({
   playerName: () => myName || 'Racer',
   getInputMode: () => inputMode,
   setInputMode: applyInputMode,
-  // The host-only Sound switch — the DISPLAY's mute, not this phone's.
+  // The host-only Sound row — the DISPLAY's mute, not this phone's.
   // Optimistic like every lobby control: the next LOBBY_UPDATE's soundOn
   // (echoed by the display's republish) is the truth.
   isHost: () => amHost,

@@ -12,7 +12,6 @@ import android.graphics.Typeface
 import android.view.View
 import androidx.compose.ui.graphics.toArgb
 import kotlin.math.ceil
-import kotlin.math.sqrt
 
 /**
  * The name tags over every other player's car in each cell: the Android half
@@ -27,10 +26,10 @@ import kotlin.math.sqrt
  * (`ttp_display_name_tags`, read by [DisplayHost] right after the frame it
  * describes); this decides nothing.
  *
- * **A STICKER IS DRAWN ONCE, NOT PER FRAME.** Each car's tag (livery fill, ink
- * outline, tail, white Fredoka) is rasterized into a Bitmap when its name or
- * colour changes, and a frame only draws those bitmaps through a matrix. No text
- * is shaped and nothing is allocated on the frame path.
+ * **A TAG IS DRAWN ONCE, NOT PER FRAME.** Each car's tag (a livery pill with its
+ * tail, white Fredoka) is rasterized into a Bitmap when its name or colour
+ * changes, and a frame only draws those bitmaps through a matrix. No text is
+ * shaped and nothing is allocated on the frame path.
  *
  * Sits UNDER the ComposeView, so the cell chips and cards paint over a tag that
  * drifts beneath them, as on the web.
@@ -178,7 +177,6 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
         val o = i * TAG_STRIDE
         val scale = tags[o + 4]
         matrix.setTranslate(-s.anchorX, -s.anchorY)
-        matrix.postRotate(TILT)
         matrix.postScale(scale, scale)
         matrix.postTranslate(tags[o + 2] * width, tags[o + 3] * height)
     }
@@ -190,49 +188,36 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
      */
     private fun rasterize(name: String, color: Int): TagBitmap {
         val em = FONT_PX * k
-        // The SLIM sticker: a thinner outline and corner than the chips', so the
-        // tag reads as the same family without the chip's weight.
-        val border = Sticker.border.value * SLIM * k
-        val radius = Tokens.radius("r-sm").value * SLIM * k
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = face
             textSize = em
             this.color = android.graphics.Color.WHITE
         }
-        // `line-height: 1` and `padding: 0.1em 0.42em`, border-box.
-        val boxW = ceil(text.measureText(name) + 0.84f * em + 2 * border)
-        val boxH = ceil(em * 1.2f + 2 * border)
-        val tailH = 0.3f * em + border
+        // `line-height: 1` and `padding: 0.14em 0.55em 0.18em`, on a pill.
+        val boxW = ceil(text.measureText(name) + 1.1f * em)
+        val boxH = ceil(em * 1.32f)
+        // The tail's size is still the CSS's `--b`-sized one, which the Toy Box
+        // kept when it dropped the outline: `0.3em + b` tall, twice that wide.
+        val b = TAIL_B * k
+        val tailH = 0.3f * em + b
         val tailW = 2 * tailH
         val bmpH = ceil(boxH + tailH)
         val bitmap = Bitmap.createBitmap(boxW.toInt(), bmpH.toInt(), Bitmap.Config.ARGB_8888)
         val c = Canvas(bitmap)
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
 
-        // The ink outline is the box itself, and the livery an inset of it with
-        // the inner radius CSS gives a border-box corner.
-        fill.color = Tokens.ink.toArgb()
-        c.drawRoundRect(RectF(0f, 0f, boxW, boxH), radius, radius, fill)
-        fill.color = color
-        val inner = (radius - border).coerceAtLeast(0f)
-        c.drawRoundRect(RectF(border, border, boxW - border, boxH - border), inner, inner, fill)
+        c.drawRoundRect(RectF(0f, 0f, boxW, boxH), boxH / 2, boxH / 2, fill)
+        // THE TAIL: one livery triangle, tucked a pixel up into the pill
+        // (`top: calc(100% - 1px)`) so no seam shows. The flat tip is the web's
+        // soft point.
+        c.drawPath(tail(boxW / 2, boxH - k, tailW, tailH), fill)
 
-        // THE TAIL: an ink triangle hung from the INNER edge of the bottom outline,
-        // then the same triangle in the livery lifted by border * sqrt(2). On
-        // 45-degree sides that lift is exactly one border perpendicular to each
-        // side, so the ink runs as one band from the box round the tip. The flat
-        // tip is the web's soft point.
-        val top = boxH - border
-        fill.color = Tokens.ink.toArgb()
-        c.drawPath(tail(boxW / 2, top, tailW, tailH), fill)
-        fill.color = color
-        c.drawPath(tail(boxW / 2, top - border * sqrt(2f), tailW, tailH), fill)
-
-        // Centred on the content box by the face's own metrics, so it sits where
-        // the browser's line box puts it.
+        // Centred on the content box by the face's own metrics, nudged by the
+        // padding's 0.04em asymmetry, so it sits where the browser's line box
+        // puts it.
         val fm = text.fontMetrics
-        val baseline = boxH / 2 - (fm.ascent + fm.descent) / 2
-        c.drawText(name, border + em * 0.42f, baseline, text)
+        val baseline = (boxH - 0.04f * em) / 2 - (fm.ascent + fm.descent) / 2
+        c.drawText(name, em * 0.55f, baseline, text)
 
         return TagBitmap(name, color, bitmap, boxW, boxH, GAP_EM * em)
     }
@@ -254,14 +239,10 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
          * usual tag, so the bitmap is only ever scaled down.
          */
         const val FONT_PX = 28.8f
-        /**
-         * Outline and corner as a share of the chips': 2/3 at the usual size
-         * (`2px` / `8px` against `3px` / `12px`), so 2/3 * 4/3 at the closest.
-         */
-        const val SLIM = 8f / 9f
+        /** `--b: calc(2px * 4 / 3)`, the tail's size term, at the closest scale. */
+        const val TAIL_B = 8f / 3f
         /** The box's bottom edge above the anchor, in em (`translateY(-0.4em)`). */
         const val GAP_EM = 0.4f
-        const val TILT = -2f
         /** Floats per tag in `ttp_display_name_tags`' answer (`ttp_display.h`). */
         const val TAG_STRIDE = 6
     }

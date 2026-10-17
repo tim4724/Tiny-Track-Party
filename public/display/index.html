@@ -236,7 +236,7 @@
        place/lap badge it shares the corner with and then fades off it: all three
        hide together after a few seconds without a mouse or a key (see
        display.css). -->
-  <div id="corner-btns">
+  <div id="corner-btns" class="key-pill">
     <button id="mute-btn" class="icon-btn hidden" aria-label="Mute sound" aria-pressed="false">
       <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
            speaker with waves = sound on, speaker with a cross = muted. The same
@@ -266,10 +266,10 @@
 
   <!-- Race: overlays over the persistent #scene backdrop -->
   <section id="race" class="hidden">
-    <div id="countdown"></div>
-    <!-- Pause overlay — frosted glass over the frozen race -->
+    <div id="countdown" class="hidden"><span class="cd-disc"><span id="countdown-num" class="cd-num"></span></span><span id="countdown-steps" class="cd-steps" aria-hidden="true"></span></div>
+    <!-- Pause overlay — frost over the frozen race -->
     <div id="pause-overlay" class="hidden">
-      <div class="pause-card card">
+      <div class="pause-card">
         <h2>Paused</h2>
         <div class="pause-card__btns">
           <button id="pause-continue" class="btn btn--brand">Continue</button>
@@ -295,7 +295,7 @@
        because show() hides all but one and this must stand over any of them,
        the boot cover included: a boot with no relay must say so. -->
   <div id="link-overlay" class="hidden">
-    <div class="link-card card">
+    <div class="link-card">
       <h2 id="link-heading">Reconnecting…</h2>
       <div id="link-status" class="link-status"></div>
       <button id="link-reconnect" class="btn btn--brand hidden">Reconnect</button>

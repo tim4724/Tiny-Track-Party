@@ -129,43 +129,16 @@ test('the frame-cost overlay is reachable on the device it was written for', () 
 
 // ---- the QR ---------------------------------------------------------------
 
-test('both QR panels FILTER, because both downscale under a rotation', () => {
+test('both QR panels FILTER, because both downscale', () => {
   // `.interpolation(.none)` keeps a QR crisp when it is ENLARGED. Neither of
-  // these is: the bitmap is ~800 px, the panels are 308 and 160 points, and the
-  // cards they sit on carry the sticker kit's rotation. Point-sampling a
-  // rotated downscale drops most of the source and staircases every module
-  // edge — which is worse for a decoder, not better.
+  // these is: the bitmap is ~800 px and the panels are a few hundred points, at
+  // no integer ratio. Point-sampling a downscale drops most of the source and
+  // staircases every module edge — which is worse for a decoder, not better.
   for (const rel of ['shells/tvos/TinyTrackParty/Screens/LobbyView.swift',
                      'shells/tvos/TinyTrackParty/Screens/RaceHUDView.swift']) {
     const src = shell(rel);
     if (src === null) continue;
     assert.doesNotMatch(src, /\.interpolation\(\.none\)/, `${rel}: point-samples a QR`);
-  }
-});
-
-// ---- the die-cut edge -------------------------------------------------------
-
-test('a die-cut edge is HALF the CSS stroke, because a stroke is centred', () => {
-  // SwiftUI has no text stroke, so both die-cut faces (the countdown numerals
-  // and the wordmark) are white copies of the glyph stamped round a ring — a
-  // DILATION by the offset. `-webkit-text-stroke` is centred on the outline, so
-  // only half of it shows. Reading the CSS number straight across doubles the
-  // cut, which at the countdown's 281-point face was a 24-point white halo and
-  // is what "the countdown font is weird" was.
-  const css = readFileSync(path.join(ROOT, 'public/display/display.css'), 'utf8');
-  assert.match(css, /-webkit-text-stroke:\s*12px/, 'premise: the countdown stroke is 12px');
-
-  for (const [rel, sym] of [
-    ['shells/tvos/TinyTrackParty/Screens/CountdownView.swift', 'DieCutText'],
-    ['shells/tvos/TinyTrackParty/Theme/Sticker.swift', 'Wordmark']
-  ]) {
-    const src = shell(rel);
-    if (src === null) continue;
-    const i = src.indexOf('var edge: CGFloat');
-    assert.ok(i > 0, `${rel}: ${sym} has no edge`);
-    assert.match(src.slice(i, i + 120), /\/ 2/,
-      `${rel}: ${sym}'s edge is the full stroke width — a stamped ring reaches `
-      + 'the whole offset outward, where the CSS reaches half of it');
   }
 });
 

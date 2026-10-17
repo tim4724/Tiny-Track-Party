@@ -1,4 +1,4 @@
-/* Display — big shared screen. "Sticker Bash" look.
+/* Display — big shared screen. "Toy Box" look (the six roles: theme.css's header).
    Tokens + reusable bits live in /shared/theme.css; this file is layout +
    display-only composition. Class/ID names are contracted with display/main.js,
    Stage.js and the render modules beside them — don't rename without updating
@@ -123,15 +123,13 @@ html {
   padding: 0.85rem 0.85rem 1rem;
   font: inherit; color: var(--ink); text-align: center;
   background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  border: 0; border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
-  transform: rotate(-1.2deg);
   cursor: pointer;
   transition: box-shadow 0.08s ease, transform 0.08s ease;
 }
-.ticket:hover { box-shadow: 8px 8px 0 var(--shadow-ink); }
-.ticket:active { transform: rotate(-1.2deg) translate(3px, 3px); box-shadow: 4px 4px 0 var(--shadow-ink); }
-.ticket:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.ticket:active { transform: scale(0.99); box-shadow: var(--shadow-pop); }
+.ticket:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 /* the in-card wordmark: the kit badge's white die-cut edge would vanish on the
    white card, so here it's the plain ink/red lockup — same face, same tilt */
 .ticket__wordmark {
@@ -185,7 +183,7 @@ html {
 .ticket__cd {
   display: block;
   font-size: 1.45em;
-  color: var(--accent); font-weight: 700; letter-spacing: 0.04em;
+  color: var(--blue); font-weight: 700; letter-spacing: 0.08em;
 }
 
 /* Race rail — tonight's race over the long game. It spans the band; the pick
@@ -222,18 +220,19 @@ html {
   display: flex; flex-direction: column; align-items: center; gap: 0.65rem;
   padding: 0.9rem 0.8rem 1rem;
   background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
-  transform: rotate(1.2deg);
 }
+/* The cup's name: a LABEL in the cup's own colour (--c, lobbySeats.js; the
+   neutral grey for a run that belongs to no cup), because nothing here is
+   pressed. The tint is the colour, the words stay ink: the label recipe's
+   darkened text turns muddy on a pale cup colour (Beach's sand). */
 .cup-sticker {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(1.2rem, 1.8vw, 1.7rem); line-height: 1.05;
-  color: #fff; text-align: center;
-  background: var(--red); border: 3px solid var(--ink); border-radius: var(--r);
-  padding: 0.45em 0.75em;
-  transform: rotate(-2deg);
-  box-shadow: var(--shadow-card);
+  color: var(--ink); text-align: center;
+  background: color-mix(in srgb, var(--c, var(--ink-2)) 34%, #fff); border-radius: var(--r-pill);
+  padding: 0.35em 0.85em 0.4em;
 }
 /* the picked circuits as mini schematics — a 2×2 grid for a cup's four races
    (numbered), one full-width map for an exact pick. The random family spoils
@@ -249,14 +248,14 @@ html {
 /* the long random card: 8 "?" boxes shrink to a 4-wide strip of pips */
 .cup-maps--many { grid-template-columns: repeat(4, 1fr); }
 .cup-maps__tile { position: relative; }
-.cup-maps__tile .track-map { border: 2.5px solid var(--ink); }
+.cup-maps__tile .track-map { border-radius: 14px; }
 /* an undrawn race: same footprint as a mini under a big "?". The wash is set
    inline — its cup's colour, or the picker's neutral grey when even the cup
    is unknown (lobbySeats.js, single-sourced from trackPicker's palette). */
 .cup-maps__tile--q {
   aspect-ratio: 1 / 1;
   display: grid; place-items: center;
-  border: 2.5px solid var(--ink); border-radius: var(--r-sm);
+  border-radius: 14px;
   container-type: inline-size;
   font-family: var(--font-display); font-weight: 700;
   /* fallback size for engines without container queries; the span rule below
@@ -273,7 +272,7 @@ html {
 .cup-maps__tile--locked {
   aspect-ratio: 1 / 1;
   display: grid; place-items: center;
-  border: 2.5px solid var(--ink); border-radius: var(--r-sm);
+  border-radius: 14px;
   background: var(--surface-2);
 }
 .cup-maps__tile--locked .lock-glyph { width: 34%; height: auto; }
@@ -289,10 +288,9 @@ html {
 .cup-races {
   font-family: var(--font-display); font-weight: 600; font-size: 0.78rem;
   letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink);
-  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  color: var(--ink-2);
+  background: var(--surface-2); border-radius: var(--r-pill);
   padding: 0.3em 0.95em;
-  box-shadow: var(--shadow-pop);
 }
 
 /* Scan hint — a quiet white sticker of its own under the ticket, as on both TV
@@ -307,11 +305,10 @@ html {
   text-align: center;
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(14px, 1.15vw, 22px); line-height: 1.15;
-  color: var(--ink); background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r);
-  padding: 0.55em 1.1em;
-  box-shadow: var(--shadow-pop);
-  rotate: -2deg;
+  color: #fff; background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-radius: var(--r);
+  padding: 0.6em 1.1em;
   opacity: 0; transition: opacity 0.4s ease;
 }
 .ticket-rail:has(#qr.is-in) .tagline { opacity: 1; }
@@ -329,10 +326,9 @@ html {
 .cup-shelf {
   position: relative;
   background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
-  transform: rotate(-1deg);
-  padding: 0.5rem 0.7rem 0.45rem;
+  padding: 0.55rem 0.9rem 0.45rem;
 }
 /* the label rides the card's top-left corner like a sticker tab — a full
    label row is height the rail can't spare above the 720p seat band */
@@ -377,12 +373,9 @@ html {
   display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
   padding: 0.45rem 0.5rem 0.55rem;
   background: var(--surface);
-  border: 3px solid var(--ink);
   border-radius: var(--r);
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--shadow-card);
 }
-.seat:nth-child(odd)  { transform: rotate(-1.4deg); }
-.seat:nth-child(even) { transform: rotate(1.4deg); }
 /* The name box ALWAYS reserves both lines (--name-lines), so the card's height is
    the same from the empty "Open" state through to a two-line name — the dock
    can't lift when someone called "Alexandra Smith" joins. Shorter names (and
@@ -394,7 +387,7 @@ html {
   min-height: calc(var(--name-lh) * var(--name-lines) * 1em);
   display: flex; justify-content: center; align-items: center;
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: var(--name-lh); color: var(--c, var(--ink));
+  font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: var(--name-lh); color: color-mix(in srgb, var(--c, var(--ink)) 80%, var(--ink));
 }
 /* Names break at the SPACE — "Alexandra Smith" stacks instead of clipping to
    "Alexandra …". `anywhere` only kicks in for a name with no space to break at
@@ -416,31 +409,31 @@ html {
   width: 1.6rem; aspect-ratio: 1;
   display: grid; place-items: center;
   color: #fff; background: var(--green);
-  border: 2.5px solid var(--ink); border-radius: 50%;
+  border-radius: 50%; box-shadow: 0 0 0 3px #fff;
 }
 .seat__ready svg { width: 70%; height: 70%; }
 .seat--ready .seat__ready { visibility: visible; }
-/* host marker — a gold star with an ink stroke, same corner as the ready check
+/* host marker — a white star on an ink disc, same corner as the ready check
    (mutually exclusive: the host never readies). */
 .seat__host {
-  position: absolute; top: -0.9rem; right: -0.7rem;
-  width: 1.9rem; aspect-ratio: 1;
+  position: absolute; top: -0.6rem; right: -0.55rem;
+  width: 1.6rem; aspect-ratio: 1;
   display: grid; place-items: center;
+  background: var(--ink); border-radius: 50%; box-shadow: 0 0 0 3px #fff;
 }
 .seat__host svg {
-  width: 100%; height: 100%;
-  fill: #ffc83d; stroke: var(--ink); stroke-width: 1.7;
-  stroke-linejoin: round; paint-order: stroke fill;
+  width: 62%; height: 62%;
+  fill: #fff; stroke: none;
 }
-/* open seat — a dashed placeholder card of the SAME footprint: the empty
+/* open seat — a glass placeholder of the SAME footprint: the empty
    .seat__open square stands in for the kart render, "Open" sits where the
    name goes */
 .seat--open {
-  background: color-mix(in srgb, #fff 50%, transparent);
-  border: 3px dashed rgba(42, 39, 53, 0.45);
+  background: rgba(24, 28, 44, 0.28);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   box-shadow: none;
 }
-.seat--open .seat__name { color: var(--ink-3); }
+.seat--open .seat__name { color: rgba(255, 255, 255, 0.85); }
 /* matches .carthumb's box (theme.css) so an open seat is the same size as a taken one */
 .seat--open .seat__open { width: 100%; aspect-ratio: 5 / 4; }
 
@@ -503,27 +496,22 @@ html {
   margin: 0;
   font-weight: 800; color: var(--ink-2);
   font-size: clamp(16px, 1.7vw, 24px);
-  transform: rotate(-1deg);
 }
 .welcome__btn {
   font-size: clamp(22px, 2.6vw, 34px);
-  padding: 0.72em 1.5em;
+  padding: 0.72em 1.6em;
   letter-spacing: 0.03em;
-  transform: rotate(1.4deg);
+  border-radius: 24px;
 }
-/* keep the sticker tilt through the press (the kit's :active would drop it) */
-.welcome__btn:active, .welcome__btn.is-pressed { transform: rotate(1.4deg) translateY(var(--btn-sink)); }
-/* TRAILER: the quiet second sticker under NEW GAME, smaller and tilted the
-   other way so the pair reads as two stickers rather than a button stack. */
+/* TRAILER: the white choice under NEW GAME, a size down. */
 .welcome__btn--trailer {
   font-size: clamp(15px, 1.6vw, 22px);
   padding: 0.6em 1.3em;
-  transform: rotate(-1.2deg);
+  border-radius: var(--r);
 }
-.welcome__btn--trailer:active, .welcome__btn--trailer.is-pressed { transform: rotate(-1.2deg) translateY(var(--btn-sink)); }
 
-/* The trailer player (index.html #trailer): the film as a sticker on the
-   overlays' glass (grouped with #pause-overlay below), so the title board it
+/* The trailer player (index.html #trailer): the film on the overlays' frost
+   (grouped with #pause-overlay below), so the title board it
    opened from stays in view around it; a click on the glass closes it. Over
    the corner chrome (12), the toast (13) and the boot cover (15); under the
    overlays that interrupt (pause 20, link 25, device chooser 30). */
@@ -540,8 +528,8 @@ html:not(.device-choice-dismissed) #trailer { z-index: 31; }
   /* COVER, not the default contain: the border makes the picture box a hair off
      16:9, and contain letterboxes that hair as a dark line inside the outline. */
   object-fit: cover;
-  border: 3px solid var(--ink); border-radius: var(--r);
-  box-shadow: var(--shadow-card);      /* a 3px-bordered card (theme.css's rule) */
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
 }
 /* A portrait screen (the phone landing) centres the film far below the close
    button's corner, so the 80vw clearance only costs width: go nearly edge to edge. */
@@ -594,6 +582,17 @@ html:not(.device-choice-dismissed) .dbg-fab { display: none; }
      masking that hitch. main.js commits the fade a frame BEFORE the rebuild for this reason. */
   will-change: opacity; }
 #scene-snap.is-fading { opacity: 0; }
+/* Into a cup's next race (backdrop.js dissolveInto): the finished race, frozen
+   as the board left it, blurred and washed pale like #results' frost (a filter
+   cannot lay white over a picture, so the contrast squeezes it toward grey
+   and the brightness lifts that grey to the frost's), so the board can go
+   without the old race snapping into focus. It then dissolves slowly into the
+   next grid, which reads as the focus pulling onto the new circuit. Scaled a
+   touch so the blur's soft edge stays off screen. */
+#scene-snap.is-soft {
+  transition-duration: 1.2s; scale: 1.06;
+  filter: blur(14px) contrast(0.15) brightness(1.75);
+}
 /* Race section is now a transparent overlay container over #scene. */
 #race { position: fixed; inset: 0; z-index: 2; }
 /* Standalone track preview (track gallery "open ↗", not the grid iframe): the
@@ -620,17 +619,43 @@ html.cam-free #race { pointer-events: none; }
   background: radial-gradient(120% 120% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.28) 100%);
 }
 
+/* The beat on a white paper DISC, tipped a few degrees like a toy's dial, and
+   the whole count under it on a glass strip with the current beat lit. GO!
+   turns the disc green. */
 #countdown {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display); font-weight: 700;
-  font-size: 26vh; color: var(--ink);
-  /* die-cut sticker numerals — ink with the white cut edge, same technique as
-     the wordmark (degrades to plain ink text without paint-order) */
-  -webkit-text-stroke: 12px #fff;
-  paint-order: stroke fill;
-  filter: drop-shadow(6px 6px 0 var(--shadow-ink));
   pointer-events: none;
 }
+.cd-disc {
+  width: 34vh; height: 34vh; border-radius: 50%; margin-top: -4vh;
+  display: grid; place-items: center;
+  background: var(--surface); box-shadow: var(--shadow-card);
+  transform: rotate(-4deg);
+}
+.cd-num {
+  font-family: var(--font-display); font-weight: 700; line-height: 1;
+  font-size: 24vh; color: var(--ink); margin-top: -1.5vh;
+}
+/* A "1" centred by its box reads right of centre: its flag reaches left, so
+   its stem, which is what the eye reads, sits right of the middle. It moves
+   left until the stem is near the centre, on the disc and in the strip. */
+#countdown[data-n='1'] .cd-num { translate: -0.045em 0; }
+.cd-step[data-n='1'] { padding-right: 0.09em; }
+#countdown.is-go .cd-disc { background: var(--brand); }
+#countdown.is-go .cd-num { color: #fff; font-size: 13vh; margin-top: 0; }
+.cd-steps {
+  position: absolute; left: 50%; bottom: calc(var(--safe-y-b) + 4vh); translate: -50% 0;
+  display: flex; gap: 0.8vh; padding: 1vh; border-radius: var(--r-pill);
+  background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.cd-step {
+  width: 6.4vh; height: 6.4vh; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 2.8vh;
+  color: rgba(255, 255, 255, 0.7); background: rgba(255, 255, 255, 0.14);
+}
+.cd-step--go { width: 9vh; border-radius: var(--r-pill); }
+.cd-step.is-now { background: #fff; color: var(--ink); }
+.cd-step--go.is-now { background: var(--brand); color: #fff; }
 /* "GO!" stays up the beat after the start (cars are already moving) and fades
    out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat.
    A PLAIN FADE, no grow: the scale was the expensive half everywhere the stroke
@@ -662,24 +687,21 @@ html.cam-free #race { pointer-events: none; }
   line-height: 1;
   color: #fff;
   background: var(--c, var(--brand));
-  border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.3em 0.55em;
-  transform: rotate(-2deg);
-  box-shadow: var(--shadow-pop);
+  border-radius: var(--r-pill);
+  padding: 0.28em 0.75em 0.32em;
+  box-shadow: var(--shadow-card);
   white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* Another player's name over their car, in your cell (CPU cars get none).
    Placed per frame by Stage's _paintNameTags from ttp_display_name_tags: the
    transform anchors the tag's tail's tip just above the point C++ projected,
-   so nothing here may set transform. The SLIM sticker (picked over five other
-   styles): the chip's filled livery sticker, one weight lighter, with a thin
-   outline and tight padding, so a pack of tags does not turn into a wall of
-   chips; and NO offset shadow: over the live 3D view a paper shadow reads as a
-   smeared second outline pointing away from the scene's own light.
+   so nothing here may set transform. A filled livery pill, one weight lighter
+   than the cell's name tag, with tight padding so a pack of tags does not turn
+   into a wall of chips.
    AUTHORED AT THE CLOSEST SIZE, C++'s scale 1 (ttp/name_tags.h), which is 4/3
    of the usual tag: C++ only ever shrinks it, so the type is never an upscaled
-   raster. At the usual size this is a 2px outline and an 8px corner. */
+   raster. */
 .name-tag {
   --b: calc(2px * 4 / 3);
   position: absolute; left: 0; top: 0; display: none;
@@ -687,32 +709,27 @@ html.cam-free #race { pointer-events: none; }
   font-family: var(--font-display); font-weight: 600; font-size: clamp(1.2rem, 1.56vw, 1.8rem);
   line-height: 1; color: #fff; white-space: nowrap;
   background: var(--c, var(--brand));
-  border: var(--b) solid var(--ink); border-radius: calc(8px * 4 / 3);
-  padding: 0.1em 0.42em;
+  border-radius: 999px;
+  padding: 0.14em 0.55em 0.18em;
+  box-shadow: var(--shadow-card);
 }
-/* The tail: one die-cut piece with the tag, not a second sticker. TWO stacked
-   triangles, not a bordered square: an ink triangle hung from the inner edge of
-   the chip's bottom outline, then the same triangle in the livery lifted by the
-   outline's width times sqrt(2). With 45-degree sides that lift is exactly one
-   outline width perpendicular to each side, so the ink runs as one band of one
-   thickness from the chip round the tip and back. A rotated square with two
-   borders could not do that: its border ends met the chip's outline at their
-   own mitre and left a notch at each join. The flat tip softens the point like
-   every sticker corner. When two tags overlap, the tail says whose car is whose. */
-.name-tag::before, .name-tag::after {
-  content: ''; position: absolute; left: 50%; top: 100%;
+/* The tail: one livery triangle under the tag's centre, its tip flattened a
+   little to soften the point. When two tags overlap, the tail says whose car is
+   whose. `--b` sizes it, and the TV shells' tags (NameTags.swift, NameTags.kt)
+   size theirs by the same number. */
+.name-tag::after {
+  content: ''; position: absolute; left: 50%; top: calc(100% - 1px);
   width: calc(0.6em + 2 * var(--b)); height: calc(0.3em + var(--b));
   transform: translateX(-50%);
   clip-path: polygon(0 0, 100% 0, 54% 92%, 46% 92%);
+  background: var(--c, var(--brand));
 }
-.name-tag::before { background: var(--ink); }
-.name-tag::after { top: calc(100% - 1.41421 * var(--b)); background: var(--c, var(--brand)); }
 
 /* Place + lap — top-right of the cell: a white sticker badge for the ordinal
    over an ink "LAP 2/3" pill, the pair leaning +1.5°. Positioned by _loop; the
    transform anchors its RIGHT edge to the left coord _loop sets (cell right). */
 .cell-rank {
-  position: absolute; display: none; transform: translateX(-100%) rotate(1.5deg);
+  position: absolute; display: none; transform: translateX(-100%);
   transform-origin: top right;
   text-align: right; pointer-events: none;
 }
@@ -723,15 +740,16 @@ html.cam-free #race { pointer-events: none; }
   font-family: var(--font-display); font-weight: 700; line-height: 1;
   font-size: clamp(2rem, 2.8vw, 2.9rem);
   color: var(--ink); background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.22em 0.45em;
-  box-shadow: var(--shadow-pop);
+  border-radius: var(--r);
+  padding: 0.22em 0.5em;
+  box-shadow: var(--shadow-card);
 }
 .cell-rank__lap {
   display: table; margin-left: auto; margin-top: 0.45rem;
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(0.9rem, 1.25vw, 1.15rem); letter-spacing: 0.12em; text-transform: uppercase;
-  color: #fff; background: var(--ink); border-radius: var(--r-pill);
+  color: #fff; background: var(--glass); border-radius: var(--r-pill);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   padding: 0.32em 0.9em;
   white-space: nowrap;
 }
@@ -744,12 +762,12 @@ html.cam-free #race { pointer-events: none; }
   flex: none; width: clamp(112px, 10vw, 152px); height: clamp(112px, 10vw, 152px); transform-origin: center;
   display: flex; align-items: center; justify-content: center;
   background: var(--surface);
-  border-radius: 26px; border: 4px solid var(--ink);
-  box-shadow: var(--shadow-pop);
+  border-radius: 28px;
+  box-shadow: var(--shadow-card);
 }
 .cell-label__item.is-empty {
-  background: transparent;
-  border: 4px dashed color-mix(in srgb, var(--ink) 45%, transparent);
+  background: rgba(24, 28, 44, 0.18);
+  border: 3px dashed rgba(255, 255, 255, 0.75);
   box-shadow: none;
 }
 /* every icon is an inlined /assets/items/*.svg (see shared/itemIcons.js) */
@@ -797,20 +815,21 @@ html.cam-free #race { pointer-events: none; }
    in #scene (z-0) like the other cell overlays, so the full results screen
    (#results, in #race z-2) covers it once the race ends. */
 .cell-finish {
-  position: absolute; display: none; transform: translate(-50%, -50%) rotate(-1.5deg);
-  flex-direction: column; align-items: center; gap: 0.35rem; text-align: center;
-  padding: clamp(0.7rem, 1.5vw, 1.3rem) clamp(1.1rem, 2.4vw, 2.2rem);
+  position: absolute; display: none; transform: translate(-50%, -50%);
+  flex-direction: column; align-items: center; gap: clamp(0.4rem, 0.8vw, 0.7rem); text-align: center;
+  padding: clamp(0.9rem, 1.9vw, 1.7rem) clamp(1.3rem, 2.8vw, 2.6rem);
   background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
   pointer-events: none;
 }
+/* a LABEL in the player's livery */
 .cell-finish__badge {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(0.85rem, 1.4vw, 1.25rem); letter-spacing: 0.16em; text-transform: uppercase;
-  color: #fff; background: var(--c, var(--brand));
+  color: color-mix(in srgb, var(--c, var(--brand)) 78%, #1B1830);
+  background: color-mix(in srgb, var(--c, var(--brand)) 20%, #fff);
   padding: 0.2rem 0.9rem; border-radius: var(--r-pill);
-  border: 2.5px solid var(--ink);
 }
 .cell-finish__place {
   font-family: var(--font-display); font-weight: 700; line-height: 1;
@@ -821,11 +840,14 @@ html.cam-free #race { pointer-events: none; }
   color: var(--ink-2); font-variant-numeric: tabular-nums;
 }
 
-/* results overlay — a full-screen paper board over the frozen race */
+/* results overlay — FROST over the live scene, the board ONE paper card on it.
+   See-through on purpose: the scene behind is the race that just ended, and
+   between cup races it is where the next track comes in. */
 #results {
   position: fixed; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(10px);
+  background: var(--frost);
+  -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
 }
 /* THE BOARD FADES UP, because it no longer arrives at the flag. The race's end
    arms it and the frozen finish frame holds the screen for the flourish
@@ -842,28 +864,27 @@ html.cam-free #race { pointer-events: none; }
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(2.4rem, 6vw, 4.6rem); margin: 0 0 1rem; color: var(--ink);
 }
-/* podium boards: the title goes full celebration — a red header sticker
+/* podium boards: the title goes celebration red — a red LABEL round it
    (capped a step below the plain title so it doesn't dwarf the podium).
    SPLIT IN TWO ON PURPOSE. The sticker is bigger than a plain title, so a board
    that grew one at the end would push everything under it — and the rows are
    mid-FLIP at that moment while the button is not animated at all. So a podium
    board carries the sticker's BOX from its first frame (.is-champs, below) and
-   the celebration lands as PAINT ONLY: colour, border colour, shadow, and a
-   rotate/scale that are transforms and therefore cost no layout. Nothing under
+   the celebration lands as PAINT ONLY: colour, background, and a rotate/scale
+   that are transforms and therefore cost no layout. Nothing under
    the header moves by so much as a pixel.
    Keep every property here layout-free — a padding or font-size added to this
    rule instead of the one above reintroduces the jump. */
 #results.is-champs h2 {
   font-size: clamp(2rem, 4.2vw, 3.4rem);
   margin-bottom: 0.5em;
-  border: 3px solid transparent; border-radius: var(--r-lg);
+  border-radius: var(--r-lg);
   padding: 0.25em 0.7em;
 }
 #results.is-podium h2 {
-  color: #fff; background: var(--red);
-  border-color: var(--ink);
+  color: color-mix(in srgb, var(--red) 78%, #1B1830);
+  background: color-mix(in srgb, var(--red) 20%, #fff);
   transform: rotate(-2deg);
-  box-shadow: var(--shadow-card);
 }
 @media (prefers-reduced-motion: no-preference) {
   /* `scale` is its own property, not `transform` — it composes with the rotate
@@ -881,38 +902,66 @@ html.cam-free #race { pointer-events: none; }
    ranks 1-N fill the left column top-down and the rest the right, the same
    reading order the phone's board uses. Counters follow DOM order, which is
    that order, so the numerals stay correct in both layouts. */
+/* The board is ONE paper card and its rows are printed on it, ruled apart by
+   a hairline: rows that each looked like a button were the old board's
+   problem. Every row draws its rule ABOVE itself, and the strip along the
+   card's top edge (::before, out of the grid's flow) paints over the top row's
+   in both columns, which is the one rule a column-major list cannot pick out
+   by selector. */
 #results-list {
-  list-style: none; padding: 0; margin: 0; counter-reset: li;
-  font-size: 1.5rem; display: grid; gap: 0.6rem; min-width: 24rem;
+  position: relative;
+  list-style: none; margin: 0; counter-reset: li;
+  font-size: 1.5rem; display: grid; gap: 0; min-width: 24rem;
+  padding: 10px 1rem; background: var(--surface);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-card);
+}
+/* Whole pixels on both sides: at a fractional offset the row's rule snaps a
+   pixel lower than the strip and a sliver of it shows. Above every row: the
+   standings re-sort stacks its sliding rows by rank (raceOverlays). */
+#results-list::before {
+  content: ''; position: absolute; z-index: 99; left: 1rem; right: 1rem;
+  top: 10px; height: 2px; background: var(--surface);
 }
 #results-list.is-two-col {
   grid-auto-flow: column;
   grid-template-rows: repeat(var(--result-rows, 4), auto);
-  column-gap: 1.2rem;
+  column-gap: 2rem;
 }
 #results-list li {
   counter-increment: li;
   display: flex; align-items: center; gap: 0.7rem;
-  background: var(--surface); border: 3px solid var(--ink);
-  border-radius: var(--r-sm); padding: 0.7rem 1.1rem; font-weight: 800;
-  box-shadow: var(--shadow-pop);
+  border-top: 2px solid var(--hairline);
+  padding: 0.55rem 0.7rem; font-family: var(--font-display); font-weight: 600;
+}
+/* The leader's row is washed in the celebration red, the way the artifact's
+   board marks it, so the eye finds the top of the table first. */
+#results-list li:first-child {
+  background: color-mix(in srgb, var(--red) 12%, #fff);
+  border-radius: 14px; border-top-color: transparent;
+}
+#results-list li:first-child + li { border-top-color: transparent; }
+/* A bot's tag: small, grey, after the name. */
+.res-cpu {
+  font-family: var(--font-body); font-weight: 800; font-size: 0.5em; letter-spacing: 0.08em;
+  color: var(--ink-3); background: var(--surface-2);
+  border-radius: var(--r-pill); padding: 0.3em 0.7em;
 }
 /* The rank numeral reserves the MEDAL CHIP's box on every row, medalled or not
    (the chip below only paints it in). Sizing the chip larger than the plain
    numeral widened the rank column when the medals landed, so the podium's list
    grew as it re-sorted. */
 #results-list li::before {
-  content: counter(li); font-family: var(--font-display); font-weight: 700;
-  color: var(--ink-2); min-width: 1.6em; text-align: center;
+  content: counter(li); font-family: var(--font-display); font-weight: 600;
+  color: var(--ink-3); min-width: 1.6em; text-align: center;
   padding: 0.05em 0.45em; border-radius: var(--r-pill);
 }
 /* racer names carry their livery colour (no swatch dot) */
-#results-list .res-name { color: var(--c, var(--ink)); }
+#results-list .res-name { color: color-mix(in srgb, var(--c, var(--ink)) 80%, var(--ink)); }
 /* The trailing cells. FIXED WIDTHS, and that is load-bearing: a cup board's two
    phases lay out the same three cells and phase 2 only fills the total in, so
    the re-sort animation moves rows without any of them changing size under it.
    tabular-nums keeps a counting total from twitching for the same reason. */
-.res-trail { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+.res-trail { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; font-family: var(--font-body); }
 .res-time { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums;
             min-width: 3.6em; text-align: right; }
 /* Late joiners ride along under the field: no rank number, "Next race" status. */
@@ -948,8 +997,13 @@ html.cam-free #race { pointer-events: none; }
    read and nothing has to materialise mid-transition. */
 .res-pts { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums;
            min-width: 4.2em; text-align: right; }
-/* "Next up: Gulch — starting in 8…" under the intermission board */
-.results-next { margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.1rem, 2vw, 1.5rem); color: var(--ink-2); }
+/* "Next up: Gulch — starting in 8…" under the intermission board: a LABEL */
+.results-next {
+  margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.1rem, 2vw, 1.5rem);
+  color: color-mix(in srgb, var(--ink-2) 78%, #1B1830);
+  background: color-mix(in srgb, var(--ink-2) 20%, #fff);
+  border-radius: var(--r-pill); padding: 0.45em 1.1em;
+}
 .results-next b { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
 /* Held, not hidden: the race phase RESERVES the footer's box so its arrival in
    the standings phase moves nothing above it. The title, the list and the button
@@ -985,8 +1039,8 @@ html.cam-free #race { pointer-events: none; }
 /* ---- Corner buttons ---- */
 /* The top-right row over the scene, on EVERY screen: mute + fullscreen
    (everywhere but the welcome board, see below) + pause (races only, .hidden
-   off-race). .icon-btn (theme.css) gives them the toy-button look; we only place
-   them here. The row keeps this corner during a race too (user call): it is
+   off-race), as ONE white pill of keys (theme.css .key-pill), the same over the
+   lobby, the race and the frost; we only place it here. The row keeps this corner during a race too (user call): it is
    where a viewer reaches for these controls, and moving it on the lobby -> race
    change only means they are not there when someone reaches.
 
@@ -1003,9 +1057,11 @@ html.cam-free #race { pointer-events: none; }
   position: fixed; z-index: 12;
   top: var(--safe-y);
   right: var(--safe-x);
-  display: flex; gap: 0.6rem;
+  padding: 5px;
   transition: opacity 0.4s ease;
 }
+/* an empty pill (every button hidden) must not leave a white dot behind */
+#corner-btns:not(:has(> .icon-btn:not(.hidden))) { display: none; }
 #corner-btns .icon-btn, .trailer__close { width: var(--corner-btn); height: var(--corner-btn); }
 
 /* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
@@ -1015,6 +1071,7 @@ html.cam-free #race { pointer-events: none; }
    and the welcome board is also what the FIRST PAINT shows — before any screen
    switch has run to re-hide it. */
 #welcome:not(.hidden) ~ #corner-btns #fullscreen-btn { display: none; }
+#welcome:not(.hidden) ~ #corner-btns:not(:has(> #mute-btn:not(.hidden), > #pause-btn:not(.hidden))) { display: none; }
 
 /* Idle race chrome — main.js sets html.chrome-idle after a few seconds without
    a pointer move / tap / key press, and ONLY while a race is running (never on
@@ -1029,44 +1086,49 @@ html.cam-free #race { pointer-events: none; }
 html.chrome-idle, html.chrome-idle * { cursor: none; }
 html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 
-/* Pause overlay — same bright frosted glass as the results screen, sits above
-   the (frozen) race with a floating card of choices. The glass is shared by
-   every overlay that sits over a board (this one, the link overlay and the
-   trailer); each sets only its own z-index. */
+/* The full-screen overlays are the phone's FROST with no card: the screen
+   behind blurred and lightened, the content straight on it, so a pause on the
+   TV and on a phone are one screen. (Dark glass was tried here and dropped:
+   it was one more surface style, used nowhere else at that size.) The frozen
+   race still shows through, so the screen reads as "on hold". Each overlay
+   sets only its own z-index; the buttons step up to TV size. */
 #pause-overlay, #link-overlay, #trailer {
   position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
+  background: var(--frost);
+  -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
 }
+.pause-card .btn, .link-card .btn { font-size: clamp(1.25rem, 2.3vw, 1.9rem); }
 #pause-overlay { z-index: 20; }
 .pause-card {
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(1.2rem, 2.5vw, 2rem); text-align: center;
-  padding: clamp(1.8rem, 4vw, 3rem) clamp(2.2rem, 5vw, 4rem);
 }
 .pause-card h2 {
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; color: var(--ink);
+  font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: 1.05; margin: 0; color: var(--ink);
 }
-.pause-card__btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
-.pause-card__btns .btn { min-width: 9rem; }
+/* The pair is always one size: a floor in em (so it scales with the label)
+   that most translations fit inside, and two EQUAL columns, so a label that
+   outgrows it widens both buttons rather than one. */
+.pause-card__btns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1rem; }
+.pause-card__btns .btn { min-width: 9em; }
 
 /* ---- Connection overlay ---- the display's own link (#link-overlay). The
-   pause glass at one z-step up: above the boot cover (15) and the pause
+   pause frost at one z-step up: above the boot cover (15) and the pause
    overlay (20), under the device chooser (30). */
 #link-overlay { z-index: 25; }
 .link-card {
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(1rem, 2vw, 1.6rem); text-align: center;
-  padding: clamp(1.8rem, 4vw, 3rem) clamp(2.2rem, 5vw, 4rem);
 }
 .link-card h2 {
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; color: var(--ink);
+  font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: 1.05; margin: 0; color: var(--ink);
 }
-.link-status { font-size: clamp(1.1rem, 2.2vw, 1.5rem); color: var(--ink); opacity: 0.7; }
+.link-status { font-size: clamp(1.25rem, 2.5vw, 1.8rem); font-weight: 700; color: var(--ink-2); }
 .link-status:empty { display: none; }
-.link-card .btn { min-width: 11rem; }
+.link-card .btn { min-width: 9em; }   /* the pause pair's size */
 
 /* ---- Device chooser / phone landing ---- the display URL opened on a
    phone-sized screen (see #device-choice in index.html). Hidden by default; the
@@ -1118,39 +1180,38 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
     radial-gradient(ellipse 48% 100% at 14% 100%, #d3edbb 98%, transparent 100%),
     radial-gradient(ellipse 52% 100% at 88% 100%, #e0f3cd 98%, transparent 100%);
 }
-.landing__wordmark { font-size: 2.6rem; margin: 0; transform: rotate(-2deg); }
+.landing__wordmark { font-size: 2.6rem; margin: 0; }
 .landing__tag { text-wrap: balance; margin: 0; color: var(--ink-2); font-weight: 700; font-size: 1.05rem; max-width: 22rem; }
 
 /* The picture is the trailer's play button: a die-cut sticker with a hard
    shadow and a slight tilt the other way from the wordmark. */
 .landing__hero {
   position: relative; display: block; width: 100%;
-  padding: 0; border: 3px solid var(--ink); border-radius: var(--r-lg);
+  padding: 0; border: 0; border-radius: var(--r-lg);
   overflow: hidden; background: var(--ink);
-  box-shadow: var(--shadow-card); transform: rotate(1deg);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
 }
 .landing__hero img { display: block; width: 100%; height: auto; }
 /* A narrow screen gives the picture most of its width back: it bleeds into
    the side padding. */
 @media (max-width: 30rem) { .landing__hero { width: calc(100% + 1.2rem); } }
-/* The disc is the picture's push-button: the .btn ledge, sunk onto while the
-   picture is pressed (theme.css .btn has the press timing's reasoning). */
+/* The disc is the picture's push-button, an ACTION: squashed and darkened
+   while the picture is pressed (theme.css .btn has the press timing's
+   reasoning). */
 .landing__play {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: grid; place-items: center;
   width: 3.6rem; height: 3.6rem;
-  border: 3px solid var(--ink); border-radius: var(--r-pill);
+  border-radius: var(--r-pill);
   background: var(--red);
-  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
-  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease;
+  transition: transform var(--press-up) ease, filter var(--press-up) ease;
 }
 .landing__hero:active .landing__play {
-  transform: translate(-50%, calc(-50% + var(--btn-sink)));
-  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+  transform: translate(-50%, -50%) scale(0.94); filter: brightness(0.9);
   transition: none;
 }
-.landing__hero:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.landing__hero:focus-visible { outline: var(--focus-ring); outline-offset: 4px; }
 .landing__play svg { width: 1.9rem; height: 1.9rem; fill: #fff; }
 
 /* The three steps: white sticker rows (.card), each led by a numbered disc in
@@ -1170,7 +1231,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 .landing__num {
   flex: none; display: grid; place-items: center;
   width: 2.4rem; height: 2.4rem;
-  border: 3px solid var(--ink); border-radius: var(--r-pill);
+  border-radius: var(--r-pill);
   background: var(--num); color: #fff;
   font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;
 }
@@ -1275,10 +1336,9 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   transform: translate(-50%, 1rem);
   z-index: 10;
   font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: #fff;
-  background: var(--brand);
-  border: 3px solid var(--ink);
-  padding: 0.6rem 1.3rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-pop);
+  background: rgba(24, 28, 44, 0.78);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  padding: 0.65rem 1.4rem; border-radius: var(--r-pill);
   opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
@@ -1291,10 +1351,10 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
      on the welcome board and in the lobby, where a television that crops would
      eat the flat 1rem it used to sit at. */
   position: fixed; left: var(--safe-x); bottom: var(--safe-y-b); z-index: 10;
-  font: inherit; font-weight: 800; font-size: 0.95rem; color: #fff;
-  background: rgba(42, 39, 53, 0.7);
+  font: inherit; font-weight: 800; font-size: 0.95rem; color: var(--ink);
+  background: var(--surface);
   border: 0; padding: 0.6rem 1.2rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-float);
+  box-shadow: inset 0 0 0 2px var(--edge);
   cursor: pointer;
 }
 

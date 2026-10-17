@@ -48,11 +48,6 @@ struct LicensesView: View {
                         row(entry, index: index)
                     }
                 }
-                // Room for the focused row's heavier edge and its hard shadow:
-                // a ScrollView clips at its bounds, and both sit outside the
-                // row's own box.
-                .padding(.horizontal, 4)
-                .padding(.trailing, 10)
                 .padding(.vertical, 8)
             }
         }
@@ -92,60 +87,51 @@ private struct BareRowStyle: ButtonStyle {
 /// One credit: what it is and who made it on the left, what it is licensed under
 /// on the right — the same two columns the web page's `.entry` row has.
 ///
-/// **FOCUS FILLS THE ROW BLUE**, and it has to go that far. The kit's every
-/// other control says focus by lifting and brightening, and neither is available
-/// here: a row is as wide as the list, so `Sticker.focusScale` pushes it past
-/// the ScrollView's bounds, WHICH CLIP (the focused row came back cropped at
-/// both ends, and the top one lost its first character), and brightening a white
-/// sticker on warm paper does nothing you can see from a sofa — a warmed fill
-/// plus a thickened edge was the first cut, and it read as no highlight at all.
-///
-/// So the row swaps face and type together, the way the lobby's ⓘ does when the
-/// remote lands on it: blue is what "you are here" looks like across this whole
-/// info branch (the ⓘ, the Licenses button, the two card labels), it is a chrome
-/// colour the theme allows, and it needs no room the row does not already have.
+/// Every row is a CHOICE — white with the faint edge — and **FOCUS IS THE PICK**:
+/// the blue wash with the edge turned into a blue ring. It is the one focus
+/// signal available here, because the lift is not: a row is as wide as the
+/// list, so `Sticker.focusScale` pushes it past the ScrollView's bounds, WHICH
+/// CLIP (the focused row came back cropped at both ends, and the top one lost
+/// its first character). The wash and the ring need no room the row does not
+/// already have.
 @MainActor
 private struct LicenseRow: View {
     let entry: Legal.Entry
     let focused: Bool
 
     var body: some View {
-        HStack(spacing: 20) {
+        let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
+        return HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.title)
                     .font(Fonts.display(26, weight: .bold))
-                    .foregroundStyle(focused ? .white : Tokens.ink)
+                    .foregroundStyle(Tokens.ink)
                     .lineLimit(1)
                 Text(entry.author)
-                    // Not `ink-3` on blue: the quiet grey a white card wants is
-                    // barely there against it, and the author is half of what
-                    // the attribution actually says.
+                    // `ink-2` rather than the caption grey: on the pick's wash
+                    // the paler one is barely there, and the author is half of
+                    // what the attribution actually says.
                     .font(Fonts.display(20, weight: .semibold))
-                    .foregroundStyle(focused ? Color.white.opacity(0.85) : Tokens.ink3)
+                    .foregroundStyle(Tokens.ink2)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // The pill stays INK on both faces. It is the one token on the row
-            // that means something specific (the licence), and a pill that
-            // recoloured with the focus would read as part of the highlight.
-            StickerPill(entry.license, tint: Tokens.ink, size: 17)
+            // A LABEL: the one token on the row that means something specific
+            // (the licence).
+            StickerPill(entry.license, size: 17)
             // The chevron says the row opens, which every row now does. It is
             // kept rather than dropped: it is the only mark on the row that
             // says a press does anything at all.
             Text("›")
                 .font(Fonts.display(28, weight: .bold))
-                .foregroundStyle(focused ? .white : Tokens.ink3)
+                .foregroundStyle(focused ? Tokens.ink : Tokens.ink3)
                 .frame(width: 18)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 11)
-        .background(
-            RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-                .fill(focused ? Tokens.blue : Tokens.surface)
-                .hardShadow(focused ? Sticker.focusShadow : Sticker.popShadow)
-        )
-        .stickerOutline(focused ? Sticker.border : Sticker.hairlineBorder, radius: Sticker.radius)
+        .background(shape.fill(focused ? Tokens.pick : Tokens.surface))
+        .overlay(Sticker.choiceEdge(shape, picked: focused))
         .animation(.easeOut(duration: 0.12), value: focused)
         .accessibilityElement(children: .combine)
     }
@@ -237,7 +223,7 @@ private struct LicenseText: View {
     }
 }
 
-/// The chrome both legal boards wear: paper, a title sticker, and the body
+/// The chrome both legal boards wear: paper, a plain ink title, and the body
 /// sized by a reader so the text page can slice against a real height.
 ///
 /// Paper rather than floating over the live 3D, because these are full-screen
@@ -252,18 +238,9 @@ private struct LegalBoard<Content: View>: View {
         PaperStage {
             VStack(alignment: .leading, spacing: 18) {
                 Text(title)
-                    .font(Fonts.display(40, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(Fonts.display(54, weight: .bold))
+                    .foregroundStyle(Tokens.ink)
                     .lineLimit(1)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-                            .fill(Tokens.red)
-                            .hardShadow(Sticker.cardShadow)
-                    )
-                    .stickerOutline(Sticker.border, radius: Sticker.radius)
-                    .rotationEffect(.degrees(-1.2))
 
                 GeometryReader { geo in content(geo.size.height) }
             }

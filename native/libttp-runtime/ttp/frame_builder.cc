@@ -13,6 +13,10 @@
 namespace ttp {
 namespace rt {
 
+// How far a car may be from its chase rig before the rig cuts to it instead
+// of springing there (see the cut below). World units; the rig sits ~1.3 back.
+constexpr float CHASE_CUT_DIST = 6.0f;
+
 void newField(DisplayState& d) {
     d.chase.clear();
     d.follow = {};
@@ -303,6 +307,14 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                     cam.dipT = x > 8 ? -1 : cam.dipT + dt;
                 }
                 rig.pos.addScaledVector(rig.up, -(1 - CHASE_AIR_FOLLOW) * air - dip);
+                // A CUT, not a chase, when the car is suddenly far from its rig.
+                // That is the end-of-race hold lifting: the field was held while
+                // the sim ran on to the flag, the finished car drove a stretch of
+                // victory lap meanwhile, and springing after it swept the camera
+                // across the track as the board came up. A rig at rest trails its
+                // car by well under this, so no driven frame ever trips it.
+                const V3 gap = cam.pos - v3(rig.pos);
+                if (cam.init && dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) cam.init = false;
                 cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);

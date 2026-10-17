@@ -32,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -168,20 +170,15 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     val settled = standings && accounted >= 1f
 
     Box(
-        // PAPER, not ink. `#results` is `rgba(255,246,235,0.92)` — warm paper is
-        // exactly what a full-screen board is allowed (and the only place it is),
-        // so scrimming with ink inverts the board's whole value. Flat, with no blur
-        // behind it, by decision: at 0.92 only 8% of the frozen race gets through.
-        // See `docs/native-port/shells.md`, "Decided, not owed".
-        Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.92f)),
+        // FROST over the frozen race, the board ONE paper card on it (`#results`).
+        //
+        // NO BLUR, which the web's frost has: the race behind is the SurfaceView,
+        // in a layer below this window that nothing here can sample, so
+        // [Sticker.frost] lays the wash a touch thicker instead. The card the rows
+        // sit on is opaque, so what is read never has the race under it.
+        Modifier.fillMaxSize().background(Sticker.frost),
         contentAlignment = Alignment.Center,
     ) {
-        // NO CARD. `#results` is a flex column on the paper wash and nothing else —
-        // the title, the list and the button sit BARE on it, which is what lets the
-        // white rows read as stickers laid on paper. A white panel behind them puts
-        // white behind the elements that are themselves the white ones, and its
-        // rotation leaned every row, the title and the button together (a row's top
-        // edge fell 9 px across its own width) so the cells looked misaligned.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -189,25 +186,21 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // TWO TITLE STATES, and the podium's is the SMALLER of them, because
                 // it wears a box: `#results h2` is 4.6rem (73.6 authored px) plain,
                 // while `.is-champs h2` drops to 3.4rem (54.4) and reserves the
-                // sticker's padding and a TRANSPARENT border from its first frame.
-                // The celebration is then paint only — fill, border colour, shadow
-                // and a rotation, none of which cost layout — so nothing under it
-                // moves at the moment the rows are mid-glide. Recolouring the WORD
-                // instead loses both the box and the size step.
+                // label's padding from its first frame. The celebration is then
+                // paint only — the red LABEL's fill and type and a rotation, none
+                // of which cost layout — so nothing under it moves at the moment
+                // the rows are mid-glide.
                 val champs = settled && results.podium
-                val titleShape = RoundedCornerShape(Sticker.radiusLarge)
                 Box(
                     Modifier
                         .then(if (champs) Modifier.tilt(-2f) else Modifier)
-                        .then(if (champs) Modifier.hardShadow(Sticker.cardShadow, titleShape) else Modifier)
-                        .background(if (champs) Tokens.red else Color.Transparent, titleShape)
-                        // Reserved on every board, so the champs border lands as
-                        // colour rather than as 4 dp of new layout.
-                        .stickerOutline(
-                            Sticker.border, titleShape,
-                            color = if (champs) Tokens.ink else Color.Transparent,
+                        .background(
+                            if (champs) labelFace(Tokens.red) else Color.Transparent,
+                            RoundedCornerShape(Sticker.radiusLarge),
                         )
-                        .padding(horizontal = TITLE_SIZE * 0.7f, vertical = TITLE_SIZE * 0.25f),
+                        .then(if (results.podium) Modifier.padding(
+                            horizontal = TITLE_SIZE * 0.7f, vertical = TITLE_SIZE * 0.25f)
+                            else Modifier),
                 ) {
                     StickerText(
                         Copy.title(
@@ -219,7 +212,7 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                             results.cupName,
                         ),
                         size = if (results.podium) TITLE_SIZE else TITLE_SIZE_PLAIN,
-                        color = if (champs) Color.White else Tokens.ink,
+                        color = if (champs) labelInk(Tokens.red) else Tokens.ink,
                     )
                 }
 
@@ -228,12 +221,12 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // CHAMPS!" is the race still talking over the cup. `.is-held` is
                 // `visibility: hidden` precisely so the box stays — dropping it
                 // shrinks the column and re-centres everything, sliding the list and
-                // the button up under a sticker that is supposed to be the only thing
+                // the button up under a label that is supposed to be the only thing
                 // arriving.
                 results.sub?.let {
                     StickerText(
                         Copy.sub(it.key, it.cupName, it.race, it.of),
-                        size = 24.dp,
+                        size = 26.dp,
                         color = if (settled && !results.intermission) Color.Transparent else Tokens.ink2,
                     )
                 }
@@ -258,10 +251,15 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // row whose place is in the other column glides across to it. A
                 // list per column can only move a row within its own.
                 val columns = if (perColumn > 0) (rows.size + perColumn - 1) / perColumn else 0
+                // ONE PAPER CARD, the rows printed on it and ruled apart by a
+                // hairline (`#results-list`): rows that each looked like a button
+                // were the old board's problem. The card holds still through the
+                // cut; only the rows on it dip out and back.
+                PaperCard(padding = 10.dp, horizontalPadding = 16.dp) {
                 Box(
                     Modifier.alpha(listAlpha)
                         .width(boardWidth * columns + COL_GAP * max(0, columns - 1))
-                        .height(rowsHeight(perColumn)),
+                        .height(ROW_HEIGHT * perColumn),
                 ) {
                     // The glide is the count's; every other re-order (the cut, a
                     // new board) is a jump made under the fade.
@@ -269,16 +267,22 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                     rows.forEachIndexed { i, live ->
                         key(live.row.id) {
                             val x by animateDpAsState((boardWidth + COL_GAP) * (i / perColumn), move, label = "row-x")
-                            val y by animateDpAsState((ROW_HEIGHT + ROW_GAP) * (i % perColumn), move, label = "row-y")
+                            val y by animateDpAsState(ROW_HEIGHT * (i % perColumn), move, label = "row-y")
                             // Of two rows that cross, the climber ENDS higher, so
                             // stacking by rank passes it in front, as on the web.
                             // The lambda offset reads the glide in LAYOUT, so a
                             // moving row is re-placed, not recomposed, per frame.
+                            //
+                            // The RULE belongs to the SLOT: none over a column's
+                            // top row, and none under the leader's wash.
                             BoardRow(i + 1, live, settled,
-                                Modifier.offset { IntOffset(x.roundToPx(), y.roundToPx()) }
+                                leader = i == 0,
+                                rule = i % perColumn != 0 && i != 1,
+                                modifier = Modifier.offset { IntOffset(x.roundToPx(), y.roundToPx()) }
                                     .zIndex(-i.toFloat()).width(boardWidth))
                         }
                     }
+                }
                 }
 
                 // RESERVED, not conditional — but only on a board that is going to
@@ -296,17 +300,11 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // StickerText's line box is taller than 24 dp, so a Spacer(24.dp)
                 // reserves less than the text it stands in for.
                 if (results.intermission) Box(
-                    Modifier.width(boardWidth).height(FOOTER_HEIGHT).padding(top = 4.dp),
+                    Modifier.width(boardWidth).height(FOOTER_HEIGHT).padding(top = 6.dp),
                     Alignment.Center,
                 ) {
                     val next = results.next
-                    if (next != null && settled) {
-                        StickerText(
-                            Copy.nextUp + next.trackName + Copy.startingIn +
-                                (state.intermissionSecs ?: next.secs) + Copy.ellipsis,
-                            size = 24.dp, color = Tokens.ink2,
-                        )
-                    }
+                    if (next != null && settled) NextUp(next.trackName, state.intermissionSecs ?: next.secs)
                 }
 
                 // TAKE FOCUS. A TV has no pointer, so an unfocused screen is a
@@ -317,11 +315,11 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 // `#results-newgame { margin-top: 1.8rem }`, and `.btn`'s own scale
-                // rather than StickerButton's welcome-board default — at 34 dp the
+                // rather than ActionButton's welcome-board default — at 34 dp the
                 // em-relative padding carried the whole box with it and the CTA
                 // outweighed the board above it.
                 Spacer(Modifier.height(13.dp))
-                StickerButton(
+                ActionButton(
                     Copy.newGame(results.newGameKey),
                     modifier = Modifier.focusRequester(focus),
                     tint = Tokens.green,
@@ -386,19 +384,18 @@ private val BOARD_WIDTH_CUP = 502.dp
 /** Up to this many rows the board stays one column; above it, two. */
 private const val ONE_COL_MAX = 5
 
-/** Between the two columns, and the reserved footer's height. */
-private val COL_GAP = 24.dp
-private val FOOTER_HEIGHT = 34.dp
+/** Between the two columns (`column-gap: 2rem`), and the reserved footer's
+ *  height: the next-up label plus its air. */
+private val COL_GAP = 32.dp
+private val FOOTER_HEIGHT = 60.dp
 
-/** One row's height, and the gap between two.
+/** One row's height, rule included.
  *
- * `#results-list li` measures ~60 authored px: a 1.5rem line box, `0.7rem`
- * padding top and bottom, and a 3px border on each side. Fixed rather than
- * content-sized, so the BOARD cannot resize under a re-sort. */
-private val ROW_HEIGHT = 60.dp
-private val ROW_GAP = 8.dp
-
-private fun rowsHeight(n: Int): Dp = ROW_HEIGHT * n + ROW_GAP * max(0, n - 1)
+ * `#results-list li` measures ~50 authored px: a 1.5rem line box, `0.55rem`
+ * padding top and bottom, and the 2px rule over it. Rows touch — the rule is
+ * what parts them. Fixed rather than content-sized, so the BOARD cannot resize
+ * under a re-sort. */
+private val ROW_HEIGHT = 50.dp
 
 /**
  * One board row.
@@ -409,22 +406,30 @@ private fun rowsHeight(n: Int): Dp = ROW_HEIGHT * n + ROW_GAP * max(0, n - 1)
  *
  * Note what the model does NOT send and this therefore does not invent: no
  * `place` (rank is the row's POSITION) and no `dnf` (it is `finished == false`).
+ *
+ * Printed on the board's card rather than drawn as a card of its own: a [rule]
+ * over it, and the [leader]'s row washed in the celebration red so the eye finds
+ * the top of the table first.
  */
 @Composable
-private fun BoardRow(rank: Int, live: LiveRow, settled: Boolean, modifier: Modifier = Modifier) {
+private fun BoardRow(
+    rank: Int, live: LiveRow, settled: Boolean,
+    leader: Boolean, rule: Boolean, modifier: Modifier = Modifier,
+) {
     val row = live.row
-    val shape = RoundedCornerShape(Sticker.radiusSmall)
+    val hairline = Tokens.hairline
     Row(
         modifier
             .fillMaxWidth()
             .height(ROW_HEIGHT)
-            // hardShadow FIRST — draw modifiers run in chain order, so chained
-            // after background it stamps the drop over the face (see
-            // shells/androidtv/CLAUDE.md).
-            .hardShadow(Sticker.popShadow, shape)
-            .background(Tokens.surface, shape)
-            .stickerOutline(Sticker.border, shape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .then(if (rule) Modifier.drawBehind {
+                drawRect(hairline, size = Size(size.width, 2.dp.toPx()))
+            } else Modifier)
+            .then(if (leader) Modifier.background(
+                Tokens.red.mix(0.12f, Color.White), RoundedCornerShape(LEADER_RADIUS))
+                else Modifier)
+            // `#results-list li`'s `padding: 0.55rem 0.7rem` and `gap: 0.7rem`.
+            .padding(horizontal = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
@@ -464,27 +469,41 @@ private fun BoardRow(rank: Int, live: LiveRow, settled: Boolean, modifier: Modif
                 StickerText(
                     if (row.joining) "–" else rank.toString(),
                     size = ROW_TYPE,
-                    color = if (medal != null) Color.White else Tokens.ink2,
+                    weight = Fonts.semibold,
+                    color = if (medal != null) Color.White else Tokens.ink3,
                 )
             }
         }
-        // NO SWATCH. `#results-list .res-name { color: var(--c, var(--ink)) }` — the
-        // livery rides the NAME, and `lobbySeats.js` says so in as many words ("the
-        // name itself carries the livery colour — no dot"). A disc beside an ink
-        // name moves the one colour on the row off the one word that identifies its
-        // owner, and adds an object the design does not have.
-        // THE BODY FACE, like the rest of the row. `#results-list` inherits
-        // `body`'s Nunito and only the rank numeral opts into the display face
-        // (`li::before` sets `font-family: var(--font-display)`), so a board set
-        // entirely in Fredoka has rounder digits and terminals than the web's at
-        // every cell but one.
-        StickerText(
-            Copy.name(row.name, row.ai),
-            size = ROW_TYPE,
-            color = Tokens.car(row.colorIndex),
-            body = true,
-            modifier = Modifier.weight(1f),
-        )
+        // NO SWATCH. `#results-list .res-name` — the livery rides the NAME (80% into
+        // ink, so a pale one still reads on paper), and `lobbySeats.js` says so in
+        // as many words ("the name itself carries the livery colour — no dot").
+        // The DISPLAY face at 600, as `#results-list li` sets it; the trailing
+        // figures below are the body face (`.res-trail`).
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+        ) {
+            StickerText(
+                row.name,
+                size = ROW_TYPE,
+                weight = Fonts.semibold,
+                color = liveryInk(row.colorIndex),
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            // A bot says so in a small grey LABEL after its name (`.res-cpu`),
+            // not in the name.
+            if (row.ai) {
+                Box(
+                    Modifier
+                        .background(Tokens.surface2, RoundedCornerShape(percent = 50))
+                        .padding(vertical = CPU_TYPE * 0.3f, horizontal = CPU_TYPE * 0.7f)
+                ) {
+                    StickerText(Copy.cpuTag, size = CPU_TYPE, weight = Fonts.extraBold,
+                        color = Tokens.ink3, tracking = 0.08f, body = true)
+                }
+            }
+        }
 
         // A JOINING row carries NOTHING ELSE — the model returns early on it — so
         // every other cell here is its neutral value, by design.
@@ -561,7 +580,30 @@ private fun BoardRow(rank: Int, live: LiveRow, settled: Boolean, modifier: Modif
 @Composable
 private fun CellText(text: String, width: Dp, size: Dp, color: Color) {
     Box(Modifier.width(width), contentAlignment = Alignment.CenterEnd) {
-        if (text.isNotEmpty()) StickerText(text, size = size, color = color, body = true)
+        if (text.isNotEmpty()) {
+            StickerText(text, size = size, weight = Fonts.extraBold, color = color, body = true)
+        }
+    }
+}
+
+/**
+ * The intermission footer, `.results-next`: a LABEL in ink-2 (the recipe), the
+ * next circuit's name in the display face and full ink inside it.
+ */
+@Composable
+private fun NextUp(trackName: String, secs: Int) {
+    val size = 24.dp
+    val ink = labelInk(Tokens.ink2)
+    Row(
+        Modifier
+            .background(labelFace(Tokens.ink2), RoundedCornerShape(percent = 50))
+            .padding(vertical = size * 0.45f, horizontal = size * 1.1f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StickerText(Copy.nextUp, size = size, weight = Fonts.extraBold, color = ink, body = true)
+        StickerText(trackName, size = size, color = Tokens.ink)
+        StickerText(Copy.startingIn + secs + Copy.ellipsis, size = size,
+            weight = Fonts.extraBold, color = ink, body = true)
     }
 }
 
@@ -573,3 +615,9 @@ private fun CellText(text: String, width: Dp, size: Dp, color: Color) {
  * internal hierarchy the design does not have.
  */
 private val ROW_TYPE = 24.dp
+
+/** `.res-cpu`'s `0.5em` of the row's type. */
+private val CPU_TYPE = ROW_TYPE * 0.5f
+
+/** The leader's wash, `border-radius: 14px` (a literal in the CSS too). */
+private val LEADER_RADIUS = 14.dp

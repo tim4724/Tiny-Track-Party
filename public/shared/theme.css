@@ -1,16 +1,38 @@
 /* ============================================================================
-   Tiny Track Party — "Sticker Bash" theme
+   Tiny Track Party — the "Toy Box" theme
    ----------------------------------------------------------------------------
    ONE source of truth for the look. Shared by the display and the controller
    (both <link> this before their own page CSS). To add a new UI element in the
    right style, reach for a TOKEN (a --custom-property) or a KIT class below
    before writing bespoke CSS — that keeps every screen consistent for free.
 
-   The language: die-cut STICKERS on the TV glass. Flat saturated colour on
-   warm paper, thick warm-ink outlines (never pure #000), hard UN-BLURRED
-   offset shadows, everything slightly rotated as if slapped on by hand.
+   The language is SIX ROLES, each meaning the same thing on the phone and the
+   TV, so what a thing looks like says what it does:
+     PAPER  — white cards, flat. Things you read.
+     FROST  — every full-screen layer (pause, settings, the link screens, the
+              results): the screen behind it blurred and lightened, with the
+              content straight on it. Never a card on a scrim.
+     ACTION — ONE solid colour button per screen, the step that moves the game
+              on (red when it leaves). .btn
+     CHOICE — everything else you press: white with a faint edge. The picked
+              one is washed in the colour it picks and ringed in it; a
+              finger on one washes it paler in that same colour. Out of
+              reach is flat grey. The phone's colour is your livery (its
+              --pick/--press), the TV's is blue.
+              The ghost button, .icon-btn, and the pages' tiles.
+     LABEL  — a tinted pill with coloured text, never a solid fill: tags,
+              counts, the legend. .pill
+     GLASS  — dark tinted readouts over the live 3D view (lap, the countdown
+              strip, the scan hint). Never something you press.
+   Two things keep a solid colour on purpose: the phone's driving pads (each is
+   the action under a thumb) and the name tags over the race (whose car is
+   whose). Nothing has a ledge or a drop shadow: a press squashes the thing
+   pressed and darkens it, or washes a white one.
    Chrome colours are red/green/blue/purple ONLY — yellow/amber and pink are
    liveries, never chrome. Celebration is RED.
+
+   ONE :root block, and scripts/gen-design-tokens.mjs bakes it into
+   design-tokens.json for the TV shells, which draw the same six roles from it.
 
    Layout:
      1. @font-face        — self-hosted Fredoka + Nunito (see /assets/fonts)
@@ -18,7 +40,7 @@
      3. base / reset      — box-sizing, default type, .hidden
      4. component kit     — .card .btn .chip .pill .field .dot  (reusable bits)
      5. wordmark          — the one die-cut TINY TRACK / PARTY! badge
-     6. paper stage       — .scene__* (grass band + sticker clouds + confetti)
+     6. paper stage       — .scene__* (sky, grass band, clouds)
 
    Pages own their LAYOUT (grid, positioning); the theme owns the LANGUAGE
    (colour, type, surface, shadow). Keep it that way.
@@ -56,9 +78,9 @@
   --car-orange: #f2784b;
   --car-cyan:   #56ccf2;
 
-  /* -- sticker palette (the 4-colour chrome + paper/ink) ------------------ */
-  --paper:  #FFF6EB;             /* full-screen board background              */
-  --ink:    #2A2735;             /* outlines, text, dark chips — never #000   */
+  /* -- chrome palette (the 4 colours + paper/ink)   ------------------ */
+  --paper:  #F3F5FA;             /* the ground: phone screens, full boards     */
+  --ink:    #2A2735;             /* text, dark chips — never #000             */
   --red:    #FF5040;             /* energy, celebration, BRAKE                */
   --green:  #22C46E;             /* go / ready / primary CTA                  */
   --blue:   #339CF2;             /* info                                      */
@@ -78,14 +100,29 @@
 
   /* -- ink (text) -------------------------------------------------------- */
   /* --ink above is headings / primary text                                  */
-  --ink-2: #5d5768;              /* body / secondary                          */
-  --ink-3: #a49a86;              /* muted / captions / open slots             */
+  --ink-2: #5B6175;              /* body / secondary                          */
+  --ink-3: #8F95A6;              /* muted / captions / open slots             */
 
   /* -- surfaces ----------------------------------------------------------- */
-  --surface:   #ffffff;          /* sticker cards                             */
-  --surface-2: #FBF0DF;          /* sunken fields                             */
-  --hairline:  var(--ink);       /* every border is ink now                   */
-  --grass:     #A9DF83;          /* the paper stage's grass band              */
+  --surface:   #ffffff;          /* PAPER: white cards                        */
+  --surface-2: #ECEEF3;          /* wells, locked tiles                       */
+  --hairline:  #E6E9F0;          /* row rules inside a card                   */
+  --grass:     #93CC72;          /* the paper stage's grass band              */
+
+  /* -- the six roles' surfaces (see the header) ---------------------------
+     A CHOICE is a white face with a faint edge; the picked one is washed and
+     a finger on one washes it paler. The TV's wash is blue; the phone
+     re-points --pick/--press at the player's livery (controller.css). GLASS
+     is only the dark readouts over the live 3D view; FROST is every
+     full-screen layer: the screen behind blurred and lightened. */
+  --edge:       #DFE3EA;         /* a choice's faint edge                     */
+  --pick:       color-mix(in srgb, var(--blue) 26%, #fff);
+  --press:      color-mix(in srgb, var(--blue) 14%, #fff);
+  --glass:      rgba(24, 28, 44, 0.55);
+  --frost:      rgba(243, 245, 250, 0.88);
+  --frost-r:    14px;            /* the frost's blur radius                   */
+  --frost-blur: blur(var(--frost-r));
+  --focus-ring: 3px solid var(--blue);
 
   /* -- type -------------------------------------------------------------- */
   --font-display: 'Fredoka', system-ui, sans-serif;   /* everything display-ish */
@@ -93,19 +130,19 @@
 
   /* -- radii ------------------------------------------------------------- */
   --r-sm:   12px;
-  --r:      16px;
-  --r-lg:   22px;
+  --r:      18px;
+  --r-lg:   24px;
   --r-pill: 999px;
 
-  /* -- shadows (hard offset, ZERO blur — the die-cut drop) -----------------
-     ONE rule: offset ≈ 2× the border width, alpha always 0.18 — so every
-     sticker reads as stamped by the same machine. Small elements (≤2.5px
-     border) take pop, 3px-bordered cards take card. Stage scenery (clouds)
-     deliberately runs lighter — it's backdrop, not chrome. */
-  --shadow-ink:   rgba(42, 39, 53, 0.18);             /* the one shadow colour */
-  --shadow-pop:   3px 3px 0 var(--shadow-ink);        /* chips, small stickers */
-  --shadow-card:  6px 6px 0 var(--shadow-ink);        /* big sticker cards     */
-  --shadow-float: 6px 6px 0 var(--shadow-ink);        /* alias — same as card  */
+  /* -- shadows ---------------------------------------------------------------
+     NONE, and no ledges: depth is not a signal anywhere. What says "press
+     me" is a solid colour (an action) or a white face with an edge (a
+     choice). The tokens stay so a rule written against them still parses;
+     each is `none`. --shadow-ink is the stage scenery's soft drop (clouds). */
+  --shadow-ink:   rgba(20, 30, 50, 0.16);             /* the stage's soft drop */
+  --shadow-pop:   none;
+  --shadow-card:  none;
+  --shadow-float: none;
   --btn-ledge:    rgba(42, 39, 53, 0.9);              /* the push-button ledge */
   /* Ledge geometry — ONE depth for every push-button in the app (chrome buttons
      AND the big BRAKE/ITEM drive pads), so nothing sits deeper than anything
@@ -181,17 +218,16 @@ body {
 
 /* 4. Component kit -------------------------------------------------------- */
 
-/* Card — the white sticker panel everything important sits on. */
+/* Card — PAPER: the white panel everything you read sits on. No outline. */
 .card {
   background: var(--surface);
-  border: 3px solid var(--ink);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
 }
 
-/* Button — chunky sticker push-button: flat colour, ink border, white text,
-   hard ink ledge. Set --btn-bg to recolour; pressed = translateY onto the
-   ledge. Modifiers below cover the common roles.
+/* Button — an ACTION: a solid colour face, white text, flat. Set --btn-bg to
+   recolour. Pressed = it squashes a little and darkens. The ghost modifier
+   below is the CHOICE version: white with the faint edge, washed while pressed.
 
    Three ways to look pressed, and they mean different things: `:active` is the
    browser's, `.held` is a finger on it RIGHT NOW where :active can't be trusted
@@ -203,16 +239,15 @@ body {
   --btn-bg: var(--brand);
   display: inline-block;
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1.15rem;
   line-height: 1.1;
   color: #fff;
   text-align: center;
-  border: 3px solid var(--ink);
+  border: 0;
   border-radius: var(--r);
-  padding: 0.8em 1.2em;
+  padding: 0.85em 1.25em;
   background: var(--btn-bg);
-  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   cursor: pointer;
   /* ASYMMETRIC, and that is the whole point. Going DOWN is instant (see the
      pressed rule below): the finger is already there, so any duration at all is
@@ -223,51 +258,74 @@ body {
      zero was tried once and read as harsh, which is what that was really about.
      Every pressed surface on the phone shares this pair; see the tiles in
      controller.css. */
-  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
+  transition: transform var(--press-up) ease, filter var(--press-up) ease, background-color var(--press-up) ease;
 }
-.btn:hover { filter: brightness(1.04); }
+/* Hover only where there IS a hover: a touch screen leaves :hover on the last
+   thing touched, so a key pressed and slid off stayed tinted as if held. */
+@media (hover: hover) { .btn:hover { filter: brightness(1.04); } }
 .btn:active, .btn.held, .btn.is-pressed {
-  transform: translateY(var(--btn-sink));
-  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
-  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;   /* down NOW */
+  transform: scale(0.96); filter: brightness(0.9);
+  transition: transform 0s, filter 0s, background-color 0s;   /* down NOW */
 }
+.btn:focus-visible { outline: var(--focus-ring); outline-offset: 4px; }
 .btn--brand  { --btn-bg: var(--brand); }
 .btn--accent { --btn-bg: var(--accent); }   /* red now — white text stands */
 .btn--danger { --btn-bg: var(--danger); }
 .btn--item   { --btn-bg: var(--item); }
-.btn--ghost  {                     /* quiet, secondary action — same ledge DEPTH
-                                      as the primary, just a lighter ink */
+.btn--ghost  {                     /* a CHOICE: white, the faint edge */
   --btn-bg: var(--surface);
   color: var(--ink);
-  box-shadow: 0 var(--btn-drop) 0 rgba(42, 39, 53, 0.35);
+  box-shadow: inset 0 0 0 2px var(--edge);
 }
-.btn--ghost:active, .btn--ghost.held, .btn--ghost.is-pressed {
-  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 rgba(42, 39, 53, 0.35);
-}
+@media (hover: hover) { .btn--ghost:hover { filter: none; } }
+.btn--ghost:active, .btn--ghost.held, .btn--ghost.is-pressed { filter: none; background: var(--press); }
+/* Disabled: flat grey, the out-of-reach look every choice shares. */
 .btn:disabled, .btn[disabled] {       /* e.g. join button while connecting */
-  opacity: 0.5; cursor: default; filter: none;
+  background: #E2E5EC; color: var(--ink-3);
+  box-shadow: none;
+  cursor: default; filter: none;
 }
-.btn:disabled:active { transform: none; box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge); }
+.btn:disabled:active { transform: none; }
 
-/* Icon button — a small square sticker button for a single glyph (e.g. pause). */
+/* Icon button — a CHOICE: a round white key with the faint edge for one glyph
+   (settings, pause, leave, sound), the same over paper, frost or the race.
+   Pressed = a small squash and the press wash. */
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 3rem; height: 3rem; padding: 0;
   color: var(--ink);
   background: var(--surface);
-  border: 3px solid var(--ink);
-  border-radius: var(--r-sm);
-  box-shadow: var(--shadow-pop);
+  border: 0;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 2px var(--edge);
   cursor: pointer;
-  /* same press, and the same reasoning as .btn's transition above */
-  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
+  transition: transform var(--press-up) ease, background-color var(--press-up) ease;
 }
-.icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
+@media (hover: hover) {
+  .icon-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--press) 50%, #fff); }
+}
 .icon-btn:active:not(:disabled), .icon-btn.held {
-  transform: translate(2px, 2px); box-shadow: none;
-  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;
+  transform: scale(0.94); background: var(--press);
+  transition: transform 0s, background-color 0s;
 }
+.icon-btn:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Key pill — the corner keys that sit together, as ONE white pill: each key is
+   a segment of it, parted by a short rule. Only keys that show are parted,
+   so a hidden one leaves no rule behind. A segment washes without squashing:
+   the rule hangs off the segment after it, and a squash dragged it inward. */
+.key-pill {
+  display: inline-flex; align-items: center;
+  background: var(--surface); border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 2px var(--edge);
+}
+.key-pill .icon-btn { position: relative; background: transparent; box-shadow: none; }
+.key-pill .icon-btn:active:not(:disabled), .key-pill .icon-btn.held { transform: none; background: var(--press); }
+.key-pill > .icon-btn:not(.hidden) ~ .icon-btn:not(.hidden)::before {
+  content: ''; position: absolute; left: -1px; top: 28%; bottom: 28%;
+  width: 2px; border-radius: 1px; background: var(--edge);
+}
 
 /* Pause glyph — two rounded bars, sized off the button's text colour. */
 .pause-glyph { display: flex; gap: 4px; }
@@ -298,13 +356,12 @@ body {
 .snd-glyph .snd-body { fill: currentColor; }
 [aria-pressed="false"] .snd-glyph--off, [aria-pressed="true"] .snd-glyph--on { display: none; }
 
-/* Chip — a small white sticker token with a colour dot (player in a roster). */
+/* Chip — a small white paper token with a colour dot (player in a roster). */
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
   background: var(--surface);
-  border: 3px solid var(--ink);
   border-radius: var(--r-pill);
   padding: 0.45rem 0.95rem 0.45rem 0.6rem;
   font-family: var(--font-display);
@@ -312,32 +369,32 @@ body {
   color: var(--ink);
   box-shadow: var(--shadow-pop);
 }
-.chip--off { opacity: 0.45; }
 
-/* Pill — an ink label sticker: white uppercase caps on an ink pill
-   (e.g. "JOIN AT", "LAP 2/3"). */
+/* Pill — a LABEL: uppercase caps in a colour on a pale tint of it. Never a
+   solid fill, so it never reads as something to press. --c picks the colour. */
 .pill {
+  --c: var(--ink-2);
   display: inline-block;
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #fff;
-  background: var(--ink);
+  color: color-mix(in srgb, var(--c) 78%, #1B1830);
+  background: color-mix(in srgb, var(--c) 20%, #fff);
   border-radius: var(--r-pill);
   padding: 0.32em 0.95em 0.38em;
 }
 
-/* Field — a sticker input/value box. */
+/* Field — an input/value box, set INTO the page rather than on it. */
 .field {
   background: var(--surface);
-  border: 3px solid var(--ink);
+  border: 2px solid var(--hairline);
   border-radius: var(--r-sm);
   padding: 0.85rem 1rem;
   color: var(--ink);
   font-weight: 700;
-  box-shadow: var(--shadow-pop);
+  box-shadow: inset 0 2px 0 rgba(20, 30, 50, 0.05);
 }
 
 /* Site footer — the one row of legal chrome ("Developed by Tim" + licenses /
@@ -374,50 +431,26 @@ body {
 .track-map__casing { fill: none; stroke: #fff; stroke-width: var(--track-map-casing); stroke-linejoin: round; stroke-linecap: round; }
 .track-map__road { fill: none; stroke: var(--ink-2); stroke-width: var(--track-map-road); stroke-linejoin: round; stroke-linecap: round; }
 .track-map__start { fill: var(--danger); stroke: #fff; stroke-width: var(--track-map-start-ring); r: var(--track-map-start-r); }
-/* A schematic-less variant: the same field carrying a glyph ("?", ∞, or the
-   tour's drawn ring) instead of a ribbon — the picker's random-family tiles
-   wear it so they keep a track tile's exact footprint. The wash is set inline
-   (the neutral grey). */
-.track-map--q {
-  display: grid; place-items: center;
-  container-type: inline-size;
-  font-family: var(--font-display); font-weight: 700;
-  /* fallback for engines without container queries; the child rule below is
-     the real size */
-  font-size: 2.2rem; line-height: 1; color: var(--ink);
-}
-/* the glyph tracks its BOX — roughly a third of the square at any width */
-.track-map--q > span, .track-map--q > i { font-size: 34cqw; }
-/* the tour's ring: drawn, so its stroke matches the ∞'s ink weight on every
-   platform (no circle codepoint does across fallback fonts) */
-.track-map--q > i {
-  width: 1em; aspect-ratio: 1 / 1; border-radius: 50%;
-  border: 0.16em solid currentColor;
-}
 
 /* Star row — cup progression (built by starRow in shared/trackPicker.js): a row
-   of die-cut stars, filled = earned. RED on purpose — amber/gold is vetoed in
-   chrome, and celebration is red. Size by context via font-size.
-
-   `paint-order: stroke fill` is what makes it a DIE CUT rather than a blot, and
-   it is the same line `.seat__host` already carries. An SVG stroke straddles the
-   path, so half of it paints INWARD: at the cup shelf's 0.78em the star renders
-   about 11px from a 24-unit box, the 2.4 units eat a fifth of its radius, and a
-   red star came out reading black with its five points blunted. Painting the
-   stroke UNDER the fill leaves the outline entirely outside the shape, which is
-   also how tvOS draws this row (an ink star stacked behind a smaller coloured
-   one — SF Symbols there, since that glyph cannot be shipped to the web). */
+   of chunky toy stars, filled = earned, the unearned ones a grey of the same
+   shape. RED on purpose — amber/gold is vetoed in chrome, and celebration is
+   red. Size by context via font-size. The stroke is the FILL's own colour with
+   round joins, which is what rounds the points off: no outline on the web
+   (Toy Box); tvOS still draws its die-cut pair from SF Symbols. */
 .starrow { display: inline-flex; gap: 0.14em; line-height: 1; }
 .starrow .star { width: 1em; height: 1em; }
 .starcount { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; line-height: 1; }
 .starrow .star path {
-  fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round;
-  paint-order: stroke fill;
+  fill: var(--red); stroke: var(--red); stroke-width: 3.2; stroke-linejoin: round;
 }
-.starrow .star--off path { fill: #fff; opacity: 0.35; }
+/* An unearned star is HOLLOW, its outline in see-through ink: a faint fill
+   sank into a picked tile's wash, and a line does not. */
+.starrow .star--off path { fill: none; stroke: rgba(38, 40, 56, 0.42); stroke-width: 2.2; }
+.starrow .star { overflow: visible; }
 
 /* Drawn padlock (lockGlyph in shared/trackPicker.js) — platform lock emoji are
-   coloured and clash with the sticker ink, so the theme draws its own. */
+   coloured and clash with the chrome's ink, so the theme draws its own. */
 .lock-glyph { width: 1em; height: 1em; }
 .lock-glyph path { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; }
 .lock-glyph rect { fill: var(--ink); }
@@ -427,7 +460,6 @@ body {
   width: 0.85rem;
   height: 0.85rem;
   border-radius: 50%;
-  border: 2px solid var(--ink);
   flex: none;
 }
 
@@ -456,58 +488,52 @@ body {
   background-position: 0 0;
 }
 
-/* 5. Wordmark — ONE die-cut badge (never a row of pills, never plain text):
+/* 5. Wordmark — ONE lockup (never a row of pills):
      <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
-   The white text-stroke is the die-cut edge; without paint-order support it
-   degrades to plain ink text — acceptable. Size by context via font-size. */
+   Ink over a red PARTY! tipped against it, with a soft moulded drop. The TV
+   shells still bake the die-cut version (scripts/bake-wordmark.mjs).
+   Size by context via font-size. */
 .wordmark {
   font-family: var(--font-display);
   font-weight: 700;
   line-height: 0.98;
   color: var(--ink);
   letter-spacing: 0.01em;
-  -webkit-text-stroke: 7px #fff;
-  paint-order: stroke fill;      /* white die-cut edge */
-  transform: rotate(-2deg);
-  filter: drop-shadow(3px 3px 0 var(--shadow-ink));
 }
 .wordmark span { display: block; }
-.wordmark .l2 { color: var(--red); font-size: 1.24em; }
+.wordmark .l2 {
+  color: var(--red); font-size: 1.24em;
+  rotate: -3deg;
+}
 
 /* 6. Paper stage ----------------------------------------------------------
    Drop a <div class="scene"> with these children behind any full-screen board
-   for the Sticker Bash backdrop: warm paper, a flat grass band, two sticker
+   for the board backdrop: sky, a flat grass band, two sticker
    clouds and a few confetti rects. Decorative only — it never eats pointer
    events and sits at the bottom of the stacking order. NO SUN (it was yellow). */
 .scene { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
 
 .scene__sky {
   position: absolute; inset: 0;
-  /* a soft warm glow high in the sky gives the paper some air */
-  background:
-    radial-gradient(120% 90% at 50% -20%, #fffdf7 0%, rgba(255, 253, 247, 0) 55%),
-    var(--paper);
+  background: linear-gradient(180deg, #CFE7F7 0%, #EAF4FB 55%, #F3F8FC 100%);
 }
 /* rolling hills peeking over the grass band — two soft bumps for depth */
 .scene__sky::before, .scene__sky::after {
   content: ''; position: absolute; border-radius: 50%;
 }
-.scene__sky::before { width: 74%; height: 30%; left: -16%; bottom: 11%; background: #d3edbb; }
-.scene__sky::after  { width: 82%; height: 36%; right: -20%; bottom: 9%; background: #e0f3cd; }
+.scene__sky::before { width: 74%; height: 30%; left: -16%; bottom: 11%; background: #BFE3A6; }
+.scene__sky::after  { width: 82%; height: 36%; right: -20%; bottom: 9%; background: #A9D98C; }
 
 .scene__sun { display: none; }   /* retired — the sun was yellow */
 
-/* Sticker cloud — a white outlined pill with two outlined circle humps. The
-   humps are clipped to their top 60% (clip-path) so their cut edge hides
-   inside the pill's white body and the outline reads as one die-cut shape. */
+/* Cloud — a soft white pill with two humps, no outline: scenery, not chrome. */
 .scene__cloud {
   position: absolute; background: #fff;
-  border: 3px solid var(--ink); border-radius: var(--r-pill);
-  box-shadow: 4px 4px 0 rgba(42, 39, 53, 0.10);
+  border-radius: var(--r-pill);
 }
 .scene__cloud::before, .scene__cloud::after {
   content: ''; position: absolute; background: #fff;
-  border: 3px solid var(--ink); border-radius: 50%;
+  border-radius: 50%;
   clip-path: inset(0 0 40% 0);
 }
 /* positioned clear of the display lobby's rails (ticket left, cup slot right)
@@ -522,22 +548,14 @@ body {
 .scene__cloud--c::before { width: 36px; height: 36px; top: -15px; left: 14px; }
 .scene__cloud--c::after  { width: 28px; height: 28px; top: -9px; left: 44px; }
 
-/* Flat grass band, gently rounded top — stage scenery, no outline (outlines
-   belong to the stickers sitting ON the stage). */
+/* Flat grass band, gently rounded top — stage scenery. */
 .scene__grass {
   position: absolute; left: -2%; right: -2%; bottom: 0; height: 24%;
   background: var(--grass);
   border-radius: 50% 50% 0 0 / 22% 22% 0 0;
 }
-/* Confetti rect for explicit placement — position + tint per instance:
-     <i class="scene__confetti" style="top:20%;left:70%;--c:var(--green);--tilt:-20deg"></i> */
-.scene__confetti {
-  position: absolute; width: 9px; height: 15px; border-radius: 3px;
-  background: var(--c, var(--red));
-  transform: rotate(var(--tilt, 0deg));
-}
 
-/* 7. Motion — the sticker SLAP-IN -----------------------------------------
+/* 7. Motion — the SLAP-IN ------------------------------------------------
    Scale overshoot with a slight rotate wobble, ~240ms. Uses the independent
    scale/rotate properties so it composes with any static transform the
    element already carries (tilts, centring translates). Applied by page CSS

@@ -223,7 +223,8 @@ typedef struct TtpCellHudInput {
 
 /* Chrome colours for the overlay, as 0xRRGGBB. These are `--ink` and
  * `--surface` from public/shared/theme.css, which is the authored source for
- * the sticker palette; tests/design-tokens.test.js holds these two against the
+ * the palette (the steer bar's glass is the ink at an alpha, its tick the
+ * surface at one); tests/design-tokens.test.js holds these two against the
  * baked token table so the two languages cannot drift apart silently.
  *
  * Only these two. A third would mean the look is being rebuilt here rather than

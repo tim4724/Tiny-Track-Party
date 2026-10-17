@@ -118,8 +118,13 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "paint-hud" -> Unit
 
             // ---- the countdown ----------------------------------------------
-            "start-countdown" ->
-                Ttp.ttp_session_start(game.sessionHandle, e.optInt("seconds", 3))
+            "start-countdown" -> {
+                val seconds = e.optInt("seconds", 3)
+                // A zero-second launch (the harness's) has no beats to lay out,
+                // and keeps whatever strip the last real one did.
+                if (seconds > 0) game.state.countdownSteps = seconds
+                Ttp.ttp_session_start(game.sessionHandle, seconds)
+            }
 
             // `Copy.countdown` spells the beat (digit / GO! / banner gone). The
             // beat's SOUND is the wasm's (it taps the same tick), so there is no

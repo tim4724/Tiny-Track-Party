@@ -38,7 +38,7 @@ import kotlin.math.floor
  * keeps the window's buffers between frames: a buffer comes back holding what
  * was drawn into it a few frames earlier. So [WindowErase] clears only the
  * rects those buffers can still hold — the name tags' recent positions and
- * the race HUD's retained sticker groups, which are redrawn over
+ * the race HUD's retained groups, which are redrawn over
  * themselves every frame and would darken at their anti-aliased edges if they
  * were not erased first. That is only sound while EVERYTHING in the window has
  * a tracked rect, so any other content ([UnboundedContent]) and any change to a

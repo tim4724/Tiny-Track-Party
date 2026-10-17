@@ -8,8 +8,8 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 
 /**
- * The "Sticker Bash" palette, read at boot from the SAME file the web's CSS is
- * baked to.
+ * The "Toy Box" palette, read at boot from the SAME file the web's CSS is baked
+ * to.
  *
  * `public/shared/theme.css` is the authored source of the look;
  * `scripts/gen-design-tokens.mjs` bakes its `:root` block to
@@ -17,7 +17,7 @@ import org.json.JSONObject
  * `stage-assets.sh` copies that file verbatim into `assets/`. Reading it here
  * rather than transcribing hex is not tidiness: it is the mitigation
  * `docs/native-port/architecture.md` accepted when it allowed three
- * implementations of the sticker look. A hex literal in Kotlin is a fourth
+ * implementations of the look. A hex literal in Kotlin is a fourth
  * source that nothing in the tree watches, and `--accent` has already moved once
  * (amber → red).
  *
@@ -34,16 +34,8 @@ import org.json.JSONObject
  */
 object Tokens {
 
-    /**
-     * A hard offset shadow. Every one in this design system has **zero blur** —
-     * that is what makes a sticker read as die-cut rather than as a floating
-     * card, and it is why `blur` is carried but has always been 0.
-     */
-    data class Shadow(val x: Dp, val y: Dp, val blur: Dp, val color: Color)
-
     private val colors = HashMap<String, Color>()
     private val lengths = HashMap<String, Dp>()
-    private val shadows = HashMap<String, Shadow>()
     private val numbers = HashMap<String, Float>()
 
     /**
@@ -101,20 +93,11 @@ object Tokens {
                 // A bare number, which the bake cannot type as anything better:
                 // the safe-zone insets are FRACTIONS of a surface, and a fraction
                 // has no unit for `length` to have parsed. Anything raw that is
-                // not a number (a font stack, a keyword) simply does not land
-                // here, which is why this is a filter and not a cast.
+                // not a number (a font stack, a keyword, the shadows' `none`)
+                // simply does not land here, which is why this is a filter and
+                // not a cast.
                 "raw" -> e.optString("resolved", "").trim().toFloatOrNull()
                     ?.let { numbers[name] = it }
-                "shadow" -> {
-                    val s = e.optJSONObject("shadow") ?: continue
-                    val c = rgba(s.opt("rgba")) ?: continue
-                    shadows[name] = Shadow(
-                        s.optDouble("x", 0.0).toFloat().dp,
-                        s.optDouble("y", 0.0).toFloat().dp,
-                        s.optDouble("blur", 0.0).toFloat().dp,
-                        c,
-                    )
-                }
                 // "font-stack" is deliberately ignored. The stack names the CSS
                 // families the browser resolves through @font-face; the faces
                 // THIS app can ask for are the static TTFs gen-fonts.py renamed,
@@ -146,26 +129,18 @@ object Tokens {
         }
         for (n in listOf("paper", "ink", "ink-2", "ink-3", "red", "green", "blue", "purple",
             "brand", "accent", "danger", "item", "surface", "surface-2", "hairline",
-            "grass", "shadow-ink", "btn-ledge")) {
+            "grass", "edge", "pick", "press", "glass", "frost")) {
             tokenRequire(colors[n] != null) { "design-tokens.json is missing --$n" }
         }
         tokenRequire(liveries.size == 8) { "expected 8 car liveries, got ${liveries.size}" }
-        for (n in listOf("r-sm", "r", "r-lg", "r-pill", "btn-drop", "btn-sink")) {
+        for (n in listOf("r-sm", "r", "r-lg", "r-pill")) {
             tokenRequire(lengths[n] != null) { "design-tokens.json is missing the length --$n" }
-        }
-        for (n in listOf("shadow-pop", "shadow-card", "shadow-float")) {
-            tokenRequire(shadows[n] != null) { "design-tokens.json is missing the shadow --$n" }
         }
         for (n in listOf("safe-frac-x", "safe-frac-y",
             "track-map-casing", "track-map-road",
             "track-map-start-r", "track-map-start-ring")) {
             tokenRequire(numbers[n] != null) { "design-tokens.json is missing the number --$n" }
         }
-        // The one rule the CSS can only state in prose, and the reason
-        // tests/design-tokens.test.js exists on the web side: press travel equal
-        // to the ledge depth would punch the button through its own ledge and
-        // flatten it. Sticker.kt's button geometry is built on the difference.
-        tokenRequire(length("btn-sink") < length("btn-drop")) { "--btn-sink must stay under --btn-drop" }
     }
 
     private fun rgba(any: Any?): Color? {
@@ -242,11 +217,6 @@ object Tokens {
     val legalInsetX: Dp = 90.dp
     val legalInsetY: Dp = 60.dp
 
-    fun shadow(name: String): Shadow =
-        shadows[name] ?: Shadow(0.dp, 0.dp, 0.dp, Color.Transparent).also {
-            tokenRequire(false) { "no shadow token --$name" }
-        }
-
     /**
      * A player's livery, by the `colorIndex` a seat carries. Wrapping, with the
      * same negative-safe modulo `protocol.h`'s `car_stats` uses.
@@ -316,8 +286,11 @@ object Tokens {
     val surface2 get() = color("surface-2")
     val hairline get() = color("hairline")
     val grass get() = color("grass")
-    val shadowInk get() = color("shadow-ink")
-    val btnLedge get() = color("btn-ledge")
+    val edge get() = color("edge")
+    val pick get() = color("pick")
+    val press get() = color("press")
+    val glass get() = color("glass")
+    val frost get() = color("frost")
 }
 
 /**

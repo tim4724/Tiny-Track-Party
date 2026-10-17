@@ -471,8 +471,13 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         // ABI — a TV shell cannot supply one honestly, knowing neither the
         // panel's size nor the couch's distance, so the ttp_display_ui_scale
         // this used to take was only ever devicePixelRatio under another name.
-        const float4 ink{ hudRgb(TTP_HUD_INK), 1.0f };
-        const float3 surface = hudRgb(TTP_HUD_SURFACE);
+        // The bar's glass is the theme ink at half strength, and its tick the
+        // surface white at a little under: the web's --glass is a near-ink at
+        // 0.55 over the 3D view, and quoting the two tokens the header already
+        // carries keeps this a quotation rather than a third colour.
+        const float4 glass{ hudRgb(TTP_HUD_INK), 0.5f };
+        const float4 tickRgba{ hudRgb(TTP_HUD_SURFACE), 0.45f };
+        const float4 none{ 0.0f, 0.0f, 0.0f, 0.0f };
         const uint32_t n = input.hudCount;
 
         // .cell-divider — a 7 px black rule down every seam that has cells on both
@@ -533,29 +538,30 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             for (uint32_t k = 0; k < nx; k++) {
                 if (MaterialInstance* mi = overlayQuad(xs[k] - ruleW * 0.5f, 0,
                             ruleW, (float) mHeight)) {
-                    mi->setParameter("shape", float3{ 0, 0, 0 });
-                    mi->setParameter("fill", float3{ 0, 0, 0 });
+                    mi->setParameter("shape", none);
+                    mi->setParameter("fill", none);
                     mi->setParameter("ink", rule);
-                    mi->setParameter("surface", surface);
-                    mi->setParameter("bar", surface);
+                    mi->setParameter("tick", none);
+                    mi->setParameter("bar", none);
                 }
             }
             for (uint32_t k = 0; k < ny; k++) {
                 if (MaterialInstance* mi = overlayQuad(0, ys[k] - ruleW * 0.5f,
                             (float) mWidth, ruleW)) {
-                    mi->setParameter("shape", float3{ 0, 0, 0 });
-                    mi->setParameter("fill", float3{ 0, 0, 0 });
+                    mi->setParameter("shape", none);
+                    mi->setParameter("fill", none);
                     mi->setParameter("ink", rule);
-                    mi->setParameter("surface", surface);
-                    mi->setParameter("bar", surface);
+                    mi->setParameter("tick", none);
+                    mi->setParameter("bar", none);
                 }
             }
         }
 
-        // .cell-steer — display.css's composition (270 x 34, 4 border, 3 tick,
-        // 20 clear of the bottom) against a 1080-line panel, times BAR_SCALE.
-        // BAR_SCALE is the only knob: scale the shape, never re-proportion the
-        // numbers.
+        // The steer bar's composition (a 270 x 34 glass pill, the fill inset 5
+        // all round, a 3 tick, 20 clear of the bottom) against a 1080-line
+        // panel, times BAR_SCALE. BAR_SCALE is the only knob: scale the shape,
+        // never re-proportion the numbers. The phone's .steer__track is the
+        // same shape in miniature (controller.css).
         //
         // NOT INSET BY THE SAFE ZONE, and that is a decision rather than an
         // omission. Everything the SHELL places is inset — its rects come out of
@@ -577,9 +583,9 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         //      room; the split does not, and one bar that moves in some layouts
         //      and not others is worse than either.
         //
-        // What is accepted: on a set that crops, the bar loses its bottom border
-        // and part of the fill, and reads as a broken shape rather than a smaller
-        // one. Weighed against (1) and taken. Do not "fix" the inconsistency with
+        // What is accepted: on a set that crops, the bar loses the bottom of its
+        // glass and part of the fill, and reads as a broken shape rather than a
+        // smaller one. Weighed against (1) and taken. Do not "fix" the inconsistency with
         // the chips without re-arguing both points.
         static constexpr float BAR_SCALE = 1.7f;
         const TtpCellHudInput* hud = ttp_frame_hud(&input);
@@ -604,29 +610,31 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             const float unit = BAR_SCALE
                     * std::sqrt((float) cell.h * (float) mHeight) / 1080.0f;
             const float barW = 270 * unit, barH = 34 * unit;
-            const float border = 4 * unit, tick = 3 * unit, clear = 20 * unit;
-            const float innerW = barW - 2 * border, innerH = barH - 2 * border;
+            const float pad = 5 * unit, tick = 3 * unit, clear = 20 * unit;
+            const float innerW = barW - 2 * pad, innerH = barH - 2 * pad;
             MaterialInstance* mi = overlayQuad(cell.x + (cell.w - barW) * 0.5f,
                     cell.y + cell.h - clear - barH, barW, barH);
             if (!mi) continue;
             // The livery this cell's car wears, straight off the roster the
             // renderer baked its model from — the shell never restates it.
-            float3 bar = surface;
+            float4 bar{ hudRgb(TTP_HUD_SURFACE), 0.0f };
             if (mTrack && hud[i].car >= 0
                     && (size_t) hud[i].car < mTrack->carColors.size()) {
                 const uint32_t abgr = mTrack->carColors[hud[i].car];
-                bar = hudRgb(((abgr & 0xff) << 16) | (abgr & 0xff00)
+                bar.xyz = hudRgb(((abgr & 0xff) << 16) | (abgr & 0xff00)
                         | ((abgr >> 16) & 0xff));
             }
-            // .cell-steer__fill: half the interior wide, centred, translated by
-            // 50 % of ITS OWN width per unit of tilt — so full lock puts the
-            // fill's edge on the interior's edge and never past it.
-            mi->setParameter("shape", float3{ barH * 0.5f, border, tick });
+            // The fill: half the inset width, centred, translated by 50 % of
+            // ITS OWN width per unit of tilt, so full lock puts its edge `pad`
+            // short of the glass's end and never closer. The clamp is what
+            // holds that promise for a tilt reported past full lock.
+            const float s = std::clamp(hud[i].steer, -1.0f, 1.0f);
+            mi->setParameter("shape", float4{ barH * 0.5f, pad, tick, 0.0f });
             mi->setParameter("fill",
-                    float3{ border + innerW * (0.25f + 0.25f * hud[i].steer),
-                            innerW * 0.5f, innerH * 0.5f });
-            mi->setParameter("ink", ink);
-            mi->setParameter("surface", surface);
+                    float4{ pad + innerW * (0.25f + 0.25f * s),
+                            innerW * 0.5f, innerH * 0.5f, 0.0f });
+            mi->setParameter("ink", glass);
+            mi->setParameter("tick", tickRgba);
             mi->setParameter("bar", bar);
         }
     }

@@ -127,8 +127,22 @@ test('the renderer quotes --ink and --surface, and has not drifted from them', (
     return t.rgba.slice(0, 3).map((c) => c.toString(16).padStart(2, '0')).join('');
   };
   assert.equal(hex('TTP_HUD_INK'), token('ink'),
-    'TTP_HUD_INK has drifted from --ink: the steer bar would be outlined in a '
-    + 'different warm ink from every sticker beside it');
+    'TTP_HUD_INK has drifted from --ink: the steer bar\'s glass would be tinted '
+    + 'a different ink from the chrome beside it');
   assert.equal(hex('TTP_HUD_SURFACE'), token('surface'),
     'TTP_HUD_SURFACE has drifted from --surface');
+});
+
+// The CHOICE washes are `color-mix(in srgb, <chrome colour> p%, #fff)`, baked to
+// the colour the browser draws. Re-derived here per channel, independently of
+// the generator's parser, from the two inputs the mix names.
+test('a color-mix token bakes to the sRGB mix of its two colours', () => {
+  for (const [name, pct] of [['pick', 26], ['press', 14]]) {
+    const t = byName.get(name);
+    assert.equal(t.type, 'color', `--${name} is a colour`);
+    assert.match(t.value, new RegExp(`^color-mix\\(in srgb, var\\(--blue\\) ${pct}%, #fff\\)$`));
+    const blue = byName.get('blue').rgba;
+    const want = blue.slice(0, 3).map((c) => Math.round(c * pct / 100 + 255 * (1 - pct / 100)));
+    assert.deepEqual(t.rgba.slice(0, 3), want, `--${name} = blue ${pct}% toward white`);
+  }
 });

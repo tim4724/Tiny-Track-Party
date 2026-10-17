@@ -42,6 +42,7 @@ export async function init() {
     forceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
     holdEnd: c('ttp_hold_end', null, ['number', 'number']),
     fastForward: c('ttp_fast_forward', null, ['number']),
+    coast: c('ttp_coast', null, ['number', 'number']),
     pause: c('ttp_pause', null, ['number']),
     resume: c('ttp_resume', null, ['number']),
     racing: c('ttp_racing', 'number', ['number']),
@@ -162,6 +163,10 @@ export class NativeRaceSession {
     if (typeof m.u === 'number') { mask |= 4; u = m.u; }
     fn.input(this.h, idJson(id), mask, s, b, u);
   }
+
+  // THE CURTAIN CALL: step a race that has ended, its field on victory laps
+  // behind the board. Muted and eventless (ttp_coast).
+  coast(dtMs) { if (this.h) fn.coast(this.h, dtMs); }
 
   fastForwardToEnd() {
     if (!this.h || this._ended) return;

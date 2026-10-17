@@ -10,11 +10,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
   <!-- Both dress the CouchPad launcher's name sheet (contract §2): color-scheme
        its text and controls (and, §4, the status-bar icons), theme-color its
-       surface: the warm paper the page art fades into, which a browser also
+       surface: the ground the page art fades into, which a browser also
        uses for its address bar. The sheet's accent is controller.css's
        accent-color on :root. -->
   <meta name="color-scheme" content="light" />
-  <meta name="theme-color" content="#FFF6EB" />
+  <meta name="theme-color" content="#F3F5FA" />
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track</title>
@@ -67,18 +67,20 @@
        page differ only in what fills the grid, so stepping between them moves
        nothing structural. Layout in controller.css (#lobby). -->
   <section id="lobby" class="hidden">
-    <!-- Identity ribbon — your NAME as a livery sticker on the left (in the
-         launcher a tap renames), the Settings gear pinned far right, and between them
-         whatever KEY the page below needs. Today that is the race page's star
-         count, a chip that opens #stars-overlay (buildModePicker; hidden on the
-         car page, whose ratings name themselves in the tile). It rides up here because the
-         ribbon is the one row that is not the choices — the grid gets every
-         pixel below it. Nothing else lives here: the lobby's navigation is the
+    <!-- Identity ribbon — your NAME in your livery on the left (in the
+         launcher a tap renames), and one pill of keys pinned far right: the
+         Settings gear, behind whatever KEY the page below needs. Today that is
+         the race page's star count, which opens #stars-overlay (buildModePicker;
+         hidden on the car page, whose ratings name themselves in the tile). It
+         rides up here because the ribbon is the one row that is not the
+         choices — the grid gets every pixel below it. Nothing else lives here: the lobby's navigation is the
          action corner at the bottom. -->
     <div class="lobby-top">
       <div class="lobby-me"><button id="me-name" class="lobby-me__name" type="button"></button></div>
-      <div id="race-key" class="race-key"></div>
-      <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
+      <div class="key-pill lobby-keys">
+        <div id="race-key" class="race-key"></div>
+        <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
+      </div>
     </div>
 
     <div class="lobby-car">
@@ -113,14 +115,14 @@
          width nothing else wants and the grid keeps the height. -->
     <div class="lobby-go">
       <div id="ready-note"></div>
-      <button id="lobby-back" class="btn btn--ghost lobby-back hidden" type="button">‹ Car</button>
+      <button id="lobby-back" class="btn btn--ghost lobby-back hidden" type="button"><svg class="back-glyph" viewBox="0 0 10 16" aria-hidden="true" focusable="false"><path d="M7.5 2 2.5 8l5 6"/></svg>Car</button>
       <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
     </div>
   </section>
 
   <!-- Game: tilt (or the ‹ › buttons) to steer. Landscape-only layout: the
-       steer indicator sits centred mid-screen (roughly the display bar's own
-       270:34 shape), with pause + settings in a row beside it — there is no
+       steer indicator sits centred mid-screen (the display bar's own
+       shape, a touch taller), with pause + settings in a row beside it — there is no
        height for a fixed top-corner button column. The mode class (mode-tilt /
        mode-buttons, set by setInputMode in driveSurface.js) decides which of
        the controls below show: tilt = ITEM left, BRAKE right (thumb columns);
@@ -131,7 +133,7 @@
            the phone; the live standings live on the big screen. -->
       <div class="hud-top">
         <button id="hud-name" class="hud-name" type="button"></button>
-        <div class="hud-btns">
+        <div class="hud-btns key-pill">
           <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
           <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>
         </div>
@@ -219,72 +221,64 @@
     <!-- .is-buttons (set by refreshSettingsCard) flips the demo, its headline
          and the legend to button steering; the default card teaches tilt. -->
     <div id="settings-card" class="settings-card">
-      <!-- Every setting is a row: its name on the left, its control on the
-           right; Steering alone stacks (below). A choice between two named
-           options is a two-way pill with the recommended one first; on/off is
-           a switch, on to the right. Each group is labelled OUTSIDE its box,
-           so a locked box (below) dims while its heading stays readable. -->
+      <!-- Every setting is one ROW: its name, then ONE segmented button holding
+           its two choices, the lesser end on the left like a switch's off
+           (Buttons | Tilt, Off | On, Performance | Quality). The pick is washed
+           in your livery; small print rides inside its choice. Each group is a
+           FIELDSET: an outline round its rows with the caption set into the
+           line (the legend), so a locked group (below) greys while its caption
+           stays readable. -->
       <div class="settings-col">
-        <!-- The dialog's name; on a phone's landscape height it is for
-             assistive tech only (controller.css): the controls need the room. -->
-        <h2 id="settings-title" class="settings-title">Settings</h2>
-        <div class="set-group" role="group" aria-labelledby="phone-group-label">
-          <h3 class="set-group__head set-group__head--phone">
-            <svg class="set-group__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="6.5" width="19" height="11" rx="3"/><path d="M5.5 10v4"/></svg>
-            <span id="phone-group-label">Your phone</span>
-          </h3>
-          <div class="set-box">
-            <!-- The one row everyone uses, so it stacks: its pill takes the
-                 full width under the name, at the sheet's largest size. -->
-            <div class="set-row set-row--stack">
-              <span class="set-row__label">
-                <span id="steering-label" class="set-row__name">Steering</span>
-                <!-- Re-resolved on every open by refreshSettingsCard: on a device
-                     with no motion sensor Tilt is disabled and this says why. -->
-                <span id="steer-note" class="set-row__note">Tilt is recommended</span>
-              </span>
-              <div class="seg-pick" role="radiogroup" aria-labelledby="steering-label">
-                <button id="input-tilt" type="button" class="seg-pick__opt" role="radio" aria-checked="true">Tilt</button>
-                <button id="input-buttons" type="button" class="seg-pick__opt" role="radio" aria-checked="false">Buttons</button>
-              </div>
+        <!-- The dialog's name: "How to drive" on the first-run sheet
+             (.is-intro), "Settings" from the gear. On a very short phone the
+             full sheet gives it to assistive tech only (controller.css). -->
+        <h2 id="settings-title" class="settings-title"><span class="settings-title--full">Settings</span><span class="settings-title--intro">How to drive</span></h2>
+        <fieldset class="set-group" aria-labelledby="phone-group-label">
+          <legend class="set-cap set-cap--phone"><span id="phone-group-label">This phone</span></legend>
+          <div class="set-row">
+            <span id="steer-label" class="set-row__name">Steering</span>
+            <div class="seg" role="radiogroup" aria-labelledby="steer-label">
+              <button id="input-buttons" type="button" class="seg__opt" role="radio" aria-checked="false">Buttons</button>
+              <!-- Re-resolved on every open by refreshSettingsCard: on a device
+                   with no motion sensor Tilt is disabled and this says why. -->
+              <button id="input-tilt" type="button" class="seg__opt" role="radio" aria-checked="true">Tilt<small id="steer-note">recommended</small></button>
             </div>
           </div>
-        </div>
+        </fieldset>
 
         <!-- The TV's settings control the BIG SCREEN, not this phone, and only
              the host may change them (the display's C++ verdict re-checks). Every
              phone sees them, so a player can tell why the TV is quiet; on a
-             non-host phone the box is LOCKED (refreshSettingsCard: .is-locked,
-             controls disabled) and the chip reads "Host only" with a lock;
-             on the host's own it reads "You're the host". Sound sends SET_SOUND
-             and renders the snapshot's soundOn, so the TV's own mute button and
-             this switch stay in step. -->
-        <div id="tv-seg" class="set-group" role="group" aria-labelledby="tv-group-label">
-          <h3 class="set-group__head">
-            <svg class="set-group__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6"/></svg>
-            <span id="tv-group-label">TV</span>
+             non-host phone the group is LOCKED (refreshSettingsCard: .is-locked,
+             choices disabled, flat grey like a locked cup) and the label reads
+             "Host only" with a lock; on the host's own it reads "You're the
+             host". Sound sends SET_SOUND and renders the snapshot's soundOn, so
+             the TV's own mute button and this row stay in step. -->
+        <fieldset id="tv-seg" class="set-group" aria-labelledby="tv-group-label">
+          <legend class="set-cap">
+            <span id="tv-group-label">On the TV</span>
             <span class="host-chip"><svg class="host-chip__lock" viewBox="0 0 10 11" aria-hidden="true" focusable="false"><rect x="1" y="4.5" width="8" height="6" rx="1.5"/><path d="M2.8 4.5V3.2a2.2 2.2 0 0 1 4.4 0v1.3"/></svg><span class="host-chip__you">You're the host</span><span class="host-chip__only">Host only</span></span>
-          </h3>
-          <div class="set-box">
-            <div class="set-row">
-              <span id="sound-label" class="set-row__name">Sound</span>
-              <button id="sound-toggle" type="button" class="switch" role="switch"
-                      aria-checked="true" aria-labelledby="sound-label"></button>
-            </div>
-            <!-- Graphics — only where the TV OFFERS it: the snapshot's frameRate
-                 is absent on a display that holds 1080@60, and this row hides
-                 with it. Quality is half the TV's rate for a sharper picture; its
-                 small print is the TV's own half rate (30, or 25 on a 50 Hz set),
-                 filled by refreshSettingsCard. -->
-            <div id="rate-row" class="set-row hidden">
-              <span id="rate-label" class="set-row__name">Graphics</span>
-              <div class="seg-pick" role="radiogroup" aria-labelledby="rate-label">
-                <button id="rate-full" type="button" class="seg-pick__opt" role="radio" aria-checked="true">Performance</button>
-                <button id="rate-half" type="button" class="seg-pick__opt" role="radio" aria-checked="false">Quality<span id="rate-half-hz" class="seg-pick__hz">30 fps</span></button>
-              </div>
+          </legend>
+          <div class="set-row">
+            <span id="sound-label" class="set-row__name">Sound</span>
+            <div class="seg" role="radiogroup" aria-labelledby="sound-label">
+              <button id="sound-off" type="button" class="seg__opt" role="radio" aria-checked="false">Off</button>
+              <button id="sound-on" type="button" class="seg__opt" role="radio" aria-checked="true">On</button>
             </div>
           </div>
-        </div>
+          <!-- Graphics — only where the TV OFFERS it: the snapshot's frameRate
+               is absent on a display that holds 1080@60, and this row hides
+               with it. Quality is half the TV's rate for a sharper picture; its
+               small print is the TV's own half rate (30, or 25 on a 50 Hz set),
+               filled by refreshSettingsCard. -->
+          <div id="rate-row" class="set-row hidden">
+            <span id="rate-label" class="set-row__name">Graphics</span>
+            <div class="seg" role="radiogroup" aria-labelledby="rate-label">
+              <button id="rate-full" type="button" class="seg__opt" role="radio" aria-checked="true">Performance</button>
+              <button id="rate-half" type="button" class="seg__opt" role="radio" aria-checked="false">Quality<small id="rate-half-hz">30 fps</small></button>
+            </div>
+          </div>
+        </fieldset>
 
         <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
       </div>

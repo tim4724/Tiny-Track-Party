@@ -125,7 +125,7 @@ for (const vp of LOBBY) {
 // row a display offers only when it could not hold 1080@60 (the player's locked).
 // It holds down to FLOOR: its headings give their lines up below 300 and 270,
 // and the overlay its margins below 300 (controller.css), so that it does.
-for (const vp of LOBBY) for (const scenario of ['settings', 'settings-buttons', 'settings-player']) {
+for (const vp of LOBBY) for (const scenario of ['settings-intro', 'settings', 'settings-buttons', 'settings-player']) {
   const at = `${vp.width}x${vp.height}`;
 
   test(`short viewport ${at}: the whole Settings sheet fits (${scenario})`, async ({ page }) => {

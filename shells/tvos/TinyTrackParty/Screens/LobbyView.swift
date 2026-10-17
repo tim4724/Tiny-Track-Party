@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// The lobby: three clusters of sticker chrome pinned to the glass, over the
+/// The lobby: three clusters of paper chrome pinned to the glass, over the
 /// paper diorama before the host picks and over the live 3D track preview after.
 ///
 /// **The layout is identical in both states** — that is the web's own rule
@@ -196,14 +196,14 @@ struct LobbyView: View {
             Spacer(minLength: 0)
             // HIDDEN ENTIRELY pre-pick — not an empty card, not a placeholder.
             // The model answers null until the host has picked, and an empty
-            // sticker would promise a card that has nothing to say.
+            // card would promise something it has nothing to say about.
             if let slot = state.cupSlot {
                 CupCard(slot: slot)
             }
             Spacer(minLength: 0)
             // Also hidden when empty, but for a different reason: an empty
-            // catalogue means boot has not read one yet, and an outlined card
-            // with no rows in it is a blank slab of paper.
+            // catalogue means boot has not read one yet, and a card with no
+            // rows in it is a blank slab of paper.
             if !state.cups.isEmpty {
                 CupShelf(cups: state.cups, earned: state.starsEarned, total: state.starsTotal)
             }
@@ -242,9 +242,12 @@ struct LobbyView: View {
 
 // MARK: - The ⓘ badge
 
-/// The info button's glyph: an SF Symbol at the badge's size, and nothing else.
-/// The sticker around it belongs to the style below, which is where the kit puts
-/// a button's face.
+/// The info button's glyph: a round dot over a rounded bar, DRAWN rather than an
+/// SF Symbol, whose serifed "i" read as a letter in a different typeface from
+/// everything around it. Android draws the same two shapes at the same
+/// proportions (LobbyScreen.kt InfoBadge), so the key is one key on both TVs.
+/// The key around it belongs to the style below, which is where the kit puts a
+/// button's face.
 @MainActor
 private struct InfoGlyph: View {
     /// Small on purpose. It is the least important thing on the board and must
@@ -253,24 +256,25 @@ private struct InfoGlyph: View {
     static let diameter: CGFloat = 54
 
     var body: some View {
-        Image(systemName: "info")
-            .font(.system(size: Self.diameter * 0.5, weight: .heavy))
-            .frame(width: Self.diameter, height: Self.diameter)
+        let d = Self.diameter
+        // Fractions of the key: the dot's centre at 0.29, the bar 0.44-0.74.
+        return ZStack {
+            Circle().frame(width: d * 0.17, height: d * 0.17).offset(y: d * (0.29 - 0.5))
+            Capsule().frame(width: d * 0.155, height: d * 0.30).offset(y: d * (0.59 - 0.5))
+        }
+        .frame(width: d, height: d)
     }
 }
 
-/// The badge, and its focus state.
+/// The badge, and its focus state: `.icon-btn`, a CHOICE — a round white key
+/// with the faint edge and an ink glyph, the same key the web's corner row is.
 ///
-/// **FOCUS FILLS IT.** The kit says focus by brightening, lifting and deepening
-/// the shadow, and on a WHITE DISC all three are invisible: photographed on the
-/// device, the focused ⓘ and the resting one were the same picture, so pressing
-/// Up appeared to do nothing at all. A sticker's other way of saying "this one"
-/// is colour, so focus swaps the face to blue with a white glyph — a chrome
-/// colour (`theme.css` allows red/green/blue/purple and nothing else), and the
-/// same blue the info board's own labels wear.
+/// **FOCUS WASHES AND RINGS IT**, as a picked choice is: the blue pick wash, the
+/// edge turned into a blue ring, and the TV's lift. A lift alone on a white disc
+/// was invisible from the sofa — photographed on the device, the focused ⓘ and
+/// the resting one were the same picture, so pressing Up appeared to do nothing.
 ///
-/// The press is the scale dropping back rather than `--btn-sink`: a circle has
-/// no ledge to sink onto.
+/// The press is `.icon-btn:active`'s: a small squash and the press wash.
 private struct InfoBadgeStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Face(configuration: configuration)
@@ -281,17 +285,13 @@ private struct InfoBadgeStyle: ButtonStyle {
         @Environment(\.isFocused) private var isFocused
 
         var body: some View {
-            configuration.label
-                .foregroundStyle(isFocused ? .white : Tokens.ink)
-                .background(
-                    Circle()
-                        .fill(isFocused ? Tokens.blue : Tokens.surface)
-                        .hardShadow(isFocused ? Sticker.focusShadow : Sticker.popShadow)
-                )
-                .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: Sticker.border))
-                .scaleEffect(configuration.isPressed ? 0.94
-                             : isFocused ? Sticker.focusScale : 1)
-                .animation(.easeOut(duration: 0.06), value: configuration.isPressed)
+            let pressed = configuration.isPressed
+            return configuration.label
+                .foregroundStyle(Tokens.ink)
+                .background(Circle().fill(pressed ? Tokens.press : isFocused ? Tokens.pick : Tokens.surface))
+                .overlay(Sticker.choiceEdge(Circle(), picked: isFocused))
+                .scaleEffect(pressed ? 0.94 : isFocused ? Sticker.focusScale : 1)
+                .animation(pressed ? nil : .easeOut(duration: 0.05), value: pressed)
                 .animation(.easeOut(duration: 0.12), value: isFocused)
         }
     }
@@ -299,14 +299,14 @@ private struct InfoBadgeStyle: ButtonStyle {
 
 // MARK: - (a) Join ticket
 
-/// The wordmark masthead over the QR and the join URL, on one sticker card, with
+/// The wordmark masthead over the QR and the join URL, on one paper card, with
 /// the scan hint hanging under it.
 ///
 /// The QR is the lobby's MAIN element and is sized like it. Everything else on
 /// this card exists to make the code usable by someone who cannot scan: the URL
 /// is printed in full, and its trailing ROOM CODE is broken onto its own line in
-/// the accent colour, because that is the only part that changes per party and
-/// the only part worth reading from a sofa.
+/// blue (`.ticket__cd`), because that is the only part that changes per party
+/// and the only part worth reading from a sofa.
 @MainActor
 private struct JoinTicket: View {
     /// The WHOLE link, exactly as the QR encodes it. What is printed is the
@@ -317,12 +317,9 @@ private struct JoinTicket: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            StickerCard(tint: Tokens.surface, rotation: -1.2, padding: LobbyViewMetrics.ticketPadding) {
+            StickerCard(padding: LobbyViewMetrics.ticketPadding) {
                 VStack(spacing: 8) {
-                    // `dieCut: false` — the badge's white edge is invisible on a
-                    // white card, which is exactly why `.ticket__wordmark`
-                    // zeroes the text stroke. Same face, same tilt, no edge.
-                    Wordmark(size: 38, dieCut: false)
+                    Wordmark(size: 38)
                     qrPanel
                     urlLines
                 }
@@ -346,22 +343,12 @@ private struct JoinTicket: View {
                 //
                 // Nearest neighbour keeps a QR crisp when it is being ENLARGED —
                 // one source pixel becomes a block of screen pixels and the
-                // module edges stay hard. Neither thing that happens to this
-                // bitmap is an enlargement. `QRCode` renders ~800 px and the
-                // panel is 308 POINTS, so it is a 2.6x DOWNSCALE (1.3x on a 4K
-                // box), and the card it sits on carries the sticker kit's
-                // `rotationEffect(-1.2°)`. Point-sampling a rotated downscale
-                // drops most of the source and lands the survivors on a slanted
-                // grid: every module edge comes back as a staircase and the
-                // finder patterns grow ragged corners. That is what "the QR is
-                // not smooth" is.
-                //
-                // The web looks right doing what LOOKS like the same thing
-                // (`#qr { image-rendering: pixelated }` inside a `.ticket`
-                // rotated by the same -1.2°) and is not: the browser rasterises
-                // the pixelated bitmap into a layer and then rotates the LAYER,
-                // antialiasing that step. SwiftUI has one sampler for the whole
-                // transform, so the choice here has to cover both halves.
+                // module edges stay hard. This bitmap is not enlarged: `QRCode`
+                // renders ~800 px and the panel is 382 POINTS, a DOWNSCALE at
+                // 1080p and close to 1:1 on a 4K box, and never an integer
+                // multiple. Point-sampling a downscale drops most of the source:
+                // every module edge comes back ragged, which is what "the QR is
+                // not smooth" was (it was worse while the card still leaned).
                 //
                 // Filtering also SCANS better, which is the part worth keeping
                 // straight: aliasing can thin a module to nothing or merge two,
@@ -406,59 +393,70 @@ private struct JoinTicket: View {
 
     private var urlLines: some View {
         let split = lines
-        return VStack(spacing: 2) {
-            Text(split.host)
+        return ZStack {
+            // `.ticket__wait`: "Loading…" holds the line until the room opens,
+            // in the same box, so the swap is a crossfade and not a reflow.
+            Text(Copy.loading)
                 .font(Fonts.display(LobbyViewMetrics.urlSize, weight: .semibold))
-                .foregroundStyle(Tokens.ink)
-                // The web wraps this `anywhere` rather than truncating, because
-                // an ellipsis eats the tail and the tail is the room code. A
-                // host has no spaces to break at and SwiftUI has no
-                // break-anywhere, so this shrinks instead of clipping — the
-                // failure mode a preview host (up to ~76 chars) actually needs.
-                .minimumScaleFactor(0.55)
-                .lineLimit(2)
-            if let code = split.code {
-                Text(code)
-                    .font(Fonts.display(LobbyViewMetrics.urlSize * 1.45, weight: .bold))
-                    .tracking(LobbyViewMetrics.urlSize * 1.45 * 0.04)
-                    .foregroundStyle(Tokens.accent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                .foregroundStyle(Tokens.ink2)
+                .opacity(joinURL.isEmpty ? 1 : 0)
+            VStack(spacing: 2) {
+                Text(split.host)
+                    .font(Fonts.display(LobbyViewMetrics.urlSize, weight: .semibold))
+                    .foregroundStyle(Tokens.ink)
+                    // The web wraps this `anywhere` rather than truncating,
+                    // because an ellipsis eats the tail and the tail is the room
+                    // code. A host has no spaces to break at and SwiftUI has no
+                    // break-anywhere, so this shrinks instead of clipping — the
+                    // failure mode a preview host (up to ~76 chars) needs.
+                    .minimumScaleFactor(0.55)
+                    .lineLimit(2)
+                if let code = split.code {
+                    Text(code)
+                        .font(Fonts.display(LobbyViewMetrics.urlSize * 1.45, weight: .bold))
+                        .tracking(LobbyViewMetrics.urlSize * 1.45 * 0.08)
+                        .foregroundStyle(Tokens.blue)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
             }
+            .opacity(joinURL.isEmpty ? 0 : 1)
         }
         .multilineTextAlignment(.center)
+        .animation(.easeOut(duration: 0.4), value: joinURL.isEmpty)
         // `.ticket__urlbox { min-height: 3.4em }`: the box holds its final
         // footprint before the code arrives.
         .frame(minHeight: LobbyViewMetrics.urlSize * 3.4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(joinURL)
+        .accessibilityLabel(joinURL.isEmpty ? Copy.loading : joinURL)
     }
 
-    /// A quiet white sticker hanging under the ticket for the whole lobby —
-    /// joining stays possible until the race starts. The web (`.tagline`) and
-    /// Android (`LobbyScreen.ScanHint`) hang the same sticker under their ticket.
+    /// `.tagline`: a GLASS readout hanging under the ticket for the whole lobby —
+    /// joining stays possible until the race starts. Held back until there is a
+    /// code to scan, its box reserved from the start so the ticket never moves.
+    ///
+    /// The glass tint without the web's backdrop blur: what is behind it is the
+    /// live attract race, and a blur re-run over that every frame buys nothing
+    /// the 55% tint does not already give the white type.
     private var scanHint: some View {
         Text(Copy.scanPrompt)
             .font(Fonts.display(22, weight: .semibold))
-            .foregroundStyle(Tokens.ink)
+            .foregroundStyle(.white)
             .fixedSize()          // one line, overhanging the ticket rather than wrapping
             .multilineTextAlignment(.center)
             .padding(.vertical, 13)
             .padding(.horizontal, 24)
-            .background(
-                RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-                    .fill(Tokens.surface)
-                    .hardShadow(Sticker.popShadow)
-            )
-            .stickerOutline(Sticker.border, radius: Sticker.radius)
-            .rotationEffect(.degrees(-2))
+            .background(RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
+                .fill(Tokens.glass))
+            .opacity(qr == nil ? 0 : 1)
+            .animation(.easeOut(duration: 0.4), value: qr == nil)
     }
 }
 
 // MARK: - (b) Cup slot
 
-/// The race card: what the host picked, as a red cup sticker over the circuits
-/// it will run and a races pill.
+/// The race card: what the host picked, as a label in the cup's own colour over
+/// the circuits it will run and a races pill.
 ///
 /// Every field is `ttp_ui_cup_slot_json`'s, including the NUMBERING of the maps
 /// (`n` = 1...N on every fixed run) — the running order is the menu at a
@@ -471,7 +469,7 @@ private struct CupCard: View {
     private static let pillSize: CGFloat = 15
 
     var body: some View {
-        StickerCard(tint: Tokens.surface, rotation: 1.2, padding: LobbyViewMetrics.cardPadding) {
+        StickerCard(padding: LobbyViewMetrics.cardPadding) {
             VStack(spacing: 11) {
                 sticker
                 maps
@@ -493,22 +491,21 @@ private struct CupCard: View {
         }
     }
 
+    /// `.cup-sticker`: a LABEL in the cup's own colour (the neutral grey for a
+    /// run that belongs to no cup), because nothing here is pressed. The tint is
+    /// the colour and the words stay INK: the label recipe's darkened text turns
+    /// muddy on a pale cup colour (Beach's sand).
     private var sticker: some View {
         Text(name)
             .font(Fonts.display(27, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Tokens.ink)
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.6)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 20)
-            .background(
-                RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-                    .fill(Tokens.red)
-                    .hardShadow(Sticker.cardShadow)
-            )
-            .stickerOutline(Sticker.border, radius: Sticker.radius)
-            .rotationEffect(.degrees(-2))
+            .padding(.top, 27 * 0.35)
+            .padding(.bottom, 27 * 0.4)
+            .padding(.horizontal, 27 * 0.85)
+            .background(Capsule().fill(Schematic.labelTint(cupId: slot.cupId)))
     }
 
     /// The web's `.cup-maps` box-count layouts, not mode hooks: ONE map at 72%
@@ -531,9 +528,8 @@ private struct CupCard: View {
     }
 
     private func tile(_ map: GameState.CupSlot.Map) -> some View {
-        // The badge hangs OFF the tile's top-left corner (the CSS puts it at
-        // -6, -6), which is the sticker idiom: a number slapped on the corner
-        // rather than inset into the picture.
+        // The badge hangs OFF the tile's top-left corner (`top/left: -0.4em`):
+        // a number on the corner rather than inset into the picture.
         Group {
             if map.locked {
                 LockedTile()
@@ -563,22 +559,17 @@ private struct CupCard: View {
             .background(Circle().fill(Tokens.ink))
     }
 
-    /// `.cup-races` — an OUTLINE pill (ink on paper), which is not the kit's
-    /// `.pill` (white on solid ink, `StickerPill`). Two different marks: the kit
-    /// pill is a label, this is a quiet fact about the card it sits on.
+    /// `.cup-races` — a quiet grey pill (ink-2 on the sunken paper), which is
+    /// not the kit's tinted `.pill`: a fact about the card it sits on rather
+    /// than a label in a colour.
     private var racesPill: some View {
         Text(Copy.races(slot.racesKey, count: slot.raceCount).uppercased())
             .font(Fonts.display(Self.pillSize, weight: .semibold))
             .tracking(Self.pillSize * 0.1)
-            .foregroundStyle(Tokens.ink)
+            .foregroundStyle(Tokens.ink2)
             .padding(.vertical, Self.pillSize * 0.3)
             .padding(.horizontal, Self.pillSize * 0.95)
-            .background(
-                Capsule()
-                    .fill(Tokens.surface)
-                    .hardShadow(Sticker.popShadow)
-            )
-            .overlay(Capsule().strokeBorder(Tokens.ink, lineWidth: Sticker.hairlineBorder))
+            .background(Capsule().fill(Tokens.surface2))
     }
 }
 
@@ -605,8 +596,7 @@ private struct QuestionTile: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous))
-        .stickerOutline(Sticker.hairlineBorder, radius: Sticker.radiusSmall)
+        .clipShape(RoundedRectangle(cornerRadius: Schematic.tileRadius, style: .continuous))
         .accessibilityHidden(true)   // the races pill counts the run in words
     }
 }
@@ -626,8 +616,7 @@ private struct LockedTile: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous))
-        .stickerOutline(Sticker.hairlineBorder, radius: Sticker.radiusSmall)
+        .clipShape(RoundedRectangle(cornerRadius: Schematic.tileRadius, style: .continuous))
         .accessibilityHidden(true)   // the races pill counts the run in words
     }
 }
@@ -638,9 +627,9 @@ private struct LockedTile: View {
 /// stars it has earned and the padlock it has not opened.
 ///
 /// **ONE CARD, NOT FIVE PILLS** — the web's own finding (`display.css`,
-/// `.cup-shelf`): five separate stickers with five outlines and five shadows
-/// read as five things scattered down the corner, and this is one thing. Rows
-/// are separated by a hairline rather than by air for the same reason.
+/// `.cup-shelf`): five separate pills read as five things scattered down the
+/// corner, and this is one thing. Rows are separated by a hairline rather than
+/// by air for the same reason.
 ///
 /// Every number is `ttp_ui_catalogue_json`'s. The star thresholds and the unlock
 /// rule live in `libttp-runtime/ttp/progression.{h,cc}` and are DERIVED before
@@ -654,7 +643,7 @@ private struct CupShelf: View {
     let total: Int
 
     var body: some View {
-        StickerCard(tint: Tokens.surface, rotation: 0, padding: 12) {
+        StickerCard(padding: 0) {
             VStack(spacing: 0) {
                 ForEach(Array(cups.enumerated()), id: \.element.id) { i, cup in
                     row(cup)
@@ -665,18 +654,18 @@ private struct CupShelf: View {
                     }
                 }
             }
+            .padding(.top, 9)
+            .padding(.bottom, 7)
+            .padding(.horizontal, 14)
         }
-        // The label rides the card's top-left corner like a sticker tab. A full
-        // label ROW is height this rail cannot spare — the web found that at
-        // 720p, where it pushed the fifth cup off the shelf.
+        // The label rides the card's top-left corner like a tab. A full label
+        // ROW is height this rail cannot spare — the web found that at 720p,
+        // where it pushed the fifth cup off the shelf.
         .overlay(alignment: .topLeading) {
             StickerPill(Copy.cupsShelf(earned: earned, of: total), size: 14)
                 .accessibilityLabel(Copy.cupsShelfSpoken(earned: earned, of: total))
-                .offset(x: 14, y: -13)
+                .offset(x: 11, y: -12)
         }
-        // The tilt is applied out here, not by `StickerCard`, so the label tab
-        // leans WITH the card instead of standing square against it.
-        .rotationEffect(.degrees(-1))
     }
 
     private func row(_ cup: GameState.CupProgress) -> some View {
@@ -686,7 +675,7 @@ private struct CupShelf: View {
             if cup.locked {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Tokens.ink2)
+                    .foregroundStyle(Tokens.ink)
             } else {
                 Circle()
                     .fill(Self.swatch(cup.color))
@@ -737,38 +726,30 @@ private struct CupShelf: View {
     }
 }
 
-/// Three die-cut stars, `earned` of them filled.
+/// Three stars, `earned` of them filled.
 ///
 /// RED, never gold: amber is vetoed in chrome and celebration is red
-/// (`theme.css`, `.starrow .star`). The unearned ones are white at 0.35 — the
-/// CSS puts that opacity on the whole path, so the ink edge fades with the
-/// fill and an empty star stays a ghost rather than an outline.
-///
-/// The ink edge is a larger glyph behind a smaller one, the same trick the host
-/// star above uses, because SwiftUI has no symbol stroke.
+/// (`theme.css`, `.starrow .star`). No outline on an earned one; an unearned one
+/// is HOLLOW, its outline in see-through ink (`.star--off`'s
+/// `rgba(38, 40, 56, 0.42)`, a literal in the CSS), because a faint fill sinks
+/// into the paper and a line does not.
 @MainActor
 private struct StarRow: View {
     let earned: Int
     var total = 3
 
+    private static let off = Color(red: 38 / 255.0, green: 40 / 255.0, blue: 56 / 255.0).opacity(0.42)
+
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(0..<total, id: \.self) { i in star(filled: i < earned) }
+            ForEach(0..<total, id: \.self) { i in
+                Image(systemName: i < earned ? "star.fill" : "star")
+                    .font(.system(size: 15, weight: i < earned ? .bold : .regular))
+                    .foregroundStyle(i < earned ? Tokens.red : Self.off)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Copy.stars(earned: earned, of: total))
-    }
-
-    private func star(filled: Bool) -> some View {
-        ZStack {
-            Image(systemName: "star.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(Tokens.ink)
-            Image(systemName: "star.fill")
-                .font(.system(size: 11.5))
-                .foregroundStyle(filled ? Tokens.red : .white)
-        }
-        .opacity(filled ? 1 : 0.35)
     }
 }
 
@@ -820,16 +801,14 @@ private struct SeatCard: View {
             name
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.top, 7)
+        .padding(.bottom, 9)
         .frame(width: Self.width)
         .background(background)
         .overlay(alignment: .topTrailing) { marker }
         // A DROPPED SEAT IS DIMMED, NEVER REMOVED: it is still theirs to come
         // back to, and the room is holding it. Same 0.5 as `.seat--off`.
         .opacity(seat.off ? 0.5 : 1)
-        // Neighbours lean opposite ways, like stickers slapped down one after
-        // another (`nth-child(odd/even)`; the grid's first cell is index 0).
-        .rotationEffect(.degrees(seat.index % 2 == 0 ? -1.4 : 1.4))
     }
 
     @ViewBuilder
@@ -844,12 +823,14 @@ private struct SeatCard: View {
         }
     }
 
-    /// The name carries the player's LIVERY (`--c` on the web), which is why
-    /// there is no colour dot on this card: the type is the swatch.
+    /// The name carries the player's LIVERY (`--c` on the web, mixed 80% with
+    /// ink so the palest liveries still read on white), which is why there is no
+    /// colour dot on this card: the type is the swatch.
     private var name: some View {
         Text(seat.open ? Copy.openSeat : seat.name)
             .font(Fonts.display(Self.nameSize, weight: .bold))
-            .foregroundStyle(seat.open ? Tokens.ink3 : Tokens.car(seat.colorIndex))
+            .foregroundStyle(seat.open ? Color.white.opacity(0.85)
+                                       : Tokens.car(seat.colorIndex).mixed(0.8, with: Tokens.ink))
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.6)
@@ -875,17 +856,12 @@ private struct SeatCard: View {
     private var background: some View {
         let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
         if seat.open {
-            // A dashed die-cut outline over half-transparent white: visibly a
-            // slot rather than a card, and no drop shadow, so it sits flat while
-            // the taken seats sit proud.
-            shape.fill(Color.white.opacity(0.5))
-                .overlay(
-                    shape.strokeBorder(Tokens.ink.opacity(0.45),
-                                       style: StrokeStyle(lineWidth: Sticker.border, dash: [12, 9]))
-                )
+            // `.seat--open`: a GLASS placeholder of the same footprint, visibly
+            // a slot rather than a card. The web blurs behind it as well; this
+            // is the tint alone, over the live attract race.
+            shape.fill(Tokens.glass(alpha: 0.28))
         } else {
-            shape.fill(Tokens.surface).hardShadow(Sticker.popShadow)
-                .overlay(shape.strokeBorder(Tokens.ink, lineWidth: Sticker.border))
+            shape.fill(Tokens.surface)
         }
     }
 
@@ -893,54 +869,30 @@ private struct SeatCard: View {
     /// host never readies — so they share one slot and this view arbitrates
     /// nothing. The web relies on the same fact (its CSS pins both to the same
     /// corner and simply lets them not collide).
+    ///
+    /// Hung `top: -0.6rem; right: -0.55rem` off the card, measured to the disc;
+    /// the white ring round it (`box-shadow: 0 0 0 3px #fff`) is extra.
     @ViewBuilder
     private var marker: some View {
         if seat.host {
-            hostStar.offset(x: 11, y: -14)
+            disc(Image(systemName: "star.fill").font(.system(size: 14)), fill: Tokens.ink)
+                .accessibilityLabel(Copy.host)
         } else if seat.ready {
-            readyCheck.offset(x: 9, y: -10)
+            disc(Image(systemName: "checkmark").font(.system(size: 14, weight: .heavy)), fill: Tokens.green)
+                .accessibilityLabel(Copy.ready)
         }
     }
 
-    /// SF Symbols stands in for the web's inline SVG paths. The glyph is the
-    /// platform's; the STICKER is the ink ring around it, which is the part the
-    /// look actually lives in.
-    private var readyCheck: some View {
-        Image(systemName: "checkmark")
-            .font(.system(size: 14, weight: .heavy))
+    /// SF Symbols stands in for the web's inline SVG paths: a white glyph on a
+    /// 26-point disc, ringed in white so it reads off the card's corner.
+    private func disc(_ glyph: some View, fill: Color) -> some View {
+        glyph
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
-            .background(Circle().fill(Tokens.green))
-            .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: Sticker.hairlineBorder))
-            .accessibilityLabel(Copy.ready)
-    }
-
-    /// The one gold in the whole shell.
-    ///
-    /// `#ffc83d` is hardcoded beside the star in `display.css` — it is not a
-    /// `:root` token, so `design-tokens.json` does not carry it and `Tokens`
-    /// cannot answer for it (the same reason `PaperStage`'s hills are literals).
-    /// It also looks like a breach of the chrome veto on amber, and is not one
-    /// by this shell's choice: it is the shipped display's own value,
-    /// transcribed rather than re-decided. If the veto should reach it, it moves
-    /// in both places at once.
-    ///
-    /// The ink edge is a larger star behind a smaller one — SwiftUI has no text
-    /// or symbol stroke, and this is the same trick `Wordmark` uses for its
-    /// die-cut edge (there, offset copies; here, one behind).
-    private var hostStar: some View {
-        ZStack {
-            Image(systemName: "star.fill")
-                .font(.system(size: 31))
-                .foregroundStyle(Tokens.ink)
-            Image(systemName: "star.fill")
-                .font(.system(size: 25))
-                .foregroundStyle(Color(red: 1, green: 200.0 / 255, blue: 61.0 / 255))
-        }
-        // Two stacked glyphs are two elements to VoiceOver, and one of them is a
-        // black star that means nothing on its own.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Copy.host)
+            .background(Circle().fill(fill))
+            .padding(3)
+            .background(Circle().fill(.white))
+            .offset(x: 9 + 3, y: -10 - 3)
     }
 }
 

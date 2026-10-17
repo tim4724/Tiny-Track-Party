@@ -49,7 +49,7 @@ object QRCode {
                 // ZXing pads with 4 modules of quiet zone unless told otherwise.
                 // ONE, matching `public/shared/qr.js`'s policy: the margin a
                 // scanner needs is supplied by what the code is MOUNTED on — the
-                // join ticket is a white `--surface` sticker card with its own
+                // join ticket is a white `--surface` paper card with its own
                 // padding, and the reconnect card the same. Four here would double
                 // it and shrink the modules for nothing.
                 EncodeHintType.MARGIN to 1,

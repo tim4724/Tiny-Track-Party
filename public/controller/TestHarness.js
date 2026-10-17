@@ -224,6 +224,7 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-race':
+    case 'stars':
       // The host's RACE page: every race as a tile — the five cups with their
       // stars (the Playroom still locked, its unlock line in the foot), then the
       // three random runs — the first cup picked, everyone ready so Start is
@@ -236,6 +237,9 @@ export function runControllerScenario(opts) {
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
         { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }
       ], 'race');
+      // 'stars' is the same page with the star count's popup open, as a tap
+      // on that chip opens it.
+      if (scenario === 'stars') showStarsPopup();
       break;
 
     case 'lobby-race-waiting':
@@ -269,6 +273,7 @@ export function runControllerScenario(opts) {
       break;
 
     case 'settings':
+    case 'settings-intro':
     case 'settings-buttons':
     case 'settings-player': {
       // Settings popup over the lobby, for the gallery — the host's two faces:
@@ -296,12 +301,16 @@ export function runControllerScenario(opts) {
       // refreshSettingsCard).
       const locked = scenario === 'settings-player';
       el('tv-seg').classList.toggle('is-locked', locked);
-      for (const id of ['sound-toggle', 'rate-full', 'rate-half']) el(id).disabled = locked;
-      el('sound-toggle').setAttribute('aria-checked', 'true');
+      for (const id of ['sound-off', 'sound-on', 'rate-full', 'rate-half']) el(id).disabled = locked;
+      el('sound-on').setAttribute('aria-checked', 'true');
+      el('sound-off').setAttribute('aria-checked', 'false');
       // The buttons and player faces double as a TV that could not hold
       // 1080@60, so they show the Graphics row too (the snapshot's frameRate
       // present); the tilt face shows the common case, where it is absent.
       el('rate-row').classList.toggle('hidden', scenario === 'settings');
+      // The first-run face: "How to drive", the steering row alone (mirrors
+      // maybeAutoShowSettings).
+      el('settings-card').classList.toggle('is-intro', scenario === 'settings-intro');
       el('settings-overlay').classList.remove('hidden');
       el('settings-overlay').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;

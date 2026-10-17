@@ -306,7 +306,7 @@ struct RootView: View {
                         itemPickupTick: state.itemPickupTick,
                         itemReadyTick: state.itemReadyTick)
 
-            CountdownView(text: state.countdown)
+            CountdownView(text: state.countdown, steps: game.proto.countdownSeconds)
 
             if let results = state.results {
                 RaceResultsView(view: results,

@@ -82,4 +82,6 @@ object Fonts {
      */
     val semibold = FontWeight(600)
     val bold = FontWeight(700)
+    /** Nunito only — the figures the CSS sets at 800 (times, totals). */
+    val extraBold = FontWeight(800)
 }

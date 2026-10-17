@@ -102,7 +102,11 @@ export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
   if (!picked) return;
-  slotEl.querySelector('.cup-sticker').textContent = state.name;
+  const sticker = slotEl.querySelector('.cup-sticker');
+  sticker.textContent = state.name;
+  // The name wears its cup's colour, the one the phone's picker gave it; a run
+  // that belongs to no cup wears the picker's neutral grey.
+  sticker.style.setProperty('--c', state.cupId ? cupTint(state.cupId, 100) : neutralTint(100));
   const mapsEl = slotEl.querySelector('.cup-maps');
   // A known chip whose schematic is missing (dev mid-rebuild) just costs its
   // picture.

@@ -217,7 +217,7 @@ test('the page dresses the launcher sheet (§2, §4) and keeps inside the safe a
     return { scheme: meta('color-scheme'), surface: meta('theme-color') };
   });
   expect(look.scheme).toBe('light');
-  expect(look.surface).toBe('#FFF6EB');
+  expect(look.surface).toBe('#F3F5FA');
   await expect.poll(() => zoe.evaluate(() => getComputedStyle(document.documentElement).accentColor))
     .toBe('rgb(230, 73, 45)');
 

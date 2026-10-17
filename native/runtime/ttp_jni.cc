@@ -167,6 +167,11 @@ jint n_ttp_car_world_pos(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdoubleArr
     return rc;
 }
 
+void n_ttp_coast(JNIEnv* env, jclass, jint a0, jdouble a1) {
+    (void) env;
+    ttp_coast((int) a0, (double) a1);
+}
+
 jdouble n_ttp_debug_bot_skill(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jdouble) ttp_debug_bot_skill((double) a0);
@@ -1387,6 +1392,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_car_finished", "(I[B)I", (void*) n_ttp_car_finished },
     { "ttp_car_ids_json", "(I)[B", (void*) n_ttp_car_ids_json },
     { "ttp_car_world_pos", "(I[B[D)I", (void*) n_ttp_car_world_pos },
+    { "ttp_coast", "(ID)V", (void*) n_ttp_coast },
     { "ttp_debug_bot_skill", "(D)D", (void*) n_ttp_debug_bot_skill },
     { "ttp_debug_curb_impact", "(D)D", (void*) n_ttp_debug_curb_impact },
     { "ttp_debug_curb_speed", "(D)D", (void*) n_ttp_debug_curb_speed },

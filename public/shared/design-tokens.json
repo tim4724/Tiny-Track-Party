@@ -1,7 +1,7 @@
 {
   "generated": "derived from public/shared/theme.css by scripts/gen-design-tokens.mjs — edit the CSS, not this",
   "source": "public/shared/theme.css",
-  "count": 48,
+  "count": 56,
   "groups": [
     {
       "label": "car palette (mirrors CAR_COLORS in shared/protocol.js)",
@@ -18,7 +18,7 @@
       ]
     },
     {
-      "label": "sticker palette (the 4-colour chrome + paper/ink)",
+      "label": "chrome palette (the 4 colours + paper/ink)",
       "tokens": [
         "paper",
         "ink",
@@ -63,6 +63,20 @@
       ]
     },
     {
+      "label": "the six roles' surfaces (see the header)",
+      "note": "A CHOICE is a white face with a faint edge; the picked one is washed and a finger on one washes it paler. The TV's wash is blue; the phone re-points --pick/--press at the player's livery (controller.css). GLASS is only the dark readouts over the live 3D view; FROST is every full-screen layer: the screen behind blurred and lightened.",
+      "tokens": [
+        "edge",
+        "pick",
+        "press",
+        "glass",
+        "frost",
+        "frost-r",
+        "frost-blur",
+        "focus-ring"
+      ]
+    },
+    {
       "label": "type",
       "tokens": [
         "font-display",
@@ -79,8 +93,8 @@
       ]
     },
     {
-      "label": "shadows (hard offset, ZERO blur — the die-cut drop)",
-      "note": "ONE rule: offset ≈ 2× the border width, alpha always 0.18 — so every sticker reads as stamped by the same machine. Small elements (≤2.5px border) take pop, 3px-bordered cards take card. Stage scenery (clouds) deliberately runs lighter — it's backdrop, not chrome.",
+      "label": "shadows",
+      "note": "NONE, and no ledges: depth is not a signal anywhere. What says \"press me\" is a solid colour (an action) or a white face with an edge (a choice). The tokens stay so a rule written against them still parses; each is `none`. --shadow-ink is the stage scenery's soft drop (clouds).",
       "tokens": [
         "shadow-ink",
         "shadow-pop",
@@ -227,22 +241,22 @@
     {
       "name": "paper",
       "var": "--paper",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
-      "value": "#FFF6EB",
-      "resolved": "#FFF6EB",
+      "value": "#F3F5FA",
+      "resolved": "#F3F5FA",
       "rgba": [
-        255,
-        246,
-        235,
+        243,
+        245,
+        250,
         1
       ],
-      "note": "full-screen board background"
+      "note": "the ground: phone screens, full boards"
     },
     {
       "name": "ink",
       "var": "--ink",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
       "value": "#2A2735",
       "resolved": "#2A2735",
@@ -252,12 +266,12 @@
         53,
         1
       ],
-      "note": "outlines, text, dark chips — never #000"
+      "note": "text, dark chips — never #000"
     },
     {
       "name": "red",
       "var": "--red",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
       "value": "#FF5040",
       "resolved": "#FF5040",
@@ -272,7 +286,7 @@
     {
       "name": "green",
       "var": "--green",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
       "value": "#22C46E",
       "resolved": "#22C46E",
@@ -287,7 +301,7 @@
     {
       "name": "blue",
       "var": "--blue",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
       "value": "#339CF2",
       "resolved": "#339CF2",
@@ -302,7 +316,7 @@
     {
       "name": "purple",
       "var": "--purple",
-      "group": "sticker palette (the 4-colour chrome + paper/ink)",
+      "group": "chrome palette (the 4 colours + paper/ink)",
       "type": "color",
       "value": "#A259E6",
       "resolved": "#A259E6",
@@ -447,12 +461,12 @@
       "var": "--ink-2",
       "group": "ink (text)",
       "type": "color",
-      "value": "#5d5768",
-      "resolved": "#5d5768",
+      "value": "#5B6175",
+      "resolved": "#5B6175",
       "rgba": [
-        93,
-        87,
-        104,
+        91,
+        97,
+        117,
         1
       ],
       "doc": "--ink above is headings / primary text",
@@ -463,12 +477,12 @@
       "var": "--ink-3",
       "group": "ink (text)",
       "type": "color",
-      "value": "#a49a86",
-      "resolved": "#a49a86",
+      "value": "#8F95A6",
+      "resolved": "#8F95A6",
       "rgba": [
-        164,
-        154,
-        134,
+        143,
+        149,
+        166,
         1
       ],
       "note": "muted / captions / open slots"
@@ -486,53 +500,149 @@
         255,
         1
       ],
-      "note": "sticker cards"
+      "note": "PAPER: white cards"
     },
     {
       "name": "surface-2",
       "var": "--surface-2",
       "group": "surfaces",
       "type": "color",
-      "value": "#FBF0DF",
-      "resolved": "#FBF0DF",
+      "value": "#ECEEF3",
+      "resolved": "#ECEEF3",
       "rgba": [
-        251,
-        240,
-        223,
+        236,
+        238,
+        243,
         1
       ],
-      "note": "sunken fields"
+      "note": "wells, locked tiles"
     },
     {
       "name": "hairline",
       "var": "--hairline",
       "group": "surfaces",
       "type": "color",
-      "value": "var(--ink)",
-      "resolved": "#2A2735",
-      "alias": "ink",
+      "value": "#E6E9F0",
+      "resolved": "#E6E9F0",
       "rgba": [
-        42,
-        39,
-        53,
+        230,
+        233,
+        240,
         1
       ],
-      "note": "every border is ink now"
+      "note": "row rules inside a card"
     },
     {
       "name": "grass",
       "var": "--grass",
       "group": "surfaces",
       "type": "color",
-      "value": "#A9DF83",
-      "resolved": "#A9DF83",
+      "value": "#93CC72",
+      "resolved": "#93CC72",
       "rgba": [
-        169,
-        223,
-        131,
+        147,
+        204,
+        114,
         1
       ],
       "note": "the paper stage's grass band"
+    },
+    {
+      "name": "edge",
+      "var": "--edge",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "color",
+      "value": "#DFE3EA",
+      "resolved": "#DFE3EA",
+      "rgba": [
+        223,
+        227,
+        234,
+        1
+      ],
+      "note": "a choice's faint edge"
+    },
+    {
+      "name": "pick",
+      "var": "--pick",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "color",
+      "value": "color-mix(in srgb, var(--blue) 26%, #fff)",
+      "resolved": "color-mix(in srgb, #339CF2 26%, #fff)",
+      "rgba": [
+        202,
+        229,
+        252,
+        1
+      ]
+    },
+    {
+      "name": "press",
+      "var": "--press",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "color",
+      "value": "color-mix(in srgb, var(--blue) 14%, #fff)",
+      "resolved": "color-mix(in srgb, #339CF2 14%, #fff)",
+      "rgba": [
+        226,
+        241,
+        253,
+        1
+      ]
+    },
+    {
+      "name": "glass",
+      "var": "--glass",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "color",
+      "value": "rgba(24, 28, 44, 0.55)",
+      "resolved": "rgba(24, 28, 44, 0.55)",
+      "rgba": [
+        24,
+        28,
+        44,
+        0.55
+      ]
+    },
+    {
+      "name": "frost",
+      "var": "--frost",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "color",
+      "value": "rgba(243, 245, 250, 0.88)",
+      "resolved": "rgba(243, 245, 250, 0.88)",
+      "rgba": [
+        243,
+        245,
+        250,
+        0.88
+      ]
+    },
+    {
+      "name": "frost-r",
+      "var": "--frost-r",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "length",
+      "value": "14px",
+      "resolved": "14px",
+      "px": 14,
+      "note": "the frost's blur radius"
+    },
+    {
+      "name": "frost-blur",
+      "var": "--frost-blur",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "raw",
+      "value": "blur(var(--frost-r))",
+      "resolved": "blur(14px)"
+    },
+    {
+      "name": "focus-ring",
+      "var": "--focus-ring",
+      "group": "the six roles' surfaces (see the header)",
+      "type": "raw",
+      "value": "3px solid var(--blue)",
+      "resolved": "3px solid #339CF2"
     },
     {
       "name": "font-display",
@@ -577,18 +687,18 @@
       "var": "--r",
       "group": "radii",
       "type": "length",
-      "value": "16px",
-      "resolved": "16px",
-      "px": 16
+      "value": "18px",
+      "resolved": "18px",
+      "px": 18
     },
     {
       "name": "r-lg",
       "var": "--r-lg",
       "group": "radii",
       "type": "length",
-      "value": "22px",
-      "resolved": "22px",
-      "px": 22
+      "value": "24px",
+      "resolved": "24px",
+      "px": 24
     },
     {
       "name": "r-pill",
@@ -602,85 +712,46 @@
     {
       "name": "shadow-ink",
       "var": "--shadow-ink",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "group": "shadows",
       "type": "color",
-      "value": "rgba(42, 39, 53, 0.18)",
-      "resolved": "rgba(42, 39, 53, 0.18)",
+      "value": "rgba(20, 30, 50, 0.16)",
+      "resolved": "rgba(20, 30, 50, 0.16)",
       "rgba": [
-        42,
-        39,
-        53,
-        0.18
+        20,
+        30,
+        50,
+        0.16
       ],
-      "note": "the one shadow colour"
+      "note": "the stage's soft drop"
     },
     {
       "name": "shadow-pop",
       "var": "--shadow-pop",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
-      "type": "shadow",
-      "value": "3px 3px 0 var(--shadow-ink)",
-      "resolved": "3px 3px 0 rgba(42, 39, 53, 0.18)",
-      "shadow": {
-        "x": 3,
-        "y": 3,
-        "blur": 0,
-        "color": "rgba(42, 39, 53, 0.18)",
-        "rgba": [
-          42,
-          39,
-          53,
-          0.18
-        ]
-      },
-      "note": "chips, small stickers"
+      "group": "shadows",
+      "type": "raw",
+      "value": "none",
+      "resolved": "none"
     },
     {
       "name": "shadow-card",
       "var": "--shadow-card",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
-      "type": "shadow",
-      "value": "6px 6px 0 var(--shadow-ink)",
-      "resolved": "6px 6px 0 rgba(42, 39, 53, 0.18)",
-      "shadow": {
-        "x": 6,
-        "y": 6,
-        "blur": 0,
-        "color": "rgba(42, 39, 53, 0.18)",
-        "rgba": [
-          42,
-          39,
-          53,
-          0.18
-        ]
-      },
-      "note": "big sticker cards"
+      "group": "shadows",
+      "type": "raw",
+      "value": "none",
+      "resolved": "none"
     },
     {
       "name": "shadow-float",
       "var": "--shadow-float",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
-      "type": "shadow",
-      "value": "6px 6px 0 var(--shadow-ink)",
-      "resolved": "6px 6px 0 rgba(42, 39, 53, 0.18)",
-      "shadow": {
-        "x": 6,
-        "y": 6,
-        "blur": 0,
-        "color": "rgba(42, 39, 53, 0.18)",
-        "rgba": [
-          42,
-          39,
-          53,
-          0.18
-        ]
-      },
-      "note": "alias — same as card"
+      "group": "shadows",
+      "type": "raw",
+      "value": "none",
+      "resolved": "none"
     },
     {
       "name": "btn-ledge",
       "var": "--btn-ledge",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "group": "shadows",
       "type": "color",
       "value": "rgba(42, 39, 53, 0.9)",
       "resolved": "rgba(42, 39, 53, 0.9)",
@@ -695,7 +766,7 @@
     {
       "name": "btn-drop",
       "var": "--btn-drop",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "group": "shadows",
       "type": "length",
       "value": "4px",
       "resolved": "4px",
@@ -706,7 +777,7 @@
     {
       "name": "btn-sink",
       "var": "--btn-sink",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "group": "shadows",
       "type": "length",
       "value": "3px",
       "resolved": "3px",
@@ -716,7 +787,7 @@
     {
       "name": "press-up",
       "var": "--press-up",
-      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "group": "shadows",
       "type": "raw",
       "value": "0.05s",
       "resolved": "0.05s",

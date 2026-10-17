@@ -1253,6 +1253,16 @@ void ttp_hold_end(int h, int on) {
   if (rs && rs->session) rs->session->holdEnd(on != 0);
 }
 
+void ttp_coast(int h, double dtMs) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->session || !rs->session->ended()) return;
+  AudioMute silent;
+  const size_t queued = rs->outQueue.size();
+  rs->driveBots();   // a bot the DNF ladder cut off is still racing
+  rs->session->coast(dtMs);
+  rs->outQueue.resize(queued);
+}
+
 void ttp_fast_forward(int h) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return;

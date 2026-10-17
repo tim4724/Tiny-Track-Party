@@ -672,7 +672,9 @@ TTP_ABI void ttp_display_shadows(int enabled);
  * speed would keep the cosmetics running. And the end-of-race fast-forward,
  * which runs the deterministic sim to the flag with no rendering — the just-
  * finished human keeps driving a victory lap, so without a hold their chase
- * camera is seen whipping across the track behind the results glass. */
+ * camera is seen whipping across the track behind the results glass. When
+ * the hold lifts, a chase rig whose car has moved on cuts to it rather than
+ * springing there (frame_builder.cc CHASE_CUT_DIST). */
 TTP_ABI void ttp_display_hold(int held);
 
 /* ---- the frame ---------------------------------------------------------- */

@@ -146,7 +146,7 @@ test('phone race page: the grid carries stars and the lock, and the ribbon the k
   // FOUR bands is the count that matches the races that would actually run.
   // Its two neighbours stay the flat "belongs to no cup" grey.
   const bg = (name) => page.locator('.mode-opt', { hasText: name })
-    .evaluate((e) => getComputedStyle(e).backgroundImage);
+    .evaluate((e) => getComputedStyle(e.querySelector('.mode-opt__band')).backgroundImage);
   const tour = await bg('World Tour');
   expect(tour).toContain('linear-gradient');
   expect(new Set(tour.match(/(?:rgba?|color)\([^)]*\)/g)).size,
@@ -169,6 +169,14 @@ test('phone race page: the grid carries stars and the lock, and the ribbon the k
   await page.goto(`${CONTROLLER}lobby-host&color=1`);
   await page.waitForSelector('#carpick .car-opt');
   await expect(page.locator('#race-key')).toBeHidden();
+});
+
+test('phone stars popup card: the count, the three tiers and the unlock', async ({ page }) => {
+  await page.goto(`${CONTROLLER}stars&color=1`);
+  await expect(page.locator('#stars-overlay')).toBeVisible();
+  await expect(page.locator('#stars-count')).toHaveText('5 of 15 collected');
+  await expect(page.locator('#stars-rules li')).toHaveCount(3);
+  await expect(page.locator('#stars-unlock')).toHaveText('Collect 6 stars to unlock the Playroom Cup.');
 });
 
 test('phone race page: waiting on the grid gates Start, and the note clears the tiles', async ({ page }) => {

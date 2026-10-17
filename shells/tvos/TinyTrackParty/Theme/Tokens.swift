@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// The "Sticker Bash" palette, read at boot from the SAME file the web's CSS is
+/// The "Toy Box" palette, read at boot from the SAME file the web's CSS is
 /// baked to.
 ///
 /// `public/shared/theme.css` is the authored source of the look;
@@ -10,15 +10,14 @@ import UIKit
 /// `shells/tvos/scripts/stage-assets.sh` copies that file verbatim into this
 /// bundle. Reading it here rather than transcribing hex is not tidiness: it is
 /// the mitigation `docs/native-port/architecture.md` accepted when it allowed
-/// three implementations of the sticker look. A hex literal in Swift is a
-/// fourth source that nothing in the tree watches, and `--accent` has already
-/// moved once (amber → red).
+/// three implementations of the look. A hex literal in Swift is a fourth
+/// source that nothing in the tree watches, and the tokens do move.
 ///
 /// So: **no colour that exists in `design-tokens.json` may be spelled again in
 /// Swift.** The few hexes that legitimately are hardcoded in this shell live in
-/// `Sticker.swift`'s paper stage, and they are hardcoded because they are not
-/// tokens at all — the bake only carries `:root`, and the stage's hills and
-/// clouds are authored inline in `.scene__*` rules.
+/// `Sticker.swift` (the paper stage's sky and hills, the label ink), and they
+/// are hardcoded because they are not tokens at all — the bake only carries
+/// `:root`, and those are authored inline in the CSS rules that use them.
 ///
 /// Not `@MainActor`: nothing here touches the C ABI or `GameState`, and the
 /// palette has to be reachable from `ButtonStyle` bodies and `#Preview`s.
@@ -26,23 +25,10 @@ import UIKit
 /// the static storage is written before it is ever read.
 enum Tokens {
 
-    // MARK: - Types
-
-    /// A hard offset shadow. Every one in this design system has **zero blur** —
-    /// that is what makes a sticker read as die-cut rather than as a floating
-    /// card, and it is why `blur` is carried but has always been 0.
-    struct Shadow {
-        let offset: CGSize
-        let blur: CGFloat
-        let color: Color
-        let uiColor: UIColor
-    }
-
     // MARK: - Storage
 
     private static var colors: [String: UIColor] = [:]
     private static var lengths: [String: CGFloat] = [:]
-    private static var shadows: [String: Shadow] = [:]
     /// Unitless tokens (`type: "raw"`) — a fraction or a viewBox unit, not a
     /// length, so there is nothing to convert to points.
     private static var numbers: [String: CGFloat] = [:]
@@ -97,19 +83,11 @@ enum Tokens {
             case "raw":
                 // A bare number in the CSS: a fraction of the surface, or a
                 // width in the schematic's own viewBox. `resolved` is the
-                // authored text, so this is the one arm that parses.
+                // authored text, so this is the one arm that parses. (The
+                // shadow tokens are raw too, and all `none`: the Toy Box has no
+                // depth, so nothing here reads them.)
                 if let raw = entry["resolved"] as? String, let v = Double(raw) {
                     numbers[name] = CGFloat(v)
-                }
-            case "shadow":
-                if let s = entry["shadow"] as? [String: Any],
-                   let c = uiColor(fromRGBA: s["rgba"]) {
-                    let x = (s["x"] as? Double) ?? 0
-                    let y = (s["y"] as? Double) ?? 0
-                    let blur = (s["blur"] as? Double) ?? 0
-                    shadows[name] = Shadow(offset: CGSize(width: x, height: y),
-                                           blur: CGFloat(blur),
-                                           color: Color(uiColor: c), uiColor: c)
                 }
             case "font-stack":
                 // Deliberately ignored. The stack names the CSS families the
@@ -156,27 +134,18 @@ enum Tokens {
                "design-tokens.json declares \(declaredCount ?? -1) tokens but \(parsed) parsed — stale copy?")
         let required = ["paper", "ink", "ink-2", "ink-3", "red", "green", "blue", "purple",
                         "brand", "accent", "danger", "item", "surface", "surface-2",
-                        "hairline", "grass", "shadow-ink", "btn-ledge"]
+                        "hairline", "grass", "edge", "pick", "press", "glass", "frost"]
         for name in required where colors[name] == nil {
             assertionFailure("design-tokens.json is missing --\(name)")
         }
         assert(liveries.count == 8, "expected 8 car liveries, got \(liveries.count)")
-        for name in ["r-sm", "r", "r-lg", "r-pill", "btn-drop", "btn-sink"] where lengths[name] == nil {
+        for name in ["r-sm", "r", "r-lg", "r-pill"] where lengths[name] == nil {
             assertionFailure("design-tokens.json is missing the length --\(name)")
-        }
-        for name in ["shadow-pop", "shadow-card", "shadow-float"] where shadows[name] == nil {
-            assertionFailure("design-tokens.json is missing the shadow --\(name)")
         }
         for name in ["track-map-casing", "track-map-road",
                      "track-map-start-r", "track-map-start-ring"] where numbers[name] == nil {
             assertionFailure("design-tokens.json is missing the number --\(name)")
         }
-        // The one rule the CSS can only state in prose, and the reason
-        // `tests/design-tokens.test.js` exists on the web side: press travel
-        // equal to the ledge depth would punch the button through its own ledge
-        // and flatten it. Sticker.swift's button geometry is built on the
-        // difference, so it has to hold here too.
-        assert(length("btn-sink") < length("btn-drop"), "--btn-sink must stay under --btn-drop")
     }
 
     private static func uiColor(fromRGBA any: Any?) -> UIColor? {
@@ -222,12 +191,6 @@ enum Tokens {
         return 0
     }
 
-    static func shadow(_ name: String) -> Shadow {
-        if let s = shadows[name] { return s }
-        assertionFailure("no shadow token --\(name)")
-        return Shadow(offset: .zero, blur: 0, color: .clear, uiColor: .clear)
-    }
-
     /// A player's livery, by the `colorIndex` a seat carries. Wrapping, with the
     /// same negative-safe modulo `protocol.h`'s `car_stats` uses, so an index
     /// from anywhere can be handed straight in.
@@ -269,13 +232,23 @@ enum Tokens {
     static var surface: Color { color("surface") }
     static var surface2: Color { color("surface-2") }
 
-    // Beyond the four the sticker kit needs by name. `hairline` is an alias of
-    // `ink` today; it is exposed separately because the CSS distinguishes
-    // "this is a border" from "this is text", and one of them could move.
     static var hairline: Color { color("hairline") }
     static var grass: Color { color("grass") }
-    static var shadowInk: Color { color("shadow-ink") }
-    static var btnLedge: Color { color("btn-ledge") }
+
+    // The six roles' surfaces (`theme.css`'s header). `frost` and `glass` carry
+    // their own alpha from the bake.
+    static var edge: Color { color("edge") }
+    static var pick: Color { color("pick") }
+    static var press: Color { color("press") }
+    static var glass: Color { color("glass") }
+    static var frost: Color { color("frost") }
+
+    /// The glass's own tint at another strength, for the two placeholders the
+    /// CSS spells as `rgba(24, 28, 44, a)` beside it: an empty item slot (0.18)
+    /// and an open seat (0.28). The alpha is the CSS's; the colour is the token.
+    static func glass(alpha: CGFloat) -> Color {
+        Color(uiColor: uiColor("glass").withAlphaComponent(alpha))
+    }
 
     // MARK: - Drift gate
 
