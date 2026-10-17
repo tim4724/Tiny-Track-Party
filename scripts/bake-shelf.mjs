@@ -48,7 +48,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import {
-  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, hideChrome, encode, HOLD_SETTLE_MS
+  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, hideChrome, encode, HOLD_SETTLE_MS, holdTimeoutMs
 } from './lib/capture.mjs';
 import { SHELF_FRAMES, scenarioQuery } from '../public/shared/galleryScenarios.js';
 // The carousel's layout size is a PLATFORM number and lives with the manifest that
@@ -98,7 +98,8 @@ async function shoot(page, port, f, scale) {
     { waitUntil: 'networkidle' });
   await waitForScene(page);
   await hideChrome(page);
-  await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
+  await page.waitForFunction(() => window.__engine?.shotHeld, null,
+    { timeout: holdTimeoutMs(f.hold, scale), polling: 100 });
   await page.waitForTimeout(HOLD_SETTLE_MS);
   return page.screenshot();
 }

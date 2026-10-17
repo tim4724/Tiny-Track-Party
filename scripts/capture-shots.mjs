@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import { CAPTURED_SCENARIOS, STORE_SHOT, scenarioQuery } from '../public/shared/galleryScenarios.js';
 import { gitSha, mergeShots, shotDir, shotFile } from './lib/shots.mjs';
 import {
-  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, encode, HOLD_SETTLE_MS
+  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, hideChrome, encode, HOLD_SETTLE_MS, holdTimeoutMs
 } from './lib/capture.mjs';
 
 const args = parseArgs();
@@ -92,6 +92,11 @@ async function main() {
       // subtly the wrong shape. A page without a harness passes the first wait
       // straight through and only waits on the fonts.
       await waitForScene(page, { timeout: 20000 });
+      // The page's own chrome is not the game: the corner keys show only while a
+      // mouse moves, and neither TV app has them, so a shot that kept them was
+      // comparing a key row against nothing (and in the split race it sat on the
+      // top-right cell's place badge).
+      await hideChrome(page);
       // A scenario's own `settleMs` wins: it names WHICH MOMENT of that screen the
       // card is about, which for the two cup boards is after the re-sort has run.
       // A card with a `hold` is a RACE moment, and the engine stops there itself:
@@ -100,7 +105,8 @@ async function main() {
       // arriving — an item landing in a cell slot pops in from 1.8x over 0.5 s
       // (`cellItemPop`), and a 300 ms beat photographed it half-grown.
       if (scenario.hold) {
-        await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
+        await page.waitForFunction(() => window.__engine?.shotHeld, null,
+          { timeout: holdTimeoutMs(scenario.hold), polling: 100 });
         // A box taken just before the hold is still spinning its roulette when
         // the race stops; a shot inside the spin shows whichever item the flick
         // was on, so wait for every slot to land.

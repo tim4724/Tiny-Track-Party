@@ -196,6 +196,15 @@ export async function waitForScene(page, { timeout = 30000 } = {}) {
 // same rested frame.
 export const HOLD_SETTLE_MS = 800;
 
+// How long to wait for a card's hold. It SCALES with how far into the race the
+// hold is and with how many pixels a frame costs, because headless is software
+// GL: a four-cell 1080p frame takes a few hundred ms and the 50 ms dt clamp makes
+// each worth at most 50 ms of race, so 10 ms of wall per ms of race (per unit of
+// scale, squared for pixels) is a bound with room to spare, never the expectation.
+export function holdTimeoutMs(hold, scale = 1) {
+  return Math.max(180000, (hold?.simMs || 0) * 10 * scale * scale);
+}
+
 // The page's own chrome, which is not the game. The race HUD is not hidden here:
 // part of it is the renderer's (the steer bar), so `?hud=0` on the URL is the one
 // switch that takes all of it off (main.js).
