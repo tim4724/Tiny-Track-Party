@@ -1650,6 +1650,57 @@ So the layer's channel is ~2 ms of a heavy second here, the box-clipped pass
 black die-cut of its fitted rect, which is how the placement was checked on
 the box and the web.
 
+### The channel map after the pass, and four nulls (2026-10-17, later)
+
+Build `7edd5d0c` (the shipped pass), Vulkan, 4P pinned 1280x720, pretzel,
+75 s counted, one run per arm with the base first and last; the box read the
+base at 14.52 and 14.29, and two more base runs during the day at 13.77 and
+14.46, so one arm resolves nothing under ~0.4 ms. Heavy-30% p50 / clean
+seconds of 75:
+
+| arm | heavy | clean | delta |
+|---|---|---|---|
+| base | 14.52 / 14.29 | 67 / 70 | |
+| no terrain | 13.02 | 74 | -1.3 |
+| no road decals (profile loop, statics, AND the shadow pass) | 13.15 | 75 | -1.25 |
+| no dressing | 13.25 | 73 | -1.1 |
+| no cars | 13.55 | 71 | -0.85 |
+| no rubber tap | 13.60 | 73 | -0.8 |
+| no grade | 13.61 | 73 | -0.8 |
+| no effects | 13.83 | 70 | -0.6 |
+| no sun-vis taps | 13.85 | 71 | -0.55 |
+| no paint loop | 13.86 | 75 | -0.5 |
+| no sky (clouds, haze, fliers, balloon) | 13.98 | 68 | -0.45 |
+| no fog | 14.20 | 69 | -0.2 |
+| no per-vertex fog maths | 14.42 | 68 | 0 |
+| every far form everywhere (`LOD_ALL`) | 13.27 | 70 | **-1.1** |
+| no far forms (`NO_LOD`) | 15.42 | 65 | +1.0 |
+
+Four probes against that, each interleaved (installs alternated, or a mask
+bit flipped on one install) and paired per second:
+
+| probe | pairs (probe vs base, mean over all seconds) | verdict |
+|---|---|---|
+| the cloud puffs' five soft discs baked to a 256x128 field, one tap instead of five square roots; plus the pad chevron loop bounded to the chevrons within a stroke (exact, four instead of up to twenty-four); plus the far-form gate at 4 px instead of 2 | +0.15 / -0.05 | null: the sky arm is fill, not the maths, and the gate's position is not what `LOD_ALL` collects (the chunk the camera is in is always near) |
+| the rubber tap bilinear-between-mips with no anisotropy (in-install bit) | -0.09 / -0.15 | null: the 0.8 ms is the fetch over a 16k-texel layer, not its filtering |
+| the paint and profile loops gated by a 32-bin occupancy mask over the chunk's s-range, so a fragment between pads skips the loop (exact, in-install bit) | +0.19 / +0.36 / -0.02 | null: the loops' cost is not the iterations between entries; a uniform-bounded loop of eight that early-outs is what the 2026-10-14 box collected, and the rest is the deck's fill |
+
+A trap on the way: a chevron loop with DYNAMIC bounds (`for (rr = r0; rr <=
+r1; ...)`) hung the PowerVR GPU outright on this box — the race drew nothing
+for 75 s and the driver logged `waitForever: Pipeline stage signal fence` —
+while the web compiled and ran it. Constant bounds with a skip are fine.
+
+**The operating point after the pass.** Adaptive 4P races on the shipped
+build: pretzel 32 s at 720 (59.7 fps, 0.3 skips/s) then 540 for the rest;
+glacier 18 s at 720 then 540 for 101 s at a heavy p50 of 9.8 ms. So the box
+plays four players at 540 with ~40% of the budget idle, because 720's
+heaviest seconds (the opening pack, the vista) touch the 15.0 ms retreat and
+the climb back is fitted on that window (the 2026-10-03 section). What 720
+needs is ~1-1.5 ms off the HEAVIEST seconds, not off the median; the only
+measured lever of that size is `LOD_ALL` (-1.1), the quality trade declined
+on 2026-09-02, and the alternative is a policy change to the rule's retreat
+or climb (render_scale.h), which is the user's call.
+
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 
 These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
