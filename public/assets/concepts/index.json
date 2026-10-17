@@ -2,38 +2,83 @@
  "_readme": "Written by scripts/gen-concept-cars.py; read by the asset gallery.",
  "models": [
   {
-   "name": "kit-sprint",
-   "tris": 1272,
-   "note": "A kit coupe with a little more: a bonnet scoop, a raked spoiler on struts, flush head and tail lamps, slate windows all round.",
+   "name": "carkit-sedan-sports",
+   "tris": 2088,
+   "note": "Car Kit 3.1 sedan-sports: Sports sedan with a rear spoiler.",
    "base": "vehicle-racer-low"
   },
   {
-   "name": "kit-formula",
-   "tris": 1080,
-   "note": "A kit open-wheeler with a little more: side pods with dark intakes, an airbox behind a roll hoop, a front wing and a rear wing on struts.",
+   "name": "carkit-race",
+   "tris": 1952,
+   "note": "Car Kit 3.1 race: Open-wheel racer.",
    "base": "vehicle-speedster"
   },
   {
-   "name": "kit-rally",
-   "tris": 1228,
-   "note": "A kit hatchback with a little more: a tall glasshouse, a roof scoop and roof spoiler, a pair of driving lamps on the front bumper.",
+   "name": "carkit-race-future",
+   "tris": 2068,
+   "note": "Car Kit 3.1 race-future: Futuristic racer.",
    "base": "vehicle-racer"
   },
   {
-   "name": "kit-muscle",
-   "tris": 1262,
-   "note": "A kit muscle car with a little more: a long bonnet with a grey blower and dark scoop through it, a set-back cab, a ducktail, side pipes and fatter rear wheels.",
+   "name": "carkit-hatchback-sports",
+   "tris": 2088,
+   "note": "Car Kit 3.1 hatchback-sports: Sports hatchback.",
    "base": "vehicle-vintage-racer"
   },
   {
-   "name": "kit-pickup",
-   "tris": 1326,
-   "note": "A kit pickup with a little more: an open bed with a crate in it, a roll bar with two lamps behind the cab."
+   "name": "carkit-sedan",
+   "tris": 2032,
+   "note": "Car Kit 3.1 sedan: Sedan."
   },
   {
-   "name": "kit-van",
-   "tris": 1492,
-   "note": "A kit micro van with a little more: a tall box with a band of slate windows, a roof rack with a suitcase strapped on."
+   "name": "carkit-taxi",
+   "tris": 2072,
+   "note": "Car Kit 3.1 taxi: Taxi."
+  },
+  {
+   "name": "carkit-police",
+   "tris": 2304,
+   "note": "Car Kit 3.1 police: Police car."
+  },
+  {
+   "name": "carkit-suv",
+   "tris": 2474,
+   "note": "Car Kit 3.1 suv: SUV with a spare wheel on the tail."
+  },
+  {
+   "name": "carkit-suv-luxury",
+   "tris": 2086,
+   "note": "Car Kit 3.1 suv-luxury: Luxury SUV."
+  },
+  {
+   "name": "carkit-van",
+   "tris": 2082,
+   "note": "Car Kit 3.1 van: Van."
+  },
+  {
+   "name": "carkit-kart-oobi",
+   "tris": 2884,
+   "note": "Car Kit 3.1 kart-oobi: Kart with its driver."
+  },
+  {
+   "name": "carkit-kart-oodi",
+   "tris": 2726,
+   "note": "Car Kit 3.1 kart-oodi: Kart with its driver."
+  },
+  {
+   "name": "carkit-kart-ooli",
+   "tris": 2706,
+   "note": "Car Kit 3.1 kart-ooli: Kart with its driver."
+  },
+  {
+   "name": "carkit-kart-oopi",
+   "tris": 2726,
+   "note": "Car Kit 3.1 kart-oopi: Kart with its driver."
+  },
+  {
+   "name": "carkit-kart-oozi",
+   "tris": 2726,
+   "note": "Car Kit 3.1 kart-oozi: Kart with its driver."
   }
  ]
 }
