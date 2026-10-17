@@ -90,6 +90,13 @@ export class RaceAudio {
     // stays silent until it resolves and never throws if the fetch fails. The
     // offline driver awaits it instead, since its first frame comes at once.
     this.samplesReady = loadSampleBuffers(this.ctx);
+    // Play the pickup cue once into a muted gain. Its first play fills the
+    // cues' shared noise buffer and runs the synth path cold, which otherwise
+    // lands mid-race on the first item box.
+    const silent = this.ctx.createGain();
+    silent.gain.value = 0;
+    silent.connect(this.ctx.destination);
+    this._variant('pickup')?.play(this.ctx, silent);
   }
 
   resume() {
