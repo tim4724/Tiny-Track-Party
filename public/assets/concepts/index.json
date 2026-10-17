@@ -127,6 +127,30 @@
    "tris": 2474,
    "note": "Car Kit 3.1 suv: Rumble: the SUV in purple, narrow on the biggest wheels.",
    "base": "vehicle-vintage-racer"
+  },
+  {
+   "name": "small-dash",
+   "tris": 2304,
+   "note": "Car Kit 3.1 police: Dash: the police car, body at 88% between bigger wheels.",
+   "base": "vehicle-racer-low"
+  },
+  {
+   "name": "small-bolt",
+   "tris": 2088,
+   "note": "Car Kit 3.1 sedan-sports: Bolt: the sports sedan, body at 88%, lowered and stretched.",
+   "base": "vehicle-speedster"
+  },
+  {
+   "name": "small-carve",
+   "tris": 2088,
+   "note": "Car Kit 3.1 hatchback-sports: Carve: the sports hatchback in blue, body at 88%, shortened.",
+   "base": "vehicle-racer"
+  },
+  {
+   "name": "small-rumble",
+   "tris": 2474,
+   "note": "Car Kit 3.1 suv: Rumble: the SUV in purple, body at 88% on the biggest wheels.",
+   "base": "vehicle-vintage-racer"
   }
  ]
 }

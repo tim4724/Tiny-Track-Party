@@ -76,13 +76,22 @@ CARS = {
     'narrow-carve': ('hatchback-sports', 'Carve: the sports hatchback in blue, narrow and shortened.',
                      'vehicle-racer'),
     'narrow-rumble': ('suv', 'Rumble: the SUV in purple, narrow on the biggest wheels.', 'vehicle-vintage-racer'),
+    # The same four with the body shrunk evenly (proportions kept) between
+    # wheels that stay put, a little bigger: front wheels show, nothing slim.
+    'small-dash': ('police', 'Dash: the police car, body at 88% between bigger wheels.', 'vehicle-racer-low'),
+    'small-bolt': ('sedan-sports', 'Bolt: the sports sedan, body at 88%, lowered and stretched.',
+                   'vehicle-speedster'),
+    'small-carve': ('hatchback-sports', 'Carve: the sports hatchback in blue, body at 88%, shortened.',
+                    'vehicle-racer'),
+    'small-rumble': ('suv', 'Rumble: the SUV in purple, body at 88% on the biggest wheels.', 'vehicle-vintage-racer'),
 }
 
 # Per-car edits on top of the conversion: `paint` moves Car Kit swatches
 # {(row, col): (row, col)} before the palette mapping, `shape` scales the body
 # (never the wheels) by (along the car, up from the ground), the wheels
-# sliding with its length; `width` scales the body across, `tyres` the wheels
-# about their own centres (the body rides up with them).
+# sliding with its length; `width` scales the body across, `body` all of it at
+# its ride height, `tyres` the wheels about their own centres (the body rides
+# up with them).
 BLUE_PAINT = {(1, 7): (1, 15), (1, 6): (1, 14)}
 PURPLE_PAINT = {(1, 7): (0, 3), (1, 6): (0, 2)}
 TWEAKS = {
@@ -93,6 +102,10 @@ TWEAKS = {
     'narrow-bolt': {'width': 0.58, 'tyres': 1.12, 'shape': (1.08, 0.85)},
     'narrow-carve': {'width': 0.6, 'tyres': 1.12, 'paint': BLUE_PAINT, 'shape': (0.82, 1.0)},
     'narrow-rumble': {'width': 0.62, 'tyres': 1.22, 'paint': PURPLE_PAINT},
+    'small-dash': {'body': 0.88, 'tyres': 1.15},
+    'small-bolt': {'body': 0.88, 'tyres': 1.15, 'shape': (1.08, 0.85)},
+    'small-carve': {'body': 0.88, 'tyres': 1.15, 'paint': BLUE_PAINT, 'shape': (0.82, 1.0)},
+    'small-rumble': {'body': 0.88, 'tyres': 1.25, 'paint': PURPLE_PAINT},
 }
 
 
@@ -179,7 +192,7 @@ def remap_uvs(mesh, pmap, used):
 
 # ------------------------------------------------------------------- convert
 
-def convert(model, pmap, used, paint=None, shape=(1.0, 1.0), width=1.0, tyres=1.0):
+def convert(model, pmap, used, paint=None, shape=(1.0, 1.0), width=1.0, tyres=1.0, body=1.0):
     """Import a Car Kit model and return (body, [(wheel name, mesh, loc)]),
     turned, scaled, tweaked (see TWEAKS) and remapped."""
     zf = car_kit()
@@ -193,6 +206,9 @@ def convert(model, pmap, used, paint=None, shape=(1.0, 1.0), width=1.0, tyres=1.
     # the wheels' radius (a wheel's centre height): bigger tyres lift the body by its growth
     radius = min(max((turn @ worlds[o] @ v.co).z for v in o.data.vertices) / 2
                  for o in new if o.name.split('.')[0] in WHEELS)
+    # a `body` scale shrinks it toward the ground; it keeps its ride height
+    belly = min((turn @ worlds[o] @ v.co).z for o in new if o.name.split('.')[0] not in WHEELS
+                for v in o.data.vertices)
     body_parts, wheels = [], []
     for o in new:
         o.parent = None
@@ -203,8 +219,8 @@ def convert(model, pmap, used, paint=None, shape=(1.0, 1.0), width=1.0, tyres=1.
         if not role:
             if paint:
                 move_swatches(o.data, paint.get)
-            o.data.transform(Matrix.Diagonal((width, shape[0], shape[1], 1.0)))
-            o.data.transform(Matrix.Translation((0.0, 0.0, radius * (tyres - 1.0))))
+            o.data.transform(Matrix.Diagonal((width * body, shape[0] * body, shape[1] * body, 1.0)))
+            o.data.transform(Matrix.Translation((0.0, 0.0, belly * (1.0 - body) + radius * (tyres - 1.0))))
         remap_uvs(o.data, pmap, used)
         if role:
             # the wheel spins about its own centre: that is where its node goes
