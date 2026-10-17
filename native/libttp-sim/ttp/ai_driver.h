@@ -56,9 +56,7 @@ extern const Persona AI_PERSONALITIES[7];
 
 // Bot skill (0..1) for a cup difficulty (1..4); anything else is 1, the bot as it
 // always was. Lower skill drives less of the racing line, wobbles across its
-// lane, and now and then runs wide into the barrier. A cup bot (skill above 0
-// and below 1) also drifts some corners, more often the higher the cup; the
-// full bot never does, so every recording keeps its shape.
+// lane, and now and then runs wide into the barrier.
 double aiSkillForTier(int tier);
 
 class AiController {
@@ -86,12 +84,10 @@ class AiController {
   double mistakeGap_ = -1;
   int mistakeT_ = 0;
   double mistakeSide_ = 1;
-  // The drift (cup bots only, skill < 1): the chance to drift a corner, its
-  // own rng so the rolls leave the wander's sequence alone, and whether the
-  // corner being braked for right now is one this bot drifts.
-  double driftChance_ = 0;
-  Mulberry32 driftRng_;
-  bool cornering_ = false, driftCorner_ = false;
+  // The slide (see AI_SLIDE_OFF): this corner's roll, and whether the steer is
+  // past the slide's threshold right now.
+  Mulberry32 slideRng_;
+  bool hardSteer_ = false, slideCorner_ = false;
 };
 
 }  // namespace ttp

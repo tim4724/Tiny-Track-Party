@@ -57,7 +57,6 @@ static Input inputFrom(const Value& v) {
     else if (b->type == Value::BOOL) { in.hasB = true; in.b = b->b ? 1 : 0; }
   }
   if (const Value* u = v.find("u")) { if (u->type == Value::NUM) { in.hasU = true; in.u = u->num; } }
-  if (const Value* d = v.find("d")) { if (d->type == Value::NUM) { in.hasD = true; in.d = d->num; } }
   return in;
 }
 static Stats statsFrom(const Value& v) {
@@ -347,7 +346,6 @@ static int runTrace(const std::string& file, bool recordMode, const std::string&
             m.set("s", Value::Num(derived.s));
             m.set("b", Value::Num(derived.b));
             m.set("u", Value::Num(derived.u));
-            if (derived.hasD) m.set("d", Value::Num(derived.d));
             inputsV.set(c.id.key(), std::move(m));
           }
         }
@@ -468,7 +466,6 @@ static int runTrace(const std::string& file, bool recordMode, const std::string&
           dv.set("s", Value::Num(derived.s));
           dv.set("b", Value::Num(derived.b));
           dv.set("u", Value::Num(derived.u));
-          if (derived.hasD) dv.set("d", Value::Num(derived.d));
           if (!recorded) {
             fail(file, frame, "inputs." + c.id.key(), "<absent>", canonical_stringify(dv), "AI-LIVE: bot drove but trace has no input");
             return 1;

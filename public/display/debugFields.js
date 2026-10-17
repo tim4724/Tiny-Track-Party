@@ -86,18 +86,8 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     { key: 'curbimpact', label: 'Curb impact', hint: 'speed lost per radian the wall turns (0 = only the cap bills) · live',
       ...knob((n) => sim.debugCurbImpact(n), 0.1,
         { min: 0, max: 4, format: (n) => n.toFixed(1) }) },
-    // Live: the drift's feel (the DRIFT_* constants in ttp/game.cc) — how tight
-    // its line is, how fast the line follows the lean, the speed it holds, and
-    // how long letting go takes to blend back into plain steering.
-    { key: 'drifttight', label: 'Drift tightness', hint: 'scales the drift line ends (1 = radius 6 leaning in, 18 easing off) · live',
-      ...knob((n) => sim.debugDriftTight(n), 0.05,
-        { min: 0.5, max: 2, format: (n) => n.toFixed(2) + '×' }) },
-    { key: 'driftsmooth', label: 'Drift smoothing', hint: 'how slowly the line follows the lean · live',
-      ...knob((n) => sim.debugDriftSmooth(n), 0.05,
-        { min: 0, max: 1, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
-    { key: 'driftspeed', label: 'Drift speed', hint: 'speed a drift holds, share of top speed · live',
-      ...knob((n) => sim.debugDriftFloor(n), 0.01,
-        { min: 0.4, max: 1, format: (n) => Math.round(n * 100) + '%' }) },
+    // Live: how long letting go of a slide takes to blend its look back out
+    // (DRIFT_RELEASE_T in ttp/game.cc).
     { key: 'driftrelease', label: 'Drift release', hint: 'blend back to steering after the brake · live',
       ...knob((n) => sim.debugDriftRelease(n), 0.05,
         { min: 0, max: 1.5, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },

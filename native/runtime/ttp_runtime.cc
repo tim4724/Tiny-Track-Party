@@ -1343,9 +1343,6 @@ double ttp_debug_curb_speed(double frac) { return debugCurbSpeed(frac); }
 double ttp_debug_curb_turn(double rate) { return debugCurbTurn(rate); }
 double ttp_debug_curb_turn_max(double rate) { return debugCurbTurnMax(rate); }
 double ttp_debug_curb_impact(double k) { return debugCurbImpact(k); }
-double ttp_debug_drift_tight(double scale) { return debugDriftTight(scale); }
-double ttp_debug_drift_smooth(double sec) { return debugDriftSmooth(sec); }
-double ttp_debug_drift_floor(double floor) { return debugDriftFloor(floor); }
 double ttp_debug_drift_release(double sec) { return debugDriftRelease(sec); }
 
 

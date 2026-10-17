@@ -158,8 +158,10 @@ test('a dropped banana is a live trigger: it spins the car that hits it', { skip
 
 test('oil puddles spin cars on the tracks that carry them', { skip }, async () => {
   // Skysnake's oils sit where the racing line has to cross them; tidepool's do not
-  // reliably catch a clean field, so the hazard check rides skysnake.
-  const r = await race('skysnake', 'monster');
+  // reliably catch a clean field, so the hazard check rides skysnake. A monster
+  // truck shrugs oil off, and the forced item makes every box one, so the race
+  // runs long enough for a car to cross a slick between trucks.
+  const r = await race('skysnake', 'monster', 6000);
   assert.ok(spinCauses(r.events).has('oil'), 'a car crossed an oil slick and spun out');
 });
 

@@ -36,9 +36,6 @@ struct Input {
   bool hasS = false; double s = 0;
   bool hasB = false; double b = 0;   // number form only (fixtures never send boolean)
   bool hasU = false; double u = 0;
-  // May this car drift (Game::update)? Only an AiController sends it; a phone
-  // never does, so a human's car keeps the drift it is born with.
-  bool hasD = false; double d = 0;
 };
 
 struct Pose { Vec3 pos, forward, up; };
@@ -81,20 +78,13 @@ struct Car {
   bool curbLimSet = false;
   double curbLim = 0;
   bool onWall = false;
-  // Drift (Game::update).
-  //   driftOk     — may drift: a human always, a bot only while its controller
-  //                 says so (Input::d), which is what PlayerDesc::bot defaults
-  //   drifting    — the drift is held (brake down)
-  //   driftDir    — its locked side in INPUT space (sign of steer)
-  //   driftMix    — how much of the drift is in force: rises in, fades out
-  //   driftK      — the line it drives: curvature (1/world units), eased
-  //   driftK0/driftLean0 — the curvature and lean it started on, which that
-  //                 lean keeps (the lean is read relative to it)
+  // The slide (Game::update): the brake with a steer at speed.
+  //   drifting    — sliding now (the brake is held)
+  //   driftMix    — how much of the look is in force: rises in, fades out
   //   slip        — the body's cosmetic angle off its travel, in heading space
-  //   driftT      — seconds since this drift started (cosmetic: the drawn hop)
-  bool driftOk = true;
+  //   driftT      — seconds since this slide started (cosmetic: the drawn hop)
   bool drifting = false;
-  double driftDir = 0, driftMix = 0, driftK = 0, driftK0 = 0, driftLean0 = 1, slip = 0;
+  double driftMix = 0, slip = 0;
   double driftT = 0;
   // Height above the deck, along its up, and its rate. Non-zero only on a
   // kicker ramp and in the flight off its lip; the pose carries it.
@@ -174,6 +164,12 @@ inline constexpr double AIR_MIN = 0.02;
 // tilt visibly moves a car through a short crest hop, too little to turn it
 // around on a kicker's long flight.
 inline constexpr double AIR_STEER = 0.7;
+// The steer and the fraction of vmax past which the brake slides a grounded
+// car (game.cc). In the header because a bot brakes at them to slide a corner,
+// and only into a slide it can start: below them its brake is a plain one.
+inline constexpr double DRIFT_START = 0.5;
+inline constexpr double DRIFT_SPEED = 0.6;
+inline bool canStartSlide(const Car& c) { return c.v >= DRIFT_SPEED * c.vmax && c.h < AIR_MIN; }
 
 // Live-tunable steering-response exponent. Module-global — shared by every
 // Game, not per-instance — and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
@@ -191,13 +187,8 @@ double debugCurbSpeed(double frac);
 double debugCurbTurn(double rate);
 double debugCurbTurnMax(double rate);
 double debugCurbImpact(double k);
-// DEBUG, likewise: the drift's line tightness (a scale on its curvatures), how
-// fast the line follows the lean (s), the speed floor it holds (fraction of
-// vmax), and how long letting go takes to blend it back into plain steering
-// (s); see the DRIFT_* constants in game.cc.
-double debugDriftTight(double scale);
-double debugDriftSmooth(double sec);
-double debugDriftFloor(double floor);
+// DEBUG, likewise: how long letting go of a slide takes to blend its look back
+// out (s); see DRIFT_RELEASE_T in game.cc.
 double debugDriftRelease(double sec);
 
 // That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies

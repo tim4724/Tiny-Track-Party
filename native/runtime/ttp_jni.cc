@@ -192,24 +192,9 @@ jdouble n_ttp_debug_curb_turn_max(JNIEnv* env, jclass, jdouble a0) {
     return (jdouble) ttp_debug_curb_turn_max((double) a0);
 }
 
-jdouble n_ttp_debug_drift_floor(JNIEnv* env, jclass, jdouble a0) {
-    (void) env;
-    return (jdouble) ttp_debug_drift_floor((double) a0);
-}
-
 jdouble n_ttp_debug_drift_release(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jdouble) ttp_debug_drift_release((double) a0);
-}
-
-jdouble n_ttp_debug_drift_smooth(JNIEnv* env, jclass, jdouble a0) {
-    (void) env;
-    return (jdouble) ttp_debug_drift_smooth((double) a0);
-}
-
-jdouble n_ttp_debug_drift_tight(JNIEnv* env, jclass, jdouble a0) {
-    (void) env;
-    return (jdouble) ttp_debug_drift_tight((double) a0);
 }
 
 jint n_ttp_display_advance(JNIEnv* env, jclass, jdouble a0) {
@@ -1407,10 +1392,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_debug_curb_speed", "(D)D", (void*) n_ttp_debug_curb_speed },
     { "ttp_debug_curb_turn", "(D)D", (void*) n_ttp_debug_curb_turn },
     { "ttp_debug_curb_turn_max", "(D)D", (void*) n_ttp_debug_curb_turn_max },
-    { "ttp_debug_drift_floor", "(D)D", (void*) n_ttp_debug_drift_floor },
     { "ttp_debug_drift_release", "(D)D", (void*) n_ttp_debug_drift_release },
-    { "ttp_debug_drift_smooth", "(D)D", (void*) n_ttp_debug_drift_smooth },
-    { "ttp_debug_drift_tight", "(D)D", (void*) n_ttp_debug_drift_tight },
     { "ttp_display_advance", "(D)I", (void*) n_ttp_display_advance },
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },

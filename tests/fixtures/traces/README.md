@@ -67,6 +67,13 @@ On 2026-10-16 the sim began announcing the end of an item's reveal (`item_ready`
 The re-emit ADDS that event and moves nothing else: every other field of every
 line is identical, and the audio corpus did not move (no cue hears it).
 `item_reveal` is the check that asserts the ordering.
+On 2026-10-17 the brake slide was reworked (a slide holds speed by the car's
+handling instead of driving a line), the curb got harsher (`WALL_SPEED_FRAC`,
+`WALL_IMPACT`), and bots began holding their brake through a slide, at a rate
+set by their cup skill. Each bot trace first diverges at a bot's brake input,
+each human one at the human scraping the curb; human inputs are verbatim, and
+`tidepool-session-beats-3bots-450f-seed21.jsonl` did not move. The audio
+corpus and the catalogue sweep followed. `drift_check` asserts the slide.
 
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the

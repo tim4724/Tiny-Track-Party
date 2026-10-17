@@ -41,7 +41,9 @@ static const double WOBBLE_LANE = 1.2;
 // The mistakes are what make a weaker bot beatable (probe_cli laptime --skill).
 static const double MISTAKE_OVERSHOOT = 0.6;
 static const int MISTAKE_FRAMES = 100;
-static const double MISTAKE_GAP_MIN = 300, MISTAKE_GAP_SPAN = 300;
+// Rarer than the harsher curb allowed at first: at 300 a cup bot lost more to
+// its own mistakes than the cups were tuned against.
+static const double MISTAKE_GAP_MIN = 400, MISTAKE_GAP_SPAN = 400;
 static const double EVADE_NEAR = -1.5;
 static const double EVADE_FAR = 13.0;
 static const double EVADE_CLEAR = 0.5;
@@ -88,18 +90,21 @@ const Persona AI_PERSONALITIES[7] = {
     {"Turbo", 1.02, 0.4}, {"Gizmo", 0.99, -0.4}, {"Scoot", 0.96, 0.1}};
 
 // Skill by cup difficulty, index tier-1 (Beach, Snow, Backyard/Canyon, Playroom).
-// Tuned with probe_cli laptime --skill so each cup's bots sit a set gap behind
-// the full bot: no cup races it, because the item and dodge fixes made the full
-// bot quicker than the field the cups were balanced against.
-static const double AI_TIER_SKILL[4] = {0.0, 0.3, 0.4, 0.6};
-// A cup bot's chance to drift a corner is its skill × AI_DRIFT_PER_SKILL, so
-// the Beach bot (skill 0) never drifts and Playroom's most often; the full bot
-// (skill 1) never does either. Rolled once per corner it brakes for. A drifting bot drives the player's rule (Game::update): it brakes
-// as ever, which past half lock becomes the drift, and holds that brake until
-// its steer eases under DRIFT_EXIT_STEER on the way out of the corner.
-static const double AI_DRIFT_PER_SKILL = 1.4;
-static const double DRIFT_EXIT_STEER = 0.3;
-static const uint32_t DRIFT_RNG_SALT = 0x9e3779b9u;
+// Tuned on solo laps averaged over AI seeds so that a player who SLIDES meets
+// each cup's bots as close as the cups once put a player who could not: the
+// cup's lap before the slide, quickened by what sliding gains a player there.
+// No cup races the full bot (skill 1).
+static const double AI_TIER_SKILL[4] = {0.15, 0.6, 0.65, 0.9};
+
+// A bot slides a corner the way a player does: the brake down once its steer
+// passes DRIFT_START, up again once it eases under AI_SLIDE_OFF on the way out,
+// and only into a slide it can start (canStartSlide), since otherwise that
+// brake is a plain one. Which corners it slides so is rolled once each at its
+// skill, on its own stream so the wander and the mistakes draw exactly what
+// they always did. The other corners keep the plain corner braking, which past
+// DRIFT_START slides too, by the player's rule, just not held through.
+static const double AI_SLIDE_OFF = 0.2;
+static const uint32_t SLIDE_RNG_SALT = 0x9e3779b9u;
 
 double aiSkillForTier(int tier) {
   if (tier < 1 || tier > 4) return 1.0;
@@ -360,8 +365,7 @@ AiController::AiController(double caution, double lookahead, double gain, double
       laneBias_(laneBias),
       skill_(clampd(skill, 0, 1)),
       rng_(seed ? seed : 1u),
-      driftChance_(skill_ > 0 && skill_ < 1 ? js_min(1.0, skill_ * AI_DRIFT_PER_SKILL) : 0),
-      driftRng_((seed ? seed : 1u) ^ DRIFT_RNG_SALT) {}
+      slideRng_((seed ? seed : 1u) ^ SLIDE_RNG_SALT) {}
 
 Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   if (--weaveT_ <= 0) {
@@ -427,14 +431,11 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   out.hasS = true; out.s = s;
   out.hasB = true; out.b = corner;
   out.hasU = true; out.u = useSeq_;
-  if (driftChance_ > 0) {
-    // one roll per corner, as its braking begins
-    if (corner > 0 && !cornering_) driftCorner_ = driftRng_.next() < driftChance_;
-    const bool exiting = std::fabs(s) < DRIFT_EXIT_STEER;
-    cornering_ = corner > 0 || (car.drifting && !exiting);
-    out.hasD = true; out.d = driftCorner_ ? 1 : 0;
-    if (driftCorner_ && car.drifting) out.b = exiting ? 0 : 1;
-  }
+  const bool hard = std::fabs(s) >= (hardSteer_ ? AI_SLIDE_OFF : DRIFT_START);
+  if (hard && !hardSteer_) slideCorner_ = slideRng_.next() < skill_;
+  hardSteer_ = hard;
+  if (slideCorner_ && hard && (car.drifting || canStartSlide(car))) out.b = 1;
+  else if (slideCorner_ && car.drifting) out.b = 0;
   return out;
 }
 
