@@ -1,12 +1,13 @@
-# gen-concept-cars.py — convert candidate cars from Kenney's CAR KIT into the
-# toy-car kit's format, into public/assets/concepts/, for the asset gallery's
-# "Concept cars" field and for racing them with ?cars=. Nothing ships them.
+# gen-concept-cars.py — candidate cars in the toy-car kit's format, into
+# public/assets/concepts/, for the asset gallery's "Concept cars" field and
+# for racing them with ?cars=. Nothing ships them. Two kinds: cars CONVERTED
+# from Kenney's Car Kit (CARS), and cars DESIGNED from its parts (DESIGNS).
 #
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py [-- name ...]
 #
 # The Car Kit is Kenney's more detailed car set (CC0). It is fetched and
-# hash-checked into the same cache as scripts/fetch-kits.mjs, and each model is
-# converted so it could drop into the roster as is:
+# hash-checked into the same cache as scripts/fetch-kits.mjs, and each car is
+# made so it could drop into the roster as is:
 #   * turned to face glTF -Z (the Car Kit faces +Z) and scaled to the roster's
 #     width, 0.525 over the wheels;
 #   * one root node holding the body (spoilers, a spare wheel, a kart's driver
@@ -18,6 +19,7 @@
 #     nearest, and the run prints how far each one moved.
 # The earlier hand-modelled concepts (toy-*, kit-*) are in git history.
 
+import bmesh
 import bpy
 import hashlib
 import json
@@ -27,7 +29,7 @@ import struct
 import sys
 import urllib.request
 import zipfile
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 KIT = os.path.join(REPO, 'public', 'assets', 'toycar')
@@ -306,9 +308,318 @@ def kit_material(path):
         f.write(out)
 
 
+# ===================================================================== design
+#
+# The DESIGNED cars: built from scratch in the Car Kit's look — its wheels,
+# its colours, chunky flat-shaded parts with one small chamfer — because no
+# Car Kit body shows its front wheels to the chase camera, and the player
+# reads steering off them. Each is a car type whose own design leaves the
+# wheels out in the open (roadster, buggy, hot rod, open 4x4), so nothing is
+# squeezed and the proportions stay a car's. Game scale, nose to +Y.
+
+SW = {  # Car Kit atlas swatches (row, col); odd columns carry the gradient
+    'red': (1, 13), 'blue': (1, 15), 'green': (1, 7), 'purple': (0, 3),
+    'trim': (2, 7), 'dark': (2, 5), 'black': (2, 3), 'glass': (0, 1),
+    'lamp': (2, 12), 'tail': (3, 5), 'seat': (2, 9),
+}
+CAR_H = (0.0, 0.45)  # the height the paint gradient runs over, light on top
+
+
+def set_swatch(o, sw, faces=None):
+    """UV o's faces (or only `faces`) into swatch sw, v down the swatch as
+    the vertex rises: the kit's light-on-top gradient."""
+    row, col = SW[sw]
+    me = o.data
+    uv = (me.uv_layers.active or me.uv_layers.new(name='UVMap')).data
+    zlo, zhi = CAR_H
+    for p in me.polygons:
+        if faces is not None and p.index not in faces:
+            continue
+        for li in p.loop_indices:
+            t = min(max((me.vertices[me.loops[li].vertex_index].co.z - zlo) / (zhi - zlo), 0.0), 1.0)
+            uv[li].uv = ((col + 0.5) / 16.0, 1.0 - (row * 0.25 + 0.03 + 0.19 * (1.0 - t)))
+
+
+def part(name, bm, sw, bev=0.008):
+    """bm as a flat-shaded part in swatch sw with a small chamfer."""
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    set_swatch(o, sw)
+    if bev > 0:
+        m = o.modifiers.new('bevel', 'BEVEL')
+        m.width, m.segments, m.limit_method, m.angle_limit = bev, 1, 'ANGLE', math.radians(30)
+    return o
+
+
+def paint(o, dirn, sw, **bounds):
+    """Paint o's faces facing dirn inside bounds (x=(lo, hi), ...) in sw,
+    flush: the faces are split along the bounds first."""
+    d = Vector(dirn).normalized()
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+
+    def facing(f):
+        return f.normal.dot(d) > 0.6
+
+    for axis, (lo, hi) in bounds.items():
+        k = 'xyz'.index(axis)
+        for cut in (lo, hi):
+            fs = [f for f in bm.faces if facing(f)]
+            geom = fs + list({e for f in fs for e in f.edges}) + list({v for f in fs for v in f.verts})
+            co, no = [0.0] * 3, [0.0] * 3
+            co[k], no[k] = cut, 1.0
+            bmesh.ops.bisect_plane(bm, geom=geom, plane_co=co, plane_no=no)
+            bm.normal_update()
+    sel = {f.index for f in bm.faces if facing(f) and all(
+        lo < f.calc_center_median()['xyz'.index(a)] < hi for a, (lo, hi) in bounds.items())}
+    bm.to_mesh(o.data)
+    bm.free()
+    set_swatch(o, sw, sel)
+    return o
+
+
+def hull(name, pts, sw, bev=0.008):
+    bm = bmesh.new()
+    for p in pts:
+        bm.verts.new(p)
+    r = bmesh.ops.convex_hull(bm, input=list(bm.verts))
+    loose = [v for v in dict.fromkeys(r['geom_interior'] + r['geom_unused']) if isinstance(v, bmesh.types.BMVert)]
+    bmesh.ops.delete(bm, geom=loose, context='VERTS')
+    bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(1), verts=list(bm.verts), edges=list(bm.edges))
+    return part(name, bm, sw, bev)
+
+
+def box(name, lo, hi, sw, bev=0.008):
+    return hull(name, [(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])], sw, bev)
+
+
+def profile(name, hx, side, sw, cx=0.0, bev=0.008):
+    """A convex side profile [(y, z), ...] extruded across cx +- hx."""
+    return hull(name, [(cx + s * hx, y, z) for y, z in side for s in (-1, 1)], sw, bev)
+
+
+def section(name, secs, sw, bev=0.008):
+    """A hull through cross-sections (y, half-width at the bottom, z bottom,
+    z top, half-width at the top): narrows upwards and along its length."""
+    pts = []
+    for y, hx, z0, z1, thx in secs:
+        pts += [(s * hx, y, z0) for s in (-1, 1)] + [(s * thx, y, z1) for s in (-1, 1)]
+    return hull(name, pts, sw, bev)
+
+
+def cyl(name, p0, p1, r, sw, seg=10):
+    p0, p1 = Vector(p0), Vector(p1)
+    d = p1 - p0
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=seg, radius1=r, radius2=r, depth=d.length)
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((p0 + p1) / 2) @ d.to_track_quat('Z', 'Y').to_matrix().to_4x4(),
+                        verts=list(bm.verts))
+    return part(name, bm, sw, 0)
+
+
+def arc(name, cx, cy, cz, r, thick, hw, a0, a1, sw, segs=7):
+    """A fender: a strip bent round the axle (x) at (cy, cz) from angle a0 to
+    a1 (degrees; 0 = straight ahead, 90 = on top), hw half-wide."""
+    bm = bmesh.new()
+    rings = []
+    for i in range(segs + 1):
+        a = math.radians(a0 + (a1 - a0) * i / segs)
+        rings.append([bm.verts.new((cx + s * hw, cy + rr * math.cos(a), cz + rr * math.sin(a)))
+                      for rr in (r, r + thick) for s in (-1, 1)])
+    for r0, r1 in zip(rings, rings[1:]):  # ring: inner-left, inner-right, outer-left, outer-right
+        for a, b in ((2, 3), (1, 0), (0, 2), (3, 1)):
+            bm.faces.new((r0[a], r0[b], r1[b], r1[a]))
+    for rr in (rings[0], rings[-1][::-1]):
+        bm.faces.new((rr[0], rr[1], rr[3], rr[2]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return part(name, bm, sw, 0.004)
+
+
+def kit_wheel(kind, r, w, left):
+    """A Car Kit wheel mesh (wheel-default / -racing / -truck) at radius r and
+    width w, centred, its hub facing out on its side."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=extracted(car_kit(), GLB_DIR + kind + '.glb'))
+    src = next(o for o in bpy.data.objects if o not in before and o.type == 'MESH')
+    me = src.data.copy()
+    for o in [o for o in bpy.data.objects if o not in before]:
+        bpy.data.objects.remove(o)
+    vs = [v.co for v in me.vertices]
+    lo = Vector([min(v[i] for v in vs) for i in range(3)])
+    hi = Vector([max(v[i] for v in vs) for i in range(3)])
+    me.transform(Matrix.Diagonal((w / (hi.x - lo.x), 2 * r / (hi.y - lo.y), 2 * r / (hi.z - lo.z), 1))
+                 @ Matrix.Translation(-(lo + hi) / 2))
+    if left:
+        me.transform(Matrix.Scale(-1, 4, (1, 0, 0)))
+        me.flip_normals()
+    return me
+
+
+def axle(wheels, kind, y, x, r, w, front):
+    """The axle's two wheels, as (node name, mesh, location)."""
+    for s, side in ((-1, 'l'), (1, 'r')):
+        wheels.append((f"wheel-{'f' if front else 'b'}{side}", kit_wheel(kind, r, w, s < 0), (s * x, y, r)))
+
+
+def xs(s, a, b):
+    """The x interval a..b (both >= 0) on side s, low end first."""
+    return tuple(sorted((s * a, s * b)))
+
+
+def hot_rod(wheels):
+    """Dash, the all-rounder: a hot-rod roadster, long bonnet and upright
+    grille, small front wheels on an exposed axle, big rear ones."""
+    P, fy, ry = 'green', 0.31, -0.24
+    section('hood', [(0.42, 0.075, 0.11, 0.25, 0.065), (0.06, 0.09, 0.10, 0.27, 0.08)], P)
+    cab = section('cab', [(0.08, 0.14, 0.08, 0.28, 0.12), (-0.30, 0.14, 0.08, 0.29, 0.12),
+                          (-0.42, 0.11, 0.10, 0.26, 0.09)], P)
+    paint(cab, (0, 0, 1), 'black', x=(-0.10, 0.10), y=(-0.22, 0.04))
+    paint(box('grille', (-0.08, 0.42, 0.10), (0.08, 0.46, 0.28), 'trim', 0.01), (0, 1, 0), 'dark',
+          x=(-0.055, 0.055), z=(0.12, 0.26))
+    box('screen', (-0.13, 0.03, 0.29), (0.13, 0.045, 0.36), 'glass', 0.004)
+    cyl('axle', (-0.15, fy, 0.105), (0.15, fy, 0.105), 0.012, 'trim', 6)
+    for s in (-1, 1):
+        paint(cab, (0, -1, 0), 'tail', x=xs(s, 0.05, 0.09), z=(0.20, 0.24))
+        paint(cyl(f'lamp{s}', (s * 0.115, 0.41, 0.235), (s * 0.115, 0.46, 0.235), 0.03, 'trim'), (0, 1, 0), 'lamp')
+        cyl(f'stalk{s}', (s * 0.08, 0.43, 0.2), (s * 0.115, 0.43, 0.23), 0.008, 'trim', 6)
+        cyl(f'header{s}', (s * 0.095, 0.30, 0.14), (s * 0.12, -0.12, 0.10), 0.014, 'trim', 8)
+        cyl(f'post{s}', (s * 0.13, 0.04, 0.27), (s * 0.13, 0.04, 0.37), 0.008, 'trim', 6)
+    axle(wheels, 'wheel-default', fy, 0.18, 0.105, 0.10, True)
+    axle(wheels, 'wheel-default', ry, 0.19, 0.135, 0.17, False)
+
+
+def roadster(wheels):
+    """Bolt, the fastest and lightest: a Seven-style roadster, long nose,
+    cycle fenders over the front wheels, a headrest fairing, side pipes."""
+    P, fy, ry, tx, r = 'red', 0.30, -0.26, 0.20, 0.12
+    tub = section('tub', [(-0.41, 0.10, 0.07, 0.235, 0.085), (-0.20, 0.12, 0.06, 0.255, 0.105),
+                          (0.12, 0.12, 0.06, 0.25, 0.105), (0.32, 0.09, 0.07, 0.215, 0.075),
+                          (0.47, 0.06, 0.085, 0.175, 0.045)], P)
+    paint(tub, (0, 0, 1), 'black', x=(-0.085, 0.085), y=(-0.17, 0.07))
+    paint(tub, (0, 1, 0), 'dark', x=(-0.04, 0.04), z=(0.10, 0.16))
+    profile('headrest', 0.035, [(-0.18, 0.25), (-0.18, 0.30), (-0.24, 0.31), (-0.36, 0.24)], P)
+    box('screen', (-0.1, 0.075, 0.245), (0.1, 0.088, 0.31), 'glass', 0.004)
+    for s in (-1, 1):
+        paint(tub, (0, -1, 0), 'tail', x=xs(s, 0.045, 0.08), z=(0.17, 0.21))
+        arc(f'fender{s}', s * tx, fy, r, r + 0.012, 0.012, 0.07, 20, 150, P)
+        arc(f'rearwing{s}', s * tx, ry, r * 1.04, r * 1.04 + 0.014, 0.012, 0.08, 40, 150, P, 6)
+        lo, hi = xs(s, 0.11, tx - 0.075)
+        box(f'web{s}', (lo, ry - 0.05, 0.215), (hi, ry + 0.05, 0.235), P)
+        cyl(f'arm{s}', (s * 0.10, fy, r), (s * (tx - 0.07), fy, r), 0.012, 'trim', 6)
+        paint(cyl(f'lamp{s}', (s * 0.13, 0.39, 0.205), (s * 0.13, 0.45, 0.205), 0.03, 'trim'), (0, 1, 0), 'lamp')
+        cyl(f'pipe{s}', (s * 0.128, -0.18, 0.095), (s * 0.128, 0.10, 0.095), 0.016, 'trim', 8)
+    axle(wheels, 'wheel-racing', fy, tx, r, 0.13, True)
+    axle(wheels, 'wheel-racing', ry, tx, r * 1.04, 0.15, False)
+
+
+def buggy(wheels):
+    """Carve, the corner king: a short dune buggy, wheels at the corners
+    under open flares, a roll bar and the engine out the back."""
+    P, fy, ry, tx = 'blue', 0.25, -0.25, 0.20
+    tub = section('tub', [(-0.37, 0.13, 0.09, 0.20, 0.11), (-0.15, 0.15, 0.07, 0.22, 0.13),
+                          (0.12, 0.14, 0.07, 0.225, 0.12), (0.30, 0.12, 0.08, 0.20, 0.10),
+                          (0.42, 0.10, 0.10, 0.165, 0.08)], P)
+    paint(tub, (0, 0, 1), 'black', x=(-0.11, 0.11), y=(-0.17, 0.07))
+    for s in (-1, 1):
+        paint(tub, (0, -1, 0), 'tail', x=xs(s, 0.07, 0.11), z=(0.14, 0.18))
+        arc(f'flareF{s}', s * tx, fy, 0.12, 0.135, 0.014, 0.075, 25, 155, P)
+        arc(f'flareR{s}', s * tx, ry, 0.13, 0.145, 0.014, 0.085, 25, 155, P)
+        lo, hi = xs(s, 0.12, tx - 0.07)
+        box(f'webF{s}', (lo, fy - 0.07, 0.19), (hi, fy + 0.07, 0.21), P)
+        lo, hi = xs(s, 0.13, tx - 0.08)
+        box(f'webR{s}', (lo, ry - 0.08, 0.19), (hi, ry + 0.08, 0.21), P)
+        lo, hi = xs(s, 0.02, 0.10)
+        box(f'seat{s}', (lo, -0.17, 0.2), (hi, -0.13, 0.3), 'seat')
+        cyl(f'hoopPost{s}', (s * 0.12, -0.19, 0.2), (s * 0.12, -0.19, 0.37), 0.012, 'trim', 6)
+        cyl(f'brace{s}', (s * 0.12, -0.19, 0.37), (s * 0.10, -0.33, 0.2), 0.01, 'trim', 6)
+        paint(cyl(f'lamp{s}', (s * 0.07, 0.31, 0.215), (s * 0.07, 0.36, 0.215), 0.026, 'trim'), (0, 1, 0), 'lamp')
+        cyl(f'exhaust{s}', (s * 0.04, -0.36, 0.15), (s * 0.04, -0.45, 0.17), 0.014, 'trim', 8)
+    cyl('hoopTop', (-0.12, -0.19, 0.37), (0.12, -0.19, 0.37), 0.012, 'trim', 6)
+    box('engine', (-0.08, -0.42, 0.12), (0.08, -0.33, 0.22), 'trim')
+    box('screen', (-0.12, 0.085, 0.215), (0.12, 0.097, 0.29), 'glass', 0.004)
+    axle(wheels, 'wheel-default', fy, tx, 0.12, 0.13, True)
+    axle(wheels, 'wheel-default', ry, tx, 0.13, 0.16, False)
+
+
+def four_by_four(wheels):
+    """Rumble, the heavy one: an open 4x4 on truck tyres, bull bar, roll
+    cage with a light bar, the spare on its tail."""
+    P, fy, ry, tx, r = 'purple', 0.27, -0.27, 0.19, 0.15
+    box('frame', (-0.08, -0.40, 0.12), (0.08, 0.40, 0.17), 'dark')
+    tub = section('tub', [(0.40, 0.13, 0.17, 0.30, 0.12), (0.10, 0.15, 0.17, 0.32, 0.14),
+                          (-0.40, 0.15, 0.17, 0.31, 0.14)], P)
+    paint(tub, (0, 0, 1), 'black', x=(-0.12, 0.12), y=(-0.28, 0.02))
+    box('bumper', (-0.15, 0.42, 0.14), (0.15, 0.47, 0.19), 'trim')
+    box('rbumper', (-0.15, -0.46, 0.14), (0.15, -0.41, 0.19), 'trim')
+    cyl('barTop', (-0.11, 0.455, 0.31), (0.11, 0.455, 0.31), 0.012, 'trim', 6)
+    for s in (-1, 1):
+        paint(tub, (0, 1, 0), 'lamp', x=xs(s, 0.06, 0.11), z=(0.24, 0.28))
+        lo, hi = xs(s, 0.08, 0.13)
+        box(f'tailLamp{s}', (lo, -0.415, 0.25), (hi, -0.40, 0.29), 'tail', 0.003)
+        cyl(f'barPost{s}', (s * 0.08, 0.455, 0.19), (s * 0.11, 0.455, 0.31), 0.012, 'trim', 6)
+        arc(f'flareF{s}', s * tx, fy, r, r + 0.015, 0.014, 0.085, 35, 145, P)
+        arc(f'flareR{s}', s * tx, ry, r, r + 0.015, 0.014, 0.085, 35, 145, P)
+        for y in (-0.06, -0.30):
+            cyl(f'cage{s}{y}', (s * 0.13, y, 0.31), (s * 0.12, y, 0.44), 0.012, 'trim', 6)
+        cyl(f'cageSide{s}', (s * 0.12, -0.06, 0.44), (s * 0.12, -0.30, 0.44), 0.012, 'trim', 6)
+        lo, hi = xs(s, 0.02, 0.11)
+        box(f'seat{s}', (lo, -0.24, 0.3), (hi, -0.19, 0.4), 'seat')
+    for y in (-0.06, -0.30):
+        cyl(f'cageTop{y}', (-0.12, y, 0.44), (0.12, y, 0.44), 0.012, 'trim', 6)
+    paint(box('lightbar', (-0.11, -0.075, 0.445), (0.11, -0.045, 0.47), 'dark', 0.004), (0, 1, 0), 'lamp',
+          x=(-0.10, 0.10), z=(0.449, 0.466))
+    spare = bpy.data.objects.new('spare', kit_wheel('wheel-truck', 0.09, 0.08, False))
+    bpy.context.scene.collection.objects.link(spare)
+    spare.rotation_euler.z = -math.pi / 2
+    spare.location = (0.0, -0.48, 0.30)
+    axle(wheels, 'wheel-truck', fy, tx, r, 0.16, True)
+    axle(wheels, 'wheel-truck', ry, tx, r, 0.16, False)
+
+
+# name -> (builder, the roster car whose role it takes). The note is the
+# builder's docstring.
+DESIGNS = {
+    'new-dash': (hot_rod, 'vehicle-racer-low'),
+    'new-bolt': (roadster, 'vehicle-speedster'),
+    'new-carve': (buggy, 'vehicle-racer'),
+    'new-rumble': (four_by_four, 'vehicle-vintage-racer'),
+}
+
+
+def design(fn, pmap, used):
+    """Run a builder, then join its parts (chamfers applied) into one body:
+    (body, [(wheel name, mesh, loc)]), on the toy palette."""
+    wheels = []
+    fn(wheels)
+    dg = bpy.context.evaluated_depsgraph_get()
+    bm = bmesh.new()
+    for o in list(bpy.context.scene.objects):
+        me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+        me.transform(o.matrix_world)
+        bm.from_mesh(me)
+        bpy.data.meshes.remove(me)
+        bpy.data.objects.remove(o)
+    me = bpy.data.meshes.new('body')
+    bm.to_mesh(me)
+    bm.free()
+    for p in me.polygons:
+        p.use_smooth = False
+    body = bpy.data.objects.new('body', me)
+    bpy.context.scene.collection.objects.link(body)
+    for m in [me] + [w[1] for w in wheels]:
+        remap_uvs(m, pmap, used)
+    return body, wheels
+
+
 def build(name, pmap, used):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    body, wheels = convert(CARS[name][0], pmap, used, **TWEAKS.get(name, {}))
+    if name in DESIGNS:
+        body, wheels = design(DESIGNS[name][0], pmap, used)
+    else:
+        body, wheels = convert(CARS[name][0], pmap, used, **TWEAKS.get(name, {}))
     for o in list(bpy.data.objects):
         if o is not body:
             bpy.data.objects.remove(o)
@@ -333,6 +644,11 @@ def write_index(tris):
         if base:
             m['base'] = base
         models.append(m)
+    for name, (fn, base) in DESIGNS.items():
+        count = tris.get(name, old.get(name, {}).get('tris'))
+        if count is not None:
+            models.append({'name': name, 'tris': count, 'base': base,
+                           'note': 'Designed from Car Kit parts. ' + ' '.join(fn.__doc__.split())})
     with open(path, 'w') as f:
         json.dump({'_readme': 'Written by scripts/gen-concept-cars.py; read by the asset gallery.',
                    'models': models}, f, indent=1)
@@ -344,7 +660,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     pmap = palette_map(extracted(car_kit(), GLB_DIR + 'Textures/colormap.png'))
     used = {}
-    write_index({name: build(name, pmap, used) for name in argv or list(CARS)})
+    write_index({name: build(name, pmap, used) for name in argv or list(CARS) + list(DESIGNS)})
     for src, (dst, e) in sorted(used.items(), key=lambda kv: -kv[1][1]):
         print(f'palette: Car Kit {src} -> toy kit {dst}, error {e:.3f}')
 

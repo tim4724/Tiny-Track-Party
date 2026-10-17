@@ -151,6 +151,30 @@
    "tris": 2474,
    "note": "Car Kit 3.1 suv: Rumble: the SUV in purple, body at 88% on the biggest wheels.",
    "base": "vehicle-vintage-racer"
+  },
+  {
+   "name": "new-dash",
+   "tris": 1968,
+   "base": "vehicle-racer-low",
+   "note": "Designed from Car Kit parts. Dash, the all-rounder: a hot-rod roadster, long bonnet and upright grille, small front wheels on an exposed axle, big rear ones."
+  },
+  {
+   "name": "new-bolt",
+   "tris": 2556,
+   "base": "vehicle-speedster",
+   "note": "Designed from Car Kit parts. Bolt, the fastest and lightest: a Seven-style roadster, long nose, cycle fenders over the front wheels, a headrest fairing, side pipes."
+  },
+  {
+   "name": "new-carve",
+   "tris": 2784,
+   "base": "vehicle-racer",
+   "note": "Designed from Car Kit parts. Carve, the corner king: a short dune buggy, wheels at the corners under open flares, a roll bar and the engine out the back."
+  },
+  {
+   "name": "new-rumble",
+   "tris": 3592,
+   "base": "vehicle-vintage-racer",
+   "note": "Designed from Car Kit parts. Rumble, the heavy one: an open 4x4 on truck tyres, bull bar, roll cage with a light bar, the spare on its tail."
   }
  ]
 }
