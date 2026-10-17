@@ -16,19 +16,21 @@
 // cannot personalise, plus the controls only this phone has.
 import { renderWaitNote } from './ui.js';
 import { ordinal } from '../shared/format.js';
+const { ROOM_STATE } = window; // protocol.js is a classic script: the page's globals
 
 const el = (id) => document.getElementById(id);
 
 // Render your card + the footer. `data` is the STANDINGS payload as the display
 // sends it: { over, series?, settled?, order: [{ playerId, name, colorIndex,
-// joining?, ai?, finished?, time?, racePlace?, points?, gained? }] }.
+// joining?, ai?, finished?, time?, racePlace?, points?, gained? }] }, and
+// `roomState` is the room's, off the same snapshot (see renderFoot).
 //
 // `settled` arrives only on a cup's LAST board, and only once the TV has
 // finished revealing the cup (display main.js showResults). Before it this
 // screen is about the race; after it, about the cup — and the title has to move
 // with the card, or a phone reading "Beach Cup · Final" over a RACE place tells
 // whoever won the last race that they won the cup.
-export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf }) {
+export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf, roomState }) {
   const s = data.series;
   const cupDone = !!(s && s.final && data.settled);
   el('results-title').textContent = !s ? 'Results'
@@ -36,7 +38,7 @@ export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf
       : s.endless ? `Race ${s.raceIndex + 1}`                  // endless random: no "of N"
         : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
   renderMe(data, meId, cupDone);
-  renderFoot(data, { hostPeerIndex, amHost, liveryOf });
+  renderFoot(data, { hostPeerIndex, amHost, liveryOf, roomState });
 }
 
 // WHERE YOU CAME IN THE RACE — one ranking, and deliberately not the cup one.
@@ -87,16 +89,24 @@ function renderMe(data, meId, cupDone) {
 // a cup by mistake. A playtest showed that leaving only through the next race's
 // pause menu reads as "there is no way out". Intermissions auto-advance, so
 // non-hosts see "starting soon" rather than a who-to-wait-on name.
-function renderFoot(data, { hostPeerIndex, amHost, liveryOf }) {
+//
+// `over` alone is not the cue. The board is pushed `over` at the finish flag,
+// while the TV runs the field on for the finish flourish, still in PLAYING, and
+// refuses SERIES_NEXT until RESULTS. The flag board's cup chip is also composed
+// before that race's points bank, so on a cup's last race it still reads as an
+// intermission. So every control here is gated on the room state, which rides
+// the same snapshot as the board.
+function renderFoot(data, { hostPeerIndex, amHost, liveryOf, roomState }) {
   const btn = el('newgame-btn');
   const wait = el('result-wait');
   const s = data.series;
-  const intermission = !!(s && !s.final && data.over);
+  const landed = !!(data.over && roomState === ROOM_STATE.RESULTS);
+  const intermission = !!(s && !s.final && landed);
   el('leavecup-btn').classList.toggle('hidden', !(amHost && intermission));
-  if (!data.over) {
+  if (!landed) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
-    wait.textContent = 'Waiting for the other racers to finish…';
+    wait.textContent = data.over ? 'Results coming up…' : 'Waiting for the other racers to finish…';
   } else if (amHost) {
     btn.textContent = intermission ? 'Next race ▸' : 'New game';
     btn.classList.remove('hidden');

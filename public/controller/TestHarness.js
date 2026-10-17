@@ -14,6 +14,7 @@ import { renderResultsBoard } from './resultsBoard.js';
 import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
 import { syncCloseButton } from './closeButton.js';
+const { ROOM_STATE } = window;
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -168,7 +169,10 @@ export function runControllerScenario(opts) {
         if (row.finished && row.time == null) row.time = 28.4 + (row.racePlace - 1) * 2.3;
         return row;
       }) },
-      { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888' }
+      // The room state the board rides in on: an `over` board here is the TV's
+      // landed one, so the footer's controls show (resultsBoard.js renderFoot).
+      { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888',
+        roomState: over ? ROOM_STATE.RESULTS : ROOM_STATE.PLAYING }
     );
   };
 

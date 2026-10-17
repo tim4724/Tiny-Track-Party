@@ -121,7 +121,7 @@ let inResults = false;     // showing the results overlay (my car finished / rac
 // automatically when the next race builds its field; GAME_END (back to the
 // lobby) clears the flag.
 let waitingForNextRace = false;
-let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
+let lastStandings = null;  // latest STANDINGS payload — the results button reads its series to pick its message
 
 // Keep the phone's screen on while seated in a room: tilt steering means whole
 // races go by without a touch, so the screen would otherwise dim and lock
@@ -373,7 +373,7 @@ function syncRoom(data) {
   const mineDone = board && (board.over || (board.order || []).some((o) => o.playerId === net.peerIndex && o.finished));
 
   if (rs === ROOM_STATE.RESULTS || (midRace && !waitingForNextRace && mineDone)) {
-    if (board) { renderResults(board); showResultsScreen(); }
+    if (board) { renderResults(board, rs); showResultsScreen(); }
   } else if (midRace && !waitingForNextRace) {
     // Drop into the live race (or the countdown — tilt streams so the display reacts).
     inResults = false;
@@ -385,7 +385,7 @@ function syncRoom(data) {
   } else if (waitingForNextRace && board && board.over) {
     // Late joiner and the FINAL board is up — it lists us as "Next race", so join
     // everyone on the results screen.
-    renderResults(board); showResultsScreen();
+    renderResults(board, rs); showResultsScreen();
   } else {
     // Lobby proper, or waiting on the next race. May be reached FROM the game
     // screen (display reloaded mid-race), so shut the drive surface down.
@@ -409,8 +409,8 @@ function showResultsScreen() {
   show('results');
 }
 
-function renderResults(data) {
-  renderResultsBoard(data, { meId: net.peerIndex, hostPeerIndex, amHost, liveryOf });
+function renderResults(data, roomState) {
+  renderResultsBoard(data, { meId: net.peerIndex, hostPeerIndex, amHost, liveryOf, roomState });
 }
 
 function applyLivery() {

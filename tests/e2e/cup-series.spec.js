@@ -61,6 +61,12 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   // timeout is that animation plus the scene teardown that can block the page
   // through it, not slack for a hang.
   await finishHumans(page);
+  // The flag's board reaches the phones BEFORE the TV's (the finish flourish),
+  // and on the last race its cup chip does not yet know the cup is over. The
+  // phone offers nothing in that window: not a "Next race" the display would
+  // refuse, and not a "Leave cup" over a cup that is finished.
+  await expect(alice.locator('#result-wait')).toHaveText('Results coming up…');
+  await expect(alice.locator('#result-foot button:visible')).toHaveCount(0);
   await inResults(page);
   await expect(page.locator('#results-title')).toHaveText('Beach Cup CHAMPS!', { timeout: 20000 });
   await expect(page.locator('#results-list li.is-medal-1')).toHaveCount(1);
