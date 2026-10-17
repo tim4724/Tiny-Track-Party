@@ -375,6 +375,12 @@ function fadeBackdrop(mid) {
 // shouldn't be running (no track yet, mid-race, or a test surface owns the scene).
 // Cheap to call repeatedly: it skips a rebuild when nothing relevant changed, so
 // re-picking the same car doesn't re-grid the field.
+// The attract field and its signature are the ORCHESTRATION layer's
+// (ttp_race.h): each seated human's PICKED car (livery + model), plus CPU
+// racers topping the grid up to a full field, every car driven by the AI, read
+// straight off the room handle (flow.demoLive). The ?bots=<n> debug cap rides
+// each call rather than the configured world: it is a URL hook, not part of
+// the game's shape.
 function refreshLobbyDemo() {
   if (_isTestMode || !sceneReady || session || !selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY)) {
     lobbyDemo.stop();
@@ -403,20 +409,6 @@ function refreshLobbyDemo() {
   lobbyDemo.start(track, field, sig, skill);
 }
 
-// Roster changes (join/leave/car-pick) arrive in bursts as players fiddle; debounce
-// the rebuild so rapid car-cycling coalesces into one re-grid instead of many.
-let demoRefreshTimer = null;
-function scheduleLobbyDemo() {
-  clearTimeout(demoRefreshTimer);
-  demoRefreshTimer = setTimeout(refreshLobbyDemo, 500);
-}
-
-// The attract field and its signature are the ORCHESTRATION layer's
-// (ttp_race.h): each seated human's PICKED car (livery + model), plus CPU
-// racers topping the grid up to a full field, every car driven by the AI, read
-// straight off the room handle (flow.demoLive above). The ?bots=<n> debug cap
-// rides each call rather than the configured world: it is a URL hook, not part
-// of the game's shape.
 // ---- audio ----
 // Two halves, and the split is load-bearing (docs/native-port/shared-cpp-plan.md
 // P7 ported one of them to C++ and left the other per-platform):
@@ -845,7 +837,11 @@ function renderRoster(rosterSize, hostPeerIndex) {
   sfx(audioDecide.roster(rosterSize, net.roomState === ROOM_STATE.LOBBY));
   renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex));
   renderPick();   // the pre-pick cup slot names the host — track joins/renames
-  scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
+  // Reflect joins/leaves/car-picks in the attract demo at once. No debounce:
+  // on a full grid a roster change is an in-place re-dress (swapCar), so there
+  // is nothing to coalesce, and a wait here is the lag between the tap and the
+  // car changing on the TV.
+  refreshLobbyDemo();
 }
 
 // Lobby right-rail cup slot, driven by the same state as the phones' track-pick

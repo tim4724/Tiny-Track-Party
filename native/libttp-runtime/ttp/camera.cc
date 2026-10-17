@@ -251,6 +251,9 @@ void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& 
     const int pick = featured;
     featured = -1;
     if (isLive(pick)) {
+        // Already chasing this car: restart the hold only. A cut would reset
+        // the chase spring to zero lag, which shows as the car jumping back.
+        if (shot == Shot::CHASE && subject == pick) { held = 0; return; }
         subject = pick;
         beat |= 1;   // the chase after this battle, so the next battle is still due
         cutTo(Shot::CHASE);

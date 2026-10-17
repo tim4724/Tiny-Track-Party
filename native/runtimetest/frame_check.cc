@@ -1122,7 +1122,15 @@ void testCoverageShots() {
           "coverage: …and holds a full chase from the pick");
     pick.featured = 2;
     pick.step(step, cars, all, players);
-    check(pick.cut && pick.held == 0, "coverage: picking again restarts the chase");
+    check(!pick.cut && pick.shot == Shot::CHASE && pick.subject == 2 && pick.held == 0,
+          "coverage: picking again restarts the hold and keeps the rig — no cut");
+    pick.featured = 0;
+    pick.step(step, cars, all, players);
+    check(pick.cut && pick.shot == Shot::CHASE && pick.subject == 0,
+          "coverage: a pick on ANOTHER car mid-chase is a cut");
+    pick.featured = 2;
+    pick.step(step, cars, all, players);
+    check(pick.cut && pick.subject == 2, "coverage: …and back again");
     pick.step(rt::COVER_HOLD_CHASE, cars, all, players);
     check(pick.shot == Shot::PACK, "coverage: after a picked chase, the cycle goes on to a battle");
   }

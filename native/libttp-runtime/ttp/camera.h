@@ -240,7 +240,9 @@ struct FollowCam {
 //
 // A car pick on a phone, or a phone joining (both a player's slot re-dressed
 // by ttp_display_reroster), cuts straight to CHASE on that car, whatever is on
-// screen: the player sees the car they just chose, driving.
+// screen: the player sees the car they just chose, driving. Unless the chase
+// is already on that car — then the shot only restarts its hold, because a
+// cut starts the rig's spring over and that reads as the car jumping.
 // ---------------------------------------------------------------------------
 enum class Shot { WIDE, LEAD, PACK, CHASE };
 constexpr float COVER_HOLD_BATTLE = 10.0f, COVER_HOLD_CHASE = 8.0f;
