@@ -1690,15 +1690,40 @@ r1; ...)`) hung the PowerVR GPU outright on this box — the race drew nothing
 for 75 s and the driver logged `waitForever: Pipeline stage signal fence` —
 while the web compiled and ran it. Constant bounds with a skip are fine.
 
-**The operating point after the pass.** Adaptive 4P races on the shipped
-build: pretzel 32 s at 720 (59.7 fps, 0.3 skips/s) then 540 for the rest;
-glacier 18 s at 720 then 540 for 101 s at a heavy p50 of 9.8 ms. So the box
-plays four players at 540 with ~40% of the budget idle, because 720's
-heaviest seconds (the opening pack, the vista) touch the 15.0 ms retreat and
-the climb back is fitted on that window (the 2026-10-03 section). What 720
-needs is ~1-1.5 ms off the HEAVIEST seconds, not off the median, and the
-alternative is a policy change to the rule's retreat or climb
-(render_scale.h), which is the user's call.
+**The operating point after the pass, and the quality tiers priced against
+it.** Adaptive 4P pretzel races on the shipped build, 100 s counted, the
+retreat read off the operating-point table: five base races, of which two
+retreated to 540 at 32-33 s and three held 720 to the end (heavy p50
+13.6-14.0, 91-96 clean seconds of 99, 3-6 seconds with a skip). So 720 at
+four players is a coin flip on the opening pack, not a floor at 540: the
+retreat needs GPU p95 over 15.0 AND presents off cadence in the same window
+(`render_scale.h`, `presentsOnCadence`), and every held race had 9-18
+seconds over 15.0 that presented on time. Glacier earlier in the day: 18 s
+at 720 then 540 for 101 s at a heavy p50 of 9.8 ms, ~40% of the budget idle.
+
+The quality cuts, same method, one or two races each (mask, what it removes,
+heavy p50, clean seconds, retreats):
+
+| arm | heavy | clean of 99 | retreated |
+|---|---|---|---|
+| base `0xDFFC` | 13.6-14.0 | 91-96 | 2 of 5 |
+| no rubber tap `0xDDFC` (no skid marks) | 13.25-13.35 | 94-97 | 0 of 4 |
+| no sun-vis + no rubber `0xD5FC` | 12.98 | 96 | 0 of 1 |
+| no sky, effects, fog `0xCF5C` | 13.75 | 94 | 0 of 1 |
+| no grade `0x9FFC` | 13.10 | 96-100 | 0 of 2 |
+| no grade + no rubber `0x9DFC` | 12.67 | 97 | 0 of 2 |
+
+Two readings of that. **No cut makes 720 clean**: the heaviest seconds reach
+a p95 of 17-18.6 ms in EVERY arm, base and -1.6 alike, because the opening
+pack and the vista are 3-4 ms over the median and the channels are 0.5-1.3
+each; a cut moves the odds of the retreat, not the skip-seconds. And **the
+grade arm is not a quality tier** — `ttpGrade` is the linear-to-sRGB encode,
+so that picture is simply wrong; it is in the table only as the measure of
+what 0.8 ms buys. The one defensible 4P-only tier is the rubber tap: a skid
+mark is a couple of pixels wide in a 4P cell, and the tap is 0.6-0.8 ms of
+the heavy second. What would actually hold 720 for four players is the rule
+tolerating a few skip-seconds a race before it retreats, which is a policy
+change to `render_scale.h` and the user's call.
 
 **`LOD_ALL`'s -1.1 was the shadow.** The user saw that the car shadow does
 not draw under the far-everywhere arm: the pass is the fine rings' own
