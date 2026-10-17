@@ -973,9 +973,10 @@ answer.
 **The boards are laid out from tvOS's safe area, not the token's.** Every
 other full-screen board takes `Tokens.safeMarginX/Y`; these three take
 `Tokens.legalInsetX/Y`, the 90 x 60 pt system safe area SwiftUI gives every
-pushed page on tvOS, under the same 60 x 28 board padding and 12 pt version
-line the tvOS twin uses. The screens gallery reads the two shells' boards
-side by side, and at the token's 2.5% this shell's list and version line sat
+pushed page on tvOS, with the same 12 pt version line the tvOS twin uses; the
+licence boards put their title and cards straight on that edge. The screens
+gallery reads the two shells' boards side by side, and at the token's 2.5%
+this shell's list and version line sat
 visibly nearer the bezel than the Apple TV's for no reason a viewer could
 name. It is a hand-typed pair because its source is Apple's platform.
 

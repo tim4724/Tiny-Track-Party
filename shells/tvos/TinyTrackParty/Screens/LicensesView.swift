@@ -25,7 +25,9 @@ import UIKit
 /// on the next stage with nothing edited.
 ///
 /// The rows are grouped exactly as the web page groups them (`SECTION_ORDER`),
-/// and the ORDER inside a section is the shared data's own.
+/// and the ORDER inside a section is the shared data's own: ONE paper card per
+/// section, its name a label at the card's corner, its rows printed on it and
+/// ruled apart — the web page's `.sec` cards, in one column.
 @MainActor
 struct LicensesView: View {
 
@@ -36,33 +38,85 @@ struct LicensesView: View {
     /// row would strand everything below it.
     @FocusState private var focusedRow: Legal.Entry.ID?
 
+    /// A section's label colour, by its index: the web's `.sec:nth-child`
+    /// cycle, so Music is red, 3D models blue, Sound effects purple, Fonts
+    /// green, and the cycle starts over.
+    private static let sectionColors = [Tokens.red, Tokens.blue, Tokens.purple, Tokens.green]
+
+    /// `Legal.entries` cut into its runs of one section, each row keeping its
+    /// index in the flat list — the index is what the drill-in route carries.
+    private struct Section: Identifiable {
+        let name: String
+        var rows: [(index: Int, entry: Legal.Entry)]
+        var id: String { name }
+    }
+
+    private static let sections: [Section] = Legal.entries.enumerated().reduce(into: []) { out, item in
+        if out.last?.name == item.element.section {
+            out[out.count - 1].rows.append((item.offset, item.element))
+        } else {
+            out.append(Section(name: item.element.section, rows: [(item.offset, item.element)]))
+        }
+    }
+
+    /// The title is the list's FIRST ITEM, not a fixed header, so it scrolls
+    /// away with the page, and the cards run under the screen edges instead of
+    /// being cut off one inset in. The first screen is the same picture either
+    /// way. (Android's twin does the same; the licence TEXT page keeps its
+    /// fixed title on both.)
     var body: some View {
-        LegalBoard(title: Copy.licenses) { _ in
+        PaperStage {
+            // The scroll view's FRAME stays on the safe area, which is what the
+            // focus engine scrolls the focused row into, so a row is never
+            // brought to rest under a bezel that crops. Its DRAWING is not
+            // clipped there: the content runs on to the screen edges. Reaching
+            // past the safe area with `ignoresSafeArea` instead moved the first
+            // screen up by the inset, title and all.
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(Legal.entries.enumerated()), id: \.element.id) { index, entry in
-                        if index == 0 || Legal.entries[index - 1].section != entry.section {
-                            StickerPill(entry.section, tint: Tokens.purple, size: 20)
-                                .padding(.top, index == 0 ? 0 : 18)
-                        }
-                        row(entry, index: index)
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    LegalTitle(text: Copy.licenses)
+                        .padding(.bottom, LegalTitle.gap - 24)
+                    ForEach(Array(Self.sections.enumerated()), id: \.element.id) { i, section in
+                        card(section, color: Self.sectionColors[i % Self.sectionColors.count])
                     }
                 }
-                .padding(.vertical, 8)
             }
+            .scrollClipDisabled()
         }
         // Seat the remote on the first row, so the list is live on arrival and
         // the board does not need a press to wake up.
         .onAppear { focusedRow = Legal.entries.first?.id }
     }
 
+    private func card(_ section: Section, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            StickerPill(section.name, tint: color, size: 16.5)
+                .padding(.top, 6)
+                .padding(.bottom, 12)
+                .padding(.leading, 9)
+            ForEach(Array(section.rows.enumerated()), id: \.element.entry.id) { n, row in
+                // The rule ABOVE each row parts it from the one before: none on
+                // the first, and none either side of the focused one, whose
+                // wash is its own edge.
+                let focused = focusedRow == row.entry.id
+                let ruled = n > 0 && !focused && focusedRow != section.rows[n - 1].entry.id
+                link(row.entry, index: row.index, focused: focused, ruled: ruled)
+            }
+        }
+        .padding(.vertical, 18)
+        .padding(.horizontal, 21)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Sticker.radiusLarge, style: .continuous)
+            .fill(Tokens.surface))
+    }
+
     /// Every row is a link, because every entry has a text behind it — see the
     /// board's own header. It used to branch on `notice`, leaving CC0 and CC-BY
     /// rows focusable but inert; what that cost was not the press, it was that
     /// the majority of this list was terms the room could not read.
-    private func row(_ entry: Legal.Entry, index: Int) -> some View {
+    private func link(_ entry: Legal.Entry, index: Int, focused: Bool, ruled: Bool) -> some View {
         NavigationLink(value: GameState.InfoRoute.license(index)) {
-            LicenseRow(entry: entry, focused: focusedRow == entry.id)
+            LicenseRow(entry: entry, focused: focused, ruled: ruled)
         }
         .buttonStyle(BareRowStyle())
         .focusEffectDisabled()
@@ -84,54 +138,58 @@ private struct BareRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
-/// One credit: what it is and who made it on the left, what it is licensed under
-/// on the right — the same two columns the web page's `.entry` row has.
+/// One credit on ONE line: what it is, then who made it, then what it is
+/// licensed under against the right edge — the web page's `.entry` row.
 ///
-/// Every row is a CHOICE — white with the faint edge — and **FOCUS IS THE PICK**:
-/// the blue wash with the edge turned into a blue ring. It is the one focus
-/// signal available here, because the lift is not: a row is as wide as the
-/// list, so `Sticker.focusScale` pushes it past the ScrollView's bounds, WHICH
-/// CLIP (the focused row came back cropped at both ends, and the top one lost
-/// its first character). The wash and the ring need no room the row does not
-/// already have.
+/// The rows are printed on their section's card, not cards of their own, and
+/// **FOCUS IS THE PICK**: the row washed blue with a blue ring inside its own
+/// box. It is the one focus signal available here, because the lift is not: a
+/// row is as wide as the list, so `Sticker.focusScale` pushes it past the
+/// ScrollView's bounds, WHICH CLIP (the focused row came back cropped at both
+/// ends, and the top one lost its first character).
 @MainActor
 private struct LicenseRow: View {
     let entry: Legal.Entry
     let focused: Bool
+    let ruled: Bool
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
-        return HStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 2) {
+        let shape = RoundedRectangle(cornerRadius: 21, style: .continuous)
+        return HStack(spacing: 15) {
+            HStack(alignment: .firstTextBaseline, spacing: 15) {
+                // The title gives way first: a long one ellipsises, and the
+                // author beside it — half of what the attribution says — stays.
                 Text(entry.title)
-                    .font(Fonts.display(26, weight: .bold))
+                    .font(Fonts.display(24, weight: .semibold))
                     .foregroundStyle(Tokens.ink)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(entry.author)
-                    // `ink-2` rather than the caption grey: on the pick's wash
-                    // the paler one is barely there, and the author is half of
-                    // what the attribution actually says.
-                    .font(Fonts.display(20, weight: .semibold))
+                    .font(Fonts.body(19.5, weight: .bold))
                     .foregroundStyle(Tokens.ink2)
                     .lineLimit(1)
+                    .fixedSize()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // A LABEL: the one token on the row that means something specific
-            // (the licence).
-            StickerPill(entry.license, size: 17)
-            // The chevron says the row opens, which every row now does. It is
-            // kept rather than dropped: it is the only mark on the row that
-            // says a press does anything at all.
-            Text("›")
-                .font(Fonts.display(28, weight: .bold))
-                .foregroundStyle(focused ? Tokens.ink : Tokens.ink3)
-                .frame(width: 18)
+            // A grey LABEL: the licence is a fact about the row, not a colour.
+            StickerPill(entry.license, size: 15)
+                .fixedSize()
+            // The chevron says the row opens, which every row does. It is the
+            // only mark on the row that says a press does anything at all.
+            Image(systemName: "chevron.right")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Tokens.ink3)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 11)
-        .background(shape.fill(focused ? Tokens.pick : Tokens.surface))
-        .overlay(Sticker.choiceEdge(shape, picked: focused))
+        .padding(.vertical, 18)
+        .padding(.horizontal, 21)
+        .background(shape.fill(focused ? Tokens.pick : Color.clear))
+        .overlay {
+            if focused { shape.strokeBorder(Tokens.blue, lineWidth: Sticker.ring) }
+        }
+        .overlay(alignment: .top) {
+            if ruled { Rectangle().fill(Tokens.hairline).frame(height: 2) }
+        }
         .animation(.easeOut(duration: 0.12), value: focused)
         .accessibilityElement(children: .combine)
     }
@@ -223,8 +281,8 @@ private struct LicenseText: View {
     }
 }
 
-/// The chrome both legal boards wear: paper, a plain ink title, and the body
-/// sized by a reader so the text page can slice against a real height.
+/// The licence text page's chrome: paper, a fixed plain ink title, and the body
+/// sized by a reader so the text can slice against a real height.
 ///
 /// Paper rather than floating over the live 3D, because these are full-screen
 /// BOARDS in the project's own sense: chrome floats bare over the scene, boards
@@ -236,17 +294,28 @@ private struct LegalBoard<Content: View>: View {
 
     var body: some View {
         PaperStage {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(title)
-                    .font(Fonts.display(54, weight: .bold))
-                    .foregroundStyle(Tokens.ink)
-                    .lineLimit(1)
-
+            // The content sits on the system safe area (90 x 60 points) and no
+            // further in: that IS the board's margin.
+            VStack(alignment: .leading, spacing: LegalTitle.gap) {
+                LegalTitle(text: title)
                 GeometryReader { geo in content(geo.size.height) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 60)
-            .padding(.vertical, 28)
         }
+    }
+}
+
+/// Both legal boards' title: plain ink, top-left.
+private struct LegalTitle: View {
+    let text: String
+
+    /// Title to body, on both legal boards.
+    static let gap: CGFloat = 30
+
+    var body: some View {
+        Text(text)
+            .font(Fonts.display(60, weight: .bold))
+            .foregroundStyle(Tokens.ink)
+            .lineLimit(1)
     }
 }

@@ -50,8 +50,8 @@ function entryRow(entry) {
 function sectionCard({ section, entries }) {
   const card = el('section', 'card sec');
 
-  // The badge straddles the card's top edge like a label slapped on it.
-  card.appendChild(el('h2', 'sec__badge', section));
+  // The section's name is the card's LABEL, a tint of the section's colour.
+  card.appendChild(el('h2', 'pill sec__badge', section));
 
   // Every section renders the same way, music included: one row per work, its
   // own author and license on each. The music used to collapse to chips under a
