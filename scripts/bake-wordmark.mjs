@@ -2,9 +2,8 @@
 //
 //   node scripts/bake-wordmark.mjs
 //
-// WHY THIS EXISTS. The wordmark is TYPE — a variable font, a centred text
-// stroke, a hard drop shadow and a 2-degree rotation, all declared once in
-// `public/shared/theme.css`. Three of the places that need it cannot render
+// WHY THIS EXISTS. The wordmark is TYPE — a variable font, two colours and a
+// tilted second line, all declared once in `public/shared/theme.css`. Three of the places that need it cannot render
 // type at all:
 //
 //   * an Android VectorDrawable has no text primitive, so the launcher banner
@@ -32,12 +31,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, servePages, launchBrowser } from './lib/capture.mjs';
 
-// THE REAL SIZE, then supersampled by the device pixel ratio. The wordmark's
-// white cut is a FIXED `-webkit-text-stroke: 7px` against a font-size the web
-// clamps to 130 at poster scale, so the edge is a proportion of that pair and of
-// nothing else. Baking at a bigger font-size thins the cut; baking at 130 and
-// asking the browser for 4x pixels keeps every proportion and just hands back
-// more of them.
+// THE REAL SIZE, then supersampled by the device pixel ratio: 130 is the
+// font-size the web clamps the board's mark to at poster scale, and asking the
+// browser for 4x pixels keeps every proportion of that layout and just hands
+// back more of them.
 const FONT_PX = 130;
 const SCALE = 4;
 
@@ -66,8 +63,8 @@ const PAGE = `<!doctype html>
 // a 320x180 bitmap arrives UPSCALED, which is exactly what it looked like.
 //
 // So the layout stays 320x180 and the pixels come from BANNER_SCALE, the same
-// trade the wordmark makes above: a fixed 7px text stroke and a fixed car width
-// are proportions of the layout, and re-typing them larger would change the
+// trade the wordmark makes above: the type and a fixed car width are
+// proportions of the layout, and re-typing them larger would change the
 // composition rather than sharpen it. Downsampling a 4x master is strictly better
 // than upsampling a 1x one, which is what the previous comment here had backwards. Built from the
 // theme's own paper stage rather than drawn by hand: `banner.xml` shipped as a
@@ -143,7 +140,14 @@ const CAR = '/assets/brand/car-hero.png';
 const SQ_BAND = 0.22;
 const SQ_DOME = 0.10;
 const pct = (x) => `${+(x * 100).toFixed(4)}%`;
-const SCENE_SQ = (band) => `
+// THE ICONS' COLOURS: the welcome board's sky and grass, turned up. At icon size
+// the board's own pale sky washed the car out, so every icon composition (the
+// square, the adaptive pair, the tvOS stack, the banner) takes this deeper pair;
+// the board itself keeps theme.css's. Picked by the user from six variations.
+const ICON_SCENE = `
+    .scene__sky { background: linear-gradient(180deg, #5FB0EC 0%, #9BD0F4 60%, #CDE8FA 100%); }
+    .scene__grass { background: #7CC25A; }`;
+const SCENE_SQ = (band) => `${ICON_SCENE}
     .scene__grass { left: -26%; right: -26%; height: ${pct(band)};
                     border-radius: 50% 50% 0 0 / ${pct(SQ_BAND * SQ_DOME / band)} ${pct(SQ_BAND * SQ_DOME / band)} 0 0; }
     .scene__sky::before, .scene__sky::after { display: none; }`;
@@ -156,10 +160,14 @@ const BANNER = `<!doctype html>
     html, body { margin: 0; }
     body { width: ${BANNER_W}px; height: ${BANNER_H}px; position: relative; overflow: hidden; }
     .scene { position: absolute; inset: 0; }
-    .car { position: absolute; left: -46px; bottom: -16px; width: 240px; }
-    .mark { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
-    /* 28px is what leaves the two lines, the die-cut edge and the shadow inside
-       the frame once the car has taken the left half. */
+    ${ICON_SCENE}
+    .scene__sky::before { background: #A4D688; }
+    .scene__sky::after { background: #8FCB6C; }
+    .car { position: absolute; left: -58px; bottom: -16px; width: 240px; }
+    /* UP IN THE SKY, as on the welcome board: the flat Toy Box mark has no
+       die-cut edge left to part it from the car's front wing or the grass
+       line, so it must clear both rather than sit on them. */
+    .mark { position: absolute; right: 12px; top: 20px; }
     .wordmark { font-size: 28px; }
   </style>
   <div class="scene">
@@ -335,7 +343,7 @@ const ADAPT_LAYER = (layer) => {
 // the box, so its height has to be restated per aspect. The clouds go for the
 // icon (small, and they sit behind the subject) and stay for the top shelf,
 // which is big enough to carry them.
-const SCENE_TV = (grassPct, flat) => `
+const SCENE_TV = (grassPct, flat) => `${ICON_SCENE}
     .scene__grass { left: -20%; right: -20%; height: ${grassPct}%;
                     ${flat ? 'border-radius: 50% 50% 0 0 / 12% 12% 0 0;' : ''} }`;
 
@@ -397,8 +405,7 @@ const SPLASH_ICON = `<!doctype html>
       width: ${ICON}px; height: ${ICON}px;
       display: flex; align-items: center; justify-content: center;
     }
-    /* Sized so the two lines sit inside the circle the launcher masks to, with
-       the die-cut edge and the drop shadow still inside it. */
+    /* Sized so the two lines sit inside the circle the launcher masks to. */
     .wordmark { font-size: ${Math.round(ICON * ICON_FIT * 0.30)}px; text-align: center; }
   </style>
   <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
@@ -461,9 +468,9 @@ if (!usedFredoka || failed.length) {
   process.exit(1);
 }
 
-// The element's own box EXCLUDES the stroke, the shadow and the rotation, so a
-// screenshot of it clips exactly the parts that make it a sticker. The padded
-// body is shot instead, and the padding is what the callers get as margin.
+// The element's own box EXCLUDES the tilted second line's overhang, so a
+// screenshot of it clips the mark. The padded body is shot instead, and the
+// padding is what the callers get as margin.
 const png = await page.locator('body').screenshot({ omitBackground: true });
 
 // Both shots come off the SAME browser and server; the names below just keep

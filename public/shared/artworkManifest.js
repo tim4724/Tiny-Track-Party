@@ -128,8 +128,7 @@ export const ARTWORK = [
   { id: 'wordmark', family: 'launcher', file: 'brand/wordmark.png', w: null, h: null,
     drawnAt: 420, bake: 'npm run bake:wordmark',
     note: 'The mark alone, transparent and cropped to the ink — callers composite it over their own '
-        + 'background. Baked at font-size 130 and supersampled 4x, because the die-cut white edge is '
-        + 'a FIXED 7px stroke: baking it bigger would thin the cut.' },
+        + 'background. Baked at the board’s own font-size 130 and supersampled 4x.' },
 
   // ---- the tvOS layered icon ----------------------------------------------
   { id: 'tvicon-400', family: 'tvicon', file: 'brand/tv/icon-front.png', w: 400, h: 240,
