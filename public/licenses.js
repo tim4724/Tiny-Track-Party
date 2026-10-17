@@ -26,9 +26,7 @@ function link(href, cls, text) {
 // The license chip is the entry's ONE link to its terms, and it points at the
 // most specific text there is: where the license requires its own text to ship
 // with the build, that is our served copy, which carries the real copyright
-// line. Otherwise it is the canonical text of the license itself. (This used to
-// be two links, a generic one plus a "notice", which left CC0 works showing a
-// notice or not depending only on whether a file happened to exist.)
+// line. Otherwise it is the canonical text of the license itself.
 function licenseChip(entry) {
   return link(entry.notice ?? licenseInfo(entry.license).url, 'pill entry__license', entry.license);
 }
@@ -50,13 +48,11 @@ function entryRow(entry) {
 function sectionCard({ section, entries }) {
   const card = el('section', 'card sec');
 
-  // The badge straddles the card's top edge like a label slapped on it.
-  card.appendChild(el('h2', 'sec__badge', section));
+  // The section's name is the card's LABEL, a tint of the section's colour.
+  card.appendChild(el('h2', 'pill sec__badge', section));
 
   // Every section renders the same way, music included: one row per work, its
-  // own author and license on each. The music used to collapse to chips under a
-  // single shared credit line, which was shorter but made one section read
-  // unlike the rest.
+  // own author and license on each.
   const list = el('ul', 'entries');
   for (const entry of entries) list.appendChild(entryRow(entry));
   card.appendChild(list);

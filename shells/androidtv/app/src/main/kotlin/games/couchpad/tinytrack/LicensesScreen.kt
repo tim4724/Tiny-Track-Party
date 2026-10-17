@@ -1,5 +1,6 @@
 package games.couchpad.tinytrack
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,13 +11,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -32,14 +32,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -55,16 +62,16 @@ import kotlinx.coroutines.launch
  *
  * **EVERY ROW OPENS.** A browser gets a link on each licence chip — the served
  * notice where one is shipped, else the canonical URL (`public/licenses.js`) —
- * and a television can follow neither, so a CC-BY or CC0 row used to name its
- * licence and give the room no way to read it. Which of the two texts a row has
- * behind it is the generator's business, not this file's.
+ * and a television can follow neither, so every row opens a text here instead.
+ * Which of the two texts a row has behind it is the generator's business, not
+ * this file's.
  *
  * The rows are grouped exactly as the web page groups them (`SECTION_ORDER`),
  * and the ORDER inside a section is the shared data's own.
  */
 @Composable
 fun LicensesScreen(state: GameState) {
-    LegalBoard(Copy.licenses) {
+    LegalBoard {
         // Every row is focusable, including the ones with no text to drill into.
         // That is not decoration: `Modifier.focusable` brings itself into view, so
         // an unfocusable row is a row the REMOTE CANNOT REACH — and the music
@@ -81,30 +88,71 @@ fun LicensesScreen(state: GameState) {
         // position outlives this composable — see `GameState.licensesList`).
         // Asking for a row that is not on screen would ask a FocusRequester no
         // node is attached to yet, which throws; the top visible one is composed
-        // by the first layout pass by definition.
-        val seat = remember { state.licensesList.firstVisibleItemIndex }
+        // by the first layout pass by definition. Item 0 is the title, so row k is
+        // item k + 1.
+        val seat = remember { (state.licensesList.firstVisibleItemIndex - 1).coerceAtLeast(0) }
         val first = remember { FocusRequester() }
         LaunchedEffect(Unit) {
             if (Legal.entries.isNotEmpty()) runCatching { first.requestFocus() }
         }
+        // Which row holds focus, because the rules either side of it hide: the
+        // focused row's wash is its own shape, and a hairline running into it
+        // reads as a seam.
+        var focusedRow by remember { mutableStateOf(-1) }
+        val entries = Legal.entries
+        // The sections in order of first appearance, for the label colour cycle.
+        val sections = remember { entries.map { it.section }.distinct() }
 
+        // ONE PAPER CARD PER SECTION, and still one lazy item per ROW: a row has
+        // to stay its own item so the list brings the FOCUSED ROW into view (a
+        // card-sized item would scroll whole sections at a time). So each row
+        // paints its slice of its section's card — the top slice carries the
+        // label and the top corners, the bottom slice the bottom corners — and
+        // the gap between two cards is the first slice's own top margin.
+        //
+        // THE TITLE IS THE FIRST ITEM, so it scrolls away with the page and the
+        // cards run on to both edges of the screen rather than being cut off in a
+        // hard line one inset in. The inset is the list's content padding, so
+        // the first and last lines can still be brought clear of it.
         LazyColumn(
             Modifier.fillMaxSize(),
             state = state.licensesList,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            contentPadding = PaddingValues(top = Tokens.legalInsetY, bottom = Tokens.legalInsetY),
         ) {
-            itemsIndexed(Legal.entries, key = { _, e -> e.section + "/" + e.title }) { i, entry ->
-                Column {
-                    if (i == 0 || Legal.entries[i - 1].section != entry.section) {
-                        Spacer(Modifier.height(if (i == 0) 0.dp else 18.dp))
-                        LabelPill(entry.section, tint = Tokens.purple, size = 20.dp)
-                        Spacer(Modifier.height(12.dp))
+            item(key = "title") { LegalTitle(Copy.licenses, Modifier.padding(bottom = TITLE_GAP)) }
+            itemsIndexed(entries, key = { _, e -> e.section + "/" + e.title }) { i, entry ->
+                val top = i == 0 || entries[i - 1].section != entry.section
+                val bottom = i == entries.size - 1 || entries[i + 1].section != entry.section
+                val r = Sticker.radiusLarge
+                Column(
+                    Modifier
+                        .padding(top = if (top && i > 0) CARD_GAP else 0.dp)
+                        .background(Tokens.surface, RoundedCornerShape(
+                            topStart = if (top) r else 0.dp, topEnd = if (top) r else 0.dp,
+                            bottomStart = if (bottom) r else 0.dp, bottomEnd = if (bottom) r else 0.dp,
+                        ))
+                        .padding(horizontal = CARD_PAD_X)
+                        .padding(top = if (top) CARD_PAD_Y else 0.dp,
+                            bottom = if (bottom) CARD_PAD_Y else 0.dp),
+                ) {
+                    if (top) {
+                        // The section's LABEL in its colour, cycling red, blue,
+                        // purple, green by section, as `.sec:nth-child(4n+k)` does
+                        // on /licenses.html.
+                        LabelPill(
+                            entry.section, size = 16.5.dp, tracking = 0.08f,
+                            tint = sectionColor(sections.indexOf(entry.section)),
+                            modifier = Modifier.padding(start = 9.dp, top = 6.dp, bottom = 12.dp),
+                        )
                     }
                     LicenseRow(
                         entry,
-                        modifier = if (i == seat) Modifier.focusRequester(first) else Modifier,
+                        ruled = !top && focusedRow != i && focusedRow != i - 1,
+                        modifier = (if (i == seat) Modifier.focusRequester(first) else Modifier)
+                            .onFocusChanged {
+                                if (it.isFocused) focusedRow = i
+                                else if (focusedRow == i) focusedRow = -1
+                            },
                     ) { state.infoPath = state.infoPath + GameState.InfoRoute.License(i) }
                 }
             }
@@ -112,38 +160,51 @@ fun LicensesScreen(state: GameState) {
     }
 }
 
+/** The section labels' colour cycle (`.sec:nth-child(4n+k)` in licenses.css). */
+private fun sectionColor(index: Int) = when (index % 4) {
+    0 -> Tokens.red
+    1 -> Tokens.blue
+    2 -> Tokens.purple
+    else -> Tokens.green
+}
+
+/** A section card's padding and the air between two cards. */
+private val CARD_PAD_X = 21.dp
+private val CARD_PAD_Y = 18.dp
+private val CARD_GAP = 24.dp
+
 /**
- * One credit: what it is and who made it on the left, what it is licensed under
- * on the right — the same two columns the web page's `.entry` row has.
+ * One credit, on ONE LINE of its section's card: what it is and who made it on
+ * the left, what it is licensed under on the right — the web page's `.entry` row.
+ * Rows are parted by a hairline over each ([ruled]), not drawn as cards.
  *
- * A CHOICE: white with the faint edge. **FOCUS WASHES IT `--pick` AND RINGS IT
- * BLUE**, the picked look, and the ring is drawn INSIDE the row as a heavier edge
- * rather than outside it as the kit's [focusRing]: a row is as wide as the list,
- * and a lazy list clips at its bounds. Blue is what "you are here" looks like
- * across this whole info branch, and it needs no room the row does not already
- * have.
- *
- * Every row opens, because every entry has a text behind it. It used to branch
- * on `notice`, leaving CC0 and CC-BY rows focusable but inert; what that cost was
- * not the press, it was that the majority of this list was terms the room could
- * not read.
+ * **FOCUS WASHES IT `--pick` AND RINGS IT BLUE**, the picked look, and the ring is
+ * drawn INSIDE the row rather than outside it as the kit's [focusRing]: a row is
+ * as wide as the list, and a lazy list clips at its bounds. Blue is what "you are
+ * here" looks like across this whole info branch.
  */
 @Composable
 private fun LicenseRow(
     entry: Legal.Entry,
+    ruled: Boolean,
     modifier: Modifier = Modifier,
     onOpen: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(Sticker.radius)
+    val shape = RoundedCornerShape(FOCUS_RADIUS)
+    val hairline = Tokens.hairline
 
     Row(
         modifier
             .fillMaxWidth()
-            .background(if (focused) Tokens.pick else Tokens.surface, shape)
+            .then(if (ruled) Modifier.drawBehind {
+                drawRect(hairline, size = Size(size.width, 2.dp.toPx()))
+            } else Modifier)
             .then(
-                if (focused) Modifier.border(Sticker.focusRingWidth, Tokens.blue, shape)
-                else Modifier.border(Sticker.edgeWidth, Tokens.edge, shape)
+                if (focused) Modifier
+                    .background(Tokens.pick, shape)
+                    .border(Sticker.focusRingWidth, Tokens.blue, shape)
+                else Modifier
             )
             .onFocusChanged { focused = it.isFocused }
             // `clickable` IS focusable, so the row must not ALSO be
@@ -154,33 +215,41 @@ private fun LicenseRow(
                 indication = null,
                 onClick = onOpen,
             )
-            .padding(horizontal = 22.dp, vertical = 11.dp),
+            .padding(horizontal = 21.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(15.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StickerText(entry.title, size = 26.dp, color = Tokens.ink)
+        // Title then author on one baseline; a title too long for the line
+        // ellipsises and the author keeps its place beside it.
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+            StickerText(entry.title, size = 24.dp, weight = Fonts.semibold, color = Tokens.ink,
+                modifier = Modifier.alignByBaseline().weight(1f, fill = false))
             // ink-2, not ink-3: the author is half of what the attribution
             // actually says, and the quiet grey nearly vanishes on the pick wash.
-            StickerText(entry.author, size = 20.dp, weight = Fonts.semibold, color = Tokens.ink2)
+            StickerText(entry.author, size = 19.5.dp, weight = Fonts.bold, color = Tokens.ink2,
+                body = true, modifier = Modifier.alignByBaseline())
         }
 
-        // A neutral LABEL on both faces. It is the one token on the row that means
+        // A GREY LABEL on both faces. It is the one token on the row that means
         // something specific (the licence), and a label that recoloured with the
         // focus would read as part of the highlight.
-        LabelPill(entry.license, size = 17.dp)
+        LabelPill(entry.license, size = 15.dp, tracking = 0.08f)
 
-        // The chevron says the row opens, which every row now does. Kept rather
-        // than dropped: it is the only mark on the row that says a press does
-        // anything at all.
-        StickerText(
-            "›",
-            modifier = Modifier.width(18.dp),
-            size = 28.dp,
-            color = if (focused) Tokens.blue else Tokens.ink3,
-        )
+        // The only mark on the row that says a press opens it. Drawn, so its
+        // weight matches the type.
+        val ink3 = Tokens.ink3
+        Canvas(Modifier.size(width = 13.5.dp, height = 21.dp)) {
+            val u = size.width / 9f
+            val p = Path().apply {
+                moveTo(2f * u, 2f * u); lineTo(7f * u, 7f * u); lineTo(2f * u, 12f * u)
+            }
+            drawPath(p, ink3, style = Stroke(2.4f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
     }
 }
+
+/** The focused row's wash, a step inside the card's own `--r-lg` corner. */
+private val FOCUS_RADIUS = 21.dp
 
 /**
  * One license text, full screen and scrolling on its own.
@@ -192,15 +261,23 @@ private fun LicenseRow(
 @Composable
 fun LicenseTextScreen(index: Int) {
     val entry = Legal.entries.getOrNull(index) ?: return
-    LegalBoard(entry.title) {
-        val text = remember(index) { Legal.text(entry) }
-        if (text == null) {
-            // The staged file is missing, which is a build fault (the generator
-            // names only files it copied). Say so on the screen rather than showing
-            // an empty board that reads as "no licence".
-            StickerText(entry.licenseUrl, size = 24.dp, weight = Fonts.semibold, color = Tokens.ink3)
-        } else {
-            LicenseText(text)
+    LegalBoard {
+        // The title stays put here: the text scrolls by itself under it, and a
+        // reader paging through a licence keeps the name of what they are reading.
+        Column(
+            Modifier.padding(top = Tokens.legalInsetY),
+            verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
+        ) {
+            LegalTitle(entry.title)
+            val text = remember(index) { Legal.text(entry) }
+            if (text == null) {
+                // The staged file is missing, which is a build fault (the generator
+                // names only files it copied). Say so on the screen rather than
+                // showing an empty board that reads as "no licence".
+                StickerText(entry.licenseUrl, size = 24.dp, weight = Fonts.semibold, color = Tokens.ink3)
+            } else {
+                LicenseText(text)
+            }
         }
     }
 }
@@ -237,7 +314,7 @@ private fun LicenseText(text: String) {
     LaunchedEffect(Unit) { focus.requestFocus() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val page = with(androidx.compose.ui.platform.LocalDensity.current) {
+        val page = with(LocalDensity.current) {
             maxHeight.toPx() * 0.5f
         }
         Box(
@@ -257,7 +334,7 @@ private fun LicenseText(text: String) {
                     scope.launch { scroll.animateScrollBy(by) }
                     true
                 }
-        ) { Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
+        ) { Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = Tokens.legalInsetY)) {
             // MONOSPACE AT 26, not the sticker face: display faces are unreadable
             // at license length, and these texts are hard-wrapped for a fixed
             // pitch — a proportional face makes their ragged right edge look like
@@ -276,30 +353,33 @@ private fun LicenseText(text: String) {
 }
 
 /**
- * The chrome both legal boards wear: paper, an ink title (`/licenses.html`'s
- * heading), and the body under it.
+ * The paper both legal boards stand on, with tvOS's system safe area
+ * (`Tokens.legalInsetX`) at the sides and nothing more. SwiftUI gives the tvOS
+ * twin that area for free; Compose has no such floor, so without it the list
+ * would sit in the overscan band and the two columns of the screens gallery
+ * would disagree about where a board starts.
+ *
+ * NOT AT THE TOP OR THE FOOT: a body runs on to the screen's edges and scrolls
+ * out under them, as a page does, rather than being cut off in a hard line one
+ * inset in. Each body takes the vertical inset itself.
  *
  * Paper rather than floating over the live 3D, because these are full-screen
  * BOARDS in the project's own sense: chrome floats bare over the scene, boards
  * stand on paper.
  */
 @Composable
-private fun LegalBoard(title: String, content: @Composable () -> Unit) {
+private fun LegalBoard(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         PaperStage()
-        // tvOS's inset FIRST (`Tokens.legalInsetX`), then the board's own
-        // 60 x 28. The tvOS twin pads by the same 60 x 28, but SwiftUI lays that
-        // inside the system's safe area on its own; Compose has no such floor,
-        // so a bare 60 x 28 here put the list within the overscan band, and the
-        // two columns of the screens gallery disagreed about where a board starts.
-        Column(
-            Modifier.fillMaxSize()
-                .padding(horizontal = Tokens.legalInsetX, vertical = Tokens.legalInsetY)
-                .padding(horizontal = 60.dp, vertical = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            StickerText(title, size = 48.dp)
-            content()
-        }
+        Box(Modifier.fillMaxSize().padding(horizontal = Tokens.legalInsetX)) { content() }
     }
 }
+
+/** A legal board's heading: plain ink, top-left (`/licenses.html`'s `h1`). */
+@Composable
+private fun LegalTitle(title: String, modifier: Modifier = Modifier) {
+    StickerText(title, size = 60.dp, modifier = modifier.lineBox(60.dp))
+}
+
+/** Between a legal board's title and its body. */
+private val TITLE_GAP = 30.dp

@@ -177,10 +177,10 @@
       "file": "androidtv/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 21350,
-      "capturedAt": "2026-10-17T14:14:41.931Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 24636,
+      "capturedAt": "2026-10-17T15:15:14.260Z",
+      "gitSha": "7ea6c5be",
+      "deviceName": "TTP_ToyBox_TV_agent3",
       "deviceKind": "emulator",
       "deviceId": "emulator-5600"
     },
@@ -190,12 +190,12 @@
       "file": "tvos/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 20536,
-      "capturedAt": "2026-10-17T14:12:36.100Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
+      "bytes": 24686,
+      "capturedAt": "2026-10-17T15:22:28.076Z",
+      "gitSha": "7ea6c5be",
+      "deviceName": "TTP Toy Box tvOS 4",
       "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "deviceId": "6FF7D3CC-1F85-47EE-AA35-2BFDBA3F2F76"
     },
     {
       "scenario": "licenses",
@@ -203,9 +203,9 @@
       "file": "web/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47286,
-      "capturedAt": "2026-10-17T14:20:23.234Z",
-      "gitSha": "8e974d48"
+      "bytes": 41026,
+      "capturedAt": "2026-10-17T15:16:47.898Z",
+      "gitSha": "7ea6c5be"
     },
     {
       "scenario": "lobby-cup",
