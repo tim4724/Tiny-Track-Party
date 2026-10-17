@@ -1,7 +1,8 @@
 # gen-concept-cars.py — candidate cars in the toy-car kit's format, into
 # public/assets/concepts/, for the asset gallery's "Concept cars" field and
-# for racing them with ?cars=. Nothing ships them. Two kinds: cars CONVERTED
-# from Kenney's Car Kit (CARS), and cars DESIGNED from its parts (DESIGNS).
+# for racing them with ?cars=. Nothing ships them. Three kinds: cars CONVERTED
+# from Kenney's Car Kit (CARS), cars DESIGNED from its parts (DESIGNS), and
+# the roster cars REMIXED with its detail (REMIX).
 #
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py [-- name ...]
 #
@@ -321,7 +322,7 @@ def kit_material(path):
 SW = {  # Car Kit atlas swatches (row, col); odd columns carry the gradient
     'red': (1, 13), 'blue': (1, 15), 'green': (1, 7), 'purple': (0, 3),
     'trim': (2, 7), 'dark': (2, 5), 'black': (2, 3), 'glass': (0, 1),
-    'lamp': (2, 12), 'tail': (3, 5), 'seat': (2, 9),
+    'lamp': (2, 12), 'tail': (3, 5), 'seat': (2, 9), 'chrome': (2, 13),
 }
 CAR_H = (0.0, 0.45)  # the height the paint gradient runs over, light on top
 
@@ -358,6 +359,12 @@ def part(name, bm, sw, bev=0.008):
 def paint(o, dirn, sw, **bounds):
     """Paint o's faces facing dirn inside bounds (x=(lo, hi), ...) in sw,
     flush: the faces are split along the bounds first."""
+    set_swatch(o, sw, split(o, dirn, **bounds))
+    return o
+
+
+def split(o, dirn, **bounds):
+    """Split o's faces facing dirn along bounds; the indices of those inside."""
     d = Vector(dirn).normalized()
     bm = bmesh.new()
     bm.from_mesh(o.data)
@@ -378,8 +385,7 @@ def paint(o, dirn, sw, **bounds):
         lo < f.calc_center_median()['xyz'.index(a)] < hi for a, (lo, hi) in bounds.items())}
     bm.to_mesh(o.data)
     bm.free()
-    set_swatch(o, sw, sel)
-    return o
+    return sel
 
 
 def hull(name, pts, sw, bev=0.008):
@@ -660,6 +666,52 @@ class Surface:
             self.block(f'{name}{s}', face, (*xs(s, *xr), *zr), sw, **kw)
 
 
+def toy_paint(body, dirn, cell, pin, **bounds):
+    """Paint a roster body's faces facing dirn inside bounds straight into
+    the toy atlas: cell (row, col), pinned `pin` down its gradient."""
+    sel = split(body, dirn, **bounds)
+    uv = body.data.uv_layers.active.data
+    row, col = cell
+    for p in body.data.polygons:
+        if p.index in sel:
+            for li in p.loop_indices:
+                uv[li].uv = ((col + 0.5) / 16, 1 - (row * 0.25 + 0.03 + 0.19 * pin))
+
+
+def drop_spoiler(body):
+    """Remove the body's spoiler: the loose block high over its tail."""
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    seen = set()
+    for f0 in list(bm.faces):
+        if f0 in seen or not f0.is_valid:
+            continue
+        part, stack = set(), [f0]
+        seen.add(f0)
+        while stack:
+            f = stack.pop()
+            part.update(f.verts)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g not in seen:
+                        seen.add(g)
+                        stack.append(g)
+        if min(v.co.z for v in part) > 0.25 and max(v.co.y for v in part) < -0.25:
+            bmesh.ops.delete(bm, geom=list(part), context='VERTS')
+    bm.to_mesh(body.data)
+    bm.free()
+
+
+GLASS = ((2, 13), 0.75)  # the toy atlas's pale glass, pinned near its top
+
+
+def side_windows(body, ys, zs, back=0.0):
+    """Glass over the cabin's flanks (both sides) for y in ys, z in zs; `back`
+    tilts the faces looked for, for a fastback's rear quarter."""
+    for s in (-1, 1):
+        toy_paint(body, (s, back, 0.3), *GLASS, y=ys, z=zs)
+
+
 def glass_windows(body):
     """The kit's dark slate windows (toy swatch 3, 5) as light glass (2, 13),
     pinned a quarter down its gradient: glass facing the sky washes white."""
@@ -671,7 +723,7 @@ def glass_windows(body):
                 uv[li].uv = (13.5 / 16, 1 - (0.5 + 0.03 + 0.19 * 0.75))
 
 
-def dash_remix(S):
+def dash_remix(S, body):
     """Dash, the roster's low racer: Car Kit wheels, light glass, block
     head and tail lamps, a grille."""
     S.pair('head', 'y+', (0.10, 0.16), (0.219, 0.25), 'lamp')
@@ -679,7 +731,7 @@ def dash_remix(S):
     S.pair('tail', 'y-', (0.094, 0.156), (0.219, 0.25), 'tail')
 
 
-def bolt_remix(S):
+def bolt_remix(S, body):
     """Bolt, the roster's open-wheel speedster: Car Kit racing wheels, nose
     lamps, tail lamps on a bar."""
     S.pair('head', 'y+', (0.03, 0.08), (0.135, 0.17), 'lamp')
@@ -687,7 +739,7 @@ def bolt_remix(S):
     S.pair('tail', 'y-', (0.03, 0.085), (0.21, 0.246), 'tail', out=0.024)
 
 
-def carve_remix(S):
+def carve_remix(S, body):
     """Carve, the roster's racer: Car Kit racing wheels, light glass, block
     head and tail lamps, a grille."""
     S.pair('head', 'y+', (0.094, 0.156), (0.225, 0.27), 'lamp')
@@ -695,11 +747,64 @@ def carve_remix(S):
     S.pair('tail', 'y-', (0.094, 0.156), (0.25, 0.30), 'tail')
 
 
-def rumble_remix(S):
+def rumble_remix(S, body):
     """Rumble, the roster's vintage racer: Car Kit wheels, block lamps
     beside a grille, tail lamps."""
     S.pair('head', 'y+', (0.06, 0.11), (0.2, 0.245), 'lamp')
     S.block('grille', 'y+', (-0.035, 0.035, 0.195, 0.25), 'black', out=0.008)
+    S.pair('tail', 'y-', (0.035, 0.08), (0.17, 0.21), 'tail')
+
+
+def dash_remodel(S, body):
+    """Dash remodelled: side windows, a bonnet scoop, the spoiler raised on
+    struts, side skirts, block lamps and a grille."""
+    side_windows(body, (-0.11, 0.07), (0.33, 0.372))
+    side_windows(body, (-0.33, -0.14), (0.25, 0.36), back=-0.25)
+    drop_spoiler(body)
+    sc = profile('scoop', 0.05, [(0.30, 0.275), (0.30, 0.305), (0.17, 0.345), (0.17, 0.31)], 'green')
+    paint(sc, (0, 1, 0), 'black')
+    profile('wing', 0.23, [(-0.31, 0.385), (-0.43, 0.375), (-0.43, 0.405), (-0.31, 0.41)], 'green')
+    for s in (-1, 1):
+        lo, hi = xs(s, 0.12, 0.16)
+        bar(f'strut{s}', (lo, -0.40, 0.28), (hi, -0.36, 0.385))
+        lo, hi = xs(s, 0.235, 0.265)
+        bar(f'skirt{s}', (lo, -0.12, 0.09), (hi, 0.12, 0.14))
+    dash_remix(S, body)
+
+
+def bolt_remodel(S, body):
+    """Bolt remodelled: a tall airbox behind the cockpit, side pods with dark
+    intakes, nose lamps, tail lamps on a bar."""
+    ab = profile('airbox', 0.05, [(-0.06, 0.30), (-0.06, 0.41), (-0.12, 0.42), (-0.26, 0.31)], 'red')
+    paint(ab, (0, 1, 0), 'black')
+    for s in (-1, 1):
+        lo, hi = xs(s, 0.11, 0.19)
+        pod = box(f'pod{s}', (lo, -0.26, 0.09), (hi, -0.03, 0.22), 'red')
+        paint(pod, (0, 1, 0), 'black')
+    bolt_remix(S, body)
+
+
+def carve_remodel(S, body):
+    """Carve remodelled as a rally car: side windows, a roof light pod and
+    roof scoop, a dark bonnet vent, block lamps and a grille."""
+    side_windows(body, (-0.11, 0.07), (0.335, 0.415))
+    side_windows(body, (-0.33, -0.15), (0.33, 0.41), back=-0.1)
+    pod = box('lightPod', (-0.12, 0.02, 0.445), (0.12, 0.07, 0.48), 'black')
+    for i, x in enumerate((-0.085, -0.03, 0.03, 0.085)):
+        box(f'spot{i}', (x - 0.022, 0.065, 0.45), (x + 0.022, 0.08, 0.475), 'lamp', 0.004)
+    sc = box('roofScoop', (-0.05, -0.10, 0.445), (0.05, -0.02, 0.47), 'blue')
+    paint(sc, (0, 1, 0), 'black')
+    S.block('vent', 'z+', (-0.07, 0.07, 0.19, 0.31), 'black', out=0.01)
+    carve_remix(S, body)
+
+
+def rumble_remodel(S, body):
+    """Rumble remodelled: the purple carried over the bonnet, a tall chrome
+    grille, big block headlamps, tail lamps."""
+    toy_paint(body, (0, 0, 1), (2, 15), 0.3, x=(-0.2, 0.2), y=(0.02, 0.5))
+    S.block('grille', 'y+', (-0.05, 0.05, 0.13, 0.27), 'chrome', out=0.014)
+    S.block('grilleBars', 'y+', (-0.035, 0.035, 0.145, 0.255), 'black', out=0.02)
+    S.pair('head', 'y+', (0.06, 0.125), (0.19, 0.25), 'lamp')
     S.pair('tail', 'y-', (0.035, 0.08), (0.17, 0.21), 'tail')
 
 
@@ -709,6 +814,10 @@ REMIX = {
     'remix-bolt': (bolt_remix, 'vehicle-speedster', 'wheel-racing'),
     'remix-carve': (carve_remix, 'vehicle-racer', 'wheel-racing'),
     'remix-rumble': (rumble_remix, 'vehicle-vintage-racer', 'wheel-default'),
+    'remodel-dash': (dash_remodel, 'vehicle-racer-low', 'wheel-default'),
+    'remodel-bolt': (bolt_remodel, 'vehicle-speedster', 'wheel-racing'),
+    'remodel-carve': (carve_remodel, 'vehicle-racer', 'wheel-racing'),
+    'remodel-rumble': (rumble_remodel, 'vehicle-vintage-racer', 'wheel-default'),
 }
 
 
@@ -724,8 +833,8 @@ def remix(fn, base, wheel_kind, pmap, used):
             bpy.data.objects.remove(o)
     body.matrix_world = Matrix.Identity(4)
     have = set(bpy.data.objects)
-    fn(Surface(body))
     glass_windows(body)
+    fn(Surface(body), body)
     dg = bpy.context.evaluated_depsgraph_get()
     bm = bmesh.new()
     bm.from_mesh(body.data)

@@ -199,6 +199,30 @@
    "tris": 1720,
    "base": "vehicle-vintage-racer",
    "note": "Rumble, the roster's vintage racer: Car Kit wheels, block lamps beside a grille, tail lamps."
+  },
+  {
+   "name": "remodel-dash",
+   "tris": 2329,
+   "base": "vehicle-racer-low",
+   "note": "Dash remodelled: side windows, a bonnet scoop, the spoiler raised on struts, side skirts, block lamps and a grille."
+  },
+  {
+   "name": "remodel-bolt",
+   "tris": 1868,
+   "base": "vehicle-speedster",
+   "note": "Bolt remodelled: a tall airbox behind the cockpit, side pods with dark intakes, nose lamps, tail lamps on a bar."
+  },
+  {
+   "name": "remodel-carve",
+   "tris": 2378,
+   "base": "vehicle-racer",
+   "note": "Carve remodelled as a rally car: side windows, a roof light pod and roof scoop, a dark bonnet vent, block lamps and a grille."
+  },
+  {
+   "name": "remodel-rumble",
+   "tris": 1804,
+   "base": "vehicle-vintage-racer",
+   "note": "Rumble remodelled: the purple carried over the bonnet, a tall chrome grille, big block headlamps, tail lamps."
   }
  ]
 }
