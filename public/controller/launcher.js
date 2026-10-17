@@ -12,6 +12,7 @@
 // addressed to the launcher rather than to us (`cpp`, which the display puts on
 // the join URL to name itself, is exactly that).
 import { cleanName } from '../shared/names.js';
+import { hapticChain } from './Haptics.js';
 
 const host = window.CouchPadHost;
 
@@ -68,6 +69,22 @@ export function terminalReason(state, info) {
   if (state === 'lost' || state === 'room_closed') return 'game_ended';
   return null;
 }
+
+// §12: the Haptics backend — transients as primitives, and the brake rumble as
+// a timed sequence where the launcher has that call, so both cues sit under ONE
+// Android setting (the launcher's are media vibration; the WebView's own
+// navigator.vibrate files under touch feedback). A launcher without the
+// sequence call keeps the rumble on §11's vibrate, which both apps provide.
+// Undefined outside the shell (and in a launcher too old for `haptic`), so
+// Haptics falls back to vibrate for everything.
+export const hapticBackend = host && typeof host.haptic === 'function'
+  ? {
+      play: (primitive, scale) => host.haptic(primitive, scale),
+      vibrate: typeof host.hapticComposition === 'function'
+        ? (p) => host.hapticComposition(hapticChain(p))   // [] on vibrate(0) = the contract's stop
+        : undefined,
+    }
+  : undefined;
 
 // System back (§9). Armed, a back gesture reaches window.CouchPad.back (and the
 // screen edges go to the system); disarmed, edge swipes stay gameplay input and

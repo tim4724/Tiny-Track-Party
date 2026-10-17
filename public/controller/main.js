@@ -24,7 +24,7 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // tests/wire-compat.test.js. Returns '' for blank input; a shell without a
 // launcher name keeps '' and falls back to the name screen.
 import { cleanName } from '../shared/names.js';
-import { inShell, shellName, canEditName, editName, leave, endSession, terminalReason, armSystemBack, installBackHook } from './launcher.js';
+import { inShell, shellName, canEditName, editName, leave, endSession, terminalReason, armSystemBack, installBackHook, hapticBackend } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
 import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
@@ -80,9 +80,10 @@ function syncShellBack() {
 // are on the main display, not the phone, so a buzz is how the phone confirms
 // something landed. ONE motor, so every cue routes through this instance: a
 // transient fired while the brake rumble is running would otherwise silence it
-// until the next renewal. See Haptics.js.
-const haptics = new Haptics();
-const buzz = (p) => haptics.tick(p);
+// until the next renewal. Cues are NAMED effects (Haptics.js EFFECTS); the
+// launcher plays them as native primitives where it can.
+const haptics = new Haptics(hapticBackend);
+const buzz = (name) => haptics.tick(name);
 
 let myColorIndex = null;
 let myCarIndex = 0;
@@ -167,7 +168,7 @@ const net = new ControllerNet({
 // entry — the popstate handler runs the real leave (leaveToName), exactly as
 // the back gesture would, keeping the stack clean.
 function exitRoom() {
-  buzz(15);
+  buzz('tap');
   if (inShell) { leave(); return; }
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   if (currentScreen !== 'name') history.back();
@@ -175,7 +176,7 @@ function exitRoom() {
 
 initLinkStatus({
   onRetry: () => {
-    buzz(15);
+    buzz('tap');
     showConn({ title: 'Reconnecting…', msg: '', retry: false, leave: false });
     net.connect(myName);
   },
@@ -301,7 +302,7 @@ function handleMessage(data) {
     // just the buzz plus a fresh-race USE reset.
     case MSG.COUNTDOWN:
       if (waitingForNextRace || inResults) break;
-      if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]);
+      if (data.n >= 0) buzz(data.n > 0 ? 'count' : 'go');
       setHeldItem(null);               // USE off at the line — ITEM relights it once boxes roll
       break;
     // Held item → lights the USE button. Per-owner, so it rides its own message
@@ -475,7 +476,7 @@ function setLobbyPage(tab) {
   lobby.classList.remove('lobby--step');
   void lobby.offsetWidth;             // restart it when stepping twice quickly
   lobby.classList.add('lobby--step');
-  buzz(15);
+  buzz('tap');
 }
 // A race page exists only for a host with a catalogue to pick from. Anyone
 // else's lobby IS the car page, so we pin them there rather than leaving a
@@ -500,7 +501,7 @@ function renderModePicker() {
     gridEl: el('track-strip'), keyEl: el('race-key'),
     catalog: trackCatalog, progress: progressData,
     selection: selectedMode, canPick: true, onPickMode: chooseMode,
-    onStarsInfo: () => { buzz(15); openStarsPopup(progressData, trackCatalog); }
+    onStarsInfo: () => { buzz('tap'); openStarsPopup(progressData, trackCatalog); }
   });
 }
 
@@ -571,7 +572,7 @@ function chooseMode(pick) {
   saveMode(pick);              // remember it so the next lobby auto-picks this mode
   renderModePicker();          // move the mark now
   net.send(MSG.SELECT_MODE, pick);
-  buzz(15);
+  buzz('tap');
 }
 
 function chooseCar(i) {
@@ -580,7 +581,7 @@ function chooseCar(i) {
   saveCarIndex(i);      // remember it so the next join restores this car
   renderLobby();        // move the highlight now
   net.send(MSG.SET_CAR, { carIndex: i });
-  buzz(15);
+  buzz('tap');
 }
 
 // A tap on the LOCKED strip — while ready the tiles are disabled with
@@ -712,7 +713,7 @@ function renameTo(n) {
 // there the stickers are plain labels: an in-room field would raise the
 // keyboard over a fullscreen page, which Android Chrome mishandles.
 async function onNameTap() {
-  buzz(15);
+  buzz('tap');
   const n = await editName();
   if (n && n !== myName) renameTo(n);
 }
@@ -800,7 +801,7 @@ el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
     renderLobby();        // flip the button (and note) now
     net.send(MSG.SET_READY, { ready: amReady });
   }
-  buzz(15);
+  buzz('tap');
 });
 
 // --- pause ---
@@ -815,22 +816,22 @@ function setPauseOverlay(on) {
   el('pause-btn').disabled = on;
   syncShellBack();   // a paused race welcomes back (= continue); a live one doesn't
 }
-el('pause-btn').addEventListener('click', () => { buzz(15); net.send(MSG.PAUSE_GAME); });
-el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RESUME_GAME); });
-el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
+el('pause-btn').addEventListener('click', () => { buzz('tap'); net.send(MSG.PAUSE_GAME); });
+el('pause-continue').addEventListener('click', () => { buzz('tap'); net.send(MSG.RESUME_GAME); });
+el('pause-newgame').addEventListener('click', () => { buzz('tap'); net.send(MSG.RETURN_TO_LOBBY); });
 
 // Host's results button: mid-series it advances to the next race, otherwise it
 // sends everyone to the lobby. Abandoning a running cup is "Leave cup" beside
 // it, which asks first (see resultsBoard's renderFoot).
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
-  buzz(15);
+  buzz('tap');
   const s = lastStandings && lastStandings.series;
   net.send(s && !s.final ? MSG.SERIES_NEXT : MSG.RETURN_TO_LOBBY);
 });
 el('leavecup-btn').addEventListener('click', () => {
   if (!amHost) return;
-  buzz(15);
+  buzz('tap');
   openLeaveCupPopup();
 });
 

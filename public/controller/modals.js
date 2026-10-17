@@ -307,9 +307,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   if (leaveCup) _leaveCup = leaveCup;
   if (onModalToggle) _onModalToggle = onModalToggle;
 
-  el('settings-btn').addEventListener('click', () => { _buzz(15); openSettings(); });
-  el('settings-btn-game').addEventListener('click', () => { _buzz(15); openSettings(); });
-  el('settings-done').addEventListener('click', () => { _buzz(15); closeSettings(); });
+  el('settings-btn').addEventListener('click', () => { _buzz('tap'); openSettings(); });
+  el('settings-btn-game').addEventListener('click', () => { _buzz('tap'); openSettings(); });
+  el('settings-done').addEventListener('click', () => { _buzz('tap'); closeSettings(); });
   el('settings-overlay').addEventListener('keydown', (e) => trapTab(el('settings-overlay'), e));
 
   // The Steering row. Picking Tilt (re-)requests motion permission INSIDE
@@ -318,13 +318,13 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   // mid-race. Picking Buttons needs nothing from the platform.
   el('input-buttons').addEventListener('click', () => {
     if (_getInputMode() === 'buttons') return;
-    _buzz(15);
+    _buzz('tap');
     _setInputMode('buttons');
     refreshSettingsCard();
   });
   el('input-tilt').addEventListener('click', async () => {
     if (_getInputMode() === 'tilt') return;
-    _buzz(15);
+    _buzz('tap');
     _setInputMode('tilt');
     refreshSettingsCard();
     if (_tilt.motionState !== 'granted') {
@@ -341,7 +341,7 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   // picked one is a no-op.
   const pickSound = (on) => {
     if (_getSoundOn() === on) return;
-    _buzz(15);
+    _buzz('tap');
     _setSoundOn(on);
     refreshSettingsCard();
   };
@@ -352,25 +352,25 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   const pickRate = (half) => {
     const rate = _getFrameRate();
     if (!rate || !!rate.half === half) return;
-    _buzz(15);
+    _buzz('tap');
     _setHalfRate(half);
     refreshSettingsCard();
   };
   el('rate-full').addEventListener('click', () => pickRate(false));
   el('rate-half').addEventListener('click', () => pickRate(true));
 
-  el('stars-done').addEventListener('click', () => { _buzz(15); closeStarsPopup(); });
+  el('stars-done').addEventListener('click', () => { _buzz('tap'); closeStarsPopup(); });
   el('stars-overlay').addEventListener('keydown', (e) => trapTab(el('stars-overlay'), e));
 
-  el('leavecup-cancel').addEventListener('click', () => { _buzz(15); closeLeaveCupPopup(); });
-  el('leavecup-confirm').addEventListener('click', () => { _buzz(15); closeLeaveCupPopup(); _leaveCup(); });
+  el('leavecup-cancel').addEventListener('click', () => { _buzz('tap'); closeLeaveCupPopup(); });
+  el('leavecup-confirm').addEventListener('click', () => { _buzz('tap'); closeLeaveCupPopup(); _leaveCup(); });
   el('leavecup-overlay').addEventListener('keydown', (e) => trapTab(el('leavecup-overlay'), e));
 
-  el('motion-done').addEventListener('click', () => { _buzz(15); closeMotionPopup(); });
+  el('motion-done').addEventListener('click', () => { _buzz('tap'); closeMotionPopup(); });
   el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
   // The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
   // since players have no keyboard fallback).
-  el('motion-tip').addEventListener('click', () => { _buzz(15); openMotionPopup(); });
+  el('motion-tip').addEventListener('click', () => { _buzz('tap'); openMotionPopup(); });
 
   // Primary recovery button — what it DOES depends on the resolved state (see
   // motionHelpCopy's `action`). Once iOS has denied, re-calling requestPermission()
@@ -380,7 +380,7 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   // prompt — there we (re-)call enableMotion() within this gesture and confirm a
   // grant in place.
   el('motion-allow').addEventListener('click', async () => {
-    _buzz(15);
+    _buzz('tap');
     if (motionHelpCopy(_tilt.motionState).action === 'reload') { location.reload(); return; }
     const btn = el('motion-allow');
     btn.disabled = true; btn.textContent = 'Asking…';

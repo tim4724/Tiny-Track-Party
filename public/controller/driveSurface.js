@@ -82,7 +82,7 @@ export function setHeldItem(item) {
   actionBtn.disabled = !item;
   _tilt.setActionEnabled(!!item);            // gate BOTH the button and the keyboard ACTION
   actionBtn.setAttribute('aria-label', item ? `Use ${ITEM_LABEL[item] || item}` : 'Use item');
-  if (item) _buzz(20);                       // eyes-free "you picked something up" (look at the TV for what)
+  if (item) _buzz('item');               // eyes-free "you picked something up" (look at the TV for what)
 }
 
 // Leaving the room: force the next setHeldItem(null) through the change guard, so
@@ -104,7 +104,7 @@ function pressSteer(side, on) {
   _tilt.pressSteer(side, on);
   const braking = _steerHeld.left && _steerHeld.right;
   if (braking) _haptics.startLoop(); else _haptics.stopLoop();
-  if (on && !braking) _buzz(12);             // light tick on a steer press; the chord gets the rumble
+  if (on && !braking) _buzz('steer');        // light tick on a steer press; the chord gets the rumble
 }
 
 function releaseSteerButtons() {
@@ -159,7 +159,7 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
   actionBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (actionBtn.disabled) return;
-    _tilt.pressAction(); _buzz(20); actionBtn.classList.add('held');
+    _tilt.pressAction(); _buzz('use'); actionBtn.classList.add('held');
   });
   const releaseAction = () => actionBtn.classList.remove('held');
   actionBtn.addEventListener('pointerup', releaseAction);
