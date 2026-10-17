@@ -2,38 +2,38 @@
  "_readme": "Written by scripts/gen-concept-cars.py; read by the asset gallery.",
  "models": [
   {
-   "name": "toy-bumper",
-   "tris": 1644,
-   "note": "The classic toy coupe: a square-shouldered shell on a dark tray, a big glass cabin, block fenders, a ducktail, steel bumpers and block lamps.",
+   "name": "kit-sprint",
+   "tris": 1272,
+   "note": "A kit coupe with a little more: a bonnet scoop, a raked spoiler on struts, flush head and tail lamps, slate windows all round.",
    "base": "vehicle-racer-low"
   },
   {
-   "name": "toy-comet",
-   "tris": 1416,
-   "note": "A land-speed streamliner: a long faceted wedge on a dark keel, a glass canopy, a tall tail fin, block pods over big rear wheels and small front wheels out on their own.",
+   "name": "kit-formula",
+   "tris": 1080,
+   "note": "A kit open-wheeler with a little more: side pods with dark intakes, an airbox behind a roll hoop, a front wing and a rear wing on struts.",
    "base": "vehicle-speedster"
   },
   {
-   "name": "toy-scout",
-   "tris": 1940,
-   "note": "A stubby rally scout on fat wheels: a tall boxy shell, dark flares, a roof light bar and the spare wheel strapped on its tail.",
+   "name": "kit-rally",
+   "tris": 1228,
+   "note": "A kit hatchback with a little more: a tall glasshouse, a roof scoop and roof spoiler, a pair of driving lamps on the front bumper.",
    "base": "vehicle-racer"
   },
   {
-   "name": "toy-brute",
-   "tris": 1584,
-   "note": "A toy hot rod: a narrow nose on skinny front wheels, a chrome blower through the bonnet, a chopped cab, and huge slicks under block fenders.",
+   "name": "kit-muscle",
+   "tris": 1262,
+   "note": "A kit muscle car with a little more: a long bonnet with a grey blower and dark scoop through it, a set-back cab, a ducktail, side pipes and fatter rear wheels.",
    "base": "vehicle-vintage-racer"
   },
   {
-   "name": "toy-hauler",
-   "tris": 1936,
-   "note": "A toy pickup: a short cab over a chunky nose, an open bed with a crate in it, a roll bar with lamps behind the cab, big steel bumpers."
+   "name": "kit-pickup",
+   "tris": 1326,
+   "note": "A kit pickup with a little more: an open bed with a crate in it, a roll bar with two lamps behind the cab."
   },
   {
-   "name": "toy-bug",
-   "tris": 1668,
-   "note": "A toy bug: a faceted dome over a short shell, four block fenders with the headlamps on the front pair, running boards, a dark engine vent."
+   "name": "kit-van",
+   "tris": 1492,
+   "note": "A kit micro van with a little more: a tall box with a band of slate windows, a roof rack with a suitcase strapped on."
   }
  ]
 }
