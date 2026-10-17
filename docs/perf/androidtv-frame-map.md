@@ -1696,10 +1696,20 @@ glacier 18 s at 720 then 540 for 101 s at a heavy p50 of 9.8 ms. So the box
 plays four players at 540 with ~40% of the budget idle, because 720's
 heaviest seconds (the opening pack, the vista) touch the 15.0 ms retreat and
 the climb back is fitted on that window (the 2026-10-03 section). What 720
-needs is ~1-1.5 ms off the HEAVIEST seconds, not off the median; the only
-measured lever of that size is `LOD_ALL` (-1.1), the quality trade declined
-on 2026-09-02, and the alternative is a policy change to the rule's retreat
-or climb (render_scale.h), which is the user's call.
+needs is ~1-1.5 ms off the HEAVIEST seconds, not off the median, and the
+alternative is a policy change to the rule's retreat or climb
+(render_scale.h), which is the user's call.
+
+**`LOD_ALL`'s -1.1 was the shadow.** The user saw that the car shadow does
+not draw under the far-everywhere arm: the pass is the fine rings' own
+planes and the far ribbon's chords sit up to `kDeckLodTol` off them, so the
+shadow lost the depth test — and in the shipped build the same thing
+happened under cars two chunks ahead, too small to notice. Fixed by keeping
+a chunk a car shadow lies on NEAR in every cell (`mShadowRings`,
+`chooseLods`). On that build `LOD_ALL` against the gate reads +0.15 / -0.05
+ms per second (two in-install pairs): the whole -1.1 was the chunks under the
+cars drawn as chords, which is where the shadow broke. With a working shadow
+the aggressive far form buys nothing, so that lever is closed as well.
 
 ## The renderer's settled levers, as they measured (records moved 2026-10-11)
 

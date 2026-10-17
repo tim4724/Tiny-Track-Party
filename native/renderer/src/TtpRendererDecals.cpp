@@ -435,6 +435,7 @@ void TtpRenderer::buildCarShadowDraws() {
 }
 
 void TtpRenderer::hideCarShadowDraws() {
+    mShadowRings.clear();
     mCarShadowPos.clear();
     mCarShadowC0.clear();
     mCarShadowIdx.clear();
@@ -502,6 +503,18 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
     const float ringLen = L / (float) N;
     const float s0 = carS - reachS, s1 = carS + reachS;   // unwrapped
     const int i0 = (int) std::floor(s0 / ringLen), i1 = (int) std::floor(s1 / ringLen);
+    // The rings this stamp lies on, for chooseLods (LodRange::ring0): one
+    // interval, or two where it wraps the lap seam.
+    {
+        const int a = ((i0 % N) + N) % N;
+        const int span = std::min(N, i1 - i0 + 2);   // cell i1 ends at ring i1 + 1
+        if (a + span <= N) {
+            mShadowRings.push_back({ a, a + span });
+        } else {
+            mShadowRings.push_back({ a, N });
+            mShadowRings.push_back({ 0, a + span - N });
+        }
+    }
     const uint32_t off = (uint32_t) mCarShadowIdx.size();
     // The stamp's (u, v) at a world point, vshadow.mat's own expression.
     const float invR2 = 0.5f / halfR, invF2 = 0.5f / halfF;

@@ -676,6 +676,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 r.farOff = farRange[k].first;
                 r.farCnt = farRange[k].second;
                 r.err = kDeckLodTol;
+                r.ring0 = (int) (t0 / trisPerRing);
+                r.ring1 = (int) ((t0 + n) / trisPerRing) + 1;
                 r.lo = float3{ 1e30f };
                 r.hi = float3{ -1e30f };
                 for (size_t q = t0 * 3; q < (t0 + n) * 3; q++) {

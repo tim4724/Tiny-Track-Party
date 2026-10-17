@@ -523,8 +523,13 @@ So:
   most `err` world units, drawn past the distance where `err` covers `kLodPx`
   pixels OF THAT CELL. The deck's is a ribbon over same-coloured rings; a static
   unlit mesh opts in with `simplify`; the flowers do not (it strips the petals).
-  It runs at every cell count (the user's call). **Read a 4P lever on the heavy
-  seconds (`perf-race --timeline`), never the run's median.**
+  It runs at every cell count (the user's call). **A chunk a car shadow lies on
+  stays NEAR in every cell** (`mShadowRings`, from `placeCarShadow`): the
+  shadow pass is the fine rings' own planes, and under the far ribbon's
+  chords (up to `kDeckLodTol` off them) it lost the depth test — no shadow
+  under a car two chunks ahead, and none under the player's own with
+  `LOD_ALL`. **Read a 4P lever on the heavy seconds (`perf-race --timeline`),
+  never the run's median.**
 
 Where four players land against the budget, and why 540 is the floor, is
 `ttp/render_scale.h`'s.

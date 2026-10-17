@@ -736,8 +736,18 @@ private:
         filament::math::float3 lo{ 0 }, hi{ 0 };
         float err = 0;
         bool far = false;
+        // A road chunk's ring range (ring1 exclusive); -1 on a static mesh.
+        // A chunk a car shadow lies on this frame stays NEAR in every cell
+        // (mShadowRings): the pass's geometry is the fine rings' own planes,
+        // and under the far ribbon's chords (up to kDeckLodTol off them) it
+        // failed the depth test — no shadow under a car on a far chunk, which
+        // LOD_ALL showed under the player's own.
+        int ring0 = -1, ring1 = -1;
     };
     std::vector<LodRange> mLods;
+    // The ring intervals (wrapped, [a, b)) this frame's car shadows cover,
+    // from placeCarShadow; cleared with the draws.
+    std::vector<std::pair<int, int>> mShadowRings;
     // EVERY cell count draws the far forms past their gate, one player included
     // (the user's call for the deck, 2026-09-02; it began as a split-only
     // trade). With the deck's tolerance a 270-line cell swaps past ~10 u, a

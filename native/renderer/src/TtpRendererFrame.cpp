@@ -2750,7 +2750,13 @@ void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
     for (LodRange& r : mLods) {
         const float near = r.err * k;
         const float3 d = clamp(cam, r.lo, r.hi) - cam;   // to the nearest point of the box
-        const bool far = k > 0.0f && (mLodAll || dot(d, d) > near * near);
+        bool pinned = false;
+        if (r.ring0 >= 0) {
+            for (const auto& [a, b] : mShadowRings) {
+                if (a < r.ring1 && b > r.ring0) { pinned = true; break; }
+            }
+        }
+        const bool far = k > 0.0f && !pinned && (mLodAll || dot(d, d) > near * near);
         if (far == r.far) continue;
         r.far = far;
         const auto ri = rcm.getInstance(r.entity);
