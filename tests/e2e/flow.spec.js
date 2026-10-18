@@ -328,8 +328,11 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await alice.waitForSelector(visible('#pause-overlay'));
   await page.waitForSelector(visible('#pause-overlay'));
 
-  // "New game" from the pause overlay aborts the race back to the lobby.
-  await bob.click('#pause-newgame');
+  // The host's way out of the pause aborts the race back to the lobby. It is
+  // the host's only, and mid-cup it asks first.
+  await expect(bob.locator('#pause-newgame')).toBeHidden();
+  await alice.click('#pause-newgame');
+  await alice.click('#leavecup-confirm');
   await page.waitForSelector(visible('#lobby'));
   await alice.waitForSelector(visible('#lobby'));
   await bob.waitForSelector(visible('#lobby'));

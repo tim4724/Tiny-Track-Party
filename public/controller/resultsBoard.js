@@ -85,7 +85,7 @@ function renderMe(data, meId, cupDone) {
 // Footer: while cars are still out, a waiting note for everyone. Once the race is
 // over, the host gets "Next race" during a cup intermission and "New game"
 // otherwise; everyone else gets a note. On an intermission the host also gets
-// "Leave cup", behind a confirm (modals.js) so the board can't be tapped out of
+// "End cup", behind a confirm (modals.js) so the board can't be tapped out of
 // a cup by mistake. A playtest showed that leaving only through the next race's
 // pause menu reads as "there is no way out". Intermissions auto-advance, so
 // non-hosts see "starting soon" rather than a who-to-wait-on name.

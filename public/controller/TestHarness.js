@@ -402,12 +402,14 @@ export function runControllerScenario(opts) {
       break;
 
     case 'paused':
+    case 'paused-guest':
       showDriveHud();
       setSteer(0.2);
       setHudName();
       setUse(true);            // USE lit
       setLatency(18, true);
       el('pause-btn').disabled = true;     // shown by showDriveHud; overlay covers it while paused
+      el('pause-newgame').classList.toggle('hidden', scenario === 'paused-guest');   // New game is the host's
       el('pause-overlay').classList.remove('hidden');
       break;
 
@@ -433,7 +435,7 @@ export function runControllerScenario(opts) {
     case 'leave-cup':
       // Mid-cup standings between two series races, viewed as the host: points
       // board in cup order (the +12 row leads on total despite this race's +15)
-      // and the host's "Next race ▸" beside "Leave cup". 'leave-cup' is the
+      // and the host's "Next race ▸" beside "End cup". 'leave-cup' is the
       // same board with that button's confirm open (modals.js owns the live one).
       setLatency(20, true);
       showBoard([

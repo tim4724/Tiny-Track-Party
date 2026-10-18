@@ -34,7 +34,7 @@ export function initOrientation({ inShell }) {
     // Never on a tap into a text field: the keyboard is about to open, and
     // going fullscreen under it makes Chrome either drop it or lose its pan
     // to the field. Never on the close button: it is the way OUT.
-    if (e.target.closest('input, textarea, #close-btn')) return;
+    if (e.target.closest('input, textarea, .close-btn')) return;
     if (busy || document.fullscreenElement) return;
     busy = true;
     try {

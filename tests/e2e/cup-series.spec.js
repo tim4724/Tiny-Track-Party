@@ -64,7 +64,7 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   // The flag's board reaches the phones BEFORE the TV's (the finish flourish),
   // and on the last race its cup chip does not yet know the cup is over. The
   // phone offers nothing in that window: not a "Next race" the display would
-  // refuse, and not a "Leave cup" over a cup that is finished.
+  // refuse, and not an "End cup" over a cup that is finished.
   await expect(alice.locator('#result-wait')).toHaveText('Results coming up…');
   await expect(alice.locator('#result-foot button:visible')).toHaveCount(0);
   await inResults(page);
@@ -186,11 +186,18 @@ test('abandoning a cup mid-race cancels the series and a restart begins at race 
   await finishHumans(page);
   await inResults(page);
   // The pause overlay is the exit from INSIDE a race (the intermission's own
-  // "Leave cup" is the next test), so advance to race 2 and pause out of it.
+  // "End cup" is the next test), so advance to race 2 and pause out of it.
   await alice.click('#newgame-btn');
   await waitForRacing(page);
   await alice.click('#pause-btn');
+  // Mid-cup the host's pause button is "End cup", behind the same confirm.
+  await expect(alice.locator('#pause-newgame')).toHaveText('End cup');
   await alice.click('#pause-newgame');
+  await alice.click('#leavecup-cancel');
+  await expect(alice.locator(visible('#pause-overlay'))).toBeVisible();
+  expect(await page.evaluate(() => window.__series().raceIndex)).toBe(1);
+  await alice.click('#pause-newgame');
+  await alice.click('#leavecup-confirm');
 
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => window.__series())).toBe(null);
@@ -277,6 +284,7 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await waitForRacing(page);
   await alice.click('#pause-btn');
   await alice.click('#pause-newgame');
+  await alice.click('#leavecup-confirm');
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => ({ series: window.__series(), mode: window.__net.mode })))
     .toEqual({ series: null, mode: 'random' });

@@ -256,10 +256,9 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
     verdict = "pause";
   } else if (t == msgOf("RESUME_GAME")) {
     verdict = "resume";
-  } else if (t == msgOf("RETURN_TO_LOBBY")) {
-    verdict = "return-to-lobby";
   } else if (t == msgOf("START_GAME") || t == msgOf("SERIES_NEXT") ||
-             t == msgOf("SET_SOUND") || t == msgOf("SET_FRAME_RATE")) {
+             t == msgOf("SET_SOUND") || t == msgOf("SET_FRAME_RATE") ||
+             t == msgOf("RETURN_TO_LOBBY")) {
     // Host-only, re-checked here so a stale or forged message cannot jump the
     // lobby; a start additionally needs every other racer ready (the same gate
     // that lights the host's button).
@@ -273,6 +272,8 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
         verdict = "set-frame-rate";
       } else if (t == msgOf("SERIES_NEXT")) {
         verdict = "series-next";
+      } else if (t == msgOf("RETURN_TO_LOBBY")) {
+        verdict = "return-to-lobby";
       } else {
         // The same readiness rule the lobby's Start button shows, asked of the
         // ui model directly over the live roster (ttp_live.h).

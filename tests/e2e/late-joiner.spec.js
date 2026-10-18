@@ -23,8 +23,10 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   expect(await page.evaluate(() => window.__session().carIds().length)).toBe(carsBefore);
 
   // Host aborts to the lobby — Carol's waiting note gives way to the ready button.
+  // The auto-picked mode is a cup, so the way out asks first.
   await alice.click('#pause-btn');
   await alice.click('#pause-newgame');
+  await alice.click('#leavecup-confirm');
   await carol.waitForSelector(visible('#ready-btn'));
 
   // The next race seats her for real.

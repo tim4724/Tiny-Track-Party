@@ -167,11 +167,12 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
  * "pause" | "resume" | "return-to-lobby" | "control" | "none" — with the
  * authorization inside.
  * START_GAME must come from the host AND every other racer must be ready (the
- * same readiness gate the lobby's Start button shows); SERIES_NEXT, SET_SOUND
- * and SET_FRAME_RATE are host-only; pause/resume/new-game are any player's; CONTROL
- * needs a live race. A shell dispatches on the verdict and re-derives none of
- * the gates — the if-chain this replaces existed in two shells with the gates
- * spelled twice.
+ * same readiness gate the lobby's Start button shows); SERIES_NEXT, SET_SOUND,
+ * SET_FRAME_RATE and RETURN_TO_LOBBY (New game) are host-only — the host as
+ * elected NOW, so a racer promoted mid-race holds them; pause/resume are any
+ * player's; CONTROL needs a live race. A shell dispatches on the verdict and
+ * re-derives none of the gates — the if-chain this replaces existed in two
+ * shells with the gates spelled twice.
  *
  * "set-sound" carries the display's MUTE, which is one state with two
  * flippers: this message and whatever switch the platform's own chrome has.

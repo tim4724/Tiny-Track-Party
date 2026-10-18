@@ -161,25 +161,32 @@ test('a launcher without CouchPadHost.name gets our name screen and no rename', 
   await expect(ann.locator('#me-name')).toBeDisabled();
 });
 
-test('the close button leaves through the launcher, racing included (§3)', async ({ page, browser }) => {
+test('the way out leaves through the launcher, racing included (§3)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
-  await expect(zoe.locator('#close-btn')).toBeVisible();
+  // The lobby's X is the last key of the settings pill, top-RIGHT.
+  await expect(zoe.locator('#lobby-close')).toBeVisible();
+  await expect(zoe.locator('#close-btn')).toBeHidden();
+  const x = await zoe.locator('#lobby-close').boundingBox();
+  const gear = await zoe.locator('#settings-btn').boundingBox();
+  const vw = zoe.viewportSize()?.width ?? 0;
+  expect(vw - ((x?.x ?? 0) + (x?.width ?? 0))).toBeLessThan(40);
+  expect(Math.abs((x?.x ?? 0) - ((gear?.x ?? 0) + (gear?.width ?? 0)))).toBeLessThan(2);
 
-  // Racing: still there, top-left, with the name sticker stepped right of it.
+  // Racing: the pause button holds the X's slot, and the way out is the
+  // pause menu's Leave game, so one stray tap cannot quit a race.
   await startRace(zoe, []);
   await waitForRacing(page);
   await zoe.waitForSelector(visible('#drive-hud'));
-  const x = await zoe.locator('#close-btn').boundingBox();
-  const name = await zoe.locator('#hud-name').boundingBox();
-  expect(x).not.toBeNull();
-  expect((x?.x ?? 0) + (x?.width ?? 0)).toBeLessThanOrEqual(name?.x ?? 0);
-  expect(x?.x ?? 99).toBeLessThan(40);
+  await expect(zoe.locator('#close-btn')).toBeHidden();
+  const pause = await zoe.locator('#pause-btn').boundingBox();
+  expect(Math.abs(((pause?.x ?? 0) + (pause?.width ?? 0)) - ((x?.x ?? 0) + (x?.width ?? 0)))).toBeLessThan(6);
 
   // The tap hands over and does not navigate: the launcher closes the web view.
   const url = zoe.url();
-  await zoe.click('#close-btn');
+  await zoe.click('#pause-btn');
+  await zoe.click('#pause-leave');
   expect(await zoe.evaluate(() => window.__cpLeft)).toBe(true);
   expect(zoe.url()).toBe(url);
 });
@@ -188,7 +195,7 @@ test('a launcher without leave() gets no close button', async ({ page, browser }
   const roomCode = await openDisplay(page);
   const zoe = await openShell(browser, roomCode, 'Zoe', { leave: false });
   await zoe.waitForSelector(visible('#lobby'));
-  await expect(zoe.locator('#close-btn')).toBeHidden();
+  await expect(zoe.locator('#lobby-close')).toBeHidden();
 });
 
 test('a rejected join reports gameEnded(room_not_found) to the launcher', async ({ page, browser }) => {

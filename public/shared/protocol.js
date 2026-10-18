@@ -53,7 +53,7 @@ var MSG = {
                                 // ttp_process_input answers the mask it consumed (-1 = no such car), so a shell bringing this
                                 // path up can assert once rather than steer nothing in silence; tests/control-mask.test.js pins both.
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
-  RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
+  RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — host only: abort the race back to the lobby
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)

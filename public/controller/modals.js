@@ -232,9 +232,10 @@ function closeStarsPopup() {
 }
 
 // ---- Leave-cup confirm ----
-// Opened only by the host's "Leave cup" on the intermission board. The board
-// leaving the screen (the next race starting, the cup ending) closes it, since
-// what it asks about is gone — see closeLeaveCupPopup's caller in main.js.
+// Opened by the host's "End cup" on the intermission board or the pause menu.
+// The screen that asked leaving (the next race starting, the cup ending, the
+// pause lifting) closes it, since what it asks about is gone — see
+// closeLeaveCupPopup's callers in main.js and pauseMenu.js.
 let _leaveCupReturnFocus = null;
 
 const leaveCupOpen = () => !el('leavecup-overlay').classList.contains('hidden');

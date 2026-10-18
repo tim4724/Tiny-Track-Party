@@ -47,17 +47,17 @@ test('in a room the X backs out to the name screen and leaves fullscreen', async
   await phone.waitForSelector(visible('#lobby'));
   await expect(page.locator('#players')).toContainText('Ann');
   await expect.poll(isFullscreen).toBe(true);
-  await expect(phone.locator('#close-btn')).toBeVisible();
+  await expect(phone.locator('#lobby-close')).toBeVisible();
 
   // No X while a dialog is up: a player reaching for it to close the dialog
   // would leave the game.
   await phone.locator('#settings-btn').tap();
   await expect(phone.locator('#settings-overlay')).toBeVisible();
-  await expect(phone.locator('#close-btn')).toBeHidden();
+  await expect(phone.locator('#lobby-close')).toBeHidden();
   await phone.locator('#settings-done').tap();
-  await expect(phone.locator('#close-btn')).toBeVisible();
+  await expect(phone.locator('#lobby-close')).toBeVisible();
 
-  await phone.locator('#close-btn').tap();
+  await phone.locator('#lobby-close').tap();
   await phone.waitForSelector(visible('#name'));
   await expect.poll(isFullscreen).toBe(false);
   await expect(page.locator('#players')).not.toContainText('Ann');

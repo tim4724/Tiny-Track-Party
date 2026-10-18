@@ -42,11 +42,13 @@
        so currentColor inherits at each use site. -->
   <svg style="display:none" aria-hidden="true"><symbol id="gear" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></symbol></svg>
 
-  <!-- Close (X) — top-left on every screen, gone while a dialog is up. In the
-       CouchPad launcher it leaves the game (contract §3); in a browser it backs
-       out of the room to the name screen and leaves fullscreen. closeButton.js
-       owns when it shows. It must stay BEFORE the sections: the rows that own
-       the top-left step right with a sibling selector while it shows. -->
+  <!-- Close (X) — the top-RIGHT corner, gone while a dialog is up. This one
+       stands alone on the name and results screens; in the lobby the X is the
+       last key in the settings pill (#lobby-close), and in a race the pause
+       button holds the corner and the way out is the pause menu's "Leave game".
+       In the CouchPad launcher it leaves the game (contract §3); in a browser it
+       backs out of the room to the name screen and leaves fullscreen.
+       closeButton.js owns when each shows. -->
   <button id="close-btn" class="icon-btn close-btn hidden" type="button" aria-label="Close"><svg class="close-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 
   <!-- Name -->
@@ -69,7 +71,8 @@
   <section id="lobby" class="hidden">
     <!-- Identity ribbon — your NAME in your livery on the left (in the
          launcher a tap renames), and one pill of keys pinned far right: the
-         Settings gear, behind whatever KEY the page below needs. Today that is
+         Settings gear and the close X (the race's gear + pause, in the same
+         corner), behind whatever KEY the page below needs. Today that is
          the race page's star count, which opens #stars-overlay (buildModePicker;
          hidden on the car page, whose ratings name themselves in the tile). It
          rides up here because the ribbon is the one row that is not the
@@ -80,6 +83,7 @@
       <div class="key-pill lobby-keys">
         <div id="race-key" class="race-key"></div>
         <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
+        <button id="lobby-close" class="icon-btn close-btn hidden" type="button" aria-label="Close"><svg class="close-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
     </div>
 
@@ -162,11 +166,15 @@
         <button id="brake-btn" class="brake">BRAKE</button>
       </div>
     </div>
-    <!-- Pause overlay — frosted glass with the same choices as the big screen -->
+    <!-- Pause overlay — frosted glass. Continue and Leave game are everyone's;
+         the middle one is the host's only: "New game", or "End cup" behind
+         its confirm while a series runs (pauseMenu.js). Leave game is THIS
+         phone's exit, so the TV's own menu has no twin of it. -->
     <div id="pause-overlay" class="hidden">
       <h2>Paused</h2>
       <button id="pause-continue" class="btn btn--brand">Continue</button>
       <button id="pause-newgame" class="btn btn--ghost">New game</button>
+      <button id="pause-leave" class="btn btn--ghost">Leave game</button>
     </div>
   </section>
 
@@ -187,7 +195,7 @@
       <span id="result-time" class="res-time"></span>
     </div>
     <div id="result-foot">
-      <button id="leavecup-btn" class="btn btn--ghost hidden" type="button" aria-haspopup="dialog">Leave cup</button>
+      <button id="leavecup-btn" class="btn btn--ghost hidden" type="button" aria-haspopup="dialog">End cup</button>
       <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
       <div id="result-wait" class="result-wait hidden"></div>
     </div>
@@ -379,15 +387,15 @@
     </div>
   </div>
 
-  <!-- Leave-cup confirm — opened only by the host's "Leave cup" on the
+  <!-- End-cup confirm — opened only by the host's "End cup" on the
        intermission board, so it never stacks with the lobby popups. Same shape
        and layer as #stars-overlay. Leaving throws away the cup's points for the
        whole couch, which is why this one asks first. -->
   <div id="leavecup-overlay" class="hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="leavecup-title" aria-describedby="leavecup-copy">
     <div class="settings-card motion-card">
-      <h2 id="leavecup-title">Leave the cup?</h2>
+      <h2 id="leavecup-title">End the cup?</h2>
       <p id="leavecup-copy" class="help-copy">Everyone goes back to the lobby and this cup's points are lost.</p>
-      <button id="leavecup-confirm" class="btn btn--danger" type="button">Leave cup</button>
+      <button id="leavecup-confirm" class="btn btn--danger" type="button">End cup</button>
       <button id="leavecup-cancel" class="btn btn--ghost" type="button">Keep racing</button>
     </div>
   </div>

@@ -1034,6 +1034,13 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 2.2rem; margin: 0 0 0.3rem; color: var(--ink);
 }
 #pause-overlay .btn { width: min(82%, 16rem); margin-top: 0; }
+/* Arming (pauseMenu.js): on a phone that did not ask for the pause the choices
+   wait out a beat, so a thumb mid-press lands on the frost. visibility, not
+   .hidden, so nothing moves when they arrive and a tap meanwhile hits nothing.
+   The fade sits on the :not() so it starts when the choices ARRIVE. */
+#pause-overlay.pause--arming .btn { visibility: hidden; }
+#pause-overlay:not(.pause--arming) .btn { animation: pause-arm 0.18s ease-out; }
+@keyframes pause-arm { from { opacity: 0; } }
 
 /* Connection overlay — screen-agnostic, sits above everything (incl. pause) so a
    dropped relay link always wins the screen. Same frosted glass as the pause UI. */
@@ -1098,7 +1105,7 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* One child is visible (renderFoot: the host's button XOR the note), except on
-   a cup's intermission, where the host also gets "Leave cup" — ghost, on the
+   a cup's intermission, where the host also gets "End cup" — ghost, on the
    LEFT, the lobby corner's own back-chip-then-primary order. */
 #result-foot { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
 #result-foot .btn { width: auto; min-width: 11rem; margin-top: 0; }
@@ -1580,11 +1587,11 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
-/* The corner keys: the X alone top-left, and at the top-right ONE pill (theme.css
-   .key-pill) — the lobby's gear (behind the race page's star count) and the
-   race's gear + pause. ONE rule, because they are the same control in the same
-   corner on consecutive screens — the name beside them is shared for the same
-   reason (.lobby-me__name).
+/* The corner keys: at the top-right ONE pill (theme.css .key-pill) — the
+   lobby's gear + X (behind the race page's star count) and the race's gear +
+   pause — and the X alone on the screens with no gear. ONE rule, because they
+   are the same control in the same corner on consecutive screens — the name
+   beside them is shared for the same reason (.lobby-me__name).
    2.9rem is the size, and 44px is the floor a fingertip needs. The rem alone was
    not enough: the short-viewport tiers at the top of this file drop the root
    font to 14px and then 12.5px, which took the square to 40px and then 36px — so
@@ -1600,26 +1607,22 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.5rem; line-height: 1;
 }
 
-/* The close button (closeButton.js) — a corner icon button sized by the rule
-   above, in the top-LEFT corner on every screen. While it shows, the two rows
-   that own the top-left step right by one button and the .hud-btns gap — a
-   sibling selector, which is why the button comes before the sections in
-   index.html. */
-.close-btn {
+/* The lone close button (closeButton.js) — a corner icon button sized by the
+   rule above, in the top-RIGHT corner of the screens with no settings pill to
+   join (the lobby's X is #lobby-close, in the pill). */
+#close-btn {
   position: fixed; z-index: 14;   /* over the screens (z 1), under every popup (15+) */
-  top: var(--edge-top); left: var(--edge-left);
+  top: var(--edge-top); right: var(--edge-right);
 }
-/* …and it is GONE while any dialog is up: a player reaches for an X in the
-   corner to close the dialog, and this one would leave the game. Every popup,
-   the pause overlay and #conn (which carries its own "Exit to start").
-   visibility rather than .hidden, so the rows above keep their step and nothing
-   moves under the backdrop. */
+/* …and every X is GONE while any dialog is up: a player reaches for an X in
+   the corner to close the dialog, and this one would leave the game. Every
+   popup, the pause overlay and #conn (which carries its own "Exit to start").
+   visibility rather than .hidden, so the pill keeps its width and nothing moves
+   under the backdrop. */
 body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
          #stars-overlay:not(.hidden), #leavecup-overlay:not(.hidden),
          #pause-overlay:not(.hidden),
          #conn:not(.hidden)) .close-btn { visibility: hidden; }
-.close-btn:not(.hidden) ~ section .lobby-top,
-.close-btn:not(.hidden) ~ section .hud-top { padding-left: calc(var(--corner-btn) + 0.55rem); }
 .close-glyph {
   width: 1em; height: 1em;
   fill: none; stroke: currentColor; stroke-width: 2.8;

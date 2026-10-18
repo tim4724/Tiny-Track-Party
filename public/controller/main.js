@@ -29,6 +29,7 @@ import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarInde
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
 import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
 import { initCloseButton, syncCloseButton } from './closeButton.js';
+import { initPauseMenu, setPauseOverlay, isPauseShown } from './pauseMenu.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation, keyboardUp } from './orientation.js';
@@ -49,8 +50,9 @@ function show(name) {
   currentScreen = name;
   // A held Start belongs to the lobby: landing anywhere else IS the answer to it.
   if (name !== 'lobby') clearStartPending();
-  // Likewise the leave-cup question belongs to the intermission board.
-  if (name !== 'results') closeLeaveCupPopup();
+  // Likewise the leave-cup question belongs to the screen that asked it: the
+  // intermission board, or the pause menu over the race.
+  if (name !== prev) closeLeaveCupPopup();
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
@@ -71,7 +73,7 @@ function show(name) {
 // pause flip; armSystemBack dedupes the transitions.
 function syncShellBack() {
   if (!inShell) return;
-  const paused = !el('pause-overlay').classList.contains('hidden');
+  const paused = isPauseShown();
   armSystemBack(currentScreen !== 'game' || paused || anyModalOpen());
 }
 
@@ -804,24 +806,19 @@ el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
   buzz('tap');
 });
 
-// --- pause ---
-// The display is authoritative over the paused state; the controller just
-// requests a change and reacts to the GAME_PAUSED / GAME_RESUMED broadcast.
-// While paused the overlay covers the screen, so the pause button is disabled.
-function setPauseOverlay(on) {
-  // Pause is authoritative and must win the screen: if a popup is open when a
-  // pause lands (both sit above the pause overlay), close it so the pause shows.
-  if (on) closeAnyModal();
-  el('pause-overlay').classList.toggle('hidden', !on);
-  el('pause-btn').disabled = on;
-  syncShellBack();   // a paused race welcomes back (= continue); a live one doesn't
-}
-el('pause-btn').addEventListener('click', () => { buzz('tap'); net.send(MSG.PAUSE_GAME); });
-el('pause-continue').addEventListener('click', () => { buzz('tap'); net.send(MSG.RESUME_GAME); });
-el('pause-newgame').addEventListener('click', () => { buzz('tap'); net.send(MSG.RETURN_TO_LOBBY); });
+// --- pause --- (pauseMenu.js)
+initPauseMenu({
+  send: (type) => net.send(type),
+  buzz,
+  leave: exitRoom,
+  isHost: () => amHost,
+  // The mode, not the board: a race's live standings carry no series chip.
+  inSeries: () => !!displayMode && displayMode.mode !== 'track',
+  onToggle: syncShellBack   // a paused race welcomes back (= continue); a live one doesn't
+});
 
 // Host's results button: mid-series it advances to the next race, otherwise it
-// sends everyone to the lobby. Abandoning a running cup is "Leave cup" beside
+// sends everyone to the lobby. Abandoning a running cup is "End cup" beside
 // it, which asks first (see resultsBoard's renderFoot).
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
@@ -840,7 +837,7 @@ el('leavecup-btn').addEventListener('click', () => {
 // returning false hands the exit to the launcher, same as the close button.
 installBackHook(() => {
   if (closeTopModal()) return true;
-  if (!el('pause-overlay').classList.contains('hidden')) { net.send(MSG.RESUME_GAME); return true; }
+  if (isPauseShown()) { net.send(MSG.RESUME_GAME); return true; }
   return false;
 });
 

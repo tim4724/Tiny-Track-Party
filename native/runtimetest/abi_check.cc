@@ -2920,7 +2920,8 @@ void uiLiveTwinsMatchJsonPaths() {
   check(act("1", "set_frame_rate", sess) == "set-frame-rate", "set-frame-rate: the host");
   check(act("1", "pause_game", sess) == "pause", "pause: any player");
   check(act("3", "resume_game", sess) == "resume", "resume: any player");
-  check(act("3", "return_to_lobby", sess) == "return-to-lobby", "new game: any player");
+  check(act("3", "return_to_lobby", sess) == "none", "new game: not the host");
+  check(act("1", "return_to_lobby", sess) == "return-to-lobby", "new game: the host");
   check(act("1", "control", sess) == "control", "control: live race");
   check(act("1", "control", 0) == "none", "control: no race, no input");
   check(act("1", "no_such_type", sess) == "none", "unknown type is none");

@@ -72,19 +72,19 @@ test('phone cup intermission: my RACE place only, race counter, advance or leave
   // NO cup standing, and no points: that is the TV's reveal to make.
   await expect(page.locator('#result-me')).not.toContainText('pts');
   await expect(page.locator('#result-me')).not.toContainText('+');
-  // Mid-series ⇒ advance, with "Leave cup" beside it (its confirm is modals.js's).
+  // Mid-series ⇒ advance, with "End cup" beside it (its confirm is modals.js's).
   // Order matters: the ghost sits LEFT of the primary, as in the lobby corner.
-  await expect(page.locator('#result-foot button:visible')).toHaveText(['Leave cup', 'Next race ▸']);
+  await expect(page.locator('#result-foot button:visible')).toHaveText(['End cup', 'Next race ▸']);
 });
 
 // The leave-cup confirm over that board: the destructive choice is the RED one
 // and named for what it does, and keeping the cup is the way back out.
-test('phone cup intermission: Leave cup asks first', async ({ page }) => {
+test('phone cup intermission: End cup asks first', async ({ page }) => {
   await page.goto(`${CONTROLLER}leave-cup&color=1`);
   await boardReady(page);
   await expect(page.locator('#leavecup-overlay')).toBeVisible();
-  await expect(page.locator('#leavecup-title')).toHaveText('Leave the cup?');
-  await expect(page.locator('#leavecup-overlay button:visible')).toHaveText(['Leave cup', 'Keep racing']);
+  await expect(page.locator('#leavecup-title')).toHaveText('End the cup?');
+  await expect(page.locator('#leavecup-overlay button:visible')).toHaveText(['End cup', 'Keep racing']);
   await expect(page.locator('#leavecup-confirm')).toHaveClass(/btn--danger/);
 });
 
