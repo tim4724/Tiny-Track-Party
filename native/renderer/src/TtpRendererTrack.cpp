@@ -219,7 +219,7 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
 }
 
 // The painted road — a direct port of render/track.js buildRoad's sweep: a
-// 16-point cross-section (skirt/kerb/gap/line/asphalt/dash) swept along a fine
+// cross-section (skirt/kerb/gap/line/asphalt/dash) swept along a fine
 // uniform resample, per-side kerb striping banded by EACH KERB EDGE's own
 // arclength (even-band snap → clean seam), dash cadence snapped to whole ring
 // runs, bare asphalt under launch strips, and the same baked-AO gradients.
@@ -285,30 +285,56 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float3 SKIRT = srgbToLinear(tb.pal[5]);
     const float3 SHOULDER = srgbToLinear(tb.pal[6]);
 
-    // Cross-section profile, strips and baked AO — verbatim from buildRoad.
+    // Cross-section profile, strips and baked AO.
+    //
+    // THE KERB'S TOP CORNERS ARE BEVELLED, the cars' own grammar (one flat
+    // chamfer, scripts/toy_cars.py) — in the FINE ribbon only. Past the far
+    // ribbon's distance a bevel is under a pixel, so there the kerb stays a
+    // box: its top is one far-only strip across the two bevels' feet (kFar
+    // below), with corners of its own lit as a top, so it meets both faces at
+    // shared positions and stays watertight. It sits `bev` low, inside
+    // kDeckLodTol. The fine ribbon pays four strips a ring; the far one none.
+    const float bev = 0.2f * std::min(cw, ch);
     struct PPoint { int sign; float off, y; };
-    const PPoint P[16] = {
-        { -1, -cw, -deck }, { -1, -cw, 0 }, { -1, -cw, ch }, { -1, 0, ch },
+    constexpr int kPts = 20;
+    const PPoint P[kPts] = {
+        { -1, -cw, -deck }, { -1, -cw, 0 }, { -1, -cw, ch - bev }, { -1, -cw + bev, ch },
+        { -1, -bev, ch }, { -1, 0, ch - bev },
         { -1, 0, 0 }, { -1, gap, 0 }, { -1, gap + lw, 0 },
         { 0, -dashW / 2, 0 }, { 0, dashW / 2, 0 },
         { 1, -gap - lw, 0 }, { 1, -gap, 0 }, { 1, 0, 0 },
-        { 1, 0, ch }, { 1, cw, ch }, { 1, cw, 0 }, { 1, cw, -deck },
+        { 1, 0, ch - bev }, { 1, bev, ch },
+        { 1, cw - bev, ch }, { 1, cw, ch - bev }, { 1, cw, 0 }, { 1, cw, -deck },
     };
+    // The deck-level points: the inner kerb feet, { ±1, 0, 0 }, and between.
+    constexpr int kDeckPt0 = 6, kDeckPt1 = 13;
     enum Kind { K_SKIRT, K_KERB, K_GAP, K_LINE, K_ROAD, K_DASH };
     struct Strip { int a, b; Kind kind; int side; }; // side: -1 L, +1 R, 0 n/a
-    const Strip STRIPS[16] = {
+    // The first kFine strips are the ring the fine ribbon draws; the last two
+    // are the far ribbon's square kerb tops, laid but never drawn near.
+    constexpr int kFine = kPts, kFarTopL = kFine, kFarTopR = kFine + 1, kLaid = kFine + 2;
+    const Strip STRIPS[kLaid] = {
         { 0, 1, K_SKIRT, 0 }, { 1, 2, K_KERB, -1 }, { 2, 3, K_KERB, -1 },
-        { 3, 4, K_KERB, -1 }, { 4, 5, K_GAP, 0 }, { 5, 6, K_LINE, 0 },
-        { 6, 7, K_ROAD, 0 }, { 7, 8, K_DASH, 0 }, { 8, 9, K_ROAD, 0 },
-        { 9, 10, K_LINE, 0 }, { 10, 11, K_GAP, 0 }, { 11, 12, K_KERB, 1 },
-        { 12, 13, K_KERB, 1 }, { 13, 14, K_KERB, 1 }, { 14, 15, K_SKIRT, 0 },
-        { 15, 0, K_SKIRT, 0 },
+        { 3, 4, K_KERB, -1 }, { 4, 5, K_KERB, -1 }, { 5, 6, K_KERB, -1 },
+        { 6, 7, K_GAP, 0 }, { 7, 8, K_LINE, 0 },
+        { 8, 9, K_ROAD, 0 }, { 9, 10, K_DASH, 0 }, { 10, 11, K_ROAD, 0 },
+        { 11, 12, K_LINE, 0 }, { 12, 13, K_GAP, 0 }, { 13, 14, K_KERB, 1 },
+        { 14, 15, K_KERB, 1 }, { 15, 16, K_KERB, 1 }, { 16, 17, K_KERB, 1 },
+        { 17, 18, K_KERB, 1 }, { 18, 19, K_SKIRT, 0 }, { 19, 0, K_SKIRT, 0 },
+        { 2, 5, K_KERB, -1 }, { 14, 17, K_KERB, 1 },
     };
-    const float AO[16] = { 0.55f, 0.65f, 0.90f, 1.0f, 0.70f, 0.90f, 1.0f, 1.0f,
-                           1.0f, 1.0f, 0.90f, 0.70f, 1.0f, 0.90f, 0.65f, 0.55f };
+    // The far ribbon's ring, in order round the section: the fine one with
+    // each kerb's bevel, top, bevel replaced by its far top.
+    constexpr int kFarStrips = kFine - 4;
+    static const int kFar[] = { 0, 1, kFarTopL, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                                kFarTopR, 17, 18, 19 };
+    static_assert(sizeof kFar / sizeof *kFar == kFarStrips);
+    const float AO[kPts] = { 0.55f, 0.65f, 0.90f, 0.90f, 1.0f, 1.0f, 0.70f, 0.90f,
+                             1.0f, 1.0f, 1.0f, 1.0f, 0.90f, 0.70f, 1.0f, 1.0f,
+                             0.90f, 0.90f, 0.65f, 0.55f };
 
     // THE DECK FLAG. The section above is a CLOSED ring, so its last strip —
-    // P[15] back to P[0] — is the road's UNDERSIDE, spanning the deck's whole lat
+    // the last point back to P[0] — is the road's UNDERSIDE, spanning the deck's whole lat
     // range from +half+cw to -half-cw. A decal is placed in track space alone, so
     // every one of them matched that quad as readily as the deck: on a LOOP,
     // where the back of the road is in shot, a boosting car's aura was painted on
@@ -327,15 +353,15 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
 
     // Every ring's profile points, once: the sweep, the strip normals and the
     // far ribbon's chord test each read the same points many times over.
-    std::vector<float3> ringPts((size_t) N * 16);
+    std::vector<float3> ringPts((size_t) N * kPts);
     for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
-        for (int j = 0; j < 16; j++) {
+        for (int j = 0; j < kPts; j++) {
             const float l = P[j].sign * halfAt(i) + P[j].off;
-            ringPts[(size_t) i * 16 + j] = f.pos + f.up * P[j].y + f.lat * l;
+            ringPts[(size_t) i * kPts + j] = f.pos + f.up * P[j].y + f.lat * l;
         }
     }
-    const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * 16 + j]; };
+    const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * kPts + j]; };
 
     // Kerb stripes banded by each kerb edge's own arclength, even-band snap.
     struct KerbDist { std::vector<float> d; float eff; };
@@ -398,26 +424,28 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // THE WELD IS BY CONSTRUCTION. Two corners can only be equal at the same
     // profile point of the same ring under the same UNWRAPPED u (the start
     // line's seam stays split, see uIdx) — short of a road narrower than its
-    // painted lines, where two profile points coincide. At most four corners
-    // land at one point (two strips meet there, from the quads on either side
-    // of the ring), so a corner is compared with those few rather than hashed
-    // against the whole ribbon. `roadRemap` answers corner -> vertex for the
+    // painted lines, where two profile points coincide. At most six corners
+    // land at one point (a strip's two, from the quads on either side of the
+    // ring, times the three strips that share a bevel's foot with a far top),
+    // so a corner is compared with those few rather than hashed against the
+    // whole ribbon. `roadRemap` answers corner -> vertex for the
     // far ribbon, which is laid over the corners' numbering. The baked light
     // below is a function of the normal alone, so it cannot split what this
     // merged.
     static const int VSEQ_PT[4] = { 0, 1, 1, 0 };   // a@i, b@i, b@ni, a@ni
     constexpr uint32_t kNone = ~0u;
-    std::vector<std::array<uint32_t, 4>> laidAt((size_t) (N + 1) * 16,
-            { kNone, kNone, kNone, kNone });
+    using Slots = std::array<uint32_t, 6>;
+    std::vector<Slots> laidAt((size_t) (N + 1) * kPts,
+            { kNone, kNone, kNone, kNone, kNone, kNone });
     std::vector<uint32_t> roadRemap;
-    roadRemap.reserve((size_t) N * 16 * 4);
-    mRoad.verts.reserve((size_t) N * 16 * 3);   // a little over half the corners survive
-    mRoad.normals.reserve((size_t) N * 16 * 3);
-    mRoad.uvs.reserve((size_t) N * 16 * 3);
-    mRoad.idx.reserve((size_t) N * 16 * 6);
+    roadRemap.reserve((size_t) N * kLaid * 4);
+    mRoad.verts.reserve((size_t) N * kLaid * 3);   // a little over half the corners survive
+    mRoad.normals.reserve((size_t) N * kLaid * 3);
+    mRoad.uvs.reserve((size_t) N * kLaid * 3);
+    mRoad.idx.reserve((size_t) N * kFine * 6);
     const auto lay = [&](uint32_t u, int pt, const Vertex& v, const float3& n,
             const math::float2& uv) {
-        std::array<uint32_t, 4>& here = laidAt[(size_t) u * 16 + pt];
+        Slots& here = laidAt[(size_t) u * kPts + pt];
         for (const uint32_t k : here) {
             if (k != kNone && !std::memcmp(&mRoad.verts[k], &v, sizeof v)
                     && !std::memcmp(&mRoad.normals[k], &n, sizeof n)
@@ -434,12 +462,12 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         }
         return k;
     };
-    std::vector<uint32_t> quadKey((size_t) N * 16);
+    std::vector<uint32_t> quadKey((size_t) N * kLaid);
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
         const float3 colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
         const bool bare = bareAsphalt(i);
-        for (int s = 0; s < 16; s++) {
+        for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];
             const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
             float3 cb;
@@ -451,7 +479,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_GAP: cb = tb.edgeLines ? ASPHALT : SHOULDER; break;
                 default: cb = ASPHALT; break;
             }
-            quadKey[(size_t) i * 16 + s] = packAlbedo(cb, 1.0f);
+            quadKey[(size_t) i * kLaid + s] = packAlbedo(cb, 1.0f);
             const uint32_t ringIdx[4] = { i, i, ni, ni };
             // uv0's arclength must NOT wrap with the ring index. ringIdx uses
             // ni = (i+1) % N, so on the last strip it is 0 and u would sweep from
@@ -496,6 +524,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             // (a@i, b@ni, a@ni) — the (i,a)-(i+1,b) diagonal project() splits
             // by. Keep the order: same winding, same provoking vertex per
             // triangle, so the rasterizer sees exactly what the soup drew.
+            if (s >= kFine) continue;   // a far top: the far ribbon's alone
             const uint32_t quad[6] = { corner[0], corner[1], corner[2],
                                        corner[0], corner[2], corner[3] };
             mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
@@ -509,13 +538,13 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     buildCarShadowDraws();
     // The ring's mean baked light at full visibility, display-encoded, for
     // the car-shadow rows (TtpRenderer.h, mRingLight): the deck-level points
-    // of the cross-section, 4..11.
+    // of the cross-section.
     mRingLight.assign(N, math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
     for (uint32_t u = 0; u < N; u++) {
         float4 acc{ 0.0f };
         int cnt = 0;
-        for (int pt = 4; pt <= 11; pt++) {
-            for (const uint32_t k : laidAt[(size_t) u * 16 + pt]) {
+        for (int pt = kDeckPt0; pt <= kDeckPt1; pt++) {
+            for (const uint32_t k : laidAt[(size_t) u * kPts + pt]) {
                 if (k == kNone || k >= mRoad.custom0.size()) continue;
                 const math::half4& h = mRoad.custom1[k];   // ambient + sun, encoded
                 acc += float4{ (float) h.x, (float) h.y, (float) h.z, (float) h.w };
@@ -540,7 +569,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // chunk is a renderable and a decal fold). Draws are cheap under Vulkan;
     // the fold is not free.
     constexpr uint32_t kRoadChunkRings = 26;
-    constexpr uint32_t trisPerRing = 16 * 2;
+    constexpr uint32_t trisPerRing = kFine * 2;
     constexpr uint32_t kRoadChunkTris = kRoadChunkRings * trisPerRing;
     if (!buildMesh(mRoad, true, roadInstance(), 4, kRoadChunkTris)) return false;
 
@@ -556,13 +585,13 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // straight the fine ribbon is thousands of sub-pixel triangles a cell; the
     // far ribbon is worth ~4 ms of that frame (chooseLods has the numbers).
     // Ring runs are the whole of it: a coarse CROSS-SECTION on top measured
-    // nothing further, so the sixteen strips stay.
+    // nothing further, so the square kerb's sixteen strips stay (kFar).
     constexpr uint32_t kDeckLodSpan = 16;
     mRoadFarIdx.clear();
     std::vector<std::pair<uint32_t, uint32_t>> farRange;
     {
         const auto quadBase = [&](uint32_t ring, int s) {
-            return (ring * 16u + (uint32_t) s) * 4u;
+            return (ring * (uint32_t) kLaid + (uint32_t) s) * 4u;
         };
         const auto chordOk = [&](uint32_t i, uint32_t j, const Strip& st) {
             for (const int pt : { st.a, st.b }) {
@@ -585,27 +614,28 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             if (r == runEnd) return quadBase(r - 1, s) + (bSide ? 2u : 3u);
             return quadBase(r, s) + (bSide ? 1u : 0u);
         };
-        std::vector<uint32_t> bounds[16], ra, rb;
+        std::vector<uint32_t> bounds[kFarStrips], ra, rb;
         for (uint32_t r0 = 0; r0 < N; r0 += kRoadChunkRings) {
             const uint32_t r1 = std::min(N, r0 + kRoadChunkRings);
             const uint32_t off = (uint32_t) mRoadFarIdx.size();
             // Each strip's run boundaries first: the rings where its runs
             // start, plus the chunk's end.
-            for (int s = 0; s < 16; s++) {
+            for (int f = 0; f < kFarStrips; f++) {
+                const int s = kFar[f];
                 const Strip& st = STRIPS[s];
-                bounds[s].clear();
+                bounds[f].clear();
                 uint32_t i = r0;
                 while (i < r1) {
-                    bounds[s].push_back(i);
+                    bounds[f].push_back(i);
                     uint32_t j = i;
                     while (j + 1 < r1 && j + 1 - i < kDeckLodSpan
-                            && quadKey[(size_t) (j + 1) * 16 + s] == quadKey[(size_t) i * 16 + s]
+                            && quadKey[(size_t) (j + 1) * kLaid + s] == quadKey[(size_t) i * kLaid + s]
                             && chordOk(i, j + 2, st)) {
                         j++;
                     }
                     i = j + 1;
                 }
-                bounds[s].push_back(r1);
+                bounds[f].push_back(r1);
             }
             // WATERTIGHT: a run's edge shared with a neighbouring strip
             // carries that neighbour's boundary rings as extra vertices, so
@@ -615,10 +645,12 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             // chord bound — sub-pixel past the gate, a dark hairline up
             // close (seen with every chunk forced far). The run is then a
             // polygon between two polylines, triangulated by walking both.
-            for (int s = 0; s < 16; s++) {
-                const std::vector<uint32_t>& ba = bounds[(s + 15) % 16];   // shares point a
-                const std::vector<uint32_t>& bb = bounds[(s + 1) % 16];    // shares point b
-                const std::vector<uint32_t>& own = bounds[s];
+            // bounds is by far-ring position f, the corners by laid strip s.
+            for (int f = 0; f < kFarStrips; f++) {
+                const int s = kFar[f];
+                const std::vector<uint32_t>& ba = bounds[(f + kFarStrips - 1) % kFarStrips]; // shares point a
+                const std::vector<uint32_t>& bb = bounds[(f + 1) % kFarStrips];              // shares point b
+                const std::vector<uint32_t>& own = bounds[f];
                 for (size_t k = 0; k + 1 < own.size(); k++) {
                     const uint32_t i = own[k], j = own[k + 1];
                     ra.assign(1, i);
@@ -653,7 +685,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 mRoadFarIdx.data(), mRoadFarIdx.size() * sizeof(uint32_t), nullptr));
     }
 
-    // Per-chunk material instances. Each ring contributes 16 strips of 2
+    // Per-chunk material instances. Each ring contributes kFine strips of 2
     // triangles, so a chunk's triangle range maps straight back to an arclength
     // range, and uploadDeckDecals can hand each chunk only what overlaps it.
     mRoadChunks.clear();

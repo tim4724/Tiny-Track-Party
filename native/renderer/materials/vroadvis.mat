@@ -4,7 +4,7 @@
 // WHY THE DECK NEEDED ITS OWN MAP. The deck's light was baked PER VERTEX into
 // custom0 (see bakeVertexLight), on the premise that a shadow whose penumbra is
 // 0.6 world units is smooth against the road's 0.48 u ring step. That premise
-// holds ALONG the track and fails ACROSS it: the 16-point cross-section puts
+// holds ALONG the track and fails ACROSS it: the cross-section puts
 // deck-level columns at lat ±half, ±(half-gap), ±(half-gap-lw) and ±dashW/2, so
 // each lane spans ~2.15 u with no vertex in it at all. A cast shadow narrower
 // than that — a barrel roll's, where the rolled deck turns edge-on to the sun
