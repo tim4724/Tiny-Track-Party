@@ -582,21 +582,13 @@ export const MUTATIONS = [
     expect: 'render_scale',
   },
   {
-    // A lobby that dipped a rung on its own boot must not drag the first race to
-    // the floor: the race is placed below the lobby's BEST rung, not below the dip.
-    name: 'render-scale/placed-below-the-dip',
+    // A count not seen yet starts where the scene before it was: only missed
+    // frames move the rung. Lowered on a guess, a device that holds the
+    // lobby's 1080 starts every new player count at 720.
+    name: 'render-scale/new-count-lowered',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'place = std::max(std::min(at, top - 1), 0);',
-    replace: 'place = std::max(at - 1, 0);',
-    expect: 'render_scale',
-  },
-  {
-    // A count not seen yet that draws more cells than the scene before it starts
-    // a rung lower — and below the BEST that scene reached, not below a dip.
-    name: 'render-scale/new-count-not-lowered',
-    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '      place = std::max(std::min(at, top - 1), 0);',
-    replace: '',
+    find: '        : at;',
+    replace: '        : std::max(at - 1, 0);',
     expect: 'render_scale',
   },
   {

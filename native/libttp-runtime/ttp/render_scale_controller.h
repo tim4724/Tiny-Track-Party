@@ -74,10 +74,9 @@ class RenderScaleController {
   // picture) and starts the scene's grace, inside which nothing missed is
   // judged (kScaleSceneGraceSec). The scene is then PLACED once its cell count
   // is known (cells()): on the rung that count last held this session — a cup
-  // is one session, four players race after race — or, for a count not seen
-  // yet that draws more cells than the scene before it, one rung below where
-  // that scene left off. The lobby holds 1080 that four players cannot; this
-  // is what keeps the first race of a cup from finding that out on its grid.
+  // is one session, four players race after race. A count not seen yet starts
+  // where the scene before it was: a new player count is no reason to give up
+  // pixels, only missed frames are (decided 2026-10-18).
   // The monitor itself is the shell's to drop, with ttp_perf_reset, for the
   // reason ttp_perf.h names.
   void scene(double tMs);
@@ -151,15 +150,9 @@ class RenderScaleController {
   double rungOf_[kMaxCells + 1] = {};
   int fails_[kMaxCells + 1][kScaleMaxPoints] = {};
   // What the frame last reported, and the count this scene was placed for (-1:
-  // not yet); the count the scene before it was placed for.
+  // not yet).
   int cells_ = -1;
   int sceneCells_ = -1;
-  int prevCells_ = -1;
-  // The best scale this scene has stood on, and that of the scene before it: a
-  // new count is placed a rung below the latter, so a lobby that dipped on its own
-  // boot does not drag the first race down to the floor.
-  double sceneTop_ = 0;
-  double prevTop_ = 0;
   double sceneMs_ = 0;
   double lastPollMs_ = 0;
   bool halfRate_ = false;

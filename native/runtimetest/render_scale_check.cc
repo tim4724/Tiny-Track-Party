@@ -399,21 +399,15 @@ int main() {
       b.race(10, kHD, lobby);
       nearly(b.lines(kHD), 1080.0, "the lobby holds the ceiling");
 
-      // The first four-player race: a count not seen yet, with more cells than
-      // the lobby, is placed a rung lower at its build — not on its grid.
+      // The first four-player race: a count not seen yet starts on the lobby's
+      // rung, and only what it misses after its grace moves it.
       b.ctl.scene(b.t);
       b.mon.reset();
       b.cells = 4;
-      check(b.race(3, kHD, four) == 1, "the first four-player race is placed at once");
-      nearly(b.lines(kHD), 720.0, "…one rung below the lobby");
-      // It counts as one failure of 1080 for four players: the first try waits
-      // the doubled wait, fails, and is the only one this session.
-      const double built = b.t - 3000.0;
-      while (b.t < built + 2.0 * kUpWaitSec * 1000.0 - 2000.0) {
-        check(!b.race(1, kHD, four), "no try of 1080 inside the doubled wait");
-      }
-      check(b.race(60, kHD, four) == 2, "…then one try, which fails fast");
-      nearly(b.lines(kHD), 720.0, "…back at 720");
+      check(b.race(3, kHD, four) == 0, "the first four-player race starts on the lobby's rung");
+      nearly(b.lines(kHD), 1080.0, "…1080, not a rung below it");
+      check(b.race(10, kHD, four) == 1, "…and steps down on its missed frames");
+      nearly(b.lines(kHD), 720.0, "…to 720");
 
       // The next race of the cup starts where four players left off, and tries
       // nothing.
@@ -437,24 +431,8 @@ int main() {
       nearly(b.lines(kHD), 720.0, "…and stays there");
     }
     {
-      // A LOBBY THAT DIPPED ON ITS OWN BOOT does not drag the first race to the
-      // floor: the race is placed a rung below the best the lobby reached
-      // (1080), which is where the lobby already is, not a rung below that.
-      Box b;
-      b.cells = 0;
-      b.ctl.scene(b.t);
-      b.race(10, kHD, [](double s) { return s > 0.7 ? 20.0 : 4.0; });
-      nearly(b.lines(kHD), 720.0, "the lobby dips a rung on its boot");
-      b.ctl.scene(b.t);
-      b.mon.reset();
-      b.cells = 4;
-      check(b.race(3, kHD, [](double s) { return s > 0.7 ? 20.0 : 8.0; }) == 0,
-            "the first four-player race starts where the lobby is");
-      nearly(b.lines(kHD), 720.0, "…at 720, not on the floor");
-    }
-    {
-      // A NEW COUNT THAT CAN HOLD the lobby's rung is placed lower too, and
-      // climbs back once the doubled wait is out.
+      // A NEW COUNT THAT CAN HOLD the lobby's rung never moves: a change of
+      // player count gives up no pixels on its own.
       Box b;
       b.cells = 0;
       b.ctl.scene(b.t);
@@ -462,10 +440,9 @@ int main() {
       b.ctl.scene(b.t);
       b.mon.reset();
       b.cells = 2;
-      b.race(3, kHD, [](double) { return 4.0; });
-      nearly(b.lines(kHD), 720.0, "a first two-player race starts a rung below the lobby");
-      b.race(2.0 * kUpWaitSec + 10, kHD, [](double) { return 4.0; });
-      nearly(b.lines(kHD), 1080.0, "…and climbs back to it inside the race when it holds");
+      check(b.race(120, kHD, [](double) { return 4.0; }) == 0,
+            "a first two-player race that holds the lobby's rung never moves");
+      nearly(b.lines(kHD), 1080.0, "…and stays at 1080");
     }
     {
       // 120 Hz IS HELD WITH PIXELS. A frame that fits 8.3 ms only at 720 lines

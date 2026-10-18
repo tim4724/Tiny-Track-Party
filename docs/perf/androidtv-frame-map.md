@@ -172,14 +172,15 @@ cannot show this):
 | rule | lobby | race 1 | races 2-4 |
 |---|---|---|---|
 | no player count | held 1080 | started at 1080: 62 frames missed in its first 6 s (~37 fps), down to 720 at 5.4 s | 720, no move, 0-7 skipped frames each |
-| placed per player count | dipped to 720 on its own boot (~20 frames, 20-25 s in) | started at 720; one try of 1080 at 80 s, 15 frames in 3 s, back | 720, no move, 1-3 skipped frames each |
+| per player count, a new count placed a rung lower (tried, dropped) | dipped to 720 on its own boot (~20 frames, 20-25 s in) | started at 720; one try of 1080 at 80 s, 15 frames in 3 s, back | 720, no move, 1-3 skipped frames each |
 
-So each scene now starts on the rung its player count last held, and a count
-not seen yet that draws more cells is placed a rung below the best the scene
-before it reached — counting as one failure of every rung above, which is why
-race 1 still tries 1080 once, 80 s in: that try is what lets a device that
-CAN hold it (an Apple TV at four players) climb back within the first race.
-The lobby, back from a cup, is placed straight on its own rung.
+So each scene starts on the rung its player count last held, and the lobby,
+back from a cup, is placed straight on its own rung. A count not seen yet
+starts where the scene before it was, and only missed frames move the rung,
+so its race 1 pays the first row's opening seconds. Placing it lower was
+tried: it cost every 1080-ceiling device its pixels on each new count,
+whether it could hold 1080 or not, and put the host's half-rate offer in
+front of devices that never missed a frame.
 
 ## Open
 

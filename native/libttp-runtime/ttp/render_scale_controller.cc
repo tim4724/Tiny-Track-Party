@@ -6,9 +6,6 @@ namespace rt {
 void RenderScaleController::scene(double tMs) {
   // What the outgoing scene's count left off at, for the next scene with it.
   if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale;
-  prevCells_ = sceneCells_;
-  prevTop_ = std::max(sceneTop_, point_.scale);
-  sceneTop_ = point_.scale;
   sceneCells_ = -1;
   cells_ = -1;
   sceneMs_ = tMs;
@@ -32,7 +29,6 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
     adopted_ = true;
     if (limits.max > 0.0) point_.scale = limits.max;
   }
-  sceneTop_ = std::max(sceneTop_, point_.scale);
 
   const perf::Readout r = mon.fold();
 
@@ -89,29 +85,16 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   const int at = pointAtOrBelow(RenderScalePoint{clamped, point_.divisor}, list, n);
 
   // PLACE THE SCENE, once its cell count is known and while it is still in its
-  // grace: where that count left off this session, or — a count not seen yet
-  // that draws more cells than the scene before it — one rung below the best
-  // the scene before it reached. Only the scene's FIRST placement lowers: a
-  // count that changes again inside the grace (a shell naming its cells late)
-  // is placed, not lowered twice. A placement is not a step: it judges
-  // nothing, and the wait to climb still runs from the build.
+  // grace: where that count left off this session. A count not seen yet stays
+  // where the scene before it was, since only missed frames move the rung. A
+  // placement is not a step: it judges nothing, and the wait to climb still
+  // runs from the build.
   if (cells_ >= 0 && std::min(cells_, kMaxCells) != sceneCells_
       && tMs - sceneMs_ < kScaleSceneGraceSec * 1000.0) {
     const int c = std::min(cells_, kMaxCells);
-    int place = at;
-    if (rungOf_[c] > 0.0) {
-      place = pointAtOrBelow(RenderScalePoint{rungOf_[c], point_.divisor}, list, n);
-    } else if (prevCells_ >= 0 && c > prevCells_ && sceneCells_ < 0) {
-      // A rung below the BEST the scene before it reached, never above where it
-      // is now: the lobby's boot can dip a rung on its own loading, and a race
-      // placed below the dip would start on the floor.
-      const int top = pointAtOrBelow(RenderScalePoint{prevTop_, point_.divisor}, list, n);
-      place = std::max(std::min(at, top - 1), 0);
-      // …and every rung above it counts as failed once at this count, so the
-      // first try waits the doubled wait: a device that holds it climbs within a
-      // race, one that does not tries once a session.
-      for (int r = place + 1; r < n; r++) fails_[c][r] = std::max(fails_[c][r], 1);
-    }
+    const int place = rungOf_[c] > 0.0
+        ? pointAtOrBelow(RenderScalePoint{rungOf_[c], point_.divisor}, list, n)
+        : at;
     sceneCells_ = c;
     if (list[place].scale != point_.scale || list[place].divisor != point_.divisor) {
       return moveTo(list[place], mon, out);
