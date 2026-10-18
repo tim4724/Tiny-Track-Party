@@ -130,11 +130,9 @@ const SUPERSAMPLE_ARM_MS = 3000;
 
 // NOTHING IS REMEMBERED ACROSS SESSIONS, on purpose. Persisting the learned
 // scale looks like free value — a weak TV would skip the seconds it spends
-// adapting in race one — but it combines badly with the half of the controller
-// that can only step DOWN: a device with no GPU timer would descend on one bad
-// window (a thermal blip, a cold shader cache, a heavy tab at boot) and have no
-// path back on any later session. A ratchet on exactly the devices this is for
-// is worse than re-learning, which costs a couple of seconds and self-corrects.
+// adapting in race one — but one bad session (a thermal blip, a cold shader
+// cache, a heavy tab at boot) would then carry into every later one.
+// Re-learning costs a few seconds per session and self-corrects.
 
 // The race loop's SLOW TICK: everything on that loop which is not the frame
 // itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
@@ -238,9 +236,9 @@ export class Stage {
     // period — and a rule whose whole contract is "hand over measurements, not
     // opinions" is not worth demonstrating on invented ones. This makes the
     // frames ACTUALLY expensive (at 3 it is nine times the fill), so everything
-    // downstream is real: real cost, real percentiles, real cost model, real
-    // resize. Where it settles is the honest answer to "what rung does this
-    // machine hold four cells at".
+    // downstream is real: real cost, real missed frames, real resize. Where it
+    // settles is the honest answer to "what rung does this machine hold four
+    // cells at".
     //
     // The three terms it overrides are each deliberate — the panel's own
     // resolution (this never supersamples), the 2x cap, and MAX_BUFFER_H — so
@@ -268,8 +266,8 @@ export class Stage {
     this._dpr = 1;           // real value comes from the _sizeCanvas below
     // THE OPERATING POINT THIS SIDE PERFORMS — the buffer scale it sized and the
     // cadence it paced. Not a second opinion about what to do: everything the
-    // decision is MADE from (the window, the percentiles, the fastest present,
-    // the cost model, the clocks) lives in ttp/render_scale_controller.h and
+    // decision is MADE from (the missed frames, the fastest present, the failed
+    // rungs, the clocks) lives in ttp/render_scale_controller.h and
     // folds off the same monitor `perf` feeds. This is the record of the answer.
     //
     // Infinity rather than a number, so the band's ceiling is the only place
@@ -423,8 +421,7 @@ export class Stage {
     // DROP THE WINDOW, every time — this is the one place the buffer changes
     // size, and the readout is LABELLED with the size it was measured at. Held,
     // a line reads "960x540" over percentiles half of which were drawn at
-    // 1280x720; worse, _adaptScale then fits its cost model from a point that
-    // belongs to neither scale and banks it as prevCostMs.
+    // 1280x720.
     this.perf.reset();
     // The resize reallocated (and cleared) the drawing buffer. A running loop
     // repaints on the next rAF, but a preview idled by pauseAfterFrame would stay
@@ -1279,7 +1276,7 @@ export class Stage {
   //
   // NOTHING IS DECIDED HERE and nothing is even measured here any more. The
   // window is the readout's (PerfHud feeds ttp_perf_sample every callback), the
-  // percentiles, the fastest present, the cost model and the clocks are all
+  // missed frames, the fastest present, the failed rungs and the clocks are all
   // ttp/render_scale_controller.h's, and the rule is ttp/render_scale.h's. What
   // is left on this side is the two things only a browser knows — the band, and
   // that a hidden tab is not a device — plus the resize.
@@ -1313,8 +1310,9 @@ export class Stage {
   // so a rescue afterwards is not forced back up), and from there the rule steps
   // down the ladder normally.
   //
-  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb needs the cost
-  // model, which needs a GPU timer, so on WebKit it would never arrive at all.
+  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb waits for a full
+  // clean window and kUpWaitSec on the rung, one rung at a time, and the point
+  // of this knob is to be at the top within seconds.
   _armSuperSample(t) {
     if (!this._superSample || this._superArmed || t < SUPERSAMPLE_ARM_MS) return;
     this._superArmed = true;

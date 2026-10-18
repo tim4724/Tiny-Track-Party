@@ -138,6 +138,9 @@ object Scenarios {
     private const val SPIN_MS = 3_000L
     private const val SPIN_LONG_MS = 5_000L
 
+    /** How long `session` sits in the lobby before its cup starts. */
+    private const val SESSION_LOBBY_MS = 45_000L
+
     /**
      * How many PRESENTED frames the dressed screen has to survive before the shot.
      *
@@ -499,6 +502,25 @@ object Scenarios {
                 Ttp.ttp_ui_progress_load(null, 1)
                 game.show(GameState.Screen.RACE)
                 game.startDemoRace(trackPick(), forceItem = null, humans = players)
+            }
+
+            // A CUP PLAYED THROUGH IN ONE PROCESS: the lobby, then every race of
+            // the first cup chained by the live intermission, as a party plays it.
+            // `bench` relaunches the app for every race, so it can never show
+            // what one race leaves the next — which is the render-scale rule's
+            // whole question about a cup (render_scale.h, kFailSec).
+            "session" -> {
+                PerfMonitor.bench()
+                Ttp.ttp_ui_progress_load(null, 1)
+                game.show(GameState.Screen.LOBBY)
+                game.net.fakeRoom(ROOM_CODE)
+                val pick = JSONObject().put("mode", "cup").put("cupId", firstCupId()
+                    ?: throw IllegalStateException("the shipped catalogue has no cups"))
+                game.net.applyPick(pick)
+                after(SESSION_LOBBY_MS) {
+                    game.show(GameState.Screen.RACE)
+                    game.startDemoRace(pick, forceItem = null, humans = players)
+                }
             }
 
             else -> return null

@@ -16,13 +16,14 @@ rules most easily broken from here, and the ones a fixture is least likely to
 catch.
 
 `render_scale` is here for a different reason: it decides how big the drawing
-buffer should be from what the last window of frames cost, and every platform
-meets the same spread of devices. It is TWO files — `render_scale.h`, the pure
-rule, and `render_scale_controller.{h,cc}`, the state around it: the window it
-folds off the readout's monitor, the running fastest present, the cost model's
-observation and the move and scene clocks. A shell names its BAND and its panel period
-and performs the answer; it holds nothing else, because three shells that held
-that state by hand had already drifted to three different percentile formulas.
+buffer should be from the frames the panel missed, and every platform meets the
+same spread of devices. It is TWO files — `render_scale.h`, the pure rule, and
+`render_scale_controller.{h,cc}`, the state around it: the missed frames per
+second drained off the readout's monitor, the running fastest present, the rung
+and the failures each player count left this session, and the scene and rung
+clocks. A shell names its BAND and its panel period and performs the answer; it
+holds nothing else, because three shells that held that state by hand had
+already drifted from each other.
 
 ## The UI model
 

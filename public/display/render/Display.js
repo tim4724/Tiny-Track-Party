@@ -343,8 +343,8 @@ export class Display {
   // on a TV is a name chip nobody can read.
   safeInsets(fx, fy) { this._fn.safeInsets(fx, fy); }
 
-  // A NEW SCENE, on the same clock the perf samples carry. The rule drops its
-  // cost model and starts the scene's grace; neither is ours to judge.
+  // A NEW SCENE, on the same clock the perf samples carry. The rule starts the
+  // scene's grace and its wait to climb; neither is ours to judge.
   scaleScene(tMs) { this._fn.scaleScene(tMs); }
 
   // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
@@ -354,9 +354,9 @@ export class Display {
   // moves the resolution (the divisor is 2 only on the host's Quality choice),
   // and a caller taking one answer and ignoring the other would be arbitrating
   // between them itself.
-  // Everything it decides FROM — the window, the percentiles, the fastest
-  // present, the cost model's observation, the clocks — is C++'s and folds off
-  // the same monitor PerfHud feeds. See ttp_display_scale_poll.
+  // Everything it decides FROM — the missed frames, the fastest present, the
+  // failed rungs, the clocks — is C++'s and drains the same monitor PerfHud
+  // feeds. See ttp_display_scale_poll.
   // The host's Quality choice: the ladder at half the panel rate. The next
   // scalePoll answers it as an ordinary move, which Stage already performs.
   scaleHalfRate(on) { this._fn.scaleHalfRate(on ? 1 : 0); }

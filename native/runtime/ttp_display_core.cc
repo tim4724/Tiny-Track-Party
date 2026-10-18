@@ -786,6 +786,9 @@ int ttp_display_frame(double dtSeconds) {
     if (!g_disp || !g_disp->built) return 0;
     DisplayCore& d = *g_disp;
     const uint32_t nCells = (uint32_t) d.cells.size();
+    // The render scale places each scene by how many cells it draws
+    // (RenderScaleController::cells); the frame is where that is a fact.
+    ttp::rt::renderScale().cells((int) nCells);
     // buildFrame is inside the shell's per-frame span (the ttp:render atrace
     // marker) but outside the renderer's kProfTotal; posting it into the
     // profile array is what lets a scripted sweep attribute a CPU spike to the

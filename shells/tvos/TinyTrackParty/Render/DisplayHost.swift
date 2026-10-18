@@ -169,10 +169,9 @@ final class DisplayHost {
     /// whatever Filament did with the last frame, so here they are two — which is
     /// precisely why the readout carries `fps` AND `hz`. Steering off the
     /// readout's `frame` block was measured doing nothing at all: a flat 16.7 ms
-    /// p95, a `latePresentRatio` pinned at 1.0, and 4 players left at 40-55 fps
-    /// with the rule never firing. So this shell folded its own present series,
-    /// with its own percentile, which had drifted from the one behind the very
-    /// overlay it was drawn beside.
+    /// p95 and 4 players left at 40-55 fps with the rule never firing. So this
+    /// shell folded its own present series, with its own percentile, which had
+    /// drifted from the one behind the very overlay it was drawn beside.
     ///
     /// The fold answers BOTH series now (`perf_stats.h`'s `Readout::present`),
     /// so there is one window again and it is the readout's. What this loop owes
@@ -187,8 +186,8 @@ final class DisplayHost {
     ///
     /// The PIN's ceiling is 2, not 1. The RULE never supersamples (a television
     /// app has nothing to gain from it), but a measurement does: above 1 the
-    /// frame rate is observable, and a cost model fitted only where the box
-    /// holds 60 is fitted where its own cadence hides the answer.
+    /// box stops holding 60, so the frame rate shows what a frame costs instead
+    /// of hiding it behind the panel's cadence.
     private static let scalePin =
         max(0, min(2, UserDefaults.standard.double(forKey: "ttpRenderScale")))
 

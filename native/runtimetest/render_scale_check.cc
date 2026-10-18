@@ -2,14 +2,14 @@
 // rule, and ttp/render_scale_controller.h, the state around it.
 //
 // Assertions rather than a corpus, like progression_check and frame_check: the
-// layer has no JS oracle, so this file is where its rules are pinned — which
-// signal decides, which directions each may move in, how many samples a
-// percentile needs, the holds, the band, and the two ways this could oscillate.
+// layer has no JS oracle, so this file is where its rules are pinned — what
+// counts as a missed frame, how many step down, what a climb waits for, how a
+// failed climb backs off, the band, the floor and the host's half rate.
 //
-// The convergence group at the end is the point of the file. A controller that
-// chases its own tail is not a bug a screenshot shows: it shows up as a picture
-// that softens and sharpens every few seconds forever, which is worse than
-// either scale.
+// The point of the file is that the rule does not MOVE much. Every move is a
+// buffer reallocation the player sees, so a controller that steps on one bad
+// second, or tries a rung it just failed every few seconds, is a flicker no
+// screenshot shows.
 #include <cstdio>
 
 #include <algorithm>
@@ -19,19 +19,20 @@
 #include "ttp/render_scale_controller.h"
 
 using ttp::rt::RenderScaleController;
-using ttp::rt::latePresentRatio;
 using ttp::rt::presentBaseline;
-using ttp::rt::RenderScaleCost;
 using ttp::rt::RenderScaleLimits;
 using ttp::rt::operatingPoints;
-using ttp::rt::pointBudgetMs;
+using ttp::rt::pointPeriodMs;
 using ttp::rt::RenderScalePoint;
-using ttp::rt::renderScaleStep;
+using ttp::rt::renderScaleRung;
+using ttp::rt::upWaitSec;
+using ttp::rt::belowAnchor;
 using ttp::rt::kScaleMaxPoints;
-using ttp::rt::fitCost;
-using ttp::rt::predictMs;
-using ttp::rt::RenderScaleSample;
-using ttp::rt::rungAtOrBelow;
+using ttp::rt::kJudgeSec;
+using ttp::rt::kDownMissed;
+using ttp::rt::kUpWaitSec;
+using ttp::rt::kMaxFails;
+using ttp::rt::pointAtOrBelow;
 using ttp::rt::rungScales;
 
 namespace {
@@ -52,75 +53,20 @@ void nearly(double got, double want, const char* what) {
 
 // A 4K panel at devicePixelRatio 1: a scale of 1.0 is its own 2160 lines, and
 // no shell floor narrows it, so what it offers is the whole ladder — 540, 720,
-// 1080, 1620 and native. THE FLOOR IS THE LADDER'S BOTTOM RUNG and no longer a
-// shell constant, which is the point of line counts: 540 lines is 540 lines on
-// every panel, where a fraction-of-the-ceiling floor meant two different
-// pictures on a 1080p surface and a 2160p one.
+// 1080, 1620 and native.
 constexpr double kHz60 = 1000.0 / 60.0;
 constexpr double kHz120 = 1000.0 / 120.0;
 constexpr RenderScaleLimits k4K{0.0, 1.0, 2160.0, kHz60};
-constexpr double kFloor = 540.0 / 2160.0;
 // The same ladder seen by a 1080p TV, where only three rungs fit under native.
 constexpr RenderScaleLimits kHD{0.0, 1.0, 1080.0, kHz60};
 // A 4K panel that can present 120.
 constexpr RenderScaleLimits k4K120{0.0, 1.0, 2160.0, kHz120};
-constexpr double kLongHold = 60.0;
-// Seconds since the SCENE was built: past its grace (kScaleSceneGraceSec).
-constexpr double kSettled = 600.0;
-// "no previous observation at another scale" — the boot state, and what every
-// case that is not ABOUT the cost model passes.
-constexpr RenderScaleSample kNoFit{0.0, 0.0};
-constexpr RenderScalePoint kNative{1.0, 1};
-constexpr int kEnough = 120;  // a full stats window
-
-// A device whose GPU timer says `ms` per frame, presenting as fast as that work
-// allows. The present half is DERIVED and not a free parameter: a frame costing
-// 30 ms of GPU cannot also be presenting every 16.7, and the retreat arm now
-// answers to the present record (presentsOnCadence), so a fixture that pairs an
-// impossible pair tests a device that cannot exist. Under a period's worth of
-// work the panel paces it; over, the work does.
-RenderScaleCost gpuAt(double ms, int frames = kEnough) {
-  // QUANTIZED TO VSYNC, because that is the only thing a present can do: work
-  // that overruns the period does not present a little late, it presents a
-  // whole period late. 15.5 ms of GPU still lands every 16.7; 20 ms lands every
-  // 33.4. That step is exactly what separates a device with headroom it cannot
-  // measure from one that is really missing.
-  const double period = 16.7;
-  const double presented = std::ceil(std::max(ms, 0.001) / period) * period;
-  return RenderScaleCost{ms, frames, presented, period, kEnough};
-}
-// A device with NO timer, presenting `ratio` times slower than its own best.
-RenderScaleCost noTimerAt(double ratio, double floorMs = 16.7, int frames = kEnough) {
-  return RenderScaleCost{0.0, 0, floorMs * ratio, floorMs, frames};
-}
-
-// A shell driving the rule, holding the one observation the model needs: the
-// scale that was in force and the share measured at it, recorded at the moment
-// the scale changes. Both real shells do exactly this.
-struct Shell {
-  RenderScalePoint at{1.0, 1};
-  RenderScaleSample prev{0.0, 0.0};
-  int moves = 0;
-  void poll(double ms, RenderScaleLimits b, double sinceScene = kSettled) {
-    const RenderScalePoint next =
-        renderScaleStep(at, gpuAt(ms), kLongHold, sinceScene, prev, b);
-    if (next.scale != at.scale || next.divisor != at.divisor) {
-      // ONLY ON A RESOLUTION MOVE, exactly as RenderScaleController::poll does
-      // it — two points at one scale determine no slope, and a half-rate flip
-      // is a same-scale move.
-      if (next.scale != at.scale) prev = RenderScaleSample{at.scale, ms};
-      at = next;
-      moves++;
-    }
-  }
-  double lines(RenderScaleLimits b) const { return at.scale * b.baseLines; }
-};
 
 }  // namespace
 
 int main() {
   // ---- the present baseline: which samples may become the device's cadence ---
-  nearly(presentBaseline(0.0, 16.7), 16.7, "the first usable p05 becomes the baseline");
+  nearly(presentBaseline(0.0, 16.7), 16.7, "the first usable median becomes the baseline");
   nearly(presentBaseline(16.7, 33.4), 16.7, "a slower window does not raise it");
   nearly(presentBaseline(16.7, 8.3), 8.3, "a faster one does lower it");
   nearly(presentBaseline(16.7, 2.0), 16.7,
@@ -128,79 +74,28 @@ int main() {
   nearly(presentBaseline(0.0, 2.0), 0.0, "…even when there is no baseline yet");
   nearly(presentBaseline(20.0, 20.0), 20.0, "a 50 Hz panel settles on its own 20 ms period");
 
-  // ---- the late-present ratio, and the samples it needs ----------------------
-  nearly(latePresentRatio(noTimerAt(2.0)), 2.0, "a whole period late reads as 2.0");
-  nearly(latePresentRatio(noTimerAt(1.0, 20.0)), 1.0,
-         "a 50 Hz panel on ITS cadence reads as 1.0, not as 20/16.7");
-  nearly(latePresentRatio(noTimerAt(2.0, 16.7, 10)), 0.0,
-         "a percentile over ten frames is not a percentile");
-  nearly(latePresentRatio(RenderScaleCost{0, 0, 33.4, 0.0, kEnough}), 0.0,
-         "no baseline learned yet means no signal");
-
-  // ---- the fallback does not step down off a scene's ASSEMBLY ---------------
-  // ---- the model may not retreat off a point the device is DELIVERING ------
-  //
-  // A GPU millisecond is not a fixed quantity. A governor that downclocks
-  // whenever a frame leaves idle makes the same work measure dearer the
-  // healthier the frame is, so a device holding its rate can price its own
-  // frame over the down threshold and be walked off a rung it never needed to
-  // give up. Measured on an Apple TV 4K: 4 players at native, GPU p95 past 90%
-  // of budget, presenting 60/60 with zero skips, and the rule taking a rung.
-  //
-  // The presents are the ground truth for "did we deliver"; the model is a
-  // prediction about it. Where they disagree at the CURRENT point, delivery
-  // wins — and only there: the climb is still the model's call, because a clean
-  // record says nothing about the rung above.
+  // ---- the decision ----------------------------------------------------------
   {
-    const RenderScalePoint top{1.0, 1};
-    const RenderScaleLimits k4K{0.0, 1.0, 2160.0, kHz60};
-    const RenderScaleSample none{0.0, 0.0};
-    // Over kScaleDownShare * 16.68 = 15.01, which on its own is a retreat.
-    const double overBudget = 15.5;
-
-    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 16.7, 16.7, kEnough},
-                          kLongHold, kSettled, none, k4K).scale == top.scale,
-          "a frame priced past the down threshold that is PRESENTING keeps its rung");
-    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 33.4, 16.7, kEnough},
-                          kLongHold, kSettled, none, k4K).scale < top.scale,
-          "…and the same price with the presents actually late does step down");
-    // Silence is not evidence: too few presents to judge is not a clean record.
-    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 16.7, 16.7, 10},
-                          kLongHold, kSettled, none, k4K).scale < top.scale,
-          "…nor is a window too short to say anything about");
-    // The veto is on the RETREAT, not on the whole arm: a point that fits still
-    // climbs, and nothing here made a clean record into a reason to move up.
-    check(renderScaleStep(RenderScalePoint{0.5, 1},
-                          RenderScaleCost{2.0, kEnough, 16.7, 16.7, kEnough},
-                          kLongHold, kSettled, RenderScaleSample{0.25, 1.0}, k4K).scale > 0.5,
-          "a clean record does not stop the model climbing");
-  }
-
-  // A step this path takes is one it can never take back, and a scene keeps
-  // costing after its build returns (shader compiles, first uploads, the shadow
-  // bake). A solo race that holds 60 at the panel's own resolution presented at
-  // 7-25 fps for its first seconds and was permanently downgraded for it.
-  {
-    const RenderScalePoint top{1.0, 1};
-    const RenderScaleLimits k4K{0.0, 1.0, 2160.0, 16.7};
-    const RenderScaleSample none{0.0, 0.0};
-    const RenderScaleCost late = noTimerAt(2.0);
-
-    check(renderScaleStep(top, late, kLongHold, 1.0, none, k4K).scale == top.scale,
-          "a whole period late one second into a scene does NOT drop a rung");
-    check(renderScaleStep(top, late, kLongHold,
-                          ttp::rt::kScaleSceneGraceSec - 0.1, none, k4K).scale == top.scale,
-          "…nor a tick before the grace is up");
-    check(renderScaleStep(top, late, kLongHold,
-                          ttp::rt::kScaleSceneGraceSec, none, k4K).scale < top.scale,
-          "…and DOES once the scene has had time to settle");
-    // A device with a timer waits too: it could climb back, but only after a
-    // lap-sized hold.
-    check(renderScaleStep(top, gpuAt(30.0), kLongHold, 1.0, none, k4K).scale == top.scale,
-          "a GPU timer does not step down inside the grace either");
-    check(renderScaleStep(top, gpuAt(30.0), kLongHold, ttp::rt::kScaleSceneGraceSec, none,
-                          k4K).scale < top.scale,
-          "…and does once it is up");
+    const int n = 5;
+    check(renderScaleRung(3, n, kDownMissed, 1, 0.0, kUpWaitSec) == 2,
+          "kDownMissed frames missed in the window step down one rung");
+    check(renderScaleRung(3, n, kDownMissed - 1, kJudgeSec, 999.0, kUpWaitSec) == 3,
+          "…and one fewer holds: a rung that holds still has the stray skip");
+    check(renderScaleRung(0, n, 100, kJudgeSec, 999.0, kUpWaitSec) == 0,
+          "nothing steps below the bottom rung");
+    check(renderScaleRung(2, n, 0, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
+          "a full clean window past the wait steps up one rung");
+    check(renderScaleRung(2, n, 1, kJudgeSec, 999.0, kUpWaitSec) == 2,
+          "…but one missed frame in it does not");
+    check(renderScaleRung(2, n, 0, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
+          "…nor a window not yet full");
+    check(renderScaleRung(2, n, 0, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
+          "…nor a rung entered too recently");
+    check(renderScaleRung(n - 1, n, 0, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
+          "nothing climbs past the ceiling");
+    nearly(upWaitSec(0), kUpWaitSec, "an unfailed rung waits kUpWaitSec");
+    nearly(upWaitSec(1), 2.0 * kUpWaitSec, "each failure doubles it");
+    nearly(upWaitSec(kMaxFails + 5), kUpWaitSec * (1 << kMaxFails), "…up to kMaxFails doublings");
   }
 
   // ---- the RUNGS -----------------------------------------------------------
@@ -218,20 +113,27 @@ int main() {
     const int n = rungScales(qhd, r);
     nearly(r[n - 1], 1.0, "native is offered on a panel the ladder does not name");
     check(n == 4, "…above the three ladder rungs that fit under it");
+    // A browser window: 909 CSS px at devicePixelRatio 2 is an 1818-line surface.
+    // Capping it at 1620 would be the WORSE picture — a 1.122 upscale, the uneven
+    // kind that crawls — so the ceiling itself is the top rung.
+    const RenderScaleLimits web{0.0, 2.0, 909.0, kHz60};
+    double w[16];
+    const int m = rungScales(web, w);
+    nearly(w[m - 1] * 909.0, 1818.0, "the top rung on a browser window is its own native size");
+    nearly(w[m - 2] * 909.0, 1620.0, "with the highest ladder value below it");
   }
   // Placement is DOWNWARD, never to the nearest: rounding up would hand a
   // struggling device more pixels on a poll that decided nothing.
   {
-    double r[8];
-    const int n = rungScales(k4K, r);
-    nearly(r[rungAtOrBelow(0.70, r, n)], 1080.0 / 2160.0,
+    RenderScalePoint l[8];
+    const int n = operatingPoints(k4K, l);
+    nearly(l[pointAtOrBelow(RenderScalePoint{0.70, 1}, l, n)].scale, 1080.0 / 2160.0,
            "a scale between rungs places on the one at or below it");
-    nearly(r[rungAtOrBelow(0.24, r, n)], 540.0 / 2160.0,
+    nearly(l[pointAtOrBelow(RenderScalePoint{0.24, 1}, l, n)].scale, 540.0 / 2160.0,
            "and one under the bottom rung comes up to it");
   }
 
   // ---- the OPERATING POINTS ------------------------------------------------
-  // Rate and resolution are ONE ordered axis, built around 1080@60.
   {
     RenderScalePoint l[8];
     const int n = operatingPoints(k4K, l);
@@ -239,235 +141,47 @@ int main() {
     for (int i = 0; i < n; i++) check(l[i].divisor == 1, "…all at the panel's own rate");
     nearly(l[0].scale * 2160.0, 540.0, "worst is 540");
     nearly(l[n - 1].scale * 2160.0, 2160.0, "best is native");
-  }
-  {
     // THE RATE IS THE PANEL'S OWN ON EVERY PANEL — the rule never moves the
-    // divisor (the ladder's comment has the decision). A 120 Hz panel offers
-    // the same rungs as a 60 Hz one, each priced per vsync.
-    RenderScalePoint l[8];
-    const int n = operatingPoints(k4K120, l);
-    check(n == 5, "a 120 Hz 4K panel offers the same five points");
-    for (int i = 0; i < n; i++) check(l[i].divisor == 1, "…every one at the panel's own 120");
-    nearly(l[2].scale * 2160.0, 1080.0, "the anchor is still 1080 lines");
-    const RenderScaleLimits hz144{0.0, 1.0, 1440.0, 1000.0 / 144.0};
-    const RenderScaleLimits small{0.0, 1.0, 700.0, kHz120};
-    for (const RenderScaleLimits& b : {k4K, hz144, small}) {
-      const int m = operatingPoints(b, l);
-      for (int i = 0; i < m; i++) check(l[i].divisor == 1, "…and so on every other panel and surface");
-    }
+    // divisor. A 120 Hz panel offers the same rungs, each due every 8.3 ms.
+    const int m = operatingPoints(k4K120, l);
+    check(m == 5, "a 120 Hz 4K panel offers the same five points");
+    for (int i = 0; i < m; i++) check(l[i].divisor == 1, "…every one at the panel's own 120");
   }
-  // The budget IS the present interval.
-  nearly(pointBudgetMs(RenderScalePoint{1.0, 1}, k4K120), kHz120, "divisor 1 on 120 Hz is 8.3 ms");
-  nearly(pointBudgetMs(RenderScalePoint{1.0, 2}, k4K120), 2.0 * kHz120, "divisor 2 is 16.7");
-
-  // ---- the cost model ------------------------------------------------------
-  // MILLISECONDS, so one fit serves every rate: what a frame costs the GPU does
-  // not depend on how often it is presented.
-  {
-    const auto truth = [](double s) { return 4.0 + 9.0 * s * s; };
-    const ttp::rt::RenderScaleFit f =
-        fitCost(0.5, truth(0.5), RenderScaleSample{1.0, truth(1.0)});
-    check(f.ok, "two observations at two scales fit");
-    nearly(f.fixedMs, 4.0, "…and recover the resolution-independent half");
-    nearly(f.fillMs, 9.0, "…and the per-pixel half");
-    nearly(predictMs(f, 0.75), truth(0.75), "so a rung it has never visited is predictable");
-  }
-  check(!fitCost(0.5, 6.0, RenderScaleSample{0.0, 0.0}).ok, "one observation does not fit");
-  check(!fitCost(0.5, 6.0, RenderScaleSample{0.5, 6.0}).ok, "nor two at the SAME scale");
-  check(!fitCost(0.5, 12.0, RenderScaleSample{1.0, 3.0}).ok,
-        "nor one saying more pixels cost LESS, which is noise and not a device");
-  check(fitCost(0.5, 1.0, RenderScaleSample{1.0, 12.0}).fixedMs >= 0.0,
-        "a negative fixed half clamps to zero");
-
-  // ---- no signal -----------------------------------------------------------
-  {
-    const RenderScaleCost silent{0.0, 0, 0.0, 0.0, 0};
-    const RenderScalePoint p = renderScaleStep(kNative, silent, kLongHold, kSettled, kNoFit, k4K);
-    nearly(p.scale, 1.0, "no signal holds the current point");
-    check(p.divisor == 1, "…rate included");
-  }
-
-  // ---- convergence ---------------------------------------------------------
-  // Walked as sequences, because oscillation is a property of the loop and not
-  // of any one decision. `Shell` holds the one observation the model needs.
-  {
-    // A weak TV: fill-dominated, so the ladder has real work to do. It starts
-    // where every shell starts — native — and must land on the best point that
-    // actually fits, then stay there.
-    const auto cost = [](double s) { return 2.0 + 20.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
-    check(sh.moves <= 4, "a weak device converges in a handful of steps");
-    check(cost(sh.at.scale) <= ttp::rt::kScaleTargetShare * pointBudgetMs(sh.at, k4K),
-          "onto a point inside its own budget");
-    const int settled = sh.moves;
-    for (int i = 0; i < 20; i++) sh.poll(cost(sh.at.scale), k4K);
-    check(sh.moves == settled, "and stays there — a fixed point, not a limit cycle");
-  }
-  {
-    // A MOSTLY-FIXED-COST DEVICE, the shape a low-end mobile GPU actually has:
-    // the reference Android box measures ~8 ms of resolution-independent cost
-    // against a 16.7 ms budget. THIS IS THE CASE A THRESHOLD CANNOT SERVE — any
-    // climb threshold low enough to stop a pure-fill device oscillating sits
-    // below its fixed cost, so it would read "no headroom" at every resolution
-    // and pin to the floor for good. The model can see that 8 ms will not move.
-    const auto cost = [](double s) { return 8.0 + 17.5 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
-    check(sh.at.scale > kFloor + 1e-9, "a mostly-fixed-cost device is not pinned at the floor");
-    check(cost(sh.at.scale) <= ttp::rt::kScaleTargetShare * pointBudgetMs(sh.at, k4K),
-          "and settles inside budget");
-  }
-  {
-    // THE OSCILLATION CASE, once an arithmetic bound on two thresholds and now a
-    // property of the loop: a device with NO fixed cost is the worst case for
-    // stepping up, because every pixel it takes back costs it.
-    const auto cost = [](double s) { return 46.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
-    const int settled = sh.moves;
-    for (int i = 0; i < 60; i++) sh.poll(cost(sh.at.scale), k4K);
-    check(sh.moves == settled, "a pure-fill device settles and never moves again");
-  }
-  {
-    // THE SCENE GETTING CHEAPER, which the recovery path exists for. The shell
-    // drops its previous observation (it belongs to a scene that no longer
-    // exists), so the rule PROBES its way back to a model and climbs on it —
-    // once the new scene has held the point it inherited for an up-hold.
-    const auto heavy = [](double s) { return 2.0 + 20.0 * s * s; };
-    const auto light = [](double s) { return 1.0 + 3.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K);
-    check(sh.at.scale < 1.0, "the heavy scene really did soften it");
-    const double inherited = sh.at.scale;
-    sh.prev = RenderScaleSample{0.0, 0.0};      // what a scene build does
-    sh.poll(light(sh.at.scale), k4K, 0.0);
-    sh.poll(light(sh.at.scale), k4K, ttp::rt::kScaleUpHoldSec - 1.0);
-    nearly(sh.at.scale, inherited, "a new scene keeps its point through its first up-hold");
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K, ttp::rt::kScaleUpHoldSec);
-    nearly(sh.at.scale, 1.0, "…and then climbs back to native from a probe");
-  }
-  {
-    // A PANEL THE LADDER DOES NOT NAME still climbs to its OWN native
-    // resolution, not to the highest ladder value under it. A browser window is
-    // this case almost always: 909 CSS px at devicePixelRatio 2 is an 1818-line
-    // surface, whose rungs are 540/720/1080/1620 and then 1818 itself.
-    //
-    // Capping at 1620 would be the WORSE picture, not the stricter one: 1620
-    // displayed on 1818 lines is a 1.122 upscale, the uneven kind that blurs in
-    // bands and crawls as the camera moves — exactly what the ladder exists to
-    // avoid. At the ceiling nothing is upscaled at all.
-    const RenderScaleLimits web{0.0, 2.0, 909.0, kHz60};
-    double r[16];
-    const int n = rungScales(web, r);
-    nearly(r[n - 1] * 909.0, 1818.0, "the top rung on a browser window is its own native size");
-    nearly(r[n - 2] * 909.0, 1620.0, "with the highest ladder value below it");
-    const auto light = [](double x) { return 1.0 + 2.0 * x * x; };
-    Shell sh;
-    sh.at = RenderScalePoint{540.0 / 909.0, 1};
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), web);
-    nearly(sh.lines(web), 1818.0, "and a device with the headroom climbs all the way to it");
-  }
-
-  {
-    // A DEVICE WHOSE COST DOES NOT SCALE WITH PIXELS MUST HOLD, not pump.
-    //
-    // The reference Android box at its floor is this: 1280x720 measured 17.1 ms
-    // and 960x540 measured 17.3, so the slope is NEGATIVE and fitCost refuses.
-    // Routing a refused FIT into the blind probe made it climb a rung, find it
-    // no cheaper, retreat one down-hold later and do it again — every excursion
-    // a surface resize, which is a visible flicker on the panel. Observed on the
-    // box as 0.67/0.50 round trips for as long as the lobby was up.
-    //
-    // Priced just UNDER the down threshold, because that is when it actually
-    // fires: over it the retreat branch takes the poll and the probe is never
-    // reached, which is why the pump on the box was minutes apart rather than
-    // every few seconds.
-    const RenderScaleSample flat{720.0 / 1080.0, 14.3};
-    const RenderScalePoint at{540.0 / 1080.0, 1};
-    nearly(renderScaleStep(at, gpuAt(14.5), kLongHold, kSettled, flat, kHD).scale,
-           at.scale, "a non-positive cost slope holds rather than probing");
-    // It is the OBSERVATION that stops it, not the hold and not lateness: the
-    // same poll with nothing measured at another scale is missing data, and
-    // probing is the only way to get any.
-    check(renderScaleStep(at, gpuAt(14.5), kLongHold, kSettled, kNoFit, kHD).scale > at.scale,
-          "…while having measured nothing probes");
-  }
-
-  // ---- 120 Hz --------------------------------------------------------------
-  //
-  // THE RATE IS THE PANEL'S OWN AND ONLY PIXELS GIVE WAY. A 120 Hz panel is
-  // priced per vsync: a frame that fits 8.3 ms runs native at 120, one that
-  // does not gives up rungs to hold 120, and one that cannot make it on any
-  // rung sits at the floor presenting as it can.
-  {
-    const auto cost = [](double s) { return 1.0 + 2.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
-    check(sh.at.divisor == 1, "a 120 Hz panel presents every vsync");
-    nearly(sh.lines(k4K120), 2160.0, "…at full resolution when the frame fits 8.3 ms");
-  }
-  {
-    // 12 ms at 1080 fits 16.7 but not 8.3. The rule used to hold 1080 on every
-    // other vsync here; it now pays in pixels and keeps the panel's rate.
-    const auto cost = [](double s) { return 4.0 + 32.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
-    check(sh.at.divisor == 1, "a frame that cannot make the vsync at 1080 keeps the rate");
-    check(sh.lines(k4K120) < 1080.0, "…and pays in resolution");
-    check(sh.lines(k4K120) >= 540.0 - 1e-9, "…never below the floor");
-  }
-  {
-    // END TO END, on the sequence a race actually walks: a heavy lobby walks
-    // the point down, the race's scene build drops the observation, and the
-    // cheap race that follows climbs back to native once it has held the point
-    // it inherited for an up-hold.
-    const auto heavy = [](double s) { return 4.0 + 32.0 * s * s; };
-    const auto light = [](double s) { return 1.0 + 2.0 * s * s; };
-    Shell sh;
-    for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K120);
-    check(sh.lines(k4K120) < 1080.0, "the lobby really did walk it down");
-    sh.prev = RenderScaleSample{0.0, 0.0};        // what a scene build does
-    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K120, ttp::rt::kScaleUpHoldSec);
-    nearly(sh.lines(k4K120), 2160.0, "and the race after it climbs back to native");
-    check(sh.at.divisor == 1, "…at the panel's rate throughout");
-  }
+  nearly(pointPeriodMs(RenderScalePoint{1.0, 1}, k4K120), kHz120, "divisor 1 on 120 Hz is due every 8.3 ms");
+  nearly(pointPeriodMs(RenderScalePoint{1.0, 2}, k4K120), 2.0 * kHz120, "divisor 2 every 16.7");
 
   // ---- the controller ------------------------------------------------------
   //
-  // The state the three shells used to hold by hand. What is pinned here is
-  // everything that was theirs to get wrong: which series the floor is learned
-  // from, what lateness is measured against once a rate has been chosen, when
-  // the window is dropped, and what a scene build does to the climb.
+  // Driven the way a shell drives it: a loop that ticks at the panel's rate,
+  // records each tick into the readout's monitor, and polls every second.
   {
     // A loop that ticks at the panel's rate and presents every Nth tick.
     // `everyNth` above 1 with a divisor of 1 is a SKIP STORM; equal to the
-    // divisor it is the cadence the rule itself chose.
+    // divisor it is the cadence the host chose. `missEvery` drops one present in
+    // that many — the stray skip a rung that holds still has.
     struct Box {
       ttp::rt::perf::Monitor mon;
       RenderScaleController ctl;
       double t = 0;
       int everyNth = 1;
+      int missEvery = 0;
+      int cells = -1;      // reported to the controller every tick, as the display core does; -1: never
       int tick = 0;
-      double gpuMs = -1;   // <= 0: no timer, like WebKit
+      double gpuMs = -1;   // what a frame costs: past a period, it misses the vsync (the rule never reads it)
       double jitterMs = 0; // stamps land this far either side of the vsync, zero-mean
 
       void ticks(int n, double panel = kHz60) {
         // WORK THAT OVERRUNS THE PERIOD MISSES THE VSYNC. A box whose GPU takes
-        // 30 ms cannot also present every 16.7, and the retreat arm now answers
-        // to the present record (presentsOnCadence), so a harness that presented
-        // regardless of its own cost would be driving a device that cannot
-        // exist — and would prove the rule holds a rung no real box could hold.
-        // `everyNth` still wins where a case declares a skip storm or the rate
-        // the rule itself chose; this only stops a cost being free.
+        // 30 ms cannot also present every 16.7; `everyNth` still wins where a
+        // case declares a skip storm or the rate the host chose.
         const int forced = gpuMs > 0.0 ? (int) std::ceil(gpuMs / panel) : 1;
         const int cadence = std::max(everyNth, std::max(forced, 1));
         for (int i = 0; i < n; i++) {
-          // A stamp early, on time, or late — in turn, so a window's median is
-          // the vsync period while its p05 is a jitter's width under it.
           const double j = jitterMs * (double) ((tick % 3) - 1);
           t += panel;
-          const bool drew = (++tick % cadence) == 0;
+          ++tick;
+          const bool drew = tick % cadence == 0 && !(missEvery > 0 && tick % missEvery == 0);
+          if (cells >= 0) ctl.cells(cells);
           ttp::rt::perf::Sample s;
           s.tMs = t + j;
           s.intervalMs = panel + j;   // the LOOP's cadence, unaffected by a skip
@@ -482,6 +196,20 @@ int main() {
         const bool moved = ctl.poll(t, b, mon, &p);
         if (out) *out = p;
         return moved;
+      }
+      // `secs` seconds of a race, polled every second as a shell does; `cost`
+      // prices a frame at the scale in force. Answers how many times it moved.
+      int race(double secs, RenderScaleLimits b, double (*cost)(double), double panel = kHz60) {
+        int moves = 0;
+        // One tick past the second, as a shell polling every frame lands: the
+        // poll cadence refuses anything under 1000 ms, and float steps sum short.
+        const int perSec = (int) std::lround(1000.0 / panel) + 1;
+        for (int i = 0; i < (int) secs; i++) {
+          gpuMs = cost(ctl.point().scale);
+          ticks(perSec, panel);
+          if (poll(b)) moves++;
+        }
+        return moves;
       }
       double lines(RenderScaleLimits b) const { return ctl.point().scale * b.baseLines; }
     };
@@ -538,49 +266,8 @@ int main() {
       check(b.ctl.point().scale <= 1.0 + 1e-9, "a lowered ceiling is honoured, not re-adopted");
     }
     {
-      // THE 144 Hz TRAP, on the arm that cannot take a mistake back.
-      //
-      // A 120 Hz panel with no GPU timer, holding a SOLID 60: the loop ticks at
-      // the panel's rate and presents every other tick, so the floor learns 8.3
-      // and the p95 is 16.7. Judged against the raw floor that is a ratio of
-      // 2.0 — "a whole period late", every window, forever — and this arm may
-      // only step DOWN, so a machine doing nothing wrong loses half its
-      // resolution and never gets it back. Measured on the artifact before the
-      // fix: 2160 lines to 1080 in nine seconds.
-      //
-      // 60 fps is the bar; a faster panel does not make a good frame a bad one.
-      // perf_stats.cc closed exactly this hole for the readout, under exactly
-      // this name, while the rule beside it kept dividing by the raw floor.
-      Box b;
-      b.ticks(240, kHz120);          // a cheap screen: every tick presents at 120
-      b.everyNth = 2;                // …then a race the box holds at a solid 60
-      for (int i = 0; i < 12; i++) { b.ticks(240, kHz120); b.poll(k4K120); }
-      nearly(b.lines(k4K120), 2160.0,
-             "a 120 Hz panel holding 60 is not late, and keeps its resolution");
-    }
-    {
-      // …AND THE FLOOR IS NOT A BLINDFOLD, which is the arm that makes the check
-      // above falsifiable. Where the panel IS the anchor the bar and the floor
-      // are one number and nothing changed: a 60 Hz box presenting every other
-      // vsync is 30 fps, a ratio of 2.0, and is rescued exactly as before.
-      //
-      // (Deliberately on a 60 Hz panel. The same demonstration at 120 Hz cannot
-      // be made: the ring holds 120 TICKS, so a box slow enough to be judged
-      // late there leaves under kMinSignalFrames present-gaps in it and the rule
-      // answers "no signal" — a real blind spot of the fallback on a
-      // high-refresh panel whose loop ticks regardless of what drew, and one
-      // this file is not the place to fix.)
-      Box b;
-      b.ticks(180);
-      b.everyNth = 2;
-      for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(k4K); }
-      check(b.lines(k4K) < 2160.0, "a box that really is late still steps down");
-    }
-    {
-      // THE SKIP STORM THE TICK SERIES HIDES, which is the whole reason the
-      // present series exists. The loop ticks a clean 60 and presents 20: a
-      // shell steering off tick intervals sees a flat 16.7 and never moves,
-      // which is a television left at 40-55 fps with the rule never firing.
+      // THE SKIP STORM THE TICK SERIES HIDES, which is why presents are counted
+      // and ticks are not. The loop ticks a clean 60 and presents 20.
       Box b;
       b.everyNth = 3;
       b.ticks(360);   // 6 s: past kScaleSceneGraceSec, which this arm honours
@@ -590,202 +277,240 @@ int main() {
       check(b.mon.size() == 0, "…and the window that decided it goes with the buffer");
     }
     {
-      // A CHOSEN CADENCE IS NOT A LATE ONE. At the host's half rate on a 120 Hz
-      // panel presents are deliberately two vsyncs apart. Lateness is judged
-      // against the cadence CHOSEN — the floor times the divisor — and without
-      // that multiply this box retreats every hold, all the way to the bottom
-      // rung, while presenting perfectly.
+      // ONE BAD SECOND IS NOT A MOVE. A rung that holds still has a stray skip:
+      // the reference box at 1080 with two players missed at most 4 frames in
+      // any 10 s of a race. One in two and a half seconds holds…
+      Box b;
+      b.missEvery = 150;
+      const int moves = b.race(120, kHD, [](double) { return 4.0; });
+      check(moves == 0, "a stray skip every 2.5 s moves nothing");
+      nearly(b.lines(kHD), 1080.0, "…and the ceiling holds");
+      // …and two a second does not.
+      Box c;
+      c.missEvery = 30;
+      c.race(20, kHD, [](double) { return 4.0; });
+      check(c.lines(kHD) < 1080.0, "two missed frames a second step down");
+    }
+    {
+      // A HOPELESS RUNG FAILS FAST, and the floor is where it stops: late at
+      // every resolution, a split falls to the bottom rung within seconds of
+      // the grace and never moves again — no sub-floor rung, no rate change.
+      Box b;
+      const int moves = b.race(10, kHD, [](double) { return 26.0; });
+      nearly(b.lines(kHD), 540.0, "a box late at every resolution falls to 540");
+      check(moves == 2, "…one rung at a time");
+      check(b.ctl.point().divisor == 1, "…at the panel's own rate, never half of it");
+      check(b.race(300, kHD, [](double) { return 26.0; }) == 0,
+            "…and stays there: there is no lower point to move to");
+    }
+    {
+      // A SCENE'S FIRST SECONDS ARE NOT ITS COST: nothing missed inside the
+      // grace is judged.
+      Box b;
+      b.race(4, k4K, [](double) { return 1.0; });
+      nearly(b.lines(k4K), 2160.0, "a cheap scene holds native");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.race(4, k4K, [](double) { return 30.0; });
+      nearly(b.lines(k4K), 2160.0, "a build's first seconds step nothing down");
+      b.race(3, k4K, [](double) { return 30.0; });
+      check(b.lines(k4K) < 2160.0, "…and past the grace a late scene steps down");
+    }
+    {
+      // THE CLIMB WAITS, and a failed rung waits longer. A race starts on the
+      // lobby's 1080 and the opening pack misses a frame and a half a second
+      // there: after a full window it steps down, which so soon after the scene
+      // put it there FAILS 1080. The pack spreads and 1080 would hold; the climb
+      // back waits the doubled wait, not the plain one.
+      const auto cheap = [](double) { return 4.0; };
+      Box b;
+      b.ctl.scene(b.t);
+      b.missEvery = 38;
+      for (int i = 0; i < 30 && b.lines(kHD) > 1000.0; i++) b.race(1, kHD, cheap);
+      nearly(b.lines(kHD), 720.0, "the opening pack steps a 1080 race down");
+      check(b.t > 13000.0, "…after a full window of it, not at once");
+      b.missEvery = 0;
+      const double down = b.t;
+      while (b.t < down + 2.0 * kUpWaitSec * 1000.0 - 2000.0) b.race(1, kHD, cheap);
+      nearly(b.lines(kHD), 720.0, "a rung failed at the start waits twice kUpWaitSec");
+      b.race(4, kHD, cheap);
+      nearly(b.lines(kHD), 1080.0, "…and then climbs back to it");
+      check(b.race(300, kHD, cheap) == 0, "…and stays, now that it holds");
+    }
+    {
+      // AN UNFAILED RUNG waits only kUpWaitSec from when its scene began. 1080
+      // holds well past kFailSec and then stops holding: that step down failed
+      // nothing.
+      const auto light = [](double) { return 4.0; };
+      Box b;
+      b.race(35, kHD, light);
+      nearly(b.lines(kHD), 1080.0, "a light scene holds the ceiling");
+      b.race(10, kHD, [](double s) { return s > 0.7 ? 20.0 : 4.0; });
+      nearly(b.lines(kHD), 720.0, "a rung that held, then could not, steps down");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      const double built = b.t;
+      while (b.t < built + kUpWaitSec * 1000.0 - 2000.0) b.race(1, kHD, light);
+      nearly(b.lines(kHD), 720.0, "a new scene keeps the point it inherits for kUpWaitSec");
+      b.race(4, kHD, light);
+      nearly(b.lines(kHD), 1080.0, "…then climbs one rung");
+    }
+    {
+      // A RUNG THE DEVICE CANNOT HOLD IS TRIED RARELY. 720 holds, 1080 misses a
+      // frame in two — four players at 1080 on the reference box. Every try
+      // fails inside two seconds, before the window ever fills, so the wait goes
+      // straight to its longest: one try in five minutes, not one a race.
+      const auto cost = [](double s) { return s > 0.7 ? 20.0 : 8.0; };
+      Box b;
+      b.ctl.scene(b.t);
+      b.race(10, kHD, cost);
+      nearly(b.lines(kHD), 720.0, "1080 is left at the start");
+      check(b.race(300, kHD, cost) == 0,
+            "a rung that failed before a full window is not tried again for the longest wait");
+      check(b.race(300, kHD, cost) == 2, "…then tried once, and failed once, in the next five minutes");
+
+      // A CUP IS ONE SESSION: the next race is the same four players, so it
+      // does not try the rung again.
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      check(b.race(300, kHD, cost) == 0, "a new race in the same session does not try it again");
+
+      // HOLDING a rung is what forgives it. The party shrinks and 1080 holds:
+      // the longest wait runs out, the climb holds, and from then on a step
+      // down that came after kFailSec failed nothing — the plain wait is back.
+      const auto light = [](double) { return 4.0; };
+      b.race(60, kHD, light);
+      nearly(b.lines(kHD), 1080.0, "after the longest wait the shrunk party climbs, and holds");
+      b.race(40, kHD, light);
+      b.race(10, kHD, cost);
+      nearly(b.lines(kHD), 720.0, "the full party is back and steps down");
+      b.race(kUpWaitSec + 15, kHD, light);
+      nearly(b.lines(kHD), 1080.0, "a rung that held is forgiven: back on the plain wait");
+    }
+    {
+      // A SCENE STARTS WHERE ITS PLAYER COUNT LEFT OFF. The lobby (the overview,
+      // no cells) holds the 1080 that four players cannot; a cup is four players
+      // race after race.
+      const auto lobby = [](double) { return 4.0; };
+      const auto four = [](double s) { return s > 0.7 ? 20.0 : 8.0; };   // 720 holds, 1080 cannot
+      Box b;
+      b.cells = 0;
+      b.ctl.scene(b.t);
+      b.race(10, kHD, lobby);
+      nearly(b.lines(kHD), 1080.0, "the lobby holds the ceiling");
+
+      // The first four-player race: a count not seen yet, with more cells than
+      // the lobby, is placed a rung lower at its build — not on its grid.
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 4;
+      check(b.race(3, kHD, four) == 1, "the first four-player race is placed at once");
+      nearly(b.lines(kHD), 720.0, "…one rung below the lobby");
+      // It counts as one failure of 1080 for four players: the first try waits
+      // the doubled wait, fails, and is the only one this session.
+      const double built = b.t - 3000.0;
+      while (b.t < built + 2.0 * kUpWaitSec * 1000.0 - 2000.0) {
+        check(!b.race(1, kHD, four), "no try of 1080 inside the doubled wait");
+      }
+      check(b.race(60, kHD, four) == 2, "…then one try, which fails fast");
+      nearly(b.lines(kHD), 720.0, "…back at 720");
+
+      // The next race of the cup starts where four players left off, and tries
+      // nothing.
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      check(b.race(300, kHD, four) == 0, "the next four-player race starts at 720 and never moves");
+
+      // Back to the lobby: its own 1080, at once, with no climb wait.
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 0;
+      check(b.race(3, kHD, lobby) == 1, "the lobby is placed back on its own rung at once");
+      nearly(b.lines(kHD), 1080.0, "…the ceiling");
+      b.race(60, kHD, lobby);
+
+      // …and the lobby holding 1080 says nothing about four players.
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 4;
+      check(b.race(300, kHD, four) == 1, "the next cup's first race is placed at 720 and tries nothing");
+      nearly(b.lines(kHD), 720.0, "…and stays there");
+    }
+    {
+      // A LOBBY THAT DIPPED ON ITS OWN BOOT does not drag the first race to the
+      // floor: the race is placed a rung below the best the lobby reached
+      // (1080), which is where the lobby already is, not a rung below that.
+      Box b;
+      b.cells = 0;
+      b.ctl.scene(b.t);
+      b.race(10, kHD, [](double s) { return s > 0.7 ? 20.0 : 4.0; });
+      nearly(b.lines(kHD), 720.0, "the lobby dips a rung on its boot");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 4;
+      check(b.race(3, kHD, [](double s) { return s > 0.7 ? 20.0 : 8.0; }) == 0,
+            "the first four-player race starts where the lobby is");
+      nearly(b.lines(kHD), 720.0, "…at 720, not on the floor");
+    }
+    {
+      // A NEW COUNT THAT CAN HOLD the lobby's rung is placed lower too, and
+      // climbs back once the doubled wait is out.
+      Box b;
+      b.cells = 0;
+      b.ctl.scene(b.t);
+      b.race(10, kHD, [](double) { return 4.0; });
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 2;
+      b.race(3, kHD, [](double) { return 4.0; });
+      nearly(b.lines(kHD), 720.0, "a first two-player race starts a rung below the lobby");
+      b.race(2.0 * kUpWaitSec + 10, kHD, [](double) { return 4.0; });
+      nearly(b.lines(kHD), 1080.0, "…and climbs back to it inside the race when it holds");
+    }
+    {
+      // 120 Hz IS HELD WITH PIXELS. A frame that fits 8.3 ms only at 720 lines
+      // walks down to 720 and stays at 120 Hz.
+      Box b;
+      b.race(40, k4K120, [](double s) { return 4.0 + 32.0 * s * s; }, kHz120);
+      nearly(b.lines(k4K120), 720.0, "a 120 Hz panel gives up pixels to keep 120");
+      check(b.ctl.point().divisor == 1, "…at the panel's own rate");
+      // A 120 Hz panel presenting a steady 60 IS late at 120: it pays in pixels
+      // too, down to the floor if nothing fits 8.3 ms.
+      Box c;
+      c.everyNth = 2;
+      c.race(20, k4K120, [](double) { return 1.0; }, kHz120);
+      nearly(c.lines(k4K120), 540.0, "60 fps on a 120 Hz panel is missing every other vsync");
+    }
+    {
+      // A CHOSEN CADENCE IS NOT A LATE ONE. At the host's half rate presents are
+      // deliberately two vsyncs apart; judged against one vsync, this box would
+      // walk to the floor while presenting perfectly.
       Box b;
       b.ctl.setHalfRate(true);
-      for (int i = 0; i < 10; i++) {
-        const double sc = b.ctl.point().scale;
-        b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
+      for (int i = 0; i < 60; i++) {
         b.everyNth = b.ctl.point().divisor;     // present at the cadence chosen
-        b.ticks(360, kHz120);                   // 3 s, past the down hold
-        b.poll(k4K120);
+        b.race(1, k4K120, [](double s) { return 8.0 + 8.0 * s * s; }, kHz120);
       }
       check(b.ctl.point().divisor == 2, "the host's half rate on a 120 Hz box is 60");
       check(b.lines(k4K120) >= 1080.0 - 1e-9,
             "…at the anchor's picture, not shredded to the floor by its own pacing");
     }
     {
-      // A CHOSEN CADENCE IS NOT A LATE ONE, on the arm that cannot take it back.
-      //
-      // The fallback (no GPU timer) may only step DOWN, so a rescue it should
-      // not have made is permanent for the life of the scene. Lateness is
-      // therefore judged against the cadence CHOSEN — the device's own fastest
-      // present times the divisor — and not against one raw vsync.
-      //
-      // REACHABLE: `ttp_display_gpu_ms` answers 0 whenever a query has not come
-      // back, so a box at the host's half rate with a timer sees the timer go
-      // quiet and the fallback inherits the point. Without the multiply it
-      // reads its own deliberate 60 fps as a ratio of 2.0 and walks the ladder
-      // to the floor while presenting perfectly.
+      // A FLIP LANDS ON THE ANCHOR, on the very next poll: a step down takes
+      // seconds and a step up most of a minute, so the new rung is found from
+      // above.
       Box b;
+      b.race(10, k4K, [](double) { return 40.0; });
+      nearly(b.lines(k4K), 540.0, "walked to the floor");
       b.ctl.setHalfRate(true);
-      for (int i = 0; i < 10; i++) {
-        const double sc = b.ctl.point().scale;
-        b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
-        b.everyNth = b.ctl.point().divisor;
-        b.ticks(360, kHz120);
-        b.poll(k4K120);
-      }
-      check(b.ctl.point().divisor == 2 && b.everyNth == 2, "settled at half rate");
-      const double settled = b.lines(k4K120);
-      b.gpuMs = -1;   // the timer goes quiet; the point stays where it was
-      for (int i = 0; i < 8; i++) { b.ticks(360, kHz120); b.poll(k4K120); }
-      nearly(b.lines(k4K120), settled,
-             "a box presenting at the cadence the rule chose is never late for it");
-    }
-    {
-      // THE POLL CADENCE IS A COST GUARD, AND WHAT PINS IT IS THAT NOTHING
-      // DEPENDS ON IT. It stops a 120-sample sort-and-fold running once a frame;
-      // it decides nothing, because the rule's own holds and kMinSignalFrames
-      // already pace every decision. So the property worth gating is not "the
-      // second poll inside a second is refused" — that answers "no move" either
-      // way, and passes for the wrong reason — but that a controller polled on
-      // EVERY FRAME converges on the same operating point as one polled at the
-      // cadence. If a decision ever starts depending on how often it is asked,
-      // this is what notices.
-      const auto cost = [](double sc) { return 4.0 + 32.0 * sc * sc; };
-      Box slow, fast;
-      for (int i = 0; i < 24; i++) {
-        slow.gpuMs = cost(slow.ctl.point().scale);
-        slow.ticks(180);
-        slow.poll(k4K);                       // once per window
-        for (int f = 0; f < 180; f++) {
-          fast.gpuMs = cost(fast.ctl.point().scale);
-          fast.ticks(1);
-          fast.poll(k4K);                     // …and once per frame
-        }
-      }
-      check(slow.ctl.point().scale > 0 && slow.ctl.point().scale < 1.0,
-            "the box settles somewhere below native, so there is something to agree on");
-      nearly(fast.lines(k4K), slow.lines(k4K),
-             "how often the rule is ASKED does not change where it lands");
-      check(fast.ctl.point().divisor == slow.ctl.point().divisor, "…nor the rate it picks");
-    }
-    {
-      // A NEW SCENE DOES NOT SHORTEN THE CLIMB: no race is cheaper than the
-      // lobby, so the point a build inherits is never one to climb out of.
-      Box b;
-      b.gpuMs = 30.0;                          // hopeless at 60 Hz
-      double movedAt = 0.0;
-      for (int i = 0; i < 6; i++) { b.ticks(180); if (b.poll(k4K)) movedAt = b.t; }
-      const double floored = b.lines(k4K);
-      check(floored < 2160.0, "an expensive scene falls off native");
-
-      b.gpuMs = 1.0;                           // …and the load lifts, with a new scene
-      b.ctl.scene(b.t);
-      b.mon.reset();
-      while (b.t + 3000.0 < movedAt + ttp::rt::kScaleUpHoldSec * 1000.0) { b.ticks(180); b.poll(k4K); }
-      nearly(b.lines(k4K), floored, "a scene build does not shorten the lap-sized up-hold");
-    }
-    {
-      // A NEW SCENE KEEPS THE POINT IT INHERITS, however long ago the last move
-      // was. The build drops the observation, so a lobby that settled minutes
-      // ago used to probe on the first poll after every track change.
-      Box b;
-      b.gpuMs = 30.0;                          // the same at every scale: nothing to fit
-      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
-      const double settled = b.lines(k4K);
-      check(settled < 2160.0, "an expensive scene falls off native");
-      for (int i = 0; i < 12; i++) { b.ticks(180); b.poll(k4K); }   // well past the up-hold
-      nearly(b.lines(k4K), settled, "…and, with nothing to fit, stays");
-      const double built = b.t;
-      b.ctl.scene(b.t);
-      b.mon.reset();
-      b.gpuMs = 1.0;                           // a new scene with all the headroom there is
-      while (b.t + 3000.0 < built + ttp::rt::kScaleUpHoldSec * 1000.0) { b.ticks(180); b.poll(k4K); }
-      nearly(b.lines(k4K), settled, "a new scene holds its point through its own up-hold");
-      for (int i = 0; i < 4; i++) { b.ticks(180); b.poll(k4K); }
-      check(b.lines(k4K) > settled, "…and then climbs");
-    }
-    {
-      // A SCENE'S FIRST SECONDS ARE NOT ITS COST, with a GPU timer too: a race
-      // that is slow while it assembles keeps its point.
-      Box b;
-      b.gpuMs = 1.0;
-      for (int i = 0; i < 4; i++) { b.ticks(180); b.poll(k4K); }
-      nearly(b.lines(k4K), 2160.0, "a cheap scene holds native");
-      b.ctl.scene(b.t);
-      b.mon.reset();
-      b.gpuMs = 30.0;
-      b.ticks(180);                            // 3 s into the new scene
-      b.poll(k4K);
-      nearly(b.lines(k4K), 2160.0, "a build's first seconds step nothing down");
-      b.ticks(180);                            // 6 s
-      b.poll(k4K);
-      check(b.lines(k4K) < 2160.0, "…and past the grace a late scene steps down");
-    }
-    {
-      // ---- 540 IS THE FLOOR AT EVERY CELL COUNT -----------------------------
-      //
-      // A split gets no point below the bottom rung: no sub-floor rung and no
-      // half-rate entry. A box that cannot hold 60 at 540 lines drops frames
-      // THERE (render_scale.h has the trade). The rule takes no cell count, so
-      // what is gated is the outcome, through the controller with the grid
-      // declared exactly as ttp_display_frame declares it: a split late at
-      // every resolution falls to the bottom rung and stays on it.
-      RenderScalePoint list[kScaleMaxPoints];
-      const int n = operatingPoints(kHD, list);
-      check(n == 3, "a 60 Hz 1080p panel offers exactly its three rungs");
-      nearly(list[0].scale * kHD.baseLines, 540.0, "…the lowest being 540 lines");
-      for (int i = 0; i < n; i++) {
-        check(list[i].divisor == 1, "…every one at the panel's own rate");
-      }
-      for (int cells = 3; cells <= 4; cells++) {
-        Box b;
-        b.gpuMs = 26.0;                        // late at every resolution
-        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(kHD); }
-        nearly(b.lines(kHD), 540.0, "a late split falls to the bottom rung");
-        check(b.ctl.point().divisor == 1, "…at the panel's own rate, never half of it");
-        bool moved = false;
-        for (int i = 0; i < 24; i++) { b.ticks(180); moved = b.poll(kHD) || moved; }
-        check(!moved, "…and stays there: there is no lower point to move to");
-        nearly(b.lines(kHD), 540.0, "…still at 540 lines");
-        check(b.ctl.point().divisor == 1, "…still at the panel's own rate");
-      }
-    }
-    {
-      // ---- THE HOST'S HALF RATE: the same ladder at half the panel's rate ----
-      //
-      // Never the rule's choice (the block above), only the host's: the phone's
-      // Quality option. It lays out the same rungs at every other vsync, so the
-      // rule spends the doubled budget on pixels.
-      RenderScaleLimits half = kHD;
-      half.halfRate = true;
-      RenderScalePoint list[kScaleMaxPoints];
-      int n = operatingPoints(half, list);
-      check(n == 3, "half rate offers the same three rungs on a 1080p panel");
-      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…every one at 30 on a 60 Hz panel");
-      RenderScaleLimits pal{0.0, 1.0, 1080.0, 20.0};
-      pal.halfRate = true;
-      n = operatingPoints(pal, list);
-      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…and at 25 on a 50 Hz one");
-      RenderScaleLimits fast = k4K120;
-      fast.halfRate = true;
-      n = operatingPoints(fast, list);
-      check(n == 5, "a 120 Hz panel at half rate offers the same five rungs");
-      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…every one at 60 there");
-
-      // A FLIP LANDS ON THE ANCHOR, as a boot does: a step down takes seconds
-      // and a step up a lap, so the new budget is found from above. On the
-      // very next poll, whatever the holds say, timer or not.
-      const RenderScaleCost quiet{0.0, 0, 0.0, 0.0, 0};
-      for (const RenderScaleCost& c : {gpuAt(10.0), quiet}) {
-        RenderScalePoint p = renderScaleStep(RenderScalePoint{540.0 / 1080.0, 1}, c, 0.0, 0.0,
-                                             kNoFit, half);
-        nearly(p.scale * kHD.baseLines, 1080.0, "flipping to half rate lands on 1080");
-        check(p.divisor == 2, "…at 30, on the very next poll");
-        p = renderScaleStep(p, c, 0.0, 0.0, kNoFit, kHD);
-        nearly(p.scale * kHD.baseLines, 1080.0, "flipping back lands on 1080 too");
-        check(p.divisor == 1, "…at the panel's own rate");
-      }
-      const RenderScalePoint p = renderScaleStep(RenderScalePoint{540.0 / 2160.0, 1}, quiet, 0.0,
-                                                 kSettled, kNoFit,
-                                                 RenderScaleLimits{0.0, 1.0, 2160.0, kHz60, true});
-      nearly(p.scale * 2160.0, 1080.0, "…and on a 4K panel, the anchor and not native");
+      RenderScalePoint p{0, 0};
+      b.ticks(61);
+      check(b.poll(k4K, &p) && p.divisor == 2, "flipping to half rate moves at once");
+      nearly(p.scale * 2160.0, 1080.0, "…to the anchor, not native");
+      b.ctl.setHalfRate(false);
+      b.ticks(61);
+      check(b.poll(k4K, &p) && p.divisor == 1, "flipping back moves at once too");
+      nearly(p.scale * 2160.0, 1080.0, "…to the anchor");
     }
     {
       // ---- WHO IS OFFERED IT, AND WHAT IT BUYS ------------------------------
@@ -794,11 +519,13 @@ int main() {
       // nothing above it; at 30 the budget doubles and 1080 fits.
       const auto drive = [](auto& b, int polls, RenderScaleLimits lim) {
         for (int i = 0; i < polls; i++) {
-          const double s = b.ctl.point().scale;
-          b.gpuMs = 14.0 + 8.0 * s * s;
-          b.everyNth = b.ctl.point().divisor;
-          b.ticks(180, kHz60);
-          b.poll(lim);
+          for (int k = 0; k < 3; k++) {
+            const double s = b.ctl.point().scale;
+            b.gpuMs = 14.0 + 8.0 * s * s;
+            b.everyNth = b.ctl.point().divisor;
+            b.ticks(60, kHz60);
+            b.poll(lim);
+          }
         }
       };
       Box b;

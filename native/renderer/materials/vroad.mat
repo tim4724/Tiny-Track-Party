@@ -112,8 +112,10 @@ material {
         // 16 at 18.9. And under a REAL pack the ITERATIONS dominate too: the
         // 2026-08-18 spectate-7 ablation put the decal channel at 4-6 ms of a
         // 22.6 ms 720p frame, almost all of it a per-car shadow loop
-        // (docs/perf/androidtv-4p-plan.md, Phase 5), after every
-        // arithmetic-level cut inside it measured zero.
+        // (docs/perf/androidtv-frame-map.md, 2026-08-24), after every
+        // arithmetic-level cut inside it measured zero. Both readings are of a
+        // longer fragment than today's: compiling the loops and their arrays
+        // out altogether read null on 2026-10-17.
         //
         // So the car shadows are not a uniform list: they are their own
         // blended draws over the deck (vshadow.mat, one per car), and this

@@ -61,15 +61,13 @@ incidental:
 `native/scripts/android-device-spawn.sh` runs the whole ctest suite on a box over
 adb, which is how the NDK leg stopped being compile-only.
 
-A driver fact that makes a tree-wide assumption false HERE, read off the
-device's own extension string (`dumpsys SurfaceFlinger | grep GLES`):
-
-- **`GL_EXT_texture_filter_anisotropic` is ABSENT.** Filament clamps
-  `gets.max_anisotropy` to 1 when it is, so every `setAnisotropy(...)` in the
-  tree — the rubber layer's and the ground textures' — is a NO-OP on this box.
-  The comments defending those settings were measured on an M1 under
-  ANGLE-Metal; they do not describe this device, and reasoning about aniso cost
-  or aniso quality here is reasoning about nothing.
+**The two backends do not share driver facts, so read the one you run.** The
+GL driver's extension string (`dumpsys SurfaceFlinger | grep GLES`) has no
+`GL_EXT_texture_filter_anisotropic`, so on the GL fallback every
+`setAnisotropy(...)` in the tree is a no-op. The Vulkan driver, the default,
+reports `samplerAnisotropy` (16x) and caps 2D images at 4096 where GL says
+8192 (`adb shell cmd gpu vkjson`). A cost or quality argument about either
+belongs to the backend it was read on.
 
 ## Traps already sprung
 
@@ -317,10 +315,11 @@ thing:
 
 ## The frame budget on this GPU
 
-**The STEADY frame is GPU-bound, and it is not close.** Measured with the
-backend's own timer (`ttp_display_gpu_ms`, real here — it is the GL timer query,
-unlike the two sibling shells): the renderer's CPU half is under 2 ms whatever is
-on screen, while the GPU is tens of milliseconds. `PerfMonitor` shows both — it
+**The STEADY frame is GPU-bound.** Measured with the backend's own timer
+(`ttp_display_gpu_ms`, real here — a timer query on the backend, unlike the
+two sibling shells): the frame thread and Filament's backend thread each sit
+near a third of the budget at four players, while every dropped present is the
+GPU's. `PerfMonitor` shows both — it
 GATHERS, and every judgement in it (the ring, the percentiles, the two rates, the
 drop count, the verdict) is `ttp_perf.h`'s, so a run this box calls amber is one
 the browser and the Apple TV call amber too. It logs that readout as one JSON
@@ -331,7 +330,7 @@ which is the only way to get two comparable ablation arms (an unpinned sweep
 resizes the buffer underneath itself, and it will happily hand you a 3x swing
 between arms that differ in nothing).
 
-**THE TAIL IS NOT GPU-BOUND, AND `ttp_display_profile` ALONE CANNOT SEE IT.**
+**THE TAIL IS NOT ONLY THE GPU, AND `ttp_display_profile` ALONE CANNOT SEE IT.**
 That profile is the RENDERER's own, and the main thread also carries the sim
 tick, the per-frame race-event drain, the ~6 Hz HUD poll and every line of Compose
 that runs after the Choreographer callback returns — so a frame lost up there once
@@ -367,12 +366,11 @@ main-thread work of the same order as anything being hunted: up, it hands you it
 own cost as the finding. Clear the property between runs the way every other knob
 is cleared.
 
-`docs/perf/androidtv-frame-map.md` is the last full reading — dated, stamped with
-its build and its panel, and kept out of this file because a number here rots
-into a phantom regression. What is durable about how it was taken is below.
-`docs/perf/androidtv-4p-plan.md` is the standing plan for four-player 60 fps,
-and it is where a lever gets priced, ordered and struck off; it is kept out of
-this file for the same reason.
+`docs/perf/androidtv-frame-map.md` is the perf record: where the frame stands,
+what each shipped lever bought, what is still open, and the ledger of levers
+measured dead — dated, stamped with its build, and kept out of this file
+because a number here rots into a phantom regression. A lever gets priced and
+struck off there. What is durable about how the readings were taken is below.
 
 `scripts/perf-frame.mjs` is the FRAME MAP: one table per player count with every
 step of a frame in it, fusing the three instruments that no single one of them
@@ -390,6 +388,11 @@ spike attribution per phase, which is Android's alone. One run answers "where
 does it settle"; interleaved runs at a pinned scale answer "what does this
 feature cost". It joins no phones and touches no relay: the bench seats its own
 players, so a measurement no longer depends on a service on the internet.
+It relaunches the app for every race, so what one race leaves the next — the
+scale rule's carry-over across a cup — needs the `session` scenario instead
+(`am start -S ... --es ttpScenario session --ei ttpPlayers 4`): the lobby, then
+the first cup played through in one process, its moves and scene builds in
+the `DisplayHost` log.
 
 **THE BOX IS ONE DEVICE SHARED BY EVERY WORKTREE AND EVERY SESSION.** The
 bench measures whatever is installed, and an install or a launch from another
@@ -504,7 +507,12 @@ bake) — are `native/renderer/CLAUDE.md`'s; what each measured is in
   fps across four identical runs. **So the number to close is the p95, and the
   gap to 60 fps is (p95 - 16.7), not (median - 16.7).** Getting that wrong makes
   a 25 % problem look like a 5 % one, which is the difference between "one more
-  optimisation" and "cut something".
+  optimisation" and "cut something". **But judge whether a rung HOLDS by
+  skips/s and clean seconds, not by the p95 alone**: the timer reads a paced
+  span where the GPU idles and under-reads the seconds that skip by 3-6 ms, so
+  a rung presenting a clean 60 has read a p95 over 16.7 — which is why the
+  scale rule steers off missed frames and not off the timer
+  (`ttp/render_scale.h`).
 - The readings repeat to about 0.6 ms of GPU median and to a whole fps in
   the cadence, so anything under half a millisecond is not a result.
 - **THE LAP IS NOT ONE NUMBER, and the spread is the whole problem.** Around one
@@ -542,36 +550,9 @@ bake) — are `native/renderer/CLAUDE.md`'s; what each measured is in
   invisible in the median and decides the p95 is what sets the frame rate on a
   vsync-locked display, so measure both.
 
-**Measured and NOT worth taking** — each cost a build and a sweep, so do not
-re-derive them:
-
-| arm | result |
-|---|---|
-| coalescing the frame's ~16 skid dirty rects into 4 by area | within noise UNDER THAT 20 ms 720-line frame — re-priced at 540 on 2026-09-03 the count is ~1.7 ms and the merge ships (`kUploadEventTexels`, the paragraph above) |
-| `doubleSided : false` on vroad | within noise; Filament already drops the normal varying once the fragment stage stops reading it |
-| back-face culling the deck and the ground | null at 4P/540 Vulkan (2026-10-04, three races a side). The older `culling : back` row here measured nothing: `doubleSided : true` forces every instance to `CullingMode::NONE`, so it took a per-instance `setCullingMode` after creation to cull at all. Pixels match within animation (a closed, outward-wound ring; FRONT wipes the top) |
-| road ring step 0.48 -> 0.72 u | 0.3 ms for real chord sag on every track |
-| `kRoadChunkTris` 2500 -> 6000 (13 chunks -> 6) | 0.1 ms of fixed cost and **+2.7 ms of fill** — the per-chunk cull and decal window both widen |
-| skipping the ~7 Hz skid mip regeneration | ~0.6 ms, and the far field scintillates without it |
-| skipping the cell overlay pass | free |
-| an sRGB SWAP CHAIN (`CONFIG_SRGB_COLORSPACE`) so the ROP does the encode | **a 3.5 ms LOSS** — see below |
-| sharing one `MaterialInstance` across every copy of an instanced scenery model, so automatic instancing can merge their draws | 0.2 ms — and it is the change the Engine::init comment about "111 draws where three issues 42" points at, so **it is the draw COUNT that does not matter here**, not the merging. Settled properly by the merged draw groups (`native/renderer/CLAUDE.md`): −104 draws/frame at 4P moves the GPU MEDIAN zero, and buys the tail (−2..−3.5 ms worst), +1–2 fps and ~0.25 ms of CPU |
-| rebooting the box and measuring cold | 3% against warm, so this device is NOT thermally throttled and a long session's readings are trustworthy |
-
-**THE sRGB SWAP CHAIN IS A LOSS ON THIS DRIVER, and it is the most surprising
-number here.** When the grade was three `pow`s per fragment it was the biggest
-single item left in a race frame — deleting the encode outright took a live
-1280x720 frame from ~18 ms of GPU to ~15.7 — so moving it into the ROP looked
-like free money. `EGL_KHR_gl_colorspace` is present, Filament honours the flag,
-and the picture comes out CORRECT. It also comes out at **~21.5 ms**: the
-driver's sRGB surface path costs more than the shader maths it replaced, by
-more than the maths cost. Whatever EGL config it selects is not the fast one.
-(The encode is gone from the fragment stage since: the scene is authored in
-display space, `native/renderer/CLAUDE.md`.)
-
-So the encode has to stay in the shader here, and the ~2 ms it costs is a real
-item with no cheap collection: an approximation is not cheaper either (a
-2-sqrt fit is the same count of SFU ops as the `pow` it replaces).
+**What has been measured and NOT taken** — each cost a build and a sweep —
+is the "Closed" ledger in `docs/perf/androidtv-frame-map.md`. Check it before
+building a lever, and add to it when one fails.
 
 The full-screen antialias pass is OFF here (`ttp_display_antialias`) and that is a
 MEASURED trade, not a dislike of the filter: turning it off buys back about one
@@ -598,8 +579,8 @@ one, so it could never price a real 2- or 4-player split.)
 frames there** (`ttp/render_scale.h` has the rule and why). The shell fact
 behind it: every resolution switch resizes this window's buffer, which recreates
 the Vulkan swapchain — ~54 ms on the Filament thread, one to three skipped
-frames — so a move costs a hitch of its own. 720p60 at four players is not near
-on the picture that matters.
+frames — so a move costs a hitch of its own. Where each player count actually
+settles is a reading, not a rule: `docs/perf/androidtv-frame-map.md`.
 
 **THE PRESENT RATE IS THE RULE'S NOW, and `debug.ttp.hz` is a PIN over it**
 (`pinVsyncInterval`, not a setter — a setter would be overwritten a second
@@ -634,14 +615,12 @@ stays red however healthy the run is stops being read. It is re-declared at the
 HUD tick, because both halves move under a running app: the divisor from the rule
 or the pin, the period from an HDMI mode change.
 
-A scene build carries the point over and changes no hold: no race is cheaper
-than the lobby's attract, so a race starts where the lobby settled and steps
-down if it has to. A short up-hold after each build would climb back into a
-point this box cannot hold on every lobby track change, paying a resize each
-way. What a build does buy is a grace in which
-nothing steps down (`kScaleSceneGraceSec`), because a race's first seconds are
-its assembly. `DisplayHost.build` calls `ttp_display_scale_scene` and
-`PerfMonitor.reset()`; the rule does the rest.
+A scene build carries the point over: a race starts where the lobby settled
+and steps down if it has to, and climbs no sooner than `kUpWaitSec` after the
+build. What a build also buys is a grace in which nothing missed is judged
+(`kScaleSceneGraceSec`), because a race's first seconds are its assembly.
+`DisplayHost.build` calls `ttp_display_scale_scene` and `PerfMonitor.reset()`;
+the rule does the rest.
 
 ## The picture at a reduced resolution
 
@@ -664,20 +643,17 @@ window at the panel's own size, which is why text stays razor sharp over a
 half-resolution 3D picture. Anything that moved a label into the renderer would
 lose that.
 
-**The settled rung moves over a lap**, because a lap's own cost varies by about
-4 ms and a rung is chosen from a fit taken over one stretch of circuit. The
-lap-sized up-hold is what keeps that to a nudge rather than a rhythm; the rung
-never climbs into a cost the model has not predicted it can hold, so what moves
-is which rung fits, not whether the controller can make up its mind.
-
-**THE RULE SOLVES, IT DOES NOT COMPARE** (`ttp/render_scale.h`, RenderScaleFit).
-This box is the reason: nearly half its budget is resolution-INDEPENDENT, so its
-total GPU share never drops below ~0.48 however many pixels it gives back, and
-any "is there headroom?" threshold low enough to stop a fill-bound GPU
-oscillating on these rungs sits below that and would pin this box to the floor
-for good. What this shell owes is the pair of numbers the model is fitted from —
-`prevScale`/`prevCostMs`, the last observation at a different scale, dropped on a
-scene build because a slope measured across two scenes belongs to neither.
+**EVERY MOVE IS A HITCH, so the rule moves rarely** (`ttp/render_scale.h`): a
+rung is left on fifteen missed frames in ten seconds, climbed after a long clean
+stretch, and a climb that fails doubles the wait before the next try — across
+the races of a cup, which is one session, not one per race. Each scene starts
+on the rung its player count last held, so a four-player race does not start
+on the lobby's 1080. A lap's
+cost swings by milliseconds, so a rung climbed on a quiet stretch of a track
+that cannot hold it on the vista is left once and then tried rarely, never
+pumped. Nothing here steers off the GPU timer: it reads a paced span when the
+GPU idles, and this box's resolution-independent half made every timer-based
+"is there headroom?" threshold wrong for it.
 
 **THE BUFFER'S WIDTH IS A MULTIPLE OF 64** (`applyScale`), so a two-column
 split puts every cell's right edge on a 32-pixel boundary. A Pixel 7's Mali
@@ -786,14 +762,11 @@ driver story is what the canary + GL retry exist for: PowerVR Vulkan drivers
 vary, and the observed failure shape (the silent unwinder hang above) is
 invisible to a crash-loop detector.
 
-**The Vulkan frame has the web's shape, and its refuted-lever list is its
-own.** Re-swept at a pinned 4P/720 (arms must SATURATE — the DVFS trap):
-the road's fill is most of the frame, dressing and terrain are small, cars
-are near-zero NET (their GL-era cost was submission, and Vulkan ate it), and
-**the merged draw groups move this backend's median nothing** — the merge
-stays for tvOS, where it is load-bearing. Refuted here, so nobody re-derives
-them: a fork patch confining each pass's Vulkan `renderArea` to its viewport
-while the passes still LOADED (built, verified ACTIVE in-log, measured ZERO at
+**The Vulkan refuted-lever list is its own.** Cars are near-zero NET (their
+GL-era cost was submission, and Vulkan ate it), and **the merged draw groups
+move this backend's median nothing** — the merge stays for tvOS, where it is
+load-bearing. Refuted here, so nobody re-derives them: a fork patch confining
+each pass's Vulkan `renderArea` to its viewport while the passes still LOADED (built, verified ACTIVE in-log, measured ZERO at
 720 — the driver already handles untouched tiles cheaply). The tiles a cell
 DOES reach were the cost: every cell after the first loaded its whole rect back
 from memory. The pinned Filament (a change proposed upstream) clears a later
@@ -803,8 +776,7 @@ still holds the first view's clear colour, so the pixels are identical
 overlapping, or they go back to loading. Also refuted: the sRGB-swapchain ROP encode (the prize was
 ~1 ms of fill when the grade was a LUT, and it flips translucent blending
 gamma→linear — a look change; the fragment encode is gone altogether now); the engine's feature flags (nothing
-Vulkan-tunable exists). What remains above the road's own shader is
-RESOLUTION — the ladder — and nothing else on this GPU.
+Vulkan-tunable exists).
 
 **`readPixels` on this driver has no `HOST_CACHED` staging memory**, so
 Filament's per-texel reshape used to walk an UNCACHED mapping — every 2-4 byte

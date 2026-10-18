@@ -100,9 +100,9 @@ TTP_ABI void ttp_display_destroy(void);
  * and never arbitrates between its halves itself.
  *
  * THE STATE IS NOT THE SHELL'S EITHER, and that is what these three calls are.
- * The window the percentiles come from, the running fastest present, the
- * observation the cost model fits from, when the point last moved and when the
- * scene was built: all of it lives in ttp/render_scale_controller.h, where the
+ * The frames missed per second, the running fastest present, the rung and the
+ * failures each player count left this session, when the rung was entered and
+ * when the scene was built: all of it lives in ttp/render_scale_controller.h, where the
  * `render_scale` ctest executes it on every leg. Three shells held it by hand
  * once, in three languages, and their percentile formulas had already drifted
  * from the one behind the readout they were drawn beside.
@@ -124,17 +124,18 @@ TTP_ABI void ttp_display_destroy(void);
 
 /* A NEW SCENE was built, on the shell's own monotonic clock in milliseconds.
  *
- * Two things follow, and neither is the shell's to judge. The cost model's
- * previous observation is dropped, because a fit whose two points straddle a
- * scene change measures a slope belonging to neither. And nothing steps down
- * for the scene's first seconds, which are its assembly and not its cost
- * (kScaleSceneGraceSec). Drop the readout's window with ttp_perf_reset
+ * Two things follow, and neither is the shell's to judge. The rule forgets
+ * the frames it judged, which were another picture, restarts its wait to
+ * climb, and places the scene on the rung its cell count last held — a cup is
+ * one session, so what four players failed carries over. And nothing missed
+ * in the scene's first seconds is judged, because they are its assembly and
+ * not its cost (kScaleSceneGraceSec). Drop the readout's window with ttp_perf_reset
  * alongside: the lobby attract and a race are different pictures. */
 TTP_ABI void ttp_display_scale_scene(double tMs);
 
 /* Re-decide the operating point. Returns 1 and writes {scale, presentDivisor}
  * into `out2` when the point MOVED; 0 (touching nothing) otherwise, which is
- * also the answer while the poll cadence or one of the rule's holds is still
+ * also the answer while the poll cadence or one of the rule's waits is still
  * running. Call it every frame; the cadence is the controller's.
  *
  *   tMs                    any monotonic clock, milliseconds. Only differences

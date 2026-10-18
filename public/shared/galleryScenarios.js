@@ -103,8 +103,8 @@ export const GALLERY_SCENARIOS = [
   // obvious alternatives — a fabricated GPU cost, a declared panel period the
   // box cannot feed — both demonstrate the rule on invented numbers, and its
   // entire contract is that a shell hands over measurements and does not invent
-  // them. Here the pixels are real, so the cost, the percentiles, the cost model
-  // and the resize all are too.
+  // them. Here the pixels are real, so the cost, the missed frames and the
+  // resize all are too.
   //
   // WHERE IT SETTLES IS THE ANSWER TO A REAL QUESTION: the rung this machine
   // holds four cells at. Watch it in the console — `[stage] scale …` is printed

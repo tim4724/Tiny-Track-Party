@@ -1,48 +1,25 @@
-// render_scale — how big the drawing buffer should be, decided from what the
-// last second of frames actually cost.
+// render_scale — how big the drawing buffer should be, decided from the frames
+// the panel actually got.
 //
 // The alternative was a constant, and a constant cannot be right: capped at
 // 1080 lines a 4K TV renders a quarter of its panel and the edges read as
 // pixelated, while uncapped the weakest TV browser this game runs on has four
-// times the fill it can afford. So the shell measures and this decides — start
-// at the surface's own resolution, step DOWN whenever a device proves it cannot
-// hold the budget, and back UP only where the measurement can prove there is
-// headroom to climb into.
+// times the fill it can afford. So the shell measures and this decides.
 //
-// TWO SIGNALS, AND THEY ARE NOT EQUALS.
+// ONE SIGNAL: MISSED FRAMES. A present that lands a vsync (or more) after the
+// one it was due on is the only cost a player sees, and it is the one
+// measurement every platform has — a browser without a GPU timer included. So
+// the rule counts frames missed over the last few seconds, steps DOWN a rung
+// when there are too many, and steps UP a rung after a long quiet stretch.
 //
-// The good one is GPU SHARE OF BUDGET, from a timer query wrapped around the
-// frame. It is the only measurement on the web that can see HEADROOM, which is
-// what raising the resolution needs: the rAF cadence is a vsync plateau, so
-// 60 fps is equally true at 10% and at 95% load. Where it exists, this decides
-// in both directions.
+// NOT A GPU-TIMER COST MODEL any more: why that was given up is in
+// docs/perf/androidtv-frame-map.md ("The resolution rule, replaced").
 //
-// The fallback is LATE PRESENTS — the p95 frame interval over the device's own
-// FASTEST present (presentBaseline + latePresentRatio below). It exists because
-// EXT_disjoint_timer_query_webgl2 is not everywhere (WebKit does not expose it,
-// and TV browsers vary), and a shell without it would otherwise be stuck at a
-// constant forever. Measured against the device's own fastest present rather
-// than against 60 Hz, it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode:
-// those present at their own steady cadence, and a ratio of 1 is a ratio of 1
-// whatever that cadence is. ABOVE 60 Hz that same arithmetic inverts,
-// which is why the reference is floored at 60 (latePresentRatio) — a 120 Hz
-// laptop holding a solid 60 is not a device that is late twice over. What it
-// CANNOT do is prove headroom — a plateau
-// looks identical at 10% and 95% load — so it may only ever step DOWN. A device
-// with no timer that is running fine stays exactly where the shell started it.
-//
-// SHARE, not milliseconds, so the frame budget stays declared in ONE place (the
-// shell that measures it) rather than being re-typed here as a second 60.
-//
-// IT SOLVES RATHER THAN COMPARES. Frame cost is `fixed + fill * s^2`, and no
-// single "is there headroom?" threshold can serve both halves of that — see the
-// cost model at RenderScaleFit, which is the heart of this file. Two
-// observations at two scales determine the split, and the step is then "the
-// highest rung predicted to fit the budget" rather than a comparator's nudge.
-//
-// The cooldowns are asymmetric anyway: a device that is struggling should be
-// rescued within a couple of seconds, and a device with headroom should be left
-// alone for a good while before the picture changes under a player.
+// WHAT A CLIMB COSTS IS A MOVE, and moves are what this file is careful with.
+// Every resolution change reallocates the buffer — on the reference Android box
+// it recreates the swap chain, ~54 ms and one to three skipped frames — so the
+// rule never moves on one bad second, climbs only after a long clean stretch,
+// and waits twice as long before trying a rung again that it just failed.
 #pragma once
 
 #include <algorithm>
@@ -67,10 +44,10 @@ struct RenderScaleLimits {
   double max;
   double baseLines;
   // The panel's OWN present period in milliseconds — one vsync, not one frame.
-  // 16.7 on a 60 Hz TV, 8.3 on a 120 Hz one. The budget is this times the
-  // operating point's divisor — 1 at the panel's own rate, 2 at the host's
-  // half rate — so a 120 Hz panel is priced per vsync and holds its rate with
-  // pixels. 0 or absent means "assume 60".
+  // 16.7 on a 60 Hz TV, 8.3 on a 120 Hz one. A frame is due every `panelMs`
+  // times the operating point's divisor — 1 at the panel's own rate, 2 at the
+  // host's half rate — so a 120 Hz panel is held at 120 with pixels. 0 or
+  // absent means "assume 60".
   double panelMs;
   // THE ONE INPUT THAT IS NOT A FACT ABOUT THE SURFACE: the host asked for the
   // sharper picture at half the panel's rate (the phone's "Sharp" option). The
@@ -79,192 +56,109 @@ struct RenderScaleLimits {
   bool halfRate = false;
 };
 
-// Above this the device is LATE and retreats. The only threshold left: where to
-// aim once the rule can predict is kScaleTargetShare, with the cost model.
-inline constexpr double kScaleDownShare = 0.90;
-// The fallback's threshold, as a multiple of the device's own fastest present.
-// 1.5 sits between the two things a vsync-locked present can be: on cadence, or
-// a whole period late. Nothing lands between them, so the exact value only has
-// to avoid jitter at the edges.
-inline constexpr double kLatePresentDown = 1.5;
-// A percentile over a handful of frames is not a percentile. Both signals are
-// ignored until the shell has this many, which also covers the moment after a
-// resize, when the window has deliberately been thrown away.
-inline constexpr int kMinSignalFrames = 30;
-// Faster than this is not a present, it is two rAF callbacks landing inside one
-// vsync (or one bad timestamp). Taking it as the panel's period would make every
-// ordinary frame look four times late, so it is rejected outright.
-inline constexpr double kMinPresentMs = 4.0;
-// Seconds a scale must hold before it may move again. Falling is a rescue;
-// rising is a luxury, and the picture changing under a player is the cost of it.
-inline constexpr double kScaleDownHoldSec = 2.5;
-// A SCENE'S FIRST SECONDS ARE NOT ITS COST, so no step DOWN is taken on them.
+// ---- the moves ---------------------------------------------------------------
 //
-// Staging a scene keeps costing after the build returns: shader compiles, first
-// uploads, the shadow bake. Measured on an A10X, a SOLO race — which holds 60
-// at the panel's own resolution all day — presented at 7-25 fps for the first
-// ~2.6 s and was clean by 3.6 s. The late-present fallback read that as a device
-// that could not hold its rung, dropped one, and then had no way back: it may
-// only ever step DOWN (see the signals note at the top), so a scene's assembly
-// cost became the resolution for the rest of the process. A device with a GPU
-// timer can climb back, but only after a lap-sized hold (kScaleUpHoldSec), so a
-// race that was slow for its first seconds would spend most of a lap soft.
+// THE WINDOW the rule judges is the last kJudgeSec seconds at the current point,
+// one entry per poll. A move or a scene build empties it, so a rung is judged
+// on its own frames and nothing else.
+inline constexpr int kJudgeSec = 10;
+// STEP DOWN on this many missed frames inside the window — a frame and a half
+// a second. Measured on the reference Android box over whole races at 1080
+// lines: two players missed at most 4 in any 10 s pinned and crossed 10 on one
+// stretch of an adaptive race, one and three players missed 17-46 in their
+// heavy stretches. So it tolerates the stray skips a rung that holds still has,
+// and a rung that cannot hold crosses it within its first second or two —
+// which is what keeps a failed climb cheap.
+inline constexpr int kDownMissed = 15;
+// STEP UP only after a full window with NOTHING missed, and at least this long
+// after the rung was entered (by a move or by a scene build). Long on purpose:
+// a lap's cost swings by milliseconds around a circuit, and a climb taken on a
+// cheap stretch is a move back down at the next heavy one — two hitches for
+// nothing.
+inline constexpr double kUpWaitSec = 40.0;
+// A STEP DOWN THIS SOON after entering a rung FAILED that rung, and the wait
+// before trying it again doubles, up to kMaxFails doublings — straight to the
+// last if it failed before a full window was judged, which is a rung that
+// cannot hold at all. Entering by a scene build counts: a race that starts on
+// the lobby's rung and cannot hold it has failed it.
 //
-// Longer than the measured tail, because the failure modes are not symmetric:
-// too short is a permanent unnecessary downgrade, too long is a few seconds of
-// stutter at a race start that is already the most expensive stretch of the run
-// (perf-race.mjs discards its own opening GRID_MS for the same reason).
+// A SCENE BUILD FORGIVES NOTHING: a cup is one session, the same players
+// race after race, so what four players could not hold in the last race they
+// cannot hold in this one. Failures are kept PER CELL COUNT
+// (RenderScaleController), so the lobby holding 1080 clears nothing four
+// players failed; what clears a rung's failures at a count is HOLDING it for
+// kFailSec at that count.
+inline constexpr double kFailSec = 30.0;
+inline constexpr int kMaxFails = 3;
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, so nothing missed in them is
+// judged. Staging keeps costing after the build returns — shader compiles,
+// first uploads, the shadow bake — and on an A10X a solo race that holds 60 at
+// native all day presented at 7-25 fps for its first ~2.6 s.
 inline constexpr double kScaleSceneGraceSec = 5.0;
-// LAP-SIZED, because a race frame's cost swings ~4 ms around a lap and a fit
-// taken over one stretch of circuit describes that stretch. The cost model
-// stops the rule climbing into a rung it cannot hold; this hold is what stops it
-// climbing on EVIDENCE that only covered the cheap half of a lap. The
-// up-decision's ~3 s evidence window taken on a cheap section never
-// contains the vista it is about to climb into, and the reference Android box
-// pumped between two rungs for whole races, paying a buffer reallocation hitch
-// at every move. At 28 s the scale climbs at most once per lap (catalogue lap
-// times run 45-75 s), so the window that qualifies the climb has seen most of
-// the circuit.
-//
-// ONE HOLD, WHATEVER THE SCENE. A scene build does not shorten it: no race is
-// cheaper than the lobby's attract, so a race never has a climb to make that
-// the lobby's point would hold it out of, and a short hold after every build
-// made a box that cannot hold the anchor climb back into it and fail again on
-// each lobby track change — two buffer reallocations per pick.
-inline constexpr double kScaleUpHoldSec = 28.0;
+
+// THE DECISION, as a pure function of what the controller has counted: where
+// the point sits on its list (`at` of `n`), the frames missed over the window
+// and how many seconds it holds, how long since the rung was entered, and the
+// wait in force for the rung above. Answers the index to move to — `at` for
+// "stay".
+inline int renderScaleRung(int at, int n, int missed, int judgedSec,
+                           double sinceEnteredSec, double upWaitSec) {
+  if (missed >= kDownMissed) return std::max(at - 1, 0);
+  if (missed == 0 && judgedSec >= kJudgeSec && sinceEnteredSec >= upWaitSec && at + 1 < n) {
+    return at + 1;
+  }
+  return at;
+}
+
+// The wait before climbing into a rung that has failed `fails` times this session.
+inline double upWaitSec(int fails) {
+  return kUpWaitSec * (double) (1 << std::min(std::max(fails, 0), kMaxFails));
+}
+
 // Below this the answer is "no change": a step the eye cannot see is not worth a
 // buffer reallocation, and it is what stops a scale pinned at a limit from
 // re-deciding every poll.
 inline constexpr double kScaleMinMove = 0.02;
 
+// ---- the rungs ---------------------------------------------------------------
+//
 // THE RUNGS, IN BUFFER LINES, and they are REAL RESOLUTIONS on purpose.
 //
 // A buffer is upscaled to the panel by the display, and a scale factor that is
 // not a simple ratio blurs UNEVENLY: at 2.02x some output rows take almost one
 // source row and their neighbours take a blend of two, so detail is sharp in
 // bands and soft in bands, and the bands CRAWL as the camera moves. It reads as
-// shimmer along every kerb and lane line, and on flat high-contrast art — thick
-// ink outlines on flat colour — it is the most visible artefact there is at a
-// reduced resolution. At a clean 1/2 every output pixel takes the same blend of
-// the same four texels, so the softening is uniform and STILL, which the eye
-// forgives; and at 2/3 and 3/4 the pattern repeats over 3 and 4 pixels rather
-// than wandering.
+// shimmer along every kerb and lane line, and on flat high-contrast art it is
+// the most visible artefact there is at a reduced resolution. At a clean 1/2
+// every output pixel takes the same blend of the same four texels, so the
+// softening is uniform and STILL, which the eye forgives; and at 2/3 and 3/4
+// the pattern repeats over 3 and 4 pixels rather than wandering.
 //
 // LINE COUNTS RATHER THAN FRACTIONS, and the two panels this ships to are why:
 // against 2160 these are 1, 3/4, 1/2, 1/3 and 1/4, and against 1080 they are 1,
 // 2/3 and 1/2. One list is the clean-fraction set for BOTH, so the rung a device
 // lands on is a resolution with a name — 1280x720, 960x540 — rather than a
-// fraction of whatever surface it happened to have. That is also what makes a
-// floor mean the same thing everywhere: a fraction-of-the-ceiling ladder puts
-// its bottom rung at a third of the PANEL, so "the softest picture we will
-// show" was 360 lines on a 1080p surface and 720 on a 2160p one, which is not
-// one decision, it is two.
+// fraction of whatever surface it happened to have, and the floor means the
+// same picture everywhere.
 //
 // THE CEILING IS ALWAYS OFFERED, as an implicit top rung above these. A surface
 // whose height is not on the ladder (a 1440p monitor, a browser window at any
 // size at all) would otherwise cap below its own native resolution and never
-// render sharp. Native is a rung on every panel; the ladder fills in below it.
+// render sharp.
 //
-// THE BOTTOM RUNG IS THE FLOOR, at every cell count. There is no separate
-// floor constant and no shell may set one lower: 540 lines is the softest
-// picture this game is willing to show, and a device that cannot hold its frame
-// rate there DROPS FRAMES there rather than going softer or slower (the
-// operating points below say why).
+// THE BOTTOM RUNG IS THE FLOOR, at every cell count. There is no separate floor
+// constant and no shell may set one lower: 540 lines is the softest picture
+// this game is willing to show, and a device that cannot hold its frame rate
+// there MISSES FRAMES there rather than going softer or slower. Below it, every
+// point buys the frames back with something worse: a softer picture than the
+// game will show, or a halved rate that doubles the picture latency of every
+// player steering by tilt.
 inline constexpr double kScaleLadder[] = { 540.0, 720.0, 1080.0, 1620.0, 2160.0 };
 inline constexpr int kScaleLadderCount =
     (int) (sizeof(kScaleLadder) / sizeof(kScaleLadder[0]));
 
-
-// WHERE THE RULE AIMS, once it can predict. Under kScaleDownShare by a real
-// margin: a rung whose predicted cost lands exactly on "late" is a rung the
-// next expensive corner takes over it, and p95 is already the number being
-// judged. The gap between the two is the whole deadband — aim at 0.85, only
-// retreat above 0.90 — so a fit that wobbles inside it moves nothing.
-inline constexpr double kScaleTargetShare = 0.85;
-
-// THE COST MODEL, and the reason there is no "is there headroom?" threshold.
-//
-// Frame cost is `fixed + fill * s^2`: a resolution-independent half (the scene
-// being submitted) and a per-pixel half. A single threshold has to serve both
-// device shapes at once and CANNOT — with 1.5x rungs, a device with no fixed
-// cost needs the climb threshold at or under 0.40 to keep an up step from
-// provoking the down step that undoes it, while the reference Android box
-// measures 0.48 of budget in FIXED cost alone and would never climb again below
-// 0.48. Every constant in that range disappoints one of them, and both are real.
-//
-// So the rule stops comparing and starts SOLVING. Two observations at different
-// scales determine `fixed` and `fill`; from there the cost of any rung is a
-// prediction, and the step is "the highest rung that fits the budget" rather
-// than "one rung towards wherever a comparator points". A rung is never stepped
-// to unless it is predicted to hold, so oscillation is structurally gone at any
-// rung width, and a mostly-fixed-cost device climbs correctly because the model
-// KNOWS its fixed half instead of a constant having to guess it.
-//
-// This is what dynamic resolution does everywhere else, minus the part this GPU
-// cannot afford: engines that render into a sub-rect of a max-size target change
-// resolution for free and can re-decide every frame, so they use fine steps and
-// no hysteresis at all. Here a change costs a buffer reallocation and a drain,
-// which is why the rungs stay coarse and the holds stay — see kScaleUpHoldSec.
-struct RenderScaleFit {
-  bool ok;
-  double fixedMs;   // frame cost that does not move with resolution
-  double fillMs;    // cost at scale 1.0 on top of `fixedMs`
-};
-
-// The last observation at a DIFFERENT scale, held by RenderScaleController
-// exactly as the running fastest present is (shells hold nothing): it is a
-// MEASUREMENT, and which samples may become one is still decided here.
-// scale <= 0 means "none yet".
-struct RenderScaleSample {
-  double scale;
-  double costMs;
-};
-
-// Solve for the two halves from the current observation and the previous one.
-// Refuses rather than guesses: one point, two points at the same scale, or a
-// fit saying more pixels cost LESS (which is noise, not a device) all answer
-// `ok = false`, and the caller falls back to not climbing at all.
-inline RenderScaleFit fitCost(double scale, double costMs, RenderScaleSample prev) {
-  RenderScaleFit f{false, 0.0, 0.0};
-  if (!(scale > 0.0) || !(costMs > 0.0)) return f;
-  if (!(prev.scale > 0.0) || !(prev.costMs > 0.0)) return f;
-  const double a = scale * scale, b = prev.scale * prev.scale;
-  const double d = a > b ? a - b : b - a;
-  if (d < 1e-6) return f;
-  const double fill = (costMs - prev.costMs) / (a - b);
-  if (!(fill > 0.0)) return f;
-  double fixed = costMs - fill * a;
-  if (fixed < 0.0) fixed = 0.0;   // all of it is fill; the fit overshot on noise
-  return RenderScaleFit{true, fixed, fill};
-}
-
-// MILLISECONDS, NOT A SHARE, and that is what lets one fit serve every frame
-// rate: what a frame costs the GPU does not depend on how often it is presented,
-// so a rate change leaves the model valid where a share of budget would have
-// been silently renormalised by it.
-inline double predictMs(const RenderScaleFit& f, double scale) {
-  return f.fixedMs + f.fillMs * scale * scale;
-}
-
-// Is there an observation at another scale AT ALL? Distinct from `fit.ok`, and
-// the difference is what stops a device probing forever: fitCost refuses BOTH
-// when nothing has been measured yet and when what was measured says cost does
-// not rise with pixels. The first is missing data and is worth a probe; the
-// second is EVIDENCE, and what it says is that resolution is not the lever
-// here — probing on it is a climb that cannot pay and a retreat 2.5 s later,
-// repeated for as long as the scene lasts.
-//
-// The reference Android box is that device at its floor: 1280x720 measured
-// 17.1 ms and 960x540 measured 17.3, so the slope is NEGATIVE and no ladder
-// step can buy anything. (Whether the timer is telling the truth that far under
-// one vsync is a separate question; the rule's job is not to bet on it.)
-inline bool hasPrevObservation(RenderScaleSample prev) {
-  return prev.scale > 0.0 && prev.costMs > 0.0;
-}
-
 // The rungs this surface actually offers, ascending, as SCALES: every ladder
-// line count that fits the band, then the ceiling itself. Native is always the
-// top rung whatever the panel — see the ladder's comment. Answers at least one
+// line count that fits the band, then the ceiling itself. Answers at least one
 // (the ceiling), so a caller may index [0] without checking.
 inline int rungScales(RenderScaleLimits b, double* out) {
   int n = 0;
@@ -280,80 +174,29 @@ inline int rungScales(RenderScaleLimits b, double* out) {
   return n;
 }
 
-// Where `s` sits on the ladder: the highest rung AT OR BELOW it, as an index.
-//
-// DOWNWARD, never to the nearest. A scale between two rungs is a scale the
-// device has not proved it can afford the upper one of, and rounding to the
-// nearest would hand a struggling device MORE pixels on a poll that decided
-// nothing — 0.70 on a 4K panel is nearer 1620 lines than 1080, so "hold" would
-// raise the resolution. Flooring makes the ladder monotone: the picture only
-// ever gets sharper through an explicit up-decision.
-//
-// The epsilon is not decoration. A ceiling arrives as min(dpr, 2160/height) and
-// can land a hair under its own rung through float alone; a bare floor would
-// read that as "between rungs" and drop a whole step off native.
-//
-// Below the bottom rung there is nothing to floor to, so the bottom rung is the
-// answer — which is also how a scale under the band is clamped back into it.
-inline int rungAtOrBelow(double s, const double* r, int n) {
-  int at = 0;
-  for (int i = 0; i < n; i++) if (r[i] <= s + 1e-9) at = i;
-  return at;
-}
-
-
 // ---- the operating points ----------------------------------------------------
 //
 // ONE ORDERED AXIS: the list is (resolution, present divisor) pairs from worst
-// to best, and the rule picks the highest entry the cost model says fits.
+// to best, and the rule moves along it.
 //
-// THE RATE IS THE PANEL'S OWN, AND ONLY PIXELS GIVE WAY:
+// THE RATE IS THE PANEL'S OWN, AND ONLY PIXELS GIVE WAY. A 120 Hz panel is held
+// at 120 by giving up pixels, which keeps every vsync's worth of picture
+// latency off a party steered by tilting phones. (`debug.ttp.hz` can still pin
+// 30 Hz on the Android shell, as a measurement knob.)
 //
-//   540   720   1080   1620   2160      every rung at divisor 1, one vsync of budget
-//               ^anchor
-//
-// A party game steered by tilting a phone pays for a halved present rate in
-// picture latency, on every player, which is a worse trade than a softer
-// picture. (`debug.ttp.hz` can still pin 30 Hz on the Android shell, as a
-// measurement knob — it is not a point of this list.)
-//
-// THE RULE NEVER MOVES THE RATE — decided 2026-10-15, after it did. The list
-// used to anchor a fast panel at 1080 lines on every other vsync and climb to
-// the panel's own rate on measured headroom, which needed the divisor read off
-// the panel period, and the web is the one shell that cannot declare one: its
-// period is learned from rAF stamps, and one misread window paced a healthy
-// race to every third vsync for the life of the page. So the divisor is never
-// the rule's. A 120 Hz panel is priced per vsync and gives up pixels to hold
-// it; a frame that cannot make the vsync on any rung presents on alternate
-// vsyncs at an uneven cadence, and that is the accepted trade — panels above
-// 60 Hz are driven by hardware that holds them. The learned period survives
-// only as the budget, where a misread costs an uneven cadence, not a wrong
-// divisor.
-//
-// 1080 LINES IS THE ANCHOR: the point a half-rate flip lands on, and the bar
-// under which the host is offered the choice (belowAnchor).
+// THE RULE NEVER MOVES THE RATE — decided 2026-10-15, after it did: pacing to
+// every Nth vsync on the rule's own judgement needed the panel period read
+// right, the web learns it from rAF stamps, and one misread window paced a
+// healthy race to every third vsync for the life of the page.
 //
 // THE HOST MAY HALVE THE RATE, and only the host: `halfRate` lays the SAME
 // ladder out at divisor 2 — 30 on a 60 Hz panel, 25 on a 50 Hz one, 60 on a
-// 120 Hz one — and the rule then climbs the rungs against that doubled budget
-// exactly as it does at full rate. It is never entered on the rule's own
-// judgement, but a preference a person picked on purpose is a different thing.
+// 120 Hz one — and the rule then moves along it exactly as at full rate.
+// 1080 LINES IS THE ANCHOR: where a rate flip lands, and the bar under which
+// the host is offered the choice (belowAnchor).
 inline constexpr double kAnchorLines = 1080.0;
-// The panel rate assumed where none is known, and the floor the fallback's
-// lateness bar sits on (latePresentRatio).
+// The panel rate assumed where none is known.
 inline constexpr double kDefaultPanelHz = 60.0;
-
-// NOTHING SITS BELOW THE BOTTOM RUNG, HOWEVER MANY CELLS. A split costs more
-// to submit than solo at any resolution, so a weak box with four cells can miss
-// slots at 540@60 — and that is the accepted trade, because every point below
-// it buys those slots back with something worse. A softer picture is past what
-// the game is willing to show; half rate doubles the picture latency of every
-// player steering by tilt; and any MOVE costs a hitch of its own — on the
-// reference Android box each resolution switch recreates the window swapchain,
-// ~54 ms and one to three skipped frames, so a retreat below the floor costs
-// the very stall it would cure. That box holds a 4-way split at 540@60 across
-// the catalogue with a handful of dropped frames in half an hour of racing. So
-// the rule takes no cell count, and the list is the ladder's on every grid.
 
 // The most operating points a surface can offer: every ladder rung that fits
 // under the ceiling, and the ceiling itself. Sizes the caller's array.
@@ -364,8 +207,8 @@ struct RenderScalePoint {
   int divisor;    // present every Nth vsync; 1 is the panel's own rate
 };
 
-// A frame's budget at this operating point: one present interval.
-inline double pointBudgetMs(const RenderScalePoint& p, RenderScaleLimits b) {
+// The present period this point is due at: one vsync times its divisor.
+inline double pointPeriodMs(const RenderScalePoint& p, RenderScaleLimits b) {
   const double panel = b.panelMs > 0.0 ? b.panelMs : 1000.0 / kDefaultPanelHz;
   return panel * (double) p.divisor;
 }
@@ -375,19 +218,12 @@ inline double anchorScale(RenderScaleLimits b) {
   return kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
 }
 
-// The divisor every rung runs at: the panel's own, or every other vsync when
-// the host asked for half rate. Whatever the panel: a 120 Hz one presents 120,
-// or 60 at the host's choice.
-inline int baseDivisor(RenderScaleLimits b) {
-  return b.halfRate ? 2 : 1;
-}
-
 // The list, ascending: one entry per rung, all at the one divisor.
 inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   double r[kScaleMaxPoints];
   const int n = rungScales(b, r);
-  const int base = baseDivisor(b);
-  for (int i = 0; i < n; i++) out[i] = RenderScalePoint{r[i], base};
+  const int divisor = b.halfRate ? 2 : 1;
+  for (int i = 0; i < n; i++) out[i] = RenderScalePoint{r[i], divisor};
   return n;
 }
 
@@ -401,14 +237,20 @@ inline bool belowAnchor(RenderScalePoint p, RenderScaleLimits b) {
   const double anchor = anchorScale(b);
   double top = 0.0;
   for (int i = 0; i < n; i++) {
-    // Ascending, so the last one that is not above the anchor.
     if (r[i] <= anchor + 1e-9) top = r[i];
   }
   return p.scale < top - 1e-9;
 }
 
-// Where `p` sits in the list: the highest entry at or below it, by the same
-// downward rule the rungs use on their own (see rungAtOrBelow).
+// Where `p` sits in the list: the highest entry AT OR BELOW it, as an index.
+//
+// DOWNWARD, never to the nearest. A scale between two rungs is a scale the
+// device has not proved it can afford the upper one of, so rounding to the
+// nearest would hand it MORE pixels on a poll that decided nothing. The epsilon
+// is not decoration: a ceiling arrives as min(dpr, 2160/height) and can land a
+// hair under its own rung through float alone. Below the bottom entry the
+// bottom entry is the answer, which is also how a scale under the band is
+// clamped back into it.
 inline int pointAtOrBelow(RenderScalePoint p, const RenderScalePoint* l, int n) {
   int at = 0;
   for (int i = 0; i < n; i++) {
@@ -417,238 +259,37 @@ inline int pointAtOrBelow(RenderScalePoint p, const RenderScalePoint* l, int n) 
   return at;
 }
 
-// The best entry whose PREDICTED cost fits its own budget, searched downward
-// from `from`. The rescue's landing spot, and the ceiling on any climb.
-inline int pointForBudget(int from, const RenderScaleFit& f,
-                          const RenderScalePoint* l, int n, RenderScaleLimits b) {
-  for (int i = from; i >= 0; i--) {
-    if (predictMs(f, l[i].scale) <= kScaleTargetShare * pointBudgetMs(l[i], b)) return i;
+// The entry a host's rate flip lands on: the anchor, or the ceiling under it.
+// A step down takes seconds and a step up most of a minute, so the new rate's
+// rung is found from above, where a boot starts too.
+inline int anchorPoint(const RenderScalePoint* l, int n, RenderScaleLimits b) {
+  const double anchor = anchorScale(b);
+  int at = 0;
+  for (int i = 1; i < n; i++) {
+    if (l[i].scale <= anchor + 1e-9) at = i;
   }
-  return 0;
+  return at;
 }
 
-// What the last window of frames cost, as the shell measured it. RAW: every
-// judgement about whether a number here means anything is made below, so that a
-// second shell hands over its measurements rather than its opinions.
-struct RenderScaleCost {
-  // p95 GPU time in MILLISECONDS, straight off the backend's timer, and how many
-  // frames carried a result. <= 0 where there is no timer. Deliberately not a
-  // share of budget: the budget is the point's own (panel period times
-  // divisor), so a share handed in would be renormalised against it. It is also
-  // what makes the cost model survive the host's half-rate flip.
-  double gpuP95Ms;
-  int gpuFrames;
-  // p95 frame interval and how many frames it was taken over, plus the bar
-  // lateness is judged against: the running fastest present (presentBaseline's
-  // answer, which RenderScaleController keeps) TIMES the operating point's
-  // divisor — the cadence the rule chose, not the panel's raw period. The call
-  // site in render_scale_controller.cc has the why.
-  double presentP95Ms;
-  double presentFloorMs;
-  int presentFrames;
-};
-
-// The device's own fastest present, folded one window at a time.
-// RenderScaleController keeps the running value and passes it back in (shells
-// hold nothing); it is a MEASUREMENT, not a decision, which is why it lives in
-// the caller's state rather than being re-derived here.
+// ---- the learned panel period ------------------------------------------------
 //
-// It has to outlive the stats window, and that is the whole subtlety of the
-// fallback signal. A ratio taken inside one window is blind to the case it
-// exists for: a device slow enough that EVERY frame in the window is slow has a
-// median equal to its p95, reads as a perfectly steady cadence, and never adapts.
-// Kept across windows, the cheap screens (a welcome board, a lobby) are where an
-// honest vsync period gets learned. It also survives a resolution change, since
-// the panel's period does not depend on what we draw at.
+// Faster than this is not a present, it is two rAF callbacks landing inside one
+// vsync (or one bad timestamp). Taking it as the panel's period would make every
+// ordinary frame look four times late, so it is rejected outright.
+inline constexpr double kMinPresentMs = 4.0;
+
+// The device's own fastest present, folded one window at a time, for a shell
+// that cannot declare its panel period (a browser has no API for it).
+// RenderScaleController keeps the running value and passes it back in. It
+// outlives the stats window so the cheap screens (a welcome board, a lobby) are
+// where an honest vsync period gets learned, and it survives a resolution
+// change, since the panel's period does not depend on what we draw at.
 //
 // `windowMs` is one window's figure for its cadence — the controller hands over
 // the tick series' MEDIAN, and render_scale_controller.cc says why not its p05.
 inline double presentBaseline(double prevFloorMs, double windowMs) {
   if (!(windowMs >= kMinPresentMs)) return prevFloorMs;
   return (prevFloorMs >= kMinPresentMs && prevFloorMs < windowMs) ? prevFloorMs : windowMs;
-}
-
-// How late this device is running, as a multiple of its own fastest present:
-// 1.0 is every frame on cadence, 2.0 is a whole period late. 0 when there is not
-// enough to say — which is what a caller passes on to renderScaleStep as "no
-// signal", so the two agree without the shell knowing the rule.
-inline double latePresentRatio(const RenderScaleCost& cost) {
-  if (cost.presentFrames < kMinSignalFrames) return 0.0;
-  if (!(cost.presentFloorMs >= kMinPresentMs) || !(cost.presentP95Ms > 0.0)) return 0.0;
-  // …AND NEVER TIGHTER THAN THE ANCHOR RATE. This is the 144 Hz trap, and it is
-  // the exact one perf_stats.cc closed for the readout ("a fast panel does not
-  // make a perfectly good 16.7 ms frame cost 240% of budget") while the rule
-  // beside it kept dividing by the raw floor.
-  //
-  // The note at the top of this file argues the fastest present is the right
-  // reference because it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode.
-  // That is true and it only covers panels slower than 60 Hz; above it the
-  // same arithmetic inverts. A 120 Hz laptop holding a solid 60 has a floor of
-  // 8.3 and a p95 of 16.7, which is a ratio of 2.0 — "a whole period late", every
-  // window, forever. Measured on the artifact: 2160 lines to 1080 in nine
-  // seconds, on a machine doing nothing wrong. And this is the arm that may only
-  // step DOWN, so it never comes back.
-  //
-  // 60 fps IS the bar, so a device presenting at it is not late whatever its
-  // glass could theoretically do. Only the FALLBACK reads this; a device with a
-  // GPU timer prices the anchor properly through pointBudgetMs and never comes
-  // here.
-  //
-  // kDefaultPanelHz AND NOT perf_stats.h's kGoodHz, which is the same 60 —
-  // deliberately, and the two are worth keeping apart until something forces
-  // the question. This header is the pure rule: it includes <algorithm> and
-  // nothing else, which is what lets every leg's ctest execute it as
-  // arithmetic, and perf_stats.h drags in <string>, <vector> and canonical.h.
-  // The 60 the rule assumes and the bar a READOUT scores against are also two
-  // questions, even where one number answers both. If they ever have to move
-  // together, extract the 60 — do not make the rule depend on the readout to
-  // get it.
-  const double bar = std::max(cost.presentFloorMs, 1000.0 / kDefaultPanelHz);
-  return cost.presentP95Ms / bar;
-}
-
-// IS THE DEVICE ACTUALLY DELIVERING, at the rate this point asks for?
-//
-// This is the veto the GPU model answers to, and it exists because a GPU
-// millisecond is not a fixed quantity. A governor that downclocks whenever a
-// frame leaves idle makes the SAME work measure dearer the healthier the frame
-// is, and a p95 collects exactly the windows where the clock had not ramped —
-// so a device comfortably holding its rate can price its own frame at 90% of
-// budget and be asked to retreat from a rung it is demonstrably presenting at.
-// Measured on an Apple TV 4K: 4 players at native, GPU p95 over the down
-// threshold, presenting 60/60 with zero skips, and the rule stepping it down a
-// rung it did not need to give up.
-//
-// AGAINST THE POINT'S OWN BUDGET, never against latePresentRatio. That ratio is
-// the FALLBACK's signal and is measured against the panel's fastest present, so
-// it reads a perfectly healthy 30 Hz point as "a whole period late" — see its
-// own note on the 120 Hz trap, which is the same arithmetic one rung along. A
-// rule that has chosen a divisor has to judge cadence against the rate it chose.
-//
-// kLatePresentDown IS the bar, deliberately reused rather than given a
-// companion constant: it already means "on cadence, or a whole period late, and
-// nothing lands between them".
-//
-// Too few frames is NOT clean — that is "not enough to say", and silence is not
-// evidence.
-inline bool presentsOnCadence(const RenderScaleCost& cost, double budgetMs) {
-  if (cost.presentFrames < kMinSignalFrames) return false;
-  if (!(cost.presentP95Ms > 0.0) || !(budgetMs > 0.0)) return false;
-  return cost.presentP95Ms < kLatePresentDown * budgetMs;
-}
-
-// The next OPERATING POINT — resolution and present divisor together — given
-// where we are and what the last window of frames cost.
-//
-// `cost.gpuP95Ms` is RAW MILLISECONDS now, not a share. A share is already an
-// opinion about the budget, and the budget is the point's own (panel period
-// times divisor); a shell handing one over would be renormalising the
-// measurement against it.
-//
-// `sinceChangeSec` is how long the current point has been in force;
-// `sinceSceneSec` how long the current SCENE has: nothing steps down inside
-// its grace (kScaleSceneGraceSec), and nothing probes up inside its first
-// up-hold (kScaleUpHoldSec).
-//
-// With no signal at all the answer is the current point, clamped — which is also
-// the answer while a hold is still running.
-inline RenderScalePoint renderScaleStep(RenderScalePoint current,
-                                        const RenderScaleCost& cost,
-                                        double sinceChangeSec, double sinceSceneSec,
-                                        RenderScaleSample prev,
-                                        RenderScaleLimits limits) {
-  RenderScalePoint list[kScaleMaxPoints];
-  const int n = operatingPoints(limits, list);
-  if (n <= 0) return current;
-
-  const double clamped = std::min(std::max(current.scale, limits.min), limits.max);
-  int at = pointAtOrBelow(RenderScalePoint{clamped, current.divisor}, list, n);
-  // A POINT FROM THE OTHER RATE — the host just flipped `halfRate` — has no
-  // entry in this list (every entry shares one divisor). It lands on the anchor
-  // (1080 lines, or the ceiling under it), where a boot starts and for the same
-  // reason: a step down takes seconds and a step up a lap, so the new budget is
-  // found from above.
-  if (list[0].divisor != current.divisor) {
-    const double anchor = anchorScale(limits);
-    at = 0;
-    for (int i = 1; i < n; i++) {
-      if (list[i].scale <= anchor + 1e-9) at = i;
-    }
-  }
-  const double gpuMs = cost.gpuFrames >= kMinSignalFrames ? cost.gpuP95Ms : 0.0;
-  const RenderScaleFit fit = fitCost(clamped, gpuMs, prev);
-  int to = at;
-
-  if (gpuMs > 0.0) {
-    const double budget = pointBudgetMs(list[at], limits);
-    if (gpuMs > kScaleDownShare * budget && sinceChangeSec >= kScaleDownHoldSec
-        && sinceSceneSec >= kScaleSceneGraceSec && !presentsOnCadence(cost, budget)) {
-      // LATE, so retreat — and the MEASUREMENT outranks the model. Without a fit
-      // it is one step; with one it is straight to a point predicted to hold,
-      // but never nowhere: a model that says the current point is fine while the
-      // device is demonstrably late is a model that is wrong.
-      //
-      // AND THE SAME SENTENCE IN REVERSE (presentsOnCadence): a model that says
-      // this point is late while the device is demonstrably DELIVERING is also
-      // wrong, and it is wrong in the direction that costs a rung. The veto is
-      // on the retreat only — a clean record is evidence about the point we are
-      // AT, not about the one above, so the climb stays the model's decision.
-      // What it gives up is at most one evidence window of prediction: a device
-      // that really is about to miss shows it in the presents within a window,
-      // and this arm can climb back out of a retreat it takes late.
-      to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
-      if (to >= at) to = at - 1;
-    } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= kScaleUpHoldSec
-               && sinceSceneSec >= kScaleUpHoldSec) {
-      // NOTHING MEASURED AT ANOTHER SCALE YET, so PROBE. A model needs two
-      // scales to exist and a scale only moves when something asks it to, so
-      // refusing to climb with no data is a deadlock: the scene changes, the
-      // shell drops the previous observation (a fit across two scenes measures a
-      // slope belonging to neither), and nothing would ever move again.
-      //
-      // A NEW SCENE KEEPS THE POINT IT INHERITS for an up-hold of its own.
-      // The build drops the observation, so without this every track change
-      // in a lobby that had long settled probed on the next poll — a climb on
-      // no evidence and, on a box that cannot hold it, a retreat 2.5 s later:
-      // two buffer resizes, one of them under the countdown.
-      //
-      // ONLY WHEN THERE IS NO OBSERVATION — see hasPrevObservation. A refused
-      // FIT is not missing data, it is data saying pixels are not the cost, and
-      // probing on it pumps between two rungs for the life of the scene.
-      if (at + 1 < n) to = at + 1;
-    } else if (fit.ok && sinceChangeSec >= kScaleUpHoldSec) {
-      // CLIMB ONLY INTO A POINT THE MODEL SAYS FITS. This is the whole of the
-      // anti-oscillation argument, and it holds at any step width: the step is
-      // never taken unless the cost it will land at is predicted under the
-      // target of ITS OWN budget.
-      //
-      // ONE STEP, not straight to the best that fits: the fit is taken over a
-      // window that saw one stretch of a lap, and cost swings ~4 ms around a
-      // circuit. One step keeps a cheap-section fit from buying three.
-      if (at + 1 < n
-          && predictMs(fit, list[at + 1].scale)
-                 <= kScaleTargetShare * pointBudgetMs(list[at + 1], limits)) {
-        to = at + 1;
-      }
-    }
-  } else if (latePresentRatio(cost) >= kLatePresentDown && sinceChangeSec >= kScaleDownHoldSec
-             && sinceSceneSec >= kScaleSceneGraceSec) {
-    // DOWN ONLY on the fallback: a steady cadence is not evidence of headroom,
-    // and a device with no GPU timer has no milliseconds to fit a model from
-    // either, so there is no branch that raises.
-    if (at > 0) to = at - 1;
-  }
-
-  if (to < 0) to = 0;
-  if (to >= n) to = n - 1;
-  RenderScalePoint next = list[to];
-  // Snap rather than creep: without this a step that lands a hair short of a
-  // limit re-decides every poll forever.
-  if (next.divisor == current.divisor
-      && next.scale > clamped - kScaleMinMove && next.scale < clamped + kScaleMinMove) {
-    return RenderScalePoint{clamped, current.divisor};
-  }
-  return next;
 }
 
 }  // namespace rt

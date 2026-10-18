@@ -161,8 +161,8 @@ rule only ever moves the resolution: the present rate is the panel's own, a
 120 Hz panel is priced per vsync and pays in pixels to hold it, and the divisor
 is 2 only on the host's Quality choice. The rule is
 `native/libttp-runtime/ttp/render_scale.h` and the state around it —
-the window, the percentiles, the fastest present, the cost model, the clocks —
-is `render_scale_controller.h`; this side names the band, resizes, and paces.
+the missed frames, the fastest present, the failed rungs, the clocks — is
+`render_scale_controller.h`; this side names the band, resizes, and paces.
 
 **`_divisor` PACES THE PICTURE, NEVER THE SIM.** `_loop` runs `onFrame` on every
 rAF callback and gates only the draw, accumulating the skipped callbacks' dt into
@@ -205,9 +205,8 @@ every Retina display, read as fractions of the ceiling they made a floor mean
 **THERE IS NO FLOOR ON THIS SIDE.** `_scaleBand` passes `min: 0` and the ladder's
 bottom rung is the floor, in one place, for every shell. `MAX_BUFFER_H` stays
 because a ceiling really is per-surface. Nothing is persisted across sessions
-either: the signal a timer-less browser uses may only step DOWN, so one bad
-window would pin a device lower forever. Re-learning costs a few seconds per
-session and self-corrects.
+either: re-learning costs a few seconds per session and self-corrects, where a
+remembered rung would carry one bad session into every later one.
 
 **THE BUFFER AND THE VIEWPORT MOVE TOGETHER, AND BOOT IS THE HOLE.** `_onResize`
 is the only place the buffer changes size and it can only tell the renderer once
@@ -224,10 +223,8 @@ which is what makes a mid-boot window change ordinary rather than exotic;
 `setTrack` — a static build, or a field rebuild on the resident track — and
 never after a reroster (the same scene re-dressed),
 `_rebuild` calls `scaleScene` and clears the perf window. The call starts the
-rule's grace, inside which nothing steps down (a scene's first seconds are its
-assembly, not its cost), and drops the rule's COST MODEL observation: it fits
-`fixed + fill * s²` from two observations at two scales, and a fit whose two
-points straddle a scene change measures a slope belonging to neither.
+rule's grace, inside which nothing missed is judged (a scene's first seconds
+are its assembly, not its cost), and its wait to climb.
 
 **There is no device probe, and there must not be one.** A UA string lies and
 `WEBGL_debug_renderer_info` is going away; what is measured is this device

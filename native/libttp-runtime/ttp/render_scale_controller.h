@@ -1,29 +1,26 @@
 // render_scale_controller — the STATE around ttp/render_scale.h's rule.
 //
-// The rule itself is pure and stays pure: two observations, three clocks and a
-// band go in, one operating point comes out. What was left over was the
-// BOOKKEEPING — the window the percentiles are taken over, the running present
-// floor, the observation the cost model fits from, when the point last moved
-// and when the scene was built — and it was written three times, once per
-// shell, in three languages, under comments that pointed at each other.
+// The rule itself is pure and stays pure: frames missed, seconds judged, how
+// long the rung has stood and the wait in force go in, one rung comes out. What
+// is left over is the BOOKKEEPING — the missed frames per second, the running
+// present floor, when the rung was entered, the rung and the failures each
+// player count left this session — and it was once written three times, once
+// per shell, in three languages, under comments that pointed at each other.
 //
-// None of it is platform. A poll cadence is not an Android fact; which samples
-// may become a percentile is not a Swift one. The three copies had already
-// drifted where it is cheapest to drift and hardest to see: two of them folded
-// their p95 at `sorted[floor((n-1)*p)]` while the fold behind the readout used
-// `sorted[floor(n*p)]`, so a television judged its own resolution on different
-// frames than the ones its overlay drew.
+// None of it is platform. A poll cadence is not an Android fact; which frames
+// count is not a Swift one. The three copies had already drifted where it is
+// cheapest to drift and hardest to see, so a television judged its own
+// resolution on different frames than the ones its overlay drew.
 //
 // WHAT A SHELL STILL OWES, and it is now only this: keep feeding
 // ttp_perf_sample (which it already did), say when a scene was built, name the
 // band and the panel period, and PERFORM the answer. Everything between those
 // is here.
 //
-// THE WINDOW IS THE READOUT'S. There is one monitor per process
-// (perf::monitor()) and this folds off it, so the numbers steering the
-// resolution are the numbers a human is looking at. The present series is the
-// one that matters — see perf_stats.h's Readout::present for why it is not the
-// tick series beside it.
+// THE MONITOR IS THE READOUT'S. There is one per process (perf::monitor()) and
+// this drains its present gaps, so the frames steering the resolution are the
+// frames a human is looking at. Presents, not ticks — see perf_stats.h's
+// Readout::present for why.
 #pragma once
 
 #include "ttp/perf_stats.h"
@@ -32,24 +29,23 @@
 namespace ttp {
 namespace rt {
 
-// How often the point is re-decided. The rule's holds are seconds long, so this
+// How often the point is re-decided. The rule's waits are seconds long, so this
 // only has to be fast enough to catch the load changing — a race starting
 // behind a lobby, a fourth player joining — within about a second of it
 // happening. All three shells spelled this number, and the two TV ones spelled
 // it in units of their own clocks.
 //
-// IT IS A COST GUARD AND DECIDES NOTHING — the rule's holds and kMinSignalFrames
-// already pace every decision, so what this buys is not re-folding 120 samples
-// once a frame. Do not write a test asserting that a second poll inside it is
-// "refused": that answers no-move either way and passes for the wrong reason.
-// render_scale_check gates the honest property instead — polled every frame, the
-// controller lands where polling at the cadence lands.
+// It is also the rule's unit of time: each poll judges the frames presented
+// since the last one, and the window is kJudgeSec of those.
 inline constexpr double kScalePollMs = 1000.0;
 
 // How long the display must stay below the anchor before the host is offered
 // half rate (offersHalfRate) — long enough that one late window is not the
 // verdict, short enough that the lobby offers it before a race has started.
 inline constexpr double kHalfRateOfferSec = 10.0;
+
+// The most split-screen cells a scene draws; 0 is the overview (the lobby).
+inline constexpr int kMaxCells = 4;
 
 class RenderScaleController {
  public:
@@ -74,15 +70,23 @@ class RenderScaleController {
   // the budget.
   double panelMs() const { return panelMs_; }
 
-  // A NEW SCENE. Drops the cost model's observation — a fit whose two points
-  // straddle a scene change measures a slope belonging to neither — and starts
-  // the scene's grace, inside which nothing steps down (kScaleSceneGraceSec).
-  // The point carries over and holds: a race starts where the lobby settled and
-  // steps down if it has to, and nothing climbs on no evidence until the scene
-  // has run an up-hold of its own (renderScaleStep's probe). The
-  // window itself is the shell's to drop, with ttp_perf_reset, for the reason
-  // ttp_perf.h names.
+  // A NEW SCENE. Empties the judged window (the last scene's frames are another
+  // picture) and starts the scene's grace, inside which nothing missed is
+  // judged (kScaleSceneGraceSec). The scene is then PLACED once its cell count
+  // is known (cells()): on the rung that count last held this session — a cup
+  // is one session, four players race after race — or, for a count not seen
+  // yet that draws more cells than the scene before it, one rung below where
+  // that scene left off. The lobby holds 1080 that four players cannot; this
+  // is what keeps the first race of a cup from finding that out on its grid.
+  // The monitor itself is the shell's to drop, with ttp_perf_reset, for the
+  // reason ttp_perf.h names.
   void scene(double tMs);
+
+  // How many split-screen cells the frame draws (0: the overview), reported by
+  // the display core every frame. Read once per scene, inside its grace — a
+  // shell may name its cells just after the build — and never after: a seat
+  // dropping mid-race does not re-place the scene.
+  void cells(int n) { cells_ = n; }
 
   // Re-decide, at most once per kScalePollMs. Answers whether the point MOVED,
   // and writes the new one to `out`.
@@ -92,19 +96,16 @@ class RenderScaleController {
   // the only things here a shell is entitled to an opinion about. Pass
   // `panelMs` 0 to have it learned (see panelMs() above).
   //
-  // ON A MOVE THE WINDOW GOES, here rather than in three shells: it describes
-  // the OLD buffer, and keeping it judges the new resolution on the old one's
-  // frames for the next two seconds — which is how a controller talks itself
-  // into a second step it does not need. Only on a MOVE: clearing every poll
-  // caps the sample count at the frame rate, and the rule ignores a window
-  // under kMinSignalFrames, so a box at 20 fps would be told it had no signal
-  // and never step down — deaf in exactly the case the mechanism exists for.
+  // ON A MOVE THE WINDOW GOES, judged and monitor alike, here rather than in
+  // three shells: it describes the OLD buffer, and keeping it judges the new
+  // resolution on the old one's frames — which is how a controller talks itself
+  // into a second step it does not need.
   bool poll(double tMs, RenderScaleLimits limits, perf::Monitor& mon,
             RenderScalePoint* out);
 
   // THE HOST'S RATE CHOICE (render_scale.h, `halfRate`), restored by the shell
   // at boot and flipped from the host phone. The next poll performs it as a
-  // move of its own, landing on the anchor at the other rate (renderScaleStep).
+  // move of its own, landing on the anchor at the other rate (anchorPoint).
   void setHalfRate(bool on) { halfRate_ = on; }
   bool halfRate() const { return halfRate_; }
 
@@ -121,19 +122,44 @@ class RenderScaleController {
   int rateHz(bool half) const;
 
  private:
+  // Put `p` in force: the window it was judged on goes with the old buffer.
+  bool moveTo(RenderScalePoint p, perf::Monitor& mon, RenderScalePoint* out);
+
   // 1.0 until the first poll ADOPTS THE BAND'S CEILING. "As sharp as this
   // surface allows" is a fact only the band knows, and a 1.0 left standing here
   // is wrong twice on any HiDPI browser (max 2): the shell sizes its buffer from
-  // the ceiling before a frame exists, so the rule would be pricing frames drawn
-  // at 2.0 as though they cost that at 1.0 — poisoning the cost model's first
-  // observation — and its first move would halve the canvas nobody asked it to
-  // touch. Both TV shells have a ceiling of 1.0 and see no difference.
+  // the ceiling before a frame exists, and a first step down from 1.0 would
+  // halve a canvas drawn at 2.0 that nobody asked it to touch. Both TV shells
+  // have a ceiling of 1.0 and see no difference.
   RenderScalePoint point_{1.0, 1};
   bool adopted_ = false;
-  RenderScaleSample prev_{0.0, 0.0};
   double floorMs_ = 0;     // presentBaseline's running answer
   double panelMs_ = 0;
-  double movedMs_ = 0;
+  // Frames missed per judged second, newest at `judged_ - 1` of a ring
+  // starting at `head_`; at most kJudgeSec of them, the current rung's only.
+  int missed_[kJudgeSec] = {};
+  int judged_ = 0;
+  int head_ = 0;
+  // When the current rung was entered — by a move or by a scene build.
+  double enteredMs_ = 0;
+  // PER CELL COUNT, for the session: the scale each count's last scene left
+  // off at (0: never seen), and how often each rung (by its index in the point
+  // list) has failed at that count. What four players failed says nothing
+  // about the lobby, and the lobby holding 1080 must not clear it. The host's
+  // half rate keeps the same indices: a rung four players failed at 60 is
+  // taken as failed at 30 too, until it holds.
+  double rungOf_[kMaxCells + 1] = {};
+  int fails_[kMaxCells + 1][kScaleMaxPoints] = {};
+  // What the frame last reported, and the count this scene was placed for (-1:
+  // not yet); the count the scene before it was placed for.
+  int cells_ = -1;
+  int sceneCells_ = -1;
+  int prevCells_ = -1;
+  // The best scale this scene has stood on, and that of the scene before it: a
+  // new count is placed a rung below the latter, so a lobby that dipped on its own
+  // boot does not drag the first race down to the floor.
+  double sceneTop_ = 0;
+  double prevTop_ = 0;
   double sceneMs_ = 0;
   double lastPollMs_ = 0;
   bool halfRate_ = false;

@@ -436,9 +436,9 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     on the host's Quality choice; one call for the pair, so a shell performs
     both halves of one decision and arbitrates nothing itself.
 
-    **THE STATE IS NOT YOURS EITHER.** The window, the percentiles, the running
-    fastest present, the cost model's observation and the clocks the holds are
-    judged against all live in `ttp/render_scale_controller.h`, folded off the
+    **THE STATE IS NOT YOURS EITHER.** The missed frames, the running fastest
+    present, the failed rungs and the clocks the waits are judged against all
+    live in `ttp/render_scale_controller.h`, drained off the
     same monitor item 3 describes. Three shells held that by hand once, in three
     languages, and two of them had drifted to a different percentile formula than
     the readout they were drawn beside. What a shell owes now is FOUR things:

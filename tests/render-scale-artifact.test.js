@@ -153,27 +153,25 @@ test('the ceiling is the BAND\'s, adopted without moving the shell\'s buffer', a
     `the first move must not land below the surface's own resolution: ${b.scale}`);
 });
 
-test('a new scene holds the point it inherits for an up-hold, then climbs', async () => {
+test('a scene build carries the session over: what failed stays failed until the wait is out', async () => {
   const b = await box();
   b.gpuMs = 30;                                    // hopeless against 16.7 ms
   for (let i = 0; i < 6; i++) { b.ticks(180); b.poll(BAND_4K); }
   const floored = b.lines(BAND_4K);
   assert.ok(floored < 2160, 'an expensive scene falls off native');
 
-  b.gpuMs = 1;                                     // …and the load lifts
-  for (let i = 0; i < 6; i++) { b.ticks(180); b.poll(BAND_4K); }
-  assert.equal(b.lines(BAND_4K), floored,
-    'past the recovery window a climb waits out the lap-sized hold');
-
-  // What a shell owes on a build: this call, and ttp_perf_reset beside it.
-  // Each round below is 180 ticks, three seconds at 60 Hz; the up-hold is 28.
+  // The load lifts with a new scene — the next race of the same cup. What a
+  // shell owes on a build: this call, and ttp_perf_reset beside it. Each round
+  // below is 180 ticks, three seconds at 60 Hz.
+  b.gpuMs = 1;
   b.fn.scene(b.t);
   b.fn.reset();
-  for (let i = 0; i < 9; i++) { b.ticks(180); b.poll(BAND_4K); }
+  for (let i = 0; i < 20; i++) { b.ticks(180); b.poll(BAND_4K); }
   assert.equal(b.lines(BAND_4K), floored,
-    'a new scene keeps the point it inherited through its own up-hold');
-  for (let i = 0; i < 3; i++) { b.ticks(180); b.poll(BAND_4K); }
-  assert.ok(b.lines(BAND_4K) > floored, '…and then climbs');
+    'a rung failed at once this session is not tried again a minute into the next race');
+  // The longest wait (render_scale.h: kUpWaitSec << kMaxFails, 320 s) runs out.
+  for (let i = 0; i < 100; i++) { b.ticks(180); b.poll(BAND_4K); }
+  assert.ok(b.lines(BAND_4K) > floored, '…and once it has, the lighter scene climbs');
 });
 
 test('a poll that decides nothing leaves the window alone', async () => {
@@ -187,10 +185,9 @@ test('a poll that decides nothing leaves the window alone', async () => {
   // and decides nothing; render_scale_check gates the honest property (polled
   // every frame, the controller lands where polling at the cadence lands).
   //
-  // A poll that decides NOTHING must leave the window alone: clearing it every
-  // second caps the sample count at the frame rate, and the rule ignores a
-  // window under kMinSignalFrames — so a box at 20 fps would be told it had no
-  // signal and never step down, deaf in exactly the case this exists for.
+  // A poll that decides NOTHING must leave the readout's window alone: it is
+  // the overlay's too, and clearing it every second would leave the readout a
+  // second of frames to fold.
   b.everyNth = 1;
   b.ticks(180);
   const before = JSON.parse(b.fn.readout(1, 960, 540, 1, null)).frame.n;

@@ -690,8 +690,8 @@ class DisplayHost(
             // straddles a build describes neither.
             PerfMonitor.reset()
             Ttp.ttp_display_scale_scene(System.nanoTime() / 1_000_000.0)
-            // EVERY BUILD, because a build restarts the scale's grace AND drops the
-            // cost model — so a shell rebuilding a scene nothing asked it to
+            // EVERY BUILD, because a build restarts the scale's grace AND its
+            // wait to climb — so a shell rebuilding a scene nothing asked it to
             // rebuild shows up as a scaler that will not settle, and the two are
             // indistinguishable without this line.
             Log.i(TAG, String.format(java.util.Locale.ROOT,
@@ -744,11 +744,11 @@ class DisplayHost(
     // -- the adaptive render scale -------------------------------------------
     //
     // THE BUFFER IS NOT THE PANEL. `ttp/render_scale.h` decides how big it should
-    // be from what the last window of frames cost, so the same build holds 60 fps
-    // on a weak TV and stays sharp on a strong one. What a shell owes is the BAND
-    // and the panel's period, and nothing else — the window, the percentiles, the
-    // fastest present, the cost model and the clocks are all
-    // `ttp/render_scale_controller.h`'s, folded off the same monitor
+    // be from the frames the panel missed, so the same build holds 60 fps on a
+    // weak TV and stays sharp on a strong one. What a shell owes is the BAND and
+    // the panel's period, and nothing else — the missed frames, the fastest
+    // present, the failed rungs and the clocks are all
+    // `ttp/render_scale_controller.h`'s, drained off the same monitor
     // [PerfMonitor] feeds. If you find yourself writing an `if` around a
     // measurement before passing it, it belongs in that header instead.
     //

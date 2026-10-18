@@ -60,6 +60,9 @@ inline constexpr double kBudgetMs = 1000.0 / kGoodHz;
 // trailing second instead (kRecentMs) — that is the span a human can act on,
 // while a p50 over sixteen frames is noise.
 inline constexpr int kWindow = 120;
+// The most present gaps kept for the render-scale rule between its polls
+// (Monitor::takeGaps): a second at the fastest panel, several times over.
+inline constexpr int kMaxGaps = 1024;
 inline constexpr double kRecentMs = 1000.0;
 
 // BOOT IS NOT A FRAME RATE. The first presents of a run are shader compilation
@@ -186,6 +189,12 @@ class Monitor {
   void pacing(double panelMs, int divisor);
   void record(const Sample& s);
   Readout fold() const;
+  // Every present-to-present gap since the last call, oldest first: the
+  // render-scale rule's input (render_scale_controller.cc). Apart from the ring
+  // because the ring holds a COUNT of samples — about one second at 120 Hz — and
+  // the rule must see every gap between its polls. Capped, so a monitor nobody
+  // drains cannot grow.
+  std::vector<double> takeGaps();
   bool warming() const { return warming_; }
   int size() const { return static_cast<int>(ring_.size()); }
 
@@ -196,6 +205,8 @@ class Monitor {
   bool warming_ = true;
   double panelMs_ = 0;
   int divisor_ = 1;
+  std::vector<double> gaps_;
+  double lastPresentMs_ = -1;
 };
 
 // THE PROCESS'S ONE MONITOR, because there is one display and therefore one

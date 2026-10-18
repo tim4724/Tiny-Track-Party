@@ -31,6 +31,8 @@ void Monitor::reset() {
   warmRun_ = 0;
   warmSeen_ = 0;
   warming_ = true;
+  gaps_.clear();
+  lastPresentMs_ = -1;
 }
 
 void Monitor::record(const Sample& s) {
@@ -45,6 +47,17 @@ void Monitor::record(const Sample& s) {
   ring_.push_back(s);
   if (static_cast<int>(ring_.size()) > kWindow)
     ring_.erase(ring_.begin(), ring_.end() - kWindow);
+  if (s.presented) {
+    if (lastPresentMs_ >= 0 && s.tMs > lastPresentMs_ && gaps_.size() < (size_t) kMaxGaps)
+      gaps_.push_back(s.tMs - lastPresentMs_);
+    lastPresentMs_ = s.tMs;
+  }
+}
+
+std::vector<double> Monitor::takeGaps() {
+  std::vector<double> out;
+  out.swap(gaps_);
+  return out;
 }
 
 namespace {

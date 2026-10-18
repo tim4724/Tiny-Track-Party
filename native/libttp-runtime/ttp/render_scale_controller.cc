@@ -4,8 +4,17 @@ namespace ttp {
 namespace rt {
 
 void RenderScaleController::scene(double tMs) {
+  // What the outgoing scene's count left off at, for the next scene with it.
+  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale;
+  prevCells_ = sceneCells_;
+  prevTop_ = std::max(sceneTop_, point_.scale);
+  sceneTop_ = point_.scale;
+  sceneCells_ = -1;
+  cells_ = -1;
   sceneMs_ = tMs;
-  prev_ = RenderScaleSample{0.0, 0.0};
+  enteredMs_ = tMs;
+  judged_ = 0;
+  head_ = 0;
 }
 
 bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
@@ -16,13 +25,14 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   if (lastPollMs_ > 0 && tMs - lastPollMs_ < kScalePollMs) return false;
   lastPollMs_ = tMs;
 
-  // THE CEILING, ONCE — see point_. Before renderScaleStep rather than after, so
-  // the first poll's answer is measured against the scale the shell is actually
-  // drawing at; and it reports NO MOVE, because the shell was already there.
+  // THE CEILING, ONCE — see point_. Before the decision rather than after, so
+  // the first poll is judged against the scale the shell is actually drawing
+  // at; and it reports NO MOVE, because the shell was already there.
   if (!adopted_) {
     adopted_ = true;
     if (limits.max > 0.0) point_.scale = limits.max;
   }
+  sceneTop_ = std::max(sceneTop_, point_.scale);
 
   const perf::Readout r = mon.fold();
 
@@ -33,7 +43,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // around the vsync on an idle Mac and ±2 ms with the main thread loaded, so
   // one window's p05 on a 120 Hz panel read 6.5 ms — and a floor that only
   // ever falls then believed in a 154 Hz panel for the life of the page, and
-  // priced every frame against it. Jitter is symmetric, so the median of a
+  // judged every frame against it. Jitter is symmetric, so the median of a
   // window that keeps up IS the period; a window that does not keep up has a
   // slower median, and the running minimum across windows ignores it exactly
   // as it ignored a slow p05.
@@ -53,43 +63,101 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
     offered_ = true;
   }
 
-  // ABSENT IS NOT ZERO, and the rule reads 0 as "no signal" for both terms. A
-  // platform with no GPU timer has no milliseconds, not free frames.
-  const RenderScaleCost cost{
-      r.gpu.has ? r.gpu.p95 : 0.0, r.gpu.n,
-      r.present.has ? r.present.p95 : 0.0,
-      // THE FLOOR TIMES THE DIVISOR: what lateness is judged against is the
-      // cadence we CHOSE, not the panel's raw period. Without it the host's
-      // deliberate present-every-other-vsync reads as a ratio of 2.0 and the
-      // fallback path rescues a healthy device downward, once every hold, to
-      // the floor. At the panel's own rate this multiplies by one; the 60 Hz
-      // floor latePresentRatio then puts under the bar is the other guard, and
-      // the one that covers a 120 Hz panel presenting a steady 60.
-      floorMs_ * static_cast<double>(point_.divisor),
-      r.present.n};
+  // JUDGE THE SECOND: every frame presented since the last poll, counted in
+  // vsyncs missed against the point's own period — times its divisor, so the
+  // host's deliberate every-other-vsync is on time, not one miss a frame. A
+  // poll that saw no present judges nothing (a hidden tab, a stalled loop: the
+  // next present's gap carries what was missed).
+  const std::vector<double> gaps = mon.takeGaps();
+  if (!gaps.empty() && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {
+    const double due = pointPeriodMs(point_, limits);
+    int missed = 0;
+    for (double g : gaps) missed += perf::budgetsMissed(g, due);
+    if (judged_ < kJudgeSec) {
+      missed_[(head_ + judged_++) % kJudgeSec] = missed;
+    } else {
+      missed_[head_] = missed;
+      head_ = (head_ + 1) % kJudgeSec;
+    }
+  }
+  int missed = 0;
+  for (int i = 0; i < judged_; i++) missed += missed_[(head_ + i) % kJudgeSec];
 
-  const RenderScalePoint next =
-      renderScaleStep(point_, cost, (tMs - movedMs_) / 1000.0,
-                      (tMs - sceneMs_) / 1000.0, prev_, limits);
+  RenderScalePoint list[kScaleMaxPoints];
+  const int n = operatingPoints(limits, list);
+  const double clamped = std::min(std::max(point_.scale, limits.min), limits.max);
+  const int at = pointAtOrBelow(RenderScalePoint{clamped, point_.divisor}, list, n);
+
+  // PLACE THE SCENE, once its cell count is known and while it is still in its
+  // grace: where that count left off this session, or — a count not seen yet
+  // that draws more cells than the scene before it — one rung below the best
+  // the scene before it reached. Only the scene's FIRST placement lowers: a
+  // count that changes again inside the grace (a shell naming its cells late)
+  // is placed, not lowered twice. A placement is not a step: it judges
+  // nothing, and the wait to climb still runs from the build.
+  if (cells_ >= 0 && std::min(cells_, kMaxCells) != sceneCells_
+      && tMs - sceneMs_ < kScaleSceneGraceSec * 1000.0) {
+    const int c = std::min(cells_, kMaxCells);
+    int place = at;
+    if (rungOf_[c] > 0.0) {
+      place = pointAtOrBelow(RenderScalePoint{rungOf_[c], point_.divisor}, list, n);
+    } else if (prevCells_ >= 0 && c > prevCells_ && sceneCells_ < 0) {
+      // A rung below the BEST the scene before it reached, never above where it
+      // is now: the lobby's boot can dip a rung on its own loading, and a race
+      // placed below the dip would start on the floor.
+      const int top = pointAtOrBelow(RenderScalePoint{prevTop_, point_.divisor}, list, n);
+      place = std::max(std::min(at, top - 1), 0);
+      // …and every rung above it counts as failed once at this count, so the
+      // first try waits the doubled wait: a device that holds it climbs within a
+      // race, one that does not tries once a session.
+      for (int r = place + 1; r < n; r++) fails_[c][r] = std::max(fails_[c][r], 1);
+    }
+    sceneCells_ = c;
+    if (list[place].scale != point_.scale || list[place].divisor != point_.divisor) {
+      return moveTo(list[place], mon, out);
+    }
+  }
+  const int slot = sceneCells_ >= 0 ? sceneCells_ : 0;
+  // A rung that has stood kFailSec holds, whatever it failed before.
+  if (tMs - enteredMs_ >= kFailSec * 1000.0) fails_[slot][at] = 0;
+  // A POINT FROM THE OTHER RATE — the host just flipped `halfRate` — has no
+  // entry in this list (every entry shares one divisor), so it moves to the
+  // anchor at the new rate.
+  const int to = list[0].divisor != point_.divisor
+      ? anchorPoint(list, n, limits)
+      : renderScaleRung(at, n, missed, judged_, (tMs - enteredMs_) / 1000.0,
+                        upWaitSec(at + 1 < n ? fails_[slot][at + 1] : 0));
+  RenderScalePoint next = list[to];
+  // Snap rather than creep: without this a scale a hair off its rung (a band
+  // that moved) re-decides every poll forever.
+  if (next.divisor == point_.divisor
+      && next.scale > clamped - kScaleMinMove && next.scale < clamped + kScaleMinMove) {
+    next = RenderScalePoint{clamped, point_.divisor};
+  }
   if (next.scale == point_.scale && next.divisor == point_.divisor) return false;
 
-  // THE OBSERVATION THE COST MODEL IS BUILT FROM, recorded at the one moment it
-  // exists: the scale that was in force and what a frame cost at it. The rule
-  // solves `fixed + fill * s^2` from this and the next one, which is how a
-  // device that is half fixed cost climbs at all, and how one frame rate's
-  // measurement prices another's. Only on a RESOLUTION move — two points at one
-  // scale determine nothing.
-  if (next.scale != point_.scale) prev_ = RenderScaleSample{point_.scale, cost.gpuP95Ms};
-  point_ = next;
-  movedMs_ = tMs;
+  // A step down soon after the rung was entered FAILED it (kFailSec). One that
+  // came before the window had even filled is hopeless for this session, and
+  // waits the longest there is: four players trying 1080 on the reference box
+  // miss ten frames inside two seconds.
+  if (next.divisor == point_.divisor && to < at && tMs - enteredMs_ < kFailSec * 1000.0) {
+    fails_[slot][at] = judged_ < kJudgeSec ? kMaxFails : std::min(fails_[slot][at] + 1, kMaxFails);
+  }
+  enteredMs_ = tMs;
+  return moveTo(next, mon, out);
+}
+
+bool RenderScaleController::moveTo(RenderScalePoint p, perf::Monitor& mon,
+                                   RenderScalePoint* out) {
+  point_ = p;
+  judged_ = 0;
+  head_ = 0;
   mon.reset();
   if (out) *out = point_;
   return true;
 }
 
 int RenderScaleController::rateHz(bool half) const {
-  RenderScaleLimits b{0.0, 0.0, 0.0, panelMs_};
-  b.halfRate = half;
   // A LEARNED period is the median of rAF ticks and can land a fraction of a
   // millisecond off the panel's, which would label a 60 Hz TV "61 fps". Snap to
   // the panel rate it is nearest to; a declared period is already one of these.
@@ -98,7 +166,7 @@ int RenderScaleController::rateHz(bool half) const {
   for (double k : kPanelHz) {
     if (hz > k * 0.95 && hz < k * 1.05) hz = k;
   }
-  return (int) (hz / (double) baseDivisor(b) + 0.5);
+  return (int) (hz / (half ? 2.0 : 1.0) + 0.5);
 }
 
 RenderScaleController& renderScale() {

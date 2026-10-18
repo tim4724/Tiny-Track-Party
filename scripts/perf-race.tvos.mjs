@@ -32,8 +32,8 @@
 // let the rule steer, and report where it settled.
 //
 // PIN EVERY ARM OF A COMPARISON. Free-running, a run reports whichever rung the
-// rule ended on, and on a box with no GPU timer the scale is a one-way ratchet:
-// a run that stumbled early reports the softer rung for the whole of its length.
+// rule ended on, and a run that stumbled early can report the softer rung for
+// most of its length (the climb back waits at least kUpWaitSec).
 // Two runs that ended on different rungs are two different questions, so READ
 // THE BUFFER SIZE OFF THE HEADER either way.
 //

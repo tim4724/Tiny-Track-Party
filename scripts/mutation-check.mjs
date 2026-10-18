@@ -534,24 +534,79 @@ export const MUTATIONS = [
     expect: 'render_scale',
   },
   {
-    // A scene build drops the cost model's observation: a fit whose two points
-    // straddle a scene change measures a slope belonging to neither, and the
-    // rule then refuses to probe (a refused FIT is evidence, not missing data).
-    name: 'render-scale/scene-keeps-the-fit',
+    // Missed frames are counted against the period the POINT is due at — the
+    // panel's times the divisor. Against one vsync, the host's deliberate half
+    // rate reads as a miss a frame and walks a healthy box to the floor.
+    name: 'render-scale/missed-against-one-vsync',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '  prev_ = RenderScaleSample{0.0, 0.0};\n}',
-    replace: '}',
+    find: 'const double due = pointPeriodMs(point_, limits);',
+    replace: 'const double due = limits.panelMs;',
     expect: 'render_scale',
   },
   {
-    // 60 fps IS the bar. Dividing by the raw fastest present instead reads a
-    // 120 Hz laptop holding a solid 60 as "a whole period late" every window —
-    // and this is the arm that may only step DOWN, so it walks a machine doing
-    // nothing wrong from 2160 lines to 1080 and never gives them back.
-    name: 'render-scale/late-ratio-vs-raw-floor',
-    file: 'native/libttp-runtime/ttp/render_scale.h',
-    find: 'const double bar = std::max(cost.presentFloorMs, 1000.0 / kDefaultPanelHz);',
-    replace: 'const double bar = cost.presentFloorMs;',
+    // A scene's first seconds are assembly, not cost. Judged, a race that is
+    // slow while it builds steps down off its own loading.
+    name: 'render-scale/grace-judged',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (!gaps.empty() && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {',
+    replace: 'if (!gaps.empty()) {',
+    expect: 'render_scale',
+  },
+  {
+    // A failed climb doubles the wait. Without it a rung the device cannot hold
+    // is tried every kUpWaitSec for as long as the scene lasts — two resizes and
+    // a stutter each time.
+    name: 'render-scale/failed-rung-not-backed-off',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'fails_[slot][at] = judged_ < kJudgeSec ? kMaxFails : std::min(fails_[slot][at] + 1, kMaxFails);',
+    replace: '{}',
+    expect: 'render_scale',
+  },
+  {
+    // A scene build forgives NOTHING: a cup is one session. Forgiven, every
+    // race of a four-player cup tries 1080 again forty seconds in.
+    name: 'render-scale/scene-forgives-the-fails',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '  enteredMs_ = tMs;\n  judged_ = 0;\n  head_ = 0;\n}',
+    replace: '  enteredMs_ = tMs;\n  judged_ = 0;\n  head_ = 0;\n  for (auto& row : fails_) for (int& f : row) f = 0;\n}',
+    expect: 'render_scale',
+  },
+  {
+    // A scene starts where its cell count left off. Without it the lobby's
+    // 1080 is where every four-player race starts, and each one drops on its
+    // grid.
+    name: 'render-scale/count-not-remembered',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale;',
+    replace: '',
+    expect: 'render_scale',
+  },
+  {
+    // A lobby that dipped a rung on its own boot must not drag the first race to
+    // the floor: the race is placed below the lobby's BEST rung, not below the dip.
+    name: 'render-scale/placed-below-the-dip',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'place = std::max(std::min(at, top - 1), 0);',
+    replace: 'place = std::max(at - 1, 0);',
+    expect: 'render_scale',
+  },
+  {
+    // A count not seen yet that draws more cells than the scene before it starts
+    // a rung lower — and below the BEST that scene reached, not below a dip.
+    name: 'render-scale/new-count-not-lowered',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '      place = std::max(std::min(at, top - 1), 0);',
+    replace: '',
+    expect: 'render_scale',
+  },
+  {
+    // A rung held for kFailSec clears its failures. Without it a rung failed
+    // once waits the longest there is for the life of the process — a party
+    // that shrank from four players to two would never get 1080 back.
+    name: 'render-scale/held-rung-keeps-its-fails',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (tMs - enteredMs_ >= kFailSec * 1000.0) fails_[slot][at] = 0;',
+    replace: '{}',
     expect: 'render_scale',
   },
   {
