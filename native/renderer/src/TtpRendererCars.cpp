@@ -368,15 +368,15 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
             w.hasWheelOff = true;
         }
     }
-    // MonsterRig graft seat: bbox of the body with the WHEELS (and axle) taken
-    // off, centred on the kit's cab slot in x/z and bottom-aligned to the slot
-    // floor plus MOUNT_LIFT (−0.07, which drops the cab onto the suspension
-    // rods). The slot is a fixed property of vehicle-monster-truck.glb — the
-    // cab shares its vertex buffer with the chassis (the split is index-only),
-    // so its runtime AABB spans the whole body and can't be measured here.
+    // MonsterRig graft seat: the body with the WHEELS (and axle) taken off,
+    // stretched to the truck's chassis width and wheel-footprint length with
+    // its own height kept (a car's body is narrower than its wheels, and the
+    // truck's cab is chassis-wide), centred on the footprint, its bottom on
+    // the cab slot floor plus MOUNT_LIFT (−0.07, onto the suspension rods).
+    // The truck's measures are constants because its cab shares the chassis's
+    // vertex buffer (the split is index-only), so no runtime AABB isolates it.
     {
-        constexpr float SLOT_MIN_Y = 0.4375f, SLOT_CX = 0.0f, SLOT_CZ = -0.03125f;
-        constexpr float MOUNT_LIFT = -0.07f;
+        constexpr float SLOT_MIN_Y = 0.4375f, MOUNT_LIFT = -0.07f;
         auto& rcm = mEngine->getRenderableManager();
         float3 lo{ 1e9f }, hi{ -1e9f };
         for (size_t k = 0; k < asset->getEntityCount(); k++) {
@@ -397,13 +397,16 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
                         hi = max(hi, wp);
                     }
         }
-        if (hi.y > lo.y) {
-            w.monsterMount = { SLOT_CX - (lo.x + hi.x) * 0.5f,
+        if (hi.y > lo.y && hi.x > lo.x && hi.z > lo.z) {
+            const float3 s{ MONSTER_BODY_HALF.x / ((hi.x - lo.x) * 0.5f), 1.0f,
+                            MONSTER_BODY_HALF.y / ((hi.z - lo.z) * 0.5f) };
+            w.monsterBodyScale = s;
+            w.monsterMount = { -(lo.x + hi.x) * 0.5f * s.x,
                                (SLOT_MIN_Y - lo.y) + MOUNT_LIFT,
-                               SLOT_CZ - (lo.z + hi.z) * 0.5f };
+                               -(lo.z + hi.z) * 0.5f * s.z };
             w.monsterRoof = w.monsterMount.y + hi.y;
             w.monsterSeat = SLOT_MIN_Y + MOUNT_LIFT;
-            w.monsterBodyHalf = { (hi.x - lo.x) * 0.5f, (hi.z - lo.z) * 0.5f };
+            w.monsterBodyHalf = MONSTER_BODY_HALF;
         }
     }
     // Footprint (blob shadow + boost-disk sizing) from the asset AABB — the JS

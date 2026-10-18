@@ -954,13 +954,15 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // it pivots about the cab slot, not about the car's road origin.
             //
             // Drawn at the footprint's length (mMonsterHalfLen), the grafted
-            // body with it.
+            // body with it — the body first fitted to the truck
+            // (monsterBodyScale, measured at load with the mount).
             mat4f rigPose = flat;
             if (isMonster) {
                 CarWheels& w = mCarWheels[i];
                 w.rigScale = mMonsterHalfLen > 0 ? c.halfLen / mMonsterHalfLen : 1;
                 rigPose = flat * mat4f::scaling(float3{ w.rigScale });
-                pose = rigPose * mat4f::translation(w.monsterMount) * bodyRot;
+                pose = rigPose * mat4f::translation(w.monsterMount)
+                     * mat4f::scaling(w.monsterBodyScale) * bodyRot;
             } else if (c.monster > 0.5f && (mMonsterInstances.size() <= i || !mMonsterInstances[i])) {
                 pose = pose * mat4f::scaling(float3{ 1.45f, 1.35f, 1.45f }); // no GLB fallback
             }

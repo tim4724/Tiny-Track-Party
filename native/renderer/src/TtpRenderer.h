@@ -989,6 +989,11 @@ private:
     // steerYaw (±WHEEL_TURN_MAX — the expo-shaped steer, so the deflection
     // tracks the car's yaw RATE rather than the raw tilt) and all four roll at
     // WHEEL_SPIN_SCALE × v/r.
+    //
+    // The half width and length a body grafted onto the monster truck is
+    // fitted to: the kit truck's chassis width and wheel footprint, in its
+    // own units (vehicle-monster-truck.glb).
+    static constexpr filament::math::float2 MONSTER_BODY_HALF{ 0.21875f, 0.4375f };
     struct CarWheels {
         utils::Entity fl, fr, bl, br;
         filament::math::float3 flT, frT, blT, brT; // original local translations
@@ -1042,16 +1047,18 @@ private:
         float roof = 0.45f, monsterRoof = 0.85f;   // roof over the car's origin (asset AABB), and with
                                                    // its body grafted into the monster rig — name tags
         float monsterSeat = 0.3675f;               // where that grafted body sits in the rig, and its
-        filament::math::float2 monsterBodyHalf{ 0.26f, 0.44f };  // half width/length, wheels off
+        filament::math::float2 monsterBodyHalf = MONSTER_BODY_HALF;  // half width/length, wheels off
         bool monsterOn = false;                    // morph edge detect
         float rigScale = 1;                        // the monster rig's drawn scale (mMonsterHalfLen);
                                                    // set by renderCars, read only while monster
         float popT = 0;                            // grow/shrink pop clock (0.34 s)
         utils::Entity axle;                        // exposed axle rod (some models) — stripped by MonsterRig
         filament::math::float3 axleT{};
-        // MonsterRig graft offset: the wheel-less body's seat in the kit cab
-        // slot (centre in x/z, bottom-aligned + MOUNT_LIFT).
+        // MonsterRig graft offset: the wheel-less body's seat on the kit truck
+        // (centred on its wheel footprint, bottom on the cab slot floor + MOUNT_LIFT).
         filament::math::float3 monsterMount{ 0, 0.28f, 0 };
+        filament::math::float3 monsterBodyScale{ 1 };  // and the body's fit to the truck: chassis-wide,
+                                                   // wheel-footprint-long, its own height
     };
     std::vector<CarWheels> mCarWheels;
     // The rolling radius of whichever tyre is actually ON THE ROAD: the rig's
