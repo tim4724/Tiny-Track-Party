@@ -57,10 +57,10 @@
     "tree-snow-b.glb": { "kit": "holiday", "model": "tree-snow-b" },
     "tree-snow-c.glb": { "kit": "holiday", "model": "tree-snow-c" },
     "tree.glb": { "kit": "toy-car", "model": "tree" },
+    "vehicle-gt.glb": { "generated": "scripts/gen-concept-cars.py" },
+    "vehicle-jeep.glb": { "generated": "scripts/gen-concept-cars.py" },
+    "vehicle-lemans.glb": { "generated": "scripts/gen-concept-cars.py" },
     "vehicle-monster-truck.glb": { "kit": "toy-car", "model": "vehicle-monster-truck" },
-    "vehicle-racer-low.glb": { "kit": "toy-car", "model": "vehicle-racer-low" },
-    "vehicle-racer.glb": { "kit": "toy-car", "model": "vehicle-racer" },
-    "vehicle-speedster.glb": { "kit": "toy-car", "model": "vehicle-speedster" },
-    "vehicle-vintage-racer.glb": { "kit": "toy-car", "model": "vehicle-vintage-racer" }
+    "vehicle-stock.glb": { "generated": "scripts/gen-concept-cars.py" }
   }
 }

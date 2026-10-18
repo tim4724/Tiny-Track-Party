@@ -26,7 +26,7 @@
 // rounded rect — native/renderer/CLAUDE.md.)
 //
 //   node scripts/capture-car-thumbs.js                    # all roster cars
-//   node scripts/capture-car-thumbs.js --name vehicle-racer-low
+//   node scripts/capture-car-thumbs.js --name vehicle-gt
 //   node scripts/capture-car-thumbs.js --yaw 215 --pitch 22 --margin 1.18
 //
 // Flags: --name (one GLB basename, else all roster), --frames (24), --size (256
@@ -47,7 +47,7 @@ const { installThreeRoutes } = require('./lib/three-routes');
 const ROOT = path.join(__dirname, '..');
 
 // Roster (parallels CAR_MODELS in public/shared/protocol.js — Dash/Bolt/Carve/Rumble).
-const ROSTER = ['vehicle-racer', 'vehicle-speedster', 'vehicle-racer-low', 'vehicle-vintage-racer'];
+const ROSTER = ['vehicle-gt', 'vehicle-lemans', 'vehicle-stock', 'vehicle-jeep'];
 
 function parseArgs(argv) {
   const out = {};

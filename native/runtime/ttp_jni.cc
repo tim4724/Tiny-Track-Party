@@ -312,6 +312,11 @@ void n_ttp_display_cells(JNIEnv* env, jclass, jbyteArray a0) {
     ttp_display_cells(s0.get());
 }
 
+jbyteArray n_ttp_display_chase_rig_json(JNIEnv* env, jclass, jdouble a0, jdouble a1, jdouble a2, jdouble a3, jdouble a4, jdouble a5) {
+    (void) env;
+    return toBytes(env, ttp_display_chase_rig_json((double) a0, (double) a1, (double) a2, (double) a3, (double) a4, (double) a5));
+}
+
 jdouble n_ttp_display_debug_chase_pitch(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jdouble) ttp_display_debug_chase_pitch((double) a0);
@@ -416,6 +421,11 @@ jbyteArray n_ttp_display_kit_field_layout(JNIEnv* env, jclass) {
 void n_ttp_display_look(JNIEnv* env, jclass, jdouble a0, jdouble a1, jdouble a2, jdouble a3, jdouble a4, jdouble a5) {
     (void) env;
     ttp_display_look((double) a0, (double) a1, (double) a2, (double) a3, (double) a4, (double) a5);
+}
+
+void n_ttp_display_look_fov(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    ttp_display_look_fov((double) a0);
 }
 
 void n_ttp_display_model_variant(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
@@ -1428,6 +1438,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_cell_cards", "(I)V", (void*) n_ttp_display_cell_cards },
     { "ttp_display_cell_rects", "([FI)I", (void*) n_ttp_display_cell_rects },
     { "ttp_display_cells", "([B)V", (void*) n_ttp_display_cells },
+    { "ttp_display_chase_rig_json", "(DDDDDD)[B", (void*) n_ttp_display_chase_rig_json },
     { "ttp_display_debug_chase_pitch", "(D)D", (void*) n_ttp_display_debug_chase_pitch },
     { "ttp_display_debug_decals", "()[B", (void*) n_ttp_display_debug_decals },
     { "ttp_display_debug_features", "(I)V", (void*) n_ttp_display_debug_features },
@@ -1449,6 +1460,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_kit_field", "(I)V", (void*) n_ttp_display_kit_field },
     { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
+    { "ttp_display_look_fov", "(D)V", (void*) n_ttp_display_look_fov },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },
     { "ttp_display_name_tag_size", "(IFFF)V", (void*) n_ttp_display_name_tag_size },
     { "ttp_display_name_tags", "([FI)I", (void*) n_ttp_display_name_tags },

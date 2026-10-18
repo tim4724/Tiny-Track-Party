@@ -14,7 +14,6 @@ namespace ttp {
 
 // ---- module constants (Game.js) ---------------------------------------------
 static const double ACCEL = 9.0;
-static const double VMAX = 11.6;
 static const double BRAKE_DECEL = 5.8;
 static const double TURN_RATE = 1.16;
 static const double STEER_EXPO = 1.25;

@@ -11,8 +11,8 @@
 // vertex accessors (POSITION/NORMAL/UV) and material — only the index list is
 // split — so no vertex data is touched and the rod looks pixel-identical.
 //
-//   node scripts/extract-rod.js public/assets/toycar/vehicle-speedster.glb
-//   node scripts/extract-rod.js public/assets/toycar/vehicle-speedster.glb --dry
+//   node scripts/extract-rod.js public/assets/toycar/<car>.glb
+//   node scripts/extract-rod.js public/assets/toycar/<car>.glb --dry
 
 const fs = require('fs');
 const { parseGLB, readAccessor } = require('./glb');

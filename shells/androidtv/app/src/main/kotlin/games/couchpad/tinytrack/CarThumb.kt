@@ -43,7 +43,7 @@ object CarThumb {
     }
 
     /**
-     * The still for a car MODEL name (`vehicle-racer`, …), or null when the model
+     * The still for a car MODEL name (`vehicle-gt`, …), or null when the model
      * has no baked render.
      *
      * A miss is a STAGING mistake rather than a design — same rule as

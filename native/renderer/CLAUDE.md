@@ -251,7 +251,7 @@ A fitted k-gon and an outline-mask arm were built and not chosen
 (`CarShadowTuning`'s header says why).
 
 **The AABB cannot do this job, which is the whole reason the footprint exists.**
-All four roster cars measure x ±0.26 to ±0.28 by z ±0.438 and are
+All four roster cars are built to nearly the same bounding box and are
 origin-centred, so a shape sized off the bounding box is the SAME shape for
 every one of them. Only the outline inside the box differs.
 

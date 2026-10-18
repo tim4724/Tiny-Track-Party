@@ -16,10 +16,10 @@ import { assetUrl } from './assetUrl.js';
 // to tint the monster chip's cab like the model it grafts. Cosmetic: nothing
 // races on them.
 export const CAR_BODY_COLORS = [
-  '#5cbb80', // vehicle-racer-low · Dash
-  '#dd5533', // vehicle-speedster · Bolt
-  '#6688cc', // vehicle-racer · Carve
-  '#aa77dd'  // vehicle-vintage-racer · Rumble
+  '#5cbb80', // vehicle-gt · Dash
+  '#dd5533', // vehicle-lemans · Bolt
+  '#6688cc', // vehicle-stock · Carve
+  '#aa77dd'  // vehicle-jeep · Rumble
 ];
 
 let icons = null;

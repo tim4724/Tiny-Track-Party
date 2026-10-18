@@ -161,7 +161,7 @@ async function bringUpRealDisplay(relayOpts = {}, opts = {}) {
     FastlaneImpl: NativePartyFastlane,
     // Chooser content, as display/main.js supplies it. Small on purpose here; the
     // 16 KiB cap gets its own fixture below.
-    carChooser: [{ id: 'vehicle-racer-low', name: 'Dash' }, { id: 'vehicle-speedster', name: 'Bolt' }],
+    carChooser: [{ id: 'vehicle-gt', name: 'Dash' }, { id: 'vehicle-lemans', name: 'Bolt' }],
     colorPalette: ['#e6492d', '#f2b134', '#2bb673', '#2d9cdb'],
     trackChooser: [{ id: 'tidepool', name: 'Tidepool', cup: 'beach' }],
     progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }], stars: { earned: 2, total: 15 } },
@@ -743,7 +743,7 @@ test('wire: the retained snapshot fits prod\'s 16 KiB cap AFTER the C++ round tr
       order: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ playerId: i, name: 'Racer ' + i, colorIndex: i % 8, ai: i > 3, finished: true, time: 61.234 + i, points: 9 - i, gained: 0 })),
       series: { cupId: 'beach', cupName: 'Beach Cup', endless: false, raceIndex: 1, raceCount: 4, nextTrackId: 'lagoon', nextTrackName: 'Lagoon', final: false, autoAdvanceMs: 12000 },
     },
-    cars: [{ id: 'vehicle-racer-low', name: 'Dash', stats: { accel: 1.04, vmax: 1.02, turn: 1.1, mass: 1 } }],
+    cars: [{ id: 'vehicle-gt', name: 'Dash', stats: { accel: 1.04, vmax: 1.02, turn: 1.1, mass: 1 } }],
     colors: ['#e6492d', '#f2b134', '#2bb673', '#2d9cdb'],
     tracks,
   };

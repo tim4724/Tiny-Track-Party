@@ -28,7 +28,10 @@ namespace ttp {
 // A car id. NONE = null/absent (an ownerless banana, a target-less rocket).
 using Id = ScalarId;
 
-struct Stats { double accel = 1, vmax = 1, turn = 1, mass = 1, halfLen = 0.44, halfWid = 0.26; };
+// A car's top speed in world units per second is VMAX times its stat; the
+// chase rig normalises speed by it, which is why the display core reads it too.
+constexpr double VMAX = 11.6;
+struct Stats { double accel = 1, vmax = 1, turn = 1, mass = 1, halfLen = 0.44, halfWid = 0.28; };
 
 // A processInput / AI-drive message. Fields are applied only when present with
 // the right type (a partial message is valid; production always sends all three).
@@ -74,7 +77,7 @@ struct Car {
   double finishTime = 0;
   int rank = 1;
   Pose pose;
-  double accel = 0, vmax = 0, turn = 0, mass = 1, halfLen = 0.44, halfWid = 0.26;
+  double accel = 0, vmax = 0, turn = 0, mass = 1, halfLen = 0.44, halfWid = 0.28;
   bool curbLimSet = false;
   double curbLim = 0;
   bool onWall = false;

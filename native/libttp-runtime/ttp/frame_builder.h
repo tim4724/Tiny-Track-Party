@@ -156,6 +156,7 @@ struct DisplayState {
     // answers costs nothing to override and removes the whole class.
     int camMode = CAM_COVERAGE;
     V3 freeEye, freeTarget;
+    float freeFov = 0;   // the free camera's lens; 0 = the overview's (ttp_display_look_fov)
     bool fog = true;
     Framing framing;
 

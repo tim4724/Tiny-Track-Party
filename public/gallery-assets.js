@@ -342,9 +342,14 @@ async function buildLegend() {
 // them in .cache/, see that script's header), so everything here has to survive
 // them being absent. That is the empty state below rather than an error — on a
 // fresh worktree it is the normal condition.
-let kitModels = null;   // [{ id, name, tris, inGame }] in field order, once fetched
-let kitLayout = [];     // the renderer's answer, same order
-let kitRows = [];       // the row elements, same order
+let kitModels = null;   // [{ id, name, tris, inGame }], once fetched
+let kitLayout = [];     // the renderer's answer, in fieldModels' order
+let kitRows = [];       // the row elements, in the same order
+// The CONCEPT CARS stand in the same field, ahead of the kits: candidates
+// modelled for this game (scripts/gen-concept-cars.py), each roster car
+// heading its own variations, so they are judged side by side.
+let conceptModels = null;  // the same shape, plus each one's `note`
+let fieldModels = [];      // what the field was last built from
 // A SHORTLIST is a set of kit models picked for one cup (.cache/kenney-kits/
 // shortlist.json, written while choosing decorations; absent is normal). Picking
 // one stands only those models, under that cup's biome, so they are judged in
@@ -401,11 +406,29 @@ async function loadKitModels() {
   return out;
 }
 
+async function loadConceptModels() {
+  const index = await (await fetch('/assets/concepts/index.json')).json();
+  const out = [];
+  for (const m of index.models) {
+    if (m.base) {
+      out.push({ id: m.base, kit: 'Roster', name: m.base, tris: '', inGame: m.base,
+                 group: m.name, note: 'As it ships today; the rows below are its variations.' });
+    }
+    out.push({ id: `concept:${m.name}`, kit: 'Concept cars', name: m.name, tris: m.tris,
+               inGame: null, note: m.note });
+  }
+  return out;
+}
+
 function matching() {
   const q = kitFilter.value.trim().toLowerCase();
   const cup = kitShortlist.find((c) => c.id === kitSet.value);
   const set = cup && new Set(cup.models.map((m) => `kit:${m}`));
-  return kitModels.filter((m) => (!set || set.has(m.id)) && (!q || m.name.toLowerCase().includes(q)));
+  // A shortlist narrows the KITS; the concept cars stand regardless. A roster
+  // car heading a group of variations stays with them under a filter that
+  // matches the variation it heads (`group`), so `tk-` keeps the bases.
+  return fieldModels.filter((m) => (!set || !m.id.startsWith('kit:') || set.has(m.id))
+    && (!q || m.name.toLowerCase().includes(q) || (m.group || '').toLowerCase().includes(q)));
 }
 
 // Build the field, then the list of what is in it. A rebuild is a scene build
@@ -415,18 +438,22 @@ async function buildKitField() {
   const s = showroom();
   if (!s) return;
   const build = ++kitBuild;
-  if (!kitModels) {
+  if (state.assetConcepts && !conceptModels) conceptModels = await loadConceptModels();
+  if (state.assetKits && !kitModels) {
     kitEmpty('Loading the kits…');
     try {
       kitModels = await loadKitModels();
     } catch (_) {
-      kitEmpty('The kits are not on this machine yet. Run `npm run fetch:kits` and reload — '
-        + 'it downloads the CC0 kits into .cache/ (they are not in the tree).');
-      return;
+      if (!state.assetConcepts) {
+        kitEmpty('The kits are not on this machine yet. Run `npm run fetch:kits` and reload — '
+          + 'it downloads the CC0 kits into .cache/ (they are not in the tree).');
+        return;
+      }
     }
   }
+  fieldModels = [...(state.assetConcepts ? conceptModels : []), ...(state.assetKits ? kitModels || [] : [])];
   const shown = matching();
-  kitCount.textContent = `${shown.length} of ${kitModels.length} models`;
+  kitCount.textContent = `${shown.length} of ${fieldModels.length} models`;
   // Every model is a fetch fired at once, and a few thousand of them exhaust
   // the browser (ERR_INSUFFICIENT_RESOURCES) and fail the whole build.
   if (shown.length > KIT_FIELD_MAX) {
@@ -452,13 +479,15 @@ async function buildKitField() {
 }
 
 function currentCup() { return kitShortlist.find((c) => c.id === kitSet.value) || null; }
-function verdictKey(m) { const c = currentCup(); return c ? `${c.id}~${m.id.slice('kit:'.length)}` : null; }
+// Only a KIT model takes a verdict; a concept car is not up for one.
+function verdictKey(m) { const c = currentCup(); return c && m.id.startsWith('kit:') ? `${c.id}~${m.id.slice('kit:'.length)}` : null; }
 
 function kitGoTo(i) {
   if (!kitShown.length) return;
   kitAt = (i + kitShown.length) % kitShown.length;
   const s = showroom();
-  if (s) s.lookAtKit(kitLayout[kitAt]);
+  const m = kitShown[kitAt];
+  if (s) s.lookAtKit(kitLayout[kitAt], m.kit === 'Roster' || m.kit === 'Concept cars');
   kitRows.forEach((r, k) => r.classList.toggle('kit-row--at', k === kitAt));
   kitRows[kitAt].scrollIntoView({ block: 'nearest' });
   paintDecide();
@@ -545,6 +574,12 @@ function buildKitList(shown) {
     tris.className = 'kit-row__tris';
     tris.textContent = `${m.tris}`;
     row.append(name, tris);
+    if (m.note) {
+      const note = document.createElement('span');
+      note.className = 'kit-row__note';
+      note.textContent = m.note;
+      row.append(note);
+    }
     row.addEventListener('click', () => {
       kitGoTo(i);
       frame.focus();   // the camera keys live in the FRAME's document
@@ -561,7 +596,7 @@ function buildKitList(shown) {
 let filterTimer = 0;
 kitFilter.addEventListener('input', () => {
   clearTimeout(filterTimer);
-  if (state.assetKits) filterTimer = setTimeout(buildKitField, 450);
+  if (state.assetKits || state.assetConcepts) filterTimer = setTimeout(buildKitField, 450);
 });
 kitSet.addEventListener('change', () => {
   const cup = kitShortlist.find((c) => c.id === kitSet.value);
@@ -569,12 +604,13 @@ kitSet.addEventListener('change', () => {
     biomeSel.value = cup.biome;
     biomeSel.dispatchEvent(new Event('change'));   // the biome picker's own path
   }
-  if (state.assetKits) buildKitField();
+  if (state.assetKits || state.assetConcepts) buildKitField();
 });
 
-Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', () => {
-  kitSheet.hidden = !state.assetKits;
-  if (state.assetKits) {
+function syncField() {
+  const on = !!(state.assetKits || state.assetConcepts);
+  kitSheet.hidden = !on;
+  if (on) {
     buildKitField();
   } else {
     // Tear the field down rather than leaving it standing out of sight: it is
@@ -585,8 +621,10 @@ Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', () => {
     kitShown = [];
     paintDecide();
   }
-});
-kitSheet.hidden = !state.assetKits;
+}
+Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', syncField);
+Gallery.bindCheckbox(state, 'asset-concepts', 'assetConcepts', syncField);
+kitSheet.hidden = !(state.assetKits || state.assetConcepts);
 
 
 // ---- boot -------------------------------------------------------------------
@@ -630,7 +668,7 @@ whenReady((s) => {
   // LAST, and the one that does not collapse into the build above: it has
   // several hundred models to fetch first, and it flies the camera when it
   // lands. A page reloaded with the field up comes back up standing in it.
-  if (state.assetKits) buildKitField();
+  if (state.assetKits || state.assetConcepts) buildKitField();
 });
 
 Gallery.initMobileOptionsToggle();

@@ -26,7 +26,7 @@ class AssetStore(private val assets: AssetManager) {
         null
     }
 
-    /** A kit model by its base name, e.g. `vehicle-racer`. */
+    /** A kit model by its base name, e.g. `vehicle-gt`. */
     fun glb(name: String): ByteArray? = bundled("toycar/$name.glb")
 
     /**

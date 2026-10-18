@@ -780,14 +780,29 @@ export function runDisplayScenario(opts, ctx) {
         // needs a step closer than a loop piece, and a row read from one fixed
         // range is a row you cannot judge. Off the LAYOUT, so the camera cannot
         // end up somewhere the model is not.
-        lookAtKit(spot) {
+        lookAtKit(spot, car) {
           if (!spot) return;
+          if (car) {
+            // A car: the race's own chase rig behind it, trailing as it does
+            // flat out, where most of a race is driven, with the lens at that
+            // speed — so it is judged from where a player sees it. The field
+            // stands every model as its file does, and a car's nose is -z.
+            const rig = scene.display.chaseRig(spot.x, spot.y, spot.z, 0, -1, 1);
+            const dir = { x: rig.target[0] - rig.eye[0], y: rig.target[1] - rig.eye[1],
+                          z: rig.target[2] - rig.eye[2] };
+            cam.eye = { x: rig.eye[0], y: rig.eye[1], z: rig.eye[2] };
+            cam.yaw = Math.atan2(dir.x, dir.z);
+            cam.pitch = Math.asin(dir.y / Math.hypot(dir.x, dir.y, dir.z));
+            scene.display.lookFov(rig.fov);
+            return;
+          }
           // Height counts as much as footprint here: the tall thin models
           // (gantries, palms) are exactly the ones a footprint under-reads.
           const reach = Math.max(spot.w, spot.d, spot.h, 1.0);
           cam.eye = { x: spot.x, y: spot.y + reach * 0.45, z: spot.z - reach * 2.4 };
           cam.yaw = 0;              // +z, straight down the row's near side
           cam.pitch = -0.1;
+          scene.display.lookFov(0);
         },
         // Which variant of a prop the SCENE is built with, which is the answer
         // the bench exists to reach: pick one here and it is what the showroom
@@ -806,6 +821,7 @@ export function runDisplayScenario(opts, ctx) {
           cam.eye = { ...START_CAM.eye };
           cam.yaw = START_CAM.yaw;
           cam.pitch = START_CAM.pitch;
+          scene.display.lookFov(0);
         }
       };
     }

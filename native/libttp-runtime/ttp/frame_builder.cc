@@ -374,7 +374,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         TtpViewInput& v = outViews[0];
         v.car = subject;
         lookAtWorld(v.world, eye, target, up);
-        v.fov = chase ? COVER_CHASE_FOV : follow ? FOLLOW_FOV : OVERVIEW_FOV;
+        v.fov = chase ? COVER_CHASE_FOV : follow ? FOLLOW_FOV
+              : mode == CAM_FREE && d.freeFov > 0 ? d.freeFov : OVERVIEW_FOV;
         v.aspect = aspect;
         v.nearZ = follow || chase ? CAM_NEAR : mode == CAM_FREE ? FREE_NEAR : OV_NEAR;
         v.farZ = follow || chase ? CAM_FAR : OV_FAR;

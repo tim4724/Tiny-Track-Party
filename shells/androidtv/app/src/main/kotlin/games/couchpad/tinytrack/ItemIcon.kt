@@ -67,10 +67,10 @@ object ItemIcon {
      * `tests/item-icons.test.js` holds it to the JS entry for entry.
      */
     val CAR_BODY_COLORS = intArrayOf(
-        0x5CBB80,   // vehicle-racer-low · Dash
-        0xDD5533,   // vehicle-speedster · Bolt
-        0x6688CC,   // vehicle-racer · Carve
-        0xAA77DD,   // vehicle-vintage-racer · Rumble
+        0x5CBB80,   // vehicle-gt · Dash
+        0xDD5533,   // vehicle-lemans · Bolt
+        0x6688CC,   // vehicle-stock · Carve
+        0xAA77DD,   // vehicle-jeep · Rumble
     )
 
     /**

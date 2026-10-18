@@ -18,8 +18,7 @@ struct RosterSlot {
     let carIndex: Int
     let color: String
     /// A toy-car kit base name from `protocol.js`'s `CAR_MODELS`
-    /// (`vehicle-racer-low`, `vehicle-speedster`, `vehicle-racer`,
-    /// `vehicle-vintage-racer`).
+    /// (`vehicle-gt`, `vehicle-lemans`, `vehicle-stock`, `vehicle-jeep`).
     let model: String
     let player: Bool
 }

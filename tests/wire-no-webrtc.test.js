@@ -36,7 +36,7 @@ test('wire: with WebRTC absent, both ends come up fastlane-less and CONTROL ride
     RoomFlowImpl: NativeRoomFlow,
     PartyConnectionImpl: NativePartyConnection,
     FastlaneImpl: NativePartyFastlane,
-    carChooser: [{ id: 'vehicle-racer-low', name: 'Dash' }],
+    carChooser: [{ id: 'vehicle-gt', name: 'Dash' }],
     colorPalette: ['#e6492d'],
     trackChooser: [{ id: 'tidepool', name: 'Tidepool', cup: 'beach' }],
     defaultTrackId: 'tidepool',

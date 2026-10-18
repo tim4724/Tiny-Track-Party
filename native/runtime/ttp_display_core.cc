@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -666,6 +667,42 @@ void ttp_display_look(double eyeX, double eyeY, double eyeZ,
     if (!g_disp) return;
     g_disp->freeEye = { (float) eyeX, (float) eyeY, (float) eyeZ };
     g_disp->freeTarget = { (float) tgtX, (float) tgtY, (float) tgtZ };
+}
+
+void ttp_display_look_fov(double deg) {
+    if (g_disp) g_disp->freeFov = (float) deg;
+}
+
+const char* ttp_display_chase_rig_json(double x, double y, double z, double fx, double fz,
+                                       double spd) {
+    static char buf[160];
+    const double len = std::sqrt(fx * fx + fz * fz);
+    const ttp::Vec3 fwd = len > 0 ? ttp::Vec3{ fx / len, 0.0, fz / len } : ttp::Vec3{ 0.0, 0.0, -1.0 };
+    ttp::Pose pose;
+    pose.pos = ttp::Vec3{ x, y, z };
+    pose.forward = fwd;
+    pose.up = ttp::Vec3{ 0.0, 1.0, 0.0 };
+    // The rig is run, not solved: a fresh one snaps on its first update, then
+    // the car drives the straight and the spring settles to its lag (v/rate)
+    // and the lens to its speed width, as in a race. Four seconds is well past
+    // the slowest ease (FOV_FALL). The height is the authored one unless the
+    // debug pitch slider has moved it, like a race.
+    const float height = g_disp ? g_disp->chaseHeight : ttp::rt::CHASE_HEIGHT;
+    const double v = spd * ttp::VMAX, dt = 1.0 / 120.0;
+    ttp::rt::ChaseCam rig;
+    double run = 0;
+    for (int i = 0; i < 480; i++) {
+        rig.update(pose, (float) spd, (float) dt, false, height);
+        run += v * dt;
+        pose.pos = ttp::Vec3{ x + fwd.x * run, y, z + fwd.z * run };
+    }
+    // Back to the spot the car was asked at.
+    const double ex = rig.pos.x - fwd.x * run, ez = rig.pos.z - fwd.z * run;
+    const double tx = rig.target.x - fwd.x * run, tz = rig.target.z - fwd.z * run;
+    std::snprintf(buf, sizeof(buf),
+            "{\"eye\":[%.4f,%.4f,%.4f],\"fov\":%.2f,\"target\":[%.4f,%.4f,%.4f]}",
+            ex, (double) rig.pos.y, ez, (double) rig.fov, tx, (double) rig.target.y, tz);
+    return buf;
 }
 
 void ttp_display_fog(int enabled) {

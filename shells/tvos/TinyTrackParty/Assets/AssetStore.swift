@@ -101,7 +101,7 @@ final class AssetStore {
     /// A model from the toy-car kit by its base name — the spelling every layer
     /// above uses, because that is how the engine names them:
     /// `ttp_theme_scenery_models` answers `["tree", "tree-pine"]` and
-    /// `protocol.js`'s `CAR_MODELS` names `vehicle-racer`.
+    /// `protocol.js`'s `CAR_MODELS` names `vehicle-gt`.
     ///
     /// Not cached. The bundle read is a memory map serviced by the unified page
     /// cache, so a per-race rebuild costs a handful of `open`s; a dictionary here

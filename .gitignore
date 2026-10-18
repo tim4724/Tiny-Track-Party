@@ -50,3 +50,6 @@ scripts/.preview-tracks.html
 # repeatedly outlived their session and then failed `npm run lint`. This is
 # where they go instead; eslint.config.js ignores it for the same reason.
 scratch/
+
+# Python bytecode (scripts/toy_cars.py is imported by gen-concept-cars.py)
+__pycache__/

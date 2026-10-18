@@ -221,8 +221,8 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * needs. `wantJson` is, in fetch order:
  *
  *   [{"name":"scenery0.glb","tag":"tree"},
- *    {"name":"car-model2.glb","tag":"vehicle-racer"},
- *    {"name":"car-model2-ghost.glb","tag":"vehicle-racer","from":"car-model2.glb"}]
+ *    {"name":"car-model2.glb","tag":"vehicle-gt"},
+ *    {"name":"car-model2-ghost.glb","tag":"vehicle-gt","from":"car-model2.glb"}]
  *
  * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in your own vocabulary — a kit
  * model's base name, a texture's authored URI. Not the asset name:
@@ -648,6 +648,20 @@ TTP_ABI void ttp_display_camera(int mode);
 /* Free-cam pose (TTP_CAM_FREE only): eye + look target in world units. */
 TTP_ABI void ttp_display_look(double eyeX, double eyeY, double eyeZ,
                               double tgtX, double tgtY, double tgtZ);
+
+/* The free camera's lens, as a vertical fov in degrees; 0 (the default) is
+ * the overview's. The asset gallery sets the race lens here when it parks the
+ * free camera on a car's chase rig, so what it shows is what a player sees. */
+TTP_ABI void ttp_display_look_fov(double deg);
+
+/* The race's chase rig behind a car at (x, y, z) on level ground, nose along
+ * (fx, fz) in plan, driving a straight at `spd` of a stat-1 car's top speed
+ * (0 parked, 1 flat out), settled: {"eye":[x,y,z],"fov":deg,"target":[x,y,z]}
+ * in world units, relative to that spot. The rig itself answers
+ * (ttp/camera.h), so a gallery can stand its free camera where a player's
+ * would be without a copy of the rig's numbers. Valid until the next call. */
+TTP_ABI const char* ttp_display_chase_rig_json(double x, double y, double z,
+                                               double fx, double fz, double spd);
 
 /* Distance fog on/off for this surface. Track previews want it off (haze would
  * clip the far side of the circuit); racing and the lobby orbit want it on. */

@@ -14,7 +14,7 @@ import SwiftUI
 ///
 /// The drawing also could not do the job it was there for. Its own header
 /// admitted "THE SHAPE IS DRESSING, not data … no claim is made that profile 2
-/// is what `vehicle-racer.glb` looks like" — so four players picking four
+/// is what `vehicle-gt.glb` looks like" — so four players picking four
 /// different cars got four near-identical pickup outlines in four colours, and
 /// the picker on their phones (which shows the real renders, from this same
 /// file) disagreed with the TV they were looking at. A car picker whose two ends

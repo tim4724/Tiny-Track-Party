@@ -232,7 +232,7 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
 
   // And the directory: everything under the kit is either a car, a prop the
   // renderer always loads, or one of the staged scenery models.
-  const CARS = ['vehicle-racer-low', 'vehicle-speedster', 'vehicle-racer', 'vehicle-vintage-racer'];
+  const CARS = ['vehicle-gt', 'vehicle-lemans', 'vehicle-stock', 'vehicle-jeep'];
   const PROPS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
   // A track's SET PIECES are the one channel keyed by the track, not the biome.
   const setModels = M.cwrap('ttp_theme_set_models', 'string', ['string']);

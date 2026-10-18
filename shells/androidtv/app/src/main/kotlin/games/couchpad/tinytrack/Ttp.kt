@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 245 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 247 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -58,6 +58,7 @@ object Ttp {
     external fun ttp_display_cell_cards(mask: Int)
     external fun ttp_display_cell_rects(out: FloatArray, max: Int): Int
     external fun ttp_display_cells(idsJson: ByteArray?)
+    external fun ttp_display_chase_rig_json(x: Double, y: Double, z: Double, fx: Double, fz: Double, spd: Double): ByteArray?
     // ttp_display_create: not bound — see OVERRIDES in scripts/gen-jni.mjs.
     external fun ttp_display_debug_chase_pitch(deg: Double): Double
     external fun ttp_display_debug_decals(): ByteArray?
@@ -80,6 +81,7 @@ object Ttp {
     external fun ttp_display_kit_field(count: Int)
     external fun ttp_display_kit_field_layout(): ByteArray?
     external fun ttp_display_look(eyeX: Double, eyeY: Double, eyeZ: Double, tgtX: Double, tgtY: Double, tgtZ: Double)
+    external fun ttp_display_look_fov(deg: Double)
     external fun ttp_display_model_variant(model: ByteArray?, variant: Int)
     external fun ttp_display_name_tag_size(slot: Int, w: Float, h: Float, lift: Float)
     external fun ttp_display_name_tags(out: FloatArray, max: Int): Int

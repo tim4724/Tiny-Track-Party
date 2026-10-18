@@ -172,6 +172,8 @@ export class Display {
       steerBars: mod.cwrap('ttp_display_steer_bars', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
+      lookFov: mod.cwrap('ttp_display_look_fov', null, ['number']),
+      chaseRig: mod.cwrap('ttp_display_chase_rig_json', 'string', ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
       shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
@@ -402,6 +404,14 @@ export class Display {
   // model (ttp_display_kit_field_layout). [] until a build with a field in it.
   kitLayout() {
     try { return JSON.parse(this._fn.kitLayout()) || []; } catch (_) { return []; }
+  }
+  // The free camera's lens in degrees; 0 is the overview's.
+  lookFov(deg) { this._fn.lookFov(deg); }
+  // The race's chase rig settled behind a car at (x, y, z) facing (fx, fz) and
+  // driving at `spd` of top speed (0 parked, 1 flat out):
+  // { eye: [x, y, z], fov, target: [x, y, z] }, in world units.
+  chaseRig(x, y, z, fx, fz, spd) {
+    return JSON.parse(this._fn.chaseRig(x, y, z, fx, fz, spd));
   }
 
   // Build (or REBUILD) the scene for a track. Every race start comes through
@@ -801,7 +811,11 @@ export function assetCache() {
   };
   const glb = (name) => {
     const kit = kitPath(name);
-    return raw(kit ? assetUrl(kit) : assetUrl(`/assets/toycar/${name}.glb`));
+    if (kit) return raw(assetUrl(kit));
+    // `concept:<name>`: the asset gallery's concept cars (scripts/gen-concept-cars.py)
+    const concept = /^concept:([\w.-]+)$/.exec(name);
+    if (concept) return raw(assetUrl(`/assets/concepts/${concept[1]}.glb`));
+    return raw(assetUrl(`/assets/toycar/${name}.glb`));
   };
   return { raw, glb };
 }

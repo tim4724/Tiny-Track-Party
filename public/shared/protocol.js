@@ -267,13 +267,14 @@ var CAR_COLORS = [
   '#56ccf2'  // cyan
 ];
 
-// Car models (Kenney Toy Car Kit), indexed by carIndex. The player picks one in
+// Car models (public/assets/toycar/, built by scripts/toy_cars.py in the Toy
+// Car Kit's construction), indexed by carIndex. The player picks one in
 // the lobby (SET_CAR); the display renders that model and tints it with the
 // player's CAR_COLORS livery. Car choice and colour are independent — two
 // players may drive the same model in different colours. CAR_MODELS / CAR_NAMES
 // are parallel arrays (one source of truth shared by renderer + picker).
 var CAR_MODELS = [
-  'vehicle-racer-low', 'vehicle-speedster', 'vehicle-racer', 'vehicle-vintage-racer'
+  'vehicle-gt', 'vehicle-lemans', 'vehicle-stock', 'vehicle-jeep'
 ];
 var CAR_NAMES = [
   'Dash', 'Bolt', 'Carve', 'Rumble'
@@ -282,17 +283,17 @@ var CAR_NAMES = [
 // resolved stats object per car; these are the source of truth the display feeds
 // in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark; `mass` is
 // relative (only the ratio matters when two cars collide); halfLen/halfWid are
-// the collision footprint half-extents in WORLD units, measured from the Kenney
-// meshes (length×width: racer 0.88×0.53, speedster 0.88×0.56).
+// the collision footprint half-extents in WORLD units, measured from the
+// meshes (every car 0.875 long, 0.55-0.57 over the wheels).
 //
 // The roster is ONE BALANCED CAR plus three specialists, each with ONE deep hole
 // (Bolt turn, Carve vmax, Rumble accel). Weight is not a fourth lever: it is
 // DERIVED from accel (carMass below) — the weakest launch is the heaviest car —
 // so Rumble's contact strength is the flip side of its launch hole, never a
 // separate number to tune. Short of Rumble's hole, the accel ORDER — and so the
-// weight order — follows the bodies: Bolt's open-wheel Speedster launches
-// quickest and weighs least, then Dash's Low Racer, Carve's taller Racer, and
-// Rumble's Vintage. The picker shows the Accel and Weight rows, so keep that
+// weight order — follows the bodies: Bolt's Le Mans prototype launches
+// quickest and weighs least, then Dash's GT coupe, Carve's boxier stock car, and
+// Rumble's jeep. The picker shows the Accel and Weight rows, so keep that
 // ladder.
 //
 // Hole depth is priced by how often the stat bills, measured flat-out
@@ -319,10 +320,10 @@ var CAR_NAMES = [
 // Carve the twisty ones, Dash the technical middle and never be worst.
 function carMass(accel) { return Math.round((1 + 6 * (1 - accel)) * 100) / 100; }
 var CAR_STATS = [
-  { accel: 1.01, vmax: 1.01, turn: 1.04, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — the balanced pick: no hole, never punished, never the best
-  { accel: 1.03, vmax: 1.06, turn: 0.88, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the fastest: top-speed king, BAD TURN (washes wide in tight corners) and light enough to shove
-  { accel: 0.98, vmax: 0.97, turn: 1.24, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails bends, never washes out, BAD VMAX — tops out early on every straight; its taller body launches a touch soft
-  { accel: 0.93, vmax: 1.00, turn: 1.08, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove
+  { accel: 1.01, vmax: 1.01, turn: 1.04, halfLen: 0.44, halfWid: 0.28 }, // Dash (GT coupe) — the balanced pick: no hole, never punished, never the best
+  { accel: 1.03, vmax: 1.06, turn: 0.88, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Le Mans prototype) — the fastest: top-speed king, BAD TURN (washes wide in tight corners) and light enough to shove
+  { accel: 0.98, vmax: 0.97, turn: 1.24, halfLen: 0.44, halfWid: 0.28 }, // Carve (stock car) — corner king: rails bends, never washes out, BAD VMAX — tops out early on every straight; its taller body launches a touch soft
+  { accel: 0.93, vmax: 1.00, turn: 1.08, halfLen: 0.44, halfWid: 0.28 }  // Rumble (jeep) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove
 ].map(function (c) { c.mass = carMass(c.accel); return c; });
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash

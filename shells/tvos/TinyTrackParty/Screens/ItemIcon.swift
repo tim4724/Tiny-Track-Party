@@ -39,10 +39,10 @@ struct ItemIcon: View {
     /// against the JS by `tests/item-icons.test.js` — the same sanctioned
     /// arrangement as `Schematic.cupColor`.
     static let carBodyColors: [UInt32] = [
-        0x5CBB80,   // vehicle-racer-low · Dash
-        0xDD5533,   // vehicle-speedster · Bolt
-        0x6688CC,   // vehicle-racer · Carve
-        0xAA77DD    // vehicle-vintage-racer · Rumble
+        0x5CBB80,   // vehicle-gt · Dash
+        0xDD5533,   // vehicle-lemans · Bolt
+        0x6688CC,   // vehicle-stock · Carve
+        0xAA77DD    // vehicle-jeep · Rumble
     ]
 
     var body: some View {
