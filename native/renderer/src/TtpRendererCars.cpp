@@ -594,7 +594,16 @@ void TtpRenderer::destroyCarSlot(uint32_t c) {
     // another slot, so only this slot's pointer into it is cleared.
     if (mCarShadowMaskOfSlot.size() > c) mCarShadowMaskOfSlot[c] = 0;
     if (mCars.size() > c) destroyMesh(mCars[c]);
-    if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};
+    // The morph state is the SIM car's, not the model's: a pick on a car
+    // already wearing the rig must not read as a fresh monster edge and pop.
+    if (mCarWheels.size() > c) {
+        CarWheels& w = mCarWheels[c];
+        const bool on = w.monsterOn;
+        const float pop = w.popT;
+        w = CarWheels{};
+        w.monsterOn = on;
+        w.popT = pop;
+    }
     if (mMonsterViews.size() > c) mMonsterViews[c] = MonsterView{};
 }
 

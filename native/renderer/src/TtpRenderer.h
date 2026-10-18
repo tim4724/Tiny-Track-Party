@@ -1048,7 +1048,7 @@ private:
                                                    // its body grafted into the monster rig — name tags
         float monsterSeat = 0.3675f;               // where that grafted body sits in the rig, and its
         filament::math::float2 monsterBodyHalf = MONSTER_BODY_HALF;  // half width/length, wheels off
-        bool monsterOn = false;                    // morph edge detect
+        bool monsterOn = false;                    // morph edge detect (with popT, kept across destroyCarSlot)
         float rigScale = 1;                        // the monster rig's drawn scale (mMonsterHalfLen);
                                                    // set by renderCars, read only while monster
         float popT = 0;                            // grow/shrink pop clock (0.34 s)
