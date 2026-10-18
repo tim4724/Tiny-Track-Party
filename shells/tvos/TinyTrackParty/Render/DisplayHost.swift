@@ -563,10 +563,13 @@ final class DisplayHost {
         }
 
         // The first painted frame OF A BUILT SCENE, which is what the backdrop
-        // waits on. Both halves matter: a present with no scene is the renderer
-        // clearing an empty view, and revealing that is the same black flash as
-        // revealing nothing at all.
-        if presented && hasScene && !hasPainted {
+        // and the boot cover wait on. All three halves matter: a present with no
+        // scene is the renderer clearing an empty view, and a SUBMITTED frame is
+        // not one on the glass — the first frames after a build queue behind the
+        // pipeline compiles, and a cover lifted on submission uncovered seconds
+        // of an empty dark surface under the lobby on a cold install.
+        // `ttp_display_settled` says when the GPU is actually through.
+        if presented && hasScene && !hasPainted && ttp_display_settled() != 0 {
             hasPainted = true
             onFirstPaint?()
         }

@@ -100,6 +100,14 @@ struct RootView: View {
     /// on a readiness flag that is never coming.
     @State private var unsupportedScenario = false
 
+    /// Whether the lobby may stay in the tree over a race: true whenever the
+    /// screen is not `.race` (re-armed on leaving it), so it is already set on
+    /// the frame the race first shows — a flag raised on the change would
+    /// arrive one frame late. Cleared once the fade-out has run.
+    @State private var lobbyHeld = true
+
+    private static let screenFade = 0.35
+
     init(game: GameCoordinator) {
         self.game = game
         _state = ObservedObject(wrappedValue: game.state)
@@ -117,26 +125,36 @@ struct RootView: View {
             MetalHostView(host: game.display)
                 .ignoresSafeArea()
 
-            // The crossfade is a conditional INSERTION, not an opacity ramp over
-            // views that stay in the tree. On a TV that distinction is the whole
-            // ball game: a view at `.opacity(0)` is still focusable, so an
-            // invisible START button would keep eating remote presses from
-            // behind the board that replaced it.
-            switch state.screen {
-            case .welcome:
-                // UNREACHABLE ON THIS PLATFORM, and kept only because the screen
-                // enum mirrors the model's (`ui_model.cc`) rather than this
-                // shell's. The welcome board exists on the web to collect a user
-                // GESTURE — the one that unlocks an AudioContext and enters
-                // fullscreen — and a TV has neither restriction, so a title card
-                // with a single NEW GAME button would be a press between the
-                // viewer and the room code for nothing. `boot()` goes straight to
-                // the lobby. Rendering the lobby here too keeps the switch total
-                // without inventing a board.
+            // The race chrome crossfades by conditional INSERTION, not an opacity
+            // ramp over a view that stays in the tree: on a TV a view at
+            // `.opacity(0)` is still focusable, so an invisible START button
+            // would keep eating remote presses. The lobby is the one exception,
+            // below.
+            //
+            // The lobby also stands for `.welcome`, which is UNREACHABLE ON THIS
+            // PLATFORM and kept only because the screen enum mirrors the model's
+            // (`ui_model.cc`) rather than this shell's. The welcome board exists
+            // on the web to collect a user GESTURE — the one that unlocks an
+            // AudioContext and enters fullscreen — and a TV has neither
+            // restriction, so a title card with a single NEW GAME button would be
+            // a press between the viewer and the room code for nothing. `boot()`
+            // goes straight to the lobby.
+            //
+            // THE LOBBY'S FADE-OUT is the one exception to insertion, because a
+            // removal transition cannot give it one: SwiftUI does not animate
+            // removing a subtree that hosts a `NavigationStack`, so the lobby
+            // left in one frame while the race chrome faded in over the cut. It
+            // stays in the tree for the screen fade, ramps a plain opacity, and
+            // is DISABLED for it, so nothing on it can take focus while it goes.
+            // ONE `lobby` call site, so the same view identity carries `.welcome`,
+            // `.lobby` and the held-over lobby; a second call site under the race
+            // branch would be a new view with no opacity to ramp from.
+            if state.screen != .race || lobbyHeld {
                 lobby
-            case .lobby:
-                lobby
-            case .race:
+                    .opacity(state.screen == .race ? 0 : 1)
+                    .disabled(state.screen == .race)
+            }
+            if state.screen == .race {
                 raceChrome
                     .transition(.opacity)
             }
@@ -165,7 +183,17 @@ struct RootView: View {
             PerfOverlay(monitor: game.display.perf)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
-        .animation(.easeInOut(duration: 0.35), value: state.screen)
+        .animation(.easeInOut(duration: Self.screenFade), value: state.screen)
+        // The lobby leaves the tree once its fade-out has run (see `lobbyHeld`).
+        // `task(id:)` cancels the wait if the screen moves again inside it. A
+        // beat PAST the fade, not on its end: the fade starts a frame or two
+        // after the state change, and tearing the lobby down can stall a frame —
+        // removed on time, that stall froze the lobby at a visible ghost.
+        .task(id: state.screen) {
+            guard state.screen == .race else { lobbyHeld = true; return }
+            guard (try? await Task.sleep(for: .seconds(Self.screenFade + 0.15))) != nil else { return }
+            lobbyHeld = false
+        }
         .animation(.easeOut(duration: 0.2), value: state.link == nil)
         .task {
             await game.boot()

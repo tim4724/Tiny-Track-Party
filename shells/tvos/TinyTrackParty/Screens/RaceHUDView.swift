@@ -131,7 +131,12 @@ private struct CellChrome: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }
             }
-            .frame(width: cell.safeRect.width, height: cell.safeRect.height)
+            // TOP-LEADING, not the default centre. While the rank readout is up
+            // its infinite frame stretches the ZStack over the whole box, so the
+            // alignment never showed; the FINISHED card takes the readout away,
+            // the ZStack shrinks to the name chip and item slot, and a centred
+            // frame dropped that pair into the middle of the cell beside the card.
+            .frame(width: cell.safeRect.width, height: cell.safeRect.height, alignment: .topLeading)
             // `.position` centres its subject on the point, so the box lands
             // exactly on the rect it was given.
             .position(x: cell.safeRect.midX, y: cell.safeRect.midY)
