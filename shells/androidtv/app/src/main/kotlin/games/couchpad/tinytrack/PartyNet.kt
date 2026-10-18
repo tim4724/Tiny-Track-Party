@@ -501,6 +501,7 @@ class PartyNet(
 
     private fun handleClose(hasCode: Boolean, code: Double) {
         cancel(createWatchdog); createWatchdog = null
+        Log.i(TAG, "relay socket closed, code ${if (hasCode) code.toInt().toString() else "none"}")
 
         // READ, never re-typed: ttp_party.h declares this export so the kit's
         // budget is stated once (root rule 1). Called here rather than cached in
@@ -800,7 +801,13 @@ class PartyNet(
 
             "reconnect" -> reconnectNow()
 
-            "set-link" -> onLink?.invoke(GameState.LinkView.from(e))
+            // Logged, because the overlay alone cannot say WHY: a link change with
+            // no `socket closed` line before it is the heartbeat's own redial.
+            "set-link" -> {
+                val link = GameState.LinkView.from(e)
+                Log.i(TAG, "link ${link.state} attempt ${link.attempt}/${link.max}")
+                onLink?.invoke(link)
+            }
 
             "detach-socket" -> detach()
 

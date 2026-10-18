@@ -340,6 +340,7 @@ final class PartyNet {
 
     private func handleClose(hasCode: Bool, code: Double) {
         createTimer?.invalidate()
+        print("[ttp] relay socket closed, code \(hasCode ? String(Int(code)) : "none")")
 
         // The KIT half: what this close code means for the reconnect budget.
         let o = TTP.obj(ttp_framing_close_outcome(hasCode ? 1 : 0, code,
@@ -608,8 +609,12 @@ final class PartyNet {
         case "reconnect":
             reconnectNow()
 
+        // Logged, because the overlay alone cannot say WHY: a link change with
+        // no `socket closed` line before it is the heartbeat's own redial.
         case "set-link":
-            onLink?(LinkView(e))
+            let link = LinkView(e)
+            print("[ttp] link \(link.state) attempt \(link.attempt)/\(link.max)")
+            onLink?(link)
 
         case "detach-socket":
             detach()
