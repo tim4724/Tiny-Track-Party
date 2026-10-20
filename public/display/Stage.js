@@ -1517,6 +1517,16 @@ export class Stage {
     this._scheduleNext();
   }
 
+  // Every drawn cell's rects, for chrome placed OUTSIDE the HUD pass above: the
+  // countdown hangs one banner on each player's view (raceOverlays.js). Empty
+  // when no cell is drawn. Syncs the cells first: a beat painted straight after
+  // a roster change lands before the frame that would have told the renderer.
+  cellBoxes() {
+    if (!this.display) return [];
+    const n = this._syncCells().length;
+    return n ? this._cellRects(n) : [];
+  }
+
   // Which cars own cells, which overlay flags, and which camera rig is running
   // change on a seat edit — not per frame. Push them only when they actually
   // move, so the steady-state frame really is one call with a dt. Returns the

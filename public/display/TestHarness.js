@@ -1120,7 +1120,7 @@ export function runDisplayScenario(opts, ctx) {
         logDeal(log);
         engine = new NativeRaceSession(field, t, {            // create-session
           bots,
-          onCountdownTick: (n) => showCountdownBanner(countdownBeat(n)),
+          onCountdownTick: (n) => showCountdownBanner(countdownBeat(n), scene.cellBoxes()),
           onRaceEvent: raceEventPerformer(scene, log),
         });
         window.__engine = engine;
@@ -1379,7 +1379,7 @@ export function runDisplayScenario(opts, ctx) {
     if (kind === 'countdown') {
       // HUD shows lap 1 while the lights count down.
       for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
-      showCountdownBanner(COUNTDOWN_STILL);
+      showCountdownBanner(COUNTDOWN_STILL, scene.cellBoxes());
     } else if (kind === 'paused') {
       // Spin the field forward a few seconds so it reads mid-race, freeze it
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.

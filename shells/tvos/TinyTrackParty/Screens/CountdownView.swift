@@ -10,18 +10,21 @@ import SwiftUI
 
 // MARK: - The countdown
 
-/// The beat on a white paper DISC, tipped a few degrees like a toy's dial, and
-/// the whole count under it on a GLASS strip with the current beat lit. GO!
-/// turns the disc green.
+/// START LIGHTS along the top of every player's view: the whole count on a
+/// GLASS strip, the current beat lit a size up, GO green.
+///
+/// ONE STRIP PER CELL, at the TOP, in every player count, as the web's
+/// `placeViews`: a count in the middle of the picture always lands on a car,
+/// since each player's car sits low in the middle of their own view. The strip
+/// is sized off its cell's height, so it keeps its share of the 3D picture in
+/// a lone view and in a split alike, and its top is level with the name chip
+/// and the place badge, which hang the same margin under the safe edge.
 ///
 /// The string is already resolved: `ttp_race_countdown_tick_json` answers a beat
 /// number, `Copy.countdown` turns it into text, and the race-flow performer puts
 /// the result in `GameState.countdown` (nil is "the countdown is gone"). Nothing
 /// here counts, and nothing here decides when GO happens — the beat's SOUND is
 /// the wasm's too, tapped where the tick fires.
-///
-/// Sizes are the CSS's `vh`, which on a 1080-point screen is one number each:
-/// tvOS is always 1920x1080 POINTS whatever the box outputs.
 struct CountdownView: View {
 
     /// `GameState.countdown`.
@@ -30,21 +33,22 @@ struct CountdownView: View {
     /// `COUNTDOWN_SECONDS` off the manifest, as the web's `paintSteps` reads it.
     let steps: Int
 
-    /// `34vh`, and `24vh` / `13vh` for the numeral and for GO!.
-    private static let disc: CGFloat = 367
-    private static let digit: CGFloat = 259
-    private static let goSize: CGFloat = 140
+    /// Every cell's PICTURE rect and SAFE rect (`GameState.CellHUD`): a strip
+    /// centred on the picture, hung from the safe edge. Empty is the whole
+    /// screen.
+    let cells: [(rect: CGRect, safe: CGRect)]
 
-    /// `6.4vh` cells (GO's `9vh` wide) on `0.8vh` gaps inside `1vh` of padding,
-    /// in `2.8vh` type, `4vh` clear of the safe edge.
-    private static let step: CGFloat = 69
-    private static let goStep: CGFloat = 97
-    private static let stepGap: CGFloat = 9
-    private static let stripPad: CGFloat = 11
-    private static let stepType: CGFloat = 30
-    private static let stripLift: CGFloat = 43
+    /// `display.css`'s `--light`: one light's diameter as a fraction of the
+    /// cell's height. Everything else on the strip is a multiple of it: GO's
+    /// width, the gap, the padding, the type, and the lit beat's size up.
+    private static let light: CGFloat = 0.128
+    private static let goWidth: CGFloat = 1.4
+    private static let gap: CGFloat = 0.125
+    private static let pad: CGFloat = 0.156
+    private static let type: CGFloat = 0.44
+    private static let litScale: CGFloat = 1.15
 
-    /// Drives the GO! fade. A one-shot per countdown, reset by `.task(id:)`.
+    /// Drives the GO fade. A one-shot per countdown, reset by `.task(id:)`.
     @State private var goFaded = false
 
     private var isGo: Bool { text == Copy.go }
@@ -53,25 +57,32 @@ struct CountdownView: View {
     private var beat: Int { isGo ? 0 : Int(text ?? "") ?? -1 }
 
     var body: some View {
-        if let text {
-            ZStack {
-                // FLATTEN BEFORE ANIMATING. Animating the opacity of a live
-                // composited tree over the 4K Metal surface re-rasterizes it per
-                // frame, and at 4K that compositing lands OUTSIDE anything the
-                // renderer can see: the old die-cut numeral cost the A10X
-                // 60 -> 7 fps for exactly the second the GO! fade ran. Each
-                // piece is rasterized once, so the fade is a texture transform.
-                face(text).drawingGroup()
-                    // `margin-top: -4vh`: the disc sits a little above centre.
-                    .offset(y: -43)
-                strip.drawingGroup()
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, Self.stripLift)
+        if text != nil {
+            // FLATTEN BEFORE ANIMATING. Animating the opacity of a live
+            // composited tree over the 4K Metal surface re-rasterizes it per
+            // frame, and at 4K that compositing lands OUTSIDE anything the
+            // renderer can see: the old die-cut numeral cost the A10X
+            // 60 -> 7 fps for exactly the second the GO fade ran. Each strip is
+            // rasterized once, so the fade is a texture transform.
+            GeometryReader { geo in
+                let whole = CGRect(origin: .zero, size: geo.size)
+                let boxes = cells.isEmpty ? [(rect: whole, safe: whole)] : cells
+                ForEach(boxes.indices, id: \.self) { i in
+                    let b = boxes[i]
+                    let l = Self.light * b.rect.height
+                    // `.position` centres the strip on the point, so its top
+                    // lands half its height above it.
+                    strip(lightSize: l).drawingGroup()
+                        .position(x: b.rect.midX, y: b.safe.minY + RaceHUDView.cellMargin + l * (0.5 + Self.pad))
+                }
             }
-            // `#countdown.is-go`: GO! stays up the beat AFTER the start (the
+            // The rects describe the SURFACE, whose origin is the screen's
+            // (RaceHUDView places its chips on the same ones).
+            .ignoresSafeArea()
+            // `#countdown.is-go`: GO stays up the beat AFTER the start (the
             // cars are already moving) and fades out over that ~1s window. A
             // PLAIN FADE, no grow — the scale was the expensive half and earned
-            // nothing the fade does not. The digits carry no animation at all:
+            // nothing the fade does not. The beats carry no animation at all:
             // a beat that moves reads as a beat still counting.
             .opacity(isGo && goFaded ? 0 : 1)
             .animation(isGo ? .easeOut(duration: 1) : nil, value: goFaded)
@@ -83,36 +94,23 @@ struct CountdownView: View {
         }
     }
 
-    private func face(_ text: String) -> some View {
-        Text(text)
-            .font(Fonts.display(isGo ? Self.goSize : Self.digit, weight: .bold))
-            .foregroundStyle(isGo ? .white : Tokens.ink)
-            .fixedSize()
-            // `margin-top: -1.5vh` on the numeral, which the disc centres; and a
-            // "1" centred by its box reads right of centre — its flag reaches
-            // left, so its stem sits right of the middle — so it moves left
-            // until the stem is near the centre (`translate: -0.045em`).
-            .offset(x: beat == 1 ? -0.045 * Self.digit : 0, y: isGo ? 0 : -8)
-            .frame(width: Self.disc, height: Self.disc)
-            .background(Circle().fill(isGo ? Tokens.brand : Tokens.surface))
-            .rotationEffect(.degrees(-4))
-    }
-
-    private var strip: some View {
-        HStack(spacing: Self.stepGap) {
+    private func strip(lightSize l: CGFloat) -> some View {
+        HStack(spacing: Self.gap * l) {
             ForEach(Array(stride(from: steps, through: 0, by: -1)), id: \.self) { n in
                 let now = n == beat
                 Text(n > 0 ? String(n) : Copy.goStep)
-                    .font(Fonts.display(Self.stepType, weight: .bold))
+                    .font(Fonts.display(Self.type * l, weight: .bold))
                     .foregroundStyle(now ? (n == 0 ? .white : Tokens.ink) : Color.white.opacity(0.7))
-                    // The strip's "1" takes the same nudge as the disc's.
-                    .offset(x: n == 1 ? -0.045 * Self.stepType : 0)
-                    .frame(width: n == 0 ? Self.goStep : Self.step, height: Self.step)
+                    // A "1" centred by its box reads right of centre: its flag
+                    // reaches left, so its stem sits right of the middle.
+                    .offset(x: n == 1 ? -0.045 * Self.type * l : 0)
+                    .frame(width: n == 0 ? Self.goWidth * l : l, height: l)
                     .background(Capsule().fill(now ? (n == 0 ? Tokens.brand : Color.white)
                                                    : Color.white.opacity(0.14)))
+                    .scaleEffect(now ? Self.litScale : 1)
             }
         }
-        .padding(Self.stripPad)
+        .padding(Self.pad * l)
         // GLASS without the web's backdrop blur, as the race HUD's lap pill:
         // the live race is behind it, and the tint alone carries the type.
         .background(Capsule().fill(Tokens.glass))

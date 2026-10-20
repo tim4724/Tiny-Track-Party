@@ -619,48 +619,37 @@ html.cam-free #race { pointer-events: none; }
   background: radial-gradient(120% 120% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.28) 100%);
 }
 
-/* The beat on a white paper DISC, tipped a few degrees like a toy's dial, and
-   the whole count under it on a glass strip with the current beat lit. GO!
-   turns the disc green. */
-#countdown {
-  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  pointer-events: none;
-}
-.cd-disc {
-  width: 34vh; height: 34vh; border-radius: 50%; margin-top: -4vh;
-  display: grid; place-items: center;
-  background: var(--surface); box-shadow: var(--shadow-card);
-  transform: rotate(-4deg);
-}
-.cd-num {
-  font-family: var(--font-display); font-weight: 700; line-height: 1;
-  font-size: 24vh; color: var(--ink); margin-top: -1.5vh;
-}
-/* A "1" centred by its box reads right of centre: its flag reaches left, so
-   its stem, which is what the eye reads, sits right of the middle. It moves
-   left until the stem is near the centre, on the disc and in the strip. */
-#countdown[data-n='1'] .cd-num { translate: -0.045em 0; }
-.cd-step[data-n='1'] { padding-right: 0.09em; }
-#countdown.is-go .cd-disc { background: var(--brand); }
-#countdown.is-go .cd-num { color: #fff; font-size: 13vh; margin-top: 0; }
+/* START LIGHTS along the top of every player's view (.cd-view, placed over
+   its cell by raceOverlays.js placeViews): the whole count on a glass strip,
+   the current beat lit a size up, GO green. Nothing sits in the middle of the
+   picture, so no player's car is ever under the count. Sized off the VIEW's
+   height (--cell-h), so the lights keep their share of the 3D picture: a
+   fixed size reads right in a split and lost in a lone full-screen view.
+   --light is one light's diameter and everything else is a multiple of it. */
+#countdown { position: fixed; inset: 0; pointer-events: none; }
+.cd-view { position: absolute; --light: calc(var(--cell-h) * 0.128); }
 .cd-steps {
-  position: absolute; left: 50%; bottom: calc(var(--safe-y-b) + 4vh); translate: -50% 0;
-  display: flex; gap: 0.8vh; padding: 1vh; border-radius: var(--r-pill);
+  /* level with the name tag and the place badge, which hang the same 11px
+     under the safe edge (.cell-label margin, Stage.js _loop's placeEl) */
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 11px); translate: -50% 0;
+  display: flex; gap: calc(var(--light) * 0.125); padding: calc(var(--light) * 0.156); border-radius: var(--r-pill);
   background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
 .cd-step {
-  width: 6.4vh; height: 6.4vh; border-radius: 50%; display: grid; place-items: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 2.8vh;
+  width: var(--light); height: var(--light); border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: calc(var(--light) * 0.44);
   color: rgba(255, 255, 255, 0.7); background: rgba(255, 255, 255, 0.14);
 }
-.cd-step--go { width: 9vh; border-radius: var(--r-pill); }
-.cd-step.is-now { background: #fff; color: var(--ink); }
+/* A "1" centred by its box reads right of centre: its flag reaches left, so
+   its stem, which is what the eye reads, sits right of the middle. */
+.cd-step[data-n='1'] { padding-right: 0.09em; }
+.cd-step--go { width: calc(var(--light) * 1.4); border-radius: var(--r-pill); }
+/* The size up is a transform, so the slap's `scale` multiplies with it. */
+.cd-step.is-now { background: #fff; color: var(--ink); transform: scale(1.15); }
 .cd-step--go.is-now { background: var(--brand); color: #fff; }
-/* "GO!" stays up the beat after the start (cars are already moving) and fades
+/* GO stays up the beat after the start (cars are already moving) and fades
    out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat.
-   A PLAIN FADE, no grow: the scale was the expensive half everywhere the stroke
-   is faked by stamping copies of the glyph (SwiftUI and Compose both do — see
-   CountdownView.swift), and it earned nothing the fade does not. */
+   A PLAIN FADE, no grow: see CountdownView.swift for what a grow cost the TV. */
 #countdown.is-go { animation: countdown-go 1s ease-out forwards; }
 @keyframes countdown-go {
   from { opacity: 1; }

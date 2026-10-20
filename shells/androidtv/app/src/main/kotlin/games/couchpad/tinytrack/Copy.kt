@@ -218,7 +218,7 @@ object Copy {
 
     /** GO is the beat the race actually starts on, not a beat before it. */
     const val go = "GO!"
-    /** The same beat as a step on the countdown strip (`CD_COPY.goStep`). */
+    /** The same beat as a step on the countdown strip (`GO_STEP`). */
     const val goStep = "GO"
 
     /**

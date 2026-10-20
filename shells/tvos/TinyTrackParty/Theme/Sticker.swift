@@ -11,7 +11,7 @@ import SwiftUI
 /// `StickerButton`), LABEL (a tinted pill, `StickerPill`) and GLASS (dark
 /// readouts over the live 3D view, `Tokens.glass`). Everything is FLAT: no ink
 /// outlines, no offset shadows, no ledges, and no tilt beyond the few the web's
-/// own lockups carry (the wordmark, the countdown disc, the champions label). Chrome is
+/// own lockups carry (the wordmark, the champions label). Chrome is
 /// red/green/blue/purple only; amber, pink, orange and cyan are liveries
 /// (`Tokens.car`) and never chrome. Celebration is RED.
 ///

@@ -939,7 +939,7 @@ const RACE_PERFORMERS = {
     for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
   },
   'start-countdown': (e) => session.startCountdown(e.seconds),
-  'show-countdown': (e) => showCountdownBanner(e),
+  'show-countdown': (e) => showCountdownBanner(e, scene.cellBoxes()),
   'broadcast-countdown': (e) => net.broadcast({ type: MSG.COUNTDOWN, n: e.n }),
   // DEFERRED off the calling stack on purpose — we are inside session.update()
   // and the no-seats-left branch tears the session down. Performing this

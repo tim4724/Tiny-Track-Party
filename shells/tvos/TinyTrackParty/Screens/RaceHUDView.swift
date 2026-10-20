@@ -35,6 +35,13 @@ import SwiftUI
 /// meant to reach.
 struct RaceHUDView: View {
 
+    /// `.cell-label`'s `margin: 0.7rem`, which the chips hang from the safe
+    /// edge by and the countdown's lights line up with. Points, not pixels:
+    /// tvOS is always 1920x1080 POINTS whatever the box outputs, and the web's
+    /// chrome is authored against a ~1920 CSS px viewport, so the number
+    /// transfers.
+    static let cellMargin: CGFloat = 11
+
     /// One per split-screen cell, in the order `ttp_display_cells` named them.
     /// Rebuilt by the coordinator's ~6 Hz poll, not per frame: nothing here
     /// changes at 60 Hz since the steer bar moved into the renderer.
@@ -91,10 +98,6 @@ private struct CellChrome: View {
     /// …and its reveal-gate counter, likewise.
     let readyTick: Int
 
-    /// `.cell-label`'s `margin: 0.7rem`. Points, not pixels: tvOS is always
-    /// 1920x1080 POINTS whatever the box outputs, and the web's chrome is
-    /// authored against a ~1920 CSS px viewport, so the number transfers.
-    private static let margin: CGFloat = 11
 
     /// FINISHED wins the cell if a car is somehow both finished and dropped.
     /// The coordinator already resolves that when it builds the row (it hands
@@ -123,10 +126,10 @@ private struct CellChrome: View {
     var body: some View {
         ZStack {
             ZStack(alignment: .topLeading) {
-                cornerLabel.padding(Self.margin)
+                cornerLabel.padding(RaceHUDView.cellMargin)
                 if !cardInCell {
                     rankReadout
-                        .padding(.top, Self.margin)
+                        .padding(.top, RaceHUDView.cellMargin)
                         .padding(.trailing, 12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }

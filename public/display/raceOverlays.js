@@ -10,13 +10,18 @@
 // renders through these functions cannot drift from live play by construction.
 const el = (id) => document.getElementById(id);
 
-// The countdown banner: one white disc carrying the beat, and under it a glass
-// strip of every beat with the current one lit. n > 0: "3/2/1". n === 0: "GO!"
-// (the race starts this beat; the disc goes green and the banner fades over
-// the next via .is-go). n < 0: banner gone. The beat's SOUND is the wasm's —
-// it taps the same tick — so there is no cue call.
-const CD_COPY = { go: 'GO!', goStep: 'GO' };  // the GO beat's copy; numerals ride the effect
-export function showCountdownBanner(e) {
+// The countdown banner: START LIGHTS, a strip of every beat with the current
+// one lit, along the top of every player's view. n > 0: "3/2/1" lit. n === 0:
+// GO lit (the race starts this beat; the banner fades over the next via
+// .is-go). n < 0: banner gone. The beat's SOUND is the wasm's — it taps the
+// same tick — so there is no cue call.
+//
+// ONE STRIP PER CELL, at the TOP, in every player count. A count in the middle
+// of the picture always lands on a car: each player's car sits low in the
+// middle of their own view. `cells` is Stage.cellBoxes(); none is the whole
+// screen.
+const GO_STEP = 'GO';  // the GO beat's copy; numerals ride the effect
+export function showCountdownBanner(e, cells) {
   const cd = el('countdown');
   // `go` IS the beat semantics (the effect carries it); no third spelling of
   // "n === 0 means GO" here.
@@ -24,30 +29,49 @@ export function showCountdownBanner(e) {
   // The strip is laid out on the way in, from the launch's own count (the same
   // number main.js launchArgs hands the session), so a resumed count still
   // shows the beats it already passed.
-  if (on && cd.classList.contains('hidden')) paintSteps(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
+  if (on && cd.classList.contains('hidden')) paintSteps(cd, window.__countdownSeconds || window.COUNTDOWN_SECONDS);
   cd.classList.toggle('hidden', !on);
-  el('countdown-num').textContent = e.go ? CD_COPY.go : on ? String(e.n) : '';
-  cd.dataset.n = e.go ? '0' : String(e.n);   // display.css centres a "1" by eye
+  if (on) placeViews(cd, cells);
   cd.classList.toggle('is-go', e.go);
-  for (const s of el('countdown-steps').children) {
-    s.classList.toggle('is-now', s.dataset.n === String(e.go ? 0 : e.n));
+  // slap each lit beat in (re-add .slap around a reflow so the animation
+  // restarts on the same element); GO keeps its own is-go fade-out.
+  for (const s of cd.getElementsByClassName('cd-step')) {
+    const now = s.dataset.n === String(e.go ? 0 : e.n);
+    s.classList.toggle('is-now', now);
+    s.classList.remove('slap');
+    if (now && e.slap) { void s.offsetWidth; s.classList.add('slap'); }
   }
-  // slap each numeral in (re-add .slap around a reflow so the animation restarts
-  // on the same element); GO! keeps its own is-go fade-out.
-  const disc = cd.querySelector('.cd-disc');
-  disc.classList.remove('slap');
-  if (e.slap) { void disc.offsetWidth; disc.classList.add('slap'); }
 }
 
-function paintSteps(count) {
-  const box = el('countdown-steps');
-  box.textContent = '';
-  for (let n = count; n >= 0; n--) {
-    const s = document.createElement('span');
-    s.className = n ? 'cd-step' : 'cd-step cd-step--go';
-    s.dataset.n = String(n);
-    s.textContent = n ? String(n) : CD_COPY.goStep;
-    box.appendChild(s);
+// One strip per cell, centred on it, sized off its height (--cell-h) and hung
+// from its SAFE rect's top edge (--safe-top), since a television may be
+// cropping the picture's. Re-placed on every beat, so a resize mid-count is
+// caught on the next one.
+function placeViews(cd, cells) {
+  const boxes = cells.length ? cells : [{ x: 0, y: 0, w: innerWidth, h: innerHeight, safe: { y: 0 } }];
+  const views = cd.getElementsByClassName('cd-view');
+  while (views.length < boxes.length) cd.appendChild(views[0].cloneNode(true));
+  while (views.length > boxes.length) views[views.length - 1].remove();
+  boxes.forEach((r, i) => {
+    const s = views[i].style;
+    s.left = r.x + 'px';
+    s.top = r.y + 'px';
+    s.width = r.w + 'px';
+    s.setProperty('--cell-h', r.h + 'px');
+    s.setProperty('--safe-top', (r.safe.y - r.y) + 'px');
+  });
+}
+
+function paintSteps(cd, count) {
+  for (const box of cd.getElementsByClassName('cd-steps')) {
+    box.textContent = '';
+    for (let n = count; n >= 0; n--) {
+      const s = document.createElement('span');
+      s.className = n ? 'cd-step' : 'cd-step cd-step--go';
+      s.dataset.n = String(n);
+      s.textContent = n ? String(n) : GO_STEP;
+      box.appendChild(s);
+    }
   }
 }
 

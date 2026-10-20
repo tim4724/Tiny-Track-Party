@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +77,11 @@ fun RaceHud(state: GameState) {
     }
 }
 
+/** `.cell-label`'s margin, which the chips hang from the safe edge by and the
+ *  countdown's lights line up with. In AUTHORED pixels, which is what the whole
+ *  tree is in under the root density override. */
+private val CELL_MARGIN = 11.dp
+
 @Composable
 private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
     // FINISHED wins the cell if a car is somehow both finished and dropped. The
@@ -102,12 +107,8 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
             .offset(cell.rect.sx.dp, cell.rect.sy.dp)
             .size(cell.rect.sw.dp, cell.rect.sh.dp)
     ) {
-        // `.cell-label`'s margin. In AUTHORED pixels, which is what the whole tree
-        // is in under the root density override.
-        val margin = 11.dp
-
         Column(
-            Modifier.padding(margin).align(Alignment.TopStart),
+            Modifier.padding(CELL_MARGIN).align(Alignment.TopStart),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             NameChip(cell.name, cell.colorIndex)
@@ -123,7 +124,7 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
         if (!cardInCell) {
             PlaceColumn(
                 cell.place, cell.lap, cell.totalLaps,
-                Modifier.align(Alignment.TopEnd).padding(top = margin, end = 12.dp),
+                Modifier.align(Alignment.TopEnd).padding(top = CELL_MARGIN, end = 12.dp),
             )
         }
     }
@@ -462,77 +463,69 @@ fun CountdownOverlay(state: GameState, defaultSteps: Int) {
     if (present) {
         UnboundedContent()
         val steps = if (state.countdownSteps > 0) state.countdownSteps else defaultSteps
-        Box(Modifier.graphicsLayer { alpha = fade.value }) { CountdownBanner(lastCount, steps) }
+        Box(Modifier.graphicsLayer { alpha = fade.value }) {
+            CountdownBanner(lastCount, steps, state.cells.map { it.rect })
+        }
     }
 }
 
 /**
- * The countdown banner (`#countdown`): the beat on a white PAPER disc tipped a
- * few degrees like a toy's dial, and under it a GLASS strip of every beat with
- * the current one lit. GO! turns the disc green. The beat is the model's
- * (`show-countdown`), and its SOUND is the wasm's, so there is no cue call here.
+ * The countdown banner (`#countdown`): START LIGHTS along the top of every
+ * player's view, a GLASS strip of every beat with the current one lit a size up
+ * and GO green. The beat is the model's (`show-countdown`), and its SOUND is the
+ * wasm's, so there is no cue call here.
+ *
+ * ONE STRIP PER CELL, at the TOP, in every player count, as the web's
+ * `placeViews`: a count in the middle of the picture always lands on a car,
+ * since each player's car sits low in the middle of their own view. Each strip
+ * is sized off its cell's height (`--light`), so it keeps its share of the 3D
+ * picture in a lone view and in a split alike, and hangs from the SAFE edge
+ * level with the name chip and the place badge. [cells] are
+ * [GameState.CellHUD.rect]; none is the whole screen.
  *
  * Takes the TEXT, not the state: the caller holds the last non-null value so the
  * banner still has something to draw while it fades out.
- *
- * OPAQUE, apart from the strip. The disc is the one large piece of chrome over
- * the live race, and a solid fill is the cheap way to draw it here; it is up for
- * three beats and changes only on a beat.
  */
 @Composable
-fun CountdownBanner(text: String, steps: Int) {
+fun CountdownBanner(text: String, steps: Int, cells: List<CellRect>) {
     if (text.isEmpty()) return
     val go = text == Copy.go
     val n = if (go) 0 else text.toIntOrNull() ?: return
+    val boxes = cells.ifEmpty {
+        listOf(CellRect(0f, 0f, AUTHORED_WIDTH, AUTHORED_HEIGHT, 0f, 0f, AUTHORED_WIDTH, AUTHORED_HEIGHT))
+    }
     Box(Modifier.fillMaxSize()) {
-        // `.cd-disc`: 34vh across, `margin-top: -4vh` inside a centring flex box,
-        // which lifts its centre by half that.
-        Box(
-            Modifier
-                .align(Alignment.Center)
-                .offset(y = -(AUTHORED_HEIGHT * 0.02f).dp)
-                .size((AUTHORED_HEIGHT * 0.34f).dp)
-                .tilt(-4f)
-                .background(if (go) Tokens.brand else Tokens.surface, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            // `.cd-num` at 24vh, lifted by half its 1.5vh margin; GO! at 13vh. A
-            // "1" centred by its box reads right of centre (its flag reaches
-            // left), so it moves left by 0.045em, as on the web.
-            val size = (AUTHORED_HEIGHT * (if (go) 0.13f else 0.24f)).dp
-            StickerText(
-                text, size = size, color = if (go) Color.White else Tokens.ink,
-                lineHeight = 1f,
-                modifier = Modifier.offset(
-                    x = if (n == 1) -size * 0.045f else 0.dp,
-                    y = if (go) 0.dp else -(AUTHORED_HEIGHT * 0.0075f).dp,
-                ),
-            )
-        }
-        // `.cd-steps`: centred, `4vh` above the bottom safe edge.
-        val vh = AUTHORED_HEIGHT / 100f
-        Row(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = Tokens.safeMarginY + (4 * vh).dp)
-                .background(Tokens.glass, RoundedCornerShape(percent = 50))
-                .padding((1 * vh).dp),
-            horizontalArrangement = Arrangement.spacedBy((0.8f * vh).dp),
-        ) {
-            for (k in steps downTo 0) CountdownStep(k, now = k == n, vh)
+        for (r in boxes) {
+            // `--light`: one light's diameter, 12.8% of the cell's height.
+            val light = r.h * 0.128f
+            Box(Modifier.offset(r.x.dp, r.sy.dp).width(r.w.dp)) {
+                // `.cd-steps`: centred, its top level with `CellChrome`'s chips.
+                Row(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = CELL_MARGIN)
+                        .background(Tokens.glass, RoundedCornerShape(percent = 50))
+                        .padding((light * 0.156f).dp),
+                    horizontalArrangement = Arrangement.spacedBy((light * 0.125f).dp),
+                ) {
+                    for (k in steps downTo 0) CountdownStep(k, now = k == n, light)
+                }
+            }
         }
     }
 }
 
-/** One `.cd-step`: a disc per number and a wider pill for GO. The lit one is
- *  white with ink (GO's goes green); the rest are white type at 70% on a 14%
- *  white wash, literals in the CSS too. */
+/** One `.cd-step`: a disc per number and a wider pill for GO, every size a
+ *  multiple of [light]. The lit one is white with ink (GO's goes green) and a
+ *  size up; the rest are white type at 70% on a 14% white wash, literals in the
+ *  CSS too. */
 @Composable
-private fun CountdownStep(k: Int, now: Boolean, vh: Float) {
+private fun CountdownStep(k: Int, now: Boolean, light: Float) {
     val goStep = k == 0
     Box(
         Modifier
-            .size(width = ((if (goStep) 9f else 6.4f) * vh).dp, height = (6.4f * vh).dp)
+            .graphicsLayer { if (now) { scaleX = 1.15f; scaleY = 1.15f } }
+            .size(width = ((if (goStep) 1.4f else 1f) * light).dp, height = light.dp)
             .background(
                 when {
                     now && goStep -> Tokens.brand
@@ -543,7 +536,7 @@ private fun CountdownStep(k: Int, now: Boolean, vh: Float) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        val size = (2.8f * vh).dp
+        val size = (0.44f * light).dp
         StickerText(
             if (goStep) Copy.goStep else k.toString(),
             size = size, lineHeight = 1f,
