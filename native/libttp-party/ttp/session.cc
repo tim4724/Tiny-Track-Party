@@ -157,7 +157,7 @@ std::string join_url(const std::string& base, const std::string& room,
                      const std::string& instance, const std::string& platform) {
   std::string url = base + "/" + room;
   // The platform vocabulary is fixed lowercase ASCII, so it needs no escaping.
-  if (!platform.empty()) url += "?cpp=" + platform;
+  if (!platform.empty()) url += "?pbp=" + platform;
   if (!instance.empty()) url += "#" + framing::encode_uri_component(instance);
   return url;
 }
@@ -180,7 +180,7 @@ bool controller_url_template(const std::string& base, const std::string& platfor
   // Not join_url(): the placeholders must survive verbatim for the relay to
   // substitute, and join_url percent-encodes the instance.
   *out = trimmed + "/{room}";
-  if (!platform.empty()) *out += "?cpp=" + platform;
+  if (!platform.empty()) *out += "?pbp=" + platform;
   *out += "#{instance}";
   return true;
 }

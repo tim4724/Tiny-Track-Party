@@ -8,7 +8,7 @@
 // ============================================================================
 
 // Party-Server relay URL (signaling + game-event fallback).
-var RELAY_URL = 'wss://ws.couchpad.games';
+var RELAY_URL = 'wss://ws.paperballoon.games';
 // Dev/test override: the server injects its RELAY_URL env into each page's
 // <meta name="relay-url"> (see server/index.js), which also widens the CSP to
 // exactly that origin — the E2E suite points pages at its hermetic stub
@@ -27,9 +27,9 @@ if (typeof document !== 'undefined') {
 // A and AAAA (it is STUN ONLY — no TURN relay is configured, so a symmetric NAT
 // on both ends still has no path and falls back to the relay).
 // The ONLY STUN server, deliberately: no third-party fallback, so no outside
-// party sees a player's address. A stun.couchpad.games outage costs
+// party sees a player's address. A stun.paperballoon.games outage costs
 // cross-network play its fastlane, and input rides the relay instead.
-var STUN_URL = 'stun:stun.couchpad.games:3478';
+var STUN_URL = 'stun:stun.paperballoon.games:3478';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.

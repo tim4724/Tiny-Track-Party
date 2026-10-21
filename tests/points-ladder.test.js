@@ -76,7 +76,7 @@ test('the gain column fits the widest gain the ladder pays', () => {
   // Anchored on the cell's own text, because every column in the row is written
   // as the same `type * N` and the first match is the wrong one.
   for (const [rel, anchor, re] of [
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ResultsScreen.kt',
+    ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/ResultsScreen.kt',
       'row.gained?.let { Copy.gained(it) }', /ROW_TYPE \* ([\d.]+)f/],
     ['shells/tvos/TinyTrackParty/Screens/ResultsView.swift',
       'Copy.gained(row.gained ?? 0)', /Self\.type \* ([\d.]+)/]

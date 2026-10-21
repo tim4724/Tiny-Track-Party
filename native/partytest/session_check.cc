@@ -103,11 +103,11 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "joinUrl") {
-    // `cpp` postdates the frozen corpus: absent reads as "" (declare nothing),
+    // `pbp` postdates the frozen corpus: absent reads as "" (declare nothing),
     // which is exactly the URL every recorded line asserts.
     out.set("url", Value::Str(ns::join_url(json::str_field(in, "base"), json::str_field(in, "room"),
                                            json::str_field(in, "instance"),
-                                           json::str_field(in, "cpp"))));
+                                           json::str_field(in, "pbp"))));
     return true;
   }
   if (op == "claimUrl") {
@@ -117,7 +117,7 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
   if (op == "template") {
     std::string t;
     out.set("template",
-            ns::controller_url_template(json::str_field(in, "base"), json::str_field(in, "cpp"), &t)
+            ns::controller_url_template(json::str_field(in, "base"), json::str_field(in, "pbp"), &t)
                 ? Value::Str(t)
                 : Value::Null());
     return true;

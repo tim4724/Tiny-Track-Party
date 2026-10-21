@@ -129,7 +129,7 @@ async function main() {
   const { room, url } = await waitForRoom(logPath);
   console.log(`   room ${room} — ${url}\n`);
 
-  check('the join URL declares this platform', /[?&]cpp=androidtv\b/.test(url), url);
+  check('the join URL declares this platform', /[?&]pbp=androidtv\b/.test(url), url);
 
   console.log('== a phone scans the QR ==');
   const alice = new Phone(proto, { name: 'Alice' });

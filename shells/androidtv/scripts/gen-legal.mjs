@@ -1,4 +1,4 @@
-// Stage the info board's legal data into the APK: the two couchpad.games links
+// Stage the info board's legal data into the APK: the two paperballoon.games links
 // the QR cards encode, and the attribution list the Licenses board renders.
 //
 //   node shells/androidtv/scripts/gen-legal.mjs      (called by stage-assets.sh)

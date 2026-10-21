@@ -157,7 +157,7 @@ void ttp_display_destroy(void) {
 // Every ttp_* call stays on main: this thread only starts it and only it takes
 // it back. A display already up, or an engine already started, is left alone.
 JNIEXPORT void JNICALL
-Java_games_couchpad_tinytrack_TtpSurface_nativePrepare(
+Java_games_paperballoon_tinytrack_TtpSurface_nativePrepare(
         JNIEnv* env, jclass, jboolean vulkan, jbyteArray pipelineCacheFile) {
     if (ttp::rt::displayCore() || gPrepared) return;
     gPrepared = new TtpRenderer();
@@ -168,7 +168,7 @@ Java_games_couchpad_tinytrack_TtpSurface_nativePrepare(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
+Java_games_paperballoon_tinytrack_TtpSurface_nativeCreate(
         JNIEnv* env, jclass, jobject surface, jint width, jint height,
         jboolean vulkan, jbyteArray pipelineCacheFile) {
     if (!surface) return JNI_FALSE;
@@ -184,7 +184,7 @@ Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_games_couchpad_tinytrack_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
+Java_games_paperballoon_tinytrack_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
     ttp_display_destroy();
 }
 
@@ -210,7 +210,7 @@ Java_games_couchpad_tinytrack_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
 // underneath is Filament's, and whether a driver re-reads the geometry of a
 // window it has already wrapped is the driver's business, not this file's.
 JNIEXPORT jboolean JNICALL
-Java_games_couchpad_tinytrack_TtpSurface_nativeSetBufferSize(
+Java_games_paperballoon_tinytrack_TtpSurface_nativeSetBufferSize(
         JNIEnv*, jclass, jint width, jint height) {
     ttp::rt::DisplayCore* core = ttp::rt::displayCore();
     if (!core || width <= 0 || height <= 0) return JNI_FALSE;

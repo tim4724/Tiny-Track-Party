@@ -97,7 +97,7 @@ const SHELL_MIX = [
     },
   },
   {
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/AudioMixer.kt',
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/AudioMixer.kt',
     values: {
       gain: /const val MASTER = ([\d.]+)f/,
       threshold: /const val COMP_THRESHOLD = (-?[\d.]+)/,

@@ -186,7 +186,7 @@ struct GameProtocol {
     /// Where the phones load the controller from when nothing overrides it.
     ///
     /// The Info.plist key is the seam a build sets: a LAN dev server or a branch's
-    /// preview deploy (`https://tinytrack-<branch>.couchpad.games`,
+    /// preview deploy (`https://tinytrack-<branch>.paperballoon.games`,
     /// `.github/workflows/preview.yml`) is a build setting, not a code change.
     /// Without it, the production origin.
     static var defaultBaseURL: URL {
@@ -194,6 +194,6 @@ struct GameProtocol {
            let url = URL(string: text), url.scheme != nil {
             return url
         }
-        return URL(string: "https://tinytrack.couchpad.games")!
+        return URL(string: "https://tinytrack.paperballoon.games")!
     }
 }

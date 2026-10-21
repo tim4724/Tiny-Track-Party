@@ -117,7 +117,7 @@ TTP_ABI const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle,
  * alphabet needs no escaping and the phones already parse these bytes). NULL or
  * "" for no instance.
  *
- * `platform` is this shell's CouchPad `cpp` value ("web", "tvos", "androidtv");
+ * `platform` is this shell's Paper Balloon `pbp` value ("web", "tvos", "androidtv");
  * the URL is the only place a display declares which box it is, so every shell
  * passes its own and none invents a value. NULL or "" declares nothing. */
 TTP_ABI const char* ttp_net_join_url(const char* base, const char* room, const char* instance,

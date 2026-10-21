@@ -113,7 +113,7 @@ for the whole boot. Index 0 keeps it under the ComposeView.
 The boot is one unbroken main-thread stretch by design (rule 1), and it used to
 get away with it by being invisible for the whole of it. Once the cover is up
 early the window is real, and the system dispatches it a FocusEvent that must be
-consumed within 5 s — otherwise `ANR in games.couchpad.tinytrack ... Waited
+consumed within 5 s — otherwise `ANR in games.paperballoon.tinytrack ... Waited
 5003ms for FocusEvent(hasFocus=true)` and `Force finishing activity`. So the
 window carries `FLAG_NOT_FOCUSABLE` while the cover is up and drops it the moment
 the cover lifts: while the cover is up there is nothing to respond to, and every
@@ -353,7 +353,7 @@ callback returns and is nobody's span.
 `Recomposer:recompose` and `traversal` itself:
 
 ```
-adb shell atrace -b 16384 -a games.couchpad.tinytrack -t 30 \
+adb shell atrace -b 16384 -a games.paperballoon.tinytrack -t 30 \
     -o /data/local/tmp/tr.txt gfx view sched am wm
 ```
 
@@ -473,7 +473,7 @@ install never has, because Play compiles `speed-profile` from the APK's baseline
 profile (Compose's own plus `app/src/main/baseline-prof.txt`, which marks the
 whole app hot). `perf-race.android.mjs` compiles `speed` before it launches; a
 harness that does not go through it has to do the same
-(`adb shell cmd package compile -m speed games.couchpad.tinytrack`).
+(`adb shell cmd package compile -m speed games.paperballoon.tinytrack`).
 
 **The lobby's attract demo is deterministic but it does NOT pick a fixed track**
 — it previews whatever the tour last resolved to, so two runs either side of a

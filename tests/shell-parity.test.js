@@ -133,9 +133,9 @@ const SHELLS = [
   { ...SWIFT, name: 'tvOS net', switchFrom: 'switch e["op"] as? String {',
     file: 'shells/tvos/TinyTrackParty/Net/PartyNet.swift' },
   { ...KOTLIN, name: 'Android race', switchFrom: 'when (op) {',
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/RaceFlowPerformer.kt' },
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/RaceFlowPerformer.kt' },
   { ...KOTLIN, name: 'Android net', switchFrom: 'when (e.optString("op")) {',
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PartyNet.kt' },
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PartyNet.kt' },
 ];
 
 for (const s of SHELLS) {
@@ -176,7 +176,7 @@ test('every TV shell acts on every controller verdict the web acts on', () => {
   // is the exact failure the gate exists to catch.
   for (const [file, shape] of [
     ['shells/tvos/TinyTrackParty/App/GameCoordinator+Lobby.swift', SWIFT],
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt', KOTLIN],
+    ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt', KOTLIN],
   ]) {
     const src = shell(file);
     if (!src) continue;
@@ -201,7 +201,7 @@ test('every shell paces the points tally by the same number', () => {
 
   for (const [file, re] of [
     ['shells/tvos/TinyTrackParty/Screens/ResultsView.swift', /tallyOfPhase = ([\d.]+)/],
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ResultsScreen.kt', /TALLY_OF_PHASE = ([\d.]+)/],
+    ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/ResultsScreen.kt', /TALLY_OF_PHASE = ([\d.]+)/],
   ]) {
     const src = shell(file);
     if (!src) continue;
@@ -232,7 +232,7 @@ test('every shell puts the same facts on the lobby snapshot', () => {
   }
   for (const file of [
     'shells/tvos/TinyTrackParty/Net/PartyNet.swift',
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PartyNet.kt',
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PartyNet.kt',
   ]) {
     const src = shell(file);
     if (!src) continue;
@@ -250,7 +250,7 @@ test('every shell that performs the walks runs BOTH boot proofs', () => {
   const PROOFS = [
     ['shells/tvos/TinyTrackParty/App/GameCoordinator.swift',
       'ttp_race_effect_ops_json', 'ttp_net_effect_ops_json'],
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
       'ttp_race_effect_ops_json', 'ttp_net_effect_ops_json'],
   ];
   for (const [file, ...symbols] of PROOFS) {
@@ -302,9 +302,9 @@ test('every shell performs BOTH halves of the blob walk, in their two places', (
       forbidden: /ttp_display_blob_ready|ttp_display_blob_export/,
     },
     {
-      build: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
+      build: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/SceneStaging.kt',
       plan: ['ttp_display_blob_plan', 'ttp_display_blob_offer'],
-      frame: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
+      frame: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/DisplayHost.kt',
       write: ['ttp_display_blob_ready', 'ttp_display_blob_export', 'ttp_display_blob_wrote'],
       forbidden: /ttp_display_blob_ready|ttp_display_blob_export/,
     },
@@ -345,7 +345,7 @@ test('no shell keeps its own memo of what the engine is holding', () => {
   for (const file of [
     'public/display/render/Display.js',
     'shells/tvos/TinyTrackParty/Assets/SceneStaging.swift',
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/SceneStaging.kt',
   ]) {
     const src = shell(file);
     if (!src) continue;

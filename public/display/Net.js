@@ -591,7 +591,7 @@ export class DisplayNet extends GameNet {
   // fills {room}/{instance} and hands the result to anyone holding only the room
   // code (native shells via GET /room/:code, controllers in `joined`), so a
   // code-only join can resolve which page to load. Mirrors the _joinUrl() shape
-  // (instance in the fragment, kept out of request logs; the same `cpp=web`
+  // (instance in the fragment, kept out of request logs; the same `pbp=web`
   // declaration, since a typed code must reach the launcher knowing as much as a
   // scanned QR does — see NativeSessionModel). The relay accepts only
   // absolute https templates and rejects the whole create on an invalid one, so

@@ -166,7 +166,7 @@ test('very short viewport: Settings opens at its top even once the card must scr
 });
 
 // The OTHER end, and the only test here that is not about a shortage of height.
-// A tablet, a desktop window, a CouchPad shell on a big panel: above roughly
+// A tablet, a desktop window, a Paper Balloon shell on a big panel: above roughly
 // 430px the render runs out of WIDTH first — it already has all the tile has —
 // and every further pixel of tile height is space the render cannot use. It all
 // used to pool ABOVE the car (90px at 1024x500, 182px at 1180x620) because the

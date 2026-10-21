@@ -90,7 +90,7 @@ const webBoot = read('public/display/boot.js');
 const TVOS_FILE = 'shells/tvos/TinyTrackParty/App/GameCoordinator.swift';
 const tvos = existsSync(path.join(ROOT, TVOS_FILE)) ? read(TVOS_FILE) : null;
 const ANDROID_FILE =
-  'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt';
+  'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt';
 const android = existsSync(path.join(ROOT, ANDROID_FILE)) ? read(ANDROID_FILE) : null;
 
 // `stats` is nested in both, and its four members matter as much as the wrapper

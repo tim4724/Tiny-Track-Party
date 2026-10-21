@@ -1,8 +1,8 @@
 // @ts-check
 // The player's name on the phone. A browser player names themselves on the name
 // screen and renames by going back to it (the X): in the room the stickers are
-// plain labels. Inside the CouchPad launcher a sticker opens the launcher's own
-// name sheet instead — couchpad-shell.spec.js covers that half.
+// plain labels. Inside the Paper Balloon launcher a sticker opens the launcher's own
+// name sheet instead — paperballoon-shell.spec.js covers that half.
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('in a browser the name stickers are labels, not a way to rename', async ({ page, browser }) => {

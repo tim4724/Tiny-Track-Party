@@ -56,7 +56,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { GRID_MS, lineStream } from './perf-race.mjs';
 import { resolveDevicectlId, assertAwake } from './lib/tvos-device.mjs';
 
-const BUNDLE_ID = 'games.couchpad.tinytrack';
+const BUNDLE_ID = 'games.paperballoon.tinytrack';
 
 // `Scenarios.swift`'s launch arguments, and the scenario that is a race rather
 // than a screen. tvOS reads them through `UserDefaults` (the NSArgumentDomain),

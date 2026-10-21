@@ -138,11 +138,11 @@ final class PartyNet {
     private(set) var roomCode: String?
     private(set) var instance: String?
 
-    /// This shell's CouchPad `cpp` value (CONTRACT.md §6). The join URL is the
+    /// This shell's Paper Balloon `pbp` value (CONTRACT.md §6). The join URL is the
     /// only place a display declares which box it is, and the contract requires
     /// the QR and the registered controller-URL template to carry the SAME one —
     /// so both read this, and neither spells it inline.
-    static let cpPlatform = "tvos"
+    static let pbPlatform = "tvos"
 
     /// The room phase, straight off the machine that owns it.
     var roomState: String { TTP.strOrEmpty(ttp_room_state(roomHandle)) }
@@ -562,7 +562,7 @@ final class PartyNet {
             // invalid one, so a plain-http origin must send no key at all.
             let maxClients = e["maxClients"] as? Double ?? Double(proto.maxPlayers + 1)
             let template = TTP.str(ttp_net_controller_url_template(proto.baseURL.absoluteString,
-                                                                  Self.cpPlatform))
+                                                                  Self.pbPlatform))
             let frame = template.map { TTP.strOrEmpty(ttp_framing_encode_create(clientId, maxClients, $0)) }
                 ?? TTP.strOrEmpty(ttp_framing_encode_create(clientId, maxClients, nil))
             socket.send(frame)
@@ -893,7 +893,7 @@ final class PartyNet {
 
     private func joinURL() -> String {
         TTP.strOrEmpty(ttp_net_join_url(proto.baseURL.absoluteString, roomCode ?? "",
-                                        instance ?? "", Self.cpPlatform))
+                                        instance ?? "", Self.pbPlatform))
     }
 
     // MARK: - Room persistence

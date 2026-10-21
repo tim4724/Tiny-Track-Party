@@ -15,7 +15,7 @@
 # libttp_runtime_tvos.a, reached through the C ABI (see the bridging header).
 name: TinyTrackParty
 options:
-  bundleIdPrefix: games.couchpad
+  bundleIdPrefix: games.paperballoon
   createIntermediateGroups: true
   deploymentTarget:
     tvOS: "17.0"
@@ -195,7 +195,7 @@ targets:
         # of it — a bare tinytrack:// is "just launch", which is what every
         # carousel item means today (TopShelf/TopShelfProvider.swift).
         CFBundleURLTypes:
-          - CFBundleURLName: games.couchpad.tinytrack
+          - CFBundleURLName: games.paperballoon.tinytrack
             CFBundleURLSchemes: [tinytrack]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
@@ -223,7 +223,7 @@ targets:
         Release:
           PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party tvOS App Store
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack
+        PRODUCT_BUNDLE_IDENTIFIER: games.paperballoon.tinytrack
         # Names the set inside Generated/Assets.xcassets. Without it actool
         # compiles the catalogue and nothing points at the image.
         ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME: LaunchImage
@@ -342,7 +342,7 @@ targets:
         # same rewrite the NSExtension note below is about — so the appex gets
         # whatever is written here and nothing else. Without it App Store Connect
         # refuses the upload: "Invalid Bundle. Your binary,
-        # games.couchpad.tinytrack.topshelf, has a 64-bit architecture slice, so
+        # games.paperballoon.tinytrack.topshelf, has a 64-bit architecture slice, so
         # you must include the arm64 value" (ITMS-90502). The archive, the export
         # and every local install succeed; only the store says no.
         UIRequiredDeviceCapabilities:
@@ -360,7 +360,7 @@ targets:
           # ride the host app's profile.
           PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party Top Shelf App Store
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.topshelf
+        PRODUCT_BUNDLE_IDENTIFIER: games.paperballoon.tinytrack.topshelf
     dependencies:
       - sdk: TVServices.framework
 
@@ -386,7 +386,7 @@ targets:
       - target: TinyTrackParty
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.shots
+        PRODUCT_BUNDLE_IDENTIFIER: games.paperballoon.tinytrack.shots
         TEST_TARGET_NAME: TinyTrackParty
         # A DEVICE run has to code sign, and code signing needs an Info.plist. A
         # test bundle has nothing to put in one, so let Xcode synthesize it

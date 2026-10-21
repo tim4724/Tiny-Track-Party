@@ -2,7 +2,7 @@
    Tokens + reusable bits live in /shared/theme.css. --car is the player's
    livery colour, set at runtime by controller/main.js (applyLivery). */
 
-/* Safe zone. env(safe-area-inset-*) is the whole source in the CouchPad
+/* Safe zone. env(safe-area-inset-*) is the whole source in the Paper Balloon
    launcher (contract §5: status bar, cutout, home indicator, Android's nav bar
    while it shows) and in a browser alike. Every fixed/edge element pads
    against these, never bare env(). */
@@ -61,7 +61,7 @@ html, body {
   color: var(--ink);
   touch-action: manipulation;
 }
-/* The CouchPad launcher's name sheet takes its Save button and field accent from
+/* The Paper Balloon launcher's name sheet takes its Save button and field accent from
    this (contract §2): the player's livery, so the sheet reads as theirs, like the
    name sticker it renames. Brand green until the livery lands. Nothing on the
    page itself is a native control it would tint. */

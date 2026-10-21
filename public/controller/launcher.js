@@ -1,20 +1,20 @@
-// The CouchPad launcher shell (CONTRACT.md) — everything that only means
+// The Paper Balloon launcher shell (CONTRACT.md) — everything that only means
 // something when this page is hosted inside the native launcher (the Android
 // app's WebView or the iOS app's WKWebView), in one file so the rest of the
 // controller can read as a plain web page. This is the one module that reads
-// window.CouchPadHost. The bridge exists only inside the launcher, so its
+// window.PaperBalloonHost. The bridge exists only inside the launcher, so its
 // PRESENCE is the shell gate, and every touchpoint on it is feature-detected on
 // top of that — the same deployed controller keeps working untouched in a plain
 // browser.
 //
-// `cp*` is the launcher's RESERVED query namespace — this game mints no param
-// starting with `cp`, and ignores any it doesn't know, since they may be
-// addressed to the launcher rather than to us (`cpp`, which the display puts on
+// `pb*` is the launcher's RESERVED query namespace — this game mints no param
+// starting with `pb`, and ignores any it doesn't know, since they may be
+// addressed to the launcher rather than to us (`pbp`, which the display puts on
 // the join URL to name itself, is exactly that).
 import { cleanName } from '../shared/names.js';
 import { hapticChain } from './Haptics.js';
 
-const host = window.CouchPadHost;
+const host = window.PaperBalloonHost;
 
 export const inShell = !!host;
 
@@ -86,7 +86,7 @@ export const hapticBackend = host && typeof host.haptic === 'function'
     }
   : undefined;
 
-// System back (§9). Armed, a back gesture reaches window.CouchPad.back (and the
+// System back (§9). Armed, a back gesture reaches window.PaperBalloon.back (and the
 // screen edges go to the system); disarmed, edge swipes stay gameplay input and
 // the close button is the only exit. Deduped on transitions — the contract
 // expects state changes, not chatter — and feature-detected like every other
@@ -104,6 +104,6 @@ export function armSystemBack(want) {
 // consumed (a dialog closed), anything else = the launcher leaves the game —
 // which is exactly what a lobby/results back should do.
 export function installBackHook(onBack) {
-  window.CouchPad = window.CouchPad || {};
-  window.CouchPad.back = () => onBack() === true;
+  window.PaperBalloon = window.PaperBalloon || {};
+  window.PaperBalloon.back = () => onBack() === true;
 }

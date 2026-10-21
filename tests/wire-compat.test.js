@@ -81,7 +81,7 @@ test('wire: the relay model matches its frozen Party-Sockets contract', () => {
   // The model's error surface must be EXACTLY prod's, in both directions.
   //
   // Superset would mean the model invents a message the phone has never seen —
-  // and in the CouchPad shell all but two error strings end the session, so an
+  // and in the Paper Balloon shell all but two error strings end the session, so an
   // invented one is an invented teardown. SUBSET is the sharper half and the one
   // this check used to miss: an error string that disappears from this file is a
   // guard that stopped being enforced, and a permissive model is the exact defect
@@ -192,22 +192,22 @@ test('wire: every C++ outbound encoder produces bytes the relay accepts', async 
   // The url branch has NEVER been on a live wire: E2E runs over http, so
   // DisplayNet._controllerUrlTemplate() returns undefined and the key is omitted.
   // Prod validates the template and rejects the WHOLE create on a bad one. The
-  // template carries the `cpp=web` display declaration prod now registers, so the
+  // template carries the `pbp=web` display declaration prod now registers, so the
   // relay's substitution is exercised on the string it will actually be handed —
   // placeholders on either side of a query arg.
   assert.equal(f.create('cid-1', 4, null), '{"clientId":"cid-1","maxClients":4,"type":"create"}');
   assert.equal(
-    f.create('cid-1', 4, 'https://tinytrack.example/{room}?cpp=web#{instance}'),
-    '{"clientId":"cid-1","maxClients":4,"type":"create","url":"https://tinytrack.example/{room}?cpp=web#{instance}"}');
+    f.create('cid-1', 4, 'https://tinytrack.example/{room}?pbp=web#{instance}'),
+    '{"clientId":"cid-1","maxClients":4,"type":"create","url":"https://tinytrack.example/{room}?pbp=web#{instance}"}');
 
   const { relay, host, seen } = await bringUpDisplay(
     { instanceId: 'm-1', region: 'ams' },
-    { url: 'https://tinytrack.example/{room}?cpp=web#{instance}' });
+    { url: 'https://tinytrack.example/{room}?pbp=web#{instance}' });
   const created = seen.protocol.find((p) => p.type === 'created');
   assert.ok(created, 'the url-carrying create was ACCEPTED by prod validation');
   assert.equal(created.msg.instance, 'm-1');
   assert.equal(created.msg.region, 'ams');
-  assert.equal(created.msg.url, `https://tinytrack.example/${created.msg.room}?cpp=web#m-1`);
+  assert.equal(created.msg.url, `https://tinytrack.example/${created.msg.room}?pbp=web#m-1`);
 
   // And the reject branch, which no live test has ever taken: a plain-http
   // template (a dev origin) kills the create outright. The display's error
@@ -869,7 +869,7 @@ test('wire: only slot 0 may publish the room snapshot, and a phone that tries is
   //
   // WHAT THIS BREAKS AT A REAL PARTY: a phone (or a shell reusing the kit for a
   // second screen) that calls setState gets an error string outside the two the
-  // CouchPad launcher survives, so the WebView is torn down.
+  // Paper Balloon launcher survives, so the WebView is torn down.
   const { relay, net, room } = await bringUpRealDisplay();
   const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'host-only' });
   const retained = relay.rooms.get(room).state;
@@ -962,7 +962,7 @@ test('asym: a null `to` MEANS something different in each implementation', async
 test('asym: prod answers a send to a vanished slot with an error, and a joined phone reads it as display-gone', async () => {
   // Phones PING slot 0 at 1 Hz, so any window where the display's socket is
   // gone (a TV on Home, a tab asleep, a network blip) produces exactly this
-  // frame. Inside the CouchPad shell an 'error' status other than 'Room not
+  // frame. Inside the Paper Balloon shell an 'error' status other than 'Room not
   // found'/'Room is full' maps to endSession('game_ended') and the launcher
   // tears the WebView down — so a JOINED phone must route this one to
   // display_gone (the waiting overlay), never to error. Structurally
@@ -1021,7 +1021,7 @@ test('asym: a returning owner can be told the room is full', async () => {
   //
   // WHAT THIS BREAKS AT A REAL PARTY: the phone shows "Room is full" on a
   // reconnect the player believes is theirs. It is one of only two error strings
-  // the CouchPad shell survives, which is not an accident — but nothing in
+  // the Paper Balloon shell survives, which is not an accident — but nothing in
   // this repo ever produced it before this test.
   const { relay, room } = await bringUpDisplay({}, { maxClients: 2 });
   const a = await bringUpPhone(relay, room, { name: 'A', clientKey: 'own-A' });
@@ -1188,7 +1188,7 @@ test('asym: the hostless grace is the most likely real-party ending and has no E
 
   // AND — the finding this test exists for. Every one of those 119 pings targeted
   // a vacant slot 0, so prod answered every one with "Target peer not found".
-  // Read as an error, the CouchPad shell ended the session about one second
+  // Read as an error, the Paper Balloon shell ended the session about one second
   // after the TV went away and the grace was dead code from the phone's side;
   // the phone reads it as display-gone, so the whole grace is spent waiting.
   // Neither the E2E stub nor any corpus can produce this.

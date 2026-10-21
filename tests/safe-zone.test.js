@@ -30,7 +30,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const TOKENS = path.join(ROOT, 'public/shared/design-tokens.json');
 const FRAME_BUILDER = path.join(ROOT, 'native/libttp-runtime/ttp/frame_builder.h');
-const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
+const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack');
 
 const tokens = JSON.parse(fs.readFileSync(TOKENS, 'utf8')).tokens;
 const token = (name) => {

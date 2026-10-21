@@ -109,7 +109,7 @@ const SHELLS = [
     hold: /display\.hold\(true\)/
   },
   {
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
     call: /ttp_fast_forward\(sessionHandle\)/,
     hold: /display\.hold\(true\)/
   }

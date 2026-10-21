@@ -8,7 +8,7 @@
        layout viewport re-fired the small-screen font tiers (controller.css),
        visibly scaling the name form down under the player's fingers. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
-  <!-- Both dress the CouchPad launcher's name sheet (contract §2): color-scheme
+  <!-- Both dress the Paper Balloon launcher's name sheet (contract §2): color-scheme
        its text and controls (and, §4, the status-bar icons), theme-color its
        surface: the ground the page art fades into, which a browser also
        uses for its address bar. The sheet's accent is controller.css's
@@ -18,7 +18,7 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track</title>
-  <!-- CouchPad shell §10: rotate to landscape before first paint. MUST be an
+  <!-- Paper Balloon shell §10: rotate to landscape before first paint. MUST be an
        external classic script this early — inline dies on the CSP, a module runs
        too late and the player watches the page turn. -->
   <script src="/controller/shellOrient.js?v=__APP_V__"></script>
@@ -46,7 +46,7 @@
        stands alone on the name and results screens; in the lobby the X is the
        last key in the settings pill (#lobby-close), and in a race the pause
        button holds the corner and the way out is the pause menu's "Leave game".
-       In the CouchPad launcher it leaves the game (contract §3); in a browser it
+       In the Paper Balloon launcher it leaves the game (contract §3); in a browser it
        backs out of the room to the name screen and leaves fullscreen.
        closeButton.js owns when each shows. -->
   <button id="close-btn" class="icon-btn close-btn hidden" type="button" aria-label="Close"><svg class="close-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -402,7 +402,7 @@
 
   <!-- Rotate overlay — the controller is LANDSCAPE-ONLY. Pure CSS: the portrait
        media query shows it over everything (z 40, above #conn) so no screen is
-       usable sideways-wrong. In the CouchPad shell the launcher pins landscape
+       usable sideways-wrong. In the Paper Balloon shell the launcher pins landscape
        (§10) so this never shows; in a plain browser it is the fallback for
        platforms where fullscreen + orientation lock (orientation.js) can't be
        had, iOS Safari first among them. -->

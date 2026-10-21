@@ -70,7 +70,7 @@ if [ "$INSTALL" = install ]; then
 fi
 
 # The same string app/build.gradle.kts stamps into versionName, so `adb shell
-# dumpsys package games.couchpad.tinytrack | grep versionName` answers
+# dumpsys package games.paperballoon.tinytrack | grep versionName` answers
 # "which commit is on the box?" and can be compared against this by eye.
 DIRTY=""
 if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then DIRTY="-dirty"; fi

@@ -50,10 +50,10 @@ jobs:
           set -euo pipefail
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
           NS="tinytrack-${SAFE_BRANCH}"
-          # All preview hosts sit under *.couchpad.games (covered by the
+          # All preview hosts sit under *.paperballoon.games (covered by the
           # existing wildcard TLS + DNS). main deploys to tinytrack-main,
           # branches to tinytrack-<branch>.
-          HOST="tinytrack-${SAFE_BRANCH}.couchpad.games"
+          HOST="tinytrack-${SAFE_BRANCH}.paperballoon.games"
 
           kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
@@ -269,7 +269,7 @@ jobs:
           BRANCH_RAW: ${{ github.ref_name }}
         run: |
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
-          HOST="tinytrack-${SAFE_BRANCH}.couchpad.games"
+          HOST="tinytrack-${SAFE_BRANCH}.paperballoon.games"
           {
             echo "### Preview"
             echo "- URL: https://${HOST}"

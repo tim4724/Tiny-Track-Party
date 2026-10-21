@@ -78,7 +78,7 @@ function syncShellBack() {
 }
 
 // haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
-// navigator.vibrate, the CouchPad iOS launcher supplies one). The player's eyes
+// navigator.vibrate, the Paper Balloon iOS launcher supplies one). The player's eyes
 // are on the main display, not the phone, so a buzz is how the phone confirms
 // something landed. ONE motor, so every cue routes through this instance: a
 // transient fired while the brake rumble is running would otherwise silence it
@@ -710,7 +710,7 @@ function renameTo(n) {
 // The name stickers — the lobby's and the race's alike, since a name that
 // renames in one place and not the other gives no hint why. In the launcher a
 // tap opens ITS name sheet (§2), which owns the name and its rules; the resolved
-// name is already its CouchPadHost.name. A browser player named themselves on
+// name is already its PaperBalloonHost.name. A browser player named themselves on
 // the name screen a moment ago and renames by going back to it (the X), so
 // there the stickers are plain labels: an in-room field would raise the
 // keyboard over a fullscreen page, which Android Chrome mishandles.

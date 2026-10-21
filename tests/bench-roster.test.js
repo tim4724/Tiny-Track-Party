@@ -58,7 +58,7 @@ test('the web harness names its seats what the bench field does', () => {
 
 test('and so does the Android harness', () => {
   assert.deepEqual(
-    mirror('shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/Scenarios.kt',
+    mirror('shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/Scenarios.kt',
       'private val NAMES'),
     sourceNames(),
     'Scenarios.kt NAMES disagrees with race_flow.cc kBenchNames');

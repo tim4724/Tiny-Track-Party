@@ -118,7 +118,7 @@ std::string clean_name_json(const std::string& valueJson);
 // no escaping, and encoding it would change bytes the phones already parse.
 // An empty instance is the JS falsy case: no fragment at all.
 //
-// `platform` spells which box this display is into the URL as `?cpp=` (CouchPad
+// `platform` spells which box this display is into the URL as `?pbp=` (Paper Balloon
 // CONTRACT §6), and the URL is the ONLY place a display declares itself — so the
 // QR, the registered template and the launcher's rejoin card all read it from the
 // same string. The vocabulary is FIXED at "web", "tvos" and "androidtv" and the
@@ -139,7 +139,7 @@ std::string claim_url(const std::string& url, double peerIndex);
 // room code — native TV shells via GET /room/:code, controllers in `joined` — so
 // a code-only join can resolve which page to load. Same shape as join_url,
 // `platform` included: the contract requires the template to match what a scanned
-// QR produces, and it is what carries `cpp` to a typed-code or nearby join.
+// QR produces, and it is what carries `pbp` to a typed-code or nearby join.
 //
 // Returns false for "register NO template". The relay accepts only absolute
 // https templates and REJECTS THE WHOLE CREATE on an invalid one, so a plain-http

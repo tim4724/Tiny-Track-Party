@@ -57,7 +57,7 @@ say "install → $SERIAL"
 say launch
 "$ADB" -s "$SERIAL" shell logcat -c >/dev/null 2>&1 || true
 "$ADB" -s "$SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
-"$ADB" -s "$SERIAL" shell am start -n games.couchpad.tinytrack/.MainActivity >/dev/null
+"$ADB" -s "$SERIAL" shell am start -n games.paperballoon.tinytrack/.MainActivity >/dev/null
 
 # WAIT FOR THE PICTURE, DON'T SLEEP AT IT. A fixed sleep is both too long on a
 # warm box and too short after a cold install, which is the failure that reads as

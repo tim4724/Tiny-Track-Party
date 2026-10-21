@@ -10,7 +10,7 @@
 
     <!-- NOTHING IS DECLARED FOR THE LAN, and that is a targetSdk fact rather
          than a permanent one. Two features here touch the local network — the
-         CouchPad room record over NsdManager (RoomAdvertiser.kt) and the
+         Paper Balloon room record over NsdManager (RoomAdvertiser.kt) and the
          fastlane's ICE host candidates (Fastlane.kt) — and Local Network
          Protections gate both behind the ACCESS_LOCAL_NETWORK runtime permission
          only for apps targeting API 37. This one targets 36 on purpose

@@ -283,7 +283,7 @@ export function closeAnyModal() {
 export function anyModalOpen() { return settingsOpen() || motionOpen() || starsOpen() || leaveCupOpen(); }
 
 // Close the topmost popup, report whether one was there — the shell's
-// window.CouchPad.back handler (motion sits above settings, so it goes first;
+// window.PaperBalloon.back handler (motion sits above settings, so it goes first;
 // the stars and leave-cup popups each open from one tap on a screen with no
 // other popup, so they never stack with anything).
 export function closeTopModal() {

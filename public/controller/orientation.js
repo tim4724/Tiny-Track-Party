@@ -1,5 +1,5 @@
 // Landscape enforcement for the PLAIN BROWSER. The controller is landscape-only:
-// in the CouchPad shell the launcher rotates and pins the device for us
+// in the Paper Balloon shell the launcher rotates and pins the device for us
 // (shellOrient.js, contract §10), but a browser can only be ASKED — fullscreen
 // plus an orientation lock, both of which need a user gesture. So this module
 // piggybacks on gestures the player already makes (any tap, from the name screen
