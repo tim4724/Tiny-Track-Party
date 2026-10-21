@@ -357,12 +357,8 @@ let fieldModels = [];      // what the field was last built from
 let kitShortlist = [];  // [{ id, label, biome, models: ['kit/model'] }]
 const KIT_FIELD_MAX = 600;
 let kitBuild = 0;       // a build that lands after a newer one was asked for is dropped
-// YES / NO on a shortlist, per cup ("beach~pirate/barrel"), kept by the dev
-// server beside the kit cache (/api/kit-verdicts) so the next step reads them.
-let kitVerdicts = {};
 let kitShown = [];      // what the field stands, same order as kitRows
 let kitAt = -1;         // the model the camera is standing on
-const kitDecide = document.getElementById('kit-decide');
 
 function kitEmpty(message) {
   const p = document.createElement('p');
@@ -377,12 +373,11 @@ function kitEmpty(message) {
 // SOURCES.json beside those files — our copies have been renamed and edited, so
 // there is no rule that recovers it.
 async function loadKitModels() {
-  const [i, s, l, v] = await Promise.all([fetch('/kits/index.json'),
-    fetch('/assets/toycar/SOURCES.json'), fetch('/kits/shortlist.json'), fetch('/api/kit-verdicts')]);
+  const [i, s, l] = await Promise.all([fetch('/kits/index.json'),
+    fetch('/assets/toycar/SOURCES.json'), fetch('/kits/shortlist.json')]);
   if (!i.ok) throw new Error('no kit cache');
   const index = await i.json();
   const sources = await s.json();
-  kitVerdicts = v.ok ? await v.json() : {};
   kitShortlist = l.ok ? (await l.json()).cups : [];
   for (const cup of kitShortlist) {
     const o = document.createElement('option');
@@ -459,7 +454,6 @@ async function buildKitField() {
   if (shown.length > KIT_FIELD_MAX) {
     s.kits([]);
     kitShown = [];
-    paintDecide();
     kitEmpty(`${shown.length} models is too many to stand at once. Pick a shortlist `
       + `or type a filter to get under ${KIT_FIELD_MAX}.`);
     return;
@@ -472,93 +466,19 @@ async function buildKitField() {
   buildKitList(shown);
   // Land on the first of them rather than wherever the last look left you: the
   // field is somewhere off past the track, and a rebuild you cannot see is
-  // indistinguishable from one that did not happen. Deciding a shortlist lands
-  // on the first one still undecided.
-  const open = shown.findIndex((m) => !kitVerdicts[verdictKey(m)]);
-  kitGoTo(currentCup() && open >= 0 ? open : 0);
+  // indistinguishable from one that did not happen.
+  kitGoTo(0);
 }
-
-function currentCup() { return kitShortlist.find((c) => c.id === kitSet.value) || null; }
-// Only a KIT model takes a verdict; a concept car is not up for one.
-function verdictKey(m) { const c = currentCup(); return c && m.id.startsWith('kit:') ? `${c.id}~${m.id.slice('kit:'.length)}` : null; }
 
 function kitGoTo(i) {
   if (!kitShown.length) return;
-  kitAt = (i + kitShown.length) % kitShown.length;
+  kitAt = i;
   const s = showroom();
   const m = kitShown[kitAt];
   if (s) s.lookAtKit(kitLayout[kitAt], m.kit === 'Roster' || m.kit === 'Concept cars');
   kitRows.forEach((r, k) => r.classList.toggle('kit-row--at', k === kitAt));
   kitRows[kitAt].scrollIntoView({ block: 'nearest' });
-  paintDecide();
 }
-
-function paintDecide() {
-  const cup = currentCup();
-  kitDecide.hidden = !cup || !state.assetKits || !kitShown.length;
-  if (kitDecide.hidden) return;
-  const m = kitShown[kitAt];
-  const v = kitVerdicts[verdictKey(m)] || null;
-  document.getElementById('kit-decide-name').textContent = m.name;
-  document.getElementById('kit-decide-meta').textContent = `${m.kit} · ${m.tris} triangles · ${kitAt + 1} of ${kitShown.length}`;
-  document.getElementById('kit-no').setAttribute('aria-pressed', String(v === 'no'));
-  document.getElementById('kit-yes').setAttribute('aria-pressed', String(v === 'yes'));
-  const vs = kitShown.map((x) => kitVerdicts[verdictKey(x)]);
-  const yes = vs.filter((x) => x === 'yes').length, no = vs.filter((x) => x === 'no').length;
-  document.getElementById('kit-tally').textContent = `${cup.label}: ${yes} yes · ${no} no · ${kitShown.length - yes - no} left`;
-  kitRows.forEach((r, k) => {
-    const rv = vs[k];
-    r.classList.toggle('kit-row--yes', rv === 'yes');
-    r.classList.toggle('kit-row--no', rv === 'no');
-  });
-}
-
-// A verdict saves, then moves on to the next model still undecided (or simply
-// the next one, once every model has a verdict). The same key again clears it.
-async function kitDecideAs(verdict) {
-  const m = kitShown[kitAt];
-  const key = m && verdictKey(m);
-  if (!key) return;
-  const was = kitVerdicts[key];
-  const next = was === verdict ? null : verdict;
-  if (next) kitVerdicts[key] = next; else delete kitVerdicts[key];
-  paintDecide();
-  fetch('/api/kit-verdicts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, verdict: next }) })
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((all) => { kitVerdicts = all; paintDecide(); })
-    .catch(() => {
-      // Show what is on disk, not what was asked for.
-      if (was) kitVerdicts[key] = was; else delete kitVerdicts[key];
-      paintDecide();
-      document.getElementById('kit-tally').textContent = 'Could not save that verdict; is the dev server running?';
-    });
-  if (!next) return;
-  for (let k = 1; k <= kitShown.length; k++) {
-    const j = (kitAt + k) % kitShown.length;
-    if (!kitVerdicts[verdictKey(kitShown[j])]) { kitGoTo(j); return; }
-  }
-  kitGoTo(kitAt + 1);
-}
-
-document.getElementById('kit-yes').addEventListener('click', () => kitDecideAs('yes'));
-document.getElementById('kit-no').addEventListener('click', () => kitDecideAs('no'));
-document.getElementById('kit-prev').addEventListener('click', () => kitGoTo(kitAt - 1));
-document.getElementById('kit-next').addEventListener('click', () => kitGoTo(kitAt + 1));
-// Keys work wherever focus is, the scene's frame included (its own keys are the
-// fly camera's WASD / QE, so Y, N and the arrows are free there).
-function onDecideKey(e) {
-  if (kitDecide.hidden || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-  const act = { KeyY: () => kitDecideAs('yes'), KeyN: () => kitDecideAs('no'),
-    ArrowRight: () => kitGoTo(kitAt + 1), ArrowLeft: () => kitGoTo(kitAt - 1) }[e.code];
-  if (act) { e.preventDefault(); act(); }
-}
-window.addEventListener('keydown', onDecideKey);
-frame.addEventListener('load', () => {
-  try { frame.contentWindow.addEventListener('keydown', onDecideKey); } catch (_) { /* cross-origin: never here */ }
-});
-try { frame.contentWindow.addEventListener('keydown', onDecideKey); } catch (_) { /* not loaded yet */ }
 
 function buildKitList(shown) {
   const frag = document.createDocumentFragment();
@@ -619,7 +539,6 @@ function syncField() {
     const s = showroom();
     if (s) { s.kits([]); s.home(); }
     kitShown = [];
-    paintDecide();
   }
 }
 Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', syncField);

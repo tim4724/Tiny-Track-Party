@@ -291,36 +291,6 @@ section.stage iframe {
 .kit-row--in .kit-row__name::after { content: ' ✓'; }
 /* Where the camera is standing right now. */
 .kit-row--at { background: #26264e; color: #fff; }
-/* A shortlist verdict, as a mark before the name. */
-.kit-row--yes .kit-row__name::before { content: '✓ '; color: #22c46e; }
-.kit-row--no .kit-row__name::before { content: '✗ '; color: #ff5040; }
-.kit-row--no { opacity: 0.5; }
-
-/* The yes/no bar: bottom centre over the scene, one model at a time. */
-.decide {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 12px;
-  background: rgba(6, 6, 15, 0.9); border: 1px solid rgba(255,255,255,0.14);
-  color: #e8e8f0; pointer-events: auto; max-width: calc(100% - 24px);
-}
-.decide[hidden] { display: none; }
-.decide__what { display: flex; flex-direction: column; min-width: 170px; }
-.decide__name { font-size: 15px; font-weight: 700; }
-.decide__meta, .decide__tally { font-size: 11px; color: #8b93b8; white-space: nowrap; }
-.decide__btn {
-  font: inherit; font-size: 15px; font-weight: 700; padding: 8px 18px;
-  border-radius: 10px; border: 2px solid transparent; cursor: pointer; color: #fff;
-}
-.decide__btn--no { background: #ff5040; }
-.decide__btn--yes { background: #22c46e; }
-.decide__btn[aria-pressed="true"] { border-color: #fff; }
-.decide__btn kbd { font: inherit; font-size: 11px; opacity: 0.75; margin-left: 4px; }
-.decide__step {
-  font-size: 20px; width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
-  background: #1c1c33; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.16);
-}
-.decide button:focus-visible { outline: 2px solid #339cf2; outline-offset: 2px; }
 
 /* Mobile: one card per row + compact, touch-friendly header.
    - Header becomes a 3-col grid: title spans the top row, and Display /

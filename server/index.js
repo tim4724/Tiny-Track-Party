@@ -217,35 +217,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // The kit browser's yes/no verdicts on a shortlist, kept beside the kit cache
-  // they judge (`npm run fetch:kits`) so the next step can read them off disk.
-  // Dev only, like the cache: no image has it. Body: { key, verdict } with
-  // verdict 'yes' | 'no' | null (null clears).
-  if (urlPath === '/api/kit-verdicts' && !IS_PROD) {
-    const file = path.join(KITS_DIR, 'verdicts.json');
-    const read = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return {}; } };
-    if (req.method === 'GET') { sendJson(res, 200, read()); return; }
-    if (req.method !== 'POST') { sendJson(res, 405, { error: 'GET or POST' }); return; }
-    let body = '';
-    req.on('data', (d) => { body += d; if (body.length > 4096) req.destroy(); });
-    req.on('end', () => {
-      let msg;
-      try { msg = JSON.parse(body); } catch (_) { sendJson(res, 400, { error: 'bad json' }); return; }
-      if (typeof msg.key !== 'string' || !/^[\w-]+~[\w-]+\/[\w.-]+$/.test(msg.key)
-          || ![null, 'yes', 'no'].includes(msg.verdict)) {
-        sendJson(res, 400, { error: 'want { key: "cup~kit/model", verdict: "yes"|"no"|null }' });
-        return;
-      }
-      const all = read();
-      if (msg.verdict) all[msg.key] = msg.verdict; else delete all[msg.key];
-      try { fs.writeFileSync(file, `${JSON.stringify(all, null, 2)}\n`); } catch (_) {
-        sendJson(res, 500, { error: 'no kit cache to write into' }); return;
-      }
-      sendJson(res, 200, all);
-    });
-    return;
-  }
-
   // --- route remaps ---
   if (urlPath === '/') {
     urlPath = '/display/index.html';
