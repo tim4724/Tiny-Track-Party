@@ -4,7 +4,7 @@ name: Release
 #
 #   - the signed store builds: TWO bundles out of ONE native build, kept as a
 #     workflow artifact and, on a release tag, published to Play. The TV bundle
-#     (leanback REQUIRED) goes to tv:Alpha. The phoneTest bundle (leanback
+#     (leanback REQUIRED) goes to tv:tv. The phoneTest bundle (leanback
 #     optional plus a LAUNCHER filter) goes to the ordinary alpha track,
 #     because Play's twelve-testers-for-fourteen-continuous-days gate is per
 #     APP, and a tester who owns no television cannot install the TV one.
@@ -315,9 +315,10 @@ jobs:
       # one part of this that has NO API: androidpublisher v3 has no form-factor
       # resource, and TrackConfig.formFactor enumerates DEFAULT, WEAR and
       # AUTOMOTIVE only. A tv: track cannot be created here, only published to,
-      # so the console declaration comes first. tv:Alpha is confirmed live
-      # (edits.tracks.list also lists tv, tv:internal, tv:beta, tv:production);
-      # the suffix is the console's name verbatim, capital A included.
+      # so the console declaration comes first. tv:tv is the TV closed track
+      # Play created with the form factor (edits.tracks.list also lists tv,
+      # tv:internal, tv:beta, tv:production); the suffix is the console's track
+      # name verbatim, so renaming the track there breaks this step.
       #
       # Closed testing goes out completed, not draft: testers opted in, and Play
       # still reviews the release. Point this at tv:production and the draft gate
@@ -329,7 +330,7 @@ jobs:
       # RE-RUNNABLE: GITHUB_RUN_NUMBER does not change on a re-run, so the codes
       # come out identical and the TV upload refuses its own as already used.
       # Recover by moving the tag, not by pressing re-run.
-      - name: Publish TV bundle to Play (tv:Alpha)
+      - name: Publish TV bundle to Play (tv:tv)
         if: github.ref_type == 'tag'
         uses: r0adkll/upload-google-play@v1.1.5
         with:
@@ -337,7 +338,7 @@ jobs:
           packageName: games.paperballoon.tinytrack
           releaseFiles: ${{ env.TV_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
-          track: tv:Alpha
+          track: tv:tv
           status: completed
 
       # THE TESTER COUNT LIVES HERE. `alpha` is the default form factor's closed
@@ -375,7 +376,7 @@ jobs:
   # NO TRACKS, unlike Play. Apple has no track concept: an accepted upload
   # processes and is then available to internal TestFlight testers, and external
   # testing needs a beta review in the console. So there is nothing here that
-  # corresponds to the tv:Alpha / alpha split above, and no status to choose.
+  # corresponds to the tv:tv / alpha split above, and no status to choose.
   #
   # Secrets (repo Settings > Secrets and variables > Actions):
   #   APPLE_DIST_CERT_P12_B64   base64 of an Apple Distribution certificate +
