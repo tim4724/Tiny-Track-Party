@@ -2,7 +2,7 @@
 // The controller is LANDSCAPE-ONLY: a portrait viewport gets the full-screen
 // rotate overlay (pure CSS on the orientation media query) over every screen,
 // and turning the phone sideways clears it without a reload. The overlay is the
-// plain-browser fallback — the CouchPad shell pins landscape via §10 instead.
+// plain-browser fallback — the Paper Balloon shell pins landscape via §10 instead.
 const { test, expect, openDisplay } = require('./helpers');
 
 test('portrait shows the rotate overlay; landscape hides it', async ({ page, browser }) => {

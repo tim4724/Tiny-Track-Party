@@ -68,7 +68,7 @@ export const SHARED_NOTICES = {
 };
 
 /// The privacy and imprint pages, read out of the display's legal footer so a TV
-/// cannot link somewhere the web does not. Both are couchpad.games pages (legal
+/// cannot link somewhere the web does not. Both are paperballoon.games pages (legal
 /// is central for every game on the launcher), which is exactly why a TV shows
 /// them as QR codes: a phone can open them, a television cannot.
 export function legalLinks() {
@@ -76,7 +76,7 @@ export function legalLinks() {
   const foot = /<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/.exec(html);
   if (!foot) throw new Error('public/display/index.html has no .site-foot footer to read');
   const href = (page) => {
-    const m = new RegExp(`href="(https://couchpad\\.games/[^"]*${page})"`).exec(foot[1]);
+    const m = new RegExp(`href="(https://paperballoon\\.games/[^"]*${page})"`).exec(foot[1]);
     if (!m) throw new Error(`the display footer no longer links ${page}`);
     return m[1];
   };

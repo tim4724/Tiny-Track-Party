@@ -2,7 +2,7 @@
 
 // Tiny Track Party static host. Like HexStacker, this server runs NO game logic and NO
 // WebSocket: it serves static files + a few JSON endpoints. Realtime multiplayer
-// runs off-box through the Party-Server relay (wss://ws.couchpad.games) plus the
+// runs off-box through the Party-Server relay (wss://ws.paperballoon.games) plus the
 // optional WebRTC fastlane. The display browser is authoritative; phones are
 // thin controllers. See public/shared/protocol.js for the relay config.
 
@@ -166,7 +166,7 @@ function cspHeader(frameAncestors) {
     "font-src 'self'",
     // RELAY_URL (env) widens connect-src to exactly the configured relay —
     // the E2E suite points pages at its local stub this way.
-    "connect-src 'self' wss://ws.couchpad.games https://ws.couchpad.games" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
+    "connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
     "img-src 'self' data:",
     "object-src 'none'",
     "frame-src 'self'",
@@ -179,13 +179,13 @@ const server = http.createServer((req, res) => {
 
   // --- JSON endpoints ---
   if (urlPath === '/health') { sendJson(res, 200, { status: 'ok' }); return; }
-  // The CouchPad launcher's App Clip: an iOS camera scan of a room link opens
+  // The Paper Balloon launcher's App Clip: an iOS camera scan of a room link opens
   // the controller without an install. App Clip domains can't be wildcards, so
   // this host lists the clip itself; the launcher's universal links come from
-  // couchpad.games's file (applinks:*.couchpad.games reads the root domain's).
+  // paperballoon.games's file (applinks:*.paperballoon.games reads the root domain's).
   // Apple's CDN fetches it over HTTPS as application/json with no redirect.
   if (urlPath === '/.well-known/apple-app-site-association') {
-    sendJson(res, 200, { appclips: { apps: ['5ZH48MPAM3.games.couchpad.controller.Clip'] } });
+    sendJson(res, 200, { appclips: { apps: ['5ZH48MPAM3.games.paperballoon.controller.Clip'] } });
     return;
   }
   if (urlPath === '/api/baseurl') {

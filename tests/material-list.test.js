@@ -43,7 +43,7 @@ const SHELLS = [
   },
   {
     name: 'Android TV',
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/SceneStaging.kt',
     // Terminated by the `)` that CLOSES the call — the one on its own line —
     // never by the first `)` in the body. A `[^)]+` body stopped at the paren
     // inside a comment, so the gate silently compared a truncated list and

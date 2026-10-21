@@ -1,6 +1,6 @@
 // The close button (X), top-right on every screen but the race: alone in the
 // corner on the name and results screens (#close-btn), the last key of the
-// settings pill in the lobby (#lobby-close). In the CouchPad launcher it is the
+// settings pill in the lobby (#lobby-close). In the Paper Balloon launcher it is the
 // player's way out (CONTRACT §3: iOS has no system back, Android's is off while
 // driving), so it shows everywhere the launcher offers leave(). In a race the
 // pause button holds that corner instead and the way out is the pause menu's

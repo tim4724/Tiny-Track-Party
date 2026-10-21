@@ -334,7 +334,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: games.couchpad.tinytrack
+          packageName: games.paperballoon.tinytrack
           releaseFiles: ${{ env.TV_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
           track: tv:Alpha
@@ -352,7 +352,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: games.couchpad.tinytrack
+          packageName: games.paperballoon.tinytrack
           releaseFiles: ${{ env.PHONE_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/phoneTest/mapping.txt
           track: alpha
@@ -394,9 +394,9 @@ jobs:
   #                             an ADMIN key — a team-wide credential on a runner,
   #                             traded for not creating two profiles by hand.
   #   APPLE_PROFILE_APP_B64     base64 of the "Tiny Track Party tvOS App Store"
-  #                             .mobileprovision (games.couchpad.tinytrack)
+  #                             .mobileprovision (games.paperballoon.tinytrack)
   #   APPLE_PROFILE_TOPSHELF_B64  the same for "Tiny Track Party Top Shelf App
-  #                             Store" (games.couchpad.tinytrack.topshelf). An
+  #                             Store" (games.paperballoon.tinytrack.topshelf). An
   #                             appex cannot ride its host's profile.
   #
   # BOTH PROFILES EXPIRE, about a year out, and that is the cost of this trade.
@@ -643,8 +643,8 @@ jobs:
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
             <key>provisioningProfiles</key><dict>
-              <key>games.couchpad.tinytrack</key><string>Tiny Track Party tvOS App Store</string>
-              <key>games.couchpad.tinytrack.topshelf</key><string>Tiny Track Party Top Shelf App Store</string>
+              <key>games.paperballoon.tinytrack</key><string>Tiny Track Party tvOS App Store</string>
+              <key>games.paperballoon.tinytrack.topshelf</key><string>Tiny Track Party Top Shelf App Store</string>
             </dict>
             <key>uploadSymbols</key><true/>
             <!-- Or xcodebuild rewrites what the archive already stamped: the

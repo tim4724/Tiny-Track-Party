@@ -44,11 +44,11 @@ val keystoreProps = sequenceOf(
 }
 
 android {
-    namespace = "games.couchpad.tinytrack"
+    namespace = "games.paperballoon.tinytrack"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "games.couchpad.tinytrack"
+        applicationId = "games.paperballoon.tinytrack"
         // 24 matches the CI leg and the ctest device build. Compose needs 21+
         // and Filament's GLES3 path 18+, so this floor is about what Android TV
         // boxes actually run rather than about either of those.

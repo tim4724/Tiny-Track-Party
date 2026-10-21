@@ -198,7 +198,7 @@ same machine.
 ## Deploys
 
 Every push builds and deploys a preview to
-`https://tinytrack-<branch>.couchpad.games` (`.github/workflows/preview.yml`).
+`https://tinytrack-<branch>.paperballoon.games` (`.github/workflows/preview.yml`).
 
 The engine wasm is a committed binary, so two branches that both touch `native/`
 will conflict on `ttp_runtime.wasm`. The artifact is wholly derived from

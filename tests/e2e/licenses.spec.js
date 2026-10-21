@@ -16,12 +16,12 @@ test('the welcome board footer leads to a licenses page that renders its credits
 
   const foot = page.locator('.welcome__foot');
   await expect(foot).toBeVisible();
-  // Three of the four leave the site (the repo, and the two couchpad.games
+  // Three of the four leave the site (the repo, and the two paperballoon.games
   // legal pages), so follow none of them here — only assert they are offered.
   await expect(foot.locator('a[href="https://github.com/tim4724/Tiny-Track-Party"]'))
     .toHaveText('Developed by Tim');
-  await expect(foot.locator('a[href="https://couchpad.games/en/privacy"]')).toBeVisible();
-  await expect(foot.locator('a[href="https://couchpad.games/en/imprint"]')).toBeVisible();
+  await expect(foot.locator('a[href="https://paperballoon.games/en/privacy"]')).toBeVisible();
+  await expect(foot.locator('a[href="https://paperballoon.games/en/imprint"]')).toBeVisible();
 
   await foot.locator('a[href="/licenses.html"]').click();
   await page.waitForURL('**/licenses.html');

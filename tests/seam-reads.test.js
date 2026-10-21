@@ -114,7 +114,7 @@ test('no shell composes a standings board', () => {
   for (const f of [
     'public/display/main.js',
     'shells/tvos/TinyTrackParty/App/GameCoordinator+Race.swift',
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
   ]) {
     assert.ok(existsSync(path.join(ROOT, f)), `${f} is missing — broken checkout?`);
     assert.doesNotMatch(codeOf(f), /\bttp_ui_standings_live_json\b|\bstandingsPayload\b/,

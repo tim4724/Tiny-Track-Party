@@ -105,7 +105,7 @@ export function lobbyFrame(roomHandle, sessionHandle, fields) {
 }
 
 // ---- URLs -------------------------------------------------------------------
-// This shell's `cpp` value (CouchPad CONTRACT §6): a browser-based display. It
+// This shell's `pbp` value (Paper Balloon CONTRACT §6): a browser-based display. It
 // is what tells the launcher which box a room is on, and the URL is the only
 // place it can say so — so it goes on the QR and on the registered template
 // alike, and reaches a typed-code, nearby or rejoin arrival through the relay.

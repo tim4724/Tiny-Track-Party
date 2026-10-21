@@ -70,7 +70,7 @@ const SHELLS = [
   },
   {
     lang: 'Kotlin',
-    dir: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack',
+    dir: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack',
     ext: '.kt',
     decl: /^\s*(?:@\w+\s+)*(?:public |internal |protected )?(?:override |open |suspend |inline )*fun\s+(?:<[^>]*>\s*)?(\w+)\s*\(/gm,
     priv: /\bprivate\s+(?:inline\s+|suspend\s+)*fun\s/,

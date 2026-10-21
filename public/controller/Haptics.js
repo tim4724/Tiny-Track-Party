@@ -5,7 +5,7 @@
 // site. Three platforms play them three ways:
 //   - the plain web page has only navigator.vibrate, which takes durations and
 //     nothing else — so every effect carries a `ms` fallback;
-//   - the CouchPad launcher offers CouchPadHost.haptic(primitive, scale), one of
+//   - the Paper Balloon launcher offers PaperBalloonHost.haptic(primitive, scale), one of
 //     Android's composition primitives at a strength (CONTRACT.md §12), plus a
 //     navigator.vibrate on both apps (§11, polyfilled on iOS);
 //   - inside the AirConsole iframe only the SDK's composition vibrate works —
@@ -124,7 +124,7 @@ export class Haptics {
   }
 }
 
-// A vibrate() pattern as a composition — the step shape both the CouchPad
+// A vibrate() pattern as a composition — the step shape both the Paper Balloon
 // launcher (CONTRACT.md §12 hapticComposition) and the AirConsole SDK take:
 // one low tick per on-segment, and the pattern's off-segments become each
 // step's `delay`, the rest AFTER the previous step ends (Android's composition

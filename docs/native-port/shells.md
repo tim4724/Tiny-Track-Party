@@ -366,18 +366,18 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    ZXing on Android, `public/shared/qr.js` in the browser — copy its policy (EC
    level L, a 1-module quiet zone), not its library. Every shell encodes
    locally: no display asks its own origin to draw its own join code.
-9. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
+9. **A base URL, and this shell's `pbp` value.** `session.h`'s `join_url` needs
    an origin serving the phone controller, and a native app has none of its own.
    The web deployment is therefore a runtime dependency of every TV app.
    `baseUrlOverride` is the existing seam. Pass your platform — `"tvos"` or
    `"androidtv"`, the fixed vocabulary `session.h` documents — to both `join_url`
    and `controller_url_template`: the join URL is the only place a display
-   declares which box it is to the CouchPad launcher, and the two must agree
+   declares which box it is to the Paper Balloon launcher, and the two must agree
    because a player may arrive by either.
-10. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
-   `_couchpad._tcp` in `.local` at room create, withdraw it at close, with the
+10. **A room advertisement, if you are native** (Paper Balloon CONTRACT §8). Publish
+   `_paperballoon._tcp` in `.local` at room create, withdraw it at close, with the
    TV's human label as the DNS-SD instance name and the room code as TXT `c` —
-   nothing else, and never TXT `cpr`, which is a launcher-to-launcher marker. The
+   nothing else, and never TXT `pbr`, which is a launcher-to-launcher marker. The
    launcher resolves the code through the relay, so this only accelerates a join
    it could already make: keep showing the QR and the code regardless. The web
    display cannot do this at all (browsers cannot advertise mDNS), which is why
@@ -534,7 +534,7 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     the licence's own text, one shared copy per id under `shells/licenses/`. The
     shared module resolves both and throws on a row with neither, so this costs a
     new shell nothing.
-    Privacy and imprint are couchpad.games pages for every game on the launcher: link them, never restate them, and on a box with no
+    Privacy and imprint are paperballoon.games pages for every game on the launcher: link them, never restate them, and on a box with no
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 

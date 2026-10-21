@@ -157,7 +157,7 @@ test('stopping between a transient and its re-arm leaves the motor silent', () =
   assert.deepEqual(calls, [BRAKE_PATTERN, EFFECTS.count.ms, 0]);
 });
 
-// --- the primitive channel (CouchPad launcher §12, AirConsole composition) ---
+// --- the primitive channel (Paper Balloon launcher §12, AirConsole composition) ---
 
 test('with a primitive channel, transients play as [primitive, scale] and the loop still rides vibrate', () => {
   const { h, calls, advance } = harness({ play: true });
@@ -206,7 +206,7 @@ test('the AirConsole backend turns the brake pattern into a chain of low ticks o
 });
 
 test('hapticChain is the launcher\'s §12 sequence: contract names, the cancel call an empty sequence', () => {
-  // The CouchPad launcher takes the chain as is (hapticComposition), and an empty
+  // The Paper Balloon launcher takes the chain as is (hapticComposition), and an empty
   // sequence is its stop — which is what a vibrate(0) must become there.
   assert.deepEqual(hapticChain([12, 60, 12]), [
     { primitive: 'low_tick', scale: 1, delay: 0 },

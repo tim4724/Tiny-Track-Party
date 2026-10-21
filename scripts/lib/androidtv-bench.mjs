@@ -34,7 +34,7 @@ export const pct = (xs, q) => {
 export const phases = (line) => Object.fromEntries(
   [...line.matchAll(/([A-Za-z]+):([\d.]+)/g)].map((m) => [m[1], +m[2]]));
 
-export const PACKAGE = 'games.couchpad.tinytrack';
+export const PACKAGE = 'games.paperballoon.tinytrack';
 export const ACTIVITY = `${PACKAGE}/.MainActivity`;
 
 // Scenarios.kt's EXTRA_SCENARIO/EXTRA_TRACK/EXTRA_PLAYERS, and the scenario that

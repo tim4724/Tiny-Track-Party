@@ -346,8 +346,8 @@ test('every legal footer carries the same links', () => {
   const want = [
     'https://github.com/tim4724/Tiny-Track-Party',
     '/licenses.html',
-    'https://couchpad.games/en/privacy',
-    'https://couchpad.games/en/imprint',
+    'https://paperballoon.games/en/privacy',
+    'https://paperballoon.games/en/imprint',
   ];
 
   for (const [rel, foot] of pages) {

@@ -7,7 +7,7 @@ import { existsSync, openSync, readFileSync, rmSync } from 'node:fs';
 
 import { resolveDevicectlId } from './tvos-device.mjs';
 
-export const BUNDLE_ID = 'games.couchpad.tinytrack';
+export const BUNDLE_ID = 'games.paperballoon.tinytrack';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sh = (cmd, argv) => execFileSync(cmd, argv, { encoding: 'utf8' });

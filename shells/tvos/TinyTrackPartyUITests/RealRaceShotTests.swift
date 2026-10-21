@@ -9,8 +9,8 @@ import XCTest
 ///
 /// This test drives nothing and reads nothing: it launches the app bare and
 /// photographs the screen every ~15 s for ~5 minutes. The host-side driver
-/// reads the room code out of the `_couchpad._tcp` Bonjour TXT record the
-/// lobby advertises (`dns-sd -L Spielzimmer _couchpad._tcp local.`), joins
+/// reads the room code out of the `_paperballoon._tcp` Bonjour TXT record the
+/// lobby advertises (`dns-sd -L Spielzimmer _paperballoon._tcp local.`), joins
 /// through the real controller page against the real relay, and starts the
 /// race — see the scratchpad phone-drive script from the 2026-08-14 session.
 final class RealRaceShotTests: XCTestCase {

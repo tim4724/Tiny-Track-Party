@@ -125,7 +125,7 @@ const SHELLS = [
   },
   {
     name: 'Android refreshBackdrop',
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
     decl: 'fun refreshBackdrop',
     assign: /state\.sceneVisible\s*=([\s\S]*?)\n\s*\}/,
     terms: [
@@ -172,7 +172,7 @@ const REASK = [
     what: 'a PICK re-asks',
     sites: [
       ['shells/tvos/TinyTrackParty/App/GameCoordinator+Race.swift', 'func setTrack'],
-      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+      ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
        'fun setTrack']
     ]
   },
@@ -180,7 +180,7 @@ const REASK = [
     what: 'the room-state flip re-asks',
     sites: [
       ['shells/tvos/TinyTrackParty/App/RaceFlowPerformer.swift', 'case "transition"'],
-      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/RaceFlowPerformer.kt',
+      ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/RaceFlowPerformer.kt',
        '"transition" ->']
     ]
   }

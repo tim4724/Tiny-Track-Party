@@ -1,13 +1,13 @@
 # R8 keeps for the release build, and one deliberate ABSENCE.
 #
 # THE BRIDGE IS RESOLVED BY NAME. native/runtime/ttp_jni.cc binds its exports in
-# JNI_OnLoad via RegisterNatives against FindClass("games/couchpad/tinytrack/Ttp")
+# JNI_OnLoad via RegisterNatives against FindClass("games/paperballoon/tinytrack/Ttp")
 # and a table of (name, signature) pairs, so the class name, the method names and
 # the descriptors are all live strings on the C++ side that no shrinker can see.
 # A rename is an UnsatisfiedLinkError at library load — i.e. at the first frame,
 # on the box, in the one build nobody runs before shipping.
--keep class games.couchpad.tinytrack.Ttp { *; }
--keep class games.couchpad.tinytrack.Ttp$* { *; }
+-keep class games.paperballoon.tinytrack.Ttp { *; }
+-keep class games.paperballoon.tinytrack.Ttp$* { *; }
 
 # The generic form of the same thing, for any native declared elsewhere later.
 # proguard-android-optimize.txt carries this too; it is repeated here so the rule
@@ -48,5 +48,5 @@
 # thread) until the JIT rescues it, if it ever does. Kept as real calls, the
 # per-block and per-frame work lives in ordinary methods that keep their code.
 # `oatdump` of the installed odex is how to check (shells/androidtv/CLAUDE.md).
--keepclassmembers,allowobfuscation,allowshrinking class games.couchpad.tinytrack.AudioMixer { <methods>; }
--keepclassmembers,allowobfuscation,allowshrinking class games.couchpad.tinytrack.DisplayHost { <methods>; }
+-keepclassmembers,allowobfuscation,allowshrinking class games.paperballoon.tinytrack.AudioMixer { <methods>; }
+-keepclassmembers,allowobfuscation,allowshrinking class games.paperballoon.tinytrack.DisplayHost { <methods>; }

@@ -119,7 +119,7 @@ const SHELLS = [
     needs: [/ttp_session_begin_field/]
   },
   {
-    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    file: 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt',
     // Same split as tvOS: the field crosses verbatim, the ABI reads the keys.
     needs: [/ttp_session_begin_field/]
   }

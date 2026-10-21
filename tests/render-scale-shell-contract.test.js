@@ -44,8 +44,8 @@ const SHELLS = {
     'shells/tvos/TinyTrackParty/Render/PerfOverlay.swift',
   ],
   androidtv: [
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfOverlay.kt',
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/DisplayHost.kt',
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PerfOverlay.kt',
   ],
 };
 
@@ -66,25 +66,25 @@ const OWED = {
   'feed the window the rule folds off': {
     web: ['public/display/render/PerfHud.js', 'perf.sample('],
     tvos: ['shells/tvos/TinyTrackParty/Render/PerfOverlay.swift', 'ttp_perf_sample('],
-    androidtv: ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfOverlay.kt',
+    androidtv: ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PerfOverlay.kt',
                 'ttp_perf_sample('],
   },
   'tell it when a scene was built': {
     web: ['public/display/Stage.js', '.scaleScene('],
     tvos: ['shells/tvos/TinyTrackParty/Render/DisplayHost.swift', 'ttp_display_scale_scene('],
-    androidtv: ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
+    androidtv: ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/DisplayHost.kt',
                 'ttp_display_scale_scene('],
   },
   'ask for the operating point rather than choosing one': {
     web: ['public/display/Stage.js', '.scalePoll('],
     tvos: ['shells/tvos/TinyTrackParty/Render/DisplayHost.swift', 'ttp_display_scale_poll('],
-    androidtv: ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
+    androidtv: ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/DisplayHost.kt',
                 'ttp_display_scale_poll('],
   },
   "declare that point as the readout's budget": {
     web: ['public/display/Stage.js', 'perf.pacing('],
     tvos: ['shells/tvos/TinyTrackParty/Render/DisplayHost.swift', 'ttp_perf_pacing('],
-    androidtv: ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
+    androidtv: ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/DisplayHost.kt',
                 'ttp_perf_pacing('],
   },
 };
@@ -193,7 +193,7 @@ test('the debug supersample ceiling cannot be reached under automation', () => {
     'public/display/render/PerfHud.js': ['_flush()', 'perf.sample('],
     'shells/tvos/TinyTrackParty/Render/PerfOverlay.swift':
       ['func record(', 'ttp_perf_sample('],
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfOverlay.kt':
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PerfOverlay.kt':
       ['fun record(', 'ttp_perf_sample('],
   };
   for (const [file, [fn, callExpr]] of Object.entries(FEEDERS)) {
@@ -241,9 +241,9 @@ test('no shell puts the panel up on its own, and every shell can be asked to', (
       ['shells/tvos/TinyTrackParty/Render/PerfOverlay.swift', /forKey: "ttpPerf"/],  // -ttpPerf 1
     ],
     androidtv: [
-      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/MainActivity.kt',
+      ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/MainActivity.kt',
        /PerfMonitor\.show\(\)/],
-      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfDebug.kt',
+      ['shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/PerfDebug.kt',
        /debug\.ttp\.perf/],                                       // setprop debug.ttp.perf 1
     ],
   };

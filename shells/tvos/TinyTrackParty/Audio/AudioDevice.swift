@@ -29,7 +29,7 @@ final class AudioDevice {
 
     // MARK: - Construction
 
-    private let log = Logger(subsystem: "games.couchpad.tinytrack", category: "audio")
+    private let log = Logger(subsystem: "games.paperballoon.tinytrack", category: "audio")
     private let baseURL: URL
     /// Where a staged song lives, if this build staged one. See [startMusic].
     private let bundledURL: (String) -> URL?

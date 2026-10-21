@@ -25,7 +25,7 @@ import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } 
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TVOS = path.join(ROOT, 'shells/tvos');
-const BUNDLE_ID = 'games.couchpad.tinytrack';
+const BUNDLE_ID = 'games.paperballoon.tinytrack';
 
 /// Long enough for a cold boot to reach the attract scene on an A10X. The test
 /// only needs the app to be RUNNING, but starting the cycle mid-boot would be

@@ -24,7 +24,7 @@ const { readFileSync, readdirSync } = require('node:fs');
 const { join } = require('node:path');
 
 const ROOT = join(__dirname, '..');
-const KOTLIN = join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
+const KOTLIN = join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack');
 const manifest = JSON.parse(
   readFileSync(join(ROOT, 'public/assets/audio/cues/manifest.json'), 'utf8'));
 const cues = manifest.cues;

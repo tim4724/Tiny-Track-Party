@@ -1,2 +1,2 @@
-HSPLgames/couchpad/tinytrack/**;->**(**)**
-Lgames/couchpad/tinytrack/**;
+HSPLgames/paperballoon/tinytrack/**;->**(**)**
+Lgames/paperballoon/tinytrack/**;

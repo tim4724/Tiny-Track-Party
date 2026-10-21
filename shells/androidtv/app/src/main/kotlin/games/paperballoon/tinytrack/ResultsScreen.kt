@@ -1,0 +1,623 @@
+package games.paperballoon.tinytrack
+
+import android.os.SystemClock
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * The results board.
+ *
+ * **A CUP BOARD IS TWO PHASES, and a shell that paints only one has dropped the
+ * cup's whole story** (`ttp_ui.h`). `raceRows` is who won the RACE, in finishing
+ * order with lap times, and it holds for `racePhaseMs`; then it becomes
+ * `listRows`, the cup table it rewrote, in standings order with points. Painting
+ * only `listRows` states the delta and never shows the change.
+ *
+ * **NOTHING APPEARS, DISAPPEARS OR RESIZES ACROSS THE TWO.** The two kinds differ
+ * by the trailing TOTAL alone, precisely so phase 2 fills a cell rather than
+ * replacing one: the cells below have FIXED WIDTHS and the footer is reserved.
+ * Otherwise every row changes size at the moment the board starts animating its
+ * POSITION, and it re-flows under the re-sort — which reads as a glitch, not as a
+ * ranking.
+ *
+ * Phase 2 counts the points into the totals while every row GLIDES ONCE, from its
+ * place before them to its place after, for as long as the count takes.
+ * `pointsBefore` is on every points row so the total can climb rather than jump,
+ * and **no shell subtracts `gained` for itself**.
+ */
+@Composable
+fun ResultsScreen(state: GameState, game: GameCoordinator) {
+    val results = state.results ?: return
+
+    // A single-race board has one phase and opens already settled.
+    var standings by remember(results) { mutableStateOf(!results.twoPhase) }
+    // How much of each row's "+N" has moved into its total, 0..1.
+    var accounted by remember(results) { mutableStateOf(0f) }
+    // The rows stand in the cup's FINAL order. Flipped once, at the start of the
+    // count, and the rows glide there for as long as the count takes.
+    var placed by remember(results) { mutableStateOf(!results.twoPhase) }
+    val runMs = results.racePhaseMs * TALLY_OF_PHASE
+    // The CUT's fade: the race table dips out and the cup's comes back in its
+    // place. See the LaunchedEffect below.
+    var listVisible by remember(results) { mutableStateOf(true) }
+    val listAlpha by animateFloatAsState(
+        if (listVisible) 1f else 0f,
+        tween(((results.racePhaseMs * FADE_OF_PHASE).toInt()).coerceAtLeast(1)),
+        label = "results-cut")
+
+    // THE SETTLE STAMP IS THIS SHELL'S OWN BEAT. The phones are handed the board
+    // the instant the race ends, which is the instant this screen STARTS its
+    // reveal — `settled` is their cue to stop reporting the race and report the
+    // cup, and sending it early crowns a champion on four phones while the TV is
+    // still counting points towards one. The TIMING is necessarily here (it is
+    // this reveal's own completion and no handle knows it); WHICH boards it means
+    // anything for is the rule's, so [GameCoordinator.settleStandings] is armed on
+    // every board that finishes settling and the model decides. A single-phase
+    // board never settles, and neither does a reveal cancelled mid-flight — the
+    // web's `raceOverlays.js` has both properties for the same reasons.
+    //
+    // ON THE MAIN THREAD, which this shell's rule 1 requires of every `ttp_*`
+    // call: a LaunchedEffect runs on the composition's own AndroidUiDispatcher,
+    // and `delay` resumes on it, so both call sites below are on main.
+    LaunchedEffect(results) {
+        if (!results.twoPhase) return@LaunchedEffect
+        delay(results.racePhaseMs.toLong())
+
+        // THE CUT. A cup board carries three orders — the race that just ended
+        // (A), the cup BEFORE these points (B) and the cup after them (C) — and
+        // sliding from A into B would be a move uncorrelated with the race just
+        // watched, made before a single point had landed, with nothing on screen
+        // to account for it. So A -> B is a CUT, not a move: the list
+        // dips out, the heading turns over to "Standings", and the cup's own
+        // table comes back in its place.
+        val fadeMs = (results.racePhaseMs * FADE_OF_PHASE).toLong()
+        listVisible = false
+        delay(fadeMs)
+        standings = true
+        accounted = 0f
+        listVisible = true
+        delay(fadeMs)   // let the cup's table arrive before its numbers move
+
+        // B -> C is ONE GLIDE spanning the count: each row travels once, straight
+        // to where it ends, while each total counts up at its own rate.
+        // Re-sorting on the totals at every beat cannot be smooth — rows climb at
+        // different rates, so a row that passes one car and is then passed by
+        // another goes up and comes back down, and a 4th/5th swap crosses the
+        // two columns twice.
+        //
+        // ONE LENGTH, whatever the ladder pays: it used to take a beat per point
+        // the WINNER owed, which tied the length of the board to the top of
+        // POINTS_BY_RANK. A bigger ladder now counts faster instead.
+        placed = true
+        if (results.listRows.none { it.owed() > 0 }) { accounted = 1f; game.settleStandings(); return@LaunchedEffect }
+        // Driven from the CLOCK, not from accumulated nominal delays. `delay` is a
+        // floor, so summing them stretches the tally under a starved main thread
+        // — on this GPU, exactly when the next circuit is meshing — and it can
+        // still be counting when the intermission advances.
+        val startedAt = SystemClock.uptimeMillis()
+        while (accounted < 1f) {
+            delay(16)
+            accounted = min(1.0, (SystemClock.uptimeMillis() - startedAt) / runMs).toFloat()
+        }
+        // The cup is now told. Anything waiting on it — the phones — can say so.
+        game.settleStandings()
+    }
+
+    // The rows as they stand RIGHT NOW: the race phase is the race's order and
+    // states NO cup number at all; the standings phase is the cup table with each
+    // row's total part-way to what it banked, in the cup's order before these
+    // points (B) until the glide places it in the final one (C).
+    val rows: List<LiveRow> = if (!standings) {
+        results.raceRows.map { LiveRow(it, null) }
+    } else {
+        val live = results.listRows.mapIndexed { seat, r ->
+            // WHOLE points, each row at its own rate, and floor() holds every
+            // row's last point for the end, so the totals land as the glide does.
+            LiveRow(r, (r.pointsBefore ?: 0) + floor(accounted * r.owed()).toInt(), seat = seat)
+        }
+        // B: the totals the rows came in on, the model's own order breaking a
+        // tie. Joining rows raced nothing and stay under the field.
+        if (placed) live else live.sortedWith(
+            compareBy<LiveRow> { it.row.joining }
+                .thenByDescending { it.row.pointsBefore ?: 0 }
+                .thenBy { it.seat })
+    }
+
+    // The title, the medals and the footer all wait for the last point. Crowning a
+    // champion while rows can still overtake would mark the wrong one.
+    val settled = standings && accounted >= 1f
+
+    Box(
+        // FROST over the frozen race, the board ONE paper card on it (`#results`).
+        //
+        // NO BLUR, which the web's frost has: the race behind is the SurfaceView,
+        // in a layer below this window that nothing here can sample, so
+        // [Sticker.frost] lays the wash a touch thicker instead. The card the rows
+        // sit on is opaque, so what is read never has the race under it.
+        Modifier.fillMaxSize().background(Sticker.frost),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+                // TWO TITLE STATES, and the podium's is the SMALLER of them, because
+                // it wears a box: `#results h2` is 4.6rem (73.6 authored px) plain,
+                // while `.is-champs h2` drops to 3.4rem (54.4) and reserves the
+                // label's padding from its first frame. The celebration is then
+                // paint only — the red LABEL's fill and type and a rotation, none
+                // of which cost layout — so nothing under it moves at the moment
+                // the rows are mid-glide.
+                val champs = settled && results.podium
+                Box(
+                    Modifier
+                        .then(if (champs) Modifier.tilt(-2f) else Modifier)
+                        .background(
+                            if (champs) labelFace(Tokens.red) else Color.Transparent,
+                            RoundedCornerShape(Sticker.radiusLarge),
+                        )
+                        .then(if (results.podium) Modifier.padding(
+                            horizontal = TITLE_SIZE * 0.7f, vertical = TITLE_SIZE * 0.25f)
+                            else Modifier),
+                ) {
+                    StickerText(
+                        Copy.title(
+                            // The CUT turns the heading to "Standings", never to a
+                            // champion: a podium's key waits for the last point.
+                            if (settled) results.titleKey
+                            else if (results.twoPhase && standings) "standings"
+                            else results.raceTitleKey.ifEmpty { results.titleKey },
+                            results.cupName,
+                        ),
+                        size = if (results.podium) TITLE_SIZE else TITLE_SIZE_PLAIN,
+                        color = if (champs) labelInk(Tokens.red) else Tokens.ink,
+                    )
+                }
+
+                // HELD, not removed, once the cup board settles: the podium's CHAMPS
+                // header says it all, and "Sunset - Race 4 of 4" under "Sunset
+                // CHAMPS!" is the race still talking over the cup. `.is-held` is
+                // `visibility: hidden` precisely so the box stays — dropping it
+                // shrinks the column and re-centres everything, sliding the list and
+                // the button up under a label that is supposed to be the only thing
+                // arriving.
+                results.sub?.let {
+                    StickerText(
+                        Copy.sub(it.key, it.cupName, it.race, it.of),
+                        size = 26.dp,
+                        color = if (settled && !results.intermission) Color.Transparent else Tokens.ink2,
+                    )
+                }
+
+                // TWO COLUMNS above five rows. A full grid is eight (FIELD_SIZE) and
+                // late joiners append one row each; at eleven a single unbounded
+                // Column exceeds 1080 authored px, and Compose then measures the
+                // trailing children — the ONLY BUTTON ON THE SCREEN — at maxHeight 0.
+                // Invisible, still focusable, and the board is unusable. The web hit
+                // exactly this and split at the same count.
+                //
+                // COLUMN-MAJOR, so ranks 1..ceil(n/2) fill the left column top-down
+                // and the rest the right: the same reading order the phone's board
+                // uses, so two screens rank alike.
+                val perColumn = if (rows.size > ONE_COL_MAX) (rows.size + 1) / 2 else rows.size
+                // ONE WIDTH, FULL STOP. Every row builds the same three trailing
+                // cells whichever beat it is for, and a beat with nothing to say in
+                // one leaves it EMPTY rather than leaving it out — so a race result,
+                // a cup table and a podium are all the same size, here and on the web.
+                val boardWidth = BOARD_WIDTH_CUP
+                // ONE LAYER, every row placed by its SLOT and keyed by player, so a
+                // row whose place is in the other column glides across to it. A
+                // list per column can only move a row within its own.
+                val columns = if (perColumn > 0) (rows.size + perColumn - 1) / perColumn else 0
+                // ONE PAPER CARD, the rows printed on it and ruled apart by a
+                // hairline (`#results-list`): rows that each looked like a button
+                // were the old board's problem. The card holds still through the
+                // cut; only the rows on it dip out and back.
+                PaperCard(padding = 10.dp, horizontalPadding = 16.dp) {
+                Box(
+                    Modifier.alpha(listAlpha)
+                        .width(boardWidth * columns + COL_GAP * max(0, columns - 1))
+                        .height(ROW_HEIGHT * perColumn),
+                ) {
+                    // The glide is the count's; every other re-order (the cut, a
+                    // new board) is a jump made under the fade.
+                    val move = if (placed) tween<Dp>(runMs.toInt(), easing = GLIDE_EASING) else snap()
+                    rows.forEachIndexed { i, live ->
+                        key(live.row.id) {
+                            val x by animateDpAsState((boardWidth + COL_GAP) * (i / perColumn), move, label = "row-x")
+                            val y by animateDpAsState(ROW_HEIGHT * (i % perColumn), move, label = "row-y")
+                            // Of two rows that cross, the climber ENDS higher, so
+                            // stacking by rank passes it in front, as on the web.
+                            // The lambda offset reads the glide in LAYOUT, so a
+                            // moving row is re-placed, not recomposed, per frame.
+                            //
+                            // The RULE belongs to the SLOT: none over a column's
+                            // top row, and none under the leader's wash.
+                            BoardRow(i + 1, live, settled,
+                                leader = i == 0,
+                                rule = i % perColumn != 0 && i != 1,
+                                modifier = Modifier.offset { IntOffset(x.roundToPx(), y.roundToPx()) }
+                                    .zIndex(-i.toFloat()).width(boardWidth))
+                        }
+                    }
+                }
+                }
+
+                // RESERVED, not conditional — but only on a board that is going to
+                // GET a footer. The footer arrives with phase 2, and a board that
+                // grows at the moment it re-sorts reads as a glitch; a single-race
+                // board has no phase 2 and no next race, so reserving there is just
+                // dead space over the button (`.results-next` is `display: none` on
+                // a board that will never have one, and `visibility: hidden` only
+                // while it has merely not arrived).
+                //
+                // `width(boardWidth)`, NOT fillMaxWidth. Inside a Column whose own
+                // width is decided by its children, fillMaxWidth takes the INCOMING
+                // MAX — the whole screen — and drags the board out to the bezels
+                // with it. An explicit HEIGHT, not a same-sized Spacer: a 24 dp
+                // StickerText's line box is taller than 24 dp, so a Spacer(24.dp)
+                // reserves less than the text it stands in for.
+                if (results.intermission) Box(
+                    Modifier.width(boardWidth).height(FOOTER_HEIGHT).padding(top = 6.dp),
+                    Alignment.Center,
+                ) {
+                    val next = results.next
+                    if (next != null && settled) NextUp(next.trackName, state.intermissionSecs ?: next.secs)
+                }
+
+                // TAKE FOCUS. A TV has no pointer, so an unfocused screen is a
+                // DEAD screen: nothing lifts, and the viewer's natural first press
+                // — OK, not a direction — goes nowhere. Both tvOS twins use
+                // `.defaultFocus` for this reason; nothing in this shell requested
+                // focus at all, and these two are its only focusable controls.
+                val focus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { focus.requestFocus() }
+                // `#results-newgame { margin-top: 1.8rem }`, and `.btn`'s own scale
+                // rather than ActionButton's welcome-board default — at 34 dp the
+                // em-relative padding carried the whole box with it and the CTA
+                // outweighed the board above it.
+                Spacer(Modifier.height(13.dp))
+                ActionButton(
+                    Copy.newGame(results.newGameKey),
+                    modifier = Modifier.focusRequester(focus),
+                    tint = Tokens.green,
+                    size = BUTTON_SIZE,
+                ) {
+                    // Mid-cup it advances the series; at the end it ends the party.
+                    // WHICH of those is the model's answer, carried in the key —
+                    // this shell does not re-derive it.
+                    if (results.newGameKey == "next_race") game.advanceSeriesRace()
+                    else game.returnToLobby()
+                }
+        }
+    }
+}
+
+/** The count, and the glide that rides it, as a fraction of phase 1's hold. The
+ * WEB's number; `tests/shell-parity.test.js` fails if it drifts. */
+private const val TALLY_OF_PHASE = 0.28
+
+/** CSS `ease-in-out`, which is what the web's glide eases with. */
+private val GLIDE_EASING = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
+/** The cut's dip, as a fraction of the model's phase-1 hold. */
+private const val FADE_OF_PHASE = 0.055
+
+/**
+ * The two title sizes, and which one a board takes is decided by whether it is a
+ * PODIUM rather than by whether it has settled — `.is-champs` lands on the first
+ * frame so the celebration costs no layout.
+ *
+ * `#results h2` clamps to 4.6rem and `.is-champs h2` to 3.4rem on a 1080p board.
+ */
+private val TITLE_SIZE_PLAIN = 74.dp
+private val TITLE_SIZE = 54.dp
+
+/** What this row still has to move out of its "+N" and into its total. */
+private fun GameState.ResultsView.Row.owed(): Int =
+    if (kind == "points" && points != null && pointsBefore != null)
+        max(0, points - pointsBefore) else 0
+
+/** A row as it stands right now: the model's record plus the total being SHOWN. */
+private data class LiveRow(
+    val row: GameState.ResultsView.Row,
+    val total: Int?,
+    val seat: Int = 0,
+)
+
+/**
+ * ONE ROW WIDTH FOR EVERY BOARD, sized by the name column and measured against
+ * the web.
+ *
+ * Every beat builds the same three trailing cells and leaves the ones it has
+ * nothing to say in EMPTY, so a race result, a cup table and a podium are all this
+ * wide — there is no longer a number per KIND. A row is rank (1.6em) + gap + NAME
+ * + gap + the three cells (3.6 + 2.7 + 4.2em with two gaps) + 12dp padding either
+ * side; at the old 410 that left the name about 52dp and every eight-row cup board
+ * truncated to "Th…", for as long as the board has had two columns. The web gives
+ * the same 24dp type a ~147dp name column on a 502dp row. Fixed rather than
+ * measured, because the beats must not re-measure between them.
+ */
+private val BOARD_WIDTH_CUP = 502.dp
+
+/** Up to this many rows the board stays one column; above it, two. */
+private const val ONE_COL_MAX = 5
+
+/** Between the two columns (`column-gap: 2rem`), and the reserved footer's
+ *  height: the next-up label plus its air. */
+private val COL_GAP = 32.dp
+private val FOOTER_HEIGHT = 60.dp
+
+/** One row's height, rule included.
+ *
+ * `#results-list li` measures ~50 authored px: a 1.5rem line box, `0.55rem`
+ * padding top and bottom, and the 2px rule over it. Rows touch — the rule is
+ * what parts them. Fixed rather than content-sized, so the BOARD cannot resize
+ * under a re-sort. */
+private val ROW_HEIGHT = 50.dp
+
+/**
+ * One board row.
+ *
+ * The cells have FIXED WIDTHS. That is the whole reason the two phases can be the
+ * same layout: `points` fills the trailing cell that `time_gain` left showing a
+ * before-total, and nothing re-measures.
+ *
+ * Note what the model does NOT send and this therefore does not invent: no
+ * `place` (rank is the row's POSITION) and no `dnf` (it is `finished == false`).
+ *
+ * Printed on the board's card rather than drawn as a card of its own: a [rule]
+ * over it, and the [leader]'s row washed in the celebration red so the eye finds
+ * the top of the table first.
+ */
+@Composable
+private fun BoardRow(
+    rank: Int, live: LiveRow, settled: Boolean,
+    leader: Boolean, rule: Boolean, modifier: Modifier = Modifier,
+) {
+    val row = live.row
+    val hairline = Tokens.hairline
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(ROW_HEIGHT)
+            .then(if (rule) Modifier.drawBehind {
+                drawRect(hairline, size = Size(size.width, 2.dp.toPx()))
+            } else Modifier)
+            .then(if (leader) Modifier.background(
+                Tokens.red.mix(0.12f, Color.White), RoundedCornerShape(LEADER_RADIUS))
+                else Modifier)
+            // `#results-list li`'s `padding: 0.55rem 0.7rem` and `gap: 0.7rem`.
+            .padding(horizontal = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        // THE RANK CELL, which is also the medal's. Gold/silver/bronze is what a
+        // medal wants and what the theme forbids (yellow and amber are vetoed in
+        // chrome), so the ranking is carried by WEIGHT: the champion takes a filled
+        // chip in --red, second and third one in --ink-2, both with white numerals.
+        // The chip's box is reserved on every row, so nothing resizes when it lands.
+        //
+        // A JOINING row is ranked with a DASH. It raced nothing, and printing "9"
+        // beside a seat that has no result ranks it against people who do.
+        // ONE TYPE SIZE FOR THE WHOLE ROW. `#results-list` sets `1.5rem` and the
+        // rank, the name, the time, the gain and the total all inherit it — the
+        // cells differ by COLOUR and fixed WIDTH, nothing else. Five sizes gave the
+        // row an internal hierarchy the design does not have, and made the trailing
+        // numbers look like a footnote to the name rather than its result.
+        val medal = if (settled) row.medal else null
+        Box(Modifier.width(ROW_TYPE * 1.6f), contentAlignment = Alignment.CenterEnd) {
+            Box(
+                Modifier
+                    // A PILL, not a disc. `li::before` is `min-width: 1.6em` with
+                    // `0.05em 0.45em` of padding and a pill radius — a circle is
+                    // what a fixed square becomes, and at the row's real height it
+                    // grows into a token twice the web's.
+                    .defaultMinSize(minWidth = ROW_TYPE * 1.6f)
+                    .background(
+                        when (medal) {
+                            1 -> Tokens.red
+                            2, 3 -> Tokens.ink2
+                            else -> Color.Transparent
+                        },
+                        RoundedCornerShape(percent = 50),
+                    )
+                    .padding(horizontal = ROW_TYPE * 0.45f, vertical = ROW_TYPE * 0.05f),
+                contentAlignment = Alignment.Center,
+            ) {
+                StickerText(
+                    if (row.joining) "–" else rank.toString(),
+                    size = ROW_TYPE,
+                    weight = Fonts.semibold,
+                    color = if (medal != null) Color.White else Tokens.ink3,
+                )
+            }
+        }
+        // NO SWATCH. `#results-list .res-name` — the livery rides the NAME (80% into
+        // ink, so a pale one still reads on paper), and `lobbySeats.js` says so in
+        // as many words ("the name itself carries the livery colour — no dot").
+        // The DISPLAY face at 600, as `#results-list li` sets it; the trailing
+        // figures below are the body face (`.res-trail`).
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+        ) {
+            StickerText(
+                row.name,
+                size = ROW_TYPE,
+                weight = Fonts.semibold,
+                color = liveryInk(row.colorIndex),
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            // A bot says so in a small grey LABEL after its name (`.res-cpu`),
+            // not in the name.
+            if (row.ai) {
+                Box(
+                    Modifier
+                        .background(Tokens.surface2, RoundedCornerShape(percent = 50))
+                        .padding(vertical = CPU_TYPE * 0.3f, horizontal = CPU_TYPE * 0.7f)
+                ) {
+                    StickerText(Copy.cpuTag, size = CPU_TYPE, weight = Fonts.extraBold,
+                        color = Tokens.ink3, tracking = 0.08f, body = true)
+                }
+            }
+        }
+
+        // A JOINING row carries NOTHING ELSE — the model returns early on it — so
+        // every other cell here is its neutral value, by design.
+        if (row.joining) {
+            CellText(Copy.nextRace, ROW_TYPE * 8f, size = ROW_TYPE, color = Tokens.ink3)
+        } else {
+            // WHICH CELL A BEAT SPEAKS IN is the row's KIND, and the cells it has
+            // nothing to say in are still THERE, empty, holding their width:
+            //   time_gain  the race:  the lap clock. Cup cells reserved.
+            //   points     the cup:   the score and the total. Clock reserved.
+            //   time       a single race: the clock, cup cells reserved too — it
+            //              has no second beat of its own to line up with, so it
+            //              lines up with the OTHER boards.
+            //
+            // THE ROW'S LAST NUMBER SITS AT THE RIGHT EDGE in both beats, which is
+            // why the order differs: the standings end on the total, so the race
+            // ends on the lap clock and keeps its two reserved cells to the LEFT of
+            // it. A row whose one figure floated in the middle read as a column
+            // that had lost its heading.
+            val cup = row.kind == "points"
+            // `time` is explicitly null for a car that did not finish, so null IS
+            // the DNF signal — there is no separate flag. `.res-time` is --ink-2,
+            // quieter than the name: at full ink it competed with the one word on
+            // the row that says whose it is.
+            val time = @Composable {
+                CellText(
+                    if (cup) "" else (row.time?.let { Copy.seconds(it) } ?: Copy.dnf),
+                    ROW_TYPE * 3.6f, size = ROW_TYPE,
+                    color = if (row.time == null) Tokens.ink3 else Tokens.ink2,
+                )
+            }
+            // Zero is still printed ("+0") and styled quiet, so the column never
+            // goes ragged — but ONLY zero. `.res-gain` is `--brand` green and
+            // `.res-gain.is-zero` the quiet `--ink-3`: the point of the column is
+            // that the eye picks out who scored, and painting every gain the quiet
+            // colour handed a "+15" the exact role the design reserves for "+0".
+            //
+            // The width holds the WIDEST gain the ladder pays, not the settled "+0"
+            // the tally ends on: this cell is a hard width, so a gain that outgrows
+            // it clips rather than pushing the board wider. `.res-gain`'s min-width
+            // in display.css carries the same number.
+            //
+            // It retires at settle — it would rest on "+0", reading as "scored
+            // nothing". The lap clock needs no retiring: it went at the CUT.
+            val gain = @Composable {
+                CellText(
+                    if (cup) row.gained?.let { Copy.gained(it) } ?: "" else "",
+                    ROW_TYPE * 2.7f, size = ROW_TYPE,
+                    color = when {
+                        settled -> Color.Transparent
+                        (row.gained ?: 0) > 0 -> Tokens.brand
+                        else -> Tokens.ink3
+                    },
+                )
+            }
+            // On screen from the standings phase's FIRST frame, holding the value
+            // the row came in with: a total that merely APPEARED in the beat that
+            // changes it would have no readable starting point for the climb.
+            // `.res-pts` is --ink-2. Purple is the ITEMS role in this palette and
+            // appears nowhere on the web's board — it made the total the loudest
+            // thing in the row, which is backwards: the total is data, and what the
+            // row is ABOUT is whose it is.
+            val pts = @Composable {
+                CellText(
+                    if (cup) live.total?.let { Copy.points(it) } ?: "" else "",
+                    ROW_TYPE * 4.2f, size = ROW_TYPE, color = Tokens.ink2,
+                )
+            }
+            if (cup) { time(); gain(); pts() } else { gain(); pts(); time() }
+        }
+    }
+}
+
+@Composable
+private fun CellText(text: String, width: Dp, size: Dp, color: Color) {
+    Box(Modifier.width(width), contentAlignment = Alignment.CenterEnd) {
+        if (text.isNotEmpty()) {
+            StickerText(text, size = size, weight = Fonts.extraBold, color = color, body = true)
+        }
+    }
+}
+
+/**
+ * The intermission footer, `.results-next`: a LABEL in ink-2 (the recipe), the
+ * next circuit's name in the display face and full ink inside it.
+ */
+@Composable
+private fun NextUp(trackName: String, secs: Int) {
+    val size = 24.dp
+    val ink = labelInk(Tokens.ink2)
+    Row(
+        Modifier
+            .background(labelFace(Tokens.ink2), RoundedCornerShape(percent = 50))
+            .padding(vertical = size * 0.45f, horizontal = size * 1.1f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StickerText(Copy.nextUp, size = size, weight = Fonts.extraBold, color = ink, body = true)
+        StickerText(trackName, size = size, color = Tokens.ink)
+        StickerText(Copy.startingIn + secs + Copy.ellipsis, size = size,
+            weight = Fonts.extraBold, color = ink, body = true)
+    }
+}
+
+/**
+ * `#results-list`'s ONE type size (`1.5rem`), inherited by every cell in a row.
+ *
+ * The rank, the name, the time, the gain and the total all take it, and the cells
+ * differ by colour and fixed width alone. Five separate sizes gave the row an
+ * internal hierarchy the design does not have.
+ */
+private val ROW_TYPE = 24.dp
+
+/** `.res-cpu`'s `0.5em` of the row's type. */
+private val CPU_TYPE = ROW_TYPE * 0.5f
+
+/** The leader's wash, `border-radius: 14px` (a literal in the CSS too). */
+private val LEADER_RADIUS = 14.dp

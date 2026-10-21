@@ -19,7 +19,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
+const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack');
 
 let WEB_ONLY, ANDROID_ONLY, SHARED_NOTICES;
 let entries, texts, legalLinks, document, gradleDependencies, LICENSES;

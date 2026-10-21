@@ -3,7 +3,7 @@ import SwiftUI
 /// The info board: privacy, imprint and the way into the license list.
 ///
 /// **THE TV IS NOT WHERE ANY OF THIS IS READ.** Privacy and imprint are
-/// couchpad.games pages shared by every game on the launcher (they are not this
+/// paperballoon.games pages shared by every game on the launcher (they are not this
 /// game's, and duplicating either here would be a second copy of a legal text
 /// that has to stay correct), and an Apple TV has no browser to open them in.
 /// So the board does what the lobby ticket already does with the join link: it

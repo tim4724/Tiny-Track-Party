@@ -128,9 +128,9 @@ test('every shell DERIVES the mask from the fields, and reads no `mask` key', ()
       path.join(ROOT, 'public/display/NativeRaceSession.js'), 'utf8'),
     'shells/tvos/TinyTrackParty/App/GameCoordinator+Lobby.swift': readFileSync(
       path.join(ROOT, 'shells/tvos/TinyTrackParty/App/GameCoordinator+Lobby.swift'), 'utf8'),
-    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt':
+    'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt':
       readFileSync(path.join(ROOT,
-        'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt'), 'utf8')
+        'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack/GameCoordinator.kt'), 'utf8')
   };
 
   // Whole-file scope on purpose: `mask` appears in exactly one place in each of

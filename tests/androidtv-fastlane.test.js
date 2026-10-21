@@ -16,7 +16,7 @@ const { existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const KOTLIN = 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack';
+const KOTLIN = 'shells/androidtv/app/src/main/kotlin/games/paperballoon/tinytrack';
 
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 
