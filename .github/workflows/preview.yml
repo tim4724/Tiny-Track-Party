@@ -152,8 +152,21 @@ jobs:
                 labels:
                   app: tinytrack
               spec:
+                automountServiceAccountToken: false
+                # The image runs as nodejs (uid 1001); declaring it makes a future image
+                # that drops USER fail to start instead of running as root.
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1001
+                  runAsGroup: 1001
+                  seccompProfile:
+                    type: RuntimeDefault
                 containers:
                   - name: tinytrack
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop: [ALL]
                     image: ${IMAGE}
                     env:
                       - name: BASE_URL
