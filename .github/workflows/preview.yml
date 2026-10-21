@@ -189,6 +189,13 @@ jobs:
                         port: 4000
                       periodSeconds: 5
                       failureThreshold: 3
+                    # The server stops listening on SIGTERM; Traefik notices the
+                    # endpoint is gone about a second later. Waiting first keeps
+                    # that gap from dropping requests on every deploy.
+                    lifecycle:
+                      preStop:
+                        sleep:
+                          seconds: 3
           ---
           apiVersion: v1
           kind: Service
