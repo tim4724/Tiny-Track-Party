@@ -148,7 +148,7 @@ android {
         // AndroidManifest.xml). Play's closed testing wants a dozen testers for
         // fourteen continuous days, and a tester who owns no television cannot
         // install a leanback-required app at all — so this variant is what goes
-        // on the ordinary closed track while the TV bundle goes on tv:Alpha.
+        // on the ordinary closed track while the TV bundle goes on tv:tv.
         // Same applicationId, so both are the same app to Play and each upload
         // still needs a versionCode nothing has used.
         //
