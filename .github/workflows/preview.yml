@@ -167,6 +167,8 @@ jobs:
                       allowPrivilegeEscalation: false
                       capabilities:
                         drop: [ALL]
+                      # The server writes no files; keep it that way.
+                      readOnlyRootFilesystem: true
                     image: ${IMAGE}
                     env:
                       - name: BASE_URL
