@@ -229,10 +229,11 @@ class GameCoordinator(
             state.fail("materials: ${e.message}")
         }
         // The debug knobs BEFORE the first build, not at the frame loop's first
-        // slow tick 45 ms after it: a mask set before launch (a sweep's
-        // `debug.ttp.features`) is then in force from the scene's first frame,
-        // and an arm the renderer reads while it builds (a probe material picked
-        // per instance, as the 2026-10-22 deck arms were) sees it at all.
+        // slow tick 45 ms after it: a scale pin or a mask set before launch (a
+        // sweep's `debug.ttp.*`) is then in force from the scene's first frame.
+        // The renderer re-tags the feature layers after every build, so a mask
+        // sent onto the still-empty scene here still covers what the build
+        // adds (TtpRenderer::debugFeatureMask).
         PerfDebug.poll(display)
         if (!booted) {
             booted = true

@@ -515,9 +515,10 @@ vertex {
     // THE LAP WRAP IS PER VERTEX TOO: the chunk-local arclength is affine in
     // uv0.x inside a chunk (26 rings, tens of metres, nowhere near the L/2
     // seam its wrap folds at), so interpolating it is exact and the fragment
-    // stops paying a floor and six highp ops to recompute it. The whole-lap
-    // fallback instance (chunkMid 0; uploadDeckDecals) keeps the wrap for
-    // honesty, and is the one place a triangle could straddle the seam.
+    // stops paying a floor and six highp ops to recompute it. The wrap stays
+    // here for the whole-lap fallback instance (chunkMid 0; uploadDeckDecals),
+    // which no draw with triangles ever uses: every built chunk carries its own
+    // instance, and only an empty road would fall back to it.
     void materialVertex(inout MaterialVertexInputs material) {
         float a = ttpFogFactor(material.worldPosition.xyz);
         // The deck layers' uvs (see `variables`), exactly the expressions the

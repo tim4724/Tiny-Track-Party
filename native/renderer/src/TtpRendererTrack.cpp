@@ -2531,11 +2531,18 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
     // joins it.
     if (!buildStatic(key, geo, theme, wear)) return false;
     mStaticKey = key;
-    return buildField(roster);
+    if (!buildField(roster)) return false;
+    // An ablation mask sent before this build tagged nothing it just added
+    // (debugFeatureMask tags what exists); re-tag, or a sweep whose mask was
+    // set before launch draws every group and reads as "this feature is free".
+    if (mFeatureTagged) tagFeatures();
+    return true;
 }
 
 bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
     releaseField();
     resetRace();
-    return buildField(roster);
+    if (!buildField(roster)) return false;
+    if (mFeatureTagged) tagFeatures();   // as in buildScene: the field is new
+    return true;
 }

@@ -1797,10 +1797,11 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         mCarMergeDirty = true;
         mDressMergeDirty = true;
     }
-    // Re-tag on every call rather than once: a scene built after the first call
-    // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
-    // ablation sweep that silently stopped ablating would read as "this feature
-    // is free".
+    // Re-tag on every call rather than once, and every build re-tags what it
+    // adds (buildScene, rebuildField): a scene built after a call — a Grand
+    // Prix's next track, a biome rebuild, or the first scene when the shell
+    // sent the mask before it — arrives untagged, and an ablation sweep that
+    // silently stopped ablating would read as "this feature is free".
     if (!mScene) return;
     tagFeatures();
     mFeatureTagged = true;
@@ -2010,8 +2011,8 @@ void TtpRenderer::releaseStatic() {
     destroyMergedGroups(mMergedDress);
     mDressMergeDirty = false;
     mAssetMeshKey.clear();
-    // The shadow draw shares the road's vertices: its entity and its own index
-    // buffer go; the instances are scene instances.
+    // The shadow draw: its entity and its ring of vertex and index buffers go
+    // (buildCarShadowDraws); the instances are scene instances.
     if (!mCarShadowEntity.isNull()) {
         mScene->remove(mCarShadowEntity);
         mEngine->getRenderableManager().destroy(mCarShadowEntity);

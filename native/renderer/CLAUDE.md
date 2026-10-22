@@ -315,8 +315,11 @@ only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
   every fragment of that material for nothing. `vglbfade` is the one
   exception, on purpose: its alpha rides `baseColor` and its colour must be
   premultiplied by it. Display colour is `precision : medium` in the
-  `variables` of every scene material (exact to 1/2048 of an 8-bit value, the
-  F16 rate on the box); texture coordinates and world units stay high.
+  `variables` of every OPAQUE scene material (exact to 1/2048 of an 8-bit
+  value, the F16 rate on the PowerVR box; on Metal SPIRV-Cross keeps the
+  interface at float and only the fragment's own ops go half); texture
+  coordinates and world units stay high. The blended materials (`vglbfade`,
+  `vblend`, `vcloud`, `vburst`, `vpoint`) keep their default precision.
 - **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
   sampled the way the GPU samples them; the merged bake decodes them to
   multiply the light and encodes the product once.
