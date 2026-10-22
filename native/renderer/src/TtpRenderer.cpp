@@ -2019,8 +2019,12 @@ void TtpRenderer::releaseStatic() {
         mCarShadowEntity = utils::Entity{};
     }
     mCarShadowMi.clear();
-    if (mCarShadowIb) { mEngine->destroy(mCarShadowIb); mCarShadowIb = nullptr; }
-    if (mCarShadowVb) { mEngine->destroy(mCarShadowVb); mCarShadowVb = nullptr; }
+    for (IndexBuffer* ib : mCarShadowIbRing) mEngine->destroy(ib);
+    for (VertexBuffer* vb : mCarShadowVbRing) mEngine->destroy(vb);
+    mCarShadowIbRing.clear();
+    mCarShadowVbRing.clear();
+    mCarShadowIb = nullptr;
+    mCarShadowVb = nullptr;
     destroyMesh(mRoad);
     if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
     {

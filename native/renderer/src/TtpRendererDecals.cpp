@@ -407,17 +407,36 @@ void TtpRenderer::buildCarShadowDraws() {
     // No mTrack test: the track is adopted after the road is built, and the
     // buffers need only the material.
     if (!mShadowMaterial) return;
-    mCarShadowVb = VertexBuffer::Builder()
-            .vertexCount((uint32_t) kCarShadowVtxCap)
-            .bufferCount(2)
-            .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
-            .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::HALF4)
-            .build(*mEngine);
-    mCarShadowIb = IndexBuffer::Builder()
-            .indexCount((uint32_t) kCarShadowIdxCap)
-            .bufferType(IndexBuffer::IndexType::UINT)
-            .build(*mEngine);
-    if (!mCarShadowVb || !mCarShadowIb) return;
+    // A RING of buffer pairs, mCellRing deep (3 on Vulkan, 1 elsewhere), the
+    // streak ring's rule: a buffer an in-flight frame still references is
+    // STAGED on the Vulkan path (a copy and a barrier at the head of the
+    // frame, before the first pass may start), while a slot written three
+    // frames ago is free and its write is a memcpy. flushCarShadows advances
+    // the slot per upload. Priced on the box (the frame map, 2026-10-22): the
+    // staged copies were the one vertex-stage hold at the head of the frame.
+    const uint32_t ring = std::max<uint32_t>(1, mCellRing);
+    for (uint32_t k = 0; k < ring; k++) {
+        VertexBuffer* vb = VertexBuffer::Builder()
+                .vertexCount((uint32_t) kCarShadowVtxCap)
+                .bufferCount(2)
+                .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+                .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::HALF4)
+                .build(*mEngine);
+        IndexBuffer* ib = IndexBuffer::Builder()
+                .indexCount((uint32_t) kCarShadowIdxCap)
+                .bufferType(IndexBuffer::IndexType::UINT)
+                .build(*mEngine);
+        if (!vb || !ib) {
+            if (vb) mEngine->destroy(vb);
+            if (ib) mEngine->destroy(ib);
+            return;
+        }
+        mCarShadowVbRing.push_back(vb);
+        mCarShadowIbRing.push_back(ib);
+    }
+    mCarShadowRingAt = 0;
+    mCarShadowVb = mCarShadowVbRing[0];
+    mCarShadowIb = mCarShadowIbRing[0];
     RenderableManager::Builder builder(kCarShadowDraws);
     builder.boundingBox({ float3{ 0.0f }, float3{ 1e4f } })
             .culling(false)
@@ -634,6 +653,13 @@ void TtpRenderer::flushCarShadows() {
     const auto ri = rcm.getInstance(mCarShadowEntity);
     if (!ri) return;
     if (!mCarShadowPos.empty()) {
+        // Next ring slot (buildCarShadowDraws): the one written three frames
+        // ago is free, so this write is a memcpy, not a staged copy.
+        if (mCarShadowVbRing.size() > 1) {
+            mCarShadowRingAt = (mCarShadowRingAt + 1) % (uint32_t) mCarShadowVbRing.size();
+        }
+        mCarShadowVb = mCarShadowVbRing[mCarShadowRingAt];
+        mCarShadowIb = mCarShadowIbRing[mCarShadowRingAt];
         const size_t pb = mCarShadowPos.size() * sizeof(float3);
         void* pbuf = malloc(pb);
         std::memcpy(pbuf, mCarShadowPos.data(), pb);

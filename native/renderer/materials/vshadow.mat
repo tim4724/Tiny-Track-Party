@@ -20,7 +20,8 @@
 // blends premultiplied like vblend.
 material {
     name : TtpVshadow,
-    variables : [ fog, inkd, { name : suv, precision : high } ],
+    variables : [ { name : fog, precision : medium }, { name : inkd, precision : medium },
+                  { name : suv, precision : high } ],
     vertexDomain : world,
     requires : [
         custom0

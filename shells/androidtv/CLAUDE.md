@@ -366,6 +366,21 @@ main-thread work of the same order as anything being hunted: up, it hands you it
 own cost as the finding. Clear the property between runs the way every other knob
 is cleared.
 
+**The GPU's own kicks and counters come from the vendor producer**
+(`/vendor/lib/libgpudataproducer.so`, whose `start` a tiny adb-launched binary
+calls; Perfetto's `gpu.renderstages` and `gpu.counters` then record every TA
+and 3D kick per queue and 28 counters at 1 ms, release APK included). Two
+rules for reading one. **It is per-kick physics, never cadence**: the
+producer halves the frame rate while it streams, so inter-frame gaps,
+overlap and late presents cannot be read off a trace; judge cadence with the
+bench. **Count anything per `vkQueueSubmit`, with the HUD window's GL context
+tagged**: HWUI's ~1 ms 3D kick per frame rides the same queue, and a frame
+stride that ignores it turns every cell boundary into a "cross-frame
+overlap" (the frame map's traps have both failures). And **a build-time arm
+needs its mask before the build**: `PerfDebug` is polled before the first
+scene build for exactly that, so a probe material picked per instance sees
+the sweep's `debug.ttp.features`; the arm's picture is the check.
+
 `docs/perf/androidtv-frame-map.md` is the perf record: where the frame stands,
 what each shipped lever bought, what is still open, and the ledger of levers
 measured dead — dated, stamped with its build, and kept out of this file

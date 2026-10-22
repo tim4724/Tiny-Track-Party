@@ -24,23 +24,32 @@
 // crest, dip and bank without anything being conformed to anything.
 material {
     name : TtpVroad,
-    // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the ambient
-    // term and `sun`.xyz = ambient + sun, both DISPLAY-ENCODED (vground.mat
-    // has the rule). The two halves reach the fragment separately because the
+    // fog.yzw = the ambient term and sun.xyz = ambient + sun, both
+    // DISPLAY-ENCODED (vground.mat has the rule) and both ALREADY SCALED by
+    // (1 - fog) per vertex, with the fog's own term (colour × luminance × fog)
+    // riding the spare components fog.x / sun.w / visUV.z — so the fragment's
+    // whole composite is one mix and one add (the vertex block has the
+    // algebra). The two halves reach the fragment separately because the
     // deck's visibility is a per-fragment tap: multiplying a tap into the
     // FINISHED light would darken the ambient floor with it and take a
-    // shadowed deck to black.
+    // shadowed deck to black. Display colour is mediump: exact to 1/2048 of
+    // an 8-bit value, and it runs at the F16 rate on the Android box.
     //
-    // uvs = the deck layers' track-space uvs, computed PER VERTEX so each
-    // layer read samples a bare varying (a NON-DEPENDENT read the GPU can
-    // issue before the shader runs): .xy the rubber layer's,
-    // .xz the sun-visibility map's (same u; only v differs, and the vis map
-    // is a render target, so its v is flipped per backend). All affine in
-    // uv0, so interpolating them equals computing them per fragment up to
-    // fp32 rounding. highp: u = s/L at fp16 steps 4 texels of an 8k layer.
-    // ONE varying for the three, not two: on a tiler every varying component
-    // is parameter-buffer bytes per vertex and an iterator per fragment.
-    variables : [ fog, sun, { name : uvs, precision : high } ],
+    // uvs = (the rubber layer's u and v; the chunk-local arclength; the lat)
+    // and visUV = (the sun-visibility map's u and v; the fog term's blue),
+    // all computed PER VERTEX: each layer tap samples a BARE .xy varying, a
+    // NON-DEPENDENT read the GPU issues before the shader runs. A .xz
+    // swizzle counts as a dependent read on PowerVR (Imagination's texture
+    // sampling rule), which is why the vis map has a varying of its own. The
+    // vis map is a render target, so its v is flipped per backend. All affine
+    // in uv0, so interpolating them equals computing them per fragment up to
+    // fp32 rounding. highp: u = s/L at fp16 steps 4 texels of a 4k layer.
+    variables : [
+        { name : fog, precision : medium },
+        { name : sun, precision : medium },
+        { name : uvs, precision : high },
+        { name : visUV, precision : high }
+    ],
     // The deck is built in world units on an identity transform, so the model
     // matrix is a multiply by one on every vertex of the scene's biggest mesh.
     // `world` skips it. It needs Filament's camera-at-origin shift OFF
@@ -226,8 +235,6 @@ material {
 }
 
 fragment {
-    #include "ttp_fog.inc"
-
     // Distance from p to the segment ab. Four instructions, and it is what lets
     // a boost pad's chevrons be drawn without a texture: the art the mesh used to
     // stroke is two segments per chevron, and the shader can measure them.
@@ -380,9 +387,6 @@ fragment {
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
-        // former so nothing else in the pipeline touches it.
-        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
         // The light's two halves are variable_fog.yzw (ambient) and
         // variable_sun.xyz (sun at full visibility), both BAKED per vertex at
@@ -390,6 +394,29 @@ fragment {
         // normal any more. The visibility that scales the sun half is the
         // track-space tap below, not a vertex term.
         vec3 base = getColor().rgb;
+        // THE DECK'S SUN VISIBILITY FIRST, one bilinear tap of the track-space
+        // bake on a bare .xy varying (the GPU issues it before the shader
+        // runs, and nothing below waits on it). The map's u is tc.x's lap
+        // normalisation (invTrackLength), so it cannot drift from the rubber
+        // layer's; only the lat span differs, and vroadvis.mat says why.
+        // uvToRenderTargetUV ran in the vertex stage: the map is an OFFSCREEN
+        // RENDER TARGET, so v = 0 names the first row in memory — the bottom
+        // of the picture on OpenGL and the top on Metal, Vulkan and WebGPU.
+        //
+        // A kerb, skirt or underside fragment carries OFF_DECK_LAT here, so it
+        // clamps onto the outermost deck column and inherits that column's
+        // shadow: a band crosses the rail instead of stopping at it. The
+        // SAMPLER does that clamp (CLAMP_TO_EDGE on both axes, bindRoadVisMap),
+        // which is what lets the uv stay affine and come from the vertex stage.
+        float vis = 1.0;
+        if (materialParams.invSunVisLatSpan > 0.0) {
+            vis = textureLod(materialParams_sunVis, variable_visUV.xy, 0.0).r;
+        }
+        // The chunk-local arclength and the lat, folded PER VERTEX (the vertex
+        // block): every paint and decal x is stored relative to the chunk's
+        // centre, so each per-entry test below is a subtract and a compare.
+        highp float sLocal = variable_uvs.z;
+        float lat = variable_uvs.w;
 
         // THE DECK MASK IS A PER-VERTEX FLAG, NOT A THRESHOLD. One was in this
         // shader twice and was wrong both times. While v was lat/half it EXCLUDED
@@ -406,15 +433,6 @@ fragment {
         // surface, and the per-decal |dl| reject above drops it for free — which
         // is also what makes a FULL-WIDTH decal (the launch strips, if they ever
         // move here) safe.
-        highp vec2 tc = getUV0();
-        // ONE wrap for both channels below: fold this fragment's arclength into
-        // the chunk's local frame, the short way round the lap. Every paint and
-        // decal x is stored relative to the same centre, so each per-entry test
-        // is then a subtract and a compare.
-        highp float L = materialParams.trackLength;
-        highp float sLocal = tc.x - materialParams.chunkMid;
-        if (L > 0.0) sLocal -= L * floor(sLocal * materialParams.invTrackLength + 0.5);
-
         // Paint, THEN rubber, THEN decals. The middle one is the ordering rule:
         // a repair or a pad is the deck's own surface, so laid rubber runs
         // across it, while a contact shadow, an aura or an oil film is laid ON
@@ -427,8 +445,10 @@ fragment {
         // it, see `variables`.
         if (materialParams.paintCount > 0) {
             highp vec4 pb = materialParams.paintBounds;
-            if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
-                base = deckPaint(base, sLocal, tc.y);
+            // One vector compare rather than a ladder of four branches.
+            if (all(greaterThanEqual(vec4(sLocal, pb.y, lat, pb.w),
+                                     vec4(pb.x, sLocal, pb.z, lat)))) {
+                base = deckPaint(base, sLocal, lat);
             }
         }
         float lh = materialParams.skidLatHalf;
@@ -445,34 +465,22 @@ fragment {
         // fragment it rejects had nothing to draw.
         if (materialParams.profCount > 0) {
             highp vec4 pb = materialParams.profBounds;
-            if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
-                base = deckProfiles(base, sLocal, tc.y);
+            if (all(greaterThanEqual(vec4(sLocal, pb.y, lat, pb.w),
+                                     vec4(pb.x, sLocal, pb.z, lat)))) {
+                base = deckProfiles(base, sLocal, lat);
             }
         }
 
-        // THE DECK'S SUN VISIBILITY, one bilinear tap of the track-space bake.
-        // Re-uses tc.x's lap normalisation (invTrackLength) so u cannot drift
-        // from the rubber layer's; only the lat span differs, and vroadvis.mat
-        // says why. uvToRenderTargetUV is mandatory: the map is an OFFSCREEN
-        // RENDER TARGET, so v = 0 names the first row in memory — the bottom of
-        // the picture on OpenGL and the top on Metal, Vulkan and WebGPU — and a
-        // raw sample reads it mirrored on those backends. Same correction
-        // sunVisibilityUV and vground already carry.
-        //
-        // A kerb, skirt or underside fragment carries OFF_DECK_LAT here, so it
-        // clamps onto the outermost deck column and inherits that column's
-        // shadow: a band crosses the rail instead of stopping at it. The
-        // SAMPLER does that clamp (CLAMP_TO_EDGE on both axes, bindRoadVisMap),
-        // which is what lets the uv stay affine and come from the vertex stage.
-        float vis = 1.0;
-        if (materialParams.invSunVisLatSpan > 0.0) {
-            vis = textureLod(materialParams_sunVis, vec2(variable_uvs.x, variable_uvs.z), 0.0).r;
-        }
         // The composited deck colour times the light, its two halves mixed
-        // through the visibility here, in display space — every input above
-        // was encoded on the CPU. emissive.w = 0 → no second exposure.
-        vec3 lit = base * mix(variable_fog.yzw, variable_sun.xyz, vis);
-        material.emissive = vec4(ttpFogMix(lit, variable_fog.x), 0.0);
+        // through the visibility here, in display space — every input was
+        // encoded on the CPU, and the fog is already folded into the halves
+        // (the vertex block), so what is left is the mix and the fog term's
+        // add. Written straight to baseColor: an unlit material passes it
+        // through untouched, where an `emissive` write would drag Filament's
+        // exposure maths (addEmissive) onto every deck fragment for nothing.
+        vec3 lit = base * mix(variable_fog.yzw, variable_sun.xyz, vis)
+                + vec3(variable_fog.x, variable_sun.w, variable_visUV.z);
+        material.baseColor = vec4(lit, 1.0);
     }
 }
 
@@ -494,16 +502,39 @@ vertex {
     // TtpRenderer::bakeVertexLight evaluates the identical ttpMatteAmbient once
     // per track, with and without the sun, encodes both for display, and this
     // stage is left with a move.
+    //
+    // THE FOG IS FOLDED HERE TOO. The fragment used to finish with
+    // ttpFogMix(base × mix(A, S, vis), a) = lit × (1 - a) + F × a, where A and
+    // S are the two light halves, F the fog colour times the luminance and a
+    // the fog factor. The mix is linear in both halves, so (1 - a) multiplies
+    // INTO them per vertex — A' = A (1 - a), S' = S (1 - a) — and F × a rides
+    // the three spare components; the fragment is left with the mix and one
+    // add. Exact up to fp16 rounding of display values (vground and vcolor
+    // fold the same way).
+    //
+    // THE LAP WRAP IS PER VERTEX TOO: the chunk-local arclength is affine in
+    // uv0.x inside a chunk (26 rings, tens of metres, nowhere near the L/2
+    // seam its wrap folds at), so interpolating it is exact and the fragment
+    // stops paying a floor and six highp ops to recompute it. The whole-lap
+    // fallback instance (chunkMid 0; uploadDeckDecals) keeps the wrap for
+    // honesty, and is the one place a triangle could straddle the seam.
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), getCustom0().xyz);
-        material.sun = vec4(getCustom1().xyz, 0.0);
+        float a = ttpFogFactor(material.worldPosition.xyz);
         // The deck layers' uvs (see `variables`), exactly the expressions the
         // fragment used to evaluate. uvToRenderTargetUV belongs to the vis map
         // alone: it is a render target, the rubber layer is an upload.
         highp vec2 tc = material.uv0;
         highp float u = tc.x * materialParams.invTrackLength;
-        material.uvs = vec4(u, tc.y * materialParams.invSkidLatSpan + 0.5,
+        highp float sl = tc.x - materialParams.chunkMid;
+        highp float L = materialParams.trackLength;
+        if (L > 0.0) sl -= L * floor(sl * materialParams.invTrackLength + 0.5);
+        float k = 1.0 - a;
+        vec3 F = frameUniforms.fogColor * (frameUniforms.iblLuminance * a);
+        material.fog = vec4(F.r, getCustom0().xyz * k);
+        material.sun = vec4(getCustom1().xyz * k, F.g);
+        material.uvs = vec4(u, tc.y * materialParams.invSkidLatSpan + 0.5, sl, tc.y);
+        material.visUV = vec4(u,
                 uvToRenderTargetUV(vec2(u, tc.y * materialParams.invSunVisLatSpan + 0.5)).y,
-                0.0);
+                F.b, 0.0);
     }
 }

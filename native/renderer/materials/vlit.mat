@@ -17,8 +17,9 @@
 material {
     name : TtpVlit,
     // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the matte
-    // light, display-encoded (ttp_shade.inc, ttpMatteLightDisplay).
-    variables : [ fog ],
+    // light, display-encoded (ttp_shade.inc, ttpMatteLightDisplay). Display
+    // values, so mediump (exact to 1/2048 of an 8-bit value).
+    variables : [ { name : fog, precision : medium } ],
     requires : [
         color,
         // the world normal the vertex stage's Lambert term needs
@@ -34,12 +35,11 @@ fragment {
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
-        // former so nothing else in the pipeline touches it.
-        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         // The vertex colour is the albedo, display-encoded (packAlbedo); the
-        // light arrived encoded too. emissive.w = 0 → no second exposure.
-        material.emissive = vec4(ttpFogMix(getColor().rgb * variable_fog.yzw, variable_fog.x), 0.0);
+        // light arrived encoded too. Straight to baseColor: an unlit material
+        // passes it through untouched, where an `emissive` write would add
+        // Filament's exposure maths (addEmissive) per fragment for nothing.
+        material.baseColor = vec4(ttpFogMix(getColor().rgb * variable_fog.yzw, variable_fog.x), 1.0);
     }
 }
 

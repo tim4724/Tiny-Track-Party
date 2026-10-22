@@ -228,6 +228,12 @@ class GameCoordinator(
         } catch (e: Exception) {
             state.fail("materials: ${e.message}")
         }
+        // The debug knobs BEFORE the first build, not at the frame loop's first
+        // slow tick 45 ms after it: a mask set before launch (a sweep's
+        // `debug.ttp.features`) is then in force from the scene's first frame,
+        // and an arm the renderer reads while it builds (a probe material picked
+        // per instance, as the 2026-10-22 deck arms were) sees it at all.
+        PerfDebug.poll(display)
         if (!booted) {
             booted = true
             boot()

@@ -1414,6 +1414,12 @@ private:
     std::vector<filament::MaterialInstance*> mCarShadowMi;
     filament::VertexBuffer* mCarShadowVb = nullptr;
     filament::IndexBuffer* mCarShadowIb = nullptr;
+    // ...which are the current slot of a RING of mCellRing pairs (the streak
+    // ring's rule, buildCarShadowDraws has the why): flushCarShadows advances
+    // the slot once per upload.
+    std::vector<filament::VertexBuffer*> mCarShadowVbRing;
+    std::vector<filament::IndexBuffer*> mCarShadowIbRing;
+    uint32_t mCarShadowRingAt = 0;
     std::vector<filament::math::float3> mCarShadowPos;     // this frame's rows
     std::vector<filament::math::half4> mCarShadowC0;        // ...and their baked light
     std::vector<uint32_t> mCarShadowIdx;

@@ -238,6 +238,12 @@ ladder. What the pass is built on, and why each piece is what it is:
 - **A rebuilt scene's instances know no stamp**: the per-slot memory of which
   model is bound (`mCarShadowStampBound`) is reset with the draws, or the race
   after the lobby draws nothing.
+- **Its vertex and index buffers are a RING of three** (the streak ring's
+  rule, `buildCarShadowDraws`). Written through one pair they were STAGED on
+  the Vulkan box every frame: three copies and a `VERTEX_INPUT` barrier ahead
+  of every frame's first vertex kick, outside the GPU timer's interval, and
+  15-25% of the box's skipped frames (the frame map, 2026-10-22). Any buffer
+  written per frame belongs in a ring.
 - Each car also pushes a READBACK-ONLY entry (`DeckDecal::car`, folded into no
   chunk) so `ttp_display_debug_decals` and the warp bench can read the car rows.
 
@@ -303,6 +309,14 @@ only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
   never clamped — the clip belongs on the product, in the 8-bit buffer.
 - **A new colour texture is RGBA8, never SRGB8_A8**: the decode the sampler
   would do is exactly the step this removes.
+- **An unlit material writes `baseColor`, never `emissive`.** Unlit passes
+  `baseColor` through untouched; an `emissive` write makes matc compile
+  Filament's `addEmissive` (an exposure mix and a multiply-add, highp) into
+  every fragment of that material for nothing. `vglbfade` is the one
+  exception, on purpose: its alpha rides `baseColor` and its colour must be
+  premultiplied by it. Display colour is `precision : medium` in the
+  `variables` of every scene material (exact to 1/2048 of an 8-bit value, the
+  F16 rate on the box); texture coordinates and world units stay high.
 - **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
   sampled the way the GPU samples them; the merged bake decodes them to
   multiply the light and encodes the product once.
@@ -355,6 +369,12 @@ opacity so lines do not ghost through it.
   that reason. The chain is needed (the deck ahead minifies an 8k-wide texture;
   `mMaxTextureDim` is a chosen ceiling, clamped down by the driver, never up);
   its throttle rides `mTime`, so its timestamp is cleared with the texture.
+- **Every deck tap reads a BARE `.xy` varying of its own.** A coordinate
+  swizzled out of a varying's other components (`.xz`, `.zw`) counts as a
+  DEPENDENT read on PowerVR (Imagination's texture-sampling rule), which the
+  GPU cannot issue before the shader runs; so the rubber layer's uv and the
+  vis map's uv are two varyings, not one packed vec4, and the deck's
+  chunk-local arclength and lat ride the spare components instead.
 - **The tap reads the uv RAW** (an upload has no per-backend flip; the suite
   audit `tests/render-target-uv.test.js` classifies the sampler), and the stamper
   keeps the texture's outer lat rows empty, which parks the kerbs' and
@@ -669,7 +689,11 @@ Filament's costs a SHADER VARIANT (a cubemap sampler and a pow behind branches t
 scene never takes), which its own `linearFog` does not fix; per fragment ours was
 still several times the per-vertex cost. **A per-vertex term needs vertices**:
 anything large, flat and fogged carries enough to interpolate between (the ground
-sheet's STEP).
+sheet's STEP). On the opaque materials even the fragment's mix is folded away:
+`ttpFogMix(c, a) = c (1 - a) + F a` is linear in `c`, so `(1 - a)` multiplies
+into the light halves (or the vertex colour) per vertex and `F a` rides a
+spare varying component, leaving the fragment one add (`vroad.mat` has the
+algebra; `vground` and `vcolor` fold the same way).
 
 **A dynamically-indexed uniform ARRAY costs whether or not the loop runs, and it
 costs by DECLARED SIZE** (`vroad.mat` has the readings). That is why the car
