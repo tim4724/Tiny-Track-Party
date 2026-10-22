@@ -50,7 +50,7 @@ runs at 12.98 / 13.22 ms heavy):
 | item | ms | |
 |---|---|---|
 | the deck | 3.8 | its AREA: the fragment is two taps and a mix, and `LOD_ALL` null says its vertex count is not it |
-| the empty frame | 2.7 | four passes, their clears, the sky dome's fill; ~0.4 ms per extra cell |
+| the empty frame | 2.7 | four passes, their clears, the sky dome's fill; ~0.4 ms per extra cell: per-pass fixed work and kick gaps, the first pass's full clear, and the HUD window's GL work inside the timer (Closed > Pass structure) |
 | terrain | 1.5 | the fill it covers; no member dominates (hills, ground, lawn discs, structures each 0.0-0.5) |
 | dressing | 0.8 | |
 | decals + the car-shadow pass | 0.8 | `TTP_FEAT_ROAD_DECALS` also hides the shadow pass |
@@ -184,12 +184,6 @@ front of devices that never missed a frame.
 
 ## Open
 
-**THE EMPTY FRAME's per-cell term, ~1.2 ms at 4P.** Every group off, pinned
-720 (light / heavy p50): 1P 1.05 / 1.44, 2P 1.04 / 1.58, 3P 1.39 / 2.18, 4P
-2.16 / 2.7. The only collector is one render pass with four viewports instead
-of a pass per View — a Filament fork change. Neither a constrained render
-area nor scoping the first pass moved it (Closed, below).
-
 **A 4P-only look tier: the rubber tap** (skid marks are ~2 px wide in a 4P
 cell; 0.4 ms heavy since display space, 0.6-0.8 before it). Priced, not taken.
 
@@ -204,9 +198,26 @@ by the reading that closed it; the build is the one of its day.
 |---|---|
 | per-cell quarter-size targets | ~0.4 ms won at identical fill, the composite back cost ~5x that |
 | Vulkan `renderArea` confined to the pass viewport (fork patch) | NULL (2026-09-04): the GPU only touches the tiles a draw reaches. The first version shipped for an hour as a BLACK picture — a Vulkan-backend change is verified by a screen capture on the box |
-| the swap chain's first pass scoped to its viewport | NULL (2026-10-12) |
+| the swap chain's first pass scoped to its viewport | NULL by the timer (2026-10-12). The 2026-10-22 trace (below the table) prices it at ~0.3 ms of GPU, inside the heavy seconds' noise |
+| one render pass for all the cells (a fork change, aimed at the empty frame's per-cell term) | a LOSS by construction (2026-10-22): the cells' geometry, 9.5 ms of a heavy 4P frame, runs under the earlier cells' fragment work, which one pass would forbid, and consecutive frames do not overlap (5 of 715), so nothing would hide the serial pass |
+| the cheapest cell drawn first | ~0.1 ms at most: the first cell's geometry already takes about as long as the cheapest cell's (2026-10-22) |
 | multiview (`OVR_multiview2`) | DELETED: GL-only, re-runs per-view geometry by design, regressed 2P and 3P |
 | depth-EQUAL stamp pass for the masked shadows | NULL (2026-08-24): the fragments cost the same in any pass |
+
+**The per-cell term, traced per pass (2026-10-22, `0d2e5286`, pretzel).** The
+GPU timer read the empty frame (every group off, pinned 720) at 1.44 ms heavy
+p50 for one player and 2.7 for four. Perfetto's `gpu.renderstages`, fed by the
+box's vendor producer (`/vendor/lib/libgpudataproducer.so`, whose `start` an
+adb-launched binary calls), times each pass's vertex/binning (TA) and fragment
+(3D) phases. A heavy 4P/720 frame is 2.1 ms of the first cell's TA with the 3D
+unit idle, 11.8 of fragment and 0.36 of idle between 3D kicks (14.5 span, the
+rest small TA waits). In the empty frame, one to four players adds 0.9 ms of
+GPU span: ~0.3 the first pass clearing and storing the whole surface (536 us
+against ~250 for a later quarter), 0.17 kick gaps, ~0.35 per-pass fixed work.
+The timer's remaining ~0.3 was the HUD window's GL work landing inside its
+interval (tags off, empty 4P/720 heavy p50: 2.35 -> 2.04 ms); at the full
+frame it costs nothing (CPU, driver and platform: the HUD window). Depth is
+never loaded or stored (the `Z Load/Store` counter reads 0).
 | sRGB swap chain instead of a shader encode | a 3.5 ms LOSS on GL (`EGL_KHR_gl_colorspace`), NULL on Vulkan (2026-09-02); moot since display space |
 | swap-chain image count / MAILBOX | latency 48-49 ms in every arm: it is the platform's frame timeline (SurfaceFlinger's +70 ms slot), not the queue (2026-09-02) |
 | a third app layer (an overlay SurfaceView for the tags) | the composer takes two app layers; a third drops both to GPU composition, heavy 18.5 ms (2026-10-14) |
@@ -277,7 +288,7 @@ by the reading that closed it; the build is the one of its day.
 | the frame-timeline API (`postVsyncCallback`) | the +53 ms slot needs the GPU done within ~6 ms of the callback; not built |
 | hardware divide (`-march=armv7ve`), PGO/ThinLTO, a fork patch to `FView::partition` | priced, not taken (2026-10-03) |
 | inlining the mixer's `lerp` | 21% SLOWER: R8 folds the mixer into one method ART compiles worse |
-| the HUD window (tags off, hud off) | NULL since the window erase (2026-10-14, 2026-10-17); it was 2.3 ms on 2026-09-28 |
+| the HUD window (tags off, hud off) | NULL since the window erase (2026-10-14, 2026-10-17); it was 2.3 ms on 2026-09-28. Still NULL with ~0.45 ms of GPU a 4P frame left in its own GL context, where the game's timer cannot see it: that work lands in the GPU's idle time (`0d2e5286`, tags off vs on, 4P/720 pretzel, three alternated rounds: heavy p50 -0.07 / +0.11 / +0.41 ms, skipped frames per 60 s 11 -> 23, 25 -> 29, 7 -> 8; 2026-10-22) |
 
 ## Two traps that live only in this file's history
 
