@@ -92,11 +92,16 @@ TA hides under the earlier cells' 3D with 0.6 / 0.9 / 1.5 ms of slack, so at
 4P/720 a fragment cut converts up to ~1.2-1.5 ms before the TA chain binds;
 at 1P/1080 fragment cuts convert 1:1 and the exposed first TA is on the
 critical path of every frame. Whether frame N+1's first TA can run under
-frame N's last 3D is UNMEASURED: the tracer stalls submission so no traced
-boundary is backed up (two counts read off traces, "5 of 715" and "268 of
-682", were both artefacts, see the traps), and until 2026-10-22 the command
-stream forbade it anyway (the car-shadow pass staged three buffer copies at
-the head of every frame, each waiting on the previous submission and fenced
+frame N's last 3D cannot be read off a trace (the tracer stalls submission so
+no traced boundary is backed up; two counts read off traces, "5 of 715" and
+"268 of 682", were both artefacts, see the traps). The early swap-chain wait
+arm answered it (Closed > Pass structure): where the GPU runs behind the
+compositor, at 1080, the image-ready wait is on the critical path and letting
+the vertex work run ahead of it is worth 0.5-1 ms of the heavy seconds; at 720
+the image is free before the frame is submitted and the arm is null, so the
+driver overlaps frames no further than that. Until 2026-10-22 the command
+stream forbade even that much (the car-shadow pass staged three buffer copies
+at the head of every frame, each waiting on the previous submission and fenced
 by a `TRANSFER -> VERTEX_INPUT` barrier; the ring below removed them, and the
 first TA still starts ~0.25 ms after the two head kicks that remain).
 
@@ -249,14 +254,6 @@ been photographed on this box (the look probe: pins 1.0, 0.833333, 0.75,
 extra failed rung on a session's first 4P race unless the instant-fail jump
 steps two rungs. A 900 rung is `kScaleLadder` plus the ctest's rung counts.
 
-**Two conditional head-of-frame arms** (fork, hours each, judged by skips at
-1P/1080 and 3P/1080): the swap-chain acquire wait injected at
-`COLOR_ATTACHMENT_OUTPUT` instead of `ALL_COMMANDS` (upstream-idiomatic), then
-the GPU timer queries off outside the bench. They decide whether the first TA
-can hide under the previous frame's 3D once the ring removed the vertex-stage
-hold; the two head kicks that remain (unattributed: the query-pool reset and a
-copy) still precede the first TA by ~0.25 ms.
-
 **Car far forms** (per-cell `LodRange` for the merged car groups, past the
 8.6 u gate at 4P/720): 0.4-0.7 ms of heavy p50, ~85% of it in the TAs that
 hide within the frame, so it buys missed frames only after fragment cuts have
@@ -279,6 +276,7 @@ by the reading that closed it; the build is the one of its day.
 | swap-chain compression (`VK_EXT_image_compression_control_swapchain`), an RGB565 swap chain, the first pass's clear scoped to its grid slot | closed by the counters (2026-10-22): `dumpsys SurfaceFlinger` reads `compressed: false` on every buffer, the pixel back end is at 4% and the memory interface at 2-12%, so the stores are not what a frame waits on; the first pass's full clear+store is ~0.3 ms by trace and null by the timer |
 | submitting each cell's command buffer as it is recorded (per-View `driver.flush`) | pacing only: the GPU span is unchanged and the frame-skipper's window is fresh at every count (S, vsync to submit, cannot reach it), so at most a few of a race's skips (2026-10-22, by arithmetic) |
 | the cheapest cell drawn first | ~0.1 ms at most: the first cell's geometry already takes about as long as the cheapest cell's (2026-10-22) |
+| the swap-chain acquire semaphore waited at `COLOR_ATTACHMENT_OUTPUT` instead of `ALL_COMMANDS`, so the frame's vertex work and transfers run before the compositor releases the image (a flag-gated fork patch: the transition out of `PRESENT` sourced at that stage so its barrier chains after the wait, and the submission chain kept across present with a second signal semaphore for the presentation engine, which is what orders the next frame's buffer writes after this frame's reads once the blanket wait is gone) | small at 1080, NULL at 720, declined (2026-10-22; one install, both arms proven by the backend's log line, three alternated 75 s rounds per rung): heavy-second p50 1P/1080 -0.48/-0.26/-0.75 ms and skips 118 -> 107, 3P/1080 -2.33/-0.38/-0.29 and 134 -> 76 (one round carried it), 4P/720 +0.26/-0.34/-0.41 and 20 -> 20. The wait is on the critical path only where the GPU runs behind the compositor, and the driver overlaps frames no further; half a millisecond at two rungs is not worth a fork commit and a pin bump that rebuilds every leg. Never run under validation layers. Upstream has waited at `ALL_COMMANDS` since 2021 (#3875) and narrowed only the in-frame chain (#8993, #9155); a per-frame buffer audit found no app write that should still be a staged copy on the box (Views ringed, material uniforms batched and shared, the instancing UBO fresh per pass), so the remaining head "copy" kick is most likely the skid layer's image upload, which cannot hold vertex work |
 | multiview (`OVR_multiview2`) | DELETED: GL-only, re-runs per-view geometry by design, regressed 2P and 3P |
 | depth-EQUAL stamp pass for the masked shadows | NULL (2026-08-24): the fragments cost the same in any pass |
 
