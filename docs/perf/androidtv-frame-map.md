@@ -229,6 +229,7 @@ by the reading that closed it; the build is the one of its day.
 | bigger deck chunks (13 -> 6 a lap) | +2.7 ms of fill: the per-chunk cull and decal window widen (GL era) |
 | ground and hills drawn after every opaque | NULL: the tiler already rejects the overdraw |
 | terrain by member (hills, ground sheet, lawn discs, structures) | 0.0-0.5 each against the group's 1.3-1.4 (2026-10-17) |
+| simpler models, priced against their own ceiling (2026-10-21, `0d2e5286`, pretzel, per-second pairs, heavy p50 ~14.3 base; pairs are two rounds) | geometry here costs by the OBJECT, not by its vertex count. The ceiling, dressing and cars both removed: 4P/720 heavy p50 -3.0 / -3.3 ms (dressing -1.4 / -2.2, cars -2.0 / -2.4; skipped frames ~25 -> ~4 a minute); 1P/1080 null (the deck's fill); 3P/1080 -0.8 / -2.2 and still 69-77 skipped frames a minute, so no geometry buys any player count a rung. Dressing split: sheets -0.5 / -1.1, kit copies -0.3 / -0.8. The REALISTIC cut does not follow the ceiling: lean flowers (3x2 spheres, capless stems, same stream, about half the flower vertices) NULL over three alternated installs (+0.1 / -0.1 / -0.5); the smooth+12 cars bought ~0.5 (2026-10-20) |
 
 **The deck's shader**
 
