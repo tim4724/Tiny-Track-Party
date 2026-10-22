@@ -1,7 +1,9 @@
 material {
     name : TtpVcolor,
-    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
-    variables : [ fog ],
+    // The fog's own term, colour × luminance × fog factor (ttp_fog.inc), with
+    // (1 - fog) already multiplied into the vertex colour: the fragment adds
+    // and nothing else. Display colour, so mediump.
+    variables : [ { name : fog, precision : medium } ],
     requires : [
         color
     ],
@@ -10,22 +12,24 @@ material {
 }
 
 fragment {
-    #include "ttp_fog.inc"
-
-    // The vertex colour is the displayed colour (packShown, TtpRendererImpl.h).
+    // The vertex colour is the displayed colour (packShown, TtpRendererImpl.h),
+    // fogged per vertex (the vertex block).
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor();
-        material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x);
+        material.baseColor.rgb += variable_fog.xyz;
     }
 }
 
 vertex {
     #include "ttp_fog.inc"
 
-    // The fog factor is the only thing this stage exists for: per vertex, so the
-    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    // The fog is the only thing this stage exists for: per vertex, so the
+    // fragment pays an add instead of a sqrt and an exp. (1 - a) folds into
+    // the colour here and F a rides the varying (ttp_fog.inc, ttpFogTerm).
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+        float a = ttpFogFactor(material.worldPosition.xyz);
+        material.color.rgb *= 1.0 - a;
+        material.fog = vec4(ttpFogTerm(a), 0.0);
     }
 }

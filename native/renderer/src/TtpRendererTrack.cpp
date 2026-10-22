@@ -729,9 +729,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
             mi->setParameter("profCount", 0);
             mi->setParameter("paintCount", 0);
-            // Build-time constants: the wrap and this chunk's own midpoint never
-            // change again, so uploadDeckDecals only ever writes the decal set.
-            mi->setParameter("trackLength", L);
+            // Build-time constants: the lap's normalisation and this chunk's
+            // own midpoint never change again, so uploadDeckDecals only ever
+            // writes the decal set.
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
             bindSkidLayer(mi);
@@ -742,10 +742,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mRoadChunks.push_back(std::move(chunk));
         }
     }
-    // The whole-lap fallback instance carries the same build-time wrap
-    // constants as the chunks, so uploadDeckDecals only ever writes decal sets.
+    // The whole-lap fallback instance carries the same build-time constants
+    // as the chunks, so uploadDeckDecals only ever writes decal sets.
     if (mRoadInst) {
-        mRoadInst->setParameter("trackLength", L);
         mRoadInst->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
     }
@@ -2347,6 +2346,11 @@ bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
     mStreakPoolCars = (int) carCount; // keyed only once whole: a failed build retries
     phases.mark("streaks+ghosts");
     phases.print("ttp build phases: field");
+    // Every scene build ends here. An ablation mask sent before it tagged
+    // nothing it just added (debugFeatureMask tags what exists); re-tag, or a
+    // sweep whose mask was set before launch draws every group and reads as
+    // "this feature is free".
+    if (mFeatureTagged) tagFeatures();
     return true;
 }
 

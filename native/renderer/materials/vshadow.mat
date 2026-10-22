@@ -1,8 +1,8 @@
 // THE CAR SHADOW AS A PASS: one blended draw per car over the road's OWN
-// deck cells under it (TtpRenderer::placeCarShadow), the same vertex buffer
-// and the same vertex-domain path, so every fragment is a road fragment at
-// the road's own depth — a tyre in front wins the depth test, nothing floats,
-// a crest or a loop is the road itself.
+// deck triangles under it (TtpRenderer::placeCarShadow clips them into the
+// pass's own buffers), on the same vertex-domain path, so every fragment is a
+// road fragment at the road's own depth — a tyre in front wins the depth
+// test, nothing floats, a crest or a loop is the road itself.
 //
 // THE SHAPE IS A TEXTURE LOCKED TO THE CAR, not arithmetic per fragment: the
 // fitted rounded rect's ramp field (ttp/car_footprint.h, RoundedRectEval)
@@ -20,7 +20,8 @@
 // blends premultiplied like vblend.
 material {
     name : TtpVshadow,
-    variables : [ fog, inkd, { name : suv, precision : high } ],
+    variables : [ { name : fog, precision : medium }, { name : inkd, precision : medium },
+                  { name : suv, precision : high } ],
     vertexDomain : world,
     requires : [
         custom0

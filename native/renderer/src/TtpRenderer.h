@@ -1399,7 +1399,7 @@ private:
     static constexpr int kCarShadowRings = 12;
     static constexpr size_t kCarShadowVtxCap = kCarShadowDraws * 512;
     static constexpr size_t kCarShadowIdxCap = kCarShadowDraws * 1024;
-    // ONE renderable, a primitive per car slot, over ONE vertex and ONE index
+    // ONE renderable, a primitive per car slot, over a vertex and an index
     // buffer rebuilt each frame (flushCarShadows): per car, the road's OWN
     // triangles under the stamp's box, CLIPPED to it. For every ring cell the
     // box spans and every deck strip it touches, the cell's two triangles are
@@ -1412,8 +1412,12 @@ private:
     // stretch had no shadow and its ends flickered (the frame map, 2026-10-14).
     utils::Entity mCarShadowEntity;
     std::vector<filament::MaterialInstance*> mCarShadowMi;
-    filament::VertexBuffer* mCarShadowVb = nullptr;
-    filament::IndexBuffer* mCarShadowIb = nullptr;
+    // The buffers are a RING of mCellRing pairs (the streak ring's rule;
+    // buildCarShadowDraws has the why), and flushCarShadows advances the slot
+    // once per upload.
+    std::vector<filament::VertexBuffer*> mCarShadowVbRing;
+    std::vector<filament::IndexBuffer*> mCarShadowIbRing;
+    uint32_t mCarShadowRingAt = 0;
     std::vector<filament::math::float3> mCarShadowPos;     // this frame's rows
     std::vector<filament::math::half4> mCarShadowC0;        // ...and their baked light
     std::vector<uint32_t> mCarShadowIdx;

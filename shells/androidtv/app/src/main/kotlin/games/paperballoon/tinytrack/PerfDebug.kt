@@ -43,8 +43,10 @@ import androidx.compose.runtime.setValue
  * every sweep measured the wrong build (shells/androidtv/CLAUDE.md, MEASURE THE
  * BUILD THAT SHIPS). Cheap and bounded: `debug.`-prefixed props are adb-only.
  *
- * Polled at the HUD's ~6 Hz tick rather than per frame: a property read is a
- * binder round trip.
+ * Polled at the HUD's ~6 Hz tick rather than per frame (a property read is a
+ * binder round trip), and once before the first scene build
+ * ([GameCoordinator.displayReady]), so a knob set before launch shapes the
+ * first scene.
  */
 object PerfDebug {
 

@@ -1,4 +1,6 @@
-// The distance fog, computed PER VERTEX and mixed per fragment.
+// The distance fog, computed PER VERTEX: mixed per fragment on the blended
+// materials, folded into the vertex's own colour on the opaque ones
+// (ttpFogTerm).
 //
 // WHY IT IS OURS AT ALL. Filament composites fog inside every surface shader,
 // and on a low-end mobile GPU that was the most expensive thing in the frame:
@@ -23,8 +25,8 @@
 // numbers `TtpRenderer::fogFor` chose — nothing is restated, and a fog tuned
 // there still lands here.
 //
-// Included by BOTH the vertex and fragment blocks of every scene material: the
-// factor is computed in one and consumed in the other.
+// A blended material includes it in BOTH blocks (the factor is computed in one
+// and mixed in the other); an opaque one includes it in the vertex block alone.
 
 // The fog opacity at a world position. Filament's own expression with the two
 // branches this scene never enters removed, and with heightFalloff pinned to 0
@@ -55,11 +57,25 @@ float ttpFogFactor(highp vec3 worldPos) {
             * (d - frameUniforms.fogStart)), frameUniforms.fogMaxOpacity);
 }
 
-// The fragment half, on DISPLAYED colour — after the grade, which is where
-// Filament put it (it ran on fragColor, past evaluateMaterial).
+// The fog's own term, F × a: the fog colour at the frame's luminance, scaled
+// by the factor. A fogged fragment shows c (1 - a) + F a, on DISPLAYED colour
+// (every material's inputs arrive encoded; Filament's own fog also ran on
+// fragColor, past evaluateMaterial).
+//
+// THE OPAQUE MATERIALS FOLD THE WHOLE MIX INTO THE VERTEX STAGE. The
+// expression is linear in c, so (1 - a) multiplies into whatever the fragment
+// will multiply anyway — the two baked light halves on vroad and vground, the
+// vertex colour on vcolor — and F a rides a spare varying component; the
+// fragment is left with one add. Exact at every vertex; between vertices the
+// interpolated product differs from the product of the interpolants by a
+// second-order term, under the fp16 step of a display value.
+vec3 ttpFogTerm(float a) {
+    return frameUniforms.fogColor * (frameUniforms.iblLuminance * a);
+}
+
+// The fragment half, for a material that mixes per fragment.
 vec3 ttpFogMix(vec3 displayed, float a) {
-    return displayed * (1.0 - a)
-            + frameUniforms.fogColor * (frameUniforms.iblLuminance * a);
+    return displayed * (1.0 - a) + ttpFogTerm(a);
 }
 
 // ADDITIVE blending only. Filament zeroes the fog colour for BLEND_MODE_ADD —

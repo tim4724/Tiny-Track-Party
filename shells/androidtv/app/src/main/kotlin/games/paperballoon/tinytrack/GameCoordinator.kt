@@ -228,6 +228,12 @@ class GameCoordinator(
         } catch (e: Exception) {
             state.fail("materials: ${e.message}")
         }
+        // The debug knobs BEFORE the first build, not at the frame loop's first
+        // slow tick after it: a scale pin or a mask set before launch (a
+        // sweep's `debug.ttp.*`) is then in force from the scene's first frame.
+        // (The renderer re-tags the feature layers after every build, so the
+        // mask reaching an empty scene here is not lost.)
+        PerfDebug.poll(display)
         if (!booted) {
             booted = true
             boot()

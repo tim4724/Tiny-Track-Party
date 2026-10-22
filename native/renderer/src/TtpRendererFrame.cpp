@@ -1190,7 +1190,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // The CPU entry below is READBACK ONLY — the
             // ttp_display_debug_decals row the warp bench reads, with the
             // conform diagnostics riding its shape field. The pass draws
-            // (TtpRenderer.h, mCarShadowVb); a scene without its material
+            // (TtpRenderer.h, mCarShadowVbRing); a scene without its material
             // gets no shadow, no row, and those slots go to the auras.
             if (mRoadInst && !mCarShadowMi.empty()
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {

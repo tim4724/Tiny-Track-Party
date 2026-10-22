@@ -38,10 +38,11 @@
 // TTP_GRADE_EXPOSURE in ttp_shade.inc.
 //
 // vertexDomain:device — the three vertices ARE the clip-space fullscreen
-// triangle, no camera transform. The colour goes in `emissive` (with w=0, which
-// opts out of the exposure attenuation in addEmissive) because an unlit
-// material's baseColor is zeroed outright when the view has a directional
-// light: see the same dance in vlit.mat.
+// triangle, no camera transform. The colour goes in `emissive` with w = 0 (no
+// exposure attenuation in addEmissive). This pass is off on the box, where
+// the scene materials' move to `baseColor` was priced, so it was never
+// re-measured and keeps the write (native/renderer/CLAUDE.md names the
+// exceptions).
 material {
     name : TtpVpresent,
     parameters : [

@@ -214,8 +214,9 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     }
     if (!mEngine) return false;
     // The RESOLVED backend, not the one asked for: a DEFAULT request lands on
-    // Vulkan or GL by device, and only Vulkan rotates (ensureCells, and the
-    // streak buffers in renderCars).
+    // Vulkan or GL by device, and only Vulkan rotates (ensureCells; the
+    // per-frame buffers: streaks in renderCars, car shadows in
+    // flushCarShadows, flake culling in cullAmbientCells).
     mCellRing = mEngine->getBackend() == Engine::Backend::VULKAN ? 3 : 1;
     // The driver's texture ceiling can sit UNDER the conservative default:
     // this box's GL driver reports 8192 while its Vulkan driver caps 2D
@@ -1797,10 +1798,11 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         mCarMergeDirty = true;
         mDressMergeDirty = true;
     }
-    // Re-tag on every call rather than once: a scene built after the first call
-    // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
-    // ablation sweep that silently stopped ablating would read as "this feature
-    // is free".
+    // Re-tag on every call rather than once, and every build re-tags what it
+    // adds (buildField, which every scene build ends in): a scene built after a call — a Grand
+    // Prix's next track, a biome rebuild, or the first scene when the shell
+    // sent the mask before it — arrives untagged, and an ablation sweep that
+    // silently stopped ablating would read as "this feature is free".
     if (!mScene) return;
     tagFeatures();
     mFeatureTagged = true;
@@ -2010,8 +2012,8 @@ void TtpRenderer::releaseStatic() {
     destroyMergedGroups(mMergedDress);
     mDressMergeDirty = false;
     mAssetMeshKey.clear();
-    // The shadow draw shares the road's vertices: its entity and its own index
-    // buffer go; the instances are scene instances.
+    // The shadow draw: its entity and its ring of vertex and index buffers go
+    // (buildCarShadowDraws); the instances are scene instances.
     if (!mCarShadowEntity.isNull()) {
         mScene->remove(mCarShadowEntity);
         mEngine->getRenderableManager().destroy(mCarShadowEntity);
@@ -2019,8 +2021,10 @@ void TtpRenderer::releaseStatic() {
         mCarShadowEntity = utils::Entity{};
     }
     mCarShadowMi.clear();
-    if (mCarShadowIb) { mEngine->destroy(mCarShadowIb); mCarShadowIb = nullptr; }
-    if (mCarShadowVb) { mEngine->destroy(mCarShadowVb); mCarShadowVb = nullptr; }
+    for (IndexBuffer* ib : mCarShadowIbRing) mEngine->destroy(ib);
+    for (VertexBuffer* vb : mCarShadowVbRing) mEngine->destroy(vb);
+    mCarShadowIbRing.clear();
+    mCarShadowVbRing.clear();
     destroyMesh(mRoad);
     if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
     {

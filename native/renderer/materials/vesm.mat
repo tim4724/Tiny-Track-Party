@@ -96,9 +96,9 @@ fragment {
             sum += w * v;
             wsum += w;
         }
-        // The colour goes in `emissive` with w = 0, like every other material
-        // here: an unlit material's baseColor is zeroed when the view carries a
-        // directional light, and w = 0 opts out of the exposure attenuation.
+        // The colour goes in `emissive` with w = 0 (no exposure attenuation),
+        // as the other bakes do: a once-per-track pass, never priced against
+        // `baseColor` (native/renderer/CLAUDE.md names the exceptions).
         material.emissive = vec4(sum / wsum, 0.0, 0.0, 0.0);
     }
 }

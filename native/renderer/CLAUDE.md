@@ -238,6 +238,12 @@ ladder. What the pass is built on, and why each piece is what it is:
 - **A rebuilt scene's instances know no stamp**: the per-slot memory of which
   model is bound (`mCarShadowStampBound`) is reset with the draws, or the race
   after the lobby draws nothing.
+- **Its vertex and index buffers are a ring of `mCellRing` pairs** (the
+  streak ring's rule, `buildCarShadowDraws`). Written through one pair they
+  were STAGED on the Vulkan box every frame: copies and a `VERTEX_INPUT`
+  barrier ahead of every frame's first vertex kick, outside the GPU timer's
+  interval (the frame map has what the ring bought). Any buffer written per
+  frame belongs in a ring.
 - Each car also pushes a READBACK-ONLY entry (`DeckDecal::car`, folded into no
   chunk) so `ttp_display_debug_decals` and the warp bench can read the car rows.
 
@@ -303,6 +309,22 @@ only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
   never clamped — the clip belongs on the product, in the 8-bit buffer.
 - **A new colour texture is RGBA8, never SRGB8_A8**: the decode the sampler
   would do is exactly the step this removes.
+- **An unlit material writes `baseColor`, never `emissive`**
+  (`tests/material-rules.test.js`). Unlit passes `baseColor` through
+  untouched; an `emissive` write makes matc compile Filament's `addEmissive`
+  (an exposure mix and a multiply-add, highp) into every fragment of that
+  material for nothing. The gate lists the exceptions with their reasons:
+  `vglbfade`, whose alpha rides `baseColor` and whose colour must be
+  premultiplied by it; the bakes (`vesm`, `vvis`, `vroadvis`), which run once
+  per track; and `vpresent`, which is off on the box. None of the four was
+  priced, so none was moved.
+- **Display colour is `precision : medium`** in a scene material's
+  `variables`: within 1/2048 of the value, under an eighth of an 8-bit step,
+  and the F16 rate on the PowerVR box (on Metal SPIRV-Cross keeps the
+  interface at float and only the fragment's own ops go half). Texture
+  coordinates and world units stay high. `vshadow` is medium though blended;
+  the other blended materials (`vglbfade`, `vblend`, `vcloud`, `vburst`,
+  `vpoint`) keep their default precision.
 - **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
   sampled the way the GPU samples them; the merged bake decodes them to
   multiply the light and encodes the product once.
@@ -355,6 +377,13 @@ opacity so lines do not ghost through it.
   that reason. The chain is needed (the deck ahead minifies an 8k-wide texture;
   `mMaxTextureDim` is a chosen ceiling, clamped down by the driver, never up);
   its throttle rides `mTime`, so its timestamp is cleared with the texture.
+- **Every deck tap reads a BARE `.xy` varying of its own**
+  (`tests/material-rules.test.js` holds every material to it). A coordinate
+  swizzled out of a varying's other components (`.xz`, `.zw`) counts as a
+  DEPENDENT read on PowerVR (Imagination's texture-sampling rule), which the
+  GPU cannot issue before the shader runs; so the rubber layer's uv and the
+  vis map's uv are two varyings, not one packed vec4, and the deck's
+  chunk-local arclength and lat ride the spare components instead.
 - **The tap reads the uv RAW** (an upload has no per-backend flip; the suite
   audit `tests/render-target-uv.test.js` classifies the sampler), and the stamper
   keeps the texture's outer lat rows empty, which parks the kerbs' and
@@ -669,7 +698,10 @@ Filament's costs a SHADER VARIANT (a cubemap sampler and a pow behind branches t
 scene never takes), which its own `linearFog` does not fix; per fragment ours was
 still several times the per-vertex cost. **A per-vertex term needs vertices**:
 anything large, flat and fogged carries enough to interpolate between (the ground
-sheet's STEP).
+sheet's STEP). On `vroad`, `vground` and `vcolor` even the fragment's mix is
+folded away (`ttp_fog.inc`, `ttpFogTerm`, has the algebra): `(1 - a)`
+multiplies into the light halves (or the vertex colour) per vertex and `F a`
+rides a spare varying component, leaving the fragment one add.
 
 **A dynamically-indexed uniform ARRAY costs whether or not the loop runs, and it
 costs by DECLARED SIZE** (`vroad.mat` has the readings). That is why the car

@@ -394,7 +394,7 @@ ttp::rt::RoundedFit TtpRenderer::carShadowFitFor(size_t slot) const {
 }
 
 // THE CAR SHADOW: a primitive per car slot over the pass's own vertex and
-// index buffers (TtpRenderer.h, mCarShadowVb), every primitive empty until
+// index buffers (TtpRenderer.h, mCarShadowVbRing), every primitive empty until
 // flushCarShadows fills them with this frame's strips. Culling off: the
 // bounds would have to follow the cars, and the draw is a few dozen
 // triangles. No polygon offset: the depth bias is vshadow.mat's vertex shrink.
@@ -407,17 +407,32 @@ void TtpRenderer::buildCarShadowDraws() {
     // No mTrack test: the track is adopted after the road is built, and the
     // buffers need only the material.
     if (!mShadowMaterial) return;
-    mCarShadowVb = VertexBuffer::Builder()
-            .vertexCount((uint32_t) kCarShadowVtxCap)
-            .bufferCount(2)
-            .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
-            .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::HALF4)
-            .build(*mEngine);
-    mCarShadowIb = IndexBuffer::Builder()
-            .indexCount((uint32_t) kCarShadowIdxCap)
-            .bufferType(IndexBuffer::IndexType::UINT)
-            .build(*mEngine);
-    if (!mCarShadowVb || !mCarShadowIb) return;
+    // A RING of buffer pairs, mCellRing deep, under the streak ring's rule
+    // (renderCars): a buffer an in-flight frame still references is STAGED on
+    // the Vulkan path (a copy and a barrier at the head of the frame, before
+    // the first pass may start), while a slot written mCellRing uploads ago is
+    // free and its write is a memcpy. flushCarShadows advances the slot per
+    // upload; the frame map has what the ring bought.
+    for (uint32_t k = 0; k < mCellRing; k++) {
+        VertexBuffer* vb = VertexBuffer::Builder()
+                .vertexCount((uint32_t) kCarShadowVtxCap)
+                .bufferCount(2)
+                .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+                .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::HALF4)
+                .build(*mEngine);
+        IndexBuffer* ib = IndexBuffer::Builder()
+                .indexCount((uint32_t) kCarShadowIdxCap)
+                .bufferType(IndexBuffer::IndexType::UINT)
+                .build(*mEngine);
+        if (!vb || !ib) {
+            if (vb) mEngine->destroy(vb);
+            if (ib) mEngine->destroy(ib);
+            return;
+        }
+        mCarShadowVbRing.push_back(vb);
+        mCarShadowIbRing.push_back(ib);
+    }
+    mCarShadowRingAt = 0;
     RenderableManager::Builder builder(kCarShadowDraws);
     builder.boundingBox({ float3{ 0.0f }, float3{ 1e4f } })
             .culling(false)
@@ -427,7 +442,8 @@ void TtpRenderer::buildCarShadowDraws() {
         MaterialInstance* mi = sceneInstance(mShadowMaterial);
         mCarShadowMi.push_back(mi);
         builder.material(k, mi)
-               .geometry(k, RenderableManager::PrimitiveType::TRIANGLES, mCarShadowVb, mCarShadowIb, 0, 0);
+               .geometry(k, RenderableManager::PrimitiveType::TRIANGLES,
+                       mCarShadowVbRing[0], mCarShadowIbRing[0], 0, 0);
     }
     mCarShadowEntity = utils::EntityManager::get().create();
     builder.build(*mEngine, mCarShadowEntity);
@@ -447,7 +463,7 @@ void TtpRenderer::hideCarShadowDraws() {
 // the ramp, clamped to the deck's width (the shadow stops at the edge; the
 // kerb is raised geometry and would hide it anyway). The geometry: the
 // road's own triangles under that box, clipped to it (TtpRenderer.h,
-// mCarShadowVb).
+// mCarShadowVbRing).
 namespace {
 // A clip vertex: (t, lat) along and across the ring cell, and the stamp's
 // (u, v) there. Both pairs are affine over one road triangle (world position
@@ -476,7 +492,7 @@ int clipPoly(const ClipV* in, int n, ClipV* out, F f) {
 void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3& fwd,
         const float3& right, float halfF, float halfR, float carS, float alpha,
         const ttp::rt::RoundedFit& fit) {
-    if (slot >= mCarShadowMi.size() || !mTrack || !mCarShadowVb) return;
+    if (slot >= mCarShadowMi.size() || !mTrack) return;
     const float L = mTrack->length;
     const int N = (int) mTrack->rings.size();
     if (L <= 0.0f || N < 2 || halfF <= 0.0f || halfR <= 0.0f) return;
@@ -629,30 +645,35 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
 // Upload this frame's strips (two events) and point each slot's primitive at
 // its range; a slot nothing placed draws nothing.
 void TtpRenderer::flushCarShadows() {
-    if (!mCarShadowVb || !mCarShadowIb || mCarShadowEntity.isNull()) return;
+    if (mCarShadowVbRing.empty() || mCarShadowEntity.isNull()) return;
     auto& rcm = mEngine->getRenderableManager();
     const auto ri = rcm.getInstance(mCarShadowEntity);
     if (!ri) return;
     if (!mCarShadowPos.empty()) {
+        // Next ring slot (buildCarShadowDraws): the one written mCellRing
+        // uploads ago is free, so this write is a memcpy, not a staged copy.
+        mCarShadowRingAt = (mCarShadowRingAt + 1) % (uint32_t) mCarShadowVbRing.size();
+        VertexBuffer* vb = mCarShadowVbRing[mCarShadowRingAt];
         const size_t pb = mCarShadowPos.size() * sizeof(float3);
         void* pbuf = malloc(pb);
         std::memcpy(pbuf, mCarShadowPos.data(), pb);
-        mCarShadowVb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(pbuf, pb,
+        vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(pbuf, pb,
                 [](void* b, size_t, void*) { free(b); }));
         const size_t cb = mCarShadowC0.size() * sizeof(math::half4);
         void* cbuf = malloc(cb);
         std::memcpy(cbuf, mCarShadowC0.data(), cb);
-        mCarShadowVb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(cbuf, cb,
+        vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(cbuf, cb,
                 [](void* b, size_t, void*) { free(b); }));
         const size_t ib = mCarShadowIdx.size() * sizeof(uint32_t);
         void* ibuf = malloc(ib);
         std::memcpy(ibuf, mCarShadowIdx.data(), ib);
-        mCarShadowIb->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(ibuf, ib,
-                [](void* b, size_t, void*) { free(b); }));
+        mCarShadowIbRing[mCarShadowRingAt]->setBuffer(*mEngine,
+                IndexBuffer::BufferDescriptor(ibuf, ib, [](void* b, size_t, void*) { free(b); }));
     }
     for (size_t k = 0; k < mCarShadowRange.size() && k < kCarShadowDraws; k++) {
         rcm.setGeometryAt(ri, k, RenderableManager::PrimitiveType::TRIANGLES,
-                mCarShadowVb, mCarShadowIb, mCarShadowRange[k].first, mCarShadowRange[k].second);
+                mCarShadowVbRing[mCarShadowRingAt], mCarShadowIbRing[mCarShadowRingAt],
+                mCarShadowRange[k].first, mCarShadowRange[k].second);
     }
 }
 
@@ -797,7 +818,6 @@ MaterialInstance* TtpRenderer::roadInstance() {
         mRoadInst = sceneInstance(mRoadMaterial);
         mRoadInst->setParameter("profCount", 0);
         mRoadInst->setParameter("paintCount", 0);
-        mRoadInst->setParameter("trackLength", 0.0f);
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
         bindSkidLayer(mRoadInst);

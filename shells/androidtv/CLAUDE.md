@@ -328,7 +328,10 @@ platforms. `PerfDebug`
 pins the render scale and drives `ttp_display_debug_features` from `adb setprop`,
 which is the only way to get two comparable ablation arms (an unpinned sweep
 resizes the buffer underneath itself, and it will happily hand you a 3x swing
-between arms that differ in nothing).
+between arms that differ in nothing). It is polled before the first scene
+build as well as at the HUD tick, so a knob set before launch is in force from
+the scene's first frame — a probe material picked per instance at build time
+reads the sweep's `debug.ttp.features`; the arm's picture is the check.
 
 **THE TAIL IS NOT ONLY THE GPU, AND `ttp_display_profile` ALONE CANNOT SEE IT.**
 That profile is the RENDERER's own, and the main thread also carries the sim
@@ -365,6 +368,18 @@ unless a previous session asked for it (`setprop debug.ttp.perf 1` or keyevent
 main-thread work of the same order as anything being hunted: up, it hands you its
 own cost as the finding. Clear the property between runs the way every other knob
 is cleared.
+
+**The GPU's own kicks and counters come from the vendor producer**
+(`/vendor/lib/libgpudataproducer.so`, whose `start` a tiny adb-launched binary
+calls; Perfetto's `gpu.renderstages` and `gpu.counters` then record every TA
+and 3D kick per queue and the GPU's counters, release APK included). Two
+rules for reading one. **It is per-kick physics, never cadence**: the
+producer halves the frame rate while it streams, so inter-frame gaps,
+overlap and late presents cannot be read off a trace; judge cadence with the
+bench. **Count anything per `vkQueueSubmit`, with the HUD window's GL context
+tagged**: HWUI's own 3D kick per frame rides the same queue, and a frame
+stride that ignores it turns every cell boundary into a "cross-frame
+overlap" (the frame map's traps have both failures).
 
 `docs/perf/androidtv-frame-map.md` is the perf record: where the frame stands,
 what each shipped lever bought, what is still open, and the ledger of levers
