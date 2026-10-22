@@ -67,7 +67,13 @@ GL driver's extension string (`dumpsys SurfaceFlinger | grep GLES`) has no
 `setAnisotropy(...)` in the tree is a no-op. The Vulkan driver, the default,
 reports `samplerAnisotropy` (16x) and caps 2D images at 4096 where GL says
 8192 (`adb shell cmd gpu vkjson`). A cost or quality argument about either
-belongs to the backend it was read on.
+belongs to the backend it was read on. Three more GL facts carry rules of
+their own (the frame map's GL section has the readings): the GL driver copies
+a WHOLE texture on every upload into one a frame in flight samples, it has no
+timer-query extension so the GL `gpu ms` readout is a fence interval that
+includes the backend thread's submit time, and its frame is bound by that
+thread, so a GL arm is judged by fps, skips and the backend thread's CPU per
+frame, never by `gpu ms`.
 
 ## Traps already sprung
 

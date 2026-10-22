@@ -229,6 +229,15 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // grid, which is the same quality trade this box already takes.
     mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
             Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
+#if defined(__ANDROID__)
+    // GL ONLY: the same 4096 the box's Vulkan driver imposes, chosen here. Its
+    // GL driver admits 8192 and answers every upload into a texture a frame in
+    // flight samples with a copy of the WHOLE texture, so the rubber layer's
+    // width is the price of each of its uploads (the frame map's GL section).
+    if (mEngine->getBackend() == Engine::Backend::OPENGL) {
+        mMaxTextureDim = std::min<uint32_t>(mMaxTextureDim, 4096);
+    }
+#endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
     // Clear the colour buffer at the start of a frame. It costs nothing (a load

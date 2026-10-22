@@ -22,7 +22,7 @@ so they live here, stamped, and nowhere else.
 | Device | Google TV Streamer (kirkwood), Android 14 / API 34, 32-bit userspace (armeabi-v7a) |
 | GPU | PowerVR Rogue GE9215, Vulkan driver 23.2. A tile-based deferred renderer with hidden-surface removal: opaque overdraw is free and draw ORDER is not a lever |
 | Vulkan facts (`cmd gpu vkjson`) | max 2D image 4096 (GL reports 8192); `samplerAnisotropy` supported (16x); `shaderFloat16` supported and real (forcing vroad's fragment highp cost +1.3 ms, 2026-10-04) |
-| Backend | Vulkan, the shipping default. GL costs +10.9 ms at 4P (2026-08-23): its backend thread is 36% inside `libGLESv2_powervr.so`. GL-era numbers do not transfer |
+| Backend | Vulkan, the shipping default. GL is the fallback for boxes without a Vulkan 1.1 driver; it has its own section below, and GL-era numbers do not transfer to Vulkan arms |
 | Output | The HDMI mode does not reach the app's buffers: at 3840x2160@60 (a capture card, 2026-10-17) the SurfaceView is still 1080 lines tall and the hardware composer scales it, so `--pin 0.666667` is 720 lines on either panel. The shell user cannot switch the HDMI mode (`set-user-preferred-display-mode` is refused), so whether a 4K output costs the GPU anything through scan-out bandwidth is unmeasured |
 | Thermal | Cold after a reboot reads 3% off warm. Never throttles: a 15-minute 4P soak peaked at 48 C on the board against a 76 C first trip point, GPU cooling device at 0 (2026-10-09) |
 
@@ -225,6 +225,60 @@ so its race 1 pays the first row's opening seconds. Placing it lower was
 tried: it cost every 1080-ceiling device its pixels on each new count,
 whether it could hold 1080 or not, and put the host's half-rate offer in
 front of devices that never missed a frame.
+
+## The GL backend (the fallback), 2026-10-22
+
+What a box without a usable Vulkan driver gets (`VulkanPolicy`), measured on
+the reference box with `--vk -1`, pinned, pretzel, 75 s races, 4P/720 unless
+noted. The GL arms were profiled with simpleperf (the APK is shell-profileable;
+symbolize the backend thread against the unstripped `.so` of the build under
+test) and traced with the vendor render-stage producer (the traps below).
+
+**The frame's shape under GL is not the Vulkan frame's.** On `863094d2` stock,
+4P/720 ran at 34 fps with 26 skipped frames a second (Vulkan: 60 and 0). The
+GPU's own work per frame was smaller than Vulkan's: ONE vertex kick and ONE
+fragment kick per frame (the driver turns the four cell passes into one
+render, so no cell's vertex phase hides under another's fragments), 5.1 and
+5.2 ms heavy, plus 3.6 ms on the transfer queue. The bound was the backend
+thread (`FEngine::loop`): 16.3 ms of CPU per frame against Vulkan's 8.3, and
+the GL "gpu ms" readout is a fence interval that includes that submit time
+(this driver has no `GL_EXT_disjoint_timer_query`). Where the 16.3 went:
+draws 40% (~10 us each, with device-memory allocations and ioctls inside the
+driver), the rubber layer's `glTexSubImage2D` 11%, the per-view UBO
+`glMapBufferRange`/`glUnmapBuffer` 13%, `eglSwapBuffers` 6%.
+
+| lever (in order, each on top of the last) | measured |
+|---|---|
+| the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED | the driver copies the WHOLE texture on every upload into one the frame in flight samples: two ~1.5 ms transfer kicks a frame at 8192, 3.6 -> 1.5 ms of transfer per frame at 4096; 34 -> 38 fps, 26 -> 22 skips/s |
+| fork patch: per-frame UBO writes through `glBufferSubData` instead of `glMapBufferRange` on PowerVR (`bugs.disable_map_buffer_for_updates`) | map+unmap 1.7 ms/frame -> `glBufferSubData` 0.9; heavy GPU span 31.5 -> 28 ms, 38 -> 40 fps, skips 22 -> 20 |
+| the rubber layer's textures in a ring of two on Android GL: each frame uploads into the slot the frame before last drew, which the frame skipper has already waited for | transfer kicks 1.5 -> 0.4 ms a frame (11 -> 5 kicks, none over 0.5 ms); fps and skips unchanged, the frame being CPU-bound |
+| material-instance uniform batching OFF on Android GL (`material.enable_material_instance_uniform_batching`, the shape Filament already uses on ANGLE/Metal) | 40 -> 46 fps, skips 20 -> 14, heavy GPU span 28 -> 22.5 ms; backend CPU per frame unchanged at ~13.3 |
+| all four together | 4P/720 49-50 fps, 10 skips/s; 4P/540 the same (CPU-bound: resolution no longer moves it); 1P/1080 60 fps, 0-4 skips/s; Vulkan 4P/720 unchanged at 60 fps, 0-3 skips/s |
+| the ring and the batching flag WITHOUT the fork patch (the pinned SDK) | 37-38 fps, 22-23 skips/s: the cap alone. The two pay off only on top of the patch, so they wait for the pin bump and only the cap shipped |
+
+The fork patch (the UBO path and the batching flag as PowerVR bug entries) is
+an upstream candidate and is NOT in the pin; shipping it is a pin bump, and the
+ring and the batching flag come with it.
+
+**Closed on GL (measured, not worth taking):**
+
+| lever | verdict |
+|---|---|
+| `glFlush` at the end of every swap-chain pass (fork), to start the vertex phase before `eglSwapBuffers` | still one vertex kick per frame by trace: this driver does not kick on a flush, as Filament's GE8320 note says |
+| merged draw groups cut at 64 instances in locality order instead of the 16 u span (fewer draws on GL) | null: 39 fps / 21 skips against 40 / 20; the draws it saves are few and the culling it costs is paid four times |
+| a smaller upload budget on GL (`kUploadEventTexels` 128x128): more, smaller rubber copies | WORSE: `glTexSubImage2D` 11 -> 18% of the backend thread. Upload EVENTS are the cost on this driver too, each a transfer-queue submit |
+| the unmerged draw groups (`TTP_DEBUG_NO_MERGE`) | +272 draws a frame cost the backend thread 2.8 ms: ~10 us a draw |
+
+**Open on GL:** draw submission is the remaining item, ~6 ms of a 13 ms
+backend frame for ~1000 draws, with the driver allocating device memory
+inside the draw; nothing on our side has moved it yet.
+
+**Traps:** the vendor render-stage producer is started by an adb-launched
+binary that dlopens `/vendor/lib/libgpudataproducer.so` and calls `start`
+(10 lines of C, NDK clang for armv7); its `gpu_slice` rows fold per frame by
+the context-0 `Vertex` kick. The GL readout's `gpu ms` cannot separate CPU
+submit from GPU work: judge a GL arm by fps and skips, the backend thread's
+CPU per frame (`/proc/<pid>/task/*/stat` over a window) and the trace.
 
 ## Open
 

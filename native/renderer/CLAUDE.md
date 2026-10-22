@@ -395,6 +395,12 @@ TV — below the API, identical command streams from the Metal backend, invisibl
 to GL and the simulator. Uploads are the path every other texture already proves
 out. The bakes stay transient-RT and are fine: they repaint whole layers.
 
+**On the Android GL backend the layer is capped at 4096 wide** (the Vulkan
+driver's own cap, chosen in `TtpRenderer::init`), because that driver answers an
+upload into a texture a frame in flight samples with a copy of the whole
+texture, so the layer's width is the price of every upload. The frame map's GL
+section has the reading, and what else that driver charges for.
+
 ## The static scene and the build
 
 **THE STATIC SCENE IS A FUNCTION OF ITS KEY, and a build whose key matches the
