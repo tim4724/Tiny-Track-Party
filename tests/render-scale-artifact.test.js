@@ -94,6 +94,16 @@ async function box() {
 
 const BAND_4K = { min: 0, max: 1, baseLines: 2160, panelMs: HZ60 };
 
+/** Poll once a second, as a shell does, until the rule moves — a step down
+ *  needs a few judged seconds on the rung (render_scale.h, kDownMinSec). */
+function pollUntilMoved(b, band, seconds = 5) {
+  for (let i = 0; i < seconds; i++) {
+    if (b.poll(band)) return true;
+    b.ticks(61);
+  }
+  return false;
+}
+
 test('the shipped module exports the render-scale ABI a shell binds to', async () => {
   const M = await import(pathToFileURL(MJS).href).then((m) => m.default());
   // DERIVED FROM THE HEADER, never listed here — a hand-written list is a list
@@ -119,7 +129,7 @@ test('frames fed to the READOUT are what the scale rule decides from', async () 
   assert.equal(r.frame.p95, HZ60, 'the tick series is a flat vsync period through a skip storm');
   assert.ok(r.present.p95 > 2.5 * HZ60, 'and the present series is the only one that can see it');
 
-  assert.ok(b.poll(BAND_4K), 'a box presenting one tick in three is rescued');
+  assert.ok(pollUntilMoved(b, BAND_4K), 'a box presenting one tick in three is rescued');
   assert.ok(b.scale < 1, `…downward: ${b.scale}`);
 });
 
@@ -178,7 +188,7 @@ test('a poll that decides nothing leaves the window alone', async () => {
   const b = await box();
   b.everyNth = 3;
   b.ticks(360);
-  assert.ok(b.poll(BAND_4K), 'the first poll decides');
+  assert.ok(pollUntilMoved(b, BAND_4K), 'the storm is decided');
 
   // NOT "the second poll inside the cadence is refused" — that answers no-move
   // either way and would pass for the wrong reason. The cadence is a cost guard

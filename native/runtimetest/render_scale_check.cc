@@ -29,7 +29,8 @@ using ttp::rt::upWaitSec;
 using ttp::rt::belowAnchor;
 using ttp::rt::kScaleMaxPoints;
 using ttp::rt::kJudgeSec;
-using ttp::rt::kDownMissed;
+using ttp::rt::downMissedFrames;
+using ttp::rt::kDownMinSec;
 using ttp::rt::kUpWaitSec;
 using ttp::rt::kMaxFails;
 using ttp::rt::pointAtOrBelow;
@@ -77,22 +78,29 @@ int main() {
   // ---- the decision ----------------------------------------------------------
   {
     const int n = 5;
-    check(renderScaleRung(3, n, kDownMissed, 1, 0.0, kUpWaitSec) == 2,
-          "kDownMissed frames missed in the window step down one rung");
-    check(renderScaleRung(3, n, kDownMissed - 1, kJudgeSec, 999.0, kUpWaitSec) == 3,
+    const int down = downMissedFrames(kHz60);
+    check(renderScaleRung(3, n, down, down, kDownMinSec, 0.0, kUpWaitSec) == 2,
+          "a window missing the step-down count steps down one rung");
+    check(renderScaleRung(3, n, down - 1, down, kJudgeSec, 999.0, kUpWaitSec) == 3,
           "…and one fewer holds: a rung that holds still has the stray skip");
-    check(renderScaleRung(0, n, 100, kJudgeSec, 999.0, kUpWaitSec) == 0,
+    check(renderScaleRung(3, n, 100, down, kDownMinSec - 1, 0.0, kUpWaitSec) == 3,
+          "…but not before kDownMinSec seconds of the rung have been judged");
+    check(renderScaleRung(0, n, 100, down, kJudgeSec, 999.0, kUpWaitSec) == 0,
           "nothing steps below the bottom rung");
-    check(renderScaleRung(2, n, 0, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
+    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
           "a full clean window past the wait steps up one rung");
-    check(renderScaleRung(2, n, 1, kJudgeSec, 999.0, kUpWaitSec) == 2,
+    check(renderScaleRung(2, n, 1, down, kJudgeSec, 999.0, kUpWaitSec) == 2,
           "…but one missed frame in it does not");
-    check(renderScaleRung(2, n, 0, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
+    check(renderScaleRung(2, n, 0, down, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
           "…nor a window not yet full");
-    check(renderScaleRung(2, n, 0, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
+    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
           "…nor a rung entered too recently");
-    check(renderScaleRung(n - 1, n, 0, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
+    check(renderScaleRung(n - 1, n, 0, down, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
           "nothing climbs past the ceiling");
+    // The count is a stretch of PICTURE: fifteen frames at 60, thirty at 120.
+    check(downMissedFrames(kHz60) == 15, "60 Hz steps down on fifteen missed frames");
+    check(downMissedFrames(kHz120) == 30, "…120 Hz on thirty, the same quarter second");
+    check(downMissedFrames(20.0) == 13, "…and 50 Hz on thirteen");
     nearly(upWaitSec(0), kUpWaitSec, "an unfailed rung waits kUpWaitSec");
     nearly(upWaitSec(1), 2.0 * kUpWaitSec, "each failure doubles it");
     nearly(upWaitSec(kMaxFails + 5), kUpWaitSec * (1 << kMaxFails), "…up to kMaxFails doublings");
@@ -272,7 +280,12 @@ int main() {
       b.everyNth = 3;
       b.ticks(360);   // 6 s: past kScaleSceneGraceSec, which this arm honours
       RenderScalePoint p{0, 0};
-      check(b.poll(k4K, &p) && p.scale < 1.0,
+      bool moved = b.poll(k4K, &p);
+      for (int i = 1; i < kDownMinSec && !moved; i++) {
+        b.ticks(61);
+        moved = b.poll(k4K, &p);
+      }
+      check(moved && p.scale < 1.0,
             "a box presenting one tick in three is rescued, not read as 60 fps");
       check(b.mon.size() == 0, "…and the window that decided it goes with the buffer");
     }
@@ -445,6 +458,56 @@ int main() {
       nearly(b.lines(kHD), 1080.0, "…and stays at 1080");
     }
     {
+      // A BURST OF OUTSIDE STALLS COSTS A STEP OR TWO, NOT THE SESSION. A Mac
+      // browser at 120 Hz holds its native 2160 lines; a system overlay (the
+      // brightness and volume keys) then stalls the page for four seconds.
+      // Before kDownMinSec this stepped once a second to the floor, and the
+      // rungs it crossed were each marked hopeless, so every later race of
+      // that count stayed at 540.
+      const RenderScaleLimits mac{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 2;
+      b.ctl.scene(b.t);
+      b.race(40, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "a light race holds native at 120 Hz");
+      b.everyNth = 4;
+      const int burst = b.race(4, mac, cheap, kHz120);
+      b.everyNth = 1;
+      check(burst <= 2, "four seconds of stalls step at most twice");
+      check(b.lines(mac) >= 1080.0 - 1e-9, "…and nowhere near the floor");
+      b.race(kUpWaitSec + kJudgeSec + 3, mac, cheap, kHz120);
+      nearly(b.lines(mac), 1620.0, "a rung entered by a step down was not failed: the plain wait climbs it");
+      b.race(kUpWaitSec + kJudgeSec, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "…and native after it, inside the same race");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      check(b.race(60, mac, cheap, kHz120) == 0, "the next race starts at native and stays");
+    }
+    {
+      // A COUNT REMEMBERS ITS RUNG IN LINES. A browser window shrinks under
+      // DevTools from 1080 CSS px to 909 between races: two players held 720
+      // lines, and must start on 720 lines again, not on the same SCALE, which
+      // is 606 lines there and so the floor.
+      const RenderScaleLimits tall{0.0, 2.0, 1080.0, kHz60};
+      const RenderScaleLimits shorter{0.0, 2.0, 909.0, kHz60};
+      const auto two = [](double s) { return s > 0.8 ? 20.0 : 4.0; };   // 720 holds on both, 1080 on neither
+      Box b;
+      b.cells = 2;
+      b.ctl.scene(b.t);
+      b.race(30, tall, two);
+      nearly(b.lines(tall), 720.0, "two players settle on 720 lines");
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 0;
+      b.race(10, shorter, [](double) { return 4.0; });
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.cells = 2;
+      b.race(30, shorter, two);
+      nearly(b.lines(shorter), 720.0, "on the shorter surface the next race starts on 720 lines again");
+    }
+    {
       // 120 Hz IS HELD WITH PIXELS. A frame that fits 8.3 ms only at 720 lines
       // walks down to 720 and stays at 120 Hz.
       Box b;
@@ -477,7 +540,7 @@ int main() {
       // seconds and a step up most of a minute, so the new rung is found from
       // above.
       Box b;
-      b.race(10, k4K, [](double) { return 40.0; });
+      b.race(20, k4K, [](double) { return 40.0; });
       nearly(b.lines(k4K), 540.0, "walked to the floor");
       b.ctl.setHalfRate(true);
       RenderScalePoint p{0, 0};

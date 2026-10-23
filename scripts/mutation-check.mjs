@@ -567,8 +567,8 @@ export const MUTATIONS = [
     // race of a four-player cup tries 1080 again forty seconds in.
     name: 'render-scale/scene-forgives-the-fails',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '  enteredMs_ = tMs;\n  judged_ = 0;\n  head_ = 0;\n}',
-    replace: '  enteredMs_ = tMs;\n  judged_ = 0;\n  head_ = 0;\n  for (auto& row : fails_) for (int& f : row) f = 0;\n}',
+    find: '  steppedDown_ = false;\n  judged_ = 0;\n  head_ = 0;\n}',
+    replace: '  steppedDown_ = false;\n  judged_ = 0;\n  head_ = 0;\n  for (auto& row : fails_) for (int& f : row) f = 0;\n}',
     expect: 'render_scale',
   },
   {
@@ -577,8 +577,36 @@ export const MUTATIONS = [
     // grid.
     name: 'render-scale/count-not-remembered',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale;',
+    find: '  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale * baseLines_;',
     replace: '',
+    expect: 'render_scale',
+  },
+  {
+    // A rung entered by a step down was passed through, not tried. Failed, one
+    // burst of outside stalls marks every rung down to the floor hopeless and
+    // the count sits there for the session.
+    name: 'render-scale/step-down-fails-the-rung',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (down && !steppedDown_ && tMs - enteredMs_ < kFailSec * 1000.0) {',
+    replace: 'if (down && tMs - enteredMs_ < kFailSec * 1000.0) {',
+    expect: 'render_scale',
+  },
+  {
+    // A step down waits kDownMinSec judged seconds on the rung. Without it a
+    // burst of stalls steps once a second, native to the floor in four.
+    name: 'render-scale/down-without-dwell',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'if (missed >= downMissed && judgedSec >= kDownMinSec) return std::max(at - 1, 0);',
+    replace: 'if (missed >= downMissed) return std::max(at - 1, 0);',
+    expect: 'render_scale',
+  },
+  {
+    // The step-down count is a stretch of picture. As a fixed fifteen frames a
+    // 120 Hz panel is twice as easy to knock down as a 60 Hz one.
+    name: 'render-scale/down-counted-in-frames',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownMissedMs / dueMs)) : 1;',
+    replace: 'return dueMs > 0.0 ? 15 : 1;',
     expect: 'render_scale',
   },
   {

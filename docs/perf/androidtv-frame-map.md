@@ -187,11 +187,14 @@ One full-screen cell frames more deck than two half cells, which is why one
 player is no cheaper than three.
 
 **The rule now (`ttp/render_scale.h`) counts MISSED FRAMES and nothing else**,
-so it is the same on a browser with no GPU timer. A rung is left on 15 missed
-frames in the last 10 s, climbed after 10 clean seconds once it has stood
-40 s, and a step down within 30 s of entering a rung FAILS it, doubling the
-wait before the next try (to 320 s at once if it failed before a full window,
-which is a rung that cannot hold at all). A scene build forgives nothing — a
+so it is the same on a browser with no GPU timer. A rung is left on 250 ms of
+missed picture in the last 10 s once 3 s of it have been judged, climbed after 10 clean seconds once it has stood 40 s,
+and a step down within 30 s of entering a rung FAILS it, doubling the wait
+before the next try (to 320 s at once if it failed before a full window,
+which is a rung that cannot hold at all). A rung entered by a step down is
+never failed: it was passed through, not tried, and counting it let one
+burst of outside stalls (a Mac's brightness overlay) mark every rung down to
+the floor as hopeless for the session. A scene build forgives nothing — a
 cup is one session, the same players race after race — and a rung held for
 30 s clears its failures. The rate is the panel's own: a 120 Hz panel is held
 at 120 with pixels.
@@ -419,7 +422,7 @@ steps two rungs. A 900 rung is `kScaleLadder` plus the ctest's rung counts.
 pretzel pinned, 75 s, alternated arms on one install; each arm is two rounds
 against eight base races). After the package the
 geometry ceiling's verdict flips for three players only. Base 3P/1080 read
-14.65-15.59 ms heavy and crossed the rule's 15 missed frames in a 10 s window
+14.65-15.59 ms heavy and crossed the rule's then 15 missed frames in a 10 s window
 in 4 of 8 races (worst windows 9-28), so it steps to 720 in about half of
 them; the scene alone is the margin:
 

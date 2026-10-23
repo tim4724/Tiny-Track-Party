@@ -141,8 +141,16 @@ class RenderScaleController {
   int head_ = 0;
   // When the current rung was entered — by a move or by a scene build.
   double enteredMs_ = 0;
-  // PER CELL COUNT, for the session: the scale each count's last scene left
-  // off at (0: never seen), and how often each rung (by its index in the point
+  // STEPPED DOWN: the current rung was entered by a step down, so it was passed
+  // through, not tried, and is never failed (render_scale.h, kFailSec).
+  bool steppedDown_ = false;
+  // The surface's baseLines at the last poll, never 0, so a scene can record
+  // its rung in lines (rungOf_).
+  double baseLines_ = 1.0;
+  // PER CELL COUNT, for the session: the rung each count's last scene left off
+  // at, IN BUFFER LINES (0: never seen) — a scale would mean another picture
+  // once the surface changed height, as a browser window does when DevTools
+  // opens under it — and how often each rung (by its index in the point
   // list) has failed at that count. What four players failed says nothing
   // about the lobby, and the lobby holding 1080 must not clear it. The host's
   // half rate keeps the same indices: a rung four players failed at 60 is

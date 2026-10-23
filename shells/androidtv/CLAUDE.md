@@ -668,14 +668,14 @@ half-resolution 3D picture. Anything that moved a label into the renderer would
 lose that.
 
 **EVERY MOVE IS A HITCH, so the rule moves rarely** (`ttp/render_scale.h`): a
-rung is left on fifteen missed frames in ten seconds, climbed after a long clean
-stretch, and a climb that fails doubles the wait before the next try — across
-the races of a cup, which is one session, not one per race. Each scene starts
-on the rung its player count last held, so a four-player race does not start
-on the lobby's 1080. A lap's
-cost swings by milliseconds, so a rung climbed on a quiet stretch of a track
-that cannot hold it on the vista is left once and then tried rarely, never
-pumped. Nothing here steers off the GPU timer: it reads a paced span when the
+rung is left on a quarter second of missed picture in ten seconds and no
+sooner than three judged seconds after it was entered, climbed after a long
+clean stretch, and a climb that fails doubles the wait before the next try —
+across the races of a cup, which is one session, not one per race. Each scene
+starts on the rung its player count last held, so a four-player race does not
+start on the lobby's 1080. A lap's cost swings by milliseconds, so a rung
+climbed on a quiet stretch of a track that cannot hold it on the vista is left
+once and then tried rarely, never pumped. Nothing here steers off the GPU timer: it reads a paced span when the
 GPU idles, and this box's resolution-independent half made every timer-based
 "is there headroom?" threshold wrong for it.
 

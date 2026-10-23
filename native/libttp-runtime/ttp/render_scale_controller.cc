@@ -5,11 +5,12 @@ namespace rt {
 
 void RenderScaleController::scene(double tMs) {
   // What the outgoing scene's count left off at, for the next scene with it.
-  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale;
+  if (sceneCells_ >= 0) rungOf_[sceneCells_] = point_.scale * baseLines_;
   sceneCells_ = -1;
   cells_ = -1;
   sceneMs_ = tMs;
   enteredMs_ = tMs;
+  steppedDown_ = false;
   judged_ = 0;
   head_ = 0;
 }
@@ -47,6 +48,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   panelMs_ = limits.panelMs > 0 ? limits.panelMs : floorMs_;
   limits.panelMs = panelMs_;
   limits.halfRate = halfRate();
+  baseLines_ = limits.baseLines > 0.0 ? limits.baseLines : 1.0;
 
   // BELOW THE ANCHOR, at full rate, for kHalfRateOfferSec on end — counted
   // from when it first fell below, so a step from 720 to 540 does not restart it.
@@ -93,7 +95,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
       && tMs - sceneMs_ < kScaleSceneGraceSec * 1000.0) {
     const int c = std::min(cells_, kMaxCells);
     const int place = rungOf_[c] > 0.0
-        ? pointAtOrBelow(RenderScalePoint{rungOf_[c], point_.divisor}, list, n)
+        ? pointAtOrBelow(RenderScalePoint{rungOf_[c] / baseLines_, point_.divisor}, list, n)
         : at;
     sceneCells_ = c;
     if (list[place].scale != point_.scale || list[place].divisor != point_.divisor) {
@@ -108,7 +110,8 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // anchor at the new rate.
   const int to = list[0].divisor != point_.divisor
       ? anchorPoint(list, n, limits)
-      : renderScaleRung(at, n, missed, judged_, (tMs - enteredMs_) / 1000.0,
+      : renderScaleRung(at, n, missed, downMissedFrames(pointPeriodMs(point_, limits)), judged_,
+                        (tMs - enteredMs_) / 1000.0,
                         upWaitSec(at + 1 < n ? fails_[slot][at + 1] : 0));
   RenderScalePoint next = list[to];
   // Snap rather than creep: without this a scale a hair off its rung (a band
@@ -119,14 +122,17 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   }
   if (next.scale == point_.scale && next.divisor == point_.divisor) return false;
 
-  // A step down soon after the rung was entered FAILED it (kFailSec). One that
-  // came before the window had even filled is hopeless for this session, and
-  // waits the longest there is: four players trying 1080 on the reference box
-  // miss ten frames inside two seconds.
-  if (next.divisor == point_.divisor && to < at && tMs - enteredMs_ < kFailSec * 1000.0) {
+  // A step down soon after the rung was entered FAILED it (kFailSec), unless a
+  // step down is also how it was entered. A step down that came before the
+  // window had even filled is hopeless for this session, and waits the longest
+  // there is: four players trying 1080 on the reference box miss ten frames
+  // inside two seconds.
+  const bool down = next.divisor == point_.divisor && to < at;
+  if (down && !steppedDown_ && tMs - enteredMs_ < kFailSec * 1000.0) {
     fails_[slot][at] = judged_ < kJudgeSec ? kMaxFails : std::min(fails_[slot][at] + 1, kMaxFails);
   }
   enteredMs_ = tMs;
+  steppedDown_ = down;
   return moveTo(next, mon, out);
 }
 

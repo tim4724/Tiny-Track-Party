@@ -23,6 +23,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 
 namespace ttp {
 namespace rt {
@@ -62,14 +63,32 @@ struct RenderScaleLimits {
 // one entry per poll. A move or a scene build empties it, so a rung is judged
 // on its own frames and nothing else.
 inline constexpr int kJudgeSec = 10;
-// STEP DOWN on this many missed frames inside the window — a frame and a half
-// a second. Measured on the reference Android box over whole races at 1080
-// lines: two players missed at most 4 in any 10 s pinned and crossed 10 on one
-// stretch of an adaptive race, one and three players missed 17-46 in their
-// heavy stretches. So it tolerates the stray skips a rung that holds still has,
-// and a rung that cannot hold crosses it within its first second or two —
-// which is what keeps a failed climb cheap.
-inline constexpr int kDownMissed = 15;
+// STEP DOWN once the window has missed this much PICTURE — fifteen frames on a
+// 60 Hz panel, a frame and a half a second. Measured on the reference Android
+// box over whole races at 1080 lines: two players missed at most 4 in any 10 s
+// pinned and crossed 10 on one stretch of an adaptive race, one and three
+// players missed 17-46 in their heavy stretches. So it tolerates the stray
+// skips a rung that holds still has, and a rung that cannot hold crosses it
+// within its first seconds — which is what keeps a failed climb cheap.
+//
+// TIME, NOT FRAMES: a count tuned at 60 Hz is twice as strict on a 120 Hz
+// panel, where fifteen frames is 125 ms, and a Mac browser stepped down on
+// stalls that small. downMissedFrames turns this into the count for the
+// period the point is due at.
+inline constexpr double kDownMissedMs = 250.0;
+// …AND ONLY AFTER THIS MANY JUDGED SECONDS on the rung. A move empties the
+// window, so without it a burst of stalls from outside the game (a system
+// overlay on a Mac, a tab next door) stepped once per second for as long as it
+// lasted, from native to the floor in four. A rung that really cannot hold
+// still leaves inside its first seconds: four players at 1080 on the reference
+// box miss ten frames in two.
+inline constexpr int kDownMinSec = 3;
+
+// The window's step-down count at a point due every `dueMs`: kDownMissedMs of
+// it, rounded to whole frames.
+inline int downMissedFrames(double dueMs) {
+  return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownMissedMs / dueMs)) : 1;
+}
 // STEP UP only after a full window with NOTHING missed, and at least this long
 // after the rung was entered (by a move or by a scene build). Long on purpose:
 // a lap's cost swings by milliseconds around a circuit, and a climb taken on a
@@ -81,6 +100,12 @@ inline constexpr double kUpWaitSec = 40.0;
 // last if it failed before a full window was judged, which is a rung that
 // cannot hold at all. Entering by a scene build counts: a race that starts on
 // the lobby's rung and cannot hold it has failed it.
+//
+// ENTERING BY A STEP DOWN DOES NOT. A rung passed through on the way down was
+// never TRIED — the frames were already late above it — so a second step out of
+// it says nothing about it. Counted, one burst of outside stalls marked every
+// rung it crossed as hopeless and the race count sat on the floor for the
+// session.
 //
 // A SCENE BUILD FORGIVES NOTHING: a cup is one session, the same players
 // race after race, so what four players could not hold in the last race they
@@ -98,12 +123,12 @@ inline constexpr double kScaleSceneGraceSec = 5.0;
 
 // THE DECISION, as a pure function of what the controller has counted: where
 // the point sits on its list (`at` of `n`), the frames missed over the window
-// and how many seconds it holds, how long since the rung was entered, and the
-// wait in force for the rung above. Answers the index to move to — `at` for
-// "stay".
-inline int renderScaleRung(int at, int n, int missed, int judgedSec,
+// against the count that steps down (downMissedFrames) and how many seconds the
+// window holds, how long since the rung was entered, and the wait in force for
+// the rung above. Answers the index to move to — `at` for "stay".
+inline int renderScaleRung(int at, int n, int missed, int downMissed, int judgedSec,
                            double sinceEnteredSec, double upWaitSec) {
-  if (missed >= kDownMissed) return std::max(at - 1, 0);
+  if (missed >= downMissed && judgedSec >= kDownMinSec) return std::max(at - 1, 0);
   if (missed == 0 && judgedSec >= kJudgeSec && sinceEnteredSec >= upWaitSec && at + 1 < n) {
     return at + 1;
   }
