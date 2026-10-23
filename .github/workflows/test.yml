@@ -91,12 +91,12 @@ jobs:
     #   cached browsers + `install --with-deps`  35 s
     #   cached browsers, no --with-deps          30 s
     #
-    # --with-deps is NOT for chromium, whose shared libraries the ubuntu-latest
-    # image already carries (that variant ran the full 3D scene boot through
-    # SwiftShader on a stock runner). It is for WEBKIT, which one spec opens
-    # (tests/CLAUDE.md says why) and whose libraries the stock image does not
-    # carry — without it that shard dies on launch, and which shard draws it
-    # moves with the sharding.
+    # No --with-deps: chromium's shared libraries are already on the
+    # ubuntu-latest image (that variant ran the full 3D scene boot through
+    # SwiftShader on a stock runner). WEBKIT's are not, and apt is the step that
+    # stalls, so the one WebKit spec runs in its own job (e2e-webkit, below)
+    # and these shards never touch apt. While every shard installed WebKit in
+    # case it drew that spec, a slow mirror failed main three runs in a row.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -117,23 +117,63 @@ jobs:
           # automatically — no image tag to keep in sync by hand any more. The
           # prefix restore-key means a miss still starts from the last browser
           # set and only downloads the delta.
-          key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: pw-browsers-${{ runner.os }}-
+          # The browser is in the key because e2e-webkit caches a different set.
+          key: pw-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pw-chromium-${{ runner.os }}-
       - name: Install Playwright browsers
-        # Its OWN cap, so an apt stall cannot spend the tests' time. Four
+        # Its OWN cap, so a stalled download cannot spend the tests' time. Four
         # minutes is generous against a warm cache (~4 s) and a cold browser
-        # download; past that the mirror is not coming back, and a re-run is
-        # cheaper than the wait. Failing here names the step, which a job-level
-        # cancellation did not.
+        # download. Failing here names the step, which a job-level cancellation
+        # did not.
         timeout-minutes: 4
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install chromium
       - name: Run E2E tests
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+        # --grep matches the file name too; e2e-webkit runs that spec.
+        run: npx playwright test --shard=${{ matrix.shard }}/6 --grep-invert webkit-controller-layout
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           # Unique per shard — upload-artifact rejects a duplicate name.
           name: playwright-traces-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+
+  # The one spec that opens WEBKIT (tests/CLAUDE.md says why). It is DOM-only,
+  # so it is quick, but WebKit's system libraries are not on the stock image and
+  # only apt installs them. Keeping that here means a slow mirror reddens this
+  # one job, named, instead of whichever shards happened to be installing.
+  e2e-webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # No sim or track number depends on the Node major: they are produced
+          # inside the wasm, which vendors its own fdlibm. The tests do: they
+          # import() the browser's ESM .js files from a CommonJS package, which
+          # only Node's module-syntax detection allows, and old Nodes lack it.
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-webkit-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pw-webkit-${{ runner.os }}-
+      - name: Install Playwright browsers
+        # Its own cap, as in e2e: past four minutes the mirror is not coming
+        # back, and a re-run is cheaper than the wait.
+        timeout-minutes: 4
+        run: npx playwright install --with-deps webkit
+      - name: Run E2E tests
+        run: npx playwright test tests/e2e/webkit-controller-layout.spec.js
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces-webkit
           path: test-results/
           retention-days: 7
