@@ -1207,8 +1207,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 constexpr float AIR_LOOK_H = 0.5f, AIR_SHADOW_FADE = 0.3f, AIR_SHADOW_SPREAD = 0.1f;
                 const float lift = std::min(1.0f, c.air / AIR_LOOK_H);
                 const float spread = 1.0f + AIR_SHADOW_SPREAD * lift;
-                const float halfF = fl * sz * spread * mShadowTune.overscan * 0.5f;
-                const float halfR = fw * sx * spread * mShadowTune.overscan * 0.5f;
+                const float halfF = fl * sz * spread * mShadowTune.size * mShadowTune.overscan * 0.5f;
+                const float halfR = fw * sx * spread * mShadowTune.size * mShadowTune.overscan * 0.5f;
                 // Heading against the track frame at carS. `bm` already carries
                 // the spin-out whirl, so the shadow keeps whirling.
                 const TrackBin::Sample f0 = mTrack->frameAt(carS);

@@ -46,8 +46,7 @@ namespace ttp { namespace kitcolors { struct Mesh; } }
 // mattered: the roster's one distinctive footprint, Rumble, is an open-wheeler
 // — a narrow rear body with a GAP to wheels that poke past it — and a lobeless
 // closed-form shape can only render that as lumps. The rect is per-car through
-// its fit (fill across, fill along, corner radius — Rumble's comes out visibly
-// rounder) and is the cheap raster: half the channel's CPU on the Android box
+// its fit (fill across, fill along) and is the cheap raster: half the channel's CPU on the Android box
 // against sampling an outline mask sixteen times a texel.
 struct CarShadowTuning {
     float ao = 0.62f;          // the stamp's peak opacity
@@ -61,13 +60,14 @@ struct CarShadowTuning {
     float loadGain = 0.08f / 0.55f;  // deepening at full body pitch
     uint32_t ink = 0x171513u;  // the shadow's colour, sRGB
     float overscan = 1.45f;    // footprint's share of the stamp quad
-    // THE CORNER RADIUS FLOOR, as a fraction of the half-extent (1 is an
-    // ellipse). The fit measures a radius per model and caps it at 0.6 to
-    // keep four corners; the user's call on the pass (2026-10-17) was that
-    // the boxy cars' stamps still read as plain rectangles, so the stamp
-    // takes the LARGER of the fit's radius and this. The fit's per-model
-    // fills still shape the ends.
-    float cornerMin = 0.35f;
+    // The stamp's scale on the fitted footprint, both axes: just past the
+    // wheels, so the corners do not leave a tyre standing on bare road.
+    float size = 1.04f;
+    // THE CORNER RADIUS, as a fraction of the half-extent (1 is an ellipse),
+    // the same for every car, and square enough to keep the wheels inside the
+    // shadow — "very rounded" read as too small (the user's call 2026-10-23).
+    // car_footprint.h says why the fit does not measure one.
+    float corner = 0.3f;
     // THE STORED FIELD'S WIDTH — deliberately wider than the penumbra the
     // player sees, because the remap below carves the visible edge out of its
     // middle and a wide smooth field is what keeps that edge sub-texel under

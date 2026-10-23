@@ -253,23 +253,21 @@ inline float rounded_rect_coverage(float u, float v, float overscan,
 // This is the whole point of the analytic path being parameterised: the raster
 // evaluates one expression either way, so a shape fitted to THIS car costs
 // exactly what a generic one costs. What it cannot carry is the wheel notches —
-// a rounded rect has no vocabulary for them — but it does carry the four
+// a rounded rect has no vocabulary for them — but it does carry the three
 // things that actually differ between these models at the layer's density: how
-// much of the bounding box the body fills at the tail, at the nose, how much
-// along, and how sharply the corners are cut.
+// much of the bounding box the body fills at the tail, at the nose, and how
+// much along. The corner radius is the caller's, one for every car: a radius
+// read off the area the body leaves empty counts the gaps between wheels and
+// body as rounding, and rounded the wheels out of the shadow.
 //
-// Fitted by MATCHING, not by search: the widths come off the central
-// silhouette's own rows, the radius from the AREA left inside them — a
-// rounded rect of half-extents (1,1) and radius r has area 4 - (4-pi)r², so r
-// falls straight out of the covered fraction. One pass over the mask, once per
-// model, at bake time.
+// Fitted by MATCHING, not by search: the widths come off the silhouette's own
+// rows. One pass over the mask, once per model, at bake time.
 // The tail and nose carry their own widths, so the four-cornered shape is a
 // symmetric TRAPEZOID when the model asks for one and a rect when it does not.
 struct RoundedFit {
     float fillXTail = 1.0f; // half-width at the TAIL (v = 0), fraction of the box's
     float fillXNose = 1.0f; // …and at the NOSE (v = 1)
     float fillZ = 1.0f;     // half-length, likewise
-    float corner = 0.42f;   // corner radius, as a fraction of the half-extent
 };
 
 // FITTED TO THE FULL EXTENT — WHEELS INCLUDED — OVER THE CAR'S WIDE SPAN,
@@ -293,10 +291,9 @@ inline RoundedFit fit_rounded_rect(const std::vector<float>& mask,
     // The footprint's own half-extents in mask pixels — everything outside is
     // the overscan margin and no part of the shape.
     const float hw = (W * 0.5f) / spec.overscan, hh = (H * 0.5f) / spec.overscan;
-    // Per row: the EXTENT half-width (widest coverage, wheels included), the
-    // row's covered pixel count for the area, and the signed dz (+ = tail).
+    // Per row: the EXTENT half-width (widest coverage, wheels included), -1
+    // where the row is empty.
     std::vector<float> ew((size_t) H, -1.0f);
-    std::vector<float> rowPx((size_t) H, 0.0f);
     float wMax = 0;
     int yTail = -1, yNose = -1;   // first/last occupied rows (tail = small y)
     for (int y = 0; y < H; y++) {
@@ -312,7 +309,6 @@ inline RoundedFit fit_rounded_rect(const std::vector<float>& mask,
         }
         if (px <= 0.0f) continue;
         ew[y] = half;
-        rowPx[y] = px;
         wMax = std::max(wMax, half);
         if (yTail < 0) yTail = y;
         yNose = y;
@@ -336,14 +332,12 @@ inline RoundedFit fit_rounded_rect(const std::vector<float>& mask,
     const int span = yN - yT + 1;
     const int sixth = std::max(1, span / 6);
     std::vector<float> tailRows, noseRows;
-    float covered = 0;
     for (int y = yT; y <= yN; y++) {
         if (ew[y] < 0.0f) continue;
-        covered += rowPx[y];
         if (y < yT + sixth) tailRows.push_back(ew[y]);
         if (y > yN - sixth) noseRows.push_back(ew[y]);
     }
-    if (tailRows.empty() || noseRows.empty() || covered <= 0.0f) return fit;
+    if (tailRows.empty() || noseRows.empty()) return fit;
     std::sort(tailRows.begin(), tailRows.end());
     std::sort(noseRows.begin(), noseRows.end());
     const float wTail = tailRows[tailRows.size() / 2];
@@ -354,18 +348,6 @@ inline RoundedFit fit_rounded_rect(const std::vector<float>& mask,
     const float zT = (H * 0.5f - (yT + 0.5f)) / hh;   // tail end, + = tail
     const float zN = (H * 0.5f - (yN + 0.5f)) / hh;
     fit.fillZ = std::min(1.0f, std::max(std::fabs(zT), std::fabs(zN)));
-    // The area of the trapezoid the silhouette actually fills. CAPPED: a car
-    // with detached wheels leaves the gaps out of `covered` while the box
-    // spans them, and the uncapped formula inflated exactly those cars into
-    // ellipses. Past ~0.6 the shape stops reading as four corners at all,
-    // which is the look this fit exists to keep.
-    const float meanW = 0.5f * (wTail + wNose);
-    const float boxPixels = (2.0f * hw * meanW) * (float) span;
-    const float frac = boxPixels > 0.0f ? covered / boxPixels : 1.0f;
-    // area = 4 - (4-pi)r²  over a 2x2 box  ->  r = sqrt((1-frac)*4/(4-pi))
-    constexpr float kPi = 3.14159265358979323846f;
-    const float r2 = (1.0f - std::min(1.0f, frac)) * 4.0f / (4.0f - kPi);
-    fit.corner = std::min(0.6f, std::max(0.0f, std::sqrt(std::max(0.0f, r2))));
     return fit;
 }
 

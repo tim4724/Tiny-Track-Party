@@ -252,7 +252,9 @@ four corners for every car, by the user's eye** (`ttp/car_footprint.h`,
 executed on every leg by the `carfootprint` ctest). The model's triangles are
 projected top-down and rasterized on the CPU out of the same GLB bytes the
 merged draw groups already decode — no parse, no GPU pass, no readback — and
-the fit (fill across, fill along, corner radius) is one pass over that coverage.
+the fit (fill across, fill along) is one pass over that coverage. The corner
+radius is `CarShadowTuning`'s, one for every car: the fit's area-derived radius
+reads wheel gaps as rounding and cut the wheels out of the shadow.
 A fitted k-gon and an outline-mask arm were built and not chosen
 (`CarShadowTuning`'s header says why).
 

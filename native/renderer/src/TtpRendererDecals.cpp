@@ -430,7 +430,6 @@ ttp::rt::RoundedFit TtpRenderer::carShadowFitFor(size_t slot) const {
             mCarShadowMaskOfSlot.size() > slot ? mCarShadowMaskOfSlot[slot] : 0;
     const auto it = key ? mCarShadowFits.find(key) : mCarShadowFits.end();
     if (it != mCarShadowFits.end()) fit = it->second;
-    fit.corner = std::min(1.0f, fit.corner);
     return fit;
 }
 
@@ -730,7 +729,7 @@ const TtpRenderer::CarShadowStamp* TtpRenderer::carShadowStamp(uint64_t key,
     constexpr uint32_t N = 128;
     const float soft = std::max(1e-3f, mShadowTune.blur * 2.0f * mShadowTune.overscan);
     const ttp::rt::RoundedRectEval rr(mShadowTune.overscan,
-            std::max(fit.corner, mShadowTune.cornerMin), soft,
+            mShadowTune.corner, soft,
             fit.fillXTail, fit.fillXNose, fit.fillZ);
     std::vector<float> f((size_t) N * N), g((size_t) N * N);
     for (uint32_t y = 0; y < N; y++) {
