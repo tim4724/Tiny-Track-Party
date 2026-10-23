@@ -323,10 +323,19 @@ stayed out of the PR. Pretzel, two arms each, interleaved with Vulkan:
 | 4P/720 pinned | 60 / 0 typical, worst 49-51 / 9-11 | 60 / 0, worst 59 / 1 |
 | 4P unpinned, 100 s | **steps down to 540** (both arms), then 60 / 0 | holds 720, worst 49 / 11 |
 
-The worst second lands between the pinned SDK's and the three-flag build's, and
-the unpinned GL race does not hold 720. The fence-timer flag is the obvious
-difference from the three-flag arms, but the 132 upstream commits under the new
-pin are a second one; neither has been isolated.
+**The fence-timer flag is not what holds 720** (A/B the same day: the pin as
+shipped against the pin plus `disable_gpu_time_fence_emulation`, interleaved,
+the first arm after every install discarded, pretzel, GL, `--timeline`):
+
+| build | unpinned 4P, seconds at 720 of ~98 | 4P/720 pinned, worst second |
+|---|---|---|
+| pin as shipped | 50 (stepped down, climbed back), 68 | 55 / 5, 53 / 7 |
+| pin + fence-timer flag | 98 (held throughout), 28 | 52 / 8, 54 / 6 |
+
+The same build spends anywhere from a quarter to all of an unpinned race at
+720: 4P on GL sits on the rung rule's threshold, and whether a race trips it is
+the run's luck more than the build's. The three-flag arms that "held 720" were
+that luck too. The flag stays fork-only.
 
 **What is left on GL.** The typical column is saturated at 60 on four cores;
 what moves now is the worst second, and tangle shows the gap (44 / 16 at a
