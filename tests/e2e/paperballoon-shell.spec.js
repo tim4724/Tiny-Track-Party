@@ -27,12 +27,12 @@ async function openShell(browser, room, name, { leave = true, nameProp = true } 
     window.__cpEdits = 0;
     window.__cpNextName = null;
     window.__cpOrient = [];      // §10 setOrientation calls, in order
-    window.__cpBackCalls = [];   // §9 enableSystemBack transitions, in order
+    window.__cpBackCalls = [];   // §9 setBackMode transitions, in order
     let current = name;
     const host = {
       gameEnded: (reason) => { window.__cpEnded = reason; },
       setOrientation: (mode) => { window.__cpOrient.push(mode); },
-      enableSystemBack: (on) => { window.__cpBackCalls.push(on); }
+      setBackMode: (mode) => { window.__cpBackCalls.push(mode); }
     };
     if (nameProp) {
       Object.defineProperty(host, 'name', { get: () => current, enumerable: true });
@@ -262,29 +262,36 @@ test('the shell asks for landscape before first paint (§10)', async ({ page, br
   expect(await zoe.evaluate(() => window.__cpOrient)).toEqual(['landscape']);
 });
 
-test('system back arms in the lobby, disarms for the race, and closes an open dialog (§9)', async ({ page, browser }) => {
+test('back leaves from the lobby, is off for the race, and closes an open dialog or pause (§9)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
   const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
-  // Lobby: armed (back = leave through the launcher). Transitions only, no chatter.
-  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true]);
+  // Lobby: back leaves through the launcher. Transitions only, no chatter.
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave']);
 
   await startRace(zoe, []);
   await waitForRacing(page);
-  // Racing: the screen edges belong to steering — disarmed.
-  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false]);
+  // Racing: the screen edges belong to steering — off.
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave', 'off']);
 
-  // Opening the settings dialog mid-race re-arms; the gesture closes it
-  // (consumed → true) and the disarm follows.
+  // Opening the settings dialog mid-race hands back to the page; the back closes
+  // it (consumed → true) and 'off' follows.
   await zoe.click('#settings-btn-game');
-  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false, true]);
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave', 'off', 'page']);
   expect(await zoe.evaluate(() => window.PaperBalloon.back())).toBe(true);
   await expect(zoe.locator('#settings-overlay')).toBeHidden();
-  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false, true, false]);
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave', 'off', 'page', 'off']);
 
-  // With nothing open mid-race a back gesture is not ours: the launcher leaves.
+  // With nothing open the hook consumes nothing: a stray call leaves.
   expect(await zoe.evaluate(() => window.PaperBalloon.back())).toBe(false);
+
+  // A paused race is the page's too: the back continues it.
+  await zoe.click('#pause-btn');
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave', 'off', 'page', 'off', 'page']);
+  expect(await zoe.evaluate(() => window.PaperBalloon.back())).toBe(true);
+  await expect(zoe.locator('#pause-overlay')).toBeHidden();
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual(['leave', 'off', 'page', 'off', 'page', 'off']);
 });
 
 test('backgrounding the app drops the seat at once; returning takes it back (§7)', async ({ page, browser }) => {

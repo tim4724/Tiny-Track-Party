@@ -24,7 +24,7 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // tests/wire-compat.test.js. Returns '' for blank input; a shell without a
 // launcher name keeps '' and falls back to the name screen.
 import { cleanName } from '../shared/names.js';
-import { inShell, shellName, canEditName, editName, leave, endSession, terminalReason, armSystemBack, installBackHook, hapticBackend } from './launcher.js';
+import { inShell, shellName, canEditName, editName, leave, endSession, terminalReason, setBackMode, installBackHook, hapticBackend } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
 import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
@@ -65,16 +65,16 @@ function show(name) {
   syncCloseButton(name);
 }
 
-// Shell §9: arm the system back gesture wherever an edge swipe isn't gameplay —
-// the lobby and results screens (back = leave, the launcher's own exit), a
-// paused race, and any open popup (back = close it, see the back hook at the
-// bottom). Disarmed only while actually DRIVING, where the screen edges must
-// stay steering input. Re-derived on every screen change, popup toggle and
-// pause flip; armSystemBack dedupes the transitions.
+// Shell §9: tell the launcher where a back goes. An open popup or a paused race
+// is 'page' (back closes the popup or continues, see the back hook at the
+// bottom; on iOS they close by their own buttons). The lobby and results screens
+// are 'leave', the launcher's own exit. 'off' only while actually DRIVING, where
+// the screen edges must stay steering input. Re-derived on every screen change,
+// popup toggle and pause flip; setBackMode dedupes the transitions.
 function syncShellBack() {
   if (!inShell) return;
-  const paused = isPauseShown();
-  armSystemBack(currentScreen !== 'game' || paused || anyModalOpen());
+  setBackMode(anyModalOpen() || isPauseShown() ? 'page'
+    : currentScreen === 'game' ? 'off' : 'leave');
 }
 
 // haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
@@ -832,9 +832,9 @@ el('leavecup-btn').addEventListener('click', () => {
   openLeaveCupPopup();
 });
 
-// Shell §9: what an armed back gesture DOES. A popup closes (motion above
-// settings); a paused race continues; anywhere else — the lobby, the results —
-// returning false hands the exit to the launcher, same as the close button.
+// Shell §9: what a back DOES in 'page' mode. A popup closes (motion above
+// settings); a paused race continues. Those are the only states syncShellBack
+// maps to 'page', so the false is a backstop: it hands the exit to the launcher.
 installBackHook(() => {
   if (closeTopModal()) return true;
   if (isPauseShown()) { net.send(MSG.RESUME_GAME); return true; }

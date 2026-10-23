@@ -86,23 +86,22 @@ export const hapticBackend = host && typeof host.haptic === 'function'
     }
   : undefined;
 
-// System back (§9). Armed, a back gesture reaches window.PaperBalloon.back (and the
-// screen edges go to the system); disarmed, edge swipes stay gameplay input and
-// the close button is the only exit. Deduped on transitions — the contract
-// expects state changes, not chatter — and feature-detected like every other
-// touchpoint.
-let _backArmed = null;
-export function armSystemBack(want) {
-  if (!(host && typeof host.enableSystemBack === 'function')) return;
-  want = !!want;
-  if (want === _backArmed) return;
-  _backArmed = want;
-  host.enableSystemBack(want);
+// System back (§9): where a back goes. 'off' keeps the screen edges gameplay
+// input and the close button the only exit; 'page' hands each back to
+// window.PaperBalloon.back (Android only — iOS never steps back inside the
+// page); 'leave' lets the launcher leave the game directly, which on iOS is the
+// swipe back to home. Deduped on transitions — the contract expects state
+// changes, not chatter — and feature-detected like every other touchpoint.
+let _backMode = null;
+export function setBackMode(mode) {
+  if (!(host && typeof host.setBackMode === 'function')) return;
+  if (mode === _backMode) return;
+  _backMode = mode;
+  host.setBackMode(mode);
 }
 
-// The launcher calls this once per gesture, only while armed. Return true =
-// consumed (a dialog closed), anything else = the launcher leaves the game —
-// which is exactly what a lobby/results back should do.
+// The launcher calls this once per back, only in 'page' mode. Return true =
+// consumed (a dialog closed), anything else = the launcher leaves the game.
 export function installBackHook(onBack) {
   window.PaperBalloon = window.PaperBalloon || {};
   window.PaperBalloon.back = () => onBack() === true;
