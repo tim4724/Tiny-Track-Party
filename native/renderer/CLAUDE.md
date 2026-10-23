@@ -395,11 +395,17 @@ TV — below the API, identical command streams from the Metal backend, invisibl
 to GL and the simulator. Uploads are the path every other texture already proves
 out. The bakes stay transient-RT and are fine: they repaint whole layers.
 
-**On the Android GL backend the layer is capped at 4096 wide** (the Vulkan
-driver's own cap, chosen in `TtpRenderer::init`), because that driver answers an
-upload into a texture a frame in flight samples with a copy of the whole
-texture, so the layer's width is the price of every upload. The frame map's GL
-section has the reading, and what else that driver charges for.
+**On the Android GL backend the layer is a ring of two textures** (`mSkidRing`),
+because that driver answers an upload into a texture a frame in flight samples
+with a copy of the whole texture: each frame writes the slot the frame before
+last drew (the frame skipper tolerates one frame in flight, so that one is the
+oldest it lets through) and owes the write to the other slot. A ring of three
+measured worse (every slot owes every upload), and so did issuing the uploads
+after `beginFrame`'s fence check instead of before it (the check is a poll, not
+a wait, and the uploads then sit between the check and cell 1's draws).
+The same backend caps the layer at 4096 wide (the Vulkan driver's own cap) and
+runs with material-instance uniform batching OFF; decided in
+`TtpRenderer::init` and `engineBuilder`. Any backend with one slot is unchanged.
 
 ## The static scene and the build
 

@@ -150,6 +150,16 @@ static Engine::Builder engineBuilder(backend::Backend backend) {
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
+#if defined(__ANDROID__)
+    // GL ONLY. Filament batches every material instance's uniforms into one
+    // UBO and binds each draw's slice by RANGE; the Android box's PowerVR GL
+    // driver pays for that per draw, and one UBO per instance is the cheaper
+    // shape there (as it is on ANGLE's Metal backend, where Filament turns the
+    // batching off itself). Vulkan keeps Filament's default.
+    if (backend == backend::Backend::OPENGL) {
+        builder.feature("material.enable_material_instance_uniform_batching", false);
+    }
+#endif
     return builder;
 }
 
@@ -230,12 +240,16 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
             Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
 #if defined(__ANDROID__)
-    // GL ONLY: the same 4096 the box's Vulkan driver imposes, chosen here. Its
-    // GL driver admits 8192 and answers every upload into a texture a frame in
-    // flight samples with a copy of the WHOLE texture, so the rubber layer's
-    // width is the price of each of its uploads (the frame map's GL section).
+    // GL ONLY, two decisions about the rubber layer. The Android GL driver
+    // answers every upload into a texture a frame in flight samples with a
+    // copy of the WHOLE texture: so the layer is capped at the same 4096 the
+    // box's Vulkan driver imposes (its GL driver admits 8192, and the width is
+    // the price of each upload), and it is a ring of two (TtpRenderer.h,
+    // mSkidRing) so each upload lands in a texture no in-flight frame samples.
+    // The frame map's GL section has the readings.
     if (mEngine->getBackend() == Engine::Backend::OPENGL) {
         mMaxTextureDim = std::min<uint32_t>(mMaxTextureDim, 4096);
+        mSkidRingN = 2;
     }
 #endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);
@@ -2065,7 +2079,10 @@ void TtpRenderer::releaseStatic() {
     for (auto& m : mKites) destroyMesh(m);
     // The rubber texture and its CPU accumulation buffer are per-track
     // (sized by lap length); the 1x1 null tap texture is engine-lifetime.
-    if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
+    for (Texture* t : mSkidRing) mEngine->destroy(t);
+    mSkidRing.clear();
+    mSkidOwed.clear();
+    mSkidTex = nullptr;
     std::vector<uint8_t>().swap(mSkidPix); // megabytes — actually release
     std::vector<std::vector<uint8_t>>().swap(mSkidMips); // likewise, ~a third more
     mSkidMipDirty.clear();

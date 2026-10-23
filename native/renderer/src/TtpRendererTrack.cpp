@@ -1565,13 +1565,25 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // and each tripped a different below-the-API device behaviour; the
         // full account is at mSkidPix in TtpRenderer.h. The CPU raster in
         // renderSkids is the only writer, through setImage.
-        mSkidTex = Texture::Builder()
-                .width(W).height(H).levels(0xff) // full chain — see the mip
-                                                 // refresh in the stamp block
-                .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE
-                        | Texture::Usage::GEN_MIPMAPPABLE)
-                .build(*mEngine);
+        // Every slot of the ring, or none: a layer missing a slot would draw
+        // stale ink every other frame.
+        for (uint32_t k = 0; k < mSkidRingN; k++) {
+            mSkidRing.push_back(Texture::Builder()
+                    .width(W).height(H).levels(0xff) // full chain — see the mip
+                                                     // refresh in the stamp block
+                    .format(Texture::InternalFormat::R8)
+                    .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE
+                            | Texture::Usage::GEN_MIPMAPPABLE)
+                    .build(*mEngine));
+        }
+        if (std::find(mSkidRing.begin(), mSkidRing.end(), nullptr) != mSkidRing.end()) {
+            for (Texture* t : mSkidRing) if (t) mEngine->destroy(t);
+            mSkidRing.clear();
+        }
+        mSkidOwed.assign(mSkidRing.size(), {});
+        mSkidRingAt = 0;
+        mSkidRingAdvance = false;
+        mSkidTex = mSkidRing.empty() ? nullptr : mSkidRing[0];
         if (mSkidTex) {
             mSkidTexW = W;
             mSkidTexH = H;

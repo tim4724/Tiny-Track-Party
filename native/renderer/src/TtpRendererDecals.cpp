@@ -7,7 +7,6 @@
 
 #include <algorithm>
 
-
 // Zero the rubber layer — the build-time init and the race-restart wipe. A
 // memset of the CPU accumulation buffer, a whole-level-0 upload, and a mip
 // regeneration. Deliberately not a GPU clear: a draw-less clear rides a pass
@@ -24,16 +23,80 @@ void TtpRenderer::clearSkidLayer() {
     mSkidMipRects.clear();
     mSkidMipLevel = 0;
     const size_t bytes = mSkidPix.size();
-    auto* zeros = new uint8_t[bytes]();
-    mSkidTex->setImage(*mEngine, 0,
-            Texture::PixelBufferDescriptor(zeros, bytes,
+    // Every slot of the ring, and nothing is owed after a wipe.
+    for (Texture* t : mSkidRing) {
+        auto* zeros = new uint8_t[bytes]();
+        t->setImage(*mEngine, 0,
+                Texture::PixelBufferDescriptor(zeros, bytes,
+                        Texture::Format::R, Texture::Type::UBYTE,
+                        [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                        nullptr));
+        // The whole mip chain too. The GL backend clamps sampling to level 0
+        // until the first generateMipmaps; Metal has no such clamp, so an
+        // un-generated chain is garbage under the trilinear tap.
+        t->generateMipmaps(*mEngine);
+    }
+    for (auto& owed : mSkidOwed) owed.clear();
+}
+
+// One sub-rect of one level, from the CPU truth (level 0 is mSkidPix, the
+// rest mSkidMips), into one slot of the ring. A frame's own uploads are owed
+// to the other slots (`owe`); stepSkidRing pays them, and pays without owing.
+void TtpRenderer::uploadSkidLevel(Texture* t, int level, int x0, int y0, int x1, int y1,
+        bool owe) {
+    const int w = std::max(1, (int) mSkidTexW >> level);
+    const int h = std::max(1, (int) mSkidTexH >> level);
+    x0 = std::max(0, x0); y0 = std::max(0, y0);
+    x1 = std::min(w, x1); y1 = std::min(h, y1);
+    const int uw = x1 - x0, uh = y1 - y0;
+    if (uw <= 0 || uh <= 0) return;
+    const uint8_t* src = level == 0 ? mSkidPix.data()
+            : ((size_t) level - 1 < mSkidMips.size() ? mSkidMips[level - 1].data() : nullptr);
+    if (!src) return;
+    auto* buf = new uint8_t[(size_t) uw * uh];
+    for (int y = 0; y < uh; y++) {
+        std::memcpy(buf + (size_t) y * uw, src + (size_t) (y0 + y) * w + x0, (size_t) uw);
+    }
+    t->setImage(*mEngine, (size_t) level,
+            (uint32_t) x0, (uint32_t) y0, (uint32_t) uw, (uint32_t) uh,
+            Texture::PixelBufferDescriptor(buf, (size_t) uw * uh,
                     Texture::Format::R, Texture::Type::UBYTE,
                     [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
                     nullptr));
-    // The whole mip chain too. The GL backend clamps sampling to level 0
-    // until the first generateMipmaps; Metal has no such clamp, so an
-    // un-generated chain is garbage under the trilinear tap.
-    mSkidTex->generateMipmaps(*mEngine);
+    if (owe) {
+        for (size_t k = 0; k < mSkidRing.size(); k++) {
+            if (mSkidRing[k] != t) mSkidOwed[k].push_back({ level, x0, y0, x1, y1 });
+        }
+    }
+}
+
+// A drawn frame went by: the next slot becomes the drawn one, is paid what it
+// is owed (merged per level the way a frame's own rects are), and the deck's
+// instances are pointed at it. One slot: nothing to do.
+void TtpRenderer::stepSkidRing() {
+    if (mSkidRing.size() < 2 || !mSkidRingAdvance) return;
+    mSkidRingAdvance = false;
+    mSkidRingAt = (mSkidRingAt + 1) % (uint32_t) mSkidRing.size();
+    mSkidTex = mSkidRing[mSkidRingAt];
+    std::vector<SkidOwed> owed = std::move(mSkidOwed[mSkidRingAt]);
+    mSkidOwed[mSkidRingAt].clear();
+    const size_t levels = mSkidMips.size() + 1;
+    for (size_t l = 0; l < levels; l++) {
+        std::vector<SkidRect> rects;
+        for (const SkidOwed& o : owed) {
+            if ((size_t) o.level == l) rects.push_back({ o.x0, o.y0, o.x1, o.y1 });
+        }
+        if (rects.empty()) continue;
+        mergeUploadRects(rects);
+        for (const SkidRect& r : rects) {
+            // Not owed again: the others already hold, or are owed, this rect.
+            uploadSkidLevel(mSkidTex, (int) l, r.x0, r.y0, r.x1, r.y1, false);
+        }
+    }
+    if (mRoadInst) bindSkidLayer(mRoadInst);
+    for (RoadChunk& rc : mRoadChunks) {
+        if (rc.mi) bindSkidLayer(rc.mi);
+    }
 }
 
 // One stamp triangle into the CPU accumulation buffer: texel space, top-left
@@ -171,18 +234,7 @@ void TtpRenderer::uploadSkidRects() {
             // The same PHYSICAL rect feeds the throttled mip refresh — one
             // wrap-split, owned here, so the two paths cannot disagree on it.
             mSkidMipDirty.push_back({ sx0, y0, sx1, y1 });
-            auto* buf = new uint8_t[(size_t) sw * sh];
-            for (int y = 0; y < sh; y++) {
-                std::memcpy(buf + (size_t) y * sw,
-                        mSkidPix.data() + (size_t) (y0 + y) * W + sx0,
-                        (size_t) sw);
-            }
-            mSkidTex->setImage(*mEngine, 0, (uint32_t) sx0, (uint32_t) y0,
-                    (uint32_t) sw, (uint32_t) sh,
-                    Texture::PixelBufferDescriptor(buf, (size_t) sw * sh,
-                            Texture::Format::R, Texture::Type::UBYTE,
-                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
-                            nullptr));
+            uploadSkidLevel(mSkidTex, 0, sx0, y0, sx1, y1);
         }
     }
     mSkidDirty.clear();
@@ -275,18 +327,7 @@ void TtpRenderer::refreshSkidMips() {
                             + row1[sx0] + row1[sx1] + 2) >> 2);
                 }
             }
-            const int uw = d.x1 - d.x0, uh = d.y1 - d.y0;
-            auto* buf = new uint8_t[(size_t) uw * uh];
-            for (int y = 0; y < uh; y++) {
-                std::memcpy(buf + (size_t) y * uw,
-                        dst + (size_t) (d.y0 + y) * dw + d.x0, (size_t) uw);
-            }
-            mSkidTex->setImage(*mEngine, (size_t) l,
-                    (uint32_t) d.x0, (uint32_t) d.y0, (uint32_t) uw, (uint32_t) uh,
-                    Texture::PixelBufferDescriptor(buf, (size_t) uw * uh,
-                            Texture::Format::R, Texture::Type::UBYTE,
-                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
-                            nullptr));
+            uploadSkidLevel(mSkidTex, l, d.x0, d.y0, d.x1, d.y1);
         }
         mSkidMipRects = std::move(next);
         mSkidMipLevel = (mSkidMipRects.empty() || (size_t) mSkidMipLevel >= mSkidMips.size())

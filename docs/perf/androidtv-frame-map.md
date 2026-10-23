@@ -249,16 +249,41 @@ driver), the rubber layer's `glTexSubImage2D` 11%, the per-view UBO
 
 | lever (in order, each on top of the last) | measured |
 |---|---|
-| the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED | the driver copies the WHOLE texture on every upload into one the frame in flight samples: two ~1.5 ms transfer kicks a frame at 8192, 3.6 -> 1.5 ms of transfer per frame at 4096; 34 -> 38 fps, 26 -> 22 skips/s |
+| the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED 2026-10-22 | the driver copies the WHOLE texture on every upload into one the frame in flight samples: two ~1.5 ms transfer kicks a frame at 8192, 3.6 -> 1.5 ms of transfer per frame at 4096; 34 -> 38 fps, 26 -> 22 skips/s |
 | fork patch: per-frame UBO writes through `glBufferSubData` instead of `glMapBufferRange` on PowerVR (`bugs.disable_map_buffer_for_updates`) | map+unmap 1.7 ms/frame -> `glBufferSubData` 0.9; heavy GPU span 31.5 -> 28 ms, 38 -> 40 fps, skips 22 -> 20 |
-| the rubber layer's textures in a ring of two on Android GL: each frame uploads into the slot the frame before last drew, which the frame skipper has already waited for | transfer kicks 1.5 -> 0.4 ms a frame (11 -> 5 kicks, none over 0.5 ms); fps and skips unchanged, the frame being CPU-bound |
-| material-instance uniform batching OFF on Android GL (`material.enable_material_instance_uniform_batching`, the shape Filament already uses on ANGLE/Metal) | 40 -> 46 fps, skips 20 -> 14, heavy GPU span 28 -> 22.5 ms; backend CPU per frame unchanged at ~13.3 |
+| the rubber layer's textures in a ring of two on Android GL: each frame uploads into the slot the frame before last drew, whose fence the frame skipper has seen signalled — SHIPPED 2026-10-23 | transfer kicks 1.5 -> 0.4 ms a frame (11 -> 5 kicks, none over 0.5 ms); fps and skips unchanged, the frame being CPU-bound |
+| material-instance uniform batching OFF on Android GL (`material.enable_material_instance_uniform_batching`, the shape Filament already uses on ANGLE/Metal) — SHIPPED 2026-10-23 | 40 -> 46 fps, skips 20 -> 14, heavy GPU span 28 -> 22.5 ms; backend CPU per frame unchanged at ~13.3 |
 | all four together | 4P/720 49-50 fps, 10 skips/s; 4P/540 the same (CPU-bound: resolution no longer moves it); 1P/1080 60 fps, 0-4 skips/s; Vulkan 4P/720 unchanged at 60 fps, 0-3 skips/s |
-| the ring and the batching flag WITHOUT the fork patch (the pinned SDK) | 37-38 fps, 22-23 skips/s: the cap alone. The two pay off only on top of the patch, so they wait for the pin bump and only the cap shipped |
+| the ring and the batching flag WITHOUT the fork patch (the pinned SDK) | 37-38 fps, 22-23 skips/s on 2026-10-22, read as "the cap alone": a THREE-CORE artefact (the box's condition, below). Re-paired on four cores 2026-10-23, the table that follows |
 
-The fork patch (the UBO path and the batching flag as PowerVR bug entries) is
-an upstream candidate and is NOT in the pin; shipping it is a pin bump, and the
-ring and the batching flag come with it.
+Every reading in the table above was taken while a kernel thread held one of
+the box's four cores (the box's condition, below); their order stands, their
+magnitudes do not. The fork patch (the UBO path and the batching flag as
+PowerVR bug entries) is an upstream candidate and is NOT in the pin; shipping
+it is a pin bump. The ring and the batching flag do not need it:
+
+**The ring and the batching flag on the pinned SDK, four cores (2026-10-23):**
+the same game code with and without the two decisions (`mSkidRingN` 1 and the
+engine feature at its default), installs interleaved twice, the first arm after
+every install discarded, pretzel, GL.
+
+| arm | cap alone | cap + ring + batching OFF |
+|---|---|---|
+| 4P/720 pinned, 75 s | 37 fps / 22-23 skips typical, worst second 28 / 31 (two arms) | 46-48 / 12-13 typical, worst 36-38 / 22-23 (two arms) |
+| 4P unpinned, 100 s | steps down to 540, then 39-42 / 17-20 there | steps down to 540, then 49-50 / 10-11 there |
+
+So the two are worth ~10 fps / 10 skips a second on the pinned SDK, and
+neither build holds 720 for four players on GL; what closes the rest is on the
+GL branch of 2026-10-23 (its cell ring and material grouping) and, for the
+unpinned rung, the fork patch.
+
+**The box's condition (2026-10-23):** the kernel thread `pvr_defer_free` (the
+PowerVR DDK's deferred cleanup) had been spinning at a full core for 53 of the
+box's 65 hours of uptime, with the game stopped, so every reading on both
+backends up to the reboot ran on three cores. A reboot returned it to idle and
+it stayed idle through the four-core arms above (its `/proc/309/stat` system
+ticks ~2 a second). What pegs it is unknown; read that thread's ticks before
+trusting a sweep.
 
 **Closed on GL (measured, not worth taking):**
 

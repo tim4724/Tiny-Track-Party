@@ -3073,6 +3073,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
         mProfile[kProfTotal] = ttpNowMs() - tFrame0;
         return true;
     }
+    stepSkidRing();
     flushSkidLayer();
     // Merged draw groups: regroup lazily — a roster lands one slot at a time
     // and the dressing stages model by model, so grouping at each call site
@@ -3106,6 +3107,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     if (warming) mEffectsWarm = true; // drawn, so the pipelines are issued
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
+    mSkidRingAdvance = true;  // drawn: stepSkidRing advances on the next frame
     // Arm settled()'s fence behind the scene's FIRST submitted frame — created
     // here, after endFrame, so everything the frame queued is ahead of it.
     if (!mSettled && !mSettleFence) mSettleFence = mEngine->createFence();

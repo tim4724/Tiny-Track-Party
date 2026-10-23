@@ -1291,7 +1291,28 @@ private:
     // for an ACCUMULATING target on that device. Plain uploads are the one
     // path every texture in the game already proves out, and dropping the
     // pass also drops a full-size TBDR load/store per stamp frame.
+    // The slot drawn this frame: always mSkidRing[mSkidRingAt] (or null).
     filament::Texture* mSkidTex = nullptr;        // per-track, R8, upload-only
+    // The layer's textures: ONE everywhere but the Android GL backend, where
+    // two are drawn alternately. That driver answers an upload into a texture
+    // a frame in flight samples with a copy of the WHOLE texture, so each
+    // frame uploads into the slot the frame before last drew: the frame
+    // skipper polls that frame's fence and skips this frame while it is
+    // unsignalled, so a drawn frame's slot is never still being read. Every
+    // upload the drawn slot takes is OWED to the others (mSkidOwed) and paid
+    // from the CPU truth when their turn comes.
+    std::vector<filament::Texture*> mSkidRing;
+    uint32_t mSkidRingN = 1;          // slots to build per track; init() decides
+    uint32_t mSkidRingAt = 0;         // the drawn slot's index
+    // The last frame drew, so the ring steps before this frame's uploads. A
+    // skipped frame does not step it, which keeps the ring on the skipper's
+    // own two-frame window.
+    bool mSkidRingAdvance = false;
+    struct SkidOwed { int level; int x0, y0, x1, y1; };
+    std::vector<std::vector<SkidOwed>> mSkidOwed;
+    void uploadSkidLevel(filament::Texture* t, int level, int x0, int y0, int x1, int y1,
+            bool owe = true);
+    void stepSkidRing();
     filament::Texture* mSkidNullTex = nullptr;    // 1x1 zero, binds when no track
     std::vector<uint8_t> mSkidPix;                // CPU truth, W×H, row 0 = -latHalf
     uint32_t mSkidTexW = 0, mSkidTexH = 0;
