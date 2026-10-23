@@ -805,8 +805,8 @@ Vulkan-tunable exists).
 **`readPixels` on this driver has no `HOST_CACHED` staging memory**, so
 Filament's per-texel reshape used to walk an UNCACHED mapping — every 2-4 byte
 load its own memory transaction, which made every Vulkan readback several
-times its GL cost. The fork carries the fix (`vulkan: bounce readPixels staging
-through a cached copy before reshape`, in the pin): one bulk memcpy into cached
+times its GL cost. Filament carries the fix (`vulkan: bounce readPixels staging
+through a cached copy before reshape`, upstream as #10347): one bulk memcpy into cached
 heap before the reshape. The residual gap to GL is the bounce copy itself plus
 GPU waits — not worth chasing, and no build waits on a readback any more (the
 blob's reads land on the frame beat).

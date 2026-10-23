@@ -8,13 +8,14 @@
 # force-pushed, and the commit a branch used to point at then belongs to no ref:
 # `git clone` stops fetching it and every fresh worktree and CI run fails to
 # resolve the pin. A tag is fetched by a plain clone and never moves. The
-# current one is `ttp-pin-2026-10-08` (upstream main + the tvOS PR branch + our
-# emscripten build fix, which is NOT going upstream with it, + the Vulkan
-# backend persisting its VkPipelineCache through the platform blob cache, + a
-# bitset alignment fix without which upstream faults on 32-bit ARM, the last two
-# proposed upstream, + later swap-chain views clearing their own viewport
-# instead of loading it when it overlaps no earlier view's, also proposed
-# upstream).
+# current one is `ttp-pin-2026-10-23`: upstream main + the four open upstream
+# PRs (the Vulkan backend persisting its VkPipelineCache through the platform
+# blob cache; a bitset alignment fix without which upstream faults on 32-bit
+# ARM; later swap-chain views clearing their own viewport instead of loading it
+# when it overlaps no earlier view's; the PowerVR GL driver workarounds for
+# uniform batching and mapped buffer updates) + our emscripten build fix, which
+# is NOT going upstream. The tvOS support that earlier pins carried is upstream
+# now.
 #
 # TAGS ARE DATED, NEVER VERSIONED. The earlier `ttp-1.76.x` names read as
 # Filament releases they were not: the patch set is the same few commits every
@@ -28,4 +29,4 @@
 # public/assets/licenses/ TOGETHER — materials are MATERIAL_VERSION-locked to
 # the tree, so a half upgrade fails at load time in the browser.
 FILAMENT_REMOTE=https://github.com/tim4724/filament.git
-FILAMENT_COMMIT=a5e892f299bb11ca2ee17451b28e4869d757a29f
+FILAMENT_COMMIT=73d76fd2177031c7ea1fe92ce1a532d15a346c26

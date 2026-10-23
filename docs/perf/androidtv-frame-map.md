@@ -313,6 +313,21 @@ trip it. The bench's verdict column is unusable on the pinned SDK (its
 fence-emulated `gpu ms` reads the vsync interval, so every second is "bad" by
 GPU time); judge those arms by fps and skips.
 
+**The pin that shipped two of the three (`ttp-pin-2026-10-23`, four cores):**
+upstream main of that day plus the open PRs, carrying the batching and
+mapped-buffer flags (google/filament#10692) and NOT the fence-timer flag, which
+stayed out of the PR. Pretzel, two arms each, interleaved with Vulkan:
+
+| arm | GL | Vulkan |
+|---|---|---|
+| 4P/720 pinned | 60 / 0 typical, worst 49-51 / 9-11 | 60 / 0, worst 59 / 1 |
+| 4P unpinned, 100 s | **steps down to 540** (both arms), then 60 / 0 | holds 720, worst 49 / 11 |
+
+The worst second lands between the pinned SDK's and the three-flag build's, and
+the unpinned GL race does not hold 720. The fence-timer flag is the obvious
+difference from the three-flag arms, but the 132 upstream commits under the new
+pin are a second one; neither has been isolated.
+
 **What is left on GL.** The typical column is saturated at 60 on four cores;
 what moves now is the worst second, and tangle shows the gap (44 / 16 at a
 pinned 720 against Vulkan's 60 / 0):

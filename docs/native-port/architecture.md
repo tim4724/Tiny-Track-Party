@@ -19,9 +19,9 @@ drivers. The web game keeps shipping throughout.
   C transliteration job, and one language keeps every internal boundary a
   plain header — one toolchain everywhere, including emscripten.
 - **Google Filament renders on all three platforms**: native on the TVs, a
-  custom emscripten/WASM build on the web. There is no official Filament
-  tvOS support — that port is ours, shipped on device; the fork commit is
-  pinned in `native/filament.pin`. The web cutover is DONE:
+  custom emscripten/WASM build on the web. Filament's tvOS support is our
+  port, merged upstream; the fork commit is pinned in
+  `native/filament.pin`. The web cutover is DONE:
   Filament is the only renderer, Three.js is deleted, and the renderer links
   into the SAME wasm module as the sim, so no frame state crosses to JS.
 - **The sim cutover is DONE.** The C++ core is the shipping web engine and

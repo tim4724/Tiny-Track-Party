@@ -146,6 +146,17 @@ build_abi() {
 
   require_sdk_slice "$abi"
 
+  # A PIN BUMP CAN MOVE THE NDK, AND AN EXISTING BUILD DIR WILL NOT FOLLOW IT.
+  # CMake records the new CMAKE_TOOLCHAIN_FILE but keeps the compiler and tools
+  # it detected on the first configure, so the game compiles with the old NDK's
+  # libc++ and the link against the new Filament libraries fails on a libc++
+  # internal (`std::__ndk1::__hash_memory`). The compiler is fixed for a build
+  # dir's life, like its generator, so a dir from another NDK is started over.
+  if [ -f "$dir/CMakeCache.txt" ] && ! grep -q "^CMAKE_AR:FILEPATH=$NDK/" "$dir/CMakeCache.txt"; then
+    say "$abi build dir was configured with another NDK — starting it over"
+    rm -rf "$dir"
+  fi
+
   say "configure $abi"
   # -G Ninja for the same measured reason the rest of the tree prefers it; the
   # generator is fixed for the life of the build dir, so it can only be chosen

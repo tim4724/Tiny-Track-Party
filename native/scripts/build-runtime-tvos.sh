@@ -37,7 +37,7 @@ ROOT="$(cd "$NATIVE/.." && pwd)"
 # shellcheck disable=SC1091
 source "$NATIVE/scripts/filament-checkout.sh"   # sets FILAMENT_SRC at the pinned commit
 require_local_install tvos-
-# tvOS floors at 17.0 to match the Filament fork's own toolchain branch. Left to
+# tvOS floors at 17.0 to match Filament's own tvOS toolchain (iOS.cmake). Left to
 # the SDK, this defaults to whatever Xcode ships (26.5 at time of writing), which
 # is a silent App Store restriction nobody notices until submission.
 TVOS_MIN="${TVOS_MIN:-17.0}"
