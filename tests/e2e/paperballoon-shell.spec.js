@@ -191,11 +191,18 @@ test('the way out leaves through the launcher, racing included (§3)', async ({ 
   expect(zoe.url()).toBe(url);
 });
 
-test('a launcher without leave() gets no close button', async ({ page, browser }) => {
+test('a launcher without leave() gets no way out to call it from', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const zoe = await openShell(browser, roomCode, 'Zoe', { leave: false });
   await zoe.waitForSelector(visible('#lobby'));
   await expect(zoe.locator('#lobby-close')).toBeHidden();
+
+  // Nor the pause menu's Leave game, which would call the missing leave().
+  await startRace(zoe, []);
+  await waitForRacing(page);
+  await zoe.click('#pause-btn');
+  await expect(zoe.locator('#pause-continue')).toBeVisible();
+  await expect(zoe.locator('#pause-leave')).toBeHidden();
 });
 
 test('a rejected join reports gameEnded(room_not_found) to the launcher', async ({ page, browser }) => {

@@ -8,11 +8,13 @@
 // choices only after PAUSE_ARM_MS: a thumb mid-press on ITEM or BRAKE when
 // someone else's pause lands must hit the frost, not Leave game.
 //
-// Continue and Leave game are everyone's. The middle button is the host's only
+// Continue and Leave game are everyone's (Leave only where there is a way
+// out: a launcher without leave() gets none, as with the close button). The middle button is the host's only
 // (the display refuses New game from anyone else, ttp_net_controller_action),
 // and while a series runs it is "End cup" behind the intermission's own
 // confirm, because abandoning a series loses its points.
 import { closeAnyModal, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
+import { inShell, canLeave } from './launcher.js';
 
 const { MSG } = window;
 
@@ -50,6 +52,7 @@ export function initPauseMenu(ctx) {
   // Leaving closes this phone's socket: the race stays paused for everyone
   // else, and the seat stays reserved (rejoin QR) until the lobby.
   el('pause-leave').addEventListener('click', () => _ctx.leave());
+  el('pause-leave').classList.toggle('hidden', inShell && !canLeave);
 }
 
 export function isPauseShown() { return _shown; }
