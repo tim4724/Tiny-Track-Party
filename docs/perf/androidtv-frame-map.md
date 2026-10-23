@@ -39,6 +39,11 @@ ring (the last two rows of the shipped-levers table):
 | 3 | 1080 | 13.6-14.3 ms | 9-18, at most 4-6 in any 10 s | 65-67 of 75 |
 | 4 | 720 | 11.9-12.6 ms | 8-9 | 67-68 of 75 |
 
+These were three-core readings. On four cores (2026-10-23) the same pinned
+races read 1P/1080 14.3-14.7 ms heavy (skips 28-45), 3P/1080 14.8-15.6 and
+4P/720 12.6-13.3, on both `2402e26a` (the old pin) and `191648db` (the new
+one), alternated installs: the pin bump is not the difference.
+
 Adaptive, 100 s: one and three players race the first ~59 s at 1080 (0.3-0.4
 skips/s) and step to 720 once, where they stay; four players place from the
 lobby's 1080, fail it in 2 s and hold 720 with 0.2 skips/s (83 of 97 clean
@@ -387,7 +392,8 @@ cell; 0.4 ms heavy since display space, 0.6-0.8 before it). Priced, not taken.
 ladder's clean-fraction doctrine, shared with the web and tvOS). Measured
 before the package (`0d2e5286`, pretzel, 100 s, 2026-10-22), when 1080 missed
 40-46 frames in its worst 10 s window against the 15 the rule leaves a rung
-at; after it, one and three players hold 1080 for the first ~59 s and step
+at; after it (three cores; see "The dressing at 3P/1080" for the four-core
+3P reading), one and three players hold 1080 for the first ~59 s and step
 down once, so the rung's case is now the second half of the race rather than
 the opening pack. Pinned with no code:
 
@@ -405,6 +411,29 @@ been photographed on this box (the look probe: pins 1.0, 0.833333, 0.75,
 0.666667 at the 4K output on a held frame and a slow pan). The cost is one
 extra failed rung on a session's first 4P race unless the instant-fail jump
 steps two rungs. A 900 rung is `kScaleLadder` plus the ctest's rung counts.
+
+**The dressing at 3P/1080** (2026-10-23, `191648db`, Vulkan, four cores,
+pretzel pinned, 75 s, alternated arms on one install; each arm is two rounds
+against eight base races). After the package the
+geometry ceiling's verdict flips for three players only. Base 3P/1080 read
+14.65-15.59 ms heavy and crossed the rule's 15 missed frames in a 10 s window
+in 4 of 8 races (worst windows 9-28), so it steps to 720 in about half of
+them; the scene alone is the margin:
+
+| 3P/1080 arm | heavy p50 | skips a race | most missed in any 10 s |
+|---|---|---|---|
+| base (8 races) | 14.65-15.59 | 19-55 | 9-28 |
+| no dressing (`--features 0x9FEC`, `TTP_FEAT_DRESSING` off) | 13.95 / 14.05 | 8 / 9 | 3 / 4 |
+| no cars (`--features 0x9FBC`, `TTP_FEAT_CARS` off) | 14.50 / 14.53 | 30 / 23 | 16 / 9 |
+| dressing sheets out (`debug.ttp.dresssheets 0`) | 14.44 / 14.42 | 16 / 12 | 8 / 5 |
+| half the kit copies (`debug.ttp.dresskeep 0.5`) | 15.12 / 14.74 | 26 / 14 | 13 / 4 |
+
+The sheets are most of it; the copies are a weaker second. Cars are not a
+3P lever. The same sweep at 1P/1080 read the ceiling WORSE (+0.5 / +1.0 ms,
+skips 22-29 -> 45-62; most likely the deck filling what the pack covered,
+not verified by a trace), and at 4P/720 -2.6 / -2.75 ms on a base
+that already skips 1-3 times a race. A realistic sheet cut (the lean flowers,
+null at 4P/720 on 2026-10-21) has not been priced at 3P/1080.
 
 **Car far forms** (per-cell `LodRange` for the merged car groups, past the
 8.6 u gate at 4P/720): 0.4-0.7 ms of heavy p50, ~85% of it in the TAs that
@@ -468,7 +497,7 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 | bigger deck chunks (13 -> 6 a lap) | +2.7 ms of fill: the per-chunk cull and decal window widen (GL era) |
 | ground and hills drawn after every opaque | NULL: the tiler already rejects the overdraw |
 | terrain by member (hills, ground sheet, lawn discs, structures) | 0.0-0.5 each against the group's 1.3-1.4 (2026-10-17) |
-| simpler models, priced against their own ceiling (2026-10-21, `0d2e5286`, pretzel, per-second pairs, heavy p50 ~14.3 base; pairs are two rounds) | geometry here costs by the OBJECT, not by its vertex count. The ceiling, dressing and cars both removed: 4P/720 heavy p50 -3.0 / -3.3 ms (dressing -1.4 / -2.2, cars -2.0 / -2.4; skipped frames ~25 -> ~4 a minute); 1P/1080 null (the deck's fill); 3P/1080 -0.8 / -2.2 and still 69-77 skipped frames a minute, so no geometry buys any player count a rung. Dressing split: sheets -0.5 / -1.1, kit copies -0.3 / -0.8. The REALISTIC cut does not follow the ceiling: lean flowers (3x2 spheres, capless stems, same stream, about half the flower vertices) NULL over three alternated installs (+0.1 / -0.1 / -0.5); the smooth+12 cars bought ~0.5 (2026-10-20) |
+| simpler models, priced against their own ceiling (2026-10-21, `0d2e5286`, pretzel, per-second pairs, heavy p50 ~14.3 base; pairs are two rounds) | geometry here costs by the OBJECT, not by its vertex count. The ceiling, dressing and cars both removed: 4P/720 heavy p50 -3.0 / -3.3 ms (dressing -1.4 / -2.2, cars -2.0 / -2.4; skipped frames ~25 -> ~4 a minute); 1P/1080 null (the deck's fill); 3P/1080 -0.8 / -2.2 and still 69-77 skipped frames a minute, so no geometry bought any player count a rung BEFORE the fragment package; after it, the dressing is 3P/1080's margin (Open, "The dressing at 3P/1080"). Dressing split: sheets -0.5 / -1.1, kit copies -0.3 / -0.8. The REALISTIC cut does not follow the ceiling: lean flowers (3x2 spheres, capless stems, same stream, about half the flower vertices) NULL over three alternated installs (+0.1 / -0.1 / -0.5); the smooth+12 cars bought ~0.5 (2026-10-20) |
 | 16-bit indices and narrower attributes, dead varyings stripped, f16 varyings (a fork patch), the live-lit car vertex at fp16, a light cubemap for the car vertex, flat shading by provoking vertex, back-face culling the cars, a leaner sky dome and lawn discs | closed by the counters and the frame shape (2026-10-22): the TA phase is vertex-ALU bound with the memory interface at 2-12% and register overload 0, so bytes per vertex are not what it waits on; the cars' whole vertex cost is ~0.3-0.45 ms at 4P/720 (the Smooth reading) so no term of it clears 0.3; and a TA cut converts only in the first cell's exposed TA until fragment cuts use the within-frame slack |
 
 **The deck's shader**
