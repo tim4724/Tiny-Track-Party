@@ -171,13 +171,20 @@ function cspHeader(frameAncestors) {
   ].join('; ');
 }
 
-const server = http.createServer((req, res) => {
+// Local HTTPS: phones only expose tilt sensors in a secure context.
+// TLS_KEY / TLS_CERT point at a PEM pair (e.g. a self-signed LAN cert).
+const TLS = process.env.TLS_KEY && process.env.TLS_CERT
+  ? { key: fs.readFileSync(process.env.TLS_KEY), cert: fs.readFileSync(process.env.TLS_CERT) }
+  : null;
+const SCHEME = TLS ? 'https' : 'http';
+
+const server = (TLS ? require('https').createServer.bind(null, TLS) : http.createServer)((req, res) => {
   let urlPath = req.url.split('?')[0];
 
   // --- JSON endpoints ---
   if (urlPath === '/health') { sendJson(res, 200, { status: 'ok' }); return; }
   if (urlPath === '/api/baseurl') {
-    sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
+    sendJson(res, 200, { baseUrl: process.env.BASE_URL || `${SCHEME}://${getLocalIP()}:${PORT}` });
     return;
   }
   // Manifest of the Kenney kit's GLBs, so the asset gallery
@@ -321,9 +328,9 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   const localIP = getLocalIP();
-  console.log(`Tiny Track Party server on http://localhost:${PORT}`);
-  console.log(`Local network:        http://${localIP}:${PORT}`);
-  console.log(`Display:              http://localhost:${PORT}/`);
+  console.log(`Tiny Track Party server on ${SCHEME}://localhost:${PORT}`);
+  console.log(`Local network:        ${SCHEME}://${localIP}:${PORT}`);
+  console.log(`Display:              ${SCHEME}://localhost:${PORT}/`);
   console.log(`(Phones need HTTPS for tilt sensors — front this with a tunnel/cert.)`);
 });
 
