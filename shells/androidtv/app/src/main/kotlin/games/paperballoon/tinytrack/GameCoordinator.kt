@@ -234,6 +234,7 @@ class GameCoordinator(
         // (The renderer re-tags the feature layers after every build, so the
         // mask reaching an empty scene here is not lost.)
         PerfDebug.poll(display)
+        state.backend = if (display.usingVulkan) "Vulkan" else "OpenGL"
         if (!booted) {
             booted = true
             boot()

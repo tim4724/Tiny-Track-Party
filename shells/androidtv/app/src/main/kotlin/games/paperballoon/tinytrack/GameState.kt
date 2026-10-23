@@ -58,6 +58,15 @@ class GameState {
      */
     var cover by mutableStateOf("none")
 
+    /**
+     * The Filament backend the display came up on, "Vulkan" or "OpenGL", for the
+     * lobby's corner label; empty until the first surface. [GameCoordinator.displayReady]
+     * writes it from [DisplayHost.usingVulkan], which is the decision after any GL
+     * retry — this shell picks the backend ([VulkanPolicy]), so the engine has
+     * nothing to add.
+     */
+    var backend by mutableStateOf("")
+
     // -- the info branch -----------------------------------------------------
 
     /**

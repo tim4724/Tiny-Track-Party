@@ -222,12 +222,22 @@ fun LobbyScreen(state: GameState) {
         // `--corner-inset` — an inset there put the buttons OUTSIDE the content,
         // and one here put the badge inside it. tvOS takes neither: the system
         // safe area it reports is already bigger than this token.
-        InfoBadge(
+        //
+        // THE BACKEND'S NAME SITS BESIDE IT, in the lobby's quiet grey: the
+        // one fact about this box a player can read off the sofa that decides
+        // which perf ledger applies (the two drivers share none). It stays inside
+        // the band the race rail already clears for the badge.
+        Row(
             Modifier
                 .align(Alignment.TopEnd)
-                .padding(end = Tokens.safeMarginX, top = Tokens.safeMarginY)
+                .padding(end = Tokens.safeMarginX, top = Tokens.safeMarginY),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            state.infoPath = listOf(GameState.InfoRoute.Info)
+            if (state.backend.isNotEmpty()) {
+                StickerText(state.backend, size = 20.dp, weight = Fonts.semibold, color = Tokens.ink2)
+            }
+            InfoBadge { state.infoPath = listOf(GameState.InfoRoute.Info) }
         }
     }
 }
