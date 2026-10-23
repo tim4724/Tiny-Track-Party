@@ -1240,7 +1240,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         mHills.bakeLight = true;
         // The ring stands all round the circuit, so one renderable is in every
         // cell's frustum; tiles let each cell draw only the hills it faces.
-        tileMajor(mHills, kSheetTile, kSheetMinTris);
+        tileMajor(mHills, mSheetTile, mSheetMinTris);
         if (!buildMesh(mHills)) return false;
     }
 
@@ -1511,7 +1511,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         }
         // The sheet is the size of the world; cut per tile so a cell submits
         // the tiles in its frustum rather than all of it, four times over.
-        tileMajor(mGround, kSheetTile, kSheetMinTris);
+        tileMajor(mGround, mSheetTile, mSheetMinTris);
         bakeVertexLight(mGround);
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind);
@@ -1824,7 +1824,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // Cut per tile like the ground. Overlapping discs across a tile seam
         // may now blend in either order, which is the same picture: they are
         // one colour, and `over` with one colour commutes.
-        tileMajor(mGroundShadows, kSheetTile, kSheetMinTris);
+        tileMajor(mGroundShadows, mSheetTile, mSheetMinTris);
         buildMesh(mGroundShadows, true, mBlendMaterial->getDefaultInstance());
     }
 

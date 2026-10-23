@@ -407,6 +407,32 @@ The same backend caps the layer at 4096 wide (the Vulkan driver's own cap) and
 runs with material-instance uniform batching OFF; decided in
 `TtpRenderer::init` and `engineBuilder`. Any backend with one slot is unchanged.
 
+## The Android GL fallback: the backend THREAD is the frame
+
+Every GL-only decision keys on `mAndroidGl` (`TtpRenderer::init`), never on the
+backend alone — the web is a GL backend too. The box's PowerVR GL driver runs
+the whole frame as one render kicked at the swap, so the frame is bound by the
+CPU of Filament's backend thread: every draw costs driver CPU, a write into a
+buffer or texture a queued frame still reads is a flush-and-wait where the same
+write into an idle one is free, and the rubber layer's uploads cost per EVENT,
+not per byte. The frame map's GL section has every reading and the ledger of
+what was measured and not taken; the rules it left:
+
+- **Every per-frame GPU write is ringed on this backend**: `mCellRing` is 3 on
+  GL as on Vulkan (the cell Views and their UBOs, the streaks, the car-shadow
+  pair, the flake-cull index buffer), and the rubber layer is the ring above.
+- **Opaque renderables are grouped by material through their priority**
+  (`applyGlPriorities`, after every merge rebuild): Filament sorts opaque draws
+  by priority, then depth bucket, then material, and front-to-back order buys
+  nothing on a hidden-surface-removal GPU while each program switch costs
+  driver CPU. Blended renderables keep their priorities.
+- **The engine is flushed around `beginFrame`**, so the backend starts the
+  frame's uploads and instance writes before cell 1 is recorded.
+- **The terrain sheets tile twice as coarse** (`mSheetTile`, `mSheetMinTris`):
+  fewer draws for vertices the GPU is not bound on here.
+- **Material-instance uniform batching is off** (`engineBuilder`): one UBO per
+  instance costs this driver less than the per-draw range bind.
+
 ## The static scene and the build
 
 **THE STATIC SCENE IS A FUNCTION OF ITS KEY, and a build whose key matches the

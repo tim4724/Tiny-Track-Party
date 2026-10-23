@@ -756,10 +756,11 @@ class DisplayHost(
     // milliseconds, the only measurement that can see HEADROOM — a vsync plateau
     // looks identical at 10% and 95% load, so without it the rule may only ever
     // step DOWN and a box that is running fine can never climb back. It comes
-    // from `ttp_display_gpu_ms`, which is the GL backend's own
-    // EXT_disjoint_timer_query and is REAL here (the CPU-time trap the web
-    // documents is emscripten's, and that platform is compiled out of the
-    // accessor for exactly this reason). [PerfMonitor] hands it over per frame.
+    // from `ttp_display_gpu_ms`, which is REAL on the Vulkan backend this shell
+    // defaults to (the CPU-time trap the web documents is emscripten's). On the
+    // GL fallback it is NOT GPU time: the PowerVR driver has no timer query, and
+    // the span Filament's fence emulation measures includes the CPU submit.
+    // [PerfMonitor] hands it over per frame.
     //
     // IT USED TO KEEP TWO WINDOWS OF ITS OWN, present intervals and GPU
     // milliseconds, with a percentile function of its own that had drifted from

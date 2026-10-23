@@ -22,7 +22,7 @@ so they live here, stamped, and nowhere else.
 | Device | Google TV Streamer (kirkwood), Android 14 / API 34, 32-bit userspace (armeabi-v7a) |
 | GPU | PowerVR Rogue GE9215, Vulkan driver 23.2. A tile-based deferred renderer with hidden-surface removal: opaque overdraw is free and draw ORDER is not a lever |
 | Vulkan facts (`cmd gpu vkjson`) | max 2D image 4096 (GL reports 8192); `samplerAnisotropy` supported (16x); `shaderFloat16` supported and real (forcing vroad's fragment highp cost +1.3 ms, 2026-10-04) |
-| Backend | Vulkan, the shipping default. GL is the fallback for boxes without a Vulkan 1.1 driver; it has its own section below, and GL-era numbers do not transfer to Vulkan arms |
+| Backend | Vulkan, the shipping default. GL is the fallback for boxes without a Vulkan 1.1 driver; it has its own section below, GL-era numbers do not transfer to Vulkan arms, and the GL frame is bound by Filament's backend THREAD where the Vulkan frame is bound by fill |
 | Output | The HDMI mode does not reach the app's buffers: at 3840x2160@60 (a capture card, 2026-10-17) the SurfaceView is still 1080 lines tall and the hardware composer scales it, so `--pin 0.666667` is 720 lines on either panel. The shell user cannot switch the HDMI mode (`set-user-preferred-display-mode` is refused), so whether a 4K output costs the GPU anything through scan-out bandwidth is unmeasured |
 | Thermal | Cold after a reboot reads 3% off warm. Never throttles: a 15-minute 4P soak peaked at 48 C on the board against a 76 C first trip point, GPU cooling device at 0 (2026-10-09) |
 
@@ -226,84 +226,133 @@ tried: it cost every 1080-ceiling device its pixels on each new count,
 whether it could hold 1080 or not, and put the host's half-rate offer in
 front of devices that never missed a frame.
 
-## The GL backend (the fallback), 2026-10-22
+## The GL backend (the fallback), 2026-10-22/23
 
 What a box without a usable Vulkan driver gets (`VulkanPolicy`), measured on
 the reference box with `--vk -1`, pinned, pretzel, 75 s races, 4P/720 unless
 noted. The GL arms were profiled with simpleperf (the APK is shell-profileable;
 symbolize the backend thread against the unstripped `.so` of the build under
-test) and traced with the vendor render-stage producer (the traps below).
+test, aggregated per GL entry point by `buckets.py` of the 2026-10-23 session),
+traced with atrace (`sched gfx view`) and priced per GL call with a standalone
+EGL pbuffer microbenchmark on the box (`glbench`, left at `/data/local/tmp`).
 
-**The frame's shape under GL is not the Vulkan frame's.** On `863094d2` stock,
-4P/720 ran at 34 fps with 26 skipped frames a second (Vulkan: 60 and 0). The
-GPU's own work per frame was smaller than Vulkan's: ONE vertex kick and ONE
-fragment kick per frame (the driver turns the four cell passes into one
-render, so no cell's vertex phase hides under another's fragments), 5.1 and
-5.2 ms heavy, plus 3.6 ms on the transfer queue. The bound was the backend
-thread (`FEngine::loop`): 16.3 ms of CPU per frame against Vulkan's 8.3, and
-the GL "gpu ms" readout is a fence interval that includes that submit time
-(this driver has no `GL_EXT_disjoint_timer_query`). Where the 16.3 went:
-draws 40% (~10 us each, with device-memory allocations and ioctls inside the
-driver), the rubber layer's `glTexSubImage2D` 11%, the per-view UBO
-`glMapBufferRange`/`glUnmapBuffer` 13%, `eglSwapBuffers` 6%.
+**The frame's shape under GL is not the Vulkan frame's.** The driver turns the
+four cell passes into ONE render kicked at `eglSwapBuffers` (one TA + one 3D
+kick a frame, ~5.1 + 5.2 ms heavy), so the GPU is never the bound; the frame is
+bound by the CPU of Filament's backend thread (`FEngine::loop`, 14-15 ms a
+frame at the start of this work against Vulkan's 8.3), which also sits
+RUNNABLE 16% of the time on four A55 cores shared with HWUI, SurfaceFlinger and
+the mixer. The main thread is NOT blocked on it (62 ms off-CPU in 2.1 s of
+render spans): main and backend pipeline, and the skips are the backend's wall
+time plus the GPU exceeding the FrameSkipper's two-vsync window.
+
+**What the driver charges, per call (microbenchmark, CPU us):** a bare draw
+2.35, and `glDrawElementsInstanced(1)` costs the SAME, so single-instance draws
+are not a lever; `glBindBufferRange` +2.5, `glBindVertexArray` +2.6,
+`glUseProgram` +8.2, texture+sampler rebind +5.2 (Filament's per-draw shape is
+~8.3); `glClearBufferfv` 5.4; a render-target switch ~13; sync objects 1.5-2.4.
+**A write into a buffer that queued draws still read is a ~325 us CPU + ~0.5-1
+ms wall FLUSH-AND-WAIT, flat from 4 KB to 256 KB; orphaning first
+(`glBufferData`) is 24 us; a write into an idle buffer 0.6 us.** A
+`glTexSubImage2D` into a texture the queued draws sample is ~600-800 us + a
+wait, into an idle one 16 us: the price is per EVENT, not per byte. Only the
+creation of a sync object (GL or EGL, any type) kicks the GPU before the swap;
+`glFlush`, a render-target switch and a readback of another FBO do not.
+
+**Where the backend thread's frame went** (lever build, before this round):
+the draw command 54% (the `glDrawElementsInstanced` call itself 50%),
+`eglSwapBuffers` 9% (BLAST `queueBuffer` ~1 ms), the rubber layer's
+`glTexSubImage2D` 9%, buffer updates 6%, descriptor/VAO/pipeline binds ~8%,
+clears 2%, fences ~2%, per-frame object churn ~2.4% (Filament's per-pass
+instancing UBO and descriptor set, the pollen `setGeometryAt`); Filament's own
+code ~6%. The host counter puts the frame at 464 draws (116 a cell) and 149
+program switches.
 
 | lever (in order, each on top of the last) | measured |
 |---|---|
-| the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED 2026-10-22 | the driver copies the WHOLE texture on every upload into one the frame in flight samples: two ~1.5 ms transfer kicks a frame at 8192, 3.6 -> 1.5 ms of transfer per frame at 4096; 34 -> 38 fps, 26 -> 22 skips/s |
-| fork patch: per-frame UBO writes through `glBufferSubData` instead of `glMapBufferRange` on PowerVR (`bugs.disable_map_buffer_for_updates`) | map+unmap 1.7 ms/frame -> `glBufferSubData` 0.9; heavy GPU span 31.5 -> 28 ms, 38 -> 40 fps, skips 22 -> 20 |
-| the rubber layer's textures in a ring of two on Android GL: each frame uploads into the slot the frame before last drew, whose fence the frame skipper has seen signalled — SHIPPED 2026-10-23 | transfer kicks 1.5 -> 0.4 ms a frame (11 -> 5 kicks, none over 0.5 ms); fps and skips unchanged, the frame being CPU-bound |
-| material-instance uniform batching OFF on Android GL (`material.enable_material_instance_uniform_batching`, the shape Filament already uses on ANGLE/Metal) — SHIPPED 2026-10-23 | 40 -> 46 fps, skips 20 -> 14, heavy GPU span 28 -> 22.5 ms; backend CPU per frame unchanged at ~13.3 |
-| all four together | 4P/720 49-50 fps, 10 skips/s; 4P/540 the same (CPU-bound: resolution no longer moves it); 1P/1080 60 fps, 0-4 skips/s; Vulkan 4P/720 unchanged at 60 fps, 0-3 skips/s |
-| the ring and the batching flag WITHOUT the fork patch (the pinned SDK) | 37-38 fps, 22-23 skips/s on 2026-10-22, read as "the cap alone": a THREE-CORE artefact (the box's condition, below). Re-paired on four cores 2026-10-23, the table that follows |
+| the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED 2026-10-22 | 34 -> 38 fps, 26 -> 22 skips/s |
+| fork patch: per-frame UBO writes through `glBufferSubData` instead of `glMapBufferRange` on PowerVR (`bugs.disable_map_buffer_for_updates`) | map+unmap 1.7 ms/frame -> 0.9; 38 -> 40 fps |
+| the rubber layer's textures in a ring of two on Android GL | transfer kicks 1.5 -> 0.4 ms a frame; fps unchanged (CPU-bound) |
+| material-instance uniform batching OFF on Android GL (`disable_material_instance_uniform_batching`) | 40 -> 46 fps; with the three above 49-50 fps / 10 skips (2026-10-22), 45-49 / 11-15 on 2026-10-23 |
+| **`mCellRing` 3 on Android GL** (the cell Views, streaks, car-shadow pair, flake-cull IB rotate, so no per-frame write lands on a buffer a queued frame reads) | **+6..+10 fps, -6 skips/s** in three batches (49/11 -> 55/5); the largest GL lever |
+| fork patch: no fence-emulated GPU timer on PowerVR (`disable_gpu_time_fence_emulation`; two sync objects and a waiting thread a frame, for a span that included CPU submit) | +1 fps / -1 skip over four interleaved pairs; `gpu ms` reads 0 on GL from here |
+| opaque renderables grouped by material through their priority + an engine flush around `beginFrame` (`applyGlPriorities`) | +2 fps / -2 skips (pairs 58/2, 59/1 against 56/4, 57/3); each half alone was within noise |
+| terrain sheets tiled twice as coarse on Android GL (`mSheetTile` 96 u, `mSheetMinTris` 256) | +2 fps / -2 skips (58/2, 59/1) |
+| all of the above | 4P/720 **59 fps / 1 skip/s** with the box's kernel thread spinning (below), backend thread ~10 ms a frame; **60 fps / 0 skips after the reboot** (worst second 54 fps / 6 skips, against 48 / 12 for the ring alone, which also holds a 60 median on four cores). Vulkan: 60 / 0 |
 
-Every reading in the table above was taken while a kernel thread held one of
-the box's four cores (the box's condition, below); their order stands, their
-magnitudes do not. The fork patch (the UBO path and the batching flag as
-PowerVR bug entries) is an upstream candidate and is NOT in the pin; shipping
-it is a pin bump. The ring and the batching flag do not need it:
-
-**The ring and the batching flag on the pinned SDK, four cores (2026-10-23):**
-the same game code with and without the two decisions (`mSkidRingN` 1 and the
-engine feature at its default), installs interleaved twice, the first arm after
-every install discarded, pretzel, GL.
+**The rubber ring and the batching flag alone, pinned SDK, four cores
+(2026-10-23):** main's code with and without those two decisions (`mSkidRingN`
+1 and the engine feature at its default), without the cell ring and the
+grouping of the lever table above, installs interleaved twice, the first arm
+after every install discarded, pretzel, GL. A cross-check of that table's
+first, third and fourth rows on four cores; the "ring alone" base the "all of
+the above" row quotes (48 / 12 worst) is a different build, with the cell ring.
 
 | arm | cap alone | cap + ring + batching OFF |
 |---|---|---|
 | 4P/720 pinned, 75 s | 37 fps / 22-23 skips typical, worst second 28 / 31 (two arms) | 46-48 / 12-13 typical, worst 36-38 / 22-23 (two arms) |
 | 4P unpinned, 100 s | steps down to 540, then 39-42 / 17-20 there | steps down to 540, then 49-50 / 10-11 there |
 
-So the two are worth ~10 fps / 10 skips a second on the pinned SDK, and
-neither build holds 720 for four players on GL; what closes the rest is on the
-GL branch of 2026-10-23 (its cell ring and material grouping) and, for the
-unpinned rung, the fork patch.
+**What the fork patch is worth (four cores, 2026-10-23):** the branch's game
+code built against the pinned SDK and against the patched one, installs
+interleaved, the first arm after every install discarded, pretzel unless noted.
 
-**The box's condition (2026-10-23):** the kernel thread `pvr_defer_free` (the
-PowerVR DDK's deferred cleanup) had been spinning at a full core for 53 of the
-box's 65 hours of uptime, with the game stopped, so every reading on both
-backends up to the reboot ran on three cores. A reboot returned it to idle and
-it stayed idle through the four-core arms above (its `/proc/309/stat` system
-ticks ~2 a second). What pegs it is unknown; read that thread's ticks before
-trusting a sweep.
+| arm, GL unless noted | pinned SDK (no fork patch) | patched SDK | Vulkan, same build |
+|---|---|---|---|
+| 4P/720, pinned rung | 60 fps / 0 skips typical; worst second 43-46 / 14-17 (four arms) | 60 / 0; worst 50-56 / 4-10 (three arms) | 60 / 0; worst 59 / 1 |
+| 1P/1080, pinned rung | 60 / 0; worst 52 / 8 | 60 / 0; worst 54-56 / 4-6 | 60 / 0; worst 49 / 11 (fill) |
+| 4P/720 glacier, pinned rung | — | 60 / 0; worst 54-56 / 4-6 | 60 / 0; worst 59-60 / 0-1 |
+| 4P/720 tangle, pinned rung | — | 60 / 0; worst 44 / 16 | 60 / 0; worst 60 / 0 |
+| **4P unpinned, 100 s: does the ladder hold 720?** | **falls to 540**, on pretzel and on tangle | **holds 720** on both (worst 53 / 7) | holds 720 on tangle (worst 52 / 7) |
+
+The three flags do not move the median — the game-side levers alone put the
+pinned SDK at 60 / 0 — but they are worth ~7 fps / 7 skips in the worst second,
+and that is the difference between a GL box racing four players at 720 and at
+540: the rule steps a rung on missed frames, and the pinned SDK's worst seconds
+trip it. The bench's verdict column is unusable on the pinned SDK (its
+fence-emulated `gpu ms` reads the vsync interval, so every second is "bad" by
+GPU time); judge those arms by fps and skips.
+
+**What is left on GL.** The typical column is saturated at 60 on four cores;
+what moves now is the worst second, and tangle shows the gap (44 / 16 at a
+pinned 720 against Vulkan's 60 / 0):
+
+| item | measured / estimated |
+|---|---|
+| the HWUI name tags: they move every frame, so HWUI redraws the 1080p window at the race's rate (RenderThread 3.2 ms a frame, mostly `eglSwapBuffersWithDamage` + `queueBuffer`; main-thread traversal/draw 1.2 ms) and contends for the cores and the driver | three-core pairs on the ring base: `debug.ttp.tags 0` 57/3 and 58/2 against 51/8 and 53/7, +5.5 fps / -5.5 skips; not re-paired on four cores. Nothing but drawing them inside the renderer's surface removes the second present: this composer takes two app layers and a third drops the stack to GPU composition (18.5 ms heavy), so a tag that moves every frame lives in the HUD window or in the 3D buffer. Renderer-placed quads of shell-rasterized bitmaps are the one shape left, and at the 720 rung they are 720-line text on a 2160 panel — the sharpness call the tags were decided on |
+| the rubber layer's uploads: 1.3 ms of backend CPU a frame, per event | no uploads at all (three cores): +5.5 fps / -5 skips. A ring of three WORSE (more owed events); no mip refresh null; async uploads on Filament's worker WORSE; the uploads after `beginFrame`'s fence check WORSE (closed below). The ring makes every rect two events (its own slot, then the owed one), so what is left is fewer events: a larger merge budget on GL (`kUploadEventTexels`), since bytes are free here too. GPU-side stamping is ruled out (`native/renderer/CLAUDE.md`) |
+| the draw count, ESTIMATED from the composition above (the backend charges ~8-11 us a draw; nothing here is measured) | car contact shadows as ONE draw per cell — today 8 primitives, each its own MaterialInstance, every slot drawn even when empty: -28 draws and -8 UBO orphans a frame, ~0.5 ms; deck chunks twice as long on GL (`kRoadChunkRings` 26 -> 52): -16 draws, more far ribbon per cell (78 rings read +1.2 ms GPU on Vulkan 4P/432, the ceiling of that cost); the folded 2D overlay's quads only in the cell they touch: 24 -> 12 draws (16 are fragment-free today); car groups per MODEL instead of per car: -30 draws, but a cross-car group culls as one box that spans the lap, so the box must arbitrate; streaks as one mesh per car (boost bursts only). The static dressing is already one draw per baked run, and widening its span measured null |
 
 **Closed on GL (measured, not worth taking):**
 
 | lever | verdict |
 |---|---|
-| `glFlush` at the end of every swap-chain pass (fork), to start the vertex phase before `eglSwapBuffers` | still one vertex kick per frame by trace: this driver does not kick on a flush, as Filament's GE8320 note says |
-| merged draw groups cut at 64 instances in locality order instead of the 16 u span (fewer draws on GL) | null: 39 fps / 21 skips against 40 / 20; the draws it saves are few and the culling it costs is paid four times |
-| a smaller upload budget on GL (`kUploadEventTexels` 128x128): more, smaller rubber copies | WORSE: `glTexSubImage2D` 11 -> 18% of the backend thread. Upload EVENTS are the cost on this driver too, each a transfer-queue submit |
-| the unmerged draw groups (`TTP_DEBUG_NO_MERGE`) | +272 draws a frame cost the backend thread 2.8 ms: ~10 us a draw |
+| `glFlush` at the end of every swap-chain pass (fork) | still one vertex kick per frame by trace; the microbenchmark confirms `glFlush` is a no-op on this driver |
+| a sync object after each cell's render, to kick the GPU early (sync creation does kick here) | null: 56/4 and 55/5 against 56/4 twice; the frame is the backend's CPU, not the chain |
+| plain `glDrawElements` for single-instance draws (fork flag) | dead before building: the microbenchmark prices both entry points at 2.35 us |
+| never orphaning buffers on PowerVR (`glBufferSubData` for whole updates, `resetBufferObject` a no-op; fork flag) | +1 fps, within noise; orphaning is 24 us where an in-place write into a busy buffer is ~1 ms, so Filament's default is right |
+| a 4 MiB minimum command buffer (`Engine::Config`) | null: the frame thread never waits for ring space |
+| merged draw groups cut at 64 instances in locality order (fewer draws on GL) | null (2026-10-22): the draws it saves are few and the culling it costs is paid four times |
+| a smaller upload budget on GL (`kUploadEventTexels` 128x128) | WORSE: events are the cost on this driver too |
+| the unmerged draw groups (`TTP_DEBUG_NO_MERGE`) | +272 draws a frame cost the backend thread 2.8 ms |
+| the rubber uploads issued after `beginFrame`'s fence check instead of before it (GL only, 2026-10-23) | WORSE: worst second 46/14 and 44/16 against 48/12 and 50/9 beside them. The check polls frame N-2's EGL fence without waiting, so the old order never guaranteed the slot's readers were done either, and the new one parks the uploads between the check and cell 1's draws on the backend |
 
-**Open on GL:** draw submission is the remaining item, ~6 ms of a 13 ms
-backend frame for ~1000 draws, with the driver allocating device memory
-inside the draw; nothing on our side has moved it yet.
+**The box's own condition (2026-10-23):** the kernel thread `pvr_defer_free`
+(the PowerVR DDK's deferred cleanup) was spinning at a full core, with the game
+stopped and for 53 of the box's 65 hours of uptime, so every reading on both
+backends up to the reboot ran on three cores; the game's GL operations feed it
+nothing measurable. A reboot returned it to idle (3 ms/s), and it stayed idle
+through the next day's sweeps (every table above marked "four cores"). What pegs
+it again is unknown; read `/proc/<pid>/stat` of that thread before trusting a
+sweep.
 
 **Traps:** the vendor render-stage producer is started by an adb-launched
-binary that dlopens `/vendor/lib/libgpudataproducer.so` and calls `start`
-(10 lines of C, NDK clang for armv7); its `gpu_slice` rows fold per frame by
-the context-0 `Vertex` kick. The GL readout's `gpu ms` cannot separate CPU
-submit from GPU work: judge a GL arm by fps and skips, the backend thread's
-CPU per frame (`/proc/<pid>/task/*/stat` over a window) and the trace.
+binary that dlopens `/vendor/lib/libgpudataproducer.so` and calls `start`;
+its `gpu_slice` rows fold per frame by the context-0 `Vertex` kick. The GL
+readout has no `gpu ms` any more (the fork reports no GPU time on this driver):
+judge a GL arm by fps and skips, the backend thread's CPU per frame
+(`/proc/<pid>/task/*/stat` over a window) and the trace. The FIRST arm after
+an install reads 4 fps low (45 against 49 on the same build); interleave pairs.
 
 ## Open
 

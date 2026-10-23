@@ -223,11 +223,19 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mEngine->setAutomaticInstancingEnabled(true);
     }
     if (!mEngine) return false;
+#if defined(__ANDROID__)
     // The RESOLVED backend, not the one asked for: a DEFAULT request lands on
-    // Vulkan or GL by device, and only Vulkan rotates (ensureCells; the
-    // per-frame buffers: streaks in renderCars, car shadows in
-    // flushCarShadows, flake culling in cullAmbientCells).
-    mCellRing = mEngine->getBackend() == Engine::Backend::VULKAN ? 3 : 1;
+    // Vulkan or GL by device. The web is a GL backend too, so the GL fallback's
+    // decisions below key on this and never on the backend alone.
+    mAndroidGl = mEngine->getBackend() == Engine::Backend::OPENGL;
+#endif
+    // Vulkan and the Android GL fallback rotate (ensureCells; the per-frame
+    // buffers: streaks in renderCars, car shadows in flushCarShadows, flake
+    // culling in cullAmbientCells). On the box's GL driver a write into a buffer
+    // the queued frame still reads is a flush-and-wait on the backend thread and
+    // a write into an idle one is free; the ring keeps every per-frame write on
+    // an idle buffer (the frame map's GL section).
+    mCellRing = (mEngine->getBackend() == Engine::Backend::VULKAN || mAndroidGl) ? 3 : 1;
     // The driver's texture ceiling can sit UNDER the conservative default:
     // this box's GL driver reports 8192 while its Vulkan driver caps 2D
     // images at 4096, and a skid layer built past the cap is a
@@ -240,16 +248,21 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
             Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
 #if defined(__ANDROID__)
-    // GL ONLY, two decisions about the rubber layer. The Android GL driver
+    // The GL fallback's decisions. The rubber layer: the Android GL driver
     // answers every upload into a texture a frame in flight samples with a
-    // copy of the WHOLE texture: so the layer is capped at the same 4096 the
+    // copy of the WHOLE texture, so the layer is capped at the same 4096 the
     // box's Vulkan driver imposes (its GL driver admits 8192, and the width is
     // the price of each upload), and it is a ring of two (TtpRenderer.h,
     // mSkidRing) so each upload lands in a texture no in-flight frame samples.
-    // The frame map's GL section has the readings.
-    if (mEngine->getBackend() == Engine::Backend::OPENGL) {
+    // The terrain sheets: a draw costs this driver CPU where the extra vertices
+    // a coarser tile submits cost the GPU nothing it is bound on, so the sheets
+    // tile twice as coarse here (TtpRenderer.h, mSheetTile). The frame map's
+    // GL section has every reading.
+    if (mAndroidGl) {
         mMaxTextureDim = std::min<uint32_t>(mMaxTextureDim, 4096);
         mSkidRingN = 2;
+        mSheetTile = 2.0f * kSheetTile;
+        mSheetMinTris = 4 * kSheetMinTris;
     }
 #endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);

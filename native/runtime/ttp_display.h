@@ -771,12 +771,15 @@ TTP_ABI const char* ttp_display_profile_names(void);
  * backend's own timer. 0 means THERE IS NO NUMBER, and a caller must treat that
  * as "no signal" rather than as a fast frame.
  *
- * WHERE IT IS REAL: the GL backend where EXT_disjoint_timer_query exists, which
- * is every Android GL ES 3 device this ships to. WHERE IT IS 0: emscripten,
- * because Filament's GL backend compiles the timer-query probe out there and
- * lands on a fallback that measures CPU time and says so in its own comment —
- * the web shell wraps its own WebGL timer query around the frame instead and
- * this must not be mistaken for it.
+ * WHERE IT IS REAL: the Vulkan backend (the Android default) and a GL backend
+ * whose driver has EXT_disjoint_timer_query. WHERE IT IS 0: emscripten, because
+ * Filament's GL backend compiles the timer-query probe out there and lands on a
+ * fallback that measures CPU time and says so in its own comment — the web
+ * shell wraps its own WebGL timer query around the frame instead and this must
+ * not be mistaken for it. WHERE IT IS NOT GPU TIME: the Android GL fallback on
+ * PowerVR, whose driver has no timer query, so Filament emulates the interval
+ * with fences and the span includes the backend thread's own submit; a GL
+ * arm is judged by fps and skips, never by this number.
  *
  * This is the ONE measurement that can see HEADROOM. A vsync-locked present
  * cadence looks identical at 10 % and 95 % load, which is why the render scale

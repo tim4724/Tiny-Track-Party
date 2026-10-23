@@ -321,9 +321,12 @@ thing:
 
 ## The frame budget on this GPU
 
-**The STEADY frame is GPU-bound.** Measured with the backend's own timer
-(`ttp_display_gpu_ms`, real here — a timer query on the backend, unlike the
-two sibling shells): the frame thread and Filament's backend thread each sit
+**The STEADY frame is GPU-bound on Vulkan.** Measured with the backend's own timer
+(`ttp_display_gpu_ms`, real on the Vulkan backend, unlike the two sibling
+shells; on the GL fallback it is a fence interval that includes the CPU
+submit, that driver has no timer query, and the GL frame is bound by Filament's
+backend THREAD, not the GPU — the frame map's GL section): the frame thread
+and Filament's backend thread each sit
 near a third of the budget at four players, while every dropped present is the
 GPU's. `PerfMonitor` shows both — it
 GATHERS, and every judgement in it (the ring, the percentiles, the two rates, the

@@ -2212,6 +2212,39 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
     }
 }
 
+// The Android GL fallback only. Filament sorts an opaque draw by PRIORITY, then
+// a coarse depth bucket, then material, so the opaque programs interleave across
+// the depth buckets of every cell and each program switch costs the driver CPU.
+// On a GPU with hidden-surface removal front-to-back order buys nothing, so give
+// each opaque MATERIAL its own priority class: draws then group by program
+// first. Blended renderables keep their priorities (the blend order is distance,
+// and the overlay's 7 must stay last). Pixels are the depth test's either way.
+void TtpRenderer::applyGlPriorities() {
+    if (!mScene || !mAndroidGl) return;
+    auto& rcm = mEngine->getRenderableManager();
+    std::unordered_map<const Material*, uint8_t> classes;
+    uint32_t touched = 0;
+    mScene->forEach([&](utils::Entity e) {
+        const auto ri = rcm.getInstance(e);
+        if (!ri || rcm.getPrimitiveCount(ri) == 0) return;
+        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri, 0);
+        if (!mi) return;
+        const Material* m = mi->getMaterial();
+        const auto mode = m->getBlendingMode();
+        if (mode != Material::BlendingMode::OPAQUE && mode != Material::BlendingMode::MASKED) return;
+        auto it = classes.find(m);
+        if (it == classes.end()) {
+            // Seven classes (0..6): the eighth is the overlay's. Materials past
+            // the seventh share the last class.
+            it = classes.emplace(m, (uint8_t) std::min<size_t>(classes.size(), 6)).first;
+        }
+        rcm.setPriority(ri, it->second);
+        touched++;
+    });
+    utils::slog.i << "ttp: Android GL priorities: " << classes.size() << " opaque materials over "
+            << touched << " renderables" << utils::io::endl;
+}
+
 // The rubber layer's GPU side, for a DRAWN frame: this frame's stamps up into the
 // texture, then the mip chain. Before beginFrame, so ink stamped this frame is drawn
 // this frame.
@@ -3084,10 +3117,16 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     if (mCarMergeDirty) {
         mCarMergeDirty = false;
         if (mMergeOff) destroyMergedGroups(mMergedCars); else rebuildCarMerge();
+        mGlPrioDirty = true;
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
         if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+        mGlPrioDirty = true;
+    }
+    if (mGlPrioDirty && mAndroidGl) {
+        mGlPrioDirty = false;
+        applyGlPriorities();
     }
     updateMergedTransforms();
     // A staged blob's readback lands HERE, because the driver tick that fires
@@ -3095,7 +3134,14 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     // web: a build cannot finish its own readbacks there, so without a frame to
     // land them nothing would ever be written.
     collectStagedBlobs();
+    // On the Android GL fallback, hand the backend everything queued so far
+    // (the rubber uploads, the instance writes) before the first cell is
+    // recorded: the first flush is otherwise the end of cell 1's render, and
+    // the backend thread is that frame's bound. The second hands it
+    // beginFrame's own work the same way.
+    if (mAndroidGl) mEngine->flush();
     const bool pace = mRenderer->beginFrame(mSwapChain);
+    if (mAndroidGl && pace) mEngine->flush();
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)
     (void) pace;

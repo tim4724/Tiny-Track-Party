@@ -579,6 +579,10 @@ private:
     // a range under 64 triangles is not worth a renderable of its own.
     static constexpr float kSheetTile = 48.0f;
     static constexpr uint32_t kSheetMinTris = 64;
+    // The live values: the constants above, or coarser on the Android GL
+    // fallback (init), where a draw costs more than the vertices it saves.
+    float mSheetTile = kSheetTile;
+    uint32_t mSheetMinTris = kSheetMinTris;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -1308,6 +1312,13 @@ private:
     // skipped frame does not step it, which keeps the ring on the skipper's
     // own two-frame window.
     bool mSkidRingAdvance = false;
+    // The Android GL fallback (init): the GL backend on the box, never the
+    // web's. Every GL-only decision in the renderer keys on this.
+    bool mAndroidGl = false;
+    // On it, opaque renderables are grouped by material through their priority
+    // (applyGlPriorities), re-applied whenever a merge rebuild changed the scene.
+    bool mGlPrioDirty = false;
+    void applyGlPriorities();
     struct SkidOwed { int level; int x0, y0, x1, y1; };
     std::vector<std::vector<SkidOwed>> mSkidOwed;
     void uploadSkidLevel(filament::Texture* t, int level, int x0, int y0, int x1, int y1,

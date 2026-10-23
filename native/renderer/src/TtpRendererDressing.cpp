@@ -197,7 +197,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
         mBoulders.bakeLight = true;
-        tileMajor(mBoulders, kSheetTile, kSheetMinTris);
+        tileMajor(mBoulders, mSheetTile, mSheetMinTris);
         buildMesh(mBoulders);
     }
 }
@@ -924,7 +924,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         if (!mLandmarks.verts.empty()) {
             accumulateNormals(mLandmarks);
             mLandmarks.bakeLight = true;
-            tileMajor(mLandmarks, kSheetTile, kSheetMinTris);
+            tileMajor(mLandmarks, mSheetTile, mSheetMinTris);
             buildMesh(mLandmarks);
         }
         return;
@@ -1564,7 +1564,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         mLandmarks.bakeLight = true;
         mLandmarks.simplify = true;
-        tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
+        tileMajor(mLandmarks, mSheetTile, mSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
 }
@@ -2130,7 +2130,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         accumulateNormals(m);
         bakeVertexLight(m);
         m.uvs.assign(m.verts.size(), float2{ 0, 0 });
-        tileMajor(m, kSheetTile, kSheetMinTris);
+        tileMajor(m, mSheetTile, mSheetMinTris);
         return buildMesh(m, true, staticInstance());
     };
     if (!mStructures.verts.empty() && !buildReceiver(mStructures)) return;
