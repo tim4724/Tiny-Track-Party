@@ -1,15 +1,17 @@
-// THE CAR SHADOW AS A PASS: one blended draw per car over the road's OWN
-// deck triangles under it (TtpRenderer::placeCarShadow clips them into the
-// pass's own buffers), on the same vertex-domain path, so every fragment is a
-// road fragment at the road's own depth — a tyre in front wins the depth
-// test, nothing floats, a crest or a loop is the road itself.
+// THE CAR SHADOW AS A PASS: one blended draw for every car together over the
+// road's OWN deck triangles under each (TtpRenderer::placeCarShadow clips them
+// into the pass's own buffers), on the same vertex-domain path, so every
+// fragment is a road fragment at the road's own depth — a tyre in front wins
+// the depth test, nothing floats, a crest or a loop is the road itself.
 //
 // THE SHAPE IS A TEXTURE LOCKED TO THE CAR, not arithmetic per fragment: the
 // fitted rounded rect's ramp field (ttp/car_footprint.h, RoundedRectEval)
-// baked once per car model (TtpRenderer::carShadowStamp), sampled at the
-// stamp's (u, v), which is affine in world position and so comes from the
-// vertex stage. Evaluated per fragment (a divide, a length, two smoothsteps)
-// the same shape cost ~1.8 ms of a 4P 720 frame on the Android box over the
+// baked once per car model into a tile of one atlas
+// (TtpRenderer::carShadowStamp), sampled at the stamp's (u, v) in that tile.
+// The (u, v) is affine in world position, so the CPU computes it per vertex
+// where it clips the strips (custom1.xy, with the car's peak alpha in .z),
+// and one draw carries every car. Evaluated per fragment (a divide, a
+// length, two smoothsteps) the same shape cost ~1.8 ms of a 4P 720 frame on the Android box over the
 // lane cells; a tap costs what the rubber tap costs. And because the texture
 // rides the car's frame, nothing re-lands on a road grid frame to frame: no
 // pulsing bands, no shiver.
@@ -24,22 +26,15 @@ material {
                   { name : suv, precision : high } ],
     vertexDomain : world,
     requires : [
-        custom0
+        custom0, custom1
     ],
     shadingModel : unlit,
     blending : transparent,
     depthWrite : false,
     culling : none,
     parameters : [
-        // The car's frame on the deck: the stamp's origin, forward and right.
-        // float4, not float3: a highp vec3 here read back at the wrong scale
-        // on the Vulkan box (the stamp's frame came out at a tenth of itself).
-        { type : float4, name : origin, precision : high },
-        { type : float4, name : fwd, precision : high },
-        { type : float4, name : right, precision : high },
-        // x: 1 / halfR, y: 1 / halfF, z: the stamp's peak alpha, w: the cap.
-        { type : float4, name : extent },
-        // x, y: the remap band's lo and hi (CarShadowTuning's remapLo/Hi x ao).
+        // x, y: the remap band's lo and hi (CarShadowTuning's remapLo/Hi x ao);
+        // z: the cap.
         { type : float4, name : fill },
         { type : float4, name : ink },
         { type : sampler2d, name : stamp }
@@ -52,9 +47,9 @@ fragment {
         prepareMaterial(material);
         // The field, scaled to this frame's peak; the remap band on it, as
         // vroad's tap applied it; the cap against stacked shadows.
-        float cs = texture(materialParams_stamp, variable_suv.xy).r * materialParams.extent.z;
+        float cs = texture(materialParams_stamp, variable_suv.xy).r * variable_inkd.w;
         float a = min(cs * smoothstep(materialParams.fill.x, materialParams.fill.y, cs),
-                materialParams.extent.w);
+                materialParams.fill.z);
         // The blend lands in display space, where the layer mixed the ink into
         // the deck in linear. A remap to the linear mix's display weight
         // ((1 - a)^(1/2.2)) matched the layer on paper and read too weak on the
@@ -84,14 +79,13 @@ vertex {
         // under anything a tyre bottom could show. It also keeps early depth
         // culling on, which a polygon offset turns off.
         material.worldPosition.xyz = wp + (getWorldCameraPosition() - wp) * 3e-4;
-        // The stamp's (u, v) over its quad: right across, forward along —
+        // The stamp's (u, v) in the atlas, from the CPU (placeCarShadow):
         // affine in world position, so exact under interpolation.
-        highp vec3 d = wp - materialParams.origin.xyz;
-        material.suv = vec4(dot(d, materialParams.right.xyz) * materialParams.extent.x * 0.5 + 0.5,
-                dot(d, materialParams.fwd.xyz) * materialParams.extent.y * 0.5 + 0.5, 0.0, 0.0);
-        // The ink (encoded, bindCarShadow) under the ring's full light (custom0
-        // = the deck's encoded ambient + sun, mRingLight): display space, so a
-        // multiply is the whole of the shading.
-        material.inkd = vec4(materialParams.ink.xyz * getCustom0().xyz, 0.0);
+        highp vec4 c1 = getCustom1();
+        material.suv = vec4(c1.xy, 0.0, 0.0);
+        // The ink (encoded) under the ring's full light (custom0 = the deck's
+        // encoded ambient + sun, mRingLight): display space, so a multiply is
+        // the whole of the shading. The car's peak alpha rides .w.
+        material.inkd = vec4(materialParams.ink.xyz * getCustom0().xyz, c1.z);
     }
 }

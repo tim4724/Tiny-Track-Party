@@ -1192,7 +1192,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // conform diagnostics riding its shape field. The pass draws
             // (TtpRenderer.h, mCarShadowVbRing); a scene without its material
             // gets no shadow, no row, and those slots go to the auras.
-            if (mRoadInst && !mCarShadowMi.empty()
+            if (mRoadInst && mCarShadowMi
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
                 // ON THE ROAD'S OWN SURFACE (vshadow.mat): the strip sits on
                 // the deck's own planes, biased toward the eye by a fraction

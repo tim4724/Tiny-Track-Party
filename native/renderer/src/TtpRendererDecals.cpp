@@ -433,20 +433,28 @@ ttp::rt::RoundedFit TtpRenderer::carShadowFitFor(size_t slot) const {
     return fit;
 }
 
-// THE CAR SHADOW: a primitive per car slot over the pass's own vertex and
-// index buffers (TtpRenderer.h, mCarShadowVbRing), every primitive empty until
-// flushCarShadows fills them with this frame's strips. Culling off: the
-// bounds would have to follow the cars, and the draw is a few dozen
-// triangles. No polygon offset: the depth bias is vshadow.mat's vertex shrink.
+// THE CAR SHADOW: one primitive for every car over the pass's own vertex and
+// index buffers (TtpRenderer.h, mCarShadowVbRing), empty until flushCarShadows
+// fills them with this frame's strips. Culling off: the bounds would have to
+// follow the cars, and the draw is a few dozen triangles a car. No polygon
+// offset: the depth bias is vshadow.mat's vertex shrink.
 void TtpRenderer::buildCarShadowDraws() {
-    mCarShadowMi.clear();
-    mCarShadowRange.assign(kCarShadowDraws, { 0, 0 });
-    // Fresh instances know no stamp: the per-slot memory of what is bound
-    // must forget too, or a rebuilt scene's instances never get a texture.
-    mCarShadowStampBound.assign(kCarShadowDraws, ~0ull);
+    mCarShadowMi = nullptr;
+    // A fresh instance has neither arm's fill and ink yet (flushCarShadows).
+    mCarShadowSolidBound = -1;
     // No mTrack test: the track is adopted after the road is built, and the
     // buffers need only the material.
     if (!mShadowMaterial) return;
+    if (!mCarShadowAtlas) {
+        const uint32_t n = kCarShadowAtlasTiles * kCarShadowStampTexels;
+        mCarShadowAtlas = Texture::Builder()
+                .width(n).height(n).levels(kCarShadowAtlasLevels)
+                .format(Texture::InternalFormat::R8)
+                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE
+                        | Texture::Usage::GEN_MIPMAPPABLE)
+                .build(*mEngine);
+        if (!mCarShadowAtlas) return;
+    }
     // A RING of buffer pairs, mCellRing deep, under the streak ring's rule
     // (renderCars): a buffer an in-flight frame still references is STAGED on
     // the Vulkan path (a copy and a barrier at the head of the frame, before
@@ -456,9 +464,10 @@ void TtpRenderer::buildCarShadowDraws() {
     for (uint32_t k = 0; k < mCellRing; k++) {
         VertexBuffer* vb = VertexBuffer::Builder()
                 .vertexCount((uint32_t) kCarShadowVtxCap)
-                .bufferCount(2)
+                .bufferCount(3)
                 .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
                 .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::HALF4)
+                .attribute(VertexAttribute::CUSTOM1, 2, VertexBuffer::AttributeType::FLOAT4)
                 .build(*mEngine);
         IndexBuffer* ib = IndexBuffer::Builder()
                 .indexCount((uint32_t) kCarShadowIdxCap)
@@ -473,18 +482,20 @@ void TtpRenderer::buildCarShadowDraws() {
         mCarShadowIbRing.push_back(ib);
     }
     mCarShadowRingAt = 0;
-    RenderableManager::Builder builder(kCarShadowDraws);
+    mCarShadowMi = sceneInstance(mShadowMaterial);
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mCarShadowMi->setParameter("stamp", mCarShadowAtlas, smp);
+    RenderableManager::Builder builder(1);
     builder.boundingBox({ float3{ 0.0f }, float3{ 1e4f } })
             .culling(false)
             .receiveShadows(false)
-            .castShadows(false);
-    for (size_t k = 0; k < kCarShadowDraws; k++) {
-        MaterialInstance* mi = sceneInstance(mShadowMaterial);
-        mCarShadowMi.push_back(mi);
-        builder.material(k, mi)
-               .geometry(k, RenderableManager::PrimitiveType::TRIANGLES,
-                       mCarShadowVbRing[0], mCarShadowIbRing[0], 0, 0);
-    }
+            .castShadows(false)
+            .material(0, mCarShadowMi)
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mCarShadowVbRing[0], mCarShadowIbRing[0], 0, 0);
     mCarShadowEntity = utils::EntityManager::get().create();
     builder.build(*mEngine, mCarShadowEntity);
     mScene->addEntity(mCarShadowEntity);
@@ -494,12 +505,12 @@ void TtpRenderer::hideCarShadowDraws() {
     mShadowRings.clear();
     mCarShadowPos.clear();
     mCarShadowC0.clear();
+    mCarShadowUv.clear();
     mCarShadowIdx.clear();
-    mCarShadowRange.assign(kCarShadowDraws, { 0, 0 });
 }
 
-// Lay slot `slot`'s geometry and hand the shader the car's frame, fit and
-// stamp. The box: the yawed quad's extents along and across the track plus
+// Append slot `slot`'s clipped road strips, each vertex carrying its atlas
+// (u, v) and the car's peak alpha. The box: the yawed quad's extents along and across the track plus
 // the ramp, clamped to the deck's width (the shadow stops at the edge; the
 // kerb is raised geometry and would hide it anyway). The geometry: the
 // road's own triangles under that box, clipped to it (TtpRenderer.h,
@@ -532,7 +543,7 @@ int clipPoly(const ClipV* in, int n, ClipV* out, F f) {
 void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3& fwd,
         const float3& right, float halfF, float halfR, float carS, float alpha,
         const ttp::rt::RoundedFit& fit) {
-    if (slot >= mCarShadowMi.size() || !mTrack) return;
+    if (slot >= kCarShadowSlots || !mCarShadowMi || !mTrack) return;
     const float L = mTrack->length;
     const int N = (int) mTrack->rings.size();
     if (L <= 0.0f || N < 2 || halfF <= 0.0f || halfR <= 0.0f) return;
@@ -543,6 +554,11 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
     const CarShadowStamp* stamp = carShadowStamp(key, fit);
     if (!stamp) return;
     const float4 sup = stamp->support;
+    // The stamp-local (u, v) lands in its atlas tile; the peak alpha rides
+    // with it, doubled under TTP_DEBUG_SHADOW_SOLID so the field saturates at
+    // the half line the solid arm's band cuts at (flushCarShadows).
+    const float tileScale = 1.0f / (float) kCarShadowAtlasTiles;
+    const float peak = mShadowSolid ? 2.0f : alpha;
     const TrackBin::Sample f0 = mTrack->frameAt(carS);
     float cs = dot(f0.tangent(), fwd), sn = dot(f0.lat, fwd);
     const float nl = std::sqrt(cs * cs + sn * sn);
@@ -571,7 +587,6 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
             mShadowRings.push_back({ 0, a + span - N });
         }
     }
-    const uint32_t off = (uint32_t) mCarShadowIdx.size();
     // The stamp's (u, v) at a world point, vshadow.mat's own expression.
     const float invR2 = 0.5f / halfR, invF2 = 0.5f / halfF;
     const auto stampUV = [&](const float3& W, float& u, float& v) {
@@ -580,7 +595,9 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
         v = dot(d, fwd) * invF2 + 0.5f;
     };
     TrackBin::DeckQuad q;
-    bool full = false;   // the shared buffers' caps reached: the slot keeps what fits
+    // The caps are shared by every car, so one placed late keeps only what
+    // fits after the cars before it.
+    bool full = false;
     for (int ii = i0; ii <= i1 && ii - i0 <= 2 * kCarShadowRings && !full; ii++) {
         const int i = ((ii % N) + N) % N;
         const int j = (i + 1) % N;
@@ -642,6 +659,8 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
                     mCarShadowPos.push_back(*wtri[tri][0] * w0 + *wtri[tri][1] * w1 + *wtri[tri][2] * w2);
                     const float4 lf = mix(lightA, lightB, v.t);
                     mCarShadowC0.push_back(math::half4{ lf.x, lf.y, lf.z, lf.w });
+                    mCarShadowUv.push_back(float4{ stamp->tile.x + v.u * tileScale,
+                            stamp->tile.y + v.v * tileScale, peak, 0.0f });
                 }
                 for (int c = 1; c + 1 < n; c++) {
                     mCarShadowIdx.push_back(base);
@@ -651,44 +670,31 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
             }
         }
     }
-    mCarShadowRange[slot] = { off, (uint32_t) mCarShadowIdx.size() - off };
-    MaterialInstance* mi = mCarShadowMi[slot];
-    mi->setParameter("origin", float4{ origin, 0.0f });
-    mi->setParameter("fwd", float4{ fwd, 0.0f });
-    mi->setParameter("right", float4{ right, 0.0f });
-    if (mShadowSolid) {
-        // TTP_DEBUG_SHADOW_SOLID: the fitted rect as an opaque black die-cut
-        // at the ramp's half line, so placement, depth and seams can be
-        // judged by eye on the TV with nothing soft to hide behind. The peak
-        // doubled saturates the field at the half line; the band just under
-        // 1 cuts there.
-        mi->setParameter("extent", float4{ 1.0f / halfR, 1.0f / halfF, 2.0f, 1.0f });
-        mi->setParameter("fill", float4{ 0.98f, 1.0f, 0.0f, 0.0f });
-        mi->setParameter("ink", float4{ 0.0f, 0.0f, 0.0f, 0.0f });
-    } else {
-        mi->setParameter("extent", float4{ 1.0f / halfR, 1.0f / halfF, alpha, mShadowTune.cap });
-        mi->setParameter("fill", float4{ mShadowTune.remapLo * mShadowTune.ao,
-                mShadowTune.remapHi * mShadowTune.ao, 0.0f, 0.0f });
-        mi->setParameter("ink", float4{ encodeSrgb(mShadowInkLinear), 0.0f });   // display space
-    }
-    // The model's stamp, rebound only when the slot's model changes.
-    if (mCarShadowStampBound[slot] != key) {
-        TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
-                TextureSampler::MagFilter::LINEAR);
-        smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        mi->setParameter("stamp", stamp->tex, smp);
-        mCarShadowStampBound[slot] = key;
-    }
 }
 
-// Upload this frame's strips (two events) and point each slot's primitive at
-// its range; a slot nothing placed draws nothing.
+// Upload this frame's strips and point the primitive at them; a
+// frame nothing placed draws nothing.
 void TtpRenderer::flushCarShadows() {
     if (mCarShadowVbRing.empty() || mCarShadowEntity.isNull()) return;
     auto& rcm = mEngine->getRenderableManager();
     const auto ri = rcm.getInstance(mCarShadowEntity);
     if (!ri) return;
+    if (mCarShadowSolidBound != (int) mShadowSolid) {
+        if (mShadowSolid) {
+            // TTP_DEBUG_SHADOW_SOLID: the fitted rect as an opaque black
+            // die-cut at the ramp's half line, so placement, depth and seams
+            // can be judged by eye on the TV with nothing soft to hide
+            // behind. The peak doubled (placeCarShadow) saturates the field
+            // at the half line; the band just under 1 cuts there.
+            mCarShadowMi->setParameter("fill", float4{ 0.98f, 1.0f, 1.0f, 0.0f });
+            mCarShadowMi->setParameter("ink", float4{ 0.0f, 0.0f, 0.0f, 0.0f });
+        } else {
+            mCarShadowMi->setParameter("fill", float4{ mShadowTune.remapLo * mShadowTune.ao,
+                    mShadowTune.remapHi * mShadowTune.ao, mShadowTune.cap, 0.0f });
+            mCarShadowMi->setParameter("ink", float4{ encodeSrgb(mShadowInkLinear), 0.0f });   // display space
+        }
+        mCarShadowSolidBound = (int) mShadowSolid;
+    }
     if (!mCarShadowPos.empty()) {
         // Next ring slot (buildCarShadowDraws): the one written mCellRing
         // uploads ago is free, so this write is a memcpy, not a staged copy.
@@ -704,29 +710,43 @@ void TtpRenderer::flushCarShadows() {
         std::memcpy(cbuf, mCarShadowC0.data(), cb);
         vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(cbuf, cb,
                 [](void* b, size_t, void*) { free(b); }));
+        const size_t ub = mCarShadowUv.size() * sizeof(float4);
+        void* ubuf = malloc(ub);
+        std::memcpy(ubuf, mCarShadowUv.data(), ub);
+        vb->setBufferAt(*mEngine, 2, VertexBuffer::BufferDescriptor(ubuf, ub,
+                [](void* b, size_t, void*) { free(b); }));
         const size_t ib = mCarShadowIdx.size() * sizeof(uint32_t);
         void* ibuf = malloc(ib);
         std::memcpy(ibuf, mCarShadowIdx.data(), ib);
         mCarShadowIbRing[mCarShadowRingAt]->setBuffer(*mEngine,
                 IndexBuffer::BufferDescriptor(ibuf, ib, [](void* b, size_t, void*) { free(b); }));
     }
-    for (size_t k = 0; k < mCarShadowRange.size() && k < kCarShadowDraws; k++) {
-        rcm.setGeometryAt(ri, k, RenderableManager::PrimitiveType::TRIANGLES,
-                mCarShadowVbRing[mCarShadowRingAt], mCarShadowIbRing[mCarShadowRingAt],
-                mCarShadowRange[k].first, mCarShadowRange[k].second);
-    }
+    rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+            mCarShadowVbRing[mCarShadowRingAt], mCarShadowIbRing[mCarShadowRingAt],
+            0, mCarShadowIdx.size());
 }
 
-// The stamp texture for one fit: RoundedRectEval's linear ramp field over the
-// stamp's (u, v), the ramp the raster targeted (blur over the overscan box),
-// 128 texels a side so the ramp is several texels wide, mip-mapped so a far
-// stamp minifies without shimmer. The outermost texels are zero (the shape
-// sits inside its overscan), so CLAMP samples outside the quad read nothing.
+// The stamp for one fit, in the next free atlas tile: RoundedRectEval's linear
+// ramp field over the stamp's (u, v), the ramp the raster targeted (blur over
+// the overscan box), 128 texels a side so the ramp is several texels wide,
+// mip-mapped so a far stamp minifies without shimmer. The outermost texels are
+// zero (the shape sits inside its overscan), and the geometry is clipped to
+// the support, so no sample reaches a neighbouring tile.
 const TtpRenderer::CarShadowStamp* TtpRenderer::carShadowStamp(uint64_t key,
         const ttp::rt::RoundedFit& fit) {
-    const auto it = mCarShadowStampTex.find(key);
-    if (it != mCarShadowStampTex.end()) return &it->second;
-    constexpr uint32_t N = 128;
+    const auto it = mCarShadowStamps.find(key);
+    if (it != mCarShadowStamps.end()) return &it->second;
+    if (!mCarShadowAtlas) return nullptr;
+    const size_t slot = mCarShadowStamps.size();
+    if (slot >= (size_t) kCarShadowAtlasTiles * kCarShadowAtlasTiles) {
+        // More models than tiles in one run. An empty support clips every
+        // strip away, so that model draws no shadow, and says so once; its
+        // entry still counts, so every later model lands here too.
+        utils::slog.w << "carShadowStamp: atlas full, model " << (unsigned long long) key
+                << " draws no shadow" << utils::io::endl;
+        return &mCarShadowStamps.emplace(key, CarShadowStamp{}).first->second;
+    }
+    constexpr uint32_t N = kCarShadowStampTexels;
     const float soft = std::max(1e-3f, mShadowTune.blur * 2.0f * mShadowTune.overscan);
     const ttp::rt::RoundedRectEval rr(mShadowTune.overscan,
             mShadowTune.corner, soft,
@@ -764,7 +784,7 @@ const TtpRenderer::CarShadowStamp* TtpRenderer::carShadowStamp(uint64_t key,
     int x0 = (int) N, x1 = -1, y0 = (int) N, y1 = -1;
     for (uint32_t y = 0; y < N; y++) {
         for (uint32_t x = 0; x < N; x++) {
-            // The outermost texels stay zero: CLAMP samples outside the quad read nothing.
+            // The outermost texels stay zero: the tile's own empty border.
             const float v = (x == 0 || y == 0 || x == N - 1 || y == N - 1) ? 0.0f : f[(size_t) y * N + x];
             const uint8_t b = (uint8_t) std::lround(std::min(1.0f, std::max(0.0f, v)) * 255.0f);
             px[(size_t) y * N + x] = b;
@@ -779,18 +799,16 @@ const TtpRenderer::CarShadowStamp* TtpRenderer::carShadowStamp(uint64_t key,
         support = { (float) std::max(0, x0 - 1) / N, (float) std::min<int>(N, x1 + 2) / N,
                     (float) std::max(0, y0 - 1) / N, (float) std::min<int>(N, y1 + 2) / N };
     }
-    Texture* tex = Texture::Builder()
-            .width(N).height(N).levels(0xff)
-            .format(Texture::InternalFormat::R8)
-            .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE
-                    | Texture::Usage::GEN_MIPMAPPABLE)
-            .build(*mEngine);
-    if (!tex) { free(px); return nullptr; }
-    tex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(px, (size_t) N * N,
-            Texture::Format::R, Texture::Type::UBYTE,
-            [](void* b, size_t, void*) { free(b); }));
-    tex->generateMipmaps(*mEngine);
-    return &mCarShadowStampTex.emplace(key, CarShadowStamp{ tex, support }).first->second;
+    const uint32_t tx = (uint32_t) slot % kCarShadowAtlasTiles;
+    const uint32_t ty = (uint32_t) slot / kCarShadowAtlasTiles;
+    mCarShadowAtlas->setImage(*mEngine, 0, tx * N, ty * N, N, N,
+            Texture::PixelBufferDescriptor(px, (size_t) N * N,
+                    Texture::Format::R, Texture::Type::UBYTE,
+                    [](void* b, size_t, void*) { free(b); }));
+    mCarShadowAtlas->generateMipmaps(*mEngine);
+    const float tile = 1.0f / (float) kCarShadowAtlasTiles;
+    return &mCarShadowStamps.emplace(key,
+            CarShadowStamp{ support, float2{ (float) tx * tile, (float) ty * tile } }).first->second;
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even

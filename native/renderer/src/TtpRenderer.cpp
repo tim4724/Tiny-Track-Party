@@ -2056,7 +2056,7 @@ void TtpRenderer::releaseStatic() {
         utils::EntityManager::get().destroy(mCarShadowEntity);
         mCarShadowEntity = utils::Entity{};
     }
-    mCarShadowMi.clear();
+    mCarShadowMi = nullptr;
     for (IndexBuffer* ib : mCarShadowIbRing) mEngine->destroy(ib);
     for (VertexBuffer* vb : mCarShadowVbRing) mEngine->destroy(vb);
     mCarShadowIbRing.clear();
@@ -2276,8 +2276,8 @@ TtpRenderer::~TtpRenderer() {
     if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mSkyMaterial) mEngine->destroy(mSkyMaterial);
     if (mShadowMaterial) mEngine->destroy(mShadowMaterial);
-    for (const auto& [_, st] : mCarShadowStampTex) mEngine->destroy(st.tex);
-    mCarShadowStampTex.clear();
+    if (mCarShadowAtlas) mEngine->destroy(mCarShadowAtlas);
+    mCarShadowStamps.clear();
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (View* v : mCellViews) mEngine->destroy(v);
     for (utils::Entity e : mCellCameraEntities) {

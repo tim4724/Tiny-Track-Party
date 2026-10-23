@@ -1419,20 +1419,24 @@ private:
     // Both are at the rig's AUTHORED size, so they ride its rigScale too.
     static constexpr float kMonsterShadowScaleW = 1.35f;
     static constexpr float kMonsterShadowScaleL = 1.05f;
-    // THE CAR SHADOW AS A PASS (vshadow.mat): one blended primitive per car
-    // slot over the road's own triangles under it, the fitted rounded rect
-    // sampled from a texture locked to the car's frame. Built with the road
-    // (buildCarShadowDraws), handed its geometry and frame every frame
-    // (placeCarShadow), empty (count 0) between.
-    static constexpr size_t kCarShadowDraws = 8;
+    // THE CAR SHADOW AS A PASS (vshadow.mat): ONE blended primitive for every
+    // car over the road's own triangles under each, the fitted rounded rect
+    // sampled from an atlas tile locked to the car's frame. Built with the
+    // road (buildCarShadowDraws), handed its geometry every frame
+    // (placeCarShadow per car, flushCarShadows once), empty (count 0) between.
+    // One draw rather than one per car: on the Android GL fallback every draw
+    // and every instance's uniform write is backend-thread CPU, and the car's
+    // frame is per-vertex data the clip already computes.
+    static constexpr size_t kCarShadowSlots = 8;
     // Ring cells a stamp may span, each way, on the longest car at the widest
     // yaw; the vertex and index caps are for the clipped polygons of all
     // slots together.
     static constexpr int kCarShadowRings = 12;
-    static constexpr size_t kCarShadowVtxCap = kCarShadowDraws * 512;
-    static constexpr size_t kCarShadowIdxCap = kCarShadowDraws * 1024;
-    // ONE renderable, a primitive per car slot, over a vertex and an index
-    // buffer rebuilt each frame (flushCarShadows): per car, the road's OWN
+    static constexpr size_t kCarShadowVtxCap = kCarShadowSlots * 512;
+    static constexpr size_t kCarShadowIdxCap = kCarShadowSlots * 1024;
+    // ONE renderable and ONE primitive, over a vertex and an index buffer
+    // filled by placeCarShadow per car and uploaded by flushCarShadows each
+    // frame: per car, the road's OWN
     // triangles under the stamp's box, CLIPPED to it. For every ring cell the
     // box spans and every deck strip it touches, the cell's two triangles are
     // clipped in (t, lat) to the box and each clipped corner is mapped through
@@ -1443,7 +1447,11 @@ private:
     // lines sat behind the road's chord where the deck twists, so a banked
     // stretch had no shadow and its ends flickered (the frame map, 2026-10-14).
     utils::Entity mCarShadowEntity;
-    std::vector<filament::MaterialInstance*> mCarShadowMi;
+    filament::MaterialInstance* mCarShadowMi = nullptr;   // a scene instance
+    // Which arm the instance's fill and ink were last set for
+    // (TTP_DEBUG_SHADOW_SOLID), so a frame writes them only on a change;
+    // -1 is neither, a fresh instance.
+    int mCarShadowSolidBound = -1;
     // The buffers are a RING of mCellRing pairs (the streak ring's rule;
     // buildCarShadowDraws has the why), and flushCarShadows advances the slot
     // once per upload.
@@ -1452,21 +1460,28 @@ private:
     uint32_t mCarShadowRingAt = 0;
     std::vector<filament::math::float3> mCarShadowPos;     // this frame's rows
     std::vector<filament::math::half4> mCarShadowC0;        // ...and their baked light
+    std::vector<filament::math::float4> mCarShadowUv;       // ...atlas (u, v), peak alpha
     std::vector<uint32_t> mCarShadowIdx;
-    std::vector<std::pair<uint32_t, uint32_t>> mCarShadowRange;   // per slot: offset, count
     // The deck's baked light per RING (the mean of the ring's deck vertices'
     // custom0), so a stamp row lights as the deck under it does.
     std::vector<filament::math::half4> mRingLight;
     void flushCarShadows();
-    // The stamp textures, one per car MODEL (the fit's key), baked on first
-    // use and kept for the run like the parsed-kit cache; which key each slot's
-    // instance has bound, so a frame rebinds only on a change.
-    // `support` is the (u0, u1, v0, v1) box outside which the baked field is
-    // zero: placeCarShadow clips the geometry to it, so no fragment is drawn
-    // where the stamp has nothing to draw.
-    struct CarShadowStamp { filament::Texture* tex = nullptr; filament::math::float4 support{}; };
-    std::unordered_map<uint64_t, CarShadowStamp> mCarShadowStampTex;
-    std::vector<uint64_t> mCarShadowStampBound;
+    // The stamps, one per car MODEL (the fit's key), each a tile of ONE
+    // atlas, baked on first use and kept for the run like the parsed-kit
+    // cache. `support` is the stamp-local (u0, u1, v0, v1) box outside which
+    // the baked field is zero: placeCarShadow clips the geometry to it, so no
+    // fragment is drawn where the stamp has nothing to draw, and no sample
+    // leaves the tile. `tile` is the tile's atlas origin.
+    struct CarShadowStamp { filament::math::float4 support{}; filament::math::float2 tile{}; };
+    std::unordered_map<uint64_t, CarShadowStamp> mCarShadowStamps;
+    // kCarShadowAtlasTiles x kCarShadowAtlasTiles tiles of 128 texels. The
+    // tiles sit on power-of-two offsets, so the mip chain never mixes two of
+    // them; it stops at 8-texel tiles, where a bilinear tap at a support's
+    // edge still reads its own tile's empty margin.
+    static constexpr uint32_t kCarShadowStampTexels = 128;
+    static constexpr uint32_t kCarShadowAtlasTiles = 4;
+    static constexpr uint32_t kCarShadowAtlasLevels = 5;
+    filament::Texture* mCarShadowAtlas = nullptr;   // renderer-lifetime
     const CarShadowStamp* carShadowStamp(uint64_t key, const ttp::rt::RoundedFit& fit);
     filament::Material* mShadowMaterial = nullptr;   // renderer-lifetime
     void buildCarShadowDraws();

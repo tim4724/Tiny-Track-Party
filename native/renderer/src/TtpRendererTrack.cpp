@@ -2467,7 +2467,7 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
                 .package(vroadvis->second.data(), vroadvis->second.size())
                 .build(*mEngine);
     }
-    // The car shadow's pass material (vshadow.mat; TtpRenderer.h, kCarShadowDraws).
+    // The car shadow's pass material (vshadow.mat; TtpRenderer.h, kCarShadowSlots).
     const auto vshadow = mAssets.find("vshadow.filamat");
     if (!mShadowMaterial && vshadow != mAssets.end()) {
         mShadowMaterial = Material::Builder()

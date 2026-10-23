@@ -177,13 +177,17 @@ a full chunk drops the item blobs before the auras. The CAR shadows are not in t
 list: they are their own pass (below), drawn after the deck, so an aura lands
 UNDER its own car's shadow — accepted when the pass replaced the tap.
 
-## The car contact shadow: one draw per car, on the road's own surface
+## The car contact shadow: one draw for every car, on the road's own surface
 
-**EVERY car's contact shadow is a blended draw of its own** (`vshadow.mat`,
-`placeCarShadow`): the road's own triangles under the stamp's box in track
+**Every car's contact shadow is part of ONE blended draw** (`vshadow.mat`,
+`placeCarShadow`): the road's own triangles under each stamp's box in track
 space, clipped to that box, with the fitted rounded rect sampled from a texture
-locked to the car's frame. It replaced a track-space R8 layer that was
-CPU-rasterized and uploaded every frame and tapped (with a B-spline under the
+locked to the car's frame. The car's frame is per-VERTEX data (its stamp
+(u, v) and peak alpha, which the clip already computes), so one primitive and
+one instance carry the whole field with no per-frame uniform write: on the
+Android GL fallback each draw and each instance's UBO write is backend-thread
+CPU (the frame map's shipped levers have what one draw bought). It replaced
+a track-space R8 layer that was CPU-rasterized and uploaded every frame and tapped (with a B-spline under the
 stamps) on every road fragment; the frame map (2026-10-14) has the whole
 ladder. What the pass is built on, and why each piece is what it is:
 
@@ -217,13 +221,15 @@ ladder. What the pass is built on, and why each piece is what it is:
 - **The road's own cells cannot be the geometry.** The cross-section has no
   vertex column inside a lane, so the tightest cell under a car is half the
   road wide; drawn that way the pass cost +1.8 ms of a 4P 720 heavy second
-  with a trivial shader, and +3.3 with the real one. Fragments are the whole
-  cost of this pass — the eight draws measured nothing — so the geometry must
-  be the stamp's own area.
+  with a trivial shader, and +3.3 with the real one. On the GPU fragments are
+  the whole cost of this pass, so the geometry must be the stamp's own area.
 - **The shape is a texture, not arithmetic.** The rounded rect's ramp field
-  (`carShadowStamp`, one 128-square R8 per car MODEL, mip-mapped, kept for the
-  run) is sampled at (u, v) the VERTEX stage emits, since the stamp's
-  coordinates are affine in world position. Evaluated per fragment the same
+  (`carShadowStamp`, one 128-square tile per car MODEL in one R8 atlas,
+  mip-mapped, kept for the run) is sampled at the (u, v) the CPU computes per
+  vertex, since the stamp's coordinates are affine in world position. The
+  tiles sit on power-of-two offsets and the chain stops at 8-texel tiles, so
+  no level mixes two models and no tap at a support's edge reaches a
+  neighbour. Evaluated per fragment the same
   shape was 1.5 ms. Locked to the car, nothing re-lands on a road grid frame to
   frame: no bands, no shiver, no filter to pay for. The baked field is the
   raster's ramp blurred by a texel (the reconstruction the layer's read
@@ -235,9 +241,6 @@ ladder. What the pass is built on, and why each piece is what it is:
   lands in display space; a remap of the alpha to the linear mix's weight
   matched the layer on paper and read too weak on the TV, so the stamp's own
   alpha is the look.
-- **A rebuilt scene's instances know no stamp**: the per-slot memory of which
-  model is bound (`mCarShadowStampBound`) is reset with the draws, or the race
-  after the lobby draws nothing.
 - **Its vertex and index buffers are a ring of `mCellRing` pairs** (the
   streak ring's rule, `buildCarShadowDraws`). Written through one pair they
   were STAGED on the Vulkan box every frame: copies and a `VERTEX_INPUT`
