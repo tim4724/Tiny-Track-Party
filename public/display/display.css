@@ -647,6 +647,19 @@ html.cam-free #race { pointer-events: none; }
 /* The size up is a transform, so the slap's `scale` multiplies with it. */
 .cd-step.is-now { background: #fff; color: var(--ink); transform: scale(1.15); }
 .cd-step--go.is-now { background: var(--brand); color: #fff; }
+/* The cup line ("Race 2 of 4") hung under the strip in the lap pill's GLASS
+   type, sized off the light like the strip. Its top clears the lit beat's
+   size up (the strip is 1.312 lights tall, the lit one reaches 0.075 past). A
+   cup's last race says so in red, the celebration colour. */
+.cd-race {
+  position: absolute; left: 50%; translate: -50% 0;
+  top: calc(var(--safe-top) + 11px + var(--light) * 1.47);
+  font-family: var(--font-display); font-weight: 600; font-size: calc(var(--light) * 0.27);
+  letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; color: #fff;
+  padding: 0.3em 0.95em; border-radius: var(--r-pill);
+  background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.cd-race.is-final { background: color-mix(in srgb, var(--red) 80%, transparent); }
 /* GO stays up the beat after the start (cars are already moving) and fades
    out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat.
    A PLAIN FADE, no grow: see CountdownView.swift for what a grow cost the TV. */

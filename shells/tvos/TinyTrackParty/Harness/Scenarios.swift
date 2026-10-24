@@ -361,6 +361,9 @@ enum Scenarios {
         case "countdown":
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             game.state.countdown = "3"
+            // The cup line a live cup puts up on this track: its place in its cup.
+            game.state.countdownCupRace =
+                GameState.CupRaceLine(TTP.obj(ttp_race_preview_cup_race_json(game.trackId)))
         case "paused":
             // The overlay goes up AFTER the hold: raised at stand-up it stopped the
             // race before the card's moment, so the hold was never reached.

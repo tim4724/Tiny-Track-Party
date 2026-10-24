@@ -78,6 +78,17 @@ enum Copy {
         }
     }
 
+    /// `show-countdown`'s `cupRace.key` → the cup line under the start lights.
+    /// (`CUP_RACE_COPY`, `raceOverlays.js`.) An endless cup has no "of N".
+    static func cupRace(_ key: String, race: Int, of: Int?) -> String {
+        switch key {
+        case "race_of": return "Race \(race) of \(of.map(String.init) ?? unknownValue)"
+        case "final_race": return "Final race"
+        case "race": return "Race \(race)"
+        default: return unknown(key)
+        }
+    }
+
     /// `resultsView.newGameKey` → the results overlay's primary button.
     /// (`NEWGAME_COPY`, `main.js`.) Mid-cup it advances the series; at the end
     /// it ends the party.

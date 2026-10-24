@@ -991,6 +991,11 @@ jbyteArray n_ttp_race_personas_json(JNIEnv* env, jclass) {
     return toBytes(env, ttp_race_personas_json());
 }
 
+jbyteArray n_ttp_race_preview_cup_race_json(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    return toBytes(env, ttp_race_preview_cup_race_json(s0.get()));
+}
+
 jbyteArray n_ttp_race_rekey_live_json(JNIEnv* env, jclass, jint a0, jint a1, jbyteArray a2, jbyteArray a3) {
     CStr s2(env, a2);
     CStr s3(env, a3);
@@ -1567,6 +1572,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_intermission_ms", "()D", (void*) n_ttp_race_intermission_ms },
     { "ttp_race_pause_live_json", "(IIIII)[B", (void*) n_ttp_race_pause_live_json },
     { "ttp_race_personas_json", "()[B", (void*) n_ttp_race_personas_json },
+    { "ttp_race_preview_cup_race_json", "([B)[B", (void*) n_ttp_race_preview_cup_race_json },
     { "ttp_race_rekey_live_json", "(II[B[B)[B", (void*) n_ttp_race_rekey_live_json },
     { "ttp_race_resume_live_json", "(IIIII)[B", (void*) n_ttp_race_resume_live_json },
     { "ttp_race_return_live_json", "(I)[B", (void*) n_ttp_race_return_live_json },

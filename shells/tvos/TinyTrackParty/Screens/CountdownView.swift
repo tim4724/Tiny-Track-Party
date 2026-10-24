@@ -33,6 +33,10 @@ struct CountdownView: View {
     /// `COUNTDOWN_SECONDS` off the manifest, as the web's `paintSteps` reads it.
     let steps: Int
 
+    /// `GameState.countdownCupRace`: the cup line hung under each strip, nil
+    /// outside a cup.
+    let cupRace: GameState.CupRaceLine?
+
     /// Every cell's PICTURE rect and SAFE rect (`GameState.CellHUD`): a strip
     /// centred on the picture, hung from the safe edge. Empty is the whole
     /// screen.
@@ -47,6 +51,8 @@ struct CountdownView: View {
     private static let pad: CGFloat = 0.156
     private static let type: CGFloat = 0.44
     private static let litScale: CGFloat = 1.15
+    private static let raceTop: CGFloat = 1.47
+    private static let raceType: CGFloat = 0.27
 
     /// Drives the GO fade. A one-shot per countdown, reset by `.task(id:)`.
     @State private var goFaded = false
@@ -73,6 +79,15 @@ struct CountdownView: View {
                     // `.position` centres the strip on the point, so its top
                     // lands half its height above it.
                     strip(lightSize: l).drawingGroup()
+                        // `.cd-race`: its top 1.47 lights under the strip's,
+                        // clear of the lit beat's size up. An overlay, so the
+                        // strip keeps its place with or without it.
+                        .overlay(alignment: .top) {
+                            if let cupRace {
+                                cupLine(cupRace, lightSize: l).fixedSize().drawingGroup()
+                                    .offset(y: Self.raceTop * l)
+                            }
+                        }
                         .position(x: b.rect.midX, y: b.safe.minY + RaceHUDView.cellMargin + l * (0.5 + Self.pad))
                 }
             }
@@ -114,6 +129,19 @@ struct CountdownView: View {
         // GLASS without the web's backdrop blur, as the race HUD's lap pill:
         // the live race is behind it, and the tint alone carries the type.
         .background(Capsule().fill(Tokens.glass))
+    }
+
+    /// The cup line in the lap pill's GLASS type; a cup's last race in red.
+    private func cupLine(_ line: GameState.CupRaceLine, lightSize l: CGFloat) -> some View {
+        let size = Self.raceType * l
+        return Text(line.text.uppercased())
+            .font(Fonts.display(size, weight: .semibold))
+            .tracking(size * 0.12)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.vertical, size * 0.3)
+            .padding(.horizontal, size * 0.95)
+            .background(Capsule().fill(line.final ? Tokens.red.opacity(0.8) : Tokens.glass))
     }
 }
 

@@ -551,6 +551,9 @@ object Scenarios {
             // before it learned this was of no countdown at all.
             "countdown" -> after(1_200L) {
                 game.state.countdown = "3"
+                // The cup line a live cup puts up on this track: its place in its cup.
+                game.state.countdownCupRace = GameState.CupRaceLine.of(TtpJson.obj(
+                    Ttp.ttp_race_preview_cup_race_json(TtpJson.arg(raceTrack()))))
                 done()
             }
 
@@ -725,11 +728,12 @@ object Scenarios {
 
     /** A finished board over the bench race this card launched — the engine's
      *  fabrication, shared with the web and tvOS harnesses. */
-    private fun previewBoard(kind: String): ByteArray? {
-        val track = trackOverride ?: firstTrackId() ?: ""
-        return Ttp.ttp_ui_preview_board_json(
-            TtpJson.arg(kind), TtpJson.arg(track), players, (seed ?: 1u).toDouble(), -1)
-    }
+    private fun previewBoard(kind: String): ByteArray? =
+        Ttp.ttp_ui_preview_board_json(
+            TtpJson.arg(kind), TtpJson.arg(raceTrack()), players, (seed ?: 1u).toDouble(), -1)
+
+    /** The circuit a race scenario launched on. */
+    private fun raceTrack(): String = trackOverride ?: firstTrackId() ?: ""
 
     /** The preview boards' finishing time for place [i] (0 = the winner). */
     private fun finishTime(i: Int): Double =

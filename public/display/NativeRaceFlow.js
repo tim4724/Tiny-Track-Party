@@ -42,6 +42,7 @@ export async function init() {
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
     benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
+    previewCupRace: c('ttp_race_preview_cup_race_json', 'string', ['string']),
     start: c('ttp_race_start_live_json', 'string',
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
@@ -99,6 +100,12 @@ export function demoLive(roomHandle, trackId, botCap) {
 // hand-copy of it. See ttp_race.h.
 export function benchField(trackId, players, seed) {
   return P(fn.benchField(trackId || '', players, seed));
+}
+
+// The countdown card's cup line for a race on `trackId`: what a live cup's
+// beats carry there, or null for a track in no cup. Harness only.
+export function previewCupRace(trackId) {
+  return P(fn.previewCupRace(trackId || ''));
 }
 
 export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {

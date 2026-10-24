@@ -119,6 +119,14 @@ TTP_ABI void ttp_race_autopilot_players(int on);
 TTP_ABI const char* ttp_race_bench_field_json(const char* trackId, int players,
                                               double seed);
 
+/* The countdown card's cup line (harness only): the `cupRace` a live cup puts
+ * on its show-countdown beats when it races `trackId`, read off the track's
+ * place in its configured cup — {"key","race","of"}, spelled as the drain
+ * spells it — or null for a track in no cup. The gallery's countdown has no
+ * series behind it, so this is how its still carries the line the live race
+ * would without a harness re-deriving the rule. */
+TTP_ABI const char* ttp_race_preview_cup_race_json(const char* trackId);
+
 /* The ops a walk's ANSWER can carry, as a JSON array of keys in a stable
  * order. A shell walks it at boot and asserts its performer switch covers
  * every op — the unperformable-op throw, moved from mid-race to startup. The

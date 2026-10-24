@@ -448,7 +448,8 @@ private fun ReconnectCard(cell: GameState.CellHUD) {
 fun CountdownOverlay(state: GameState, defaultSteps: Int) {
     val shown = state.screen == GameState.Screen.RACE && state.countdown != null
     var lastCount by remember { mutableStateOf("") }
-    state.countdown?.let { lastCount = it }
+    var lastCupRace by remember { mutableStateOf<GameState.CupRaceLine?>(null) }
+    state.countdown?.let { lastCount = it; lastCupRace = state.countdownCupRace }
     var present by remember { mutableStateOf(false) }
     val fade = remember { Animatable(0f) }
     LaunchedEffect(shown) {
@@ -464,7 +465,7 @@ fun CountdownOverlay(state: GameState, defaultSteps: Int) {
         UnboundedContent()
         val steps = if (state.countdownSteps > 0) state.countdownSteps else defaultSteps
         Box(Modifier.graphicsLayer { alpha = fade.value }) {
-            CountdownBanner(lastCount, steps, state.cells.map { it.rect })
+            CountdownBanner(lastCount, steps, state.cells.map { it.rect }, lastCupRace)
         }
     }
 }
@@ -487,7 +488,7 @@ fun CountdownOverlay(state: GameState, defaultSteps: Int) {
  * banner still has something to draw while it fades out.
  */
 @Composable
-fun CountdownBanner(text: String, steps: Int, cells: List<CellRect>) {
+fun CountdownBanner(text: String, steps: Int, cells: List<CellRect>, cupRace: GameState.CupRaceLine?) {
     if (text.isEmpty()) return
     val go = text == Copy.go
     val n = if (go) 0 else text.toIntOrNull() ?: return
@@ -510,8 +511,32 @@ fun CountdownBanner(text: String, steps: Int, cells: List<CellRect>) {
                 ) {
                     for (k in steps downTo 0) CountdownStep(k, now = k == n, light)
                 }
+                // `.cd-race`: 1.47 lights under the strip's top, clear of the
+                // lit beat's size up.
+                if (cupRace != null) {
+                    CupRacePill(
+                        cupRace, light,
+                        Modifier.align(Alignment.TopCenter).padding(top = CELL_MARGIN + (light * 1.47f).dp),
+                    )
+                }
             }
         }
+    }
+}
+
+/** The cup line under a strip, in the lap pill's GLASS type ([LapPill]) sized
+ *  off [light]; a cup's last race in red. */
+@Composable
+private fun CupRacePill(line: GameState.CupRaceLine, light: Float, modifier: Modifier) {
+    val size = (0.27f * light).dp
+    Box(
+        modifier
+            .background(if (line.final) Tokens.red.copy(alpha = 0.8f) else Tokens.glass,
+                RoundedCornerShape(percent = 50))
+            .padding(vertical = size * 0.3f, horizontal = size * 0.95f)
+    ) {
+        StickerText(line.text.uppercase(), size = size, weight = Fonts.semibold,
+            color = Color.White, tracking = 0.12f)
     }
 }
 

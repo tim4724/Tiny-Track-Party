@@ -21,6 +21,12 @@ const el = (id) => document.getElementById(id);
 // middle of their own view. `cells` is Stage.cellBoxes(); none is the whole
 // screen.
 const GO_STEP = 'GO';  // the GO beat's copy; numerals ride the effect
+// The beat's `cupRace` keys (race_flow.h countdownTick). Endless has no "of N".
+const CUP_RACE_COPY = {
+  race_of: (c) => `Race ${c.race} of ${c.of}`,
+  final_race: () => 'Final race',
+  race: (c) => `Race ${c.race}`
+};
 export function showCountdownBanner(e, cells) {
   const cd = el('countdown');
   // `go` IS the beat semantics (the effect carries it); no third spelling of
@@ -33,6 +39,14 @@ export function showCountdownBanner(e, cells) {
   cd.classList.toggle('hidden', !on);
   if (on) placeViews(cd, cells);
   cd.classList.toggle('is-go', e.go);
+  // The cup line under the lights, absent outside a cup.
+  const race = e.cupRace;
+  for (const r of cd.getElementsByClassName('cd-race')) {
+    r.classList.toggle('hidden', !race);
+    if (!race) continue;
+    r.textContent = CUP_RACE_COPY[race.key](race);
+    r.classList.toggle('is-final', race.key === 'final_race');
+  }
   // slap each lit beat in (re-add .slap around a reflow so the animation
   // restarts on the same element); GO keeps its own is-go fade-out.
   for (const s of cd.getElementsByClassName('cd-step')) {

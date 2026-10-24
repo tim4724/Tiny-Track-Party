@@ -80,6 +80,17 @@ object Copy {
     }
 
     /**
+     * `show-countdown`'s `cupRace.key` → the cup line under the start lights
+     * (`CUP_RACE_COPY`, `raceOverlays.js`). An endless cup has no "of N".
+     */
+    fun cupRace(key: String, race: Int, of: Int?): String = when (key) {
+        "race_of" -> "Race $race of ${of?.toString() ?: unknownValue}"
+        "final_race" -> "Final race"
+        "race" -> "Race $race"
+        else -> unknown(key)
+    }
+
+    /**
      * `resultsView.newGameKey` → the results overlay's primary button. Mid-cup it
      * advances the series; at the end it ends the party.
      */

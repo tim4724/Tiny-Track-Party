@@ -335,6 +335,7 @@ struct RootView: View {
                         itemReadyTick: state.itemReadyTick)
 
             CountdownView(text: state.countdown, steps: game.proto.countdownSeconds,
+                          cupRace: state.countdownCupRace,
                           cells: state.cells.map { ($0.rect, $0.safeRect) })
 
             if let results = state.results {

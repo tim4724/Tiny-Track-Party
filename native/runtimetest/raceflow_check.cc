@@ -305,6 +305,13 @@ Value effectVal(const race::Effect& e) {
       v.set("n", Value::Num(e.num));
       v.set("slap", Value::Bool(e.slap));
       v.set("go", Value::Bool(e.go));
+      if (!e.cupRaceKey.empty()) {
+        Value c = Value::Obj();
+        c.set("key", Value::Str(e.cupRaceKey));
+        c.set("race", Value::Num(e.cupRace));
+        if (e.cupRaceKey != "race") c.set("of", Value::Num(e.cupRaceOf));
+        v.set("cupRace", std::move(c));
+      }
       break;
     case race::Op::BROADCAST_COUNTDOWN: v.set("n", Value::Num(e.num)); break;
     case race::Op::REFRESH_AUTO_PAUSE: v.set("deferred", Value::Bool(e.deferred)); break;
@@ -650,7 +657,17 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     return v;
   }
   if (op == "countdownTick") {
-    race::Effects es = race::countdownTick(json::num_field(in, "n"));
+    // `cup` is absent on a single race's beat, so those recorded lines replay
+    // with no cup line.
+    const Value* c = in.find("cup");
+    race::CupRace cup;
+    if (c && c->type == Value::OBJ) {
+      cup.endless = json::truthy(c->find("endless"));
+      cup.raceIndex = json::num_field(*c, "raceIndex");
+      cup.raceCount = json::num_field(*c, "raceCount");
+    }
+    race::Effects es = race::countdownTick(json::num_field(in, "n"),
+                                           c && c->type == Value::OBJ ? &cup : nullptr);
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));

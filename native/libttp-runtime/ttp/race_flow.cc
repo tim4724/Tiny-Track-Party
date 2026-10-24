@@ -574,12 +574,18 @@ bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
   return p95Ms <= p50Ms * kSceneWarmSpread;
 }
 
-Effects countdownTick(double n) {
+Effects countdownTick(double n, const CupRace* cup) {
   Effects out;
   Effect e = mk(Op::SHOW_COUNTDOWN);
   e.num = n;
   e.slap = n > 0;
   e.go = n == 0;
+  if (cup) {
+    e.cupRace = cup->raceIndex + 1;
+    e.cupRaceOf = cup->raceCount;
+    e.cupRaceKey = cup->endless ? "race"
+                 : e.cupRace >= cup->raceCount ? "final_race" : "race_of";
+  }
   out.push_back(e);
   if (n >= 0) { e = mk(Op::BROADCAST_COUNTDOWN); e.num = n; out.push_back(e); }
   return out;

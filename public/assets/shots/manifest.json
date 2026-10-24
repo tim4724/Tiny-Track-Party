@@ -7,12 +7,12 @@
       "file": "androidtv/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 434176,
-      "capturedAt": "2026-10-17T14:05:05.044Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "bytes": 485456,
+      "capturedAt": "2026-10-24T09:25:02.922Z",
+      "gitSha": "5bf45a43",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "countdown",
@@ -20,12 +20,12 @@
       "file": "tvos/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 433164,
-      "capturedAt": "2026-10-17T14:12:34.367Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
+      "bytes": 476762,
+      "capturedAt": "2026-10-24T09:22:54.995Z",
+      "gitSha": "5bf45a43",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
       "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
     },
     {
       "scenario": "countdown",
@@ -33,9 +33,9 @@
       "file": "web/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 284133,
-      "capturedAt": "2026-10-17T14:01:07.939Z",
-      "gitSha": "8e974d48"
+      "bytes": 303308,
+      "capturedAt": "2026-10-24T09:20:07.269Z",
+      "gitSha": "5bf45a43"
     },
     {
       "scenario": "disconnected",

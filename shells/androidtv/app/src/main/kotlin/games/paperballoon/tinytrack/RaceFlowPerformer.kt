@@ -129,7 +129,11 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             // `Copy.countdown` spells the beat (digit / GO! / banner gone). The
             // beat's SOUND is the wasm's (it taps the same tick), so there is no
             // cue call here.
-            "show-countdown" -> game.state.countdown = Copy.countdown(e.optInt("n", -1))
+            "show-countdown" -> {
+                game.state.countdown = Copy.countdown(e.optInt("n", -1))
+                // The cup line rides every beat; absent outside a cup.
+                game.state.countdownCupRace = GameState.CupRaceLine.of(e.optJSONObject("cupRace"))
+            }
 
             "broadcast-countdown" -> game.net.broadcast(
                 JSONObject().put("type", game.proto.msgCountdown)

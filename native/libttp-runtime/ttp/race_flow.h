@@ -185,6 +185,10 @@ struct Effect {
   bool deferred = false;  // refresh-auto-pause — see the header
   bool go = false;        // show-countdown: this beat is GO!
   bool slap = false;      // show-countdown: re-slap the numeral
+  // show-countdown: the cup line under the lights (countdownTick), "" outside
+  // a cup. cupRaceOf is unread when the key is "race".
+  std::string cupRaceKey;
+  double cupRace = 0, cupRaceOf = 0;
   bool placeTrack = false;  // fade-to-lobby
 
   // set-race-flags
@@ -483,7 +487,18 @@ bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
 // COUNTDOWN handler flips them onto the drive HUD, so a race that ends within a
 // second of GO would otherwise have this trailing beat land after the final
 // standings and yank their results board back to the wheel.
-Effects countdownTick(double n);
+//
+// `cup` is the series this race belongs to, null outside one. It puts the cup
+// line under the lights on every show-countdown beat (Effect::cupRaceKey), so
+// the couch knows which race of the cup is starting: "race_of" (race 2 of 4),
+// "final_race" on a cup's last race, and "race" for an endless series, which
+// has no "of N" — the results board's subtitle follows the same rule.
+struct CupRace {
+  bool endless = false;
+  double raceIndex = 0;   // 0-based
+  double raceCount = 0;   // unread when endless
+};
+Effects countdownTick(double n, const CupRace* cup = nullptr);
 
 // The "GO!" beat: physics are live and the banner is still up.
 Effects raceStart(const std::string& biome, bool audioReady);

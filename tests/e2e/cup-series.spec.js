@@ -26,6 +26,11 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   await startRace(alice, [bob]);
   await waitForRacing(page);
   expect(await page.evaluate(() => window.__series() && window.__series().raceIndex)).toBe(0);
+  // The countdown hung the cup line under its lights. Read as text, not
+  // visibility: the one-second E2E count has faded by the time racing is true,
+  // and the line it painted stays in the banner's markup.
+  const cupLine = page.locator('#countdown .cd-race').first();
+  await expect(cupLine).toHaveText('Race 1 of 4');
   // Baseline for the in-loop guard below: the cell HUD is up in race 1.
   await expect(page.locator('.cell-label').first()).toBeVisible();
 
@@ -45,6 +50,7 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await waitForRacing(page);
     expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[race]);
     expect(await page.evaluate(() => window.__scene._track.id)).toBe(BEACH[race]);
+    await expect(cupLine).toHaveText(race === 3 ? 'Final race' : `Race ${race + 1} of 4`);
     // The cell HUD (name/item/place/lap) must come back in EVERY chained race.
     // The bug: reset-scene-cars recreates the CSS-hidden HUD elements, and when
     // the new layout signature matches Stage's placement latch (same seats,

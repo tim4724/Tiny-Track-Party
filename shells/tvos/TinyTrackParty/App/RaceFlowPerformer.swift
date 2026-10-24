@@ -128,6 +128,8 @@ struct RaceFlowPerformer {
             // beat's SOUND is the wasm's (it taps the same tick), so there is no
             // cue call here.
             game.state.countdown = Copy.countdown(Int(e["n"] as? Double ?? -1))
+            // The cup line rides every beat; absent outside a cup.
+            game.state.countdownCupRace = GameState.CupRaceLine(e["cupRace"] as? [String: Any])
 
         case "broadcast-countdown":
             game.net.broadcast(TTP.json([

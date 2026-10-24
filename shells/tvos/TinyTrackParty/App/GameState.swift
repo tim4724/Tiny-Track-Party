@@ -240,6 +240,23 @@ final class GameState: ObservableObject {
 
     /// "3" / "2" / "1" / "GO!" / nil.
     @Published var countdown: String?
+    /// The cup line under the start lights, nil outside a cup. `final` is a
+    /// cup's last race, which wears red.
+    struct CupRaceLine: Equatable {
+        let text: String
+        let final: Bool
+
+        /// `cupRace` as a show-countdown beat carries it, and as
+        /// `ttp_race_preview_cup_race_json` answers it for the gallery; nil
+        /// without one.
+        init?(_ c: [String: Any]?) {
+            guard let c, let key = c["key"] as? String else { return nil }
+            text = Copy.cupRace(key, race: Int(c["race"] as? Double ?? 0),
+                                of: (c["of"] as? Double).map { Int($0) })
+            final = key == "final_race"
+        }
+    }
+    @Published var countdownCupRace: CupRaceLine?
     @Published var paused = false
     @Published var pauseButtonShown = false
 

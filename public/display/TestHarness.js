@@ -26,7 +26,7 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
 import { dissolveInto } from './backdrop.js';
 import { resultsView, intermissionSecs, previewBoard, previewProgress, progressLoad, catalogue } from './NativeUiModel.js';
-import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
+import { benchField, previewCupRace, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { trackSchematic } from './NativeSchematic.js';
@@ -1379,7 +1379,10 @@ export function runDisplayScenario(opts, ctx) {
     if (kind === 'countdown') {
       // HUD shows lap 1 while the lights count down.
       for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
-      showCountdownBanner(COUNTDOWN_STILL, scene.cellBoxes());
+      // The cup line a live cup puts up on this track: its place in its cup.
+      const cupRace = previewCupRace(track.trackId);
+      showCountdownBanner(cupRace ? { ...COUNTDOWN_STILL, cupRace } : COUNTDOWN_STILL,
+                          scene.cellBoxes());
     } else if (kind === 'paused') {
       // Spin the field forward a few seconds so it reads mid-race, freeze it
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.

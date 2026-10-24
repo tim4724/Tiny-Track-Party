@@ -4248,6 +4248,18 @@ void raceLiveWalks() {
   world.set("cups", cupsJson);
   const std::string worldJson = canonical_stringify(world);
   check(ttp_race_configure(worldJson.c_str()) == 1, "race walks: the world configured");
+
+  // The gallery countdown's cup line: the track's place in its configured cup,
+  // the last race named final, and none for a track in no cup.
+  check(std::string(ttp_race_preview_cup_race_json("tidepool"))
+            == "{\"key\":\"race_of\",\"of\":2,\"race\":1}",
+        "preview cup line: a cup's first race is race 1 of its count");
+  check(std::string(ttp_race_preview_cup_race_json("helix"))
+            == "{\"key\":\"final_race\",\"of\":2,\"race\":2}",
+        "preview cup line: a cup's last race is its final race");
+  check(std::string(ttp_race_preview_cup_race_json("nowhere")) == "null",
+        "preview cup line: a track in no cup has none");
+
   check(ttp_race_configure("not json") == 0, "a malformed world is refused");
 
   race::FieldWorld W;

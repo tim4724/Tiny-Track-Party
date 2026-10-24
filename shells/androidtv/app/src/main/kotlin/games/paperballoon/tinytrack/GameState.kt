@@ -372,6 +372,25 @@ class GameState {
     /** "3" / "2" / "1" / "GO!" / null. */
     var countdown by mutableStateOf<String?>(null)
 
+    /** The cup line under the start lights, null outside a cup. [final] is a
+     *  cup's last race, which wears red. */
+    data class CupRaceLine(val text: String, val final: Boolean) {
+        companion object {
+            /** `cupRace` as a show-countdown beat carries it, and as
+             *  `ttp_race_preview_cup_race_json` answers it for the gallery;
+             *  null without one. */
+            fun of(c: JSONObject?): CupRaceLine? {
+                if (c == null || !c.has("key")) return null
+                val key = c.getString("key")
+                return CupRaceLine(
+                    Copy.cupRace(key, c.optInt("race"), if (c.has("of")) c.getInt("of") else null),
+                    final = key == "final_race",
+                )
+            }
+        }
+    }
+    var countdownCupRace by mutableStateOf<CupRaceLine?>(null)
+
     /** The last launch's count (`start-countdown`'s `seconds`), which the
      *  countdown strip lays its beats out from; 0 until a launch names one. */
     var countdownSteps by mutableStateOf(0)

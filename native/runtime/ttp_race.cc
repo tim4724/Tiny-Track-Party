@@ -67,7 +67,7 @@ std::map<int, double> g_fieldSeed;
 std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
     g_bufEvents, g_bufFlag, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufPause, g_bufResume,
-    g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench;
+    g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench, g_bufPreviewCupRace;
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -251,6 +251,15 @@ Value idArr(const std::vector<race::Id>& ids) {
   return a;
 }
 
+// A show-countdown beat's cup line. Shared with the gallery's preview of it.
+Value cupRaceVal(const race::Effect& e) {
+  Value c = Value::Obj();
+  c.set("key", Value::Str(e.cupRaceKey));
+  c.set("race", Value::Num(e.cupRace));
+  if (e.cupRaceKey != "race") c.set("of", Value::Num(e.cupRaceOf));
+  return c;
+}
+
 // One effect, spelled exactly as raceFlow.js wrote its literal. The switch is
 // exhaustive so a new op that forgets its payload is a -Wswitch warning.
 Value effectVal(const race::Effect& e) {
@@ -284,6 +293,8 @@ Value effectVal(const race::Effect& e) {
       v.set("n", Value::Num(e.num));
       v.set("slap", Value::Bool(e.slap));
       v.set("go", Value::Bool(e.go));
+      // Absent outside a cup, so a single race's beat keeps its recorded shape.
+      if (!e.cupRaceKey.empty()) v.set("cupRace", cupRaceVal(e));
       break;
     case race::Op::BROADCAST_COUNTDOWN: v.set("n", Value::Num(e.num)); break;
     case race::Op::REFRESH_AUTO_PAUSE: v.set("deferred", Value::Bool(e.deferred)); break;
@@ -643,6 +654,22 @@ const char* ttp_race_bench_field_json(const char* trackId, int players, double s
   return put(g_bufBench, out);
 }
 
+const char* ttp_race_preview_cup_race_json(const char* trackId) {
+  const std::string id = trackId ? trackId : "";
+  for (const race::Cup& c : g_cups) {
+    for (size_t i = 0; i < c.tracks.size(); ++i) {
+      if (c.tracks[i] != id) continue;
+      // The beat a cup launched from this race would put up: its race is the
+      // track's place, as a cup advanced to it stands.
+      race::CupRace cup;
+      cup.raceIndex = static_cast<double>(i);
+      cup.raceCount = static_cast<double>(c.tracks.size());
+      return put(g_bufPreviewCupRace, cupRaceVal(race::countdownTick(3, &cup).front()));
+    }
+  }
+  return put(g_bufPreviewCupRace, Value::Null());
+}
+
 // ---- the vocabulary ----------------------------------------------------------
 
 // The ops a walk's ANSWER can carry — the enum minus the executor's own set,
@@ -779,7 +806,15 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
     // to the ordinary-event filter makes them vanish, which is the routing
     // bug this drain exists to end (shells.md, the fourth launch bug).
     if (type == "_countdown") {
-      executeAndSpell(roomHandle, race::countdownTick(json::num_field(e, "n")), {}, fx);
+      race::CupRace cup;
+      if (series) {
+        cup.endless = series->endless();
+        cup.raceIndex = series->raceIndex();
+        cup.raceCount = series->raceCount();
+      }
+      executeAndSpell(roomHandle,
+                      race::countdownTick(json::num_field(e, "n"), series ? &cup : nullptr),
+                      {}, fx);
     } else if (type == "_raceStart") {
       executeAndSpell(roomHandle, race::raceStart(biome ? biome : "", audioReady != 0),
                       {}, fx);
