@@ -60,14 +60,14 @@ constexpr float CAM_LAND_DIP = 0.06f, CAM_DIP_T = 0.08f;
 constexpr float MONSTER_CAM_RISE = 0.47f, MONSTER_CAM_BACK = 0.4f;
 constexpr float MONSTER_CAM_UP = 4.0f, MONSTER_CAM_DOWN = 2.0f;  // ease rates (1/s)
 // The AIM rig: while a banana trails the car (the ITEM button held), the rig
-// pulls back and up a little and the aim point slides from ahead of the car to
-// AIM_CAM_LOOK_BACK behind it. The car rides in the top third of the frame with
-// a few lengths of road still ahead of it, and the road it is leaving, where the
-// banana lands and a follower is, fills the rest. The aim point lags a moving
-// car (CAM_TGT_RATE), so at speed it sits further back than LOOK_BACK and the
-// car rides higher. A short hold is a plain drop, so the rig waits out
-// AIM_CAM_DELAY of holding before it moves.
-constexpr float AIM_CAM_RISE = 0.55f, AIM_CAM_BACK = 1.3f, AIM_CAM_LOOK_BACK = 0.5f;
+// pulls back and up and the aim point slides from ahead of the car onto it. The
+// car stays near the middle of the frame, where it is easy to steer, and the
+// wider shot brings the road behind it, where the banana lands and a follower
+// is, into the lower half. Aiming further behind the car showed more of that
+// road but pushed the car to the top edge and the road ahead out of shot. A
+// short hold is a plain drop, so the rig waits out AIM_CAM_DELAY of holding
+// before it moves.
+constexpr float AIM_CAM_RISE = 1.4f, AIM_CAM_BACK = 2.5f;
 constexpr float AIM_CAM_DELAY = 0.4f;                       // seconds of holding
 constexpr float AIM_CAM_IN = 5.0f, AIM_CAM_OUT = 4.0f;      // ease rates (1/s)
 // 7 -> 32. This one constant decides both how far back the camera sits while

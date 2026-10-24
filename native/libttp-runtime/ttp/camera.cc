@@ -21,7 +21,7 @@ void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, 
     const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back
                                 + aimBlend * AIM_CAM_BACK)
                   + up * (height + monsterBlend * rise + aimBlend * AIM_CAM_RISE);
-    const V3 wantTgt = p + fwd * (CHASE_LOOK - aimBlend * (CHASE_LOOK + AIM_CAM_LOOK_BACK)) + up * CHASE_TGT_UP;
+    const V3 wantTgt = p + fwd * (CHASE_LOOK * (1 - aimBlend)) + up * CHASE_TGT_UP;
     // Frame-rate-independent damping → smooth lag/swing behind through turns.
     const float rateSpd = spd < CAM_RATE_SPD_MAX ? spd : CAM_RATE_SPD_MAX;
     const float aPos = 1 - std::exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);
