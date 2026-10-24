@@ -19,22 +19,24 @@ const SELF = new URL(import.meta.url).pathname;
 
 // which {seed, profile} becomes which track id (re-pick by editing this, then re-run)
 // User-picked rosters (audition round of 2026-07-03; see gallery-tracks.html).
+// `jumps` are hand-placed crest hops (track-gen.mjs liftJumps), for the tracks whose
+// seeded hops came out too soft to launch a car.
 const SEEDS = {
   // Beach Cup (Easy)
-  tidepool:   { seed: 88,  profile: 'easy' },
-  cove:       { seed: 250, profile: 'easy' },
-  driftwood:  { seed: 138, profile: 'easy' },
-  riptide:    { seed: 330, profile: 'easy' },
+  tidepool:   { seed: 88,  profile: 'easy', jumps: [{ wp: 15, amp: 0.65 }, { wp: 45, amp: 0.4 }] },
+  cove:       { seed: 250, profile: 'easy', jumps: [{ wp: 9, amp: 1.0 }, { wp: 42, amp: 0.6 }] },
+  driftwood:  { seed: 138, profile: 'easy', jumps: [{ wp: 5, amp: 0.9 }, { wp: 19, amp: 0.35 }] },
+  riptide:    { seed: 330, profile: 'easy', jumps: [{ wp: 6, amp: 1.1 }, { wp: 36, amp: 0.35 }] },
   // Snow Cup (Medium) — the gentle end of the mid grammar: low brake fraction, no
   // hairpins, roomy min radii, but still crossings + real climb so nothing reads flat.
-  powder:     { seed: 27,  profile: 'mid' },
-  flurry:     { seed: 477, profile: 'mid' },
-  glacier:    { seed: 290, profile: 'mid' },
-  avalanche:  { seed: 125, profile: 'mid' },
+  powder:     { seed: 27,  profile: 'mid', jumps: [{ wp: 4, amp: 0.6 }, { wp: 43, amp: 0.6 }] },
+  flurry:     { seed: 477, profile: 'mid', jumps: [{ wp: 7, amp: 0.6 }, { wp: 44, amp: 0.6 }] },
+  glacier:    { seed: 290, profile: 'mid', jumps: [{ wp: 23, amp: 0.5 }, { wp: 43, amp: 0.6 }] },
+  avalanche:  { seed: 125, profile: 'mid', jumps: [{ wp: 11, amp: 0.4 }, { wp: 60, amp: 0.5 }] },
   // Backyard Cup (middle) — pretzel/cloverleaf are original classic seeds re-baked
   // through the decorated mid profile (same plans/crossings — mid shares classic's
   // grammar). The frozen `classic` profile stays in track-gen as provenance.
-  ribbon:     { seed: 128, profile: 'mid' },
+  ribbon:     { seed: 128, profile: 'mid', jumps: [{ wp: 24, amp: 0.6 }, { wp: 75, amp: 0.3 }] },
   pretzel:    { seed: 13,  profile: 'mid' },
   tangle:     { seed: 372, profile: 'mid' },
   cloverleaf: { seed: 121, profile: 'mid' },
@@ -62,8 +64,8 @@ const report = (line) => { if (toStdout) process.stderr.write(`${line}\n`); else
 // a JSON round trip on its way into the bake. Re-serializing a parsed double is
 // byte-safe in practice, but "safe in practice" is the wrong standard for the
 // one file tests/codegen-freshness.test.js compares byte for byte.
-function bakeOne(id, { seed, profile }) {
-  const wp = bakeSeed(seed, profile);
+function bakeOne(id, { seed, profile, jumps }) {
+  const wp = bakeSeed(seed, profile, { jumps });
   const src = { waypoints: wp };
   const t = buildTrack(src);
   const f = profile === 'classic'

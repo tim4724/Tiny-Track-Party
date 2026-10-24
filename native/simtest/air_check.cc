@@ -181,8 +181,12 @@ int main() {
   // Four bots, flat out, a minute on every shipped track. The bounds are loose
   // on purpose — they catch a crest that sends a car into orbit or a flight
   // that never ends, not a retune.
+  //
+  // And the floor: every seeded track has jumps (gen-tracks.mjs places them by
+  // hand where its seeded hops were too soft), so its minute must send a car
+  // visibly off the deck. A rebake that flattens a track's jumps fails here.
   {
-    const double MAX_PEAK = 1.5, MAX_AIR = 2.0;
+    const double MAX_PEAK = 1.5, MAX_AIR = 2.0, SEEN = 0.2;
     int hops = 0;
     for (int t = 0; t < TTP_TRACK_COUNT; t++) {
       BuiltRaceTrack race;
@@ -220,6 +224,8 @@ int main() {
       std::printf("  %-12s hops %3d  peak %.2f  longest %.2f s\n", TTP_TRACKS[t].id, trackHops, peak, longest);
       check(peak < MAX_PEAK, std::string(TTP_TRACKS[t].id) + ": no crest sends a car above the cap");
       check(longest < MAX_AIR, std::string(TTP_TRACKS[t].id) + ": every flight comes back down");
+      if (TTP_TRACKS[t].isSpline)
+        check(peak >= SEEN, std::string(TTP_TRACKS[t].id) + ": a seeded track sends a car visibly off the deck");
     }
     check(hops > 0, "somewhere in the catalogue a hill launches a fast car");
   }

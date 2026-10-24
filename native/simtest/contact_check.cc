@@ -260,6 +260,9 @@ int main() {
   // corners, braking and all — rather than ploughing into the first barrier.
   // (`finished` is what puts a car on the autopilot; finished cars still
   // collide with each other, which is exactly the pair needed here.)
+  // The stretch starts past Tidepool's first jump and ends before its second:
+  // a car in the air passes over the one ahead, so a crest breaks the contact
+  // this measures.
   {
     BuiltRaceTrack bt = track("tidepool");
     Stats slow;  slow.vmax = 0.55;
@@ -267,12 +270,13 @@ int main() {
     const std::vector<PlayerDesc> pair{PlayerDesc{Id::Num(0), true, slow},
                                        PlayerDesc{Id::Num(1), true, quick}};
     const int FRAMES = 900;
+    const double START = 140.0;
     const auto open = [&](Game& g, double behind) {
       Car& lead = *g.cars()[0];
       Car& push = *g.cars()[1];
       lead.finished = true; push.finished = true;
-      lead.totalS = 30.0;          lead.lat = 0; lead.v = 6.0; lead.heading = 0;
-      push.totalS = 30.0 - behind; push.lat = 0; push.v = 6.0; push.heading = 0;
+      lead.totalS = START;          lead.lat = 0; lead.v = 6.0; lead.heading = 0;
+      push.totalS = START - behind; push.lat = 0; push.v = 6.0; push.heading = 0;
     };
 
     // The control is the SAME race with the pusher put out of reach, so the

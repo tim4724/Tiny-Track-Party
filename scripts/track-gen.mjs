@@ -346,6 +346,7 @@ export function decoratePlan(wps, wpPairs, prof, seed, salt = 0) {
 
 // Worst |heading step| per 0.1 world units — the smoothness gate the unit tests enforce,
 // measured with the same skips (vertical stunt / tilted flank / high deck / flared width).
+const STEP_GATE = 0.08;
 function worstStepOf(wps) {
   return worstHeadingStep(trackSweep({ waypoints: wps }, 0.1));
 }
@@ -564,8 +565,9 @@ function chooseAnchor(plan, resolveAt) {
 // smoothness check; salt 0 first keeps existing bakes reproducible.
 //
 // `anchor: false` pins the start at waypoint 0 (the pre-2026-07-17 behaviour) — for
-// comparing against an old bake, not for shipping.
-export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {}) {
+// comparing against an old bake, not for shipping. `jumps` are a track's hand-placed
+// crest hops (see JUMPS below).
+export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [] } = {}) {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
   const plan0 = genPlan(seed, prof);
@@ -586,7 +588,7 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {
       decoratePlan(cand, wpPairs, prof, seed, salt);
       if (!prof.decor) { wps = cand; break; }
       const step = worstStepOf(cand);
-      if (step < 0.078) { wps = cand; break; }          // safely under the 0.08 gate
+      if (step < 0.078) { wps = cand; break; }          // safely under STEP_GATE
       if (step < bestStep) { bestStep = step; best = cand; }
     }
     if (!wps) wps = best; // all salts marginal — keep the least bad; the gates will judge it
@@ -594,8 +596,31 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {
   };
 
   const r = anchor ? chooseAnchor(plan0, resolveAt) : resolveAt(0);
+  if (jumps.length) liftJumps(r.wps, jumps);
   if (prof !== PROFILES.classic) roundTightCorners(r.wps, r.h);   // classic is frozen provenance
   return r;
+}
+
+// ---- JUMPS ----
+// The seeded hops were placed before cars could leave the road, so whether one
+// launches is luck. A car flies where the deck bends away faster than gravity
+// pulls (the crest lift in native/libttp-sim/ttp/game.cc), and what makes the
+// deck bend that hard is ONE waypoint lifted clear of close neighbours, which on
+// a seeded plan means a sweeper: every crest the Backyard and Canyon cups fly
+// off is that shape. So a
+// track names its jumps by hand: `{ wp, amp }` lifts waypoint `wp` (an index into
+// the BAKED ring, after the start anchor) to `amp` above its neighbours' mean.
+// It runs after the decoration's smoothness re-roll and refuses rather than
+// re-rolls, so naming a jump can never reshuffle the rest of a track.
+function liftJumps(wps, jumps) {
+  const m = wps.length;
+  for (const { wp, amp } of jumps) {
+    if (!(wp > 0 && wp < m)) throw new Error(`jump at waypoint ${wp}: the ring has ${m}, and 0 is the grid`);
+    const a = wps[wp - 1], b = wps[(wp + 1) % m];
+    wps[wp].y = ((a.y || 0) + (b.y || 0)) / 2 + amp;
+  }
+  const step = worstStepOf(wps);
+  if (step >= STEP_GATE) throw new Error(`jumps ${JSON.stringify(jumps)} bend the plan past the smoothness gate (${step.toFixed(3)})`);
 }
 
 // ---- CORNER FLOOR ----
@@ -783,7 +808,7 @@ export async function evaluateSeed(seed, profileName = 'classic') {
   const fails = [];
   const band = (name, v, [lo, hi]) => { if (v < lo || v > hi) fails.push(`${name}=${v}∉[${lo},${hi}]`); };
   if (t.gap >= 0.5) fails.push(`gap=${t.gap.toFixed(2)}`);
-  if (worstStep >= 0.08) fails.push(`step=${worstStep.toFixed(3)}`);
+  if (worstStep >= STEP_GATE) fails.push(`step=${worstStep.toFixed(3)}`);
   if (crossings > 0 && minBridge < 1.5) fails.push(`bridge=${minBridge.toFixed(1)}`);
   if (maxY > 8) fails.push(`maxY=${maxY.toFixed(1)}`);
   band('len', Math.round(L), G.len);
