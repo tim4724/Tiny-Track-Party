@@ -75,8 +75,8 @@ struct Car {
   double useSeq = 0;
   bool wantUse = false;
   // itemHeld — the ITEM button is down (Input::h)
-  // trailing — a banana used with the button down, carried at the rear bumper
-  //            until it comes up; the slot still holds it until then
+  // trailing — a banana used with the button down rides the rear bumper until
+  //            it comes up (BananaRt::carried). The slot is free meanwhile.
   bool itemHeld = false, trailing = false;
   double tRaw = 0, tCatch = 0;
   double lap = 0;
@@ -112,7 +112,10 @@ struct Zone { double s, lat, radius; };  // oil hazard (circle)
 struct PadRt { double s, lat; bool strip; double radius, halfLen, halfWidth; };
 struct BoxRt { double s, lat, radius, cooldown; int row; };
 struct PoleRt { double s, lat, radius; };
-struct BananaRt { long id; double s, lat; Id owner; double armAt; bool respawn; double liveAt; bool hit; };
+// carried — riding its owner's rear bumper (the ITEM button held): live for every
+// other car, moved each step to bananaDropPoint, left where it is on the release.
+struct BananaRt { long id; double s, lat; Id owner; double armAt; bool respawn; double liveAt; bool hit;
+                  bool carried = false; };
 struct RocketRt { long id; double s, lat; Id owner; Id targetId; double life; double v; bool hit; };
 
 struct Event {
@@ -341,6 +344,8 @@ class Game {
   double placeT(const Car& c) const;
   std::string roll(double t);
   void useItemImpl(Car& c);
+  void dropCarried(Car& c);
+  void carryBananas();
   bool enterBanana(Car& c);
   void collidePole(Car& c, const PoleRt& p);
   void monsterHit(const Car& m, Car& v);

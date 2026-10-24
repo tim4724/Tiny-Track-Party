@@ -66,10 +66,11 @@ constexpr float MONSTER_CAM_UP = 4.0f, MONSTER_CAM_DOWN = 2.0f;  // ease rates (
 // is, into the lower half. Aiming further behind the car showed more of that
 // road but pushed the car to the top edge and the road ahead out of shot. A
 // short hold is a plain drop, so the rig waits out AIM_CAM_DELAY of holding
-// before it moves.
+// before it moves. The move is a smoothstep over a fixed time, not an
+// exponential ease: the ease's sudden start read as a jump cut.
 constexpr float AIM_CAM_RISE = 1.4f, AIM_CAM_BACK = 2.5f;
 constexpr float AIM_CAM_DELAY = 0.4f;                       // seconds of holding
-constexpr float AIM_CAM_IN = 5.0f, AIM_CAM_OUT = 4.0f;      // ease rates (1/s)
+constexpr float AIM_CAM_IN_S = 1.5f, AIM_CAM_OUT_S = 1.2f;  // seconds, there and back
 // 7 -> 32. This one constant decides both how far back the camera sits while
 // racing and how far that is from the parked shot, which never lags at all: the
 // eye's lag behind its parked place fell 0.44 -> 0.20u flat out, and that is
@@ -108,7 +109,8 @@ struct ChaseCam {
     V3 pos, target;
     float fov = BASE_FOV;
     float monsterBlend = 0;  // eased 0..1 toward the monster rig
-    float aimBlend = 0;      // eased 0..1 toward the aim rig
+    float aimT = 0;          // 0..1 along the move to the aim rig, linear
+    float aimBlend = 0;      // aimT smoothstepped: how much of the aim rig is in
     float aimHeldT = 0;      // how long the aim has been asked for, for AIM_CAM_DELAY
     // The landing dip (frame_builder): the last frame's height and climb rate
     // (a landing is read off them), the dip's clock (-1 = none running) and depth.

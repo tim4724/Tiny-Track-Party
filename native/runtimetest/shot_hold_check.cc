@@ -138,8 +138,8 @@ int main() {
     check(step.hold == -1 && !step.release, "the banana showcase waits its first 0.8 s");
     step = sh::bananaShowcase(st, 0.5, field);
     check(step.hold == 2 && !step.release, "then trailPick's car takes one");
-    step = sh::bananaShowcase(st, 2.4, field);
-    check(step.hold == -1 && !step.release, "and holds it for 2.5 s");
+    step = sh::bananaShowcase(st, 3.4, field);
+    check(step.hold == -1 && !step.release, "and holds it for 3.5 s");
     step = sh::bananaShowcase(st, 0.2, field);
     check(step.hold == -1 && step.release, "then lets go");
     step = sh::bananaShowcase(st, 1.9, field);

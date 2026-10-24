@@ -91,7 +91,7 @@ enum class Showcase { None, Rocket, Monster, Banana };
 inline constexpr double SHOWCASE_FIRST_FIRE_S = 0.8;
 inline constexpr double SHOWCASE_ROCKET_GAP_S = 1.3;
 inline constexpr double SHOWCASE_MONSTER_GAP_S = 1.6;
-inline constexpr double SHOWCASE_BANANA_HOLD_S = 2.5;  // the aim view's delay, ease and a beat
+inline constexpr double SHOWCASE_BANANA_HOLD_S = 3.5;  // the aim view's delay, move and a beat
 inline constexpr double SHOWCASE_BANANA_GAP_S = 2.0;
 
 struct ShowcaseState {

@@ -364,6 +364,7 @@ bool Game::removeCar(const Id& id) {
   auto it = std::find_if(cars_.begin(), cars_.end(),
                          [&](const std::unique_ptr<Car>& c) { return c->id == id; });
   if (it == cars_.end()) return false;
+  dropCarried(**it);
   cars_.erase(it);
   long i = indexOfId(finishedOrder_, id);
   if (i >= 0) finishedOrder_.erase(finishedOrder_.begin() + i);
@@ -435,7 +436,6 @@ bool Game::giveItem(const Id& id, const std::string& item, bool hasTCatch, doubl
   Car* c = find(id);
   if (!c) return false;
   c->item = item;  // "" clears
-  c->trailing = false;
   c->pickupAge = 999;
   if (hasTCatch) c->tCatch = tCatch;
   return true;
@@ -617,8 +617,6 @@ void Game::enterBox(Car& c) {
       if (c.rowIn.count(b.row)) continue;
       c.rowIn[b.row] = i;
       if (!c.finished || c.item.empty()) {
-        // The box takes the slot, so a trailing banana goes down first.
-        if (c.trailing) { c.trailing = false; useItemImpl(c); }
         c.item = roll(placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN;
         Event e; e.type = "pickup"; e.id = c.id; e.item = c.item; e.finished = c.finished; emit(e);
       } else {
@@ -690,8 +688,11 @@ void Game::useItemImpl(Car& c) {
   } else if (c.item == "banana") {
     double s, lat;
     bananaDropPoint(c, s, lat);
-    double armAt = elapsed_ + BANANA_OWNER_IMMUNE;
-    bananas_.push_back(BananaRt{++bananaSeq_, s, lat, c.id, armAt, false, 0, false});
+    BananaRt dropped{++bananaSeq_, s, lat, c.id, elapsed_ + BANANA_OWNER_IMMUNE, false, 0, false};
+    // Used with the button down, it rides the bumper instead, never armed
+    // against its carrier (dropCarried arms it on the release).
+    if (c.itemHeld) { dropCarried(c); dropped.carried = true; dropped.armAt = INF; c.trailing = true; }
+    bananas_.push_back(dropped);
   } else if (c.item == "rocket") {
     Car* target = nextCarAhead(c);
     double fwd = target ? wrap_s(target->totalS - c.totalS, length_) : INF;
@@ -703,6 +704,27 @@ void Game::useItemImpl(Car& c) {
     c.monsterT = MONSTER_DUR_MIN + (MONSTER_DUR_MAX - MONSTER_DUR_MIN) * t;
   }
   c.item = "";
+}
+
+// Lets go of the banana this car carries where it is now, armed against its
+// owner from here as one dropped on the press is.
+void Game::dropCarried(Car& c) {
+  if (!c.trailing) return;
+  c.trailing = false;
+  for (auto& b : bananas_) {
+    if (!b.carried || b.owner != c.id) continue;
+    b.carried = false;
+    b.armAt = elapsed_ + BANANA_OWNER_IMMUNE;
+  }
+}
+
+// After the collision passes, so a carried banana sits on the bumper of the car
+// as it is drawn.
+void Game::carryBananas() {
+  for (auto& b : bananas_) {
+    if (!b.carried) continue;
+    if (const Car* c = find(b.owner)) bananaDropPoint(*c, b.s, b.lat);
+  }
 }
 
 bool Game::enterBanana(Car& c) {
@@ -717,6 +739,8 @@ bool Game::enterBanana(Car& c) {
       hit = true;
       if (b.respawn) b.liveAt = elapsed_ + BOX_RESPAWN;
       else b.hit = true;
+      // Hit off a bumper, it is gone from there too.
+      if (b.carried) if (Car* o = find(b.owner)) o->trailing = false;
     }
   }
   if (hit) bananas_.erase(std::remove_if(bananas_.begin(), bananas_.end(),
@@ -1115,15 +1139,11 @@ void Game::update(double dtMs) {
       if (revealing && c.pickupAge >= ITEM_USE_READY) {
         Event e; e.type = "item_ready"; e.id = c.id; emit(e);
       }
-      if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) {
-        c.wantUse = false;
-        if (c.item == "banana" && c.itemHeld) c.trailing = true;
-        else useItemImpl(c);
-      }
+      if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; useItemImpl(c); }
       else if (c.wantUse && c.item.empty()) c.wantUse = false;
-      // A trailing banana goes down when the button comes up, or when a spin
-      // shakes it loose.
-      if (c.trailing && (!c.itemHeld || spinning)) { c.trailing = false; useItemImpl(c); }
+      // A carried banana stays where it is when the button comes up, or when a
+      // spin shakes it loose.
+      if (c.trailing && (!c.itemHeld || spinning)) dropCarried(c);
       if (!spinning && grounded && enterZonesPads(c)) applyPad(c);
     }
     if (c.finished || elapsed_ > LAUNCH_GATE) enterBox(c);
@@ -1252,7 +1272,7 @@ void Game::update(double dtMs) {
       if (lap >= totalLaps_) {
         c.finished = true;
         c.finishTimeNull = false; c.finishTime = elapsed_;
-        c.item = ""; c.wantUse = false; c.trailing = false;
+        c.item = ""; c.wantUse = false; dropCarried(c);
         finishedOrder_.push_back(c.id);
         Event e; e.type = "finish"; e.id = c.id; e.rank = (int)finishedOrder_.size(); e.time = c.finishTime; emit(e);
       } else {
@@ -1265,6 +1285,7 @@ void Game::update(double dtMs) {
 
   resolveCollisions(dt);
   recomputePoses();
+  carryBananas();
   rank();
 }
 

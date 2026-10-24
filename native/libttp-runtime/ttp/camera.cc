@@ -16,8 +16,9 @@ void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, 
     monsterBlend += ((monster ? 1.0f : 0.0f) - monsterBlend) * (1 - std::exp(-blendRate * dt));
     aimHeldT = aim ? aimHeldT + dt : 0;
     const bool aiming = aimHeldT >= AIM_CAM_DELAY;
-    const float aimRate = aiming ? AIM_CAM_IN : AIM_CAM_OUT;
-    aimBlend += ((aiming ? 1.0f : 0.0f) - aimBlend) * (1 - std::exp(-aimRate * dt));
+    aimT += aiming ? dt / AIM_CAM_IN_S : -dt / AIM_CAM_OUT_S;
+    aimT = aimT < 0 ? 0 : aimT > 1 ? 1 : aimT;
+    aimBlend = aimT * aimT * (3 - 2 * aimT);
     const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back
                                 + aimBlend * AIM_CAM_BACK)
                   + up * (height + monsterBlend * rise + aimBlend * AIM_CAM_RISE);

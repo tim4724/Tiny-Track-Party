@@ -105,8 +105,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     // lap length an exhibit's `u` is a fraction of.
     const bool staged = d.showcase && d.hold && eng;
 
-    // Dropped bananas, filtered below, plus one trailing each car that holds one.
-    const size_t nBananas = eng ? eng->bananas().size() + cars.size() : 0;
+    const size_t nBananas = eng ? eng->bananas().size() : 0;  // filtered below
     const size_t nRockets = (eng ? eng->rockets().size() : 0)
             + (staged ? showcase_rockets().size() : 0);
     const size_t nBoxes = eng ? eng->boxes().size() : 0;
@@ -402,15 +401,6 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             if (now < b.liveAt) continue;
             outBananas[nb].s = (float) b.s;
             outBananas[nb].lat = (float) b.lat;
-            nb++;
-        }
-        // A trailing banana sits where it will land, so it rides the bumper.
-        for (const Car* c : cars) {
-            if (!c || !c->trailing) continue;
-            double s, lat;
-            eng->bananaDropPoint(*c, s, lat);
-            outBananas[nb].s = (float) s;
-            outBananas[nb].lat = (float) lat;
             nb++;
         }
     }

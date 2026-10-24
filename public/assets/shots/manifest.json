@@ -7,9 +7,9 @@
       "file": "web/banana-aim.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 35746,
-      "capturedAt": "2026-10-24T12:24:44.644Z",
-      "gitSha": "614609fc"
+      "bytes": 35310,
+      "capturedAt": "2026-10-24T18:08:42.455Z",
+      "gitSha": "a52ff64a"
     },
     {
       "scenario": "countdown",

@@ -79,7 +79,10 @@ export function setHeldItem(item) {
   if (item === _heldItem) return;            // only react on a change
   _heldItem = item;
   const actionBtn = el('action-btn');
-  actionBtn.disabled = !item;
+  // A banana held with the button down empties the slot under the thumb. The
+  // button stays live until it comes up: a disabled button may never see its
+  // pointerup, and the banana would ride the bumper for the rest of the race.
+  if (item || !actionBtn.classList.contains('held')) actionBtn.disabled = !item;
   _tilt.setActionEnabled(!!item);            // gate BOTH the button and the keyboard ACTION
   actionBtn.setAttribute('aria-label', item ? `Use ${ITEM_LABEL[item] || item}` : 'Use item');
   if (item) _buzz('item');               // eyes-free "you picked something up" (look at the TV for what)
@@ -162,7 +165,10 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
     if (actionBtn.disabled) return;
     _tilt.holdAction(true); _buzz('use'); actionBtn.classList.add('held');
   });
-  const releaseAction = () => { _tilt.holdAction(false); actionBtn.classList.remove('held'); };
+  const releaseAction = () => {
+    _tilt.holdAction(false); actionBtn.classList.remove('held');
+    if (!_heldItem) actionBtn.disabled = true;
+  };
   actionBtn.addEventListener('pointerup', releaseAction);
   actionBtn.addEventListener('pointercancel', releaseAction);
   actionBtn.addEventListener('pointerleave', releaseAction);

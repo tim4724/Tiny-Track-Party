@@ -167,7 +167,7 @@ export const GALLERY_SCENARIOS = [
   // enough for the view to finish moving even in a software-rendered capture.
   { id: 'banana-aim', key: 'racing', title: 'Banana aim', animated: true,
     params: { track: 'tidepool', players: 2, seed: 1, showcase: 'banana' },
-    hold: { simMs: 89000, trailMs: 2500 } },
+    hold: { simMs: 89000, trailMs: 3000 } },
   // The scripted-beat cards (pause, a dropped seat, a finisher) hold too, and the
   // beat runs AFTER the hold: a wall-clock delay put a slow TV's beat at the start
   // line with GO still up. The moments sit just under the web preview's own spin
