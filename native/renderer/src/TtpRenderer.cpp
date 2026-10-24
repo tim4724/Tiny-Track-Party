@@ -960,6 +960,41 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     }
 }
 
+// How far past its top a berm ring's slope lands on the ground. The slope is a
+// sand pile's, so a jump's ramp sits on a hill rather than a ridge. Where
+// another strand of road passes close by, the flare stops short of burying it,
+// but never goes steeper than base + 0.8 h, which the builder's own clearance
+// (trackbuilder.cc, the hills' REACH) already keeps off every road.
+static float bermFlare(const ttp::HillRing& r, const ttp::RaceTrack& geo) {
+    const float base = 0.6f;
+    const float gy = (float) geo.groundY;
+    const float top = (float) std::max(r.topL, r.topR), h = top - gy;
+    if (h <= 0) return base;
+    const float cx = (float) r.cx, cz = (float) r.cz, lx = (float) r.lx, lz = (float) r.lz;
+    const float halfW = (float) r.halfW;
+    const float steep = base + 0.8f * h;
+    float flare = base + 2.0f * h;
+    // The ring's slopes run along its lateral axis, so only road crossing that
+    // cross-section can be buried. Road overlapping the ring's own deck (d <= 0)
+    // is the hill's own road: the builder never raises a hill over another one.
+    // The slope's height at x past halfW is top - h * x / flare, so a road at
+    // height y, d past halfW, stays clear while d >= flare * q, q the share of
+    // the drop the slope must make before it is below that road.
+    const float margin = 0.05f;
+    for (const ttp::OutSample& sm : geo.samples) {
+        const float y = (float) sm.pos.y - margin;
+        if (y >= top) continue;
+        const float dx = (float) sm.pos.x - cx, dz = (float) sm.pos.z - cz;
+        const float half = (float) sm.width / 2;
+        if (std::fabs(dx * lz - dz * lx) > half + 1.0f) continue;
+        const float d = std::fabs(dx * lx + dz * lz) - half - halfW;
+        if (d <= 0) continue;
+        const float q = 1.0f - std::max(0.0f, y - gy) / h;
+        flare = std::min(flare, d / q);
+    }
+    return std::max(steep, flare);
+}
+
 // The geometry half of TrackBin, taken straight off the built track.
 //
 // This used to arrive in track.bin, serialized by a SECOND implementation of the
@@ -1043,7 +1078,7 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
         rings.reserve(run.size());
         for (const ttp::HillRing& r : run) {
             rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz,
-                              (float) r.halfW, (float) r.topL, (float) r.topR });
+                              (float) r.halfW, (float) r.topL, (float) r.topR, bermFlare(r, geo) });
         }
         out.berms.push_back(std::move(rings));
     }

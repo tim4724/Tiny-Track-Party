@@ -1638,19 +1638,12 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
     return false;
 }
 
-// How far past its top a berm ring's slope lands: the flare grows with height
-// for a constant slope angle (buildHills). A template only because TrackBin is
-// private to the renderer, out of a file-scope function's reach.
-template <typename Ring> static float bermFlare(const Ring& r, float groundY) {
-    return 0.6f + 0.8f * std::max(0.0f, std::max(r.topL, r.topR) - groundY);
-}
-
 // Rings sit a sim sample apart, so the union of their discs is the berm's
 // footprint to within a few centimetres.
 bool TtpRenderer::inBerm(const TrackBin& tb, float x, float z, float margin) const {
     for (const auto& run : tb.berms) {
         for (const auto& r : run) {
-            const float dx = x - r.cx, dz = z - r.cz, lim = r.halfW + bermFlare(r, tb.groundY) + margin;
+            const float dx = x - r.cx, dz = z - r.cz, lim = r.halfW + r.flare + margin;
             if (dx * dx + dz * dz < lim * lim) return true;
         }
     }
@@ -1664,7 +1657,7 @@ float TtpRenderer::bermEdge(const TrackBin& tb, float x, float z) const {
     for (const auto& run : tb.berms) {
         for (const auto& r : run) {
             const float dx = x - r.cx, dz = z - r.cz, d2 = dx * dx + dz * dz;
-            if (d2 < best) { best = d2; edge = r.halfW + bermFlare(r, tb.groundY); }
+            if (d2 < best) { best = d2; edge = r.halfW + r.flare; }
         }
     }
     return edge;
@@ -2136,12 +2129,11 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     if (!mStructures.verts.empty() && !buildReceiver(mStructures)) return;
 
     // Berms: consecutive cross-section rings stitched into a grass surface that
-    // meets the road underside and flares down to the lawn (buildHills verbatim
-    // — left slope, top, right slope; flare grows with height for a constant
-    // slope angle).
+    // meets the road underside and flares down to the lawn: left slope, top,
+    // right slope (each ring's flare is TtpRenderer.cpp's bermFlare).
     const float gy = tb.groundY;
     const auto corners = [&](const TrackBin::BermRing& r, float3 out[4]) {
-        const float flare = bermFlare(r, gy);
+        const float flare = r.flare;
         const float hw = r.halfW, ox = r.lx, oz = r.lz;
         out[0] = { r.cx - ox * (hw + flare), gy, r.cz - oz * (hw + flare) };
         out[1] = { r.cx - ox * hw, r.topL, r.cz - oz * hw };

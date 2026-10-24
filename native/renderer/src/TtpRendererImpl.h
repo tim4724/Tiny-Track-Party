@@ -376,7 +376,8 @@ struct TtpRenderer::TrackBin {
     std::vector<Pillar> pillars;         // columns under a raised deck
     struct Post { float x, z, radius; float3 cPos, cUp; };
     std::vector<Post> supportPosts;      // loop shafts (top cut to the deck underside)
-    struct BermRing { float cx, cz, lx, lz, halfW, topL, topR; };
+    // `flare`: how far past halfW the slope lands on the ground (bermFlare).
+    struct BermRing { float cx, cz, lx, lz, halfW, topL, topR, flare; };
     std::vector<std::vector<BermRing>> berms;
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)
