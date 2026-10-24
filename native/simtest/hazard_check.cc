@@ -220,6 +220,45 @@ int main() {
     check(c.spinT > 0.0, "the spin timer is running after the hit");
   }
 
+  // ---- a banana used with the ITEM button held -------------------------------
+  // No trace sends `h`, so no fixture reaches the trailing banana. It must stay
+  // off the road while the button is down and land on the release, beside a
+  // control arm that sends no `h` and so drops on the press as before.
+  {
+    BuiltRaceTrack bt;
+    std::string err;
+    if (!build_race_track_by_id("tidepool", 3, 7u, bt, err)) {
+      std::fprintf(stderr, "FAIL build tidepool (held banana): %s\n", err.c_str());
+      return 2;
+    }
+    const std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), false, Stats{}}};
+    int uses = 0;
+    Game game(players, bt.game, [&uses](const Event& e) { if (e.type == "item_use") uses++; });
+    Car& c = *game.cars()[0];
+    c.totalS = 30.0;
+    c.v = 6.0;
+
+    game.giveItem(c.id, "banana", false, 0);
+    Input press; press.hasU = true; press.u = 1; press.hasH = true; press.h = 1;
+    game.processInput(c.id, press);
+    for (int i = 0; i < 30; i++) game.update(DT);
+    check(c.trailing, "a banana used with the button down trails the car");
+    check(game.bananas().empty() && uses == 0, "…and is not on the road while it is held");
+    check(c.item == "banana", "…and stays in the slot until it drops");
+
+    Input release; release.hasH = true; release.h = 0;
+    game.processInput(c.id, release);
+    game.update(DT);
+    check(!c.trailing && c.item.empty(), "the release drops it");
+    check(game.bananas().size() == 1 && uses == 1, "…onto the road, once");
+
+    game.giveItem(c.id, "banana", false, 0);
+    Input tap; tap.hasU = true; tap.u = 2;
+    game.processInput(c.id, tap);
+    game.update(DT);
+    check(game.bananas().size() == 2 && !c.trailing, "control: no `h` drops on the press");
+  }
+
   std::printf("hazard check: %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

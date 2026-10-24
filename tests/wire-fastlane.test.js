@@ -147,7 +147,7 @@ test('fastlane: every CONTROL sample the phone sends is applied exactly once by 
 
     // Every one was ACKED, so the phone's gate knows what the display holds.
     const gate = ctx.net.gate;
-    assert.deepEqual(gate._acked, { s: sent.at(-1).s, b: sent.at(-1).b, u: sent.at(-1).u },
+    assert.deepEqual(gate._acked, { s: sent.at(-1).s, b: sent.at(-1).b, u: sent.at(-1).u, h: 0 },
       'the gate\'s confirmed value is the newest applied sample');
     assert.equal(gate._pending, false, 'nothing left in flight');
   });

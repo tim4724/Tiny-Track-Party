@@ -36,12 +36,12 @@
 // on-screen ‹ › buttons steer BINARY — full lock left/right, no ramp (ramps were
 // tried and read as two steps anyway). Holding BOTH is the brake: pressed
 // together it brakes straight, one added to the other keeps steering toward the
-// first (see CHORD_SIMUL_MS). Same {s,b,u} frame either way; the display never
+// first (see CHORD_SIMUL_MS). Same {s,b,u,h} frame either way; the display never
 // knows which mode a phone is in.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
 // Space/Down brake. Steer = tip + keys (so the loop is testable headlessly).
-// Emits {s,b,u} to onControl on every sensor sample and on every button/key
+// Emits {s,b,u,h} to onControl on every sensor sample and on every button/key
 // edge — the InputGate downstream decides what actually reaches the wire — with
 // a SEND_HZ interval kept as the idle heartbeat and the no-sensor fallback.
 
@@ -137,6 +137,7 @@ export class TiltInput {
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
     this._actKeyDown = false;
+    this._actBtn = false;  // the on-screen ITEM button is down (see holdAction)
     this._actionEnabled = false; // gate: ACTION does nothing unless the slot holds an item (set via setActionEnabled)
     this._timer = null;
     this._gestureAsk = false;  // a re-request is already armed (see _askOnNextGesture)
@@ -278,6 +279,7 @@ export class TiltInput {
     this._brakeKey = 0;
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
+    this._actBtn = false;
   }
 
   // Steer = tip = asin(gRight) (see the header). gRight is clamped because
@@ -326,7 +328,9 @@ export class TiltInput {
     // u is a wrapping use-counter: the display fires the held item once each time it
     // CHANGES, so it survives the fastlane's latest-wins drops (a dropped frame just
     // re-delivers the same value) without a separate reliable message.
-    this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3), u: this._useCount });
+    // h is the ITEM button held: level state, re-carried every frame like s and b.
+    const h = this._actBtn || this._actKeyDown ? 1 : 0;
+    this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3), u: this._useCount, h });
   }
 
   // The ‹ › buttons' contribution: ±1 while exactly one is held. Both held is
@@ -382,9 +386,11 @@ export class TiltInput {
       else if (k === 'arrowright' || k === 'd') { this._keyR = down; e.preventDefault(); }
       else if (k === 'arrowdown' || k === ' ' || k === 's') { this._brakeKey = down ? BRAKE_LEVEL : 0; e.preventDefault(); }
       else if (k === 'enter' || k === 'e' || k === 'arrowup') {
-        // ACTION (use item): bump only on the leading edge so key auto-repeat doesn't spam
-        if (down && !this._actKeyDown) this.pressAction();
-        this._actKeyDown = down; e.preventDefault(); return;
+        // ACTION (use item): bump only on the leading edge so key auto-repeat doesn't
+        // spam. Held is set first, so the press and the hold leave in one frame.
+        if (down && !this._actKeyDown) { this._actKeyDown = true; this.pressAction(); }
+        else if (!down && this._actKeyDown) { this._actKeyDown = false; if (this._timer) this._tick(); }
+        e.preventDefault(); return;
       }
       else return;
       this._key = (this._keyR ? 1 : 0) - (this._keyL ? 1 : 0);
@@ -419,5 +425,14 @@ export class TiltInput {
     if (!this._actionEnabled) return;
     this._useCount = (this._useCount + 1) & 255;
     if (this._timer) this._tick();
+  }
+
+  // The on-screen ACTION button going down or up. Down is also the press, and
+  // held is set first so the two leave in one frame: a banana used while held
+  // trails the car until the button comes up.
+  holdAction(on) {
+    this._actBtn = on;
+    if (on) this.pressAction();
+    else if (this._timer) this._tick();
   }
 }

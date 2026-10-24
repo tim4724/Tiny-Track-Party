@@ -39,6 +39,10 @@ struct Input {
   bool hasS = false; double s = 0;
   bool hasB = false; double b = 0;   // number form only (fixtures never send boolean)
   bool hasU = false; double u = 0;
+  // The ITEM button is down (non-zero) or up. Only a banana reads it: used while
+  // the button is down, it trails the car and drops when the button comes up. A
+  // sender that never carries it drops on the press, as before it existed.
+  bool hasH = false; double h = 0;
 };
 
 struct Pose { Vec3 pos, forward, up; };
@@ -70,6 +74,10 @@ struct Car {
   double pickupAge = 999;
   double useSeq = 0;
   bool wantUse = false;
+  // itemHeld — the ITEM button is down (Input::h)
+  // trailing — a banana used with the button down, carried at the rear bumper
+  //            until it comes up; the slot still holds it until then
+  bool itemHeld = false, trailing = false;
   double tRaw = 0, tCatch = 0;
   double lap = 0;
   bool finished = false;
@@ -247,6 +255,9 @@ class Game {
   bool hasCar(const Id& id) const { return find(id) != nullptr; }
   bool carFinished(const Id& id, bool& out) const;  // false if unknown car
   Car* nextCarAhead(const Car& c);
+  // Where a banana dropped by this car lands, on its rear bumper. The drop uses
+  // it, and so does the display for a banana that is still trailing.
+  void bananaDropPoint(const Car& c, double& s, double& lat) const;
 
   // driveBot: run one AI controller for its car and apply the result. Writes the
   // derived input to *out when given (ai-live compare). Returns false for an

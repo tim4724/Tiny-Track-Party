@@ -14,7 +14,8 @@ namespace ttp {
 namespace rt {
 
 // How far a car may be from its chase rig before the rig cuts to it instead
-// of springing there (see the cut below). World units; the rig sits ~1.3 back.
+// of springing there (see the cut below). World units; the rig sits ~1.3 back,
+// and the aim rig (camera.h) under 4.
 constexpr float CHASE_CUT_DIST = 6.0f;
 
 void newField(DisplayState& d) {
@@ -104,7 +105,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     // lap length an exhibit's `u` is a fraction of.
     const bool staged = d.showcase && d.hold && eng;
 
-    const size_t nBananas = eng ? eng->bananas().size() : 0;  // filtered below
+    // Dropped bananas, filtered below, plus one trailing each car that holds one.
+    const size_t nBananas = eng ? eng->bananas().size() + cars.size() : 0;
     const size_t nRockets = (eng ? eng->rockets().size() : 0)
             + (staged ? showcase_rockets().size() : 0);
     const size_t nBoxes = eng ? eng->boxes().size() : 0;
@@ -317,7 +319,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                 if (cam.init && dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) cam.init = false;
                 cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
-                           outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);
+                           outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack,
+                           !fromHeld && c->trailing);
             }
             TtpViewInput& v = outViews[i];
             v.car = subject;
@@ -399,6 +402,15 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             if (now < b.liveAt) continue;
             outBananas[nb].s = (float) b.s;
             outBananas[nb].lat = (float) b.lat;
+            nb++;
+        }
+        // A trailing banana sits where it will land, so it rides the bumper.
+        for (const Car* c : cars) {
+            if (!c || !c->trailing) continue;
+            double s, lat;
+            eng->bananaDropPoint(*c, s, lat);
+            outBananas[nb].s = (float) s;
+            outBananas[nb].lat = (float) lat;
             nb++;
         }
     }

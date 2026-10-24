@@ -170,7 +170,7 @@ object Ttp {
     external fun ttp_perf_readout_json(cells: Int, width: Int, height: Int, dpr: Double, trackOrNull: ByteArray?): ByteArray?
     external fun ttp_perf_reset()
     external fun ttp_perf_sample(tMs: Double, intervalMs: Double, presented: Int, cpuMs: Double, gpuMs: Double)
-    external fun ttp_process_input(h: Int, idJson: ByteArray?, mask: Int, s: Double, b: Double, u: Double): Int
+    external fun ttp_process_input(h: Int, idJson: ByteArray?, mask: Int, s: Double, b: Double, u: Double, hold: Double): Int
     external fun ttp_protocol_manifest_json(): ByteArray?
     external fun ttp_race_advance_live_json(roomHandle: Int, sceneReady: Int, seed: Double, countdownSeconds: Double, forceItemOrNull: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_race_auto_pause_live_json(sessionHandle: Int, roomHandle: Int, raceEnded: Int): ByteArray?

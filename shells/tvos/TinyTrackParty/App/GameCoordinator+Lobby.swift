@@ -88,17 +88,18 @@ extension GameCoordinator {
             // left un-steered for the whole race. Nothing errored, the packets
             // all arrived, and the cars simply never answered the phones.
             var mask: Int32 = 0
-            var s = 0.0, b = 0.0, u = 0.0
+            var s = 0.0, b = 0.0, u = 0.0, h = 0.0
             if let v = msg["s"] as? Double { mask |= 1; s = v }
             // `b` is a number OR a bool, matching the reader this was ported
             // from — a phone that sends `true` must brake, not be ignored.
             if let v = msg["b"] as? Double { mask |= 2; b = v }
             else if let v = msg["b"] as? Bool { mask |= 2; b = v ? 1 : 0 }
             if let v = msg["u"] as? Double { mask |= 4; u = v }
+            if let v = msg["h"] as? Double { mask |= 8; h = v }
             // Applied on ARRIVAL rather than queued for the next tick: the input
             // path is 4.6 us, and buffering it would add a frame of latency to
             // the one thing players feel.
-            ttp_process_input(sessionHandle, from.json, mask, s, b, u)
+            ttp_process_input(sessionHandle, from.json, mask, s, b, u, h)
             return
         }
         switch TTP.strOrEmpty(ttp_net_controller_action(net.roomHandle, sessionHandle,

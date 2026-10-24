@@ -352,6 +352,7 @@ void Game::processInput(const Id& id, const Input& msg) {
   if (msg.hasS) c->steer = js_max(-1.0, js_min(1.0, msg.s));
   if (msg.hasB) c->brake = js_max(0.0, js_min(1.0, msg.b));
   if (msg.hasU && msg.u != c->useSeq) { c->useSeq = msg.u; c->wantUse = true; }
+  if (msg.hasH) c->itemHeld = msg.h != 0;
 }
 
 static long indexOfId(const std::vector<Id>& v, const Id& id) {
@@ -434,6 +435,7 @@ bool Game::giveItem(const Id& id, const std::string& item, bool hasTCatch, doubl
   Car* c = find(id);
   if (!c) return false;
   c->item = item;  // "" clears
+  c->trailing = false;
   c->pickupAge = 999;
   if (hasTCatch) c->tCatch = tCatch;
   return true;
@@ -615,6 +617,8 @@ void Game::enterBox(Car& c) {
       if (c.rowIn.count(b.row)) continue;
       c.rowIn[b.row] = i;
       if (!c.finished || c.item.empty()) {
+        // The box takes the slot, so a trailing banana goes down first.
+        if (c.trailing) { c.trailing = false; useItemImpl(c); }
         c.item = roll(placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN;
         Event e; e.type = "pickup"; e.id = c.id; e.item = c.item; e.finished = c.finished; emit(e);
       } else {
@@ -664,6 +668,19 @@ Car* Game::nextCarAhead(const Car& c) {
   return best;
 }
 
+// Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
+// already over anything further back, and would spin on a banana it never saw.
+void Game::bananaDropPoint(const Car& c, double& s, double& lat) const {
+  double back = halfExtents(c).len;
+  Frame f = centerline_->sampleAt(c.totalS);
+  Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
+  Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
+  ProjectResult hit = centerline_->projectNear(world, c.totalS, back + 0.5);
+  double lim = curbLimit(hit.frame.width);
+  lat = js_max(-lim, js_min(lim, hit.lat));
+  s = wrap_s(hit.s, length_);
+}
+
 void Game::useItemImpl(Car& c) {
   { Event e; e.type = "item_use"; e.id = c.id; e.item = c.item; emit(e); }
   if (c.item == "boost") {
@@ -671,16 +688,8 @@ void Game::useItemImpl(Car& c) {
     c.boostMul = js_max(c.boostMul, BOOST_ITEM_MUL);
     c.boostT = js_max(c.boostT, BOOST_ITEM_DUR_MIN + (BOOST_ITEM_DUR_MAX - BOOST_ITEM_DUR_MIN) * t);
   } else if (c.item == "banana") {
-    // Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
-    // already over anything further back, and would spin on a banana it never saw.
-    double back = halfExtents(c).len;
-    Frame f = centerline_->sampleAt(c.totalS);
-    Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
-    Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
-    ProjectResult hit = centerline_->projectNear(world, c.totalS, back + 0.5);
-    double lim = curbLimit(hit.frame.width);
-    double lat = js_max(-lim, js_min(lim, hit.lat));
-    double s = wrap_s(hit.s, length_);
+    double s, lat;
+    bananaDropPoint(c, s, lat);
     double armAt = elapsed_ + BANANA_OWNER_IMMUNE;
     bananas_.push_back(BananaRt{++bananaSeq_, s, lat, c.id, armAt, false, 0, false});
   } else if (c.item == "rocket") {
@@ -1106,8 +1115,15 @@ void Game::update(double dtMs) {
       if (revealing && c.pickupAge >= ITEM_USE_READY) {
         Event e; e.type = "item_ready"; e.id = c.id; emit(e);
       }
-      if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; useItemImpl(c); }
+      if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) {
+        c.wantUse = false;
+        if (c.item == "banana" && c.itemHeld) c.trailing = true;
+        else useItemImpl(c);
+      }
       else if (c.wantUse && c.item.empty()) c.wantUse = false;
+      // A trailing banana goes down when the button comes up, or when a spin
+      // shakes it loose.
+      if (c.trailing && (!c.itemHeld || spinning)) { c.trailing = false; useItemImpl(c); }
       if (!spinning && grounded && enterZonesPads(c)) applyPad(c);
     }
     if (c.finished || elapsed_ > LAUNCH_GATE) enterBox(c);
@@ -1236,7 +1252,7 @@ void Game::update(double dtMs) {
       if (lap >= totalLaps_) {
         c.finished = true;
         c.finishTimeNull = false; c.finishTime = elapsed_;
-        c.item = ""; c.wantUse = false;
+        c.item = ""; c.wantUse = false; c.trailing = false;
         finishedOrder_.push_back(c.id);
         Event e; e.type = "finish"; e.id = c.id; e.rank = (int)finishedOrder_.size(); e.time = c.finishTime; emit(e);
       } else {

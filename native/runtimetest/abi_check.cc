@@ -279,7 +279,7 @@ bool traceThroughAbi(const std::string& path) {
         if (b && (b->type == Value::NUM || b->type == Value::BOOL)) mask |= 2;
         if (u && u->type == Value::NUM) mask |= 4;
         const double bv = !b ? 0.0 : (b->type == Value::BOOL ? (b->b ? 1.0 : 0.0) : b->num);
-        ttp_process_input(h, idJson->c_str(), mask, s ? s->num : 0.0, bv, u ? u->num : 0.0);
+        ttp_process_input(h, idJson->c_str(), mask, s ? s->num : 0.0, bv, u ? u->num : 0.0, 0.0);
       }
     }
     ttp_update(h, dt);
@@ -1678,8 +1678,8 @@ void audioThroughAbi() {
   int ticks = 0, gos = 0, voices = 0;
   double nowMs = 0;
   for (int f = 0; f < 260; f++) {
-    ttp_process_input(heard, "0", 7, 0.2, 0, 0);
-    ttp_process_input(unheard, "0", 7, 0.2, 0, 0);
+    ttp_process_input(heard, "0", 7, 0.2, 0, 0, 0);
+    ttp_process_input(unheard, "0", 7, 0.2, 0, 0, 0);
     ttp_update(heard, 1000.0 / 60.0);
     ttp_update(unheard, 1000.0 / 60.0);
     ttp_events_json(heard);

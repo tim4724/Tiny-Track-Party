@@ -10,13 +10,18 @@ namespace ttp {
 namespace rt {
 
 void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, float height,
-                      float rise, float back) {
+                      float rise, float back, bool aim) {
     const V3 p = v3(pose.pos), fwd = v3(pose.forward), up = v3(pose.up);
     const float blendRate = monster ? MONSTER_CAM_UP : MONSTER_CAM_DOWN;
     monsterBlend += ((monster ? 1.0f : 0.0f) - monsterBlend) * (1 - std::exp(-blendRate * dt));
-    const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back)
-                  + up * (height + monsterBlend * rise);
-    const V3 wantTgt = p + fwd * CHASE_LOOK + up * CHASE_TGT_UP;
+    aimHeldT = aim ? aimHeldT + dt : 0;
+    const bool aiming = aimHeldT >= AIM_CAM_DELAY;
+    const float aimRate = aiming ? AIM_CAM_IN : AIM_CAM_OUT;
+    aimBlend += ((aiming ? 1.0f : 0.0f) - aimBlend) * (1 - std::exp(-aimRate * dt));
+    const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back
+                                + aimBlend * AIM_CAM_BACK)
+                  + up * (height + monsterBlend * rise + aimBlend * AIM_CAM_RISE);
+    const V3 wantTgt = p + fwd * (CHASE_LOOK - aimBlend * (CHASE_LOOK + AIM_CAM_LOOK_BACK)) + up * CHASE_TGT_UP;
     // Frame-rate-independent damping → smooth lag/swing behind through turns.
     const float rateSpd = spd < CAM_RATE_SPD_MAX ? spd : CAM_RATE_SPD_MAX;
     const float aPos = 1 - std::exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);

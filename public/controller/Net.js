@@ -232,7 +232,7 @@ export class ControllerNet extends GameNet {
     if (!this.party) return false;
     const why = this.gate.decide(sample, nowMs, this._srtt);
     if (!why) return false;
-    const msg = { s: sample.s, b: sample.b, u: sample.u, type: MSG.CONTROL };
+    const msg = { s: sample.s, b: sample.b, u: sample.u, h: sample.h, type: MSG.CONTROL };
     // Routed through FASTLANE_TYPES exactly like send() does, so protocol.js
     // stays the one place that decides what rides P2P — this path must not
     // quietly keep using the fastlane if CONTROL is ever taken off it.

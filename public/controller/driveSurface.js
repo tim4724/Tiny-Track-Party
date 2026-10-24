@@ -154,14 +154,15 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
   }
 
   // ACTION (use item) — one tap = one use. Bumps the wrapping use-counter the next
-  // CONTROL frame carries; disabled (and ignored) while the slot is empty.
+  // CONTROL frame carries, and holds `h` while the button is down (a banana
+  // trails until release); disabled (and ignored) while the slot is empty.
   const actionBtn = el('action-btn');
   actionBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (actionBtn.disabled) return;
-    _tilt.pressAction(); _buzz('use'); actionBtn.classList.add('held');
+    _tilt.holdAction(true); _buzz('use'); actionBtn.classList.add('held');
   });
-  const releaseAction = () => actionBtn.classList.remove('held');
+  const releaseAction = () => { _tilt.holdAction(false); actionBtn.classList.remove('held'); };
   actionBtn.addEventListener('pointerup', releaseAction);
   actionBtn.addEventListener('pointercancel', releaseAction);
   actionBtn.addEventListener('pointerleave', releaseAction);

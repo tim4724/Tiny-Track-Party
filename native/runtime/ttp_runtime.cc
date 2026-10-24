@@ -1115,7 +1115,8 @@ void ttp_update(int h, double dtMs) {
   }
 }
 
-int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
+int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u,
+                      double hold) {
   RuntimeSession* rs = get(h);
   if (!rs) return -1;
   if (!rs->eng) buildSession(rs);
@@ -1130,8 +1131,9 @@ int ttp_process_input(int h, const char* idJson, int mask, double s, double b, d
   if (mask & 1) { in.hasS = true; in.s = s; }
   if (mask & 2) { in.hasB = true; in.b = b; }
   if (mask & 4) { in.hasU = true; in.u = u; }
+  if (mask & 8) { in.hasH = true; in.h = hold; }
   rs->eng->processInput(id, in);
-  return mask & 7;
+  return mask & 15;
 }
 
 const char* ttp_snapshot_json(int h) {

@@ -50,7 +50,7 @@ test('runtime ABI replays the tidepool input fixture bit-for-bit', async () => {
     start: cw('ttp_session_start', 'void', ['number', 'number']),
     update: cw('ttp_update', 'void', ['number', 'number']),
     input: cw('ttp_process_input', 'void',
-      ['number', 'string', 'number', 'number', 'number', 'number']),
+      ['number', 'string', 'number', 'number', 'number', 'number', 'number']),
     snapshot: cw('ttp_snapshot_json', 'string', ['number']),
     events: cw('ttp_events_json', 'string', ['number']),
     racing: cw('ttp_racing', 'number', ['number']),
@@ -89,7 +89,7 @@ test('runtime ABI replays the tidepool input fixture bit-for-bit', async () => {
         if (typeof msg.b === 'number' || typeof msg.b === 'boolean') mask |= 2;
         if (typeof msg.u === 'number') mask |= 4;
         const b = typeof msg.b === 'boolean' ? (msg.b ? 1 : 0) : (msg.b || 0);
-        abi.input(h, idJson, mask, msg.s || 0, b, msg.u || 0);
+        abi.input(h, idJson, mask, msg.s || 0, b, msg.u || 0, 0);
       }
     }
     abi.update(h, header.dt);
