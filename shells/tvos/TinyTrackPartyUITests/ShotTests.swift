@@ -95,8 +95,10 @@ final class ShotTests: XCTestCase {
             NSPredicate(format: "identifier IN %@", ["ttp-ready", "ttp-unsupported"])
         ).firstMatch
         // A held card waits for its race moment (an item card, for its item), so
-        // it gets longer than a screen that only has to stand up.
-        if !verdict.waitForExistence(timeout: hold == nil ? 30 : 120) {
+        // it gets longer than a screen that only has to stand up: the Android
+        // harness's 180 s, since a hold late in a race needs most of that on
+        // top of a cold launch.
+        if !verdict.waitForExistence(timeout: hold == nil ? 30 : 180) {
             XCTFail("\(id): the app never signalled ready")
             app.terminate()
             return

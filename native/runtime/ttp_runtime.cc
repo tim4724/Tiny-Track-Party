@@ -350,6 +350,19 @@ static std::vector<ttp::rt::shot_hold::CarView> showcaseCars(const RuntimeSessio
   return out;
 }
 
+// The held-banana card's beat (ttp/shot_hold.h trailPick): the picked seat is
+// handed a banana and presses ITEM with it held, through the input a phone sends.
+static void trailBanana(RuntimeSession& rs) {
+  const int pick = ttp::rt::shot_hold::trailPick(showcaseCars(rs));
+  if (pick < 0) return;
+  const Car& c = *rs.eng->cars()[pick];
+  rs.eng->giveItem(c.id, "banana", false, 0);
+  Input in;
+  in.hasU = true; in.u = ((int) c.useSeq + 1) & 255;
+  in.hasH = true; in.h = 1;
+  rs.eng->processInput(c.id, in);
+}
+
 // Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
 // and the probes cannot drift apart. The session owns the centerline the
 // GameTrack points at, so the built pair is moved onto it wholesale.
@@ -1111,6 +1124,7 @@ void ttp_update(int h, double dtMs) {
       rs->holdAccumMs = 0;
       return;
     }
+    if (sh::trailDue(rs->hold, rs->holdState, rs->eng->elapsed())) trailBanana(*rs);
     stepSession(rs, ms);
   }
 }

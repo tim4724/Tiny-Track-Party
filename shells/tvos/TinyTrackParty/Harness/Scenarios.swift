@@ -262,7 +262,7 @@ enum Scenarios {
 
         case "countdown", "racing", "racing-sidewinder",
              "race-beach", "race-snow", "race-backyard", "race-canyon", "race-playroom",
-             "rocket", "monster", "paused", "reconnect", "reconnect-solo", "finished":
+             "rocket", "monster", "banana-aim", "paused", "reconnect", "reconnect-solo", "finished":
             // `racing-sidewinder` (the deck-decal card) and the store's cup
             // races are all this race on another circuit. The gallery table pins
             // it with a `track` param, which the runner passes as `-ttpTrack`.

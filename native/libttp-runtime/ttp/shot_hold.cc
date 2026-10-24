@@ -12,7 +12,10 @@ bool parse(const Value& blob, Spec* out) {
   if (!json::is_obj(&blob)) return false;
   const Value* sim = blob.find("simMs");
   if (!json::is_num(sim) || !(sim->num >= 0)) return false;
+  const Value* trail = blob.find("trailMs");
+  if (trail && !(json::is_num(trail) && trail->num > 0 && trail->num <= sim->num)) return false;
   out->simS = sim->num / 1000;
+  out->trailS = trail ? trail->num / 1000 : 0;
   return true;
 }
 
@@ -23,6 +26,25 @@ double allow(const Spec& spec, State& state, double elapsedS, double dtS) {
     return 0;
   }
   return dtS < spec.simS - elapsedS ? dtS : spec.simS - elapsedS;
+}
+
+bool trailDue(const Spec& spec, State& state, double elapsedS) {
+  if (spec.trailS <= 0 || state.trailed || elapsedS < spec.simS - spec.trailS) return false;
+  state.trailed = true;
+  return true;
+}
+
+int trailPick(const std::vector<CarView>& cars) {
+  int pick = -1;
+  double best = 0;
+  for (int i = 0; i < (int) cars.size(); i++) {
+    if (!cars[i].viewer || cars[i].finished) continue;
+    for (const CarView& o : cars) {
+      const double gap = cars[i].totalS - o.totalS;
+      if (gap > 0 && (pick < 0 || gap < best)) { pick = i; best = gap; }
+    }
+  }
+  return pick;
 }
 
 Showcase parseShowcase(const char* kind) {

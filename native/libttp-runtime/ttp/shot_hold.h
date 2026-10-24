@@ -14,7 +14,9 @@
 // hold decided in each shell would be three copies of it.
 //
 // A hold is `simMs`, the race time to stop at. An item card is a moment of a
-// real race like any other, found on the trailer editor's timeline.
+// real race like any other, found on the trailer editor's timeline. The one
+// exception is a held banana: no bot holds the ITEM button, so no real race has
+// one, and `trailMs` stages it (trailPick below).
 //
 // Harness-only: nothing in a party arms one.
 #pragma once
@@ -29,14 +31,17 @@ namespace shot_hold {
 
 struct Spec {
   double simS = 0;
+  double trailS = 0;    // > 0: stage a held banana this long before the stop
 };
 
 // A malformed hold is a harness bug, not a save to tolerate: false, and nothing
-// armed. simMs is required and must be >= 0.
+// armed. simMs is required and must be >= 0; trailMs is optional, > 0 and no
+// later than simMs.
 bool parse(const Value& blob, Spec* out);
 
 struct State {
   bool held = false;    // latched: once held, the race never steps again
+  bool trailed = false; // latched: the held banana is staged once
 };
 
 // One car as the item showcase reads it.
@@ -56,6 +61,17 @@ inline constexpr double FIXED_STEP_MS = 1000.0 / 60.0;
 // shorter step that lands exactly on the target, or 0 once held. Latches
 // `state.held` on the frame the target is reached.
 double allow(const Spec& spec, State& state, double elapsedS, double dtS);
+
+// ---- the held banana ----------------------------------------------------------
+// True once, on the first step at or past `trailS` before the stop: the step on
+// which a player is handed a banana with ITEM held, so the card freezes with it
+// trailing and the aim rig up (camera.h). Long enough before the stop for the
+// rig to finish moving is the card's choice.
+bool trailDue(const Spec& spec, State& state, double elapsedS);
+
+// Which car holds it: the viewer with the nearest car behind, since that car
+// is what aiming a banana is about. -1 when no viewer has anyone behind.
+int trailPick(const std::vector<CarView>& cars);
 
 // ---- the item showcase ------------------------------------------------------
 // The item showroom GIVES its item and fires it at once, on a loop, so the

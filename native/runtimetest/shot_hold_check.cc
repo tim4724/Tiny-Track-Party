@@ -106,6 +106,33 @@ int main() {
     check(sh::showcasePick(sh::Showcase::Monster, st, 0, field) == 1, "and the next once it is gone");
   }
 
+  // ---- the held banana ----
+  check(parse("{\"simMs\":5000,\"trailMs\":1500}", &s) && near(s.trailS, 1.5), "a trail parses");
+  check(!parse("{\"simMs\":5000,\"trailMs\":0}", &s), "a zero trail is refused");
+  check(!parse("{\"simMs\":1000,\"trailMs\":1500}", &s), "a trail before the race is refused");
+  check(parse("{\"simMs\":5000}", &s) && s.trailS == 0, "no trail by default");
+  {
+    sh::State st;
+    check(!sh::trailDue(s, st, 10), "no trail is never due");
+    parse("{\"simMs\":5000,\"trailMs\":1500}", &s);
+    check(!sh::trailDue(s, st, 3.4), "not due before simMs - trailMs");
+    check(sh::trailDue(s, st, 3.5), "due at it");
+    check(!sh::trailDue(s, st, 3.6), "and only once");
+  }
+  {
+    // {totalS, monster, viewer, finished}
+    const std::vector<sh::CarView> field = {
+      {20, false, true, false},    // 0: viewer, 8 ahead of the next car
+      {12, false, false, false},   // 1: AI
+      {11, false, true, false},    // 2: viewer, 1 ahead of car 3
+      {10, false, false, false},   // 3: AI
+      {10.5, false, true, true},   // 4: viewer, 0.5 ahead, but finished
+    };
+    check(sh::trailPick(field) == 2, "the unfinished viewer with the nearest car behind holds it");
+    check(sh::trailPick({{10, false, true, false}, {20, false, false, false}}) == -1,
+          "a viewer with nobody behind holds nothing");
+  }
+
   std::printf("shot_hold: %d/%d passed\n", cases - failed, cases);
   return failed ? 1 : 0;
 }
