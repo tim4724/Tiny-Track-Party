@@ -163,7 +163,7 @@ constexpr WptDef kW_driftwood[] = {
   { 0x1.18p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.31eb851eb851fp+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.4666666666666p+5, 0x1.6666666666666p-2, 0x1.eb851eb851eb8p-5, 0x0p+0, -0x1p+3, false },
-  { 0x1.5970a3d70a3d7p+5, 0x1.5eb851eb851ecp+0, 0x1.eb851eb851eb8p-1, 0x0p+0, -0x1p+3, false },
+  { 0x1.5970a3d70a3d7p+5, 0x1.5eb851eb851ecp+0, 0x1.3851eb851eb85p-1, 0x0p+0, -0x1p+3, false },
   { 0x1.69ae147ae147bp+5, 0x1.7d70a3d70a3d7p+1, 0x1.eb851eb851eb8p-5, 0x0p+0, -0x1p+3, false },
   { 0x1.75d70a3d70a3dp+5, 0x1.451eb851eb852p+2, 0x0p+0, 0x0p+0, -0x1p+3, false },
   { 0x1.7d1eb851eb852p+5, 0x1.ep+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -216,17 +216,17 @@ constexpr WptDef kW_driftwood[] = {
   { 0x1.623d70a3d70a4p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_driftwood[] = {
-  { 0x1.8dd2f1a9fbe77p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.8d4fdf3b645a2p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_driftwood[] = {
-  { 0x1.d916872b020c5p-1, 0x0p+0, false, 0x0p+0 },
-  { 0x1.0a3d70a3d70a4p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.d99999999999ap-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.09ba5e353f7cfp-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_driftwood[] = {
-  { 0x1.5374bc6a7ef9ep-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.5374bc6a7ef9ep-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.5374bc6a7ef9ep-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.5374bc6a7ef9ep-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.52f1a9fbe76c9p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.52f1a9fbe76c9p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.52f1a9fbe76c9p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.52f1a9fbe76c9p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.5e353f7ced917p-3, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.5e353f7ced917p-3, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.5e353f7ced917p-3, 0x1.6666666666666p-2, false, 0x0p+0 },
