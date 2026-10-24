@@ -52,6 +52,7 @@ Showcase parseShowcase(const char* kind) {
   const std::string k(kind);
   if (k == "rocket") return Showcase::Rocket;
   if (k == "monster") return Showcase::Monster;
+  if (k == "banana") return Showcase::Banana;
   return Showcase::None;
 }
 
@@ -73,6 +74,24 @@ int showcasePick(Showcase kind, ShowcaseState& state, double dtS, const std::vec
   if (pick < 0) return -1;
   state.fireCd = kind == Showcase::Monster ? SHOWCASE_MONSTER_GAP_S : SHOWCASE_ROCKET_GAP_S;
   return pick;
+}
+
+BananaStep bananaShowcase(ShowcaseState& state, double dtS, const std::vector<CarView>& cars) {
+  BananaStep step;
+  if (state.releaseCd >= 0) {
+    state.releaseCd -= dtS;
+    if (state.releaseCd < 0) {
+      step.release = true;
+      state.fireCd = SHOWCASE_BANANA_GAP_S;
+    }
+    return step;
+  }
+  state.fireCd -= dtS;
+  if (state.fireCd > 0) return step;
+  // Nobody with a car behind: try again next step.
+  step.hold = trailPick(cars);
+  if (step.hold >= 0) state.releaseCd = SHOWCASE_BANANA_HOLD_S;
+  return step;
 }
 
 }  // namespace shot_hold

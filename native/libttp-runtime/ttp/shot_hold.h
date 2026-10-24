@@ -82,22 +82,37 @@ int trailPick(const std::vector<CarView>& cars);
 // front of a camera), on a cooldown so it is not a barrage; a monster only on a
 // viewer seat (its own cell then holds the truck, and the audio voices non-AI
 // cars only) and one truck at a time.
-enum class Showcase { None, Rocket, Monster };
+//
+// The banana is the live Banana aim card's, and it is HELD rather than fired:
+// trailPick's car takes it with ITEM down, which trails it and brings up the
+// aim view, and lets go SHOWCASE_BANANA_HOLD_S later, which drops it.
+enum class Showcase { None, Rocket, Monster, Banana };
 
 inline constexpr double SHOWCASE_FIRST_FIRE_S = 0.8;
 inline constexpr double SHOWCASE_ROCKET_GAP_S = 1.3;
 inline constexpr double SHOWCASE_MONSTER_GAP_S = 1.6;
+inline constexpr double SHOWCASE_BANANA_HOLD_S = 2.5;  // the aim view's delay, ease and a beat
+inline constexpr double SHOWCASE_BANANA_GAP_S = 2.0;
 
 struct ShowcaseState {
   double fireCd = SHOWCASE_FIRST_FIRE_S;
+  double releaseCd = -1;  // the held banana's hold still to run; < 0 = none held
 };
 
-// "rocket" | "monster" -> the kind; anything else is None.
+// "rocket" | "monster" | "banana" -> the kind; anything else is None.
 Showcase parseShowcase(const char* kind);
 
 // Called once per sim step of `dtS`. Returns the index in `cars` of the car to
-// give the item to and fire it from now, or -1.
+// give the item to and fire it from now, or -1. Not for the banana.
 int showcasePick(Showcase kind, ShowcaseState& state, double dtS, const std::vector<CarView>& cars);
+
+// The banana's step: the index of the car to take a banana with ITEM held, or
+// -1, and whether the car holding the last one lets go now.
+struct BananaStep {
+  int hold = -1;
+  bool release = false;
+};
+BananaStep bananaShowcase(ShowcaseState& state, double dtS, const std::vector<CarView>& cars);
 
 }  // namespace shot_hold
 }  // namespace rt

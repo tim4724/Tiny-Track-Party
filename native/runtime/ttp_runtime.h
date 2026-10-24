@@ -161,10 +161,10 @@ TTP_ABI int ttp_shot_hold(int h, const char* holdJson);
 // 1 once the armed hold has been reached; the race will not step again.
 TTP_ABI int ttp_shot_held(int h);
 
-// The item showroom's showcase (ttp/shot_hold.h): after each step,
-// the engine gives the item to the car the rule picks and fires it. `kind` is
-// "rocket" | "monster"; null or anything else turns it off. 1 = set, 0 = unknown
-// handle.
+// The item showcase (ttp/shot_hold.h): after each step, the engine gives the
+// item to the car the rule picks and fires it, or for "banana" holds it and
+// lets go. `kind` is "rocket" | "monster" | "banana"; null or anything else
+// turns it off. 1 = set, 0 = unknown handle.
 TTP_ABI int ttp_item_showcase(int h, const char* kind);
 
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------

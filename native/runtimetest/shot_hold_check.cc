@@ -75,7 +75,8 @@ int main() {
   check(sh::parseShowcase("rocket") == sh::Showcase::Rocket, "rocket showcase parses");
   check(sh::parseShowcase("monster") == sh::Showcase::Monster, "monster showcase parses");
   check(sh::parseShowcase(nullptr) == sh::Showcase::None, "null turns the showcase off");
-  check(sh::parseShowcase("banana") == sh::Showcase::None, "an unknown item turns it off");
+  check(sh::parseShowcase("banana") == sh::Showcase::Banana, "banana showcase parses");
+  check(sh::parseShowcase("boost") == sh::Showcase::None, "an unknown item turns it off");
   {
     // {totalS, monster, viewer, finished}
     const std::vector<sh::CarView> field = {
@@ -131,6 +132,27 @@ int main() {
     check(sh::trailPick(field) == 2, "the unfinished viewer with the nearest car behind holds it");
     check(sh::trailPick({{10, false, true, false}, {20, false, false, false}}) == -1,
           "a viewer with nobody behind holds nothing");
+
+    sh::ShowcaseState st;
+    auto step = sh::bananaShowcase(st, 0.5, field);
+    check(step.hold == -1 && !step.release, "the banana showcase waits its first 0.8 s");
+    step = sh::bananaShowcase(st, 0.5, field);
+    check(step.hold == 2 && !step.release, "then trailPick's car takes one");
+    step = sh::bananaShowcase(st, 2.4, field);
+    check(step.hold == -1 && !step.release, "and holds it for 2.5 s");
+    step = sh::bananaShowcase(st, 0.2, field);
+    check(step.hold == -1 && step.release, "then lets go");
+    step = sh::bananaShowcase(st, 1.9, field);
+    check(step.hold == -1 && !step.release, "the next waits its 2 s gap");
+    step = sh::bananaShowcase(st, 0.2, field);
+    check(step.hold == 2, "and then comes");
+  }
+  {
+    sh::ShowcaseState st;
+    const std::vector<sh::CarView> alone = {{10, false, true, false}, {20, false, false, false}};
+    check(sh::bananaShowcase(st, 1, alone).hold == -1, "nobody with a car behind takes none");
+    check(sh::bananaShowcase(st, 0.01, {{10, false, true, false}, {5, false, false, false}}).hold == 0,
+          "and the next step one is tried again");
   }
 
   std::printf("shot_hold: %d/%d passed\n", cases - failed, cases);
