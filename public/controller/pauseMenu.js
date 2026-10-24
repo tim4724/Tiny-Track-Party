@@ -9,10 +9,11 @@
 // someone else's pause lands must hit the frost, not Leave game.
 //
 // Continue and Leave game are everyone's (Leave only where there is a way
-// out: a launcher without leave() gets none, as with the close button). The middle button is the host's only
-// (the display refuses New game from anyone else, ttp_net_controller_action),
-// and while a series runs it is "End cup" behind the intermission's own
-// confirm, because abandoning a series loses its points.
+// out: a launcher without leave() gets none, as with the close button). The
+// middle button, New game, is the host's only (the display refuses it from
+// anyone else, ttp_net_controller_action), and while a series runs it asks
+// first through the intermission's own confirm, because abandoning a series
+// loses its points.
 import { closeAnyModal, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
 import { inShell, canLeave } from './launcher.js';
 
@@ -27,12 +28,6 @@ let _ctx = null;
 let _shown = false;
 let _askedAt = -Infinity;
 let _armTimer = 0;
-
-function renderChoices() {
-  const btn = el('pause-newgame');
-  btn.classList.toggle('hidden', !_ctx.isHost());
-  btn.textContent = _ctx.inSeries() ? 'End cup' : 'New game';
-}
 
 // ctx: { send(type), buzz(kind), leave(), isHost(), inSeries(), onToggle() }
 export function initPauseMenu(ctx) {
@@ -58,7 +53,8 @@ export function initPauseMenu(ctx) {
 export function isPauseShown() { return _shown; }
 
 export function setPauseOverlay(on) {
-  if (on) renderChoices();   // the host can change while paused
+  // the host can change while paused
+  if (on) el('pause-newgame').classList.toggle('hidden', !_ctx.isHost());
   if (on === _shown) return;
   _shown = on;
   const overlay = el('pause-overlay');

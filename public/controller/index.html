@@ -167,9 +167,9 @@
       </div>
     </div>
     <!-- Pause overlay — frosted glass. Continue and Leave game are everyone's;
-         the middle one is the host's only: "New game", or "End cup" behind
-         its confirm while a series runs (pauseMenu.js). Leave game is THIS
-         phone's exit, so the TV's own menu has no twin of it. -->
+         the middle one is the host's only: "New game", behind a confirm
+         while a series runs (pauseMenu.js). Leave game is THIS phone's exit,
+         so the TV's own menu has no twin of it. -->
     <div id="pause-overlay" class="hidden">
       <h2>Paused</h2>
       <button id="pause-continue" class="btn btn--brand">Continue</button>
@@ -195,7 +195,7 @@
       <span id="result-time" class="res-time"></span>
     </div>
     <div id="result-foot">
-      <button id="leavecup-btn" class="btn btn--ghost hidden" type="button" aria-haspopup="dialog">End cup</button>
+      <button id="leavecup-btn" class="btn btn--ghost hidden" type="button" aria-haspopup="dialog">New game</button>
       <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
       <div id="result-wait" class="result-wait hidden"></div>
     </div>
@@ -387,15 +387,15 @@
     </div>
   </div>
 
-  <!-- End-cup confirm — opened only by the host's "End cup" on the
+  <!-- Leave-cup confirm — opened only by the host's mid-cup "New game" on the
        intermission board, so it never stacks with the lobby popups. Same shape
        and layer as #stars-overlay. Leaving throws away the cup's points for the
        whole couch, which is why this one asks first. -->
   <div id="leavecup-overlay" class="hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="leavecup-title" aria-describedby="leavecup-copy">
     <div class="settings-card motion-card">
-      <h2 id="leavecup-title">End the cup?</h2>
+      <h2 id="leavecup-title">Start a new game?</h2>
       <p id="leavecup-copy" class="help-copy">Everyone goes back to the lobby and this cup's points are lost.</p>
-      <button id="leavecup-confirm" class="btn btn--danger" type="button">End cup</button>
+      <button id="leavecup-confirm" class="btn btn--danger" type="button">New game</button>
       <button id="leavecup-cancel" class="btn btn--ghost" type="button">Keep racing</button>
     </div>
   </div>

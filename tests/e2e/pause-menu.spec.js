@@ -49,7 +49,7 @@ test('pause arms the other phones, New game is the host\'s, and leaving keeps th
   await alice.click('#pause-leave');
   await alice.waitForSelector(visible('#name'));
   await expect(bob.locator('#pause-newgame')).toBeVisible();
-  await expect(bob.locator('#pause-newgame')).toHaveText('End cup');
+  await expect(bob.locator('#pause-newgame')).toHaveText('New game');
   expect(await page.evaluate(() => window.__net.roomState)).toBe('playing');
   await expect(page.locator('#pause-overlay')).toBeVisible();
 

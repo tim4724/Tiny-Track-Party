@@ -70,7 +70,7 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   // The flag's board reaches the phones BEFORE the TV's (the finish flourish),
   // and on the last race its cup chip does not yet know the cup is over. The
   // phone offers nothing in that window: not a "Next race" the display would
-  // refuse, and not an "End cup" over a cup that is finished.
+  // refuse, and not a mid-cup "New game" over a cup that is finished.
   await expect(alice.locator('#result-wait')).toHaveText('Results coming up…');
   await expect(alice.locator('#result-foot button:visible')).toHaveCount(0);
   await inResults(page);
@@ -192,12 +192,12 @@ test('abandoning a cup mid-race cancels the series and a restart begins at race 
   await finishHumans(page);
   await inResults(page);
   // The pause overlay is the exit from INSIDE a race (the intermission's own
-  // "End cup" is the next test), so advance to race 2 and pause out of it.
+  // "New game" is the next test), so advance to race 2 and pause out of it.
   await alice.click('#newgame-btn');
   await waitForRacing(page);
   await alice.click('#pause-btn');
-  // Mid-cup the host's pause button is "End cup", behind the same confirm.
-  await expect(alice.locator('#pause-newgame')).toHaveText('End cup');
+  // Mid-cup the host's pause button is still "New game", behind the same confirm.
+  await expect(alice.locator('#pause-newgame')).toHaveText('New game');
   await alice.click('#pause-newgame');
   await alice.click('#leavecup-cancel');
   await expect(alice.locator(visible('#pause-overlay'))).toBeVisible();

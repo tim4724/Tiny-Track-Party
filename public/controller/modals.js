@@ -232,7 +232,8 @@ function closeStarsPopup() {
 }
 
 // ---- Leave-cup confirm ----
-// Opened by the host's "End cup" on the intermission board or the pause menu.
+// Opened by the host's mid-cup "New game" on the intermission board or the
+// pause menu.
 // The screen that asked leaving (the next race starting, the cup ending, the
 // pause lifting) closes it, since what it asks about is gone — see
 // closeLeaveCupPopup's callers in main.js and pauseMenu.js.

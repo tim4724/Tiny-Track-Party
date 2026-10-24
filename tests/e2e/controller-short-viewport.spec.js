@@ -226,6 +226,27 @@ test('narrow viewport: the stack reads ribbon, then choices, then the way on', a
   expect(new Set(boxes.map((b) => b.left)).size, 'two columns').toBe(2);
 });
 
+// The RACE page does not stack with it: it stays pinned, four across and two
+// rows down, and its tiles give up their bands before the page would scroll.
+// `lobby-race-waiting` puts the host's waiting note on a line of its own, the
+// tallest the action row gets.
+for (const scenario of ['lobby-race', 'lobby-race-waiting']) {
+  test(`narrow viewport: the race page is two rows and does not scroll (${scenario})`, async ({ page }) => {
+    await page.setViewportSize({ width: 568, height: 270 });
+    await page.goto(`/controller/index.html?scenario=${scenario}&color=0`);
+    await page.waitForSelector('.racelist .mode-opt');
+
+    const seen = await page.evaluate(() => {
+      const se = document.scrollingElement;
+      const tops = [...document.querySelectorAll('.racelist .mode-opt')]
+        .map((e) => Math.round(e.getBoundingClientRect().top));
+      return { scroll: se.scrollHeight - se.clientHeight, rows: new Set(tops).size };
+    });
+    expect(seen.rows, 'two rows').toBe(2);
+    expect(seen.scroll, 'no page scroll').toBeLessThanOrEqual(0);
+  });
+}
+
 // The name chip and the corner buttons are the same controls in the same corner
 // on the lobby and in the race, and a player steps straight from one to the
 // other — so they must be the same SIZE, and the transition must not resize

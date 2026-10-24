@@ -435,7 +435,7 @@ export function runControllerScenario(opts) {
     case 'leave-cup':
       // Mid-cup standings between two series races, viewed as the host: points
       // board in cup order (the +12 row leads on total despite this race's +15)
-      // and the host's "Next race ▸" beside "End cup". 'leave-cup' is the
+      // and the host's "Next race ▸" beside "New game". 'leave-cup' is the
       // same board with that button's confirm open (modals.js owns the live one).
       setLatency(20, true);
       showBoard([

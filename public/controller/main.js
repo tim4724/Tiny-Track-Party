@@ -818,8 +818,8 @@ initPauseMenu({
 });
 
 // Host's results button: mid-series it advances to the next race, otherwise it
-// sends everyone to the lobby. Abandoning a running cup is "End cup" beside
-// it, which asks first (see resultsBoard's renderFoot).
+// sends everyone to the lobby. Abandoning a running cup is #leavecup-btn beside
+// it, also labelled "New game", which asks first (see resultsBoard's renderFoot).
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
   buzz('tap');

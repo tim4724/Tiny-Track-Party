@@ -14,10 +14,11 @@
 //     the trail element now, so the pair centres as one thing.
 //
 // Both are one declaration away from coming back, and both are invisible to a
-// screenshot diff at a single size, so they are measured here at two.
+// screenshot diff at a single size, so they are measured across the tiers.
 const { test, expect } = require('./helpers');
 
-const AT = [{ width: 932, height: 430 }, { width: 844, height: 300 }];
+// The last two are the shortest and the narrowest phones (controller.css).
+const AT = [{ width: 932, height: 430 }, { width: 844, height: 300 }, { width: 653, height: 232 }, { width: 568, height: 300 }];
 
 for (const vp of AT) {
   const at = `${vp.width}x${vp.height}`;
@@ -39,11 +40,14 @@ for (const vp of AT) {
         trailOff: Math.round(trail.top - tile.top),
         nameOffCentre: Math.round(name.left + name.right - tile.left - tile.right),
         trailOffCentre: Math.round(trail.left + trail.right - tile.left - tile.right),
-        nameLeft: Math.round(name.left - tile.left),
-        trailLeft: Math.round(trail.left - tile.left),
-        // Short phones lay the tile on its side (controller.css, max-height
-        // 320px): band left, name and trail flush left beside it.
-        sideways: getComputedStyle(e).display === 'grid'
+        // A cup's circuits are ONE row whenever they show: a 2x2 block beside
+        // the name is the layout this replaced.
+        mapRows: new Set([...e.querySelectorAll('.track-map')]
+          .map((m) => m.getBoundingClientRect()).filter((r) => r.height)
+          .map((r) => Math.round(r.top))).size,
+        // Shown or gone, never a sliver: a band with no height to flex into
+        // collapses to a line across the top of the tile.
+        band: e.querySelector('.mode-opt__band').getBoundingClientRect().height
       };
     }));
     expect(tiles.length).toBeGreaterThan(2);
@@ -59,17 +63,14 @@ for (const vp of AT) {
     expect(spread('trailOff'), 'every stars/count row does too').toBeLessThanOrEqual(1);
 
     // Centred across too — including the locked tile, whose padlock used to
-    // take a column of its own and carry the count off with it. On its side,
-    // flush left instead, every tile at the same offset beside its band.
-    expect(new Set(tiles.map((t) => t.sideways)).size, 'one layout for the whole grid').toBe(1);
-    if (tiles[0].sideways) {
-      expect(spread('nameLeft'), 'every name starts at the same offset').toBeLessThanOrEqual(1);
-      expect(spread('trailLeft'), 'and so does every trail, padlock included').toBeLessThanOrEqual(1);
-    } else {
-      for (const t of tiles) {
-        expect(Math.abs(t.nameOffCentre), 'the name is centred').toBeLessThanOrEqual(1);
-        expect(Math.abs(t.trailOffCentre), 'and so is the trail, padlock included').toBeLessThanOrEqual(2);
-      }
+    // take a column of its own and carry the count off with it. The tile is
+    // the same stack at every height (controller.css .mode-opt__band); short
+    // phones shrink or drop the band rather than lay the tile on its side.
+    for (const t of tiles) {
+      expect(t.mapRows, 'the circuits are one row').toBeLessThanOrEqual(1);
+      if (t.band) expect(t.band, 'the band is tall enough to draw them').toBeGreaterThanOrEqual(20);
+      expect(Math.abs(t.nameOffCentre), 'the name is centred').toBeLessThanOrEqual(1);
+      expect(Math.abs(t.trailOffCentre), 'and so is the trail, padlock included').toBeLessThanOrEqual(2);
     }
   });
 }

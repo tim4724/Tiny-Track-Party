@@ -231,9 +231,9 @@ input[type=text]:disabled { opacity: 0.6; }
    list in half the page — the page's whole width is the grid's now, and at two
    columns the eight tiles wanted four rows out of a track that has three.
    The rows are minmax(0, 1fr), not 1fr, for the reason .carpick's are: a bare
-   1fr carries a min-content floor, and here that floor is two lines of name plus
-   a star row, which on a short phone would push the last row into a scroll
-   nobody would guess was there. */
+   1fr carries a min-content floor, and here that floor is a name plus a star
+   row, which on a short phone would push the last row into a scroll nobody
+   would guess was there. */
 .racelist {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: minmax(0, 1fr);
@@ -290,12 +290,14 @@ input[type=text]:disabled { opacity: 0.6; }
    is filled by the car half, and renderReadyFoot leaves the back chip hidden.
    The grammar is the same one; only the stepper collapses. */
 
-/* Narrow screens: the landscape row heights leave everything cramped — go back
-   to PAGE scrolling (a pinned action row would leave the middle almost no
-   height). The order is the landscape one, which is already top to bottom:
-   ribbon, choices, the way on. */
+/* Narrow screens: the landscape row heights leave the CAR page cramped — it
+   goes back to PAGE scrolling (a pinned action row would leave the middle
+   almost no height). The order is the landscape one, which is already top to
+   bottom: ribbon, choices, the way on. The race page stays pinned, four across
+   and two rows down at every width: its tiles give up their band before they
+   would push the page into a scroll (.mode-opt__band). */
 @media (max-width: 620px) {
-  #lobby {
+  #lobby:not(.lobby--race) {
     height: auto;
     grid-template-rows: auto;      /* every row sizes to content when the page scrolls */
     row-gap: 1rem;
@@ -308,18 +310,13 @@ input[type=text]:disabled { opacity: 0.6; }
     flex: 1 1 100%; margin-inline: 0; text-align: center;
     white-space: normal; text-overflow: clip;
   }
-  .carpick, .racelist { overflow-y: visible; }
-  /* Three across, not four: this tier is a phone held the wrong way round or a
-     narrow window, roughly half the width the landscape layout is drawn for,
-     and a quarter of that is not a tap target. The rows size to CONTENT here,
-     the page having gone from a fixed height to a scrolling one — 1fr rows
-     against an auto-height track collapse. */
-  .racelist { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: auto; }
-  /* Two across, not four, and one fewer than the race page's three: a quarter of
-     this tier's width is not a tap target for a tile carrying a render, a name
-     AND four rated rows, where a race tile is text and takes less. The rows size
-     to CONTENT — `1fr` rows against an auto-height track collapse. */
-  .carpick { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
+  /* Two across, not four: a quarter of this tier's width is not a tap target
+     for a tile carrying a render, a name AND four rated rows. The rows size to
+     CONTENT — `1fr` rows against an auto-height track collapse. */
+  .carpick {
+    overflow-y: visible;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto;
+  }
 }
 
 /* Stepping between the two lobby pages. The primary button is the same element
@@ -687,8 +684,11 @@ input[type=text]:disabled { opacity: 0.6; }
    row that flexes: the tile's height is the grid row's, so the band takes
    everything the name and trail leave, and its art grows with it. That is
    what gives every tile one shape at every size.
-   The pick is your livery ring alone. */
+   The pick is your livery ring alone.
+   The tile is a SIZE container (its height is always the grid row's, the race
+   page never scrolling) so the band can give way to it, below. */
 .mode-opt {
+  container: race-tile / size;
   position: relative;
   display: flex; flex-direction: column; align-items: stretch;
   min-height: 0; gap: 0.35rem;
@@ -698,10 +698,9 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-opt:disabled { cursor: default; }
 /* A SIZE container, so the art inside can be sized off the band's own box:
-   four circuits in a row while the band is wide, a 2x2 block once it is tall
-   enough that the block draws them bigger (a band under 2:1). */
+   the four circuits stay ONE row at every size and shrink with the band. */
 .mode-opt__band {
-  flex: 1 1 0; min-height: 1.3rem;
+  flex: 1 1 0; min-height: 0;
   container-type: size;
   border-radius: calc(var(--r) - 0.4rem);
   display: grid; place-items: center; overflow: hidden;
@@ -717,9 +716,14 @@ input[type=text]:disabled { opacity: 0.6; }
   width: var(--s); height: var(--s);
   background: none; border-radius: 0;
 }
-@container (aspect-ratio < 2) {
-  .mode-opt__art { grid-auto-flow: row; grid-template-columns: repeat(2, auto); }
-  .mode-opt__art .track-map { --s: min((84cqh - var(--gap)) / 2, (84cqw - var(--gap)) / 2); }
+/* The band is what gives on a short tile. Once it would be under ~20px its
+   circuits are outlines nobody can read, so it goes and the name and trail
+   centre in the tile. Measured on the tile, not the viewport: the host's
+   waiting note can take a row of its own and shorten every tile. */
+@container race-tile (max-height: 4.9rem) {
+  .mode-opt__band { display: none; }
+  .mode-opt__name { margin-top: auto; }
+  .mode-opt__sub, .mode-opt .starrow { margin-bottom: auto; }
 }
 .mode-opt__band .track-map__casing { stroke: #fff; stroke-width: 22; }
 .mode-opt__band .track-map__road, .mode-opt__band .track-map__start { display: none; }
@@ -1105,7 +1109,7 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* One child is visible (renderFoot: the host's button XOR the note), except on
-   a cup's intermission, where the host also gets "End cup" — ghost, on the
+   a cup's intermission, where the host also gets "New game" — ghost, on the
    LEFT, the lobby corner's own back-chip-then-primary order. */
 #result-foot { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
 #result-foot .btn { width: auto; min-width: 11rem; margin-top: 0; }
@@ -1760,36 +1764,6 @@ body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
   .set-group { gap: 0.3rem; padding-bottom: 0.35rem; }
 }
 
-/* SHORT PHONES lay the race tile on its side. Under this height a stacked
-   tile's band is a strip a few px tall (the name and trail keep their height
-   and the band gets what is left), while the tile is three times as wide as it
-   is tall. So the band goes to the LEFT as a square, as tall as the tile, its
-   circuits in a 2x2 block, and the name and trail stack beside it.
-   The tile is a size container only here: its height is the grid row's
-   (1fr), never its content's, which is what lets the band read it. The
-   narrow-width tier's content-sized rows never reach this. */
-@media (max-height: 320px) and (min-width: 621px) {
-  .mode-opt {
-    container-type: size;
-    display: grid; grid-template-columns: auto minmax(0, 1fr);
-    /* max-content, not auto: the name clips (overflow: hidden), so its AUTO
-       minimum is 0 and the 1fr rows took its height. */
-    grid-template-rows: 1fr max-content max-content 1fr;
-    column-gap: 0.55rem; row-gap: 0.2rem;
-    padding: 0.35rem 0.5rem 0.35rem 0.35rem;
-  }
-  .mode-opt__band {
-    grid-column: 1; grid-row: 1 / -1;
-    width: calc(100cqh - 0.7rem); height: calc(100cqh - 0.7rem); min-height: 0;
-  }
-  /* Beside a square band the name has height to spare and width to none, so
-     here it may take a second line (the narrowest phones' long names need it). */
-  .mode-opt__name {
-    grid-column: 2; grid-row: 2; text-align: left; line-height: 1.1;
-    white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  }
-  .mode-opt__sub, .mode-opt .starrow { grid-column: 2; grid-row: 3; justify-content: flex-start; }
-}
 @media (max-height: 270px) {
   /* And the CAR page spends its ratings. Below this height a car tile cannot
      hold a render, a name AND four rated rows: the row is under 90px and the
@@ -1798,6 +1772,4 @@ body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
      can be read without. They come back the moment there is room, which on a
      phone is putting the browser bar away. */
   .car-opt__stats { display: none; }
-  /* one step down again: "Playroom Cup" wants every pixel beside its band */
-  .mode-opt__name { font-size: 1rem; }
 }
