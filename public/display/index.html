@@ -19,6 +19,16 @@
        'same-origin', which a `preload as=fetch crossorigin` request would not
        match — the browser would download all 2.7 MB of it twice. -->
   <link rel="modulepreload" href="/display/engine/native/ttp_runtime.mjs" />
+  <!-- The phone landing's picture (#device-choice) is its largest paint, and as
+       a lazy image it would not be asked for until the stylesheets had loaded
+       and laid it out. Declared here instead, but behind the SAME media query
+       display.css shows the landing at, so a big screen, where the landing is
+       display:none, still never fetches it (tests/artwork-manifest.test.js
+       holds the two together, and holds both srcsets to the baked widths). -->
+  <link rel="preload" as="image" type="image/webp" fetchpriority="high"
+        imagesrcset="/assets/brand/web/landing-640.webp 640w, /assets/brand/web/landing-960.webp 960w, /assets/brand/web/landing-1280.webp 1280w"
+        imagesizes="(max-width: 30rem) calc(100vw - 1.2rem), 27.6rem"
+        media="(max-width: 700px), (max-height: 500px)" />
   <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
 
@@ -65,7 +75,8 @@
        engine boot until a choice is made, so a stray phone visit never spawns a
        ghost room, nor downloads and compiles an engine it will not run. The
        hero image is loading="lazy" so a big screen, where this is display:none,
-       never fetches it.
+       never fetches it; phones get it early from the preload in <head>, at the
+       width their slot needs, with the shelf JPEG as the no-WebP fallback.
        role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
        containment we don't implement (no focus trap) — tabbing out lands on
        the benign lobby behind, which the screen reader can then read honestly. -->
@@ -74,7 +85,10 @@
       <h1 id="device-choice-title" class="wordmark landing__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></h1>
       <p class="landing__tag">Toy car racing for 1 - 4 players</p>
       <button id="device-trailer" class="landing__hero" aria-label="Play the trailer">
-        <img src="/assets/brand/tv/shelf/split.jpg" alt="Four players racing toy cars in split screen" width="1920" height="1080" loading="lazy" fetchpriority="high" />
+        <picture>
+          <source type="image/webp" srcset="/assets/brand/web/landing-640.webp 640w, /assets/brand/web/landing-960.webp 960w, /assets/brand/web/landing-1280.webp 1280w" sizes="(max-width: 30rem) calc(100vw - 1.2rem), 27.6rem" />
+          <img src="/assets/brand/tv/shelf/split.jpg" alt="Four players racing toy cars in split screen" width="1920" height="1080" loading="lazy" fetchpriority="high" />
+        </picture>
         <!-- A drawn triangle, not the ▶ character: iOS sets that glyph with
              emoji metrics and it sits off the disc's centre. -->
         <span class="landing__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></span>

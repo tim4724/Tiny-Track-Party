@@ -299,6 +299,18 @@ const server = http.createServer((req, res) => {
     // stale engine beside a fresh shell for a day. Other static assets (CSS,
     // images, fonts, GLBs) get a 24h cache in prod; bust with ?v=__APP_V__
     // when they change.
+    //
+    // NOT `no-cache` + an ETag, though it reads as the same guarantee with a
+    // free 304: it is not. A BACK/FORWARD navigation reuses whatever is in the
+    // HTTP cache WITHOUT revalidating it, and a page restored from the
+    // back/forward cache is the old page outright — Chromium, measured: after a
+    // deploy, Back ran the old scripts under both. no-store is what keeps those
+    // bytes out of every cache, so Back fetches the build that is live. It
+    // costs the bfcache and the 304s; this game fetches its engine LATE (a
+    // phone only on "Use this phone"), so an old page brought back by Back
+    // would otherwise pair its old JS with a freshly fetched new engine, which
+    // fails the boot's ABI checks. no-store on the HTML alone is worse still:
+    // a fresh page over cached scripts.
     const noCache = !IS_PROD || ext === '.html' || ext === '.js' ||
                     ext === '.mjs' || ext === '.wasm';
     headers['Cache-Control'] = noCache ? 'no-store' : 'public, max-age=86400';

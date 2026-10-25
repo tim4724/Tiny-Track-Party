@@ -57,9 +57,25 @@ function jpegSize(buf) {
   throw new Error('no SOF marker — not a JPEG?');
 }
 
+// WebP is a RIFF container, and the size sits in whichever of its three chunk
+// kinds the encoder chose: VP8X (extended) and VP8L (lossless) store it as bit
+// fields, VP8 (lossy) as two 14-bit words after the frame tag.
+function webpSize(buf) {
+  assert.equal(buf.toString('ascii', 0, 4) + buf.toString('ascii', 8, 12), 'RIFFWEBP', 'not a WebP');
+  const chunk = buf.toString('ascii', 12, 16);
+  if (chunk === 'VP8X') return { w: buf.readUIntLE(24, 3) + 1, h: buf.readUIntLE(27, 3) + 1 };
+  if (chunk === 'VP8L') {
+    const bits = buf.readUInt32LE(21);
+    return { w: (bits & 0x3fff) + 1, h: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff };
+  throw new Error(`unknown WebP chunk ${chunk}`);
+}
+
 function imageSize(file) {
   const buf = fs.readFileSync(file);
-  return path.extname(file) === '.png' ? pngSize(buf) : jpegSize(buf);
+  const ext = path.extname(file);
+  return ext === '.png' ? pngSize(buf) : ext === '.webp' ? webpSize(buf) : jpegSize(buf);
 }
 
 test('artwork: every manifest entry exists at the size it claims', () => {
@@ -175,4 +191,36 @@ test('artwork: the carousel manifest and its frames agree', () => {
     assert.deepEqual(at2x, { w: w * scale, h: h * scale },
       `${it.id}@2x is ${at2x.w}x${at2x.h}`);
   }
+});
+
+// The landing page's picture is served from these entries, and a page that names a
+// width the bake no longer writes is a 404 on every phone that picks it. So the
+// srcset and the preload's imagesrcset must be the family, exactly; the frame the
+// entries are cut from must be one the bake still shoots; and the preload's media
+// query must be the one display.css shows the landing at — it is what keeps a big
+// screen, where the landing is display:none, from fetching the picture at all.
+test('artwork: the landing page serves exactly the landing family', () => {
+  const entries = MANIFEST.ARTWORK.filter((e) => e.family === 'landing');
+  const want = entries.map((e) => `/assets/${e.file} ${e.w}w`).sort();
+  const html = fs.readFileSync(path.join(PUBLIC, 'display/index.html'), 'utf8');
+  const sets = [...html.matchAll(/(?:image)?srcset="([^"]+)"/g)].map((m) => m[1])
+    .filter((s) => s.includes('/brand/web/'));
+  assert.equal(sets.length, 2, 'expected the <source> srcset and the preload imagesrcset');
+  for (const s of sets) assert.deepEqual(s.split(',').map((x) => x.trim()).sort(), want);
+  // (the favicon's `sizes` is a pixel box, not a slot width, so it is left out)
+  const sizes = [...html.matchAll(/(?:image)?sizes="([^"]+)"/g)].map((m) => m[1]).filter((v) => /vw/.test(v));
+  assert.equal(sizes.length, 2, 'expected the <source> sizes and the preload imagesizes');
+  assert.equal(sizes[0], sizes[1], 'the <source> sizes and the preload imagesizes must agree');
+
+  const { items } = JSON.parse(fs.readFileSync(path.join(ASSETS, MANIFEST.CAROUSEL_MANIFEST), 'utf8'));
+  for (const e of entries) {
+    assert.ok(items.some((it) => it.id === e.from), `${e.id}: cut from ${e.from}, which the bake no longer shoots`);
+  }
+
+  const css = fs.readFileSync(path.join(PUBLIC, 'display/display.css'), 'utf8');
+  const shown = /@media ([^{]+)\{\s*html:not\(\.device-choice-dismissed\) #device-choice \{ display: flex; \}/.exec(css);
+  assert.ok(shown, 'display.css no longer shows #device-choice behind one media query');
+  const preload = /<link rel="preload" as="image"[^>]*media="([^"]+)"/.exec(html);
+  assert.ok(preload, 'the landing picture is not preloaded');
+  assert.equal(preload[1], shown[1].trim(), 'the preload must fire exactly where the landing shows');
 });

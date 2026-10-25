@@ -25,8 +25,9 @@
 //            literals 404 under any subpath hosting (tests/asset-urls.test.js),
 //            so the page resolves each one through shared/assetUrl.js and the
 //            test joins it onto public/assets/.
-//   w, h     the pixel size the file must be. The test measures the real PNG/JPEG
-//            header rather than trusting this, which is the whole point of it.
+//   w, h     the pixel size the file must be. The test measures the real
+//            PNG/JPEG/WebP header rather than trusting this, which is the whole
+//            point of it.
 //   drawnAt  how WIDE to draw it in the gallery, in CSS px — the size the PLATFORM
 //            draws it at, which is the only size worth judging it at. For the
 //            favicon that is 32; for the Android TV banner it is its 320dp layout
@@ -73,6 +74,14 @@ export const ARTWORK_FAMILIES = [
     title: 'tvOS top shelf — the carousel',
     blurb: 'Full-screen 16:9 frames for the Top Shelf extension, one per cup then the situations a cup '
          + 'frame cannot say. tvOS draws these at 2x on a 4K box, which is what the @2x set is for.',
+    bake: 'npm run bake:shelf'
+  },
+  {
+    id: 'landing',
+    title: 'Web landing picture',
+    blurb: 'The split-screen carousel frame again, for the phone landing page: three WebP widths for '
+         + 'its srcset, cut from the same capture as the shelf frame so a phone downloads the width its '
+         + 'slot needs (tens of KB) rather than the 1920px JPEG, which stays as the fallback.',
     bake: 'npm run bake:shelf'
   },
   {
@@ -150,7 +159,19 @@ export const ARTWORK = [
     drawnAt: 640, bake: 'npm run bake:shelf',
     note: 'A SHORTER window of the same capture — full width, fewer rows — not a stretch of the 16:9 one.' },
   { id: 'topshelf-wide-2x', family: 'shelf-static', file: 'brand/tv/topshelf-wide@2x.jpg',
-    w: 4640, h: 1440, drawnAt: 640, bake: 'npm run bake:shelf', note: 'And its 4K variant.' }
+    w: 4640, h: 1440, drawnAt: 640, bake: 'npm run bake:shelf', note: 'And its 4K variant.' },
+
+  // ---- the web landing picture ----------------------------------------------
+  // `from` names the carousel frame they are cut from; the bake reads these
+  // entries for its widths, and display/index.html's srcset is held to them.
+  { id: 'landing-640', family: 'landing', file: 'brand/web/landing-640.webp', w: 640, h: 360,
+    from: 'split', drawnAt: 360, bake: 'npm run bake:shelf',
+    note: 'A 1x phone, or a 2x one in a narrow column.' },
+  { id: 'landing-960', family: 'landing', file: 'brand/web/landing-960.webp', w: 960, h: 540,
+    from: 'split', drawnAt: 360, bake: 'npm run bake:shelf', note: 'The usual 2x-3x phone.' },
+  { id: 'landing-1280', family: 'landing', file: 'brand/web/landing-1280.webp', w: 1280, h: 720,
+    from: 'split', drawnAt: 360, bake: 'npm run bake:shelf',
+    note: 'The landing column at its widest (30rem) on a 3x phone.' }
 ];
 
 // THE CAROUSEL'S SIZE, declared once. tvOS lays the Top Shelf carousel out in
@@ -181,5 +202,6 @@ export const ARTWORK_SWEEP = [
   // frame and never deletes, so a frame renamed or dropped from SHELF_FRAMES
   // leaves the old jpg behind — and reconciling only against carousel.json would
   // never see it, which made the orphan test's own title untrue.
-  { dir: 'public/assets/brand/tv/shelf', skip: [] }
+  { dir: 'public/assets/brand/tv/shelf', skip: [] },
+  { dir: 'public/assets/brand/web', skip: [] }
 ];

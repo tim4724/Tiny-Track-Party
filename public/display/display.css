@@ -1194,7 +1194,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   box-shadow: var(--shadow-card);
   cursor: pointer;
 }
-.landing__hero img { display: block; width: 100%; height: auto; }
+.landing__hero picture, .landing__hero img { display: block; width: 100%; height: auto; }
 /* A narrow screen gives the picture most of its width back: it bleeds into
    the side padding. */
 @media (max-width: 30rem) { .landing__hero { width: calc(100% + 1.2rem); } }

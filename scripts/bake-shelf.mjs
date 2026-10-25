@@ -53,7 +53,12 @@ import {
 import { SHELF_FRAMES, scenarioQuery } from '../public/shared/galleryScenarios.js';
 // The carousel's layout size is a PLATFORM number and lives with the manifest that
 // the gallery and the gate read it from, not here (root CLAUDE.md, rule 1).
-import { CAROUSEL_SIZE } from '../public/shared/artworkManifest.js';
+import { CAROUSEL_SIZE, ARTWORK } from '../public/shared/artworkManifest.js';
+
+// The web landing's picture: WebP widths cut from one carousel frame's capture.
+// Which frame and which widths are the manifest's `landing` entries, so the bake,
+// the page's srcset and the size gate all read one list.
+const LANDING = ARTWORK.filter((e) => e.family === 'landing');
 
 const args = parseArgs();
 
@@ -129,6 +134,13 @@ async function main() {
         const jpg = await encode(page, png, { width: w, height: h, quality: 0.88 });
         fs.writeFileSync(path.join(shelfDir, `${f.id}${suffix}.jpg`), jpg);
         console.log(`  ${(f.id + suffix).padEnd(17)} ${String(jpg.length).padStart(7)} B  ${w}x${h}`);
+      }
+      for (const e of LANDING.filter((l) => l.from === f.id)) {
+        const out = path.join(ROOT, 'public/assets', e.file);
+        const webp = await encode(page, png, { width: e.w, height: e.h, type: 'image/webp', quality: 0.8 });
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        fs.writeFileSync(out, webp);
+        console.log(`  ${e.id.padEnd(17)} ${String(webp.length).padStart(7)} B  ${e.w}x${e.h}`);
       }
       manifest.push({ id: f.id, context: f.context, title: f.title });
     }
