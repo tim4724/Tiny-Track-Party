@@ -133,6 +133,20 @@ TTP_ABI void ttp_display_destroy(void);
  * alongside: the lobby attract and a race are different pictures. */
 TTP_ABI void ttp_display_scale_scene(double tMs);
 
+/* THE SURFACE CHANGED SIZE under the shell — a browser window resized, or
+ * entering or leaving fullscreen — on the same clock. Nothing missed in the next
+ * few seconds is judged (kScaleResizeGraceSec): that stall is the
+ * reallocation's, not the rung's. Call it BEFORE the poll that answers the new
+ * band, and only for a size the shell did not choose: a buffer resized to
+ * perform an answer is not one, and a television whose view never changes
+ * size owes nothing here.
+ *
+ * The band itself needs no call: a poll whose height or ceiling differs from
+ * the last answers at once, outside the cadence, with the same picture on the
+ * new surface — the same rung in buffer lines, or the new ceiling where the old
+ * one was in force. */
+TTP_ABI void ttp_display_scale_resized(double tMs);
+
 /* Re-decide the operating point. Returns 1 and writes {scale, presentDivisor}
  * into `out2` when the point MOVED; 0 (touching nothing) otherwise, which is
  * also the answer while the poll cadence or one of the rule's waits is still

@@ -454,6 +454,14 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     - `ttp_perf_pacing(ttp_display_scale_panel_ms(), divisor)`, so the readout's
       budget is the operating point's.
 
+    A surface that can change size UNDER the shell — only the browser's, today:
+    a window drag, fullscreen in or out — also owes
+    `ttp_display_scale_resized(tMs)` before the poll that sees the new band, so
+    the reallocation's stall is not judged as the rung's. The band change itself
+    needs nothing: the poll answers it at once, keeping the same picture. A
+    television's view never changes size, and a buffer resized to perform an
+    answer is not a resize in this sense, so neither TV shell calls it.
+
     **PACE ANY DIVISOR, EVEN ON A 60 Hz PANEL.** The rule never halves a 60 Hz
     panel's rate on its own judgement, but the HOST may: the phone's TV picture
     row (Performance / Quality) sends SET_FRAME_RATE, `ttp_net_controller_action`

@@ -89,11 +89,29 @@ inline constexpr int kDownMinSec = 3;
 inline int downMissedFrames(double dueMs) {
   return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownMissedMs / dueMs)) : 1;
 }
-// STEP UP only after a full window with NOTHING missed, and at least this long
-// after the rung was entered (by a move or by a scene build). Long on purpose:
-// a lap's cost swings by milliseconds around a circuit, and a climb taken on a
-// cheap stretch is a move back down at the next heavy one — two hitches for
-// nothing.
+// STEP UP only after a full window that missed AT MOST THIS MUCH PICTURE — a
+// fifth of the step-down bar: three frames on a 60 Hz panel, six at 120 — and
+// at least kUpWaitSec after the rung was entered.
+//
+// NOT ZERO, which it was. The bar to STAY on a rung is kDownMissedMs, so a
+// device holding its ceiling with a stray skip every few seconds was never
+// asked for a perfect window — it started there. Once anything stepped it
+// down, the climb back demanded ten seconds without one late frame, which a
+// browser on a 120 Hz Mac does not reliably give at any resolution: the
+// session stayed a rung or more below a ceiling the device had been holding.
+// A stray skip says nothing about the rung above; a rung that cannot hold
+// misses a stretch of picture, and a failed climb is priced by kFailSec.
+inline constexpr double kUpMissedMs = 50.0;
+
+// The window's climb allowance at a point due every `dueMs`: kUpMissedMs of
+// it, rounded to whole frames.
+inline int upMissedFrames(double dueMs) {
+  return dueMs > 0.0 ? (int) std::lround(kUpMissedMs / dueMs) : 0;
+}
+// The wait, and it is long on purpose: a lap's cost swings by milliseconds
+// around a circuit, and a climb taken on a cheap stretch is a move back down
+// at the next heavy one — two hitches for nothing. Counted from when the rung
+// was entered, by a move or by a scene build.
 inline constexpr double kUpWaitSec = 40.0;
 // A STEP DOWN THIS SOON after entering a rung FAILED that rung, and the wait
 // before trying it again doubles, up to kMaxFails doublings — straight to the
@@ -120,16 +138,26 @@ inline constexpr int kMaxFails = 3;
 // first uploads, the shadow bake — and on an A10X a solo race that holds 60 at
 // native all day presented at 7-25 fps for its first ~2.6 s.
 inline constexpr double kScaleSceneGraceSec = 5.0;
+// …AND A RESIZE'S FIRST SECONDS ARE NOT THE RUNG'S COST EITHER. A browser
+// window entering or leaving fullscreen, or dragged by its corner, stalls the
+// page while it reallocates the canvas and lays the page out again — a cost
+// the rung did not cause and will not have again. Judged, it stepped a Mac
+// that held its ceiling a rung down on every fullscreen toggle, and a step
+// soon after a climb FAILED the rung it had just reached. Shorter than a
+// scene's grace: there is no staging behind a resize, only the stall itself.
+inline constexpr double kScaleResizeGraceSec = 3.0;
 
 // THE DECISION, as a pure function of what the controller has counted: where
 // the point sits on its list (`at` of `n`), the frames missed over the window
-// against the count that steps down (downMissedFrames) and how many seconds the
-// window holds, how long since the rung was entered, and the wait in force for
-// the rung above. Answers the index to move to — `at` for "stay".
-inline int renderScaleRung(int at, int n, int missed, int downMissed, int judgedSec,
-                           double sinceEnteredSec, double upWaitSec) {
+// against the count that steps down (downMissedFrames) and the count a climb
+// allows (upMissedFrames), how many seconds the window holds, how long since
+// the rung was entered, and the wait in force for the rung above. Answers the
+// index to move to — `at` for "stay".
+inline int renderScaleRung(int at, int n, int missed, int downMissed, int upMissed,
+                           int judgedSec, double sinceEnteredSec, double upWaitSec) {
   if (missed >= downMissed && judgedSec >= kDownMinSec) return std::max(at - 1, 0);
-  if (missed == 0 && judgedSec >= kJudgeSec && sinceEnteredSec >= upWaitSec && at + 1 < n) {
+  if (missed <= upMissed && judgedSec >= kJudgeSec && sinceEnteredSec >= upWaitSec
+      && at + 1 < n) {
     return at + 1;
   }
   return at;

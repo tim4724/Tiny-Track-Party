@@ -188,7 +188,7 @@ player is no cheaper than three.
 
 **The rule now (`ttp/render_scale.h`) counts MISSED FRAMES and nothing else**,
 so it is the same on a browser with no GPU timer. A rung is left on 250 ms of
-missed picture in the last 10 s once 3 s of it have been judged, climbed after 10 clean seconds once it has stood 40 s,
+missed picture in the last 10 s once 3 s of it have been judged, climbed after 10 s missing no more than 50 ms of picture (3 frames at 60 Hz) once it has stood 40 s,
 and a step down within 30 s of entering a rung FAILS it, doubling the wait
 before the next try (to 320 s at once if it failed before a full window,
 which is a rung that cannot hold at all). A rung entered by a step down is

@@ -87,6 +87,17 @@ class RenderScaleController {
   // dropping mid-race does not re-place the scene.
   void cells(int n) { cells_ = n; }
 
+  // THE SURFACE CHANGED SIZE (a browser window resized, or entering or leaving
+  // fullscreen). Nothing missed in the next kScaleResizeGraceSec is judged:
+  // that stall is the reallocation's, not the rung's. Nothing else changes —
+  // the rung, its clocks and the window judged so far all stand — and a resize
+  // the controller performed itself (a move) is not one: that window goes with
+  // the move.
+  void resized(double tMs) {
+    resized_ = true;
+    resizedMs_ = tMs;
+  }
+
   // Re-decide, at most once per kScalePollMs. Answers whether the point MOVED,
   // and writes the new one to `out`.
   //
@@ -99,6 +110,12 @@ class RenderScaleController {
   // three shells: it describes the OLD buffer, and keeping it judges the new
   // resolution on the old one's frames — which is how a controller talks itself
   // into a second step it does not need.
+  //
+  // A BAND THAT CHANGED is answered AT ONCE, outside the cadence, and it keeps
+  // the PICTURE rather than the scale: the same rung in buffer lines on the new
+  // surface, or the new ceiling where the old one was in force. That is a
+  // re-placement, not a step — it judges nothing, keeps the rung's clocks and
+  // its window, and fails nothing (remap()).
   bool poll(double tMs, RenderScaleLimits limits, perf::Monitor& mon,
             RenderScalePoint* out);
 
@@ -124,6 +141,9 @@ class RenderScaleController {
   // Put `p` in force: the window it was judged on goes with the old buffer.
   bool moveTo(RenderScalePoint p, perf::Monitor& mon, RenderScalePoint* out);
 
+  // The band moved under the point: put the same picture in force on it.
+  bool remap(RenderScaleLimits limits, RenderScalePoint* out);
+
   // 1.0 until the first poll ADOPTS THE BAND'S CEILING. "As sharp as this
   // surface allows" is a fact only the band knows, and a 1.0 left standing here
   // is wrong twice on any HiDPI browser (max 2): the shell sizes its buffer from
@@ -145,8 +165,11 @@ class RenderScaleController {
   // through, not tried, and is never failed (render_scale.h, kFailSec).
   bool steppedDown_ = false;
   // The surface's baseLines at the last poll, never 0, so a scene can record
-  // its rung in lines (rungOf_).
+  // its rung in lines (rungOf_) and a band change can keep the point's.
   double baseLines_ = 1.0;
+  // …and the band's ceiling then, so a band change can tell a point AT the
+  // ceiling (which follows it) from one on a ladder rung (which keeps its lines).
+  double max_ = 0;
   // PER CELL COUNT, for the session: the rung each count's last scene left off
   // at, IN BUFFER LINES (0: never seen) — a scale would mean another picture
   // once the surface changed height, as a browser window does when DevTools
@@ -162,6 +185,8 @@ class RenderScaleController {
   int cells_ = -1;
   int sceneCells_ = -1;
   double sceneMs_ = 0;
+  bool resized_ = false;     // resized() has been called at all
+  double resizedMs_ = 0;
   double lastPollMs_ = 0;
   bool halfRate_ = false;
   bool offered_ = false;

@@ -17,6 +17,14 @@ void RenderScaleController::scene(double tMs) {
 
 bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
                                  perf::Monitor& mon, RenderScalePoint* out) {
+  // THE BAND MOVED: the surface changed height or ceiling (fullscreen, a
+  // dragged window, DevTools). Answered now rather than at the next cadence,
+  // so a shell sizing its buffer for the new surface sizes it once.
+  if (adopted_ && ((limits.baseLines > 0.0 ? limits.baseLines : 1.0) != baseLines_
+                   || limits.max != max_)) {
+    return remap(limits, out);
+  }
+
   // The first call decides immediately rather than waiting a second: what it
   // does is declare the panel period, and a readout judged against a guessed
   // 60 Hz reads amber on a 50 Hz television for as long as it takes.
@@ -49,6 +57,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   limits.panelMs = panelMs_;
   limits.halfRate = halfRate();
   baseLines_ = limits.baseLines > 0.0 ? limits.baseLines : 1.0;
+  max_ = limits.max;
 
   // BELOW THE ANCHOR, at full rate, for kHalfRateOfferSec on end — counted
   // from when it first fell below, so a step from 720 to 540 does not restart it.
@@ -67,7 +76,8 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // poll that saw no present judges nothing (a hidden tab, a stalled loop: the
   // next present's gap carries what was missed).
   const std::vector<double> gaps = mon.takeGaps();
-  if (!gaps.empty() && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {
+  const bool resizing = resized_ && tMs - resizedMs_ < kScaleResizeGraceSec * 1000.0;
+  if (!gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {
     const double due = pointPeriodMs(point_, limits);
     int missed = 0;
     for (double g : gaps) missed += perf::budgetsMissed(g, due);
@@ -110,7 +120,8 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // anchor at the new rate.
   const int to = list[0].divisor != point_.divisor
       ? anchorPoint(list, n, limits)
-      : renderScaleRung(at, n, missed, downMissedFrames(pointPeriodMs(point_, limits)), judged_,
+      : renderScaleRung(at, n, missed, downMissedFrames(pointPeriodMs(point_, limits)),
+                        upMissedFrames(pointPeriodMs(point_, limits)), judged_,
                         (tMs - enteredMs_) / 1000.0,
                         upWaitSec(at + 1 < n ? fails_[slot][at + 1] : 0));
   RenderScalePoint next = list[to];
@@ -142,6 +153,41 @@ bool RenderScaleController::moveTo(RenderScalePoint p, perf::Monitor& mon,
   judged_ = 0;
   head_ = 0;
   mon.reset();
+  if (out) *out = point_;
+  return true;
+}
+
+bool RenderScaleController::remap(RenderScaleLimits limits, RenderScalePoint* out) {
+  // THE PICTURE, NOT THE SCALE. A scale is a multiplier on the surface's height,
+  // so kept across a change of height it is another picture — and placed
+  // DOWNWARD onto the new rungs (pointAtOrBelow), a shorter surface lost a rung
+  // to it every time: a Mac on 1620 lines in fullscreen had 1358 of them in
+  // the window, which is 1080. Each exit from fullscreen cost a rung no missed
+  // frame had asked for, and a climb back takes most of a minute per rung.
+  //
+  // So a ladder rung keeps its LINES — every rung under the new ceiling is
+  // offered on any surface — and the CEILING stays the ceiling: "as sharp as
+  // this surface allows" is the same answer on the new surface, even where it
+  // is more lines than the old one's. If the new surface cannot afford it, its
+  // frames say so, as they would have for any rung.
+  const double base = limits.baseLines > 0.0 ? limits.baseLines : 1.0;
+  const bool atCeiling = point_.scale >= max_ - 1e-9;
+  const double want = atCeiling ? limits.max : point_.scale * baseLines_ / base;
+  baseLines_ = base;
+  max_ = limits.max;
+  limits.halfRate = halfRate();
+  RenderScalePoint list[kScaleMaxPoints];
+  const int n = operatingPoints(limits, list);
+  const double clamped = std::min(std::max(want, limits.min), limits.max);
+  // The divisor is untouched: a pending rate flip is the next poll's to perform.
+  const RenderScalePoint p{
+      list[pointAtOrBelow(RenderScalePoint{clamped, point_.divisor}, list, n)].scale,
+      point_.divisor};
+  // NOT A STEP: the rung, its clocks, how it was entered and the frames judged
+  // on it all stand. The resize's own stall is the shell's to report
+  // (resized()), and the grace that follows keeps it out of the window.
+  if (p.scale == point_.scale) return false;
+  point_ = p;
   if (out) *out = point_;
   return true;
 }

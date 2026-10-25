@@ -30,6 +30,7 @@ using ttp::rt::belowAnchor;
 using ttp::rt::kScaleMaxPoints;
 using ttp::rt::kJudgeSec;
 using ttp::rt::downMissedFrames;
+using ttp::rt::upMissedFrames;
 using ttp::rt::kDownMinSec;
 using ttp::rt::kUpWaitSec;
 using ttp::rt::kMaxFails;
@@ -79,28 +80,34 @@ int main() {
   {
     const int n = 5;
     const int down = downMissedFrames(kHz60);
-    check(renderScaleRung(3, n, down, down, kDownMinSec, 0.0, kUpWaitSec) == 2,
+    const int up = upMissedFrames(kHz60);
+    check(renderScaleRung(3, n, down, down, up, kDownMinSec, 0.0, kUpWaitSec) == 2,
           "a window missing the step-down count steps down one rung");
-    check(renderScaleRung(3, n, down - 1, down, kJudgeSec, 999.0, kUpWaitSec) == 3,
+    check(renderScaleRung(3, n, down - 1, down, up, kJudgeSec, 999.0, kUpWaitSec) == 3,
           "…and one fewer holds: a rung that holds still has the stray skip");
-    check(renderScaleRung(3, n, 100, down, kDownMinSec - 1, 0.0, kUpWaitSec) == 3,
+    check(renderScaleRung(3, n, 100, down, up, kDownMinSec - 1, 0.0, kUpWaitSec) == 3,
           "…but not before kDownMinSec seconds of the rung have been judged");
-    check(renderScaleRung(0, n, 100, down, kJudgeSec, 999.0, kUpWaitSec) == 0,
+    check(renderScaleRung(0, n, 100, down, up, kJudgeSec, 999.0, kUpWaitSec) == 0,
           "nothing steps below the bottom rung");
-    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
+    check(renderScaleRung(2, n, 0, down, up, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
           "a full clean window past the wait steps up one rung");
-    check(renderScaleRung(2, n, 1, down, kJudgeSec, 999.0, kUpWaitSec) == 2,
-          "…but one missed frame in it does not");
-    check(renderScaleRung(2, n, 0, down, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
+    check(renderScaleRung(2, n, up, down, up, kJudgeSec, 999.0, kUpWaitSec) == 3,
+          "…and so does one with no more than the climb allowance missed");
+    check(renderScaleRung(2, n, up + 1, down, up, kJudgeSec, 999.0, kUpWaitSec) == 2,
+          "…but one frame past it does not");
+    check(renderScaleRung(2, n, 0, down, up, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
           "…nor a window not yet full");
-    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
+    check(renderScaleRung(2, n, 0, down, up, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
           "…nor a rung entered too recently");
-    check(renderScaleRung(n - 1, n, 0, down, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
+    check(renderScaleRung(n - 1, n, 0, down, up, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
           "nothing climbs past the ceiling");
     // The count is a stretch of PICTURE: fifteen frames at 60, thirty at 120.
     check(downMissedFrames(kHz60) == 15, "60 Hz steps down on fifteen missed frames");
     check(downMissedFrames(kHz120) == 30, "…120 Hz on thirty, the same quarter second");
     check(downMissedFrames(20.0) == 13, "…and 50 Hz on thirteen");
+    // The climb allowance is a stretch of picture too, a fifth of that bar.
+    check(upMissedFrames(kHz60) == 3, "60 Hz climbs with up to three missed frames");
+    check(upMissedFrames(kHz120) == 6, "…120 Hz with up to six");
     nearly(upWaitSec(0), kUpWaitSec, "an unfailed rung waits kUpWaitSec");
     nearly(upWaitSec(1), 2.0 * kUpWaitSec, "each failure doubles it");
     nearly(upWaitSec(kMaxFails + 5), kUpWaitSec * (1 << kMaxFails), "…up to kMaxFails doublings");
@@ -506,6 +513,104 @@ int main() {
       b.cells = 2;
       b.race(30, shorter, two);
       nearly(b.lines(shorter), 720.0, "on the shorter surface the next race starts on 720 lines again");
+    }
+    {
+      // FULLSCREEN IN AND OUT KEEPS THE PICTURE. A Mac at 120 Hz: the page is
+      // 1084 CSS px tall in fullscreen and 909 in the window. The point was kept
+      // as a SCALE across the change and placed DOWNWARD on the new rungs, so
+      // every exit cost a rung with not one frame missed — 2160, 1620, 1080,
+      // 720 over three round trips, and a climb back takes most of a minute a
+      // rung.
+      const RenderScaleLimits full{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const RenderScaleLimits win{0.0, 2.0, 909.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 1;
+      b.ctl.scene(b.t);
+      b.race(10, full, cheap, kHz120);
+      nearly(b.lines(full), 2160.0, "fullscreen holds its ceiling");
+      for (int i = 0; i < 3; i++) {
+        RenderScalePoint p{0, 0};
+        b.ticks(10, kHz120);
+        check(b.poll(win, &p), "leaving fullscreen is answered at once, outside the poll cadence");
+        nearly(p.scale, 2.0, "…on the window's own ceiling, not the rung under it");
+        b.race(5, win, cheap, kHz120);
+        b.ticks(10, kHz120);
+        check(b.poll(full, &p), "entering it again is answered at once too");
+        nearly(b.lines(full), 2160.0, "…on fullscreen's ceiling");
+        b.race(5, full, cheap, kHz120);
+      }
+      nearly(b.lines(full), 2160.0, "three round trips cost no pixels");
+
+      // A LADDER RUNG KEEPS ITS LINES: 1620 in fullscreen is 1620 in the window,
+      // where the same scale would be 1358 lines and so 1080.
+      Box c;
+      c.cells = 1;
+      c.ctl.scene(c.t);
+      c.race(12, full, [](double s) { return s > 1.6 ? 12.0 : 1.0; }, kHz120);
+      nearly(c.lines(full), 1620.0, "a fullscreen page that cannot hold its ceiling settles on 1620");
+      for (int i = 0; i < 2; i++) {
+        c.ticks(10, kHz120);
+        c.poll(win);
+        nearly(c.lines(win), 1620.0, "…keeps 1620 lines in the window");
+        c.race(4, win, cheap, kHz120);
+        c.ticks(10, kHz120);
+        c.poll(full);
+        nearly(c.lines(full), 1620.0, "…and back in fullscreen");
+        c.race(4, full, cheap, kHz120);
+      }
+    }
+    {
+      // A RESIZE'S STALL IS NOT THE RUNG'S. The page stalls while the browser
+      // reallocates the canvas and lays itself out again; judged, that stepped
+      // a page holding its ceiling down on every fullscreen toggle.
+      const RenderScaleLimits full{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      for (int told = 1; told >= 0; told--) {
+        Box b;
+        b.cells = 1;
+        b.ctl.scene(b.t);
+        b.race(40, full, cheap, kHz120);
+        if (told) b.ctl.resized(b.t);
+        b.mon.reset();
+        b.everyNth = 4;   // two seconds presenting one vsync in four
+        b.race(2, full, cheap, kHz120);
+        b.everyNth = 1;
+        b.race(5, full, cheap, kHz120);
+        if (told) {
+          nearly(b.lines(full), 2160.0, "a stall inside the resize grace steps nothing down");
+        } else {
+          check(b.lines(full) < 2160.0, "…where the same stall unannounced does (the control)");
+        }
+      }
+    }
+    {
+      // A STRAY SKIP DOES NOT BAR THE CLIMB BACK. The ceiling holds with a late
+      // frame every few seconds — staying never asked for a perfect window — and
+      // an outside stall steps it down. The climb used to want ten seconds with
+      // NOTHING missed, which a browser at 120 Hz does not reliably give, so the
+      // page sat a rung below a ceiling it had been holding all along.
+      const RenderScaleLimits full{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      for (int stray : {360, 100}) {   // a late frame every 3 s; every 0.8 s
+        Box b;
+        b.cells = 1;
+        b.missEvery = stray;
+        b.ctl.scene(b.t);
+        b.race(40, full, cheap, kHz120);
+        nearly(b.lines(full), 2160.0, "the ceiling holds with stray skips");
+        b.everyNth = 4;
+        b.race(1, full, cheap, kHz120);
+        b.everyNth = 1;
+        nearly(b.lines(full), 1620.0, "an outside stall steps it down one rung");
+        b.race(kUpWaitSec + kJudgeSec + 5, full, cheap, kHz120);
+        if (stray == 360) {
+          nearly(b.lines(full), 2160.0, "…and with a late frame every 3 s it climbs back");
+        } else {
+          nearly(b.lines(full), 1620.0,
+                 "…but one missing more than the allowance stays, without stepping down either");
+        }
+      }
     }
     {
       // 120 Hz IS HELD WITH PIXELS. A frame that fits 8.3 ms only at 720 lines

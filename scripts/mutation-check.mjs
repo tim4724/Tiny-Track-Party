@@ -548,8 +548,37 @@ export const MUTATIONS = [
     // slow while it builds steps down off its own loading.
     name: 'render-scale/grace-judged',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'if (!gaps.empty() && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {',
-    replace: 'if (!gaps.empty()) {',
+    find: 'if (!gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {',
+    replace: 'if (!gaps.empty() && !resizing) {',
+    expect: 'render_scale',
+  },
+  {
+    // …and a resize's first seconds are the reallocation's. Judged, a Mac
+    // holding its ceiling stepped a rung down on every fullscreen toggle.
+    name: 'render-scale/resize-grace-judged',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'const bool resizing = resized_ && tMs - resizedMs_ < kScaleResizeGraceSec * 1000.0;',
+    replace: 'const bool resizing = false;',
+    expect: 'render_scale',
+  },
+  {
+    // A band change keeps the PICTURE. Left to the cadence, the old scale is
+    // placed downward on the new surface's rungs, and every exit from
+    // fullscreen cost a rung no missed frame asked for.
+    name: 'render-scale/band-change-keeps-the-scale',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '    return remap(limits, out);',
+    replace: '    (void) 0;',
+    expect: 'render_scale',
+  },
+  {
+    // A climb allows a stray skip. Demanding a perfect window, a browser at
+    // 120 Hz that something stepped down never climbs back to a ceiling it
+    // was holding.
+    name: 'render-scale/climb-wants-a-perfect-window',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'return dueMs > 0.0 ? (int) std::lround(kUpMissedMs / dueMs) : 0;',
+    replace: 'return 0;',
     expect: 'render_scale',
   },
   {

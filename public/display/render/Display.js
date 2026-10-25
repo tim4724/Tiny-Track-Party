@@ -138,6 +138,7 @@ export class Display {
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       safeInsets: mod.cwrap('ttp_display_safe_insets', null, ['number', 'number']),
       scaleScene: mod.cwrap('ttp_display_scale_scene', null, ['number']),
+      scaleResized: mod.cwrap('ttp_display_scale_resized', null, ['number']),
       scalePoll: mod.cwrap('ttp_display_scale_poll', 'number',
                            ['number', 'number', 'number', 'number', 'number', 'number']),
       scalePanelMs: mod.cwrap('ttp_display_scale_panel_ms', 'number', []),
@@ -346,6 +347,11 @@ export class Display {
   // A NEW SCENE, on the same clock the perf samples carry. The rule starts the
   // scene's grace and its wait to climb; neither is ours to judge.
   scaleScene(tMs) { this._fn.scaleScene(tMs); }
+
+  // THE WINDOW CHANGED SIZE (a drag, fullscreen), same clock. The rule judges
+  // nothing for a few seconds: the stall is the reallocation's, not the rung's.
+  // Not for a resize performing a scalePoll answer — that one is the rule's own.
+  scaleResized(tMs) { this._fn.scaleResized(tMs); }
 
   // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
   // which is also the answer while a hold or the poll cadence is running.

@@ -496,6 +496,11 @@ jint n_ttp_display_scale_poll(JNIEnv* env, jclass, jdouble a0, jdouble a1, jdoub
     return rc;
 }
 
+void n_ttp_display_scale_resized(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    ttp_display_scale_resized((double) a0);
+}
+
 void n_ttp_display_scale_scene(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     ttp_display_scale_scene((double) a0);
@@ -1478,6 +1483,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_scale_half_rate", "(I)V", (void*) n_ttp_display_scale_half_rate },
     { "ttp_display_scale_panel_ms", "()D", (void*) n_ttp_display_scale_panel_ms },
     { "ttp_display_scale_poll", "(DDDDD[D)I", (void*) n_ttp_display_scale_poll },
+    { "ttp_display_scale_resized", "(D)V", (void*) n_ttp_display_scale_resized },
     { "ttp_display_scale_scene", "(D)V", (void*) n_ttp_display_scale_scene },
     { "ttp_display_settled", "()I", (void*) n_ttp_display_settled },
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },

@@ -219,6 +219,15 @@ step this machine may never take. NEW GAME's click carries the fullscreen unlock
 which is what makes a mid-boot window change ordinary rather than exotic;
 `tests/e2e/boot-resize.spec.js` holds that window open on purpose.
 
+**A WINDOW RESIZE IS NOT A STEP, AND THE RULE HEARS IT FIRST.** The browser is
+the one shell whose surface changes size under it (a drag, fullscreen, DevTools),
+so `_onWindowResize` tells the rule (`scaleResized`, a few seconds in which the
+stall is not judged) and polls BEFORE `_onResize` sizes the buffer. The poll
+answers a band change at once with the same PICTURE — the same rung in lines, or
+the new ceiling — so the buffer is sized once. Sized first at the old scale, a
+shorter window was a rung lower every time (a 1620-line fullscreen is 1358 lines
+of window at the same scale, placed down to 1080).
+
 **A SCENE BUILD IS ONE CALL AND ONE RESET THIS SIDE OWES.** After every
 `setTrack` — a static build, or a field rebuild on the resident track — and
 never after a reroster (the same scene re-dressed),

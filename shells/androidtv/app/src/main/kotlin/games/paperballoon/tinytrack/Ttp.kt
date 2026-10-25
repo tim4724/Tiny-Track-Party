@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 248 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 249 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -94,6 +94,7 @@ object Ttp {
     external fun ttp_display_scale_half_rate(on: Int)
     external fun ttp_display_scale_panel_ms(): Double
     external fun ttp_display_scale_poll(tMs: Double, minScale: Double, maxScale: Double, baseLines: Double, panelMs: Double, out2: DoubleArray): Int
+    external fun ttp_display_scale_resized(tMs: Double)
     external fun ttp_display_scale_scene(tMs: Double)
     external fun ttp_display_settled(): Int
     external fun ttp_display_shadows(enabled: Int)

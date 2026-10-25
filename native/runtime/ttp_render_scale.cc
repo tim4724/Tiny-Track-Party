@@ -24,6 +24,10 @@ extern "C" void ttp_display_scale_scene(double tMs) {
   ctl().scene(tMs);
 }
 
+extern "C" void ttp_display_scale_resized(double tMs) {
+  ctl().resized(tMs);
+}
+
 extern "C" int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
                                       double baseLines, double panelMs, double* out2) {
   if (!out2) return 0;

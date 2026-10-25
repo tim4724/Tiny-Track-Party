@@ -327,7 +327,7 @@ export class Stage {
     this._cardMask = null;   // last pushed "a card owns this cell" bitmask
     this._divPushed = null;  // last pushed divider toggle
     this._hudPushed = null;  // last pushed steer-bar toggle
-    window.addEventListener('resize', () => this._onResize());
+    window.addEventListener('resize', () => this._onWindowResize());
   }
 
   // The chunky ink rules between split-screen cells (?dividers=0 turns them
@@ -383,7 +383,7 @@ export class Stage {
     const ch = Math.max(1, this.container.clientHeight);
     if (this._superArmed) {
       // Held AT the debug ceiling until the point has been there once
-      // (`_superReached`, latched in _adaptScale); released after, so the rescue
+      // (`_superReached`, latched in _pollScale); released after, so the rescue
       // this exists to show is not fought by its own floor.
       return {
         min: this._superReached ? 0 : this._superSample,
@@ -421,6 +421,24 @@ export class Stage {
     // adaptive step. Written here because this is the only place it is decided.
     this.perf.dpr = this._dpr;
     return { w, h };
+  }
+
+  // THE PAGE WAS RESIZED UNDER US — a drag, fullscreen in or out, DevTools —
+  // as opposed to _onResize performing a size the rule chose.
+  //
+  // Two things the rule needs to hear first, both C++'s to act on. That the
+  // stall about to follow is the resize's (scaleResized): judged, it stepped a
+  // Mac a rung down on every fullscreen toggle. And the new band, BEFORE the
+  // buffer is sized: the rule answers a band change at once with the same
+  // PICTURE on the new surface, and asking after sizing would reallocate twice
+  // — once at the old scale, which on the new height is another picture.
+  _onWindowResize() {
+    if (this.display && this._dprRequest == null && !this._automation) {
+      const t = performance.now();
+      this.display.scaleResized(t);
+      this._pollScale(t);
+    }
+    this._onResize();
   }
 
   _onResize() {
@@ -1332,12 +1350,20 @@ export class Stage {
   }
 
   _adaptScale(t) {
-    if (this._dprRequest != null || this._automation) return;   // a named scale is not ours to move
+    if (this._pollScale(t)) this._onResize();
+  }
+
+  // Ask, and take the answer into `_autoScale`/`_divisor` — everything but the
+  // resize, which is the caller's: _adaptScale performs it at once, and a
+  // window resize (_onWindowResize) is about to size the buffer anyway. True
+  // when the point moved.
+  _pollScale(t) {
+    if (this._dprRequest != null || this._automation) return false;   // a named scale is not ours to move
     // A THROTTLED TAB IS NOT THIS DEVICE. A hidden tab presents at whatever rate
     // the browser feels like, so the window fills with frames that describe
     // nothing — drop it rather than decide on it, which is the readout's own
     // rule (stale history is worse than none) applied to the same monitor.
-    if (typeof document !== 'undefined' && document.hidden) { this.perf.reset(); return; }
+    if (typeof document !== 'undefined' && document.hidden) { this.perf.reset(); return false; }
     this._armSuperSample(t);
     // …and release its floor once the point has actually reached it. Latched
     // here rather than inside _scaleBand, which _sizeCanvas also calls and which
@@ -1364,7 +1390,7 @@ export class Stage {
       this._pacedDivisor = this._divisor;
       this.perf.pacing(panelMs, this._divisor);
     }
-    if (!step) return;
+    if (!step) return false;
     // WHAT THE RULE ANSWERED, on the console, because a move is an EVENT and the
     // readout only ever shows the current size. Both TV shells print this and
     // the browser did not, so the one platform you can actually sit in front of
@@ -1374,11 +1400,11 @@ export class Stage {
     console.info(`[stage] scale ${was.toFixed(3)} -> ${this._autoScale.toFixed(3)}`
         + ` (${Math.round(this._autoScale * band.baseLines)} lines)`
         + ` | ${Math.round(1000 / (panelMs || 1000 / 60))}Hz / divisor ${this._divisor}`);
-    // …and _onResize drops the window a second time, once the buffer has
-    // actually changed size. The rule dropped it at the decision; this catches
-    // the reallocation's own stall, which would otherwise be the first thing the
-    // next decision sees.
-    this._onResize();
+    // …and the caller's _onResize drops the window a second time, once the
+    // buffer has actually changed size. The rule dropped it at the decision;
+    // that catches the reallocation's own stall, which would otherwise be the
+    // first thing the next decision sees.
+    return true;
   }
 
   _loop(t) {
