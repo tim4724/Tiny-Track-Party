@@ -100,6 +100,10 @@ const TAG_LIFT_EM = 0.4;
 const tagName = (c, id) => c.name || ('P' + id);
 
 const MAX_BUFFER_H = 2160;
+// How many drawn frames of the CURRENT scene the canvas must hold before a
+// hidden scene may stop drawing (see _hiddenIdle). Two, because the boot's
+// first reveal is two frames into the loop and cuts straight in, unfaded.
+const FRESH_FRAMES = 2;
 
 // DEV. `?cars=,,tk-stock-hatch-muscle,tk-jeep-b` draws roster car i
 // with concept car i instead (public/assets/concepts/, the asset gallery's
@@ -171,6 +175,10 @@ export class Stage {
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
     this._periodMs = 0;      // the panel's vsync period, averaged off rAF deltas (see _loop)
     this._undrawn = false;   // step everything but the draw (see setUndrawn)
+    this._freshFrames = 0;   // frames drawn since the last build or resize (see _hiddenIdle)
+    this._dimSince = null;   // when #scene last went transparent, and its fade-out's length
+    this._dimFadeMs = 0;
+    this._hiddenIdling = false;
     this._clockMs = 0;       // the frame clock: dt summed, handed to onFrame
     this._track = null;
     this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
@@ -418,6 +426,7 @@ export class Stage {
   _onResize() {
     const { w, h } = this._sizeCanvas();
     if (this.display) this.display.resize(w, h);
+    this._freshFrames = 0;   // the reallocated buffer holds no frame at all
     // DROP THE WINDOW, every time — this is the one place the buffer changes
     // size, and the readout is LABELLED with the size it was measured at. Held,
     // a line reads "960x540" over percentiles half of which were drawn at
@@ -568,6 +577,7 @@ export class Stage {
             if (sceneSig === this._sceneSig && this.display.built
                 && await this.display.reroster(roster, this._assets)) {
               this._rosterSig = rosterSig;
+              this._freshFrames = 0;
               continue;
             }
             this.display.showcase(!!this._showcase); // latched; see showcase()
@@ -577,6 +587,7 @@ export class Stage {
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
             this._rosterSig = rosterSig;
+            this._freshFrames = 0;
             // A FULL BUILD ONLY. The reroster path above is an in-place re-dress
             // of the same scene — same meshes, same cost — so it inherits its own
             // scale legitimately and must not re-arm the scene's grace.
@@ -1402,7 +1413,26 @@ export class Stage {
     this._clockMs += dt * 1000;
     if (this.onFrame) this.onFrame(dt, this._clockMs);
     if (!this.display) { this._scheduleNext(); return; }
-    if (this._undrawn) {
+    const hiddenIdle = this._hiddenIdle(t);
+    if (this._hiddenIdling && !hiddenIdle) {
+      // Back on screen. The window holds the undrawn callbacks, which cost next
+      // to nothing, and the scale rule must not climb on a cadence no drawn
+      // frame ever kept.
+      this.perf.reset();
+    }
+    this._hiddenIdling = hiddenIdle;
+    // Derived bytes the last frame landed. HERE and not at the end of a build:
+    // a WebGL readback cannot complete inside the call that issues it, so the
+    // build only stages and this is where the bake actually arrives
+    // (ttp_display.h). One integer on an idle frame, and it is deliberately
+    // not awaited — nothing on screen waits for a cache write.
+    // Unawaited, and its failures are swallowed: nothing on screen waits for a
+    // cache write, and a rejected IndexedDB put must not reach the page as an
+    // unhandled rejection from the frame loop. Ahead of the undrawn return, so a
+    // bake the hidden scene's last drawn frame landed is written while nobody is
+    // watching, not under the fade that reveals it.
+    this.display.writeReadyBlobs().catch(() => {});
+    if (this._undrawn || hiddenIdle) {
       // Everything a frame does before the GPU — the sim above, the bookkeeping, the
       // renderer's own state — and no draw. See setUndrawn.
       this._syncCells();
@@ -1411,15 +1441,6 @@ export class Stage {
       return;
     }
     this._adaptScale(t);
-    // Derived bytes the last frame landed. HERE and not at the end of a build:
-    // a WebGL readback cannot complete inside the call that issues it, so the
-    // build only stages and this is where the bake actually arrives
-    // (ttp_display.h). One integer on an idle frame, and it is deliberately
-    // not awaited — nothing on screen waits for a cache write.
-    // Unawaited, and its failures are swallowed: nothing on screen waits for a
-    // cache write, and a rejected IndexedDB put must not reach the page as an
-    // unhandled rejection from the frame loop.
-    this.display.writeReadyBlobs().catch(() => {});
 
     const ids = this._syncCells();
 
@@ -1558,6 +1579,27 @@ export class Stage {
   // drives keep step too. Pacing and the perf meter are a drawn frame's business.
   setUndrawn(on) { this._undrawn = !!on; }
 
+  // A SCENE NOBODY CAN SEE DOES NOT DRAW. #scene goes transparent (.is-dim)
+  // whenever the 3D is not the backdrop — the welcome board above all, where a
+  // TV can sit for minutes — and a frame drawn at opacity 0 costs the GPU what a
+  // visible one does. So the loop steps UNDRAWN there (see setUndrawn): the sim,
+  // the attract demo and the renderer's own state all keep time, and the first
+  // frame drawn on the way back in is the one drawing throughout would have
+  // shown. Two holds keep a reveal honest. The canvas must already carry
+  // FRESH_FRAMES drawn frames of the CURRENT scene — a build or a resize leaves
+  // it holding the old one, or nothing, and the boot's first reveal cuts in
+  // without a fade. And a fade OUT keeps drawing until it has run (its length
+  // read off the element, as the CSS states it), or the picture would freeze
+  // while it dissolves.
+  _hiddenIdle(t) {
+    if (!this.container.classList.contains('is-dim')) { this._dimSince = null; return false; }
+    if (this._dimSince === null) {
+      this._dimSince = t;
+      this._dimFadeMs = (parseFloat(getComputedStyle(this.container).transitionDuration) || 0) * 1000;
+    }
+    return this._freshFrames >= FRESH_FRAMES && t - this._dimSince >= this._dimFadeMs;
+  }
+
   // The frame itself, and the only place the perf HUD instruments. The GPU timer
   // brackets THIS call and nothing else: the HUD's own DOM writes and the cell
   // placement below happen outside it, so the number stays a measure of the
@@ -1568,6 +1610,7 @@ export class Stage {
     this.perf.gpuBegin();
     this.display.frame(dt);
     this.perf.gpuEnd();
+    this._freshFrames++;
     // ONLY WITH A READER. The CPU term feeds the panel and the benched log and
     // nothing else — the scale rule does not use one — so an unwatched frame
     // does not pay for the profile read (PerfHud's `watching`).

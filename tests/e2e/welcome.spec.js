@@ -10,6 +10,32 @@
 // roster for the next party).
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
+test('the welcome board draws no 3D frames; NEW GAME draws the attract race again', async ({ page }) => {
+  // #scene is transparent behind the title board, and a TV can sit there for
+  // minutes: the loop keeps the sim and the attract race stepping but stops
+  // DRAWING (Stage._hiddenIdle). Counted at the renderer's own frame call, so
+  // the gate is what the GPU is asked for rather than a flag inside Stage.
+  await page.goto('/');
+  await page.waitForFunction(() => window.__sceneReady);
+  await page.evaluate(() => window.__sceneReady);
+  await page.evaluate(() => {
+    const d = window.__scene.display;
+    const frame = d.frame.bind(d);
+    window.__drawn = 0;
+    d.frame = (dt) => { window.__drawn++; return frame(dt); };
+  });
+  // Past the boot's own fresh frames and the fade-out (both well under this
+  // wait), the count must hold still.
+  await page.waitForTimeout(1500);
+  const settled = await page.evaluate(() => window.__drawn);
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__drawn), 'a hidden scene must not draw').toBe(settled);
+
+  await page.click('#newgame-btn');
+  await page.waitForSelector(visible('#lobby'));
+  await page.waitForFunction((n) => window.__drawn > n + 10, settled, { timeout: 20000 });
+});
+
 test('boot shows the welcome board with the room pre-warmed; NEW GAME reveals the lobby', async ({ page }) => {
   await page.goto('/');
 

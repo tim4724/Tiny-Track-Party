@@ -311,6 +311,17 @@ fraction of the drawn cost and the next drawn frame is what every-frame drawing
 would have shown. `onFrame(dt, nowMs)` carries the loop's own clock, dt summed,
 which under a gate is the sim's time rather than the wall's.
 
+**A scene nobody can see does not draw.** While `#scene` is `.is-dim` (the
+welcome board, a lobby with no preview) the loop steps undrawn on its own
+(`Stage._hiddenIdle`): a frame at opacity 0 costs the GPU what a visible one
+does, and a TV can sit on the title board for minutes. Two holds keep a reveal
+honest, and both are load-bearing: the canvas must already carry a couple of
+drawn frames of the CURRENT scene (a build or a resize resets that, and the
+boot's first reveal cuts in unfaded), and a fade-out keeps drawing for its own
+CSS length. Coming back resets the perf window, so the scale rule never climbs
+on undrawn ticks. `tests/e2e/welcome.spec.js` counts the renderer's frame calls
+to hold it.
+
 A capture that RUNS A RACE must run headed: headless Chromium is SwiftShader,
 headed gets ANGLE-on-Metal, and under SwiftShader a full-resolution frame is slow
 enough that the 50 ms dt clamp stops the race advancing. A still (a scenario that
