@@ -122,7 +122,13 @@ export function carThumbNode(model, { spin = false } = {}) {
     // over, since a decode that failed on a strip the browser already loaded is
     // no reason to sit on the still forever.
     pre.onload = () => { if (pre.decode) pre.decode().then(takeOver, takeOver); else takeOver(); };
-    pre.src = url;
+    // The strip waits for the still. It is ~20x the still's bytes, and fetched
+    // beside it on a phone's first paint it starves the very picture the player
+    // is looking at (the still is the controller page's largest paint). Either
+    // outcome lets it go, as above: a still that failed is no reason not to spin.
+    const loadStrip = () => { if (!overlay.dataset.spinOff) pre.src = url; };
+    if (still.complete) loadStrip();
+    else { still.addEventListener('load', loadStrip, { once: true }); still.addEventListener('error', loadStrip, { once: true }); }
   }
   return box;
 }

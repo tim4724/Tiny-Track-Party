@@ -18,6 +18,7 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track</title>
+  <meta name="description" content="The phone controller for Tiny Track Party: pick your car and steer by tilting your phone." />
   <!-- Paper Balloon shell §10: rotate to landscape before first paint. MUST be an
        external classic script this early — inline dies on the CSP, a module runs
        too late and the player watches the page turn. -->
@@ -28,9 +29,9 @@
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
   <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/controller/controller.css?v=__APP_V__" />
-  <script src="/shared/protocol.js?v=__APP_V__"></script>
-  <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
-  <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script defer src="/shared/protocol.js?v=__APP_V__"></script>
+  <script defer src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script defer src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
 </head>
 <body>
   <!-- Shared SVG defs. The gear glyph is drawn ONCE and <use>d by both settings
@@ -406,11 +407,11 @@
        (§10) so this never shows; in a plain browser it is the fallback for
        platforms where fullscreen + orientation lock (orientation.js) can't be
        had, iOS Safari first among them. -->
-  <div id="rotate" class="rotate" role="alertdialog" aria-live="assertive">
+  <div id="rotate" class="rotate" role="alertdialog" aria-live="assertive" aria-labelledby="rotate-title" aria-describedby="rotate-msg">
     <div class="rotate__card">
       <div class="rotate__phone" aria-hidden="true"></div>
-      <h2 class="rotate__title">Turn your phone sideways</h2>
-      <p class="rotate__msg">This controller plays in landscape. Once you're sideways, lock rotation so tilting doesn't flip the screen.</p>
+      <h2 id="rotate-title" class="rotate__title">Turn your phone sideways</h2>
+      <p id="rotate-msg" class="rotate__msg">This controller plays in landscape. Once you're sideways, lock rotation so tilting doesn't flip the screen.</p>
     </div>
   </div>
 

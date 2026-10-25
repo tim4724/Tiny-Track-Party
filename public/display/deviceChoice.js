@@ -36,32 +36,37 @@ function initLanding(choice) {
 }
 initLanding(el('device-choice'));
 
-// Run `onChosen` (the room's start) as soon as the big screen is committed to —
-// immediately where the chooser doesn't show, otherwise on the button or on the
-// window growing past the breakpoint.
-export function startWhenDeviceChosen(onChosen) {
+// Resolves as soon as the big screen is committed to — immediately where the
+// chooser doesn't show, otherwise on the button or on the window growing past
+// the breakpoint. main.js awaits it BEFORE the engine boot, not just before the
+// room's start: a phone that only reads the landing (which is most phone visits)
+// never downloads or compiles the engine and never stands up WebGL, so the page
+// it is reading stays responsive and its picture isn't starved of bandwidth.
+// The welcome board behind already answers NEW GAME before the engine is up.
+export function whenDeviceChosen() {
   const choice = el('device-choice');
   if (!choice || getComputedStyle(choice).display === 'none') {
     dismissDeviceChoice();
-    onChosen();
-    return;
+    return Promise.resolve();
   }
   window.__deviceChoicePending = true; // E2E hook: the boot took the deferred path
-  let chosen = false;
-  const proceed = () => {
-    if (chosen) return;
-    chosen = true;
-    window.__deviceChoicePending = false;
-    window.removeEventListener('resize', onResize);
-    dismissDeviceChoice();
-    onChosen();
-  };
-  // The chooser's visibility is pure CSS (the display.css media query): if the
-  // window grows past the trigger — a small desktop window getting maximised —
-  // the overlay vanishes on its own, so treat that as choosing the big screen
-  // or the room would never open. Reading the computed style on resize keeps
-  // the breakpoint defined in exactly one place (the CSS).
-  const onResize = () => { if (getComputedStyle(choice).display === 'none') proceed(); };
-  el('device-continue').addEventListener('click', proceed);
-  window.addEventListener('resize', onResize);
+  return new Promise((resolve) => {
+    let chosen = false;
+    const proceed = () => {
+      if (chosen) return;
+      chosen = true;
+      window.__deviceChoicePending = false;
+      window.removeEventListener('resize', onResize);
+      dismissDeviceChoice();
+      resolve();
+    };
+    // The chooser's visibility is pure CSS (the display.css media query): if the
+    // window grows past the trigger — a small desktop window getting maximised —
+    // the overlay vanishes on its own, so treat that as choosing the big screen
+    // or the room would never open. Reading the computed style on resize keeps
+    // the breakpoint defined in exactly one place (the CSS).
+    const onResize = () => { if (getComputedStyle(choice).display === 'none') proceed(); };
+    el('device-continue').addEventListener('click', proceed);
+    window.addEventListener('resize', onResize);
+  });
 }

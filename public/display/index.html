@@ -6,6 +6,7 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track Party</title>
+  <meta name="description" content="Toy car racing for 1 to 4 players on one big screen. Everyone scans a QR code and steers by tilting their phone. Free, in the browser, nothing to install." />
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/icon/favicon-32.png?v=__APP_V__" />
   <link rel="apple-touch-icon" href="/assets/icon/apple-touch-icon.png?v=__APP_V__" />
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
@@ -22,14 +23,17 @@
   <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
 
   <!-- Transport + shared contract: classic scripts set window globals BEFORE
-       the deferred module entry runs. -->
-  <script src="/shared/protocol.js?v=__APP_V__"></script>
+       the deferred module entry runs. `defer` keeps that order (deferred
+       classic and module scripts run in document order once parsing ends)
+       without blocking the parser, so the landing's picture is found and
+       painted without waiting on three script round trips. -->
+  <script defer src="/shared/protocol.js?v=__APP_V__"></script>
   <!-- PartyConnection + PartyFastlane survive the native port: they own the
        WebSocket and the WebRTC handshake (which wasm cannot), and the native
        fastlane SUBCLASSES PartyFastlane to inherit that handshake. RoomFlow.js is
        gone — the room state machine is C++ now (NativeRoomFlow). -->
-  <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
-  <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script defer src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script defer src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
 </head>
 <body>
   <!-- Default lobby backdrop: the sunny diorama (shown until a track is picked).
@@ -57,9 +61,9 @@
        the fork after: send the link to a big screen, or run the big screen
        here. A cramped viewport can also mean someone trying to JOIN, hence the
        scan hint. Hidden on big screens and once dismissed (display.css media
-       query + the html.device-choice-dismissed class); main.js defers opening
-       a room until a choice is made, so a stray phone visit never spawns a
-       ghost room. The hero image is loading="lazy" so a big screen, where this
+       query + the html.device-choice-dismissed class); main.js defers the whole
+       engine boot until a choice is made, so a stray phone visit never spawns a
+       ghost room, nor downloads and compiles an engine it will not run. The hero image is loading="lazy" so a big screen, where this
        is display:none, never fetches it.
        role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
        containment we don't implement (no focus trap) — tabbing out lands on
@@ -69,7 +73,7 @@
       <h1 id="device-choice-title" class="wordmark landing__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></h1>
       <p class="landing__tag">Toy car racing for 1 - 4 players</p>
       <button id="device-trailer" class="landing__hero" aria-label="Play the trailer">
-        <img src="/assets/brand/tv/shelf/split.jpg" alt="Four players racing toy cars in split screen" width="1920" height="1080" loading="lazy" />
+        <img src="/assets/brand/tv/shelf/split.jpg" alt="Four players racing toy cars in split screen" width="1920" height="1080" loading="lazy" fetchpriority="high" />
         <!-- A drawn triangle, not the ▶ character: iOS sets that glyph with
              emoji metrics and it sits off the disc's centre. -->
         <span class="landing__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></span>

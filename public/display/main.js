@@ -26,7 +26,7 @@ import { setBackdrop3D, crossfadeBackdrop, dissolveInto } from './backdrop.js';
 // TV-surface furniture with no stake in the race: the auto-hiding chrome, the
 // fullscreen toggle, the copy toast. Importing this module installs them.
 import { revealRaceChrome, holdRaceChrome, enterFullscreen, showToast, copyText } from './chrome.js';
-import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
+import { dismissDeviceChoice, whenDeviceChosen } from './deviceChoice.js';
 // The UI MODEL is C++ too (ttp_ui.h over libttp-runtime/ttp/ui_model.cc). Every
 // screen decision below — which seats, which race card, which rows, whether the
 // field may freeze — is ITS answer; this file renders and decides nothing.
@@ -166,6 +166,11 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 // GAME path (the caught click held pressed, then the lobby reveal and the
 // ticket's QR/URL fade) can be watched by hand instead of racing a fast machine.
 const _qBootDelay = parseInt(_trackParams.get('bootdelay'), 10) || 0;
+// The phone landing holds the WHOLE boot, not only the room: nothing below runs
+// until the big screen is committed to (see whenDeviceChosen). Gallery iframes
+// are small and ?solo is a dev surface, so neither is ever held by the chooser.
+if (_isTestMode || _isDebugSolo) dismissDeviceChoice();
+await whenDeviceChosen();
 if (_qBootDelay) await new Promise((r) => setTimeout(r, _qBootDelay));
 // ---- the native engine ------------------------------------------------------
 // Stood up in boot.js, which owns the ordering; a failure is FATAL rather than a
@@ -1413,7 +1418,6 @@ if (!_isTestMode) wakeLock.enable();
 // TestHarness drive a single screen from fake data. Normal play connects.
 const _scenario = _trackParams.get('scenario');
 if (_scenario) {
-  dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
   // Which backdrop each scenario gets (diorama vs the 3D scene) is the
   // harness's call, in ONE place next to the scenarios — see runDisplayScenario.
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
@@ -1440,7 +1444,6 @@ if (_scenario) {
   // module seats a synthetic human in net.flow and feeds the keyboard through the
   // normal engine input path, so the whole race lifecycle runs unchanged. Booting
   // through the lobby (not the test harness) keeps that path identical to live play.
-  dismissDeviceChoice(); // dev surface — never block it on the chooser
   show('lobby');
   renderRoster(0, null);
   updateBackdrop();
@@ -1469,15 +1472,14 @@ if (_scenario) {
   };
   show('welcome');
   // The caught-click replay runs IMMEDIATELY after show('welcome'), before
-  // anything that forces a style recalc (startWhenDeviceChosen reads computed
-  // style): if the lobby's display:none from show('welcome') were committed
+  // anything that forces a style recalc: if the lobby's display:none from show('welcome') were committed
   // between the two, re-showing it would restart every entrance animation in
   // it — the already-visible chrome re-slapping is what a mid-boot click must
   // NOT cause.
   if (newGameClicked) newGameClick();
   renderRoster(0, null); // paint the open-seat placeholders now, so the lobby reveal is complete
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  startWhenDeviceChosen(() => net.start()); // warms the room BEHIND the welcome board, gated on the device chooser where it shows
+  net.start(); // warms the room BEHIND the welcome board (the device chooser, where it shows, was answered before the boot)
 
   // Browser back: one level up the SCREEN_ORDER stack. WHAT that means is
   // uiModel's back table, which reads the two race latches as well as the
