@@ -108,9 +108,9 @@ function sendJson(res, statusCode, payload) {
 // without a stat, and quality 5 keeps the one-time cost tens of ms rather than
 // the seconds quality 11 would take on the wasm. The GLBs and the Filament
 // materials are binary but NOT compressed formats (vertex buffers, shader
-// blobs) and shrink 3-4x, and the race fetches a dozen of each at boot. Media
-// types stay raw — they are already compressed formats, and they're the ones
-// that get range requests.
+// blobs): they shrink 4-5x, and every boot fetches dozens of them. Media types
+// stay raw — they are already compressed formats, and they're the ones that
+// get range requests.
 const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.md', '.glb', '.filamat']);
 const brotliCache = new Map(); // filePath -> { src, encoded }
 function brotliFor(filePath, data) {

@@ -1472,10 +1472,10 @@ if (_scenario) {
   };
   show('welcome');
   // The caught-click replay runs IMMEDIATELY after show('welcome'), before
-  // anything that forces a style recalc: if the lobby's display:none from show('welcome') were committed
-  // between the two, re-showing it would restart every entrance animation in
-  // it — the already-visible chrome re-slapping is what a mid-boot click must
-  // NOT cause.
+  // anything that forces a style recalc: if the lobby's display:none from
+  // show('welcome') were committed between the two, re-showing it would restart
+  // every entrance animation in it — the already-visible chrome re-slapping is
+  // what a mid-boot click must NOT cause.
   if (newGameClicked) newGameClick();
   renderRoster(0, null); // paint the open-seat placeholders now, so the lobby reveal is complete
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)

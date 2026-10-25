@@ -14,8 +14,8 @@ export function dismissDeviceChoice() {
 }
 
 // The landing's own controls. Wired when this module loads, not from
-// startWhenDeviceChosen: boot calls that only once the engine has loaded, and
-// the landing is on screen from the first paint, like NEW GAME and TRAILER.
+// whenDeviceChosen: the landing is on screen from the first paint, like NEW
+// GAME and TRAILER, and it has to answer while nothing behind it has booted.
 function initLanding(choice) {
   // The big button sends this page to a big screen: the phone's share sheet
   // where there is one, otherwise the link onto the clipboard. It names the

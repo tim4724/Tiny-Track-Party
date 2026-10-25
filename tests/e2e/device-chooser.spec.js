@@ -1,10 +1,10 @@
 // @ts-check
 // Device chooser: the display URL on a phone-sized viewport offers the
-// big-screen/join fork and defers room creation until a choice is made;
-// big screens never see it.
+// big-screen/join fork and defers the engine boot (and with it the room)
+// until a choice is made; big screens never see it.
 const { test, expect, openDisplay } = require('./helpers');
 
-test('phone-sized visit gets the chooser and defers the room', async ({ browser }) => {
+test('phone-sized visit gets the chooser and defers the engine boot', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
   const engineFetches = [];

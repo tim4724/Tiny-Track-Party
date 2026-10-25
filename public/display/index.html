@@ -63,8 +63,9 @@
        scan hint. Hidden on big screens and once dismissed (display.css media
        query + the html.device-choice-dismissed class); main.js defers the whole
        engine boot until a choice is made, so a stray phone visit never spawns a
-       ghost room, nor downloads and compiles an engine it will not run. The hero image is loading="lazy" so a big screen, where this
-       is display:none, never fetches it.
+       ghost room, nor downloads and compiles an engine it will not run. The
+       hero image is loading="lazy" so a big screen, where this is display:none,
+       never fetches it.
        role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
        containment we don't implement (no focus trap) — tabbing out lands on
        the benign lobby behind, which the screen reader can then read honestly. -->
