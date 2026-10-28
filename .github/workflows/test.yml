@@ -109,17 +109,24 @@ jobs:
           node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
+      - name: Name the runner image
+        # The browser builds are per distro release but Playwright's cache dir
+        # is not, so a cache restored from another image is taken as installed
+        # and the browser then fails to load its libraries. ImageOS (ubuntu24,
+        # ubuntu26) is only in the shell environment, not the env context.
+        id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           # Keyed on the lockfile, so bumping @playwright/test invalidates it
-          # automatically — no image tag to keep in sync by hand any more. The
+          # automatically, and on the runner image (see above). The
           # prefix restore-key means a miss still starts from the last browser
           # set and only downloads the delta.
           # The browser is in the key because e2e-webkit caches a different set.
-          key: pw-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: pw-chromium-${{ runner.os }}-
+          key: pw-chromium-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pw-chromium-${{ steps.image.outputs.os }}-
       - name: Install Playwright browsers
         # Its OWN cap, so a stalled download cannot spend the tests' time. Four
         # minutes is generous against a warm cache (~4 s) and a cold browser
@@ -157,12 +164,16 @@ jobs:
           node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
+      - name: Name the runner image
+        # As in e2e: the image is in the key.
+        id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: pw-webkit-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: pw-webkit-${{ runner.os }}-
+          key: pw-webkit-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pw-webkit-${{ steps.image.outputs.os }}-
       - name: Install Playwright browsers
         # Its own cap, as in e2e: past four minutes the mirror is not coming
         # back, and a re-run is cheaper than the wait.
