@@ -31,7 +31,7 @@ const SEEDS = {
   // hairpins, roomy min radii, but still crossings + real climb so nothing reads flat.
   powder:     { seed: 27,  profile: 'mid', jumps: [{ wp: 4, amp: 0.6 }, { wp: 43, amp: 0.6 }] },
   flurry:     { seed: 477, profile: 'mid', jumps: [{ wp: 7, amp: 0.6 }, { wp: 44, amp: 0.6 }] },
-  glacier:    { seed: 290, profile: 'mid', jumps: [{ wp: 23, amp: 0.5 }, { wp: 43, amp: 0.6 }] },
+  glacier:    { seed: 290, profile: 'mid', jumps: [{ wp: 23, amp: 0.5 }, { wp: 43, amp: 0.45 }] },
   avalanche:  { seed: 125, profile: 'mid', jumps: [{ wp: 11, amp: 0.4 }, { wp: 60, amp: 0.5 }] },
   // Backyard Cup (middle) — pretzel/cloverleaf are original classic seeds re-baked
   // through the decorated mid profile (same plans/crossings — mid shares classic's

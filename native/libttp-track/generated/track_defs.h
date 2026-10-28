@@ -513,7 +513,7 @@ constexpr WptDef kW_glacier[] = {
   { 0x1.6f851eb851eb8p+4, 0x1.1df5c28f5c28fp+6, 0x1.0a3d70a3d70a4p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.7970a3d70a3d7p+4, 0x1.2c51eb851eb85p+6, 0x1.e666666666666p-1, 0x0p+0, 0x0p+0, true },
   { 0x1.7a147ae147ae1p+4, 0x1.32c28f5c28f5cp+6, 0x1.ccccccccccccdp-1, 0x0p+0, 0x0p+0, true },
-  { 0x1.7333333333333p+4, 0x1.38f5c28f5c28fp+6, 0x1.7851eb851eb85p+0, 0x0p+0, 0x0p+0, true },
+  { 0x1.7333333333333p+4, 0x1.38f5c28f5c28fp+6, 0x1.51eb851eb851fp+0, 0x0p+0, 0x0p+0, true },
   { 0x1.659999999999ap+4, 0x1.3e70a3d70a3d7p+6, 0x1.ae147ae147ae1p-1, 0x0p+0, 0x0p+0, true },
   { 0x1.523d70a3d70a4p+4, 0x1.42b851eb851ecp+6, 0x1.ae147ae147ae1p-1, 0x0p+0, 0x0p+0, true },
   { 0x1.3ae147ae147aep+4, 0x1.4566666666666p+6, 0x1.a8f5c28f5c28fp-1, 0x0p+0, 0x0p+0, true },
@@ -549,17 +549,17 @@ constexpr FurnDef kOils_glacier[] = {
 };
 constexpr FurnDef kPads_glacier[] = {
   { 0x1.fbe76c8b43958p-2, 0x0p+0, false, 0x0p+0 },
-  { 0x1.dfbe76c8b4396p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.e04189374bc6ap-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_glacier[] = {
   { 0x1.810624dd2f1aap-3, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.810624dd2f1aap-3, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.810624dd2f1aap-3, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.810624dd2f1aap-3, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.6f9db22d0e56p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.6f9db22d0e56p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.6f9db22d0e56p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.6f9db22d0e56p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 
 constexpr WptDef kW_avalanche[] = {
