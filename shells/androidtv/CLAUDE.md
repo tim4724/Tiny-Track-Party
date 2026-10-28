@@ -640,10 +640,11 @@ stays red however healthy the run is stops being read. It is re-declared at the
 HUD tick, because both halves move under a running app: the divisor from the rule
 or the pin, the period from an HDMI mode change.
 
-A scene build carries the point over: a race starts where the lobby settled
-and steps down if it has to, and climbs no sooner than `kUpWaitSec` after the
-build. What a build also buys is a grace in which nothing missed is judged
-(`kScaleSceneGraceSec`), because a race's first seconds are its assembly.
+A scene build carries the point over: a race starts where its player count
+left off and steps down if it has to, and a rung that count lost stays barred
+through the build until its bar runs out. What a build also buys is a grace in
+which nothing is judged (`kScaleSceneGraceSec`), because a race's first seconds
+are its assembly.
 `DisplayHost.build` calls `ttp_display_scale_scene` and `PerfMonitor.reset()`;
 the rule does the rest.
 

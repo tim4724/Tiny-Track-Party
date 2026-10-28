@@ -508,7 +508,7 @@ object Scenarios {
             // the first cup chained by the live intermission, as a party plays it.
             // `bench` relaunches the app for every race, so it can never show
             // what one race leaves the next — which is the render-scale rule's
-            // whole question about a cup (render_scale.h, kFailSec).
+            // whole question about a cup (render_scale.h, kBarSec).
             "session" -> {
                 PerfMonitor.bench()
                 Ttp.ttp_ui_progress_load(null, 1)

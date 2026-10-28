@@ -95,7 +95,8 @@ async function box() {
 const BAND_4K = { min: 0, max: 1, baseLines: 2160, panelMs: HZ60 };
 
 /** Poll once a second, as a shell does, until the rule moves — a step down
- *  needs a few judged seconds on the rung (render_scale.h, kDownMinSec). */
+ *  needs the window's late presents AND a run of late seconds
+ *  (render_scale.h, kDownMinSec). */
 function pollUntilMoved(b, band, seconds = 5) {
   for (let i = 0; i < seconds; i++) {
     if (b.poll(band)) return true;
@@ -163,7 +164,7 @@ test('the ceiling is the BAND\'s, adopted without moving the shell\'s buffer', a
     `the first move must not land below the surface's own resolution: ${b.scale}`);
 });
 
-test('a scene build carries the session over: what failed stays failed until the wait is out', async () => {
+test('a scene build carries the session over: a lost rung stays barred until its bar runs out', async () => {
   const b = await box();
   b.gpuMs = 30;                                    // hopeless against 16.7 ms
   for (let i = 0; i < 6; i++) { b.ticks(180); b.poll(BAND_4K); }
@@ -178,8 +179,8 @@ test('a scene build carries the session over: what failed stays failed until the
   b.fn.reset();
   for (let i = 0; i < 20; i++) { b.ticks(180); b.poll(BAND_4K); }
   assert.equal(b.lines(BAND_4K), floored,
-    'a rung failed at once this session is not tried again a minute into the next race');
-  // The longest wait (render_scale.h: kUpWaitSec << kMaxFails, 320 s) runs out.
+    'a rung lost this session is not tried again a minute into the next race');
+  // The bar (render_scale.h: kBarSec, clocked from the loss) runs out.
   for (let i = 0; i < 100; i++) { b.ticks(180); b.poll(BAND_4K); }
   assert.ok(b.lines(BAND_4K) > floored, '…and once it has, the lighter scene climbs');
 });

@@ -1,11 +1,12 @@
 // render_scale_controller — the STATE around ttp/render_scale.h's rule.
 //
-// The rule itself is pure and stays pure: frames missed, seconds judged, how
-// long the rung has stood and the wait in force go in, one rung comes out. What
-// is left over is the BOOKKEEPING — the missed frames per second, the running
-// present floor, when the rung was entered, the rung and the failures each
-// player count left this session — and it was once written three times, once
-// per shell, in three languages, under comments that pointed at each other.
+// The rule itself is pure and stays pure: the late presents of the judged
+// window, the clean run and whether the rung above is barred go in, one rung
+// comes out. What is left over is the BOOKKEEPING — the window and the clean
+// run, the running present floor, when the rung was entered, the rung each
+// player count left off at and the rungs it lost this session — and it was
+// once written three times, once per shell, in three languages, under comments
+// that pointed at each other.
 //
 // None of it is platform. A poll cadence is not an Android fact; which frames
 // count is not a Swift one. The three copies had already drifted where it is
@@ -36,7 +37,7 @@ namespace rt {
 // it in units of their own clocks.
 //
 // It is also the rule's unit of time: each poll judges the frames presented
-// since the last one, and the window is kJudgeSec of those.
+// since the last one as one second, and the window is kJudgeSec of those.
 inline constexpr double kScalePollMs = 1000.0;
 
 // How long the display must stay below the anchor before the host is offered
@@ -70,13 +71,13 @@ class RenderScaleController {
   // the budget.
   double panelMs() const { return panelMs_; }
 
-  // A NEW SCENE. Empties the judged window (the last scene's frames are another
-  // picture) and starts the scene's grace, inside which nothing missed is
-  // judged (kScaleSceneGraceSec). The scene is then PLACED once its cell count
-  // is known (cells()): on the rung that count last held this session — a cup
-  // is one session, four players race after race. A count not seen yet starts
-  // where the scene before it was: a new player count is no reason to give up
-  // pixels, only missed frames are (decided 2026-10-18).
+  // A NEW SCENE. Empties the window and ends the clean run (the last scene's
+  // frames are another picture) and starts the scene's grace, inside which
+  // nothing is judged (kScaleSceneGraceSec). The scene is then PLACED once its
+  // cell count is known (cells()): on the rung that count last held this
+  // session — a cup is one session, four players race after race. A count not
+  // seen yet starts where the scene before it was: a new player count is no
+  // reason to give up pixels, only late frames are (decided 2026-10-18).
   // The monitor itself is the shell's to drop, with ttp_perf_reset, for the
   // reason ttp_perf.h names.
   void scene(double tMs);
@@ -88,11 +89,10 @@ class RenderScaleController {
   void cells(int n) { cells_ = n; }
 
   // THE SURFACE CHANGED SIZE (a browser window resized, or entering or leaving
-  // fullscreen). Nothing missed in the next kScaleResizeGraceSec is judged:
-  // that stall is the reallocation's, not the rung's. Nothing else changes —
-  // the rung, its clocks and the window judged so far all stand — and a resize
-  // the controller performed itself (a move) is not one: that window goes with
-  // the move.
+  // fullscreen). Nothing in the next kScaleResizeGraceSec is judged: that
+  // stall is the reallocation's, not the rung's. Nothing else changes — the
+  // rung, its clocks, its window and its clean run stand — and a resize the
+  // controller performed itself (a move) is not one: a move empties them anyway.
   void resized(double tMs) {
     resized_ = true;
     resizedMs_ = tMs;
@@ -106,8 +106,8 @@ class RenderScaleController {
   // the only things here a shell is entitled to an opinion about. Pass
   // `panelMs` 0 to have it learned (see panelMs() above).
   //
-  // ON A MOVE THE WINDOW GOES, judged and monitor alike, here rather than in
-  // three shells: it describes the OLD buffer, and keeping it judges the new
+  // ON A MOVE THE WINDOW, THE CLEAN RUN AND THE MONITOR GO, here rather than in
+  // three shells: they describe the OLD buffer, and keeping them judges the new
   // resolution on the old one's frames — which is how a controller talks itself
   // into a second step it does not need.
   //
@@ -115,7 +115,7 @@ class RenderScaleController {
   // the PICTURE rather than the scale: the same rung in buffer lines on the new
   // surface, or the new ceiling where the old one was in force. That is a
   // re-placement, not a step — it judges nothing, keeps the rung's clocks and
-  // its window, and fails nothing (remap()).
+  // window, and bars nothing (remap()).
   bool poll(double tMs, RenderScaleLimits limits, perf::Monitor& mon,
             RenderScalePoint* out);
 
@@ -142,7 +142,15 @@ class RenderScaleController {
   bool moveTo(RenderScalePoint p, perf::Monitor& mon, RenderScalePoint* out);
 
   // The band moved under the point: put the same picture in force on it.
-  bool remap(RenderScaleLimits limits, RenderScalePoint* out);
+  bool remap(double tMs, RenderScaleLimits limits, RenderScalePoint* out);
+
+  // The count the bars are kept under: the scene's, or the overview's until
+  // it is placed.
+  int barSlot() const { return sceneCells_ >= 0 ? sceneCells_ : 0; }
+  // Is a rung of `lines` barred at count `c` — it or one of fewer lines lost
+  // there, and the bar still running? And bar one, from now.
+  bool barred(int c, double lines, double tMs) const;
+  void bar(int c, double lines, double tMs);
 
   // 1.0 until the first poll ADOPTS THE BAND'S CEILING. "As sharp as this
   // surface allows" is a fact only the band knows, and a 1.0 left standing here
@@ -154,15 +162,17 @@ class RenderScaleController {
   bool adopted_ = false;
   double floorMs_ = 0;     // presentBaseline's running answer
   double panelMs_ = 0;
-  // Frames missed per judged second, newest at `judged_ - 1` of a ring
-  // starting at `head_`; at most kJudgeSec of them, the current rung's only.
-  int missed_[kJudgeSec] = {};
+  // Late presents per judged second, newest at `judged_ - 1` of a ring starting
+  // at `head_` — at most kJudgeSec of them, the current point's only — and the
+  // runs of late and of clean seconds at the point (render_scale.h, cleanSecond).
+  int late_[kJudgeSec] = {};
   int judged_ = 0;
   int head_ = 0;
-  // When the current rung was entered — by a move or by a scene build.
+  int lateRun_ = 0;
+  int cleanRun_ = 0;
+  // When the current point was entered, by a move or by a scene build, and
+  // whether by a step down, which makes it passed through and never lost.
   double enteredMs_ = 0;
-  // STEPPED DOWN: the current rung was entered by a step down, so it was passed
-  // through, not tried, and is never failed (render_scale.h, kFailSec).
   bool steppedDown_ = false;
   // The surface's baseLines at the last poll, never 0, so a scene can record
   // its rung in lines (rungOf_) and a band change can keep the point's.
@@ -171,15 +181,15 @@ class RenderScaleController {
   // ceiling (which follows it) from one on a ladder rung (which keeps its lines).
   double max_ = 0;
   // PER CELL COUNT, for the session: the rung each count's last scene left off
-  // at, IN BUFFER LINES (0: never seen) — a scale would mean another picture
-  // once the surface changed height, as a browser window does when DevTools
-  // opens under it — and how often each rung (by its index in the point
-  // list) has failed at that count. What four players failed says nothing
-  // about the lobby, and the lobby holding 1080 must not clear it. The host's
-  // half rate keeps the same indices: a rung four players failed at 60 is
-  // taken as failed at 30 too, until it holds.
+  // at, and the rungs it lost with until when each is barred (render_scale.h,
+  // kBarSec). Both IN BUFFER LINES (0: never seen) — a scale, or a place in
+  // the point list, would mean another picture once the surface changed size.
+  struct Bar {
+    double lines = 0;
+    double untilMs = 0;
+  };
   double rungOf_[kMaxCells + 1] = {};
-  int fails_[kMaxCells + 1][kScaleMaxPoints] = {};
+  Bar bars_[kMaxCells + 1][kScaleMaxPoints] = {};
   // What the frame last reported, and the count this scene was placed for (-1:
   // not yet).
   int cells_ = -1;

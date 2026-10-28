@@ -186,18 +186,29 @@ What 1080 is worth to them, pinned for a whole race (`eca93da5`, pretzel,
 One full-screen cell frames more deck than two half cells, which is why one
 player is no cheaper than three.
 
-**The rule now (`ttp/render_scale.h`) counts MISSED FRAMES and nothing else**,
-so it is the same on a browser with no GPU timer. A rung is left on 250 ms of
-missed picture in the last 10 s once 3 s of it have been judged, climbed after 10 s missing no more than 50 ms of picture (3 frames at 60 Hz) once it has stood 40 s,
-and a step down within 30 s of entering a rung FAILS it, doubling the wait
-before the next try (to 320 s at once if it failed before a full window,
-which is a rung that cannot hold at all). A rung entered by a step down is
-never failed: it was passed through, not tried, and counting it let one
-burst of outside stalls (a Mac's brightness overlay) mark every rung down to
-the floor as hopeless for the session. A scene build forgives nothing — a
-cup is one session, the same players race after race — and a rung held for
-30 s clears its failures. The rate is the panel's own: a 120 Hz panel is held
-at 120 with pixels.
+**The rule now (`ttp/render_scale.h`, whose comments carry the thresholds)
+counts LATE PRESENTS and nothing else**, so it is the same on a browser with no
+GPU timer. It steps down on a quarter second of late picture in a 10 s window
+once the lateness has lasted, climbs on a run of clean seconds, and bars a rung
+it tried and lost, at that player count and clocked from the loss. The rate is
+the panel's own: a 120 Hz panel is held at 120 with pixels.
+
+**Presents, not missed vsyncs**, because a frozen frame is not load: a 300 ms
+freeze at 120 Hz is 36 missed vsyncs, past the step-down bar alone, so a Mac's
+brightness and volume overlays walked Chrome down a rung a press. Counted as
+presents it is one. **A window, not a streak of bad seconds**, because on the
+box a streak took a 2.5 s lobby stutter for load, and four players' periodic
+vista seconds at 1080 never formed one; the window keeps the thresholds the
+tables below were tuned on.
+
+A whole cup in one process on the box (`session`, Vulkan, adaptive):
+
+| players | moves | lobby | at the settled rung | at 1080 |
+|---|---|---|---|---|
+| 2 | 0 | 1080 throughout, through a 2 s boot stutter of 27 late frames | 1080, 10 skipped in 491 s | — |
+| 4 | 3 | 1080 throughout | 720, 4 skipped in 476 s | 126 skipped in 16 s: race 1's opening on the lobby's rung, and one retry when the bar ran out |
+
+The streak form moved nine times in the same 4P cup.
 
 Against the old rule, adaptive pretzel races, 100 s counted, seconds at 1080
 and moves per race read off the rule's own log (`1.0-e3299bc5-dirty` builds,

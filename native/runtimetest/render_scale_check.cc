@@ -3,12 +3,12 @@
 //
 // Assertions rather than a corpus, like progression_check and frame_check: the
 // layer has no JS oracle, so this file is where its rules are pinned — what
-// counts as a missed frame, how many step down, what a climb waits for, how a
-// failed climb backs off, the band, the floor and the host's half rate.
+// counts as a late present, how many step down, what a climb waits for, how a
+// lost rung is barred, the band, the floor and the host's half rate.
 //
 // The point of the file is that the rule does not MOVE much. Every move is a
 // buffer reallocation the player sees, so a controller that steps on one bad
-// second, or tries a rung it just failed every few seconds, is a flicker no
+// second, or tries a rung it just lost every few seconds, is a flicker no
 // screenshot shows.
 #include <cstdio>
 
@@ -25,15 +25,16 @@ using ttp::rt::operatingPoints;
 using ttp::rt::pointPeriodMs;
 using ttp::rt::RenderScalePoint;
 using ttp::rt::renderScaleRung;
-using ttp::rt::upWaitSec;
+using ttp::rt::cleanSecond;
+using ttp::rt::downLateFrames;
+using ttp::rt::kJudgeSec;
+using ttp::rt::kDownMinSec;
+using ttp::rt::kUpSec;
+using ttp::rt::kTrySec;
+using ttp::rt::kBarSec;
+using ttp::rt::kScaleSceneGraceSec;
 using ttp::rt::belowAnchor;
 using ttp::rt::kScaleMaxPoints;
-using ttp::rt::kJudgeSec;
-using ttp::rt::downMissedFrames;
-using ttp::rt::upMissedFrames;
-using ttp::rt::kDownMinSec;
-using ttp::rt::kUpWaitSec;
-using ttp::rt::kMaxFails;
 using ttp::rt::pointAtOrBelow;
 using ttp::rt::rungScales;
 
@@ -78,39 +79,37 @@ int main() {
 
   // ---- the decision ----------------------------------------------------------
   {
+    // THE WINDOW'S STEP-DOWN COUNT is a stretch of PICTURE: a quarter second of
+    // late presents, whatever the panel's rate.
+    const int down = downLateFrames(kHz60);
+    check(down == 15, "60 Hz steps down on fifteen late presents in the window");
+    check(downLateFrames(kHz120) == 30, "…120 Hz on thirty, the same quarter second");
+    check(downLateFrames(20.0) == 13, "…and 50 Hz on thirteen");
+
+    // A CLEAN SECOND allows a stray, as a share of the vsyncs it spanned.
+    check(cleanSecond(60, 0), "a second with nothing late is clean");
+    check(cleanSecond(60, 1), "…and so is one with a stray");
+    check(!cleanSecond(60, 2), "…but not two at 60 Hz");
+    check(cleanSecond(120, 2), "two are still a stray's share at 120 Hz");
+    check(!cleanSecond(120, 3), "…three are not");
+    check(cleanSecond(25, 1), "a 50 Hz TV at its half rate of 25 still allows its stray");
+    check(!cleanSecond(25, 2), "…but not two");
+
     const int n = 5;
-    const int down = downMissedFrames(kHz60);
-    const int up = upMissedFrames(kHz60);
-    check(renderScaleRung(3, n, down, down, up, kDownMinSec, 0.0, kUpWaitSec) == 2,
-          "a window missing the step-down count steps down one rung");
-    check(renderScaleRung(3, n, down - 1, down, up, kJudgeSec, 999.0, kUpWaitSec) == 3,
-          "…and one fewer holds: a rung that holds still has the stray skip");
-    check(renderScaleRung(3, n, 100, down, up, kDownMinSec - 1, 0.0, kUpWaitSec) == 3,
-          "…but not before kDownMinSec seconds of the rung have been judged");
-    check(renderScaleRung(0, n, 100, down, up, kJudgeSec, 999.0, kUpWaitSec) == 0,
-          "nothing steps below the bottom rung");
-    check(renderScaleRung(2, n, 0, down, up, kJudgeSec, kUpWaitSec, kUpWaitSec) == 3,
-          "a full clean window past the wait steps up one rung");
-    check(renderScaleRung(2, n, up, down, up, kJudgeSec, 999.0, kUpWaitSec) == 3,
-          "…and so does one with no more than the climb allowance missed");
-    check(renderScaleRung(2, n, up + 1, down, up, kJudgeSec, 999.0, kUpWaitSec) == 2,
-          "…but one frame past it does not");
-    check(renderScaleRung(2, n, 0, down, up, kJudgeSec - 1, 999.0, kUpWaitSec) == 2,
-          "…nor a window not yet full");
-    check(renderScaleRung(2, n, 0, down, up, kJudgeSec, kUpWaitSec - 0.1, kUpWaitSec) == 2,
-          "…nor a rung entered too recently");
-    check(renderScaleRung(n - 1, n, 0, down, up, kJudgeSec, 999.0, kUpWaitSec) == n - 1,
-          "nothing climbs past the ceiling");
-    // The count is a stretch of PICTURE: fifteen frames at 60, thirty at 120.
-    check(downMissedFrames(kHz60) == 15, "60 Hz steps down on fifteen missed frames");
-    check(downMissedFrames(kHz120) == 30, "…120 Hz on thirty, the same quarter second");
-    check(downMissedFrames(20.0) == 13, "…and 50 Hz on thirteen");
-    // The climb allowance is a stretch of picture too, a fifth of that bar.
-    check(upMissedFrames(kHz60) == 3, "60 Hz climbs with up to three missed frames");
-    check(upMissedFrames(kHz120) == 6, "…120 Hz with up to six");
-    nearly(upWaitSec(0), kUpWaitSec, "an unfailed rung waits kUpWaitSec");
-    nearly(upWaitSec(1), 2.0 * kUpWaitSec, "each failure doubles it");
-    nearly(upWaitSec(kMaxFails + 5), kUpWaitSec * (1 << kMaxFails), "…up to kMaxFails doublings");
+    check(renderScaleRung(3, n, down, down, kDownMinSec, 0, false) == 2,
+          "a window holding the step-down count, late for kDownMinSec seconds, steps down one rung");
+    check(renderScaleRung(3, n, down - 1, down, kJudgeSec, 0, false) == 3,
+          "…and one fewer holds: a rung that holds still has the stray late frame");
+    check(renderScaleRung(3, n, 99, down, kDownMinSec - 1, 0, false) == 3,
+          "…and not before the lateness has lasted kDownMinSec seconds");
+    check(renderScaleRung(3, n, 99, down, 0, 1, false) == 3,
+          "…nor once it has stopped: the newest second was clean");
+    check(renderScaleRung(0, n, 99, down, kJudgeSec, 0, false) == 0, "nothing steps below the bottom rung");
+    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpSec, false) == 3,
+          "kUpSec clean seconds in a row step up one rung");
+    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpSec - 1, false) == 2, "…and one fewer does not");
+    check(renderScaleRung(2, n, 0, down, kJudgeSec, kUpSec, true) == 2, "…nor into a barred rung");
+    check(renderScaleRung(n - 1, n, 0, down, kJudgeSec, 99, false) == n - 1, "nothing climbs past the ceiling");
   }
 
   // ---- the RUNGS -----------------------------------------------------------
@@ -206,6 +205,20 @@ int main() {
           mon.record(s);
         }
       }
+      // THE PAGE FROZE: one present landing `ms` after the last, as a system
+      // overlay, a garbage collection or a tab switch leaves it.
+      void stall(double ms) {
+        t += ms;
+        ++tick;
+        if (cells >= 0) ctl.cells(cells);
+        ttp::rt::perf::Sample s;
+        s.tMs = t;
+        s.intervalMs = ms;
+        s.presented = true;
+        s.cpuMs = -1;
+        s.gpuMs = gpuMs;
+        mon.record(s);
+      }
       bool poll(RenderScaleLimits b, RenderScalePoint* out = nullptr) {
         RenderScalePoint p{0, 0};
         const bool moved = ctl.poll(t, b, mon, &p);
@@ -294,11 +307,11 @@ int main() {
       }
       check(moved && p.scale < 1.0,
             "a box presenting one tick in three is rescued, not read as 60 fps");
-      check(b.mon.size() == 0, "…and the window that decided it goes with the buffer");
+      check(b.mon.size() == 0, "…and the frames that decided it go with the buffer");
     }
     {
       // ONE BAD SECOND IS NOT A MOVE. A rung that holds still has a stray skip:
-      // the reference box at 1080 with two players missed at most 4 frames in
+      // the reference box at 1080 with two players was late at most 4 times in
       // any 10 s of a race. One in two and a half seconds holds…
       Box b;
       b.missEvery = 150;
@@ -309,14 +322,14 @@ int main() {
       Box c;
       c.missEvery = 30;
       c.race(20, kHD, [](double) { return 4.0; });
-      check(c.lines(kHD) < 1080.0, "two missed frames a second step down");
+      check(c.lines(kHD) < 1080.0, "two late presents a second step down");
     }
     {
       // A HOPELESS RUNG FAILS FAST, and the floor is where it stops: late at
       // every resolution, a split falls to the bottom rung within seconds of
       // the grace and never moves again — no sub-floor rung, no rate change.
       Box b;
-      const int moves = b.race(10, kHD, [](double) { return 26.0; });
+      const int moves = b.race(15, kHD, [](double) { return 26.0; });
       nearly(b.lines(kHD), 540.0, "a box late at every resolution falls to 540");
       check(moves == 2, "…one rung at a time");
       check(b.ctl.point().divisor == 1, "…at the panel's own rate, never half of it");
@@ -324,7 +337,7 @@ int main() {
             "…and stays there: there is no lower point to move to");
     }
     {
-      // A SCENE'S FIRST SECONDS ARE NOT ITS COST: nothing missed inside the
+      // A SCENE'S FIRST SECONDS ARE NOT ITS COST: nothing late inside the
       // grace is judged.
       Box b;
       b.race(4, k4K, [](double) { return 1.0; });
@@ -333,34 +346,35 @@ int main() {
       b.mon.reset();
       b.race(4, k4K, [](double) { return 30.0; });
       nearly(b.lines(k4K), 2160.0, "a build's first seconds step nothing down");
-      b.race(3, k4K, [](double) { return 30.0; });
+      b.race(5, k4K, [](double) { return 30.0; });
       check(b.lines(k4K) < 2160.0, "…and past the grace a late scene steps down");
     }
     {
-      // THE CLIMB WAITS, and a failed rung waits longer. A race starts on the
-      // lobby's 1080 and the opening pack misses a frame and a half a second
-      // there: after a full window it steps down, which so soon after the scene
-      // put it there FAILS 1080. The pack spreads and 1080 would hold; the climb
-      // back waits the doubled wait, not the plain one.
+      // A RUNG TRIED AND LOST IS BARRED. A race starts on the lobby's 1080 and
+      // the opening pack is late three times a second there: it steps down so
+      // soon after the scene put it there that 1080 is LOST, and barred for
+      // kBarSec. The pack spreads and 1080 would hold; the climb back waits out
+      // the bar, then kUpSec clean seconds.
       const auto cheap = [](double) { return 4.0; };
       Box b;
       b.ctl.scene(b.t);
-      b.missEvery = 38;
+      b.missEvery = 20;
       for (int i = 0; i < 30 && b.lines(kHD) > 1000.0; i++) b.race(1, kHD, cheap);
       nearly(b.lines(kHD), 720.0, "the opening pack steps a 1080 race down");
-      check(b.t > 13000.0, "…after a full window of it, not at once");
+      check(b.t < (kScaleSceneGraceSec + kJudgeSec) * 1000.0,
+            "…inside its first window, not after a long one");
       b.missEvery = 0;
-      const double down = b.t;
-      while (b.t < down + 2.0 * kUpWaitSec * 1000.0 - 2000.0) b.race(1, kHD, cheap);
-      nearly(b.lines(kHD), 720.0, "a rung failed at the start waits twice kUpWaitSec");
+      const double lost = b.t;
+      while (b.t < lost + kBarSec * 1000.0 - 2000.0) b.race(1, kHD, cheap);
+      nearly(b.lines(kHD), 720.0, "a rung lost at the start is barred for kBarSec");
       b.race(4, kHD, cheap);
-      nearly(b.lines(kHD), 1080.0, "…and then climbs back to it");
+      nearly(b.lines(kHD), 1080.0, "…and climbed back once the bar is out");
       check(b.race(300, kHD, cheap) == 0, "…and stays, now that it holds");
     }
     {
-      // AN UNFAILED RUNG waits only kUpWaitSec from when its scene began. 1080
-      // holds well past kFailSec and then stops holding: that step down failed
-      // nothing.
+      // A RUNG THAT HELD, THEN COULD NOT, IS NOT LOST. 1080 holds well past
+      // kTrySec and then the load rises: the step down bars nothing, and the
+      // climb back waits only for kUpSec clean seconds — through a scene build.
       const auto light = [](double) { return 4.0; };
       Box b;
       b.race(35, kHD, light);
@@ -369,43 +383,79 @@ int main() {
       nearly(b.lines(kHD), 720.0, "a rung that held, then could not, steps down");
       b.ctl.scene(b.t);
       b.mon.reset();
-      const double built = b.t;
-      while (b.t < built + kUpWaitSec * 1000.0 - 2000.0) b.race(1, kHD, light);
-      nearly(b.lines(kHD), 720.0, "a new scene keeps the point it inherits for kUpWaitSec");
+      b.race(kScaleSceneGraceSec + kUpSec - 2, kHD, light);
+      nearly(b.lines(kHD), 720.0, "a new scene keeps the point it inherits until kUpSec clean seconds");
       b.race(4, kHD, light);
-      nearly(b.lines(kHD), 1080.0, "…then climbs one rung");
+      nearly(b.lines(kHD), 1080.0, "…and climbs back to it then, unbarred");
+    }
+    {
+      // A HICCUP DOES NOT END A CLEAN STREAK. A climb counts clean seconds in a
+      // row, and a frozen frame is one late present: the page that stalled for
+      // a system overlay halfway through the count still climbs on time.
+      const RenderScaleLimits mac{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 1;
+      b.ctl.scene(b.t);
+      b.race(40, mac, cheap, kHz120);
+      b.everyNth = 4;
+      b.race(kDownMinSec, mac, cheap, kHz120);
+      b.everyNth = 1;
+      nearly(b.lines(mac), 1620.0, "kDownMinSec seconds of a quarter rate step native down");
+      b.race(kUpSec / 2, mac, cheap, kHz120);
+      b.stall(300.0);
+      b.race(kUpSec - kUpSec / 2 + 1, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "a 300 ms freeze mid-count does not delay the climb");
+    }
+    {
+      // A DESCENT BARS NOTHING IT PASSED THROUGH. Twelve seconds of outside
+      // load walk a page that held native to the floor; the rungs it crossed
+      // were late because the load was, not because they were tried. Once the
+      // load lifts it climbs a rung every kUpSec, not after a bar.
+      const RenderScaleLimits mac{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 1;
+      b.ctl.scene(b.t);
+      b.race(40, mac, cheap, kHz120);
+      b.everyNth = 4;
+      b.race(4 * kDownMinSec, mac, cheap, kHz120);
+      b.everyNth = 1;
+      nearly(b.lines(mac), 540.0, "sustained outside load walks native to the floor");
+      check(b.race(4 * (kUpSec + 1) + 2, mac, cheap, kHz120) == 4,
+            "…and once it lifts, every rung comes back a kUpSec apart");
+      nearly(b.lines(mac), 2160.0, "…up to native, inside a minute");
     }
     {
       // A RUNG THE DEVICE CANNOT HOLD IS TRIED RARELY. 720 holds, 1080 misses a
-      // frame in two — four players at 1080 on the reference box. Every try
-      // fails inside two seconds, before the window ever fills, so the wait goes
-      // straight to its longest: one try in five minutes, not one a race.
+      // frame in two — four players at 1080 on the reference box. Every try is
+      // lost inside seconds, so 1080 is tried once a bar, not once a race.
       const auto cost = [](double s) { return s > 0.7 ? 20.0 : 8.0; };
       Box b;
       b.ctl.scene(b.t);
-      b.race(10, kHD, cost);
+      for (int i = 0; i < 20 && b.lines(kHD) > 1000.0; i++) b.race(1, kHD, cost);
       nearly(b.lines(kHD), 720.0, "1080 is left at the start");
-      check(b.race(300, kHD, cost) == 0,
-            "a rung that failed before a full window is not tried again for the longest wait");
-      check(b.race(300, kHD, cost) == 2, "…then tried once, and failed once, in the next five minutes");
+      const double lost = b.t;
+      check(b.race(kBarSec / 2, kHD, cost) == 0, "a lost rung is not tried again inside its bar");
 
-      // A CUP IS ONE SESSION: the next race is the same four players, so it
-      // does not try the rung again.
+      // A CUP IS ONE SESSION: the next race is the same four players, so a
+      // build forgives nothing — but the bar is a CLOCK FROM THE LOSS, through
+      // the builds, and then it simply runs out. Counted from each build, a
+      // wait longer than a race never ran out inside one, and a rung lost once
+      // was out of reach for the cup.
       b.ctl.scene(b.t);
       b.mon.reset();
-      check(b.race(300, kHD, cost) == 0, "a new race in the same session does not try it again");
+      int moves = 0;
+      while (b.t < lost + kBarSec * 1000.0 - 1000.0) moves += b.race(1, kHD, cost);
+      check(moves == 0, "the next race of the cup does not try it while the bar runs");
+      check(b.race(kDownMinSec + 4, kHD, cost) == 2,
+            "…and once the bar is out it is tried at once — the clean streak ran on — and lost once");
+      nearly(b.lines(kHD), 720.0, "…back on the rung that holds");
 
-      // HOLDING a rung is what forgives it. The party shrinks and 1080 holds:
-      // the longest wait runs out, the climb holds, and from then on a step
-      // down that came after kFailSec failed nothing — the plain wait is back.
+      // A party that shrinks gets its pixels back at the next try, and holds.
       const auto light = [](double) { return 4.0; };
-      b.race(60, kHD, light);
-      nearly(b.lines(kHD), 1080.0, "after the longest wait the shrunk party climbs, and holds");
-      b.race(40, kHD, light);
-      b.race(10, kHD, cost);
-      nearly(b.lines(kHD), 720.0, "the full party is back and steps down");
-      b.race(kUpWaitSec + 15, kHD, light);
-      nearly(b.lines(kHD), 1080.0, "a rung that held is forgiven: back on the plain wait");
+      b.race(kBarSec + kUpSec + 2, kHD, light);
+      nearly(b.lines(kHD), 1080.0, "a lighter load climbs once the bar is out, and holds");
     }
     {
       // A SCENE STARTS WHERE ITS PLAYER COUNT LEFT OFF. The lobby (the overview,
@@ -426,14 +476,14 @@ int main() {
       b.cells = 4;
       check(b.race(3, kHD, four) == 0, "the first four-player race starts on the lobby's rung");
       nearly(b.lines(kHD), 1080.0, "…1080, not a rung below it");
-      check(b.race(10, kHD, four) == 1, "…and steps down on its missed frames");
+      check(b.race(10, kHD, four) == 1, "…and steps down on its late presents");
       nearly(b.lines(kHD), 720.0, "…to 720");
 
       // The next race of the cup starts where four players left off, and tries
       // nothing.
       b.ctl.scene(b.t);
       b.mon.reset();
-      check(b.race(300, kHD, four) == 0, "the next four-player race starts at 720 and never moves");
+      check(b.race(60, kHD, four) == 0, "the next four-player race starts at 720 and never moves");
 
       // Back to the lobby: its own 1080, at once, with no climb wait.
       b.ctl.scene(b.t);
@@ -447,7 +497,7 @@ int main() {
       b.ctl.scene(b.t);
       b.mon.reset();
       b.cells = 4;
-      check(b.race(300, kHD, four) == 1, "the next cup's first race is placed at 720 and tries nothing");
+      check(b.race(60, kHD, four) == 1, "the next cup's first race is placed at 720 and tries nothing");
       nearly(b.lines(kHD), 720.0, "…and stays there");
     }
     {
@@ -465,12 +515,11 @@ int main() {
       nearly(b.lines(kHD), 1080.0, "…and stays at 1080");
     }
     {
-      // A BURST OF OUTSIDE STALLS COSTS A STEP OR TWO, NOT THE SESSION. A Mac
-      // browser at 120 Hz holds its native 2160 lines; a system overlay (the
-      // brightness and volume keys) then stalls the page for four seconds.
-      // Before kDownMinSec this stepped once a second to the floor, and the
-      // rungs it crossed were each marked hopeless, so every later race of
-      // that count stayed at 540.
+      // A BURST OF OUTSIDE STALLS COSTS A STEP, NOT THE SESSION. A Mac browser
+      // at 120 Hz holds its native 2160 lines; a system overlay (the
+      // brightness and volume keys) then holds the page to a quarter of its
+      // rate for four seconds. It steps down once, bars nothing — native had
+      // stood past kTrySec — and climbs back on kUpSec clean seconds.
       const RenderScaleLimits mac{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
       const auto cheap = [](double) { return 1.0; };
       Box b;
@@ -481,15 +530,56 @@ int main() {
       b.everyNth = 4;
       const int burst = b.race(4, mac, cheap, kHz120);
       b.everyNth = 1;
-      check(burst <= 2, "four seconds of stalls step at most twice");
-      check(b.lines(mac) >= 1080.0 - 1e-9, "…and nowhere near the floor");
-      b.race(kUpWaitSec + kJudgeSec + 3, mac, cheap, kHz120);
-      nearly(b.lines(mac), 1620.0, "a rung entered by a step down was not failed: the plain wait climbs it");
-      b.race(kUpWaitSec + kJudgeSec, mac, cheap, kHz120);
-      nearly(b.lines(mac), 2160.0, "…and native after it, inside the same race");
+      check(burst == 1, "four seconds of stalls step once");
+      nearly(b.lines(mac), 1620.0, "…one rung");
+      b.race(kUpSec + 2, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "…and kUpSec clean seconds climb it back");
       b.ctl.scene(b.t);
       b.mon.reset();
       check(b.race(60, mac, cheap, kHz120) == 0, "the next race starts at native and stays");
+
+      // A SECOND BURST JUST AFTER A CLIMB loses the rung it climbed into: the
+      // rule cannot tell an outside stall from load. The bar is a clock from
+      // the loss and runs through the next race's build, then simply expires.
+      b.everyNth = 4;
+      b.race(kDownMinSec, mac, cheap, kHz120);
+      b.everyNth = 1;
+      nearly(b.lines(mac), 1620.0, "an outside stall steps native down");
+      b.race(kUpSec + 2, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "…and the climb takes it back");
+      b.everyNth = 4;
+      b.race(kDownMinSec, mac, cheap, kHz120);
+      b.everyNth = 1;
+      nearly(b.lines(mac), 1620.0, "a second stall inside kTrySec of the climb steps it down again");
+      const double lost = b.t;
+      b.race(kUpSec + 5, mac, cheap, kHz120);
+      b.ctl.scene(b.t);
+      b.mon.reset();
+      b.race(kScaleSceneGraceSec + kUpSec + 2, mac, cheap, kHz120);
+      nearly(b.lines(mac), 1620.0, "…and native is barred through the next race's build");
+      while (b.t < lost + kBarSec * 1000.0 + 2000.0) b.race(1, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "…until kBarSec after the loss, not for the cup");
+    }
+    {
+      // A FROZEN FRAME IS ONE LATE PRESENT. A 400 ms freeze on a 120 Hz Mac
+      // is 48 vsyncs on one present; counted as missed vsyncs it was past the
+      // step-down count by itself, and a brightness key pressed a few times
+      // walked the page down a rung a press. Fewer pixels would not shorten it.
+      const RenderScaleLimits mac{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 1;
+      b.ctl.scene(b.t);
+      b.race(40, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "native holds");
+      b.stall(400.0);
+      b.race(5, mac, cheap, kHz120);
+      nearly(b.lines(mac), 2160.0, "one 400 ms freeze steps nothing down");
+      for (int i = 0; i < 10; i++) {
+        b.stall(400.0);
+        b.race(1, mac, cheap, kHz120);
+      }
+      nearly(b.lines(mac), 2160.0, "…nor a freeze every second for ten seconds: ten late presents, not 480");
     }
     {
       // A COUNT REMEMBERS ITS RUNG IN LINES. A browser window shrinks under
@@ -502,8 +592,8 @@ int main() {
       Box b;
       b.cells = 2;
       b.ctl.scene(b.t);
-      b.race(30, tall, two);
-      nearly(b.lines(tall), 720.0, "two players settle on 720 lines");
+      b.race(45, tall, two);
+      nearly(b.lines(tall), 720.0, "two players settle on 720 lines, after trying 1080 once");
       b.ctl.scene(b.t);
       b.mon.reset();
       b.cells = 0;
@@ -513,6 +603,57 @@ int main() {
       b.cells = 2;
       b.race(30, shorter, two);
       nearly(b.lines(shorter), 720.0, "on the shorter surface the next race starts on 720 lines again");
+    }
+    {
+      // A BAR IS ON LINES, AND ON EVERY RUNG ABOVE THEM. A Mac at 120 Hz loses
+      // its 2160-line fullscreen ceiling on the grid. In the window the
+      // ceiling is 1818 lines, in the same place in the list: fewer lines than
+      // the rung it lost, so the window may try it. When that is lost too,
+      // fullscreen's 2160 is more lines than it, and stays barred.
+      const RenderScaleLimits full{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
+      const RenderScaleLimits win{0.0, 2.0, 909.0, kHz120};
+      const auto top = [](double s) { return s > 1.9 ? 20.0 : 1.0; };   // either ceiling is late
+      const auto cheap = [](double) { return 1.0; };
+      Box b;
+      b.cells = 1;
+      b.ctl.scene(b.t);
+      b.race(1, full, top, kHz120);   // the first poll adopts the ceiling
+      for (int i = 0; i < 20 && b.lines(full) > 2000.0; i++) b.race(1, full, top, kHz120);
+      nearly(b.lines(full), 1620.0, "a fullscreen ceiling that cannot hold steps down on the grid");
+      b.race(kUpSec + 5, full, cheap, kHz120);
+      nearly(b.lines(full), 1620.0, "…and is barred");
+      b.race(kUpSec + 3, win, cheap, kHz120);
+      nearly(b.lines(win), 1818.0, "the window's ceiling has fewer lines than the lost one, and is tried");
+      b.race(kDownMinSec + 2, win, top, kHz120);
+      nearly(b.lines(win), 1620.0, "…and lost");
+      b.race(kUpSec + 5, full, cheap, kHz120);
+      nearly(b.lines(full), 1620.0, "back in fullscreen, 2160 is more lines than a lost rung, and barred");
+
+      // …AND A RESIZE DOES NOT CARRY THE CEILING ONTO A BARRED ONE. Fullscreen
+      // loses 2160; the window climbs to its own 1818-line ceiling, and going
+      // fullscreen from there keeps its 1818 lines — 1620 — rather than
+      // following the ceiling up onto 2160, which is barred still.
+      Box d;
+      d.cells = 1;
+      d.ctl.scene(d.t);
+      d.race(1, full, top, kHz120);
+      for (int i = 0; i < 20 && d.lines(full) > 2000.0; i++) d.race(1, full, top, kHz120);
+      d.race(kUpSec + 3, win, cheap, kHz120);
+      nearly(d.lines(win), 1818.0, "a window tries its own ceiling");
+      d.ticks(10, kHz120);
+      d.poll(full);
+      nearly(d.lines(full), 1620.0, "…and fullscreen from it lands under the barred 2160, not on it");
+
+      // A WINDOW THAT LOST ITS OWN CEILING, AND NOTHING ELSE, gets no 2160 in
+      // fullscreen: more lines than the rung it could not hold.
+      Box e;
+      e.cells = 1;
+      e.ctl.scene(e.t);
+      e.race(1, win, top, kHz120);
+      for (int i = 0; i < 20 && e.lines(win) > 1700.0; i++) e.race(1, win, top, kHz120);
+      nearly(e.lines(win), 1620.0, "a window that cannot hold its 1818-line ceiling steps down on the grid");
+      e.race(kUpSec + 5, full, cheap, kHz120);
+      nearly(e.lines(full), 1620.0, "…and fullscreen does not climb past the lines it lost");
     }
     {
       // FULLSCREEN IN AND OUT KEEPS THE PICTURE. A Mac at 120 Hz: the page is
@@ -573,8 +714,8 @@ int main() {
         b.race(40, full, cheap, kHz120);
         if (told) b.ctl.resized(b.t);
         b.mon.reset();
-        b.everyNth = 4;   // two seconds presenting one vsync in four
-        b.race(2, full, cheap, kHz120);
+        b.everyNth = 4;   // four seconds presenting one vsync in four
+        b.race(4, full, cheap, kHz120);
         b.everyNth = 1;
         b.race(5, full, cheap, kHz120);
         if (told) {
@@ -586,10 +727,8 @@ int main() {
     }
     {
       // A STRAY SKIP DOES NOT BAR THE CLIMB BACK. The ceiling holds with a late
-      // frame every few seconds — staying never asked for a perfect window — and
-      // an outside stall steps it down. The climb used to want ten seconds with
-      // NOTHING missed, which a browser at 120 Hz does not reliably give, so the
-      // page sat a rung below a ceiling it had been holding all along.
+      // frame every second or so, and an outside stall steps it down: a clean
+      // second allows a stray, so the climb back is not owed a perfect page.
       const RenderScaleLimits full{0.0, 2160.0 / 1084.0, 1084.0, kHz120};
       const auto cheap = [](double) { return 1.0; };
       for (int stray : {360, 100}) {   // a late frame every 3 s; every 0.8 s
@@ -600,16 +739,11 @@ int main() {
         b.race(40, full, cheap, kHz120);
         nearly(b.lines(full), 2160.0, "the ceiling holds with stray skips");
         b.everyNth = 4;
-        b.race(1, full, cheap, kHz120);
+        b.race(kDownMinSec, full, cheap, kHz120);
         b.everyNth = 1;
         nearly(b.lines(full), 1620.0, "an outside stall steps it down one rung");
-        b.race(kUpWaitSec + kJudgeSec + 5, full, cheap, kHz120);
-        if (stray == 360) {
-          nearly(b.lines(full), 2160.0, "…and with a late frame every 3 s it climbs back");
-        } else {
-          nearly(b.lines(full), 1620.0,
-                 "…but one missing more than the allowance stays, without stepping down either");
-        }
+        b.race(kUpSec + 3, full, cheap, kHz120);
+        nearly(b.lines(full), 2160.0, "…and with stray skips it still climbs back");
       }
     }
     {

@@ -1339,9 +1339,9 @@ export class Stage {
   // so a rescue afterwards is not forced back up), and from there the rule steps
   // down the ladder normally.
   //
-  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb waits for a full
-  // clean window and kUpWaitSec on the rung, one rung at a time, and the point
-  // of this knob is to be at the top within seconds.
+  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb waits for a streak
+  // of clean seconds, one rung at a time, and the point of this knob is to be
+  // at the top within seconds.
   _armSuperSample(t) {
     if (!this._superSample || this._superArmed || t < SUPERSAMPLE_ARM_MS) return;
     this._superArmed = true;

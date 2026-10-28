@@ -534,7 +534,7 @@ export const MUTATIONS = [
     expect: 'render_scale',
   },
   {
-    // Missed frames are counted against the period the POINT is due at — the
+    // Late presents are counted against the period the POINT is due at — the
     // panel's times the divisor. Against one vsync, the host's deliberate half
     // rate reads as a miss a frame and walks a healthy box to the floor.
     name: 'render-scale/missed-against-one-vsync',
@@ -567,37 +567,121 @@ export const MUTATIONS = [
     // fullscreen cost a rung no missed frame asked for.
     name: 'render-scale/band-change-keeps-the-scale',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '    return remap(limits, out);',
+    find: '    return remap(tMs, limits, out);',
     replace: '    (void) 0;',
     expect: 'render_scale',
   },
   {
-    // A climb allows a stray skip. Demanding a perfect window, a browser at
-    // 120 Hz that something stepped down never climbs back to a ceiling it
-    // was holding.
-    name: 'render-scale/climb-wants-a-perfect-window',
+    // A frozen frame is ONE late present, however many vsyncs it covers.
+    // Counted as vsyncs, a 400 ms freeze is past the step-down count on its
+    // own, and a brightness key pressed a few times walked a Mac down a rung a
+    // press.
+    name: 'render-scale/hiccup-counted-as-load',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'lateNow += missed > 0;',
+    replace: 'lateNow += missed;',
+    expect: 'render_scale',
+  },
+  {
+    // A step down wants lateness that has LASTED: kDownMinSec late seconds in a
+    // row. On the window alone, one second at a quarter rate stepped a 120 Hz
+    // page down, and a burst that had ended stepped the rung below again.
+    name: 'render-scale/down-without-a-late-run',
     file: 'native/libttp-runtime/ttp/render_scale.h',
-    find: 'return dueMs > 0.0 ? (int) std::lround(kUpMissedMs / dueMs) : 0;',
-    replace: 'return 0;',
+    find: 'if (late >= downLate && lateRun >= kDownMinSec) return std::max(at - 1, 0);',
+    replace: 'if (late >= downLate) return std::max(at - 1, 0);',
     expect: 'render_scale',
   },
   {
-    // A failed climb doubles the wait. Without it a rung the device cannot hold
-    // is tried every kUpWaitSec for as long as the scene lasts — two resizes and
-    // a stutter each time.
-    name: 'render-scale/failed-rung-not-backed-off',
-    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'fails_[slot][at] = judged_ < kJudgeSec ? kMaxFails : std::min(fails_[slot][at] + 1, kMaxFails);',
-    replace: '{}',
+    // The step-down count is a stretch of PICTURE. Counted in frames at 60 Hz,
+    // a 120 Hz panel is held to twice the standard.
+    name: 'render-scale/down-counted-in-frames',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownLateMs / dueMs)) : 1;',
+    replace: 'return 15;',
     expect: 'render_scale',
   },
   {
-    // A scene build forgives NOTHING: a cup is one session. Forgiven, every
-    // race of a four-player cup tries 1080 again forty seconds in.
-    name: 'render-scale/scene-forgives-the-fails',
+    // A clean second allows a stray. Demanding a perfect one, a browser at
+    // 120 Hz that something stepped down never climbs back.
+    name: 'render-scale/climb-wants-a-perfect-second',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'return late <= std::max(1, (int) std::lround(vsyncs * kCleanLateShare));',
+    replace: 'return late == 0;',
+    expect: 'render_scale',
+  },
+  {
+    // …and never none. As a bare share it rounds to zero at 25 Hz, the half
+    // rate of a 50 Hz TV, where one stray then ends every clean run.
+    name: 'render-scale/clean-share-rounds-to-none',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'return late <= std::max(1, (int) std::lround(vsyncs * kCleanLateShare));',
+    replace: 'return late <= (int) std::lround(vsyncs * kCleanLateShare);',
+    expect: 'render_scale',
+  },
+  {
+    // A resize keeps the ceiling only where the count has not lost it. Kept
+    // regardless, a window on its own ceiling goes fullscreen straight onto
+    // the 2160 it lost a minute ago.
+    name: 'render-scale/resize-carries-the-ceiling-onto-a-bar',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '  steppedDown_ = false;\n  judged_ = 0;\n  head_ = 0;\n}',
-    replace: '  steppedDown_ = false;\n  judged_ = 0;\n  head_ = 0;\n  for (auto& row : fails_) for (int& f : row) f = 0;\n}',
+    find: '  const bool atCeiling = point_.scale >= max_ - 1e-9\n      && !barred(',
+    replace: '  const bool atCeiling = point_.scale >= max_ - 1e-9\n      || !barred(',
+    expect: 'render_scale',
+  },
+  {
+    // A bar holds every rung of as many lines or more. Matched to the lost
+    // rung alone, a window that lost its 1818-line ceiling climbs to 2160 the
+    // moment it goes fullscreen.
+    name: 'render-scale/bar-holds-only-its-own-lines',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (tMs < b.untilMs && b.lines <= lines + 0.5) return true;',
+    replace: 'if (tMs < b.untilMs && std::fabs(b.lines - lines) < 0.5) return true;',
+    expect: 'render_scale',
+  },
+  {
+    // A lost rung is barred. Without the bar, four players on the box try
+    // 1080 every kUpSec: two hitches and seconds of drops each time.
+    name: 'render-scale/lost-rung-not-barred',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '    bar(slot, list[at].scale * baseLines_, tMs);',
+    replace: '    (void) 0;',
+    expect: 'render_scale',
+  },
+  {
+    // …and the bar is read on the climb.
+    name: 'render-scale/bar-ignored-on-the-climb',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'const bool aboveBarred = at + 1 < n && barred(slot, list[at + 1].scale * baseLines_, tMs);',
+    replace: 'const bool aboveBarred = false;',
+    expect: 'render_scale',
+  },
+  {
+    // A rung entered by a step down was passed through, not tried. Barred, a
+    // few seconds of outside load held every rung above the floor for the bar.
+    name: 'render-scale/passed-rung-barred',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (down && !steppedDown_ && tMs - enteredMs_ < kTrySec * 1000.0) {',
+    replace: 'if (down && tMs - enteredMs_ < kTrySec * 1000.0) {',
+    expect: 'render_scale',
+  },
+  {
+    // A scene build forgives nothing: a cup is one session. Forgiven, every
+    // race of a four-player cup tries 1080 again on its first clean streak.
+    name: 'render-scale/scene-clears-the-bars',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '  lateRun_ = 0;\n  cleanRun_ = 0;\n}\n\nbool RenderScaleController::poll(',
+    replace: '  lateRun_ = 0;\n  cleanRun_ = 0;\n  for (auto& r : bars_) for (Bar& b : r) b = Bar{};\n}\n\nbool RenderScaleController::poll(',
+    expect: 'render_scale',
+  },
+  {
+    // A rung that stood kTrySec is not lost when it goes late. Barred, a
+    // page that met a lap's heavy stretch (or an outside burst) after holding
+    // its ceiling waited out the bar instead of climbing back.
+    name: 'render-scale/held-rung-barred',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (down && !steppedDown_ && tMs - enteredMs_ < kTrySec * 1000.0) {',
+    replace: 'if (down && !steppedDown_) {',
     expect: 'render_scale',
   },
   {
@@ -611,51 +695,13 @@ export const MUTATIONS = [
     expect: 'render_scale',
   },
   {
-    // A rung entered by a step down was passed through, not tried. Failed, one
-    // burst of outside stalls marks every rung down to the floor hopeless and
-    // the count sits there for the session.
-    name: 'render-scale/step-down-fails-the-rung',
-    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'if (down && !steppedDown_ && tMs - enteredMs_ < kFailSec * 1000.0) {',
-    replace: 'if (down && tMs - enteredMs_ < kFailSec * 1000.0) {',
-    expect: 'render_scale',
-  },
-  {
-    // A step down waits kDownMinSec judged seconds on the rung. Without it a
-    // burst of stalls steps once a second, native to the floor in four.
-    name: 'render-scale/down-without-dwell',
-    file: 'native/libttp-runtime/ttp/render_scale.h',
-    find: 'if (missed >= downMissed && judgedSec >= kDownMinSec) return std::max(at - 1, 0);',
-    replace: 'if (missed >= downMissed) return std::max(at - 1, 0);',
-    expect: 'render_scale',
-  },
-  {
-    // The step-down count is a stretch of picture. As a fixed fifteen frames a
-    // 120 Hz panel is twice as easy to knock down as a 60 Hz one.
-    name: 'render-scale/down-counted-in-frames',
-    file: 'native/libttp-runtime/ttp/render_scale.h',
-    find: 'return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownMissedMs / dueMs)) : 1;',
-    replace: 'return dueMs > 0.0 ? 15 : 1;',
-    expect: 'render_scale',
-  },
-  {
-    // A count not seen yet starts where the scene before it was: only missed
-    // frames move the rung. Lowered on a guess, a device that holds the
+    // A count not seen yet starts where the scene before it was: only late
+    // presents move the rung. Lowered on a guess, a device that holds the
     // lobby's 1080 starts every new player count at 720.
     name: 'render-scale/new-count-lowered',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
     find: '        : at;',
     replace: '        : std::max(at - 1, 0);',
-    expect: 'render_scale',
-  },
-  {
-    // A rung held for kFailSec clears its failures. Without it a rung failed
-    // once waits the longest there is for the life of the process — a party
-    // that shrank from four players to two would never get 1080 back.
-    name: 'render-scale/held-rung-keeps-its-fails',
-    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'if (tMs - enteredMs_ >= kFailSec * 1000.0) fails_[slot][at] = 0;',
-    replace: '{}',
     expect: 'render_scale',
   },
   {

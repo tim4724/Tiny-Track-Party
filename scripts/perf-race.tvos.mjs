@@ -33,7 +33,7 @@
 //
 // PIN EVERY ARM OF A COMPARISON. Free-running, a run reports whichever rung the
 // rule ended on, and a run that stumbled early can report the softer rung for
-// most of its length (the climb back waits at least kUpWaitSec).
+// most of its length (the climb back waits kUpSec clean seconds a rung).
 // Two runs that ended on different rungs are two different questions, so READ
 // THE BUFFER SIZE OFF THE HEADER either way.
 //

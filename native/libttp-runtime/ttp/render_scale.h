@@ -6,20 +6,16 @@
 // pixelated, while uncapped the weakest TV browser this game runs on has four
 // times the fill it can afford. So the shell measures and this decides.
 //
-// ONE SIGNAL: MISSED FRAMES. A present that lands a vsync (or more) after the
-// one it was due on is the only cost a player sees, and it is the one
-// measurement every platform has — a browser without a GPU timer included. So
-// the rule counts frames missed over the last few seconds, steps DOWN a rung
-// when there are too many, and steps UP a rung after a long quiet stretch.
+// ONE SIGNAL: LATE PRESENTS. A present that lands a vsync (or more) after the
+// one it was due on is the only cost a player sees, and the one measurement
+// every platform has, a browser without a GPU timer included. A GPU timer was
+// the signal once and was given up: a DVFS GPU prices the same frame dearer the
+// healthier it is (docs/perf/androidtv-frame-map.md, "The resolution rule").
 //
-// NOT A GPU-TIMER COST MODEL any more: why that was given up is in
-// docs/perf/androidtv-frame-map.md ("The resolution rule, replaced").
-//
-// WHAT A CLIMB COSTS IS A MOVE, and moves are what this file is careful with.
-// Every resolution change reallocates the buffer — on the reference Android box
-// it recreates the swap chain, ~54 ms and one to three skipped frames — so the
-// rule never moves on one bad second, climbs only after a long clean stretch,
-// and waits twice as long before trying a rung again that it just failed.
+// A MOVE IS ITSELF A HITCH. Every resolution change reallocates the buffer —
+// on the Android box it recreates the swap chain, ~54 ms and one to three
+// skipped frames — so the rule steps down only on sustained lateness, climbs
+// only on a long clean run, and does not try a rung it lost again for a while.
 #pragma once
 
 #include <algorithm>
@@ -59,114 +55,90 @@ struct RenderScaleLimits {
 
 // ---- the moves ---------------------------------------------------------------
 //
-// THE WINDOW the rule judges is the last kJudgeSec seconds at the current point,
-// one entry per poll. A move or a scene build empties it, so a rung is judged
-// on its own frames and nothing else.
-inline constexpr int kJudgeSec = 10;
-// STEP DOWN once the window has missed this much PICTURE — fifteen frames on a
-// 60 Hz panel, a frame and a half a second. Measured on the reference Android
-// box over whole races at 1080 lines: two players missed at most 4 in any 10 s
-// pinned and crossed 10 on one stretch of an adaptive race, one and three
-// players missed 17-46 in their heavy stretches. So it tolerates the stray
-// skips a rung that holds still has, and a rung that cannot hold crosses it
-// within its first seconds — which is what keeps a failed climb cheap.
+// EVERYTHING IS COUNTED IN LATE PRESENTS: a present that landed a vsync or
+// more after the one it was due on, at the point's own period. Presents, not
+// missed vsyncs: one frame frozen for 300 ms on a 120 Hz Mac is 36 missed
+// vsyncs but ONE late present — a hiccup (a system overlay, a collection, a
+// tab next door) that fewer pixels would not shorten — while a rung that
+// cannot hold is late on present after present. Counted as vsyncs, a Mac's
+// brightness keys walked Chrome down a rung a press.
 //
-// TIME, NOT FRAMES: a count tuned at 60 Hz is twice as strict on a 120 Hz
-// panel, where fifteen frames is 125 ms, and a Mac browser stepped down on
-// stalls that small. downMissedFrames turns this into the count for the
-// period the point is due at.
-inline constexpr double kDownMissedMs = 250.0;
-// …AND ONLY AFTER THIS MANY JUDGED SECONDS on the rung. A move empties the
-// window, so without it a burst of stalls from outside the game (a system
-// overlay on a Mac, a tab next door) stepped once per second for as long as it
-// lasted, from native to the floor in four. A rung that really cannot hold
-// still leaves inside its first seconds: four players at 1080 on the reference
-// box miss ten frames in two.
+// THE WINDOW the rule steps down on is the last kJudgeSec judged seconds at
+// the current point, one entry per poll. A move or a scene build empties it.
+inline constexpr int kJudgeSec = 10;
+// STEP DOWN once the window holds this much late picture — fifteen presents at
+// 60 Hz, thirty at 120. Measured on the reference Android box over whole races
+// at 1080 lines: two players were late at most 4 times in any 10 s pinned, one
+// and three players 40-46 times in their heavy stretches, and four players'
+// periodic vista seconds (9-16 late each, between near-clean ones) sum past it
+// where no streak of bad seconds ever forms. So it tolerates the stray late
+// frame a rung that holds still has, and a rung that cannot hold crosses it
+// within its first seconds.
+inline constexpr double kDownLateMs = 250.0;
+// …AND ONLY ONCE THE NEWEST kDownMinSec SECONDS WERE ALL LATE (not clean, in
+// cleanSecond's terms): lateness that has lasted, and is still going on. One
+// second at a quarter rate was enough for the count by itself; and a burst
+// that has ended is still in the window, and stepped the rung below a second
+// time for frames it never drew. A move ends the run, so a burst of outside
+// load steps at most once per kDownMinSec of it, not once a second.
 inline constexpr int kDownMinSec = 3;
 
-// The window's step-down count at a point due every `dueMs`: kDownMissedMs of
-// it, rounded to whole frames.
-inline int downMissedFrames(double dueMs) {
-  return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownMissedMs / dueMs)) : 1;
+// The window's step-down count at a point due every `dueMs`.
+inline int downLateFrames(double dueMs) {
+  return dueMs > 0.0 ? std::max(1, (int) std::lround(kDownLateMs / dueMs)) : 1;
 }
-// STEP UP only after a full window that missed AT MOST THIS MUCH PICTURE — a
-// fifth of the step-down bar: three frames on a 60 Hz panel, six at 120 — and
-// at least kUpWaitSec after the rung was entered.
-//
-// NOT ZERO, which it was. The bar to STAY on a rung is kDownMissedMs, so a
-// device holding its ceiling with a stray skip every few seconds was never
-// asked for a perfect window — it started there. Once anything stepped it
-// down, the climb back demanded ten seconds without one late frame, which a
-// browser on a 120 Hz Mac does not reliably give at any resolution: the
-// session stayed a rung or more below a ceiling the device had been holding.
-// A stray skip says nothing about the rung above; a rung that cannot hold
-// misses a stretch of picture, and a failed climb is priced by kFailSec.
-inline constexpr double kUpMissedMs = 50.0;
 
-// The window's climb allowance at a point due every `dueMs`: kUpMissedMs of
-// it, rounded to whole frames.
-inline int upMissedFrames(double dueMs) {
-  return dueMs > 0.0 ? (int) std::lround(kUpMissedMs / dueMs) : 0;
+// STEP UP one rung after kUpSec CLEAN seconds in a row, into a rung that is not
+// barred. A clean second is late on at most kCleanLateShare of the vsyncs it
+// spanned — one a second at 60 Hz, two at 120 — and never zero, because a
+// browser at 120 Hz does not reliably give a second without a stray, nor a
+// 50 Hz TV at its half rate of 25 (where the share rounds to none). The run
+// is long because a climb taken on a cheap stretch of a lap meets the heavy
+// one later, and that is two hitches for nothing.
+inline constexpr double kCleanLateShare = 1.0 / 60.0;
+inline constexpr int kUpSec = 15;
+
+inline bool cleanSecond(int vsyncs, int late) {
+  return late <= std::max(1, (int) std::lround(vsyncs * kCleanLateShare));
 }
-// The wait, and it is long on purpose: a lap's cost swings by milliseconds
-// around a circuit, and a climb taken on a cheap stretch is a move back down
-// at the next heavy one — two hitches for nothing. Counted from when the rung
-// was entered, by a move or by a scene build.
-inline constexpr double kUpWaitSec = 40.0;
-// A STEP DOWN THIS SOON after entering a rung FAILED that rung, and the wait
-// before trying it again doubles, up to kMaxFails doublings — straight to the
-// last if it failed before a full window was judged, which is a rung that
-// cannot hold at all. Entering by a scene build counts: a race that starts on
-// the lobby's rung and cannot hold it has failed it.
-//
-// ENTERING BY A STEP DOWN DOES NOT. A rung passed through on the way down was
-// never TRIED — the frames were already late above it — so a second step out of
-// it says nothing about it. Counted, one burst of outside stalls marked every
-// rung it crossed as hopeless and the race count sat on the floor for the
-// session.
-//
-// A SCENE BUILD FORGIVES NOTHING: a cup is one session, the same players
-// race after race, so what four players could not hold in the last race they
-// cannot hold in this one. Failures are kept PER CELL COUNT
-// (RenderScaleController), so the lobby holding 1080 clears nothing four
-// players failed; what clears a rung's failures at a count is HOLDING it for
-// kFailSec at that count.
-inline constexpr double kFailSec = 30.0;
-inline constexpr int kMaxFails = 3;
-// A SCENE'S FIRST SECONDS ARE NOT ITS COST, so nothing missed in them is
-// judged. Staging keeps costing after the build returns — shader compiles,
-// first uploads, the shadow bake — and on an A10X a solo race that holds 60 at
-// native all day presented at 7-25 fps for its first ~2.6 s.
-inline constexpr double kScaleSceneGraceSec = 5.0;
-// …AND A RESIZE'S FIRST SECONDS ARE NOT THE RUNG'S COST EITHER. A browser
-// window entering or leaving fullscreen, or dragged by its corner, stalls the
-// page while it reallocates the canvas and lays the page out again — a cost
-// the rung did not cause and will not have again. Judged, it stepped a Mac
-// that held its ceiling a rung down on every fullscreen toggle, and a step
-// soon after a climb FAILED the rung it had just reached. Shorter than a
-// scene's grace: there is no staging behind a resize, only the stall itself.
-inline constexpr double kScaleResizeGraceSec = 3.0;
 
-// THE DECISION, as a pure function of what the controller has counted: where
-// the point sits on its list (`at` of `n`), the frames missed over the window
-// against the count that steps down (downMissedFrames) and the count a climb
-// allows (upMissedFrames), how many seconds the window holds, how long since
-// the rung was entered, and the wait in force for the rung above. Answers the
-// index to move to — `at` for "stay".
-inline int renderScaleRung(int at, int n, int missed, int downMissed, int upMissed,
-                           int judgedSec, double sinceEnteredSec, double upWaitSec) {
-  if (missed >= downMissed && judgedSec >= kDownMinSec) return std::max(at - 1, 0);
-  if (missed <= upMissed && judgedSec >= kJudgeSec && sinceEnteredSec >= upWaitSec
-      && at + 1 < n) {
-    return at + 1;
-  }
+// A RUNG LOST: entered by a climb or by a scene's placement, and left by a
+// step down within kTrySec, about a lap. It is BARRED at that player count for
+// kBarSec, and so is every rung of as many lines or more, on any surface: a
+// browser window that loses its 1818-line ceiling cannot hold 2160 in
+// fullscreen either. The bar is clocked from the loss, so it runs through
+// scene builds (a cup is the same players race after race), and it spans
+// about a cup: four players who cannot hold 1080 try it once a cup, not once
+// a race.
+//
+// Two kinds of rung are never lost. One entered by a step down was passed
+// through, not tried: barred, a few seconds of outside load walked a page to
+// the floor and held every rung above it for the bar. And one that stood
+// kTrySec and then went late met a lap's heavy stretch or something outside
+// the game; the climb back may try it as soon as it is clean.
+inline constexpr double kTrySec = 30.0;
+inline constexpr double kBarSec = 300.0;
+
+// THE DECISION: where the point sits on its list (`at` of `n`), the late
+// presents in the window against the count that steps down, the runs of late
+// and of clean seconds at the point, and whether the rung above is barred.
+// Answers the index to move to — `at` for "stay".
+inline int renderScaleRung(int at, int n, int late, int downLate, int lateRun,
+                           int cleanRun, bool aboveBarred) {
+  if (late >= downLate && lateRun >= kDownMinSec) return std::max(at - 1, 0);
+  if (cleanRun >= kUpSec && !aboveBarred && at + 1 < n) return at + 1;
   return at;
 }
 
-// The wait before climbing into a rung that has failed `fails` times this session.
-inline double upWaitSec(int fails) {
-  return kUpWaitSec * (double) (1 << std::min(std::max(fails, 0), kMaxFails));
-}
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, so nothing in them is judged.
+// Staging keeps costing after the build returns — shader compiles, first
+// uploads, the shadow bake — and on an A10X a solo race that holds 60 at
+// native all day presented at 7-25 fps for its first ~2.6 s.
+inline constexpr double kScaleSceneGraceSec = 5.0;
+// …AND A RESIZE'S FIRST SECONDS ARE NOT THE RUNG'S EITHER. A browser window
+// entering or leaving fullscreen stalls the page while it reallocates the
+// canvas and lays the page out again, a cost the rung did not cause.
+inline constexpr double kScaleResizeGraceSec = 3.0;
 
 // Below this the answer is "no change": a step the eye cannot see is not worth a
 // buffer reallocation, and it is what stops a scale pinned at a limit from
