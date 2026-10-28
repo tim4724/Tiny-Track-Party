@@ -82,6 +82,14 @@ test('the advertisement is the contract\'s service type and TXT key', () => {
   assert.doesNotMatch(src, /"pbr"/,
     'pbr is launcher-only — a display that sets it disclaims its own label');
 
+  // The launcher drops exactly this suffix. Without it, some Android TV builds
+  // refuse the registration outright, since the device's own services already
+  // use the bare device name.
+  assert.match(src, /LABEL_SUFFIX = " · Paper Balloon"/,
+    'the instance-name suffix must be the one the launcher strips');
+  assert.match(src, /return label \+ LABEL_SUFFIX/,
+    'the bare device name fails to register on some Android TV builds');
+
   // NsdManager needs a port to register and the launcher never dials it, so the
   // record must not advertise something that is actually served.
   assert.match(src, /ServerSocket\(0\)/,

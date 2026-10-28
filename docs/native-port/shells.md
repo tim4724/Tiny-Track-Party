@@ -376,7 +376,9 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    because a player may arrive by either.
 10. **A room advertisement, if you are native** (Paper Balloon CONTRACT §8). Publish
    `_paperballoon._tcp` in `.local` at room create, withdraw it at close, with the
-   TV's human label as the DNS-SD instance name and the room code as TXT `c` —
+   TV's human label as the DNS-SD instance name (on Android TV followed by
+   ` · Paper Balloon`, which the launcher drops — the bare device name fails to
+   register on some builds) and the room code as TXT `c` —
    nothing else, and never TXT `pbr`, which is a launcher-to-launcher marker. The
    launcher resolves the code through the relay, so this only accelerates a join
    it could already make: keep showing the QR and the code regardless. The web

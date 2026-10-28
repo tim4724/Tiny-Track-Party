@@ -31,9 +31,10 @@ import java.net.ServerSocket
  * The launcher never dials the SRV port. `NsdManager` needs a port to register,
  * so a throwaway [ServerSocket] supplies one that nothing serves.
  *
- * The instance name is the TV's own name ("Spielzimmer"), which the launcher
- * shows verbatim so a player with two boxes can tell the rooms apart. It never
- * leaves the LAN: the relay is told the platform and nothing else.
+ * The instance name is the TV's own name ("Spielzimmer") plus [LABEL_SUFFIX].
+ * The launcher drops the suffix and shows the name, so a player with two boxes
+ * can tell the rooms apart. It never leaves the LAN: the relay is told the
+ * platform and nothing else.
  *
  * ALL OF IT IS AN ACCELERATOR, NEVER THE ONLY ROUTE IN. mDNS is blocked on
  * AP-isolated and guest networks, so every failure here is logged and swallowed,
@@ -134,12 +135,19 @@ class RoomAdvertiser(context: Context) {
      * that has none — which includes every box below API 25, where the setting
      * does not exist. `DEVICE_NAME` is a compile-time String constant, so it
      * inlines and the minSdk-24 call is just a lookup that answers null.
+     *
+     * Then [LABEL_SUFFIX]. DNS-SD caps the instance name at 63 UTF-8 bytes, so
+     * the name gives way, never the suffix.
      */
     private fun deviceLabel(): String {
         val name = runCatching {
             Settings.Global.getString(appContext.contentResolver, Settings.Global.DEVICE_NAME)
         }.getOrNull()
-        return name?.trim()?.takeIf { it.isNotEmpty() } ?: Build.MODEL
+        var label = name?.trim()?.takeIf { it.isNotEmpty() } ?: Build.MODEL
+        while ((label + LABEL_SUFFIX).toByteArray().size > 63) {
+            label = label.substring(0, label.offsetByCodePoints(label.length, -1))
+        }
+        return label + LABEL_SUFFIX
     }
 
     private companion object {
@@ -158,5 +166,13 @@ class RoomAdvertiser(context: Context) {
 
         /** TXT key for the room code (§8). The whole record. */
         const val CODE_KEY = "c"
+
+        /**
+         * §8: the launcher drops this before showing the name. The bare device
+         * name won't register on some Android TV builds, which refuse an instance
+         * name the device's own services already use, even under another service
+         * type.
+         */
+        const val LABEL_SUFFIX = " · Paper Balloon"
     }
 }

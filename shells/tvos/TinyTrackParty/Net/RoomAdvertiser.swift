@@ -28,7 +28,9 @@ import os
 /// the device's own name ("Spielzimmer"). The launcher shows that verbatim, so a
 /// player with two Apple TVs can tell the rooms apart. `UIDevice.name` cannot
 /// serve here: since tvOS 16 it is a synonym for the model and reads "Apple TV"
-/// on every box.
+/// on every box. That is also why this record goes without the
+/// ` · Paper Balloon` suffix the Android TV twin appends: §8 asks it only of a
+/// display that names the record itself.
 ///
 /// ALL OF IT IS AN ACCELERATOR, NEVER THE ONLY ROUTE IN. mDNS is blocked on
 /// AP-isolated and guest networks, and the local-network permission (already
