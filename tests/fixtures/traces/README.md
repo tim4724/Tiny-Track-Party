@@ -79,7 +79,9 @@ On 2026-10-28 a car past the top of a flight began falling under
 branch disabled the old recordings replay exactly, so only falling cars moved
 them: skysnake, `tidepool-session-ailive-4bots-900f-seed13` and the catalogue
 sweep, with the audio corpus following (its `land` cues shift). `air_check`
-still bounds the flights.
+still bounds the flights. The same day an airborne car stopped paying the curb:
+the edge still holds it and turns it along the road, at no speed. No trace
+flies into the edge, so only the catalogue sweep moved; `air_check` asserts it.
 
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the

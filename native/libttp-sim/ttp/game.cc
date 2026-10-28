@@ -511,20 +511,25 @@ bool Game::pinCurb(Car& c) {
   double lim = js_max(0.05, base - (fpt.side - fpt.restSide));
   if (c.lat <= lim && c.lat >= -lim) return false;
   c.lat = c.lat > 0 ? lim : -lim;
-  c.onWall = true;
+  if (c.h < AIR_MIN) c.onWall = true;
   return true;
 }
 
 // What touching the curb COSTS: the rash timer, the speed cap, and the end of
 // any shove (a car scraping a barrier must not keep coasting on a gift).
+// Nothing in the air: there the road's edge is a guide rail, not a kerb. The
+// kerb is low and a jumping car is above it, so a scrape there would be a wall
+// nobody can see, and a tilt player cannot aim a landing.
 void Game::billCurb(Car& c, double dt) {
+  if (c.h >= AIR_MIN) return;
   double cap = c.vmax * g_wallSpeedFrac;
   c.wallRashT = WALL_RASH_T;
   c.shoveT = 0;
   if (c.v > cap) c.v = js_max(cap, c.v - WALL_DECEL * dt);
 }
 
-// The integration's curb: pin the car, turn it along the wall, bill it. The
+// The integration's curb: pin the car, turn it along the wall, bill it (the
+// turn costs speed only on the deck; see billCurb). The
 // turn lives here and not in billCurb, which resolveCollisions also calls AFTER
 // its passes: a car turned there would swing its body into a neighbour the
 // passes have already separated it from. A car pinned only by a shove is
@@ -539,7 +544,7 @@ void Game::clampCurb(Car& c, double dt) {
     double turned = js_min((into + WALL_PEEL) * (1 - dmath::exp(-g_wallTurnRate * dt)),
                            g_wallTurnMax * dt);
     c.heading += turned * side;
-    c.v *= dmath::exp(-g_wallImpact * turned);
+    if (c.h < AIR_MIN) c.v *= dmath::exp(-g_wallImpact * turned);
   }
   billCurb(c, dt);
 }
