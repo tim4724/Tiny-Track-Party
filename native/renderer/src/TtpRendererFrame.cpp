@@ -1695,8 +1695,13 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 mBoxCollectT[i] = std::max(0.0f, mBoxCollectT[i] - input.dt);
                 alpha = mBoxCollectT[i] / POOF;                  // 1 → 0
                 const float grow = 1.0f + (1.0f - alpha) * 1.1f; // 1 → 2.1
+                // The idle angle plus the extra spin since the grab, so the
+                // twin takes over at the solid box's own yaw; a spin-up phased
+                // off the clock alone snaps the box round on the grab frame.
+                const float since = POOF - mBoxCollectT[i];
+                const float yaw = mTime * 1.6f + since * 1.6f * (2.2f - 1.0f);
                 tcm.setTransform(tcm.getInstance(fadeInst->getRoot()),
-                        hover * mat4f::rotation(mTime * 1.6f * 2.2f, float3{ 0, 1, 0 })
+                        hover * mat4f::rotation(yaw, float3{ 0, 1, 0 })
                         * mat4f::scaling(float3{ mBoxScale * grow }));
                 MaterialInstance* const* mats = fadeInst->getMaterialInstances();
                 for (size_t mi = 0; mi < fadeInst->getMaterialInstanceCount(); mi++) {
