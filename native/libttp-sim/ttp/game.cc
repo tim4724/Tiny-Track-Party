@@ -159,6 +159,13 @@ static const double GRAVITY = 12.0;
 // Tune it, not GRAVITY, to move crest hops. Crest only, so a kicker, which
 // leaves its lip already in the air, flies under GRAVITY alone.
 static const double CREST_PULL = 80.0;
+// Past the top of a flight the car falls under this alone, no pull: GRAVITY
+// plus the pull brought a hop down at twice the gravity it went up against,
+// so it drifted up and slammed back. Only the fall is softened, so a hill
+// launches the same cars to the same height as before. Never upward: over the
+// crest's top the road can still fall away faster than this, and letting that
+// lift the car again would hold it hovering at the peak.
+static const double GRAVITY_FALL = 6.0;
 // Two cars further apart in height than this pass over each other.
 static const double AIR_CLEAR = 0.35;
 // How fast an airborne body tips toward the road's angle (1/s). Held at its
@@ -1245,7 +1252,8 @@ void Game::update(double dtMs) {
     // into one instant, which reads as a hop off the crest.
     // In the air the body leaves at the angle it had, so against a road that
     // turns away under it the car pitches nose-up by k per metre travelled,
-    // and tips back toward the road's angle at AIR_TIP.
+    // and tips back toward the road's angle at AIR_TIP. Once falling it falls
+    // under GRAVITY_FALL.
     // Landing is neutral: the car keeps its speed and pays nothing.
     double ramp = kickerFloor(c.totalS);
     double k = crestAt(c.totalS);
@@ -1257,6 +1265,7 @@ void Game::update(double dtMs) {
       c.vh = ramp > 0 ? js_min(c.v, c.vmax) * (KICKER_RISE / KICKER_LEN) : 0;
       c.pitch = ramp > 0 ? KICKER_PITCH : 0;
     } else {
+      if (c.vh < 0) lift = js_min(0.0, c.v * c.v * k - GRAVITY_FALL);
       c.vh += lift * dt;
       c.h += c.vh * dt;
       c.pitch += (k * c.v - AIR_TIP * c.pitch) * dt;

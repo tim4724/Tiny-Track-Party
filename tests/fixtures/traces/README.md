@@ -74,6 +74,12 @@ set by their cup skill. Each bot trace first diverges at a bot's brake input,
 each human one at the human scraping the curb; human inputs are verbatim, and
 `tidepool-session-beats-3bots-450f-seed21.jsonl` did not move. The audio
 corpus and the catalogue sweep followed. `drift_check` asserts the slide.
+On 2026-10-28 a car past the top of a flight began falling under
+`GRAVITY_FALL` alone, without the crest pull (`Game::update`). With the falling
+branch disabled the old recordings replay exactly, so only falling cars moved
+them: skysnake, `tidepool-session-ailive-4bots-900f-seed13` and the catalogue
+sweep, with the audio corpus following (its `land` cues shift). `air_check`
+still bounds the flights.
 
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
