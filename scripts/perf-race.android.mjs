@@ -96,8 +96,9 @@ export function makeAndroidBackend() {
   const mixerTicks = () => {
     try {
       const pid = adb('shell', 'pidof', PACKAGE).trim();
-      const tid = adb('shell', 'ps', '-T', '-p', pid).split('\n')
-        .find((l) => l.trim().endsWith('ttp-mix'))?.trim().split(/\s+/)[2];
+      // Through /proc, not `ps -T`: Fire OS 6 (Android 7) has no -T.
+      const tid = adb('shell', `grep -lx ttp-mix /proc/${pid}/task/*/comm`)
+        .trim().split('/')[4];
       if (!tid) return null;
       // utime and stime are fields 14 and 15; the comm before ") " may hold spaces.
       const f = adb('shell', 'cat', `/proc/${pid}/task/${tid}/stat`).split(') ')[1].split(' ');
@@ -273,7 +274,7 @@ export function makeAndroidBackend() {
       restoreKnobs();
       report(spikes, phasemax, phase50);
       const end = mixer && mixerTicks();
-      if (end?.tid === mixer.tid) {
+      if (end && end.tid === mixer.tid) {
         // USER_HZ is 100: a tick is 10 ms of the thread's CPU.
         const share = ((end.ticks - mixer.ticks) * 10) / (end.at - mixer.at);
         console.log(`\n# audio mixer ${(100 * share).toFixed(0)}% of a core`
