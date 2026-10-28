@@ -158,6 +158,19 @@ test('ACTION is gated by the held-item slot and bumps the use-counter once per p
   assert.equal(out.at(-1).u, 2, 'each press bumps exactly once');
 });
 
+test('ACTION held carries `h` until it comes up, even after the slot empties under it', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.setActionEnabled(true);
+  t.holdAction(true); t._tick();
+  assert.deepEqual([out.at(-1).u, out.at(-1).h], [1, 1], 'the press and the hold leave together');
+  t.setActionEnabled(false);   // the held banana left the slot
+  t._tick();
+  assert.equal(out.at(-1).h, 1, 'still held: the banana trails until release');
+  t.holdAction(false); t._tick();
+  assert.deepEqual([out.at(-1).u, out.at(-1).h], [1, 0], 'the release clears `h` and fires nothing');
+});
+
 test('the ACTION use-counter wraps at 256 (matches the display fire-on-change protocol)', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

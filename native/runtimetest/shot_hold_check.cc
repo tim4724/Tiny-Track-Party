@@ -75,7 +75,8 @@ int main() {
   check(sh::parseShowcase("rocket") == sh::Showcase::Rocket, "rocket showcase parses");
   check(sh::parseShowcase("monster") == sh::Showcase::Monster, "monster showcase parses");
   check(sh::parseShowcase(nullptr) == sh::Showcase::None, "null turns the showcase off");
-  check(sh::parseShowcase("banana") == sh::Showcase::None, "an unknown item turns it off");
+  check(sh::parseShowcase("banana") == sh::Showcase::Banana, "banana showcase parses");
+  check(sh::parseShowcase("boost") == sh::Showcase::None, "an unknown item turns it off");
   {
     // {totalS, monster, viewer, finished}
     const std::vector<sh::CarView> field = {
@@ -104,6 +105,54 @@ int main() {
     check(sh::showcasePick(sh::Showcase::Monster, st, 1, field) == -1, "one truck at a time");
     field[0].monster = false;
     check(sh::showcasePick(sh::Showcase::Monster, st, 0, field) == 1, "and the next once it is gone");
+  }
+
+  // ---- the held banana ----
+  check(parse("{\"simMs\":5000,\"trailMs\":1500}", &s) && near(s.trailS, 1.5), "a trail parses");
+  check(!parse("{\"simMs\":5000,\"trailMs\":0}", &s), "a zero trail is refused");
+  check(!parse("{\"simMs\":1000,\"trailMs\":1500}", &s), "a trail before the race is refused");
+  check(parse("{\"simMs\":5000}", &s) && s.trailS == 0, "no trail by default");
+  {
+    sh::State st;
+    check(!sh::trailDue(s, st, 10), "no trail is never due");
+    parse("{\"simMs\":5000,\"trailMs\":1500}", &s);
+    check(!sh::trailDue(s, st, 3.4), "not due before simMs - trailMs");
+    check(sh::trailDue(s, st, 3.5), "due at it");
+    check(!sh::trailDue(s, st, 3.6), "and only once");
+  }
+  {
+    // {totalS, monster, viewer, finished}
+    const std::vector<sh::CarView> field = {
+      {20, false, true, false},    // 0: viewer, 8 ahead of the next car
+      {12, false, false, false},   // 1: AI
+      {11, false, true, false},    // 2: viewer, 1 ahead of car 3
+      {10, false, false, false},   // 3: AI
+      {10.5, false, true, true},   // 4: viewer, 0.5 ahead, but finished
+    };
+    check(sh::trailPick(field) == 2, "the unfinished viewer with the nearest car behind holds it");
+    check(sh::trailPick({{10, false, true, false}, {20, false, false, false}}) == -1,
+          "a viewer with nobody behind holds nothing");
+
+    sh::ShowcaseState st;
+    auto step = sh::bananaShowcase(st, 0.5, field);
+    check(step.hold == -1 && !step.release, "the banana showcase waits its first 0.8 s");
+    step = sh::bananaShowcase(st, 0.5, field);
+    check(step.hold == 2 && !step.release, "then trailPick's car takes one");
+    step = sh::bananaShowcase(st, 3.4, field);
+    check(step.hold == -1 && !step.release, "and holds it for 3.5 s");
+    step = sh::bananaShowcase(st, 0.2, field);
+    check(step.hold == -1 && step.release, "then lets go");
+    step = sh::bananaShowcase(st, 1.9, field);
+    check(step.hold == -1 && !step.release, "the next waits its 2 s gap");
+    step = sh::bananaShowcase(st, 0.2, field);
+    check(step.hold == 2, "and then comes");
+  }
+  {
+    sh::ShowcaseState st;
+    const std::vector<sh::CarView> alone = {{10, false, true, false}, {20, false, false, false}};
+    check(sh::bananaShowcase(st, 1, alone).hold == -1, "nobody with a car behind takes none");
+    check(sh::bananaShowcase(st, 0.01, {{10, false, true, false}, {5, false, false, false}}).hold == 0,
+          "and the next step one is tried again");
   }
 
   std::printf("shot_hold: %d/%d passed\n", cases - failed, cases);

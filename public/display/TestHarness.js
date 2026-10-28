@@ -1309,9 +1309,14 @@ export function runDisplayScenario(opts, ctx) {
     // re-armed on every deal so a redealt race stops at the same moment.
     const holdParam = new URLSearchParams(location.search).get('hold');
     const hold = holdParam ? JSON.parse(holdParam) : null;
+    // `?showcase=` — a live card's item loop (ttp_item_showcase), for an item no
+    // race shows on its own. A capture names its moment with a hold instead, and
+    // the loop would change the race on the way there, so a hold switches it off.
+    const showcase = hold ? null : new URLSearchParams(location.search).get('showcase');
     const newSession = () => {
       const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
       if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
+      if (showcase) s.itemShowcase(showcase);
       return s;
     };
     let engine = newSession();

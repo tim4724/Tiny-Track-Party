@@ -12,7 +12,10 @@ bool parse(const Value& blob, Spec* out) {
   if (!json::is_obj(&blob)) return false;
   const Value* sim = blob.find("simMs");
   if (!json::is_num(sim) || !(sim->num >= 0)) return false;
+  const Value* trail = blob.find("trailMs");
+  if (trail && !(json::is_num(trail) && trail->num > 0 && trail->num <= sim->num)) return false;
   out->simS = sim->num / 1000;
+  out->trailS = trail ? trail->num / 1000 : 0;
   return true;
 }
 
@@ -25,11 +28,31 @@ double allow(const Spec& spec, State& state, double elapsedS, double dtS) {
   return dtS < spec.simS - elapsedS ? dtS : spec.simS - elapsedS;
 }
 
+bool trailDue(const Spec& spec, State& state, double elapsedS) {
+  if (spec.trailS <= 0 || state.trailed || elapsedS < spec.simS - spec.trailS) return false;
+  state.trailed = true;
+  return true;
+}
+
+int trailPick(const std::vector<CarView>& cars) {
+  int pick = -1;
+  double best = 0;
+  for (int i = 0; i < (int) cars.size(); i++) {
+    if (!cars[i].viewer || cars[i].finished) continue;
+    for (const CarView& o : cars) {
+      const double gap = cars[i].totalS - o.totalS;
+      if (gap > 0 && (pick < 0 || gap < best)) { pick = i; best = gap; }
+    }
+  }
+  return pick;
+}
+
 Showcase parseShowcase(const char* kind) {
   if (!kind) return Showcase::None;
   const std::string k(kind);
   if (k == "rocket") return Showcase::Rocket;
   if (k == "monster") return Showcase::Monster;
+  if (k == "banana") return Showcase::Banana;
   return Showcase::None;
 }
 
@@ -51,6 +74,24 @@ int showcasePick(Showcase kind, ShowcaseState& state, double dtS, const std::vec
   if (pick < 0) return -1;
   state.fireCd = kind == Showcase::Monster ? SHOWCASE_MONSTER_GAP_S : SHOWCASE_ROCKET_GAP_S;
   return pick;
+}
+
+BananaStep bananaShowcase(ShowcaseState& state, double dtS, const std::vector<CarView>& cars) {
+  BananaStep step;
+  if (state.releaseCd >= 0) {
+    state.releaseCd -= dtS;
+    if (state.releaseCd < 0) {
+      step.release = true;
+      state.fireCd = SHOWCASE_BANANA_GAP_S;
+    }
+    return step;
+  }
+  state.fireCd -= dtS;
+  if (state.fireCd > 0) return step;
+  // Nobody with a car behind: try again next step.
+  step.hold = trailPick(cars);
+  if (step.hold >= 0) state.releaseCd = SHOWCASE_BANANA_HOLD_S;
+  return step;
 }
 
 }  // namespace shot_hold

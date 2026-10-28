@@ -14,7 +14,8 @@ namespace ttp {
 namespace rt {
 
 // How far a car may be from its chase rig before the rig cuts to it instead
-// of springing there (see the cut below). World units; the rig sits ~1.3 back.
+// of springing there (see the cut below). World units; the rig sits ~1.3 back,
+// and the aim rig (camera.h) under 4.
 constexpr float CHASE_CUT_DIST = 6.0f;
 
 void newField(DisplayState& d) {
@@ -317,7 +318,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                 if (cam.init && dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) cam.init = false;
                 cam.update(rig,
                            fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
-                           outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);
+                           outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack,
+                           !fromHeld && c->trailing);
             }
             TtpViewInput& v = outViews[i];
             v.car = subject;

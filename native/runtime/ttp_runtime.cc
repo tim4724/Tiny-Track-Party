@@ -299,6 +299,7 @@ struct RuntimeSession {
   // The preview's item showcase (ttp_item_showcase).
   ttp::rt::shot_hold::Showcase showcase = ttp::rt::shot_hold::Showcase::None;
   ttp::rt::shot_hold::ShowcaseState showcaseState;
+  Id showcaseHolder;  // the car the banana showcase let take one, for its release
 
   std::unique_ptr<Game> game;            // bare-mode owner
   std::unique_ptr<RaceSession> session;  // countdown-mode owner
@@ -348,6 +349,19 @@ static std::vector<ttp::rt::shot_hold::CarView> showcaseCars(const RuntimeSessio
     out.push_back({cp->totalS, cp->monsterT > 0, !ai, cp->finished});
   }
   return out;
+}
+
+// The held banana (ttp/shot_hold.h): car `pick` is handed a banana and presses
+// ITEM with it held, through the input a phone sends.
+static void holdBanana(RuntimeSession& rs, int pick) {
+  if (pick < 0) return;
+  const Car& c = *rs.eng->cars()[pick];
+  rs.eng->giveItem(c.id, "banana", false, 0);
+  Input in;
+  in.hasU = true; in.u = ((int) c.useSeq + 1) & 255;
+  in.hasH = true; in.h = 1;
+  rs.eng->processInput(c.id, in);
+  rs.showcaseHolder = c.id;
 }
 
 // Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
@@ -1082,6 +1096,16 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
   }
   if (!racing || rs->showcase == ttp::rt::shot_hold::Showcase::None) return;
   const auto cars = showcaseCars(*rs);
+  if (rs->showcase == ttp::rt::shot_hold::Showcase::Banana) {
+    const auto step = ttp::rt::shot_hold::bananaShowcase(rs->showcaseState, dtMs / 1000, cars);
+    if (step.release) {
+      Input in;
+      in.hasH = true; in.h = 0;
+      rs->eng->processInput(rs->showcaseHolder, in);
+    }
+    holdBanana(*rs, step.hold);
+    return;
+  }
   const int pick = ttp::rt::shot_hold::showcasePick(rs->showcase, rs->showcaseState, dtMs / 1000, cars);
   if (pick < 0) return;
   const Id id = rs->eng->cars()[pick]->id;
@@ -1111,11 +1135,14 @@ void ttp_update(int h, double dtMs) {
       rs->holdAccumMs = 0;
       return;
     }
+    if (sh::trailDue(rs->hold, rs->holdState, rs->eng->elapsed()))
+      holdBanana(*rs, sh::trailPick(showcaseCars(*rs)));
     stepSession(rs, ms);
   }
 }
 
-int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
+int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u,
+                      double hold) {
   RuntimeSession* rs = get(h);
   if (!rs) return -1;
   if (!rs->eng) buildSession(rs);
@@ -1130,8 +1157,9 @@ int ttp_process_input(int h, const char* idJson, int mask, double s, double b, d
   if (mask & 1) { in.hasS = true; in.s = s; }
   if (mask & 2) { in.hasB = true; in.b = b; }
   if (mask & 4) { in.hasU = true; in.u = u; }
+  if (mask & 8) { in.hasH = true; in.h = hold; }
   rs->eng->processInput(id, in);
-  return mask & 7;
+  return mask & 15;
 }
 
 const char* ttp_snapshot_json(int h) {

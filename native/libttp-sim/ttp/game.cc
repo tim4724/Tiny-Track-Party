@@ -352,6 +352,7 @@ void Game::processInput(const Id& id, const Input& msg) {
   if (msg.hasS) c->steer = js_max(-1.0, js_min(1.0, msg.s));
   if (msg.hasB) c->brake = js_max(0.0, js_min(1.0, msg.b));
   if (msg.hasU && msg.u != c->useSeq) { c->useSeq = msg.u; c->wantUse = true; }
+  if (msg.hasH) c->itemHeld = msg.h != 0;
 }
 
 static long indexOfId(const std::vector<Id>& v, const Id& id) {
@@ -363,6 +364,7 @@ bool Game::removeCar(const Id& id) {
   auto it = std::find_if(cars_.begin(), cars_.end(),
                          [&](const std::unique_ptr<Car>& c) { return c->id == id; });
   if (it == cars_.end()) return false;
+  dropCarried(**it);
   cars_.erase(it);
   long i = indexOfId(finishedOrder_, id);
   if (i >= 0) finishedOrder_.erase(finishedOrder_.begin() + i);
@@ -664,6 +666,19 @@ Car* Game::nextCarAhead(const Car& c) {
   return best;
 }
 
+// Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
+// already over anything further back, and would spin on a banana it never saw.
+void Game::bananaDropPoint(const Car& c, double& s, double& lat) const {
+  double back = halfExtents(c).len;
+  Frame f = centerline_->sampleAt(c.totalS);
+  Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
+  Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
+  ProjectResult hit = centerline_->projectNear(world, c.totalS, back + 0.5);
+  double lim = curbLimit(hit.frame.width);
+  lat = js_max(-lim, js_min(lim, hit.lat));
+  s = wrap_s(hit.s, length_);
+}
+
 void Game::useItemImpl(Car& c) {
   { Event e; e.type = "item_use"; e.id = c.id; e.item = c.item; emit(e); }
   if (c.item == "boost") {
@@ -671,18 +686,13 @@ void Game::useItemImpl(Car& c) {
     c.boostMul = js_max(c.boostMul, BOOST_ITEM_MUL);
     c.boostT = js_max(c.boostT, BOOST_ITEM_DUR_MIN + (BOOST_ITEM_DUR_MAX - BOOST_ITEM_DUR_MIN) * t);
   } else if (c.item == "banana") {
-    // Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
-    // already over anything further back, and would spin on a banana it never saw.
-    double back = halfExtents(c).len;
-    Frame f = centerline_->sampleAt(c.totalS);
-    Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
-    Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
-    ProjectResult hit = centerline_->projectNear(world, c.totalS, back + 0.5);
-    double lim = curbLimit(hit.frame.width);
-    double lat = js_max(-lim, js_min(lim, hit.lat));
-    double s = wrap_s(hit.s, length_);
-    double armAt = elapsed_ + BANANA_OWNER_IMMUNE;
-    bananas_.push_back(BananaRt{++bananaSeq_, s, lat, c.id, armAt, false, 0, false});
+    double s, lat;
+    bananaDropPoint(c, s, lat);
+    BananaRt dropped{++bananaSeq_, s, lat, c.id, elapsed_ + BANANA_OWNER_IMMUNE, false, 0, false};
+    // Used with the button down, it rides the bumper instead, never armed
+    // against its carrier (dropCarried arms it on the release).
+    if (c.itemHeld) { dropCarried(c); dropped.carried = true; dropped.armAt = INF; c.trailing = true; }
+    bananas_.push_back(dropped);
   } else if (c.item == "rocket") {
     Car* target = nextCarAhead(c);
     double fwd = target ? wrap_s(target->totalS - c.totalS, length_) : INF;
@@ -694,6 +704,27 @@ void Game::useItemImpl(Car& c) {
     c.monsterT = MONSTER_DUR_MIN + (MONSTER_DUR_MAX - MONSTER_DUR_MIN) * t;
   }
   c.item = "";
+}
+
+// Lets go of the banana this car carries where it is now, armed against its
+// owner from here as one dropped on the press is.
+void Game::dropCarried(Car& c) {
+  if (!c.trailing) return;
+  c.trailing = false;
+  for (auto& b : bananas_) {
+    if (!b.carried || b.owner != c.id) continue;
+    b.carried = false;
+    b.armAt = elapsed_ + BANANA_OWNER_IMMUNE;
+  }
+}
+
+// After the collision passes, so a carried banana sits on the bumper of the car
+// as it is drawn.
+void Game::carryBananas() {
+  for (auto& b : bananas_) {
+    if (!b.carried) continue;
+    if (const Car* c = find(b.owner)) bananaDropPoint(*c, b.s, b.lat);
+  }
 }
 
 bool Game::enterBanana(Car& c) {
@@ -708,6 +739,8 @@ bool Game::enterBanana(Car& c) {
       hit = true;
       if (b.respawn) b.liveAt = elapsed_ + BOX_RESPAWN;
       else b.hit = true;
+      // Hit off a bumper, it is gone from there too.
+      if (b.carried) if (Car* o = find(b.owner)) o->trailing = false;
     }
   }
   if (hit) bananas_.erase(std::remove_if(bananas_.begin(), bananas_.end(),
@@ -1108,6 +1141,9 @@ void Game::update(double dtMs) {
       }
       if (c.wantUse && !c.item.empty() && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; useItemImpl(c); }
       else if (c.wantUse && c.item.empty()) c.wantUse = false;
+      // A carried banana stays where it is when the button comes up, or when a
+      // spin shakes it loose.
+      if (c.trailing && (!c.itemHeld || spinning)) dropCarried(c);
       if (!spinning && grounded && enterZonesPads(c)) applyPad(c);
     }
     if (c.finished || elapsed_ > LAUNCH_GATE) enterBox(c);
@@ -1236,7 +1272,7 @@ void Game::update(double dtMs) {
       if (lap >= totalLaps_) {
         c.finished = true;
         c.finishTimeNull = false; c.finishTime = elapsed_;
-        c.item = ""; c.wantUse = false;
+        c.item = ""; c.wantUse = false; dropCarried(c);
         finishedOrder_.push_back(c.id);
         Event e; e.type = "finish"; e.id = c.id; e.rank = (int)finishedOrder_.size(); e.time = c.finishTime; emit(e);
       } else {
@@ -1249,6 +1285,7 @@ void Game::update(double dtMs) {
 
   resolveCollisions(dt);
   recomputePoses();
+  carryBananas();
   rank();
 }
 

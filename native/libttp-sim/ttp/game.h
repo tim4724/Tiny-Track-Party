@@ -39,6 +39,10 @@ struct Input {
   bool hasS = false; double s = 0;
   bool hasB = false; double b = 0;   // number form only (fixtures never send boolean)
   bool hasU = false; double u = 0;
+  // The ITEM button is down (non-zero) or up. Only a banana reads it: used while
+  // the button is down, it trails the car and drops when the button comes up. A
+  // sender that never carries it drops on the press, as before it existed.
+  bool hasH = false; double h = 0;
 };
 
 struct Pose { Vec3 pos, forward, up; };
@@ -70,6 +74,8 @@ struct Car {
   double pickupAge = 999;
   double useSeq = 0;
   bool wantUse = false;
+  bool itemHeld = false;     // the ITEM button is down (Input::h)
+  bool trailing = false;     // a BananaRt::carried of this car's rides its bumper
   double tRaw = 0, tCatch = 0;
   double lap = 0;
   bool finished = false;
@@ -104,7 +110,10 @@ struct Zone { double s, lat, radius; };  // oil hazard (circle)
 struct PadRt { double s, lat; bool strip; double radius, halfLen, halfWidth; };
 struct BoxRt { double s, lat, radius, cooldown; int row; };
 struct PoleRt { double s, lat, radius; };
-struct BananaRt { long id; double s, lat; Id owner; double armAt; bool respawn; double liveAt; bool hit; };
+// carried — riding its owner's rear bumper (the ITEM button held): live for every
+// other car, moved each step to bananaDropPoint, left where it is on the release.
+struct BananaRt { long id; double s, lat; Id owner; double armAt; bool respawn; double liveAt; bool hit;
+                  bool carried = false; };
 struct RocketRt { long id; double s, lat; Id owner; Id targetId; double life; double v; bool hit; };
 
 struct Event {
@@ -247,6 +256,9 @@ class Game {
   bool hasCar(const Id& id) const { return find(id) != nullptr; }
   bool carFinished(const Id& id, bool& out) const;  // false if unknown car
   Car* nextCarAhead(const Car& c);
+  // Where a banana dropped by this car lands, on its rear bumper. The drop uses
+  // it, and carryBananas re-places a carried banana with it every step.
+  void bananaDropPoint(const Car& c, double& s, double& lat) const;
 
   // driveBot: run one AI controller for its car and apply the result. Writes the
   // derived input to *out when given (ai-live compare). Returns false for an
@@ -330,6 +342,8 @@ class Game {
   double placeT(const Car& c) const;
   std::string roll(double t);
   void useItemImpl(Car& c);
+  void dropCarried(Car& c);
+  void carryBananas();
   bool enterBanana(Car& c);
   void collidePole(Car& c, const PoleRt& p);
   void monsterHit(const Car& m, Car& v);

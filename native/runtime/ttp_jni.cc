@@ -904,9 +904,9 @@ void n_ttp_perf_sample(JNIEnv* env, jclass, jdouble a0, jdouble a1, jint a2, jdo
     ttp_perf_sample((double) a0, (double) a1, (int) a2, (double) a3, (double) a4);
 }
 
-jint n_ttp_process_input(JNIEnv* env, jclass, jint a0, jbyteArray a1, jint a2, jdouble a3, jdouble a4, jdouble a5) {
+jint n_ttp_process_input(JNIEnv* env, jclass, jint a0, jbyteArray a1, jint a2, jdouble a3, jdouble a4, jdouble a5, jdouble a6) {
     CStr s1(env, a1);
-    return (jint) ttp_process_input((int) a0, s1.get(), (int) a2, (double) a3, (double) a4, (double) a5);
+    return (jint) ttp_process_input((int) a0, s1.get(), (int) a2, (double) a3, (double) a4, (double) a5, (double) a6);
 }
 
 jbyteArray n_ttp_protocol_manifest_json(JNIEnv* env, jclass) {
@@ -1565,7 +1565,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_perf_readout_json", "(IIID[B)[B", (void*) n_ttp_perf_readout_json },
     { "ttp_perf_reset", "()V", (void*) n_ttp_perf_reset },
     { "ttp_perf_sample", "(DDIDD)V", (void*) n_ttp_perf_sample },
-    { "ttp_process_input", "(I[BIDDD)I", (void*) n_ttp_process_input },
+    { "ttp_process_input", "(I[BIDDDD)I", (void*) n_ttp_process_input },
     { "ttp_protocol_manifest_json", "()[B", (void*) n_ttp_protocol_manifest_json },
     { "ttp_race_advance_live_json", "(IIDD[B[B)[B", (void*) n_ttp_race_advance_live_json },
     { "ttp_race_auto_pause_live_json", "(III)[B", (void*) n_ttp_race_auto_pause_live_json },

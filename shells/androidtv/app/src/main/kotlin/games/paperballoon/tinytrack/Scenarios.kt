@@ -426,7 +426,7 @@ object Scenarios {
             // because unsupported is a legitimate answer.
             "countdown", "racing", "racing-sidewinder",
             "race-beach", "race-snow", "race-backyard", "race-canyon", "race-playroom",
-            "rocket", "monster", "paused", "reconnect", "reconnect-solo", "finished" -> {
+            "rocket", "monster", "banana-aim", "paused", "reconnect", "reconnect-solo", "finished" -> {
                 // UNLOCKED FIRST: the pick walk silently refuses a track in a
                 // locked cup, and a fresh install has the Playroom locked, so its
                 // card would photograph the attract race. `unlockAll` is the

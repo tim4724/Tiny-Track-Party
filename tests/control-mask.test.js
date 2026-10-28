@@ -1,14 +1,14 @@
 // THE CONTROL PRESENCE-MASK: what it means, and that every shell derives it.
 //
-// `ttp_process_input(h, id, mask, s, b, u)` takes a PRESENCE bitmask — 1 = `s`
-// is present, 2 = `b`, 4 = `u` — and leaves an absent field UNTOUCHED on the
-// car. That is what makes a partial CONTROL legal, and it is also what makes a
-// wrong mask completely silent: pass 0 and every field is skipped, so the call
-// succeeds, the packet is accounted for, nothing errors, and the car simply
-// never answers the phone.
+// `ttp_process_input(h, id, mask, s, b, u, hold)` takes a PRESENCE bitmask — 1 =
+// `s` is present, 2 = `b`, 4 = `u`, 8 = `h` — and leaves an absent field
+// UNTOUCHED on the car. That is what makes a partial CONTROL legal, and it is
+// also what makes a wrong mask completely silent: pass 0 and every field is
+// skipped, so the call succeeds, the packet is accounted for, nothing errors,
+// and the car simply never answers the phone.
 //
 // THE MASK IS NEVER ON THE WIRE. `public/controller/Net.js` sends
-// `{s, b, u, type}` and nothing else; the mask is DERIVED by the receiving
+// `{s, b, u, h, type}` and nothing else; the mask is DERIVED by the receiving
 // shell from which fields the message actually carries. The first TV shell read
 // a `mask` key off the message instead, got nil on every sample, and steered no
 // car at all — with every packet arriving and nothing erroring.
@@ -45,10 +45,10 @@ async function driveWithMask(mask) {
   c('ttp_session_start', null, ['number', 'number'])(h, -1);
 
   const input = c('ttp_process_input', null,
-    ['number', 'string', 'number', 'number', 'number', 'number']);
+    ['number', 'string', 'number', 'number', 'number', 'number', 'number']);
   const update = c('ttp_update', null, ['number', 'number']);
   for (let i = 0; i < 180; i++) {
-    input(h, '1', mask, 1.0, 0, i);      // hard over, every frame
+    input(h, '1', mask, 1.0, 0, i, 0);   // hard over, every frame
     update(h, 1000 / 60);
   }
   const car = JSON.parse(c('ttp_snapshot_json', 'string', ['number'])(h)).cars[0];
@@ -90,19 +90,19 @@ test('the call ANSWERS what it consumed, so the silence is at least askable', as
   c('ttp_add_human', null, ['number', 'string', 'string'])(h, '1', null);
   c('ttp_session_start', null, ['number', 'number'])(h, -1);
   const input = c('ttp_process_input', 'number',
-    ['number', 'string', 'number', 'number', 'number', 'number']);
+    ['number', 'string', 'number', 'number', 'number', 'number', 'number']);
 
-  assert.equal(input(h, '1', 7, 1, 0, 1), 7, 'a full sample should report all three fields');
-  assert.equal(input(h, '1', 1, 1, 0, 1), 1, 'a steer-only sample should report bit 1');
+  assert.equal(input(h, '1', 15, 1, 0, 1, 0), 15, 'a full sample should report all four fields');
+  assert.equal(input(h, '1', 1, 1, 0, 1, 0), 1, 'a steer-only sample should report bit 1');
   // THE WHOLE POINT: the shipped bug's call is the one that answers 0.
-  assert.equal(input(h, '1', 0, 1, 0, 1), 0,
+  assert.equal(input(h, '1', 0, 1, 0, 1, 0), 0,
     'mask 0 must answer 0 — that is the difference between silent and askable');
   // Stray high bits are masked off, so the answer is what was USED, never an echo.
-  assert.equal(input(h, '1', 0xff, 1, 0, 1), 7, 'unknown bits should not come back');
+  assert.equal(input(h, '1', 0xff, 1, 0, 1, 0), 15, 'unknown bits should not come back');
   // The other silent way to steer nothing, and it cost the same kind of hour: a
   // mistyped identity used to be indistinguishable from a delivered packet.
-  assert.equal(input(h, '999', 7, 1, 0, 1), -1, 'no such car should answer -1');
-  assert.equal(input(h, '"1"', 7, 1, 0, 1), -1,
+  assert.equal(input(h, '999', 7, 1, 0, 1, 0), -1, 'no such car should answer -1');
+  assert.equal(input(h, '"1"', 7, 1, 0, 1, 0), -1,
     'the STRING "1" is a different player from the number 1 — and says so');
   c('ttp_dispose', null, ['number'])(h);
 });
@@ -151,9 +151,9 @@ test('every shell DERIVES the mask from the fields, and reads no `mask` key', ()
       `${name}: reads a \`mask\` off the CONTROL message — the wire carries none, ` +
       'so it is 0 on every sample and every field is silently discarded');
 
-    // All three bits, each set from its own field being present
+    // All four bits, each set from its own field being present
     // (`mask |= N` in JS/Swift, `mask = mask or N` in Kotlin).
-    for (const bit of ['1', '2', '4']) {
+    for (const bit of ['1', '2', '4', '8']) {
       assert.match(src, new RegExp(`mask\\s*(?:\\|=\\s*${bit}|=\\s*mask\\s+or\\s+${bit})\\b`),
         `${name}: never sets presence bit ${bit} — that field can never reach a car`);
     }

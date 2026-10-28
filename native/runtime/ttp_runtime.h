@@ -70,10 +70,11 @@ TTP_ABI void ttp_session_start(int h, int countdownSeconds);
 TTP_ABI void ttp_update(int h, double dtMs);
 
 // Inject a (possibly partial) CONTROL message for a car. mask bit 1 = s present,
-// 2 = b present, 4 = u present; absent fields are left untouched on the car.
+// 2 = b present, 4 = u present, 8 = hold present; absent fields are left
+// untouched on the car. `hold` is the wire's `h`, the ITEM button down or up.
 //
 // THE MASK IS THE SHELL'S TO DERIVE, and it is never on the wire: the phone
-// sends {s, b, u} and the receiving shell reads off which of them arrived.
+// sends {s, b, u, h} and the receiving shell reads off which of them arrived.
 // Leaving an absent field untouched is what makes a partial message SAFE —
 // defaulting `u` to 0 instead would look like a fresh use-counter and fire the
 // car's held item — so the mask is not going away.
@@ -88,7 +89,7 @@ TTP_ABI void ttp_update(int h, double dtMs);
 //       which is the other silent way to steer nothing (ttp_car_finished uses
 //       -1 for the same "unknown car" and for the same reason).
 //    0  the car exists and the call carried nothing to apply.
-//   >0  the presence mask actually consumed (mask & 7, so a caller passing
+//   >0  the presence mask actually consumed (mask & 15, so a caller passing
 //       stray high bits is told which ones counted).
 //
 // A FINISHED car answers its mask: it exists and the call was well formed, the
@@ -98,7 +99,8 @@ TTP_ABI void ttp_update(int h, double dtMs);
 // a television. `ttp_last_error` is deliberately NOT populated here: it clears
 // on entry by contract (ttp_error.h), and a call at sensor rate would wipe
 // every other refusal in the tree within a frame.
-TTP_ABI int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u);
+TTP_ABI int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u,
+                              double hold);
 
 // ---- readback (canonical JSON; see buffer-lifetime note above) --------------
 
@@ -159,10 +161,10 @@ TTP_ABI int ttp_shot_hold(int h, const char* holdJson);
 // 1 once the armed hold has been reached; the race will not step again.
 TTP_ABI int ttp_shot_held(int h);
 
-// The item showroom's showcase (ttp/shot_hold.h): after each step,
-// the engine gives the item to the car the rule picks and fires it. `kind` is
-// "rocket" | "monster"; null or anything else turns it off. 1 = set, 0 = unknown
-// handle.
+// The item showcase (ttp/shot_hold.h): after each step, the engine gives the
+// item to the car the rule picks and fires it, or for "banana" holds it and
+// lets go. `kind` is "rocket" | "monster" | "banana"; null or anything else
+// turns it off. 1 = set, 0 = unknown handle.
 TTP_ABI int ttp_item_showcase(int h, const char* kind);
 
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------

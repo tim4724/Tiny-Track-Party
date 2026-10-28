@@ -2,6 +2,16 @@
   "generated": "scripts/capture-shots{,-tvos,-androidtv}.mjs",
   "shots": [
     {
+      "scenario": "banana-aim",
+      "platform": "web",
+      "file": "web/banana-aim.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 35310,
+      "capturedAt": "2026-10-24T18:08:42.455Z",
+      "gitSha": "a52ff64a"
+    },
+    {
       "scenario": "countdown",
       "platform": "androidtv",
       "file": "androidtv/countdown.jpg",

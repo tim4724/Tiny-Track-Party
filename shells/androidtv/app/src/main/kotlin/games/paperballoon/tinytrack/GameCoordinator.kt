@@ -1314,7 +1314,7 @@ class GameCoordinator(
             // un-steered for the whole race. Nothing errored and the packets all
             // arrived.
             var mask = 0
-            var s = 0.0; var b = 0.0; var u = 0.0
+            var s = 0.0; var b = 0.0; var u = 0.0; var h = 0.0
             if (msg.has("s") && !msg.isNull("s")) { mask = mask or 1; s = msg.optDouble("s") }
             // `b` is a number OR a bool, matching the reader this was ported from —
             // a phone that sends `true` must brake, not be ignored.
@@ -1333,6 +1333,7 @@ class GameCoordinator(
                 }
             }
             if (msg.has("u") && !msg.isNull("u")) { mask = mask or 4; u = msg.optDouble("u") }
+            if (msg.has("h") && !msg.isNull("h")) { mask = mask or 8; h = msg.optDouble("h") }
             // Applied on ARRIVAL rather than queued for the next tick: the input
             // path is microseconds, and buffering it would add a frame of latency
             // to the one thing players feel.
@@ -1351,7 +1352,7 @@ class GameCoordinator(
             // that applies something latches, and the first that does not says so
             // and then goes quiet. Logging at sensor rate would bury the report in
             // its own repeats.
-            val took = Ttp.ttp_process_input(sessionHandle, TtpJson.arg(from.json), mask, s, b, u)
+            val took = Ttp.ttp_process_input(sessionHandle, TtpJson.arg(from.json), mask, s, b, u, h)
             if (!inputProven) {
                 if (took > 0) {
                     inputProven = true

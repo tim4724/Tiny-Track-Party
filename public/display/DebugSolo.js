@@ -11,7 +11,8 @@
 // broadcast / sendTo) then runs unchanged against a null wire — no special-casing
 // leaks into DisplayNet or the race lifecycle. Nothing here loads unless ?solo.
 //
-// Controls: WASD / arrow keys steer + brake (S / ↓), Q or Space use item,
+// Controls: WASD / arrow keys steer + brake (S / ↓), Q or Space use item (hold
+// it with a banana to trail it, release to drop),
 // Enter start / next race, R abort back to the lobby. The car auto-accelerates
 // (there is no throttle input — matching the phones), so W / ↑ is a no-op.
 
@@ -92,7 +93,7 @@ export class DebugSolo {
     let s = 0;
     if (down(STEER_L)) s -= 1;
     if (down(STEER_R)) s += 1;
-    return { s, b: down(BRAKE) ? 1 : 0, u: this.useSeq };
+    return { s, b: down(BRAKE) ? 1 : 0, u: this.useSeq, h: down(ITEM) ? 1 : 0 };
   }
 
   _bindKeys() {
@@ -102,7 +103,7 @@ export class DebugSolo {
       if (e.repeat) return;                 // ignore key-repeat for the one-shot keys
       if (c === 'Enter') return this._onStart();
       if (c === 'KeyR') return this._toLobby();
-      if (ITEM.has(c)) { this.useSeq = (this.useSeq + 1) & 255; return; }
+      if (ITEM.has(c)) this.useSeq = (this.useSeq + 1) & 255;
       this.held.add(c);
     };
     this._onKeyUp = (e) => this.held.delete(e.code);

@@ -63,7 +63,7 @@ async function abi() {
     start: cw('ttp_session_start', 'void', ['number', 'number']),
     update: cw('ttp_update', 'void', ['number', 'number']),
     input: cw('ttp_process_input', 'void',
-      ['number', 'string', 'number', 'number', 'number', 'number']),
+      ['number', 'string', 'number', 'number', 'number', 'number', 'number']),
     snapshot: cw('ttp_snapshot_json', 'string', ['number']),
     results: cw('ttp_results_json', 'string', ['number']),
     forceFinish: cw('ttp_force_finish', 'void', ['number', 'string', 'number']),
@@ -90,8 +90,8 @@ async function liveRace(frames) {
   a.start(h, -1);
   const out = { first: null, bananas: null, rockets: null };
   for (let i = 0; i < frames; i++) {
-    a.input(h, '1', 1 | 2 | 4, 0.05, 0, i % 256);
-    a.input(h, '2', 1 | 2, -0.05, 0, 0);
+    a.input(h, '1', 1 | 2 | 4, 0.05, 0, i % 256, 0);
+    a.input(h, '2', 1 | 2, -0.05, 0, 0, 0);
     a.update(h, 1000 / 60);
     const snap = JSON.parse(a.snapshot(h));
     if (!out.first) out.first = snap;
@@ -192,9 +192,9 @@ test('event vocabulary in the schema matches every emit site in game.cc', () => 
   assert.deepEqual([...schema.$defs.spin.properties.cause.enum].sort(), [...causes].sort(), 'spin causes');
 });
 
-test('input schema covers exactly the {s, b, u} triple', () => {
+test('input schema covers exactly the {s, b, u, h} fields', () => {
   const schema = loadSchema('input.schema.json');
-  assert.deepEqual(keysOf(schema.properties), ['b', 's', 'u']);
+  assert.deepEqual(keysOf(schema.properties), ['b', 'h', 's', 'u']);
   assert.equal(schema.properties.u.maximum, 255, 'use-counter wraps at 8 bits');
 });
 

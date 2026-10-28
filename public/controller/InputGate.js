@@ -142,12 +142,13 @@ const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
 const isRail = (s) => s === 1 || s === -1 || s === 0;
 
 // True when `a` differs from `b` enough that the display needs telling.
-// `u` and `b` are compared exactly: the use-counter is discrete (a missed change
-// costs the player an item) and brake is effectively binary, so neither has a
-// meaningful "close enough".
+// `u`, `h` and `b` are compared exactly: the use-counter is discrete (a missed
+// change costs the player an item), and the ITEM hold and the brake are binary,
+// so none has a meaningful "close enough".
 function differs(a, b, steerThreshold) {
   if (!b) return true;                       // nothing confirmed yet
   if (num(a.u) !== num(b.u)) return true;
+  if (num(a.h) !== num(b.h)) return true;
   if (num(a.b) !== num(b.b)) return true;
   const d = Math.abs(num(a.s) - num(b.s));
   if (d > 0 && isRail(num(a.s))) return true; // rails land exactly (see isRail)
@@ -209,7 +210,7 @@ export class InputGate {
 
   // Record that `sample` was handed to the transport.
   markSent(sample, nowMs) {
-    this._sent = { s: num(sample.s), b: num(sample.b), u: num(sample.u) };
+    this._sent = { s: num(sample.s), b: num(sample.b), u: num(sample.u), h: num(sample.h) };
     this._sentAt = nowMs;
     this._pending = true;
   }
@@ -219,7 +220,7 @@ export class InputGate {
   // and callers pass the sample straight here.
   markAcked(sample) {
     if (!sample) return;
-    this._acked = { s: num(sample.s), b: num(sample.b), u: num(sample.u) };
+    this._acked = { s: num(sample.s), b: num(sample.b), u: num(sample.u), h: num(sample.h) };
     this._pending = false;
   }
 

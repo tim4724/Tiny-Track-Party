@@ -44,9 +44,10 @@ var STUN_URL = 'stun:stun.paperballoon.games:3478';
 var MSG = {
   // Controller -> Display (intents)
   HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
-  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, sensor-rate gated, fastlane.
+  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping], h: ACTION held[0|1]} — hot path, sensor-rate gated, fastlane.
+                                // `h` is level state: a banana used while it is 1 trails the car and drops when it goes 0.
                                 // The display derives ttp_process_input's presence MASK from which fields arrived (bit1 s:number,
-                                // bit2 b:number-or-boolean, bit4 u:number); the wire carries no mask. Derive from THIS line, not
+                                // bit2 b:number-or-boolean, bit4 u:number, bit8 h:number); the wire carries no mask. Derive from THIS line, not
                                 // from another shell's code. (A C++ seam for this path was measured and refuted — stays JS.)
                                 // Absent fields are left UNTOUCHED on the car, which is what makes a partial message safe —
                                 // a `u` defaulted to 0 would read as a fresh use-counter and fire the car's held item.

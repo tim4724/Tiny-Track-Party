@@ -34,7 +34,7 @@ export async function init() {
       ['string', 'number', 'number', 'string', 'string', 'string']),
     start: c('ttp_session_start', null, ['number', 'number']),
     update: c('ttp_update', null, ['number', 'number']),
-    input: c('ttp_process_input', null, ['number', 'string', 'number', 'number', 'number', 'number']),
+    input: c('ttp_process_input', null, ['number', 'string', 'number', 'number', 'number', 'number', 'number']),
     snapshot: c('ttp_snapshot_json', 'string', ['number']),
     events: c('ttp_events_json', 'string', ['number']),
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
@@ -157,11 +157,12 @@ export class NativeRaceSession {
 
   processInput(id, m) {
     if (!this.h) return;
-    let mask = 0, s = 0, b = 0, u = 0;
+    let mask = 0, s = 0, b = 0, u = 0, h = 0;
     if (typeof m.s === 'number') { mask |= 1; s = m.s; }
     if (typeof m.b === 'number' || typeof m.b === 'boolean') { mask |= 2; b = +m.b; }
     if (typeof m.u === 'number') { mask |= 4; u = m.u; }
-    fn.input(this.h, idJson(id), mask, s, b, u);
+    if (typeof m.h === 'number') { mask |= 8; h = m.h; }
+    fn.input(this.h, idJson(id), mask, s, b, u, h);
   }
 
   // THE CURTAIN CALL: step a race that has ended, its field on victory laps
