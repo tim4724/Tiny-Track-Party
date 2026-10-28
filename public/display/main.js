@@ -58,6 +58,7 @@ const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') }
 // the plan's non-goal). Test/gallery/solo surfaces drive screens directly and
 // get no history entries (gallery lives in iframes; solo has no welcome).
 let currentScreen = null;
+let previewShownMs = 0;         // how long the lobby has shown its preview circuit (rotatePreview)
 let updateSoundHint = () => {}; // rebound below once the audio pill is wired
 let suppressPopstate = false;   // the history.back() below is ours — its popstate must not act
 let popstateNavigating = false; // this show() IS a popstate retreat — don't pop again (set/cleared by the handler)
@@ -311,6 +312,7 @@ const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
 function selectTrack(id) {
   if (!built.has(id) || id === selectedTrackId) return;
   selectedTrackId = id;
+  previewShownMs = 0;
   track = built.get(id);
   track.totalLaps = TOTAL_LAPS;
   window.__track = track;
@@ -412,6 +414,20 @@ function refreshLobbyDemo() {
     return;
   }
   lobbyDemo.start(track, field, sig, skill);
+}
+
+// The empty lobby tours the catalogue. This side only counts how long the lobby
+// has SHOWN the current circuit, since it last changed or the lobby came up
+// (the welcome board would pay for builds nobody sees), and asks once a second;
+// when and where to is ttp_race_demo_next_json's. The swap is a preview, so
+// nothing is remembered.
+function rotatePreview(dt) {
+  if (currentScreen !== 'lobby' || !lobbyDemo.active) { previewShownMs = 0; return; }
+  const before = Math.floor(previewShownMs / 1000);
+  previewShownMs += dt * 1000;
+  if (Math.floor(previewShownMs / 1000) === before) return;
+  const next = flow.demoNext(net.flow.handle, selectedTrackId, previewShownMs);
+  if (next) selectTrack(next);
 }
 
 // ---- audio ----
@@ -518,7 +534,7 @@ let raceEnded = false;      // race over → the field coasts behind the (transl
 let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
 
 scene.onFrame = (dt) => {
-  if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
+  if (!session) { lobbyDemo.step(dt); rotatePreview(dt); return; } // no race → run the lobby attract demo
   // THE CURTAIN CALL: a finished race does not freeze behind its board. Every
   // car is home and drives its own victory lap (ttp_coast), muted and raising
   // nothing, until the next race or the lobby takes the scene.

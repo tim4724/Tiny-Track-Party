@@ -196,8 +196,10 @@ extension GameCoordinator {
     func setTrack(_ id: String) {
         guard id != trackId else { return }
         trackId = id
-        // No publish: every caller is the track-change effect, and the walk
-        // that emitted it published the stored pick one op earlier.
+        previewShownMs = 0
+        // No publish: the lobby tour's swap is a preview, and every other
+        // caller is the track-change effect, whose walk published the stored
+        // pick one op earlier.
         // The pick is what lifts the paper off the lobby (see refreshBackdrop):
         // before it there is no scene to show, after it there is.
         refreshBackdrop()

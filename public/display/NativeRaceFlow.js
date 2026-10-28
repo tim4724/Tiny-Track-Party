@@ -41,6 +41,7 @@ export async function init() {
     configure: c('ttp_race_configure', 'number', ['string']),
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
+    demoNext: c('ttp_race_demo_next_json', 'string', ['number', 'string', 'number']),
     benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
     previewCupRace: c('ttp_race_preview_cup_race_json', 'string', ['string']),
     start: c('ttp_race_start_live_json', 'string',
@@ -91,6 +92,12 @@ export function configure({ fieldSize, carCount, colorCount, aiPrefix, carStats,
 // The lobby attract grid + its render signature, off the live room.
 export function demoLive(roomHandle, trackId, botCap) {
   return P(fn.demoLive(roomHandle, trackId || '', id(botCap)));
+}
+
+// Where the empty lobby's preview goes next, after `shownMs` on `trackId`:
+// a track id, or null to stay.
+export function demoNext(roomHandle, trackId, shownMs) {
+  return P(fn.demoNext(roomHandle, trackId || '', shownMs)).trackId;
 }
 
 // The BENCH field, without a room: `players` autopiloted player seats at the

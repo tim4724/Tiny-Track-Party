@@ -307,6 +307,16 @@ std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const Fi
 // re-grid.
 std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trackId);
 
+// How long an EMPTY lobby previews one circuit before the attract race moves
+// on to another. The shells count only the time the lobby is on screen, so the
+// welcome board never pays a scene build nobody sees.
+inline constexpr double DEMO_ROTATE_MS = 90000;
+
+// Whether the attract preview moves on. Only an empty lobby rotates: once a
+// phone is seated (a dropped seat still counts) the preview holds still for
+// them, and a pick owns the preview outright.
+bool demoRotates(double shownMs, bool anySeated, bool hasPick);
+
 // ---- the series behind a start ----------------------------------------------
 
 // The lobby card's cup row, shared rather than mirrored — this layer reads

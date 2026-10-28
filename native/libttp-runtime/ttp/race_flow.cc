@@ -319,6 +319,10 @@ std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const Fi
   return field;
 }
 
+bool demoRotates(double shownMs, bool anySeated, bool hasPick) {
+  return shownMs >= DEMO_ROTATE_MS && !anySeated && !hasPick;
+}
+
 std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trackId) {
   std::string out = trackId + "|";
   for (size_t i = 0; i < field.size(); i++) {

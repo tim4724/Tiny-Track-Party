@@ -500,8 +500,9 @@ harness that does not go through it has to do the same
 (`adb shell cmd package compile -m speed games.paperballoon.tinytrack`).
 
 **The lobby's attract demo is deterministic but it does NOT pick a fixed track**
-— it previews whatever the tour last resolved to, so two runs either side of a
-race are two different scenes. Pin the track: the bench takes one.
+— it previews whatever the last pick resolved to, and an EMPTY lobby moves on to
+another circuit on a timer (`race_flow.h`'s DEMO_ROTATE_MS), so two runs are two
+different scenes. Pin the track: the bench takes one.
 
 **THE COST IS `fixed + per-megapixel`**, and the fixed half is what the render
 scale cannot spend against — no buffer size reaches under it — so it is what

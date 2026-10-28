@@ -3638,6 +3638,39 @@ void netWalksMatchMultiCallPath() {
       ttp_room_dispose(e);
     }
 
+    // The empty lobby's preview rotation: race::demoRotates over the live
+    // room, the next circuit off the same bag, never the one showing.
+    {
+      const double due = race::DEMO_ROTATE_MS;
+      auto next = [](int r, const char* t, double ms) {
+        return at(parseOrNull(ttp_race_demo_next_json(r, t, ms), "demo_next"), "trackId");
+      };
+      const int f = ttp_room_create("{}");
+      ttp_net_init_pick(f, nullptr, 1, 13579);
+      check(next(f, "tidepool", due - 1).type == Value::NUL,
+            "demo_next: an empty lobby holds a circuit until the interval is up");
+      bool fresh = true;
+      std::string shown = "tidepool";
+      for (int i = 0; i < 6; i++) {
+        const Value n = next(f, shown.c_str(), due);
+        fresh = fresh && n.type == Value::STR && n.str != shown;
+        shown = n.type == Value::STR ? n.str : shown;
+      }
+      check(fresh, "demo_next: once due, every answer is a track, never the one showing");
+      ttp_room_add_player(f, "1", "{\"name\":\"Ada\"}");
+      check(next(f, shown.c_str(), due).type == Value::NUL,
+            "demo_next: a seated phone holds the preview still");
+      check(race::demoRotates(due, false, false) && !race::demoRotates(due, false, true) &&
+                !race::demoRotates(due, true, false) && !race::demoRotates(due - 1, false, false),
+            "demoRotates: only an empty, unpicked lobby past the interval moves on");
+      const int g = ttp_room_create("{}");
+      ttp_net_init_pick(g, nullptr, 0, 13579);
+      check(next(g, "tidepool", due).type == Value::NUL,
+            "demo_next: a bagless room has nothing to rotate to");
+      ttp_room_dispose(f);
+      ttp_room_dispose(g);
+    }
+
     ttp_room_events_json(walkRoom);
     ttp_room_events_json(twin.room);
   }

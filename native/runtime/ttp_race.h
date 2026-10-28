@@ -152,6 +152,18 @@ TTP_ABI const char* ttp_race_effect_ops_json(void);
 TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
                                             const char* botCapJson);
 
+/* Where the empty lobby's preview goes next. `shownMs` is how long the lobby
+ * has had `trackId` on screen; the interval and the empty-lobby rule are
+ * race_flow.h's demoRotates. When it rotates, the next circuit is a draw from
+ * the room's shuffle bag — the unlocked catalogue, no repeats until every
+ * track has shown — never the one already showing. The shell performs it as a
+ * preview swap (no pick is stored, nothing is remembered) and restarts its
+ * count on the new track. Any polling cadence gives the same answer; the
+ * shells ask once a second to keep a JSON crossing off the frame path.
+ *   -> {"trackId": "<id>" | null (stay)} */
+TTP_ABI const char* ttp_race_demo_next_json(int roomHandle, const char* trackId,
+                                            double shownMs);
+
 /* ---- start / launch ------------------------------------------------------ */
 
 /* The lobby start, whole: the START_GAME go/no-go (re-checked here so a stale

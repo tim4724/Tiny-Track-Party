@@ -64,7 +64,7 @@ std::map<int, double> g_fieldSeed;
 // start answer and then immediately the demo signature on the same tick, and a
 // single buffer would hand the second call's bytes to a caller still holding the
 // first's pointer.
-std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
+std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufDemoNext, g_bufStart, g_bufLaunch,
     g_bufEvents, g_bufFlag, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufPause, g_bufResume,
     g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench, g_bufPreviewCupRace;
@@ -721,6 +721,23 @@ const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
   // `sig` already carries.
   v.set("skill", Value::Num(botSkillFor(trackId ? trackId : "")));
   return put(g_bufDemo, v);
+}
+
+const char* ttp_race_demo_next_json(int roomHandle, const char* trackId, double shownMs) {
+  const std::string current = trackId ? trackId : "";
+  const bool anySeated = !ttp_live_roster_players(roomHandle, /*connectedOnly=*/false).empty();
+  const bool hasPick = !json::str_field(ttp_room_pick_value(roomHandle), "trackId").empty();
+  std::string next;
+  if (race::demoRotates(shownMs, anySeated, hasPick)) {
+    next = ttp_live_bag_draw(roomHandle);
+    // The bag never repeats across consecutive draws, but the boot preview
+    // came from the shell's memory rather than the bag, so one redraw.
+    if (next == current) next = ttp_live_bag_draw(roomHandle);
+    if (next == current) next.clear();
+  }
+  Value v = Value::Obj();
+  v.set("trackId", next.empty() ? Value::Null() : Value::Str(next));
+  return put(g_bufDemoNext, v);
 }
 
 // ---- start / launch ----------------------------------------------------------

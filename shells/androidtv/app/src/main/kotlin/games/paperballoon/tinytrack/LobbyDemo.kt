@@ -91,6 +91,9 @@ class LobbyDemo {
         return live.optString("sig") != signature || handle == 0
     }
 
+    /** Whether an attract race is on screen. */
+    val active: Boolean get() = handle != 0
+
     fun refresh() {
         val t = trackId()
         if (t.isEmpty()) { stop(); return }

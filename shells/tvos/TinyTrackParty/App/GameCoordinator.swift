@@ -96,6 +96,8 @@ final class GameCoordinator: ObservableObject {
     /// rather than read back from the display, because the pick exists before a
     /// scene does (the lobby names a track, then stages it).
     var trackId: String = ""
+    /// How long the lobby has shown `trackId` (`rotatePreview`).
+    var previewShownMs: Double = 0
     /// Laps per race — the manifest's `TOTAL_LAPS`, assigned at boot. The `3`
     /// is only the value before `boot()` runs, never what a race launches with.
     var laps: Int32 = 3

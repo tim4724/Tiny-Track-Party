@@ -180,6 +180,7 @@ extension GameCoordinator {
             drainRaceEvents()
         } else {
             lobbyDemo.step(dt)
+            rotatePreview(dt)
         }
         audio.frame(nowMs: nowMs())
     }

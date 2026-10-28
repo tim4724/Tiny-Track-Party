@@ -5,6 +5,21 @@ import Foundation
 @MainActor
 extension GameCoordinator {
 
+    // MARK: - The empty lobby's tour
+
+    /// The empty lobby tours the catalogue (`ttp_race_demo_next_json`); the
+    /// web's `rotatePreview` has the why.
+    func rotatePreview(_ dt: Double) {
+        guard state.screen == .lobby, lobbyDemo.active else { previewShownMs = 0; return }
+        let before = (previewShownMs / 1000).rounded(.down)
+        previewShownMs += dt * 1000
+        guard (previewShownMs / 1000).rounded(.down) != before else { return }
+        let next = TTP.obj(ttp_race_demo_next_json(net.roomHandle, trackId, previewShownMs))
+        guard let id = next["trackId"] as? String else { return }
+        setTrack(id)
+        refreshLobby()
+    }
+
     // MARK: - The seat grid
 
     /// Re-read the lobby from the ROOM HANDLE. There is no roster copy in this

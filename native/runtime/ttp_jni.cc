@@ -951,6 +951,11 @@ jbyteArray n_ttp_race_demo_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1
     return toBytes(env, ttp_race_demo_live_json((int) a0, s1.get(), s2.get()));
 }
 
+jbyteArray n_ttp_race_demo_next_json(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdouble a2) {
+    CStr s1(env, a1);
+    return toBytes(env, ttp_race_demo_next_json((int) a0, s1.get(), (double) a2));
+}
+
 jbyteArray n_ttp_race_effect_ops_json(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_race_effect_ops_json());
@@ -1569,6 +1574,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_configure", "([B)I", (void*) n_ttp_race_configure },
     { "ttp_race_countdown_ready", "(IID)I", (void*) n_ttp_race_countdown_ready },
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
+    { "ttp_race_demo_next_json", "(I[BD)[B", (void*) n_ttp_race_demo_next_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
     { "ttp_race_events_live_json", "(II[BIIDD)[B", (void*) n_ttp_race_events_live_json },

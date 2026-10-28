@@ -85,6 +85,9 @@ final class LobbyDemo {
         return live["sig"] as? String != signature || handle == 0
     }
 
+    /// Whether an attract race is on screen.
+    var active: Bool { handle != 0 }
+
     func refresh() {
         let track = trackId()
         guard !track.isEmpty else { stop(); return }

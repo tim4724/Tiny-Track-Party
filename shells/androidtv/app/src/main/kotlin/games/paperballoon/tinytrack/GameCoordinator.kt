@@ -150,6 +150,8 @@ class GameCoordinator(
      */
     var trackId = ""
         private set
+    /** How long the lobby has shown [trackId] ([rotatePreview]). */
+    private var previewShownMs = 0.0
 
     /** Laps per race — the manifest's TOTAL_LAPS, assigned at boot. */
     private var laps = 3
@@ -1016,6 +1018,7 @@ class GameCoordinator(
             drainRaceEvents()
         } else {
             lobbyDemo.step(dt)
+            rotatePreview(dt)
         }
         audio.frame(nowMs())
     }
@@ -1227,6 +1230,22 @@ class GameCoordinator(
     }
 
     // -- the lobby ------------------------------------------------------------
+
+    /**
+     * The empty lobby tours the catalogue (`ttp_race_demo_next_json`); the web's
+     * `rotatePreview` has the why.
+     */
+    private fun rotatePreview(dt: Double) {
+        if (state.screen != GameState.Screen.LOBBY || !lobbyDemo.active) { previewShownMs = 0.0; return }
+        val before = Math.floor(previewShownMs / 1000)
+        previewShownMs += dt * 1000
+        if (Math.floor(previewShownMs / 1000) == before) return
+        val next = TtpJson.obj(Ttp.ttp_race_demo_next_json(
+            net.roomHandle, TtpJson.arg(trackId), previewShownMs))
+        val id = TtpJson.optStr(next, "trackId") ?: return
+        setTrack(id)
+        refreshLobby()
+    }
 
     /**
      * Re-read the lobby from the ROOM HANDLE. There is no roster copy in this shell
@@ -1589,6 +1608,7 @@ class GameCoordinator(
     fun setTrack(id: String) {
         if (id == trackId) return
         trackId = id
+        previewShownMs = 0.0
         // The pick is what lifts the paper off the lobby (see refreshBackdrop):
         // before it there is no scene to show, after it there is.
         refreshBackdrop()
