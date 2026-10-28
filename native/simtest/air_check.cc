@@ -137,6 +137,30 @@ int main() {
     check(kept[1] == vmax, "a car in the air keeps its full speed under full lock");
   }
 
+  // ---- the road's edge in the air --------------------------------------------
+  // The same car driven nose-first into the edge, once on the deck and once a
+  // metre up: in the air the edge holds it and turns it along the road, free.
+  {
+    const double S = 28.0;
+    double kept[2], lat[2], heading[2], vmax = 0;
+    bool wall[2];
+    for (int air = 0; air < 2; air++) {
+      Game game(one, bt.game, [](const Event&) {});
+      Car& c = *game.cars()[0];
+      place(c, S, 5.0, c.vmax);  // past the edge on the +lat side: pinned
+      c.heading = -0.5;          // and pointed into it
+      c.h = air ? 1.0 : 0.0;
+      game.update(DT);
+      kept[air] = c.v; lat[air] = c.lat; heading[air] = c.heading; wall[air] = c.onWall;
+      vmax = c.vmax;
+    }
+    check(kept[0] < vmax && wall[0], "the control car on the deck pays the curb");
+    check(lat[1] == lat[0], "in the air the road's edge still holds the car");
+    check(heading[1] > -0.5, "and turns it along the road");
+    check(kept[1] == vmax, "a car meeting the edge in the air keeps its full speed");
+    check(!wall[1], "and is not grinding a wall (no scrub, no curb skids)");
+  }
+
   // ---- the deck's hazards are cleared ----------------------------------------
   {
     GameTrack oily = bt.game;
