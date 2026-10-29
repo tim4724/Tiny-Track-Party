@@ -79,6 +79,9 @@ material {
         custom1
     ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     culling : none,
     doubleSided : true,
     // uv0 IS NOT A TEXTURE COORDINATE HERE, it is track space (s, lat), and

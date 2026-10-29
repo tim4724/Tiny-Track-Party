@@ -37,6 +37,35 @@ const PAIRS = [
   }
 ];
 
+// The puff sprite's SHAPE is vcloud.mat's five discs, and the C++ draws each
+// sprite as the support octagon of those discs grown by the shader's soft edge
+// (TtpRendererTrack.cpp, puffPoly): outside that hull the alpha is exactly
+// zero, so the alpha field is the rectangle's. Move a disc in one file and the
+// other either clips the puff or spends fragments on nothing. A pair rather
+// than a parameter because the hull is built once at scene build from numbers
+// the shader keeps as compile-time literals in its fragment loop.
+test('the puff sprite hull is cut from the discs vcloud.mat draws', () => {
+  const shader = read('materials/vcloud.mat');
+  const cpp = read('src/TtpRendererTrack.cpp');
+  const discs = [...shader.matchAll(/ttpDisc\(p, vec2\(([\d.]+), ([\d.]+)\), ([\d.]+)\)/g)]
+    .map((m) => m.slice(1, 4).map(Number));
+  const soft = /const float SOFT = ([\d.]+);/.exec(shader);
+  assert.ok(discs.length > 0 && soft, 'vcloud.mat: the disc calls or SOFT moved');
+  const table = /puffPoly[\s\S]*?DISCS\[\d+\] = \{([\s\S]*?)\};/.exec(cpp);
+  const cSoft = /puffPoly[\s\S]*?constexpr float SOFT = ([\d.]+)f;/.exec(cpp);
+  assert.ok(table && cSoft, 'TtpRendererTrack.cpp: puffPoly\'s DISCS table or SOFT moved');
+  const cDiscs = [...table[1].matchAll(/\{\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\}/g)]
+    .map((m) => m.slice(1, 4).map(Number));
+  assert.deepEqual(cDiscs, discs, 'the C++ disc table disagrees with vcloud.mat');
+  assert.equal(Number(cSoft[1]), Number(soft[1]), 'the C++ SOFT disagrees with vcloud.mat');
+  // The field the hull's corners are mapped into (uv = corner / field).
+  const field = /getUV0\(\) \* vec2\(([\d.]+), ([\d.]+)\)/.exec(shader);
+  const cField = /puffPoly[\s\S]*?px \/ ([\d.]+)f, v = py \/ ([\d.]+)f/.exec(cpp);
+  assert.ok(field && cField, 'the field size moved in vcloud.mat or puffPoly');
+  assert.deepEqual(cField.slice(1, 3).map(Number), field.slice(1, 3).map(Number),
+    'the C++ field size disagrees with vcloud.mat');
+});
+
 test('a constant spelled in both a shader and the C++ agrees', () => {
   for (const p of PAIRS) {
     const s = p.shader.re.exec(read(p.shader.file));

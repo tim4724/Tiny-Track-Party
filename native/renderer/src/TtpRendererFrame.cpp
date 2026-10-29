@@ -2978,9 +2978,12 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
         // floor keeps the transform invertible at the wrap itself.
         const float edge = std::min(1.0f, (wrap - std::fabs(p0.x)) / 40.0f);
         sk *= std::max(1e-3f, edge * edge * (3.0f - 2.0f * edge));
-        // The quad's corners as posed (the slide keeps the yaw): its nearest
+        // The sprite's vertices as posed (the slide keeps the yaw): its nearest
         // and farthest points from the eye, where a reach either side of the
-        // centre overstated the span several times over.
+        // centre overstated the span several times over. The fog is per
+        // vertex, so the drawn vertices are the points whose fog matters —
+        // the fan centre included, which can sit nearer the eye than any
+        // corner of the rectangle the hull is cut from.
         const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
         const float cy = std::cos(yaw), sy = std::sin(yaw);
         float near = 1e30f, far = 0;

@@ -78,6 +78,9 @@ material {
         tangents
     ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     // Declared two-sided so gltfio's per-instance setDoubleSided/setCullingMode
     // can honour each glTF material's own flag — the kit's textured props are
     // doubleSided, its palm and cactus foliage is not, and a ghost twin is

@@ -2048,16 +2048,54 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     // the pre-scaled puff hung huge and fogged right over the track).
     if (mCloudMaterial) {
         // The puff's SHAPE is vcloud.mat's, evaluated per fragment from uv0 —
-        // so a sprite is one quad and the silhouette stays smooth however large
-        // the push-out draws it. Everything below is just where and how big.
-        const auto puffQuad = [&](Mesh& m, float sw, float sh, uint32_t colour) {
-            for (int j = 0; j < 2; j++) {
-                for (int k = 0; k < 2; k++) {
-                    m.verts.push_back({ (k - 0.5f) * sw, (0.5f - j) * sh, 0, colour });
-                    m.uvs.push_back({ (float) k, (float) j }); // v runs DOWN the field
+        // so a sprite is one small polygon and the silhouette stays smooth
+        // however large the push-out draws it. Everything below is just where
+        // and how big.
+        //
+        // THE POLYGON IS THE PUFF'S SUPPORT HULL, NOT A RECTANGLE. vcloud.mat's
+        // alpha is exactly zero outside its discs grown by SOFT (the smoothstep
+        // saturates there), so a rectangle's corners spend fragments that blend
+        // nothing: the octagon of the discs' support lines keeps every non-zero
+        // texel. The alpha field is the rectangle's; the rasterizer's
+        // interpolation over the new triangulation is what moves, by a few
+        // levels on a near puff's soft edge (the frame map, 2026-10-29). Fanned
+        // from the centroid: fat triangles keep the attribute gradients honest
+        // on a puff a few pixels wide. The discs, SOFT and the field size mirror
+        // vcloud.mat; tests/shader-cpp-constants.test.js holds the two together.
+        const auto puffPoly = [&](Mesh& m, float sw, float sh, uint32_t colour) {
+            struct Disc { float cx, cy, r; };   // in the 128x64 field vcloud.mat samples
+            static const Disc DISCS[5] = {
+                { 36, 36, 14 }, { 58, 30, 17 }, { 84, 36, 14 }, { 68, 42, 11 }, { 46, 42, 10 } };
+            constexpr float SOFT = 8.5f;
+            constexpr int N = 8;                // support directions = hull corners
+            float dx[N], dy[N], sup[N];
+            for (int k = 0; k < N; k++) {
+                dx[k] = std::cos((float) k * 2.0f * (float) M_PI / N);
+                dy[k] = std::sin((float) k * 2.0f * (float) M_PI / N);
+                sup[k] = -1e9f;
+                for (const Disc& d : DISCS) {
+                    sup[k] = std::max(sup[k], d.cx * dx[k] + d.cy * dy[k] + d.r + SOFT);
                 }
             }
-            m.idx = { 0, 2, 1, 1, 2, 3 };
+            // Each corner is where two neighbouring support lines meet; the
+            // centroid is vertex N.
+            float cu = 0, cv = 0;
+            for (int k = 0; k < N; k++) {
+                const int n = (k + 1) % N;
+                const float det = dx[k] * dy[n] - dx[n] * dy[k];
+                const float px = (sup[k] * dy[n] - sup[n] * dy[k]) / det;
+                const float py = (dx[k] * sup[n] - dx[n] * sup[k]) / det;
+                const float u = px / 128.0f, v = py / 64.0f;   // v runs DOWN the field
+                m.verts.push_back({ (u - 0.5f) * sw, (0.5f - v) * sh, 0, colour });
+                m.uvs.push_back({ u, v });
+                cu += u; cv += v;
+            }
+            cu /= N; cv /= N;
+            m.verts.push_back({ (cu - 0.5f) * sw, (0.5f - cv) * sh, 0, colour });
+            m.uvs.push_back({ cu, cv });
+            for (uint32_t k = 0; k < N; k++) {
+                m.idx.push_back(N); m.idx.push_back(k); m.idx.push_back((k + 1) % N);
+            }
         };
         // theme.clouds dresses the same 8 sprites: `count` hides the tail,
         // scale/aspect restretch the authored width, opacity + tint repaint.
@@ -2071,12 +2109,12 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const float w = 50 + (i % 3) * 20;
             mCloudPos[i] = { std::cos(a) * r, 42.0f + (i % 3) * 16,
                              std::sin(a) * r };
-            // Sprite quad, billboarded per view in render(). Geometry at
+            // Sprite hull, billboarded per view in render(). Geometry at
             // AUTHORED size — the per-frame push-out scales the transform
             // (softened, k^0.55: cameras sit far from the origin, so full-k
             // clouds loom oversized). DEF_CLOUDS aspect is 0.42.
             const float sw = w * tb.cloudScale;
-            puffQuad(mClouds[i], sw, sw * tb.cloudAspect,
+            puffPoly(mClouds[i], sw, sw * tb.cloudAspect,
                     packShown(cloudTint, 1.0f, tb.cloudOpacity));
             if (!buildMesh(mClouds[i], true, mCloudMaterial->getDefaultInstance())) {
                 return false;
@@ -2096,7 +2134,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const float r = 132 + (i % 3) * 34;
             mHazePos[i] = { std::cos(a) * r, 9.0f + (i % 3) * 7, std::sin(a) * r };
             const float sw = (95.0f + (i % 3) * 28) * tb.hazeScale;
-            puffQuad(mHaze[i], sw, sw * 0.14f, // HAZE_ASPECT — banks, not puffs
+            puffPoly(mHaze[i], sw, sw * 0.14f, // HAZE_ASPECT — banks, not puffs
                     packShown(hazeTint, 1.0f, tb.hazeOpacity));
             // Priority 5 draws a bank AFTER the clouds (default 4). Both write
             // no depth, so the blend pass's order is the whole of what decides

@@ -69,6 +69,9 @@ material {
     ],
     variables : [ uv ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     blending : transparent,
     culling : none,
     depthWrite : false,

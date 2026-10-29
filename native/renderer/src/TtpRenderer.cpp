@@ -208,15 +208,6 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
 #else
     mEngine = engineBuilder(backend).build();
 #endif
-    if (mEngine) {
-        // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
-        // cones — and each instance was its own draw call. Filament can merge
-        // identical primitives that share a MaterialInstance into one instanced
-        // draw; three gets the same effect by merging its scenery into a single
-        // mesh, which is most of why it issues 42 draws a frame where we issue
-        // 111.
-        mEngine->setAutomaticInstancingEnabled(true);
-    }
     if (!mEngine) return false;
 #if defined(__ANDROID__)
     // The RESOLVED backend, not the one asked for: a DEFAULT request lands on
@@ -224,6 +215,13 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // decisions below key on this and never on the backend alone.
     mAndroidGl = mEngine->getBackend() == Engine::Backend::OPENGL;
 #endif
+    // Filament merges identical primitives that share a MaterialInstance into
+    // one instanced draw. Off on the Android GL fallback: the merged groups
+    // (buildStatic, buildField) are explicit, so it only ever batched the
+    // gltfio pools, and a pass that batches anything creates and destroys an
+    // instancing UBO per cell per frame — a waiting buffer create on PowerVR
+    // GL. See native/renderer/CLAUDE.md, "The Android GL fallback".
+    mEngine->setAutomaticInstancingEnabled(!mAndroidGl);
     // Vulkan and the Android GL fallback rotate (ensureCells; the per-frame
     // buffers: streaks in renderCars, car shadows in flushCarShadows, flake
     // culling in cullAmbientCells). On the box's GL driver a write into a buffer

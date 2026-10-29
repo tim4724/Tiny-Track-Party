@@ -434,6 +434,12 @@ what was measured and not taken; the rules it left:
   frame's uploads and instance writes before cell 1 is recorded.
 - **The terrain sheets tile twice as coarse** (`mSheetTile`, `mSheetMinTris`):
   fewer draws for vertices the GPU is not bound on here.
+- **Filament's automatic instancing is OFF** (`TtpRenderer::init`): the merged
+  groups are explicit, so the instancer only ever batched the gltfio pools, and
+  a pass that batches anything creates, writes and destroys a per-pass
+  instancing UBO and descriptor set, per cell, per frame — a waiting buffer
+  create on this driver, worth far more than the handful of draws it saved
+  (the frame map, 2026-10-29).
 - **Material-instance uniform batching is the pin's call, per GPU**
   (`disable_material_instance_uniform_batching`, set by renderer string in
   the fork's `OpenGLContext.cpp`, whose comment has each driver's reason):
@@ -747,10 +753,28 @@ drives toward it.
   replacement for the sRGB `pow` measured no faster — which is why the encode
   left the fragment stage altogether (above) rather than getting cheaper.
 
+**A puff sprite is its SUPPORT HULL, not a rectangle** (`puffPoly`): vcloud.mat's
+alpha is exactly zero past its discs grown by the soft edge, and blended sprites
+are the one fill channel on the Fire TV Stick, so their geometry is trimmed
+before anything in their shader. Near-identical, not identical (the frame map,
+2026-10-29, has the pixel delta). The sky-band fit measures the hull's own
+vertices, since the fog is per vertex; `tests/shader-cpp-constants.test.js`
+holds the C++ disc table to the shader's.
+
 **THE FOG IS OURS, PER VERTEX** (`ttp_fog.inc`), and the view's fog is off.
 Filament's costs a SHADER VARIANT (a cubemap sampler and a pow behind branches this
 scene never takes), which its own `linearFog` does not fix; per fragment ours was
-still several times the per-vertex cost. **A per-vertex term needs vertices**:
+still several times the per-vertex cost. **So every material filters the fog
+variant out** (`variantFilter : [ fog ]`, held by `tests/material-rules.test.js`),
+and with it gone the fork's filamat proves an unlit material never reads the
+built-in interpolants (`vertex_worldPosition`, `vertex_worldNormal`,
+`vertex_position`: computeShadingParams' inputs) and emits none of them
+(`MATERIAL_SKIPS_SURFACE_INTERPOLANTS`, the pin's filamat commit) — on a
+tile-based GPU that output is what the vertex stage pays (the frame map,
+2026-10-29), and the pixels are the same by construction. A fragment that calls
+a position or normal getter keeps them (the visibility bake's
+`getUserWorldPosition()` does); the filamat commit defines which reads count.
+**A per-vertex term needs vertices**:
 anything large, flat and fogged carries enough to interpolate between (the ground
 sheet's STEP). On `vroad`, `vground` and `vcolor` even the fragment's mix is
 folded away (`ttp_fog.inc`, `ttpFogTerm`, has the algebra): `(1 - a)`

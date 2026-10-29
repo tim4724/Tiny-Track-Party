@@ -1,8 +1,9 @@
-// Two rules every material is held to, both priced on the Android box
-// (native/renderer/CLAUDE.md, "Shading, lighting, colour" and the deck's
-// taps; docs/perf/androidtv-frame-map.md has the readings) and both invisible
-// to every other check: the renderer has no ctest, and a material that breaks
-// either compiles, links and draws the same picture, milliseconds slower.
+// Three rules every material is held to, each priced on an Android box
+// (native/renderer/CLAUDE.md, "Shading, lighting, colour", the deck's taps and
+// the fog paragraph; docs/perf/androidtv-frame-map.md has the readings) and
+// each invisible to every other check: the renderer has no ctest, and a
+// material that breaks one compiles, links and draws the same picture,
+// milliseconds slower.
 //
 //   1. An unlit material writes `baseColor`, never `emissive`. An `emissive`
 //      write makes matc compile Filament's addEmissive (an exposure mix and a
@@ -14,6 +15,11 @@
 //      GPU cannot issue before the shader runs — which is why vroad.mat gives
 //      the visibility map a varying of its own rather than packing it as `.zw`
 //      of the rubber layer's.
+//   3. Every material filters Filament's fog variant out. The fog is ours, per
+//      vertex (ttp_fog.inc), and with the variant gone the fork's filamat can
+//      prove an unlit material never reads the built-in surface interpolants
+//      and leave them out of its vertex outputs; without the filter it keeps
+//      emitting them, which on a tile-based GPU is the vertex stage's cost.
 
 'use strict';
 
@@ -56,6 +62,18 @@ test('an unlit material writes baseColor, never emissive', () => {
   assert.deepEqual(stale, [],
     'these no longer write emissive — drop them from EMISSIVE_WRITERS:\n  '
     + stale.join('\n  '));
+});
+
+// Rule 3. A material whose fragment reads a position or normal getter (the
+// visibility bake's getUserWorldPosition(), say) keeps the interpolants
+// whatever the filter says; the pin's filamat commit defines which reads count.
+test('every material filters the fog variant out', () => {
+  const missing = sources().filter((f) => f.endsWith('.mat'))
+    .filter((f) => !/variantFilter\s*:\s*\[[^\]]*\bfog\b[^\]]*\]/.test(codeOf(f)));
+  assert.deepEqual(missing, [],
+    'these do not filter the fog variant, so the fork\'s filamat keeps emitting '
+    + 'the built-in interpolants nothing here reads — add `variantFilter : [ fog ]` '
+    + 'to the material block:\n  ' + missing.join('\n  '));
 });
 
 test('a texture coordinate handed whole out of a varying is its .xy', () => {

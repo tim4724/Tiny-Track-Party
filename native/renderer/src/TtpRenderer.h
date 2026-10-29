@@ -1516,7 +1516,8 @@ private:
     std::vector<Mesh> mBirds;
     std::vector<Mesh> mKites;
     Mesh mPlane;
-    // Drifting cloud puffs: one billboarded quad each, shaped by vcloud.mat.
+    // Drifting cloud puffs: one billboarded support octagon each (puffPoly),
+    // shaped by vcloud.mat.
     std::vector<Mesh> mClouds;
     std::vector<filament::math::float3> mCloudPos; // current position (x drifts)
     // Low dust banks (theme.haze) — same puff, bank-flat, drifting faster.

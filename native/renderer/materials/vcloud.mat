@@ -9,7 +9,8 @@
 // linear interpolation of a curve is faceted at every resolution.
 //
 // So the field is evaluated PER FRAGMENT from uv0 instead, the way vpoint
-// rebuilds its radial sprite: smooth at any size, and two triangles per puff
+// rebuilds its radial sprite: smooth at any size, and eight triangles per puff
+// (the support octagon of the discs below, TtpRendererTrack.cpp's puffPoly)
 // rather than two hundred and fifty-six.
 material {
     name : TtpVcloud,
@@ -20,6 +21,9 @@ material {
         uv0
     ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     culling : none,
     blending : transparent,
     depthWrite : false,
@@ -41,8 +45,12 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor();
-        // uv0 spans the quad; the lobes are authored in the 128x64 field.
+        // uv0 maps the 128x64 field over the rectangle the hull is cut from;
+        // the lobes are authored in that field.
         vec2 p = getUV0() * vec2(128.0, 64.0);
+        // The discs and SOFT are mirrored by TtpRendererTrack.cpp's puffPoly,
+        // which cuts the sprite to their support hull; the pair is held by
+        // tests/shader-cpp-constants.test.js.
         // Source-over of five discs at 0.95 alpha: track what stays CLEAR and
         // invert. Stacking the coverages instead gives a much harder alpha in
         // the overlaps, which is what made the puffs read as flat white blobs.

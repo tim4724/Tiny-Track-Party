@@ -28,6 +28,9 @@ material {
         tangents
     ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     // `fade`, which is what gltfio compiles its own BLEND ubershaders with (see
     // build_ubershader in libs/gltfio/CMakeLists.txt) — so a ghost blends
     // exactly as it did before this material existed.

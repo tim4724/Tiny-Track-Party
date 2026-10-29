@@ -445,6 +445,134 @@ small to begin with (~0.3-0.45 ms of vertex cost at 4P/720, "Closed"
 below), so the stick is
 where this pays.
 
+### The whole frame, the probes and the interpolant strip (2026-10-29 afternoon)
+
+Same box, pretzel, 8-car grid, pinned 960x540, 60 s counted, build `02b74cef`
+plus probe APKs that differ from it by mask-gated probe code (every arm below
+names which). The box drifts 2-3 fps race to race and slid ~2 fps over the
+hour, so every delta is against the base of its OWN round or install pair,
+and an APK A/B is three alternated install pairs with the first race after
+each install discarded. The box has no readable thermal zone.
+
+**Where the 4P/540 frame goes** (two rounds in alternating order; ms recovered
+when a group is hidden, against the base of its round, 32.7 fps = 30.6 ms):
+
+| hidden | fps | ms | what it is |
+|---|---|---|---|
+| cars (`0x9FBC`) | 43.9 | **7.8** | car GLBs, merged groups, streaks |
+| road (`0x9FF8`) | 39.4 | **5.2** | the deck and every channel its shader carries |
+| terrain (`0x9FF4`) | 39.1 | **5.0** | ground, hills, berms, structures, lawn discs, gantry, the sky dome |
+| effects (`0x9F7C`) | 38.8 | **4.8** | the item SYSTEM's consequences: no boxes, so no rockets, bursts or monster rigs in the race (the 8 boxes are 328 verts each) |
+| dressing (`0x9FEC`) | 37.1 | 3.6 | sheets, baked runs, props |
+| rubber (`0x9DFC`), inside road | 36.3 | 3.0 | the layer whole: raster, uploads, mips and the deck's tap |
+| sky billboards (`0x9FDC`) | 35.3 | 2.3 | the cloud sprites (rectangles then, before the hull) and the balloon (not the dome) |
+| the deck's sun-vis taps (`0x97FC`), inside road | 34.4 | ~1.5 | noisy (0.3 / 2.8 in its two rounds) |
+| the decal loop (`0x9EFC`), inside road | 34.1 | ~1.3 | |
+| vertex fog (`0x1FFC`), far forms (`0x1009FFC`) | 32.5 / 32.0 | null | |
+| everything (`0x9F00`) | 60.0 | | the skeleton holds the panel |
+
+The six content groups SUM to the frame (28.7 of 30.6 ms; the three rows
+marked "inside road" are channels of the road's shader, not more content): the
+GL frame is one TA+3D render, nothing overlaps anything, and a millisecond cut
+anywhere is a millisecond off the frame.
+
+**At 2P/540** (46.7 fps = 21.4 ms, round 1 against its base): cars 3.2, effects
+2.9, road 2.5, terrain 1.9, dressing 1.1, rubber 0.4, sky 0.1. The fill-class
+channels vanish at two cells. Per-thread CPU over a 30 s window at 2P: Filament's
+backend 46% of a core, the frame thread 41%, the mixer 25%, all four cores 42%
+busy, and the CPU clock SAGGING from 1690 to 1456 MHz mid-race under the
+`interactive` governor — that sag is what the spinner's +3 fps was. At 4P the
+same threads read 46 / 44 / 35% with the clock held at 1690: GPU-bound.
+
+**Probes that read NULL on this GPU** (one APK, mask-bit arms, two rounds):
+
+| arm | reading |
+|---|---|
+| the car vertex light with no `pow()` (three fewer transcendentals a vertex) | 31.0 vs 31.2 |
+| no light maths at all on the car vertex (no normalize, SH, sun, encode) | 30.1 vs 31.2 |
+| no rubber uploads at all (rects and mips; the ink goes stale) | 31.9 vs 31.2 |
+| no rubber mip refresh | 31.5 vs 31.2 |
+| no item-box glow retint (the per-frame `emissiveFactor` writes) | 30.9 vs 31.2 |
+
+So the ~65 ns a car vertex costs is a per-INVOCATION fixed cost (attribute
+fetch, the dynamically indexed `objectUniforms` fetch, the parameter-buffer
+output), not shader ALU; the rubber channel's 3 ms is the deck's TEXTURE TAP
+(fill), not upload events, the opposite of the GE9215; and the mixer thread's
+32% is its real cost on these A53s (oatdump: every hot method compiled).
+
+**SHIPPED: the puff sprites as their support hull** (`puffPoly`): vcloud.mat's
+alpha is exactly zero outside its five discs grown by SOFT, so the octagon of
+support lines draws the rectangle's pixels on 56% of its fragments. A build-time
+knob, so the mask was set before launch; three alternated pairs on one install:
+base 29.7 / 31.4 / 31.0, hull 31.8 / 32.9 / 31.6 fps = **30.7 -> 32.1 fps, -1.4
+ms at 4P**, ahead in 3 of 3. NEAR-identical, not identical: web frames of the
+bench scenario under the capture gate at a fixed 1/60 step, pumped to the same
+frame with the HUD off (two runs of one build diff to zero, so the method is
+exact) differ from the previous build on 0.07% of their pixels
+by at most 6 of 255 inside a near puff's soft edge, and on a puff a few pixels
+across by up to 16 on 40 pixels; the rectangle fed through the same path diffs
+to zero, so it is the rasterizer's interpolation over the new triangulation
+(fanned from the centroid, which halved the worst delta), nothing in the field.
+
+**SHIPPED: the built-in surface interpolants stripped** (`ttp-pin-2026-10-29b`,
+filamat's `MATERIAL_SKIPS_SURFACE_INTERPOLANTS`; every material now carries
+`variantFilter : [ fog ]`). Filament emitted `vertex_worldPosition` (4 floats),
+`vertex_position` (4) and, with tangents, `vertex_worldNormal` (3) on every
+material, and nothing in an unlit fragment here reads them: 8-11 of the 13-22
+varying floats a vertex wrote. Three alternated install pairs, 4P/540, the
+built-ins kept vs stripped: 31.5 / 29.7 / 31.5 vs 35.7 / 37.3 / 35.6 fps =
+**30.9 -> 36.2 fps, -4.8 ms**, ahead in 3 of 3; web frames diff to 0 pixels.
+The first probe of it (gated on the shading model alone) also stripped the
+visibility bake, whose fragment reads `getUserWorldPosition()`, and the far
+structures' shadows moved: the shipped form proves per material that no getter
+is called, through the user's helpers but not through `prepareMaterial`.
+
+**SHIPPED: Filament's automatic instancing OFF on Android GL**
+(`setAutomaticInstancingEnabled(false)` under `mAndroidGl`). The merged groups
+are explicit, so the instancer only ever batched the gltfio pools (the item
+boxes), and a pass that batches anything creates, writes and destroys a
+per-pass instancing UBO and descriptor set every frame, per cell — on this
+driver a buffer create or `glBufferData` waits for the queued frame. Three
+alternated rounds on one install, 4P/540: base 32.8 / 31.7 / 31.3, off 35.1 /
+35.6 / 37.1 fps = **31.9 -> 35.9 fps, -3.5 ms**, ahead in 3 of 3; the pixels are
+the same (the instancer keeps stream order). This is most of what the "effects"
+ablation was: the boxes are the one family it could batch.
+
+**Measured and NOT taken (same session, 4P/540, three alternated rounds or
+install pairs each):**
+
+| lever | reading | verdict |
+|---|---|---|
+| a `Fence` after each cell's `render()` on GL (the Vulkan shape: cell k's fragments under cell k+1's vertices) | 31.4 vs 31.3; 2P 47.2 vs 45.2 / 47.8 | null — the driver still runs one render |
+| the smooth merged prims (wheels) welded on exact (pos, uv) + a 0.5 degree normal cluster at the merge build | 31.9 vs 32.1 | null as built (the merge count was not logged; the flat-body weld needed the vertex-reuse reorder to pay, which this had) |
+| `vcolor` in the world domain for every mesh (a probe: the movers draw at the origin, the static set is priced) | 31.4 vs 32.1, ahead in 2 of 3 | +0.7 fps, inside the race-to-race spread; a world-domain twin for the static vcolor meshes is not worth its half day |
+| a CONSTANT per-instance index in the vertex stage (no dynamically indexed `objectUniforms.data[i]`; probe matc) on top of the strip | 35.8 vs 35.4 | null — the per-instance fetch is not the cost |
+
+**The three together, `02b74cef` against the build that ships them** (three
+alternated install pairs, the first race after each install discarded):
+4P/540 **34.5 / 34.3 / 33.1 -> 43.3 / 46.7 / 42.0 fps** (34.0 -> 44.0: 29.4 ->
+22.7 ms, -6.7 ms), ahead in 3 of 3. Less than the levers' own readings summed
+(1.4 + 4.8 + 3.5 = 9.7): each was priced on a different base over a day on
+which the box drifted, and the strip and the instancer both lift the same
+vertex-bound frame, so the second lever has less left to take. 2P/540 (two
+pairs) **48.6 / 48.8 -> 58.8 /
+58.7 fps, skipped frames a race ~670 -> ~77**: two players at 540 now hold the
+panel's rate on this box. **The same pair on the Google TV Streamer** (GE9215,
+4P pinned 1080, the saturated column, three alternated install pairs, first race
+after each install discarded): Vulkan 53.6 / 53.3 / 52.5 -> 53.1 / 53.3 / 53.1
+fps, a null (that frame is fill-bound; the interpolants and the instancer were
+never its cost); GL 49.5 / 49.8 / 49.4 -> 50.9 / 51.5 / 50.7 fps, **+1.5 fps,
+ahead in 3 of 3** (skips a race ~607 -> ~528), so the GL fallback gains there
+too and the Vulkan default loses nothing.
+
+**What that says about this GPU.** The TA is bound by what a vertex WRITES,
+not by what it computes or fetches: 11 floats of output were worth 4.8 ms where
+the whole light computation and the per-instance fetch were worth nothing, and
+a driver-side buffer temporary per pass was worth 3.5 ms. What is left of the
+car channel is its vertex COUNT (the welded flat bodies paid; the wheels'
+0.5-degree weld did not move it) and whatever else writes a varying a fragment
+never reads.
+
 ## Open
 
 **A 4P-only look tier: the rubber tap** (skid marks are ~2 px wide in a 4P

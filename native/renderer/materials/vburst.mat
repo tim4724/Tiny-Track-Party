@@ -34,6 +34,9 @@ material {
         uv0
     ],
     shadingModel : unlit,
+    // Fog is ours (ttp_fog.inc); every material filters Filament's variant
+    // (tests/material-rules.test.js says why).
+    variantFilter : [ fog ],
     // BACK-face culling, unlike every other blended material here. Additive
     // blending accumulates, so a two-sided flash ball adds its own far side
     // through its near one and comes out twice as bright as the JS mesh (which
