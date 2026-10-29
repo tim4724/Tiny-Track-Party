@@ -26,8 +26,10 @@
 // Filament SDK.
 #include "ttp/theme.h"
 #include "ttp/wear.h"
-// The GLB mesh reader behind the merged draw groups — header-only for the same
-// no-link-edge reason as theme.h above; ctests execute it on every leg.
+// The GLB mesh reader behind the merged draw groups, and the flat-body weld
+// they draw the car bodies with — header-only for the same no-link-edge reason
+// as theme.h above; ctests execute both on every leg.
+#include "ttp/flat_weld.h"
 #include "ttp/glb_mesh.h"
 namespace ttp { namespace kitcolors { struct Mesh; } }
 #include "ttp/car_footprint.h"
@@ -971,6 +973,9 @@ private:
     filament::gltfio::MaterialProvider* mMatProvider = nullptr;
     filament::Material* mGlbMaterial = nullptr;
     filament::Material* mGlbFadeMaterial = nullptr;
+    // ...and the flat-interpolated one for the welded car bodies (vglbflat.mat,
+    // ttp/flat_weld.h). Optional: without it no body is rewritten or welded.
+    filament::Material* mGlbFlatMaterial = nullptr;
     filament::gltfio::AssetLoader* mAssetLoader = nullptr;
     filament::gltfio::ResourceLoader* mResourceLoader = nullptr;
     filament::gltfio::TextureProvider* mStbProvider = nullptr;
@@ -1933,6 +1938,7 @@ private:
         std::vector<filament::math::float3> pos;
         std::vector<filament::math::quatf> quats;
         std::vector<filament::math::float2> uvs;
+        std::vector<uint32_t> colors;   // vglbflat's required COLOR (never read)
         std::vector<uint32_t> idx;
     };
     struct MergedGroup {
@@ -2026,6 +2032,11 @@ private:
     // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
+    // The welded form of each flat prim drawn with vglbflat, keyed by the
+    // prim's address in mGlbMeshCache (whose entries are never erased, so the
+    // address is the prim's identity). The weld is quadratic in triangles, so
+    // it is paid once per model, not per roster rebuild.
+    std::unordered_map<const ttp::rt::GlbMeshPrim*, ttp::rt::FlatWeld> mFlatWelds;
     // Which parse an instanced dressing asset was loaded from (scene scope).
     std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
     // The model identity of asset `name` (whose bytes are `glb`), memoised

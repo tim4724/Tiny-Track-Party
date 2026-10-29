@@ -70,7 +70,7 @@ object SceneStaging {
      * pattern to copy and this throws on every one.
      */
     val MATERIAL_NAMES = listOf(
-        "vcolor", "vblend", "vlit", "vroad", "vglb", "vglbfade", "vpoint",
+        "vcolor", "vblend", "vlit", "vroad", "vglb", "vglbfade", "vglbflat", "vpoint",
         "vcloud", "vground", "vvis", "vroadvis", "vpresent", "vesm", "vburst",
         "voverlay", "vsky", "vshadow",
     )

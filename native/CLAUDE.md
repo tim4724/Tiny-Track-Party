@@ -35,7 +35,7 @@ standings board and the room snapshot were wire bytes; they never were — every
 outbound frame is canonicalized before it leaves, so the model order stopped at
 framing. Nothing anywhere may depend on the order a Value was built in. What IS
 contract is key PRESENCE: a null and an absent key are different answers, and
-`libttp-json`'s `ordered_stringify` survives for one caller (the glTF rewrite).
+`libttp-json`'s `ordered_stringify` survives for the glTF rewrites.
 
 **JSON or packed? Answer by call frequency.** A layer answering once per event
 returns JSON, especially when half its answer is unbounded text. A layer drained

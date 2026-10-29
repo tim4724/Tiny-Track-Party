@@ -620,7 +620,8 @@ So:
 - **Triangle ORDER is a cost too.** A tiler re-shades a vertex per primitive batch,
   so `buildMesh` reorders every OPAQUE range and its far form for vertex reuse
   (`reorderForVertexReuse`), within the range. **Nothing may depend on triangle
-  order inside an opaque range after build**; a blended mesh keeps its order.
+  order inside an opaque range after build**; a blended mesh keeps its order,
+  and so does a welded flat body's overlay tail (`FlatWeld::baseTris`).
 - **A far-plane cut buys nothing**: the scenery is authored to end where the fog
   saturates (`RACE_FOG_FAR`). Chunking deck and terrain for cullability was
   built and reverted: the GPU it saved, the extra renderables spent on the frame
@@ -668,6 +669,14 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   never the GLB, because the biome recolours untextured models through it. A model
   the table does not know keeps the instanced, live-lit draw.
 - The item-box fade twins stay unmerged: they hold PER-INSTANCE materials.
+- **A FLAT-SHADED car body is drawn WELDED on `vglbflat.mat`**: at load an
+  all-flat mesh is moved onto a `#flat` clone of its glTF material
+  (`flat_material_glb`), the provider hands that vglbflat, and the merge (a
+  group of one) draws it from shared corners. The two picture rules — the
+  backend's provoking corner and the coplanar overlays — are
+  `ttp/flat_weld.h`'s. Filament sets no provoking-vertex convention, so a pin
+  that ever sets one breaks the rotation silently. A body that is not all-flat
+  (the jeep) keeps vglb and its own vertices.
 
 **A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
 `set` list in `public/shared/tracks.js`): composed GLBs instanced like props,

@@ -2441,6 +2441,14 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
                 .package(vglbfade->second.data(), vglbfade->second.size())
                 .build(*mEngine);
     }
+    // ...and flat-interpolated, for the welded car bodies (see vglbflat.mat).
+    // Optional too: without it the bodies keep vglb and their own vertices.
+    const auto vglbflat = mAssets.find("vglbflat.filamat");
+    if (!mGlbFlatMaterial && vglbflat != mAssets.end()) {
+        mGlbFlatMaterial = Material::Builder()
+                .package(vglbflat->second.data(), vglbflat->second.size())
+                .build(*mEngine);
+    }
     const auto vground = mAssets.find("vground.filamat");
     if (!mGroundMaterial && vground != mAssets.end()) {
         mGroundMaterial = Material::Builder()
@@ -2526,7 +2534,7 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
     //
     // compile() is async on a driver-side queue, so a build is all headroom.
     for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
-                         mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
+                         mRoadMaterial, mGlbMaterial, mGlbFadeMaterial, mGlbFlatMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mEsmMaterial,
                          mPresentMaterial, mOverlayMaterial,

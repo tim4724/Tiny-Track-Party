@@ -5,7 +5,7 @@
 #include <cstring>
 
 #include "ttp/canonical.h"
-#include "ttp/glb.h"
+#include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
 #include "ttp/race_track.h"
 
@@ -567,7 +567,7 @@ std::vector<MatTint> resolve_model_tints(const std::string& model,
   if (!def) return out;
 
   std::string text;
-  if (!json_chunk(glb, len, text)) return out;
+  if (!glb_json_chunk(glb, len, text)) return out;
   bool ok = false;
   const Value doc = json::parse(text.c_str(), &ok);
   if (!ok) return out;

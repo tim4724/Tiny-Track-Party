@@ -75,9 +75,9 @@ void canonical_stringify_into(const Value& v, std::string& out);
 // every readback whose bytes are compared to a fixture depends on the sort — so
 // it must never grow an ordering mode.
 //
-// This one has ONE caller: the glTF document libttp-runtime/ttp/glb.cc rewrites.
-// cgltf reads a glTF's keys in any order, so the sort would buy nothing and cost
-// the only thing that makes that rewrite debuggable — a readable diff of the
+// This one is for the glTF documents libttp-runtime rewrites. cgltf reads a
+// glTF's keys in any order, so the sort would buy nothing and cost the only
+// thing that makes a rewrite debuggable — a readable diff of the
 // source chunk against the re-emitted one. (It also served the standings board,
 // on the theory that the board's key order was the wire's. It was not: the frame
 // encoder canonicalizes, so the model order stopped at framing.)

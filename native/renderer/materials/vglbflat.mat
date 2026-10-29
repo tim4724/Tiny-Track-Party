@@ -1,0 +1,62 @@
+// vglb.mat for a FLAT-SHADED mesh drawn from welded corners: the car bodies.
+//
+// The renderer welds the mesh (ttp/flat_weld.h has how, and why it is the same
+// picture): each triangle's provoking corner carries the face normal, and
+// `interpolation : flat` lights the whole face from that corner.
+//
+// THE FOG CANNOT BE FLAT. Filament applies the interpolation to every custom
+// variable, and the fog factor is NOT per face (a distance, then an exp): flat
+// it would step from face to face across a fogged car. So it rides the one
+// smooth varying an unlit material can write, the vertex colour (getColor() in
+// the fragment), at the same medium precision vglb's `fog` has. That is why
+// `color` is required; the vertex stage overwrites it before anything reads it,
+// so the stream is a dummy (gltfio's, or a zero buffer on the merged draw).
+//
+// THE PARAMETER BLOCK IS vglb.mat's, name for name (vglbfade.mat says why it is
+// spelled out again). The glb loader picks this material for a glTF material
+// named `<name>#flat`, which only flat_material_glb writes.
+material {
+    name : TtpVglbFlat,
+    // the matte light, display-encoded (ttp_shade.inc, ttpMatteLightDisplay)
+    variables : [ { name : light, precision : medium } ],
+    requires : [
+        uv0,
+        tangents,
+        color
+    ],
+    shadingModel : unlit,
+    interpolation : flat,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : baseColorMap },
+        { type : mat3, name : baseColorUvMatrix, precision : high },
+        { type : float4, name : baseColorFactor },
+        { type : float3, name : emissiveFactor },
+        { type : float, name : metallicFactor },
+        { type : float, name : roughnessFactor },
+        { type : float, name : normalScale },
+        { type : float, name : aoStrength }
+    ]
+}
+
+fragment {
+    #include "ttp_fog.inc"
+    #include "ttp_glb.inc"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(ttpFogMix(ttpGlbBaseColor().rgb * variable_light.xyz, getColor().x), 1.0);
+    }
+}
+
+vertex {
+    #include "ttp_shade.inc"
+    #include "ttp_fog.inc"
+
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.light = vec4(ttpMatteLightDisplay(normalize(material.worldNormal)), 0.0);
+        material.color = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+    }
+}

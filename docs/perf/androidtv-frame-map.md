@@ -421,14 +421,29 @@ interleaved arms, first arm after an install discarded. Fps is the run's mean.
 | `ttp-pin-2026-10-29` vs `ttp-pin-2026-10-23` (on this GPU only `glMapBufferRange` against `glBufferSubData`) | null over 7 pairs in both orders | null |
 | rendering through a FrameSkipper skip; `setSustainedPerformanceMode` | null | null |
 | vertex fog off; `debug.ttp.tags 0` | null; tags off is SLOWER | null; slower |
+| on batching: every car draw kept at 3 indices / a quarter of its triangles (probe) | — | car share ~8.5 ms -> 1.4 (3 indices) / 2.8 (a quarter): ~7 ms is GEOMETRY, linear in it; all 96 draws ~1.4 |
+| on batching: the bodies welded, source triangle order / reordered for reuse (probe, look off) | — | 30.1 -> 30.7 / **33.4** in 4 of 4 rounds: the saving needs the reorder |
+| **the flat bodies welded** (`vglbflat`, `ttp/flat_weld.h`; gt/lemans/stock ~1.7-2.4k -> ~0.5-0.9k vertices, the jeep unchanged), shipped build vs main `3f2dfa75`, 10 pairs alternating (2P: 4) | 47.1 -> 48.9 | **31.3 -> 33.2**, ahead in 9 of 10 pairs; race-to-race spread 2-3 fps |
 
 The cars are ~13 ms of the 4P frame, and none of it is past vertex shading:
 parking their vertices after the vertex stage reads the same as the base, and
 their share is flat across the render scale, so it is neither fill nor a
 parameter-buffer overflow. Batching ON takes their share to ~7 ms, so this GPU
 answers the batching question the other way round from the GE9215, and
-`engineBuilder` no longer switches it for the whole GL backend. How the rest
-splits between vertex shading and per-draw work is unmeasured.
+`engineBuilder` no longer switches it for the whole GL backend. Of what is
+left, nearly all is the car GEOMETRY (cutting the index ranges, every draw
+kept), so fewer draws is not a lever here and fewer shaded vertices is: the
+flat bodies are drawn welded. What is left is the wheels (smooth tyre bands,
+which do not weld) and the jeep's mixed body.
+
+**The same weld pair on the Google TV Streamer (2026-10-29, pretzel, 3 rounds
+alternating, each install warmed):** at 4P and 2P pinned 720 both builds hold
+60 / 0 on both backends, so nothing there can be priced. At 4P pinned 1080 (the
+saturated column): Vulkan 53.8 -> 54.2 fps, heavy GPU p50 20.23 -> 19.88 ms
+(lower in 3 of 3); GL 52.1 -> 52.2 fps, a null. The GE9215's car cost was
+small to begin with (~0.3-0.45 ms of vertex cost at 4P/720, "Closed"
+below), so the stick is
+where this pays.
 
 ## Open
 
@@ -545,7 +560,7 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 | ground and hills drawn after every opaque | NULL: the tiler already rejects the overdraw |
 | terrain by member (hills, ground sheet, lawn discs, structures) | 0.0-0.5 each against the group's 1.3-1.4 (2026-10-17) |
 | simpler models, priced against their own ceiling (2026-10-21, `0d2e5286`, pretzel, per-second pairs, heavy p50 ~14.3 base; pairs are two rounds) | geometry here costs by the OBJECT, not by its vertex count. The ceiling, dressing and cars both removed: 4P/720 heavy p50 -3.0 / -3.3 ms (dressing -1.4 / -2.2, cars -2.0 / -2.4; skipped frames ~25 -> ~4 a minute); 1P/1080 null (the deck's fill); 3P/1080 -0.8 / -2.2 and still 69-77 skipped frames a minute, so no geometry bought any player count a rung BEFORE the fragment package; after it, the dressing is 3P/1080's margin (Open, "The dressing at 3P/1080"). Dressing split: sheets -0.5 / -1.1, kit copies -0.3 / -0.8. The REALISTIC cut does not follow the ceiling: lean flowers (3x2 spheres, capless stems, same stream, about half the flower vertices) NULL over three alternated installs (+0.1 / -0.1 / -0.5); the smooth+12 cars bought ~0.5 (2026-10-20) |
-| 16-bit indices and narrower attributes, dead varyings stripped, f16 varyings (a fork patch), the live-lit car vertex at fp16, a light cubemap for the car vertex, flat shading by provoking vertex, back-face culling the cars, a leaner sky dome and lawn discs | closed by the counters and the frame shape (2026-10-22): the TA phase is vertex-ALU bound with the memory interface at 2-12% and register overload 0, so bytes per vertex are not what it waits on; the cars' whole vertex cost is ~0.3-0.45 ms at 4P/720 (the Smooth reading) so no term of it clears 0.3; and a TA cut converts only in the first cell's exposed TA until fragment cuts use the within-frame slack |
+| 16-bit indices and narrower attributes, dead varyings stripped, f16 varyings (a fork patch), the live-lit car vertex at fp16, a light cubemap for the car vertex, flat shading by provoking vertex (null on this GPU; shipped for the GE8300, "The Fire TV Stick 4K"), back-face culling the cars, a leaner sky dome and lawn discs | closed by the counters and the frame shape (2026-10-22): the TA phase is vertex-ALU bound with the memory interface at 2-12% and register overload 0, so bytes per vertex are not what it waits on; the cars' whole vertex cost is ~0.3-0.45 ms at 4P/720 (the Smooth reading) so no term of it clears 0.3; and a TA cut converts only in the first cell's exposed TA until fragment cuts use the within-frame slack |
 
 **The deck's shader**
 

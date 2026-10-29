@@ -95,9 +95,10 @@ namespace {
 
 class TtpGlbMaterials : public gltfio::MaterialProvider {
 public:
-    TtpGlbMaterials(Material* material, Material* fade, Texture* white,
+    TtpGlbMaterials(Material* material, Material* fade, Material* flat, Texture* white,
             gltfio::MaterialProvider* fallback)
-            : mMaterial(material), mFade(fade), mWhite(white), mFallback(fallback) {}
+            : mMaterial(material), mFade(fade), mFlat(flat), mWhite(white),
+              mFallback(fallback) {}
     ~TtpGlbMaterials() override { delete mFallback; }
 
     // Everything vglb.mat can be, in one place. A config outside this is not an
@@ -106,19 +107,29 @@ public:
     // OUR MATERIAL FOR THIS CONFIG, or null to hand it to the ubershader. Both
     // entry points below go through here rather than re-stating the two halves
     // of the test, which would then have to be kept identical by inspection.
-    Material* resolve(const gltfio::MaterialKey& c, const gltfio::UvMap& uvmap) const {
-        Material* const m = pick(c);
+    Material* resolve(const gltfio::MaterialKey& c, const gltfio::UvMap& uvmap,
+            const char* label) const {
+        Material* const m = pick(c, label);
         return (m && expressible(c, uvmap)) ? m : nullptr;
     }
 
     // OPAQUE takes vglb, BLEND takes vglbfade, and MASK is the one alpha mode
     // nothing in the kit uses — it would need an alpha-test material and a
     // maskThreshold, so it goes to the ubershader like any other feature we do
-    // not have a material for.
-    Material* pick(const gltfio::MaterialKey& c) const {
-        if (c.alphaMode == gltfio::AlphaMode::OPAQUE) return mMaterial;
+    // not have a material for. An opaque material named `<name>#flat` is one
+    // flat_material_glb cloned for an all-flat mesh, and takes vglbflat.
+    Material* pick(const gltfio::MaterialKey& c, const char* label) const {
+        if (c.alphaMode == gltfio::AlphaMode::OPAQUE) {
+            return mFlat && isFlatLabel(label) ? mFlat : mMaterial;
+        }
         if (c.alphaMode == gltfio::AlphaMode::BLEND) return mFade;
         return nullptr;
+    }
+
+    static bool isFlatLabel(const char* label) {
+        const size_t n = label ? std::strlen(label) : 0;
+        const size_t k = std::strlen(ttp::rt::kFlatMaterialSuffix);
+        return n >= k && !std::strcmp(label + n - k, ttp::rt::kFlatMaterialSuffix);
     }
 
     static bool expressible(const gltfio::MaterialKey& c, const gltfio::UvMap& uvmap) {
@@ -135,14 +146,14 @@ public:
     Material* getMaterial(gltfio::MaterialKey* config, gltfio::UvMap* uvmap,
             const char* label) override {
         gltfio::constrainMaterial(config, uvmap);
-        if (Material* m = resolve(*config, *uvmap)) return m;
+        if (Material* m = resolve(*config, *uvmap, label)) return m;
         return mFallback->getMaterial(config, uvmap, label);
     }
 
     MaterialInstance* createMaterialInstance(gltfio::MaterialKey* config, gltfio::UvMap* uvmap,
             const char* label, const char* extras) override {
         gltfio::constrainMaterial(config, uvmap);
-        Material* const mat = resolve(*config, *uvmap);
+        Material* const mat = resolve(*config, *uvmap, label);
         if (!mat) {
             return mFallback->createMaterialInstance(config, uvmap, label, extras);
         }
@@ -166,10 +177,11 @@ public:
         return mi;
     }
 
-    // vglb needs uv0 whether or not the primitive carries one; nothing here
-    // reads vertex colour, so a mesh that has none is not given a dummy.
+    // vglb needs uv0 whether or not the primitive carries one, and vglbflat
+    // requires a colour stream it overwrites before reading (vglbflat.mat).
     bool needsDummyData(VertexAttribute attrib) const noexcept override {
-        return attrib == VertexAttribute::UV0 || mFallback->needsDummyData(attrib);
+        return attrib == VertexAttribute::UV0 || attrib == VertexAttribute::COLOR
+                || mFallback->needsDummyData(attrib);
     }
 
     // Both of these are the cache's, and the cache is the fallback's — vglb is a
@@ -184,6 +196,7 @@ public:
 private:
     Material* const mMaterial;   // opaque; null falls the whole kit back
     Material* const mFade;       // alphaMode BLEND — the ghost twins
+    Material* const mFlat;       // `#flat` clones — the welded car bodies
     Texture* const mWhite;
     gltfio::MaterialProvider* const mFallback;
 };
@@ -198,7 +211,7 @@ void TtpRenderer::ensureAssetLoader() {
     // its own, which is what every shell did before this material existed.
     mMatProvider = mGlbMaterial
             ? (gltfio::MaterialProvider*) new TtpGlbMaterials(
-                    mGlbMaterial, mGlbFadeMaterial, whiteTexture(), uber)
+                    mGlbMaterial, mGlbFadeMaterial, mGlbFlatMaterial, whiteTexture(), uber)
             : uber;
     gltfio::AssetConfiguration ac{};
     ac.engine = mEngine;
@@ -284,9 +297,18 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
     // below this point runs identically for a fresh parse and a parked one,
     // because all of it reads the asset rather than the bytes.
     const uint64_t modelKey = glbKey(name, glb);
+    const auto* meshes = glbMeshes(modelKey, glb);   // per-model mesh decode, memoised by key
     gltfio::FilamentAsset* asset = takeAsset(modelKey);
     if (!asset) {
-        asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
+        // An all-flat body mesh loads on a `#flat` clone of its material, so it
+        // gets a vglbflat instance of its own while the wheels keep the kit's
+        // shared one; buildMergedGroup then draws it welded (ttp/flat_weld.h).
+        std::vector<uint8_t> flat;
+        if (mGlbFlatMaterial && meshes) {
+            flat = ttp::rt::flat_material_glb(glb.data(), glb.size(), *meshes);
+        }
+        const std::vector<uint8_t>& bytes = flat.empty() ? glb : flat;
+        asset = mAssetLoader->createAsset(bytes.data(), (uint32_t) bytes.size());
         if (!asset) return false;
         registerAssetUris(asset);
         if (!mResourceLoader->loadResources(asset)) {
@@ -303,11 +325,10 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::string& name,
     setShadows(asset->getEntities(), asset->getEntityCount(), false, false);
     mCarAssets[index] = asset;
     // The merged draw groups: remember which MODEL this slot wears (the bytes
-    // are the identity — same rule as the shadow fits), decode its
-    // meshes once per model, and let the next frame regroup the field.
+    // are the identity — same rule as the shadow fits), and let the next frame
+    // regroup the field.
     if (mCarModelKey.size() <= index) mCarModelKey.resize(index + 1, 0);
     mCarModelKey[index] = modelKey;
-    glbMeshes(modelKey, glb);   // per-model mesh decode; already memoised by key
     mCarMergeDirty = true;
 
     // Wheel handles for the per-frame steer/roll cosmetics. Original local
@@ -684,7 +705,8 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
 
 // Regroup the whole field into merged draws: per CAR, per distinct MESH (the
 // per-side wheel pairs share one, so a car's four wheels land in two
-// 2-instance groups; a body or axle node alone keeps its gltfio draw), one
+// 2-instance groups; a body or axle node alone keeps its gltfio draw unless
+// it is a flat body on vglbflat, which merges alone to be drawn welded), one
 // instanced renderable whose transforms mirror the gltfio nodes every frame
 // (updateMergedTransforms). Per car rather than per model because a group's
 // box is the union of its instances: a group spanning two cars spread round

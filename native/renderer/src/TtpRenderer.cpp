@@ -1401,6 +1401,23 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
     for (size_t p = 0; p < prims.size(); p++) {
         if (!rcm.getMaterialInstanceAt(ri0, p)) return false;
     }
+    // A prim on vglbflat is drawn WELDED (ttp/flat_weld.h, memoised per
+    // model): that is worth a draw of its own, so a lone flat body merges as a
+    // group of one. The provoking corner is the backend's to pick.
+    std::vector<const ttp::rt::FlatWeld*> welds(prims.size(), nullptr);
+    bool anyFlat = false;
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (rcm.getMaterialInstanceAt(ri0, p)->getMaterial() != mGlbFlatMaterial) continue;
+        auto it = mFlatWelds.find(&prims[p]);
+        if (it == mFlatWelds.end()) {
+            const bool provokingLast = mEngine->getBackend() == Engine::Backend::OPENGL;
+            it = mFlatWelds.emplace(&prims[p],
+                    ttp::rt::weld_flat_prim(prims[p], provokingLast)).first;
+        }
+        if (it->second.prim.idx.empty()) return false;   // not flat after all
+        welds[p] = &it->second;
+        anyFlat = true;
+    }
 
     const size_t maxInst =
             std::min<size_t>(64, mEngine->getMaxAutomaticInstances());
@@ -1465,7 +1482,7 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
     const bool bake = !dynamic && colors && mBakeRig.valid;
     for (const std::vector<utils::Entity>& chunk : runs) {
         const size_t n = chunk.size();
-        if (n < 2 && !bake) continue;   // nothing to merge it with
+        if (n < 2 && !bake && !anyFlat) continue;   // nothing to merge it with
         MergedGroup g;
         g.dynamic = dynamic;
         g.feat = feat;
@@ -1475,10 +1492,12 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
             out.push_back(std::move(g));
             continue;
         }
-        if (n < 2) continue;   // the bake refused: it keeps its original draw
+        if (n < 2 && !anyFlat) continue;   // the bake refused: it keeps its original draw
         g.xf.assign(n, mat4f{});
         float r2 = 0;
-        for (const auto& sp : prims) {
+        for (size_t primIndex = 0; primIndex < prims.size(); primIndex++) {
+            const ttp::rt::FlatWeld* weld = welds[primIndex];
+            const ttp::rt::GlbMeshPrim& sp = weld ? weld->prim : prims[primIndex];
             MergedPrim mp;
             const size_t nv = sp.pos.size() / 3;
             mp.pos.resize(nv);
@@ -1508,21 +1527,30 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
                 }
             }
             mp.idx = sp.idx;
-            // The same material the merged draw is built with, below.
-            const size_t primIndex = (size_t) (&sp - prims.data());
+            // The same material the merged draw is built with, below. A weld's
+            // overlays stay after its front range, in order: only the front
+            // is free to reorder (meshopt keeps each triangle's corner order,
+            // so the provoking corner survives it).
             if (isOpaque(rcm.getMaterialInstanceAt(ri0, primIndex))) {
-                reorderForVertexReuse(mp.idx.data(), mp.idx.size());
+                reorderForVertexReuse(mp.idx.data(),
+                        weld ? weld->baseTris * 3 : mp.idx.size());
             }
-            mp.vb = VertexBuffer::Builder()
-                    .vertexCount((uint32_t) nv)
-                    .bufferCount(3)
+            // vglbflat requires COLOR and overwrites it before anything reads it.
+            if (weld) mp.colors.assign(nv, 0);
+            VertexBuffer::Builder vbb;
+            vbb.vertexCount((uint32_t) nv)
+                    .bufferCount(weld ? 4 : 3)
                     .attribute(VertexAttribute::POSITION, 0,
                             VertexBuffer::AttributeType::FLOAT3)
                     .attribute(VertexAttribute::TANGENTS, 1,
                             VertexBuffer::AttributeType::FLOAT4)
                     .attribute(VertexAttribute::UV0, 2,
-                            VertexBuffer::AttributeType::FLOAT2)
-                    .build(*mEngine);
+                            VertexBuffer::AttributeType::FLOAT2);
+            if (weld) {
+                vbb.attribute(VertexAttribute::COLOR, 3, VertexBuffer::AttributeType::UBYTE4)
+                        .normalized(VertexAttribute::COLOR);
+            }
+            mp.vb = vbb.build(*mEngine);
             mp.ib = IndexBuffer::Builder()
                     .indexCount((uint32_t) mp.idx.size())
                     .bufferType(IndexBuffer::IndexType::UINT)
@@ -1537,6 +1565,10 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
                     fp.quats.data(), fp.quats.size() * sizeof(math::quatf), nullptr));
             fp.vb->setBufferAt(*mEngine, 2, VertexBuffer::BufferDescriptor(
                     fp.uvs.data(), fp.uvs.size() * sizeof(math::float2), nullptr));
+            if (weld) {
+                fp.vb->setBufferAt(*mEngine, 3, VertexBuffer::BufferDescriptor(
+                        fp.colors.data(), fp.colors.size() * sizeof(uint32_t), nullptr));
+            }
             fp.ib->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
                     fp.idx.data(), fp.idx.size() * sizeof(uint32_t), nullptr));
         }
@@ -2264,6 +2296,7 @@ TtpRenderer::~TtpRenderer() {
     if (mRoadVisMap) mEngine->destroy(mRoadVisMap);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
+    if (mGlbFlatMaterial) mEngine->destroy(mGlbFlatMaterial);
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);

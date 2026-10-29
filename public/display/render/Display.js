@@ -55,7 +55,7 @@ export const FEAT = {
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.
-const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade',
+const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade', 'vglbflat',
                    'vpoint', 'vcloud', 'vground', 'vvis', 'vroadvis', 'vpresent', 'vesm',
                    'vburst', 'voverlay', 'vsky', 'vshadow'];
 

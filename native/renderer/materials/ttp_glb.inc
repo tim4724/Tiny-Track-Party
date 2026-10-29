@@ -1,13 +1,14 @@
-// The half of the kit's GLB shading that vglb.mat and vglbfade.mat share: the
-// base colour, read the way gltfio expects it to be read.
+// The half of the kit's GLB shading that vglb.mat, vglbfade.mat and
+// vglbflat.mat share: the base colour, read the way gltfio expects it to be read.
 //
-// The two materials exist only because Filament bakes the BLENDING MODE into a
-// material — the solid kit is opaque, the ghost twins glb.cc rewrites are
-// alphaMode BLEND — and everything else about them is identical. This is that
-// everything else. What each still spells out for itself is its PARAMETER BLOCK,
-// because matc resolves #include inside the shader blocks and not inside the
-// material header; vglb.mat carries the note on why those names are a contract
-// with gltfio rather than a choice, and vglbfade.mat points at it.
+// They are separate materials because Filament bakes the BLENDING MODE and the
+// INTERPOLATION into a material: the solid kit is opaque, the ghost twins glb.cc
+// rewrites are alphaMode BLEND, and the welded flat bodies interpolate flat. The
+// base colour is the same in all three, and this is it. What each still spells
+// out for itself is its PARAMETER BLOCK, because matc resolves #include inside
+// the shader blocks and not inside the material header; vglb.mat carries the
+// note on why those names are a contract with gltfio rather than a choice, and
+// the other two point at it.
 vec4 ttpGlbBaseColor() {
     // Row-vector order, matching gltfio's own materials — matrixFromUvTransform
     // builds it to be applied that way round. Identity for everything this kit

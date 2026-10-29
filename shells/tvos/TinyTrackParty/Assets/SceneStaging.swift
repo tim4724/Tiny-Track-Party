@@ -94,7 +94,7 @@ enum SceneStaging {
     /// went the same way — the rubber layer rasterizes on the CPU and uploads,
     /// so there is no stamp material left to stage.
     static let materialNames = ["vcolor", "vblend", "vlit", "vroad",
-                                "vglb", "vglbfade", "vpoint", "vcloud", "vground",
+                                "vglb", "vglbfade", "vglbflat", "vpoint", "vcloud", "vground",
                                 "vvis", "vroadvis", "vpresent", "vesm",
                                 "vburst", "voverlay", "vsky", "vshadow"]
 

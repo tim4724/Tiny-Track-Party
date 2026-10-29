@@ -1,45 +1,15 @@
 #include "ttp/glb.h"
 
-#include <cstring>
-
 #include "ttp/canonical.h"
+#include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
 
 namespace ttp {
 namespace rt {
-namespace {
-
-constexpr uint32_t kGlbMagic = 0x46546C67u;  // 'glTF'
-constexpr uint32_t kChunkJson = 0x4E4F534Au;  // 'JSON'
-constexpr size_t kJsonPayloadStart = 20;      // 12-byte header + 8-byte chunk header
-
-uint32_t le32(const uint8_t* p) {
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
-}
-
-void put_le32(uint8_t* p, uint32_t v) {
-    p[0] = (uint8_t) (v & 0xFF);
-    p[1] = (uint8_t) ((v >> 8) & 0xFF);
-    p[2] = (uint8_t) ((v >> 16) & 0xFF);
-    p[3] = (uint8_t) ((v >> 24) & 0xFF);
-}
-
-}  // namespace
-
-bool json_chunk(const uint8_t* bytes, size_t len, std::string& out) {
-    if (!bytes || len < kJsonPayloadStart) return false;
-    if (le32(bytes) != kGlbMagic) return false;
-    if (le32(bytes + 16) != kChunkJson) return false;
-    const uint32_t jsonLen = le32(bytes + 12);
-    if (jsonLen > len - kJsonPayloadStart) return false;
-    out.assign((const char*) bytes + kJsonPayloadStart, jsonLen);
-    return true;
-}
 
 std::vector<uint8_t> ghost_glb(const uint8_t* bytes, size_t len) {
     std::string text;
-    if (!json_chunk(bytes, len, text)) return {};
+    if (!glb_json_chunk(bytes, len, text)) return {};
     ttp::Value doc;
     if (!ttp::json::Parser(text).parse(doc) || doc.type != ttp::Value::OBJ) return {};
 
@@ -96,29 +66,13 @@ std::vector<uint8_t> ghost_glb(const uint8_t* bytes, size_t len) {
     // ordered_stringify, not canonical: a glTF document's key order carries no
     // meaning to cgltf, and preserving the source's order keeps a diff of the
     // two chunks readable when one of these ever has to be debugged.
-    std::string json = ttp::ordered_stringify(doc);
-    // Pad to a 4-byte boundary with spaces, per the GLB spec — measured on the
-    // encoded BYTES (see the header).
-    while (json.size() % 4) json += ' ';
-
-    const uint32_t srcJsonLen = le32(bytes + 12);
-    const uint8_t* rest = bytes + kJsonPayloadStart + srcJsonLen;
-    const size_t restLen = len - kJsonPayloadStart - srcJsonLen;
-
-    std::vector<uint8_t> out(kJsonPayloadStart + json.size() + restLen);
-    std::memcpy(out.data(), bytes, 12);            // magic, version, (length)
-    put_le32(out.data() + 8, (uint32_t) out.size());
-    put_le32(out.data() + 12, (uint32_t) json.size());
-    put_le32(out.data() + 16, kChunkJson);
-    std::memcpy(out.data() + kJsonPayloadStart, json.data(), json.size());
-    if (restLen) std::memcpy(out.data() + kJsonPayloadStart + json.size(), rest, restLen);
-    return out;
+    return glb_with_json(bytes, len, ttp::ordered_stringify(doc));
 }
 
 std::vector<std::string> glb_image_uris(const uint8_t* bytes, size_t len) {
     std::vector<std::string> uris;
     std::string text;
-    if (!json_chunk(bytes, len, text)) return uris;
+    if (!glb_json_chunk(bytes, len, text)) return uris;
     ttp::Value doc;
     if (!ttp::json::Parser(text).parse(doc)) return uris;
     const ttp::Value* images = doc.find("images");

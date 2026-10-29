@@ -991,6 +991,15 @@ target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_war
 ttp_emscripten_cli(glbmesh_check)
 add_test(NAME glbmesh COMMAND glbmesh_check)
 
+# The flat-body weld (ttp/flat_weld.h) the car bodies' merged draw uses —
+# header-inline for the same reason, and checked on the shipped roster too,
+# since the overlapping decal faces it must keep in order are the kit's own.
+add_executable(flatweld_check runtimetest/flatweld_check.cc)
+target_link_libraries(flatweld_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(flatweld_check)
+add_test(NAME flatweld
+  COMMAND flatweld_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
+
 # The car contact shadow's SHAPE (ttp/car_footprint.h) — header-inline for the
 # same reason, and the picture depends on it: the four roster cars share a
 # bounding box, so the footprint is the only thing that tells them apart.

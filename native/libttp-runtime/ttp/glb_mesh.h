@@ -1,7 +1,8 @@
-// glb_mesh — a minimal GLB *mesh* reader: node names and their triangle
-// geometry, nothing else. It exists for the renderer's merged draw groups,
-// which need each kit mesh's vertices in a buffer of their own (gltfio keeps
-// its VertexBuffers private), and it reads the same bytes the shell already
+// glb_mesh — a minimal GLB reader: node names and their triangle geometry, plus
+// the container read and rewrite (glb_json_chunk, glb_with_json). It exists for
+// the renderer's merged draw groups, which need each kit mesh's vertices in a
+// buffer of their own (gltfio keeps its VertexBuffers private) and rewrite a
+// car GLB before loading it, and it reads the same bytes the shell already
 // provided (`TtpRenderer::provideAsset`), so nothing new crosses any boundary.
 //
 // HEADER-ONLY ON PURPOSE. The renderer and libttp-runtime may not link each
@@ -48,6 +49,11 @@ struct GlbMeshNode {
 };
 
 namespace glbmesh_detail {
+
+constexpr uint32_t kMagic = 0x46546C67u;      // "glTF"
+constexpr uint32_t kJson = 0x4E4F534Au;       // "JSON"
+constexpr uint32_t kBin = 0x004E4942u;        // "BIN\0"
+constexpr size_t kJsonPayloadStart = 20;      // 12-byte header + 8-byte chunk header
 
 inline uint32_t le32(const uint8_t* p) {
     return (uint32_t) p[0] | ((uint32_t) p[1] << 8)
@@ -158,14 +164,48 @@ inline bool readIndices(const Value& doc, size_t accessor,
 
 }  // namespace glbmesh_detail
 
+// The JSON chunk's payload, or false when `bytes` is not a GLB whose first
+// chunk is JSON. Every length is checked against the buffer handed over, not
+// against the header's own claim: a truncated download is a far likelier
+// caller mistake than a malicious file.
+inline bool glb_json_chunk(const uint8_t* bytes, size_t len, std::string& out) {
+    using namespace glbmesh_detail;
+    if (!bytes || len < kJsonPayloadStart || le32(bytes) != kMagic) return false;
+    if (le32(bytes + 16) != kJson) return false;
+    const uint32_t jsonLen = le32(bytes + 12);
+    if (jsonLen > len - kJsonPayloadStart) return false;
+    out.assign((const char*) bytes + kJsonPayloadStart, jsonLen);
+    return true;
+}
+
+// The same GLB with its JSON chunk replaced by `json` and every later chunk
+// copied through. The chunk is padded to 4 bytes with spaces, measured in
+// encoded BYTES (glb.h's ghost_glb says why that is the trap). `bytes` must
+// already have passed glb_json_chunk.
+inline std::vector<uint8_t> glb_with_json(const uint8_t* bytes, size_t len, std::string json) {
+    using namespace glbmesh_detail;
+    const auto put = [](uint8_t* p, uint32_t v) {
+        for (int i = 0; i < 4; i++) p[i] = (uint8_t) ((v >> (8 * i)) & 0xFF);
+    };
+    while (json.size() % 4) json += ' ';
+    const uint32_t srcJsonLen = le32(bytes + 12);
+    const uint8_t* rest = bytes + kJsonPayloadStart + srcJsonLen;
+    const size_t restLen = len - kJsonPayloadStart - srcJsonLen;
+    std::vector<uint8_t> out(kJsonPayloadStart + json.size() + restLen);
+    std::memcpy(out.data(), bytes, 12);            // magic, version, (length)
+    put(out.data() + 8, (uint32_t) out.size());
+    put(out.data() + 12, (uint32_t) json.size());
+    put(out.data() + 16, kJson);
+    std::memcpy(out.data() + kJsonPayloadStart, json.data(), json.size());
+    if (restLen) std::memcpy(out.data() + kJsonPayloadStart + json.size(), rest, restLen);
+    return out;
+}
+
 // Every glTF node that carries a mesh, with its triangles decoded. {} when the
 // bytes are not a GLB this reader fully understands — never a partial answer.
 inline std::vector<GlbMeshNode> read_glb_meshes(const uint8_t* bytes, size_t len) {
     using namespace glbmesh_detail;
-    constexpr uint32_t kMagic = 0x46546C67;      // "glTF"
-    constexpr uint32_t kJson = 0x4E4F534A;       // "JSON"
-    constexpr uint32_t kBin = 0x004E4942;        // "BIN\0"
-    if (!bytes || len < 20 || le32(bytes) != kMagic) return {};
+    if (!bytes || len < kJsonPayloadStart || le32(bytes) != kMagic) return {};
     // Chunk walk: JSON first (mandatory), then the BIN chunk if any.
     std::string json;
     const uint8_t* bin = nullptr;

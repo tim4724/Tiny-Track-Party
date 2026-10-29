@@ -266,6 +266,10 @@ to know and the rest is arithmetic. `native/renderer/CLAUDE.md` carries the two
 traps that live on the renderer's side of that line — the v-axis sign, and that
 the capture only means anything at the asset's rest pose.
 
+`ttp/flat_weld.h`, the car bodies' welded draw (`native/renderer/CLAUDE.md`,
+merged draw groups), is header-only for the same reason and gated by the
+`flatweld` ctest.
+
 ## The asset gallery and the model bench
 
 `/gallery-assets.html` holds the whole kit in one scene, built from data rather
