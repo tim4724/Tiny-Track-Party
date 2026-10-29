@@ -408,9 +408,8 @@ oldest it lets through) and owes the write to the other slot. A ring of three
 measured worse (every slot owes every upload), and so did issuing the uploads
 after `beginFrame`'s fence check instead of before it (the check is a poll, not
 a wait, and the uploads then sit between the check and cell 1's draws).
-The same backend caps the layer at 4096 wide (the Vulkan driver's own cap) and
-runs with material-instance uniform batching OFF; decided in
-`TtpRenderer::init` and `engineBuilder`. Any backend with one slot is unchanged.
+The same backend caps the layer at 4096 wide (the Vulkan driver's own cap),
+decided in `TtpRenderer::init`. Any backend with one slot is unchanged.
 
 ## The Android GL fallback: the backend THREAD is the frame
 
@@ -435,8 +434,11 @@ what was measured and not taken; the rules it left:
   frame's uploads and instance writes before cell 1 is recorded.
 - **The terrain sheets tile twice as coarse** (`mSheetTile`, `mSheetMinTris`):
   fewer draws for vertices the GPU is not bound on here.
-- **Material-instance uniform batching is off** (`engineBuilder`): one UBO per
-  instance costs this driver less than the per-draw range bind.
+- **Material-instance uniform batching is the pin's call, per GPU**
+  (`disable_material_instance_uniform_batching`, set by renderer string in
+  the fork's `OpenGLContext.cpp`, whose comment has each driver's reason):
+  off on the GE9215, on for the GE8300 Fire TV Stick. Never switch it for
+  the whole backend in `engineBuilder`.
 
 ## The static scene and the build
 

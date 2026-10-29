@@ -150,16 +150,11 @@ static Engine::Builder engineBuilder(backend::Backend backend) {
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
-#if defined(__ANDROID__)
-    // GL ONLY. Filament batches every material instance's uniforms into one
-    // UBO and binds each draw's slice by RANGE; the Android box's PowerVR GL
-    // driver pays for that per draw, and one UBO per instance is the cheaper
-    // shape there (as it is on ANGLE's Metal backend, where Filament turns the
-    // batching off itself). Vulkan keeps Filament's default.
-    if (backend == backend::Backend::OPENGL) {
-        builder.feature("material.enable_material_instance_uniform_batching", false);
-    }
-#endif
+    // `material.enable_material_instance_uniform_batching` stays at Filament's
+    // default: the pin's GL Bugs turn it off by renderer string for the GPU
+    // that stalls on it (the GE9215), and the GE8300 is the other way round.
+    // Never switch it for the whole GL backend here (the frame map,
+    // 2026-10-29).
     return builder;
 }
 

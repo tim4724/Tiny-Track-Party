@@ -293,7 +293,7 @@ program switches.
 | the rubber layer capped at 4096 wide on Android GL (the Vulkan driver's own cap) — SHIPPED 2026-10-22 | 34 -> 38 fps, 26 -> 22 skips/s |
 | fork patch: per-frame UBO writes through `glBufferSubData` instead of `glMapBufferRange` on PowerVR (`bugs.disable_map_buffer_for_updates`) | map+unmap 1.7 ms/frame -> 0.9; 38 -> 40 fps |
 | the rubber layer's textures in a ring of two on Android GL | transfer kicks 1.5 -> 0.4 ms a frame; fps unchanged (CPU-bound) |
-| material-instance uniform batching OFF on Android GL (`disable_material_instance_uniform_batching`) | 40 -> 46 fps; with the three above 49-50 fps / 10 skips (2026-10-22), 45-49 / 11-15 on 2026-10-23 |
+| material-instance uniform batching OFF on Android GL (`disable_material_instance_uniform_batching`) — withdrawn app-side 2026-10-29: the pin now sets it for the GE9215 only (see "The Fire TV Stick 4K") | 40 -> 46 fps; with the three above 49-50 fps / 10 skips (2026-10-22), 45-49 / 11-15 on 2026-10-23 |
 | **`mCellRing` 3 on Android GL** (the cell Views, streaks, car-shadow pair, flake-cull IB rotate, so no per-frame write lands on a buffer a queued frame reads) | **+6..+10 fps, -6 skips/s** in three batches (49/11 -> 55/5); the largest GL lever |
 | fork patch: no fence-emulated GPU timer on PowerVR (`disable_gpu_time_fence_emulation`; two sync objects and a waiting thread a frame, for a span that included CPU submit) | +1 fps / -1 skip over four interleaved pairs; `gpu ms` reads 0 on GL from here |
 | opaque renderables grouped by material through their priority + an engine flush around `beginFrame` (`applyGlPriorities`) | +2 fps / -2 skips (pairs 58/2, 59/1 against 56/4, 57/3); each half alone was within noise |
@@ -399,6 +399,36 @@ readout has no `gpu ms` any more (the fork reports no GPU time on this driver):
 judge a GL arm by fps and skips, the backend thread's CPU per frame
 (`/proc/<pid>/task/*/stat` over a window) and the trace. The FIRST arm after
 an install reads 4 fps low (45 against 49 on the same build); interleave pairs.
+
+## The Fire TV Stick 4K: a second GL GPU, 2026-10-28/29
+
+Fire TV Stick 4K 2018 (mantis): MT8695, four A53 at 754-1690 MHz under the
+`interactive` governor, PowerVR Rogue **GE8300**, GL ES 3.2 driver 1.9, Fire
+OS 6 (Android 7.1.2), 32-bit. Vulkan is 1.0.3, under Filament's 1.1 floor, so
+it races on GL. Pretzel, 8-car grid, the scale pinned at 960x540 (`--pin 0.5`),
+interleaved arms, first arm after an install discarded. Fps is the run's mean.
+
+| arm | 2P | 4P |
+|---|---|---|
+| the build on `46290663` | 40-45 | 24-27 |
+| cars hidden (`kFeatCars` off) | 52 | 39-40 |
+| car vertices parked off screen AFTER shading (probe) | — | = base |
+| car materials single-sided | — | null |
+| car merge off (gltfio draws) | — | -2 |
+| render scale 360 / 540 / 720 | flat to 720; 1080 costs | 28 / 26.5 / 25 |
+| CPU held at 1690 MHz (a spinner) | +3 | null |
+| **material-instance uniform batching ON** (Filament's default), shipped builds, 4 rounds in alternating order | 45.4 -> 47.9, up in 2 of 4 (and in 3 of 3 probe pairs); noisy | **26.9 -> 31.0, up in 4 of 4** (and in 5 of 5 probe pairs) |
+| `ttp-pin-2026-10-29` vs `ttp-pin-2026-10-23` (on this GPU only `glMapBufferRange` against `glBufferSubData`) | null over 7 pairs in both orders | null |
+| rendering through a FrameSkipper skip; `setSustainedPerformanceMode` | null | null |
+| vertex fog off; `debug.ttp.tags 0` | null; tags off is SLOWER | null; slower |
+
+The cars are ~13 ms of the 4P frame, and none of it is past vertex shading:
+parking their vertices after the vertex stage reads the same as the base, and
+their share is flat across the render scale, so it is neither fill nor a
+parameter-buffer overflow. Batching ON takes their share to ~7 ms, so this GPU
+answers the batching question the other way round from the GE9215, and
+`engineBuilder` no longer switches it for the whole GL backend. How the rest
+splits between vertex shading and per-draw work is unmeasured.
 
 ## Open
 
