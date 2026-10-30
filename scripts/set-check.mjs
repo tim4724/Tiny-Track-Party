@@ -3,7 +3,8 @@
 // left floating. A set-*.glb is cut into ISLANDS (triangles joined by a shared
 // corner, seams welded), and an island is held up when it stands on the floor
 // (the model's y = 0, the ground the renderer stands it on; a part sunk below
-// it is planted) or touches an island that is. Touching is the islands'
+// it is planted; for a piece modelled on terrain, that terrain: SET_GROUND)
+// or touches an island that is. Touching is the islands'
 // surfaces coming within TOUCH of each other, triangle against triangle, so a
 // part pushed into another counts and one a hair off does not; boxes would
 // call a bell hanging inside its arch held. What is left after the walk is
@@ -19,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { glbTriangles } from '../public/display/glbTriangles.js';
+import { SET_GROUND } from '../public/shared/tracks.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SET_DIR = path.join(ROOT, 'public/assets/toycar');
@@ -107,7 +109,24 @@ const boxOf = (pts) => {
 // The gap between two boxes (0 where they overlap).
 const boxGap = (a, b) => Math.hypot(...[0, 1, 2].map((d) => Math.max(0, a.lo[d] - b.hi[d], b.lo[d] - a.hi[d])));
 
+// The floor a piece stands on: y = 0, or for a piece modelled on terrain
+// (tracks.js SET_GROUND) the mounds the renderer lays under it, as
+// TtpRenderer::landforms and set_prototypes.py set_ground() have them.
+function floorOf(model) {
+  const mounds = (SET_GROUND[model] || []).filter((f) => f.kind === 'mound');
+  return (x, z) => {
+    let best = 0;
+    for (const f of mounds) {
+      const lx = x - (f.x || 0), lz = z - (f.z || 0);
+      const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
+      if (t < 1) best = Math.max(best, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
+    }
+    return best;
+  };
+}
+
 export function checkPiece(file) {
+  const floor = floorOf(path.basename(file, '.glb'));
   const tris = glbTriangles(fs.readFileSync(file));
   // Islands: triangles joined through a shared corner, corners welded by
   // position (the exporter splits them at every UV and normal seam).
@@ -150,7 +169,8 @@ export function checkPiece(file) {
   };
 
   // Held up: on the floor, or touching what is.
-  const held = islands.map((isl) => isl.box.lo[1] <= TOUCH);
+  const held = islands.map((isl) => isl.box.lo[1] <= TOUCH
+    || isl.tris.some(({ t }) => t.some((p) => p[1] <= floor(p[0], p[2]) + TOUCH)));
   const queue = [...held.keys()].filter((i) => held[i]);
   while (queue.length) {
     const i = queue.pop();
