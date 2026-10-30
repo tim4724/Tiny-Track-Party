@@ -971,7 +971,7 @@ export function runDisplayScenario(opts, ctx) {
           const m = by.get(p.model);
           if (m) { m.count++; return; }
           by.set(p.model, { model: p.model, label: labelOf(p.model), count: 1, index: i,
-                            size: 4 * p.hx * p.hz * Math.max(p.top - lay.groundY, 0) });
+                            size: 4 * p.hx * p.hz * Math.max(p.top - p.y, 0) });
         });
         return [...by.values()].sort((a, b) => b.size - a.size);
       }
@@ -1158,9 +1158,9 @@ export function runDisplayScenario(opts, ctx) {
       // its plan radius wide up to its top) or in another piece (inShape).
       // 0 is a clear view. Round p the ground is level and bare, as the
       // renderer leaves it under every piece it stands (buildSetPieces: the
-      // relief flattened out to FLAT_PAD past the footprint's corners, the
-      // scatter kept FLAT_PAD off it), which holds for a row the placement
-      // search moved without a build as well.
+      // relief cut down to the piece's foot out to FLAT_PAD past its
+      // footprint, the scatter kept FLAT_PAD off it), which holds for a row
+      // the placement search moved without a build as well.
       const FLAT_PAD = 1;
       // Where the pieces stand for the sight lines: the layout, or while the
       // placement search runs, its moves too.
@@ -1176,9 +1176,13 @@ export function runDisplayScenario(opts, ctx) {
           return Math.abs(dx * p.ax + dz * p.az) < p.hx + FLAT_PAD && Math.abs(dz * p.ax - dx * p.az) < p.hz + FLAT_PAD;
         };
         const trees = scatter.filter(([x, z, r]) => x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r && !inFoot(x, z));
-        const flatR = Math.hypot(p.hx, p.hz) + FLAT_PAD;
-        const ground = (x, z) => ((x - p.cx) ** 2 + (z - p.cz) ** 2 < flatR * flatR
-          ? Math.min(display.groundY(x, z), layout.groundY) : display.groundY(x, z));
+        // Over p's own footprint (the clearing's rectangle) the ground is at
+        // most its foot. That is the clearing for a piece the search moved
+        // without a build; for a piece that brings its own ground (SET_GROUND)
+        // it is that ground left out of its own sight lines, as it was while
+        // the mountain was part of the model — its aim points are the model's
+        // box and sit inside it. Other pieces' lines still meet it.
+        const ground = (x, z) => (inFoot(x, z) ? Math.min(display.groundY(x, z), p.y) : display.groundY(x, z));
         const [into] = crossing(p, eye, c);
         // The other pieces whose footprint the line crosses, and where.
         const across = [];

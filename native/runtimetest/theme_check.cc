@@ -116,6 +116,20 @@ Value themeOf(const rt::Theme& t) {
   o.set("hills", colors(t.hills));
   o.set("scenery", sceneryOf(t.scenery));
   o.set("landmarks", colors(t.landmarks));
+  {
+    // The landforms the codegen carried (tracks.js `land` and SET_GROUND).
+    Value land = Value::Arr();
+    for (const rt::Landform& l : t.land) {
+      Value e = Value::Obj();
+      e.set("kind", u(l.kind)); e.set("piece", f((float) l.piece));
+      e.set("u", f(l.u)); e.set("lat", f(l.lat)); e.set("yaw", f(l.yaw));
+      e.set("x", f(l.x)); e.set("z", f(l.z)); e.set("len", f(l.len));
+      e.set("r", f(l.r)); e.set("r1", f(l.r1)); e.set("w", f(l.w)); e.set("rz", f(l.rz));
+      e.set("h", f(l.h)); e.set("h1", f(l.h1)); e.set("top", f(l.top)); e.set("shape", f(l.shape));
+      land.push(e);
+    }
+    o.set("land", land);
+  }
   o.set("structure", u(t.structure));
   o.set("groundKind", u(t.groundKind));
   o.set("fogTune", f(t.fogTune));

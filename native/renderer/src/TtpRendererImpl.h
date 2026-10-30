@@ -362,6 +362,7 @@ struct TtpRenderer::TrackBin {
     std::vector<std::string> setModels;
     struct SetPiece { uint32_t slot; float u, lat, yaw, y, scale; };
     std::vector<SetPiece> setPieces;
+    std::vector<ttp::rt::Landform> land;   // theme.land: the terrain's shapes
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
     std::vector<uint32_t> lmKinds;       // 0 gnome, 1 doghouse, 2 picnic
     float clDensity = 0;                 // clutter (only 'flower' ported)
