@@ -717,6 +717,16 @@ live-lit with nothing to say so, which is why `scripts/lib/glb-compose.mjs`
 renames them; a kit model shipped whole can carry the same flaw (the budget
 names it).
 
+**A set piece's MOVING PART is a node named `anim_...`** (the grammar is
+`ttp/set_motion.h`, the drawing `TtpRendererMotion.cpp`): baked unlit like
+the static runs but in its node's frame, light frozen at rest, and moved by one
+transform a frame that is a closed form of the scene clock and the cars, so it
+has no state to reset. Hence the verbs: spins about the part's own axis,
+sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
+runs inside something opaque. A part that travels leaves the sun bake; one that
+moves in place keeps its rest shadow. The static merge leaves every `anim_`
+slot alone, so a merge change (per-placement bakes) must too.
+
 **New world content is priced on the host first, the box once per batch.**
 `npm run budget:scene` counts what each cell submits over a whole lap (the
 count is decided in this C++ before any backend sees it, so it transfers to

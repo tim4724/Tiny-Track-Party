@@ -2259,6 +2259,8 @@ void TtpRenderer::releaseStatic() {
     mPropAssets.clear();
     mPropInstances.clear();
     mPropSpins.clear();
+    mSetMovers.clear();
+    mSetPaths.clear();
     mSetAssets.clear();
     mSetInstances.clear();
     mSetFeet.clear();
