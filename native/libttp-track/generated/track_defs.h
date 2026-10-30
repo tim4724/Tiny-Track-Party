@@ -1666,6 +1666,8 @@ constexpr SetDef kSet_gauntlet[] = {
   { "set-block-castle", 0x1.e9e1b089a0275p-1, 0x1.9333333333333p+4, 0x1.8p+4, 0x0p+0, 0x1.4cccccccccccdp+0 },
   { "set-toy-soldiers", 0x1.e12d77318fc5p-1, 0x1.5p+3, 0x1.3p+6, 0x0p+0, 0x1p+0 },
   { "set-toy-robot", 0x1.c5d63886594afp-1, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-toy-soldiers", 0x1.4cccccccccccdp-1, 0x1.8p+3, 0x1.4p+4, 0x0p+0, 0x1p+0 },
+  { "set-toy-soldiers", 0x1.3333333333333p-3, 0x1.8p+3, 0x1.4p+4, 0x0p+0, 0x1p+0 },
 };
 
 constexpr SegDef kS_helix[] = {
@@ -1704,7 +1706,7 @@ constexpr SetDef kSet_helix[] = {
   { "set-marble-run", 0x1.1b8bac710cb29p-2, 0x1.9p+4, -0x1.06p+7, 0x0p+0, 0x1.4cccccccccccdp+0 },
   { "set-slinky", 0x1.44189374bc6a8p-1, 0x1.dp+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-spinning-top", 0x1.28f5c28f5c28fp-3, 0x1.5p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-marbles", 0x1.eb851eb851eb8p-6, -0x1.4p+3, 0x1.68p+7, 0x0p+0, 0x1p+0 },
+  { "set-marbles", 0x1.47ae147ae147bp-4, -0x1.4p+3, 0x1.68p+7, 0x0p+0, 0x1p+0 },
 };
 
 constexpr SegDef kS_skyline[] = {
@@ -1744,7 +1746,7 @@ constexpr FurnDef kBoxes_skyline[] = {
 };
 constexpr SetDef kSet_skyline[] = {
   { "set-flight-desk", 0x1.f03afb7e90ff9p-2, -0x1.a19999999999ap+4, 0x1.14p+7, 0x0p+0, 0x1.8p+0 },
-  { "set-cardboard-box", 0x1.59b3d07c84b5ep-6, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0 },
+  { "set-cardboard-box", 0x1.f126e978d4fdfp-1, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0 },
 };
 
 constexpr SegDef kS_gate0[] = {
@@ -1941,7 +1943,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, kOils_crag, 2, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 5, nullptr, 0 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 6, nullptr, 0 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 3, nullptr, 0 },
-  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 3, nullptr, 0 },
+  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 5, nullptr, 0 },
   { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 4, nullptr, 0 },
   { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 2, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
