@@ -259,16 +259,32 @@ export const SET_GROUND = {
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
   'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 3 }],
-  'set-wash-bed': [{ kind: 'plain', len: 32, r: 7, w: 8, h: 3 }],
+  'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 3 }],
   // Gulch's mine: the rock spur the adit is cut into (behind it, -X) and the
-  // yard levelled in front of it, toward the road; each length of the ore
-  // line lies on the floor of its own shallow cutting, so the line never
-  // steps where the land rolls.
+  // yard levelled in front of it, toward the road.
   'set-mine-portal': [
     { kind: 'plain', yaw: 90, z: 5, len: 16, r: 6, w: 6 },
     { kind: 'ridge', x: -14, len: 34, r: 10, h: 10, top: 0.3 }
   ],
-  'set-ore-line': [{ kind: 'plain', len: 16, r: 6, w: 6, h: 1.2 }],
+  // Its ore line (placed on the portal's own anchor), from the yard round the
+  // start straight and the east bend to the headframe: the shallow cutting it
+  // lies in, one plain per chord of its route, so it never steps where the
+  // land rolls. The builder lays the rails on a smooth curve through the
+  // chords' ends (set_prototypes.py ore_line). A form's x/z is in its own
+  // turned frame (TtpRenderer::setupTerrain).
+  'set-ore-line': [
+    { kind: 'plain', yaw: 71.57, x: 0.16, z: 1.9, len: 2.85, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 21.16, x: 2.66, z: 3.66, len: 3.32, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 11.32, x: 3.53, z: 8.42, len: 7.27, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: -22.05, x: 9.58, z: 12.33, len: 8.4, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 2.5, x: 1.85, z: 22.35, len: 6.66, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: -39.05, x: 18.41, z: 22.88, len: 9.78, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: -11.54, x: 3.5, z: 41.33, len: 16.39, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: -1.42, x: -5.26, z: 57.47, len: 16.2, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 31.02, x: -39.61, z: 60.12, len: 15.21, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 38.44, x: -48.02, z: 70.02, len: 15.94, r: 6, w: 6, h: 1.2 },
+    { kind: 'plain', yaw: 67.13, x: -79.57, z: 53.39, len: 16.06, r: 6, w: 6, h: 1.2 }
+  ],
   // Crag's flank the sauropod weathers out of, its summit behind (-X).
   'set-sauropod': [{ kind: 'mound', x: -18, h: 17, r: 24, r1: 26, rz: 48, shape: 1.3 }]
 };
@@ -509,22 +525,23 @@ export const TRACKS = {
     name: 'Gulch', waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine: the adit cut into a spur under the long ridge north of
-    // the start straight, an ore line winding out of its yard across the
-    // north to the headframe over the shaft past the east bend, its wheel
-    // turning; spoil heaps at both workings, timber supports round the lap.
+    // the start straight, one ore line winding out of its yard along the
+    // whole start straight and round the east bend to the headframe over the
+    // shaft up the east side, its wheel turning, carts of ore riding the line
+    // from the adit to the shaft; spoil heaps at both workings and out by the
+    // far bends, timber supports round the lap.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 26 },
-      { model: 'set-headframe', u: 0.1551, lat: 29.9, yaw: 59 },
-      { model: 'set-ore-line', u: 0.0311, lat: 25.7, yaw: -6 },
-      { model: 'set-ore-line', u: 0.0752, lat: 25.5, yaw: 12 },
-      { model: 'set-ore-line', u: 0.1164, lat: 25.4, yaw: -22 },
-      { model: 'set-ore-line', u: 0.1328, lat: 26.2, yaw: 13 }
+      { model: 'set-ore-line', u: 0.018, lat: 26 },
+      { model: 'set-headframe', u: 0.2113, lat: 24.8, yaw: 77 }
     ],
     // the ridge the mine is in, its spoil heaps
     land: [
       { kind: 'ridge', u: 0.0004, lat: 60, len: 80, r: 24, h: 20, top: 0.3 },
-      { kind: 'ridge', u: 0.1564, lat: 49.6, r: 10, h: 6, top: 0.15 },
-      { kind: 'ridge', u: 0.9715, lat: 23.9, r: 9, h: 5, top: 0.15 }
+      { kind: 'ridge', u: 0.202, lat: 43.4, len: 6, r: 10, h: 6, top: 0.15 },
+      { kind: 'ridge', u: 0.9715, lat: 23.9, r: 9, h: 5, top: 0.15 },
+      { kind: 'ridge', u: 0.3367, lat: 22.9, len: 14, r: 11, h: 7, top: 0.15 },
+      { kind: 'ridge', u: 0.8963, lat: 22.6, len: 14, r: 11, h: 7, top: 0.15 }
     ]
   },
   crag: {
@@ -538,9 +555,13 @@ export const TRACKS = {
       { model: 'set-sauropod', u: 0.1012, lat: -15.8, yaw: 163 },
       { model: 'set-dino-dig', u: 0.325, lat: 14 }
     ],
-    // the east crag behind the dig
+    // the crag itself: the west crag running down from the skeleton's flank
+    // along the long straight, the east crag behind the dig, the south crag
+    // past the far loop
     land: [
-      { kind: 'ridge', u: 0.3353, lat: 33.6, yaw: -171, len: 60, r: 18, h: 9, top: 0.2 }
+      { kind: 'ridge', u: 0.0601, lat: -46.5, yaw: 147, len: 50, r: 16, h: 13, top: 0.25 },
+      { kind: 'ridge', u: 0.3353, lat: 33.6, yaw: -171, len: 60, r: 18, h: 9, top: 0.2 },
+      { kind: 'ridge', u: 0.8066, lat: 34.3, yaw: 25, len: 50, r: 14, h: 11, top: 0.2 }
     ]
   },
   sidewinder: {
