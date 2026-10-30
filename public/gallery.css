@@ -284,6 +284,8 @@ section.stage iframe {
 .kit-row:hover { background: rgba(255,255,255,0.08); }
 .kit-row__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kit-row__tris { color: #6f7699; font-size: 10px; }
+/* The landmark stage's buffer height beside its Res toggle. */
+.lm-lines { color: #8b93b8; font-size: 11px; font-variant-numeric: tabular-nums; min-width: 5.5em; }
 /* A concept car's own description, under its name. */
 .kit-row__note { flex-basis: 100%; padding-bottom: 4px; color: #8b93b8; font-size: 10px; line-height: 1.4; }
 /* Already in the game: dimmed, because the eye is here for the candidates. */
@@ -291,6 +293,30 @@ section.stage iframe {
 .kit-row--in .kit-row__name::after { content: ' ✓'; }
 /* Where the camera is standing right now. */
 .kit-row--at { background: #26264e; color: #fff; }
+
+/* Landmark gallery (gallery-landmarks.html): segmented pickers (players,
+   camera). The picked one wears the nav's own active look. */
+.seg { gap: 2px; }
+.seg button.ctrl.is-on { background: #2a2a5a; color: #fff; border-color: #5060c0; }
+/* The other cells' landmarks while SPREAD is on: a step quieter than the focus. */
+.kit-row--also { background: #1b1b38; color: #c8c8f0; }
+/* The list stands BESIDE the scene, not over it: a split's top-right cell has
+   its own place pill and view in that corner, and judging a landmark is
+   judging the whole cell. Overlays again where the screen is too narrow. */
+.stage--beside { display: flex; }
+.stage--beside iframe { flex: 1 1 auto; min-width: 0; width: auto; }
+.stage--beside .legend {
+  position: static; flex: none; max-height: none;
+  border-radius: 0; border-width: 0 0 0 1px;
+}
+@media (max-width: 640px) {
+  .stage--beside { display: block; }
+  .stage--beside iframe { width: 100%; }
+  .stage--beside .legend {
+    position: absolute; max-height: calc(100% - 24px);
+    border-radius: 10px; border-width: 1px;
+  }
+}
 
 /* Mobile: one card per row + compact, touch-friendly header.
    - Header becomes a 3-col grid: title spans the top row, and Display /

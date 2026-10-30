@@ -47,6 +47,11 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
                       'safe_insets',
                       'camera', 'look', 'fog', 'shadows',
+                      // The landmark gallery's: where the set pieces and scenery stand
+                      // and where one may, a camera and a parked car per cell to look
+                      // at them with, and the ground a sight line to one must clear.
+                      'set_layout', 'scatter_layout', 'spot_issue', 'cell_look', 'cell_look_clear',
+                      'car_pose', 'car_pose_clear', 'ground_y',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
                       'biome', 'showcase',
@@ -207,7 +212,7 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
 test('the asset showroom stages every scenery GLB in the kit', async () => {
   const M = await load();
   for (const name of ['ttp_theme_showcase_models', 'ttp_theme_showcase_prop_models',
-                      'ttp_showcase_inventory_json']) {
+                      'ttp_theme_showcase_set_models', 'ttp_showcase_inventory_json']) {
     assert.equal(typeof M[`_${name}`], 'function',
       `_${name} is not exported — gallery-assets.js would fail at the cwrap call`);
   }
@@ -246,9 +251,17 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
 
+  // The set ROW: every catalogue track's pieces, so a placed model the showroom
+  // never stands would be a prototype nobody can look at.
+  const stagedSet = JSON.parse(M.cwrap('ttp_theme_showcase_set_models', 'string', [])());
+  const catalogue = Object.keys(TRACKS).flatMap((id) => JSON.parse(setModels(id)));
+  assert.deepEqual([...new Set(catalogue)].filter((m) => !stagedSet.includes(m)), [],
+    'a track places a set piece the asset gallery never shows');
+
   const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', [])());
   assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
   assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
+  assert.deepEqual(inv.set, stagedSet, 'the legend lists the set row too');
   // 15 since the snowman and the wind-up train were retired as procedural kinds
   // — the snow and playroom biomes plant Kenney models for both now. The literal
   // is the tripwire: a kind added and not staged, or retired and left behind,

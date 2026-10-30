@@ -292,9 +292,29 @@ void n_ttp_display_camera(JNIEnv* env, jclass, jint a0) {
     ttp_display_camera((int) a0);
 }
 
+void n_ttp_display_car_pose(JNIEnv* env, jclass, jint a0, jdouble a1, jdouble a2) {
+    (void) env;
+    ttp_display_car_pose((int) a0, (double) a1, (double) a2);
+}
+
+void n_ttp_display_car_pose_clear(JNIEnv* env, jclass) {
+    (void) env;
+    ttp_display_car_pose_clear();
+}
+
 void n_ttp_display_cell_cards(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_cell_cards((uint32_t) a0);
+}
+
+void n_ttp_display_cell_look(JNIEnv* env, jclass, jint a0, jdouble a1, jdouble a2, jdouble a3, jdouble a4, jdouble a5, jdouble a6, jdouble a7) {
+    (void) env;
+    ttp_display_cell_look((int) a0, (double) a1, (double) a2, (double) a3, (double) a4, (double) a5, (double) a6, (double) a7);
+}
+
+void n_ttp_display_cell_look_clear(JNIEnv* env, jclass) {
+    (void) env;
+    ttp_display_cell_look_clear();
 }
 
 jint n_ttp_display_cell_rects(JNIEnv* env, jclass, jfloatArray outArr, jint max) {
@@ -395,6 +415,11 @@ jint n_ttp_display_frame(JNIEnv* env, jclass, jdouble a0) {
 jdouble n_ttp_display_gpu_ms(JNIEnv* env, jclass) {
     (void) env;
     return (jdouble) ttp_display_gpu_ms();
+}
+
+jdouble n_ttp_display_ground_y(JNIEnv* env, jclass, jdouble a0, jdouble a1) {
+    (void) env;
+    return (jdouble) ttp_display_ground_y((double) a0, (double) a1);
 }
 
 void n_ttp_display_hold(JNIEnv* env, jclass, jint a0) {
@@ -506,6 +531,16 @@ void n_ttp_display_scale_scene(JNIEnv* env, jclass, jdouble a0) {
     ttp_display_scale_scene((double) a0);
 }
 
+jbyteArray n_ttp_display_scatter_layout(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_scatter_layout());
+}
+
+jbyteArray n_ttp_display_set_layout(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_set_layout());
+}
+
 jint n_ttp_display_settled(JNIEnv* env, jclass) {
     (void) env;
     return (jint) ttp_display_settled();
@@ -524,6 +559,11 @@ void n_ttp_display_showcase(JNIEnv* env, jclass, jint a0) {
 jbyteArray n_ttp_display_slot_ids_json(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_display_slot_ids_json());
+}
+
+jbyteArray n_ttp_display_spot_issue(JNIEnv* env, jclass, jdouble a0, jdouble a1, jdouble a2, jdouble a3, jint a4) {
+    (void) env;
+    return toBytes(env, ttp_display_spot_issue((double) a0, (double) a1, (double) a2, (double) a3, (int) a4));
 }
 
 void n_ttp_display_steer_bars(JNIEnv* env, jclass, jint a0) {
@@ -1221,6 +1261,11 @@ jbyteArray n_ttp_theme_showcase_prop_models(JNIEnv* env, jclass) {
     return toBytes(env, ttp_theme_showcase_prop_models());
 }
 
+jbyteArray n_ttp_theme_showcase_set_models(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_theme_showcase_set_models());
+}
+
 jbyteArray n_ttp_track_build_json(JNIEnv* env, jclass, jbyteArray a0, jint a1, jint a2) {
     CStr s0(env, a0);
     return toBytes(env, ttp_track_build_json(s0.get(), (int) a1, (uint32_t) a2));
@@ -1450,7 +1495,11 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_build", "([B[B)I", (void*) n_ttp_display_build },
     { "ttp_display_burst", "([BDD)V", (void*) n_ttp_display_burst },
     { "ttp_display_camera", "(I)V", (void*) n_ttp_display_camera },
+    { "ttp_display_car_pose", "(IDD)V", (void*) n_ttp_display_car_pose },
+    { "ttp_display_car_pose_clear", "()V", (void*) n_ttp_display_car_pose_clear },
     { "ttp_display_cell_cards", "(I)V", (void*) n_ttp_display_cell_cards },
+    { "ttp_display_cell_look", "(IDDDDDDD)V", (void*) n_ttp_display_cell_look },
+    { "ttp_display_cell_look_clear", "()V", (void*) n_ttp_display_cell_look_clear },
     { "ttp_display_cell_rects", "([FI)I", (void*) n_ttp_display_cell_rects },
     { "ttp_display_cells", "([B)V", (void*) n_ttp_display_cells },
     { "ttp_display_chase_rig_json", "(DDDDDD)[B", (void*) n_ttp_display_chase_rig_json },
@@ -1470,6 +1519,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_fog", "(I)V", (void*) n_ttp_display_fog },
     { "ttp_display_frame", "(D)I", (void*) n_ttp_display_frame },
     { "ttp_display_gpu_ms", "()D", (void*) n_ttp_display_gpu_ms },
+    { "ttp_display_ground_y", "(DD)D", (void*) n_ttp_display_ground_y },
     { "ttp_display_hold", "(I)V", (void*) n_ttp_display_hold },
     { "ttp_display_hud", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_hud },
     { "ttp_display_kit_field", "(I)V", (void*) n_ttp_display_kit_field },
@@ -1490,10 +1540,13 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_scale_poll", "(DDDDD[D)I", (void*) n_ttp_display_scale_poll },
     { "ttp_display_scale_resized", "(D)V", (void*) n_ttp_display_scale_resized },
     { "ttp_display_scale_scene", "(D)V", (void*) n_ttp_display_scale_scene },
+    { "ttp_display_scatter_layout", "()[B", (void*) n_ttp_display_scatter_layout },
+    { "ttp_display_set_layout", "()[B", (void*) n_ttp_display_set_layout },
     { "ttp_display_settled", "()I", (void*) n_ttp_display_settled },
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },
     { "ttp_display_showcase", "(I)V", (void*) n_ttp_display_showcase },
     { "ttp_display_slot_ids_json", "()[B", (void*) n_ttp_display_slot_ids_json },
+    { "ttp_display_spot_issue", "(DDDDI)[B", (void*) n_ttp_display_spot_issue },
     { "ttp_display_steer_bars", "(I)V", (void*) n_ttp_display_steer_bars },
     { "ttp_dispose", "(I)V", (void*) n_ttp_dispose },
     { "ttp_events_json", "(I)[B", (void*) n_ttp_events_json },
@@ -1626,6 +1679,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_theme_set_models", "([B)[B", (void*) n_ttp_theme_set_models },
     { "ttp_theme_showcase_models", "()[B", (void*) n_ttp_theme_showcase_models },
     { "ttp_theme_showcase_prop_models", "()[B", (void*) n_ttp_theme_showcase_prop_models },
+    { "ttp_theme_showcase_set_models", "()[B", (void*) n_ttp_theme_showcase_set_models },
     { "ttp_track_build_json", "([BII)[B", (void*) n_ttp_track_build_json },
     { "ttp_track_frames_json", "([B[B)[B", (void*) n_ttp_track_frames_json },
     { "ttp_track_json", "([BII)[B", (void*) n_ttp_track_json },

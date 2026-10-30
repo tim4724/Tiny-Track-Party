@@ -35,6 +35,12 @@ npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|3|4] [--track 
 npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap,
                                   # against tests/fixtures/scene-budget.json. Run it
                                   # after adding scenery; the box is the verdict per batch
+npm run score:landmarks [-- --track id] [--board dir]
+                                  # how long a racer sees each set piece over a lap, and
+                                  # why not; --board photographs every model for review
+npm run place:landmarks [-- --track id] [--write]
+                                  # better spots for the pieces a racer barely sees;
+                                  # --write moves them in tracks.js (then rebuild, re-score)
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
                                   # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)

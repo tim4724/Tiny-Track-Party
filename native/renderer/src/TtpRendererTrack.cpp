@@ -218,6 +218,13 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
     return mGroundGrid.at(x, z);
 }
 
+// A berm is the hill a raised stretch of road stands on, and it is drawn over
+// the ground rather than folded into it, so a sight line has to meet both.
+float TtpRenderer::groundY(float x, float z) const {
+    if (!mTrack) return 0.0f;
+    return std::max(groundSurfaceY(*mTrack, x, z), bermY(*mTrack, x, z));
+}
+
 // The painted road — a direct port of render/track.js buildRoad's sweep: a
 // cross-section (skirt/kerb/gap/line/asphalt/dash) swept along a fine
 // uniform resample, per-side kerb striping banded by EACH KERB EDGE's own

@@ -107,9 +107,15 @@ TTP_ABI const char* ttp_theme_showcase_models(void);
  * ttp_theme_showcase_models's biome-independence rule. */
 TTP_ABI const char* ttp_theme_showcase_prop_models(void);
 
+/* The set-piece GLBs a showcase build stages, handed back as "set<i>.glb": every
+ * catalogue track's pieces in one row, under the same biome-independence rule.
+ * A shell building the showroom fetches THESE in place of ttp_theme_set_models
+ * (whose answer for the showroom's own id is empty). */
+TTP_ABI const char* ttp_theme_showcase_set_models(void);
+
 /* What that world holds, as JSON, for the gallery's legend:
  *
- *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…]}
+ *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…],"set":[…]}
  *
  * HUMAN-READABLE captions, not ids: nothing resolves by them. They come from
  * here because the layer that decides what is staged should be the one that says

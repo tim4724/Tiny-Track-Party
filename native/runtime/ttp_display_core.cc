@@ -184,6 +184,26 @@ const char* ttp_display_kit_field_layout(void) {
     return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
 }
 
+const char* ttp_display_set_layout(void) {
+    // The renderer owns the string, as with the kit field above.
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->setLayout()
+                                        : TtpRenderer::kNoSetLayout;
+}
+
+const char* ttp_display_scatter_layout(void) {
+    // The renderer owns the string, as with the kit field above.
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->scatterLayout() : "[]";
+}
+
+double ttp_display_ground_y(double x, double z) {
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->groundY((float) x, (float) z) : 0.0;
+}
+
+const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int skip) {
+    return (g_disp && g_disp->renderer)
+            ? g_disp->renderer->spotIssue((float) x, (float) z, (float) lo, (float) hi, skip) : "";
+}
+
 // What a STATIC scene is OF — the one rule, read by the build below (a
 // resident scene of this key is kept, and only the field rebuilt) and by the
 // blob walk's plannedKey() (the sun bake is part of that scene). The ROSTER is
@@ -671,6 +691,25 @@ void ttp_display_look(double eyeX, double eyeY, double eyeZ,
 
 void ttp_display_look_fov(double deg) {
     if (g_disp) g_disp->freeFov = (float) deg;
+}
+
+void ttp_display_cell_look(int cell, double ex, double ey, double ez,
+                           double tx, double ty, double tz, double fov) {
+    if (!g_disp) return;
+    ttp::rt::setCellLook(*g_disp, cell, { (float) ex, (float) ey, (float) ez },
+                         { (float) tx, (float) ty, (float) tz }, (float) fov);
+}
+
+void ttp_display_cell_look_clear(void) {
+    if (g_disp) g_disp->cellLooks.clear();
+}
+
+void ttp_display_car_pose(int cell, double s, double lat) {
+    if (g_disp) ttp::rt::setCarPose(*g_disp, cell, s, lat);
+}
+
+void ttp_display_car_pose_clear(void) {
+    if (g_disp) g_disp->carPoses.clear();
 }
 
 const char* ttp_display_chase_rig_json(double x, double y, double z, double fx, double fz,

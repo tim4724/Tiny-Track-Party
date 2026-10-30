@@ -99,7 +99,7 @@ const TAG_LIFT_EM = 0.4;
 // What a tag says: the car's name, or its seat for a car with none.
 const tagName = (c, id) => c.name || ('P' + id);
 
-const MAX_BUFFER_H = 2160;
+export const MAX_BUFFER_H = 2160;
 // How many drawn frames of the CURRENT scene the canvas must hold before a
 // hidden scene may stop drawing (see _hiddenIdle). Two, because the boot's
 // first reveal is two frames into the loop and cuts straight in, unfaded.
@@ -422,6 +422,9 @@ export class Stage {
     this.perf.dpr = this._dpr;
     return { w, h };
   }
+
+  // The drawing buffer's height in lines: where the render scale stands.
+  get bufferLines() { return this._canvas.height; }
 
   // THE PAGE WAS RESIZED UNDER US — a drag, fullscreen in or out, DevTools —
   // as opposed to _onResize performing a size the rule chose.
@@ -1176,22 +1179,26 @@ export class Stage {
     }
     this._free = f;
     if (this.display) this.display.camera(CAM.FREE);
+    // Every listener below hangs off this, so disableUserCamera can take them all back.
+    this._freeAbort = new AbortController();
+    const signal = this._freeAbort.signal;
 
     const editable = (t) => !!t && (t.isContentEditable ||
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
     let dragging = false, lx = 0, ly = 0;
     dom.style.cursor = 'grab';
+    this._freePointer = dom.style.pointerEvents;
     dom.style.pointerEvents = 'auto';
     dom.addEventListener('pointerdown', (e) => {
       dragging = true; lx = e.clientX; ly = e.clientY;
       dom.style.cursor = 'grabbing';
       dom.setPointerCapture(e.pointerId);
-    });
+    }, { signal });
     dom.addEventListener('pointerup', (e) => {
       dragging = false;
       dom.style.cursor = 'grab';
       try { dom.releasePointerCapture(e.pointerId); } catch (_) { /* already gone */ }
-    });
+    }, { signal });
     dom.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       f.yaw -= (e.clientX - lx) * 0.005;
@@ -1199,7 +1206,7 @@ export class Stage {
       // with an epsilon short of vertical (where the look basis degenerates).
       f.pitch = Math.max(-1.55, Math.min(1.55, f.pitch - (e.clientY - ly) * 0.005));
       lx = e.clientX; ly = e.clientY;
-    });
+    }, { signal });
     // The wheel flies forward/back along the look direction, scaled by the
     // framing distance so a notch feels the same near or far.
     dom.addEventListener('wheel', (e) => {
@@ -1208,7 +1215,7 @@ export class Stage {
       const d = this._freeDir();
       const step = Math.max(8, f.fly) * 0.0009 * -e.deltaY;
       f.eye.x += d.x * step; f.eye.y += d.y * step; f.eye.z += d.z * step;
-    }, { passive: false });
+    }, { passive: false, signal });
 
     const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
     window.addEventListener('keydown', (e) => {
@@ -1216,10 +1223,23 @@ export class Stage {
       if (editable(e.target)) return; // don't hijack keys typed into the debug panel
       f.keys.add(e.code);
       e.preventDefault();
-    });
-    window.addEventListener('keyup', (e) => f.keys.delete(e.code));
-    window.addEventListener('blur', () => f.keys.clear()); // no keyup arrives if focus leaves mid-press
+    }, { signal });
+    window.addEventListener('keyup', (e) => f.keys.delete(e.code), { signal });
+    window.addEventListener('blur', () => f.keys.clear(), { signal }); // no keyup arrives if focus leaves mid-press
     return f;
+  }
+
+  // Drop the free camera: its listeners, its cursor, and the FREE mode itself, so
+  // the next _syncCells picks whichever camera the stage's flags now name. Only the
+  // landmark gallery leaves free mode without a reload; every other caller opens it
+  // for the page's life. A later enableUserCamera starts a fresh one.
+  disableUserCamera() {
+    if (!this._free) return;
+    this._freeAbort.abort();
+    this._freeAbort = null;
+    this._free = null;
+    this.container.style.cursor = '';
+    this.container.style.pointerEvents = this._freePointer;
   }
 
   _freeDir() {
