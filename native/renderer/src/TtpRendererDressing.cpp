@@ -1806,15 +1806,20 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
         const float v = -dx * f.az + dz * f.ax;    // along its +Z
         if (std::fabs(u) < f.hx + margin && std::fabs(v) < f.hz + margin) return true;
     }
-    // A mound a piece brought (SET_GROUND) is that piece's ground: its own
-    // pines and rocks dress it, as they did when it was part of the model —
+    // A mound or fan a piece brought (SET_GROUND) is that piece's ground: its
+    // own pines and rocks dress it, as they did when it was part of the model —
     // and the keep-out is the box it had then, so no verge it kept clear
     // fills up with scatter.
     for (const LandShape& s : mLand) {
-        if (s.kind != 3) continue;
+        if (s.kind != 3 && s.kind != 4) continue;
         const float dx = x - s.x, dz = z - s.z;
         const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
-        if (lx < s.r + margin && lx > -s.r1 - margin && std::fabs(lz) < s.rz + margin) return true;
+        if (s.kind == 3) {
+            if (lx < s.r + margin && lx > -s.r1 - margin && std::fabs(lz) < s.rz + margin) return true;
+        } else {
+            const float reach = std::max(s.r, s.r1) + margin;
+            if (std::fabs(lx) < reach && std::fabs(lz) < 0.5f * s.len + reach) return true;
+        }
     }
     return false;
 }

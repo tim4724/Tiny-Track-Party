@@ -74,7 +74,8 @@ struct SetDef {
 // LEFT — a set piece's own frame, so a set piece's ground is authored in the
 // same frame as its model.
 struct LandDef {
-  int kind;           // 0 ridge (a hill when len is 0), 1 ring, 2 plain, 3 mound
+  int kind;           // 0 ridge (a hill when len is 0), 1 ring, 2 plain, 3 mound,
+                      // 4 fan (a set piece's ridge it lies on), 5 paint (colour only)
   int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
   double u, lat, yaw; // the anchor when piece is -1, like a set piece's; on a
                       // piece, yaw alone turns the form in the piece's frame
@@ -87,6 +88,7 @@ struct LandDef {
   double h, h1;       // height at -Z / +Z end (ridge), else h
   double top;         // ridge / ring: the flat crest, a fraction of the radius
   double shape;       // mound: its flank exponent
+  unsigned tint;      // 0xRRGGBB over the ground it covers; 0 = none
 };
 
 struct TrackDef {
