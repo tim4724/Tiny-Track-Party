@@ -13,6 +13,10 @@
 //   anim_path:c=chute:p=7.5:o=0.33   ride the closed path `chute`, a third on
 //   anim_smoke                   (mesh-less) where a chimney's smoke rises from
 //
+// An `anim_` node inside another rides on it: it moves in its parent's moving
+// frame (a wind-up key turning in a walking robot's back). A path rides
+// nothing: its loop is where the piece stands.
+//
 // A path is the empties `path_<chain>_<k>` of the same GLB, k = 0, 1, ... in
 // order, closed back to 0. Lengths are the node's own units (a GLB's grow and the
 // placement's scale carry them); radii are WORLD units, because they are about

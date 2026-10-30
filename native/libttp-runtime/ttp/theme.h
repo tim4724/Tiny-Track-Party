@@ -41,9 +41,10 @@ namespace rt {
 
 enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUND_SNOW, GROUND_WOOD };
 // A shape change rebuilds the horizon ring: 'dome' soft meadow mounds, 'mesa'
-// flat-topped buttes, 'block' giant toy building blocks, 'island' a sparse low
-// offshore chain with sea gaps between features.
-enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_BLOCK, HILL_ISLAND };
+// flat-topped buttes, 'room' the playroom's furniture (a bed, a sofa, a
+// bookshelf, a toy chest), 'island' a sparse low offshore chain with sea gaps
+// between features.
+enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
 // Ambient particle motion presets (trackPayload.js AMB_KINDS).
 enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE

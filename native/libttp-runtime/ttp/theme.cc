@@ -226,6 +226,28 @@ void pirateCove(Theme& t) {
                       { 6, 0.12f, 0.5f, 0.15f } };
 }
 
+// Each playroom track is one game played on the floor, and the room's loose
+// toys keep out of its way: the giant alphabet blocks belong to Gauntlet's
+// castle siege alone (a block tower beside Skysnake's board or Helix's marble
+// run told the cup one story four times), crayons leave Helix and Skysnake,
+// and the finish gantry wears the track's own colours (the snake's green and
+// yellow, the sky's blue, the marbles' purple, the castle's red).
+void playroomTrack(Theme& t, const std::string& track) {
+  const auto keep = [&](std::initializer_list<uint32_t> ks) { t.landmarks = ks; };
+  if (track == "skysnake") {
+    keep({ LM_DUCK, LM_BALL, LM_BOOKS });
+    t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
+  } else if (track == "skyline") {
+    keep({ LM_BALL, LM_CRAYONS, LM_BOOKS });
+    t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
+  } else if (track == "helix") {
+    keep({ LM_DUCK, LM_BALL, LM_BOOKS });
+    t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
+  } else if (track == "gauntlet") {
+    t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
+  }
+}
+
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
 // the signature: fogTune pulls the chase-cam fog in and low dust banks drift
 // across the mesas.
@@ -362,11 +384,13 @@ Theme playroomTheme() {
   t.hemi = { 0xfff2dc, 0xa88860, 2.2f };  // warm room light, wood-floor bounce
   t.key = { 0xffeac2, 1.5f };             // low afternoon sun through the window
   t.groundKind = GROUND_WOOD;
-  // Giant toy blocks scattered on the floor past the fog. hills[0] also tints
-  // the controller's cup panel, so the warm red keeps the playroom distinct
-  // from beach sand / canyon clay.
-  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
-  t.hillShape = HILL_BLOCK;
+  // The room round the floor, past the fog: a bed, a sofa, a bookshelf and a
+  // toy chest, each part picking its colour from this list by index (the
+  // renderer's ROOM table): red, blue, yellow, green, furniture wood, linen. hills[0]
+  // also tints the controller's cup panel, so the warm red keeps the playroom
+  // distinct from beach sand / canyon clay.
+  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa8744a, 0xfdf4de };
+  t.hillShape = HILL_ROOM;
   // Indoors: no cumulus, just faint warm puffs of sunbeam bloom.
   t.clouds = { 3, 0.22f, 1.3f, 0.3f, 0xffedd2 };
   t.fogTune = 1.25f;  // the tall stunt structures must read from track level
@@ -559,6 +583,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 
   // The beach cup's one pirate track is pirate through and through.
   if (b && std::strcmp(b->name, "beach") == 0 && track == "cove") pirateCove(t);
+  if (b && std::strcmp(b->name, "playroom") == 0) playroomTrack(t, track);
 
   // No procedural landmark beside a set piece that contradicts it. Crag's own
   // windpump turns now, so the spinning windmill leaves Crag (only there: on
