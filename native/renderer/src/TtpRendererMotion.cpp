@@ -81,6 +81,7 @@ void TtpRenderer::buildSetMovers() {
                         tcm.getWorldTransform(tcm.getInstance(ents[e]))[3].xyz;
             }
             std::map<std::string, int> pathOf;
+            const float baseY = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
             for (const auto& [name, pts] : chains) {
                 if (pts.size() < 2) continue;
                 SetPath sp;
@@ -90,6 +91,22 @@ void TtpRenderer::buildSetMovers() {
                     sp.at.push_back(sp.at.back()
                             + length(sp.pts[i % sp.pts.size()] - sp.pts[i - 1]));
                 }
+                if (!(sp.at.back() > 1e-4f)) continue;   // every point on one spot: no loop
+                // A leg below the piece's base is meant to be out of sight
+                // (the chute's swim home): say so if the ground there no
+                // longer covers it, which a reshaped terrain could do.
+                for (size_t i = 0; i < sp.pts.size(); i++) {
+                    const float3 a = sp.pts[i], b = sp.pts[(i + 1) % sp.pts.size()];
+                    for (int k = 0; k <= 8; k++) {
+                        const float3 q = a + (b - a) * (k / 8.0f);
+                        if (q.y < baseY - 0.05f && q.y > groundY(q.x, q.z)) {
+                            utils::slog.w << "set motion: path " << name.c_str()
+                                    << " shows above the ground below its piece" << utils::io::endl;
+                            i = sp.pts.size();
+                            break;
+                        }
+                    }
+                }
                 pathOf[name] = (int) mSetPaths.size();
                 mSetPaths.push_back(std::move(sp));
             }
@@ -98,7 +115,12 @@ void TtpRenderer::buildSetMovers() {
                 const char* nodeName = asset->getName(node);
                 if (setAnimRoot(asset, node) != node) continue;   // not an outermost part
                 ttp::rt::SetMotion motion;
-                ttp::rt::parse_set_motion(nodeName, motion);
+                std::string unknown;
+                ttp::rt::parse_set_motion(nodeName, motion, &unknown);
+                if (!unknown.empty()) {
+                    utils::slog.w << "set motion: " << nodeName << " has an unknown "
+                            << unknown.c_str() << utils::io::endl;
+                }
                 const mat4f rest = tcm.getWorldTransform(tcm.getInstance(node));
                 // Everything drawn under the node, baked into ONE mesh in its frame.
                 std::vector<utils::Entity> parts;
@@ -119,9 +141,13 @@ void TtpRenderer::buildSetMovers() {
                 for (const utils::Entity src : parts) {
                     if (!ok) break;
                     const char* nm = asset->getName(src);
+                    // By name, like mergeInstancedSet: two nodes of one name
+                    // on different meshes (composed kit trees) are ambiguous.
                     const ttp::rt::GlbMeshNode* found = nullptr;
                     for (const auto& n : meshIt->second) {
-                        if (nm && n.name == nm) found = &n;
+                        if (!nm || n.name != nm) continue;
+                        if (found && found->mesh != n.mesh) { found = nullptr; break; }
+                        found = &n;
                     }
                     if (!found || found->mesh < 0
                             || (uint32_t) found->mesh >= colorModel->meshCount) { ok = false; break; }
@@ -206,8 +232,16 @@ void TtpRenderer::buildSetMovers() {
                         ^ (uint32_t) e * 83492791u);
                 if (motion.path) {
                     const auto p = pathOf.find(motion.chain);
-                    if (p != pathOf.end()) mv.path = p->second;
-                    else motion.path = false;
+                    if (p != pathOf.end()) {
+                        mv.path = p->second;
+                    } else {
+                        // Already out of the sun bake as a traveller: it
+                        // stands still with no shadow, so it must be loud.
+                        utils::slog.w << "set motion: " << nodeName << " rides path "
+                                << motion.chain.c_str() << ", which has no loop; it stands still"
+                                << utils::io::endl;
+                        motion.path = false;
+                    }
                 }
                 mv.motion = std::move(motion);
                 mMergedDress.push_back(std::move(g));
@@ -312,8 +346,10 @@ void TtpRenderer::buildSmokePuffs(const float3& origin) {
                     const float dx = bx - 32, dy = by - 32;
                     return dx * dx + dy * dy <= 18 * 18;
                 });
+                // Wood-smoke grey: every chimney is on the snow cup, where a
+                // white puff is one more snowflake.
                 m.verts.push_back({ (float) k / NX - 0.5f, 0.5f - (float) j / NY, 0,
-                                    packShown(srgbToLinear(0xeef2f6), 1.0f, cov) });
+                                    packShown(srgbToLinear(0x8d949e), 1.0f, cov) });
             }
         }
         for (int j = 0; j < NY; j++) {

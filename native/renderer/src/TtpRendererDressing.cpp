@@ -1620,8 +1620,10 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     }
     auto& tcm = mEngine->getTransformManager();
     std::vector<size_t> next(nModels, 0);
+    std::vector<std::vector<float>> offRoad(nModels);   // each instance's |lat|
     for (const auto& p : tb.setPieces) {
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
+        offRoad[p.slot].push_back(std::fabs(p.lat));
         const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
         const float3 t = f.tangent();
         const float yaw = std::atan2(t.x, t.z) + p.yaw;
@@ -1699,20 +1701,27 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     }
     layout.set("pieces", std::move(rows));
     mSetLayout = ttp::canonical_stringify(layout);
-    // Placed: what travels leaves the sun bake, and a chimney may smoke.
+    // Placed: what travels leaves the sun bake, and ONE chimney smokes: the
+    // one nearest the road, which the racers pass closest.
+    float smokeOff = 1e30f;
+    float3 smokeAt{};
     for (size_t m = 0; m < mSetAssets.size(); m++) {
         if (!mSetAssets[m]) continue;
-        for (auto* inst : mSetInstances[m]) {
+        for (size_t i = 0; i < mSetInstances[m].size(); i++) {
+            gltfio::FilamentInstance* const inst = mSetInstances[m][i];
             keepTravellersOutOfBake(mSetAssets[m], inst);
-            for (size_t k = 0; k < inst->getEntityCount() && mSmoke.empty(); k++) {
+            const float off = i < offRoad[m].size() ? offRoad[m][i] : 1e30f;
+            for (size_t k = 0; k < inst->getEntityCount() && off < smokeOff; k++) {
                 ttp::rt::SetMotion mo;
                 const utils::Entity e = inst->getEntities()[k];
                 if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
-                    buildSmokePuffs(tcm.getWorldTransform(tcm.getInstance(e))[3].xyz);
+                    smokeOff = off;
+                    smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
                 }
             }
         }
     }
+    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt);
 }
 
 bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
