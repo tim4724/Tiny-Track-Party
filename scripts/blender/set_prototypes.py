@@ -1860,6 +1860,58 @@ def water_stream(at, a, reach, rise, n=7, t=0.3):
         strut(p(max(0.0, k / n - 0.02)), p(min(1.0, (k + 1) / n + 0.02)), t, 0xd0e8ff)
 
 @piece(1.5)
+def playground():
+    # Cloverleaf: swings, slide, seesaw and a sandpit with a bucket.
+    H = 4.0
+    for z in (-2.4, 2.4):
+        for s in (-1, 1):
+            o = cyl(0.1, H + 0.2, (s * 1.1, 0, z), 0x339cf2, segs=8, smooth=False)
+            tilted(o, 0, -s * 0.26)
+    box((0.22, 0.22, 5.4), (0, H, 0), 0x339cf2)
+    for n, z in enumerate((-1.0, 1.0)):
+        with animated('anim_sway:a=z:d=28:p=2.6#%d' % n, (0, H, z)):          # swinging from the bar
+            for s in (-1, 1):
+                # chains in the frame's grey: black ones read as a barred wall
+                tube([(0, H - 0.1, z + s * 0.45), (0, 1.0, z + s * 0.45)], 0.025, 0x9aa1b4, res=2)
+            box((0.5, 0.08, 1.2), (0, 0.95, z), 0xff5040)
+    X = 3.6
+    for s in (-1, 1):
+        box((0.08, 2.6, 0.08), (X + 1.4, 1.3, s * 0.45), 0x9aa1b4)
+    for i in range(5):
+        box((0.08, 0.06, 0.9), (X + 1.4, 0.35 + i * 0.55, 0), 0x9aa1b4)
+    box((1.2, 0.12, 1.2), (X + 0.7, 2.6, 0), 0x9aa1b4)
+    for s in (-1, 1):
+        box((0.1, 0.9, 1.2), (X + 0.7 + s * 0.6, 3.05, 0), 0x9aa1b4)
+    box((0.1, 0.9, 0.1), (X + 0.7, 3.05, 0.6), 0x9aa1b4)
+    chute_len = 4.2
+    box((1.0, 0.1, chute_len), (X + 0.7, 2.6 - 1.2, -0.6 - chute_len / 2 * math.cos(0.6)), 0xff5040, pitch=0.6)
+    for s in (-1, 1):
+        box((0.06, 0.3, chute_len), (X + 0.7 + s * 0.5, 2.6 - 1.05, -0.6 - chute_len / 2 * math.cos(0.6)), 0xff5040, pitch=0.6)
+    # the seesaw rocks on its fulcrum
+    box((0.3, 0.6, 0.6), (-4.0, 0.3, 0), 0x339cf2)
+    with animated('anim_sway:a=x:d=11:p=2.4', (-4.0, 0.7, 0)):
+        box((0.4, 0.1, 4.4), (-4.0, 0.7, 0), 0x22c46e)
+        for s2 in (-1, 1):
+            box((0.5, 0.12, 0.5), (-4.0, 0.81, s2 * 2.0), 0xff5040)
+            box((0.1, 0.4, 0.1), (-4.0, 0.95, s2 * 1.7), 0x9aa1b4)
+    # the roundabout turns
+    box((0.5, 0.3, 0.5), (-1.0, 0.15, -4.6), 0x9aa1b4)
+    with animated('anim_spin:w=0.9', (-1.0, 0.3, -4.6)):
+        cyl(1.5, 0.15, (-1.0, 0.3, -4.6), 0xffc044, segs=12)
+        cyl(0.12, 1.0, (-1.0, 0.45, -4.6), 0x9aa1b4, segs=6)
+        for k in range(4):
+            a = k * math.pi / 2
+            strut((-1.0, 1.4, -4.6), (-1.0 + math.cos(a) * 1.3, 0.95, -4.6 + math.sin(a) * 1.3), 0.1, 0xff5040)
+            box((0.1, 0.5, 0.1), (-1.0 + math.cos(a) * 1.3, 0.7, -4.6 + math.sin(a) * 1.3), 0xff5040)
+    # sandpit with a bucket and spade
+    for s in (-1, 1):
+        box((3.2, 0.3, 0.2), (-1.0, 0.15, 4.5 + s * 1.5), 0xb08a5a)
+        box((0.2, 0.3, 3.2), (-1.0 + s * 1.5, 0.15, 4.5), 0xb08a5a)
+    box((2.8, 0.2, 2.8), (-1.0, 0.1, 4.5), 0xe6d29a)
+    cyl(0.28, 0.4, (-0.4, 0.2, 4.2), 0xff5040, r2=0.22, segs=8)
+    box((0.06, 0.6, 0.18), (-1.6, 0.5, 4.9), 0x339cf2, roll=0.6)
+
+@piece(1.5)
 def paddling_pool():
     # Pretzel's support: a blue inflatable pool, a floating ring, a duck, a
     # towel and a slide into it.
@@ -1881,6 +1933,49 @@ def paddling_pool():
         box((0.9, 0.08, 0.1), (-1.6, 2.3 * t, -4.75 + 0.6 * t), 0x9aa1b4)
     box((1.0, 0.1, 0.5), (-1.6, 2.2, -4.15), 0x9aa1b4)
     cyl(0.3, 0.45, (3.0, 0, -1.4), 0xa259e6, r2=0.25, segs=8)
+
+@piece(1.5)
+def bird_bath():
+    # Cloverleaf's support: a bird bath on a pedestal, a bird on the rim, a
+    # ring of flowers round it.
+    cyl(0.6, 0.2, (0, 0, 0), 0x9aa1b4, segs=10)
+    cyl(0.25, 1.4, (0, 0.2, 0), 0x9aa1b4, r2=0.2, segs=10)
+    cyl(0.5, 0.3, (0, 1.6, 0), 0x9aa1b4, r2=1.0, segs=14)
+    disc(0.85, (0, 1.9, 0), 0x7db8e8, segs=14, h=0.04)
+    sphere(0.16, (0.8, 2.0, 0), 0x339cf2, subdiv=1, scale=(1, 0.8, 1.4))
+    sphere(0.1, (0.8, 2.2, 0.2), 0x339cf2, subdiv=1)
+    torus(2.0, 0.25, (0, 0.1, 0), 0x7a5a3a, segs=14)
+    for k in range(9):
+        a = k / 9 * 2 * math.pi
+        cyl(0.04, 0.5, (math.cos(a) * 2.0, 0.2, math.sin(a) * 2.0), 0x2bb673, segs=4, smooth=False)
+        sphere(0.2, (math.cos(a) * 2.0, 0.75, math.sin(a) * 2.0), [0xff5040, 0xa259e6, 0xf2c14e, 0xfff6eb][k % 4], subdiv=1)
+
+@piece(1.5)
+def barbecue():
+    # Cloverleaf's support: a kettle grill with sausages on the grate and its
+    # lid swung open; a table, two chairs and a cooler.
+    cyl(0.35, 0.45, (0, 0.5, 0), 0x2a2735, r2=0.7, segs=12)          # the kettle
+    disc(0.64, (0, 0.95, 0), 0x555b66, segs=12, h=0.04)                # the grate
+    for k in range(3):
+        a = k * 2 * math.pi / 3 + 0.5
+        strut((math.cos(a) * 0.65, 0, math.sin(a) * 0.65), (math.cos(a) * 0.25, 0.6, math.sin(a) * 0.25), 0.1, 0x555b66)
+    for k in range(3):
+        box((0.16, 0.14, 0.55), (-0.25 + k * 0.25, 1.05, 0), 0xd94f3d)
+    # the lid, swung up on its hinge at the back of the rim
+    th = 1.1
+    o = cyl(0.7, 0.32, (-0.7 + 0.7 * math.cos(th), 0.97 + 0.7 * math.sin(th), 0), 0x2a2735, r2=0.35, segs=12)
+    tilted(o, 0, -th)
+    box((1.8, 0.08, 1.2), (-2.4, 0.75, 0), 0xb08a5a)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box((0.08, 0.75, 0.08), (-2.4 + sx * 0.8, 0.375, sz * 0.5), 0xb08a5a)
+    for s in (-1, 1):
+        box((0.5, 0.06, 0.5), (-2.4, 0.5, s * 1.2), 0x339cf2)
+        box((0.5, 0.5, 0.06), (-2.4, 0.78, s * 1.45), 0x339cf2)
+        for sx in (-1, 1):
+            box((0.05, 0.5, 0.05), (-2.4 + sx * 0.2, 0.25, s * 1.0), 0x9aa1b4)
+    box((0.9, 0.6, 0.6), (0.4, 0.3, -1.8), 0x339cf2)
+    box((0.95, 0.1, 0.65), (0.4, 0.65, -1.8), 0xfff6eb)
 
 def goal(z, face):
     """A little goal on the line at `z`, its mouth toward +Z (face 1) or -Z
@@ -1958,97 +2053,23 @@ def sprinkler():
             box((0.7, 0.7, 0.7), tip, 0x339cf2, yaw=-a)
             water_stream((tip[0] * 1.08, tip[1] + 0.1, tip[2] * 1.08), a, 6.8, 1.6)
 
-# ---- Cloverleaf, variant B: the giant clover meadow ----
-
-HEART = [(0.0, 0.0), (0.35, 0.5), (0.8, 0.85), (1.25, 0.8), (1.5, 0.45), (1.42, 0.12), (1.3, 0.0),
-         (1.42, -0.12), (1.5, -0.45), (1.25, -0.8), (0.8, -0.85), (0.35, -0.5)]
-
-def clover_head(at, r, n, tip=0.0, cup=0.25, k0=0.0, color=0x2bb673, mark=True):
-    """A clover head of `n` heart-shaped leaflets `r` long round `at`, the
-    head tipped `tip` from flat toward +X, each leaflet cupped `cup` up from
-    the head's plane, a pale heart on each (`mark`). Built as slabs straight off the
-    head's centre, so every leaflet is joined to it."""
-    import bmesh
-    cx, cy, cz = at
-    N = (math.sin(tip), math.cos(tip), 0.0)
-    A = (math.cos(tip), -math.sin(tip), 0.0)
-    B = (0.0, 0.0, 1.0)
-    def slab(scale, lift, t, col, j):
-        a = k0 + j * 2 * math.pi / n
-        d = [math.cos(a) * A[i] + math.sin(a) * B[i] for i in range(3)]
-        c = [-math.sin(a) * A[i] + math.cos(a) * B[i] for i in range(3)]
-        def p(u, v, h):
-            u, v = u * r * scale + (1 - scale) * 0.55 * r, v * r * scale
-            return tuple(at[i] + d[i] * u + c[i] * v + N[i] * (u * math.tan(cup) + h + lift) for i in range(3))
-        top = [p(u, v, t / 2) for u, v in HEART]
-        bot = [p(u, v, -t / 2) for u, v in HEART]
-        m = len(HEART)
-        faces = [tuple(range(m)), tuple(range(2 * m - 1, m - 1, -1))]
-        faces += [(i, (i + 1) % m, m + (i + 1) % m, m + i) for i in range(m)]
-        me = bpy.data.meshes.new('leaf')
-        me.from_pydata([tuple(P(*q)) for q in top + bot], [], faces)
-        me.update()
-        bm = bmesh.new()
-        bm.from_mesh(me)
-        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-        bm.to_mesh(me)
-        bm.free()
-        o = bpy.data.objects.new('leaf', me)
-        bpy.context.scene.collection.objects.link(o)
-        return paint(o, col)
-    for j in range(n):
-        slab(1.0, 0.0, 0.3, color, j)
-        if mark:
-            slab(0.45, 0.17, 0.06, 0xf8f8fb, j)
-
-@piece(1.0)
-def giant_four_leaf():
-    # Cloverleaf B's hero: one four-leaf clover at the scale of the garden,
-    # growing from the summit of the fourth leaf of the land (SET_GROUND),
-    # its head nodding in the wind and tipped to the road (+X) so all four
-    # leaves read.
-    G = 0x2bb673
-    s0 = set_ground('giant-four-leaf')(0.0, 0.0)
-    tube([(0, s0 - 1.0, 0), (0.2, s0 + 4.0, 0.1), (0.6, s0 + 8.0, 0.2), (1.2, s0 + 11.4, 0.0)], 0.5, G,
-         res=4, smooth=True)
-    hx, hy, hz = 1.2, s0 + 11.8, 0.0
-    with animated('anim_sway:a=z:d=10:p=5.5', (hx, hy - 1.0, hz)):
-        sphere(0.9, (hx, hy, hz), G, subdiv=1)
-        clover_head((hx, hy, hz), 3.6, 4, tip=0.9, cup=0.15, k0=math.pi / 4)
-
-def white_clover(x, z, h):
-    """A white clover flower on its stalk: a ball of florets, a few blushing."""
-    tube([(x, -0.3, z), (x + 0.2, h * 0.5, z), (x + 0.3, h, z + 0.2)], 0.22, 0x2bb673, res=3, smooth=True)
-    fx, fy, fz = x + 0.3, h + 0.7, z + 0.2
-    sphere(1.0, (fx, fy, fz), 0xf8f8fb, subdiv=0)
-    for j in range(5):
-        a = j * 2 * math.pi / 5
-        box((0.4, 0.5, 0.4), (fx + math.cos(a) * 0.8, fy - 0.35, fz + math.sin(a) * 0.8), 0xf378f0)
-    return fx, fy, fz
-
-@piece(1.0)
-def giant_clover():
-    # Cloverleaf B's companions: a clump of ordinary three-leaf clover at the
-    # garden's scale, three stems of leaves and a white flower, a bumblebee
-    # working round the flower.
-    G = 0x2bb673
-    for (x, z, h, a0, cup) in ((0.0, 0.0, 7.0, 0.3, 0.35), (2.6, 1.8, 5.2, 1.4, 0.45), (-1.8, 2.4, 4.0, 2.4, 0.5)):
-        tube([(x, -0.3, z), (x + 0.15, h * 0.5, z + 0.1), (x + 0.3, h, z + 0.2)], 0.3, G, res=3, smooth=True)
-        box((0.8, 0.8, 0.8), (x + 0.3, h + 0.1, z + 0.2), G)
-        clover_head((x + 0.3, h + 0.1, z + 0.2), 2.1, 3, tip=0.3, cup=cup, k0=a0, mark=False)
-    fx, fy, fz = white_clover(-0.6, -2.4, 6.0)
-    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'clump')   # one part, one draw
-    # the bee's round: a loop of waypoints about the flower; in flight, so
-    # it is the one part of the clump that touches nothing
-    for k in range(6):
-        a = k * 2 * math.pi / 6
-        marker('path_bee_%d' % k, (fx + math.cos(a) * 2.4, fy + 0.4 * math.sin(2 * a), fz + math.sin(a) * 2.4))
-    with animated('anim_path:c=bee:p=4.5:f=1', (fx + 2.4, fy, fz)):
-        bx, by, bz = fx + 2.4, fy, fz
-        box((0.5, 0.45, 0.8), (bx, by, bz), 0xffc044)
-        box((0.52, 0.47, 0.18), (bx, by, bz - 0.12), 0x2a2735)
-        box((0.52, 0.47, 0.18), (bx, by, bz + 0.2), 0x2a2735)
-        box((1.3, 0.06, 0.35), (bx, by + 0.25, bz), 0xd0e8ff)
+@piece(1.45)
+def picnic_blanket():
+    # Cloverleaf: a red and white checked blanket, a wicker basket with its
+    # lid shut and its handle up, plates and a bottle.
+    box((2.4, 0.04, 2.0), (0, 0.02, 0), 0xff5040)
+    for i in range(3):
+        for j in range(3):
+            if (i + j) % 2 == 0:
+                box((0.8, 0.05, 0.667), (-0.8 + i * 0.8, 0.03, -0.667 + j * 0.667), 0xfff6eb)
+    box((0.8, 0.45, 0.55), (-0.5, 0.27, 0.45), 0xb08a5a)
+    box((0.86, 0.08, 0.6), (-0.5, 0.52, 0.45), 0x9a7b55)
+    for s in (-1, 1):
+        strut((-0.5 + s * 0.3, 0.52, 0.45), (-0.5 + s * 0.2, 0.92, 0.45), 0.08, 0x9a7b55)
+    box((0.5, 0.08, 0.08), (-0.5, 0.92, 0.45), 0x9a7b55)
+    for x, z in ((0.55, -0.55), (0.6, 0.4)):
+        disc(0.26, (x, 0.05, z), 0xfff6eb, segs=10, h=0.04)
+    cyl(0.1, 0.5, (-0.2, 0.04, -0.5), 0x2bb673, segs=6)
 
 # ====================================================================================
 # CANYON
