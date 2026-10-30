@@ -798,7 +798,9 @@ the static runs but in its node's frame, light frozen at rest, and moved by one
 transform a frame that is a closed form of the scene clock and the cars, so it
 has no state to reset. Hence the verbs: spins about the part's own axis,
 sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
-runs inside something opaque. A part that travels leaves the sun bake; one that
+runs inside something opaque (or whose loop is closed in sight). A part inside
+another rides on it: its pose composes onto the outer part's pose of the same
+frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
 moves in place keeps its rest shadow. The static merge leaves every `anim_`
 slot alone, so a merge change (per-placement bakes) must too.
 

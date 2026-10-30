@@ -1551,9 +1551,9 @@ void themeThroughAbi() {
   check(ttp_theme_boost_icon("no-such-biome") == ttp_theme_boost_icon("grass"),
         "an unknown biome yields grass's accent rather than 0");
 
-  check(ttp_theme_hill_color("playroom", 3) == 0x6cbf6cu,
-        "the playroom's fourth block colour survives — a truncated hills list would lose it");
-  check(ttp_theme_hill_color("playroom", 4) == 0u, "an out-of-range hill index is 0");
+  check(ttp_theme_hill_color("playroom", 5) == 0xfdf4deu,
+        "the playroom's last furniture colour survives — a truncated hills list would lose it");
+  check(ttp_theme_hill_color("playroom", 6) == 0u, "an out-of-range hill index is 0");
   check(ttp_theme_hill_color("grass", -1) == 0u, "a negative hill index is 0");
 
   // Slot order is the contract, and the bush donor must not get a slot of its

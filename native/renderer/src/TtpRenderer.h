@@ -1725,6 +1725,8 @@ private:
         float scale = 1;                    // its uniform world scale
         float phase = 0;
         int path = -1;                      // into mSetPaths
+        int parent = -1;                    // the mover it rides, built before it
+        filament::math::mat4f onParent;     // its rest in the parent's rest frame
         ttp::rt::SetMotion motion;
     };
     struct SetPath {                        // a closed polyline in world space
@@ -1734,9 +1736,11 @@ private:
     std::vector<SetMover> mSetMovers;
     std::vector<SetPath> mSetPaths;
     std::vector<ttp::rt::SetMotionCar> mSetMotionCars;   // per-frame scratch
-    // The outermost `anim_` node over `ent` in a set piece, or null.
+    std::vector<filament::math::mat4f> mSetMoverNow;      // per-frame: each mover's world
+    // The outermost `anim_` node over `ent` in a set piece (the nearest with
+    // `outermost` false), or null.
     utils::Entity setAnimRoot(const filament::gltfio::FilamentAsset* asset,
-            utils::Entity ent) const;
+            utils::Entity ent, bool outermost = true) const;
     void keepTravellersOutOfBake(const filament::gltfio::FilamentAsset* asset,
             filament::gltfio::FilamentInstance* inst);
     void buildSetMovers();
@@ -2279,6 +2283,7 @@ private:
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
     void buildKitField(const TrackBin& tb);
+    void buildRoomRing(const TrackBin& tb, float sf);
     void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
