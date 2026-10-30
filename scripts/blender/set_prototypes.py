@@ -2156,10 +2156,10 @@ def wash_bed():
     # its own SET_GROUND cuts between low banks (the plain it lies on). Placed
     # end to end, each reach overlapping the next, the bed winds across the
     # whole map and under the bridges where the road crosses it; the hero
-    # (dry-creek) is the stretch by the north straight. 32 units along Z,
+    # (dry-creek) is the stretch by the north straight. 38 units along Z,
     # ragged, fading to stones at both ends where the next reach takes over;
     # ONE mesh (group), so a reach is one draw wherever it is seen.
-    L, N = 32.0, 20
+    L, N = 38.0, 20
     def half(z):
         t = abs(z) / (L / 2)
         return (2.5 + 0.45 * math.sin(z * 0.7) + 0.3 * math.sin(z * 1.9 + 1.0)) * max(0.0, 1 - t ** 4) ** 0.5
@@ -2186,17 +2186,17 @@ def mine_portal():
     # spur (the piece's SET_GROUND ridge behind it, -X; the track's own ridge
     # rises beyond), a headwall of blocky rock round it; a narrow-gauge line
     # runs out of it toward the road (+X), under the tipple (a bin on a
-    # trestle, its spout over the line) to a buffer stop. An ore cart shuttles
-    # the length of it (anim_path, facing as it rests), in and out of the dark
-    # of the adit. The powder shed stands upstream (-Z), its flag flapping;
-    # the yard in front is the plain the SET_GROUND levels. The ore line runs
-    # on from the yard (set-ore-line) to the headframe.
-    for (x, y, z, sx, sy, sz, c, yw) in (                                         # the headwall
-            (-5.0, 1.8, -3.3, 2.4, 3.6, 2.4, 0xa96545, 0.2),
-            (-4.9, 1.8, 3.3, 2.2, 3.6, 2.4, 0xc47a52, -0.3),
-            (-5.4, 4.0, 0.0, 2.8, 1.6, 6.2, 0xa96545, 0.05),
-            (-7.0, 5.4, -2.2, 2.8, 2.2, 3.2, 0xc47a52, 0.5),
-            (-7.2, 5.2, 2.4, 3.0, 2.2, 3.0, 0xa96545, -0.4)):
+    # trestle, its spout over a cart) to a buffer stop. The ore line branches
+    # off it just outside the adit (set-ore-line, on this piece's anchor), and
+    # its carts come out of the dark of the adit. The powder shed stands
+    # upstream (-Z), its flag flapping; the yard in front is the plain the
+    # SET_GROUND levels.
+    # the headwall: two buttresses and a lintel block, sunk into the spur's
+    # slope (a block standing higher reads as a slab perched on it)
+    for (x, y, z, sx, sy, sz, c, yw) in (
+            (-5.0, 1.6, -3.3, 2.4, 3.6, 2.4, 0xa96545, 0.2),
+            (-4.9, 1.6, 3.3, 2.2, 3.6, 2.4, 0xc47a52, -0.3),
+            (-5.6, 3.7, 0.0, 2.8, 1.6, 6.2, 0xa96545, 0.05)):
         box((sx, sy, sz), (x, y, z), c, yaw=yw)
     box((1.4, 3.0, 2.6), (-3.8, 1.5, 0), ROPE)                                   # the adit
     for z in (-1.5, 1.5):
@@ -2211,13 +2211,9 @@ def mine_portal():
         box((0.3, 0.1, 1.6), (-3.0 + k * 1.0, 0.04, 0), TIMBER)
     box((0.6, 0.9, 1.8), (13.3, 0.45, 0), TIMBER)                                # buffer stop
     box((0.3, 0.3, 2.2), (13.0, 0.75, 0), 'red')
-    # the cart's run: out of the adit to the buffer stop and back in
-    marker('path_cart_0', (-5.2, 0.12, 0))
-    marker('path_cart_1', (11.6, 0.12, 0))
-    with animated('anim_path:c=cart:p=11:f=0', (3.0, 0.12, 0)):
-        ore_cart((3.0, 0.12, 0), yaw=math.pi / 2, ore_color='yellow')
+    ore_cart((6.0, 0.12, 0), yaw=math.pi / 2, ore_color='yellow')                # loading under the tipple
     # the tipple: a trestle over the line, the bin on its deck, a funnel under
-    # the deck with its spout over the line, a ladder up one leg
+    # the deck with its spout over the cart, a ladder up one leg
     for sx in (-1, 1):
         for sz in (-1, 1):
             box((0.4, 4.4, 0.4), (6.0 + sx * 1.6, 2.2, sz * 1.6), TIMBER)
@@ -2392,8 +2388,8 @@ def headframe():
     # down: a timber headframe over the shaft collar, its back legs braced
     # toward the hoist house (-X) the cable comes from, the big sheave wheel
     # on top turning as the cage winds (anim_spin), the cable over it and
-    # down the shaft; the line's last rails run out of the collar toward the
-    # road (+X), a cart of gold ore on them.
+    # down to the cage; the ore line (set-ore-line) runs up to the collar from
+    # +X, and its carts roll onto the collar and down the shaft.
     H = 9.0
     box((3.6, 0.4, 3.4), (1.0, 0.2, 0), TIMBER)                                  # the collar
     box((2.4, 0.06, 2.4), (1.0, 0.42, 0), 'dark')
@@ -2421,35 +2417,95 @@ def headframe():
             box((0.16, 2.8, 0.16), (0, cy, 0), 'red', roll=k * math.pi / 4)
         box((0.55, 0.55, 0.5), (0, cy, 0), 'slate')
     strut((-7.4, 2.4, 0), (-1.0, cy + 1.1, 0), 0.12, ROPE)                     # the cable from the drum
-    strut((1.45, cy, 0), (1.45, 0.45, 0), 0.12, ROPE)                           # and down the shaft
-    box((1.0, 1.1, 1.0), (1.45, 2.4, 0), 'slate')                                # the cage, coming up
+    strut((1.45, cy, 0), (1.45, 2.95, 0), 0.12, ROPE)                           # and down to the cage
+    box((1.0, 1.1, 1.0), (1.45, 2.4, 0), 'slate')                                # the cage, over the carts
     hut(3.6, 2.6, 3.4, (-8.8, 0, 0), TIMBER, 'slate')                            # the hoist house
     box((0.45, 1.8, 0.45), (-9.9, 3.8, 1.0), 'slate')
-    for z in (-0.55, 0.55):                                                      # the line's last rails
-        box((8.5, 0.14, 0.14), (7.2, 0.12, z), 'slate')
-    for k in range(8):
-        box((0.3, 0.1, 1.6), (3.4 + k * 1.05, 0.04, 0), TIMBER)
-    ore_cart((6.0, 0.12, 0), yaw=math.pi / 2, ore_color='yellow')
-    for s in (-1, 1):                                                            # a ladder up a leg
-        box((0.1, 6.0, 0.1), (1.9, 3.0, -1.0 + s * 0.3), TIMBER)
+    for s in (-1, 1):                                                            # a ladder up a leg, clear of the carts
+        box((0.1, 6.0, 0.1), (1.9, 3.0, -1.2 + s * 0.25), TIMBER)
     for i in range(7):
-        box((0.1, 0.08, 0.6), (1.9, 0.6 + i * 0.8, -1.0), TIMBER)
+        box((0.1, 0.08, 0.5), (1.9, 0.6 + i * 0.8, -1.2), TIMBER)
     kit('pirate', 'barrel', (-2.6, 0, 2.6), yaw=0.3, scale=0.5)
 
-@piece(1.0)
+@piece(1.45)
 def ore_line():
-    # Gulch: one length of the mine's narrow-gauge line, laid on the floor of
-    # its own shallow cutting (SET_GROUND: the plain it lies in, so the line
-    # never steps where the land rolls). Placed end to end round a meander
-    # from the portal's yard to the headframe, so the line winds across the
-    # map: 16 units along Z, the next length overlapping its end. One mesh
-    # (group), so a length is one draw.
-    L, n = 16.0, 11
-    for k in range(n):
-        box((1.9, 0.16, 0.42), (0, 0.08, -L / 2 + (k + 0.5) * L / n), TIMBER)
-    for s in (-1, 1):
-        box((0.16, 0.16, L), (s * 0.55, 0.24, 0), 'slate')
-    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'line')
+    # Gulch: the mine's narrow-gauge line, placed on the mine portal's own
+    # anchor (this frame and grow are the portal's). It branches off the
+    # portal's line just outside the adit, winds out of the yard along the
+    # start straight and round the east bend, and ends at the headframe's
+    # collar (placed to meet it). Its SET_GROUND is the cutting it lies in, one
+    # plain per chord of the route; the rails run on a smooth curve through the
+    # chords' ends, the portal's gauge and sleepers. Two carts of gold ore ride
+    # it (anim_path, facing their way): out of the dark of the adit, the length
+    # of the line, onto the collar and down the shaft, home under the ground.
+    # Cut in three runs (groups), so a cell draws only the runs it sees.
+    k = GROW['ore-line']
+    pts = []
+    for f in SET_GROUND['set-ore-line']:
+        th = math.radians(f['yaw'])
+        s, c = math.sin(th), math.cos(th)
+        cx, cz = f['x'] * c + f['z'] * s, -f['x'] * s + f['z'] * c     # its offset is in its turned frame
+        h = f['len'] / 2
+        if not pts:
+            pts.append(((cx - s * h) / k, (cz - c * h) / k))
+        pts.append(((cx + s * h) / k, (cz + c * h) / k))
+    # Catmull-Rom through them: out of the portal's line along +X, into the
+    # collar along the last chord
+    ext = ([(pts[1][0] - 2 * math.dist(pts[0], pts[1]), pts[1][1])] + pts
+           + [(2 * pts[-1][0] - pts[-2][0], 2 * pts[-1][1] - pts[-2][1])])
+    curve = [pts[0]]
+    for i in range(1, len(ext) - 2):
+        p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+        n = max(1, math.ceil(math.dist(p1, p2) / 0.5))
+        for j in range(1, n + 1):
+            t = j / n
+            curve.append(tuple(0.5 * (2 * p1[a] + (p2[a] - p0[a]) * t
+                                      + (2 * p0[a] - 5 * p1[a] + 4 * p2[a] - p3[a]) * t * t
+                                      + (3 * p1[a] - p0[a] - 3 * p2[a] + p3[a]) * t ** 3) for a in (0, 1)))
+    acc = [0.0]
+    for a, b in zip(curve, curve[1:]):
+        acc.append(acc[-1] + math.dist(a, b))
+    total = acc[-1]
+    def on(s):
+        """The point and the heading at `s` along the curve."""
+        i = 0
+        while i < len(curve) - 2 and acc[i + 1] < s:
+            i += 1
+        a, b = curve[i], curve[i + 1]
+        d = max(1e-6, acc[i + 1] - acc[i])
+        t = min(1.0, max(0.0, (s - acc[i]) / d))
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ((b[0] - a[0]) / d, (b[1] - a[1]) / d)
+    RAIL, TIE = 2.8, 1.6                                         # a rail chord, the sleepers' spacing
+    nr = max(3, math.ceil(total / RAIL))
+    ss = [total * i / nr for i in range(nr + 1)]
+    for run in range(3):
+        before = set(bpy.context.scene.objects)
+        i0, i1 = nr * run // 3, nr * (run + 1) // 3
+        for i in range(i0, i1):
+            (pa, da), (pb, db) = on(ss[i]), on(ss[i + 1])
+            for sd in (-1, 1):
+                strut((pa[0] + da[1] * 0.55 * sd, 0.12, pa[1] - da[0] * 0.55 * sd),
+                      (pb[0] + db[1] * 0.55 * sd, 0.12, pb[1] - db[0] * 0.55 * sd), 0.14, 'slate')
+        s = ss[i0] + TIE / 2
+        while s < ss[i1]:
+            p, d = on(s)
+            box((1.6, 0.1, 0.3), (p[0], 0.04, p[1]), TIMBER, yaw=math.atan2(d[0], d[1]))
+            s += TIE
+        group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'line%d' % run)
+    # the carts' loop: up out of the ground behind the adit, out along the
+    # portal's line, the length of this one, onto the collar (1.83 on from the
+    # line's end, the headframe being placed 2.83 on, its collar 1.0 back) and
+    # down the shaft, then home under everything
+    loop = [(-6.5, -2.4, 0.0), (-5.0, 0.12, 0.0)]
+    loop += [(p[0], 0.12, p[1]) for p in (on(s)[0] for s in ss)]
+    (ex, ez), (dx, dz) = on(total)
+    loop += [(ex + dx * 1.83, 0.45, ez + dz * 1.83), (ex + dx * 2.3, -3.0, ez + dz * 2.3)]
+    for i, p in enumerate(loop):
+        marker('path_ore_%d' % i, p)
+    x0, z0 = pts[0]
+    for n in range(2):
+        with animated('anim_path:c=ore:p=48:o=%.1f:f=1#%d' % (n / 2, n), (x0, 0.12, z0)):
+            ore_cart((x0, 0.12, z0), yaw=math.pi / 2, ore_color='yellow')
 
 @piece(1.0)
 def sauropod():
