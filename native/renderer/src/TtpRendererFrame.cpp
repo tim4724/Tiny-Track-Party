@@ -1444,6 +1444,8 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             if (ti) tcm.setTransform(ti, turn);
         }
     }
+    // The set pieces' moving parts (TtpRendererMotion.cpp).
+    stepSetMovers(carPosW);
 
     // Chimney smoke: each puff rises, grows and dissolves over ~6 s, staggered
     // in thirds. Billboarded toward this frame's first camera (they're tiny and
@@ -1457,7 +1459,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             const float3 p{ mSmokeOrigin.x + u * 1.7f
                                     + std::sin(mTime * 0.8f + i * 2.1f) * 0.15f,
                             mSmokeOrigin.y + u * 3.4f, mSmokeOrigin.z };
-            const float w = 0.7f + u * 2.2f;
+            const float w = 1.0f + u * 2.8f;
             // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
             // so shrink to nothing at the ends instead (same read at this size).
             const float fade = 0.42f * std::min(1.0f, u * 5) * (1 - u) / 0.42f;
@@ -3150,7 +3152,8 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+        if (mMergeOff) { destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
+        else buildDressingMerge();
         mGlPrioDirty = true;
     }
     if (mGlPrioDirty && mAndroidGl) {
