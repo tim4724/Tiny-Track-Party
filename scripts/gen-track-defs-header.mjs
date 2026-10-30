@@ -183,6 +183,8 @@ function landInit(l, piece, where) {
   if (piece < 0 && (typeof l.u !== 'number' || l.u < 0 || l.u >= 1)) fail(`${where}: u ${JSON.stringify(l.u)} must be a number in [0, 1)`);
   if (piece >= 0 && (l.u != null || l.lat != null)) fail(`${where}: a set piece's ground is anchored on the piece; it takes no u/lat (yaw turns it in the piece's frame)`);
   if (!(l.r > 0)) fail(`${where}: r must be positive`);
+  if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
+  if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
   if (l.kind !== 'plain' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
   if (l.kind === 'ring' && !(l.w > 0)) fail(`${where}: a ring needs its bank's half-width w`);

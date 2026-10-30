@@ -20,7 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { glbTriangles } from '../public/display/glbTriangles.js';
-import { SET_GROUND } from '../public/shared/tracks.js';
+import { setGroundY } from '../public/shared/tracks.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SET_DIR = path.join(ROOT, 'public/assets/toycar');
@@ -109,24 +109,10 @@ const boxOf = (pts) => {
 // The gap between two boxes (0 where they overlap).
 const boxGap = (a, b) => Math.hypot(...[0, 1, 2].map((d) => Math.max(0, a.lo[d] - b.hi[d], b.lo[d] - a.hi[d])));
 
-// The floor a piece stands on: y = 0, or for a piece modelled on terrain
-// (tracks.js SET_GROUND) the mounds the renderer lays under it, as
-// TtpRenderer::landforms and set_prototypes.py set_ground() have them.
-function floorOf(model) {
-  const mounds = (SET_GROUND[model] || []).filter((f) => f.kind === 'mound');
-  return (x, z) => {
-    let best = 0;
-    for (const f of mounds) {
-      const lx = x - (f.x || 0), lz = z - (f.z || 0);
-      const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
-      if (t < 1) best = Math.max(best, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
-    }
-    return best;
-  };
-}
-
 export function checkPiece(file) {
-  const floor = floorOf(path.basename(file, '.glb'));
+  // The floor: y = 0, or the terrain a piece was modelled on (SET_GROUND).
+  const model = path.basename(file, '.glb');
+  const floor = (x, z) => setGroundY(model, x, z);
   const tris = glbTriangles(fs.readFileSync(file));
   // Islands: triangles joined through a shared corner, corners welded by
   // position (the exporter splits them at every UV and normal seam).
@@ -179,11 +165,20 @@ export function checkPiece(file) {
     }
   }
 
+  // The parts standing on SET_GROUND terrain, each by the corners it stands
+  // on: what tests/e2e/set-ground.spec.js holds against the ground the
+  // renderer actually draws, which this file cannot see.
+  const standing = islands.filter((isl) => isl.box.lo[1] > TOUCH).map((isl) => ({
+    lo: isl.box.lo, hi: isl.box.hi,
+    feet: isl.tris.flatMap(({ t }) => t).filter((p) => p[1] <= floor(p[0], p[2]) + TOUCH)
+  })).filter((isl) => isl.feet.length);
+
   const all = boxOf(islands.flatMap((isl) => [isl.box.lo, isl.box.hi]));
   const r2 = (v) => Math.round(v * 100) / 100;
   return {
     triangles: tris.length,
     islands: n,
+    standing,
     size: { x: r2(all.hi[0] - all.lo[0]), y: r2(all.hi[1] - all.lo[1]), z: r2(all.hi[2] - all.lo[2]) },
     floating: [...Array(n).keys()].filter((i) => !held[i]).map((i) => {
       const { lo, hi } = islands[i].box;

@@ -915,7 +915,8 @@ SET_GROUND = json.loads(os.environ.get('TTP_SET_GROUND', '{}'))
 
 def set_ground(name):
     """height(x, z) of the piece's SET_GROUND in the build frame: its mounds,
-    as the renderer's terrain has them (TtpRenderer::landforms), the summit
+    as the renderer's terrain has them (TtpRenderer::landforms; tracks.js
+    setGroundY is the JS copy set-check reads), the highest of them, the summit
     `h` reaching `r` toward +X, `r1` behind and `rz` along, the flank
     cos(t*pi/2)^shape, and the plain (0) past them."""
     forms = [f for f in SET_GROUND.get('set-' + name, []) if f['kind'] == 'mound']
