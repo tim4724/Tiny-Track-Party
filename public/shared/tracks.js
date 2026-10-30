@@ -232,7 +232,11 @@ const BOXES = {
 //   ring   a bank round a bowl: crest radius `r`, half-width `w`, height `h`
 //   plain  a capsule like a ridge, `r` wide with a `w` fade, where the ground
 //          is left UNRAISED: a creek bed or valley floor, the low line the
-//          raised land stands over. Nothing goes below the plain itself.
+//          raised land stands over. Nothing goes below the plain itself. With
+//          `h`, a channel: a bank that tall along both sides, its crest where
+//          the fade ends; reaches chained round a bend keep one floor (no
+//          bank crosses another reach's floor). The floor wears the biome's
+//          creek-bed tint (the renderer's groundTint).
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.
@@ -251,13 +255,22 @@ export const SET_GROUND = {
   'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
   'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
-  // Wash's creek: the bed is the low line the raised land stands over, between
-  // two cut banks (turned 90 so the spine runs along the creek's own X).
-  'set-dry-creek': [
-    { kind: 'plain', yaw: 90, x: -3, len: 88, r: 6, w: 8 },
-    { kind: 'ridge', yaw: 90, x: -18, len: 80, r: 7, h: 2, top: 0.2 },
-    { kind: 'ridge', yaw: 90, x: 12, len: 80, r: 7, h: 2, top: 0.2 }
-  ]
+  // Wash's creek, the stretch by the road: the bed is the low line the raised
+  // land stands over between its cut banks, the wash's own land carrying on
+  // from both ends (turned 90 so the spine runs along the creek's X).
+  'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 3 }],
+  'set-wash-bed': [{ kind: 'plain', len: 32, r: 7, w: 8, h: 3 }],
+  // Gulch's mine: the rock spur the adit is cut into (behind it, -X) and the
+  // yard levelled in front of it, toward the road; each length of the ore
+  // line lies on the floor of its own shallow cutting, so the line never
+  // steps where the land rolls.
+  'set-mine-portal': [
+    { kind: 'plain', yaw: 90, z: 5, len: 16, r: 6, w: 6 },
+    { kind: 'ridge', x: -14, len: 34, r: 10, h: 10, top: 0.3 }
+  ],
+  'set-ore-line': [{ kind: 'plain', len: 16, r: 6, w: 6, h: 1.2 }],
+  // Crag's flank the sauropod weathers out of, its summit behind (-X).
+  'set-sauropod': [{ kind: 'mound', x: -18, h: 17, r: 24, r1: 26, rz: 48, shape: 1.3 }]
 };
 
 // The height a model's SET_GROUND mounds give at (x, z) in its own frame, over
@@ -468,38 +481,74 @@ export const TRACKS = {
   wash: {
     name: 'Wash', waypoints: GEN_TRACKS.wash,
     oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes,
+    // A dry-wash ranch: the wash winds across the whole map, its gravel bed
+    // laid reach by reach (set-wash-bed, each bringing its channel), from the
+    // north-west past the hero's stretch by the north straight (tumbleweeds
+    // blowing down it), under the north strand's low culvert into the east
+    // loop and out under the east bend's high trestle; a side wash comes in
+    // from the south under the south strand. Cottonwoods died on its banks;
+    // the corral is by the water that is not there.
     set: [
-      { model: 'set-dry-creek', u: 0.823, lat: -36, yaw: 90 },
-      { model: 'set-dead-cottonwood', u: 0.12, lat: -14, yaw: 160 },
-      { model: 'set-dead-cottonwood', u: 0.62, lat: -14, yaw: 160 },
-      { model: 'set-cow-skull', u: 0.29, lat: 10.5, yaw: 20 },
-      { model: 'set-cow-skull', u: 0.05, lat: 10.5, yaw: 20 },
-      { model: 'set-ranch-fence', u: 0.962, lat: 14.5, yaw: 20 },
-      { model: 'set-ranch-fence', u: 0.85, lat: 14.5, yaw: 20 }
+      { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
+      { model: 'set-dead-cottonwood', u: 0.4916, lat: 12.7 },
+      { model: 'set-dead-cottonwood', u: 0.7061, lat: -35.3, yaw: -180 },
+      { model: 'set-ranch-fence', u: 0.742, lat: -10.5, yaw: 180 },
+      { model: 'set-wash-bed', u: 0.9863, lat: -74.2, yaw: -112 },
+      { model: 'set-wash-bed', u: 0.9728, lat: -54.7, yaw: 66 },
+      { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
+      { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
+      { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },
+      { model: 'set-wash-bed', u: 0.5941, lat: -19, yaw: -93 },
+      { model: 'set-wash-bed', u: 0.5933, lat: -48.9, yaw: 95 },
+      { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
+      { model: 'set-wash-bed', u: 0.5332, lat: -17.6, yaw: 68 },
+      { model: 'set-wash-bed', u: 0.5182, lat: 8.6, yaw: -91 }
     ]
   },
   gulch: {
     name: 'Gulch', waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
+    // A gold mine: the adit cut into a spur under the long ridge north of
+    // the start straight, an ore line winding out of its yard across the
+    // north to the headframe over the shaft past the east bend, its wheel
+    // turning; spoil heaps at both workings, timber supports round the lap.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 26 },
-      { model: 'set-oil-drums', u: 0.09, lat: 13, yaw: 60 }
+      { model: 'set-headframe', u: 0.1551, lat: 29.9, yaw: 59 },
+      { model: 'set-ore-line', u: 0.0311, lat: 25.7, yaw: -6 },
+      { model: 'set-ore-line', u: 0.0752, lat: 25.5, yaw: 12 },
+      { model: 'set-ore-line', u: 0.1164, lat: 25.4, yaw: -22 },
+      { model: 'set-ore-line', u: 0.1328, lat: 26.2, yaw: 13 }
+    ],
+    // the ridge the mine is in, its spoil heaps
+    land: [
+      { kind: 'ridge', u: 0.0004, lat: 60, len: 80, r: 24, h: 20, top: 0.3 },
+      { kind: 'ridge', u: 0.1564, lat: 49.6, r: 10, h: 6, top: 0.15 },
+      { kind: 'ridge', u: 0.9715, lat: 23.9, r: 9, h: 5, top: 0.15 }
     ]
   },
   crag: {
     name: 'Crag', waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
+    // A dinosaur crag: a sauropod's skeleton weathering out of the crag's
+    // flank past the end of the long straight, lying broadside to it so the
+    // whole run down the straight looks at it; the dig that found its leg
+    // below the east crag. Still, as a fossil is.
     set: [
-      { model: 'set-water-tower', u: 0.983, lat: 13 },
-      { model: 'set-fossil', u: 0.326, lat: -14, yaw: 160 },
-      { model: 'set-windpump', u: 0.62, lat: -14, yaw: 160 },
-      { model: 'set-ranch-fence', u: 0.302, lat: 18.2, yaw: 20 },
-      { model: 'set-ranch-fence', u: 0.19, lat: -10.5, yaw: 160 }
+      { model: 'set-sauropod', u: 0.1012, lat: -15.8, yaw: 163 },
+      { model: 'set-dino-dig', u: 0.325, lat: 14 }
+    ],
+    // the east crag behind the dig
+    land: [
+      { kind: 'ridge', u: 0.3353, lat: 33.6, yaw: -171, len: 60, r: 18, h: 9, top: 0.2 }
     ]
   },
   sidewinder: {
     name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
+    // A desert highway: the telegraph line along the long straight, the
+    // rattlesnake on the verge, route signs, and mesa rims closing the west
+    // as near backdrops (the north and east stay open).
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
       { model: 'set-rattlesnake', u: 0.24, lat: 10.2 },
@@ -507,6 +556,12 @@ export const TRACKS = {
       { model: 'set-cow-skull', u: 0.72, lat: 14.5, yaw: 20 },
       { model: 'set-route-sign', u: 0.012, lat: -5.5, yaw: 110 },
       { model: 'set-route-sign', u: 0.81, lat: 10, yaw: 70 }
+    ],
+    // the mesa rims: across the far end of the long straight, and south-west
+    // past the south loop, each about 8 degrees over the horizon
+    land: [
+      { kind: 'ridge', u: 0.1784, lat: 73, yaw: 4, len: 110, r: 30, h: 14, top: 0.7 },
+      { kind: 'ridge', u: 0.7313, lat: 78, yaw: 151, len: 120, r: 30, h: 15, top: 0.7 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
