@@ -268,7 +268,9 @@ export const SET_GROUND = {
     { kind: 'plain', yaw: 90, z: 5, len: 16, r: 6, w: 6 },
     { kind: 'ridge', x: -14, len: 34, r: 10, h: 10, top: 0.3 }
   ],
-  'set-ore-line': [{ kind: 'plain', len: 16, r: 6, w: 6, h: 1.2 }]
+  'set-ore-line': [{ kind: 'plain', len: 16, r: 6, w: 6, h: 1.2 }],
+  // Crag's flank the sauropod weathers out of, its summit behind (-X).
+  'set-sauropod': [{ kind: 'mound', x: -18, h: 17, r: 24, r1: 26, rz: 48, shape: 1.3 }]
 };
 
 // The height a model's SET_GROUND mounds give at (x, z) in its own frame, over
@@ -528,19 +530,17 @@ export const TRACKS = {
   crag: {
     name: 'Crag', waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
-    // VARIANT B of the contested pair, a mesa ranch: mesas close the north-west
-    // and the far end of the long straight, and the ranch stands together at
-    // the head of the straight, the water tower, the windpump turning by the
-    // corral. Variant A (the dinosaur crag) is what this commit replaces.
+    // A dinosaur crag: a sauropod's skeleton weathering out of the crag's
+    // flank past the end of the long straight, lying broadside to it so the
+    // whole run down the straight looks at it; the dig that found its leg
+    // below the east crag. Still, as a fossil is.
     set: [
-      { model: 'set-water-tower', u: 0.983, lat: 13 },
-      { model: 'set-windpump', u: 0.955, lat: 15, yaw: 20 },
-      { model: 'set-ranch-fence', u: 0.012, lat: 22, yaw: 20 }
+      { model: 'set-sauropod', u: 0.1012, lat: -15.8, yaw: 163 },
+      { model: 'set-dino-dig', u: 0.325, lat: 14 }
     ],
-    // the mesas
+    // the east crag behind the dig
     land: [
-      { kind: 'ridge', u: 0.7648, lat: 31.8, yaw: 50, len: 70, r: 22, h: 13, top: 0.65 },
-      { kind: 'ridge', u: 0.1012, lat: -34.5, yaw: -16, len: 60, r: 20, h: 12, top: 0.6 }
+      { kind: 'ridge', u: 0.3353, lat: 33.6, yaw: -171, len: 60, r: 18, h: 9, top: 0.2 }
     ]
   },
   sidewinder: {
