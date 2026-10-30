@@ -960,18 +960,24 @@ private:
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
+    // `piece` the set piece it came with (-1: the track's own), and `base`
+    // what that piece's mound rises from (setupTerrain).
     struct LandShape {
         uint32_t kind;
+        int piece;
         float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
         float x0, z0, x1, z1;
+        float base;
     };
     std::vector<LandShape> mLand;
-    float landforms(float x, float z, float edge, float base, float* dell) const;
-    // Per set piece: whether it brings its own ground (SET_GROUND) — then it
-    // stands on the plain it was modelled on and levels no clearing.
-    std::vector<uint8_t> mSetOwnGround;
-    // The lowest the land lies under a clearing's footprint (its centre,
-    // corners and edge middles), before any clearing: what it is levelled to.
+    float landforms(float x, float z, float edge, float lift, float hill, float* dell) const;
+    float roadLift(const TrackBin& tb, float x, float z, float& edge) const;
+    // Per set piece that brings its own ground (SET_GROUND), how far over the
+    // plain it stands, as it was modelled on it, levelling no clearing: 0, or
+    // for a mound the land's lift at its anchor. -1 for every other piece.
+    std::vector<float> mSetOwnGround;
+    // The lowest the land lies under a clearing's footprint (sampled at most
+    // the grid's step apart), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
 
     // The corridor the hills keep clear of the road, and the ramp back up to
@@ -980,20 +986,33 @@ private:
     static constexpr float kFlatR = 4.0f;
     static constexpr float kRampR = 24.0f;
     // THE RAISED GROUND. Under and beside raised road the land comes up to
-    // kRaiseDrop under the deck's top (a blend of the decks nearby, weighted
-    // by nearness), so the road stands on short stilts over land instead of
-    // tall ones over the plain at its lowest point. The 1.3 u of pillar it
-    // leaves showing under the 0.34 slab keeps the elevated toy-track read.
-    // Full lift out to kRaiseFlatR past the nearest road edge, back to the
-    // plain over kRaiseRampR past that.
+    // kRaiseDrop under the deck's top, so the road stands on short stilts over
+    // land instead of tall ones over the plain at its lowest point. The 1.3 u
+    // of pillar it leaves showing under the slab keeps the elevated toy-track
+    // read. Within kRaiseFlatR of the road the deck that counts is the
+    // NEAREST one (so a crest hump gets its full lift); past that, a blend of
+    // the decks nearby weighted by nearness, relaxing to the plain over
+    // kRaiseRampR. Either way held under every OTHER strand of road nearby
+    // (so no bank rises beside the lower road at a crossing or across a
+    // hairpin): see terrainField.
     static constexpr float kRaiseDrop = 1.64f;
     static constexpr float kRaiseFlatR = 6.0f;
     static constexpr float kRaiseRampR = 30.0f;
+    // How far along the lap a section must be from the nearest one to count
+    // as ANOTHER strand of road: further than any section of the same strand
+    // can be while still within kRaiseFlatR of the point.
+    static constexpr float kOtherStrandS = 24.0f;
+    // How steeply the ground may climb away from another strand of road past
+    // kRaiseFlatR (rise per unit out).
+    static constexpr float kStrandSlope = 0.5f;
     // THE CAP, per grid vertex (buildTerrainCap): every triangle a deck
     // crosses stays kDeckClear under that deck's lowest section corner.
     // terrainCapAt reads it anywhere, as the lowest corner of the triangle
     // the point lies in.
     static constexpr float kDeckClear = 0.12f;
+    // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
+    // cap clears and what the supports stop under.
+    static constexpr float kDeckDepth = 0.34f;
     std::vector<float> mTerrainCap;
     void buildTerrainCap(const TrackBin& tb);
     float terrainCapAt(float x, float z) const;
@@ -1001,6 +1020,9 @@ private:
     // its arclength weight (samples are unevenly spaced, so each speaks for
     // its own span).
     std::vector<float> mTsiTopY, mTsiSpan;
+    // terrainField's scratch: the samples in reach of the point it is on, with
+    // their distance past the edge (kept to save an allocation per call).
+    mutable std::vector<std::pair<uint32_t, float>> mTsiNear;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;

@@ -513,21 +513,38 @@ stand on `groundY` with their feet buried.
   under that section's lowest corner. A linear triangle never rises above its
   corners, so no tuning of the lift can push the surface through a road, and a
   road under a bridge keeps its own clearance. Change the lift freely; never
-  bypass the cap.
+  bypass the cap. Beside the road the lift is held under every OTHER strand
+  nearby (a crossing's lower road, a hairpin's far leg), so no bank walls the
+  road under a bridge. `tests/e2e/terrain-ground.spec.js` reads both off the
+  drawn ground.
+- **The cap, not the lift, sets the stilt on a short crest.** A grid vertex
+  sits under the LOWEST deck section crossing any triangle around it, two
+  cells (up to 18 u) of road, so under a hump shorter than that the ground
+  stays at the hump's foot and the pillars keep their height. Only a finer
+  grid near the road would change that, and the grid's step is a cost.
 - **NEVER BELOW `groundY`.** The sun bake's flat caster proxy sits at
   `groundY`: ground under it bakes fully shadowed, and the posts standing on it
   would hang. A valley is land left UNRAISED, not dug.
-- **A PIECE STANDS WHERE THE LAND LIES.** A set piece's clearing is levelled to
-  the lowest natural ground under its footprint (`naturalFootY`), never raised
-  for it: a piece on its own knoll reads as a plinth, which the art direction
-  rejects.
+- **A PIECE STANDS WHERE THE LAND LIES.** A set piece's or landmark's
+  clearing is levelled to the lowest natural ground under its footprint
+  (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
+  fills nothing, since a piece on its own knoll reads as a plinth, which the
+  art direction rejects.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
   `landforms`), never more noise: short wavelengths read as lumps tracing the
   road. A set piece modelled standing on terrain carries it as `SET_GROUND`;
   the Blender builder reads the same numbers, so its parts stand on what the
-  renderer lays, and the piece levels no clearing.
+  renderer lays, and the piece levels no clearing. Its mounds take the land
+  under them as the HIGHEST of them or of the raised ground, so two pieces'
+  slopes join without a trough and the road along a mountain's foot keeps its
+  short stilts (a part at the foot may be buried a little there). The formula
+  lives three times — `landforms`, `set_prototypes.py set_ground()` and
+  `tracks.js setGroundY` — and the e2e spec catches the C++ and the GLB
+  disagreeing. On a convex slope the grid's chords run under the curve the
+  parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
+  chord misses; a part floats only if that is bypassed.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

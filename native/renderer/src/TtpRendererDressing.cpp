@@ -838,7 +838,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         return true;
     };
-    struct Spot { float x, z, yaw; bool ok; };
+    // y: how far above the plain the spot's clearing is levelled (findSpot).
+    struct Spot { float x, z, yaw; bool ok; float y = 0; };
+    // A spot's clearing in the relief, levelled to the land already there
+    // (the set pieces' rule); answers its height above the plain.
+    const auto clearing = [&](float x, float z, float m) {
+        TerrainFlat f{ x, z, 1, 0, 0, 0, m + 1.0f, gy };
+        f.y = naturalFootY(tb, f);
+        mTerrainFlats.push_back(f);
+        return f.y - gy;
+    };
     const auto findSpot = [&](float s0, float off, float m) -> Spot {
         for (float s = s0; s < tb.length - 10; s += 3) {
             const TrackBin::Sample f = tb.frameAt(s);
@@ -848,9 +857,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
             if (!clearSpot(x, z, m)) continue;
             placed.push_back({ x, z, m });
-            mTerrainFlats.push_back({ x, z, 1, 0, 0, 0, m + 1.0f, gy }); // clearing in the relief
+            const float y = clearing(x, z, m);
             const float fx = -f.lat.x * side, fz = -f.lat.z * side;
-            return { x, z, std::atan2(fx, fz), true };
+            return { x, z, std::atan2(fx, fz), true, y };
         }
         return { 0, 0, 0, false };
     };
@@ -867,8 +876,8 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float px = mx + std::cos(a) * rr, pz = mz + std::sin(a) * rr;
                 if (!clearSpot(px, pz, m)) continue;
                 placed.push_back({ px, pz, m });
-                mTerrainFlats.push_back({ px, pz, 1, 0, 0, 0, m + 1.0f, gy }); // clearing in the relief
-                return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true };
+                const float y = clearing(px, pz, m);
+                return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true, y };
             }
         }
         return { 0, 0, 0, false };
@@ -879,7 +888,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     // part(): pre-transformed prim → local offset → yaw → world, flat colour.
     const auto part = [&](const Prim& prim, float lx, float ly, float lz,
             const Spot& sp, uint32_t hex, float shade = 1.0f) {
-        const mat4f m = mat4f::translation(float3{ sp.x, gy, sp.z })
+        const mat4f m = mat4f::translation(float3{ sp.x, gy + sp.y, sp.z })
                 * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 })
                 * mat4f::translation(float3{ lx, ly, lz });
         const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
@@ -1252,7 +1261,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             for (const bool inner : { false, true }) {
                 const Prim dome = primSphereBand(inner ? 1.97f : 2.0f, 20, 5,
                         0, (float) M_PI / 2.15f);
-                const mat4f m = mat4f::translation(float3{ sp.x, gy, sp.z })
+                const mat4f m = mat4f::translation(float3{ sp.x, gy + sp.y, sp.z })
                         * rotY(sp.yaw) * rotX(TILT)
                         * mat4f::translation(float3{ 0, 3.06f, 0 })
                         * mat4f::scaling(float3{ 1, 0.62f, 1 });
@@ -1399,7 +1408,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 buildMesh(mWindmill);
                 const float fx = std::sin(sp.yaw), fz = std::cos(sp.yaw);
                 mWindmillBase = mat4f::translation(
-                        float3{ sp.x + fx * 0.75f, gy + H + 0.35f, sp.z + fz * 0.75f })
+                        float3{ sp.x + fx * 0.75f, gy + sp.y + H + 0.35f, sp.z + fz * 0.75f })
                         * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 });
             }
             mShadowSpots.push_back({ sp.x, sp.z, 2.0f, 10.5f });
@@ -1449,7 +1458,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             {
                 const float cy2 = std::cos(sp.yaw), sy2 = std::sin(sp.yaw);
                 mSmokeOrigin = { sp.x + (-0.95f) * cy2 + (-0.95f) * sy2,
-                                 gy + 4.75f,
+                                 gy + sp.y + 4.75f,
                                  sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 };
                 if (mBlendMaterial) {
                     mSmoke.resize(3);
@@ -1562,7 +1571,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float ox = px2 * off + std::cos(ai) * slide;
                 const float oz = pz2 * off - std::sin(ai) * slide;
                 const float lift = onTop ? 0.33f : 0.0f;
-                const Spot at{ sp.x, sp.z, 0, true };
+                const Spot at{ sp.x, sp.z, 0, true, sp.y };
                 const auto make = [&](Prim g, uint32_t hex, float shade) {
                     part(applyPre(g, rotY(ai) * rotZ((float) M_PI / 2)),
                             ox, 0.17f + lift, oz, at, hex, shade);
@@ -1584,7 +1593,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             for (int i = 0; i < 3; i++) {
                 const float w = 2.6f - i * 0.35f, d = 1.9f - i * 0.22f, h = 0.42f;
                 const float a = ((float) rnd() - 0.5f) * 0.7f;
-                const Spot at{ sp.x, sp.z, a, true };
+                const Spot at{ sp.x, sp.z, a, true, sp.y };
                 part(primBox(w - 0.18f, h - 0.13f, d - 0.12f), 0.06f, ty + h / 2, 0,
                         at, 0xf7f5ee);
                 part(primBox(w, 0.07f, d), 0, ty + h - 0.035f, 0, at, COVERS[i]);
@@ -1682,10 +1691,13 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         // footprint levels the relief to that, so a ship never stands on a
         // slope with a corner in the air. The ground is never raised FOR a
         // piece: a piece on its own knoll reads as a plinth. A piece that
-        // brings its own ground (SET_GROUND) stands on the plain that ground
-        // rises from, as it was modelled, and levels nothing.
+        // brings its own ground (SET_GROUND) stands where that ground rises
+        // from (the plain, or for a mound the land raised at its anchor), as it
+        // was modelled, and levels nothing.
         TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, tb.groundY };
-        if (i >= mSetOwnGround.size() || !mSetOwnGround[i]) {
+        if (i < mSetOwnGround.size() && mSetOwnGround[i] >= 0) {
+            clearing.y += mSetOwnGround[i];
+        } else {
             clearing.y = naturalFootY(tb, clearing);
             mTerrainFlats.push_back(clearing);
         }
@@ -2302,7 +2314,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             if (s.pos.y - base.y < 1.5f) continue;
             const float dx = s.pos.x - base.x, dz = s.pos.z - base.z;
             const float d = dx * dx + dz * dz;
-            if (d < 4.0f && d < bestD) { bestD = d; topY = s.pos.y - 0.34f; }
+            if (d < 4.0f && d < bestD) { bestD = d; topY = s.pos.y - kDeckDepth; }
         }
         column(base.x, base.z, p.radius, base.y - 0.06f,
                 std::max(base.y - 0.06f + 0.3f, topY), nullptr, nullptr);
@@ -2310,7 +2322,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     // Loop shafts: built tall from the lawn, then cut to the road's underside.
     for (const TrackBin::Post& p : tb.supportPosts) {
         const float3 n = p.cUp;
-        const float3 planeP = p.cPos - n * 0.34f; // deck thickness
+        const float3 planeP = p.cPos - n * kDeckDepth;
         column(p.x, p.z, p.radius, tb.groundY - 0.1f, p.cPos.y + 1.0f, &planeP, &n);
     }
     // Kicker ramps: a wedge across the road from its foot on the deck to its
