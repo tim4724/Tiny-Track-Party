@@ -883,14 +883,18 @@ def reef_shelf():
     # wet stone, anemones and a starfish. Blocks, not balls: a flat-shaded
     # ball costs ten blocks' vertices. Its crabs live at the rock pool: one
     # here would be a draw of its own in every run.
-    for (x, z, w, d, h, yw, c) in ((-7.0, -5.0, 4.4, 5.0, 0.5, 0.2, 'slate'),
-                                   (-7.4, 0.8, 4.0, 5.2, 0.6, -0.15, 'slate'),
-                                   (-6.6, 5.8, 4.4, 4.4, 0.45, 0.1, 'slate'),
-                                   (-1.9, -4.4, 4.6, 6.0, 0.75, -0.2, 'grey'),
-                                   (-1.6, 3.6, 5.0, 6.0, 0.62, 0.25, 'grey'),
-                                   (3.2, -1.0, 3.4, 5.0, 0.42, 0.1, 'grey'),
-                                   (3.0, 6.2, 3.0, 3.4, 0.36, -0.3, 'grey')):
-        box((w, h, d), (x, h / 2, z), c, yaw=yw)
+    # The shelves are strata dipping to the sea: each tips up toward the road
+    # (roll), so its landward lip and its sunlit face show, wet slate at the
+    # water, grey above it, the dry pale stone highest. Level slabs of one
+    # grey read from the road as patches of tarmac.
+    for (x, z, w, d, h, yw, rl, c) in ((-7.0, -5.0, 4.4, 5.0, 0.5, 0.2, 0.06, 'slate'),
+                                       (-7.4, 0.8, 4.0, 5.2, 0.6, -0.15, 0.06, 'slate'),
+                                       (-6.6, 5.8, 4.4, 4.4, 0.45, 0.1, 0.06, 'slate'),
+                                       (-1.9, -4.4, 4.6, 6.0, 0.9, -0.2, 0.13, 'grey'),
+                                       (-1.6, 3.6, 5.0, 6.0, 0.8, 0.25, 0.12, 'grey'),
+                                       (3.2, -1.0, 3.4, 5.0, 0.7, 0.1, 0.18, 'lavender'),
+                                       (3.0, 6.2, 3.0, 3.4, 0.6, -0.3, 0.2, 'lavender')):
+        box((w, h, d), (x, h / 2 + 0.05, z), c, yaw=yw, roll=rl)
     # the pools between the shelves: a pale rim, the deep blue middle
     for (x, z, r, rim) in ((-4.5, -1.4, 1.7, True), (0.9, -0.2, 1.4, True), (-3.9, 5.6, 1.2, False),
                            (2.4, -6.1, 1.1, False)):
@@ -904,13 +908,14 @@ def reef_shelf():
     box((1.8, 1.1, 1.6), (-9.8, 0.5, 4.2), 'grey', yaw=0.2)
     box((1.5, 0.9, 1.4), (-9.0, 0.4, -7.0), 'slate', yaw=0.8)
     # weed over the wet stone, mussels in its cracks
-    for (x, y, z, yw) in ((-7.2, 0.54, -4.0, 0.4), (-6.8, 0.48, 6.0, -0.5), (-1.8, 0.78, -3.0, 1.2)):
-        box((1.6, 0.08, 0.55), (x, y, z), 0x2f8f5b, yaw=yw)
-    for (x, y, z) in ((-6.0, 0.68, 1.6), (-2.6, 0.85, -5.6)):
+    for (x, y, z, w, d, yw, rl) in ((-7.2, 0.56, -4.2, 2.6, 1.6, 0.2, 0.06), (-7.6, 0.66, 1.2, 2.2, 2.4, -0.15, 0.06),
+                                    (-6.8, 0.51, 6.0, 2.4, 1.4, 0.1, 0.06), (-2.4, 0.92, -3.4, 1.8, 1.0, -0.2, 0.13)):
+        box((w, 0.08, d), (x, y, z), 'green', yaw=yw, roll=rl)
+    for (x, y, z) in ((-6.0, 0.72, 1.6), (-2.6, 0.88, -5.6)):
         box((0.7, 0.18, 0.4), (x, y, z), 'dark', yaw=x)
     for (x, z, c) in ((-4.0, -2.4, 0xe66a5a), (1.4, 0.9, 0xa878e8), (-3.4, 5.0, 0xe66a5a)):
         cyl(0.22, 0.24, (x, 0.05, z), c, r2=0.32, segs=6)
-    starfish((-1.0, 0.68, 4.4), 0xe4784f, s=1.0)
+    starfish((-1.0, 0.9, 4.4), 0xe4784f, s=1.0)
     join_still('reef')
 
 @piece(1.4)

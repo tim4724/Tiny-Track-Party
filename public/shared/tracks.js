@@ -337,7 +337,7 @@ export const TRACKS = {
       { model: 'set-strand-line', u: 0.562, lat: -15, yaw: 176, scale: 1.2 },
       { model: 'set-strand-line', u: 0.512, lat: -12, yaw: 168, scale: 1.2 },
       { model: 'set-strand-line', u: 0.47, lat: -17, yaw: 190, scale: 1.2 },
-      { model: 'set-bonfire', u: 0.425, lat: -11, yaw: 160 }
+      { model: 'set-bonfire', u: 0.42, lat: -14, yaw: 160, scale: 1.6 }
     ],
     land: [
       { kind: 'ridge', u: 0.58, lat: 36, len: 50, r: 15, h: 5, top: 0.2 },
