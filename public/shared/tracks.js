@@ -560,12 +560,12 @@ export const TRACKS = {
   skyline: {
     name: 'Skyline', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline,
-    // Block city: the skyway flies straight at a toy town of wooden blocks
-    // past the U-turn, its towers at the skyway's own height and a crane
-    // turning on its building site; the cardboard box in the infield is
-    // where the blocks came from
+    // Flight from the desk: the skyway flies straight at a desk standing at
+    // its own height past the U-turn, a toy plane circling its tether over a
+    // paper runway on it, a rocket steaming on its pad, a globe turning; the
+    // cardboard box in the infield is the hangar
     set: [
-      { model: 'set-block-city', u: 0.4846, lat: -26.1, yaw: 138, scale: 1.3 },
+      { model: 'set-flight-desk', u: 0.4846, lat: -26.1, yaw: 138, scale: 1.5 },
       { model: 'set-cardboard-box', u: 0.0211, lat: 24, scale: 1.4 }
     ]
   }
