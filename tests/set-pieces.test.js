@@ -21,10 +21,8 @@ const FLOATING = {
   'set-cow-skull': 10,
   'set-dead-cottonwood': 10,
   'set-log-pile': 1,
-  'set-mine-portal': 1,
   'set-pirate-camp': 1,
   'set-ski-lift': 3,
-  'set-water-tower': 9,
   'set-windsock': 5
 };
 

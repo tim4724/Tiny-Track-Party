@@ -342,6 +342,14 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
             }
             mat4f w{ float4{ rot[0] * mv.scale, 0 }, float4{ rot[1] * mv.scale, 0 },
                      float4{ rot[2] * mv.scale, 0 }, float4{ at, 1 } };
+            // A traveller may also bob and spin in its own frame as it goes: a
+            // tumbleweed bounces and rolls along its path.
+            if (m.spin || m.bob) {
+                const ttp::rt::SetMotionPose pose = ttp::rt::set_motion_pose(m, mTime, mv.phase,
+                        nullptr, 0);
+                w = w * mat4f::translation(float3{ 0, pose.lift, 0 });
+                if (m.spin) w = w * axisTurn(m.spinAxis, pose.spin);
+            }
             mSetMoverNow[k] = w;
             tcm.setTransform(ti, w);
             continue;
