@@ -380,8 +380,8 @@ TTP_ABI const char* ttp_display_set_layout(void);
 TTP_ABI const char* ttp_display_scatter_layout(void);
 
 /* The renderer's own ground height at world (x, z) for the built static
- * scene: the surface scatter and set pieces stand on (terrain relief, hills,
- * the flats kept around the road and under pieces), or the berm a raised
+ * scene: the surface scatter and set pieces stand on (the ground raised under
+ * the road, the hills, the clearings levelled under pieces), or the berm a raised
  * stretch of road stands on where that is higher. The flat ground height
  * where there is no relief, 0 before a build. For the landmark gallery's
  * sight-line test. */

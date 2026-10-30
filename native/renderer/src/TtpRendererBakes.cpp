@@ -640,7 +640,10 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v3: the road's baked vertex light left the tail.
 // v4: the ESM left the blob; it carries the three visibility maps instead
 // (ground, structures, deck), each as width, height and R8 rows.
-constexpr uint32_t kBakeVersion = 4u;
+// v5: the ground rose to meet the road, so every ground map a v4 build
+// baked describes a surface that no longer exists. The generation retires
+// them too; the bump says so where the format is read.
+constexpr uint32_t kBakeVersion = 5u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);

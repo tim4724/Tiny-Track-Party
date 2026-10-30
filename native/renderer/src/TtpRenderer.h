@@ -934,24 +934,58 @@ private:
     std::vector<GroundBand> mGroundBands;
     static constexpr float kGroundTile = 600.0f / 18.0f;
     filament::math::float3 groundColorAt(float x) const;
-    // Terrain relief: rolling hills on the ground sheet, flat under and beside
-    // the road (see setupTerrain). Amp 0 = the flat-quad biomes (sand, wood).
+    // Terrain relief: the ground rises under raised road, and rolls into
+    // hills away from it (see setupTerrain). Amp 0 = the flat-quad biomes
+    // (sand, wood), which keep the plain.
     float mTerrainAmp = 0;
     uint32_t mTerrainSeed = 0;
     float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
-    // Flat clearings the landmark spots carve into the relief (so a windmill
-    // never stands on a slope). Registered by buildLandmarks BEFORE the ground
-    // mesh and the scatter sample the field — see the builder order.
-    struct TerrainFlat { float x, z, r; };
+    // Clearings the set pieces and landmark spots level into the relief (so a
+    // windmill never stands on a slope), each at its own height `y`: the
+    // ground already there, never a plinth raised for it. Registered BEFORE
+    // the ground mesh and the scatter sample the field — see the builder order.
+    // A rounded rectangle: half extents hx, hz along the axes (ax, az) and
+    // (-az, ax), grown by r; a landmark's round spot has zero extents. Level
+    // inside, back to the land over 8 u.
+    struct TerrainFlat { float x, z, ax, az, hx, hz, r, y; };
     std::vector<TerrainFlat> mTerrainFlats;
     void setupTerrain(const TrackBin& tb);
-    float terrainY(const TrackBin& tb, float x, float z) const;
+    // The ground's height at (x, z): with the clearings levelled in, or as the
+    // land lies before any of them (`withFlats` false) — the height a clearing
+    // is levelled TO, so a piece stands where the ground already was.
+    float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
+    float terrainField(const TrackBin& tb, float x, float z, bool withFlats) const;
+    // The lowest the land lies under a clearing's footprint (its centre,
+    // corners and edge middles), before any clearing: what it is levelled to.
+    float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
 
-    // The corridor the terrain keeps flat around the road, and the ramp back up
-    // to full height past it. Named because the SAMPLE INDEX's search radius is
+    // The corridor the hills keep clear of the road, and the ramp back up to
+    // full height past it. Named because the SAMPLE INDEX's search radius is
     // derived from them: they used to be two literals inside terrainY.
     static constexpr float kFlatR = 4.0f;
     static constexpr float kRampR = 24.0f;
+    // THE RAISED GROUND. Under and beside raised road the land comes up to
+    // kRaiseDrop under the deck's top (a blend of the decks nearby, weighted
+    // by nearness), so the road stands on short stilts over land instead of
+    // tall ones over the plain at its lowest point. The 1.3 u of pillar it
+    // leaves showing under the 0.34 slab keeps the elevated toy-track read.
+    // Full lift out to kRaiseFlatR past the nearest road edge, back to the
+    // plain over kRaiseRampR past that.
+    static constexpr float kRaiseDrop = 1.64f;
+    static constexpr float kRaiseFlatR = 6.0f;
+    static constexpr float kRaiseRampR = 30.0f;
+    // THE CAP, per grid vertex (buildTerrainCap): every triangle a deck
+    // crosses stays kDeckClear under that deck's lowest section corner.
+    // terrainCapAt reads it anywhere, as the lowest corner of the triangle
+    // the point lies in.
+    static constexpr float kDeckClear = 0.12f;
+    std::vector<float> mTerrainCap;
+    void buildTerrainCap(const TrackBin& tb);
+    float terrainCapAt(float x, float z) const;
+    // Per sample, for the raised ground: the deck's top at its low edge and
+    // its arclength weight (samples are unevenly spaced, so each speaks for
+    // its own span).
+    std::vector<float> mTsiTopY, mTsiSpan;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
@@ -1572,6 +1606,15 @@ private:
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // The chase camera's view up the road, one segment every 2 u of the lap
+    // (buildSightLines), and whether something standing at (x, z), plan
+    // radius r, rising to `top`, would cut one — the scatter's keep-out on
+    // the inside of bends.
+    struct SightLine { filament::math::float3 a, b; };
+    std::vector<SightLine> mSightLines;
+    static constexpr float kSightAhead = 18.0f;
+    void buildSightLines(const TrackBin& tb);
+    bool blocksRoadAhead(float x, float z, float r, float top) const;
     std::string mSetLayout = kNoSetLayout;
     std::string mScatterLayout = "[]";
     // The grass BERMS under raised deck reach a few units past the kerb, and

@@ -186,7 +186,9 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (const auto& p : placements) {
             if (p.model != m) continue;
             const float gy = groundSurfaceY(tb, p.x, p.z) - p.sink * p.s;
-            record(p.x, p.z, reach * p.s, gy + bb.max.y * p.s * p.syJit);
+            const float top = gy + bb.max.y * p.s * p.syJit;
+            if (blocksRoadAhead(p.x, p.z, reach * p.s, top)) continue;
+            record(p.x, p.z, reach * p.s, top);
             const mat4f xf = mat4f::translation(
                     float3{ p.x, gy, p.z })
                     * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
@@ -195,6 +197,12 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             mShadowSpots.push_back({ p.x, p.z, 0.62f * p.s, 0.8f * p.s });
             k++;
         }
+        // What the sight lines turned away leaves the scene (buildProps' rule).
+        for (size_t j = k; j < mSceneryInstances[m].size(); j++) {
+            gltfio::FilamentInstance* inst = mSceneryInstances[m][j];
+            mScene->removeEntities(inst->getEntities(), inst->getEntityCount());
+        }
+        mSceneryInstances[m].resize(k);
     }
 
     // Boulders: flat-shaded icosahedra, vertex-tinted greys.
@@ -381,6 +389,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         const float2 ground = footprintSpan(tb, p.x, p.z, pr);
         if (ground.y - ground.x > 0.25f * tall[p.slot] * p.s) continue;
         p.y = ground.x;
+        if (blocksRoadAhead(p.x, p.z, pr, p.y + tall[p.slot] * p.s)) continue;
         bool clash = false;
         for (const float4& spot : mShadowSpots) {
             const float dx = p.x - spot.x, dz = p.z - spot.y;
@@ -839,7 +848,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
             if (!clearSpot(x, z, m)) continue;
             placed.push_back({ x, z, m });
-            mTerrainFlats.push_back({ x, z, m + 1.0f }); // clearing in the relief
+            mTerrainFlats.push_back({ x, z, 1, 0, 0, 0, m + 1.0f, gy }); // clearing in the relief
             const float fx = -f.lat.x * side, fz = -f.lat.z * side;
             return { x, z, std::atan2(fx, fz), true };
         }
@@ -858,7 +867,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float px = mx + std::cos(a) * rr, pz = mz + std::sin(a) * rr;
                 if (!clearSpot(px, pz, m)) continue;
                 placed.push_back({ px, pz, m });
-                mTerrainFlats.push_back({ px, pz, m + 1.0f }); // clearing in the relief
+                mTerrainFlats.push_back({ px, pz, 1, 0, 0, 0, m + 1.0f, gy }); // clearing in the relief
                 return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true };
             }
         }
@@ -1659,11 +1668,6 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const float3 t = f.tangent();
         const float yaw = std::atan2(t.x, t.z) + p.yaw;
         const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
-        const mat4f xf = mat4f::translation(float3{ x, tb.groundY + p.y, z })
-                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                * mat4f::scaling(float3{ p.scale });
-        gltfio::FilamentInstance* const inst = mSetInstances[p.slot][next[p.slot]++];
-        tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
         // What it covers, from the composition's own bounds.
         const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
         const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
@@ -1672,11 +1676,22 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const float wx = x + ax * cx - az * cz, wz = z + az * cx + ax * cz;
         const float hx = 0.5f * (bb.max.x - bb.min.x) * p.scale;
         const float hz = 0.5f * (bb.max.z - bb.min.z) * p.scale;
-        const float top = tb.groundY + p.y + bb.max.y * p.scale;
+        // It stands where the land already lies — the lowest of it under the
+        // footprint, so no corner hangs — and one clearing the shape of the
+        // footprint levels the relief to that, so a ship never stands on a
+        // slope with a corner in the air. The ground is never raised FOR a
+        // piece: a piece on its own knoll reads as a plinth.
+        TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, 0.0f };
+        clearing.y = naturalFootY(tb, clearing);
+        mTerrainFlats.push_back(clearing);
+        const float base = clearing.y + p.y;
+        const mat4f xf = mat4f::translation(float3{ x, base, z })
+                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ p.scale });
+        gltfio::FilamentInstance* const inst = mSetInstances[p.slot][next[p.slot]++];
+        tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
+        const float top = base + bb.max.y * p.scale;
         mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
-        // One clearing round the whole piece: the relief is flattened under
-        // it, so a ship never stands on a slope with a corner in the air.
-        mTerrainFlats.push_back({ wx, wz, std::sqrt(hx * hx + hz * hz) + 1.0f });
         ttp::Value row = ttp::Value::Obj();
         row.set("model", ttp::Value::Str(tb.setModels[p.slot]));
         row.set("u", num(p.u));
@@ -1685,7 +1700,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         row.set("yaw", num(p.yaw * 180.0 / M_PI));
         row.set("heading", num(yaw));
         row.set("x", num(x));
-        row.set("y", num(tb.groundY + p.y));
+        row.set("y", num(base));
         row.set("z", num(z));
         row.set("cx", num(wx));
         row.set("cz", num(wz));
@@ -1734,6 +1749,36 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     mSetLayout = ttp::canonical_stringify(layout);
 }
 
+// THE ROAD AHEAD STAYS IN VIEW. The chase camera rides under a unit over the
+// deck and looks kSightAhead up the road; on a bend that sight line cuts
+// across the inside, and a tree standing there hides the corner. It always
+// could, but the raised ground lifts the verge to just under the deck, so a
+// tree beside a bend now stands its full height over the camera.
+void TtpRenderer::buildSightLines(const TrackBin& tb) {
+    constexpr float STEP = 2.0f, EYE = 0.8f, TARGET = 0.2f;
+    mSightLines.clear();
+    if (tb.samples.size() < 2 || tb.length <= 0) return;
+    for (float d = 0; d < tb.length; d += STEP) {
+        const TrackBin::Sample a = tb.frameAt(d);
+        const TrackBin::Sample b = tb.frameAt(std::fmod(d + kSightAhead, tb.length));
+        mSightLines.push_back({ a.pos + a.up * EYE, b.pos + b.up * TARGET });
+    }
+}
+
+bool TtpRenderer::blocksRoadAhead(float x, float z, float r, float top) const {
+    constexpr float MARGIN = 0.4f;
+    for (const SightLine& s : mSightLines) {
+        const float ex = s.b.x - s.a.x, ez = s.b.z - s.a.z, l2 = ex * ex + ez * ez;
+        if (l2 <= 0) continue;
+        const float t = std::min(1.0f, std::max(0.0f, ((x - s.a.x) * ex + (z - s.a.z) * ez) / l2));
+        const float dx = x - (s.a.x + ex * t), dz = z - (s.a.z + ez * t);
+        const float lim = r + MARGIN;
+        if (dx * dx + dz * dz >= lim * lim) continue;
+        if (top > s.a.y + (s.b.y - s.a.y) * t) return true;
+    }
+    return false;
+}
+
 bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
     for (const SetFoot& f : mSetFeet) {
         const float dx = x - f.x, dz = z - f.z;
@@ -1754,10 +1799,11 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
     constexpr float BERM_MARGIN = 0.3f, PILLAR_MARGIN = 0.5f, PIECE_MARGIN = 0.5f, SEA_MARGIN = 1.0f;
     if (!mTrack) return "";
     const TrackBin& tb = *mTrack;
+    const float ground = groundSurfaceY(tb, x, z);   // what "raised" is measured from here
     for (const auto& s : tb.samples) {
         const float dx = x - s.pos.x, dz = z - s.pos.z, lim = s.width / 2 + MARGIN;
         if (dx * dx + dz * dz >= lim * lim) continue;
-        if (s.pos.y - tb.groundY > UNDER_RAISE && hi < s.pos.y - UNDER_GAP) continue;
+        if (s.pos.y - ground > UNDER_RAISE && hi < s.pos.y - UNDER_GAP) continue;
         if (lo > s.pos.y + OVER_GAP) continue;
         return "road";
     }
