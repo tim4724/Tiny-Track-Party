@@ -136,7 +136,7 @@ export function createComposer({ generator, texture }) {
   // a transform and a mesh index, not geometry.
   //
   // Returns the placement node, so a caller can put it under a pivot instead
-  // of straight on the scene. `scale` is uniform and written only when set, so
+  // of straight on the scene. `name` names it. `scale` is uniform and written only when set, so
   // a composition that never scales keeps the train set's exact bytes.
   function copyTree(i) {
     const n = { ...out.nodes[i] };
@@ -144,13 +144,15 @@ export function createComposer({ generator, texture }) {
     out.nodes.push(n);
     return out.nodes.length - 1;
   }
-  function place(roots, { x, z, yaw, y = 0, scale, scene = true }) {
+  function place(roots, { x, z, yaw, y = 0, scale, scene = true, name }) {
     const half = yaw / 2;
     const kids = roots.map(copyTree);
     const node = {
       translation: [x, y, z],
       rotation: [0, Math.sin(half), 0, Math.cos(half)],  // yaw about +y
     };
+    // A name makes the placement a moving part (`anim_...`, set_motion.h).
+    if (name) node.name = name;
     if (scale != null) node.scale = [scale, scale, scale];
     node.children = kids;
     out.nodes.push(node);

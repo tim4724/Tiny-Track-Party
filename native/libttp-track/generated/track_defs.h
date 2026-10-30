@@ -635,6 +635,7 @@ constexpr SetDef kSet_glacier[] = {
   { "set-ice-chunks", 0x1.eb851eb851eb8p-2, 0x1.5p+3, 0x1.28p+6, 0x0p+0, 0x1p+0 },
   { "set-expedition-camp", 0x1.c28f5c28f5c29p-1, -0x1.dp+3, 0x1.4p+7, 0x0p+0, 0x1p+0 },
   { "set-ice-chunks", 0x1.0a3d70a3d70a4p-3, 0x1.5p+3, 0x1.dp+6, 0x0p+0, 0x1p+0 },
+  { "set-penguin-chute", 0x1.70a3d70a3d70ap-2, 0x1.1p+4, 0x1.4p+5, 0x0p+0, 0x1p+0 },
 };
 
 constexpr WptDef kW_avalanche[] = {
@@ -1921,7 +1922,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 10 },
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 9 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 8 },
-  { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, kOils_glacier, 1, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 9 },
+  { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, kOils_glacier, 1, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 10 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 8 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 5 },

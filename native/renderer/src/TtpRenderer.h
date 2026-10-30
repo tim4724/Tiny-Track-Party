@@ -35,6 +35,7 @@ namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
 #include "ttp/name_tags.h"
+#include "ttp/set_motion.h"
 
 
 // The car contact shadow's constants, and the ONE place they are written down:
@@ -1592,6 +1593,38 @@ private:
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;
+    // THE SET PIECES' MOVING PARTS (TtpRendererMotion.cpp; the `anim_` grammar
+    // is ttp/set_motion.h's). Each part is ONE unlit mesh baked in its node's
+    // own frame, its light frozen at the rest pose, drawn through a
+    // MergedGroup in mMergedDress (so teardown, the feature tags and the GL
+    // priorities are the baked runs'), and posed each frame by one transform:
+    // rest * the verbs' closed form of the scene clock and the cars.
+    struct SetMover {
+        utils::Entity ent;                  // the baked mesh's renderable
+        filament::math::mat4f rest;         // the node's world transform at rest
+        filament::math::mat3f restInv;      // its rotation's inverse, scale removed
+        float scale = 1;                    // its uniform world scale
+        float phase = 0;
+        int path = -1;                      // into mSetPaths
+        ttp::rt::SetMotion motion;
+    };
+    struct SetPath {                        // a closed polyline in world space
+        std::vector<filament::math::float3> pts;
+        std::vector<float> at;              // arclength at each point; at.back() = the loop
+    };
+    std::vector<SetMover> mSetMovers;
+    std::vector<SetPath> mSetPaths;
+    std::vector<ttp::rt::SetMotionCar> mSetMotionCars;   // per-frame scratch
+    // The outermost `anim_` node over `ent` in a set piece, or null.
+    utils::Entity setAnimRoot(const filament::gltfio::FilamentAsset* asset,
+            utils::Entity ent) const;
+    void keepTravellersOutOfBake(const filament::gltfio::FilamentAsset* asset,
+            filament::gltfio::FilamentInstance* inst);
+    void buildSetMovers();
+    void stepSetMovers(const std::vector<filament::math::float3>& carPosW);
+    // The smoke puffs over a chimney at `origin` (a set piece's `anim_smoke`,
+    // or the procedural cabin's).
+    void buildSmokePuffs(const filament::math::float3& origin);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
     Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
@@ -2231,7 +2264,10 @@ public:
     // baked path (an undecodable GLB, ambiguous node names, a colour table
     // that disagrees with the geometry) is silent on the glass and costs
     // vertex shading in every cell, so the scene budget gate reads this.
-    // What moves (a spin subtree, the cone pool) is not counted.
+    // What moves (a spin subtree, the cone pool) is not counted. A set piece's
+    // `anim_` part needs no exemption: its baked mover took it out of the scene
+    // (buildSetMovers), so it is counted only when that bake failed, which is
+    // exactly a part left standing live-lit.
     std::vector<std::pair<std::string, int>> debugLiveDressing() const;
     void debugWipeSkids() { mSkidWipe = true; }
     // FEATURE ABLATION — the per-feature cost map's only instrument.

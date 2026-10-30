@@ -81,6 +81,7 @@
     "set-oil-drums.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-paddling-pool.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-parasol.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-penguin-chute.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-picnic-blanket.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-pirate-camp.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-pirate-ship.glb": { "generated": "scripts/gen-set-pieces.mjs" },

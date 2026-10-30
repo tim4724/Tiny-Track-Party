@@ -1,5 +1,6 @@
 #include "ttp/theme.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -558,6 +559,20 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 
   // The beach cup's one pirate track is pirate through and through.
   if (b && std::strcmp(b->name, "beach") == 0 && track == "cove") pirateCove(t);
+
+  // No procedural landmark beside a set piece that contradicts it. Crag's own
+  // windpump turns now, so the spinning windmill leaves Crag (only there: on
+  // the other canyon tracks it is the one thing that moves). Where
+  // the track's set has log cabins (Powder, Flurry), one of THEM smokes
+  // (`anim_smoke`), so the smoking procedural cabin goes: one smoking chimney a
+  // track, and never a cold cabin beside a warm one.
+  const auto drop = [&](uint32_t k) {
+    t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
+  };
+  if (b && std::strcmp(b->name, "canyon") == 0 && track == "crag") drop(LM_WINDMILL);
+  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
+    drop(LM_CABIN);
+  }
 
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out
   // identical wherever this runs. Track ids are ASCII, so hashing the UTF-8
