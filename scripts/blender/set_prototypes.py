@@ -25,6 +25,7 @@
 #
 # Blender is Z-up and the exporter maps (x, y, z) -> (x, z, -y), so every helper
 # takes glTF coordinates (across, up, along) and converts once, in `P()`.
+import json
 import math
 import os
 import sys
@@ -1010,6 +1011,42 @@ def mound(peak, cx, cz, rx0, rx1, rz, color=0xeef4f9, rings=6, segs=18, sink=0.4
     snowy(paint(o, color), 0.45)
     return h
 
+# The ground a piece was modelled standing on, when it is TERRAIN rather than
+# part of the model: public/shared/tracks.js SET_GROUND, handed over by
+# scripts/gen-set-prototypes.mjs (TTP_SET_GROUND). The renderer lays the same
+# numbers as the track's ground wherever the piece stands, so what is built on
+# it here — towers, pines, rocks — stands on the terrain in the game. In world
+# units there; this frame is the build's, which the export grows by GROW.
+SET_GROUND = json.loads(os.environ.get('TTP_SET_GROUND', '{}'))
+
+def set_ground(name):
+    """height(x, z) of the piece's SET_GROUND in the build frame: its mounds,
+    as the renderer's terrain has them (TtpRenderer::landforms; tracks.js
+    setGroundY is the JS copy set-check reads), the highest of them, the summit
+    `h` reaching `r` toward +X, `r1` behind and `rz` along, the flank
+    cos(t*pi/2)^shape, and the plain (0) past them."""
+    forms = [f for f in SET_GROUND.get('set-' + name, []) if f['kind'] == 'mound']
+    if not forms:
+        raise SystemExit('set-%s has no SET_GROUND mound: run it through scripts/gen-set-prototypes.mjs' % name)
+    k = GROW[name]
+    def h(x, z):
+        best = 0.0
+        for f in forms:
+            lx, lz = x * k - f.get('x', 0.0), z * k - f.get('z', 0.0)
+            t = math.hypot(lx / (f['r'] if lx > 0 else f['r1']), lz / f['rz'])
+            if t < 1.0:
+                best = max(best, f['h'] * math.cos(t * math.pi / 2) ** f.get('shape', 1.0))
+        return best / k
+    return h
+
+def group(objs, name):
+    """Export `objs` as ONE node called `name` (joined after they are shaded
+    and chamfered, so each part keeps its own swatch): a part the renderer moves
+    as a whole, like the lift's chairs (`anim_` nodes)."""
+    for o in objs:
+        o['group'] = name
+    return objs
+
 def turned(cx, cz, yaw, lx, lz):
     """A point (lx, lz) in a frame at (cx, cz) turned by `yaw` (box()'s sense:
     its +Z runs along (sin yaw, cos yaw))."""
@@ -1025,17 +1062,21 @@ def pylon(at, h, yaw, ground=0.0):
     for s in (-1, 1):
         gx, gz = turned(x, z, yaw, s * 1.4, 0)
         box((0.5, 0.3, 0.7), (gx, h + 0.05, gz), 0x2a2735, yaw=yaw)
-    box((1.4, 0.6, 1.4), (x, ground, z), 0x868ba1, yaw=yaw)
+    # the footing reaches well under the slope: the terrain is a 9 u grid's
+    # chords across the curve this stands on, a little under it on a crest
+    box((1.4, 1.2, 1.4), (x, ground - 0.3, z), 0x868ba1, yaw=yaw)
 
 def chair(at, yaw, color=0x3f7bd9):
-    """A two-seat chair hanging under the cable at `at`, facing down the line."""
+    """A two-seat chair hanging under the cable at `at`, facing down the line.
+    Returns its parts."""
     x, y, z = at
-    box((0.2, 1.5, 0.2), (x, y - 0.75, z), 0x2a2735, yaw=yaw)
+    parts = [box((0.2, 1.5, 0.2), (x, y - 0.75, z), 0x2a2735, yaw=yaw)]
     for (lx, ly, lz, size, c) in ((0, -1.55, 0.1, (1.5, 0.16, 0.7), color),
                                   (0, -1.15, -0.2, (1.5, 0.7, 0.16), color),
                                   (0, -0.95, 0.5, (1.5, 0.2, 0.2), 0x2a2735)):
         px, pz = turned(x, z, yaw, lx, lz)
-        box(size, (px, y + ly, pz), c, yaw=yaw)
+        parts.append(box(size, (px, y + ly, pz), c, yaw=yaw))
+    return parts
 
 def bullwheel(x, y, z, yaw):
     """The big wheel the cable turns round in a station, on its frame."""
@@ -1057,12 +1098,13 @@ def station(x, z, y, ground, yaw, roof=0xff5040):
 def ski_lift():
     # Powder: a ski mountain standing along the road, its summit behind (-X)
     # and its long flank toward the road, so the lap drives past the whole of
-    # it side-on. The chairlift climbs that flank on the diagonal from a
-    # valley station by the road over four towers to the top station on the
-    # summit, chairs going up one side and down the other; a slalom piste runs
-    # down the other diagonal to a finish banner on the flat; pines on the
-    # flanks.
-    H = mound(30.0, -40.0, 0.0, 45.0, 55.0, 75.0, shape=1.15, jitter=0.8)
+    # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
+    # what stands on it. The chairlift climbs that flank on the diagonal from
+    # a valley station by the road over four towers to the top station on the
+    # summit, chairs riding up one side and down the other round the haul
+    # rope's loop (anim_path); a slalom piste runs down the other diagonal to a
+    # finish banner on the flat; pines on the flanks.
+    H = set_ground('ski-lift')
     V, T = (12.0, -22.0), (-36.0, -3.0)             # valley and top wheels
     dx, dz = T[0] - V[0], T[1] - V[1]
     L = math.hypot(dx, dz)
@@ -1082,11 +1124,17 @@ def ski_lift():
     for s in (-1.4, 1.4):
         tube([(V[0] + dx * f + nx * s, y, V[1] + dz * f + nz * s) for f, y in line], 0.07, 0x2a2735,
              res=2, bevel_res=0, wire=True)
-    for k in range(4):
-        f = 0.11 + k * 0.22
-        chair((V[0] + dx * f + nx * 1.4, cy(f), V[1] + dz * f + nz * 1.4), yaw, 0x3f7bd9)
-        f2 = f + 0.11
-        chair((V[0] + dx * f2 - nx * 1.4, cy(f2), V[1] + dz * f2 - nz * 1.4), yaw + math.pi, 0xff5040)
+    # the haul rope's loop: up one side, round the top wheel, down the other;
+    # the renderer carries the chairs round it (anim_path), facing their way
+    up = [(V[0] + dx * f + nx * 1.4, y, V[1] + dz * f + nz * 1.4) for f, y in line]
+    down = [(V[0] + dx * f - nx * 1.4, y, V[1] + dz * f - nz * 1.4) for f, y in reversed(line)]
+    for k, pt in enumerate(up + down):
+        marker('path_lift_%d' % k, pt)
+    for k in range(8):
+        f = (k + 0.5) / 8
+        at = (V[0] + dx * f + nx * 1.4, cy(f), V[1] + dz * f + nz * 1.4)   # rest spot, any will do
+        with animated('anim_path:c=lift:p=48:o=%.3f:f=1#%d' % (k / 8, k), at):
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2])        # faces +X, the way it rides
     # valley station on the flat by the road, its hut beside it, skis racked
     station(V[0], V[1], y0, 0.0, yaw)
     hx, hz = turned(V[0], V[1], yaw, 0.0, -4.4)
@@ -1203,8 +1251,9 @@ def avalanche_slide():
     # let go: the broken crown near the top, the bare rock of the chute below
     # it, and the debris fan of tumbled snow blocks and rocks spread out at
     # its foot toward the road, a pine snapped and its trunk thrown down, a
-    # buried sled. Forest stands either side of the chute.
-    H = mound(28.0, -40.0, 0.0, 40.0, 46.0, 60.0, jitter=0.6)
+    # buried sled. Forest stands either side of the chute. The mountain is
+    # the track's terrain (SET_GROUND); this is what lies on it.
+    H = set_ground('avalanche-slide')
     # the crown: the broken edge of the slab, a step of rock across the face
     for z in (-2.6, 0.0, 2.6):
         x = -28.0 + 0.4 * abs(z)
@@ -1216,7 +1265,9 @@ def avalanche_slide():
     for i, x in enumerate(xs):
         w = 1.8 + 0.45 * i
         for z in (-w, 0.0, w):
-            verts.append((x, H(x, z + 0.3 * math.sin(i)) + (0.12 if z == 0.0 else 0.08), z + 0.3 * math.sin(i)))
+            # lifted clear of the terrain's 9 u chords, which cut a little
+            # above the curve where the face is hollow
+            verts.append((x, H(x, z + 0.3 * math.sin(i)) + (0.26 if z == 0.0 else 0.22), z + 0.3 * math.sin(i)))
     faces = [(3 * i + j, 3 * i + j + 1, 3 * (i + 1) + j + 1, 3 * (i + 1) + j) for i in range(len(xs) - 1) for j in (0, 1)]
     poly(verts, faces, 0x9aa1b4)
     for i, x in enumerate((-20.0, -12.0, -4.0)):
@@ -1522,8 +1573,9 @@ def expedition_camp():
 def avalanche_fence():
     # Avalanche: a run of snow fence at the foot of the mountainside it guards
     # the road from, upright slats wired between posts and braced from behind
-    # (-X), the snow it caught drifted along its back, pines up the slope.
-    H = mound(16.0, -20.0, 0.0, 18.0, 19.0, 26.0, jitter=0.5)
+    # (-X), the snow it caught drifted along its back, pines up the slope. The
+    # mountainside is the track's terrain (SET_GROUND).
+    H = set_ground('avalanche-fence')
     for x, z, k in ((-10.0, -9.0, 2.4), (-14.0, 8.0, 2.6), (-6.0, 13.0, 2.2), (-22.0, -14.0, 2.4)):
         pine((x, H(x, z) - 0.3, z), k)
     L, N = 4.2, 3
@@ -2908,10 +2960,33 @@ def chamfer():
 
 CHAMFER = 0.05   # the car's 0.02 at its 0.9 length, at this scale and a little over
 
+def join_groups():
+    """Each group() becomes one object named after it, its parts' bevels
+    applied first (a join keeps only the active object's modifiers)."""
+    groups = {}
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH' and o.get('group'):
+            groups.setdefault(o['group'], []).append(o)
+    for name, objs in groups.items():
+        for o in objs:
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True)
+            bpy.context.view_layer.objects.active = o
+            for m in list(o.modifiers):
+                bpy.ops.object.modifier_apply(modifier=m.name)
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        bpy.ops.object.join()
+        objs[0].name = name
+        objs[0].data.name = name
+
 def finalize_and_export(name):
     k = GROW.get(name, 1.0)
     shade()
     chamfer()
+    join_groups()
     for o in bpy.context.scene.objects:
         if o.type == 'MESH' and not o.data.uv_layers:
             o.data.uv_layers.new(name='UVMap')
