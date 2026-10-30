@@ -259,7 +259,9 @@ export const SET_GROUND = {
   // Powder's ski mountain, its summit behind the lift (the lift's frame, grown
   // 1.35 by its builder), and the blue run washed down it from the top
   // station to the slalom and on to the finish on the flat; Avalanche's slide
-  // face, the debris fan it dropped out to the road, and its fences' slopes.
+  // face, the debris fan over the chute's end (stopping a grid cell short of
+  // the road, whose cap would leave what lies on it floating), and its
+  // fences' slopes.
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xb4cdf2 },
@@ -267,7 +269,7 @@ export const SET_GROUND = {
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
-    { kind: 'fan', yaw: 90, z: -9, len: 26, r: 8, r1: 11, h: 2.5, h1: 0.5, top: 0.3 }
+    { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
   // Flurry's lake: the ice lies on the plain, unraised, and the snow banks up
   // round it (the road crosses its east edge on stilts).
@@ -421,15 +423,15 @@ export const TRACKS = {
       { model: 'set-penguin-chute', u: 0.36, lat: 17, yaw: 40 }
     ],
     // the glacier: a tongue of blue ice flows down from the massif in the
-    // west between its grey lateral moraines, into the middle of the map,
+    // west, low in the valley between two snow ridges, into the middle of the map,
     // ending among the penguins by the long legs; the fort stands on the
     // terminal moraine the ice left behind at the far end of the lap, which
     // the long legs drive straight at
     land: [
       { kind: 'ridge', u: 0.0491, lat: -126.1, yaw: 151, len: 60, r: 42, h: 28 },
-      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, len: 122, r: 15, r1: 11, h: 8, h1: 2.5, top: 0.4, tint: 0x8cc2f2 },
-      { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, len: 90, r: 7, h: 4.5, h1: 3, top: 0.2, tint: 0xbcb8c0 },
-      { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, len: 90, r: 7, h: 4.5, h1: 3, top: 0.2, tint: 0xbcb8c0 },
+      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 12, r1: 9, h: 3, h1: 1.2, top: 0.5, tint: 0x8cc2f2 },
+      { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, x: 8, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
+      { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, x: -3, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 }
     ]
   },
