@@ -104,7 +104,8 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
             switch (s.kind) {
                 case 0: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; break; // ridge
                 case 1: px1 = nx1 = zz = s.r + s.w; break;                               // ring
-                case 2: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // plain
+                case 2: px1 = nx1 = s.r + (s.h > 0 ? 2.6f : 1.0f) * s.w;                 // plain, its banks
+                        zz = 0.5f * s.len + px1; break;
                 default: px1 = s.r; nx1 = s.r1; zz = s.rz; fade = 1.3f; break;          // mound
             }
             // The world box, for the quick reject, takes in a mound's fade too;
@@ -363,8 +364,9 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
 // and the sun bake's flat proxy all stand on groundY, and ground below it
 // would bake fully shadowed and leave them hanging.
 float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-        float* dell) const {
+        float* dell, float* bed) const {
     if (dell) *dell = 0;
+    if (bed) *bed = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -390,7 +392,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         // colour's dell term (groundTint).
         if (dell) *dell = mask * (1.0f - shape) * smooth01(border / kRampR);
     }
-    const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell);
+    const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell, bed);
     float y = tb.groundY + land * smooth01(border / kRampR);
     if (withFlats) {
         // Cut only: a clearing lowers what stands above its level and leaves
@@ -417,7 +419,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
 // parts stand on the very surface they were modelled on, and the road beside
 // its foot keeps its short stilts.
 float TtpRenderer::landforms(float x, float z, float edge, float lift, float hill,
-        float* dell) const {
+        float* dell, float* bed) const {
     const auto local = [&](const LandShape& s, float& lx, float& lz) {
         const float dx = x - s.x, dz = z - s.z;
         lx = dx * s.ax + dz * s.az;
@@ -434,17 +436,28 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         return t <= top ? 1.0f : 1.0f - smooth01((t - top) / (1.0f - top));
     };
     const auto in = [&](const LandShape& s) { return x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1; };
+    // A plain with a height `h` is a channel: a bank that tall along both
+    // sides, its crest where the floor's fade ends, falling away over 1.6 of
+    // that fade behind. The highest bank of any plain, and only where no
+    // plain keeps its floor (`keepAll`), so the bank of one reach never runs
+    // across the floor of the next round a bend.
+    float keepAll = 1.0f, bank = 0.0f;
     for (const LandShape& s : mLand) {
         if (s.kind != 2 || !in(s)) continue;
         float lx, lz, at;
         local(s, lx, lz);
         const float d = spine(s, lx, lz, at);
-        const float keep = smooth01((d - s.r) / std::max(0.01f, s.w));
+        const float w = std::max(0.01f, s.w);
+        const float keep = smooth01((d - s.r) / w);
         lift *= keep;
         hill *= keep;
+        keepAll *= keep;
         if (dell) *dell *= keep;
+        if (bed) *bed = std::max(*bed, 1.0f - keep);
+        if (s.h > 0) bank = std::max(bank, s.h * keep * (1.0f - smooth01((d - s.r - w) / (1.6f * w))));
     }
     const float clear = smooth01((edge - kFlatR) / 12.0f);
+    hill += bank * keepAll * clear;
     for (const LandShape& s : mLand) {
         if ((s.kind != 0 && s.kind != 1) || !in(s)) continue;
         float lx, lz, at = 0;
@@ -522,10 +535,12 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     const auto vi = [&](int c, int r) { return (size_t) r * (cols + 1) + c; };
     std::vector<float> h(nv);
     mGroundDell.assign(nv, 0.0f);
+    mGroundBed.assign(nv, 0.0f);
     for (int r = 0; r <= rows; r++) {
         for (int c = 0; c <= cols; c++) {
             const size_t v = vi(c, r);
-            h[v] = terrainField(tb, mTerrainX0 + c * sx, mTerrainZ0 + r * sz, true, &mGroundDell[v]);
+            h[v] = terrainField(tb, mTerrainX0 + c * sx, mTerrainZ0 + r * sz, true, &mGroundDell[v],
+                    &mGroundBed[v]);
         }
     }
     mGroundGrid.h.resize(nv);
@@ -549,23 +564,28 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     }
 }
 
-// Two terms, both tied to a shape and both gentle, because the grid's 9 u
+// Three terms, all tied to a shape and all gentle, because the grid's 9 u
 // interpolation turns them into broad gradients: dells out among the hills a
-// shade deeper, and a steep face turning to what lies under the surface (earth
-// under lawn, darker rust on the badlands, grey rock through the snow). Linear
-// multipliers over the biome texture; 1 is the texture as painted, which is
-// what the road's verge and the berms keep, so nothing seams at a berm's foot.
-float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float upY) const {
-    float3 deep{ 1.0f }, face{ 1.0f };
+// shade deeper, a steep face turning to what lies under the surface (earth
+// under lawn, darker rust on the badlands, grey rock through the snow), and
+// the floor of a `plain` landform (`bed`) wearing what a dry creek leaves (the
+// badlands' grey-khaki gravel). Linear multipliers over the biome texture; 1
+// is the texture as painted, which is what the road's verge and the berms
+// keep, so nothing seams at a berm's foot. Multipliers only darken, so a bed
+// can only shift toward a duller colour, never a paler one.
+float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float upY) const {
+    float3 deep{ 1.0f }, face{ 1.0f }, floor{ 1.0f };
     switch (groundKind) {
         case 0: deep = { 0.88f, 0.92f, 0.86f }; face = { 0.86f, 0.76f, 0.58f }; break;  // lawn
-        case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f }; break;  // redrock
+        case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f };         // redrock
+                floor = { 0.62f, 0.80f, 0.96f }; break;
         case 3: deep = { 0.90f, 0.93f, 0.99f }; face = { 0.62f, 0.66f, 0.74f }; break;  // snow
         default: return float3{ 1.0f };
     }
     // From about 20 degrees, fully by about 42.
     const float steep = smooth01((1.0f - upY - 0.06f) / 0.2f);
-    const float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
+    float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
+    c = mix(c, c * floor, std::min(1.0f, std::max(0.0f, bed)));
     return mix(c, c * face, 0.55f * steep);
 }
 
@@ -1854,9 +1874,10 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const float3 n = normalize(float3{
                             (hAt(c - 1, r) - hAt(c + 1, r)) / (2 * sx), 1.0f,
                             (hAt(c, r - 1) - hAt(c, r + 1)) / (2 * sz) });
-                    const float dell = mGroundDell[(size_t) r * (cols + 1) + c];
+                    const size_t gv = (size_t) r * (cols + 1) + c;
                     mGround.verts.push_back({ x, hAt(c, r), z,
-                            packAlbedo(groundTint(tb.groundKind, dell, n.y), 1.0f) });
+                            packAlbedo(groundTint(tb.groundKind, mGroundDell[gv], mGroundBed[gv], n.y),
+                                       1.0f) });
                     mGround.uvs.push_back({ x / TILE, z / TILE });
                     mGround.normals.push_back(n);
                 }
