@@ -331,11 +331,12 @@ CSS length. Coming back resets the perf window, so the scale rule never climbs
 on undrawn ticks. `tests/e2e/welcome.spec.js` counts the renderer's frame calls
 to hold it.
 
-A capture that RUNS A RACE must run headed: headless Chromium is SwiftShader,
-headed gets ANGLE-on-Metal, and under SwiftShader a full-resolution frame is slow
-enough that the 50 ms dt clamp stops the race advancing. A still (a scenario that
-holds, the free-cam inspector) renders the same picture headless, so stay
-headless there — a headed run opens a window on the user's screen.
+Captures run headless — a headed run opens a window on the user's screen.
+`launchBrowser()` puts headless on ANGLE-Metal on a Mac; Chromium's own headless
+default is SwiftShader, where a full-resolution frame is slow enough that the
+50 ms dt clamp stops a race advancing, and whose CPU appetite starves every
+other browser on the machine. A browser launched outside the seam is back on
+SwiftShader.
 
 ## Measuring frame cost
 

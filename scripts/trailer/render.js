@@ -16,11 +16,9 @@
 // produce costs only wall clock. A realtime capture would instead be at the mercy of
 // whatever the machine was doing, and could not be re-rendered identically later.
 //
-// This must run HEADED. Headless Chromium falls back to SwiftShader (software GL);
-// headed gets ANGLE-on-Metal and the real GPU, which is the difference between the
-// scene rendering at 60 fps and at well under one. Nothing is displayed to a human —
-// the window just has to exist. Measured on an M1 Max at 3840x2160: the scene itself
-// runs at 60 fps, and a PNG readback is the whole per-frame cost.
+// This runs HEADED, on the window's real GPU path at 3840x2160. Nothing is
+// displayed to a human — the window just has to exist. The scene itself holds
+// 60 fps there, and a PNG readback is the whole per-frame cost.
 //
 // THE SOUND IS RENDERED THE SAME WAY. The display's mix is a Web Audio graph, and Web
 // Audio can run one on an OfflineAudioContext that only advances when told to: `?offlineaudio`
@@ -267,7 +265,7 @@ async function main() {
 
   let b;
   try {
-    // HEADED for the real GPU — see the note at the top of this file.
+    // HEADED — see the note at the top of this file.
     b = await launchBrowser({ headed: true });
     const page = await b.page({
       viewport: { width: WIDTH, height: HEIGHT },

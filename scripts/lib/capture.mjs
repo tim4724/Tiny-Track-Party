@@ -140,7 +140,12 @@ export async function servePages(pages, { root = path.join(ROOT, 'public') } = {
 // under webdriver in E2E anyway).
 export async function launchBrowser({ realUser = true, headed = false } = {}) {
   // Muted: a headed bake otherwise plays race audio out of the machine's speakers.
-  const browser = await chromium.launch({ headless: !headed, args: ['--mute-audio'] });
+  // On a Mac, headless gets the GPU too: Chromium's headless default is SwiftShader,
+  // which draws WebGL on the CPU and starves every other browser on the machine.
+  // Linux (CI) has no GPU to ask for and keeps SwiftShader.
+  const args = ['--mute-audio'];
+  if (process.platform === 'darwin') args.push('--use-angle=metal');
+  const browser = await chromium.launch({ headless: !headed, args });
   async function context(opts = {}) {
     const ctx = await browser.newContext(opts);
     if (realUser) {
@@ -197,8 +202,8 @@ export async function waitForScene(page, { timeout = 30000 } = {}) {
 export const HOLD_SETTLE_MS = 800;
 
 // How long to wait for a card's hold. It SCALES with how far into the race the
-// hold is and with how many pixels a frame costs, because headless is software
-// GL: a four-cell 1080p frame takes a few hundred ms and the 50 ms dt clamp makes
+// hold is and with how many pixels a frame costs, because headless off a Mac is
+// software GL: a four-cell 1080p frame takes a few hundred ms and the 50 ms dt clamp makes
 // each worth at most 50 ms of race, so 10 ms of wall per ms of race (per unit of
 // scale, squared for pixels) is a bound with room to spare, never the expectation.
 export function holdTimeoutMs(hold, scale = 1) {

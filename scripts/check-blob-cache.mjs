@@ -41,7 +41,7 @@ import { serveApp, launchBrowser, displayURL, args as parseArgs } from './lib/ca
 
 const args = parseArgs();
 // Generous, and it is the SCENE that needs it: a cold build compiles shaders and
-// bakes a 2048² shadow map under software GL before the first frame.
+// bakes a 2048² shadow map (under software GL, on CI) before the first frame.
 const TIMEOUT_MS = 120_000;
 
 const fail = (msg) => { console.error(`\n  FAIL  ${msg}`); process.exitCode = 1; };
