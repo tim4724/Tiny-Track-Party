@@ -24,26 +24,34 @@
 #include <map>
 
 utils::Entity TtpRenderer::setAnimRoot(const gltfio::FilamentAsset* asset,
-        utils::Entity ent) const {
+        utils::Entity ent, bool outermost) const {
     auto& tcm = mEngine->getTransformManager();
     utils::Entity root;
     for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
         const utils::Entity e = tcm.getEntity(ti);
-        if (ttp::rt::is_set_motion_name(asset->getName(e))) root = e;   // outermost wins
+        if (!ttp::rt::is_set_motion_name(asset->getName(e))) continue;
+        root = e;
+        if (!outermost) break;
     }
     return root;
 }
 
+// A part travels if any `anim_` node over it does: one riding on a traveller
+// (a wind-up key on a walking robot) leaves the bake with it.
 void TtpRenderer::keepTravellersOutOfBake(const gltfio::FilamentAsset* asset,
         gltfio::FilamentInstance* inst) {
     auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
     for (size_t i = 0; i < inst->getEntityCount(); i++) {
         const utils::Entity e = inst->getEntities()[i];
         if (!rcm.getInstance(e)) continue;
-        const utils::Entity root = setAnimRoot(asset, e);
-        ttp::rt::SetMotion m;
-        if (!root.isNull() && ttp::rt::parse_set_motion(asset->getName(root), m) && m.travels()) {
-            setShadows(&e, 1, false, false);
+        for (auto ti = tcm.getInstance(e); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
+            const char* nm = asset->getName(tcm.getEntity(ti));
+            ttp::rt::SetMotion m;
+            if (ttp::rt::is_set_motion_name(nm) && ttp::rt::parse_set_motion(nm, m) && m.travels()) {
+                setShadows(&e, 1, false, false);
+                break;
+            }
         }
     }
 }
@@ -110,10 +118,26 @@ void TtpRenderer::buildSetMovers() {
                 pathOf[name] = (int) mSetPaths.size();
                 mSetPaths.push_back(std::move(sp));
             }
+            // Every `anim_` node moves what hangs under it up to the next one:
+            // a node inside another rides on it (a key turning in a walking
+            // robot's back), so the outer ones are built first and each inner
+            // one remembers the mover it rides.
+            std::map<utils::Entity, size_t> moverOf;
+            std::vector<std::pair<int, size_t>> order;   // (anim nodes over it, entity slot)
             for (size_t e = 0; e < nEnt; e++) {
+                if (setAnimRoot(asset, ents[e], false) != ents[e]) continue;
+                int depth = 0;
+                for (auto ti = tcm.getInstance(tcm.getParent(tcm.getInstance(ents[e]))); ti;
+                        ti = tcm.getInstance(tcm.getParent(ti))) {
+                    depth += ttp::rt::is_set_motion_name(asset->getName(tcm.getEntity(ti))) ? 1 : 0;
+                }
+                order.push_back({ depth, e });
+            }
+            std::stable_sort(order.begin(), order.end());
+            for (const auto& slot : order) {
+                const size_t e = slot.second;
                 const utils::Entity node = ents[e];
                 const char* nodeName = asset->getName(node);
-                if (setAnimRoot(asset, node) != node) continue;   // not an outermost part
                 ttp::rt::SetMotion motion;
                 std::string unknown;
                 ttp::rt::parse_set_motion(nodeName, motion, &unknown);
@@ -125,11 +149,21 @@ void TtpRenderer::buildSetMovers() {
                 // Everything drawn under the node, baked into ONE mesh in its frame.
                 std::vector<utils::Entity> parts;
                 for (size_t i = 0; i < nEnt; i++) {
-                    if (rcm.getInstance(ents[i]) && setAnimRoot(asset, ents[i]) == node) {
+                    if (rcm.getInstance(ents[i]) && setAnimRoot(asset, ents[i], false) == node) {
                         parts.push_back(ents[i]);
                     }
                 }
                 if (parts.empty()) continue;
+                // The mover this one rides, if any (built already: outer first):
+                // the nearest `anim_` node over it that became one (a node with
+                // nothing drawn of its own makes none, so its riders ride on
+                // past it).
+                int rides = -1;
+                for (auto ti = tcm.getInstance(tcm.getParent(tcm.getInstance(node)));
+                        ti && rides < 0; ti = tcm.getInstance(tcm.getParent(ti))) {
+                    const auto it = moverOf.find(tcm.getEntity(ti));
+                    if (it != moverOf.end()) rides = (int) it->second;
+                }
                 MergedGroup g;
                 Mesh& mesh = g.baked;
                 mesh.weld = true;
@@ -243,8 +277,13 @@ void TtpRenderer::buildSetMovers() {
                         motion.path = false;
                     }
                 }
+                if (rides >= 0) {
+                    mv.parent = rides;
+                    mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * rest;
+                }
                 mv.motion = std::move(motion);
                 mMergedDress.push_back(std::move(g));
+                moverOf[node] = mSetMovers.size();
                 mSetMovers.push_back(std::move(mv));
             }
         }
@@ -272,7 +311,11 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         const float t = seg > 0 ? (s - p.at[i]) / seg : 0;
         return p.pts[i] + (p.pts[(i + 1) % n] - p.pts[i]) * t;
     };
-    for (const SetMover& mv : mSetMovers) {
+    // Where each mover is this frame, for the ones riding it (outer first).
+    mSetMoverNow.resize(mSetMovers.size());
+    for (size_t k = 0; k < mSetMovers.size(); k++) {
+        const SetMover& mv = mSetMovers[k];
+        mSetMoverNow[k] = mv.rest;
         const auto ti = tcm.getInstance(mv.ent);
         if (!ti) continue;
         const ttp::rt::SetMotion& m = mv.motion;
@@ -299,6 +342,7 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
             }
             mat4f w{ float4{ rot[0] * mv.scale, 0 }, float4{ rot[1] * mv.scale, 0 },
                      float4{ rot[2] * mv.scale, 0 }, float4{ at, 1 } };
+            mSetMoverNow[k] = w;
             tcm.setTransform(ti, w);
             continue;
         }
@@ -323,7 +367,9 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         if (m.sway) local = local * axisTurn(m.swayAxis, pose.sway);
         if (m.spin) local = local * axisTurn(m.spinAxis, pose.spin);
         if (pose.roll != 0) local = local * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
-        tcm.setTransform(ti, mv.rest * local);
+        const mat4f base = mv.parent >= 0 ? mSetMoverNow[(size_t) mv.parent] * mv.onParent : mv.rest;
+        mSetMoverNow[k] = base * local;
+        tcm.setTransform(ti, mSetMoverNow[k]);
     }
 }
 
