@@ -97,18 +97,32 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
                     px + (ax * l.x - az * l.z) * k, pz + (az * l.x + ax * l.z) * k, ax, az,
                     l.len * k, l.r * k, l.r1 * k, l.w * k, l.rz * k, l.h * k, l.h1 * k,
                     l.top, l.shape, 0, 0, 0, 0 };
-            float reach = 0;
+            // What the form reaches, as a box on its own axes: +X, -X, +-Z.
+            float px1 = 0, nx1 = 0, zz = 0, fade = 1.0f;
             switch (s.kind) {
-                case 0: reach = 0.5f * s.len + std::max(s.r, s.r1); break;      // ridge
-                case 1: reach = s.r + s.w; break;                               // ring
-                case 2: reach = 0.5f * s.len + s.r + s.w; break;                // plain
-                default: reach = std::max({ s.r, s.r1, s.rz }) * 1.3f; break;   // mound + its fade
+                case 0: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; break; // ridge
+                case 1: px1 = nx1 = zz = s.r + s.w; break;                               // ring
+                case 2: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // plain
+                default: px1 = s.r; nx1 = s.r1; zz = s.rz; fade = 1.3f; break;          // mound
             }
-            s.x0 = s.x - reach; s.x1 = s.x + reach;
-            s.z0 = s.z - reach; s.z1 = s.z + reach;
+            // The world box, for the quick reject, takes in a mound's fade too;
+            // the REGION only what rises (the fade just gives the land back).
+            const auto worldBox = [&](float k2, float& bx0, float& bz0, float& bx1, float& bz1) {
+                bx0 = bz0 = 1e30f; bx1 = bz1 = -1e30f;
+                for (const float lx : { px1 * k2, -nx1 * k2 }) {
+                    for (const float lz : { zz * k2, -zz * k2 }) {
+                        const float wx = s.x + ax * lx - az * lz, wz = s.z + az * lx + ax * lz;
+                        bx0 = std::min(bx0, wx); bx1 = std::max(bx1, wx);
+                        bz0 = std::min(bz0, wz); bz1 = std::max(bz1, wz);
+                    }
+                }
+            };
+            worldBox(fade, s.x0, s.z0, s.x1, s.z1);
             mLand.push_back(s);
-            x0 = std::min(x0, s.x0 - kRampR); x1 = std::max(x1, s.x1 + kRampR);
-            z0 = std::min(z0, s.z0 - kRampR); z1 = std::max(z1, s.z1 + kRampR);
+            float rx0, rz0, rx1, rz1;
+            worldBox(1.0f, rx0, rz0, rx1, rz1);
+            x0 = std::min(x0, rx0 - kRampR); x1 = std::max(x1, rx1 + kRampR);
+            z0 = std::min(z0, rz0 - kRampR); z1 = std::max(z1, rz1 + kRampR);
         }
     }
     mTerrainX0 = std::max(x0, -LIM); mTerrainX1 = std::min(x1, LIM);
