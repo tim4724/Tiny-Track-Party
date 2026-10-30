@@ -954,7 +954,9 @@ private:
     // land lies before any of them (`withFlats` false) — the height a clearing
     // is levelled TO, so a piece stands where the ground already was.
     float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
-    float terrainField(const TrackBin& tb, float x, float z, bool withFlats) const;
+    // `dell`, if asked: how far down a swell the point lies, 0 near the road.
+    float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
+            float* dell = nullptr) const;
     // The lowest the land lies under a clearing's footprint (its centre,
     // corners and edge middles), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
@@ -1002,6 +1004,12 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
+    // Per grid vertex, terrainField's dell term, for the ground's colour.
+    std::vector<float> mGroundDell;
+    // The ground colour at a grid vertex: a low-contrast tint off the shape of
+    // the land (its dells, its steep faces), multiplied over the biome's
+    // texture. Never per-vertex noise: a speckle reads as a texture pattern.
+    filament::math::float3 groundTint(uint32_t groundKind, float dell, float upY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.

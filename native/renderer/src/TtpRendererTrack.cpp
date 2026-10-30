@@ -234,7 +234,9 @@ float TtpRenderer::terrainY(const TrackBin& tb, float x, float z, bool withFlats
 // caller's to apply (terrainY, buildTerrainGrid): the pillars, posts, berms
 // and the sun bake's flat proxy all stand on groundY, and ground below it
 // would bake fully shadowed and leave them hanging.
-float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats) const {
+float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
+        float* dell) const {
+    if (dell) *dell = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -287,7 +289,11 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
                       + 0.22f * terrainNoise(mTerrainSeed ^ 0x9e3779b9u, x / 34.0f, z / 34.0f);
         // Shaped so valleys sit flat and hills round off — pure noise reads as
         // static, not landscape.
-        hill = mTerrainAmp * mask * std::pow(n, 1.15f);
+        const float shape = std::pow(n, 1.15f);
+        hill = mTerrainAmp * mask * shape;
+        // How far down a swell this is, out where the hills are: the ground
+        // colour's dell term (groundTint).
+        if (dell) *dell = mask * (1.0f - shape) * smooth01(border / kRampR);
     }
     float y = tb.groundY + (lift + hill) * smooth01(border / kRampR);
     if (withFlats) {
@@ -319,14 +325,35 @@ float TtpRenderer::naturalFootY(const TrackBin& tb, const TerrainFlat& f) const 
 void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     if (mTerrainAmp <= 0) return;
     mGroundGrid.h.resize((size_t) (mGroundGrid.cols + 1) * (mGroundGrid.rows + 1));
+    mGroundDell.assign(mGroundGrid.h.size(), 0.0f);
     for (int r = 0; r <= mGroundGrid.rows; r++) {
         for (int c = 0; c <= mGroundGrid.cols; c++) {
             const size_t v = (size_t) r * (mGroundGrid.cols + 1) + c;
             const float y = terrainField(tb, mTerrainX0 + c * mGroundGrid.sx,
-                    mTerrainZ0 + r * mGroundGrid.sz, true);
+                    mTerrainZ0 + r * mGroundGrid.sz, true, &mGroundDell[v]);
             mGroundGrid.h[v] = std::max(tb.groundY, std::min(y, mTerrainCap[v]));
         }
     }
+}
+
+// Two terms, both tied to a shape and both gentle, because the grid's 9 u
+// interpolation turns them into broad gradients: dells out among the hills a
+// shade deeper, and a steep face turning to what lies under the surface (earth
+// under lawn, darker rust on the badlands, grey rock through the snow). Linear
+// multipliers over the biome texture; 1 is the texture as painted, which is
+// what the road's verge and the berms keep, so nothing seams at a berm's foot.
+float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float upY) const {
+    float3 deep{ 1.0f }, face{ 1.0f };
+    switch (groundKind) {
+        case 0: deep = { 0.88f, 0.92f, 0.86f }; face = { 0.86f, 0.76f, 0.58f }; break;  // lawn
+        case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f }; break;  // redrock
+        case 3: deep = { 0.90f, 0.93f, 0.99f }; face = { 0.62f, 0.66f, 0.74f }; break;  // snow
+        default: return float3{ 1.0f };
+    }
+    // From about 20 degrees, fully by about 42.
+    const float steep = smooth01((1.0f - upY - 0.06f) / 0.2f);
+    const float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
+    return mix(c, c * face, 0.55f * steep);
 }
 
 // The grounding rule for chunky pieces: the LOWEST surface point under the
@@ -1609,13 +1636,16 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             for (int r = 0; r <= rows; r++) {
                 for (int c = 0; c <= cols; c++) {
                     const float x = mTerrainX0 + c * sx, z = mTerrainZ0 + r * sz;
-                    mGround.verts.push_back({ x, hAt(c, r), z, white });
-                    mGround.uvs.push_back({ x / TILE, z / TILE });
                     // Central-difference heightfield normal — analytic, so the
                     // hills shade smooth at any grid step.
-                    mGround.normals.push_back(normalize(float3{
+                    const float3 n = normalize(float3{
                             (hAt(c - 1, r) - hAt(c + 1, r)) / (2 * sx), 1.0f,
-                            (hAt(c, r - 1) - hAt(c, r + 1)) / (2 * sz) }));
+                            (hAt(c, r - 1) - hAt(c, r + 1)) / (2 * sz) });
+                    const float dell = mGroundDell[(size_t) r * (cols + 1) + c];
+                    mGround.verts.push_back({ x, hAt(c, r), z,
+                            packAlbedo(groundTint(tb.groundKind, dell, n.y), 1.0f) });
+                    mGround.uvs.push_back({ x / TILE, z / TILE });
+                    mGround.normals.push_back(n);
                 }
             }
             for (int r = 0; r < rows; r++) {
