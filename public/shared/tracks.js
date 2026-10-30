@@ -536,11 +536,14 @@ export const TRACKS = {
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege: the block castle on its cushion fort where the
     // long home straight points, its soldiers drawn up before the gate and
-    // the wind-up robot marching its beat beside the straight
+    // the wind-up robot marching its beat beside the straight; the besiegers'
+    // ranks stand out across the floor, on the far bends of the lap
     set: [
       { model: 'set-block-castle', u: 0.9568, lat: 25.2, yaw: 24, scale: 1.3 },
       { model: 'set-toy-soldiers', u: 0.9398, lat: 10.5, yaw: 76 },
-      { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 }
+      { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 },
+      { model: 'set-toy-soldiers', u: 0.65, lat: 12, yaw: 20 },
+      { model: 'set-toy-soldiers', u: 0.15, lat: 12, yaw: 20 }
     ]
   },
   helix: {
@@ -554,7 +557,7 @@ export const TRACKS = {
       { model: 'set-marble-run', u: 0.2769, lat: 25, yaw: -131, scale: 1.3 },
       { model: 'set-slinky', u: 0.633, lat: 14.5 },
       { model: 'set-spinning-top', u: 0.145, lat: 10.5 },
-      { model: 'set-marbles', u: 0.03, lat: -10, yaw: 180 }
+      { model: 'set-marbles', u: 0.08, lat: -10, yaw: 180 }
     ]
   },
   skyline: {
@@ -563,10 +566,10 @@ export const TRACKS = {
     // Flight from the desk: the skyway flies straight at a desk standing at
     // its own height past the U-turn, a toy plane circling its tether over a
     // paper runway on it, a rocket steaming on its pad, a globe turning; the
-    // cardboard box in the infield is the hangar
+    // cardboard box by the grid is the hangar
     set: [
       { model: 'set-flight-desk', u: 0.4846, lat: -26.1, yaw: 138, scale: 1.5 },
-      { model: 'set-cardboard-box', u: 0.0211, lat: 24, scale: 1.4 }
+      { model: 'set-cardboard-box', u: 0.971, lat: 12, scale: 1.4 }
     ]
   }
 };

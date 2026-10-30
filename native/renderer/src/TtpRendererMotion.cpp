@@ -134,7 +134,8 @@ void TtpRenderer::buildSetMovers() {
                 order.push_back({ depth, e });
             }
             std::stable_sort(order.begin(), order.end());
-            for (const auto& [depth, e] : order) {
+            for (const auto& slot : order) {
+                const size_t e = slot.second;
                 const utils::Entity node = ents[e];
                 const char* nodeName = asset->getName(node);
                 ttp::rt::SetMotion motion;
@@ -153,13 +154,14 @@ void TtpRenderer::buildSetMovers() {
                     }
                 }
                 if (parts.empty()) continue;
-                // The mover this one rides, if any (built already: outer first).
+                // The mover this one rides, if any (built already: outer first):
+                // the nearest `anim_` node over it that became one (a node with
+                // nothing drawn of its own makes none, so its riders ride on
+                // past it).
                 int rides = -1;
-                if (depth > 0) {
-                    const auto pi = tcm.getInstance(tcm.getParent(tcm.getInstance(node)));
-                    const utils::Entity over = pi ? setAnimRoot(asset, tcm.getEntity(pi), false)
-                                                  : utils::Entity{};
-                    const auto it = moverOf.find(over);
+                for (auto ti = tcm.getInstance(tcm.getParent(tcm.getInstance(node)));
+                        ti && rides < 0; ti = tcm.getInstance(tcm.getParent(ti))) {
+                    const auto it = moverOf.find(tcm.getEntity(ti));
                     if (it != moverOf.end()) rides = (int) it->second;
                 }
                 MergedGroup g;
