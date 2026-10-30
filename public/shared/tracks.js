@@ -259,6 +259,21 @@ export const SET_GROUND = {
     { kind: 'ridge', yaw: 90, x: 12, len: 80, r: 7, h: 2, top: 0.2 }
   ]
 };
+
+// The height a model's SET_GROUND mounds give at (x, z) in its own frame, over
+// the plain: the highest of them, as the renderer composes them
+// (TtpRenderer::landforms) and the Blender builder builds on them
+// (set_prototypes.py set_ground(), which cannot import this).
+export function setGroundY(model, x, z) {
+  let best = 0;
+  for (const f of SET_GROUND[model] || []) {
+    if (f.kind !== 'mound') continue;
+    const lx = x - (f.x || 0), lz = z - (f.z || 0);
+    const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
+    if (t < 1) best = Math.max(best, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
+  }
+  return best;
+}
 //
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
 export const TRACKS = {
