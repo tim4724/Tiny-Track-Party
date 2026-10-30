@@ -579,10 +579,11 @@ export const TRACKS = {
       { model: 'set-route-sign', u: 0.81, lat: 10, yaw: 70 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
-    // past the south loop, each about 8 degrees over the horizon
+    // past the south loop, no crest edge more than about 8 degrees over the
+    // horizon from any point of the road
     land: [
-      { kind: 'ridge', u: 0.1784, lat: 73, yaw: 4, len: 110, r: 30, h: 14, top: 0.7 },
-      { kind: 'ridge', u: 0.7313, lat: 78, yaw: 151, len: 120, r: 30, h: 15, top: 0.7 }
+      { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
+      { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
