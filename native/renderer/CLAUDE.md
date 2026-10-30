@@ -499,6 +499,34 @@ memory until another track builds or the renderer goes.
   its snapshotted parse pose (`mBodyRest`). Anything added to a reuse path asks
   the same question: what would a fresh `createAsset` have guaranteed?
 
+## The ground meets the road
+
+`groundY` (the track's) is the plain under the deck's LOWEST point, so on the
+open-country biomes most of a lap rides high over it. The renderer's ground
+(`terrainY`, `TtpRendererTrack.cpp`) rises toward the deck instead, leaving a
+short stilt showing (`kRaiseDrop`), and rolls into hills away from it. It is
+renderer-only: the sim never reads it, and pillars, berms and the gantry still
+stand on `groundY` with their feet buried.
+
+- **NO GROUND THROUGH A DECK, PROVABLY.** The cap is per grid vertex
+  (`buildTerrainCap`): every triangle a deck section touches keeps its corners
+  under that section's lowest corner. A linear triangle never rises above its
+  corners, so no tuning of the lift can push the surface through a road, and a
+  road under a bridge keeps its own clearance. Change the lift freely; never
+  bypass the cap.
+- **NEVER BELOW `groundY`.** The sun bake's flat caster proxy sits at
+  `groundY`: ground under it bakes fully shadowed, and the posts standing on it
+  would hang. A valley is land left UNRAISED, not dug.
+- **A PIECE STANDS WHERE THE LAND LIES.** A set piece's clearing is levelled to
+  the lowest natural ground under its footprint (`naturalFootY`), never raised
+  for it: a piece on its own knoll reads as a plinth, which the art direction
+  rejects.
+- **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
+  grid as the mesh draws it — never `tb.groundY`.
+- **The road ahead stays visible**: a tree or prop that would cut the chase
+  camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
+  raised verge would otherwise stand it over the camera.
+
 ## The sun: one static light rule, three receivers, three maps
 
 **A static surface's light is vertex data, and its sun shadow is one tap into a
