@@ -233,6 +233,11 @@ const BOXES = {
 //   plain  a capsule like a ridge, `r` wide with a `w` fade, where the ground
 //          is left UNRAISED: a creek bed or valley floor, the low line the
 //          raised land stands over. Nothing goes below the plain itself.
+//   paint  a capsule like a plain that shapes nothing: it only colours the
+//          ground (a piste down a mountain)
+// Any of them but a mound may carry a `tint`, 0xRRGGBB, a multiplier over the
+// ground's colour where the form lies (fading with its flank, or a plain's or
+// paint's `w`); the ground's grid is 9 u, so a tint is a broad wash.
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.
@@ -241,15 +246,35 @@ const BOXES = {
 // in its own frame. The renderer lays it wherever the piece is placed (and
 // levels no clearing under it), and scripts/gen-set-prototypes.mjs hands the
 // same numbers to the Blender builder, so the model's towers and pines stand
-// on the terrain they were built on. One extra kind here:
+// on the terrain they were built on. Two extra kinds here, the ground the
+// builder builds on (set_ground()), which take the land under them:
 //   mound  scripts/blender/set_prototypes.py's mound(): summit at (`x`, `z`),
 //          `h` tall, reaching `r` toward +X, `r1` toward -X and `rz` along Z,
 //          its flank cos(t·π/2)^`shape`
+//   fan    a ridge's shape (`len`, `r`/`r1`, `h`/`h1`, `top`) lying ON the
+//          mounds, its rise added to theirs: a debris fan spilling off a
+//          slope to a wide low end
+// A form's `yaw` turns it, and its (`x`, `z`), in the piece's frame.
 export const SET_GROUND = {
   // Powder's ski mountain, its summit behind the lift (the lift's frame, grown
-  // 1.35 by its builder), and Avalanche's slide face and its fences' slopes.
-  'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
-  'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
+  // 1.35 by its builder), and the blue run washed down it from the top
+  // station to the slalom and on to the finish on the flat; Avalanche's slide
+  // face, the debris fan it dropped out to the road, and its fences' slopes.
+  'set-ski-lift': [
+    { kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 },
+    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xb4cdf2 },
+    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xb4cdf2 }
+  ],
+  'set-avalanche-slide': [
+    { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
+    { kind: 'fan', yaw: 90, z: -9, len: 26, r: 8, r1: 11, h: 2.5, h1: 0.5, top: 0.3 }
+  ],
+  // Flurry's lake: the ice lies on the plain, unraised, and the snow banks up
+  // round it (the road crosses its east edge on stilts).
+  'set-frozen-lake': [
+    { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
+    { kind: 'ring', r: 21, w: 6, h: 3.5 }
+  ],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Wash's creek: the bed is the low line the raised land stands over, between
   // two cut banks (turned 90 so the spine runs along the creek's own X).
@@ -260,19 +285,30 @@ export const SET_GROUND = {
   ]
 };
 
-// The height a model's SET_GROUND mounds give at (x, z) in its own frame, over
-// the plain: the highest of them, as the renderer composes them
-// (TtpRenderer::landforms) and the Blender builder builds on them
+// The height a model's SET_GROUND mounds and fans give at (x, z) in its own
+// frame, over the plain: the highest mound and the fans lying on it, as the
+// renderer composes them (TtpRenderer::landforms) and the Blender builder builds on them
 // (set_prototypes.py set_ground(), which cannot import this).
 export function setGroundY(model, x, z) {
-  let best = 0;
+  let mounds = 0, fans = 0;
   for (const f of SET_GROUND[model] || []) {
-    if (f.kind !== 'mound') continue;
-    const lx = x - (f.x || 0), lz = z - (f.z || 0);
-    const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
-    if (t < 1) best = Math.max(best, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
+    if (f.kind !== 'mound' && f.kind !== 'fan') continue;
+    const a = (f.yaw || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const lx = x * c - z * s - (f.x || 0), lz = x * s + z * c - (f.z || 0);
+    if (f.kind === 'mound') {
+      const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
+      if (t < 1) mounds = Math.max(mounds, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
+      continue;
+    }
+    // a fan is debris lying on the mounds: its rise adds to theirs
+    const half = (f.len || 0) / 2, cz = Math.min(half, Math.max(-half, lz));
+    const at = f.len ? (cz + half) / f.len : 0;
+    const t = Math.hypot(lx, lz - cz) / (f.r + ((f.r1 ?? f.r) - f.r) * at);
+    if (t >= 1) continue;
+    const top = f.top || 0, k = t <= top ? 0 : Math.min(1, (t - top) / (1 - top));
+    fans += (f.h + ((f.h1 ?? f.h) - f.h) * at) * (1 - k * k * (3 - 2 * k));
   }
-  return best;
+  return mounds + fans;
 }
 //
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
@@ -352,24 +388,21 @@ export const TRACKS = {
       { model: 'set-piste-fence', u: 0.96, lat: -7, yaw: 180 },
       { model: 'set-piste-fence', u: 0.06, lat: 7.5 },
       { model: 'set-ski-rack', u: 0.03, lat: 9, yaw: 20 },
-      { model: 'set-log-cabin', u: 0.18, lat: -18, yaw: 160 },
-      { model: 'set-snowman-pair', u: 0.82, lat: 14.5, yaw: 20 },
-      { model: 'set-ski-rack', u: 0.55, lat: -7.2, yaw: 160 },
-      { model: 'set-snowman-pair', u: 0.07, lat: -7.3, yaw: 160 }
+      { model: 'set-ski-rack', u: 0.55, lat: -7.2, yaw: 160 }
     ]
   },
   flurry: {
     name: 'Flurry', waypoints: GEN_TRACKS.flurry,
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
-      { model: 'set-frozen-pond', u: 0.824, lat: 54.2, scale: 0.85 },
+      { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 172 },
       { model: 'set-log-cabin', u: 0.6, lat: -20, yaw: 160 },
-      { model: 'set-log-cabin', u: 0.4, lat: -8.5, yaw: 160 },
-      { model: 'set-log-pile', u: 0.36, lat: -10.5, yaw: 160 },
-      { model: 'set-snowman-pair', u: 0.53, lat: -7, yaw: 160 },
-      { model: 'set-snowman-pair', u: 0.69, lat: 7.5, yaw: 20 },
-      { model: 'set-log-cabin', u: 0.92, lat: -18, yaw: 160 },
-      { model: 'set-snowman-pair', u: 0.21, lat: 12, yaw: 20 }
+      { model: 'set-log-pile', u: 0.3719, lat: -9.2, yaw: -169 }
+    ],
+    // a frozen stream runs from the village loop under the crossing down to
+    // the lake
+    land: [
+      { kind: 'plain', u: 0.4413, lat: 5, yaw: -142, len: 54, r: 3, w: 5, tint: 0xc8e0f6 }
     ]
   },
   glacier: {
@@ -386,6 +419,18 @@ export const TRACKS = {
       { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 160 },
       { model: 'set-ice-chunks', u: 0.13, lat: 10.5, yaw: 116 },
       { model: 'set-penguin-chute', u: 0.36, lat: 17, yaw: 40 }
+    ],
+    // the glacier: a tongue of blue ice flows down from the massif in the
+    // west between its grey lateral moraines, into the middle of the map,
+    // ending among the penguins by the long legs; the fort stands on the
+    // terminal moraine the ice left behind at the far end of the lap, which
+    // the long legs drive straight at
+    land: [
+      { kind: 'ridge', u: 0.0491, lat: -126.1, yaw: 151, len: 60, r: 42, h: 28 },
+      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, len: 122, r: 15, r1: 11, h: 8, h1: 2.5, top: 0.4, tint: 0x8cc2f2 },
+      { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, len: 90, r: 7, h: 4.5, h1: 3, top: 0.2, tint: 0xbcb8c0 },
+      { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, len: 90, r: 7, h: 4.5, h1: 3, top: 0.2, tint: 0xbcb8c0 },
+      { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 }
     ]
   },
   avalanche: {

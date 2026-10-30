@@ -174,26 +174,31 @@ function setInit(p) {
 // piece whose model has a SET_GROUND entry brings that ground with it,
 // anchored on the piece itself (its index), since the model was built standing
 // on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
-// but shape (1) and a plain's fade (8).
-const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3 };
-const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape'];
+// but shape (1), a plain's or paint's fade (8) and tint (0, none).
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5 };
+const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint'];
 function landInit(l, piece, where) {
   checkKeys(l, LAND_KEYS, where);
   if (!(l.kind in LAND_KINDS)) fail(`${where}: kind ${JSON.stringify(l.kind)} is not one of ${Object.keys(LAND_KINDS).join(', ')}`);
   if (piece < 0 && (typeof l.u !== 'number' || l.u < 0 || l.u >= 1)) fail(`${where}: u ${JSON.stringify(l.u)} must be a number in [0, 1)`);
   if (piece >= 0 && (l.u != null || l.lat != null)) fail(`${where}: a set piece's ground is anchored on the piece; it takes no u/lat (yaw turns it in the piece's frame)`);
+  if (piece < 0 && (l.kind === 'mound' || l.kind === 'fan')) fail(`${where}: a ${l.kind} is the ground a set piece was modelled on: it belongs in SET_GROUND`);
   if (!(l.r > 0)) fail(`${where}: r must be positive`);
   if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
   if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
-  if (l.kind !== 'plain' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind !== 'plain' && l.kind !== 'paint' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
+  if (l.kind === 'mound' && l.tint != null) fail(`${where}: a mound takes no tint`);
   if (l.kind === 'ring' && !(l.w > 0)) fail(`${where}: a ring needs its bank's half-width w`);
   if (l.top != null && !(l.top >= 0 && l.top < 1)) fail(`${where}: top must be in [0, 1)`);
+  if (l.tint != null && !(Number.isInteger(l.tint) && l.tint > 0 && l.tint <= 0xffffff)) fail(`${where}: tint must be a 0xRRGGBB colour`);
   const n = (v, d = 0) => D(v ?? d);
-  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape.
+  const fades = l.kind === 'plain' || l.kind === 'paint';
+  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape, tint.
   return `{ ${LAND_KINDS[l.kind]}, ${piece}, ${n(l.u)}, ${n(l.lat)}, ${n(l.yaw)}, ${n(l.x)}, ${n(l.z)}, `
-    + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, l.kind === 'plain' ? 8 : 0)}, ${n(l.rz)}, `
-    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)} }`;
+    + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, fades ? 8 : 0)}, ${n(l.rz)}, `
+    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)}, 0x${(l.tint || 0).toString(16)}u }`;
 }
 for (const [model, list] of Object.entries(SET_GROUND)) {
   if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${model}.glb`))) fail(`SET_GROUND "${model}" has no GLB`);
