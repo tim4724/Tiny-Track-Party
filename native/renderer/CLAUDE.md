@@ -545,6 +545,12 @@ stand on `groundY` with their feet buried.
   disagreeing. On a convex slope the grid's chords run under the curve the
   parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
   chord misses; a part floats only if that is bypassed.
+- **The beach rolls inland only** (`beachMask`): its dunes stand inside the
+  lap's loop, never on the beach between the road and the sea (a ring of
+  dunes read as a wall and hid it), and everything, the authored landforms
+  included, sinks to exactly the plain short of the waterline, where the sea
+  and the wet sand lie flat on it. The sea and the dunes read one shoreline
+  (`shoreline()`).
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.
