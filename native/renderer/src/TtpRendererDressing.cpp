@@ -1662,7 +1662,8 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     }
     auto& tcm = mEngine->getTransformManager();
     std::vector<size_t> next(nModels, 0);
-    for (const auto& p : tb.setPieces) {
+    for (size_t i = 0; i < tb.setPieces.size(); i++) {
+        const auto& p = tb.setPieces[i];
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
         const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
         const float3 t = f.tangent();
@@ -1680,10 +1681,14 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         // footprint, so no corner hangs — and one clearing the shape of the
         // footprint levels the relief to that, so a ship never stands on a
         // slope with a corner in the air. The ground is never raised FOR a
-        // piece: a piece on its own knoll reads as a plinth.
-        TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, 0.0f };
-        clearing.y = naturalFootY(tb, clearing);
-        mTerrainFlats.push_back(clearing);
+        // piece: a piece on its own knoll reads as a plinth. A piece that
+        // brings its own ground (SET_GROUND) stands on the plain that ground
+        // rises from, as it was modelled, and levels nothing.
+        TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, tb.groundY };
+        if (i >= mSetOwnGround.size() || !mSetOwnGround[i]) {
+            clearing.y = naturalFootY(tb, clearing);
+            mTerrainFlats.push_back(clearing);
+        }
         const float base = clearing.y + p.y;
         const mat4f xf = mat4f::translation(float3{ x, base, z })
                 * mat4f::rotation(yaw, float3{ 0, 1, 0 })

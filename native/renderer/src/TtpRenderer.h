@@ -957,6 +957,19 @@ private:
     // `dell`, if asked: how far down a swell the point lies, 0 near the road.
     float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
             float* dell = nullptr) const;
+    // The track's landforms (TrackBin::land), resolved by setupTerrain into the
+    // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
+    // own lengths and heights already scaled, and the box it can reach.
+    struct LandShape {
+        uint32_t kind;
+        float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
+        float x0, z0, x1, z1;
+    };
+    std::vector<LandShape> mLand;
+    float landforms(float x, float z, float edge, float base, float* dell) const;
+    // Per set piece: whether it brings its own ground (SET_GROUND) — then it
+    // stands on the plain it was modelled on and levels no clearing.
+    std::vector<uint8_t> mSetOwnGround;
     // The lowest the land lies under a clearing's footprint (its centre,
     // corners and edge middles), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
