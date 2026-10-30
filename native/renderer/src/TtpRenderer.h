@@ -1769,6 +1769,10 @@ private:
     // Merge the vertices equal in position and colour, keeping each one's
     // first slot and the triangle order. For a mesh that carries nothing else.
     static void weldExact(Mesh& m);
+    // A kit prim with its bitwise-equal (position, normal, uv) vertices made
+    // one; `reorder` reorders over the unwelded corners first
+    // (TtpRenderer.cpp has why).
+    static ttp::rt::GlbMeshPrim weldPrimExact(const ttp::rt::GlbMeshPrim& p, bool reorder);
     // One range's simplified far form, appended to m.idx (buildMesh's own).
     // `scale` is meshopt's for the whole vertex set; `lockBorder` keeps a
     // range's open edges where a neighbouring range shares them.

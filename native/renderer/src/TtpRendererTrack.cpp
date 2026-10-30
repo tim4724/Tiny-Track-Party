@@ -1,6 +1,9 @@
 // The track scene build: terrain, ground sheet, road chunks, gantry and the
 // hill ring. TtpRendererImpl.h carries what the topic files share.
+#include <array>
 #include <chrono>
+#include <cstring>
+#include <map>
 #include <numeric>
 #include <utility>
 
@@ -1912,6 +1915,34 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             return float3{ -std::cos(theta) * std::sin(phi), std::cos(phi),
                            std::sin(theta) * std::sin(phi) };
         };
+        // SHARED CORNERS, on exact bits. Every triangle meeting at a grid
+        // point gets the same position and normal bit for bit (one spherePt
+        // call per corner, normalize() of that same point), and the colour
+        // changes only across a gore seam, so a key on all three makes them
+        // one vertex: the same triangles with the same attributes at every
+        // corner, from a third of the vertices in every cell's draw. The same
+        // pixels too, but by the opaque-range order contract rather than by
+        // construction: shared corners let buildMesh's vertex-reuse reorder
+        // permute the triangles, and vlit culls nothing, so a pixel where a
+        // back face meets a front one at one depth goes to whichever draws
+        // first. buildMesh's own weld (weldExact) is for a mesh that carries
+        // nothing a normal could split, and this one is lit, so the key is
+        // built here. The poles' signed zeros and the float seam at theta 2π
+        // stay apart, which is the exact rule and not a flaw in it.
+        std::map<std::array<uint32_t, 7>, uint32_t> corners;
+        const auto corner = [&](const float3& p, const float3& n, uint32_t col) {
+            static_assert(sizeof(float3) == 3 * sizeof(uint32_t), "float3 is three words");
+            std::array<uint32_t, 7> key;
+            std::memcpy(&key[0], &p, sizeof(float3));
+            std::memcpy(&key[3], &n, sizeof(float3));
+            key[6] = col;
+            const auto [it, fresh] = corners.try_emplace(key, (uint32_t) m.verts.size());
+            if (fresh) {
+                m.verts.push_back({ p.x, p.y, p.z, col });
+                m.normals.push_back(n);
+            }
+            m.idx.push_back(it->second);
+        };
         const auto pushTri = [&](const float3& a, const float3& b, const float3& c) {
             // face gore by centroid longitude → crisp seams (per-face paint)
             const float cx3 = (a.x + b.x + c.x) / 3, cz3 = (a.z + b.z + c.z) / 3;
@@ -1920,9 +1951,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     % GORES;
             const uint32_t col = packAlbedo(PANELS[gore % 2], 1.0f);
             for (const float3& p : { a, b, c }) {
-                m.verts.push_back({ p.x, p.y * 1.08f, p.z, col });
-                m.normals.push_back(normalize(p));
-                m.idx.push_back((uint32_t) m.idx.size());
+                corner(float3{ p.x, p.y * 1.08f, p.z }, normalize(p), col);
             }
         };
         for (int iy = 0; iy < HS; iy++) {
@@ -1936,11 +1965,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // rigging frustum (open cylinder 0.55 → 0.2, h 0.55 @ y −1.18) + basket
         const auto pushQuad = [&](const float3& a, const float3& b, const float3& c,
                 const float3& d, const float3& n, uint32_t col) {
-            for (const float3& p : { a, b, c, c, b, d }) {
-                m.verts.push_back({ p.x, p.y, p.z, col });
-                m.normals.push_back(n);
-                m.idx.push_back((uint32_t) m.idx.size());
-            }
+            for (const float3& p : { a, b, c, c, b, d }) corner(p, n, col);
         };
         const uint32_t RIG = packAlbedo(srgbToLinear(0x6f5a40), 1.0f);
         for (int s = 0; s < 8; s++) {

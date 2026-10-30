@@ -742,8 +742,16 @@ void TtpRenderer::rebuildCarMerge() {
         }
     }
     int merged = 0;
-    for (const MergedGroup& g : mMergedCars) merged += (int) g.sources.size();
+    size_t verts = 0, submitted = 0;   // the groups' vertices, once and per instance
+    for (const MergedGroup& g : mMergedCars) {
+        merged += (int) g.sources.size();
+        size_t nv = 0;
+        for (const MergedPrim& p : g.prims) nv += p.pos.size();
+        verts += nv;
+        submitted += nv * g.sources.size();
+    }
     utils::slog.i << "ttp carmerge: per-car " << (int) mMergedCars.size() << " groups over "
-            << merged << " nodes, " << (carNodes - merged) << " nodes on their own draw"
+            << merged << " nodes, " << (carNodes - merged) << " nodes on their own draw, "
+            << verts << " vertices (" << submitted << " over the instances)"
             << utils::io::endl;
 }

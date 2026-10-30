@@ -618,6 +618,40 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     return r;
 }
 
+// A kit prim with its bitwise-equal vertices (position, normal, uv) made one,
+// for a merged draw: weldExact's recipe, unindexed so meshopt numbers the
+// unique vertices in order of first appearance and each keeps its first slot.
+// The triangle order is the UNWELDED draw's: the vertex-reuse reorder runs
+// over the corners as the kit split them and the weld renumbers them after,
+// so what changes is which vertex a corner names, never which of two
+// coplanar triangles a depth tie goes to.
+ttp::rt::GlbMeshPrim TtpRenderer::weldPrimExact(const ttp::rt::GlbMeshPrim& p, bool reorder) {
+    struct Packed { float pos[3], normal[3], uv[2]; };
+    static_assert(sizeof(Packed) == 32, "no padding to zero");
+    const size_t nv = p.pos.size() / 3;
+    const bool hasUv = p.uv.size() == nv * 2;
+    std::vector<Packed> packed(nv);
+    for (size_t i = 0; i < nv; i++) {
+        std::memcpy(packed[i].pos, &p.pos[i * 3], 12);
+        std::memcpy(packed[i].normal, &p.normal[i * 3], 12);
+        if (hasUv) std::memcpy(packed[i].uv, &p.uv[i * 2], 8);
+        else packed[i].uv[0] = packed[i].uv[1] = 0.0f;
+    }
+    std::vector<uint32_t> remap(nv);
+    meshopt_generateVertexRemap(remap.data(), nullptr, nv, packed.data(), nv, sizeof(Packed));
+    ttp::rt::GlbMeshPrim w;
+    for (size_t i = 0; i < nv; i++) {
+        if (remap[i] != w.pos.size() / 3) continue;   // not its first appearance
+        w.pos.insert(w.pos.end(), &p.pos[i * 3], &p.pos[i * 3] + 3);
+        w.normal.insert(w.normal.end(), &p.normal[i * 3], &p.normal[i * 3] + 3);
+        if (hasUv) w.uv.insert(w.uv.end(), &p.uv[i * 2], &p.uv[i * 2] + 2);
+    }
+    w.idx = p.idx;
+    if (reorder) reorderForVertexReuse(w.idx.data(), w.idx.size());
+    for (uint32_t& k : w.idx) k = remap[k];
+    return w;
+}
+
 void TtpRenderer::weldExact(Mesh& m) {
     // The key is every attribute the vertex carries to the GPU, bit for bit —
     // its position and colour; buildMesh only welds a mesh that has nothing
@@ -1478,6 +1512,12 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
     // on its gltfio draw it is lit per vertex and per fragment beside identical
     // baked copies a few units away.
     const bool bake = !dynamic && colors && mBakeRig.valid;
+    // Every other prim is welded on bit-identical (position, normal, uv) for
+    // an INSTANCED run: the kit's exporter splits corners the merged draw has
+    // no attribute left to tell apart, and equal attributes in are equal
+    // quats and pixels out. Filled by the first run that is instanced, since
+    // a baked run reads the prims as they came.
+    std::vector<ttp::rt::GlbMeshPrim> exact;
     for (const std::vector<utils::Entity>& chunk : runs) {
         const size_t n = chunk.size();
         if (n < 2 && !bake && !anyFlat) continue;   // nothing to merge it with
@@ -1491,11 +1531,18 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
             continue;
         }
         if (n < 2 && !anyFlat) continue;   // the bake refused: it keeps its original draw
+        if (exact.empty()) {
+            exact.resize(prims.size());
+            for (size_t p = 0; p < prims.size(); p++) {
+                if (welds[p]) continue;
+                exact[p] = weldPrimExact(prims[p], isOpaque(rcm.getMaterialInstanceAt(ri0, p)));
+            }
+        }
         g.xf.assign(n, mat4f{});
         float r2 = 0;
         for (size_t primIndex = 0; primIndex < prims.size(); primIndex++) {
             const ttp::rt::FlatWeld* weld = welds[primIndex];
-            const ttp::rt::GlbMeshPrim& sp = weld ? weld->prim : prims[primIndex];
+            const ttp::rt::GlbMeshPrim& sp = weld ? weld->prim : exact[primIndex];
             MergedPrim mp;
             const size_t nv = sp.pos.size() / 3;
             mp.pos.resize(nv);
@@ -1528,10 +1575,10 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
             // The same material the merged draw is built with, below. A weld's
             // overlays stay after its front range, in order: only the front
             // is free to reorder (meshopt keeps each triangle's corner order,
-            // so the provoking corner survives it).
-            if (isOpaque(rcm.getMaterialInstanceAt(ri0, primIndex))) {
-                reorderForVertexReuse(mp.idx.data(),
-                        weld ? weld->baseTris * 3 : mp.idx.size());
+            // so the provoking corner survives it). An exact prim arrived
+            // reordered (weldPrimExact).
+            if (weld && isOpaque(rcm.getMaterialInstanceAt(ri0, primIndex))) {
+                reorderForVertexReuse(mp.idx.data(), weld->baseTris * 3);
             }
             // vglbflat requires COLOR and overwrites it before anything reads it.
             if (weld) mp.colors.assign(nv, 0);

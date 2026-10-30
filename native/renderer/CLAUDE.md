@@ -674,6 +674,10 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   interpolates back to the picture. The FACTOR is read from the live instance,
   never the GLB, because the biome recolours untextured models through it. A model
   the table does not know keeps the instanced, live-lit draw.
+- **An INSTANCED prim that is not flat is welded on bit-identical (position,
+  normal, uv) first** (`weldPrimExact`): same attributes, same quats, same
+  pixels, fewer vertices per instance. A baked run expands the prims as they
+  came.
 - The item-box fade twins stay unmerged: they hold PER-INSTANCE materials.
 - **A FLAT-SHADED car body is drawn WELDED on `vglbflat.mat`**: at load an
   all-flat mesh is moved onto a `#flat` clone of its glTF material
