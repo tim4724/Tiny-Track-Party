@@ -341,16 +341,79 @@ def kit(kit_id, model, at, yaw=0.0, scale=1.0, pitch=0.0, roll=0.0):
     place(o, at, yaw, pitch, roll)
     return o
 
+# ---- moving parts ------------------------------------------------------------------
+# A part that moves is ONE object named `anim_<verbs>` with its origin at its
+# pivot: native/libttp-runtime/ttp/set_motion.h is the grammar, the renderer
+# bakes and moves it (TtpRendererMotion.cpp). Build its pieces inside
+# `with animated(name, pivot):`; finalize_and_export joins them after the
+# chamfer, so the part costs one draw and keeps the piece's look. Names must be
+# unique in a piece (Blender would suffix a repeat), so a repeated part carries
+# a `#n` tag the grammar ignores.
+
+ANIMS = []
+
+class animated:
+    def __init__(self, name, pivot):
+        self.name, self.pivot = name, pivot
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        return self
+    def __exit__(self, *exc):
+        gid = len(ANIMS)
+        ANIMS.append((self.name, self.pivot))
+        for o in bpy.context.scene.objects:
+            if o not in self.before:
+                o['anim'] = gid
+        return False
+
+def marker(name, at):
+    """A mesh-less node: a path's waypoint (`path_<chain>_<k>`, a closed loop
+    in k order) or where something happens (`anim_smoke`)."""
+    o = bpy.data.objects.new(name, None)
+    bpy.context.scene.collection.objects.link(o)
+    o.location = P(*at)
+    return o
+
+def join_anims(k):
+    """Each `animated` group into one object, origin at its pivot (grown by k
+    with the piece), rotation and scale applied so its frame is the piece's."""
+    for gid, (name, pivot) in enumerate(ANIMS):
+        objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') == gid]
+        if not objs:
+            continue
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        bpy.ops.object.convert(target='MESH')          # applies the chamfer
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        o = bpy.context.view_layer.objects.active
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        bpy.context.scene.cursor.location = P(*pivot) * k
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        o.name = name
+        o.data.name = name
+    ANIMS.clear()
+
 # ---- shared sub-assemblies ------------------------------------------------------
 
-def flagpole(at, h, color, w=1.2, fh=0.7, pole=0xfff6eb):
+def flagpole(at, h, color, w=1.2, fh=0.7, pole=0xfff6eb, wave=None):
+    """`wave` names the cloth's motion (a `#n` tag apart per flag): it swings
+    round the pole, which is how a flag in a gusting wind reads from a car."""
     x, y, z = at
     cyl(0.2, 0.3, (x, y, z), pole, segs=6)
     cyl(0.09, h, (x, y, z), pole, segs=6)
     sphere(0.17, (x, y + h + 0.1, z), pole, subdiv=1)
     # the cloth in two slabs, kinked as if the wind had it
-    box((w * 0.55, fh, 0.12), (x + w * 0.27 + 0.05, y + h - fh / 2 - 0.1, z), color)
-    box((w * 0.5, fh * 0.9, 0.12), (x + w * 0.77, y + h - fh / 2 - 0.15, z + 0.08), color, yaw=-0.3)
+    def cloth():
+        box((w * 0.55, fh, 0.12), (x + w * 0.27 + 0.05, y + h - fh / 2 - 0.1, z), color)
+        box((w * 0.5, fh * 0.9, 0.12), (x + w * 0.77, y + h - fh / 2 - 0.15, z + 0.08), color, yaw=-0.3)
+    if wave:
+        with animated(wave, (x, y + h, z)):
+            cloth()
+    else:
+        cloth()
 
 def post_and_rail(a, b, h, color, r=0.06):
     cyl(r, h, a, color, segs=6, smooth=False)
@@ -601,7 +664,8 @@ def pirate_camp():
     kit('pirate', 'barrel', (-0.2, 0, 3.5), yaw=0.2, scale=0.5)
     kit('pirate', 'barrel', (0.2, 0.62, 3.25), yaw=1.4, scale=0.5)
     kit('pirate', 'crate', (1.3, 0, 4.2), yaw=-0.3, scale=0.6)
-    kit('pirate', 'flag-pirate-high', (-1.3, 0, 2.6), yaw=math.radians(90), scale=0.9)   # cloth to the road
+    with animated('anim_sway:a=y:d=30:p=2.1', (-1.3, 0, 2.6)):                      # it swings round its pole
+        kit('pirate', 'flag-pirate-high', (-1.3, 0, 2.6), yaw=math.radians(90), scale=0.9)   # cloth to the road
 
 @piece(1.5)
 def skull_rock():
@@ -698,10 +762,11 @@ def buoy_line():
     # flying a flag.
     for s, flag in ((-1, 0xff5040), (1, 0xffc044)):
         zb = s * 15.6
-        cyl(0.55, 0.85, (0, -0.25, zb), 0xff5040, r2=0.36, segs=8)
-        cyl(0.37, 0.3, (0, 0.6, zb), 0xfff6eb, r2=0.3, segs=8)
-        box((0.14, 1.3, 0.14), (0, 1.5, zb), 0x2a2735)
-        box((0.06, 0.45, 0.7), (0, 1.9, zb - s * 0.42), flag)
+        with animated('anim_bob:h=0.3:p=%.1f#%d' % (3.0 + 0.4 * s, s + 1), (0, -0.25, zb)):   # riding the swell
+            cyl(0.55, 0.85, (0, -0.25, zb), 0xff5040, r2=0.36, segs=8)
+            cyl(0.37, 0.3, (0, 0.6, zb), 0xfff6eb, r2=0.3, segs=8)
+            box((0.14, 1.3, 0.14), (0, 1.5, zb), 0x2a2735)
+            box((0.06, 0.45, 0.7), (0, 1.9, zb - s * 0.42), flag)
     beam((0, 0.16, -15.2), (0, 0.16, 15.2), 0.1, 0xfff6eb)
     for k in range(29):
         zf = -14.0 + k * 1.0
@@ -794,7 +859,8 @@ def cannon_post():
     r = 0.34 * 0.6
     for bx, by, bz in ((1.45, r, 0.75), (1.45, r, 1.15), (1.8, r, 0.95), (1.57, 2.5 * r, 0.95)):
         kit('pirate', 'cannon-ball', (bx, by, bz), scale=0.6)
-    kit('pirate', 'flag-pirate', (0.3, 0, -1.9), yaw=math.radians(-90), scale=1.1)   # cloth to the road
+    with animated('anim_sway:a=y:d=30:p=1.9', (0.3, 0, -1.9)):                       # it swings round its pole
+        kit('pirate', 'flag-pirate', (0.3, 0, -1.9), yaw=math.radians(-90), scale=1.1)   # cloth to the road
 
 @piece(1.45)
 def drift_logs():
@@ -1271,6 +1337,7 @@ def log_cabin():
     # chimney through the back slope
     box((0.7, 1.9, 0.7), (-1.1, ridge - 0.2, -0.75), 0x868ba1)
     snowy(box((0.82, 0.14, 0.82), (-1.1, ridge + 0.8, -0.75), 0xeef4f9))
+    marker('anim_smoke', (-1.1, ridge + 0.9, -0.75))   # the first cabin on a track smokes
     # the door and two lit windows on the front, one on each side
     box((0.1, 1.75, 1.1), (W / 2 + 0.06, 1.0, -0.55), 0xfff6eb)
     box((0.1, 1.55, 0.85), (W / 2 + 0.12, 0.92, -0.55), 0x38383d)
@@ -1306,29 +1373,93 @@ def snowman_pair():
     kit('holiday', 'sled', (1.6, 0, 0.0), yaw=0.4, scale=1.4)
     snow_heap((-1.2, 0, 0.4), 1.4, yaw=1.2)
 
+# A penguin standing at (x, y, z), beak to +X turned by yaw. Built from boxes,
+# it is joined into one moving part by its caller.
+def penguin(x, y, z, k, yaw):
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy, dz):
+        return (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c)
+    box((0.9 * k, 1.3 * k, 0.8 * k), at(0, 0.65 * k, 0), 0x2a2735, yaw=yaw)       # body
+    box((0.2, 1.05 * k, 0.78 * k), at(0.42 * k, 0.6 * k, 0), 0xfff6eb, yaw=yaw)    # white front
+    box((0.7 * k, 0.6 * k, 0.65 * k), at(0, 1.55 * k, 0), 0x2a2735, yaw=yaw)       # head
+    box((0.3 * k, 0.14 * k, 0.2 * k), at(0.45 * k, 1.5 * k, 0), 0xff7e44, yaw=yaw)  # beak
+    for sd in (-1, 1):
+        box((0.12, 0.12, 0.12), at(0.36 * k, 1.66 * k, sd * 0.18 * k), 0xfff6eb, yaw=yaw)
+        box((0.5 * k, 0.8 * k, 0.12), at(0, 0.75 * k, sd * 0.46 * k), 0x2a2735, yaw=yaw, roll=0.2)
+        box((0.4 * k, 0.1, 0.24 * k), at(0.2 * k, 0.05, sd * 0.2 * k), 0xff7e44, yaw=yaw)
+
+# A penguin tobogganing on its belly toward +X, the pivot under the middle of
+# its belly: the body flat, the head up to see where it is going (the beak and
+# the white face are what say "penguin" from above), flippers out like wings.
+def slider_penguin(x, y, z, k):
+    box((1.3 * k, 0.62 * k, 0.8 * k), (x, y + 0.31 * k, z), 0x2a2735)                    # body
+    box((0.95 * k, 0.12, 0.7 * k), (x + 0.05 * k, y + 0.06, z), 0xfff6eb)                 # white belly on the ice
+    box((0.62 * k, 0.6 * k, 0.62 * k), (x + 0.62 * k, y + 0.8 * k, z), 0x2a2735)          # head, up
+    box((0.12, 0.42 * k, 0.48 * k), (x + 0.94 * k, y + 0.76 * k, z), 0xfff6eb)            # face
+    box((0.32 * k, 0.14 * k, 0.2 * k), (x + 1.08 * k, y + 0.72 * k, z), 0xff7e44)         # beak
+    for sd in (-1, 1):
+        box((0.12, 0.12, 0.12), (x + 0.96 * k, y + 0.92 * k, z + sd * 0.17 * k), 0x2a2735)  # eye on the face
+        box((0.55 * k, 0.1, 0.5 * k), (x - 0.05 * k, y + 0.3 * k, z + sd * 0.62 * k), 0x2a2735, pitch=sd * 0.25)  # flipper out
+        box((0.3 * k, 0.1, 0.2 * k), (x - 0.78 * k, y + 0.12 * k, z + sd * 0.18 * k), 0xff7e44)  # feet behind
+
+# The standing penguins' life (set_motion.h): rock on their feet out of step,
+# turn to watch a car coming (radii in world units), hop as one passes close.
+PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.4#%d'
+
+def live_penguin(n, x, y, z, k, yaw):
+    with animated(PENGUIN % n, (x, y, z)):
+        penguin(x, y, z, k, yaw)
+
 @piece(1.45)
 def ice_chunks():
     # Glacier: a slab of floe ice beached on the snow with three penguins on
     # it, all facing +X: each placement's yaw turns that to the racer where the
-    # lap reads it best (score:landmarks' `face`), a fish left on the ice.
+    # lap reads it best (score:landmarks' `face`), a fish left on the ice. The
+    # penguins are alive, each one moving part.
     snowy(box((4.6, 0.5, 3.6), (0, 0.25, 0), 0xd0e8ff, yaw=0.3), 0.4)
-    def penguin(x, z, k, yaw):
-        c, s2 = math.cos(yaw), math.sin(yaw)
-        def at(dx, dy, dz):                       # a point on the bird, beak to +X turned by yaw
-            return (x + dx * c + dz * s2, 0.5 + dy, z - dx * s2 + dz * c)
-        box((0.9 * k, 1.3 * k, 0.8 * k), at(0, 0.65 * k, 0), 0x2a2735, yaw=yaw)       # body
-        box((0.2, 1.05 * k, 0.78 * k), at(0.42 * k, 0.6 * k, 0), 0xfff6eb, yaw=yaw)    # white front
-        box((0.7 * k, 0.6 * k, 0.65 * k), at(0, 1.55 * k, 0), 0x2a2735, yaw=yaw)       # head
-        box((0.3 * k, 0.14 * k, 0.2 * k), at(0.45 * k, 1.5 * k, 0), 0xff7e44, yaw=yaw)  # beak
-        for sd in (-1, 1):
-            box((0.12, 0.12, 0.12), at(0.36 * k, 1.66 * k, sd * 0.18 * k), 0xfff6eb, yaw=yaw)
-            box((0.5 * k, 0.8 * k, 0.12), at(0, 0.75 * k, sd * 0.46 * k), 0x2a2735, yaw=yaw, roll=0.2)
-            box((0.4 * k, 0.1, 0.24 * k), at(0.2 * k, 0.05, sd * 0.2 * k), 0xff7e44, yaw=yaw)
-    penguin(0.6, -0.3, 1.0, 0.0)
-    penguin(-0.5, 1.0, 0.8, -0.15)
-    penguin(-0.4, -1.4, 0.7, 0.15)
+    live_penguin(1, 0.6, 0.5, -0.3, 1.0, 0.0)
+    live_penguin(2, -0.5, 0.5, 1.0, 0.8, -0.15)
+    live_penguin(3, -0.4, 0.5, -1.4, 0.7, 0.15)
     box((0.6, 0.14, 0.2), (1.6, 0.57, 1.0), 0x8ecae6, yaw=0.8)                  # the fish
     snow_heap((2.6, 0, -1.6), 1.1, yaw=0.3)
+
+@piece(1.45)
+def penguin_chute():
+    # Glacier: the colony's toboggan run. Penguins pop out of a hole in the top
+    # of an ice block, belly-slide down a chute toward the road (+X) and dive
+    # into a hole in a floe at its foot. Under the ice they swim back to the
+    # block: the path's hidden half runs inside the block and under the
+    # ground, so every split cell sees them go in and come out, never jump.
+    # Two more stand by the hole and watch the cars.
+    ICE, SNOW, HOLE = 0xd0e8ff, 0xeef4f9, 0x38383d
+    TOP = 2.85                                    # the block's snow cap
+    snowy(box((2.4, 2.6, 2.4), (-3.2, 1.3, 0), ICE), 0.4)
+    snowy(box((2.7, 0.25, 2.7), (-3.2, TOP - 0.125, 0), SNOW), 0.5)
+    box((1.0, 0.04, 1.0), (-3.2, TOP + 0.01, 0), HOLE)
+    a, b = (-2.0, TOP), (3.6, 0.47)               # the chute's running surface, lip to foot
+    run, ang = math.hypot(b[0] - a[0], a[1] - b[1]), math.atan2(a[1] - b[1], b[0] - a[0])
+    mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    def on_chute(x):
+        return a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0])
+    box((run, 0.12, 1.3), (mx, my - 0.06, 0), ICE, roll=ang)
+    for sd in (-1, 1):
+        box((run, 0.32, 0.12), (mx, my + 0.1, sd * 0.68), ICE, roll=ang)
+    for px in (-0.4, 1.8):                        # snow posts under it
+        hy = on_chute(px) - 0.12
+        snowy(box((0.35, hy, 0.35), (px, hy / 2, 0), SNOW), 0.5)
+    snowy(box((3.2, 0.45, 3.0), (5.2, 0.225, 0), ICE, yaw=0.15), 0.4)
+    box((1.1, 0.04, 1.1), (5.0, 0.46, 0), HOLE, yaw=0.15)
+    # the loop, piece frame: inside the block, out of its hole, along the cap
+    # to the lip, down the chute, across the floe, down its hole, back under
+    for k, pt in enumerate(((-3.2, -1.8, 0), (-3.2, 1.9, 0), (-3.2, TOP + 0.1, 0), (a[0], TOP + 0.02, 0),
+                            (b[0], b[1] + 0.02, 0), (5.0, 0.47, 0), (5.0, -1.8, 0))):
+        marker('path_chute_%d' % k, pt)
+    for n in range(3):                            # spread round the loop; the renderer moves them
+        x = a[0] + (b[0] - a[0]) * (0.2 + 0.3 * n)
+        with animated('anim_path:c=chute:p=8.5:o=%.3f#%d' % (n / 3, n), (x, on_chute(x), 0)):
+            slider_penguin(x, on_chute(x), 0, 0.75)
+    live_penguin(4, 6.3, 0.45, 1.15, 0.8, -0.4)
+    live_penguin(5, 4.2, 0.45, -1.2, 0.72, 0.5)
 
 @piece(1.4)
 def expedition_camp():
@@ -1343,8 +1474,8 @@ def expedition_camp():
     box((0.5, 0.75, 0.4), (2.0, 0.38, -1.0), 0xcf534f, yaw=0.3)
     box((0.55, 0.2, 0.45), (2.0, 0.8, -1.0), 0x2a2735, yaw=0.3)
     kit('holiday', 'sled-long', (1.8, 0, 2.2), yaw=0.3, scale=1.5)
-    flagpole((1.2, 0, -2.4), 3.6, 0xff5040, w=1.1, fh=0.7)
-    flagpole((-1.6, 0, 2.6), 3.0, 0xff7e44, w=1.0, fh=0.6)
+    flagpole((1.2, 0, -2.4), 3.6, 0xff5040, w=1.1, fh=0.7, wave='anim_sway:a=y:d=28:p=1.9#1')
+    flagpole((-1.6, 0, 2.6), 3.0, 0xff7e44, w=1.0, fh=0.6, wave='anim_sway:a=y:d=28:p=2.2#2')
     snow_heap((-1.8, 0, -1.6), 1.5, yaw=0.9)
 
 @piece(1.4)
@@ -1537,11 +1668,12 @@ def playground():
             o = cyl(0.1, H + 0.2, (s * 1.1, 0, z), 0x339cf2, segs=8, smooth=False)
             tilted(o, 0, -s * 0.26)
     box((0.22, 0.22, 5.4), (0, H, 0), 0x339cf2)
-    for z in (-1.0, 1.0):
-        for s in (-1, 1):
-            # chains in the frame's grey: black ones read as a barred wall
-            tube([(0, H - 0.1, z + s * 0.45), (0, 1.0, z + s * 0.45)], 0.025, 0x9aa1b4, res=2)
-        box((0.5, 0.08, 1.2), (0, 0.95, z), 0xff5040)
+    for n, z in enumerate((-1.0, 1.0)):
+        with animated('anim_sway:a=z:d=28:p=2.6#%d' % n, (0, H, z)):          # swinging from the bar
+            for s in (-1, 1):
+                # chains in the frame's grey: black ones read as a barred wall
+                tube([(0, H - 0.1, z + s * 0.45), (0, 1.0, z + s * 0.45)], 0.025, 0x9aa1b4, res=2)
+            box((0.5, 0.08, 1.2), (0, 0.95, z), 0xff5040)
     X = 3.6
     for s in (-1, 1):
         box((0.08, 2.6, 0.08), (X + 1.4, 1.3, s * 0.45), 0x9aa1b4)
@@ -1750,10 +1882,11 @@ def sprinkler():
     # water out over the wet patch it has made.
     disc(2.2, (0, 0.0, 0), 0x2bb673, segs=10, h=0.03)
     box((0.3, 0.5, 0.3), (0, 0.25, 0), 0x9aa1b4)
-    for k in range(3):
-        a = 0.3 + k * 2 * math.pi / 3
-        strut((0, 0.55, 0), (math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), 0.12, 0xffc044)
-        water_jet((math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), a, 2.0, 1.0)
+    with animated('anim_spin:w=-1.3', (0, 0.55, 0)):                              # the head turns, jets and all
+        for k in range(3):
+            a = 0.3 + k * 2 * math.pi / 3
+            strut((0, 0.55, 0), (math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), 0.12, 0xffc044)
+            water_jet((math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), a, 2.0, 1.0)
 
 @piece(1.45)
 def picnic_blanket():
@@ -2197,11 +2330,12 @@ def windpump():
             box((0.12, 0.12, 2 * w + 0.12), (s2 * w, y, 0), WOOD)
     cy = H + 0.25
     box((1.0, 0.5, 0.5), (0.05, cy, 0), 'slate')                                 # the head
-    box((0.3, 0.3, 0.3), (0.62, cy, 0), 'red')                                   # the hub
-    for k in range(12):                                                          # the blades
-        a = k / 12 * 2 * math.pi
-        box((0.06, 1.2, 0.26), (0.66, cy + math.sin(a) * 0.95, math.cos(a) * 0.95), BLADE, pitch=-(math.pi / 2 - a))
-    torus(1.5, 0.07, (0.68, cy, 0), WOOD, segs=16, axis='across')
+    with animated('anim_spin:a=x:w=1.4', (0.66, cy, 0)):                         # the wheel turns
+        box((0.3, 0.3, 0.3), (0.62, cy, 0), 'red')                               # the hub
+        for k in range(12):                                                      # the blades
+            a = k / 12 * 2 * math.pi
+            box((0.06, 1.2, 0.26), (0.66, cy + math.sin(a) * 0.95, math.cos(a) * 0.95), BLADE, pitch=-(math.pi / 2 - a))
+        torus(1.5, 0.07, (0.68, cy, 0), WOOD, segs=16, axis='across')
     box((1.8, 0.12, 0.12), (-1.2, cy, 0), WOOD)                                  # the tail
     box((1.0, 0.8, 0.08), (-2.3, cy, 0), 'cream')
     box((0.08, H - 0.6, 0.08), (0, (H - 0.6) / 2 + 0.3, 0), 'slate')            # the pump rod
@@ -2485,9 +2619,10 @@ def toy_plane():
             box((0.06, 1.0, 0.06), (sx, 2.4, sz), 0x9a7b55)
     box((0.08, 0.9, 0.7), (0, 2.95, -1.5), 0xff5040)
     box((1.6, 0.08, 0.7), (0, 2.5, -1.5), 0x5a8fd8)
-    cyl(0.1, 0.3, (0, 2.2, 2.2), 0x2a2735, segs=8, axis='along', smooth=False)
-    for k in range(3):
-        box((0.12, 1.2, 0.06), (0, 2.2, 2.5), 0x9a7b55, pitch=0, roll=k * math.pi / 3)
+    with animated('anim_spin:a=z:w=6', (0, 2.2, 2.5)):                             # the propeller turns
+        cyl(0.1, 0.3, (0, 2.2, 2.2), 0x2a2735, segs=8, axis='along', smooth=False)
+        for k in range(3):
+            box((0.12, 1.2, 0.06), (0, 2.2, 2.5), 0x9a7b55, pitch=0, roll=k * math.pi / 3)
     box((0.5, 0.4, 0.5), (0, 2.75, 0.2), 0x8ecae6)
     for s in (-1, 1):
         cyl(0.22, 0.14, (s * 0.5, 1.5, 0.8), 0x2a2735, segs=10, axis='across', smooth=False)
@@ -2543,8 +2678,9 @@ def toy_robot():
     box((0.12, 0.14, 0.7), (0.68, 4.68, 0), 0xe66a5a)
     box((0.2, 1.0, 0.2), (0, 6.15, 0), 0x2a2735)
     sphere(0.38, (0, 6.85, 0), 0xff5040, subdiv=1)
-    box((0.6, 0.2, 0.2), (-1.0, 3.2, 0), 0x9a7b55)
-    box((0.12, 1.1, 0.5), (-1.35, 3.2, 0), 0x9a7b55)
+    with animated('anim_spin:a=x:w=1.6', (-1.0, 3.2, 0)):                         # the key winds round
+        box((0.6, 0.2, 0.2), (-1.0, 3.2, 0), 0x9a7b55)
+        box((0.12, 1.1, 0.5), (-1.35, 3.2, 0), 0x9a7b55)
 
 # ---- playroom companions ----
 
@@ -2740,6 +2876,7 @@ def finalize_and_export(name):
         if o.parent is None and k != 1.0:
             o.location = o.location * k
             o.scale = o.scale * k
+    join_anims(k)
     bpy.ops.object.select_all(action='SELECT')
     out = os.path.join(OUT_DIR, 'set-%s.glb' % name)
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_yup=True, export_apply=True,

@@ -331,7 +331,8 @@ export const TRACKS = {
       { model: 'set-ice-chunks', u: 0.24, lat: -14.5, yaw: 135 },
       { model: 'set-ice-chunks', u: 0.48, lat: 10.5, yaw: 74 },
       { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 160 },
-      { model: 'set-ice-chunks', u: 0.13, lat: 10.5, yaw: 116 }
+      { model: 'set-ice-chunks', u: 0.13, lat: 10.5, yaw: 116 },
+      { model: 'set-penguin-chute', u: 0.36, lat: 17, yaw: 40 }
     ]
   },
   avalanche: {
