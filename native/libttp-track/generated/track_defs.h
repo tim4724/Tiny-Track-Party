@@ -1743,7 +1743,7 @@ constexpr FurnDef kBoxes_skyline[] = {
   { 0x1.63d70a3d70a3dp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_skyline[] = {
-  { "set-block-city", 0x1.f03afb7e90ff9p-2, -0x1.a19999999999ap+4, 0x1.14p+7, 0x0p+0, 0x1.4cccccccccccdp+0 },
+  { "set-flight-desk", 0x1.f03afb7e90ff9p-2, -0x1.a19999999999ap+4, 0x1.14p+7, 0x0p+0, 0x1.8p+0 },
   { "set-cardboard-box", 0x1.59b3d07c84b5ep-6, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0 },
 };
 
