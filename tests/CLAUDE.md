@@ -201,6 +201,17 @@ the Chromium specs already cover.
 live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not
 ship, out of a cache no test has (`npm run fetch:kits`) — so what is gated is the
 packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
+`/gallery-landmarks.html` is the same kind of page for each track's set pieces;
+how its camera poses look is judged by eye, so `gallery-landmarks.spec.js` pins
+the set layout and the scenery read-back reaching the page, the lap score
+(`__landmarks.score()`, what `npm run score:landmarks` prints) covering every
+piece with none standing on the road or under a deck, the split following the seats, every view
+switching on a scene that keeps drawing, each cell's camera
+(`__landmarks.poses()`) being finite with its landmark inside the driver's lens,
+and the driver views parking each cell's car at a spot of its own (half a car
+gap clear in its lane) on level, upright road. It reads what
+the page PUSHED: whether the renderer applied a look or a car pose is the
+`frame_builder` ctest's.
 
 ## Auditing the suite itself
 

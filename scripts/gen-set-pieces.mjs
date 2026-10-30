@@ -51,18 +51,14 @@ function compose(kit, name, build) {
 
 // ---- Pirate Cove (cove) ------------------------------------------------------
 
-// The pirate ship, run aground with a cannon and its plunder on the -X side.
+// The pirate ship at anchor in the shallows, its longboat alongside on the +X
+// side. It stands in the sea, so nothing that belongs on land rides with it:
+// the plunder and the palms are the shore pieces' (set-jetty, set-pirate-camp).
 // The hull runs along +Z (the kit's long axis), so it lies parallel to the road
-// at a placement yaw of 0 or 180 — 180 on the track's right turns the plunder
-// to face the road and the boat and palms to the sea.
+// at a placement yaw of 0 or 180 — 180 on the track's right turns the longboat
+// to the open sea.
 compose(PIRATE, 'set-pirate-ship', (put) => {
   put('ship-pirate-large', { x: 0, z: 0, y: -0.35, yaw: 0.12 });
-  put('boat-row-large', { x: 5.2, z: -4.5, yaw: 0.9 });
-  put('cannon', { x: -4.6, z: 3.2, yaw: -2.2 });
-  put('chest', { x: -4.0, z: -1.2, yaw: 0.5 });
-  put('barrel', { x: -5.2, z: -2.6 });
-  put('barrel', { x: -5.9, z: -1.4, yaw: 1.1 });
-  put('crate-bottles', { x: -3.4, z: -3.6, yaw: 0.3 });
-  put('palm-detailed-bend', { x: 6.5, z: 4.0, yaw: 2.4 });
-  put('palm-detailed-straight', { x: -7.0, z: 6.0, yaw: 0.7 });
+  // tracks.js sinks the ship half a unit; the longboat floats, so it rides that back up
+  put('boat-row-large', { x: 5.2, z: -4.5, y: 0.45, yaw: 0.9 });
 });

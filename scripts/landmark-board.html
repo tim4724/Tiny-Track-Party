@@ -1,0 +1,313 @@
+<title>Landmark Review Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* Layout: a toy-box shelf of paper cards, one per model; the shots lead each
+   card, the lap bar says how much of a lap the racer has it in view. */
+:root {
+  --paper: #F3F5FA;   /* the ground */
+  --card: #FFFFFF;    /* paper cards */
+  --ink: #2A2735;
+  --ink-2: #5B6175;
+  --ink-3: #8F95A6;
+  --edge: #E2E5EC;
+  --green: #22C46E;   /* OK, clean sight */
+  --red: #FF5040;     /* fix, hidden */
+  --blue: #339CF2;    /* too small, selected */
+  --purple: #A259E6;  /* rethink, under a deck */
+  --track: #E9ECF3;   /* the empty part of a lap bar */
+  --font-display: 'Fredoka', 'Nunito', ui-rounded, system-ui, sans-serif;
+  --font-body: 'Nunito', ui-rounded, system-ui, sans-serif;
+  --font-data: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1C1A24; --card: #26232F; --ink: #F1F0F6; --ink-2: #B9B7C6; --ink-3: #8A879A;
+    --edge: #3A3646; --track: #332F3E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1C1A24; --card: #26232F; --ink: #F1F0F6; --ink-2: #B9B7C6; --ink-3: #8A879A;
+  --edge: #3A3646; --track: #332F3E; color-scheme: dark;
+}
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 15px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+h1, h2 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(26px, 4vw, 34px); letter-spacing: -0.01em; }
+h2 { font-size: 21px; }
+.lede { color: var(--ink-2); max-width: 68ch; margin: 6px 0 0; }
+.bar-top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; justify-content: space-between; }
+.tally { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  font-family: var(--font-display); font-weight: 500; font-size: 13px; letter-spacing: 0.02em;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--c, var(--ink-3)) 16%, transparent);
+  color: color-mix(in srgb, var(--c, var(--ink-3)) 80%, var(--ink));
+}
+.pill.ok { --c: var(--green); } .pill.fix { --c: var(--red); } .pill.rethink { --c: var(--purple); }
+.pill.review { --c: var(--blue); } .pill.warn { --c: var(--red); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button, select {
+  font: inherit; font-family: var(--font-display); font-weight: 500; font-size: 14px; color: var(--ink);
+  background: var(--card); border: 1.5px solid var(--edge); border-radius: 999px; padding: 6px 14px;
+  cursor: pointer;
+}
+select { border-radius: 10px; }
+button:hover { border-color: color-mix(in srgb, var(--c, var(--blue)) 50%, var(--edge)); }
+button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--c, var(--blue)) 18%, var(--card));
+  border-color: var(--c, var(--blue));
+}
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--ink-2); font-size: 13px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.notice { background: color-mix(in srgb, var(--blue) 12%, var(--card)); border-radius: var(--r); padding: 10px 14px; color: var(--ink-2); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 18px; }
+.card { background: var(--card); border-radius: var(--r); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; min-width: 0; }
+.card.ok { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--green) 55%, transparent); }
+.card.fix { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent); }
+.card.rethink { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--purple) 55%, transparent); }
+.head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
+.id { font-family: var(--font-data); font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.shots { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 6px; }
+.shots figure { margin: 0; position: relative; min-width: 0; }
+.shots .side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.shots img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 9px; background: var(--track); cursor: zoom-in; }
+.shots figcaption {
+  position: absolute; left: 6px; bottom: 6px; font-size: 11px; font-family: var(--font-display); font-weight: 500;
+  letter-spacing: 0.03em; padding: 1px 7px; border-radius: 999px; background: rgba(42, 39, 53, 0.72); color: #fff;
+}
+.none { aspect-ratio: 16 / 9; border-radius: 9px; background: var(--track); display: grid; place-items: center; color: var(--ink-3); font-size: 13px; text-align: center; padding: 8px; }
+.laps { display: grid; gap: 6px; }
+.lap { display: grid; grid-template-columns: minmax(84px, 9ch) 1fr; gap: 4px 10px; align-items: center; font-size: 13px; }
+.lap .where { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lap .where b { color: var(--ink); font-weight: 700; }
+.bar { height: 12px; background: var(--track); border-radius: 6px; display: flex; overflow: hidden; }
+.bar span { height: 100%; }
+.lap .nums { grid-column: 2; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.verdict { display: grid; gap: 8px; border-top: 1.5px dashed var(--edge); padding-top: 12px; }
+.verdict .seg button[data-v="ok"] { --c: var(--green); }
+.verdict .seg button[data-v="fix"] { --c: var(--red); }
+.verdict .seg button[data-v="rethink"] { --c: var(--purple); }
+textarea {
+  font: inherit; color: var(--ink); background: var(--paper); border: 1.5px solid var(--edge); border-radius: 10px;
+  padding: 8px 10px; min-height: 58px; resize: vertical; width: 100%; box-sizing: border-box;
+}
+.saved { font-size: 12px; color: var(--ink-3); min-height: 1em; }
+.changed { font-size: 13px; color: var(--ink-2); }
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1400px); }
+dialog::backdrop { background: rgba(20, 18, 28, 0.82); }
+dialog img { display: block; width: 100%; height: auto; border-radius: 12px; }
+@media (max-width: 460px) { .shots { grid-template-columns: minmax(0, 1fr); } .shots .side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color .15s, border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="bar-top">
+    <div>
+      <h1>Landmark Review Board</h1>
+      <p class="lede">Every set piece at the placement where a racer sees it best: the racer's best moment of the lap, then the gallery's Glance and High views. Mark each one OK, Fix or Rethink and say what you see. A piece that is rebuilt comes back up for review.</p>
+    </div>
+    <div class="tally" id="tally"></div>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="status" role="group" aria-label="Show">
+      <button type="button" data-s="all" aria-pressed="true">All</button>
+      <button type="button" data-s="review" style="--c: var(--blue)">To review</button>
+      <button type="button" data-s="changed" style="--c: var(--blue)">Changed since review</button>
+      <button type="button" data-s="ok" style="--c: var(--green)">OK</button>
+      <button type="button" data-s="fix" style="--c: var(--red)">Fix</button>
+      <button type="button" data-s="rethink" style="--c: var(--purple)">Rethink</button>
+    </div>
+    <select id="track" aria-label="Track"><option value="">Every track</option></select>
+    <select id="sort" aria-label="Order">
+      <option value="track">Track order</option>
+      <option value="seen">Least seen first</option>
+    </select>
+  </div>
+
+  <div class="legend" aria-label="Lap bar">
+    <span>Each bar is one lap. The coloured part is the time the piece is in the racer's view:</span>
+    <span><i style="background: var(--green)"></i>reads clearly</span>
+    <span><i style="background: var(--blue)"></i>too small</span>
+    <span><i style="background: var(--red)"></i>hidden</span>
+    <span><i style="background: var(--purple)"></i>seen under a deck</span>
+  </div>
+
+  <p class="notice" id="notice" hidden></p>
+  <main class="grid" id="grid"><p class="notice">Loading the pieces…</p></main>
+</div>
+<dialog id="zoom"><img id="zoom-img" alt=""></dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const VERDICTS = { ok: 'OK', fix: 'Fix', rethink: 'Rethink' };
+  let board = null, verdicts = {}, db = null, show = 'all';
+  const drafts = {};
+
+  const statusOf = (m) => {
+    const v = verdicts[m.model];
+    return v && v.version === m.version ? v.verdict : 'review';
+  };
+  // New or rebuilt since the previous bake (board.json's `changed`), so
+  // marking a piece never takes it out of the list.
+  const changed = (m) => (board.changed || []).includes(m.model);
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k) n.append(k);
+    return n;
+  };
+  const trackName = (id) => (board.tracks.find((t) => t.id === id) || {}).name || id;
+  const trackOf = (id) => board.tracks.find((t) => t.id === id) || { lap: 1, length: 1 };
+
+  function shot(src, label) {
+    if (!src) return el('div', { class: 'none', text: `${label}: never in clear view on the lap` });
+    const img = el('img', { src, alt: `${label} view`, loading: 'lazy', onclick: () => { $('zoom-img').src = src; $('zoom').showModal(); } });
+    return el('figure', {}, img, el('figcaption', { text: label }));
+  }
+
+  function lapRow(p) {
+    const { lap, length } = trackOf(p.track);
+    const clean = Math.max(0, p.lens - p.small - p.hidden - p.roof);
+    const bar = el('div', { class: 'bar', role: 'img',
+      'aria-label': `In view ${p.lens}s of a ${lap}s lap: ${clean.toFixed(1)}s clear, ${p.small}s too small, ${p.hidden}s hidden, ${p.roof}s under a deck` });
+    for (const [v, c] of [[clean, 'var(--green)'], [p.small, 'var(--blue)'], [p.hidden, 'var(--red)'], [p.roof, 'var(--purple)']]) {
+      if (v > 0) bar.append(el('span', { style: `width:${(100 * v) / lap}%;background:${c}` }));
+    }
+    const side = p.lat < 0 ? 'left' : 'right';
+    const round = Math.round((100 * p.s) / length);
+    return el('div', { class: 'lap' },
+      el('div', { class: 'where' }, el('b', { text: trackName(p.track) })),
+      bar,
+      el('div', { class: 'nums', text: `${round}% round the lap, on the ${side} · reads ${p.seen}s (longest ${p.longest}s) · ${Math.round(p.peak * 100)}% of the screen at best` }));
+  }
+
+  async function save(m, patch) {
+    if (!db) return;
+    const prev = verdicts[m.model] && verdicts[m.model].version === m.version ? verdicts[m.model] : {};
+    const next = { verdict: prev.verdict || null, note: prev.note || '', ...patch, version: m.version, label: m.label, at: new Date().toISOString() };
+    verdicts[m.model] = next;
+    const msg = document.querySelector(`[data-saved="${m.model}"]`);
+    try {
+      await db.doc(`verdicts/${m.model}`).set(next);
+      if (msg) msg.textContent = 'Saved';
+    } catch (e) {
+      if (msg) msg.textContent = e && e.code === 'not_granted' ? 'You can view this board but not save to it.' : 'Not saved. Try again.';
+    }
+    render();
+  }
+
+  function card(m) {
+    const status = statusOf(m);
+    const v = verdicts[m.model];
+    const stale = v && v.version !== m.version;
+    const facts = el('div', { class: 'facts' },
+      el('span', { class: `pill ${status}`, text: status === 'review' ? 'To review' : VERDICTS[status] }),
+      el('span', { class: 'pill', text: `${m.check.triangles.toLocaleString()} triangles` }),
+      m.check.floating ? el('span', { class: 'pill warn', text: `${m.check.floating} floating part${m.check.floating > 1 ? 's' : ''}` }) : null);
+    const note = el('textarea', { id: `note-${m.model}`, placeholder: 'What looks wrong, missing or off?', 'aria-label': `Note on ${m.label}` });
+    note.value = drafts[m.model] ?? (v && !stale ? v.note : '') ?? '';
+    let timer = null;
+    note.addEventListener('input', () => {
+      drafts[m.model] = note.value;
+      clearTimeout(timer);
+      timer = setTimeout(() => save(m, { note: note.value }), 900);
+    });
+    const buttons = el('div', { class: 'seg', role: 'group', 'aria-label': 'Verdict' },
+      ...Object.entries(VERDICTS).map(([k, label]) => el('button', {
+        type: 'button', 'data-v': k, 'aria-pressed': String(status === k), text: label,
+        onclick: () => save(m, { verdict: status === k ? null : k, note: note.value })
+      })));
+    if (!db) for (const b of buttons.children) b.disabled = true;
+    if (!db) note.disabled = true;
+    const placements = [...m.placements].sort((a, b) => b.seen - a.seen || b.peak - a.peak);
+    return el('article', { class: `card ${status}` },
+      el('div', { class: 'head' }, el('h2', { text: m.label }), el('span', { class: 'id', text: `${m.model} · ${m.version}` })),
+      el('div', { class: 'shots' }, shot(m.shots.lap, 'Racer'),
+        el('div', { class: 'side' }, shot(m.shots.glance, 'Glance'), shot(m.shots.high, 'High'))),
+      facts,
+      el('div', { class: 'laps' }, ...placements.map(lapRow)),
+      el('div', { class: 'verdict' },
+        stale ? el('p', { class: 'changed', text: `Rebuilt since it was marked ${VERDICTS[v.verdict] || 'reviewed'}${v.note ? `: "${v.note}"` : ''}` }) : null,
+        buttons, note, el('div', { class: 'saved', 'data-saved': m.model })));
+  }
+
+  function render() {
+    if (!board) return;
+    const counts = { review: 0, ok: 0, fix: 0, rethink: 0 };
+    for (const m of board.models) counts[statusOf(m)]++;
+    $('tally').replaceChildren(
+      el('span', { class: 'pill review', text: `${counts.review} to review` }),
+      el('span', { class: 'pill review', text: `${board.models.filter(changed).length} changed` }),
+      el('span', { class: 'pill ok', text: `${counts.ok} OK` }),
+      el('span', { class: 'pill fix', text: `${counts.fix} fix` }),
+      el('span', { class: 'pill rethink', text: `${counts.rethink} rethink` }));
+    const t = $('track').value;
+    let list = board.models.filter((m) => (show === 'all' || (show === 'changed' ? changed(m) : statusOf(m) === show))
+      && (!t || m.placements.some((p) => p.track === t)));
+    const order = board.tracks.map((x) => x.id);
+    const best = (m) => Math.max(...m.placements.map((p) => p.seen));
+    list = $('sort').value === 'seen'
+      ? list.sort((a, b) => best(a) - best(b))
+      : list.sort((a, b) => order.indexOf(a.track) - order.indexOf(b.track));
+    const focus = document.activeElement && document.activeElement.id;
+    $('grid').replaceChildren(...(list.length ? list.map(card) : [el('p', { class: 'notice', text: 'No pieces match. Pick another filter.' })]));
+    if (focus && $(focus)) $(focus).focus();
+  }
+
+  for (const b of $('status').children) {
+    b.addEventListener('click', () => {
+      show = b.dataset.s;
+      for (const o of $('status').children) o.setAttribute('aria-pressed', String(o === b));
+      render();
+    });
+  }
+  $('track').addEventListener('change', render);
+  $('sort').addEventListener('change', render);
+  $('zoom').addEventListener('click', () => $('zoom').close());
+
+  fetch('board.json').then((r) => r.json()).then((data) => {
+    board = data;
+    for (const t of board.tracks) $('track').append(el('option', { value: t.id, text: `${t.name} (${t.cup})` }));
+    render();
+  }).catch(() => { $('grid').replaceChildren(el('p', { class: 'notice', text: 'The pieces did not load. Reload the page.' })); });
+
+  const store = window.claude && window.claude.use ? window.claude.use('db') : Promise.resolve(null);
+  store.then((d) => {
+    db = d;
+    if (!db) {
+      $('notice').textContent = 'Verdicts cannot be saved in this view. Open the board in claude.ai, signed in, to mark pieces.';
+      $('notice').hidden = false;
+      render();
+      return;
+    }
+    db.collection('verdicts').onSnapshot((snap) => {
+      verdicts = {};
+      for (const doc of snap.docs) verdicts[doc.id] = doc.data();
+      render();
+    }, () => {
+      $('notice').textContent = 'Saved verdicts stopped updating. Reload the page.';
+      $('notice').hidden = false;
+    });
+    render();
+  });
+})();
+</script>

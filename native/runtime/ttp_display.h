@@ -349,6 +349,52 @@ TTP_ABI void ttp_display_bench(const char* model);
 TTP_ABI void ttp_display_kit_field(int count);
 TTP_ABI const char* ttp_display_kit_field_layout(void);
 
+/* ---- the set-piece layout (DEV) ----------------------------------------- *
+ *
+ * Where the built track's SET PIECES stand, for the landmark gallery
+ * (/gallery-landmarks.html), which flies its cameras to them. Canonical JSON,
+ * {"groundY","length","pieces":[...]}, one row per PLACED piece in authored
+ * order. A piece whose GLB failed to load is skipped, so every row names its
+ * own model:
+ *   model           the GLB base name
+ *   u, s            lap fraction, and u * length
+ *   lat, yaw        authored: units off the centreline (+ right), degrees
+ *   heading         the world yaw it was placed at, radians
+ *   x, y, z         its anchor (the frame point + lat, on the ground + lift)
+ *   cx, cz          its footprint's centre
+ *   ax, az          its +X axis in plan; hx, hz its half extents along +X/+Z
+ *   top             its world top
+ *   parts           each mesh of the composition as [cx, cz, hx, hz, top]:
+ *                   a box on the piece's own axes, for how big the piece's
+ *                   largest mesh reads
+ * The footprint is the one every later placement pass keeps out of, so a chrome
+ * framing a piece reads it here rather than re-deriving the placement from the
+ * track descriptor. Valid until the next build of a different static scene;
+ * {"groundY":0,"length":0,"pieces":[]} before one. */
+TTP_ABI const char* ttp_display_set_layout(void);
+
+/* DEV. Where the built track's scenery trees and boulders stand, for the same
+ * camera's sight lines: a JSON array of [x, z, r, top] per piece, r its plan
+ * radius and top its world top. Valid like ttp_display_set_layout; [] before
+ * a build. */
+TTP_ABI const char* ttp_display_scatter_layout(void);
+
+/* The renderer's own ground height at world (x, z) for the built static
+ * scene: the surface scatter and set pieces stand on (terrain relief, hills,
+ * the flats kept around the road and under pieces), or the berm a raised
+ * stretch of road stands on where that is higher. The flat ground height
+ * where there is no relief, 0 before a build. For the landmark gallery's
+ * sight-line test. */
+TTP_ABI double ttp_display_ground_y(double x, double z);
+
+/* DEV. Whether a set piece may stand over world (x, z) with its surface
+ * spanning world heights lo..hi in the built scene: "" where it may, else what
+ * keeps it out ("road", "pillar", "berm", "piece" for another piece's foot,
+ * "sea"). `skip` is a ttp_display_set_layout row whose own foot does not
+ * count (the piece being moved; -1 for none). For the landmark gallery's
+ * placement search; "" before a build. */
+TTP_ABI const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int skip);
+
 /* Build the scene for `trackId` from the GLBs/textures the resolved biome names
  * and the roster handed over here.
  *
@@ -668,6 +714,33 @@ TTP_ABI void ttp_display_look(double eyeX, double eyeY, double eyeZ,
  * the overview's. The asset gallery sets the race lens here when it parks the
  * free camera on a car's chase rig, so what it shows is what a player sees. */
 TTP_ABI void ttp_display_look_fov(double deg);
+
+/* A per-CELL look (DEV): cell `cell` looks from the eye (ex, ey, ez) to the
+ * target (tx, ty, tz) instead of from its car's chase rig, with a vertical fov
+ * of `fov` degrees (0 keeps the rig's). Only the camera changes: the cell's
+ * rect, its aspect band, the split's widen-only lens, the race fog band and
+ * its steer bar are all the cell's as before, so a gallery can stand a split
+ * screen's cells wherever it likes and still see exactly what a race draws.
+ * A look for a cell the current cell list (ttp_display_cells) does not have is
+ * ignored, so push the cells first. The looks survive a new field or roster,
+ * so the page that set them clears them (ttp_display_cell_look_clear).
+ * Reached only by the landmark gallery. */
+TTP_ABI void ttp_display_cell_look(int cell, double ex, double ey, double ez,
+                                   double tx, double ty, double tz, double fov);
+TTP_ABI void ttp_display_cell_look_clear(void);
+
+/* A per-CELL car pose (DEV): the car owning cell `cell` is DRAWN parked at
+ * track arclength `s` (wrapped to the lap) and lateral offset `lat` (+ right),
+ * heading along the track there, at rest, instead of where the sim has it.
+ * Display only: the sim is untouched. It reaches the renderer as a sim pose
+ * would (the deck spot the wheels conform to included), so the cell's chase
+ * rig follows it like a race car, cutting to a pose that jumps. Same rules as
+ * the looks: push the cells first, a cell the list lacks is ignored, the poses
+ * survive a new field, and a cell may carry a pose and a look at once. A
+ * kicker's wedge is not modelled (the car is drawn on the deck under it); no
+ * catalogue track has one. Reached only by the landmark gallery. */
+TTP_ABI void ttp_display_car_pose(int cell, double s, double lat);
+TTP_ABI void ttp_display_car_pose_clear(void);
 
 /* The race's chase rig behind a car at (x, y, z) on level ground, nose along
  * (fx, fz) in plan, driving a straight at `spd` of a stat-1 car's top speed
