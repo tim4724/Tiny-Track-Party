@@ -5,6 +5,7 @@
 #include "TtpRendererKit.h"
 
 #include <cstdio>
+#include <map>
 
 #include "ttp/canonical.h"
 #include "ttp/kitfield.h"   // header-only; the renderer may not link libttp-runtime
@@ -247,6 +248,18 @@ static utils::Entity spinNode(const gltfio::FilamentAsset* asset,
         if (nm && std::strcmp(nm, "spin") == 0) return inst->getEntities()[e];
     }
     return {};
+}
+
+// Whether `ent` hangs under a node that MOVES: one named "spin", or one whose
+// name starts "anim_" (a set piece's moving part). Everything under such a node
+// stays out of every static bake and is mirrored per frame instead.
+static bool movesUnder(const gltfio::FilamentAsset* asset, filament::TransformManager& tcm,
+        utils::Entity ent) {
+    for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
+        const char* nm = asset->getName(tcm.getEntity(ti));
+        if (nm && (std::strcmp(nm, "spin") == 0 || std::strncmp(nm, "anim_", 5) == 0)) return true;
+    }
+    return false;
 }
 
 // Trackside props (theme.props): a scattered set-dressing pass, instanced from
@@ -2343,7 +2356,8 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
 // are ambiguous across meshes (nothing in the kit is; the refusal keeps a
 // future asset honest rather than half-merged).
 void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
-        const std::vector<gltfio::FilamentInstance*>& insts, bool dynamic) {
+        const std::vector<gltfio::FilamentInstance*>& insts, bool dynamic,
+        bool perPlacement) {
     if (!asset || insts.empty() || !mEngine) return;
     const auto keyIt = mAssetMeshKey.find(asset);
     if (keyIt == mAssetMeshKey.end()) return;
@@ -2353,20 +2367,13 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     auto& tcm = mEngine->getTransformManager();
     const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
     if (!nEnt) return;
-    // A model with an animated "spin" node (the toy train) moves under a
-    // static merge, so what hangs under that node is mirrored per frame
-    // instead. Only that: the train set's rails are most of its pixels, stand
-    // still, and bake like any other dressing. Instance 0 answers for all:
-    // the slots are the same in every instance.
+    // A model with a moving node (movesUnder: the toy train's "spin", a set
+    // piece's "anim_*") moves under a static merge, so what hangs under that
+    // node is mirrored per frame instead. Only that: the train set's rails are
+    // most of its pixels, stand still, and bake like any other dressing.
+    // Instance 0 answers for all: the slots are the same in every instance.
     const utils::Entity* ents = insts[0]->getEntities();
-    const utils::Entity spin = spinNode(asset, insts[0]);
-    const auto underSpin = [&](utils::Entity ent) {
-        if (spin.isNull()) return false;
-        for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
-            if (tcm.getEntity(ti) == spin) return true;
-        }
-        return false;
-    };
+    const auto moving = [&](size_t e) { return movesUnder(asset, tcm, ents[e]); };
     // The kit colour table for this model, keyed by the same bytes hash; a
     // model it does not know keeps the instanced, live-lit draw.
     const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
@@ -2374,6 +2381,7 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         if (!in || in->getEntityCount() != nEnt) return;
     }
     std::unordered_map<int, std::vector<size_t>> slotsByMesh;
+    std::vector<std::pair<size_t, int>> still;   // (slot, mesh), in slot order
     for (size_t e = 0; e < nEnt; e++) {
         const utils::Entity ent = insts[0]->getEntities()[e];
         if (!rcm.getInstance(ent)) continue;
@@ -2388,6 +2396,15 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         }
         if (!found) return;
         slotsByMesh[found->mesh].push_back(e);
+        if (perPlacement && !moving(e)) still.emplace_back(e, found->mesh);
+    }
+    // A set piece bakes PER PLACEMENT; only what moves is left for the
+    // per-mesh groups below. A model the bake refuses takes them whole.
+    if (!still.empty() && colorModel && bakePlacements(insts, meshIt->second, *colorModel, still)) {
+        for (auto it = slotsByMesh.begin(); it != slotsByMesh.end();) {
+            std::erase_if(it->second, [&](size_t e) { return !moving(e); });
+            it = it->second.empty() ? slotsByMesh.erase(it) : std::next(it);
+        }
     }
     for (const auto& [mesh, slots] : slotsByMesh) {
         const ttp::rt::GlbMeshNode* node = nullptr;
@@ -2418,11 +2435,96 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         const ttp::kitcolors::Mesh* colors = (colorModel && node->mesh >= 0
                 && (uint32_t) node->mesh < colorModel->meshCount)
                 ? &colorModel->meshes[node->mesh] : nullptr;
-        const bool moves = dynamic || std::any_of(slots.begin(), slots.end(),
-                [&](size_t e) { return underSpin(ents[e]); });
+        const bool moves = dynamic || std::any_of(slots.begin(), slots.end(), moving);
         buildMergedGroup(mMergedDress, sources, node->prims, moves,
                 kFeatDressing, colors);
     }
+}
+
+// THE SET PIECE'S BAKE, one mesh per PLACEMENT: every part of one instance
+// that stands still, across all of its meshes, with bakeMergedRun's colour and
+// light. A Blender piece exports a mesh per part and its placements stand too
+// far apart for a per-mesh run to join two of them, so the per-mesh merge made
+// one renderable per PART per placement -- a hundred draws a piece.
+//
+// A piece wider than a tile (mPieceTile) is split into one mesh per tile, so
+// what a cell's frustum or far form decides is a corner of the piece, not all
+// of it. The split is by WHOLE PART (its centre's tile), never through one:
+// each mesh then holds only complete parts, so its far form needs no locked
+// border and two neighbours can never open a crack between them.
+//
+// Refuses the whole model before building anything when a part is one the kit
+// table cannot colour, so a model is never half baked.
+bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& insts,
+        const std::vector<ttp::rt::GlbMeshNode>& nodes, const ttp::kitcolors::Model& colors,
+        const std::vector<std::pair<size_t, int>>& still) {
+    if (!mBakeRig.valid) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    struct Part { size_t slot; const ttp::rt::GlbMeshNode* node; const ttp::kitcolors::Mesh* colors; };
+    std::vector<Part> parts;
+    std::vector<float3> factor;
+    for (const auto& [slot, mesh] : still) {
+        if (mesh < 0 || (uint32_t) mesh >= colors.meshCount) return false;
+        const ttp::rt::GlbMeshNode* node = nullptr;
+        for (const auto& n : nodes) {
+            if (n.mesh == mesh) { node = &n; break; }
+        }
+        if (!node) return false;
+        if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, colors.meshes[mesh], factor)) {
+            return false;
+        }
+        parts.push_back({ slot, node, &colors.meshes[mesh] });
+    }
+    for (size_t i = 0; i < insts.size(); i++) {
+        const utils::Entity* ents = insts[i]->getEntities();
+        // THE COPIES HALF OF THE DRESSING ABLATION (mergeInstancedSet), over
+        // placements: a dropped one leaves the scene outright.
+        const auto at = [&](size_t k) { return static_cast<size_t>(static_cast<float>(k) * mDressKeep); };
+        if (mDressKeep < 1.0f && at(i + 1) == at(i)) {
+            for (const Part& p : parts) mScene->remove(ents[p.slot]);
+            continue;
+        }
+        // Each part's tile, on a grid anchored at the placement's own corner,
+        // so a piece narrower than a tile is one mesh wherever it stands.
+        std::vector<float3> centre(parts.size(), float3{ 0 });
+        float x0 = 1e30f, z0 = 1e30f;
+        for (size_t j = 0; j < parts.size(); j++) {
+            const auto ri = rcm.getInstance(ents[parts[j].slot]);
+            const auto ti = tcm.getInstance(ents[parts[j].slot]);
+            if (!ri || !ti) continue;
+            centre[j] = (tcm.getWorldTransform(ti)
+                    * float4{ rcm.getAxisAlignedBoundingBox(ri).center, 1.0f }).xyz;
+            x0 = std::min(x0, centre[j].x);
+            z0 = std::min(z0, centre[j].z);
+        }
+        std::map<int64_t, MergedGroup> tiles;   // ordered: the build order is the key's
+        for (size_t j = 0; j < parts.size(); j++) {
+            const Part& p = parts[j];
+            const utils::Entity src = ents[p.slot];
+            const auto ti = tcm.getInstance(src);
+            if (!ti || !bakeFactors(src, p.node->prims, *p.colors, factor)) continue;
+            const int64_t key = (int64_t) ((centre[j].z - z0) / mPieceTile) * 65536
+                    + (int64_t) ((centre[j].x - x0) / mPieceTile);
+            MergedGroup& g = tiles[key];
+            appendBaked(g.baked, tcm.getWorldTransform(ti), p.node->prims, *p.colors, factor);
+            g.sources.push_back(src);
+        }
+        for (auto& [key, g] : tiles) {
+            g.feat = kFeatDressing;
+            g.baked.weld = true;
+            g.baked.simplify = true;
+            if (!buildMesh(g.baked)) continue;   // nothing baked: the originals keep drawing
+            g.ent = g.baked.entity;
+            // Whatever layer the originals sit on: the caster bit
+            // (buildSetPieces), and a feature bit when a sweep tagged the scene.
+            const uint8_t layer = rcm.getLayerMask(rcm.getInstance(g.sources[0]));
+            if (const auto ri = rcm.getInstance(g.ent)) rcm.setLayerMask(ri, 0xFF, layer);
+            for (const utils::Entity src : g.sources) mScene->remove(src);
+            mMergedDress.push_back(std::move(g));
+        }
+    }
+    return true;
 }
 
 // The per-copy dressing, regrouped: the instanced scenery and prop models
@@ -2442,7 +2544,7 @@ void TtpRenderer::buildDressingMerge() {
         mergeInstancedSet(mPropAssets[m], mPropInstances[m], false);
     }
     for (size_t m = 0; m < mSetAssets.size() && m < mSetInstances.size(); m++) {
-        mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
+        mergeInstancedSet(mSetAssets[m], mSetInstances[m], false, true);
     }
     mergeInstancedSet(mConeAsset, mConeInstances, true);
 }
@@ -2466,19 +2568,12 @@ std::vector<std::pair<std::string, int>> TtpRenderer::debugLiveDressing() const 
             if (!asset || insts[m].empty() || !insts[m][0]) continue;
             int live = 0;
             for (const auto* in : insts[m]) {
-                const utils::Entity spin = spinNode(asset, in);
                 for (size_t e = 0; e < in->getEntityCount(); e++) {
                     const utils::Entity ent = in->getEntities()[e];
                     if (!rcm.getInstance(ent)) continue;
                     const auto group = instancedBy.find(ent.getId());
                     if (group != instancedBy.end()) { live += group->second; continue; }
-                    if (!mScene->hasEntity(ent)) continue;
-                    bool moves = false;
-                    for (auto ti = tcm.getInstance(ent); ti && !spin.isNull();
-                            ti = tcm.getInstance(tcm.getParent(ti))) {
-                        if (tcm.getEntity(ti) == spin) { moves = true; break; }
-                    }
-                    if (!moves) live++;
+                    if (mScene->hasEntity(ent) && !movesUnder(asset, tcm, ent)) live++;
                 }
             }
             if (!live) continue;

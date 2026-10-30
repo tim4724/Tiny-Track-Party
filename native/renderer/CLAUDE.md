@@ -696,7 +696,17 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
 
 **A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
 `set` list in `public/shared/tracks.js`): composed GLBs instanced like props,
-so they merge, bake and get a far form with no renderer path of their own. Two
+so they bake with the same colour and light and get a far form. One
+difference is in the grouping: a set piece bakes **per PLACEMENT, not per mesh**
+(`bakePlacements`). A Blender piece exports a mesh per part and its placements
+stand too far apart for a per-mesh run to join two, so the per-mesh merge drew
+every part of every placement as its own renderable (a hundred-odd draws a
+piece). Each placement's still parts become one mesh per `mPieceTile` tile,
+split by whole part, so a big piece still culls and takes its far form a
+corner at a time (never through a part, so a tile's far form needs no locked
+border). **A node named `spin`
+or `anim_*` MOVES** (`movesUnder`): its subtree stays out of every static bake
+and is mirrored per frame like the toy train's. Two more
 things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of
