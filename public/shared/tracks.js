@@ -521,50 +521,52 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
+    // Snakes and ladders: the board fills the infield, a ladder running off
+    // it toward the spiral climb; the game's box stands where the grid
+    // straight points, a ladder leant on it; and below the dive (the lap's
+    // snake) the board's snake has come alive, huge, rearing at the racers
     set: [
-      { model: 'set-block-tower', u: 0.096, lat: 12 },
-      { model: 'set-block-pile', u: 0.19, lat: -12, yaw: 160 },
-      { model: 'set-block-pile', u: 0.9, lat: 12, yaw: 20 },
-      { model: 'set-block-pile', u: 0.11, lat: -14.5, yaw: 160 },
-      { model: 'set-marbles', u: 0.07, lat: -7.5, yaw: 160 },
-      { model: 'set-marbles', u: 0.25, lat: 10.5, yaw: 20 }
+      { model: 'set-jointed-snake', u: 0.9306, lat: 15.6, yaw: 180, scale: 1.5 },
+      { model: 'set-snakes-ladders', u: 0.113, lat: -17 },
+      { model: 'set-game-box', u: 0.29, lat: 12 }
     ]
   },
   gauntlet: {
     name: 'Gauntlet', segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
+    // The toy castle siege: the block castle on its cushion fort where the
+    // long home straight points, its soldiers drawn up before the gate and
+    // the wind-up robot marching its beat beside the straight
     set: [
-      { model: 'set-block-castle', u: 0.834, lat: 17.9 },
-      { model: 'set-toy-robot', u: 0.984, lat: -7.5, yaw: 180 },
-      { model: 'set-toy-soldiers', u: 0.97, lat: 6, yaw: 20 },
-      { model: 'set-toy-soldiers', u: 0.65, lat: 12, yaw: 20 },
-      { model: 'set-toy-soldiers', u: 0.15, lat: 12, yaw: 20 },
-      { model: 'set-dominoes', u: 0.64, lat: -10.5, yaw: 160 },
-      { model: 'set-dominoes', u: 0.08, lat: -12, yaw: 160 }
+      { model: 'set-block-castle', u: 0.9568, lat: 25.2, yaw: 24, scale: 1.3 },
+      { model: 'set-toy-soldiers', u: 0.9398, lat: 10.5, yaw: 76 },
+      { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 }
     ]
   },
   helix: {
     name: 'Helix', segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
+    // The marble run: the lap in small beside the spiral climb, where the top
+    // straight points, marbles climbing one tower's screw, along the high
+    // chute and down the other's (the two spirals and the skyway), then home
+    // along the floor
     set: [
+      { model: 'set-marble-run', u: 0.2769, lat: 25, yaw: -131, scale: 1.3 },
       { model: 'set-slinky', u: 0.633, lat: 14.5 },
       { model: 'set-spinning-top', u: 0.145, lat: 10.5 },
-      { model: 'set-yoyo', u: 0.24, lat: 10.5, yaw: 20 },
-      { model: 'set-yoyo', u: 0.1, lat: 10.5, yaw: 20 },
-      { model: 'set-crayons', u: 0.12, lat: -14, yaw: 160 },
-      { model: 'set-crayons', u: 0.02, lat: 32.5, yaw: 20 }
+      { model: 'set-marbles', u: 0.03, lat: -10, yaw: 180 }
     ]
   },
   skyline: {
     name: 'Skyline', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline,
+    // Flight from the desk: the skyway flies straight at a desk standing at
+    // its own height past the U-turn, a toy plane circling its tether over a
+    // paper runway on it, a rocket steaming on its pad, a globe turning; the
+    // cardboard box in the infield is the hangar
     set: [
-      { model: 'set-toy-rocket', u: 0.42, lat: 31.6 },
-      { model: 'set-toy-plane', u: 0.974, lat: -7.5, yaw: 180 },
-      { model: 'set-cardboard-box', u: 0.09, lat: -10.5, yaw: 160 },
-      { model: 'set-cardboard-box', u: 0.45, lat: -7.5, yaw: 160 },
-      { model: 'set-block-pile', u: 0.46, lat: -32.5, yaw: 160 },
-      { model: 'set-marbles', u: 0.95, lat: 12, yaw: 20 }
+      { model: 'set-flight-desk', u: 0.4846, lat: -26.1, yaw: 138, scale: 1.5 },
+      { model: 'set-cardboard-box', u: 0.0211, lat: 24, scale: 1.4 }
     ]
   }
 };
