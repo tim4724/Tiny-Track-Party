@@ -67,6 +67,28 @@ struct SetDef {
   double scale;       // uniform; 1 = as composed
 };
 
+// A LANDFORM: a shape the RENDERER sums into this track's ground (public/
+// shared/tracks.js `land`, and SET_GROUND under the set pieces modelled on
+// one). Not builder input, for SetDef's reason. Lengths in world units in the
+// anchor's frame: +Z along the track's heading turned `yaw`, +X the track's
+// LEFT — a set piece's own frame, so a set piece's ground is authored in the
+// same frame as its model.
+struct LandDef {
+  int kind;           // 0 ridge (a hill when len is 0), 1 ring, 2 plain, 3 mound
+  int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
+  double u, lat, yaw; // the anchor when piece is -1, like a set piece's; on a
+                      // piece, yaw alone turns the form in the piece's frame
+  double x, z;        // centre offset in the anchor frame
+  double len;         // ridge / plain: length along +Z
+  double r, r1;       // ridge: radius at -Z / +Z end; ring: crest radius; plain: half-width;
+                      // mound: reach toward +X / toward -X
+  double w;           // ring: half-width of the bank; plain: its fade
+  double rz;          // mound: reach along Z
+  double h, h1;       // height at -Z / +Z end (ridge), else h
+  double top;         // ridge / ring: the flat crest, a fraction of the radius
+  double shape;       // mound: its flank exponent
+};
+
 struct TrackDef {
   const char* id;
   // THE TWO FIELDS BELOW ARE NOT BUILDER INPUT. Nothing in this library reads
@@ -93,8 +115,9 @@ struct TrackDef {
   const FurnDef* poles; int nPoles;
   const BananaDef* bananas; int nBananas;
   const FurnDef* kickers; int nKickers;   // u only: a kicker spans the road
-  // Renderer-only, like name and cup: nothing in this library reads it.
+  // Renderer-only, like name and cup: nothing in this library reads them.
   const SetDef* set; int nSet;
+  const LandDef* land; int nLand;
 };
 
 // A CUP: a curated, ordered set of tracks, and the catalogue's own arrangement.
