@@ -1628,6 +1628,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     const uint32_t nModels = (uint32_t) tb.setModels.size();
     mSetAssets.assign(nModels, nullptr);
     mSetInstances.assign(nModels, {});
+    mSetDrapes.assign(nModels, false);
     for (uint32_t m = 0; m < nModels; m++) {
         size_t count = 0;
         for (const auto& p : tb.setPieces) if (p.slot == m) count++;
@@ -1635,6 +1636,9 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const std::string name = "set" + std::to_string(m) + ".glb";
         mSetAssets[m] = loadInstancedProp(name.c_str(), count, mSetInstances[m]);
         if (!mSetAssets[m]) continue;
+        for (size_t e = 0; e < mSetAssets[m]->getEntityCount(); e++) {
+            if (isDrapeName(mSetAssets[m]->getName(mSetAssets[m]->getEntities()[e]))) mSetDrapes[m] = true;
+        }
         for (auto* inst : mSetInstances[m]) {
             // The buildScenery metal fix: the shared matte read on every piece.
             MaterialInstance* const* mis = inst->getMaterialInstances();
@@ -1679,6 +1683,8 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, tb.groundY };
         if (i < mSetOwnGround.size() && mSetOwnGround[i] >= 0) {
             clearing.y += mSetOwnGround[i];
+        } else if (mSetDrapes[p.slot]) {
+            // A piece that drapes lies on the land as it is (mSetDrapes).
         } else {
             clearing.y = naturalFootY(tb, clearing);
             mTerrainFlats.push_back(clearing);
@@ -2542,6 +2548,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         const ttp::rt::GlbMeshNode* node;
         const ttp::kitcolors::Mesh* colors;
         std::vector<float3> factor;
+        bool drape;
     };
     std::vector<Part> parts;
     for (const auto& [slot, mesh] : still) {
@@ -2551,7 +2558,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             if (n.mesh == mesh) { node = &n; break; }
         }
         if (!node) return false;
-        Part p{ slot, node, &colors.meshes[mesh], {} };
+        Part p{ slot, node, &colors.meshes[mesh], {}, mTrack && isDrapeName(node->name.c_str()) };
         if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
             return false;
         }
@@ -2578,7 +2585,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     + (int64_t) ((centre[j].x - x0) / mPieceTile);
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
-                    p.node->prims, *p.colors, p.factor);
+                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr);
             g.sources.push_back(src);
         }
         for (auto& [key, g] : tiles) {
