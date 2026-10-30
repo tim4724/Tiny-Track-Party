@@ -961,9 +961,10 @@ private:
     // land lies before any of them (`withFlats` false) — the height a clearing
     // is levelled TO, so a piece stands where the ground already was.
     float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
-    // `dell`, if asked: how far down a swell the point lies, 0 near the road.
+    // `dell`, if asked: how far down a swell the point lies, 0 near the road;
+    // `bed`: how far inside a `plain` landform's floor (1 on it, 0 clear of it).
     float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-            float* dell = nullptr) const;
+            float* dell = nullptr, float* bed = nullptr) const;
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
@@ -979,7 +980,8 @@ private:
         filament::math::float3 tint;
     };
     std::vector<LandShape> mLand;
-    float landforms(float x, float z, float edge, float lift, float hill, float* dell) const;
+    float landforms(float x, float z, float edge, float lift, float hill, float* dell,
+            float* bed) const;
     // The landforms' tints at (x, z), multiplied: what the ground's colour
     // wears there over groundTint (a glacier's ice, a piste).
     filament::math::float3 landTint(float x, float z) const;
@@ -1070,12 +1072,13 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
-    // Per grid vertex, terrainField's dell term, for the ground's colour.
-    std::vector<float> mGroundDell;
+    // Per grid vertex, terrainField's dell and bed terms, for the ground's colour.
+    std::vector<float> mGroundDell, mGroundBed;
     // The ground colour at a grid vertex: a low-contrast tint off the shape of
-    // the land (its dells, its steep faces), multiplied over the biome's
-    // texture. Never per-vertex noise: a speckle reads as a texture pattern.
-    filament::math::float3 groundTint(uint32_t groundKind, float dell, float upY) const;
+    // the land (its dells, its steep faces, a creek's floor), multiplied over
+    // the biome's texture. Never per-vertex noise: a speckle reads as a texture
+    // pattern.
+    filament::math::float3 groundTint(uint32_t groundKind, float dell, float bed, float upY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.
