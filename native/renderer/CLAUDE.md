@@ -539,10 +539,15 @@ stand on `groundY` with their feet buried.
   renderer lays, and the piece levels no clearing. Its mounds take the land
   under them as the HIGHEST of them or of the raised ground, so two pieces'
   slopes join without a trough and the road along a mountain's foot keeps its
-  short stilts (a part at the foot may be buried a little there). The formula
-  lives three times — `landforms`, `set_prototypes.py set_ground()` and
-  `tracks.js setGroundY` — and the e2e spec catches the C++ and the GLB
-  disagreeing. On a convex slope the grid's chords run under the curve the
+  short stilts (a part at the foot may be buried a little there); its fans
+  (debris) add their rise on top. The formula lives three times —
+  `landforms`, `set_prototypes.py set_ground()` and `tracks.js setGroundY` —
+  and the e2e spec catches the C++ and the GLB disagreeing. Within a grid
+  cell of a deck the cap holds the land lower than any of them, so a part
+  built there on a fan sits sunk, never on the formula's surface.
+- **A form's `tint` is the ground's colour, never a texture**: a multiplier
+  per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
+  glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the
   parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
   chord misses; a part floats only if that is bypassed.
 - **The road ahead stays visible**: a tree or prop that would cut the chase

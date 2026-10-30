@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "ttp/canonical.h"
 #include "ttp/glb_mesh.h"
@@ -224,6 +225,59 @@ void pirateCove(Theme& t) {
                       { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
                       { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
                       { 6, 0.12f, 0.5f, 0.15f } };
+}
+
+// The snow cup's four tracks are four places, so each carries its own idea
+// round the lap past its set pieces: the scatter's Holiday Kit leavings, and
+// where it says something, the kerb banks and the gantry. One entry per
+// scatter model: (name, weight, s0, s1, face, verge).
+struct SnowProp { const char* model; float w, s0, s1; bool face, verge; };
+void snowProps(Theme& t, std::initializer_list<SnowProp> list) {
+  t.props.models.clear();
+  t.props.scatter.clear();
+  for (const SnowProp& p : list) {
+    t.props.scatter.push_back({ (uint32_t) t.props.models.size(), p.w, p.s0, p.s1, p.face, p.verge });
+    t.props.models.push_back(p.model);
+  }
+}
+
+// Powder is a ski resort: the banks are the race course's red and blue gate
+// colours, the gantry's posts banded like slalom poles, and what lies about
+// is the guests' (a snowman by the road, sleds).
+void powderResort(Theme& t) {
+  t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
+  t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
+  snowProps(t, { { "snowman", 0.25f, 1.0f, 0.3f, true, true }, { "sled", 0.30f, 1.0f, 0.3f, false, true },
+                 { "snow-pile", 0.25f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.20f, 0.9f, 0.4f, false, false } });
+}
+
+// Flurry is a frozen lake below a village: open snow round the ice (fewer
+// pines, which also pays for the lake on the long view down its middle leg),
+// sleds left by the road for the slope down to the ice; its one snowman is
+// the set's, on the lake.
+void flurryLake(Theme& t) {
+  t.scenery.density = 0.42f;
+  t.props.scatterDensity = 0.28f;
+  snowProps(t, { { "sled", 0.35f, 1.0f, 0.3f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
+                 { "rocks-medium", 0.15f, 0.9f, 0.4f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
+}
+
+// Glacier is wild ice: no cabin and no village leavings, rock the ice
+// dropped, and banks the blue of the glacier's own ice.
+void penguinGlacier(Theme& t) {
+  t.landmarks.clear();
+  t.road.kerbA = 0xd6ebfb; t.road.kerbB = 0xb8daf3;
+  snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false },
+                 { "rocks-large", 0.20f, 0.85f, 0.35f, false, false }, { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
+}
+
+// Avalanche is a pass under a slope that lets go: debris (rock and tumbled
+// snow) along the road, and the gantry's posts banded orange and black like
+// the avalanche poles that mark a road through a slide path.
+void avalanchePass(Theme& t) {
+  t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
+  snowProps(t, { { "rocks-medium", 0.30f, 0.9f, 0.4f, false, false }, { "rocks-large", 0.25f, 0.85f, 0.35f, false, false },
+                 { "snow-pile", 0.30f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
@@ -551,10 +605,13 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   // rather than a heavy fall (powder is the lightest day of the four). The
   // renderer clamps at 9600.
   if (b && std::strcmp(b->name, "snow") == 0) {
-    if (track == "powder") { t.ambient.count = 2800; t.ambient.size = 0.28f; }
-    else if (track == "flurry") { t.ambient.count = 4500; }
-    else if (track == "glacier") { t.ambient.count = 6000; t.ambient.size = 0.22f; }
-    else if (track == "avalanche") { t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
+    if (track == "powder") { t.ambient.count = 2800; t.ambient.size = 0.28f; powderResort(t); }
+    else if (track == "flurry") { t.ambient.count = 4500; flurryLake(t); }
+    else if (track == "glacier") { t.ambient.count = 6000; t.ambient.size = 0.22f; penguinGlacier(t); }
+    else if (track == "avalanche") {
+      t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f;
+      avalanchePass(t);
+    }
   }
 
   // The beach cup's one pirate track is pirate through and through.
@@ -598,6 +655,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
       l.x = (float) d.x; l.z = (float) d.z; l.len = (float) d.len;
       l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
       l.h = (float) d.h; l.h1 = (float) d.h1; l.top = (float) d.top; l.shape = (float) d.shape;
+      l.tint = d.tint;
       t.land.push_back(l);
     }
   }
