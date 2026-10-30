@@ -37,6 +37,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { encodeGlb, readGlb } from './lib/glb-compose.mjs';
+import { SET_GROUND } from '../public/shared/tracks.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'public/assets/toycar');
@@ -55,7 +56,10 @@ const ATLAS = { pirate: 'Textures/pirate-colormap.png', holiday: 'Textures/holid
 
 if (!fs.existsSync(KIT_CACHE)) throw new Error('no kit cache — run `npm run fetch:kits` first');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ttp-set-protos-'));
-execFileSync(BLENDER, ['-b', '--python-exit-code', '1', '-P', SCRIPT, '--', KIT_CACHE, tmp, ...process.argv.slice(2)], { stdio: ['ignore', 'inherit', 'inherit'] });
+// A piece modelled on terrain (SET_GROUND) is built against the very numbers
+// the renderer lays as the track's ground, so the two cannot drift.
+execFileSync(BLENDER, ['-b', '--python-exit-code', '1', '-P', SCRIPT, '--', KIT_CACHE, tmp, ...process.argv.slice(2)],
+  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND) } });
 
 const sources = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
 for (const file of fs.readdirSync(tmp).filter((f) => f.endsWith('.glb')).sort()) {

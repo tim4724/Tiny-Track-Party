@@ -440,6 +440,9 @@ constexpr SetDef kSet_powder[] = {
   { "set-ski-rack", 0x1.199999999999ap-1, -0x1.ccccccccccccdp+2, 0x1.4p+7, 0x0p+0, 0x1p+0 },
   { "set-snowman-pair", 0x1.1eb851eb851ecp-4, -0x1.d333333333333p+2, 0x1.4p+7, 0x0p+0, 0x1p+0 },
 };
+constexpr LandDef kLand_powder[] = {
+  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.bp+5, 0x0p+0, 0x0p+0, 0x1.29p+6, 0x1.e6p+5, 0x0p+0, 0x1.95p+6, 0x1.44p+5, 0x1.44p+5, 0x0p+0, 0x1.2666666666666p+0 },
+};
 
 constexpr WptDef kW_flurry[] = {
   { -0x1.eb851eb851eb8p-3, 0x1.8570a3d70a3d7p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -737,6 +740,11 @@ constexpr SetDef kSet_avalanche[] = {
   { "set-warning-sign", 0x1.7ef9db22d0e56p-2, 0x1.68p+4, 0x1.b8p+5, 0x0p+0, 0x1p+0 },
   { "set-avalanche-fence", 0x1.bd70a3d70a3d7p-1, 0x1p+4, 0x1.4p+4, 0x0p+0, 0x1p+0 },
   { "set-avalanche-fence", 0x1.999999999999ap-4, -0x1.04p+5, 0x1.4p+7, 0x0p+0, 0x1p+0 },
+};
+constexpr LandDef kLand_avalanche[] = {
+  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.dp+5, 0x0p+0, 0x0p+0, 0x1.0accccccccccdp+6, 0x1.dp+5, 0x0p+0, 0x1.5cp+6, 0x1.44ccccccccccdp+5, 0x1.44ccccccccccdp+5, 0x0p+0, 0x1.999999999999ap+0 },
+  { 3, 4, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.a99999999999ap+4, 0x1.9333333333333p+4, 0x0p+0, 0x1.2333333333333p+5, 0x1.6666666666666p+4, 0x1.6666666666666p+4, 0x0p+0, 0x1.999999999999ap+0 },
+  { 3, 5, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.a99999999999ap+4, 0x1.9333333333333p+4, 0x0p+0, 0x1.2333333333333p+5, 0x1.6666666666666p+4, 0x1.6666666666666p+4, 0x0p+0, 0x1.999999999999ap+0 },
 };
 
 constexpr WptDef kW_ribbon[] = {
@@ -1932,10 +1940,10 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 10, nullptr, 0 },
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 9, nullptr, 0 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 10, nullptr, 0 },
-  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 9, nullptr, 0 },
+  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 9, kLand_powder, 1 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 8, nullptr, 0 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, kOils_glacier, 1, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 9, nullptr, 0 },
-  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6, nullptr, 0 },
+  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6, kLand_avalanche, 3 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 8, kLand_ribbon, 2 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 5, nullptr, 0 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, kOils_tangle, 1, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 4, nullptr, 0 },
