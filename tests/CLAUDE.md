@@ -205,7 +205,8 @@ packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
 how its camera poses look is judged by eye, so `gallery-landmarks.spec.js` pins
 the set layout and the scenery read-back reaching the page, the lap score
 (`__landmarks.score()`, what `npm run score:landmarks` prints) covering every
-piece with none standing on the road or under a deck, the split following the seats, every view
+piece with none standing on the road or under a deck, no still part of a piece
+left live-lit by the bake, the split following the seats, every view
 switching on a scene that keeps drawing, each cell's camera
 (`__landmarks.poses()`) being finite with its landmark inside the driver's lens,
 and the driver views parking each cell's car at a spot of its own (half a car
