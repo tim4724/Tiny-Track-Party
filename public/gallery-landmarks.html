@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Landmark Gallery · Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+</head>
+<body class="stage-page">
+<header>
+  <h1>TINY TRACK · LANDMARKS</h1>
+
+  <div class="group">
+    <select id="lm-track" aria-label="Track"></select>
+  </div>
+
+  <div class="group seg" role="group" aria-label="Players" id="lm-players">
+    <button class="ctrl" data-players="1">1P</button>
+    <button class="ctrl" data-players="2">2P</button>
+    <button class="ctrl" data-players="3">3P</button>
+    <button class="ctrl" data-players="4">4P</button>
+  </div>
+
+  <div class="group seg" role="group" aria-label="Camera" id="lm-views">
+    <button class="ctrl" data-view="driver" title="The race's chase rig on the approach">Driver</button>
+    <button class="ctrl" data-view="glance" title="The approach, looking at the landmark">Glance</button>
+    <button class="ctrl" data-view="high" title="From above, across the road">High</button>
+    <button class="ctrl" data-view="orbit" title="A slow walk round the landmark">Orbit</button>
+    <button class="ctrl" data-view="top" title="Straight down over the whole lap">Top</button>
+    <button class="ctrl" data-view="race" title="A live race, chase cams">Race</button>
+    <button class="ctrl" data-view="free" title="Fly it yourself: drag, scroll, WASD, Q/E">Free</button>
+  </div>
+
+  <div class="group">
+    <label class="checkbox-label" for="lm-spread" title="Each cell frames the next landmark">
+      <input type="checkbox" id="lm-spread">
+      Spread
+    </label>
+  </div>
+
+  <div class="group">
+    <button class="ctrl" id="lm-res" title="Sharp pins the render scale to this screen's; Auto is the game's adaptive scale">Res: Sharp</button>
+    <span class="lm-lines" id="lm-lines" title="The stage's drawing buffer height"></span>
+  </div>
+
+  <div class="group">
+    <button class="ctrl" id="lm-prev" title="Previous landmark (Left arrow)">Prev</button>
+    <button class="ctrl" id="lm-next" title="Next landmark (Right arrow)">Next</button>
+  </div>
+
+  <button class="ctrl options-toggle" id="options-toggle" aria-expanded="false" aria-label="Options">⚙</button>
+
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-assets.html">Assets</a>
+    <a href="/gallery-landmarks.html" class="active">Landmarks</a>
+    <a href="/gallery-artwork.html">Artwork</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html">Music</a>
+    <a href="/gallery-shots.html">Screens</a>
+    <a href="/licenses.html">Licenses</a>
+  </nav>
+</header>
+
+<section class="stage stage--beside">
+  <!-- The real display page on a catalogue track, driven through its
+       window.__landmarks hook. Interactive like the asset stage: Free mode
+       hands the camera to the viewer. -->
+  <iframe id="lm-stage" title="Landmarks"></iframe>
+  <aside class="legend" id="lm-legend">
+    <p class="legend__hint">Left/Right landmark · Up/Down track · 1-4 players</p>
+    <div id="lm-list"></div>
+  </aside>
+</section>
+
+<script type="module" src="/gallery-landmarks.js"></script>
+</body>
+</html>

@@ -1052,28 +1052,35 @@ void Game::resolveCollisions(double dt) {
   for (Car* c : list) if (c->curbHit) billCurb(*c, dt);
 }
 
+Pose carPose(Centerline& cl, double totalS, double lat, double heading, double h,
+             double halfLen) {
+  Frame f = cl.sampleAt(totalS);
+  Vec3 up = f.up;
+  if (lat > 0.05 || lat < -0.05) {
+    Frame f2 = cl.sampleAt(totalS + CURV_PROBE);
+    double tau = dmath::atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / CURV_PROBE;
+    if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, lat * tau).normalize();
+  }
+  Vec3 forward = f.tangent.clone().applyAxisAngle(f.up, heading);
+  Frame fR = cl.sampleAt(totalS - halfLen);
+  Frame fF = cl.sampleAt(totalS + halfLen);
+  Vec3 chord = fF.pos.addScaledVector(fF.lateral, lat)
+                   .sub(fR.pos.addScaledVector(fR.lateral, lat));
+  double rise = chord.dot(up);
+  double run = chord.addScaledVector(up, -rise).length();
+  if (run > 1e-6) forward.addScaledVector(up, rise / run).normalize();
+  Pose p;
+  p.pos = f.pos.clone().addScaledVector(f.lateral, lat);
+  p.pos.addScaledVector(up, h);
+  p.forward = forward;
+  p.up = up;
+  return p;
+}
+
 void Game::recomputePoses() {
   for (const auto& cp : cars_) {
     Car& c = *cp;
-    Frame f = centerline_->sampleAt(c.totalS);
-    Vec3 up = f.up;
-    if (c.lat > 0.05 || c.lat < -0.05) {
-      Frame f2 = centerline_->sampleAt(c.totalS + CURV_PROBE);
-      double tau = dmath::atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / CURV_PROBE;
-      if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, c.lat * tau).normalize();
-    }
-    Vec3 forward = f.tangent.clone().applyAxisAngle(f.up, c.heading);
-    Frame fR = centerline_->sampleAt(c.totalS - c.halfLen);
-    Frame fF = centerline_->sampleAt(c.totalS + c.halfLen);
-    Vec3 chord = fF.pos.addScaledVector(fF.lateral, c.lat)
-                     .sub(fR.pos.addScaledVector(fR.lateral, c.lat));
-    double rise = chord.dot(up);
-    double run = chord.addScaledVector(up, -rise).length();
-    if (run > 1e-6) forward.addScaledVector(up, rise / run).normalize();
-    c.pose.pos = f.pos.clone().addScaledVector(f.lateral, c.lat);
-    c.pose.pos.addScaledVector(up, c.h);
-    c.pose.forward = forward;
-    c.pose.up = up;
+    c.pose = carPose(*centerline_, c.totalS, c.lat, c.heading, c.h, c.halfLen);
   }
 }
 

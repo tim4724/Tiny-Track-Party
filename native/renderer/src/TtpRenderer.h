@@ -213,6 +213,30 @@ public:
     void setKitField(int count);
     const char* kitFieldLayout() const { return mKitLayout.c_str(); }
 
+    // ---- the set-piece layout (dev) ---------------------------------------
+    // Where the track's set pieces ended up, for the landmark gallery's camera
+    // (the shape is ttp_display_set_layout's). The footprint is mSetFeet's
+    // own, so a camera framing a piece and the keep-outs every later pass
+    // honours cannot disagree about where it stands. Written once per static
+    // scene; kNoSetLayout before one is built, and the ABI's answer when
+    // there is no renderer at all.
+    const char* setLayout() const { return mSetLayout.c_str(); }
+    // Where buildScenery stood each tree and boulder, for the same camera's
+    // sight lines (the shape is ttp_display_scatter_layout's); "[]" before a
+    // build.
+    const char* scatterLayout() const { return mScatterLayout.c_str(); }
+    // The built static scene's ground height at (x, z): groundSurfaceY, the
+    // surface every scattered piece stands on, or the berm under raised road
+    // where one stands higher (bermY). 0 with no scene.
+    float groundY(float x, float z) const;
+    // What keeps a set piece's surface over (x, z), spanning world heights lo
+    // to hi, from standing there in the built scene: "road", "pillar", "berm",
+    // "piece" (another piece's foot; set layout row `skip` is not counted) or
+    // "sea"; "" where it may stand. For the landmark gallery's placement
+    // search, which moves pieces it has not built.
+    const char* spotIssue(float x, float z, float lo, float hi, int skip) const;
+    static constexpr const char* kNoSetLayout = "{\"groundY\":0,\"length\":0,\"pieces\":[]}";
+
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
 
     // ---- what still has to be handed over ---------------------------------
@@ -1545,15 +1569,20 @@ private:
     // whole verge — which every later placement pass keeps out of.
     std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
-    struct SetFoot { float x, z, ax, az, hx, hz; };  // centre, +X axis, half extents
+    struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    std::string mSetLayout = kNoSetLayout;
+    std::string mScatterLayout = "[]";
     // The grass BERMS under raised deck reach a few units past the kerb, and
     // the scatters ground a piece on the terrain beneath them, so one standing
     // on a berm's flank is half inside it. inBerm is that keep-out; bermEdge
     // is how far out the berm beside a centreline point reaches (0 = none).
     bool inBerm(const TrackBin& tb, float x, float z, float margin) const;
     float bermEdge(const TrackBin& tb, float x, float z) const;
+    // The berms' own surface height at (x, z), read off the strips
+    // buildStructures stitches between consecutive rings; -1e30 off every berm.
+    float bermY(const TrackBin& tb, float x, float z) const;
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;

@@ -2041,6 +2041,210 @@ void testSplitLensIsLayoutInvariant(const GameTrack& track) {
 }
 
 // ---------------------------------------------------------------------------
+// ttp_display_cell_look: the landmark gallery's per-cell camera. It replaces a
+// cell's CAMERA and nothing else: the cell is still a cell (no overview flag,
+// so the renderer still fits it into the band and widens only), at the cell's
+// aspect, on the race fog band, with its steer bar, following its car. The
+// rect itself is TtpRenderer's and out of this check's reach; what decides
+// which rect the view lands in is the flag and the view count, both pinned.
+// Driven on an ultrawide so the cell aspect is not the surface's by accident.
+// ---------------------------------------------------------------------------
+void testCellLook(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  const Car& c0 = *game.cars()[0];
+  const Car& c2 = *game.cars()[2];   // not [1]: its monster rig is not the plain ChaseCam
+
+  DisplayState d = freshState();
+  d.width = 3840;
+  d.height = 1080;
+  d.roster = {P0, P1, P2};
+  d.cells = {P0, P2};
+  const float aspect = caseAspect(d);
+  const V3 eye{12.5f, 20.0f, -30.0f}, target{-4.0f, 1.5f, 6.0f};
+  rt::setCellLook(d, 1, eye, target, 0);
+  // Indices the cell list does not have: ignored, not grown into. Index 2 is
+  // a cell a 3P split would have, and still not one this split has.
+  rt::setCellLook(d, -1, eye, target, 0);
+  rt::setCellLook(d, 2, eye, target, 0);
+  rt::setCellLook(d, 99, eye, target, 0);
+  checkU((uint32_t) d.cellLooks.size(), 2, "only a cell the list has takes a look");
+
+  ChaseCam refA, refB;
+  const TtpFrameInput* h = nullptr;
+  float wantLook[16];
+  rt::lookAtWorld(wantLook, eye, target, V3{0, 1, 0});
+  for (int frame = 0; frame < 4; frame++) {
+    h = rt::buildFrame(d, &game, DT, aspect);
+    refA.update(c0.pose, carSpd(c0), DT);
+    refB.update(c2.pose, carSpd(c2), DT);
+    const TtpViewInput* views = ttp_frame_views(h);
+    checkU(h->viewCount, 2, "a look keeps one view per cell");
+    check((h->flags & TTP_FRAME_OVERVIEW) == 0, "…and a looked cell is still a CELL, not an overview");
+    checkU(h->hudCount, 2, "…with its cell overlay");
+    check((ttp_frame_hud(h)[1].flags & TTP_HUD_STEER_BAR) != 0, "…and its steer bar");
+    float wantA[16];
+    rt::lookAtWorld(wantA, refA.pos, refA.target, rt::v3(c0.pose.up));
+    checkView(views[0], wantA, refA.fov, aspect, rt::CAM_NEAR, rt::CAM_FAR,
+              d.framing.raceFogNear, d.framing.raceFogFar, "the cell with no look is its chase rig");
+    // fov 0 keeps the rig's own, so the split's lens rule is untouched.
+    checkView(views[1], wantLook, refB.fov, aspect, rt::CAM_NEAR, rt::CAM_FAR,
+              d.framing.raceFogNear, d.framing.raceFogFar, "the looked cell");
+    check(views[1].car == 2, "…still names its car");
+  }
+  // FROM the eye, TOWARD the target: the position column is the eye, and the
+  // camera's back (+Z) column points from the target to it.
+  const float* w = ttp_frame_views(h)[1].world;
+  check(w[12] == eye.x && w[13] == eye.y && w[14] == eye.z, "the looked cell's camera sits at the eye");
+  const V3 back = rt::norm(eye - target);
+  check(std::fabs(w[8] - back.x) < 1e-6f && std::fabs(w[9] - back.y) < 1e-6f
+            && std::fabs(w[10] - back.z) < 1e-6f,
+        "…and looks at the target");
+
+  // A lens of its own when asked for one.
+  rt::setCellLook(d, 1, eye, target, 70.0f);
+  h = rt::buildFrame(d, &game, DT, aspect);
+  refA.update(c0.pose, carSpd(c0), DT);
+  refB.update(c2.pose, carSpd(c2), DT);
+  checkF(ttp_frame_views(h)[1].fov, 70.0f, "a look's own fov replaces the rig's");
+  checkF(ttp_frame_views(h)[0].fov, refA.fov, "…in its cell alone");
+
+  // The rig kept springing underneath the look, so clearing it hands back the
+  // chase shot exactly where an unlooked rig would be.
+  d.cellLooks.clear();
+  h = rt::buildFrame(d, &game, DT, aspect);
+  refB.update(c2.pose, carSpd(c2), DT);
+  float wantB[16];
+  rt::lookAtWorld(wantB, refB.pos, refB.target, rt::v3(c2.pose.up));
+  checkMat(ttp_frame_views(h)[1].world, wantB, "a cleared look is the chase rig again");
+  checkF(ttp_frame_views(h)[1].fov, refB.fov, "…at the rig's fov");
+
+  // The look sent for cell 2 while there were two cells was dropped, not kept:
+  // a third cell arriving later does not inherit it.
+  d.cells = {P0, P2, P1};
+  h = rt::buildFrame(d, &game, DT, aspect);
+  checkU(h->viewCount, 3, "the split grew to three");
+  const float* w2 = ttp_frame_views(h)[2].world;
+  check(!(w2[12] == eye.x && w2[13] == eye.y && w2[14] == eye.z),
+        "…and its new cell does not wake a look sent before it existed");
+}
+
+// ---------------------------------------------------------------------------
+// ttp_display_car_pose: the landmark gallery's per-cell CAR. The car owning a
+// posed cell is drawn parked at the track frame for (s, lat), as the car input
+// a sim pose would be (world pose and the deck spot the renderer conforms to),
+// and the cell's chase rig follows THAT car: springing while it holds, cutting
+// when the pose jumps. The sim never hears of it, so clearing hands back the
+// sim's pose, and a look still wins the cell's camera over the rig.
+// ---------------------------------------------------------------------------
+void testCarPose(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  const Car& c0 = *game.cars()[0];
+  const Car& c2 = *game.cars()[2];
+  const double L = game.length();
+
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+  d.cells = {P0, P2};
+  const float aspect = caseAspect(d);
+  // Past the lap on purpose: the pose wraps, as the ABI promises.
+  const double s = L + L * 0.37, lat = 0.8;
+  rt::setCarPose(d, 1, s, lat);
+  rt::setCarPose(d, -1, s, lat);
+  rt::setCarPose(d, 2, s, lat);
+  checkU((uint32_t) d.carPoses.size(), 2, "only a cell the list has takes a car pose");
+
+  // The track frame for (s, lat), stated straight off the centreline.
+  const double sw = ttp::wrap_s(s, L);
+  const Frame f = game.centerline()->sampleAt(sw);
+  const Vec3 at = f.pos.clone().addScaledVector(f.lateral, lat);
+  // …and its orientation, the sim's own pose rule there: heading along the
+  // track, the deck's up twisted across to `lat`.
+  const Pose want = ttp::carPose(*game.centerline(), sw, lat, 0, 0, c2.halfLen);
+
+  ChaseCam refA, refB;
+  const TtpFrameInput* h = nullptr;
+  for (int frame = 0; frame < 4; frame++) {
+    h = rt::buildFrame(d, &game, DT, aspect);
+    const TtpCarInput& o = ttp_frame_cars(h)[2];
+    check(sameVec(o.pos, at), "the posed car stands at the track frame for (s, lat)");
+    check(o.forward.x * f.tangent.x + o.forward.y * f.tangent.y + o.forward.z * f.tangent.z > 0.99,
+          "…nose along the track there");
+    check(sameVec(o.forward, want.forward) && sameVec(o.up, want.up),
+          "…oriented by the sim's pose rule at that spot, heading 0");
+    checkF(o.trackS, (float) sw, "…its deck spot wrapped to the lap");
+    checkF(o.trackLat, (float) lat, "…and at its lateral");
+    check(o.spd == 0 && o.steer == 0 && o.steerYaw == 0 && o.spin == 0 && o.air == 0,
+          "…parked, at rest");
+    checkF(o.halfLen, (float) c2.halfLen, "…keeping the sim's footprint");
+    checkCar(ttp_frame_cars(h)[0], c0, "an unposed car is the sim's");
+    check(!sameVec(o.pos, c2.pose.pos),
+          "…and the sim's car is not where the posed one is drawn");
+
+    refA.update(c0.pose, carSpd(c0), DT);
+    refB.update(rt::heldPose(o), 0, DT);
+    float wantA[16], wantB[16];
+    rt::lookAtWorld(wantA, refA.pos, refA.target, rt::v3(c0.pose.up));
+    rt::lookAtWorld(wantB, refB.pos, refB.target, V3{o.up.x, o.up.y, o.up.z});
+    checkMat(ttp_frame_views(h)[0].world, wantA, "the unposed cell chases the sim's car");
+    checkMat(ttp_frame_views(h)[1].world, wantB, "the posed cell's rig chases the posed car, at rest");
+    checkF(ttp_frame_views(h)[1].fov, refB.fov, "…on the rig's lens");
+  }
+  // It LOOKS AT the car: the eye is a chase distance off it, the car ahead.
+  {
+    const float* w = ttp_frame_views(h)[1].world;
+    const TtpCarInput& o = ttp_frame_cars(h)[2];
+    const V3 eye{w[12], w[13], w[14]}, car{o.pos.x, o.pos.y, o.pos.z};
+    const V3 toCar = car - eye;
+    check(std::sqrt(rt::dot(toCar, toCar)) < 4.0f, "the posed cell's eye sits just behind its car");
+    check(-(w[8] * toCar.x + w[9] * toCar.y + w[10] * toCar.z) > 0, "…facing it");
+  }
+
+  // A pose that JUMPS is a cut: the rig snaps behind the car at once, it does
+  // not sweep across the track after it. The cut is a fresh shot in full: a
+  // lens left wide by the race and a landing dip under way start over too.
+  {
+    ChaseCam& cam = d.chase[d.cells[1].key()];
+    cam.fov = rt::BASE_FOV + 6;
+    cam.dipT = 0;
+    cam.dipDepth = 1;
+  }
+  rt::setCarPose(d, 1, s + L * 0.5, -lat);
+  h = rt::buildFrame(d, &game, DT, aspect);
+  refA.update(c0.pose, carSpd(c0), DT);
+  refB = ChaseCam{};
+  refB.update(rt::heldPose(ttp_frame_cars(h)[2]), 0, DT);
+  {
+    float want[16];
+    const TtpCarInput& o = ttp_frame_cars(h)[2];
+    rt::lookAtWorld(want, refB.pos, refB.target, V3{o.up.x, o.up.y, o.up.z});
+    checkMat(ttp_frame_views(h)[1].world, want, "a jumped pose CUTS the rig onto the car");
+    checkF(ttp_frame_views(h)[1].fov, rt::BASE_FOV, "…on the parked lens, not the race's");
+  }
+
+  // A look wins the camera; the car stays posed under it.
+  const V3 eye{12.5f, 20.0f, -30.0f}, target{-4.0f, 1.5f, 6.0f};
+  rt::setCellLook(d, 1, eye, target, 0);
+  h = rt::buildFrame(d, &game, DT, aspect);
+  refA.update(c0.pose, carSpd(c0), DT);
+  refB.update(rt::heldPose(ttp_frame_cars(h)[2]), 0, DT);
+  {
+    float want[16];
+    rt::lookAtWorld(want, eye, target, V3{0, 1, 0});
+    checkMat(ttp_frame_views(h)[1].world, want, "a look wins the posed cell's camera");
+    check(!sameVec(ttp_frame_cars(h)[2].pos, c2.pose.pos), "…and the car stays posed under it");
+  }
+  d.cellLooks.clear();
+
+  // Clearing hands the car back to the sim, every field of it.
+  d.carPoses.clear();
+  h = rt::buildFrame(d, &game, DT, aspect);
+  checkCar(ttp_frame_cars(h)[2], c2, "a cleared pose is the sim's car again");
+  checkF(ttp_frame_cars(h)[2].trackS, (float) c2.totalS, "…on the sim's deck spot");
+}
+
+// ---------------------------------------------------------------------------
 // TTP_FRAME_OVERVIEW — which of the two rects the single view is drawn into.
 //
 // The renderer cannot infer it: one cell and one overview are both viewCount 1,
@@ -2408,6 +2612,8 @@ int main() {
   testCoverageView(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
+  testCellLook(bt.game);
+  testCarPose(bt.game);
   testOverviewOwnsTheSurface(bt.game);
   testCellHud(bt.game);
   testHud(bt.game);

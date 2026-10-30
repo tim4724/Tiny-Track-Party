@@ -122,7 +122,8 @@ export default [
       'scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs', 'scripts/bake-shelf.mjs',
       'scripts/lib/capture.mjs', 'scripts/check-blob-cache.mjs',
       'scripts/bake-cues.mjs', 'scripts/perf-features.mjs', 'scripts/perf-race.mjs',
-      'scripts/lobby-fit-check.mjs', 'scripts/scene-budget.mjs',
+      'scripts/lobby-fit-check.mjs', 'scripts/scene-budget.mjs', 'scripts/landmark-score.mjs',
+      'scripts/landmark-place.mjs',
     ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },

@@ -704,7 +704,12 @@ their oriented footprints (`mSetFeet`): they are authored, so they win their
 ground. The scatters keep out of the grass berms the same way (`inBerm`), since
 they ground a piece on the terrain beneath one; the verge band starts at the
 berm's foot, and a prop is grounded under its model's own footprint and
-dropped, never sunk, where its uphill edge would bury a quarter of its height. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
+dropped, never sunk, where its uphill edge would bury a quarter of its height.
+**Each scatter SPOT draws from its own seeded stream** (`spotSeed`): with one
+stream for the pass, a spot a piece's foot skipped shifted the draws of every
+spot after it, so moving one set piece re-rolled every tree further round the
+lap and no placement could be judged before it was built
+(`npm run place:landmarks`). A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
 that see it, so a heavy one belongs where few cells look at once, and is
 priced on the box's 4P heavy seconds like any other geometry. A composed
 model whose node names point at two meshes is REFUSED by the merge and draws

@@ -157,6 +157,27 @@ struct DisplayState {
     int camMode = CAM_COVERAGE;
     V3 freeEye, freeTarget;
     float freeFov = 0;   // the free camera's lens; 0 = the overview's (ttp_display_look_fov)
+
+    // The landmark gallery's per-CELL camera (ttp_display_cell_look): cell i
+    // looks from `eye` to `target` instead of from its car's chase rig, and
+    // nothing else about the cell changes: its rect, its aspect, the race fog
+    // band, its steer bar, the car it budgets for. The rig keeps springing
+    // underneath, so dropping the look hands back a settled chase shot rather
+    // than one easing in from wherever it was left. Indexed by cell, and only a
+    // cell the current list has takes one (setCellLook). newField and a
+    // shrinking cell list leave the entries alone: the page that set them
+    // clears them before it aims again.
+    struct CellLook { bool on = false; V3 eye, target; float fov = 0; };  // fov 0 = the rig's
+    std::vector<CellLook> cellLooks;
+    // …and its per-CELL car (ttp_display_car_pose): the car owning cell i is
+    // DRAWN parked at accumulated arclength `s`, lateral `lat`, instead of where
+    // the sim has it. Display only, the sim never hears of it. It enters the
+    // frame as the car input a sim pose would (world pose AND the deck spot the
+    // renderer conforms the wheels to), so the cell's chase rig follows it like
+    // a race car's, cutting to a moved pose past CHASE_CUT_DIST. Indexed,
+    // bounded and cleared exactly like cellLooks; a cell can have both.
+    struct CarPose { bool on = false; double s = 0, lat = 0; };
+    std::vector<CarPose> carPoses;
     bool fog = true;
     Framing framing;
 
@@ -184,6 +205,14 @@ void atRest(TtpCarInput& c);
 // The pose a car is DRAWN at, read back off the frame's own car input — what
 // a camera follows when the picture and the sim may disagree (a held field).
 ttp::Pose heldPose(const TtpCarInput& c);
+
+// ttp_display_cell_look's body, so the frame_builder ctest drives the same
+// bounds the ABI does: a look for a cell the current list does not have is
+// ignored, not kept for when the split grows.
+void setCellLook(DisplayState& d, int cell, V3 eye, V3 target, float fov);
+
+// ttp_display_car_pose's body, on the same bounds as setCellLook.
+void setCarPose(DisplayState& d, int cell, double s, double lat);
 
 // The ABI's JSON array of scalar ids (a roster, a cell list) as ids.
 std::vector<ScalarId> parseIds(const char* json);
