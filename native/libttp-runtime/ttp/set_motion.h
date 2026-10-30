@@ -63,12 +63,17 @@ inline bool is_set_motion_name(const char* name) {
 }
 
 // False for a name that is not `anim_...`. An unknown verb or key is skipped,
-// so a newer asset still loads on an older renderer, standing still.
-inline bool parse_set_motion(const char* name, SetMotion& m) {
+// so a newer asset still loads on an older renderer, standing still; each one
+// is appended to `unknown` (when given), which is how the asset gate and the
+// renderer's log catch a typo that would otherwise just stand still.
+inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknown = nullptr) {
   m = SetMotion{};
   if (!is_set_motion_name(name)) return false;
   std::string s(name + 5);
   if (const size_t hash = s.find('#'); hash != std::string::npos) s.resize(hash);
+  const auto bad = [&](const std::string& what) {
+    if (unknown) *unknown += (unknown->empty() ? "" : ", ") + what;
+  };
   size_t at = 0;
   while (at <= s.size()) {
     size_t end = s.find('+', at);
@@ -80,7 +85,10 @@ inline bool parse_set_motion(const char* name, SetMotion& m) {
     bool* on = v == "spin" ? &m.spin : v == "sway" ? &m.sway : v == "bob" ? &m.bob
              : v == "waddle" ? &m.waddle : v == "watch" ? &m.watch : v == "hop" ? &m.hop
              : v == "path" ? &m.path : v == "smoke" ? &m.smoke : nullptr;
-    if (!on) continue;
+    if (!on) {
+      bad("verb '" + v + "'");
+      continue;
+    }
     *on = true;
     while (colon != std::string::npos) {
       const size_t next = verb.find(':', colon + 1);
@@ -88,33 +96,47 @@ inline bool parse_set_motion(const char* name, SetMotion& m) {
           next == std::string::npos ? std::string::npos : next - colon - 1);
       colon = next;
       const size_t eq = kv.find('=');
-      if (eq == std::string::npos || eq == 0) continue;
-      const char key = kv[0];
-      const std::string val = kv.substr(eq + 1);
+      const char key = eq == 1 ? kv[0] : 0;   // keys are one letter: `deg=` is not `d=`
+      const std::string val = eq == std::string::npos ? "" : kv.substr(eq + 1);
       const float f = std::strtof(val.c_str(), nullptr);
       const char axis = val.empty() ? 'y' : val[0];
+      bool known = true;
       if (v == "spin") {
-        if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f;
+        if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f; else known = false;
       } else if (v == "sway") {
         if (key == 'a') m.swayAxis = axis; else if (key == 'd') m.swayDeg = f;
-        else if (key == 'p' && f > 0) m.swayPeriod = f;
+        else if (key == 'p' && f > 0) m.swayPeriod = f; else known = false;
       } else if (v == "bob") {
         if (key == 'h') m.bobHeight = f; else if (key == 'p' && f > 0) m.bobPeriod = f;
+        else known = false;
       } else if (v == "waddle") {
         if (key == 'd') m.waddleDeg = f; else if (key == 'p' && f > 0) m.waddlePeriod = f;
+        else known = false;
       } else if (v == "watch") {
-        if (key == 'r') m.watchRadius = f; else if (key == 'd') m.watchDeg = f;
+        if (key == 'r') m.watchRadius = f; else if (key == 'd') m.watchDeg = f; else known = false;
       } else if (v == "hop") {
         if (key == 'r') m.hopRadius = f; else if (key == 'h') m.hopHeight = f;
-        else if (key == 'p' && f > 0) m.hopPeriod = f;
+        else if (key == 'p' && f > 0) m.hopPeriod = f; else known = false;
       } else if (v == "path") {
-        if (key == 'c') m.chain = val; else if (key == 'p' && f > 0) m.pathPeriod = f;
+        if (key == 'c' && !val.empty()) m.chain = val;
+        else if (key == 'p' && f > 0) m.pathPeriod = f;
         else if (key == 'o') m.pathOffset = f; else if (key == 'f') m.pathFace = (int) f;
+        else known = false;
+      } else {
+        known = false;
       }
+      if (!known) bad("key '" + kv + "' of " + v);
     }
   }
-  if (m.spinAxis != 'x' && m.spinAxis != 'z') m.spinAxis = 'y';
-  if (m.swayAxis != 'x' && m.swayAxis != 'y') m.swayAxis = 'z';
+  if (m.spinAxis != 'x' && m.spinAxis != 'y' && m.spinAxis != 'z') {
+    bad("spin axis");
+    m.spinAxis = 'y';
+  }
+  if (m.swayAxis != 'x' && m.swayAxis != 'y' && m.swayAxis != 'z') {
+    bad("sway axis");
+    m.swayAxis = 'z';
+  }
+  if (m.path && m.chain.empty()) bad("path without a chain");
   return true;
 }
 
@@ -155,24 +177,24 @@ inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
     p.lift += 0.05f * std::fabs(std::cos(w));   // up on each foot as it rocks over
   }
   if (m.watch && nCars) {
-    // Toward the cars in reach, each weighted by how close it is: the weighted
-    // direction moves continuously as cars come and go, and a car behind the
-    // part fades the turn out, so passing behind never snaps the head across.
-    float sx = 0, sz = 0, sum = 0;
+    // Each car in reach asks for its own bearing, clamped, and faded out over
+    // the 60 degrees behind the part; the turn is the weighted mean of those
+    // asks, divided by at least 1 so it fades in with the first car. Every term
+    // is continuous in where the cars are, so no pair of cars (one ahead, one
+    // behind, or abreast on either side) can flip the head between frames.
+    // Averaging DIRECTIONS instead lets opposed cars cancel to a sideways
+    // resultant that jumps to the clamp.
+    const float lim = m.watchDeg * DEG;
+    float num = 0, sum = 0;
     for (size_t i = 0; i < nCars; i++) {
       const float w = set_motion_falloff(cars[i].dist, m.watchRadius, 0.4f * m.watchRadius);
-      const float len = std::sqrt(cars[i].x * cars[i].x + cars[i].z * cars[i].z);
-      if (w <= 0 || len < 1e-4f) continue;
-      sx += w * cars[i].x / len;
-      sz += w * cars[i].z / len;
-      sum += w;
+      if (w <= 0 || cars[i].x * cars[i].x + cars[i].z * cars[i].z < 1e-8f) continue;
+      const float to = std::atan2(-cars[i].z, cars[i].x);   // a turn about +y takes +x toward -z
+      const float front = std::min(1.0f, std::max(0.0f, (3.14159265f - std::fabs(to)) / (60 * DEG)));
+      num += w * front * std::min(lim, std::max(-lim, to));
+      sum += w * front;
     }
-    if (sum > 0 && sx * sx + sz * sz > 1e-8f) {
-      const float to = std::atan2(-sz, sx);   // a turn about +y takes +x toward -z
-      const float behind = std::min(1.0f, std::max(0.0f, (3.14159265f - std::fabs(to)) / (60 * DEG)));
-      const float lim = m.watchDeg * DEG;
-      p.yaw = std::min(lim, std::max(-lim, to)) * std::min(1.0f, sum) * behind;
-    }
+    p.yaw = num / std::max(1.0f, sum);
   }
   if (m.hop && nCars) {
     float near = 0;

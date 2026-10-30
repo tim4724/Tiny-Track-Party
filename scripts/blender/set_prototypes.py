@@ -348,23 +348,59 @@ def kit(kit_id, model, at, yaw=0.0, scale=1.0, pitch=0.0, roll=0.0):
 # `with animated(name, pivot):`; finalize_and_export joins them after the
 # chamfer, so the part costs one draw and keeps the piece's look. Names must be
 # unique in a piece (Blender would suffix a repeat), so a repeated part carries
-# a `#n` tag the grammar ignores.
+# a `#n` tag the grammar ignores. The motion's axes are the NODE's: a part built
+# turned by `yaw` (a penguin facing its own way) passes it, and the node carries
+# the turn, so a watch clamps about its beak and a waddle rocks over its feet.
 
 ANIMS = []
 
+def animate(objs, name, pivot, yaw=0.0):
+    """Mark built objects as one moving part (what `animated` does for a block)."""
+    gid = len(ANIMS)
+    ANIMS.append((name, pivot, yaw))
+    for o in objs:
+        o['anim'] = gid
+
 class animated:
-    def __init__(self, name, pivot):
-        self.name, self.pivot = name, pivot
+    def __init__(self, name, pivot, yaw=0.0):
+        self.name, self.pivot, self.yaw = name, pivot, yaw
     def __enter__(self):
         self.before = set(bpy.context.scene.objects)
         return self
     def __exit__(self, *exc):
-        gid = len(ANIMS)
-        ANIMS.append((self.name, self.pivot))
-        for o in bpy.context.scene.objects:
-            if o not in self.before:
-                o['anim'] = gid
+        animate([o for o in bpy.context.scene.objects if o not in self.before],
+                self.name, self.pivot, self.yaw)
         return False
+
+def split_off(o, pick):
+    """Separate the faces of `o` whose local centre passes `pick` into their
+    own object, and return it (a kit flag's cloth off its pole)."""
+    import bmesh
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bm = bmesh.from_edit_mesh(o.data)
+    for f in bm.faces:
+        if pick(f.calc_center_median()):
+            f.select_set(True)
+    bm.select_flush(True)
+    bmesh.update_edit_mesh(o.data)
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return next(x for x in bpy.context.selected_objects if x is not o)
+
+def kit_flag(model, at, yaw, scale, flap):
+    """A kit flag whose cloth flaps: it dips and lifts about the cloth's own
+    normal, hinged at the top of the pole. Seen across, which is how a car sees
+    a flag turned to the road, that reads; a swing round the pole only narrows
+    the cloth. The pole stays in the static bake."""
+    o = kit('pirate', model, at, yaw=yaw, scale=scale)
+    cloth = split_off(o, lambda c: c.x > 0.25)   # the kit's cloth flies along its +X off a 0.2 pole
+    bpy.context.view_layer.update()
+    top = max((cloth.matrix_world @ v.co).z for v in cloth.data.vertices)
+    animate([cloth], flap, (at[0], top, at[2]))
 
 def marker(name, at):
     """A mesh-less node: a path's waypoint (`path_<chain>_<k>`, a closed loop
@@ -377,7 +413,7 @@ def marker(name, at):
 def join_anims(k):
     """Each `animated` group into one object, origin at its pivot (grown by k
     with the piece), rotation and scale applied so its frame is the piece's."""
-    for gid, (name, pivot) in enumerate(ANIMS):
+    for gid, (name, pivot, yaw) in enumerate(ANIMS):
         objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') == gid]
         if not objs:
             continue
@@ -392,6 +428,9 @@ def join_anims(k):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         bpy.context.scene.cursor.location = P(*pivot) * k
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        if yaw:   # the turn moves from the vertices onto the node (yaw about up = Blender Z)
+            o.data.transform(Matrix.Rotation(-yaw, 4, 'Z'))
+            o.rotation_euler = (0.0, 0.0, yaw)
         o.name = name
         o.data.name = name
     ANIMS.clear()
@@ -399,8 +438,9 @@ def join_anims(k):
 # ---- shared sub-assemblies ------------------------------------------------------
 
 def flagpole(at, h, color, w=1.2, fh=0.7, pole=0xfff6eb, wave=None):
-    """`wave` names the cloth's motion (a `#n` tag apart per flag): it swings
-    round the pole, which is how a flag in a gusting wind reads from a car."""
+    """`wave` names the cloth's motion (a `#n` tag apart per flag), hinged at
+    the top of the pole: a flap about z (the cloth's normal) dips and lifts it,
+    which is what reads from a car seeing it across (kit_flag)."""
     x, y, z = at
     cyl(0.2, 0.3, (x, y, z), pole, segs=6)
     cyl(0.09, h, (x, y, z), pole, segs=6)
@@ -664,8 +704,8 @@ def pirate_camp():
     kit('pirate', 'barrel', (-0.2, 0, 3.5), yaw=0.2, scale=0.5)
     kit('pirate', 'barrel', (0.2, 0.62, 3.25), yaw=1.4, scale=0.5)
     kit('pirate', 'crate', (1.3, 0, 4.2), yaw=-0.3, scale=0.6)
-    with animated('anim_sway:a=y:d=30:p=2.1', (-1.3, 0, 2.6)):                      # it swings round its pole
-        kit('pirate', 'flag-pirate-high', (-1.3, 0, 2.6), yaw=math.radians(90), scale=0.9)   # cloth to the road
+    kit_flag('flag-pirate-high', (-1.3, 0, 2.6), math.radians(90), 0.9,   # cloth to the road, it flaps
+             'anim_sway:a=x:d=24:p=2.1')
 
 @piece(1.5)
 def skull_rock():
@@ -759,14 +799,14 @@ def beach_ball(at):
 def buoy_line():
     # Riptide: the swimming line off the lifeguard's beach: a rope of red and
     # white floats lying on the water between two big marker buoys, each
-    # flying a flag.
+    # flying a flag. They stand still: the line lies some sixty units off the
+    # road, where a bob of any honest size is a pixel at 540p.
     for s, flag in ((-1, 0xff5040), (1, 0xffc044)):
         zb = s * 15.6
-        with animated('anim_bob:h=0.3:p=%.1f#%d' % (3.0 + 0.4 * s, s + 1), (0, -0.25, zb)):   # riding the swell
-            cyl(0.55, 0.85, (0, -0.25, zb), 0xff5040, r2=0.36, segs=8)
-            cyl(0.37, 0.3, (0, 0.6, zb), 0xfff6eb, r2=0.3, segs=8)
-            box((0.14, 1.3, 0.14), (0, 1.5, zb), 0x2a2735)
-            box((0.06, 0.45, 0.7), (0, 1.9, zb - s * 0.42), flag)
+        cyl(0.55, 0.85, (0, -0.25, zb), 0xff5040, r2=0.36, segs=8)
+        cyl(0.37, 0.3, (0, 0.6, zb), 0xfff6eb, r2=0.3, segs=8)
+        box((0.14, 1.3, 0.14), (0, 1.5, zb), 0x2a2735)
+        box((0.06, 0.45, 0.7), (0, 1.9, zb - s * 0.42), flag)
     beam((0, 0.16, -15.2), (0, 0.16, 15.2), 0.1, 0xfff6eb)
     for k in range(29):
         zf = -14.0 + k * 1.0
@@ -859,8 +899,8 @@ def cannon_post():
     r = 0.34 * 0.6
     for bx, by, bz in ((1.45, r, 0.75), (1.45, r, 1.15), (1.8, r, 0.95), (1.57, 2.5 * r, 0.95)):
         kit('pirate', 'cannon-ball', (bx, by, bz), scale=0.6)
-    with animated('anim_sway:a=y:d=30:p=1.9', (0.3, 0, -1.9)):                       # it swings round its pole
-        kit('pirate', 'flag-pirate', (0.3, 0, -1.9), yaw=math.radians(-90), scale=1.1)   # cloth to the road
+    kit_flag('flag-pirate', (0.3, 0, -1.9), math.radians(-90), 1.1,       # cloth to the road, it flaps
+             'anim_sway:a=x:d=24:p=1.9')
 
 @piece(1.45)
 def drift_logs():
@@ -1407,7 +1447,7 @@ def slider_penguin(x, y, z, k):
 PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.4#%d'
 
 def live_penguin(n, x, y, z, k, yaw):
-    with animated(PENGUIN % n, (x, y, z)):
+    with animated(PENGUIN % n, (x, y, z), yaw):
         penguin(x, y, z, k, yaw)
 
 @piece(1.45)
@@ -1474,8 +1514,8 @@ def expedition_camp():
     box((0.5, 0.75, 0.4), (2.0, 0.38, -1.0), 0xcf534f, yaw=0.3)
     box((0.55, 0.2, 0.45), (2.0, 0.8, -1.0), 0x2a2735, yaw=0.3)
     kit('holiday', 'sled-long', (1.8, 0, 2.2), yaw=0.3, scale=1.5)
-    flagpole((1.2, 0, -2.4), 3.6, 0xff5040, w=1.1, fh=0.7, wave='anim_sway:a=y:d=28:p=1.9#1')
-    flagpole((-1.6, 0, 2.6), 3.0, 0xff7e44, w=1.0, fh=0.6, wave='anim_sway:a=y:d=28:p=2.2#2')
+    flagpole((1.2, 0, -2.4), 3.6, 0xff5040, w=1.1, fh=0.7, wave='anim_sway:a=z:d=24:p=1.9#1')
+    flagpole((-1.6, 0, 2.6), 3.0, 0xff7e44, w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.2#2')
     snow_heap((-1.8, 0, -1.6), 1.5, yaw=0.9)
 
 @piece(1.4)
@@ -2678,9 +2718,11 @@ def toy_robot():
     box((0.12, 0.14, 0.7), (0.68, 4.68, 0), 0xe66a5a)
     box((0.2, 1.0, 0.2), (0, 6.15, 0), 0x2a2735)
     sphere(0.38, (0, 6.85, 0), 0xff5040, subdiv=1)
-    with animated('anim_spin:a=x:w=1.6', (-1.0, 3.2, 0)):                         # the key winds round
-        box((0.6, 0.2, 0.2), (-1.0, 3.2, 0), 0x9a7b55)
-        box((0.12, 1.1, 0.5), (-1.35, 3.2, 0), 0x9a7b55)
+    # The key is big, a toy's, so its turn reads past the robot's flank from
+    # along the road: its height swings between the bow's length and width.
+    with animated('anim_spin:a=x:w=2.2', (-1.0, 3.2, 0)):                         # the key winds round
+        box((0.7, 0.24, 0.24), (-1.05, 3.2, 0), 0x9a7b55)
+        box((0.14, 1.8, 0.6), (-1.45, 3.2, 0), 0x9a7b55)
 
 # ---- playroom companions ----
 
