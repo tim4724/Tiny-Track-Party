@@ -182,10 +182,10 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
     }
   }
 
-  // Skyline's rocket stands far off the road, in one stretch's lens: the
-  // other three cells turn onto it, each from its own distance, each keeping
+  // Riptide's lifeguard tower stands inland on its dune bank, in no stretch's
+  // lens: every cell turns onto it, each from its own distance, each keeping
   // its own car in shot.
-  await page.evaluate(() => window.__landmarks.track('skyline'));
+  await page.evaluate(() => window.__landmarks.track('riptide'));
   await page.evaluate(() => window.__landmarks.focus(0));
   expect(await carInLens(page)).toEqual([true, true, true, true]);
   expect(new Set((await poses(page)).map((q) => q.car.s)).size).toBe(4);
