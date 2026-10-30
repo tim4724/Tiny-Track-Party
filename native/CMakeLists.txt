@@ -1035,6 +1035,12 @@ target_link_libraries(kitfield_check PRIVATE libttp_runtime ttp_strict_fp ttp_wa
 ttp_emscripten_cli(kitfield_check)
 add_test(NAME kitfield COMMAND kitfield_check)
 
+# The set pieces' moving parts (ttp/set_motion.h), header-only like kitfield.h.
+add_executable(setmotion_check runtimetest/setmotion_check.cc)
+target_link_libraries(setmotion_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(setmotion_check)
+add_test(NAME setmotion COMMAND setmotion_check)
+
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
 # ships on tvOS and Android TV, where the shell hands init() a CAMetalLayer or
@@ -1053,6 +1059,7 @@ if(DEFINED FILAMENT_SDK)
     renderer/src/TtpRendererDecals.cpp
     renderer/src/TtpRendererDressing.cpp
     renderer/src/TtpRendererFrame.cpp
+    renderer/src/TtpRendererMotion.cpp
     renderer/src/TtpRendererTrack.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include

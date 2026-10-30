@@ -1444,6 +1444,8 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             if (ti) tcm.setTransform(ti, turn);
         }
     }
+    // The set pieces' moving parts (TtpRendererMotion.cpp).
+    stepSetMovers(carPosW);
 
     // Chimney smoke: each puff rises, grows and dissolves over ~6 s, staggered
     // in thirds. Billboarded toward this frame's first camera (they're tiny and
@@ -3150,7 +3152,8 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+        if (mMergeOff) { destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
+        else buildDressingMerge();
         mGlPrioDirty = true;
     }
     if (mGlPrioDirty && mAndroidGl) {
