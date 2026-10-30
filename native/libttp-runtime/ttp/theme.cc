@@ -226,6 +226,58 @@ void pirateCove(Theme& t) {
                       { 6, 0.12f, 0.5f, 0.15f } };
 }
 
+// The other three beaches each tell their own story, and the holiday
+// postcard (lighthouse, sailboat, parasol, sandcastle) only stays where it
+// belongs to it. Sand, sea, palms, shells and gulls are the island's own.
+//
+// Tidepool is the reef at low tide: no postcard and no kites, the boulders
+// the reef's own grey stone, starfish and shells on the sand rather than
+// driftwood, and the gantry's posts the grey of the reef banded in the
+// shallows' teal.
+void lowTideReef(Theme& t) {
+  t.landmarks.clear();
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.gantry.pylon = 0x9aa1b4; t.gantry.hasRings = true; t.gantry.rings = 0x1fc0c9;
+  t.gantry.finial = 0xe4784f;
+  ScenerySpec& s = t.scenery;
+  s.rocks = { 0x9aa1b4, 0x868ba1, 0x7b8194 };
+  s.clutter = { { CL_SHELL, 0.45f, { 0xf5ead8, 0xecc8b4, 0xd9b8c4 } },
+                { CL_STARFISH, 0.55f, { 0xe4784f, 0xd95f6a, 0xf2c14e } } };
+  t.props.models = { "prop-crate" };
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  t.props.scatterDensity = 0.1f;
+}
+
+// Driftwood is a storm beach: the gulls more of them and harder at it in the
+// wind, no kites, no parasol or sandcastle (and no sailboat out in that sea);
+// the lighthouse stays, it is a storm coast. Driftwood lies thick along the
+// tide line, the freight the sea brought in is crates, and the gantry is
+// timber, like the trunk.
+void stormBeach(Theme& t) {
+  t.landmarks = { LM_LIGHTHOUSE };
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.birds.count = 6; t.birds.speed = 0.34f; t.birds.flapHz = 2.8f;
+  t.gantry.pylon = 0x8a6a46; t.gantry.hasRings = false; t.gantry.finial = 0xfff6eb;
+  ScenerySpec& s = t.scenery;
+  s.clutter = { { CL_DRIFTWOOD, 0.55f, { 0xcbb794, 0xb8a686, 0x9a8a70 } },
+                { CL_SHELL, 0.3f, { 0xf5ead8, 0xecc8b4 } },
+                { CL_STARFISH, 0.15f, { 0xe4784f } } };
+  s.clutterDensity = 0.36f;
+  t.props.models = { "prop-crate" };
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  t.props.scatterDensity = 0.22f;
+}
+
+// Riptide is the surf patrol's beach: its parasols and its tower are the
+// holiday here, so the procedural parasol and sandcastle go; the lighthouse,
+// the sailboat and the kites stay, and the gantry keeps the lifeguard's red
+// and white.
+void surfPatrol(Theme& t) {
+  t.landmarks = { LM_LIGHTHOUSE, LM_SAILBOAT };
+}
+
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
 // the signature: fogTune pulls the chase-cam fog in and low dust banks drift
 // across the mesas.
@@ -557,8 +609,13 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     else if (track == "avalanche") { t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
   }
 
-  // The beach cup's one pirate track is pirate through and through.
-  if (b && std::strcmp(b->name, "beach") == 0 && track == "cove") pirateCove(t);
+  // Each beach cup track is its own place (pirateCove and the three after it).
+  if (b && std::strcmp(b->name, "beach") == 0) {
+    if (track == "cove") pirateCove(t);
+    else if (track == "tidepool") lowTideReef(t);
+    else if (track == "driftwood") stormBeach(t);
+    else if (track == "riptide") surfPatrol(t);
+  }
 
   // No procedural landmark beside a set piece that contradicts it. Crag's own
   // windpump turns now, so the spinning windmill leaves Crag (only there: on
