@@ -971,7 +971,7 @@ export function runDisplayScenario(opts, ctx) {
           const m = by.get(p.model);
           if (m) { m.count++; return; }
           by.set(p.model, { model: p.model, label: labelOf(p.model), count: 1, index: i,
-                            size: 4 * p.hx * p.hz * Math.max(p.top - lay.groundY, 0) });
+                            size: 4 * p.hx * p.hz * Math.max(p.top - p.y, 0) });
         });
         return [...by.values()].sort((a, b) => b.size - a.size);
       }
@@ -1178,7 +1178,7 @@ export function runDisplayScenario(opts, ctx) {
         const trees = scatter.filter(([x, z, r]) => x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r && !inFoot(x, z));
         const flatR = Math.hypot(p.hx, p.hz) + FLAT_PAD;
         const ground = (x, z) => ((x - p.cx) ** 2 + (z - p.cz) ** 2 < flatR * flatR
-          ? Math.min(display.groundY(x, z), layout.groundY) : display.groundY(x, z));
+          ? Math.min(display.groundY(x, z), p.y) : display.groundY(x, z));
         const [into] = crossing(p, eye, c);
         // The other pieces whose footprint the line crosses, and where.
         const across = [];
