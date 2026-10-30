@@ -46,17 +46,21 @@ float smooth01(float t) {
 } // namespace
 
 // The open-country biomes (lawn, redrock, snow) get a shaped ground: it rises
-// under raised road and rolls into hills away from it. Sand stays flat — the
-// beach's shoreline and water sheet assume the plane — and so does the
-// playroom's wood floor: an indoor floor with hills under the boards reads as
-// a defect, not a landscape.
+// under raised road and rolls into hills away from it. Sand gets dunes, but
+// only inland of the road and never at the water (beachMask): the shoreline
+// and the water sheet assume the plane there. The playroom's wood floor stays
+// flat: an indoor floor with hills under the boards reads as a defect, not a
+// landscape.
 void TtpRenderer::setupTerrain(const TrackBin& tb) {
     switch (tb.groundKind) {
         case 0: mTerrainAmp = 4.6f; break;  // lawn
+        case 1: mTerrainAmp = 3.6f; break;  // sand — soft dunes, inland only
         case 2: mTerrainAmp = 6.5f; break;  // redrock — badlands earn the drama
         case 3: mTerrainAmp = 5.2f; break;  // snow
-        default: mTerrainAmp = 0; break;    // sand, wood
+        default: mTerrainAmp = 0; break;    // wood
     }
+    mInland.clear();
+    mShoreR.clear();
     mGroundGrid = {};
     mGroundGrid.flatY = tb.groundY;
     mTerrainCap.clear();
@@ -70,8 +74,11 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
         z0 = std::min(z0, s.pos.z); z1 = std::max(z1, s.pos.z);
     }
     // Hills live in the track's own neighbourhood; past the region the flat
-    // sheet resumes, well before the horizon ring's feature bases.
-    const float EXT = 90.0f, LIM = 390.0f;
+    // sheet resumes, well before the horizon ring's feature bases. The beach's
+    // dunes stand inside the loop, so its region only needs the border fade's
+    // room past the road (a landform out on the beach grows it below): every
+    // grid vertex out there would be flat sand costing what a hill does.
+    const float EXT = tb.groundKind == 1 ? kRampR + 6.0f : 90.0f, LIM = 390.0f;
     x0 -= EXT; x1 += EXT; z0 -= EXT; z1 += EXT;
     if (tb.samples.empty()) mTerrainAmp = 0;
     // The landforms, into the world. One whose reach passes the region grows
@@ -130,6 +137,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     mTerrainX0 = std::max(x0, -LIM); mTerrainX1 = std::min(x1, LIM);
     mTerrainZ0 = std::max(z0, -LIM); mTerrainZ1 = std::min(z1, LIM);
     if (mTerrainAmp <= 0) return;
+    if (tb.groundKind == 1) setupBeachMask(tb);
     // The grid's cell is decided here, before anything samples the field,
     // because the deck cap is kept per grid vertex (buildTerrainCap).
     //
@@ -159,6 +167,55 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
         s.base = roadLift(tb, a.x, a.y, edge);
         mSetOwnGround[(size_t) s.piece] = s.base;
     }
+}
+
+// The beach's two masks (see mInland in TtpRenderer.h). The loop's inside is
+// rasterised once by scanline over the centreline polygon; a cell is only 2 u
+// and the road's own corridor keeps the hills down for several units either
+// side of the centreline, so the raster's steps never show. The shoreline is
+// tabled by bearing off the very curve the sea is drawn on.
+void TtpRenderer::setupBeachMask(const TrackBin& tb) {
+    const size_t n = tb.samples.size();
+    mInlandCols = std::max(1, (int) std::ceil((mTerrainX1 - mTerrainX0) / kInlandCell));
+    mInlandRows = std::max(1, (int) std::ceil((mTerrainZ1 - mTerrainZ0) / kInlandCell));
+    mInland.assign((size_t) mInlandCols * mInlandRows, 0);
+    std::vector<float> cross;
+    for (int r = 0; r < mInlandRows && tb.closed; r++) {
+        const float z = mTerrainZ0 + (r + 0.5f) * kInlandCell;
+        cross.clear();
+        for (size_t i = 0; i < n; i++) {
+            const float3 a = tb.samples[i].pos, b = tb.samples[(i + 1) % n].pos;
+            if ((a.z <= z) == (b.z <= z)) continue;
+            cross.push_back(a.x + (b.x - a.x) * (z - a.z) / (b.z - a.z));
+        }
+        std::sort(cross.begin(), cross.end());
+        for (size_t k = 0; k + 1 < cross.size(); k += 2) {
+            const int c0 = std::max(0, (int) std::ceil((cross[k] - mTerrainX0) / kInlandCell - 0.5f));
+            const int c1 = std::min(mInlandCols - 1,
+                    (int) std::floor((cross[k + 1] - mTerrainX0) / kInlandCell - 0.5f));
+            for (int c = c0; c <= c1; c++) mInland[(size_t) r * mInlandCols + c] = 1;
+        }
+    }
+    if (!tb.hasWater) return;
+    const Shoreline shore = shoreline(tb);
+    mShoreR.resize(kShoreSpokes);
+    for (int k = 0; k < kShoreSpokes; k++) mShoreR[k] = shore.at(k * 2.0f * (float) M_PI / kShoreSpokes);
+}
+
+float TtpRenderer::beachMask(float x, float z, float& inland) const {
+    inland = 1.0f;
+    if (mInland.empty()) return 1.0f;
+    const int c = (int) std::floor((x - mTerrainX0) / kInlandCell);
+    const int r = (int) std::floor((z - mTerrainZ0) / kInlandCell);
+    inland = c >= 0 && r >= 0 && c < mInlandCols && r < mInlandRows
+            && mInland[(size_t) r * mInlandCols + c] ? 1.0f : 0.0f;
+    if (mShoreR.empty()) return 1.0f;
+    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
+    if (f < 0) f += kShoreSpokes;
+    const int k = std::min(kShoreSpokes - 1, (int) f);
+    const float t = f - k;
+    const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * t;
+    return smooth01((R - kShoreKeep - std::sqrt(x * x + z * z)) / kShoreRamp);
 }
 
 // A bucket index over the track samples in XZ, so terrainY can ask "how far to
@@ -390,8 +447,13 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         // colour's dell term (groundTint).
         if (dell) *dell = mask * (1.0f - shape) * smooth01(border / kRampR);
     }
+    // The beach rolls inland only, and nothing stands at the water.
+    float inland;
+    const float shore = beachMask(x, z, inland);
+    hill *= inland;
+    if (dell) *dell *= inland * shore;
     const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell);
-    float y = tb.groundY + land * smooth01(border / kRampR);
+    float y = tb.groundY + land * shore * smooth01(border / kRampR);
     if (withFlats) {
         // Cut only: a clearing lowers what stands above its level and leaves
         // a dip alone, so nothing is ever filled up under a piece.
@@ -552,7 +614,8 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
 // Two terms, both tied to a shape and both gentle, because the grid's 9 u
 // interpolation turns them into broad gradients: dells out among the hills a
 // shade deeper, and a steep face turning to what lies under the surface (earth
-// under lawn, darker rust on the badlands, grey rock through the snow). Linear
+// under lawn, darker rust on the badlands, grey rock through the snow, the
+// sandstone of a headland under the beach). Linear
 // multipliers over the biome texture; 1 is the texture as painted, which is
 // what the road's verge and the berms keep, so nothing seams at a berm's foot.
 float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float upY) const {
@@ -561,6 +624,7 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float upY) const
         case 0: deep = { 0.88f, 0.92f, 0.86f }; face = { 0.86f, 0.76f, 0.58f }; break;  // lawn
         case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f }; break;  // redrock
         case 3: deep = { 0.90f, 0.93f, 0.99f }; face = { 0.62f, 0.66f, 0.74f }; break;  // snow
+        case 1: deep = { 0.94f, 0.91f, 0.85f }; face = { 0.70f, 0.64f, 0.62f }; break;  // sand: rock under a headland
         default: return float3{ 1.0f };
     }
     // From about 20 degrees, fully by about 42.
