@@ -967,17 +967,22 @@ private:
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
-    // `piece` the set piece it came with (-1: the track's own), and `base`
-    // what that piece's mound rises from (setupTerrain).
+    // `piece` the set piece it came with (-1: the track's own), `base` what
+    // that piece's mound or fan rises from (setupTerrain), `tint` the
+    // multiplier it lays over the ground's colour (1: none).
     struct LandShape {
         uint32_t kind;
         int piece;
         float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
         float x0, z0, x1, z1;
         float base;
+        filament::math::float3 tint;
     };
     std::vector<LandShape> mLand;
     float landforms(float x, float z, float edge, float lift, float hill, float* dell) const;
+    // The landforms' tints at (x, z), multiplied: what the ground's colour
+    // wears there over groundTint (a glacier's ice, a piste).
+    filament::math::float3 landTint(float x, float z) const;
     float roadLift(const TrackBin& tb, float x, float z, float& edge) const;
     // Per set piece that brings its own ground (SET_GROUND), how far over the
     // plain it stands, as it was modelled on it, levelling no clearing: 0, or
