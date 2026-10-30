@@ -251,8 +251,10 @@ export const SET_GROUND = {
   'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
   'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
-  // Pretzel's oak on the knoll it grew on, its summit under the trunk.
-  'set-treehouse': [{ kind: 'mound', h: 3.0, r: 17, r1: 17, rz: 17, shape: 1.4 }],
+  // Pretzel's oak on the crest of the hill it grew on, its summit under the
+  // trunk: short toward the road (+X), the hill falling away behind it and
+  // along it across the north-east corner of the garden.
+  'set-treehouse': [{ kind: 'mound', h: 3.0, r: 17, r1: 40, rz: 28, shape: 1.4 }],
   // Wash's creek: the bed is the low line the raised land stands over, between
   // two cut banks (turned 90 so the spine runs along the creek's own X).
   'set-dry-creek': [
@@ -432,10 +434,11 @@ export const TRACKS = {
   pretzel: {
     name: 'Pretzel', waypoints: GEN_TRACKS.pretzel,
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
-    // The treehouse oak on its knoll (SET_GROUND, about three over the
-    // nearest deck) at the north-west, where the long diagonal points, the
-    // tyre swinging; the paddling pool at the knoll's foot, the trampoline
-    // and the pitch round the lap
+    // The treehouse oak on the crest of its hill (SET_GROUND, about three
+    // over the nearest deck, the hill running on behind it over the corner of
+    // the garden) where the long diagonal points, the tyre swinging; the
+    // paddling pool at the hill's foot, the trampoline and the pitch round
+    // the lap
     set: [
       { model: 'set-treehouse', u: 0.06511, lat: 31.614, yaw: -21.74, scale: 1.6 },
       { model: 'set-paddling-pool', u: 0.053, lat: 14.5 },
