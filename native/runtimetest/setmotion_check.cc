@@ -8,15 +8,28 @@
 //   2. A POSE IS A FUNCTION of its inputs: no hidden state, so an undrawn wind
 //      and a restarted race see the same thing.
 //   3. A TURN TO WATCH never passes its clamp, never snaps when a car circles
-//      the part (behind it included), and rests when no car is in reach.
+//      the part (behind it included) or when two cars pull it opposite ways,
+//      and rests when no car is in reach.
 //   4. A HOP lifts only while a car is close, and never past its height.
+//   5. THE SHIPPED PIECES SAY WHAT THEY MEAN: in every set-*.glb, each `anim_`
+//      node parses with no unknown verb or key (a typo parses to a part that
+//      stands still, and nothing else would notice), does something, and a
+//      path names a chain of two or more distinct points.
 //
-// Usage: setmotion_check   (no arguments)
+// Usage: setmotion_check [public/assets/toycar]
+
+#include <dirent.h>
 
 #include <cmath>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <vector>
 #include <string>
 
+#include "ttp/glb_mesh.h"
+#include "ttp/json_parse.h"
 #include "ttp/set_motion.h"
 
 using ttp::rt::SetMotion;
@@ -38,9 +51,61 @@ void check(bool ok, const std::string& what) {
 
 bool near(float a, float b, float eps = 1e-5f) { return std::fabs(a - b) <= eps; }
 
+// 5. Every `anim_` node of one set piece.
+void checkPiece(const std::string& path, const std::string& label) {
+  std::ifstream f(path, std::ios::binary);
+  const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string json;
+  ttp::Value doc;
+  if (!ttp::rt::glb_json_chunk(bytes.data(), bytes.size(), json)
+      || !ttp::json::Parser(json).parse(doc) || doc.type != ttp::Value::OBJ) {
+    check(false, label + " reads as a GLB");
+    return;
+  }
+  const ttp::Value* nodes = doc.find("nodes");
+  if (!nodes) return;
+  // Chains first: `path_<chain>_<k>` by their translation (siblings under the
+  // piece's root, so their local spots are the loop's shape).
+  std::map<std::string, std::vector<std::vector<double>>> chains;
+  for (const ttp::Value& n : nodes->arr) {
+    const ttp::Value* nm = n.find("name");
+    if (!nm || nm->str.compare(0, 5, "path_") != 0) continue;
+    const size_t us = nm->str.rfind('_');
+    std::vector<double> t{ 0, 0, 0 };
+    if (const ttp::Value* tr = n.find("translation")) {
+      for (size_t i = 0; i < 3 && i < tr->arr.size(); i++) t[i] = tr->arr[i].num;
+    }
+    chains[nm->str.substr(5, us - 5)].push_back(t);
+  }
+  for (const ttp::Value& n : nodes->arr) {
+    const ttp::Value* nm = n.find("name");
+    if (!nm || !ttp::rt::is_set_motion_name(nm->str.c_str())) continue;
+    SetMotion m;
+    std::string unknown;
+    ttp::rt::parse_set_motion(nm->str.c_str(), m, &unknown);
+    const std::string who = label + " " + nm->str;
+    check(unknown.empty(), who + " has no unknown verb or key (" + unknown + ")");
+    check(m.any() || m.smoke, who + " does something");
+    if (!m.path) continue;
+    const auto c = chains.find(m.chain);
+    double loop = 0;
+    if (c != chains.end()) {
+      const auto& p = c->second;
+      for (size_t i = 0; i < p.size(); i++) {
+        const auto& a = p[i];
+        const auto& b = p[(i + 1) % p.size()];
+        loop += std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1])
+                          + (a[2] - b[2]) * (a[2] - b[2]));
+      }
+    }
+    check(c != chains.end() && c->second.size() >= 2 && loop > 1e-3,
+          who + " rides a chain of two or more distinct points");
+  }
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   constexpr float DEG = 0.0174532925f;
   SetMotion m;
 
@@ -99,6 +164,27 @@ int main() {
   }
   check(worst < 2 * DEG, "a car circling the part never snaps its head (worst step "
         + std::to_string(worst / DEG) + " deg)");
+  // Two cars: one ahead and one behind sliding past the part side by side, and
+  // two abreast on opposite sides sliding forward. Averaged directions cancel
+  // to a sideways resultant here and flip the head to the clamp in one step.
+  const float lanes[][4] = { { 8, -8, 1, 1 }, { 8, -8, 1, -1 }, { 0, 0, 8, -8 } };
+  for (const auto& l : lanes) {
+    worst = 0;
+    for (int i = 0; i <= 2000; i++) {
+      const float s = -10 + i * 0.01f;   // 0.01 u a step, under a frame of driving
+      SetMotionCar two[2];
+      for (int k = 0; k < 2; k++) {
+        const float x = l[k] != 0 ? l[k] : s, z = l[k] != 0 ? s * l[2 + k] : l[2 + k];
+        two[k] = SetMotionCar{ x, z, std::sqrt(x * x + z * z) };
+      }
+      const float y = ttp::rt::set_motion_pose(m, 0, 0, two, 2).yaw;
+      check(std::fabs(y) <= 60 * DEG + 1e-5f, "the clamp holds with two cars");
+      if (i) worst = std::max(worst, std::fabs(y - prev));
+      prev = y;
+    }
+    check(worst < 2 * DEG, "two cars on opposite sides never snap the head (worst step "
+          + std::to_string(worst / DEG) + " deg)");
+  }
 
   // 4. Hopping.
   ttp::rt::parse_set_motion("anim_hop:r=8:h=0.4", m);
@@ -112,6 +198,32 @@ int main() {
   const SetMotionCar gone{ 9, 0, 9 };
   check(ttp::rt::set_motion_pose(m, 0.25f, 0, &gone, 1).lift == 0, "a car past the radius stops the hops");
 
-  std::printf("setmotion: %d checks, %d failures\n", checks, failures);
+  check(ttp::rt::parse_set_motion("anim_swing+sway:deg=30", m) && m.sway && near(m.swayDeg, 25),
+        "a typo'd verb or key changes nothing");
+  std::string unknown;
+  ttp::rt::parse_set_motion("anim_swing+sway:deg=30:d=22", m, &unknown);
+  check(unknown == "verb 'swing', key 'deg=30' of sway" && near(m.swayDeg, 22),
+        "and is reported (" + unknown + ")");
+  unknown.clear();
+  ttp::rt::parse_set_motion("anim_waddle+watch:r=30+hop:r=14:h=0.4#3", m, &unknown);
+  check(unknown.empty(), "the penguin reports nothing");
+
+  // 5. The shipped pieces.
+  int pieces = 0;
+  if (argc > 1) {
+    if (DIR* d = opendir(argv[1])) {
+      while (const dirent* e = readdir(d)) {
+        const std::string name = e->d_name;
+        if (name.compare(0, 4, "set-") != 0 || name.size() < 8
+            || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
+        checkPiece(std::string(argv[1]) + "/" + name, name);
+        pieces++;
+      }
+      closedir(d);
+    }
+    check(pieces > 0, std::string("set pieces found under ") + argv[1]);
+  }
+
+  std::printf("setmotion: %d checks, %d failures, %d pieces\n", checks, failures, pieces);
   return failures ? 1 : 0;
 }

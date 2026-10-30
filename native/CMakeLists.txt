@@ -1039,7 +1039,8 @@ add_test(NAME kitfield COMMAND kitfield_check)
 add_executable(setmotion_check runtimetest/setmotion_check.cc)
 target_link_libraries(setmotion_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(setmotion_check)
-add_test(NAME setmotion COMMAND setmotion_check)
+add_test(NAME setmotion
+  COMMAND setmotion_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
 
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
