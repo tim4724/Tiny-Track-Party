@@ -48,7 +48,6 @@
     "set-barbecue.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-bird-bath.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-castle.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-block-city.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-bonfire.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-buoy-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cannon-post.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
