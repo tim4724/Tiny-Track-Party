@@ -64,11 +64,25 @@ const browser = await launchBrowser();
 async function measure(track, players) {
   const ctx = await browser.context({ viewport: { width: 480, height: 270 } });
   await ctx.addInitScript(() => {
-    const c = (window.__glCount = { draws: 0, verts: 0 });
+    const c = (window.__glCount = { draws: 0, verts: 0, lit: 0 });
     const proto = WebGL2RenderingContext.prototype;
+    // LIVE-LIT is a program that reads a normal at draw time: Filament feeds it
+    // as mesh_tangents, which every baked (vcolor, vground, vroad) program lacks.
+    const litOf = new WeakMap();
+    let lit = false;
+    const useProgram = proto.useProgram;
+    proto.useProgram = function (p) {
+      if (p && !litOf.has(p)) litOf.set(p, this.getAttribLocation(p, 'mesh_tangents') >= 0);
+      lit = !!p && litOf.get(p);
+      return useProgram.call(this, p);
+    };
     const wrap = (name, n) => {
       const orig = proto[name];
-      proto[name] = function (...x) { c.draws++; c.verts += n(x); return orig.apply(this, x); };
+      proto[name] = function (...x) {
+        const v = n(x);
+        c.draws++; c.verts += v; if (lit) c.lit += v;
+        return orig.apply(this, x);
+      };
     };
     // Indices submitted, times instances: the stream the tiler bins per cell.
     // (perf-features.mjs has why each count sits where it does.)
@@ -102,7 +116,7 @@ async function measure(track, players) {
         const b = { ...window.__glCount };
         window.__pump(16.7);
         const draws = window.__glCount.draws - b.draws;
-        if (draws) return { verts: window.__glCount.verts - b.verts, draws };
+        if (draws) return { verts: window.__glCount.verts - b.verts, draws, lit: window.__glCount.lit - b.lit };
         await new Promise((r) => setTimeout(r, 5));
       }
       throw new Error('no frame drew in 100 pumps');
@@ -124,7 +138,7 @@ async function measure(track, players) {
       const all = await draw(FEAT.ALL);
       const bare = await draw(FEAT.ALL & ~FEAT.DRESSING);
       samples.push({ f, verts: all.verts / cells, dress: (all.verts - bare.verts) / cells,
-                     draws: all.draws / cells });
+                     draws: all.draws / cells, lit: all.lit / cells });
       if (Math.min(...players().map((c) => c.lap)) > startLap) break;
     }
     display.debugFeatures(FEAT.ALL);
@@ -139,7 +153,7 @@ const k = (v) => `${(v / 1000).toFixed(1)}k`.padStart(7);
 const failures = [];
 const recorded = {};
 
-console.log('track            P  samples   worst/cell  p90/cell  dressing@worst  draws@worst');
+console.log('track            P  samples   worst/cell  p90/cell  dressing@worst  draws@worst  max draws  lit@worst');
 for (const id of ids) {
   recorded[id] = {};
   for (const players of PLAYERS) {
@@ -148,9 +162,12 @@ for (const id of ids) {
     const row = { worst: Math.round(worst.verts), p90: Math.round(pct(samples.map((s) => s.verts), 0.9)),
                   dressing: Math.round(worst.dress) };
     recorded[id][players] = row;
+    // Draws and live-lit vertices are REPORTED, not gated: what a draw costs is
+    // a fact about the device (native/renderer/CLAUDE.md), so the box judges them.
+    const maxDraws = Math.max(...samples.map((s) => s.draws));
     console.log(`${id.padEnd(16)} ${players}  ${String(samples.length).padStart(7)}  ${k(row.worst)}  `
       + `${k(row.p90)}   ${k(row.dressing)} (${(100 * row.dressing / row.worst).toFixed(0).padStart(2)}%)`
-      + `   ${worst.draws.toFixed(0).padStart(6)}`);
+      + `   ${worst.draws.toFixed(0).padStart(6)}     ${maxDraws.toFixed(0).padStart(6)}  ${k(worst.lit)}`);
     const liveNames = Object.entries(live);
     if (liveNames.length) {
       failures.push(`${id}: static dressing drawing LIVE-LIT (off the baked path): `

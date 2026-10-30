@@ -31,7 +31,7 @@
 // as theme.h above; ctests execute both on every leg.
 #include "ttp/flat_weld.h"
 #include "ttp/glb_mesh.h"
-namespace ttp { namespace kitcolors { struct Mesh; } }
+namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
 #include "ttp/name_tags.h"
@@ -609,6 +609,13 @@ private:
     // fallback (init), where a draw costs more than the vertices it saves.
     float mSheetTile = kSheetTile;
     uint32_t mSheetMinTris = kSheetMinTris;
+    // A set piece's bake tile (bakePlacements). Finer than a sheet's because
+    // a piece is dense where a sheet is sparse: at the sheet's 48 u a piece
+    // beside the start drew whole to every camera next to it and the 4P worst
+    // frame grew. At 4 u the vertices match the per-part cull's for half its
+    // draws; the GL fallback, where a draw costs more, takes 8 u.
+    static constexpr float kPieceTile = 4.0f;
+    float mPieceTile = kPieceTile;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -2095,6 +2102,18 @@ private:
     bool bakeMergedRun(MergedGroup& g, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             utils::Entity src0);
+    bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
+    void appendBaked(Mesh& m, const filament::math::mat4f& xf,
+            const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors,
+            const std::vector<filament::math::float3>& factor);
+    // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
+    // comment): `still` is each (entity slot, parsed mesh) that stands still.
+    bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,
+            const std::vector<ttp::rt::GlbMeshNode>& nodes,
+            const ttp::kitcolors::Model& colors,
+            const std::vector<std::pair<size_t, int>>& still);
     void destroyMergedGroups(std::vector<MergedGroup>& groups);
     void mirrorMergedGroup(MergedGroup& g,
             filament::math::float3& mn, filament::math::float3& mx);
@@ -2102,7 +2121,7 @@ private:
     void buildDressingMerge();
     void mergeInstancedSet(const filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& insts,
-            bool dynamic);
+            bool dynamic, bool perPlacement = false);
     void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);

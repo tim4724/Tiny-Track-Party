@@ -256,6 +256,7 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mSkidRingN = 2;
         mSheetTile = 2.0f * kSheetTile;
         mSheetMinTris = 4 * kSheetMinTris;
+        mPieceTile = 2.0f * kPieceTile;
     }
 #endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);
@@ -1359,57 +1360,77 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
 bool TtpRenderer::bakeMergedRun(MergedGroup& g,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, utils::Entity src0) {
-    if (colors.primCount != prims.size()) return false;
+    std::vector<float3> factor;
+    if (!bakeFactors(src0, prims, colors, factor)) return false;
     auto& tcm = mEngine->getTransformManager();
     auto& rcm = mEngine->getRenderableManager();
-    const auto ri0 = rcm.getInstance(src0);
-    if (!ri0) return false;
-    std::vector<float3> factor(prims.size(), float3{ 1.0f });
-    for (size_t p = 0; p < prims.size(); p++) {
-        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
-                || prims[p].normal.size() != prims[p].pos.size()) {
-            return false;
-        }
-        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri0, p);
-        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
-        // The live factor is display-encoded (displayKitFactors); the bake
-        // multiplies in linear and encodes the product once, so decode it.
-        const float3 f = mi->getParameter<float4>("baseColorFactor").xyz;
-        factor[p] = { srgbChannel(f.x), srgbChannel(f.y), srgbChannel(f.z) };
-    }
-    const uint8_t layer = rcm.getLayerMask(ri0);
+    const uint8_t layer = rcm.getLayerMask(rcm.getInstance(src0));
     Mesh& m = g.baked;
     m.weld = true;
     m.simplify = true;
     for (const utils::Entity src : g.sources) {
         const auto ti = tcm.getInstance(src);
         if (!ti) return false;
-        const mat4f xf = tcm.getWorldTransform(ti);
-        const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
-        for (size_t p = 0; p < prims.size(); p++) {
-            const ttp::rt::GlbMeshPrim& sp = prims[p];
-            const uint8_t* rgb = colors.prims[p].rgb;
-            const uint32_t base = (uint32_t) m.verts.size();
-            const size_t nv = sp.pos.size() / 3;
-            for (size_t i = 0; i < nv; i++) {
-                const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
-                        sp.pos[i * 3 + 2], 1.0f }).xyz;
-                const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
-                        sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
-                const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
-                        srgbChannel(rgb[i * 3 + 1] / 255.0f),
-                        srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
-                m.verts.push_back({ pw.x, pw.y, pw.z,
-                        packShown(lin * bakedMatteLight(nw), 1.0f) });
-            }
-            for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
-        }
+        appendBaked(m, tcm.getWorldTransform(ti), prims, colors, factor);
     }
     if (!buildMesh(m)) return false;
     g.ent = m.entity;
     // Whatever layer the originals sit on (a sweep may have tagged the scene).
     if (const auto ri = rcm.getInstance(m.entity)) rcm.setLayerMask(ri, 0xFF, layer);
     return true;
+}
+
+// The bake's check and colour inputs for one mesh as `src` draws it: the kit
+// table must agree with the decoded geometry about every count, and each prim
+// takes the live material's baseColorFactor, decoded to linear (the live factor
+// is display-encoded, displayKitFactors; the bake multiplies in linear and
+// encodes the product once).
+bool TtpRenderer::bakeFactors(utils::Entity src,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, std::vector<float3>& factor) {
+    if (colors.primCount != prims.size()) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri = rcm.getInstance(src);
+    if (!ri) return false;
+    factor.assign(prims.size(), float3{ 1.0f });
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
+                || prims[p].normal.size() != prims[p].pos.size()) {
+            return false;
+        }
+        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri, p);
+        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
+        const float3 f = mi->getParameter<float4>("baseColorFactor").xyz;
+        factor[p] = { srgbChannel(f.x), srgbChannel(f.y), srgbChannel(f.z) };
+    }
+    return true;
+}
+
+// One copy of a mesh into a baked mesh: its vertices in world space under
+// `xf`, each coloured with the table's texture colour times the prim's factor
+// times the matte light of its own world normal.
+void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor) {
+    const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+    for (size_t p = 0; p < prims.size(); p++) {
+        const ttp::rt::GlbMeshPrim& sp = prims[p];
+        const uint8_t* rgb = colors.prims[p].rgb;
+        const uint32_t base = (uint32_t) m.verts.size();
+        const size_t nv = sp.pos.size() / 3;
+        for (size_t i = 0; i < nv; i++) {
+            const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
+                    sp.pos[i * 3 + 2], 1.0f }).xyz;
+            const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
+                    sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
+            const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
+                    srgbChannel(rgb[i * 3 + 1] / 255.0f),
+                    srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
+            m.verts.push_back({ pw.x, pw.y, pw.z,
+                    packShown(lin * bakedMatteLight(nw), 1.0f) });
+        }
+        for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
+    }
 }
 
 bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
