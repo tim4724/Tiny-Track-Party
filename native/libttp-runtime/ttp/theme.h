@@ -189,6 +189,16 @@ struct SetSpec {
   std::vector<SetPiece> pieces;
 };
 
+// The track's LANDFORMS (public/shared/tracks.js `land`, plus SET_GROUND under
+// the set pieces modelled on one): ttp::LandDef's fields, as the renderer's
+// terrain reads them. A function of the track alone, like the set.
+struct Landform {
+  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound (LandDef)
+  int piece = -1;             // anchored on set.pieces[piece]; -1: on u/lat/yaw
+  float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
+  float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
+};
+
 // One scenery model's recolour, resolved against that model's authored glTF
 // materials — gltfio names its material instances after the glTF material, so
 // the renderer applies these by name.
@@ -224,6 +234,7 @@ struct Theme {
   bool hasIce = false;
   IceSpec ice;
   SetSpec set;
+  std::vector<Landform> land;
   // One entry per `scenery.models` index, filled by resolve_model_tints() once
   // the shell has handed over that model's bytes. Empty until then.
   std::vector<std::vector<MatTint>> modelTints;

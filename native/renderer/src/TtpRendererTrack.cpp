@@ -72,9 +72,47 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     // Hills live in the track's own neighbourhood; past the region the flat
     // sheet resumes, well before the horizon ring's feature bases.
     const float EXT = 90.0f, LIM = 390.0f;
-    mTerrainX0 = std::max(x0 - EXT, -LIM); mTerrainX1 = std::min(x1 + EXT, LIM);
-    mTerrainZ0 = std::max(z0 - EXT, -LIM); mTerrainZ1 = std::min(z1 + EXT, LIM);
+    x0 -= EXT; x1 += EXT; z0 -= EXT; z1 += EXT;
     if (tb.samples.empty()) mTerrainAmp = 0;
+    // The landforms, into the world. One whose reach passes the region grows
+    // it (by the border fade's width too), so no form is cut off at the edge.
+    mLand.clear();
+    mSetOwnGround.assign(tb.setPieces.size(), 0);
+    if (mTerrainAmp > 0) {
+        for (const ttp::rt::Landform& l : tb.land) {
+            float u = l.u, lat = l.lat, yaw = l.yaw, k = 1.0f;
+            if (l.piece >= 0) {
+                if ((size_t) l.piece >= tb.setPieces.size()) continue;
+                const auto& p = tb.setPieces[(size_t) l.piece];
+                u = p.u; lat = p.lat; yaw += p.yaw; k = p.scale;
+                mSetOwnGround[(size_t) l.piece] = 1;
+            }
+            // buildSetPieces' frame, so a piece and its ground cannot disagree.
+            const TrackBin::Sample f = tb.frameAt(u * tb.length);
+            const float3 t = f.tangent();
+            const float hd = std::atan2(t.x, t.z) + yaw;
+            const float ax = std::cos(hd), az = -std::sin(hd);
+            const float px = f.pos.x + f.lat.x * lat, pz = f.pos.z + f.lat.z * lat;
+            LandShape s{ l.kind,
+                    px + (ax * l.x - az * l.z) * k, pz + (az * l.x + ax * l.z) * k, ax, az,
+                    l.len * k, l.r * k, l.r1 * k, l.w * k, l.rz * k, l.h * k, l.h1 * k,
+                    l.top, l.shape, 0, 0, 0, 0 };
+            float reach = 0;
+            switch (s.kind) {
+                case 0: reach = 0.5f * s.len + std::max(s.r, s.r1); break;      // ridge
+                case 1: reach = s.r + s.w; break;                               // ring
+                case 2: reach = 0.5f * s.len + s.r + s.w; break;                // plain
+                default: reach = std::max({ s.r, s.r1, s.rz }) * 1.3f; break;   // mound + its fade
+            }
+            s.x0 = s.x - reach; s.x1 = s.x + reach;
+            s.z0 = s.z - reach; s.z1 = s.z + reach;
+            mLand.push_back(s);
+            x0 = std::min(x0, s.x0 - kRampR); x1 = std::max(x1, s.x1 + kRampR);
+            z0 = std::min(z0, s.z0 - kRampR); z1 = std::max(z1, s.z1 + kRampR);
+        }
+    }
+    mTerrainX0 = std::max(x0, -LIM); mTerrainX1 = std::min(x1, LIM);
+    mTerrainZ0 = std::max(z0, -LIM); mTerrainZ1 = std::min(z1, LIM);
     if (mTerrainAmp <= 0) return;
     // The grid's cell is decided here, before anything samples the field,
     // because the deck cap is kept per grid vertex (buildTerrainCap).
@@ -295,7 +333,9 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         // colour's dell term (groundTint).
         if (dell) *dell = mask * (1.0f - shape) * smooth01(border / kRampR);
     }
-    float y = tb.groundY + (lift + hill) * smooth01(border / kRampR);
+    float land = lift + hill;
+    if (!mLand.empty()) land = landforms(x, z, edge, land, dell);
+    float y = tb.groundY + land * smooth01(border / kRampR);
     if (withFlats) {
         for (const TerrainFlat& f : mTerrainFlats) {
             const float dx = x - f.x, dz = z - f.z;
@@ -306,6 +346,73 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         }
     }
     return y;
+}
+
+// The landforms over the raised ground and hills (`base`, above the plain), in
+// three passes so the order of authoring never matters: a plain withholds the
+// lift and the hills under it, ridges and rings add on top (fading out toward
+// the road so a flank never walls a verge), and a mound REPLACES the land under
+// it, so it is exactly the surface its set piece was modelled on.
+float TtpRenderer::landforms(float x, float z, float edge, float base, float* dell) const {
+    const auto local = [&](const LandShape& s, float& lx, float& lz) {
+        const float dx = x - s.x, dz = z - s.z;
+        lx = dx * s.ax + dz * s.az;
+        lz = dz * s.ax - dx * s.az;
+    };
+    // Distance to the form's spine (local Z, len long) and where along it.
+    const auto spine = [](const LandShape& s, float lx, float lz, float& at) {
+        const float half = 0.5f * s.len;
+        const float c = std::min(half, std::max(-half, lz));
+        at = s.len > 0 ? (c + half) / s.len : 0.0f;
+        return std::sqrt(lx * lx + (lz - c) * (lz - c));
+    };
+    const auto profile = [](float t, float top) {   // 1 on the crest, 0 at the foot
+        return t <= top ? 1.0f : 1.0f - smooth01((t - top) / (1.0f - top));
+    };
+    const auto in = [&](const LandShape& s) { return x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1; };
+    for (const LandShape& s : mLand) {
+        if (s.kind != 2 || !in(s)) continue;
+        float lx, lz, at;
+        local(s, lx, lz);
+        const float d = spine(s, lx, lz, at);
+        const float keep = smooth01((d - s.r) / std::max(0.01f, s.w));
+        base *= keep;
+        if (dell) *dell *= keep;
+    }
+    const float clear = smooth01((edge - kFlatR) / 12.0f);
+    for (const LandShape& s : mLand) {
+        if ((s.kind != 0 && s.kind != 1) || !in(s)) continue;
+        float lx, lz, at = 0;
+        local(s, lx, lz);
+        float t, h;
+        if (s.kind == 0) {
+            const float d = spine(s, lx, lz, at);
+            t = d / (s.r + (s.r1 - s.r) * at);
+            h = s.h + (s.h1 - s.h) * at;
+        } else {
+            t = std::fabs(std::sqrt(lx * lx + lz * lz) - s.r) / s.w;
+            h = s.h;
+        }
+        if (t >= 1.0f) continue;
+        base += h * profile(t, s.top) * clear;
+        if (dell) *dell *= 1.0f - profile(t, 0);
+    }
+    for (const LandShape& s : mLand) {
+        if (s.kind != 3 || !in(s)) continue;
+        float lx, lz;
+        local(s, lx, lz);
+        // set_prototypes.py mound(): an oval reaching r toward +X, r1 behind,
+        // rz along, its flank cos(t·π/2)^shape.
+        const float rx = lx > 0 ? s.r : s.r1;
+        const float t = std::sqrt((lx / rx) * (lx / rx) + (lz / s.rz) * (lz / s.rz));
+        const float own = 1.0f - smooth01((t - 1.0f) / 0.3f);
+        if (own <= 0) continue;
+        const float h = t < 1.0f
+                ? s.h * std::pow(std::cos(t * (float) M_PI * 0.5f), s.shape) : 0.0f;
+        base = base * (1.0f - own) + h;
+        if (dell) *dell *= 1.0f - own;
+    }
+    return base;
 }
 
 float TtpRenderer::naturalFootY(const TrackBin& tb, const TerrainFlat& f) const {

@@ -907,6 +907,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     for (const ttp::rt::SetPiece& p : th.set.pieces) {
         out.setPieces.push_back({ p.slot, p.u, p.lat, p.yaw, p.y, p.scale });
     }
+    out.land = th.land;
     out.structureCol = th.structure;
 
     out.groundKind = th.groundKind;

@@ -38,7 +38,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRACKS, CUPS } from '../public/shared/tracks.js';
+import { TRACKS, CUPS, SET_GROUND } from '../public/shared/tracks.js';
 // The cup PAPER COLOURS. Authored in the picker because the PHONE imports that
 // file and a phone has no wasm to ask; carried across here so a native shell
 // does not retype five hex literals (the first one did). trackPicker.js has no
@@ -152,7 +152,7 @@ function bananaInit(f) {
 }
 
 // ---- descriptor ----
-const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set'];
+const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
 
 // ---- set pieces (renderer-only: the builder never reads them) ----
 // `model` names a GLB under public/assets/toycar that scripts/gen-set-pieces.mjs
@@ -167,6 +167,35 @@ function setInit(p) {
   if (p.scale != null && !(p.scale > 0)) fail(`set piece scale ${JSON.stringify(p.scale)} must be positive`);
   // Field order MUST match SetDef: model, u, lat, yaw, y, scale.
   return `{ ${JSON.stringify(p.model)}, ${D(p.u)}, ${D(p.lat || 0)}, ${D(p.yaw || 0)}, ${D(p.y || 0)}, ${D(p.scale ?? 1)} }`;
+}
+
+// ---- landforms (renderer-only, like the set) ----
+// A track's `land` entries are anchored by u/lat/yaw like a set piece; a set
+// piece whose model has a SET_GROUND entry brings that ground with it,
+// anchored on the piece itself (its index), since the model was built standing
+// on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
+// but shape (1) and a plain's fade (8).
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3 };
+const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape'];
+function landInit(l, piece, where) {
+  checkKeys(l, LAND_KEYS, where);
+  if (!(l.kind in LAND_KINDS)) fail(`${where}: kind ${JSON.stringify(l.kind)} is not one of ${Object.keys(LAND_KINDS).join(', ')}`);
+  if (piece < 0 && (typeof l.u !== 'number' || l.u < 0 || l.u >= 1)) fail(`${where}: u ${JSON.stringify(l.u)} must be a number in [0, 1)`);
+  if (piece >= 0 && (l.u != null || l.lat != null)) fail(`${where}: a set piece's ground is anchored on the piece; it takes no u/lat (yaw turns it in the piece's frame)`);
+  if (!(l.r > 0)) fail(`${where}: r must be positive`);
+  if (l.kind !== 'plain' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
+  if (l.kind === 'ring' && !(l.w > 0)) fail(`${where}: a ring needs its bank's half-width w`);
+  if (l.top != null && !(l.top >= 0 && l.top < 1)) fail(`${where}: top must be in [0, 1)`);
+  const n = (v, d = 0) => D(v ?? d);
+  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape.
+  return `{ ${LAND_KINDS[l.kind]}, ${piece}, ${n(l.u)}, ${n(l.lat)}, ${n(l.yaw)}, ${n(l.x)}, ${n(l.z)}, `
+    + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, l.kind === 'plain' ? 8 : 0)}, ${n(l.rz)}, `
+    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)} }`;
+}
+for (const [model, list] of Object.entries(SET_GROUND)) {
+  if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${model}.glb`))) fail(`SET_GROUND "${model}" has no GLB`);
+  if (!Array.isArray(list) || !list.length) fail(`SET_GROUND "${model}" must list its landforms`);
 }
 
 const out = [];
@@ -239,6 +268,17 @@ for (const id of [...trackIds, ...devIds]) {
     out.push('};');
     setRef = `kSet_${sym}`; nSet = desc.set.length;
   }
+  const lands = [];
+  (desc.set || []).forEach((p, i) => (SET_GROUND[p.model] || []).forEach((l, k) =>
+    lands.push(landInit(l, i, `SET_GROUND "${p.model}"[${k}]`))));
+  (desc.land || []).forEach((l, k) => lands.push(landInit(l, -1, `track "${id}" land[${k}]`)));
+  let landRef = 'nullptr';
+  if (lands.length) {
+    out.push(`constexpr LandDef kLand_${sym}[] = {`);
+    for (const s of lands) out.push(`  ${s},`);
+    out.push('};');
+    landRef = `kLand_${sym}`;
+  }
   out.push('');
 
   // Field order MUST match TrackDef in trackbuilder.h.
@@ -247,7 +287,8 @@ for (const id of [...trackIds, ...devIds]) {
     + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
     + `${D(trackWidth)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
-    + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet} }`);
+    + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet}, `
+    + `${landRef}, ${lands.length} }`);
 }
 
 out.push('constexpr TrackDef TTP_TRACKS[] = {');
