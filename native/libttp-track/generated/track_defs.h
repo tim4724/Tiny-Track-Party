@@ -1163,13 +1163,17 @@ constexpr FurnDef kBoxes_cloverleaf[] = {
   { 0x1.fbe76c8b43958p-5, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_cloverleaf[] = {
-  { "set-playground", 0x1.85db76b3bb83dp-4, -0x1.ac3d70a3d70a4p+4, -0x1.5a6b851eb851fp+7, 0x0p+0, 0x1.6666666666666p+0 },
-  { "set-picnic-blanket", 0x1.e978d4fdf3b64p-2, 0x1.ep+2, 0x1.4p+4, 0x0p+0, 0x1p+0 },
-  { "set-barbecue", 0x1.3333333333333p-4, -0x1.ep+2, 0x1.4p+7, 0x0p+0, 0x1p+0 },
-  { "set-bird-bath", 0x1.ae147ae147ae1p-1, 0x1.dp+3, 0x1.4p+4, 0x0p+0, 0x1p+0 },
+  { "set-giant-four-leaf", 0x1.85db76b3bb83dp-4, -0x1.ac3d70a3d70a4p+4, -0x1.5a6b851eb851fp+7, 0x0p+0, 0x1p+1 },
+  { "set-giant-clover", 0x1.0bd9018e75793p-1, -0x1.84ed916872b02p+4, 0x1.af51eb851eb85p+6, 0x0p+0, 0x1.8p+0 },
+  { "set-giant-clover", 0x1.b588e368f0846p-2, -0x1.3fe76c8b43958p+4, 0x1.ddc28f5c28f5cp+5, 0x0p+0, 0x1.8p+0 },
+  { "set-giant-clover", 0x1.ac9320d9945b7p-1, 0x1.12e147ae147aep+4, -0x1.8070a3d70a3d7p+6, 0x0p+0, 0x1.8p+0 },
+  { "set-giant-clover", 0x1.cd2b2bfdb4cc2p-3, -0x1.9ebc6a7ef9db2p+4, 0x1.47b851eb851ecp+7, 0x0p+0, 0x1.8p+0 },
 };
 constexpr LandDef kLand_cloverleaf[] = {
-  { 0, -1, 0x1.85db76b3bb83dp-4, -0x1.ac3d70a3d70a4p+4, -0x1.5a6b851eb851fp+7, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.4p+4, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x1.6p+2, 0x1.6p+2, 0x1.3333333333333p-1, 0x1p+0 },
+  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x0p+0, 0x1.8p+3, 0x1.8p+1, 0x1.8p+1, 0x0p+0, 0x1.6666666666666p+0 },
+  { 0, -1, 0x1.6c226809d4952p-2, 0x1.46d916872b021p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.999999999999ap-3, 0x1p+0 },
+  { 0, -1, 0x1.c081c2e33eff2p-1, -0x1.f0c49ba5e353fp+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.999999999999ap-3, 0x1p+0 },
+  { 0, -1, 0x1.620ee8d10f51bp-6, 0x1.5c7ae147ae148p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.999999999999ap-3, 0x1p+0 },
   { 0, -1, 0x1.999999999999ap-3, -0x1.8p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+5, 0x1p+5, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.4p+3, 0x1.3333333333333p-3, 0x1p+0 },
   { 0, -1, 0x1.0a3d70a3d70a4p-1, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.18p+6, 0x1.ap+4, 0x1.ap+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1.999999999999ap-3, 0x1p+0 },
 };
@@ -1950,7 +1954,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 5, kLand_ribbon, 6 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 4, kLand_pretzel, 1 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, kOils_tangle, 1, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 2, kLand_tangle, 2 },
-  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 4, kLand_cloverleaf, 3 },
+  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 5, kLand_cloverleaf, 6 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 7, kLand_wash, 3 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 2, nullptr, 0 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, kOils_crag, 2, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 5, nullptr, 0 },

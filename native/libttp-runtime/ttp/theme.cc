@@ -257,10 +257,10 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.road.kerbA = 0x2bb673;
     t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
   } else if (track == "cloverleaf") {
-    // Playground hill: a picnic by the playground; the gantry in the
-    // climbing frame's blue.
-    t.landmarks = { LM_PICNIC };
-    t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
+    // The clover meadow: none of the postcard; clover-green kerbs and gantry.
+    t.landmarks.clear();
+    t.road.kerbA = 0x61cb8b;
+    t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xf8f8fb;
   }
 }
 

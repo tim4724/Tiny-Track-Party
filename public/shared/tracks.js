@@ -251,6 +251,8 @@ export const SET_GROUND = {
   'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
   'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
+  // Cloverleaf B's four-leaf clover on the fourth leaf of the land.
+  'set-giant-four-leaf': [{ kind: 'mound', h: 3.0, r: 12, r1: 12, rz: 12, shape: 1.4 }],
   // Pretzel's oak on the knoll it grew on, its summit under the trunk.
   'set-treehouse': [{ kind: 'mound', h: 3.0, r: 17, r1: 17, rz: 17, shape: 1.4 }],
   // Wash's creek: the bed is the low line the raised land stands over, between
@@ -464,20 +466,23 @@ export const TRACKS = {
   cloverleaf: {
     name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
-    // Playground hill: the playground on the flat top of the hill south-west
-    // of the circuit, where the start straight points, swings, seesaw and
-    // roundabout going; a picnic, a barbecue and the bird bath round the lap
+    // Giant clover meadow (variant B): one four-leaf clover at the garden's
+    // scale where the start straight points, its head nodding, and clumps of
+    // three-leaf clover with a bee at each round the lap
     set: [
-      { model: 'set-playground', u: 0.09518, lat: -26.765, yaw: -173.21, scale: 1.4 },
-      { model: 'set-picnic-blanket', u: 0.478, lat: 7.5, yaw: 20 },
-      { model: 'set-barbecue', u: 0.075, lat: -7.5, yaw: 160 },
-      { model: 'set-bird-bath', u: 0.84, lat: 14.5, yaw: 20 }
+      { model: 'set-giant-four-leaf', u: 0.09518, lat: -26.765, yaw: -173.21, scale: 2 },
+      { model: 'set-giant-clover', u: 0.52314, lat: -24.308, yaw: 107.83, scale: 1.5 },
+      { model: 'set-giant-clover', u: 0.42728, lat: -19.994, yaw: 59.72, scale: 1.5 },
+      { model: 'set-giant-clover', u: 0.83706, lat: 17.18, yaw: -96.11, scale: 1.5 },
+      { model: 'set-giant-clover', u: 0.22518, lat: -25.921, yaw: 163.86, scale: 1.5 }
     ],
-    // the playground's hill, its top levelled at about the height of the
-    // decks beside it; the round hill beyond the south bend and a long ridge
-    // closing the west
+    // the circuit's three leaves each swell into a round hill (the clover
+    // brings the fourth); the round hill beyond the south bend and a long
+    // ridge closing the west
     land: [
-      { kind: 'ridge', u: 0.09518, lat: -26.765, yaw: -173.21, len: 12, r: 20, h: 5.5, top: 0.6 },
+      { kind: 'ridge', u: 0.3556, lat: 10.214, r: 13, h: 6, top: 0.2 },
+      { kind: 'ridge', u: 0.87599, lat: -7.762, r: 13, h: 6, top: 0.2 },
+      { kind: 'ridge', u: 0.02161, lat: 10.89, r: 13, h: 6, top: 0.2 },
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 }
     ]
