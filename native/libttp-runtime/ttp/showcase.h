@@ -43,6 +43,11 @@ const std::vector<std::string>& showcase_models();
 // showcase_models() contract, for the trackside prop channel (Theme::props).
 const std::vector<std::string>& showcase_prop_models();
 
+// The set-piece GLBs the showcase stages, in set<i>.glb slot order: every
+// catalogue track's pieces, stood in a row (showcase_theme). The same
+// biome-independence rule as showcase_models().
+const std::vector<std::string>& showcase_set_models();
+
 // The showcase world for `biomeName`, on `trackId`. Everything a track's own
 // theme decides is unchanged (resolve_theme's per-track ambient patch and
 // shoreline seed included); what is added is the rest of the kit.
@@ -54,8 +59,8 @@ Theme showcase_theme(const char* biomeName, const char* trackId);
 
 // What that world holds, for the gallery's legend:
 //
-//   {"scenery":[…GLB names…],"props":[…GLB names…],"landmarks":[…names…],
-//    "clutter":[…names…],"fliers":[…names…]}
+//   {"scenery":[…GLB names…],"props":[…GLB names…],"set":[…GLB names…],
+//    "landmarks":[…names…],"clutter":[…names…],"fliers":[…names…]}
 //
 // Canonical JSON, keys sorted, as every ttp_*_json boundary but ttp_ui.h's is.
 // The names are for HUMANS to read beside the thing they name — they are not an

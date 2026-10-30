@@ -357,8 +357,9 @@ struct TtpRenderer::TrackBin {
     float prDensity = 0;
     struct PropStamp { uint32_t slot; float w, s0, s1; bool face, verge; };
     std::vector<PropStamp> prScatter;
-    // The track's set pieces (theme.set), bound as set<i>.glb by slot.
-    uint32_t setModelCount = 0;
+    // The track's set pieces (theme.set), bound as set<i>.glb by slot; the
+    // model names are there for the set layout's read-back (setLayout).
+    std::vector<std::string> setModels;
     struct SetPiece { uint32_t slot; float u, lat, yaw, y, scale; };
     std::vector<SetPiece> setPieces;
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
@@ -377,7 +378,19 @@ struct TtpRenderer::TrackBin {
     struct Post { float x, z, radius; float3 cPos, cUp; };
     std::vector<Post> supportPosts;      // loop shafts (top cut to the deck underside)
     // `flare`: how far past halfW the slope lands on the ground (bermFlare).
-    struct BermRing { float cx, cz, lx, lz, halfW, topL, topR, flare; };
+    struct BermRing {
+        float cx, cz, lx, lz, halfW, topL, topR, flare;
+        // The ring's cross-section, left to right: the left foot on the
+        // ground (`gy`), the deck's two top edges, the right foot. The one
+        // statement of the berm's shape: the mesh (buildStructures) and the
+        // height read-back (bermY) both read it.
+        void corners(float gy, float3 out[4]) const {
+            out[0] = { cx - lx * (halfW + flare), gy, cz - lz * (halfW + flare) };
+            out[1] = { cx - lx * halfW, topL, cz - lz * halfW };
+            out[2] = { cx + lx * halfW, topR, cz + lz * halfW };
+            out[3] = { cx + lx * (halfW + flare), gy, cz + lz * (halfW + flare) };
+        }
+    };
     std::vector<std::vector<BermRing>> berms;
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)

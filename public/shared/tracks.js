@@ -215,7 +215,8 @@ const BOXES = {
 
 // Set pieces — `set`, per track: the big landmarks that make one circuit look
 // unlike the rest of its cup (the biome's scatter is the same on all four). Each
-// names a composed model (scripts/gen-set-pieces.mjs) and places it by `u`
+// names a composed model (scripts/gen-set-pieces.mjs, or modelled in Blender by
+// scripts/gen-set-prototypes.mjs) and places it by `u`
 // (fraction of the lap) and `lat` (world units off the centreline; + is the
 // track's RIGHT), turned `yaw` degrees from the track's heading there; `y`
 // lifts or sinks it, `scale` sizes it. Visual only: the sim never sees one, so a
@@ -227,76 +228,220 @@ export const TRACKS = {
   // rolling hills + hops, width play, no crossings; auto-placed furniture).
   tidepool: {
     name: 'Tidepool', waypoints: GEN_TRACKS.tidepool,
-    oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes
+    oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
+    set: [
+      { model: 'set-rock-pool', u: 0.924, lat: 13, yaw: 20 },
+      { model: 'set-crab-pots', u: 0.37, lat: 10.9, yaw: 20 },
+      { model: 'set-crab-pots', u: 0.8, lat: 37, yaw: 20 },
+      { model: 'set-rowboat', u: 0.86, lat: 37, yaw: 20 },
+      { model: 'set-tide-rocks', u: 0.43, lat: 19, yaw: 20 },
+      { model: 'set-tide-rocks', u: 0.32, lat: 19.5, yaw: 20 },
+      { model: 'set-tide-rocks', u: 0.97, lat: 24.3, yaw: 20 },
+      { model: 'set-tide-rocks', u: 0.08, lat: 10.5, yaw: 20 },
+      { model: 'set-tide-rocks', u: 0.58, lat: -10.5, yaw: 160 }
+    ]
   },
   cove: {
     name: 'Cove', waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
     set: [
-      { model: 'set-pirate-ship', u: 0.93, lat: 33, yaw: 180, y: -0.5, scale: 1.25 }  // aground in the shallows
+      { model: 'set-pirate-ship', u: 0.925, lat: 54.5, yaw: 180, y: -0.5, scale: 1.25 },
+      { model: 'set-jetty', u: 0.966, lat: 41 },
+      { model: 'set-shipwreck-ribs', u: 0.55, lat: 60.5, yaw: 90, scale: 1.4 },
+      { model: 'set-pirate-camp', u: 0.99, lat: 10, yaw: 20 },
+      { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
+      { model: 'set-treasure-dig', u: 0.82, lat: 10.5, yaw: 20 },
+      { model: 'set-treasure-dig', u: 0.67, lat: -11, yaw: 160 },
+      { model: 'set-treasure-dig', u: 0.99, lat: -10.5, yaw: 160 },
+      { model: 'set-cannon-post', u: 0.12, lat: 13, yaw: 20 },
+      { model: 'set-cannon-post', u: 0.8, lat: 13, yaw: 20 }
     ]
   },
   driftwood: {
     name: 'Driftwood', waypoints: GEN_TRACKS.driftwood,
-    oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes
+    oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes,
+    set: [
+      { model: 'set-driftwood-trunk', u: 0.7, lat: -14, yaw: 180 },
+      { model: 'set-rowboat', u: 0.38, lat: -7, yaw: 160 },
+      { model: 'set-drift-logs', u: 0.65, lat: -8.3, yaw: 160 },
+      { model: 'set-drift-logs', u: 0.82, lat: -12, yaw: 160 },
+      { model: 'set-drift-logs', u: 0.08, lat: -12, yaw: 160 },
+      { model: 'set-drift-logs', u: 0.42, lat: -12, yaw: 160 },
+      { model: 'set-drift-logs', u: 0.73, lat: 7.5, yaw: 20 },
+      { model: 'set-bonfire', u: 0.294, lat: 10.5, yaw: 20 },
+      { model: 'set-drift-logs', u: 0, lat: 7, yaw: 20 }
+    ]
   },
   riptide: {
     name: 'Riptide', waypoints: GEN_TRACKS.riptide,
-    oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes
+    oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
+    set: [
+      { model: 'set-lifeguard-tower', u: 0.6, lat: -43, yaw: 160, scale: 1.3 },
+      { model: 'set-buoy-line', u: 0.596, lat: -59, yaw: 180 },
+      { model: 'set-deck-chairs', u: 0.76, lat: -18.2, yaw: 160 },
+      { model: 'set-parasol', u: 0.05, lat: -12, yaw: 160 },
+      { model: 'set-parasol', u: 0.32, lat: -10.5, yaw: 160 },
+      { model: 'set-parasol', u: 0.89, lat: 10.5, yaw: 20 },
+      { model: 'set-surfboards', u: 0.61, lat: -6, yaw: 160 },
+      { model: 'set-surfboards', u: 0.75, lat: 12, yaw: 20 },
+      { model: 'set-deck-chairs', u: 0.45, lat: -12, yaw: 160 },
+      { model: 'set-parasol', u: 0.77, lat: 10.4, yaw: 20 }
+    ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
   // fraction, no hairpins, roomy radii, but real crossings + climb; auto-placed furniture).
   powder: {
     name: 'Powder', waypoints: GEN_TRACKS.powder,
-    oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes
+    oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
+    set: [
+      { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
+      { model: 'set-ski-rack', u: 0.695, lat: 22.5, yaw: 20 },
+      { model: 'set-piste-fence', u: 0.96, lat: -7, yaw: 180 },
+      { model: 'set-piste-fence', u: 0.06, lat: 7.5 },
+      { model: 'set-ski-rack', u: 0.03, lat: 9, yaw: 20 },
+      { model: 'set-log-cabin', u: 0.18, lat: -18, yaw: 160 },
+      { model: 'set-snowman-pair', u: 0.82, lat: 14.5, yaw: 20 },
+      { model: 'set-ski-rack', u: 0.55, lat: -7.2, yaw: 160 },
+      { model: 'set-snowman-pair', u: 0.07, lat: -7.3, yaw: 160 }
+    ]
   },
   flurry: {
     name: 'Flurry', waypoints: GEN_TRACKS.flurry,
-    oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes
+    oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
+    set: [
+      { model: 'set-frozen-pond', u: 0.824, lat: 54.2, scale: 0.85 },
+      { model: 'set-log-cabin', u: 0.6, lat: -20, yaw: 160 },
+      { model: 'set-log-cabin', u: 0.4, lat: -8.5, yaw: 160 },
+      { model: 'set-log-pile', u: 0.36, lat: -10.5, yaw: 160 },
+      { model: 'set-snowman-pair', u: 0.53, lat: -7, yaw: 160 },
+      { model: 'set-snowman-pair', u: 0.69, lat: 7.5, yaw: 20 },
+      { model: 'set-log-cabin', u: 0.92, lat: -18, yaw: 160 },
+      { model: 'set-snowman-pair', u: 0.21, lat: 12, yaw: 20 }
+    ]
   },
   glacier: {
     name: 'Glacier', waypoints: GEN_TRACKS.glacier,
-    oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes
+    oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
+    set: [
+      { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 180 },
+      { model: 'set-igloo', u: 0.12, lat: -14, yaw: 160 },
+      { model: 'set-expedition-camp', u: 0.01, lat: 10.5, yaw: 20 },
+      { model: 'set-ice-chunks', u: 0.7, lat: 14.5, yaw: 247 },
+      { model: 'set-ice-chunks', u: 0.94, lat: -9.2, yaw: 55 },
+      { model: 'set-ice-chunks', u: 0.24, lat: -14.5, yaw: 135 },
+      { model: 'set-ice-chunks', u: 0.48, lat: 10.5, yaw: 74 },
+      { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 160 },
+      { model: 'set-ice-chunks', u: 0.13, lat: 10.5, yaw: 116 }
+    ]
   },
   avalanche: {
     name: 'Avalanche', waypoints: GEN_TRACKS.avalanche,
-    oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes
+    oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes,
+    set: [
+      { model: 'set-avalanche-slide', u: 0.76, lat: 16 },
+      { model: 'set-windsock', u: 0.124, lat: 10.5, yaw: 20 },
+      { model: 'set-warning-sign', u: 0.277, lat: 27.3, yaw: 55 },
+      { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
+      { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
+      { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 }
+    ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation,
   // decorated mid profile; auto-placed furniture).
   ribbon: {
     name: 'Ribbon', waypoints: GEN_TRACKS.ribbon,
-    oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes
+    oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
+    set: [
+      { model: 'set-washing-line', u: 0.05, lat: -7.5, yaw: 180 },
+      { model: 'set-garden-shed', u: 0.45, lat: 10.5, yaw: 20 },
+      { model: 'set-wheelbarrow', u: 0, lat: 8.5, yaw: 20 },
+      { model: 'set-flower-bed', u: 0.39, lat: -10.5, yaw: 160 },
+      { model: 'set-wheelbarrow', u: 0.425, lat: -10.5, yaw: 160 },
+      { model: 'set-flower-bed', u: 0.84, lat: -13, yaw: 160 },
+      { model: 'set-flower-bed', u: 0.07, lat: 6, yaw: 20 },
+      { model: 'set-flower-bed', u: 0.98, lat: 7.5, yaw: 20 }
+    ]
   },
   pretzel: {
     name: 'Pretzel', waypoints: GEN_TRACKS.pretzel,
-    oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes
+    oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
+    set: [
+      { model: 'set-treehouse', u: 0.858, lat: 31.6 },
+      { model: 'set-paddling-pool', u: 0.053, lat: 14.5 },
+      { model: 'set-trampoline', u: 0.05, lat: 27.5, yaw: 20 },
+      { model: 'set-football-pitch', u: 0.772, lat: -32.5, yaw: 160 },
+      { model: 'set-trampoline', u: 0.77, lat: -14, yaw: 160 }
+    ]
   },
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
-    oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes
+    oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
+    set: [
+      { model: 'set-garden-hose', u: 0.509, lat: 16 },
+      { model: 'set-sprinkler', u: 0.3, lat: 10, yaw: 20 },
+      { model: 'set-sprinkler', u: 0.75, lat: 10, yaw: 20 },
+      { model: 'set-sprinkler', u: 0.05, lat: -10, yaw: 160 }
+    ]
   },
   cloverleaf: {
     name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
-    oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes
+    oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
+    set: [
+      { model: 'set-playground', u: 0.18, lat: 14, yaw: 20, scale: 0.55 },
+      { model: 'set-picnic-blanket', u: 0.478, lat: 7.5, yaw: 20 },
+      { model: 'set-barbecue', u: 0.075, lat: -7.5, yaw: 160 },
+      { model: 'set-picnic-blanket', u: 0.06, lat: -10.5, yaw: 160 },
+      { model: 'set-bird-bath', u: 0.84, lat: 14.5, yaw: 20 },
+      { model: 'set-flower-bed', u: 0.93, lat: 9, yaw: 20 },
+      { model: 'set-picnic-blanket', u: 0.95, lat: 7.5, yaw: 20 },
+      { model: 'set-flower-bed', u: 0.8, lat: -10, yaw: 160 }
+    ]
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
   // crossings, width pinches, crest hills; auto-placed furniture).
   wash: {
     name: 'Wash', waypoints: GEN_TRACKS.wash,
-    oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes
+    oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes,
+    set: [
+      { model: 'set-dry-creek', u: 0.823, lat: -36, yaw: 90 },
+      { model: 'set-dead-cottonwood', u: 0.12, lat: -14, yaw: 160 },
+      { model: 'set-dead-cottonwood', u: 0.62, lat: -14, yaw: 160 },
+      { model: 'set-cow-skull', u: 0.29, lat: 10.5, yaw: 20 },
+      { model: 'set-cow-skull', u: 0.05, lat: 10.5, yaw: 20 },
+      { model: 'set-ranch-fence', u: 0.962, lat: 14.5, yaw: 20 },
+      { model: 'set-ranch-fence', u: 0.85, lat: 14.5, yaw: 20 }
+    ]
   },
   gulch: {
     name: 'Gulch', waypoints: GEN_TRACKS.gulch,
-    oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes
+    oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
+    set: [
+      { model: 'set-mine-portal', u: 0.018, lat: 26 },
+      { model: 'set-oil-drums', u: 0.09, lat: 13, yaw: 60 }
+    ]
   },
   crag: {
     name: 'Crag', waypoints: GEN_TRACKS.crag,
-    oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes
+    oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
+    set: [
+      { model: 'set-water-tower', u: 0.983, lat: 13 },
+      { model: 'set-fossil', u: 0.326, lat: -14, yaw: 160 },
+      { model: 'set-windpump', u: 0.62, lat: -14, yaw: 160 },
+      { model: 'set-ranch-fence', u: 0.302, lat: 18.2, yaw: 20 },
+      { model: 'set-ranch-fence', u: 0.19, lat: -10.5, yaw: 160 }
+    ]
   },
   sidewinder: {
     name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
-    oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes
+    oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
+    set: [
+      { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
+      { model: 'set-rattlesnake', u: 0.24, lat: 10.2 },
+      { model: 'set-cow-skull', u: 0.282, lat: -14.3, yaw: 160 },
+      { model: 'set-cow-skull', u: 0.72, lat: 14.5, yaw: 20 },
+      { model: 'set-route-sign', u: 0.012, lat: -5.5, yaw: 110 },
+      { model: 'set-route-sign', u: 0.81, lat: 10, yaw: 70 }
+    ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
   // `startU` moves the start/finish line a fraction of a lap along the ring (see
@@ -309,19 +454,52 @@ export const TRACKS = {
   // its walk already opens with enough straight behind the line.
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
-    oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake
+    oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
+    set: [
+      { model: 'set-block-tower', u: 0.096, lat: 12 },
+      { model: 'set-block-pile', u: 0.19, lat: -12, yaw: 160 },
+      { model: 'set-block-pile', u: 0.9, lat: 12, yaw: 20 },
+      { model: 'set-block-pile', u: 0.11, lat: -14.5, yaw: 160 },
+      { model: 'set-marbles', u: 0.07, lat: -7.5, yaw: 160 },
+      { model: 'set-marbles', u: 0.25, lat: 10.5, yaw: 20 }
+    ]
   },
   gauntlet: {
     name: 'Gauntlet', segments: GAUNTLET,
-    oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet
+    oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
+    set: [
+      { model: 'set-block-castle', u: 0.834, lat: 17.9 },
+      { model: 'set-toy-robot', u: 0.984, lat: -7.5, yaw: 180 },
+      { model: 'set-toy-soldiers', u: 0.97, lat: 6, yaw: 20 },
+      { model: 'set-toy-soldiers', u: 0.65, lat: 12, yaw: 20 },
+      { model: 'set-toy-soldiers', u: 0.15, lat: 12, yaw: 20 },
+      { model: 'set-dominoes', u: 0.64, lat: -10.5, yaw: 160 },
+      { model: 'set-dominoes', u: 0.08, lat: -12, yaw: 160 }
+    ]
   },
   helix: {
     name: 'Helix', segments: HELIX, startU: 0.020,
-    oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix
+    oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
+    set: [
+      { model: 'set-slinky', u: 0.633, lat: 14.5 },
+      { model: 'set-spinning-top', u: 0.145, lat: 10.5 },
+      { model: 'set-yoyo', u: 0.24, lat: 10.5, yaw: 20 },
+      { model: 'set-yoyo', u: 0.1, lat: 10.5, yaw: 20 },
+      { model: 'set-crayons', u: 0.12, lat: -14, yaw: 160 },
+      { model: 'set-crayons', u: 0.02, lat: 32.5, yaw: 20 }
+    ]
   },
   skyline: {
     name: 'Skyline', segments: SKYLINE, startU: 0.024,
-    oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline
+    oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline,
+    set: [
+      { model: 'set-toy-rocket', u: 0.42, lat: 31.6 },
+      { model: 'set-toy-plane', u: 0.974, lat: -7.5, yaw: 180 },
+      { model: 'set-cardboard-box', u: 0.09, lat: -10.5, yaw: 160 },
+      { model: 'set-cardboard-box', u: 0.45, lat: -7.5, yaw: 160 },
+      { model: 'set-block-pile', u: 0.46, lat: -32.5, yaw: 160 },
+      { model: 'set-marbles', u: 0.95, lat: 12, yaw: 20 }
+    ]
   }
 };
 

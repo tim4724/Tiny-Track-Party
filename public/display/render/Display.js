@@ -161,6 +161,8 @@ export class Display {
       bench: mod.cwrap('ttp_display_bench', null, ['string']),
       kitField: mod.cwrap('ttp_display_kit_field', null, ['number']),
       kitLayout: mod.cwrap('ttp_display_kit_field_layout', 'string', []),
+      setLayout: mod.cwrap('ttp_display_set_layout', 'string', []),
+      scatterLayout: mod.cwrap('ttp_display_scatter_layout', 'string', []),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -175,6 +177,14 @@ export class Display {
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       lookFov: mod.cwrap('ttp_display_look_fov', null, ['number']),
       chaseRig: mod.cwrap('ttp_display_chase_rig_json', 'string', ['number', 'number', 'number', 'number', 'number', 'number']),
+      cellLook: mod.cwrap('ttp_display_cell_look', null,
+                          ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+      cellLookClear: mod.cwrap('ttp_display_cell_look_clear', null, []),
+      carPose: mod.cwrap('ttp_display_car_pose', null, ['number', 'number', 'number']),
+      carPoseClear: mod.cwrap('ttp_display_car_pose_clear', null, []),
+      groundY: mod.cwrap('ttp_display_ground_y', 'number', ['number', 'number']),
+      spotIssue: mod.cwrap('ttp_display_spot_issue', 'string', ['number', 'number', 'number', 'number', 'number']),
+      trackFrames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
       shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
@@ -411,8 +421,43 @@ export class Display {
   kitLayout() {
     try { return JSON.parse(this._fn.kitLayout()) || []; } catch (_) { return []; }
   }
+  // DEV. Where the built track's set pieces stand (ttp_display_set_layout):
+  // { length, groundY, pieces: [{ model, s, lat, x, y, z, cx, cz, hx, hz, top, … }] }.
+  setLayout() {
+    try { return JSON.parse(this._fn.setLayout()); } catch (_) { return { length: 0, groundY: 0, pieces: [] }; }
+  }
+  // DEV. Where its scenery trees and boulders stand (ttp_display_scatter_layout):
+  // [[x, z, r, top], …].
+  scatterLayout() {
+    try { return JSON.parse(this._fn.scatterLayout()) || []; } catch (_) { return []; }
+  }
   // The free camera's lens in degrees; 0 is the overview's.
   lookFov(deg) { this._fn.lookFov(deg); }
+  // DEV. Cell `i` looks from `eye` to `target` ({x,y,z}) instead of from its
+  // car's chase rig; fov 0 keeps the rig's. Everything else is the cell's.
+  cellLook(i, eye, target, fov) {
+    this._fn.cellLook(i, eye.x, eye.y, eye.z, target.x, target.y, target.z, fov || 0);
+  }
+  cellLookClear() { this._fn.cellLookClear(); }
+  // DEV. The car owning cell `i` is drawn parked at track arclength `s`,
+  // `lat` right of the centreline, instead of where the sim has it; its chase
+  // rig follows it there.
+  carPose(i, s, lat) { this._fn.carPose(i, s, lat); }
+  carPoseClear() { this._fn.carPoseClear(); }
+  // DEV. The built scene's ground height at world (x, z): what scatter and set
+  // pieces stand on, hills included.
+  groundY(x, z) { return this._fn.groundY(x, z); }
+  // DEV. What keeps a set piece's surface over (x, z), lo..hi high, from
+  // standing there ('' where it may; ttp_display_spot_issue). `skip` is the
+  // set layout row being moved.
+  spotIssue(x, z, lo, hi, skip = -1) { return this._fn.spotIssue(x, z, lo, hi, skip); }
+  // The built track's own frames at arclengths `sList` (they wrap):
+  // [{ s, pos, tangent, up, lateral, width }], [] on an unknown track. Keep the
+  // list short: the JSON argument is marshalled on the wasm stack.
+  trackFrames(trackId, sList) {
+    try { return JSON.parse(this._fn.trackFrames(trackId, JSON.stringify(sList)) || '[]'); }
+    catch (_) { return []; }
+  }
   // The race's chase rig settled behind a car at (x, y, z) facing (fx, fz) and
   // driving at `spd` of top speed (0 parked, 1 flat out):
   // { eye: [x, y, z], fov, target: [x, y, z] }, in world units.
@@ -461,9 +506,10 @@ export class Display {
     scModels.forEach((m, i) => want.push({ name: `scenery${i}.glb`, tag: m }));
     const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
     prModels.forEach((m, i) => want.push({ name: `prop${i}.glb`, tag: m }));
-    // The track's own set pieces — a function of the TRACK, so the showroom
-    // (which builds a stand-in track) takes the same path and gets none.
-    biomes.setModels(trackId).forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
+    // The track's own set pieces — a function of the TRACK. The showroom builds
+    // a stand-in track with none of its own and stages every track's in a row.
+    const setModels = this._showcase ? biomes.showcaseSetModels() : biomes.setModels(trackId);
+    setModels.forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
     // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
     // in the order the layout comes back in and the order the chrome names them.
     this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));

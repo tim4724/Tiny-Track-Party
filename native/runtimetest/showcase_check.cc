@@ -31,12 +31,14 @@
 //
 // Usage: showcase_check   (no arguments — the tables are compiled in)
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "generated/track_defs.h"
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
 
@@ -222,6 +224,25 @@ void testInventory() {
   check(json.find("\"dominoes\"") != std::string::npos, "inventory names the dominoes");
   check(json.find("\"hot-air balloon\"") != std::string::npos, "inventory names the balloon");
   for (const std::string& m : rt::showcase_models()) {
+    check(json.find("\"" + m + "\"") != std::string::npos, "inventory names " + m);
+  }
+  // The set row stands every model the catalogue's set lists use, once each,
+  // each on a straight.
+  std::vector<std::string> authored;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    for (int k = 0; k < TTP_TRACKS[i].nSet; k++) {
+      const std::string m = TTP_TRACKS[i].set[k].model;
+      if (std::find(authored.begin(), authored.end(), m) == authored.end()) authored.push_back(m);
+    }
+  }
+  check(t.set.pieces.size() == authored.size(), "the set row stands every catalogue set model once");
+  check(t.set.models.size() == authored.size(), "the set row stages each set model once");
+  for (const rt::SetPiece& p : t.set.pieces) {
+    const bool onStraight = p.u < 0.26f || (p.u > 0.43f && p.u < 0.76f) || p.u > 0.79f;
+    check(onStraight, "a set-row piece stands on a showroom straight");
+    check(p.slot < t.set.models.size(), "a set-row piece names a staged model");
+  }
+  for (const std::string& m : rt::showcase_set_models()) {
     check(json.find("\"" + m + "\"") != std::string::npos, "inventory names " + m);
   }
   // Once each: the union dedupes, so the staged list is exactly the enum.

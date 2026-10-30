@@ -290,6 +290,8 @@ async function buildLegend() {
     list('Props', PROP_MODELS),
     await iconGroup(),
     list('Scenery', inv.scenery),
+    list('Set pieces', inv.set,
+         'Every track\'s own landmark, in one row along the outside of both straights.'),
     list('Landmarks', inv.landmarks),
     list('Clutter', inv.clutter),
     list('Air', inv.fliers)
@@ -303,7 +305,7 @@ async function buildLegend() {
   try {
     const res = await fetch('/api/assets');
     if (res.ok) {
-      const staged = new Set([...models, ...PROP_MODELS, ...inv.scenery]);
+      const staged = new Set([...models, ...PROP_MODELS, ...inv.scenery, ...inv.props, ...inv.set]);
       const spare = (await res.json()).assets.filter((a) => !staged.has(a));
       const el = list('In the kit, not staged', spare,
                       'Present under /assets/toycar, drawn by nothing.');

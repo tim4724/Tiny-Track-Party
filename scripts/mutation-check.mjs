@@ -370,8 +370,8 @@ export const MUTATIONS = [
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
     // The lens rule: a cell is a small screen, not a crop of a big one. A fov
     // scaled by the layout is identity at one cell, so only a split can see it.
-    find: 'v.fov = cam.fov;',
-    replace: 'v.fov = cam.fov / (float) d.cells.size();',
+    find: 'look->fov : cam.fov;',
+    replace: 'look->fov : cam.fov / (float) d.cells.size();',
     expect: 'frame_builder',
   },
   {

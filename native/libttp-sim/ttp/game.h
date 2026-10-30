@@ -47,6 +47,14 @@ struct Input {
 
 struct Pose { Vec3 pos, forward, up; };
 
+// The pose a car at accumulated arclength `totalS`, lateral `lat`, `heading` off
+// the tangent and `h` above the deck is drawn and collided at, pitched to the
+// chord between its axles `halfLen` either side. Game's own poses are this
+// function; it is free so the display can stand a car at a spot the sim never
+// put it (the landmark gallery's ttp_display_car_pose) by the same rule.
+Pose carPose(Centerline& cl, double totalS, double lat, double heading, double h,
+             double halfLen);
+
 struct Car {
   Id id;
   double totalS = 0, lat = 0, v = 0, vlat = 0, heading = 0, steer = 0, brake = 0;

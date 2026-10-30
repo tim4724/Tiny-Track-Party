@@ -902,7 +902,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     }
 
     out.lmKinds = th.landmarks;
-    out.setModelCount = (uint32_t) th.set.models.size();
+    out.setModels = th.set.models;
     out.setPieces.clear();
     for (const ttp::rt::SetPiece& p : th.set.pieces) {
         out.setPieces.push_back({ p.slot, p.u, p.lat, p.yaw, p.y, p.scale });
@@ -2262,6 +2262,8 @@ void TtpRenderer::releaseStatic() {
     mSetAssets.clear();
     mSetInstances.clear();
     mSetFeet.clear();
+    mSetLayout = kNoSetLayout;
+    mScatterLayout = "[]";
     mKitAssets.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
