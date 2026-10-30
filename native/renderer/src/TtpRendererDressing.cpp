@@ -261,9 +261,6 @@ static bool hangsUnder(const gltfio::FilamentAsset* asset, filament::TransformMa
 }
 // The toy train's pivot: what hangs under it is mirrored per frame.
 static bool isSpin(const char* nm) { return std::strcmp(nm, "spin") == 0; }
-// A set piece's moving part: no static merge takes what hangs under it. The
-// motion pass does, as one mesh baked in the node's own frame.
-static bool isAnim(const char* nm) { return std::strncmp(nm, "anim_", 5) == 0; }
 
 // Trackside props (theme.props): a scattered set-dressing pass, instanced from
 // the generated prop-*.glb kit pieces (scripts/gen-props.mjs). Own seeded
@@ -1451,45 +1448,12 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, sp, 0x4a3a2e);  // lintel
             part(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, sp, 0x9fa8ba); // chimney
             part(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, sp, 0xb9c1d0);
-            // Chimney smoke: three soft puffs rising, growing and fading on a
-            // staggered loop (the JS sprites, as blend quads billboarded per cell).
-            {
+            // Chimney smoke, unless a set piece's chimney already has it: one
+            // smoking chimney a track.
+            if (mSmoke.empty()) {
                 const float cy2 = std::cos(sp.yaw), sy2 = std::sin(sp.yaw);
-                mSmokeOrigin = { sp.x + (-0.95f) * cy2 + (-0.95f) * sy2,
-                                 gy + 4.75f,
-                                 sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 };
-                if (mBlendMaterial) {
-                    mSmoke.resize(3);
-                    const BlurKernel blur(6.0f);
-                    // 8px cells: the 6px blur spreads the disc edge over ~12px
-                    // of the 64×64 field, so every gradient still gets a sample.
-                    constexpr int NX = 8, NY = 8;
-                    for (Mesh& m : mSmoke) {
-                        for (int j = 0; j <= NY; j++) {
-                            for (int k = 0; k <= NX; k++) {
-                                const float px = (float) k / NX * 64.0f;
-                                const float py = (float) j / NY * 64.0f;
-                                const float cov = blur.coverage(px, py,
-                                        [](float bx, float by) {
-                                            const float dx = bx - 32, dy = by - 32;
-                                            return dx * dx + dy * dy <= 18 * 18;
-                                        });
-                                m.verts.push_back({ (float) k / NX - 0.5f,
-                                                    0.5f - (float) j / NY, 0,
-                                                    packShown(srgbToLinear(0xeef2f6),
-                                                            1.0f, cov) });
-                            }
-                        }
-                        for (int j = 0; j < NY; j++) {
-                            for (int k = 0; k < NX; k++) {
-                                const uint32_t b = (uint32_t) (j * (NX + 1) + k);
-                                const uint32_t n = b + (uint32_t) (NX + 1);
-                                m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                            }
-                        }
-                        buildMesh(m, true, mBlendMaterial->getDefaultInstance(), 5);
-                    }
-                }
+                buildSmokePuffs({ sp.x + (-0.95f) * cy2 + (-0.95f) * sy2, gy + 4.75f,
+                                  sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 });
             }
             mShadowSpots.push_back({ sp.x, sp.z, 3.0f, 4.3f });
         }
@@ -1669,8 +1633,10 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     }
     auto& tcm = mEngine->getTransformManager();
     std::vector<size_t> next(nModels, 0);
+    std::vector<std::vector<float>> offRoad(nModels);   // each instance's |lat|
     for (const auto& p : tb.setPieces) {
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
+        offRoad[p.slot].push_back(std::fabs(p.lat));
         const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
         const float3 t = f.tangent();
         const float yaw = std::atan2(t.x, t.z) + p.yaw;
@@ -1748,6 +1714,27 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     }
     layout.set("pieces", std::move(rows));
     mSetLayout = ttp::canonical_stringify(layout);
+    // Placed: what travels leaves the sun bake, and ONE chimney smokes: the
+    // one nearest the road, which the racers pass closest.
+    float smokeOff = 1e30f;
+    float3 smokeAt{};
+    for (size_t m = 0; m < mSetAssets.size(); m++) {
+        if (!mSetAssets[m]) continue;
+        for (size_t i = 0; i < mSetInstances[m].size(); i++) {
+            gltfio::FilamentInstance* const inst = mSetInstances[m][i];
+            keepTravellersOutOfBake(mSetAssets[m], inst);
+            const float off = i < offRoad[m].size() ? offRoad[m][i] : 1e30f;
+            for (size_t k = 0; k < inst->getEntityCount() && off < smokeOff; k++) {
+                ttp::rt::SetMotion mo;
+                const utils::Entity e = inst->getEntities()[k];
+                if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
+                    smokeOff = off;
+                    smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
+                }
+            }
+        }
+    }
+    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt);
 }
 
 bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
@@ -2405,7 +2392,8 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     for (size_t e = 0; e < nEnt; e++) {
         const utils::Entity ent = insts[0]->getEntities()[e];
         if (!rcm.getInstance(ent)) continue;
-        if (hangsUnder(asset, tcm, ent, isAnim)) continue;   // the motion pass's
+        // A set piece's moving part is buildSetMovers' (TtpRendererMotion.cpp).
+        if (!setAnimRoot(asset, ent).isNull()) continue;
         const char* nm = asset->getName(ent);
         if (!nm) return;
         const ttp::rt::GlbMeshNode* found = nullptr;
@@ -2563,6 +2551,7 @@ void TtpRenderer::buildDressingMerge() {
     for (size_t m = 0; m < mSetAssets.size() && m < mSetInstances.size(); m++) {
         mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
     }
+    buildSetMovers();
     mergeInstancedSet(mConeAsset, mConeInstances, true);
 }
 
