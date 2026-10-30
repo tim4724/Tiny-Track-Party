@@ -530,6 +530,13 @@ stand on `groundY` with their feet buried.
   (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
   fills nothing, since a piece on its own knoll reads as a plinth, which the
   art direction rejects.
+- **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
+  (a hose across a lawn, a post's pad) has each baked vertex lifted by the
+  ground drawn under it (`bakePlacements`), so a spine longer than any
+  clearing follows the land instead of flattening it. A model with one stands
+  on the plain and levels nothing (`mSetDrapes`): its other parts are built
+  from the plain up (a post sunk through whatever land it meets). Only the
+  baked path drapes; a model the bake refuses stands flat.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in

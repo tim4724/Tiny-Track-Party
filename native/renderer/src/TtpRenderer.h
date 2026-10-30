@@ -1689,6 +1689,16 @@ private:
     // whole verge — which every later placement pass keeps out of.
     std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
+    // Per set model: whether it has a `drape` part (isDrapeName). A part that
+    // DRAPES lies on the land as the renderer draws it -- a hose across a
+    // lawn, the foot of a post -- its baked vertices lifted by the ground
+    // under each (bakePlacements), so it needs no ground of its own. A model
+    // with one stands on the plain and levels nothing: what it brings to the
+    // land follows it instead of flattening it.
+    std::vector<bool> mSetDrapes;
+    static bool isDrapeName(const char* name) {
+        return name && std::strncmp(name, "drape", 5) == 0;
+    }
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
@@ -2262,10 +2272,13 @@ private:
             utils::Entity src0);
     bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
+    // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
+    // by the land under it over the plain (a set piece's `drape` part).
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
-            const std::vector<filament::math::float3>& factor);
+            const std::vector<filament::math::float3>& factor,
+            const TrackBin* drapeOn = nullptr);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,
