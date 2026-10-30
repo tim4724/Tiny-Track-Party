@@ -20,7 +20,6 @@ const FLOATING = {
   // Not yet fixed:
   'set-cow-skull': 10,
   'set-dead-cottonwood': 10,
-  'set-lifeguard-tower': 4,
   'set-log-pile': 1,
   'set-mine-portal': 1,
   'set-pirate-camp': 1,
