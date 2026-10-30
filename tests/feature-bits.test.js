@@ -1,7 +1,8 @@
-// One source per shared number: the TTP_FEAT_* ablation bits are declared in
-// `native/runtime/ttp_display.h` and nowhere else, and every mirror is a
-// hand-typed copy — Display.js's FEAT map, PerfDebug.kt's TTP_FEAT_ALL, and the
-// bench backend's default mask.
+// One source per shared number: the TTP_FEAT_* ablation bits and the
+// TTP_DEBUG_* knobs are declared in `native/runtime/ttp_display.h` and nowhere
+// else, and every mirror is a hand-typed copy — Display.js's FEAT map,
+// PerfDebug.kt's TTP_FEAT_ALL, the bench backend's default mask, and the
+// renderer's kFeat*/kDebug* constants.
 //
 // THE FAILURE DIRECTION IS SILENT. A new TTP_FEAT bit lands in the header, the
 // renderer gates a channel on it, and every stale ALL mirror masks that channel
@@ -91,4 +92,55 @@ test("the Android harnesses' one FEAT mirror matches the header", () => {
   for (const g of ['ROAD', 'TERRAIN', 'DRESSING', 'SKY', 'CARS', 'EFFECTS']) {
     assert.ok(g in feat, `androidtv-bench.mjs lost its ${g} bit — a sweep arm would ablate nothing`);
   }
+});
+
+/** `#define TTP_DEBUG_<NAME> 0x<bits>`: the knobs outside TTP_FEAT_ALL. */
+function debugBits() {
+  const out = new Map();
+  for (const m of read('native/runtime/ttp_display.h')
+      .matchAll(/#define TTP_DEBUG_([A-Z_]+)\s+0x([0-9A-Fa-f]+)/g)) {
+    out.set(m[1], parseInt(m[2], 16));
+  }
+  assert.ok(out.size > 0, 'no TTP_DEBUG_* defines read — has the header moved?');
+  return out;
+}
+
+test('every TTP_DEBUG_* knob has a bit of its own, outside TTP_FEAT_ALL', () => {
+  // Two knobs on one bit switch each other, and a knob inside TTP_FEAT_ALL is
+  // set by every restore.
+  const all = headerBits().get('ALL');
+  const seen = [];
+  for (const [name, v] of debugBits()) {
+    assert.equal(v & all, 0, `TTP_DEBUG_${name} 0x${v.toString(16)} overlaps TTP_FEAT_ALL`);
+    for (const [other, w] of seen) {
+      assert.equal(v & w, 0, `TTP_DEBUG_${name} and TTP_DEBUG_${other} share a bit`);
+    }
+    seen.push([name, v]);
+  }
+});
+
+test("the renderer's kFeat*/kDebug* copies match the header, name for name", () => {
+  // The renderer cannot include the ABI header, so TtpRenderer.h retypes every
+  // bit it reads. Two of those copies once merged textually clean onto one
+  // bit. A copy pairs with its define by name, case and underscores aside
+  // (kDebugShadowSolid is TTP_DEBUG_SHADOW_SOLID); kFeatNoMerge is
+  // TTP_DEBUG_NO_MERGE, the one copy named across the two families.
+  const key = (s) => s.replace(/_/g, '').toLowerCase();
+  const defines = new Map();
+  for (const [family, bits] of [['FEAT', headerBits()], ['DEBUG', debugBits()]]) {
+    for (const [name, v] of bits) {
+      assert.ok(!defines.has(key(name)), `TTP_${family}_${name}'s name is another define's`);
+      defines.set(key(name), { name: `TTP_${family}_${name}`, v });
+    }
+  }
+  let copies = 0;
+  for (const m of read('native/renderer/src/TtpRenderer.h')
+      .matchAll(/static constexpr uint(?:8|32)_t k(Feat|Debug)(\w+)\s*=\s*0x([0-9A-Fa-f]+)/g)) {
+    const d = defines.get(key(m[2]));
+    assert.ok(d, `TtpRenderer.h's k${m[1]}${m[2]} names no TTP_FEAT_* or TTP_DEBUG_* define`);
+    assert.equal(parseInt(m[3], 16), d.v,
+      `TtpRenderer.h's k${m[1]}${m[2]} 0x${m[3]} disagrees with ${d.name} in ttp_display.h`);
+    copies++;
+  }
+  assert.ok(copies > 0, 'no kFeat*/kDebug* copies read — has TtpRenderer.h moved?');
 });
