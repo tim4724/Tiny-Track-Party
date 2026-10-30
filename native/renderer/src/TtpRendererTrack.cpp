@@ -1438,6 +1438,59 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
              28000.0f * (tb.hemiIntensity / 2.2f) };
 }
 
+// The playroom's horizon is the ROOM the floor belongs to: a bed, a sofa, a
+// bookshelf and a toy chest standing round it past the fog, as silhouettes
+// that say "furniture" at a glance. Ten boxes, the count the giant toy blocks
+// they replace had, so the ring costs what it did. Each piece stands at a
+// bearing `a` and radius `r` and faces the floor's middle; a part sits in
+// that frame (`t` along the ring, `d` outward, `y0` its foot) and takes its
+// colour from the theme's hill list by index (theme.cc playroomTheme).
+void TtpRenderer::buildRoomRing(const TrackBin& tb, float sf) {
+    struct Part { float a, r, t, d, y0, w, h, depth; int color; };
+    static const Part ROOM[] = {
+        // the bed, long side to the floor: mattress, headboard, a pillow
+        { 0.55f, 172, 0, 0, 0, 66, 12, 36, 1 },
+        { 0.55f, 172, 35, 0, 0, 4, 27, 38, 4 },
+        { 0.55f, 172, 26, 0, 12, 11, 4, 26, 5 },
+        // a chaise sofa: seat, back on the far side, one arm
+        { 2.15f, 176, 0, 0, 0, 70, 11, 26, 0 },
+        { 2.15f, 176, 0, 11, 0, 70, 24, 8, 0 },
+        { 2.15f, 176, -37, 0, 0, 8, 16, 26, 0 },
+        // the bookshelf, a band of books standing proud across its middle
+        { 3.65f, 196, 0, 0, 0, 42, 32, 10, 4 },
+        { 3.65f, 196, 0, -0.6f, 15, 36, 9, 10, 3 },
+        // the toy chest and its lid
+        { 5.05f, 166, 0, 0, 0, 30, 14, 18, 2 },
+        { 5.05f, 166, 0, 0, 14, 32, 3, 20, 0 },
+    };
+    for (const Part& p : ROOM) {
+        const float ca = std::cos(p.a), sa = std::sin(p.a);
+        // outward along (ca, sa), along the ring (sa, -ca): a turn, never a
+        // mirror, so the boxes keep their winding
+        const float cx = ca * (p.r + p.d) + sa * p.t, cz = sa * (p.r + p.d) - ca * p.t;
+        const float reach = 0.5f * std::max(p.w, p.depth);
+        if (mKitFieldMaxX > mKitFieldMinX   // the gallery's field wins, as in the ring
+                && (cx + reach) * sf > mKitFieldMinX - ttp::rt::kKitFieldClear
+                && (cx - reach) * sf < mKitFieldMaxX + ttp::rt::kKitFieldClear
+                && (cz + reach) * sf > mKitFieldMinZ - ttp::rt::kKitFieldClear
+                && (cz - reach) * sf < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
+            continue;
+        }
+        mHillAnchors.push_back({ cx, cz, p.y0 + p.h - 1.0f }); // authored coords
+        const float3 hc = srgbToLinear(tb.hillColors.empty() ? 0x8cc578u
+                : tb.hillColors[(size_t) p.color % tb.hillColors.size()]);
+        const uint32_t col = packAlbedo(hc, 1.0f);
+        const Prim pr = primBox(1, 1, 1);
+        const uint32_t base = (uint32_t) mHills.verts.size();
+        for (const float3& v : pr.v) {
+            const float lt = v.x * p.w, ld = v.z * p.depth;
+            const float x = (cx + sa * lt + ca * ld) * sf, z = (cz - ca * lt + sa * ld) * sf;
+            mHills.verts.push_back({ x, p.y0 + (v.y + 0.5f) * p.h - 1.0f, z, col });
+        }
+        for (const uint32_t idx : pr.i) mHills.idx.push_back(base + idx);
+    }
+}
+
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
@@ -1535,11 +1588,12 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const float sf = std::max(1.0f, (maxR + 60.0f) / 150.0f);
         mHillSf = sf; // the balloon's orbit radius scales with the same push-out
         // Four silhouettes (buildHillRingGeometry): meadow domes, canyon mesas
-        // (flat-topped 9-sided talus cones), playroom blocks (yawed near-cubes)
+        // (flat-topped 9-sided talus cones), the playroom's furniture (below)
         // and beach islands (fewer, lower, farther domes — the sea has to show
         // BETWEEN them). Feature count, scale and radius all vary per shape.
         const uint32_t shape = tb.hillShape;
-        const int count = shape == 1 ? 14 : shape == 2 ? 10 : shape == 3 ? 9 : 18;
+        const int count = shape == 1 ? 14 : shape == 2 ? 0 : shape == 3 ? 9 : 18;
+        if (shape == 2) buildRoomRing(tb, sf);
         for (int i = 0; i < count; i++) {
             float sx, sy, sz, a, r, yaw = 0;
             if (shape == 1) {        // mesa
@@ -1548,12 +1602,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 sx = 20 + (i % 4) * 8; sz = 16 + ((i + 2) % 4) * 7;
                 a = ((float) i / count) * 2.0f * (float) M_PI + (i % 5) * 0.17f;
                 r = 152 + (i % 3) * 20;
-            } else if (shape == 2) { // block
-                sy = 13 + (i % 3) * 5;
-                sx = 14 + (i % 4) * 5; sz = 14 + ((i + 2) % 4) * 5;
-                yaw = (i % 7) * 0.85f; // scaled BEFORE the yaw — a sheared box loses the block read
-                a = ((float) i / count) * 2.0f * (float) M_PI + (i % 5) * 0.23f;
-                r = 158 + (i % 3) * 22;
             } else if (shape == 3) { // island
                 sy = 3.5f + (i % 3) * 2.2f;
                 sx = 28 + (i % 4) * 11; sz = 20 + ((i + 1) % 4) * 8;
@@ -1589,22 +1637,16 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const auto rot = [&](const float3& p) {
                 return float3{ p.x * cyw + p.z * syw, p.y, -p.x * syw + p.z * cyw };
             };
-            // The mesa yaws BEFORE its non-uniform scale (facet phase), the
-            // block scales first (yawing a scaled box would shear it, and the
-            // crisp block silhouette is the whole point).
-            const bool yawFirst = (shape == 1);
+            // The mesa yaws BEFORE its non-uniform scale (facet phase).
             const auto place = [&](float3 p) {
-                if (yaw != 0 && yawFirst) p = rot(p);
+                if (yaw != 0) p = rot(p);
                 p = { p.x * sx, p.y * sy, p.z * sz };
-                if (yaw != 0 && !yawFirst) p = rot(p);
                 return float3{ (p.x + cx) * sf, p.y - 1.0f, (p.z + cz) * sf };
             };
-            if (shape == 1 || shape == 2) {
-                // Unit protos with their base at y=0 (so the y scale IS the
-                // feature height): a 9-sided talus cone with a 0.58 plateau,
-                // or a cube.
-                const Prim pr = (shape == 1) ? primCylinder(0.58f, 1.0f, 1.0f, 9)
-                                             : primBox(1, 1, 1);
+            if (shape == 1) {
+                // A unit proto with its base at y=0 (so the y scale IS the
+                // feature height): a 9-sided talus cone with a 0.58 plateau.
+                const Prim pr = primCylinder(0.58f, 1.0f, 1.0f, 9);
                 const uint32_t base = (uint32_t) mHills.verts.size();
                 for (const float3& v : pr.v) {
                     const float3 w = place({ v.x, v.y + 0.5f, v.z });
