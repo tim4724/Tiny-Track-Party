@@ -563,7 +563,10 @@ after each install discarded): Vulkan 53.6 / 53.3 / 52.5 -> 53.1 / 53.3 / 53.1
 fps, a null (that frame is fill-bound; the interpolants and the instancer were
 never its cost); GL 49.5 / 49.8 / 49.4 -> 50.9 / 51.5 / 50.7 fps, **+1.5 fps,
 ahead in 3 of 3** (skips a race ~607 -> ~528), so the GL fallback gains there
-too and the Vulkan default loses nothing.
+too and the Vulkan default loses nothing. The strip ALONE is null on that box
+(pin `ttp-pin-2026-10-29` against `-29b` on `3858ca72`, five GL pairs 53.3 vs
+52.8 fps, two Vulkan pairs 55.1 vs 55.0, 2026-10-30): the GL gain is the
+instancer and the hull.
 
 **What that says about this GPU.** The TA is bound by what a vertex WRITES,
 not by what it computes or fetches: 11 floats of output were worth 4.8 ms where
@@ -573,10 +576,71 @@ car channel is its vertex COUNT (the welded flat bodies paid; the wheels'
 0.5-degree weld did not move it) and whatever else writes a varying a fragment
 never reads.
 
-## Open
+### The crumbs and the look tiers (2026-10-30)
 
-**A 4P-only look tier: the rubber tap** (skid marks are ~2 px wide in a 4P
-cell; 0.4 ms heavy since display space, 0.6-0.8 before it). Priced, not taken.
+Same box and protocol, on `3858ca72` (the three levers above shipped).
+
+**Where the 4P/540 frame goes now** (two rounds, against each round's base,
+44.2 fps = 22.6 ms): cars 4.4 ms, road 4.1, terrain 3.1, dressing 2.9, rubber
+0.65, sky 0.45, the deck's sun-vis taps null. The same arms pinned at 720
+(+2.4 ms for +0.40 MP) move every channel by less than the pair noise: no
+channel is fill-bound at 4P. The rubber channel the afternoon priced at 3 ms
+is now under a millisecond. **By cell count at 540**: 1P 59.9, 2P 58.8, 3P
+55.4, 4P 44.2 fps.
+
+**The pixel-identical crumbs together are NOT a millisecond.** The merged
+prims welded on bit-identical corners (a kit wheel 384 -> 368), the balloon
+welded on exact (position, normal, colour) (1236 -> 355 vertices), and the
+folded steer bars drawn only in their own cell (4P: 24 -> 12 overlay draws),
+against the shipped build, six alternated install pairs at 4P/540: 42.7 ->
+43.4 fps, **-0.35 ms**, ahead in 4, level in 1, behind in 1, inside the
+race-to-race spread. Web frames diff to 0 px at 4/2/1P, HUD on and off,
+antialias folded or not. On top of them the NEAR pieces (the jeep's body
+welded once its spare is a node of its own, 1680 -> 305; the flat weld's
+provoking corners assigned by hitting set, GT 542 -> 480, Le Mans 515 -> 468,
+stock 738 -> 662), three pairs: 44.0 -> 44.6 fps, ~-0.3 ms, one pair behind.
+Their pixels: the jeep's chamfers shade like the other bodies' (02b74cef's
+class), 46 px of depth ties at body/panel contacts on three of nine
+SwiftShader web frames (none under ANGLE-Metal), and the jeep's monster
+ghost, which now draws the spare as a blended renderable of its own, sorted
+back to front, instead of mid-body under the bumpers and lamps: 0 px in
+every ghosted frame found (a ghosted truck sits on the chase eye, its tail
+behind it), while from a camera further back the spare would composite over
+them. Streamer 4P/1080, the whole set against the shipped build: Vulkan
+52.8 vs 53.0, GL 50.4 vs 50.8 fps (three pairs each).
+
+**The look tiers**, debug-bit arms (the bits are gone since) on one install
+of the whole set, three rounds in alternating order, 4P/540, base 44.7 fps:
+
+| tier | fps | ms | Streamer Vulkan 4P/1080 |
+|---|---|---|---|
+| car far forms per cell | 47.9 | **-1.5**, ahead 3 of 3 | 53.5 -> 54.1, null |
+| far forms + bilinear rubber | 48.8 | -1.9 | |
+| rubber tap without anisotropy | 45.9 | -0.6 | |
+| rubber tap bilinear, nearest mip | 44.5 | null | null |
+
+**Decided on look (2026-10-30).** The rubber tap is bilinear from the nearest
+mip, without anisotropy, as the DEFAULT on every platform (`bindSkidLayer`),
+chosen because beside trilinear + 4x it reads the same by eye at 540, 720
+and 1080, not for a saving. In the rounds above its own arm read null, and
+the trilinear arm without anisotropy, strictly more work, read -0.6 ms, so
+both are inside the noise; the Streamer read it null, as it read the
+filtering on 2026-10-17 (the cost there is the fetch over the layer). A
+saving on this box needs a one-variable A/B: the build against itself with
+only the sampler reverted. The car far forms are REJECTED and closed below:
+at the 4P gate (~2 world units in a 360-line cell) a near rival's far form
+drops thin parts, the Le Mans wing plate collapsing inside the simplifier's
+tolerance, and the swap is too obvious to buy the 1.5 ms with.
+
+**What shipped, against main** (`7729f280`, the welds, the steer bars, the
+jeep and the bilinear tap together, alternated install pairs, first race
+after each install discarded): 4P/540 six pairs, 44.0 vs 44.2 fps, three
+ahead and three behind, a null on this box; 2P/540 two pairs, 58.6 both (the
+panel's rate). Streamer 4P/1080 two pairs each: Vulkan 53.4 vs 53.6, GL 49.3
+vs 50.9 (ahead in both). They ship because they are cheaper by construction
+and cost no pixel the user did not accept, not for a frame-time step.
+
+## Open
 
 **An intermediate rung for one and three players** (the user's call: the
 ladder's clean-fraction doctrine, shared with the web and tvOS). Measured
@@ -625,12 +689,6 @@ not verified by a trace), and at 4P/720 -2.6 / -2.75 ms on a base
 that already skips 1-3 times a race. A realistic sheet cut (the lean flowers,
 null at 4P/720 on 2026-10-21) has not been priced at 3P/1080.
 
-**Car far forms** (per-cell `LodRange` for the merged car groups, past the
-8.6 u gate at 4P/720): 0.4-0.7 ms of heavy p50, ~85% of it in the TAs that
-hide within the frame, so it buys missed frames only after fragment cuts have
-used the 0.6 / 0.9 / 1.5 ms of slack; the smooth-roster export overlaps it
-almost entirely (one or the other, the user's look call).
-
 ## Closed — measured, and not worth taking
 
 Do not rebuild these without a reason the entry does not already answer. Dated
@@ -675,6 +733,7 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 |---|---|
 | distance LOD for anything but the deck, fog culling, a far-plane cut | the scenery ends where the fog saturates: 600 -> 100 u moved the submitted count ~2% |
 | deck: a second coarser ribbon past 60 u, a nearer gate, `kLodPx` 4, chunks of 13 or 52 rings, a 6-strip far cross-section | all NULL (2026-09-02..10-17): the camera's own chunk is always near |
+| far forms for the CARS (each rival's merged group re-pointed per cell past the `LodRange` gate, simplified per atlas swatch; built behind a debug bit and removed) | REJECTED on look (2026-10-30): "too obvious", a near rival drops thin parts at the 4P gate (the Le Mans wing plate collapses). It was the one look tier that bought a step on the Fire TV Stick, -1.5 ms at 4P/540 ahead in 3 of 3, null on the Streamer at 4P/1080 ("The crumbs and the look tiers"); on the Streamer at 4P/720 an earlier cut read 0.4-0.7 ms of heavy p50, ~85% of it in TAs that hide within the frame |
 | `LOD_ALL` (far ribbon everywhere) | its -1.1 ms was the car shadow failing the depth test on chords; with shadowed chunks pinned near it is NULL (2026-10-17) |
 | a tighter ribbon chord (0.005 u) | the far ribbon's value IS the loose chord on gently curved far rings (2026-09-10) |
 | back-face culling the deck and the ground (per-instance `setCullingMode`) | NULL (2026-10-04) |
@@ -699,7 +758,6 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 | a per-chunk gate on the rubber tap, on the sun-vis tap | NULL / ~0.15 ms (2026-09-04, 2026-10-14): what is on screen is the few chunks under the cars |
 | the paint and profile loops compiled OUT (a `lean` material constant) | NULL (2026-10-17): once the fragment is short, the arrays' declared size stops costing |
 | the loops gated by a 32-bin occupancy mask; the chevron loop bounded | NULL (2026-10-17). A chevron loop with DYNAMIC bounds hung the GPU outright (`waitForever: Pipeline stage signal fence`) |
-| the rubber tap's filtering (bilinear-mip-nearest, no anisotropy) | NULL: the cost is the fetch over a 16k-texel layer (2026-10-17) |
 | one two-channel layer for rubber + shadow | NULL as a probe (2026-10-14) |
 | `doubleSided : false` on vroad | NULL: Filament drops the unread normal varying anyway |
 | skipping the rubber's mip refresh | ~0.6 ms, and the far field scintillates without it |
