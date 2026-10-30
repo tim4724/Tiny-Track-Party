@@ -246,6 +246,11 @@ const BOXES = {
 //          `h` tall, reaching `r` toward +X, `r1` toward -X and `rz` along Z,
 //          its flank cos(t·π/2)^`shape`
 export const SET_GROUND = {
+  // Powder's ski mountain, its summit behind the lift (the lift's frame, grown
+  // 1.35 by its builder), and Avalanche's slide face and its fences' slopes.
+  'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
+  'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
+  'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Wash's creek: the bed is the low line the raised land stands over, between
   // two cut banks (turned 90 so the spine runs along the creek's own X).
   'set-dry-creek': [
