@@ -983,6 +983,25 @@ private:
     // plain it stands, as it was modelled on it, levelling no clearing: 0, or
     // for a mound the land's lift at its anchor. -1 for every other piece.
     std::vector<float> mSetOwnGround;
+    // THE BEACH'S DUNES. Sand rolls like the other biomes, but only on the
+    // LAND side of the road: inside the lap's loop (mInland, a raster of the
+    // centreline polygon), never on the beach between the road and the sea, so
+    // the sea shows from every stretch of road (a ring of dunes round the
+    // island read as a wall and hid it). Everything, the authored landforms
+    // included, sinks to exactly the plain short of the waterline (mShoreR),
+    // where the water sheet and the wet sand lie flat on it.
+    std::vector<uint8_t> mInland;
+    int mInlandCols = 0, mInlandRows = 0;
+    static constexpr float kInlandCell = 2.0f;
+    std::vector<float> mShoreR;   // the shoreline's radius, kShoreSpokes bearings round
+    static constexpr int kShoreSpokes = 360;
+    // The plain is kept kShoreKeep inside the waterline (past the wet sand's
+    // inner edge) and the land is back to full kShoreRamp further in.
+    static constexpr float kShoreKeep = 15.0f, kShoreRamp = 18.0f;
+    void setupBeachMask(const TrackBin& tb);
+    // The share of the land that stands at (x, z), and through `inland`
+    // whether that is inside the loop. 1 and 1 off the beach.
+    float beachMask(float x, float z, float& inland) const;
     // The lowest the land lies under a clearing's footprint (sampled at most
     // the grid's step apart), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
@@ -1078,6 +1097,15 @@ private:
     // The fitted shoreline radius at a bearing (buildWater); the sailboat
     // anchors off the same curve. Null when the theme carries no water.
     std::function<float(float)> mShoreFn;
+    // What the shoreline is drawn from: the track's samples and the phases its
+    // shore seed gives (shoreline()), so the sea and the dunes read one curve.
+    struct Shoreline {
+        std::vector<filament::math::float2> pts;
+        float shorePh[4], crinklePh[3], swashPh[3];
+        float at(float a) const;   // the radius at bearing a
+        static float harm(const float (*h)[2], int n, const float* ph, float a);
+    };
+    static Shoreline shoreline(const TrackBin& tb);
     std::vector<Mesh> mCars; // box markers — fallback when a car has no GLB
 
     // Real car models (gltfio). mCarAssets[i] is null when car i fell back to

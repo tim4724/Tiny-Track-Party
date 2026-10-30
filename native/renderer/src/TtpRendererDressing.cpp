@@ -1999,6 +1999,43 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     return asset;
 }
 
+// The fitted shoreline (theme.water): the convex support of the track's
+// samples at each bearing, pushed out by a margin and wobbled into lobes and a
+// crinkle by phases drawn from the track's shore seed. Built once per track;
+// buildWater draws the sea from it and setupTerrain keeps the dunes off it.
+TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
+    Shoreline s;
+    s.pts.reserve(tb.samples.size());
+    for (const auto& p : tb.samples) s.pts.push_back({ p.pos.x, p.pos.z });
+    uint32_t seed = tb.shoreSeed;
+    const auto rnd = [&]() {
+        seed = seed * 1664525u + 1013904223u;
+        return (float) ((double) seed / 4294967296.0);
+    };
+    for (float& p : s.shorePh) p = rnd() * 2.0f * (float) M_PI;
+    for (float& p : s.crinklePh) p = rnd() * 2.0f * (float) M_PI;
+    for (float& p : s.swashPh) p = rnd() * 2.0f * (float) M_PI;
+    return s;
+}
+
+float TtpRenderer::Shoreline::harm(const float (*h)[2], int n, const float* ph, float a) {
+    float sum = 0, w = 0;
+    for (int i = 0; i < n; i++) { sum += h[i][1] * std::sin(h[i][0] * a + ph[i]); w += h[i][1]; }
+    return sum / w;
+}
+
+float TtpRenderer::Shoreline::at(float a) const {
+    constexpr float SHORE_MARGIN = 26, SHORE_WOBBLE = 22, SHORE_CRINKLE = 2.6f;
+    static const float SHORE_H[4][2] = { { 2, 1 }, { 3, 0.72f }, { 5, 0.44f }, { 7, 0.26f } };
+    static const float CRINKLE_H[3][2] = { { 11, 1 }, { 17, 0.62f }, { 29, 0.34f } };
+    const float cx = std::cos(a), cz = std::sin(a);
+    float support = 0;
+    for (const float2& p : pts) support = std::max(support, p.x * cx + p.y * cz);
+    return support + SHORE_MARGIN
+            + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
+            + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+}
+
 // The sea ring (theme.water): a flat ring around the play field whose radial
 // vertex-colour bands sell the read — a bright foam line at the shore, then
 // turquoise shallows deepening to blue out past the fog — plus the wet-sand
@@ -2012,7 +2049,6 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     // 144 spokes = 2.5° steps: chord sag at the shore radius is ~0.03u and the
     // sharpest crinkle harmonic (29·a) still gets ~5 samples per cycle.
     constexpr int SEG = 144;
-    constexpr float SHORE_MARGIN = 26, SHORE_WOBBLE = 22, SHORE_CRINKLE = 2.6f;
     constexpr float SHORE_FADE = 220, SWASH_RANGE = 0.62f, SWASH_ZONE = 20;
     // [radius, colour param (0..2 = foam→shallow→deep), alpha]
     static const float BANDS[9][3] = {
@@ -2033,59 +2069,19 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
         { WATER_INNER - 2,    0.42f },
         { WATER_INNER + 2.5f, 0.5f },
     };
-    static const float SHORE_H[4][2] = { { 2, 1 }, { 3, 0.72f }, { 5, 0.44f }, { 7, 0.26f } };
-    static const float CRINKLE_H[3][2] = { { 11, 1 }, { 17, 0.62f }, { 29, 0.34f } };
     static const float SWASH_H[3][2] = { { 3, 1 }, { 7, 0.55f }, { 13, 0.3f } };
-
-    uint32_t seed = tb.shoreSeed;
-    const auto rnd = [&]() {
-        seed = seed * 1664525u + 1013904223u;
-        return (float) ((double) seed / 4294967296.0);
-    };
-    float shorePh[4], crinklePh[3], swashPh[3];
-    for (float& p : shorePh) p = rnd() * 2.0f * (float) M_PI;
-    for (float& p : crinklePh) p = rnd() * 2.0f * (float) M_PI;
-    for (float& p : swashPh) p = rnd() * 2.0f * (float) M_PI;
-    const auto harm = [](const float (*h)[2], int n, const float* ph, float a) {
-        float sum = 0, w = 0;
-        for (int i = 0; i < n; i++) { sum += h[i][1] * std::sin(h[i][0] * a + ph[i]); w += h[i][1]; }
-        return sum / w;
-    };
-    // Convex support of the track's samples at this bearing + the lobes/crinkle.
-    const auto shoreAt = [&](float a) {
-        const float cx = std::cos(a), cz = std::sin(a);
-        float support = 0;
-        for (const auto& s : tb.samples) {
-            support = std::max(support, s.pos.x * cx + s.pos.z * cz);
-        }
-        return support + SHORE_MARGIN
-                + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
-                + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
-    };
-    // The sailboat anchors off the same curve — but from buildLandmarks, AFTER
-    // this function's stack is gone, so the stored copy must OWN what it
-    // reads: the support points and the phase arrays are copied in, and
-    // `harm` is captureless. (shoreAt itself stays by-reference for the SEG
-    // loop below.)
-    std::vector<float2> shorePts;
-    shorePts.reserve(tb.samples.size());
-    for (const auto& s : tb.samples) shorePts.push_back({ s.pos.x, s.pos.z });
-    mShoreFn = [pts = std::move(shorePts), shorePh, crinklePh, harm](float a) {
-        const float cx = std::cos(a), cz = std::sin(a);
-        float support = 0;
-        for (const float2& p : pts) {
-            support = std::max(support, p.x * cx + p.y * cz);
-        }
-        return support + SHORE_MARGIN
-                + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
-                + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
-    };
+    // The sailboat anchors off the same curve, from buildLandmarks after this
+    // stack is gone, so the stored copy owns its Shoreline.
+    const Shoreline shore = shoreline(tb);
+    mShoreFn = [shore](float a) { return shore.at(a); };
+    const auto harm = Shoreline::harm;
+    const float* swashPh = shore.swashPh;
     std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {
         const float a = (float) (si % SEG) / SEG * 2.0f * (float) M_PI;
         cosA[si] = std::cos(a); sinA[si] = std::sin(a);
-        shoreR[si] = shoreAt(a);
+        shoreR[si] = shore.at(a);
         swashF[si] = 1 + SWASH_RANGE * harm(SWASH_H, 3, swashPh, a);
         outer = std::max(outer, shoreR[si]);
     }

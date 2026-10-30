@@ -643,7 +643,9 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v5: the ground rose to meet the road, so every ground map a v4 build
 // baked describes a surface that no longer exists. The generation retires
 // them too; the bump says so where the format is read.
-constexpr uint32_t kBakeVersion = 5u;
+// v6: the beach's sand rose into dunes inland, so its ground maps went stale
+// the same way.
+constexpr uint32_t kBakeVersion = 6u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
