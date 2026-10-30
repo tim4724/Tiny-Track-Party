@@ -98,6 +98,10 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
     // no road runs through a piece or over it (`npm run place:landmarks` moves one that does)
     expect(['road', 'deck'], `${p.label} clashes`).not.toContain(p.spot);
   }
+  // Every static part of every piece took the bake: nothing still is left
+  // drawing live-lit. The scene budget gates the same answer per track, but
+  // nothing runs it unasked.
+  expect(await page.evaluate(() => window.__scene.display.debugLiveDressing())).toEqual({});
 
   const cells = () => page.evaluate(() => window.__scene.cellBoxes().length);
   expect(await cells()).toBe(2);
