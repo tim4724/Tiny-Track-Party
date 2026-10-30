@@ -1353,36 +1353,34 @@ def avalanche_slide():
         x = -28.0 + 0.4 * abs(z)
         box((0.9, 1.0, 2.8), (x, H(x, z) + 0.2, z), 0x868ba1, yaw=0.15 * z)
     # the chute: the scar the slab left, scoured to grey rock, lying on the
-    # face and widening as it runs down to the fan
-    xs = [-27.0 + 3.3 * i for i in range(9)]
+    # face and widening as it runs down into the fan, whose blocks cover its end
+    xs = [-27.0 + 3.3 * i for i in range(8)]
     verts = []
     for i, x in enumerate(xs):
         w = 1.8 + 0.45 * i
         for z in (-w, 0.0, w):
             # lifted clear of the terrain's 9 u chords, which cut a little
-            # above the curve where the face is hollow
-            verts.append((x, H(x, z + 0.3 * math.sin(i)) + (0.26 if z == 0.0 else 0.22), z + 0.3 * math.sin(i)))
+            # above the curve where the face is hollow and the fan meets it
+            verts.append((x, H(x, z + 0.3 * math.sin(i)) + (0.34 if z == 0.0 else 0.3), z + 0.3 * math.sin(i)))
     faces = [(3 * i + j, 3 * i + j + 1, 3 * (i + 1) + j + 1, 3 * (i + 1) + j) for i in range(len(xs) - 1) for j in (0, 1)]
     poly(verts, faces, 0x9aa1b4)
     for i, x in enumerate((-20.0, -12.0, -4.0)):
         rock((x, H(x, 0.4) - 0.2, 0.4 * (i % 2 * 2 - 1)), 0.8, yaw=i * 1.9)
     # the debris fan (SET_GROUND's `fan`, the snow that came down lying on the
-    # mountain's foot): tumbled snow blocks over it, the runout thinning out
-    # toward the road (+X). The runout is sunk into the snow it slid in on:
-    # within a cell of the road the terrain is held under the deck, lower
-    # than the fan it was built on.
-    def sit(x, z):
-        return H(x, z) - (0.0 if x < -2.0 else 0.7 + 0.14 * (x + 2.0))
+    # mountain's foot over the chute's end): tumbled snow blocks over it, the
+    # runout thinning out on toward the road (+X). The fan itself stops a grid
+    # cell short of the road, where the deck's cap would hold the land under it
+    # and leave what was built on it floating.
     for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
                                    (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
                                    (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
                                    (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8)]):
         k *= 1.3
-        snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, sit(x, z) + 0.3 * k, z), 0xf3f7fb,
+        snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, H(x, z) + 0.3 * k, z), 0xf3f7fb,
                   yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
     for i, (x, z, k) in enumerate([(3.0, 0.8, 1.2), (5.0, -1.2, 1.0), (1.0, 2.2, 1.1), (6.2, 2.0, 0.8),
                                    (-4.5, -1.0, 1.1)]):
-        rock((x, sit(x, z) - 0.15, z), k, yaw=i * 1.4)
+        rock((x, H(x, z) - 0.15, z), k, yaw=i * 1.4)
     # the snapped pine: its stump on the slope, the trunk thrown down the fan
     cyl(0.32, 1.4, (-1.0, H(-1.0, -3.2) - 0.3, -3.2), 0x7a5a3a, r2=0.26, segs=6)
     cyl(0.28, 4.2, (5.6, H(5.6, -5.0) + 0.1, -5.0), 0x7a5a3a, r2=0.16, segs=6, axis='across', yaw=0.5)

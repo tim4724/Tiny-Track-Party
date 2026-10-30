@@ -543,8 +543,11 @@ stand on `groundY` with their feet buried.
   (debris) add their rise on top. The formula lives three times —
   `landforms`, `set_prototypes.py set_ground()` and `tracks.js setGroundY` —
   and the e2e spec catches the C++ and the GLB disagreeing. Within a grid
-  cell of a deck the cap holds the land lower than any of them, so a part
-  built there on a fan sits sunk, never on the formula's surface.
+  cell of a deck the cap holds the land lower than any of them, so a fan
+  stops a cell short of the road: a part built on it there floats, and one
+  sunk under the formula has its upper blocks read as feet by the spec. A
+  fan narrower than about two grid cells cannot be drawn either: the 9 u
+  chords cut through whatever lies on it (a chute's scar).
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
   glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the
