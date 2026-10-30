@@ -21934,8 +21934,8 @@ inline const Prim k_set_treehouse_m23[] = {
     { 24u, k_set_treehouse_m23_p0 }
 };
 inline const uint8_t k_set_treehouse_m24_p0[] = {
-    158,91,65,158,91,65,158,91,65,158,91,65,158,91,65,158,91,65,150,89,65,150,89,65,149,89,65,150,89,65,150,89,65,150,89,65,158,91,65,158,91,65,158,91,65,158,91,65,
-    158,91,65,158,91,65,150,89,65,149,89,65,150,89,65,150,89,65,150,89,65,150,89,65
+    158,91,65,158,91,65,158,91,65,158,91,65,158,91,65,158,91,65,150,89,65,150,89,65,150,89,65,150,89,65,150,89,65,150,89,65,158,91,65,158,91,65,158,91,65,158,91,65,
+    158,91,65,158,91,65,150,89,65,150,89,65,150,89,65,150,89,65,150,89,65,150,89,65
 };
 inline const Prim k_set_treehouse_m24[] = {
     { 24u, k_set_treehouse_m24_p0 }
@@ -25810,7 +25810,7 @@ inline const Model kModels[] = {
     { 6554997674895520980ull, 37u, k_set_toy_soldiers },  // set-toy-soldiers.glb
     { 4960368842505607904ull, 9u, k_set_trampoline },  // set-trampoline.glb
     { 14421346109911556778ull, 11u, k_set_treasure_dig },  // set-treasure-dig.glb
-    { 12823300431264526064ull, 49u, k_set_treehouse },  // set-treehouse.glb
+    { 6419289210282853642ull, 49u, k_set_treehouse },  // set-treehouse.glb
     { 8007815054795192503ull, 28u, k_set_warning_sign },  // set-warning-sign.glb
     { 5416820525182070199ull, 10u, k_set_washing_line_b },  // set-washing-line-b.glb
     { 4895571928147616574ull, 10u, k_set_washing_line_n },  // set-washing-line-n.glb
