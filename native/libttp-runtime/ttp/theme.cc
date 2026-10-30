@@ -354,6 +354,44 @@ void playroomTrack(Theme& t, const std::string& track) {
   }
 }
 
+// The backyard cup's four gardens, each one idea (its set pieces and land carry
+// it): Ribbon's washing day, Pretzel's treehouse, Tangle's hose, Cloverleaf's
+// playground. The gnome, kennel and picnic were the cup's postcard on every
+// track; each garden keeps only what belongs to its own story, and wears its
+// idea on the kerbs and the gantry.
+void backyardTrack(Theme& t, const std::string& track) {
+  if (track == "ribbon") {
+    // Washing day: a mown lawn under the lines, so the wildflowers thin out
+    // (they spread round the lap instead of crowding the start), and none of
+    // the postcard. Laundry-blue kerbs, the gantry white like the posts.
+    t.landmarks.clear();
+    t.scenery.clutterDensity = 0.12f;
+    t.props.models = { "prop-crate", "prop-hay" };
+    t.props.scatter = { { 0, 0.5f, 0.85f, 0.4f, false, true }, { 1, 0.5f, 0.9f, 0.25f } };
+    t.road.kerbA = 0x339cf2;
+    t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
+  } else if (track == "pretzel") {
+    // The kids' garden: the dog's kennel stays, a tent pitched for a night
+    // out, toys left on the lawn. Timber kerbs and gantry, the treehouse's.
+    t.landmarks = { LM_DOGHOUSE };
+    t.props.models = { "tent-open", "skateboard", "prop-crate" };
+    t.props.scatter = { { 0, 0.3f, 2.0f, 0.5f }, { 1, 0.4f, 1.6f, 0.4f, false, true },
+                        { 2, 0.3f, 0.9f, 0.25f } };
+    t.road.kerbA = 0xb08a5a;
+    t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
+  } else if (track == "tangle") {
+    // The hose's lawn: the gnome it waters stays. Hose-green kerbs and gantry.
+    t.landmarks = { LM_GNOME };
+    t.road.kerbA = 0x2bb673;
+    t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
+  } else if (track == "cloverleaf") {
+    // Playground hill: a picnic by the playground; the gantry in the
+    // climbing frame's blue.
+    t.landmarks = { LM_PICNIC };
+    t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
+  }
+}
+
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
 // the signature: fogTune pulls the chase-cam fog in and low dust banks drift
 // across the mesas.
@@ -732,6 +770,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     else if (track == "riptide") surfPatrol(t);
   }
   if (b && std::strcmp(b->name, "playroom") == 0) playroomTrack(t, track);
+  if (b && std::strcmp(b->name, "grass") == 0) backyardTrack(t, track);
 
   // Each canyon track's own carriers (canyonTrack): its story's props and
   // structures, and the spinning windmill left to the one ranch.

@@ -1867,62 +1867,141 @@ def strut(a, b, t, color):
     return box((t, t, math.sqrt(dx * dx + dy * dy + dz * dz)), mid, color,
                yaw=math.atan2(dx, dz), pitch=math.atan2(dy, math.hypot(dx, dz)))
 
-def water_jet(at, a, reach, rise, n=5):
-    """A jet of water from the nozzle `at` out along heading `a` (from +X toward
-    +Z) to the ground `reach` away, arcing `rise` over a straight drop: n
-    drops, each stretched along its flight so the arc reads as water."""
-    x0, y0, z0 = at
-    def p(t):
-        return (x0 + math.cos(a) * reach * t, y0 * (1 - t) + 4 * rise * t * (1 - t), z0 + math.sin(a) * reach * t)
-    for k in range(n):
-        strut(p((k + 0.15) / n), p((k + 0.75) / n), 0.12, 0xd0e8ff)
+# Ribbon is washing day at the scale of the garden, not of the cars: four
+# lines, each a hundred units of rope between two T-posts twelve high on the
+# terraces either side, strung right across the circuit, so a racer passes
+# under the washing eight times a lap. Each line is its own piece, built along
+# its +Z from post to post and placed by tracks.js along the line it was
+# measured on. `bare` are the stretches (fractions of the line) that pass over
+# Ribbon's road, with the margin a piece keeps from a deck: only rope there,
+# and the rope stays well over deck + 4 (the lowest crossing is under 3.4).
+# The posts stand on the plain, sunk through whatever land is under them, and
+# each one's concrete pad DRAPES over that land (TtpRenderer::mSetDrapes), so
+# the line levels no ground.
+WASH_H, WASH_SAG = 12.5, 3.0
+WASH_KINDS = [('shirt', 0xff5040), ('sheet', 0xf8f8fb), ('trousers', 0x339cf2), ('towel', 0x22c46e),
+              ('shirt', 0xffc044), ('socks', 0xf8f8fb), ('towel', 0xa259e6), ('trousers', 0x555b66),
+              ('shirt', 0x339cf2), ('sheet', 0xffc044), ('towel', 0xff5040), ('shirt', 0x22c46e)]
 
-@piece(1.4)
-def washing_line():
-    # Ribbon: three posts and a long sagging line of washing (shirts,
-    # trousers, towels, socks), the laundry basket at the first post.
-    L = 16.0
-    for z in (-L / 2, 0, L / 2):
-        cyl(0.11, 3.4, (0, 0, z), 0x9a7b55, segs=8, smooth=False)
-        box((0.9, 0.1, 0.1), (0, 3.3, z), 0x9a7b55)
-    for z0 in (-L / 2, 0):
-        tube(sag((0, 3.32, z0), (0, 3.32, z0 + L / 2), 0.5, n=7), 0.025, 0xf8f8fb, res=2)
-    K = 1.3                                                # the washing's own scale
-    def hang(kind, c, z):
-        t = ((z + L / 2) % (L / 2)) / (L / 2)
-        y = 3.32 - 0.5 * 4 * t * (1 - t) + 0.03          # the line's height here
-        def cloth(h, w, dy, dz, col=c, t=0.07):          # a piece hung dy below the line
-            box((t, h * K, w * K), (0, y - dy * K, z + dz * K), col)
-        if kind == 'shirt':          # a T: the body, short sleeves out at the shoulders
-            cloth(1.1, 0.9, 0.55, 0)
-            for s in (-1, 1):
-                cloth(0.36, 0.42, 0.2, s * 0.62)
-        elif kind == 'trousers':     # the waistband and two legs
-            cloth(0.24, 0.9, 0.12, 0)
-            for s in (-1, 1):
-                cloth(1.25, 0.38, 0.86, s * 0.24)
-        elif kind == 'towel':        # a stripe across the foot
-            cloth(1.3, 1.1, 0.65, 0)
-            cloth(0.2, 1.1, 1.05, 0, 0xf8f8fb, 0.09)
-        else:                        # a pair of socks, toes pointing the same way
-            for s in (-1, 1):
-                cloth(0.6, 0.24, 0.3, s * 0.25)
-                cloth(0.22, 0.42, 0.5, s * 0.25 + 0.12)
-    wash = [('shirt', 0xff5040), ('trousers', 0x339cf2), ('towel', 0x22c46e), ('socks', 0xf8f8fb),
-            ('shirt', 0xa259e6), ('towel', 0xffc044), ('trousers', 0x555b66), ('shirt', 0xf8f8fb)]
-    for i, (kind, c) in enumerate(wash):
-        hang(kind, c, (-L / 2 if i < 4 else 0) + L / 2 * (0.14 + 0.24 * (i % 4)))
-    # the laundry basket at the first post's foot, a sheet heaped in it
-    box((1.2, 0.6, 0.85), (1.2, 0.3, -L / 2 + 1.3), 0x339cf2)
-    box((1.0, 0.3, 0.65), (1.2, 0.65, -L / 2 + 1.3), 0xf8f8fb)
-    box((0.5, 0.6, 0.3), (0.3, 3.0, 0.4), 0xff5040)                      # the peg bag
+def washing_span(L, bare, seed):
+    def line_y(z):
+        t = (z + L / 2) / L
+        return WASH_H - WASH_SAG * 4 * t * (1 - t)
+    # Each post, each stretch of washing and the pads are ONE part apiece
+    # (group): the bake tiles a piece by part, and a part per garment made a
+    # line forty draws.
+    pads = []
+    for s in (-1, 1):
+        z = s * L / 2
+        group([box((0.55, WASH_H + 2.6, 0.55), (0, (WASH_H - 2.6) / 2, z), 0x9aa1b4),   # sunk 2.6
+               box((3.2, 0.4, 0.4), (0, WASH_H + 0.2, z), 0x9aa1b4),                  # the T
+               strut((0, WASH_H - 1.6, z), (1.2, WASH_H + 0.05, z), 0.3, 0x9aa1b4),
+               strut((0, WASH_H - 1.6, z), (-1.2, WASH_H + 0.05, z), 0.3, 0x9aa1b4)],
+              'post_%d' % (s + 1))
+        pads.append(box((2.0, 0.16, 2.0), (0, 0.08, z), 0xc6cbd6))
+    group(pads, 'drape_pads')
+    n = int(L / 4) + 1
+    tube([(0, line_y(-L / 2 + L * i / (n - 1)) + 0.15, -L / 2 + L * i / (n - 1)) for i in range(n)],
+         0.17, 0xf8f8fb, res=2)
+    # the washing: along every stretch that is not over road, from 2.5 off
+    # each post, each piece pegged a little into the rope so it hangs from it
+    K = 2.6
+    free, z0 = [], -L / 2 + 2.5
+    for a, b in bare:
+        free.append((z0, -L / 2 + a * L))
+        z0 = -L / 2 + b * L
+    free.append((z0, L / 2 - 2.5))
+    widths = {'shirt': 2.1, 'trousers': 1.0, 'towel': 1.2, 'socks': 0.9, 'sheet': 1.8}
+    k, moving = seed * 5, 0
+    for j, (a, b) in enumerate(free):
+        z, hung = a, []
+        while True:
+            kind, col = WASH_KINDS[k % len(WASH_KINDS)]
+            w = widths[kind] * K
+            if z + w > b:
+                break
+            mid = z + w / 2
+            y = line_y(mid) + 0.2
+            def cloth(h, cw, dy, dz, c=col, t=0.14):
+                hung.append(box((t, h * K, cw * K), (0, y - dy * K, mid + dz * K), c))
+            def garment():
+                if kind == 'shirt':          # a T: the body, short sleeves out at the shoulders
+                    cloth(1.1, 0.9, 0.58, 0)
+                    for s in (-1, 1):
+                        cloth(0.36, 0.42, 0.2, s * 0.62)
+                elif kind == 'trousers':     # the waistband and two legs
+                    cloth(0.24, 0.9, 0.12, 0)
+                    for s in (-1, 1):
+                        cloth(1.25, 0.38, 0.86, s * 0.24)
+                elif kind == 'towel':        # a stripe across the foot
+                    cloth(1.3, 1.1, 0.65, 0)
+                    cloth(0.2, 1.1, 1.05, 0, 0xf8f8fb, 0.2)
+                elif kind == 'sheet':        # folded over the line, a hem at its foot
+                    cloth(1.5, 1.7, 0.75, 0)
+                    cloth(0.16, 1.7, 1.42, 0, 0xa0a8c9 if col == 0xf8f8fb else 0xf8f8fb, 0.2)
+                else:                        # a pair of socks, toes pointing the same way
+                    for s in (-1, 1):
+                        cloth(0.6, 0.24, 0.3, s * 0.25)
+                        cloth(0.22, 0.42, 0.5, s * 0.25 + 0.12)
+            # every fourth piece flaps in the wind (about the line's own axis)
+            if k % 4 == 0 and moving < 3:
+                n0 = len(hung)
+                with animated('anim_sway:a=z:d=%d:p=%.1f#%d' % (16 + k % 7, 2.2 + (k % 5) * 0.3, moving),
+                              (0, y, mid)):
+                    garment()
+                del hung[n0:]
+                moving += 1
+            else:
+                garment()
+            z += w + 1.0
+            k += 1
+        if hung:
+            group(hung, 'wash_%d' % j)
+
+@piece(1.0)
+def laundry_basket():
+    # Ribbon's companion: the basket the washing came out in, at the lines'
+    # scale, on the terrace at a post's foot: wicker bands, two handles, the
+    # rest of the wash heaped in it and a sheet trailing over the rim, the
+    # peg bag on top.
+    W, H, D = 5.2, 2.4, 3.6
+    for k, y in enumerate((0.3, 0.9, 1.5, 2.1)):
+        c = 0xb08a5a if k % 2 == 0 else 0x9a7b55
+        for s in (-1, 1):
+            box((W, 0.6, 0.3), (0, y, s * (D / 2 - 0.15)), c)
+            box((0.3, 0.6, D - 0.6), (s * (W / 2 - 0.15), y, 0), c)
+    box((W - 0.4, H - 0.2, D - 0.4), (0, (H - 0.2) / 2, 0), 0xa0a8c9)          # the wash inside
+    for s in (-1, 1):
+        box((0.3, 0.7, 1.2), (s * (W / 2 + 0.05), H + 0.25, 0), 0x7a5a3a)
+    for x, z, w, h, d, c in ((-1.2, -0.5, 2.0, 0.9, 1.6, 0xff5040), (0.9, 0.4, 2.2, 1.0, 1.8, 0x339cf2),
+                             (-0.2, 0.6, 1.6, 0.8, 1.4, 0xf8f8fb), (1.3, -0.7, 1.4, 0.7, 1.2, 0xffc044),
+                             (-1.6, 0.7, 1.2, 0.6, 1.0, 0x22c46e)):
+        box((w, h, d), (x, H - 0.3 + h / 2, z), c, yaw=0.2 * x)
+    box((2.4, 0.2, 0.3), (0.4, H + 0.15, D / 2 + 0.1), 0xf8f8fb)             # the sheet over the rim
+    box((2.4, 1.6, 0.2), (0.4, H - 0.6, D / 2 + 0.2), 0xf8f8fb)
+    box((1.0, 1.0, 0.8), (-0.6, H + 0.9, -0.3), 0xa259e6)                      # the peg bag
+    for k in range(3):
+        box((0.22, 0.9, 0.3), (1.6 - k * 0.5, H + 0.45, -D / 2 + 0.15), (0xff5040, 0x22c46e, 0xffc044)[k])
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'basket')   # one part, one draw
+
+for _name, _L, _bare, _seed in (
+        ('washing-line', 108.2, ((0.13, 0.237), (0.677, 0.802)), 0),
+        ('washing-line-n', 104.9, ((0.445, 0.557), (0.675, 0.787)), 1),
+        ('washing-line-b', 108.5, ((0.19, 0.318), (0.598, 0.728)), 2),
+        ('washing-line-s', 108.5, ((0.403, 0.52), (0.745, 0.855)), 3)):
+    PIECES[_name] = (lambda L, bare, seed: lambda: washing_span(L, bare, seed))(_L, _bare, _seed)
+    GROW[_name] = 1.0
 
 @piece(1.35)
 def treehouse():
     # Pretzel: the oak grown big with a platform round its trunk, a red hut on
     # the platform's road side (+X) clear of the trunk, a ladder, a tyre swing,
-    # a rope ladder, a flag and a bird box.
-    cyl(1.0, 5.0, (0, 0, 0), 0x7a5a3a, r2=0.7, segs=10)
+    # a rope ladder, a flag and a bird box. It grew on its knoll (SET_GROUND):
+    # built from its summit, then lifted onto it, the trunk sunk into it and
+    # the ladder's foot on its slope.
+    H = set_ground('treehouse')
+    s0 = H(0.0, 0.0)
+    cyl(1.0, 6.0, (0, -1.0, 0), 0x7a5a3a, r2=0.7, segs=10)
     for a, r, h in ((1.6, 0.3, 2.6), (3.2, 0.28, 2.2), (4.7, 0.25, 2.4)):     # boughs away from the hut
         o = cyl(r, h, (0, 4.2, 0), 0x7a5a3a, r2=0.1, segs=7, smooth=False)
         tilted(o, math.cos(a) * 0.8, math.sin(a) * 0.8)
@@ -1948,53 +2027,82 @@ def treehouse():
         box((2.3, 0.14, 1.4), (HX, 6.4 + 0.4, s * 0.55), 0xb08a5a, pitch=-s * 0.6)
     # the ladder: its foot out on the lawn (+Z), its head on the platform's edge
     for s in (-1, 1):
-        strut((0.9 + s * 0.32, 0.0, 3.5), (0.9 + s * 0.32, 4.5, 2.3), 0.12, 0xb08a5a)
+        x = 0.9 + s * 0.32
+        strut((x, H(x, 3.6) - s0 - 0.1, 3.6), (x, 4.5, 2.3), 0.12, 0xb08a5a)
     for i in range(7):
         t = (i + 0.7) / 7.7
         box((0.7, 0.08, 0.1), (0.9, 4.5 * t, 3.5 - 1.2 * t), 0xb08a5a)
     # a tyre swing from its own bough, clear of the platform; the rope ladder
     # off the far side, a flag on the back corner, a bird box
     strut((0.0, 7.4, -0.2), (-4.0, 7.8, -2.8), 0.36, 0x7a5a3a)
-    tube([(-3.6, 7.6, -2.55), (-3.6, 1.6, -2.55)], 0.03, 0x9a7b55, res=2, bevel_res=0)
-    torus(0.55, 0.18, (-3.6, 1.1, -2.55), 0x2a2735, axis='across')
+    with animated('anim_sway:a=x:d=24:p=2.8', (-3.6, 7.6, -2.55)):      # the tyre swings
+        tube([(-3.6, 7.6, -2.55), (-3.6, 1.6, -2.55)], 0.03, 0x9a7b55, res=2, bevel_res=0)
+        torus(0.55, 0.18, (-3.6, 1.1, -2.55), 0x2a2735, axis='across')
     for i in range(6):
         box((0.5, 0.05, 0.1), (-1.0, 0.6 + i * 0.7, 2.6), 0xb08a5a)
     for s in (-0.25, 0.25):
         tube([(-1.0 + s, 4.5, 2.4), (-1.0 + s, 0.4, 2.7)], 0.025, 0x9a7b55, res=2, bevel_res=0)
-    flagpole((-2.65, 4.5, -2.15), 2.8, 0x22c46e, pole=0xb08a5a)
+    flagpole((-2.65, 4.5, -2.15), 2.8, 0x22c46e, pole=0xb08a5a, wave='anim_sway:a=z:d=20:p=1.5')
     box((0.5, 0.6, 0.5), (0.9, 3.2, 0.2), 0xb08a5a)
     box((0.5, 0.1, 0.6), (0.9, 3.55, 0.2), 0xd94f3d)
     disc(0.08, (1.16, 3.3, 0.2), 0x2a2735, segs=8, h=0.02)
+    for o in bpy.context.scene.objects:          # onto the summit
+        o.location.z += s0
+    ANIMS[:] = [(n, (x, y + s0, z), yaw) for n, (x, y, z), yaw in ANIMS]
 
-@piece(2.0)
+# Tangle: one hose at the scale of the garden, from the tap on the east lawn,
+# under the bridge of the S-bend, round the middle lawn, under the first
+# bridge and over the north lawn to the sprinkler on the west (its own piece,
+# the hero). PATH is the hose's line in this piece's frame (tracks.js places
+# it at heading 0, so these are the world's axes), measured clear of Tangle's
+# road except where a deck passes high over it. Yellow, so it reads on the
+# lawn. Every part DRAPES (TtpRenderer::mSetDrapes): the renderer lays it on
+# the lawn as drawn, over the humps it crosses, and the piece levels no ground.
+HOSE_PATH = [(26.0, -33.0), (21.0, -32.0), (16.0, -30.0), (11.0, -27.0), (6.0, -25.5), (2.0, -24.0),
+             (-2.0, -21.0), (-4.0, -16.0), (-3.0, -9.0), (-7.0, -6.0), (-12.0, -10.0), (-18.0, -7.0),
+             (-20.0, 0.0), (-15.0, 3.0), (-9.0, 6.0), (-8.0, 12.0), (-9.0, 18.0), (-13.0, 23.0),
+             (-20.0, 27.0), (-25.0, 33.0), (-31.0, 30.0), (-36.0, 35.0), (-42.0, 31.0), (-44.0, 24.0),
+             (-49.0, 20.0), (-49.5, 14.0), (-51.4, 9.6)]
+HOSE_R = 0.6
+
+@piece(1.0)
 def garden_hose():
-    # Tangle: a tap, the hose snaking across the lawn to a sprinkler that is
-    # watering it, a hose reel and a watering can. Grown big rather than
-    # dressed: four-sided tubes, Tangle's vista sits at the 4P ceiling.
-    box((0.35, 1.1, 0.35), (-1.0, 0.55, -5.5), 0x9aa1b4)
-    cyl(0.07, 0.6, (-1.0, 1.0, -5.5), 0x9aa1b4, segs=8, axis='across', smooth=False)
-    cyl(0.18, 0.06, (-1.0, 1.15, -5.5), 0xff5040, segs=8)
-    path = [(-0.6, 0.9, -5.5), (0.3, 0.12, -4.6), (1.6, 0.12, -3.2), (0.4, 0.12, -2.0), (-0.9, 0.12, -1.2),
-            (0.2, 0.12, 0.2), (1.7, 0.12, 0.8), (1.2, 0.12, 2.0), (-0.4, 0.12, 1.6), (-1.0, 0.12, 2.8),
-            (0.6, 0.12, 3.6), (1.9, 0.12, 4.6), (1.0, 0.12, 5.6), (-0.2, 0.3, 6.0)]
-    tube(path, 0.12, 0x2bb673, res=3, bevel_res=0, smooth=True)
-    coil = [(1.8 + math.cos(a) * 0.9, 0.12 + 0.06 * (a / (2 * math.pi)), -3.2 + math.sin(a) * 0.9) for a in [k * 0.6 for k in range(14)]]
-    tube(coil, 0.12, 0x2bb673, res=2, bevel_res=0, smooth=True)
-    disc(2.0, (-0.2, 0.0, 6.2), 0x2bb673, segs=10, h=0.03)              # the wet patch
-    cyl(0.3, 0.25, (-0.2, 0.0, 6.2), 0x9aa1b4, segs=10, smooth=False)
-    cyl(0.08, 0.5, (-0.2, 0.25, 6.2), 0x9aa1b4, segs=6, smooth=False)
-    sphere(0.22, (-0.2, 0.8, 6.2), 0x9aa1b4, subdiv=1)
-    for k in range(3):
-        water_jet((-0.2, 0.85, 6.2), 0.4 + k * 2 * math.pi / 3, 1.9, 0.9)
-    # the reel the rest of the hose never left
+    Y = 0xffc044
+    # the tap: a standpipe on a slab, a red wheel handle, the hose's coupling
+    # pointing west along the hose
+    tx, tz = 30.0, -35.0
+    parts = [box((2.4, 0.3, 2.4), (tx, 0.15, tz), 0x9aa1b4),
+             box((0.8, 4.0, 0.8), (tx, 2.0, tz), 0x9aa1b4),
+             cyl(0.4, 1.3, (tx, 3.2, tz), 0x9aa1b4, segs=8, axis='across', yaw=math.pi),
+             cyl(0.8, 0.25, (tx, 4.3, tz), 0xff5040, segs=10),
+             box((0.3, 0.6, 0.3), (tx, 4.0, tz), 0x9aa1b4),
+             cyl(0.65, 0.7, (tx - 1.3, 3.2, tz), 0x22c46e, segs=8, axis='across', yaw=math.pi)]
+    # the hose: out of the coupling, down to the lawn, then the PATH
+    pts = [(tx - 2.0, 3.2, tz), (tx - 3.0, 1.4, tz + 0.6)]
+    pts += [(x, HOSE_R, z) for x, z in HOSE_PATH]
+    parts.append(tube(pts, HOSE_R, Y, res=3, smooth=True))
+    # its far end: the coupling it screws onto the sprinkler with
+    ex, ez = HOSE_PATH[-1]
+    parts.append(box((1.3, 1.3, 1.3), (ex, HOSE_R, ez), 0x22c46e))
+    # the reel cart by the tap, a few turns of the hose still on its drum
+    rx, rz = 30.0, -28.0
     for s in (-1, 1):
-        cyl(0.7, 0.08, (-2.2, 0.75, -5.0 + s * 0.35), 0x22c46e, segs=10, axis='along', smooth=False)
-    cyl(0.5, 0.62, (-2.2, 0.75, -5.31), 0x2bb673, segs=10, axis='along', smooth=False)
-    for s in (-1, 1):
-        box((0.08, 0.8, 0.08), (-2.2 + s * 0.3, 0.4, -5.0), 0x9aa1b4)
-    # a watering can (no pots: every vertex here shows in Tangle's 4P vista)
-    cyl(0.4, 0.8, (2.8, 0, -1.0), 0x339cf2, segs=8)
-    cyl(0.07, 0.9, (3.1, 0.5, -1.0), 0x339cf2, segs=4, axis='across', smooth=False)
+        parts.append(cyl(1.6, 0.3, (rx + s * 1.2, 1.9, rz), 0x22c46e, segs=12, axis='across'))
+        parts.append(box((0.3, 2.0, 0.3), (rx + s * 1.4, 1.0, rz + 0.9), 0x9aa1b4))
+        parts.append(box((0.3, 2.0, 0.3), (rx + s * 1.4, 1.0, rz - 0.9), 0x9aa1b4))
+    parts.append(cyl(1.1, 2.4, (rx - 1.2, 1.9, rz), Y, segs=12, axis='across'))
+    parts.append(box((3.1, 0.3, 0.3), (rx, 2.05, rz - 0.9), 0x9aa1b4))
+    group(parts, 'drape_hose')
+
+def water_stream(at, a, reach, rise, n=7, t=0.3):
+    """A jet as one unbroken stream from the nozzle `at` out along heading `a`
+    (from +X toward +Z), `reach` away where it meets the ground, arcing `rise`
+    over a straight drop: n links, each overlapping the next."""
+    x0, y0, z0 = at
+    def p(t):
+        return (x0 + math.cos(a) * reach * t, y0 * (1 - t) + 4 * rise * t * (1 - t), z0 + math.sin(a) * reach * t)
+    for k in range(n):
+        strut(p(max(0.0, k / n - 0.02)), p(min(1.0, (k + 1) / n + 0.02)), t, 0xd0e8ff)
 
 @piece(1.5)
 def playground():
@@ -2024,11 +2132,22 @@ def playground():
     box((1.0, 0.1, chute_len), (X + 0.7, 2.6 - 1.2, -0.6 - chute_len / 2 * math.cos(0.6)), 0xff5040, pitch=0.6)
     for s in (-1, 1):
         box((0.06, 0.3, chute_len), (X + 0.7 + s * 0.5, 2.6 - 1.05, -0.6 - chute_len / 2 * math.cos(0.6)), 0xff5040, pitch=0.6)
-    # seesaw
+    # the seesaw rocks on its fulcrum
     box((0.3, 0.6, 0.6), (-4.0, 0.3, 0), 0x339cf2)
-    box((0.4, 0.1, 4.4), (-4.0, 0.7, 0), 0x22c46e, pitch=0.18)
-    box((0.5, 0.12, 0.5), (-4.0, 1.1, 2.0), 0xff5040)
-    box((0.5, 0.12, 0.5), (-4.0, 0.3, -2.0), 0xff5040)
+    with animated('anim_sway:a=x:d=11:p=2.4', (-4.0, 0.7, 0)):
+        box((0.4, 0.1, 4.4), (-4.0, 0.7, 0), 0x22c46e)
+        for s2 in (-1, 1):
+            box((0.5, 0.12, 0.5), (-4.0, 0.81, s2 * 2.0), 0xff5040)
+            box((0.1, 0.4, 0.1), (-4.0, 0.95, s2 * 1.7), 0x9aa1b4)
+    # the roundabout turns
+    box((0.5, 0.3, 0.5), (-1.0, 0.15, -4.6), 0x9aa1b4)
+    with animated('anim_spin:w=0.9', (-1.0, 0.3, -4.6)):
+        cyl(1.5, 0.15, (-1.0, 0.3, -4.6), 0xffc044, segs=12)
+        cyl(0.12, 1.0, (-1.0, 0.45, -4.6), 0x9aa1b4, segs=6)
+        for k in range(4):
+            a = k * math.pi / 2
+            strut((-1.0, 1.4, -4.6), (-1.0 + math.cos(a) * 1.3, 0.95, -4.6 + math.sin(a) * 1.3), 0.1, 0xff5040)
+            box((0.1, 0.5, 0.1), (-1.0 + math.cos(a) * 1.3, 0.7, -4.6 + math.sin(a) * 1.3), 0xff5040)
     # sandpit with a bucket and spade
     for s in (-1, 1):
         box((3.2, 0.3, 0.2), (-1.0, 0.15, 4.5 + s * 1.5), 0xb08a5a)
@@ -2038,37 +2157,16 @@ def playground():
     box((0.06, 0.6, 0.18), (-1.6, 0.5, 4.9), 0x339cf2, roll=0.6)
 
 @piece(1.5)
-def garden_shed():
-    # Ribbon's support: a shed with a window and its window box, tools leant
-    # by the door, a water butt at the side, a timber compost bin behind.
-    hut(3.6, 2.6, 3.0, (0, 0, 0), 0x6cae55, 0x7a5a3a)
-    box((0.06, 0.7, 0.7), (1.82, 1.6, 1.0), 0x8ecae6)
-    box((0.06, 0.08, 0.8), (1.84, 1.6, 1.0), 0xfff6eb)
-    box((0.06, 0.8, 0.08), (1.84, 1.6, 1.0), 0xfff6eb)
-    box((0.3, 0.22, 0.9), (1.95, 1.15, 1.0), 0x9a7b55)
-    for k, c in enumerate((0xff5040, 0xffc044, 0xa878e8)):
-        box((0.22, 0.2, 0.22), (1.95, 1.35, 0.7 + k * 0.3), c)
-    cyl(0.6, 1.3, (-1.0, 0, 2.2), 0x22c46e, segs=10)
-    cyl(0.55, 0.08, (-1.0, 1.3, 2.2), 0x555b66, segs=10)
-    for k, c in enumerate((0x9aa1b4, 0x9a7b55, 0xff5040)):
-        box((0.06, 1.6, 0.08), (1.95, 0.8, -1.3 + k * 0.3), c, roll=0.15)
-        box((0.06, 0.2, 0.3), (1.95, 1.65, -1.3 + k * 0.3), c)
-    box((0.16, 1.0, 1.8), (-3.6, 0.5, -0.8), 0x9a7b55)
-    for s in (-1, 1):
-        box((1.4, 1.0, 0.16), (-2.95, 0.5, -0.8 + s * 0.82), 0x9a7b55)
-    box((1.25, 0.8, 1.5), (-2.95, 0.4, -0.8), 0x5a3a2a)
-    box((0.8, 0.25, 0.9), (-2.85, 0.9, -0.75), 0x61cb8b, yaw=0.3)
-
-@piece(1.5)
 def paddling_pool():
     # Pretzel's support: a blue inflatable pool, a floating ring, a duck, a
     # towel and a slide into it.
     torus(2.4, 0.5, (0, 0.5, 0), 0x339cf2, segs=20, minor=8)
     disc(2.2, (0, 0.45, 0), 0x62d3c8, segs=24, h=0.1)
     torus(0.6, 0.18, (-0.6, 0.6, 0.4), 0xff5040, segs=14)
-    sphere(0.3, (0.9, 0.7, -0.6), 0xf2c14e, subdiv=1, scale=(1, 0.8, 1.3))
-    sphere(0.2, (0.9, 1.0, -0.9), 0xf2c14e, subdiv=1)
-    box((0.14, 0.06, 0.2), (0.9, 1.0, -1.1), 0xff5040)
+    with animated('anim_bob:h=0.18:p=2.6', (0.9, 0.5, -0.6)):              # the duck rides the ripples
+        sphere(0.3, (0.9, 0.7, -0.6), 0xf2c14e, subdiv=1, scale=(1, 0.8, 1.3))
+        sphere(0.2, (0.9, 1.0, -0.9), 0xf2c14e, subdiv=1)
+        box((0.14, 0.06, 0.2), (0.9, 1.0, -1.1), 0xff5040)
     box((1.8, 0.05, 1.0), (3.4, 0.03, 1.6), 0x22c46e, yaw=0.2)
     # the slide: a ladder up to a little deck, a walled chute down over the rim
     box((1.0, 0.1, 2.6), (-1.6, 1.6, -2.8), 0xff5040, pitch=-0.5)
@@ -2124,48 +2222,6 @@ def barbecue():
     box((0.9, 0.6, 0.6), (0.4, 0.3, -1.8), 0x339cf2)
     box((0.95, 0.1, 0.65), (0.4, 0.65, -1.8), 0xfff6eb)
 
-# ---- backyard companions ----
-
-@piece(1.45)
-def flower_bed():
-    # Ribbon and Cloverleaf: a raised timber bed planted in three rows, each a
-    # leafy ridge dotted with blooms, a little shrub at each end.
-    for s2 in (-1, 1):
-        box((1.6, 0.45, 0.16), (0, 0.22, s2 * 1.8), 0x9a7b55)
-        box((0.16, 0.45, 3.6), (s2 * 0.8, 0.22, 0), 0x9a7b55)
-    box((1.45, 0.36, 3.45), (0, 0.2, 0), 0x5a3a2a)
-    bloom = [0xff5040, 0xffc044, 0xa878e8, 0xfff6eb]
-    for r, x in enumerate((-0.45, 0.0, 0.45)):
-        box((0.34, 0.3, 3.2), (x, 0.5, 0), 0x2bb673)
-        zs = (-0.8, 0.0, 0.8) if r == 1 else (-1.2, -0.4, 0.4, 1.2)
-        for k, z in enumerate(zs):
-            box((0.28, 0.22, 0.28), (x, 0.74, z), bloom[(k + r) % 4])
-    for z in (-2.35, 2.35):
-        cyl(0.55, 0.55, (0, 0, z), 0x61cb8b, r2=0.45, segs=6)
-        cyl(0.45, 0.4, (0, 0.55, z), 0x61cb8b, r2=0.12, segs=6)
-
-@piece(1.45)
-def wheelbarrow():
-    # Ribbon: a green barrow heaped with soil, its handles running under the
-    # tub to the wheel's axle, two legs at the back; a watering can beside it.
-    WZ, WR = 1.05, 0.36                                   # the wheel: centre along, radius
-    slope = -math.atan2(0.75 - WR, 1.75 + WZ)             # the handles' fall to the axle
-    rail = lambda z: 0.75 + (z + 1.75) * math.tan(slope)  # their height along the barrow
-    box((1.0, 0.5, 1.4), (0, rail(-0.05) + 0.32, -0.05), 0x22c46e, pitch=slope)
-    box((0.85, 0.2, 1.2), (0, rail(-0.05) + 0.62, -0.05), 0x7a5a3a, pitch=slope)
-    box((0.5, 0.16, 0.6), (0, rail(-0.1) + 0.76, -0.1), 0x7a5a3a, yaw=0.4)
-    cyl(WR, 0.22, (-0.11, WR, WZ), 0x2a2735, segs=10, axis='across')
-    for s2 in (-1, 1):
-        strut((s2 * 0.42, 0.75, -1.75), (s2 * 0.12, WR, WZ), 0.12, 0x9a7b55)
-        strut((s2 * 0.29, 0.0, -0.45), (s2 * 0.29, rail(-0.45), -0.45), 0.12, 0x9a7b55)
-    # the can: its spout from the foot up and out, a handle over the top
-    cyl(0.32, 0.65, (1.2, 0, -0.6), 0x339cf2, segs=8)
-    strut((1.2, 0.2, -0.35), (1.2, 0.8, 0.2), 0.12, 0x339cf2)
-    box((0.22, 0.22, 0.12), (1.2, 0.84, 0.24), 0x339cf2)
-    box((0.1, 0.1, 0.5), (1.2, 0.95, -0.6), 0x339cf2)
-    for z in (-0.82, -0.38):
-        box((0.1, 0.32, 0.1), (1.2, 0.8, z), 0x339cf2)
-
 def goal(z, face):
     """A little goal on the line at `z`, its mouth toward +Z (face 1) or -Z
     (face -1). The net is open cord, never a sheet (a sheet reads as a glass
@@ -2211,19 +2267,36 @@ def trampoline():
     for k in range(6):
         a = k / 6 * 2 * math.pi
         box((0.16, 1.0, 0.16), (math.cos(a) * 1.9, 0.5, math.sin(a) * 1.9), 0x555b66)
-    sphere(0.4, (0.5, 1.4, -0.4), 0xff5040, subdiv=1)
+    with animated('anim_bob:h=1.6:p=1.1', (0.5, 1.0, -0.4)):                # a ball left bouncing
+        sphere(0.4, (0.5, 1.4, -0.4), 0xff5040, subdiv=1)
 
-@piece(1.45)
+@piece(1.0)
 def sprinkler():
-    # Tangle: a rotary lawn sprinkler, three arms each throwing a jet of
-    # water out over the wet patch it has made.
-    disc(2.2, (0, 0.0, 0), 0x2bb673, segs=10, h=0.03)
-    box((0.3, 0.5, 0.3), (0, 0.25, 0), 0x9aa1b4)
-    with animated('anim_spin:w=-1.3', (0, 0.55, 0)):                              # the head turns, jets and all
+    # Tangle's hero: the rotary sprinkler at the end of the hose, at the
+    # garden's scale: a heavy sled, a riser taller than a car is long, and a
+    # head of three arms turning, each throwing a stream of water out over the
+    # lawn it has soaked. The hose screws on at its back (-X).
+    disc(10.5, (0, 0.0, 0), 0x22c46e, segs=16, h=0.05)                  # the soaked lawn
+    for x, z, r in ((6.5, 3.0, 1.6), (-3.5, 6.0, 1.2), (2.0, -7.0, 1.8)):
+        disc(r, (x, 0.05, z), 0x62d3c8, segs=10, h=0.05)                # puddles
+    for s in (-1, 1):
+        box((5.0, 0.5, 0.7), (0, 0.25, s * 1.6), 0xffc044)               # the sled's runners
+    box((3.2, 0.6, 3.2), (0, 0.75, 0), 0x22c46e)
+    cyl(0.9, 0.6, (0, 1.05, 0), 0x9aa1b4, segs=10)
+    box((1.6, 0.7, 0.9), (-1.9, 0.75, 0), 0x9aa1b4)                        # the inlet
+    cyl(0.5, 1.2, (-3.1, 0.7, 0), 0xffc044, segs=8, axis='across')
+    box((0.8, 5.6, 0.8), (0, 4.2, 0), 0x9aa1b4)                            # the riser
+    cyl(0.75, 0.6, (0, 6.9, 0), 0x555b66, segs=10)
+    H = 7.5
+    with animated('anim_spin:w=-1.1', (0, H, 0)):                        # the head turns, streams and all
+        cyl(1.0, 0.9, (0, H - 0.1, 0), 0xffc044, segs=10)
+        box((0.9, 0.9, 0.9), (0, H + 1.1, 0), 0xff5040)
         for k in range(3):
             a = 0.3 + k * 2 * math.pi / 3
-            strut((0, 0.55, 0), (math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), 0.12, 0xffc044)
-            water_jet((math.cos(a) * 0.4, 0.62, math.sin(a) * 0.4), a, 2.0, 1.0)
+            tip = (math.cos(a) * 3.4, H + 1.0, math.sin(a) * 3.4)
+            strut((0, H + 0.4, 0), tip, 0.5, 0xffc044)
+            box((0.7, 0.7, 0.7), tip, 0x339cf2, yaw=-a)
+            water_stream((tip[0] * 1.08, tip[1] + 0.1, tip[2] * 1.08), a, 6.8, 1.6)
 
 @piece(1.45)
 def picnic_blanket():
