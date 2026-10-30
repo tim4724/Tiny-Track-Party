@@ -422,7 +422,8 @@ void TtpRenderer::ensureOverlay() {
     mOverlayView->setFrustumCullingEnabled(false);
 }
 
-MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
+MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h,
+        int32_t cell) {
     if (!mOverlayMaterial || w <= 0 || h <= 0) return nullptr;
     ensureOverlay();
     if (mOverlayQuads.size() <= mOverlayUsed) {
@@ -445,6 +446,7 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
         mOverlayQuads.push_back(q);
     }
     OverlayQuad& q = mOverlayQuads[mOverlayUsed++];
+    q.cell = cell;
     Scene* const want = mOverlayFolded ? mScene : mOverlayScene;
     if (q.scene && q.scene != want) { q.scene->remove(q.entity); q.scene = nullptr; }
     if (!q.scene) { want->addEntity(q.entity); q.scene = want; }
@@ -614,7 +616,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             const float pad = 5 * unit, tick = 3 * unit, clear = 20 * unit;
             const float innerW = barW - 2 * pad, innerH = barH - 2 * pad;
             MaterialInstance* mi = overlayQuad(cell.x + (cell.w - barW) * 0.5f,
-                    cell.y + cell.h - clear - barH, barW, barH);
+                    cell.y + cell.h - clear - barH, barW, barH, (int32_t) i);
             if (!mi) continue;
             // The livery this cell's car wears, straight off the roster the
             // renderer baked its model from — the shell never restates it.
@@ -2736,6 +2738,9 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // every other cell — including the monster driver's own — keeps it
             // solid. Same between-render() trick as the cloud billboards.
             applyMonsterGhosts(i);
+            // The folded steer bars likewise: THIS cell's in the scene, the
+            // rest out, each an empty draw everywhere but its own cell.
+            if (mOverlayFolded) applyCellSteerBars(i);
             // Fliers, haze, clouds and boost streaks all turn toward THIS
             // cell's camera between render() calls (single-threaded rendering
             // executes each render() immediately, the JS sprite way).
@@ -2847,6 +2852,22 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
     // instances must follow it into each submission. Only while a monster is
     // on — every other frame the once-per-frame mirror in render() holds.
     if (anyOn) updateMergedTransforms();
+}
+
+// The folded steer bars, one cell at a time. voverlay.mat maps a quad's canvas
+// pixels into the DRAWING cell, and drawOverlay places a bar inside its own
+// cell, clear of every seam, so in any other cell's pass it is clipped whole
+// and still costs a draw — at 4P, three empty bar draws in every cell. The
+// dividers cross every cell and keep their membership. Scene membership, not
+// a parked transform: the quads never cull, so a parked one would still draw.
+void TtpRenderer::applyCellSteerBars(uint32_t cell) {
+    for (uint32_t k = 0; k < mOverlayUsed && k < mOverlayQuads.size(); k++) {
+        OverlayQuad& q = mOverlayQuads[k];
+        if (q.cell < 0) continue;
+        const bool here = (uint32_t) q.cell == cell;
+        if (here && !q.scene) { mScene->addEntity(q.entity); q.scene = mScene; }
+        if (!here && q.scene) { q.scene->remove(q.entity); q.scene = nullptr; }
+    }
 }
 
 // Everything that turns toward the active camera between render() calls:

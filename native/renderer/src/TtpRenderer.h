@@ -874,6 +874,10 @@ private:
         utils::Entity entity;
         filament::MaterialInstance* mi = nullptr;
         filament::Scene* scene = nullptr;   // where it currently lives (null = nowhere)
+        // The one cell this quad lies inside (a steer bar), or -1 for one that
+        // crosses them all (a divider). Folded, a bar is in the scene only
+        // while its own cell renders — applyCellSteerBars.
+        int32_t cell = -1;
     };
     std::vector<OverlayQuad> mOverlayQuads;
     uint32_t mOverlayUsed = 0;
@@ -883,9 +887,14 @@ private:
     bool mOverlayFolded = false;
     void ensureOverlay();
     // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
-    // origin (the units ttp_grid_cell answers in). Returns its instance for the
-    // caller to paint, or nullptr if the material never arrived.
-    filament::MaterialInstance* overlayQuad(float x, float y, float w, float h);
+    // origin (the units ttp_grid_cell answers in); `cell` as OverlayQuad says.
+    // Returns its instance for the caller to paint, or nullptr if the material
+    // never arrived.
+    filament::MaterialInstance* overlayQuad(float x, float y, float w, float h,
+            int32_t cell = -1);
+    // Between render() calls in the folded cell loop: this cell's steer bar
+    // into the scene, every other cell's out of it.
+    void applyCellSteerBars(uint32_t cell);
     void drawOverlay(const TtpFrameInput& input);
 
     Mesh mRoad;
