@@ -590,6 +590,16 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
       t.set.pieces.push_back({ slot, (float) d.u, (float) d.lat,
                                (float) (d.yaw * M_PI / 180.0), (float) d.y, (float) d.scale });
     }
+    for (int i = 0; i < def->nLand; i++) {
+      const LandDef& d = def->land[i];
+      Landform l;
+      l.kind = (uint32_t) d.kind; l.piece = d.piece;
+      l.u = (float) d.u; l.lat = (float) d.lat; l.yaw = (float) (d.yaw * M_PI / 180.0);
+      l.x = (float) d.x; l.z = (float) d.z; l.len = (float) d.len;
+      l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
+      l.h = (float) d.h; l.h1 = (float) d.h1; l.top = (float) d.top; l.shape = (float) d.shape;
+      t.land.push_back(l);
+    }
   }
   return t;
 }

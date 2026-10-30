@@ -222,6 +222,59 @@ const BOXES = {
 // lifts or sinks it, `scale` sizes it. Visual only: the sim never sees one, so a
 // piece the road passes through has to leave the deck and its berm clear.
 //
+// Landforms — `land`, per track: the shapes the ground itself carries (the
+// renderer sums them into its terrain; visual only, like `set`). Each is
+// anchored like a set piece (`u`, `lat`, `yaw`) and shaped in that frame, +Z
+// along the heading, +X the track's LEFT, in world units:
+//   ridge  a capsule `len` long along +Z (a round hill at len 0): radius `r`
+//          (`r1` at the +Z end), height `h` (`h1`), a flat crest `top` of r
+//          (a mesa); a ridge falling to a wide low end is a debris fan
+//   ring   a bank round a bowl: crest radius `r`, half-width `w`, height `h`
+//   plain  a capsule like a ridge, `r` wide with a `w` fade, where the ground
+//          is left UNRAISED: a creek bed or valley floor, the low line the
+//          raised land stands over. Nothing goes below the plain itself.
+// Ground never rises through a deck (the renderer caps it under every road),
+// but a form's flank beside a bend still hides the road ahead: keep them to
+// the outsides of bends and to the open side of the lap.
+//
+// SET_GROUND, per MODEL: the ground a set piece was modelled standing on,
+// in its own frame. The renderer lays it wherever the piece is placed (and
+// levels no clearing under it), and scripts/gen-set-prototypes.mjs hands the
+// same numbers to the Blender builder, so the model's towers and pines stand
+// on the terrain they were built on. One extra kind here:
+//   mound  scripts/blender/set_prototypes.py's mound(): summit at (`x`, `z`),
+//          `h` tall, reaching `r` toward +X, `r1` toward -X and `rz` along Z,
+//          its flank cos(t·π/2)^`shape`
+export const SET_GROUND = {
+  // Powder's ski mountain, its summit behind the lift (the lift's frame, grown
+  // 1.35 by its builder), and Avalanche's slide face and its fences' slopes.
+  'set-ski-lift': [{ kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 }],
+  'set-avalanche-slide': [{ kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 }],
+  'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
+  // Wash's creek: the bed is the low line the raised land stands over, between
+  // two cut banks (turned 90 so the spine runs along the creek's own X).
+  'set-dry-creek': [
+    { kind: 'plain', yaw: 90, x: -3, len: 88, r: 6, w: 8 },
+    { kind: 'ridge', yaw: 90, x: -18, len: 80, r: 7, h: 2, top: 0.2 },
+    { kind: 'ridge', yaw: 90, x: 12, len: 80, r: 7, h: 2, top: 0.2 }
+  ]
+};
+
+// The height a model's SET_GROUND mounds give at (x, z) in its own frame, over
+// the plain: the highest of them, as the renderer composes them
+// (TtpRenderer::landforms) and the Blender builder builds on them
+// (set_prototypes.py set_ground(), which cannot import this).
+export function setGroundY(model, x, z) {
+  let best = 0;
+  for (const f of SET_GROUND[model] || []) {
+    if (f.kind !== 'mound') continue;
+    const lx = x - (f.x || 0), lz = z - (f.z || 0);
+    const t = Math.hypot(lx / (lx > 0 ? f.r : f.r1), lz / f.rz);
+    if (t < 1) best = Math.max(best, f.h * Math.cos(t * Math.PI / 2) ** (f.shape ?? 1));
+  }
+  return best;
+}
+//
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
 export const TRACKS = {
   // Beach Cup — SEEDED easy circuits (scan-seeds `easy` profile: sweeping corners,
@@ -361,6 +414,12 @@ export const TRACKS = {
       { model: 'set-flower-bed', u: 0.84, lat: -13, yaw: 160 },
       { model: 'set-flower-bed', u: 0.07, lat: 6, yaw: 20 },
       { model: 'set-flower-bed', u: 0.98, lat: 7.5, yaw: 20 }
+    ],
+    // a long garden bank behind the north loop and a rounded hill to the east;
+    // the west side stays open
+    land: [
+      { kind: 'ridge', u: 0.2, lat: -46, len: 60, r: 24, h: 6, top: 0.35 },
+      { kind: 'ridge', u: 0.66, lat: -46, r: 28, h: 8, top: 0.15 }
     ]
   },
   pretzel: {
@@ -396,6 +455,12 @@ export const TRACKS = {
       { model: 'set-flower-bed', u: 0.93, lat: 9, yaw: 20 },
       { model: 'set-picnic-blanket', u: 0.95, lat: 7.5, yaw: 20 },
       { model: 'set-flower-bed', u: 0.8, lat: -10, yaw: 160 }
+    ],
+    // the playground's hill rising beyond the south bend, a long ridge closing
+    // the west; the east stays open
+    land: [
+      { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
+      { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 }
     ]
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
