@@ -686,7 +686,9 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   backend's provoking corner and the coplanar overlays — are
   `ttp/flat_weld.h`'s. Filament sets no provoking-vertex convention, so a pin
   that ever sets one breaks the rotation silently. A body that is not all-flat
-  (the jeep) keeps vglb and its own vertices.
+  keeps vglb and its own vertices, so nothing smooth may be joined into a flat body:
+  the jeep's spare is the kit's smooth-normalled wheel, and `scripts/toy_cars.py`
+  exports it as a `spare` node of its own, which draws live-lit like a wheel.
 
 **A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
 `set` list in `public/shared/tracks.js`): composed GLBs instanced like props,

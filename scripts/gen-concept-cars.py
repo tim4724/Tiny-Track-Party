@@ -1,6 +1,7 @@
 # gen-concept-cars.py — exports the cars scripts/toy_cars.py builds, in the
 # toy-car kit's own GLB layout (one colormap material by URI, the root node
-# first, wheel-fl/fr/bl/br as its children):
+# first, wheel-fl/fr/bl/br — and the spare, where a car has one — as its
+# children):
 #
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py -- --roster
 #       the four SHIPPED cars (toy_cars.ROSTER) into public/assets/toycar/.
@@ -29,14 +30,14 @@ KIT = os.path.join(REPO, 'public', 'assets', 'toycar')
 OUT = os.path.join(REPO, 'public', 'assets', 'concepts')
 
 
-def export(name, body, wheels, out):
-    """Write out/<name>.glb: body at the root, the wheel nodes, given as
-    (name, mesh, location), as its children. Returns the triangle count."""
+def export(name, body, children, out):
+    """Write out/<name>.glb: body at the root, the children, given as
+    (name, mesh, location), as its child nodes. Returns the triangle count."""
     bpy.ops.object.select_all(action='DESELECT')
     body.name = name
     keep = [body]
-    for wname, mesh, loc in wheels:
-        o = bpy.data.objects.new(wname, mesh)
+    for cname, mesh, loc in children:
+        o = bpy.data.objects.new(cname, mesh)
         bpy.context.scene.collection.objects.link(o)
         o.parent = body
         o.location = loc
@@ -95,11 +96,11 @@ def kit_material(path):
 
 def build(name, out):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    body, wheels = toy_cars.build(name)
+    body, children = toy_cars.build(name)
     for o in list(bpy.data.objects):
         if o is not body:
             bpy.data.objects.remove(o)
-    return export(name, body, wheels, out)
+    return export(name, body, children, out)
 
 
 def write_index(tris):

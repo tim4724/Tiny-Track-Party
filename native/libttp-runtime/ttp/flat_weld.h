@@ -31,8 +31,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "ttp/canonical.h"
@@ -188,18 +190,205 @@ inline bool coplanar_overlap(const Tri& a, const Tri& b) {
     return on_plane_overlap(a, b) || on_plane_overlap(b, a);
 }
 
+// WHICH CORNER CARRIES THE FACE NORMAL (the rotation below then puts it where
+// the backend reads). A SLOT is one welded (position, uv), and a triangle may
+// carry its normal at any of its three. Two triangles of one face normal
+// carrying it at one slot share a vertex, and the first normal at a slot rides
+// the vertex the slot has anyway, so what costs a vertex is every FURTHER
+// normal at a slot: a twin. Per normal, its slots must hit every one of its
+// triangles, so the assignment is one hitting set per normal, the sets
+// overlapping as little as can be found. A corner picked in visiting order
+// lets that order decide how many twins a body emits.
+//
+// Integer keys and ordered containers throughout: the pick must come out the
+// same on every platform, since the index buffer is the picture.
+
+constexpr uint32_t kNoFace = ~0u;   // a zero-area triangle: claims no corner
+
+struct Triple { uint32_t s[3]; };   // one triangle's corner slots
+
+// The cost of a normal's hitting set against the others': PAID slots (held
+// by another normal, a twin each), then size (a free slot used here is one
+// fewer for the rest).
+struct HitCost { uint32_t paid = 0, size = 0; };
+inline bool operator<(HitCost a, HitCost b) {
+    return a.paid != b.paid ? a.paid < b.paid : a.size < b.size;
+}
+inline HitCost operator+(HitCost a, HitCost b) { return { a.paid + b.paid, a.size + b.size }; }
+
+// Branch and bound for one normal's min-cost hitting set, from a feasible
+// INCUMBENT that bounds it. The first leaf no dearer than the incumbent is
+// taken even at equal cost: that is what walks the assignment off the
+// greedy's plateau. The node budget is ONE per assignment, shared by every
+// search of every round: a hang guard for a model this has never met, sized
+// well above what the roster spends, past which every search keeps the best
+// it has (its incumbent, for a search that starts past it). A node costs the
+// normal's triples, so the guard bounds the search.
+constexpr size_t kHitNodes = 1 << 15;
+
+// What every search of one assignment shares: the node count kHitNodes caps,
+// and two slot-sized flag arrays, all zero between searches (`chosen` unwinds
+// as a search returns; `taken`, the bound's, is cleared per node over the
+// normal's own triples).
+struct HitScratch {
+    size_t spent = 0;
+    std::vector<char> chosen, taken;
+    explicit HitScratch(size_t nSlots) : chosen(nSlots, 0), taken(nSlots, 0) {}
+};
+
+struct HitSearch {
+    const std::vector<Triple>& fam;
+    const std::vector<uint32_t>& use;   // the OTHER normals holding each slot
+    HitScratch& x;
+    std::vector<uint32_t> cur, best;
+    HitCost bestCost;
+    bool replaced = false;
+
+    HitSearch(const std::vector<Triple>& f, const std::vector<uint32_t>& u,
+            std::vector<uint32_t> incumbent, HitScratch& scratch)
+            : fam(f), use(u), x(scratch), best(std::move(incumbent)) {
+        for (uint32_t s : best) bestCost = bestCost + costOf(s);
+    }
+    HitCost costOf(uint32_t s) const { return { use[s] ? 1u : 0u, 1 }; }
+
+    void rec(HitCost cost) {
+        if (++x.spent > kHitNodes) return;
+        std::vector<char>& chosen = x.chosen;
+        std::vector<char>& taken = x.taken;
+        // The unhit triples, and a bound on what is left: pairwise-disjoint
+        // unhit triples each need a slot of their own, a paid one when all
+        // three of theirs are held.
+        const Triple* first = nullptr;
+        HitCost lb;
+        for (const Triple& tr : fam) {
+            if (chosen[tr.s[0]] || chosen[tr.s[1]] || chosen[tr.s[2]]) continue;
+            if (!first) first = &tr;
+            if (taken[tr.s[0]] || taken[tr.s[1]] || taken[tr.s[2]]) continue;
+            HitCost c = costOf(tr.s[0]);
+            for (int k = 1; k < 3; k++) if (costOf(tr.s[k]) < c) c = costOf(tr.s[k]);
+            lb = lb + c;
+            for (uint32_t s : tr.s) taken[s] = 1;
+        }
+        for (const Triple& tr : fam) {
+            for (uint32_t s : tr.s) taken[s] = 0;
+        }
+        if (!first) {
+            if (cost < bestCost || (!replaced && !(bestCost < cost))) {
+                best = cur;
+                bestCost = cost;
+                replaced = true;
+            }
+            return;
+        }
+        const HitCost reach = cost + lb;
+        if (bestCost < reach || (replaced && !(reach < bestCost))) return;
+        // Branch on the first unhit triple, its free slots first.
+        uint32_t order[3] = { first->s[0], first->s[1], first->s[2] };
+        std::stable_sort(order, order + 3,
+                [&](uint32_t a, uint32_t b) { return costOf(a) < costOf(b); });
+        for (uint32_t s : order) {
+            chosen[s] = 1;
+            cur.push_back(s);
+            rec(cost + costOf(s));
+            cur.pop_back();
+            chosen[s] = 0;
+        }
+    }
+};
+
+inline std::vector<uint32_t> hitting_set(const std::vector<Triple>& fam,
+        const std::vector<uint32_t>& use, const std::vector<uint32_t>& incumbent,
+        HitScratch& scratch) {
+    HitSearch h(fam, use, incumbent, scratch);
+    h.rec({});
+    std::sort(h.best.begin(), h.best.end());
+    return h.best;
+}
+
+// Rounds re-solve until one changes nothing; the cap cuts a plateau cycle,
+// should one ever form.
+constexpr int kAssignRounds = 8;
+
+// The corner each triangle carries its face normal at (-1 for no area), given
+// each corner's slot and each triangle's face normal id. Greedy first: the
+// (slot, normal) pair at a slot no normal holds yet, else the pair serving
+// the most unassigned triangles. Then every normal's set is re-solved in turn
+// against the others' until a round changes nothing.
+inline std::vector<int> assign_face_corners(const std::vector<uint32_t>& slot,
+        const std::vector<uint32_t>& face, size_t nSlots, size_t nNormals) {
+    const size_t nt = face.size();
+    std::vector<std::vector<Triple>> fam(nNormals);
+    std::map<std::pair<uint32_t, uint32_t>, std::vector<uint32_t>> pairs;   // (slot, normal)
+    size_t left = 0;
+    for (size_t t = 0; t < nt; t++) {
+        if (face[t] == kNoFace) continue;
+        fam[face[t]].push_back({ { slot[t * 3], slot[t * 3 + 1], slot[t * 3 + 2] } });
+        for (int k = 0; k < 3; k++) pairs[{ slot[t * 3 + k], face[t] }].push_back((uint32_t) t);
+        left++;
+    }
+    std::vector<std::vector<uint32_t>> held(nNormals);   // each normal's slots
+    std::vector<uint32_t> use(nSlots, 0);                // normals holding each slot
+    std::vector<char> assigned(nt, 0);
+    // Each pick rescans every (slot, normal) pair: quadratic like the overlay
+    // pass, and like it paid once per model.
+    while (left) {
+        auto best = pairs.end();
+        size_t bestGain = 0;
+        bool bestFree = false;
+        for (auto it = pairs.begin(); it != pairs.end(); ++it) {
+            size_t gain = 0;
+            for (uint32_t t : it->second) gain += !assigned[t];
+            if (!gain) continue;
+            const bool free = use[it->first.first] == 0;
+            if (best == pairs.end() || (free && !bestFree) || (free == bestFree && gain > bestGain)) {
+                best = it; bestGain = gain; bestFree = free;
+            }
+        }
+        held[best->first.second].push_back(best->first.first);
+        use[best->first.first]++;
+        for (uint32_t t : best->second) assigned[t] = 1;
+        left -= bestGain;
+    }
+    for (auto& h : held) std::sort(h.begin(), h.end());
+    HitScratch scratch(nSlots);
+    for (int round = 0; round < kAssignRounds; round++) {
+        bool changed = false;
+        for (size_t n = 0; n < nNormals; n++) {
+            for (uint32_t s : held[n]) use[s]--;
+            std::vector<uint32_t> h = hitting_set(fam[n], use, held[n], scratch);
+            for (uint32_t s : h) use[s]++;
+            if (h != held[n]) {
+                held[n] = std::move(h);
+                changed = true;
+            }
+        }
+        if (!changed) break;
+    }
+    std::vector<int> pick(nt, -1);
+    for (size_t t = 0; t < nt; t++) {
+        if (face[t] == kNoFace) continue;
+        const std::vector<uint32_t>& h = held[face[t]];
+        for (int k = 0; k < 3 && pick[t] < 0; k++) {
+            if (std::binary_search(h.begin(), h.end(), slot[t * 3 + k])) pick[t] = k;
+        }
+    }
+    return pick;
+}
+
 }  // namespace flatweld_detail
 
 // Weld an all-flat prim (prim_all_flat) on bitwise (position, uv). Each
-// triangle keeps a corner whose normal is its face's — one already lit for
-// that face, else a free one, else a twin of its first corner, which later
-// faces of that normal reuse — and is rotated so that corner provokes. A
-// zero-area triangle draws nothing and claims no corner. Returns an empty prim
-// for input that is not all-flat.
+// triangle carries its face normal at the corner
+// flatweld_detail::assign_face_corners gives it, and is rotated so that corner
+// sits where the backend reads: the slot's own vertex when no normal has it
+// yet, else the vertex that slot already lights for this normal, else a twin. A zero-area triangle draws
+// nothing and claims no corner. Returns an empty prim for input that is not
+// all-flat.
 inline FlatWeld weld_flat_prim(const GlbMeshPrim& sp, bool provokingLast) {
     // Declarations, not a using-directive: an includer may have a V3 of its own.
     using flatweld_detail::Tri;
     using flatweld_detail::coplanar_overlap;
+    using flatweld_detail::kNoFace;
     FlatWeld out;
     if (!prim_all_flat(sp)) return out;
     const size_t nt = sp.idx.size() / 3;
@@ -216,59 +405,68 @@ inline FlatWeld weld_flat_prim(const GlbMeshPrim& sp, bool provokingLast) {
         }
     }
 
+    // Slots and face normals as ids in order of first appearance, keyed on
+    // their bytes (the maps are looked up, never walked).
+    std::unordered_map<std::string, uint32_t> slotOf, normalOf;
+    std::vector<uint32_t> slot(nt * 3), face(nt, kNoFace);
+    for (size_t t = 0; t < nt; t++) {
+        for (int k = 0; k < 3; k++) {
+            const uint32_t v = sp.idx[t * 3 + k];
+            std::string key((const char*) &sp.pos[v * 3], 12);
+            if (hasUv) key.append((const char*) &sp.uv[v * 2], 8);
+            slot[t * 3 + k] = slotOf.emplace(key, (uint32_t) slotOf.size()).first->second;
+        }
+        if (!tris[t].ok) continue;   // zero area: draws nothing, claims nothing
+        const std::string key((const char*) &sp.normal[sp.idx[t * 3] * 3], 12);
+        face[t] = normalOf.emplace(key, (uint32_t) normalOf.size()).first->second;
+    }
+    const std::vector<int> pick = flatweld_detail::assign_face_corners(
+            slot, face, slotOf.size(), normalOf.size());
+
     GlbMeshPrim& w = out.prim;
-    std::vector<char> holdsFace;   // a welded corner already provokes for its normal
-    // Every welded vertex at one (position, uv): the first, then its twins.
-    std::unordered_map<std::string, std::vector<uint32_t>> ids;
     const auto emit = [&](uint32_t v, const float* n) {
         w.pos.insert(w.pos.end(), &sp.pos[v * 3], &sp.pos[v * 3] + 3);
         w.normal.insert(w.normal.end(), n, n + 3);
         if (hasUv) w.uv.insert(w.uv.end(), &sp.uv[v * 2], &sp.uv[v * 2] + 2);
-        holdsFace.push_back(0);
-        return (uint32_t) holdsFace.size() - 1;
+        return (uint32_t) (w.pos.size() / 3 - 1);
     };
-    const int slot = provokingLast ? 2 : 0;
+    constexpr uint32_t kNoVertex = ~0u;
+    std::vector<uint32_t> first(slotOf.size(), kNoVertex);  // the vertex a slot has anyway
+    std::vector<char> lights(slotOf.size(), 0);              // ...and whether it carries a normal yet
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> lit;   // (slot, normal) -> its vertex
+    const int readSlot = provokingLast ? 2 : 0;
     std::vector<uint32_t> base, over;
     for (size_t t = 0; t < nt; t++) {
         const uint32_t* c = &sp.idx[t * 3];
-        const float* face = &sp.normal[c[0] * 3];
-        std::vector<uint32_t>* twins[3];   // each corner's welded vertices
+        const float* n = &sp.normal[c[0] * 3];
         uint32_t corner[3];
         for (int k = 0; k < 3; k++) {
-            std::string key((const char*) &sp.pos[c[k] * 3], 12);
-            if (hasUv) key.append((const char*) &sp.uv[c[k] * 2], 8);
-            twins[k] = &ids[key];   // node-based: the pointer survives a rehash
-            if (twins[k]->empty()) twins[k]->push_back(emit(c[k], face));
-            corner[k] = twins[k]->front();
+            uint32_t& f = first[slot[t * 3 + k]];
+            if (f == kNoVertex) f = emit(c[k], n);
+            corner[k] = f;
         }
         auto& dst = overlay[t] ? over : base;
-        if (!tris[t].ok) {   // zero area: draws nothing, claims nothing
+        if (pick[t] < 0) {
             dst.insert(dst.end(), corner, corner + 3);
             continue;
         }
-        int pick = -1;
-        for (int k = 0; k < 3 && pick < 0; k++) {
-            for (uint32_t id : *twins[k]) {
-                if (holdsFace[id] && !std::memcmp(&w.normal[id * 3], face, 12)) {
-                    corner[k] = id;
-                    pick = k;
-                    break;
-                }
+        const uint32_t s = slot[t * 3 + pick[t]];
+        auto it = lit.find({ s, face[t] });
+        if (it == lit.end()) {
+            uint32_t id;
+            if (!lights[s]) {
+                id = first[s];
+                std::memcpy(&w.normal[id * 3], n, 12);
+                lights[s] = 1;
+            } else {
+                id = emit(c[pick[t]], n);   // a twin
             }
+            it = lit.emplace(std::make_pair(s, face[t]), id).first;
         }
-        for (int k = 0; k < 3 && pick < 0; k++) {
-            if (!holdsFace[corner[k]]) pick = k;
-        }
-        if (pick < 0) {   // every corner provokes for another face: a twin
-            corner[0] = emit(c[0], face);
-            twins[0]->push_back(corner[0]);
-            pick = 0;
-        }
-        std::memcpy(&w.normal[corner[pick] * 3], face, 12);
-        holdsFace[corner[pick]] = 1;
+        corner[pick[t]] = it->second;
         // Rotate (a, b, c) -> (b, c, a) until the face corner sits in the slot
         // the backend reads; a cyclic rotation keeps the winding.
-        const int shift = (pick - slot + 3) % 3;
+        const int shift = (pick[t] - readSlot + 3) % 3;
         for (int k = 0; k < 3; k++) dst.push_back(corner[(k + shift) % 3]);
     }
     out.baseTris = base.size() / 3;

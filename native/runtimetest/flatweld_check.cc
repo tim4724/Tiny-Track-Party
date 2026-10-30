@@ -13,7 +13,10 @@
 //
 // The first property also runs a CONTROL arm that must fail (the provoking normal
 // read from the wrong slot), and the synthetic box states its own overlay
-// count rather than deriving it from the predicate under test.
+// count rather than deriving it from the predicate under test. The FEWER
+// half is held per roster body by a stated ceiling: the face-corner
+// assignment is a search, and a corner picked in visiting order lands above
+// it.
 //
 // And the GLB rewrite that routes a flat mesh to the flat material: only
 // all-flat meshes move, onto a `#flat` clone, and the geometry reads back
@@ -237,10 +240,16 @@ int main(int argc, char** argv) {
   expect(!ttp::rt::prim_all_flat(smooth), "one bent corner normal makes it not flat");
   expect(ttp::rt::weld_flat_prim(smooth, true).prim.idx.empty(), "a not-flat prim is not welded");
 
-  // The shipped roster, when the asset directory is given.
+  // The shipped roster, when the asset directory is given. Each flat body's
+  // welded vertex count, at most — re-stated on purpose when the assignment
+  // or the model changes.
   if (argc > 1) {
+    const std::map<std::string, size_t> weldedAtMost = {
+        { "vehicle-gt", 480 }, { "vehicle-jeep", 305 }, { "vehicle-lemans", 468 },
+        { "vehicle-stock", 662 } };
     int flatBodies = 0;
-    for (const char* car : { "vehicle-gt", "vehicle-jeep", "vehicle-lemans", "vehicle-stock" }) {
+    for (const auto& [name, atMost] : weldedAtMost) {
+      const char* car = name.c_str();
       const std::vector<uint8_t> bytes = readFile(std::string(argv[1]) + "/" + car + ".glb");
       const std::vector<GlbMeshNode> nodes = ttp::rt::read_glb_meshes(bytes.data(), bytes.size());
       expect(!nodes.empty(), std::string(car) + ": decodes");
@@ -253,6 +262,8 @@ int main(int argc, char** argv) {
           std::printf("%s/%s: %zu -> %zu vertices, %zu of %zu triangles overlays\n", car,
               n.name.c_str(), p.pos.size() / 3, w.prim.pos.size() / 3,
               p.idx.size() / 3 - w.baseTris, p.idx.size() / 3);
+          expect(w.prim.pos.size() / 3 <= atMost, std::string(car) + ": welded to at most "
+              + std::to_string(atMost) + " vertices");
           flatBodies++;
         }
       }

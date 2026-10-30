@@ -86,6 +86,7 @@ class Car:
         self.paint = PAINT[paint] if isinstance(paint, str) else paint
         self.parts = []
         self.wheels = []   # (node name, mesh, location)
+        self.loose = []    # one child node each: joined on their own, never into the body
         self.col = bpy.data.collections.new(name)
         bpy.context.scene.collection.children.link(self.col)
 
@@ -232,46 +233,64 @@ class Car:
             self.wheels.append((f"wheel-{'f' if front else 'b'}{side}", wheel_mesh(s < 0, r, w), (s * x, y, r)))
 
     def spare(self, name, loc, r, w):
-        """A spare wheel joined into the body, hub along Y."""
+        """A spare wheel on the tail, hub along Y, placed in the mesh and
+        exported as a child node of its own: the kit's wheel carries smooth
+        normals, and joined into the body they kept the body off the
+        renderer's flat weld (ttp/flat_weld.h)."""
         me = wheel_mesh(False, r, w)
         me.transform(Matrix.Translation(loc) @ Matrix.Rotation(math.radians(90), 4, 'Z'))
         o = bpy.data.objects.new(name, me)
         self.col.objects.link(o)
-        self.parts.append(o)
+        self.loose.append(o)
         return o
 
     # ---- finish
-    def finish(self, x_offset=0.0, live=False):
-        """Join the parts into one body object at x_offset. `live` also makes
-        the wheel objects, parented, for looking at in Blender."""
+    def _join(self, name, parts):
+        """One mesh out of `parts`, modifiers applied, every face flat."""
         dg = bpy.context.evaluated_depsgraph_get()
         bm = bmesh.new()
-        for o in self.parts:
+        for o in parts:
             me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
             me.transform(o.matrix_world)
             bm.from_mesh(me)
             bpy.data.meshes.remove(me)
             bpy.data.objects.remove(o)
-        me = bpy.data.meshes.new(self.name)
+        me = bpy.data.meshes.new(name)
         bm.to_mesh(me)
         bm.free()
         for p in me.polygons:
             p.use_smooth = False
         me.materials.append(material())
+        return me
+
+    def finish(self, x_offset=0.0, live=False):
+        """Join the parts into one body object at x_offset. Returns (body,
+        children) with the children as (node name, mesh, location): the
+        wheels, then each loose part at the identity, its placement already in
+        the mesh (the same bytes it had joined into the body). `live` also
+        makes the child objects, parented, for looking at in Blender."""
+        children = list(self.wheels)
+        for o in self.loose:
+            name = o.name
+            children.append((name, self._join(name, [o]), (0, 0, 0)))
+        me = self._join(self.name, self.parts)
         body = bpy.data.objects.new(self.name, me)
         self.col.objects.link(body)
         body.location.x = x_offset
         if live:
-            for wname, wme, loc in self.wheels:
-                o = bpy.data.objects.new(wname, wme)
+            for cname, cme, loc in children:
+                o = bpy.data.objects.new(cname, cme)
                 self.col.objects.link(o)
                 o.parent = body
                 o.location = loc
-        hi = max(v.co.z for v in me.vertices)
+        # The loose parts sit at the identity, so their vertices are in the
+        # body's frame: the height is over all of it, as when they were joined.
+        hi = max(v.co.z for m in [me] + [cme for _, cme, _ in children[len(self.wheels):]]
+                 for v in m.vertices)
         wid = max(abs(loc[0]) + max(abs(v.co.x) for v in wme.vertices) for _, wme, loc in self.wheels)
         assert hi <= CAR_H[1] + 1e-6, f'{self.name} is {hi:.3f} high'
         print(f'{self.name}: height {hi:.3f}, width over wheels {2 * wid:.3f}')
-        return body
+        return body, children
 
 
 # The kit's standard wheel (slate tyre, white hub) rides on every shipped car,
@@ -494,11 +513,11 @@ CARS = {
 
 
 def build(name, x=0.0, live=False):
-    """(body, [(wheel node, mesh, location)]) for one car, roster or concept."""
+    """(body, [(child node, mesh, location)]) for one car, roster or concept."""
     fn, paint = ROSTER[name] if name in ROSTER else CARS[name]
     c = Car(name, paint)
     fn(c)
-    return c.finish(x, live), c.wheels
+    return c.finish(x, live)
 
 
 def build_all(names=None, spacing=1.2):
