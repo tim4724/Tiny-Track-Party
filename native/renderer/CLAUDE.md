@@ -523,6 +523,11 @@ stand on `groundY` with their feet buried.
   rejects.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
+- **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
+  `landforms`), never more noise: short wavelengths read as lumps tracing the
+  road. A set piece modelled standing on terrain carries it as `SET_GROUND`;
+  the Blender builder reads the same numbers, so its parts stand on what the
+  renderer lays, and the piece levels no clearing.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.
