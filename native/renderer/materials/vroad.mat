@@ -249,7 +249,7 @@ fragment {
     // texture() written directly in material() (GLSLTools::textureLodBias), and
     // a biased read may not be a plain varying read. The bias is always 0 here
     // (no dynamic resolution, no TAA), so this is exact. Implicit LOD stays: the
-    // layer has mips and anisotropy.
+    // layer has mips.
     float skidInk(highp vec2 uv) {
         return texture(materialParams_skidLayer, uv).r;
     }

@@ -2286,8 +2286,8 @@ void TtpRenderer::flushSkidLayer() {
         do { refreshSkidMips(); } while (mSkidMipLevel != 0 || !mSkidMipDirty.empty());
         return;
     }
-        // Refresh the rubber layer's mip chain, throttled. The tap filters
-    // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
+        // Refresh the rubber layer's mip chain, throttled. The tap is mipped
+    // (bindSkidLayer): without mips, the deck ahead minifies a
     // 8k-wide layer through single-texel lookups and every mark
     // SCINTILLATES in motion, which the eye reads as the track itself
     // flickering. The refresh is INCREMENTAL — CPU box-filter under the

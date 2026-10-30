@@ -382,6 +382,10 @@ opacity so lines do not ghost through it.
   that reason. The chain is needed (the deck ahead minifies an 8k-wide texture;
   `mMaxTextureDim` is a chosen ceiling, clamped down by the driver, never up);
   its throttle rides `mTime`, so its timestamp is cleared with the texture.
+  The tap samples the chain bilinear from the NEAREST mip, without
+  anisotropy, on every platform, chosen by eye: trilinear + anisotropic read
+  the same, and no box has measured a saving either way (`bindSkidLayer` has
+  why, the frame map the readings).
 - **Every deck tap reads a BARE `.xy` varying of its own**
   (`tests/material-rules.test.js` holds every material to it). A coordinate
   swizzled out of a varying's other components (`.xz`, `.zw`) counts as a

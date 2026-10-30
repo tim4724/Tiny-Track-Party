@@ -1608,7 +1608,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // chain off the zeroed level 0 (the GL backend clamps sampling
             // to level 0 until the first generateMipmaps; Metal has no such
             // clamp, so an un-generated chain is garbage under the
-            // trilinear tap).
+            // mipped tap).
             clearSkidLayer();
         } else {
             mSkidLatHalf = 0;

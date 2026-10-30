@@ -33,7 +33,7 @@ void TtpRenderer::clearSkidLayer() {
                         nullptr));
         // The whole mip chain too. The GL backend clamps sampling to level 0
         // until the first generateMipmaps; Metal has no such clamp, so an
-        // un-generated chain is garbage under the trilinear tap.
+        // un-generated chain is garbage under the mipped tap.
         t->generateMipmaps(*mEngine);
     }
     for (auto& owed : mSkidOwed) owed.clear();
@@ -831,27 +831,21 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     }
     Texture* t = mSkidTex ? mSkidTex : mSkidNullTex;
     if (!t) return;
-    // Trilinear + anisotropic: the deck ahead minifies this layer hard, and a
-    // no-mip LINEAR tap made every mark scintillate in motion (deck-wide
-    // temporal aliasing). Aniso keeps the marks readable at the road's grazing
-    // angles instead of trilinear mush. There is no window on ungenerated
-    // mips: the build-time wipe generates the chain off the cleared level 0
-    // (the GL backend's own level-0 clamp covered this, Metal's does not
-    // exist — see the wipe in TtpRendererTrack.cpp).
+    // MIPPED, because the deck ahead minifies this layer hard: a no-mip LINEAR
+    // tap made every mark scintillate in motion (deck-wide temporal aliasing).
+    // There is no window on ungenerated mips: the build-time wipe generates
+    // the chain off the cleared level 0 (the GL backend's own level-0 clamp
+    // covered this, Metal's does not exist — see the wipe in
+    // TtpRendererTrack.cpp). The null texture has no chain: plain LINEAR.
+    //
+    // Bilinear from the NEAREST mip, no anisotropy, on every platform, chosen
+    // by eye: beside trilinear + 4x anisotropic the marks read the same at
+    // 540, 720 and 1080 lines, and no box measured either filter dearer than
+    // the noise (the frame map has the readings).
     TextureSampler smp(t == mSkidTex
-                    ? TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR
+                    ? TextureSampler::MinFilter::LINEAR_MIPMAP_NEAREST
                     : TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);
-    // 4, the same as the ground textures. MEASURED (M1 Max, ANGLE-Metal,
-    // EXT_disjoint_timer_query, countdown/skyline, 4 cells, 6400x3600 — 12x a
-    // 1080p frame, interleaved 9 reps): the whole mip+trilinear+aniso change is
-    // INSIDE the noise against the un-mipped LINEAR tap it replaced, at aniso 8
-    // as well as 4. Fill is not what this frame is made of (it is submission
-    // bound, with a large resolution-independent intercept), so there was no
-    // per-fragment cost to trade away. 4 rather than 8 only because it is the
-    // house value and leaves margin on weak GPUs, which this bench cannot speak
-    // for. Do not "optimise" this tap without re-measuring — it does not show.
-    smp.setAnisotropy(4);
     // REPEAT along s carries the lap wrap; CLAMP across lat parks the kerbs'
     // and underside's out-of-band v on an edge row the stamper never writes.
     smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
