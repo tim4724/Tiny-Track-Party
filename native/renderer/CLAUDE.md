@@ -704,9 +704,10 @@ every part of every placement as its own renderable (a hundred-odd draws a
 piece). Each placement's still parts become one mesh per `mPieceTile` tile,
 split by whole part, so a big piece still culls and takes its far form a
 corner at a time (never through a part, so a tile's far form needs no locked
-border). **A node named `spin`
-or `anim_*` MOVES** (`movesUnder`): its subtree stays out of every static bake
-and is mirrored per frame like the toy train's. Two more
+border). **What hangs under an `anim_*` node is no static merge's**: the
+motion pass bakes it in the node's own frame (one unlit draw per moving part),
+and until it does the part draws live-lit and the live-dressing gate names it.
+A `spin` subtree is mirrored per frame like the toy train's. Two more
 things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of

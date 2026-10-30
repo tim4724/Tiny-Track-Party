@@ -1391,7 +1391,7 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
     if (colors.primCount != prims.size()) return false;
     auto& rcm = mEngine->getRenderableManager();
     const auto ri = rcm.getInstance(src);
-    if (!ri) return false;
+    if (!ri || rcm.getPrimitiveCount(ri) != prims.size()) return false;
     factor.assign(prims.size(), float3{ 1.0f });
     for (size_t p = 0; p < prims.size(); p++) {
         if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()

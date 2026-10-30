@@ -609,12 +609,11 @@ private:
     // fallback (init), where a draw costs more than the vertices it saves.
     float mSheetTile = kSheetTile;
     uint32_t mSheetMinTris = kSheetMinTris;
-    // A set piece's bake tile (bakePlacements). Finer than a sheet's because
-    // a piece is dense where a sheet is sparse: at the sheet's 48 u a piece
-    // beside the start drew whole to every camera next to it and the 4P worst
-    // frame grew. At 4 u the vertices match the per-part cull's for half its
-    // draws; the GL fallback, where a draw costs more, takes 8 u.
-    static constexpr float kPieceTile = 4.0f;
+    // A set piece's bake tile (bakePlacements), split by whole part. Finer
+    // than a sheet's because a piece is dense where a sheet is sparse, so a
+    // tile drawn whole to a camera beside it costs vertices a sheet's would
+    // not; doubled on the GL fallback like the sheet's.
+    static constexpr float kPieceTile = 8.0f;
     float mPieceTile = kPieceTile;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
@@ -2121,7 +2120,7 @@ private:
     void buildDressingMerge();
     void mergeInstancedSet(const filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& insts,
-            bool dynamic, bool perPlacement = false);
+            bool dynamic);
     void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
