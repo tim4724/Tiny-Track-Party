@@ -2247,44 +2247,6 @@ def mine_portal():
     kit('pirate', 'barrel', (-1.8, 0, -3.8), yaw=1.4, scale=0.5)
     kit('survival', 'tool-pickaxe', (-1.6, 0, 3.2), yaw=0.4, scale=2.6, roll=0.25)
 
-@piece(1.5)
-def water_tower():
-    # Crag: a wooden tank on braced legs, a conical roof, its downpipe to a
-    # trough at its foot, a ladder, barrels and a sign post.
-    H = 6.0
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            o = cyl(0.16, H + 0.4, (sx * 1.7, 0, sz * 1.7), TIMBER, segs=8, smooth=False)
-            tilted(o, sz * 0.09, -sx * 0.09)
-    for y in (2.0, 4.2):
-        for s in (-1, 1):
-            box((3.4, 0.12, 0.12), (0, y, s * 1.6), TIMBER)
-            box((0.12, 0.12, 3.4), (s * 1.6, y, 0), TIMBER)
-    for s in (-1, 1):
-        box((0.1, 0.1, 4.4), (s * 1.6, 3.1, 0), TIMBER, pitch=0.6)
-        box((0.1, 0.1, 4.4), (s * 1.6, 3.1, 0), TIMBER, pitch=-0.6)
-    box((3.6, 0.2, 3.6), (0, H, 0), TIMBER)
-    cyl(2.0, 3.0, (0, H + 0.1, 0), 0x9a7b55, segs=14)
-    for y in (H + 0.5, H + 1.6, H + 2.7):
-        cyl(2.08, 0.16, (0, y, 0), 0x5a4632, segs=14)
-    cyl(2.3, 1.6, (0, H + 3.1, 0), 0x6e5b3a, r2=0.15, segs=14)
-    # the downpipe out of the tank floor, an elbow out, a tap over the trough
-    box((0.24, H - 1.3, 0.24), (1.1, 1.3 + (H - 1.3) / 2, 0.4), 'slate')
-    box((2.1, 0.24, 0.24), (2.05, 1.42, 0.4), 'slate')
-    box((0.3, 0.4, 0.3), (3.0, 1.15, 0.4), 'slate')
-    box((1.1, 0.7, 2.4), (3.0, 0.35, 0.4), TIMBER)
-    box((0.9, 0.05, 2.2), (3.0, 0.68, 0.4), 0x62d3c8)
-    # ladder up a leg, barrels and a sign post
-    for s in (-1, 1):
-        box((0.06, H + 0.2, 0.06), (1.95, (H + 0.2) / 2, -1.7 + s * 0.3), TIMBER)
-    for i in range(9):
-        box((0.06, 0.05, 0.7), (1.95, 0.4 + i * 0.65, -1.7), TIMBER)
-    kit('pirate', 'barrel', (-2.8, 0, 2.2), yaw=0.3, scale=0.5)
-    kit('pirate', 'barrel', (-2.2, 0, 2.9), yaw=1.1, scale=0.5)
-    cyl(0.08, 3.0, (2.6, 0, 3.4), TIMBER, segs=6, smooth=False)
-    box((0.08, 0.5, 1.6), (2.6, 2.6, 3.4), 0xd9b054)
-    box((0.08, 0.4, 1.2), (2.6, 2.0, 3.4), 0xd9b054)
-
 @piece(1.35)
 def telegraph_line():
     # Sidewinder: a telegraph line straight across the desert along the long
@@ -2389,7 +2351,7 @@ def cow_skull():
 
 @piece(1.45)
 def ranch_fence():
-    # Wash (and Crag's variant B): a small split-rail corral, its gate swung open toward the
+    # Wash: a small split-rail corral, its gate swung open toward the
     # road (+X), a water trough and a hay bale inside.
     S = 2.4
     posts = [(-S, -S), (0, -S), (S, -S), (S, 0), (S, S), (0, S), (-S, S), (-S, 0)]
@@ -2412,44 +2374,6 @@ def ranch_fence():
     box((0.7, 0.05, 1.5), (-1.3, 0.51, -1.0), 0x62d3c8)
     box((0.9, 0.6, 1.2), (-1.2, 0.3, 1.2), 'yellow', yaw=0.3)                     # hay bale
     box((0.95, 0.06, 0.08), (-1.2, 0.61, 1.2), 'brown', yaw=0.3)
-
-@piece(1.45)
-def windpump():
-    # Crag: an old farm windpump: a wooden tower braced corner to corner, the
-    # wheel of narrow wooden blades up top facing the road (+X) with its tail
-    # vane behind, the pump rod down the middle to the pump head, its spout
-    # over a plank trough at the foot.
-    H = 7.0
-    WOOD, BLADE = 0x8a6a46, 'tan'
-    def leg(sx, sz, y):                                                         # a leg's corner at height y
-        w = 0.8 - y * 0.07
-        return (sx * w, y, sz * w)
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            strut(leg(sx, sz, 0.0), leg(sx, sz, H), 0.2, WOOD)
-    for y0, y1 in ((0.3, 3.6), (3.6, 6.8)):                                     # the X braces, each face
-        for a, b in (((-1, 1), (1, 1)), ((1, -1), (-1, -1)), ((1, 1), (1, -1)), ((-1, -1), (-1, 1))):
-            strut(leg(*a, y0), leg(*b, y1), 0.12, WOOD)
-    for y in (0.3, 3.6, 6.8):                                                   # the girts
-        for s2 in (-1, 1):
-            w = 0.8 - y * 0.07
-            box((2 * w + 0.12, 0.12, 0.12), (0, y, s2 * w), WOOD)
-            box((0.12, 0.12, 2 * w + 0.12), (s2 * w, y, 0), WOOD)
-    cy = H + 0.25
-    box((1.0, 0.5, 0.5), (0.05, cy, 0), 'slate')                                 # the head
-    with animated('anim_spin:a=x:w=1.4', (0.66, cy, 0)):                         # the wheel turns
-        box((0.3, 0.3, 0.3), (0.62, cy, 0), 'red')                               # the hub
-        for k in range(12):                                                      # the blades
-            a = k / 12 * 2 * math.pi
-            box((0.06, 1.2, 0.26), (0.66, cy + math.sin(a) * 0.95, math.cos(a) * 0.95), BLADE, pitch=-(math.pi / 2 - a))
-        torus(1.5, 0.07, (0.68, cy, 0), WOOD, segs=16, axis='across')
-    box((1.8, 0.12, 0.12), (-1.2, cy, 0), WOOD)                                  # the tail
-    box((1.0, 0.8, 0.08), (-2.3, cy, 0), 'cream')
-    box((0.08, H - 0.6, 0.08), (0, (H - 0.6) / 2 + 0.3, 0), 'slate')            # the pump rod
-    box((0.36, 0.7, 0.36), (0, 0.35, 0), 'slate')
-    box((1.6, 0.14, 0.14), (0.8, 0.6, 0), 'slate')
-    box((1.0, 0.55, 2.2), (1.9, 0.27, 0), WOOD)                                  # the trough
-    box((0.8, 0.05, 2.0), (1.9, 0.56, 0), 0x62d3c8)
 
 @piece(1.45)
 def route_sign():
@@ -2526,6 +2450,100 @@ def ore_line():
     for s in (-1, 1):
         box((0.16, 0.16, L), (s * 0.55, 0.24, 0), 'slate')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'line')
+
+@piece(1.0)
+def sauropod():
+    # Crag: a giant sauropod's skeleton weathering out of the crag's flank
+    # (the piece's SET_GROUND mound: its summit behind, -X, its long face
+    # toward the road). The backbone lies along the slope from the tip of the
+    # tail to the small skull at the end of the long neck, which climbs the
+    # slope; the ribs arch up out of the rock over the chest and down into it
+    # again on the downhill side, open to the road; the hip plate and two leg
+    # bones lie loose below. Still: it is a fossil. World units (no grow).
+    H = set_ground('sauropod')
+    BC = 'cream'
+    def spine(f):                                                                # f: 0 the tail tip .. 1 the skull
+        z = -25.0 + 48.0 * f
+        x = -5.0 + 1.4 * math.sin(f * 4.0) - 7.0 * max(0.0, (f - 0.62) / 0.38) ** 1.6
+        return x, z
+    nv = 30
+    for i in range(nv):
+        f = i / (nv - 1)
+        x, z = spine(f)
+        body = math.sin(min(1.0, max(0.0, (f - 0.08) / 0.62)) * math.pi)
+        neck = max(0.0, (f - 0.62) / 0.38)
+        sz = 0.55 + 1.15 * body + 0.25 * neck
+        y = H(x, z) + sz * 0.3
+        x2, z2 = spine(min(1.0, f + 0.02))
+        x1, z1 = spine(max(0.0, f - 0.02))
+        yaw = math.atan2(x2 - x1, z2 - z1)
+        box((sz * 1.1, sz * 0.9, sz * 0.8), (x, y, z), BC, yaw=yaw)
+        if 0.16 < f < 0.66 and i % 2 == 0:                                       # the spines on the back
+            box((sz * 0.3, sz * 0.9, sz * 0.4), (x, y + sz * 0.8, z), BC, yaw=yaw)
+    for k in range(9):                                                           # the ribs, open to the road
+        # each springs from the backbone, arches over toward the road and
+        # sweeps back toward the tail as it goes down into the rock, as a
+        # rib does: bowed and raked, so a row of them reads as a ribcage
+        f = 0.29 + 0.31 * k / 8
+        x, z = spine(f)
+        g = 0.55 + 0.45 * math.sin((k + 1) / 10 * math.pi)
+        y0 = H(x, z) + 0.9
+        pts = [(x, y0, z)]
+        for t, (ox, oy, oz) in ((0.33, (1.7, 2.5, -0.5)), (0.66, (3.9, 2.3, -1.3)), (1.0, (5.2, 0.0, -2.0))):
+            px, pz = x + ox * g, z + oz * g
+            py = y0 + oy * g if t < 1.0 else H(px, pz) - 0.4
+            pts.append((px, py, pz))
+        for p0, p1 in zip(pts, pts[1:]):
+            strut(p0, p1, 0.42, BC)
+    x, z = spine(1.0)                                                            # the skull
+    y = H(x, z) + 0.6
+    box((1.7, 1.2, 2.3), (x, y + 0.3, z + 0.7), BC)
+    box((1.3, 0.55, 1.5), (x, y - 0.1, z + 1.9), BC)
+    for sd in (-1, 1):
+        box((0.14, 0.5, 0.6), (x + sd * 0.82, y + 0.5, z + 0.4), 'dark')
+    x, z = spine(0.3)                                                            # the hip plate, the legs
+    hx = x + 2.2
+    box((2.6, 0.4, 3.0), (hx, H(hx, z) + 0.1, z - 0.5), BC, yaw=0.3, roll=0.35)
+    for (a, b, t) in (((x + 3.6, z - 3.5), (x + 6.6, z + 0.5), 0.62), ((x + 5.4, z + 3.0), (x + 8.0, z + 6.0), 0.5)):
+        ya, yb = H(*a) + t * 0.4, H(*b) + t * 0.4
+        strut((a[0], ya, a[1]), (b[0], yb, b[1]), t, BC)
+        box((t * 2.0, t * 1.4, t * 1.6), (b[0], yb + 0.1, b[1]), BC)              # its knuckle
+    x, z = spine(0.6)
+    for k, (dx, dz, kk) in enumerate(((6.5, -1.0, 1.4), (8.0, 4.5, 1.0), (4.0, 9.0, 1.2))):
+        sandstone_rock((x + dx, H(x + dx, z + dz) - 0.3, z + dz), kk, yaw=0.7 * k, color=0xa96545)
+
+@piece(1.45)
+def dino_dig():
+    # Crag: the palaeontologists' camp below the crag, where one of the
+    # skeleton's legs turned up: a pit pegged out with string round a huge
+    # thigh bone, a sieve on its trestles, crates of plaster jackets, a canvas
+    # tent, its flag flapping (anim_sway).
+    box((5.4, 0.06, 3.4), (0, 0.03, 0), 'brown')                                  # the dug floor
+    box((0.7, 0.6, 3.6), (0.2, 0.36, 0), 'cream', yaw=0.25)                        # the thigh bone
+    for s in (-1, 1):
+        box((1.2, 0.8, 0.9), (0.2 + s * 1.7 * math.sin(0.25), 0.42, s * 1.7 * math.cos(0.25)), 'cream', yaw=0.25)
+    stakes = [(-2.9, -1.9), (2.9, -1.9), (2.9, 1.9), (-2.9, 1.9)]
+    for x, z in stakes:
+        box((0.2, 1.0, 0.2), (x, 0.5, z), 'tan')
+    for (x0, z0), (x1, z1) in zip(stakes, stakes[1:] + stakes[:1]):
+        if x0 == x1:
+            box((0.08, 0.08, abs(z1 - z0)), (x0, 0.85, (z0 + z1) / 2), 'red')
+        else:
+            box((abs(x1 - x0), 0.08, 0.08), ((x0 + x1) / 2, 0.85, z0), 'red')
+    for s2 in (-1, 1):                                                            # the tent
+        box((2.8, 0.12, 1.8), (-4.2, 0.7, -2.6 + s2 * 0.62), 0xf2bf99, pitch=-s2 * 0.86)
+    box((3.0, 0.14, 0.14), (-4.2, 1.4, -2.6), ROPE)
+    for s in (-1, 1):
+        prism([(1.2, 0.02), (-1.2, 0.02), (0, 1.35)], -4.2 + s * 1.35, 0.1, 0xf2bf99)
+    flagpole((-6.0, 0, -4.0), 3.4, 'red', w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.1#1')
+    for k, (x, z) in enumerate(((-3.6, 1.6), (-4.4, 2.4), (-3.9, 2.2))):         # crates of plaster jackets
+        box((0.9, 0.7, 0.9), (x, 0.35 + (0.7 if k == 2 else 0), z), 0x9a7b55, yaw=0.2 * k)
+    for sx in (-1, 1):                                                           # the sieve on trestles
+        for sz in (-1, 1):
+            box((0.12, 0.9, 0.12), (3.8 + sx * 0.6, 0.45, 2.8 + sz * 0.4), TIMBER)
+    box((1.5, 0.12, 1.1), (3.8, 0.95, 2.8), 'slate')
+    kit('survival', 'tool-pickaxe', (2.2, 0, -2.8), yaw=1.2, scale=3.0, roll=0.25)
+    kit('survival', 'bucket', (-1.8, 0, 2.6), yaw=0.4, scale=2.6)
 
 # ====================================================================================
 # PLAYROOM
