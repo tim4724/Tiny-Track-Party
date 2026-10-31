@@ -97,7 +97,7 @@ void testCompleteness() {
   // Every kind DECLARED, not merely every kind some biome happens to use: the
   // enum is the vocabulary, and a kind the renderer can draw but no biome lists
   // is exactly the thing a gallery is for.
-  for (uint32_t k = rt::LM_GNOME; k <= rt::LM_BOOKS; k++) {
+  for (uint32_t k = rt::LM_GNOME; k <= rt::LM_CABIN; k++) {
     check(hasKind(show.landmarks, k), "showcase stages landmark kind " + std::to_string(k));
   }
   for (uint32_t k = rt::CL_FLOWER; k <= rt::CL_DOMINO; k++) {
@@ -246,7 +246,7 @@ void testInventory() {
     check(json.find("\"" + m + "\"") != std::string::npos, "inventory names " + m);
   }
   // Once each: the union dedupes, so the staged list is exactly the enum.
-  check(t.landmarks.size() == (size_t) (rt::LM_BOOKS + 1), "every landmark kind is staged once");
+  check(t.landmarks.size() == (size_t) (rt::LM_CABIN + 1), "every landmark kind is staged once");
 }
 
 // The standing exhibits. Placement is TASTE and nothing here judges it; what is
