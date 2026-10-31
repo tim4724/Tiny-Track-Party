@@ -164,12 +164,23 @@ void TtpRenderer::buildSetMovers() {
                     const auto it = moverOf.find(tcm.getEntity(ti));
                     if (it != moverOf.end()) rides = (int) it->second;
                 }
+                // The path a part's far-form box must cover: a traveller's own,
+                // or the one the traveller it rides goes round (a robot's legs).
+                int lodPath = -1;
+                float3 lodOrigin = rest[3].xyz;
+                if (motion.path) {
+                    const auto p = pathOf.find(motion.chain);
+                    if (p != pathOf.end()) lodPath = p->second;
+                } else if (rides >= 0) {
+                    lodPath = mSetMovers[(size_t) rides].lodPath;
+                    lodOrigin = mSetMovers[(size_t) rides].lodOrigin;
+                }
                 MergedGroup g;
                 Mesh& mesh = g.baked;
                 mesh.weld = true;
-                // A far form like the static runs' (chooseLods), for a part that
-                // stays put; a traveller's box would be wherever it was built.
-                mesh.simplify = !motion.travels();
+                // A far form like the static runs' (chooseLods); a part that
+                // travels measures to the box its whole loop sweeps (below).
+                mesh.simplify = true;
                 const mat4f toNode = inverse(rest);
                 bool ok = colorModel != nullptr;
                 for (const utils::Entity src : parts) {
@@ -230,16 +241,28 @@ void TtpRenderer::buildSetMovers() {
                     continue;
                 }
                 // chooseLods measures to a WORLD box: the rest pose's, which an
-                // in-place motion never strays far from.
+                // in-place motion never strays far from; for a traveller (or a
+                // part riding one), every spot of its loop with the part's
+                // reach round its traveller's origin, turned any way.
                 for (LodRange& r : mLods) {
                     if (r.entity != mesh.entity) continue;
                     float3 lo{ 1e30f }, hi{ -1e30f };
+                    float reach = 0;
                     for (int c = 0; c < 8; c++) {
                         const float3 p{ (c & 1) ? r.hi.x : r.lo.x, (c & 2) ? r.hi.y : r.lo.y,
                                         (c & 4) ? r.hi.z : r.lo.z };
                         const float3 w = (rest * float4{ p, 1 }).xyz;
                         lo = min(lo, w);
                         hi = max(hi, w);
+                        reach = std::max(reach, length(w - lodOrigin));
+                    }
+                    if (lodPath >= 0) {
+                        lo = float3{ 1e30f };
+                        hi = float3{ -1e30f };
+                        for (const float3& q : mSetPaths[(size_t) lodPath].pts) {
+                            lo = min(lo, q - reach);
+                            hi = max(hi, q + reach);
+                        }
                     }
                     r.lo = lo;
                     r.hi = hi;
@@ -258,12 +281,17 @@ void TtpRenderer::buildSetMovers() {
                 mv.scale = length(rest[0].xyz);
                 const float inv = mv.scale > 0 ? 1.0f / mv.scale : 1.0f;
                 mv.restInv = transpose(mat3f{ rest[0].xyz * inv, rest[1].xyz * inv, rest[2].xyz * inv });
-                // Out of step per placement and per part: the placement's spot
-                // and the node's slot, so the same track always moves the same.
-                const float3 at = rest[3].xyz;
-                mv.phase = ttp::rt::set_motion_phase((uint32_t) (int32_t) std::lround(at.x * 16)
-                        * 73856093u ^ (uint32_t) (int32_t) std::lround(at.z * 16) * 19349663u
-                        ^ (uint32_t) e * 83492791u);
+                // Out of step per placement and per part: the part's spot and
+                // the node's slot, so the same track always moves the same; a
+                // part in step (`o`) counts from its placement's root instead,
+                // the spot every part of the placement shares.
+                const auto spot = [](const float3& p) {
+                    return (uint32_t) (int32_t) std::lround(p.x * 16) * 73856093u
+                            ^ (uint32_t) (int32_t) std::lround(p.z * 16) * 19349663u;
+                };
+                mv.phase = ttp::rt::set_motion_part_phase(motion,
+                        spot(rest[3].xyz) ^ (uint32_t) e * 83492791u,
+                        spot(tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].xyz));
                 if (motion.path) {
                     const auto p = pathOf.find(motion.chain);
                     if (p != pathOf.end()) {
@@ -277,6 +305,8 @@ void TtpRenderer::buildSetMovers() {
                         motion.path = false;
                     }
                 }
+                mv.lodPath = lodPath;
+                mv.lodOrigin = lodOrigin;
                 if (rides >= 0) {
                     mv.parent = rides;
                     mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * rest;
