@@ -1569,31 +1569,24 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
              28000.0f * (tb.hemiIntensity / 2.2f) };
 }
 
-// The playroom's horizon is the ROOM the floor belongs to: a bed, a sofa, a
-// bookshelf and a toy chest standing round it past the fog, as silhouettes
-// that say "furniture" at a glance. Ten boxes, the count the giant toy blocks
-// they replace had, so the ring costs what it did. Each piece stands at a
-// bearing `a` and radius `r` and faces the floor's middle; a part sits in
-// that frame (`t` along the ring, `d` outward, `y0` its foot) and takes its
-// colour from the theme's hill list by index (theme.cc playroomTheme).
+// The playroom's horizon is the foot of the room's walls: a skirting board
+// with the wall rising pale over it into the fog, in a ring past the floor.
+// At the toy cars' scale the room is all there is of the real world (1 u is
+// about 5.5 cm), so it is only ever seen as far-off planes, never as furniture
+// to recognise. Each panel stands at a bearing `a` and radius `r`, faces the
+// floor's middle and takes its colour from the theme's hill list by index
+// (theme.cc playroomTheme).
 void TtpRenderer::buildRoomRing(const TrackBin& tb, float sf) {
     struct Part { float a, r, t, d, y0, w, h, depth; int color; };
-    static const Part ROOM[] = {
-        // the bed, long side to the floor: mattress, headboard, a pillow
-        { 0.55f, 172, 0, 0, 0, 66, 12, 36, 1 },
-        { 0.55f, 172, 35, 0, 0, 4, 27, 38, 4 },
-        { 0.55f, 172, 26, 0, 12, 11, 4, 26, 5 },
-        // a chaise sofa: seat, back on the far side, one arm
-        { 2.15f, 176, 0, 0, 0, 70, 11, 26, 0 },
-        { 2.15f, 176, 0, 11, 0, 70, 24, 8, 0 },
-        { 2.15f, 176, -37, 0, 0, 8, 16, 26, 0 },
-        // the bookshelf, a band of books standing proud across its middle
-        { 3.65f, 196, 0, 0, 0, 42, 32, 10, 4 },
-        { 3.65f, 196, 0, -0.6f, 15, 36, 9, 10, 3 },
-        // the toy chest and its lid
-        { 5.05f, 166, 0, 0, 0, 30, 14, 18, 2 },
-        { 5.05f, 166, 0, 0, 14, 32, 3, 20, 0 },
-    };
+    constexpr int N = 24;
+    constexpr float R = 185;
+    const float w = 2 * R * std::tan((float) M_PI / N) + 1.0f;
+    Part ROOM[2 * N];
+    for (int i = 0; i < N; i++) {
+        const float a = (i + 0.5f) * 2.0f * (float) M_PI / N;
+        ROOM[2 * i] = { a, R, 0, 0, 0, w, 5, 1.6f, 4 };          // the skirting board
+        ROOM[2 * i + 1] = { a, R, 0, 0.8f, 0, w, 60, 1.0f, 5 };  // the wall over it
+    }
     for (const Part& p : ROOM) {
         const float ca = std::cos(p.a), sa = std::sin(p.a);
         // outward along (ca, sa), along the ring (sa, -ca): a turn, never a
@@ -1719,7 +1712,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const float sf = std::max(1.0f, (maxR + 60.0f) / 150.0f);
         mHillSf = sf; // the balloon's orbit radius scales with the same push-out
         // Four silhouettes (buildHillRingGeometry): meadow domes, canyon mesas
-        // (flat-topped 9-sided talus cones), the playroom's furniture (below)
+        // (flat-topped 9-sided talus cones), the playroom's walls (below)
         // and beach islands (fewer, lower, farther domes — the sea has to show
         // BETWEEN them). Feature count, scale and radius all vary per shape.
         const uint32_t shape = tb.hillShape;
