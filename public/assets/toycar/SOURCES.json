@@ -52,7 +52,6 @@
     "set-buoy-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-butte.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-wall.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-cattle.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cottage-row.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crab-pots.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dead-cottonwood.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
