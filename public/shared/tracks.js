@@ -294,11 +294,13 @@ export const SET_GROUND = {
   // from both ends (turned 90 so the spine runs along the creek's X).
   'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 3 }],
   'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 3 }],
-  // Gulch's mine: the rock spur the adit is cut into (behind it, -X, its foot
-  // at the rock face) and the yard levelled in front of it, toward the road.
+  // Gulch's mine: the rock spur rising behind the adit's rock face (-X; its
+  // foot just behind the face, so the face stands whole on the yard instead
+  // of poking out of the slope in shards) and the yard levelled in front of
+  // it, toward the road.
   'set-mine-portal': [
     { kind: 'plain', yaw: 90, len: 8, r: 4, w: 5 },
-    { kind: 'ridge', x: -9, len: 30, r: 8, h: 9, top: 0.3 }
+    { kind: 'ridge', x: -13, len: 30, r: 8, h: 9, top: 0.3 }
   ],
   // Its ore line (placed on the portal's own anchor), from the yard round the
   // start straight and the east bend to the headframe: the level bed it
@@ -664,15 +666,16 @@ export const TRACKS = {
     // and fields of hoodoos between them (rock: big as rock is), and the
     // ranch, every building at its own size, stands on the open plain at the
     // head of the long straight: house, barn, water tower, the windpump
-    // turning, the corral with cattle. Its windpumps and herds are out on the range round the
-    // whole lap.
+    // turning, the corral with cattle. Its herds graze near the road (real
+    // cows are a car long, so further out the raised ground hides them) and
+    // its windpumps turn out on the range.
     set: [
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
       { model: 'set-windpump', u: 0.58, lat: -14, yaw: 180 },
-      { model: 'set-windpump', u: 0.8, lat: -14, yaw: 180 },
-      { model: 'set-cattle', u: 0.14, lat: -11 },
-      { model: 'set-cattle', u: 0.54, lat: 14 },
-      { model: 'set-cattle', u: 0.86, lat: 13 },
+      { model: 'set-windpump', u: 0.09, lat: -7, yaw: 180 },
+      { model: 'set-cattle', u: 0.04, lat: -7.5 },
+      { model: 'set-cattle', u: 0.48, lat: 10.5 },
+      { model: 'set-cattle', u: 0.13, lat: 10.5 },
       { model: 'set-hoodoos', u: 0.3, lat: 18 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
@@ -687,8 +690,9 @@ export const TRACKS = {
     name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
     // A desert highway: the telegraph line along the long straight, a
-    // filling station on its verge with its sign turning, and mesa rims closing the west as near backdrops (the north and east stay
-    // open). Everything by the road at its own size.
+    // filling station on its verge with its sign turning, and mesa rims
+    // closing the west as near backdrops (the north and east stay open).
+    // Everything by the road at its own size.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 }
