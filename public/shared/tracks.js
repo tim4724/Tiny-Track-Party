@@ -389,9 +389,11 @@ export const TRACKS = {
     // Low tide: the reef the sea left bare runs along the waterline round the
     // lap (a spine of shelves, each turned to the shore), with its big rock
     // pool where the reef comes closest to the road, people at its edge, and
-    // the crab fishers' landing above the reef.
+    // the crab fishers' landing above the reef just before it. The pool lies
+    // beside the low west run that points at it, not at the waterline: out
+    // there it hid behind the hump and read as a few grey lumps.
     set: [
-      { model: 'set-rock-pool', u: 0.866, lat: 27, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 13, yaw: 4 },
       { model: 'set-reef-shelf', u: 0.172, lat: 31.5, yaw: -1 },
       { model: 'set-reef-shelf', u: 0.228, lat: 31.5, yaw: -3 },
       { model: 'set-reef-shelf', u: 0.297, lat: 30, yaw: -10 },
@@ -401,7 +403,7 @@ export const TRACKS = {
       { model: 'set-reef-shelf', u: 0.739, lat: 29.5, yaw: 18 },
       { model: 'set-reef-shelf', u: 0.797, lat: 29.5, yaw: -3 },
       { model: 'set-reef-shelf', u: 0.928, lat: 32.8, yaw: -23 },
-      { model: 'set-crab-pots', u: 0.7, lat: 5.5, yaw: 10 }
+      { model: 'set-crab-pots', u: 0.64, lat: 8, yaw: 10 }
     ]
   },
   cove: {
@@ -412,8 +414,8 @@ export const TRACKS = {
     // wreck lies run up the beach after the start, the crew's camp smokes
     // before it, and Skull Rock ends a headland between the two bends.
     set: [
-      { model: 'set-pirate-ship', u: 0.45, lat: 22, yaw: 180, y: -0.3 },
-      { model: 'set-jetty', u: 0.43, lat: 8 },
+      { model: 'set-pirate-ship', u: 0.475, lat: 22, yaw: 180, y: -0.3 },
+      { model: 'set-jetty', u: 0.47, lat: 7.5 },
       { model: 'set-shipwreck-ribs', u: 0.1, lat: 11, yaw: 90 },
       { model: 'set-pirate-camp', u: 0.82, lat: 7.5, yaw: 20 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 }
@@ -431,14 +433,14 @@ export const TRACKS = {
     // A storm beach: the sea comes up to the road on the flat stretch (its
     // `shore`), and the line the storm tide left runs along the sand above
     // it, from the great trunk to the bonfire, wandering as it goes; the
-    // dunes pile up inland, inside the loop.
+    // dunes pile up inland, inside the loop. The hops on that stretch hide
+    // what lies low beyond them, so the line is long pieces with their root
+    // plates reared up, and the bonfire waits past the last hop.
     set: [
       { model: 'set-driftwood-trunk', u: 0.29, lat: -6, yaw: 180 },
-      { model: 'set-strand-line', u: 0.316, lat: -6.5, yaw: 172 },
-      { model: 'set-strand-line', u: 0.344, lat: -8.5, yaw: 8 },
-      { model: 'set-strand-line', u: 0.372, lat: -6.5, yaw: 186 },
-      { model: 'set-strand-line', u: 0.4, lat: -7, yaw: -6 },
-      { model: 'set-bonfire', u: 0.43, lat: -6.5, yaw: 160 }
+      { model: 'set-strand-line', u: 0.33, lat: -8.5, yaw: 176 },
+      { model: 'set-strand-line', u: 0.39, lat: -7, yaw: -4 },
+      { model: 'set-bonfire', u: 0.45, lat: -6.5, yaw: 160 }
     ],
     land: [
       { kind: 'ridge', u: 0.58, lat: 36, len: 50, r: 15, h: 5, top: 0.2 },
@@ -453,12 +455,10 @@ export const TRACKS = {
     // Surf patrol: the sea comes in to the east road (its `shore`), and on
     // the strip of beach between them the lifeguard's tower looks out over
     // the swimmers' water, the umbrellas either side of it and the buoy line
-    // and the surfers riding the swell beyond.
+    // and the surfers riding the swell beyond: one piece, at the end of the
+    // east straight where the road bends away and a racer looks straight at it.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.19, lat: -6.5 },
-      { model: 'set-buoy-line', u: 0.19, lat: -17 },
-      { model: 'set-parasol', u: 0.165, lat: -6 },
-      { model: 'set-parasol', u: 0.215, lat: -6.5, yaw: 15 }
+      { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
     ],
     land: [
       { kind: 'shore', u: 0.19, lat: -10, len: 60, r: 30 }
