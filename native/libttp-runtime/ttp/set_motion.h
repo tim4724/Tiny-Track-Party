@@ -24,6 +24,10 @@
 // placement's scale carry them); radii are WORLD units, because they are about
 // cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
 // c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
+// On a path `o` is where it starts round its loop; on sway, bob or waddle it
+// puts the part IN STEP: it counts from its placement's clock, not its own,
+// `o` of a cycle on, so parts of one piece keep time (a robot's legs and body,
+// a snake's tail joints). Without it every part keeps a phase of its own.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
@@ -57,6 +61,8 @@ struct SetMotion {
   std::string chain;
   float pathPeriod = 8.0f, pathOffset = 0.0f;
   int pathFace = 2;
+  bool inStep = false;   // `o` on an in-place verb: phase = the placement's + `step`
+  float step = 0.0f;
   // A part that TRAVELS leaves the sun bake: a shadow baked at its rest spot
   // would stay behind. One that moves in place keeps its rest-pose shadow, which
   // under the near-overhead sun is its footprint.
@@ -109,6 +115,9 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
       bool known = true;
       if (v == "spin") {
         if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f; else known = false;
+      } else if (key == 'o' && (v == "sway" || v == "bob" || v == "waddle")) {
+        m.inStep = true;
+        m.step = f;
       } else if (v == "sway") {
         if (key == 'a') m.swayAxis = axis; else if (key == 'd') m.swayDeg = f;
         else if (key == 'p' && f > 0) m.swayPeriod = f; else known = false;
@@ -153,6 +162,15 @@ inline float set_motion_phase(uint32_t seed) {
   seed ^= seed >> 15; seed *= 0x846ca68bu;
   seed ^= seed >> 16;
   return (float) (seed >> 8) / 16777216.0f;
+}
+
+// A part's phase: its own (`own`, hashed from its spot and slot) or, in step
+// (`o`), its placement's (`placement`, hashed from the spot every part of the
+// placement shares) plus its offset, so the in-step parts share one clock.
+inline float set_motion_part_phase(const SetMotion& m, uint32_t own, uint32_t placement) {
+  if (!m.inStep) return set_motion_phase(own);
+  const float u = set_motion_phase(placement) + m.step;
+  return u - std::floor(u);
 }
 
 // One car as the part sees it: its horizontal offset in the part's REST frame
