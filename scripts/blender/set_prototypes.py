@@ -1216,6 +1216,17 @@ def join_still(name):
     return group([o for o in bpy.context.scene.objects
                   if o.type == 'MESH' and o.get('anim') is None], name)
 
+def draped(name, build):
+    """Run `build` and make what it made ONE part named `drape_<name>`: the
+    renderer lays each vertex on the ground as it DRAWS it (a 9 u grid's
+    chords, a hand's breadth or more off the curve on a slope), so small
+    things on a piece's own ground are built from y = 0 as if on the plain
+    and land on the drawn slope instead of floating off it or sinking in."""
+    before = set(bpy.context.scene.objects)
+    build()
+    return group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'],
+                 'drape_' + name)
+
 def turned(cx, cz, yaw, lx, lz):
     """A point (lx, lz) in a frame at (cx, cz) turned by `yaw` (box()'s sense:
     its +Z runs along (sin yaw, cos yaw))."""
@@ -1392,12 +1403,12 @@ def ski_lift():
     for f in fr:
         x, z = V[0] + dx * f, V[1] + dz * f
         pylon((x, 0, z), cy(f), yaw, ground=H(x, z))
-    # the rope in straight spans from sheave to sheave: the tube is a smooth
-    # spline, so it is handed the spans finely enough to lie on them
-    rope = [k / 40 for k in range(41)]
+    # the rope in straight spans from sheave to sheave, a bar a span (a
+    # third of the vertices a swept tube fine enough to lie on them costs)
     for s in (-GAUGE, GAUGE):
-        tube([(V[0] + dx * f + nx * s, cy(f), V[1] + dz * f + nz * s) for f in rope], 0.035, 0x2a2735,
-             res=1, bevel_res=0, wire=True)
+        for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
+            strut((V[0] + dx * fa + nx * s, ya, V[1] + dz * fa + nz * s),
+                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), 0.07, 0x2a2735)
     # the haul rope's loop: up one side, round the top wheel, down the other;
     # the renderer carries the chairs round it (anim_path), facing their way
     up = [(V[0] + dx * f + nx * GAUGE, y, V[1] + dz * f + nz * GAUGE) for f, y in line]
@@ -1555,22 +1566,24 @@ def frozen_lake():
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
         with animated('anim_path:c=rink:p=16:o=%.3f:f=1#%d' % (n / 6, n), at):
             skater(at[0], at[1], at[2], coat, hat, k=0.19)
-    # the shanty village on the north-west ice, a fishing hole by each door
-    for (x, z, c, yw, pipe) in ((-7.0, -6.0, 0xcf534f, 0.2, True), (-8.6, -4.2, 0x3f7bd9, -0.3, False),
-                                (-5.6, -8.0, 0x61cb8b, 0.5, False), (-9.2, -7.4, 0xffc044, 0.1, True),
-                                (-6.4, -3.4, 0xa878e8, -0.6, False), (-4.2, -5.6, 0xff7e44, 0.3, False),
-                                (-7.6, -9.6, 0x3f7bd9, 0.4, False)):
+    # the shanty village on the north-west ice, a fishing hole by each door;
+    # all of it inside nine units of the middle, where the drawn ice is flat
+    # (past that the ground's 9 u grid rises toward the banks over the ice)
+    for (x, z, c, yw, pipe) in ((-5.25, -4.5, 0xcf534f, 0.2, True), (-6.45, -3.15, 0x3f7bd9, -0.3, False),
+                                (-4.2, -6.0, 0x61cb8b, 0.5, False), (-6.9, -5.55, 0xffc044, 0.1, True),
+                                (-4.8, -2.55, 0xa878e8, -0.6, False), (-3.15, -4.2, 0xff7e44, 0.3, False),
+                                (-5.7, -7.2, 0x3f7bd9, 0.4, False)):
         shanty(x, z, c, yw, pipe)
         hx, hz = turned(x, z, yw, 0.62, 0.15)
         box((0.24, 0.02, 0.24), (hx, 0.075, hz), 0x2f3a4a, yaw=yw)        # its hole
-    sx, sz = -4.6, -3.2                                                  # the fisher out in the open
+    sx, sz = -2.2, -6.6                                                  # the fisher out in the open
     box((0.3, 0.02, 0.3), (sx + 0.42, 0.075, sz), 0x2f3a4a)
     cyl(0.09, 0.16, (sx, 0.07, sz), 0x555b66, segs=8)                    # his bucket
     seated(sx, 0.23, sz, 0x6e4a32, 0xffc044)
     with animated('anim_sway:a=z:d=22:p=1.6#rod', (sx + 0.1, 0.36, sz)):
         box((0.48, 0.03, 0.03), (sx + 0.32, 0.42, sz), 0x2a2735, roll=0.4)
-    # on the ice by the west bank, a snowman in a hat
-    snowman((-11.0, 0.07, 6.0), 0.15, hat=True)
+    # on the ice by the rink, a snowman in a hat
+    snowman((-7.6, 0.07, 5.0), 0.15, hat=True)
 
 @piece(1.0)
 def snow_fort():
@@ -1638,51 +1651,52 @@ def avalanche_slide():
     # tall as the ambient ones.
     H = set_ground('avalanche-slide')
     G = 1.45                                   # the old build's grow: where things lie on the slope
-    for z in (-2.6, 0.0, 2.6):                 # the crown: the broken edge of the slab
-        x = (-28.0 + 0.4 * abs(z)) * G
-        box((1.3, 1.4, 4.0), (x, H(x, z * G) + 0.3, z * G), 0x868ba1, yaw=0.15 * z)
-    # the chute: the scar the slab left, scoured to grey rock, lying on the
-    # face and widening as it runs down into the fan, whose blocks cover its end
-    xs = [(-27.0 + 3.3 * i) * G for i in range(8)]
-    verts = []
-    for i, x in enumerate(xs):
-        w = (1.8 + 0.45 * i) * G
-        for z in (-w, 0.0, w):
-            zz = z + 0.3 * G * math.sin(i)
-            # lifted clear of the terrain's 9 u chords, which cut a little
-            # above the curve where the face is hollow and the fan meets it
-            verts.append((x, H(x, zz) + (0.5 if z == 0.0 else 0.43), zz))
-    faces = [(3 * i + j, 3 * i + j + 1, 3 * (i + 1) + j + 1, 3 * (i + 1) + j) for i in range(len(xs) - 1) for j in (0, 1)]
-    poly(verts, faces, 0x9aa1b4)
-    for i, x in enumerate((-20.0, -12.0, -4.0)):
-        x *= G
-        z = 0.4 * G * (i % 2 * 2 - 1)
-        rock((x, H(x, z) - 0.3, z), 0.9, yaw=i * 1.9)
-    # the debris fan: tumbled snow blocks over it, the runout thinning on
-    # toward the road (+X). The fan stops a grid cell short of the road,
-    # where the deck's cap would hold the land under it and leave what lies
-    # on it floating.
-    for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
-                                   (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
-                                   (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
-                                   (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8), (-4.5, 3.8, 1.0),
-                                   (0.0, -6.0, 0.9), (-2.0, 6.5, 0.8), (3.0, 7.0, 0.7), (8.5, -4.0, 0.7)]):
-        x, z, k = x * G, z * G, k * 0.5
-        snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, H(x, z) + 0.15 * k, z), 0xf3f7fb,
-                  yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
-    for i, (x, z, k) in enumerate([(3.0, 0.8, 1.0), (5.0, -1.2, 0.8), (1.0, 2.2, 0.9), (6.2, 2.0, 0.7),
-                                   (-4.5, -1.0, 0.9)]):
-        x, z = x * G, z * G
-        rock((x, H(x, z) - 0.2, z), k, yaw=i * 1.4)
-    # the snapped pine: its stump on the slope, the trunk thrown down the fan
-    x, z = -1.0 * G, -3.2 * G
-    cyl(0.18, 0.8, (x, H(x, z) - 0.3, z), 0x7a5a3a, r2=0.15, segs=6)
-    x, z = 5.6 * G, -5.0 * G
-    cyl(0.16, 3.2, (x, H(x, z) + 0.05, z), 0x7a5a3a, r2=0.09, segs=6, axis='across', yaw=0.5)
+    # What lies on the face and the fan is draped: built from y = 0 as if on
+    # the plain, each vertex laid on the slope as the renderer draws it (its
+    # 9 u grid's chords stray a unit off the curve), so no block floats and
+    # none is swallowed.
+    def debris():
+        for z in (-2.6, 0.0, 2.6):                 # the crown: the broken edge of the slab
+            x = (-28.0 + 0.4 * abs(z)) * G
+            box((1.3, 1.4, 4.0), (x, 0.3, z * G), 0x868ba1, yaw=0.15 * z)
+        # the chute: the scar the slab left, scoured to grey rock, lying on the
+        # face and widening as it runs down into the fan, whose blocks cover
+        # its end; fine enough to follow the drawn slope, and lifted a little
+        # over it so the grid's folds between its corners stay under
+        xs = [(-27.0 + 1.65 * i) * G for i in range(15)]
+        verts = []
+        for i, x in enumerate(xs):
+            w = (1.8 + 0.225 * i) * G
+            for f in (-1.0, -0.5, 0.0, 0.5, 1.0):
+                verts.append((x, 0.35 - 0.1 * abs(f), f * w + 0.3 * G * math.sin(i / 2)))
+        faces = [(5 * i + j, 5 * i + j + 1, 5 * (i + 1) + j + 1, 5 * (i + 1) + j)
+                 for i in range(len(xs) - 1) for j in range(4)]
+        poly(verts, faces, 0x9aa1b4)
+        for i, x in enumerate((-20.0, -12.0, -4.0)):
+            x *= G
+            z = 0.4 * G * (i % 2 * 2 - 1)
+            rock((x, -0.3, z), 0.9, yaw=i * 1.9)
+        # the debris fan: tumbled snow blocks over it, the runout thinning on
+        # toward the road (+X). The fan stops a grid cell short of the road,
+        # where the deck's cap would hold the land under it.
+        for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
+                                       (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
+                                       (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
+                                       (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8), (-4.5, 3.8, 1.0),
+                                       (0.0, -6.0, 0.9), (-2.0, 6.5, 0.8), (3.0, 7.0, 0.7), (8.5, -4.0, 0.7)]):
+            x, z, k = x * G, z * G, k * 0.5
+            snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, 0.15 * k, z), 0xf3f7fb,
+                      yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
+        for i, (x, z, k) in enumerate([(3.0, 0.8, 1.0), (5.0, -1.2, 0.8), (1.0, 2.2, 0.9), (6.2, 2.0, 0.7),
+                                       (-4.5, -1.0, 0.9)]):
+            rock((x * G, -0.2, z * G), k, yaw=i * 1.4)
+        # the snapped pine: its stump on the slope, the trunk thrown down the fan
+        cyl(0.18, 0.8, (-1.0 * G, -0.3, -3.2 * G), 0x7a5a3a, r2=0.15, segs=6)
+        cyl(0.16, 3.2, (5.6 * G, 0.05, -5.0 * G), 0x7a5a3a, r2=0.09, segs=6, axis='across', yaw=0.5)
+        sled(5.0 * G, -0.05, 3.6 * G, 0.8, 0xcf534f, L=0.5)
+    draped('debris', debris)
     x, z = 6.5 * G, -6.4 * G
     pine((x, H(x, z) - 0.3, z), 1.7)
-    x, z = 5.0 * G, 3.6 * G
-    sled(x, H(x, z) - 0.05, z, 0.8, 0xcf534f, L=0.5)
     # forest either side of the chute
     for x, z, k in ((-12.0, -12.0, 1.9), (-6.0, -16.0, 1.8), (-22.0, -14.0, 1.8), (-12.0, 12.0, 1.9),
                     (-5.0, 15.0, 1.8), (-22.0, 14.0, 1.7), (-34.0, -28.0, 1.9), (-32.0, 30.0, 1.9)):
@@ -2027,26 +2041,29 @@ def avalanche_fence():
     H = set_ground('avalanche-fence')
     for x, z, k in ((-14.0, -12.6, 1.8), (-19.6, 11.2, 1.9), (-30.8, -19.6, 1.8)):
         pine((x, H(x, z) - 0.6, z), k)
+    # The rakes and the fence are draped: built from y = 0 as if on the plain,
+    # each laid on the slope as the renderer draws it (its 9 u grid's chords
+    # stray a unit and more off the curve at the foot), so none floats or sinks.
     def rake(x, z0, z1):
         n = max(2, int(round((z1 - z0) / 2.0)))
         zs = [z0 + (z1 - z0) * i / n for i in range(n + 1)]
         for z in zs:                                                # posts, leaning into the hill
-            box((0.1, 1.3, 0.1), (x, H(x, z) + 0.35, z), 0x6e4a32, roll=0.35)
+            box((0.1, 1.3, 0.1), (x, 0.35, z), 0x6e4a32, roll=0.35)
         for za, zb in zip(zs[:-1], zs[1:]):                         # the slatted boards between them
-            ga, gb = H(x, za), H(x, zb)
-            box((0.06, 0.7, zb - za), (x - 0.22, (ga + gb) / 2 + 0.55, (za + zb) / 2), 0x8a6a46,
-                roll=0.35, pitch=math.atan2(gb - ga, zb - za))
-    for (x, half) in ((-6.0, 6.0), (-10.5, 7.5), (-15.0, 8.5), (-19.5, 8.0)):
-        rake(x, -half, half)
-    # the snow fence at the foot, its slats upright, the drift along its back
-    L = 7.0
-    for i in range(5):
-        z = -L / 2 + i * L / 4
-        box((0.1, 1.0, 0.1), (0.1, 0.45, z), 0x6e4a32)
-    for i in range(4):
-        z = -L / 2 + (i + 0.5) * L / 4
-        box((0.06, 0.75, L / 4 - 0.12), (0.18, 0.5, z), 0xb06041 if i % 2 else 0x8a6a46)
-    snowy(box((0.6, 0.25, L - 0.4), (-0.25, 0.12, 0), 0xf3f7fb))
+            box((0.06, 0.7, zb - za), (x - 0.22, 0.55, (za + zb) / 2), 0x8a6a46, roll=0.35)
+    def defences():
+        for (x, half) in ((-6.0, 6.0), (-10.5, 7.5), (-15.0, 8.5), (-19.5, 8.0)):
+            rake(x, -half, half)
+        # the snow fence at the foot, its slats upright, the drift along its back
+        L = 7.0
+        for i in range(5):
+            z = -L / 2 + i * L / 4
+            box((0.1, 1.1, 0.1), (0.1, 0.4, z), 0x6e4a32)
+        for i in range(4):
+            z = -L / 2 + (i + 0.5) * L / 4
+            box((0.06, 0.75, L / 4 - 0.12), (0.18, 0.5, z), 0xb06041 if i % 2 else 0x8a6a46)
+        snowy(box((0.6, 0.35, L - 0.4), (-0.25, 0.07, 0), 0xf3f7fb))
+    draped('rakes', defences)
 
 @piece(1.0)
 def warning_sign():
@@ -2056,18 +2073,23 @@ def warning_sign():
     # beside a red and white marker pole; rocks that came down lie at its
     # foot and up the face, a pine.
     H = set_ground('warning-sign')
-    for x, z, k in ((-2.4, -3.4, 0.6), (-3.4, 2.2, 0.8), (-1.6, 4.4, 0.45), (-5.0, -0.6, 0.6),
-                    (-8.0, -4.0, 0.7), (-11.0, 3.0, 0.8), (-6.5, 6.5, 0.5)):
-        rock((x, H(x, z) - 0.35 * k, z), k, yaw=x * z)
     for x, z, k in ((-11.2, 11.2, 1.8), (-14.0, -8.0, 1.7)):
         pine((x, H(x, z) - 0.6, z), k)
-    box((0.08, 1.0, 0.08), (0, 0.5, 0), 0x555b66)
-    box((0.06, 0.5, 0.5), (0.04, 0.85, 0), 0x2a2735, pitch=math.pi / 4)
-    box((0.06, 0.42, 0.42), (0.07, 0.85, 0), 0xffc044, pitch=math.pi / 4)
-    prism([(0.14, 0.76), (-0.14, 0.76), (-0.03, 0.94)], 0.11, 0.03, 0x2a2735)
-    for k in range(5):
-        box((0.08, 0.22, 0.08), (0.0, 0.11 + k * 0.22, 0.6), 0xff5040 if k % 2 == 0 else 0xfff6eb)
-    snow_heap((-0.5, 0, -0.5), 0.5, yaw=0.3)
+    def sign():
+        # at the slope's foot, where the grid's chords stray furthest from the
+        # curve: draped, the sign and its rocks stand on the snow as drawn
+        for x, z, k in ((-2.4, -3.4, 0.6), (-3.4, 2.2, 0.8), (-1.6, 4.4, 0.45), (-5.0, -0.6, 0.6),
+                        (-8.0, -4.0, 0.7), (-11.0, 3.0, 0.8), (-6.5, 6.5, 0.5)):
+            rock((x, -0.35 * k, z), k, yaw=x * z)
+        box((0.08, 1.2, 0.08), (0, 0.4, 0), 0x555b66)
+        box((0.06, 0.5, 0.5), (0.04, 0.85, 0), 0x2a2735, pitch=math.pi / 4)
+        box((0.06, 0.42, 0.42), (0.07, 0.85, 0), 0xffc044, pitch=math.pi / 4)
+        prism([(0.14, 0.76), (-0.14, 0.76), (-0.03, 0.94)], 0.11, 0.03, 0x2a2735)
+        box((0.08, 0.2, 0.08), (0.0, 0.0, 0.6), 0xfff6eb)
+        for k in range(5):
+            box((0.08, 0.22, 0.08), (0.0, 0.11 + k * 0.22, 0.6), 0xff5040 if k % 2 == 0 else 0xfff6eb)
+        snow_heap((-0.5, -0.1, -0.5), 0.5, yaw=0.3)
+    draped('sign', sign)
 
 # ====================================================================================
 # BACKYARD
