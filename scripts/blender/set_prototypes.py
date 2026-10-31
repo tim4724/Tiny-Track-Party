@@ -2503,8 +2503,8 @@ def football_pitch():
     # body sliding over the grass reads uncanny however it is posed. Three
     # children stand in a triangle in the road-side half, each just having
     # struck the ball on to the next, and the BALL is what moves, lofted from
-    # foot to foot round the triangle. The keepers wait on their lines, arms
-    # going up now and then, a child on the touchline cheering (gestures).
+    # foot to foot round the triangle. The keepers wait on their lines and a
+    # child watches from the touchline, all of them still.
     PW, PL, T = 26.0, 42.0, 0.36
     W = 'white'
     def line(x, z, w, l, yaw=0.0):
@@ -2535,10 +2535,9 @@ def football_pitch():
         for k in (1, 2):
             t = k / 3
             box((GW, 0.07, 0.07), (0, GH * (1 - t), z0 + s * GD * t), NET)
-    # the keepers on their lines, arms out ready, going up now and then
-    for s, c, hair, p in ((-1, 0x22c46e, 1, 4.6), (1, 0xa259e6, 3, 5.3)):
-        person((0, 0, s * (PL / 2 - 1.0)), s * math.pi / 2, c, k=0.72, hair=hair, arm=0.9,
-               gesture='anim_gesture:a=z:d=110:p=%.1f:k=0.35#keep%d' % (p, s + 1))
+    # the keepers on their lines, arms out ready
+    for s, c, hair in ((-1, 0x22c46e, 1), (1, 0xa259e6, 3)):
+        person((0, 0, s * (PL / 2 - 1.0)), s * math.pi / 2, c, k=0.72, hair=hair, arm=0.9)
     # the passing triangle: each child faces the next, the right foot through
     TRI = [(6.0, -10.0, 0xff5040), (7.0, 2.0, 0x339cf2), (-2.0, -4.0, 0xff5040)]
     feet = []
@@ -2570,9 +2569,8 @@ def football_pitch():
         marker('path_ball_%d' % k, at)
     with animated('anim_path:c=ball:p=6:f=0', pts[0]):
         sphere(R, pts[0], 'white', flat=False)
-    # a child on the touchline cheering them on
-    person((-PW / 2 - 1.6, 0, 9.0), 0.0, 0xffc044, k=0.68, hair=2, arm=0.2,
-           gesture='anim_gesture:a=z:d=150:p=3.8:k=0.3#cheer')
+    # a child on the touchline watching
+    person((-PW / 2 - 1.6, 0, 9.0), 0.0, 0xffc044, k=0.68, hair=2, arm=0.2)
     # mums and dads on a bench on the far touchline
     bench((-PW / 2 - 2.5, 0, -3.0), yaw=math.pi / 2)
     bench((-PW / 2 - 2.5, 0, 3.0), yaw=math.pi / 2)
