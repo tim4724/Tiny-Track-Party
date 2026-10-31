@@ -295,12 +295,17 @@ void snowProps(Theme& t, std::initializer_list<SnowProp> list) {
 
 // Powder is a ski resort: the banks are the race course's red and blue gate
 // colours, the gantry's posts banded like slalom poles, and what lies about
-// is the guests' (a snowman by the road, sleds).
+// is the guests' (a snowman by the road, sleds), at their real size beside a
+// car: the kit's snowman is a unit tall and its sled a unit long, twice the
+// real thing. At that size more of them clear the spacing rule, so they are
+// rolled less often, and the verge carries fewer of them (the kit snowman is
+// a heavy model, and the resort's chalets and lift spend that budget).
 void powderResort(Theme& t) {
+  t.props.scatterDensity = 0.18f;
   t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
   t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
-  snowProps(t, { { "snowman", 0.25f, 1.0f, 0.3f, true, true }, { "sled", 0.30f, 1.0f, 0.3f, false, true },
-                 { "snow-pile", 0.25f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.20f, 0.9f, 0.4f, false, false } });
+  snowProps(t, { { "snowman", 0.12f, 0.45f, 0.1f, true, true }, { "sled", 0.25f, 0.4f, 0.1f, false, true },
+                 { "snow-pile", 0.38f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false } });
 }
 
 // Flurry is a frozen lake below a village: open snow round the ice (fewer
@@ -310,14 +315,16 @@ void powderResort(Theme& t) {
 void flurryLake(Theme& t) {
   t.scenery.density = 0.42f;
   t.props.scatterDensity = 0.28f;
-  snowProps(t, { { "sled", 0.35f, 1.0f, 0.3f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
+  snowProps(t, { { "sled", 0.35f, 0.4f, 0.1f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
                  { "rocks-medium", 0.15f, 0.9f, 0.4f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
-// Glacier is wild ice: no cabin and no village leavings, rock the ice
-// dropped, and banks the blue of the glacier's own ice.
+// Glacier is wild ice: no cabin and no village leavings, few trees (open
+// snow, where the penguins read), rock the ice dropped, and banks the blue of
+// the glacier's own ice.
 void penguinGlacier(Theme& t) {
   t.landmarks.clear();
+  t.scenery.density = 0.3f;
   t.road.kerbA = 0xd6ebfb; t.road.kerbB = 0xb8daf3;
   snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false },
                  { "rocks-large", 0.20f, 0.85f, 0.35f, false, false }, { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
@@ -618,7 +625,7 @@ Theme playroomTheme() {
   t.props.models = { "trainset", "skateboard" };
   // The ring keeps its own rate (0.03 a candidate) under the skateboard's
   // density: at 2.8k vertices it is the heaviest thing the scatter plants.
-  t.props.scatterDensity = 0.12f;
+  t.props.scatterDensity = 0.18f;
   t.props.scatter = { { 0, 0.25f, 2.0f }, { 1, 0.75f, 3.5f, 0.5f, false, true } };
   return t;
 }
