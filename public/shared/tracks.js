@@ -288,6 +288,13 @@ export const SET_GROUND = {
     { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
     { kind: 'ring', r: 21, w: 6, h: 1.6 }
   ],
+  // Glacier's toboggan hill: the penguins' slide comes down its long face
+  // toward the road (+X) to the water hole on the flat at its foot; broad
+  // enough that the ground's 9 u grid draws it as a hill, not a cone.
+  'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
+  // Powder's ski school: the nursery slope behind it (-X), its gentle face to
+  // the road, the school's hut and arch at its foot.
+  'set-ski-school': [{ kind: 'mound', x: -10, h: 3.4, r: 13, r1: 10, rz: 13, shape: 1.3 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   'set-warning-sign': [{ kind: 'mound', x: -28, h: 22.4, r: 25.9, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Pretzel's oak on the crest of the knoll it grew on, its summit under the
@@ -458,7 +465,7 @@ export const TRACKS = {
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
     set: [
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
-      { model: 'set-ski-rack', u: 0.54, lat: -10.2, yaw: 160 }
+      { model: 'set-ski-school', u: 0.54, lat: -10.2, yaw: 160 }
     ]
   },
   flurry: {
@@ -479,14 +486,14 @@ export const TRACKS = {
     name: 'Glacier', waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
-      { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 180 },
+      { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 170 },
       { model: 'set-igloo', u: 0.01, lat: -7, yaw: 106 },
       { model: 'set-expedition-camp', u: 0.09, lat: 7.5, yaw: 77 },
       { model: 'set-penguin-group', u: 0.03, lat: 7.5, yaw: 69 },
       { model: 'set-penguin-group', u: 0.92, lat: -9, yaw: 227 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
-      { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 232 },
-      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 180 }
+      { model: 'set-expedition-camp', u: 0.88, lat: -12, yaw: 232 },
+      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 }
     ],
     // the glacier: a tongue of blue ice flows down from the massif in the
     // west, low in the valley between two snow ridges, into the middle of the map,
