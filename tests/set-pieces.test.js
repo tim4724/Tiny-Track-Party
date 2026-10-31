@@ -13,10 +13,7 @@ const assert = require('node:assert');
 const path = require('node:path');
 
 const FLOATING = {
-  'set-pirate-ship': 4,       // the rowboat on the sea beside it
-  // Not yet fixed:
-  'set-cow-skull': 10,
-  'set-dead-cottonwood': 10
+  'set-pirate-ship': 4        // the rowboat on the sea beside it
 };
 
 test('no shipped set piece floats a part beyond its FLOATING entry', async () => {
