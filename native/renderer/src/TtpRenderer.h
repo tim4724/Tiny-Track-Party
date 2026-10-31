@@ -1110,6 +1110,13 @@ private:
     struct Shoreline {
         std::vector<filament::math::float2> pts;
         float shorePh[4], crinklePh[3], swashPh[3];
+        // Where a track's `shore` landform brings the sea in to the road: at
+        // bearing `a` the waterline stands `gap` past the road's support,
+        // held for `half` of shore either side (arc length at radius `r`) and
+        // back out to the open shore over `fade`.
+        struct Bay { float a, r, gap, half, fade; };
+        std::vector<Bay> bays;
+        float support(float a) const;   // the track's reach at bearing a
         float at(float a) const;   // the radius at bearing a
         static float harm(const float (*h)[2], int n, const float* ph, float a);
     };
@@ -1702,6 +1709,8 @@ private:
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // Within `margin` of the sea, or in it (false where there is none).
+    bool inSea(float x, float z, float margin) const;
     // The chase camera's view up the road, one segment every 2 u of the lap
     // (buildSightLines), and whether something standing at (x, z), plan
     // radius r, rising to `top`, would cut one — the scatter's keep-out on

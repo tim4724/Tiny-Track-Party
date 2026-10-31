@@ -16,8 +16,7 @@ const FLOATING = {
   'set-pirate-ship': 4,       // the rowboat on the sea beside it
   // Not yet fixed:
   'set-cow-skull': 10,
-  'set-dead-cottonwood': 10,
-  'set-pirate-camp': 1
+  'set-dead-cottonwood': 10
 };
 
 test('no shipped set piece floats a part beyond its FLOATING entry', async () => {

@@ -1449,17 +1449,19 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
 
     // Chimney smoke: each puff rises, grows and dissolves over ~6 s, staggered
     // in thirds. Billboarded toward this frame's first camera (they're tiny and
-    // far; a per-cell re-aim isn't worth the extra state).
+    // far; a per-cell re-aim isn't worth the extra state). Sized for a
+    // chimney or a camp fire beside a 0.9 u car: a puff the size of the cabin
+    // it rises from reads as a dark blot in the sky.
     if (!mSmoke.empty() && input.viewCount > 0) {
         const TtpViewInput& v0 = ttp_frame_views(&input)[0];
         const float3 camP{ v0.world[12], v0.world[13], v0.world[14] };
         for (size_t i = 0; i < mSmoke.size(); i++) {
             if (mSmoke[i].entity.isNull()) continue;
             const float u = std::fmod(mTime * 0.16f + (float) i / 3, 1.0f);
-            const float3 p{ mSmokeOrigin.x + u * 1.7f
-                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.15f,
-                            mSmokeOrigin.y + u * 3.4f, mSmokeOrigin.z };
-            const float w = 1.0f + u * 2.8f;
+            const float3 p{ mSmokeOrigin.x + u * 0.8f
+                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.08f,
+                            mSmokeOrigin.y + u * 1.7f, mSmokeOrigin.z };
+            const float w = 0.35f + u * 1.0f;
             // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
             // so shrink to nothing at the ends instead (same read at this size).
             const float fade = 0.42f * std::min(1.0f, u * 5) * (1 - u) / 0.42f;

@@ -294,9 +294,6 @@ export const SET_GROUND = {
   // trunk: short toward the road (+X), the hill falling away behind it and
   // along it across the north-east corner of the garden.
   'set-treehouse': [{ kind: 'mound', h: 3.0, r: 17, r1: 40, rz: 28, shape: 1.4 }],
-  // Riptide's dune bank: a long sand bank behind the beach, the lifeguard's
-  // hut on its crest and its boardwalk down the face toward the road.
-  'set-lifeguard-tower': [{ kind: 'mound', x: -1.2, h: 5.2, r: 15, r1: 16, rz: 30, shape: 1.2 }],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -366,10 +363,10 @@ export const TRACKS = {
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
     // Low tide: the reef the sea left bare runs along the waterline round the
     // lap (a spine of shelves, each turned to the shore), with its big rock
-    // pool where the reef comes closest to the road and the creels hauled up
-    // above it.
+    // pool where the reef comes closest to the road, people at its edge, and
+    // the crab fishers' landing above the reef.
     set: [
-      { model: 'set-rock-pool', u: 0.866, lat: 27, yaw: 4, scale: 1.15 },
+      { model: 'set-rock-pool', u: 0.866, lat: 27, yaw: 4 },
       { model: 'set-reef-shelf', u: 0.172, lat: 31.5, yaw: -1 },
       { model: 'set-reef-shelf', u: 0.228, lat: 31.5, yaw: -3 },
       { model: 'set-reef-shelf', u: 0.297, lat: 30, yaw: -10 },
@@ -379,61 +376,67 @@ export const TRACKS = {
       { model: 'set-reef-shelf', u: 0.739, lat: 29.5, yaw: 18 },
       { model: 'set-reef-shelf', u: 0.797, lat: 29.5, yaw: -3 },
       { model: 'set-reef-shelf', u: 0.928, lat: 32.8, yaw: -23 },
-      { model: 'set-crab-pots', u: 0.84, lat: 13, yaw: 20 }
+      { model: 'set-crab-pots', u: 0.7, lat: 5.5, yaw: 10 }
     ]
   },
   cove: {
     name: 'Cove', waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
+    // The pirates' cove: the sea comes in to the road past the hop (its
+    // `shore`), the ship riding at anchor off the end of the jetty; the old
+    // wreck lies run up the beach after the start, the crew's camp smokes
+    // before it, and Skull Rock ends a headland between the two bends.
     set: [
-      { model: 'set-pirate-ship', u: 0.925, lat: 54.5, yaw: 180, y: -0.5, scale: 1.25 },
-      { model: 'set-jetty', u: 0.966, lat: 41 },
-      { model: 'set-shipwreck-ribs', u: 0.55, lat: 60.5, yaw: 90, scale: 1.4 },
-      { model: 'set-pirate-camp', u: 0.99, lat: 10, yaw: 20 },
-      { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
-      { model: 'set-treasure-dig', u: 0.82, lat: 10.5, yaw: 20 },
-      { model: 'set-treasure-dig', u: 0.67, lat: -11, yaw: 160 },
-      { model: 'set-treasure-dig', u: 0.99, lat: -10.5, yaw: 160 },
-      { model: 'set-cannon-post', u: 0.12, lat: 13, yaw: 20 },
-      { model: 'set-cannon-post', u: 0.8, lat: 13, yaw: 20 }
+      { model: 'set-pirate-ship', u: 0.45, lat: 22, yaw: 180, y: -0.3 },
+      { model: 'set-jetty', u: 0.43, lat: 8 },
+      { model: 'set-shipwreck-ribs', u: 0.1, lat: 11, yaw: 90 },
+      { model: 'set-pirate-camp', u: 0.82, lat: 7.5, yaw: 20 },
+      { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 }
     ],
     // Skull Rock is the end of a headland: a rocky ridge running out from the
     // west shore to stare at the road across the bay between the two bends
     land: [
-      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.2 }
+      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.2 },
+      { kind: 'shore', u: 0.45, lat: 14, len: 56, r: 30 }
     ]
   },
   driftwood: {
     name: 'Driftwood', waypoints: GEN_TRACKS.driftwood,
     oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes,
-    // A storm beach: the line the storm tide left runs along the beach from
-    // the great trunk to the bonfire at the north bend, wandering as it goes,
-    // and the dunes pile up inland, inside the loop.
+    // A storm beach: the sea comes up to the road on the flat stretch (its
+    // `shore`), and the line the storm tide left runs along the sand above
+    // it, from the great trunk to the bonfire, wandering as it goes; the
+    // dunes pile up inland, inside the loop.
     set: [
-      { model: 'set-driftwood-trunk', u: 0.7, lat: -14, yaw: 180 },
-      { model: 'set-strand-line', u: 0.662, lat: -13, yaw: 172, scale: 1.2 },
-      { model: 'set-strand-line', u: 0.612, lat: -19, yaw: 188, scale: 1.2 },
-      { model: 'set-strand-line', u: 0.562, lat: -15, yaw: 176, scale: 1.2 },
-      { model: 'set-strand-line', u: 0.512, lat: -12, yaw: 168, scale: 1.2 },
-      { model: 'set-strand-line', u: 0.47, lat: -17, yaw: 190, scale: 1.2 },
-      { model: 'set-bonfire', u: 0.42, lat: -14, yaw: 160, scale: 1.6 }
+      { model: 'set-driftwood-trunk', u: 0.29, lat: -6, yaw: 180 },
+      { model: 'set-strand-line', u: 0.316, lat: -6.5, yaw: 172 },
+      { model: 'set-strand-line', u: 0.344, lat: -8.5, yaw: 8 },
+      { model: 'set-strand-line', u: 0.372, lat: -6.5, yaw: 186 },
+      { model: 'set-strand-line', u: 0.4, lat: -7, yaw: -6 },
+      { model: 'set-bonfire', u: 0.43, lat: -6.5, yaw: 160 }
     ],
     land: [
       { kind: 'ridge', u: 0.58, lat: 36, len: 50, r: 15, h: 5, top: 0.2 },
-      { kind: 'ridge', u: 0.97, lat: 32, r: 16, h: 4.5, top: 0.15 }
+      { kind: 'ridge', u: 0.97, lat: 32, r: 16, h: 4.5, top: 0.15 },
+      // the storm sea comes up the beach to the strand line it left
+      { kind: 'shore', u: 0.37, lat: -14, len: 110, r: 40 }
     ]
   },
   riptide: {
     name: 'Riptide', waypoints: GEN_TRACKS.riptide,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
-    // Surf patrol: the lifeguard's hut on the crest of a dune bank inside the
-    // loop, looking out over the east road to the one crowded stretch of
-    // beach and the swimming line in the sea beyond it.
+    // Surf patrol: the sea comes in to the east road (its `shore`), and on
+    // the strip of beach between them the lifeguard's tower looks out over
+    // the swimmers' water, the umbrellas either side of it and the buoy line
+    // and the surfers riding the swell beyond.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.258, lat: 24, scale: 1.3 },
-      { model: 'set-buoy-line', u: 0.2, lat: -41, yaw: 180 },
-      { model: 'set-parasol', u: 0.235, lat: -12, yaw: 180 },
-      { model: 'set-surfboards', u: 0.245, lat: -9, yaw: 160 }
+      { model: 'set-lifeguard-tower', u: 0.19, lat: -6.5 },
+      { model: 'set-buoy-line', u: 0.19, lat: -17 },
+      { model: 'set-parasol', u: 0.165, lat: -6 },
+      { model: 'set-parasol', u: 0.215, lat: -6.5, yaw: 15 }
+    ],
+    land: [
+      { kind: 'shore', u: 0.19, lat: -10, len: 60, r: 30 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
