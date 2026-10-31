@@ -92,8 +92,16 @@ void TtpRenderer::buildSetMovers() {
             const float baseY = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
             for (const auto& [name, pts] : chains) {
                 if (pts.size() < 2) continue;
+                // A `drape` chain lies on the drawn ground as a `drape` part
+                // does (appendBaked): lifted by the land under each point over
+                // the placement's foot, so a slide down a terrain hill follows
+                // the grid's chords instead of the curve they cut across.
+                const bool drape = mTrack && name.compare(0, 5, "drape") == 0;
                 SetPath sp;
-                for (const auto& [i, p] : pts) sp.pts.push_back(p);
+                for (const auto& [i, p] : pts) {
+                    sp.pts.push_back(p);
+                    if (drape) sp.pts.back().y += groundSurfaceY(*mTrack, p.x, p.z) - baseY;
+                }
                 sp.at.push_back(0);
                 for (size_t i = 1; i <= sp.pts.size(); i++) {
                     sp.at.push_back(sp.at.back()
@@ -342,13 +350,15 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
             }
             mat4f w{ float4{ rot[0] * mv.scale, 0 }, float4{ rot[1] * mv.scale, 0 },
                      float4{ rot[2] * mv.scale, 0 }, float4{ at, 1 } };
-            // A traveller may also bob and spin in its own frame as it goes: a
-            // tumbleweed bounces and rolls along its path.
-            if (m.spin || m.bob) {
+            // A traveller may also bob, spin and waddle in its own frame as it
+            // goes: a tumbleweed bounces and rolls along its path, a walking
+            // penguin rocks from foot to foot.
+            if (m.spin || m.bob || m.waddle) {
                 const ttp::rt::SetMotionPose pose = ttp::rt::set_motion_pose(m, mTime, mv.phase,
                         nullptr, 0);
                 w = w * mat4f::translation(float3{ 0, pose.lift, 0 });
                 if (m.spin) w = w * axisTurn(m.spinAxis, pose.spin);
+                if (pose.roll != 0) w = w * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
             }
             mSetMoverNow[k] = w;
             tcm.setTransform(ti, w);
