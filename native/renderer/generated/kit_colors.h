@@ -17634,7 +17634,7 @@ inline const Model kModels[] = {
     { 7224899618835397239ull, 103u, k_set_block_city },  // set-block-city.glb
     { 16444259472090693824ull, 21u, k_set_block_towers },  // set-block-towers.glb
     { 13660497155775302198ull, 5u, k_set_bonfire },  // set-bonfire.glb
-    { 15405807203073158109ull, 10u, k_set_buoy_line },  // set-buoy-line.glb
+    { 15160812448078091557ull, 10u, k_set_buoy_line },  // set-buoy-line.glb
     { 3898427775535889912ull, 1u, k_set_butte },  // set-butte.glb
     { 15333388012282297939ull, 1u, k_set_canyon_wall },  // set-canyon-wall.glb
     { 5381169591695226665ull, 3u, k_set_cattle },  // set-cattle.glb
