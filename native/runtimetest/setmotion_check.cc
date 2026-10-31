@@ -278,6 +278,14 @@ int main(int argc, char** argv) {
   ttp::rt::parse_set_motion("anim_bob:h=0.3:p=2:r=0", r0);
   check(ttp::rt::set_motion_pose(m, 0.7f, 0.2f, nullptr, 0).lift
             == ttp::rt::set_motion_pose(r0, 0.7f, 0.2f, nullptr, 0).lift, "a bob with no rest is the old bob");
+  // 4c. A bouncing bob touches down every period and never passes its height.
+  ttp::rt::parse_set_motion("anim_bob:h=0.2:p=0.5:b=1", m);
+  float high = 0;
+  for (int i = 0; i < 100; i++) high = std::max(high, ttp::rt::set_motion_pose(m, i * 0.01f, 0, nullptr, 0).lift);
+  check(m.bobBounce && high > 0.19f && high <= 0.2f + 1e-6f, "a bounce never passes its height");
+  check(near(ttp::rt::set_motion_pose(m, 1.0f, 0, nullptr, 0).lift, 0, 1e-5f)
+            && near(ttp::rt::set_motion_pose(m, 0.25f, 0, nullptr, 0).lift, 0.2f, 1e-5f),
+        "a bounce lands every period and tops out between");
 
   check(ttp::rt::parse_set_motion("anim_swing+sway:deg=30", m) && m.sway && near(m.swayDeg, 25),
         "a typo'd verb or key changes nothing");
