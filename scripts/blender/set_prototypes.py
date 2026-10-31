@@ -1068,7 +1068,7 @@ def lifeguard_tower():
     # the rescue board and the ring buoy, a rack of surfboards, the red rescue
     # boat pulled up toward the water, and the red-and-yellow flags that mark
     # where to swim. The lifeguard on the deck watches the water through
-    # binoculars and turns them on the cars going by; the flags fly.
+    # binoculars; the flags fly.
     white, red, wood = 0xfff6eb, 0xff5040, 0x9a7b55
     S, top = 0.95, 0.95                       # the stilts' spread, the deck's height
     for sx in (-1, 1):
@@ -1107,16 +1107,14 @@ def lifeguard_tower():
     flag_on_pole((hx - W / 2 + 0.06, y0 + H + 0.1, -D / 2 + 0.06), 0.5, (red, 0xffc044),
                  'anim_sway:a=z:d=24:p=1.8#roof')
     # the lifeguard out on the deck beside the hut, on the side the cars come
-    # from so they see him past it, binoculars up to the water; he turns them
-    # on the cars as they come by (watch)
+    # from so they see him past it, binoculars up to the water, still
     gx, gy, gz = 0.5, top + 0.07, -0.5
     def guard():
         figure((gx, gy, gz), 0.0, shirt=red, legs=red, hair=0xffc044)
         for s in (-1, 1):                                                  # forearms up to them
             beam((gx + 0.02, gy + 0.32, gz + s * 0.1), (gx + 0.08, gy + 0.42, gz + s * 0.05), 0.06, red)
         box((0.07, 0.06, 0.14), (gx + 0.1, gy + 0.43, gz), 0x38383d)          # the binoculars
-    with animated('anim_watch:r=20:d=100#guard', (gx, gy, gz)):
-        guard()
+    guard()
     # the rescue board against a stilt, the rack of surfboards beside the hut
     box((0.05, 0.62, 0.15), (S / 2 + 0.12, 0.3, -S / 2 - 0.1), red, roll=0.2)
     for z in (1.0, 1.6):
