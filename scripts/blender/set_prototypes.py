@@ -2470,24 +2470,39 @@ def local(cx, cz, yaw):
 SKIN = 0xf2bf99
 HAIR = (0x7a5a3a, 0x2a2735, 0xffc044, 0xb06041)
 
-def person(at, yaw, shirt, k=1.0, hair=0, legs=0x4f5260, sit=False, arm=0.0):
+def person(at, yaw, shirt, k=1.0, hair=0, legs=0x4f5260, sit=False, arm=0.0, kick=0.0, gesture=None):
     """Someone facing +X turned by `yaw`, 1.9 tall at k 1 (a child is about
     0.7): blocks, the cars' way, about twice life size across so they read.
     Sitting, the seat is at `at` and the legs reach forward off it. `arm`
-    lifts the arms forward (radians), to hold a rope or a ribbon."""
+    lifts the arms forward (radians), to hold a rope or a ribbon. `kick`
+    stands them on the left leg with the right swung forward that far
+    (radians), a ball just struck. `gesture` names the arms' motion
+    (a one-way `anim_sway...:r=` with a rest), turning about the shoulders: the one movement a
+    person here makes of their own (set_motion.h)."""
     L = local(at[0], at[2], yaw)
     y = at[1]
     if sit:
         box((0.6 * k, 0.24 * k, 0.44 * k), L(0.2 * k, y + 0.12 * k, 0), legs, yaw=yaw)
         box((0.22 * k, 0.5 * k, 0.44 * k), L(0.42 * k, y - 0.12 * k, 0), legs, yaw=yaw)
         b = y + 0.22 * k
+    elif kick:
+        box((0.32 * k, 0.86 * k, 0.21 * k), L(0, y + 0.43 * k, 0.11 * k), legs, yaw=yaw)
+        box((0.3 * k, 0.86 * k, 0.2 * k), L(0.43 * k * math.sin(kick), y + 0.86 * k - 0.43 * k * math.cos(kick), -0.11 * k),
+            legs, yaw=yaw, roll=-kick)
+        b = y + 0.84 * k
     else:
         box((0.32 * k, 0.86 * k, 0.44 * k), L(0, y + 0.43 * k, 0), legs, yaw=yaw)
         b = y + 0.84 * k
     box((0.4 * k, 0.64 * k, 0.54 * k), L(0, b + 0.32 * k, 0), shirt, yaw=yaw)
-    for s in (-1, 1):
-        box((0.2 * k, 0.56 * k, 0.17 * k), L(0.05 * k + 0.28 * k * math.sin(arm), b + 0.58 * k - 0.28 * k * math.cos(arm), s * 0.35 * k),
-            shirt, yaw=yaw, roll=-arm)
+    def arms():
+        for s in (-1, 1):
+            box((0.2 * k, 0.56 * k, 0.17 * k), L(0.05 * k + 0.28 * k * math.sin(arm), b + 0.58 * k - 0.28 * k * math.cos(arm), s * 0.35 * k),
+                shirt, yaw=yaw, roll=-arm)
+    if gesture:
+        with animated(gesture, L(0.05 * k, b + 0.58 * k, 0), yaw=yaw):
+            arms()
+    else:
+        arms()
     box((0.4 * k, 0.4 * k, 0.38 * k), L(0, b + 0.84 * k, 0), SKIN, yaw=yaw)
     box((0.44 * k, 0.14 * k, 0.42 * k), L(-0.03 * k, b + 1.08 * k, 0), HAIR[hair % 4], yaw=yaw)
 
@@ -2631,8 +2646,8 @@ def village_church():
     # The church: nave along Z under a slate roof, the tower at its -Z end
     # carrying the spire (the tallest thing in the village, about six cars),
     # a porch on the road side (+X), the clock; yews and headstones in the
-    # churchyard behind. On the green before it the maypole stands, children
-    # dancing round it with its ribbons (the lot turns round the pole).
+    # churchyard behind. On the green before it the maypole stands, its
+    # ribbons loose in the breeze, the children round it between dances.
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
@@ -2669,17 +2684,20 @@ def village_church():
     box((0.35, 9.0, 0.35), (MX, 4.5, 0), 'white')
     cyl(0.5, 0.5, (MX, 9.0, 0), 0xff5040, segs=8)
     COLS = (0xff5040, 0x339cf2, 0xffc044, 0x22c46e, 0xa259e6, 0xf8f8fb, 0x339cf2, 0xff5040)
-    with animated('anim_spin:w=0.55', (MX, 0, 0)):
-        cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
-        for k in range(6):
-            a = k * 2 * math.pi / 6
-            r = 4.2
-            px, pz = MX + r * math.cos(a), r * math.sin(a)
-            # each child runs round the pole (faces along the circle), the
-            # ribbon in the hand nearest the pole
-            person((px, 0, pz), -a - math.pi / 2, COLS[k], k=0.7, hair=k, arm=0.9)
-            hx, hz = MX + (r - 0.35) * math.cos(a), (r - 0.35) * math.sin(a)
-            strut((MX + 0.6 * math.cos(a), 8.3, 0.6 * math.sin(a)), (hx, 1.35, hz), 0.12, COLS[(k + 3) % 8])
+    # The dance has stopped for a breather: the children stand round the
+    # pole and its ribbons hang loose off the crown, each lifting and
+    # falling in the breeze on its own. The wind moves, nobody does: a ring
+    # of children carried round the pole read as figures gliding over the
+    # grass, skipping or not.
+    cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
+    for k in range(6):
+        a = k * 2 * math.pi / 6 + 0.5
+        ax, az = MX + 0.6 * math.cos(a), 0.6 * math.sin(a)
+        with animated('anim_sway:a=z:d=14:p=%.2f#rib%d' % (2.4 + 0.25 * k, k), (ax, 8.3, az), yaw=-a):
+            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
+    for k in range(6):
+        a = k * 2 * math.pi / 6
+        person((MX + 4.4 * math.cos(a), 0, 4.4 * math.sin(a)), math.pi - a, COLS[k], k=0.7, hair=k, arm=0.25 * (k % 2))
     join_still('church')
 
 @piece(REAL)
@@ -2786,7 +2804,7 @@ def treehouse():
     for k in range(4):
         a = k * math.pi / 2 + 0.4
         box((0.16, 1.9, 0.16), (TX + 1.8 * math.cos(a), ty - 0.05, TZ + 1.8 * math.sin(a)), 0x555b66)   # legs bedded in the slope
-    with animated('anim_bob:h=1.1:p=1.0', (TX, ty + 0.92, TZ)):
+    with animated('anim_bob:h=0.16:p=0.8:b=1', (TX, ty + 0.92, TZ)):    # about her own height, landing on the mat
         person((TX, ty + 0.92, TZ), 0.6, 0xff5040, k=0.7, hair=2, arm=2.6)
     kennel((-4.5, G(-4.5, 6.0), 6.0), 1.2)
     for o in bpy.context.scene.objects:          # onto the summit
@@ -2797,8 +2815,12 @@ def treehouse():
 @piece(REAL)
 def football_pitch():
     # Pretzel: the village pitch laid along the road, its lines painted on
-    # the lawn, little goals at the ends, and a game on: the ball going round
-    # from child to child, two of them chasing it, the keepers waiting.
+    # the lawn, little goals at the ends, and a kickabout on. Nobody runs: a
+    # body sliding over the grass reads uncanny however it is posed. Three
+    # children stand in a triangle in the road-side half, each just having
+    # struck the ball on to the next, and the BALL is what moves, lofted from
+    # foot to foot round the triangle. The keepers wait on their lines, arms
+    # going up now and then, a child on the touchline cheering (gestures).
     PW, PL, T = 26.0, 42.0, 0.36
     W = 'white'
     def line(x, z, w, l, yaw=0.0):
@@ -2829,21 +2851,44 @@ def football_pitch():
         for k in (1, 2):
             t = k / 3
             box((GW, 0.07, 0.07), (0, GH * (1 - t), z0 + s * GD * t), NET)
-    # the keepers on their lines, two players each side standing off
-    person((0, 0, -PL / 2 + 1.0), -math.pi / 2, 0x22c46e, k=0.72, hair=1, arm=1.2)
-    person((0, 0, PL / 2 - 1.0), math.pi / 2, 0xa259e6, k=0.72, hair=3, arm=1.2)
-    for i, (x, z, c) in enumerate(((-6.0, -10.0, 0xff5040), (7.0, -4.0, 0xff5040), (-5.0, 6.0, 0x339cf2),
-                                   (6.0, 12.0, 0x339cf2), (2.0, -15.0, 0x339cf2), (-1.0, 15.0, 0xff5040))):
-        person((x, 0, z), math.atan2(z, -x), c, k=0.72, hair=i)
-    # the ball's round, from player to player (a closed path), and two chasing it
-    LOOP = [(-4.5, -9.0), (5.5, -3.5), (-3.5, 5.5), (4.5, 11.0), (0.5, 4.0), (1.5, -13.5)]
-    for k, (x, z) in enumerate(LOOP):
-        marker('path_ball_%d' % k, (x, 0.0, z))
-    with animated('anim_path:c=ball:p=8:o=0:f=0', (LOOP[0][0], 0.0, LOOP[0][1])):
-        box((0.64, 0.64, 0.64), (LOOP[0][0], 0.32, LOOP[0][1]), 'white')
-    for n, o in enumerate((0.93, 0.45)):
-        with animated('anim_path:c=ball:p=8:o=%.2f:f=1#%d' % (o, n), (LOOP[0][0], 0.0, LOOP[0][1])):
-            person((LOOP[0][0], 0.0, LOOP[0][1]), 0.0, (0xff5040, 0x339cf2)[n], k=0.72, hair=n + 2, arm=0.5)
+    # the keepers on their lines, arms out ready, going up now and then
+    for s, c, hair, p in ((-1, 0x22c46e, 1, 4.6), (1, 0xa259e6, 3, 5.3)):
+        person((0, 0, s * (PL / 2 - 1.0)), s * math.pi / 2, c, k=0.72, hair=hair, arm=0.9,
+               gesture='anim_sway:a=z:d=110:p=%.1f:r=0.65#keep%d' % (p, s + 1))
+    # the passing triangle: each child faces the next, the right foot through
+    TRI = [(6.0, -10.0, 0xff5040), (7.0, 2.0, 0x339cf2), (-2.0, -4.0, 0xff5040)]
+    feet = []
+    for i, (x, z, c) in enumerate(TRI):
+        nx, nz, _ = TRI[(i + 1) % 3]
+        d = math.hypot(nx - x, nz - z)
+        ux, uz = (nx - x) / d, (nz - z) / d
+        person((x, 0, z), math.atan2(-uz, ux), c, k=0.72, hair=i, arm=0.5, kick=0.8)
+        feet.append((x + 0.55 * ux, z + 0.55 * uz))
+    # two more standing off, watching the ball
+    for i, (x, z, c) in enumerate(((-6.0, 7.0, 0x339cf2), (2.5, 11.0, 0xff5040))):
+        person((x, 0, z), math.atan2(-(-4.0 - z), 3.0 - x), c, k=0.72, hair=i + 2)
+    # the ball's round: lofted from each foot, landing a stride short of the
+    # next and rolling in to it (a closed path, the ball steady along it).
+    # A real ball's size at the toy world's chunkiness (about 1.5x): a ball
+    # half a child's height read as a beach ball, and a block that small
+    # reads as a box, so it is a smooth one.
+    R, LOFT, ROLL = 0.18, 1.6, 1.2
+    pts = []
+    for i in range(3):
+        (x0, z0), (x1, z1) = feet[i], feet[(i + 1) % 3]
+        d = math.hypot(x1 - x0, z1 - z0)
+        lx, lz = x1 - (x1 - x0) * ROLL / d, z1 - (z1 - z0) * ROLL / d
+        for j in range(8):
+            u = j / 8
+            pts.append((x0 + (lx - x0) * u, R + 4 * LOFT * u * (1 - u), z0 + (lz - z0) * u))
+        pts.append((lx, R, lz))
+    for k, at in enumerate(pts):
+        marker('path_ball_%d' % k, at)
+    with animated('anim_path:c=ball:p=6:f=0', pts[0]):
+        sphere(R, pts[0], 'white', flat=False)
+    # a child on the touchline cheering them on
+    person((-PW / 2 - 1.6, 0, 9.0), 0.0, 0xffc044, k=0.68, hair=2, arm=0.2,
+           gesture='anim_sway:a=z:d=150:p=3.8:r=0.7#cheer')
     # mums and dads on a bench on the far touchline
     bench((-PW / 2 - 2.5, 0, -3.0), yaw=math.pi / 2)
     bench((-PW / 2 - 2.5, 0, 3.0), yaw=math.pi / 2)
@@ -2991,7 +3036,7 @@ def watermill():
         marker('path_duck_%d' % k, (PX + 8.0 * math.cos(a), 0.3, PZ + 8.0 * math.sin(a)))
     for j in range(3):
         a0 = 0.0
-        with animated('anim_path:c=duck:p=26:o=%.3f:f=1#%d' % (j / 3 + 0.04 * j, j), (PX + 8.0, 0.3, PZ)):
+        with animated('anim_path:c=duck:p=44:o=%.3f:f=1+bob:h=0.015:p=1.6#%d' % (j / 3 + 0.04 * j, j), (PX + 8.0, 0.3, PZ)):
             duck((PX + 8.0, 0.3, PZ), (0xf8f8fb, 0x9a7b55, 0xf8f8fb)[j])
     WLX, WLZ = PX - 10.0, PZ - 8.0
     cyl(0.8, 8.0, (WLX, 0, WLZ), 0x7a5a3a, r2=0.5, segs=7)
@@ -3000,7 +3045,8 @@ def watermill():
     AX, AZ = PX - PR - 2.2, PZ + 4.0
     bench((AX, 0, AZ), yaw=math.pi / 2)
     person((AX - 0.1, 0.5, AZ), 0.0, 0x22c46e, hair=1, sit=True, arm=0.6)
-    strut((AX + 0.3, 0.9, AZ + 0.35), (AX + 5.0, 3.0, AZ + 0.35), 0.1, 0x2a2735)
+    with animated('anim_sway:a=z:d=9:p=4.5:r=0.75#rod', (AX + 0.3, 0.9, AZ + 0.35)):   # the rod jigs
+        strut((AX + 0.3, 0.9, AZ + 0.35), (AX + 5.0, 3.0, AZ + 0.35), 0.1, 0x2a2735)
     for k, (x, z) in enumerate(((PX - 12.0, PZ + 5.0), (PX + 6.0, PZ - 11.5), (PX - 4.0, PZ + 12.6))):
         for j in range(4):
             a = j * 1.7 + k
@@ -3122,7 +3168,7 @@ def ice_cream_van():
     # afternoon reaches the rest of the lap: a van parked along a gravel
     # lay-by (its length Z, the serving hatch on the road side, +X) under
     # the big cone on its roof turning, the children queueing at the hatch,
-    # one hopping, a grown-up on the bench with a cone. Real size: about one
+    # one waving, a grown-up on the bench with a cone. Real size: about one
     # and a half cars long.
     BODY, TRIM = 0xf8f8fb, 0x339cf2
     box((4.6, 0.1, 9.0), (1.2, 0.05, 0.0), 0xfde4c7)                 # the lay-by
@@ -3148,10 +3194,10 @@ def ice_cream_van():
         cyl(0.12, 1.3, (0, 3.3, -1.1), 0xd9b054, r2=0.55, segs=8)
         sphere(0.62, (0, 4.85, -1.1), 0xf1976c)
         sphere(0.45, (0, 5.5, -1.1), 0xfde4c7)
-    # the queue at the hatch, facing it, the second child hopping
+    # the queue at the hatch, facing it, the second child's arms going up
     person((2.3, 0, -1.6), math.pi, 0xff5040, k=0.68, hair=1, arm=0.6)
-    with animated('anim_bob:h=0.25:p=0.8', (3.0, 0, -0.4)):
-        person((3.0, 0, -0.4), math.pi * 0.9, 0x22c46e, k=0.64, hair=2, arm=2.4)
+    person((3.0, 0, -0.4), math.pi * 0.9, 0x22c46e, k=0.64, hair=2, arm=0.3,
+           gesture='anim_sway:a=z:d=140:p=3.2:r=0.65#kid')
     person((3.4, 0, 0.8), math.pi * 0.85, 0xa259e6, k=0.7, hair=3)
     person((3.7, 0, 1.9), math.pi * 0.85, 0x339cf2, hair=0)
     # the bench along the back of the lay-by, a grown-up with a cone
