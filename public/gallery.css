@@ -298,6 +298,21 @@ section.stage iframe {
    camera). The picked one wears the nav's own active look. */
 .seg { gap: 2px; }
 .seg button.ctrl.is-on { background: #2a2a5a; color: #fff; border-color: #5060c0; }
+/* The landmark stage's key legend. A key is a LABEL (theme.css .pill): a
+   tinted pill, never a solid fill, since it names a key rather than being one. */
+.keys { display: grid; gap: 3px; margin-bottom: 10px; }
+.keys > div { display: flex; align-items: center; gap: 8px; }
+.keys dt { flex: none; width: 64px; display: flex; gap: 3px; color: #6f7699; }
+.keys dd { color: #b8bedc; }
+.legend kbd {
+  display: inline-block; min-width: 1.9em; padding: 0 0.55em;
+  border-radius: 999px; text-align: center;
+  font: 700 10px/1.7 system-ui, -apple-system, sans-serif;
+  color: #b9c3ff; background: rgba(80, 96, 192, 0.24);
+}
+.keys-off { display: none; }
+.legend.keys-hidden .keys { display: none; }
+.legend.keys-hidden .keys-off { display: block; }
 /* The other cells' landmarks while SPREAD is on: a step quieter than the focus. */
 .kit-row--also { background: #1b1b38; color: #c8c8f0; }
 /* The list stands BESIDE the scene, not over it: a split's top-right cell has
