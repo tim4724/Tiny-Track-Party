@@ -3443,12 +3443,15 @@ def wash_bed():
     # along it: a cottonwood on each bank where the water is underground, at
     # a real one's size (some twenty metres), its crown over the banks, and a
     # red boulder on the bar. The bed keeps the shade it had under its stones
-    # (shade() runs the ramp to the piece's new top, the crowns).
+    # (shade() runs the ramp to the piece's new top, the crowns). Where a
+    # reach runs under the road the trees stand where every placement's road
+    # passes at least a crown and a kerb clear: a crown must never stand on
+    # the road or hang over its kerb.
     bed = [o for o in bpy.context.scene.objects if o.type == 'MESH']
     for o in bed:
         o['ramp'] = 0.84
-    cottonwood((4.3, 0, -7.5), 4.4, 1.5)
-    cottonwood((-4.1, 0, 6.0), 3.8, 1.3)
+    cottonwood((5.0, 0, 1.5), 4.4, 1.5)
+    cottonwood((-4.0, 0, 3.5), 3.8, 1.3)
     sandstone_rock((3.2, 0, 5.0), 1.1, yaw=0.7)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
 
