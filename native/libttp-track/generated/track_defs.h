@@ -1699,7 +1699,7 @@ constexpr FurnDef kBoxes_skysnake[] = {
 };
 constexpr SetDef kSet_skysnake[] = {
   { "set-jointed-snake", 0x1.f367a0f9096bcp-1, 0x1.4p+3, 0x1.68p+7, 0x0p+0, 0x1p+0 },
-  { "set-snakes-ladders", 0x1.b0d844d013a93p-1, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-snakes-ladders", 0x1.b0d844d013a93p-1, 0x1.cp+3, 0x1.68p+5, 0x0p+0, 0x1p+0 },
   { "set-game-box", 0x1.28f5c28f5c28fp-2, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-toy-snake-loop", 0x1.5c28f5c28f5c3p-3, -0x1p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-toy-snake-loop", 0x1p-2, 0x1.2p+3, 0x1.ep+6, 0x0p+0, 0x1p+0 },

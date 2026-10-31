@@ -4419,13 +4419,42 @@ def pawn(at, color, k=1.0):
 
 SNAKE = (0x6cbf6c, 0xf2c14e)
 
+def stand_open(B, phi):
+    """Stand a folded board up like an open book: every part so far, built
+    lying flat (face up, its fold the line x = 0), is cut at the fold and
+    turned so the fold stands upright, the board's -Z edge on the floor and
+    its face to +X, each half swung `phi` toward the face."""
+    import bmesh
+    bpy.ops.object.select_all(action='DESELECT')
+    parts = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    for o in parts:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    c, s = math.cos(phi), math.sin(phi)
+    for o in parts:
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
+                               plane_co=(0, 0, 0), plane_no=(1, 0, 0))
+        for v in bm.verts:
+            x, y, z = v.co.x, v.co.z, -v.co.y                  # Blender -> (across, up, along)
+            h, d = z + B, y                                    # stood on its -Z edge, face to +d
+            sg = 1.0 if x > 0 else -1.0
+            x, d = x * c - sg * d * s, sg * x * s + d * c      # each half swung toward the face
+            v.co = P(d, h, x)
+        bm.to_mesh(o.data)
+        bm.free()
+        o.data.update()
+
 @piece(1.0)
 def snakes_ladders():
-    # Skysnake: a game of snakes and ladders set out on the floor past the
-    # dive's loop, where the dive looks down on it (lying flat, it reads only
-    # from above), a 60 cm board of a hundred squares (a toy car fits on one), its
-    # snakes and ladders printed on it, the pawns mid-game and two dice
-    # thrown. The track's dive is its snake and its climb a ladder.
+    # Skysnake: a game of snakes and ladders past the dive's loop, outside
+    # the bend the loop runs out into: a 60 cm board of a hundred squares (a
+    # toy car fits on one) stood up half open like a book, its snakes and
+    # ladders to the road (lying flat, it showed only a sliver over the
+    # kerb), the pawns and two dice on the floor before it. The track's dive
+    # is its snake and its climb a ladder.
     B, T = 5.5, 0.22
     box((2 * B + 0.25, T, 2 * B + 0.25), (0, T / 2, 0), 0xb06041)        # the board's edge
     box((2 * B, 0.04, 2 * B), (0, T + 0.02, 0), 0xfdf4de)                 # its printed face
@@ -4447,14 +4476,15 @@ def snakes_ladders():
         print_band(pts, y + 0.02, 0.42, c)
         hx, hz = ctrl[0]
         quad([(hx - 0.35, y + 0.025, hz), (hx, y + 0.025, hz - 0.3), (hx + 0.35, y + 0.025, hz), (hx, y + 0.025, hz + 0.45)], c)
-    pawn((3.0, T, -2.6), 0xe66a5a, k=0.3)
-    pawn((-1.7, T, -4.1), 0x5a8fd8, k=0.3)
-    pawn((1.0, T, 4.2), 0xa878e8, k=0.3)
-    pawn((-3.8, T, 2.6), 0xf2c14e, k=0.3)
-    die((-4.0, T, 4.2), 0.5, 0.4)
-    die((-2.9, T, 4.7), 0.5, -0.3, faces=(('+x', 1), ('-z', 6), ('+z', 3), ('-x', 4)))
-    merge_paint()
     keep_light(0.4)
+    stand_open(B + 0.125, math.radians(28))
+    pawn((3.4, 0, -1.2), 0xe66a5a, k=0.4)
+    pawn((4.2, 0, 0.6), 0x5a8fd8, k=0.4)
+    pawn((2.6, 0, 0.3), 0xa878e8, k=0.4)
+    pawn((4.6, 0, -2.6), 0xf2c14e, k=0.4)
+    die((5.4, 0, 1.6), 0.6, 0.4)
+    die((5.9, 0, 0.4), 0.6, -0.3, faces=(('+x', 1), ('-z', 6), ('+z', 3), ('-x', 4)))
+    merge_paint()
 
 def toy_snake(ctrl, base, k, rear=None, tail=None, neck=None):
     """A jointed wooden toy snake lying along the curve through `ctrl` [(x,
