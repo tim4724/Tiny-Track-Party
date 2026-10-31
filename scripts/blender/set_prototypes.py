@@ -1227,16 +1227,24 @@ def buoy_line():
         box((0.16, 0.08, 0.12), (x0 + 0.33, SEA - 0.02, z0), 0xff5040, yaw=math.pi / 4)
         figure((x0 - 0.04, SEA + 0.02, z0), 0.0, shirt=0xff5040, legs=0xff5040, hair=0xffc044, pose='crouch')
         beam((x0 + 0.12, SEA + 0.0, z0 + 0.14), (x0 - 0.02, SEA + 0.36, z0 + 0.1), 0.06, 0x9a7b55)   # the paddle
-    # the surf either side of the flags: a wave rolls in out of the swell
-    # with a surfer riding it across and in, and runs out into the foam
-    # short of the line; the wave and its rider are one rigid part on a
-    # loop whose way back out runs under the sand (a closed path, hidden)
+    # the surf either side of the flags: a wave rolls up out of the swell
+    # with a surfer riding it across and in, and short of the line it breaks
+    # and pitches him over into the water (a wipeout: he never sinks upright).
+    # The wave and its rider are one rigid part on a closed path that faces
+    # it along its way (f=2, so the dive tips it forward and the climb tilts
+    # it back), its node turned to the ride so the rest pose is the ride's;
+    # the way back out runs deep under the sand, where the turns are hidden.
     for k, s in enumerate((-1, 1)):
-        ride = [(7.4, 0.0, s * 12.0), (2.6, 0.0, s * 7.2), (2.2, -1.0, s * 6.8), (8.0, -1.0, s * 12.5)]
+        d = (-math.sqrt(0.5), -s * math.sqrt(0.5))            # the ride's way, in and across
+        x0, z0 = 7.4, s * 12.0
+        x1, z1 = 2.6, s * 7.2
+        ride = [(x0, 0.0, z0), (x1, 0.0, z1),
+                (x1 + 0.8 * d[0], -1.8, z1 + 0.8 * d[1]),    # the dive, 66 degrees down
+                (x0 - 3.1 * d[0], -1.8, z0 - 3.1 * d[1])]    # back out; up again at 30 degrees
         for i, at in enumerate(ride):
             marker('path_surf%d_%d' % (k, i), at)
-        x0, _, z0 = ride[0]
-        with animated('anim_path:c=surf%d:p=12:o=%.1f:f=0#surf%d' % (k, 0.5 * k, k), ride[0]), square():
+        with animated('anim_path:c=surf%d:p=14:o=%.1f:f=2#surf%d' % (k, 0.5 * k, k), ride[0],
+                      yaw=s * 3 * math.pi / 4), square():
             wave(ride[0], 2.8)
             yb = -math.pi / 2 - s * math.pi / 4                # the board along the ride, in and across
             board(x0 - 0.1, z0, (0x339cf2, 0xff5040)[k], yb, y=SEA + 0.14)
