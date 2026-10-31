@@ -1582,7 +1582,7 @@ void themeThroughAbi() {
   // A kind no SINGLE biome carries: the union is the point of the inventory.
   // (It was the wind-up train until the playroom's train became a kit model.)
   check(inventory.find("\"lighthouse\"") != std::string::npos
-                && inventory.find("\"alphabet blocks\"") != std::string::npos,
+                && inventory.find("\"log cabin\"") != std::string::npos,
         "…and names the kinds no single biome carries");
 }
 
