@@ -25,13 +25,13 @@
 // on the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed);
 // the other verbs are in-place and a path ignores them. Lengths are the node's own units (a GLB's grow and the
 // placement's scale carry them); radii are WORLD units, because they are about
-// cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
-// c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full),
-// r rest: the share of a sway's or a bob's period it stands still. A sway with
-// a rest swings ONE way (0 to d and back, eased at both ends) instead of either
-// side of its rest pose: a cow lifts its head from the grass and lowers it
-// again, a tumbleweed bounces and lands. A bob is one-sided already, so its
-// rest only adds the pause.
+// cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius
+// (watch, hop), c chain, o phase offset (0..1), f facing for a path (0 rest,
+// 1 yaw, 2 full), s size (smoke), and r on a sway or a bob is its REST: the
+// share of its period it stands still. A sway with a rest swings ONE way (0 to
+// d and back, eased at both ends) instead of either side of its rest pose: a
+// cow lifts its head from the grass and lowers it again. A bob is one-sided
+// already, so its rest only adds the pause: a tumbleweed bounces and lands.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
