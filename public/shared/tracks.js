@@ -265,12 +265,11 @@ export const SET_GROUND = {
   // the resort's chalets and the slalom's finish stand (a plain, so the
   // ground raised toward the deck does not bury them; the mountain's foot
   // stops a grid cell short of them, where the 9 u grid's chords over the
-  // foot would), and the blue run
-  // washed down it from the top station to the slalom and on to the finish
-  // on the flat; Avalanche's slide
-  // face, the debris fan over the chute's end (stopping a grid cell short of
-  // the road, whose cap would leave what lies on it floating), and the
-  // slopes its fences and warning signs stand under.
+  // foot would), and the blue run washed down it from the top station to the
+  // slalom and on to the finish on the flat; Avalanche's slide face, the
+  // debris fan over the chute's end (stopping a grid cell short of the road,
+  // whose cap would leave what lies on it floating), and the slopes its
+  // fences and warning signs stand under.
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
@@ -444,7 +443,6 @@ export const TRACKS = {
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
     set: [
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
-      { model: 'set-ski-rack', u: 0.435, lat: 14.5, yaw: 20 },
       { model: 'set-ski-rack', u: 0.54, lat: -10.2, yaw: 160 }
     ]
   },

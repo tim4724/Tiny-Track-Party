@@ -301,7 +301,7 @@ void snowProps(Theme& t, std::initializer_list<SnowProp> list) {
 // rolled less often, and the verge carries fewer of them (the kit snowman is
 // a heavy model, and the resort's chalets and lift spend that budget).
 void powderResort(Theme& t) {
-  t.props.scatterDensity = 0.24f;
+  t.props.scatterDensity = 0.18f;
   t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
   t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
   snowProps(t, { { "snowman", 0.12f, 0.45f, 0.1f, true, true }, { "sled", 0.25f, 0.4f, 0.1f, false, true },
@@ -625,7 +625,7 @@ Theme playroomTheme() {
   t.props.models = { "trainset", "skateboard" };
   // The ring keeps its own rate (0.03 a candidate) under the skateboard's
   // density: at 2.8k vertices it is the heaviest thing the scatter plants.
-  t.props.scatterDensity = 0.12f;
+  t.props.scatterDensity = 0.18f;
   t.props.scatter = { { 0, 0.25f, 2.0f }, { 1, 0.75f, 3.5f, 0.5f, false, true } };
   return t;
 }
