@@ -12,7 +12,7 @@ import { MAX_BUFFER_H } from './display/Stage.js';
 // page, and a track or view picked here means nothing on the others.
 const STATE_KEY = 'tinytrack_gallery_landmarks_v1';
 const state = (() => {
-  const d = { track: '', players: 1, view: 'driver', spread: false, res: 'sharp' };
+  const d = { track: '', players: 1, view: 'driver', spread: false, res: 'sharp', slow: false, keys: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -24,6 +24,8 @@ const viewBtns = [...document.querySelectorAll('#lm-views [data-view]')];
 const spreadBox = document.getElementById('lm-spread');
 const list = document.getElementById('lm-list');
 const resBtn = document.getElementById('lm-res');
+const slowBtn = document.getElementById('lm-slow');
+const legend = document.getElementById('lm-legend');
 let lm = null;   // the hook, once the frame has built its first scene
 const linesOut = document.getElementById('lm-lines');
 
@@ -85,6 +87,8 @@ function paintButtons() {
   for (const b of viewBtns) b.classList.toggle('is-on', b.dataset.view === state.view);
   spreadBox.checked = state.spread;
   resBtn.textContent = state.res === 'sharp' ? 'Res: Sharp' : 'Res: Auto';
+  slowBtn.classList.toggle('is-on', state.slow);
+  legend.classList.toggle('keys-hidden', !state.keys);
 }
 
 function paintList() {
@@ -161,6 +165,25 @@ function setView(v) {
 function restoreView() {
   try { lm.view(state.view); } catch (_) { state.view = 'driver'; save(); paintButtons(); lm.view(state.view); }
 }
+// The camera buttons' own order is the cycle.
+function stepView(d) {
+  const i = viewBtns.findIndex((b) => b.dataset.view === state.view);
+  setView(viewBtns[(i + d + viewBtns.length) % viewBtns.length].dataset.view);
+}
+function setSpread(on) {
+  state.spread = on;
+  save();
+  spreadBox.checked = on;
+  if (lm) { lm.spread(on); paintList(); }
+}
+// Slow motion: the scene at a quarter of real time, to judge how a piece moves.
+const SLOW = 0.25;
+function setSlow(on) {
+  state.slow = on;
+  save();
+  paintButtons();
+  if (lm) lm.timeScale(on ? SLOW : 1);
+}
 function stepTrack(d) {
   if (!lm) return;
   const opts = [...trackSel.options];
@@ -171,12 +194,8 @@ function stepTrack(d) {
 for (const b of playerBtns) b.addEventListener('click', () => { setPlayers(+b.dataset.players); frame.focus(); });
 for (const b of viewBtns) b.addEventListener('click', () => { setView(b.dataset.view); frame.focus(); });
 trackSel.addEventListener('change', () => { setTrack(trackSel.value); frame.focus(); });
-spreadBox.addEventListener('change', () => {
-  state.spread = spreadBox.checked;
-  save();
-  if (lm) { lm.spread(state.spread); paintList(); }
-  frame.focus();
-});
+spreadBox.addEventListener('change', () => { setSpread(spreadBox.checked); frame.focus(); });
+slowBtn.addEventListener('click', () => { setSlow(!state.slow); frame.focus(); });
 resBtn.addEventListener('click', () => {
   state.res = state.res === 'sharp' ? 'auto' : 'sharp';
   save();
@@ -191,16 +210,24 @@ document.getElementById('lm-prev').addEventListener('click', () => { step(-1); f
 document.getElementById('lm-next').addEventListener('click', () => { step(1); frame.focus(); });
 
 // Keys work from either document: after a click the FRAME has focus (so WASD
-// flies the free camera), and the arrows and digits must still reach here.
+// flies the free camera), and the rest must still reach here. The letters keep
+// clear of the free camera's W A S D Q E; the legend in the side panel lists
+// them. A field being typed into keeps its keys.
 function onKey(e) {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const t = e.target;
-  if (t && (t.tagName === 'SELECT' || t.tagName === 'INPUT')) return;
-  if (e.key === 'ArrowLeft') step(-1);
-  else if (e.key === 'ArrowRight') step(1);
-  else if (e.key === 'ArrowUp') stepTrack(-1);
-  else if (e.key === 'ArrowDown') stepTrack(1);
-  else if (e.key >= '1' && e.key <= '4') setPlayers(+e.key);
+  if (t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (k === 'ArrowLeft') step(-1);
+  else if (k === 'ArrowRight') step(1);
+  else if (k === 'ArrowUp') stepTrack(-1);
+  else if (k === 'ArrowDown') stepTrack(1);
+  else if (k === 'c') stepView(e.shiftKey ? -1 : 1);
+  else if (k >= '1' && k <= '4') setPlayers(+k);
+  else if (k === 'x') setSpread(!state.spread);
+  else if (k === 'm') setSlow(!state.slow);
+  else if (k === 'Home') focus(0);
+  else if (k === '?') { state.keys = !state.keys; save(); paintButtons(); }
   else return;
   e.preventDefault();
 }
@@ -227,6 +254,7 @@ function init(h) {
   trackSel.value = state.track;
   save();
   lm.spread(state.spread);
+  lm.timeScale(state.slow ? SLOW : 1);
   restoreView();
   paintList();
 }

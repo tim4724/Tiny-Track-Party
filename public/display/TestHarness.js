@@ -2014,6 +2014,9 @@ export function runDisplayScenario(opts, ctx) {
         // where nothing beats it by enough or nothing may stand).
         better: (aspect) => serial(async () => better(aspect || 16 / 9)),
         spread(on) { spreadOn = on !== false; aim(); return spreadOn; },
+        // The scene clock's rate (1 is real time): slow motion, to judge how a
+        // set piece moves. It slows the cameras' own easing and a race too.
+        timeScale: (n) => scene.setTimeScale(n),
         home() { focusAt = 0; return setView('driver'); }
       };
     }

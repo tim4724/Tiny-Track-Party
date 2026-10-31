@@ -224,3 +224,75 @@ test('landmark gallery page: the Res toggle', async ({ page }) => {
   await expect(page.locator('#lm-res')).toHaveText('Res: Auto');
   expect(await src()).toBeNull();
 });
+
+// The page's keys, from either document (the chrome's, or the stage's once a
+// click has put focus in the frame): the arrows walk the landmarks and the
+// catalogue, C cycles the camera in the buttons' order, and the rest do what
+// their buttons do.
+test('landmark gallery page: the keys', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const lm = (call) => page.evaluate((c) => {
+    const L = document.getElementById('lm-stage').contentWindow.__landmarks;
+    return c === 'count' ? L.tracks().length : L[c]();
+  }, call);
+  const trackIs = (id) => page.waitForFunction(
+    (t) => document.getElementById('lm-stage').contentWindow.__landmarks.trackId() === t, id);
+
+  // Landmarks: right and left step the focus, the list follows; Home is the first.
+  expect(await lm('focused')).toBe(0);
+  await page.keyboard.press('ArrowRight');
+  expect(await lm('focused')).toBe(1);
+  await expect(page.locator('#lm-list .kit-row').nth(1)).toHaveClass(/kit-row--at/);
+  await page.keyboard.press('ArrowLeft');
+  expect(await lm('focused')).toBe(0);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Home');
+  expect(await lm('focused')).toBe(0);
+
+  // Camera: C walks the buttons' order and shift-C back, from inside the frame too.
+  const views = await page.$$eval('#lm-views [data-view]', (bs) => bs.map((b) => b.dataset.view));
+  expect(await lm('mode')).toBe(views[0]);
+  await page.keyboard.press('c');
+  expect(await lm('mode')).toBe(views[1]);
+  await expect(page.locator(`#lm-views [data-view="${views[1]}"]`)).toHaveClass(/is-on/);
+  await page.evaluate(() => document.getElementById('lm-stage').contentWindow.focus());
+  await page.keyboard.press('c');
+  expect(await lm('mode')).toBe(views[2]);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+C');
+  expect(await lm('mode')).toBe(views[views.length - 1]);
+  await page.keyboard.press('c');
+  expect(await lm('mode')).toBe(views[0]);
+
+  // Tracks: down is the next of the whole catalogue in cup order, up wraps.
+  const order = await page.$$eval('#lm-track option', (os) => os.map((o) => o.value));
+  expect(order.length).toBe(await lm('count'));
+  expect(await lm('trackId')).toBe(order[0]);
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#lm-track')).toHaveValue(order[1]);
+  await trackIs(order[1]);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('#lm-track')).toHaveValue(order[order.length - 1]);
+  await trackIs(order[order.length - 1]);
+
+  // Players, spread, slow motion and the legend itself.
+  await page.keyboard.press('2');
+  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.seats() === 2);
+  await page.keyboard.press('x');
+  await expect(page.locator('#lm-spread')).toBeChecked();
+  await page.keyboard.press('x');
+  await expect(page.locator('#lm-spread')).not.toBeChecked();
+  const scale = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__scene._timeScale);
+  await page.keyboard.press('m');
+  await expect(page.locator('#lm-slow')).toHaveClass(/is-on/);
+  expect(await scale()).toBe(0.25);
+  await page.keyboard.press('m');
+  expect(await scale()).toBe(1);
+  await expect(page.locator('#lm-keys')).toBeVisible();
+  await page.keyboard.press('?');
+  await expect(page.locator('#lm-keys')).toBeHidden();
+  await expect(page.locator('#lm-keys-off')).toBeVisible();
+  await page.keyboard.press('?');
+  await expect(page.locator('#lm-keys')).toBeVisible();
+});
