@@ -86,7 +86,7 @@
     "set-rock-pool.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-shipwreck-ribs.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ski-lift.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-ski-rack.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-ski-school.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-skull-rock.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-slinky.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snakes-ladders.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
