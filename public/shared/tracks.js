@@ -282,10 +282,22 @@ export const SET_GROUND = {
     { kind: 'ring', r: 21, w: 6, h: 3.5 }
   ],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
-  // Pretzel's oak on the crest of the hill it grew on, its summit under the
+  // Pretzel's oak on the crest of the knoll it grew on, its summit under the
   // trunk: short toward the road (+X), the hill falling away behind it and
-  // along it across the north-east corner of the garden.
-  'set-treehouse': [{ kind: 'mound', h: 3.0, r: 17, r1: 40, rz: 28, shape: 1.4 }],
+  // along it over the corner of the garden.
+  'set-treehouse': [{ kind: 'mound', h: 2.6, r: 18, r1: 32, rz: 26, shape: 0.6 }],
+  // Ribbon's cottages stand on the bank their lane runs along: a long low
+  // terrace, flat on top and broad enough that the ground's grid draws it
+  // flat under them, its crest about level with the road beside it (it rises
+  // from the ground raised under the deck, and stays under the cap the deck
+  // holds the ground to), so a racer looks across at the cottages rather
+  // than down over the kerb at their roofs.
+  'set-cottage-row': [{ kind: 'fan', x: -1.5, len: 30, r: 18, h: 1.1, top: 0.7 }],
+  // Pretzel's den camp on a bank of its own, the same shape.
+  'set-den-camp': [{ kind: 'fan', len: 6, r: 9, h: 1.4, top: 0.6 }],
+  // Cloverleaf's playground hill: a broad round top the playground stands on
+  // (flat for its whole width), steeper to the road (+X), falling away behind.
+  'set-playground': [{ kind: 'mound', h: 2.4, r: 18, r1: 30, rz: 24, shape: 0.5 }],
   // Riptide's dune bank: a long sand bank behind the beach, the lifeguard's
   // hut on its crest and its boardwalk down the face toward the road.
   'set-lifeguard-tower': [{ kind: 'mound', x: -1.2, h: 5.2, r: 15, r1: 16, rz: 30, shape: 1.2 }],
@@ -501,78 +513,78 @@ export const TRACKS = {
   ribbon: {
     name: 'Ribbon', waypoints: GEN_TRACKS.ribbon,
     oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
-    // Washing day: four lines strung right across the circuit from the
-    // terraces on the west to the terraces on the east, each placed along the
-    // line it was measured on (scripts/blender/set_prototypes.py washing_span)
+    // The village: the church on the east terrace where the grid straight
+    // looks, the maypole on its green; rows of cottages along the lanes the
+    // circuit runs down, past the north loop, the long diagonal and round the
+    // south loop, each on its bank (SET_GROUND), washing out in the gardens;
+    // the windmill turning in the middle of the south loop. A row keeps clear
+    // of another piece's clearing, which would cut its bank
     set: [
-      { model: 'set-washing-line', u: 0.01404, lat: -17.023, yaw: 16.88 },
-      { model: 'set-laundry-basket', u: 0.92311, lat: 24.442, yaw: 10.44 },
-      { model: 'set-washing-line-n', u: 0.23239, lat: -0.15, yaw: -91.93 },
-      { model: 'set-washing-line-b', u: 0.46839, lat: -14.842, yaw: -122.87 },
-      { model: 'set-washing-line-s', u: 0.54757, lat: 3.799, yaw: -114 }
+      { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
+      { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
+      { model: 'set-cottage-row', u: 0.823, lat: 31, yaw: 41.02 },
+      { model: 'set-cottage-row', u: 0.14, lat: -12, yaw: 180 },
+      { model: 'set-cottage-row', u: 0.598, lat: -9.6, yaw: 176.98 },
+      { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 }
     ],
-    // the garden climbs in two terraces either side of the circuit, the posts
-    // on the lower step; a long bank behind the north loop and a rounded hill
-    // to the south-east close the ends
+    // the valley the village lies in: two terraces climbing either side of
+    // the circuit, a long bank behind the north loop and a round hill to the
+    // south-east
     land: [
-      { kind: 'ridge', u: 0.92656, lat: 25.874, yaw: 4.23, len: 120, r: 16, h: 3, top: 0.6 },
-      { kind: 'ridge', u: 0.92705, lat: 35.91, yaw: 3.39, len: 100, r: 9, h: 3, top: 0.45 },
-      { kind: 'ridge', u: 0.37785, lat: 31.449, yaw: 157.23, len: 120, r: 16, h: 3, top: 0.6 },
-      { kind: 'ridge', u: 0.37196, lat: 39.797, yaw: 158.48, len: 100, r: 9, h: 3, top: 0.45 },
+      { kind: 'ridge', u: 0.92671, lat: 19.8, yaw: 3.97, len: 120, r: 16, h: 3, top: 0.6 },
+      { kind: 'ridge', u: 0.92746, lat: 29.818, yaw: 2.68, len: 100, r: 9, h: 3, top: 0.45 },
+      { kind: 'ridge', u: 0.38249, lat: 25.92, yaw: 156.65, len: 120, r: 16, h: 3, top: 0.6 },
+      { kind: 'ridge', u: 0.37558, lat: 34.185, yaw: 157.64, len: 100, r: 9, h: 3, top: 0.45 },
       { kind: 'ridge', u: 0.2, lat: -46, len: 60, r: 24, h: 6, top: 0.35 },
-      { kind: 'ridge', u: 0.66, lat: -46, r: 28, h: 8, top: 0.15 }
+      { kind: 'ridge', u: 0.66022, lat: -27.168, r: 24, h: 7, top: 0.15 }
     ]
   },
   pretzel: {
     name: 'Pretzel', waypoints: GEN_TRACKS.pretzel,
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
-    // The treehouse oak on the crest of its hill (SET_GROUND, about three
-    // over the nearest deck, the hill running on behind it over the corner of
-    // the garden) where the long diagonal points, the tyre swinging; the
-    // paddling pool at the hill's foot, the trampoline and the pitch round
-    // the lap
+    // The children's summer: the treehouse oak on its knoll (SET_GROUND)
+    // past the north-west corner, where the start diagonal points, its den
+    // round the foot; the pitch beside the diagonal with a game on; their
+    // camp out past the east bend, the fire smoking
     set: [
-      { model: 'set-treehouse', u: 0.06511, lat: 31.614, yaw: -21.74, scale: 1.6 },
-      { model: 'set-paddling-pool', u: 0.053, lat: 14.5 },
-      { model: 'set-trampoline', u: 0.77, lat: -14, yaw: 160 },
-      { model: 'set-football-pitch', u: 0.772, lat: -32.5, yaw: 160 }
+      { model: 'set-treehouse', u: 0.05455, lat: 21, yaw: 25.44 },
+      { model: 'set-football-pitch', u: 0.92176, lat: -9.578, yaw: 1.41 },
+      { model: 'set-den-camp', u: 0.53381, lat: 11.842, yaw: 13.39 }
     ]
   },
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
-    // The tangled hose: from the tap on the east lawn under both bridges and
-    // round the middle to the one big sprinkler on the west lawn, ahead of the
-    // grid. The hose is placed at heading 0 (its builder's PATH is in the
-    // world's axes).
+    // The mill stream: it rises on the east lawn, runs under the S-bend by
+    // the crossing, across the middle lawn and under the first bridge, along
+    // the north lawn and round the north-west corner into the race of the
+    // watermill on its pond, straight ahead of the grid. Laid reach by reach,
+    // each reach's end circle on the next one's
     set: [
-      { model: 'set-sprinkler', u: 0.09052, lat: 21.121, yaw: 135.17, scale: 1.3 },
-      { model: 'set-garden-hose', u: 0.44592, lat: -4.334, yaw: -134.44 }
+      { model: 'set-watermill', u: 0.09199, lat: 14.152, yaw: 35.65 },
+      { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
+      { model: 'set-stream-reach', u: 0.51248, lat: 8.411, yaw: 96.74 },
+      { model: 'set-stream-reach', u: 0.50012, lat: -11.456, yaw: 116.55 },
+      { model: 'set-stream-reach', u: 0.15996, lat: -2.595, yaw: -67.1 },
+      { model: 'set-stream-reach', u: 0.14206, lat: 9.721, yaw: -172.98 },
+      { model: 'set-stream-reach', u: 0.10395, lat: 7.076, yaw: 174.83 }
     ],
-    // the lawn humps where the hose runs over it, north of the first bridge
-    // and in the middle
+    // the north lawn's hump the stream bends round
     land: [
-      { kind: 'ridge', u: 0.12122, lat: 21.88, r: 12, h: 3, top: 0.2 },
-      { kind: 'ridge', u: 0.04252, lat: -12.384, r: 9, h: 2.2, top: 0.2 }
+      { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 }
     ]
   },
   cloverleaf: {
     name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
-    // Playground hill: the playground on the flat top of the hill south-west
-    // of the circuit, where the start straight points, swings, seesaw and
-    // roundabout going; a picnic, a barbecue and the bird bath round the lap
+    // Playground hill: the playground on the broad top of its hill
+    // (SET_GROUND) outside the south-west corner, where the start straight
+    // points, every swing, seesaw and roundabout going with a child on it
     set: [
-      { model: 'set-playground', u: 0.09518, lat: -26.765, yaw: -173.21, scale: 1.4 },
-      { model: 'set-picnic-blanket', u: 0.478, lat: 7.5, yaw: 20 },
-      { model: 'set-barbecue', u: 0.075, lat: -7.5, yaw: 160 },
-      { model: 'set-bird-bath', u: 0.84, lat: 14.5, yaw: 20 }
+      { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96 }
     ],
-    // the playground's hill, its top levelled at about the height of the
-    // decks beside it; the round hill beyond the south bend and a long ridge
-    // closing the west
+    // the round hill beyond the south bend and a long ridge closing the west
     land: [
-      { kind: 'ridge', u: 0.09518, lat: -26.765, yaw: -173.21, len: 12, r: 20, h: 5.5, top: 0.6 },
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 }
     ]

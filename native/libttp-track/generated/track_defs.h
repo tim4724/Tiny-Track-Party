@@ -861,19 +861,24 @@ constexpr FurnDef kBoxes_ribbon[] = {
   { 0x1.af1a9fbe76c8bp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_ribbon[] = {
-  { "set-washing-line", 0x1.cc100e6afcce2p-7, -0x1.105e353f7ced9p+4, 0x1.0e147ae147ae1p+4, 0x0p+0, 0x1p+0 },
-  { "set-laundry-basket", 0x1.d8a1dfb9389b5p-1, 0x1.87126e978d4fep+4, 0x1.4e147ae147ae1p+3, 0x0p+0, 0x1p+0 },
-  { "set-washing-line-n", 0x1.dbef49cf56eadp-3, -0x1.3333333333333p-3, -0x1.6fb851eb851ecp+6, 0x0p+0, 0x1p+0 },
-  { "set-washing-line-b", 0x1.dfa1a0cf1800ap-2, -0x1.daf1a9fbe76c9p+3, -0x1.eb7ae147ae148p+6, 0x0p+0, 0x1p+0 },
-  { "set-washing-line-s", 0x1.185b18548a9bdp-1, 0x1.e645a1cac0831p+1, -0x1.c8p+6, 0x0p+0, 0x1p+0 },
+  { "set-village-church", 0x1.48c692f6e8295p-2, 0x1.5b16872b020c5p+4, 0x1.3ab851eb851ecp+5, 0x0p+0, 0x1p+0 },
+  { "set-cottage-row", 0x1.c083126e978d5p-2, 0x1.dp+3, 0x1.b851eb851eb85p+0, 0x0p+0, 0x1p+0 },
+  { "set-cottage-row", 0x1.a5604189374bcp-1, 0x1.fp+4, 0x1.4828f5c28f5c3p+5, 0x0p+0, 0x1p+0 },
+  { "set-cottage-row", 0x1.1eb851eb851ecp-3, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0 },
+  { "set-cottage-row", 0x1.322d0e5604189p-1, -0x1.3333333333333p+3, 0x1.61f5c28f5c28fp+7, 0x0p+0, 0x1p+0 },
+  { "set-windmill", 0x1.3d70a3d70a3d7p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_ribbon[] = {
-  { 0, -1, 0x1.da6612839042ep-1, 0x1.9dfbe76c8b439p+4, 0x1.0eb851eb851ecp+2, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
-  { 0, -1, 0x1.daa64c2f837b5p-1, 0x1.1f47ae147ae14p+5, 0x1.b1eb851eb851fp+1, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u },
-  { 0, -1, 0x1.82eb1c432ca58p-2, 0x1.f72f1a9fbe76dp+4, 0x1.3a75c28f5c28fp+7, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
-  { 0, -1, 0x1.7ce3150dae3e7p-2, 0x1.3e604189374bcp+5, 0x1.3cf5c28f5c28fp+7, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u },
+  { 4, 1, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.8p+0, 0x0p+0, 0x1.ep+4, 0x1.2p+4, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 0x1.199999999999ap+0, 0x1.6666666666666p-1, 0x1p+0, 0x0u },
+  { 4, 2, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.8p+0, 0x0p+0, 0x1.ep+4, 0x1.2p+4, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 0x1.199999999999ap+0, 0x1.6666666666666p-1, 0x1p+0, 0x0u },
+  { 4, 3, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.8p+0, 0x0p+0, 0x1.ep+4, 0x1.2p+4, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 0x1.199999999999ap+0, 0x1.6666666666666p-1, 0x1p+0, 0x0u },
+  { 4, 4, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.8p+0, 0x0p+0, 0x1.ep+4, 0x1.2p+4, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 0x1.199999999999ap+0, 0x1.6666666666666p-1, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.da79bbadc0981p-1, 0x1.3cccccccccccdp+4, 0x1.fc28f5c28f5c3p+1, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.dadc0980b242p-1, 0x1.dd16872b020c5p+4, 0x1.570a3d70a3d71p+1, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.87ab7564302b4p-2, 0x1.9eb851eb851ecp+4, 0x1.394cccccccccdp+7, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.80980b242070cp-2, 0x1.117ae147ae148p+5, 0x1.3b47ae147ae14p+7, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u },
   { 0, -1, 0x1.999999999999ap-3, -0x1.7p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+5, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.6666666666666p-2, 0x1p+0, 0x0u },
-  { 0, -1, 0x1.51eb851eb851fp-1, -0x1.7p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x1p+3, 0x1p+3, 0x1.3333333333333p-3, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.52085b18548aap-1, -0x1.b2b020c49ba5ep+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1.3333333333333p-3, 0x1p+0, 0x0u },
 };
 
 constexpr WptDef kW_pretzel[] = {
@@ -960,13 +965,13 @@ constexpr FurnDef kBoxes_pretzel[] = {
   { 0x1.bb645a1cac083p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_pretzel[] = {
-  { "set-treehouse", 0x1.0ab0c88a47edp-4, 0x1.f9d2f1a9fbe77p+4, -0x1.5bd70a3d70a3dp+4, 0x0p+0, 0x1.999999999999ap+0 },
-  { "set-paddling-pool", 0x1.b22d0e5604189p-5, 0x1.dp+3, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-trampoline", 0x1.8a3d70a3d70a4p-1, -0x1.cp+3, 0x1.4p+7, 0x0p+0, 0x1p+0 },
-  { "set-football-pitch", 0x1.8b4395810624ep-1, -0x1.04p+5, 0x1.4p+7, 0x0p+0, 0x1p+0 },
+  { "set-treehouse", 0x1.bedfa43fe5c92p-5, 0x1.5p+4, 0x1.970a3d70a3d71p+4, 0x0p+0, 0x1p+0 },
+  { "set-football-pitch", 0x1.d7f0ed3d859c9p-1, -0x1.327ef9db22d0ep+3, 0x1.68f5c28f5c28fp+0, 0x0p+0, 0x1p+0 },
+  { "set-den-camp", 0x1.114f8b588e369p-1, 0x1.7af1a9fbe76c9p+3, 0x1.ac7ae147ae148p+3, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_pretzel[] = {
-  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.1p+4, 0x1.4p+5, 0x0p+0, 0x1.cp+4, 0x1.8p+1, 0x1.8p+1, 0x0p+0, 0x1.6666666666666p+0, 0x0u },
+  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+4, 0x1p+5, 0x0p+0, 0x1.ap+4, 0x1.4cccccccccccdp+1, 0x1.4cccccccccccdp+1, 0x0p+0, 0x1.3333333333333p-1, 0x0u },
+  { 4, 2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0, 0x1.6666666666666p+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
 };
 
 constexpr WptDef kW_tangle[] = {
@@ -1067,12 +1072,16 @@ constexpr FurnDef kBoxes_tangle[] = {
   { 0x1.7d70a3d70a3d7p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_tangle[] = {
-  { "set-sprinkler", 0x1.72c5197a24895p-4, 0x1.51ef9db22d0e5p+4, 0x1.0e570a3d70a3dp+7, 0x0p+0, 0x1.4cccccccccccdp+0 },
-  { "set-garden-hose", 0x1.c89f40a2877eep-2, -0x1.15604189374bcp+2, -0x1.0ce147ae147aep+7, 0x0p+0, 0x1p+0 },
+  { "set-watermill", 0x1.78ca8198f1d3fp-4, 0x1.c4dd2f1a9fbe7p+3, 0x1.1d33333333333p+5, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.d88a47ecfe9b8p-1, -0x1.cc395810624ddp+4, -0x1.46147ae147ae1p+5, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.0663c74fb54ap-1, 0x1.0d26e978d4fdfp+3, 0x1.82f5c28f5c28fp+6, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.000fba8826aa9p-1, -0x1.6e978d4fdf3b6p+3, 0x1.d233333333333p+6, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.47991bc558644p-3, -0x1.4c28f5c28f5c3p+1, -0x1.0c66666666666p+6, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.22f05a708ede5p-3, 0x1.37126e978d4fep+3, -0x1.59f5c28f5c28fp+7, 0x0p+0, 0x1p+0 },
+  { "set-stream-reach", 0x1.a9c779a6b50b1p-4, 0x1.c4dd2f1a9fbe7p+2, 0x1.5da8f5c28f5c3p+7, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_tangle[] = {
-  { 0, -1, 0x1.f08461f9f01b8p-4, 0x1.5e147ae147ae1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.999999999999ap-3, 0x1p+0, 0x0u },
-  { 0, -1, 0x1.5c52e72da123p-5, -0x1.8c49ba5e353f8p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.199999999999ap+1, 0x1.199999999999ap+1, 0x1.999999999999ap-3, 0x1p+0, 0x0u },
+  { 0, -1, 0x1.8e3150dae3e6cp-2, -0x1.abc6a7ef9db23p+4, 0x1.24d1eb851eb85p+7, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.999999999999ap-3, 0x1p+0, 0x0u },
 };
 
 constexpr WptDef kW_cloverleaf[] = {
@@ -1174,13 +1183,10 @@ constexpr FurnDef kBoxes_cloverleaf[] = {
   { 0x1.fbe76c8b43958p-5, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_cloverleaf[] = {
-  { "set-playground", 0x1.85db76b3bb83dp-4, -0x1.ac3d70a3d70a4p+4, -0x1.5a6b851eb851fp+7, 0x0p+0, 0x1.6666666666666p+0 },
-  { "set-picnic-blanket", 0x1.e978d4fdf3b64p-2, 0x1.ep+2, 0x1.4p+4, 0x0p+0, 0x1p+0 },
-  { "set-barbecue", 0x1.3333333333333p-4, -0x1.ep+2, 0x1.4p+7, 0x0p+0, 0x1p+0 },
-  { "set-bird-bath", 0x1.ae147ae147ae1p-1, 0x1.dp+3, 0x1.4p+4, 0x0p+0, 0x1p+0 },
+  { "set-playground", 0x1.4fdf3b645a1cbp-4, -0x1.1p+4, 0x1.57eb851eb851fp+7, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_cloverleaf[] = {
-  { 0, -1, 0x1.85db76b3bb83dp-4, -0x1.ac3d70a3d70a4p+4, -0x1.5a6b851eb851fp+7, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.4p+4, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x1.6p+2, 0x1.6p+2, 0x1.3333333333333p-1, 0x1p+0, 0x0u },
+  { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+4, 0x1.ep+4, 0x0p+0, 0x1.8p+4, 0x1.3333333333333p+1, 0x1.3333333333333p+1, 0x0p+0, 0x1p-1, 0x0u },
   { 0, -1, 0x1.999999999999ap-3, -0x1.8p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+5, 0x1p+5, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.4p+3, 0x1.3333333333333p-3, 0x1p+0, 0x0u },
   { 0, -1, 0x1.0a3d70a3d70a4p-1, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.18p+6, 0x1.ap+4, 0x1.ap+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1.999999999999ap-3, 0x1p+0, 0x0u },
 };
@@ -1990,10 +1996,10 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 3, kLand_flurry, 3 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, kOils_glacier, 1, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 10, kLand_glacier, 5 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6, kLand_avalanche, 4 },
-  { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 5, kLand_ribbon, 6 },
-  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 4, kLand_pretzel, 1 },
-  { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, kOils_tangle, 1, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 2, kLand_tangle, 2 },
-  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 4, kLand_cloverleaf, 3 },
+  { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 6, kLand_ribbon, 10 },
+  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 3, kLand_pretzel, 2 },
+  { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, kOils_tangle, 1, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 7, kLand_tangle, 1 },
+  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 1, kLand_cloverleaf, 3 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 14, kLand_wash, 11 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 3, kLand_gulch, 18 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, kOils_crag, 2, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 2, kLand_crag, 4 },
