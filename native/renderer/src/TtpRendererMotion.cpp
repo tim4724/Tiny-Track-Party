@@ -283,6 +283,8 @@ void TtpRenderer::buildSetMovers() {
                 g.ent = mesh.entity;
                 g.feat = kFeatDressing;
                 g.sources = parts;
+                const auto row = mSetRowOf.find(inst);
+                g.setRow = row != mSetRowOf.end() ? row->second : -1;
                 SetMover mv;
                 mv.ent = g.ent;
                 mv.rest = rest;
