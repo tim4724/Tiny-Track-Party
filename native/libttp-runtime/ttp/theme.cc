@@ -354,40 +354,45 @@ void playroomTrack(Theme& t, const std::string& track) {
   }
 }
 
-// The backyard cup's four gardens, each one idea (its set pieces and land carry
-// it): Ribbon's washing day, Pretzel's treehouse, Tangle's hose, Cloverleaf's
-// playground. The gnome, kennel and picnic were the cup's postcard on every
-// track; each garden keeps only what belongs to its own story, and wears its
-// idea on the kerbs and the gantry.
+// The backyard cup's four gardens, each one idea at the tiny world's own
+// scale, where a car is a car: Ribbon's village, Pretzel's treehouse,
+// Tangle's mill stream, Cloverleaf's playground (their set pieces and land
+// carry it). The grass biome's gnome, kennel and picnic are giants at that
+// scale, so no garden keeps them; its verge things stand at their real size
+// (a hay bale a third of a car, a tent half one) and what is smaller than
+// that is left out. Each garden wears its idea on the kerbs and the gantry.
 void backyardTrack(Theme& t, const std::string& track) {
+  if (track != "ribbon" && track != "pretzel" && track != "tangle" && track != "cloverleaf") return;
+  t.landmarks.clear();
+  t.props.models = { "prop-hay", "tent-open" };
+  t.props.scatter = { { 0, 0.7f, 0.34f, 0.08f, false, true }, { 1, 0.3f, 0.7f, 0.15f } };
   if (track == "ribbon") {
-    // Washing day: a mown lawn under the lines, so the wildflowers thin out
-    // (they spread round the lap instead of crowding the start), and none of
-    // the postcard. Laundry-blue kerbs, the gantry white like the posts.
-    t.landmarks.clear();
+    // The village: hay bales on the lane's verge, no tents. Fewer
+    // wildflowers (a patch costs more vertices than a cottage) and a few
+    // fewer trees, so the village fits the frame the washing lines had.
+    // The kerbs the maypole's blue, the gantry white like the cottages.
+    t.props.models = { "prop-hay" };
+    t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.12f;
-    t.props.models = { "prop-crate", "prop-hay" };
-    t.props.scatter = { { 0, 0.5f, 0.85f, 0.4f, false, true }, { 1, 0.5f, 0.9f, 0.25f } };
+    t.scenery.density = 0.55f;
     t.road.kerbA = 0x339cf2;
     t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
   } else if (track == "pretzel") {
-    // The kids' garden: the dog's kennel stays, a tent pitched for a night
-    // out, toys left on the lawn. Timber kerbs and gantry, the treehouse's.
-    t.landmarks = { LM_DOGHOUSE };
-    t.props.models = { "tent-open", "skateboard", "prop-crate" };
-    t.props.scatter = { { 0, 0.3f, 2.0f, 0.5f }, { 1, 0.4f, 1.6f, 0.4f, false, true },
-                        { 2, 0.3f, 0.9f, 0.25f } };
+    // The children's summer: tents pitched round the garden. Timber kerbs
+    // and gantry, the treehouse's.
+    t.props.scatter = { { 0, 0.4f, 0.34f, 0.08f, false, true }, { 1, 0.6f, 0.7f, 0.15f } };
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
   } else if (track == "tangle") {
-    // The hose's lawn: the gnome it waters stays. Hose-green kerbs and gantry.
-    t.landmarks = { LM_GNOME };
+    // The mill's water meadows: open grass mown along the stream, so the
+    // stream reads across it, fewer trees and wildflowers (the hose's lawn
+    // used to keep both off half the map). Meadow-green kerbs and gantry.
+    t.scenery.clutterDensity = 0.1f;
+    t.scenery.density = 0.45f;
     t.road.kerbA = 0x2bb673;
     t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
   } else if (track == "cloverleaf") {
-    // Playground hill: a picnic by the playground; the gantry in the
-    // climbing frame's blue.
-    t.landmarks = { LM_PICNIC };
+    // The park: the gantry in the climbing frame's blue.
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
   }
 }
