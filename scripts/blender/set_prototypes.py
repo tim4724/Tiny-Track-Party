@@ -2552,8 +2552,11 @@ def football_pitch():
     for i, (x, z, c) in enumerate(((-6.0, 7.0, 0x339cf2), (2.5, 11.0, 0xff5040))):
         person((x, 0, z), math.atan2(-(-4.0 - z), 3.0 - x), c, k=0.72, hair=i + 2)
     # the ball's round: lofted from each foot, landing a stride short of the
-    # next and rolling in to it (a closed path, the ball steady along it)
-    R, LOFT, ROLL = 0.36, 1.6, 1.2
+    # next and rolling in to it (a closed path, the ball steady along it).
+    # A real ball's size at the toy world's chunkiness (about 1.5x): a ball
+    # half a child's height read as a beach ball, and a block that small
+    # reads as a box, so it is a smooth one.
+    R, LOFT, ROLL = 0.18, 1.6, 1.2
     pts = []
     for i in range(3):
         (x0, z0), (x1, z1) = feet[i], feet[(i + 1) % 3]
@@ -2566,7 +2569,7 @@ def football_pitch():
     for k, at in enumerate(pts):
         marker('path_ball_%d' % k, at)
     with animated('anim_path:c=ball:p=6:f=0', pts[0]):
-        sphere(R, pts[0], 'white')
+        sphere(R, pts[0], 'white', flat=False)
     # a child on the touchline cheering them on
     person((-PW / 2 - 1.6, 0, 9.0), 0.0, 0xffc044, k=0.68, hair=2, arm=0.2,
            gesture='anim_gesture:a=z:d=150:p=3.8:k=0.3#cheer')
