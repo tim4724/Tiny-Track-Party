@@ -3124,16 +3124,36 @@ def block_castle():
 
 @piece(0.45)
 def spinning_top():
-    # Helix: two wooden spinning tops still spinning on their points, each
-    # wobbling as it goes, and the pull string thrown down on the floor
-    # beside them with its T handle. A top is about 8 cm.
-    for tag, x, z, k, w in (('a', 0.0, 0.0, 1.0, 5.0), ('b', -1.2, 4.6, 0.75, -6.0)):
-        with animated('anim_sway:a=z:d=7:p=%.1f#%s' % (1.6 * k, tag), (x, 0, z)):     # it wobbles on its point
-            cyl(0.06 * k, 0.4 * k, (x, 0, z), 0x2a2735, r2=0.32 * k, segs=10)
-            with animated('anim_spin:w=%.1f#%s' % (w, tag), (x, 0, z)):              # and spins
-                spinning_top_body(x, z, k)
-    tube([(-0.9, 0.1, -0.6), (-1.6, 0.1, -1.4), (-2.4, 0.1, -2.0), (-2.1, 0.1, -3.0), (-2.9, 0.1, -3.8)], 0.05, 0xfff6eb, res=3, bevel_res=0)
-    box((0.3, 0.3, 1.4), (-3.0, 0.15, -4.0), 0x9a7b55, yaw=0.9)
+    # Helix: a tin humming top (about 16 cm across and 20 cm to its knob, the
+    # biggest tops there are) spinning on its point, the screw of its pump a
+    # helix of its own, and a wooden top (about 6 cm) spinning beside it with
+    # its pull string thrown down on the floor. Each wobbles as it goes.
+    with animated('anim_sway:a=z:d=4:p=2.6#a', (0, 0, 0)):
+        cyl(0.15, 0.6, (0, 0, 0), 0x2a2735, r2=0.6, segs=8)                          # the point
+        with animated('anim_spin:w=4.0#a', (0, 0, 0)):
+            humming_top_body()
+    x, z, k = -1.5, 6.4, 0.75
+    with animated('anim_sway:a=z:d=7:p=1.2#b', (x, 0, z)):
+        cyl(0.06 * k, 0.4 * k, (x, 0, z), 0x2a2735, r2=0.32 * k, segs=10)
+        with animated('anim_spin:w=-6.0#b', (x, 0, z)):
+            spinning_top_body(x, z, k)
+    tube([(-0.5, 0.1, 4.6), (-0.2, 0.1, 3.8), (0.9, 0.1, 3.9), (1.9, 0.1, 4.6), (2.6, 0.1, 4.2)], 0.05, 0xfff6eb, res=3, bevel_res=0)
+    box((0.3, 0.3, 1.4), (2.9, 0.15, 3.9), 0x9a7b55, yaw=0.9)
+
+def humming_top_body():
+    # tin: a cone up from the point to a fat yellow belly band, a painted dome
+    # over it with panels that show it turning, the collar, and the pump: a
+    # bar with its screw wound round it and a red knob
+    cyl(0.6, 1.6, (0, 0.6, 0), 0xe66a5a, r2=3.3, segs=10)
+    cyl(3.4, 0.5, (0, 2.2, 0), 0xf2c14e, segs=10)
+    cyl(3.3, 1.6, (0, 2.7, 0), 0x5a8fd8, r2=1.4, segs=10)
+    for j in range(6):
+        a = j * math.pi / 3
+        box((0.16, 1.4, 1.0), (math.cos(a) * 2.5, 3.45, math.sin(a) * 2.5), (0xfdf4de, 0xe66a5a)[j % 2], yaw=-a, roll=-0.87)
+    cyl(1.4, 0.4, (0, 4.3, 0), 0xf2c14e, r2=0.8, segs=10)
+    box((0.4, 3.2, 0.4), (0, 6.2, 0), 0x9aa1b4)
+    tube(helix_pts(0, 0, 0.36, 4.8, 7.4, 0.0, 3, per=5), 0.08, 0x9aa1b4, res=1, bevel_res=0)
+    cyl(0.8, 0.7, (0, 7.7, 0), 0xe66a5a, r2=0.55, segs=10)
 
 def spinning_top_body(x, z, k):
     cyl(0.32 * k, 1.2 * k, (x, 0.4 * k, z), 0xe66a5a, r2=1.7 * k, segs=10)          # the belly
