@@ -3,7 +3,9 @@
 // left floating. A set-*.glb is cut into ISLANDS (triangles joined by a shared
 // corner, seams welded), and an island is held up when it stands on the floor
 // (the model's y = 0, the ground the renderer stands it on; a part sunk below
-// it is planted; for a piece modelled on terrain, that terrain: SET_GROUND)
+// it is planted; for a piece modelled on terrain, that terrain: SET_GROUND,
+// except under a part the renderer drapes, built on the plain and laid on
+// the ground as it is drawn)
 // or touches an island that is. Touching is the islands'
 // surfaces coming within TOUCH of each other, triangle against triangle, so a
 // part pushed into another counts and one a hair off does not; boxes would
@@ -110,9 +112,10 @@ const boxOf = (pts) => {
 const boxGap = (a, b) => Math.hypot(...[0, 1, 2].map((d) => Math.max(0, a.lo[d] - b.hi[d], b.lo[d] - a.hi[d])));
 
 export function checkPiece(file) {
-  // The floor: y = 0, or the terrain a piece was modelled on (SET_GROUND).
+  // The floor: y = 0, or the terrain a piece was modelled on (SET_GROUND)
+  // where the part is not draped.
   const model = path.basename(file, '.glb');
-  const floor = (x, z) => setGroundY(model, x, z);
+  const floor = (p, t) => (t.drape ? 0 : setGroundY(model, p[0], p[2]));
   const tris = glbTriangles(fs.readFileSync(file));
   // Islands: triangles joined through a shared corner, corners welded by
   // position (the exporter splits them at every UV and normal seam).
@@ -156,7 +159,7 @@ export function checkPiece(file) {
 
   // Held up: on the floor, or touching what is.
   const held = islands.map((isl) => isl.box.lo[1] <= TOUCH
-    || isl.tris.some(({ t }) => t.some((p) => p[1] <= floor(p[0], p[2]) + TOUCH)));
+    || isl.tris.some(({ t }) => t.some((p) => p[1] <= floor(p, t) + TOUCH)));
   const queue = [...held.keys()].filter((i) => held[i]);
   while (queue.length) {
     const i = queue.pop();
@@ -170,7 +173,7 @@ export function checkPiece(file) {
   // renderer actually draws, which this file cannot see.
   const standing = islands.filter((isl) => isl.box.lo[1] > TOUCH).map((isl) => ({
     lo: isl.box.lo, hi: isl.box.hi,
-    feet: isl.tris.flatMap(({ t }) => t).filter((p) => p[1] <= floor(p[0], p[2]) + TOUCH)
+    feet: isl.tris.flatMap(({ t }) => t.filter((p) => p[1] <= floor(p, t) + TOUCH))
   })).filter((isl) => isl.feet.length);
 
   const all = boxOf(islands.flatMap((isl) => [isl.box.lo, isl.box.hi]));
