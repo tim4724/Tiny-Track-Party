@@ -1029,8 +1029,17 @@ export function runDisplayScenario(opts, ctx) {
         }
         return viewed.get(p);
       }
-      const heightOf = (p) => Math.max(p.top - p.y, 0.5);
-      const centreOf = (p, at) => ({ x: p.cx, y: p.y + heightOf(p) * at, z: p.cz });
+      // What a piece stands on: its foot, or for one that brings its own
+      // ground (SET_GROUND) and is built on its summit, that summit as the
+      // renderer draws it, so the aim points are the piece and not the hill
+      // under it.
+      const feet = new WeakMap();
+      const footOf = (p) => {
+        if (!feet.has(p)) feet.set(p, Math.max(p.y, Math.min(display.groundY(p.cx, p.cz), p.top - 0.5)));
+        return feet.get(p);
+      };
+      const heightOf = (p) => Math.max(p.top - footOf(p), 0.5);
+      const centreOf = (p, at) => ({ x: p.cx, y: footOf(p) + heightOf(p) * at, z: p.cz });
       const radiusOf = (p) => Math.max(Math.hypot(p.hx, p.hz), heightOf(p) / 2, 1);
       // How big the piece reads: its largest mesh, not its footprint, which
       // takes in the snowman and lamp beside an igloo; at least half the
@@ -1226,7 +1235,7 @@ export function runDisplayScenario(opts, ctx) {
       function sightPoints(p) {
         const h = heightOf(p);
         const long = p.hx >= p.hz ? { x: p.ax * p.hx, z: p.az * p.hx } : { x: -p.az * p.hz, z: p.ax * p.hz };
-        const end = (k) => ({ x: p.cx + long.x * k, y: p.y + h * 0.4, z: p.cz + long.z * k });
+        const end = (k) => ({ x: p.cx + long.x * k, y: footOf(p) + h * 0.4, z: p.cz + long.z * k });
         return [centreOf(p, 0.5), centreOf(p, 0.15), centreOf(p, 0.9), end(0.7), end(-0.7)];
       }
 

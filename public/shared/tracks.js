@@ -297,7 +297,7 @@ export const SET_GROUND = {
   'set-den-camp': [{ kind: 'fan', len: 6, r: 9, h: 1.4, top: 0.6 }],
   // Cloverleaf's playground hill: a broad round top the playground stands on
   // (flat for its whole width), steeper to the road (+X), falling away behind.
-  'set-playground': [{ kind: 'mound', h: 2.4, r: 18, r1: 30, rz: 24, shape: 0.5 }],
+  'set-playground': [{ kind: 'mound', h: 4.0, r: 20, r1: 34, rz: 28, shape: 0.5 }],
   // Riptide's dune bank: a long sand bank behind the beach, the lifeguard's
   // hut on its crest and its boardwalk down the face toward the road.
   'set-lifeguard-tower': [{ kind: 'mound', x: -1.2, h: 5.2, r: 15, r1: 16, rz: 30, shape: 1.2 }],
@@ -561,13 +561,14 @@ export const TRACKS = {
     // watermill on its pond, straight ahead of the grid. Laid reach by reach,
     // each reach's end circle on the next one's
     set: [
-      { model: 'set-watermill', u: 0.09199, lat: 14.152, yaw: 35.65 },
+      { model: 'set-watermill', u: 0.09204, lat: 24.151, yaw: 35.46 },
       { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
       { model: 'set-stream-reach', u: 0.51248, lat: 8.411, yaw: 96.74 },
       { model: 'set-stream-reach', u: 0.50012, lat: -11.456, yaw: 116.55 },
       { model: 'set-stream-reach', u: 0.15996, lat: -2.595, yaw: -67.1 },
       { model: 'set-stream-reach', u: 0.14206, lat: 9.721, yaw: -172.98 },
-      { model: 'set-stream-reach', u: 0.10395, lat: 7.076, yaw: 174.83 }
+      { model: 'set-stream-reach', u: 0.10401, lat: 9.482, yaw: -172.89 },
+      { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 }
     ],
     // the north lawn's hump the stream bends round
     land: [
@@ -579,9 +580,12 @@ export const TRACKS = {
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
     // Playground hill: the playground on the broad top of its hill
     // (SET_GROUND) outside the south-west corner, where the start straight
-    // points, every swing, seesaw and roundabout going with a child on it
+    // points, the climbing net its tallest thing, every swing, seesaw and
+    // roundabout going with a child on it; the park's ice-cream van on the
+    // start straight, the children queueing at it
     set: [
-      { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96 }
+      { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96 },
+      { model: 'set-ice-cream-van', u: 0.95, lat: -9, yaw: 180 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west
     land: [
