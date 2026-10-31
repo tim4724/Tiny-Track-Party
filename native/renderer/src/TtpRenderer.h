@@ -948,7 +948,7 @@ private:
     uint32_t mTerrainSeed = 0;
     float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
     // Clearings the set pieces and landmark spots level into the relief (so a
-    // windmill never stands on a slope), each at its own height `y`: the
+    // cabin never stands on a slope), each at its own height `y`: the
     // ground already there, never a plinth raised for it. Registered BEFORE
     // the ground mesh and the scatter sample the field — see the builder order.
     // A rounded rectangle: half extents hx, hz along the axes (ax, az) and
@@ -1772,7 +1772,6 @@ private:
     void buildSmokePuffs(const filament::math::float3& origin);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
-    Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
     // Chimney smoke (cabin): three soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
@@ -1807,7 +1806,6 @@ private:
     // field, which is every build but the gallery's.
     float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
-    filament::math::mat4f mWindmillBase{};
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
     std::vector<filament::math::float4> mShadowSpots; // x, z, radius, height (0: no disc)
