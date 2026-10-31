@@ -2813,6 +2813,34 @@ def treehouse():
     join_still('oak')
 
 @piece(REAL)
+def swing_oak():
+    # Pretzel: another of the garden's old oaks out by a bend, the tall thing
+    # a racer on a deck riding over the lawn sees: a tyre swing from its low
+    # bough with a child riding it, a bike dropped at the trunk. The same tree
+    # as the treehouse's, a little smaller, so the summer reaches round the
+    # lap without a second den.
+    BARK = 0x7a5a3a
+    cyl(1.2, 12.0, (0, -0.5, 0), BARK, r2=0.8, segs=9)
+    for a, r, h in ((2.2, 0.5, 4.4), (4.4, 0.45, 4.0)):
+        o = cyl(r, h, (0, 7.5, 0), BARK, r2=0.22, segs=7, smooth=False)
+        tilted(o, math.cos(a) * 0.9, math.sin(a) * 0.9)
+    for c, r in (((0, 14.5, 0), 5.2), ((-4.0, 13.0, 2.6), 3.9), ((3.6, 13.4, -2.8), 3.8),
+                 ((0.8, 17.6, 2.0), 3.6), ((-1.8, 16.4, -3.0), 3.2)):
+        sphere(r, c, 0x5f9f4a if r > 4.0 else 0x6cae55, subdiv=1)
+    # the swing's bough out toward the road (+X), the tyre on its rope
+    BX, BZ = 5.0, 1.0
+    strut((0.0, 8.0, 0.2), (BX, 8.9, BZ), 0.6, BARK)
+    with animated('anim_sway:a=x:d=24:p=2.6', (BX - 0.3, 8.6, BZ)):
+        strut((BX - 0.3, 8.7, BZ), (BX - 0.3, 1.3, BZ), 0.08, 0x9a7b55)
+        torus(0.55, 0.2, (BX - 0.3, 0.95, BZ), 0x2a2735, segs=12, axis='across')
+        person((BX - 0.3, 0.85, BZ), 0.0, 0x22c46e, k=0.65, hair=2, sit=True)
+    # the bike dropped on the grass at the trunk
+    for z in (-0.9, 0.9):
+        torus(0.55, 0.1, (2.2, 0.12, -2.0 + z), 0x2a2735, segs=10)
+    box((0.12, 0.12, 1.8), (2.2, 0.2, -2.0), 0xff5040)
+    join_still('oak')
+
+@piece(REAL)
 def football_pitch():
     # Pretzel: the village pitch laid along the road, its lines painted on
     # the lawn, little goals at the ends, and a kickabout on. Nobody runs: a
@@ -2894,6 +2922,22 @@ def football_pitch():
     bench((-PW / 2 - 2.5, 0, 3.0), yaw=math.pi / 2)
     person((-PW / 2 - 2.6, 0.5, -3.0), 0.0, 0xa259e6, hair=1, sit=True)
     person((-PW / 2 - 2.6, 0.5, 3.3), 0.0, 0xffc044, hair=3, sit=True)
+    # the club's pavilion they sit in front of, under its veranda, facing the
+    # pitch: white boards under a red roof, the club flag over the ridge. A
+    # real one's size (two cars long); it is what stands up off the lawn, so
+    # it is what says pitch from a car whose kerb hides the lines.
+    D, L, H = 4.4, 10.0, 3.4
+    PF = local(-PW / 2 - 3.2 - D / 2, 0.0, 0.0)
+    box((D, H, L), PF(0, H / 2, 0), 'white', yaw=0.0)
+    ridge = gable_roof(PF, 0.0, 0.0, D, L, H, 0xcf534f, 'white')
+    box((1.8, 0.2, L), PF(D / 2 + 0.9, H - 0.4, 0), 0x9a7b55, yaw=0.0)     # the veranda roof
+    for z in (-L / 2 + 0.3, 0.0, L / 2 - 0.3):
+        box((0.2, H - 0.4, 0.2), PF(D / 2 + 1.7, (H - 0.4) / 2, z), 0x9a7b55, yaw=0.0)
+    box((0.14, 2.1, 1.2), PF(D / 2 + 0.06, 1.05, 0), 0x339cf2, yaw=0.0)
+    for z in (-3.0, 3.0):
+        window(PF, 0.0, D / 2, 2.0, z, w=1.4, h=1.0)
+    flagpole(PF(0, ridge - 0.3, 0), 4.2, 0x339cf2, w=1.6, fh=0.9, pole='white',
+             wave='anim_sway:a=z:d=22:p=1.6#club')
     join_still('pitch')
 
 @piece(REAL)
@@ -2932,13 +2976,14 @@ def den_camp():
     join_still('camp')
 
 # ---- TANGLE: the mill stream ------------------------------------------------------------
-# Tangle's stream rises out of the east lawn, runs under the S-bend's bridge
+# Tangle's stream rises in the north loop, runs under the S-bend's bridge
 # and the first bridge and over the north lawn to the mill pond on the west,
 # ahead of the grid, where the watermill's wheel turns in the race. The
 # stream is laid reach by reach (set-stream-reach, each placed along its
 # stretch, their tapered ends overlapping); the mill is the hero. Water is a
-# flat sheet on the lawn: from a deck riding over the garden it reads as a
-# line of blue across the map.
+# flat sheet on the lawn: from a deck riding over the garden it is a line of
+# blue under the kerb, so each reach brings a willow on its bank, the tall
+# thing that says stream.
 WATER, MUD = 0x7db8e8, 0xb08a5a
 STREAM_W, REACH = 4.2, 88.0   # its half width; a reach's length between its end circles
 
@@ -2978,7 +3023,21 @@ def stream_reach():
             a = j * 1.7 + k
             box((0.18, 1.6 - 0.2 * j, 0.18), (x + 0.4 * math.cos(a), 0.8 - 0.1 * j, z + 0.4 * math.sin(a)),
                 (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
+    # a willow on the -X bank a quarter of the way along, hanging over the
+    # water: the tall thing that says stream from a deck riding over the
+    # lawn, where the water itself is a line under the kerb. Turning a reach
+    # half round puts it on the other bank at the other end.
+    willow((-W - 3.4, 0, -REACH / 4))
     join_still('drape_reach')
+
+def willow(at):
+    """A weeping willow by the water, about as tall as a garden oak (three
+    cars): a short trunk, a round crown and the curtain of its hanging
+    branches down to a car's height off the ground."""
+    x, y, z = at
+    cyl(0.8, 8.0, (x, y, z), 0x7a5a3a, r2=0.5, segs=7)
+    sphere(4.6, (x, y + 9.6, z), 0x6cae55, subdiv=1, scale=(1.0, 0.7, 1.0))
+    cyl(5.0, 6.0, (x, y + 3.4, z), 0x61cb8b, r2=4.2, segs=10)
 
 def duck(at, color=0xf8f8fb):
     """A duck on the water facing +X: body, tail, head, bill (twice life size)."""
@@ -3038,10 +3097,7 @@ def watermill():
         a0 = 0.0
         with animated('anim_path:c=duck:p=44:o=%.3f:f=1+bob:h=0.015:p=1.6#%d' % (j / 3 + 0.04 * j, j), (PX + 8.0, 0.3, PZ)):
             duck((PX + 8.0, 0.3, PZ), (0xf8f8fb, 0x9a7b55, 0xf8f8fb)[j])
-    WLX, WLZ = PX - 10.0, PZ - 8.0
-    cyl(0.8, 8.0, (WLX, 0, WLZ), 0x7a5a3a, r2=0.5, segs=7)
-    sphere(4.6, (WLX, 9.6, WLZ), 0x6cae55, subdiv=1, scale=(1.0, 0.7, 1.0))
-    cyl(5.0, 6.0, (WLX, 3.4, WLZ), 0x61cb8b, r2=4.2, segs=10)
+    willow((PX - 10.0, 0, PZ - 8.0))
     AX, AZ = PX - PR - 2.2, PZ + 4.0
     bench((AX, 0, AZ), yaw=math.pi / 2)
     person((AX - 0.1, 0.5, AZ), 0.0, 0x22c46e, hair=1, sit=True, arm=0.6)
@@ -3068,23 +3124,9 @@ def kid_swing(n, x, z, top, shirt, hair):
         box((0.55, 0.1, 0.75), (x, 0.58, z), 0xff5040)
         person((x - 0.1, 0.63, z), 0.0, shirt, k=0.68, hair=hair, sit=True, arm=1.3)
 
-@piece(REAL)
-def playground():
-    H = set_ground('playground')
-    s0 = H(0.0, 0.0)
-    # bark under it all, its edge bedded into the hill
-    box((19.0, 0.6, 21.0), (0, -0.18, 0), 0xb08a5a)
-    # the swings: an A-frame each end of a top bar along Z
-    SX, top = -5.0, 2.6
-    for z in (-9.0, -3.0):
-        for s in (-1, 1):
-            strut((SX + s * 1.3, 0, z), (SX, top, z), 0.2, 0x339cf2)
-    box((0.24, 0.24, 6.4), (SX, top, -6.0), 0x339cf2)
-    kid_swing(0, SX, -7.4, top, 0xffc044, 1)
-    kid_swing(1, SX, -4.6, top, 0x22c46e, 2)
-    # the climbing tower: a deck on four posts under a red roof, a slide off its
-    # road side (+X), a ladder up its back
-    TX, TZ, DY = 1.5, 5.0, 1.6
+def slide_tower(TX, TZ, DY=1.6):
+    """A climbing tower: a deck on four posts under a red roof, a slide off
+    its +X side, a ladder up its back."""
     for sx in (-1, 1):
         for sz in (-1, 1):
             box((0.24, 3.4, 0.24), (TX + sx * 1.0, 1.7, TZ + sz * 1.0), 0xffc044)
@@ -3102,6 +3144,38 @@ def playground():
     for i in range(4):
         t = (i + 0.7) / 4.5
         box((0.12, 0.1, 0.8), (TX - 2.2 + 1.2 * t, DY * t, TZ), 0x9aa1b4)
+
+def climbing_net(NX, NZ, NH=7.0, NR=2.6):
+    """The climbing net: a rope pyramid on a mast, the tallest thing in a
+    park as it is in a real one (about seven metres)."""
+    cyl(0.16, NH, (NX, 0, NZ), 0x9aa1b4, segs=6)
+    box((0.5, 0.3, 0.5), (NX, NH + 0.1, NZ), 0xff5040)
+    ring = [(NX + NR * math.cos(k * math.pi / 4), NZ + NR * math.sin(k * math.pi / 4)) for k in range(8)]
+    for x, z in ring:
+        strut((x, 0.05, z), (NX, NH, NZ), 0.16, 0xff5040)
+    for f in (0.33, 0.66):
+        for k in range(8):
+            (x0, z0), (x1, z1) = ring[k], ring[(k + 1) % 8]
+            strut((NX + (x0 - NX) * (1 - f), NH * f, NZ + (z0 - NZ) * (1 - f)),
+                  (NX + (x1 - NX) * (1 - f), NH * f, NZ + (z1 - NZ) * (1 - f)), 0.12, 0xff5040)
+
+@piece(REAL)
+def playground():
+    H = set_ground('playground')
+    s0 = H(0.0, 0.0)
+    # bark under it all, its edge bedded into the hill
+    box((19.0, 0.6, 21.0), (0, -0.18, 0), 0xb08a5a)
+    # the swings: an A-frame each end of a top bar along Z
+    SX, top = -5.0, 2.6
+    for z in (-9.0, -3.0):
+        for s in (-1, 1):
+            strut((SX + s * 1.3, 0, z), (SX, top, z), 0.2, 0x339cf2)
+    box((0.24, 0.24, 6.4), (SX, top, -6.0), 0x339cf2)
+    kid_swing(0, SX, -7.4, top, 0xffc044, 1)
+    kid_swing(1, SX, -4.6, top, 0x22c46e, 2)
+    # the climbing tower, its slide off the road side (+X)
+    TX, TZ, DY = 1.5, 5.0, 1.6
+    slide_tower(TX, TZ)
     person((TX + 0.3, DY + 0.1, TZ - 0.3), 0.3, 0xa259e6, k=0.68, hair=3)
     # the seesaw, a child each end
     QX, QZ = 6.0, -2.0
@@ -3138,38 +3212,60 @@ def playground():
     box((3.2, 0.24, 3.2), (-5.5, 0.12, 5.0), 0xfde4c7)
     person((-5.6, 0.2, 5.3), 0.4, 0x339cf2, k=0.6, hair=0)
     box((0.4, 0.4, 0.4), (-4.9, 0.4, 4.4), 0xff5040)
-    # the climbing net: a rope pyramid on a mast, the tallest thing in the
-    # park as it is in a real one (about seven metres), two children up it
-    NX, NZ, NH, NR = -2.0, 8.6, 7.0, 2.6
-    cyl(0.16, NH, (NX, 0, NZ), 0x9aa1b4, segs=6)
-    box((0.5, 0.3, 0.5), (NX, NH + 0.1, NZ), 0xff5040)
-    ring = [(NX + NR * math.cos(k * math.pi / 4), NZ + NR * math.sin(k * math.pi / 4)) for k in range(8)]
-    for x, z in ring:
-        strut((x, 0.05, z), (NX, NH, NZ), 0.16, 0xff5040)
-    for f in (0.33, 0.66):
-        for k in range(8):
-            (x0, z0), (x1, z1) = ring[k], ring[(k + 1) % 8]
-            strut((NX + (x0 - NX) * (1 - f), NH * f, NZ + (z0 - NZ) * (1 - f)),
-                  (NX + (x1 - NX) * (1 - f), NH * f, NZ + (z1 - NZ) * (1 - f)), 0.12, 0xff5040)
+    # the climbing net, two children up it
+    NX, NZ, NH = -2.0, 8.6, 7.0
+    climbing_net(NX, NZ)
     person((NX + 1.3, NH * 0.33 + 0.05, NZ - 1.4), 2.3, 0x22c46e, k=0.62, hair=1, arm=2.4)
     person((NX - 0.6, NH * 0.66 + 0.05, NZ + 0.5), 0.9, 0xffc044, k=0.6, hair=2, arm=2.6)
     # the benches round it, two of the grown-ups watching
     for z, c in ((-3.0, 0xa259e6), (6.5, 0xffc044)):
         bench((-8.4, 0, z), yaw=math.pi / 2)
         person((-8.5, 0.5, z + 0.2), 0.0, c, hair=1 if z < 0 else 3, sit=True)
+    # the ice-cream van up on the hill at the end of the swings, its hatch to
+    # the road and the children queueing at it: part of the scene a racer
+    # reads as one shape, where on its own at the hill's foot it was a car's
+    # size under the kerb (and no nearer the road, where the land a deck
+    # holds down falls away under it)
+    ice_cream_van(4.0, -15.0)
     for o in bpy.context.scene.objects:          # onto the summit
         o.location.z += s0
     ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('playground')
 
 @piece(REAL)
-def ice_cream_van():
-    # The park's ice-cream van round the hill's foot, so the playground's
-    # afternoon reaches the rest of the lap: a van parked along a gravel
-    # lay-by (its length Z, the serving hatch on the road side, +X) under
-    # the big cone on its roof turning, the children queueing at the hatch,
-    # one waving, a grown-up on the bench with a cone. Real size: about one
-    # and a half cars long.
+def play_corner():
+    # Another corner of the same park on a low knoll of its own (SET_GROUND),
+    # so the playground's afternoon reaches round the lap: the climbing net
+    # standing over a slide tower, its slide toward the road (+X), a pair of
+    # swings going, a grown-up on the bench. Built from the summit and lifted
+    # onto it.
+    s0 = set_ground('play-corner')(0.0, 0.0)
+    box((12.0, 0.6, 13.0), (0, -0.18, 0), 0xb08a5a)
+    climbing_net(-2.5, 2.5)
+    slide_tower(1.0, -3.0)
+    person((1.3, 1.7, -3.3), 0.3, 0xff5040, k=0.68, hair=1)
+    person((-1.2, 7.0 * 0.5 + 0.05, 2.9), 0.9, 0x339cf2, k=0.62, hair=2, arm=2.6)
+    SX, top = -4.0, 2.6
+    for z in (-6.0, -1.6):
+        for k in (-1, 1):
+            strut((SX + k * 1.3, 0, z), (SX, top, z), 0.2, 0x22c46e)
+    box((0.24, 0.24, 4.8), (SX, top, -3.8), 0x22c46e)
+    kid_swing(2, SX, -4.9, top, 0xa259e6, 3)
+    kid_swing(3, SX, -2.7, top, 0xffc044, 0)
+    bench((-5.2, 0, 4.5), yaw=math.pi / 2)
+    person((-5.3, 0.5, 4.7), 0.0, 0x22c46e, hair=2, sit=True)
+    for o in bpy.context.scene.objects:          # onto the summit
+        o.location.z += s0
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
+    join_still('corner')
+
+def ice_cream_van(ox, oz):
+    """The park's ice-cream van parked at (ox, oz) of the piece's frame: a van
+    along a gravel lay-by (its length Z, the serving hatch on +X) under the
+    big cone on its roof turning, the children queueing at the hatch, one
+    waving, a grown-up on the bench with a cone. Real size: about one and a
+    half cars long. Built at the origin, then moved there."""
+    before, n = set(bpy.context.scene.objects), len(ANIMS)
     BODY, TRIM = 0xf8f8fb, 0x339cf2
     box((4.6, 0.1, 9.0), (1.2, 0.05, 0.0), 0xfde4c7)                 # the lay-by
     box((2.3, 1.3, 6.2), (0, 1.15, -0.2), BODY)                       # the body
@@ -3203,7 +3299,11 @@ def ice_cream_van():
     # the bench along the back of the lay-by, a grown-up with a cone
     bench((3.4, 0, -3.6), yaw=-math.pi / 2)
     person((3.5, 0.5, -3.6), math.pi, 0xffc044, hair=3, sit=True, arm=1.0)
-    join_still('van')
+    for o in bpy.context.scene.objects:
+        if o not in before:
+            o.location.x += ox
+            o.location.y -= oz
+    ANIMS[n:] = [(nm, (x + ox, y, z + oz), yaw, p, t) for nm, (x, y, z), yaw, p, t in ANIMS[n:]]
 
 # ====================================================================================
 # CANYON
