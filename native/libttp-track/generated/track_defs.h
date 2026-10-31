@@ -1654,6 +1654,7 @@ constexpr FurnDef kBoxes_sidewinder[] = {
 constexpr SetDef kSet_sidewinder[] = {
   { "set-telegraph-line", 0x1.47ae147ae147bp-6, 0x1.2666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-filling-station", 0x1.f1a9fbe76c8b4p-1, -0x1.3p+3, 0x1.68p+7, 0x0p+0, 0x1p+0 },
+  { "set-oil-field", 0x1.7ae147ae147aep-1, 0x1.28p+4, 0x0p+0, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_sidewinder[] = {
   { 0, -1, 0x1.6d5cfaacd9e84p-3, 0x1.9p+6, 0x1p+2, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1.ep+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.ap+3, 0x1p-1, 0x1p+0, 0x0u },
@@ -2026,7 +2027,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 25, kLand_wash, 20 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 3, kLand_gulch, 18 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, kOils_crag, 2, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 14, nullptr, 0 },
-  { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 2, kLand_sidewinder, 2 },
+  { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 3, kLand_sidewinder, 2 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 5, nullptr, 0 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 5, nullptr, 0 },
   { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 3, nullptr, 0 },
