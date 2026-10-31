@@ -18,9 +18,13 @@
 // nothing: its loop is where the piece stands.
 //
 // A path is the empties `path_<chain>_<k>` of the same GLB, k = 0, 1, ... in
-// order, closed back to 0. A traveller may also spin and bob in its own frame
-// on the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed);
-// the other verbs are in-place and a path ignores them. Lengths are the node's own units (a GLB's grow and the
+// order, closed back to 0; a chain named `drape...` lies on the ground as the
+// renderer draws it (each point lifted by the land under it over the piece's
+// foot, like a `drape` part), so a traveller on a terrain hill stays on its
+// drawn slope. A traveller may also spin, bob and waddle in its own frame on
+// the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed; a
+// walking penguin rocks from foot to foot); the other verbs are in-place and a
+// path ignores them. Lengths are the node's own units (a GLB's grow and the
 // placement's scale carry them); radii are WORLD units, because they are about
 // cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
 // c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
