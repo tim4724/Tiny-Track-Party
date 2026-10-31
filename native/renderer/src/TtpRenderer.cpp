@@ -1413,7 +1413,7 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
-        const TrackBin* drapeOn) {
+        const TrackBin* drapeOn, float foot) {
     const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
     for (size_t p = 0; p < prims.size(); p++) {
         const ttp::rt::GlbMeshPrim& sp = prims[p];
@@ -1423,7 +1423,7 @@ void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         for (size_t i = 0; i < nv; i++) {
             float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
                     sp.pos[i * 3 + 2], 1.0f }).xyz;
-            if (drapeOn) pw.y += groundSurfaceY(*drapeOn, pw.x, pw.z) - drapeOn->groundY;
+            if (drapeOn) pw.y += groundSurfaceY(*drapeOn, pw.x, pw.z) - foot;
             const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
                     sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
             const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),

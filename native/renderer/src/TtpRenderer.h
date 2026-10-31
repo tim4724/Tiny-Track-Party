@@ -2273,12 +2273,13 @@ private:
     bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
     // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
-    // by the land under it over the plain (a set piece's `drape` part).
+    // by the land under it over `foot`, the height its placement stands at (a
+    // set piece's `drape` part: modelled from its foot, it lands on the ground).
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             const std::vector<filament::math::float3>& factor,
-            const TrackBin* drapeOn = nullptr);
+            const TrackBin* drapeOn = nullptr, float foot = 0.0f);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,

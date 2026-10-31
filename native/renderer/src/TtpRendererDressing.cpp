@@ -1432,48 +1432,55 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const Spot sp = findSpot(65, 10 + (float) rnd() * 5, 5);
         if (sp.ok) {
             constexpr uint32_t LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
+            // Authored five units long; built at K, a real cabin's two and a
+            // half beside a 0.9 car (the scenery's 4-5 m to the unit).
+            constexpr float K = 0.55f;
+            const auto cpart = [&](const Prim& prim, float lx, float ly, float lz, uint32_t hex,
+                    float shade = 1.0f) {
+                part(applyPre(prim, mat4f::scaling(float3{ K, K, K })), lx * K, ly * K, lz * K, sp, hex, shade);
+            };
             for (int row = 0; row < 5; row++) { // log courses
                 const float ly = 0.26f + row * 0.5f;
                 for (const float zoff : { 1.8f, -1.8f }) { // front/back along local X
-                    part(applyPre(primCylinder(0.26f, 0.26f, 5.0f, 7),
+                    cpart(applyPre(primCylinder(0.26f, 0.26f, 5.0f, 7),
                                 rotZ((float) M_PI / 2)),
-                            0, ly, zoff, sp, row % 2 ? LOG : LOG2,
+                            0, ly, zoff, row % 2 ? LOG : LOG2,
                             0.97f + (row % 3) * 0.03f);
                 }
                 for (const float xoff : { 2.3f, -2.3f }) { // sides, half a course up
-                    part(applyPre(primCylinder(0.26f, 0.26f, 4.0f, 7),
+                    cpart(applyPre(primCylinder(0.26f, 0.26f, 4.0f, 7),
                                 rotX((float) M_PI / 2)),
-                            xoff, ly + 0.25f, 0, sp, row % 2 ? LOG2 : LOG,
+                            xoff, ly + 0.25f, 0, row % 2 ? LOG2 : LOG,
                             0.96f + (row % 2) * 0.04f);
                 }
             }
             for (int gi = 0; gi < 3; gi++) { // gable ends shorten toward the ridge
                 const float ly = 2.76f + gi * 0.48f;
                 for (const float zoff : { 1.8f, -1.8f }) {
-                    part(applyPre(primCylinder(0.24f, 0.24f, 3.4f - gi * 1.1f, 7),
+                    cpart(applyPre(primCylinder(0.24f, 0.24f, 3.4f - gi * 1.1f, 7),
                                 rotZ((float) M_PI / 2)),
-                            0, ly, zoff, sp, gi % 2 ? LOG : LOG2);
+                            0, ly, zoff, gi % 2 ? LOG : LOG2);
                 }
             }
             for (const int sd : { -1, 1 }) { // snow-heaped roof slabs
-                part(applyPre(primBox(3.05f, 0.22f, 5.4f), rotZ(sd * 0.6f)),
-                        sd * -1.2f, 3.6f, 0, sp, SNOWC);
+                cpart(applyPre(primBox(3.05f, 0.22f, 5.4f), rotZ(sd * 0.6f)),
+                        sd * -1.2f, 3.6f, 0, SNOWC);
             }
-            part(applyPre(primCylinder(0.18f, 0.18f, 5.45f, 7), rotX((float) M_PI / 2)),
-                    0, 4.32f, 0, sp, SNOWC, 0.98f); // snow-capped ridge log
-            part(primBox(0.9f, 1.5f, 0.14f), 0.95f, 0.75f, 1.98f, sp, 0x4a3a2e);  // door
-            part(primBox(0.78f, 0.68f, 0.14f), -1.0f, 1.35f, 1.98f, sp, 0xffd98a); // lit window
-            part(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, sp, 0x4a3a2e);  // lintel
-            part(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, sp, 0x9fa8ba); // chimney
-            part(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, sp, 0xb9c1d0);
+            cpart(applyPre(primCylinder(0.18f, 0.18f, 5.45f, 7), rotX((float) M_PI / 2)),
+                    0, 4.32f, 0, SNOWC, 0.98f); // snow-capped ridge log
+            cpart(primBox(0.9f, 1.5f, 0.14f), 0.95f, 0.75f, 1.98f, 0x4a3a2e);  // door
+            cpart(primBox(0.78f, 0.68f, 0.14f), -1.0f, 1.35f, 1.98f, 0xffd98a); // lit window
+            cpart(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, 0x4a3a2e);  // lintel
+            cpart(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, 0x9fa8ba); // chimney
+            cpart(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, 0xb9c1d0);
             // Chimney smoke, unless a set piece's chimney already has it: one
             // smoking chimney a track.
             if (mSmoke.empty()) {
                 const float cy2 = std::cos(sp.yaw), sy2 = std::sin(sp.yaw);
-                buildSmokePuffs({ sp.x + (-0.95f) * cy2 + (-0.95f) * sy2, gy + sp.y + 4.75f,
-                                  sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 });
+                buildSmokePuffs({ sp.x + (-0.95f * K) * cy2 + (-0.95f * K) * sy2, gy + sp.y + 4.75f * K,
+                                  sp.z - (-0.95f * K) * sy2 + (-0.95f * K) * cy2 });
             }
-            mShadowSpots.push_back({ sp.x, sp.z, 3.0f, 4.3f });
+            mShadowSpots.push_back({ sp.x, sp.z, 3.0f * K, 4.3f * K });
         }
     }
 
@@ -2567,6 +2574,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
     }
     for (gltfio::FilamentInstance* inst : insts) {
         const utils::Entity* ents = inst->getEntities();
+        // Where the placement stands: a part that drapes is lifted by the land
+        // over THAT, so it lands on the ground whether the piece stands on the
+        // plain or on its own ground's raised base (mSetOwnGround).
+        const float foot = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
         // Each part's tile, on a grid anchored at the placement's own corner,
         // so a piece narrower than a tile is one mesh wherever it stands.
         std::vector<float3> centre(parts.size());
@@ -2586,7 +2597,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     + (int64_t) ((centre[j].x - x0) / mPieceTile);
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
-                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr);
+                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot);
             g.sources.push_back(src);
         }
         for (auto& [key, g] : tiles) {

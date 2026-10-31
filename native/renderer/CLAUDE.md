@@ -532,11 +532,13 @@ stand on `groundY` with their feet buried.
   art direction rejects.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
-  ground drawn under it (`bakePlacements`), so a spine longer than any
-  clearing follows the land instead of flattening it. A model with one stands
-  on the plain and levels nothing (`mSetDrapes`): its other parts are built
-  from the plain up (a post sunk through whatever land it meets). Only the
-  baked path drapes; a model the bake refuses stands flat.
+  ground drawn under it over the placement's foot (`bakePlacements`), so a
+  spine longer than any clearing follows the land instead of flattening it,
+  and a small part on `SET_GROUND` (a sign, a rock, a rake on a slope) sits
+  on the 9 u grid's chords rather than the curve they cut across. A model
+  with one stands on the plain and levels nothing (`mSetDrapes`): its other
+  parts are built from the plain up (a post sunk through whatever land it
+  meets). Only the baked path drapes; a model the bake refuses stands flat.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
