@@ -686,6 +686,56 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0):
     for sd in (-1, 1):
         box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
 
+class square:
+    """Blocks built inside stay square: a small thing far out (a swimmer's
+    head) would pay a chamfer's triangles for an edge no racer resolves."""
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        return self
+    def __exit__(self, *exc):
+        for o in bpy.context.scene.objects:
+            if o not in self.before:
+                o['chamfer'] = 0
+
+SEA = 0.12   # the sea's surface over the sand a piece in it stands on (buildWater's WATER_LIFT)
+
+def stadium(cx, cz, r, half, n):
+    """A closed loop of (x, z) like a running track: two straights along Z
+    `half` either side of cz, `r` either side of cx, joined by half circles
+    of `n` steps, starting at the +X straight's far end."""
+    pts = []
+    for zc, a0 in ((cz + half, 0.0), (cz - half, math.pi)):
+        pts += [(cx + r * math.cos(a0 + math.pi * i / n), zc + r * math.sin(a0 + math.pi * i / n)) for i in range(n)]
+    return pts
+
+def wave(at, L):
+    """A breaking wave rolling in to -X from `at` (its foot on the sand, the
+    sea's surface SEA over it): a ridge of water `L` long along Z, gentle at
+    its back, its crest and steep face white with foam, dying away at both
+    ends."""
+    x0, y0, z0 = at
+    back = [(-0.75, -0.08), (-0.35, 0.06), (-0.05, 0.19)]          # (x, y over SEA): the swell's back
+    front = [(-0.05, 0.19), (0.08, 0.21), (0.16, 0.12), (0.26, -0.08)]   # the crest and the face, -X is in
+    rows = [(-0.5, 0.1), (-0.2, 0.95), (0.2, 0.95), (0.5, 0.1)]
+    for prof, color in ((back, 'sky'), (front, 0xfff6eb)):
+        n = len(prof)
+        verts = [(x0 - x, y0 + SEA - 0.08 + (y + 0.08) * h, z0 + f * L) for f, h in rows for x, y in prof]
+        faces = [(j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i)
+                 for j in range(len(rows) - 1) for i in range(n - 1)]
+        poly(verts, faces, color)
+
+def flames(tongues, heart, at=(0.0, 0.0, 0.0)):
+    """A camp fire's flames: orange tongues round a yellow heart, each
+    (dx, dz, r, h, lift, beat) a cone that flickers up and down on its own
+    short beat (anim_bob, out of step with the others), so the tips dance
+    while the fire as a whole stands still. Each foot is sunk `lift` under
+    the embers at `at`, so a tongue at the top of its flicker shows no gap."""
+    x0, y0, z0 = at
+    for k, (dx, dz, r, h, lift, beat) in enumerate(tongues + (heart,)):
+        with animated('anim_bob:h=%.3f:p=%.2f#flame%d' % (lift, beat, k), (x0 + dx, y0, z0 + dz)):
+            cyl(r, h + lift, (x0 + dx, y0 + 0.03 - lift, z0 + dz),
+                0xffc044 if k == len(tongues) else 0xff7e44, r2=0.01, segs=5)
+
 def flag_on_pole(at, h, colors, wave, w=0.32, fh=0.2):
     """A slim pole `h` tall and a flag of horizontal bands flying to +X off its
     top, hinged there; `wave` names the cloth's flap (set_motion.h)."""
@@ -705,8 +755,9 @@ def rock_pool():
     # grey boulders heaped up on the sea side (-X) and dropping low on the
     # road side so the water shows from the chase cam. A natural form, as big
     # as the reef it lies in (G). Its life is at a car's scale: a child with a
-    # bucket working along the near shore and back, a parent crouched at the
-    # water, two gulls on the high rock.
+    # bucket crouched at the near shore, a parent crouched beside, a gull on
+    # the far shore and one riding the wind in wide circles over the rocks,
+    # which is what a racer this far off sees move.
     G = 1.45
     disc(4.2 * G, (0.2 * G, 0.0, -0.3 * G), 'sky', segs=20, h=0.05)            # the shallows
     disc(3.6 * G, (-0.6 * G, 0.0, 1.2 * G), 'sky', segs=20, h=0.05)
@@ -719,17 +770,28 @@ def rock_pool():
     boulder(hi, 0.9 * G, yaw=0.8, color='slate')
     boulder((-0.9 * G, 0, 0.8 * G), 0.5 * G, yaw=1.1)                          # breaking the surface
     # the near shore, where the shallows meet the sand on the road side
-    a0, a1 = (math.cos(-0.7) * 6.6, 0.0, math.sin(-0.7) * 6.6), (math.cos(0.6) * 6.6, 0.0, math.sin(0.6) * 6.6)
-    marker('path_pool_0', a0)
-    marker('path_pool_1', a1)
-    with animated('anim_path:c=pool:p=14:f=1#kid', a0):
-        figure(a0, -math.pi / 2, shirt=0xffc044, legs=0x6794d9)
-        box((0.08, 0.09, 0.08), (a0[0], 0.17, a0[2] + 0.17), 0xff5040)     # the bucket in hand
+    ka = -0.35
+    figure((math.cos(ka) * 6.5, 0.0, math.sin(ka) * 6.5), math.pi - ka, shirt=0xffc044, legs=0x6794d9,
+           pose='crouch')
+    box((0.08, 0.09, 0.08), (math.cos(ka) * 6.5, 0.045, math.sin(ka) * 6.5 + 0.17), 0xff5040)   # the bucket
     figure((math.cos(0.05) * 6.4, 0.0, math.sin(0.05) * 6.4), math.pi, shirt=0x339cf2, legs=0x38383d, pose='crouch')
     box((0.3, 0.05, 0.18), (math.cos(0.05) * 6.75, 0.03, math.sin(0.05) * 6.75 + 0.3), 0xff7e44)   # a towel
-    for k, a in enumerate((0.95, 1.25)):                                         # gulls on the far shore
-        gull((math.cos(a) * 6.5, 0.0, math.sin(a) * 6.5), 0.3 * k,
-             'anim_watch:r=24+hop:r=10:h=0.2#g%d' % k if k == 0 else 'anim_watch:r=24#g%d' % k)
+    gull((math.cos(0.95) * 6.5, 0.0, math.sin(0.95) * 6.5), 0.0)                 # on the far shore
+    # the gull aloft: wings out, gliding a wide circle from the pool out over
+    # the beach toward the road and rising and sinking on the air (a closed
+    # path, facing its way). Its rest pose stands on the shore by the other;
+    # the path is where it flies.
+    ring = [(6.0 + 7.0 * math.cos(i * math.pi / 8), 3.6, 1.0 + 7.0 * math.sin(i * math.pi / 8)) for i in range(16)]
+    for i, at in enumerate(ring):
+        marker('path_soar_%d' % i, at)
+    gx, gz = math.cos(1.25) * 6.5, math.sin(1.25) * 6.5
+    with animated('anim_path:c=soar:p=22:f=1+bob:h=0.5:p=5.5#soar', (gx, 0.1, gz)):
+        box((0.2, 0.07, 0.08), (gx, 0.1, gz), 0xf8f8fb)                          # body, bill to +X
+        box((0.07, 0.06, 0.065), (gx + 0.12, 0.13, gz), 0xf8f8fb)
+        box((0.06, 0.04, 0.05), (gx + 0.17, 0.12, gz), 0xffc044)
+        for sd in (-1, 1):                                                      # wings, a shallow V
+            box((0.11, 0.03, 0.26), (gx + 0.01, 0.14, gz + sd * 0.16), 0x9aa1b4, pitch=sd * 0.2)
+            box((0.08, 0.03, 0.08), (gx, 0.17, gz + sd * 0.32), 0x38383d, pitch=sd * 0.2)
     join_still('pool')
 
 @piece(1.45)
@@ -823,9 +885,8 @@ def pirate_camp():
     for i in range(6):
         a = i / 6 * 2 * math.pi
         box((0.09, 0.07, 0.07), (1.2 + math.cos(a) * 0.2, 0.035, 0.4 + math.sin(a) * 0.2), 'grey', yaw=-a)
-    with animated('anim_spin:w=2.4#fire', (1.2, 0.02, 0.4)):
-        cyl(0.11, 0.24, (1.2, 0.02, 0.4), 0xff7e44, r2=0.02, segs=5)
-        cyl(0.06, 0.3, (1.22, 0.02, 0.42), 0xffc044, r2=0.01, segs=5)
+    flames(((0.03, 0.0, 0.1, 0.22, 0.04, 0.33), (-0.04, 0.03, 0.08, 0.17, 0.035, 0.29)),
+           (0.01, -0.01, 0.06, 0.28, 0.05, 0.24), at=(1.2, 0.0, 0.4))
     marker('anim_smoke', (1.2, 0.3, 0.4))
     kit('pirate', 'barrel', (1.2, 0, -0.1), yaw=0.2, scale=0.16)
     figure((1.2, 0.2, -0.1), math.pi / 2, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f, pose='sit')
@@ -966,19 +1027,15 @@ def strand_line():
 def bonfire():
     # Driftwood: the beach fire at the end of the strand line, at a car's
     # scale: driftwood stood up in a cone in its ring of stones, the flames
-    # licking round out of it and the yellow heart leaping, its smoke going up
-    # over the beach; two logs drawn up as seats with three of the beach's
-    # people round it, and a lean-to of driftwood poles behind them out of
-    # the wind.
+    # flickering up out of it, its smoke going up over the beach; two logs
+    # drawn up as seats with three of the beach's people round it, and a
+    # lean-to of driftwood poles behind them out of the wind.
     for k in range(8):
         a = k / 8 * 2 * math.pi
         box((0.1, 0.08, 0.08), (math.cos(a) * 0.32, 0.04, math.sin(a) * 0.32), 0x868ba1, yaw=-a)
     disc(0.27, (0, 0.0, 0), 0x38383d, segs=10, h=0.03)
-    with animated('anim_spin:w=2.6#flames', (0, 0.03, 0)):                     # tongues of flame, uneven, turning
-        for (dx, dz, r, h) in ((0.04, 0.0, 0.14, 0.36), (-0.07, 0.06, 0.1, 0.28), (-0.03, -0.08, 0.09, 0.24)):
-            cyl(r, h, (dx, 0.03, dz), 0xff7e44, r2=0.01, segs=5)
-    with animated('anim_sway:a=x:d=20:p=0.8+bob:h=0.06:p=0.55#heart', (0.01, 0.03, 0.01)):
-        cyl(0.08, 0.48, (0.01, 0.03, 0.01), 0xffc044, r2=0.01, segs=5)        # its yellow heart
+    flames(((0.05, 0.0, 0.13, 0.34, 0.05, 0.31), (-0.07, 0.06, 0.1, 0.27, 0.045, 0.37),
+            (-0.03, -0.08, 0.09, 0.23, 0.04, 0.27)), (0.01, 0.01, 0.07, 0.44, 0.06, 0.23))
     for k in range(6):
         a = k / 6 * 2 * math.pi + 0.3
         rod((math.cos(a) * 0.24, 0.02, math.sin(a) * 0.24), (math.cos(a) * 0.03, 0.42, math.sin(a) * 0.03),
@@ -1010,8 +1067,8 @@ def lifeguard_tower():
     # under the patrol's flag and a red cross for the road to see. Round it:
     # the rescue board and the ring buoy, a rack of surfboards, the red rescue
     # boat pulled up toward the water, and the red-and-yellow flags that mark
-    # where to swim. The lifeguard on the deck scans the water from side to
-    # side; the flags fly.
+    # where to swim. The lifeguard on the deck watches the water through
+    # binoculars and turns them on the cars going by; the flags fly.
     white, red, wood = 0xfff6eb, 0xff5040, 0x9a7b55
     S, top = 0.95, 0.95                       # the stilts' spread, the deck's height
     for sx in (-1, 1):
@@ -1049,9 +1106,17 @@ def lifeguard_tower():
     # the patrol's flag over the roof
     flag_on_pole((hx - W / 2 + 0.06, y0 + H + 0.1, -D / 2 + 0.06), 0.5, (red, 0xffc044),
                  'anim_sway:a=z:d=24:p=1.8#roof')
-    # the lifeguard on the lookout, scanning the water
-    with animated('anim_sway:a=y:d=40:p=5.5#guard', (0.48, top + 0.07, 0)):
-        figure((0.48, top + 0.07, 0), 0.0, shirt=red, legs=red, hair=0xffc044)
+    # the lifeguard out on the deck beside the hut, on the side the cars come
+    # from so they see him past it, binoculars up to the water; he turns them
+    # on the cars as they come by (watch)
+    gx, gy, gz = 0.5, top + 0.07, -0.5
+    def guard():
+        figure((gx, gy, gz), 0.0, shirt=red, legs=red, hair=0xffc044)
+        for s in (-1, 1):                                                  # forearms up to them
+            beam((gx + 0.02, gy + 0.32, gz + s * 0.1), (gx + 0.08, gy + 0.42, gz + s * 0.05), 0.06, red)
+        box((0.07, 0.06, 0.14), (gx + 0.1, gy + 0.43, gz), 0x38383d)          # the binoculars
+    with animated('anim_watch:r=20:d=100#guard', (gx, gy, gz)):
+        guard()
     # the rescue board against a stilt, the rack of surfboards beside the hut
     box((0.05, 0.62, 0.15), (S / 2 + 0.12, 0.3, -S / 2 - 0.1), red, roll=0.2)
     for z in (1.0, 1.6):
@@ -1093,20 +1158,30 @@ def parasol():
     box((0.17, 0.03, 0.13), (-0.5, 0.135, 0.6), 0xfff6eb)
     for (dx, dz, s) in ((0, 0, 0.16), (0.1, 0.09, 0.1), (-0.09, 0.08, 0.1)):    # the sandcastle
         box((s, s * 0.8, s), (0.85 + dx, s * 0.4, -0.6 + dz), 0xe6d29a)
-    figure((1.25, 0, -1.2), math.pi / 2, shirt=0xffc044, legs=0x339cf2)
-    figure((1.25, 0, 0.0), -math.pi / 2, shirt=0x61cb8b, legs=0xff5040, hair=0x38383d)
-    with animated('anim_bob:h=0.45:p=1.3#ball', (1.25, 0.0, -0.6)):          # thrown up and caught
-        box((0.1, 0.1, 0.1), (1.25, 0.05, -0.6), 0xff5040)
+    figure((1.25, 0, -1.2), -math.pi / 2, shirt=0xffc044, legs=0x339cf2)
+    figure((1.25, 0, 0.0), math.pi / 2, shirt=0x61cb8b, legs=0xff5040, hair=0x38383d)
+    # the ball lobbed from one child's hands to the other's and back, turning
+    # over in the air (anim_path along the arc and back: it turns round in
+    # their hands)
+    arc = [(1.25, 0.36 + 0.55 * (1 - (2 * t - 1) ** 2), -1.08 + 0.96 * t) for t in (i / 8 for i in range(9))]
+    for k, at in enumerate(arc + arc[-2:0:-1]):
+        marker('path_ball_%d' % k, at)
+    with animated('anim_path:c=ball:p=2.4:f=0+spin:a=x:w=5', arc[0]):
+        box((0.1, 0.1, 0.1), arc[0], 0xff5040)
+        box((0.11, 0.03, 0.11), arc[0], 0xfff6eb)                              # its white band
     join_still('parasols')
 
 @piece(1.0)
 def buoy_line():
     # Riptide: the swimming line off the patrol's beach, at a car's scale: a
     # rope of red and white floats lying on the water between two marker
-    # buoys, each flying a flag, and out past it two surfers, one sitting on
-    # her board waiting for a wave and one riding in. The swell lifts it all:
-    # the markers rock and bob, the line rides up and down in two lengths,
-    # out of step, the riding surfer leans into the wave.
+    # buoys, each flying a flag, swimmers inside it, and out past it the
+    # surf. The swell lifts it all: the markers rock and bob, the line rides
+    # up and down in two lengths, out of step, the swimmers' heads ride it,
+    # a surfer sits her board waiting; the lifeguard paddles a rescue board
+    # round the swimmers, and either side of the flags a wave rolls in with
+    # a surfer riding it. The sea is the ground's (+X out to sea, the water
+    # SEA over the sand at 0); what moves rides on it, so no figure stands.
     for k, (s, flag) in enumerate(((-1, 0xff5040), (1, 0xffc044))):
         zb = s * 15.0
         with animated('anim_sway:a=z:d=20:p=3.1+bob:h=0.12:p=3.1#m%d' % k, (0, 0.0, zb)):
@@ -1121,16 +1196,58 @@ def buoy_line():
             for k in range(10):                       # each float down through the water to the sand
                 zf = z0 + 0.5 + k * 1.5
                 box((0.12, 0.24, 0.16), (0, 0.12, zf), 0xfff6eb if (g * 10 + k) % 2 else 0xff5040)
-    def board(x, z, color, yaw):                      # its keel down through the water to the sand
+    def board(x, z, color, yaw, y=None):
+        """A surfboard along +Z turned by `yaw`: lying on the water at `y`
+        (a ridden one), else its keel down through the water to the sand."""
         c, s = math.cos(yaw), math.sin(yaw)
-        box((0.13, 0.17, 0.5), (x, 0.085, z), color, yaw=yaw)
-        box((0.09, 0.17, 0.12), (x + 0.25 * s, 0.085, z + 0.25 * c), color, yaw=yaw + math.pi / 4)
-    with animated('anim_bob:h=0.14:p=3.4#sit', (4.5, 0.14, -6.0)):
-        board(4.5, -6.0, 0xffc044, 0.3)
-        figure((4.5, 0.17, -6.05), -1.3, shirt=0x38383d, legs=0x38383d, hair=0xffc044, pose='sit')
-    with animated('anim_sway:a=z:d=14:p=2.2+bob:h=0.2:p=2.2#ride', (3.2, 0.14, 7.0)):
-        board(3.2, 7.0, 0xff5040, -0.4)
-        figure((3.2, 0.17, 7.0), math.pi - 0.4, shirt=0x339cf2, legs=0x38383d)
+        t, cy = (0.06, y) if y is not None else (0.17, 0.085)
+        box((0.13, t, 0.5), (x, cy, z), color, yaw=yaw)
+        box((0.09, t, 0.12), (x + 0.25 * s, cy, z + 0.25 * c), color, yaw=yaw + math.pi / 4)
+    with animated('anim_bob:h=0.08:p=3.4#sit', (5.0, 0.14, 0.0)):
+        board(5.0, 0.0, 0xffc044, 0.3)
+        figure((5.0, 0.17, -0.05), -1.3, shirt=0x38383d, legs=0x38383d, hair=0xffc044, pose='sit')
+    # swimmers between the flags, in the white water inside the line: heads
+    # and shoulders out of it, riding the swell (a pair together, one alone)
+    for k, (heads, lift, beat) in enumerate(((((-2.8, -1.2, 0xffc044), (-2.6, -0.85, 0x339cf2)), 0.05, 2.9),
+                                             (((-2.4, 1.4, 0xff5040),), 0.06, 3.3))):
+        with animated('anim_bob:h=%.2f:p=%.1f#swim%d' % (lift, beat, k), (heads[0][0], 0.0, heads[0][1])), square():
+            for (x, z, cap) in heads:
+                box((0.1, 0.1, 0.2), (x, SEA - 0.03, z), 0xf2bf99)            # shoulders, awash
+                box((0.11, 0.11, 0.11), (x, SEA + 0.07, z), 0xf2bf99)
+                box((0.12, 0.05, 0.12), (x - 0.01, SEA + 0.135, z), cap)       # a swim cap
+    # the lifeguard on the rescue board, kneeling, paddling slow laps along
+    # the outside of the line off the swimmers (a stadium of two straights,
+    # the board bow first), clear of the surf either side
+    patrol = stadium(1.4, 0.0, 0.5, 4.5, 6)
+    for k, (x, z) in enumerate(patrol):
+        marker('path_patrol_%d' % k, (x, SEA - 0.06, z))
+    x0, z0 = patrol[0]
+    with animated('anim_path:c=patrol:p=40:f=1+bob:h=0.03:p=1.7#rescue', (x0, SEA - 0.06, z0)), square():
+        box((0.62, 0.08, 0.16), (x0, SEA - 0.02, z0), 0xff5040)                 # the board, bow to +X
+        box((0.16, 0.08, 0.12), (x0 + 0.33, SEA - 0.02, z0), 0xff5040, yaw=math.pi / 4)
+        figure((x0 - 0.04, SEA + 0.02, z0), 0.0, shirt=0xff5040, legs=0xff5040, hair=0xffc044, pose='crouch')
+        beam((x0 + 0.12, SEA + 0.0, z0 + 0.14), (x0 - 0.02, SEA + 0.36, z0 + 0.1), 0.06, 0x9a7b55)   # the paddle
+    # the surf either side of the flags: a wave rolls in out of the swell
+    # with a surfer riding it across and in, and runs out into the foam
+    # short of the line; the wave and its rider are one rigid part on a
+    # loop whose way back out runs under the sand (a closed path, hidden)
+    for k, s in enumerate((-1, 1)):
+        ride = [(7.4, 0.0, s * 12.0), (2.6, 0.0, s * 7.2), (2.2, -1.0, s * 6.8), (8.0, -1.0, s * 12.5)]
+        for i, at in enumerate(ride):
+            marker('path_surf%d_%d' % (k, i), at)
+        x0, _, z0 = ride[0]
+        with animated('anim_path:c=surf%d:p=12:o=%.1f:f=0#surf%d' % (k, 0.5 * k, k), ride[0]), square():
+            wave(ride[0], 2.8)
+            yb = -math.pi / 2 - s * math.pi / 4                # the board along the ride, in and across
+            board(x0 - 0.1, z0, (0x339cf2, 0xff5040)[k], yb, y=SEA + 0.14)
+            # standing side on, facing in to the beach, arms out
+            yf = yb + math.pi
+            figure((x0 - 0.1, SEA + 0.17, z0), yf, shirt=(0xff7e44, 0x61cb8b)[k], legs=0x38383d,
+                   hair=(0x7a5a3a, 0xffc044)[k])
+            c, sn = math.cos(yf), math.sin(yf)
+            for side in (-1, 1):
+                beam((x0 - 0.1 + side * 0.1 * sn, SEA + 0.52, z0 + side * 0.1 * c),
+                     (x0 - 0.1 + side * 0.3 * sn, SEA + 0.44, z0 + side * 0.3 * c), 0.06, 0xf2bf99)
 
 # ====================================================================================
 # SNOW
