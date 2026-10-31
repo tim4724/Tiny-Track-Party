@@ -2164,7 +2164,8 @@ def penguin_chute():
         with animated('anim_path:c=drapeslide:p=13:o=%.3f#%d' % (n / 4, n), (x, 0.07, 0.0)), plain_parts():
             slider_penguin(x, 0.07, 0.0, 0.5)
     # the climbers' loop: out of the water, up the flank in a line, over the
-    # top and down behind it, home under the hill
+    # top and down behind it, home under the hill; uphill no faster than the
+    # colony's walkers go on the flat
     climb = [(HOLE + 0.3, -0.7, 1.0), (HOLE - 0.4, 0.02, 1.5), (0.0, 0.0, 3.2), (-4.5, 0.0, 5.2),
              (-9.0, 0.0, 5.8), (-13.5, 0.0, 4.6), (-17.0, 0.0, 2.6), (TOP - 0.6, 0.0, 1.2),
              (TOP - 2.6, 0.0, 0.9), (TOP - 4.2, -1.3, 0.9)]
@@ -2173,7 +2174,7 @@ def penguin_chute():
         marker('path_drapeclimb_%d' % k, pt)
     for n in range(3):
         at = climb[2 + n]
-        with animated('anim_path:c=drapeclimb:p=60:o=%.3f:f=1+waddle:d=12:p=0.46#%d' % (n / 3, n), at), plain_parts():
+        with animated('anim_path:c=drapeclimb:p=90:o=%.3f:f=1+waddle:d=12:p=0.46#%d' % (n / 3, n), at), plain_parts():
             stood_penguin(at[0], at[2], 0.47, 0.0)
 
 @piece(1.0)
@@ -2184,7 +2185,9 @@ def expedition_camp():
     # over them (some twelve metres, banded red and white, guyed: what reads
     # over the kerb of the raised road) flying the expedition's flag across
     # to the road, lines of prayer flags strung from its head, a long sled
-    # loaded with kit, rucksacks, two climbers.
+    # loaded with kit, rucksacks, two climbers. All of it on the crest of its
+    # snow bank (SET_GROUND), up where a racer sees it over the kerb, and
+    # draped: built on y = 0 and laid on the bank as the renderer draws it.
     def tent(x, z, color, k=0.27, yaw=0.0):
         c, s2 = math.cos(yaw), math.sin(yaw)
         def at(dx, dy, dz):
@@ -2222,7 +2225,8 @@ def expedition_camp():
     for a in (0.6, 2.7, 4.8):
         gx, gz = MX + 1.5 * math.cos(a), MZ + 1.5 * math.sin(a)
         strut((MX, MH * 0.7, MZ), (gx, 0.02, gz), 0.025, 0xc8cfdf)
-    flag_across((MX, MH, MZ), 0.45, 0xff5040, 'anim_sway:a=x:d=24:p=1.9#1', w=0.62, fh=0.38, pole=0x555b66)
+    flag_across((MX, MH, MZ), 0.45, 0xff5040, 'anim_drape+sway:a=x:d=24:p=1.9#1', w=0.62, fh=0.38,
+                pole=0x555b66)
     # prayer flags: two lines from the mast's head down to pegs toward the road
     COLS = (0x3f7bd9, 0xfff6eb, 0xff5040, 0x61cb8b, 0xffc044)
     for end in ((1.9, -3.4), (2.1, -0.9)):
@@ -2235,7 +2239,10 @@ def expedition_camp():
             mx, my, mz = (top[0] + (foot[0] - top[0]) * t, top[1] + (foot[1] - top[1]) * t,
                           top[2] + (foot[2] - top[2]) * t)
             box((0.17, 0.14, 0.02), (mx, my - 0.09, mz), COLS[i % 5], yaw=yaw + math.pi / 2)
-    join_still('camp')
+    # draped, the flag too (`drape`): the bank's crest is drawn on the 9 u
+    # grid, half a unit and more off its flat top
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
+          'drape_camp')
 
 @piece(1.0)
 def avalanche_fence():
@@ -2258,7 +2265,7 @@ def avalanche_fence():
         for z in zs:                                                # posts, leaning into the hill
             box((0.1, 1.3, 0.1), (x, 0.35, z), 0x6e4a32, roll=0.35)
         for za, zb in zip(zs[:-1], zs[1:]):                         # the slatted boards between them
-            box((0.06, 0.7, zb - za), (x - 0.22, 0.55, (za + zb) / 2), 0x8a6a46, roll=0.35)
+            box((0.06, 0.7, zb - za), (x - 0.08, 0.55, (za + zb) / 2), 0x8a6a46, roll=0.35)
     def defences():
         for (x, half) in ((-6.0, 6.0), (-10.5, 7.5), (-15.0, 8.5), (-19.5, 8.0)):
             rake(x, -half, half)

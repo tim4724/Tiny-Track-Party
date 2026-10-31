@@ -292,6 +292,12 @@ export const SET_GROUND = {
   // toward the road (+X) to the water hole on the flat at its foot; broad
   // enough that the ground's 9 u grid draws it as a hill, not a cone.
   'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
+  // Glacier's expedition camp on a snow bank of its own, flat on top like the
+  // den camp's and set back from the road: the land by the climbing road lies
+  // well under the deck, so a camp on it hid its tents behind the kerb; on the
+  // bank they show over it. The camp drapes, so where the bank meets land
+  // already raised (the second camp, by a ramp) it lies on the slope drawn.
+  'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), its gentle face to
   // the road, the school's hut and arch at its foot.
   'set-ski-school': [{ kind: 'mound', x: -10, h: 3.4, r: 13, r1: 10, rz: 13, shape: 1.3 }],
@@ -488,7 +494,7 @@ export const TRACKS = {
     set: [
       { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 170 },
       { model: 'set-igloo', u: 0.01, lat: -7, yaw: 106 },
-      { model: 'set-expedition-camp', u: 0.09, lat: 7.5, yaw: 77 },
+      { model: 'set-expedition-camp', u: 0.09, lat: 11, yaw: 77 },
       { model: 'set-penguin-group', u: 0.03, lat: 7.5, yaw: 69 },
       { model: 'set-penguin-group', u: 0.92, lat: -9, yaw: 227 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
