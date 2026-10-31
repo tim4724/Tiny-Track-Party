@@ -175,7 +175,7 @@ function setInit(p) {
 // anchored on the piece itself (its index), since the model was built standing
 // on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
 // but shape (1), a plain's or paint's fade (8) and tint (0, none).
-const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5 };
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6 };
 const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint'];
 function landInit(l, piece, where) {
   checkKeys(l, LAND_KEYS, where);
@@ -186,7 +186,8 @@ function landInit(l, piece, where) {
   if (!(l.r > 0)) fail(`${where}: r must be positive`);
   if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
   if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
-  if (l.kind !== 'plain' && l.kind !== 'paint' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind !== 'plain' && l.kind !== 'paint' && l.kind !== 'shore' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds) and r (its fade), no height or tint, never on a piece`);
   if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
   if (l.kind === 'mound' && l.tint != null) fail(`${where}: a mound takes no tint`);
