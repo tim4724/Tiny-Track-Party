@@ -122,6 +122,23 @@ int main(int argc, char** argv) {
   check(ttp::rt::parse_set_motion("anim_path:c=chute:p=7.5:o=0.33:f=1", m)
             && m.path && m.chain == "chute" && near(m.pathPeriod, 7.5f)
             && near(m.pathOffset, 0.33f) && m.pathFace == 1 && m.travels(), "a path traveller");
+  {
+    std::string unknown;
+    check(ttp::rt::parse_set_motion("anim_path:c=walk:p=36:f=1+waddle:d=10:p=0.42#0", m, &unknown)
+              && unknown.empty() && m.path && m.waddle && m.travels() && near(m.waddleDeg, 10)
+              && near(m.waddlePeriod, 0.42f), "a walker waddles along its path");
+    // what the renderer composes onto a traveller: the rock and its lift, no turn
+    const SetMotionPose w = ttp::rt::set_motion_pose(m, 0.105f, 0, nullptr, 0);
+    check(near(w.roll, 10 * 0.0174532925f, 1e-4f) && w.lift >= 0 && w.yaw == 0,
+          "a walker rocks to its clamp a quarter step in");
+  }
+  {
+    std::string unknown;
+    check(ttp::rt::parse_set_motion("anim_drape+sway:a=x:d=22:p=1.9#flag", m, &unknown)
+              && unknown.empty() && m.drape && m.sway && m.swayAxis == 'x' && !m.travels(),
+          "a flag on a draped pole stands on the drawn ground");
+    check(ttp::rt::parse_set_motion("anim_sway:a=x", m) && !m.drape, "a part is not draped unless it says so");
+  }
   check(ttp::rt::parse_set_motion("anim_wobble+bob:h=0.3:q=9", m)
             && m.bob && near(m.bobHeight, 0.3f) && !m.travels(), "an unknown verb and key are skipped");
   check(ttp::rt::parse_set_motion("anim_spin:a=q", m) && m.spinAxis == 'y', "a bad axis falls back to y");
