@@ -10,7 +10,9 @@
 //   3. A TURN TO WATCH never passes its clamp, never snaps when a car circles
 //      the part (behind it included) or when two cars pull it opposite ways,
 //      and rests when no car is in reach.
-//   4. A HOP lifts only while a car is close, and never past its height.
+//   4. A HOP lifts only while a car is close, and never past its height. A
+//      GESTURE (a sway or bob with a rest) goes one way and back, eased, and
+//      then stands still for its rest.
 //   5. THE SHIPPED PIECES SAY WHAT THEY MEAN: in every set-*.glb, each `anim_`
 //      node parses with no unknown verb or key (a typo parses to a part that
 //      stands still, and nothing else would notice), does something, and a
@@ -143,6 +145,9 @@ int main(int argc, char** argv) {
             && m.bob && near(m.bobHeight, 0.3f) && !m.travels(), "an unknown verb and key are skipped");
   check(ttp::rt::parse_set_motion("anim_spin:a=q", m) && m.spinAxis == 'y', "a bad axis falls back to y");
   check(ttp::rt::parse_set_motion("anim_smoke", m) && m.smoke && !m.any(), "smoke is a marker, not a motion");
+  check(near(m.smokeScale, 1), "a chimney's smoke by default");
+  check(ttp::rt::parse_set_motion("anim_smoke:s=2.5", m) && m.smoke && near(m.smokeScale, 2.5f) && !m.any(),
+        "a stack's smoke, bigger");
   check(ttp::rt::parse_set_motion("anim_sway:a=y:d=9:p=2:o=0.25#t3", m)
             && m.sway && m.inStep && near(m.step, 0.25f) && near(m.swayPeriod, 2), "a sway in step");
   check(ttp::rt::parse_set_motion("anim_path:c=x:o=0.5", m) && !m.inStep && near(m.pathOffset, 0.5f),
@@ -238,6 +243,41 @@ int main(int argc, char** argv) {
   check(top > 0.3f && top <= 0.4f + 1e-6f, "a close car makes it hop, never past its height");
   const SetMotionCar gone{ 9, 0, 9 };
   check(ttp::rt::set_motion_pose(m, 0.25f, 0, &gone, 1).lift == 0, "a car past the radius stops the hops");
+
+  // 4b. A gesture: a sway or a bob with a rest moves one way and back in the
+  // first share of its period, eased in and out, and stands still after.
+  check(ttp::rt::parse_set_motion("anim_sway:a=z:d=30:p=8:r=0.75#a", m)
+            && m.sway && near(m.swayRest, 0.75f) && near(m.swayPeriod, 8), "a sway with a rest");
+  float lo = 1e9f, hi = -1e9f, step = 0, last = 0, still = 0;
+  for (int i = 0; i <= 1600; i++) {
+    const float t = i * 0.01f;   // two periods, a hundredth of a second apart
+    const float s = ttp::rt::set_motion_pose(m, t, 0, nullptr, 0).sway;
+    lo = std::min(lo, s);
+    hi = std::max(hi, s);
+    if (i) step = std::max(step, std::fabs(s - last));
+    last = s;
+    const float u = t / 8 - std::floor(t / 8);
+    if (u >= 0.25f) still = std::max(still, std::fabs(s));
+  }
+  check(lo >= 0 && near(hi, 30 * DEG, 1e-3f), "a gesture swings one way, all the way");
+  check(still == 0, "and rests for the rest of its period");
+  check(step < 0.5f * DEG, "and never jumps (worst step " + std::to_string(step / DEG) + " deg)");
+  check(ttp::rt::parse_set_motion("anim_bob:h=0.3:p=0.8:r=0.4", m) && near(m.bobRest, 0.4f), "a bob with a rest");
+  lo = 1e9f, hi = -1e9f, still = 0;
+  for (int i = 0; i <= 800; i++) {
+    const float t = i * 0.002f;
+    const float l = ttp::rt::set_motion_pose(m, t, 0.3f, nullptr, 0).lift;
+    lo = std::min(lo, l);
+    hi = std::max(hi, l);
+    const float u = t / 0.8f + 0.3f - std::floor(t / 0.8f + 0.3f);
+    if (u >= 0.6f) still = std::max(still, l);
+  }
+  check(lo >= 0 && near(hi, 0.3f, 1e-3f) && still == 0, "a bounce lands and waits on the ground");
+  ttp::rt::parse_set_motion("anim_bob:h=0.3:p=2", m);
+  SetMotion r0;
+  ttp::rt::parse_set_motion("anim_bob:h=0.3:p=2:r=0", r0);
+  check(ttp::rt::set_motion_pose(m, 0.7f, 0.2f, nullptr, 0).lift
+            == ttp::rt::set_motion_pose(r0, 0.7f, 0.2f, nullptr, 0).lift, "a bob with no rest is the old bob");
 
   check(ttp::rt::parse_set_motion("anim_swing+sway:deg=30", m) && m.sway && near(m.swayDeg, 25),
         "a typo'd verb or key changes nothing");
