@@ -991,6 +991,8 @@ def bonfire():
     for i in range(6):
         z = -0.6 + i * 0.24
         rod((-1.25, 1.0, z), (-1.95, 0.0, z + 0.05 * (i % 2)), 0.05, 0x8a6a46 if i % 2 else 0xb8a686, segs=5)
+    # an old sail over the poles: without it the frame reads as a swing
+    box((1.22, 0.03, 1.5), (-1.64, 0.53, 0.0), 0x6794d9, roll=math.atan2(1.0, 0.7))
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
 
