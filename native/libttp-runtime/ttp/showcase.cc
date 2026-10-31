@@ -51,7 +51,6 @@ const char* landmarkName(uint32_t kind) {
     case LM_PICNIC: return "picnic table";
     case LM_HOODOO: return "hoodoo rocks";
     case LM_BLOCKS: return "alphabet blocks";
-    case LM_WINDMILL: return "windmill";
     case LM_LIGHTHOUSE: return "lighthouse";
     case LM_SAILBOAT: return "sailboat";
     case LM_DUCK: return "bath duck";

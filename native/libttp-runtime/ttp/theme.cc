@@ -432,7 +432,7 @@ Theme canyonTheme() {
   // Grit on the wind: fast low sand streaks under the drifting dust banks.
   ambientKind(t.ambient, AMB_SAND); t.ambient.count = 240; t.ambient.tint = 0xe9c9a0;
   t.structure = 0xb4714d;  // supports read as red-rock columns, not city concrete
-  t.landmarks = { LM_HOODOO, LM_WINDMILL };
+  t.landmarks = { LM_HOODOO };
   // Vultures riding a thermal — soaring, barely a wing-beat.
   t.birds.count = 2; t.birds.tint = 0x3a322c; t.birds.size = 3.6f; t.birds.y = 36;
   t.birds.rc = 150; t.birds.rb = 20; t.birds.speed = 0.1f; t.birds.flap = 0.15f; t.birds.flapHz = 0.5f;
@@ -464,31 +464,26 @@ Theme canyonTheme() {
 
 // Each canyon track tells its own story (its `set` and `land` in tracks.js),
 // and the biome's scatter and structures follow it. The props are re-chosen
-// from the shared kit: no story gets another's leftovers. The spinning
-// windmill is Wash's (a ranch's) among the cup's tracks; the hoodoos stand
+// from the shared kit: no story gets another's leftovers. The hoodoos stand
 // on every track: they are the badlands themselves, not a story.
-//   wash        a dry-wash ranch: hay by the fences, a barrel, rocks
+//   wash        a dry wash and its canyon: the rock alone, rocks and stones
 //   gulch       a gold mine: timber supports like a trestle, crates and
 //               barrels of supplies, broken stone, no hay
-//   crag        a fossil crag: the rock alone, nothing a person left
+//   crag        a ranch in butte country: hay by the fences, a barrel, rocks
 //   sidewinder  a desert highway: road-works lights on the verge, stones
 void canyonTrack(Theme& t, const std::string& track) {
-  if (track == "gulch" || track == "crag" || track == "sidewinder") {
-    t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), (uint32_t) LM_WINDMILL),
-                      t.landmarks.end());
-  }
   if (track == "wash") {
-    t.props.models = { "prop-hay", "pirate-barrel", "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.30f, 0.85f, 0.35f, false, true }, { 1, 0.16f, 0.42f, 0.12f, false, true },
-                        { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.24f, 1.4f, 0.5f } };
+    t.props.models = { "rock-sand", "stones" };
+    t.props.scatter = { { 0, 0.55f, 1.6f, 0.6f }, { 1, 0.45f, 1.4f, 0.5f } };
   } else if (track == "gulch") {
     t.structure = 0x8a6a46;  // timber, like the mine's own trestles
     t.props.models = { "prop-crate", "pirate-barrel", "stones" };
-    t.props.scatter = { { 0, 0.34f, 0.9f, 0.3f, false, true }, { 1, 0.30f, 0.42f, 0.12f, false, true },
+    t.props.scatter = { { 0, 0.34f, 0.6f, 0.2f, false, true }, { 1, 0.30f, 0.3f, 0.08f, false, true },
                         { 2, 0.36f, 1.4f, 0.5f } };
   } else if (track == "crag") {
-    t.props.models = { "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.55f, 1.6f, 0.6f }, { 1, 0.45f, 1.4f, 0.5f } };
+    t.props.models = { "prop-hay", "pirate-barrel", "rock-sand", "stones" };
+    t.props.scatter = { { 0, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
+                        { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.24f, 1.4f, 0.5f } };
   } else if (track == "sidewinder") {
     t.props.models = { "construction-light", "rock-sand", "stones" };
     t.props.scatter = { { 0, 0.22f, 2.4f, 0.4f, true, true }, { 1, 0.42f, 1.5f, 0.6f },
@@ -785,7 +780,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   if (b && std::strcmp(b->name, "grass") == 0) backyardTrack(t, track);
 
   // Each canyon track's own carriers (canyonTrack): its story's props and
-  // structures, and the spinning windmill left to the one ranch.
+  // structures.
   if (b && std::strcmp(b->name, "canyon") == 0) canyonTrack(t, track);
 
   // No procedural landmark beside a set piece that contradicts it. Where

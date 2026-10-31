@@ -262,11 +262,12 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
   assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
   assert.deepEqual(inv.set, stagedSet, 'the legend lists the set row too');
-  // 15 since the snowman and the wind-up train were retired as procedural kinds
-  // — the snow and playroom biomes plant Kenney models for both now. The literal
-  // is the tripwire: a kind added and not staged, or retired and left behind,
-  // has to come past this line.
-  assert.equal(inv.landmarks.length, 15, 'every hero landmark kind is staged');
+  // 14 since the snowman, the wind-up train and the windmill were retired as
+  // procedural kinds: the snow and playroom biomes plant Kenney models for the
+  // first two, Crag's ranch a real-size windpump. The literal is the tripwire:
+  // a kind added and not staged, or retired and left behind, has to come past
+  // this line.
+  assert.equal(inv.landmarks.length, 14, 'every hero landmark kind is staged');
   assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
     'the legend spans kinds no single biome carries');
 });
