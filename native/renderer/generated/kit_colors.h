@@ -17894,7 +17894,7 @@ inline const Model kModels[] = {
     { 4649026753161099687ull, 2u, k_set_expedition_camp },  // set-expedition-camp.glb
     { 2487097371168777402ull, 2u, k_set_filling_station },  // set-filling-station.glb
     { 6218529456685888541ull, 4u, k_set_football_pitch },  // set-football-pitch.glb
-    { 673107633037000536ull, 61u, k_set_frozen_lake },  // set-frozen-lake.glb
+    { 14363901938798370786ull, 61u, k_set_frozen_lake },  // set-frozen-lake.glb
     { 9571221725245157593ull, 13u, k_set_game_box },  // set-game-box.glb
     { 14500640782058733948ull, 49u, k_set_headframe },  // set-headframe.glb
     { 7079353645661939421ull, 1u, k_set_hoodoos },  // set-hoodoos.glb
