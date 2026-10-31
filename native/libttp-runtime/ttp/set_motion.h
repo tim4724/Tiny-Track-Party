@@ -9,6 +9,9 @@
 //   anim_spin:a=x:w=2.5          turn about the node's own x axis at 2.5 rad/s
 //   anim_sway:a=y:d=25:p=1.8     swing +-25 degrees about y, a 1.8 s period
 //   anim_bob:h=0.25:p=3          rise and fall 0.25 units every 3 s
+//   anim_bob:h=0.1:p=0.5:b=1     bounce 0.1 units every 0.5 s (a skip, a trampoline)
+//   anim_gesture:a=z:d=70:p=5:k=0.3  lift 70 degrees about z and back in the
+//                                first 0.3 of every 5 s, then rest (an arm, a rod)
 //   anim_waddle+watch+hop#2      a penguin: rock, turn to the cars, hop
 //   anim_path:c=chute:p=7.5:o=0.33   ride the closed path `chute`, a third on
 //   anim_smoke                   (mesh-less) where a chimney's smoke rises from
@@ -20,10 +23,14 @@
 // A path is the empties `path_<chain>_<k>` of the same GLB, k = 0, 1, ... in
 // order, closed back to 0. A traveller may also spin and bob in its own frame
 // on the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed);
-// the other verbs are in-place and a path ignores them. Lengths are the node's own units (a GLB's grow and the
+// the other verbs are in-place and a path ignores them. A gesture is the one
+// verb for a person's own movement: one small move and a rest, never a
+// whole-body rock (a body that moves rides something: a swing, a ring). Lengths are the node's own units (a GLB's grow and the
 // placement's scale carry them); radii are WORLD units, because they are about
 // cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
-// c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
+// c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full),
+// b 1 for a bob that bounces (fast off the ground, slow at the top) instead of
+// a smooth rise and fall, k the share of a gesture's period it moves in.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
@@ -45,12 +52,15 @@ namespace rt {
 
 struct SetMotion {
   bool spin = false, sway = false, bob = false, waddle = false, watch = false,
-       hop = false, path = false, smoke = false;
+       hop = false, path = false, smoke = false, gesture = false;
   char spinAxis = 'y';
   float spinRate = 1.0f;                     // rad/s, signed
   char swayAxis = 'z';
   float swayDeg = 25.0f, swayPeriod = 2.0f;  // a sway under ~20 degrees does not read
   float bobHeight = 0.2f, bobPeriod = 3.0f;
+  bool bobBounce = false;
+  char gestureAxis = 'z';
+  float gestureDeg = 60.0f, gesturePeriod = 5.0f, gestureShare = 0.3f;
   float waddleDeg = 12.0f, waddlePeriod = 0.9f;
   float watchRadius = 26.0f, watchDeg = 60.0f;
   float hopRadius = 9.0f, hopHeight = 0.35f, hopPeriod = 0.5f;
@@ -61,7 +71,7 @@ struct SetMotion {
   // would stay behind. One that moves in place keeps its rest-pose shadow, which
   // under the near-overhead sun is its footprint.
   bool travels() const { return path; }
-  bool any() const { return spin || sway || bob || waddle || watch || hop || path; }
+  bool any() const { return spin || sway || bob || waddle || watch || hop || path || gesture; }
 };
 
 inline bool is_set_motion_name(const char* name) {
@@ -90,7 +100,8 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
     const std::string v = verb.substr(0, colon);
     bool* on = v == "spin" ? &m.spin : v == "sway" ? &m.sway : v == "bob" ? &m.bob
              : v == "waddle" ? &m.waddle : v == "watch" ? &m.watch : v == "hop" ? &m.hop
-             : v == "path" ? &m.path : v == "smoke" ? &m.smoke : nullptr;
+             : v == "path" ? &m.path : v == "smoke" ? &m.smoke
+             : v == "gesture" ? &m.gesture : nullptr;
     if (!on) {
       bad("verb '" + v + "'");
       continue;
@@ -114,7 +125,7 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
         else if (key == 'p' && f > 0) m.swayPeriod = f; else known = false;
       } else if (v == "bob") {
         if (key == 'h') m.bobHeight = f; else if (key == 'p' && f > 0) m.bobPeriod = f;
-        else known = false;
+        else if (key == 'b') m.bobBounce = f != 0; else known = false;
       } else if (v == "waddle") {
         if (key == 'd') m.waddleDeg = f; else if (key == 'p' && f > 0) m.waddlePeriod = f;
         else known = false;
@@ -123,6 +134,10 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
       } else if (v == "hop") {
         if (key == 'r') m.hopRadius = f; else if (key == 'h') m.hopHeight = f;
         else if (key == 'p' && f > 0) m.hopPeriod = f; else known = false;
+      } else if (v == "gesture") {
+        if (key == 'a') m.gestureAxis = axis; else if (key == 'd') m.gestureDeg = f;
+        else if (key == 'p' && f > 0) m.gesturePeriod = f;
+        else if (key == 'k' && f > 0 && f <= 1) m.gestureShare = f; else known = false;
       } else if (v == "path") {
         if (key == 'c' && !val.empty()) m.chain = val;
         else if (key == 'p' && f > 0) m.pathPeriod = f;
@@ -142,6 +157,10 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
     bad("sway axis");
     m.swayAxis = 'z';
   }
+  if (m.gestureAxis != 'x' && m.gestureAxis != 'y' && m.gestureAxis != 'z') {
+    bad("gesture axis");
+    m.gestureAxis = 'z';
+  }
   if (m.path && m.chain.empty()) bad("path without a chain");
   return true;
 }
@@ -160,9 +179,9 @@ inline float set_motion_phase(uint32_t seed) {
 struct SetMotionCar { float x, z, dist; };
 
 // The in-place pose: angles in radians about the part's own axes, lift in its
-// own units. The renderer composes rest * T(0, lift, 0) * Ry(yaw) * sway * spin
-// * Rx(roll).
-struct SetMotionPose { float yaw = 0, sway = 0, spin = 0, roll = 0, lift = 0; };
+// own units. The renderer composes rest * T(0, lift, 0) * Ry(yaw) * sway
+// * gesture * spin * Rx(roll).
+struct SetMotionPose { float yaw = 0, sway = 0, gesture = 0, spin = 0, roll = 0, lift = 0; };
 
 inline float set_motion_falloff(float d, float r, float inner) {
   if (r <= 0) return 0;
@@ -176,7 +195,18 @@ inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
   SetMotionPose p;
   if (m.spin) p.spin = m.spinRate * t + phase * TAU;
   if (m.sway) p.sway = m.swayDeg * DEG * std::sin(TAU * (t / m.swayPeriod + phase));
-  if (m.bob) p.lift += m.bobHeight * (0.5f - 0.5f * std::cos(TAU * (t / m.bobPeriod + phase)));
+  if (m.bob) {
+    const float u = t / m.bobPeriod + phase;
+    p.lift += m.bobHeight * (m.bobBounce ? std::fabs(std::sin(0.5f * TAU * u))
+                                         : 0.5f - 0.5f * std::cos(TAU * u));
+  }
+  if (m.gesture) {
+    // Out and back as one smooth bump over the first `k` of the period, then
+    // still: a move read as a gesture needs the rest round it.
+    float u = t / m.gesturePeriod + phase;
+    u = (u - std::floor(u)) / m.gestureShare;
+    if (u < 1) p.gesture = m.gestureDeg * DEG * (0.5f - 0.5f * std::cos(TAU * u));
+  }
   if (m.waddle) {
     const float w = TAU * (t / m.waddlePeriod + phase);
     p.roll = m.waddleDeg * DEG * std::sin(w);
