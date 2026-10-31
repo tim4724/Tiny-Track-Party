@@ -332,22 +332,15 @@ void avalanchePass(Theme& t) {
                  { "snow-pile", 0.30f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
-// Each playroom track is one game played on the floor, and the room's loose
-// toys keep out of its way: the giant alphabet blocks belong to Gauntlet's
-// castle siege alone (a block tower beside Skysnake's board or Helix's marble
-// run told the cup one story four times), crayons leave Helix and Skysnake,
-// and the finish gantry wears the track's own colours (the snake's green and
-// yellow, the sky's blue, the marbles' purple, the castle's red).
+// Each playroom track is one game played on the floor at the toy cars' own
+// scale, and the finish gantry wears the track's colours (the snake's green
+// and yellow, the sky's blue, the marbles' purple, the castle's red).
 void playroomTrack(Theme& t, const std::string& track) {
-  const auto keep = [&](std::initializer_list<uint32_t> ks) { t.landmarks = ks; };
   if (track == "skysnake") {
-    keep({ LM_DUCK, LM_BALL, LM_BOOKS });
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
   } else if (track == "skyline") {
-    keep({ LM_BALL, LM_CRAYONS, LM_BOOKS });
     t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
   } else if (track == "helix") {
-    keep({ LM_DUCK, LM_BALL, LM_BOOKS });
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
   } else if (track == "gauntlet") {
     t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
@@ -562,11 +555,11 @@ Theme playroomTheme() {
   t.hemi = { 0xfff2dc, 0xa88860, 2.2f };  // warm room light, wood-floor bounce
   t.key = { 0xffeac2, 1.5f };             // low afternoon sun through the window
   t.groundKind = GROUND_WOOD;
-  // The room round the floor, past the fog: a bed, a sofa, a bookshelf and a
-  // toy chest, each part picking its colour from this list by index (the
-  // renderer's ROOM table): red, blue, yellow, green, furniture wood, linen. hills[0]
-  // also tints the controller's cup panel, so the warm red keeps the playroom
-  // distinct from beach sand / canyon clay.
+  // The room round the floor, past the fog: its walls' skirting board and the
+  // wall over it, each picking its colour from this list by index (the
+  // renderer's ROOM table): red, blue, yellow, green, skirting wood, wall linen.
+  // hills[0] also tints the controller's cup panel, so the warm red keeps the
+  // playroom distinct from beach sand / canyon clay.
   t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa8744a, 0xfdf4de };
   t.hillShape = HILL_ROOM;
   // Indoors: no cumulus, just faint warm puffs of sunbeam bloom.
@@ -588,10 +581,11 @@ Theme playroomTheme() {
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
   t.structure = 0x4a6fc4;  // support columns read as the kit's blue connectors
-  // LM_TRAIN is gone from here: the wind-up loco is the Holiday Kit's own train
-  // set now (the prop below). Its procedural geometry survives as the asset
-  // gallery's model bench, which is where retired shapes live.
-  t.landmarks = { LM_BLOCKS, LM_DUCK, LM_BALL, LM_CRAYONS, LM_BOOKS };
+  // No procedural landmarks: the giant blocks, duck, ball, crayons and books
+  // were everyday things at many times a toy car's scale. Each track's toys
+  // are its set pieces, at their real size (tracks.js `set`); the retired
+  // shapes live on in the asset gallery's model bench.
+  t.landmarks.clear();
   t.gate = 0xfff3e2;  // warm indoor-light gate grade
   t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xff5040;  // a third primary
   // No trees indoors — the "boulder" channel does all the work: faceted toy bits

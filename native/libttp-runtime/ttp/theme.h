@@ -41,9 +41,9 @@ namespace rt {
 
 enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUND_SNOW, GROUND_WOOD };
 // A shape change rebuilds the horizon ring: 'dome' soft meadow mounds, 'mesa'
-// flat-topped buttes, 'room' the playroom's furniture (a bed, a sofa, a
-// bookshelf, a toy chest), 'island' a sparse low offshore chain with sea gaps
-// between features.
+// flat-topped buttes, 'room' the playroom's walls (a skirting board and the
+// wall over it), 'island' a sparse low offshore chain with sea gaps between
+// features.
 enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
 // Ambient particle motion presets (trackPayload.js AMB_KINDS).
 enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE };
@@ -51,15 +51,18 @@ enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAK
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.
 enum LandmarkKind : uint32_t {
-  // A kind here is PROCEDURAL geometry the renderer builds. Two are gone —
-  // the snowman and the wind-up train — because the snow and playroom biomes
-  // plant Kenney kit models for both now (their prop scatters). The numbering
-  // is not stable across such a retirement, and does not need to be: nothing
-  // outside this tree stores a kind, the renderer selects on these NAMES, and
-  // the theme corpus is re-recorded with the change.
-  LM_GNOME = 0, LM_DOGHOUSE, LM_PICNIC, LM_HOODOO, LM_BLOCKS,
-  LM_WINDMILL, LM_LIGHTHOUSE, LM_SAILBOAT, LM_DUCK, LM_BALL, LM_UMBRELLA,
-  LM_SANDCASTLE, LM_CABIN, LM_CRAYONS, LM_BOOKS
+  // A kind here is PROCEDURAL geometry the renderer builds. Some are gone:
+  // the snowman and the wind-up train, because the snow and playroom biomes
+  // plant Kenney kit models for both now (their prop scatters), and the
+  // playroom's giants (alphabet blocks, bath duck, play ball, crayons, picture
+  // books), because indoors every toy stands at its real size beside a toy
+  // car, as a track's set piece. The numbering is not stable across such a
+  // retirement, and does not need to be: nothing outside this tree stores a
+  // kind, the renderer selects on these NAMES, and the theme corpus is
+  // re-recorded with the change.
+  LM_GNOME = 0, LM_DOGHOUSE, LM_PICNIC, LM_HOODOO,
+  LM_WINDMILL, LM_LIGHTHOUSE, LM_SAILBOAT, LM_UMBRELLA,
+  LM_SANDCASTLE, LM_CABIN
 };
 // Near-field ground clutter kinds (procedural — the renderer's clutter builders).
 enum ClutterKindId : uint32_t {

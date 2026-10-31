@@ -1132,133 +1132,12 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    // NO has(4). The snowman that stood here was procedural, and the snow biome
-    // plants the Holiday Kit's own instead (theme.cc, the prop scatter) — so the
-    // geometry went with the placement rather than sitting here unreachable. The
-    // KIND is still in LandmarkKind: renumbering that enum would rewrite every
-    // biome's recorded landmark list to say nothing new.
-
-    if (has(ttp::rt::LM_BLOCKS)) { // blocks — giant alphabet blocks (playroom)
-        static const uint32_t TONES[3] = { 0xe66a5a, 0x5a8fd8, 0xf2c14e };
-        const auto block = [&](float bx, float bz, float size, float cy, float yaw,
-                uint32_t hex) {
-            const Spot at{ bx, bz, yaw, true };
-            part(primBox(size, size, size), 0, cy + size / 2, 0, at, hex,
-                    0.97f + (float) rnd() * 0.06f);
-            // Face panels: lighter plates proud of the four sides + the top
-            // (a plain cube reads as a shipping crate).
-            const float pw = size * 0.72f, t = 0.05f, off = size / 2 + t / 2 - 0.01f;
-            const float PL[5][6] = {
-                { off, 0, 0, t, pw, pw }, { -off, 0, 0, t, pw, pw },
-                { 0, 0, off, pw, pw, t }, { 0, 0, -off, pw, pw, t },
-                { 0, off, 0, pw, t, pw },
-            };
-            for (const auto& p : PL) {
-                part(applyPre(primBox(p[3], p[4], p[5]),
-                            mat4f::translation(float3{ p[0], p[1], p[2] })),
-                        0, cy + size / 2, 0, at, 0xf7ead2, 0.98f);
-            }
-        };
-        for (float s = 55; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 6.0f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 5)) continue;
-            const float3 tan = f.tangent();
-            block(x, z, 3.2f, 0, (float) rnd() * 0.6f, TONES[0]);
-            block(x + tan.x * 3.4f + f.lat.x * side * 1.3f,
-                  z + tan.z * 3.4f + f.lat.z * side * 1.3f,
-                  2.6f, 0, 0.5f + (float) rnd() * 0.5f, TONES[1]);
-            block(x + tan.x * 0.4f, z + tan.z * 0.4f, 2.4f, 3.2f,
-                  (float) rnd() * (float) M_PI * 0.5f, TONES[2]);
-            placed.push_back({ x, z, 5.5f });
-            mShadowSpots.push_back({ x, z, 2.2f, 3.2f });
-            break;
-        }
-    }
-
-    if (has(ttp::rt::LM_DUCK)) { // duck — a chunky bath-toy spectator (playroom)
-        constexpr uint32_t YELLOW = 0xf6cf46, BILL = 0xf2953c;
-        for (float s = 30; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 4.2f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 3)) continue;
-            const float fx = -f.lat.x * side, fz = -f.lat.z * side;
-            const Spot sp{ x, z, std::atan2(fx, fz), true };
-            part(applyPre(primIcoDetail(1.5f, 1),
-                        mat4f::scaling(float3{ 1.1f, 0.82f, 1.35f })),
-                    0, 1.2f, -0.2f, sp, YELLOW); // chesty hull
-            for (const int sd : { -1, 1 }) { // wing slabs against the hull
-                part(applyPre(primIcoDetail(0.8f, 1),
-                            rotZ(sd * 0.22f) * rotX(-0.38f)
-                                    * mat4f::scaling(float3{ 0.3f, 0.66f, 1.2f })),
-                        sd * 1.44f, 1.55f, -0.45f, sp, YELLOW, 0.94f);
-            }
-            part(applyPre(primCone(0.55f, 1.1f, 6), rotX(-(float) M_PI / 2 - 0.65f)),
-                    0, 1.75f, -1.85f, sp, YELLOW, 0.98f); // tail flicks up and aft
-            part(primIcoDetail(0.9f, 1), 0, 2.72f, 0.7f, sp, YELLOW, 1.02f); // head
-            part(applyPre(primIcoDetail(0.5f, 1),
-                        mat4f::scaling(float3{ 1.7f, 0.45f, 1.15f })),
-                    0, 2.55f, 1.5f, sp, BILL); // one broad smiling paddle
-            for (const int sd : { -1, 1 }) { // eyes wide apart on the sides
-                part(primIcoDetail(0.14f, 1), sd * 0.68f, 2.99f, 1.23f, sp, 0x343a44);
-            }
-            placed.push_back({ x, z, 3 });
-            mShadowSpots.push_back({ x, z, 1.6f, 2.7f });
-            break;
-        }
-    }
-
-    if (has(ttp::rt::LM_BALL)) { // ball — the classic panelled play ball (playroom)
-        constexpr float BR = 1.5f;
-        static const uint32_t PANELS[6] = { 0xdf4a3c, 0xf5f2ea, 0x3f6fd1,
-                                            0xf5f2ea, 0xf2c14e, 0xf5f2ea };
-        for (float s = 85; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 4.8f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 2.8f)) continue;
-            // Panels are painted PER FACE by centroid longitude (per-vertex
-            // lerping smears the seams) with white polar caps cut at a whole
-            // latitude ring, then the ball is tilted — a settled ball never
-            // sits pole-up, and the tilt is what makes the panels read.
-            const Prim sph = primSphere(BR, 14, 10);
-            const float rz = 0.35f + (float) rnd() * 0.4f;
-            const float ry = (float) rnd() * 2.0f * (float) M_PI;
-            const mat4f m = mat4f::translation(float3{ x, gy + BR * 0.92f, z })
-                    * rotY(ry) * rotZ(rz);
-            constexpr float CAP_LAT = (float) M_PI / 6;
-            for (size_t t = 0; t + 2 < sph.i.size(); t += 3) {
-                const float3 a = sph.v[sph.i[t]], b = sph.v[sph.i[t + 1]];
-                const float3 c = sph.v[sph.i[t + 2]];
-                const float3 ctr = (a + b + c) / 3.0f;
-                const float polar = std::acos(ctr.y / std::max(1e-6f, length(ctr)));
-                const uint32_t hex = (polar < CAP_LAT || polar > (float) M_PI - CAP_LAT)
-                        ? 0xf5f2eau
-                        : PANELS[(size_t) std::floor(
-                                ((std::atan2(ctr.z, ctr.x) + (float) M_PI)
-                                        / (2 * (float) M_PI)) * 6) % 6];
-                const uint32_t col = packAlbedo(srgbToLinear(hex), 1.0f);
-                const uint32_t base = (uint32_t) mLandmarks.verts.size();
-                for (const float3& v : { a, b, c }) {
-                    const float3 w = (m * float4{ v, 1 }).xyz;
-                    smooth((uint32_t) mLandmarks.verts.size(), m, v);
-                    mLandmarks.verts.push_back({ w.x, w.y, w.z, col });
-                }
-                mLandmarks.idx.insert(mLandmarks.idx.end(), { base, base + 1, base + 2 });
-            }
-            placed.push_back({ x, z, 2.5f });
-            mShadowSpots.push_back({ x, z, 1.5f, 3.0f });
-            break;
-        }
-    }
+    // NO snowman, and none of the playroom's giants (alphabet blocks, bath
+    // duck, play ball, crayons, picture books). The snowman was procedural and
+    // the snow biome plants the Holiday Kit's own instead (theme.cc, the prop
+    // scatter); the giants stood many times a toy car's scale, and the
+    // playroom's toys are its tracks' set pieces now, at their real size. The
+    // geometry went with the placement rather than sitting here unreachable.
 
     if (has(ttp::rt::LM_UMBRELLA)) { // umbrella — a day at the beach
         const Spot sp = findSpot(45, 5.2f, 4);
@@ -1532,57 +1411,6 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primBox(0.76f, 0.14f, 0.54f), -0.85f, 0.6f, -0.7f, sp, 0xf5f0e2);
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), -0.35f, 0.07f, 0.9f, sp, 0xf7f5ee);
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), 0.55f, 0.07f, -0.55f, sp, 0xf7f5ee);
-        }
-    }
-
-    if (has(ttp::rt::LM_CRAYONS)) { // crayons — four fat wax sticks spilled, a fifth thrown across
-        const Spot sp = findSpot(110, 4.4f, 3);
-        if (sp.ok) {
-            static const uint32_t COLS[5] = { 0xd8463f, 0x3f6fd1, 0x3fa14e,
-                                              0xf2a83c, 0x8a76d8 };
-            const float a0 = (float) rnd() * 2.0f * (float) M_PI; // the spill's heading
-            const float px2 = std::sin(a0), pz2 = std::cos(a0);   // spread axis
-            for (int i = 0; i < 5; i++) {
-                const bool onTop = i == 4;
-                const float ai = onTop ? a0 + 1.25f
-                                       : a0 + ((float) rnd() - 0.5f) * 0.2f;
-                const float off = onTop ? 0.15f : (i - 1.5f) * 0.6f;
-                const float slide = onTop ? 0.0f : ((float) rnd() - 0.5f) * 0.8f;
-                const float ox = px2 * off + std::cos(ai) * slide;
-                const float oz = pz2 * off - std::sin(ai) * slide;
-                const float lift = onTop ? 0.33f : 0.0f;
-                const Spot at{ sp.x, sp.z, 0, true, sp.y };
-                const auto make = [&](Prim g, uint32_t hex, float shade) {
-                    part(applyPre(g, rotY(ai) * rotZ((float) M_PI / 2)),
-                            ox, 0.17f + lift, oz, at, hex, shade);
-                };
-                make(primCylinder(0.16f, 0.16f, 2.3f, 9), COLS[i], 1.0f);
-                make(applyPre(primCone(0.16f, 0.42f, 9),
-                            mat4f::translation(float3{ 0, 1.36f, 0 })), COLS[i], 1.08f);
-                make(primCylinder(0.18f, 0.18f, 1.3f, 9), COLS[i], 0.88f); // paper band
-            }
-            mShadowSpots.push_back({ sp.x, sp.z, 1.4f, 0.4f });
-        }
-    }
-
-    if (has(ttp::rt::LM_BOOKS)) { // books — three stacked picture books, spines askew
-        const Spot sp = findSpot(130, 8 + (float) rnd() * 3, 3);
-        if (sp.ok) {
-            static const uint32_t COVERS[3] = { 0x3f6fd1, 0xd8463f, 0x3fa14e };
-            float ty = 0;
-            for (int i = 0; i < 3; i++) {
-                const float w = 2.6f - i * 0.35f, d = 1.9f - i * 0.22f, h = 0.42f;
-                const float a = ((float) rnd() - 0.5f) * 0.7f;
-                const Spot at{ sp.x, sp.z, a, true, sp.y };
-                part(primBox(w - 0.18f, h - 0.13f, d - 0.12f), 0.06f, ty + h / 2, 0,
-                        at, 0xf7f5ee);
-                part(primBox(w, 0.07f, d), 0, ty + h - 0.035f, 0, at, COVERS[i]);
-                part(primBox(w, 0.07f, d), 0, ty + 0.035f, 0, at, COVERS[i], 0.94f);
-                part(primBox(0.1f, h, d), -w / 2 + 0.05f, ty + h / 2, 0, at,
-                        COVERS[i], 0.88f);
-                ty += h;
-            }
-            mShadowSpots.push_back({ sp.x, sp.z, 1.5f, 1.3f });
         }
     }
 
