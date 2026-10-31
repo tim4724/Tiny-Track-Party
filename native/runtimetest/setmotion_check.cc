@@ -198,6 +198,31 @@ int main(int argc, char** argv) {
   const SetMotionCar gone{ 9, 0, 9 };
   check(ttp::rt::set_motion_pose(m, 0.25f, 0, &gone, 1).lift == 0, "a car past the radius stops the hops");
 
+  // 6. A gesture moves out and back once in its share of the period, never
+  // past its angle and never the other way, and rests for the rest; a
+  // bouncing bob touches down every period and never passes its height.
+  check(ttp::rt::parse_set_motion("anim_gesture:a=x:d=50:p=4:k=0.25#arm", m)
+            && m.gesture && m.gestureAxis == 'x' && near(m.gestureDeg, 50)
+            && near(m.gesturePeriod, 4) && near(m.gestureShare, 0.25f), "gesture parameters");
+  float most = 0, least = 0, still = 0;
+  for (int i = 0; i < 800; i++) {
+    const float g = ttp::rt::set_motion_pose(m, i * 0.01f, 0, nullptr, 0).gesture;
+    most = std::max(most, g);
+    least = std::min(least, g);
+    if (i * 0.01f > 1.0f + 1e-4f && i * 0.01f < 4.0f - 1e-4f) still = std::max(still, std::fabs(g));
+  }
+  check(most > 49 * DEG && most <= 50 * DEG + 1e-6f && least >= 0, "a gesture reaches its angle, one way");
+  check(still == 0, "a gesture rests outside its share");
+  check(near(ttp::rt::set_motion_pose(m, 0.5f, 0, nullptr, 0).gesture, 50 * DEG, 1e-4f),
+        "a gesture peaks halfway through its move");
+  ttp::rt::parse_set_motion("anim_bob:h=0.2:p=0.5:b=1", m);
+  float high = 0;
+  for (int i = 0; i < 100; i++) high = std::max(high, ttp::rt::set_motion_pose(m, i * 0.01f, 0, nullptr, 0).lift);
+  check(m.bobBounce && high > 0.19f && high <= 0.2f + 1e-6f, "a bounce never passes its height");
+  check(near(ttp::rt::set_motion_pose(m, 1.0f, 0, nullptr, 0).lift, 0, 1e-5f)
+            && near(ttp::rt::set_motion_pose(m, 0.25f, 0, nullptr, 0).lift, 0.2f, 1e-5f),
+        "a bounce lands every period and tops out between");
+
   check(ttp::rt::parse_set_motion("anim_swing+sway:deg=30", m) && m.sway && near(m.swayDeg, 25),
         "a typo'd verb or key changes nothing");
   std::string unknown;
