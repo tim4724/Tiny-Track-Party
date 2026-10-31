@@ -24,6 +24,10 @@
 // placement's scale carry them); radii are WORLD units, because they are about
 // cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
 // c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
+// On a path `o` is where it starts round its loop; on sway, bob or waddle it
+// puts the part IN STEP: it counts from its placement's clock, not its own,
+// `o` of a cycle on, so parts of one piece keep time (a robot's legs and body,
+// a snake's tail joints). Without it every part keeps a phase of its own.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
