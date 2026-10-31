@@ -3544,7 +3544,7 @@ def filling_station():
     hawk_circle((0.4, -0.6), 5.4, 4.2, 14.0)
     join_still('station')
 
-def pumpjack(x0, z0, yaw, tag, period, phase_deg=16):
+def pumpjack(x0, z0, yaw, tag, period):
     """An oil pumpjack, the nodding donkey, its beam along its local X turned
     by `yaw`: a skid, the A-frame samson post, the walking beam with the
     horsehead over the wellhead at +X and the gearbox with its red
@@ -3566,7 +3566,7 @@ def pumpjack(x0, z0, yaw, tag, period, phase_deg=16):
         part((0.6, 0.34, 0.08), -1.05, 0.46, sz * 0.32, 'red')                  # its counterweights
     part((0.26, 0.5, 0.26), 1.32, 0.25, 0, 'slate')                             # the wellhead
     part((0.36, 0.1, 0.36), 1.32, 0.52, 0, 'grey')
-    with animated('anim_sway:a=z:d=%d:p=%.1f#%s' % (phase_deg, period, tag), at(0, 1.6, 0), yaw):
+    with animated('anim_sway:a=z:d=16:p=%.1f#%s' % (period, tag), at(0, 1.6, 0), yaw):
         part((2.6, 0.16, 0.16), -0.05, 1.6, 0, 'slate')                         # the walking beam
         part((0.2, 0.62, 0.22), 1.28, 1.42, 0, 'yellow')                        # the horsehead
         part((0.12, 0.1, 0.22), 1.36, 1.76, 0, 'yellow')
