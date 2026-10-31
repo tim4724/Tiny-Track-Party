@@ -813,7 +813,10 @@ sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
 runs inside something opaque (or whose loop is closed in sight). A part inside
 another rides on it: its pose composes onto the outer part's pose of the same
 frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
-moves in place keeps its rest shadow. The static merge leaves every `anim_`
+moves in place keeps its rest shadow. A traveller is drawn only on its path, so
+where it is built is just its pivot: a flier is built on the floor under its
+loop, or it would count in the piece's box, its sight points and the floating
+check as a part standing in the air. The static merge leaves every `anim_`
 slot alone, so a merge change (per-placement bakes) must too.
 
 **New world content is priced on the host first, the box once per batch.**
