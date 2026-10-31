@@ -2424,9 +2424,10 @@ def watermill():
 
 # ---- CLOVERLEAF: the playground on the hill -----------------------------------------
 # Cloverleaf's playground at the size of a real one, on the broad top of its
-# hill (SET_GROUND, built from the summit and lifted onto it): a climbing tower with a slide off it, swings, a seesaw, a roundabout
-# and a spring rider, every one with a child on it and moving, a sandpit, the
-# mums and dads on the benches.
+# hill (SET_GROUND, built from the summit and lifted onto it): a climbing tower
+# with a slide off it, the rope climbing net standing over the rest, swings, a
+# seesaw, a roundabout and a spring rider, every one with a child on it and
+# moving, a sandpit, the mums and dads on the benches.
 
 def kid_swing(n, x, z, top, shirt, hair):
     with animated('anim_sway:a=z:d=32:p=%.1f#%d' % (2.3 + 0.25 * n, n), (x, top, z)):
@@ -2505,6 +2506,21 @@ def playground():
     box((3.2, 0.24, 3.2), (-5.5, 0.12, 5.0), 0xfde4c7)
     person((-5.6, 0.2, 5.3), 0.4, 0x339cf2, k=0.6, hair=0)
     box((0.4, 0.4, 0.4), (-4.9, 0.4, 4.4), 0xff5040)
+    # the climbing net: a rope pyramid on a mast, the tallest thing in the
+    # park as it is in a real one (about seven metres), two children up it
+    NX, NZ, NH, NR = -2.0, 8.6, 7.0, 2.6
+    cyl(0.16, NH, (NX, 0, NZ), 0x9aa1b4, segs=6)
+    box((0.5, 0.3, 0.5), (NX, NH + 0.1, NZ), 0xff5040)
+    ring = [(NX + NR * math.cos(k * math.pi / 4), NZ + NR * math.sin(k * math.pi / 4)) for k in range(8)]
+    for x, z in ring:
+        strut((x, 0.05, z), (NX, NH, NZ), 0.16, 0xff5040)
+    for f in (0.33, 0.66):
+        for k in range(8):
+            (x0, z0), (x1, z1) = ring[k], ring[(k + 1) % 8]
+            strut((NX + (x0 - NX) * (1 - f), NH * f, NZ + (z0 - NZ) * (1 - f)),
+                  (NX + (x1 - NX) * (1 - f), NH * f, NZ + (z1 - NZ) * (1 - f)), 0.12, 0xff5040)
+    person((NX + 1.3, NH * 0.33 + 0.05, NZ - 1.4), 2.3, 0x22c46e, k=0.62, hair=1, arm=2.4)
+    person((NX - 0.6, NH * 0.66 + 0.05, NZ + 0.5), 0.9, 0xffc044, k=0.6, hair=2, arm=2.6)
     # the benches round it, two of the grown-ups watching
     for z, c in ((-3.0, 0xa259e6), (6.5, 0xffc044)):
         bench((-8.4, 0, z), yaw=math.pi / 2)
@@ -2513,6 +2529,49 @@ def playground():
         o.location.z += s0
     ANIMS[:] = [(n, (x, y + s0, z), yaw, p) for n, (x, y, z), yaw, p in ANIMS]
     join_still('playground')
+
+@piece(REAL)
+def ice_cream_van():
+    # The park's ice-cream van round the hill's foot, so the playground's
+    # afternoon reaches the rest of the lap: a van parked along a gravel
+    # lay-by (its length Z, the serving hatch on the road side, +X) under
+    # the big cone on its roof turning, the children queueing at the hatch,
+    # one hopping, a grown-up on the bench with a cone. Real size: about one
+    # and a half cars long.
+    BODY, TRIM = 0xf8f8fb, 0x339cf2
+    box((4.6, 0.1, 9.0), (1.2, 0.05, 0.0), 0xfde4c7)                 # the lay-by
+    box((2.3, 1.3, 6.2), (0, 1.15, -0.2), BODY)                       # the body
+    box((2.32, 0.3, 6.22), (0, 0.65, -0.2), TRIM)                     # its skirt
+    box((2.3, 1.5, 4.4), (0, 2.55, -1.1), BODY)                       # the box behind the cab
+    box((2.32, 0.28, 4.42), (0, 2.0, -1.1), TRIM)                     # the stripe round it
+    box((2.2, 0.9, 1.5), (0, 2.1, 2.0), BODY, pitch=-0.35)            # the cab roof sloping to the bonnet
+    box((1.9, 0.7, 0.12), (0, 2.05, 2.78), 0x8ecae6, pitch=-0.35)     # the windscreen
+    box((2.1, 0.2, 0.3), (0, 0.65, 2.95), 'grey')                     # the bumper
+    for s in (-1, 1):
+        box((0.4, 0.3, 0.1), (s * 0.75, 1.15, 2.92), 0xffc044)        # the lamps
+        box((0.12, 0.7, 0.9), (s * 1.16, 2.05, 1.9), 0x8ecae6)        # the cab's side windows
+    for sz in (-2.1, 1.8):
+        for x in (1.0, -1.4):
+            cyl(0.5, 0.4, (x, 0.5, sz), 0x2a2735, segs=8, axis='across')
+    # the serving hatch, its awning out over the queue, the menu under it
+    box((0.12, 0.95, 2.4), (1.16, 2.55, -1.3), 0x2a2735)
+    box((0.9, 0.1, 2.8), (1.55, 3.2, -1.3), 0xff5040, roll=-0.35)
+    box((0.1, 0.5, 1.6), (1.18, 1.5, -1.3), 0xffc044)
+    # the cone on the roof, turning: the wafer and two scoops
+    with animated('anim_spin:w=1.1', (0, 3.3, -1.1)):
+        cyl(0.12, 1.3, (0, 3.3, -1.1), 0xd9b054, r2=0.55, segs=8)
+        sphere(0.62, (0, 4.85, -1.1), 0xf1976c)
+        sphere(0.45, (0, 5.5, -1.1), 0xfde4c7)
+    # the queue at the hatch, facing it, the second child hopping
+    person((2.3, 0, -1.6), math.pi, 0xff5040, k=0.68, hair=1, arm=0.6)
+    with animated('anim_bob:h=0.25:p=0.8', (3.0, 0, -0.4)):
+        person((3.0, 0, -0.4), math.pi * 0.9, 0x22c46e, k=0.64, hair=2, arm=2.4)
+    person((3.4, 0, 0.8), math.pi * 0.85, 0xa259e6, k=0.7, hair=3)
+    person((3.7, 0, 1.9), math.pi * 0.85, 0x339cf2, hair=0)
+    # the bench along the back of the lay-by, a grown-up with a cone
+    bench((3.4, 0, -3.6), yaw=-math.pi / 2)
+    person((3.5, 0.5, -3.6), math.pi, 0xffc044, hair=3, sit=True, arm=1.0)
+    join_still('van')
 
 # ====================================================================================
 # CANYON
