@@ -12,6 +12,7 @@
 //   anim_waddle+watch+hop#2      a penguin: rock, turn to the cars, hop
 //   anim_path:c=chute:p=7.5:o=0.33   ride the closed path `chute`, a third on
 //   anim_smoke                   (mesh-less) where a chimney's smoke rises from
+//   anim_drape+sway:a=x:d=22     a flag on a pole that stands on terrain
 //
 // An `anim_` node inside another rides on it: it moves in its parent's moving
 // frame (a wind-up key turning in a walking robot's back). A path rides
@@ -24,10 +25,15 @@
 // drawn slope. A traveller may also spin, bob and waddle in its own frame on
 // the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed; a
 // walking penguin rocks from foot to foot); the other verbs are in-place and a
-// path ignores them. Lengths are the node's own units (a GLB's grow and the
-// placement's scale carry them); radii are WORLD units, because they are about
-// cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
-// c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
+// path ignores them. `drape` moves nothing: an in-place part on a piece built
+// on its own terrain (SET_GROUND) stands on the ground as the renderer draws
+// it, lifted by the land under its pivot over the piece's foot as the `drape`
+// parts round it are, so a flag stays on the top of its draped pole where the
+// grid's chords stray off the curve the piece was built on. Lengths are the
+// node's own units (a GLB's grow and the placement's scale carry them); radii
+// are WORLD units, because they are about cars. Keys: a axis (x|y|z), w rad/s,
+// d degrees, p seconds, h height, r radius, c chain, o phase offset (0..1), f
+// facing for a path (0 rest, 1 yaw, 2 full).
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
@@ -49,7 +55,7 @@ namespace rt {
 
 struct SetMotion {
   bool spin = false, sway = false, bob = false, waddle = false, watch = false,
-       hop = false, path = false, smoke = false;
+       hop = false, path = false, smoke = false, drape = false;
   char spinAxis = 'y';
   float spinRate = 1.0f;                     // rad/s, signed
   char swayAxis = 'z';
@@ -94,7 +100,7 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
     const std::string v = verb.substr(0, colon);
     bool* on = v == "spin" ? &m.spin : v == "sway" ? &m.sway : v == "bob" ? &m.bob
              : v == "waddle" ? &m.waddle : v == "watch" ? &m.watch : v == "hop" ? &m.hop
-             : v == "path" ? &m.path : v == "smoke" ? &m.smoke : nullptr;
+             : v == "path" ? &m.path : v == "smoke" ? &m.smoke : v == "drape" ? &m.drape : nullptr;
     if (!on) {
       bad("verb '" + v + "'");
       continue;

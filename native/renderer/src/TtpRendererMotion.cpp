@@ -263,6 +263,11 @@ void TtpRenderer::buildSetMovers() {
                 SetMover mv;
                 mv.ent = g.ent;
                 mv.rest = rest;
+                // A `drape` part stands where the ground is drawn, as the
+                // draped parts round it do (appendBaked).
+                if (motion.drape && mTrack && !motion.travels()) {
+                    mv.rest[3].y += groundSurfaceY(*mTrack, rest[3].x, rest[3].z) - baseY;
+                }
                 mv.scale = length(rest[0].xyz);
                 const float inv = mv.scale > 0 ? 1.0f / mv.scale : 1.0f;
                 mv.restInv = transpose(mat3f{ rest[0].xyz * inv, rest[1].xyz * inv, rest[2].xyz * inv });
@@ -287,7 +292,7 @@ void TtpRenderer::buildSetMovers() {
                 }
                 if (rides >= 0) {
                     mv.parent = rides;
-                    mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * rest;
+                    mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * mv.rest;
                 }
                 mv.motion = std::move(motion);
                 mMergedDress.push_back(std::move(g));

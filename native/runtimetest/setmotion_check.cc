@@ -132,6 +132,13 @@ int main(int argc, char** argv) {
     check(near(w.roll, 10 * 0.0174532925f, 1e-4f) && w.lift >= 0 && w.yaw == 0,
           "a walker rocks to its clamp a quarter step in");
   }
+  {
+    std::string unknown;
+    check(ttp::rt::parse_set_motion("anim_drape+sway:a=x:d=22:p=1.9#flag", m, &unknown)
+              && unknown.empty() && m.drape && m.sway && m.swayAxis == 'x' && !m.travels(),
+          "a flag on a draped pole stands on the drawn ground");
+    check(ttp::rt::parse_set_motion("anim_sway:a=x", m) && !m.drape, "a part is not draped unless it says so");
+  }
   check(ttp::rt::parse_set_motion("anim_wobble+bob:h=0.3:q=9", m)
             && m.bob && near(m.bobHeight, 0.3f) && !m.travels(), "an unknown verb and key are skipped");
   check(ttp::rt::parse_set_motion("anim_spin:a=q", m) && m.spinAxis == 'y', "a bad axis falls back to y");
