@@ -1448,8 +1448,9 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     stepSetMovers(carPosW);
 
     // Chimney smoke: each puff rises, grows and dissolves over ~7 s, staggered
-    // evenly, so the puffs overlap into a gentle column leaning off with the
-    // breeze. Billboarded toward this frame's first camera (they're tiny and
+    // evenly and each taller than the gap to the next, so they overlap into one
+    // gentle column leaning off with the breeze (spaced wider, they read as a
+    // dotted line of blots). Billboarded toward this frame's first camera (they're tiny and
     // far; a per-cell re-aim isn't worth the extra state). Sized for a
     // chimney or a camp fire beside a 0.9 u car: a puff the size of the cabin
     // it rises from reads as a dark blot in the sky.
@@ -1461,15 +1462,15 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             const float u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
             const float3 p{ mSmokeOrigin.x + u * 0.6f
                                     + std::sin(mTime * 0.8f + i * 2.1f) * 0.06f,
-                            mSmokeOrigin.y + u * 2.4f, mSmokeOrigin.z };
-            const float w = 0.3f + u * 0.9f;
+                            mSmokeOrigin.y + u * 2.0f, mSmokeOrigin.z };
+            const float w = 0.5f + u * 1.0f;
             // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
             // so shrink to nothing at the ends instead (same read at this size).
             const float fade = std::min(1.0f, u * 5) * std::sqrt(1 - u);
             const float yaw = std::atan2(camP.x - p.x, camP.z - p.z);
             tcm.setTransform(tcm.getInstance(mSmoke[i].entity),
                     mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                    * mat4f::scaling(float3{ w * fade, w * 0.62f * fade, 1 }));
+                    * mat4f::scaling(float3{ w * fade, w * 0.8f * fade, 1 }));
         }
     }
 
