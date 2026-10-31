@@ -126,6 +126,30 @@ int main(int argc, char** argv) {
             && m.bob && near(m.bobHeight, 0.3f) && !m.travels(), "an unknown verb and key are skipped");
   check(ttp::rt::parse_set_motion("anim_spin:a=q", m) && m.spinAxis == 'y', "a bad axis falls back to y");
   check(ttp::rt::parse_set_motion("anim_smoke", m) && m.smoke && !m.any(), "smoke is a marker, not a motion");
+  check(ttp::rt::parse_set_motion("anim_sway:a=y:d=9:p=2:o=0.25#t3", m)
+            && m.sway && m.inStep && near(m.step, 0.25f) && near(m.swayPeriod, 2), "a sway in step");
+  check(ttp::rt::parse_set_motion("anim_path:c=x:o=0.5", m) && !m.inStep && near(m.pathOffset, 0.5f),
+        "a path's o is where it starts round its loop, not a step");
+
+  // 1b. In step: parts of one placement that name `o` keep one clock, `o`
+  // apart, whatever their own spots; the rest keep phases of their own.
+  {
+    SetMotion s0, s1, own;
+    ttp::rt::parse_set_motion("anim_sway:a=y:d=9:p=2:o=0", s0);
+    ttp::rt::parse_set_motion("anim_bob:h=0.2:p=2:o=0.75", s1);
+    ttp::rt::parse_set_motion("anim_sway:a=y:d=9:p=2", own);
+    for (uint32_t place : { 1u, 977u, 0xdeadbeefu }) {
+      const float a0 = ttp::rt::set_motion_part_phase(s0, 11, place);
+      const float a1 = ttp::rt::set_motion_part_phase(s1, 4242, place);
+      float d = a1 - a0;
+      d -= std::floor(d);
+      check(near(d, 0.75f, 1e-5f), "two parts in step stay their offsets apart");
+      check(a0 >= 0 && a0 < 1 && a1 >= 0 && a1 < 1, "an in-step phase stays in [0, 1)");
+    }
+    check(ttp::rt::set_motion_part_phase(own, 11, 1) == ttp::rt::set_motion_phase(11)
+              && ttp::rt::set_motion_part_phase(own, 12, 1) != ttp::rt::set_motion_part_phase(own, 11, 1),
+          "a part not in step keeps a phase of its own");
+  }
 
   // 2. Purity and the clock.
   ttp::rt::parse_set_motion("anim_waddle+watch+hop", m);

@@ -1749,6 +1749,10 @@ private:
         int path = -1;                      // into mSetPaths
         int parent = -1;                    // the mover it rides, built before it
         filament::math::mat4f onParent;     // its rest in the parent's rest frame
+        // The path its far-form box sweeps (its own, or the traveller it
+        // rides), and where on it that traveller stood at rest; -1 in place.
+        int lodPath = -1;
+        filament::math::float3 lodOrigin{ 0 };
         ttp::rt::SetMotion motion;
     };
     struct SetPath {                        // a closed polyline in world space
