@@ -426,12 +426,13 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
     }
 }
 
-// Three soft puffs rising, growing and fading on a staggered loop (the JS
-// sprites, as blend quads billboarded per cell); renderWorld moves them.
+// Six soft puffs rising, growing and fading on a staggered loop, close
+// enough to overlap into a column (the JS sprites, as blend quads billboarded
+// per cell); renderWorld moves them.
 void TtpRenderer::buildSmokePuffs(const float3& origin) {
     mSmokeOrigin = origin;
     if (!mBlendMaterial) return;
-    mSmoke.resize(3);
+    mSmoke.resize(6);
     const BlurKernel blur(6.0f);
     // 8px cells: the 6px blur spreads the disc edge over ~12px of the 64x64
     // field, so every gradient still gets a sample.
