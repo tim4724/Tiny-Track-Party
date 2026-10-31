@@ -74,6 +74,7 @@
     "set-log-cabin.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-marble-run.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-mine-portal.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-oil-field.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ore-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-parasol.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-penguin-chute.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

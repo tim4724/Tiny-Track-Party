@@ -2936,6 +2936,38 @@ def tumbleweed(at, r):
         bpy.ops.object.shade_flat()
         paint(o, color)
 
+def hawk_circle(c, y, R, period, k=1.0, tag='hawk'):
+    """A hawk circling over the piece: a closed loop of `path_<tag>_<n>`
+    empties `R` round (cx, cz) at height `y`, and the bird riding it
+    (anim_path facing its way), wings spread and banked into the turn, a car
+    long from tip to tip (a vulture's span and then some, so it reads against
+    the sky). `k` is the world's size in the builder's units (1 / the piece's
+    grow). The bird is BUILT on the ground under the circle, its low wing
+    tip on the floor: a traveller is drawn only on its path, so where it is
+    built is just its pivot, and a bird built up in the air would stand in
+    the piece's box, its sight points and the floating check as a part 5 u
+    up that nothing holds."""
+    cx, cz = c
+    k *= 0.68                                            # the parts below are a 1.26 span's
+    N = 24
+    for n in range(N):                                   # angle up: +Z first, the centre on its right
+        a = 2 * math.pi * n / N
+        marker('path_%s_%d' % (tag, n), (cx + R * math.cos(a), y, cz + R * math.sin(a)))
+    x0, y0, z0 = cx + R, 0.16 * k, cz
+    bank = -0.38                                         # right wing (+Z) down, into the turn
+    cb, sb = math.cos(bank), math.sin(bank)
+    def b(size, dx, dy, dz, color):                      # a part of the bird, its frame tipped by the bank
+        box([s * k for s in size], (x0 + dx * k, y0 + (dy * cb + dz * sb) * k, z0 + (-dy * sb + dz * cb) * k),
+            color, pitch=bank)
+    with animated('anim_path:c=%s:p=%.1f:f=1#%s' % (tag, period, tag), (x0, y0, z0)):
+        b((0.34, 0.09, 0.11), 0, 0, 0, 'dark')                                   # the body
+        b((0.09, 0.08, 0.09), 0.2, 0.03, 0, 'dark')                              # the head
+        b((0.06, 0.04, 0.05), 0.26, 0.02, 0, 'yellow')                           # the bill
+        b((0.14, 0.03, 0.16), -0.22, 0.0, 0, 'salmon')                           # the red tail, fanned
+        for sd in (-1, 1):                                                       # the wings, a little raised
+            b((0.2, 0.03, 0.42), 0.02, 0.03, sd * 0.26, 'dark')
+            b((0.12, 0.03, 0.2), -0.02, 0.06, sd * 0.53, 'slate')               # the fingered tips
+
 def sandstone_rock(at, k=1.0, yaw=0.0, color=0xc07a55):
     """A low red-rock boulder: two blocks, one tipped on the other."""
     x, y, z = at
@@ -2950,9 +2982,11 @@ def dry_creek():
     # floor under it and a low cut bank either side. A pale gravel bed along X
     # between dark banks, stones on the bars, a dead cottonwood of a tree's
     # size on the bank. Tumbleweeds, each half a car high, blow down it: each rolls out of the
-    # rock pile at the upwind end, bowls the length of the bed bouncing and
-    # vanishes into the pile at the far end; the hidden half of the loop runs
-    # back under the ground (anim_path+spin+bob).
+    # rock pile at the upwind end, bowls the length of the bed at a gust's
+    # pace, bouncing and landing (a bob with a rest) and rolling as fast as it
+    # goes, and vanishes into the pile at the far end; the hidden half of the
+    # loop runs back under the ground (anim_path+spin+bob). A hawk circles
+    # over the bed.
     L, W, BANK = 54.0, 3.0, 0.45
     zc = lambda x: 0.9 * math.sin(x / 6.5)                       # a wander inside the land's plain
     def wid(x):
@@ -2997,11 +3031,12 @@ def dry_creek():
     xs = [-END + 2 * END * i / 12 for i in range(13)]
     for k, pt in enumerate([(x, R, zc(x)) for x in xs] + [(END, -1.9, zc(END)), (-END, -1.9, zc(-END))]):
         marker('path_weed_%d' % k, pt)
-    for n in range(3):
-        x = xs[2 + 3 * n]
-        with animated('anim_path:c=weed:p=30:o=%.3f:f=1+spin:a=z:w=-16+bob:h=0.08:p=0.5#%d' % (n / 3, n),
-                      (x, R, zc(x))):
+    for n in range(4):
+        x = xs[1 + 3 * n]
+        with animated('anim_path:c=weed:p=56:o=%.3f:f=1+spin:a=z:w=-11+bob:h=0.2:p=%.2f:r=0.35#%d'
+                      % (n / 4, 0.7 + 0.06 * n, n), (x, R, zc(x))):
             tumbleweed((x, R, zc(x)), R)
+    hawk_circle((2.0, 1.5), 4.6, 3.4, 15.0, k=1 / 1.45)
 
 @piece(1.0)
 def wash_bed():
@@ -3249,19 +3284,20 @@ def dead_cottonwood():
     dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
     o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
     o.rotation_euler.z = 0.6
-    vy, k = 9.5, 1.0                                                             # the vulture
-    def v(size, d, color, pitch=0.0):
-        box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)
-    v((0.7, 0.6, 0.55), (0, 0.42, 0), 'dark')
-    for sd in (-1, 1):
-        v((0.8, 0.5, 0.12), (-0.08, 0.48, sd * 0.33), 'slate')
-    v((0.5, 0.12, 0.4), (-0.5, 0.25, 0), 'dark')
-    v((0.36, 0.16, 0.46), (0.22, 0.74, 0), 'white')
-    v((0.16, 0.26, 0.16), (0.3, 0.92, 0), 'salmon')
-    v((0.32, 0.24, 0.26), (0.4, 1.1, 0), 'red')
-    v((0.2, 0.1, 0.12), (0.62, 1.06, 0), 'cream')
-    for sd in (-1, 1):
-        v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
+    vy, k = 9.5, 1.0                                                             # the vulture, turning
+    def v(size, d, color, pitch=0.0):                                            # on its perch to watch
+        box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)   # the cars go by
+    with animated('anim_watch:r=24:d=75#v', (0, vy, 0)):
+        v((0.7, 0.6, 0.55), (0, 0.42, 0), 'dark')
+        for sd in (-1, 1):
+            v((0.8, 0.5, 0.12), (-0.08, 0.48, sd * 0.33), 'slate')
+        v((0.5, 0.12, 0.4), (-0.5, 0.25, 0), 'dark')
+        v((0.36, 0.16, 0.46), (0.22, 0.74, 0), 'white')
+        v((0.16, 0.26, 0.16), (0.3, 0.92, 0), 'salmon')
+        v((0.32, 0.24, 0.26), (0.4, 1.1, 0), 'red')
+        v((0.2, 0.1, 0.12), (0.62, 1.06, 0), 'cream')
+        for sd in (-1, 1):
+            v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
     sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
     sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
     tumbleweed((-1.8, 0.5, 2.2), 0.5)
@@ -3317,8 +3353,9 @@ def windpump():
 def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
     """A cow the size of one beside a car (about a car long), facing +X
     turned by `yaw`: a block of a body on its legs, a white patch, a white
-    face lowered to graze, short horns. `life` names the head's motion (a
-    nod as it grazes), hinged at the neck."""
+    face lowered to graze, short horns. `life` names the head's motion,
+    hinged at the neck: a gesture (a sway with a rest) lifts it from the
+    grass to look about now and then and lowers it again."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
     def p(dx, dy, dz):
@@ -3400,17 +3437,18 @@ def ranch():
     box((0.4, 0.03, 1.0), (X0 + 0.5, 0.25, -1.2), 0x62d3c8)
     hay_bale((X0 + 0.6, 0, 1.2), 0.3)
     cow((0.4, 0, -0.6), yaw=0.4)
-    cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=14:p=3.4#c')
+    cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
     cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb)
     join_still('ranch')
 
 @piece(1.0)
 def cattle():
     # Crag: a few head of the ranch's cattle out on the range by a salt lick,
-    # each a car long; two of them grazing (their heads nod).
-    cow((0.0, 0, 0.0), yaw=0.3, life='anim_sway:a=z:d=14:p=3.1#a')
+    # each a car long, grazing; two of them now and then lift their heads to
+    # look about (a gesture: up, a moment, down, then a long graze).
+    cow((0.0, 0, 0.0), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
     cow((-1.4, 0, 1.3), yaw=2.4, coat=0x5a3a28)
-    cow((-0.6, 0, -1.6), yaw=-0.9, coat=0xf8f8fb, life='anim_sway:a=z:d=12:p=3.7#b')
+    cow((-0.6, 0, -1.6), yaw=-0.9, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
     box((0.3, 0.24, 0.3), (-0.9, 0.12, 0.1), 'white')                           # the salt lick
     join_still('herd')
 
@@ -3480,7 +3518,7 @@ def filling_station():
     # Sidewinder: the filling station on the desert highway, at its own size
     # beside a car: the shop with its door to the road (+X), a canopy over
     # two pumps in front of it, a stack of tyres and oil drums, and the tall
-    # sign by the road turning on its pole (anim_spin).
+    # sign by the road turning on its pole (anim_spin). A hawk circles over it.
     hut(2.6, 1.2, 2.0, (-2.2, 0, 0), 0xf2efe6, 0xc0392b)
     box((0.1, 0.3, 1.6), (-0.85, 1.05, 0), 0xc0392b)                             # its name board
     for sx in (0.2, 2.6):
@@ -3503,7 +3541,69 @@ def filling_station():
             box((0.12, 0.6, 1.2), (2.6, 3.3, -2.6), 0xc0392b)
             box((0.16, 0.2, 0.9), (2.6, 3.35, -2.6), 'white')
             box((0.18, 0.12, 0.12), (2.6, 3.7, -2.6), 'yellow')
+    hawk_circle((0.4, -0.6), 5.4, 4.2, 14.0)
     join_still('station')
+
+def pumpjack(x0, z0, yaw, tag, period, phase_deg=16):
+    """An oil pumpjack, the nodding donkey, its beam along its local X turned
+    by `yaw`: a skid, the A-frame samson post, the walking beam with the
+    horsehead over the wellhead at +X and the gearbox with its red
+    counterweights at -X. The beam and the horsehead nod (anim_sway about
+    the beam's pivot), the bridle hanging from the head riding with them into
+    the wellhead's stuffing box. Two units tall, a real one's height and a
+    half."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy, dz):
+        return (x0 + dx * c + dz * s, dy, z0 - dx * s + dz * c)
+    def part(size, dx, dy, dz, color, pitch=0.0):
+        box(size, at(dx, dy, dz), color, yaw=yaw, pitch=pitch)
+    part((2.9, 0.14, 0.8), -0.1, 0.07, 0, 'grey')                               # the skid
+    for sx in (-1, 1):                                                          # the samson post
+        for sz in (-1, 1):
+            strut(at(sx * 0.42, 0.1, sz * 0.34), at(0, 1.5, sz * 0.12), 0.1, 'slate')
+    part((0.5, 0.56, 0.5), -1.05, 0.42, 0, 'slate')                             # the gearbox
+    for sz in (-1, 1):
+        part((0.6, 0.34, 0.08), -1.05, 0.46, sz * 0.32, 'red')                  # its counterweights
+    part((0.26, 0.5, 0.26), 1.32, 0.25, 0, 'slate')                             # the wellhead
+    part((0.36, 0.1, 0.36), 1.32, 0.52, 0, 'grey')
+    with animated('anim_sway:a=z:d=%d:p=%.1f#%s' % (phase_deg, period, tag), at(0, 1.6, 0), yaw):
+        part((2.6, 0.16, 0.16), -0.05, 1.6, 0, 'slate')                         # the walking beam
+        part((0.2, 0.62, 0.22), 1.28, 1.42, 0, 'yellow')                        # the horsehead
+        part((0.12, 0.1, 0.22), 1.36, 1.76, 0, 'yellow')
+        part((0.06, 0.66, 0.06), 1.36, 0.88, 0, 'dark')                         # the bridle
+        part((0.3, 0.22, 0.24), -1.28, 1.56, 0, 'slate')                        # the equalizer
+
+@piece(1.0)
+def oil_field():
+    # Sidewinder: a little oil field on the desert by the highway, every
+    # piece at its own size beside a car: three pumpjacks on their dirt pads,
+    # out of step, nodding (anim_sway); a pair of tanks; and tumbleweeds
+    # blowing along the field's road side (+X), bouncing as they roll, out of
+    # a rock pile at one end and into one at the other (anim_path+spin+bob,
+    # home under the ground). The jacks stand broadside to the road (beams
+    # along Z), the way a nod reads.
+    PADS = ((-1.0, -6.5, 4.6), (-3.4, 0.4, 5.3), (-0.6, 6.8, 4.1))
+    for n, (x, z, per) in enumerate(PADS):
+        ground_poly([(x - 1.4, 0.03, z - 2.2), (x + 1.4, 0.03, z - 2.2), (x + 1.4, 0.03, z + 2.2),
+                     (x - 1.4, 0.03, z + 2.2)], [(0, 1, 2, 3)], 0xb8a686)
+        pumpjack(x, z, math.pi / 2 * (1 if n % 2 else -1), 'j%d' % n, per)
+    for k, (x, z) in enumerate(((-6.0, 3.6), (-6.0, 5.0))):                    # the tanks
+        cyl(0.62, 1.1, (x, 0, z), 'white' if k else 'grey', segs=10)
+        cyl(0.66, 0.08, (x, 1.1, z), 'slate', segs=10)
+    box((0.12, 0.12, 1.4), (-5.3, 0.9, 4.3), 'slate')                           # their pipe
+    # the weeds' run along the road side
+    L, R, X = 26.0, 0.25, 2.2
+    for sz in (-1, 1):
+        sandstone_rock((X + 0.3, 0, sz * (L / 2 + 0.6)), 1.0, yaw=0.5 + sz)
+    zs = [-L / 2 + L * i / 12 for i in range(13)]
+    for k, pt in enumerate([(X, R, z) for z in zs] + [(X, -1.6, L / 2), (X, -1.6, -L / 2)]):
+        marker('path_weeds_%d' % k, pt)
+    for n in range(3):
+        z = zs[1 + 4 * n]
+        with animated('anim_path:c=weeds:p=30:o=%.3f:f=1+spin:a=z:w=-7.5+bob:h=0.28:p=%.2f:r=0.35#%d'
+                      % (n / 3, 0.72 + 0.07 * n, n), (X, R, z)):
+            tumbleweed((X, R, z), R)
+    join_still('field')
 
 @piece(0.45)
 @plain
@@ -3515,7 +3615,9 @@ def headframe():
     # the sheave wheel on top turning as the cage winds (anim_spin), the
     # cable over it and down to the cage; the ore line (set-ore-line) runs up
     # to the collar from +X, and its train rolls onto the collar and down the
-    # shaft.
+    # shaft. The hoist house's boiler stack stands nearly as tall as the
+    # headframe, smoke rising from it (anim_smoke): the working mine's mark
+    # on the skyline from across the map.
     H = 9.0
     box((3.6, 0.4, 3.4), (1.0, 0.2, 0), TIMBER)                                  # the collar
     box((2.4, 0.06, 2.4), (1.0, 0.42, 0), 'dark')
@@ -3546,7 +3648,11 @@ def headframe():
     strut((1.45, cy, 0), (1.45, 2.95, 0), 0.12, ROPE)                           # and down to the cage
     box((1.0, 1.1, 1.0), (1.45, 2.4, 0), 'slate')                                # the cage, over the carts
     hut(3.6, 2.6, 3.4, (-8.8, 0, 0), TIMBER, 'slate')                            # the hoist house
-    box((0.45, 1.8, 0.45), (-9.9, 3.8, 1.0), 'slate')
+    SX, SZ, SH = -10.0, -2.4, 9.6                                                # its boiler stack
+    cyl(0.62, 0.9, (SX, 0, SZ), 0xa96545, segs=8)
+    cyl(0.45, SH, (SX, 0, SZ), 'slate', r2=0.36, segs=8)
+    cyl(0.48, 0.4, (SX, SH - 0.4, SZ), 0x8a4a32, segs=8)
+    marker('anim_smoke:s=2.4', (SX, SH + 0.1, SZ))                              # a stack's smoke, not a chimney's
     for s in (-1, 1):                                                            # a ladder up a leg, clear of the carts
         box((0.12, 6.0, 0.12), (1.9, 3.0, -1.2 + s * 0.25), TIMBER)
     for i in range(7):
