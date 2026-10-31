@@ -1772,7 +1772,7 @@ private:
     void buildSmokePuffs(const filament::math::float3& origin);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
-    // Chimney smoke (cabin): three soft puffs rising on a staggered loop.
+    // Chimney or camp-fire smoke: a column of soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
