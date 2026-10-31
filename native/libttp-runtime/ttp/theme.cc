@@ -549,7 +549,9 @@ Theme snowTheme() {
 // rails; indoors, but still broad daylight.
 Theme playroomTheme() {
   Theme t;
-  t.sky[0] = 0x8cbcea; t.sky[1] = 0xf3e3c3; t.sky[2] = 0xfaf0da;
+  // Indoors there is no blue overhead: over the room's walls the zenith is a
+  // warm ceiling, so a racer up on a deck sees no sky above a wall.
+  t.sky[0] = 0xf6ecdc; t.sky[1] = 0xf3e3c3; t.sky[2] = 0xfaf0da;
   t.fog = 0xf3e3c3;
   t.boost = 0x39c24a;  // green — complementary pop on the orange deck
   t.hemi = { 0xfff2dc, 0xa88860, 2.2f };  // warm room light, wood-floor bounce
