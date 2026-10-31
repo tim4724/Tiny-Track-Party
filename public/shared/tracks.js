@@ -754,16 +754,17 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Snakes and ladders, at the toy cars' own scale: the board set out on
-    // the floor past the dive's loop, where a racer coming down the dive looks
-    // down on it (flat, it reads only from above), and its box stood on edge
-    // where the grid straight points; the board's wooden snakes have come
+    // Snakes and ladders, at the toy cars' own scale: the board stood up half
+    // open past the dive's loop, outside the bend the loop runs out into, its
+    // face turned to the racers coming down the dive (lying flat, it showed
+    // only a sliver over the kerb), and its box stood on edge where the grid
+    // straight points; the board's wooden snakes have come
     // alive, one rearing at the racers inside the bend where the south leg
     // turns for the line, two more slithering round either side of the grid
     // straight's end
     set: [
       { model: 'set-jointed-snake', u: 0.9754, lat: 10, yaw: 180 },
-      { model: 'set-snakes-ladders', u: 0.8454, lat: 14 },
+      { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
       { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 }
