@@ -4129,9 +4129,9 @@ TOY = [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c]
 # across, a marble run 9 high. Nothing from the grown-ups' world: at this
 # scale a book or a sofa is terrain, not a prop.
 
-@piece(0.65)
 def slinky():
-    # Helix: a rainbow slinky walking down a stack of books. ONE coiled wire,
+    # Helix: a rainbow slinky walking down a stack of books (built at the
+    # marble tower's grow, 0.65, which stands it beside). ONE coiled wire,
     # its ends bunched (a stack on the top book, a stack on the floor), the
     # arch between them opened out so the gaps between the coils show: that
     # spring-and-gap is what says slinky. Each colour is a band of coils.
@@ -4421,8 +4421,9 @@ SNAKE = (0x6cbf6c, 0xf2c14e)
 
 @piece(1.0)
 def snakes_ladders():
-    # Skysnake: a game of snakes and ladders set out on the floor in the
-    # infield, a 60 cm board of a hundred squares (a toy car fits on one), its
+    # Skysnake: a game of snakes and ladders set out on the floor past the
+    # dive's loop, where the dive looks down on it (lying flat, it reads only
+    # from above), a 60 cm board of a hundred squares (a toy car fits on one), its
     # snakes and ladders printed on it, the pawns mid-game and two dice
     # thrown. The track's dive is its snake and its climb a ladder.
     B, T = 5.5, 0.22
@@ -4521,9 +4522,9 @@ def toy_snake(ctrl, base, k, rear=None, tail=None, neck=None):
 def jointed_snake():
     # Skysnake's hero: the board's snake come alive, a wooden jointed toy
     # snake (about 80 cm of it, as thick as a toy car is tall) lying in curves
-    # on the floor below the lap's dive (the dive is the snake). It rears up
-    # at its -Z end and sways its head out over -X toward the racers coming
-    # down the dive, and its tail wiggles joint by joint as the wooden toy's
+    # on the floor inside the bend before the line. It rears up at its -Z end
+    # and sways its head out over -X toward the racers coming at it down the
+    # straight, and its tail wiggles joint by joint as the wooden toy's
     # does when it is shaken; a little one lies curled beside it. Its body
     # runs along Z.
     toy_snake([(0.0, 7.4), (1.6, 5.0), (-1.6, 2.6), (1.4, 0.0), (-1.3, -2.4), (0.9, -4.6), (0.0, -6.4)],
@@ -4538,9 +4539,11 @@ def toy_snake_loop():
     # circle head first (anim_path, facing its way), so every block follows
     # the one ahead along the curve, as a snake's body does. A traveller,
     # it leaves the sun bake: a shadow baked where it lay would stay behind.
-    # Its head rears up as it goes, a cobra's, so it reads over a kerb. Built
-    # with its head at +Z heading +X, where the loop starts.
-    R, k, N = 2.6, 0.45, 64
+    # Its head rears up as it goes, a cobra's, so it reads over a kerb. As
+    # thick as the jointed snake (one game's snakes), on a ring wide enough
+    # to read from the straight it lies at the end of. Built with its head at
+    # +Z heading +X, where the loop starts.
+    R, k, N = 3.4, 0.6, 64
     for i in range(N):
         a = math.radians(90.0 - 360.0 * i / N)
         marker('path_ring_%d' % i, (R * math.cos(a), 0, R * math.sin(a)))
@@ -4735,6 +4738,32 @@ def helix_pts(cx, cz, R, y0, y1, a0, turns, per=16):
     return [(cx + R * math.cos(a0 + 2 * math.pi * turns * i / n), y0 + (y1 - y0) * i / n,
              cz + R * math.sin(a0 + 2 * math.pi * turns * i / n)) for i in range(n + 1)]
 
+def chute(pts, color, mr, half=0.75, wall=0.55):
+    """A marble run's chute: a U channel under the marbles (radius `mr`),
+    swept along their line [(x, y, z)]; its inside and outside are separate
+    faces so each keeps its own light."""
+    n = len(pts)
+    verts = []
+    for i, p in enumerate(pts):
+        a, b = pts[min(i + 1, n - 1)], pts[max(i - 1, 0)]
+        tx, tz = a[0] - b[0], a[2] - b[2]
+        l = math.hypot(tx, tz) or 1.0
+        ox, oz = -tz / l * half, tx / l * half
+        y = p[1] - mr - 0.05
+        verts += [(p[0] + ox, y + wall, p[2] + oz), (p[0] + ox, y, p[2] + oz),
+                  (p[0] - ox, y, p[2] - oz), (p[0] - ox, y + wall, p[2] - oz)]
+    front = [(4 * i + k, 4 * (i + 1) + k, 4 * (i + 1) + k + 1, 4 * i + k + 1) for i in range(n - 1) for k in range(3)]
+    m = len(verts)
+    me = bpy.data.meshes.new('chute')
+    me.from_pydata([tuple(P(*v)) for v in verts + verts], [],
+                   front + [tuple(m + v for v in reversed(f)) for f in front])
+    for f in me.polygons:
+        f.use_smooth = True
+    me.update()
+    o = bpy.data.objects.new('chute', me)
+    bpy.context.scene.collection.objects.link(o)
+    return paint(o, color)
+
 @piece(0.62)
 def marble_run():
     # Helix: a marble run that is the lap in small, about 50 cm tall. Marbles
@@ -4756,34 +4785,10 @@ def marble_run():
         for k in range(n):
             cyl(1.25, h / n, (0, 0.4 + k * h / n, zc), TOY[k % 4], segs=10)
         cyl(1.5, 0.5, (0, 0.4 + h, zc), 0xfdf4de, segs=10)
-    # the chute: a U channel under the marbles, swept along their line; its
-    # inside and outside are separate faces so each keeps its own light
-    def chute(pts, color, half=0.75, wall=0.55):
-        n = len(pts)
-        verts = []
-        for i, p in enumerate(pts):
-            a, b = pts[min(i + 1, n - 1)], pts[max(i - 1, 0)]
-            tx, tz = a[0] - b[0], a[2] - b[2]
-            l = math.hypot(tx, tz) or 1.0
-            ox, oz = -tz / l * half, tx / l * half
-            y = p[1] - MR - 0.05
-            verts += [(p[0] + ox, y + wall, p[2] + oz), (p[0] + ox, y, p[2] + oz),
-                      (p[0] - ox, y, p[2] - oz), (p[0] - ox, y + wall, p[2] - oz)]
-        front = [(4 * i + k, 4 * (i + 1) + k, 4 * (i + 1) + k + 1, 4 * i + k + 1) for i in range(n - 1) for k in range(3)]
-        m = len(verts)
-        me = bpy.data.meshes.new('chute')
-        me.from_pydata([tuple(P(*v)) for v in verts + verts], [],
-                       front + [tuple(m + v for v in reversed(f)) for f in front])
-        for f in me.polygons:
-            f.use_smooth = True
-        me.update()
-        o = bpy.data.objects.new('chute', me)
-        bpy.context.scene.collection.objects.link(o)
-        return paint(o, color)
-    chute(up, 0xe66a5a)
-    chute(down, 0x5a8fd8)
-    chute([up[-1], down[0]], 0xf2c14e)            # the high run from A's top to B's
-    chute([down[-1], up[0]], 0xf2c14e)            # and the low run home along the floor
+    chute(up, 0xe66a5a, MR)
+    chute(down, 0x5a8fd8, MR)
+    chute([up[-1], down[0]], 0xf2c14e, MR)        # the high run from A's top to B's
+    chute([down[-1], up[0]], 0xf2c14e, MR)        # and the low run home along the floor
     # spokes from each tower to its screw, and legs under the high chute
     for zc, pts in ((ZA, up), (ZB, down)):
         for i in range(4, len(pts) - 1, 8):
@@ -4820,6 +4825,48 @@ def marble_run():
         with animated('anim_path:c=marbles:p=18:o=%.4f:f=0#%d' % (m / NM, m), at):
             sphere(MR, at, COLS[m], subdiv=2, flat=False)
 
+@piece(0.65)
+def marble_tower():
+    # Helix: one more tower of the marble run's kit (about 45 cm), stood
+    # where the grid straight points: a column of the same stacked toy
+    # cylinders with a chute wound round it in a helix, three marbles
+    # rolling down it, into the column's foot and up inside it (out of sight)
+    # to the cup on top. Beside it the slinky walks down its books, a helix
+    # of its own: the two read as one corner of the room where a slinky
+    # alone was a speck. Side by side along X, read from +Z (the slinky's
+    # arch faces it).
+    slinky()
+    K = 0.62 / 0.65                              # the marble run's own size, in this piece's units
+    TX = 9.6                                     # the tower's axis, past the slinky's floor stack
+    R, MR, TURNS = 3.0 * K, 0.62 * K, 3.25
+    LOW, HIGH = MR + 0.07 * K, 13.4 * K
+    cyl(2.2 * K, 0.4 * K, (TX, 0, 0), 0x9aa1b4, segs=12)
+    h = HIGH + 0.3 * K
+    n = 5
+    for k in range(n):
+        cyl(1.25 * K, h / n, (TX, 0.4 * K + k * h / n, 0), TOY[(k + 2) % 4], segs=10)
+    top = 0.4 * K + h
+    cyl(1.0 * K, 1.1 * K, (TX, top, 0), 0xfdf4de, r2=2.0 * K, segs=10)        # the cup the marbles come up into
+    down = helix_pts(TX, 0, R, HIGH, LOW, 0.0, TURNS)
+    chute(down, 0x6cbf6c, MR, half=0.75 * K, wall=0.55 * K)
+    foot = (TX + 0.6 * K * math.cos(2 * math.pi * TURNS), LOW, 0.6 * K * math.sin(2 * math.pi * TURNS))
+    chute([down[-1], foot], 0xf2c14e, MR, half=0.75 * K, wall=0.55 * K)          # into the column's foot
+    for i in range(4, len(down) - 1, 8):                                         # spokes from the column
+        p = down[i]
+        dx, dz = p[0] - TX, p[2]
+        l = math.hypot(dx, dz)
+        bar((TX + dx / l * 1.2 * K, p[1] - MR - 0.1 * K, dz / l * 1.2 * K),
+            (p[0] - dx / l * 0.7 * K, p[1] - MR - 0.1 * K, p[2] - dz / l * 0.7 * K), 0.3 * K, 0.3 * K, 0x9aa1b4)
+    # the loop: down the screw, into the foot, up the column's middle, out
+    # of the cup and back to the top of the screw
+    loop = down + [foot] + [(TX, LOW + (top - LOW) * j / 6, 0) for j in range(7)] + [(TX, top + 0.5 * K, 0)]
+    for k, p in enumerate(loop):
+        marker('path_tower_%d' % k, p)
+    for m, c in enumerate((0xe66a5a, 0x5a8fd8, 0xf2c14e)):
+        at = down[int(len(down) * m / 3)]
+        with animated('anim_path:c=tower:p=11:o=%.4f:f=0#%d' % (m / 3, m), at):
+            sphere(MR, at, c, subdiv=2, flat=False)
+
 # ---- Gauntlet: the besiegers ----
 
 def soldier(at, color):
@@ -4851,6 +4898,53 @@ def toy_soldiers():
         cyl(0.55, 0.18, (1.6, 0.55, 4.6 + s * 0.6 - 0.09), 0xb06041, segs=8, axis='along')
     box((0.7, 0.5, 1.0), (1.6, 0.7, 4.6), 0x6cbf6c)
     cyl(0.32, 2.0, (0.9, 1.0, 4.6), 0x38383d, r2=0.26, segs=8, axis='across')
+    merge_paint()
+
+@piece(0.55)
+def siege_tower():
+    # Gauntlet: the besiegers' toy siege tower (about 30 cm, a wooden toy at
+    # the soldiers' own scale) rolled up on its four wheels, its drawbridge
+    # raised against its face (+X, the side it rolls toward: the castle and
+    # the road), a pennant flapping over its battlements, and a rank of four
+    # soldiers marching before it: the siege's tallest piece, so it reads
+    # down a long straight where a rank alone is a speck.
+    W, D = 5.4, 5.4                               # its footprint, X by Z
+    WOODC, DARK = 0xc8955a, 0x7a5a3a
+    for sx in (-1, 1):                            # the wheels, hubs out
+        for sz in (-1, 1):
+            z = D / 2 if sz > 0 else -D / 2 - 0.6
+            cyl(1.1, 0.6, (sx * 1.6, 1.1, z), DARK, segs=10, axis='along')
+            cyl(0.4, 0.7, (sx * 1.6, 1.1, z - 0.05), 0xf2c14e, segs=6, axis='along')
+    box((W, 0.7, D), (0, 1.45, 0), DARK)                                          # the bed
+    box((W, 3.8, D), (0, 3.7, 0), WOODC)                                          # the storeys
+    box((W - 0.5, 3.2, D - 0.5), (0, 7.2, 0), WOODC)
+    box((W + 0.4, 0.4, D + 0.4), (0, 9.0, 0), DARK)                               # the fighting deck
+    for i, (x, z) in enumerate(((-1, -1), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0))):
+        box((0.9, 0.9, 0.9), (x * (W / 2 - 0.25), 9.65, z * (D / 2 - 0.25)), TOY[i % 4])    # battlements
+    for y in (1.8, 5.6):                                                          # plank seams round it
+        box((W + 0.08, 0.16, D + 0.08), (0, y, 0), DARK)
+    for sz in (-1, 1):                                                            # its sides: a brace, a shield
+        z = sz * (D / 2 + 0.04)
+        bar((-W / 2 + 0.4, 2.1, z), (W / 2 - 0.4, 5.3, z), 0.3, 0.2, DARK)
+        bar((-W / 2 + 0.4, 5.3, z), (W / 2 - 0.4, 2.1, z), 0.3, 0.2, DARK)
+        zu = sz * (D - 0.5) / 2                                                   # on the upper storey
+        cyl(1.1, 0.2, (0, 7.2, zu if sz > 0 else zu - 0.2), 0x5a8fd8, segs=10, axis='along')
+        cyl(0.4, 0.3, (0, 7.2, zu if sz > 0 else zu - 0.3), 0xf2c14e, segs=6, axis='along')
+    # the drawbridge, raised: a red board hinged at the upper storey's floor,
+    # leaning a little off the face, its two chains up to the deck
+    box((0.3, 3.4, 3.4), (W / 2 + 0.2, 7.3, 0), 0xe66a5a, roll=-0.08)
+    for z in (-1.0, 0.0, 1.0):
+        box((0.12, 3.2, 0.12), (W / 2 + 0.38, 7.3, z), 0xa84a3e, roll=-0.08)
+    for sz in (-1, 1):
+        bar((W / 2 + 0.45, 8.9, sz * 1.5), (W / 2 - 0.1, 9.1, sz * 1.5), 0.2, 0.2, 0x2a2735)
+    box((BAR * 1.6, 3.7, BAR * 1.6), (0, 11.05, 0), 0x2a2735)                    # the pennant's pole
+    with animated('anim_sway:a=x:d=24:p=1.9#pennant', (0, 12.8, 0)):
+        box((0.08, 0.9, 1.6), (0, 12.35, 0.85), 0x6cbf6c)
+        box((0.08, 0.5, 0.8), (0, 12.35, 2.0), 0x6cbf6c)
+    # the rank before it, on their stand
+    box((1.2, 0.2, 6.4), (W / 2 + 2.6, 0.1, 0), 0x6cbf6c)
+    for k in range(4):
+        soldier((W / 2 + 2.6, 0.2, -2.25 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
     merge_paint()
 
 # ---- build + export ----------------------------------------------------------------
