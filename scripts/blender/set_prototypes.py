@@ -1216,92 +1216,185 @@ def join_still(name):
     return group([o for o in bpy.context.scene.objects
                   if o.type == 'MESH' and o.get('anim') is None], name)
 
+def draped(name, build):
+    """Run `build` and make what it made ONE part named `drape_<name>`: the
+    renderer lays each vertex on the ground as it DRAWS it (a 9 u grid's
+    chords, a hand's breadth or more off the curve on a slope), so small
+    things on a piece's own ground are built from y = 0 as if on the plain
+    and land on the drawn slope instead of floating off it or sinking in."""
+    before = set(bpy.context.scene.objects)
+    build()
+    return group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'],
+                 'drape_' + name)
+
 def turned(cx, cz, yaw, lx, lz):
     """A point (lx, lz) in a frame at (cx, cz) turned by `yaw` (box()'s sense:
     its +Z runs along (sin yaw, cos yaw))."""
     c, s = math.cos(yaw), math.sin(yaw)
     return cx + lx * c + lz * s, cz - lx * s + lz * c
 
+# ---- the snow world at its real size -------------------------------------------
+# A car is 0.9 long, and the ambient pines stand 2 to 4 tall: a unit is some
+# four or five metres. Everything below is built at the size the real thing
+# would be next to a real car, a little chunkier at most (a person or a
+# penguin under half a unit, a cabin two or three across), so the pieces are
+# authored in world units and grow 1. What is big in life (the ski mountain,
+# the avalanche slopes, the glacier, the lake) is the track's terrain.
+
+def person(x, y, z, coat, hat, yaw=0.0):
+    """Someone standing, facing +X turned by `yaw`, at a person's size beside a
+    car (0.48 tall): boots and legs, a coat, a head in a hat."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy):
+        return (x + dx * c, y + dy, z - dx * s)
+    box((0.1, 0.18, 0.14), at(0, 0.09), 0x38383d, yaw=yaw)
+    box((0.13, 0.17, 0.18), at(0, 0.265), coat, yaw=yaw)
+    box((0.09, 0.09, 0.09), at(0.01, 0.395), 0xf2bf99, yaw=yaw)
+    box((0.1, 0.06, 0.1), at(0.0, 0.465), hat, yaw=yaw)
+
+def seated(x, y, z, coat, hat, yaw=0.0):
+    """Someone sitting (on a chair, a bucket), facing +X turned by `yaw`; `y`
+    is the seat."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy):
+        return (x + dx * c, y + dy, z - dx * s)
+    box((0.2, 0.07, 0.14), at(0.07, 0.035), 0x38383d, yaw=yaw)       # thighs
+    box((0.13, 0.17, 0.18), at(-0.02, 0.15), coat, yaw=yaw)
+    box((0.09, 0.09, 0.09), at(-0.01, 0.28), 0xf2bf99, yaw=yaw)
+    box((0.1, 0.06, 0.1), at(-0.02, 0.35), hat, yaw=yaw)
+
+def skier(x, y, z, coat, hat):
+    """A skier running toward +X, crouched over the skis, at a person's size:
+    the skis, bent legs, a coat leaning in, a head and hat. Joined into one
+    moving part by its caller."""
+    box((0.5, 0.06, 0.13), (x + 0.03, y + 0.03, z), 0x2a2735)                 # the pair of skis
+    box((0.1, 0.17, 0.13), (x - 0.01, y + 0.14, z), 0x38383d, roll=-0.35)    # bent legs
+    box((0.14, 0.17, 0.17), (x + 0.03, y + 0.29, z), coat, roll=-0.45)       # leaning in
+    box((0.09, 0.09, 0.09), (x + 0.09, y + 0.4, z), 0xf2bf99)
+    box((0.1, 0.06, 0.1), (x + 0.09, y + 0.47, z), hat)
+
+def sled(x, y, z, yaw, color=0xcf534f, L=0.6):
+    """A sled `L` long along +X turned by `yaw`, its deck on two runners
+    curling up at the front: three blocks."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    box((L * 0.85, 0.06, 0.24), (x - L * 0.05 * c, y + 0.1, z + L * 0.05 * s), color, yaw=yaw)
+    for sd in (-1, 1):
+        box((L, 0.06, 0.06), (x + sd * 0.09 * s, y + 0.03, z + sd * 0.09 * c), 0x555b66, yaw=yaw)
+
+def cabin_hut(w, h, d, at, wall, roof, yaw=0.0):
+    """A small gabled hut at its real size (one or two units across), door on
+    +X turned by `yaw`, trimmed as hut() is at the size of its parts: a grey
+    plinth, a dark door in a white frame, a window either side, a chunky roof
+    under a grey ridge."""
+    x, y, z = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    def part(dx, dy, dz, size, color, pitch=0.0):
+        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw, pitch=pitch)
+    part(0, h / 2, 0, (w, h, d), wall)
+    part(0, 0.04, 0, (w + 0.08, 0.08, d + 0.08), 'grey')
+    dw = d * 0.34
+    part(w / 2 + 0.02, h * 0.37, 0, (0.06, h * 0.74 + 0.06, dw + 0.08), 'white')
+    part(w / 2 + 0.045, h * 0.34, 0, (0.06, h * 0.68, dw), 'slate')
+    for k in (-1, 1):
+        part(0, h * 0.58, k * (d / 2 + 0.02), (w * 0.4 + 0.08, h * 0.3 + 0.08, 0.06), 'white')
+        part(0, h * 0.58, k * (d / 2 + 0.045), (w * 0.4, h * 0.3, 0.06), 'slate')
+        part(0, h + 0.1, k * (d + 0.2) / 4, (w + 0.2, 0.1, (d + 0.2) * 0.55), roof, pitch=-k * 0.6)
+    part(0, h + 0.13 + 0.155 * (d + 0.2), 0, (w + 0.24, 0.09, 0.14), 'grey')
+
 def pylon(at, h, yaw, ground=0.0):
     """A lift tower standing on `ground`, its crossarm at `h` across the line
-    (the line runs along the tower's turned +Z)."""
+    (the line runs along the tower's turned +Z), at a real tower's size: a
+    column four units tall at most, the sheaves either side at the gauge."""
     x, _, z = at
-    cyl(0.3, h - ground + 0.4, (x, ground - 0.4, z), 0x555b66, segs=4)
-    box((3.4, 0.34, 0.34), (x, h - 0.2, z), 0x555b66, yaw=yaw)
+    box((0.22, h - ground + 0.5, 0.22), (x, (h + ground - 0.5) / 2, z), 0x555b66, yaw=yaw)
+    box((1.4, 0.12, 0.12), (x, h + 0.08, z), 0x555b66, yaw=yaw)
     for s in (-1, 1):
-        gx, gz = turned(x, z, yaw, s * 1.4, 0)
-        box((0.5, 0.3, 0.7), (gx, h + 0.05, gz), 0x2a2735, yaw=yaw)
+        gx, gz = turned(x, z, yaw, s * GAUGE, 0)
+        box((0.12, 0.1, 0.4), (gx, h, gz), 0x2a2735, yaw=yaw)
     # the footing reaches well under the slope: the terrain is a 9 u grid's
     # chords across the curve this stands on, a little under it on a crest
-    box((1.4, 1.2, 1.4), (x, ground - 0.3, z), 0x868ba1, yaw=yaw)
+    box((0.6, 0.6, 0.6), (x, ground - 0.2, z), 0x868ba1, yaw=yaw)
 
-def chair(at, yaw, color=0x3f7bd9):
-    """A two-seat chair hanging under the cable at `at`, facing down the line.
-    Returns its parts."""
+GAUGE = 0.55   # half the lift's gauge: the haul rope either side of the towers
+
+def chair(at, yaw, color=0x3f7bd9, riders=()):
+    """A two-seat chair hanging under the cable at `at`, facing down the line,
+    half a unit across; `riders` are the coats of whoever sits in it. Returns
+    its parts."""
     x, y, z = at
-    parts = [box((0.2, 1.5, 0.2), (x, y - 0.75, z), 0x2a2735, yaw=yaw)]
-    for (lx, ly, lz, size, c) in ((0, -1.55, 0.1, (1.5, 0.16, 0.7), color),
-                                  (0, -1.15, -0.2, (1.5, 0.7, 0.16), color),
-                                  (0, -0.95, 0.5, (1.5, 0.2, 0.2), 0x2a2735)):
+    # the hanger runs up past the rope to its grip: the rope is a smooth curve
+    # through the towers, so between them it sits a little off the line
+    parts = [box((0.06, 0.72, 0.06), (x, y - 0.06, z), 0x2a2735, yaw=yaw)]
+    for (lx, ly, lz, size, c) in ((0, -0.45, 0.04, (0.52, 0.06, 0.2), color),
+                                  (0, -0.35, -0.07, (0.52, 0.2, 0.06), color)):
         px, pz = turned(x, z, yaw, lx, lz)
         parts.append(box(size, (px, y + ly, pz), c, yaw=yaw))
+    for i, coat in enumerate(riders):
+        lx = (-0.13, 0.13)[i]
+        px, pz = turned(x, z, yaw, lx, -0.01)
+        parts.append(box((0.13, 0.16, 0.12), (px, y - 0.34, pz), coat, yaw=yaw))
+        parts.append(box((0.09, 0.09, 0.09), (px, y - 0.21, pz), 0xf2bf99, yaw=yaw))
     return parts
 
-def bullwheel(x, y, z, yaw):
-    """The big wheel the cable turns round in a station, on its frame."""
-    cyl(1.5, 0.3, (x, y - 0.15, z), 0x555b66, segs=8)
-    cyl(0.5, 0.5, (x, y - 0.25, z), 0x2a2735, segs=8)
-    box((0.4, 1.2, 0.4), (x, y + 0.75, z), 0x555b66)
-    box((3.6, 0.3, 0.5), (x, y + 1.3, z), 0x555b66, yaw=yaw)
-
 def station(x, z, y, ground, yaw, roof=0xff5040):
-    """A lift station: the bullwheel under a red roof on four legs."""
-    bullwheel(x, y, z, yaw)
+    """A lift station at its real size: the bullwheel the haul rope turns
+    round, at the gauge, under a red roof on four legs."""
+    cyl(GAUGE + 0.03, 0.08, (x, y - 0.04, z), 0x555b66, segs=10)
+    box((0.14, 0.52, 0.14), (x, y + 0.26, z), 0x555b66)
+    top = y + 0.52
     for sx in (-1, 1):
         for sz in (-1, 1):
-            px, pz = turned(x, z, yaw, sx * 1.6, sz * 1.1)
-            box((0.3, y + 1.6 - ground + 0.3, 0.3), (px, (y + 1.6 + ground - 0.3) / 2, pz), 0x555b66, yaw=yaw)
-    box((4.4, 0.3, 3.2), (x, y + 1.6, z), roof, yaw=yaw)
+            px, pz = turned(x, z, yaw, sx * 0.8, sz * 0.55)
+            box((0.1, top - ground + 0.3, 0.1), (px, (top + ground - 0.3) / 2, pz), 0x555b66, yaw=yaw)
+    box((2.0, 0.12, 1.4), (x, top + 0.06, z), roof, yaw=yaw)
 
-def snowcat(x, y, z):
+def snowcat(x, y, z, k=0.45):
     """A piste groomer facing +X, built like the cars: two broad tracks, a red
     body and cab with dark glass, the blade up front, the tiller behind,
-    lamps on the roof. Its pivot is under the middle of its tracks."""
+    lamps on the roof. `k` sizes it (0.45: a real groomer's 1.5 units). Its
+    pivot is under the middle of its tracks."""
     RED, DARK, GLASS = 0xcf534f, 0x38383d, 0x2f3a4a
+    def b(size, dx, dy, dz, color):
+        box([s * k for s in size], (x + dx * k, y + dy * k, z + dz * k), color)
     for s in (-1, 1):
-        box((3.2, 0.7, 0.62), (x, y + 0.35, z + s * 0.82), DARK)
-        box((3.0, 0.14, 0.66), (x, y + 0.74, z + s * 0.82), 0x868ba1)
-    box((2.3, 0.6, 1.5), (x - 0.1, y + 1.0, z), RED)
-    box((1.4, 1.0, 1.4), (x + 0.15, y + 1.8, z), RED)
-    box((0.1, 0.62, 1.16), (x + 0.86, y + 1.88, z), GLASS)
+        b((3.2, 0.7, 0.62), 0, 0.35, s * 0.82, DARK)
+        b((3.0, 0.14, 0.66), 0, 0.74, s * 0.82, 0x868ba1)
+    b((2.3, 0.6, 1.5), -0.1, 1.0, 0, RED)
+    b((1.4, 1.0, 1.4), 0.15, 1.8, 0, RED)
+    b((0.14, 0.62, 1.16), 0.86, 1.88, 0, GLASS)
     for s in (-1, 1):
-        box((0.9, 0.55, 0.1), (x + 0.2, y + 1.9, z + s * 0.71), GLASS)
-    box((1.5, 0.12, 1.5), (x + 0.15, y + 2.36, z), 0xfff6eb)
-    box((0.3, 0.2, 0.9), (x + 0.5, y + 2.52, z), 0xff7e44)
-    box((0.3, 1.0, 2.5), (x + 1.95, y + 0.6, z), 0xfff6eb)                 # the blade
-    for s in (-1, 1):
-        box((0.6, 0.18, 0.18), (x + 1.55, y + 0.85, z + s * 0.6), DARK)
-    box((0.7, 0.36, 2.2), (x - 1.95, y + 0.4, z), DARK)                    # the tiller
+        b((0.9, 0.55, 0.14), 0.2, 1.9, s * 0.71, GLASS)
+    b((1.5, 0.14, 1.5), 0.15, 2.36, 0, 0xfff6eb)
+    b((0.3, 0.2, 0.9), 0.5, 2.52, 0, 0xff7e44)
+    b((0.3, 1.0, 2.5), 1.95, 0.6, 0, 0xfff6eb)                 # the blade
+    b((0.7, 0.36, 2.2), -1.95, 0.4, 0, DARK)                    # the tiller
 
-@piece(1.35)
+@piece(1.0)
 def ski_lift():
     # Powder: a ski mountain standing along the road, its summit behind (-X)
     # and its long flank toward the road, so the lap drives past the whole of
     # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
-    # what stands on it. The chairlift climbs that flank on the diagonal from
-    # a valley station by the road over four towers to the top station on the
-    # summit, chairs riding up one side and down the other round the haul
-    # rope's loop (anim_path); a slalom piste runs down the other diagonal to a
-    # finish banner on the flat; pines on the flanks.
+    # what stands on it, every part at its real size: a chairlift's towers
+    # (four units at most) march up that flank on the diagonal from a valley
+    # station by the road to the top station on the summit, the chairs (half
+    # a unit across, skiers sat in most going up) riding up one side and down
+    # the other round the haul rope's loop (anim_path); skiers run down the
+    # slalom on the other diagonal to the finish banner on the flat, where
+    # they ski into the timing hut (their way back up is out of sight, under
+    # the snow, to the top hut); a groomer crawls up and down the piste. A
+    # queue at the valley station, skis racked, the resort's chalets round
+    # it on the flat by the road, pines on the flanks.
     H = set_ground('ski-lift')
-    V, T = (12.0, -22.0), (-36.0, -3.0)             # valley and top wheels
+    G = 1.35                                   # the old build's grow: where things stand on the mountain
+    V, T = (12.0 * G, -22.0 * G), (-36.0 * G, -3.0 * G)            # valley and top wheels
     dx, dz = T[0] - V[0], T[1] - V[1]
     L = math.hypot(dx, dz)
     yaw = math.atan2(dx, dz)
     nx, nz = dz / L, -dx / L                          # across the line
-    y0, y1 = 3.4, H(*T) + 3.4
-    fr = (0.22, 0.44, 0.64, 0.82)
-    line = [(0.0, y0)] + [(f, H(V[0] + dx * f, V[1] + dz * f) + 5.6) for f in fr] + [(1.0, y1)]
+    CAB = 3.0                                         # the cable over the snow at a tower
+    y0, y1 = 1.1, H(*T) + 1.1                         # and at the wheels, where the chairs are boarded
+    fr = [k / 8 for k in range(1, 8)]
+    line = [(0.0, y0)] + [(f, H(V[0] + dx * f, V[1] + dz * f) + CAB) for f in fr] + [(1.0, y1)]
     def cy(f):
         for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
             if fa <= f <= fb:
@@ -1309,77 +1402,115 @@ def ski_lift():
         return line[-1][1]
     for f in fr:
         x, z = V[0] + dx * f, V[1] + dz * f
-        pylon((x, 0, z), cy(f) + 0.3, yaw, ground=H(x, z))
-    for s in (-1.4, 1.4):
-        tube([(V[0] + dx * f + nx * s, y, V[1] + dz * f + nz * s) for f, y in line], 0.07, 0x2a2735,
-             res=2, bevel_res=0, wire=True)
+        pylon((x, 0, z), cy(f), yaw, ground=H(x, z))
+    # the rope in straight spans from sheave to sheave, a bar a span (a
+    # third of the vertices a swept tube fine enough to lie on them costs)
+    for s in (-GAUGE, GAUGE):
+        for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
+            strut((V[0] + dx * fa + nx * s, ya, V[1] + dz * fa + nz * s),
+                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), 0.07, 0x2a2735)
     # the haul rope's loop: up one side, round the top wheel, down the other;
     # the renderer carries the chairs round it (anim_path), facing their way
-    up = [(V[0] + dx * f + nx * 1.4, y, V[1] + dz * f + nz * 1.4) for f, y in line]
-    down = [(V[0] + dx * f - nx * 1.4, y, V[1] + dz * f - nz * 1.4) for f, y in reversed(line)]
+    up = [(V[0] + dx * f + nx * GAUGE, y, V[1] + dz * f + nz * GAUGE) for f, y in line]
+    down = [(V[0] + dx * f - nx * GAUGE, y, V[1] + dz * f - nz * GAUGE) for f, y in reversed(line)]
     for k, pt in enumerate(up + down):
         marker('path_lift_%d' % k, pt)
+    COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
     for k in range(8):
-        f = (k + 0.5) / 8
-        at = (V[0] + dx * f + nx * 1.4, cy(f), V[1] + dz * f + nz * 1.4)   # rest spot, any will do
-        with animated('anim_path:c=lift:p=48:o=%.3f:f=1#%d' % (k / 8, k), at):
-            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2])        # faces +X, the way it rides
-    # valley station on the flat by the road, its hut beside it, skis racked
+        f = (k + 1) / 9                                # clear of the wheels, where the rope curls
+        at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
+        riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
+        with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 8, k), at):
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders)   # faces +X, the way it rides
+    # valley station on the flat by the road, its hut behind it, skis racked,
+    # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw)
-    hx, hz = turned(V[0], V[1], yaw, 0.0, -4.4)
-    hut(3.6, 2.6, 3.2, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
-    for k in range(4):
-        px, pz = turned(V[0], V[1], yaw, 2.8, -1.6 + k * 0.4)
-        box((0.12, 1.9, 0.18), (px, 0.95, pz), [0xff5040, 0x339cf2, 0x22c46e, 0xa259e6][k], yaw=yaw, roll=0.15)
+    hx, hz = turned(V[0], V[1], yaw, 0.0, -2.0)
+    cabin_hut(1.6, 0.9, 1.2, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
+    for k in range(5):
+        px, pz = turned(V[0], V[1], yaw, 1.5, -0.6 + k * 0.16)
+        box((0.06, 0.44, 0.07), (px, 0.22, pz), COATS[k], yaw=yaw, roll=0.15)
+    for k in range(3):
+        px, pz = turned(V[0], V[1], yaw, -0.25 + 0.3 * k, 1.3 + 0.12 * (k % 2))
+        person(px, 0, pz, COATS[k + 1], COATS[k + 3], yaw=yaw - math.pi / 2)
+    # the resort's chalets round the valley station, on the flat toward the road
+    for (lx, lz, w, d, wall, ry) in ((4.5, -3.0, 2.2, 1.6, 0x9a5f3c, 0.3), (5.5, 1.2, 1.8, 1.4, 0xcf534f, -0.2),
+                                     (2.6, 4.2, 2.0, 1.5, 0x9a7b55, 0.5)):
+        cabin_hut(w, 0.95, d, (V[0] + lx, 0, V[1] + lz), wall, 0xeef4f9, yaw=ry)
+    for k in range(2):
+        person(V[0] + 3.2 + 0.5 * k, 0, V[1] - 0.6 + 0.9 * (k % 2), COATS[k], COATS[(k + 2) % 6], yaw=1.2 * k)
     # top station on the summit, its hut behind it
-    station(T[0], T[1], y1, H(*T) - 0.4, yaw)
-    tx, tz = turned(T[0], T[1], yaw, 0.0, 4.2)
-    hut(3.4, 2.4, 3.0, (tx, H(tx, tz) - 0.3, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
+    station(T[0], T[1], y1, H(*T) - 0.3, yaw)
+    tx, tz = turned(T[0], T[1], yaw, 0.0, 2.0)
+    cabin_hut(1.6, 0.9, 1.2, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
     # the slalom down the other diagonal to the finish on the flat
-    S0, F = (-6.0, 5.0), (12.0, 21.0)
+    S0, F = (-6.0 * G, 5.0 * G), (12.0 * G, 21.0 * G)
     px_, pz_ = F[0] - S0[0], F[1] - S0[1]
     pl = math.hypot(px_, pz_)
     pyaw = math.atan2(px_, pz_)
     qx, qz = pz_ / pl, -px_ / pl
-    for k in range(5):
-        f = 0.1 + k * 0.19
-        s2 = 1.4 if k % 2 else -1.4
+    gates = []
+    for k in range(6):
+        f = 0.08 + k * 0.155
+        s2 = 0.9 if k % 2 else -0.9
         x, z = S0[0] + px_ * f + qx * s2, S0[1] + pz_ * f + qz * s2
+        gates.append((x - qx * s2 * 0.3, z - qz * s2 * 0.3))     # the skier's line, inside each gate
         c = 0xff5040 if k % 2 == 0 else 0x339cf2
         g = H(x, z)
-        for e in (-0.7, 0.7):
+        for e in (-0.22, 0.22):
             ex, ez = turned(x, z, pyaw, e, 0)
-            box((0.2, 3.1, 0.2), (ex, g + 0.35, ez), c, yaw=pyaw)   # posts sunk past the jitter
-        box((1.4, 0.7, 0.14), (x, g + 1.4, z), c, yaw=pyaw)
-    for e in (-2.8, 2.8):
+            box((0.06, 0.8, 0.06), (ex, g + 0.12, ez), c, yaw=pyaw)    # sunk past the grid's chords
+        box((0.44, 0.24, 0.06), (x, g + 0.4, z), c, yaw=pyaw)
+    for e in (-1.6, 1.6):
         ex, ez = turned(F[0], F[1], pyaw, e, 0)
-        box((0.3, 3.4, 0.3), (ex, 1.5, ez), 0x555b66, yaw=pyaw)
-    box((6.0, 0.9, 0.16), (F[0], 3.0, F[1]), 0x339cf2, yaw=pyaw)
-    box((2.8, 0.5, 0.2), (F[0], 3.0, F[1]), 0xfff6eb, yaw=pyaw)
+        box((0.14, 1.5, 0.14), (ex, H(ex, ez) + 0.55, ez), 0x555b66, yaw=pyaw)
+    box((3.4, 0.4, 0.08), (F[0], H(*F) + 1.15, F[1]), 0x339cf2, yaw=pyaw)
+    box((1.4, 0.24, 0.1), (F[0], H(*F) + 1.15, F[1]), 0xfff6eb, yaw=pyaw)
+    fx, fz = turned(F[0], F[1], pyaw, 2.4, 1.2)                          # the timing hut
+    cabin_hut(1.1, 0.8, 1.0, (fx, H(fx, fz) - 0.05, fz), 0x9a7b55, 0xeef4f9, yaw=pyaw - math.pi / 2)
+    # the skiers' loop: out of the top hut, over the summit to the start, the
+    # gates down the slalom, through the finish and into the timing hut, then
+    # back up out of sight, under the snow, to the top hut
+    run = [(tx, tz), (-32.0 * G, 12.0 * G)] + gates + [F, (fx, fz)]
+    surf = []
+    for (ax, az), (bx, bz) in zip(run[:-1], run[1:]):
+        n = max(1, int(math.hypot(bx - ax, bz - az) / 2.5))
+        for i in range(n):
+            x, z = ax + (bx - ax) * i / n, az + (bz - az) * i / n
+            surf.append((x, H(x, z) + 0.02, z))
+    surf.append((fx, H(fx, fz) + 0.02, fz))
+    under = [(x, H(x, z) - 1.6, z) for (x, _, z) in reversed(surf[::3] + [surf[-1]])]
+    for k, pt in enumerate(surf + under):
+        marker('path_ski_%d' % k, pt)
+    for k in range(4):
+        x, y, z = surf[3 + k * 4]
+        with animated('anim_path:c=ski:p=70:o=%.3f#%d' % (k / 4, k), (x, y, z)):
+            skier(x, y, z, COATS[k], COATS[(k + 3) % 6])
     # the piste runs on up from the slalom to the top station (its blue wash
-    # is the terrain's, SET_GROUND's `paint`); a snowcat grooms it, crawling
-    # up one side and back down the other (anim_path, pitched to the slope)
-    run = [(-32.0, 12.0), S0, F]
+    # is the terrain's, SET_GROUND's `paint`); a groomer works it, crawling up
+    # one side and back down the other (anim_path, pitched to the slope)
+    groom = [(-32.0 * G, 12.0 * G), S0, F]
     def along(off, back):
         pts = []
-        for (ax, az), (bx, bz) in zip(run[:-1], run[1:]):
+        for (ax, az), (bx, bz) in zip(groom[:-1], groom[1:]):
             l = math.hypot(bx - ax, bz - az)
             nx_, nz_ = -(bz - az) / l, (bx - ax) / l
-            for i in range(5):
-                f = i / 5
+            for i in range(8):
+                f = i / 8
                 pts.append((ax + (bx - ax) * f + nx_ * off, az + (bz - az) * f + nz_ * off))
-        pts.append((run[-1][0] + nx_ * off, run[-1][1] + nz_ * off))
+        pts.append((groom[-1][0] + nx_ * off, groom[-1][1] + nz_ * off))
         return list(reversed(pts)) if back else pts
-    loop = along(-3.6, False) + along(3.6, True)
+    loop = along(-3.4, False) + along(3.4, True)
     for k, (x, z) in enumerate(loop):
-        marker('path_groom_%d' % k, (x, H(x, z) + 0.15, z))
+        marker('path_groom_%d' % k, (x, H(x, z) + 0.02, z))
     x, z = loop[3]
-    with animated('anim_path:c=groom:p=40:f=2#cat', (x, H(x, z) + 0.15, z)):
-        snowcat(x, H(x, z) + 0.15, z)
-    # pines on the flanks, clear of the lift line and the piste
-    for x, z, k in ((-50.0, -30.0, 2.6), (-50.0, 30.0, 2.8), (2.0, -32.0, 2.4), (4.0, 40.0, 2.6),
-                    (-12.0, 20.0, 2.5), (-30.0, 45.0, 2.4), (-25.0, -45.0, 2.4)):
-        pine((x, H(x, z) - 1.0, z), k * 1.1)   # sunk past the jitter
+    with animated('anim_path:c=groom:p=60:f=2#cat', (x, H(x, z) + 0.02, z)):
+        snowcat(x, H(x, z) + 0.02, z)
+    # pines on the flanks, clear of the lift line and the piste, the size of
+    # the ambient ones
+    for x, z, k in ((-50.0, -30.0, 1.9), (-12.0, 20.0, 1.8)):
+        x, z = x * G, z * G
+        pine((x, H(x, z) - 0.6, z), k)   # sunk past the grid's chords
 
 def skater(x, y, z, coat, hat, k=1.0):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
@@ -1392,308 +1523,353 @@ def skater(x, y, z, coat, hat, k=1.0):
     b((0.56, 0.32, 0.28), 0.05, 0.16, 0.15, BOOT)                      # the gliding skate
     b((0.26, 0.8, 0.26), 0.0, 0.7, 0.15, TROUSERS, roll=-0.12)          # the standing leg
     b((0.26, 0.74, 0.26), -0.42, 0.88, -0.15, TROUSERS, roll=0.9)       # the lifted leg, behind
-    b((0.5, 0.28, 0.26), -0.8, 0.6, -0.15, BOOT, roll=0.9)
     b((0.6, 0.85, 0.7), 0.05, 1.55, 0.0, coat, roll=-0.25)             # the coat, leaning in
-    b((0.22, 0.22, 2.3), 0.05, 1.72, 0.0, coat)                         # arms out
-    b((0.66, 0.2, 0.74), 0.12, 1.98, 0.0, hat)                          # the scarf
-    b((0.44, 0.44, 0.44), 0.2, 2.32, 0.0, SKIN)                         # the head
-    b((0.5, 0.3, 0.5), 0.18, 2.64, 0.0, hat)                            # the hat
+    b((0.3, 0.3, 2.3), 0.05, 1.72, 0.0, coat)                           # arms out
+    b((0.5, 0.5, 0.5), 0.2, 2.32, 0.0, SKIN)                            # the head
+    b((0.56, 0.3, 0.56), 0.18, 2.64, 0.0, hat)                          # the hat
+
+def shanty(x, z, color, yaw=0.0, pipe=False):
+    """An ice-fishing shanty at its real size: a box hut on skids, a snowed
+    roof, a dark door to +X turned by `yaw`, maybe a stovepipe."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy, dz):
+        return (x + dx * c + dz * s, dy, z - dx * s + dz * c)
+    box((0.66, 0.06, 0.5), at(0, 0.03, 0), 0x6e4a32, yaw=yaw)
+    box((0.6, 0.48, 0.46), at(0, 0.3, 0), color, yaw=yaw)
+    snowy(box((0.7, 0.08, 0.56), at(0, 0.58, 0), 0xfff6eb, yaw=yaw, roll=0.12), 0.5)
+    box((0.06, 0.32, 0.2), at(0.31, 0.24, 0), 0x38383d, yaw=yaw)
+    if pipe:
+        box((0.07, 0.24, 0.07), at(-0.18, 0.72, 0.12), 0x555b66, yaw=yaw)
 
 @piece(1.0)
 def frozen_lake():
     # Flurry: a frozen lake at the bottom of the land, the snowbanks round it
     # and the plain it lies on are the track's terrain (SET_GROUND), and the
     # road crosses its east edge on its stilts (+X, toward the road). Built in
-    # world units. Skaters glide round a rink on the west ice (anim_path); a
-    # red ice-fishing shanty with its fisher jigging a rod by his hole; a
+    # world units, everything on the ice at its real size beside a car: six
+    # skaters (half a unit tall) glide round a rink on the west ice
+    # (anim_path); out on the north-west ice a little village of fishing
+    # shanties in bright colours, a fisher sat by his hole jigging his rod; a
     # snowman on the ice by the bank.
     R = 15.0
     disc(R, (0, 0, 0), 0xa9d7ee, segs=40, h=0.06)
     disc(R - 3.0, (0, 0.01, 0), 0x8ecae6, segs=32, h=0.06)          # the clear ice in the middle
-    # the rink: an oval round the west ice, the skaters spread round it
+    # the rink: an oval on the west ice, the skaters spread round it
     N = 14
+    rc, rx, rz = (-2.0, 4.0), 4.5, 5.5
     for j in range(N):
         a = j / N * 2 * math.pi
-        marker('path_rink_%d' % j, (-1.0 + math.cos(a) * 7.0, 0.07, 2.0 + math.sin(a) * 8.0))
-    for n, (coat, hat) in enumerate(((0xcf534f, 0x3f7bd9), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f))):
-        a = n / 3 * 2 * math.pi
-        at = (-1.0 + math.cos(a) * 7.0, 0.07, 2.0 + math.sin(a) * 8.0)
-        with animated('anim_path:c=rink:p=16:o=%.3f:f=1#%d' % (n / 3, n), at):
-            skater(at[0], at[1], at[2], coat, hat, k=0.95)
-    # the shanty: a red hut on skids by its fishing hole, a stovepipe
-    sx, sz = -9.5, -9.5
-    box((2.6, 0.12, 2.0), (sx, 0.12, sz), 0x6e4a32)
-    box((2.4, 1.9, 1.8), (sx, 1.13, sz), 0xcf534f)
-    box((2.8, 0.22, 2.2), (sx, 2.18, sz), 0xfff6eb, roll=0.12)
-    box((0.1, 1.3, 0.8), (sx + 1.22, 0.9, sz), 0x38383d)
-    box((0.3, 0.9, 0.3), (sx - 0.7, 2.6, sz - 0.4), 0x555b66)    # cold: the cabin's is the smoke
-    box((1.1, 0.04, 1.1), (sx + 2.6, 0.08, sz + 1.0), 0x2f3a4a)        # the hole
-    cyl(0.32, 0.55, (sx + 2.0, 0.07, sz + 2.1), 0x555b66, segs=8)       # his bucket
-    box((0.5, 0.7, 0.55), (sx + 2.0, 0.98, sz + 2.1), 0x6e4a32)         # the fisher, sat on it
-    box((0.42, 0.42, 0.42), (sx + 2.05, 1.55, sz + 2.1), 0xf2bf99)
-    box((0.5, 0.2, 0.5), (sx + 2.05, 1.84, sz + 2.1), 0xffc044)
-    with animated('anim_sway:a=x:d=22:p=1.6#rod', (sx + 2.2, 1.1, sz + 2.0)):
-        box((0.12, 0.12, 1.9), (sx + 2.45, 1.45, sz + 1.2), 0x2a2735, pitch=0.45)
-    # on the ice by the west bank, a snowman in a hat
-    snowman((-11.0, 0.07, 6.0), 0.9, hat=True)
+        marker('path_rink_%d' % j, (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz))
+    for n, (coat, hat) in enumerate(((0xcf534f, 0x3f7bd9), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f),
+                                     (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9), (0xfff6eb, 0xcf534f))):
+        a = n / 6 * 2 * math.pi
+        at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
+        with animated('anim_path:c=rink:p=16:o=%.3f:f=1#%d' % (n / 6, n), at):
+            skater(at[0], at[1], at[2], coat, hat, k=0.19)
+    # the shanty village on the north-west ice, a fishing hole by each door;
+    # all of it inside nine units of the middle, where the drawn ice is flat
+    # (past that the ground's 9 u grid rises toward the banks over the ice)
+    for (x, z, c, yw, pipe) in ((-5.25, -4.5, 0xcf534f, 0.2, True), (-6.45, -3.15, 0x3f7bd9, -0.3, False),
+                                (-4.2, -6.0, 0x61cb8b, 0.5, False), (-6.9, -5.55, 0xffc044, 0.1, True),
+                                (-4.8, -2.55, 0xa878e8, -0.6, False), (-3.15, -4.2, 0xff7e44, 0.3, False),
+                                (-5.7, -7.2, 0x3f7bd9, 0.4, False)):
+        shanty(x, z, c, yw, pipe)
+        hx, hz = turned(x, z, yw, 0.62, 0.15)
+        box((0.24, 0.02, 0.24), (hx, 0.075, hz), 0x2f3a4a, yaw=yw)        # its hole
+    sx, sz = -2.2, -6.6                                                  # the fisher out in the open
+    box((0.3, 0.02, 0.3), (sx + 0.42, 0.075, sz), 0x2f3a4a)
+    cyl(0.09, 0.16, (sx, 0.07, sz), 0x555b66, segs=8)                    # his bucket
+    seated(sx, 0.23, sz, 0x6e4a32, 0xffc044)
+    with animated('anim_sway:a=z:d=22:p=1.6#rod', (sx + 0.1, 0.36, sz)):
+        box((0.48, 0.03, 0.03), (sx + 0.32, 0.42, sz), 0x2a2735, roll=0.4)
+    # on the ice by the rink, a snowman in a hat
+    snowman((-7.6, 0.07, 5.0), 0.15, hat=True)
 
-@piece(1.45)
+@piece(1.0)
 def snow_fort():
-    # Glacier: a big snow fort built the way the igloo is, of cut snow blocks
-    # laid in courses (the chamfers and the shading tell them apart): a square
-    # of walls with battlements, the gateway open to the road (+X), a round
-    # lookout tower of blocks at the back corner flying a flag, snowballs
-    # piled ready inside and out, a snowman keeping watch by the gate. The
-    # blocks are rounded, packed snow rather than cut ice. No pines of its
-    # own: its footprint is what levels the moraine it stands on.
+    # Glacier: a big snow fort built of cut snow blocks laid in courses (the
+    # rounding and the shading tell them apart), at a real fort's size beside
+    # a car: four units square, walls a unit tall with battlements, the gateway
+    # open to the road (+X), a round lookout tower of blocks at the back corner
+    # flying a flag, snowballs piled ready, a snowman keeping watch by the
+    # gate. The moraine it stands on is the track's terrain.
     SNOW = 0xf3f7fb
-    H = 5.0                                                        # half a side
-    def cut(size, at, yaw=0.0):
-        snowy(box(size, at, SNOW, yaw=yaw), 0.4)['round'] = 0.22
-    def brick(x, y, z, across):
-        cut((1.9, 1.0, 1.0) if across else (1.0, 1.0, 1.9), (x, y, z))
+    H = 2.0                                                        # half a side
+    BL, BH, BD = 1.0, 0.45, 0.5                                     # a block: long, high, deep
+    def cut(size, at, yaw=0.0, round=True):
+        o = snowy(box(size, at, SNOW, yaw=yaw), 0.4)
+        if round:                                                  # what the eye reads: the top
+            o['round'] = 0.1
     for c in range(2):                                             # two courses, the joints staggered
-        y = 0.5 + c
-        for k in range(5):
-            t = -H + 1.0 + k * 2.0 + (1.0 if c % 2 else 0.0)
-            if t > H - 0.9:
+        y = BH / 2 + c * BH
+        for k in range(4):
+            t = -H + BL / 2 + k * BL + (BL / 2 if c % 2 else 0.0)
+            if t > H - 0.3:
                 continue
-            if abs(t) > 1.6:
-                brick(H, y, t, False)                              # the front wall, the gate left open
-            brick(-H, y, t, False)                                 # the back wall
+            if abs(t) > 0.6:
+                cut((BD, BH, BL), (H, y, t), round=c > 0)          # the front wall, the gate left open
+            cut((BD, BH, BL), (-H, y, t), round=c > 0)             # the back wall
             for sz in (-1, 1):
-                brick(t, y, sz * H, True)                          # the side walls
+                cut((BL, BH, BD), (t, y, sz * H), round=c > 0)     # the side walls
     for sx in (-1, 1):                                             # the corners
         for sz in (-1, 1):
-            for c in range(2):
-                cut((1.0, 1.0, 1.0), (sx * H, 0.5 + c, sz * H))
-    for k in range(5):                                             # battlements on every other block
-        t = -H + 1.0 + k * 2.0
-        if abs(t) > 1.6:
-            cut((1.0, 0.8, 1.0), (H, 2.4, t))
-        cut((1.0, 0.8, 1.0), (-H, 2.4, t))
+            cut((BD, 2 * BH, BD), (sx * H, BH, sz * H))
+    for t in (-1.0, 1.0):                                          # battlements
+        cut((BD, 0.3, 0.5), (-H, 2 * BH + 0.15, t))
         for sz in (-1, 1):
-            cut((1.0, 0.8, 1.0), (t, 2.4, sz * H))
-    tx, tz, R = -H, -H, 1.8                                        # the lookout tower
-    for c in range(5):
-        n = 7
+            cut((0.5, 0.3, BD), (t, 2 * BH + 0.15, sz * H))
+    for sz in (-1, 1):
+        cut((BD, 0.3, 0.5), (H, 2 * BH + 0.15, sz * 1.3))
+    tx, tz, R = -H, -H, 0.75                                       # the lookout tower
+    for c in range(4):
+        n = 5
         for k in range(n):
             a = (k + 0.5 * (c % 2)) / n * 2 * math.pi
-            cut((0.9, 1.0, 1.55), (tx + math.cos(a) * R, 0.5 + c, tz + math.sin(a) * R), yaw=-a)
-    snowy(cyl(R + 0.5, 0.3, (tx, 5.0, tz), SNOW, segs=12), 0.4)
-    flagpole((tx, 5.3, tz), 3.2, 0xff5040)
-    def pile(x, z):                                                # snowballs: four and one on top
-        for dx, dz in ((-0.45, -0.45), (0.45, -0.45), (-0.45, 0.45), (0.45, 0.45)):
-            snowy(sphere(0.45, (x + dx, 0.42, z + dz), SNOW, subdiv=1), 0.4)
-        snowy(sphere(0.45, (x, 0.95, z), SNOW, subdiv=1), 0.4)
-    pile(H - 2.0, 2.6)
-    pile(H + 2.2, -3.2)
-    snowman((H + 2.6, 0, 3.0), 0.9, hat=True)
+            cut((0.4, BH, 0.9), (tx + math.cos(a) * R, BH / 2 + c * BH, tz + math.sin(a) * R), yaw=-a,
+                round=c == 3)
+    snowy(cyl(R + 0.25, 0.14, (tx, 4 * BH, tz), SNOW, segs=12), 0.4)
+    box((0.08, 1.0, 0.08), (tx, 4 * BH + 0.5, tz), 0xfff6eb)
+    box((0.4, 0.26, 0.06), (tx + 0.24, 4 * BH + 0.86, tz), 0xff5040)
+    for (x, z) in ((H - 0.9, 0.9), (H + 0.9, -1.4)):              # snowballs: four and one on top
+        for dx, dz in ((-0.1, -0.1), (0.1, -0.1), (-0.1, 0.1), (0.1, 0.1)):
+            snowy(box((0.17, 0.17, 0.17), (x + dx, 0.085, z + dz), SNOW), 0.4)
+        snowy(box((0.17, 0.17, 0.17), (x, 0.24, z), SNOW, yaw=0.6), 0.4)
+    snowman((H + 1.0, 0, 1.2), 0.15, hat=True)
+    person(H + 0.6, 0, 0.0, 0xcf534f, 0x3f7bd9, yaw=0.3)
+    person(H - 0.7, 0, -0.6, 0x3f7bd9, 0xffc044, yaw=2.6)
+    join_still('fort')
 
-@piece(1.45)
+@piece(1.0)
 def avalanche_slide():
     # Avalanche: a broad mountain behind the verge (summit at -X) whose face
     # let go: the broken crown near the top, the bare rock of the chute below
     # it, and the debris fan of tumbled snow blocks and rocks spread out at
     # its foot toward the road, a pine snapped and its trunk thrown down, a
-    # buried sled. Forest stands either side of the chute. The mountain is
-    # the track's terrain (SET_GROUND); this is what lies on it.
+    # buried sled. Forest stands either side of the chute. The mountain and
+    # the fan are the track's terrain (SET_GROUND); this is what lies on them,
+    # at its real size: blocks of snow the size of a car or less, pines as
+    # tall as the ambient ones.
     H = set_ground('avalanche-slide')
-    # the crown: the broken edge of the slab, a step of rock across the face
-    for z in (-2.6, 0.0, 2.6):
-        x = -28.0 + 0.4 * abs(z)
-        box((0.9, 1.0, 2.8), (x, H(x, z) + 0.2, z), 0x868ba1, yaw=0.15 * z)
-    # the chute: the scar the slab left, scoured to grey rock, lying on the
-    # face and widening as it runs down into the fan, whose blocks cover its end
-    xs = [-27.0 + 3.3 * i for i in range(8)]
-    verts = []
-    for i, x in enumerate(xs):
-        w = 1.8 + 0.45 * i
-        for z in (-w, 0.0, w):
-            # lifted clear of the terrain's 9 u chords, which cut a little
-            # above the curve where the face is hollow and the fan meets it
-            verts.append((x, H(x, z + 0.3 * math.sin(i)) + (0.34 if z == 0.0 else 0.3), z + 0.3 * math.sin(i)))
-    faces = [(3 * i + j, 3 * i + j + 1, 3 * (i + 1) + j + 1, 3 * (i + 1) + j) for i in range(len(xs) - 1) for j in (0, 1)]
-    poly(verts, faces, 0x9aa1b4)
-    for i, x in enumerate((-20.0, -12.0, -4.0)):
-        rock((x, H(x, 0.4) - 0.2, 0.4 * (i % 2 * 2 - 1)), 0.8, yaw=i * 1.9)
-    # the debris fan (SET_GROUND's `fan`, the snow that came down lying on the
-    # mountain's foot over the chute's end): tumbled snow blocks over it, the
-    # runout thinning out on toward the road (+X). The fan itself stops a grid
-    # cell short of the road, where the deck's cap would hold the land under it
-    # and leave what was built on it floating.
-    for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
-                                   (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
-                                   (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
-                                   (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8)]):
-        k *= 1.3
-        snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, H(x, z) + 0.3 * k, z), 0xf3f7fb,
-                  yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
-    for i, (x, z, k) in enumerate([(3.0, 0.8, 1.2), (5.0, -1.2, 1.0), (1.0, 2.2, 1.1), (6.2, 2.0, 0.8),
-                                   (-4.5, -1.0, 1.1)]):
-        rock((x, H(x, z) - 0.15, z), k, yaw=i * 1.4)
-    # the snapped pine: its stump on the slope, the trunk thrown down the fan
-    cyl(0.32, 1.4, (-1.0, H(-1.0, -3.2) - 0.3, -3.2), 0x7a5a3a, r2=0.26, segs=6)
-    cyl(0.28, 4.2, (5.6, H(5.6, -5.0) + 0.1, -5.0), 0x7a5a3a, r2=0.16, segs=6, axis='across', yaw=0.5)
-    pine((6.5, H(6.5, -6.4) - 0.2, -6.4), 1.9)
-    kit('holiday', 'sled', (5.0, H(5.0, 3.6) + 0.25, 3.6), yaw=0.8, scale=1.4, roll=0.6)
+    G = 1.45                                   # the old build's grow: where things lie on the slope
+    # What lies on the face and the fan is draped: built from y = 0 as if on
+    # the plain, each vertex laid on the slope as the renderer draws it (its
+    # 9 u grid's chords stray a unit off the curve), so no block floats and
+    # none is swallowed.
+    def debris():
+        for z in (-2.6, 0.0, 2.6):                 # the crown: the broken edge of the slab
+            x = (-28.0 + 0.4 * abs(z)) * G
+            box((1.3, 1.4, 4.0), (x, 0.3, z * G), 0x868ba1, yaw=0.15 * z)
+        # the chute: the scar the slab left, scoured to grey rock, lying on the
+        # face and widening as it runs down into the fan, whose blocks cover
+        # its end; fine enough to follow the drawn slope, and lifted a little
+        # over it so the grid's folds between its corners stay under
+        xs = [(-27.0 + 1.65 * i) * G for i in range(15)]
+        verts = []
+        for i, x in enumerate(xs):
+            w = (1.8 + 0.225 * i) * G
+            for f in (-1.0, -0.5, 0.0, 0.5, 1.0):
+                verts.append((x, 0.35 - 0.1 * abs(f), f * w + 0.3 * G * math.sin(i / 2)))
+        faces = [(5 * i + j, 5 * i + j + 1, 5 * (i + 1) + j + 1, 5 * (i + 1) + j)
+                 for i in range(len(xs) - 1) for j in range(4)]
+        poly(verts, faces, 0x9aa1b4)
+        for i, x in enumerate((-20.0, -12.0, -4.0)):
+            x *= G
+            z = 0.4 * G * (i % 2 * 2 - 1)
+            rock((x, -0.3, z), 0.9, yaw=i * 1.9)
+        # the debris fan: tumbled snow blocks over it, the runout thinning on
+        # toward the road (+X). The fan stops a grid cell short of the road,
+        # where the deck's cap would hold the land under it.
+        for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
+                                       (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
+                                       (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
+                                       (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8), (-4.5, 3.8, 1.0),
+                                       (0.0, -6.0, 0.9), (-2.0, 6.5, 0.8), (3.0, 7.0, 0.7), (8.5, -4.0, 0.7)]):
+            x, z, k = x * G, z * G, k * 0.5
+            snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, 0.15 * k, z), 0xf3f7fb,
+                      yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
+        for i, (x, z, k) in enumerate([(3.0, 0.8, 1.0), (5.0, -1.2, 0.8), (1.0, 2.2, 0.9), (6.2, 2.0, 0.7),
+                                       (-4.5, -1.0, 0.9)]):
+            rock((x * G, -0.2, z * G), k, yaw=i * 1.4)
+        # the snapped pine: its stump on the slope, the trunk thrown down the fan
+        cyl(0.18, 0.8, (-1.0 * G, -0.3, -3.2 * G), 0x7a5a3a, r2=0.15, segs=6)
+        cyl(0.16, 3.2, (5.6 * G, 0.05, -5.0 * G), 0x7a5a3a, r2=0.09, segs=6, axis='across', yaw=0.5)
+        sled(5.0 * G, -0.05, 3.6 * G, 0.8, 0xcf534f, L=0.5)
+    draped('debris', debris)
+    x, z = 6.5 * G, -6.4 * G
+    pine((x, H(x, z) - 0.3, z), 1.7)
     # forest either side of the chute
-    for x, z, k in ((-12.0, -12.0, 2.6), (-6.0, -16.0, 2.4), (-22.0, -14.0, 2.4), (-12.0, 12.0, 2.6),
-                    (-5.0, 15.0, 2.4), (-22.0, 14.0, 2.2), (-34.0, -28.0, 2.6), (-32.0, 30.0, 2.6),
-                    (-10.0, -36.0, 2.4), (-10.0, 36.0, 2.4)):
-        pine((x, H(x, z) - 0.3, z), k)
+    for x, z, k in ((-12.0, -12.0, 1.9), (-6.0, -16.0, 1.8), (-22.0, -14.0, 1.8), (-12.0, 12.0, 1.9),
+                    (-5.0, 15.0, 1.8), (-22.0, 14.0, 1.7), (-34.0, -28.0, 1.9), (-32.0, 30.0, 1.9)):
+        x, z = x * G, z * G
+        pine((x, H(x, z) - 0.6, z), k)
 
-@piece(1.5)
+def igloo_dome(cx, cz, R, yaw, blocks=True):
+    """An igloo of snow blocks at (cx, cz), `R` its radius (a real one is
+    under a unit and a half across): rings of cut blocks stepping in as they
+    rise and closing over the top, or (`blocks` off) the packed dome alone;
+    a tunnel of blocks out toward +X turned by `yaw`, its doorway dark."""
+    snowy(sphere(R * 0.92, (cx, 0, cz), 0xf3f7fb, subdiv=1), 0.4)     # the packed snow behind the joints
+    if blocks:
+        rows = 2
+        span = math.pi / 2 * 0.7 / rows
+        for row in range(rows):
+            phi = (row + 0.5) * span
+            rr = R * math.cos(phi)
+            n = max(5, round(2 * math.pi * rr / 0.5))
+            for k in range(n):
+                a = (k + 0.5 * (row % 2)) / n * 2 * math.pi
+                snowy(box((0.14, R * span * 0.94, 2 * math.pi * rr / n * 0.94),
+                          (cx + math.cos(a) * rr, R * math.sin(phi), cz + math.sin(a) * rr), 0xf3f7fb,
+                          yaw=-a, roll=-phi * 0.85), 0.4)
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy, dz):
+        return (cx + dx * c + dz * s, dy, cz - dx * s + dz * c)
+    T = R * 0.45                                                      # the tunnel's half-width
+    snowy(box((0.7 * R, 0.62 * R, 2.6 * T), at(R * 1.05, 0.31 * R, 0), 0xf3f7fb, yaw=yaw), 0.4)
+    box((0.06, 0.45 * R, 1.1 * T), at(R * 1.42, 0.22 * R, 0), 0x2f3a4a, yaw=yaw)
+
+@piece(1.0)
 def igloo():
-    # Glacier's support: an igloo of snow blocks, laid in rings that step in
-    # as they rise and close over the top, each block cut square so its
-    # chamfered edges and the shading tell the blocks apart; a tunnel of
-    # blocks to the road (+X), its doorway dark, a snowman at the door and a
-    # lantern.
-    R = 2.8
-    snowy(sphere(R * 0.9, (0, 0, 0), 0xf3f7fb, subdiv=1), 0.4)       # the packed snow behind the joints
-    rows = 5
-    span = math.pi / 2 * 0.9 / rows
-    for row in range(rows):
-        phi = (row + 0.5) * span
-        rr = R * math.cos(phi)
-        n = max(5, round(2 * math.pi * rr / 1.3))
-        for k in range(n):
-            a = (k + 0.5 * (row % 2)) / n * 2 * math.pi
-            snowy(box((0.5, R * span * 0.94, 2 * math.pi * rr / n * 0.94),
-                      (math.cos(a) * rr, R * math.sin(phi), math.sin(a) * rr), 0xf3f7fb,
-                      yaw=-a, roll=-phi * 0.85), 0.4)
-    snowy(box((1.3, 0.4, 1.3), (0, R * 0.98, 0), 0xf3f7fb, yaw=0.3), 0.4)   # the key block
-    # the tunnel toward the road: two courses of blocks over a dark doorway
+    # Glacier: an igloo camp out on the ice at its real size beside a car:
+    # a big igloo of cut blocks (a unit and a half across) and two smaller
+    # domes, their tunnels toward the road (+X), a dog sled with its team
+    # resting in the snow, a rack of fish drying, the
+    # hunter by his door and a snowman.
+    igloo_dome(0.0, 0.0, 0.75, 0.0)
+    igloo_dome(-1.2, 1.7, 0.5, -0.5, blocks=False)
+    igloo_dome(-1.6, -1.4, 0.45, 0.4, blocks=False)
+    sled(1.6, 0, 1.2, 0.2, 0x9a7b55, L=0.7)
+    for k in range(3):                                                 # the team, lying down
+        x, z = 1.75 + (k // 2) * 0.32, 0.55 + (k % 2) * 0.28 - 0.2 * (k // 2)
+        box((0.24, 0.1, 0.11), (x, 0.06, z), (0x868ba1, 0x38383d, 0xfff6eb, 0x868ba1)[k], yaw=0.2)
+        box((0.09, 0.09, 0.09), (x + 0.14, 0.12, z), (0x868ba1, 0x38383d, 0xfff6eb, 0x868ba1)[k], yaw=0.2)
+    for z in (-1.6, -0.9):                                             # the drying rack
+        box((0.06, 0.5, 0.06), (0.7, 0.25, z), 0x7a5a3a)
+    box((0.05, 0.05, 0.85), (0.7, 0.48, -1.25), 0x7a5a3a)
     for k in range(3):
-        x = R - 0.2 + k * 0.85
-        for sz in (-1, 1):
-            snowy(box((0.8, 1.2, 0.5), (x, 0.6, sz * 0.75), 0xf3f7fb), 0.4)
-        snowy(box((0.8, 0.45, 2.0), (x, 1.42, 0), 0xf3f7fb), 0.4)
-    box((0.1, 1.1, 1.0), (R + 1.95, 0.55, 0), 0x2f3a4a)
-    snowman((R + 3.2, 0, 1.9), 0.8)
-    kit('holiday', 'lantern', (R + 2.8, 0, -1.9), yaw=0, scale=1.5)
-    snow_heap((-3.2, 0, 2.4), 1.4, yaw=1.0)
+        box((0.04, 0.16, 0.08), (0.72, 0.38, -1.48 + k * 0.22), 0x8ecae6)
+    person(1.3, 0, -0.2, 0x9a7b55, 0x38383d, yaw=0.2)
+    snowman((-0.4, 0, 1.3), 0.14)
+    snow_heap((-2.4, 0, 0.3), 0.6, yaw=1.0)
+    join_still('camp')
 
-@piece(1.5)
+@piece(1.0)
 def windsock():
-    # Avalanche's support: a windsock streaming on a tall mast, a slatted
-    # white weather screen on legs and a rescue sled by its foot. The sock
-    # swings round the mast as the wind veers off the mountain.
-    cyl(0.1, 7.0, (0, 0, 0), 0x555b66, r2=0.06, segs=6, smooth=False)
-    with animated('anim_sway:a=y:d=40:p=5.5#sock', (0, 6.9, 0)):
-        torus(0.35, 0.04, (0, 6.9, 0), 0x2a2735, axis='across')
-        for k in range(5):
-            c = 0xff5040 if k % 2 == 0 else 0xfff6eb
-            cyl(0.36 - k * 0.04, 0.6, (0.3 + k * 0.6, 6.85 - k * 0.08, 0), c, r2=0.32 - k * 0.04, segs=10, axis='across', smooth=False)
-    # the weather screen: a louvred box on four legs under a little roof
-    for sx in (-0.35, 0.35):
-        for sz in (-0.35, 0.35):
-            box((0.12, 1.1, 0.12), (1.6 + sx, 0.55, 1.6 + sz), 0x555b66)
-    box((1.0, 0.8, 1.0), (1.6, 1.5, 1.6), 0xfff6eb)
-    for y in (1.3, 1.55, 1.8):
-        box((0.06, 0.08, 0.8), (2.12, y, 1.6), 0x868ba1)
-    box((1.3, 0.14, 1.3), (1.6, 2.0, 1.6), 0x555b66)
-    kit('holiday', 'sled', (-1.6, 0, -1.2), yaw=0.4, scale=1.4)
-    snow_heap((0.5, 0, -2.6), 1.1, yaw=0.2)
-
-@piece(1.5)
-def log_pile():
-    # Flurry's support: firewood stacked with its cut ends to the road under
-    # a lean-to, an axe in the chopping block beside it.
-    for row in range(3):
-        for k in range(4 - row):
-            z = -0.9 + k * 0.6 + row * 0.3
-            y = 0.3 + row * 0.52
-            cyl(0.3, 2.2, (-1.1, y, z), 0x8a6a46, segs=6, axis='across')
-            cyl(0.22, 0.06, (1.1, y, z), 0xd9b48a, segs=6, axis='across')
-    # the lean-to: tall at the front, a snowed board roof down to the back
-    for s in (-1, 1):
-        box((0.2, 2.4, 0.2), (1.4, 1.2, s * 1.5), 0x8a6a46)
-        box((0.2, 1.8, 0.2), (-1.4, 0.9, s * 1.5), 0x8a6a46)
-    box((3.4, 0.16, 3.5), (0, 2.18, 0), 0x8a6a46, roll=-0.2)
-    snowy(box((3.3, 0.12, 3.4), (-0.03, 2.32, 0), 0xeef4f9, roll=-0.2))
-    cyl(0.5, 0.6, (2.4, 0, 1.6), 0x8a6a46, segs=8)
-    box((0.12, 0.9, 0.12), (2.4, 0.7, 1.6), 0x9a7b55, pitch=0.4)
-    box((0.3, 0.3, 0.08), (2.4, 1.06, 1.82), 0x555b66)
-
-# ---- snow companions: small pieces that carry a track's story round its lap ----
-
-@piece(1.4)
-def ski_rack():
-    # Powder: pairs of skis and poles racked by the piste, a trail sign, a
-    # heap of snow.
-    for z in (-1.3, 1.3):
-        box((0.2, 1.6, 0.2), (0, 0.8, z), 0x9a7b55)
-    box((0.2, 0.2, 3.0), (0, 1.45, 0), 0x9a7b55)
-    for k, c in enumerate((0xff5040, 0x339cf2, 0x22c46e)):
-        for e in (-0.11, 0.11):
-            z = -0.9 + k * 0.7 + e
-            box((0.1, 1.8, 0.18), (0.25, 0.9, z), c, roll=-0.18)
-            box((0.1, 0.3, 0.18), (0.16, 1.92, z), c, roll=0.5)
-    for k in range(2):
-        for e in (-0.1, 0.1):
-            z = 1.0 + e
-            box((0.14, 1.4, 0.14), (0.3 + k * 0.25, 0.7, z - 0.25 + k * 0.5), 0x2a2735, roll=-0.25)
-            box((0.32, 0.06, 0.32), (0.41 + k * 0.25, 0.25, z - 0.25 + k * 0.5), 0x2a2735)
-    box((0.2, 2.4, 0.2), (0.6, 1.2, 2.4), 0x555b66)
-    box((0.12, 0.9, 1.3), (0.7, 2.1, 2.4), 0x339cf2)
-    box((0.14, 0.3, 0.8), (0.76, 2.1, 2.4), 0xfff6eb)
-    snow_heap((-0.8, 0, -1.8), 1.3, yaw=0.6)
-
-@piece(1.4)
-def piste_fence():
-    # Powder: an orange safety net strung along a bend, marker poles at the ends.
-    L = 8.0
-    for k in range(5):
-        box((0.2, 1.4, 0.2), (0, 0.7, -L / 2 + k * L / 4), 0x2a2735)
-    box((0.08, 0.9, L), (0.1, 0.75, 0), 0xff7e44)
-    for z in (-L / 2 - 0.6, L / 2 + 0.6):
+    # Avalanche's patrol post, at its real size beside a car: the avalanche
+    # patrol's red hut, a windsock streaming on its mast (one and a half
+    # units) and swinging round it as the wind veers off the mountain, a
+    # slatted weather screen on legs, a snow stake banded to read the depth,
+    # a rescue sled, two of the patrol with their probes by the door.
+    cabin_hut(1.5, 0.85, 1.2, (-0.4, 0, -0.6), 0xcf534f, 0xeef4f9)
+    box((0.08, 1.6, 0.08), (1.0, 0.8, 0.9), 0x555b66)
+    with animated('anim_sway:a=y:d=40:p=5.5#sock', (1.0, 1.55, 0.9)):
+        box((0.06, 0.06, 0.06), (1.03, 1.55, 0.9), 0x2a2735)
         for k in range(4):
-            box((0.22, 0.5, 0.22), (0, 0.25 + k * 0.5, z), 0xff5040 if k % 2 == 0 else 0xfff6eb)
+            c = 0xff5040 if k % 2 == 0 else 0xfff6eb
+            cyl(0.1 - k * 0.012, 0.15, (1.06 + k * 0.15, 1.55 - k * 0.02, 0.9), c,
+                r2=0.09 - k * 0.012, segs=8, axis='across', smooth=False)
+    for sx in (-0.1, 0.1):                                         # the weather screen
+        for sz in (-0.1, 0.1):
+            box((0.05, 0.42, 0.05), (1.0 + sx, 0.21, -0.4 + sz), 0x555b66)
+    box((0.28, 0.22, 0.28), (1.0, 0.53, -0.4), 0xfff6eb)
+    box((0.34, 0.06, 0.34), (1.0, 0.67, -0.4), 0x555b66)
+    for k in range(5):                                             # the snow stake
+        box((0.08, 0.2, 0.08), (0.3, 0.1 + k * 0.2, 1.4), 0xff5040 if k % 2 == 0 else 0xfff6eb)
+    sled(0.2, 0, 0.6, 0.4, 0xff7e44, L=0.6)
+    person(0.6, 0, -0.1, 0xff7e44, 0x38383d, yaw=0.4)
+    person(0.75, 0, 0.3, 0xff7e44, 0xcf534f, yaw=-0.3)
+    for (x, z) in ((0.72, -0.18), (0.88, 0.22)):                   # their probes
+        box((0.04 + 0.02, 0.6, 0.04 + 0.02), (x, 0.3, z), 0x868ba1)
+    snow_heap((-1.6, 0, 0.6), 0.6, yaw=0.2)
 
-@piece(1.4)
-def log_cabin():
-    # Flurry: a log cabin, each wall its own logs whose ends cross out past
-    # the corners (the side walls' laid half a log higher), a snowed gable
-    # roof, a stone chimney, a lit window by the door and one in each side.
-    W, D, H = 4.2, 3.4, 2.4                       # across (door on +X), along, wall height
-    box((W + 0.3, 0.25, D + 0.3), (0, 0.12, 0), 0x868ba1)
-    box((W - 0.2, H, D - 0.2), (0, H / 2 + 0.1, 0), 0x6e4a32)          # the chinking between the logs
-    p = (H - 0.15) / 5
-    for k in range(5):
+def woodpile(x, z, k=0.3):
+    """Firewood stacked under a lean-to, cut ends to +X, an axe in the block
+    beside it; `k` sizes it (0.3: a real woodpile)."""
+    for row in range(3):
+        for j in range(4 - row):
+            zz = z + (-0.9 + j * 0.6 + row * 0.3) * k
+            y = (0.3 + row * 0.52) * k
+            cyl(0.3 * k, 2.2 * k, (x - 1.1 * k, y, zz), 0x8a6a46, segs=6, axis='across')
+    for s in (-1, 1):
+        box((0.2 * k, 2.4 * k, 0.2 * k), (x + 1.4 * k, 1.2 * k, z + s * 1.5 * k), 0x8a6a46)
+        box((0.2 * k, 1.8 * k, 0.2 * k), (x - 1.4 * k, 0.9 * k, z + s * 1.5 * k), 0x8a6a46)
+    snowy(box((3.4 * k, 0.2 * k, 3.5 * k), (x, 2.2 * k, z), 0xeef4f9, roll=-0.2))
+    cyl(0.5 * k, 0.6 * k, (x + 2.4 * k, 0, z + 1.6 * k), 0x8a6a46, segs=8)
+
+def log_cabin_at(cx, cz, k=1.0, smoke=False):
+    """A log cabin at (cx, cz), door on +X, built at `k` of the old 4.2 unit
+    cabin (0.55: a real cabin, two and a half units across): each wall its
+    own logs whose ends cross out past the corners, a snowed gable roof, a
+    stone chimney, lit windows."""
+    W, D, H = 4.2 * k, 3.4 * k, 2.0 * k
+    L = 0.4 * k                                    # a log
+    box((W + 0.3 * k, 0.25 * k, D + 0.3 * k), (cx, 0.12 * k, cz), 0x868ba1)
+    box((W - 0.2 * k, H, D - 0.2 * k), (cx, H / 2 + 0.1 * k, cz), 0x6e4a32)    # the chinking
+    p = (H - 0.15 * k) / 4
+    for j in range(4):
         for s in (-1, 1):
-            box((0.4, 0.4, D + 0.5), (s * (W / 2 - 0.2), 0.25 + (k + 0.5) * p, 0), 0x8a5a3a)
-            if k < 4:
-                box((W + 0.5, 0.4, 0.4), (0, 0.25 + (k + 1) * p, s * (D / 2 - 0.2)), 0x9a5f3c)
-    # gables on the door end and the back
+            box((L, L, D + 0.5 * k), (cx + s * (W / 2 - L / 2), 0.25 * k + (j + 0.5) * p, cz), 0x8a5a3a)
+            if j < 3:
+                box((W + 0.5 * k, L, L), (cx, 0.25 * k + (j + 1) * p, cz + s * (D / 2 - L / 2)), 0x9a5f3c)
     for s in (-1, 1):
-        prism([(D / 2 - 0.05, H + 0.1), (-D / 2 + 0.05, H + 0.1), (0, H + 0.1 + (D / 2) * math.tan(0.6))],
-              s * (W / 2 - 0.1), 0.2, 0x8a5a3a)
-    # the roof: two snowed slabs meeting over the ridge (along X), eaves past the walls
-    ridge = H + 0.1 + (D / 2) * math.tan(0.6)
-    run = D / 2 + 0.45
+        prism([(cz + D / 2 - 0.05 * k, H + 0.1 * k), (cz - D / 2 + 0.05 * k, H + 0.1 * k),
+               (cz, H + 0.1 * k + (D / 2) * math.tan(0.6))], cx + s * (W / 2 - 0.1 * k), 0.2 * k, 0x8a5a3a)
+    ridge = H + 0.1 * k + (D / 2) * math.tan(0.6)
+    run = D / 2 + 0.45 * k
     for s in (-1, 1):
-        zc = s * run / 2
-        snowy(box((W + 0.8, 0.26, run / math.cos(0.6) + 0.1), (0, ridge - (run / 2) * math.tan(0.6) + 0.16, zc),
+        snowy(box((W + 0.8 * k, 0.26 * k, run / math.cos(0.6) + 0.1 * k),
+                  (cx, ridge - (run / 2) * math.tan(0.6) + 0.16 * k, cz + s * run / 2),
                   0xeef4f9, pitch=-s * 0.6), 0.5)
-    box((W + 0.9, 0.22, 0.36), (0, ridge + 0.3, 0), 0x868ba1)
-    # chimney through the back slope
-    box((0.7, 1.9, 0.7), (-1.1, ridge - 0.2, -0.75), 0x868ba1)
-    snowy(box((0.82, 0.14, 0.82), (-1.1, ridge + 0.8, -0.75), 0xeef4f9))
-    marker('anim_smoke', (-1.1, ridge + 0.9, -0.75))   # the first cabin on a track smokes
-    # the door and two lit windows on the front, one on each side
-    box((0.1, 1.75, 1.1), (W / 2 + 0.06, 1.0, -0.55), 0xfff6eb)
-    box((0.1, 1.55, 0.85), (W / 2 + 0.12, 0.92, -0.55), 0x38383d)
-    box((0.1, 0.8, 0.8), (W / 2 + 0.06, 1.45, 0.95), 0xfff6eb)
-    box((0.1, 0.6, 0.6), (W / 2 + 0.12, 1.45, 0.95), 0xffc044)
-    for s in (-1, 1):
-        box((1.0, 0.8, 0.1), (0.7, 1.45, s * (D / 2 + 0.06)), 0xfff6eb)
-        box((0.8, 0.6, 0.1), (0.7, 1.45, s * (D / 2 + 0.12)), 0xffc044)
+    box((W + 0.9 * k, 0.22 * k, 0.36 * k), (cx, ridge + 0.3 * k, cz), 0x868ba1)
+    box((0.7 * k, 1.9 * k, 0.7 * k), (cx - 1.1 * k, ridge - 0.2 * k, cz - 0.75 * k), 0x868ba1)
+    snowy(box((0.82 * k, 0.14 * k, 0.82 * k), (cx - 1.1 * k, ridge + 0.8 * k, cz - 0.75 * k), 0xeef4f9))
+    if smoke:
+        marker('anim_smoke', (cx - 1.1 * k, ridge + 0.9 * k, cz - 0.75 * k))
+    box((0.1 * k, 1.55 * k, 1.1 * k), (cx + W / 2 + 0.06 * k, 0.9 * k, cz - 0.55 * k), 0xfff6eb)
+    box((0.1 * k, 1.35 * k, 0.85 * k), (cx + W / 2 + 0.12 * k, 0.82 * k, cz - 0.55 * k), 0x38383d)
+    box((0.1 * k, 0.8 * k, 0.8 * k), (cx + W / 2 + 0.06 * k, 1.3 * k, cz + 0.95 * k), 0xfff6eb)
+    box((0.1 * k, 0.6 * k, 0.6 * k), (cx + W / 2 + 0.12 * k, 1.3 * k, cz + 0.95 * k), 0xffc044)
+
+@piece(1.0)
+def log_cabin():
+    # Flurry: a corner of the village below the lake at its real size beside
+    # a car: a log cabin two and a half units across with its chimney smoking
+    # (the first cabin on a track smokes), a smaller one beside it, the
+    # woodpile under its lean-to, a villager.
+    log_cabin_at(0.0, 0.0, 0.58, smoke=True)
+    log_cabin_at(-0.6, 3.0, 0.42)
+    woodpile(0.2, -2.2, 0.3)
+    person(1.8, 0, -0.6, 0x3f7bd9, 0xcf534f, yaw=-0.4)
+    join_still('cabins')
+
+# ---- snow companions: small scenes that carry a track's story round its lap ----
+
+@piece(1.0)
+def ski_rack():
+    # Powder: a ski school's meeting point by the piste, at its real size: its
+    # hut, skis and poles racked along a rail (the skis under half a unit), a
+    # trail sign, an instructor and two pupils waiting.
+    cabin_hut(1.4, 0.8, 1.1, (-0.9, 0, 0.0), 0xcf534f, 0xeef4f9)
+    for z in (-0.55, 0.55):
+        box((0.06, 0.34, 0.06), (0.4, 0.17, z + 0.4), 0x9a7b55)
+    box((0.06, 0.06, 1.2), (0.4, 0.31, 0.4), 0x9a7b55)
+    for k, c in enumerate((0xff5040, 0x339cf2, 0x22c46e, 0xffc044)):
+        z = -0.05 + k * 0.28
+        for e in (-0.035, 0.035):
+            box((0.04 + 0.02, 0.44, 0.06), (0.46, 0.22, z + e), c, roll=-0.18)
+    box((0.08, 0.9, 0.08), (0.7, 0.45, -0.9), 0x555b66)               # the trail sign
+    box((0.06, 0.26, 0.4), (0.74, 0.78, -0.9), 0x339cf2)
+    box((0.07, 0.1, 0.24), (0.77, 0.78, -0.9), 0xfff6eb)
+    person(1.0, 0, -0.2, 0xcf534f, 0xfff6eb, yaw=math.pi)
+    person(0.6, 0, -0.45, 0x61cb8b, 0xffc044, yaw=0.0)
+    person(0.55, 0, 0.05, 0xa878e8, 0x3f7bd9, yaw=-0.2)
+    snow_heap((-0.4, 0, 1.3), 0.5, yaw=0.6)
+    join_still('school')
 
 def snowman(at, k=1.0, hat=False):
     """Three blocks of snow, coal eyes and buttons, a carrot facing +X, stick
-    arms, a scarf: built the way the cars are, in chunky blocks."""
+    arms, a scarf: built the way the cars are, in chunky blocks, `k` sizing
+    all of it (0.15: a real snowman, half a unit tall)."""
     x, y, z = at
     snowy(box((1.4 * k, 1.2 * k, 1.4 * k), (x, y + 0.6 * k, z), 0xf3f7fb, yaw=0.2), 0.5)
     snowy(box((1.05 * k, 0.9 * k, 1.05 * k), (x, y + 1.65 * k, z), 0xf3f7fb, yaw=-0.1), 0.5)
@@ -1701,160 +1877,219 @@ def snowman(at, k=1.0, hat=False):
     box((1.15 * k, 0.2 * k, 1.15 * k), (x, y + 2.12 * k, z), 0xff5040)
     box((0.45 * k, 0.16 * k, 0.16 * k), (x + 0.6 * k, y + 2.45 * k, z), 0xff7e44)
     for s2 in (-1, 1):
-        box((0.08, 0.12 * k, 0.12 * k), (x + 0.41 * k, y + 2.65 * k, z + s2 * 0.18 * k), 0x2a2735)
-        box((0.14, 0.14, 1.0 * k), (x, y + 1.85 * k, z + s2 * 0.95 * k), 0x7a5a3a, pitch=s2 * 0.45)
-    box((0.08, 0.14 * k, 0.14 * k), (x + 0.55 * k, y + 1.75 * k, z), 0x2a2735)
-    box((0.08, 0.14 * k, 0.14 * k), (x + 0.72 * k, y + 0.95 * k, z), 0x2a2735)
+        box((0.14 * k, 0.14 * k, 1.0 * k), (x, y + 1.85 * k, z + s2 * 0.95 * k), 0x7a5a3a, pitch=s2 * 0.45)
     if hat:
         box((0.95 * k, 0.1 * k, 0.95 * k), (x, y + 2.92 * k, z), 0x2a2735)
         box((0.6 * k, 0.55 * k, 0.6 * k), (x, y + 3.25 * k, z), 0x2a2735)
 
-# A penguin standing at (x, y, z), beak to +X turned by yaw. Built from boxes,
-# it is joined into one moving part by its caller.
-def penguin(x, y, z, k, yaw):
+def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
+    """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall:
+    a penguin beside a car is under half a unit. Feet, a dark body with its
+    white front, the head and beak, the flippers. A live one is joined into
+    one moving part by its caller."""
+    u = k / 0.47
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c)
-    box((0.9 * k, 1.3 * k, 0.8 * k), at(0, 0.65 * k, 0), 0x2a2735, yaw=yaw)       # body
-    box((0.2, 1.05 * k, 0.78 * k), at(0.42 * k, 0.6 * k, 0), 0xfff6eb, yaw=yaw)    # white front
-    box((0.7 * k, 0.6 * k, 0.65 * k), at(0, 1.55 * k, 0), 0x2a2735, yaw=yaw)       # head
-    box((0.3 * k, 0.14 * k, 0.2 * k), at(0.45 * k, 1.5 * k, 0), 0xff7e44, yaw=yaw)  # beak
-    for sd in (-1, 1):
-        box((0.12, 0.12, 0.12), at(0.36 * k, 1.66 * k, sd * 0.18 * k), 0xfff6eb, yaw=yaw)
-        box((0.5 * k, 0.8 * k, 0.12), at(0, 0.75 * k, sd * 0.46 * k), 0x2a2735, yaw=yaw, roll=0.2)
-        box((0.4 * k, 0.1, 0.24 * k), at(0.2 * k, 0.05, sd * 0.2 * k), 0xff7e44, yaw=yaw)
+    box((0.18 * u, 0.06, 0.16 * u), at(0.03 * u, 0.03, 0), 0xff7e44, yaw=yaw)            # feet
+    box((0.22 * u, 0.29 * u, 0.2 * u), at(0, 0.2 * u, 0), 0x2a2735, yaw=yaw)             # body
+    box((0.06, 0.23 * u, 0.16 * u), at(0.1 * u, 0.19 * u, 0), 0xfff6eb, yaw=yaw)         # white front
+    box((0.16 * u, 0.13 * u, 0.15 * u), at(0.01 * u, 0.405 * u, 0), 0x2a2735, yaw=yaw)   # head
+    box((0.08 * u, 0.06, 0.06), at(0.11 * u, 0.39 * u, 0), 0xff7e44, yaw=yaw)            # beak
+    if flippers:
+        for sd in (-1, 1):
+            box((0.12 * u, 0.18 * u, 0.06), at(0, 0.22 * u, sd * 0.12 * u), 0x2a2735, yaw=yaw, pitch=sd * 0.25)
 
-# A penguin tobogganing on its belly toward +X, the pivot under the middle of
-# its belly: the body flat, the head up to see where it is going (the beak and
-# the white face are what say "penguin" from above), flippers out like wings.
-def slider_penguin(x, y, z, k):
-    box((1.3 * k, 0.62 * k, 0.8 * k), (x, y + 0.31 * k, z), 0x2a2735)                    # body
-    box((0.95 * k, 0.12, 0.7 * k), (x + 0.05 * k, y + 0.06, z), 0xfff6eb)                 # white belly on the ice
-    box((0.62 * k, 0.6 * k, 0.62 * k), (x + 0.62 * k, y + 0.8 * k, z), 0x2a2735)          # head, up
-    box((0.12, 0.42 * k, 0.48 * k), (x + 0.94 * k, y + 0.76 * k, z), 0xfff6eb)            # face
-    box((0.32 * k, 0.14 * k, 0.2 * k), (x + 1.08 * k, y + 0.72 * k, z), 0xff7e44)         # beak
+def slider_penguin(x, y, z, k=0.45):
+    """A penguin on its belly toward +X, `k` long, the pivot under the middle
+    of its belly: the body flat, the head up to see where it is going (the
+    beak and the white face say "penguin" from above), flippers out."""
+    u = k / 0.45
+    box((0.36 * u, 0.13 * u, 0.2 * u), (x, y + 0.075 * u, z), 0x2a2735)                  # body
+    box((0.26 * u, 0.06, 0.17 * u), (x + 0.02 * u, y + 0.035, z), 0xfff6eb)               # belly
+    box((0.15 * u, 0.14 * u, 0.15 * u), (x + 0.2 * u, y + 0.17 * u, z), 0x2a2735)         # head, up
+    box((0.06, 0.1 * u, 0.12 * u), (x + 0.28 * u, y + 0.16 * u, z), 0xfff6eb)             # face
+    box((0.08 * u, 0.06, 0.06), (x + 0.32 * u, y + 0.15 * u, z), 0xff7e44)                # beak
     for sd in (-1, 1):
-        box((0.12, 0.12, 0.12), (x + 0.96 * k, y + 0.92 * k, z + sd * 0.17 * k), 0x2a2735)  # eye on the face
-        box((0.55 * k, 0.1, 0.5 * k), (x - 0.05 * k, y + 0.3 * k, z + sd * 0.62 * k), 0x2a2735, pitch=sd * 0.25)  # flipper out
-        box((0.3 * k, 0.1, 0.2 * k), (x - 0.78 * k, y + 0.12 * k, z + sd * 0.18 * k), 0xff7e44)  # feet behind
+        box((0.14 * u, 0.06, 0.1 * u), (x - 0.02 * u, y + 0.07 * u, z + sd * 0.15 * u), 0x2a2735)  # flipper out
+    box((0.08 * u, 0.06, 0.12 * u), (x - 0.21 * u, y + 0.03, z), 0xff7e44)                # feet behind
 
 # The standing penguins' life (set_motion.h): rock on their feet out of step,
-# turn to watch a car coming (radii in world units), hop as one passes close.
-PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.4#%d'
+# turn to watch a car coming (radii in world units), a little hop as one
+# passes close.
+PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.12#%d'
 
 def live_penguin(n, x, y, z, k, yaw):
     with animated(PENGUIN % n, (x, y, z), yaw):
         penguin(x, y, z, k, yaw)
 
-@piece(1.45)
-def ice_chunks():
-    # Glacier: a slab of floe ice beached on the snow with three penguins on
-    # it, all facing +X: each placement's yaw turns that to the racer where the
-    # lap reads it best (score:landmarks' `face`), a fish left on the ice. The
-    # penguins are alive, each one moving part.
-    snowy(box((4.6, 0.5, 3.6), (0, 0.25, 0), 0xd0e8ff, yaw=0.3), 0.4)
-    live_penguin(1, 0.6, 0.5, -0.3, 1.0, 0.0)
-    live_penguin(2, -0.5, 0.5, 1.0, 0.8, -0.15)
-    live_penguin(3, -0.4, 0.5, -1.4, 0.7, 0.15)
-    box((0.6, 0.14, 0.2), (1.6, 0.57, 1.0), 0x8ecae6, yaw=0.8)                  # the fish
-    snow_heap((2.6, 0, -1.6), 1.1, yaw=0.3)
+def stood_penguin(x, z, k, yaw):
+    """A penguin of the crowd, standing still: three blocks (the dark body
+    with its head, the white front, the beak), which is what reads of one
+    among many."""
+    u = k / 0.47
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy):
+        return (x + dx * c, dy, z - dx * s2)
+    box((0.22 * u, 0.44 * u, 0.2 * u), at(0, 0.22 * u), 0x2a2735, yaw=yaw)
+    box((0.06, 0.26 * u, 0.16 * u), at(0.1 * u, 0.17 * u), 0xfff6eb, yaw=yaw)
+    box((0.08 * u, 0.06, 0.06), at(0.13 * u, 0.36 * u), 0xff7e44, yaw=yaw)
 
-@piece(1.45)
+@piece(1.0)
+def penguin_group():
+    # Glacier: a colony of penguins out on the snow by the ice, standing on
+    # the snow itself at their own size beside a car (under half a unit tall):
+    # a crowd of a couple of dozen, a few lying on their bellies and a chick
+    # or two among them, most facing +X; two at the front are alive where
+    # they stand (they rock on their feet, turn to watch a car coming and hop
+    # as one passes close), and a pair wanders a loop round the colony's
+    # edge, one behind the other (anim_path facing its way, a bob for the
+    # step). Each placement's yaw turns +X to the racer where the lap reads
+    # it best (score:landmarks' `face`).
+    for i in range(24):
+        # a sunflower spread over an oval, so the crowd is even without a grid
+        r, a = math.sqrt((i + 0.5) / 24), i * 2.39996
+        x, z = 2.6 * r * math.cos(a), 1.7 * r * math.sin(a)
+        if x > 0.9 and abs(z) < 0.9:
+            continue                                               # room for the live ones in front
+        h = math.sin(i * 12.9898) * 0.5 + 0.5
+        yaw = (h - 0.5) * 1.6 + 0.6 * math.sin(i * 3.1)
+        if i % 9 == 4:
+            slider_penguin(x, 0, z, 0.4)                           # lying on its belly
+        else:
+            stood_penguin(x, z, 0.34 if i % 7 == 3 else 0.42 + 0.06 * h, yaw)
+    live_penguin(1, 1.4, 0, 0.35, 0.46, 0.0)
+    live_penguin(2, 1.2, 0, -0.45, 0.44, 0.3)
+    N = 14
+    pts = [(math.cos(a) * 3.3, 0.0, math.sin(a) * 2.3) for a in (j / N * 2 * math.pi for j in range(N))]
+    for j, p in enumerate(pts):
+        marker('path_walk_%d' % j, p)
+    for k in range(2):
+        at = pts[k]
+        with animated('anim_path:c=walk:p=36:o=%.3f:f=1+bob:h=0.03:p=0.42#%d' % (k * 0.06, k), at):
+            penguin(at[0], 0, at[2], 0.44, 0.0)
+    snow_heap((-2.8, 0, 1.6), 0.5, yaw=0.5)
+
+@piece(1.0)
 def penguin_chute():
-    # Glacier: the colony's toboggan run. Penguins pop out of a hole in the top
-    # of an ice block, belly-slide down a chute toward the road (+X) and dive
-    # into a hole in a floe at its foot. Under the ice they swim back to the
-    # block: the path's hidden half runs inside the block and under the
-    # ground, so every split cell sees them go in and come out, never jump.
-    # Two more stand by the hole and watch the cars.
-    ICE, SNOW, HOLE = 0xd0e8ff, 0xeef4f9, 0x38383d
-    TOP = 2.85                                    # the block's snow cap
-    snowy(box((2.4, 2.6, 2.4), (-3.2, 1.3, 0), ICE), 0.4)
-    snowy(box((2.7, 0.25, 2.7), (-3.2, TOP - 0.125, 0), SNOW), 0.5)
-    box((1.0, 0.04, 1.0), (-3.2, TOP + 0.01, 0), HOLE)
-    a, b = (-2.0, TOP), (3.6, 0.47)               # the chute's running surface, lip to foot
-    run, ang = math.hypot(b[0] - a[0], a[1] - b[1]), math.atan2(a[1] - b[1], b[0] - a[0])
-    mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
-    def on_chute(x):
-        return a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0])
-    box((run, 0.12, 1.3), (mx, my - 0.06, 0), ICE, roll=ang)
-    for sd in (-1, 1):
-        box((run, 0.32, 0.12), (mx, my + 0.1, sd * 0.68), ICE, roll=ang)
-    for px in (-0.4, 1.8):                        # snow posts under it
-        hy = on_chute(px) - 0.12
-        snowy(box((0.35, hy, 0.35), (px, hy / 2, 0), SNOW), 0.5)
-    snowy(box((3.2, 0.45, 3.0), (5.2, 0.225, 0), ICE, yaw=0.15), 0.4)
-    box((1.1, 0.04, 1.1), (5.0, 0.46, 0), HOLE, yaw=0.15)
-    # the loop, piece frame: inside the block, out of its hole, along the cap
-    # to the lip, down the chute, across the floe, down its hole, back under
-    for k, pt in enumerate(((-3.2, -1.8, 0), (-3.2, 1.9, 0), (-3.2, TOP + 0.1, 0), (a[0], TOP + 0.02, 0),
-                            (b[0], b[1] + 0.02, 0), (5.0, 0.47, 0), (5.0, -1.8, 0))):
+    # Glacier: the colony's toboggan run, at the penguins' own size. A drift
+    # of snow banked up by the shore, rising away from the road (-X), its
+    # face worn into a slide; penguins come over its crest, belly-slide down
+    # toward the road (+X) and shoot into a hole of open water in the ice at
+    # its foot. Under the ice they swim back behind the crest (the path's
+    # hidden half runs under the drift and the ice), so a split cell sees
+    # them go in and come out, never jump. More stand at the water's edge and
+    # on top to watch.
+    H = mound(2.0, -2.6, 0.0, 3.4, 5.6, 3.4, color=0xeef4f9, sink=0.3, shape=1.3)
+    disc(1.5, (4.3, 0.0, 0.0), 0xd0e8ff, segs=20, h=0.04)            # the ice round the hole
+    disc(0.95, (4.3, 0.01, 0.0), 0x6794d9, segs=16, h=0.04)          # open water
+    xs = [-2.6 + 0.6 * i for i in range(10)]                           # down the face, on the drift
+    pts = [(-3.9, H(-3.9, 0.0) - 0.45, 0.0)] + [(x, max(H(x, 0.0), 0.0) + 0.01, 0.0) for x in xs]
+    pts += [(3.6, 0.03, 0.0), (4.2, 0.0, 0.0), (4.4, -0.6, 0.0), (4.0, -1.4, 0.0), (-3.9, -1.4, 0.0)]
+    for k, pt in enumerate(pts):
         marker('path_chute_%d' % k, pt)
     for n in range(3):                            # spread round the loop; the renderer moves them
-        x = a[0] + (b[0] - a[0]) * (0.2 + 0.3 * n)
-        with animated('anim_path:c=chute:p=8.5:o=%.3f#%d' % (n / 3, n), (x, on_chute(x), 0)):
-            slider_penguin(x, on_chute(x), 0, 0.75)
-    live_penguin(4, 6.3, 0.45, 1.15, 0.8, -0.4)
-    live_penguin(5, 4.2, 0.45, -1.2, 0.72, 0.5)
+        x = -1.5 + 1.5 * n
+        with animated('anim_path:c=chute:p=9:o=%.3f#%d' % (n / 3, n), (x, H(x, 0.0) + 0.01, 0.0)):
+            slider_penguin(x, H(x, 0.0) + 0.01, 0.0, 0.42)
+    penguin(5.0, 0.04, 1.0, 0.46, -0.4, flippers=False)
+    penguin(4.6, 0.04, -1.2, 0.42, 0.5, flippers=False)
+    penguin(5.4, 0.04, -0.4, 0.34, 0.1, flippers=False)
+    penguin(-2.4, H(-2.4, 0.9) - 0.03, 0.9, 0.44, 0.0, flippers=False)
 
-@piece(1.4)
+@piece(1.0)
 def expedition_camp():
-    # Glacier: a climbers' camp, a ridge tent closed at both ends with its door
-    # toward +X, a rucksack and a long sled by it, flags on tall poles.
-    for s2 in (-1, 1):
-        box((3.2, 0.12, 1.9), (0, 0.72, s2 * 0.66), 0xff7e44, pitch=-s2 * 0.86)
-    box((3.4, 0.14, 0.14), (0, 1.46, 0), 0x2a2735)
-    for s in (-1, 1):
-        prism([(1.28, 0.02), (-1.28, 0.02), (0, 1.42)], s * 1.52, 0.1, 0xff7e44)
-    prism([(0.5, 0.02), (-0.5, 0.02), (0, 0.95)], 1.6, 0.06, 0x2a2735)
-    box((0.5, 0.75, 0.4), (2.0, 0.38, -1.0), 0xcf534f, yaw=0.3)
-    box((0.55, 0.2, 0.45), (2.0, 0.8, -1.0), 0x2a2735, yaw=0.3)
-    kit('holiday', 'sled-long', (1.8, 0, 2.2), yaw=0.3, scale=1.5)
-    flagpole((1.2, 0, -2.4), 3.6, 0xff5040, w=1.1, fh=0.7, wave='anim_sway:a=z:d=24:p=1.9#1')
-    flagpole((-1.6, 0, 2.6), 3.0, 0xff7e44, w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.2#2')
-    snow_heap((-1.8, 0, -1.6), 1.5, yaw=0.9)
+    # Glacier: a climbers' camp at its real size beside a car: three ridge
+    # tents (under a unit long) behind a curved wall of snow blocks against
+    # the wind, a long sled loaded with kit, rucksacks, a flag on its pole
+    # streaming, two climbers.
+    def tent(x, z, color):
+        k = 0.27
+        for s2 in (-1, 1):
+            box((3.2 * k, 0.06, 1.9 * k), (x, 0.72 * k, z + s2 * 0.66 * k), color, pitch=-s2 * 0.86)
+        box((3.4 * k, 0.06, 0.06), (x, 1.46 * k, z), 0x2a2735)
+        for s in (-1, 1):
+            prism([(z + 1.28 * k, 0.02), (z - 1.28 * k, 0.02), (z, 1.42 * k)], x + s * 1.52 * k, 0.06, color)
+        prism([(z + 0.5 * k, 0.02), (z - 0.5 * k, 0.02), (z, 0.95 * k)], x + 1.6 * k, 0.06, 0x2a2735)
+    tent(0.0, 0.0, 0xff7e44)
+    tent(-0.3, 0.9, 0xcf534f)
+    tent(0.2, -0.95, 0xffc044)
+    for k in range(6):                                              # the wind wall, round the back
+        a = -1.1 + k * 0.44
+        snowy(box((0.18, 0.26, 0.5), (-0.75 - 0.6 * math.cos(a) + 0.6, 0.13, 1.25 * math.sin(a)), 0xf3f7fb,
+                  yaw=a), 0.4)
+    sled(0.9, 0, 0.9, 0.3, 0x9a7b55, L=0.7)
+    box((0.22, 0.12, 0.3), (0.92, 0.2, 0.9), 0x3f7bd9, yaw=0.3)     # its load
+    for (x, z, c) in ((0.75, -0.35, 0xcf534f), (0.85, -0.15, 0x61cb8b)):
+        box((0.12, 0.18, 0.1), (x, 0.09, z), c, yaw=0.3)
+    person(1.1, 0, -0.5, 0xcf534f, 0x38383d, yaw=0.5)
+    person(1.25, 0, 0.25, 0x3f7bd9, 0xffc044, yaw=-0.6)
+    box((0.07, 1.1, 0.07), (0.6, 0.55, -1.5), 0xfff6eb)
+    with animated('anim_sway:a=z:d=24:p=1.9#1', (0.6, 1.1, -1.5)):
+        box((0.36, 0.22, 0.05), (0.8, 0.98, -1.5), 0xff5040)
+    join_still('camp')
 
-@piece(1.4)
+@piece(1.0)
 def avalanche_fence():
-    # Avalanche: a run of snow fence at the foot of the mountainside it guards
-    # the road from, upright slats wired between posts and braced from behind
-    # (-X), the snow it caught drifted along its back, pines up the slope. The
+    # Avalanche: the defences on the mountainside the road runs under, at
+    # their real size beside a car: rows of snow rakes across the slope above
+    # the verge (a unit tall, leaning into the hill, each one a rail of
+    # upright slats on posts braced from below), stepping up the face one
+    # above the other so the lines read across the white from the road, and
+    # at the foot a run of slatted snow fence with the drift it caught. The
     # mountainside is the track's terrain (SET_GROUND).
     H = set_ground('avalanche-fence')
-    for x, z, k in ((-10.0, -9.0, 2.4), (-14.0, 8.0, 2.6), (-6.0, 13.0, 2.2), (-22.0, -14.0, 2.4)):
-        pine((x, H(x, z) - 0.3, z), k)
-    L, N = 4.2, 3
-    for i in range(N + 1):
-        z = (i - N / 2) * L
-        box((0.22, 2.4, 0.22), (0.1, 1.2, z), 0x6e4a32)
-        box((0.18, 2.2, 0.18), (-0.55, 0.95, z), 0x6e4a32, roll=0.45)
-    for y in (0.55, 1.75):
-        box((0.08, 0.1, N * L), (0.24, y, 0), 0x555b66)
-    for i in range(N):
-        z0 = (i - N / 2) * L
-        for k in range(6):
-            box((0.08, 1.9, 0.32), (0.3, 1.1, z0 + 0.45 + k * 0.66), 0xb06041 if k % 2 else 0x8a6a46)
-    snowy(box((1.6, 0.6, N * L - 0.6), (-0.9, 0.3, 0), 0xf3f7fb))
-    snow_heap((-1.4, 0, -3.2), 1.6, yaw=0.4)
+    for x, z, k in ((-14.0, -12.6, 1.8), (-19.6, 11.2, 1.9), (-30.8, -19.6, 1.8)):
+        pine((x, H(x, z) - 0.6, z), k)
+    # The rakes and the fence are draped: built from y = 0 as if on the plain,
+    # each laid on the slope as the renderer draws it (its 9 u grid's chords
+    # stray a unit and more off the curve at the foot), so none floats or sinks.
+    def rake(x, z0, z1):
+        n = max(2, int(round((z1 - z0) / 2.0)))
+        zs = [z0 + (z1 - z0) * i / n for i in range(n + 1)]
+        for z in zs:                                                # posts, leaning into the hill
+            box((0.1, 1.3, 0.1), (x, 0.35, z), 0x6e4a32, roll=0.35)
+        for za, zb in zip(zs[:-1], zs[1:]):                         # the slatted boards between them
+            box((0.06, 0.7, zb - za), (x - 0.22, 0.55, (za + zb) / 2), 0x8a6a46, roll=0.35)
+    def defences():
+        for (x, half) in ((-6.0, 6.0), (-10.5, 7.5), (-15.0, 8.5), (-19.5, 8.0)):
+            rake(x, -half, half)
+        # the snow fence at the foot, its slats upright, the drift along its back
+        L = 7.0
+        for i in range(5):
+            z = -L / 2 + i * L / 4
+            box((0.1, 1.1, 0.1), (0.1, 0.4, z), 0x6e4a32)
+        for i in range(4):
+            z = -L / 2 + (i + 0.5) * L / 4
+            box((0.06, 0.75, L / 4 - 0.12), (0.18, 0.5, z), 0xb06041 if i % 2 else 0x8a6a46)
+        snowy(box((0.6, 0.35, L - 0.4), (-0.25, 0.07, 0), 0xf3f7fb))
+    draped('rakes', defences)
 
-@piece(1.4)
+@piece(1.0)
 def warning_sign():
-    # Avalanche: a yellow diamond warning sign with a slope and its tumbling
-    # snow on it, on a post beside a red and white marker pole, under the
-    # rock slope it warns of, rocks that came down it lying at its foot.
-    H = mound(16.0, -20.0, 0.0, 18.0, 18.5, 26.0, color=0x9aa1b4, jitter=0.7)
-    for x, z, k in ((-1.6, -2.4, 0.9), (-2.2, 1.6, 1.1), (-0.8, 3.4, 0.6), (-3.4, -0.4, 0.8)):
-        rock((x, H(x, z) - 0.2, z), k, yaw=x * z)
-    pine((-8.0, H(-8.0, 8.0) - 0.3, 8.0), 2.2)
-    box((0.2, 3.0, 0.2), (0, 1.5, 0), 0x555b66)
-    box((0.1, 1.5, 1.5), (0.08, 2.6, 0), 0x2a2735, pitch=math.pi / 4)
-    box((0.12, 1.3, 1.3), (0.12, 2.6, 0), 0xffc044, pitch=math.pi / 4)
-    prism([(0.42, 2.32), (-0.42, 2.32), (-0.08, 2.86)], 0.2, 0.05, 0x2a2735)
-    for (z, y) in ((0.28, 2.75), (0.4, 2.55), (0.18, 2.95)):
-        box((0.06, 0.12, 0.12), (0.2, y, z), 0x2a2735, pitch=0.5)
-    for k in range(5):
-        box((0.22, 0.5, 0.22), (0, 0.25 + k * 0.5, 1.4), 0xff5040 if k % 2 == 0 else 0xfff6eb)
-    snow_heap((-0.6, 0, -0.6), 1.1, yaw=0.3)
+    # Avalanche: an avalanche warning under the slope it warns of (the slope
+    # is the track's terrain, SET_GROUND), at its real size beside a car: a
+    # yellow diamond with the slope and its tumbling snow on it, on a post
+    # beside a red and white marker pole; rocks that came down lie at its
+    # foot and up the face, a pine.
+    H = set_ground('warning-sign')
+    for x, z, k in ((-11.2, 11.2, 1.8), (-14.0, -8.0, 1.7)):
+        pine((x, H(x, z) - 0.6, z), k)
+    def sign():
+        # at the slope's foot, where the grid's chords stray furthest from the
+        # curve: draped, the sign and its rocks stand on the snow as drawn
+        for x, z, k in ((-2.4, -3.4, 0.6), (-3.4, 2.2, 0.8), (-1.6, 4.4, 0.45), (-5.0, -0.6, 0.6),
+                        (-8.0, -4.0, 0.7), (-11.0, 3.0, 0.8), (-6.5, 6.5, 0.5)):
+            rock((x, -0.35 * k, z), k, yaw=x * z)
+        box((0.08, 1.2, 0.08), (0, 0.4, 0), 0x555b66)
+        box((0.06, 0.5, 0.5), (0.04, 0.85, 0), 0x2a2735, pitch=math.pi / 4)
+        box((0.06, 0.42, 0.42), (0.07, 0.85, 0), 0xffc044, pitch=math.pi / 4)
+        prism([(0.14, 0.76), (-0.14, 0.76), (-0.03, 0.94)], 0.11, 0.03, 0x2a2735)
+        box((0.08, 0.2, 0.08), (0.0, 0.0, 0.6), 0xfff6eb)
+        for k in range(5):
+            box((0.08, 0.22, 0.08), (0.0, 0.11 + k * 0.22, 0.6), 0xff5040 if k % 2 == 0 else 0xfff6eb)
+        snow_heap((-0.5, -0.1, -0.5), 0.5, yaw=0.3)
+    draped('sign', sign)
 
 # ====================================================================================
 # BACKYARD
