@@ -1806,7 +1806,7 @@ void TtpRenderer::setDressSheets(bool on) {
 // list but not the other makes an ablation arm silently stop covering it —
 // which reads as "this feature is free".
 void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) const {
-    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) fn(*m);
+    for (const Mesh* m : { &mBoulders, &mLandmarks, &mClutter }) fn(*m);
     for (const Mesh& m : mSmoke) fn(m);
     for (const Mesh& m : mSignMeshes) fn(m);
 }
@@ -2213,7 +2213,6 @@ void TtpRenderer::releaseStatic() {
     destroyMesh(mStructures);
     destroyMesh(mBerms);
     for (auto& m : mHaze) destroyMesh(m);
-    destroyMesh(mWindmill);
     for (auto& m : mSmoke) destroyMesh(m);
     for (auto& m : mSignMeshes) destroyMesh(m);
     destroyMesh(mWater);

@@ -1470,12 +1470,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         }
     }
 
-    // The windmill's multi-blade rotor spins about its facing axis.
-    if (!mWindmill.entity.isNull()) {
-        tcm.setTransform(tcm.getInstance(mWindmill.entity),
-                mWindmillBase * mat4f::rotation(mTime * 0.85f, float3{ 0, 0, 1 }));
-    }
-
     // Kickable cones — TrackProps._stepCones, with the kick test upgraded from
     // that port's car-centre disc (r 0.7, which punted signs ~0.4 u off the
     // door panels) to the car's own oriented collision rectangle. A marker

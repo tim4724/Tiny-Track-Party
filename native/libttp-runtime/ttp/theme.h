@@ -51,14 +51,16 @@ enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAK
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.
 enum LandmarkKind : uint32_t {
-  // A kind here is PROCEDURAL geometry the renderer builds. Two are gone —
-  // the snowman and the wind-up train — because the snow and playroom biomes
-  // plant Kenney kit models for both now (their prop scatters). The numbering
+  // A kind here is PROCEDURAL geometry the renderer builds. Three are gone —
+  // the snowman and the wind-up train, because the snow and playroom biomes
+  // plant Kenney kit models for both now (their prop scatters), and the
+  // windmill, a windpump at three times its size, because Crag's ranch
+  // carries the real-size one as a set piece. The numbering
   // is not stable across such a retirement, and does not need to be: nothing
   // outside this tree stores a kind, the renderer selects on these NAMES, and
   // the theme corpus is re-recorded with the change.
   LM_GNOME = 0, LM_DOGHOUSE, LM_PICNIC, LM_HOODOO, LM_BLOCKS,
-  LM_WINDMILL, LM_LIGHTHOUSE, LM_SAILBOAT, LM_DUCK, LM_BALL, LM_UMBRELLA,
+  LM_LIGHTHOUSE, LM_SAILBOAT, LM_DUCK, LM_BALL, LM_UMBRELLA,
   LM_SANDCASTLE, LM_CABIN, LM_CRAYONS, LM_BOOKS
 };
 // Near-field ground clutter kinds (procedural — the renderer's clutter builders).

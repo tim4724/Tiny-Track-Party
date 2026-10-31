@@ -695,7 +695,7 @@ So:
   their vertex colours at build (`Mesh::bakeLight`, `bakedMatteLight`); the static
   kit copies do the same through their merged groups; the shadow RECEIVERS keep it
   in custom0 (above). What lights live is only what MOVES — the cars, the cone
-  pool, the windmill, the plane, the rockets. Lighting the kit material per vertex
+  pool, the plane, the rockets. Lighting the kit material per vertex
   for those measured a null. The one visible difference of a vertex bake is a
   coarse smooth-normal cylinder lit between its vertices.
 - **Triangle ORDER is a cost too.** A tiler re-shades a vertex per primitive batch,
