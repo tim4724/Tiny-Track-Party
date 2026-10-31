@@ -1534,7 +1534,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     mSetLayout = ttp::canonical_stringify(layout);
     // Placed: what travels leaves the sun bake, and ONE chimney smokes: the
     // one nearest the road, which the racers pass closest.
-    float smokeOff = 1e30f;
+    float smokeOff = 1e30f, smokeScale = 1.0f;
     float3 smokeAt{};
     for (size_t m = 0; m < mSetAssets.size(); m++) {
         if (!mSetAssets[m]) continue;
@@ -1548,11 +1548,12 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
                 if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
                     smokeOff = off;
                     smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
+                    smokeScale = mo.smokeScale;
                 }
             }
         }
     }
-    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt);
+    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt, smokeScale);
 }
 
 // THE ROAD AHEAD STAYS IN VIEW. The chase camera rides under a unit over the

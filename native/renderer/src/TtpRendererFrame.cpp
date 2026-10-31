@@ -1460,10 +1460,11 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         for (size_t i = 0; i < mSmoke.size(); i++) {
             if (mSmoke[i].entity.isNull()) continue;
             const float u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
-            const float3 p{ mSmokeOrigin.x + u * 0.6f
-                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.06f,
-                            mSmokeOrigin.y + u * 2.0f, mSmokeOrigin.z };
-            const float w = 0.5f + u * 1.0f;
+            const float k = mSmokeScale;
+            const float3 p{ mSmokeOrigin.x + (u * 0.6f
+                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.06f) * k,
+                            mSmokeOrigin.y + u * 2.0f * k, mSmokeOrigin.z };
+            const float w = (0.5f + u * 1.0f) * k;
             // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
             // so shrink to nothing at the ends instead (same read at this size).
             const float fade = std::min(1.0f, u * 5) * std::sqrt(1 - u);

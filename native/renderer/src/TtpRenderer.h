@@ -1772,13 +1772,14 @@ private:
     void buildSetMovers();
     void stepSetMovers(const std::vector<filament::math::float3>& carPosW);
     // The smoke puffs over a chimney at `origin` (a set piece's `anim_smoke`,
-    // or the procedural cabin's).
-    void buildSmokePuffs(const filament::math::float3& origin);
+    // or the procedural cabin's), `scale` times a chimney's (a stack's `s=`).
+    void buildSmokePuffs(const filament::math::float3& origin, float scale = 1.0f);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
     // Chimney or camp-fire smoke: a column of soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
+    float mSmokeScale = 1.0f;
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
     // (rocket, gnome, train, starfish). Sized by hand because that enum lives
     // beside the builders it names; a static_assert in the .cpp holds the two

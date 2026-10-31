@@ -724,12 +724,15 @@ export const TRACKS = {
     name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
     // A desert highway: the telegraph line along the long straight, a
-    // filling station on its verge with its sign turning, and mesa rims
-    // closing the west as near backdrops (the north and east stay open).
-    // Everything by the road at its own size.
+    // filling station on its verge with its sign turning and a hawk over it,
+    // a little oil field outside the south loop, its pumpjacks nodding and
+    // tumbleweeds blowing by, and mesa rims closing the west as
+    // near backdrops (the north and east stay open). Everything by the road
+    // at its own size.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
-      { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 }
+      { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
+      { model: 'set-oil-field', u: 0.74, lat: 18.5, yaw: 0 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
