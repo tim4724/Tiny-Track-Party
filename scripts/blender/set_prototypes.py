@@ -3493,6 +3493,68 @@ def flight_desk():
         o = cyl(0.15, 2.6, (4.6 + dx, TOP + 0.4, -2.8 + dz), c, segs=6)
         tilted(o, 0.12 * (k - 1), 0.1)
 
+def city_block(x, z, w, d, floors, color, roof=None, yaw=0.0):
+    """A toy building of stacked blocks: a coloured block a floor, a dark band
+    of windows round each, a roof block on top."""
+    FH = 2.0
+    for f in range(floors):
+        c = color if f % 2 == 0 else 0xfdf4de
+        box((w, FH, d), (x, f * FH + FH / 2, z), c, yaw=yaw)
+        o = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        for face, half in (('+x', d / 2), ('-x', d / 2), ('+z', w / 2), ('-z', w / 2)):
+            off = (w if face[1] == 'x' else d) / 2 + 0.012
+            face_rect(o, face, off, -half + 0.35, half - 0.35, -0.3, 0.35, 0x38383d)
+    top = floors * FH
+    if roof == 'gable':
+        o = prism([(-d / 2 - 0.2, 0), (d / 2 + 0.2, 0), (0, 1.6)], 0, w + 0.2, 0xe66a5a)
+        o.location = P(x, top, z)
+        o.rotation_euler.z = yaw
+    elif roof == 'dome':
+        cyl(min(w, d) / 2, 1.0, (x, top, z), 0x6cbf6c, r2=0.2, segs=10)
+    elif roof == 'flat':
+        box((w + 0.3, 0.4, d + 0.3), (x, top + 0.2, z), 0xf2c14e, yaw=yaw)
+
+@piece(1.0)
+def block_city():
+    # Skyline (variant B, "block city"): a toy town of wooden blocks where
+    # the skyway points, its towers at the skyway's own height so the racers
+    # fly at them: block buildings in streets with toy cars, an arch, and a
+    # building site whose crane turns.
+    box((15.0, 0.06, 26.0), (0, 0.03, 0), 0x868ba1)                      # the streets
+    for z in (-6.5, 6.5):
+        for k in range(5):
+            box((0.9, 0.03, 0.3), (-5.5 + k * 2.8, 0.075, z), 0xfdf4de)
+    B = [(-4.5, -10.5, 3.6, 3.6, 5, 0xe66a5a, 'flat'), (1.0, -10.5, 3.0, 4.0, 3, 0x5a8fd8, 'gable'),
+         (5.2, -10.0, 3.2, 3.2, 2, 0x6cbf6c, 'dome'), (-5.0, 0.0, 3.4, 5.0, 6, 0x5a8fd8, 'flat'),
+         (0.5, -1.0, 3.0, 3.0, 4, 0xf2c14e, 'gable'), (5.0, 1.5, 3.0, 4.0, 3, 0xe66a5a, 'dome'),
+         (-4.8, 10.5, 3.2, 3.6, 4, 0x6cbf6c, 'gable'), (5.0, 10.8, 3.4, 3.4, 5, 0xf2c14e, 'flat')]
+    for x, z, w, d, fl, c, roof in B:
+        city_block(x, z, w, d, fl, c, roof)
+    # an arch over the middle street: two pillars and a lintel
+    for s in (-1, 1):
+        box((1.0, 3.0, 1.0), (0.6 + s * 2.0, 1.5, 6.5), 0xa878e8)
+    box((5.2, 1.0, 1.2), (0.6, 3.5, 6.5), 0xe66a5a)
+    # the building site and its crane, the jib turning
+    box((4.0, 0.3, 4.0), (0.5, 0.15, 11.5), 0xf2bf99)
+    for k in range(2):
+        box((1.6, 1.6, 1.6), (0.0 + k * 1.7, 1.1, 11.0), TOY[k + 1])
+    CX, CZ, CH = 1.5, 12.5, 11.0
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box((0.22, CH, 0.22), (CX + sx * 0.4, CH / 2, CZ + sz * 0.4), 0xf2c14e)
+    for k in range(5):
+        box((1.0, 0.16, 1.0), (CX, 1.5 + k * 2.1, CZ), 0xf2c14e)
+    with animated('anim_spin:w=0.35', (CX, CH, CZ)):
+        box((1.4, 1.2, 1.4), (CX, CH + 0.6, CZ), 0xff5040)                  # the cab
+        box((0.6, 0.5, 9.5), (CX, CH + 1.4, CZ + 2.8), 0xf2c14e)            # the jib
+        box((1.4, 1.0, 1.6), (CX, CH + 1.1, CZ - 2.4), 0x555b66)            # the counterweight
+        bar((CX, CH + 1.2, CZ + 6.8), (CX, CH - 2.8, CZ + 6.8), 0.08, 0.08, 0x2a2735)
+        box((1.0, 0.8, 1.0), (CX, CH - 3.2, CZ + 6.8), 0x5a8fd8)             # a block on the hook
+    toy_car((-1.8, 0.06, -6.5), 0xff5040, yaw=math.pi / 2)
+    toy_car((3.2, 0.06, 6.5), 0x6cbf6c, yaw=-math.pi / 2)
+    merge_paint()
+
 def helix_pts(cx, cz, R, y0, y1, a0, turns, per=16):
     n = int(turns * per)
     return [(cx + R * math.cos(a0 + 2 * math.pi * turns * i / n), y0 + (y1 - y0) * i / n,
