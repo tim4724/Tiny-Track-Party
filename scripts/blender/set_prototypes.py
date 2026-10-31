@@ -3374,21 +3374,6 @@ def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
     else:
         head()
 
-def pickup(at):
-    """A ranch pickup a car long, facing +X: the cab and the bonnet, the
-    open bed behind with a bale in it, four dark wheels, a white roof."""
-    x, y, z = at
-    box((0.36, 0.2, 0.5), (x + 0.24, y + 0.21, z), 0x3f6fd1)                  # the bonnet
-    box((0.3, 0.2, 0.5), (x - 0.06, y + 0.34, z), 0x3f6fd1)                   # the cab
-    box((0.32, 0.06, 0.52), (x - 0.06, y + 0.47, z), 'white')                 # its roof
-    box((0.06, 0.12, 0.42), (x + 0.1, y + 0.37, z), 'sky')                    # the windscreen
-    box((0.42, 0.16, 0.5), (x - 0.42, y + 0.19, z), 0x3f6fd1)                 # the bed
-    box((0.36, 0.06, 0.42), (x - 0.42, y + 0.25, z), 'dark')                  # its floor, open
-    box((0.28, 0.14, 0.34), (x - 0.42, y + 0.33, z), 'yellow')                # a bale in it
-    for dx in (0.26, -0.42):
-        for dz in (-0.25, 0.25):
-            box((0.2, 0.2, 0.08), (x + dx, y + 0.1, z + dz), 'dark')         # the wheels
-
 def hay_bale(at, yaw=0.0):
     x, y, z = at
     box((0.6, 0.32, 0.4), (x, y + 0.16, z), 'yellow', yaw=yaw)
@@ -3401,8 +3386,7 @@ def ranch():
     # chimney, the red barn with hay stacked by it, the water tower on its
     # braced legs, the windpump turning over its stock tank, and the corral in
     # front toward the road (+X) with cattle in it, one of them grazing; all
-    # on a dirt yard. A dirt track rings the yard and the ranch's pickup does
-    # its rounds on it (anim_path, a bob for the ruts).
+    # on a dirt yard.
     ground_poly([(-7.4, 0.03, -8.6), (3.8, 0.03, -8.6), (3.8, 0.03, 8.8), (-7.4, 0.03, 8.8)], [(0, 1, 2, 3)], 0xd39a70)
     # the house, door toward the road, a porch along its front
     hut(3.0, 1.2, 2.4, (-4.2, 0, -3.8), 0xe3cfa4, 0x8a4a32)
@@ -3455,21 +3439,6 @@ def ranch():
     cow((0.4, 0, -0.6), yaw=0.4)
     cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
     cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb)
-    # the dirt track round the yard, and the pickup going round it
-    CX, RX, RZ, N = -1.8, 7.6, 11.5, 32
-    ring = [(CX + RX * math.cos(2 * math.pi * n / N), RZ * math.sin(2 * math.pi * n / N)) for n in range(N)]
-    verts, faces = [], []
-    for n, (px, pz) in enumerate(ring):
-        nx, nz = (px - CX) / RX ** 2, pz / RZ ** 2                              # the ellipse's normal
-        nl = math.hypot(nx, nz)
-        for w in (-0.45, 0.45):
-            verts.append((px + nx / nl * w, 0.05, pz + nz / nl * w))
-        faces.append((2 * n, 2 * n + 1, (2 * n + 3) % (2 * N), (2 * n + 2) % (2 * N)))
-    ground_poly(verts, faces, 'cream')                                         # pale against the red dirt
-    for n, (px, pz) in enumerate(ring):
-        marker('path_rounds_%d' % n, (px, 0.05, pz))
-    with animated('anim_path:c=rounds:p=40:f=1+bob:h=0.025:p=0.45#truck', (ring[0][0], 0.05, ring[0][1])):
-        pickup((ring[0][0], 0.05, ring[0][1]))
     join_still('ranch')
 
 @piece(1.0)
