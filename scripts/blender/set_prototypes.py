@@ -2685,7 +2685,10 @@ def telegraph_line():
     # straight (+-Z), its poles a real pole's height (two car lengths) and
     # stood clear of the road (the offsets come from the track: see the
     # piece's set entry), crossarms ACROSS the line, three wires sagging
-    # between poles. Each end pole is stayed by a guy wire to an anchor, and
+    # between poles. Where the figure-eight's two strands cross the line
+    # (the gap in the poles) it carries no wire: at a real pole's height a
+    # span would hang across the low road at the driver's eye and thread
+    # under the overpass. Each end pole is stayed by a guy wire to an anchor, and
     # the line drops into a lineman's hut at its far end; a highway sign
     # faces the oncoming traffic by the straight. Grouped in runs of four
     # spans, a draw each, so a cell draws only the runs it sees.
@@ -2699,6 +2702,8 @@ def telegraph_line():
             box((0.86, 0.1, 0.1), (0, H - 0.2, z), TIMBER)
         for x in arm:
             for z0, z1 in zip(zs[r0:r0 + 4], zs[r0 + 1:r0 + 5]):
+                if z1 - z0 > 16:                         # the road crosses the gap: no wire over it
+                    continue
                 tube(sag((x, H - 0.05, z0), (x, H - 0.05, z1), 0.012 * (z1 - z0), n=3), 0.025, ROPE,
                      res=1, bevel_res=0, wire=True)
         group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'run%d' % r0)

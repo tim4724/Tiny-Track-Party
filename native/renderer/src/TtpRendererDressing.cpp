@@ -1364,11 +1364,6 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    // NO WINDMILL. The ten-unit procedural derrick that stood here was a
-    // windpump at three times its size; Crag's ranch carries the real-size one
-    // as a set piece (set-windpump, set-ranch), so the geometry and its kind
-    // went with the placement.
-
     if (has(ttp::rt::LM_CABIN)) { // cabin — a log cabin with smoke curling from the chimney
         const Spot sp = findSpot(65, 10 + (float) rnd() * 5, 5);
         if (sp.ok) {
