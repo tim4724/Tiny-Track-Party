@@ -2574,6 +2574,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
     }
     for (gltfio::FilamentInstance* inst : insts) {
         const utils::Entity* ents = inst->getEntities();
+        // Where the placement stands: a part that drapes is lifted by the land
+        // over THAT, so it lands on the ground whether the piece stands on the
+        // plain or on its own ground's raised base (mSetOwnGround).
+        const float foot = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
         // Each part's tile, on a grid anchored at the placement's own corner,
         // so a piece narrower than a tile is one mesh wherever it stands.
         std::vector<float3> centre(parts.size());
@@ -2593,7 +2597,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     + (int64_t) ((centre[j].x - x0) / mPieceTile);
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
-                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr);
+                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot);
             g.sources.push_back(src);
         }
         for (auto& [key, g] : tiles) {
