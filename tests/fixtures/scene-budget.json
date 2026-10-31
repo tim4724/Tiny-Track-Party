@@ -195,14 +195,14 @@
     },
     "skysnake": {
       "1": {
-        "worst": 108732,
-        "p90": 99267,
-        "dressing": 24408
+        "worst": 111924,
+        "p90": 99351,
+        "dressing": 26628
       },
       "4": {
-        "worst": 91082,
+        "worst": 91084,
         "p90": 86537,
-        "dressing": 22844
+        "dressing": 7704
       }
     },
     "gauntlet": {

@@ -356,6 +356,9 @@ def kit(kit_id, model, at, yaw=0.0, scale=1.0, pitch=0.0, roll=0.0):
 # An `animated` block inside another is a part riding on that one (a key
 # turning in a walking robot's back): its node is exported as the outer
 # node's child, and the renderer moves it in the outer one's moving frame.
+# `tilt` leans a part's node about x (a spinning top's axis, off upright, for
+# it to precess round the upright spin of the part it rides): build its
+# pieces upright and the block leans them, its riders' too, about the pivot.
 
 ANIMS = []
 ANIM_STACK = []
@@ -363,24 +366,32 @@ ANIM_STACK = []
 def animate(objs, name, pivot, yaw=0.0):
     """Mark built objects as one moving part (what `animated` does for a block)."""
     gid = len(ANIMS)
-    ANIMS.append((name, pivot, yaw, None))
+    ANIMS.append((name, pivot, yaw, None, 0.0))
     for o in objs:
         o['anim'] = gid
 
 class animated:
-    def __init__(self, name, pivot, yaw=0.0):
-        self.name, self.pivot, self.yaw = name, pivot, yaw
+    def __init__(self, name, pivot, yaw=0.0, tilt=0.0):
+        self.name, self.pivot, self.yaw, self.tilt = name, pivot, yaw, tilt
     def __enter__(self):
         self.before = set(bpy.context.scene.objects)
         self.gid = len(ANIMS)
-        ANIMS.append((self.name, self.pivot, self.yaw, ANIM_STACK[-1] if ANIM_STACK else None))
+        ANIMS.append((self.name, self.pivot, self.yaw, ANIM_STACK[-1] if ANIM_STACK else None, self.tilt))
         ANIM_STACK.append(self.gid)
         return self
     def __exit__(self, *exc):
         ANIM_STACK.pop()
-        for o in bpy.context.scene.objects:
-            if o not in self.before and o.get('anim') is None:   # an inner part keeps its own
+        new = [o for o in bpy.context.scene.objects if o not in self.before]
+        for o in new:
+            if o.get('anim') is None:   # an inner part keeps its own
                 o['anim'] = self.gid
+        if self.tilt:
+            bpy.context.view_layer.update()   # the newest part's matrix_world is not current yet
+            lean = Matrix.Translation(P(*self.pivot)) @ Matrix.Rotation(self.tilt, 4, 'X') \
+                @ Matrix.Translation(-P(*self.pivot))
+            for o in new:
+                if o.parent is None:
+                    o.matrix_world = lean @ o.matrix_world
         return False
 
 def split_off(o, pick):
@@ -425,7 +436,7 @@ def join_anims(k):
     """Each `animated` group into one object, origin at its pivot (grown by k
     with the piece), rotation and scale applied so its frame is the piece's."""
     joined = {}
-    for gid, (name, pivot, yaw, _) in enumerate(ANIMS):
+    for gid, (name, pivot, yaw, _, tilt) in enumerate(ANIMS):
         objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') == gid]
         if not objs:
             continue
@@ -440,14 +451,14 @@ def join_anims(k):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         bpy.context.scene.cursor.location = P(*pivot) * k
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-        if yaw:   # the turn moves from the vertices onto the node (yaw about up = Blender Z)
-            o.data.transform(Matrix.Rotation(-yaw, 4, 'Z'))
-            o.rotation_euler = (0.0, 0.0, yaw)
+        if yaw or tilt:   # the turn moves from the vertices onto the node (yaw about up = Blender Z)
+            o.data.transform((Matrix.Rotation(yaw, 4, 'Z') @ Matrix.Rotation(tilt, 4, 'X')).inverted())
+            o.rotation_euler = (tilt, 0.0, yaw)
         o.name = name
         o.data.name = name
         joined[gid] = o
     bpy.context.view_layer.update()
-    for gid, (_, _, _, parent) in enumerate(ANIMS):
+    for gid, (_, _, _, parent, _) in enumerate(ANIMS):
         if parent is not None and gid in joined and parent in joined:
             child, over = joined[gid], joined[parent]
             child.parent = over
@@ -2305,7 +2316,7 @@ def cottage_row():
         box((0.6, 0.5, 5.4), (-8.0 + k * 2.0, 0.45, 0.0), 0x61cb8b)
     for o in bpy.context.scene.objects:          # onto the bank
         o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p) for n, (x, y, z), yaw, p in ANIMS]
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('cottages')
 
 @piece(REAL)
@@ -2473,7 +2484,7 @@ def treehouse():
     kennel((-4.5, G(-4.5, 6.0), 6.0), 1.2)
     for o in bpy.context.scene.objects:          # onto the summit
         o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p) for n, (x, y, z), yaw, p in ANIMS]
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('oak')
 
 @piece(REAL)
@@ -2565,7 +2576,7 @@ def den_camp():
         person((TX + 2.5, 0.9, TZ), 0.0, 0x339cf2, k=0.64, hair=2, sit=True, arm=1.3)
     for o in bpy.context.scene.objects:          # onto the bank
         o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p) for n, (x, y, z), yaw, p in ANIMS]
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('camp')
 
 # ---- TANGLE: the mill stream ------------------------------------------------------------
@@ -2795,7 +2806,7 @@ def playground():
         person((-8.5, 0.5, z + 0.2), 0.0, c, hair=1 if z < 0 else 3, sit=True)
     for o in bpy.context.scene.objects:          # onto the summit
         o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p) for n, (x, y, z), yaw, p in ANIMS]
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('playground')
 
 @piece(REAL)
@@ -3717,8 +3728,10 @@ def block_castle():
     # Gauntlet: a castle of alphabet blocks on the floor, the toy siege the
     # track's soldiers and robot lay. The curtain wall runs along the road
     # with its gate to the road (+X), towers at the four corners flying
-    # pennants that flap, side and back walls closing the court, a moat along
-    # the front with the drawbridge down across it. A block is about 5 cm.
+    # pennants that flap, the king's banner over the gate, side and back
+    # walls closing the court, a moat along the front with the drawbridge
+    # down across it. A block is about 5 cm; a pennant a toy's, cut big
+    # enough to see flapping from the road.
     S, C = 1.4, 0.0                               # a block; the ground it stands on
     front = ('+x', '+y')
     for i in range(7):                           # the curtain wall, two courses
@@ -3729,6 +3742,11 @@ def block_castle():
         if i % 2 == 0:
             box((S * 0.6, S * 0.5, S * 0.6), (0, C + S * 2.25, z), 0xf2c14e)
     box((0.5, S * 1.05, S * 0.9), (0.2, C + S * 0.52, 0), 0x3a2a22)              # the gateway
+    GT = C + S * 2                                                              # the banner over it
+    box((BAR * 1.6, 2.6, BAR * 1.6), (0, GT + 1.3, 0), 0x2a2735)
+    with animated('anim_sway:a=x:d=20:p=2.4#banner', (0, GT + 2.55, 0)):
+        box((0.08, 1.1, 1.9), (0, GT + 1.98, 1.0), 0x5a8fd8)
+        box((0.1, 0.4, 0.4), (0, GT + 1.98, 1.0), 0xf2c14e)                    # its crest
     n = 0
     for sz in (-1, 1):
         z = sz * 4 * S
@@ -3738,9 +3756,10 @@ def block_castle():
                       letters={'+x': ABC[(j + 4 + sz) % 8]} if x == 0 else None)
             top = C + h * S
             cyl(S * 0.78, S * 0.9, (x, top, z), 0x6cbf6c if x == 0 else 0xe66a5a, r2=0.05, segs=10)
-            box((BAR, 1.6, BAR), (x, top + 1.2, z), 0x2a2735)
-            with animated('anim_sway:a=x:d=26:p=%.1f#%d' % (1.6 + 0.2 * n, n), (x, top + 1.95, z)):
-                box((0.06, 0.55, 1.0), (x, top + 1.7, z + 0.55 * sz), 0xff5040)  # the pennant flaps
+            box((BAR * 1.4, 1.8, BAR * 1.4), (x, top + 1.3, z), 0x2a2735)
+            with animated('anim_sway:a=x:d=24:p=%.1f#%d' % (1.6 + 0.2 * n, n), (x, top + 2.15, z)):
+                box((0.08, 0.8, 1.2), (x, top + 1.75, z + 0.65 * sz), 0xff5040)  # the pennant flaps,
+                box((0.08, 0.44, 0.6), (x, top + 1.75, z + 1.5 * sz), 0xff5040)  # tapering to its tip
             n += 1
         for j in (1, 2):                            # the side walls
             block(S, (-j * S, C + S / 2, z), TOY[(j + 1) % 4], faces=('+y', '+z', '-z'))
@@ -3759,15 +3778,20 @@ def spinning_top():
     # Helix: a tin humming top (about 16 cm across and 20 cm to its knob, the
     # biggest tops there are) spinning on its point, the screw of its pump a
     # helix of its own, and a wooden top (about 6 cm) spinning beside it with
-    # its pull string thrown down on the floor. Each wobbles as it goes.
-    with animated('anim_sway:a=z:d=4:p=2.6#a', (0, 0, 0)):
+    # its pull string thrown down on the floor. Each PRECESSES as a top does:
+    # it spins fast about its own axis, leaned off upright, and that axis
+    # walks slowly round the upright on its point, the same way round (a
+    # leaned spin riding an upright one). The wooden one is further run down:
+    # leaned more, its axis circling faster. The point is the upright part:
+    # a part with nothing drawn is no node for the lean to ride.
+    with animated('anim_spin:w=1.5#a', (0, 0, 0)):
         cyl(0.15, 0.6, (0, 0, 0), 0x2a2735, r2=0.6, segs=8)                          # the point
-        with animated('anim_spin:w=4.0#a', (0, 0, 0)):
+        with animated('anim_spin:w=5.0#a', (0, 0, 0), tilt=0.12):
             humming_top_body()
     x, z, k = -1.5, 6.4, 0.75
-    with animated('anim_sway:a=z:d=7:p=1.2#b', (x, 0, z)):
+    with animated('anim_spin:w=-2.6#b', (x, 0, z)):
         cyl(0.06 * k, 0.4 * k, (x, 0, z), 0x2a2735, r2=0.32 * k, segs=10)
-        with animated('anim_spin:w=-6.0#b', (x, 0, z)):
+        with animated('anim_spin:w=-7.0#b', (x, 0, z), tilt=0.2):
             spinning_top_body(x, z, k)
     tube([(-0.5, 0.1, 4.6), (-0.2, 0.1, 3.8), (0.9, 0.1, 3.9), (1.9, 0.1, 4.6), (2.6, 0.1, 4.2)], 0.05, 0xfff6eb, res=3, bevel_res=0)
     box((0.3, 0.3, 1.4), (2.9, 0.15, 3.9), 0x9a7b55, yaw=0.9)
@@ -3803,22 +3827,26 @@ def spinning_top_body(x, z, k):
 @piece(0.7)
 def toy_robot():
     # Gauntlet: a boxy wind-up robot marching its beat before the castle, a
-    # loop so it never turns back on itself in sight: it rocks from foot to
-    # foot as wind-up toys walk, and the big key in its back turns. Visor and
-    # eyes, a grille mouth, antenna, claws. Built facing +X at the loop's
-    # first point; the renderer turns it along its way. About 25 cm tall.
+    # loop so it never turns back on itself in sight: it steps as wind-up
+    # toys walk, each leg lifting in turn while the body rocks over the other
+    # (anim_bob and anim_waddle in step), and the big key in its back turns.
+    # Visor and eyes, a grille mouth, antenna, claws. Built facing +X at the
+    # loop's first point; the renderer turns it along its way. About 25 cm
+    # tall.
     RX, RZ, N = 1.6, 4.0, 16
     for k in range(N):
         a = 2 * math.pi * k / N
         marker('path_patrol_%d' % k, (RX * math.cos(a), 0, RZ * math.sin(a)))
     X = RX
     with animated('anim_path:c=patrol:p=14:f=1', (X, 0, 0)):
-        for z in (-0.55, 0.55):
-            box((1.1, 0.3, 0.9), (X + 0.1, 0.15, z), 0x2a2735)                   # the feet march on
-        with animated('anim_waddle:d=9:p=0.9', (X, 0.3, 0)):                      # the rest rocks over them
-            for z in (-0.55, 0.55):
+        box((1.2, 0.45, 1.9), (X, 1.9, 0), 0x868ba1)                             # the hips march on
+        # a leg lifts at the top of the body's rock the other way: the waddle
+        # rolls its top toward +Z a quarter in, so the -Z leg goes up then
+        for z, o in ((-0.55, 0.25), (0.55, 0.75)):
+            with animated('anim_bob:h=0.24:p=0.9:o=%g#%s' % (o, 'l' if z < 0 else 'r'), (X, 0, z)):
                 box((0.7, 1.4, 0.7), (X, 1.0, z), 0x9aa1b4)
-            box((1.2, 0.45, 1.9), (X, 1.9, 0), 0x868ba1)
+                box((1.1, 0.3, 0.9), (X + 0.1, 0.15, z), 0x2a2735)
+        with animated('anim_waddle:d=7:p=0.9:o=0', (X, 1.9, 0)):                  # the body rocks over them
             box((1.4, 2.0, 2.0), (X, 3.1, 0), 0x5a8fd8)
             box((0.12, 0.9, 1.2), (X + 0.72, 3.15, 0), 0xd0e8ff)
             for k, c in enumerate((0xff5040, 0x6cbf6c, 0xf2c14e)):
@@ -3969,9 +3997,12 @@ def toy_snake(ctrl, base, k, rear=None, tail=None, neck=None):
     z)], its blocks alternating green and yellow with a gap at every joint,
     tapering to the tail, `k` its size, standing on `base(x, z)`. With `rear`
     (a direction (x, z)), its last joints rise and its head leans out that
-    way; otherwise its head lies at the curve's end. `tail` and `neck` name
-    those parts' motion (anim_), the tail's last four blocks and the rearing
-    neck with its head."""
+    way; otherwise its head lies at the curve's end. `neck` names the rearing
+    neck's motion (anim_), with its head. `tail` (n, degrees, period, lag)
+    wiggles the tail's last n blocks the way the toy's joints let it: each
+    block swings about the joint before it, riding the one before, each `lag`
+    of a swing behind the one before (anim_sway in step), so a wave runs down
+    to the tip."""
     joints = curve(ctrl, 1.4 * k)
     N = len(joints)
     def body(i):
@@ -3982,10 +4013,14 @@ def toy_snake(ctrl, base, k, rear=None, tail=None, neck=None):
         bar((x0 + (x1 - x0) * g, y, z0 + (z1 - z0) * g), (x1 - (x1 - x0) * g, y, z1 - (z1 - z0) * g),
             1.25 * f * k, 1.0 * f * k, SNAKE[i % 2])
     if tail:
-        with animated(tail, (joints[4][0], base(*joints[4]), joints[4][1])):
-            for i in range(4):
-                body(i)
-    for i in range(0 if not tail else 4, N - 1):
+        n, deg, period, lag = tail
+        with contextlib.ExitStack() as chain:
+            for m in range(n):
+                j = joints[n - m]
+                chain.enter_context(animated('anim_sway:a=y:d=%g:p=%g:o=%.3f#tail%d' % (deg, period, (1.0 - m * lag) % 1.0, m),
+                                             (j[0], base(*j), j[1])))
+                body(n - 1 - m)
+    for i in range(0 if not tail else tail[0], N - 1):
         body(i)
     def head(hx, hy, hz, d, pitch):
         yaw = math.atan2(d[0], d[1])
@@ -4025,24 +4060,30 @@ def jointed_snake():
     # snake (about 80 cm of it, as thick as a toy car is tall) lying in curves
     # on the floor below the lap's dive (the dive is the snake). It rears up
     # at its -Z end and sways its head out over -X toward the racers coming
-    # down the dive, and its tail swishes; a little one lies curled beside it.
-    # Its body runs along Z.
+    # down the dive, and its tail wiggles joint by joint as the wooden toy's
+    # does when it is shaken; a little one lies curled beside it. Its body
+    # runs along Z.
     toy_snake([(0.0, 7.4), (1.6, 5.0), (-1.6, 2.6), (1.4, 0.0), (-1.3, -2.4), (0.9, -4.6), (0.0, -6.4)],
               lambda x, z: 0.0, 0.62, rear=(-1.0, 0.0),
-              tail='anim_sway:a=y:d=30:p=2.3#tail', neck='anim_sway:a=y:d=24:p=3.3#neck')
+              tail=(5, 10, 2.2, 0.13), neck='anim_sway:a=y:d=24:p=3.3#neck')
     toy_snake([(-3.4, 7.8), (-4.6, 5.8), (-3.4, 4.0), (-4.5, 2.2)], lambda x, z: 0.0, 0.36)
 
 @piece(1.0)
 def toy_snake_loop():
     # Skysnake: another of the game's wooden snakes slithering round on the
-    # floor. Its body lies on an arc and the whole snake turns about the
-    # arc's middle, so it glides head first along its own curve.
-    # Its head rears up as it goes, a cobra's, so it reads over a kerb.
-    R, k = 2.6, 0.45
-    ctrl = [(R * math.cos(math.radians(a)), R * math.sin(math.radians(a))) for a in range(120, -121, -30)]
-    a = math.radians(-120)
-    with animated('anim_spin:w=0.45', (0, 0, 0)):
-        toy_snake(ctrl, lambda x, z: 0.0, k, rear=(math.sin(a), -math.cos(a)))
+    # floor. Its body lies on an arc of its circle and it travels round the
+    # circle head first (anim_path, facing its way), so every block follows
+    # the one ahead along the curve, as a snake's body does. A traveller,
+    # it leaves the sun bake: a shadow baked where it lay would stay behind.
+    # Its head rears up as it goes, a cobra's, so it reads over a kerb. Built
+    # with its head at +Z heading +X, where the loop starts.
+    R, k, N = 2.6, 0.45, 64
+    for i in range(N):
+        a = math.radians(90.0 - 360.0 * i / N)
+        marker('path_ring_%d' % i, (R * math.cos(a), 0, R * math.sin(a)))
+    ctrl = [(R * math.cos(math.radians(a)), R * math.sin(math.radians(a))) for a in range(330, 89, -30)]
+    with animated('anim_path:c=ring:p=14:f=1', (0, 0, R)):
+        toy_snake(ctrl, lambda x, z: 0.0, k, rear=(1.0, 0.0))
 
 @piece(1.0)
 def game_box():
@@ -4113,9 +4154,10 @@ def block_city():
     # Skyline: a town of wooden toy blocks built on a city play rug (printed
     # streets, a park, a building site), the racers' own size: houses with
     # gable roofs a block or two tall, a row of shops, a tower a child stacked
-    # up to the skyway's height, toy cars parked in the streets and a toy
-    # crane turning over the building site. The rug is 1.3 by 1.65 m; its
-    # front (+X) faces the road, the main street running along it (Z).
+    # up to the skyway's height, toy cars parked in the streets, one driving
+    # round the park block (anim_path, facing its way), and a toy crane
+    # slewing over the building site. The rug is 1.3 by 1.65 m; its front
+    # (+X) faces the road, the main street running along it (Z).
     RW, RL = 24.0, 30.0
     box((RW + 0.8, 0.08, RL + 0.8), (0, 0.04, 0), 0x5a8fd8)                     # the rug's border
     box((RW, 0.06, RL), (0, 0.11, 0), 0xfdf4de)                                 # the printed mat
@@ -4125,10 +4167,12 @@ def block_city():
     street(0.7, -RL / 2, 3.3, RL / 2)                                             # the main street
     for zc in (-6.0, 7.0):                                                        # and two cross streets
         street(-RW / 2, zc - 1.3, RW / 2, zc + 1.3)
+    WX = -11.35                                                                   # a lane down the far edge
+    street(-RW / 2, -7.3, -10.7, 8.3)
     for k in range(9):                                                            # dashes down the middle
         z = -RL / 2 + 1.6 + k * 3.4
         quad([(1.9, Y + 0.01, z), (2.1, Y + 0.01, z), (2.1, Y + 0.01, z + 1.2), (1.9, Y + 0.01, z + 1.2)], 0xfdf4de)
-    quad([(-11.0, Y, -4.2), (-1.0, Y, -4.2), (-1.0, Y, 5.2), (-11.0, Y, 5.2)], 0x6cbf6c)    # the park
+    quad([(-10.7, Y, -4.2), (-1.0, Y, -4.2), (-1.0, Y, 5.2), (-10.7, Y, 5.2)], 0x6cbf6c)    # the park
     quad([(-11.5, Y, 9.0), (-3.5, Y, 9.0), (-3.5, Y, 14.5), (-11.5, Y, 14.5)], WOOD)         # the building site
     G = 0.14                                                                      # the rug's top
     B = [  # (x, z, w, d, h, body, roof, kind), the road side first
@@ -4168,15 +4212,42 @@ def block_city():
             box((0.2, CH, 0.2), (CX + sx * 0.32, G + CH / 2, CZ + sz * 0.32), 0xf2c14e)
     for k in range(4):
         box((0.84, 0.14, 0.84), (CX, G + 1.2 + k * 1.3, CZ), 0xf2c14e)
-    with animated('anim_spin:w=0.35', (CX, G + CH, CZ)):
+    # The crane slews to and fro over the site's edge and the cross street
+    # (its jib toward the town at rest, so the load never swings off the
+    # rug), as a crane works, and the block on its hook swings (a pendulum
+    # about the jib's own line, riding the jib).
+    with animated('anim_sway:a=y:d=45:p=12', (CX, G + CH, CZ)):
         box((1.0, 0.9, 1.0), (CX, G + CH + 0.45, CZ), 0xff5040)                   # the cab
-        box((0.45, 0.4, 5.4), (CX, G + CH + 1.05, CZ + 1.9), 0xf2c14e)            # the jib
-        box((0.9, 0.7, 1.0), (CX, G + CH + 0.8, CZ - 1.3), 0x555b66)              # the counterweight
-        bar((CX, G + CH + 0.85, CZ + 4.2), (CX, G + CH - 2.0, CZ + 4.2), 0.06, 0.06, 0x2a2735)
-        box((0.7, 0.7, 0.7), (CX, G + CH - 2.4, CZ + 4.2), 0x5a8fd8)               # a block on the hook
-    for x, z, c, ax in ((2.6, -10.5, 0xff5040, False), (1.4, 9.0, 0x6cbf6c, False), (-6.0, 7.4, 0x5a8fd8, True)):
+        box((0.45, 0.4, 5.4), (CX, G + CH + 1.05, CZ - 1.9), 0xf2c14e)            # the jib
+        box((0.9, 0.7, 1.0), (CX, G + CH + 0.8, CZ + 1.3), 0x555b66)              # the counterweight
+        with animated('anim_sway:a=z:d=7:p=2.6', (CX, G + CH + 0.85, CZ - 4.2)):
+            bar((CX, G + CH + 0.85, CZ - 4.2), (CX, G + CH - 2.0, CZ - 4.2), 0.06, 0.06, 0x2a2735)
+            box((0.7, 0.7, 0.7), (CX, G + CH - 2.4, CZ - 4.2), 0x5a8fd8)           # a block on the hook
+    for x, z, c, ax in ((2.6, -10.5, 0xff5040, False), (1.4, 9.0, 0x6cbf6c, False)):
         o0 = set(bpy.context.scene.objects)
         mini_car(x, z, c, along_x=ax)
+        for o in set(bpy.context.scene.objects) - o0:
+            o.location.z += G
+    # the blue car drives round the park block: east along the south cross
+    # street, up the main street, west along the north one, down the lane,
+    # its corners rounded; built at the loop's first point, heading +X
+    loop, RC = [], 1.2
+    for (ax, az), (bx, bz) in (((WX, -6.0), (2.0, -6.0)), ((2.0, -6.0), (2.0, 7.0)),
+                               ((2.0, 7.0), (WX, 7.0)), ((WX, 7.0), (WX, -6.0))):
+        l = math.hypot(bx - ax, bz - az)
+        dx, dz = (bx - ax) / l, (bz - az) / l
+        n = int((l - 2 * RC) / 0.5)
+        loop += [(ax + dx * (RC + (l - 2 * RC) * i / n), az + dz * (RC + (l - 2 * RC) * i / n)) for i in range(n)]
+        nx, nz = -dz, dx                                                          # the turn is to the left
+        cx, cz = bx - dx * RC + nx * RC, bz - dz * RC + nz * RC
+        for i in range(6):
+            a = math.pi / 2 * i / 6
+            loop.append((cx - nx * RC * math.cos(a) + dx * RC * math.sin(a), cz - nz * RC * math.cos(a) + dz * RC * math.sin(a)))
+    for i, (x, z) in enumerate(loop):
+        marker('path_drive_%d' % i, (x, G, z))
+    with animated('anim_path:c=drive:p=30:f=1', (loop[0][0], G, loop[0][1])):
+        o0 = set(bpy.context.scene.objects)
+        mini_car(loop[0][0], loop[0][1], 0x5a8fd8, along_x=True)
         for o in set(bpy.context.scene.objects) - o0:
             o.location.z += G
     merge_paint()
@@ -4210,7 +4281,7 @@ def marble_run():
     # and never needs hiding. Towers on the piece's Z axis, A (up) at +Z, B
     # (down) at -Z.
     ZA, ZB, R, TURNS = 13.0, -13.0, 3.4, 2.5
-    MR = 0.45                                    # a marble's radius: a big glass one
+    MR = 0.62                                    # a marble's radius: a big shooter, chunky enough to read rolling
     LOW, HIGH_A, HIGH_B = MR + 0.07, 14.5, 13.5  # marble centre heights: the low run lies on the floor
     up = helix_pts(0, ZA, R, LOW, HIGH_A, 0.0, TURNS)
     down = helix_pts(0, ZB, R, HIGH_B, LOW, math.pi, TURNS)
@@ -4272,7 +4343,7 @@ def marble_run():
         a, b = loop[i], loop[(i + 1) % len(loop)]
         seglen.append(math.dist(a, b))
     total = sum(seglen)
-    COLS = (0x7db8e8, 0xe66a5a, 0x6cbf6c, 0xf2c14e, 0xa878e8, 0x7db8e8, 0xff7e44)
+    COLS = (0x7db8e8, 0xe66a5a, 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xff7e44, 0x5a8fd8, 0xff5040, 0x6cbf6c, 0xf2c14e)
     NM = len(COLS)
     for m in range(NM):
         s = total * m / NM
