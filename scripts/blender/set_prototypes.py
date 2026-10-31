@@ -2939,16 +2939,16 @@ def tumbleweed(at, r):
 def hawk_circle(c, y, R, period, k=1.0, tag='hawk'):
     """A hawk circling over the piece: a closed loop of `path_<tag>_<n>`
     empties `R` round (cx, cz) at height `y`, and the bird riding it
-    (anim_path facing its way), wings spread and banked into the turn, a car
-    long from tip to tip (a vulture's span and then some, so it reads against
-    the sky). `k` is the world's size in the builder's units (1 / the piece's
+    (anim_path facing its way), wings spread and banked into the turn, 0.55
+    u from tip to tip: twice a real hawk's span, the scale rule's most for a
+    small living thing, flying low enough to read against the sky. `k` is the world's size in the builder's units (1 / the piece's
     grow). The bird is BUILT on the ground under the circle, its low wing
     tip on the floor: a traveller is drawn only on its path, so where it is
     built is just its pivot, and a bird built up in the air would stand in
     the piece's box, its sight points and the floating check as a part 5 u
     up that nothing holds."""
     cx, cz = c
-    k *= 0.68                                            # the parts below are a 1.26 span's
+    k *= 0.44                                            # the parts below are a 1.26 span's
     N = 24
     for n in range(N):                                   # angle up: +Z first, the centre on its right
         a = 2 * math.pi * n / N
@@ -3036,7 +3036,7 @@ def dry_creek():
         with animated('anim_path:c=weed:p=56:o=%.3f:f=1+spin:a=z:w=-11+bob:h=0.2:p=%.2f:r=0.35#%d'
                       % (n / 4, 0.7 + 0.06 * n, n), (x, R, zc(x))):
             tumbleweed((x, R, zc(x)), R)
-    hawk_circle((2.0, 1.5), 4.6, 3.4, 15.0, k=1 / 1.45)
+    hawk_circle((2.0, 1.5), 3.6, 3.0, 15.0, k=1 / 1.45)
 
 @piece(1.0)
 def wash_bed():
@@ -3541,7 +3541,7 @@ def filling_station():
             box((0.12, 0.6, 1.2), (2.6, 3.3, -2.6), 0xc0392b)
             box((0.16, 0.2, 0.9), (2.6, 3.35, -2.6), 'white')
             box((0.18, 0.12, 0.12), (2.6, 3.7, -2.6), 'yellow')
-    hawk_circle((0.4, -0.6), 5.4, 4.2, 14.0)
+    hawk_circle((0.4, -0.6), 4.6, 3.6, 14.0)
     join_still('station')
 
 def pumpjack(x0, z0, yaw, tag, period):
@@ -3550,8 +3550,9 @@ def pumpjack(x0, z0, yaw, tag, period):
     horsehead over the wellhead at +X and the gearbox with its red
     counterweights at -X. The beam and the horsehead nod (anim_sway about
     the beam's pivot), the bridle hanging from the head riding with them into
-    the wellhead's stuffing box. Two units tall, a real one's height and a
-    half."""
+    the wellhead's stuffing box, and the pitman arms hanging from the far end
+    riding with them down beside the counterweights, so the beam reads as
+    driven. Two units tall, a real one's height and a half."""
     c, s = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x0 + dx * c + dz * s, dy, z0 - dx * s + dz * c)
@@ -3572,6 +3573,9 @@ def pumpjack(x0, z0, yaw, tag, period):
         part((0.12, 0.1, 0.22), 1.36, 1.76, 0, 'yellow')
         part((0.06, 0.66, 0.06), 1.36, 0.88, 0, 'dark')                         # the bridle
         part((0.3, 0.22, 0.24), -1.28, 1.56, 0, 'slate')                        # the equalizer
+        part((0.12, 0.1, 0.96), -1.2, 1.48, 0, 'slate')                         # its cross bar
+        for sz in (-1, 1):                                                      # the pitman arms, down to
+            part((0.08, 1.0, 0.08), -1.2, 0.98, sz * 0.44, 'dark')              # the cranks
 
 @piece(1.0)
 def oil_field():
