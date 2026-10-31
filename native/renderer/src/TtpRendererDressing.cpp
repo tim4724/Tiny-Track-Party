@@ -131,6 +131,9 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
     // the kerb.
     std::erase_if(placements, [&](const Placement& p) { return inBerm(tb, p.x, p.z, 0); });
     std::erase_if(boulders, [&](const Boulder& b) { return inBerm(tb, b.x, b.z, b.rr); });
+    // ...and out of the sea, where a `shore` brings it in over the verge.
+    std::erase_if(placements, [&](const Placement& p) { return inSea(p.x, p.z, 1.5f); });
+    std::erase_if(boulders, [&](const Boulder& b) { return inSea(b.x, b.z, b.rr); });
 
     // Where each tree and boulder stands, for the landmark gallery's sight
     // lines (scatterLayout): [x, z, plan radius, world top].
@@ -335,6 +338,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                 placements.push_back({ e->slot, x, 0.0f, z, s, yaw });   // y: grounded below
             }
         }
+        // Filtered after the stream, as the scenery's berms are, so no other roll moves.
+        std::erase_if(placements, [&](const Placement& p) { return inSea(p.x, p.z, 1.0f); });
     }
 
     mPropAssets.resize(tb.prModelCount, nullptr);
@@ -466,7 +471,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
         }
-        return !inSetFoot(x, z, 0.5f);
+        return !inSetFoot(x, z, 0.5f) && !inSea(x, z, 0.5f);
     };
     int geoms = 0;
     const auto put = [&](Prim p, const mat4f& m, uint32_t hex, float shade) {
@@ -1011,7 +1016,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         if (!lowest || a.z < lowest->z) lowest = &a; // .z carries `top`
     }
     if (has(ttp::rt::LM_LIGHTHOUSE) && lowest) { // lighthouse — banded tower on its island
-        constexpr float LH = 1.75f; // LH_SCALE (~16.5u tall)
+        // ~9.5 u tall: a tall real lighthouse (40 m) beside a 0.9 car, out on
+        // its island (the beach's scale rule: big things only as big as in life).
+        constexpr float LH = 1.0f;
         const Spot at{ lowest->x * mHillSf, lowest->y * mHillSf, 0, true };
         const float baseY = lowest->z - 0.8f; // sunk into the island crown
         const auto seg = [&](float r0, float r1, float h, float cy, uint32_t hex,
@@ -1038,8 +1045,10 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const float wy = gy + 0.12f; // rides ON the water sheet (WATER_LIFT)
         const float yaw = (float) rnd() * 2.0f * (float) M_PI;
         constexpr float HEEL = 0.09f; // a sailing boat leans
+        // Built 5.5 long; at BOAT a 10 m yacht beside a 0.9 car.
+        constexpr float BOAT = 0.45f;
         const mat4f frame = mat4f::translation(float3{ bx, wy, bz })
-                * rotY(yaw) * rotZ(HEEL);
+                * rotY(yaw) * rotZ(HEEL) * mat4f::scaling(float3{ BOAT });
         const auto bpart = [&](Prim prim, float lx, float ly, float lz, uint32_t hex) {
             const mat4f m = frame * mat4f::translation(float3{ lx, ly, lz });
             const uint32_t c = packAlbedo(srgbToLinear(hex), 1.0f);
@@ -1860,8 +1869,12 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
         const float u = dx * f.ax + dz * f.az, v = -dx * f.az + dz * f.ax;
         if (std::fabs(u) < f.hx + PIECE_MARGIN && std::fabs(v) < f.hz + PIECE_MARGIN) return "piece";
     }
-    if (mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - SEA_MARGIN) return "sea";
+    if (inSea(x, z, SEA_MARGIN)) return "sea";
     return "";
+}
+
+bool TtpRenderer::inSea(float x, float z, float margin) const {
+    return mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - margin;
 }
 
 // Consecutive rings are stitched into a strip. A point is read in every strip
@@ -2026,7 +2039,25 @@ TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
     for (float& p : s.shorePh) p = rnd() * 2.0f * (float) M_PI;
     for (float& p : s.crinklePh) p = rnd() * 2.0f * (float) M_PI;
     for (float& p : s.swashPh) p = rnd() * 2.0f * (float) M_PI;
+    // A `shore` landform: the waterline runs through its anchor. Never closer
+    // than SHORE_MIN_GAP past the road's centre, so the surf cannot reach the
+    // deck wherever the anchor was put.
+    constexpr float SHORE_MIN_GAP = 5.0f;
+    for (const ttp::rt::Landform& l : tb.land) {
+        if (l.kind != 6 || l.piece >= 0) continue;
+        const TrackBin::Sample f = tb.frameAt(l.u * tb.length);
+        const float px = f.pos.x + f.lat.x * l.lat, pz = f.pos.z + f.lat.z * l.lat;
+        const float a = std::atan2(pz, px), r = std::sqrt(px * px + pz * pz);
+        s.bays.push_back({ a, r, std::max(SHORE_MIN_GAP, r - s.support(a)), 0.5f * l.len, l.r });
+    }
     return s;
+}
+
+float TtpRenderer::Shoreline::support(float a) const {
+    const float cx = std::cos(a), cz = std::sin(a);
+    float best = 0;
+    for (const float2& p : pts) best = std::max(best, p.x * cx + p.y * cz);
+    return best;
 }
 
 float TtpRenderer::Shoreline::harm(const float (*h)[2], int n, const float* ph, float a) {
@@ -2039,12 +2070,17 @@ float TtpRenderer::Shoreline::at(float a) const {
     constexpr float SHORE_MARGIN = 26, SHORE_WOBBLE = 22, SHORE_CRINKLE = 2.6f;
     static const float SHORE_H[4][2] = { { 2, 1 }, { 3, 0.72f }, { 5, 0.44f }, { 7, 0.26f } };
     static const float CRINKLE_H[3][2] = { { 11, 1 }, { 17, 0.62f }, { 29, 0.34f } };
-    const float cx = std::cos(a), cz = std::sin(a);
-    float support = 0;
-    for (const float2& p : pts) support = std::max(support, p.x * cx + p.y * cz);
-    return support + SHORE_MARGIN
-            + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
-            + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    const float sup = support(a);
+    const float crinkle = SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    float r = sup + SHORE_MARGIN + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a)) + crinkle;
+    for (const Bay& b : bays) {
+        const float d = std::fabs(std::remainder(a - b.a, 2.0f * (float) M_PI)) * b.r;
+        if (d >= b.half + b.fade) continue;
+        const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / b.fade));
+        const float w = 1.0f - t * t * (3.0f - 2.0f * t);
+        r = std::min(r, r + (sup + b.gap + 0.3f * crinkle - r) * w);
+    }
+    return r;
 }
 
 // The sea ring (theme.water): a flat ring around the play field whose radial
@@ -2087,7 +2123,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     mShoreFn = [shore](float a) { return shore.at(a); };
     const auto harm = Shoreline::harm;
     const float* swashPh = shore.swashPh;
-    std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1);
+    std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1), landK(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {
         const float a = (float) (si % SEG) / SEG * 2.0f * (float) M_PI;
@@ -2095,6 +2131,12 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
         shoreR[si] = shore.at(a);
         swashF[si] = 1 + SWASH_RANGE * harm(SWASH_H, 3, swashPh, a);
         outer = std::max(outer, shoreR[si]);
+        // Where a bay brings the sea in to the road, the damp sand narrows
+        // with the beach, so the strip between them is not all wet. The open
+        // shore stands well past WET_FULL, so it keeps its band whole.
+        constexpr float WET_FULL = 20.0f;
+        landK[si] = shore.bays.empty() ? 1.0f
+                : std::min(1.0f, std::max(0.35f, (shoreR[si] - shore.support(a)) / WET_FULL));
     }
     const float y = tb.groundY + WATER_LIFT;
     const float3 foam = srgbToLinear(tb.waterFoam);
@@ -2111,8 +2153,9 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
             const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
             const uint32_t col = colAt(ri);
             for (int si = 0; si <= SEG; si++) {
+                const float o = off < 0 ? off * landK[si] : off;
                 const float r = shoreR[si] * (1 - t) + outer * t
-                        + off * (1 + (swashF[si] - 1) * sw);
+                        + o * (1 + (swashF[si] - 1) * sw);
                 m.verts.push_back({ cosA[si] * r, y + lift, sinA[si] * r, col });
             }
         }

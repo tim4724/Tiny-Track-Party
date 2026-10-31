@@ -565,7 +565,10 @@ stand on `groundY` with their feet buried.
   dunes read as a wall and hid it), and everything, the authored landforms
   included, sinks to exactly the plain short of the waterline, where the sea
   and the wet sand lie flat on it. The sea and the dunes read one shoreline
-  (`shoreline()`).
+  (`shoreline()`), and so does every keep-out (`inSea`: scatter, props,
+  clutter, `spotIssue`). A `shore` landform brings that one curve in to a
+  stretch of road (Riptide's surf beach): the track never moves to meet the
+  sea, the sea moves to meet the track.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

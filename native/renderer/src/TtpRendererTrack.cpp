@@ -88,6 +88,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     std::vector<float2> anchors(tb.setPieces.size());
     if (mTerrainAmp > 0) {
         for (const ttp::rt::Landform& l : tb.land) {
+            if (l.kind == 6) continue;   // a shore moves the sea, not the land (shoreline())
             float u = l.u, lat = l.lat, yaw = l.yaw, k = 1.0f;
             if (l.piece >= 0) {
                 if ((size_t) l.piece >= tb.setPieces.size()) continue;
