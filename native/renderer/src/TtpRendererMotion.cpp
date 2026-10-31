@@ -383,8 +383,9 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
 
 // Three soft puffs rising, growing and fading on a staggered loop (the JS
 // sprites, as blend quads billboarded per cell); renderWorld moves them.
-void TtpRenderer::buildSmokePuffs(const float3& origin) {
+void TtpRenderer::buildSmokePuffs(const float3& origin, float scale) {
     mSmokeOrigin = origin;
+    mSmokeScale = scale;
     if (!mBlendMaterial) return;
     mSmoke.resize(3);
     const BlurKernel blur(6.0f);
