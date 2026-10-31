@@ -61,8 +61,11 @@ function compose(kit, name, build) {
 // lifts, the longboat bobs out of step with it. A ship rolling the 20 degrees
 // a flag swings would be a storm; 12 degrees on a slow period is a heavy swell
 // whose masthead sweeps a couple of units, which a racer sees.
+// At SHIP the kit's galleon is 8.5 long, a real one beside a 0.9 car (the
+// kit models it four times a car's scale), its longboat a car long.
+const SHIP = 0.65;
 compose(PIRATE, 'set-pirate-ship', (put) => {
-  put('ship-pirate-large', { x: 0, z: 0, y: -0.35, yaw: 0.12, name: 'anim_sway:a=z:d=12:p=6.5+bob:h=0.5:p=4.6' });
-  // tracks.js sinks the ship half a unit; the longboat floats, so it rides that back up
-  put('boat-row-large', { x: 5.2, z: -4.5, y: 0.45, yaw: 0.9, name: 'anim_bob:h=0.45:p=3.1' });
+  put('ship-pirate-large', { x: 0, z: 0, y: -0.35 * SHIP, yaw: 0.12, scale: SHIP, name: 'anim_sway:a=z:d=12:p=6.5+bob:h=0.32:p=4.6' });
+  // tracks.js sinks the ship a third of a unit; the longboat floats, so it rides that back up
+  put('boat-row-large', { x: 3.4, z: -2.9, y: 0.3, yaw: 0.9, scale: 0.34, name: 'anim_bob:h=0.2:p=3.1' });
 });
