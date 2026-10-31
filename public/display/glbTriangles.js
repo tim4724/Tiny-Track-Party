@@ -2,7 +2,9 @@
 // points. Dependency-free so the browser and Node read a model the same way:
 // the landmark gallery's sight lines (TestHarness.js) and the set-piece check
 // (scripts/set-check.mjs). Triangle lists only; other primitive modes are
-// skipped.
+// skipped. A triangle under a part the renderer DRAPES (a node named
+// `drape...`, or an `anim_` node with the `drape` verb: set_motion.h) carries
+// `drape: true`: it was built on the plain and is laid on the ground as drawn.
 
 const GLB_MAGIC = 0x46546c67, JSON_CHUNK = 0x4e4f534a, BIN_CHUNK = 0x004e4942;
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -55,9 +57,12 @@ export function glbTriangles(bytes) {
   }
   if (!json || !bin) throw new Error('expected a JSON and a BIN chunk');
   const tris = [];
-  const walk = (ni, parent) => {
+  const draped = (name = '') => name.startsWith('drape')
+    || (name.startsWith('anim_') && name.slice(5).split('#')[0].split('+').some((v) => v.split(':')[0] === 'drape'));
+  const walk = (ni, parent, drape) => {
     const n = json.nodes[ni];
     const m = mul(parent, localMatrix(n));
+    drape = drape || draped(n.name);
     if (n.mesh != null) {
       for (const p of json.meshes[n.mesh].primitives) {
         if ((p.mode ?? 4) !== 4) continue;
@@ -65,11 +70,15 @@ export function glbTriangles(bytes) {
           m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13],
           m[2] * x + m[6] * y + m[10] * z + m[14]]);
         const idx = p.indices != null ? accessor(json, bin, p.indices) : pos.map((_, k) => k);
-        for (let k = 0; k + 2 < idx.length; k += 3) tris.push([pos[idx[k]], pos[idx[k + 1]], pos[idx[k + 2]]]);
+        for (let k = 0; k + 2 < idx.length; k += 3) {
+          const t = [pos[idx[k]], pos[idx[k + 1]], pos[idx[k + 2]]];
+          if (drape) t.drape = true;
+          tris.push(t);
+        }
       }
     }
-    for (const c of n.children || []) walk(c, m);
+    for (const c of n.children || []) walk(c, m, drape);
   };
-  for (const ni of json.scenes[json.scene || 0].nodes) walk(ni, IDENTITY);
+  for (const ni of json.scenes[json.scene || 0].nodes) walk(ni, IDENTITY, false);
   return tris;
 }
