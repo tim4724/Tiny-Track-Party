@@ -373,6 +373,7 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         mat4f local = mat4f::translation(float3{ 0, pose.lift, 0 });
         if (pose.yaw != 0) local = local * mat4f::rotation(pose.yaw, float3{ 0, 1, 0 });
         if (m.sway) local = local * axisTurn(m.swayAxis, pose.sway);
+        if (pose.gesture != 0) local = local * axisTurn(m.gestureAxis, pose.gesture);
         if (m.spin) local = local * axisTurn(m.spinAxis, pose.spin);
         if (pose.roll != 0) local = local * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
         const mat4f base = mv.parent >= 0 ? mSetMoverNow[(size_t) mv.parent] * mv.onParent : mv.rest;
