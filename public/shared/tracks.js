@@ -260,14 +260,20 @@ const BOXES = {
 //          slope to a wide low end
 // A form's `yaw` turns it, and its (`x`, `z`), in the piece's frame.
 export const SET_GROUND = {
-  // Powder's ski mountain, its summit behind the lift (the lift's frame, grown
-  // 1.35 by its builder), and the blue run washed down it from the top
-  // station to the slalom and on to the finish on the flat; Avalanche's slide
+  // Powder's ski mountain, its summit behind the lift (in the lift's frame),
+  // the valley floor at its foot toward the road where the valley station,
+  // the resort's chalets and the slalom's finish stand (a plain, so the
+  // ground raised toward the deck does not bury them; the mountain's foot
+  // stops a grid cell short of them, where the 9 u grid's chords over the
+  // foot would), and the blue run
+  // washed down it from the top station to the slalom and on to the finish
+  // on the flat; Avalanche's slide
   // face, the debris fan over the chute's end (stopping a grid cell short of
-  // the road, whose cap would leave what lies on it floating), and its
-  // fences' slopes.
+  // the road, whose cap would leave what lies on it floating), and the
+  // slopes its fences and warning signs stand under.
   'set-ski-lift': [
-    { kind: 'mound', x: -54, h: 40.5, r: 74.25, r1: 60.75, rz: 101.25, shape: 1.15 },
+    { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
+    { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
     { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xb4cdf2 },
     { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xb4cdf2 }
   ],
@@ -276,12 +282,15 @@ export const SET_GROUND = {
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
   // Flurry's lake: the ice lies on the plain, unraised, and the snow banks up
-  // round it (the road crosses its east edge on stilts).
+  // round it (the road crosses its east edge on stilts). The bank stays under
+  // a racer's eye on the raised road (the deck rides some 2.6 over the ice),
+  // so the ice reads over it.
   'set-frozen-lake': [
     { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
-    { kind: 'ring', r: 21, w: 6, h: 3.5 }
+    { kind: 'ring', r: 21, w: 6, h: 1.6 }
   ],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
+  'set-warning-sign': [{ kind: 'mound', x: -28, h: 22.4, r: 25.9, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Pretzel's oak on the crest of the hill it grew on, its summit under the
   // trunk: short toward the road (+X), the hill falling away behind it and
   // along it across the north-east corner of the garden.
@@ -435,11 +444,8 @@ export const TRACKS = {
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
     set: [
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
-      { model: 'set-ski-rack', u: 0.695, lat: 22.5, yaw: 20 },
-      { model: 'set-piste-fence', u: 0.96, lat: -7, yaw: 180 },
-      { model: 'set-piste-fence', u: 0.06, lat: 7.5 },
-      { model: 'set-ski-rack', u: 0.03, lat: 9, yaw: 20 },
-      { model: 'set-ski-rack', u: 0.55, lat: -7.2, yaw: 160 }
+      { model: 'set-ski-rack', u: 0.435, lat: 14.5, yaw: 20 },
+      { model: 'set-ski-rack', u: 0.54, lat: -10.2, yaw: 160 }
     ]
   },
   flurry: {
@@ -448,7 +454,7 @@ export const TRACKS = {
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 172 },
       { model: 'set-log-cabin', u: 0.6, lat: -20, yaw: 160 },
-      { model: 'set-log-pile', u: 0.3719, lat: -9.2, yaw: -169 }
+      { model: 'set-log-cabin', u: 0.06, lat: 14.5, yaw: 20 }
     ],
     // a frozen stream runs from the village loop under the crossing down to
     // the lake
@@ -461,15 +467,13 @@ export const TRACKS = {
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
       { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 180 },
-      { model: 'set-igloo', u: 0.12, lat: -14, yaw: 160 },
-      { model: 'set-expedition-camp', u: 0.01, lat: 10.5, yaw: 20 },
-      { model: 'set-ice-chunks', u: 0.7, lat: 14.5, yaw: 247 },
-      { model: 'set-ice-chunks', u: 0.94, lat: -9.2, yaw: 55 },
-      { model: 'set-ice-chunks', u: 0.24, lat: -14.5, yaw: 135 },
-      { model: 'set-ice-chunks', u: 0.48, lat: 10.5, yaw: 74 },
-      { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 160 },
-      { model: 'set-ice-chunks', u: 0.13, lat: 10.5, yaw: 116 },
-      { model: 'set-penguin-chute', u: 0.36, lat: 17, yaw: 40 }
+      { model: 'set-igloo', u: 0.01, lat: -7, yaw: 106 },
+      { model: 'set-expedition-camp', u: 0.09, lat: 7.5, yaw: 77 },
+      { model: 'set-penguin-group', u: 0.03, lat: 7.5, yaw: 69 },
+      { model: 'set-penguin-group', u: 0.92, lat: -9, yaw: 227 },
+      { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
+      { model: 'set-expedition-camp', u: 0.88, lat: -14.5, yaw: 232 },
+      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 180 }
     ],
     // the glacier: a tongue of blue ice flows down from the massif in the
     // west, low in the valley between two snow ridges, into the middle of the map,
@@ -489,7 +493,7 @@ export const TRACKS = {
     oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes,
     set: [
       { model: 'set-avalanche-slide', u: 0.76, lat: 16 },
-      { model: 'set-windsock', u: 0.124, lat: 10.5, yaw: 20 },
+      { model: 'set-windsock', u: 0.894, lat: 7.5, yaw: 20 },
       { model: 'set-warning-sign', u: 0.277, lat: 27.3, yaw: 55 },
       { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
       { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
