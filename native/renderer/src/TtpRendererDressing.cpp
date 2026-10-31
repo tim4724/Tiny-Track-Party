@@ -1436,6 +1436,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     auto& tcm = mEngine->getTransformManager();
     std::vector<size_t> next(nModels, 0);
     std::vector<std::vector<float>> offRoad(nModels);   // each instance's |lat|
+    int nRows = 0;
     for (size_t i = 0; i < tb.setPieces.size(); i++) {
         const auto& p = tb.setPieces[i];
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
@@ -1475,6 +1476,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
                 * mat4f::scaling(float3{ p.scale });
         gltfio::FilamentInstance* const inst = mSetInstances[p.slot][next[p.slot]++];
         tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
+        mSetRowOf[inst] = nRows;
         const float top = base + bb.max.y * p.scale;
         mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
         ttp::Value row = ttp::Value::Obj();
@@ -1494,6 +1496,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         row.set("hx", num(hx));
         row.set("hz", num(hz));
         row.set("top", num(top));
+        row.set("id", ttp::Value::Num(setIdColor(nRows)));   // TTP_DEBUG_SET_ID's colour
         // Each mesh of the composition as its own box on the piece's axes:
         // a piece's footprint takes in all of it (an igloo, the snowman and
         // lamp beside it), and a camera judges how big the piece reads by
@@ -1529,6 +1532,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         }
         row.set("parts", std::move(parts));
         rows.push(std::move(row));
+        nRows++;
     }
     layout.set("pieces", std::move(rows));
     mSetLayout = ttp::canonical_stringify(layout);
@@ -1547,6 +1551,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
                 const utils::Entity e = inst->getEntities()[k];
                 if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
                     smokeOff = off;
+                    mSmokeRow = mSetRowOf[inst];
                     smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
                     smokeScale = mo.smokeScale;
                 }
@@ -2408,8 +2413,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot);
             g.sources.push_back(src);
         }
+        const auto row = mSetRowOf.find(inst);
         for (auto& [key, g] : tiles) {
             g.feat = kFeatDressing;
+            g.setRow = row != mSetRowOf.end() ? row->second : -1;
             g.baked.weld = true;
             g.baked.simplify = true;
             if (!buildMesh(g.baked)) {
@@ -2430,6 +2437,50 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         }
     }
     return true;
+}
+
+// TTP_DEBUG_SET_ID's colour for layout row `row`: one channel full, one
+// empty and the third a step of 8 from 16 up, so 174 rows decode apart under
+// a few levels of error and no lit or fogged surface lands on one by chance
+// short of a saturated primary.
+uint32_t TtpRenderer::setIdColor(int row) {
+    static constexpr int kPerm[6][3] = { { 0, 1, 2 }, { 0, 2, 1 }, { 1, 0, 2 },
+                                         { 1, 2, 0 }, { 2, 0, 1 }, { 2, 1, 0 } };
+    const int* p = kPerm[row % 6];
+    uint8_t c[3];
+    c[p[0]] = 255;
+    c[p[1]] = (uint8_t) std::min(16 + 8 * (row / 6), 248);
+    c[p[2]] = 0;
+    return (uint32_t) c[0] << 16 | (uint32_t) c[1] << 8 | c[2];
+}
+
+// Paint (mSetIdOn) or restore every set piece's meshes: the CPU copies are
+// rewritten and uploaded whole, the shipped colours kept beside them. A mesh
+// already in the asked state is left alone, so a rebuild's call repaints only
+// what it built. The smoke keeps its puffs' shape as a cut at half coverage.
+void TtpRenderer::paintSetIds() {
+    const auto paint = [&](Mesh& m, std::vector<uint32_t>& saved, int row) {
+        if (!m.vb || m.verts.empty() || mSetIdOn == !saved.empty()) return;
+        if (mSetIdOn) {
+            const uint32_t rgb = setIdColor(row);
+            const uint32_t abgr = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
+            for (Vertex& v : m.verts) {
+                saved.push_back(v.abgr);
+                v.abgr = abgr | ((v.abgr >> 24) >= 128 ? 0xFF000000u : 0u);
+            }
+        } else {
+            for (size_t i = 0; i < m.verts.size() && i < saved.size(); i++) m.verts[i].abgr = saved[i];
+            saved.clear();
+        }
+        m.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                m.verts.data(), m.verts.size() * sizeof(Vertex), nullptr));
+    };
+    for (MergedGroup& g : mMergedDress) {
+        if (g.setRow >= 0) paint(g.baked, g.idSaved, g.setRow);
+    }
+    if (mSmokeRow < 0) return;
+    mSmokeIdSaved.resize(mSmoke.size());
+    for (size_t i = 0; i < mSmoke.size(); i++) paint(mSmoke[i], mSmokeIdSaved[i], mSmokeRow);
 }
 
 // The per-copy dressing, regrouped: the instanced scenery and prop models

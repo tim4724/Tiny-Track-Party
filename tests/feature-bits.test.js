@@ -119,6 +119,17 @@ test('every TTP_DEBUG_* knob has a bit of its own, outside TTP_FEAT_ALL', () => 
   }
 });
 
+test("Display.js DEBUG mirrors the header's knobs it names", () => {
+  const block = read('public/display/render/Display.js')
+    .match(/export const DEBUG = \{([\s\S]*?)\};/);
+  assert.ok(block, 'Display.js DEBUG has moved');
+  const bits = debugBits();
+  for (const m of block[1].matchAll(/([A-Z_]+):\s*0x([0-9A-Fa-f]+)/g)) {
+    assert.equal(parseInt(m[2], 16), bits.get(m[1]),
+      `Display.js DEBUG.${m[1]} disagrees with ttp_display.h's TTP_DEBUG_${m[1]}`);
+  }
+});
+
 test("the renderer's kFeat*/kDebug* copies match the header, name for name", () => {
   // The renderer cannot include the ABI header, so TtpRenderer.h retypes every
   // bit it reads. Two of those copies once merged textually clean onto one
