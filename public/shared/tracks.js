@@ -687,13 +687,14 @@ export const TRACKS = {
     // the floor by the spiral climb and its box stood on edge where the grid
     // straight points; the board's wooden snakes have come alive, one rearing
     // at the racers where the south leg points, two more slithering round
-    // where the grid straight and the dive run
+    // either side of the road by the board (the dive's loop would hide one
+    // standing past it)
     set: [
       { model: 'set-jointed-snake', u: 0.9578, lat: 13.9, yaw: -142 },
       { model: 'set-snakes-ladders', u: 0.263, lat: -14.5 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -10.5 },
-      { model: 'set-toy-snake-loop', u: 0.8763, lat: 18 }
+      { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 }
     ]
   },
   gauntlet: {
@@ -718,11 +719,12 @@ export const TRACKS = {
     // straight points, marbles climbing one tower's screw, along the high
     // chute and down the other's (the two spirals and the skyway), then home
     // along the floor; a slinky walks down its books by the grid straight and
-    // two tops spin where the back straight points
+    // a tin humming top and a wooden one spin on the top straight, short of
+    // the run
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-slinky', u: 0.093, lat: 7.3 },
-      { model: 'set-spinning-top', u: 0.985, lat: 5.3 }
+      { model: 'set-spinning-top', u: 0.215, lat: -5.5 }
     ]
   },
   skyline: {

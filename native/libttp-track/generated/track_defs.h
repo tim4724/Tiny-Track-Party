@@ -1674,7 +1674,7 @@ constexpr SetDef kSet_skysnake[] = {
   { "set-snakes-ladders", 0x1.0d4fdf3b645a2p-2, -0x1.dp+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-game-box", 0x1.28f5c28f5c28fp-2, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-toy-snake-loop", 0x1.5c28f5c28f5c3p-3, -0x1.5p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-toy-snake-loop", 0x1.c0aa64c2f837bp-1, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-toy-snake-loop", 0x1p-2, 0x1.2p+3, 0x1.ep+6, 0x0p+0, 0x1p+0 },
 };
 
 constexpr SegDef kS_gauntlet[] = {
@@ -1763,7 +1763,7 @@ constexpr FurnDef kBoxes_helix[] = {
 constexpr SetDef kSet_helix[] = {
   { "set-marble-run", 0x1.1b8bac710cb29p-2, 0x1.6p+4, -0x1.06p+7, 0x0p+0, 0x1p+0 },
   { "set-slinky", 0x1.7ced916872b02p-4, 0x1.d333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-spinning-top", 0x1.f851eb851eb85p-1, 0x1.5333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-spinning-top", 0x1.b851eb851eb85p-3, -0x1.6p+2, 0x0p+0, 0x0p+0, 0x1p+0 },
 };
 
 constexpr SegDef kS_skyline[] = {
