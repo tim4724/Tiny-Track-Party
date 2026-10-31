@@ -2328,8 +2328,8 @@ def village_church():
     # The church: nave along Z under a slate roof, the tower at its -Z end
     # carrying the spire (the tallest thing in the village, about six cars),
     # a porch on the road side (+X), the clock; yews and headstones in the
-    # churchyard behind. On the green before it the maypole stands, children
-    # dancing round it with its ribbons (the lot turns round the pole).
+    # churchyard behind. On the green before it the maypole stands, its
+    # ribbons loose in the breeze, the children round it between dances.
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
@@ -2366,22 +2366,20 @@ def village_church():
     box((0.35, 9.0, 0.35), (MX, 4.5, 0), 'white')
     cyl(0.5, 0.5, (MX, 9.0, 0), 0xff5040, segs=8)
     COLS = (0xff5040, 0x339cf2, 0xffc044, 0x22c46e, 0xa259e6, 0xf8f8fb, 0x339cf2, 0xff5040)
-    # The crown turns with the dance, and the children ride round on it
-    # SKIPPING, every other one in step (a bounce each stride): a ring that
-    # only slid round read as figures gliding over the grass.
-    with animated('anim_spin:w=0.42', (MX, 0, 0)):
-        cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
-        for half in (0, 1):
-            with animated('anim_bob:h=0.035:p=0.48:b=1#%d' % half, (MX, 0, 0)):
-                for k in range(half, 6, 2):
-                    a = k * 2 * math.pi / 6
-                    r = 4.2
-                    px, pz = MX + r * math.cos(a), r * math.sin(a)
-                    # each child goes round the pole (faces along the
-                    # circle), the ribbon in the hand nearest the pole
-                    person((px, 0, pz), -a - math.pi / 2, COLS[k], k=0.7, hair=k, arm=0.9)
-                    hx, hz = MX + (r - 0.35) * math.cos(a), (r - 0.35) * math.sin(a)
-                    strut((MX + 0.6 * math.cos(a), 8.3, 0.6 * math.sin(a)), (hx, 1.35, hz), 0.12, COLS[(k + 3) % 8])
+    # The dance has stopped for a breather: the children stand round the
+    # pole and its ribbons hang loose off the crown, each lifting and
+    # falling in the breeze on its own. The wind moves, nobody does: a ring
+    # of children carried round the pole read as figures gliding over the
+    # grass, skipping or not.
+    cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
+    for k in range(6):
+        a = k * 2 * math.pi / 6 + 0.5
+        ax, az = MX + 0.6 * math.cos(a), 0.6 * math.sin(a)
+        with animated('anim_sway:a=z:d=14:p=%.2f#rib%d' % (2.4 + 0.25 * k, k), (ax, 8.3, az), yaw=-a):
+            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
+    for k in range(6):
+        a = k * 2 * math.pi / 6
+        person((MX + 4.4 * math.cos(a), 0, 4.4 * math.sin(a)), math.pi - a, COLS[k], k=0.7, hair=k, arm=0.25 * (k % 2))
     join_still('church')
 
 @piece(REAL)
