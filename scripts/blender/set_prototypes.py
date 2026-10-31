@@ -1591,7 +1591,8 @@ def frozen_lake():
     # road crosses its east edge on its stilts (+X, toward the road). Built in
     # world units, everything on the ice at its real size beside a car: six
     # skaters (half a unit tall) glide round a rink on the west ice at a
-    # skater's pace, leaning from skate to skate (anim_path + waddle); out on the north-west ice a little village of fishing
+    # skater's pace (anim_path; carried by their skates, they hold their
+    # pose); out on the north-west ice a little village of fishing
     # shanties in bright colours, a fisher sat by his hole jigging his rod; a
     # snowman on the ice by the bank.
     R = 15.0
@@ -1607,7 +1608,7 @@ def frozen_lake():
                                      (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9), (0xfff6eb, 0xcf534f))):
         a = n / 6 * 2 * math.pi
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
-        with animated('anim_path:c=rink:p=26:o=%.3f:f=1+waddle:d=7:p=1.7#%d' % (n / 6, n), at):
+        with animated('anim_path:c=rink:p=26:o=%.3f:f=1#%d' % (n / 6, n), at):
             skater(at[0], at[1], at[2], coat, hat, k=0.19)
     # the shanty village on the north-west ice, a fishing hole by each door;
     # all of it inside nine units of the middle, where the drawn ice is flat
