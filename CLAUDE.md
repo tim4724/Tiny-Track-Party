@@ -38,6 +38,10 @@ npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell
 npm run score:landmarks [-- --track id] [--board dir]
                                   # how long a racer sees each set piece over a lap, and
                                   # why not; --board photographs every model for review
+npm run see:landmarks [-- --track id] [--out dir] [--four]
+                                  # the same, counted in PIXELS off the real picture: every
+                                  # piece in a flat id colour (TTP_DEBUG_SET_ID) over a driven
+                                  # lap; readable s, what hides it, stills of the worst
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)
