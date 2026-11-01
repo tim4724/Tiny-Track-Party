@@ -292,6 +292,10 @@ export const SET_GROUND = {
   // toward the road (+X) to the water hole on the flat at its foot; broad
   // enough that the ground's 9 u grid draws it as a hill, not a cone.
   'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
+  // Glacier's rookery: the snow slope the colony stands up, its face to the
+  // road (+X), so the crowd shows row over row instead of as a line along the
+  // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
+  'set-penguin-group': [{ kind: 'mound', x: -8, h: 2.6, r: 12, r1: 9, rz: 11, shape: 1.2 }],
   // Glacier's expedition camp on a snow bank of its own, flat on top like the
   // den camp's and set back from the road: the land by the climbing road lies
   // well under the deck, so a camp on it hid its tents behind the kerb; on the
@@ -299,8 +303,9 @@ export const SET_GROUND = {
   // already raised (the second camp, by a ramp) it lies on the slope drawn.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), its gentle face to
-  // the road, the school's hut and arch at its foot.
-  'set-ski-school': [{ kind: 'mound', x: -10, h: 3.4, r: 13, r1: 10, rz: 13, shape: 1.3 }],
+  // the road, its foot reaching under the school's hut and arch so the whole
+  // school stands up on it over the kerb of the raised road beside it.
+  'set-ski-school': [{ kind: 'mound', x: -7, h: 4.2, r: 13, r1: 10, rz: 13, shape: 1.3 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   'set-warning-sign': [{ kind: 'mound', x: -28, h: 22.4, r: 25.9, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Pretzel's oak on the crest of the knoll it grew on, its summit under the
@@ -479,8 +484,11 @@ export const TRACKS = {
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 172 },
-      { model: 'set-log-cabin', u: 0.6, lat: -20, yaw: 160 },
-      { model: 'set-log-cabin', u: 0.06, lat: 14.5, yaw: 20 }
+      // the village round the lap, close by the road where a racer reads a
+      // cabin (see:landmarks): by the start, on the east loop, on the run in
+      { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
+      { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
+      { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 }
     ],
     // a frozen stream runs from the village loop under the crossing down to
     // the lake
@@ -492,20 +500,23 @@ export const TRACKS = {
     name: 'Glacier', waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
-      { model: 'set-snow-fort', u: 0.663, lat: -18, yaw: 170 },
-      { model: 'set-igloo', u: 0.01, lat: -7, yaw: 106 },
-      { model: 'set-expedition-camp', u: 0.09, lat: 11, yaw: 77 },
-      { model: 'set-penguin-group', u: 0.03, lat: 7.5, yaw: 69 },
-      { model: 'set-penguin-group', u: 0.92, lat: -9, yaw: 227 },
+      { model: 'set-snow-fort', u: 0.237, lat: -10, yaw: 0 },
+      { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
+      { model: 'set-penguin-group', u: 0.712, lat: 9, yaw: 255 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
-      { model: 'set-expedition-camp', u: 0.88, lat: -12, yaw: 232 },
+      { model: 'set-expedition-camp', u: 0.887, lat: -12, yaw: 238 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 }
     ],
-    // the glacier: a tongue of blue ice flows down from the massif in the
-    // west, low in the valley between two snow ridges, into the middle of the map,
-    // ending among the penguins by the long legs; the fort stands on the
-    // terminal moraine the ice left behind at the far end of the lap, which
-    // the long legs drive straight at
+    // Each piece stands where a racer reads it from the chase camera (the
+    // see:landmarks probe), not where the old sight-line score put it: the
+    // fort and its igloo camp at the end of the top straight, short of the
+    // corridor down the middle whose vista the box cannot also pay a fort
+    // for; the rookeries close by the low road; the camps by the bends.
+    // The glacier: a tongue of blue ice flows down from the massif in the
+    // west, low in the valley between two snow ridges, into the middle of the
+    // map, ending among the penguins by the long legs; the terminal moraine
+    // the ice left lies at the far end of the lap, which the long legs drive
+    // straight at
     land: [
       { kind: 'ridge', u: 0.0491, lat: -126.1, yaw: 151, len: 60, r: 42, h: 28 },
       { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 12, r1: 9, h: 3, h1: 1.2, top: 0.5, tint: 0x8cc2f2 },
@@ -519,7 +530,7 @@ export const TRACKS = {
     oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes,
     set: [
       { model: 'set-avalanche-slide', u: 0.76, lat: 16 },
-      { model: 'set-windsock', u: 0.894, lat: 7.5, yaw: 20 },
+      { model: 'set-windsock', u: 0.894, lat: 7.5, yaw: 48 },
       { model: 'set-warning-sign', u: 0.277, lat: 27.3, yaw: 55 },
       { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
       { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
