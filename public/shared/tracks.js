@@ -792,17 +792,19 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Snakes and ladders, at the toy cars' own scale: the board set out on
-    // the floor by the spiral climb and its box stood on edge where the grid
-    // straight points; the board's wooden snakes have come alive, one rearing
-    // at the racers where the south leg points, two more slithering round
-    // either side of the road by the board (the dive's loop would hide one
-    // standing past it)
+    // Snakes and ladders, at the toy cars' own scale: the board stood up half
+    // open past the dive's loop, outside the bend the loop runs out into, its
+    // face turned to the racers coming down the dive (lying flat, it showed
+    // only a sliver over the kerb), and its box stood on edge where the grid
+    // straight points; the board's wooden snakes have come
+    // alive, one rearing at the racers inside the bend where the south leg
+    // turns for the line, two more slithering round either side of the grid
+    // straight's end
     set: [
-      { model: 'set-jointed-snake', u: 0.9578, lat: 13.9, yaw: -142 },
-      { model: 'set-snakes-ladders', u: 0.263, lat: -14.5 },
+      { model: 'set-jointed-snake', u: 0.9754, lat: 10, yaw: 180 },
+      { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
-      { model: 'set-toy-snake-loop', u: 0.17, lat: -10.5 },
+      { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
       { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 }
     ]
   },
@@ -811,14 +813,20 @@ export const TRACKS = {
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege: the block castle where the long home straight
     // points, the wind-up robot marching its beat beside the straight by a
-    // rank of soldiers and their cannon; more ranks of besiegers stand out
-    // across the floor, on the far bends of the lap
+    // rank of soldiers and their cannon, another rank in the infield; the
+    // besiegers' siege towers, each with a rank marching before it, stand
+    // where the middle straight and the grid straight point, and their
+    // trebuchet, its arm just thrown, where the south straight points (a
+    // rank alone is a speck down a long straight; a tall engine reads from
+    // its far end)
     set: [
       { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
       { model: 'set-toy-soldiers', u: 0.88, lat: 7.5, yaw: 76 },
       { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 },
-      { model: 'set-toy-soldiers', u: 0.65, lat: 12, yaw: 20 },
-      { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 }
+      { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
+      { model: 'set-siege-tower', u: 0.6522, lat: 10.8, yaw: 26 },
+      { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },
+      { model: 'set-trebuchet', u: 0.186, lat: 17.2, yaw: 270 }
     ]
   },
   helix: {
@@ -827,13 +835,17 @@ export const TRACKS = {
     // The marble run: the lap in small (about 50 cm of it) where the top
     // straight points, marbles climbing one tower's screw, along the high
     // chute and down the other's (the two spirals and the skyway), then home
-    // along the floor; a slinky walks down its books by the grid straight and
-    // a tin humming top and a wooden one spin on the top straight, short of
-    // the run
+    // along the floor; more of the kit stands about the room: a marble screw
+    // round a column, a slinky walking down its books beside it, where the
+    // grid straight points, and a zigzag of chutes between two columns
+    // outside the raised straight and again by the loop's entry; a tin
+    // humming top and a wooden one spin short of the run
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
-      { model: 'set-slinky', u: 0.093, lat: 7.3 },
-      { model: 'set-spinning-top', u: 0.215, lat: -5.5 }
+      { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
+      { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
+      { model: 'set-marble-zigzag', u: 0.8246, lat: 9.4, yaw: 148 },
+      { model: 'set-marble-zigzag', u: 0.5174, lat: 12.2, yaw: 100 }
     ]
   },
   skyline: {
@@ -842,11 +854,12 @@ export const TRACKS = {
     // Block city: a town of wooden blocks on a city play rug past the top
     // straight, ahead of both the grid straight and the skyway, a crane
     // turning on its building site; towers a child stacked to the skyway's
-    // own height stand where the skyway lands and where the back straight
-    // points
+    // own height stand past where the skyway lands, where the two legs
+    // beside the skyway point and where the back straight points
     set: [
       { model: 'set-block-city', u: 0.125, lat: -18, yaw: 180 },
-      { model: 'set-block-towers', u: 0.522, lat: -5.5, yaw: 180 },
+      { model: 'set-block-towers', u: 0.5319, lat: -14.9, yaw: -138 },
+      { model: 'set-block-towers', u: 0.802, lat: -13.6, yaw: -172 },
       { model: 'set-block-towers', u: 0.975, lat: -14.5, yaw: 138 }
     ]
   }
