@@ -1483,10 +1483,12 @@ def cabin_hut(w, h, d, at, wall, roof, yaw=0.0):
 def pylon(at, h, yaw, ground=0.0):
     """A lift tower standing on `ground`, its crossarm at `h` across the line
     (the line runs along the tower's turned +Z), at a real tower's size: a
-    column four units tall at most, the sheaves either side at the gauge."""
+    column four units tall at most, the sheaves either side at the gauge.
+    Painted red, as many resorts paint theirs, and a little stout: grey on
+    the shaded snow, the line of towers up the flank was lost from the road."""
     x, _, z = at
-    box((0.22, h - ground + 0.5, 0.22), (x, (h + ground - 0.5) / 2, z), 0x555b66, yaw=yaw)
-    box((1.4, 0.12, 0.12), (x, h + 0.08, z), 0x555b66, yaw=yaw)
+    box((0.3, h - ground + 0.5, 0.3), (x, (h + ground - 0.5) / 2, z), 0xcf534f, yaw=yaw)
+    box((1.4, 0.16, 0.16), (x, h + 0.08, z), 0xcf534f, yaw=yaw)
     for s in (-1, 1):
         gx, gz = turned(x, z, yaw, s * GAUGE, 0)
         box((0.12, 0.1, 0.4), (gx, h, gz), 0x2a2735, yaw=yaw)
