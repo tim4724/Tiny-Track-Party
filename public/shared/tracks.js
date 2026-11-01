@@ -317,8 +317,13 @@ export const SET_GROUND = {
   // Pretzel's den camp on a bank of its own, the same shape.
   'set-den-camp': [{ kind: 'fan', len: 6, r: 9, h: 1.4, top: 0.6 }],
   // Cloverleaf's playground hill: a broad round top the playground stands on
-  // (flat for its whole width), steeper to the road (+X), falling away behind.
-  'set-playground': [{ kind: 'mound', h: 4.0, r: 20, r1: 34, rz: 28, shape: 0.5 }],
+  // (flat for its whole width), steeper to the road (+X), falling away behind;
+  // low enough that its crest does not hide the playground from the corner.
+  'set-playground': [{ kind: 'mound', h: 2.5, r: 20, r1: 34, rz: 28, shape: 0.5 }],
+  // ...and another corner of the park on a low knoll: it stands on the land
+  // a deck raises beside it, which the deck's cap holds under the slab, so a
+  // taller knoll there would leave the corner standing in the air.
+  'set-play-corner': [{ kind: 'mound', h: 0.6, r: 8, r1: 14, rz: 12, shape: 0.6 }],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -533,17 +538,20 @@ export const TRACKS = {
     oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
     // The village: the church on the east terrace where the grid straight
     // looks, the maypole on its green; rows of cottages along the lanes the
-    // circuit runs down, past the north loop, the long diagonal and round the
-    // south loop, each on its bank (SET_GROUND), washing out in the gardens;
-    // the windmill turning in the middle of the south loop. A row keeps clear
-    // of another piece's clearing, which would cut its bank
+    // circuit runs down, by the grid straight (in front of the climb to the
+    // first bridge, which hid a row behind it), past the north loop, the long
+    // diagonal, round the south loop and at the west bend's exit, each on its
+    // bank (SET_GROUND), washing out in the gardens; the windmill turning in
+    // the middle of the south loop. A row keeps clear of another piece's
+    // clearing, which would cut its bank
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
       { model: 'set-cottage-row', u: 0.823, lat: 31, yaw: 41.02 },
-      { model: 'set-cottage-row', u: 0.14, lat: -12, yaw: 180 },
+      { model: 'set-cottage-row', u: 0.045, lat: -15, yaw: 180, y: -0.2 },
       { model: 'set-cottage-row', u: 0.598, lat: -9.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 }
+      { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 },
+      { model: 'set-cottage-row', u: 0.86, lat: 9, yaw: 48.17 }
     ],
     // the valley the village lies in: two terraces climbing either side of
     // the circuit, a long bank behind the north loop and a round hill to the
@@ -562,22 +570,29 @@ export const TRACKS = {
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
     // The children's summer: the treehouse oak on its knoll (SET_GROUND)
     // past the north-west corner, where the start diagonal points, its den
-    // round the foot; the pitch beside the diagonal with a game on; their
-    // camp out past the east bend, the fire smoking
+    // round the foot; the pitch beside the diagonal with a game on, its
+    // pavilion across it from the road, standing up behind the game over the
+    // kerb that hides the lines; their camp by the
+    // diagonal's top, where the racer comes off the north hairpin, the fire
+    // smoking
     set: [
       { model: 'set-treehouse', u: 0.05455, lat: 21, yaw: 25.44 },
       { model: 'set-football-pitch', u: 0.92176, lat: -9.578, yaw: 1.41 },
-      { model: 'set-den-camp', u: 0.53381, lat: 11.842, yaw: 13.39 }
+      { model: 'set-den-camp', u: 0.534, lat: 11.842, yaw: 13.39, scale: 1.4 },
+      { model: 'set-swing-oak', u: 0.14, lat: 9, yaw: 39.71 },
+      { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 }
     ]
   },
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
-    // The mill stream: it rises on the east lawn, runs under the S-bend by
-    // the crossing, across the middle lawn and under the first bridge, along
-    // the north lawn and round the north-west corner into the race of the
-    // watermill on its pond, straight ahead of the grid. Laid reach by reach,
-    // each reach's end circle on the next one's
+    // The mill stream: it rises inside the north loop, runs under the long
+    // diagonal, over the east lawn and under the S-bend by the crossing,
+    // across the middle lawn and under the first bridge, along the north lawn
+    // and round the north-west corner into the race of the watermill on its
+    // pond, straight ahead of the grid. Laid reach by reach, each reach's end
+    // circle on the next one's, each turned so its willow stands clear of
+    // every deck (half round puts it on the other bank at the other end)
     set: [
       { model: 'set-watermill', u: 0.09204, lat: 24.151, yaw: 35.46 },
       { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
@@ -586,7 +601,10 @@ export const TRACKS = {
       { model: 'set-stream-reach', u: 0.15996, lat: -2.595, yaw: -67.1 },
       { model: 'set-stream-reach', u: 0.14206, lat: 9.721, yaw: -172.98 },
       { model: 'set-stream-reach', u: 0.10401, lat: 9.482, yaw: -172.89 },
-      { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 }
+      { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 },
+      { model: 'set-stream-reach', u: 0.89136, lat: -26.405, yaw: 59.8 },
+      { model: 'set-stream-reach', u: 0.86586, lat: -7.524, yaw: -121.56 },
+      { model: 'set-stream-reach', u: 0.83755, lat: 10.952, yaw: 55.43 }
     ],
     // the north lawn's hump the stream bends round
     land: [
@@ -599,11 +617,16 @@ export const TRACKS = {
     // Playground hill: the playground on the broad top of its hill
     // (SET_GROUND) outside the south-west corner, where the start straight
     // points, the climbing net its tallest thing, every swing, seesaw and
-    // roundabout going with a child on it; the park's ice-cream van on the
-    // start straight, the children queueing at it
+    // roundabout going with a child on it, the park's ice-cream van parked
+    // up there with the children queueing at it; another corner of the park
+    // in the S between the two decks, seen from both. Built at the toy
+    // world's chunkiness, where real size put the park under the kerb of a
+    // deck riding three units over the lawn. A knoll by a deck is held down
+    // to it (the cap), so a corner's own is low: it stands on the land the
+    // decks raise, not over it
     set: [
-      { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96 },
-      { model: 'set-ice-cream-van', u: 0.95, lat: -9, yaw: 180 }
+      { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96, y: -0.05, scale: 1.3 },
+      { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west
     land: [
