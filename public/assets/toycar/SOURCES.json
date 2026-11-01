@@ -65,7 +65,6 @@
     "set-game-box.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-headframe.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hoodoos.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-igloo.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jetty.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jointed-snake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lifeguard-tower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
