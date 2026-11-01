@@ -871,10 +871,11 @@ def reef_shelf():
 def crab_pots():
     # Tidepool: the crab fishers' landing above the reef, at a car's scale: a
     # blue net loft with its door to the road (+X) and floats hung on its
-    # wall, the boat hauled up beside it with its red sail hung up its mast to
-    # dry (what a racer sees first, over the kerb), creels stacked high by the
-    # slip, a net drying on two poles, and the fisher in yellow oilskins
-    # sorting the catch, who turns to watch the cars go by.
+    # wall, the boat hauled up beside it with its pale sail hung up its mast to
+    # dry (what a racer sees first, over the kerb; not the roof's red, which
+    # it stands in front of from the road), creels stacked high by the slip, a
+    # net drying on two poles, and the fisher in yellow oilskins sorting the
+    # catch, who turns to watch the cars go by.
     hut(1.5, 1.0, 1.6, (-0.8, 0, 0), 0x6794d9, 0xcf534f, t=0.25)
     for z in (-0.45, -0.1, 0.25):
         box((0.13, 0.13, 0.07), (-0.8 + z, 0.55, 0.84), 0xff7e44)            # floats on the wall
@@ -882,7 +883,7 @@ def crab_pots():
     boat((bx, 0, bz), 0.25, 0xfff6eb, trim=0x339cf2)
     box((0.07, 1.35, 0.07), (bx, 0.75, bz), 0x9a7b55)                         # the mast
     sail = [(bz - 0.75, 0.42), (bz - 0.05, 1.38), (bz - 0.05, 0.35)]
-    prism([(z, y) for z, y in sail], bx + 0.02, 0.03, 0xcf534f)               # the sail, hung up to dry
+    prism([(z, y) for z, y in sail], bx + 0.02, 0.03, 0xfff6eb)               # the sail, hung up to dry
     for (x, y, z, yw) in ((0.45, 0, 0.95, 0.1), (0.45, 0, 1.35, -0.05), (0.75, 0, 1.15, 0.4),
                           (0.45, 0.2, 1.15, 0.2), (0.6, 0.4, 1.15, -0.1), (0.5, 0.2, 1.4, 0.3),
                           (0.55, 0.6, 1.2, 0.15)):
@@ -1139,6 +1140,11 @@ def bonfire():
 
 # ---- Riptide ----
 
+# Where along the beach the swim line's middle lies off the tower: up the
+# beach toward the cars coming (-Z), because past the tower (+Z) Riptide's
+# shore bay ends and the line's far end would lie on the sand.
+SWIM_Z = -7.5
+
 @piece(1.0)
 def lifeguard_tower():
     # Riptide: the surf patrol's station on the beach by the waterline, at a
@@ -1215,8 +1221,9 @@ def lifeguard_tower():
         box((0.04, 0.36, 0.025), (0.07 - 0.24 * math.sin(0.2), 0.24, zc), st, roll=-0.2)
     # the rescue boat, pulled up toward the water
     boat((1.75, 0, -0.7), 0.15, red)
-    # the swimming flags either side of the patrol's water
-    for k, z in enumerate((-2.3, 2.6)):
+    # the swimming flags either side of the patrol's water (the swim line's
+    # middle, SWIM_Z below)
+    for k, z in enumerate((SWIM_Z - 2.3, SWIM_Z + 2.6)):
         flag_on_pole((1.1, 0, z), 1.0, (red, 0xffc044), 'anim_sway:a=z:d=24:p=%.1f#swim%d' % (2.0 + 0.3 * k, k))
     # Each group stands still as a part of its own, so a cell that sees only
     # the tower or only the water draws only that.
@@ -1237,7 +1244,7 @@ def lifeguard_tower():
     def swim():
         with square():
             swim_line()
-    still('swim', swim, 10.5, 0.0)
+    still('swim', swim, 12.0, SWIM_Z)
     group([o for o in bpy.context.scene.objects
            if o.type == 'MESH' and o.get('anim') is None and o.get('group') is None], 'tower')
 
