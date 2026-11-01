@@ -708,6 +708,26 @@ class square:
             if o not in self.before:
                 o['chamfer'] = 0
 
+class moved:
+    """What is built inside, its moving parts and their path markers too,
+    built about the origin and shifted to (x, z): one scene's group laid out
+    beside another in the same piece."""
+    def __init__(self, x, z):
+        self.x, self.z = x, z
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        self.anims = len(ANIMS)
+        return self
+    def __exit__(self, *exc):
+        shift = P(self.x, 0.0, self.z)
+        for o in bpy.context.scene.objects:
+            if o not in self.before and o.parent is None:
+                o.location += shift
+        for i in range(self.anims, len(ANIMS)):
+            name, (px, py, pz), yaw, parent, tilt = ANIMS[i]
+            ANIMS[i] = (name, (px + self.x, py, pz + self.z), yaw, parent, tilt)
+        return False
+
 SEA = 0.12   # the sea's surface over the sand a piece in it stands on (buildWater's WATER_LIFT)
 
 def stadium(cx, cz, r, half, n):
@@ -850,23 +870,30 @@ def reef_shelf():
 @piece(1.0)
 def crab_pots():
     # Tidepool: the crab fishers' landing above the reef, at a car's scale: a
-    # blue shed with its door to the road (+X) and floats hung on its wall,
-    # the boat hauled up beside it, creels stacked by the slip, a net drying
-    # on two poles, and the fisher in yellow oilskins sorting the catch, who
-    # turns to watch the cars go by.
-    hut(1.2, 0.75, 1.0, (-0.6, 0, 0), 0x6794d9, 0xcf534f, t=0.2)
-    for z in (-0.3, -0.05, 0.2):
-        box((0.11, 0.11, 0.06), (-0.6 + z, 0.42, 0.55), 0xff7e44)            # floats on the wall
-    boat((0.5, 0, -1.3), 0.25, 0xfff6eb, trim=0x339cf2)
-    for (x, y, z, yw) in ((0.45, 0, 0.75, 0.1), (0.45, 0, 1.15, -0.05), (0.75, 0, 0.95, 0.4),
-                          (0.45, 0.2, 0.95, 0.2), (0.6, 0.4, 0.95, -0.1)):
+    # blue net loft with its door to the road (+X) and floats hung on its
+    # wall, the boat hauled up beside it with its pale sail hung up its mast to
+    # dry (what a racer sees first, over the kerb; not the roof's red, which
+    # it stands in front of from the road), creels stacked high by the slip, a
+    # net drying on two poles, and the fisher in yellow oilskins sorting the
+    # catch, who turns to watch the cars go by.
+    hut(1.5, 1.0, 1.6, (-0.8, 0, 0), 0x6794d9, 0xcf534f, t=0.25)
+    for z in (-0.45, -0.1, 0.25):
+        box((0.13, 0.13, 0.07), (-0.8 + z, 0.55, 0.84), 0xff7e44)            # floats on the wall
+    bx, bz = 0.75, -1.75
+    boat((bx, 0, bz), 0.25, 0xfff6eb, trim=0x339cf2)
+    box((0.07, 1.35, 0.07), (bx, 0.75, bz), 0x9a7b55)                         # the mast
+    sail = [(bz - 0.75, 0.42), (bz - 0.05, 1.38), (bz - 0.05, 0.35)]
+    prism([(z, y) for z, y in sail], bx + 0.02, 0.03, 0xfff6eb)               # the sail, hung up to dry
+    for (x, y, z, yw) in ((0.45, 0, 0.95, 0.1), (0.45, 0, 1.35, -0.05), (0.75, 0, 1.15, 0.4),
+                          (0.45, 0.2, 1.15, 0.2), (0.6, 0.4, 1.15, -0.1), (0.5, 0.2, 1.4, 0.3),
+                          (0.55, 0.6, 1.2, 0.15)):
         creel((x, y, z), yw)
-    for z in (1.6, 2.6):
-        box((0.05, 0.62, 0.05), (-0.2, 0.31, z), 0x9a7b55)
-    box((0.03, 0.32, 0.98), (-0.2, 0.42, 2.1), 'slate')                     # the net
-    box((0.04, 0.04, 1.04), (-0.2, 0.6, 2.1), 0x9a7b55)
-    with animated('anim_watch:r=22:d=70#fisher', (1.0, 0, 0.4)):
-        figure((1.0, 0, 0.4), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
+    for z in (1.9, 2.9):
+        box((0.06, 0.8, 0.06), (-0.2, 0.4, z), 0x9a7b55)
+    box((0.03, 0.42, 0.98), (-0.2, 0.52, 2.4), 'slate')                     # the net
+    box((0.05, 0.05, 1.06), (-0.2, 0.78, 2.4), 0x9a7b55)
+    with animated('anim_watch:r=22:d=70#fisher', (1.05, 0, 0.55)):
+        figure((1.05, 0, 0.55), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
     join_still('landing')
 
 # ---- Cove ----
@@ -917,7 +944,7 @@ def pirate_camp():
     kit('pirate', 'barrel', (0.3, 0, 1.0), yaw=0.9, scale=0.2)
     kit('pirate', 'barrel', (0.05, 0, 1.2), yaw=0.2, scale=0.2)
     kit('pirate', 'crate', (0.5, 0, 1.45), yaw=-0.3, scale=0.25)
-    kit_flag('flag-pirate-high', (-0.45, 0, 0.9), math.radians(90), 0.42,   # cloth to the road, it flaps
+    kit_flag('flag-pirate-high', (-0.45, 0, 0.9), math.radians(90), 0.6,    # cloth to the road, it flaps
              'anim_sway:a=x:d=24:p=2.1')
     join_still('camp')
 
@@ -937,37 +964,64 @@ def shipwreck_ribs():
         w = 1.0 - abs(k - 3) * 0.08                                              # beamiest midships
         for s in (-1, 1):
             hh = 0.55 if (s > 0) == (k % 3 == 1) else 1.0                        # some snapped short
-            tube([(s * 0.06, 0.1, z), (s * 0.8 * w, 0.22, z), (s * 1.15 * w, 0.62, z),
-                  (s * 1.22 * w, 0.62 + 0.55 * hh, z)], 0.07, wood, res=3, wire=True)
-    # what is left of the planking, along the low side
-    for y, x, z0, z1 in ((0.32, 0.95, -3.4, 2.9), (0.52, 1.1, -3.1, 1.7), (0.74, 1.18, -2.3, 0.5)):
-        box((0.07, 0.17, z1 - z0), (-x, y, (z0 + z1) / 2), wood)
-    box((0.07, 0.17, 2.6), (0.95, 0.32, -1.4), wood)
-    beam((0.6, 0.12, 0.6), (3.4, 0.15, -1.6), 0.16, wood)                         # the mast
-    beam((2.5, 0.15, -0.9), (2.9, 0.15, -0.1), 0.1, wood)                         # its yard
-    gull((0.0, 0.15, 1.0), 0.8)                                                # on the keel
+            tube([(s * 0.06, 0.1, z), (s * 0.8 * w, 0.24, z), (s * 1.15 * w, 0.85, z),
+                  (s * 1.22 * w, 0.85 + 0.8 * hh, z)], 0.08, wood, res=3, wire=True)
+    # what is left of the planking, along the low side, still nearly whole
+    # there, so the hull shows from the road as a hull and not a comb
+    for y, x, z0, z1 in ((0.32, 0.95, -3.4, 2.9), (0.55, 1.1, -3.2, 2.5), (0.78, 1.15, -2.9, 1.9),
+                         (1.01, 1.18, -2.5, 1.2), (1.24, 1.2, -2.0, 0.5), (1.47, 1.22, -1.4, -0.2)):
+        box((0.07, 0.22, z1 - z0), (-x, y, (z0 + z1) / 2), wood)
+    for y, z0, z1 in ((0.32, -3.0, 0.4), (0.55, -2.6, -0.4), (0.78, -2.0, -1.0)):
+        box((0.07, 0.22, z1 - z0), (1.0 + (y - 0.32) * 0.2, y, (z0 + z1) / 2), wood)
+    # the mainmast still standing, snapped two thirds up, its yard hanging
+    # off it askew: the wreck's one tall line, what a racer sees coming
+    rod((0.0, 0.1, 0.4), (0.12, 2.3, 0.45), 0.13, wood, r2=0.1, segs=6)
+    rod((0.12, 2.3, 0.45), (0.2, 2.55, 0.42), 0.1, wood, r2=0.03, segs=5)
+    beam((-0.9, 1.55, 0.2), (1.0, 2.0, 0.65), 0.09, wood)                          # its yard
+    beam((0.6, 0.12, 0.6), (3.0, 0.15, -1.3), 0.13, wood)                          # the topmast, down
+    gull((0.2, 2.55, 0.42), 0.8)                                               # on the stump
     join_still('wreck')
 
 @piece(1.0)
 def jetty():
     # Cove: the pirates' landing stage at a car's scale, from the sand (+X)
     # out over the shallows (-X) toward the ship: plank decking a little wider
-    # than a car on square piles, a rowing boat tied at the far end where a
-    # pirate keeps watch, barrels and a crate waiting at the near end.
+    # than a car, high on square piles (a pier stands well clear of the tide,
+    # and a deck at the sand's height lay hidden behind the road's kerb),
+    # steps up to it from the beach, a rail along both sides, a rowing boat
+    # tied at the far end where a pirate keeps watch under the Jolly Roger,
+    # barrels and crates waiting at the near end by the cargo derrick, one
+    # slung from its jib over the deck.
+    D = 0.7                                                                     # the deck's height
     for k in range(22):                                                         # the decking
-        box((0.42, 0.06, 0.8), (1.2 - k * 0.46, 0.4, 0), 0xb06041 if k % 3 else 0x9a6a46)
+        box((0.42, 0.1, 0.8), (1.2 - k * 0.46, D, 0), 0xb06041 if k % 3 else 0x9a6a46)
     for zs in (-0.32, 0.32):                                                    # the stringers
-        box((10.2, 0.1, 0.1), (-3.7, 0.32, zs), 0x8a6a46)
+        box((10.2, 0.12, 0.12), (-3.7, D - 0.1, zs), 0x8a6a46)
     for k in range(6):
         for zs in (-0.42, 0.42):
-            box((0.12, 1.0, 0.12), (1.2 - k * 1.95, -0.1, zs), 0x8a6a46)
+            box((0.14, D + 0.6, 0.14), (1.2 - k * 1.95, (D - 0.6) / 2, zs), 0x8a6a46)
+            box((0.09, 0.32, 0.09), (1.2 - k * 1.95, D + 0.2, zs), 0x8a6a46)    # the rail's posts
+    for zs in (-0.42, 0.42):                                                    # the rail
+        box((9.9, 0.08, 0.08), (-3.7, D + 0.34, zs), 0x9a6a46)
+    for i in range(3):                                                          # the steps down to the sand
+        box((0.3, 0.08, 0.7), (1.58 + i * 0.28, D - 0.2 - i * 0.22, 0), 0x9a6a46)
+        box((0.08, D - 0.2 - i * 0.22, 0.08), (1.58 + i * 0.28, (D - 0.2 - i * 0.22) / 2, 0.3), 0x8a6a46)
     kit('pirate', 'boat-row-small', (-8.2, -0.02, 0.95), yaw=math.radians(90), scale=0.32)
-    beam((-8.0, 0.25, 0.42), (-8.1, 0.2, 0.75), 0.06, 0xfde4c7)
-    figure((-8.5, 0.43, 0.0), math.pi, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f)
-    kit('pirate', 'barrel', (1.9, 0, -0.35), yaw=0.4, scale=0.2)
-    kit('pirate', 'barrel', (2.1, 0, 0.05), yaw=1.2, scale=0.2)
-    kit('pirate', 'crate', (1.9, 0, 0.55), yaw=0.2, scale=0.25)
-    kit('pirate', 'crate', (1.9, 0.19, 0.55), yaw=0.6, scale=0.21)
+    beam((-8.0, D - 0.1, 0.42), (-8.1, 0.2, 0.75), 0.06, 0xfde4c7)
+    figure((-8.5, D + 0.05, 0.0), math.pi, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f)
+    kit('pirate', 'barrel', (2.4, 0, -0.45), yaw=0.4, scale=0.2)
+    kit('pirate', 'barrel', (2.55, 0, 0.6), yaw=1.2, scale=0.2)
+    kit('pirate', 'crate', (0.7, D + 0.05, 0.15), yaw=0.2, scale=0.25)
+    kit('pirate', 'crate', (0.7, D + 0.24, 0.15), yaw=0.6, scale=0.21)
+    kit('pirate', 'barrel', (0.95, D + 0.05, -0.2), yaw=0.9, scale=0.2)
+    # the cargo derrick at the land end, the Jolly Roger at the jetty head:
+    # the landing's tall lines
+    box((0.14, 2.3, 0.14), (1.45, 1.15, -0.6), 0x8a6a46)
+    beam((1.45, 2.2, -0.6), (0.3, 2.05, -0.15), 0.1, 0x8a6a46)
+    beam((1.45, 1.4, -0.6), (0.9, 2.08, -0.4), 0.08, 0x8a6a46)
+    box((0.04, 0.5, 0.04), (0.35, 1.8, -0.15), 0xfde4c7)
+    kit('pirate', 'barrel', (0.35, 1.32, -0.15), yaw=0.3, scale=0.2)
+    kit_flag('flag-pirate-high', (-8.0, D + 0.05, -0.3), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.3')
     join_still('jetty')
 
 # ---- Driftwood ----
@@ -1004,34 +1058,48 @@ def strand_line():
     # a car's scale, laid end to end from the great trunk to the bonfire
     # (tracks.js places it as a spine, turned a little each time so it
     # wanders): whole trees thrown up by the storm, stripped and bleached, a
-    # few of them piled on the others, one root plate reared up out of the
+    # few of them piled on the others, a root plate reared up out of each
     # pile, and between them the wrack: weed, a lost float, a broken plank,
     # a crate the sea brought in. Trees are tree-sized here (the beach's own
     # palms stand two to three), so the line reads from the road. It runs
-    # along Z.
+    # along Z, two piles to a piece, their root plates at its two ends: each
+    # pile alone is gone from a racer's view as soon as it is near enough to
+    # read, so the stretch is one piece that reads from the road the whole
+    # way along it.
     wood, pale, dark = 0x8a6a46, 0xb8a686, 0x7a5a3a
-    def x_at(z):                       # the line wanders as it goes
-        return 0.6 * math.sin(z * 0.45)
-    for (z0, z1, dx0, dx1, r, y0, y1, c) in ((-4.8, -1.0, 0.3, -0.4, 0.2, 0.2, 0.17, pale),
-                                            (-2.2, 2.4, -0.6, 0.2, 0.24, 0.24, 0.2, wood),
-                                            (-1.6, 1.0, 0.5, -0.1, 0.16, 0.5, 0.44, pale),   # piled on the others
-                                            (1.6, 4.9, 0.4, -0.3, 0.18, 0.18, 0.15, pale),
-                                            (3.0, 4.6, -0.7, 0.5, 0.12, 0.12, 0.12, dark)):
-        rod((x_at(z0) + dx0, y0, z0), (x_at(z1) + dx1, y1, z1), r, c, r2=r * 0.7, segs=7)
-    # the root plate of the piled tree, reared up out of the line
-    cyl(0.6, 0.16, (x_at(-2.3) - 0.6, 0.52, -2.3), wood, segs=9, axis='along')
-    for a in (-0.9, 0.3, 1.6):
-        rod((x_at(-2.3) - 0.6 + 0.35 * math.cos(a), 0.52 + 0.35 * math.sin(a), -2.25),
-            (x_at(-2.3) - 0.6 + 0.75 * math.cos(a), max(0.05, 0.52 + 0.75 * math.sin(a) - 0.15), -2.0),
-            0.05, wood, r2=0.03, segs=5)
-    # the wrack between the trees
-    for z in (-4.0, -0.6, 0.9, 3.4):
-        box((0.5, 0.04, 0.24), (x_at(z) - 0.5, 0.02, z), 0x2f8f5b, yaw=0.6 * math.sin(z * 1.3))
-    for z in (-3.0, 2.0):
-        box((0.4, 0.04, 0.2), (x_at(z) + 0.55, 0.02, z), 0x7a5a3a, yaw=0.8 * math.cos(z))
-    box((0.13, 0.13, 0.13), (x_at(-0.2) + 0.6, 0.065, -0.2), 0xff7e44)       # a fishing float
-    box((0.12, 0.04, 0.75), (x_at(3.2) + 0.7, 0.02, 3.2), 0x9a6a46, yaw=0.5)   # a broken plank
-    box((0.24, 0.2, 0.3), (x_at(-3.8) - 0.6, 0.1, -3.8), 0xb06041, yaw=0.4)   # a crate
+    def pile(m, phase):
+        """One pile, `m` = -1 mirrors it along Z (its root plate to +Z)."""
+        def x_at(z):                       # the line wanders as it goes
+            return 0.6 * math.sin(z * 0.45 + phase)
+        def at(x, y, z):
+            return (x, y, m * z)
+        for (z0, z1, dx0, dx1, r, y0, y1, c) in ((-4.8, -1.0, 0.3, -0.4, 0.2, 0.2, 0.17, pale),
+                                                (-2.2, 2.4, -0.6, 0.2, 0.24, 0.24, 0.2, wood),
+                                                (-1.6, 1.0, 0.5, -0.1, 0.16, 0.5, 0.44, pale),   # piled on the others
+                                                (1.6, 4.9, 0.4, -0.3, 0.18, 0.18, 0.15, pale),
+                                                (3.0, 4.6, -0.7, 0.5, 0.12, 0.12, 0.12, dark)):
+            rod(at(x_at(z0) + dx0, y0, z0), at(x_at(z1) + dx1, y1, z1), r, c, r2=r * 0.7, segs=7)
+        # the root plate of the piled tree, reared up out of the line as tall
+        # as the great trunk's, its face along the line to a racer coming
+        # down it
+        rx, ry = x_at(-2.3) - 0.6, 0.85
+        cyl(0.85, 0.2, at(rx, ry, -2.3 if m > 0 else -2.1), 0x7a5a3a, segs=9, axis='along')
+        for a in (-0.9, 0.3, 1.6, 2.6):
+            rod(at(rx + 0.5 * math.cos(a), ry + 0.5 * math.sin(a), -2.2),
+                at(rx + 1.05 * math.cos(a), max(0.05, ry + 1.05 * math.sin(a) - 0.2), -1.9),
+                0.07, wood, r2=0.03, segs=5)
+        # the wrack between the trees
+        for z in (-4.0, -0.6, 0.9, 3.4):
+            box((0.5, 0.04, 0.24), at(x_at(z) - 0.5, 0.02, z), 0x2f8f5b, yaw=-m * 0.6 * math.sin(z * 1.3))
+        for z in (-3.0, 2.0):
+            box((0.4, 0.04, 0.2), at(x_at(z) + 0.55, 0.02, z), 0x7a5a3a, yaw=-m * 0.8 * math.cos(z))
+        box((0.13, 0.13, 0.13), at(x_at(-0.2) + 0.6, 0.065, -0.2), 0xff7e44)       # a fishing float
+        box((0.12, 0.04, 0.75), at(x_at(3.2) + 0.7, 0.02, 3.2), 0x9a6a46, yaw=-m * 0.5)   # a broken plank
+        box((0.24, 0.2, 0.3), at(x_at(-3.8) - 0.6, 0.1, -3.8), 0xb06041, yaw=-m * 0.4)   # a crate
+    with moved(0.0, -4.9):
+        pile(1, 0.0)
+    with moved(0.35, 4.9):
+        pile(-1, 1.3)
     join_still('strand')
 
 @piece(1.0)
@@ -1057,18 +1125,25 @@ def bonfire():
     figure((0.15, 0.17, 0.75), -math.pi / 2, shirt=0x6794d9, legs=0xf2bf99, hair=0xffc044, pose='sit')
     figure((-0.62, 0, 0.1), 0.0, shirt=0x61cb8b, legs=0x38383d, pose='crouch')
     # the lean-to: driftwood poles against a ridge pole, out of the wind
-    for z in (-0.6, 0.6):
-        rod((-1.25, 0, z), (-1.25, 1.0, z), 0.05, 0xb8a686, segs=5)
-    rod((-1.25, 1.0, -0.75), (-1.25, 1.0, 0.75), 0.05, 0xb8a686, segs=5)
-    for i in range(6):
-        z = -0.6 + i * 0.24
-        rod((-1.25, 1.0, z), (-1.95, 0.0, z + 0.05 * (i % 2)), 0.05, 0x8a6a46 if i % 2 else 0xb8a686, segs=5)
+    R, B = 1.35, 0.95                                    # the ridge's height, how far back the poles reach
+    for z in (-0.8, 0.8):
+        rod((-1.25, 0, z), (-1.25, R, z), 0.06, 0xb8a686, segs=5)
+    rod((-1.25, R, -0.95), (-1.25, R, 0.95), 0.06, 0xb8a686, segs=5)
+    for i in range(8):
+        z = -0.8 + i * 0.23
+        rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 0x8a6a46 if i % 2 else 0xb8a686, segs=5)
     # an old sail over the poles: without it the frame reads as a swing
-    box((1.22, 0.03, 1.5), (-1.64, 0.53, 0.0), 0x6794d9, roll=math.atan2(1.0, 0.7))
+    box((math.hypot(R, B) - 0.05, 0.03, 1.9), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 0x6794d9,
+        roll=math.atan2(R, B))
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
 
 # ---- Riptide ----
+
+# Where along the beach the swim line's middle lies off the tower: up the
+# beach toward the cars coming (-Z), because past the tower (+Z) Riptide's
+# shore bay ends and the line's far end would lie on the sand.
+SWIM_Z = -7.5
 
 @piece(1.0)
 def lifeguard_tower():
@@ -1080,6 +1155,10 @@ def lifeguard_tower():
     # boat pulled up toward the water, and the red-and-yellow flags that mark
     # where to swim. The lifeguard on the deck watches the water through
     # binoculars and turns them on the cars going by; the flags fly.
+    # The patrol's whole beach is this one piece: the swimmers' umbrellas
+    # either side of the tower and the swim line and the surf off it. Each of
+    # them alone is a car's size, a speck from the road; together, close round
+    # the tower, they read as one beach for as long as the tower does.
     white, red, wood = 0xfff6eb, 0xff5040, 0x9a7b55
     S, top = 0.95, 0.95                       # the stilts' spread, the deck's height
     for sx in (-1, 1):
@@ -1142,13 +1221,34 @@ def lifeguard_tower():
         box((0.04, 0.36, 0.025), (0.07 - 0.24 * math.sin(0.2), 0.24, zc), st, roll=-0.2)
     # the rescue boat, pulled up toward the water
     boat((1.75, 0, -0.7), 0.15, red)
-    # the swimming flags either side of the patrol's water
-    for k, z in enumerate((-2.3, 2.6)):
+    # the swimming flags either side of the patrol's water (the swim line's
+    # middle, SWIM_Z below)
+    for k, z in enumerate((SWIM_Z - 2.3, SWIM_Z + 2.6)):
         flag_on_pole((1.1, 0, z), 1.0, (red, 0xffc044), 'anim_sway:a=z:d=24:p=%.1f#swim%d' % (2.0 + 0.3 * k, k))
-    join_still('tower')
+    # Each group stands still as a part of its own, so a cell that sees only
+    # the tower or only the water draws only that.
+    def still(name, build, x, z):
+        before = set(bpy.context.scene.objects)
+        with moved(x, z):
+            build()
+        group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'
+               and o.get('anim') is None], name)
+    # Square blocks on the beach and the water: a sunbather's, a float's or a
+    # deck chair's rounded edge is under a pixel from the road, and they cost
+    # the vista frame's vertices.
+    def beach(tag):
+        with square():
+            swimmers_beach(tag)
+    still('beach_a', lambda: beach('a'), 0.0, -6.0)
+    still('beach_b', lambda: beach('b'), 0.0, 6.0)
+    def swim():
+        with square():
+            swim_line()
+    still('swim', swim, 12.0, SWIM_Z)
+    group([o for o in bpy.context.scene.objects
+           if o.type == 'MESH' and o.get('anim') is None and o.get('group') is None], 'tower')
 
-@piece(1.0)
-def parasol():
+def swimmers_beach(tag):
     # Riptide: the swimmers' stretch of beach by the patrol, at a car's scale:
     # striped umbrellas a little over a car's height in a loose row along the
     # sand, a towel under each with its sunbather, deck chairs turned to the
@@ -1156,7 +1256,7 @@ def parasol():
     # throwing a beach ball between them.
     for (x, z, c) in ((0.1, -2.6, 0xff5040), (-0.3, -1.3, 0x339cf2), (0.2, 0.1, 0xffc044),
                       (-0.2, 1.4, 0xff5040), (0.15, 2.7, 0x22c46e)):
-        umbrella((x, 0, z), 0.36, 0.58, (c, 0xfff6eb))
+        umbrella((x, 0, z), 0.42, 0.68, (c, 0xfff6eb))
     for (x, z, c, yw, who) in ((0.35, -2.5, 0x22c46e, 0.1, 0xcf534f), (-0.05, -1.2, 0xff7e44, -0.15, None),
                                (0.45, 0.2, 0x339cf2, 0.05, 0x6794d9), (0.05, 1.5, 0xffc044, -0.1, 0xa878e8)):
         box((0.44, 0.03, 0.22), (x, 0.015, z), c, yaw=yw)
@@ -1176,14 +1276,12 @@ def parasol():
     # their hands)
     arc = [(1.25, 0.36 + 0.55 * (1 - (2 * t - 1) ** 2), -1.08 + 0.96 * t) for t in (i / 8 for i in range(9))]
     for k, at in enumerate(arc + arc[-2:0:-1]):
-        marker('path_ball_%d' % k, at)
-    with animated('anim_path:c=ball:p=2.4:f=0+spin:a=x:w=5', arc[0]):
+        marker('path_ball%s_%d' % (tag, k), at)
+    with animated('anim_path:c=ball%s:p=2.4:f=0+spin:a=x:w=5' % tag, arc[0]):
         box((0.1, 0.1, 0.1), arc[0], 0xff5040)
         box((0.11, 0.03, 0.11), arc[0], 0xfff6eb)                              # its white band
-    join_still('parasols')
 
-@piece(1.0)
-def buoy_line():
+def swim_line():
     # Riptide: the swimming line off the patrol's beach, at a car's scale: a
     # rope of red and white floats lying on the water between two marker
     # buoys, each flying a flag, swimmers inside it, and out past it the
@@ -1204,9 +1302,9 @@ def buoy_line():
         z0 = -14.6 + g * 14.6
         with animated('anim_bob:h=0.1:p=%.1f#f%d' % (2.6 + 0.5 * g, g), (0, 0.14, z0 + 7.3)):
             box((0.06, 0.06, 14.4), (0, 0.17, z0 + 7.3), 0xfff6eb)
-            for k in range(10):                       # each float down through the water to the sand
-                zf = z0 + 0.5 + k * 1.5
-                box((0.12, 0.24, 0.16), (0, 0.12, zf), 0xfff6eb if (g * 10 + k) % 2 else 0xff5040)
+            for k in range(7):                        # each float down through the water to the sand
+                zf = z0 + 0.5 + k * 2.2
+                box((0.12, 0.24, 0.16), (0, 0.12, zf), 0xfff6eb if (g * 7 + k) % 2 else 0xff5040)
     def board(x, z, color, yaw, y=None):
         """A surfboard along +Z turned by `yaw`: lying on the water at `y`
         (a ridden one), else its keel down through the water to the sand."""
@@ -1221,7 +1319,7 @@ def buoy_line():
     # and shoulders out of it, riding the swell (a pair together, one alone)
     for k, (heads, lift, beat) in enumerate(((((-2.8, -1.2, 0xffc044), (-2.6, -0.85, 0x339cf2)), 0.05, 2.9),
                                              (((-2.4, 1.4, 0xff5040),), 0.06, 3.3))):
-        with animated('anim_bob:h=%.2f:p=%.1f#swim%d' % (lift, beat, k), (heads[0][0], 0.0, heads[0][1])), square():
+        with animated('anim_bob:h=%.2f:p=%.1f#swimmer%d' % (lift, beat, k), (heads[0][0], 0.0, heads[0][1])), square():
             for (x, z, cap) in heads:
                 box((0.1, 0.1, 0.2), (x, SEA - 0.03, z), 0xf2bf99)            # shoulders, awash
                 box((0.11, 0.11, 0.11), (x, SEA + 0.07, z), 0xf2bf99)
