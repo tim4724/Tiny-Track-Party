@@ -1779,7 +1779,7 @@ def snow_fort():
     # white fort on white snow did not read from the road. Beside it (+Z) the
     # builders' igloo camp, one scene with the fort: the big igloo of cut
     # blocks, a small dome, the dog team resting by their sled.
-    SNOW, ICE = 0xf3f7fb, 0x9fd6ee
+    SNOW, ICE = 0xf3f7fb, 0xf3f7fb                                # option B: the blocks snow-white
     H = 2.0                                                        # half a side
     BL, BH, BD = 1.0, 0.45, 0.5                                     # a block: long, high, deep
     def cut(size, at, yaw=0.0, round=True, color=ICE):
