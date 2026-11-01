@@ -571,7 +571,8 @@ export const TRACKS = {
     // The children's summer: the treehouse oak on its knoll (SET_GROUND)
     // past the north-west corner, where the start diagonal points, its den
     // round the foot; the pitch beside the diagonal with a game on, its
-    // pavilion standing over the kerb that hides the lines; their camp by the
+    // pavilion across it from the road, standing up behind the game over the
+    // kerb that hides the lines; their camp by the
     // diagonal's top, where the racer comes off the north hairpin, the fire
     // smoking
     set: [

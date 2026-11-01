@@ -2845,7 +2845,7 @@ def football_pitch():
     # Pretzel: the village pitch laid along the road, its lines painted on
     # the lawn, little goals at the ends, and a kickabout on. Nobody runs: a
     # body sliding over the grass reads uncanny however it is posed. Three
-    # children stand in a triangle in the road-side half, each just having
+    # children stand in a triangle in the far half, each just having
     # struck the ball on to the next, and the BALL is what moves, lofted from
     # foot to foot round the triangle. The keepers wait on their lines, arms
     # going up now and then, a child on the touchline cheering (gestures).
@@ -2917,17 +2917,21 @@ def football_pitch():
     # a child on the touchline cheering them on
     person((-PW / 2 - 1.6, 0, 9.0), 0.0, 0xffc044, k=0.68, hair=2, arm=0.2,
            gesture='anim_sway:a=z:d=150:p=3.8:r=0.7#cheer')
-    # mums and dads on a bench on the far touchline
-    bench((-PW / 2 - 2.5, 0, -3.0), yaw=math.pi / 2)
-    bench((-PW / 2 - 2.5, 0, 3.0), yaw=math.pi / 2)
-    person((-PW / 2 - 2.6, 0.5, -3.0), 0.0, 0xa259e6, hair=1, sit=True)
-    person((-PW / 2 - 2.6, 0.5, 3.3), 0.0, 0xffc044, hair=3, sit=True)
+    # mums and dads on a bench on the far touchline (+X; the road runs along
+    # the -X one)
+    PZ = 12.0
+    bench((PW / 2 + 2.5, 0, PZ - 3.0), yaw=-math.pi / 2)
+    bench((PW / 2 + 2.5, 0, PZ + 3.0), yaw=-math.pi / 2)
+    person((PW / 2 + 2.6, 0.5, PZ - 3.0), math.pi, 0xa259e6, hair=1, sit=True)
+    person((PW / 2 + 2.6, 0.5, PZ + 3.3), math.pi, 0xffc044, hair=3, sit=True)
     # the club's pavilion they sit in front of, under its veranda, facing the
-    # pitch: white boards under a red roof, the club flag over the ridge. A
-    # real one's size (two cars long); it is what stands up off the lawn, so
-    # it is what says pitch from a car whose kerb hides the lines.
+    # pitch across it from the road: white boards under a red roof, the club
+    # flag over the ridge. A real one's size (two cars long); it is what
+    # stands up off the lawn, so it is what says pitch from a car whose kerb
+    # hides the lines, and from the far side it stands behind the game, not
+    # in front of it.
     D, L, H = 4.4, 10.0, 3.4
-    PF = local(-PW / 2 - 3.2 - D / 2, 0.0, 0.0)
+    PF = local(PW / 2 + 3.2 + D / 2, PZ, math.pi)
     box((D, H, L), PF(0, H / 2, 0), 'white', yaw=0.0)
     ridge = gable_roof(PF, 0.0, 0.0, D, L, H, 0xcf534f, 'white')
     box((1.8, 0.2, L), PF(D / 2 + 0.9, H - 0.4, 0), 0x9a7b55, yaw=0.0)     # the veranda roof
