@@ -3153,6 +3153,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
         mDressMergeDirty = false;
         if (mMergeOff) { destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
         else buildDressingMerge();
+        if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;
     }
     if (mGlPrioDirty && mAndroidGl) {

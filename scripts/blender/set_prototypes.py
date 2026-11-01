@@ -3402,6 +3402,14 @@ def dry_creek():
             tumbleweed((x, R, zc(x)), R)
     hawk_circle((2.0, 1.5), 3.6, 3.0, 15.0, k=1 / 1.45)
 
+def cottonwood(at, h, r):
+    """A living cottonwood `h` tall: a stout trunk forking into a broad,
+    lumpy crown `r` round, three faceted lobes of green."""
+    x, y, z = at
+    cyl(0.2, h * 0.6, (x, y, z), 0x8a6a46, r2=0.12, segs=6)
+    for dx, dy, dz, f in ((0.0, 0.74, 0.0, 1.0), (0.55, 0.62, 0.4, 0.72), (-0.5, 0.64, -0.35, 0.68)):
+        sphere(r * f, (x + dx * r, y + h * dy, z + dz * r), 0x5f9f4a, subdiv=1)
+
 @piece(1.0)
 def wash_bed():
     # Wash: one reach of the dry wash's gravel bed, the floor of the channel
@@ -3430,6 +3438,21 @@ def wash_bed():
     for i, (x, z, r) in enumerate(((0.8, -12.0, 0.5), (-1.2, -6.0, 0.4), (0.3, 1.0, 0.6),
                                    (1.4, 7.5, 0.35), (-0.6, 12.5, 0.5), (-1.9, -0.8, 0.3))):
         box((r, 0.2 + 0.2 * r, r * 0.8), (x, 0.1, z), tones[i % 4], yaw=i * 0.9)
+    # The bed lies in its channel under the raised land, out of a racer's
+    # sight but close by; what shows where the wash runs is the tree line
+    # along it: a cottonwood on each bank where the water is underground, at
+    # a real one's size (some twenty metres), its crown over the banks, and a
+    # red boulder on the bar. The bed keeps the shade it had under its stones
+    # (shade() runs the ramp to the piece's new top, the crowns). Where a
+    # reach runs under the road the trees stand where every placement's road
+    # passes at least a crown and a kerb clear: a crown must never stand on
+    # the road or hang over its kerb.
+    bed = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    for o in bed:
+        o['ramp'] = 0.84
+    cottonwood((5.0, 0, 1.5), 4.4, 1.5)
+    cottonwood((-4.0, 0, 3.5), 3.8, 1.3)
+    sandstone_rock((3.2, 0, 5.0), 1.1, yaw=0.7)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
 
 @piece(0.35)
@@ -3544,29 +3567,64 @@ def ore_line():
         t = min(1.0, max(0.0, (s - acc[i]) / d))
         return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ((b[0] - a[0]) / d, (b[1] - a[1]) / d)
     RAIL, TIE, Y = 12.0, 5.5, 0.3                                # a rail chord, the sleepers' spacing, rail height
+    # Beside the low start straight the line crosses the flat on a timber
+    # trestle, up a ramp out of the yard and down one into its cutting where
+    # the land rises toward the high bend: rails on the sand are a line a
+    # racer cannot read at that distance, a trestle a car high with the train
+    # riding along it is the mine's line seen from the road.
+    T0, T1, RISE, RAMP = 5.0 / k, 36.0 / k, 1.4 / k, 7.0 / k
+    def ry(s):
+        """The rails' height at `s` along the line."""
+        t = min(1.0, max(0.0, (s - T0) / RAMP), max(0.0, (T1 - s) / RAMP))
+        return Y + RISE * t * t * (3 - 2 * t)
+    BENT = 2.6 / k
     nr = max(3, math.ceil(total / RAIL))
     ss = [total * i / nr for i in range(nr + 1)]
+    for a0 in (T0, T1 - RAMP):                                   # the ramps in chords of a quarter
+        for q in range(5):
+            x = a0 + RAMP * q / 4
+            if not any(abs(x - v) < RAMP / 8 for v in ss):
+                ss.append(x)
+    ss.sort()
+    nr = len(ss) - 1
     for run in range(3):
         before = set(bpy.context.scene.objects)
         i0, i1 = nr * run // 3, nr * (run + 1) // 3
         for i in range(i0, i1):
             (pa, da), (pb, db) = on(ss[i]), on(ss[i + 1])
+            ya, yb = ry(ss[i]), ry(ss[i + 1])
             for sd in (-1, 1):
-                strut((pa[0] + da[1] * 0.6 * sd, Y, pa[1] - da[0] * 0.6 * sd),
-                      (pb[0] + db[1] * 0.6 * sd, Y, pb[1] - db[0] * 0.6 * sd), 0.2, 'slate')
+                a = (pa[0] + da[1] * 0.6 * sd, ya, pa[1] - da[0] * 0.6 * sd)
+                b = (pb[0] + db[1] * 0.6 * sd, yb, pb[1] - db[0] * 0.6 * sd)
+                strut(a, b, 0.2, 'slate')
+                if max(ya, yb) > Y + 0.3:                            # the trestle's stringers
+                    strut((a[0], a[1] - 0.35, a[2]), (b[0], b[1] - 0.35, b[2]), 0.4, TIMBER)
         s = ss[i0] + TIE / 2
         while s < ss[i1]:
             p, d = on(s)
-            box((1.8, 0.2, 0.5), (p[0], 0.1, p[1]), TIMBER, yaw=math.atan2(d[0], d[1]))
+            box((1.8, 0.2, 0.5), (p[0], ry(s) - 0.2, p[1]), TIMBER, yaw=math.atan2(d[0], d[1]))
             s += TIE
+        s = T0 + BENT / 2                                            # the trestle's bents
+        while s < T1:
+            if ss[i0] <= s < ss[i1] and ry(s) > Y + 0.5:
+                (p, d), h = on(s), ry(s) - 0.55
+                yaw = math.atan2(d[0], d[1])
+                foot = [(p[0] + d[1] * 1.2 * sd, 0.0, p[1] - d[0] * 1.2 * sd) for sd in (-1, 1)]
+                head = [(p[0] + d[1] * 0.9 * sd, h, p[1] - d[0] * 0.9 * sd) for sd in (-1, 1)]
+                for f, t in zip(foot, head):
+                    strut(f, t, 0.32, TIMBER)
+                box((2.6, 0.3, 0.42), (p[0], h, p[1]), TIMBER, yaw=yaw)
+                strut(foot[0], head[1], 0.16, TIMBER)
+            s += BENT
         group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'line%d' % run)
     # the train's loop: up out of the ground behind the adit, out along the
-    # portal's line, the length of this one, onto the headframe's collar (0.81
-    # world on from the line's end, the headframe standing 1.26 on) and down
-    # the shaft, then home under everything
-    CO = 0.81 / k
+    # portal's line, the length of this one (over the trestle), onto the
+    # headframe's collar (the headframe stands 1.26 world on from the line's
+    # end, its collar 1 of its own units toward the line) and down the
+    # shaft, then home under everything
+    CO = (1.26 - GROW['headframe']) / k
     loop = [(-8.0, -3.0, 0.0), (-5.2, Y, 0.0)]
-    loop += [(p[0], Y, p[1]) for p in (on(s)[0] for s in ss)]
+    loop += [(p[0], ry(s), p[1]) for p, s in ((on(s)[0], s) for s in ss)]
     (ex, ez), (dx, dz) = on(total)
     loop += [(ex + dx * CO, Y + 0.25, ez + dz * CO), (ex + dx * CO, -12.0, ez + dz * CO)]
     for i, p in enumerate(loop):
@@ -3638,17 +3696,18 @@ def telegraph_line():
     box((0.06, 0.4, 0.6), (-0.8, 1.05, -4.0), 0xd9b054)
     box((0.07, 0.08, 0.42), (-0.77, 1.05, -4.0), ROPE)
 
-@piece(0.47)
+@piece(0.55)
 @plain
 def dead_cottonwood():
-    # Wash's support: a lone dead cottonwood a tree's height on the bank, a
-    # vulture perched on its top looking out at the road, a fallen limb, red
-    # rocks and a tumbleweed at its foot (the builder's units are 1/0.47 of
-    # the world's).
+    # Wash's support: a lone dead cottonwood a big one's height on the bank
+    # (some 23 m), a vulture perched on its top looking out at the road, a
+    # fallen limb, red rocks and a tumbleweed at its foot (the builder's
+    # units are 1/0.55 of the world's; the vulture and the weed keep their
+    # own size).
     dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
     o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
     o.rotation_euler.z = 0.6
-    vy, k = 9.5, 1.0                                                             # the vulture, turning
+    vy, k = 9.5, 0.47 / GROW['dead-cottonwood']                                 # the vulture, turning
     def v(size, d, color, pitch=0.0):                                            # on its perch to watch
         box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)   # the cars go by
     with animated('anim_watch:r=24:d=75#v', (0, vy, 0)):
@@ -3664,7 +3723,7 @@ def dead_cottonwood():
             v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
     sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
     sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
-    tumbleweed((-1.8, 0.5, 2.2), 0.5)
+    tumbleweed((-1.8, 0.43, 2.2), 0.43)
     join_still('tree')
 
 def windpump_body(x0, z0, k, tag=''):
@@ -3706,12 +3765,27 @@ def windpump_body(x0, z0, k, tag=''):
     box((1.0 * k, 0.55 * k, 2.2 * k), (x0 + 1.9 * k, 0.27 * k, z0), WOOD)       # the trough
     box((0.8 * k, 0.05 * k, 2.0 * k), (x0 + 1.9 * k, 0.56 * k, z0), 0x62d3c8)
 
-@piece(0.42)
+@piece(1.0)
+@plain
 def windpump():
-    # Crag: a windpump out on the range at a stock trough, a tree's height
-    # (the builder's units are 1/0.42 of the world's), its wheel turning: the
-    # ranch's water reaching every part of the lap.
-    windpump_body(0.0, 0.0, 1.0)
+    # Crag: a windpump out on the range, a tree's height, its wheel turning
+    # (toward +X, the road) over the round stock tank it fills, and the
+    # ranch's cattle come in to it: one drinking at the tank, the rest
+    # grazing round it, two of them now and then lifting their heads to look
+    # about (a gesture). The herd stands at the water rather than alone on
+    # the range, where four cows a car long each are a speck from the road:
+    # tower, tank and herd read as one scene.
+    windpump_body(0.0, 0.0, 0.5)                                                 # a big one, some 16 m
+    TX, TZ = 2.0, 1.0
+    cyl(0.85, 0.36, (TX, 0, TZ), 'grey', segs=12)                              # the stock tank
+    cyl(0.78, 0.04, (TX, 0.33, TZ), 0x62d3c8, segs=12)
+    box((0.3, 0.24, 0.3), (-0.9, 0.12, 1.4), 'white')                           # the salt lick
+    def toward(x, z, tx, tz):
+        return math.atan2(-(tz - z), tx - x)
+    cow((3.4, 0, 0.0), yaw=toward(3.4, 0.0, TX, TZ))                           # drinking
+    cow((0.2, 0, 2.1), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
+    cow((2.8, 0, 2.3), yaw=2.4, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
+    cow((-1.4, 0, -1.5), yaw=-0.9, coat=0x5a3a28)
     join_still('pump')
 
 def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
@@ -3804,17 +3878,6 @@ def ranch():
     cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
     cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb)
     join_still('ranch')
-
-@piece(1.0)
-def cattle():
-    # Crag: a few head of the ranch's cattle out on the range by a salt lick,
-    # each a car long, grazing; two of them now and then lift their heads to
-    # look about (a gesture: up, a moment, down, then a long graze).
-    cow((0.0, 0, 0.0), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
-    cow((-1.4, 0, 1.3), yaw=2.4, coat=0x5a3a28)
-    cow((-0.6, 0, -1.6), yaw=-0.9, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    box((0.3, 0.24, 0.3), (-0.9, 0.12, 0.1), 'white')                           # the salt lick
-    join_still('herd')
 
 def hoodoo(x, z, h, k, yaw=0.0):
     """A hoodoo: a spire of soft banded rock under a hard dark cap, wider at
@@ -3955,10 +4018,36 @@ def oil_field():
         ground_poly([(x - 1.4, 0.03, z - 2.2), (x + 1.4, 0.03, z - 2.2), (x + 1.4, 0.03, z + 2.2),
                      (x - 1.4, 0.03, z + 2.2)], [(0, 1, 2, 3)], 0xb8a686)
         pumpjack(x, z, math.pi / 2 * (1 if n % 2 else -1), 'j%d' % n, per)
-    for k, (x, z) in enumerate(((-6.0, 3.6), (-6.0, 5.0))):                    # the tanks
-        cyl(0.62, 1.1, (x, 0, z), 'white' if k else 'grey', segs=10)
-        cyl(0.66, 0.08, (x, 1.1, z), 'slate', segs=10)
-    box((0.12, 0.12, 1.4), (-5.3, 0.9, 4.3), 'slate')                           # their pipe
+    # the tank battery the jacks pump into, a real lease tank's size (some
+    # seven metres across and as tall), white and red, the field's mass
+    with plain_parts():
+        for k, (x, z) in enumerate(((-6.6, 3.0), (-6.6, 5.4))):
+            cyl(1.0, 1.5, (x, 0, z), 'white' if k else 'red', segs=12)
+            cyl(1.04, 0.1, (x, 1.5, z), 'slate', segs=12)
+        box((0.12, 0.12, 1.4), (-6.6, 1.2, 4.2), 'slate')                       # their pipe
+    # the old timber derrick the field was struck with, still standing over
+    # its well behind the jacks: a cable-tool rig's height (about 22 m), its
+    # four legs leaning in to the crown block, girts and braces up its faces,
+    # the bull-wheel shed at its foot; the field's mark from across the map
+    DX, DZ, DH = -6.4, -2.4, 5.0
+    def leg(sx, sz, y):
+        w = 0.95 + (0.28 - 0.95) * y / DH
+        return (DX + sx * w, y, DZ + sz * w)
+    with plain_parts():
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                strut(leg(sx, sz, 0.0), leg(sx, sz, DH), 0.14, TIMBER)
+        lv = (0.3, 1.5, 2.6, 3.6, 4.4)
+        for y in lv:                                                             # the girts
+            w = 0.95 + (0.28 - 0.95) * y / DH
+            for s in (-1, 1):
+                box((2 * w + 0.1, 0.1, 0.1), (DX, y, DZ + s * w), TIMBER)
+                box((0.1, 0.1, 2 * w + 0.1), (DX + s * w, y, DZ), TIMBER)
+        for y0, y1 in zip(lv, lv[1:]):                                           # a brace up each face
+            for a, b in (((1, 1), (1, -1)), ((-1, -1), (-1, 1)), ((1, -1), (-1, -1)), ((-1, 1), (1, 1))):
+                strut(leg(*a, y0), leg(*b, y1), 0.07, TIMBER)
+        box((0.9, 0.3, 0.9), (DX, DH + 0.15, DZ), TIMBER)                        # the crown block
+    hut(1.6, 0.9, 1.3, (DX + 0.2, 0, DZ - 2.1), 0x9a7b55, 'slate', t=0.5)
     # the weeds' run along the road side
     L, R, X = 26.0, 0.25, 2.2
     for sz in (-1, 1):
@@ -3973,12 +4062,13 @@ def oil_field():
             tumbleweed((X, R, z), R)
     join_still('field')
 
-@piece(0.45)
+@piece(0.6)
 @plain
 def headframe():
     # Gulch: the far end of the mine's ore line, where a shaft goes straight
-    # down: a timber headframe over the shaft collar at a real one's height
-    # (about six car lengths; the builder's units are 1/0.45 of the world's),
+    # down: a timber headframe over the shaft collar at a big real one's
+    # height (some thirty metres, eight car lengths, so its wheel shows over
+    # the high bend's deck; the builder's units are 1/0.6 of the world's),
     # its back legs braced toward the hoist house (-X) the cable comes from,
     # the sheave wheel on top turning as the cage winds (anim_spin), the
     # cable over it and down to the cage; the ore line (set-ore-line) runs up

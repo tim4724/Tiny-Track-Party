@@ -1960,6 +1960,11 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
     mShadowSolid = (mask & kDebugShadowSolid) != 0;   // read per frame by placeCarShadow
+    const bool setId = (mask & kDebugSetId) != 0;
+    if (setId != mSetIdOn) {
+        mSetIdOn = setId;
+        paintSetIds();
+    }
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
@@ -2289,6 +2294,7 @@ void TtpRenderer::releaseStatic() {
     mSetPaths.clear();
     mSetAssets.clear();
     mSetInstances.clear();
+    mSetRowOf.clear();
     mSetFeet.clear();
     mSetLayout = kNoSetLayout;
     mScatterLayout = "[]";
@@ -2316,6 +2322,8 @@ void TtpRenderer::releaseStatic() {
     mBirds.clear();
     mKites.clear();
     mSmoke.clear();
+    mSmokeIdSaved.clear();
+    mSmokeRow = -1;
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
