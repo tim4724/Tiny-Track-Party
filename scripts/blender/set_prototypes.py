@@ -4897,6 +4897,44 @@ def marble_tower():
         with animated('anim_path:c=tower:p=11:o=%.4f:f=0#%d' % (m / 3, m), at):
             sphere(MR, at, c, subdiv=2, flat=False)
 
+@piece(0.65)
+def marble_zigzag():
+    # Helix: a third build from the marble run's kit (about 45 cm): two
+    # columns of its stacked toy cylinders with straight chutes zigzagging
+    # down between them, three marbles rolling the zigzag, through the
+    # columns at each turn, into the tall column's foot and up inside it (out
+    # of sight) to the cup on top. Unlike the screw tower its face is broad:
+    # the zigzag is the XY plane, read from +Z.
+    K = 0.62 / 0.65                              # the marble run's own size, in this piece's units
+    CR, MR, N = 1.25 * K, 0.62 * K, 6
+    XA, XB = -4.4 * K, 4.4 * K                   # the columns' axes: A the tall one, the lift
+    LOW, HIGH = MR + 0.47 * K, 13.4 * K
+    box((XB - XA + 4.4 * K, 0.4 * K, 4.4 * K), (0, 0.2 * K, 0), 0x9aa1b4)       # the base board
+    for x, h, c0 in ((XA, HIGH + 0.3 * K, 1), (XB, HIGH - (HIGH - LOW) / N + 0.9 * K, 3)):
+        n = 5
+        for k in range(n):
+            cyl(CR, (h - 0.4 * K) / n, (x, 0.4 * K + k * (h - 0.4 * K) / n, 0), TOY[(k + c0) % 4], segs=10)
+    top = HIGH + 0.3 * K
+    cyl(1.0 * K, 1.1 * K, (XA, top, 0), 0xfdf4de, r2=2.0 * K, segs=10)          # the cup the marbles come up into
+    cyl(1.5 * K, 0.5 * K, (XB, HIGH - (HIGH - LOW) / N + 0.9 * K, 0), 0xfdf4de, segs=10)   # the short column's cap
+    ends = (XA + CR + 0.1 * K, XB - CR - 0.1 * K)
+    loop = []
+    for i in range(N):
+        y0 = HIGH - (HIGH - LOW) * i / N
+        y1 = HIGH - (HIGH - LOW) * (i + 1) / N + 0.25 * K
+        a, b = (ends if i % 2 == 0 else ends[::-1])
+        ramp = [(a, y0, 0), (b, y1, 0)]
+        chute(ramp, TOY[i % 4], MR, half=0.75 * K, wall=0.55 * K)
+        loop += ramp + [((XB if i % 2 == 0 else XA), y1 - 0.12 * K, 0)]   # through the column at the turn
+    # up the tall column's middle, out of the cup, onto the first chute
+    loop += [(XA, LOW + (top - LOW) * j / 6, 0) for j in range(1, 7)] + [(XA, top + 0.5 * K, 0)]
+    for k, p in enumerate(loop):
+        marker('path_zig_%d' % k, p)
+    for m, c in enumerate((0xe66a5a, 0x5a8fd8, 0xf2c14e)):
+        at = loop[3 * (2 * m)]
+        with animated('anim_path:c=zig:p=12:o=%.4f:f=0#%d' % (m / 3, m), at):
+            sphere(MR, at, c, subdiv=2, flat=False)
+
 # ---- Gauntlet: the besiegers ----
 
 def soldier(at, color):
@@ -4975,6 +5013,39 @@ def siege_tower():
     box((1.2, 0.2, 6.4), (W / 2 + 2.6, 0.1, 0), 0x6cbf6c)
     for k in range(4):
         soldier((W / 2 + 2.6, 0.2, -2.25 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
+    merge_paint()
+
+@piece(0.55)
+def trebuchet():
+    # Gauntlet: the besiegers' toy trebuchet (about 40 cm to its arm's tip, a
+    # wooden kit at the soldiers' own scale) on its wheeled frame, its arm
+    # just thrown and standing high over the frame, the sling's red ball at
+    # its tip, the counterweight swung down; its crew of three before it. The
+    # arm swings in the YZ plane, so it reads side on, from +X (the crew's
+    # side).
+    WOODC, DARK = 0xc8955a, 0x7a5a3a
+    for sx in (-1, 1):
+        box((0.6, 0.6, 9.0), (sx * 2.2, 0.9, 0), DARK)                        # the frame's rails
+        for z in (-3.6, 3.6):                                                 # its wheels, hubs out
+            cyl(0.9, 0.5, (sx * 2.75, 0.9, z), DARK, segs=10, axis='across')
+            cyl(0.35, 0.6, (sx * 2.8, 0.9, z), 0xf2c14e, segs=6, axis='across')
+        bar((sx * 2.2, 1.2, -3.4), (sx * 2.2, 7.4, 0), 0.55, 0.55, WOODC)     # the A of each side
+        bar((sx * 2.2, 1.2, 3.4), (sx * 2.2, 7.4, 0), 0.55, 0.55, WOODC)
+        bar((sx * 2.2, 3.4, -2.2), (sx * 2.2, 3.4, 2.2), 0.4, 0.4, DARK)      # and its cross bar
+    for z in (-4.0, 4.0):
+        box((5.0, 0.5, 0.6), (0, 0.9, z), DARK)                               # the frame's ends
+    cyl(0.35, 5.4, (-2.7, 7.4, 0), 0x9aa1b4, segs=8, axis='across')           # the axle
+    tip = (0, 7.4 + 7.6 * math.sin(math.radians(66)), 7.6 * math.cos(math.radians(66)))
+    tail = (0, 7.4 - 2.6 * math.sin(math.radians(66)), -2.6 * math.cos(math.radians(66)))
+    bar(tail, tip, 0.6, 0.6, 0xe66a5a)                                        # the throwing arm, thrown
+    box((2.4, 2.0, 2.0), (0, tail[1] - 1.1, tail[2]), 0x5a8fd8)               # the counterweight, swung down
+    sling = (0, tip[1] - 2.2, tip[2] + 0.9)
+    bar(tip, sling, 0.12, 0.12, 0xfdf4de)
+    sphere(0.6, sling, 0xff5040)                                              # the ball in the sling
+    # the crew before it, on their stand
+    box((1.2, 0.2, 4.6), (4.6, 0.1, 0), 0x6cbf6c)
+    for k in range(3):
+        soldier((4.6, 0.2, -1.5 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
     merge_paint()
 
 # ---- build + export ----------------------------------------------------------------

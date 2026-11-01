@@ -777,15 +777,18 @@ export const TRACKS = {
     // points, the wind-up robot marching its beat beside the straight by a
     // rank of soldiers and their cannon, another rank in the infield; the
     // besiegers' siege towers, each with a rank marching before it, stand
-    // where the middle straight and the grid straight point (a rank alone
-    // is a speck down a long straight, the tower reads from its far end)
+    // where the middle straight and the grid straight point, and their
+    // trebuchet, its arm just thrown, where the south straight points (a
+    // rank alone is a speck down a long straight; a tall engine reads from
+    // its far end)
     set: [
       { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
       { model: 'set-toy-soldiers', u: 0.88, lat: 7.5, yaw: 76 },
       { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 },
       { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
       { model: 'set-siege-tower', u: 0.6522, lat: 10.8, yaw: 26 },
-      { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 }
+      { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },
+      { model: 'set-trebuchet', u: 0.186, lat: 17.2, yaw: 270 }
     ]
   },
   helix: {
@@ -794,15 +797,17 @@ export const TRACKS = {
     // The marble run: the lap in small (about 50 cm of it) where the top
     // straight points, marbles climbing one tower's screw, along the high
     // chute and down the other's (the two spirals and the skyway), then home
-    // along the floor; another tower of the kit, a marble screw round a
-    // column with a slinky walking down its books beside it, stands where the
-    // grid straight points and again on the straight between the two loops,
-    // and a tin humming top and a wooden one spin short of the run
+    // along the floor; more of the kit stands about the room: a marble screw
+    // round a column, a slinky walking down its books beside it, where the
+    // grid straight points, and a zigzag of chutes between two columns
+    // outside the raised straight and again by the loop's entry; a tin
+    // humming top and a wooden one spin short of the run
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
       { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
-      { model: 'set-marble-tower', u: 0.8246, lat: 9.4, yaw: 148 }
+      { model: 'set-marble-zigzag', u: 0.8246, lat: 9.4, yaw: 148 },
+      { model: 'set-marble-zigzag', u: 0.5174, lat: 12.2, yaw: 100 }
     ]
   },
   skyline: {
