@@ -32,6 +32,7 @@ import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { trackSchematic } from './NativeSchematic.js';
 import { glbTriangles } from './glbTriangles.js';
 import { assetUrl } from '../shared/assetUrl.js';
+import { FEAT, DEBUG } from './render/Display.js';
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
@@ -1948,6 +1949,179 @@ export function runDisplayScenario(opts, ctx) {
       // Registered after the stage's own listener, so the cells have moved.
       window.addEventListener('resize', () => aim());
 
+      // PIXEL LAP (window.__landmarks.see): what of each set piece a racer's
+      // picture really holds, counted in pixels rather than predicted. The
+      // engine paints every placement in its layout row's flat colour
+      // (TTP_DEBUG_SET_ID, the row's `id`) while the deck, the ground, the
+      // trees and the cars draw and hide it as in a race, and the autopiloted
+      // player drives a live session under the race's own chase camera.
+      // Every `every` seconds of its second lap, cell 0 is drawn and read
+      // back; per row in sight: `a` [row, pixels, height] in the race's
+      // picture, `b` the same with only the dressing drawn (so b - a is what
+      // the deck, the terrain and the cars hid) and, where b clears the bar
+      // (minPx and minH) and a does not, `road`, `ground` and `both`: the
+      // race's picture without the deck, without the terrain and without
+      // either, to say which hid it (what `both` still hides is the cars). Clouds, particles, item effects and the fog stay out of every
+      // probe frame: they drift or tint, and an id is exact or it is lost.
+      // The page's loop is stopped meanwhile and the session stepped at a
+      // fixed 60 Hz, so a second call with `stills` ([{k, row}], sample
+      // indices) replays the same lap and photographs those moments as the
+      // racer sees them, the row's unhidden outline boxed.
+      const SEE_STEP_MS = 1000 / 60;
+      const SEE_RACE = (FEAT.ALL & ~(FEAT.SKY | FEAT.EFFECTS | FEAT.FOG_VERTEX)) | DEBUG.SET_ID;
+      const SEE_ALONE = FEAT.DRESSING | DEBUG.SET_ID;
+      let seeCanvas = null;
+      // Per layout row seen in `rect` of the drawn frame: its pixels, its
+      // tallest column of them (how tall it stands where it stands tallest:
+      // a flat pitch or a sliver along a kerb is low however wide, and a
+      // stray pixel of a lit surface sharing an id adds one), and the box
+      // between the 2nd and 98th percentile of them.
+      function readIds(rect, ids) {
+        const src = display.canvas;
+        if (!seeCanvas) seeCanvas = document.createElement('canvas');
+        if (seeCanvas.width !== src.width || seeCanvas.height !== src.height) {
+          seeCanvas.width = src.width;
+          seeCanvas.height = src.height;
+        }
+        const g = seeCanvas.getContext('2d', { willReadFrequently: true });
+        g.drawImage(src, 0, 0);
+        const { x, y, w, h } = rect;
+        const d = g.getImageData(x, y, w, h).data;
+        const found = new Map();
+        for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+          const r = d[i], gg = d[i + 1], b = d[i + 2];
+          const hi = Math.max(r, gg, b), lo = Math.min(r, gg, b);
+          if (hi < 253 || lo > 2) continue;
+          const mid = r + gg + b - hi - lo;
+          const snap = 16 + 8 * Math.round((mid - 16) / 8);
+          if (Math.abs(mid - snap) > 2 || snap < 16 || snap > 248) continue;
+          const q = (v) => (v === hi ? 255 : v === lo ? 0 : snap);
+          const row = ids.get((q(r) << 16) | (q(gg) << 8) | q(b));
+          if (row === undefined) continue;
+          let f = found.get(row);
+          if (!f) found.set(row, f = { n: 0, ys: new Int32Array(h), xs: new Int32Array(w) });
+          f.n++;
+          f.ys[(p / w) | 0]++;
+          f.xs[p % w]++;
+        }
+        const span = (hist, n) => {
+          let lo = 0, hi = hist.length - 1;
+          for (let c = 0; lo < hist.length && (c += hist[lo]) <= n * 0.02; lo++);
+          for (let c = 0; hi > 0 && (c += hist[hi]) <= n * 0.02; hi--);
+          return [lo, hi];
+        };
+        const out = new Map();
+        for (const [row, f] of found) {
+          const [y0, y1] = span(f.ys, f.n), [x0, x1] = span(f.xs, f.n);
+          let h = 0;
+          for (const c of f.xs) if (c > h) h = c;
+          out.set(row, { n: f.n, h, box: [x0, y0, x1, y1] });
+        }
+        return out;
+      }
+      const pack = (m) => [...m].map(([row, f]) => [row, f.n, f.h]);
+      async function seeLap(opts = {}) {
+        const every = Math.max(1, Math.round(((opts.every || 0.2) * 1000) / SEE_STEP_MS));
+        const minPx = opts.minPx || 0, minH = opts.minH || 0;
+        const reads = (f) => !!f && f.n >= minPx && f.h >= minH;
+        const stills = new Map();
+        for (const { k, row } of opts.stills || []) stills.set(k, [...(stills.get(k) || []), row]);
+        const shooting = stills.size > 0;
+        const ids = new Map(layout.pieces.map((p, i) => [p.id, i]));
+        const len = layout.length;
+        const cw = display.canvas.width, ch = display.canvas.height;
+        const r = display.cellRects(1);
+        const rect = { x: Math.round(r[0] * cw), y: Math.round(r[1] * ch),
+                       w: Math.round(r[2] * cw), h: Math.round(r[3] * ch) };
+        const me = field.find((f) => !f.ai).peerIndex;   // cell 0's car
+        const frames = [], shots = [];
+        scene.stop();
+        display.cellLookClear();
+        display.carPoseClear();
+        poses = [];
+        if (engine) engine.dispose();
+        engine = bareSession(field, track, { bots });
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        scene.hold(false);
+        display.antialias(shooting);
+        display.debugFeatures(shooting ? FEAT.ALL : SEE_RACE);
+        const dt = SEE_STEP_MS / 1000;
+        try {
+          for (let step = 1, k = 0; ; step++) {
+            if (step * SEE_STEP_MS > LAP_MAX_S * 1000) throw new Error(`no two laps of '${track.id}' in ${LAP_MAX_S}s`);
+            engine.update(SEE_STEP_MS);
+            if (step % every) { display.advance(dt); continue; }
+            const c = engine.getSnapshot().cars.find((x) => x.id === me);
+            if (c.totalS >= 2 * len || c.finished) break;
+            if (c.totalS < len) { display.advance(dt); continue; }
+            const at = { k, s: Math.round((c.totalS - len) * 10) / 10, lat: Math.round(c.lat * 100) / 100,
+                         x: Math.round(c.pose.pos.x * 10) / 10, z: Math.round(c.pose.pos.z * 10) / 10 };
+            if (k % 20 === 0) await new Promise((res) => setTimeout(res, 0));
+            k++;
+            if (shooting) {
+              if (!stills.has(at.k)) { display.advance(dt); continue; }
+              display.frame(dt);
+              const pic = document.createElement('canvas');
+              pic.width = rect.w;
+              pic.height = rect.h;
+              pic.getContext('2d').drawImage(display.canvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+              display.debugFeatures(SEE_ALONE);
+              display.frame(0);
+              const alone = readIds(rect, ids);
+              display.debugFeatures(FEAT.ALL);
+              for (const row of stills.get(at.k)) {
+                const out = document.createElement('canvas');
+                out.width = rect.w;
+                out.height = rect.h;
+                const g = out.getContext('2d');
+                g.drawImage(pic, 0, 0);
+                const f = alone.get(row);
+                if (f) {
+                  const [x0, y0, x1, y1] = f.box;
+                  g.strokeStyle = '#ff00ff';
+                  g.lineWidth = 2;
+                  g.strokeRect(x0 - 3, y0 - 3, x1 - x0 + 7, y1 - y0 + 7);
+                }
+                shots.push({ ...at, row, jpeg: out.toDataURL('image/jpeg', 0.85) });
+              }
+              continue;
+            }
+            display.frame(dt);
+            const a = readIds(rect, ids);
+            display.debugFeatures(SEE_ALONE);
+            display.frame(0);
+            const b = readIds(rect, ids);
+            const rec = { ...at, a: pack(a), b: pack(b) };
+            if ([...b].some(([row, f]) => reads(f) && !reads(a.get(row)))) {
+              display.debugFeatures(SEE_RACE & ~FEAT.ROAD);
+              display.frame(0);
+              rec.road = pack(readIds(rect, ids));
+              display.debugFeatures(SEE_RACE & ~FEAT.TERRAIN);
+              display.frame(0);
+              rec.ground = pack(readIds(rect, ids));
+              display.debugFeatures(SEE_RACE & ~FEAT.ROAD & ~FEAT.TERRAIN);
+              display.frame(0);
+              rec.both = pack(readIds(rect, ids));
+            }
+            display.debugFeatures(SEE_RACE);
+            frames.push(rec);
+          }
+        } finally {
+          display.debugFeatures(FEAT.ALL);
+          display.antialias(true);
+          engine.dispose();
+          engine = null;
+          newSession();
+          setView(mode);
+          scene.start();
+        }
+        return { track: track.id, every: (every * SEE_STEP_MS) / 1000, length: len, cell: rect,
+                 pieces: layout.pieces.map((p, i) => ({ index: i, model: p.model, label: labelOf(p.model),
+                                                        s: p.s, u: p.u, lat: p.lat, cx: p.cx, cz: p.cz })),
+                 frames, shots };
+      }
+
       const built = serial(async () => { await seat(); setView(mode); });
 
       // The gallery chrome's control surface, same-origin like __showroom. The
@@ -2008,6 +2182,9 @@ export function runDisplayScenario(opts, ctx) {
         // The lap visibility of every piece on the track (lapScore), for a
         // cell of this aspect (16:9, every split's shape, by default).
         score: (aspect) => serial(async () => lapScore(aspect || 16 / 9)),
+        // The pixel lap (seeLap): every piece's pixels in cell 0's picture
+        // over a driven lap, or with `stills` that lap's moments photographed.
+        see: (opts) => serial(async () => seeLap(opts)),
         // Better spots for the pieces a racer barely reads (the placement
         // search), for a cell of this aspect: per piece searched, where it
         // stands and reads now and where it would read better (`to`, null

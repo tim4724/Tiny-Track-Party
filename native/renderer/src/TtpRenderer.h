@@ -815,6 +815,19 @@ private:
     // pass's placement and depth on a TV.
     static constexpr uint32_t kDebugShadowSolid = 0x4000000;
     bool mShadowSolid = false;
+    // TTP_DEBUG_SET_ID: each set-piece placement in its layout row's flat
+    // colour (setIdColor), written into the CPU copies of its meshes and
+    // uploaded when the bit flips or the dressing is rebuilt (paintSetIds),
+    // the shipped colours kept beside them to put back.
+    static constexpr uint32_t kDebugSetId = 0x10000000;
+    bool mSetIdOn = false;
+    static uint32_t setIdColor(int row);   // 0xRRGGBB
+    void paintSetIds();
+    // Which layout row each placement's instance draws (buildSetPieces), and
+    // the row the one smoke column belongs to.
+    std::unordered_map<const filament::gltfio::FilamentInstance*, int> mSetRowOf;
+    int mSmokeRow = -1;
+    std::vector<std::vector<uint32_t>> mSmokeIdSaved;
     // Ditto for the whole-lap fallback chunk.
     std::vector<DeckDecal> mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
@@ -2188,6 +2201,8 @@ private:
         float radius = 0;                        // mesh-local bound, world AABB
         bool dynamic = false;                    // mirror world transforms per frame
         uint8_t feat = 0;                        // kFeat* bit for tagFeatures
+        int setRow = -1;                         // a set piece's layout row (TTP_DEBUG_SET_ID)
+        std::vector<uint32_t> idSaved;           // its shipped colours while painted
     };
     std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves
     std::vector<MergedGroup> mMergedDress;  // built once per scene's dressing

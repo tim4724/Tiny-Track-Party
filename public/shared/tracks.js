@@ -322,8 +322,8 @@ export const SET_GROUND = {
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
-  'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 3 }],
-  'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 3 }],
+  'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 1.5 }],
+  'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 1.5 }],
   // Gulch's mine: the rock spur rising behind the adit's rock face (-X; its
   // foot just behind the face, so the face stands whole on the yard instead
   // of poking out of the slope in shards) and the yard levelled in front of
@@ -622,17 +622,18 @@ export const TRACKS = {
     // in `land` rising behind them), the inside of the bend left open so the
     // road ahead stays in sight. Out on the plain the wash winds across the
     // whole map, its gravel bed laid reach by reach (set-wash-bed, each
-    // bringing its channel), from the north-west past the hero's stretch by
-    // the north straight (tumbleweeds blowing down it), under the north
-    // strand's low culvert into the east loop and out under the east bend's
-    // high trestle; a side wash comes in from the south under the south
-    // strand. Cottonwoods died on its banks.
+    // bringing its channel; the far north-west reaches, out of a racer's
+    // sight, are channel only, in `land`), from the north-west past the
+    // hero's stretch by the north straight (tumbleweeds blowing down it),
+    // under the north strand's low culvert into the east loop and out under
+    // the east bend's high trestle; a side wash comes in from the south
+    // under the south strand. The bed lies under the raised land, so what a
+    // racer sees of the wash is its line of living cottonwoods (each reach
+    // brings two); others died on its banks.
     set: [
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
       { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
-      { model: 'set-dead-cottonwood', u: 0.966, lat: -17.6, yaw: -180 },
-      { model: 'set-wash-bed', u: 0.9863, lat: -74.2, yaw: -112 },
-      { model: 'set-wash-bed', u: 0.9728, lat: -54.7, yaw: 66 },
+      { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },
@@ -666,7 +667,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.1212, lat: -18, yaw: 1, len: 17.4, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1519, lat: -18.8, len: 18.5, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.0485, lat: 12.1, yaw: -127, len: 13, r: 9, h: 6, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1514, lat: 10.5, yaw: 127, len: 8.4, r: 9, h: 6, top: 0.3, tint: 0xc8846a }
+      { kind: 'ridge', u: 0.1514, lat: 10.5, yaw: 127, len: 8.4, r: 9, h: 6, top: 0.3, tint: 0xc8846a },
+      // the wash's far reaches north-west of the creek, its channel only
+      { kind: 'plain', u: 0.9863, lat: -74.2, yaw: -112, len: 38, r: 7, w: 8, h: 1.5 },
+      { kind: 'plain', u: 0.9728, lat: -54.7, yaw: 66, len: 38, r: 7, w: 8, h: 1.5 }
     ]
   },
   gulch: {
@@ -674,10 +678,11 @@ export const TRACKS = {
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine at its own size: the adit, a car high, cut into the rock
     // face of a spur under the long ridge north of the start straight, one
-    // ore line winding out of its yard along the whole start straight and
-    // round the east bend to the headframe over the shaft up the east side,
-    // its wheel turning, a little train of ore riding the line from the adit
-    // to the shaft; grey spoil heaps at both workings and out by the far
+    // ore line winding out of its yard along the whole start straight (on a
+    // timber trestle beside it) and round the east bend to the headframe
+    // over the shaft up the east side, its wheel turning over the high
+    // bend's deck, a little train of ore riding the line from the adit to
+    // the shaft; grey spoil heaps at both workings and out by the far
     // bends, timber supports round the lap.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
@@ -700,16 +705,14 @@ export const TRACKS = {
     // and fields of hoodoos between them (rock: big as rock is), and the
     // ranch, every building at its own size, stands on the open plain at the
     // head of the long straight: house, barn, water tower, the windpump
-    // turning, the corral with cattle. Its herds graze near the road (real
-    // cows are a car long, so further out the raised ground hides them) and
-    // its windpumps turn out on the range.
+    // turning, the corral with cattle. Out on the range its windpumps turn
+    // over their stock tanks near the road, its herds come in to them (a cow
+    // alone is a speck from the road; tower, tank and herd read as one).
     set: [
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
+      { model: 'set-windpump', u: 0.175, lat: 10 },
       { model: 'set-windpump', u: 0.58, lat: -14, yaw: 180 },
-      { model: 'set-windpump', u: 0.09, lat: -7, yaw: 180 },
-      { model: 'set-cattle', u: 0.04, lat: -7.5 },
-      { model: 'set-cattle', u: 0.48, lat: 10.5 },
-      { model: 'set-cattle', u: 0.13, lat: 10.5 },
+      { model: 'set-windpump', u: 0.48, lat: 12.5 },
       { model: 'set-hoodoos', u: 0.3, lat: 18 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
@@ -725,14 +728,15 @@ export const TRACKS = {
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
     // A desert highway: the telegraph line along the long straight, a
     // filling station on its verge with its sign turning and a hawk over it,
-    // a little oil field outside the south loop, its pumpjacks nodding and
-    // tumbleweeds blowing by, and mesa rims closing the west as
+    // a little oil field outside the north loop, its old derrick standing
+    // over the tank battery, its pumpjacks nodding and tumbleweeds blowing
+    // by, and mesa rims closing the west as
     // near backdrops (the north and east stay open). Everything by the road
     // at its own size.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
-      { model: 'set-oil-field', u: 0.74, lat: 18.5, yaw: 0 }
+      { model: 'set-oil-field', u: 0.77, lat: 15 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
