@@ -812,9 +812,9 @@ export const TRACKS = {
     name: 'Gauntlet', segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege, one set of toy knights split into two sides: the
-    // block castle where the long home straight points, the wind-up robot
-    // marching its beat beside the straight by a rank of its blue knights and
-    // their cannon, another rank in the infield; the red besiegers' siege towers,
+    // block castle where the long home straight points, its dragon standing
+    // guard beside the straight by a rank of its blue knights and their
+    // cannon, another rank in the infield; the red besiegers' siege towers,
     // each with a rank marching before it, stand where the middle straight
     // and the grid straight point, and their trebuchet, its arm just thrown
     // toward the castle, where the south straight points (a rank alone is a
@@ -822,7 +822,7 @@ export const TRACKS = {
     set: [
       { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
       { model: 'set-toy-soldiers', u: 0.88, lat: 7.5, yaw: 76 },
-      { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 },
+      { model: 'set-toy-dragon', u: 0.8864, lat: 10, yaw: 0 },
       { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
       { model: 'set-siege-tower', u: 0.6522, lat: 10.8, yaw: 26 },
       { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },

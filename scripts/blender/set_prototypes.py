@@ -4450,7 +4450,7 @@ TOY = [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c]
 # Indoors the scale is the TOY car's: a racer is a 5 cm toy car, so 1 unit is
 # about 5.5 cm, and every toy here stands at its real size beside one (a
 # little chunkier, as a toy is): a board game about 11 across, a wooden snake
-# as thick as a car is tall, a wind-up robot 5 tall, a castle of blocks 10
+# as thick as a car is tall, a toy dragon 4 tall, a castle of blocks 10
 # across, a marble run 9 high. Nothing from the grown-ups' world: at this
 # scale a book or a sofa is terrain, not a prop.
 
@@ -4507,7 +4507,7 @@ def slinky():
 @piece(0.8)
 def block_castle():
     # Gauntlet: a castle of alphabet blocks on the floor, the toy siege the
-    # track's knights and robot lay. The curtain wall runs along the road
+    # track's knights and their dragon lay. The curtain wall runs along the road
     # with its gate to the road (+X), towers at the four corners flying
     # pennants that flap, the king's banner over the gate, side and back
     # walls closing the court, a moat along the front with the drawbridge
@@ -4606,50 +4606,50 @@ def spinning_top_body(x, z, k):
         box((0.5 * k, 0.7 * k, 0.14 * k), (x + math.cos(a) * 1.35 * k, 2.3 * k, z + math.sin(a) * 1.35 * k), 0xe66a5a, yaw=-a)
 
 @piece(0.7)
-def toy_robot():
-    # Gauntlet: a boxy wind-up robot marching its beat before the castle, a
-    # loop so it never turns back on itself in sight: it steps as wind-up
-    # toys walk, each leg lifting in turn while the body rocks over the other
-    # (anim_bob and anim_waddle in step), and the big key in its back turns.
-    # Visor and eyes, a grille mouth, antenna, claws. Built facing +X at the
-    # loop's first point; the renderer turns it along its way. About 25 cm
-    # tall.
-    RX, RZ, N = 1.6, 4.0, 16
-    for k in range(N):
-        a = 2 * math.pi * k / N
-        marker('path_patrol_%d' % k, (RX * math.cos(a), 0, RZ * math.sin(a)))
-    X = RX
-    with animated('anim_path:c=patrol:p=14:f=1', (X, 0, 0)):
-        box((1.2, 0.45, 1.9), (X, 1.9, 0), 0x868ba1)                             # the hips march on
-        # a leg lifts at the top of the body's rock the other way: the waddle
-        # rolls its top toward +Z a quarter in, so the -Z leg goes up then
-        for z, o in ((-0.55, 0.25), (0.55, 0.75)):
-            with animated('anim_bob:h=0.24:p=0.9:o=%g#%s' % (o, 'l' if z < 0 else 'r'), (X, 0, z)):
-                box((0.7, 1.4, 0.7), (X, 1.0, z), 0x9aa1b4)
-                box((1.1, 0.3, 0.9), (X + 0.1, 0.15, z), 0x2a2735)
-        with animated('anim_waddle:d=7:p=0.9:o=0', (X, 1.9, 0)):                  # the body rocks over them
-            box((1.4, 2.0, 2.0), (X, 3.1, 0), 0x5a8fd8)
-            box((0.12, 0.9, 1.2), (X + 0.72, 3.15, 0), 0xd0e8ff)
-            for k, c in enumerate((0xff5040, 0x6cbf6c, 0xf2c14e)):
-                box((0.12, 0.22, 0.22), (X + 0.8, 3.15, -0.35 + k * 0.35), c)
-            for z in (-1.25, 1.25):
-                box((0.8, 0.8, 0.5), (X, 3.7, z), 0x9aa1b4)
-                box((0.5, 1.6, 0.5), (X, 2.6, z * 1.04), 0x9aa1b4)
-                box((0.7, 0.4, 0.35), (X + 0.1, 1.65, z * 1.04), 0xe66a5a)
-            box((0.55, 0.4, 0.55), (X, 4.3, 0), 0x868ba1)
-            box((1.3, 1.2, 1.5), (X, 5.05, 0), 0x9aa1b4)
-            box((0.12, 0.55, 1.2), (X + 0.68, 5.2, 0), 0x2a2735)
-            for z in (-0.28, 0.28):
-                box((0.12, 0.3, 0.3), (X + 0.74, 5.2, z), 0xf2c14e)
-                box((0.3, 0.45, 0.22), (X, 5.05, z * 3.1), 0xe66a5a)
-            box((0.12, 0.14, 0.7), (X + 0.68, 4.68, 0), 0xe66a5a)
-            box((0.2, 1.0, 0.2), (X, 6.15, 0), 0x2a2735)
-            sphere(0.38, (X, 6.85, 0), 0xff5040, subdiv=1)
-            # The key is big, a toy's, so its turn reads past the robot's
-            # flank: its height swings between the bow's length and width.
-            with animated('anim_spin:a=x:w=2.2', (X - 1.0, 3.2, 0)):              # the key winds round
-                box((0.7, 0.24, 0.24), (X - 1.05, 3.2, 0), 0x9a7b55)
-                box((0.14, 1.8, 0.6), (X - 1.45, 3.2, 0), 0x9a7b55)
+def toy_dragon():
+    # Gauntlet: the castle's toy dragon (a moulded one from the knights' set,
+    # about 25 cm to its wing tips and 40 cm nose to tail) standing guard
+    # before the castle, side on to the road (+X), its head toward the cars
+    # coming at it (-Z). It flaps its wings, slowly, both in step, and now
+    # and then turns its head to the road and back. Its tail curls down to
+    # the floor behind it.
+    GREEN, BELLY, WING, HORN = 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xfdf4de
+    for z in (-1.1, 1.1):                                                     # the legs, claws forward
+        for sx in (-1, 1):
+            box((0.7, 1.5, 0.7), (sx * 0.72, 0.75, z), GREEN)
+            box((0.8, 0.3, 1.0), (sx * 0.72, 0.15, z - 0.2), BELLY)
+    box((1.9, 1.7, 3.4), (0, 2.2, 0), GREEN)                                  # the body
+    box((1.4, 0.3, 3.0), (0, 1.28, 0), BELLY)                                 # its belly
+    box((1.7, 1.5, 1.2), (0, 2.6, -1.9), GREEN)                               # the chest
+    bar((0, 2.9, -2.1), (0, 4.6, -3.0), 1.0, 1.0, GREEN)                      # the neck
+    for z in (-1.4, -0.5, 0.4, 1.3):                                          # spines down the back
+        cyl(0.32, 0.6, (0, 3.0, z), BELLY, r2=0.02, segs=4)
+    # the tail, thick to thin, down to the floor and curling off behind
+    tube([(0, 2.2, 1.5), (0.2, 1.7, 3.0), (0.8, 0.9, 4.2), (0.9, 0.5, 5.0)], 0.5, GREEN, res=3, bevel_res=1)
+    tube([(0.9, 0.5, 5.0), (0.6, 0.32, 5.8), (-0.4, 0.32, 6.3)], 0.3, GREEN, res=3, bevel_res=0)
+    box((0.9, 0.16, 0.9), (-0.85, 0.08, 6.45), BELLY, yaw=math.pi / 4)        # its spade
+    # The head turns to the road (+X) and back once in a while: a gesture.
+    with animated('anim_sway:a=y:d=-32:p=7:r=0.6#head', (0, 4.6, -3.0)):
+        box((1.3, 1.1, 1.7), (0, 5.0, -3.5), GREEN)
+        box((1.0, 0.7, 1.1), (0, 4.75, -4.7), GREEN)                          # the snout
+        box((0.9, 0.16, 1.0), (0, 4.35, -4.7), BELLY)                         # the jaw's edge
+        for sx in (-1, 1):
+            box((0.3, 0.36, 0.42), (sx * 0.62, 5.25, -3.7), HORN)            # the eyes
+            box((0.12, 0.22, 0.22), (sx * 0.78, 5.25, -3.8), 0x2a2735)
+            box((0.12, 0.14, 0.14), (sx * 0.4, 4.95, -5.26), 0x2a2735)        # the nostrils
+            bar((sx * 0.4, 5.45, -3.0), (sx * 0.55, 6.25, -2.35), 0.24, 0.24, HORN)   # the horns
+    # The wings, raised from the shoulders: a bone along the top edge and
+    # out to the tip, the membrane between them. They flap about the
+    # shoulder's own line (Z), the two mirrored and in step.
+    for sx in (-1, 1):
+        root = (sx * 0.9, 3.0, -0.8)
+        tip, back = (sx * 2.3, 6.2, -1.4), (sx * 2.9, 4.4, 1.6)
+        with animated('anim_sway:a=z:d=%d:p=2.8:o=0#wing%d' % (18 * sx, sx), root):
+            poly([(sx * 0.9, 3.0, -1.6), tip, back, (sx * 1.6, 3.6, 1.1), (sx * 0.9, 3.0, 0.6)],
+                 [(0, 1, 2), (0, 2, 3), (0, 3, 4)], WING)
+            bar((sx * 0.9, 3.0, -1.4), tip, 0.26, 0.26, GREEN)
+            bar(tip, back, 0.22, 0.22, GREEN)
+    merge_paint()
 
 
 # ---- the playroom games ------------------------------------------------------
