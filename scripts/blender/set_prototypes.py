@@ -146,12 +146,12 @@ def box(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     place(o, at, yaw, pitch, roll)
     return paint(o, color)
 
-def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False):
+def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem=False):
     """A cylinder (or cone when r2 differs) whose base centre is `at`, standing
     along `axis` (up | along | across). Faceted, like a Kenney barrel; a thin
     one longer than four radii is a pole, built as the cars' square bar (a log
-    or a trunk stays round)."""
-    pole = h > 4 * r and r <= 0.25
+    or a trunk stays round: `stem`, a living thing's round body)."""
+    pole = h > 4 * r and r <= 0.25 and not stem
     if pole:
         # a square of side 2r has its corners at r * sqrt(2)
         r = max(r, BAR / 2) * math.sqrt(2)
@@ -567,16 +567,6 @@ def rock(at, k=1.0, yaw=0.0, color=0x868ba1):
     x, y, z = at
     box((1.2 * k, 0.8 * k, 1.0 * k), (x, y + 0.4 * k, z), color, yaw=yaw)
     box((0.7 * k, 0.5 * k, 0.6 * k), (x + 0.2 * k, y + 0.95 * k, z - 0.1 * k), 0x9aa1b4, yaw=yaw + 0.6)
-
-def dead_tree(at, h=6.0, color=0x8a6a46, r=0.45):
-    """A dead tree `h` tall, its trunk `r` at the foot, four bare limbs in
-    proportion to it."""
-    x, y, z = at
-    k = h / 6.0
-    cyl(r, h, (x, y, z), color, r2=r * 0.45, segs=7, smooth=False)
-    for i, (a, t, l) in enumerate(((0.3, 0.55, 2.8), (2.4, 0.5, 2.4), (4.2, 0.65, 2.0), (1.4, 0.95, 1.6))):
-        o = cyl(r * 0.36, l * k, (x, y + h * (0.55 + 0.12 * i), z), color, r2=r * 0.09, segs=5, smooth=False)
-        tilted(o, math.cos(a) * t, math.sin(a) * t)
 
 # ---- the pieces ----------------------------------------------------------------
 
@@ -3579,8 +3569,8 @@ def dry_creek():
     # the track's land (tracks.js wash `land`: a plain wound across the map,
     # left unraised under the bridges); this piece's SET_GROUND holds the same
     # floor under it and a low cut bank either side. A pale gravel bed along X
-    # between dark banks, stones on the bars, a dead cottonwood of a tree's
-    # size on the bank. Tumbleweeds, each half a car high, blow down it: each rolls out of the
+    # between dark banks, stones on the bars, a saguaro and an ocotillo on
+    # the bank. Tumbleweeds, each half a car high, blow down it: each rolls out of the
     # rock pile at the upwind end, bowls the length of the bed at a gust's
     # pace, bouncing and landing (a bob with a rest) and rolling as fast as it
     # goes, and vanishes into the pile at the far end; the hidden half of the
@@ -3622,7 +3612,10 @@ def dry_creek():
         sandstone_rock((x, 0, zc(x) - 0.2), 1.7, yaw=0.5 + sx)
         sandstone_rock((x + sx * 1.0, 0, zc(x) + 1.0), 1.3, yaw=1.6 - sx)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')   # one draw
-    dead_tree((-6.0, 0, zc(-6.0) + 4.4), h=3.0, r=0.17)
+    with plain_parts():                                                # in builder units: 1/1.45 of the world's
+        saguaro((-6.0, 0, zc(-6.0) + 4.4), 2.5, arms=((0.4, 0.45, 0.3), (3.4, 0.58, 0.24)))
+        ocotillo((-7.3, 0, zc(-7.3) + 3.6), 1.4, seed=3)
+        brush((-5.0, 0, zc(-5.0) + 5.2), 0.7)
     sandstone_rock((-4.4, 0, zc(-4.4) + 3.2), 0.8, yaw=0.4)
     sandstone_rock((10.0, 0, zc(10.0) + 3.0), 0.7, yaw=1.2)
     # the tumbleweeds' loop: down the bed at its own height, then back under it
@@ -3637,13 +3630,50 @@ def dry_creek():
             tumbleweed((x, R, zc(x)), R)
     hawk_circle((2.0, 1.5), 3.6, 3.0, 15.0, k=1 / 1.45)
 
-def cottonwood(at, h, r):
-    """A living cottonwood `h` tall: a stout trunk forking into a broad,
-    lumpy crown `r` round, three faceted lobes of green."""
+def saguaro(at, h, arms=((0.0, 0.45, 0.55),), yaw=0.0):
+    """A saguaro `h` tall, the desert's own tall plant: a fat ribbed column
+    (six faceted sides, tapering to its crown), each of its `arms` (turn
+    about the trunk, height up it as a share of h, length up as a share of
+    h) an elbow out from the trunk and a column up from it, tapering to its
+    tip. Faceted round in section, as a cactus is, the arms only four-sided:
+    a two-armed one is some 130 vertices."""
     x, y, z = at
-    cyl(0.2, h * 0.6, (x, y, z), 0x8a6a46, r2=0.12, segs=6)
-    for dx, dy, dz, f in ((0.0, 0.74, 0.0, 1.0), (0.55, 0.62, 0.4, 0.72), (-0.5, 0.64, -0.35, 0.68)):
-        sphere(r * f, (x + dx * r, y + h * dy, z + dz * r), 0x5f9f4a, subdiv=1)
+    r = 0.085 * h
+    cyl(r, h, (x, y, z), 'green', r2=r * 0.6, segs=5, stem=True)
+    ra = r * 0.9
+    for a, at_h, up in arms:
+        a += yaw
+        c, sn = math.cos(a), math.sin(a)
+        reach = r + ra * 2.0                                     # the elbow, out from the trunk
+        o = cyl(ra, reach, (x, y + h * at_h, z), 'green', segs=4, axis='across', stem=True)
+        o.rotation_euler.z += a
+        ax, az = x + c * reach, z - sn * reach
+        cyl(ra, h * up, (ax, y + h * at_h - ra, az), 'green', r2=ra * 0.62, segs=4, yaw=a + math.pi / 4, stem=True)
+
+def ocotillo(at, h, n=5, seed=0):
+    """An ocotillo `h` tall: a fountain of long spiny canes splaying from one
+    root, each tipped with its red flower spike."""
+    x, y, z = at
+    for i in range(n):
+        a = 2 * math.pi * (i + 0.37 * seed) / n
+        lean = 0.22 + 0.12 * ((i * 5 + seed) % 3)
+        L = h * (0.82 + 0.06 * ((i * 3 + seed) % 4))
+        tip = (x + math.cos(a) * math.sin(lean) * L, y + math.cos(lean) * L, z - math.sin(a) * math.sin(lean) * L)
+        rod((x, y, z), tip, 0.1, 'green', r2=0.07, segs=3)
+        top = (tip[0] + (tip[0] - x) * 0.1, tip[1] + 0.24, tip[2] + (tip[2] - z) * 0.1)
+        rod(tip, top, 0.1, 'red', r2=0.05, segs=3)
+
+def brush(at, k=1.0, yaw=0.0):
+    """A clump of desert brush (creosote, bursage): two low faceted domes."""
+    x, y, z = at
+    cyl(0.55 * k, 0.42 * k, (x, y, z), 'green', r2=0.25 * k, segs=5, yaw=yaw, stem=True)
+    cyl(0.38 * k, 0.3 * k, (x + 0.48 * k, y, z + 0.3 * k), 'green', r2=0.16 * k, segs=5, yaw=yaw + 0.5, stem=True)
+
+def barrel_cactus(at, k=1.0):
+    """A barrel cactus a knee high, its crown in flower."""
+    x, y, z = at
+    cyl(0.24 * k, 0.38 * k, (x, y, z), 'green', r2=0.2 * k, segs=5, stem=True)
+    cyl(0.2 * k, 0.08 * k, (x, y + 0.38 * k, z), 'red', r2=0.1 * k, segs=5, stem=True)
 
 @piece(1.0)
 def wash_bed():
@@ -3674,20 +3704,25 @@ def wash_bed():
                                    (1.4, 7.5, 0.35), (-0.6, 12.5, 0.5), (-1.9, -0.8, 0.3))):
         box((r, 0.2 + 0.2 * r, r * 0.8), (x, 0.1, z), tones[i % 4], yaw=i * 0.9)
     # The bed lies in its channel under the raised land, out of a racer's
-    # sight but close by; what shows where the wash runs is the tree line
-    # along it: a cottonwood on each bank where the water is underground, at
-    # a real one's size (some twenty metres), its crown over the banks, and a
-    # red boulder on the bar. The bed keeps the shade it had under its stones
-    # (shade() runs the ramp to the piece's new top, the crowns). Where a
-    # reach runs under the road the trees stand where every placement's road
-    # passes at least a crown and a kerb clear: a crown must never stand on
-    # the road or hang over its kerb.
+    # sight but close by; what shows where the wash runs is what grows along
+    # it, where the water is underground: on each bank a stand of saguaros
+    # (the old one an old one's height, some fifteen metres), brush at a
+    # foot, and red boulders on the bar. No tree: a desert wash reads as cactus and rock. The bed keeps
+    # the shade it had under its stones (shade() runs the ramp to the
+    # piece's new top, the saguaros). Where a reach runs under the road the
+    # stands keep to the footprint every placement's road passes a kerb
+    # clear of.
     bed = [o for o in bpy.context.scene.objects if o.type == 'MESH']
     for o in bed:
         o['ramp'] = 0.84
-    cottonwood((5.0, 0, 1.5), 4.4, 1.5)
-    cottonwood((-4.0, 0, 3.5), 3.8, 1.3)
-    sandstone_rock((3.2, 0, 5.0), 1.1, yaw=0.7)
+    with plain_parts():
+        saguaro((5.0, 0, 1.5), 4.6, arms=((0.3, 0.36, 0.42), (3.5, 0.48, 0.36), (1.9, 0.6, 0.26)))
+        saguaro((5.9, 0, 0.5), 3.2, arms=((2.2, 0.45, 0.36),))
+        brush((4.1, 0, 2.3), 1.2)
+        saguaro((-4.0, 0, 3.5), 4.2, arms=((3.6, 0.4, 0.42), (0.4, 0.52, 0.32)))
+        saguaro((-3.4, 0, 4.3), 2.9, arms=((5.0, 0.48, 0.34),))
+        sandstone_rock((3.2, 0, 5.0), 1.4, yaw=0.7)
+        sandstone_rock((-3.0, 0, 2.4), 1.2, yaw=2.1)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
 
 @piece(0.35)
@@ -3931,18 +3966,21 @@ def telegraph_line():
     box((0.06, 0.4, 0.6), (-0.8, 1.05, -4.0), 0xd9b054)
     box((0.07, 0.08, 0.42), (-0.77, 1.05, -4.0), ROPE)
 
-@piece(0.55)
+@piece(1.0)
 @plain
-def dead_cottonwood():
-    # Wash's support: a lone dead cottonwood a big one's height on the bank
-    # (some 23 m), a vulture perched on its top looking out at the road, a
-    # fallen limb, red rocks and a tumbleweed at its foot (the builder's
-    # units are 1/0.55 of the world's; the vulture and the weed keep their
-    # own size).
-    dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
-    o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
-    o.rotation_euler.z = 0.6
-    vy, k = 9.5, 0.47 / GROW['dead-cottonwood']                                 # the vulture, turning
+def saguaro_stand():
+    # Wash's support: a stand of saguaros on the bank, the old one an old
+    # one's height (some fifteen metres, its three arms up), a young one
+    # beside it, an ocotillo in flower, brush and a barrel cactus at their
+    # feet, red rocks among them; a vulture perched
+    # on the old one's crown, turning to watch the road (anim_watch).
+    H = 4.2
+    saguaro((0, 0, 0), H, arms=((0.2, 0.4, 0.34), (2.9, 0.52, 0.28), (4.6, 0.62, 0.2)))
+    saguaro((1.5, 0, -1.4), 1.8, arms=((0.6, 0.5, 0.3),))
+    ocotillo((-1.6, 0, 1.4), 2.2, seed=4)
+    brush((1.2, 0, 1.3), 1.0, yaw=0.4)
+    barrel_cactus((-1.1, 0, -1.6), 1.1)
+    vy, k = H, 0.47                                                              # the vulture, turning
     def v(size, d, color, pitch=0.0):                                            # on its perch to watch
         box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)   # the cars go by
     with animated('anim_watch:r=24:d=75#v', (0, vy, 0)):
@@ -3956,10 +3994,9 @@ def dead_cottonwood():
         v((0.2, 0.1, 0.12), (0.62, 1.06, 0), 'cream')
         for sd in (-1, 1):
             v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
-    sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
-    sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
-    tumbleweed((-1.8, 0.43, 2.2), 0.43)
-    join_still('tree')
+    sandstone_rock((-1.4, 0, -0.6), 0.9, yaw=1.2)
+    sandstone_rock((1.6, 0, -2.9), 0.7, yaw=0.2)
+    join_still('stand')
 
 def windpump_body(x0, z0, k, tag=''):
     """An old farm windpump at (x0, z0), `k` the size of the 7 unit one: a
