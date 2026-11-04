@@ -95,7 +95,7 @@
     "set-stream-reach.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-swing-oak.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-telegraph-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-toy-robot.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-toy-dragon.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-toy-snake-loop.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-toy-soldiers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-trebuchet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

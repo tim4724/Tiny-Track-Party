@@ -118,6 +118,7 @@ struct ScenerySpec {
   BushSpec bush;
   std::vector<uint32_t> rocks;       // boulder tint family (flat-shaded)
   float rockS[2] = { 0.3f, 0.45f };  // boulder radius = rockS[0] + rand() * rockS[1]
+  bool rockBlocks = false;           // the boulders are toy building blocks, not stones
   float clutterDensity = 0;
   std::vector<ClutterSpec> clutter;  // drawn from its OWN seeded stream
 };

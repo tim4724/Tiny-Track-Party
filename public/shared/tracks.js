@@ -840,18 +840,18 @@ export const TRACKS = {
   gauntlet: {
     name: 'Gauntlet', segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
-    // The toy castle siege: the block castle where the long home straight
-    // points, the wind-up robot marching its beat beside the straight by a
-    // rank of soldiers and their cannon, another rank in the infield; the
-    // besiegers' siege towers, each with a rank marching before it, stand
-    // where the middle straight and the grid straight point, and their
-    // trebuchet, its arm just thrown, where the south straight points (a
-    // rank alone is a speck down a long straight; a tall engine reads from
-    // its far end)
+    // The toy castle siege, one set of toy knights split into two sides: the
+    // block castle where the long home straight points, its dragon standing
+    // guard beside the straight by a rank of its blue knights and their
+    // cannon, another rank in the infield; the red besiegers' siege towers,
+    // each with a rank marching before it, stand where the middle straight
+    // and the grid straight point, and their trebuchet, its arm just thrown
+    // toward the castle, where the south straight points (a rank alone is a
+    // speck down a long straight; a tall engine reads from its far end)
     set: [
       { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
       { model: 'set-toy-soldiers', u: 0.88, lat: 7.5, yaw: 76 },
-      { model: 'set-toy-robot', u: 0.8864, lat: 10, yaw: 0 },
+      { model: 'set-toy-dragon', u: 0.8864, lat: 10, yaw: 0 },
       { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
       { model: 'set-siege-tower', u: 0.6522, lat: 10.8, yaw: 26 },
       { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },
@@ -865,8 +865,8 @@ export const TRACKS = {
     // straight points, marbles climbing one tower's screw, along the high
     // chute and down the other's (the two spirals and the skyway), then home
     // along the floor; more of the kit stands about the room: a marble screw
-    // round a column, a slinky walking down its books beside it, where the
-    // grid straight points, and a zigzag of chutes between two columns
+    // round a column, a slinky walking down off an alphabet block beside
+    // it, where the grid straight points, and a zigzag of chutes between two columns
     // outside the raised straight and again by the loop's entry; a tin
     // humming top and a wooden one spin short of the run
     set: [
