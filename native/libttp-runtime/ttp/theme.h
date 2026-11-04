@@ -310,9 +310,10 @@ const char* biome_for_cup(const char* cupId);
 const char* biome_for_track(const char* trackId);
 
 // The fully resolved palette for a biome on a track. An unknown biome name
-// resolves to grass, matching themeForCup's fallback. `trackId` only reaches two
-// things: the per-track ambient patch (the snow cup's four different winter
-// days) and the shoreline seed.
+// resolves to grass, matching themeForCup's fallback. `trackId` reaches the
+// track's own patch over its biome (weather, props, carriers), the shoreline
+// seed and the set pieces. Its props keep the biome's slot order
+// (ttp_theme_prop_models), whatever order the patch named them in.
 Theme resolve_theme(const char* biomeName, const char* trackId);
 
 // The recolour table for `model`, resolved against that model's own authored

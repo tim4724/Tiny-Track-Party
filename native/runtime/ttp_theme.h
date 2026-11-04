@@ -74,7 +74,9 @@ TTP_ABI uint32_t ttp_theme_hill_color(const char* biomeName, int index);
 TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
 
 /* The trackside prop GLBs this biome stamps (scattered set dressing), same
- * JSON array and same slot contract — handed back as "prop<i>.glb". Empty
+ * JSON array and same slot contract — handed back as "prop<i>.glb". Every one
+ * of the biome's tracks stamps from this list, including the props a track
+ * patches in for itself, so the shell needs no track to fetch them. Empty
  * array for a biome that runs no props. */
 TTP_ABI const char* ttp_theme_prop_models(const char* biomeName);
 

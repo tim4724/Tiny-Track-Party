@@ -6,6 +6,7 @@
 #include <cstring>
 #include <initializer_list>
 
+#include "generated/track_defs.h"
 #include "ttp/canonical.h"
 #include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
@@ -742,11 +743,11 @@ const char* biome_for_track(const char* trackId) {
   return biome_for_cup(def ? def->cup : nullptr);
 }
 
-Theme resolve_theme(const char* biomeName, const char* trackId) {
-  const BiomeEntry* b = findBiome(biomeName);
-  Theme t = (b ? b->build : grassTheme)();
-  const std::string track = trackId ? trackId : "";
+namespace {
 
+// What one track patches over its biome's theme: its weather, its props, its
+// carriers.
+void patchTrack(Theme& t, const BiomeEntry* b, const std::string& track) {
   // Weather varies ACROSS the snow cup: each track patches the flake cloud, so
   // the four races read as four different winter days rather than one repeated
   // snow globe. A count is "particles in the camera box" (the renderer's
@@ -780,14 +781,49 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   if (b && std::strcmp(b->name, "canyon") == 0) canyonTrack(t, track);
 
   // No procedural landmark beside a set piece that contradicts it. Where
-  // the track's set has log cabins (Powder, Flurry), one of THEM smokes
-  // (`anim_smoke`), so the smoking procedural cabin goes: one smoking chimney a
-  // track, and never a cold cabin beside a warm one.
+  // the track's set has its own houses (Flurry's smoking log cabins, Powder's
+  // chalets round the valley station), the procedural cabin goes: never a
+  // lone cabin beside a village of other ones.
   const auto drop = [&](uint32_t k) {
     t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
   };
   if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
     drop(LM_CABIN);
+  }
+}
+
+// The prop<i>.glb slot order of a biome, which the shell fetches by the BIOME
+// (ttp_theme_prop_models): the biome's own props, then each of its catalogue
+// tracks' own in catalogue order. A track that patches its props (snowProps,
+// pirateCove, ...) names its models in an order of its own, so resolve_theme
+// puts its slots back into this one: left in its own, Glacier's snow piles
+// drew as the biome's snowmen and its rocks as sleds.
+std::vector<std::string> biomeProps(const BiomeEntry* b) {
+  std::vector<std::string> out = b->build().props.models;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    if (std::strcmp(biome_for_track(TTP_TRACKS[i].id), b->name) != 0) continue;
+    Theme x = b->build();
+    patchTrack(x, b, TTP_TRACKS[i].id);
+    for (const std::string& m : x.props.models) {
+      if (std::find(out.begin(), out.end(), m) == out.end()) out.push_back(m);
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
+Theme resolve_theme(const char* biomeName, const char* trackId) {
+  const BiomeEntry* b = findBiome(biomeName);
+  Theme t = (b ? b->build : grassTheme)();
+  const std::string track = trackId ? trackId : "";
+  patchTrack(t, b, track);
+  if (b) {
+    const std::vector<std::string> all = biomeProps(b);
+    for (PropStamp& p : t.props.scatter) {
+      p.slot = (uint32_t) (std::find(all.begin(), all.end(), t.props.models[p.slot]) - all.begin());
+    }
+    t.props.models = all;
   }
 
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out
