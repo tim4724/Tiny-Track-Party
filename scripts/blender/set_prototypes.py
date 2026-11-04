@@ -555,18 +555,21 @@ def snow_heap(at, k=1.0, yaw=0.0):
     snowy(box((0.9 * k, 0.35 * k, 0.7 * k), (x + 0.1 * k, y + 0.6 * k, z), 0xf3f7fb, yaw=yaw + 0.5))
 
 def pine(at, k=1.0):
-    """A snowy pine: three faceted tiers and a white tip on a stub of trunk,
-    snow lying on the upper half of the two lower tiers as it lies on the
-    ambient pines round it (a bare green pine beside them read as another
-    season)."""
+    """A snowy pine: three faceted tiers on a stub of trunk, snow lying on
+    the upper part of each tier as it lies on the ambient pines round it (a
+    bare green pine beside them read as another season). The snow is a shell
+    just outside the tier from a third of its height up, so it shows as a
+    white band above each green skirt, as on the Holiday Kit pines, and the
+    top tier's is the white tip; a cone set inside the tier showed as a
+    hairline."""
     x, y, z = at
     box((0.3 * k, 0.5 * k, 0.3 * k), (x, y + 0.25 * k, z), 0x7a5a3a)
+    F, S = 0.32, 1.07                       # where the snow starts up a tier; how far proud
     for i, (r, h) in enumerate(((0.75, 0.7), (0.58, 0.6), (0.4, 0.5))):
         y0 = y + (0.4 + i * 0.42) * k
         cyl(r * k, h * k, (x, y0, z), 0x61cb8b, r2=0.08 * k, segs=6)
-        if i < 2:
-            snowy(cyl(0.64 * r * k, 0.58 * h * k, (x, y0 + 0.42 * h * k, z), 0xf3f7fb, r2=0.02, segs=6), 0.45)
-    cyl(0.18 * k, 0.3 * k, (x, y + 1.55 * k, z), 0xf3f7fb, r2=0.02, segs=6)
+        snowy(cyl(S * (r - (r - 0.08) * F) * k, (1 - F) * h * k, (x, y0 + F * h * k, z), 0xf3f7fb,
+                  r2=S * 0.08 * k, segs=6), 0.45)
 
 def rock(at, k=1.0, yaw=0.0, color=0x868ba1):
     """A grey rock: two blocks, one tipped on the other."""
