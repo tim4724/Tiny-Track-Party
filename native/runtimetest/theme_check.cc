@@ -36,6 +36,7 @@
 
 #include "corpus_diff.h"
 #include "corpus_record.h"
+#include "generated/track_defs.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
@@ -463,5 +464,25 @@ int main(int argc, char** argv) {
   }
   std::printf("untextured models tinted: %d/%d\n", tinted, tintable);
 
-  return (passed == cases && tinted == tintable) ? 0 : 1;
+  // ---- Beyond the corpus: a track stamps the props it names ----------------
+  //
+  // The shell fetches prop<i>.glb by the BIOME (ttp_theme_prop_models), and
+  // the renderer stamps a track's scatter by slot into that list. A track that
+  // patches its props must therefore come back in the biome's slot order, or
+  // its slots name other models: Glacier drew snowmen for its snow piles.
+  int propTracks = 0, propAgree = 0;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    const char* id = TTP_TRACKS[i].id;
+    const char* biome = rt::biome_for_track(id);
+    const rt::Theme t = rt::resolve_theme(biome, id);
+    propTracks++;
+    if (t.props.models == rt::resolve_theme(biome, "").props.models) {
+      propAgree++;
+    } else {
+      std::fprintf(stderr, "FAIL props %s: its prop slots are not the %s biome's\n", id, biome);
+    }
+  }
+  std::printf("tracks stamping their biome's prop slots: %d/%d\n", propAgree, propTracks);
+
+  return (passed == cases && tinted == tintable && propAgree == propTracks) ? 0 : 1;
 }
