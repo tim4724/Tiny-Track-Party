@@ -155,7 +155,7 @@ comments beside the code.
 | 2026-10-08 | later cells clear their own viewport instead of loading it (fork, proposed upstream) | pretzel 720 drops 425 -> 237 per 80 s, tidepool 232 -> 58 |
 | 2026-10-09 | opaque triangles reordered for vertex reuse (deck ACMR 2.0 -> 1.14) | tidepool heavy 15.9 -> 15.1 |
 | 2026-10-09 | the item roulette without its transform (Android only) | pretzel skips 158 -> 119 a race; the window's cost, not Filament's |
-| 2026-10 | VkPipelineCache persisted across launches | first-use pipeline compiles off the race |
+| 2026-10 | VkPipelineCache persisted across launches (off by accident from the fork's gate on 2026-10-07 until 2026-11-04: it needs `backend.vulkan.enable_pipeline_cache_persistence`) | first-use pipeline compiles off the race |
 | 2026-10-14 | paint loop bounds box; B-spline gate at 0.6 x remapLo; deck and ground in `vertexDomain : world` | -0.9 to -1.75 ms heavy together; clean 38-41 -> 57-59 of 75 |
 | 2026-10-14 | sky as a vertex-gradient dome at each cell's eye, not a cubemap skybox | -0.5 / -0.7 ms heavy |
 | 2026-10-17 | the car shadow as one draw per car on the deck, clipped to the stamp's support | -1.4 to -1.8 ms heavy against the road-space layer; skips ~75 -> ~20 per 75 s |
@@ -514,18 +514,13 @@ across by up to 16 on 40 pixels; the rectangle fed through the same path diffs
 to zero, so it is the rasterizer's interpolation over the new triangulation
 (fanned from the centroid, which halved the worst delta), nothing in the field.
 
-**SHIPPED: the built-in surface interpolants stripped** (`ttp-pin-2026-10-29b`,
-filamat's `MATERIAL_SKIPS_SURFACE_INTERPOLANTS`; every material now carries
-`variantFilter : [ fog ]`). Filament emitted `vertex_worldPosition` (4 floats),
-`vertex_position` (4) and, with tangents, `vertex_worldNormal` (3) on every
-material, and nothing in an unlit fragment here reads them: 8-11 of the 13-22
-varying floats a vertex wrote. Three alternated install pairs, 4P/540, the
-built-ins kept vs stripped: 31.5 / 29.7 / 31.5 vs 35.7 / 37.3 / 35.6 fps =
-**30.9 -> 36.2 fps, -4.8 ms**, ahead in 3 of 3; web frames diff to 0 pixels.
-The first probe of it (gated on the shading model alone) also stripped the
-visibility bake, whose fragment reads `getUserWorldPosition()`, and the far
-structures' shadows moved: the shipped form proves per material that no getter
-is called, through the user's helpers but not through `prepareMaterial`.
+**The built-in surface interpolants, a misread win.** Filament emits
+`vertex_worldPosition`, `vertex_position` and, with tangents, `vertex_worldNormal`
+on every material, and nothing in an unlit fragment here uses them. A filamat commit
+that left them out read 30.9 -> 36.2 fps, -4.8 ms at 4P/540. The cost was our own
+`-Os`: it skips spirv-opt on GL, so the fragments kept reading the three varyings
+into unused globals. At matc's default the reads are gone and the commit is a null
+(45.0 vs 45.0 fps), so it was closed upstream and left the pin (see "Build flags").
 
 **SHIPPED: Filament's automatic instancing OFF on Android GL**
 (`setAutomaticInstancingEnabled(false)` under `mAndroidGl`). The merged groups
@@ -639,6 +634,44 @@ ahead and three behind, a null on this box; 2P/540 two pairs, 58.6 both (the
 panel's rate). Streamer 4P/1080 two pairs each: Vulkan 53.4 vs 53.6, GL 49.3
 vs 50.9 (ahead in both). They ship because they are cheaper by construction
 and cost no pixel the user did not accept, not for a frame-time step.
+
+## Build flags (2026-11-04)
+
+`ttp-pin-2026-11-04` (the same tree as `ttp-pin-2026-11-04b` on these two paths: the
+GE9215's GL workarounds are all that differs), pretzel 4P, one warm race per install then a counted 60 s
+race. Streamer on Vulkan at 1080, stick on GL at 540. Five arms over 15 installs in
+balanced order, n=3 each; "main CPU" is the frame thread's typical `cpu ms`.
+
+| arm | Streamer fps / heavy ms / main CPU | stick fps / heavy ms / main CPU | verdict |
+|---|---|---|---|
+| **matc default** (shipped) | **56.1** / 18.3 / 4.35 | **45.5** / 24.5 / 6.59 | the base of every arm below |
+| matc `-Os` | 55.0 / 19.5 / 4.33 | 39.7 / 28.3 / 6.51 | never; also 528K of GL blobs against 400K and 792K of Metal against 580K |
+| ThinLTO, Filament + game | 55.5 / 18.9 / 4.23 | 44.8 / 24.8 / 6.41 | -0.15 ms of frame thread, no frames |
+| `-march=armv7ve -mtune=cortex-a53` | 55.4 / 19.2 / 4.32 | 45.9 / 24.9 / 6.51 | null |
+| `-marm` instead of Thumb-2 | 55.5 / 18.7 / 4.60 | 44.7 / 25.5 / 6.82 | slower, and a 21% larger `.so` |
+
+Race-to-race spread is 2-3 fps on the stick, so only `-Os` clears the noise. Both
+boxes are GPU-bound, so a CPU flag has little to convert. `-fno-exceptions` does not
+build: Filament's own assimp uses `try`. Web, three rounds each, link `-O3`, ThinLTO
+and `-msimd128` on the Filament SDK against the base: 120 fps, 0.8 ms CPU and 2.7 ms
+GPU on every arm, and ThinLTO's wasm is 6% larger. The flags stay as they were. Web
+pixels at `-O` and `-Os` differ less than two runs of one build.
+
+Metal on the Apple TV 4K, 4P at 2160 on a 50 Hz panel, three alternated installs per
+arm: both hold 50 fps with no skips, heavy 10.2 at the default and 10.3 at `-Os`,
+inside that box's 0.5 ms noise floor. The default is one flag everywhere and 27% smaller.
+
+**This pin against the one before** (`ttp-pin-2026-10-29b` at `-Os`, four alternated
+pairs): Streamer 55.3 -> 55.3 fps, heavy 18.9 -> 19.1; stick 43.8 -> 43.4, heavy 25.2
+-> 25.0. The frame cost is unchanged with 6 fork commits instead of 15. The stick's frame
+thread is up 0.33 ms (6.29 -> 6.62, in every pair), not yet traced.
+
+`-O` on the GE9215's GL fallback, with the pin's GL workarounds: 52.9 fps (52.5, 52.7, 53.4; heavy 19.3 ms).
+Without them it is 35 fps (35.0, 34.5, 35.5; heavy 32 ms), which is what
+google/filament#10692 is worth to this path.
+
+**The persisted pipeline cache was off.** Warm launches on the Streamer, four each:
+race-ready 3.9 -> 3.2 s, `FEngine::loop` CPU by then 2.45 -> 0.87 s.
 
 ## Open
 
@@ -798,7 +831,7 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 | a render thread (the main thread's drops) | drops/s 0 typical and 0 worst on a speed-compiled 4P/720 race (2026-10-22): every missed frame is a frame-skipper decline, the GPU's |
 | the rule's tolerance (a longer scene grace, a wider window, a higher threshold) | nothing for 1P/3P (2026-10-22): their 1080 skipping is 5-7 a second on the vistas inside every lap, not the pack alone; only 2P's late retreats would move |
 | the frame-timeline API (`postVsyncCallback`) | the +53 ms slot needs the GPU done within ~6 ms of the callback; not built |
-| hardware divide (`-march=armv7ve`), PGO/ThinLTO, a fork patch to `FView::partition` | priced, not taken (2026-10-03) |
+| a fork patch to `FView::partition`, PGO | priced, not taken (2026-10-03); C++ build flags are measured in "Build flags", and the frame is not CPU-bound on either box, so PGO has nothing to convert into |
 | inlining the mixer's `lerp` | 21% SLOWER: R8 folds the mixer into one method ART compiles worse |
 | the HUD window (tags off, hud off) | NULL since the window erase (2026-10-14, 2026-10-17); it was 2.3 ms on 2026-09-28. Still NULL with ~0.45 ms of GPU a 4P frame left in its own GL context, where the game's timer cannot see it: that work lands in the GPU's idle time (`0d2e5286`, tags off vs on, 4P/720 pretzel, three alternated rounds: heavy p50 -0.07 / +0.11 / +0.41 ms, skipped frames per 60 s 11 -> 23, 25 -> 29, 7 -> 8; 2026-10-22) |
 

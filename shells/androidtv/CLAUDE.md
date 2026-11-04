@@ -125,15 +125,15 @@ window carries `FLAG_NOT_FOCUSABLE` while the cover is up and drops it the momen
 the cover lifts: while the cover is up there is nothing to respond to, and every
 button in this game is on a phone anyway.
 
-**`matc`'s default optimizer emits GLSL this GPU rejects.** It round-trips
-through SPIR-V and produces loops carrying a temporary through the increment
-expression (`for (int i=0; i<n; t0=t1,i++)`) where the temporary is assigned only
-inside the body. Desktop GL and Metal accept it; the PowerVR driver reports "used
-without being initialised" and then fails the compile, so `TtpVroad` — the one
-material with dynamic loops, over its 32 deck decals — never links and Filament's
-GL thread throws `PostconditionPanic` and aborts the process. `build-materials.sh`
-passes `-Os`, globally and for every platform, because a browser on this same box
-drives the same driver.
+**The GE9215's GLSL compiler can reject a valid `vroad`, and says nothing useful.**
+At matc's default optimization an August revision of the material failed with
+`IMGSRV DoCompileShader: Failed to compile shader` and only warnings in the log;
+removing either early-out `continue` from its decal loop made it compile, and a
+minimal shader with the same loop shape compiles, so the trigger is internal to
+the driver. The GE8300 compiled every revision. It stops the material linking and
+the GL thread aborts the process, so after an edit to `vroad.mat` race once on the
+Streamer with `--vk -1`, because nothing else takes that path: the Streamer's
+default is Vulkan.
 
 **THE WEBRTC AAR SHIPS NO CONSUMER R8 RULES**, and `libjingle_peerconnection_so`
 `FindClass()`es `org.webrtc` and `org.jni_zero` from its own `JNI_OnLoad` —

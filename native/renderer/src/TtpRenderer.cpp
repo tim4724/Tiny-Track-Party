@@ -149,7 +149,10 @@ static Engine::Builder engineBuilder(backend::Backend backend) {
             // Filament ships this OFF and calls it experimental. It is enabled
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
-            .feature("backend.vulkan.enable_staging_buffer_bypass", true);
+            .feature("backend.vulkan.enable_staging_buffer_bypass", true)
+            // Off by default upstream, and without it the blob cache
+            // persistPipelineCache installs is never read or written.
+            .feature("backend.vulkan.enable_pipeline_cache_persistence", true);
     // `material.enable_material_instance_uniform_batching` stays at Filament's
     // default: the pin's GL Bugs turn it off by renderer string for the GPU
     // that stalls on it (the GE9215), and the GE8300 is the other way round.

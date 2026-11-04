@@ -775,15 +775,11 @@ holds the C++ disc table to the shader's.
 Filament's costs a SHADER VARIANT (a cubemap sampler and a pow behind branches this
 scene never takes), which its own `linearFog` does not fix; per fragment ours was
 still several times the per-vertex cost. **So every material filters the fog
-variant out** (`variantFilter : [ fog ]`, held by `tests/material-rules.test.js`),
-and with it gone the fork's filamat proves an unlit material never reads the
-built-in interpolants (`vertex_worldPosition`, `vertex_worldNormal`,
-`vertex_position`: computeShadingParams' inputs) and emits none of them
-(`MATERIAL_SKIPS_SURFACE_INTERPOLANTS`, the pin's filamat commit) — on a
-tile-based GPU that output is what the vertex stage pays (the frame map,
-2026-10-29), and the pixels are the same by construction. A fragment that calls
-a position or normal getter keeps them (the visibility bake's
-`getUserWorldPosition()` does); the filamat commit defines which reads count.
+variant out** (`variantFilter : [ fog ]`, held by `tests/material-rules.test.js`).
+Filament's built-in interpolants (`vertex_worldPosition`, `vertex_worldNormal`,
+`vertex_position`) reach no unlit fragment here only because matc's default
+optimizer strips their reads, which is why the GL blobs are never compiled `-Os`
+(`build-materials.sh`, the frame map 2026-11-04).
 **A per-vertex term needs vertices**:
 anything large, flat and fogged carries enough to interpolate between (the ground
 sheet's STEP). On `vroad`, `vground` and `vcolor` even the fragment's mix is

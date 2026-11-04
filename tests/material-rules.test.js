@@ -16,10 +16,8 @@
 //      the visibility map a varying of its own rather than packing it as `.zw`
 //      of the rubber layer's.
 //   3. Every material filters Filament's fog variant out. The fog is ours, per
-//      vertex (ttp_fog.inc), and with the variant gone the fork's filamat can
-//      prove an unlit material never reads the built-in surface interpolants
-//      and leave them out of its vertex outputs; without the filter it keeps
-//      emitting them, which on a tile-based GPU is the vertex stage's cost.
+//      vertex (ttp_fog.inc), the view's fog is off, so the variant never runs and
+//      would only add shaders to every blob.
 
 'use strict';
 
@@ -64,15 +62,11 @@ test('an unlit material writes baseColor, never emissive', () => {
     + stale.join('\n  '));
 });
 
-// Rule 3. A material whose fragment reads a position or normal getter (the
-// visibility bake's getUserWorldPosition(), say) keeps the interpolants
-// whatever the filter says; the pin's filamat commit defines which reads count.
 test('every material filters the fog variant out', () => {
   const missing = sources().filter((f) => f.endsWith('.mat'))
     .filter((f) => !/variantFilter\s*:\s*\[[^\]]*\bfog\b[^\]]*\]/.test(codeOf(f)));
   assert.deepEqual(missing, [],
-    'these do not filter the fog variant, so the fork\'s filamat keeps emitting '
-    + 'the built-in interpolants nothing here reads — add `variantFilter : [ fog ]` '
+    'these carry a fog variant that never runs — add `variantFilter : [ fog ]` '
     + 'to the material block:\n  ' + missing.join('\n  '));
 });
 

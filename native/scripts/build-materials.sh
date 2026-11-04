@@ -55,29 +55,15 @@ for mat in "$MATDIR"/*.mat; do
     if [ ! -f "$out" ] || [ "$mat" -nt "$out" ] || [ "$MATC" -nt "$out" ] \
             || [ "$0" -nt "$out" ] \
             || { [ -n "$newest_inc" ] && [ "$newest_inc" -nt "$out" ]; }; then
-        # -Os IS NOT A SIZE PREFERENCE, it is what makes vroad COMPILE on a real
-        # mobile GPU.
-        #
-        # matc's default optimizer round-trips through SPIR-V and emits loops
-        # that carry a temporary through the increment expression
-        # (`for (int i=0; i<n; t0=t1,i++)`), where the temporary is only assigned
-        # inside the body. Desktop GL and Metal accept it. The PowerVR Rogue
-        # driver in a Google TV Streamer reports each one as "used without being
-        # initialised" and then fails the compile outright, so TtpVroad — the
-        # only material with dynamic loops, over its 32 deck decals — never
-        # links, and Filament's GL thread throws PostconditionPanic and aborts
-        # the process. -Os takes a different path that emits none of them, at
-        # 546 generated lines against the default's 509.
-        #
-        # GLOBAL rather than per-platform on purpose. This is not an Android
-        # quirk: a browser on that same box drives the same driver, so the web
-        # display shipped the same broken shader to it. One flag, one set of
-        # blobs, every platform fixed.
+        # NEVER -Os. For GL it skips spirv-opt altogether, and the shaders then
+        # read Filament's built-in interpolants into globals nothing uses; that
+        # was 6 fps at 4P on the GE8300. It is slower on Vulkan too, and larger
+        # on GL and Metal (the frame map, 2026-11-04).
         #
         # NOTE the `$0 -nt` gate above: the flags live in this script and are NOT
         # part of runtime-source-hash, so without it an edit here leaves every
         # blob looking current and changes nothing.
-        "$MATC" -a "$API" -p "$PLATFORM" -Os -o "$out" "$mat"
+        "$MATC" -a "$API" -p "$PLATFORM" -o "$out" "$mat"
         built=$((built + 1))
     else
         kept=$((kept + 1))
