@@ -266,15 +266,16 @@ export const SET_GROUND = {
   // ground raised toward the deck does not bury them; the mountain's foot
   // stops a grid cell short of them, where the 9 u grid's chords over the
   // foot would), and the blue run washed down it from the top station to the
-  // slalom and on to the finish on the flat; Avalanche's slide face, the
-  // debris fan over the chute's end (stopping a grid cell short of the road,
-  // whose cap would leave what lies on it floating), and the slopes its
-  // fences and warning signs stand under.
+  // slalom and on to the finish on the flat (faint: a groomed run is white,
+  // and a deeper blue read as a stain); Avalanche's slide face, the debris
+  // fan over the chute's end (stopping a grid cell short of the road, whose
+  // cap would leave what lies on it floating), and the slopes its fences and
+  // warning signs stand under.
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
-    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xb4cdf2 },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xb4cdf2 }
+    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xdde7f5 },
+    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xdde7f5 }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
@@ -299,9 +300,13 @@ export const SET_GROUND = {
   // Glacier's expedition camp on a snow bank of its own, flat on top like the
   // den camp's and set back from the road: the land by the climbing road lies
   // well under the deck, so a camp on it hid its tents behind the kerb; on the
-  // bank they show over it. The camp drapes, so where the bank meets land
-  // already raised (the second camp, by a ramp) it lies on the slope drawn.
+  // bank they show over it. The camp drapes, so it lies on the slope drawn:
+  // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
+  // ...and its advanced camp, past the bend where a racer looks at it, on a
+  // bank kept low and a footprint kept small: there the ground already rises
+  // toward the snow ridge, and the base camp's bank on it tipped every tent.
+  'set-advanced-camp': [{ kind: 'fan', x: -0.5, z: 0.5, len: 4, r: 7, h: 1.3, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), its gentle face to
   // the road, its foot reaching under the school's hut and arch so the whole
   // school stands up on it over the kerb of the raised road beside it.
@@ -509,14 +514,15 @@ export const TRACKS = {
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       { model: 'set-penguin-group', u: 0.712, lat: 9, yaw: 255 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
-      { model: 'set-expedition-camp', u: 0.887, lat: -12, yaw: 238 },
+      { model: 'set-advanced-camp', u: 0.897, lat: -13, yaw: 328 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
     // fort and its igloo camp at the end of the top straight, short of the
     // corridor down the middle whose vista the box cannot also pay a fort
-    // for; the rookeries close by the low road; the camps by the bends.
+    // for; the rookeries close by the low road; the expedition's base camp
+    // and its smaller advanced camp by the bends.
     // The glacier: a tongue of blue ice flows down from the massif in the
     // west, low in the valley between two snow ridges, into the middle of the
     // map, ending among the penguins by the long legs; the terminal moraine
