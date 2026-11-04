@@ -563,7 +563,7 @@ export const TRACKS = {
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
       { model: 'set-cottage-row', u: 0.828, lat: 33, yaw: 0 },
-      { model: 'set-cottage-row', u: 0.045, lat: -15, yaw: 180, y: -0.2 },
+      { model: 'set-cottage-row', u: 0.045, lat: -19, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
       { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 },
       { model: 'set-cottage-row', u: 0.88, lat: 14.5, yaw: 0 }
@@ -615,7 +615,7 @@ export const TRACKS = {
       { model: 'set-stream-reach', u: 0.50012, lat: -11.456, yaw: 116.55 },
       { model: 'set-stream-reach', u: 0.1544, lat: -1.942, yaw: -85.23 },
       { model: 'set-stream-reach', u: 0.1292, lat: 8.869, yaw: 177.52 },
-      { model: 'set-stream-reach', u: 0.10401, lat: 9.482, yaw: -172.89 },
+      { model: 'set-stream-reach', u: 0.10125, lat: 10.084, yaw: -162.76 },
       { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 },
       { model: 'set-stream-reach', u: 0.89136, lat: -26.405, yaw: 59.8 },
       { model: 'set-stream-reach', u: 0.86586, lat: -7.524, yaw: -121.56 },
