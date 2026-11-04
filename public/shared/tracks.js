@@ -345,21 +345,24 @@ export const SET_GROUND = {
   // Its ore line (placed on the portal's own anchor), from the yard round the
   // start straight and the east bend to the headframe: the level bed it
   // lies in, one plain per chord of its route, so it never steps where the
-  // land rolls. The builder lays the rails on a smooth curve through the
-  // chords' ends (set_prototypes.py ore_line). A form's x/z is in its own
-  // turned frame (TtpRenderer::setupTerrain).
+  // land rolls; its floor wider than a cell of the ground's grid (9 u), which
+  // would otherwise draw its chords over the rails and leave the line in
+  // pieces with the train riding through the hill. The builder lays the
+  // rails on a smooth curve through the chords' ends (set_prototypes.py
+  // ore_line). A form's x/z is in its own turned frame
+  // (TtpRenderer::setupTerrain).
   'set-ore-line': [
-    { kind: 'plain', yaw: 71.57, x: 0.16, z: 1.9, len: 2.85, r: 3, w: 4 },
-    { kind: 'plain', yaw: 21.16, x: 2.66, z: 3.66, len: 3.32, r: 3, w: 4 },
-    { kind: 'plain', yaw: 11.32, x: 3.53, z: 8.42, len: 7.27, r: 3, w: 4 },
-    { kind: 'plain', yaw: -22.05, x: 9.58, z: 12.33, len: 8.4, r: 3, w: 4 },
-    { kind: 'plain', yaw: 2.5, x: 1.85, z: 22.35, len: 6.66, r: 3, w: 4 },
-    { kind: 'plain', yaw: -39.05, x: 18.41, z: 22.88, len: 9.78, r: 3, w: 4 },
-    { kind: 'plain', yaw: -11.54, x: 3.5, z: 41.33, len: 16.39, r: 3, w: 4 },
-    { kind: 'plain', yaw: -1.42, x: -5.26, z: 57.47, len: 16.2, r: 3, w: 4 },
-    { kind: 'plain', yaw: 31.02, x: -39.61, z: 60.12, len: 15.21, r: 3, w: 4 },
-    { kind: 'plain', yaw: 38.44, x: -48.02, z: 70.02, len: 15.94, r: 3, w: 4 },
-    { kind: 'plain', yaw: 67.13, x: -79.57, z: 53.39, len: 16.06, r: 3, w: 4 }
+    { kind: 'plain', yaw: 71.57, x: 0.16, z: 1.9, len: 2.85, r: 6, w: 5 },
+    { kind: 'plain', yaw: 21.16, x: 2.66, z: 3.66, len: 3.32, r: 6, w: 5 },
+    { kind: 'plain', yaw: 11.32, x: 3.53, z: 8.42, len: 7.27, r: 6, w: 5 },
+    { kind: 'plain', yaw: -22.05, x: 9.58, z: 12.33, len: 8.4, r: 6, w: 5 },
+    { kind: 'plain', yaw: 2.5, x: 1.85, z: 22.35, len: 6.66, r: 6, w: 5 },
+    { kind: 'plain', yaw: -39.05, x: 18.41, z: 22.88, len: 9.78, r: 6, w: 5 },
+    { kind: 'plain', yaw: -11.54, x: 3.5, z: 41.33, len: 16.39, r: 6, w: 5 },
+    { kind: 'plain', yaw: -1.42, x: -5.26, z: 57.47, len: 16.2, r: 6, w: 5 },
+    { kind: 'plain', yaw: 31.02, x: -39.61, z: 60.12, len: 15.21, r: 6, w: 5 },
+    { kind: 'plain', yaw: 38.44, x: -48.02, z: 70.02, len: 15.94, r: 6, w: 5 },
+    { kind: 'plain', yaw: 67.13, x: -79.57, z: 53.39, len: 16.06, r: 6, w: 5 }
   ]
 };
 
@@ -662,12 +665,14 @@ export const TRACKS = {
     // under the north strand's low culvert into the east loop and out under
     // the east bend's high trestle; a side wash comes in from the south
     // under the south strand. The bed lies under the raised land, so what a
-    // racer sees of the wash is its line of living cottonwoods (each reach
-    // brings two); others died on its banks.
+    // racer sees of the wash is what grows along it: saguaros, ocotillo and
+    // brush on its banks (each reach brings a stand on each side), and two
+    // old saguaros standing over the start's bends, a vulture on each. A
+    // desert of rock, sand and cactus: no trees.
     set: [
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
-      { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
+      { model: 'set-saguaro-stand', u: 0.302, lat: 10.5 },
+      { model: 'set-saguaro-stand', u: 0.95, lat: -10, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },
@@ -742,11 +747,14 @@ export const TRACKS = {
     // turning, the corral with cattle. Out on the range its windpumps turn
     // over their stock tanks near the road, its herds come in to them (a cow
     // alone is a speck from the road; tower, tank and herd read as one).
+    // Every wheel, the ranch's included, faces the one wind (the same way
+    // across the map), its tail vane downwind: each yaw turns its pump to
+    // the ranch's.
     set: [
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
-      { model: 'set-windpump', u: 0.175, lat: 10 },
-      { model: 'set-windpump', u: 0.58, lat: -14, yaw: 180 },
-      { model: 'set-windpump', u: 0.48, lat: 12.5 },
+      { model: 'set-windpump', u: 0.175, lat: 10, yaw: -51 },
+      { model: 'set-windpump', u: 0.58, lat: -14, yaw: 13 },
+      { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: 82 },
       { model: 'set-hoodoos', u: 0.3, lat: 18 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
