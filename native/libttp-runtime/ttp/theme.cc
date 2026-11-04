@@ -597,13 +597,16 @@ Theme playroomTheme() {
   t.landmarks.clear();
   t.gate = 0xfff3e2;  // warm indoor-light gate grade
   t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xff5040;  // a third primary
-  // No trees indoors — the "boulder" channel does all the work: faceted toy bits
-  // in the same plastic primaries as the horizon blocks.
+  // No trees indoors — the "boulder" channel does all the work: a child's
+  // building blocks left about the floor (cubes and long blocks, 3 to 7 cm,
+  // the set pieces' own blocks), in the toys' painted primaries. Faceted
+  // stones in those colours read as rocks, and a floor has none.
   ScenerySpec& s = t.scenery;
   s.hasBush = false;
   s.mixTree = 0; s.mixBush = 0;  // everything rolls "rock"
   s.rocks = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
-  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // chunky toy-piece scale
+  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // a block's side
+  s.rockBlocks = true;
   s.density = 0.35f;                     // floors are tidier than meadows
   s.clutter = { { CL_BRICK, 0.5f, { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c } },
                 { CL_MARBLE, 0.3f, { 0x7db8e8, 0xe89a8a, 0x9cd89c } },
@@ -616,8 +619,8 @@ Theme playroomTheme() {
   // channel would strew rails across the floor. Drawn at a fixed 2x, because
   // the kit's train is smaller than its cars and should stand at least as
   // big as them; a ring that size is a landmark, so it is sparse.
-  // A skateboard left on the floor is a real one beside a toy car, so it
-  // stands at three and a half times its kit size, by the road.
+  // A toy skateboard (a fingerboard's big brother, about 14 cm) left on the
+  // floor stands at three and a half times its kit size, by the road.
   t.props.models = { "trainset", "skateboard" };
   // The ring keeps its own rate (0.03 a candidate) under the skateboard's
   // density: at 2.8k vertices it is the heaviest thing the scatter plants.
