@@ -1092,6 +1092,19 @@ def jetty():
 
 # ---- Driftwood ----
 
+class bleached:
+    """Wood built inside is driftwood the sea and the sun bleached silver: the
+    light end of its swatch's ramp (shade()). On the full ramp a log lying
+    that low darkens to slate and reads as a steel pipe."""
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        return self
+    def __exit__(self, *exc):
+        for o in bpy.context.scene.objects:
+            if o not in self.before and o.get('swatch'):
+                o['ramp'] = 0.35
+        return False
+
 @piece(1.0)
 def driftwood_trunk():
     # Driftwood: a whole tree the storm brought in, at a car's scale (nine
@@ -1102,20 +1115,21 @@ def driftwood_trunk():
     L = 8.0
     # Driftwood is bleached silver by the sea and the sun (the beach's own
     # loose driftwood is pale too), not the red-brown of sawn timber.
-    wood, pale = 'grey', 'lavender'
-    spine = [(0.0, 0.34, -L / 2 + 0.3), (0.08, 0.32, -L / 4), (0.0, 0.28, 0), (-0.1, 0.23, L / 4), (0.04, 0.17, L / 2)]
-    for i, rr in enumerate((0.36, 0.31, 0.26, 0.2)):
-        rod(spine[i], spine[i + 1], rr, wood, r2=rr - 0.04, segs=7)
-    cyl(0.85, 0.26, (0.0, 0.72, -L / 2 - 0.15), wood, segs=9, axis='along')    # the root plate
-    for a, reach, droop in ((-110, 0.95, 0.25), (-50, 1.0, 0.15), (20, 1.0, 0.1), (85, 0.95, 0.2), (140, 0.85, 0.35)):
-        ra = math.radians(a)
-        dx, dy = math.sin(ra), math.cos(ra)
-        rod((dx * 0.6, 0.72 + dy * 0.6, -L / 2 - 0.05), (dx * reach, max(0.08, 0.72 + dy * reach - droop), -L / 2 + 0.3),
-            0.09, wood, r2=0.04, segs=5)
-    rod((0.06, 0.3, L / 4), (0.5, 1.05, L / 4 + 0.4), 0.09, pale, r2=0.04, segs=6)    # two broken limbs
-    rod((-0.15, 0.4, -0.4), (-0.85, 0.62, -0.1), 0.08, pale, r2=0.04, segs=6)
-    rod((1.1, 0.1, 0.0), (1.7, 0.09, 1.7), 0.11, wood, r2=0.08)                    # smaller logs
-    rod((-0.9, 0.08, 1.5), (-1.4, 0.07, 2.5), 0.08, pale, r2=0.06)
+    wood, pale = 'lavender', 'white'
+    with bleached():
+        spine = [(0.0, 0.34, -L / 2 + 0.3), (0.08, 0.32, -L / 4), (0.0, 0.28, 0), (-0.1, 0.23, L / 4), (0.04, 0.17, L / 2)]
+        for i, rr in enumerate((0.36, 0.31, 0.26, 0.2)):
+            rod(spine[i], spine[i + 1], rr, wood, r2=rr - 0.04, segs=7)
+        cyl(0.85, 0.26, (0.0, 0.72, -L / 2 - 0.15), wood, segs=9, axis='along')    # the root plate
+        for a, reach, droop in ((-110, 0.95, 0.25), (-50, 1.0, 0.15), (20, 1.0, 0.1), (85, 0.95, 0.2), (140, 0.85, 0.35)):
+            ra = math.radians(a)
+            dx, dy = math.sin(ra), math.cos(ra)
+            rod((dx * 0.6, 0.72 + dy * 0.6, -L / 2 - 0.05), (dx * reach, max(0.08, 0.72 + dy * reach - droop), -L / 2 + 0.3),
+                0.09, wood, r2=0.04, segs=5)
+        rod((0.06, 0.3, L / 4), (0.5, 1.05, L / 4 + 0.4), 0.09, pale, r2=0.04, segs=6)    # two broken limbs
+        rod((-0.15, 0.4, -0.4), (-0.85, 0.62, -0.1), 0.08, pale, r2=0.04, segs=6)
+        rod((1.1, 0.1, 0.0), (1.7, 0.09, 1.7), 0.11, wood, r2=0.08)                    # smaller logs
+        rod((-0.9, 0.08, 1.5), (-1.4, 0.07, 2.5), 0.08, pale, r2=0.06)
     figure((0.0, 0.5, 0.6), 0.0, shirt=0x6794d9, legs=0xf2bf99, pose='sit')
     gull((1.2, 0.0, -L / 2 + 0.6), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     join_still('trunk')
@@ -1134,28 +1148,29 @@ def strand_line():
     # pile alone is gone from a racer's view as soon as it is near enough to
     # read, so the stretch is one piece that reads from the road the whole
     # way along it.
-    wood, pale, dark = 'grey', 'lavender', 'slate'     # bleached, as the great trunk is
+    wood, pale, dark = 'lavender', 'white', 'grey'     # bleached, as the great trunk is
     def pile(m, phase):
         """One pile, `m` = -1 mirrors it along Z (its root plate to +Z)."""
         def x_at(z):                       # the line wanders as it goes
             return 0.6 * math.sin(z * 0.45 + phase)
         def at(x, y, z):
             return (x, y, m * z)
-        for (z0, z1, dx0, dx1, r, y0, y1, c) in ((-4.8, -1.0, 0.3, -0.4, 0.2, 0.2, 0.17, pale),
-                                                (-2.2, 2.4, -0.6, 0.2, 0.24, 0.24, 0.2, wood),
-                                                (-1.6, 1.0, 0.5, -0.1, 0.16, 0.5, 0.44, pale),   # piled on the others
-                                                (1.6, 4.9, 0.4, -0.3, 0.18, 0.18, 0.15, pale),
-                                                (3.0, 4.6, -0.7, 0.5, 0.12, 0.12, 0.12, dark)):
-            rod(at(x_at(z0) + dx0, y0, z0), at(x_at(z1) + dx1, y1, z1), r, c, r2=r * 0.7, segs=7)
-        # the root plate of the piled tree, reared up out of the line as tall
-        # as the great trunk's, its face along the line to a racer coming
-        # down it
-        rx, ry = x_at(-2.3) - 0.6, 0.85
-        cyl(0.85, 0.2, at(rx, ry, -2.3 if m > 0 else -2.1), wood, segs=9, axis='along')
-        for a in (-0.9, 0.3, 1.6, 2.6):
-            rod(at(rx + 0.5 * math.cos(a), ry + 0.5 * math.sin(a), -2.2),
-                at(rx + 1.05 * math.cos(a), max(0.05, ry + 1.05 * math.sin(a) - 0.2), -1.9),
-                0.07, wood, r2=0.03, segs=5)
+        with bleached():
+            for (z0, z1, dx0, dx1, r, y0, y1, c) in ((-4.8, -1.0, 0.3, -0.4, 0.2, 0.2, 0.17, pale),
+                                                    (-2.2, 2.4, -0.6, 0.2, 0.24, 0.24, 0.2, wood),
+                                                    (-1.6, 1.0, 0.5, -0.1, 0.16, 0.5, 0.44, pale),   # piled on the others
+                                                    (1.6, 4.9, 0.4, -0.3, 0.18, 0.18, 0.15, pale),
+                                                    (3.0, 4.6, -0.7, 0.5, 0.12, 0.12, 0.12, dark)):
+                rod(at(x_at(z0) + dx0, y0, z0), at(x_at(z1) + dx1, y1, z1), r, c, r2=r * 0.7, segs=7)
+            # the root plate of the piled tree, reared up out of the line as tall
+            # as the great trunk's, its face along the line to a racer coming
+            # down it
+            rx, ry = x_at(-2.3) - 0.6, 0.85
+            cyl(0.85, 0.2, at(rx, ry, -2.3 if m > 0 else -2.1), wood, segs=9, axis='along')
+            for a in (-0.9, 0.3, 1.6, 2.6):
+                rod(at(rx + 0.5 * math.cos(a), ry + 0.5 * math.sin(a), -2.2),
+                    at(rx + 1.05 * math.cos(a), max(0.05, ry + 1.05 * math.sin(a) - 0.2), -1.9),
+                    0.07, wood, r2=0.03, segs=5)
         # the wrack between the trees
         for z in (-4.0, -0.6, 0.9, 3.4):
             box((0.5, 0.04, 0.24), at(x_at(z) - 0.5, 0.02, z), 0x2f8f5b, yaw=-m * 0.6 * math.sin(z * 1.3))
@@ -1187,8 +1202,9 @@ def bonfire():
         a = k / 6 * 2 * math.pi + 0.3
         rod((math.cos(a) * 0.24, 0.02, math.sin(a) * 0.24), (math.cos(a) * 0.03, 0.42, math.sin(a) * 0.03),
             0.035, 0x8a6a46, segs=5)
-    for z in (-0.75, 0.75):                              # bleached driftwood, like the strand line's
-        rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'grey', segs=7)
+    with bleached():
+        for z in (-0.75, 0.75):                          # bleached driftwood, like the strand line's
+            rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'lavender', segs=7)
     figure((0.0, 0.17, -0.75), math.pi / 2, shirt=0xcf534f, legs=0x38383d, pose='sit')
     figure((0.15, 0.17, 0.75), -math.pi / 2, shirt=0x6794d9, legs=0xf2bf99, hair=0xffc044, pose='sit')
     figure((-0.62, 0, 0.1), 0.0, shirt=0x61cb8b, legs=0x38383d, pose='crouch')
@@ -1197,12 +1213,13 @@ def bonfire():
     # unit), the tall end of a real one, and long, a shelter for the whole
     # party rather than a wall over them
     R, B, H = 0.95, 0.85, 1.5                            # the ridge's height, how far back the poles reach, half its length
-    for z in (-H + 0.1, H - 0.1):
-        rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'lavender', segs=5)
-    rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'lavender', segs=5)
-    for i in range(11):
-        z = -H + 0.1 + i * (2 * H - 0.2) / 10
-        rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'grey' if i % 2 else 'lavender', segs=5)
+    with bleached():
+        for z in (-H + 0.1, H - 0.1):                    # the uprights and ridge grey: white, they framed a goal
+            rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'lavender', segs=5)
+        rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'lavender', segs=5)
+        for i in range(11):
+            z = -H + 0.1 + i * (2 * H - 0.2) / 10
+            rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'lavender' if i % 2 else 'white', segs=5)
     # an old sail over the poles: without it the frame reads as a swing
     box((math.hypot(R, B) - 0.05, 0.03, 2 * H), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 0x6794d9,
         roll=math.atan2(R, B))
@@ -1210,11 +1227,12 @@ def bonfire():
     # as they do on a beach the storms fill with wood: poles leant together
     # round a ring, crossing at the top, a person's height and a half
     tx, tz, TH = -1.0, H + 0.9, 0.95
-    for i in range(8):
-        a = i / 8 * 2 * math.pi + 0.2
-        rod((tx + math.cos(a) * 0.5, 0.0, tz + math.sin(a) * 0.5),
-            (tx - math.cos(a) * 0.06, TH + 0.08 * (i % 3), tz - math.sin(a) * 0.06), 0.05,
-            'grey' if i % 2 else 'lavender', r2=0.03, segs=5)
+    with bleached():
+        for i in range(8):
+            a = i / 8 * 2 * math.pi + 0.2
+            rod((tx + math.cos(a) * 0.5, 0.0, tz + math.sin(a) * 0.5),
+                (tx - math.cos(a) * 0.06, TH + 0.08 * (i % 3), tz - math.sin(a) * 0.06), 0.05,
+                'lavender' if i % 2 else 'white', r2=0.03, segs=5)
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
 

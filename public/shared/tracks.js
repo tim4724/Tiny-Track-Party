@@ -434,10 +434,12 @@ export const TRACKS = {
     ],
     // Skull Rock is the end of a headland: a ridge running out from the
     // west shore to stare at the road across the bay between the two bends,
-    // green with the scrub that holds a headland (bare, a hill that size is
-    // a desert dune; the beach's own hills say so, theme.cc)
+    // a broad crest green with the scrub that holds a headland (bare and
+    // peaked, a hill that size is a desert dune; the beach's own hills say
+    // so, theme.cc). The tint is a wash over the ground's 9 u grid, so only
+    // a crest that wide and a tint that deep reads green from the road.
     land: [
-      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.2, tint: 0x9cdccc },
+      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.45, tint: 0x84c890 },
       { kind: 'shore', u: 0.45, lat: 10, len: 56, r: 30 }
     ]
   },
@@ -471,13 +473,14 @@ export const TRACKS = {
     // the swimmers' water, the umbrellas either side of it and the buoy line
     // and the surfers riding the swell beyond: one piece, at the end of the
     // east straight where the road bends away and a racer looks straight at it.
-    // The shore holds its line the length of the swim line and past it, so
-    // the line lies on the water from end to end.
+    // The shore is anchored where the patrol is, so it runs along the swim
+    // line's own axis, and holds that line the length of the swim line and
+    // past it: the line lies on the water, a swim's width out, end to end.
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
     ],
     land: [
-      { kind: 'shore', u: 0.19, lat: -10, len: 90, r: 30 }
+      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
