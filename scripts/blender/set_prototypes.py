@@ -790,10 +790,38 @@ def rock_pool():
     # the far shore and one riding the wind in wide circles over the rocks,
     # which is what a racer this far off sees move.
     G = 1.45
-    disc(4.2 * G, (0.2 * G, 0.0, -0.3 * G), 'sky', segs=20, h=0.05)            # the shallows
-    disc(3.6 * G, (-0.6 * G, 0.0, 1.2 * G), 'sky', segs=20, h=0.05)
-    disc(3.2 * G, (0.0, 0.03, -0.1 * G), 'blue', segs=18, h=0.05)              # the deep middle
-    disc(2.6 * G, (-0.7 * G, 0.03, 1.2 * G), 'blue', segs=18, h=0.05)
+    # The water is the light end of its swatches (ramp): the blue's dark end is
+    # violet and read as some other liquid beside the turquoise sea.
+    shallows = ((4.2 * G, 0.2 * G, -0.3 * G), (3.6 * G, -0.6 * G, 1.2 * G))
+    for r, x, z in shallows:
+        disc(r, (x, 0.0, z), 'sky', segs=20, h=0.05)['ramp'] = 0.25            # the shallows
+    disc(3.2 * G, (0.0, 0.03, -0.1 * G), 'blue', segs=18, h=0.05)['ramp'] = 0.25   # the deep middle
+    disc(2.6 * G, (-0.7 * G, 0.03, 1.2 * G), 'blue', segs=18, h=0.05)['ramp'] = 0.25
+    # The pool lies IN the rock, not on the sand: a rim of flat reef stone all
+    # round its edge, its lip a little over the water and low enough at the
+    # road side that the water shows past it, the slabs darker and wet toward
+    # the sea, where the boulders heap up on them. The pool's people kneel on it.
+    RIM = 0.16
+    def edge(a):
+        """How far the shallows reach from the pool's middle toward angle a."""
+        ca, sa = math.cos(a), math.sin(a)
+        far = 0.0
+        for r, x, z in shallows:
+            b = x * ca + z * sa
+            far = max(far, b + math.sqrt(max(0.0, r * r - (x * x + z * z - b * b))))
+        return far
+    # Uneven, as stone is: each slab its own depth back from the water, its
+    # own turn and lip, the wet slate and the dry grey mixed.
+    for k in range(14):
+        a = (k + 0.5) / 14 * 2 * math.pi
+        j = (math.sin(k * 12.9898) * 43758.5453) % 1.0
+        depth = 2.0 + 1.3 * j
+        d = edge(a) - 0.15 + depth / 2
+        sea = math.cos(a) < -0.2
+        h = RIM + (0.1 if sea else 0.0) + 0.05 * (j - 0.5)
+        box((depth, h, 3.3 + 0.6 * ((k * 7) % 3) / 2),
+            (math.cos(a) * d, h / 2, math.sin(a) * d),
+            'slate' if sea or j > 0.7 else 'grey', yaw=-a + 0.3 * (j - 0.5), roll=0.04 * ((k % 2) * 2 - 1))
     for a, d, k, sq in ((2.5, 5.2, 1.5, 0.8), (3.1, 5.5, 1.9, 0.85), (3.75, 5.2, 1.4, 0.75),
                         (4.4, 5.0, 1.0, 0.7), (1.9, 5.0, 0.9, 0.7), (5.3, 4.8, 0.6, 0.6)):
         boulder((math.cos(a) * d * G, 0, math.sin(a) * d * G), k * G, yaw=a * 1.7, squash=sq)
@@ -802,12 +830,12 @@ def rock_pool():
     boulder((-0.9 * G, 0, 0.8 * G), 0.5 * G, yaw=1.1)                          # breaking the surface
     # the near shore, where the shallows meet the sand on the road side
     ka = -0.35
-    figure((math.cos(ka) * 6.5, 0.0, math.sin(ka) * 6.5), math.pi - ka, shirt=0xffc044, legs=0x6794d9,
+    figure((math.cos(ka) * 6.7, RIM, math.sin(ka) * 6.7), math.pi - ka, shirt=0xffc044, legs=0x6794d9,
            pose='crouch')
-    box((0.08, 0.09, 0.08), (math.cos(ka) * 6.5, 0.045, math.sin(ka) * 6.5 + 0.17), 0xff5040)   # the bucket
-    figure((math.cos(0.05) * 6.4, 0.0, math.sin(0.05) * 6.4), math.pi, shirt=0x339cf2, legs=0x38383d, pose='crouch')
-    box((0.3, 0.05, 0.18), (math.cos(0.05) * 6.75, 0.03, math.sin(0.05) * 6.75 + 0.3), 0xff7e44)   # a towel
-    gull((math.cos(0.95) * 6.5, 0.0, math.sin(0.95) * 6.5), 0.0)                 # on the far shore
+    box((0.08, 0.09, 0.08), (math.cos(ka) * 6.7, RIM + 0.045, math.sin(ka) * 6.7 + 0.17), 0xff5040)   # the bucket
+    figure((math.cos(0.05) * 6.6, RIM, math.sin(0.05) * 6.6), math.pi, shirt=0x339cf2, legs=0x38383d, pose='crouch')
+    box((0.3, 0.05, 0.18), (math.cos(0.05) * 6.95, RIM + 0.03, math.sin(0.05) * 6.95 + 0.3), 0xff7e44)   # a towel
+    gull((math.cos(0.95) * 6.9, RIM, math.sin(0.95) * 6.9), 0.0)                 # on the far shore
     # the gull aloft: wings out, gliding a wide circle from the pool out over
     # the beach toward the road and rising and sinking on the air (a closed
     # path, facing its way). Its rest pose stands on the shore by the other;
@@ -848,17 +876,23 @@ def reef_shelf():
                                        (3.0, 6.2, 3.0, 3.4, 0.6, -0.3, 0.2, 'lavender')):
         box((w, h, d), (x, h / 2 + 0.05, z), c, yaw=yw, roll=rl)
     # the pools between the shelves: a pale rim, the deep blue middle
-    for (x, z, r, rim) in ((-4.5, -1.4, 1.7, True), (0.9, -0.2, 1.4, True), (-3.9, 5.6, 1.2, False),
-                           (2.4, -6.1, 1.1, False)):
+    # (each caught between ledges, none out on the open sand)
+    for (x, z, r, rim) in ((-4.5, -1.4, 1.7, True), (0.9, -0.2, 1.4, True), (-3.9, 5.6, 1.2, False)):
         if rim:
-            disc(r + 0.4, (x, 0.0, z), 'sky', segs=8, h=0.05)
-        disc(r, (x, 0.02, z), 'blue', segs=8, h=0.05)
-    # the sea stack in the surf and the rocks along the water's edge: what
-    # makes the run read from the road
-    box((2.6, 2.3, 2.4), (-9.6, 1.1, -2.0), 'slate', yaw=0.5, roll=0.08)
-    box((1.8, 1.3, 1.7), (-9.4, 2.7, -1.8), 'grey', yaw=1.2, roll=-0.12)
-    box((1.8, 1.1, 1.6), (-9.8, 0.5, 4.2), 'grey', yaw=0.2)
-    box((1.5, 0.9, 1.4), (-9.0, 0.4, -7.0), 'slate', yaw=0.8)
+            disc(r + 0.4, (x, 0.0, z), 'sky', segs=8, h=0.05)['ramp'] = 0.25
+        disc(r, (x, 0.02, z), 'blue', segs=8, h=0.05)['ramp'] = 0.25
+    # The reef runs on under the sea: the last ledges awash in the surf, the
+    # water over the sand at SEA (grown), just breaking over them, and out
+    # past them the sea stack and the rocks along the water's edge, standing
+    # in it: what makes the run read from the road, and what says the sea
+    # left the rest bare.
+    awash = SEA / GROW['reef-shelf'] + 0.08
+    for (x, z, w, d, yw) in ((-11.0, -4.6, 2.6, 4.4, 0.25), (-11.4, 1.0, 2.4, 4.6, -0.1), (-10.8, 6.0, 2.6, 3.6, 0.15)):
+        box((w, awash, d), (x, awash / 2, z), 'slate', yaw=yw)
+    box((2.6, 2.8, 2.4), (-10.9, 1.35, -2.0), 'slate', yaw=0.5, roll=0.08)
+    box((1.8, 1.3, 1.7), (-10.7, 3.2, -1.8), 'grey', yaw=1.2, roll=-0.12)
+    box((1.8, 1.1, 1.6), (-11.3, 0.5, 4.2), 'grey', yaw=0.2)
+    box((1.5, 0.9, 1.4), (-10.5, 0.4, -7.0), 'slate', yaw=0.8)
     # weed over the wet stone, mussels in its cracks
     for (x, y, z, w, d, yw, rl) in ((-7.2, 0.56, -4.2, 2.6, 1.6, 0.2, 0.06), (-7.6, 0.66, 1.2, 2.2, 2.4, -0.15, 0.06),
                                     (-6.8, 0.51, 6.0, 2.4, 1.4, 0.1, 0.06), (-2.4, 0.92, -3.4, 1.8, 1.0, -0.2, 0.13)):
@@ -879,19 +913,45 @@ def crab_pots():
     hut(1.5, 1.0, 1.6, (-0.8, 0, 0), 0x6794d9, 0xcf534f, t=0.25)
     for z in (-0.45, -0.1, 0.25):
         box((0.13, 0.13, 0.07), (-0.8 + z, 0.55, 0.84), 0xff7e44)            # floats on the wall
-    bx, bz = 0.75, -1.75
-    boat((bx, 0, bz), 0.25, 0xfff6eb, trim=0x339cf2)
-    box((0.07, 1.35, 0.07), (bx, 0.75, bz), 0x9a7b55)                         # the mast
-    sail = [(bz - 0.75, 0.42), (bz - 0.05, 1.38), (bz - 0.05, 0.35)]
+    # The dinghy sits up on its launching trolley, as a boat kept up the beach
+    # does, so it is wheeled down to the water rather than lying on the sand
+    # far from it: two wheels under its middle, the cradle's bearers along
+    # its keel and the towing handle to the slip.
+    bx, bz, T = 0.75, -1.75, 0.17
+    c, s = math.cos(0.25), math.sin(0.25)
+    def on_boat(dx, dz):
+        return (bx + dx * c + dz * s, bz - dx * s + dz * c)
+    for sd in (-1, 1):
+        wx, wz = on_boat(sd * 0.21, -0.1)
+        cyl(0.085, 0.06, (wx - sd * 0.03 * c, 0.085, wz + sd * 0.03 * s), 'dark', segs=8, axis='across',
+            yaw=0.25)
+        bx0, bz0 = on_boat(sd * 0.12, -0.5)
+        bx1, bz1 = on_boat(sd * 0.12, 0.3)
+        beam((bx0, T - 0.04, bz0), (bx1, T - 0.04, bz1), 0.05, 0x9a7b55)
+    ax0, az0 = on_boat(-0.2, -0.1)
+    ax1, az1 = on_boat(0.2, -0.1)
+    beam((ax0, 0.085, az0), (ax1, 0.085, az1), 0.05, 'dark')                    # the axle
+    hx0, hz0 = on_boat(0.0, 0.3)
+    hx1, hz1 = on_boat(0.0, 0.85)
+    beam((hx0, T - 0.04, hz0), (hx1, 0.06, hz1), 0.05, 0x9a7b55)
+    boat((bx, T, bz), 0.25, 0xfff6eb, trim=0x339cf2)
+    box((0.07, 1.35, 0.07), (bx, 0.75 + T, bz), 0x9a7b55)                     # the mast
+    sail = [(bz - 0.75, 0.42 + T), (bz - 0.05, 1.38 + T), (bz - 0.05, 0.35 + T)]
     prism([(z, y) for z, y in sail], bx + 0.02, 0.03, 0xfff6eb)               # the sail, hung up to dry
     for (x, y, z, yw) in ((0.45, 0, 0.95, 0.1), (0.45, 0, 1.35, -0.05), (0.75, 0, 1.15, 0.4),
                           (0.45, 0.2, 1.15, 0.2), (0.6, 0.4, 1.15, -0.1), (0.5, 0.2, 1.4, 0.3),
                           (0.55, 0.6, 1.2, 0.15)):
         creel((x, y, z), yw)
+    # a net hung over a line between two poles to dry: green, sagging with
+    # the line and hanging deepest in the middle, not a board on two posts
     for z in (1.9, 2.9):
         box((0.06, 0.8, 0.06), (-0.2, 0.4, z), 0x9a7b55)
-    box((0.03, 0.42, 0.98), (-0.2, 0.52, 2.4), 'slate')                     # the net
-    box((0.05, 0.05, 1.06), (-0.2, 0.78, 2.4), 0x9a7b55)
+    line = sag((-0.2, 0.78, 1.93), (-0.2, 0.78, 2.87), 0.08, n=5)
+    for i in range(4):
+        (_, y0, z0), (_, y1, z1) = line[i], line[i + 1]
+        drop = 0.3 + 0.12 * (1 - abs(i - 1.5) / 1.5)
+        box((0.03, drop, z1 - z0 + 0.02), (-0.2, (y0 + y1) / 2 - drop / 2, (z0 + z1) / 2), 'green')
+        beam(line[i], line[i + 1], 0.04, 0x9a7b55)
     with animated('anim_watch:r=22:d=70#fisher', (1.05, 0, 0.55)):
         figure((1.05, 0, 0.55), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
     join_still('landing')
@@ -992,23 +1052,29 @@ def jetty():
     # tied at the far end where a pirate keeps watch under the Jolly Roger,
     # barrels and crates waiting at the near end by the cargo derrick, one
     # slung from its jib over the deck.
-    D = 0.7                                                                     # the deck's height
-    for k in range(22):                                                         # the decking
+    # Long enough to reach past the surf: Cove's waterline lies no nearer the
+    # road than its shore allows (TtpRenderer::shoreline), so the jetty runs
+    # out over the foam to a head and a moored boat on the open water.
+    D, N = 0.7, 30                                                              # the deck's height, its planks
+    END = 1.2 - (N - 1) * 0.46                                                  # the head's last plank
+    for k in range(N):                                                          # the decking
         box((0.42, 0.1, 0.8), (1.2 - k * 0.46, D, 0), 0xb06041 if k % 3 else 0x9a6a46)
     for zs in (-0.32, 0.32):                                                    # the stringers
-        box((10.2, 0.12, 0.12), (-3.7, D - 0.1, zs), 0x8a6a46)
-    for k in range(6):
+        box((1.4 - END, 0.12, 0.12), ((1.4 + END) / 2 - 0.1, D - 0.1, zs), 0x8a6a46)
+    for k in range(8):
         for zs in (-0.42, 0.42):
-            box((0.14, D + 0.6, 0.14), (1.2 - k * 1.95, (D - 0.6) / 2, zs), 0x8a6a46)
-            box((0.09, 0.32, 0.09), (1.2 - k * 1.95, D + 0.2, zs), 0x8a6a46)    # the rail's posts
+            px = 1.2 + (END - 1.2) * k / 7
+            box((0.14, D + 0.6, 0.14), (px, (D - 0.6) / 2, zs), 0x8a6a46)
+            box((0.09, 0.32, 0.09), (px, D + 0.2, zs), 0x8a6a46)              # the rail's posts
     for zs in (-0.42, 0.42):                                                    # the rail
-        box((9.9, 0.08, 0.08), (-3.7, D + 0.34, zs), 0x9a6a46)
+        box((1.2 - END + 0.1, 0.08, 0.08), ((1.2 + END) / 2, D + 0.34, zs), 0x9a6a46)
     for i in range(3):                                                          # the steps down to the sand
         box((0.3, 0.08, 0.7), (1.58 + i * 0.28, D - 0.2 - i * 0.22, 0), 0x9a6a46)
         box((0.08, D - 0.2 - i * 0.22, 0.08), (1.58 + i * 0.28, (D - 0.2 - i * 0.22) / 2, 0.3), 0x8a6a46)
-    kit('pirate', 'boat-row-small', (-8.2, -0.02, 0.95), yaw=math.radians(90), scale=0.32)
-    beam((-8.0, D - 0.1, 0.42), (-8.1, 0.2, 0.75), 0.06, 0xfde4c7)
-    figure((-8.5, D + 0.05, 0.0), math.pi, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f)
+    H = END + 0.3                                                               # by the head
+    kit('pirate', 'boat-row-small', (H - 0.25, -0.02, 0.95), yaw=math.radians(90), scale=0.32)
+    beam((H - 0.05, D - 0.1, 0.42), (H - 0.15, 0.2, 0.75), 0.06, 0xfde4c7)
+    figure((H - 0.55, D + 0.05, 0.0), math.pi, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f)
     kit('pirate', 'barrel', (2.4, 0, -0.45), yaw=0.4, scale=0.2)
     kit('pirate', 'barrel', (2.55, 0, 0.6), yaw=1.2, scale=0.2)
     kit('pirate', 'crate', (0.7, D + 0.05, 0.15), yaw=0.2, scale=0.25)
@@ -1021,7 +1087,7 @@ def jetty():
     beam((1.45, 1.4, -0.6), (0.9, 2.08, -0.4), 0.08, 0x8a6a46)
     box((0.04, 0.5, 0.04), (0.35, 1.8, -0.15), 0xfde4c7)
     kit('pirate', 'barrel', (0.35, 1.32, -0.15), yaw=0.3, scale=0.2)
-    kit_flag('flag-pirate-high', (-8.0, D + 0.05, -0.3), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.3')
+    kit_flag('flag-pirate-high', (H - 0.05, D + 0.05, -0.3), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.3')
     join_still('jetty')
 
 # ---- Driftwood ----
@@ -1034,7 +1100,9 @@ def driftwood_trunk():
     # limbs, smaller logs washed up beside it, a beachcomber sitting on it and
     # a gull on the roots who watches the cars and hops off as one goes by.
     L = 8.0
-    wood, pale = 0x8a6a46, 0xb8a686
+    # Driftwood is bleached silver by the sea and the sun (the beach's own
+    # loose driftwood is pale too), not the red-brown of sawn timber.
+    wood, pale = 'grey', 'lavender'
     spine = [(0.0, 0.34, -L / 2 + 0.3), (0.08, 0.32, -L / 4), (0.0, 0.28, 0), (-0.1, 0.23, L / 4), (0.04, 0.17, L / 2)]
     for i, rr in enumerate((0.36, 0.31, 0.26, 0.2)):
         rod(spine[i], spine[i + 1], rr, wood, r2=rr - 0.04, segs=7)
@@ -1066,7 +1134,7 @@ def strand_line():
     # pile alone is gone from a racer's view as soon as it is near enough to
     # read, so the stretch is one piece that reads from the road the whole
     # way along it.
-    wood, pale, dark = 0x8a6a46, 0xb8a686, 0x7a5a3a
+    wood, pale, dark = 'grey', 'lavender', 'slate'     # bleached, as the great trunk is
     def pile(m, phase):
         """One pile, `m` = -1 mirrors it along Z (its root plate to +Z)."""
         def x_at(z):                       # the line wanders as it goes
@@ -1083,7 +1151,7 @@ def strand_line():
         # as the great trunk's, its face along the line to a racer coming
         # down it
         rx, ry = x_at(-2.3) - 0.6, 0.85
-        cyl(0.85, 0.2, at(rx, ry, -2.3 if m > 0 else -2.1), 0x7a5a3a, segs=9, axis='along')
+        cyl(0.85, 0.2, at(rx, ry, -2.3 if m > 0 else -2.1), wood, segs=9, axis='along')
         for a in (-0.9, 0.3, 1.6, 2.6):
             rod(at(rx + 0.5 * math.cos(a), ry + 0.5 * math.sin(a), -2.2),
                 at(rx + 1.05 * math.cos(a), max(0.05, ry + 1.05 * math.sin(a) - 0.2), -1.9),
@@ -1119,31 +1187,45 @@ def bonfire():
         a = k / 6 * 2 * math.pi + 0.3
         rod((math.cos(a) * 0.24, 0.02, math.sin(a) * 0.24), (math.cos(a) * 0.03, 0.42, math.sin(a) * 0.03),
             0.035, 0x8a6a46, segs=5)
-    for z in (-0.75, 0.75):
-        rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 0x8a6a46, segs=7)
+    for z in (-0.75, 0.75):                              # bleached driftwood, like the strand line's
+        rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'grey', segs=7)
     figure((0.0, 0.17, -0.75), math.pi / 2, shirt=0xcf534f, legs=0x38383d, pose='sit')
     figure((0.15, 0.17, 0.75), -math.pi / 2, shirt=0x6794d9, legs=0xf2bf99, hair=0xffc044, pose='sit')
     figure((-0.62, 0, 0.1), 0.0, shirt=0x61cb8b, legs=0x38383d, pose='crouch')
-    # the lean-to: driftwood poles against a ridge pole, out of the wind
-    R, B = 1.35, 0.95                                    # the ridge's height, how far back the poles reach
-    for z in (-0.8, 0.8):
-        rod((-1.25, 0, z), (-1.25, R, z), 0.06, 0xb8a686, segs=5)
-    rod((-1.25, R, -0.95), (-1.25, R, 0.95), 0.06, 0xb8a686, segs=5)
-    for i in range(8):
-        z = -0.8 + i * 0.23
-        rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 0x8a6a46 if i % 2 else 0xb8a686, segs=5)
+    # the lean-to: driftwood poles against a ridge pole, out of the wind,
+    # about twice a standing person (THE SCALE RULE: a person is half a
+    # unit), the tall end of a real one, and long, a shelter for the whole
+    # party rather than a wall over them
+    R, B, H = 0.95, 0.85, 1.5                            # the ridge's height, how far back the poles reach, half its length
+    for z in (-H + 0.1, H - 0.1):
+        rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'lavender', segs=5)
+    rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'lavender', segs=5)
+    for i in range(11):
+        z = -H + 0.1 + i * (2 * H - 0.2) / 10
+        rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'grey' if i % 2 else 'lavender', segs=5)
     # an old sail over the poles: without it the frame reads as a swing
-    box((math.hypot(R, B) - 0.05, 0.03, 1.9), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 0x6794d9,
+    box((math.hypot(R, B) - 0.05, 0.03, 2 * H), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 0x6794d9,
         roll=math.atan2(R, B))
+    # past the lean-to's end, a driftwood teepee the beachcombers stood up,
+    # as they do on a beach the storms fill with wood: poles leant together
+    # round a ring, crossing at the top, a person's height and a half
+    tx, tz, TH = -1.0, H + 0.9, 0.95
+    for i in range(8):
+        a = i / 8 * 2 * math.pi + 0.2
+        rod((tx + math.cos(a) * 0.5, 0.0, tz + math.sin(a) * 0.5),
+            (tx - math.cos(a) * 0.06, TH + 0.08 * (i % 3), tz - math.sin(a) * 0.06), 0.05,
+            'grey' if i % 2 else 'lavender', r2=0.03, segs=5)
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
 
 # ---- Riptide ----
 
-# Where along the beach the swim line's middle lies off the tower: up the
-# beach toward the cars coming (-Z), because past the tower (+Z) Riptide's
-# shore bay ends and the line's far end would lie on the sand.
-SWIM_Z = -7.5
+# Where along the beach the swim line's middle lies off the tower: a little
+# up the beach toward the cars coming (-Z), not far, because up there the
+# waterline turns in round the bend before it and the line's end would lie in
+# the surf; past the tower (+Z) Riptide's shore (tracks.js) runs on long
+# enough to hold the line's other end on the water.
+SWIM_Z = -3.5
 
 @piece(1.0)
 def lifeguard_tower():

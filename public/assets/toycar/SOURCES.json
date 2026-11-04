@@ -37,7 +37,6 @@
     "pirate-chest.glb": { "kit": "pirate", "model": "chest" },
     "pirate-crate.glb": { "kit": "pirate", "model": "crate" },
     "pirate-flag.glb": { "kit": "pirate", "model": "flag-pirate-high" },
-    "pirate-rowboat.glb": { "kit": "pirate", "model": "boat-row-small" },
     "prop-crate.glb": { "generated": "scripts/gen-props.mjs" },
     "prop-hay.glb": { "generated": "scripts/gen-props.mjs" },
     "rock-sand.glb": { "kit": "survival", "model": "rock-sand-b" },
