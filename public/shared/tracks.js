@@ -319,6 +319,10 @@ export const SET_GROUND = {
   // holds the ground to), so a racer looks across at the cottages rather
   // than down over the kerb at their roofs.
   'set-cottage-row': [{ kind: 'fan', x: -1.5, len: 30, r: 18, h: 1.1, top: 0.7 }],
+  // ...and its church on the churchyard's own level ground, cut into the
+  // terrace it stands on, the green before it: on the slope as it was, the
+  // tower stood a storey deep in the hill.
+  'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
   // Pretzel's den camp on a bank of its own, the same shape.
   'set-den-camp': [{ kind: 'fan', len: 6, r: 9, h: 1.4, top: 0.6 }],
   // Cloverleaf's playground hill: a broad round top the playground stands on
@@ -558,11 +562,11 @@ export const TRACKS = {
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
-      { model: 'set-cottage-row', u: 0.823, lat: 31, yaw: 41.02 },
+      { model: 'set-cottage-row', u: 0.828, lat: 33, yaw: 0 },
       { model: 'set-cottage-row', u: 0.045, lat: -15, yaw: 180, y: -0.2 },
-      { model: 'set-cottage-row', u: 0.598, lat: -9.6, yaw: 176.98 },
+      { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
       { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 },
-      { model: 'set-cottage-row', u: 0.86, lat: 9, yaw: 48.17 }
+      { model: 'set-cottage-row', u: 0.88, lat: 14.5, yaw: 0 }
     ],
     // the valley the village lies in: two terraces climbing either side of
     // the circuit, a long bank behind the north loop and a round hill to the
@@ -609,8 +613,8 @@ export const TRACKS = {
       { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
       { model: 'set-stream-reach', u: 0.51248, lat: 8.411, yaw: 96.74 },
       { model: 'set-stream-reach', u: 0.50012, lat: -11.456, yaw: 116.55 },
-      { model: 'set-stream-reach', u: 0.15996, lat: -2.595, yaw: -67.1 },
-      { model: 'set-stream-reach', u: 0.14206, lat: 9.721, yaw: -172.98 },
+      { model: 'set-stream-reach', u: 0.1544, lat: -1.942, yaw: -85.23 },
+      { model: 'set-stream-reach', u: 0.1292, lat: 8.869, yaw: 177.52 },
       { model: 'set-stream-reach', u: 0.10401, lat: 9.482, yaw: -172.89 },
       { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 },
       { model: 'set-stream-reach', u: 0.89136, lat: -26.405, yaw: 59.8 },
