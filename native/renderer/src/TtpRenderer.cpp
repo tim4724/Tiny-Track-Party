@@ -892,6 +892,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.scRocks = sc.rocks;
     out.scRockS[0] = sc.rockS[0];
     out.scRockS[1] = sc.rockS[1];
+    out.scRockBlocks = sc.rockBlocks;
     out.scModelCount = (uint32_t) sc.models.size();
     out.clDensity = sc.clutterDensity;
     out.clKinds.clear();

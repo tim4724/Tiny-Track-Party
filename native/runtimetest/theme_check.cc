@@ -93,6 +93,7 @@ Value sceneryOf(const rt::ScenerySpec& s) {
   Value rockS = Value::Arr();
   rockS.push(f(s.rockS[0])); rockS.push(f(s.rockS[1]));
   o.set("rockS", rockS);
+  if (s.rockBlocks) o.set("rockBlocks", Value::Bool(true));  // absent: stones
   o.set("clutterDensity", f(s.clutterDensity));
   Value cl = Value::Arr();
   for (const rt::ClutterSpec& c : s.clutter) {

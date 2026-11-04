@@ -4677,26 +4677,19 @@ TOY = [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c]
 # Indoors the scale is the TOY car's: a racer is a 5 cm toy car, so 1 unit is
 # about 5.5 cm, and every toy here stands at its real size beside one (a
 # little chunkier, as a toy is): a board game about 11 across, a wooden snake
-# as thick as a car is tall, a wind-up robot 5 tall, a castle of blocks 10
+# as thick as a car is tall, a toy dragon 4 tall, a castle of blocks 10
 # across, a marble run 9 high. Nothing from the grown-ups' world: at this
 # scale a book or a sofa is terrain, not a prop.
 
 def slinky():
-    # Helix: a rainbow slinky walking down a stack of books (built at the
-    # marble tower's grow, 0.65, which stands it beside). ONE coiled wire,
-    # its ends bunched (a stack on the top book, a stack on the floor), the
-    # arch between them opened out so the gaps between the coils show: that
+    # Helix: a rainbow slinky walking down off a big alphabet block (built at
+    # the marble tower's grow, 0.65, which stands it beside; a stack of books
+    # was a grown-up's thing among the toys). ONE coiled wire, its ends
+    # bunched (a stack on the block, a stack on the floor), the arch between
+    # them opened out so the gaps between the coils show: that
     # spring-and-gap is what says slinky. Each colour is a band of coils.
-    for k, (c, w, d, x, z, yaw) in enumerate(((0x5a8fd8, 4.0, 3.0, -3.3, 0.0, 0.05), (0xe66a5a, 3.6, 2.8, -3.4, 0.1, -0.08),
-                                               (0x6cbf6c, 3.3, 2.6, -3.35, -0.05, 0.12))):
-        y, h, t = k * 0.72, 0.72, 0.12
-        o = box((w, t, d), (x, y + t / 2, z), c, yaw=yaw)                  # back cover
-        box((w, t, d), (x, y + h - t / 2, z), c, yaw=yaw)                  # front cover
-        ca, sa = math.cos(yaw), math.sin(yaw)
-        box((t, h, d), (x + (w / 2 - t / 2) * ca, y + h / 2, z - (w / 2 - t / 2) * sa), c, yaw=yaw)   # spine, road side
-        box((w - 0.2, h - 2 * t, d - 0.24), (x - 0.1 * ca, y + h / 2, z + 0.1 * sa), 0xfdf4de, yaw=yaw)  # the pages
-        box((t + 0.02, 0.14, d * 0.5), (x + (w / 2 - t / 2) * ca, y + h / 2, z - (w / 2 - t / 2) * sa), 0xfdf4de, yaw=yaw)
-    TOPY = 3 * 0.72
+    TOPY = 2.3
+    block(TOPY, (-3.4, TOPY / 2, 0.0), 0xf2c14e, yaw=0.06, letters={'+z': 'A', '+x': 'B', '-z': 'C', '-x': 'D'})
     R, WIRE, TIGHT, OPEN, NEND = 1.0, 0.1, 0.24, 0.7, 6
     a0 = (-3.4, TOPY + WIRE + 0.02)
     b0 = (4.0, WIRE + 0.02)
@@ -4741,7 +4734,7 @@ def slinky():
 @piece(0.8)
 def block_castle():
     # Gauntlet: a castle of alphabet blocks on the floor, the toy siege the
-    # track's soldiers and robot lay. The curtain wall runs along the road
+    # track's knights and their dragon lay. The curtain wall runs along the road
     # with its gate to the road (+X), towers at the four corners flying
     # pennants that flap, the king's banner over the gate, side and back
     # walls closing the court, a moat along the front with the drawbridge
@@ -4773,8 +4766,8 @@ def block_castle():
             cyl(S * 0.78, S * 0.9, (x, top, z), 0x6cbf6c if x == 0 else 0xe66a5a, r2=0.05, segs=10)
             box((BAR * 1.4, 1.8, BAR * 1.4), (x, top + 1.3, z), 0x2a2735)
             with animated('anim_sway:a=x:d=24:p=%.1f#%d' % (1.6 + 0.2 * n, n), (x, top + 2.15, z)):
-                box((0.08, 0.8, 1.2), (x, top + 1.75, z + 0.65 * sz), 0xff5040)  # the pennant flaps,
-                box((0.08, 0.44, 0.6), (x, top + 1.75, z + 1.5 * sz), 0xff5040)  # tapering to its tip
+                box((0.08, 0.8, 1.2), (x, top + 1.75, z + 0.65), 0xff5040)  # the pennant flaps, all
+                box((0.08, 0.44, 0.6), (x, top + 1.75, z + 1.5), 0xff5040)  # four the banner's way
             n += 1
         for j in (1, 2):                            # the side walls
             block(S, (-j * S, C + S / 2, z), TOY[(j + 1) % 4], faces=('+y', '+z', '-z'))
@@ -4840,50 +4833,50 @@ def spinning_top_body(x, z, k):
         box((0.5 * k, 0.7 * k, 0.14 * k), (x + math.cos(a) * 1.35 * k, 2.3 * k, z + math.sin(a) * 1.35 * k), 0xe66a5a, yaw=-a)
 
 @piece(0.7)
-def toy_robot():
-    # Gauntlet: a boxy wind-up robot marching its beat before the castle, a
-    # loop so it never turns back on itself in sight: it steps as wind-up
-    # toys walk, each leg lifting in turn while the body rocks over the other
-    # (anim_bob and anim_waddle in step), and the big key in its back turns.
-    # Visor and eyes, a grille mouth, antenna, claws. Built facing +X at the
-    # loop's first point; the renderer turns it along its way. About 25 cm
-    # tall.
-    RX, RZ, N = 1.6, 4.0, 16
-    for k in range(N):
-        a = 2 * math.pi * k / N
-        marker('path_patrol_%d' % k, (RX * math.cos(a), 0, RZ * math.sin(a)))
-    X = RX
-    with animated('anim_path:c=patrol:p=14:f=1', (X, 0, 0)):
-        box((1.2, 0.45, 1.9), (X, 1.9, 0), 0x868ba1)                             # the hips march on
-        # a leg lifts at the top of the body's rock the other way: the waddle
-        # rolls its top toward +Z a quarter in, so the -Z leg goes up then
-        for z, o in ((-0.55, 0.25), (0.55, 0.75)):
-            with animated('anim_bob:h=0.24:p=0.9:o=%g#%s' % (o, 'l' if z < 0 else 'r'), (X, 0, z)):
-                box((0.7, 1.4, 0.7), (X, 1.0, z), 0x9aa1b4)
-                box((1.1, 0.3, 0.9), (X + 0.1, 0.15, z), 0x2a2735)
-        with animated('anim_waddle:d=7:p=0.9:o=0', (X, 1.9, 0)):                  # the body rocks over them
-            box((1.4, 2.0, 2.0), (X, 3.1, 0), 0x5a8fd8)
-            box((0.12, 0.9, 1.2), (X + 0.72, 3.15, 0), 0xd0e8ff)
-            for k, c in enumerate((0xff5040, 0x6cbf6c, 0xf2c14e)):
-                box((0.12, 0.22, 0.22), (X + 0.8, 3.15, -0.35 + k * 0.35), c)
-            for z in (-1.25, 1.25):
-                box((0.8, 0.8, 0.5), (X, 3.7, z), 0x9aa1b4)
-                box((0.5, 1.6, 0.5), (X, 2.6, z * 1.04), 0x9aa1b4)
-                box((0.7, 0.4, 0.35), (X + 0.1, 1.65, z * 1.04), 0xe66a5a)
-            box((0.55, 0.4, 0.55), (X, 4.3, 0), 0x868ba1)
-            box((1.3, 1.2, 1.5), (X, 5.05, 0), 0x9aa1b4)
-            box((0.12, 0.55, 1.2), (X + 0.68, 5.2, 0), 0x2a2735)
-            for z in (-0.28, 0.28):
-                box((0.12, 0.3, 0.3), (X + 0.74, 5.2, z), 0xf2c14e)
-                box((0.3, 0.45, 0.22), (X, 5.05, z * 3.1), 0xe66a5a)
-            box((0.12, 0.14, 0.7), (X + 0.68, 4.68, 0), 0xe66a5a)
-            box((0.2, 1.0, 0.2), (X, 6.15, 0), 0x2a2735)
-            sphere(0.38, (X, 6.85, 0), 0xff5040, subdiv=1)
-            # The key is big, a toy's, so its turn reads past the robot's
-            # flank: its height swings between the bow's length and width.
-            with animated('anim_spin:a=x:w=2.2', (X - 1.0, 3.2, 0)):              # the key winds round
-                box((0.7, 0.24, 0.24), (X - 1.05, 3.2, 0), 0x9a7b55)
-                box((0.14, 1.8, 0.6), (X - 1.45, 3.2, 0), 0x9a7b55)
+def toy_dragon():
+    # Gauntlet: the castle's toy dragon (a moulded one from the knights' set,
+    # about 25 cm to its wing tips and 40 cm nose to tail) standing guard
+    # before the castle, side on to the road (+X), its head toward the cars
+    # coming at it (-Z). It flaps its wings, slowly, both in step, and now
+    # and then turns its head to the road and back. Its tail curls down to
+    # the floor behind it.
+    GREEN, BELLY, WING, HORN = 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xfdf4de
+    for z in (-1.1, 1.1):                                                     # the legs, claws forward
+        for sx in (-1, 1):
+            box((0.7, 1.5, 0.7), (sx * 0.72, 0.75, z), GREEN)
+            box((0.8, 0.3, 1.0), (sx * 0.72, 0.15, z - 0.2), BELLY)
+    box((1.9, 1.7, 3.4), (0, 2.2, 0), GREEN)                                  # the body
+    box((1.4, 0.3, 3.0), (0, 1.28, 0), BELLY)                                 # its belly
+    box((1.7, 1.5, 1.2), (0, 2.6, -1.9), GREEN)                               # the chest
+    bar((0, 2.9, -2.1), (0, 4.6, -3.0), 1.0, 1.0, GREEN)                      # the neck
+    for z in (-1.4, -0.5, 0.4, 1.3):                                          # spines down the back
+        cyl(0.32, 0.6, (0, 3.0, z), BELLY, r2=0.02, segs=4)
+    # the tail, thick to thin, down to the floor and curling off behind
+    tube([(0, 2.2, 1.5), (0.2, 1.7, 3.0), (0.8, 0.9, 4.2), (0.9, 0.5, 5.0)], 0.5, GREEN, res=3, bevel_res=1)
+    tube([(0.9, 0.5, 5.0), (0.6, 0.32, 5.8), (-0.4, 0.32, 6.3)], 0.3, GREEN, res=3, bevel_res=0)
+    box((0.9, 0.16, 0.9), (-0.85, 0.08, 6.45), BELLY, yaw=math.pi / 4)        # its spade
+    # The head turns to the road (+X) and back once in a while: a gesture.
+    with animated('anim_sway:a=y:d=-32:p=7:r=0.6#head', (0, 4.6, -3.0)):
+        box((1.3, 1.1, 1.7), (0, 5.0, -3.5), GREEN)
+        box((1.0, 0.7, 1.1), (0, 4.75, -4.7), GREEN)                          # the snout
+        box((0.9, 0.16, 1.0), (0, 4.35, -4.7), BELLY)                         # the jaw's edge
+        for sx in (-1, 1):
+            box((0.3, 0.36, 0.42), (sx * 0.62, 5.25, -3.7), HORN)            # the eyes
+            box((0.12, 0.22, 0.22), (sx * 0.78, 5.25, -3.8), 0x2a2735)
+            box((0.12, 0.14, 0.14), (sx * 0.4, 4.95, -5.26), 0x2a2735)        # the nostrils
+            bar((sx * 0.4, 5.45, -3.0), (sx * 0.55, 6.25, -2.35), 0.24, 0.24, HORN)   # the horns
+    # The wings, raised from the shoulders: a bone along the top edge and
+    # out to the tip, the membrane between them. They flap about the
+    # shoulder's own line (Z), the two mirrored and in step.
+    for sx in (-1, 1):
+        root = (sx * 0.9, 3.0, -0.8)
+        tip, back = (sx * 2.3, 6.2, -1.4), (sx * 2.9, 4.4, 1.6)
+        with animated('anim_sway:a=z:d=%d:p=2.8:o=0#wing%d' % (18 * sx, sx), root):
+            poly([(sx * 0.9, 3.0, -1.6), tip, back, (sx * 1.6, 3.6, 1.1), (sx * 0.9, 3.0, 0.6)],
+                 [(0, 1, 2), (0, 2, 3), (0, 3, 4)], WING)
+            bar((sx * 0.9, 3.0, -1.4), tip, 0.26, 0.26, GREEN)
+            bar(tip, back, 0.22, 0.22, GREEN)
+    merge_paint()
 
 
 # ---- the playroom games ------------------------------------------------------
@@ -5137,7 +5130,9 @@ def toy_snake_loop():
 def game_box():
     # Skysnake: the game's box (40 by 26 cm) stood on its edge by the spiral
     # climb, the lid's green snake, its drawn ladders and its yellow title
-    # band to the road (+X); a spare die and two pawns left beside it.
+    # band to the road (+X); the set's other two pawns left beside it, at the
+    # board's pawns' size and in the two colours the board's four lack (the
+    # board keeps the game's dice).
     W, H, D = 7.4, 4.8, 1.0
     box((D, H, W), (0, H / 2, 0), 0x5a8fd8)
     plate_x(D / 2 + 0.01, H - 1.35, H - 0.4, -W / 2 + 0.5, W / 2 - 0.5, 0xf2c14e)        # the title band
@@ -5149,9 +5144,8 @@ def game_box():
             plate_x(D / 2 + 0.02, 0.5, 2.75, z + s * 0.37 - 0.07, z + s * 0.37 + 0.07, 0xb06041)
         for y in (0.95, 1.5, 2.05, 2.6):
             plate_x(D / 2 + 0.02, y - 0.05, y + 0.05, z - 0.37, z + 0.37, 0xb06041)
-    die((1.6, 0, 2.2), 0.5, 0.5)
-    pawn((1.7, 0, -1.4), 0xe66a5a, k=0.3)
-    pawn((2.4, 0, -0.6), 0x6cbf6c, k=0.3)
+    pawn((1.8, 0, -1.4), 0xfdf4de, k=0.4)
+    pawn((2.5, 0, -0.4), 0x6cbf6c, k=0.4)
     merge_paint()
 
 # ---- Skyline: a town of wooden blocks ---------------------------------------
@@ -5413,7 +5407,7 @@ def marble_tower():
     # where the grid straight points: a column of the same stacked toy
     # cylinders with a chute wound round it in a helix, three marbles
     # rolling down it, into the column's foot and up inside it (out of sight)
-    # to the cup on top. Beside it the slinky walks down its books, a helix
+    # to the cup on top. Beside it the slinky walks down off its block, a helix
     # of its own: the two read as one corner of the room where a slinky
     # alone was a speck. Side by side along X, read from +Z (the slinky's
     # arch faces it).
@@ -5489,30 +5483,39 @@ def marble_zigzag():
 
 # ---- Gauntlet: the besiegers ----
 
+# The castle's knights wear its blue, the besiegers' red: one toy set of
+# knights split into two sides, as a child plays it.
+DEFENDERS, BESIEGERS = 0x5a8fd8, 0xff5040
+
 def soldier(at, color):
-    # a wooden soldier facing +X: trousers, coat with belt and arms, face,
-    # busby, his rifle held at his side
+    # a toy knight facing +X: hose, a surcoat with its cross, belt and arms,
+    # a great helm with its slit and plume, a spear at his side and his
+    # shield before him
     x, y, z = at
     box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
     box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)
-    box((0.72, 0.14, 0.58), (x, y + 1.15, z), 0xfdf4de)
-    plate_x(x + 0.362, y + 1.25, y + 1.95, z - 0.05, z + 0.05, 0xffc044)
+    box((0.72, 0.14, 0.58), (x, y + 1.15, z), 0x9a7b55)
+    plate_x(x + 0.362, y + 1.25, y + 1.95, z - 0.06, z + 0.06, 0xfdf4de)
+    plate_x(x + 0.362, y + 1.62, y + 1.74, z - 0.22, z + 0.22, 0xfdf4de)
     for s in (-1, 1):
         box((0.3, 0.85, 0.24), (x, y + 1.55, z + s * 0.4), color)
         box((0.26, 0.24, 0.22), (x, y + 1.02, z + s * 0.4), 0xf2bf99)
-    box((0.5, 0.5, 0.5), (x, y + 2.25, z), 0xf2bf99)
-    box((0.58, 0.75, 0.58), (x, y + 2.87, z), 0x2a2735)
-    plate_x(x + 0.302, y + 2.66, y + 2.84, z - 0.09, z + 0.09, 0xffc044)
-    box((0.14, 1.5, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9aa1b4)       # barrel
-    box((0.2, 0.6, 0.2), (x + 0.06, y + 0.85, z + 0.59), 0x9a7b55)         # stock, at the hand
+    box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4)                    # the helm
+    plate_x(x + 0.292, y + 2.36, y + 2.48, z - 0.2, z + 0.2, 0x2a2735)      # its eye slit
+    box((0.12, 0.6, 0.46), (x, y + 3.0, z), color)                          # the plume
+    box((0.14, 2.5, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)       # the spear,
+    cyl(0.16, 0.45, (x + 0.06, y + 3.0, z + 0.59), 0x9aa1b4, r2=0.02, segs=4)  # its head
+    box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)          # the shield
+    plate_x(x + 0.502, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
+    plate_x(x + 0.502, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
 
 @piece(0.55)
 def toy_soldiers():
-    # Gauntlet: a rank of four wooden soldiers on their stand, 9 cm tall,
-    # guarding the road.
+    # Gauntlet: a rank of four of the castle's toy knights on their stand,
+    # 9 cm tall, guarding the road.
     box((1.2, 0.2, 6.4), (0, 0.1, 0), 0x6cbf6c)
     for k in range(4):
-        soldier((0, 0.2, -2.25 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
+        soldier((0, 0.2, -2.25 + k * 1.5), DEFENDERS)
     # their toy cannon, run out toward the road
     for s in (-1, 1):
         cyl(0.55, 0.18, (1.6, 0.55, 4.6 + s * 0.6 - 0.09), 0xb06041, segs=8, axis='along')
@@ -5564,17 +5567,17 @@ def siege_tower():
     # the rank before it, on their stand
     box((1.2, 0.2, 6.4), (W / 2 + 2.6, 0.1, 0), 0x6cbf6c)
     for k in range(4):
-        soldier((W / 2 + 2.6, 0.2, -2.25 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
+        soldier((W / 2 + 2.6, 0.2, -2.25 + k * 1.5), BESIEGERS)
     merge_paint()
 
 @piece(0.55)
 def trebuchet():
     # Gauntlet: the besiegers' toy trebuchet (about 40 cm to its arm's tip, a
     # wooden kit at the soldiers' own scale) on its wheeled frame, its arm
-    # just thrown and standing high over the frame, the sling's red ball at
-    # its tip, the counterweight swung down; its crew of three before it. The
-    # arm swings in the YZ plane, so it reads side on, from +X (the crew's
-    # side).
+    # just thrown and standing high over the frame toward its target (-Z),
+    # the sling hanging empty from its tip, the counterweight swung down; its
+    # crew of three before it. The arm swings in the YZ plane, so it reads
+    # side on, from +X (the crew's side).
     WOODC, DARK = 0xc8955a, 0x7a5a3a
     for sx in (-1, 1):
         box((0.6, 0.6, 9.0), (sx * 2.2, 0.9, 0), DARK)                        # the frame's rails
@@ -5587,17 +5590,17 @@ def trebuchet():
     for z in (-4.0, 4.0):
         box((5.0, 0.5, 0.6), (0, 0.9, z), DARK)                               # the frame's ends
     cyl(0.35, 5.4, (-2.7, 7.4, 0), 0x9aa1b4, segs=8, axis='across')           # the axle
-    tip = (0, 7.4 + 7.6 * math.sin(math.radians(66)), 7.6 * math.cos(math.radians(66)))
-    tail = (0, 7.4 - 2.6 * math.sin(math.radians(66)), -2.6 * math.cos(math.radians(66)))
+    tip = (0, 7.4 + 7.6 * math.sin(math.radians(66)), -7.6 * math.cos(math.radians(66)))
+    tail = (0, 7.4 - 2.6 * math.sin(math.radians(66)), 2.6 * math.cos(math.radians(66)))
     bar(tail, tip, 0.6, 0.6, 0xe66a5a)                                        # the throwing arm, thrown
     box((2.4, 2.0, 2.0), (0, tail[1] - 1.1, tail[2]), 0x5a8fd8)               # the counterweight, swung down
-    sling = (0, tip[1] - 2.2, tip[2] + 0.9)
+    sling = (0, tip[1] - 2.2, tip[2] - 0.9)
     bar(tip, sling, 0.12, 0.12, 0xfdf4de)
-    sphere(0.6, sling, 0xff5040)                                              # the ball in the sling
+    box((0.5, 0.3, 0.7), sling, 0x9a7b55)                                     # its pouch, the shot gone
     # the crew before it, on their stand
     box((1.2, 0.2, 4.6), (4.6, 0.1, 0), 0x6cbf6c)
     for k in range(3):
-        soldier((4.6, 0.2, -1.5 + k * 1.5), 0xff5040 if k % 2 == 0 else 0x5a8fd8)
+        soldier((4.6, 0.2, -1.5 + k * 1.5), BESIEGERS)
     merge_paint()
 
 # ---- build + export ----------------------------------------------------------------

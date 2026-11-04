@@ -209,7 +209,8 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         mSceneryInstances[m].resize(k);
     }
 
-    // Boulders: flat-shaded icosahedra, vertex-tinted greys.
+    // Boulders: flat-shaded icosahedra, vertex-tinted greys (the playroom's
+    // are toy blocks).
     if (!boulders.empty()) {
         const float T = (1.0f + std::sqrt(5.0f)) / 2.0f;
         const float3 V[12] = {
@@ -228,6 +229,21 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             const uint32_t col = packAlbedo(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
             const float by = footprintY(tb, b.x, b.z, b.rr);
+            if (tb.scRockBlocks) {
+                // A child's building block left on the floor, `rr` on a side:
+                // a cube, or (the flatter third of the squash roll) a long
+                // block twice that, lying flat. Same rolls as a stone, so the
+                // scatter does not move.
+                const float w = b.sy < 0.65f ? 2 * b.rr : b.rr;
+                const Prim box = primBox(w, b.rr, b.rr);
+                record(b.x, b.z, 0.5f * std::sqrt(w * w + b.rr * b.rr), by + b.rr);
+                for (const uint32_t i : box.i) {
+                    const float3 p = box.v[i];
+                    const float rx = p.x * cy + p.z * sy, rz = -p.x * sy + p.z * cy;
+                    mBoulders.verts.push_back({ b.x + rx, by + b.rr * 0.5f + p.y, b.z + rz, col });
+                }
+                continue;
+            }
             record(b.x, b.z, b.rr, by + b.rr * (0.25f + b.sy));
             for (const auto& face : F) {
                 for (int vi = 0; vi < 3; vi++) {
