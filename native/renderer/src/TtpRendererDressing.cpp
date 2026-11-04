@@ -618,17 +618,22 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             // of the geometry a cell submits where a split looks across a whole
             // backyard circuit at once, and at race scale 4x3 spheres and 3-sided
             // stems read the same as the smooth ones at half the triangles.
+            // At the tiny world's scale (a car is a car, 1 u some 4.5 m) a
+            // flower stands about half a metre with a toy's big head; drawn
+            // at the patch's old size a daisy stood as tall as a child and
+            // as wide as a goalmouth. Only the size: the draws are the same.
+            constexpr float K = 0.35f;
             const int n = 3 + (int) std::floor(rnd() * 3);
             struct Bloom { float x, z, r; };
             std::vector<Bloom> spots;
             for (int i = 0; i < n; i++) {
-                const float s = 0.85f + (float) rnd() * 0.45f;
+                const float s = (0.85f + (float) rnd() * 0.45f) * K;
                 const float headR = 0.28f * s;
                 float fx = 0, fz = 0;
                 bool found = false;
                 for (int t = 0; t < 6 && !found; t++) {
                     const float a = (float) rnd() * 2.0f * (float) M_PI;
-                    const float rr = (float) rnd() * 0.9f;
+                    const float rr = (float) rnd() * 0.9f * K;   // the clump shrinks with them (as many fit)
                     const float px = x + std::cos(a) * rr, pz = z + std::sin(a) * rr;
                     bool ok = true;
                     for (const Bloom& sp : spots) {
