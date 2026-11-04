@@ -747,14 +747,16 @@ export const TRACKS = {
     // turning, the corral with cattle. Out on the range its windpumps turn
     // over their stock tanks near the road, its herds come in to them (a cow
     // alone is a speck from the road; tower, tank and herd read as one).
-    // Every wheel, the ranch's included, faces the one wind (the same way
-    // across the map), its tail vane downwind: each yaw turns its pump to
-    // the ranch's.
+    // Every wheel, the ranch's included, faces the one wind: the west wind
+    // that blows the sand and the clouds east (+X) across the map, its tail
+    // vane downwind. Each yaw turns its pump's wheel to the world's -X; the
+    // ranch's own is turned inside its piece (set_prototypes.py
+    // RANCH_WIND_YAW, for the ranch as it stands here).
     set: [
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
-      { model: 'set-windpump', u: 0.175, lat: 10, yaw: -51 },
-      { model: 'set-windpump', u: 0.58, lat: -14, yaw: 13 },
-      { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: 82 },
+      { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
+      { model: 'set-windpump', u: 0.58, lat: -14, yaw: 154 },
+      { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: -137 },
       { model: 'set-hoodoos', u: 0.3, lat: 18 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
