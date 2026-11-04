@@ -195,13 +195,15 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
-  // Washed-up freight above the tide line: crates and pulled-up rowing boats.
-  // No fence — the coast stays open to the water. The pirate leavings are
-  // Cove's alone (pirateCove, applied in resolve_theme): a chest or a
-  // cannon on every beach told the cup one story four times.
-  t.props.models = { "prop-crate", "pirate-rowboat" };
-  t.props.scatterDensity = 0.2f;
-  t.props.scatter = { { 0, 0.55f, 0.9f, 0.3f }, { 1, 0.45f, 0.6f, 0.15f } };
+  // Washed-up freight above the tide line: crates. No rowing boats: the
+  // scatter stands by the road, a long way up the sand from the water, and
+  // a boat there was left high and dry. No fence — the coast stays open to
+  // the water. The pirate leavings are Cove's alone (pirateCove, applied in
+  // resolve_theme): a chest or a cannon on every beach told the cup one
+  // story four times.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.11f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
   return t;
 }
 
@@ -219,13 +221,14 @@ void pirateCove(Theme& t) {
   t.gantry.pylon = t.structure;
   t.gantry.hasRings = false;
   t.gantry.finial = 0x38383d;
+  // Its boats are on the water (the ship's longboat, the one tied at the
+  // jetty), none left on the sand by the road.
   t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
-                     "pirate-cannon", "pirate-rowboat", "pirate-flag" };
-  t.props.scatterDensity = 0.28f;
-  t.props.scatter = { { 0, 0.10f, 0.9f, 0.3f }, { 1, 0.20f, 0.42f, 0.12f, false, true },
-                      { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
-                      { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
-                      { 6, 0.12f, 0.5f, 0.15f } };
+                     "pirate-cannon", "pirate-flag" };
+  t.props.scatterDensity = 0.24f;
+  t.props.scatter = { { 0, 0.12f, 0.9f, 0.3f }, { 1, 0.23f, 0.42f, 0.12f, false, true },
+                      { 2, 0.15f, 0.42f, 0.1f, false, true }, { 3, 0.2f, 0.55f, 0.15f },
+                      { 4, 0.16f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.5f, 0.15f } };
 }
 
 // The other three beaches each tell their own story, and the holiday

@@ -428,21 +428,27 @@ export const TRACKS = {
     name: 'Cove', waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
     // The pirates' cove: the sea comes in to the road past the hop (its
-    // `shore`), the ship riding at anchor off the end of the jetty; the old
-    // wreck lies run up the beach after the start, the crew's camp smokes
-    // before it, and Skull Rock ends a headland between the two bends.
+    // `shore`, as near as the renderer lets it come), the jetty running out
+    // past the surf to its rowing boat afloat and the ship riding at anchor
+    // off its head; the old wreck lies run up the beach after the start, the
+    // crew's camp smokes before it, and Skull Rock ends a headland between
+    // the two bends.
     set: [
-      { model: 'set-pirate-ship', u: 0.475, lat: 22, yaw: 180, y: -0.3 },
+      { model: 'set-pirate-ship', u: 0.475, lat: 26, yaw: 180, y: -0.3 },
       { model: 'set-jetty', u: 0.47, lat: 7.5 },
       { model: 'set-shipwreck-ribs', u: 0.1, lat: 11, yaw: 90 },
       { model: 'set-pirate-camp', u: 0.82, lat: 7.5, yaw: 20 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 }
     ],
-    // Skull Rock is the end of a headland: a rocky ridge running out from the
-    // west shore to stare at the road across the bay between the two bends
+    // Skull Rock is the end of a headland: a ridge running out from the
+    // west shore to stare at the road across the bay between the two bends,
+    // a broad crest green with the scrub that holds a headland (bare and
+    // peaked, a hill that size is a desert dune; the beach's own hills say
+    // so, theme.cc). The tint is a wash over the ground's 9 u grid, so only
+    // a crest that wide and a tint that deep reads green from the road.
     land: [
-      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.2 },
-      { kind: 'shore', u: 0.45, lat: 14, len: 56, r: 30 }
+      { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.45, tint: 0x84c890 },
+      { kind: 'shore', u: 0.45, lat: 10, len: 56, r: 30 }
     ]
   },
   driftwood: {
@@ -475,11 +481,14 @@ export const TRACKS = {
     // the swimmers' water, the umbrellas either side of it and the buoy line
     // and the surfers riding the swell beyond: one piece, at the end of the
     // east straight where the road bends away and a racer looks straight at it.
+    // The shore is anchored where the patrol is, so it runs along the swim
+    // line's own axis, and holds that line the length of the swim line and
+    // past it: the line lies on the water, a swim's width out, end to end.
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
     ],
     land: [
-      { kind: 'shore', u: 0.19, lat: -10, len: 60, r: 30 }
+      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
