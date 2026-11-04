@@ -2779,6 +2779,7 @@ def village_church():
     # a porch on the road side (+X), the clock; yews and headstones in the
     # churchyard behind. On the green before it the maypole stands, its
     # ribbons loose in the breeze, the children round it between dances.
+    s0 = set_ground('village-church')(0.0, 0.0) - 0.3
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
@@ -2803,9 +2804,9 @@ def village_church():
     box((0.14, 2.3, 1.3), PF(1.55, 1.15, 0), 0x7a5a3a)
     box((3.4, 0.4, 3.8), PF(-0.1, 3.2, 0), SLATE)
     # the churchyard behind: two yews, headstones
-    for z in (-6.0, 6.0):
+    for z in (-6.0, 6.0):                                 # (a yew's dark green snapped to slate: a second spire)
         cyl(0.4, 1.4, (-D / 2 - 4.5, 0, z), 0x7a5a3a, segs=6)
-        cyl(2.4, 6.0, (-D / 2 - 4.5, 1.2, z), 0x3f7a4a, r2=0.5, segs=8)
+        cyl(2.4, 6.0, (-D / 2 - 4.5, 1.2, z), 0x4f9a48, r2=0.5, segs=8)
     for k in range(4):
         box((0.25, 1.0, 0.7), (-D / 2 - 2.0 - (k % 2) * 2.2, 0.5, -2.0 + (k // 2) * 3.0), 'grey')
     # the green: a bench each side, the maypole
@@ -2829,6 +2830,9 @@ def village_church():
     for k in range(6):
         a = k * 2 * math.pi / 6
         person((MX + 4.4 * math.cos(a), 0, 4.4 * math.sin(a)), math.pi - a, COLS[k], k=0.7, hair=k, arm=0.25 * (k % 2))
+    for o in bpy.context.scene.objects:          # onto its level ground
+        o.location.z += s0
+    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('church')
 
 @piece(REAL)
@@ -3061,16 +3065,20 @@ def football_pitch():
     # stands up off the lawn, so it is what says pitch from a car whose kerb
     # hides the lines, and from the far side it stands behind the game, not
     # in front of it.
+    # Its frame is turned half round (its front to -X, the pitch), and every
+    # part is turned with it: a roof slab's roll only matches its side of the
+    # ridge in the frame it was built for, or the roof opens like a book.
     D, L, H = 4.4, 10.0, 3.4
-    PF = local(PW / 2 + 3.2 + D / 2, PZ, math.pi)
-    box((D, H, L), PF(0, H / 2, 0), 'white', yaw=0.0)
-    ridge = gable_roof(PF, 0.0, 0.0, D, L, H, 0xcf534f, 'white')
-    box((1.8, 0.2, L), PF(D / 2 + 0.9, H - 0.4, 0), 0x9a7b55, yaw=0.0)     # the veranda roof
+    PY = math.pi
+    PF = local(PW / 2 + 3.2 + D / 2, PZ, PY)
+    box((D, H, L), PF(0, H / 2, 0), 'white', yaw=PY)
+    ridge = gable_roof(PF, PY, 0.0, D, L, H, 0xcf534f, 'white')
+    box((1.8, 0.2, L), PF(D / 2 + 0.9, H - 0.4, 0), 0x9a7b55, yaw=PY)     # the veranda roof
     for z in (-L / 2 + 0.3, 0.0, L / 2 - 0.3):
-        box((0.2, H - 0.4, 0.2), PF(D / 2 + 1.7, (H - 0.4) / 2, z), 0x9a7b55, yaw=0.0)
-    box((0.14, 2.1, 1.2), PF(D / 2 + 0.06, 1.05, 0), 0x339cf2, yaw=0.0)
+        box((0.2, H - 0.4, 0.2), PF(D / 2 + 1.7, (H - 0.4) / 2, z), 0x9a7b55, yaw=PY)
+    box((0.14, 2.1, 1.2), PF(D / 2 + 0.06, 1.05, 0), 0x339cf2, yaw=PY)
     for z in (-3.0, 3.0):
-        window(PF, 0.0, D / 2, 2.0, z, w=1.4, h=1.0)
+        window(PF, PY, D / 2, 2.0, z, w=1.4, h=1.0)
     flagpole(PF(0, ridge - 0.3, 0), 4.2, 0x339cf2, w=1.6, fh=0.9, pole='white',
              wave='anim_sway:a=z:d=22:p=1.6#club')
     join_still('pitch')
@@ -3167,12 +3175,20 @@ def stream_reach():
 
 def willow(at):
     """A weeping willow by the water, about as tall as a garden oak (three
-    cars): a short trunk, a round crown and the curtain of its hanging
-    branches down to a car's height off the ground."""
+    cars): a short trunk, a low round crown and the streamers of its hanging
+    branches, a ragged fringe with the trunk showing between them, down to a
+    car's height off the ground (one solid curtain read as a green drum)."""
     x, y, z = at
     cyl(0.8, 8.0, (x, y, z), 0x7a5a3a, r2=0.5, segs=7)
-    sphere(4.6, (x, y + 9.6, z), 0x6cae55, subdiv=1, scale=(1.0, 0.7, 1.0))
-    cyl(5.0, 6.0, (x, y + 3.4, z), 0x61cb8b, r2=4.2, segs=10)
+    sphere(4.6, (x, y + 9.6, z), 0x6cae55, subdiv=1, scale=(1.0, 0.62, 1.0))
+    with plain_parts():
+        N = 12
+        for k in range(N):                      # each a streamer narrowing to its tip, flared out
+            a = (k + 0.5) * 2 * math.pi / N
+            h = (5.8, 6.8, 5.1, 6.3)[k % 4]
+            o = cyl(0.0, h, (x + 4.8 * math.cos(a), y + 9.9 - h, z + 4.8 * math.sin(a)),
+                    (0x61cb8b, 0x6cae55)[k % 2], r2=1.15, segs=3, yaw=a + math.pi / 3)
+            tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
 
 def duck(at, color=0xf8f8fb):
     """A duck on the water facing +X: body, tail, head, bill (twice life size)."""
@@ -3298,8 +3314,6 @@ def climbing_net(NX, NZ, NH=7.0, NR=2.6):
 def playground():
     H = set_ground('playground')
     s0 = H(0.0, 0.0)
-    # bark under it all, its edge bedded into the hill
-    box((19.0, 0.6, 21.0), (0, -0.18, 0), 0xb08a5a)
     # the swings: an A-frame each end of a top bar along Z
     SX, top = -5.0, 2.6
     for z in (-9.0, -3.0):
@@ -3375,7 +3389,6 @@ def play_corner():
     # swings going, a grown-up on the bench. Built from the summit and lifted
     # onto it.
     s0 = set_ground('play-corner')(0.0, 0.0)
-    box((12.0, 0.6, 13.0), (0, -0.18, 0), 0xb08a5a)
     climbing_net(-2.5, 2.5)
     slide_tower(1.0, -3.0)
     person((1.3, 1.7, -3.3), 0.3, 0xff5040, k=0.68, hair=1)
