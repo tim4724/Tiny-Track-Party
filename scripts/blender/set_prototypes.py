@@ -4903,7 +4903,9 @@ def toy_snake_loop():
 def game_box():
     # Skysnake: the game's box (40 by 26 cm) stood on its edge by the spiral
     # climb, the lid's green snake, its drawn ladders and its yellow title
-    # band to the road (+X); a spare die and two pawns left beside it.
+    # band to the road (+X); the set's other two pawns left beside it, at the
+    # board's pawns' size and in the two colours the board's four lack (the
+    # board keeps the game's dice).
     W, H, D = 7.4, 4.8, 1.0
     box((D, H, W), (0, H / 2, 0), 0x5a8fd8)
     plate_x(D / 2 + 0.01, H - 1.35, H - 0.4, -W / 2 + 0.5, W / 2 - 0.5, 0xf2c14e)        # the title band
@@ -4915,9 +4917,8 @@ def game_box():
             plate_x(D / 2 + 0.02, 0.5, 2.75, z + s * 0.37 - 0.07, z + s * 0.37 + 0.07, 0xb06041)
         for y in (0.95, 1.5, 2.05, 2.6):
             plate_x(D / 2 + 0.02, y - 0.05, y + 0.05, z - 0.37, z + 0.37, 0xb06041)
-    die((1.6, 0, 2.2), 0.5, 0.5)
-    pawn((1.7, 0, -1.4), 0xe66a5a, k=0.3)
-    pawn((2.4, 0, -0.6), 0x6cbf6c, k=0.3)
+    pawn((1.8, 0, -1.4), 0xfdf4de, k=0.4)
+    pawn((2.5, 0, -0.4), 0x6cbf6c, k=0.4)
     merge_paint()
 
 # ---- Skyline: a town of wooden blocks ---------------------------------------
@@ -5179,7 +5180,7 @@ def marble_tower():
     # where the grid straight points: a column of the same stacked toy
     # cylinders with a chute wound round it in a helix, three marbles
     # rolling down it, into the column's foot and up inside it (out of sight)
-    # to the cup on top. Beside it the slinky walks down its books, a helix
+    # to the cup on top. Beside it the slinky walks down off its block, a helix
     # of its own: the two read as one corner of the room where a slinky
     # alone was a speck. Side by side along X, read from +Z (the slinky's
     # arch faces it).
