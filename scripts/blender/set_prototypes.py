@@ -3632,23 +3632,28 @@ def dry_creek():
 
 def saguaro(at, h, arms=((0.0, 0.45, 0.55),), yaw=0.0):
     """A saguaro `h` tall, the desert's own tall plant: a fat ribbed column
-    (six faceted sides, tapering to its crown), each of its `arms` (turn
+    (five faceted sides, tapering to its crown), each of its `arms` (turn
     about the trunk, height up it as a share of h, length up as a share of
     h) an elbow out from the trunk and a column up from it, tapering to its
     tip. Faceted round in section, as a cactus is, the arms only four-sided:
-    a two-armed one is some 130 vertices."""
+    a two-armed one is some 130 vertices. The elbow is a square bar, flat on
+    top and square to the arm it carries, as the kit's own cactus is: a
+    four-sided one stood on its edge shows a lit lozenge from above, and a
+    row of those up a trunk reads as a fir's tiers."""
     x, y, z = at
     r = 0.085 * h
     cyl(r, h, (x, y, z), 'green', r2=r * 0.6, segs=5, stem=True)
     ra = r * 0.9
+    side = ra * math.sqrt(2)                                     # the arm's square, corner radius ra
     for a, at_h, up in arms:
         a += yaw
         c, sn = math.cos(a), math.sin(a)
-        reach = r + ra * 2.0                                     # the elbow, out from the trunk
-        o = cyl(ra, reach, (x, y + h * at_h, z), 'green', segs=4, axis='across', stem=True)
-        o.rotation_euler.z += a
+        reach = r + ra * 2.0                                     # the arm's axis, out from the trunk's
+        L = reach + side / 2                                     # the elbow, trunk axis to the arm's far face
+        ey = y + h * at_h
+        box((L, side, side), (x + c * L / 2, ey, z - sn * L / 2), 'green', yaw=a)
         ax, az = x + c * reach, z - sn * reach
-        cyl(ra, h * up, (ax, y + h * at_h - ra, az), 'green', r2=ra * 0.62, segs=4, yaw=a + math.pi / 4, stem=True)
+        cyl(ra, h * up, (ax, ey - side / 2, az), 'green', r2=ra * 0.62, segs=4, yaw=a + math.pi / 4, stem=True)
 
 def ocotillo(at, h, n=5, seed=0):
     """An ocotillo `h` tall: a fountain of long spiny canes splaying from one
@@ -3998,12 +4003,14 @@ def saguaro_stand():
     sandstone_rock((1.6, 0, -2.9), 0.7, yaw=0.2)
     join_still('stand')
 
-def windpump_body(x0, z0, k, tag=''):
+def windpump_body(x0, z0, k, tag='', yaw=0.0):
     """An old farm windpump at (x0, z0), `k` the size of the 7 unit one: a
     wooden tower braced corner to corner, the wheel of narrow wooden blades
-    up top facing +X with its tail vane behind, the pump rod down the middle
-    to the pump head, its spout over a plank trough at the foot. The wheel
-    turns (anim_spin)."""
+    up top facing +X turned by `yaw` (into the wind) with its tail vane
+    behind, the pump rod down the middle to the pump head, its spout over a
+    plank trough at the foot. The wheel turns (anim_spin)."""
+    before = set(bpy.context.scene.objects)
+    c, s = math.cos(yaw), math.sin(yaw)
     H = 7.0 * k
     WOOD, BLADE = 0x8a6a46, 'tan'
     def leg(sx, sz, y):                                                          # a leg's corner at height y
@@ -4022,7 +4029,7 @@ def windpump_body(x0, z0, k, tag=''):
             box((0.12 * k, 0.12 * k, 2 * w + 0.12 * k), (x0 + s2 * w, y, z0), WOOD)
     cy = H + 0.25 * k
     box((1.0 * k, 0.5 * k, 0.5 * k), (x0 + 0.05 * k, cy, z0), 'slate')         # the head
-    with animated('anim_spin:a=x:w=1.4' + tag, (x0 + 0.66 * k, cy, z0)):          # the wheel turns
+    with animated('anim_spin:a=x:w=1.4' + tag, (x0 + 0.66 * k * c, cy, z0 - 0.66 * k * s), yaw):   # the wheel turns
         box((0.3 * k, 0.3 * k, 0.3 * k), (x0 + 0.62 * k, cy, z0), 'red')        # the hub
         for b in range(8):                                                       # the blades
             a = b / 8 * 2 * math.pi
@@ -4036,6 +4043,12 @@ def windpump_body(x0, z0, k, tag=''):
     box((1.6 * k, 0.14 * k, 0.14 * k), (x0 + 0.8 * k, 0.6 * k, z0), 'slate')
     box((1.0 * k, 0.55 * k, 2.2 * k), (x0 + 1.9 * k, 0.27 * k, z0), WOOD)       # the trough
     box((0.8 * k, 0.05 * k, 2.0 * k), (x0 + 1.9 * k, 0.56 * k, z0), 0x62d3c8)
+    if yaw:                                                                      # built facing +X, then turned
+        bpy.context.view_layer.update()
+        turn = Matrix.Translation(P(x0, 0, z0)) @ Matrix.Rotation(yaw, 4, 'Z') @ Matrix.Translation(-P(x0, 0, z0))
+        for o in bpy.context.scene.objects:
+            if o not in before and o.parent is None:
+                o.matrix_world = turn @ o.matrix_world
 
 @piece(1.0)
 @plain
@@ -4089,6 +4102,10 @@ def hay_bale(at, yaw=0.0):
     box((0.6, 0.32, 0.4), (x, y + 0.16, z), 'yellow', yaw=yaw)
     box((0.62, 0.05, 0.08), (x, y + 0.33, z), 'brown', yaw=yaw)
 
+# Crag stands the ranch with its +X 39.1 degrees round from the world's +X
+# (its placement's heading); the world's west is this far round from it.
+RANCH_WIND_YAW = math.pi - 0.682
+
 @piece(1.0)
 def ranch():
     # Crag: the mesa ranch, every building at its own size beside a car (the
@@ -4125,10 +4142,14 @@ def ranch():
     box((0.5, 0.3, 0.9), (tx + 1.0, 0.15, tz + 0.2), TIMBER)
     for i in range(5):                                                           # a ladder up a leg
         box((0.06, 0.06, 0.34), (tx - 0.62, 0.35 + i * 0.36, tz - 0.3), TIMBER)
-    # the windpump over the stock tank, across the yard
-    windpump_body(1.6, 6.8, 0.42, tag='#w')
-    cyl(0.75, 0.32, (2.6, 0, 6.8), 'grey', segs=12)
-    cyl(0.68, 0.04, (2.6, 0.3, 6.8), 0x62d3c8, segs=12)
+    # the windpump over the stock tank, across the yard. Its wheel faces the
+    # wind that blows the sand east across every canyon map (the ambient's
+    # +X drift, the clouds' too), so it looks west: RANCH_WIND_YAW turns it
+    # from the ranch's +X (the road) as Crag stands it (tracks.js crag set).
+    windpump_body(1.6, 6.8, 0.42, tag='#w', yaw=RANCH_WIND_YAW)
+    wx, wz = 1.6 + math.cos(RANCH_WIND_YAW), 6.8 - math.sin(RANCH_WIND_YAW)
+    cyl(0.75, 0.32, (wx, 0, wz), 'grey', segs=12)
+    cyl(0.68, 0.04, (wx, 0.3, wz), 0x62d3c8, segs=12)
     # the corral toward the road: posts and two rails, its gate open on +X
     X0, X1, Z0, Z1 = -1.4, 3.2, -2.0, 2.0
     posts = [(X0 + (X1 - X0) * i / 2, Z0) for i in range(3)] + [(X1, Z0 + (Z1 - Z0) * i / 4) for i in range(1, 5)] \
