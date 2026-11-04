@@ -440,16 +440,21 @@ Theme canyonTheme() {
   s.rocks = { 0xc07a55, 0xa8623f, 0xd39a70 };  // rust -> dusty ochre family
   s.rockS[0] = 0.6f; s.rockS[1] = 0.9f;
   s.density = 0.45f;  // sparser than the shore; deserts read empty on purpose
-  s.clutter = { { CL_SCRUB, 0.5f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
-                { CL_DRIFTWOOD, 0.22f, { 0xd8c8a8, 0xc4b494 } },
-                { CL_PEBBLES, 0.28f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
+  // Scrub and red pebbles only: no driftwood, which is the beach's (and dead
+  // wood reads as the trees a canyon has none of).
+  s.clutter = { { CL_SCRUB, 0.62f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
+                { CL_PEBBLES, 0.38f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
   // Supply crates and barrels by the road, among sandstone rocks and stone
   // heaps (Survival Kit, Mini Forest — both authored small, so they stand well
   // over their own size). The crates and barrels are on the verge, where they
-  // read; the barrel is the beach's, at the beach's size.
-  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones" };
+  // read; the barrel is the beach's, at the beach's size. The list is every
+  // canyon track's: the shell stages a BIOME's props (ttp_theme_prop_models
+  // resolves no track), so a track picks among these by slot in its scatter
+  // (canyonTrack) and never re-lists them. A list of its own would bind its
+  // slots to the biome's models: rocks drawn as crates, lamps as barrels.
+  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones", "prop-hay", "construction-light" };
   t.props.scatterDensity = 0.24f;
   t.props.scatter = { { 0, 0.22f, 0.9f, 0.3f, false, true }, { 1, 0.26f, 0.42f, 0.12f, false, true },
                       { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.22f, 1.4f, 0.5f } };
@@ -458,8 +463,9 @@ Theme canyonTheme() {
 
 // Each canyon track tells its own story (its `set` and `land` in tracks.js),
 // and the biome's scatter and structures follow it. The props are re-chosen
-// from the shared kit: no story gets another's leftovers. The hoodoos stand
-// on every track: they are the badlands themselves, not a story.
+// from the biome's list by slot (0 crate, 1 barrel, 2 sandstone rocks,
+// 3 stones, 4 hay, 5 road-works lamp): no story gets another's leftovers. The
+// hoodoos stand on every track: they are the badlands themselves, not a story.
 //   wash        a dry wash and its canyon: the rock alone, rocks and stones
 //   gulch       a gold mine: timber supports like a trestle, crates and
 //               barrels of supplies, broken stone, no hay
@@ -467,21 +473,17 @@ Theme canyonTheme() {
 //   sidewinder  a desert highway: road-works lights on the verge, stones
 void canyonTrack(Theme& t, const std::string& track) {
   if (track == "wash") {
-    t.props.models = { "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.55f, 1.6f, 0.6f }, { 1, 0.45f, 1.4f, 0.5f } };
+    t.props.scatter = { { 2, 0.55f, 1.6f, 0.6f }, { 3, 0.45f, 1.4f, 0.5f } };
   } else if (track == "gulch") {
     t.structure = 0x8a6a46;  // timber, like the mine's own trestles
-    t.props.models = { "prop-crate", "pirate-barrel", "stones" };
     t.props.scatter = { { 0, 0.34f, 0.6f, 0.2f, false, true }, { 1, 0.30f, 0.3f, 0.08f, false, true },
-                        { 2, 0.36f, 1.4f, 0.5f } };
+                        { 3, 0.36f, 1.4f, 0.5f } };
   } else if (track == "crag") {
-    t.props.models = { "prop-hay", "pirate-barrel", "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
+    t.props.scatter = { { 4, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
                         { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.24f, 1.4f, 0.5f } };
   } else if (track == "sidewinder") {
-    t.props.models = { "construction-light", "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.22f, 2.4f, 0.4f, true, true }, { 1, 0.42f, 1.5f, 0.6f },
-                        { 2, 0.36f, 1.4f, 0.5f } };
+    t.props.scatter = { { 5, 0.22f, 2.4f, 0.4f, true, true }, { 2, 0.42f, 1.5f, 0.6f },
+                        { 3, 0.36f, 1.4f, 0.5f } };
   }
 }
 
