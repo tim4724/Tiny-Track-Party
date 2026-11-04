@@ -650,8 +650,11 @@ balanced order, n=3 each; "main CPU" is the frame thread's typical `cpu ms`.
 | `-march=armv7ve -mtune=cortex-a53` | 55.4 / 19.2 / 4.32 | 45.9 / 24.9 / 6.51 | null |
 | `-marm` instead of Thumb-2 | 55.5 / 18.7 / 4.60 | 44.7 / 25.5 / 6.82 | slower, and a 21% larger `.so` |
 
-Race-to-race spread is 2-3 fps on the stick, so only `-Os` clears the noise. Both
-boxes are GPU-bound, so a CPU flag has little to convert. `-fno-exceptions` does not
+Race-to-race spread is 2-3 fps on the stick, so only `-Os` clears the noise. At 4P
+both boxes are GPU-bound, so a CPU flag has little to convert. At 2P they are at the
+panel's cap, so it has nothing to convert either: 9 installs in balanced order, base /
+ThinLTO / armv7ve, stick 58.8 / 59.2 / 58.8 fps, Streamer 60.0 / 59.9 / 60.0 (base
+n=2, one race failed to start). 3P is unmeasured. `-fno-exceptions` does not
 build: Filament's own assimp uses `try`. Web, three rounds each, link `-O3`, ThinLTO
 and `-msimd128` on the Filament SDK against the base: 120 fps, 0.8 ms CPU and 2.7 ms
 GPU on every arm, and ThinLTO's wasm is 6% larger. The flags stay as they were. Web
