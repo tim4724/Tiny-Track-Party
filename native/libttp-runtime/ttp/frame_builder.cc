@@ -239,7 +239,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     int mode = d.camMode;
     bool chase = false;
     if (covered) {
-        d.coverage.step(dt, outCars, live, d.rosterPlayers);
+        d.coverage.step(dt, outCars, live, d.rosterPlayers, d.loops);
         if (d.coverage.cut) {
             d.follow = {};
             d.coverChase = {};
@@ -357,7 +357,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         } else if (follow) {
             std::vector<bool> filmed = live;
             if (covered) d.coverage.battleField(outCars, filmed);
-            d.follow.update(outCars, filmed, f.center, d.tagDeck, d.ground, dt);
+            d.follow.update(outCars, filmed, f.center, d.tagDeck, d.ground, d.loops, dt);
             eye = d.follow.pos;
             target = d.follow.target;
         } else if (mode == CAM_BBOX) {

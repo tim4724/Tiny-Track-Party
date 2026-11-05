@@ -102,6 +102,7 @@ struct DisplayState {
     FollowCam follow;                   // CAM_FOLLOW's rig; reset with `chase`
     Coverage coverage;                  // CAM_COVERAGE's shot; reset with `chase`
     CoverChase coverChase;              // ...and its CHASE shot's rig
+    std::vector<LoopShot> loops;        // where the follow cam films each looping of the scene from
     // The built track's road as an occluder, per scene: the name tags hide
     // behind it, and the follow cam keeps the battle out from under it.
     NameTagDeck tagDeck;

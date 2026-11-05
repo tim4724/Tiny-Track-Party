@@ -213,6 +213,72 @@ constexpr float FOLLOW_AIM_OMEGA = 3.0f, FOLLOW_YAW_OMEGA = 1.8f, FOLLOW_DIST_OM
                 FOLLOW_PITCH_OMEGA = 5.0f;
 constexpr float FOLLOW_FLOW_RATE = 4.0f;    // 1/s, how fast the carried velocity follows the leader's
 
+// A LOOPING HAS NO GOOD SIDE FROM OUTSIDE. Outside a ring is behind the road, so
+// no pitch of the usual place sees anything but the deck's back with the cars on
+// the far face of it. So the rig goes to the ring's SIDE for the ride: on its axis,
+// where the deck is edge-on and the eye stays inside the tube the road sweeps out,
+// which is what keeps every car's side of the deck in view.
+//
+// IT IS ONE MOVE, WITH NO HOLD AND NO CUT IN IT: a cut or a fixed camera breaks the
+// race, and one that arrives early and waits reads as stiff. So the goals are
+// functions of how far round the battle has got, not of a clock. Over
+// FOLLOW_LOOP_LEAD the yaw and the distance swing over. On the ride the camera works
+// like an operator following the action: the aim goes most of the way to the battle
+// and the eye only leans that way, so the view turns and tilts after the cars,
+// pushing in as they go. It does not arc round the ring instead, because that takes
+// the eye out of the tube and films the near half of the ring from behind.
+//
+// The place is worked out once per scene (loopShots). The axis has two ends and
+// something can stand on it: a skyway rolling upright shows its top to only one of
+// them, and Gauntlet's ramp runs through its ring along the axis itself. So each end
+// is its best of small swings off the axis (FOLLOW_LOOP_YAWS, FOLLOW_LOOP_RISES),
+// the first that hides the fewest deck points. The rig chooses between the two
+// as it arrives, weighing what each hides against how far it has to swing, because
+// a half-turn in front of the cars is its own kind of interruption.
+//
+// The stretch is every sample tilted past FOLLOW_LOOP_STEEP that goes over upside
+// down, so a banked corner is never one. Past FOLLOW_LOOP_MAX_LEN it is cut into
+// equal parts with a place each: Skyline's half-loop runs on into a long skyway, and
+// fitting all of it films specks.
+constexpr float FOLLOW_LOOP_STEEP = 0.7f;     // the deck's up.y below which it is steep
+// Track units before the stretch that the swing begins (what the yaw and distance
+// springs need at a boosted car's speed), and after it that the rig stays.
+constexpr float FOLLOW_LOOP_LEAD = 45.0f, FOLLOW_LOOP_TAIL = 2.0f;
+// Track units before the stretch that the swing has done and the ride begins, so
+// the aim and the pitch are there as the cars go up.
+constexpr float FOLLOW_LOOP_SETTLE = 15.0f;
+constexpr float FOLLOW_LOOP_MAX_LEN = 25.0f;  // track units; a whole ring is under this
+constexpr float FOLLOW_LOOP_MARGIN = 1.35f;   // the fit, loose of the lobby's boards
+constexpr float FOLLOW_LOOP_LIFT = 0.12f;     // how far up the picture, in half-frames
+constexpr float FOLLOW_LOOP_ASPECT = 16.0f / 9.0f;   // built with the scene, before any cell
+// How much of the battle's offset from the ring's middle the aim and the eye take.
+constexpr float FOLLOW_LOOP_PAN = 0.7f, FOLLOW_LOOP_LEAN = 0.2f;
+constexpr float FOLLOW_LOOP_YAW_OMEGA = 5.0f;  // riding: the yaw has to keep up with the aim
+constexpr float FOLLOW_LOOP_REACH = 5.0f;     // how far from the ring's middle the battle counts
+constexpr float FOLLOW_LOOP_PUSH = 0.1f;      // of the distance, either side of the fit
+constexpr float FOLLOW_LOOP_HIDDEN_COST = 8.0f;   // choosing an end: all hidden against a half-turn
+// Off the axis, in order of preference (rad).
+constexpr float FOLLOW_LOOP_YAWS[] = { 0, 0.2f, -0.2f, 0.4f, -0.4f };
+constexpr float FOLLOW_LOOP_RISES[] = { 0, 0.2f, 0.4f };
+
+struct LoopPlace {
+    V3 aim;                  // where the aim goes with no car to lean toward
+    float yaw, pitch, dist;  // as FollowCam's
+    float hidden;            // the worst share of deck points hidden, over the stretch's parts
+};
+
+struct LoopShot {
+    float from, start, to;   // track positions within a lap: the swing, the ride, its end
+    float lap;               // the lap's length, what wraps a car's unwrapped trackS
+    LoopPlace ends[2];
+    float rideFrom, rideTo;  // the whole stretch this is part of: one swing and one push
+};
+
+std::vector<LoopShot> loopShots(const std::vector<OutSample>& samples, float lap,
+                                const NameTagDeck& deck, const GroundGrid& ground);
+// The shot whose stretch covers track position `trackS`, -1 for none.
+int loopAt(const std::vector<LoopShot>& loops, float trackS);
+
 struct FollowCam {
     V3 pos, target;
     float yaw = 0, dist = 0;  // yaw: the direction the camera FACES, atan2(x, z)
@@ -222,15 +288,18 @@ struct FollowCam {
     float yawVel = 0, distVel = 0, pitchVel = 0;
     V3 back = { 0, 0, -1 };   // the leader's last LEVEL heading, reversed and flattened
     bool init = false;
+    int loop = -1, loopEnd = 0;   // the looping it is on, and the end of it that it chose
+    float entryYaw = 0, entryDist = 0;   // where the swing began
     std::vector<V3> last;    // each slot's position last frame (the leader's displacement)...
     std::vector<bool> seen;  // ...valid only where the slot held a car last frame
 
     // `live[i]` says slot i holds a car this frame; `cars` is the frame's own
     // car input, so a held field is followed where it is DRAWN. `trackCentre`
     // is Framing::center, what the camera looks in toward; `deck` and `ground`
-    // are what it keeps the battle out from behind.
+    // are what it keeps the battle out from behind; `loops` the scene's loopShots.
     void update(const TtpCarInput* cars, const std::vector<bool>& live, V3 trackCentre,
-                const NameTagDeck& deck, const GroundGrid& ground, float dt);
+                const NameTagDeck& deck, const GroundGrid& ground,
+                const std::vector<LoopShot>& loops, float dt);
 };
 
 // ---------------------------------------------------------------------------
@@ -277,13 +346,17 @@ struct Coverage {
 
     // `live[i]`: slot i holds a car this frame, `cars` the frame's car input.
     // `player[i]`: slot i is a player's car, which the rotating CHASE prefers
-    // over the CPU fill.
+    // over the CPU fill. `loops`: the scene's loopShots, because a battle shot does
+    // not end on a looping: that would cut away from the ride.
     void step(float dt, const TtpCarInput* cars, const std::vector<bool>& live,
-              const std::vector<bool>& player);
+              const std::vector<bool>& player, const std::vector<LoopShot>& loops);
     // Narrow `live` to the cars a LEAD or PACK shot films: the whole field
     // for LEAD (the follow cam finds the leader itself), the cars within
     // FOLLOW_GAP of the focus for PACK.
     void battleField(const TtpCarInput* cars, std::vector<bool>& live) const;
+    // Is the filmed battle swinging toward, or riding, a looping?
+    bool battleOnLoop(const TtpCarInput* cars, const std::vector<bool>& live,
+                      const std::vector<LoopShot>& loops) const;
 };
 
 // The coverage CHASE is not the race chase rig. That one sits low and close

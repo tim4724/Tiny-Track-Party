@@ -271,6 +271,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
         g_disp->tagDeck.kerbH = theme.road.kerbH;
         g_disp->ground = r.groundGrid();
+        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground);
         g_disp->sceneT = 0;
         solveFraming(*g_disp);
         // Start the turntable on the still view's own bearing, so a preview's
@@ -499,7 +500,7 @@ void ttp_display_release(void) {
     if (!g_disp || !g_disp->built) return;
     // THE FIELD ONLY: the static scene stays resident under its key, so the
     // build that follows a release — on every shell, every race — is a field
-    // rebuild when the track did not change. tagDeck, ground and the framing
+    // rebuild when the track did not change. tagDeck, ground, loops and the framing
     // belong to that scene and stay with it.
     g_disp->renderer->releaseField();
     g_disp->built = false;

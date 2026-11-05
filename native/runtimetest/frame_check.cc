@@ -1050,7 +1050,7 @@ void testCoverageShots() {
                        const std::vector<bool>& player) {
     int cuts = 0;
     for (float t = 0; t < seconds; t += step) {
-      c.step(step, cars, live, player);
+      c.step(step, cars, live, player, {});
       cuts += c.cut;
     }
     return cuts;
@@ -1074,14 +1074,14 @@ void testCoverageShots() {
 
   rt::Coverage c;
   check(c.shot == Shot::WIDE, "coverage: nothing to film until there is a field");
-  c.step(step, cars, all, players);
+  c.step(step, cars, all, players, {});
   check(c.cut && c.shot == Shot::LEAD, "coverage: a field opens on the lead battle at once");
   check(run(c, rt::COVER_HOLD_BATTLE - step, all, players) == 0, "coverage: LEAD holds");
-  c.step(step, cars, all, players);
+  c.step(step, cars, all, players, {});
   check(c.cut && c.shot == Shot::CHASE && c.subject == 1,
         "coverage: LEAD cuts to a CHASE on the first PLAYER's car, not slot 0");
   check(run(c, rt::COVER_HOLD_CHASE - step, all, players) == 0, "coverage: CHASE holds");
-  c.step(step, cars, all, players);
+  c.step(step, cars, all, players, {});
   check(c.cut && c.shot == Shot::PACK && c.subject == 3, "coverage: CHASE cuts to the PACK fight");
   {
     std::vector<bool> filmed = all;
@@ -1090,16 +1090,16 @@ void testCoverageShots() {
           "coverage: PACK films the fight and not the lead battle");
   }
   check(run(c, rt::COVER_HOLD_BATTLE - step, all, players) == 0, "coverage: PACK holds");
-  c.step(step, cars, all, players);
+  c.step(step, cars, all, players, {});
   check(c.cut && c.shot == Shot::CHASE && c.subject == 3, "coverage: the next chase takes the next player");
-  c.step(rt::COVER_HOLD_CHASE, cars, all, players);
+  c.step(rt::COVER_HOLD_CHASE, cars, all, players, {});
   check(c.cut && c.shot == Shot::LEAD, "coverage: …and round to LEAD");
   {
     std::vector<bool> filmed = all;
     c.battleField(cars, filmed);
     check(filmed == all, "coverage: LEAD hands the follow cam the whole field");
   }
-  c.step(rt::COVER_HOLD_BATTLE, cars, all, players);
+  c.step(rt::COVER_HOLD_BATTLE, cars, all, players, {});
   check(c.shot == Shot::CHASE && c.subject == 1, "coverage: the chase wraps round the players");
 
   // Nobody has joined: the chase rotates over the whole field.
@@ -1113,25 +1113,25 @@ void testCoverageShots() {
   // cycle carries on with a battle, not a second chase.
   {
     rt::Coverage pick;
-    pick.step(step, cars, all, players);
+    pick.step(step, cars, all, players, {});
     pick.featured = 2;
-    pick.step(step, cars, all, players);
+    pick.step(step, cars, all, players, {});
     check(pick.cut && pick.shot == Shot::CHASE && pick.subject == 2 && pick.featured == -1,
           "coverage: a car pick cuts straight to that car");
     check(run(pick, rt::COVER_HOLD_CHASE - step, all, players) == 0,
           "coverage: …and holds a full chase from the pick");
     pick.featured = 2;
-    pick.step(step, cars, all, players);
+    pick.step(step, cars, all, players, {});
     check(!pick.cut && pick.shot == Shot::CHASE && pick.subject == 2 && pick.held == 0,
           "coverage: picking again restarts the hold and keeps the rig — no cut");
     pick.featured = 0;
-    pick.step(step, cars, all, players);
+    pick.step(step, cars, all, players, {});
     check(pick.cut && pick.shot == Shot::CHASE && pick.subject == 0,
           "coverage: a pick on ANOTHER car mid-chase is a cut");
     pick.featured = 2;
-    pick.step(step, cars, all, players);
+    pick.step(step, cars, all, players, {});
     check(pick.cut && pick.subject == 2, "coverage: …and back again");
-    pick.step(rt::COVER_HOLD_CHASE, cars, all, players);
+    pick.step(rt::COVER_HOLD_CHASE, cars, all, players, {});
     check(pick.shot == Shot::PACK, "coverage: after a picked chase, the cycle goes on to a battle");
   }
 
@@ -1139,22 +1139,22 @@ void testCoverageShots() {
   // ends its shot.
   {
     rt::Coverage gone;
-    gone.step(step, cars, all, players);
+    gone.step(step, cars, all, players, {});
     std::vector<bool> live = all;
     live[2] = false;
     gone.featured = 2;
-    gone.step(step, cars, live, players);
+    gone.step(step, cars, live, players, {});
     check(!gone.cut && gone.shot == Shot::LEAD, "coverage: a pick of an empty slot is ignored");
     gone.featured = 1;
-    gone.step(step, cars, all, players);
+    gone.step(step, cars, all, players, {});
     live = all;
     live[1] = false;
-    gone.step(step, cars, live, players);
+    gone.step(step, cars, live, players, {});
     check(gone.cut && gone.shot == Shot::PACK && gone.subject == 3,
           "coverage: a chase whose car leaves cuts on");
     live = all;
     live[3] = false;
-    gone.step(step, cars, live, players);
+    gone.step(step, cars, live, players, {});
     check(gone.cut && gone.shot == Shot::CHASE, "coverage: a pack whose focus leaves cuts on");
   }
 
@@ -1165,6 +1165,133 @@ void testCoverageShots() {
     check(run(empty, 60, nobody, nobody) == 0 && empty.shot == Shot::WIDE,
           "coverage: with no cars it stays on the wide shot");
   }
+}
+
+// A battle shot does not cut away from a looping: it waits for the ride to finish.
+void testCoverageHoldsThroughALoop() {
+  using rt::Shot;
+  const std::vector<rt::LoopShot> loops = {{50, 60, 70, 1000, {}, 0, 0}, {150, 160, 170, 1000, {}, 0, 0}};
+  const std::vector<bool> all(4, true), nobody(4, false);
+  TtpCarInput cars[4] = {};
+  const auto place = [&](float lead, float pack) {
+    cars[0].trackS = lead;
+    cars[1].trackS = lead - 1;
+    cars[2].trackS = pack;
+    cars[3].trackS = pack - 2;
+  };
+
+  place(55, 10);
+  rt::Coverage c;
+  c.step(0.5f, cars, all, nobody, loops);
+  check(c.shot == Shot::LEAD, "premise: the lead battle is on a loop");
+  c.step(rt::COVER_HOLD_BATTLE, cars, all, nobody, loops);
+  check(c.shot == Shot::LEAD && !c.cut, "loop hold: LEAD outlasts its hold while the battle is on the loop");
+  place(1055, 10);
+  c.step(0.5f, cars, all, nobody, loops);
+  check(c.shot == Shot::LEAD && !c.cut, "loop hold: the same loop a lap on");
+  place(90, 10);
+  c.step(0.5f, cars, all, nobody, loops);
+  check(c.shot == Shot::CHASE && c.cut, "loop hold: ...and goes on the moment the battle has left it");
+
+  // PACK waits for its own fight, not for the leaders up the road.
+  rt::Coverage pack;
+  pack.shot = Shot::PACK;
+  pack.subject = 3;
+  place(55, 300);
+  pack.step(rt::COVER_HOLD_BATTLE, cars, all, nobody, loops);
+  check(pack.shot == Shot::CHASE, "loop hold: PACK ignores a loop its fight is not on");
+  pack = {};
+  pack.shot = Shot::PACK;
+  pack.subject = 3;
+  place(300, 155);
+  pack.step(rt::COVER_HOLD_BATTLE, cars, all, nobody, loops);
+  check(pack.shot == Shot::PACK, "loop hold: PACK holds while its own fight is on one");
+
+  // A chase rides the loop itself and keeps its clock; a pick still cuts.
+  rt::Coverage chase;
+  chase.featured = 0;
+  place(55, 10);
+  chase.step(0.5f, cars, all, nobody, loops);
+  chase.step(rt::COVER_HOLD_CHASE, cars, all, nobody, loops);
+  check(chase.shot != Shot::CHASE, "loop hold: a CHASE keeps its own hold through a loop");
+  rt::Coverage pick;
+  pick.step(0.5f, cars, all, nobody, loops);
+  pick.featured = 2;
+  pick.step(0.5f, cars, all, nobody, loops);
+  check(pick.shot == Shot::CHASE && pick.subject == 2, "loop hold: a car pick still cuts to that car");
+}
+
+// The follow cam on the shipped loopings, driven round the real centerline at a
+// boosted car's speed: it films the cars, on the side of the deck they are on,
+// and it gets there without a cut. `hiddenShare` is how much of a track's rides may
+// be hidden from one car at a steady speed: more on Gauntlet, whose ramp stands on
+// the ring's axis.
+void testFollowOnLoopings() {
+  const struct { const char* id; float hiddenShare; } tracks[] = {
+      {"skysnake", 0.1f}, {"skyline", 0.1f}, {"helix", 0.1f}, {"gauntlet", 0.25f}};
+  for (const auto& t : tracks) {
+    const std::string id = t.id;
+    const RaceTrack geo = build_catalogue_track(*find_track_def(t.id), 1, 0u);
+    const rt::NameTagDeck deck = rt::nameTagDeck(geo.samples, geo.closed);
+    rt::GroundGrid ground;
+    ground.flatY = -20;
+    const std::vector<rt::LoopShot> loops = rt::loopShots(geo.samples, (float) geo.length, deck, ground);
+    check(!loops.empty(), id + ": has a looping");
+    V3 mid;
+    for (const OutSample& o : geo.samples) mid = mid + rt::v3(o.pos);
+    mid = mid * (1.0f / (float) geo.samples.size());
+    const auto carAt = [&](float at) {
+      size_t k = 0;
+      while (k + 1 < geo.samples.size() && geo.samples[k + 1].s <= at) k++;
+      const OutSample& o = geo.samples[k];
+      TtpCarInput c = {};
+      c.pos = {(float) o.pos.x, (float) o.pos.y, (float) o.pos.z};
+      c.up = {(float) o.up.x, (float) o.up.y, (float) o.up.z};
+      c.forward = {(float) o.tangent.x, (float) o.tangent.y, (float) o.tangent.z};
+      c.trackS = at;
+      return c;
+    };
+    // A whole lap, so the rig comes to each looping from wherever the last left it.
+    rt::FollowCam cam;
+    const std::vector<bool> live(2, true);
+    const float speed = 18.0f;
+    int ride = 0, hidden = 0, behind = 0, outOfFrame = 0;
+    float maxStep = 0;
+    V3 prev;
+    bool have = false;
+    for (float at = 2; at < (float) geo.length; at += speed * DT) {
+      const TtpCarInput cars[2] = {carAt(at), carAt(at - 1.5f)};
+      cam.update(cars, live, mid, deck, ground, loops, DT);
+      // Only on a looping: off one the rig cuts under a bridge, as it always has.
+      if (have && cam.loop >= 0) {
+        const V3 step = cam.pos - prev;
+        maxStep = std::fmax(maxStep, std::sqrt(rt::dot(step, step)));
+      }
+      prev = cam.pos;
+      have = cam.loop >= 0;
+      bool onRide = false;
+      for (const rt::LoopShot& l : loops) onRide = onRide || (at >= l.start && at < l.to);
+      if (!onRide) continue;
+      ride++;
+      const V3 p{cars[0].pos.x, cars[0].pos.y, cars[0].pos.z}, up{cars[0].up.x, cars[0].up.y, cars[0].up.z};
+      const V3 toEye = cam.pos - p;
+      hidden += rt::deckBlocks(deck, cam.pos, p + up * rt::FOLLOW_AIM_UP, 0, rt::FOLLOW_CAR_CLEAR);
+      behind += rt::dot(toEye, up) < -0.1f * std::sqrt(rt::dot(toEye, toEye));
+      const V3 fwd = rt::norm(cam.target - cam.pos), right = rt::norm(V3{fwd.z, 0, -fwd.x});
+      const float z = -rt::dot(toEye, fwd), half = z * std::tan(rt::FOLLOW_FOV * 0.5f * 3.14159265f / 180);
+      outOfFrame += z <= 0 || std::fabs(rt::dot(toEye, right)) > half * rt::FOLLOW_LOOP_ASPECT || std::fabs(toEye.y) > half * 1.2f;
+    }
+    const std::string counts = " (" + std::to_string(hidden) + " hidden, " + std::to_string(behind) + " behind, of "
+                             + std::to_string(ride) + ")";
+    check(ride > 0, id + ": premise: the drive covers the rides");
+    check(hidden <= t.hiddenShare * ride, id + ": the deck hides the leader only as much as the track must" + counts);
+    check(behind <= 0.1f * ride, id + ": the camera stays on the deck's top side round the ring" + counts);
+    check(outOfFrame == 0, id + ": the leader stays in the picture round the ring");
+    check(maxStep < 1.0f, id + ": the camera never jumps on its way to a looping or round it");
+  }
+  const RaceTrack flat = build_catalogue_track(*find_track_def("cove"), 1, 0u);
+  check(rt::loopShots(flat.samples, (float) flat.length, rt::nameTagDeck(flat.samples, flat.closed), rt::GroundGrid()).empty(),
+        "a track with no looping has no place for one");
 }
 
 void testCoverageView(const GameTrack& track) {
@@ -2405,6 +2532,8 @@ int main() {
   testOverviewViews(bt.game);
   testFollowView(bt.game);
   testCoverageShots();
+  testCoverageHoldsThroughALoop();
+  testFollowOnLoopings();
   testCoverageView(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
