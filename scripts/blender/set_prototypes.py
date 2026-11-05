@@ -577,6 +577,16 @@ def rock(at, k=1.0, yaw=0.0, color=0x868ba1):
     box((1.2 * k, 0.8 * k, 1.0 * k), (x, y + 0.4 * k, z), color, yaw=yaw)
     box((0.7 * k, 0.5 * k, 0.6 * k), (x + 0.2 * k, y + 0.95 * k, z - 0.1 * k), 0x9aa1b4, yaw=yaw + 0.6)
 
+def dead_tree(at, h=6.0, color=0x8a6a46, r=0.45):
+    """A dead tree `h` tall, its trunk `r` at the foot, four bare limbs in
+    proportion to it."""
+    x, y, z = at
+    k = h / 6.0
+    cyl(r, h, (x, y, z), color, r2=r * 0.45, segs=7, smooth=False)
+    for i, (a, t, l) in enumerate(((0.3, 0.55, 2.8), (2.4, 0.5, 2.4), (4.2, 0.65, 2.0), (1.4, 0.95, 1.6))):
+        o = cyl(r * 0.36, l * k, (x, y + h * (0.55 + 0.12 * i), z), color, r2=r * 0.09, segs=5, smooth=False)
+        tilted(o, math.cos(a) * t, math.sin(a) * t)
+
 # ---- the pieces ----------------------------------------------------------------
 
 PIECES = {}
@@ -4140,21 +4150,18 @@ def telegraph_line():
     box((0.06, 0.4, 0.6), (-0.8, 1.05, -4.0), 0xd9b054)
     box((0.07, 0.08, 0.42), (-0.77, 1.05, -4.0), ROPE)
 
-@piece(1.0)
+@piece(0.55)
 @plain
-def saguaro_stand():
-    # Wash's support: a stand of saguaros on the bank, the old one an old
-    # one's height (some fifteen metres, its three arms up), a young one
-    # beside it, an ocotillo in flower, brush and a barrel cactus at their
-    # feet, red rocks among them; a vulture perched
-    # on the old one's crown, turning to watch the road (anim_watch).
-    H = 4.2
-    saguaro((0, 0, 0), H, arms=((0.2, 0.4, 0.34), (2.9, 0.52, 0.28), (4.6, 0.62, 0.2)))
-    saguaro((1.5, 0, -1.4), 1.8, arms=((0.6, 0.5, 0.3),))
-    ocotillo((-1.6, 0, 1.4), 2.2, seed=4)
-    brush((1.2, 0, 1.3), 1.0, yaw=0.4)
-    barrel_cactus((-1.1, 0, -1.6), 1.1)
-    vy, k = H, 0.47                                                              # the vulture, turning
+def dead_cottonwood():
+    # Wash's support: a lone dead cottonwood a big one's height on the bank
+    # (some 23 m), a vulture perched on its top looking out at the road, a
+    # fallen limb, red rocks and a tumbleweed at its foot (the builder's
+    # units are 1/0.55 of the world's; the vulture and the weed keep their
+    # own size).
+    dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
+    o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
+    o.rotation_euler.z = 0.6
+    vy, k = 9.5, 0.47 / GROW['dead-cottonwood']                                 # the vulture, turning
     def v(size, d, color, pitch=0.0):                                            # on its perch to watch
         box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)   # the cars go by
     with animated('anim_watch:r=24:d=75#v', (0, vy, 0)):
@@ -4168,9 +4175,10 @@ def saguaro_stand():
         v((0.2, 0.1, 0.12), (0.62, 1.06, 0), 'cream')
         for sd in (-1, 1):
             v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
-    sandstone_rock((-1.4, 0, -0.6), 0.9, yaw=1.2)
-    sandstone_rock((1.6, 0, -2.9), 0.7, yaw=0.2)
-    join_still('stand')
+    sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
+    sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
+    tumbleweed((-1.8, 0.43, 2.2), 0.43)
+    join_still('tree')
 
 def windpump_body(x0, z0, k, tag='', yaw=0.0):
     """An old farm windpump at (x0, z0), `k` the size of the 7 unit one: a

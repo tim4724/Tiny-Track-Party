@@ -686,12 +686,12 @@ export const TRACKS = {
     // under the south strand. The bed lies under the raised land, so what a
     // racer sees of the wash is what grows along it: saguaros, ocotillo and
     // brush on its banks (each reach brings a stand on each side), and two
-    // old saguaros standing over the start's bends, a vulture on each. A
-    // desert of rock, sand and cactus: no trees.
+    // dead cottonwoods standing bare over the start's bends, a vulture on
+    // each. A desert of rock, sand and cactus: nothing green but cactus.
     set: [
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-saguaro-stand', u: 0.302, lat: 10.5 },
-      { model: 'set-saguaro-stand', u: 0.95, lat: -10, yaw: -180 },
+      { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
+      { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },

@@ -1276,8 +1276,8 @@ constexpr FurnDef kBoxes_wash[] = {
 };
 constexpr SetDef kSet_wash[] = {
   { "set-dry-creek", 0x1.d81d7dbf487fdp-1, -0x1.28p+4, 0x1.cp+6, 0x0p+0, 0x1p+0 },
-  { "set-saguaro-stand", 0x1.353f7ced91687p-2, 0x1.5p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-saguaro-stand", 0x1.e666666666666p-1, -0x1.4p+3, -0x1.68p+7, 0x0p+0, 0x1p+0 },
+  { "set-dead-cottonwood", 0x1.353f7ced91687p-2, 0x1.5p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-dead-cottonwood", 0x1.e666666666666p-1, -0x1.4p+3, -0x1.68p+7, 0x0p+0, 0x1p+0 },
   { "set-wash-bed", 0x1.6acd9e83e425bp-1, -0x1.9333333333333p+4, -0x1.2p+7, 0x0p+0, 0x1p+0 },
   { "set-wash-bed", 0x1.5c28f5c28f5c3p-1, -0x1.ccccccccccccdp+1, 0x1.34p+6, 0x0p+0, 0x1p+0 },
   { "set-wash-bed", 0x1.330be0ded288dp-1, 0x1.5666666666666p+3, 0x1.dp+6, 0x0p+0, 0x1p+0 },
