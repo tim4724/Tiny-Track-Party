@@ -314,14 +314,14 @@ struct RaceResultsView: View {
                     // it, so the sentence reads the same on both screens. A
                     // LABEL in ink-2: a fact about the board, not a control.
                     (Text(Copy.nextUp)
-                        + Text(next.trackName).font(Fonts.display(24, weight: .bold)).foregroundColor(Tokens.ink)
+                        + Text(next.trackName).font(Fonts.display(Self.footerType, weight: .bold)).foregroundColor(Tokens.ink)
                         + Text(Copy.startingIn)
                         + Text(String(intermissionSecs ?? next.secs))
                         + Text(Copy.ellipsis))
-                        .font(Fonts.body(24, weight: .heavy))
+                        .font(Fonts.body(Self.footerType, weight: .heavy))
                         .foregroundStyle(Tokens.ink2.mixed(0.78, with: Sticker.labelInk))
-                        .padding(.vertical, 24 * 0.45)
-                        .padding(.horizontal, 24 * 1.1)
+                        .padding(.vertical, Self.footerType * 0.45)
+                        .padding(.horizontal, Self.footerType * 1.1)
                         .background(Capsule().fill(Tokens.ink2.mixed(0.20, with: .white)))
                 }
             }
@@ -378,7 +378,8 @@ struct RaceResultsView: View {
     /// Between the two columns (`column-gap: 2rem`), and the reserved footer's
     /// height (the "Next up" label).
     private static let columnGap: CGFloat = 32
-    private static let footerHeight: CGFloat = 56
+    private static let footerHeight: CGFloat = 84
+    private static let footerType: CGFloat = 36
     /// One row's height, its rule included: `#results-list li` measures ~52
     /// authored px. Rows touch — the hairline is what parts them. Fixed rather
     /// than content-sized, so the BOARD cannot resize under a re-sort.

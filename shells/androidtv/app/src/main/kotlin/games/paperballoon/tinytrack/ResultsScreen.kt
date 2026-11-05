@@ -293,14 +293,15 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // a board that will never have one, and `visibility: hidden` only
                 // while it has merely not arrived).
                 //
-                // `width(boardWidth)`, NOT fillMaxWidth. Inside a Column whose own
-                // width is decided by its children, fillMaxWidth takes the INCOMING
-                // MAX — the whole screen — and drags the board out to the bezels
-                // with it. An explicit HEIGHT, not a same-sized Spacer: a 24 dp
-                // StickerText's line box is taller than 24 dp, so a Spacer(24.dp)
-                // reserves less than the text it stands in for.
+                // No width: the footer sizes to its text, which may be wider than
+                // the board, and the Column centres it. NOT fillMaxWidth: inside a
+                // Column whose own width is decided by its children, that takes the
+                // INCOMING MAX — the whole screen — and drags the board out to the
+                // bezels with it. An explicit HEIGHT, not a same-sized Spacer: a
+                // StickerText's line box is taller than its size, so a Spacer reserves
+                // less than the text it stands in for.
                 if (results.intermission) Box(
-                    Modifier.width(boardWidth).height(FOOTER_HEIGHT).padding(top = 6.dp),
+                    Modifier.height(FOOTER_HEIGHT).padding(top = 6.dp),
                     Alignment.Center,
                 ) {
                     val next = results.next
@@ -387,7 +388,8 @@ private const val ONE_COL_MAX = 5
 /** Between the two columns (`column-gap: 2rem`), and the reserved footer's
  *  height: the next-up label plus its air. */
 private val COL_GAP = 32.dp
-private val FOOTER_HEIGHT = 60.dp
+private val FOOTER_HEIGHT = 90.dp
+private val FOOTER_TYPE = 36.dp
 
 /** One row's height, rule included.
  *
@@ -592,7 +594,7 @@ private fun CellText(text: String, width: Dp, size: Dp, color: Color) {
  */
 @Composable
 private fun NextUp(trackName: String, secs: Int) {
-    val size = 24.dp
+    val size = FOOTER_TYPE
     val ink = labelInk(Tokens.ink2)
     Row(
         Modifier

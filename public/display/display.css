@@ -1001,7 +1001,7 @@ html.cam-free #race { pointer-events: none; }
            min-width: 4.2em; text-align: right; }
 /* "Next up: Gulch — starting in 8…" under the intermission board: a LABEL */
 .results-next {
-  margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.1rem, 2vw, 1.5rem);
+  margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.6rem, 3vw, 2.25rem);
   color: color-mix(in srgb, var(--ink-2) 78%, #1B1830);
   background: color-mix(in srgb, var(--ink-2) 20%, #fff);
   border-radius: var(--r-pill); padding: 0.45em 1.1em;
