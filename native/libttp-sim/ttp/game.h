@@ -331,7 +331,7 @@ class Game {
   bool pinCurb(Car& c);
   void billCurb(Car& c, double dt);
   void clampCurb(Car& c, double dt);
-  bool enterZonesOil(Car& c);
+  double enterZonesOil(Car& c);
   bool enterZonesPads(Car& c);
   bool inStrip(const Car& c, const PadRt& z) const;
   bool inZone(const Car& c, double zs, double zlat, double radius) const;

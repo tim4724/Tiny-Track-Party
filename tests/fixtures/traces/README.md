@@ -83,6 +83,12 @@ still bounds the flights. The same day an airborne car stopped paying the curb:
 the edge still holds it and turns it along the road, at no speed. No trace
 flies into the edge, so only the catalogue sweep moved; `air_check` asserts it.
 
+On 2026-11-05 a car clipping the edge of an oil slick began spinning for half the
+time (`OIL_CLIP_FRAC`), and a clip stopped re-arming a spin already running. With
+the fraction at 1.0, which no car can reach, the old recordings replay exactly, so
+only clips moved them: skysnake, the schedule trace and five sweep tracks.
+`hazard_check` asserts both tiers.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.

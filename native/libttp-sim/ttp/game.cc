@@ -111,6 +111,10 @@ static const double POLE_MIN_KEEP = 0.3;
 static const double OIL_RADIUS = 0.7;
 static const double SPIN_TIME = 1.0;
 static const double OIL_REARM = 4.0;
+// Past this fraction of the radius off the slick's centre, a car has only
+// clipped it and spins for half the time: one turn instead of two, so it still
+// lands facing forward.
+static const double OIL_CLIP_FRAC = 0.6;
 static const double SPIN_DRAG_RATE = 1.8;
 static const double SPIN_TURNS = 2;
 static const double SPREAD_REF_FRAC = 0.15;
@@ -560,8 +564,12 @@ bool Game::inZone(const Car& c, double zs, double zlat, double radius) const {
   return (ds * ds + dl * dl) < radius * radius;
 }
 
-bool Game::enterZonesOil(Car& c) {
-  bool entered = false;
+// The seconds this car spins for, 0 if it entered no slick. Every car crosses
+// the rim, so the distance to the centre says nothing at that moment; the
+// lateral offset is where its path runs through the slick, which it crosses too
+// fast to steer out of.
+double Game::enterZonesOil(Car& c) {
+  double spinFor = 0;
   for (int i = 0; i < (int)hazards_.size(); i++) {
     const Zone& z = hazards_[i];
     bool hit = inZone(c, z.s, z.lat, z.radius);
@@ -570,11 +578,15 @@ bool Game::enterZonesOil(Car& c) {
         c.oilIn.insert(i);
         auto it = c.oilCd.find(i);
         double cdv = it != c.oilCd.end() ? it->second : 0;
-        if (elapsed_ >= cdv) { entered = true; c.oilCd[i] = elapsed_ + OIL_REARM; }
+        if (elapsed_ >= cdv) {
+          c.oilCd[i] = elapsed_ + OIL_REARM;
+          bool clipped = std::fabs(c.lat - z.lat) >= z.radius * OIL_CLIP_FRAC;
+          spinFor = js_max(spinFor, clipped ? SPIN_TIME / 2 : SPIN_TIME);
+        }
       }
     } else c.oilIn.erase(i);
   }
-  return entered;
+  return spinFor;
 }
 bool Game::enterZonesPads(Car& c) {
   bool entered = false;
@@ -1133,11 +1145,12 @@ void Game::update(double dtMs) {
     // Oil, bananas and pads lie ON the deck, so a car in the air clears them.
     bool grounded = c.h < AIR_MIN;
     {
-      bool oil = grounded && enterZonesOil(c);
+      double oil = grounded ? enterZonesOil(c) : 0;
       bool ban = grounded && enterBanana(c);
-      if ((oil || ban) && c.monsterT <= 0) {
+      if ((oil > 0 || ban) && c.monsterT <= 0) {
         if (!spinning) c.spin = 0;
-        c.spinT = SPIN_TIME; spinning = true;
+        // A clip never cuts short a spin that is already running.
+        c.spinT = js_max(c.spinT, ban ? SPIN_TIME : oil); spinning = true;
         c.boostT = 0; c.boostMul = 1;
         Event e; e.type = "spin"; e.id = c.id; e.cause = ban ? "banana" : "oil"; emit(e);
       }

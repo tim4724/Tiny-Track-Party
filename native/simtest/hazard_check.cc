@@ -1,7 +1,8 @@
-// Hazard-response check — the two sim behaviours that NOTHING else in the tree
-// reaches: Game::collidePole and Game::stageBanana.
+// Hazard-response check — the sim behaviours that NOTHING else in the tree
+// asserts: Game::collidePole, Game::stageBanana, and which of an oil slick's two
+// spins a car gets (a trace records whichever it got, never why).
 //
-// WHY THEY HAVE NO COVERAGE, AND WHY THAT IS NOT THE SAME PROBLEM TWICE:
+// WHY THE FIRST TWO HAVE NO COVERAGE, AND WHY THAT IS NOT THE SAME PROBLEM TWICE:
 //
 //   collidePole is UNREACHABLE ON THE SHIPPED CATALOGUE. Every one of the 20
 //   catalogue tracks builds with zero poles — verified against the JS TrackBuilder
@@ -58,6 +59,28 @@ double gapTo(const Car& c, const PoleRt& p, double length) {
   const double ds = wrap_delta(c.totalS - p.s, length);
   const double dl = c.lat - p.lat;
   return std::sqrt(ds * ds + dl * dl);
+}
+
+// Drives one car at `lat` from s = 30 over the given slicks and times its spin.
+struct OilRun { int spinEvents = 0; int ticks = 0; double peak = 0; };
+OilRun driveOverOil(const GameTrack& track, const std::vector<Zone>& slicks, double lat) {
+  GameTrack oily = track;
+  oily.hazards = slicks;
+  const std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), false, Stats{}}};
+  OilRun run;
+  Game game(players, oily, [&run](const Event& e) { if (e.type == "spin") run.spinEvents++; });
+  Car& c = *game.cars()[0];
+  c.totalS = 30.0;
+  c.lat = lat;
+  c.heading = 0.0;
+  c.v = 6.0;
+  for (int i = 0; i < 40 && c.spinT <= 0; i++) game.update(DT);
+  while (c.spinT > 0) {
+    run.ticks++;
+    if (c.spin > run.peak) run.peak = c.spin;
+    game.update(DT);
+  }
+  return run;
 }
 
 }  // namespace
@@ -289,6 +312,37 @@ int main() {
     game.update(DT);
     check(game.bananas().size() == 2 && !c.trailing && !game.bananas()[1].carried,
           "control: no `h` drops on the press");
+  }
+
+  // ---- how much of an oil slick the car's path runs through --------------------
+  {
+    BuiltRaceTrack bt;
+    std::string err;
+    if (!build_race_track_by_id("tidepool", 3, 7u, bt, err)) {
+      std::fprintf(stderr, "FAIL build tidepool (oil): %s\n", err.c_str());
+      return 2;
+    }
+    const double TURN = 2 * 3.14159265358979323846;
+    // The spin's rate per frame at DT. The last frame sampled is one short of the
+    // whole turn (the next resets it), so the margin has to clear exactly that.
+    const double NEAR = 1.5 * (2 * TURN / 60);
+    const std::vector<Zone> slick{Zone{30.8, 0.0, 0.7}};
+
+    for (double lat : {0.0, 0.3, -0.3}) {
+      const OilRun r = driveOverOil(bt.game, slick, lat);
+      check(r.spinEvents == 1 && std::abs(r.ticks - 60) <= 1, "through the middle: the full second");
+      check(std::fabs(r.peak - 2 * TURN) <= NEAR, "…and two whole turns");
+    }
+    for (double lat : {0.5, -0.5, 0.65}) {
+      const OilRun r = driveOverOil(bt.game, slick, lat);
+      check(r.spinEvents == 1 && std::abs(r.ticks - 30) <= 1, "clipping the edge: half of it");
+      check(std::fabs(r.peak - TURN) <= NEAR, "…and one whole turn, landing straight");
+    }
+
+    // Already spinning from the first slick when it clips the second.
+    const OilRun both = driveOverOil(bt.game, {slick[0], Zone{31.6, 0.5, 0.7}}, 0.0);
+    check(both.spinEvents == 2, "control: the car does reach the second slick");
+    check(std::abs(both.ticks - 60) <= 1, "a clip does not cut short the longer spin already running");
   }
 
   std::printf("hazard check: %d assertions, %d failures\n", checks, failures);
