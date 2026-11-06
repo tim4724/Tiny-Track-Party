@@ -163,8 +163,8 @@ export const SKYSNAKE = [
 ];
 
 // ---- BACKYARD CUP — four SEEDED multi-crossing tracks. Each is a procedurally-generated
-// closed plan whose self-crossings are lifted into overpasses by a solved elevation profile
-// (scripts/gen-tracks.mjs); the resolved waypoints are baked into GEN_TRACKS and used directly
+// closed plan whose self-crossings are lifted into overpasses, each on a short ramp of its
+// own with the rest of the lap on the ground (scripts/track-gen.mjs, gen-tracks.mjs); the resolved waypoints are baked into GEN_TRACKS and used directly
 // in the registry below. To reroll or change the seed picks, edit + run that script. ----
 
 // Oil slicks per track — FIXED hazards. Placed by `u` (fraction of the lap, 0 =
@@ -282,9 +282,8 @@ export const SET_GROUND = {
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
   // Flurry's lake: the ice lies on the plain, unraised, and the snow banks up
-  // round it (the road crosses its east edge on stilts). The bank stays under
-  // a racer's eye on the raised road (the deck rides some 2.6 over the ice),
-  // so the ice reads over it.
+  // round it (the road crosses its east edge on a low bank of its own). The
+  // bank stays low beside the road, so the ice reads over it.
   'set-frozen-lake': [
     { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
     { kind: 'ring', r: 21, w: 6, h: 1.6 }
@@ -298,9 +297,8 @@ export const SET_GROUND = {
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
   'set-penguin-group': [{ kind: 'mound', x: -8, h: 2.6, r: 12, r1: 9, rz: 11, shape: 1.2 }],
   // Glacier's expedition camp on a snow bank of its own, flat on top like the
-  // den camp's and set back from the road: the land by the climbing road lies
-  // well under the deck, so a camp on it hid its tents behind the kerb; on the
-  // bank they show over it. The camp drapes, so it lies on the slope drawn:
+  // den camp's and set back from the road: a camp on the flat hid its tents
+  // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:
   // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
   // ...and its advanced camp, past the bend where a racer looks at it, on a
@@ -309,7 +307,7 @@ export const SET_GROUND = {
   'set-advanced-camp': [{ kind: 'fan', x: -0.5, z: 0.5, len: 4, r: 7, h: 1.3, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), its gentle face to
   // the road, its foot reaching under the school's hut and arch so the whole
-  // school stands up on it over the kerb of the raised road beside it.
+  // school stands up on it over the kerb of the road beside it.
   'set-ski-school': [{ kind: 'mound', x: -7, h: 4.2, r: 13, r1: 10, rz: 13, shape: 1.3 }],
   'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   'set-warning-sign': [{ kind: 'mound', x: -28, h: 22.4, r: 25.9, r1: 25.2, rz: 36.4, shape: 1.6 }],
@@ -317,14 +315,7 @@ export const SET_GROUND = {
   // trunk: short toward the road (+X), the hill falling away behind it and
   // along it over the corner of the garden.
   'set-treehouse': [{ kind: 'mound', h: 2.6, r: 18, r1: 32, rz: 26, shape: 0.6 }],
-  // Ribbon's cottages stand on the bank their lane runs along: a long low
-  // terrace, flat on top and broad enough that the ground's grid draws it
-  // flat under them, its crest about level with the road beside it (it rises
-  // from the ground raised under the deck, and stays under the cap the deck
-  // holds the ground to), so a racer looks across at the cottages rather
-  // than down over the kerb at their roofs.
-  'set-cottage-row': [{ kind: 'fan', x: -1.5, len: 30, r: 18, h: 1.1, top: 0.7 }],
-  // ...and its church on the churchyard's own level ground, cut into the
+  // Ribbon's church on the churchyard's own level ground, cut into the
   // terrace it stands on, the green before it: on the slope as it was, the
   // tower stood a storey deep in the hill.
   'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
@@ -334,10 +325,6 @@ export const SET_GROUND = {
   // (flat for its whole width), steeper to the road (+X), falling away behind;
   // low enough that its crest does not hide the playground from the corner.
   'set-playground': [{ kind: 'mound', h: 2.5, r: 20, r1: 34, rz: 28, shape: 0.5 }],
-  // ...and another corner of the park on a low knoll: it stands on the land
-  // a deck raises beside it, which the deck's cap holds under the slab, so a
-  // taller knoll there would leave the corner standing in the air.
-  'set-play-corner': [{ kind: 'mound', h: 0.6, r: 8, r1: 14, rz: 12, shape: 0.6 }],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -496,7 +483,7 @@ export const TRACKS = {
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
-  // fraction, no hairpins, roomy radii, but real crossings + climb; auto-placed furniture).
+  // fraction, no hairpins, roomy radii, but real crossings + hills; auto-placed furniture).
   powder: {
     name: 'Powder', waypoints: GEN_TRACKS.powder,
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
@@ -564,7 +551,7 @@ export const TRACKS = {
       { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 }
     ]
   },
-  // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation,
+  // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
   // decorated mid profile; auto-placed furniture).
   ribbon: {
     name: 'Ribbon', waypoints: GEN_TRACKS.ribbon,
@@ -573,10 +560,10 @@ export const TRACKS = {
     // looks, the maypole on its green; rows of cottages along the lanes the
     // circuit runs down, by the grid straight (in front of the climb to the
     // first bridge, which hid a row behind it), past the north loop, the long
-    // diagonal, round the south loop and at the west bend's exit, each on its
-    // bank (SET_GROUND), washing out in the gardens; the windmill turning in
-    // the middle of the south loop. A row keeps clear of another piece's
-    // clearing, which would cut its bank
+    // diagonal, round the south loop and at the west bend's exit, on the
+    // flat by the road (the deck's cap holds any bank there down to it),
+    // washing out in the gardens; the windmill turning in the middle of the
+    // south loop
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
@@ -609,7 +596,7 @@ export const TRACKS = {
     // diagonal's top, where the racer comes off the north hairpin, the fire
     // smoking
     set: [
-      { model: 'set-treehouse', u: 0.05455, lat: 21, yaw: 25.44 },
+      { model: 'set-treehouse', u: 0.05455, lat: 23, yaw: 25.44 },
       { model: 'set-football-pitch', u: 0.92176, lat: -9.578, yaw: 1.41 },
       { model: 'set-den-camp', u: 0.534, lat: 11.842, yaw: 13.39, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.14, lat: 9, yaw: 39.71 },
@@ -653,10 +640,8 @@ export const TRACKS = {
     // roundabout going with a child on it, the park's ice-cream van parked
     // up there with the children queueing at it; another corner of the park
     // in the S between the two decks, seen from both. Built at the toy
-    // world's chunkiness, where real size put the park under the kerb of a
-    // deck riding three units over the lawn. A knoll by a deck is held down
-    // to it (the cap), so a corner's own is low: it stands on the land the
-    // decks raise, not over it
+    // world's chunkiness, so it reads from the road. The corner stands on
+    // the flat by the road: the deck's cap holds any knoll there down to it
     set: [
       { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96, y: -0.05, scale: 1.3 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 }
@@ -681,10 +666,11 @@ export const TRACKS = {
     // bringing its channel; the far north-west reaches, out of a racer's
     // sight, are channel only, in `land`), from the north-west past the
     // hero's stretch by the north straight (tumbleweeds blowing down it),
-    // under the north strand's low culvert into the east loop and out under
-    // the east bend's high trestle; a side wash comes in from the south
-    // under the south strand. The bed lies under the raised land, so what a
-    // racer sees of the wash is what grows along it: saguaros, ocotillo and
+    // across the north strand, which dips through it at the bed's level,
+    // into the east loop and out under the east bend's bridge; a side wash
+    // comes in from the south under the south strand. The bed is a shallow
+    // channel, so what a racer sees of the wash where the road leaves it is
+    // what grows along it: saguaros, ocotillo and
     // brush on its banks (each reach brings a stand on each side), and two
     // dead cottonwoods standing bare over the start's bends, a vulture on
     // each. A desert of rock, sand and cactus: nothing green but cactus.
@@ -738,8 +724,8 @@ export const TRACKS = {
     // face of a spur under the long ridge north of the start straight, one
     // ore line winding out of its yard along the whole start straight (on a
     // timber trestle beside it) and round the east bend to the headframe
-    // over the shaft up the east side, its wheel turning over the high
-    // bend's deck, a little train of ore riding the line from the adit to
+    // over the shaft up the east side, its wheel turning over the east
+    // bend, a little train of ore riding the line from the adit to
     // the shaft; grey spoil heaps at both workings and out by the far
     // bends, timber supports round the lap.
     set: [

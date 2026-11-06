@@ -19,32 +19,36 @@ const SELF = new URL(import.meta.url).pathname;
 
 // which {seed, profile} becomes which track id (re-pick by editing this, then re-run)
 // User-picked rosters (audition round of 2026-07-03; see gallery-tracks.html).
-// `jumps` are hand-placed crest hops (track-gen.mjs liftJumps), for the tracks whose
-// seeded hops came out too soft to launch a car.
+// `anchor` is the plan waypoint the start line stands on: the grid search's pick when the
+// track shipped, pinned because everything on a track is placed by lap fraction from its
+// start, so a re-solved elevation must not move it. `jumps` are hand-placed crest hops
+// (track-gen.mjs liftJumps), for the tracks whose seeded hops came out too soft to launch
+// a car; on Backyard and Canyon they stand on the crests of the old full-height hills that
+// used to launch one, each lowered until it lands no harder than the hill did.
 const SEEDS = {
   // Beach Cup (Easy)
-  tidepool:   { seed: 88,  profile: 'easy', jumps: [{ wp: 15, amp: 0.65 }, { wp: 45, amp: 0.4 }] },
-  cove:       { seed: 250, profile: 'easy', jumps: [{ wp: 9, amp: 1.0 }, { wp: 42, amp: 0.6 }] },
-  driftwood:  { seed: 138, profile: 'easy', jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.35 }] },
-  riptide:    { seed: 330, profile: 'easy', jumps: [{ wp: 6, amp: 1.1 }, { wp: 36, amp: 0.35 }] },
+  tidepool:   { seed: 88,  profile: 'easy', anchor: 47, jumps: [{ wp: 15, amp: 0.65 }, { wp: 45, amp: 0.4 }] },
+  cove:       { seed: 250, profile: 'easy', anchor: 0, jumps: [{ wp: 9, amp: 1.0 }, { wp: 42, amp: 0.6 }] },
+  driftwood:  { seed: 138, profile: 'easy', anchor: 5, jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.35 }] },
+  riptide:    { seed: 330, profile: 'easy', anchor: 2, jumps: [{ wp: 6, amp: 1.1 }, { wp: 36, amp: 0.35 }] },
   // Snow Cup (Medium) — the gentle end of the mid grammar: low brake fraction, no
-  // hairpins, roomy min radii, but still crossings + real climb so nothing reads flat.
-  powder:     { seed: 27,  profile: 'mid', jumps: [{ wp: 4, amp: 0.6 }, { wp: 43, amp: 0.6 }] },
-  flurry:     { seed: 477, profile: 'mid', jumps: [{ wp: 7, amp: 0.6 }, { wp: 44, amp: 0.6 }] },
-  glacier:    { seed: 290, profile: 'mid', jumps: [{ wp: 23, amp: 0.5 }, { wp: 43, amp: 0.45 }] },
-  avalanche:  { seed: 125, profile: 'mid', jumps: [{ wp: 11, amp: 0.4 }, { wp: 60, amp: 0.5 }] },
+  // hairpins, roomy min radii, but still crossings, hills and jumps so nothing reads flat.
+  powder:     { seed: 27,  profile: 'mid', anchor: 1, jumps: [{ wp: 4, amp: 0.6 }, { wp: 43, amp: 0.5 }] },
+  flurry:     { seed: 477, profile: 'mid', anchor: 39, jumps: [{ wp: 7, amp: 0.6 }, { wp: 44, amp: 0.48 }] },
+  glacier:    { seed: 290, profile: 'mid', anchor: 63, jumps: [{ wp: 23, amp: 0.4 }, { wp: 43, amp: 0.4 }] },
+  avalanche:  { seed: 125, profile: 'mid', anchor: 67, jumps: [{ wp: 11, amp: 0.38 }, { wp: 60, amp: 0.58 }] },
   // Backyard Cup (middle) — pretzel/cloverleaf are original classic seeds re-baked
   // through the decorated mid profile (same plans/crossings — mid shares classic's
   // grammar). The frozen `classic` profile stays in track-gen as provenance.
-  ribbon:     { seed: 128, profile: 'mid', jumps: [{ wp: 24, amp: 0.6 }, { wp: 75, amp: 0.3 }] },
-  pretzel:    { seed: 13,  profile: 'mid' },
-  tangle:     { seed: 372, profile: 'mid' },
-  cloverleaf: { seed: 121, profile: 'mid' },
+  ribbon:     { seed: 128, profile: 'mid', anchor: 33, jumps: [{ wp: 24, amp: 0.5 }, { wp: 75, amp: 0.2 }] },
+  pretzel:    { seed: 13,  profile: 'mid', anchor: 58, jumps: [{ wp: 48, amp: 0.3 }] },
+  tangle:     { seed: 372, profile: 'mid', anchor: 71, jumps: [{ wp: 41, amp: 0.36 }] },
+  cloverleaf: { seed: 121, profile: 'mid', anchor: 71 },
   // Canyon Cup (Hard)
-  wash:       { seed: 193, profile: 'hard' },
-  gulch:      { seed: 550, profile: 'hard' },
-  crag:       { seed: 276, profile: 'hard' },
-  sidewinder: { seed: 62,  profile: 'hard' },
+  wash:       { seed: 193, profile: 'hard', anchor: 57, jumps: [{ wp: 51, amp: 0.52 }] },
+  gulch:      { seed: 550, profile: 'hard', anchor: 76, jumps: [{ wp: 35, amp: 0.6 }] },
+  crag:       { seed: 276, profile: 'hard', anchor: 75, jumps: [{ wp: 24, amp: 0.37 }, { wp: 72, amp: 0.5 }] },
+  sidewinder: { seed: 62,  profile: 'hard', anchor: 60, jumps: [{ wp: 28, amp: 0.42 }] },
 };
 
 // --stdout prints the bake instead of writing it, which is how
@@ -64,8 +68,8 @@ const report = (line) => { if (toStdout) process.stderr.write(`${line}\n`); else
 // a JSON round trip on its way into the bake. Re-serializing a parsed double is
 // byte-safe in practice, but "safe in practice" is the wrong standard for the
 // one file tests/codegen-freshness.test.js compares byte for byte.
-function bakeOne(id, { seed, profile, jumps }) {
-  const wp = bakeSeed(seed, profile, { jumps });
+function bakeOne(id, { seed, profile, anchor, jumps }) {
+  const wp = bakeSeed(seed, profile, { anchor, jumps });
   const src = { waypoints: wp };
   const t = buildTrack(src);
   const f = profile === 'classic'
@@ -98,9 +102,9 @@ if (bakeArg) {
   process.exit(0);
 }
 
-// The 16 bakes are INDEPENDENT and each costs 0.4-0.8 s of pure CPU: 16 elevation
-// solves and grid-anchor shortlists, each building real geometry through the
-// native builder. Serially that was 10.3 s at 104% CPU, and since this script is
+// The 16 bakes are INDEPENDENT and each costs pure CPU: 16 elevation solves and
+// decoration checks, each building real geometry through the native builder.
+// Serially that was 10.3 s at 104% CPU, and since this script is
 // what tests/codegen-freshness.test.js shells out to, those 10.3 s were 93% of
 // the whole `npm test` wall clock — one assertion, one core, everything waiting.
 //

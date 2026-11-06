@@ -501,10 +501,11 @@ memory until another track builds or the renderer goes.
 
 ## The ground meets the road
 
-`groundY` (the track's) is the plain under the deck's LOWEST point, so on the
-open-country biomes most of a lap rides high over it. The renderer's ground
-(`terrainY`, `TtpRendererTrack.cpp`) rises toward the deck instead, leaving a
-short stilt showing (`kRaiseDrop`), and rolls into hills away from it. It is
+`groundY` (the track's) is the plain under the deck's LOWEST point. A seeded
+track lies near it except on its crossings' ramps and its hills
+(`scripts/track-gen.mjs` localLift). The renderer's ground (`terrainY`,
+`TtpRendererTrack.cpp`) rises toward the deck, leaving a short stilt showing
+(`kRaiseDrop`), and rolls into hills away from it. It is
 renderer-only: the sim never reads it, and pillars, berms and the gantry still
 stand on `groundY` with their feet buried.
 

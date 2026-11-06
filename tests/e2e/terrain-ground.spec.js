@@ -5,7 +5,10 @@
 //   - under every deck point, kerb to kerb, the ground stays under the slab
 //     (or at the plain, where the slab itself is sunk into it);
 //   - beside raised road, 1 to 4 u off either edge, no bank comes above the
-//     slab's underside (a crossing's lower road, the far side of a hairpin);
+//     slab's underside (a crossing's lower road, the far side of a hairpin).
+//     Raised is over the lap's LOWEST road, not over groundY: groundY can sit
+//     under it (a banked corner's low edge sets it), and road at that level
+//     lies in the plain, the land beside it level with it;
 //   - every part of a piece modelled on terrain (SET_GROUND) that stands on
 //     that terrain touches the ground drawn under it: nothing floats.
 // Berms are drawn over the ground and answer groundY too, so the points
@@ -42,6 +45,7 @@ test('the raised ground stays under every road and holds up the terrain pieces',
     for (const id of cup.tracks) {
       const b = buildTrack(TRACK_LIST.find((t) => t.id === id));
       const S = b.centerline.samples, gy = b.groundY;
+      const flush = Math.max(gy, Math.min(...S.map((q) => q.pos.y)) - DEPTH);
       const layout = await loadTrack(page, id);
       const set = TRACKS[id].set || [];
       const own = layout.pieces.map((r, i) => ({ r, k: set[i]?.scale ?? 1 })).filter(({ r }) => SET_GROUND[r.model]);
@@ -68,7 +72,7 @@ test('the raised ground stays under every road and holds up the terrain pieces',
             if (!nearBerm(x, z)) under.push([x, z, Math.max(pos.y + lat.y * l - DEPTH * up.y, gy) + SLACK]);
           }
           const top = Math.min(pos.y + lat.y * half, pos.y - lat.y * half);
-          if (top - DEPTH - CLEAR <= gy) continue;   // raised road only
+          if (top - DEPTH - CLEAR <= flush) continue;   // raised road only
           for (const side of [-1, 1]) {
             for (const o of [1, 2.5, 4]) {
               const x = pos.x + lat.x * side * (half + o), z = pos.z + lat.z * side * (half + o);

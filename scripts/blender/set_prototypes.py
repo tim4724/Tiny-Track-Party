@@ -2901,10 +2901,7 @@ def cottage_row():
     # Three cottages along a lane (their fronts +X, to the road), each with a
     # back garden hedged off from the next: washing out either side, the
     # vegetable bed in the middle one, a shed. One chimney smokes. They stand
-    # on the bank the lane runs along (SET_GROUND), built flat on its top and
-    # lifted onto it, a hand's breadth sunk so no garden corner stands proud
-    # where the ground's grid rounds the bank's edge.
-    s0 = set_ground('cottage-row')(0.0, 0.0) - 0.3
+    # on the flat by the road, which a deck's cap holds level.
     WALL = (0xf8f8fb, 0xfde4c7, 0xf8f8fb)
     ROOF = (0xcf534f, 0xd9b054, 0x4f5260)
     DOOR = (0x339cf2, 0x22c46e, 0xff5040)
@@ -2923,9 +2920,6 @@ def cottage_row():
     box((5.0, 0.3, 6.0), (-7.0, 0.15, 0.0), 0x7a5a3a)
     for k in range(2):
         box((0.6, 0.5, 5.4), (-8.0 + k * 2.0, 0.45, 0.0), 0x61cb8b)
-    for o in bpy.context.scene.objects:          # onto the bank
-        o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('cottages')
 
 @piece(REAL)
@@ -3539,12 +3533,10 @@ def playground():
 
 @piece(REAL)
 def play_corner():
-    # Another corner of the same park on a low knoll of its own (SET_GROUND),
-    # so the playground's afternoon reaches round the lap: the climbing net
+    # Another corner of the same park on the flat by the road, so the
+    # playground's afternoon reaches round the lap: the climbing net
     # standing over a slide tower, its slide toward the road (+X), a pair of
-    # swings going, a grown-up on the bench. Built from the summit and lifted
-    # onto it.
-    s0 = set_ground('play-corner')(0.0, 0.0)
+    # swings going, a grown-up on the bench.
     climbing_net(-2.5, 2.5)
     slide_tower(1.0, -3.0)
     person((1.3, 1.7, -3.3), 0.3, 0xff5040, k=0.68, hair=1)
@@ -3558,9 +3550,6 @@ def play_corner():
     kid_swing(3, SX, -2.7, top, 0xffc044, 0)
     bench((-5.2, 0, 4.5), yaw=math.pi / 2)
     person((-5.3, 0.5, 4.7), 0.0, 0x22c46e, hair=2, sit=True)
-    for o in bpy.context.scene.objects:          # onto the summit
-        o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('corner')
 
 def ice_cream_van(ox, oz):
@@ -4023,7 +4012,7 @@ def ore_line():
     RAIL, TIE, Y = 12.0, 5.5, 0.3                                # a rail chord, the sleepers' spacing, rail height
     # Beside the low start straight the line crosses the flat on a timber
     # trestle, up a ramp out of the yard and down one into its cutting where
-    # the land rises toward the high bend: rails on the sand are a line a
+    # the land rises toward the east bend: rails on the sand are a line a
     # racer cannot read at that distance, a trestle a car high with the train
     # riding along it is the mine's line seen from the road.
     T0, T1, RISE, RAMP = 5.0 / k, 36.0 / k, 1.4 / k, 7.0 / k
@@ -4538,7 +4527,7 @@ def headframe():
     # Gulch: the far end of the mine's ore line, where a shaft goes straight
     # down: a timber headframe over the shaft collar at a big real one's
     # height (some thirty metres, eight car lengths, so its wheel shows over
-    # the high bend's deck; the builder's units are 1/0.6 of the world's),
+    # the east bend; the builder's units are 1/0.6 of the world's),
     # its back legs braced toward the hoist house (-X) the cable comes from,
     # the sheave wheel on top turning as the cage winds (anim_spin), the
     # cable over it and down to the cage; the ore line (set-ore-line) runs up

@@ -106,8 +106,8 @@ const DERIVED = [
   // Also not a C++ input: the baked waypoints + auto-placed furniture for the 16
   // seeded tracks. It dominates this file's runtime and it earns it — every other
   // entry re-derives in milliseconds because it just re-reads a JS file, while
-  // this one re-runs the whole search: 16 elevation solves and grid-anchor
-  // shortlists, each building real geometry through the native builder. That IS
+  // this one re-runs the whole pipeline: 16 elevation solves and decoration
+  // checks, each building real geometry through the native builder. That IS
   // the check. A cheaper version (one track per profile, say) would prove the
   // pipeline executes and then read like it proved the bake, which is the
   // failure this file's header is about.
