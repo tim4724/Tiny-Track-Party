@@ -50,6 +50,11 @@ function deriveClaim() {
 function loadClientId(roomCode) {
   const key = 'clientId_' + roomCode;
   try {
+    // A player is only in one room at a time — clean up other rooms' ids.
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('clientId_') && k !== key) localStorage.removeItem(k);
+    }
     let id = localStorage.getItem(key);
     if (!id) { id = 'tc-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(key, id); }
     return id;

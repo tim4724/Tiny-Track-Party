@@ -1464,3 +1464,23 @@ test('wire: a real phone\'s CONTROL reaches the sim through the real marshalling
 
   session.dispose();
 });
+
+test('phone: joining a room drops the clientIds of other rooms and keeps its own', async () => {
+  const { ControllerNet } = await H.controllerModules();
+  globalThis.localStorage.clear();
+  globalThis.localStorage.setItem('clientId_OLD1', 'old-1');
+  globalThis.localStorage.setItem('clientId_OLD2', 'old-2');
+  globalThis.localStorage.setItem('clientId_ROOM', 'phone-1');
+  globalThis.localStorage.setItem('tinytrack_other', 'kept');
+  globalThis.location.pathname = '/ROOM';
+  globalThis.location.search = '';
+  globalThis.location.hash = '';
+
+  const net = new ControllerNet({});
+
+  assert.equal(net.clientId, 'phone-1', 'a reload in the same room keeps the seat');
+  assert.deepEqual(
+    [...globalThis.localStorage._store.keys()].sort(),
+    ['clientId_ROOM', 'tinytrack_other'],
+  );
+});
