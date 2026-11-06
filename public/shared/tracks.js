@@ -1,5 +1,5 @@
 // Resolved waypoints for the seeded generated tracks (generated offline by
-// scripts/gen-tracks.mjs — solver-placed elevation + difficulty-profile decoration and the
+// scripts/gen-tracks.mjs — solved crossing elevation + difficulty-profile decoration and the
 // chosen start anchor baked in; pure data, no renderer). GEN_FURNITURE carries their
 // auto-placed oils/pads/boxes (scripts/track-gen.mjs placeFurniture), read via genFurn()
 // below — every generated track uses it, the Backyard four included (they were re-baked
@@ -281,12 +281,13 @@ export const SET_GROUND = {
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
-  // Flurry's lake: the ice lies on the plain, unraised, and the snow banks up
-  // round it (the road crosses its east edge on a low bank of its own). The
-  // bank stays low beside the road, so the ice reads over it.
+  // Flurry's lake: the ice lies on the plain, unraised, and a snow bank rings
+  // it (the road crosses its east edge on that bank). The road lies near the
+  // plain beside the lake, so the bank is kept under a racer's eye: a taller
+  // one walls the ice off from the road.
   'set-frozen-lake': [
     { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
-    { kind: 'ring', r: 21, w: 6, h: 1.6 }
+    { kind: 'ring', r: 21, w: 6, h: 0.7 }
   ],
   // Glacier's toboggan hill: the penguins' slide comes down its long face
   // toward the road (+X) to the water hole on the flat at its foot; broad
@@ -515,7 +516,7 @@ export const TRACKS = {
     set: [
       { model: 'set-snow-fort', u: 0.237, lat: -10, yaw: 0 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
-      { model: 'set-penguin-group', u: 0.712, lat: 9, yaw: 255 },
+      { model: 'set-penguin-group', u: 0.7, lat: 9, yaw: 255 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
       { model: 'set-advanced-camp', u: 0.897, lat: -13, yaw: 328 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 }
@@ -567,10 +568,10 @@ export const TRACKS = {
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
-      { model: 'set-cottage-row', u: 0.828, lat: 33, yaw: 0 },
+      { model: 'set-cottage-row', u: 0.828, lat: 26, yaw: 0 },
       { model: 'set-cottage-row', u: 0.045, lat: -19, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.62, lat: 13, yaw: 0 },
+      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
       { model: 'set-cottage-row', u: 0.88, lat: 14.5, yaw: 0 }
     ],
     // the valley the village lies in: two terraces climbing either side of
@@ -596,23 +597,26 @@ export const TRACKS = {
     // diagonal's top, where the racer comes off the north hairpin, the fire
     // smoking
     set: [
-      { model: 'set-treehouse', u: 0.05455, lat: 23, yaw: 25.44 },
+      { model: 'set-treehouse', u: 0.065, lat: 23, yaw: 25.44 },
       { model: 'set-football-pitch', u: 0.92176, lat: -9.578, yaw: 1.41 },
       { model: 'set-den-camp', u: 0.534, lat: 11.842, yaw: 13.39, scale: 1.4 },
-      { model: 'set-swing-oak', u: 0.14, lat: 9, yaw: 39.71 },
+      { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 }
     ]
   },
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
-    // The mill stream: it rises inside the north loop, runs under the long
-    // diagonal, over the east lawn and under the S-bend by the crossing,
-    // across the middle lawn and under the first bridge, along the north lawn
-    // and round the north-west corner into the race of the watermill on its
-    // pond, straight ahead of the grid. Laid reach by reach, each reach's end
-    // circle on the next one's, each turned so its willow stands clear of
-    // every deck (half round puts it on the other bank at the other end)
+    // The mill stream: it rises inside the north loop, winds over the east,
+    // middle and north lawns and round the north-west corner into the race of
+    // the watermill on its pond, straight ahead of the grid. The road lies on
+    // the lawn for most of the lap, so where they meet the stream fords it at
+    // the road's own level; it runs under the two bridges, and under the low
+    // trestle on the run to the line (gen-tracks SEEDS `trestle`: that
+    // stretch's hump stands on pillars rather than dam the water). Laid
+    // reach by reach, each reach's end circle on the next one's, each turned
+    // so its willow stands clear of every deck (half round puts it on the
+    // other bank at the other end)
     set: [
       { model: 'set-watermill', u: 0.09204, lat: 24.151, yaw: 35.46 },
       { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
@@ -666,9 +670,11 @@ export const TRACKS = {
     // bringing its channel; the far north-west reaches, out of a racer's
     // sight, are channel only, in `land`), from the north-west past the
     // hero's stretch by the north straight (tumbleweeds blowing down it),
-    // across the north strand, which dips through it at the bed's level,
-    // into the east loop and out under the east bend's bridge; a side wash
-    // comes in from the south under the south strand. The bed is a shallow
+    // across the north strand, which fords it at the bed's level, into the
+    // east loop and out under the east bend's low trestle (gen-tracks SEEDS
+    // `trestle`: the bend's hill stands on pillars over the bed, not on an
+    // embankment across it); a side wash comes in from the south across the
+    // south strand, another ford. The bed is a shallow
     // channel, so what a racer sees of the wash where the road leaves it is
     // what grows along it: saguaros, ocotillo and
     // brush on its banks (each reach brings a stand on each side), and two
@@ -895,7 +901,7 @@ export const TRACKS = {
 // the codegen refuses a cup without one.
 export const CUPS = [
   { id: 'beach',    name: 'Beach Cup',    difficulty: 1, tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
-  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings + climb (snow biome)
+  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings, hills and jumps (snow biome)
   { id: 'backyard', name: 'Backyard Cup', difficulty: 3, tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
   { id: 'canyon',   name: 'Canyon Cup',   difficulty: 3, tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
   // crazy: stunts (playroom biome — orange plastic track).

@@ -2169,7 +2169,7 @@ def windsock():
     # a rescue sled, two of the patrol with their probes by the door, and on
     # its pad beside the post the rescue helicopter, its rotors idling (the
     # windsock is the pad's); the post's radio mast over it all, banded red
-    # and white, what reads of the post over the kerb of the raised road.
+    # and white, what reads of the post over the kerb and the verge.
     cabin_hut(1.5, 0.85, 1.2, (-0.4, 0, -0.6), 0xcf534f, 0xeef4f9)
     disc(1.7, (-1.0, 0, 3.6), 0x868ba1, segs=20, h=0.04)            # the pad, its H
     for dz in (-0.35, 0.35):
@@ -2259,7 +2259,7 @@ def log_cabin():
     # Flurry: a corner of the village below the lake at its real size beside
     # a car: a log cabin two and a half units across and two smaller ones
     # either side of it, their chimneys smoking (the columns stand over the
-    # kerb of the raised road where the cabins do not), the woodpile under its
+    # kerb from far down the road, before the cabins do), the woodpile under its
     # lean-to between them, a villager.
     log_cabin_at(0.0, 0.0, 0.58, smoke=1.5)
     log_cabin_at(-0.6, 3.0, 0.42, smoke=True)
@@ -2601,7 +2601,7 @@ def expedition_camp():
     # of bright ridge tents (under a unit long) and the big blue mess tent
     # behind a curved wall of snow blocks against the wind, the radio mast
     # over them (some twelve metres, banded red and white, guyed: what reads
-    # over the kerb of the raised road) flying the expedition's flag across
+    # over the kerb from far down the road) flying the expedition's flag across
     # to the road, lines of prayer flags strung from its head, a long sled
     # loaded with kit, rucksacks, two climbers. All of it on the crest of its
     # snow bank (SET_GROUND), up where a racer sees it over the kerb, and
@@ -3100,7 +3100,7 @@ def treehouse():
 @piece(REAL)
 def swing_oak():
     # Pretzel: another of the garden's old oaks out by a bend, the tall thing
-    # a racer on a deck riding over the lawn sees: a tyre swing from its low
+    # a racer on the lawn's road sees over the kerb: a tyre swing from its low
     # bough with a child riding it, a bike dropped at the trunk. The same tree
     # as the treehouse's, a little smaller, so the summer reaches round the
     # lap without a second den.
@@ -3274,8 +3274,8 @@ def den_camp():
 # ahead of the grid, where the watermill's wheel turns in the race. The
 # stream is laid reach by reach (set-stream-reach, each placed along its
 # stretch, their tapered ends overlapping); the mill is the hero. Water is a
-# flat sheet on the lawn: from a deck riding over the garden it is a line of
-# blue under the kerb, so each reach brings a willow on its bank, the tall
+# flat sheet on the lawn: from the road, eye height over the grass, it is a
+# line of blue beside the kerb, so each reach brings a willow on its bank, the tall
 # thing that says stream.
 WATER, MUD = 0x7db8e8, 0xb08a5a
 STREAM_W, REACH = 4.2, 88.0   # its half width; a reach's length between its end circles
@@ -3317,8 +3317,8 @@ def stream_reach():
             box((0.18, 1.6 - 0.2 * j, 0.18), (x + 0.4 * math.cos(a), 0.8 - 0.1 * j, z + 0.4 * math.sin(a)),
                 (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
     # a willow on the -X bank a quarter of the way along, hanging over the
-    # water: the tall thing that says stream from a deck riding over the
-    # lawn, where the water itself is a line under the kerb. Turning a reach
+    # water: the tall thing that says stream from the road on the lawn,
+    # where the water itself is a line beside the kerb. Turning a reach
     # half round puts it on the other bank at the other end.
     willow((-W - 3.4, 0, -REACH / 4))
     join_still('drape_reach')

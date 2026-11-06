@@ -383,8 +383,11 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
   } else if (track == "pretzel") {
     // The children's summer: tents pitched round the garden. Timber kerbs
-    // and gantry, the treehouse's.
+    // and gantry, the treehouse's. Fewer wildflowers: the road lies on the
+    // lawn, so its whole verge is open to them, and a patch costs more
+    // vertices than a tent.
     t.props.scatter = { { 0, 0.4f, 0.34f, 0.08f, false, true }, { 1, 0.6f, 0.7f, 0.15f } };
+    t.scenery.clutterDensity = 0.15f;
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
   } else if (track == "tangle") {
@@ -396,7 +399,9 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.road.kerbA = 0x2bb673;
     t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
   } else if (track == "cloverleaf") {
-    // The park: the gantry in the climbing frame's blue.
+    // The park: the gantry in the climbing frame's blue. Fewer wildflowers,
+    // as on Pretzel: the road lies on the grass, its verge open to them.
+    t.scenery.clutterDensity = 0.15f;
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
   }
 }
