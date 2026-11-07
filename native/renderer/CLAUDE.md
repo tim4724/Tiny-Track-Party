@@ -535,9 +535,13 @@ enough to do both:
   apron follows the deck's top less what it rises over the chord either side.
 - **The land at the kerb.** Past the apron the band is the field as its OWN
   road raises it (another road's raised ground, a ramp's beside it, is the
-  grid's), handing over to the grid at its end and diving under it there.
-  Where the grid cannot draw what stands at the usual end (a mountain's flank
-  the cap pulls down) the band runs on to its last row, eased along the road.
+  grid's), kept within `kBandOver` of the grid but for a form authored
+  `near`: the band follows the road, not every swell the grid smoothed away,
+  so the land the set pieces were placed and scored against stays put. It
+  hands over to the grid at its end (light, normal and colour terms too) and
+  dives under it there. Where the grid cannot draw what stands at the usual
+  end (a `near` flank the cap pulls down) it runs on to its last row, eased
+  along the road.
 - **It yields**: inside a footprint (it comes down to the grid by
   `kHoldSlope` a unit as it nears one, so a piece's flat parts stand at their
   level), at the sea and a pond, along a street, where another road at its

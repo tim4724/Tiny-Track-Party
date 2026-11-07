@@ -1137,6 +1137,10 @@ private:
     // terrainField's scratch: the samples in reach of the point it is on, with
     // their distance past the edge (kept to save an allocation per call).
     mutable std::vector<std::pair<uint32_t, float>> mTsiNear;
+    // terrainField's scratch too: what the forms authored `near` raised at
+    // the point it last sampled (the verge band lets the land stand that
+    // much over the grid).
+    mutable float mNearRise = 0;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
@@ -1176,10 +1180,13 @@ private:
     // lookups (groundSurfaceY, the camera's GroundGrid::at) read the higher.
     void buildVergeBand(const TrackBin& tb);
     static constexpr int kBandRows = 10, kBandNarrow = 7;
-    static constexpr float kBandRow[kBandRows] = { -0.15f, 0.7f, 1.8f, 3.2f, 5.0f, 7.5f, 10.5f, 14.0f, 19.0f, 25.0f };
+    static constexpr float kBandRow[kBandRows] = { -0.05f, 0.7f, 1.8f, 3.2f, 5.0f, 7.5f, 10.5f, 14.0f, 19.0f, 25.0f };
     // Where the field stands kBandWide over the grid at row kBandNarrow, the
     // band runs on to its last row (buildVergeBand).
     static constexpr float kBandWide = 0.8f;
+    // How far past the apron the band may stand over the grid, but for a
+    // form authored `near` (its rise rides on top).
+    static constexpr float kBandOver = 0.4f;
     static constexpr float kBandStep = 2.4f, kBandTurnCos = 0.9962f;   // 5 degrees
     static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
     static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f;

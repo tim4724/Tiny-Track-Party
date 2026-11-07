@@ -488,6 +488,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         float* dell, float* bed, float liftCap) const {
     if (dell) *dell = 0;
     if (bed) *bed = 0;
+    mNearRise = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -602,7 +603,9 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         if (t >= 1.0f) continue;
         // A form authored `near` keeps its height to that close past the
         // kerb (the verge band draws it there); the rest clear the corridor.
-        hill += h * profile(t, s.top) * (s.near > 0 ? smooth01((edge - s.near) / kNearRamp) : clear);
+        const float rise = h * profile(t, s.top) * (s.near > 0 ? smooth01((edge - s.near) / kNearRamp) : clear);
+        hill += rise;
+        if (s.near > 0) mNearRise += rise;
         if (dell) *dell *= 1.0f - profile(t, 0);
     }
     // The mounds first, then the fans: a fan is debris lying ON what is under
@@ -917,7 +920,8 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const Edge& e = edges[q];
             if (e.fill <= 0 || e.reach < O) continue;
             const float px = e.E.x + e.l.x * O, pz = e.E.z + e.l.y * O;
-            want[q] = landAt(e, px, pz, O, nullptr, nullptr) - mGroundGrid.gridAt(px, pz) > kBandWide ? 1.0f : 0.0f;
+            const float field = landAt(e, px, pz, O, nullptr, nullptr), grid = mGroundGrid.gridAt(px, pz);
+            want[q] = std::min(field, grid + kBandOver + mNearRise) - grid > kBandWide ? 1.0f : 0.0f;
         }
         for (size_t q = 0; q < want.size(); q++) {
             const int k = (int) (q / 2), side = (int) (q % 2);
@@ -937,6 +941,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
     std::vector<float3> P((size_t) K * 2 * R);
     std::vector<float> dellV(P.size(), 0.0f), bedV(P.size(), 0.0f);
     std::vector<uint8_t> live(P.size(), 0);
+    std::vector<float> over(P.size(), 1.0f);   // how far into the hand-over to the grid
     for (int k = 0; k < K; k++) {
         const float s = rings[sel[k]].s;
         for (int side = 0; side < 2; side++) {
@@ -954,7 +959,11 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 const float grid = mGroundGrid.gridAt(px, pz);
                 float a = e.lev - (r == 0 ? kApronTuck : kApronGap);
                 if (o > kApronLevel) {
-                    const float land = std::max(field - e.hump * (1.0f - smooth01((o - kApronRun) / kRaiseRampR)),
+                    // The land keeps to the grid's within kBandOver, but for a
+                    // form authored `near`: the band follows the road, not
+                    // every swell the grid smoothed away.
+                    const float land = std::max(std::min(field - e.hump * (1.0f - smooth01((o - kApronRun) / kRaiseRampR)),
+                                                         grid + kBandOver + mNearRise),
                                                 grid + kBandLift);
                     a = lerp(a, land, smooth01((o - kApronLevel) / kApronRun));
                 }
@@ -978,6 +987,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 y = lerp(grid - kBandTuck, std::min(y, grid + rise), hold);
                 live[v] = hold > 0 && y > grid - kBandTuck;
                 P[v] = { px, y, pz };
+                over[v] = smooth01((o - b0) / (b1 - b0));
             }
         }
     }
@@ -991,26 +1001,49 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 const size_t c = vi(kn, side, r + 1), d = vi(k, side, r + 1);
                 if (!(live[a] | live[b] | live[c] | live[d])) continue;
                 for (const auto& t : { std::array<size_t, 3>{ a, b, c }, std::array<size_t, 3>{ a, c, d } }) {
-                    float3 n = cross(P[t[1]] - P[t[0]], P[t[2]] - P[t[0]]);
-                    if (n.y < 0) n = -n;
-                    for (const size_t q : t) {
-                        nrm[q] += n;
-                        mBandIdx.push_back((uint32_t) q);
+                    // A face diving under the grid shades nothing it touches.
+                    if (live[t[0]] & live[t[1]] & live[t[2]]) {
+                        float3 n = cross(P[t[1]] - P[t[0]], P[t[2]] - P[t[0]]);
+                        if (n.y < 0) n = -n;
+                        for (const size_t q : t) nrm[q] += n;
                     }
+                    for (const size_t q : t) mBandIdx.push_back((uint32_t) q);
                 }
             }
         }
     }
     if (mBandIdx.empty()) return;
     // Compact to the vertices the quads use.
+    // The grid's own light, normal and colour terms where the band hands over
+    // to it, so the two meet without a seam (buildStatic's normal, the mesh's
+    // triangle split for the rest).
+    const auto gridTerm = [&](const std::vector<float>& f, float x, float z) {
+        const int cols = mGroundGrid.cols, rows = mGroundGrid.rows;
+        const float u = (x - mTerrainX0) / mGroundGrid.sx, w = (z - mTerrainZ0) / mGroundGrid.sz;
+        if (u <= 0 || w <= 0 || u >= cols || w >= rows) return 0.0f;
+        const int c = std::min(cols - 1, (int) u), r = std::min(rows - 1, (int) w);
+        const float fu = u - c, fv = w - r;
+        const auto at = [&](int cc, int rr) { return f[(size_t) rr * (cols + 1) + cc]; };
+        if (fu + fv <= 1.0f) return at(c, r) + (at(c + 1, r) - at(c, r)) * fu + (at(c, r + 1) - at(c, r)) * fv;
+        return at(c + 1, r + 1) + (at(c, r + 1) - at(c + 1, r + 1)) * (1.0f - fu) + (at(c + 1, r) - at(c + 1, r + 1)) * (1.0f - fv);
+    };
+    const auto gridNormal = [&](float x, float z) {
+        const float sx = mGroundGrid.sx, sz = mGroundGrid.sz;
+        return normalize(float3{ (mGroundGrid.gridAt(x - sx, z) - mGroundGrid.gridAt(x + sx, z)) / (2 * sx), 1.0f,
+                                 (mGroundGrid.gridAt(x, z - sz) - mGroundGrid.gridAt(x, z + sz)) / (2 * sz) });
+    };
     std::vector<uint32_t> remap(P.size(), UINT32_MAX);
     for (uint32_t& q : mBandIdx) {
         if (remap[q] == UINT32_MAX) {
             remap[q] = (uint32_t) mBandVerts.size();
-            const float3 n = length(nrm[q]) > 1e-9f ? normalize(nrm[q]) : float3{ 0, 1, 0 };
             const float3& p = P[q];
+            const float3 ng = gridNormal(p.x, p.z);
+            float3 n = length(nrm[q]) > 1e-9f ? normalize(nrm[q]) : ng;
+            n = normalize(mix(n, ng, live[q] ? over[q] : 1.0f));
+            const float dell = lerp(dellV[q], gridTerm(mGroundDell, p.x, p.z), over[q]);
+            const float bed = lerp(bedV[q], gridTerm(mGroundBed, p.x, p.z), over[q]);
             mBandVerts.push_back({ p.x, p.y, p.z,
-                    packAlbedo(groundTint(tb.groundKind, dellV[q], bedV[q], n.y) * landTint(p.x, p.z), 1.0f,
+                    packAlbedo(groundTint(tb.groundKind, dell, bed, n.y) * landTint(p.x, p.z), 1.0f,
                                1.0f - rockWeight(tb.groundKind, n.y)) });
             mBandNormals.push_back(n);
             mGroundGrid.bandP.insert(mGroundGrid.bandP.end(), { p.x, p.y, p.z });
