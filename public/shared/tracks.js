@@ -432,19 +432,19 @@ export const TRACKS = {
     // outer bends the sea comes in to a few strides past the kerb (the
     // `shore`s), and the reef stands in that surf, its ledges awash.
     set: [
-      { model: 'set-rock-pool', u: 0.675, lat: 14.5, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
       { model: 'set-reef-shelf', u: 0.172, lat: 31.5, yaw: -1 },
       { model: 'set-reef-shelf', u: 0.228, lat: 31.5, yaw: -3 },
-      { model: 'set-reef-shelf', u: 0.297, lat: 16, yaw: -10 },
-      { model: 'set-reef-shelf', u: 0.353, lat: 16, yaw: 3 },
+      { model: 'set-reef-shelf', u: 0.297, lat: 18.1, yaw: -10 },
+      { model: 'set-reef-shelf', u: 0.353, lat: 18.2, yaw: 3 },
       { model: 'set-reef-shelf', u: 0.429, lat: 30.3, yaw: 19 },
-      { model: 'set-reef-shelf', u: 0.739, lat: 16, yaw: 18 },
-      { model: 'set-reef-shelf', u: 0.797, lat: 16, yaw: -3 },
-      { model: 'set-crab-pots', u: 0.64, lat: 8, yaw: 10 }
+      { model: 'set-reef-shelf', u: 0.739, lat: 18.4, yaw: 18 },
+      { model: 'set-reef-shelf', u: 0.797, lat: 18.2, yaw: -3 },
+      { model: 'set-crab-pots', u: 0.64, lat: 10.2, yaw: 10 }
     ],
     land: [
-      { kind: 'shore', u: 0.325, lat: 7, len: 60, r: 30 },
-      { kind: 'shore', u: 0.79, lat: 7.5, len: 80, r: 30 }
+      { kind: 'shore', u: 0.325, lat: 8.8, len: 60, r: 30 },
+      { kind: 'shore', u: 0.79, lat: 9.7, len: 80, r: 30 }
     ]
   },
   cove: {
@@ -461,10 +461,10 @@ export const TRACKS = {
     // which lies on the start straight, so its outer side is never the
     // road's reach (native/renderer/CLAUDE.md).
     set: [
-      { model: 'set-pirate-ship', u: 0.475, lat: 26, yaw: 180, y: -0.3 },
-      { model: 'set-jetty', u: 0.47, lat: 7.5 },
-      { model: 'set-shipwreck-ribs', u: 0.795, lat: 10.5, yaw: 75, y: -0.2 },
-      { model: 'set-pirate-camp', u: 0.09, lat: 7.5, yaw: -20 },
+      { model: 'set-pirate-ship', u: 0.475, lat: 28.2, yaw: 180, y: -0.3 },
+      { model: 'set-jetty', u: 0.47, lat: 9.7 },
+      { model: 'set-shipwreck-ribs', u: 0.795, lat: 13, yaw: 75, y: -0.2 },
+      { model: 'set-pirate-camp', u: 0.09, lat: 9.7, yaw: -20 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 }
     ],
     // Skull Rock is the end of a headland: a ridge running out from the
@@ -475,8 +475,8 @@ export const TRACKS = {
     // a crest that wide and a tint that deep reads green from the road.
     land: [
       { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.45, tint: 0x84c890 },
-      { kind: 'shore', u: 0.45, lat: 10, len: 56, r: 30 },
-      { kind: 'shore', u: 0.795, lat: 9, len: 24, r: 18 }
+      { kind: 'shore', u: 0.45, lat: 12.2, len: 56, r: 30 },
+      { kind: 'shore', u: 0.795, lat: 11.2, len: 24, r: 18 }
     ]
   },
   driftwood: {
@@ -489,16 +489,16 @@ export const TRACKS = {
     // what lies low beyond them, so the line is long pieces with their root
     // plates reared up, and the bonfire waits past the last hop.
     set: [
-      { model: 'set-driftwood-trunk', u: 0.29, lat: -6, yaw: 180 },
-      { model: 'set-strand-line', u: 0.33, lat: -8.5, yaw: 176 },
-      { model: 'set-strand-line', u: 0.39, lat: -7, yaw: -4 },
-      { model: 'set-bonfire', u: 0.45, lat: -6.5, yaw: 160 }
+      { model: 'set-driftwood-trunk', u: 0.29, lat: -9, yaw: 180 },
+      { model: 'set-strand-line', u: 0.33, lat: -10.2, yaw: 176 },
+      { model: 'set-strand-line', u: 0.39, lat: -9.3, yaw: -4 },
+      { model: 'set-bonfire', u: 0.45, lat: -8.7, yaw: 160 }
     ],
     land: [
       { kind: 'ridge', u: 0.58, lat: 36, len: 50, r: 15, h: 5, top: 0.2 },
       { kind: 'ridge', u: 0.97, lat: 32, r: 16, h: 4.5, top: 0.15 },
       // the storm sea comes up the beach to the strand line it left
-      { kind: 'shore', u: 0.37, lat: -14, len: 110, r: 40 }
+      { kind: 'shore', u: 0.37, lat: -16.2, len: 110, r: 40 }
     ]
   },
   riptide: {
@@ -520,11 +520,11 @@ export const TRACKS = {
     // the beach: the promenade's huts and kiosk on a boardwalk at the outer
     // kerb, facing the cars down the straight, its pier out into the sea.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 },
-      { model: 'set-promenade', u: 0.393, lat: -6, yaw: 180 }
+      { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
+      { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 }
     ],
     land: [
-      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 },
+      { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
       { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 11 }
     ]
   },
