@@ -1,6 +1,6 @@
 'use strict';
 // The scene budget's baseline must cover every track (and only those), at
-// every player count the gate reads, and carry a ceiling.
+// every player count the gate reads, and carry both 4P ceilings.
 //
 // WHY. `npm run budget:scene` needs a browser and a lap per track, so it does
 // not run here — and a gate that is only run by hand is a gate that drifts. A
@@ -31,6 +31,7 @@ test('scene budget: the baseline prices every track at 1 and 4 players', async (
     'priced tracks that no longer exist — delete their entries');
 });
 
-test('scene budget: the 4P ceiling is set', () => {
+test('scene budget: the 4P ceilings are set', () => {
   assert.ok(baseline.ceiling > 0, 'tests/fixtures/scene-budget.json needs a ceiling');
+  assert.ok(baseline.drawCeiling > 0, 'tests/fixtures/scene-budget.json needs a drawCeiling');
 });

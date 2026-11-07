@@ -873,12 +873,14 @@ slot alone, so a merge change (per-placement bakes) must too.
 `npm run budget:scene` counts what each cell submits over a whole lap (the
 count is decided in this C++ before any backend sees it, so it transfers to
 the box) and fails a track whose worst frame grows, a shipped track's 4P frame
-over the baseline's `ceiling`, and any static dressing the merge left live-lit
-(`ttp_display_debug_live_dressing` names it). The ceiling is a box fact, the
-worst frame a track may have while 4P still holds, so it moves only on a box
-reading. Over budget: move it off the vista (what every cell sees down the
-straight), then make it lighter. Never a per-fragment term, a blended material
-or a new material.
+over the baseline's `ceiling` or its 4P draws per cell over `drawCeiling`, and
+any static dressing the merge left live-lit (`ttp_display_debug_live_dressing`
+names it). The ceilings are box facts, the most vertices and the most draws a
+track may have while 4P still holds; on the box each limits as much as the
+other, so both are gated (the calibration is in `scripts/scene-budget.mjs`).
+They move only on a box reading. Over budget: move it off the vista (what every
+cell sees down the straight), then make it lighter or merge it. Never a
+per-fragment term, a blended material or a new material.
 A biome PROP is capped per model before it is priced at all
 (`tests/display-abi.test.js`): it is stamped many times a lap, and the kit
 authors a barrel with a car's vertices. `scripts/slim-kit-models.mjs`

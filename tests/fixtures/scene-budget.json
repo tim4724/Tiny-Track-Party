@@ -1,5 +1,6 @@
 {
-  "ceiling": 136500,
+  "ceiling": 180000,
+  "drawCeiling": 240,
   "tracks": {
     "tidepool": {
       "1": {

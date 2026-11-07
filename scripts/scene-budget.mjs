@@ -9,7 +9,22 @@
 // count the box submits (perf-features.mjs reproduced the device ledger's
 // figures exactly). It is a PROXY: the box stays the verdict, once per batch
 // (`perf:race --platform androidtv --players 4 --vk 1 --timeline`), and that
-// verdict is what calibrates `ceiling` in the baseline.
+// verdict is what calibrates `ceiling` and `drawCeiling` in the baseline.
+//
+// THE CALIBRATION. On the Google TV Streamer (GE9215, Vulkan, render scale
+// pinned at 0.5: 4P at 540 lines), 40 s timeline races of stress builds that
+// copy set pieces round the lap, read as clean seconds per run against this
+// count's 4P worst frame and its most draws per cell:
+//   ~131k vertices, 135-186 draws    40 of 40, every run
+//   210k, 195 draws (tidepool)       40 of 41, 39 of 40: holds
+//   188k, 271 draws (pretzel)        40 of 41: holds
+//   175k, 278 draws (ribbon)         40, 34, 39 of 41: the edge
+//   217k, 363 draws (ribbon)         34-36 of 40: fails every run
+//   226k and up, 240+ draws          fails everywhere
+// Neither count alone separates the builds that hold from the ones that fail
+// (210k holds on 195 draws, 175k wobbles on 278): draws limit the box as much
+// as vertices do. So both are gated, `ceiling` (180k) under the first vertex
+// count that failed and `drawCeiling` (240) under the draws that failed.
 //
 // WHAT IT GATES, per track:
 //   • LIVE-LIT STATIC DRESSING must be none (ttp_display_debug_live_dressing).
@@ -18,8 +33,9 @@
 //   • The WORST sampled frame's vertices per cell at each player count must not
 //     grow past the track's recorded figure (TOLERANCE), and at four players no
 //     SHIPPED track may pass `ceiling` — the worst frame a shipped track has and
-//     the box still holds. A dev track (the showroom, a probe) is priced and
-//     tracked but never raced by a party of four, so the ceiling is not its.
+//     the box still holds — nor may the lap's most draws per cell pass
+//     `drawCeiling`. A dev track (the showroom, a probe) is priced and tracked
+//     but never raced by a party of four, so the ceilings are not its.
 //     Worst, not median: the 4P frame that drops is the vista, every cell
 //     looking down the straight (native/renderer/CLAUDE.md).
 //
@@ -32,7 +48,7 @@
 // and headless: aspect is what the frustum needs, not pixels.
 //
 // Usage: npm run budget:scene [-- --track cove,tangle] [--players 1,4]
-//        [--record]   rewrite the baseline's per-track figures (ceiling stays)
+//        [--record]   rewrite the baseline's per-track figures (the ceilings stay)
 //        [--every 30] frames between samples
 import fs from 'node:fs';
 import path from 'node:path';
@@ -162,8 +178,9 @@ for (const id of ids) {
     const row = { worst: Math.round(worst.verts), p90: Math.round(pct(samples.map((s) => s.verts), 0.9)),
                   dressing: Math.round(worst.dress) };
     recorded[id][players] = row;
-    // Draws and live-lit vertices are REPORTED, not gated: what a draw costs is
-    // a fact about the device (native/renderer/CLAUDE.md), so the box judges them.
+    // Draws are gated like vertices (drawCeiling, below): the box calibration
+    // in the header found them limiting as much. The live-lit vertices are
+    // only reported; the gate on them is that no static dressing is live-lit.
     const maxDraws = Math.max(...samples.map((s) => s.draws));
     console.log(`${id.padEnd(16)} ${players}  ${String(samples.length).padStart(7)}  ${k(row.worst)}  `
       + `${k(row.p90)}   ${k(row.dressing)} (${(100 * row.dressing / row.worst).toFixed(0).padStart(2)}%)`
@@ -183,6 +200,10 @@ for (const id of ids) {
       failures.push(`${id} 4P: worst frame ${k(row.worst).trim()}/cell is over the ceiling `
         + `${k(baseline.ceiling).trim()} — move it off the vista or make it lighter`);
     }
+    if (players === 4 && TRACKS[id] && baseline.drawCeiling != null && maxDraws > baseline.drawCeiling) {
+      failures.push(`${id} 4P: ${maxDraws.toFixed(0)} draws/cell at the lap's busiest frame, over the `
+        + `draw ceiling ${baseline.drawCeiling} — move pieces off the vista or merge them`);
+    }
   }
 }
 
@@ -194,7 +215,8 @@ if (RECORD) {
     baseline.tracks[id] = { ...(baseline.tracks[id] || {}), ...byP };
   }
   fs.writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + '\n');
-  console.log(`\nrecorded ${path.relative(ROOT, BASELINE)} (ceiling ${baseline.ceiling ?? 'unset'} kept)`);
+  console.log(`\nrecorded ${path.relative(ROOT, BASELINE)} (ceiling ${baseline.ceiling ?? 'unset'}, `
+    + `drawCeiling ${baseline.drawCeiling ?? 'unset'} kept)`);
 }
 if (failures.length) {
   console.error(`\n${failures.length} over budget:\n  ${failures.join('\n  ')}`);
