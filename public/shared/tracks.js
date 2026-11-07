@@ -856,9 +856,10 @@ export const TRACKS = {
     name: 'Helix', segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
     // The marble run: the lap in small (about 50 cm of it) where the top
-    // straight points, marbles climbing one tower's screw, along the high
-    // chute and down the other's (the two spirals and the skyway), then home
-    // along the floor; more of the kit stands about the room: a marble screw
+    // straight points, marbles up inside one tower and out of its cup, down
+    // its own screw or along the high chute and down the other's (the two
+    // spirals and the skyway), then home along the floor, never rolling
+    // uphill in sight; more of the kit stands about the room: a marble screw
     // round a column, a slinky walking down off an alphabet block beside
     // it, where the grid straight points, and a zigzag of chutes between two columns
     // outside the raised straight and again by the loop's entry; a tin
