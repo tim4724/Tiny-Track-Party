@@ -48,9 +48,12 @@ export const FEAT = {
   FOG_VERTEX: 0x8000,
   ALL: 0x9FFC,
 };
-// The TTP_DEBUG_* knobs above FEAT's range are not mirrored here (the test
-// holds this table to the TTP_FEAT_* set); they ride ?features= as the raw
-// mask.
+// The TTP_DEBUG_* knobs above FEAT's range ride ?features= as the raw mask;
+// the one a harness sets by name is here, held to the header like FEAT.
+export const DEBUG = {
+  // Every set-piece placement in its layout row's flat `id` colour (see/landmarks).
+  SET_ID: 0x10000000,
+};
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
@@ -150,6 +153,7 @@ export class Display {
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
+      antialias: mod.cwrap('ttp_display_antialias', null, ['number']),
       debugChasePitch: mod.cwrap('ttp_display_debug_chase_pitch', 'number', ['number']),
       debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
       debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
@@ -829,6 +833,9 @@ export class Display {
   // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
   // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
   debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
+  // The full-screen antialias pass (ttp_display_antialias): on in every shell
+  // that can afford it; a pixel count turns it off so edges keep their ids.
+  antialias(on) { this._fn.antialias(on ? 1 : 0); }
   // Chase-cam tilt in degrees below level (negative = authored); answers the
   // authored pitch. The debug panel's "Camera angle" slider, nothing else.
   debugChasePitch(deg) { return this._fn.debugChasePitch(deg); }

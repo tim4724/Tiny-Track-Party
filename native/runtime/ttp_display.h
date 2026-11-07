@@ -996,6 +996,15 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * the shadow pass's placement, depth and seams by eye, on a TV, in a race.
  * TTP_FEAT_ALL | this = 0x4009FFC. A look knob, not an ablation. */
 #define TTP_DEBUG_SHADOW_SOLID 0x4000000
+/* SET paints every set-piece PLACEMENT (its baked tiles, its `anim_` parts and
+ * its smoke) in one flat colour of its own, the `id` of its row in
+ * ttp_display_set_layout, while everything else draws as it does, so a
+ * readback counts how much of each piece a camera really sees through the
+ * deck, the terrain and the trees (npm run see:landmarks). The colour lands
+ * exact only with TTP_FEAT_FOG_VERTEX cleared and the antialias pass off.
+ * Applied when the bit flips and when the dressing is (re)built, never per
+ * frame. TTP_FEAT_ALL | this = 0x10009FFC. */
+#define TTP_DEBUG_SET_ID 0x10000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 /* DEBUG: tilt every chase rig to `deg` below level by raising or lowering the
