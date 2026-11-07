@@ -45,6 +45,8 @@ npm run see:landmarks [-- --track id] [--out dir] [--four]
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)
+npm run film:laps -- --track id [--tree path] [--players 4]   # cell 0's lap 2, frame-gated: two trees' films are one race
+npm run score:verge -- --track id|--all [--tree path] [--map] # how much of the lap the world reaches the kerb, + skyline
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
                                   # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)
