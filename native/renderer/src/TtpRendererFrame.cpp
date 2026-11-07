@@ -2938,7 +2938,10 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // The far forms (LodRange) are every race cell's trade past that cell's
     // own gate; only the overviews draw every near range.
     const bool lods = input.viewCount > 0 && (input.flags & TTP_FRAME_OVERVIEW) == 0;
-    if (!lods) chooseLods(float3{ 0 }, 0.0f);
+    if (!lods) {
+        chooseLods(float3{ 0 }, 0.0f);
+        chooseCuts(float3{ 0 }, 0.0f);
+    }
     if (input.viewCount == 0) {
         restoreAmbientRange();   // the overview draws the cloud's whole range
         if (mOverlayFolded) {
@@ -3032,8 +3035,10 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             if (lods) {
                 // THIS cell's pixels per radian, so the trade scales itself to
                 // the pixels it has (TtpRenderer.h, LodRange).
-                chooseLods(world[3].xyz, (float) rect.h
-                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f)));
+                const float pxPerRad = (float) rect.h
+                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
+                chooseLods(world[3].xyz, pxPerRad);
+                chooseCuts(world[3].xyz, pxPerRad);
             }
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
@@ -3087,6 +3092,33 @@ void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
         rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES, r.vb,
                 far ? r.farIb : r.ib, far ? r.farOff : r.off, far ? r.farCnt : r.cnt);
     }
+}
+
+// Lite's small-thing cut for one cell (CutRange): what holds only things
+// smaller than kCutPx pixels of THIS cell leaves its scene. Stated only when it
+// changes, like the far forms. On the heavy tracks at the box's 4P cell it
+// takes a few percent of the worst frame's vertices (the far clutter, mostly)
+// and of its draws (the far scatter runs).
+void TtpRenderer::chooseCuts(const float3& cam, float pxPerRad) {
+    const float k = pxPerRad / kCutPx;
+    for (CutRange& c : mCuts) {
+        if (c.sheet && !mDressSheets) continue;   // the ablation holds them out
+        const float3 d = clamp(cam, c.lo, c.hi) - cam;
+        const float reach = c.size * k;
+        const bool cut = k > 0.0f && dot(d, d) > reach * reach;
+        if (cut == c.cut) continue;
+        c.cut = cut;
+        if (cut) mScene->remove(c.entity); else mScene->addEntity(c.entity);
+    }
+}
+
+// Every cut back in the scene and the list emptied, before what it names is
+// rebuilt or destroyed.
+void TtpRenderer::restoreCuts() {
+    for (const CutRange& c : mCuts) {
+        if (c.cut) mScene->addEntity(c.entity);
+    }
+    mCuts.clear();
 }
 
 // The monster ghost swap for one cell: a truck looming in front of THAT cell's
@@ -3171,8 +3203,7 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
     // cloud spans a few percent of its distance, far less than the gap from
     // FOG_CUTOFF to the dome); if it were the fog bound would win, since a
     // hidden edge is the lesser of the two artefacts.
-    const float dome = SKY_DOME_SHARE * farZ * std::cos((float) M_PI / SKY_DOME_SEGS)
-            * std::cos((float) M_PI / (2 * SKY_DOME_RINGS));
+    const float dome = SKY_DOME_SHARE * farZ * mSkyInset;
     const auto fitSkyBand = [&](float3& p, float& scale, float near, float far) {
         if (near <= 0.0f) return;
         const float tMin = FOG_CUTOFF / near;
@@ -3428,7 +3459,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) { destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
+        if (mMergeOff) { restoreCuts(); destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
         else buildDressingMerge();
         if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;

@@ -303,6 +303,14 @@ class DisplayHost(
             // is not this decision, and one taken on a cheap corner prices it at
             // half a millisecond and flatters it.
             Ttp.ttp_display_antialias(0)
+            // THE DETAIL TIER, which the C++ decides from the platform: lite on
+            // this box (shells/androidtv/CLAUDE.md, under "The frame budget on
+            // this GPU"), or what `debug.ttp.detail` asks for (PerfDebug).
+            // Before the first build, which meshes it; on the CREATE branch,
+            // since a recreated surface is a new display.
+            val tier = TtpJson.str(Ttp.ttp_display_detail(TtpJson.arg(PartyNet.CP_PLATFORM),
+                TtpJson.arg(PerfDebug.getprop("debug.ttp.detail"))))
+            Log.i(TAG, "detail tier $tier")
             // The overscan margin the per-cell HUD is placed inside. Android has
             // nothing to ask — a TV does not tell an app what it crops — so this
             // is the authored margin, taken from the token the web's CSS

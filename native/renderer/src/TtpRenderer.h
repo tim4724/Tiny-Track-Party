@@ -182,6 +182,14 @@ public:
         if (on != mShadowsEnabled) { mShadowsEnabled = on; dropStaticKey(); }
     }
 
+    // THE LITE DETAIL TIER (ttp_display_detail decides it): the same world
+    // with what a racer barely sees taken off the frame, each cut beside the
+    // code it changes and the list in native/renderer/CLAUDE.md ("The detail
+    // tier"). Latched like the shadows, since most of the cuts are built in.
+    void setLite(bool on) {
+        if (on != mLite) { mLite = on; dropStaticKey(); }
+    }
+
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
     // later scene is built with, and — for the asset gallery's MODEL BENCH —
@@ -606,16 +614,18 @@ private:
     // a range under 64 triangles is not worth a renderable of its own.
     static constexpr float kSheetTile = 48.0f;
     static constexpr uint32_t kSheetMinTris = 64;
-    // The live values: the constants above, or coarser on the Android GL
-    // fallback (init), where a draw costs more than the vertices it saves.
+    // The live values: the constants above, or coarser where a draw costs
+    // more than the vertices it saves: the Android GL fallback, and the lite
+    // tier (buildStatic sets them per scene).
     float mSheetTile = kSheetTile;
     uint32_t mSheetMinTris = kSheetMinTris;
     // A set piece's bake tile (bakePlacements), split by whole part. Finer
     // than a sheet's because a piece is dense where a sheet is sparse, so a
     // tile drawn whole to a camera beside it costs vertices a sheet's would
-    // not; doubled on the GL fallback like the sheet's.
+    // not; doubled with the sheet's.
     static constexpr float kPieceTile = 8.0f;
     float mPieceTile = kPieceTile;
+    bool mLite = false;   // setLite
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -653,6 +663,10 @@ private:
     //   rings, where the cubemap was 64 texels a face).
     filament::Material* mSkyMaterial = nullptr;   // renderer-lifetime, like vroadvis
     Mesh mSkyDome;
+    // How far inside its unit sphere the dome's nearest facet sits (the
+    // cosines of a facet's half-angles), for the sky band's fit
+    // (orientCellBillboards); the lite tier builds the dome coarser.
+    float mSkyInset = 1.0f;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     // Cheap-matte live-lit (vlit.mat, custom Lambert): the meshes that MOVE.
     // Every static lit surface bakes its light instead (custom0, bakeLight).
@@ -786,6 +800,28 @@ private:
         int ring0 = -1, ring1 = -1;
     };
     std::vector<LodRange> mLods;
+    // LITE'S SMALL-THING CUT, the far form that is nothing: a renderable of
+    // small things (a run of scatter or props, a chunk of clutter) leaves a
+    // cell's scene once `size`, the height of what it holds, covers under
+    // kCutPx pixels of THAT cell from the nearest point of its box, and comes
+    // back when it covers more. Per cell like chooseLods, so a 1P cell keeps
+    // what a 4P one drops. By scene membership: a layer bit is spoken for, and
+    // a range of nothing is still a draw. `sheet` marks a dressing SHEET,
+    // which the sheets ablation owns while it is off (applyDressSheets).
+    struct CutRange {
+        utils::Entity entity;
+        filament::math::float3 lo{ 0 }, hi{ 0 };
+        float size = 0;
+        bool sheet = false;
+        bool cut = false;
+    };
+    std::vector<CutRange> mCuts;
+    static constexpr float kCutPx = 6.0f;
+    // Registers a built renderable (lite only); size 0 takes its box's height.
+    void addCut(utils::Entity e, float size, bool sheet);
+    // Puts every cut back, or (pxPerRad 0) leaves them all in.
+    void chooseCuts(const filament::math::float3& cam, float pxPerRad);
+    void restoreCuts();
     // The ring intervals (wrapped, [a, b)) this frame's car shadows cover,
     // from placeCarShadow; cleared with the draws.
     std::vector<std::pair<int, int>> mShadowRings;

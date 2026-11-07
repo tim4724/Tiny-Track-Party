@@ -32,8 +32,9 @@ npm run check:blob-cache          # Do blobs kept between RUNS survive the round
 npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|3|4] [--track id]
                                   # THE BENCH: one live race, autopiloted players at the
                                   # back of a full grid, one readout shape on all three
-npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap,
-                                  # against tests/fixtures/scene-budget.json. Run it
+npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap, in
+                                  # each detail tier (full: web + Apple TV, lite: Android
+                                  # TV), against tests/fixtures/scene-budget.json. Run it
                                   # after adding scenery; the box is the verdict per batch
 npm run score:landmarks [-- --track id] [--board dir]
                                   # how long a racer sees each set piece over a lap, and
@@ -45,8 +46,10 @@ npm run see:landmarks [-- --track id] [--out dir] [--four]
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)
-npm run film:laps -- --track id [--tree path] [--players 4]   # cell 0's lap 2, frame-gated: two trees' films are one race
-npm run score:verge -- --track id|--all [--tree path] [--map] # how much of the lap the world reaches the kerb, + skyline
+npm run film:laps -- --track id [--tree path] [--players 4] [--detail lite]   # cell 0's lap 2, frame-gated:
+                                  # two trees' (or tiers') films are one race
+npm run score:verge -- --track id|--all [--tree path] [--detail lite] [--map] # how much of the lap the
+                                  # world reaches the kerb, + skyline
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
                                   # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)

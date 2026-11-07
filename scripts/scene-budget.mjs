@@ -9,12 +9,20 @@
 // count the box submits (perf-features.mjs reproduced the device ledger's
 // figures exactly). It is a PROXY: the box stays the verdict, once per batch
 // (`perf:race --platform androidtv --players 4 --vk 1 --timeline`), and that
-// verdict is what calibrates `ceiling` and `drawCeiling` in the baseline.
+// verdict is what calibrates a tier's `ceiling` and `drawCeiling`.
 //
-// THE CALIBRATION. On the Google TV Streamer (GE9215, Vulkan, render scale
-// pinned at 0.5: 4P at 540 lines), 40 s timeline races of stress builds that
-// copy set pieces round the lap, read as clean seconds per run against this
-// count's 4P worst frame and its most draws per cell:
+// ONE BASELINE PER DETAIL TIER (ttp/detail.h). The Android TV draws LITE and
+// the web and the Apple TV draw FULL, so each tier is priced, tracked and
+// ceilinged on its own: `lite` carries the box's ceilings below, and `full`
+// carries a PROVISIONAL 260k / 360 that awaits an Apple TV calibration (the
+// same stress-build method, on the Apple TV at 4P and the operating point it
+// settles on). Until one is read, full's ceilings are a guess, not a box fact.
+//
+// THE CALIBRATION (lite's ceilings). On the Google TV Streamer (GE9215,
+// Vulkan, render scale pinned at 0.5: 4P at 540 lines), 40 s timeline races of
+// stress builds that copy set pieces round the lap, read as clean seconds per
+// run against this count's 4P worst frame and its most draws per cell (taken
+// before the tiers existed, so of the full world; a box fact either way):
 //   ~131k vertices, 135-186 draws    40 of 40, every run
 //   210k, 195 draws (tidepool)       40 of 41, 39 of 40: holds
 //   188k, 271 draws (pretzel)        40 of 41: holds
@@ -26,16 +34,17 @@
 // as vertices do. So both are gated, `ceiling` (180k) under the first vertex
 // count that failed and `drawCeiling` (240) under the draws that failed.
 //
-// WHAT IT GATES, per track:
+// WHAT IT GATES, per track and tier:
 //   • LIVE-LIT STATIC DRESSING must be none (ttp_display_debug_live_dressing).
 //     A model that falls off the baked path is silent on the glass and pays
 //     vertex shading in every cell; this names it.
 //   • The WORST sampled frame's vertices per cell at each player count must not
-//     grow past the track's recorded figure (TOLERANCE), and at four players no
-//     SHIPPED track may pass `ceiling` — the worst frame a shipped track has and
-//     the box still holds — nor may the lap's most draws per cell pass
-//     `drawCeiling`. A dev track (the showroom, a probe) is priced and tracked
-//     but never raced by a party of four, so the ceilings are not its.
+//     grow past the tier's recorded figure for the track (TOLERANCE), and at
+//     four players no SHIPPED track may pass the tier's `ceiling`, the worst
+//     frame a shipped track may have while that tier's device still holds, nor
+//     may the lap's most draws per cell pass its `drawCeiling`. A dev track
+//     (the showroom, a probe) is priced and tracked but never raced by a party
+//     of four, so the ceilings are not its.
 //     Worst, not median: the 4P frame that drops is the vista, every cell
 //     looking down the straight (native/renderer/CLAUDE.md).
 //
@@ -44,11 +53,13 @@
 // The lap is wound UNDRAWN (Stage.setUndrawn: sim + the renderer's CPU half,
 // nothing submitted) and only the sampled frames draw, each twice: the full
 // scene, then without the DRESSING group, which splits the world's own share
-// out of the total. Counts do not depend on resolution, so the page is small
-// and headless: aspect is what the frustum needs, not pixels.
+// out of the total. Headless, at a page size per tier (VIEW): the far forms
+// and lite's cuts gate on a cell's own pixels, so lite is priced at the box's
+// 4P buffer (960x540); full keeps the small page its figures were recorded
+// at, which swaps the far forms in a little early.
 //
-// Usage: npm run budget:scene [-- --track cove,tangle] [--players 1,4]
-//        [--record]   rewrite the baseline's per-track figures (the ceilings stay)
+// Usage: npm run budget:scene [-- --track cove,tangle] [--players 1,4] [--detail full,lite]
+//        [--record]   rewrite the measured tiers' per-track figures (the ceilings stay)
 //        [--every 30] frames between samples
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,6 +71,10 @@ const BASELINE = path.join(ROOT, 'tests/fixtures/scene-budget.json');
 const TOLERANCE = 0.02;
 const a = args();
 const PLAYERS = String(a.players || '1,4').split(',').map(Number);
+const TIERS = String(a.detail || 'full,lite').split(',');
+for (const t of TIERS) if (t !== 'full' && t !== 'lite') throw new Error(`--detail: full and/or lite, not ${t}`);
+// HOW, in the header, has why the tiers are priced at different sizes.
+const VIEW = { full: { width: 480, height: 270 }, lite: { width: 960, height: 540 } };
 const EVERY = parseInt(a.every || '30', 10);
 const RECORD = !!a.record;
 
@@ -69,16 +84,15 @@ const allIds = [...Object.keys(TRACKS), ...Object.keys(DEV_TRACKS)];
 const ids = a.track ? String(a.track).split(',') : allIds;
 for (const id of ids) if (!allIds.includes(id)) throw new Error(`unknown track ${id}`);
 
-const baseline = fs.existsSync(BASELINE)
-  ? JSON.parse(fs.readFileSync(BASELINE, 'utf8')) : { ceiling: null, tracks: {} };
+const baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8'));
 
 const app = await serveApp();
 const browser = await launchBrowser();
 
-// One lap of one track at one player count: per sampled frame, vertices per
-// cell in total and the dressing's share of them, plus draws.
-async function measure(track, players) {
-  const ctx = await browser.context({ viewport: { width: 480, height: 270 } });
+// One lap of one track at one player count in one tier: per sampled frame,
+// vertices per cell in total and the dressing's share of them, plus draws.
+async function measure(track, players, tier) {
+  const ctx = await browser.context({ viewport: VIEW[tier] });
   await ctx.addInitScript(() => {
     const c = (window.__glCount = { draws: 0, verts: 0, lit: 0 });
     const proto = WebGL2RenderingContext.prototype;
@@ -115,10 +129,12 @@ async function measure(track, players) {
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.error('  [page error]', e.message));
-  await page.goto(displayURL(app.port, { scenario: 'bench', players, track, seed: 1, gate: 1 }));
+  await page.goto(displayURL(app.port, { scenario: 'bench', players, track, seed: 1, gate: 1, detail: tier }));
   // Polled on a timer: under the gate rAF is the driver's, and a rAF poll never fires.
   await page.waitForFunction(() => window.__engine && window.__scene?.sceneBuilt(), null,
     { timeout: 90000, polling: 250 });
+  const drawn = await page.evaluate(() => window.__scene.detail);
+  if (drawn !== tier) throw new Error(`${track}: asked for the ${tier} tier, the page drew ${drawn}`);
   const out = await page.evaluate(async ({ every }) => {
     const { FEAT } = await import('/display/render/Display.js');
     const stage = window.__scene, display = stage.display;
@@ -167,42 +183,45 @@ async function measure(track, players) {
 const pct = (xs, p) => { const s = [...xs].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 const k = (v) => `${(v / 1000).toFixed(1)}k`.padStart(7);
 const failures = [];
-const recorded = {};
+const recorded = { full: {}, lite: {} };
 
-console.log('track            P  samples   worst/cell  p90/cell  dressing@worst  draws@worst  max draws  lit@worst');
-for (const id of ids) {
-  recorded[id] = {};
-  for (const players of PLAYERS) {
-    const { live, samples } = await measure(id, players);
-    const worst = samples.reduce((m, s) => (s.verts > m.verts ? s : m), samples[0]);
-    const row = { worst: Math.round(worst.verts), p90: Math.round(pct(samples.map((s) => s.verts), 0.9)),
-                  dressing: Math.round(worst.dress) };
-    recorded[id][players] = row;
-    // Draws are gated like vertices (drawCeiling, below): the box calibration
-    // in the header found them limiting as much. The live-lit vertices are
-    // only reported; the gate on them is that no static dressing is live-lit.
-    const maxDraws = Math.max(...samples.map((s) => s.draws));
-    console.log(`${id.padEnd(16)} ${players}  ${String(samples.length).padStart(7)}  ${k(row.worst)}  `
-      + `${k(row.p90)}   ${k(row.dressing)} (${(100 * row.dressing / row.worst).toFixed(0).padStart(2)}%)`
-      + `   ${worst.draws.toFixed(0).padStart(6)}     ${maxDraws.toFixed(0).padStart(6)}  ${k(worst.lit)}`);
-    const liveNames = Object.entries(live);
-    if (liveNames.length) {
-      failures.push(`${id}: static dressing drawing LIVE-LIT (off the baked path): `
-        + liveNames.map(([m, n]) => `${m} x${n}`).join(', '));
-    }
-    const was = baseline.tracks[id]?.[players]?.worst;
-    if (!RECORD && was != null && row.worst > was * (1 + TOLERANCE)) {
-      failures.push(`${id} ${players}P: worst frame ${k(row.worst).trim()}/cell, recorded ${k(was).trim()}`
-        + ` (+${(100 * (row.worst / was - 1)).toFixed(1)}%) — re-record with --record if intended`);
-    }
-    if (!RECORD && was == null) failures.push(`${id} ${players}P: no recorded figure — run with --record`);
-    if (players === 4 && TRACKS[id] && baseline.ceiling != null && row.worst > baseline.ceiling) {
-      failures.push(`${id} 4P: worst frame ${k(row.worst).trim()}/cell is over the ceiling `
-        + `${k(baseline.ceiling).trim()} — move it off the vista or make it lighter`);
-    }
-    if (players === 4 && TRACKS[id] && baseline.drawCeiling != null && maxDraws > baseline.drawCeiling) {
-      failures.push(`${id} 4P: ${maxDraws.toFixed(0)} draws/cell at the lap's busiest frame, over the `
-        + `draw ceiling ${baseline.drawCeiling} — move pieces off the vista or merge them`);
+console.log('tier track            P  samples   worst/cell  p90/cell  dressing@worst  draws@worst  max draws  lit@worst');
+for (const tier of TIERS) {
+  const base = baseline[tier];
+  for (const id of ids) {
+    recorded[tier][id] = {};
+    for (const players of PLAYERS) {
+      const { live, samples } = await measure(id, players, tier);
+      const worst = samples.reduce((m, s) => (s.verts > m.verts ? s : m), samples[0]);
+      const row = { worst: Math.round(worst.verts), p90: Math.round(pct(samples.map((s) => s.verts), 0.9)),
+                    dressing: Math.round(worst.dress) };
+      recorded[tier][id][players] = row;
+      // Draws are gated like vertices (drawCeiling, below): the box calibration
+      // in the header found them limiting as much. The live-lit vertices are
+      // only reported; the gate on them is that no static dressing is live-lit.
+      const maxDraws = Math.max(...samples.map((s) => s.draws));
+      console.log(`${tier} ${id.padEnd(16)} ${players}  ${String(samples.length).padStart(7)}  ${k(row.worst)}  `
+        + `${k(row.p90)}   ${k(row.dressing)} (${(100 * row.dressing / row.worst).toFixed(0).padStart(2)}%)`
+        + `   ${worst.draws.toFixed(0).padStart(6)}     ${maxDraws.toFixed(0).padStart(6)}  ${k(worst.lit)}`);
+      const liveNames = Object.entries(live);
+      if (liveNames.length) {
+        failures.push(`${tier} ${id}: static dressing drawing LIVE-LIT (off the baked path): `
+          + liveNames.map(([m, n]) => `${m} x${n}`).join(', '));
+      }
+      const was = base.tracks[id]?.[players]?.worst;
+      if (!RECORD && was != null && row.worst > was * (1 + TOLERANCE)) {
+        failures.push(`${tier} ${id} ${players}P: worst frame ${k(row.worst).trim()}/cell, recorded ${k(was).trim()}`
+          + ` (+${(100 * (row.worst / was - 1)).toFixed(1)}%) — re-record with --record if intended`);
+      }
+      if (!RECORD && was == null) failures.push(`${tier} ${id} ${players}P: no recorded figure — run with --record`);
+      if (players === 4 && TRACKS[id] && row.worst > base.ceiling) {
+        failures.push(`${tier} ${id} 4P: worst frame ${k(row.worst).trim()}/cell is over the ceiling `
+          + `${k(base.ceiling).trim()} — move it off the vista or make it lighter`);
+      }
+      if (players === 4 && TRACKS[id] && maxDraws > base.drawCeiling) {
+        failures.push(`${tier} ${id} 4P: ${maxDraws.toFixed(0)} draws/cell at the lap's busiest frame, over the `
+          + `draw ceiling ${base.drawCeiling} — move pieces off the vista or merge them`);
+      }
     }
   }
 }
@@ -211,12 +230,13 @@ await browser.close();
 await app.close?.();
 
 if (RECORD) {
-  for (const [id, byP] of Object.entries(recorded)) {
-    baseline.tracks[id] = { ...(baseline.tracks[id] || {}), ...byP };
+  for (const tier of TIERS) {
+    for (const [id, byP] of Object.entries(recorded[tier])) {
+      baseline[tier].tracks[id] = { ...(baseline[tier].tracks[id] || {}), ...byP };
+    }
   }
   fs.writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + '\n');
-  console.log(`\nrecorded ${path.relative(ROOT, BASELINE)} (ceiling ${baseline.ceiling ?? 'unset'}, `
-    + `drawCeiling ${baseline.drawCeiling ?? 'unset'} kept)`);
+  console.log(`\nrecorded ${TIERS.join(' + ')} in ${path.relative(ROOT, BASELINE)} (the ceilings kept)`);
 }
 if (failures.length) {
   console.error(`\n${failures.length} over budget:\n  ${failures.join('\n  ')}`);

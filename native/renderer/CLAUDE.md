@@ -872,19 +872,56 @@ slot alone, so a merge change (per-placement bakes) must too.
 **New world content is priced on the host first, the box once per batch.**
 `npm run budget:scene` counts what each cell submits over a whole lap (the
 count is decided in this C++ before any backend sees it, so it transfers to
-the box) and fails a track whose worst frame grows, a shipped track's 4P frame
-over the baseline's `ceiling` or its 4P draws per cell over `drawCeiling`, and
-any static dressing the merge left live-lit (`ttp_display_debug_live_dressing`
-names it). The ceilings are box facts, the most vertices and the most draws a
-track may have while 4P still holds; on the box each limits as much as the
-other, so both are gated (the calibration is in `scripts/scene-budget.mjs`).
-They move only on a box reading. Over budget: move it off the vista (what every
-cell sees down the straight), then make it lighter or merge it. Never a
+the box), in BOTH detail tiers (below), and fails a track whose worst frame
+grows, a shipped track's 4P frame over its tier's `ceiling` or its 4P draws
+per cell over the tier's `drawCeiling`, and any static dressing the merge left
+live-lit (`ttp_display_debug_live_dressing` names it). The ceilings are device
+facts, the most vertices and the most draws a track may have while 4P still
+holds. LITE's are the box's: there each limits as much as the other, so both
+are gated (the calibration is in `scripts/scene-budget.mjs`). FULL's are
+PROVISIONAL, a guess at the Apple TV that awaits a calibration there. Both move
+only on a device reading. Over budget: move it off the vista (what every cell
+sees down the straight), then make it lighter or merge it. Never a
 per-fragment term, a blended material or a new material.
 A biome PROP is capped per model before it is priced at all
 (`tests/display-abi.test.js`): it is stamped many times a lap, and the kit
 authors a barrel with a car's vertices. `scripts/slim-kit-models.mjs`
 decimates a kit model from the ratio SOURCES.json records for it.
+
+## The detail tier
+
+**LITE is the same world with what a racer barely sees taken off the frame**,
+so the weakest device (the Android TV box at 4P/540) holds while the web and
+the Apple TV draw FULL and keep the headroom over it. The tier is decided in
+C++ (`ttp/detail.h`, from the platform each shell names to
+`ttp_display_detail`) and latched like the shadows: `setLite` drops the static
+key, since most cuts are built in. The landforms, the set pieces, the deck and
+the cars are the world and lite leaves them whole (car far forms were rejected
+on look; the deck is the surface the cars sit on). What it cuts, each beside
+its code:
+
+- **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
+  16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a
+  few percent more vertices (less of each sheet culled).
+- **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
+  paid all of the full one; the gradient between rings strays a few code values.
+- **Octagonal ground-shadow discs**: the rim fades to nothing.
+- **The small-thing cut** (`CutRange`, `chooseCuts`): a run of scatter or
+  props, or a chunk of clutter, leaves a cell's scene once what it holds covers
+  under `kCutPx` pixels of THAT cell. Per cell like the far forms, so a 1P cell
+  keeps what a 4P one drops. By scene membership: a layer bit is spoken for and
+  a range of nothing is still a draw.
+
+Tried and left out, each 1-3% of the vertices: far forms from 3 px (a near
+tree's canopy swaps at 17 u, not 26) and the cut at 8 px, both pops a
+frame-matched still shows; and no copse companions, or a thinner scatter or
+clutter, which change the verge in 1P too, where the box has the headroom.
+
+Priced at the box's 4P buffer on the heavy tracks, lite's worst frame has
+about 30% fewer draws and 6-13% fewer vertices than full's; most of the rest
+of the vertices are the road, the cars and the ground, which it does not touch. It
+changes no sim, so `film:laps -- --detail lite` films the same race frame for
+frame beside full, and `score:verge -- --detail lite` scores it.
 
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one

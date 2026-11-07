@@ -154,6 +154,7 @@ export class Display {
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
       antialias: mod.cwrap('ttp_display_antialias', null, ['number']),
+      detail: mod.cwrap('ttp_display_detail', 'string', ['string', 'string']),
       debugChasePitch: mod.cwrap('ttp_display_debug_chase_pitch', 'number', ['number']),
       debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
       debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
@@ -836,6 +837,9 @@ export class Display {
   // The full-screen antialias pass (ttp_display_antialias): on in every shell
   // that can afford it; a pixel count turns it off so edges keep their ids.
   antialias(on) { this._fn.antialias(on ? 1 : 0); }
+  // The detail tier (ttp_display_detail): the C++ decides it from this shell's
+  // platform; `ask` ('full' | 'lite' | null) overrides. Answers the tier.
+  detail(platform, ask) { return this._fn.detail(platform, ask); }
   // Chase-cam tilt in degrees below level (negative = authored); answers the
   // authored pitch. The debug panel's "Camera angle" slider, nothing else.
   debugChasePitch(deg) { return this._fn.debugChasePitch(deg); }

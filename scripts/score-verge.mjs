@@ -33,9 +33,11 @@
 // halves green (something within 3 u), yellow (6 u) or red, set pieces
 // magenta, sea blue, rising land shaded, trees green.
 //
-// --tree scores another worktree's build, like film:laps.
+// --tree scores another worktree's build, and --detail lite|full a detail tier
+// (default full; the tag then takes `-lite`), like film:laps.
 //
-// Usage: npm run score:verge -- --track a,b|--all [--tree path] [--tag name] [--out dir] [--map]
+// Usage: npm run score:verge -- --track a,b|--all [--tree path] [--detail lite|full] [--tag name]
+//        [--out dir] [--map]
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -50,7 +52,9 @@ const SKY = { every: 5, half: 40, step: 5, rise: 3, share: 0.8 };
 
 const a = args();
 const TREE = path.resolve(typeof a.tree === 'string' ? a.tree : ROOT);
-const TAG = typeof a.tag === 'string' ? a.tag : path.basename(TREE);
+const DETAIL = a.detail === undefined ? 'full' : String(a.detail);
+if (DETAIL !== 'full' && DETAIL !== 'lite') throw new Error('--detail: lite or full');
+const TAG = typeof a.tag === 'string' ? a.tag : path.basename(TREE) + (DETAIL === 'lite' ? '-lite' : '');
 const OUT = path.resolve(typeof a.out === 'string' ? a.out : path.join(ROOT, 'scratch', 'eval', 'scores'));
 const MAPS = path.join(OUT, '..', 'maps');
 const { serveApp, launchBrowser, displayURL, waitForScene } = await import(pathToFileURL(path.join(TREE, 'scripts/lib/capture.mjs')));
@@ -337,10 +341,12 @@ const browser = await launchBrowser();
 const results = [];
 try {
   const page = await browser.page({ viewport: { width: 960, height: 540 } });
-  await page.goto(displayURL(app.port, { scenario: 'landmarks', track: ids[0], players: 1, dpr: 1 }));
+  await page.goto(displayURL(app.port, { scenario: 'landmarks', track: ids[0], players: 1, dpr: 1, detail: DETAIL }));
   await waitForScene(page, { timeout: 180000 });
   await page.waitForFunction(() => window.__landmarks && window.__landmarks.ready(), null, { timeout: 180000, polling: 250 });
   await page.evaluate(() => window.__landmarks.ready());
+  const tier = await page.evaluate(() => window.__scene.detail);
+  if (DETAIL === 'lite' && tier !== 'lite') throw new Error(`${TREE} has no lite tier (it drew ${tier ?? 'no tier'})`);
   for (const id of ids) {
     const lap = await page.evaluate(async (t) => {
       const l = window.__landmarks;
