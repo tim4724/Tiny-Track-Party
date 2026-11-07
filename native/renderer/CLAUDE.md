@@ -571,7 +571,12 @@ stand on `groundY` with their feet buried.
   (`shoreline()`), and so does every keep-out (`inSea`: scatter, props,
   clutter, `spotIssue`). A `shore` landform brings that one curve in to a
   stretch of road (Riptide's surf beach): the track never moves to meet the
-  sea, the sea moves to meet the track.
+  sea, the sea moves to meet the track. It stops short of the road unless
+  the shore carries a `w`, which lets the waterline in that far inside the
+  road's reach, so the deck runs over the sea on a causeway (Riptide past
+  its hop). The curve is polar about the world origin, so a shore can only
+  reach a stretch of road that is the outermost on its bearing; anchored
+  anywhere else it lands far off.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

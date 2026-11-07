@@ -1838,15 +1838,18 @@ TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
     for (float& p : s.crinklePh) p = rnd() * 2.0f * (float) M_PI;
     for (float& p : s.swashPh) p = rnd() * 2.0f * (float) M_PI;
     // A `shore` landform: the waterline runs through its anchor. Never closer
-    // than SHORE_MIN_GAP past the road's centre, so the surf cannot reach the
-    // deck wherever the anchor was put.
+    // than SHORE_MIN_GAP past the road's support, so the surf cannot reach the
+    // deck wherever the anchor was put, unless the shore says how far INSIDE
+    // it the water may come (`w`): then the road runs out over the shallows
+    // and the waterline lies up to `w` short of its reach on that bearing.
     constexpr float SHORE_MIN_GAP = 5.0f;
     for (const ttp::rt::Landform& l : tb.land) {
         if (l.kind != 6 || l.piece >= 0) continue;
         const TrackBin::Sample f = tb.frameAt(l.u * tb.length);
         const float px = f.pos.x + f.lat.x * l.lat, pz = f.pos.z + f.lat.z * l.lat;
         const float a = std::atan2(pz, px), r = std::sqrt(px * px + pz * pz);
-        s.bays.push_back({ a, r, std::max(SHORE_MIN_GAP, r - s.support(a)), 0.5f * l.len, l.r });
+        s.bays.push_back({ a, r, std::max(l.w > 0 ? -l.w : SHORE_MIN_GAP, r - s.support(a)),
+                           0.5f * l.len, l.r });
     }
     return s;
 }
