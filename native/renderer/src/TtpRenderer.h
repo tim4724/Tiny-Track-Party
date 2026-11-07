@@ -1031,16 +1031,25 @@ private:
     // derived from them: they used to be two literals inside terrainY.
     static constexpr float kFlatR = 4.0f;
     static constexpr float kRampR = 24.0f;
-    // THE RAISED GROUND. Under and beside raised road the land comes up to
-    // kRaiseDrop under the deck's top, so the road stands on short stilts over
-    // land instead of tall ones over the plain at its lowest point. The 1.3 u
-    // of pillar it leaves showing under the slab keeps the elevated toy-track
-    // read. Within kRaiseFlatR of the road the deck that counts is the
+    // THE RAISED GROUND. Under and beside the road the land comes up toward
+    // the deck. LOW road (its top up to kVergeLow over the plain) sits IN the
+    // land: the ground stands kVergeDrop under the deck's top and meets the
+    // slab inside its skirt, so nothing flat beside the road (a pitch, a bed,
+    // a stream) hides behind a step. RAISED road stands on stilts: the ground
+    // stays kRaiseDrop under its top, and the 1.3 u of pillar that leaves
+    // under the slab keeps the elevated toy-track read. Between the two the
+    // ground holds level, kVergeLow - kVergeDrop over the plain, so it never
+    // dips along a ramp. kVergeDrop stays clear of kDeckClear (the cap would
+    // bind and rag the apron) and of the berms' 0.15 u tuck under the deck
+    // (trackbuilder.cc: the ground would lie on a berm's shoulder and
+    // shimmer). Within kRaiseFlatR of the road the deck that counts is the
     // NEAREST one (so a crest hump gets its full lift); past that, a blend of
     // the decks nearby weighted by nearness, relaxing to the plain over
     // kRaiseRampR. Either way held under every OTHER strand of road nearby
     // (so no bank rises beside the lower road at a crossing or across a
-    // hairpin): see terrainField.
+    // hairpin): see roadLift.
+    static constexpr float kVergeDrop = 0.2f;
+    static constexpr float kVergeLow = 1.2f;
     static constexpr float kRaiseDrop = 1.64f;
     static constexpr float kRaiseFlatR = 6.0f;
     static constexpr float kRaiseRampR = 30.0f;
@@ -1052,12 +1061,12 @@ private:
     // kRaiseFlatR (rise per unit out).
     static constexpr float kStrandSlope = 0.5f;
     // THE CAP, per grid vertex (buildTerrainCap): every triangle a deck
-    // crosses stays kDeckClear under that deck's lowest section corner.
+    // crosses stays kDeckClear under that deck's top at its lower kerb edge.
     // terrainCapAt reads it anywhere, as the lowest corner of the triangle
     // the point lies in.
     static constexpr float kDeckClear = 0.12f;
     // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
-    // cap clears and what the supports stop under.
+    // supports stop under.
     static constexpr float kDeckDepth = 0.34f;
     std::vector<float> mTerrainCap;
     void buildTerrainCap(const TrackBin& tb);

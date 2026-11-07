@@ -504,25 +504,31 @@ memory until another track builds or the renderer goes.
 `groundY` (the track's) is the plain under the deck's LOWEST point. A seeded
 track lies near it except on its crossings' ramps and its hills
 (`scripts/track-gen.mjs` localLift). The renderer's ground (`terrainY`,
-`TtpRendererTrack.cpp`) rises toward the deck, leaving a short stilt showing
-(`kRaiseDrop`), and rolls into hills away from it. It is
-renderer-only: the sim never reads it, and pillars, berms and the gantry still
-stand on `groundY` with their feet buried.
+`TtpRendererTrack.cpp`) rises toward the deck and rolls into hills away from
+it. LOW road sits IN the land: the ground meets the slab inside its skirt
+(`kVergeDrop` under the top), so nothing flat beside it hides behind a step.
+Only RAISED road, a crossing or a ramp's upper half, shows stilts
+(`kRaiseDrop`), the toy-track read. It is renderer-only: the sim never reads
+it, and pillars, berms and the gantry still stand on `groundY` with their feet
+buried.
 
 - **NO GROUND THROUGH A DECK, PROVABLY.** The cap is per grid vertex
   (`buildTerrainCap`): every triangle a deck section touches keeps its corners
-  under that section's lowest corner. A linear triangle never rises above its
-  corners, so no tuning of the lift can push the surface through a road, and a
-  road under a bridge keeps its own clearance. Change the lift freely; never
-  bypass the cap. Beside the road the lift is held under every OTHER strand
-  nearby (a crossing's lower road, a hairpin's far leg), so no bank walls the
-  road under a bridge. `tests/e2e/terrain-ground.spec.js` reads both off the
+  `kDeckClear` under that deck's TOP at its lower kerb edge. A linear triangle
+  never rises above its corners, so no tuning of the lift can push the surface
+  through a road, and a road under a bridge keeps its own clearance; the land
+  may meet the slab inside its skirt, where the opaque deck hides it. Change
+  the lift freely; never bypass the cap. Beside the road the lift is held
+  under every OTHER strand nearby (a crossing's lower road, a hairpin's far
+  leg), so no bank walls the road under a bridge.
+  `tests/e2e/terrain-ground.spec.js` reads the cap and the stilts off the
   drawn ground.
 - **The cap, not the lift, sets the stilt on a short crest.** A grid vertex
   sits under the LOWEST deck section crossing any triangle around it, two
   cells (up to 18 u) of road, so under a hump shorter than that the ground
-  stays at the hump's foot and the pillars keep their height. Only a finer
-  grid near the road would change that, and the grid's step is a cost.
+  stays at the hump's foot and the pillars keep their height, and a sliver
+  of skirt shows at every ramp's foot. Only a finer grid near the road would
+  change that, and the grid's step is a cost.
 - **NEVER BELOW `groundY`.** The sun bake's flat caster proxy sits at
   `groundY`: ground under it bakes fully shadowed, and the posts standing on it
   would hang. A valley is land left UNRAISED, not dug.
@@ -548,8 +554,8 @@ stand on `groundY` with their feet buried.
   the Blender builder reads the same numbers, so its parts stand on what the
   renderer lays, and the piece levels no clearing. Its mounds take the land
   under them as the HIGHEST of them or of the raised ground, so two pieces'
-  slopes join without a trough and the road along a mountain's foot keeps its
-  short stilts (a part at the foot may be buried a little there); its fans
+  slopes join without a trough and the road along a mountain's foot keeps the
+  raised ground's verge (a part at the foot may be buried a little there); its fans
   (debris) add their rise on top. The formula lives three times —
   `landforms`, `set_prototypes.py set_ground()` and `tracks.js setGroundY` —
   and the e2e spec catches the C++ and the GLB disagreeing. Within a grid

@@ -645,7 +645,8 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // them too; the bump says so where the format is read.
 // v6: the beach's sand rose into dunes inland, so its ground maps went stale
 // the same way.
-constexpr uint32_t kBakeVersion = 6u;
+// v7: the ground rose to meet low road too (kVergeDrop), the same again.
+constexpr uint32_t kBakeVersion = 7u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
