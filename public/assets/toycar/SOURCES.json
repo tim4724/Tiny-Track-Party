@@ -82,6 +82,8 @@
     "set-playground.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ranch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-reef-shelf.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-rock-cut-seep.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-rock-cut.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-rock-pool.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-shipwreck-ribs.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-siege-tower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
