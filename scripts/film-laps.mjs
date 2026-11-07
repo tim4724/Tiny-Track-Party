@@ -85,10 +85,12 @@ try {
                              && window.__scene.sceneBuilt(), PLAYERS, { timeout: 180000, polling: 250 });
   await page.evaluate(() => document.fonts && document.fonts.ready);
   await hideChrome(page);
-  const len = await page.evaluate((hz) => {
-    window.__scene.setFixedStep(1 / hz);
-    return window.__scene.display.setLayout().length;
-  }, SIM_HZ);
+  await page.evaluate((hz) => window.__scene.setFixedStep(1 / hz), SIM_HZ);
+  // The lap the sim counts: the tree's own builder's length, which any tree
+  // can answer (a tree without the landmark ABI has no setLayout).
+  const nativeTrack = await import(pathToFileURL(path.join(TREE, 'scripts/native-track.mjs')));
+  await nativeTrack.init();
+  const len = nativeTrack.buildTrack(track).length;
 
   // Lap 1 and the grid, undrawn: a second at a time, then a step at a time
   // as the line nears, the step that crosses it drawn (a 60 Hz step covers
