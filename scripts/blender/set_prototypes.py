@@ -796,8 +796,9 @@ def rock_pool():
     # road side so the water shows from the chase cam. A natural form, as big
     # as the reef it lies in (G). Its life is at a car's scale: a child with a
     # bucket crouched at the near shore, a parent crouched beside, a gull on
-    # the far shore and one riding the wind in wide circles over the rocks,
-    # which is what a racer this far off sees move.
+    # the far shore turning to watch the cars (hopping off as one comes close,
+    # as the beach's standing gulls all do) and one riding the wind in wide
+    # circles over the rocks, which is what a racer this far off sees move.
     G = 1.45
     # The water is the light end of its swatches (ramp): the blue's dark end is
     # violet and read as some other liquid beside the turquoise sea.
@@ -844,7 +845,7 @@ def rock_pool():
     box((0.08, 0.09, 0.08), (math.cos(ka) * 6.7, RIM + 0.045, math.sin(ka) * 6.7 + 0.17), 0xff5040)   # the bucket
     figure((math.cos(0.05) * 6.6, RIM, math.sin(0.05) * 6.6), math.pi, shirt=0x339cf2, legs=0x38383d, pose='crouch')
     box((0.3, 0.05, 0.18), (math.cos(0.05) * 6.95, RIM + 0.03, math.sin(0.05) * 6.95 + 0.3), 0xff7e44)   # a towel
-    gull((math.cos(0.95) * 6.9, RIM, math.sin(0.95) * 6.9), 0.0)                 # on the far shore
+    gull((math.cos(0.95) * 6.9, RIM, math.sin(0.95) * 6.9), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')   # on the far shore
     # the gull aloft: wings out, gliding a wide circle from the pool out over
     # the beach toward the road and rising and sinking on the air (a closed
     # path, facing its way). Its rest pose stands on the shore by the other;
@@ -1048,7 +1049,7 @@ def shipwreck_ribs():
     rod((0.12, 2.3, 0.45), (0.2, 2.55, 0.42), 0.1, wood, r2=0.03, segs=5)
     beam((-0.9, 1.55, 0.2), (1.0, 2.0, 0.65), 0.09, wood)                          # its yard
     beam((0.6, 0.12, 0.6), (3.0, 0.15, -1.3), 0.13, wood)                          # the topmast, down
-    gull((0.2, 2.55, 0.42), 0.8)                                               # on the stump
+    gull((0.2, 2.55, 0.42), 0.8, 'anim_watch:r=24#gull')                       # on the stump, watching the cars
     join_still('wreck')
 
 @piece(1.0)
@@ -2025,11 +2026,14 @@ def snow_fort():
     snowy(cyl(R + 0.25, 0.14, (tx, TC * BH, tz), SNOW, segs=12), 0.4)
     flag_across((tx, TC * BH + 0.14, tz), 1.5, 0xff5040, 'anim_sway:a=x:d=22:p=1.9#flag', w=0.9, fh=0.55)
     with plain_parts():                                            # small things: no chamfer to see
-        for (sx, sz, c) in ((1, 1, 0x3f7bd9), (1, -1, 0x61cb8b), (-1, 1, 0xa878e8)):   # pennants on the corners
+        # pennants on the corners, flying in the wind the tower's flag flies
+        # in: each dips and lifts about its pole's head, out of step
+        for k, (sx, sz, c) in enumerate(((1, 1, 0x3f7bd9), (1, -1, 0x61cb8b), (-1, 1, 0xa878e8))):
             x, z = sx * H, sz * H
             box((0.06, 0.8, 0.06), (x, 2 * BH + 0.4, z), 0x9a7b55)
             tri = [(z + 0.02 * sz, 2 * BH + 0.78), (z + 0.02 * sz, 2 * BH + 0.48), (z - 0.5 * sz, 2 * BH + 0.63)]
-            prism(tri if sz > 0 else tri[::-1], x, 0.04, c)
+            with animated('anim_sway:a=x:d=%d:p=%.1f#pennant%d' % (22 * sz, 1.6 + 0.2 * k, k), (x, 2 * BH + 0.78, z)):
+                prism(tri if sz > 0 else tri[::-1], x, 0.04, c)
         for (x, z) in ((H - 0.9, 0.9), (H + 0.9, -1.4)):              # snowballs: four and one on top
             for dx, dz in ((-0.1, -0.1), (0.1, -0.1), (-0.1, 0.1), (0.1, 0.1)):
                 snowy(box((0.17, 0.17, 0.17), (x + dx, 0.085, z + dz), SNOW), 0.4)
@@ -2289,18 +2293,22 @@ def ski_school():
     # size. The slope is the track's terrain (SET_GROUND: a low hill behind,
     # -X, its gentle face to the road), and on it the school's day goes round:
     # the children ride the magic carpet up the slope standing on their skis,
-    # step off at the top and snowplough down in a line through their little
-    # slalom, out under the red and blue arch at the bottom and round to the
-    # carpet again (one loop, a child's slow pace). At the foot the school's
-    # red hut, its skis racked, the instructor watching and two tall feather
-    # flags by the road, the colour that says "ski school" from a car going
-    # by. All of it lies on the slope as the renderer draws it (draped, the
-    # children's loop a `drape` chain) but the hut, which stands level.
+    # inside its covered gallery as a nursery slope's carpet runs, step off at
+    # the top and snowplough down in a line through their little slalom, out
+    # under the red and blue arch and on round the slope's face, a little
+    # downhill all the way, to the carpet's foot (one loop, a child's slow
+    # pace). Nothing climbs in sight: uphill they ride the belt, hidden in its
+    # tunnel, and the run's foot IS the carpet's, its lowest point, so no
+    # child skis back up to it. At the foot the school's red hut, its skis
+    # racked, the instructor watching and two tall feather flags by the road,
+    # the colour that says "ski school" from a car going by. All of it lies
+    # on the slope as the renderer draws it (draped, the children's loop a
+    # `drape` chain) but the hut, which stands level.
     H = set_ground('ski-school')
     COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
     CZ, C0, C1 = -1.3, 1.0, -7.6                                     # the carpet: its line, foot, head
-    GATES = [(-6.4, 2.7), (-4.9, 0.9), (-3.4, 2.7), (-1.9, 0.9), (-0.4, 2.7)]
-    AX, AZ = 1.7, 1.9                                                # the arch
+    GATES = [(-6.6, 2.7), (-5.3, 0.9), (-4.0, 2.7), (-2.7, 0.9), (-1.4, 2.7)]
+    AX, AZ = 0.0, 1.9                                                # the arch
     def static():
         for z in (-0.55, 0.55):                                       # the ski rack
             box((0.06, 0.34, 0.06), (2.5, 0.17, z - 2.6), 0x9a7b55)
@@ -2309,16 +2317,32 @@ def ski_school():
             z = -3.05 + k * 0.28
             for e in (-0.035, 0.035):
                 box((0.06, 0.44, 0.06), (2.56, 0.22, z + e), c, roll=-0.18)
-        # the magic carpet: its belt, green rails either side, a step at each end
+        # the magic carpet: its belt and a step at each end (its gallery hides
+        # the rest)
         n = 9
         xs = [C0 + (C1 - C0) * i / n for i in range(n + 1)]
         verts = [(x, 0.06, CZ + e) for x in xs for e in (-0.24, 0.24)]
         poly(verts, [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)], 0x38383d)
-        for sd in (-1, 1):
-            for xa, xb in zip(xs[:-1], xs[1:]):
-                box((abs(xb - xa) + 0.04, 0.14, 0.07), ((xa + xb) / 2, 0.08, CZ + sd * 0.3), 0x61cb8b)
         for x in (C0 + 0.35, C1 - 0.35):
             box((0.5, 0.08, 0.7), (x, 0.04, CZ), 0x868ba1)
+        # its gallery: a tunnel of pale panels over the belt on green hoops,
+        # open at both ends, tall enough for a child on skis, a span a panel
+        # so it lies on the slope as drawn
+        RT, PANELS = 0.62, 4
+        ts = [C0 - 0.05 + (C1 - C0 + 0.1) * i / n for i in range(n + 1)]
+        half = math.pi / PANELS / 2
+        chord, rm = 2 * RT * math.sin(half), RT * math.cos(half)
+        with plain_parts():
+            for xa, xb in zip(ts[:-1], ts[1:]):
+                for j in range(PANELS):
+                    t = (2 * j + 1) * half
+                    box((abs(xb - xa) + 0.02, 0.05, chord + 0.02), ((xa + xb) / 2, rm * math.sin(t), CZ + rm * math.cos(t)),
+                        0xd0e8ff, pitch=t - math.pi / 2)
+            for x in ts:
+                for j in range(PANELS):
+                    t = (2 * j + 1) * half
+                    box((0.1, 0.08, chord + 0.06), (x, (rm + 0.04) * math.sin(t), CZ + (rm + 0.04) * math.cos(t)),
+                        0x61cb8b, pitch=t - math.pi / 2)
         for k, (gx, gz) in enumerate(GATES):                          # the children's slalom
             box((0.05, 0.42, 0.05), (gx, 0.21, gz), 0xfff6eb)
             box((0.03, 0.16, 0.22), (gx, 0.34, gz + 0.11), (0xff7e44, 0x3f7bd9)[k % 2])
@@ -2329,7 +2353,7 @@ def ski_school():
                 (0xff5040, 0x3f7bd9)[i % 2], pitch=t - math.pi / 2)
         for fz in (-0.9, 4.2):                                         # feather flags' poles by the road
             box((0.06, 1.5, 0.06), (3.0, 0.75, fz), 0x555b66)
-        snow_person(0.9, 0, 0.6, 0xcf534f, 0xfff6eb, yaw=math.pi)         # the instructor, watching
+        snow_person(1.8, 0, 2.6, 0xcf534f, 0xfff6eb, yaw=math.pi)         # the instructor, watching
         snow_heap((-0.2, 0, -4.4), 0.5, yaw=0.6)
     draped('school', static)
     # the hut level on the slope, its floor at the slope's top corner and a
@@ -2342,12 +2366,14 @@ def ski_school():
         with animated('anim_drape+sway:a=y:d=18:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
             box((0.04, 1.0, 0.36), (3.0, 0.95, fz + 0.2), c)
             box((0.05, 0.12, 0.2), (3.0, 0.75, fz + 0.2), 0xfff6eb)
-    # the children's loop: up the carpet, off at the head, down through the
-    # gates, under the arch, round to the carpet's foot
+    # the children's loop: up the carpet inside its gallery, off at the head,
+    # down through the gates, under the arch, round the face of the slope
+    # (each point a little further from the summit than the last, so a
+    # little lower) to the carpet's foot
     loop = [(C0 + 0.1, 0.08, CZ), (C1 + 0.2, 0.08, CZ), (C1 - 0.6, 0.02, CZ + 0.8), (C1 - 0.3, 0.02, 2.0)]
     for k, (gx, gz) in enumerate(GATES):
         loop.append((gx, 0.02, gz + (-0.4 if k % 2 == 0 else 0.4)))
-    loop += [(AX - 0.7, 0.02, AZ), (AX + 0.5, 0.02, AZ), (2.3, 0.02, 0.4), (C0 + 0.6, 0.02, CZ + 0.15)]
+    loop += [(AX - 0.7, 0.02, AZ), (AX + 0.5, 0.02, AZ), (0.95, 0.02, 0.85), (1.15, 0.02, -0.25)]
     for k, pt in enumerate(loop):
         marker('path_drapekids_%d' % k, pt)
     for n in range(5):
@@ -2391,74 +2417,108 @@ def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
                 box((0.12 * u, 0.18 * u, 0.06), at(0, 0.22 * u, sd * 0.12 * u), 0x2a2735, yaw=yaw,
                     pitch=sd * 0.25)
 
-def slider_penguin(x, y, z, k=0.45):
-    """A penguin on its belly toward +X, `k` long, the pivot under the middle
-    of its belly: the body flat, the head up to see where it is going (the
-    beak and the white face say "penguin" from above), flippers out."""
+def slider_penguin(x, y, z, k=0.45, yaw=0.0):
+    """A penguin on its belly toward +X turned by `yaw`, `k` long, the pivot
+    under the middle of its belly: the body flat, the head up to see where it
+    is going (the beak and the white face say "penguin" from above), flippers
+    out."""
     u = k / 0.45
-    box((0.36 * u, 0.13 * u, 0.2 * u), (x, y + 0.075 * u, z), 0x2a2735)                  # body
-    box((0.26 * u, 0.06, 0.17 * u), (x + 0.02 * u, y + 0.035, z), 0xfff6eb)               # belly
-    box((0.15 * u, 0.14 * u, 0.15 * u), (x + 0.2 * u, y + 0.17 * u, z), 0x2a2735)         # head, up
-    box((0.06, 0.1 * u, 0.12 * u), (x + 0.28 * u, y + 0.16 * u, z), 0xfff6eb)             # face
-    box((0.08 * u, 0.06, 0.06), (x + 0.32 * u, y + 0.15 * u, z), 0xff7e44)                # beak
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def b(size, dx, dy, dz, color):
+        box(size, (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c), color, yaw=yaw)
+    b((0.36 * u, 0.13 * u, 0.2 * u), 0, 0.075 * u, 0, 0x2a2735)                   # body
+    b((0.26 * u, 0.06, 0.17 * u), 0.02 * u, 0.035, 0, 0xfff6eb)                    # belly
+    b((0.15 * u, 0.14 * u, 0.15 * u), 0.2 * u, 0.17 * u, 0, 0x2a2735)              # head, up
+    b((0.06, 0.1 * u, 0.12 * u), 0.28 * u, 0.16 * u, 0, 0xfff6eb)                  # face
+    b((0.08 * u, 0.06, 0.06), 0.32 * u, 0.15 * u, 0, 0xff7e44)                     # beak
     for sd in (-1, 1):
-        box((0.14 * u, 0.06, 0.1 * u), (x - 0.02 * u, y + 0.07 * u, z + sd * 0.15 * u), 0x2a2735)  # flipper out
-    box((0.08 * u, 0.06, 0.12 * u), (x - 0.21 * u, y + 0.03, z), 0xff7e44)                # feet behind
+        b((0.14 * u, 0.06, 0.1 * u), -0.02 * u, 0.07 * u, sd * 0.15 * u, 0x2a2735)  # flipper out
+    b((0.08 * u, 0.06, 0.12 * u), -0.21 * u, 0.03, 0, 0xff7e44)                    # feet behind
 
 # The standing penguins' life (set_motion.h): rock on their feet out of step,
 # turn to watch a car coming (radii in world units), a little hop as one
 # passes close.
 PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.12#%d'
 
-def live_penguin(n, x, y, z, k, yaw):
-    with animated(PENGUIN % n, (x, y, z), yaw):
-        penguin(x, y, z, k, yaw)
-
-def stood_penguin(x, z, k, yaw):
-    """A penguin of the crowd, standing still: three blocks (the dark body
-    with its head, the white front, the beak), which is what reads of one
-    among many."""
+def stood_penguin(x, z, k, yaw, y=0.0):
+    """A penguin of a crowd: three blocks (the dark body with its head, the
+    white front, the beak), which is what reads of one among many."""
     u = k / 0.47
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy):
-        return (x + dx * c, dy, z - dx * s2)
+        return (x + dx * c, y + dy, z - dx * s2)
     box((0.22 * u, 0.44 * u, 0.2 * u), at(0, 0.22 * u), 0x2a2735, yaw=yaw)
     with plain_parts():                                  # too thin for a chamfer to show
         box((0.06, 0.26 * u, 0.16 * u), at(0.1 * u, 0.17 * u), 0xfff6eb, yaw=yaw)
         box((0.08 * u, 0.06, 0.06), at(0.13 * u, 0.36 * u), 0xff7e44, yaw=yaw)
+
+# A CROWD of penguins, every one of them alive, at the cost of a few moving
+# parts: it stands in KNOTS of a few close together, each knot one part
+# that rocks on its feet (waddle) about the line its members stand along and
+# face, so each of them rocks from foot to foot as a lone penguin does. The
+# knots keep their own pace and phase, the members their own sizes and turns
+# (a chick among them, one lying on its belly that wriggles as the rest
+# rock). A frozen penguin beside a moving one reads as a broken toy, and one
+# part a penguin is too many draws for a crowd. Each member stands on the
+# piece's own ground (SET_GROUND, `H`) as it lies round the knot's middle and
+# the knot is draped there (`drape`): a knot is small enough that the drawn
+# slope under it is the authored one, its uphill members held to a hand's
+# breadth over its middle (set-check's floor under a draped part).
+KNOT_SLOTS = {   # (along the knot's line, across it) of each member, by size
+    2: ((-0.2, -0.1), (0.2, 0.12)),
+    3: ((-0.31, 0.09), (0.0, -0.16), (0.31, 0.1)),
+    4: ((-0.34, -0.14), (-0.05, 0.2), (0.12, -0.19), (0.36, 0.11)),
+    5: ((-0.35, 0.0), (-0.1, -0.24), (-0.06, 0.24), (0.2, -0.02), (0.39, 0.22)),
+    6: ((-0.35, -0.21), (-0.02, -0.25), (0.32, -0.19), (-0.25, 0.19), (0.08, 0.22), (0.38, 0.17)),
+}
+
+def penguin_knot(tag, cx, cz, yaw, n, H, seed, lying=False, file=False):
+    """A knot of `n` penguins round (cx, cz) facing +X turned by `yaw` (their
+    line), rocking together on their feet; `file` stands them one behind
+    another down the line, a step apart (a line of them across a slope stands
+    level along it)."""
+    h0 = H(cx, cz)
+    d, p = 6 + seed * 5 % 4, 1.15 + 0.12 * (seed * 3 % 7)
+    slots = [(0.38 * (j - (n - 1) / 2), 0.07 * (-1) ** j) for j in range(n)] if file else KNOT_SLOTS[n]
+    with animated('anim_drape+waddle:d=%d:p=%.2f#%s' % (d, p, tag), (cx, 0.0, cz), yaw):
+        for j, (a, l) in enumerate(slots):
+            x, z = turned(cx, cz, yaw, a, l)
+            y = min(0.08, H(x, z) - h0)
+            f = (seed * 3 + j * 7) % 11 / 10.0
+            if lying and j == n - 1:
+                slider_penguin(x, y, z, 0.4, yaw)
+            elif (seed + 2 * j) % 7 == 3:
+                stood_penguin(x, z, 0.34, yaw + (f - 0.5) * 0.5, y)          # a chick
+            else:
+                stood_penguin(x, z, 0.42 + 0.06 * f, yaw + (f - 0.5) * 0.5, y)
 
 @piece(1.0)
 def penguin_group():
     # Glacier: a rookery of penguins on a snow slope by the ice, at their own
     # size beside a car (under half a unit tall). The slope is the track's
     # terrain (SET_GROUND: a low hill behind, -X, its face to the road), and
-    # the crowd stands up its face, row over row, so from a car going by it
-    # reads as one crowd rather than a line along the kerb: some three dozen,
-    # a few lying on their bellies and a chick or two among them, most facing
-    # +X; two at the front are alive where they stand (they rock on their
-    # feet, turn to watch a car coming and hop as one passes close), and a
+    # the crowd stands up its face, knot over knot, so from a car going by it
+    # reads as one crowd rather than a line along the kerb: some four dozen,
+    # most facing +X, a few lying on their bellies and a chick or two among
+    # them, every one of them rocking on its feet (penguin_knot). Two at the
+    # front turn to watch a car coming and hop as one passes close, and a
     # pair wanders a loop round the rookery's edge, one behind the other
     # (anim_path facing its way, rocking from foot to foot as it goes). All of
     # it lies on the slope as the renderer draws it (draped, the walkers' loop
     # a `drape` chain). Each placement's yaw turns +X to the racer where the
     # lap reads it best.
-    CX, RX, RZ, N = -2.8, 4.5, 4.4, 54
-    def crowd():
-        for i in range(N):
-            # a sunflower spread over an oval, so the crowd is even without a grid
-            r, a = math.sqrt((i + 0.5) / N), i * 2.39996
-            x, z = CX + RX * r * math.cos(a), RZ * r * math.sin(a)
-            if x > 0.6 and abs(z) < 1.0:
-                continue                                           # room for the live ones in front
-            h = math.sin(i * 12.9898) * 0.5 + 0.5
-            yaw = (h - 0.5) * 1.6 + 0.6 * math.sin(i * 3.1)
-            if i % 9 == 4:
-                with plain_parts():
-                    slider_penguin(x, 0, z, 0.4)                   # lying on its belly
-            else:
-                stood_penguin(x, z, 0.34 if i % 7 == 3 else 0.42 + 0.06 * h, yaw)
-        snow_heap((CX - 3.2, 0, 2.6), 0.5, yaw=0.5)
-    draped('rookery', crowd)
+    H = set_ground('penguin-group')
+    CX, RX, RZ, K = -2.8, 4.5, 4.4, 11
+    for i in range(K):
+        # a sunflower spread over an oval, so the knots are even without a grid
+        r, a = math.sqrt((i + 0.5) / K), i * 2.39996 + 0.4
+        x, z = CX + RX * 0.92 * r * math.cos(a), RZ * 0.92 * r * math.sin(a)
+        if x > 0.0 and abs(z) < 1.5:
+            z = 1.5 if z >= 0 else -1.5                            # room for the live ones in front
+        h = math.sin(i * 12.9898) * 0.5 + 0.5
+        penguin_knot('k%d' % i, x, z, (h - 0.5) * 0.9 + 0.3 * math.sin(i * 3.1), 4 + i % 3, H, i,
+                     lying=i % 4 == 2)
+    draped('rookery', lambda: snow_heap((CX - 3.2, 0, 2.6), 0.5, yaw=0.5))
     for n, (x, z, k, yaw) in enumerate(((1.4, 0.35, 0.46, 0.0), (1.2, -0.45, 0.44, 0.3))):
         with animated('anim_drape+' + PENGUIN[5:] % (n + 1), (x, 0, z), yaw):
             penguin(x, 0, z, k, yaw)
@@ -2485,7 +2545,8 @@ def penguin_chute():
     # crest on their bellies, toboggan the length of it and shoot into the
     # water; more climb out of the hole and trudge up the hill's flank in a
     # line, waddling, to go over the top for another go; the rest of the
-    # colony stands on the face beside the slide, row over row, watching. Both loops close
+    # colony stands on the face beside the slide, line over line, watching,
+    # rocking on its feet as every penguin here does. Both loops close
     # out of sight (under the hill, under the ice): a slider comes up just
     # behind the crest, a climber goes down behind it, so a racer sees them
     # go in and come out, never jump. Everything is DRAPED: built from y = 0
@@ -2506,22 +2567,21 @@ def penguin_chute():
                 snowy(box((xb - xa + 0.1, 0.16, 0.18), ((xa + xb) / 2, 0.06, sd * 0.52), 0xf3f7fb), 0.45)
         disc(2.1, (HOLE, 0.0, 0.0), 0xd0e8ff, segs=24, h=0.05)        # the ice round the hole
         disc(1.35, (HOLE, 0.01, 0.0), 0x4f7fd0, segs=20, h=0.05)      # open water
-        for (x, z, k, yaw) in ((HOLE + 0.8, 1.7, 0.46, -0.6), (HOLE + 1.9, 0.6, 0.42, 0.3),
-                               (HOLE + 1.5, -1.5, 0.44, 0.6), (HOLE - 0.6, -1.9, 0.34, 1.2),
-                               (HOLE + 2.3, -0.5, 0.4, 0.0)):
-            stood_penguin(x, z, k, yaw)                              # watching at the water's edge
-        for (x, z, k, yaw) in ((TOP - 0.4, -1.3, 0.44, 0.0), (TOP + 0.3, -1.9, 0.42, 0.4)):
-            stood_penguin(x, z, k, yaw)                              # and from the top
-        slider_penguin(HOLE + 2.6, 0.05, 1.6, 0.4)                     # one resting on its belly
-        for i in range(30):                                          # the colony on the hill's face,
-            r, a = math.sqrt((i + 0.5) / 30), i * 2.39996            # row over row beside the slide
-            x, z = -6.5 + 5.2 * r * math.cos(a), -4.7 + 2.5 * r * math.sin(a)
-            h = math.sin(i * 12.9898) * 0.5 + 0.5
-            if i % 9 == 4:
-                slider_penguin(x, 0.0, z, 0.4)
-            else:
-                stood_penguin(x, z, 0.34 if i % 7 == 3 else 0.42 + 0.06 * h, (h - 0.5) * 1.4)
     draped('chute', static)
+    # the watchers, every one alive (penguin_knot): two knots at the water's
+    # edge facing the road, one lying on its belly to rest, two on the top,
+    # and the colony on the hill's face beside the slide, line over line,
+    # each line turned to the slide to watch (along the face, so it stands
+    # level across it)
+    H = set_ground('penguin-chute')
+    penguin_knot('w0', HOLE + 1.4, 1.5, -0.5, 3, H, 1)
+    penguin_knot('w1', HOLE + 1.6, -1.4, 0.5, 4, H, 4, lying=True)
+    penguin_knot('w2', TOP, -1.6, 0.2, 2, H, 2)
+    for i in range(7):
+        r, a = math.sqrt((i + 0.5) / 7), i * 2.39996 + 0.9
+        x, z = -6.5 + 5.2 * r * math.cos(a), -4.7 + 2.3 * r * math.sin(a)
+        penguin_knot('c%d' % i, x, z, -math.pi / 2 + 0.2 * math.sin(i * 2.7), 5 + i % 3, H, i + 5,
+                     lying=i % 3 == 1, file=True)
     # the sliders' loop: up out of the snow behind the crest, over it and down
     # the groove, across the flat and into the water, home under the ice and
     # the hill
@@ -2580,21 +2640,6 @@ def radio_mast(MX, MZ, MH, bands, flag):
         strut((MX, MH * 0.7, MZ), (gx, 0.02, gz), 0.025, 0xc8cfdf)
     flag_across((MX, MH, MZ), 0.45, 0xff5040, flag, w=0.62, fh=0.38, pole=0x555b66)
 
-def prayer_flags(top, ends):
-    """Lines of prayer flags pulled taut from `top` down to a peg at each of
-    `ends` (x, z)."""
-    COLS = (0x3f7bd9, 0xfff6eb, 0xff5040, 0x61cb8b, 0xffc044)
-    for end in ends:
-        foot = (end[0], 0.35, end[1])
-        box((0.05, 0.35, 0.05), (end[0], 0.17, end[1]), 0x9a7b55)
-        strut(top, foot, 0.02, 0xc8cfdf)                            # pulled taut: one bar
-        yaw = math.atan2(foot[0] - top[0], foot[2] - top[2])
-        for i in range(6):
-            t = (i + 0.7) / 6.6
-            mx, my, mz = (top[0] + (foot[0] - top[0]) * t, top[1] + (foot[1] - top[1]) * t,
-                          top[2] + (foot[2] - top[2]) * t)
-            box((0.17, 0.14, 0.02), (mx, my - 0.09, mz), COLS[i % 5], yaw=yaw + math.pi / 2)
-
 @piece(1.0)
 def expedition_camp():
     # Glacier: a climbers' base camp at its real size beside a car: a cluster
@@ -2602,10 +2647,10 @@ def expedition_camp():
     # behind a curved wall of snow blocks against the wind, the radio mast
     # over them (some twelve metres, banded red and white, guyed: what reads
     # over the kerb from far down the road) flying the expedition's flag across
-    # to the road, lines of prayer flags strung from its head, a long sled
-    # loaded with kit, rucksacks, two climbers. All of it on the crest of its
-    # snow bank (SET_GROUND), up where a racer sees it over the kerb, and
-    # draped: built on y = 0 and laid on the bank as the renderer draws it.
+    # to the road, a long sled loaded with kit, rucksacks, two climbers. All
+    # of it on the crest of its snow bank (SET_GROUND), up where a racer sees
+    # it over the kerb, and draped: built on y = 0 and laid on the bank as the
+    # renderer draws it.
     ridge_tent(0.0, 0.0, 0xff7e44)
     ridge_tent(-0.3, 0.9, 0xcf534f)
     ridge_tent(0.2, -0.95, 0xffc044)
@@ -2622,11 +2667,9 @@ def expedition_camp():
         box((0.12, 0.18, 0.1), (x, 0.09, z), c, yaw=0.3)
     snow_person(1.6, 0, -0.6, 0xcf534f, 0x38383d, yaw=0.5)
     snow_person(1.75, 0, 0.25, 0x3f7bd9, 0xffc044, yaw=-0.6)
-    # the radio mast, banded, its guys pegged out round it; prayer flags: two
-    # lines from the mast's head down to pegs toward the road
+    # the radio mast, banded, its guys pegged out round it
     MX, MZ, MH = -0.5, -2.2, 2.8
     radio_mast(MX, MZ, MH, 7, 'anim_drape+sway:a=x:d=24:p=1.9#1')
-    prayer_flags((MX, MH - 0.35, MZ), ((1.9, -3.4), (2.1, -0.9)))
     # draped, the flag too (`drape`): the bank's crest is drawn on the 9 u
     # grid, half a unit and more off its flat top
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
@@ -2638,7 +2681,7 @@ def advanced_camp():
     # and smaller, as a camp up the mountain is: four ridge tents in a row
     # and the store tent behind them, a short wall of snow blocks at the back,
     # no mess tent and no sled, the radio mast (what reads over the kerb)
-    # flying the expedition's flag with one line of prayer flags, two ice axes
+    # flying the expedition's flag, two ice axes
     # stood in the snow, two climbers by the tents. Close set, on a low bank
     # (SET_GROUND), so the slope it stands near tips no tent: draped, built on
     # y = 0 and laid on the snow as the renderer draws it.
@@ -2654,7 +2697,6 @@ def advanced_camp():
     snow_person(1.3, 0, 0.8, 0x61cb8b, 0x38383d, yaw=-0.5)
     MX, MZ, MH = -0.3, 2.3, 2.8
     radio_mast(MX, MZ, MH, 7, 'anim_drape+sway:a=x:d=24:p=1.7#1')
-    prayer_flags((MX, MH - 0.35, MZ), ((1.6, 3.2),))
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
           'drape_camp')
 
@@ -4222,10 +4264,11 @@ def windpump():
     # Crag: a windpump out on the range, a tree's height, its wheel turning
     # (toward +X, the road) over the round stock tank it fills, and the
     # ranch's cattle come in to it: one drinking at the tank, the rest
-    # grazing round it, two of them now and then lifting their heads to look
-    # about (a gesture). The herd stands at the water rather than alone on
-    # the range, where four cows a car long each are a speck from the road:
-    # tower, tank and herd read as one scene.
+    # grazing round it, each of them now and then lifting its head to look
+    # about (a gesture, every cow at its own pace: a herd where two looked up
+    # and two never did read as two toys). The herd stands at the water
+    # rather than alone on the range, where four cows a car long each are a
+    # speck from the road: tower, tank and herd read as one scene.
     windpump_body(0.0, 0.0, 0.5)                                                 # a big one, some 16 m
     TX, TZ = 2.0, 1.0
     cyl(0.85, 0.36, (TX, 0, TZ), 'grey', segs=12)                              # the stock tank
@@ -4233,10 +4276,10 @@ def windpump():
     box((0.3, 0.24, 0.3), (-0.9, 0.12, 1.4), 'white')                           # the salt lick
     def toward(x, z, tx, tz):
         return math.atan2(-(tz - z), tx - x)
-    cow((3.4, 0, 0.0), yaw=toward(3.4, 0.0, TX, TZ))                           # drinking
+    cow((3.4, 0, 0.0), yaw=toward(3.4, 0.0, TX, TZ), life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')   # drinking
     cow((0.2, 0, 2.1), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
     cow((2.8, 0, 2.3), yaw=2.4, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    cow((-1.4, 0, -1.5), yaw=-0.9, coat=0x5a3a28)
+    cow((-1.4, 0, -1.5), yaw=-0.9, coat=0x5a3a28, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('pump')
 
 def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
@@ -4278,8 +4321,8 @@ def ranch():
     # builder works in world units): the ranch house with its porch and
     # chimney, the red barn with hay stacked by it, the water tower on its
     # braced legs, the windpump turning over its stock tank, and the corral in
-    # front toward the road (+X) with cattle in it, one of them grazing; all
-    # on a dirt yard.
+    # front toward the road (+X) with cattle in it, grazing, each lifting its
+    # head now and then to look about; all on a dirt yard.
     ground_poly([(-7.4, 0.03, -8.6), (3.8, 0.03, -8.6), (3.8, 0.03, 8.8), (-7.4, 0.03, 8.8)], [(0, 1, 2, 3)], 0xd39a70)
     # the house, door toward the road, a porch along its front
     hut(3.0, 1.2, 2.4, (-4.2, 0, -3.8), 0xe3cfa4, 0x8a4a32)
@@ -4333,9 +4376,9 @@ def ranch():
     box((0.5, 0.25, 1.1), (X0 + 0.5, 0.12, -1.2), 'grey')                         # a trough, a hay feeder
     box((0.4, 0.03, 1.0), (X0 + 0.5, 0.25, -1.2), 0x62d3c8)
     hay_bale((X0 + 0.6, 0, 1.2), 0.3)
-    cow((0.4, 0, -0.6), yaw=0.4)
+    cow((0.4, 0, -0.6), yaw=0.4, life='anim_sway:a=z:d=30:p=7.1:r=0.72#d')
     cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
-    cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb)
+    cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
     join_still('ranch')
 
 def hoodoo(x, z, h, k, yaw=0.0):
@@ -5097,12 +5140,14 @@ def jointed_snake():
     # on the floor inside the bend before the line. It rears up at its -Z end
     # and sways its head out over -X toward the racers coming at it down the
     # straight, and its tail wiggles joint by joint as the wooden toy's
-    # does when it is shaken; a little one lies curled beside it. Its body
-    # runs along Z.
+    # does when it is shaken; a little one lies curled beside it, its own
+    # tail wiggling (a still snake beside a live one read as a broken toy).
+    # Its body runs along Z.
     toy_snake([(0.0, 7.4), (1.6, 5.0), (-1.6, 2.6), (1.4, 0.0), (-1.3, -2.4), (0.9, -4.6), (0.0, -6.4)],
               lambda x, z: 0.0, 0.62, rear=(-1.0, 0.0),
               tail=(5, 10, 2.2, 0.13), neck='anim_sway:a=y:d=24:p=3.3#neck')
-    toy_snake([(-3.4, 7.8), (-4.6, 5.8), (-3.4, 4.0), (-4.5, 2.2)], lambda x, z: 0.0, 0.36)
+    toy_snake([(-3.4, 7.8), (-4.6, 5.8), (-3.4, 4.0), (-4.5, 2.2)], lambda x, z: 0.0, 0.36,
+              tail=(3, 14, 1.7, 0.15))
 
 @piece(1.0)
 def toy_snake_loop():
@@ -5339,29 +5384,40 @@ def chute(pts, color, mr, half=0.75, wall=0.55):
 
 @piece(0.62)
 def marble_run():
-    # Helix: a marble run that is the lap in small, about 50 cm tall. Marbles
-    # climb a screw round one tower, roll along a high chute to the second,
-    # corkscrew down it and run home along the floor: the track's two
-    # spirals, its skyway and its run home, so the loop is closed in sight
-    # and never needs hiding. Towers on the piece's Z axis, A (up) at +Z, B
-    # (down) at -Z.
+    # Helix: a marble run that is the lap in small, about 50 cm tall: two
+    # towers, each with a chute wound round it in a screw, a high chute
+    # between their tops and a run home along the floor, the track's two
+    # spirals, its skyway and its run home. A marble only ever rolls DOWN in
+    # sight: it comes up inside tower A (out of sight, the kit's lift, as in
+    # its other towers) and out of the cup on top, and there the run forks.
+    # Some marbles take the high chute to B and corkscrew down B's screw and
+    # home along the floor; the rest corkscrew straight down A's own screw;
+    # both drop into A's foot and up inside it again. Towers on the piece's Z
+    # axis, A (the lift) at +Z, B at -Z.
     ZA, ZB, R, TURNS = 13.0, -13.0, 3.4, 2.5
     MR = 0.62                                    # a marble's radius: a big shooter, chunky enough to read rolling
     LOW, HIGH_A, HIGH_B = MR + 0.07, 14.5, 13.5  # marble centre heights: the low run lies on the floor
-    up = helix_pts(0, ZA, R, LOW, HIGH_A, 0.0, TURNS)
-    down = helix_pts(0, ZB, R, HIGH_B, LOW, math.pi, TURNS)
-    loop = up + down                             # up ends at angle pi (-X side), down ends at 0 (+X)
-    # the towers: stacked toy cylinders, a cap on each
-    for zc, h in ((ZA, HIGH_A + 1.0), (ZB, HIGH_B + 1.0)):
+    up = helix_pts(0, ZA, R, LOW, HIGH_A, 0.0, TURNS)          # A's screw, foot to top
+    down = helix_pts(0, ZB, R, HIGH_B, LOW, math.pi, TURNS)     # B's screw, top to foot
+    # the towers: stacked toy cylinders; A carries the cup the marbles come up
+    # into, B a cap
+    TOPA = HIGH_A - 0.3                          # A's column top: its cup's lip is the screw's top
+    for zc, h in ((ZA, TOPA - 0.4), (ZB, HIGH_B + 1.0)):
         cyl(2.2, 0.4, (0, 0, zc), 0x9aa1b4, segs=12)
         n = 5
         for k in range(n):
             cyl(1.25, h / n, (0, 0.4 + k * h / n, zc), TOY[k % 4], segs=10)
-        cyl(1.5, 0.5, (0, 0.4 + h, zc), 0xfdf4de, segs=10)
+    cyl(1.0, 1.1, (0, TOPA, ZA), 0xfdf4de, r2=2.0, segs=10)       # the cup the marbles come up into
+    cyl(1.5, 0.5, (0, 0.4 + HIGH_B + 1.0, ZB), 0xfdf4de, segs=10)
     chute(up, 0xe66a5a, MR)
     chute(down, 0x5a8fd8, MR)
     chute([up[-1], down[0]], 0xf2c14e, MR)        # the high run from A's top to B's
     chute([down[-1], up[0]], 0xf2c14e, MR)        # and the low run home along the floor
+    over = TOPA + 1.1 + MR + 0.03                 # a marble's height clear of the cup's lip
+    rim = (-2.05, over, ZA)                       # out over the lip, down onto A's screw
+    chute([rim, up[-1]], 0xf2c14e, MR)
+    foot = (1.3, LOW, ZA)                         # in at A's foot
+    chute([up[0], foot], 0xf2c14e, MR)
     # spokes from each tower to its screw, and legs under the high chute
     for zc, pts in ((ZA, up), (ZB, down)):
         for i in range(4, len(pts) - 1, 8):
@@ -5376,27 +5432,22 @@ def marble_run():
         y = HIGH_A + (HIGH_B - HIGH_A) * f - MR - 0.05
         box((0.4, y, 0.4), (x, y / 2, z), 0x9aa1b4)
         box((1.6, 0.3, 1.6), (x, 0.15, z), 0x9aa1b4)
-    # the path the marbles ride, and the marbles spread round it
-    for k, p in enumerate(loop):
-        marker('path_marbles_%d' % k, p)
-    seglen = []
-    for i in range(len(loop)):
-        a, b = loop[i], loop[(i + 1) % len(loop)]
-        seglen.append(math.dist(a, b))
-    total = sum(seglen)
+    # the two runs the marbles ride, sharing the lift: up A's middle out of
+    # sight, over the cup's rim, then the long way (the high chute, B, home)
+    # or the short (A's screw)
+    lift = [(0, LOW + (TOPA - LOW) * j / 6, ZA) for j in range(7)] + [(0, over, ZA), rim]
+    runs = (('marbles', lift + [up[-1]] + down + [up[0], foot], 6, 15.0),
+            ('screw', lift + up[::-1] + [foot], 4, 9.0))
     COLS = (0x7db8e8, 0xe66a5a, 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xff7e44, 0x5a8fd8, 0xff5040, 0x6cbf6c, 0xf2c14e)
-    NM = len(COLS)
-    for m in range(NM):
-        s = total * m / NM
-        i = 0
-        while s > seglen[i]:
-            s -= seglen[i]
-            i += 1
-        a, b = loop[i], loop[(i + 1) % len(loop)]
-        f = s / seglen[i]
-        at = tuple(a[j] + (b[j] - a[j]) * f for j in range(3))
-        with animated('anim_path:c=marbles:p=18:o=%.4f:f=0#%d' % (m / NM, m), at):
-            sphere(MR, at, COLS[m], subdiv=2, flat=False)
+    m = 0
+    for chain, loop, NM, period in runs:
+        for k, q in enumerate(loop):
+            marker('path_%s_%d' % (chain, k), q)
+        for j in range(NM):
+            at = up[len(up) * j // NM]             # rest spot, any will do: the path carries it
+            with animated('anim_path:c=%s:p=%.1f:o=%.4f:f=0#%d' % (chain, period, j / NM, m), at):
+                sphere(MR, at, COLS[m], subdiv=2, flat=False)
+            m += 1
 
 @piece(0.65)
 def marble_tower():
