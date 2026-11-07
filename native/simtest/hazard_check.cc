@@ -4,16 +4,13 @@
 //
 // WHY THE FIRST TWO HAVE NO COVERAGE, AND WHY THAT IS NOT THE SAME PROBLEM TWICE:
 //
-//   collidePole is UNREACHABLE ON THE SHIPPED CATALOGUE. Every one of the 20
-//   catalogue tracks builds with zero poles — verified against the JS TrackBuilder
-//   too, so this is not a port gap: TrackBuilder auto-emits ghost poles only for
-//   pillars/loop shafts standing inside a drivable corridor, and no shipped layout
-//   puts one there (helix has 30 pillars and 2 loops and still emits none). The
-//   collision code is live, 36 lines of it, and the moment a track does place a
-//   post in the road — or the Gym becomes buildable natively — it is on the byte
-//   path. Until then no fixture can exercise it, because fixtures race catalogue
-//   tracks. So this check builds the situation directly: a real track with poles
-//   spliced into its GameTrack.
+//   collidePole is reached on the shipped catalogue only by a SAND track's finish
+//   gantry, whose pylons stand out on the sand (trackbuilder.h,
+//   sand_gantry_lat). TrackBuilder auto-emits ghost poles only for pillars/loop
+//   shafts standing inside a drivable corridor, and no shipped layout puts one
+//   there (helix has 30 pillars and 2 loops and still emits none). So this check
+//   builds the situation directly: a pole-free track with poles spliced into its
+//   GameTrack.
 //
 //   stageBanana is a TRACE-STAGING HOOK with no caller in the engine. The REAL
 //   banana gameplay path (useItem -> drop behind the car -> enterBanana -> spin) is
@@ -90,13 +87,15 @@ int main() {
   {
     BuiltRaceTrack bt;
     std::string err;
-    if (!build_race_track_by_id("tidepool", 3, 42u, bt, err)) {
-      std::fprintf(stderr, "FAIL build tidepool: %s\n", err.c_str());
+    // Not a Beach Cup track: their sand puts the finish gantry's pylons on the
+    // road as poles.
+    if (!build_race_track_by_id("powder", 3, 42u, bt, err)) {
+      std::fprintf(stderr, "FAIL build powder: %s\n", err.c_str());
       return 2;
     }
     check(bt.game.poles.empty(),
-          "the premise still holds: a catalogue track carries no poles (if this "
-          "fails, a real track grew one and the golden traces now cover this code)");
+          "the premise still holds: this track carries no poles (if this fails, it "
+          "grew one and the golden traces now cover this code)");
 
     // Two posts: one the car is driven into, one far away that must stay inert.
     const double POLE_S = 40.0, POLE_LAT = 0.0, POLE_R = 0.35;

@@ -46,7 +46,7 @@ export function auditTracks() {
     for (let i = 0; i < n; i += 2) for (let j = i + 2; j < n; j += 2) {
       if (ss[i].up.y < 0.9 || ss[j].up.y < 0.9) continue;
       const arc = Math.min(Math.abs(ss[i].s - ss[j].s), L - Math.abs(ss[i].s - ss[j].s));
-      if (arc < 8) continue;
+      if (arc < Math.max(8, 1.5 * (ss[i].width / 2 + ss[j].width / 2 + KERB))) continue;  // a neighbour on the same strand
       const dy = Math.abs(ss[i].pos.y - ss[j].pos.y);
       if (dy >= LEVEL) continue;                       // vertically clear (bridge) — 3D gate governs
       const dx = ss[i].pos.x - ss[j].pos.x, dz = ss[i].pos.z - ss[j].pos.z;

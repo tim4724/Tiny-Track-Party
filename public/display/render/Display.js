@@ -153,6 +153,7 @@ export class Display {
       debugChasePitch: mod.cwrap('ttp_display_debug_chase_pitch', 'number', ['number']),
       debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
       debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
+      debugSandDust: mod.cwrap('ttp_display_debug_sand_dust', 'number', ['number', 'number']),
       dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
       dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
@@ -789,6 +790,7 @@ export class Display {
   // extra distance back ("Monster angle" / "Monster distance").
   debugMonsterPitch(deg) { return this._fn.debugMonsterPitch(deg); }
   debugMonsterBack(units) { return this._fn.debugMonsterBack(units); }
+  debugSandDust(knob, value) { return this._fn.debugSandDust(knob, value); }
 
   dressKeep(f) { this._fn.dressKeep(f); }
 

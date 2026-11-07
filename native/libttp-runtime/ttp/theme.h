@@ -79,6 +79,7 @@ struct RoadPalette {
   uint32_t kerbB = 0xf8f8fb;
   uint32_t skirt = 0x5a6078;     // deck side/belly (defaults to `asphalt`)
   uint32_t shoulder = 0x5a6078;  // dusty edge tint where edge lines are dropped
+  uint32_t sand = 0xe4cc94;      // the strip between asphalt and kerb on a track that has one
   float kerbW = 0.22f, kerbH = 0.20f;  // kerb cross-section (visual only)
   bool edgeLines = true;         // false drops the painted side lines
   // Whether this deck has ever been REPAIRED — the asphalt patches of

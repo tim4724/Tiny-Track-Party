@@ -418,7 +418,10 @@ int main() {
         Game game(field(2), bt.game, [](const Event&) {});
         Car& a = *game.cars()[0];
         Car& b = *game.cars()[1];
-        a.totalS = s0; a.lat = 1.6 * side; a.v = 10.0; a.vlat = 0;
+        // Measured from the curb, the sand strip included, so a wider strip does
+        // not leave the car short of the wall when the frames run out.
+        a.totalS = s0; a.lat = (bt.game.roadWidth / 2 + bt.game.sand - 0.9) * side;
+        a.v = 10.0; a.vlat = 0;
         a.heading = -angle * side;          // into the wall on the `side` edge
         b.totalS = -80.0;
         const double cap = a.vmax * debugCurbSpeed(-1);

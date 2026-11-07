@@ -62,7 +62,7 @@ inline std::unique_ptr<Centerline> make_centerline(const RaceTrack& rt) {
   for (const OutSample& s : rt.samples) {
     Sample cs;
     cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
-    cs.width = s.width; cs.s = s.s;
+    cs.width = s.width; cs.sand = s.sand; cs.s = s.s;
     samples.push_back(cs);
   }
   return std::make_unique<Centerline>(std::move(samples), rt.length);
@@ -82,6 +82,7 @@ inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_
   g.length = rt.length;
   g.totalLaps = laps;
   g.roadWidth = rt.roadWidth;
+  g.sand = rt.sand;
   g.seed = seed;
   for (const Hazard& h : rt.hazards) g.hazards.push_back(Zone{h.s, h.lat, h.radius});
   for (const Pad& p : rt.pads)

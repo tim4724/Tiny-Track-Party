@@ -202,6 +202,7 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
   // width — a half-width road, and every derived furniture radius with it.
   const double width = numOr(desc, "width", 0);
   p.def.width = width != 0 ? width : kRoadWidthFallback;
+  p.def.sand = numOr(desc, "sand", 0);
   p.def.startU = numOr(desc, "startU", 0);
 
   if (isSpline) {
@@ -664,10 +665,10 @@ void audioFlush() {
 const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
-  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_LAND,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_SAND,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {
@@ -785,6 +786,7 @@ void ttp_audio_frame(double nowMs) {
     a.spin = c.spin;
     a.monster = c.monsterT > 0;
     a.onWall = c.onWall;
+    a.onSand = c.onSand;
     a.drift = c.driftMix;
     a.air = c.h;
     a.airRate = c.vh;

@@ -242,6 +242,7 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     voice(out, "corner", c.id, js_max(c.steer * c.steer, c.drift) * (1 - c.drift) * tyreGate, nullptr);
     voice(out, "drift", c.id, c.drift * tyreGate, nullptr);
     voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4) * ground, nullptr);
+    voice(out, "sand", c.id, c.onSand ? SAND_LEVEL * clamp01(c.spd / 0.4) : 0, nullptr);
     // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
     // While a monster truck, the same loop deepens into a big-truck growl.
     voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2) + (c.airborne ? ENGINE_FLARE : 0),

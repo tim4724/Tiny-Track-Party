@@ -461,7 +461,19 @@ fragment {
             // per-backend flip. See tests/render-target-uv.test.js.
             float ink = skidInk(variable_uvs.xy);
             vec4 sc = materialParams.skidColor;
-            base = mix(base, sc.rgb, min(ink, sc.a));
+            // On the sand strip (its vertex alpha is 0, buildRoadMesh) a tyre
+            // leaves a GROOVE, not rubber: the same ink tints the sand itself,
+            // each pass deeper, so the strip wears in where the cars drive.
+            // Damp, churned sand: warmer and only a little darker, never grey.
+            // (Lit ridges along its edges, two more taps, were tried and read
+            // as odd light lines. An early-out for sand pixels that skipped the
+            // paint and decal work measured SLOWER on the GE9215, ~1.3 ms at
+            // 4P/1080 with the antialias pass on.)
+            if (getColor().a < 0.5) {
+                base = mix(base, base * vec3(0.8, 0.72, 0.58), min(ink * 2.2, 0.8));
+            } else {
+                base = mix(base, sc.rgb, min(ink, sc.a));
+            }
         }
         // A box in front of the loop — see profBounds. Exact, not conservative:
         // a box IS the union of the per-entry windows its loop tests, so a

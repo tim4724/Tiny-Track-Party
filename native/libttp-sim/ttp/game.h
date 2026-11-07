@@ -86,7 +86,9 @@ struct Car {
   double accel = 0, vmax = 0, turn = 0, mass = 1, halfLen = 0.44, halfWid = 0.28;
   bool curbLimSet = false;
   double curbLim = 0;
+  double sandHere = 0;   // the sand strip's width where the car is, per side
   bool onWall = false;
+  bool onSand = false;
   // The slide (Game::update): the brake with a steer at speed.
   //   drifting    — sliding now (the brake is held)
   //   driftMix    — how much of the look is in force: rises in, fades out
@@ -135,6 +137,7 @@ struct GameTrack {
   double length;
   int totalLaps;
   double roadWidth;
+  double sand = 0;
   uint32_t seed;
   std::vector<Zone> hazards;
   std::vector<PadRt> pads;

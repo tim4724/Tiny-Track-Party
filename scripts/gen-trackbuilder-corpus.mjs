@@ -38,9 +38,11 @@ import { fnv1a } from './oracle-lib.mjs';
 // second, JS-side track build — the engine's C++ TrackBuilder is the only one
 // left, and the browser holds no track geometry at all. So this generator can no
 // longer RUN as committed: the tests/fixtures/trackbuilder-corpus.jsonl it
-// produced is permanent cross-implementation evidence, replayed by the
-// trackbuilder ctest, and re-recording it from C++ would only prove C++ matches
-// itself.
+// produced is cross-implementation evidence, replayed by the trackbuilder ctest,
+// and re-recording it from C++ would only prove C++ matches itself. The Beach
+// Cup lines are that weaker evidence already: this builder has no sand strip, so
+// they were re-emitted from C++ (trackbuilder_check --record, the
+// record_trackbuilder ctest) when the strip shipped.
 //
 // It is kept because the hexJSON encoding below IS the comparison contract in
 // executable form. To re-derive the oracle, restore the JS twins first —

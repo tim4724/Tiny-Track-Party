@@ -939,6 +939,13 @@ TTP_ABI double ttp_display_debug_chase_pitch(double deg);
 TTP_ABI double ttp_display_debug_monster_pitch(double deg);
 TTP_ABI double ttp_display_debug_monster_back(double units);
 
+/* DEBUG: the sand dust's look, knob by knob in TtpRenderer::SandDustKnob's order
+ * (rate, life, start size, end size, opacity, flatness, trail, drift, rise, drag,
+ * whiteness, turn boost, bite boost). A negative value restores the authored
+ * one. Answers the AUTHORED value, with or without a display, so a slider reads
+ * its default by resetting. */
+TTP_ABI double ttp_display_debug_sand_dust(int knob, double value);
+
 #ifdef __cplusplus
 }
 #endif

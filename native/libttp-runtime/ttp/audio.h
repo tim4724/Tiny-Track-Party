@@ -62,6 +62,7 @@ inline constexpr double AUD_CUT = 64;     // past here: out of the scene -> sile
 // A sustained voice below this level is not running at all: it starts when its
 // level first rises above the floor and dies when it falls back.
 inline constexpr double VOICE_FLOOR = 0.02;
+inline constexpr double SAND_LEVEL = 0.45;     // the sand voice at speed
 inline constexpr double SCREECH_GAP_MS = 140;  // min spacing so curb contact can't machine-gun
 inline constexpr double LAP_GAP_MS = 350;      // min spacing between lap chimes
 // A wall-grind only counts as a scrub above this speed — below it the car is
@@ -122,6 +123,7 @@ struct Car {
   double spin = 0;
   bool monster = false;
   bool onWall = false;
+  bool onSand = false;
   double drift = 0;          // the sim's Car::driftMix, 0..1 (not on the snapshot)
   double air = 0;            // height off the deck (sim Car::h)
   double airRate = 0;        // and its rate, negative coming down (Car::vh)

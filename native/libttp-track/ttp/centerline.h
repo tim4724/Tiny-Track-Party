@@ -19,11 +19,14 @@ namespace ttp {
 struct Frame {
   Vec3 pos, tangent, up, lateral;
   double width = 0.0;
+  double sand = 0.0;  // per side, inside `width`
+  double asphaltHalf() const { return width / 2 - sand; }  // the drivable asphalt's half-width
 };
 
 struct Sample {
   Vec3 pos, tangent, up, lateral;
   double width = 0.0;
+  double sand = 0.0;
   double s = 0.0;
 };
 

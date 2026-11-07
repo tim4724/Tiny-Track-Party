@@ -241,6 +241,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // Constants — identical to buildRoad's.
     const float defHalf = tb.roadWidth / 2;
     const float cw = tb.kerbW, ch = tb.kerbH, deck = 0.34f;
+    // Sand is the gap between kerb and edge line, grown, ring by ring
+    // (TrackBin::gapOf): a sample's width runs kerb to kerb, so the line lands on
+    // the asphalt's edge and the section keeps its strips.
     const float gap = std::min(0.07f, defHalf * 0.3f);
     const float lw = std::min(0.20f, defHalf * 0.5f - gap);
     const float stripeLen = 2.0f, dashW = TrackBin::kDashW;
@@ -287,6 +290,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float3 KERB_B = srgbToLinear(tb.pal[4]);
     const float3 SKIRT = srgbToLinear(tb.pal[5]);
     const float3 SHOULDER = srgbToLinear(tb.pal[6]);
+    const float3 SAND = srgbToLinear(tb.pal[7]);
 
     // Cross-section profile, strips and baked AO.
     //
@@ -303,7 +307,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const PPoint P[kPts] = {
         { -1, -cw, -deck }, { -1, -cw, 0 }, { -1, -cw, ch - bev }, { -1, -cw + bev, ch },
         { -1, -bev, ch }, { -1, 0, ch - bev },
-        { -1, 0, 0 }, { -1, gap, 0 }, { -1, gap + lw, 0 },
+        { -1, 0, 0 }, { -1, gap, 0 }, { -1, gap + lw, 0 },     // gap: offAt widens it per ring
         { 0, -dashW / 2, 0 }, { 0, dashW / 2, 0 },
         { 1, -gap - lw, 0 }, { 1, -gap, 0 }, { 1, 0, 0 },
         { 1, 0, ch - bev }, { 1, bev, ch },
@@ -356,11 +360,23 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
 
     // Every ring's profile points, once: the sweep, the strip normals and the
     // far ribbon's chord test each read the same points many times over.
+    // A point's lateral offset from its kerb at ring i: the gap's two edges
+    // follow that ring's own gap (the sand, where there is some).
+    const auto offAt = [&](uint32_t i, int j) {
+        const float g = tb.gapOf(frames[i]);
+        switch (j) {
+            case 7: return g;
+            case 8: return g + lw;
+            case 11: return -g - lw;
+            case 12: return -g;
+            default: return P[j].off;
+        }
+    };
     std::vector<float3> ringPts((size_t) N * kPts);
     for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
         for (int j = 0; j < kPts; j++) {
-            const float l = P[j].sign * halfAt(i) + P[j].off;
+            const float l = P[j].sign * halfAt(i) + offAt(i, j);
             ringPts[(size_t) i * kPts + j] = f.pos + f.up * P[j].y + f.lat * l;
         }
     }
@@ -479,7 +495,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_SKIRT: cb = SKIRT; break;
                 case K_DASH: cb = bare ? ASPHALT : (dashOn(i) ? DASHC : ASPHALT); break;
                 case K_LINE: cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER); break;
-                case K_GAP: cb = tb.edgeLines ? ASPHALT : SHOULDER; break;
+                case K_GAP: cb = tb.sand > 0 ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
                 default: cb = ASPHALT; break;
             }
             quadKey[(size_t) i * kLaid + s] = packAlbedo(cb, 1.0f);
@@ -517,10 +533,14 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // anyway. Raw lat has no second quantity to agree with.
                 // Off the deck, v is the out-of-band sentinel instead — see the
                 // DECK FLAG note above.
-                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, AO[pt]) },
+                // A sand strip's alpha is 0: vroad.mat reads it as "a tyre
+                // leaves a groove here, not rubber". The deck is opaque, so the
+                // alpha is free.
+                const float flag = (st.kind == K_GAP && tb.sand > 0) ? 0.0f : 1.0f;
+                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, AO[pt], flag) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
-                          onDeck ? P[pt].sign * halfAt(ri) + P[pt].off : OFF_DECK_LAT });
+                          onDeck ? P[pt].sign * halfAt(ri) + offAt(ri, pt) : OFF_DECK_LAT });
                 roadRemap.push_back(corner[v]);
             }
             // The soup's two triangles, verbatim: (a@i, b@i, b@ni) then
@@ -539,6 +559,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // sun bake later does.
     bakeVertexLight(mRoad);
     buildCarShadowDraws();
+    buildSandDraws(tb);
     // The ring's mean baked light at full visibility, display-encoded, for
     // the car-shadow rows (TtpRenderer.h, mRingLight): the deck-level points
     // of the cross-section.
@@ -919,7 +940,11 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
     const float3 INKC = srgbToLinear(0x2a2735) * grade;
     const float3 PAPER = srgbToLinear(0xfff6eb) * grade;
     const float defHalf = tb.roadWidth / 2;
-    const float halfSpan = defHalf + tb.kerbW + 0.25f + 0.3f;
+    // Outside the kerbs; on a sand track where they would stand without the sand,
+    // out on it, where the pylons collide (ttp::sand_gantry_lat says why).
+    const float halfSpan = tb.sand > 0 ? (float) ttp::sand_gantry_lat(tb.roadWidth)
+                                       : defHalf + tb.kerbW + (float) ttp::GANTRY_CLEAR;
+    const float POST_R = (float) ttp::GANTRY_POST_RADIUS;
     const float CLEARH = 2.0f, BANNER_H = 0.8f, BANNER_D = 0.12f;
 
     const auto quadW = [&](const float3& a, const float3& b, const float3& c,
@@ -983,12 +1008,12 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
             const int bands = 2 * (int) std::lround((topY / RING_H - 1) / 2) + 1;
             for (int b = 0; b < bands; b++) {
                 const float f0 = (float) b / bands, f1 = (float) (b + 1) / bands;
-                tubeAo(sx, 0.30f, 0.30f, footY + (topY - footY) * f0,
+                tubeAo(sx, POST_R, POST_R, footY + (topY - footY) * f0,
                         footY + (topY - footY) * f1, (b % 2) ? RING_C : PYLON_C,
                         1.0f, 1.0f);
             }
         } else {
-            tube(sx, 0.30f, footY, topY, PYLON_C);
+            tube(sx, POST_R, footY, topY, PYLON_C);
         }
         // Finial: a flush dome cap at PYLON_R (an oversized/pillbox cap swallows
         // the pylon top with a visible crease).
@@ -997,7 +1022,7 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
         const uint32_t domeC = packAlbedo(FINIAL_C, 1.0f);
         for (int r = 0; r <= RINGS; r++) {
             const float phi = (float) r / RINGS * (float) M_PI / 2;
-            const float rr = std::cos(phi) * 0.30f, yy = std::sin(phi) * 0.30f;
+            const float rr = std::cos(phi) * POST_R, yy = std::sin(phi) * POST_R;
             for (int j = 0; j <= SEG; j++) {
                 const float a = (float) j / SEG * 2.0f * (float) M_PI;
                 const float3 p = toWorld(sx + std::cos(a) * rr, topY + yy, std::sin(a) * rr);

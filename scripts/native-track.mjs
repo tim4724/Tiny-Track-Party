@@ -209,7 +209,7 @@ function idOrDescriptorArg(defOrId) {
 // cup tags, generator bookkeeping). The native side refuses what it
 // cannot read, which is the right default for a typo but the wrong one for a
 // field that was never geometry, so the known-inert keys are dropped here.
-const BUILD_KEYS = ['id', 'width', 'startU', 'segments', 'waypoints',
+const BUILD_KEYS = ['id', 'width', 'sand', 'startU', 'segments', 'waypoints',
                     'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers'];
 function stripAuthoring(desc) {
   const out = {};

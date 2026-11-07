@@ -229,6 +229,7 @@ export const DEFAULT_PICKS = {
   corner: 'squeal',
   brake: 'rubber',
   drift: 'grain',           // Tim's pick from the drift sound lineup (2026-10-13)
+  sand: 'grit',
   banana_drop: 'plop',
   banana_slip: 'dizzy',
   monster_inflate: 'turbo', // Tim's gallery pick (2026-06-21)
@@ -501,6 +502,63 @@ export const CUES = [
               const at = ctx.currentTime;
               out.gain.setTargetAtTime(0.0001, at, 0.06);
               try { src.stop(at + 0.4); wobble.stop(at + 0.4); flutter.stop(at + 0.4); } catch (_) { /* already stopped */ }
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'sand',
+    label: 'Sand',
+    desc: 'STATE-DRIVEN: tyres ploughing through the sand strip beside the road: a low rush with a dry hiss over it.',
+    continuous: true,
+    variants: [
+      {
+        id: 'grit', label: 'gritty rush',
+        start(ctx, dest) {
+          // Foley, not a tyre note: two wide noise bands, far apart so it sits
+          // clear of the squeal and the drift, with a fast uneven grain over both.
+          // Both LFOs are integer Hz so the baked 1 s loop closes in phase.
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 340;
+          lo.Q.value = 1;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 3200;
+          hi.Q.value = 0.8;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.35;
+          const grain = ctx.createGain();
+          grain.gain.value = 0.7;
+          const flutterA = ctx.createOscillator();
+          flutterA.frequency.value = 23;
+          const flutterB = ctx.createOscillator();
+          flutterB.frequency.value = 37;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.2;
+          flutterA.connect(flutterDepth);
+          flutterB.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); flutterA.start(t); flutterB.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.16 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
             }
           };
         }

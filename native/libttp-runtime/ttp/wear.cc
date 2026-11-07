@@ -16,7 +16,8 @@ WearPlan compute_wear_plan(const RaceTrack& geo, const RoadPalette& road) {
   const float L = (float) geo.length;
   if (!road.patched || L < 20.0f || geo.samples.empty()) return plan;
 
-  // The deck's width per arclength, through the sim's own centerline type.
+  // The asphalt's width per arclength, through the sim's own centerline type:
+  // a patch is a repair to the asphalt, so it stays off the sand strip.
   const std::unique_ptr<Centerline> center = make_centerline(geo);
 
   // Seeded by track id so a track's repairs are ITS repairs, every visit
@@ -41,7 +42,7 @@ WearPlan compute_wear_plan(const RaceTrack& geo, const RoadPalette& road) {
     const float hl = 0.35f + 0.45f * (float) rng.next();
     const bool dark = rng.next() < 0.5;
     if (nearFurniture(s)) continue;
-    const float half = (float) center->widthAt(s) * 0.5f;
+    const float half = (float) center->sampleAt(s).asphaltHalf();
     const float latMax = std::max(0.0f, half - hl - 0.4f);
     WearMark m;
     m.s = s;

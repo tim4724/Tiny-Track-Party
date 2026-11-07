@@ -11,6 +11,7 @@ import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
 // registry can name a new track BEFORE gen-tracks.mjs runs (the bake pipeline itself
 // imports this module; a hard read here would deadlock that workflow).
 const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
+const BEACH_SAND = 1.1;
 
 // Track catalogue — DATA ONLY, no renderer. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
@@ -225,23 +226,24 @@ const BOXES = {
 export const TRACKS = {
   // Beach Cup — SEEDED easy circuits (scan-seeds `easy` profile: sweeping corners,
   // rolling hills + hops, width play, no crossings; auto-placed furniture).
+  // Every Beach track carries a sand strip beside the asphalt (plan units per side).
   tidepool: {
-    name: 'Tidepool', waypoints: GEN_TRACKS.tidepool,
+    name: 'Tidepool', sand: BEACH_SAND, waypoints: GEN_TRACKS.tidepool,
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes
   },
   cove: {
-    name: 'Cove', waypoints: GEN_TRACKS.cove,
+    name: 'Cove', sand: BEACH_SAND, waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
     set: [
       { model: 'set-pirate-ship', u: 0.93, lat: 33, yaw: 180, y: -0.5, scale: 1.25 }  // aground in the shallows
     ]
   },
   driftwood: {
-    name: 'Driftwood', waypoints: GEN_TRACKS.driftwood,
+    name: 'Driftwood', sand: BEACH_SAND, waypoints: GEN_TRACKS.driftwood,
     oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes
   },
   riptide: {
-    name: 'Riptide', waypoints: GEN_TRACKS.riptide,
+    name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
@@ -368,11 +370,12 @@ const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
 // instead — the display/controller TestHarnesses, the trailer editor, the schematic and
 // export bakes, and the unit tests that iterate every shipped track. So a new descriptor
 // field reaches the GAME only through the codegen; copy it here too, or the previews
-// silently disagree with the game. `startU` is one of those; `width` is deliberately
-// absent because no descriptor sets it (the shipped width games are per-SEGMENT).
+// silently disagree with the game. `startU` and `sand` are two of those; `width` is
+// deliberately absent because no descriptor sets it (the shipped width games are
+// per-SEGMENT).
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name,
   cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,
-  segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints, startU: TRACKS[id].startU,
+  segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints, startU: TRACKS[id].startU, sand: TRACKS[id].sand,
   oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));

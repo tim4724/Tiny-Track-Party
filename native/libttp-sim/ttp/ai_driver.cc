@@ -131,7 +131,7 @@ RacingLine::RacingLine(Centerline& centerline) {
 
   auto boundFor = [&](double kAbs, int i) -> double {
     const Frame& f = frames[i];
-    double half = (!std::isnan(f.width)) ? f.width / 2 : RL_FALLBACK_HALF;
+    double half = (!std::isnan(f.width)) ? f.asphaltHalf() : RL_FALLBACK_HALF;
     double cut = js_min(1.1, kAbs * LOOKAHEAD * LOOKAHEAD / 8);
     double b = half - RL_LAT_MARGIN - RL_EDGE - cut;
     return b < RL_MIN_ROOM ? 0 : b;

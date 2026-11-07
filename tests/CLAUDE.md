@@ -56,7 +56,10 @@ that restores a twin, and `npm run revive:js-oracle` restores the whole set into
 throwaway worktree to run one in. **That path is worth keeping for exactly three
 corpora** — math, trackbuilder and track-sampler — because their oracles have never
 been re-emitted from C++, which makes them the last cross-implementation evidence
-in the tree. The audio, ui, session, schematic, theme, raceflow and roomflow oracles
+in the tree. One exception: a trackbuilder line for a track the JS builder cannot
+express (a sand strip) is re-emitted from C++ through `record_trackbuilder`, and
+is regression evidence from that commit on; the other lines keep the claim. The
+audio, ui, session, schematic, theme, raceflow and roomflow oracles
 were **deleted outright** with their twins; those corpora can never be re-derived from
 JS at all. The `record_*`
 roundtrip carries the freshness obligation for all of those except raceflow, whose

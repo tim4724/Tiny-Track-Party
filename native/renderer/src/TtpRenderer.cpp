@@ -860,6 +860,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.pal[0] = th.road.asphalt; out.pal[1] = th.road.line; out.pal[2] = th.road.dash;
     out.pal[3] = th.road.kerbA;   out.pal[4] = th.road.kerbB;
     out.pal[5] = th.road.skirt;   out.pal[6] = th.road.shoulder;
+    out.pal[7] = th.road.sand;
     out.kerbW = th.road.kerbW;
     out.kerbH = th.road.kerbH;
     out.edgeLines = th.road.edgeLines;
@@ -1036,6 +1037,7 @@ static float bermFlare(const ttp::HillRing& r, const ttp::RaceTrack& geo) {
 // and the sim's doubles never come back the other way.
 void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
     out.roadWidth = (float) geo.roadWidth;
+    out.sand = (float) geo.sand;
     out.groundY = (float) geo.groundY;
     out.length = (float) geo.length;
     out.closed = geo.closed;
@@ -1048,6 +1050,7 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
         d.lat = { (float) s.lateral.x, (float) s.lateral.y, (float) s.lateral.z };
         d.up = { (float) s.up.x, (float) s.up.y, (float) s.up.z };
         d.width = (float) s.width;
+        d.sand = (float) s.sand;
         d.s = (float) s.s;
     }
 
@@ -2118,6 +2121,7 @@ void TtpRenderer::resetRace() {
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
     for (Burst& b : mBursts) b = {};
+    resetSandState();
     mDeckDecals.clear();
     mDeckDecalsLast.clear();
 }
@@ -2171,6 +2175,17 @@ void TtpRenderer::releaseStatic() {
     for (VertexBuffer* vb : mCarShadowVbRing) mEngine->destroy(vb);
     mCarShadowIbRing.clear();
     mCarShadowVbRing.clear();
+    if (!mSandEntity.isNull()) {
+        mScene->remove(mSandEntity);
+        mEngine->getRenderableManager().destroy(mSandEntity);
+        utils::EntityManager::get().destroy(mSandEntity);
+        mSandEntity = utils::Entity{};
+    }
+    for (VertexBuffer* vb : mSandVbRing) mEngine->destroy(vb);
+    mSandVbRing.clear();
+    if (mSandIb) { mEngine->destroy(mSandIb); mSandIb = nullptr; }
+    resetSandState();
+    mSandDrawn = false;
     destroyMesh(mRoad);
     if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
     {

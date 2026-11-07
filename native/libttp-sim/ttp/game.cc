@@ -21,6 +21,9 @@ static const double MAX_HEADING = 1.25;
 // The speed cap while scraping the curb, as a fraction of vmax.
 static const double WALL_SPEED_FRAC = 0.30;
 static const double WALL_DECEL = 20.0;
+// The speed ceiling with the car's centre past the asphalt, on a track that has
+// sand between the asphalt and the curb, as a fraction of what it would be.
+static const double SAND_SPEED_FRAC = 0.75;
 // While pinned, the wall turns the car along itself, so a car never hangs
 // nose-first on the curb: the angle into the wall eases at WALL_TURN_RATE (1/s)
 // until the car points WALL_PEEL (rad) away from it. Contact only, into-wall
@@ -108,6 +111,11 @@ static const double RIBBON_SCALE_MAX = 1.65;
 static const double CURV_PROBE = 0.6;        // metres; centreline probe step for curvature and twist
 static const double KNOCK_DAMP = 6.0;
 static const double POLE_MIN_KEEP = 0.3;
+// A nose-on pole hit glances the car this far sideways per unit pushed back
+// (tan of the deflection), toward the side of the pole its centre is on; within
+// POLE_GLANCE_TIE of dead in line, toward the road's middle.
+static const double POLE_GLANCE = 0.6;
+static const double POLE_GLANCE_TIE = 0.02;
 static const double OIL_RADIUS = 0.7;
 static const double SPIN_TIME = 1.0;
 static const double OIL_REARM = 4.0;
@@ -1013,6 +1021,20 @@ void Game::collidePole(Car& c, const PoleRt& p) {
     if (bx <= by) { nx = lx > 0 ? -1 : 1; pen = p.radius + bx; }
     else { ny = ly > 0 ? -1 : 1; pen = p.radius + by; }
   }
+  // A NOSE-ON hit glances off toward the side the car is on, so it slides round
+  // the pole instead of pinning there while the player holds straight: the
+  // wall's peel (WALL_TURN), for a post.
+  if (std::fabs(nx) > std::fabs(ny)) {
+    // Dead in line, the glance goes toward the road's middle: the pole's side
+    // of the track, in the car's own left/right.
+    const double towardMiddle = p.lat > 0 ? -1.0 : 1.0;
+    const double rightIsPlusLat = c.colLat.dot(c.colRight) >= 0 ? 1.0 : -1.0;
+    const double side = std::fabs(ly) > POLE_GLANCE_TIE ? (ly > 0 ? -1.0 : 1.0)
+        : towardMiddle * rightIsPlusLat;
+    ny += side * POLE_GLANCE;
+    double len = std::sqrt(nx * nx + ny * ny);
+    nx /= len; ny /= len;
+  }
   Vec3 n = c.colFwd.clone().multiplyScalar(nx).addScaledVector(c.colRight, ny);
   separate(c, n.clone().multiplyScalar(pen));
   Vec3 v = c.colTan.clone().multiplyScalar(c.v * dmath::cos(c.heading))
@@ -1131,6 +1153,7 @@ void Game::update(double dtMs) {
   for (const auto& cp : cars_) {
     Car& c = *cp;
     c.onWall = false;
+    c.onSand = false;
     if (c.finished) {
       c.steer = pursue(c, *centerline_, LOOKAHEAD, STEER_GAIN, 0);
       c.brake = cornerBrake(c, *centerline_, 0, 1, nullptr);
@@ -1217,6 +1240,9 @@ void Game::update(double dtMs) {
     }
     double vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
     double targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
+    c.onSand = c.sandHere > 0 && grounded && c.curbLimSet
+               && std::fabs(c.lat) > c.curbLim + LAT_MARGIN - c.sandHere;
+    if (c.onSand && !boosting) targetV *= SAND_SPEED_FRAC;
     if (c.wallRashT > 0) {
       c.wallRashT -= dt;
       if (!boosting) {
@@ -1248,6 +1274,7 @@ void Game::update(double dtMs) {
     c.totalS = js_max(prevTotal, hit.s);
     c.lat = hit.lat;
     c.curbLim = curbLimit(hit.frame.width); c.curbLimSet = true;
+    c.sandHere = hit.frame.sand;
     c.heading = dmath::atan2(
         hit.frame.tangent.clone().cross(fwd).dot(hit.frame.up),
         hit.frame.tangent.dot(fwd));

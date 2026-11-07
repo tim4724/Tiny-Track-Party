@@ -304,6 +304,8 @@ struct TtpRenderer::TrackBin {
     struct Sample {
         float3 pos, lat, up;
         float width, s;
+        float sand = 0;   // per side, inside `width` (the built track's own)
+        float asphaltHalf() const { return width / 2 - sand; }  // a tyre past this is on the sand
         // Travel direction. The JS frame derives lateral = tangent × up
         // (Centerline._sampleInto), so recovering the tangent is up × lateral —
         // cross(lat, up) is its NEGATIVE, which pointed the boost-pad chevrons
@@ -323,13 +325,15 @@ struct TtpRenderer::TrackBin {
     // retained because project() must scan THESE chords — see its comment.
     // deckGap/deckLine are the deck profile's gap and edge-line widths, set by
     // buildRoadMesh from the SAME locals it sweeps with, so project() can
-    // reconstruct the deck strip boundaries without a second derivation.
+    // reconstruct the deck strip boundaries without a second derivation. On a
+    // sand track the gap is the sample's own sand (gapOf), never under deckGap.
     std::vector<Sample> rings;
     float deckGap = 0, deckLine = 0;
+    float gapOf(const Sample& smp) const { return sand > 0 ? std::max(smp.sand, deckGap) : deckGap; }
     static constexpr float kDashW = 0.18f;
     std::vector<uint32_t> carColors;
     std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
-    uint32_t pal[7]; // asphalt line dash kerbA kerbB skirt shoulder (sRGB)
+    uint32_t pal[8]; // asphalt line dash kerbA kerbB skirt shoulder sand (sRGB)
     float kerbW = 0.22f, kerbH = 0.20f;
     bool edgeLines = true;
     std::vector<std::pair<float, float>> zones; // launch strips: (s, halfLen+margin)
@@ -381,7 +385,7 @@ struct TtpRenderer::TrackBin {
     std::vector<std::vector<BermRing>> berms;
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)
-    float roadWidth = 5, groundY = 0, length = 0;
+    float roadWidth = 5, sand = 0, groundY = 0, length = 0;
     bool closed = true;
 
     // ── Theme block (everything else the biome dresses) ───────────────────
@@ -512,6 +516,7 @@ struct TtpRenderer::TrackBin {
         r.up = normalize(mix(pB.up, pC.up, u));
         r.lat = normalize(cross(tan, r.up));
         r.width = pB.width + (pC.width - pB.width) * u;
+        r.sand = pB.sand + (pC.sand - pB.sand) * u;
         r.s = w;
         return r;
     }
@@ -613,14 +618,15 @@ struct TtpRenderer::TrackBin {
         return k < 0 ? 0 : (k >= n ? n - 1 : k);
     }
 
-    // The deck's seven strips at a ring of half-width h, as the EIGHT lat
-    // bounds buildRoadMesh sweeps (gap, line, road, dash, road, line, gap):
-    // the uv0.y every deck vertex of that ring carries. One derivation for
-    // project() below and for deckTriAt, which must agree with it exactly.
-    void deckStripBounds(float h, float* o) const {
-        o[0] = -h; o[1] = -h + deckGap; o[2] = -h + deckGap + deckLine;
+    // The deck's seven strips at a ring, as the EIGHT lat bounds buildRoadMesh
+    // sweeps (gap, line, road, dash, road, line, gap): the uv0.y every deck
+    // vertex of that ring carries. One derivation for project() below and for
+    // deckTriAt, which must agree with it exactly.
+    void deckStripBounds(const Sample& ring, float* o) const {
+        const float h = ring.width * 0.5f, g = gapOf(ring);
+        o[0] = -h; o[1] = -h + g; o[2] = -h + g + deckLine;
         o[3] = -kDashW / 2; o[4] = kDashW / 2;
-        o[5] = h - deckGap - deckLine; o[6] = h - deckGap; o[7] = h;
+        o[5] = h - g - deckLine; o[6] = h - g; o[7] = h;
     }
 
     // THE MESH'S OWN uv0 -> WORLD MAP, one triangle at a time. The road is
@@ -667,8 +673,8 @@ struct TtpRenderer::TrackBin {
         // the seam quad runs to exactly L. Same expression, same rounding.
         q.sa = (float) i / n * length;
         q.sb = (float) (i + 1) / n * length;
-        deckStripBounds(a.width * 0.5f, q.bA);
-        deckStripBounds(b.width * 0.5f, q.bB);
+        deckStripBounds(a, q.bA);
+        deckStripBounds(b, q.bB);
         q.posA = a.pos; q.latA = a.lat;
         q.posB = b.pos; q.latB = b.lat;
     }
@@ -857,8 +863,8 @@ struct TtpRenderer::TrackBin {
         // smooth by construction.
         const float3 upS = normalize(mix(a.up, b.up, t));
         float bA[8], bB[8];
-        deckStripBounds(a.width * 0.5f, bA);
-        deckStripBounds(b.width * 0.5f, bB);
+        deckStripBounds(a, bA);
+        deckStripBounds(b, bB);
         const float l = std::min(bA[7] - 1e-4f, std::max(bA[0] + 1e-4f, outLat));
         int j = 0;
         while (j < 6 && l > bA[j + 1]) j++;

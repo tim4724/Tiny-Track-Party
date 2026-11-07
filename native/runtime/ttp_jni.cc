@@ -352,6 +352,11 @@ jdouble n_ttp_display_debug_monster_pitch(JNIEnv* env, jclass, jdouble a0) {
     return (jdouble) ttp_display_debug_monster_pitch((double) a0);
 }
 
+jdouble n_ttp_display_debug_sand_dust(JNIEnv* env, jclass, jint a0, jdouble a1) {
+    (void) env;
+    return (jdouble) ttp_display_debug_sand_dust((int) a0, (double) a1);
+}
+
 void n_ttp_display_debug_wipe_skids(JNIEnv* env, jclass) {
     (void) env;
     ttp_display_debug_wipe_skids();
@@ -1461,6 +1466,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_debug_live_dressing", "()[B", (void*) n_ttp_display_debug_live_dressing },
     { "ttp_display_debug_monster_back", "(D)D", (void*) n_ttp_display_debug_monster_back },
     { "ttp_display_debug_monster_pitch", "(D)D", (void*) n_ttp_display_debug_monster_pitch },
+    { "ttp_display_debug_sand_dust", "(ID)D", (void*) n_ttp_display_debug_sand_dust },
     { "ttp_display_debug_wipe_skids", "()V", (void*) n_ttp_display_debug_wipe_skids },
     { "ttp_display_destroy", "()V", (void*) n_ttp_display_destroy },
     { "ttp_display_dividers", "(I)V", (void*) n_ttp_display_dividers },

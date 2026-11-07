@@ -219,6 +219,18 @@ ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
 )
+# Re-emits the committed file from this build (the fixture's own track list and
+# key set, never more) and demands byte identity. The JS oracle cannot build a
+# track with a sand strip, so a Beach Cup line is C++-emitted evidence from the
+# commit that re-recorded it; the other lines keep their cross-implementation
+# claim as long as this stays green on them.
+add_test(NAME record_trackbuilder
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:trackbuilder_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/trackbuilder-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
 # ---- Conformance: the top-down schematic + its snapshot codec ---------------
 # Replays tests/fixtures/schematic-corpus.jsonl against libttp-track's schematic

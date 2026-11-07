@@ -163,6 +163,13 @@ const VOICES = {
     param: () => ({ bandpassHz: [760, 1520], Q: [4, 7], wobbleLfoHz: 3, flutterLfoHz: 17 }),
     note: 'ONE file, like brake: both bands, the 3 Hz wobble and the 17 Hz flutter are static, so only the (divided-out) output gain moves with level.',
   },
+  sand: {
+    variant: 'grit',
+    levels: [1],
+    levelInvariant: true,
+    param: () => ({ bandpassHz: [340, 3200], Q: [1, 0.8], flutterLfoHz: [23, 37] }),
+    note: 'ONE file, like drift: both bands and both flutters are static, so only the output gain moves with level.',
+  },
   boost: {
     variant: 'smooth',
     // The lowpass sweeps 420→900 Hz, 1.1 octaves, with Q 1 — a full octave of

@@ -880,6 +880,11 @@ double ttp_display_debug_monster_back(double units) {
     return ttp::rt::MONSTER_CAM_BACK;
 }
 
+double ttp_display_debug_sand_dust(int knob, double value) {
+    if (g_disp && g_disp->renderer) return g_disp->renderer->debugSandDust(knob, (float) value);
+    return TtpRenderer::sandDustAuthored(knob);
+}
+
 const char* ttp_display_debug_live_dressing(void) {
     static std::string buf;
     ttp::Value o = ttp::Value::Obj();

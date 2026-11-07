@@ -44,7 +44,7 @@ async function loadNativeAbi() {
   };
 }
 
-let buildTrack, trackSweep, trackFrames, trackSupports;
+let buildTrack, trackSweep, trackFrames, trackSupports, SCALE;
 let TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS;
 let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
@@ -52,7 +52,7 @@ test.before(async () => {
     .slice(0, 4).map((p) => [`cpu-${p.name.toLowerCase()}`, p.caution, p.laneBias]);
   const nt = await import('../scripts/native-track.mjs');
   await nt.init();
-  ({ buildTrack, trackSweep, trackFrames, trackSupports } = nt);
+  ({ buildTrack, trackSweep, trackFrames, trackSupports, SCALE } = nt);
   ({ TRACKS, TRACK_LIST } = await import('../public/shared/tracks.js'));
   DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
   // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev
@@ -313,7 +313,8 @@ test('every shipped track starts on a clean grid, with clear sky over the gantry
       + ` width=${g.minWidth.toFixed(1)}-${g.maxWidth.toFixed(1)}`
       + ` headroom=${g.headroom === Infinity ? 'clear' : g.headroom.toFixed(2)}`;
     assert.ok(g.headroom > 3.1, `${say} — a deck passes over the finish line; the gantry is 2.8 tall and would clip it`);
-    assert.ok(gridPasses(g, built.roadWidth), `${say} — grid is not straight/flat/level/full-width enough`);
+    // A sample runs kerb to kerb, so the grid is roadWidth plus the sand (authored per side).
+    assert.ok(gridPasses(g, built.roadWidth + 2 * SCALE * (t.sand ?? 0)), `${say} — grid is not straight/flat/level/full-width enough`);
   }
 });
 
@@ -832,7 +833,7 @@ test('no two same-level upright strands overlap road surfaces', () => {
       for (let j = i + 2; j < N; j += 2) {
         if (ss[i].up.y < 0.9 || ss[j].up.y < 0.9) continue;
         const arc = Math.min(Math.abs(ss[i].s - ss[j].s), L - Math.abs(ss[i].s - ss[j].s));
-        if (arc < 8) continue;
+        if (arc < Math.max(8, 1.5 * (ss[i].width / 2 + ss[j].width / 2 + KERB))) continue;
         if (Math.abs(ss[i].pos.y - ss[j].pos.y) >= LEVEL) continue;
         const h = Math.hypot(ss[i].pos.x - ss[j].pos.x, ss[i].pos.z - ss[j].pos.z);
         const need = ss[i].width / 2 + ss[j].width / 2 + KERB;

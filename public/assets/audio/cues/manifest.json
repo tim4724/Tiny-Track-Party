@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "ae84842762037c40bdb0dfa65a75abb6e61e759ff793afabf1d09c30c519da94",
+    "sharedSha256": "010e58c4ea57703397930c7c810a6e8c0053547cc67a25a7d2cad347ac462b9b",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -990,6 +990,49 @@
       },
       "variant": "rumble",
       "sourceSha256": "5595c526d918aca6150e8840c65ebafed2ca4bb0faf9b4179f26af3142681a79"
+    },
+    "sand": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "grit",
+      "playback": {
+        "gainFormula": "0.16 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "sand.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.396924,
+          "rms": 0.091086,
+          "sha256": "6e28b86ef2ea18c270e90dd24bd8f99e5d9310772645b15ef9e31288adc45966",
+          "bandpassHz": [
+            340,
+            3200
+          ],
+          "Q": [
+            1,
+            0.8
+          ],
+          "flutterLfoHz": [
+            23,
+            37
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like drift: both bands and both flutters are static, so only the output gain moves with level.",
+      "sourceSha256": "c611f2b78637f43a3485f0ca0454aa7f477961f3ccb8003195da0770dec2cf60"
     }
   }
 }

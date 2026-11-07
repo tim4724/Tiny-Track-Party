@@ -892,7 +892,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 w.prevSpd = c.spd;
                 const float pitchAmt = std::max(-1.0f, std::min(1.0f, dspd / 0.8f));
                 w.accelNorm = pitchAmt > 0 ? pitchAmt : 0;
-                const float diveGate = std::min(1.0f, c.brake * 3.0f);
+                const float diveGate = std::max(c.sand, std::min(1.0f, c.brake * 3.0f));
                 const float pitchTarget = -pitchAmt
                         * (pitchAmt < 0 ? 0.08f * diveGate : 0.03f);
                 w.pitch += (pitchTarget - w.pitch)
@@ -1915,6 +1915,277 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     mProfile[kProfDecalUp] = ttpNowMs() - tDecal;
 }
 
+void TtpRenderer::buildSandDraws(const TrackBin& tb) {
+    if (!(tb.sand > 0) || !mBlendMaterial) return;
+    // As ALBEDO: renderSandSpray mixes the dust's colour from it each frame and
+    // multiplies in the deck's own light.
+    mSandEnc = encodeSrgb(srgbToLinear(tb.pal[7]));
+    for (uint32_t k = 0; k < mCellRing; k++) {
+        mSandVbRing.push_back(VertexBuffer::Builder()
+                .vertexCount(kSandPuffs * kSandPuffVerts)
+                .bufferCount(1)
+                .attribute(VertexAttribute::POSITION, 0,
+                        VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
+                .attribute(VertexAttribute::COLOR, 0,
+                        VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
+                .normalized(VertexAttribute::COLOR)
+                .build(*mEngine));
+    }
+    mSandRingAt = 0;
+    // A fan per puff (centre, mid ring, rim) in fixed slots, so the index buffer is
+    // written once and a frame only says how many puffs to draw.
+    const uint32_t idxCount = kSandPuffs * kSandPuffIdx;
+    mSandIb = IndexBuffer::Builder()
+            .indexCount(idxCount)
+            .bufferType(IndexBuffer::IndexType::USHORT)
+            .build(*mEngine);
+    const size_t ib = idxCount * sizeof(uint16_t);
+    uint16_t* idx = (uint16_t*) malloc(ib);
+    uint32_t at = 0;
+    for (uint32_t d = 0; d < kSandPuffs; d++) {
+        const uint32_t c = d * kSandPuffVerts, mid = c + 1, rim = c + 1 + kSandPuffSegs;
+        for (uint32_t k = 0; k < kSandPuffSegs; k++) {
+            const uint32_t n = (k + 1) % kSandPuffSegs;
+            idx[at++] = (uint16_t) c; idx[at++] = (uint16_t) (mid + k); idx[at++] = (uint16_t) (mid + n);
+            idx[at++] = (uint16_t) (mid + k); idx[at++] = (uint16_t) (rim + k); idx[at++] = (uint16_t) (rim + n);
+            idx[at++] = (uint16_t) (mid + k); idx[at++] = (uint16_t) (rim + n); idx[at++] = (uint16_t) (mid + n);
+        }
+    }
+    mSandIb->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(idx, ib,
+            [](void* b, size_t, void*) { free(b); }));
+    mSandEntity = utils::EntityManager::get().create();
+    RenderableManager::Builder(1)
+            .boundingBox({ float3{ 0.0f }, float3{ 1e4f } })
+            .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
+            .material(0, sceneInstance(mBlendMaterial))
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mSandVbRing[0], mSandIb, 0, 0)
+            .build(*mEngine, mSandEntity);
+    mScene->addEntity(mSandEntity);
+}
+
+// The dust a rear tyre on the sand raises: one blended draw of soft puffs,
+// rewritten once a frame. Grains thrown off the tyre came first and were replaced
+// by this; a coat on the tyre itself was tried as overlay geometry and read as a
+// glitch on the kit's tyres (a real one is a tint in the wheels' own shader).
+//
+// The dust answers what the tyre is DOING, because it is the sand's feedback: the
+// outer rear tyre in a turn raises more and spreads it wider, the bite of running
+// onto the sand (the speed it takes off) raises a burst, and a tyre just off the
+// sand trails a little. A puff is lit by the deck under the car, grows wide and
+// low, drifts behind and thins out. It faces the camera following its car; the
+// others see it at an angle, which a soft blob forgives.
+void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput* cars,
+        uint32_t nCars) {
+    if (mSandEntity.isNull()) return;
+    // The look's knobs are mSandDust[kDust*] (TtpRenderer.h has them).
+    constexpr float SHED = 12.0f;                     // puffs a second off a tyre just off the sand
+    constexpr float BODY = 0.65f, RIM = 0.93f;        // a puff's ring radii, as its radius's share
+    constexpr float DUST_NEAR = 10.0f;                // world units: full dust within this of a camera
+    constexpr float DUST_FAR_SHARE = 0.25f;           // the least of it, however far
+    const TtpViewInput* views = ttp_frame_views(&input);
+    constexpr float TURN_FULL = 2.0f;                 // rad/s of heading change = a full turn
+    constexpr float BITE_FULL = 0.4f;                 // 1/s of normalized speed lost = full bite
+    constexpr float ON = 5.0f, OFF = 1.4f;            // 1/s: how fast `mSandOn` follows
+    const float dt = input.dt;
+    const auto rnd = [&](float lo, float hi) {
+        mSandSeed = mSandSeed * 1664525u + 1013904223u;
+        return lo + (hi - lo) * (float) (mSandSeed >> 16) / 65536.0f;
+    };
+    const float RATE = mSandDust[kDustRate];
+    const float drag = std::exp(-mSandDust[kDustDrag] * dt);
+    // Paler than the sand, toward a warm off-white (brighter sand glows yellow):
+    // dust in the air is a haze, and sand-coloured dust over sand is invisible.
+    const float3 dustCol = mSandEnc + (float3{ 0.94f, 0.91f, 0.86f } - mSandEnc) * mSandDust[kDustWhite];
+    size_t live = 0;
+    for (SandPuff& p : mSandPuffs) {
+        p.age += dt;
+        if (p.age >= p.life) continue;
+        p.vel *= drag;
+        p.pos += p.vel * dt;
+        mSandPuffs[live++] = p;
+    }
+    mSandPuffs.resize(live);
+    mSandDue.resize(nCars * 2, 0.0f);
+    mSandOn.resize(nCars * 2, 0.0f);
+    mSandPrevFwd.resize(nCars, float3{ 0.0f });
+    mSandPrevSpd.resize(nCars, 0.0f);
+
+    const float L = mTrack ? mTrack->length : 0.0f;
+    const size_t N = mTrack ? mTrack->rings.size() : 0;
+    for (uint32_t i = 0; i < nCars; i++) {
+        const TtpCarInput& c = cars[i];
+        const bool grounded = mTrack && c.airborne < 0.5f;
+        const float speed = i < mCarWheels.size() && dt > 0 ? mCarWheels[i].lastDs / dt : 0.0f;
+        const float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
+        const float3 up = { c.up.x, c.up.y, c.up.z };
+        const float3 right = normalize(cross(up, fwd));
+        const float3 pos = { c.pos.x, c.pos.y, c.pos.z };
+        const CarWheels* cw = i < mCarWheels.size() && mCarWheels[i].hasWheelOff
+                ? &mCarWheels[i] : nullptr;
+        const float r = cw ? cw->wheelRadius : 0.125f;
+        // How hard it turns (the heading's change, toward the turn's centre) and
+        // how hard the sand bites (the speed it is taking off).
+        float3& prevFwd = mSandPrevFwd[i];
+        const float3 dFwd = dot(prevFwd, prevFwd) > 0 ? fwd - prevFwd : float3{ 0.0f };
+        prevFwd = fwd;
+        const float turn = dt > 0 ? std::min(1.0f, length(dFwd) / dt / TURN_FULL) : 0.0f;
+        const float bite = dt > 0
+                ? std::max(0.0f, std::min(1.0f, (mSandPrevSpd[i] - c.spd) / dt / BITE_FULL)) : 0.0f;
+        mSandPrevSpd[i] = c.spd;
+        if (!grounded) continue;
+        // The deck's light under the car (the car shadow's per-ring term: ambient
+        // plus sun, display-encoded), so the dust sits in its light.
+        float3 light{ 1.0f };
+        if (L > 0 && N > 0 && mRingLight.size() == N) {
+            const float u = std::fmod(c.trackS, L) / L;
+            const size_t ring = std::min(N - 1, (size_t) std::max(0.0f, (u < 0 ? u + 1 : u) * (float) N));
+            light = float3{ (float) mRingLight[ring].x, (float) mRingLight[ring].y,
+                    (float) mRingLight[ring].z };
+        }
+        const uint32_t rgb = packAbgr(dustCol * light, 0.0f);
+        // Far from every camera a puff is a few pixels, so a distant car raises
+        // fewer of them; near any camera, the dust is all there.
+        float nearest = DUST_NEAR;
+        for (uint32_t k = 0; k < input.viewCount; k++) {
+            const float3 cam{ views[k].world[12], views[k].world[13], views[k].world[14] };
+            nearest = std::min(nearest, length(cam - pos));
+        }
+        const float lod = input.viewCount > 0 ? std::max(DUST_FAR_SHARE, DUST_NEAR / std::max(nearest, DUST_NEAR)) : 1.0f;
+        const TrackBin::Sample f = mTrack->frameAt(c.trackS);
+        for (int wheel = 0; wheel < 2; wheel++) {
+            float& due = mSandDue[i * 2 + wheel];
+            float& on = mSandOn[i * 2 + wheel];
+            // The body's whirl (drift slip, spin-out) yaws the wheels with it.
+            const float3 off = cw ? cw->wheelOff[2 + wheel] : float3{ 0.0f };
+            const float3 tyre = cw
+                    ? right * (off.x * std::cos(c.spin) + off.z * std::sin(c.spin))
+                            + fwd * (-off.x * std::sin(c.spin) + off.z * std::cos(c.spin))
+                    : right * ((wheel ? 1.0f : -1.0f) * c.halfWid * 0.85f) - fwd * (c.halfLen * 0.7f);
+            // Each tyre answers for itself: only the one actually on the sand raises
+            // any, so a car straddling the edge shows it on its outer side alone.
+            const bool onSand = f.sand > 0
+                    && std::fabs(dot(pos + tyre - f.pos, f.lat)) > f.asphaltHalf();
+            const float before = on;
+            on += ((onSand ? 1.0f : 0.0f) - on) * (1.0f - std::exp(-(onSand ? ON : OFF) * dt));
+            const bool shed = !onSand && before > 0.15f;
+            if ((!onSand && !shed) || c.spd < 0.1f) { due = 0; continue; }
+            // Outer in the turn: the tyre on the far side from the turn's centre.
+            const bool outer = dot(tyre, dFwd) < 0;
+            const float side = dot(tyre, right) > 0 ? 1.0f : -1.0f;
+            const float mul = onSand
+                    ? std::max(0.3f, std::min(2.0f, 0.8f + mSandDust[kDustBite] * bite
+                            + (outer ? 1.0f : -0.43f) * mSandDust[kDustTurn] * turn))
+                    : SHED / RATE * before;
+            due += RATE * std::min(1.0f, c.spd / 0.5f) * mul * lod * dt;
+            const float fan = onSand ? 1.0f + (outer ? 0.8f : -0.3f) * turn : 0.4f;
+            const float scale = onSand ? 1.0f : 0.6f;
+            while (due >= 1.0f && mSandPuffs.size() < kSandPuffs) {
+                due -= 1.0f;
+                SandPuff p;
+                p.pos = pos + tyre - fwd * (r * 0.6f + speed * dt * rnd(0, 1))
+                        + right * (side * rnd(-0.02f, 0.08f));
+                const float trail = mSandDust[kDustTrail];
+                p.vel = fwd * (speed * std::max(0.0f, trail + rnd(-0.075f, 0.075f)))
+                        + right * (side * mSandDust[kDustDrift] * rnd(0.5f, 1.5f) * fan)
+                        + up * (mSandDust[kDustRise] * rnd(0.57f, 1.43f));
+                p.age = 0;
+                p.life = std::max(0.05f, mSandDust[kDustLife] * rnd(0.8f, 1.2f));
+                p.r0 = mSandDust[kDustStart] * rnd(0.83f, 1.17f) * scale;
+                p.r1 = mSandDust[kDustEnd] * rnd(0.82f, 1.18f) * scale * (outer ? 1.0f + 0.3f * turn : 1.0f);
+                p.peak = std::min(1.0f, mSandDust[kDustOpacity] * rnd(0.9f, 1.1f))
+                        * (0.85f + 0.35f * bite) * (onSand ? 1.0f : 0.6f);
+                p.rgb = rgb;
+                p.seed = (uint32_t) rnd(0, 65535.0f);
+                p.car = (int32_t) i;
+                mSandPuffs.push_back(p);
+            }
+            due = std::min(due, 1.0f);
+        }
+    }
+    const bool any = !mSandPuffs.empty() && input.viewCount > 0;
+    if (!any && !mSandDrawn) return;
+    auto& rcm = mEngine->getRenderableManager();
+    if (any) {
+        mSandRingAt = (mSandRingAt + 1) % (uint32_t) mSandVbRing.size();
+        const size_t vb = mSandPuffs.size() * kSandPuffVerts * sizeof(Vertex);
+        Vertex* v = (Vertex*) malloc(vb);
+        for (size_t d = 0; d < mSandPuffs.size(); d++) {
+            const SandPuff& p = mSandPuffs[d];
+            // Faces the camera that follows its car (the first one, if none does).
+            const TtpViewInput* view = &views[0];
+            for (uint32_t k = 0; k < input.viewCount; k++) if (views[k].car == p.car) view = &views[k];
+            const float3 cam{ view->world[12], view->world[13], view->world[14] };
+            const float t = p.age / p.life;
+            // Grows fast and eases out; fades in at once and thins away.
+            const float R = p.r0 + (p.r1 - p.r0) * (1.0f - (1.0f - t) * (1.0f - t));
+            const float alpha = p.peak * std::min(1.0f, t / 0.08f) * std::pow(1.0f - t, 1.5f);
+            // Wider than tall, its soft bottom just clear of the deck so the ground
+            // never cuts a hard line through it.
+            const float rx = R, ry = R * mSandDust[kDustFlat];
+            const float3 centre = p.pos + float3{ 0, ry * 1.05f + 0.005f, 0 };
+            const float3 toCam = cam - centre;
+            float3 ax = cross(float3{ 0, 1, 0 }, toCam);
+            ax = dot(ax, ax) > 1e-8f ? normalize(ax) : float3{ 1, 0, 0 };
+            const float3 ay = normalize(cross(normalize(toCam), ax));
+            // A lumpy outline, fixed for the puff's life, so a cloud of them reads as
+            // dust rather than as a stack of ellipses.
+            uint32_t h = p.seed * 2654435761u + 1u;
+            const auto jitter = [&]() {
+                h = h * 1664525u + 1013904223u;
+                return 0.8f + 0.4f * (float) (h >> 16) / 65536.0f;
+            };
+            Vertex* o = v + d * kSandPuffVerts;
+            // Lit from above: the top of a puff a little lighter than its belly.
+            const uint32_t lit = p.rgb;
+            const auto shade = [&](float k, float a) {
+                const float f = std::min(1.0f, 1.0f + 0.12f * k);
+                const uint32_t r = (uint32_t) std::min(255.0f, (float) (lit & 0xff) * f);
+                const uint32_t g = (uint32_t) std::min(255.0f, (float) ((lit >> 8) & 0xff) * f);
+                const uint32_t b = (uint32_t) std::min(255.0f, (float) ((lit >> 16) & 0xff) * f);
+                return r | (g << 8) | (b << 16)
+                        | ((uint32_t) std::lround(std::min(1.0f, std::max(0.0f, a)) * 255.0f) << 24);
+            };
+            *o++ = { centre.x, centre.y, centre.z, shade(0.3f, alpha) };
+            Vertex* rimOut = o + kSandPuffSegs;
+            for (uint32_t k = 0; k < kSandPuffSegs; k++) {
+                const float a = (float) k / kSandPuffSegs * 6.2831853f + (float) (p.seed & 7);
+                const float ca = std::cos(a), sa = std::sin(a), j = jitter();
+                // A body that holds its density most of the way out, then a soft
+                // edge: a lump of dust, not a glow. The edge's last few percent,
+                // nearly transparent, is cut off (RIM) with the alpha the ramp has
+                // there: the same picture, for fewer blended pixels.
+                const float3 m = centre + ax * (ca * rx * BODY * j) + ay * (sa * ry * BODY * j);
+                const float3 e = centre + ax * (ca * rx * RIM * j) + ay * (sa * ry * RIM * j);
+                *o++ = { m.x, m.y, m.z, shade(sa, alpha * 0.92f) };
+                *rimOut++ = { e.x, e.y, e.z, shade(sa, alpha * 0.92f * (1.0f - RIM) / (1.0f - BODY)) };
+            }
+        }
+        mSandVbRing[mSandRingAt]->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(v, vb,
+                [](void* b, size_t, void*) { free(b); }));
+    }
+    const size_t indices = any ? mSandPuffs.size() * kSandPuffIdx : 0;
+    rcm.setGeometryAt(rcm.getInstance(mSandEntity), 0, RenderableManager::PrimitiveType::TRIANGLES,
+            mSandVbRing[mSandRingAt], mSandIb, 0, indices);
+    mSandDrawn = any;
+}
+
+float TtpRenderer::debugSandDust(int knob, float value) {
+    if (knob < 0 || knob >= kDustKnobs) return 0.0f;
+    mSandDust[knob] = value < 0 ? kSandDustAuthored[knob] : value;
+    return kSandDustAuthored[knob];
+}
+
+void TtpRenderer::resetSandState() {
+    mSandPuffs.clear();
+    mSandOn.clear();
+    mSandDue.clear();
+    mSandPrevFwd.clear();
+    mSandPrevSpd.clear();
+}
+
 void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* cars,
         uint32_t nCars) {
 
@@ -2151,6 +2422,13 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 float ws = 0, wl = 0;
                 mTrack->project(gp, up, ws, wl, &st.projHint);
                 const float2 cur{ ws, wl };
+                // A tyre on the sand always grooves it, whatever the scuff
+                // channels say, and only that tyre: the one still on the
+                // asphalt leaves no rubber for it.
+                const TrackBin::Sample here = mTrack->sand > 0 ? mTrack->frameAt(ws) : TrackBin::Sample{};
+                const bool grooving = here.sand > 0 && c.airborne < 0.5f
+                        && std::fabs(wl) > here.asphaltHalf();
+                const float strengthHere = grooving ? 1.0f : strength;
                 if (!st.seeded) {
                     st.last = cur;
                     st.seeded = true;
@@ -2159,7 +2437,7 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 }
                 const float2 seg{ wrapS(cur.x - st.last.x), cur.y - st.last.y };
                 const float dist = std::sqrt(seg.x * seg.x + seg.y * seg.y);
-                if (dist > SKID_SEG_MAX || strength <= 0.02f) {
+                if (dist > SKID_SEG_MAX || strengthHere <= 0.02f) {
                     // Teleport, or not marking. Re-anchor on the wheel EVERY
                     // frame while quiet, not just once it has moved a segment:
                     // a parked `last` up to SEG_MIN behind the tyre made the
@@ -2194,7 +2472,7 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 const auto rel = [&](const float2& p) {
                     return float2{ wrapS(p.x - cur.x), p.y };
                 };
-                stamp(cur.x, rel(rL), rel(rR), rel(fL), rel(fR), strength);
+                stamp(cur.x, rel(rL), rel(rR), rel(fL), rel(fR), strengthHere);
                 st.edgeL = fL;
                 st.edgeR = fR;
                 st.hasEdge = true;
@@ -3117,6 +3395,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     renderWorld(input, cars, nCars, carPosW, auraDecals);
     mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];
     renderSkids(input, cars, nCars);
+    renderSandSpray(input, cars, nCars);
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];

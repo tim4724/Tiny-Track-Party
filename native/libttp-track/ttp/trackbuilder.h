@@ -86,6 +86,7 @@ struct TrackDef {
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
+  double sand;     // sand strip per side, between the asphalt and the kerb; waypoint tracks only
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
   const FurnDef* pads; int nPads;
@@ -129,6 +130,7 @@ struct OutSample {
   Vec3 pos, tangent, up, lateral;
   double s = 0.0;
   double width = 0.0;
+  double sand = 0.0;    // per side, inside `width`: narrower through a tight corner
   bool pillars = false;
   bool hillable = false;
 };
@@ -159,6 +161,17 @@ struct Pole {                                       // authored (ghost=false) + 
   bool ghost;
 };
 
+// The finish gantry's pylons, drawn and collided alike: their radius, and how
+// far past the kerb they stand. On a sand track they stand where they would on
+// a track without sand, just past where its kerb would be (the default kerb's
+// 0.22, RoadPalette::kerbW, which this library cannot read), which is out on
+// the sand, so they collide. The sand is authored wide enough to pass a pylon
+// on either side (Tidepool's leaves about two car widths between pylon and
+// kerb), and a nose-on hit glances off (Game::collidePole).
+inline constexpr double GANTRY_POST_RADIUS = 0.30;
+inline constexpr double GANTRY_CLEAR = 0.55;
+inline constexpr double sand_gantry_lat(double roadWidth) { return roadWidth / 2 + 0.22 + GANTRY_CLEAR; }
+
 struct AutoPole { double s, lat, radius; };         // top-level autoPoles; serialize ghost:true
 
 struct Pillar { double x, z, baseY, topY, radius; };
@@ -180,7 +193,8 @@ struct RaceTrack {
   double length;
   bool closed;
   double gap;
-  double roadWidth;
+  double roadWidth;  // the asphalt; a sample's width runs kerb to kerb, so it includes the sand
+  double sand = 0;   // per side, the authored width; a sample's own may be narrower
   double groundY;
   std::string trackId;
   int totalLaps;

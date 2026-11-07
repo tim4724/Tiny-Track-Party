@@ -1472,6 +1472,34 @@ private:
     std::vector<filament::VertexBuffer*> mCarShadowVbRing;
     std::vector<filament::IndexBuffer*> mCarShadowIbRing;
     uint32_t mCarShadowRingAt = 0;
+    // The dust a rear tyre on the sand raises (renderSandSpray): soft blobs hugging
+    // the ground, each facing the camera that follows its car, in fixed slots of one
+    // blended draw rewritten once a frame through a ring of vertex buffers (the
+    // streak ring's rule). A track with no sand has no entity and pays nothing.
+    struct SandPuff {
+        filament::math::float3 pos, vel;  // its foot on the deck, and drift
+        float age, life, r0, r1, peak;
+        uint32_t rgb, seed;
+        int32_t car;
+    };
+    static constexpr uint32_t kSandPuffs = 512, kSandPuffSegs = 8;
+    static constexpr uint32_t kSandPuffVerts = 1 + 2 * kSandPuffSegs;  // centre, mid ring, rim
+    static constexpr uint32_t kSandPuffIdx = kSandPuffSegs * 9;
+    utils::Entity mSandEntity;
+    filament::IndexBuffer* mSandIb = nullptr;
+    std::vector<filament::VertexBuffer*> mSandVbRing;
+    uint32_t mSandRingAt = 0;
+    bool mSandDrawn = false;           // the draw's current geometry holds anything
+    filament::math::float3 mSandEnc{};  // the sand's colour, encoded albedo: the dust's starting point
+    std::vector<SandPuff> mSandPuffs;
+    std::vector<float> mSandDue;       // per rear tyre: puffs owed
+    std::vector<float> mSandOn;        // per rear tyre: how recently on the sand, 0..1
+    std::vector<filament::math::float3> mSandPrevFwd;  // per car: last frame's heading
+    std::vector<float> mSandPrevSpd;   // ...and speed: the turn and the bite read them
+    uint32_t mSandSeed = 1;
+    void buildSandDraws(const TrackBin& tb);
+    void renderSandSpray(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
+    void resetSandState();             // what a race left in the air: puffs and per-tyre memory
     std::vector<filament::math::float3> mCarShadowPos;     // this frame's rows
     std::vector<filament::math::half4> mCarShadowC0;        // ...and their baked light
     std::vector<filament::math::float4> mCarShadowUv;       // ...atlas (u, v), peak alpha
@@ -2246,7 +2274,36 @@ public:
     static constexpr uint32_t kDebugDecalAll = kDebugNoDecalProfile
             | kDebugNoDecalBlob | kDebugNoDecalStatics | kDebugDecalCapsHalf;
     void debugFeatureMask(uint32_t mask);
+    // The sand dust's look (renderSandSpray), one knob each, in the order of
+    // ttp_display_debug_sand_dust. The authored values are these; the display's
+    // debug panel moves them live. Each puff varies around its knob's value.
+    enum SandDustKnob {
+        kDustRate,      // puffs a second, per rear tyre on the sand, at speed
+        kDustLife,      // seconds a puff lasts
+        kDustStart,     // its size when it appears
+        kDustEnd,       // ...and fully grown
+        kDustOpacity,   // its peak alpha
+        kDustFlat,      // height over width
+        kDustTrail,     // the share of the car's speed it starts with
+        kDustDrift,     // how fast it drifts outward
+        kDustRise,      // ...and upward
+        kDustDrag,      // 1/s: how fast the air stops it
+        kDustWhite,     // how far from the sand's colour toward off-white
+        kDustTurn,      // more dust off the outer tyre in a turn
+        kDustBite,      // more dust while the sand takes speed off
+        kDustKnobs
+    };
+    static constexpr float kSandDustAuthored[kDustKnobs] = {
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+    static float sandDustAuthored(int knob) {
+        return knob >= 0 && knob < kDustKnobs ? kSandDustAuthored[knob] : 0.0f;
+    }
+    // Sets one knob (a negative value restores the authored one) and answers its
+    // authored value. mSandDust starts as the authored table.
+    float debugSandDust(int knob, float value);
 private:
+    float mSandDust[kDustKnobs] = {
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
     bool mHideCars = false;
     // Feature-ablation state (debugFeatureMask). mFeatureTagged latches the one
     // pass that moves every renderable off the default layer bit onto its
