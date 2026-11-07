@@ -543,9 +543,12 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         if (dell) *dell *= 1.0f - profile(t, 0);
     }
     // The mounds first, then the fans: a fan is debris lying ON what is under
-    // it (a mound's foot), so its rise adds to theirs.
-    float own = 0, top = 0;
+    // it (a mound's foot), so its rise adds to theirs. Two fans side by side
+    // (two pieces' banks overlapping) union like the mounds, the higher of
+    // them: one stacked on the other buried the first's cottages in it.
+    float own = 0, top = 0, mounds = 0;
     for (const uint32_t kind : { 3u, 4u }) {
+        if (kind == 4) mounds = top;
         for (const LandShape& s : mLand) {
             if (s.kind != kind || !in(s)) continue;
             float lx, lz, t, rise;
@@ -566,7 +569,7 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
             const float o = 1.0f - smooth01((t - 1.0f) / 0.3f);
             if (o <= 0) continue;
             own = std::max(own, o);
-            top = kind == 3 ? std::max(top, s.base * o + rise) : std::max(top, s.base * o) + rise;
+            top = std::max(top, kind == 3 ? s.base * o + rise : std::max(mounds, s.base * o) + rise);
         }
     }
     if (dell) *dell *= 1.0f - own;

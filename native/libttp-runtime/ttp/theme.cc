@@ -6,6 +6,7 @@
 #include <cstring>
 #include <initializer_list>
 
+#include "generated/track_defs.h"
 #include "ttp/canonical.h"
 #include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
@@ -194,13 +195,15 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
-  // Washed-up freight above the tide line: crates and pulled-up rowing boats.
-  // No fence — the coast stays open to the water. The pirate leavings are
-  // Cove's alone (pirateCove, applied in resolve_theme): a chest or a
-  // cannon on every beach told the cup one story four times.
-  t.props.models = { "prop-crate", "pirate-rowboat" };
-  t.props.scatterDensity = 0.2f;
-  t.props.scatter = { { 0, 0.55f, 0.9f, 0.3f }, { 1, 0.45f, 0.6f, 0.15f } };
+  // Washed-up freight above the tide line: crates. No rowing boats: the
+  // scatter stands by the road, a long way up the sand from the water, and
+  // a boat there was left high and dry. No fence — the coast stays open to
+  // the water. The pirate leavings are Cove's alone (pirateCove, applied in
+  // resolve_theme): a chest or a cannon on every beach told the cup one
+  // story four times.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.11f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
   return t;
 }
 
@@ -218,13 +221,14 @@ void pirateCove(Theme& t) {
   t.gantry.pylon = t.structure;
   t.gantry.hasRings = false;
   t.gantry.finial = 0x38383d;
+  // Its boats are on the water (the ship's longboat, the one tied at the
+  // jetty), none left on the sand by the road.
   t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
-                     "pirate-cannon", "pirate-rowboat", "pirate-flag" };
-  t.props.scatterDensity = 0.28f;
-  t.props.scatter = { { 0, 0.10f, 0.9f, 0.3f }, { 1, 0.20f, 0.42f, 0.12f, false, true },
-                      { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
-                      { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
-                      { 6, 0.12f, 0.5f, 0.15f } };
+                     "pirate-cannon", "pirate-flag" };
+  t.props.scatterDensity = 0.24f;
+  t.props.scatter = { { 0, 0.12f, 0.9f, 0.3f }, { 1, 0.23f, 0.42f, 0.12f, false, true },
+                      { 2, 0.15f, 0.42f, 0.1f, false, true }, { 3, 0.2f, 0.55f, 0.15f },
+                      { 4, 0.16f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.5f, 0.15f } };
 }
 
 // The other three beaches each tell their own story, and the holiday
@@ -439,16 +443,21 @@ Theme canyonTheme() {
   s.rocks = { 0xc07a55, 0xa8623f, 0xd39a70 };  // rust -> dusty ochre family
   s.rockS[0] = 0.6f; s.rockS[1] = 0.9f;
   s.density = 0.45f;  // sparser than the shore; deserts read empty on purpose
-  s.clutter = { { CL_SCRUB, 0.5f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
-                { CL_DRIFTWOOD, 0.22f, { 0xd8c8a8, 0xc4b494 } },
-                { CL_PEBBLES, 0.28f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
+  // Scrub and red pebbles only: no driftwood, which is the beach's (and dead
+  // wood reads as the trees a canyon has none of).
+  s.clutter = { { CL_SCRUB, 0.62f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
+                { CL_PEBBLES, 0.38f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
   // Supply crates and barrels by the road, among sandstone rocks and stone
   // heaps (Survival Kit, Mini Forest — both authored small, so they stand well
   // over their own size). The crates and barrels are on the verge, where they
-  // read; the barrel is the beach's, at the beach's size.
-  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones" };
+  // read; the barrel is the beach's, at the beach's size. The list is every
+  // canyon track's: the shell stages a BIOME's props (ttp_theme_prop_models
+  // resolves no track), so a track picks among these by slot in its scatter
+  // (canyonTrack) and never re-lists them. A list of its own would bind its
+  // slots to the biome's models: rocks drawn as crates, lamps as barrels.
+  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones", "prop-hay", "construction-light" };
   t.props.scatterDensity = 0.24f;
   t.props.scatter = { { 0, 0.22f, 0.9f, 0.3f, false, true }, { 1, 0.26f, 0.42f, 0.12f, false, true },
                       { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.22f, 1.4f, 0.5f } };
@@ -457,8 +466,9 @@ Theme canyonTheme() {
 
 // Each canyon track tells its own story (its `set` and `land` in tracks.js),
 // and the biome's scatter and structures follow it. The props are re-chosen
-// from the shared kit: no story gets another's leftovers. The hoodoos stand
-// on every track: they are the badlands themselves, not a story.
+// from the biome's list by slot (0 crate, 1 barrel, 2 sandstone rocks,
+// 3 stones, 4 hay, 5 road-works lamp): no story gets another's leftovers. The
+// hoodoos stand on every track: they are the badlands themselves, not a story.
 //   wash        a dry wash and its canyon: the rock alone, rocks and stones
 //   gulch       a gold mine: timber supports like a trestle, crates and
 //               barrels of supplies, broken stone, no hay
@@ -466,21 +476,17 @@ Theme canyonTheme() {
 //   sidewinder  a desert highway: road-works lights on the verge, stones
 void canyonTrack(Theme& t, const std::string& track) {
   if (track == "wash") {
-    t.props.models = { "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.55f, 1.6f, 0.6f }, { 1, 0.45f, 1.4f, 0.5f } };
+    t.props.scatter = { { 2, 0.55f, 1.6f, 0.6f }, { 3, 0.45f, 1.4f, 0.5f } };
   } else if (track == "gulch") {
     t.structure = 0x8a6a46;  // timber, like the mine's own trestles
-    t.props.models = { "prop-crate", "pirate-barrel", "stones" };
     t.props.scatter = { { 0, 0.34f, 0.6f, 0.2f, false, true }, { 1, 0.30f, 0.3f, 0.08f, false, true },
-                        { 2, 0.36f, 1.4f, 0.5f } };
+                        { 3, 0.36f, 1.4f, 0.5f } };
   } else if (track == "crag") {
-    t.props.models = { "prop-hay", "pirate-barrel", "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
+    t.props.scatter = { { 4, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
                         { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.24f, 1.4f, 0.5f } };
   } else if (track == "sidewinder") {
-    t.props.models = { "construction-light", "rock-sand", "stones" };
-    t.props.scatter = { { 0, 0.22f, 2.4f, 0.4f, true, true }, { 1, 0.42f, 1.5f, 0.6f },
-                        { 2, 0.36f, 1.4f, 0.5f } };
+    t.props.scatter = { { 5, 0.22f, 2.4f, 0.4f, true, true }, { 2, 0.42f, 1.5f, 0.6f },
+                        { 3, 0.36f, 1.4f, 0.5f } };
   }
 }
 
@@ -597,13 +603,16 @@ Theme playroomTheme() {
   t.landmarks.clear();
   t.gate = 0xfff3e2;  // warm indoor-light gate grade
   t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xff5040;  // a third primary
-  // No trees indoors — the "boulder" channel does all the work: faceted toy bits
-  // in the same plastic primaries as the horizon blocks.
+  // No trees indoors — the "boulder" channel does all the work: a child's
+  // building blocks left about the floor (cubes and long blocks, 3 to 7 cm,
+  // the set pieces' own blocks), in the toys' painted primaries. Faceted
+  // stones in those colours read as rocks, and a floor has none.
   ScenerySpec& s = t.scenery;
   s.hasBush = false;
   s.mixTree = 0; s.mixBush = 0;  // everything rolls "rock"
   s.rocks = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
-  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // chunky toy-piece scale
+  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // a block's side
+  s.rockBlocks = true;
   s.density = 0.35f;                     // floors are tidier than meadows
   s.clutter = { { CL_BRICK, 0.5f, { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c } },
                 { CL_MARBLE, 0.3f, { 0x7db8e8, 0xe89a8a, 0x9cd89c } },
@@ -616,8 +625,8 @@ Theme playroomTheme() {
   // channel would strew rails across the floor. Drawn at a fixed 2x, because
   // the kit's train is smaller than its cars and should stand at least as
   // big as them; a ring that size is a landmark, so it is sparse.
-  // A skateboard left on the floor is a real one beside a toy car, so it
-  // stands at three and a half times its kit size, by the road.
+  // A toy skateboard (a fingerboard's big brother, about 14 cm) left on the
+  // floor stands at three and a half times its kit size, by the road.
   t.props.models = { "trainset", "skateboard" };
   // The ring keeps its own rate (0.03 a candidate) under the skateboard's
   // density: at 2.8k vertices it is the heaviest thing the scatter plants.
@@ -742,11 +751,11 @@ const char* biome_for_track(const char* trackId) {
   return biome_for_cup(def ? def->cup : nullptr);
 }
 
-Theme resolve_theme(const char* biomeName, const char* trackId) {
-  const BiomeEntry* b = findBiome(biomeName);
-  Theme t = (b ? b->build : grassTheme)();
-  const std::string track = trackId ? trackId : "";
+namespace {
 
+// What one track patches over its biome's theme: its weather, its props, its
+// carriers.
+void patchTrack(Theme& t, const BiomeEntry* b, const std::string& track) {
   // Weather varies ACROSS the snow cup: each track patches the flake cloud, so
   // the four races read as four different winter days rather than one repeated
   // snow globe. A count is "particles in the camera box" (the renderer's
@@ -780,14 +789,49 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   if (b && std::strcmp(b->name, "canyon") == 0) canyonTrack(t, track);
 
   // No procedural landmark beside a set piece that contradicts it. Where
-  // the track's set has log cabins (Powder, Flurry), one of THEM smokes
-  // (`anim_smoke`), so the smoking procedural cabin goes: one smoking chimney a
-  // track, and never a cold cabin beside a warm one.
+  // the track's set has its own houses (Flurry's smoking log cabins, Powder's
+  // chalets round the valley station), the procedural cabin goes: never a
+  // lone cabin beside a village of other ones.
   const auto drop = [&](uint32_t k) {
     t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
   };
   if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
     drop(LM_CABIN);
+  }
+}
+
+// The prop<i>.glb slot order of a biome, which the shell fetches by the BIOME
+// (ttp_theme_prop_models): the biome's own props, then each of its catalogue
+// tracks' own in catalogue order. A track that patches its props (snowProps,
+// pirateCove, ...) names its models in an order of its own, so resolve_theme
+// puts its slots back into this one: left in its own, Glacier's snow piles
+// drew as the biome's snowmen and its rocks as sleds.
+std::vector<std::string> biomeProps(const BiomeEntry* b) {
+  std::vector<std::string> out = b->build().props.models;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    if (std::strcmp(biome_for_track(TTP_TRACKS[i].id), b->name) != 0) continue;
+    Theme x = b->build();
+    patchTrack(x, b, TTP_TRACKS[i].id);
+    for (const std::string& m : x.props.models) {
+      if (std::find(out.begin(), out.end(), m) == out.end()) out.push_back(m);
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
+Theme resolve_theme(const char* biomeName, const char* trackId) {
+  const BiomeEntry* b = findBiome(biomeName);
+  Theme t = (b ? b->build : grassTheme)();
+  const std::string track = trackId ? trackId : "";
+  patchTrack(t, b, track);
+  if (b) {
+    const std::vector<std::string> all = biomeProps(b);
+    for (PropStamp& p : t.props.scatter) {
+      p.slot = (uint32_t) (std::find(all.begin(), all.end(), t.props.models[p.slot]) - all.begin());
+    }
+    t.props.models = all;
   }
 
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out

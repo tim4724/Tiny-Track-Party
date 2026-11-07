@@ -209,7 +209,8 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         mSceneryInstances[m].resize(k);
     }
 
-    // Boulders: flat-shaded icosahedra, vertex-tinted greys.
+    // Boulders: flat-shaded icosahedra, vertex-tinted greys (the playroom's
+    // are toy blocks).
     if (!boulders.empty()) {
         const float T = (1.0f + std::sqrt(5.0f)) / 2.0f;
         const float3 V[12] = {
@@ -228,6 +229,21 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             const uint32_t col = packAlbedo(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
             const float by = footprintY(tb, b.x, b.z, b.rr);
+            if (tb.scRockBlocks) {
+                // A child's building block left on the floor, `rr` on a side:
+                // a cube, or (the flatter third of the squash roll) a long
+                // block twice that, lying flat. Same rolls as a stone, so the
+                // scatter does not move.
+                const float w = b.sy < 0.65f ? 2 * b.rr : b.rr;
+                const Prim box = primBox(w, b.rr, b.rr);
+                record(b.x, b.z, 0.5f * std::sqrt(w * w + b.rr * b.rr), by + b.rr);
+                for (const uint32_t i : box.i) {
+                    const float3 p = box.v[i];
+                    const float rx = p.x * cy + p.z * sy, rz = -p.x * sy + p.z * cy;
+                    mBoulders.verts.push_back({ b.x + rx, by + b.rr * 0.5f + p.y, b.z + rz, col });
+                }
+                continue;
+            }
             record(b.x, b.z, b.rr, by + b.rr * (0.25f + b.sy));
             for (const auto& face : F) {
                 for (int vi = 0; vi < 3; vi++) {
@@ -618,17 +634,22 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             // of the geometry a cell submits where a split looks across a whole
             // backyard circuit at once, and at race scale 4x3 spheres and 3-sided
             // stems read the same as the smooth ones at half the triangles.
+            // At the tiny world's scale (a car is a car, 1 u some 4.5 m) a
+            // flower stands about half a metre with a toy's big head; drawn
+            // at the patch's old size a daisy stood as tall as a child and
+            // as wide as a goalmouth. Only the size: the draws are the same.
+            constexpr float K = 0.35f;
             const int n = 3 + (int) std::floor(rnd() * 3);
             struct Bloom { float x, z, r; };
             std::vector<Bloom> spots;
             for (int i = 0; i < n; i++) {
-                const float s = 0.85f + (float) rnd() * 0.45f;
+                const float s = (0.85f + (float) rnd() * 0.45f) * K;
                 const float headR = 0.28f * s;
                 float fx = 0, fz = 0;
                 bool found = false;
                 for (int t = 0; t < 6 && !found; t++) {
                     const float a = (float) rnd() * 2.0f * (float) M_PI;
-                    const float rr = (float) rnd() * 0.9f;
+                    const float rr = (float) rnd() * 0.9f * K;   // the clump shrinks with them (as many fit)
                     const float px = x + std::cos(a) * rr, pz = z + std::sin(a) * rr;
                     bool ok = true;
                     for (const Bloom& sp : spots) {

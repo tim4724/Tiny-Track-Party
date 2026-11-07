@@ -354,6 +354,7 @@ struct TtpRenderer::TrackBin {
     struct { uint32_t model; float s0, s1, sink; } scBush{};
     std::vector<uint32_t> scRocks{ 0xaaaaaa, 0xb4a898, 0x9aa2a4 };
     float scRockS[2] = { 0.3f, 0.45f };
+    bool scRockBlocks = false;
     uint32_t scModelCount = 0;
     // Trackside props (theme.props): scattered set dressing, bound as
     // prop<i>.glb by slot.

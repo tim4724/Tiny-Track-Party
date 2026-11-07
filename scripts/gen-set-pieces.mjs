@@ -58,14 +58,15 @@ function compose(kit, name, build) {
 // at a placement yaw of 0 or 180 — 180 on the track's right turns the longboat
 // to the open sea.
 // Both ride the swell (set_motion.h): the ship rolls about its keel and
-// lifts, the longboat bobs out of step with it. A ship rolling the 20 degrees
-// a flag swings would be a storm; 12 degrees on a slow period is a heavy swell
-// whose masthead sweeps a couple of units, which a racer sees.
+// lifts, the longboat bobs out of step with it. A cove is an anchorage
+// because it is sheltered, and its sea lies flat: a ship rolling 12 degrees
+// there was riding out a storm, so it rolls a few degrees on a slow period,
+// which still swings the masthead a unit, and heaves a little.
 // At SHIP the kit's galleon is 8.5 long, a real one beside a 0.9 car (the
 // kit models it four times a car's scale), its longboat a car long.
 const SHIP = 0.65;
 compose(PIRATE, 'set-pirate-ship', (put) => {
-  put('ship-pirate-large', { x: 0, z: 0, y: -0.35 * SHIP, yaw: 0.12, scale: SHIP, name: 'anim_sway:a=z:d=12:p=6.5+bob:h=0.32:p=4.6' });
+  put('ship-pirate-large', { x: 0, z: 0, y: -0.35 * SHIP, yaw: 0.12, scale: SHIP, name: 'anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2' });
   // tracks.js sinks the ship a third of a unit; the longboat floats, so it rides that back up
-  put('boat-row-large', { x: 3.4, z: -2.9, y: 0.3, yaw: 0.9, scale: 0.34, name: 'anim_bob:h=0.2:p=3.1' });
+  put('boat-row-large', { x: 3.4, z: -2.9, y: 0.3, yaw: 0.9, scale: 0.34, name: 'anim_bob:h=0.08:p=3.4' });
 });
