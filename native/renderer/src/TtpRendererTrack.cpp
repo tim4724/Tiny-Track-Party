@@ -118,7 +118,8 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
             switch (s.kind) {
                 case 0: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; break; // ridge
                 case 1: px1 = nx1 = zz = s.r + s.w; break;                               // ring
-                case 2: px1 = nx1 = s.r + (s.h > 0 ? 2.6f : 1.0f) * s.w;                 // plain, its banks
+                case 2: case 7:                                                          // plain, its banks; pond
+                        px1 = nx1 = s.r + (s.kind == 7 ? kPondFloor : 0.0f) + (s.h > 0 ? 2.6f : 1.0f) * s.w;
                         zz = 0.5f * s.len + px1; break;
                 case 5: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // paint
                 case 8: px1 = nx1 = s.r; zz = 0.5f * s.len + px1; break;                 // clear
@@ -567,12 +568,14 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
     // across the floor of the next round a bend.
     float keepAll = 1.0f, bank = 0.0f;
     for (const LandShape& s : mLand) {
-        if (s.kind != 2 || !in(s)) continue;
+        if ((s.kind != 2 && s.kind != 7) || !in(s)) continue;
         float lx, lz, at;
         local(s, lx, lz);
         const float d = spine(s, lx, lz, at);
         const float w = std::max(0.01f, s.w);
-        const float keep = smooth01((d - s.r) / w);
+        // A pond's floor runs a little past its water, so the sheet's edge
+        // lies on the plain, not on a grid chord climbing to the land.
+        const float keep = smooth01((d - s.r - (s.kind == 7 ? kPondFloor : 0.0f)) / w);
         lift *= keep;
         hill *= keep;
         keepAll *= keep;
@@ -653,7 +656,7 @@ float3 TtpRenderer::landTint(float x, float z) const {
         };
         float w;
         switch (s.kind) {
-            case 2: case 5: w = 1.0f - smooth01((d - s.r) / std::max(0.01f, s.w)); break;
+            case 2: case 5: case 7: w = 1.0f - smooth01((d - s.r) / std::max(0.01f, s.w)); break;
             case 1: w = crest(std::fabs(std::sqrt(lx * lx + lz * lz) - s.r) / s.w); break;
             default: w = crest(d / (s.r + (s.r1 - s.r) * at)); break;   // ridge, fan
         }
@@ -2240,6 +2243,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     // bananas' and rockets' in the render loop.
     phases.mark("props");
     buildWater(tb);
+    buildPonds(tb);
     buildFliers(tb);
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
     phases.mark("w:water+oil");
@@ -2247,6 +2251,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     // The track's set pieces before anything seeded: they are authored, so
     // they win their ground, and every pass after keeps out of mSetFeet.
     buildSetPieces(tb);
+    buildStructuresReceiver();   // after the set pieces: their `floor` parts join it
     // Landmarks FIRST: their spots carve flat clearings into the terrain field
     // (mTerrainFlats), which the scatter and the ground mesh then sample. The
     // three streams are independently seeded, so this order moves nothing.

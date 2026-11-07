@@ -1556,6 +1556,10 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
                 * mat4f::scaling(float3{ p.scale });
         gltfio::FilamentInstance* const inst = mSetInstances[p.slot][next[p.slot]++];
         tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
+        for (size_t k = 0; k < inst->getEntityCount(); k++) {
+            const utils::Entity e = inst->getEntities()[k];
+            if (isFloorName(mSetAssets[p.slot]->getName(e))) appendFloorPart(mSetAssets[p.slot], e);
+        }
         mSetRowOf[inst] = nRows;
         const float top = base + bb.max.y * p.scale;
         mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
@@ -1714,7 +1718,12 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
     if (!mTrack) return "";
     const TrackBin& tb = *mTrack;
     const float ground = groundSurfaceY(tb, x, z);   // what "raised" is measured from here
+    // A print lying on the floor (a play mat's `floor` part) may pass under
+    // any deck and round any pillar.
+    constexpr float FLOOR_PRINT = 0.15f;
+    const bool floorPrint = hi - ground > 0.01f && hi - ground < FLOOR_PRINT;   // a probe AT the ground is no print
     for (const auto& s : tb.samples) {
+        if (floorPrint) break;
         const float dx = x - s.pos.x, dz = z - s.pos.z, lim = s.width / 2 + MARGIN;
         if (dx * dx + dz * dz >= lim * lim) continue;
         if (s.pos.y - ground > UNDER_RAISE && hi < s.pos.y - UNDER_GAP) continue;
@@ -1722,6 +1731,7 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
         return "road";
     }
     for (const auto& p : tb.pillars) {
+        if (floorPrint) break;
         const float dx = x - p.x, dz = z - p.z, lim = p.radius + PILLAR_MARGIN;
         if (dx * dx + dz * dz < lim * lim) return "pillar";
     }
@@ -1738,7 +1748,18 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
 }
 
 bool TtpRenderer::inSea(float x, float z, float margin) const {
-    return mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - margin;
+    return (mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - margin) || inPond(x, z, margin);
+}
+
+bool TtpRenderer::inPond(float x, float z, float margin) const {
+    for (const LandShape& s : mLand) {
+        if (s.kind != 7) continue;
+        const float dx = x - s.x, dz = z - s.z;
+        const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
+        const float half = 0.5f * s.len, c = std::min(half, std::max(-half, lz));
+        if (std::sqrt(lx * lx + (lz - c) * (lz - c)) < s.r + margin) return true;
+    }
+    return false;
 }
 
 // Consecutive rings are stitched into a strip. A point is read in every strip
@@ -2106,6 +2127,95 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     }
 }
 
+// Inland water: each `pond` landform (kind 7) is a sheet over the flat floor
+// its plain keeps (kPondFloor past the water), on its own outline, the
+// landform's capsule with a gentle wobble: a thin pale line at the edge, then
+// the stream's own blue (set_prototypes.py WATER, the kit's sky swatch at the
+// foot of its ramp) deepening to the middle, so the brook and the pond it
+// opens into are one water. Round it a shore: a band of pebbles with a crisp
+// edge on the lawn, not a mud fade. Blended and polygon-offset like the sea,
+// so it lies on the ground it covers and every keep-out (inSea) holds the
+// dressing off it.
+void TtpRenderer::buildPonds(const TrackBin& tb) {
+    if (!mBlendMaterial) return;
+    const float3 rim = srgbToLinear(0xd4e6f8u), shallow = srgbToLinear(0x8cb2e7u);
+    const float3 mid = srgbToLinear(0x7da6e2u), deep = srgbToLinear(0x6c97d9u);
+    const float3 pebble = srgbToLinear(0xc9b994u);
+    constexpr int ARC = 10, SIDE = 2;
+    constexpr int N = 2 * (ARC + SIDE);
+    constexpr float WOBBLE = 0.7f;
+    // [offset past r (u), colour (0 rim, 1 shallow, 2 mid, 3 deep), alpha]
+    static const float WATER[5][3] = {
+        { -99, 3, 1 }, { -2.2f, 2, 1 }, { -0.4f, 1, 1 }, { -0.08f, 0, 0.95f }, { 0.02f, 0, 0 },
+    };
+    // [offset past r (u), alpha]: under the water's edge, out to a hard edge
+    static const float SHORE[3][2] = { { -0.5f, 1 }, { 0.45f, 1 }, { 0.55f, 0 } };
+    uint32_t seed = 0x706f6e64u;
+    for (const LandShape& s : mLand) {
+        if (s.kind != 7) continue;
+        seed = seed * 1664525u + 1013904223u;
+        const float p1 = (seed >> 8) * (6.2831853f / 16777216.0f);
+        seed = seed * 1664525u + 1013904223u;
+        const float p2 = (seed >> 8) * (6.2831853f / 16777216.0f);
+        const float half = 0.5f * s.len;
+        // The outline at unit radius: a base on the spine and a direction.
+        float bx[N], bz[N], dx[N], dz[N], wob[N];
+        int k = 0;
+        for (int i = 0; i < ARC; i++, k++) {        // the +Z cap, +X to -X
+            const float a = (float) M_PI * i / ARC;
+            bx[k] = 0; bz[k] = half; dx[k] = std::cos(a); dz[k] = std::sin(a);
+        }
+        for (int i = 0; i < SIDE; i++, k++) {       // the -X side, +Z to -Z
+            bx[k] = 0; bz[k] = half - s.len * i / SIDE; dx[k] = -1; dz[k] = 0;
+        }
+        for (int i = 0; i < ARC; i++, k++) {        // the -Z cap, -X to +X
+            const float a = (float) M_PI * (1 + (float) i / ARC);
+            bx[k] = 0; bz[k] = -half; dx[k] = std::cos(a); dz[k] = std::sin(a);
+        }
+        for (int i = 0; i < SIDE; i++, k++) {       // the +X side, -Z to +Z
+            bx[k] = 0; bz[k] = -half + s.len * i / SIDE; dx[k] = 1; dz[k] = 0;
+        }
+        for (int i = 0; i < N; i++) {
+            const float f = 6.2831853f * i / N;
+            wob[i] = WOBBLE * (0.6f * std::sin(3 * f + p1) + 0.4f * std::sin(5 * f + p2));
+        }
+        const auto ring = [&](Mesh& m, float off, float y, uint32_t col) {
+            const float rho = std::max(0.0f, s.r + off), share = std::min(1.0f, rho / s.r);
+            for (int i = 0; i < N; i++) {
+                const float rr = rho + wob[i] * share;
+                const float lx = bx[i] + dx[i] * rr, lz = bz[i] + dz[i] * rr;
+                m.verts.push_back({ s.x + s.ax * lx - s.az * lz, y, s.z + s.az * lx + s.ax * lz, col });
+            }
+        };
+        const auto stitch = [&](Mesh& m, uint32_t base, int rings) {
+            for (int ri = 0; ri + 1 < rings; ri++) {
+                for (int i = 0; i < N; i++) {
+                    const uint32_t a = base + ri * N + i, a1 = base + ri * N + (i + 1) % N;
+                    const uint32_t b = a + N, b1 = a1 + N;
+                    m.idx.insert(m.idx.end(), { a, a1, b, a1, b1, b });
+                }
+            }
+        };
+        uint32_t base = (uint32_t) mPondBank.verts.size();
+        for (const auto& b : SHORE) ring(mPondBank, b[0], tb.groundY + 0.05f, packShown(pebble, 1.0f, b[1]));
+        stitch(mPondBank, base, 3);
+        base = (uint32_t) mPond.verts.size();
+        for (const auto& b : WATER) {
+            const float t = b[1];
+            const float3 c = t <= 1 ? mix(rim, shallow, t) : t <= 2 ? mix(shallow, mid, t - 1) : mix(mid, deep, t - 2);
+            ring(mPond, b[0], tb.groundY + 0.09f, packShown(c, 1.0f, b[2]));
+        }
+        stitch(mPond, base, 5);
+    }
+    if (mPond.verts.empty()) return;
+    MaterialInstance* mi = sceneInstance(mBlendMaterial);
+    mi->setPolygonOffset(-1.0f, -1.0f);
+    buildMesh(mPondBank, true, mi, 1);
+    mi = sceneInstance(mBlendMaterial);
+    mi->setPolygonOffset(-1.0f, -1.0f);
+    buildMesh(mPond, true, mi, 2);
+}
+
 // Fliers: gulls/vultures/geese circling their roosts (theme.birds), kites
 // bobbing on their strings over the shore (theme.kites) and the playroom's
 // paper dart (theme.paperPlane). The JS birds/kites are canvas SPRITES; here
@@ -2266,7 +2376,57 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         }
     };
 
-    for (const TrackBin::Pillar& p : tb.pillars) {
+    // A toy kit's stacked cylinders (theme.structureStack): pieces the kit's
+    // own height, each in its own colour, on a grey foot disc lying on the
+    // floor. Every piece keeps its own vertices, so the colours meet in a clean
+    // line. Priced per vertex, a band is the cost, so a stack costs about the
+    // column it replaces: eight sides (the kit's own columns are ten at twice
+    // this radius), no lid on any band (the deck hides the top one, the next
+    // piece the rest), and the foot a lid alone, flat on the floor, where a
+    // camera only ever sees it from above.
+    const auto band = [&](float x, float z, float r, float y0, float y1, uint32_t col) {
+        constexpr int SEG = 8;
+        const uint32_t base = (uint32_t) mStructures.verts.size();
+        for (int j = 0; j <= SEG; j++) {
+            const float a = (float) j / SEG * 2.0f * (float) M_PI;
+            const float vx = x + std::cos(a) * r, vz = z + std::sin(a) * r;
+            mStructures.verts.push_back({ vx, y0, vz, col });
+            mStructures.verts.push_back({ vx, y1, vz, col });
+        }
+        for (int j = 0; j < SEG; j++) {
+            const uint32_t a0 = base + (uint32_t) j * 2, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
+            mStructures.idx.insert(mStructures.idx.end(), { a0, b0, a1, b0, b1, a1 });
+        }
+    };
+    const auto disc = [&](float x, float z, float r, float y, uint32_t col) {
+        constexpr int SEG = 8;
+        const uint32_t c = (uint32_t) mStructures.verts.size();
+        mStructures.verts.push_back({ x, y, z, col });
+        for (int j = 0; j < SEG; j++) {
+            const float a = (float) j / SEG * 2.0f * (float) M_PI;
+            mStructures.verts.push_back({ x + std::cos(a) * r, y, z + std::sin(a) * r, col });
+        }
+        for (int j = 0; j < SEG; j++) {   // wound to face UP, as column's cap is
+            mStructures.idx.insert(mStructures.idx.end(),
+                    { c, c + 1 + (uint32_t) ((j + 1) % SEG), c + 1 + (uint32_t) j });
+        }
+    };
+    const auto stacked = [&](const TrackBin::Pillar& p, size_t phase) {
+        constexpr float FOOT = 0.04f, PIECE = 1.7f;   // the marble run's pieces, grown
+        const float top = std::max(p.baseY + 0.1f, p.topY);
+        if (p.baseY < tb.groundY + FOOT) {   // on the floor, not on a deck below
+            disc(p.x, p.z, p.radius * 1.7f, tb.groundY + FOOT, packAlbedo(srgbToLinear(0x9aa1b4u), 1.0f));
+        }
+        const int n = std::max(1, (int) std::lround((top - p.baseY) / PIECE));
+        for (int k = 0; k < n; k++) {
+            const uint32_t c = tb.structureStack[(phase + (size_t) k) % tb.structureStack.size()];
+            band(p.x, p.z, p.radius * 1.04f, p.baseY + (top - p.baseY) * k / n,
+                    p.baseY + (top - p.baseY) * (k + 1) / n, packAlbedo(srgbToLinear(c), 1.0f));
+        }
+    };
+    for (size_t i = 0; i < tb.pillars.size(); i++) {
+        const TrackBin::Pillar& p = tb.pillars[i];
+        if (!tb.structureStack.empty() && p.topY - tb.groundY > 0.8f) { stacked(p, i); continue; }
         // Down to the bed of a sunk sea, which lies under the plain they stand on.
         const float sink = bedSink(p.x, p.z);
         const float baseY = sink > 0 ? std::min(p.baseY, tb.groundY - sink - 0.1f) : p.baseY;
@@ -2285,8 +2445,12 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             const float d = dx * dx + dz * dz;
             if (d < 4.0f && d < bestD) { bestD = d; topY = s.pos.y - kDeckDepth; }
         }
-        column(base.x, base.z, p.radius, base.y - 0.06f,
-                std::max(base.y - 0.06f + 0.3f, topY), nullptr, nullptr);
+        const float y0 = base.y - 0.06f, y1 = std::max(y0 + 0.3f, topY);
+        if (!tb.structureStack.empty() && y1 - y0 > 0.8f) {   // the same kit as the pillars beside it
+            stacked({ base.x, base.z, y0, y1, p.radius }, tb.pillars.size() + (size_t) (&p - tb.poles.data()));
+            continue;
+        }
+        column(base.x, base.z, p.radius, y0, y1, nullptr, nullptr);
     }
     // Loop shafts: built tall from the lawn, then cut to the road's underside.
     for (const TrackBin::Post& p : tb.supportPosts) {
@@ -2382,7 +2546,8 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         tileMajor(m, mSheetTile, mSheetMinTris);
         return buildMesh(m, true, staticInstance());
     };
-    if (!mStructures.verts.empty() && !buildReceiver(mStructures)) return;
+    // mStructures itself is built after the set pieces, which may add their
+    // `floor` parts to it (buildStructuresReceiver).
 
     // Berms: consecutive cross-section rings (BermRing::corners) stitched into a
     // grass surface that meets the road underside and flares down to the lawn:
@@ -2413,6 +2578,52 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         }
     }
     if (!mBerms.verts.empty()) buildReceiver(mBerms);
+}
+
+void TtpRenderer::buildStructuresReceiver() {
+    if (mStructures.verts.empty()) return;
+    accumulateNormals(mStructures);
+    bakeVertexLight(mStructures);
+    mStructures.uvs.assign(mStructures.verts.size(), float2{ 0, 0 });
+    tileMajor(mStructures, mSheetTile, mSheetMinTris);
+    buildMesh(mStructures, true, staticInstance());
+}
+
+// A set piece's `floor` part into mStructures: its vertices in world space,
+// each with the kit table's colour times its prim's factor as albedo (the
+// receiver bakes the light). False leaves the part to draw as gltfio loaded it.
+bool TtpRenderer::appendFloorPart(const gltfio::FilamentAsset* asset, utils::Entity e) {
+    const auto keyIt = mAssetMeshKey.find(asset);
+    if (keyIt == mAssetMeshKey.end()) return false;
+    const auto meshIt = mGlbMeshCache.find(keyIt->second);
+    if (meshIt == mGlbMeshCache.end()) return false;
+    const ttp::kitcolors::Model* colorModel = ttp::kitcolors::find(keyIt->second);
+    const char* nm = asset->getName(e);
+    if (!colorModel || !nm) return false;
+    const ttp::rt::GlbMeshNode* node = nullptr;
+    for (const auto& n : meshIt->second) {
+        if (n.name == nm) { node = &n; break; }
+    }
+    if (!node || node->mesh < 0 || (uint32_t) node->mesh >= colorModel->meshCount) return false;
+    const ttp::kitcolors::Mesh& colors = colorModel->meshes[node->mesh];
+    std::vector<float3> factor;
+    if (!bakeFactors(e, node->prims, colors, factor)) return false;
+    auto& tcm = mEngine->getTransformManager();
+    const mat4f xf = tcm.getWorldTransform(tcm.getInstance(e));
+    for (size_t p = 0; p < node->prims.size(); p++) {
+        const ttp::rt::GlbMeshPrim& sp = node->prims[p];
+        const uint8_t* rgb = colors.prims[p].rgb;
+        const uint32_t base = (uint32_t) mStructures.verts.size();
+        for (size_t i = 0; i < sp.pos.size() / 3; i++) {
+            const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1], sp.pos[i * 3 + 2], 1.0f }).xyz;
+            const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f), srgbChannel(rgb[i * 3 + 1] / 255.0f),
+                    srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
+            mStructures.verts.push_back({ pw.x, pw.y, pw.z, packAlbedo(lin, 1.0f) });
+        }
+        for (const uint32_t k : sp.idx) mStructures.idx.push_back(base + k);
+    }
+    mScene->remove(e);
+    return true;
 }
 
 // One instanced-asset family (a scenery model, a prop model, the cone pool)
@@ -2473,6 +2684,7 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         if (!setAnimRoot(asset, ent).isNull()) continue;
         const char* nm = asset->getName(ent);
         if (!nm) return;
+        if (setPiece && isFloorName(nm)) continue;   // in mStructures (appendFloorPart)
         const ttp::rt::GlbMeshNode* found = nullptr;
         for (const auto& n : meshIt->second) {
             if (n.name == nm) {

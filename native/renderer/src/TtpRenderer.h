@@ -1014,6 +1014,7 @@ private:
         filament::math::float3 tint;
     };
     std::vector<LandShape> mLand;
+    static constexpr float kPondFloor = 3.0f;   // a pond's flat floor past its water
     float landforms(float x, float z, float edge, float lift, float hill, float* dell,
             float* bed) const;
     // The landforms' tints at (x, z), multiplied: what the ground's colour
@@ -1784,6 +1785,9 @@ private:
     // The sea ring + its wet-sand glaze (theme.water), fitted to the track's
     // own shoreline.
     Mesh mWater, mWet;
+    // Inland water (a `pond` landform, kind 7): a sheet with its own outline
+    // over the plain floor the landform keeps, and its pebble shore.
+    Mesh mPond, mPondBank;
     // Fliers (theme.birds / kites / paperPlane): billboard glyphs built as real
     // stroked geometry (the JS canvas sprites), plus the playroom's 3D dart.
     std::vector<Mesh> mBirds;
@@ -1819,11 +1823,21 @@ private:
     static bool isDrapeName(const char* name) {
         return name && std::strncmp(name, "drape", 5) == 0;
     }
+    // A set piece's `floor` part (a play mat) is a print lying on the floor.
+    // It joins mStructures, the static receiver, so the deck's baked shadow
+    // lands on it (buildSetPieces); the merge skips it.
+    static bool isFloorName(const char* name) {
+        return name && std::strncmp(name, "floor", 5) == 0;
+    }
+    bool appendFloorPart(const filament::gltfio::FilamentAsset* asset, utils::Entity e);
+    void buildStructuresReceiver();
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
     // Within `margin` of the sea, or in it (false where there is none).
     bool inSea(float x, float z, float margin) const;
+    // Within `margin` of a pond's water, or in it.
+    bool inPond(float x, float z, float margin) const;
     // The chase camera's view up the road, one segment every 2 u of the lap
     // (buildSightLines), and whether something standing at (x, z), plan
     // radius r, rising to `top`, would cut one — the scatter's keep-out on
@@ -2423,6 +2437,7 @@ private:
             bool dynamic);
     void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
+    void buildPonds(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);

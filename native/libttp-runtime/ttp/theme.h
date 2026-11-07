@@ -206,7 +206,7 @@ struct SetSpec {
 // the set pieces modelled on one): ttp::LandDef's fields, as the renderer's
 // terrain reads them. A function of the track alone, like the set.
 struct Landform {
-  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint, 6 shore, 8 clear, 9 street (LandDef)
+  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint, 6 shore, 7 pond, 8 clear, 9 street (LandDef)
   int piece = -1;             // anchored on set.pieces[piece]; -1: on u/lat/yaw
   float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
   float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
@@ -228,6 +228,10 @@ struct Theme {
   PropsSpec props;
   std::vector<uint32_t> landmarks;
   uint32_t structure = 0x9aa1b4;  // pillars / poles / loop shafts (toy concrete)
+  // Non-empty: the bridge pillars are a toy kit's stacked cylinders, one
+  // colour per piece round this list, on a foot disc under a cap (Helix's
+  // marble kit). Empty: plain columns in `structure`.
+  std::vector<uint32_t> structureStack;
   uint32_t groundKind = GROUND_LAWN;
   float fogTune = 1;              // scalar on the RACE + lobby-perimeter fog distances
   KeyLight key;

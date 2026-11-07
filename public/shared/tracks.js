@@ -238,6 +238,12 @@ const BOXES = {
 //          the fade ends; reaches chained round a bend keep one floor (no
 //          bank crosses another reach's floor). The floor wears the biome's
 //          creek-bed tint (the renderer's groundTint).
+//   pond   open water on the plain: a capsule like a plain (`len`, `r` the
+//          water's reach, `w` the land's fade back), its floor kept flat a
+//          little past the water and the sheet drawn on it with its own
+//          outline and a pebble shore. Only under a deck on pillars well over
+//          the plain, never against a low slab; the dressing keeps off it as
+//          off the sea
 //   paint  a capsule like a plain that shapes nothing: it only colours the
 //          ground (a piste down a mountain)
 //   shore  (the beach) brings the sea's waterline in through the anchor, held
@@ -692,30 +698,36 @@ export const TRACKS = {
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
     // The mill stream: it rises inside the north loop, winds over the east,
     // middle and north lawns and round the north-west corner into the race of
-    // the watermill on its pond, straight ahead of the grid. The road lies on
-    // the lawn for most of the lap, so where they meet the stream fords it at
-    // the road's own level; it runs under the two bridges, and under the low
-    // trestle on the run to the line (gen-tracks SEEDS `trestle`: that
-    // stretch's hump stands on pillars rather than dam the water). Laid
-    // reach by reach, each reach's end circle on the next one's, each turned
-    // so its willow stands clear of every deck (half round puts it on the
-    // other bank at the other end)
+    // the watermill on its pond, straight ahead of the grid (the wheel turns
+    // with the water going down the race into the pond). The road lies on
+    // the lawn for most of the lap, so where they meet the stream goes under
+    // it: through a stone culvert, seen coming out each side, on the run to
+    // the line, and under the two bridges, where the first bridge's west span
+    // stands on its piers in a pond the stream opens into (`pond`), kept off
+    // the low strand beside it, ducks and a pebble shore on its open half.
+    // Laid reach by reach, each reach's end circle on the next one's, each
+    // turned so its willow stands clear of every deck (half round puts it on
+    // the other bank at the other end).
     set: [
       { model: 'set-watermill', u: 0.09204, lat: 24.151, yaw: 35.46 },
       { model: 'set-stream-reach', u: 0.92293, lat: -28.764, yaw: -40.76 },
       { model: 'set-stream-reach', u: 0.51248, lat: 8.411, yaw: 96.74 },
       { model: 'set-stream-reach', u: 0.50012, lat: -11.456, yaw: 116.55 },
-      { model: 'set-stream-reach', u: 0.1544, lat: -1.942, yaw: -85.23 },
-      { model: 'set-stream-reach', u: 0.1292, lat: 8.869, yaw: 177.52 },
+      { model: 'set-stream-reach', u: 0.1139, lat: 9.04, yaw: -171.34 },
       { model: 'set-stream-reach', u: 0.10125, lat: 10.084, yaw: -162.76 },
       { model: 'set-stream-reach', u: 0.09737, lat: 12.372, yaw: -147.02 },
       { model: 'set-stream-reach', u: 0.89136, lat: -26.405, yaw: 59.8 },
       { model: 'set-stream-reach', u: 0.86586, lat: -7.524, yaw: -121.56 },
-      { model: 'set-stream-reach', u: 0.83755, lat: 10.952, yaw: 55.43 }
+      { model: 'set-stream-reach', u: 0.83755, lat: 10.952, yaw: 55.43 },
+      { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
+      { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
+      { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 }
     ],
-    // the north lawn's hump the stream bends round
+    // the north lawn's hump the stream bends round, and the pond under the
+    // first bridge's west span
     land: [
-      { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 }
+      { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 },
+      { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 }
     ]
   },
   cloverleaf: {
@@ -728,10 +740,14 @@ export const TRACKS = {
     // up there with the children queueing at it; another corner of the park
     // in the S between the two decks, seen from both. Built at the toy
     // world's chunkiness, so it reads from the road. The corner stands on
-    // the flat by the road: the deck's cap holds any knoll there down to it
+    // the flat by the road: the deck's cap holds any knoll there down to it.
+    // The park's railway rings the lawn inside the top loop, its line three
+    // units past the start straight's kerb and on round the hairpin, the top
+    // straight and the bridge's leg, so its train runs beside the racers
     set: [
       { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96, y: -0.05, scale: 1.3 },
-      { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 }
+      { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
+      { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west
     land: [
@@ -926,8 +942,13 @@ export const TRACKS = {
     // straight points; the board's wooden snakes have come
     // alive, one rearing at the racers inside the bend where the south leg
     // turns for the line, two more slithering round either side of the grid
-    // straight's end
+    // straight's end. The game again as a floor mat the grid straight runs
+    // down the middle of, its big pawns and foam dice stood on it, and just
+    // past the mat's end the racers' toy car park on the infield, its lift
+    // and spiral ramp running
     set: [
+      { model: 'set-floor-mat', u: 0, lat: 0 },
+      { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
       { model: 'set-jointed-snake', u: 0.9754, lat: 10, yaw: 180 },
       { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
@@ -938,20 +959,24 @@ export const TRACKS = {
   gauntlet: {
     name: 'Gauntlet', segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
-    // The toy castle siege, one set of toy knights split into two sides: the
-    // block castle where the long home straight points, its dragon standing
-    // guard beside the straight by a rank of its blue knights and their
-    // cannon, another rank in the infield; the red besiegers' siege towers,
-    // each with a rank marching before it, stand where the middle straight
-    // and the grid straight point, and their trebuchet, its arm just thrown
-    // toward the castle, where the south straight points (a rank alone is a
-    // speck down a long straight; a tall engine reads from its far end)
+    // The toy castle siege, one set of toy knights split into two sides,
+    // laid across the long home straight: the red besiegers' siege tower, a
+    // rank marching before it, inside it, and a rank of the castle's blue
+    // knights with their cannon, and its dragon, outside, facing them across
+    // the road. The race runs through no-man's land and under the castle's
+    // outer gatehouse (set-castle-gate, astride the road) toward the block
+    // castle itself, where the straight points. Another blue rank stands in
+    // the infield, another siege tower where the grid straight points and the
+    // besiegers' trebuchet, its arm just thrown toward the castle, where the
+    // south straight points (a rank alone is a speck down a long straight; a
+    // tall engine reads from its far end).
     set: [
+      { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
+      { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
+      { model: 'set-toy-dragon', u: 0.825, lat: 8 },
+      { model: 'set-castle-gate', u: 0.85, lat: 0 },
       { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
-      { model: 'set-toy-soldiers', u: 0.88, lat: 7.5, yaw: 76 },
-      { model: 'set-toy-dragon', u: 0.8864, lat: 10, yaw: 0 },
       { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
-      { model: 'set-siege-tower', u: 0.6522, lat: 10.8, yaw: 26 },
       { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },
       { model: 'set-trebuchet', u: 0.186, lat: 17.2, yaw: 270 }
     ]
@@ -967,13 +992,16 @@ export const TRACKS = {
     // round a column, a slinky walking down off an alphabet block beside
     // it, where the grid straight points, and a zigzag of chutes between two columns
     // outside the raised straight and again by the loop's entry; a tin
-    // humming top and a wooden one spin short of the run
+    // humming top and a wooden one spin short of the run; and the run's high
+    // chute beside the skyway inside its bend, at the deck's own height, its
+    // marbles racing the cars along it
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
       { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
       { model: 'set-marble-zigzag', u: 0.8246, lat: 9.4, yaw: 148 },
-      { model: 'set-marble-zigzag', u: 0.5174, lat: 12.2, yaw: 100 }
+      { model: 'set-marble-zigzag', u: 0.5174, lat: 12.2, yaw: 100 },
+      { model: 'set-marble-skyway', u: 0.477, lat: -5 }
     ]
   },
   skyline: {

@@ -572,6 +572,10 @@ buried.
   with one stands on the plain and levels nothing (`mSetDrapes`): its other
   parts are built from the plain up (a post sunk through whatever land it
   meets). Only the baked path drapes; a model the bake refuses stands flat.
+- **A `floor…` PART IS A PRINT ON THE FLOOR** (a play mat): it joins
+  `mStructures`, the static receiver, instead of the dressing merge, so the
+  deck's baked shadow falls on it (`appendFloorPart`), and `spotIssue` lets a
+  part that low (`FLOOR_PRINT`) pass under any deck and round any pillar.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in

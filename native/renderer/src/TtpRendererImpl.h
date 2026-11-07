@@ -402,6 +402,7 @@ struct TtpRenderer::TrackBin {
     std::vector<std::vector<BermRing>> berms;
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)
+    std::vector<uint32_t> structureStack; // theme.structureStack: stacked pillars
     float roadWidth = 5, sand = 0, groundY = 0, length = 0;
     bool closed = true;
 

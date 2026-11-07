@@ -917,6 +917,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     }
     out.land = th.land;
     out.structureCol = th.structure;
+    out.structureStack = th.structureStack;
 
     out.groundKind = th.groundKind;
     out.fogTune = th.fogTune;
@@ -1858,7 +1859,7 @@ void TtpRenderer::tagFeatures() {
     tagMesh(mRoad, kFeatRoad);
 
     // The world the deck stands in. mGroundProxy stays out (see tagEntities).
-    meshes({ &mGround, &mHills, &mWater, &mWet, &mStructures, &mBerms,
+    meshes({ &mGround, &mHills, &mWater, &mWet, &mPond, &mPondBank, &mStructures, &mBerms,
              &mGroundShadows, &mGantry }, kFeatTerrain);
 
     // Set dressing: everything scattered beside the track. The sheets come
@@ -2243,6 +2244,8 @@ void TtpRenderer::releaseStatic() {
     for (auto& m : mSignMeshes) destroyMesh(m);
     destroyMesh(mWater);
     destroyMesh(mWet);
+    destroyMesh(mPond);
+    destroyMesh(mPondBank);
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);

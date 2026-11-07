@@ -3966,8 +3966,10 @@ def den_camp():
 # stretch, their tapered ends overlapping); the mill is the hero. Water is a
 # flat sheet on the lawn: from the road, eye height over the grass, it is a
 # line of blue beside the kerb, so each reach brings a willow on its bank, the tall
-# thing that says stream.
-WATER, MUD = 0x7db8e8, 0xb08a5a
+# thing that says stream. The water is the kit's sky swatch at the foot of its
+# ramp, and the pond it opens into (a `pond` landform the renderer draws,
+# TtpRenderer::buildPonds) is painted the same blue: one water.
+WATER, MUD = 0x8ecae6, 0xb08a5a
 STREAM_W, REACH = 4.2, 88.0   # its half width; a reach's length between its end circles
 
 @piece(REAL)
@@ -4042,14 +4044,14 @@ def duck(at, color=0xf8f8fb):
 def watermill():
     # The mill on its pond: a stone mill house (front +X, to the road) under
     # a red tile roof, the wheel on its road side turning in the race that
-    # runs out of the pond past it; ducks going round the pond, a weeping
+    # runs past it into the pond; ducks going round the pond, a weeping
     # willow over the water, someone fishing off the bank. Real size: the
     # house is two cars long, the wheel nearly two across.
     STONE, TILE = 0xfde4c7, 0xcf534f
     PX, PZ, PR = -1.0, -20.0, 13.0                    # the pond, upstream (-Z) of the house
     cyl(PR + 1.4, 0.14, (PX, 0, PZ), MUD, segs=20)
     cyl(PR, 0.3, (PX, 0, PZ), WATER, segs=20)
-    # the race: out of the pond's +X side past the wheel, on along +Z
+    # the race: from +Z past the wheel into the pond's +X side
     RX = 6.6
     box((3.4, 0.14, 26.0), (RX, 0.07, 2.0), MUD)
     box((2.2, 0.3, 26.0), (RX, 0.15, 2.0), WATER)
@@ -4065,9 +4067,11 @@ def watermill():
     for z in (-3.0, 3.0):
         window(F, 0.0, D / 2, 4.6, z, w=1.2, h=1.2)
     box((1.2, 1.0, 1.0), (2.0, 0.5, L / 2 + 1.2), 0xfde4c7)                       # sacks at the door
-    # the wheel, axle across (X), turning so its foot runs downstream
+    # the wheel, axle across (X), turning so its foot runs downstream: the
+    # stream comes down the race INTO the pond (its last reach meets the
+    # race's +Z end), so the foot runs toward the pond (-Z)
     WX, WY, WZ, R = RX, 3.4, 0.0, 3.4
-    with animated('anim_spin:a=x:w=-0.9', (WX, WY, WZ)):
+    with animated('anim_spin:a=x:w=0.9', (WX, WY, WZ)):
         cyl(0.5, 1.8, (WX - 0.9, WY, WZ), 0x2a2735, segs=8, axis='across')
         for s in (-1, 1):
             torus(R, 0.22, (WX + s * 0.6, WY, WZ), 0x7a5a3a, segs=16, axis='across')
@@ -4100,6 +4104,194 @@ def watermill():
             box((0.2, 1.8 - 0.2 * j, 0.2), (x + 0.5 * math.cos(a), 0.9 - 0.1 * j, z + 0.5 * math.sin(a)),
                 (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
     join_still('mill')
+
+@piece(REAL)
+def pond_ducks():
+    # Life on Tangle's pond and its shore, on the half of it clear of the
+    # bridge (+X toward the bridge, whose deck and spotIssue's margin start
+    # 5.7 u out): two ducks going round, lily pads, reeds in the shallows of
+    # the far bank and stones on the pebble shore. The pond is the track's
+    # `pond` landform (its cap centred here, 5.3 u round; the renderer draws
+    # its water and shore, TtpRenderer::buildPonds); its sheet lies 0.09 u
+    # over the plain, so the ducks float at 0.1 u (0.4 here).
+    WY, R = 0.4, 21.6                        # the water; the shore's line, 5.4 u
+    n = 10
+    for k in range(n):
+        a = -k * 2 * math.pi / n
+        marker('path_pduck_%d' % k, (10.0 * math.cos(a), WY, 12.0 * math.sin(a)))
+    for j in range(2):
+        with animated('anim_path:c=pduck:p=40:o=%.3f:f=1+bob:h=0.015:p=1.6#%d' % (j / 2 + 0.07, j), (10.0, WY, 0.0)):
+            duck((10.0, WY, 0.0), (0xf8f8fb, 0x9a7b55)[j])
+    for k, deg in enumerate((168, 212)):     # reeds in the far bank's shallows
+        x, z = 19.0 * math.cos(math.radians(deg)), 19.0 * math.sin(math.radians(deg))
+        for j in range(4 - k):
+            a = j * 1.6 + k
+            box((0.24, 2.3 - 0.3 * j, 0.24), (x + 0.7 * math.cos(a), WY + 1.05 - 0.15 * j, z + 0.7 * math.sin(a)),
+                (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
+    for k, (x, z, r) in enumerate(((-12.0, -2.0, 1.0), (-13.5, 3.0, 0.8))):   # lily pads, flat on the water
+        ground_poly([(x, WY, z)] + [(x + r * math.cos(a * math.pi / 3), WY, z + r * math.sin(a * math.pi / 3))
+                                         for a in range(6)], [(0, 1 + a, 1 + (a + 1) % 6) for a in range(6)], 0x4f9a48)
+    # stones on the shore: round the cap, and down both sides to the margin
+    stones = [(R * math.cos(math.radians(d)), R * math.sin(math.radians(d))) for d in (125, 190, 238)]
+    stones += [(7.0, -R), (17.0, -R - 0.6), (11.0, R + 0.3)]
+    with plain_parts():
+        for k, (x, z) in enumerate(stones):
+            box((1.5 - 0.15 * (k % 3), 0.7 - 0.1 * (k % 2), 1.2), (x, 0.3, z), ('grey', 'lavender')[k % 2], yaw=0.7 * k)
+    join_still('pond')
+
+# ---- TANGLE: the culverts where the brook goes under the low road ---------------------
+
+@piece()
+def culvert():
+    # The stone barrel that carries the brook under the low road on the run to
+    # the line, seen where it comes out each side: a low barrel along the
+    # stream (+X toward the road), its inner end at spotIssue's 1.2 u past the
+    # deck, and at its outer end a headwall with a dark arched mouth over the
+    # water and wing walls splayed along the banks. World units. Low (its top
+    # a hand over the road's surface), so it reads as the road's own
+    # embankment over the brook, not a box beside it; no parapet along the
+    # kerb. The water itself is the stream reach under it.
+    L, W, HB = 2.4, 2.6, 0.55               # the barrel: length, width, height
+    T, WH, HH, R = 0.35, 3.4, 0.8, 0.72     # the headwall: thickness, width, height; the mouth's radius
+    box((L, HB, W), (-L / 2, HB / 2, 0), 'grey')
+    x = -L - T / 2 + 0.05
+    box((T, HH, WH), (x, HH / 2, 0), 'lavender')
+    face = x - T / 2 - 0.02
+    def mouth(fx, r):
+        arc = [(fx, r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
+        poly([(fx, 0.0, 0.0)] + arc, [(0, k + 1, k + 2) for k in range(8)], 0x2a2735)
+    mouth(face, R)                           # where the brook comes out, away from the road
+    mouth(0.02, 0.42)                        # and the barrel's end at the road, the water going under it
+    for sd in (-1, 1):                       # wing walls, short and splayed along the banks
+        box((0.8, 0.45, 0.42), (face - 0.3, 0.225, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45)
+    join_still('culvert')
+
+# ---- CLOVERLEAF: the park railway in the top loop ------------------------------------
+# A park's narrow-gauge line on the lawn inside the top loop, the way the racers
+# go: down the start straight three units past its kerb, round inside the
+# hairpin, along the top straight and down inside the bridge's leg, and back
+# across the loop's foot. Two trains half the loop apart (an engine and two
+# open coaches each, people riding): the racer has one in the frame for
+# seconds whatever the moment, from the straight, the hairpin, the top
+# straight or the leg, and a halt halfway down the straight has people
+# waiting for them. World units, real size and a little chunky. The line
+# is in the frame of its anchor (tracks.js), every unit, built offline round
+# the roads' clearances (scratch geometry, not a source); its points are the
+# train's path, a `drape` chain, so the train rides the lawn as drawn, and
+# the ballast and rails drape with it. No tunnel: a hill cannot rise inside
+# the loop (the deck cap holds its grid) and one built as geometry cannot
+# wear the lawn's colour.
+PARK_LINE = (
+    (0.214, -14.757), (1.195, -14.554), (2.095, -14.115), (2.857, -13.467), (3.436, -12.652), (3.795, -11.718),
+    (3.918, -10.724), (3.932, -9.720), (3.945, -8.716), (3.958, -7.712), (3.971, -6.708), (3.984, -5.704),
+    (3.998, -4.700), (4.011, -3.696), (4.024, -2.692), (4.037, -1.688), (4.051, -0.684), (4.064, 0.320),
+    (4.077, 1.324), (4.090, 2.328), (4.103, 3.332), (4.117, 4.336), (4.130, 5.340), (4.143, 6.345),
+    (4.156, 7.349), (4.169, 8.353), (4.183, 9.357), (4.196, 10.361), (4.183, 11.364), (3.935, 12.329),
+    (3.385, 13.161), (2.591, 13.766), (1.642, 14.079), (0.642, 14.057), (-0.293, 13.704), (-1.059, 13.065),
+    (-1.684, 12.280), (-2.297, 11.485), (-2.910, 10.690), (-3.524, 9.895), (-4.137, 9.100), (-4.750, 8.305),
+    (-5.364, 7.510), (-5.977, 6.715), (-6.591, 5.920), (-7.204, 5.125), (-7.817, 4.330), (-8.431, 3.535),
+    (-9.044, 2.740), (-9.658, 1.945), (-10.271, 1.150), (-10.884, 0.354), (-11.498, -0.441), (-12.111, -1.236),
+    (-12.710, -2.041), (-13.187, -2.923), (-13.495, -3.877), (-13.625, -4.871), (-13.572, -5.872), (-13.339, -6.846),
+    (-12.932, -7.763), (-12.365, -8.590), (-11.670, -9.313), (-10.948, -10.011), (-10.226, -10.709), (-9.504, -11.406),
+    (-8.782, -12.104), (-8.060, -12.802), (-7.338, -13.500), (-6.598, -14.178), (-5.746, -14.701), (-4.791, -14.999),
+    (-3.791, -15.055), (-2.790, -14.980), (-1.788, -14.906), (-0.787, -14.831))
+
+def park_engine(at, k=1.0, boiler='red', cab='green'):
+    """A little tank engine facing +X on the rails at `at`: running gear, the
+    boiler and its chimney ahead, the cab behind."""
+    x, y, z = at
+    box((1.5 * k, 0.22 * k, 0.56 * k), (x, y + 0.13 * k, z), 'dark')
+    cyl(0.25 * k, 0.8 * k, (x - 0.2 * k, y + 0.48 * k, z), boiler, segs=6, axis='across')
+    box((0.16 * k, 0.3 * k, 0.16 * k), (x + 0.45 * k, y + 0.85 * k, z), 'dark')
+    box((0.5 * k, 0.55 * k, 0.62 * k), (x - 0.48 * k, y + 0.55 * k, z), cab)
+    box((0.62 * k, 0.08 * k, 0.68 * k), (x - 0.48 * k, y + 0.86 * k, z), 'dark')
+    box((0.08 * k, 0.14 * k, 0.62 * k), (x + 0.74 * k, y + 0.2 * k, z), 'yellow')
+
+def park_coach(at, color, riders, k=1.0):
+    """An open coach facing +X: its running gear, a low body and two people
+    sitting in it, riding (they keep still: the coach moves them)."""
+    x, y, z = at
+    box((1.35 * k, 0.2 * k, 0.52 * k), (x, y + 0.12 * k, z), 'dark')
+    box((1.35 * k, 0.26 * k, 0.6 * k), (x, y + 0.35 * k, z), color)
+    for n, shirt in enumerate(riders):
+        dx = (0.33 - 0.66 * n) * k
+        box((0.2 * k, 0.24 * k, 0.24 * k), (x + dx, y + 0.6 * k, z), shirt)
+        box((0.15 * k, 0.15 * k, 0.15 * k), (x + dx, y + 0.8 * k, z), 0xf2bf99)
+
+def park_waiting(at, yaw, shirt):
+    """Someone standing on the platform waiting for the train, still: legs,
+    body, head, at a person's size beside a car."""
+    x, y, z = at
+    box((0.14, 0.24, 0.18), (x, y + 0.12, z), 0x4f5260, yaw=yaw)
+    box((0.18, 0.22, 0.24), (x, y + 0.35, z), shirt, yaw=yaw)
+    box((0.14, 0.14, 0.14), (x, y + 0.53, z), 0xf2bf99, yaw=yaw)
+
+@piece()
+def park_railway():
+    pts, n = PARK_LINE, len(PARK_LINE)
+    def frame(i):
+        a, b = pts[(i - 1) % n], pts[(i + 1) % n]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        d = math.hypot(tx, tz)
+        return tx / d, tz / d
+    def band(profile, color):
+        """A closed band along the line, its cross-section `profile`
+        [(across, up), ...] from one side to the other."""
+        m = len(profile)
+        verts, faces = [], []
+        for i, (x, z) in enumerate(pts):
+            tx, tz = frame(i)
+            for o, y in profile:
+                verts.append((x + tz * o, y, z - tx * o))
+        for i in range(n):
+            j = (i + 1) % n
+            for c in range(m - 1):
+                faces.append((m * i + c, m * j + c, m * j + c + 1, m * i + c + 1))
+        o = ground_poly(verts, faces, color)
+        for f in o.data.polygons:                              # one normal a corner: no seam per face
+            f.use_smooth = True
+    Y = 0.2                                                       # the rails' top
+    band(((0.85, 0.0), (0.55, 0.15), (-0.55, 0.15), (-0.85, 0.0)), 'lavender')  # the ballast bank
+    verts, faces = [], []                                         # a sleeper every unit
+    for i, (x, z) in enumerate(pts):
+        tx, tz = frame(i)
+        for a, o in ((-0.11, 0.48), (0.11, 0.48), (0.11, -0.48), (-0.11, -0.48)):
+            verts.append((x + tx * a + tz * o, 0.17, z + tz * a - tx * o))
+        faces.append(tuple(range(4 * i, 4 * i + 4)))
+    ground_poly(verts, faces, 'brown')
+    for sd in (-1, 1):
+        band(((sd * 0.27 + 0.05, Y), (sd * 0.27 - 0.05, Y)), 'slate')          # the rails
+    # a halt halfway down the start straight, on the line's inner side: a
+    # platform, a shelter open to the line, two people waiting
+    PX, PZ = 2.75, 0.0                                            # the platform's middle (the line at x 4.05)
+    box((0.9, 0.3, 3.4), (PX, 0.15, PZ), 'cream')
+    box((0.12, 0.75, 1.5), (PX - 0.35, 0.6, PZ - 0.5), 'red')                 # the shelter's back
+    for sz in (-1, 1):
+        box((0.6, 0.75, 0.1), (PX - 0.08, 0.6, PZ - 0.5 + sz * 0.7), 'red')   # its ends
+    box((0.85, 0.1, 1.75), (PX - 0.05, 1.02, PZ - 0.5), 'dark')               # its roof
+    park_waiting((PX + 0.15, 0.3, PZ + 0.8), 0.0, 0x339cf2)
+    park_waiting((PX + 0.05, 0.3, PZ + 1.25), 0.4, 0xffc044)
+    for i, (x, z) in enumerate(pts):
+        marker('path_drapetrain_%d' % i, (x, Y, z))
+    span = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) for i in range(n))
+    period = span / 2.4                                           # 2.4 u a second
+    K = 1.4                                                       # a little chunky
+    # two trains half the loop apart, so one is always on the side a racer
+    # is looking at: an engine and two open coaches each, people riding
+    trains = (('red', 'green', ('blue', (0xff5040, 0xffc044)), ('yellow', (0x22c46e, 0xa878e8))),
+              ('blue', 'red', ('green', (0xffc044, 0x339cf2)), ('red', (0xa878e8, 0xff5040))))
+    x0, z0 = pts[0]
+    for t, (boiler, cab, *coaches) in enumerate(trains):
+        cars = [(1.5 * K, lambda at, b=boiler, c=cab: park_engine(at, K, b, c))]
+        cars += [(1.35 * K, lambda at, c=c, r=r: park_coach(at, c, r, K)) for c, r in coaches]
+        behind = span * t / len(trains)
+        for c, (L, build) in enumerate(cars):
+            if c:
+                behind += (cars[c - 1][0] + L) / 2 + 0.15 * K
+            with animated('anim_path:c=drapetrain:p=%.2f:o=%.4f:f=1#%d' % (period, (1.0 - behind / span) % 1.0, 3 * t + c),
+                          (x0, Y, z0)):
+                build((x0, Y, z0))
+    join_still('drape_line')
 
 # ---- CLOVERLEAF: the playground on the hill -----------------------------------------
 # Cloverleaf's playground at the size of a real one, on the broad top of its
@@ -4299,7 +4491,11 @@ class plain_parts:
     post, a rail, a cow's leg is a few hundredths of a unit across, where
     the chamfer cannot be seen and only multiplies the part's triangles by
     almost four; the same holds for rough rock, whose blocks are big but
-    whose edges no one reads as made."""
+    whose edges no one reads as made. The chamfer is also what the bake
+    simplifies away for a piece's FAR form, though (TtpRenderer::farForm
+    keeps none that cuts less than a fifth): a piece that is square all
+    through draws whole at any distance, so square its small parts and keep
+    its frame chamfered."""
     def __enter__(self):
         self.before = set(bpy.context.scene.objects)
         return self
@@ -6024,6 +6220,7 @@ GLYPH = {
     'H': ((0, 0, 0, 4), (4, 0, 4, 4), (1, 2, 3, 2)),
     'L': ((0, 0, 0, 4), (1, 0, 4, 0)),
     'T': ((0, 4, 4, 4), (2, 0, 2, 3)),
+    'P': ((0, 0, 0, 4), (1, 4, 3, 4), (1, 2, 3, 2), (4, 3, 4, 3)),
 }
 ABC = 'ABCDEHLT'
 
@@ -6166,6 +6363,45 @@ def block_castle():
     box((L, 0.14, S * 0.85), (S / 2 + L / 2, C + 0.16, 0), 0xb08a5a, roll=0.06)
     for s in (-1, 1):
         tube([(S / 2 + 0.05, C + S * 0.95, s * S * 0.38), (S / 2 + L - 0.15, C + 0.3, s * S * 0.38)], 0.03, 0x2a2735, res=2, bevel_res=0)
+    merge_paint()
+
+@piece(1.0)
+def castle_gate():
+    # Gauntlet: the home straight runs THROUGH the block castle's gatehouse,
+    # the castle itself standing beside the road just short of it. Placed at
+    # lat 0, so x = 0 is the road's centreline (deck 5 wide, kerbs to 2.76),
+    # +Z the way the racers drive and +X their left. Built from the castle's
+    # own blocks (block_castle's 1.4 at its grow 0.8): only the towers are
+    # taller than the castle's, because the lintel must clear the road. A
+    # tower of five blocks on each kerb (inner faces 4 u off the centreline,
+    # past the road's 1.2 u margin) and a lintel of seven blocks between
+    # them, its underside 3.6 up: 3.18 over the deck top, past spotIssue's
+    # OVER_GAP 3 and the highest camera's 2.6. From each tower a short wall
+    # runs straight AWAY from the road, two blocks with a crenel on each:
+    # never along the kerb. Nothing moves: indoors nothing flaps.
+    S = 1.12                                                  # the castle's block
+    for sx in (-1, 1):
+        x = sx * (4.0 + S / 2)
+        road = '-x' if sx > 0 else '+x'                       # the face turned to the road
+        for j in range(5):
+            block(S, (x, S / 2 + j * S, 0), TOY[(j + (sx > 0)) % 4], faces=('-z', road),
+                  letters={'-z': ABC[(2 * j + (sx > 0)) % 8]})
+        cyl(S * 0.78, S * 0.9, (x, 5 * S, 0), 0x6cbf6c if sx > 0 else 0xe66a5a, r2=0.05, segs=10)
+    L, LY = 8.0 / 7, 3.6                                      # the lintel's blocks, its underside
+    for i in range(7):
+        block(L, ((i - 3) * L, LY + L / 2, 0), TOY[(i + 2) % 4], faces=('-z',),
+              letters={'-z': 'LHEDCBA'[i]})                   # +X is the racer's left: it reads A to L
+    box((7 * L, 0.16, S * 0.9), (0, LY + 0.08, 0), 0x3a2a22)          # the gateway's dark soffit
+    for i in (-3, -1, 1, 3):                                          # crenels along the lintel
+        box((S * 0.6, S * 0.5, S * 0.6), (i * L, LY + L + S * 0.25, 0), 0xf2c14e)
+    # the walls away from the road
+    for sx in (-1, 1):
+        for k in range(2):
+            x = sx * (4.0 + S + S / 2 + k * S)
+            for j in range(2):
+                block(S, (x, S / 2 + j * S, 0), TOY[(k + j + 1) % 4], faces=('-z',),
+                      letters={'-z': ABC[(k + 3 * j + 2) % 8]} if j == 0 else None)
+            box((S * 0.6, S * 0.5, S * 0.6), (x, 2 * S + S * 0.25, 0), 0xf2c14e)
     merge_paint()
 
 @piece(0.45)
@@ -6333,15 +6569,15 @@ PIP = {1: ((0, 0),), 2: ((-1, 1), (1, -1)), 3: ((-1, 1), (0, 0), (1, -1)),
        4: ((-1, 1), (1, 1), (-1, -1), (1, -1)), 5: ((-1, 1), (1, 1), (0, 0), (-1, -1), (1, -1)),
        6: ((-1, 1), (-1, 0), (-1, -1), (1, 1), (1, 0), (1, -1))}
 
-def die(at, s, yaw, faces=(('+x', 5), ('-z', 3), ('+z', 4), ('-x', 2))):
-    """A white die, its pips painted on the four sides."""
-    box((s, s, s), (at[0], at[1] + s / 2, at[2]), 0xfdf4de, yaw=yaw)
+def die(at, s, yaw, faces=(('+x', 5), ('-z', 3), ('+z', 4), ('-x', 2)), color=0xfdf4de, pip=0x2a2735):
+    """A die (white unless `color`), its pips painted on the four sides."""
+    box((s, s, s), (at[0], at[1] + s / 2, at[2]), color, yaw=yaw)
     o = bpy.context.active_object
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     p = s * 0.09
     for face, n in faces:
         for u, v in PIP[n]:
-            face_rect(o, face, s / 2 + 0.012, u * s * 0.27 - p, u * s * 0.27 + p, v * s * 0.27 - p, v * s * 0.27 + p, 0x2a2735)
+            face_rect(o, face, s / 2 + 0.012, u * s * 0.27 - p, u * s * 0.27 + p, v * s * 0.27 - p, v * s * 0.27 + p, pip)
 
 def pawn(at, color, k=1.0):
     x, y, z = at
@@ -6537,6 +6773,73 @@ def game_box():
     pawn((2.5, 0, -0.4), 0x6cbf6c, k=0.4)
     merge_paint()
 
+def floor_quad(pts, y, color):
+    """A flat print at height `y` through [(x, z)], wound to face UP: the
+    renderer takes a `floor` part's normals from its winding."""
+    s = sum(pts[i][1] * pts[(i + 1) % len(pts)][0] - pts[i][0] * pts[(i + 1) % len(pts)][1] for i in range(len(pts)))
+    if s < 0:
+        pts = pts[::-1]
+    o = quad([(x, y, z) for x, z in pts], color)
+    o.name = 'floorq'                   # not merge_paint's: the mat joins as one `floor` part
+    return o
+
+@piece(1.0)
+def floor_mat():
+    # Skysnake's game again, as a floor mat the grid straight runs down the
+    # middle of (placed at lat 0): a 1.8 m snakes-and-ladders mat of 144
+    # squares lying flat on the boards, its printed snakes and ladders either
+    # side of the road, three big floor-game pawns and two foam dice stood on
+    # it. The mat is ONE `floor` part: the renderer lays it in the structures'
+    # receiver so the deck's shadow falls on it, and spotIssue lets a print
+    # that low pass under the deck.
+    N, C = 12, 2.7
+    B = N * C / 2
+    Y0, Y1, Y2 = 0.03, 0.05, 0.065
+    mat = [floor_quad([(-B - 0.4, -B - 0.4), (B + 0.4, -B - 0.4), (B + 0.4, B + 0.4), (-B - 0.4, B + 0.4)], Y0, 0x5a8fd8)]
+    for i in range(N):
+        for j in range(N):
+            x0, z0 = -B + i * C, -B + j * C
+            col = TOY[(i // 2 + j) % 4] if (i + j) % 2 == 0 else 0xfdf4de
+            mat.append(floor_quad([(x0, z0), (x0 + C, z0), (x0 + C, z0 + C), (x0, z0 + C)], Y1, col))
+    def band(pts, w, color, y):
+        for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+            l = math.hypot(x1 - x0, z1 - z0) or 1.0
+            nx, nz = -(z1 - z0) / l * w / 2, (x1 - x0) / l * w / 2
+            mat.append(floor_quad([(x0 - nx, z0 - nz), (x1 - nx, z1 - nz), (x1 + nx, z1 + nz), (x0 + nx, z0 + nz)], y, color))
+    def ladder(a, b, w):
+        l = math.hypot(b[0] - a[0], b[1] - a[1])
+        nx, nz = -(b[1] - a[1]) / l * w / 2, (b[0] - a[0]) / l * w / 2
+        for s in (-1, 1):
+            band([(a[0] + s * nx, a[1] + s * nz), (b[0] + s * nx, b[1] + s * nz)], 0.32, 0xb06041, Y2)
+        for k in range(1, max(2, int(l / 1.0))):
+            f = k / max(2, int(l / 1.0))
+            cx, cz = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
+            band([(cx - nx, cz - nz), (cx + nx, cz + nz)], 0.24, 0xb06041, Y2 + 0.005)
+    # the printed ladders and snakes, clear of the road down the middle (|x| < 3.5)
+    for a, b in (((6.0, -13.0), (8.5, 1.0)), ((-11.5, -11.0), (-9.0, 4.0)), ((12.5, 3.0), (13.5, 14.0)),
+                 ((-6.5, 6.0), (-5.0, 15.0)), ((14.0, -14.0), (15.0, -4.0))):
+        ladder(a, b, 1.8)
+    for ctrl, c in (([(-6.0, -4.0), (-8.5, -6.5), (-5.5, -9.0), (-8.0, -11.5), (-6.0, -14.5)], 0x6cbf6c),
+                    ([(12.0, -1.0), (9.5, -4.5), (12.0, -8.0), (10.0, -12.0)], 0xe66a5a),
+                    ([(-13.5, 15.0), (-10.5, 12.0), (-13.5, 9.0), (-11.5, 5.5)], 0xa878e8),
+                    ([(5.0, 15.0), (8.0, 12.0), (5.0, 8.5), (7.0, 4.5)], 0x6cbf6c),
+                    ([(16.0, 15.0), (14.5, 11.0), (16.5, 7.0)], 0xa878e8)):
+        pts = curve(ctrl, 0.6)
+        band(pts, 1.4, c, Y2 + 0.01)
+        hx, hz = ctrl[0]
+        mat.append(floor_quad([(hx - 0.8, hz), (hx, hz - 0.7), (hx + 0.8, hz), (hx, hz + 1.0)], Y2 + 0.015, c))
+    group(mat, 'floor_mat')
+    # the floor game's big pawns and its foam die, stood on the mat
+    pawn((-7.0, Y1, -1.5), 0xe66a5a, k=0.9)
+    pawn((6.5, Y1, 7.0), 0x5a8fd8, k=0.9)
+    pawn((10.5, Y1, -9.0), 0xf2c14e, k=0.9)
+    # foam dice in the toy colours, a little over a car's height: a cream
+    # one this big, its pips in rows, read as a house with windows
+    die((6.0, Y1, -5.0), 0.85, 0.5, color=0xe66a5a, pip=0xfdf4de)
+    die((-8.0, Y1, 10.5), 0.85, -0.4, faces=(('+x', 1), ('-z', 6), ('+z', 3), ('-x', 4)), color=0x5a8fd8, pip=0xfdf4de)
+    keep_light(0.2)
+    merge_paint()
+
 # ---- Skyline: a town of wooden blocks ---------------------------------------
 
 WOOD = 0xf2bf99
@@ -6703,10 +7006,12 @@ def helix_pts(cx, cz, R, y0, y1, a0, turns, per=16):
     return [(cx + R * math.cos(a0 + 2 * math.pi * turns * i / n), y0 + (y1 - y0) * i / n,
              cz + R * math.sin(a0 + 2 * math.pi * turns * i / n)) for i in range(n + 1)]
 
-def chute(pts, color, mr, half=0.75, wall=0.55):
+def chute(pts, color, mr, half=0.75, wall=0.55, inner=None):
     """A marble run's chute: a U channel under the marbles (radius `mr`),
     swept along their line [(x, y, z)]; its inside and outside are separate
-    faces so each keeps its own light."""
+    faces so each keeps its own light, and `inner` paints the channel's floor
+    its own colour (a separate part): from above, two coloured rims and a
+    pale floor read as a channel where one colour reads as a plank."""
     n = len(pts)
     verts = []
     for i, p in enumerate(pts):
@@ -6719,15 +7024,19 @@ def chute(pts, color, mr, half=0.75, wall=0.55):
                   (p[0] - ox, y, p[2] - oz), (p[0] - ox, y + wall, p[2] - oz)]
     front = [(4 * i + k, 4 * (i + 1) + k, 4 * (i + 1) + k + 1, 4 * i + k + 1) for i in range(n - 1) for k in range(3)]
     m = len(verts)
-    me = bpy.data.meshes.new('chute')
-    me.from_pydata([tuple(P(*v)) for v in verts + verts], [],
-                   front + [tuple(m + v for v in reversed(f)) for f in front])
-    for f in me.polygons:
-        f.use_smooth = True
-    me.update()
-    o = bpy.data.objects.new('chute', me)
-    bpy.context.scene.collection.objects.link(o)
-    return paint(o, color)
+    def part(vs, faces, c):
+        me = bpy.data.meshes.new('chute')
+        me.from_pydata([tuple(P(*v)) for v in vs], [], faces)
+        for f in me.polygons:
+            f.use_smooth = True
+        me.update()
+        o = bpy.data.objects.new('chute', me)
+        bpy.context.scene.collection.objects.link(o)
+        return paint(o, c)
+    if inner is not None:                        # front faces look into the U; k = 1 is its floor
+        part(verts, front[1::3], inner)
+        return part(verts, front[0::3] + front[2::3] + [tuple(reversed(f)) for f in front], color)
+    return part(verts + verts, front + [tuple(m + v for v in reversed(f)) for f in front], color)
 
 @piece(0.62)
 def marble_run():
@@ -6838,6 +7147,71 @@ def marble_tower():
         with animated('anim_path:c=tower:p=11:o=%.4f:f=0#%d' % (m / 3, m), at):
             sphere(MR, at, c, subdiv=2, flat=False)
 
+@piece(1.0)
+def marble_skyway():
+    # Helix: the marble run's high chute beside the skyway, at the deck's own
+    # height inside the bend, so marbles race the cars along it. Built in
+    # world units at the kit's own size (marble_run's numbers at its grow,
+    # K): a marble, a column, a chute are the ones a racer has just passed
+    # in the marble run, not bigger. Marbles come up inside column A (out of
+    # sight, the kit's lift) and out of its top, roll the long chute, four
+    # of the kit's straight pieces in its colours (a cream floor between
+    # the coloured rims, so it reads as a channel and not a plank from the
+    # deck, which looks down on it) stepping down on their legs
+    # to column B, corkscrew down B's screw to the floor and roll home along
+    # the floor, swung out away from the road, to A's foot. +Z along the
+    # skyway's direction of travel, the road on the -X side, the chute on
+    # x = 0, the columns, B's screw and the run home on +X: placed at lat -5
+    # everything above the deck's underside keeps spotIssue's 1.2 u past the
+    # deck edge.
+    K = 0.62                                     # marble_run's grow: its parts at their size here
+    ZA, ZB = -12.5, 13.0                         # the columns along the chute
+    MR, CR = 0.62 * K, 1.25 * K                  # a marble's radius, a column's
+    HALF, WALL = 0.75 * K, 0.55 * K              # the chute's half width and wall
+    LOW, HIGH_A, HIGH_B = MR + 0.07, 6.1, 5.3    # marble centres over the floor, under the eye: the deck banks to about 5.4 at its inner kerb
+    AX, R, TURNS = 1.6, 3.4 * K, 2               # A's axis out from the chute; B's screw
+    BX = R                                       # B's screw starts on the chute's line
+    TOPA = HIGH_A - 0.2                          # A's column top, its cap just over the chute's start
+    for zc, x, top, c0 in ((ZA, AX, TOPA, 0), (ZB, BX, HIGH_B + 0.6, 2)):
+        cyl(2.2 * K, 0.4 * K, (x, 0, zc), 0x9aa1b4, segs=8)
+        h = (top - 0.4 * K) / 4
+        for k in range(4):
+            cyl(CR, h, (x, 0.4 * K + k * h, zc), TOY[(k + c0) % 4], segs=8)
+    cyl(1.5 * K, 0.5 * K, (AX, TOPA, ZA), 0xfdf4de, segs=8)               # A's cap, the marbles out of its top
+    cyl(1.5 * K, 0.5 * K, (BX, HIGH_B + 0.6, ZB), 0xfdf4de, segs=8)        # B's cap
+    start = (0, HIGH_A, ZA + 1.3)            # out past A's cap
+    n = int(TURNS * 12)                      # B's screw from the chute's end, winding on toward +Z first
+    down = [(BX + R * math.cos(math.pi - 2 * math.pi * TURNS * i / n), HIGH_B + (LOW - HIGH_B) * i / n,
+             ZB + R * math.sin(math.pi - 2 * math.pi * TURNS * i / n)) for i in range(n + 1)]
+    PIECES = 4                               # the long chute: four straight kit pieces
+    high = [tuple(start[j] + (down[0][j] - start[j]) * i / PIECES for j in range(3)) for i in range(PIECES + 1)]
+    for i in range(PIECES):
+        chute(high[i:i + 2], TOY[(i + 2) % 4], MR, half=HALF, wall=WALL, inner=0xfdf4de)
+    chute(down, 0x5a8fd8, MR, half=HALF, wall=WALL, inner=0xfdf4de)
+    home = [down[-1], (BX + 1.4, LOW, ZB - 4.5), (3.6, LOW, 0.0), (AX + 2.2, LOW, ZA + 3.0), (AX + 0.9, LOW, ZA)]
+    chute(home, 0xe66a5a, MR, half=HALF, wall=WALL, inner=0xfdf4de)
+    for i in range(6, len(down) - 1, 12):    # spokes from B to its screw, one a turn
+        p = down[i]
+        dx, dz = p[0] - BX, p[2] - ZB
+        l = math.hypot(dx, dz)
+        bar((BX + dx / l * CR, p[1] - MR - 0.08, ZB + dz / l * CR), (p[0] - dx / l * HALF, p[1] - MR - 0.08, p[2] - dz / l * HALF),
+            0.2, 0.2, 0x9aa1b4)
+    for p in high[1:-1]:                     # a leg under each joint, a collar round the joint
+        y = p[1] - MR - 0.05
+        box((0.24, y, 0.24), (0, y / 2, p[2]), 0x9aa1b4)
+        box((2 * HALF + 0.16, WALL + 0.12, 0.3), (0, y + WALL / 2, p[2]), 0x9aa1b4)
+    over = TOPA + 0.5 * K + MR + 0.03
+    lift = [(AX, LOW + (TOPA - LOW) * j / 6, ZA) for j in range(7)] + [(AX, over, ZA)]
+    loop = lift + [start, down[0]] + down[1:] + home[1:]
+    for k, q in enumerate(loop):
+        marker('path_sky_%d' % k, q)
+    COLS = (0xe66a5a, 0x6cbf6c, 0xf2c14e, 0xa878e8, 0x5a8fd8, 0xff7e44, 0x6cbf6c, 0xe66a5a)
+    for j, c in enumerate(COLS):                 # eight: two or three on the long chute at once
+        at = down[len(down) * j // len(COLS)]
+        with animated('anim_path:c=sky:p=8.0:o=%.4f:f=0#%d' % (j / len(COLS), j), at):
+            sphere(MR, at, c, subdiv=1, flat=False)
+            bpy.ops.object.shade_smooth()        # twenty faces, rolling: smooth reads round at this size
+
 @piece(0.65)
 def marble_zigzag():
     # Helix: a third build from the marble run's kit (about 45 cm): two
@@ -6876,6 +7250,82 @@ def marble_zigzag():
         with animated('anim_path:c=zig:p=12:o=%.4f:f=0#%d' % (m / 3, m), at):
             sphere(MR, at, c, subdiv=2, flat=False)
 
+@piece(1.0)
+def toy_garage():
+    # Skysnake: the racers' home, a multi-storey toy car park beside the
+    # grid in the track's green and yellow, about 20 cm tall (low, so a
+    # racer's eye looks down onto its ramp): a ground floor and a deck on four
+    # green columns, the roof a second deck, and on the roof a blue P block
+    # (the alphabet blocks' own) that says car park from down the straight
+    # where the open decks alone read as shelving. Its front (+X) faces the
+    # road. A toy car rides the lift up the front and
+    # down again (the platform bobs, the car on it), and two more roll down
+    # the spiral ramp at the side (+Z), half a loop apart, drive into the floor and go
+    # back up INSIDE the stair core at the back, out of sight, to the roof:
+    # the one place in the room a car goes uphill, and it does it on a
+    # machine or out of sight. Nothing else moves: no parked cars, so every
+    # toy car here moves.
+    GREEN, YEL, RED = 0x5cb168, 0xf2c14e, 0xe66a5a
+    W, FLOORS, T = 7.0, (1.7, 3.4), 0.25                       # body width, deck tops, slab
+    box((W + 0.6, 0.2, W + 0.6), (0, 0.1, 0), GREEN)                            # the base board
+    for y in FLOORS:
+        box((W, T, W), (0, y - T / 2, 0), YEL)                                   # the decks
+        box((0.12, T + 0.1, W), (W / 2 + 0.06, y - T / 2, 0), GREEN)             # a green fascia to the road
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box((0.5, FLOORS[-1] + 0.3, 0.5), (sx * (W / 2 - 0.25), (FLOORS[-1] + 0.3) / 2, sz * (W / 2 - 0.25)), GREEN)
+    # parking bays painted on each deck and the floor
+    for y in (0.2,) + FLOORS:
+        for k in range(3):
+            z = -2.0 + k * 1.6
+            quad([(0.4, y + 0.01, z - 0.04), (2.9, y + 0.01, z - 0.04), (2.9, y + 0.01, z + 0.04), (0.4, y + 0.01, z + 0.04)], 0xfdf4de)
+    # the stair core at the back, where the ramp car climbs out of sight, a
+    # door at the floor and at the roof
+    CX = -2.3
+    box((2.0, FLOORS[-1] + 1.0, 2.0), (CX, (FLOORS[-1] + 1.0) / 2 + 0.2, 0), GREEN)
+    box((2.3, 0.3, 2.3), (CX, FLOORS[-1] + 1.35, 0), YEL)                        # its cap
+    for y in (0.2, FLOORS[-1]):
+        plate_x(CX + 1.01, y, y + 0.8, -0.5, 0.5, 0x2a2735)
+    block(1.2, (W / 2 - 0.95, FLOORS[-1] + 0.6, W / 2 - 0.95), 0x5a8fd8, faces=('+x', '+z', '-x', '-z', '+y'),
+          letters={'+x': 'P', '+z': 'P'})                                         # the car park's sign
+    # the lift up the front: two red rails, a beam over them, the platform
+    LX = W / 2 + 0.75
+    for sz in (-1, 1):
+        box((0.3, FLOORS[-1] + 1.2, 0.3), (LX, (FLOORS[-1] + 1.2) / 2, sz * 0.95), RED)
+    box((0.4, 0.35, 2.3), (LX, FLOORS[-1] + 1.2, 0), RED)
+    with animated('anim_bob:h=3.1:p=8:r=0.1#lift', (LX, 0.25, 0)):
+        box((1.3, 0.16, 1.5), (LX, 0.3, 0), YEL)
+        o0 = set(bpy.context.scene.objects)
+        mini_car(LX, 0, 0x5a8fd8)
+        for o in set(bpy.context.scene.objects) - o0:
+            o.location.z += 0.38                                                 # Blender Z is up
+    # the spiral ramp down the side: a low-lipped chute round a green post,
+    # two turns from the roof's edge to the floor
+    RZ, RR, TOP, LOW = W / 2 + 2.5, 2.4, FLOORS[-1] + 0.02, 0.24
+    cyl(0.45, TOP + 0.6, (0, 0, RZ), GREEN, segs=10)
+    spiral = helix_pts(0, RZ, RR, TOP, LOW, -math.pi / 2, 2, per=16)
+    chute(spiral, YEL, 0.0, half=0.6, wall=0.12)
+    for i in range(4, len(spiral) - 1, 8):                                       # spokes to the post
+        p = spiral[i]
+        dx, dz = p[0], p[2] - RZ
+        l = math.hypot(dx, dz)
+        bar((dx / l * 0.45, p[1] - 0.15, RZ + dz / l * 0.45), (p[0] - dx / l * 0.55, p[1] - 0.15, p[2] - dz / l * 0.55),
+            0.2, 0.2, GREEN)
+    # the ramp car's loop: down the spiral, in across the floor, up the core
+    # out of sight, out across the roof to the spiral's top
+    loop = spiral + [(0.0, LOW, 2.0), (CX + 0.6, LOW, 0.4), (CX, LOW, 0.0)]
+    loop += [(CX, LOW + (TOP - LOW) * j / 5, 0.0) for j in range(1, 6)]
+    loop += [(CX + 0.6, TOP, 0.4), (0.0, TOP, 2.0)]
+    for k, p in enumerate(loop):
+        marker('path_ramp_%d' % k, p)
+    for m, c in enumerate((RED, 0xa878e8)):                                      # two, half a loop apart
+        with animated('anim_path:c=ramp:p=14:f=2:o=%.1f#%d' % (m / 2, m), spiral[0]):
+            o0 = set(bpy.context.scene.objects)
+            mini_car(spiral[0][0], spiral[0][2], c, along_x=True)
+            for o in set(bpy.context.scene.objects) - o0:
+                o.location.z += spiral[0][1]
+    merge_paint()
+
 # ---- Gauntlet: the besiegers ----
 
 # The castle's knights wear its blue, the besiegers' red: one toy set of
@@ -6885,7 +7335,14 @@ DEFENDERS, BESIEGERS = 0x5a8fd8, 0xff5040
 def soldier(at, color):
     # a toy knight facing +X: hose, a surcoat with its cross, belt and arms,
     # a great helm with its slit and plume, a spear at his side and his
-    # shield before him
+    # shield before him. Square-edged: his parts are a few tenths of a unit,
+    # where a chamfer cannot be seen and nearly quadruples what a rank costs
+    # up close. The piece he stands in keeps its chamfered frame, which is
+    # what lets the bake cut it a far form (TtpRenderer::farForm).
+    with plain_parts():
+        _soldier(at, color)
+
+def _soldier(at, color):
     x, y, z = at
     box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
     box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)

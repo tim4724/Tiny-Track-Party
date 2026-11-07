@@ -175,7 +175,7 @@ function setInit(p) {
 // anchored on the piece itself (its index), since the model was built standing
 // on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
 // but shape (1), a plain's or paint's fade (8) and tint (0, none).
-const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6, clear: 8, street: 9 };
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6, pond: 7, clear: 8, street: 9 };
 const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint'];
 function landInit(l, piece, where) {
   checkKeys(l, LAND_KEYS, where);
@@ -188,7 +188,8 @@ function landInit(l, piece, where) {
   if (l.kind !== 'street' && !(l.r > 0)) fail(`${where}: r must be positive`);
   if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
   if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
-  if (!['plain', 'paint', 'shore', 'clear', 'street'].includes(l.kind) && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind === 'pond' && (piece >= 0 || l.h != null)) fail(`${where}: a pond is open water on the plain: len and r (its water), w (the land's fade back), no height, never on a piece`);
+  if (!['plain', 'paint', 'shore', 'pond', 'clear', 'street'].includes(l.kind) && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
   if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0) || (l.w != null && !(l.w > 0)))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds), r (its fade) and, to let the water in past the road, w (how far inside the road's reach it may come); no height or tint, never on a piece`);
   if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
@@ -197,7 +198,7 @@ function landInit(l, piece, where) {
   if (l.top != null && !(l.top >= 0 && l.top < 1)) fail(`${where}: top must be in [0, 1)`);
   if (l.tint != null && !(Number.isInteger(l.tint) && l.tint > 0 && l.tint <= 0xffffff)) fail(`${where}: tint must be a 0xRRGGBB colour`);
   const n = (v, d = 0) => D(v ?? d);
-  const fades = l.kind === 'plain' || l.kind === 'paint';
+  const fades = l.kind === 'plain' || l.kind === 'paint' || l.kind === 'pond';
   // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape, tint.
   return `{ ${LAND_KINDS[l.kind]}, ${piece}, ${n(l.u)}, ${n(l.lat)}, ${n(l.yaw)}, ${n(l.x)}, ${n(l.z)}, `
     + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, fades ? 8 : 0)}, ${n(l.rz)}, `

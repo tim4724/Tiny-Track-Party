@@ -78,6 +78,7 @@ struct LandDef {
                       // 4 fan (a set piece's ridge it lies on), 5 paint (colour only),
                       // 6 shore (the waterline runs through the anchor: len of
                       // shore held, r its fade back to the open shore),
+                      // 7 pond (open water on the plain, len and r its water),
                       // 8 clear (no seeded scatter within r of its spine),
                       // 9 street (len of road centred on u: its kerb a kerbstone)
   int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
