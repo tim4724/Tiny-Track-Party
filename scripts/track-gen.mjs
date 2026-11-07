@@ -12,7 +12,8 @@
 //                           profile spreads each lift over half the lap, so a profile with
 //                           `rampGrade` keeps only its choice of which strand goes over and
 //                           lifts each over-strand on a short ramp of its own (localLift):
-//                           the rest of the lap lies on the ground.
+//                           the rest of the lap lies on the ground, and two ramps that
+//                           meet high up hold one deck between them.
 //   4. roundTightCorners  — no corner's radius under ~1.4 road half-widths (CORNER FLOOR);
 //                           `classic` is exempt, being frozen provenance.
 // Because the plan closes by construction and elevation is solved on top, the two never
@@ -116,7 +117,7 @@ export const PROFILES = {
     decor: { hills: [1, 2], hillAmp: [0.3, 0.55], hillHW: [2, 4], hops: [2, 4], hopAmp: [0.15, 0.35],
       bank: 8, bankRun: 4, maxBanked: 1, flares: 2, flareW: [3.0, 3.4], pinches: 1, pinchW: 2.25 },
     rampGrade: 0.2,
-    oilCount: 2,
+    oilCount: 2, clearJumps: true,
     // Band of the shipped Backyard four: brake 0.01-0.17, minR 2.2-7.2, dens 0.030-0.044,
     // crossings 12-16 (!) — crossing count is DRAMA, not difficulty; corners/braking are
     // the difficulty axis, so the band is generous on crossings and strict on those.
@@ -136,7 +137,7 @@ export const PROFILES = {
     decor: { hills: [2, 3], hillAmp: [0.4, 0.8], hillHW: [2, 3], hops: [1, 3], hopAmp: [0.15, 0.4],
       bank: 8, bankRun: 5, maxBanked: 1, flares: 1, flareW: [3.0, 3.3], pinches: 2, pinchW: 2.15 },
     rampGrade: 0.2,
-    oilCount: 2,
+    oilCount: 2, clearJumps: true,
     // Calibration: switchback (the then-canonical Hard, since deleted) probed brake 0.66 — but its lap is
     // 25s of wall-to-wall corners; at Backyard lap length (~50s) even a 3-hairpin
     // track dilutes to ~0.14, while bowtie (Medium) sits at 0.01 and the easy band
@@ -230,6 +231,18 @@ export function localLift(plan, wpPairs, relaxed, grade) {
         if (t < 1) y = Math.max(y, peak[j] * (1 + Math.cos(Math.PI * t)) / 2);
       }
       h[i] = y;
+    }
+    // Two peaks whose ramps meet more than halfway up are one deck: hold the lower
+    // peak's height between them rather than dip into a roller on the bridge.
+    const tops = [];
+    for (let j = 0; j < m; j++) if (peak[j]) tops.push(j);
+    for (let t = 0; t < tops.length; t++) {
+      const a = tops[t], b = tops[(t + 1) % tops.length];
+      if (a === b) continue;
+      const level = Math.min(peak[a], peak[b]), span = ((b - a) % m + m) % m;
+      let low = Infinity;
+      for (let d = 1; d < span; d++) low = Math.min(low, h[(a + d) % m]);
+      if (low >= level / 2) for (let d = 1; d < span; d++) h[(a + d) % m] = Math.max(h[(a + d) % m], level);
     }
     let moved = false;
     for (const [o, u] of over) {
@@ -423,11 +436,11 @@ function worstHeadingStep(frames) {
 // carry an elevation; SOLVER h>0.6 → bridge (pillars, not a berm). 0.6 = half the solver's
 // crossing clearance D=1.2: above the midpoint a waypoint is the OVER strand of a crossing.
 // Decorated hills never set `bridge` — they must berm, which is exactly why the solver's h
-// is kept separate from the decorated y here.
+// is kept separate from the decorated y here — unless a track names them a `trestle`.
 const roundWps = (wps, h) => wps.map((o, i) => {
   const out = { x: +o.x.toFixed(2), z: +o.z.toFixed(2) };
   if (o.y > 0.05) out.y = +o.y.toFixed(2);
-  if (h[i] > 0.6) out.bridge = true;
+  if (h[i] > 0.6 || o.bridge) out.bridge = true;
   if (o.w != null) out.w = +o.w.toFixed(2);
   if (o.bank) out.bank = Math.round(o.bank);
   return out;
@@ -622,7 +635,7 @@ function chooseAnchor(plan, resolveAt) {
 // waypoint: a shipped track whose start must not move when its elevation is re-solved
 // (everything on it is placed by lap fraction from that start). `jumps` are a track's
 // hand-placed crest hops (see JUMPS below).
-export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [] } = {}) {
+export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [], trestle = [] } = {}) {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
   const plan0 = genPlan(seed, prof);
@@ -658,6 +671,7 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true, jump
 
   const r = anchor === true ? chooseAnchor(plan0, resolveAt) : resolveAt(anchor || 0);
   if (jumps.length) liftJumps(r.wps, jumps);
+  for (const i of trestle) r.wps[i].bridge = true;
   if (prof !== PROFILES.classic) roundTightCorners(r.wps, r.h);   // classic is frozen provenance
   return r;
 }
@@ -892,6 +906,8 @@ export async function evaluateSeed(seed, profileName = 'classic') {
 // across the lane on gentle open stretches ~half a lap apart, off high decks; oil
 // slicks off-centre on gentle OPEN ground — never under a deck (cones tangle with
 // pillars) and never up on a bridge/hill (a forced spin mustn't throw you off a drop).
+// With `jumps`, pads and boxes also keep off a jump's run-up and oils off its flight,
+// and an oil with nowhere legal left is left out rather than placed on a deck.
 // Deterministic (pure argmin over centerline stats). Returns {oils, pads, boxes} in the
 // catalogue's u/lat form; the shipped hand-tuned tracks keep their authored data.
 //
@@ -899,7 +915,14 @@ export async function evaluateSeed(seed, profileName = 'classic') {
 // Centerline through trackFrames, so it measures with the same cubic the sim reads.
 // buildTrack memoizes, so a caller that already built this descriptor pays nothing.
 // (One bulk call rather than one per station — a lap is thousands of them.)
-export function placeFurniture(source, { oils = 2 } = {}) {
+// LAUNCH_K is the crest a car leaves at full speed: the sim launches where v^2*k beats
+// its gravity (game.cc), so VMAX^2 * LAUNCH_K ~ GRAVITY. A flight lands within FLIGHT of
+// its crest, and an oil within RUN_IN before it spins a car into the take-off;
+// PAD_RUNUP and BOX_RUNUP are how far a boost from each carries. `jumps`
+// keeps furniture off them; a profile's `clearJumps` asks for it, and the Beach bakes
+// keep the furniture they shipped with.
+const LAUNCH_K = 0.09, FLIGHT = 12, RUN_IN = 8, PAD_RUNUP = 30, BOX_RUNUP = 60;
+export function placeFurniture(source, { oils = 2, jumps = false } = {}) {
   const t = buildTrack(source);
   const cl = t.centerline, L = t.length, STEP = 0.5, N = Math.floor(L / STEP);
   const sList = [];
@@ -918,6 +941,15 @@ export function placeFurniture(source, { oils = 2 } = {}) {
     a.k = Math.abs(dh) / STEP;
   }
   const wrapI = (i) => ((i % N) + N) % N;
+  // JUMPS: crests a car leaves the road on at full speed (vertical curvature past
+  // LAUNCH_K). A boost carried into one flies it at up to 1.5x speed, which is 2.25x the
+  // lift, and an oil where cars come down catches exactly the cars that cannot steer.
+  const slope = (f) => f.tangent.y / Math.max(1e-6, Math.hypot(f.tangent.x, f.tangent.z));
+  const kv = frames.map((_, i) => -(slope(frames[wrapI(i + 1)]) - slope(frames[wrapI(i - 1)])) / (2 * STEP));
+  const jumpS = [];
+  for (let i = 0; i < N; i++) if (kv[i] >= LAUNCH_K && kv[i] >= kv[wrapI(i - 1)] && kv[i] > kv[wrapI(i + 1)]) jumpS.push(st[i].s);
+  const toJump = (i) => Math.min(...jumpS.map((j) => ((j - st[i].s) % L + L) % L));   // arclength ahead to the next jump
+  const pastJump = (i) => Math.min(...jumpS.map((j) => ((st[i].s - j) % L + L) % L)); // ...and since the last one
   const winK = (i, r) => { let mx = 0; for (let d = -r; d <= r; d++) mx = Math.max(mx, st[wrapI(i + d)].k); return mx; };
   const overhead = (i) => { // another strand of road flying over this station?
     const p = st[i].pos;
@@ -936,8 +968,9 @@ export function placeFurniture(source, { oils = 2 } = {}) {
   const claims = [[0, 0.05 * L]];
   const clearOf = (s, r) => claims.every(([cs, cr]) => Math.min(Math.abs(s - cs), L - Math.abs(s - cs)) >= r + cr);
   // argmin cost over stations inside the (wrapped) arclength window that are unclaimed
-  const pick = (cost, r, win = null) => {
-    let best = -1, bc = Infinity;
+  // A pick costing `limit` or more is refused rather than placed.
+  const pick = (cost, r, win = null, limit = Infinity) => {
+    let best = -1, bc = limit;
     for (let i = 0; i < N; i++) {
       const s = st[i].s;
       if (win) { const d = ((s - win[0]) % L + L) % L; if (d > ((win[1] - win[0]) % L + L) % L) continue; }
@@ -951,17 +984,23 @@ export function placeFurniture(source, { oils = 2 } = {}) {
   const u = (i) => +(st[i].s / L).toFixed(3);
   const half = (i, cost, r) => pick(cost, r, [st[i].s + 0.38 * L, st[i].s + 0.62 * L]); // the "~half a lap apart" partner
 
-  const costPad = (i) => winK(i, 8) * 10 + st[i].grade * 2 + (nearLoop(i) ? 100 : 0);
+  // Off the run-up to a jump: a pad's boost lasts about as far as PAD_RUNUP, and a
+  // bot spends a boost item on the first straight after the box row.
+  const costPad = (i) => winK(i, 8) * 10 + st[i].grade * 2 + (nearLoop(i) ? 100 : 0)
+    + (jumps && toJump(i) < PAD_RUNUP ? 100 : 0);
   const p0 = pick(costPad, 5), p1 = p0 >= 0 ? half(p0, costPad, 5) : -1;
 
   const costBox = (i) => winK(i, 6) * 10 + st[i].grade * 3
-    + (st[i].pos.y - groundY > 2.5 ? 30 : 0) + (nearLoop(i) ? 100 : 0);
+    + (st[i].pos.y - groundY > 2.5 ? 30 : 0) + (nearLoop(i) ? 100 : 0)
+    + (jumps && toJump(i) < BOX_RUNUP ? 100 : 0);
   const b0 = pick(costBox, 5), b1 = b0 >= 0 ? half(b0, costBox, 5) : -1;
 
+  // An oil that can only go on a deck, under one or where cars land is left out.
   const costOil = (i) => winK(i, 4) * 8 + st[i].grade * 4
-    + (overhead(i) ? 1000 : 0) + (st[i].pos.y - groundY > 1.2 ? 1000 : 0);
+    + (overhead(i) ? 1000 : 0) + (st[i].pos.y - groundY > 1.2 ? 1000 : 0)
+    + (jumps && (pastJump(i) < FLIGHT || toJump(i) < RUN_IN) ? 1000 : 0);
   const oilIdx = [];
-  for (let n = 0; n < oils; n++) { const o = pick(costOil, 0.1 * L); if (o >= 0) oilIdx.push(o); }
+  for (let n = 0; n < oils; n++) { const o = pick(costOil, 0.1 * L, null, jumps ? 1000 : Infinity); if (o >= 0) oilIdx.push(o); }
 
   const BOX_LANES = [-1.05, -0.35, 0.35, 1.05]; // mirrors the catalogue's boxRow lanes
   return {

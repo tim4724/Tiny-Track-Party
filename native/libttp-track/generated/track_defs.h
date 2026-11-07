@@ -500,7 +500,8 @@ constexpr WptDef kW_flurry[] = {
   { 0x1.a851eb851eb85p+2, 0x1.73851eb851eb8p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_flurry[] = {
-  { 0x1.1b22d0e560419p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.3df3b645a1cacp-1, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.a8f5c28f5c28fp-2, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_flurry[] = {
   { 0x1.2e147ae147ae1p-2, 0x0p+0, false, 0x0p+0 },
@@ -511,10 +512,10 @@ constexpr FurnDef kBoxes_flurry[] = {
   { 0x1.3b645a1cac083p-3, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.3b645a1cac083p-3, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.3b645a1cac083p-3, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.5a1cac083126fp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.5a1cac083126fp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.5a1cac083126fp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.5a1cac083126fp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.89ba5e353f7cfp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.89ba5e353f7cfp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.89ba5e353f7cfp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.89ba5e353f7cfp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_flurry[] = {
   { "set-frozen-lake", 0x1.578d4fdf3b646p-2, -0x1.6cccccccccccdp+3, 0x1.58p+7, 0x0p+0, 0x1p+0 },
@@ -524,7 +525,7 @@ constexpr SetDef kSet_flurry[] = {
 };
 constexpr LandDef kLand_flurry[] = {
   { 2, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.fp+3, 0x1.fp+3, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdcecf8u },
-  { 1, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.5p+4, 0x1.5p+4, 0x1.8p+2, 0x0p+0, 0x1.999999999999ap+0, 0x1.999999999999ap+0, 0x0p+0, 0x1p+0, 0x0u },
+  { 1, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.5p+4, 0x1.5p+4, 0x1.8p+2, 0x0p+0, 0x1.6666666666666p-1, 0x1.6666666666666p-1, 0x0p+0, 0x1p+0, 0x0u },
   { 2, -1, 0x1.c3e425aee632p-2, 0x1.4p+2, -0x1.1cp+7, 0x0p+0, 0x0p+0, 0x1.bp+5, 0x1.8p+1, 0x1.8p+1, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xc8e0f6u },
 };
 
@@ -563,7 +564,7 @@ constexpr WptDef kW_glacier[] = {
   { 0x1.468f5c28f5c29p+4, 0x1.60a3d70a3d70ap+5, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.528f5c28f5c29p+4, 0x1.8370a3d70a3d7p+5, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.64p+4, 0x1.b63d70a3d70a4p+5, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
-  { 0x1.6d9999999999ap+4, 0x1.d228f5c28f5c3p+5, 0x1.a8f5c28f5c28fp-1, 0x0p+0, 0x0p+0, true },
+  { 0x1.6d9999999999ap+4, 0x1.d228f5c28f5c3p+5, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.775c28f5c28f6p+4, 0x1.ee28f5c28f5c3p+5, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.8051eb851eb85p+4, 0x1.0428f5c28f5c3p+6, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.807ae147ae148p+4, 0x1.0accccccccccdp+6, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
@@ -605,26 +606,26 @@ constexpr WptDef kW_glacier[] = {
 };
 constexpr FurnDef kOils_glacier[] = {
   { 0x1.322d0e5604189p-2, 0x1.6666666666666p-1, false, 0x0p+0 },
-  { 0x1.2b851eb851eb8p-1, -0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.56872b020c49cp-1, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_glacier[] = {
-  { 0x1.e353f7ced9168p-2, 0x0p+0, false, 0x0p+0 },
-  { 0x1.da1cac083126fp-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.03126e978d4fep-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.da9fbe76c8b44p-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_glacier[] = {
   { 0x1.7ef9db22d0e56p-3, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.7ef9db22d0e56p-3, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.7ef9db22d0e56p-3, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.7ef9db22d0e56p-3, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.7020c49ba5e35p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.8fdf3b645a1cbp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.8fdf3b645a1cbp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.8fdf3b645a1cbp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.8fdf3b645a1cbp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_glacier[] = {
   { "set-snow-fort", 0x1.e5604189374bcp-3, -0x1.4p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-expedition-camp", 0x1.79db22d0e5604p-1, -0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
-  { "set-penguin-group", 0x1.6c8b439581062p-1, 0x1.2p+3, 0x1.fep+7, 0x0p+0, 0x1p+0 },
+  { "set-penguin-group", 0x1.6666666666666p-1, 0x1.2p+3, 0x1.fep+7, 0x0p+0, 0x1p+0 },
   { "set-penguin-group", 0x1.8f5c28f5c28f6p-2, 0x1.ep+2, 0x1.1dp+8, 0x0p+0, 0x1p+0 },
   { "set-advanced-camp", 0x1.cb4395810624ep-1, -0x1.ap+3, 0x1.48p+8, 0x0p+0, 0x1p+0 },
   { "set-penguin-chute", 0x1.f0a3d70a3d70ap-1, -0x1.ep+3, 0x1.04p+7, 0x0p+0, 0x1p+0 },
@@ -654,7 +655,7 @@ constexpr WptDef kW_avalanche[] = {
   { 0x1.08a3d70a3d70ap+4, 0x0p+0, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.60ccccccccccdp+4, 0x0p+0, 0x1.c28f5c28f5c29p-2, 0x0p+0, 0x0p+0, false },
   { 0x1.8428f5c28f5c3p+4, 0x1.7ae147ae147aep-2, 0x1.70a3d70a3d70ap-4, 0x0p+0, 0x0p+0, false },
-  { 0x1.a3d70a3d70a3dp+4, 0x1.70a3d70a3d70ap+0, 0x1.b851eb851eb85p-2, 0x0p+0, 0x0p+0, false },
+  { 0x1.a3d70a3d70a3dp+4, 0x1.70a3d70a3d70ap+0, 0x1p-1, 0x0p+0, 0x0p+0, false },
   { 0x1.c35c28f5c28f6p+4, 0x1.4147ae147ae14p+1, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.e6e147ae147aep+4, 0x1.71eb851eb851fp+1, 0x0p+0, 0x1.2p+1, 0x1p+3, false },
   { 0x1.035c28f5c28f6p+5, 0x1.4f5c28f5c28f6p+1, 0x0p+0, 0x1.2p+1, 0x1p+3, false },
@@ -718,21 +719,22 @@ constexpr WptDef kW_avalanche[] = {
   { 0x1.06b851eb851ecp+4, 0x1.c59999999999ap+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_avalanche[] = {
-  { 0x1.6b851eb851eb8p-2, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.3b645a1cac083p-2, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.6a7ef9db22d0ep-1, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_avalanche[] = {
-  { 0x1.3f7ced916872bp-3, 0x0p+0, false, 0x0p+0 },
-  { 0x1.722d0e5604189p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.deb851eb851ecp-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.0189374bc6a7fp-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_avalanche[] = {
-  { 0x1.ddb22d0e56042p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.ddb22d0e56042p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.ddb22d0e56042p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.ddb22d0e56042p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.0189374bc6a7fp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.0189374bc6a7fp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.0189374bc6a7fp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.0189374bc6a7fp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.a3d70a3d70a3dp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.a3d70a3d70a3dp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.a3d70a3d70a3dp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.a3d70a3d70a3dp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.b74bc6a7ef9dbp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.b74bc6a7ef9dbp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.b74bc6a7ef9dbp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.b74bc6a7ef9dbp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_avalanche[] = {
   { "set-avalanche-slide", 0x1.851eb851eb852p-1, 0x1p+4, 0x0p+0, 0x0p+0, 0x1p+0 },
@@ -840,25 +842,25 @@ constexpr FurnDef kOils_ribbon[] = {
 };
 constexpr FurnDef kPads_ribbon[] = {
   { 0x1.b126e978d4fdfp-2, 0x0p+0, false, 0x0p+0 },
-  { 0x1.c8b4395810625p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.a2d0e56041893p-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_ribbon[] = {
   { 0x1.0189374bc6a7fp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.0189374bc6a7fp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.0189374bc6a7fp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.0189374bc6a7fp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.be76c8b439581p-4, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.be76c8b439581p-4, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.be76c8b439581p-4, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.be76c8b439581p-4, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.df3b645a1cac1p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.df3b645a1cac1p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.df3b645a1cac1p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.df3b645a1cac1p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_ribbon[] = {
   { "set-village-church", 0x1.48c692f6e8295p-2, 0x1.5b16872b020c5p+4, 0x1.3ab851eb851ecp+5, 0x0p+0, 0x1p+0 },
   { "set-cottage-row", 0x1.c083126e978d5p-2, 0x1.dp+3, 0x1.b851eb851eb85p+0, 0x0p+0, 0x1p+0 },
-  { "set-cottage-row", 0x1.a7ef9db22d0e5p-1, 0x1.08p+5, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-cottage-row", 0x1.a7ef9db22d0e5p-1, 0x1.ap+4, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-cottage-row", 0x1.70a3d70a3d70ap-5, -0x1.3p+4, 0x1.68p+7, 0x0p+0, 0x1p+0 },
   { "set-cottage-row", 0x1.374bc6a7ef9dbp-1, -0x1.e666666666666p+2, 0x1.61f5c28f5c28fp+7, 0x0p+0, 0x1p+0 },
-  { "set-windmill", 0x1.3d70a3d70a3d7p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0 },
+  { "set-windmill", 0x1.3333333333333p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0 },
   { "set-cottage-row", 0x1.c28f5c28f5c29p-1, 0x1.dp+3, 0x0p+0, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_ribbon[] = {
@@ -890,14 +892,14 @@ constexpr WptDef kW_pretzel[] = {
   { 0x1.e68f5c28f5c29p+4, -0x1.0451eb851eb85p+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.f6b851eb851ecp+4, -0x1.2147ae147ae14p+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.ffae147ae147bp+4, -0x1.4fd70a3d70a3dp+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
-  { 0x1.fa8f5c28f5c29p+4, -0x1.7ee147ae147aep+4, 0x1.dc28f5c28f5c3p-1, 0x0p+0, 0x0p+0, true },
+  { 0x1.fa8f5c28f5c29p+4, -0x1.7ee147ae147aep+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.e7851eb851eb8p+4, -0x1.aa3d70a3d70a4p+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.c8a3d70a3d70ap+4, -0x1.ce147ae147ae1p+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.a051eb851eb85p+4, -0x1.e70a3d70a3d71p+4, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, true },
   { 0x1.728f5c28f5c29p+4, -0x1.f30a3d70a3d71p+4, 0x1.dc28f5c28f5c3p-1, 0x0p+0, 0x0p+0, true },
   { 0x1.463d70a3d70a4p+4, -0x1.f19999999999ap+4, 0x1.999999999999ap-2, 0x1.2p+1, 0x0p+0, false },
   { 0x1.1bd70a3d70a3dp+4, -0x1.e451eb851eb85p+4, 0x0p+0, 0x1.2p+1, 0x0p+0, false },
-  { 0x1.ed1eb851eb852p+3, -0x1.cc51eb851eb85p+4, 0x1.3d70a3d70a3d7p-2, 0x1.2p+1, 0x0p+0, false },
+  { 0x1.ed1eb851eb852p+3, -0x1.cc51eb851eb85p+4, 0x1.2e147ae147ae1p-1, 0x1.2p+1, 0x0p+0, false },
   { 0x1.b23d70a3d70a4p+3, -0x1.ab0a3d70a3d71p+4, 0x0p+0, 0x1.2p+1, 0x0p+0, false },
   { 0x1.8b33333333333p+3, -0x1.8333333333333p+4, 0x1.c28f5c28f5c29p-2, 0x1.2p+1, 0x0p+0, false },
   { 0x1.7b33333333333p+3, -0x1.57851eb851eb8p+4, 0x1.eb851eb851eb8p-1, 0x0p+0, 0x0p+0, true },
@@ -920,7 +922,7 @@ constexpr WptDef kW_pretzel[] = {
   { 0x1.dd47ae147ae14p+4, -0x1.57eb851eb851fp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.df0a3d70a3d71p+4, -0x1.643d70a3d70a4p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.e75c28f5c28f6p+4, -0x1.6feb851eb851fp+5, 0x1.c28f5c28f5c29p-3, 0x0p+0, 0x0p+0, false },
-  { 0x1.f5c28f5c28f5cp+4, -0x1.7ap+5, 0x1.0a3d70a3d70a4p-1, 0x0p+0, 0x0p+0, false },
+  { 0x1.f5c28f5c28f5cp+4, -0x1.7ap+5, 0x1.7ae147ae147aep-2, 0x0p+0, 0x0p+0, false },
   { 0x1.047ae147ae148p+5, -0x1.81c28f5c28f5cp+5, 0x1.c28f5c28f5c29p-3, 0x0p+0, 0x0p+0, false },
   { 0x1.0fd70a3d70a3dp+5, -0x1.86b851eb851ecp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.1c147ae147ae1p+5, -0x1.8866666666666p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -937,7 +939,7 @@ constexpr WptDef kW_pretzel[] = {
   { 0x1.aeb851eb851ecp+3, -0x1.f0a3d70a3d70ap+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_pretzel[] = {
-  { 0x1.70a3d70a3d70ap-1, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.71a9fbe76c8b4p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
   { 0x1.3d70a3d70a3d7p-3, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_pretzel[] = {
@@ -949,16 +951,16 @@ constexpr FurnDef kBoxes_pretzel[] = {
   { 0x1.d78d4fdf3b646p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.d78d4fdf3b646p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.d78d4fdf3b646p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.bc6a7ef9db22dp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.bc6a7ef9db22dp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.bc6a7ef9db22dp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.bc6a7ef9db22dp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ef9db22d0e56p-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ef9db22d0e56p-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ef9db22d0e56p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ef9db22d0e56p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_pretzel[] = {
-  { "set-treehouse", 0x1.bedfa43fe5c92p-5, 0x1.7p+4, 0x1.970a3d70a3d71p+4, 0x0p+0, 0x1p+0 },
+  { "set-treehouse", 0x1.0a3d70a3d70a4p-4, 0x1.7p+4, 0x1.970a3d70a3d71p+4, 0x0p+0, 0x1p+0 },
   { "set-football-pitch", 0x1.d7f0ed3d859c9p-1, -0x1.327ef9db22d0ep+3, 0x1.68f5c28f5c28fp+0, 0x0p+0, 0x1p+0 },
   { "set-den-camp", 0x1.116872b020c4ap-1, 0x1.7af1a9fbe76c9p+3, 0x1.ac7ae147ae148p+3, 0x0p+0, 0x1.6666666666666p+0 },
-  { "set-swing-oak", 0x1.1eb851eb851ecp-3, 0x1.2p+3, 0x1.3dae147ae147bp+5, 0x0p+0, 0x1p+0 },
+  { "set-swing-oak", 0x1.5c28f5c28f5c3p-3, 0x1.ep+2, 0x1.3dae147ae147bp+5, 0x0p+0, 0x1p+0 },
   { "set-swing-oak", 0x1.828f5c28f5c29p-1, -0x1.2p+3, 0x1.1ceb851eb851fp+7, 0x0p+0, 0x1p+0 },
 };
 constexpr LandDef kLand_pretzel[] = {
@@ -1008,7 +1010,7 @@ constexpr WptDef kW_tangle[] = {
   { 0x1.3d9999999999ap+4, -0x1.328f5c28f5c29p+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.5028f5c28f5c3p+4, -0x1.81eb851eb851fp+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.5cccccccccccdp+4, -0x1.e28f5c28f5c29p+2, 0x1.70a3d70a3d70ap-3, 0x0p+0, 0x0p+0, false },
-  { 0x1.62e147ae147aep+4, -0x1.2666666666666p+3, 0x1.147ae147ae148p-1, 0x0p+0, 0x0p+0, false },
+  { 0x1.62e147ae147aep+4, -0x1.2666666666666p+3, 0x1.199999999999ap-1, 0x0p+0, 0x0p+0, false },
   { 0x1.619999999999ap+4, -0x1.5c7ae147ae148p+3, 0x1.70a3d70a3d70ap-3, 0x0p+0, 0x0p+0, false },
   { 0x1.591eb851eb852p+4, -0x1.9051eb851eb85p+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.4a3d70a3d70a4p+4, -0x1.bdc28f5c28f5cp+3, 0x1.eb851eb851eb8p-4, 0x0p+0, 0x0p+0, false },
@@ -1036,33 +1038,33 @@ constexpr WptDef kW_tangle[] = {
   { 0x1.f666666666666p+4, -0x1.b15c28f5c28f6p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.31c28f5c28f5cp+5, -0x1.b15c28f5c28f6p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.43eb851eb851fp+5, -0x1.abae147ae147bp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4beb851eb851fp+5, -0x1.a066666666666p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4d0a3d70a3d71p+5, -0x1.a0f5c28f5c28fp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.4d0a3d70a3d71p+5, -0x1.9147ae147ae14p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.40b851eb851ecp+5, -0x1.7aa3d70a3d70ap+5, 0x1.999999999999ap-4, 0x0p+0, 0x0p+0, false },
-  { 0x1.2c66666666666p+5, -0x1.5f9999999999ap+5, 0x1.999999999999ap-3, 0x0p+0, 0x0p+0, false },
-  { 0x1.11ae147ae147bp+5, -0x1.40f5c28f5c28fp+5, 0x1.999999999999ap-4, 0x0p+0, 0x0p+0, false },
+  { 0x1.40b851eb851ecp+5, -0x1.7aa3d70a3d70ap+5, 0x1.999999999999ap-4, 0x0p+0, 0x0p+0, true },
+  { 0x1.2c66666666666p+5, -0x1.5f9999999999ap+5, 0x1.999999999999ap-3, 0x0p+0, 0x0p+0, true },
+  { 0x1.11ae147ae147bp+5, -0x1.40f5c28f5c28fp+5, 0x1.999999999999ap-4, 0x0p+0, 0x0p+0, true },
   { 0x1.e451eb851eb85p+4, -0x1.1fae147ae147bp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.9eb851eb851ecp+4, -0x1.f947ae147ae14p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.56147ae147ae1p+4, -0x1.b147ae147ae14p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.0d47ae147ae14p+4, -0x1.6970a3d70a3d7p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_tangle[] = {
-  { 0x1.7ced916872b02p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
-  { 0x1.03126e978d4fep-2, -0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.7d70a3d70a3d7p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.b53f7ced91687p-2, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_tangle[] = {
   { 0x1.dcac083126e98p-1, 0x0p+0, false, 0x0p+0 },
   { 0x1.1604189374bc7p-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_tangle[] = {
-  { 0x1.d0e5604189375p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.d0e5604189375p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.d0e5604189375p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.d0e5604189375p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.a8f5c28f5c28fp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.a8f5c28f5c28fp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.a8f5c28f5c28fp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.a8f5c28f5c28fp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.d0624dd2f1aap-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.d0624dd2f1aap-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.d0624dd2f1aap-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.d0624dd2f1aap-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.395810624dd2fp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.395810624dd2fp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.395810624dd2fp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.395810624dd2fp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_tangle[] = {
   { "set-watermill", 0x1.78feef5ec80c7p-4, 0x1.826a7ef9db22dp+4, 0x1.1bae147ae147bp+5, 0x0p+0, 0x1p+0 },
@@ -1226,11 +1228,11 @@ constexpr WptDef kW_wash[] = {
   { 0x1.223d70a3d70a4p+6, 0x1.bd1eb851eb852p+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.2d33333333333p+6, 0x1.c666666666666p+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.375c28f5c28f6p+6, 0x1.e947ae147ae14p+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.3fccccccccccdp+6, 0x1.111eb851eb852p+4, 0x1.3333333333333p-3, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.45ccccccccccdp+6, 0x1.36147ae147ae1p+4, 0x1.d70a3d70a3d71p-2, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.48d70a3d70a3dp+6, 0x1.60a3d70a3d70ap+4, 0x1.3d70a3d70a3d7p-1, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.48a3d70a3d70ap+6, 0x1.8e147ae147ae1p+4, 0x1.d70a3d70a3d71p-2, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.4528f5c28f5c3p+6, 0x1.b970a3d70a3d7p+4, 0x1.3333333333333p-3, 0x1.1333333333333p+1, 0x0p+0, false },
+  { 0x1.3fccccccccccdp+6, 0x1.111eb851eb852p+4, 0x1.3333333333333p-3, 0x1.1333333333333p+1, 0x0p+0, true },
+  { 0x1.45ccccccccccdp+6, 0x1.36147ae147ae1p+4, 0x1.d70a3d70a3d71p-2, 0x1.1333333333333p+1, 0x0p+0, true },
+  { 0x1.48d70a3d70a3dp+6, 0x1.60a3d70a3d70ap+4, 0x1.3d70a3d70a3d7p-1, 0x1.1333333333333p+1, 0x0p+0, true },
+  { 0x1.48a3d70a3d70ap+6, 0x1.8e147ae147ae1p+4, 0x1.d70a3d70a3d71p-2, 0x1.1333333333333p+1, 0x0p+0, true },
+  { 0x1.4528f5c28f5c3p+6, 0x1.b970a3d70a3d7p+4, 0x1.3333333333333p-3, 0x1.1333333333333p+1, 0x0p+0, true },
   { 0x1.3eb851eb851ecp+6, 0x1.dee147ae147aep+4, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.35e147ae147aep+6, 0x1.fb5c28f5c28f6p+4, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.2b5c28f5c28f6p+6, 0x1.0628f5c28f5c3p+5, 0x1.d70a3d70a3d71p-3, 0x1.1333333333333p+1, 0x0p+0, false },
@@ -1241,7 +1243,7 @@ constexpr WptDef kW_wash[] = {
   { 0x1.88b851eb851ecp+5, 0x1.21c28f5c28f5cp+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.7a66666666666p+5, 0x1.12147ae147ae1p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.6a8f5c28f5c29p+5, 0x1.0ae147ae147aep+4, 0x1.70a3d70a3d70ap-2, 0x0p+0, 0x0p+0, false },
-  { 0x1.5a3d70a3d70a4p+5, 0x1.0c51eb851eb85p+4, 0x1.c28f5c28f5c29p-1, 0x0p+0, 0x0p+0, false },
+  { 0x1.5a3d70a3d70a4p+5, 0x1.0c51eb851eb85p+4, 0x1.d1eb851eb851fp-1, 0x0p+0, 0x0p+0, false },
   { 0x1.4ab851eb851ecp+5, 0x1.16b851eb851ecp+4, 0x1.70a3d70a3d70ap-2, 0x0p+0, 0x0p+0, false },
   { 0x1.3d33333333333p+5, 0x1.28f5c28f5c28fp+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.32b851eb851ecp+5, 0x1.41eb851eb851fp+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -1252,21 +1254,21 @@ constexpr WptDef kW_wash[] = {
   { 0x1.aca3d70a3d70ap+4, 0x1.df0a3d70a3d71p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_wash[] = {
-  { 0x1.f0a3d70a3d70ap-2, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.428f5c28f5c29p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_wash[] = {
   { 0x1.7be76c8b43958p-1, 0x0p+0, false, 0x0p+0 },
   { 0x1.2b020c49ba5e3p-3, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_wash[] = {
-  { 0x1.8cccccccccccdp-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.8cccccccccccdp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.8cccccccccccdp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.8cccccccccccdp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.4dd2f1a9fbe77p-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.4dd2f1a9fbe77p-2, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.4dd2f1a9fbe77p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.4dd2f1a9fbe77p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.f3b645a1cac08p-5, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.f3b645a1cac08p-5, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.f3b645a1cac08p-5, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.f3b645a1cac08p-5, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ec8b439581062p-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ec8b439581062p-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ec8b439581062p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ec8b439581062p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_wash[] = {
   { "set-dry-creek", 0x1.d81d7dbf487fdp-1, -0x1.28p+4, 0x1.cp+6, 0x0p+0, 0x1p+0 },
@@ -1352,7 +1354,7 @@ constexpr WptDef kW_gulch[] = {
   { -0x1.851eb851eb852p+0, -0x1.12p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { -0x1.099999999999ap+2, -0x1.06a3d70a3d70ap+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { -0x1.951eb851eb852p+2, -0x1.ec7ae147ae148p+4, 0x1.3333333333333p-2, 0x0p+0, 0x0p+0, false },
-  { -0x1.f99999999999ap+2, -0x1.c3d70a3d70a3dp+4, 0x1.ccccccccccccdp-1, 0x0p+0, 0x0p+0, false },
+  { -0x1.f99999999999ap+2, -0x1.c3d70a3d70a3dp+4, 0x1.2666666666666p+0, 0x0p+0, 0x0p+0, false },
   { -0x1.18a3d70a3d70ap+3, -0x1.95eb851eb851fp+4, 0x1.3333333333333p-2, 0x0p+0, 0x0p+0, false },
   { -0x1.1bd70a3d70a3dp+3, -0x1.66147ae147ae1p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { -0x1.06147ae147ae1p+3, -0x1.37851eb851eb8p+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -1399,22 +1401,22 @@ constexpr WptDef kW_gulch[] = {
   { -0x1.1eb851eb851ecp+4, 0x1.0bd70a3d70a3dp+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 constexpr FurnDef kOils_gulch[] = {
-  { 0x1.8f5c28f5c28f6p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
-  { 0x1.da1cac083126fp-2, -0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.28f5c28f5c28fp-2, 0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.8fdf3b645a1cbp-1, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_gulch[] = {
   { 0x1.b22d0e5604189p-4, 0x0p+0, false, 0x0p+0 },
-  { 0x1.27ef9db22d0e5p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.276c8b439581p-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_gulch[] = {
-  { 0x1.28f5c28f5c28fp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.28f5c28f5c28fp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.28f5c28f5c28fp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.28f5c28f5c28fp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.cb4395810624ep-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.cb4395810624ep-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.cb4395810624ep-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.cb4395810624ep-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.47ae147ae147bp-4, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.47ae147ae147bp-4, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.47ae147ae147bp-4, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.47ae147ae147bp-4, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.dd2f1a9fbe76dp-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.dd2f1a9fbe76dp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.dd2f1a9fbe76dp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.dd2f1a9fbe76dp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_gulch[] = {
   { "set-mine-portal", 0x1.26e978d4fdf3bp-6, 0x1p+4, 0x0p+0, 0x0p+0, 0x1p+0 },
@@ -1467,7 +1469,7 @@ constexpr WptDef kW_crag[] = {
   { 0x1.8e7ae147ae148p+5, -0x1.8p+0, 0x0p+0, 0x1.1333333333333p+1, 0x1p+3, false },
   { 0x1.95d70a3d70a3dp+5, -0x1.d47ae147ae148p+1, 0x1.0a3d70a3d70a4p-3, 0x1.1333333333333p+1, 0x1p+3, false },
   { 0x1.988f5c28f5c29p+5, -0x1.7f5c28f5c28f6p+2, 0x1.851eb851eb852p-2, 0x1.1333333333333p+1, 0x1p+3, false },
-  { 0x1.96ccccccccccdp+5, -0x1.ec28f5c28f5c3p+2, 0x1.8p-1, 0x1.1333333333333p+1, 0x1p+3, false },
+  { 0x1.96ccccccccccdp+5, -0x1.ec28f5c28f5c3p+2, 0x1.70a3d70a3d70ap-1, 0x1.1333333333333p+1, 0x1p+3, false },
   { 0x1.9147ae147ae14p+5, -0x1.28p+3, 0x1.851eb851eb852p-2, 0x1.1333333333333p+1, 0x1p+3, false },
   { 0x1.8866666666666p+5, -0x1.51eb851eb851fp+3, 0x1.0a3d70a3d70a4p-3, 0x1.1333333333333p+1, 0x1p+3, false },
   { 0x1.7cf5c28f5c28fp+5, -0x1.7051eb851eb85p+3, 0x0p+0, 0x1.1333333333333p+1, 0x1p+3, false },
@@ -1515,7 +1517,7 @@ constexpr WptDef kW_crag[] = {
   { 0x1.7dc28f5c28f5cp+3, 0x1.530a3d70a3d71p+5, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.9fae147ae147bp+3, 0x1.6066666666666p+5, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.cf5c28f5c28f6p+3, 0x1.6accccccccccdp+5, 0x1.3333333333333p-2, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.047ae147ae148p+4, 0x1.7170a3d70a3d7p+5, 0x1.999999999999ap-1, 0x1.1333333333333p+1, 0x0p+0, false },
+  { 0x1.047ae147ae148p+4, 0x1.7170a3d70a3d7p+5, 0x1.b333333333333p-1, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.23d70a3d70a3dp+4, 0x1.73ae147ae147bp+5, 0x1.3333333333333p-2, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.a1c28f5c28f5cp+4, 0x1.73ae147ae147bp+5, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.c8ccccccccccdp+4, 0x1.6c147ae147ae1p+5, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
@@ -1527,17 +1529,16 @@ constexpr WptDef kW_crag[] = {
 };
 constexpr FurnDef kOils_crag[] = {
   { 0x1.a5e353f7ced91p-2, 0x1.6666666666666p-1, false, 0x0p+0 },
-  { 0x1.a4dd2f1a9fbe7p-1, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_crag[] = {
   { 0x1.395810624dd2fp-3, 0x0p+0, false, 0x0p+0 },
   { 0x1.60c49ba5e353fp-1, 0x0p+0, false, 0x0p+0 },
 };
 constexpr FurnDef kBoxes_crag[] = {
-  { 0x1.de353f7ced917p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.de353f7ced917p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.de353f7ced917p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.de353f7ced917p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ddb22d0e56042p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.ddb22d0e56042p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ddb22d0e56042p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.ddb22d0e56042p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.126e978d4fdf4p-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
   { 0x1.126e978d4fdf4p-1, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.126e978d4fdf4p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
@@ -1587,7 +1588,7 @@ constexpr WptDef kW_sidewinder[] = {
   { 0x1.68ccccccccccdp+5, -0x1.751eb851eb852p+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.775c28f5c28f6p+5, -0x1.7333333333333p+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.85851eb851eb8p+5, -0x1.8147ae147ae14p+3, 0x1p-2, 0x1.1333333333333p+1, 0x0p+0, false },
-  { 0x1.9228f5c28f5c3p+5, -0x1.9eb851eb851ecp+3, 0x1.570a3d70a3d71p-1, 0x1.1333333333333p+1, 0x0p+0, false },
+  { 0x1.9228f5c28f5c3p+5, -0x1.9eb851eb851ecp+3, 0x1.4cccccccccccdp-1, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.9c3d70a3d70a4p+5, -0x1.c8f5c28f5c28fp+3, 0x1p-2, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.a2f5c28f5c28fp+5, -0x1.fcccccccccccdp+3, 0x0p+0, 0x1.1333333333333p+1, 0x0p+0, false },
   { 0x1.a5d70a3d70a3dp+5, -0x1.1ae147ae147aep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -1611,7 +1612,7 @@ constexpr WptDef kW_sidewinder[] = {
   { 0x1.8b70a3d70a3d7p+5, -0x1.fe28f5c28f5c3p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.6828f5c28f5c3p+5, -0x1.eee147ae147aep+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.5aa3d70a3d70ap+5, -0x1.e67ae147ae148p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.5051eb851eb85p+5, -0x1.da7ae147ae148p+5, 0x1.3333333333333p-2, 0x0p+0, 0x0p+0, false },
+  { 0x1.5051eb851eb85p+5, -0x1.da7ae147ae148p+5, 0x1.ccccccccccccdp-2, 0x0p+0, 0x0p+0, false },
   { 0x1.4ap+5, -0x1.ccp+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.483d70a3d70a4p+5, -0x1.bc3d70a3d70a4p+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1.4b33333333333p+5, -0x1.aca3d70a3d70ap+5, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -1630,7 +1631,7 @@ constexpr WptDef kW_sidewinder[] = {
 };
 constexpr FurnDef kOils_sidewinder[] = {
   { 0x1.a7ef9db22d0e5p-1, 0x1.6666666666666p-1, false, 0x0p+0 },
-  { 0x1.851eb851eb852p-2, -0x1.6666666666666p-1, false, 0x0p+0 },
+  { 0x1.d0e5604189375p-3, -0x1.6666666666666p-1, false, 0x0p+0 },
 };
 constexpr FurnDef kPads_sidewinder[] = {
   { 0x1.53f7ced916873p-4, 0x0p+0, false, 0x0p+0 },
@@ -1641,10 +1642,10 @@ constexpr FurnDef kBoxes_sidewinder[] = {
   { 0x1.d70a3d70a3d71p-4, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.d70a3d70a3d71p-4, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.d70a3d70a3d71p-4, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.6a7ef9db22d0ep-1, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.6a7ef9db22d0ep-1, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.6a7ef9db22d0ep-1, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.6a7ef9db22d0ep-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.fae147ae147aep-2, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.fae147ae147aep-2, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.fae147ae147aep-2, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.fae147ae147aep-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_sidewinder[] = {
   { "set-telegraph-line", 0x1.47ae147ae147bp-6, 0x1.2666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0 },
@@ -2017,16 +2018,16 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 4, kLand_driftwood, 3 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 1, kLand_riptide, 1 },
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 2, kLand_powder, 5 },
-  { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 1, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 4, kLand_flurry, 3 },
+  { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 4, kLand_flurry, 3 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 6, kLand_glacier, 10 },
-  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 1, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6, kLand_avalanche, 6 },
+  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 6, kLand_avalanche, 6 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 7, kLand_ribbon, 7 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 5, kLand_pretzel, 2 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 11, kLand_tangle, 1 },
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 2, kLand_cloverleaf, 3 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 23, kLand_wash, 20 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 3, kLand_gulch, 18 },
-  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 2, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 12, nullptr, 0 },
+  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 12, nullptr, 0 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 3, kLand_sidewinder, 2 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 5, nullptr, 0 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 7, nullptr, 0 },
