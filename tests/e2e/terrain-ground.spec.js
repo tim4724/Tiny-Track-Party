@@ -2,13 +2,14 @@
 // The renderer's raised ground against the road and the set pieces, read off
 // the ground it actually draws (display.groundY: the grid, the deck cap, the
 // clearings, the berms). Per cup, track by track:
-//   - under every deck point, kerb to kerb, the ground stays under the slab
-//     (or at the plain, where the slab itself is sunk into it);
-//   - beside raised road, 1 to 4 u off either edge, no bank comes above the
-//     slab's underside (a crossing's lower road, the far side of a hairpin).
-//     Raised is over the lap's LOWEST road, not over groundY: groundY can sit
-//     under it (a banked corner's low edge sets it), and road at that level
-//     lies in the plain, the land beside it level with it;
+//   - under every deck point, kerb to kerb, the ground stays kDeckClear under
+//     the deck's top (or at the plain, where the deck itself is sunk into it);
+//   - beside road on its full stilts, 1 to 4 u off either edge, the land
+//     stays under the slab, so the stilts keep showing. Lower road sits in
+//     the land by design (TtpRenderer.h, THE RAISED GROUND), so the check
+//     above is its guard: beside it the 9 u grid carries a hill's or an
+//     authored wall's flank (a slot canyon) in toward the kerb, which is
+//     land, not a bank;
 //   - every part of a piece modelled on terrain (SET_GROUND) that stands on
 //     that terrain touches the ground drawn under it: nothing floats.
 // Berms are drawn over the ground and answer groundY too, so the points
@@ -22,8 +23,10 @@ const { test, expect } = require('./helpers');
 const ROOT = path.resolve(__dirname, '../..');
 const HEADER = fs.readFileSync(path.join(ROOT, 'native/renderer/src/TtpRenderer.h'), 'utf8');
 const constant = (name) => Number(new RegExp(`${name} = ([\\d.]+)f`).exec(HEADER)[1]);
+const CLEAR = constant('kDeckClear');   // what the cap keeps under the deck's top
 const DEPTH = constant('kDeckDepth');   // the slab under the deck's top
-const CLEAR = constant('kDeckClear');   // what the cap keeps under it
+// How high over the plain a deck stands on its full stilts.
+const STILTS = constant('kVergeLow') - constant('kVergeDrop') + constant('kRaiseDrop');
 const TOUCH = 0.1;                      // scripts/set-check.mjs: a part held up
 const SLACK = 1e-3;
 
@@ -45,7 +48,6 @@ test('the raised ground stays under every road and holds up the terrain pieces',
     for (const id of cup.tracks) {
       const b = buildTrack(TRACK_LIST.find((t) => t.id === id));
       const S = b.centerline.samples, gy = b.groundY;
-      const flush = Math.max(gy, Math.min(...S.map((q) => q.pos.y)) - DEPTH);
       const layout = await loadTrack(page, id);
       const set = TRACKS[id].set || [];
       const own = layout.pieces.map((r, i) => ({ r, k: set[i]?.scale ?? 1 })).filter(({ r }) => SET_GROUND[r.model]);
@@ -65,14 +67,14 @@ test('the raised ground stays under every road and holds up the terrain pieces',
         for (const f of [0, 0.5]) {
           const lerp = (key) => ({ x: a[key].x + (c[key].x - a[key].x) * f, y: a[key].y + (c[key].y - a[key].y) * f,
                                    z: a[key].z + (c[key].z - a[key].z) * f });
-          const pos = lerp('pos'), lat = lerp('lateral'), up = lerp('up');
+          const pos = lerp('pos'), lat = lerp('lateral');
           const half = (a.width + (c.width - a.width) * f) / 2;
           for (let k = -4; k <= 4; k++) {
             const l = half * k / 4, x = pos.x + lat.x * l, z = pos.z + lat.z * l;
-            if (!nearBerm(x, z)) under.push([x, z, Math.max(pos.y + lat.y * l - DEPTH * up.y, gy) + SLACK]);
+            if (!nearBerm(x, z)) under.push([x, z, Math.max(pos.y + lat.y * l - CLEAR, gy) + SLACK]);
           }
           const top = Math.min(pos.y + lat.y * half, pos.y - lat.y * half);
-          if (top - DEPTH - CLEAR <= flush) continue;   // raised road only
+          if (top - gy < STILTS) continue;
           for (const side of [-1, 1]) {
             for (const o of [1, 2.5, 4]) {
               const x = pos.x + lat.x * side * (half + o), z = pos.z + lat.z * side * (half + o);
@@ -103,7 +105,7 @@ test('the raised ground stays under every road and holds up the terrain pieces',
         };
       }, { under, beside, parts, gy, touch: TOUCH });
       expect.soft(r.under.slice(0, 5), `${id}: ground through a deck`).toEqual([]);
-      expect.soft(r.beside.slice(0, 5), `${id}: a bank above the slab beside raised road`).toEqual([]);
+      expect.soft(r.beside.slice(0, 5), `${id}: a bank burying the stilts beside raised road`).toEqual([]);
       expect.soft(r.floating, `${id}: SET_GROUND parts floating over the drawn ground`).toEqual([]);
       if (!r.relief) break;   // a flat biome: the rest of the cup shows the same plain
     }

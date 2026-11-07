@@ -240,6 +240,12 @@ const BOXES = {
 //          creek-bed tint (the renderer's groundTint).
 //   paint  a capsule like a plain that shapes nothing: it only colours the
 //          ground (a piste down a mountain)
+//   shore  (the beach) brings the sea's waterline in through the anchor, held
+//          for `len` of shore and faded back out over `r`; never nearer than
+//          a few units past the road, unless `w` lets it that far inside the
+//          road's reach (the road then runs over the water). It only reaches
+//          road that is the island's outermost on its bearing from the origin
+//          (native/renderer/CLAUDE.md, the beach).
 // Any of them but a mound may carry a `tint`, 0xRRGGBB, a multiplier over the
 // ground's colour where the form lies (fading with its flank, or a plain's or
 // paint's `w`); the ground's grid is 9 u, so a tint is a broad wash.
@@ -403,19 +409,23 @@ export const TRACKS = {
     // pool where the reef comes closest to the road, people at its edge, and
     // the crab fishers' landing above the reef just before it. The pool lies
     // beside the low west run that points at it, not at the waterline: out
-    // there it hid behind the hump and read as a few grey lumps.
+    // there it hid behind the hump and read as a few grey lumps. On the two
+    // outer bends the sea comes in to a few strides past the kerb (the
+    // `shore`s), and the reef stands in that surf, its ledges awash.
     set: [
-      { model: 'set-rock-pool', u: 0.675, lat: 13, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 14.5, yaw: 4 },
       { model: 'set-reef-shelf', u: 0.172, lat: 31.5, yaw: -1 },
       { model: 'set-reef-shelf', u: 0.228, lat: 31.5, yaw: -3 },
-      { model: 'set-reef-shelf', u: 0.297, lat: 30, yaw: -10 },
-      { model: 'set-reef-shelf', u: 0.353, lat: 30, yaw: 3 },
+      { model: 'set-reef-shelf', u: 0.297, lat: 16, yaw: -10 },
+      { model: 'set-reef-shelf', u: 0.353, lat: 16, yaw: 3 },
       { model: 'set-reef-shelf', u: 0.429, lat: 30.3, yaw: 19 },
-      { model: 'set-reef-shelf', u: 0.683, lat: 32.5, yaw: -5 },
-      { model: 'set-reef-shelf', u: 0.739, lat: 29.5, yaw: 18 },
-      { model: 'set-reef-shelf', u: 0.797, lat: 29.5, yaw: -3 },
-      { model: 'set-reef-shelf', u: 0.928, lat: 32.8, yaw: -23 },
+      { model: 'set-reef-shelf', u: 0.739, lat: 16, yaw: 18 },
+      { model: 'set-reef-shelf', u: 0.797, lat: 16, yaw: -3 },
       { model: 'set-crab-pots', u: 0.64, lat: 8, yaw: 10 }
+    ],
+    land: [
+      { kind: 'shore', u: 0.325, lat: 7, len: 60, r: 30 },
+      { kind: 'shore', u: 0.79, lat: 7.5, len: 80, r: 30 }
     ]
   },
   cove: {
@@ -478,11 +488,16 @@ export const TRACKS = {
     // The shore is anchored where the patrol is, so it runs along the swim
     // line's own axis, and holds that line the length of the swim line and
     // past it: the line lies on the water, a swim's width out, end to end.
+    // From the hop on, the road runs out over the shallows (the second
+    // `shore`, whose `w` lets the water in past the road), the hop on timber
+    // piles (its `trestle`, scripts/gen-tracks.mjs) and then a low causeway:
+    // open sea outside, a strip of lagoon inside, then the beach.
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
     ],
     land: [
-      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 }
+      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 },
+      { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 11 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
@@ -507,9 +522,31 @@ export const TRACKS = {
       { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 }
     ],
     // a frozen stream runs from the village loop under the crossing down to
-    // the lake
+    // the lake; the valley is closed by mountains on the outside of the lap,
+    // one off each of its four sides, open between them at both ends of its
+    // long axis so it reads as a valley, not a bowl: each a long snow ridge
+    // with its peaks on it, the peaks' crests tinted rock, and a dark wash of
+    // forest along its foot. Their crests stand about where the fog begins,
+    // and their reach stays inside the terrain's 48-cell cap.
     land: [
-      { kind: 'plain', u: 0.4413, lat: 5, yaw: -142, len: 54, r: 3, w: 5, tint: 0xc8e0f6 }
+      { kind: 'plain', u: 0.4413, lat: 5, yaw: -142, len: 54, r: 3, w: 5, tint: 0xc8e0f6 },
+      { kind: 'ridge', u: 0.15, lat: 68, len: 120, r: 28, h: 16, top: 0.15 },
+      { kind: 'ridge', u: 0.15, lat: 72, z: -38, len: 8, r: 24, h: 16, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.15, lat: 70, z: 2, len: 12, r: 20, h: 11, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.15, lat: 74, z: 36, len: 6, r: 24, h: 15, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
+      { kind: 'ridge', u: 0.39, lat: -74, z: -28, len: 8, r: 22, h: 14, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.39, lat: -74, z: 24, len: 6, r: 24, h: 17, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.65, lat: 68, len: 120, r: 30, h: 17, top: 0.15 },
+      { kind: 'ridge', u: 0.65, lat: 72, z: -40, len: 10, r: 22, h: 13, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.65, lat: 74, z: 0, len: 6, r: 26, h: 18, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.65, lat: 72, z: 38, len: 8, r: 22, h: 12, top: 0.2, tint: 0x56607a },
+      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
+      { kind: 'ridge', u: 0.92, lat: -72, z: -15, len: 8, r: 22, h: 13, top: 0.2, tint: 0x56607a },
+      { kind: 'paint', u: 0.15, lat: 42, len: 120, r: 3, w: 8, tint: 0x3f6050 },
+      { kind: 'paint', u: 0.39, lat: -44, len: 100, r: 3, w: 8, tint: 0x3f6050 },
+      { kind: 'paint', u: 0.65, lat: 42, len: 120, r: 3, w: 8, tint: 0x3f6050 },
+      { kind: 'paint', u: 0.92, lat: -42, len: 80, r: 3, w: 8, tint: 0x3f6050 }
     ]
   },
   glacier: {
@@ -551,7 +588,23 @@ export const TRACKS = {
       { model: 'set-warning-sign', u: 0.277, lat: 27.3, yaw: 55 },
       { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
       { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
-      { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 }
+      { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 },
+      // The road cut along the outside verge under the slopes, its face to
+      // the road: the run to the slide's foot, then a gap where the debris
+      // runs out to the kerb, then the straight after it under its bank. Each
+      // length is 12 u, spaced along the verge (not the centreline) so they
+      // meet round the bends; a run carries one seep.
+      { model: 'set-rock-cut', u: 0.709, lat: 6.5 },
+      { model: 'set-rock-cut-seep', u: 0.731, lat: 6.5 },
+      { model: 'set-rock-cut', u: 0.792, lat: 6.5 },
+      { model: 'set-rock-cut', u: 0.811, lat: 6.5 },
+      { model: 'set-rock-cut-seep', u: 0.834, lat: 6.5 },
+      { model: 'set-rock-cut', u: 0.854, lat: 6.5 }
+    ],
+    // the slope that straight is cut into, rising behind the cut: clear of
+    // the slide's and the fences' mounds, which would swallow it (landforms)
+    land: [
+      { kind: 'ridge', u: 0.82, lat: 24, len: 44, r: 14, h: 9, top: 0.2, tint: 0xa8b2c4 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,

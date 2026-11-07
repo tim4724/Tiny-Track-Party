@@ -2771,6 +2771,144 @@ def warning_sign():
             snow_rake(x, -half, half)
     draped('sign', sign)
 
+def rock_length(seep):
+    """A length of Avalanche's road cut, the cut the road was blasted
+    through the mountain's foot (12 units along Z, as Wash's canyon_wall),
+    the face toward the road (+X): blue-grey granite, faceted as a blasted
+    face is, in four strata that step back as they go up (grey and lavender:
+    the palette's blue-greys), three to four and a half units tall, lower
+    than Wash's walls, so the snow slope shows over it from the road; snow
+    lying on every ledge, its edge showing from below, and over the ragged
+    crest, where a bank carries on back into the hill; icicles off the
+    ledges, snow-capped boulders at its foot and, with `seep`, a frozen seep
+    down the face. It DRAPES: every vertex rides the land, so the foot
+    follows the verge and the bank runs into the slope behind. The face is
+    periodic over its length, so the lengths placed end to end meet."""
+    L, D, nz, STEP, BATTER = 12.0, 4.0, 9, 0.45, 0.1
+    zs = [-L / 2 + L * i / (nz - 1) for i in range(nz)]
+    def fan(v):
+        # The length widens with depth (none at the foot of the face): on a
+        # bend's outside, where the lengths' backs spread apart, each overlaps
+        # the next instead of leaving a dark notch between them.
+        x, y, z = v
+        return x, y, z * (1 - 0.03 * x)
+    def rnd(i, j):
+        v = math.sin((i % (nz - 1)) * 12.9898 + j * 78.233) * 43758.5453
+        return v - math.floor(v)
+    def wave(z, k, ph):
+        return math.sin(2 * math.pi * k * z / L + ph)
+    # the strata's bounds: the foot (sunk), three bedding planes dipping
+    # along the cut, and the ragged crest
+    bounds = [[-0.3] * nz] + [[y0 + 0.26 * wave(z, 1, 1.7 * b) for z in zs] for b, y0 in enumerate((1.15, 2.15, 2.95))]
+    bounds.append([max(bounds[3][i] + 0.45, 3.3 + rnd(i, 7) + 0.15 * wave(zs[i], 2, 0.4)) for i in range(nz)])
+    def face(b, r):
+        """Row r (0 foot, 1 middle, 2 top) of stratum b, as (x, y, z) per column."""
+        out = []
+        for i, z in enumerate(zs):
+            y0, y1 = bounds[b][i], bounds[b + 1][i]
+            y = y0 + (y1 - y0) * r / 2
+            out.append((-b * STEP - BATTER * (y - y0) + 0.22 * (rnd(i, 10 * b + r) - 0.5), y, z))
+        return out
+    def strip(a, c, color, out):
+        """Quads between two rows of points, each turned to face `out` (glTF)."""
+        n = len(a)
+        me = bpy.data.meshes.new('strip')
+        me.from_pydata([tuple(P(*fan(v))) for v in a + c], [],
+                       [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)])
+        me.update()
+        o = P(*out)
+        for p in me.polygons:
+            if p.normal.dot(o) < 0:
+                p.flip()
+        ob = bpy.data.objects.new('strip', me)
+        bpy.context.scene.collection.objects.link(ob)
+        return paint(ob, color)
+    def cap(pts, color, out):
+        """One polygon, an end of the cut, turned to face `out`."""
+        me = bpy.data.meshes.new('cap')
+        me.from_pydata([tuple(P(*fan(v))) for v in pts], [], [tuple(range(len(pts)))])
+        me.update()
+        if me.polygons[0].normal.dot(P(*out)) < 0:
+            me.polygons[0].flip()
+        ob = bpy.data.objects.new('cap', me)
+        bpy.context.scene.collection.objects.link(ob)
+        return paint(ob, color)
+    X, UP = (1, 0, 0), (0, 1, 0)
+    rows = [[face(b, r) for r in range(3)] for b in range(4)]
+    profile = []                      # the end's outline, foot to crest
+    for b, col in enumerate(('grey', 'lavender', 'grey', 'lavender')):
+        rs = (0, 1, 2) if b < 2 else (0, 2)          # the short upper strata take one row of facets
+        for r0, r1 in zip(rs, rs[1:]):
+            strip(rows[b][r0], rows[b][r1], col, X)
+        profile += [rows[b][r] for r in rs if b == 0 or r > 0]   # a ledge's drift ends on its foot
+        top = rows[b][2]
+        if b < 3:
+            # the snow on the ledge: its edge, then the drift against the stratum above
+            lip = [(x + 0.05, y - 0.02, z) for x, y, z in top]
+            rim = [(x + 0.05, y + 0.18, z) for x, y, z in top]
+            back = [(x, y + 0.22, z) for (x, y, z) in face(b + 1, 0)]
+            snowy(strip(lip, rim, 'white', X))
+            snowy(strip(rim, back, 'white', UP))
+            profile += [lip, rim, back]
+    # the crest's snow, its edge over the face, the cap back to the hill and
+    # the bank falling into the land behind, short and its far edge sunk deep:
+    # where the slope behind rises, a longer bank rode up it as a roof
+    crest = rows[3][2]
+    lip = [(x + 0.06, y - 0.02, z) for x, y, z in crest]
+    rim = [(x + 0.06, y + 0.25, z) for x, y, z in crest]
+    cap_back = [(-D, y + 0.2, z) for x, y, z in crest]
+    bank = [(-D - 3.5, -1.0, z) for z in zs]
+    snowy(strip(lip, rim, 'white', X))
+    snowy(strip(rim, cap_back, 'white', UP))
+    snowy(strip(cap_back, bank, 'white', UP))
+    # the two ends: the rock's section, and the snow's over it (white, so
+    # where a bend pokes one length's end through the next's crest it shows
+    # as snow, not as a dark notch)
+    for i, sz in ((0, -1), (nz - 1, 1)):
+        x, y, z = crest[i]
+        cap([p[i] for p in profile] + [(-D, y - 0.2, z), (-D, -0.3, z)], 'grey', (0, 0, sz))
+        snowy(cap([crest[i], lip[i], rim[i], cap_back[i], bank[i], (-D, -0.3, z), (-D, y - 0.2, z)],
+                  'white', (0, 0, sz)))
+    def at(b, f):
+        """The top edge of stratum b a fraction f of the way along the cut."""
+        k = min(nz - 2, int(f * (nz - 1)))
+        t = f * (nz - 1) - k
+        a, c = rows[b][2][k], rows[b][2][k + 1]
+        return tuple(a[j] + (c[j] - a[j]) * t for j in range(3))
+    with plain_parts():
+        # icicles off the ledges' lips
+        for b, f, ln in ((0, 0.18, 0.55), (0, 0.71, 0.4), (1, 0.38, 0.6), (2, 0.86, 0.45)):
+            x, y, z = at(b, f)
+            cyl(0.012, ln, (x + 0.02, y + 0.04 - ln, z), 'sky', r2=0.1, segs=3, stem=True)
+        if seep:
+            # the frozen seep down the two lower strata, its ice fanned at the foot
+            def across(row, f0, f1):
+                return [tuple(row[4][j] + (row[5][j] - row[4][j]) * f + (0.05 if j == 0 else 0) for j in range(3))
+                        for f in (f0, f1)]
+            for b in (0, 1):
+                for r in range(2):
+                    strip(across(rows[b][r], 0.15 + 0.1 * b, 0.75 - 0.05 * b),
+                          across(rows[b][r + 1], 0.2 + 0.1 * b, 0.7 - 0.05 * b), 'sky', X)
+            box((1.0, 0.14, 1.4), (0.45, 0.04, 0.7), 'sky', yaw=0.2)
+        # snow-capped boulders fallen at the foot
+        for z, s, yaw in ((3.6, 0.7, 1.5),) if seep else ((-3.8, 0.9, 0.3), (1.4, 0.5, 2.2)):
+            x = 0.25 + s * 0.6
+            box((s * 1.3, s * 0.8, s), (x, s * 0.3, z), 'grey', yaw=yaw)
+            snowy(box((s * 1.1, s * 0.22, s * 0.8), (x - 0.05, s * 0.75, z), 'white', yaw=yaw + 0.1))
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+
+@piece(1.0)
+def rock_cut():
+    # Avalanche: a length of the road cut (rock_length), placed end to end
+    # along the outside verge under the slopes.
+    rock_length(False)
+
+@piece(1.0)
+def rock_cut_seep():
+    # ...and the length with a frozen seep down its face, one to a run of
+    # lengths: on every length it read as a row of drainpipes.
+    rock_length(True)
+
 # ====================================================================================
 # BACKYARD
 # ====================================================================================

@@ -278,10 +278,11 @@ void TtpRenderer::buildTerrainSampleIndex(const TrackBin& tb) {
 // THE DECK CAP, per grid vertex. Every sample's deck section is a disc in XZ
 // (half-width, kerb and half the way to its farther neighbour), and every
 // grid TRIANGLE that disc touches gets its three corners capped at the
-// section's lowest corner — slab underside at the low kerb edge, bank
-// included — less kDeckClear. A linear triangle never rises above its highest
-// corner, so no point of the drawn surface comes through any deck: the LOWER
-// road at a crossing included, which is how a road under a bridge stays open.
+// deck's TOP at the section's lower kerb edge, bank included, less
+// kDeckClear. A linear triangle never rises above its highest corner, so no
+// point of the drawn surface comes through any deck: the LOWER road at a
+// crossing included, which is how a road under a bridge stays open. The
+// ground may meet the slab inside its skirt, where the opaque deck hides it.
 // Per triangle rather than per radius, so the cap reaches only the cells a
 // deck actually crosses and the ground can still rise one cell beside it.
 void TtpRenderer::buildTerrainCap(const TrackBin& tb) {
@@ -305,12 +306,7 @@ void TtpRenderer::buildTerrainCap(const TrackBin& tb) {
     for (size_t i = 0; i < n; i++) {
         const auto& s = tb.samples[i];
         const float half = s.width * 0.5f + tb.kerbW;
-        float low = 1e30f;
-        for (const float side : { -1.0f, 1.0f }) {
-            const float3 e = s.pos + s.lat * (side * half);
-            low = std::min({ low, e.y, e.y - kDeckDepth * s.up.y });
-        }
-        const float lim = low - kDeckClear;
+        const float lim = std::min((s.pos + s.lat * half).y, (s.pos - s.lat * half).y) - kDeckClear;
         // Out to halfway to each neighbour, so the discs cover the whole deck
         // whatever the spacing (it stretches where the lap closes).
         const float gap = std::max(length(tb.samples[(i + 1) % n].pos - s.pos),
@@ -397,8 +393,9 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
             }
         }
     }
-    // The raised ground: kRaiseDrop under the deck, held out to kRaiseFlatR
-    // past the edge and relaxing to the plain over kRaiseRampR. Close in, the
+    // The raised ground: kVergeDrop under low road, kRaiseDrop under raised
+    // road and level between (TtpRenderer.h), held out to kRaiseFlatR past
+    // the edge and relaxing to the plain over kRaiseRampR. Close in, the
     // deck is the nearest one; further out, the blend. And never over the
     // cone each OTHER strand of road allows (a crossing, the far side of a
     // hairpin: further along the lap than a strand's own reach) — flat out to
@@ -414,7 +411,8 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
             if (std::min(ds, tb.length - ds) < kOtherStrandS) continue;
             target = std::min(target, mTsiTopY[i] + kStrandSlope * std::max(0.0f, d - kRaiseFlatR));
         }
-        lift = std::max(0.0f, target - kRaiseDrop - tb.groundY)
+        const float h = target - tb.groundY;
+        lift = std::max(0.0f, std::min(h - kVergeDrop, std::max(kVergeLow - kVergeDrop, h - kRaiseDrop)))
              * (1.0f - smooth01((edge - kRaiseFlatR) / kRaiseRampR));
     }
     return lift;

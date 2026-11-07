@@ -187,7 +187,7 @@ function landInit(l, piece, where) {
   if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
   if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
   if (l.kind !== 'plain' && l.kind !== 'paint' && l.kind !== 'shore' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
-  if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds) and r (its fade), no height or tint, never on a piece`);
+  if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0) || (l.w != null && !(l.w > 0)))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds), r (its fade) and, to let the water in past the road, w (how far inside the road's reach it may come); no height or tint, never on a piece`);
   if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
   if (l.kind === 'mound' && l.tint != null) fail(`${where}: a mound takes no tint`);
