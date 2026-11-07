@@ -31,10 +31,11 @@
 // as theme.h above; ctests execute both on every leg.
 #include "ttp/flat_weld.h"
 #include "ttp/glb_mesh.h"
-namespace ttp { namespace kitcolors { struct Mesh; } }
+namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
 #include "ttp/name_tags.h"
+#include "ttp/set_motion.h"
 
 
 // The car contact shadow's constants, and the ONE place they are written down:
@@ -212,6 +213,30 @@ public:
     // from that, so the two cannot disagree about where one is or how big.
     void setKitField(int count);
     const char* kitFieldLayout() const { return mKitLayout.c_str(); }
+
+    // ---- the set-piece layout (dev) ---------------------------------------
+    // Where the track's set pieces ended up, for the landmark gallery's camera
+    // (the shape is ttp_display_set_layout's). The footprint is mSetFeet's
+    // own, so a camera framing a piece and the keep-outs every later pass
+    // honours cannot disagree about where it stands. Written once per static
+    // scene; kNoSetLayout before one is built, and the ABI's answer when
+    // there is no renderer at all.
+    const char* setLayout() const { return mSetLayout.c_str(); }
+    // Where buildScenery stood each tree and boulder, for the same camera's
+    // sight lines (the shape is ttp_display_scatter_layout's); "[]" before a
+    // build.
+    const char* scatterLayout() const { return mScatterLayout.c_str(); }
+    // The built static scene's ground height at (x, z): groundSurfaceY, the
+    // surface every scattered piece stands on, or the berm under raised road
+    // where one stands higher (bermY). 0 with no scene.
+    float groundY(float x, float z) const;
+    // What keeps a set piece's surface over (x, z), spanning world heights lo
+    // to hi, from standing there in the built scene: "road", "pillar", "berm",
+    // "piece" (another piece's foot; set layout row `skip` is not counted) or
+    // "sea"; "" where it may stand. For the landmark gallery's placement
+    // search, which moves pieces it has not built.
+    const char* spotIssue(float x, float z, float lo, float hi, int skip) const;
+    static constexpr const char* kNoSetLayout = "{\"groundY\":0,\"length\":0,\"pieces\":[]}";
 
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
 
@@ -585,6 +610,12 @@ private:
     // fallback (init), where a draw costs more than the vertices it saves.
     float mSheetTile = kSheetTile;
     uint32_t mSheetMinTris = kSheetMinTris;
+    // A set piece's bake tile (bakePlacements), split by whole part. Finer
+    // than a sheet's because a piece is dense where a sheet is sparse, so a
+    // tile drawn whole to a camera beside it costs vertices a sheet's would
+    // not; doubled on the GL fallback like the sheet's.
+    static constexpr float kPieceTile = 8.0f;
+    float mPieceTile = kPieceTile;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -910,24 +941,95 @@ private:
     std::vector<GroundBand> mGroundBands;
     static constexpr float kGroundTile = 600.0f / 18.0f;
     filament::math::float3 groundColorAt(float x) const;
-    // Terrain relief: rolling hills on the ground sheet, flat under and beside
-    // the road (see setupTerrain). Amp 0 = the flat-quad biomes (sand, wood).
+    // Terrain relief: the ground rises under raised road, and rolls into
+    // hills away from it (see setupTerrain). Amp 0 = the flat-quad biomes
+    // (sand, wood), which keep the plain.
     float mTerrainAmp = 0;
     uint32_t mTerrainSeed = 0;
     float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
-    // Flat clearings the landmark spots carve into the relief (so a windmill
-    // never stands on a slope). Registered by buildLandmarks BEFORE the ground
-    // mesh and the scatter sample the field — see the builder order.
-    struct TerrainFlat { float x, z, r; };
+    // Clearings the set pieces and landmark spots level into the relief (so a
+    // windmill never stands on a slope), each at its own height `y`: the
+    // ground already there, never a plinth raised for it. Registered BEFORE
+    // the ground mesh and the scatter sample the field — see the builder order.
+    // A rounded rectangle: half extents hx, hz along the axes (ax, az) and
+    // (-az, ax), grown by r; a landmark's round spot has zero extents. Level
+    // inside, back to the land over 8 u.
+    struct TerrainFlat { float x, z, ax, az, hx, hz, r, y; };
     std::vector<TerrainFlat> mTerrainFlats;
     void setupTerrain(const TrackBin& tb);
-    float terrainY(const TrackBin& tb, float x, float z) const;
+    // The ground's height at (x, z): with the clearings levelled in, or as the
+    // land lies before any of them (`withFlats` false) — the height a clearing
+    // is levelled TO, so a piece stands where the ground already was.
+    float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
+    // `dell`, if asked: how far down a swell the point lies, 0 near the road.
+    float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
+            float* dell = nullptr) const;
+    // The track's landforms (TrackBin::land), resolved by setupTerrain into the
+    // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
+    // own lengths and heights already scaled, and the box it can reach.
+    // `piece` the set piece it came with (-1: the track's own), and `base`
+    // what that piece's mound rises from (setupTerrain).
+    struct LandShape {
+        uint32_t kind;
+        int piece;
+        float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
+        float x0, z0, x1, z1;
+        float base;
+    };
+    std::vector<LandShape> mLand;
+    float landforms(float x, float z, float edge, float lift, float hill, float* dell) const;
+    float roadLift(const TrackBin& tb, float x, float z, float& edge) const;
+    // Per set piece that brings its own ground (SET_GROUND), how far over the
+    // plain it stands, as it was modelled on it, levelling no clearing: 0, or
+    // for a mound the land's lift at its anchor. -1 for every other piece.
+    std::vector<float> mSetOwnGround;
+    // The lowest the land lies under a clearing's footprint (sampled at most
+    // the grid's step apart), before any clearing: what it is levelled to.
+    float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
 
-    // The corridor the terrain keeps flat around the road, and the ramp back up
-    // to full height past it. Named because the SAMPLE INDEX's search radius is
+    // The corridor the hills keep clear of the road, and the ramp back up to
+    // full height past it. Named because the SAMPLE INDEX's search radius is
     // derived from them: they used to be two literals inside terrainY.
     static constexpr float kFlatR = 4.0f;
     static constexpr float kRampR = 24.0f;
+    // THE RAISED GROUND. Under and beside raised road the land comes up to
+    // kRaiseDrop under the deck's top, so the road stands on short stilts over
+    // land instead of tall ones over the plain at its lowest point. The 1.3 u
+    // of pillar it leaves showing under the slab keeps the elevated toy-track
+    // read. Within kRaiseFlatR of the road the deck that counts is the
+    // NEAREST one (so a crest hump gets its full lift); past that, a blend of
+    // the decks nearby weighted by nearness, relaxing to the plain over
+    // kRaiseRampR. Either way held under every OTHER strand of road nearby
+    // (so no bank rises beside the lower road at a crossing or across a
+    // hairpin): see terrainField.
+    static constexpr float kRaiseDrop = 1.64f;
+    static constexpr float kRaiseFlatR = 6.0f;
+    static constexpr float kRaiseRampR = 30.0f;
+    // How far along the lap a section must be from the nearest one to count
+    // as ANOTHER strand of road: further than any section of the same strand
+    // can be while still within kRaiseFlatR of the point.
+    static constexpr float kOtherStrandS = 24.0f;
+    // How steeply the ground may climb away from another strand of road past
+    // kRaiseFlatR (rise per unit out).
+    static constexpr float kStrandSlope = 0.5f;
+    // THE CAP, per grid vertex (buildTerrainCap): every triangle a deck
+    // crosses stays kDeckClear under that deck's lowest section corner.
+    // terrainCapAt reads it anywhere, as the lowest corner of the triangle
+    // the point lies in.
+    static constexpr float kDeckClear = 0.12f;
+    // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
+    // cap clears and what the supports stop under.
+    static constexpr float kDeckDepth = 0.34f;
+    std::vector<float> mTerrainCap;
+    void buildTerrainCap(const TrackBin& tb);
+    float terrainCapAt(float x, float z) const;
+    // Per sample, for the raised ground: the deck's top at its low edge and
+    // its arclength weight (samples are unevenly spaced, so each speaks for
+    // its own span).
+    std::vector<float> mTsiTopY, mTsiSpan;
+    // terrainField's scratch: the samples in reach of the point it is on, with
+    // their distance past the edge (kept to save an allocation per call).
+    mutable std::vector<std::pair<uint32_t, float>> mTsiNear;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
@@ -944,6 +1046,12 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
+    // Per grid vertex, terrainField's dell term, for the ground's colour.
+    std::vector<float> mGroundDell;
+    // The ground colour at a grid vertex: a low-contrast tint off the shape of
+    // the land (its dells, its steep faces), multiplied over the biome's
+    // texture. Never per-vertex noise: a speckle reads as a texture pattern.
+    filament::math::float3 groundTint(uint32_t groundKind, float dell, float upY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.
@@ -1579,18 +1687,64 @@ private:
     // whole verge — which every later placement pass keeps out of.
     std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
-    struct SetFoot { float x, z, ax, az, hx, hz; };  // centre, +X axis, half extents
+    struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // The chase camera's view up the road, one segment every 2 u of the lap
+    // (buildSightLines), and whether something standing at (x, z), plan
+    // radius r, rising to `top`, would cut one — the scatter's keep-out on
+    // the inside of bends.
+    struct SightLine { filament::math::float3 a, b; };
+    std::vector<SightLine> mSightLines;
+    static constexpr float kSightAhead = 18.0f;
+    void buildSightLines(const TrackBin& tb);
+    bool blocksRoadAhead(float x, float z, float r, float top) const;
+    std::string mSetLayout = kNoSetLayout;
+    std::string mScatterLayout = "[]";
     // The grass BERMS under raised deck reach a few units past the kerb, and
     // the scatters ground a piece on the terrain beneath them, so one standing
     // on a berm's flank is half inside it. inBerm is that keep-out; bermEdge
     // is how far out the berm beside a centreline point reaches (0 = none).
     bool inBerm(const TrackBin& tb, float x, float z, float margin) const;
     float bermEdge(const TrackBin& tb, float x, float z) const;
+    // The berms' own surface height at (x, z), read off the strips
+    // buildStructures stitches between consecutive rings; -1e30 off every berm.
+    float bermY(const TrackBin& tb, float x, float z) const;
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;
+    // THE SET PIECES' MOVING PARTS (TtpRendererMotion.cpp; the `anim_` grammar
+    // is ttp/set_motion.h's). Each part is ONE unlit mesh baked in its node's
+    // own frame, its light frozen at the rest pose, drawn through a
+    // MergedGroup in mMergedDress (so teardown, the feature tags and the GL
+    // priorities are the baked runs'), and posed each frame by one transform:
+    // rest * the verbs' closed form of the scene clock and the cars.
+    struct SetMover {
+        utils::Entity ent;                  // the baked mesh's renderable
+        filament::math::mat4f rest;         // the node's world transform at rest
+        filament::math::mat3f restInv;      // its rotation's inverse, scale removed
+        float scale = 1;                    // its uniform world scale
+        float phase = 0;
+        int path = -1;                      // into mSetPaths
+        ttp::rt::SetMotion motion;
+    };
+    struct SetPath {                        // a closed polyline in world space
+        std::vector<filament::math::float3> pts;
+        std::vector<float> at;              // arclength at each point; at.back() = the loop
+    };
+    std::vector<SetMover> mSetMovers;
+    std::vector<SetPath> mSetPaths;
+    std::vector<ttp::rt::SetMotionCar> mSetMotionCars;   // per-frame scratch
+    // The outermost `anim_` node over `ent` in a set piece, or null.
+    utils::Entity setAnimRoot(const filament::gltfio::FilamentAsset* asset,
+            utils::Entity ent) const;
+    void keepTravellersOutOfBake(const filament::gltfio::FilamentAsset* asset,
+            filament::gltfio::FilamentInstance* inst);
+    void buildSetMovers();
+    void stepSetMovers(const std::vector<filament::math::float3>& carPosW);
+    // The smoke puffs over a chimney at `origin` (a set piece's `anim_smoke`,
+    // or the procedural cabin's).
+    void buildSmokePuffs(const filament::math::float3& origin);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
     Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
@@ -2100,6 +2254,18 @@ private:
     bool bakeMergedRun(MergedGroup& g, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             utils::Entity src0);
+    bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
+    void appendBaked(Mesh& m, const filament::math::mat4f& xf,
+            const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors,
+            const std::vector<filament::math::float3>& factor);
+    // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
+    // comment): `still` is each (entity slot, parsed mesh) that stands still.
+    bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,
+            const std::vector<ttp::rt::GlbMeshNode>& nodes,
+            const ttp::kitcolors::Model& colors,
+            const std::vector<std::pair<size_t, int>>& still);
     void destroyMergedGroups(std::vector<MergedGroup>& groups);
     void mirrorMergedGroup(MergedGroup& g,
             filament::math::float3& mn, filament::math::float3& mx);
@@ -2218,7 +2384,10 @@ public:
     // baked path (an undecodable GLB, ambiguous node names, a colour table
     // that disagrees with the geometry) is silent on the glass and costs
     // vertex shading in every cell, so the scene budget gate reads this.
-    // What moves (a spin subtree, the cone pool) is not counted.
+    // What moves (a spin subtree, the cone pool) is not counted. A set piece's
+    // `anim_` part needs no exemption: its baked mover took it out of the scene
+    // (buildSetMovers), so it is counted only when that bake failed, which is
+    // exactly a part left standing live-lit.
     std::vector<std::pair<std::string, int>> debugLiveDressing() const;
     void debugWipeSkids() { mSkidWipe = true; }
     // FEATURE ABLATION — the per-feature cost map's only instrument.

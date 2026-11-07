@@ -1,7 +1,9 @@
 #include "ttp/showcase.h"
 
 #include <algorithm>
+#include <cmath>
 
+#include "generated/track_defs.h"
 #include "ttp/canonical.h"
 
 namespace ttp {
@@ -94,6 +96,22 @@ constexpr float kMixBush = 0.86f;
 
 }  // namespace
 
+// The set<i>.glb slot of `model`, appending it on first sight (theme.cc's own
+// rule for a track's list).
+uint32_t setSlot(std::vector<std::string>& models, const char* model) {
+  uint32_t slot = 0;
+  while (slot < models.size() && models[slot] != model) slot++;
+  if (slot == models.size()) models.push_back(model);
+  return slot;
+}
+
+const std::vector<std::string>& showcase_set_models() {
+  // The catalogue walk alone decides this, so it is one list whichever biome
+  // the gallery shows — the showcase_models() rule, for the same reason.
+  static const std::vector<std::string> models = showcase_theme(biome_name(0), "").set.models;
+  return models;
+}
+
 const std::vector<std::string>& showcase_models() {
   // Built once: the tables behind it are constant for the life of the process,
   // and the shell asks for this on every scene build.
@@ -108,9 +126,41 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
   // The PALETTE, whole and unmodified — the picked biome's sky, ground, road,
   // hills, light rig, water and ice. Nothing below touches any of it.
   Theme t = resolve_theme(biomeName, trackId);
-  // Set pieces belong to a track, and the showroom stages none (its shell
-  // fetches the showcase lists only).
+  // Set pieces belong to a TRACK, so the showroom's own list is empty; what it
+  // stages instead is the SET ROW: every model the catalogue's set lists use,
+  // once (a track repeats its small pieces round the lap), stood along the
+  // outside of both straights so one lap meets each of them once (the
+  // landmarks' exhibition rule). Each keeps its first authored yaw, lift and scale;
+  // a piece authored on the track's right is turned round, so its front still
+  // faces the road from the row's side.
   t.set = {};
+  {
+    struct Row { float lo, hi; };
+    // The showroom's two straights as lap fractions (devTracks.js): the
+    // exhibition straight runs on from the grid straight before it, and `hi`
+    // past 1 wraps.
+    const Row rows[2] = { { 0.80f, 1.25f }, { 0.43f, 0.75f } };
+    const float kRowLat = -13.0f;
+    std::vector<const SetDef*> pieces;
+    for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+      for (int k = 0; k < TTP_TRACKS[i].nSet; k++) {
+        const SetDef& d = TTP_TRACKS[i].set[k];
+        bool seen = false;
+        for (const SetDef* p : pieces) seen = seen || std::string(p->model) == d.model;
+        if (!seen) pieces.push_back(&d);
+      }
+    }
+    const size_t n = pieces.size();
+    const size_t perRow[2] = { (n + 1) / 2, n / 2 };
+    for (size_t idx = 0; idx < n; idx++) {
+      const SetDef& d = *pieces[idx];
+      const int row = (int) (idx % 2);
+      const float along = ((float) (idx / 2) + 0.5f) / (float) perRow[row];
+      const float u = std::fmod(rows[row].lo + (rows[row].hi - rows[row].lo) * along, 1.0f);
+      const float yaw = (float) (d.yaw * M_PI / 180.0) + (d.lat > 0 ? (float) M_PI : 0.0f);
+      t.set.pieces.push_back({ setSlot(t.set.models, d.model), u, kRowLat, yaw, (float) d.y, (float) d.scale });
+    }
+  }
 
   // Started EMPTY, not from the picked biome's own list, and that matters: the
   // scenery<i>.glb slot order falls out of this walk, and the shell fetches
@@ -190,8 +240,7 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
     t.props.models.push_back(model);
     return (uint32_t) (t.props.models.size() - 1);
   };
-  for (int i = 0; i < biome_count(); i++) {
-    const Theme o = resolve_theme(biome_name(i), trackId);
+  const auto addProps = [&](const Theme& o) {
     for (const PropStamp& p : o.props.scatter) {
       const std::string& model = o.props.models[p.slot];
       const bool seen = std::find(t.props.models.begin(), t.props.models.end(), model)
@@ -200,6 +249,13 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
       if (!seen) t.props.scatter.push_back({ slot, p.w, p.s0, p.s1 });
     }
     t.props.scatterDensity = std::max(t.props.scatterDensity, o.props.scatterDensity);
+  };
+  for (int i = 0; i < biome_count(); i++) addProps(resolve_theme(biome_name(i), trackId));
+  // Then each catalogue track's own: a track may patch its biome's props (the
+  // beach cup keeps its pirate leavings for Cove), and those ship too.
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    const char* id = TTP_TRACKS[i].id;
+    addProps(resolve_theme(biome_for_track(id), id));
   }
   const float pw = t.props.scatter.empty() ? 0.0f : 1.0f / (float) t.props.scatter.size();
   for (PropStamp& p : t.props.scatter) p.w = pw;
@@ -224,6 +280,10 @@ std::string showcase_inventory_json() {
   Value props = Value::Arr();
   for (const std::string& m : showcase_prop_models()) props.push(Value::Str(m));
   o.set("props", props);
+
+  Value set = Value::Arr();
+  for (const std::string& m : showcase_set_models()) set.push(Value::Str(m));
+  o.set("set", set);
 
   Value landmarks = Value::Arr();
   for (uint32_t k : t.landmarks) landmarks.push(Value::Str(landmarkName(k)));

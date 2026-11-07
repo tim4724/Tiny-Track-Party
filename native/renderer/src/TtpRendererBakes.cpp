@@ -78,6 +78,16 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     }
     lo -= float3{ 4.0f, 8.0f, 4.0f };
     hi += float3{ 4.0f, 8.0f, 4.0f };
+    // The set pieces cast too, and they stand off the road. One poking past
+    // the box writes its depth into the map's border texels, and CLAMP_TO_EDGE
+    // then hands that border to every receiver beyond it: a shadow streaking
+    // from the piece to the edge of the ground. So the box takes them in.
+    for (const SetFoot& f : mSetFeet) {
+        const float ex = std::fabs(f.ax) * f.hx + std::fabs(f.az) * f.hz;
+        const float ez = std::fabs(f.az) * f.hx + std::fabs(f.ax) * f.hz;
+        lo = min(lo, float3{ f.x - ex - 1.0f, lo.y, f.z - ez - 1.0f });
+        hi = max(hi, float3{ f.x + ex + 1.0f, f.top + 1.0f, f.z + ez + 1.0f });
+    }
     const float3 centre = (lo + hi) * 0.5f;
     // Distance to stand the light off at: the bounding-sphere radius still
     // decides that (it has to clear the geometry from any angle), but it no
@@ -630,7 +640,10 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v3: the road's baked vertex light left the tail.
 // v4: the ESM left the blob; it carries the three visibility maps instead
 // (ground, structures, deck), each as width, height and R8 rows.
-constexpr uint32_t kBakeVersion = 4u;
+// v5: the ground rose to meet the road, so every ground map a v4 build
+// baked describes a surface that no longer exists. The generation retires
+// them too; the bump says so where the format is read.
+constexpr uint32_t kBakeVersion = 5u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);

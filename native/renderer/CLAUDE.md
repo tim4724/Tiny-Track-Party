@@ -503,6 +503,56 @@ memory until another track builds or the renderer goes.
   its snapshotted parse pose (`mBodyRest`). Anything added to a reuse path asks
   the same question: what would a fresh `createAsset` have guaranteed?
 
+## The ground meets the road
+
+`groundY` (the track's) is the plain under the deck's LOWEST point, so on the
+open-country biomes most of a lap rides high over it. The renderer's ground
+(`terrainY`, `TtpRendererTrack.cpp`) rises toward the deck instead, leaving a
+short stilt showing (`kRaiseDrop`), and rolls into hills away from it. It is
+renderer-only: the sim never reads it, and pillars, berms and the gantry still
+stand on `groundY` with their feet buried.
+
+- **NO GROUND THROUGH A DECK, PROVABLY.** The cap is per grid vertex
+  (`buildTerrainCap`): every triangle a deck section touches keeps its corners
+  under that section's lowest corner. A linear triangle never rises above its
+  corners, so no tuning of the lift can push the surface through a road, and a
+  road under a bridge keeps its own clearance. Change the lift freely; never
+  bypass the cap. Beside the road the lift is held under every OTHER strand
+  nearby (a crossing's lower road, a hairpin's far leg), so no bank walls the
+  road under a bridge. `tests/e2e/terrain-ground.spec.js` reads both off the
+  drawn ground.
+- **The cap, not the lift, sets the stilt on a short crest.** A grid vertex
+  sits under the LOWEST deck section crossing any triangle around it, two
+  cells (up to 18 u) of road, so under a hump shorter than that the ground
+  stays at the hump's foot and the pillars keep their height. Only a finer
+  grid near the road would change that, and the grid's step is a cost.
+- **NEVER BELOW `groundY`.** The sun bake's flat caster proxy sits at
+  `groundY`: ground under it bakes fully shadowed, and the posts standing on it
+  would hang. A valley is land left UNRAISED, not dug.
+- **A PIECE STANDS WHERE THE LAND LIES.** A set piece's or landmark's
+  clearing is levelled to the lowest natural ground under its footprint
+  (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
+  fills nothing, since a piece on its own knoll reads as a plinth, which the
+  art direction rejects.
+- **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
+  grid as the mesh draws it — never `tb.groundY`.
+- **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
+  `landforms`), never more noise: short wavelengths read as lumps tracing the
+  road. A set piece modelled standing on terrain carries it as `SET_GROUND`;
+  the Blender builder reads the same numbers, so its parts stand on what the
+  renderer lays, and the piece levels no clearing. Its mounds take the land
+  under them as the HIGHEST of them or of the raised ground, so two pieces'
+  slopes join without a trough and the road along a mountain's foot keeps its
+  short stilts (a part at the foot may be buried a little there). The formula
+  lives three times — `landforms`, `set_prototypes.py set_ground()` and
+  `tracks.js setGroundY` — and the e2e spec catches the C++ and the GLB
+  disagreeing. On a convex slope the grid's chords run under the curve the
+  parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
+  chord misses; a part floats only if that is bypassed.
+- **The road ahead stays visible**: a tree or prop that would cut the chase
+  camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
+  raised verge would otherwise stand it over the camera.
+
 ## The sun: one static light rule, three receivers, three maps
 
 **A static surface's light is vertex data, and its sun shadow is one tap into a
@@ -700,7 +750,18 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
 
 **A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
 `set` list in `public/shared/tracks.js`): composed GLBs instanced like props,
-so they merge, bake and get a far form with no renderer path of their own. Two
+so they bake with the same colour and light and get a far form. One
+difference is in the grouping: a set piece bakes **per PLACEMENT, not per mesh**
+(`bakePlacements`). A Blender piece exports a mesh per part and its placements
+stand too far apart for a per-mesh run to join two, so the per-mesh merge drew
+every part of every placement as its own renderable (a hundred-odd draws a
+piece). Each placement's still parts become one mesh per `mPieceTile` tile,
+split by whole part, so a big piece still culls and takes its far form a
+corner at a time (never through a part, so a tile's far form needs no locked
+border). **What hangs under an `anim_*` node is no static merge's**: the
+motion pass bakes it in the node's own frame (one unlit draw per moving part),
+and until it does the part draws live-lit and the live-dressing gate names it.
+A `spin` subtree is mirrored per frame like the toy train's. Two more
 things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of
@@ -708,13 +769,28 @@ their oriented footprints (`mSetFeet`): they are authored, so they win their
 ground. The scatters keep out of the grass berms the same way (`inBerm`), since
 they ground a piece on the terrain beneath one; the verge band starts at the
 berm's foot, and a prop is grounded under its model's own footprint and
-dropped, never sunk, where its uphill edge would bury a quarter of its height. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
+dropped, never sunk, where its uphill edge would bury a quarter of its height.
+**Each scatter SPOT draws from its own seeded stream** (`spotSeed`): with one
+stream for the pass, a spot a piece's foot skipped shifted the draws of every
+spot after it, so moving one set piece re-rolled every tree further round the
+lap and no placement could be judged before it was built
+(`npm run place:landmarks`). A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
 that see it, so a heavy one belongs where few cells look at once, and is
 priced on the box's 4P heavy seconds like any other geometry. A composed
 model whose node names point at two meshes is REFUSED by the merge and draws
 live-lit with nothing to say so, which is why `scripts/lib/glb-compose.mjs`
 renames them; a kit model shipped whole can carry the same flaw (the budget
 names it).
+
+**A set piece's MOVING PART is a node named `anim_...`** (the grammar is
+`ttp/set_motion.h`, the drawing `TtpRendererMotion.cpp`): baked unlit like
+the static runs but in its node's frame, light frozen at rest, and moved by one
+transform a frame that is a closed form of the scene clock and the cars, so it
+has no state to reset. Hence the verbs: spins about the part's own axis,
+sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
+runs inside something opaque. A part that travels leaves the sun bake; one that
+moves in place keeps its rest shadow. The static merge leaves every `anim_`
+slot alone, so a merge change (per-placement bakes) must too.
 
 **New world content is priced on the host first, the box once per batch.**
 `npm run budget:scene` counts what each cell submits over a whole lap (the

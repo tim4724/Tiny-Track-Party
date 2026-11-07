@@ -1,5 +1,6 @@
 #include "ttp/theme.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -60,8 +61,8 @@ void deriveModels(ScenerySpec& s) {
 ScenerySpec grassScenery() {
   ScenerySpec s;
   s.trees = {
-    { "tree", 0.65f, 2.3f, 1.1f },       // round oak — the staple
-    { "tree-pine", 0.35f, 2.3f, 1.1f },  // pine as the accent
+    { "tree", 0.65f, 4.1f, 2.0f },       // round oak — the staple
+    { "tree-pine", 0.35f, 4.1f, 2.0f },  // pine as the accent
   };
   s.hasBush = true;
   s.bush = { "tree", 1.1f, 0.7f, 0.3f };
@@ -192,10 +193,30 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
-  // Washed-up freight and a pirate cove's leavings above the tide line. No
-  // fence — the coast stays open to the water. The Pirate Kit is authored large
-  // against a toy car (its barrel is taller than one), so its pieces stand at
-  // about half size, and the small ones stand on the verge.
+  // Washed-up freight above the tide line: crates and pulled-up rowing boats.
+  // No fence — the coast stays open to the water. The pirate leavings are
+  // Cove's alone (pirateCove, applied in resolve_theme): a chest or a
+  // cannon on every beach told the cup one story four times.
+  t.props.models = { "prop-crate", "pirate-rowboat" };
+  t.props.scatterDensity = 0.2f;
+  t.props.scatter = { { 0, 0.55f, 0.9f, 0.3f }, { 1, 0.45f, 0.6f, 0.15f } };
+  return t;
+}
+
+// Cove is a pirate island and nothing else. The holiday beach goes: its
+// lighthouse, sailboat, parasol and sandcastle landmarks, the kites, and the
+// lighthouse bands on the gantry, whose posts stand as timber instead. The
+// pirate leavings come in as its props. Sand, sea, palms, rocks, shells and
+// gulls are the island's own and stay. The Pirate Kit is authored large
+// against a toy car (its barrel is taller than one), so its pieces stand at
+// about half size, and the small ones stand on the verge.
+void pirateCove(Theme& t) {
+  t.landmarks.clear();
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.gantry.pylon = t.structure;
+  t.gantry.hasRings = false;
+  t.gantry.finial = 0x38383d;
   t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
                      "pirate-cannon", "pirate-rowboat", "pirate-flag" };
   t.props.scatterDensity = 0.28f;
@@ -203,7 +224,6 @@ Theme beachTheme() {
                       { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
                       { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
                       { 6, 0.12f, 0.5f, 0.15f } };
-  return t;
 }
 
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
@@ -537,6 +557,23 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     else if (track == "avalanche") { t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
   }
 
+  // The beach cup's one pirate track is pirate through and through.
+  if (b && std::strcmp(b->name, "beach") == 0 && track == "cove") pirateCove(t);
+
+  // No procedural landmark beside a set piece that contradicts it. Crag's own
+  // windpump turns now, so the spinning windmill leaves Crag (only there: on
+  // the other canyon tracks it is the one thing that moves). Where
+  // the track's set has log cabins (Powder, Flurry), one of THEM smokes
+  // (`anim_smoke`), so the smoking procedural cabin goes: one smoking chimney a
+  // track, and never a cold cabin beside a warm one.
+  const auto drop = [&](uint32_t k) {
+    t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
+  };
+  if (b && std::strcmp(b->name, "canyon") == 0 && track == "crag") drop(LM_WINDMILL);
+  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
+    drop(LM_CABIN);
+  }
+
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out
   // identical wherever this runs. Track ids are ASCII, so hashing the UTF-8
   // bytes is what the JS charCodeAt loop did.
@@ -552,6 +589,16 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
       if (slot == t.set.models.size()) t.set.models.push_back(d.model);
       t.set.pieces.push_back({ slot, (float) d.u, (float) d.lat,
                                (float) (d.yaw * M_PI / 180.0), (float) d.y, (float) d.scale });
+    }
+    for (int i = 0; i < def->nLand; i++) {
+      const LandDef& d = def->land[i];
+      Landform l;
+      l.kind = (uint32_t) d.kind; l.piece = d.piece;
+      l.u = (float) d.u; l.lat = (float) d.lat; l.yaw = (float) (d.yaw * M_PI / 180.0);
+      l.x = (float) d.x; l.z = (float) d.z; l.len = (float) d.len;
+      l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
+      l.h = (float) d.h; l.h1 = (float) d.h1; l.top = (float) d.top; l.shape = (float) d.shape;
+      t.land.push_back(l);
     }
   }
   return t;

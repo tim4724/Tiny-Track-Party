@@ -5,16 +5,31 @@
 #include "TtpRendererKit.h"
 
 #include <cstdio>
+#include <map>
 
+#include "ttp/canonical.h"
 #include "ttp/kitfield.h"   // header-only; the renderer may not link libttp-runtime
 
 
-// Trackside scenery — an EXACT replay of buildScenery's seeded streams (the
-// same LCG, the same rand() consumption order, the same corridor clearance),
-// so every tree/bush/boulder lands where the Three.js scatter puts it. Trees
-// and bushes become gltfio instances (per-tree shade jitter is consumed from
-// the stream but not applied — instances share materials); boulders are a
-// merged vertex-tinted icosahedron mesh.
+// The seed of one candidate spot of a seeded scatter: the pass's seed mixed
+// with the spot's step along the lap and its side. Each spot draws from its
+// own stream, so a spot that is skipped (a set piece's foot, the road) takes
+// nothing from its neighbours: moving one set piece re-rolls only the spots it
+// covers, never every tree further round the lap. Integer mixing (murmur3's
+// finaliser), the same on every platform.
+static uint32_t spotSeed(uint32_t seed, uint32_t step, int side) {
+    uint32_t h = seed ^ (step * 0x9E3779B1u) ^ (side > 0 ? 0x85EBCA6Bu : 0u);
+    h ^= h >> 16; h *= 0x85EBCA6Bu;
+    h ^= h >> 13; h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+    return h;
+}
+
+// Trackside scenery: trees, bushes and boulders down both verges, a candidate
+// every 7 units a side, each from its own seeded stream (spotSeed). Trees and
+// bushes become gltfio instances (per-tree shade jitter is drawn but not
+// applied — instances share materials); boulders are a merged vertex-tinted
+// icosahedron mesh.
 void TtpRenderer::buildScenery(const TrackBin& tb) {
     // NOT gated on having trees. The playroom is an indoor floor with none at
     // all (mix.tree = 0, so every roll lands on the "boulder" channel, which is
@@ -70,10 +85,12 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
 
     struct Boulder { float x, z, rr, sy, yaw; uint32_t grey; float shade; };
     std::vector<Boulder> boulders;
-    for (float d = 0; d < tb.length; d += 7) {
+    uint32_t step = 0;
+    for (float d = 0; d < tb.length; d += 7, step++) {
         const TrackBin::Sample f = tb.frameAt(d);
         const float half = f.width / 2;
         for (const int side : { -1, 1 }) {
+            seed = spotSeed(tb.scSeed1, step, side);
             if (rnd() > tb.scDensity) continue;
             const float lat = side * (half + 2.5f + (float) rnd() * 9.0f);
             const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 3.0f;
@@ -115,6 +132,19 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
     std::erase_if(placements, [&](const Placement& p) { return inBerm(tb, p.x, p.z, 0); });
     std::erase_if(boulders, [&](const Boulder& b) { return inBerm(tb, b.x, b.z, b.rr); });
 
+    // Where each tree and boulder stands, for the landmark gallery's sight
+    // lines (scatterLayout): [x, z, plan radius, world top].
+    const auto num = [](double v) { return ttp::Value::Num(std::round(v * 1000.0) / 1000.0); };
+    ttp::Value scatter = ttp::Value::Arr();
+    const auto record = [&](float x, float z, float r, float top) {
+        ttp::Value row = ttp::Value::Arr();
+        row.push(num(x));
+        row.push(num(z));
+        row.push(num(r));
+        row.push(num(top));
+        scatter.push(std::move(row));
+    };
+
     // Trees/bushes: one instanced asset per scenery model.
     mSceneryAssets.resize(tb.scModelCount, nullptr);
     mSceneryInstances.resize(tb.scModelCount);
@@ -151,17 +181,29 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             }
         }
         auto& tcm = mEngine->getTransformManager();
+        const filament::Aabb bb = mSceneryAssets[m]->getBoundingBox();
+        const float reach = 0.5f * std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
         size_t k = 0;
         for (const auto& p : placements) {
             if (p.model != m) continue;
+            const float gy = groundSurfaceY(tb, p.x, p.z) - p.sink * p.s;
+            const float top = gy + bb.max.y * p.s * p.syJit;
+            if (blocksRoadAhead(p.x, p.z, reach * p.s, top)) continue;
+            record(p.x, p.z, reach * p.s, top);
             const mat4f xf = mat4f::translation(
-                    float3{ p.x, groundSurfaceY(tb, p.x, p.z) - p.sink * p.s, p.z })
+                    float3{ p.x, gy, p.z })
                     * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
                     * mat4f::scaling(float3{ p.s, p.s * p.syJit, p.s });
             tcm.setTransform(tcm.getInstance(mSceneryInstances[m][k]->getRoot()), xf);
             mShadowSpots.push_back({ p.x, p.z, 0.62f * p.s, 0.8f * p.s });
             k++;
         }
+        // What the sight lines turned away leaves the scene (buildProps' rule).
+        for (size_t j = k; j < mSceneryInstances[m].size(); j++) {
+            gltfio::FilamentInstance* inst = mSceneryInstances[m][j];
+            mScene->removeEntities(inst->getEntities(), inst->getEntityCount());
+        }
+        mSceneryInstances[m].resize(k);
     }
 
     // Boulders: flat-shaded icosahedra, vertex-tinted greys.
@@ -183,6 +225,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             const uint32_t col = packAlbedo(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
             const float by = footprintY(tb, b.x, b.z, b.rr);
+            record(b.x, b.z, b.rr, by + b.rr * (0.25f + b.sy));
             for (const auto& face : F) {
                 for (int vi = 0; vi < 3; vi++) {
                     float3 p = V[face[vi]] * INV;
@@ -200,6 +243,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         tileMajor(mBoulders, mSheetTile, mSheetMinTris);
         buildMesh(mBoulders);
     }
+    mScatterLayout = ttp::canonical_stringify(scatter);
 }
 
 // The node a prop model may name "spin" (the toy train's pivot), in one
@@ -213,6 +257,18 @@ static utils::Entity spinNode(const gltfio::FilamentAsset* asset,
     }
     return {};
 }
+
+// Whether `ent` is, or hangs under, a node whose name `named` accepts.
+static bool hangsUnder(const gltfio::FilamentAsset* asset, filament::TransformManager& tcm,
+        utils::Entity ent, bool (*named)(const char*)) {
+    for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
+        const char* nm = asset->getName(tcm.getEntity(ti));
+        if (nm && named(nm)) return true;
+    }
+    return false;
+}
+// The toy train's pivot: what hangs under it is mirrored per frame.
+static bool isSpin(const char* nm) { return std::strcmp(nm, "spin") == 0; }
 
 // Trackside props (theme.props): a scattered set-dressing pass, instanced from
 // the generated prop-*.glb kit pieces (scripts/gen-props.mjs). Own seeded
@@ -338,7 +394,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     for (size_t i = 0; i < placements.size(); i++) {
         Placement& p = placements[i];
         const float pr = reach[p.slot] * p.s;   // what this prop covers
-        if (!isClearP(p.x, p.z, std::max(ROAD_CLEAR, pr))) continue;
+        if (!isClearP(p.x, p.z, pr + ROAD_CLEAR * 0.5f)) continue;
         // Grounded at the LOWEST point under its own footprint (footprintSpan),
         // so the downhill edge never hangs; the uphill edge is then that much
         // inside the hill. Past a quarter of the prop's height it reads as
@@ -346,6 +402,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         const float2 ground = footprintSpan(tb, p.x, p.z, pr);
         if (ground.y - ground.x > 0.25f * tall[p.slot] * p.s) continue;
         p.y = ground.x;
+        if (blocksRoadAhead(p.x, p.z, pr, p.y + tall[p.slot] * p.s)) continue;
         bool clash = false;
         for (const float4& spot : mShadowSpots) {
             const float dx = p.x - spot.x, dz = p.z - spot.y;
@@ -389,9 +446,10 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
 }
 
 
-// Near-field ground clutter — the flower patches, on their own rand2 stream
-// (seed 5381-FNV) exactly like buildScenery's clutter pass. Only the 'flower'
-// kind is ported; palettes with other kinds send no clutter config at all.
+// Near-field ground clutter — the flower patches, seeded off the second
+// scatter seed, one stream a spot (spotSeed) like the scenery. Only the
+// 'flower' kind is ported; palettes with other kinds send no clutter config
+// at all.
 void TtpRenderer::buildClutter(const TrackBin& tb) {
     if (tb.clKinds.empty() || tb.clDensity <= 0) return;
     uint32_t seed = tb.scSeed2;
@@ -426,10 +484,12 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     const auto RY = [](float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); };
     const auto RZ = [](float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); };
 
-    for (float d = 0; d < tb.length && geoms < 700; d += 5) {
+    uint32_t step = 0;
+    for (float d = 0; d < tb.length && geoms < 700; d += 5, step++) {
         const TrackBin::Sample f = tb.frameAt(d);
         const float half = f.width / 2;
         for (const int side : { -1, 1 }) {
+            seed = spotSeed(tb.scSeed2, step, side);  // spotSeed: one stream a spot
             if (rnd() > tb.clDensity) continue;
             const float lat = side * (half + 1.3f + (float) rnd() * 3.4f);
             const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 1.6f;
@@ -791,7 +851,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         return true;
     };
-    struct Spot { float x, z, yaw; bool ok; };
+    // y: how far above the plain the spot's clearing is levelled (findSpot).
+    struct Spot { float x, z, yaw; bool ok; float y = 0; };
+    // A spot's clearing in the relief, levelled to the land already there
+    // (the set pieces' rule); answers its height above the plain.
+    const auto clearing = [&](float x, float z, float m) {
+        TerrainFlat f{ x, z, 1, 0, 0, 0, m + 1.0f, gy };
+        f.y = naturalFootY(tb, f);
+        mTerrainFlats.push_back(f);
+        return f.y - gy;
+    };
     const auto findSpot = [&](float s0, float off, float m) -> Spot {
         for (float s = s0; s < tb.length - 10; s += 3) {
             const TrackBin::Sample f = tb.frameAt(s);
@@ -801,9 +870,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
             if (!clearSpot(x, z, m)) continue;
             placed.push_back({ x, z, m });
-            mTerrainFlats.push_back({ x, z, m + 1.0f }); // clearing in the relief
+            const float y = clearing(x, z, m);
             const float fx = -f.lat.x * side, fz = -f.lat.z * side;
-            return { x, z, std::atan2(fx, fz), true };
+            return { x, z, std::atan2(fx, fz), true, y };
         }
         return { 0, 0, 0, false };
     };
@@ -820,8 +889,8 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float px = mx + std::cos(a) * rr, pz = mz + std::sin(a) * rr;
                 if (!clearSpot(px, pz, m)) continue;
                 placed.push_back({ px, pz, m });
-                mTerrainFlats.push_back({ px, pz, m + 1.0f }); // clearing in the relief
-                return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true };
+                const float y = clearing(px, pz, m);
+                return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true, y };
             }
         }
         return { 0, 0, 0, false };
@@ -832,7 +901,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     // part(): pre-transformed prim → local offset → yaw → world, flat colour.
     const auto part = [&](const Prim& prim, float lx, float ly, float lz,
             const Spot& sp, uint32_t hex, float shade = 1.0f) {
-        const mat4f m = mat4f::translation(float3{ sp.x, gy, sp.z })
+        const mat4f m = mat4f::translation(float3{ sp.x, gy + sp.y, sp.z })
                 * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 })
                 * mat4f::translation(float3{ lx, ly, lz });
         const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
@@ -1205,7 +1274,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             for (const bool inner : { false, true }) {
                 const Prim dome = primSphereBand(inner ? 1.97f : 2.0f, 20, 5,
                         0, (float) M_PI / 2.15f);
-                const mat4f m = mat4f::translation(float3{ sp.x, gy, sp.z })
+                const mat4f m = mat4f::translation(float3{ sp.x, gy + sp.y, sp.z })
                         * rotY(sp.yaw) * rotX(TILT)
                         * mat4f::translation(float3{ 0, 3.06f, 0 })
                         * mat4f::scaling(float3{ 1, 0.62f, 1 });
@@ -1352,7 +1421,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 buildMesh(mWindmill);
                 const float fx = std::sin(sp.yaw), fz = std::cos(sp.yaw);
                 mWindmillBase = mat4f::translation(
-                        float3{ sp.x + fx * 0.75f, gy + H + 0.35f, sp.z + fz * 0.75f })
+                        float3{ sp.x + fx * 0.75f, gy + sp.y + H + 0.35f, sp.z + fz * 0.75f })
                         * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 });
             }
             mShadowSpots.push_back({ sp.x, sp.z, 2.0f, 10.5f });
@@ -1397,45 +1466,12 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, sp, 0x4a3a2e);  // lintel
             part(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, sp, 0x9fa8ba); // chimney
             part(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, sp, 0xb9c1d0);
-            // Chimney smoke: three soft puffs rising, growing and fading on a
-            // staggered loop (the JS sprites, as blend quads billboarded per cell).
-            {
+            // Chimney smoke, unless a set piece's chimney already has it: one
+            // smoking chimney a track.
+            if (mSmoke.empty()) {
                 const float cy2 = std::cos(sp.yaw), sy2 = std::sin(sp.yaw);
-                mSmokeOrigin = { sp.x + (-0.95f) * cy2 + (-0.95f) * sy2,
-                                 gy + 4.75f,
-                                 sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 };
-                if (mBlendMaterial) {
-                    mSmoke.resize(3);
-                    const BlurKernel blur(6.0f);
-                    // 8px cells: the 6px blur spreads the disc edge over ~12px
-                    // of the 64×64 field, so every gradient still gets a sample.
-                    constexpr int NX = 8, NY = 8;
-                    for (Mesh& m : mSmoke) {
-                        for (int j = 0; j <= NY; j++) {
-                            for (int k = 0; k <= NX; k++) {
-                                const float px = (float) k / NX * 64.0f;
-                                const float py = (float) j / NY * 64.0f;
-                                const float cov = blur.coverage(px, py,
-                                        [](float bx, float by) {
-                                            const float dx = bx - 32, dy = by - 32;
-                                            return dx * dx + dy * dy <= 18 * 18;
-                                        });
-                                m.verts.push_back({ (float) k / NX - 0.5f,
-                                                    0.5f - (float) j / NY, 0,
-                                                    packShown(srgbToLinear(0xeef2f6),
-                                                            1.0f, cov) });
-                            }
-                        }
-                        for (int j = 0; j < NY; j++) {
-                            for (int k = 0; k < NX; k++) {
-                                const uint32_t b = (uint32_t) (j * (NX + 1) + k);
-                                const uint32_t n = b + (uint32_t) (NX + 1);
-                                m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                            }
-                        }
-                        buildMesh(m, true, mBlendMaterial->getDefaultInstance(), 5);
-                    }
-                }
+                buildSmokePuffs({ sp.x + (-0.95f) * cy2 + (-0.95f) * sy2, gy + sp.y + 4.75f,
+                                  sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 });
             }
             mShadowSpots.push_back({ sp.x, sp.z, 3.0f, 4.3f });
         }
@@ -1515,7 +1551,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float ox = px2 * off + std::cos(ai) * slide;
                 const float oz = pz2 * off - std::sin(ai) * slide;
                 const float lift = onTop ? 0.33f : 0.0f;
-                const Spot at{ sp.x, sp.z, 0, true };
+                const Spot at{ sp.x, sp.z, 0, true, sp.y };
                 const auto make = [&](Prim g, uint32_t hex, float shade) {
                     part(applyPre(g, rotY(ai) * rotZ((float) M_PI / 2)),
                             ox, 0.17f + lift, oz, at, hex, shade);
@@ -1537,7 +1573,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             for (int i = 0; i < 3; i++) {
                 const float w = 2.6f - i * 0.35f, d = 1.9f - i * 0.22f, h = 0.42f;
                 const float a = ((float) rnd() - 0.5f) * 0.7f;
-                const Spot at{ sp.x, sp.z, a, true };
+                const Spot at{ sp.x, sp.z, a, true, sp.y };
                 part(primBox(w - 0.18f, h - 0.13f, d - 0.12f), 0.06f, ty + h / 2, 0,
                         at, 0xf7f5ee);
                 part(primBox(w, 0.07f, d), 0, ty + h - 0.035f, 0, at, COVERS[i]);
@@ -1576,10 +1612,23 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // TrackBin::Sample::basis), on the ground. Instanced like the props, so the
 // dressing merge bakes them the same way.
 void TtpRenderer::buildSetPieces(const TrackBin& tb) {
-    if (tb.setPieces.empty()) return;
-    mSetAssets.assign(tb.setModelCount, nullptr);
-    mSetInstances.assign(tb.setModelCount, {});
-    for (uint32_t m = 0; m < tb.setModelCount; m++) {
+    // The layout read-back (setLayout), rounded to the millimetre like the kit
+    // field's: a camera needs nothing finer, and a float widened to double
+    // spells every value with nine digits of noise.
+    const auto num = [](double v) { return ttp::Value::Num(std::round(v * 1000.0) / 1000.0); };
+    ttp::Value layout = ttp::Value::Obj();
+    ttp::Value rows = ttp::Value::Arr();
+    layout.set("length", num(tb.length));
+    layout.set("groundY", num(tb.groundY));
+    if (tb.setPieces.empty()) {
+        layout.set("pieces", std::move(rows));
+        mSetLayout = ttp::canonical_stringify(layout);
+        return;
+    }
+    const uint32_t nModels = (uint32_t) tb.setModels.size();
+    mSetAssets.assign(nModels, nullptr);
+    mSetInstances.assign(nModels, {});
+    for (uint32_t m = 0; m < nModels; m++) {
         size_t count = 0;
         for (const auto& p : tb.setPieces) if (p.slot == m) count++;
         if (!count) continue;
@@ -1601,18 +1650,16 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         }
     }
     auto& tcm = mEngine->getTransformManager();
-    std::vector<size_t> next(tb.setModelCount, 0);
-    for (const auto& p : tb.setPieces) {
+    std::vector<size_t> next(nModels, 0);
+    std::vector<std::vector<float>> offRoad(nModels);   // each instance's |lat|
+    for (size_t i = 0; i < tb.setPieces.size(); i++) {
+        const auto& p = tb.setPieces[i];
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
+        offRoad[p.slot].push_back(std::fabs(p.lat));
         const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
         const float3 t = f.tangent();
         const float yaw = std::atan2(t.x, t.z) + p.yaw;
         const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
-        const mat4f xf = mat4f::translation(float3{ x, tb.groundY + p.y, z })
-                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                * mat4f::scaling(float3{ p.scale });
-        tcm.setTransform(tcm.getInstance(
-                mSetInstances[p.slot][next[p.slot]++]->getRoot()), xf);
         // What it covers, from the composition's own bounds.
         const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
         const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
@@ -1621,11 +1668,135 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const float wx = x + ax * cx - az * cz, wz = z + az * cx + ax * cz;
         const float hx = 0.5f * (bb.max.x - bb.min.x) * p.scale;
         const float hz = 0.5f * (bb.max.z - bb.min.z) * p.scale;
-        mSetFeet.push_back({ wx, wz, ax, az, hx, hz });
-        // One clearing round the whole piece: the relief is flattened under
-        // it, so a ship never stands on a slope with a corner in the air.
-        mTerrainFlats.push_back({ wx, wz, std::sqrt(hx * hx + hz * hz) + 1.0f });
+        // It stands where the land already lies — the lowest of it under the
+        // footprint, so no corner hangs — and one clearing the shape of the
+        // footprint levels the relief to that, so a ship never stands on a
+        // slope with a corner in the air. The ground is never raised FOR a
+        // piece: a piece on its own knoll reads as a plinth. A piece that
+        // brings its own ground (SET_GROUND) stands where that ground rises
+        // from (the plain, or for a mound the land raised at its anchor), as it
+        // was modelled, and levels nothing.
+        TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, tb.groundY };
+        if (i < mSetOwnGround.size() && mSetOwnGround[i] >= 0) {
+            clearing.y += mSetOwnGround[i];
+        } else {
+            clearing.y = naturalFootY(tb, clearing);
+            mTerrainFlats.push_back(clearing);
+        }
+        const float base = clearing.y + p.y;
+        const mat4f xf = mat4f::translation(float3{ x, base, z })
+                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ p.scale });
+        gltfio::FilamentInstance* const inst = mSetInstances[p.slot][next[p.slot]++];
+        tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
+        const float top = base + bb.max.y * p.scale;
+        mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
+        ttp::Value row = ttp::Value::Obj();
+        row.set("model", ttp::Value::Str(tb.setModels[p.slot]));
+        row.set("u", num(p.u));
+        row.set("s", num(p.u * tb.length));
+        row.set("lat", num(p.lat));
+        row.set("yaw", num(p.yaw * 180.0 / M_PI));
+        row.set("heading", num(yaw));
+        row.set("x", num(x));
+        row.set("y", num(base));
+        row.set("z", num(z));
+        row.set("cx", num(wx));
+        row.set("cz", num(wz));
+        row.set("ax", num(ax));
+        row.set("az", num(az));
+        row.set("hx", num(hx));
+        row.set("hz", num(hz));
+        row.set("top", num(top));
+        // Each mesh of the composition as its own box on the piece's axes:
+        // a piece's footprint takes in all of it (an igloo, the snowman and
+        // lamp beside it), and a camera judges how big the piece reads by
+        // its largest mesh.
+        auto& rcm = mEngine->getRenderableManager();
+        ttp::Value parts = ttp::Value::Arr();
+        for (size_t k = 0; k < inst->getEntityCount(); k++) {
+            const utils::Entity e = inst->getEntities()[k];
+            const auto ri = rcm.getInstance(e);
+            if (!ri) continue;
+            const filament::Box bx = rcm.getAxisAlignedBoundingBox(ri);
+            const mat4f wm = tcm.getWorldTransform(tcm.getInstance(e));
+            float u0 = 1e9f, u1 = -1e9f, v0 = 1e9f, v1 = -1e9f, y1 = -1e9f;
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                    for (int sz = -1; sz <= 1; sz += 2) {
+                        const float3 corner = bx.center
+                                + bx.halfExtent * float3{ (float) sx, (float) sy, (float) sz };
+                        const float3 wp = (wm * float4{ corner, 1 }).xyz;
+                        const float u = wp.x * ax + wp.z * az, v = -wp.x * az + wp.z * ax;
+                        u0 = std::min(u0, u); u1 = std::max(u1, u);
+                        v0 = std::min(v0, v); v1 = std::max(v1, v);
+                        y1 = std::max(y1, wp.y);
+                    }
+            const float u = 0.5f * (u0 + u1), v = 0.5f * (v0 + v1);
+            ttp::Value part = ttp::Value::Arr();
+            part.push(num(u * ax - v * az));
+            part.push(num(u * az + v * ax));
+            part.push(num(0.5f * (u1 - u0)));
+            part.push(num(0.5f * (v1 - v0)));
+            part.push(num(y1));
+            parts.push(std::move(part));
+        }
+        row.set("parts", std::move(parts));
+        rows.push(std::move(row));
     }
+    layout.set("pieces", std::move(rows));
+    mSetLayout = ttp::canonical_stringify(layout);
+    // Placed: what travels leaves the sun bake, and ONE chimney smokes: the
+    // one nearest the road, which the racers pass closest.
+    float smokeOff = 1e30f;
+    float3 smokeAt{};
+    for (size_t m = 0; m < mSetAssets.size(); m++) {
+        if (!mSetAssets[m]) continue;
+        for (size_t i = 0; i < mSetInstances[m].size(); i++) {
+            gltfio::FilamentInstance* const inst = mSetInstances[m][i];
+            keepTravellersOutOfBake(mSetAssets[m], inst);
+            const float off = i < offRoad[m].size() ? offRoad[m][i] : 1e30f;
+            for (size_t k = 0; k < inst->getEntityCount() && off < smokeOff; k++) {
+                ttp::rt::SetMotion mo;
+                const utils::Entity e = inst->getEntities()[k];
+                if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
+                    smokeOff = off;
+                    smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
+                }
+            }
+        }
+    }
+    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt);
+}
+
+// THE ROAD AHEAD STAYS IN VIEW. The chase camera rides under a unit over the
+// deck and looks kSightAhead up the road; on a bend that sight line cuts
+// across the inside, and a tree standing there hides the corner. It always
+// could, but the raised ground lifts the verge to just under the deck, so a
+// tree beside a bend now stands its full height over the camera.
+void TtpRenderer::buildSightLines(const TrackBin& tb) {
+    constexpr float STEP = 2.0f, EYE = 0.8f, TARGET = 0.2f;
+    mSightLines.clear();
+    if (tb.samples.size() < 2 || tb.length <= 0) return;
+    for (float d = 0; d < tb.length; d += STEP) {
+        const TrackBin::Sample a = tb.frameAt(d);
+        const TrackBin::Sample b = tb.frameAt(std::fmod(d + kSightAhead, tb.length));
+        mSightLines.push_back({ a.pos + a.up * EYE, b.pos + b.up * TARGET });
+    }
+}
+
+bool TtpRenderer::blocksRoadAhead(float x, float z, float r, float top) const {
+    constexpr float MARGIN = 0.4f;
+    for (const SightLine& s : mSightLines) {
+        const float ex = s.b.x - s.a.x, ez = s.b.z - s.a.z, l2 = ex * ex + ez * ez;
+        if (l2 <= 0) continue;
+        const float t = std::min(1.0f, std::max(0.0f, ((x - s.a.x) * ex + (z - s.a.z) * ez) / l2));
+        const float dx = x - (s.a.x + ex * t), dz = z - (s.a.z + ez * t);
+        const float lim = r + MARGIN;
+        if (dx * dx + dz * dz >= lim * lim) continue;
+        if (top > s.a.y + (s.b.y - s.a.y) * t) return true;
+    }
+    return false;
 }
 
 bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
@@ -1635,7 +1806,88 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
         const float v = -dx * f.az + dz * f.ax;    // along its +Z
         if (std::fabs(u) < f.hx + margin && std::fabs(v) < f.hz + margin) return true;
     }
+    // A mound a piece brought (SET_GROUND) is that piece's ground: its own
+    // pines and rocks dress it, as they did when it was part of the model —
+    // and the keep-out is the box it had then, so no verge it kept clear
+    // fills up with scatter.
+    for (const LandShape& s : mLand) {
+        if (s.kind != 3) continue;
+        const float dx = x - s.x, dz = z - s.z;
+        const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
+        if (lx < s.r + margin && lx > -s.r1 - margin && std::fabs(lz) < s.rz + margin) return true;
+    }
     return false;
+}
+
+// The road keeps a set piece MARGIN past its deck edge, except for a part
+// that stays clear of the deck: UNDER_GAP below a deck raised over
+// UNDER_RAISE, or OVER_GAP above it (a wire). The berm keeps BERM_MARGIN,
+// a pillar PILLAR_MARGIN, another piece PIECE_MARGIN, and the sea starts
+// SEA_MARGIN inside the shoreline.
+const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int skip) const {
+    constexpr float MARGIN = 1.2f, UNDER_RAISE = 3.0f, UNDER_GAP = 1.5f, OVER_GAP = 3.0f;
+    constexpr float BERM_MARGIN = 0.3f, PILLAR_MARGIN = 0.5f, PIECE_MARGIN = 0.5f, SEA_MARGIN = 1.0f;
+    if (!mTrack) return "";
+    const TrackBin& tb = *mTrack;
+    const float ground = groundSurfaceY(tb, x, z);   // what "raised" is measured from here
+    for (const auto& s : tb.samples) {
+        const float dx = x - s.pos.x, dz = z - s.pos.z, lim = s.width / 2 + MARGIN;
+        if (dx * dx + dz * dz >= lim * lim) continue;
+        if (s.pos.y - ground > UNDER_RAISE && hi < s.pos.y - UNDER_GAP) continue;
+        if (lo > s.pos.y + OVER_GAP) continue;
+        return "road";
+    }
+    for (const auto& p : tb.pillars) {
+        const float dx = x - p.x, dz = z - p.z, lim = p.radius + PILLAR_MARGIN;
+        if (dx * dx + dz * dz < lim * lim) return "pillar";
+    }
+    if (inBerm(tb, x, z, BERM_MARGIN)) return "berm";
+    for (size_t k = 0; k < mSetFeet.size(); k++) {
+        if ((int) k == skip) continue;
+        const SetFoot& f = mSetFeet[k];
+        const float dx = x - f.x, dz = z - f.z;
+        const float u = dx * f.ax + dz * f.az, v = -dx * f.az + dz * f.ax;
+        if (std::fabs(u) < f.hx + PIECE_MARGIN && std::fabs(v) < f.hz + PIECE_MARGIN) return "piece";
+    }
+    if (mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - SEA_MARGIN) return "sea";
+    return "";
+}
+
+// Consecutive rings are stitched into a strip. A point is read in every strip
+// whose span it lies across, at its share along it, and across each ring as
+// the polyline through its corners (BermRing::corners), the ground beyond its
+// feet; the highest answer wins where strips overlap.
+float TtpRenderer::bermY(const TrackBin& tb, float x, float z) const {
+    const float gy = tb.groundY;
+    const auto across = [gy](const TrackBin::BermRing& r, float u) {
+        float3 c[4];
+        r.corners(gy, c);
+        float at[4];
+        for (int k = 0; k < 4; k++) at[k] = (c[k].x - r.cx) * r.lx + (c[k].z - r.cz) * r.lz;
+        for (int k = 0; k < 3; k++) {
+            if (u < at[k] || u > at[k + 1]) continue;
+            const float span = at[k + 1] - at[k];
+            return span > 0 ? c[k].y + (c[k + 1].y - c[k].y) * (u - at[k]) / span : c[k].y;
+        }
+        return gy;
+    };
+    float best = -1e30f;
+    for (const auto& run : tb.berms) {
+        for (size_t i = 0; i + 1 < run.size(); i++) {
+            const TrackBin::BermRing& a = run[i];
+            const TrackBin::BermRing& b = run[i + 1];
+            const float sx = b.cx - a.cx, sz = b.cz - a.cz, l2 = sx * sx + sz * sz;
+            if (l2 <= 0) continue;
+            const float t = ((x - a.cx) * sx + (z - a.cz) * sz) / l2;
+            if (t < 0 || t > 1) continue;
+            const float ua = (x - a.cx) * a.lx + (z - a.cz) * a.lz;
+            const float ub = (x - b.cx) * b.lx + (z - b.cz) * b.lz;
+            if (std::fabs(ua) > a.halfW + a.flare && std::fabs(ub) > b.halfW + b.flare) continue;
+            const float ya = across(a, ua);
+            best = std::max(best, ya + (across(b, ub) - ya) * t);
+        }
+    }
+    return best;
 }
 
 // Rings sit a sim sample apart, so the union of their discs is the berm's
@@ -2065,7 +2317,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             if (s.pos.y - base.y < 1.5f) continue;
             const float dx = s.pos.x - base.x, dz = s.pos.z - base.z;
             const float d = dx * dx + dz * dz;
-            if (d < 4.0f && d < bestD) { bestD = d; topY = s.pos.y - 0.34f; }
+            if (d < 4.0f && d < bestD) { bestD = d; topY = s.pos.y - kDeckDepth; }
         }
         column(base.x, base.z, p.radius, base.y - 0.06f,
                 std::max(base.y - 0.06f + 0.3f, topY), nullptr, nullptr);
@@ -2073,7 +2325,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     // Loop shafts: built tall from the lawn, then cut to the road's underside.
     for (const TrackBin::Post& p : tb.supportPosts) {
         const float3 n = p.cUp;
-        const float3 planeP = p.cPos - n * 0.34f; // deck thickness
+        const float3 planeP = p.cPos - n * kDeckDepth;
         column(p.x, p.z, p.radius, tb.groundY - 0.1f, p.cPos.y + 1.0f, &planeP, &n);
     }
     // Kicker ramps: a wedge across the road from its foot on the deck to its
@@ -2128,18 +2380,10 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     };
     if (!mStructures.verts.empty() && !buildReceiver(mStructures)) return;
 
-    // Berms: consecutive cross-section rings stitched into a grass surface that
-    // meets the road underside and flares down to the lawn: left slope, top,
-    // right slope (each ring's flare is TtpRenderer.cpp's bermFlare).
+    // Berms: consecutive cross-section rings (BermRing::corners) stitched into a
+    // grass surface that meets the road underside and flares down to the lawn:
+    // left slope, top, right slope.
     const float gy = tb.groundY;
-    const auto corners = [&](const TrackBin::BermRing& r, float3 out[4]) {
-        const float flare = r.flare;
-        const float hw = r.halfW, ox = r.lx, oz = r.lz;
-        out[0] = { r.cx - ox * (hw + flare), gy, r.cz - oz * (hw + flare) };
-        out[1] = { r.cx - ox * hw, r.topL, r.cz - oz * hw };
-        out[2] = { r.cx + ox * hw, r.topR, r.cz + oz * hw };
-        out[3] = { r.cx + ox * (hw + flare), gy, r.cz + oz * (hw + flare) };
-    };
     const auto quad = [&](const float3& a, const float3& b, const float3& c, const float3& d) {
         const uint32_t base = (uint32_t) mBerms.verts.size();
         for (const float3& p : { a, b, c, d }) {
@@ -2154,10 +2398,10 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     for (const auto& run : tb.berms) {
         if (run.size() < 2) continue;
         float3 A[4], B[4];
-        corners(run[0], A);
+        run[0].corners(gy, A);
         for (size_t i = 1; i < run.size(); i++) {
             if (i % 2 && i + 1 < run.size()) continue;
-            corners(run[i], B);
+            run[i].corners(gy, B);
             quad(A[0], A[1], B[1], B[0]); // left slope
             quad(A[1], A[2], B[2], B[1]); // top, under the road
             quad(A[2], A[3], B[3], B[2]); // right slope
@@ -2185,30 +2429,44 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     auto& tcm = mEngine->getTransformManager();
     const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
     if (!nEnt) return;
+    const bool setPiece = std::find(mSetAssets.begin(), mSetAssets.end(), asset) != mSetAssets.end();
     // A model with an animated "spin" node (the toy train) moves under a
     // static merge, so what hangs under that node is mirrored per frame
     // instead. Only that: the train set's rails are most of its pixels, stand
     // still, and bake like any other dressing. Instance 0 answers for all:
     // the slots are the same in every instance.
     const utils::Entity* ents = insts[0]->getEntities();
-    const utils::Entity spin = spinNode(asset, insts[0]);
-    const auto underSpin = [&](utils::Entity ent) {
-        if (spin.isNull()) return false;
-        for (auto ti = tcm.getInstance(ent); ti; ti = tcm.getInstance(tcm.getParent(ti))) {
-            if (tcm.getEntity(ti) == spin) return true;
-        }
-        return false;
-    };
+    const auto spins = [&](size_t e) { return hangsUnder(asset, tcm, ents[e], isSpin); };
     // The kit colour table for this model, keyed by the same bytes hash; a
     // model it does not know keeps the instanced, live-lit draw.
     const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
     for (auto* in : insts) {
         if (!in || in->getEntityCount() != nEnt) return;
     }
+    // THE COPIES HALF OF THE DRESSING ABLATION (mDressKeep, 1 = every copy;
+    // ttp_display_dress_keep says what it is for). A dropped copy leaves the
+    // scene outright, because a merge only takes the sources it is handed out
+    // of it -- one merely omitted from the merge would keep drawing exactly as
+    // gltfio loaded it. A set piece's copy is its whole PLACEMENT, so both of
+    // its halves below (the baked placements, the spinning parts) see the same
+    // placements; anything else thins per (instance, mesh) copy, further down.
+    const auto dropped = [&](size_t k) {
+        const auto at = [&](size_t j) { return static_cast<size_t>(static_cast<float>(j) * mDressKeep); };
+        return mDressKeep < 1.0f && at(k + 1) == at(k);
+    };
+    std::vector<gltfio::FilamentInstance*> placed;
+    for (size_t i = 0; i < insts.size(); i++) {
+        if (!setPiece || !dropped(i)) { placed.push_back(insts[i]); continue; }
+        mScene->removeEntities(insts[i]->getEntities(), insts[i]->getEntityCount());
+    }
+    if (placed.empty()) return;
     std::unordered_map<int, std::vector<size_t>> slotsByMesh;
+    std::vector<std::pair<size_t, int>> still;   // a set piece's (slot, mesh), in slot order
     for (size_t e = 0; e < nEnt; e++) {
         const utils::Entity ent = insts[0]->getEntities()[e];
         if (!rcm.getInstance(ent)) continue;
+        // A set piece's moving part is buildSetMovers' (TtpRendererMotion.cpp).
+        if (!setAnimRoot(asset, ent).isNull()) continue;
         const char* nm = asset->getName(ent);
         if (!nm) return;
         const ttp::rt::GlbMeshNode* found = nullptr;
@@ -2220,6 +2478,15 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         }
         if (!found) return;
         slotsByMesh[found->mesh].push_back(e);
+        if (setPiece && !spins(e)) still.emplace_back(e, found->mesh);
+    }
+    // A set piece bakes PER PLACEMENT; only what spins is left for the
+    // per-mesh groups below. A model the bake refuses takes them whole.
+    if (!still.empty() && colorModel && bakePlacements(placed, meshIt->second, *colorModel, still)) {
+        for (auto it = slotsByMesh.begin(); it != slotsByMesh.end();) {
+            std::erase_if(it->second, [&](size_t e) { return !spins(e); });
+            it = it->second.empty() ? slotsByMesh.erase(it) : std::next(it);
+        }
     }
     for (const auto& [mesh, slots] : slotsByMesh) {
         const ttp::rt::GlbMeshNode* node = nullptr;
@@ -2227,21 +2494,13 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
             if (n.mesh == mesh) { node = &n; break; }
         }
         std::vector<utils::Entity> sources;
-        for (auto* in : insts) {
+        for (auto* in : placed) {
             for (const size_t e : slots) sources.push_back(in->getEntities()[e]);
         }
-        // THE COPIES HALF OF THE DRESSING ABLATION (mDressKeep, 1 = every copy;
-        // ttp_display_dress_keep says what it is for). A dropped copy leaves the
-        // scene outright, because buildMergedGroup only takes the sources it is
-        // handed out of it -- one merely omitted from the merge would keep
-        // drawing exactly as gltfio loaded it.
-        if (mDressKeep < 1.0f) {
+        if (!setPiece && mDressKeep < 1.0f) {
             std::vector<utils::Entity> kept;
             for (size_t i = 0; i < sources.size(); i++) {
-                const auto at = [&](size_t k) {
-                    return static_cast<size_t>(static_cast<float>(k) * mDressKeep);
-                };
-                if (at(i + 1) != at(i)) kept.push_back(sources[i]);
+                if (!dropped(i)) kept.push_back(sources[i]);
                 else mScene->remove(sources[i]);
             }
             sources.swap(kept);
@@ -2250,11 +2509,100 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         const ttp::kitcolors::Mesh* colors = (colorModel && node->mesh >= 0
                 && (uint32_t) node->mesh < colorModel->meshCount)
                 ? &colorModel->meshes[node->mesh] : nullptr;
-        const bool moves = dynamic || std::any_of(slots.begin(), slots.end(),
-                [&](size_t e) { return underSpin(ents[e]); });
+        const bool moves = dynamic || std::any_of(slots.begin(), slots.end(), spins);
         buildMergedGroup(mMergedDress, sources, node->prims, moves,
                 kFeatDressing, colors);
     }
+}
+
+// THE SET PIECE'S BAKE, one mesh per PLACEMENT: every part of one instance
+// that stands still, across all of its meshes, with bakeMergedRun's colour and
+// light. A Blender piece exports a mesh per part and its placements stand too
+// far apart for a per-mesh run to join two of them, so the per-mesh merge made
+// one renderable per PART per placement -- a hundred draws a piece.
+//
+// A piece wider than a tile (mPieceTile) is split into one mesh per tile, so
+// what a cell's frustum or far form decides is a corner of the piece, not all
+// of it. The split is by WHOLE PART (its centre's tile), never through one:
+// each mesh then holds only complete parts, so its far form needs no locked
+// border and two neighbours can never open a crack between them.
+//
+// Every check runs on instance 0, before anything is built, and refuses the
+// whole model when a part is one the kit table cannot colour: the placements
+// are instances of one model sharing its materials (loadInstancedProp), so
+// what holds for one holds for all and a model is never half baked.
+bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& insts,
+        const std::vector<ttp::rt::GlbMeshNode>& nodes, const ttp::kitcolors::Model& colors,
+        const std::vector<std::pair<size_t, int>>& still) {
+    if (!mBakeRig.valid) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    struct Part {
+        size_t slot;
+        const ttp::rt::GlbMeshNode* node;
+        const ttp::kitcolors::Mesh* colors;
+        std::vector<float3> factor;
+    };
+    std::vector<Part> parts;
+    for (const auto& [slot, mesh] : still) {
+        if (mesh < 0 || (uint32_t) mesh >= colors.meshCount) return false;
+        const ttp::rt::GlbMeshNode* node = nullptr;
+        for (const auto& n : nodes) {
+            if (n.mesh == mesh) { node = &n; break; }
+        }
+        if (!node) return false;
+        Part p{ slot, node, &colors.meshes[mesh], {} };
+        if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
+            return false;
+        }
+        parts.push_back(std::move(p));
+    }
+    for (gltfio::FilamentInstance* inst : insts) {
+        const utils::Entity* ents = inst->getEntities();
+        // Each part's tile, on a grid anchored at the placement's own corner,
+        // so a piece narrower than a tile is one mesh wherever it stands.
+        std::vector<float3> centre(parts.size());
+        float x0 = 1e30f, z0 = 1e30f;
+        for (size_t j = 0; j < parts.size(); j++) {
+            const utils::Entity src = ents[parts[j].slot];
+            centre[j] = (tcm.getWorldTransform(tcm.getInstance(src))
+                    * float4{ rcm.getAxisAlignedBoundingBox(rcm.getInstance(src)).center, 1.0f }).xyz;
+            x0 = std::min(x0, centre[j].x);
+            z0 = std::min(z0, centre[j].z);
+        }
+        std::map<int64_t, MergedGroup> tiles;   // ordered: the build order is the key's
+        for (size_t j = 0; j < parts.size(); j++) {
+            const Part& p = parts[j];
+            const utils::Entity src = ents[p.slot];
+            const int64_t key = (int64_t) ((centre[j].z - z0) / mPieceTile) * 65536
+                    + (int64_t) ((centre[j].x - x0) / mPieceTile);
+            MergedGroup& g = tiles[key];
+            appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
+                    p.node->prims, *p.colors, p.factor);
+            g.sources.push_back(src);
+        }
+        for (auto& [key, g] : tiles) {
+            g.feat = kFeatDressing;
+            g.baked.weld = true;
+            g.baked.simplify = true;
+            if (!buildMesh(g.baked)) {
+                // Not reachable for parts that passed the checks above; if it
+                // ever is, the originals keep drawing live-lit and the scene
+                // budget's live-dressing gate names the model.
+                utils::slog.w << "bakePlacements: a tile did not build; its "
+                        << g.sources.size() << " parts stay live-lit" << utils::io::endl;
+                continue;
+            }
+            g.ent = g.baked.entity;
+            // Whatever layer the originals sit on: the caster bit
+            // (buildSetPieces), and a feature bit when a sweep tagged the scene.
+            const uint8_t layer = rcm.getLayerMask(rcm.getInstance(g.sources[0]));
+            if (const auto ri = rcm.getInstance(g.ent)) rcm.setLayerMask(ri, 0xFF, layer);
+            for (const utils::Entity src : g.sources) mScene->remove(src);
+            mMergedDress.push_back(std::move(g));
+        }
+    }
+    return true;
 }
 
 // The per-copy dressing, regrouped: the instanced scenery and prop models
@@ -2276,6 +2624,7 @@ void TtpRenderer::buildDressingMerge() {
     for (size_t m = 0; m < mSetAssets.size() && m < mSetInstances.size(); m++) {
         mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
     }
+    buildSetMovers();
     mergeInstancedSet(mConeAsset, mConeInstances, true);
 }
 
@@ -2298,19 +2647,14 @@ std::vector<std::pair<std::string, int>> TtpRenderer::debugLiveDressing() const 
             if (!asset || insts[m].empty() || !insts[m][0]) continue;
             int live = 0;
             for (const auto* in : insts[m]) {
-                const utils::Entity spin = spinNode(asset, in);
                 for (size_t e = 0; e < in->getEntityCount(); e++) {
                     const utils::Entity ent = in->getEntities()[e];
                     if (!rcm.getInstance(ent)) continue;
                     const auto group = instancedBy.find(ent.getId());
                     if (group != instancedBy.end()) { live += group->second; continue; }
-                    if (!mScene->hasEntity(ent)) continue;
-                    bool moves = false;
-                    for (auto ti = tcm.getInstance(ent); ti && !spin.isNull();
-                            ti = tcm.getInstance(tcm.getParent(ti))) {
-                        if (tcm.getEntity(ti) == spin) { moves = true; break; }
-                    }
-                    if (!moves) live++;
+                    // A spinning part is mirrored per frame, so it is no miss.
+                    // An `anim_` part is: still in the scene, it stands still.
+                    if (mScene->hasEntity(ent) && !hangsUnder(asset, tcm, ent, isSpin)) live++;
                 }
             }
             if (!live) continue;
