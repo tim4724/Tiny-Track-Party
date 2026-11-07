@@ -239,6 +239,12 @@ const BOXES = {
 //          creek-bed tint (the renderer's groundTint).
 //   paint  a capsule like a plain that shapes nothing: it only colours the
 //          ground (a piste down a mountain)
+//   shore  (the beach) brings the sea's waterline in through the anchor, held
+//          for `len` of shore and faded back out over `r`; never nearer than
+//          a few units past the road, unless `w` lets it that far inside the
+//          road's reach (the road then runs over the water). It only reaches
+//          road that is the island's outermost on its bearing from the origin
+//          (native/renderer/CLAUDE.md, the beach).
 // Any of them but a mound may carry a `tint`, 0xRRGGBB, a multiplier over the
 // ground's colour where the form lies (fading with its flank, or a plain's or
 // paint's `w`); the ground's grid is 9 u, so a tint is a broad wash.
@@ -401,19 +407,23 @@ export const TRACKS = {
     // pool where the reef comes closest to the road, people at its edge, and
     // the crab fishers' landing above the reef just before it. The pool lies
     // beside the low west run that points at it, not at the waterline: out
-    // there it hid behind the hump and read as a few grey lumps.
+    // there it hid behind the hump and read as a few grey lumps. On the two
+    // outer bends the sea comes in to a few strides past the kerb (the
+    // `shore`s), and the reef stands in that surf, its ledges awash.
     set: [
-      { model: 'set-rock-pool', u: 0.675, lat: 13, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 14.5, yaw: 4 },
       { model: 'set-reef-shelf', u: 0.172, lat: 31.5, yaw: -1 },
       { model: 'set-reef-shelf', u: 0.228, lat: 31.5, yaw: -3 },
-      { model: 'set-reef-shelf', u: 0.297, lat: 30, yaw: -10 },
-      { model: 'set-reef-shelf', u: 0.353, lat: 30, yaw: 3 },
+      { model: 'set-reef-shelf', u: 0.297, lat: 16, yaw: -10 },
+      { model: 'set-reef-shelf', u: 0.353, lat: 16, yaw: 3 },
       { model: 'set-reef-shelf', u: 0.429, lat: 30.3, yaw: 19 },
-      { model: 'set-reef-shelf', u: 0.683, lat: 32.5, yaw: -5 },
-      { model: 'set-reef-shelf', u: 0.739, lat: 29.5, yaw: 18 },
-      { model: 'set-reef-shelf', u: 0.797, lat: 29.5, yaw: -3 },
-      { model: 'set-reef-shelf', u: 0.928, lat: 32.8, yaw: -23 },
+      { model: 'set-reef-shelf', u: 0.739, lat: 16, yaw: 18 },
+      { model: 'set-reef-shelf', u: 0.797, lat: 16, yaw: -3 },
       { model: 'set-crab-pots', u: 0.64, lat: 8, yaw: 10 }
+    ],
+    land: [
+      { kind: 'shore', u: 0.325, lat: 7, len: 60, r: 30 },
+      { kind: 'shore', u: 0.79, lat: 7.5, len: 80, r: 30 }
     ]
   },
   cove: {
@@ -476,11 +486,16 @@ export const TRACKS = {
     // The shore is anchored where the patrol is, so it runs along the swim
     // line's own axis, and holds that line the length of the swim line and
     // past it: the line lies on the water, a swim's width out, end to end.
+    // From the hop on, the road runs out over the shallows (the second
+    // `shore`, whose `w` lets the water in past the road), the hop on timber
+    // piles (its `trestle`, scripts/gen-tracks.mjs) and then a low causeway:
+    // open sea outside, a strip of lagoon inside, then the beach.
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
     ],
     land: [
-      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 }
+      { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 },
+      { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 11 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
