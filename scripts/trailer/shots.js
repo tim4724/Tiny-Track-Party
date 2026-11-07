@@ -63,7 +63,7 @@ module.exports = [
   // it starts on the track named here.
   { id: '01-riptide-1p', scenario: 'chain', players: 1, track: 'riptide', camera: 'chase-nohud', warmup: 3.1, seconds: 2.5 },
   { id: '02-riptide-1p', scenario: 'racing', players: 1, track: 'riptide', camera: 'follow', warmup: 7.6, seconds: 4 },
-  { id: '03-avalanche-1p', scenario: 'racing', players: 1, track: 'avalanche', camera: 'chase-nohud', warmup: 43.867, seconds: 3.5 },
+  { id: '03-powder-1p', scenario: 'racing', players: 1, track: 'powder', camera: 'chase-nohud', warmup: 37.6, seconds: 3.5 },
   { id: '04-glacier-2p', scenario: 'racing', players: 2, track: 'glacier', warmup: 10.267, seconds: 4 },
   { id: '05-pretzel-1p', scenario: 'racing', players: 1, track: 'pretzel', camera: 'follow', warmup: 24.5, seconds: 3.5 },
   { id: '06-gulch-1p', scenario: 'racing', players: 1, track: 'gulch', camera: 'follow', warmup: 21.3, seconds: 4 },

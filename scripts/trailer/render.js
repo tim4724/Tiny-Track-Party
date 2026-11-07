@@ -7,6 +7,7 @@
 //   node scripts/trailer/render.js --shot 02-canyon-4p --seed 12   # re-roll a take
 //   node scripts/trailer/render.js --preview            # 960x540, fast, for pacing
 //   node scripts/trailer/render.js --soundonly          # re-render the SOUND only
+//   node scripts/trailer/render.js --headed             # in a window (headless is the default)
 //
 // WHY FRAME-BY-FRAME, and not a screen recording. The display can be driven by a
 // FIXED timestep (Stage.setFixedStep) instead of the rAF clock, so the sim advances
@@ -16,9 +17,10 @@
 // produce costs only wall clock. A realtime capture would instead be at the mercy of
 // whatever the machine was doing, and could not be re-rendered identically later.
 //
-// This runs HEADED, on the window's real GPU path at 3840x2160. Nothing is
-// displayed to a human — the window just has to exist. The scene itself holds
-// 60 fps there, and a PNG readback is the whole per-frame cost.
+// This runs headless: on macOS the seam puts headless Chromium on ANGLE-Metal, so
+// the 3840x2160 scene is drawn on the GPU without a window, and the fixed step makes
+// the render rate irrelevant to the picture anyway. Elsewhere headless is
+// SwiftShader, and `--headed` gets the window's GPU path back.
 //
 // THE SOUND IS RENDERED THE SAME WAY. The display's mix is a Web Audio graph, and Web
 // Audio can run one on an OfflineAudioContext that only advances when told to: `?offlineaudio`
@@ -44,7 +46,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) continue;
     const key = a.slice(2);
-    if (key === 'preview' || key === 'keepframes' || key === 'soundonly') { out[key] = true; continue; }
+    if (key === 'preview' || key === 'keepframes' || key === 'soundonly' || key === 'headed') { out[key] = true; continue; }
     if (key === 'shot') { out.shot.push(argv[++i]); continue; }
     out[key] = argv[++i];
   }
@@ -265,8 +267,8 @@ async function main() {
 
   let b;
   try {
-    // HEADED — see the note at the top of this file.
-    b = await launchBrowser({ headed: true });
+    // Headless unless --headed — see the note at the top of this file.
+    b = await launchBrowser({ headed: !!args.headed });
     const page = await b.page({
       viewport: { width: WIDTH, height: HEIGHT },
       deviceScaleFactor: DSF,
