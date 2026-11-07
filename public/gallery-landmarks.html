@@ -40,6 +40,10 @@
     </label>
   </div>
 
+  <div class="group seg">
+    <button class="ctrl" id="lm-slow" title="Slow motion: the scene at a quarter speed (M)">Slow</button>
+  </div>
+
   <div class="group">
     <button class="ctrl" id="lm-res" title="Sharp pins the render scale to this screen's; Auto is the game's adaptive scale">Res: Sharp</button>
     <span class="lm-lines" id="lm-lines" title="The stage's drawing buffer height"></span>
@@ -72,7 +76,17 @@
        hands the camera to the viewer. -->
   <iframe id="lm-stage" title="Landmarks"></iframe>
   <aside class="legend" id="lm-legend">
-    <p class="legend__hint">Left/Right landmark · Up/Down track · 1-4 players</p>
+    <dl class="keys" id="lm-keys">
+      <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>landmark</dd></div>
+      <div><dt><kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>track</dd></div>
+      <div><dt><kbd>C</kbd><kbd>&#8679;C</kbd></dt><dd>camera</dd></div>
+      <div><dt><kbd>1</kbd>-<kbd>4</kbd></dt><dd>players</dd></div>
+      <div><dt><kbd>X</kbd></dt><dd>spread</dd></div>
+      <div><dt><kbd>M</kbd></dt><dd>slow motion</dd></div>
+      <div><dt><kbd>Home</kbd></dt><dd>first landmark</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>hide these keys</dd></div>
+    </dl>
+    <p class="legend__hint keys-off" id="lm-keys-off"><kbd>?</kbd> keys</p>
     <div id="lm-list"></div>
   </aside>
 </section>

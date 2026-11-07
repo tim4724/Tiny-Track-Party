@@ -9,21 +9,48 @@
 //   anim_spin:a=x:w=2.5          turn about the node's own x axis at 2.5 rad/s
 //   anim_sway:a=y:d=25:p=1.8     swing +-25 degrees about y, a 1.8 s period
 //   anim_bob:h=0.25:p=3          rise and fall 0.25 units every 3 s
+//   anim_bob:h=0.1:p=0.5:b=1     bounce 0.1 units every 0.5 s (a skip, a trampoline)
+//   anim_sway:a=z:d=30:p=8:r=0.75   a GESTURE: lift 30 degrees and back once in
+//                                the first quarter of every 8 s, then rest
 //   anim_waddle+watch+hop#2      a penguin: rock, turn to the cars, hop
 //   anim_path:c=chute:p=7.5:o=0.33   ride the closed path `chute`, a third on
 //   anim_smoke                   (mesh-less) where a chimney's smoke rises from
+//   anim_drape+sway:a=x:d=22     a flag on a pole that stands on terrain
+//   anim_smoke:s=2.5             ... puffs two and a half times a chimney's (a stack)
 //
 // An `anim_` node inside another rides on it: it moves in its parent's moving
 // frame (a wind-up key turning in a walking robot's back). A path rides
 // nothing: its loop is where the piece stands.
 //
 // A path is the empties `path_<chain>_<k>` of the same GLB, k = 0, 1, ... in
-// order, closed back to 0. A traveller may also spin and bob in its own frame
-// on the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed);
-// the other verbs are in-place and a path ignores them. Lengths are the node's own units (a GLB's grow and the
-// placement's scale carry them); radii are WORLD units, because they are about
-// cars. Keys: a axis (x|y|z), w rad/s, d degrees, p seconds, h height, r radius,
-// c chain, o phase offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full).
+// order, closed back to 0; a chain named `drape...` lies on the ground as the
+// renderer draws it (each point lifted by the land under it over the piece's
+// foot, like a `drape` part), so a traveller on a terrain hill stays on its
+// drawn slope. A traveller may also spin, bob and waddle in its own frame on
+// the way (`anim_path:c=wash+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a tumbleweed; a
+// walking penguin rocks from foot to foot); the other verbs are in-place and a
+// path ignores them. `drape` moves nothing: an in-place part on a piece built
+// on its own terrain (SET_GROUND) stands on the ground as the renderer draws
+// it, lifted by the land under its pivot over the piece's foot as the `drape`
+// parts round it are, so a flag stays on the top of its draped pole where the
+// grid's chords stray off the curve the piece was built on. Lengths are the
+// node's own units (a GLB's grow and the placement's scale carry them); radii
+// are WORLD units, because they are about cars. Keys: a axis (x|y|z), w rad/s,
+// d degrees, p seconds, h height, r radius (watch, hop), c chain, o phase
+// offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full), s size (smoke).
+// r on a sway or a bob is its REST: the share of its period it stands still.
+// A sway with a rest swings ONE way (0 to d and back, eased at both ends)
+// instead of either side of its rest pose: a cow lifts its head from the
+// grass and lowers it again. A bob is one-sided already, so its rest only
+// adds the pause: a tumbleweed bounces and lands. A one-way sway with a rest
+// is also the one move a person makes of their own: one small move and a
+// rest, never a whole-body rock (a body that moves rides something: a swing,
+// a ring). b 1 makes a bob BOUNCE (fast off the ground, slow at the top)
+// instead of a smooth rise and fall.
+// On a path `o` is where it starts round its loop; on sway, bob or waddle it
+// puts the part IN STEP: it counts from its placement's clock, not its own,
+// `o` of a cycle on, so parts of one piece keep time (a robot's legs and body,
+// a snake's tail joints). Without it every part keeps a phase of its own.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
@@ -45,18 +72,23 @@ namespace rt {
 
 struct SetMotion {
   bool spin = false, sway = false, bob = false, waddle = false, watch = false,
-       hop = false, path = false, smoke = false;
+       hop = false, path = false, smoke = false, drape = false;
   char spinAxis = 'y';
   float spinRate = 1.0f;                     // rad/s, signed
   char swayAxis = 'z';
   float swayDeg = 25.0f, swayPeriod = 2.0f;  // a sway under ~20 degrees does not read
-  float bobHeight = 0.2f, bobPeriod = 3.0f;
+  float swayRest = -1.0f;                    // < 0: either side, no rest
+  float bobHeight = 0.2f, bobPeriod = 3.0f, bobRest = 0.0f;
+  bool bobBounce = false;
   float waddleDeg = 12.0f, waddlePeriod = 0.9f;
   float watchRadius = 26.0f, watchDeg = 60.0f;
   float hopRadius = 9.0f, hopHeight = 0.35f, hopPeriod = 0.5f;
   std::string chain;
   float pathPeriod = 8.0f, pathOffset = 0.0f;
   int pathFace = 2;
+  bool inStep = false;   // `o` on an in-place verb: phase = the placement's + `step`
+  float step = 0.0f;
+  float smokeScale = 1.0f;                   // the puffs' size and rise, a chimney's at 1
   // A part that TRAVELS leaves the sun bake: a shadow baked at its rest spot
   // would stay behind. One that moves in place keeps its rest-pose shadow, which
   // under the near-overhead sun is its footprint.
@@ -90,7 +122,7 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
     const std::string v = verb.substr(0, colon);
     bool* on = v == "spin" ? &m.spin : v == "sway" ? &m.sway : v == "bob" ? &m.bob
              : v == "waddle" ? &m.waddle : v == "watch" ? &m.watch : v == "hop" ? &m.hop
-             : v == "path" ? &m.path : v == "smoke" ? &m.smoke : nullptr;
+             : v == "path" ? &m.path : v == "smoke" ? &m.smoke : v == "drape" ? &m.drape : nullptr;
     if (!on) {
       bad("verb '" + v + "'");
       continue;
@@ -109,12 +141,17 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
       bool known = true;
       if (v == "spin") {
         if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f; else known = false;
+      } else if (key == 'o' && (v == "sway" || v == "bob" || v == "waddle")) {
+        m.inStep = true;
+        m.step = f;
       } else if (v == "sway") {
         if (key == 'a') m.swayAxis = axis; else if (key == 'd') m.swayDeg = f;
-        else if (key == 'p' && f > 0) m.swayPeriod = f; else known = false;
+        else if (key == 'p' && f > 0) m.swayPeriod = f;
+        else if (key == 'r') m.swayRest = std::min(0.95f, std::max(0.0f, f)); else known = false;
       } else if (v == "bob") {
         if (key == 'h') m.bobHeight = f; else if (key == 'p' && f > 0) m.bobPeriod = f;
-        else known = false;
+        else if (key == 'r') m.bobRest = std::min(0.95f, std::max(0.0f, f));
+        else if (key == 'b') m.bobBounce = f != 0; else known = false;
       } else if (v == "waddle") {
         if (key == 'd') m.waddleDeg = f; else if (key == 'p' && f > 0) m.waddlePeriod = f;
         else known = false;
@@ -128,6 +165,8 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
         else if (key == 'p' && f > 0) m.pathPeriod = f;
         else if (key == 'o') m.pathOffset = f; else if (key == 'f') m.pathFace = (int) f;
         else known = false;
+      } else if (v == "smoke") {
+        if (key == 's' && f > 0) m.smokeScale = f; else known = false;
       } else {
         known = false;
       }
@@ -155,6 +194,15 @@ inline float set_motion_phase(uint32_t seed) {
   return (float) (seed >> 8) / 16777216.0f;
 }
 
+// A part's phase: its own (`own`, hashed from its spot and slot) or, in step
+// (`o`), its placement's (`placement`, hashed from the spot every part of the
+// placement shares) plus its offset, so the in-step parts share one clock.
+inline float set_motion_part_phase(const SetMotion& m, uint32_t own, uint32_t placement) {
+  if (!m.inStep) return set_motion_phase(own);
+  const float u = set_motion_phase(placement) + m.step;
+  return u - std::floor(u);
+}
+
 // One car as the part sees it: its horizontal offset in the part's REST frame
 // (x forward, z to the side; any length) and its distance in world units.
 struct SetMotionCar { float x, z, dist; };
@@ -170,13 +218,30 @@ inline float set_motion_falloff(float d, float r, float inner) {
   return t * t * (3 - 2 * t);
 }
 
+// One swing out and back, eased at both ends, in the first (1 - rest) of a
+// period, then still: 0 at rest, 1 at the top. `u` is the clock in periods.
+inline float set_motion_once(float u, float rest) {
+  constexpr float TAU = 6.28318530718f;
+  const float a = 1 - rest;
+  u -= std::floor(u);
+  return u < a ? 0.5f - 0.5f * std::cos(TAU * u / a) : 0.0f;
+}
+
 inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
     const SetMotionCar* cars, size_t nCars) {
   constexpr float TAU = 6.28318530718f, DEG = 0.0174532925f;
   SetMotionPose p;
   if (m.spin) p.spin = m.spinRate * t + phase * TAU;
-  if (m.sway) p.sway = m.swayDeg * DEG * std::sin(TAU * (t / m.swayPeriod + phase));
-  if (m.bob) p.lift += m.bobHeight * (0.5f - 0.5f * std::cos(TAU * (t / m.bobPeriod + phase)));
+  if (m.sway) {
+    p.sway = m.swayRest < 0 ? m.swayDeg * DEG * std::sin(TAU * (t / m.swayPeriod + phase))
+                            : m.swayDeg * DEG * set_motion_once(t / m.swayPeriod + phase, m.swayRest);
+  }
+  if (m.bob) {
+    const float u = t / m.bobPeriod + phase;
+    p.lift += m.bobHeight * (m.bobBounce ? std::fabs(std::sin(0.5f * TAU * u))
+                             : m.bobRest > 0 ? set_motion_once(u, m.bobRest)
+                                             : 0.5f - 0.5f * std::cos(TAU * u));
+  }
   if (m.waddle) {
     const float w = TAU * (t / m.waddlePeriod + phase);
     p.roll = m.waddleDeg * DEG * std::sin(w);
