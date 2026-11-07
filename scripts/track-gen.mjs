@@ -8,7 +8,11 @@
 //                           waypoint-index pairs (crossings depend only on x/z, not height).
 //   3. solveElevation(...)— relax a smooth periodic height profile that lifts one strand
 //                           over the other at every crossing and returns to ground (y[0]=0,
-//                           y≥0, Δ≥1.2 per crossing); bails on a runaway "knot".
+//                           y≥0, Δ≥1.2 per crossing); bails on a runaway "knot". The relaxed
+//                           profile spreads each lift over half the lap, so a profile with
+//                           `rampGrade` keeps only its choice of which strand goes over and
+//                           lifts each over-strand on a short ramp of its own (localLift):
+//                           the rest of the lap lies on the ground.
 //   4. roundTightCorners  — no corner's radius under ~1.4 road half-widths (CORNER FLOOR);
 //                           `classic` is exempt, being frozen provenance.
 // Because the plan closes by construction and elevation is solved on top, the two never
@@ -109,8 +113,9 @@ export const PROFILES = {
     pChicane: 0.16, chicane: { angle: 38, r: 13 },
     midStraight: [12, 28], pExtra: 0.4, extraLen: [8, 18],
     closerR: [10, 18], finalStraight: [10, 20], target: [420, 470],
-    decor: { hills: [1, 2], hillAmp: [0.6, 1.1], hillHW: [2, 4], hops: [2, 4], hopAmp: [0.15, 0.35],
+    decor: { hills: [1, 2], hillAmp: [0.3, 0.55], hillHW: [2, 4], hops: [2, 4], hopAmp: [0.15, 0.35],
       bank: 8, bankRun: 4, maxBanked: 1, flares: 2, flareW: [3.0, 3.4], pinches: 1, pinchW: 2.25 },
+    rampGrade: 0.2,
     oilCount: 2,
     // Band of the shipped Backyard four: brake 0.01-0.17, minR 2.2-7.2, dens 0.030-0.044,
     // crossings 12-16 (!) — crossing count is DRAMA, not difficulty; corners/braking are
@@ -128,8 +133,9 @@ export const PROFILES = {
     pChicane: 0.2, chicane: { angle: 45, r: 10 },
     midStraight: [10, 22], pExtra: 0.35, extraLen: [8, 14],
     closerR: [9, 14], finalStraight: [8, 16], target: [430, 480],
-    decor: { hills: [2, 3], hillAmp: [0.8, 1.6], hillHW: [2, 3], hops: [1, 3], hopAmp: [0.15, 0.4],
+    decor: { hills: [2, 3], hillAmp: [0.4, 0.8], hillHW: [2, 3], hops: [1, 3], hopAmp: [0.15, 0.4],
       bank: 8, bankRun: 5, maxBanked: 1, flares: 1, flareW: [3.0, 3.3], pinches: 2, pinchW: 2.15 },
+    rampGrade: 0.2,
     oilCount: 2,
     // Calibration: switchback (the then-canonical Hard, since deleted) probed brake 0.66 — but its lap is
     // 25s of wall-to-wall corners; at Backyard lap length (~50s) even a 3-hairpin
@@ -164,22 +170,25 @@ export function genPlan(seed, prof = PROFILES.classic) {
   return pts.map((p) => ({ x: p.x * k, z: p.z * k }));
 }
 
-export function findCrossings(flat, plan) {
-  const S = flat.centerline.samples, n = S.length, L = flat.length, rw = flat.roadWidth;
+export function findCrossings(flat, plan, reach = flat.roadWidth * 0.55) {
+  const S = flat.centerline.samples, n = S.length, L = flat.length;
   const wpS = plan.map((p) => { let best = 0, bd = Infinity; for (let i = 0; i < n; i++) { const dx = S[i].pos.x - p.x * SCALE, dz = S[i].pos.z - p.z * SCALE, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = i; } } return S[best].s; });
   const nearestWp = (s) => { let best = 0, bd = Infinity; for (let i = 0; i < wpS.length; i++) { const d = Math.min(Math.abs(wpS[i] - s), L - Math.abs(wpS[i] - s)); if (d < bd) { bd = d; best = i; } } return best; };
   const pairs = new Map();
   for (let i = 0; i < n; i += 2) for (let j = i + 2; j < n; j += 2) {
     const arc = Math.min(Math.abs(S[i].s - S[j].s), L - Math.abs(S[i].s - S[j].s)); if (arc < 14) continue;
-    const dx = S[i].pos.x - S[j].pos.x, dz = S[i].pos.z - S[j].pos.z; if (dx * dx + dz * dz > (rw * 0.55) ** 2) continue;
+    const dx = S[i].pos.x - S[j].pos.x, dz = S[i].pos.z - S[j].pos.z; if (dx * dx + dz * dz > reach * reach) continue;
     const a = nearestWp(S[i].s), b = nearestWp(S[j].s); if (a === b) continue;
     pairs.set(a < b ? `${a},${b}` : `${b},${a}`, [Math.min(a, b), Math.max(a, b)]);
   }
   return [...pairs.values()];
 }
 
+// The vertical clearance every crossing is solved to, in plan units (x SCALE in the world).
+const CLEARANCE = 1.2;
+
 export function solveElevation(wpPairs, M) {
-  const D = 1.2, h = new Array(M).fill(0);
+  const D = CLEARANCE, h = new Array(M).fill(0);
   for (let iter = 0; iter < 400; iter++) {
     let worst = 0;
     for (const [a, b] of wpPairs) { const gap = h[a] - h[b], need = D - Math.abs(gap); if (need <= 0) continue; worst = Math.max(worst, need); const s = gap >= 0 ? 1 : -1, push = need / 2 + 0.02; if (a !== 0) h[a] += s * push; if (b !== 0) h[b] -= s * push; }
@@ -189,6 +198,48 @@ export function solveElevation(wpPairs, M) {
     if (worst < 1e-3) break;
   }
   return h;
+}
+
+// LOCAL LIFT: the relaxed profile above spreads every crossing's lift over half the lap,
+// so most of a busy plan rides high over the ground and the scenery beside it sits below
+// the road. A profile with `rampGrade` keeps only what the crossings need: the relaxed
+// solve still decides which strand of each crossing goes OVER, then every over-strand
+// waypoint stands on its own raised-cosine ramp, as high as its crossing needs and no
+// higher, and the lap between the ramps lies on the ground. A ramp's half-length grows
+// with its height, so every ramp climbs at most `rampGrade` and every crest is as round
+// as the lowest one (curvature 2*grade^2/height): far too round to launch a car, which
+// is what the hand-placed jumps are for. `wpPairs` here are the NEAR MISSES as well as the
+// crossings (findCrossings at a road's width plus a kerb): two strands side by side close
+// enough for their decks to overlap need the clearance too, which the relaxed profile
+// only ever gave them by spreading every lift so wide. Where one crossing's lower road
+// sits on another's ramp, the deck above it is raised to clear it, so the solve iterates;
+// a knot (a strand that would have to clear its own ramp) throws, like the relaxed solve.
+export function localLift(plan, wpPairs, relaxed, grade) {
+  const m = plan.length, s = new Array(m).fill(0);
+  for (let i = 1; i < m; i++) s[i] = s[i - 1] + Math.hypot(plan[i].x - plan[i - 1].x, plan[i].z - plan[i - 1].z);
+  const ring = s[m - 1] + Math.hypot(plan[0].x - plan[m - 1].x, plan[0].z - plan[m - 1].z);
+  const dist = (i, j) => { const d = Math.abs(s[i] - s[j]); return Math.min(d, ring - d); };
+  const over = wpPairs.map(([a, b]) => (relaxed[a] >= relaxed[b] ? [a, b] : [b, a]));
+  const peak = new Array(m).fill(0), h = new Array(m).fill(0);
+  for (let iter = 0; iter < 100; iter++) {
+    for (let i = 0; i < m; i++) {
+      let y = 0;
+      for (let j = 0; j < m; j++) {
+        if (!peak[j]) continue;
+        const t = dist(i, j) * 2 * grade / (Math.PI * peak[j]);
+        if (t < 1) y = Math.max(y, peak[j] * (1 + Math.cos(Math.PI * t)) / 2);
+      }
+      h[i] = y;
+    }
+    let moved = false;
+    for (const [o, u] of over) {
+      const need = h[u] + CLEARANCE;
+      if (peak[o] < need - 1e-9) { peak[o] = need; moved = true; }
+    }
+    if (Math.max(...peak) > 8) throw new Error('elevation diverged (crossing knot)');
+    if (!moved) return h;
+  }
+  throw new Error('elevation diverged (crossing knot)');
 }
 
 // ---- DECORATION passes (seeded, deterministic) ----
@@ -206,9 +257,11 @@ export function decoratePlan(wps, wpPairs, prof, seed, salt = 0) {
   const rng = mulberry32((seed ^ 0xDEC0 ^ Math.imul(salt, 0x9E3779B9)) >>> 0), rand = (lo, hi) => lo + rng() * (hi - lo);
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
   const m = wps.length, at = (i) => wps[((i % m) + m) % m];
-  // Protection masks. On a multi-crossing plan the solver lifts the ENTIRE lap into a
-  // rolling baseline (only the seam is pinned to 0), so "flat ground" doesn't exist —
-  // eligibility must be defined RELATIVE to that baseline or decoration never lands:
+  // Protection masks, read off the RELAXED solve (resolveSeed decorates on it, then moves
+  // the decoration onto the local lift where a profile has one). On a multi-crossing plan
+  // the relaxed solve lifts the ENTIRE lap into a rolling baseline (only the seam is
+  // pinned to 0), so "flat ground" doesn't exist there — eligibility must be defined
+  // RELATIVE to that baseline or decoration never lands:
   //  - `prot` (crossing zones ±1 + the seam) guards every pass — solver heights are
   //    load-bearing right at a crossing and the grid stays level/default-width.
   //  - hills/hops (protHills) additionally avoid each crossing's LOWER strand (a mound
@@ -565,14 +618,17 @@ function chooseAnchor(plan, resolveAt) {
 // smoothness check; salt 0 first keeps existing bakes reproducible.
 //
 // `anchor: false` pins the start at waypoint 0 (the pre-2026-07-17 behaviour) — for
-// comparing against an old bake, not for shipping. `jumps` are a track's hand-placed
-// crest hops (see JUMPS below).
+// comparing against an old bake, not for shipping. A number pins it at that plan
+// waypoint: a shipped track whose start must not move when its elevation is re-solved
+// (everything on it is placed by lap fraction from that start). `jumps` are a track's
+// hand-placed crest hops (see JUMPS below).
 export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [] } = {}) {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
   const plan0 = genPlan(seed, prof);
   const flat = buildTrack({ waypoints: plan0 });
   const pairs0 = findCrossings(flat, plan0);
+  const near0 = prof.rampGrade ? findCrossings(flat, plan0, flat.roadWidth + 1) : null;
   const m = plan0.length;
 
   // Resolve with the start line moved to plan waypoint `k`: rotate the ring, re-index the
@@ -580,12 +636,17 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true, jump
   const resolveAt = (k) => {
     const plan = k ? rotateRing(plan0, k) : plan0;
     const sh = (i) => ((i - k) % m + m) % m;
-    const wpPairs = k ? pairs0.map(([a, b]) => { const x = sh(a), y = sh(b); return [Math.min(x, y), Math.max(x, y)]; }) : pairs0;
-    const h = solveElevation(wpPairs, m);
+    const reindex = (pairs) => (k ? pairs.map(([a, b]) => { const x = sh(a), y = sh(b); return [Math.min(x, y), Math.max(x, y)]; }) : pairs);
+    const wpPairs = reindex(pairs0);
+    const relaxed = solveElevation(wpPairs, m);
+    const h = prof.rampGrade ? localLift(plan, reindex(near0), relaxed, prof.rampGrade) : relaxed;
     let wps = null, best = null, bestStep = Infinity;
     for (let salt = 0; salt < 4; salt++) {
-      const cand = plan.map((p, i) => ({ x: p.x, z: p.z, y: h[i] }));
+      // Decoration is placed against the RELAXED profile (its masks read the heights),
+      // then moved onto the local lift: a hill lands where it always did, on lower road.
+      const cand = plan.map((p, i) => ({ x: p.x, z: p.z, y: relaxed[i] }));
       decoratePlan(cand, wpPairs, prof, seed, salt);
+      if (h !== relaxed) for (let i = 0; i < m; i++) cand[i].y += h[i] - relaxed[i];
       if (!prof.decor) { wps = cand; break; }
       const step = worstStepOf(cand);
       if (step < 0.078) { wps = cand; break; }          // safely under STEP_GATE
@@ -595,7 +656,7 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true, jump
     return { prof, plan, flat, wpPairs, h, wps, anchor: k };
   };
 
-  const r = anchor ? chooseAnchor(plan0, resolveAt) : resolveAt(0);
+  const r = anchor === true ? chooseAnchor(plan0, resolveAt) : resolveAt(anchor || 0);
   if (jumps.length) liftJumps(r.wps, jumps);
   if (prof !== PROFILES.classic) roundTightCorners(r.wps, r.h);   // classic is frozen provenance
   return r;
