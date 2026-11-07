@@ -61,6 +61,8 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     }
     mInland.clear();
     mShoreR.clear();
+    mShoreSup.clear();
+    mShoreSink.clear();
     mGroundGrid = {};
     mGroundGrid.flatY = tb.groundY;
     mTerrainCap.clear();
@@ -209,6 +211,51 @@ void TtpRenderer::setupBeachMask(const TrackBin& tb) {
     const Shoreline shore = shoreline(tb);
     mShoreR.resize(kShoreSpokes);
     for (int k = 0; k < kShoreSpokes; k++) mShoreR[k] = shore.at(k * 2.0f * (float) M_PI / kShoreSpokes);
+    if (std::none_of(shore.bays.begin(), shore.bays.end(), [](const Shoreline::Bay& b) { return b.sunk; })) return;
+    mShoreSup.resize(kShoreSpokes);
+    mShoreSink.resize(kShoreSpokes);
+    for (int k = 0; k < kShoreSpokes; k++) {
+        const float a = k * 2.0f * (float) M_PI / kShoreSpokes;
+        mShoreSup[k] = shore.support(a);
+        mShoreSink[k] = shore.sunk(a);
+    }
+}
+
+// The sunk sea (TtpRenderer.h, kSeaSink): read off the spoke tables by
+// bearing, so a grid vertex never walks the track.
+float TtpRenderer::seaSink(float x, float z) const {
+    if (mShoreSink.empty()) return 0.0f;
+    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
+    if (f < 0) f += kShoreSpokes;
+    const int k = std::min(kShoreSpokes - 1, (int) f), k1 = (k + 1) % kShoreSpokes;
+    const float t = f - k;
+    const float sink = mShoreSink[k] + (mShoreSink[k1] - mShoreSink[k]) * t;
+    if (sink <= 0) return 0.0f;
+    const float sup = mShoreSup[k] + (mShoreSup[k1] - mShoreSup[k]) * t;
+    const float out = std::sqrt(x * x + z * z) - sup;
+    // Linear, as the sheet is between its rings at kSinkHold and kSinkOpen.
+    return kSeaSink * sink * (1.0f - std::min(1.0f, std::max(0.0f, (out - kSinkHold) / (kSinkOpen - kSinkHold))));
+}
+
+// The ground under a sunk sea: down from the plain to the water's level over
+// kSinkBeach, reaching it kSinkShore inside the waterline, then kSinkBed
+// further under the water. The 9 u grid's chords decide where the drawn sand
+// actually meets the water, so the sheet reaches in under the beach there
+// (kSinkInset, buildWater) and the drawn ground sets the edge. All of it
+// scales with how far the sea has sunk, so where the bay eases out the
+// beach does too.
+float TtpRenderer::bedSink(float x, float z) const {
+    const float sink = seaSink(x, z);
+    if (sink <= 0) return 0.0f;
+    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
+    if (f < 0) f += kShoreSpokes;
+    const int k = std::min(kShoreSpokes - 1, (int) f);
+    const float t = f - k;
+    const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * t;
+    const float d = std::sqrt(x * x + z * z) - R + kSinkShore;   // past the water's edge
+    const float share = sink / kSeaSink;
+    return share * ((kSeaSink - kWaterLift) * smooth01((d + kSinkBeach) / kSinkBeach)
+                    + (kWaterLift + kSinkBed) * smooth01(d / 3.0f));
 }
 
 float TtpRenderer::beachMask(float x, float z, float& inland) const {
@@ -358,7 +405,7 @@ float TtpRenderer::terrainCapAt(float x, float z) const {
 }
 
 float TtpRenderer::terrainY(const TrackBin& tb, float x, float z, bool withFlats) const {
-    return std::max(tb.groundY, std::min(terrainField(tb, x, z, withFlats), terrainCapAt(x, z)));
+    return std::max(tb.groundY - bedSink(x, z), std::min(terrainField(tb, x, z, withFlats), terrainCapAt(x, z)));
 }
 
 // What the road decides at (x, z): how far its nearest EDGE is, and the raised
@@ -431,10 +478,10 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
 }
 
 // The land before the deck cap: the raised ground, the hills and (withFlats)
-// the clearings. Never through a deck and never under the plain is the
-// caller's to apply (terrainY, buildTerrainGrid): the pillars, posts, berms
-// and the sun bake's flat proxy all stand on groundY, and ground below it
-// would bake fully shadowed and leave them hanging.
+// the clearings, and a sunk sea's bed. Never through a deck and never under
+// the plain (that bed aside) is the caller's to apply (terrainY,
+// buildTerrainGrid): the pillars, posts and berms stand on groundY, and
+// ground below it would leave them hanging.
 float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
         float* dell, float* bed) const {
     if (dell) *dell = 0;
@@ -470,7 +517,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
     hill *= inland;
     if (dell) *dell *= inland * shore;
     const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell, bed);
-    float y = tb.groundY + land * shore * smooth01(border / kRampR);
+    float y = tb.groundY + land * shore * smooth01(border / kRampR) - bedSink(x, z);
     if (withFlats) {
         // Cut only: a clearing lowers what stands above its level and leaves
         // a dip alone, so nothing is ever filled up under a piece.
@@ -728,7 +775,7 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
                                             h[vi(c + 1, r - 1)] + h[vi(c - 1, r + 1)] }) - 2 * y;
                 y += std::max(0.0f, -d2) / 8.0f;
             }
-            mGroundGrid.h[v] = std::max(tb.groundY, std::min(y, mTerrainCap[v]));
+            mGroundGrid.h[v] = std::max(tb.groundY - bedSink(x, z), std::min(y, mTerrainCap[v]));
         }
     }
 }
@@ -859,6 +906,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float3 SKIRT = srgbToLinear(tb.pal[5]);
     const float3 SHOULDER = srgbToLinear(tb.pal[6]);
     const float3 SAND = srgbToLinear(tb.pal[7]);
+    const float3 SLUSH = srgbToLinear(tb.kerbSlush);
 
     // Cross-section profile, strips and baked AO.
     //
@@ -872,7 +920,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float bev = 0.2f * std::min(cw, ch);
     struct PPoint { int sign; float off, y; };
     constexpr int kPts = 20;
-    const PPoint P[kPts] = {
+    PPoint P[kPts] = {
         { -1, -cw, -deck }, { -1, -cw, 0 }, { -1, -cw, ch - bev }, { -1, -cw + bev, ch },
         { -1, -bev, ch }, { -1, 0, ch - bev },
         { -1, 0, 0 }, { -1, gap, 0 }, { -1, gap + lw, 0 },     // gap: offAt widens it per ring
@@ -881,6 +929,110 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         { 1, 0, ch - bev }, { 1, bev, ch },
         { 1, cw - bev, ch }, { 1, cw, ch - bev }, { 1, cw, 0 }, { 1, cw, -deck },
     };
+    // THE PLOUGH BANK (tb.kerbBank): the kerb drawn as the snow a plough threw
+    // up, on the same seven points a side. A rounded crest leaning off the
+    // road, a slush-grey road face, and an outer slope that runs down into the
+    // land beside the road. Its toe goes where the land is, `bankDepth` under
+    // the deck's edge: where the land meets the slab (low road) a little past
+    // the slab's foot, under the ground; where it lies lower, out of reach of
+    // a kerb (a causeway over a frozen lake, a banked bend's high side), on
+    // down to it at kBankRun, out to kBankSpread of depth. Deeper still the
+    // slope stands up into snow piled against the slab's side, and past
+    // kBankSheer, raised road on its stilts, the bank sits on the deck with
+    // the slab's edge bare under it: a bank on a bridge, never snow hanging
+    // off a ledge. The step to that is one ring wide, between two toes on the
+    // slab's side, so it is the end of the pile. Each ring then scales the
+    // bank's height and width by a slow seeded wobble (bankAt), so it wanders
+    // along the road rather than running as one extruded bar. The static
+    // profile is the low bank; the per-ring one only moves points off the
+    // deck.
+    constexpr float kBankToe = 0.35f, kBankRun = 1.2f, kBankSpread = 0.9f, kBankSheer = 1.3f;
+    if (tb.kerbBank) {
+        const float bankP[7][2] = { { -(cw + kBankToe), -deck }, { -(cw + 0.1f), 0.15f * ch },
+                                    { -0.85f * cw, 0.62f * ch }, { -0.6f * cw, 0.95f * ch },
+                                    { -0.32f * cw, ch }, { -0.1f * cw, 0.6f * ch }, { 0, 0 } };
+        for (int k = 0; k < 7; k++) {
+            P[k] = { -1, bankP[k][0], bankP[k][1] };
+            P[kPts - 1 - k] = { 1, -bankP[k][0], bankP[k][1] };
+        }
+    }
+    // How far a bank side has stood up against the slab, at depth c, and
+    // whether it is up on the deck.
+    const auto bankSteep = [&](float c) { return smooth01((c - kBankSpread) / (kBankSheer - kBankSpread)); };
+    const auto bankOnDeck = [&](float c) { return c > kBankSheer; };
+    // The bank's point k (0 the toe, 6 the foot on the deck) on the left, at
+    // depth c: (off, y) beside the edge.
+    const auto bankPoint = [&](int k, float c, float& off, float& y) {
+        const float sheer[7][2] = { { -cw, -deck }, { -cw, 0 }, { -0.95f * cw, 0.45f * ch },
+                                    { -0.75f * cw, 0.85f * ch }, { -0.45f * cw, ch },
+                                    { -0.12f * cw, 0.6f * ch }, { 0, 0 } };
+        const float t = bankSteep(c);
+        off = P[k].off + (sheer[k][0] - P[k].off) * t;
+        y = P[k].y + (sheer[k][1] - P[k].y) * t;
+        if (k == 0 && c > deck && !bankOnDeck(c)) {
+            off = P[0].off - kBankRun * (std::min(c, kBankSpread) - deck);
+            off += (-cw - off) * t;
+            y = -c - 0.05f;
+        }
+    };
+    // The bank's height and width scales at arclength s on `side`: a lump
+    // every 3 u or so over a slower swell, out of phase with the other side;
+    // and how high up its road face the slush splashes, thick in places and
+    // thin in others, never one even band. A shape, not a colour per ring: a
+    // colour that changes ring by ring splits the ribbon's shared corners and
+    // its far runs, which the scene budget cannot afford.
+    const auto bankAt = [](float s, int side, float& hs, float& ws, float& slush) {
+        const float ph = side > 0 ? 1.7f : 0.0f;
+        const float n = 0.5f + 0.3f * std::sin(s * 2.03f + ph) + 0.2f * std::sin(s * 0.74f + 2.0f * ph + 1.0f);
+        const float m = 0.5f + 0.3f * std::sin(s * 1.61f + 3.0f * ph + 0.4f) + 0.2f * std::sin(s * 0.53f + ph);
+        const float q = 0.5f + 0.3f * std::sin(s * 1.37f + 2.3f * ph) + 0.2f * std::sin(s * 3.1f + 4.6f * ph);
+        hs = 0.55f + 0.45f * n;
+        ws = 0.8f + 0.4f * m;
+        slush = 0.7f + 0.4f * q;
+    };
+    // Each ring's bank depth, per side (2i left, 2i + 1 right): the land
+    // under the deck's edge at the low bank's toe, the berm's slope or the
+    // ground (terrainY: the field the ground grid is sampled from, before any
+    // clearing). Read every kBankStep rings, eased along the road (a berm's
+    // end drops its slope to the plain inside one sample, and a bank turning
+    // over that fast folds into a spike) and run between.
+    std::vector<float> bankDepth;
+    if (tb.kerbBank) {
+        constexpr uint32_t kBankStep = 4;
+        const uint32_t n = (N + kBankStep - 1) / kBankStep;
+        std::vector<float> read((size_t) n * 2), eased((size_t) n * 2);
+        for (uint32_t c = 0; c < n; c++) {
+            const uint32_t i = c * kBankStep;
+            const TrackBin::Sample& f = frames[i];
+            for (int k = 0; k < 2; k++) {
+                const float side = k ? 1.0f : -1.0f;
+                const float3 edge = f.pos + f.lat * (side * halfAt(i));
+                const float3 toe = edge + f.lat * (side * (cw + kBankToe));
+                read[2 * c + k] = edge.y - std::max(terrainY(tb, toe.x, toe.z), bermY(tb, toe.x, toe.z));
+            }
+        }
+        for (int pass = 0; pass < 2; pass++) {
+            for (uint32_t c = 0; c < n; c++) {
+                for (int k = 0; k < 2; k++) {
+                    float sum = 0;
+                    for (uint32_t d = 0; d < 5; d++) {
+                        sum += (float) (d < 3 ? d + 1 : 5 - d) * read[2 * ((c + n + d - 2) % n) + k];
+                    }
+                    eased[2 * c + k] = sum / 9.0f;
+                }
+            }
+            read.swap(eased);
+        }
+        bankDepth.resize((size_t) N * 2);
+        for (uint32_t i = 0; i < N; i++) {
+            const uint32_t c = i / kBankStep, cn = (c + 1) % n;
+            const uint32_t a = c * kBankStep, b = cn ? cn * kBankStep : N;
+            const float t = (float) (i - a) / (float) (b - a);
+            for (int k = 0; k < 2; k++) {
+                bankDepth[2 * i + k] = read[2 * c + k] + (read[2 * cn + k] - read[2 * c + k]) * t;
+            }
+        }
+    }
     // The deck-level points: the inner kerb feet, { ±1, 0, 0 }, and between.
     constexpr int kDeckPt0 = 6, kDeckPt1 = 13;
     enum Kind { K_SKIRT, K_KERB, K_GAP, K_LINE, K_ROAD, K_DASH };
@@ -965,10 +1117,24 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         const TrackBin::Sample& f = frames[i];
         const float kerbK = 1.0f + street[i] * (kStreetKerbH / ch - 1.0f);
         const float wider = street[i] * (kStreetKerbW - cw);
+        float hs[2] = { 1, 1 }, ws[2] = { 1, 1 }, slush[2] = { 1, 1 };
+        if (tb.kerbBank) {
+            const float sArc = ((float) i / N) * L;
+            bankAt(sArc, -1, hs[0], ws[0], slush[0]);
+            bankAt(sArc, 1, hs[1], ws[1], slush[1]);
+        }
         for (int j = 0; j < kPts; j++) {
+            float off = offAt(i, j), y = P[j].y;
+            if (tb.kerbBank && (j < kDeckPt0 || j > kDeckPt1)) {
+                const int k = j < kDeckPt0 ? 0 : 1;     // the side
+                const int b = k ? kPts - 1 - j : j;
+                bankPoint(b, bankDepth[2 * i + k], off, y);
+                off *= (k ? -1.0f : 1.0f) * ws[k];
+                if (y > 0) y *= hs[k] * (b == 5 ? slush[k] : 1.0f);
+            }
             const bool outer = P[j].off * P[j].sign > cw * 0.5f;   // the kerb's outer face and the skirt
-            const float l = P[j].sign * halfAt(i) + offAt(i, j) + (outer ? P[j].sign * wider : 0.0f);
-            const float y = P[j].y > 0 ? P[j].y * kerbK : P[j].y;
+            if (y > 0) y *= kerbK;
+            const float l = P[j].sign * halfAt(i) + off + (outer ? P[j].sign * wider : 0.0f);
             ringPts[(size_t) i * kPts + j] = f.pos + f.up * y + f.lat * l;
         }
     }
@@ -1084,8 +1250,23 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
             float3 cb;
             switch (st.kind) {
-                case K_KERB: cb = st.side > 0 ? colR : colL; break;
-                case K_SKIRT: cb = SKIRT; break;
+                case K_KERB:
+                    cb = st.side > 0 ? colR : colL;
+                    // the bank's road face, splashed with slush (how high
+                    // the splash reaches wanders: bankAt)
+                    if (tb.kerbBank && ((st.a == 5 && st.b == 6) || (st.a == 13 && st.b == 14))) cb = SLUSH;
+                    break;
+                case K_SKIRT:
+                    // a bank's outer slope is snow down to its toe, turning to
+                    // the slab's edge where the bank sits on its deck at both
+                    // rings (a quad from one to the other is the end of a
+                    // pile); the underside stays
+                    cb = SKIRT;
+                    if (tb.kerbBank && s != 19) {
+                        const int k = s ? 1 : 0;
+                        if (!bankOnDeck(bankDepth[2 * i + k]) || !bankOnDeck(bankDepth[2 * ni + k])) cb = colL;
+                    }
+                    break;
                 case K_DASH: cb = bare ? ASPHALT : (dashOn(i) ? DASHC : ASPHALT); break;
                 case K_LINE: cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER); break;
                 case K_GAP: cb = tb.sand > 0 ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
@@ -1103,7 +1284,13 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const uint32_t uIdx[4] = { i, i, i + 1, i + 1 };
             const auto stripNormal = [&](uint32_t ring) {
                 const float3 across = pointAt(ring, st.b) - pointAt(ring, st.a);
-                const float3 n = cross(across, tans[ring]);
+                float3 along = tans[ring];
+                // a bank's strip leans with its own wobble, so its lumps shade
+                if (tb.kerbBank && (st.kind == K_KERB || (st.kind == K_SKIRT && s != 19))) {
+                    const uint32_t rn = (ring + 1) % N, rp = (ring + N - 1) % N;
+                    along = (pointAt(rn, st.a) + pointAt(rn, st.b)) - (pointAt(rp, st.a) + pointAt(rp, st.b));
+                }
+                const float3 n = cross(across, along);
                 const float len = length(n);
                 return len > 1e-9f ? n / len : frames[ring].up;
             };
@@ -1126,11 +1313,20 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // anyway. Raw lat has no second quantity to agree with.
                 // Off the deck, v is the out-of-band sentinel instead — see the
                 // DECK FLAG note above.
+                // A low bank's slope is snow lying on snow, not a kerb's foot
+                // in its shadow: its toe and shoulder darken only as it
+                // stands up against the slab, and its toe on the deck.
+                float ao = AO[pt];
+                if (tb.kerbBank && (pt <= 1 || pt >= kPts - 2)) {
+                    const float c = bankDepth[2 * ri + (pt > 1 ? 1 : 0)];
+                    const bool toe = pt == 0 || pt == kPts - 1;
+                    if (!(toe && bankOnDeck(c))) ao += ((toe ? 0.85f : 0.95f) - ao) * (1.0f - bankSteep(c));
+                }
                 // A sand strip's alpha is 0: vroad.mat reads it as "a tyre
                 // leaves a groove here, not rubber". The deck is opaque, so the
                 // alpha is free.
                 const float flag = (st.kind == K_GAP && tb.sand > 0) ? 0.0f : 1.0f;
-                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, AO[pt], flag) },
+                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, ao, flag) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
                           onDeck ? P[pt].sign * halfAt(ri) + offAt(ri, pt) : OFF_DECK_LAT });
@@ -2159,10 +2355,14 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // but ground receivers still need a floor in the map or the
             // road's penumbra collapses against the far plane. This flat quad
             // at groundY is that floor: layer bit 0 cleared so no main view
-            // ever draws it, bit 1 set (below) so the bake does.
+            // ever draws it, bit 1 set (below) so the bake does. At the
+            // lowest ground, which is the plain except under a sunk sea: the
+            // beach going down to it would bake as shadowed by the floor.
+            const float floorY = std::min(groundY,
+                    *std::min_element(mGroundGrid.h.begin(), mGroundGrid.h.end()));
             mGroundProxy.verts = {
-                { -G, groundY, -G, white }, { G, groundY, -G, white },
-                { -G, groundY, G, white }, { G, groundY, G, white } };
+                { -G, floorY, -G, white }, { G, floorY, -G, white },
+                { -G, floorY, G, white }, { G, floorY, G, white } };
             mGroundProxy.idx = { 0, 2, 1, 1, 2, 3 };
             if (buildMesh(mGroundProxy)) {
                 auto& rcm = mEngine->getRenderableManager();

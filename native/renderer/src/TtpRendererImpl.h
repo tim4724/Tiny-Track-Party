@@ -335,6 +335,8 @@ struct TtpRenderer::TrackBin {
     std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
     uint32_t pal[8]; // asphalt line dash kerbA kerbB skirt shoulder sand (sRGB)
     float kerbW = 0.22f, kerbH = 0.20f;
+    bool kerbBank = false;      // the kerb as a plough's snowbank (theme.road.kerbBank)
+    uint32_t kerbSlush = 0;     //   and the slush on its road face (sRGB)
     bool edgeLines = true;
     std::vector<std::pair<float, float>> zones; // launch strips: (s, halfLen+margin)
     uint32_t sky[3];                            // zenith horizon below (sRGB)

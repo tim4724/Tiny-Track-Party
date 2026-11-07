@@ -1064,7 +1064,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const float ba = (lowest ? std::atan2(lowest->y, lowest->x) : 0.0f) + 2.3f;
         const float br = mShoreFn(ba) + 22.0f;
         const float bx = std::cos(ba) * br, bz = std::sin(ba) * br;
-        const float wy = gy + 0.12f; // rides ON the water sheet (WATER_LIFT)
+        const float wy = gy + kWaterLift - seaSink(bx, bz); // rides ON the water sheet
         const float yaw = (float) rnd() * 2.0f * (float) M_PI;
         constexpr float HEEL = 0.09f; // a sailing boat leans
         // Built 5.5 long; at BOAT a 10 m yacht beside a 0.9 car.
@@ -1704,6 +1704,8 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
 // The road keeps a set piece MARGIN past its deck edge, except for a part
 // that stays clear of the deck: UNDER_GAP below a deck raised over
 // UNDER_RAISE, or OVER_GAP above it (a wire). The berm keeps BERM_MARGIN,
+// unless the part is OVER_GAP above it too (a gallery's roof: the berm's
+// test is a disc round each ring, so it covers the road beside it as well),
 // a pillar PILLAR_MARGIN, another piece PIECE_MARGIN, and the sea starts
 // SEA_MARGIN inside the shoreline.
 const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int skip) const {
@@ -1723,7 +1725,7 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
         const float dx = x - p.x, dz = z - p.z, lim = p.radius + PILLAR_MARGIN;
         if (dx * dx + dz * dz < lim * lim) return "pillar";
     }
-    if (inBerm(tb, x, z, BERM_MARGIN)) return "berm";
+    if (inBerm(tb, x, z, BERM_MARGIN) && lo <= groundY(x, z) + OVER_GAP) return "berm";
     for (size_t k = 0; k < mSetFeet.size(); k++) {
         if ((int) k == skip) continue;
         const SetFoot& f = mSetFeet[k];
@@ -1913,9 +1915,26 @@ TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
         const float px = f.pos.x + f.lat.x * l.lat, pz = f.pos.z + f.lat.z * l.lat;
         const float a = std::atan2(pz, px), r = std::sqrt(px * px + pz * pz);
         s.bays.push_back({ a, r, std::max(l.w > 0 ? -l.w : SHORE_MIN_GAP, r - s.support(a)),
-                           0.5f * l.len, l.r });
+                           0.5f * l.len, l.r, l.w > 0 });
     }
     return s;
+}
+
+// How much of a bay's shore holds at bearing a: 1 along its `half`, easing
+// back to 0 over its `fade`.
+float TtpRenderer::Shoreline::bayWeight(const Bay& b, float a) const {
+    const float d = std::fabs(std::remainder(a - b.a, 2.0f * (float) M_PI)) * b.r;
+    if (d >= b.half + b.fade) return 0.0f;
+    const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / b.fade));
+    return 1.0f - t * t * (3.0f - 2.0f * t);
+}
+
+float TtpRenderer::Shoreline::sunk(float a) const {
+    float k = 0;
+    for (const Bay& b : bays) {
+        if (b.sunk) k = std::max(k, bayWeight(b, a));
+    }
+    return k;
 }
 
 float TtpRenderer::Shoreline::support(float a) const {
@@ -1939,11 +1958,8 @@ float TtpRenderer::Shoreline::at(float a) const {
     const float crinkle = SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
     float r = sup + SHORE_MARGIN + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a)) + crinkle;
     for (const Bay& b : bays) {
-        const float d = std::fabs(std::remainder(a - b.a, 2.0f * (float) M_PI)) * b.r;
-        if (d >= b.half + b.fade) continue;
-        const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / b.fade));
-        const float w = 1.0f - t * t * (3.0f - 2.0f * t);
-        r = std::min(r, r + (sup + b.gap + 0.3f * crinkle - r) * w);
+        const float w = bayWeight(b, a);
+        if (w > 0) r = std::min(r, r + (sup + b.gap + 0.3f * crinkle - r) * w);
     }
     return r;
 }
@@ -1956,23 +1972,30 @@ float TtpRenderer::Shoreline::at(float a) const {
 // gets an oval island and the surf never floods the road.
 void TtpRenderer::buildWater(const TrackBin& tb) {
     if (!tb.hasWater || !mBlendMaterial) return;
-    constexpr float WATER_INNER = 135.0f, WATER_LIFT = 0.12f;
+    constexpr float WATER_INNER = 135.0f;
     constexpr float WATER_SHADE = 1.0f; // the flat sheet's constant Lambert term
     // 144 spokes = 2.5° steps: chord sag at the shore radius is ~0.03u and the
     // sharpest crinkle harmonic (29·a) still gets ~5 samples per cycle.
     constexpr int SEG = 144;
     constexpr float SHORE_FADE = 220, SWASH_RANGE = 0.62f, SWASH_ZONE = 20;
-    // [radius, colour param (0..2 = foam→shallow→deep), alpha]
-    static const float BANDS[9][3] = {
-        { WATER_INNER,        0,     0    },
-        { WATER_INNER + 1.2f, 0,     0.9f },
-        { WATER_INNER + 4.0f, 0,     0.92f },
-        { WATER_INNER + 4.4f, 0.8f,  0.88f },
-        { WATER_INNER + 9,    0.9f,  0.86f },
-        { WATER_INNER + 20,   1,     0.95f },
-        { WATER_INNER + 60,   1.55f, 1 },
-        { WATER_INNER + 180,  2,     1 },
-        { 2600,               2,     1 },
+    // Where a band lies behind a causeway (a sunk bay, kSeaSink): the shore's
+    // own bands reach kSinkInset in under the beach, the next two stand where
+    // the sunk sea holds and where it is back at the plain's level, the open
+    // sea's stay put. Moving rings costs nothing; adding them costs every
+    // spoke round the island.
+    enum Sunk { INSET, HOLD, OPEN, KEEP };
+    struct Band { float r, colour, alpha; Sunk sunk; };
+    // colour 0..2 = foam→shallow→deep
+    static const Band BANDS[9] = {
+        { WATER_INNER,        0,     0,     INSET },
+        { WATER_INNER + 1.2f, 0,     0.9f,  INSET },
+        { WATER_INNER + 4.0f, 0,     0.92f, INSET },
+        { WATER_INNER + 4.4f, 0.8f,  0.88f, INSET },
+        { WATER_INNER + 9,    0.9f,  0.86f, HOLD },
+        { WATER_INNER + 20,   1,     0.95f, OPEN },
+        { WATER_INNER + 60,   1.55f, 1,     KEEP },
+        { WATER_INNER + 180,  2,     1,     KEEP },
+        { 2600,               2,     1,     KEEP },
     };
     static const float WET[5][2] = { // [radius, alpha]
         { WATER_INNER - 13,   0 },
@@ -1989,6 +2012,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     const auto harm = Shoreline::harm;
     const float* swashPh = shore.swashPh;
     std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1), landK(SEG + 1);
+    std::vector<float> sup(SEG + 1), calm(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {
         const float a = (float) (si % SEG) / SEG * 2.0f * (float) M_PI;
@@ -2000,28 +2024,41 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
         // with the beach, so the strip between them is not all wet. The open
         // shore stands well past WET_FULL, so it keeps its band whole.
         constexpr float WET_FULL = 20.0f;
+        sup[si] = shore.bays.empty() ? 0.0f : shore.support(a);
         landK[si] = shore.bays.empty() ? 1.0f
-                : std::min(1.0f, std::max(0.35f, (shoreR[si] - shore.support(a)) / WET_FULL));
+                : std::min(1.0f, std::max(0.35f, (shoreR[si] - sup[si]) / WET_FULL));
+        // Behind a causeway the water is a lagoon: no surf breaks on its
+        // shore, and the foam band read as a white line painted along the road.
+        calm[si] = shore.sunk(a);
     }
-    const float y = tb.groundY + WATER_LIFT;
+    const float gy = tb.groundY;
     const float3 foam = srgbToLinear(tb.waterFoam);
     const float3 shallow = srgbToLinear(tb.waterShallow);
     const float3 deep = srgbToLinear(tb.waterDeep);
-    const auto ringMesh = [&](Mesh& m, const std::function<float(int)>& radiusAt,
-            int rings, bool fade, float lift,
-            const std::function<uint32_t(int)>& colAt) {
+    // One vertex per ring per spoke, its height read where it lands; `sunk`
+    // says where a ring lies behind a causeway (null: where it always does).
+    const auto ringMesh = [&](Mesh& m, const std::vector<float>& radii, bool fade, const Sunk* sunk,
+            const std::function<float(float, float)>& yAt,
+            const std::function<uint32_t(int, int)>& colAt) {
+        const int rings = (int) radii.size();
         for (int ri = 0; ri < rings; ri++) {
-            const float off = radiusAt(ri) - WATER_INNER;
+            const float off = radii[ri] - WATER_INNER;
             // The outline relaxes back to a circle as the water deepens — out
             // past the fog the far rings only need to reach the sky.
             const float t = fade ? std::min(1.0f, std::fabs(off) / SHORE_FADE) : 0.0f;
             const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
-            const uint32_t col = colAt(ri);
             for (int si = 0; si <= SEG; si++) {
                 const float o = off < 0 ? off * landK[si] : off;
-                const float r = shoreR[si] * (1 - t) + outer * t
+                float r = shoreR[si] * (1 - t) + outer * t
                         + o * (1 + (swashF[si] - 1) * sw);
-                m.verts.push_back({ cosA[si] * r, y + lift, sinA[si] * r, col });
+                if (sunk && calm[si] > 0) {
+                    const float to = sunk[ri] == INSET ? r - kSinkInset * sw
+                                   : sunk[ri] == HOLD ? sup[si] + kSinkHold
+                                   : sunk[ri] == OPEN ? sup[si] + kSinkOpen : r;
+                    r += (to - r) * calm[si];
+                }
+                const float x = cosA[si] * r, z = sinA[si] * r;
+                m.verts.push_back({ x, yAt(x, z), z, colAt(ri, si) });
             }
         }
         const uint32_t verts = SEG + 1;
@@ -2032,21 +2069,32 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
             }
         }
     };
-    // Damp sand first (it draws under the sea), then the sheet.
+    // Damp sand first (it draws under the sea), then the sheet: the damp sand
+    // on the beach, going down with it to a sunk sea, the sheet at the sea's
+    // level.
     {
         const uint32_t wet = tb.waterWet;
-        ringMesh(mWet, [](int ri) { return WET[ri][0]; }, 5, false, -0.05f, [&](int ri) {
-            return packShown(srgbToLinear(wet), 1.0f, WET[ri][1]);
-        });
+        std::vector<float> radii;
+        for (const auto& w : WET) radii.push_back(w[0]);
+        ringMesh(mWet, radii, false, nullptr,
+                [&](float x, float z) { return gy + kWaterLift - 0.05f - bedSink(x, z); },
+                [&](int ri, int) { return packShown(srgbToLinear(wet), 1.0f, WET[ri][1]); });
         MaterialInstance* mi = sceneInstance(mBlendMaterial);
         mi->setPolygonOffset(-1.0f, -1.0f);
         buildMesh(mWet, true, mi, 1);
     }
     {
-        ringMesh(mWater, [](int ri) { return BANDS[ri][0]; }, 9, true, 0.0f, [&](int ri) {
-            const float t = BANDS[ri][1];
+        std::vector<float> radii;
+        Sunk sunk[9];
+        for (int i = 0; i < 9; i++) { radii.push_back(BANDS[i].r); sunk[i] = BANDS[i].sunk; }
+        ringMesh(mWater, radii, true, sunk,
+                [&](float x, float z) { return gy + kWaterLift - seaSink(x, z); },
+                [&](int ri, int si) {
+            // A lagoon's edge wears the shallows' own colour.
+            float t = BANDS[ri].colour;
+            if (t < 0.8f) t += (0.8f - t) * calm[si];
             const float3 c = t <= 1 ? mix(foam, shallow, t) : mix(shallow, deep, t - 1);
-            return packShown(c, WATER_SHADE, BANDS[ri][2]);
+            return packShown(c, WATER_SHADE, BANDS[ri].alpha);
         });
         // The JS sheet is Lambert, but it's FLAT and horizontal, so its shading
         // is one constant — folded into the vertex colours instead, since the
@@ -2219,7 +2267,10 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     };
 
     for (const TrackBin::Pillar& p : tb.pillars) {
-        column(p.x, p.z, p.radius, p.baseY, std::max(p.baseY + 0.1f, p.topY), nullptr, nullptr);
+        // Down to the bed of a sunk sea, which lies under the plain they stand on.
+        const float sink = bedSink(p.x, p.z);
+        const float baseY = sink > 0 ? std::min(p.baseY, tb.groundY - sink - 0.1f) : p.baseY;
+        column(p.x, p.z, p.radius, baseY, std::max(p.baseY + 0.1f, p.topY), nullptr, nullptr);
     }
     // Poles: from the road surface (EMBED 0.06 below) up to just under the deck
     // crossing overhead (TUCK 0.34), or POST_UP 2.0 above the road with nothing
@@ -2281,6 +2332,44 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             face(foot[1][j], foot[1][j + 1], top[1][j + 1], top[1][j], sc);
         }
         face(foot[0][SLICES], top[0][SLICES], top[1][SLICES], foot[1][SLICES], sc);
+    }
+    // A deck over a sunk sea stands on timber bents wherever it is clear of
+    // the water: a square pile under each kerb and a cap beam across under the
+    // slab, every BENT_STEP, so the causeway reads as raised on legs rather
+    // than lying on the sea. The track's own pillars (above) still carry its
+    // crests; these are the renderer's, and nothing collides with them.
+    if (!mShoreSink.empty()) {
+        constexpr float BENT_STEP = 6.0f, PILE = 0.12f, CAP = 0.1f, CLEAR = 0.3f;
+        const auto outward = [&](float3 a, float3 b, float3 c, float3 d, float3 n) {
+            if (dot(cross(b - a, c - a), n) < 0) std::swap(b, d);
+            face(a, b, c, d, sc);
+        };
+        for (float s = 0; s < tb.length; s += BENT_STEP) {
+            const TrackBin::Sample f = tb.frameAt(s);
+            if (!inSea(f.pos.x, f.pos.z, -1.0f)) continue;
+            const float water = tb.groundY + kWaterLift - seaSink(f.pos.x, f.pos.z);
+            const float off = 0.5f * f.width + tb.kerbW - PILE - 0.02f;
+            const float3 e[2] = { f.pos - f.lat * off, f.pos + f.lat * off };
+            const float under = std::min(e[0].y, e[1].y) - kDeckDepth;
+            if (under - water < CLEAR) continue;
+            for (const float3& p : e) {
+                const float y0 = tb.groundY - bedSink(p.x, p.z) - 0.1f, y1 = p.y - kDeckDepth + 0.02f;
+                for (const float2 n : { float2{ 1, 0 }, float2{ 0, 1 }, float2{ -1, 0 }, float2{ 0, -1 } }) {
+                    const float cx = p.x + n.x * PILE, cz = p.z + n.y * PILE;
+                    const float tx = -n.y * PILE, tz = n.x * PILE;
+                    outward({ cx - tx, y0, cz - tz }, { cx - tx, y1, cz - tz },
+                            { cx + tx, y1, cz + tz }, { cx + tx, y0, cz + tz }, { n.x, 0, n.y });
+                }
+            }
+            // The cap: its underside and the two faces along the road.
+            float3 t = f.tangent();
+            t = normalize(float3{ t.x, 0, t.z }) * PILE;
+            const float3 a0{ e[0].x, under - 2 * CAP, e[0].z }, a1{ e[1].x, under - 2 * CAP, e[1].z };
+            const float3 up{ 0, 2 * CAP + 0.02f, 0 };
+            outward(a0 - t, a1 - t, a1 + t, a0 + t, { 0, -1, 0 });
+            outward(a0 + t, a1 + t, a1 + t + up, a0 + t + up, t);
+            outward(a0 - t, a1 - t, a1 - t + up, a0 - t + up, -t);
+        }
     }
 
     // STATIC SHADOW RECEIVERS, both: baked vertex light, one tap of their own

@@ -1476,6 +1476,107 @@ def swim_line():
                 beam((x0 - 0.1 + side * 0.1 * sn, SEA + 0.52, z0 + side * 0.1 * c),
                      (x0 - 0.1 + side * 0.3 * sn, SEA + 0.44, z0 + side * 0.3 * c), 0.06, 0xf2bf99)
 
+# ---- Riptide's promenade ----
+
+def beach_hut(x, y, z, body, trim=0xfff6eb):
+    """A bathing hut a little chunkier than life (2.7 m to the ridge), its
+    gable and door to the road (+X): a painted box, a white door and a
+    pitched roof in its own colour, standing on the boardwalk at `y`."""
+    w, h, d = 0.6, 0.66, 0.62
+    box((w, h, d), (x, y + h / 2, z), body)
+    box((0.05, h * 0.74, d * 0.48), (x + w / 2 + 0.01, y + h * 0.38, z), trim)              # the door
+    peak = 0.28
+    prism([(z - d / 2 - 0.07, y + h), (z + d / 2 + 0.07, y + h), (z, y + h + peak)], x, w + 0.08, body)  # the roof
+
+def angler(x, y, z, yaw, shirt, rod_to):
+    """A fisher sitting on the pier's edge, legs over it, rod out to sea."""
+    figure((x, y, z), yaw, shirt=shirt, legs=0x4f5260, hair=0x7a5a3a, pose='sit')
+    beam((x - 0.02 * math.cos(yaw), y + 0.22, z + 0.02 * math.sin(yaw)), rod_to, 0.04, 0x38383d)
+
+@piece(1.0)
+def promenade():
+    # Riptide's town end of the beach, where the causeway sets out: a timber
+    # boardwalk at the road's own level along the straight's outer kerb (+X
+    # is the road; its edge keeps the set pieces' 1.2 u off the deck),
+    # bathing huts standing on it with their doors to the cars, the kiosk
+    # between the two rows, and the fishing pier running straight on from the
+    # boardwalk's end out over the sea where the road swings away onto the
+    # causeway, so the chase camera looks down the pier the length of the
+    # straight. At yaw 180 +Z runs against the cars, so the huts come first
+    # and the pier last. The piece stands on the plain and levels nothing (the
+    # umbrellas on the sand are draped): the deck and the piles are built from
+    # well under it, so they reach the sand wherever it lies and stand in a
+    # sea the causeway has sunk.
+    wood, dark, deck_y = 0x9a7b55, 0x8a6a46, 0.38
+    BW0, BW1, Z0, Z1 = -0.2, 2.2, -4.6, 9.0          # the boardwalk, 2.4 u wide
+    FOOT = -1.2
+    box((BW1 - BW0, 0.1, Z1 - Z0), ((BW0 + BW1) / 2, deck_y - 0.05, (Z0 + Z1) / 2), wood)
+    with square():                                    # its piles along the sea side
+        for k in range(3):
+            z = Z0 + 0.3 + k * (Z1 - Z0 - 0.6) / 2
+            box((0.14, deck_y - FOOT, 0.14), (BW0 + 0.12, (deck_y + FOOT) / 2, z), dark)
+    # the huts on it, two rows of three either side of the kiosk, their doors
+    # a stride back from the boardwalk's edge
+    HX = 0.62
+    for z, c in ((8.2, 0xff5040), (7.45, 0x339cf2), (6.7, 0xfff6eb), (2.4, 0x22c46e), (1.65, 0xffc044), (0.9, 0x339cf2)):
+        beach_hut(HX, deck_y, z, c, trim=0x339cf2 if c == 0xfff6eb else 0xfff6eb)
+    # the kiosk: a counter to the cars under a red and white awning, an ice
+    # cream on its roof, a queue of two on the boards
+    KX, KZ = 0.5, 4.55
+    box((0.8, 0.66, 1.3), (KX, deck_y + 0.33, KZ), 0xfff6eb)
+    box((0.9, 0.07, 1.4), (KX, deck_y + 0.69, KZ), 0x339cf2)                           # the roof
+    for i in range(3):
+        box((0.46, 0.05, 1.4 / 3), (KX + 0.62, deck_y + 0.62, KZ - 0.47 + i * 0.467),
+            0xff5040 if i % 2 == 0 else 0xfff6eb, roll=0.35)
+    cyl(0.12, 0.28, (KX, deck_y + 0.72, KZ), 0xf2bf99, r2=0.02, segs=6)               # the cone, point down
+    o = bpy.context.active_object
+    o.location = P(KX, deck_y + 1.0, KZ)
+    o.rotation_euler = (math.pi, 0, 0)
+    box((0.24, 0.2, 0.24), (KX, deck_y + 1.08, KZ), 0xfde4c7)                          # the scoop
+    with square():
+        figure((1.5, deck_y, KZ - 0.2), math.pi, shirt=0x339cf2, legs=0x4f5260, hair=0x38383d)
+        figure((1.8, deck_y, KZ + 0.25), math.pi, shirt=0xff7e44, legs=0x339cf2, hair=0xffc044)
+    # the pier: on from the boardwalk's end at its level and out over the
+    # sea, turned a little off the road's line so the boardwalk's huts do not
+    # stand in front of it; square piles, a wider head, no rail
+    A, LEN, W = 0.45, 18.0, 1.2
+    dx, dz = -math.sin(A), -math.cos(A)              # along the pier, away from the huts
+    px0, pz0 = 0.75, Z0 + 0.3                         # where it leaves the boardwalk
+    def at(t, s=0.0):
+        return px0 + dx * t + dz * s, pz0 + dz * t - dx * s
+    for k in range(3):
+        x, z = at(LEN * (k + 0.5) / 3)
+        box((W, 0.1, LEN / 3 - 0.04), (x, deck_y - 0.05, z), 0xb06041 if k % 2 else wood, yaw=A)
+    hx, hz = at(LEN + 1.0)
+    box((2.2, 0.1, 2.0), (hx, deck_y - 0.05, hz), wood, yaw=A)                         # the head
+    with square():
+        for k in range(3):
+            for s in (-0.46, 0.46):
+                x, z = at(1.6 + k * (LEN - 1.6) / 2, s)
+                box((0.13, deck_y - FOOT, 0.13), (x, (deck_y + FOOT) / 2, z), dark, yaw=A)
+        for s in (-0.9, 0.9):
+            x, z = at(LEN + 1.6, s)
+            box((0.14, deck_y - FOOT, 0.14), (x, (deck_y + FOOT) / 2, z), dark, yaw=A)
+        # still anglers at the head, rods out over the water
+        for s, shirt in ((-0.45, 0xff5040), (0.5, 0x339cf2)):
+            x, z = at(LEN + 1.85, s)
+            tx, tz = at(LEN + 2.9, s * 1.6)
+            angler(x, deck_y, z, A + math.pi / 2, shirt, (tx, deck_y + 0.85, tz))
+    # the bait shed at its head, its roof the pier's mark against the sea
+    sx, sz = at(LEN + 0.6, 0.0)
+    box((0.9, 0.6, 0.8), (sx, deck_y + 0.3, sz), 0xfff6eb, yaw=A)
+    box((1.05, 0.12, 0.95), (sx, deck_y + 0.66, sz), 0xff5040, yaw=A)
+    flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (0xff5040, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.0#kiosk')
+    join_still('promenade')
+    # umbrellas on the sand between the boardwalk and the sea, as the sand lies
+    def sand():
+        with square():
+            for (x, z, c) in ((-2.2, 4.6, 0xff5040),):
+                umbrella((x, 0, z), 0.46, 0.72, (c, 0xfff6eb), gores=6)
+                box((0.46, 0.04, 0.24), (x - 0.38, 0.02, z + 0.1), 0xffc044, yaw=0.1)
+                figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')
+    draped('sand', sand)
+
 # ====================================================================================
 # SNOW
 # ====================================================================================
@@ -1930,20 +2031,87 @@ def shanty(x, z, color, yaw=0.0, pipe=False):
     if pipe:
         box((0.07, 0.24, 0.07), at(-0.18, 0.72, 0.12), 0x555b66, yaw=yaw)
 
+def clip(pts, keep):
+    """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
+    `keep` linear (a half-plane)."""
+    out = []
+    for i in range(len(pts)):
+        a, b = pts[i], pts[(i + 1) % len(pts)]
+        ka, kb = keep(*a), keep(*b)
+        if ka >= 0:
+            out.append(a)
+        if (ka >= 0) != (kb >= 0):
+            t = ka / (ka - kb)
+            out.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+    return out
+
+def slab(outline, y0, y1, color):
+    """A flat slab cut to a simple `outline`, from y0 up to y1: a sheet of ice."""
+    n = len(outline)
+    verts = [(x, y0, z) for x, z in outline] + [(x, y1, z) for x, z in outline]
+    faces = [tuple(range(n, 2 * n))] + [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
+    me = bpy.data.meshes.new('slab')
+    me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+    me.update()
+    if me.polygons[0].normal.z < 0:
+        for p in me.polygons:
+            p.flip()
+    o = bpy.data.objects.new('slab', me)
+    bpy.context.scene.collection.objects.link(o)
+    return paint(o, color)
+
+# Flurry's lake, placed at yaw 180 so the piece's +X is the road's right: the
+# road comes down off the bridge across it, running down -Z from (12.4, 21)
+# to (11.4, -2) on its stilts, then on its berm (z 0.5 .. -11), and bends
+# right round the east ice at z -12 .. -22 to run off along z -23. The ice
+# never goes under the deck. The west sheet stops on lines along the road
+# (LAKE_ROAD, the road there as a straight line): 4.3 u off its centreline
+# beside the stilts, 6.2 u beside the berm. The east sheet fills the inside
+# of the bend, outlined as close: clear of the deck, the berms on both ramps,
+# the start straight to the north and the cabin to the east (LAKE_E).
+# Flurry's SET_GROUND holds the plain under both.
+LAKE_ROAD = ((12.4, 21.0), (11.4, -2.0))
+LAKE_BERM_Z = 1.5
+LAKE_W = dict(cx=0.0, cz=-1.5, half=3.5, r=15.0, off=4.3, berm=6.2)
+LAKE_E = ((16.3, 13.0), (25.5, 14.0), (26.8, 9.0), (27.0, 3.0), (28.5, -1.5), (28.5, -13.5),
+          (26.5, -16.0), (19.6, -16.7), (17.9, -11.0), (17.9, 0.0), (16.0, 2.0))
+
+def road_clear(off):
+    """keep(x, z) >= 0 west of LAKE_ROAD by `off`."""
+    (x0, z0), (x1, z1) = LAKE_ROAD
+    return lambda x, z: x0 + (z - z0) * (x1 - x0) / (z1 - z0) - off - x
+
+def shrink(pts, d):
+    """An outline pulled in toward its centroid by `d` all round."""
+    cx = sum(x for x, _ in pts) / len(pts)
+    cz = sum(z for _, z in pts) / len(pts)
+    out = []
+    for x, z in pts:
+        l = math.hypot(x - cx, z - cz)
+        out.append((x - (x - cx) / l * d, z - (z - cz) / l * d))
+    return out
+
 @piece(1.0)
 def frozen_lake():
-    # Flurry: a frozen lake at the bottom of the land, the snowbanks round it
-    # and the plain it lies on are the track's terrain (SET_GROUND), and the
-    # road crosses its east edge on its stilts (+X, toward the road). Built in
-    # world units, everything on the ice at its real size beside a car: six
-    # skaters (half a unit tall) glide round a rink on the west ice at a
-    # skater's pace (anim_path; carried by their skates, they hold their
-    # pose); out on the north-west ice a little village of fishing
-    # shanties in bright colours, a fisher sat by his hole jigging his rod; a
-    # snowman on the ice by the bank.
-    R = 15.0
-    disc(R, (0, 0, 0), 0xa9d7ee, segs=40, h=0.06)
-    disc(R - 3.0, (0, 0.01, 0), 0x8ecae6, segs=32, h=0.06)          # the clear ice in the middle
+    # Flurry: a frozen lake at the bottom of the land, the plain it lies on is
+    # the track's terrain (SET_GROUND), and the road crosses it between its
+    # two sheets on its stilts. Built in world units, everything on the ice at
+    # its real size beside a car: six skaters (half a unit tall) glide round a
+    # rink on the west ice at a skater's pace (anim_path; carried by their
+    # skates, they hold their pose); on the east ice, ahead on the right of a
+    # racer coming down off the bridge, a village of fishing shanties in bright
+    # colours and a fisher sat by his hole jigging his rod; a snowman on the
+    # ice by the rink.
+    W = LAKE_W
+    rim = stadium(W['cx'], W['cz'], W['r'], W['half'], 12)
+    # in two, the part beside the stilts laid a hair over the part beside the
+    # berm where they overlap, so no seam opens between them
+    slab(clip(clip(rim, road_clear(W['berm'])), lambda x, z: LAKE_BERM_Z - z), 0.0, 0.06, 0xa9d7ee)
+    slab(clip(clip(rim, road_clear(W['off'])), lambda x, z: z - LAKE_BERM_Z + 0.4), 0.0, 0.065, 0xa9d7ee)
+    west_in = clip(stadium(W['cx'], W['cz'], W['r'] - 3.0, W['half'], 12), road_clear(W['berm'] + 2.5))
+    slab(west_in, 0.0, 0.07, 0x8ecae6)                                # the clear ice in the middle
+    slab(list(LAKE_E), 0.0, 0.06, 0xa9d7ee)
+    slab(shrink(LAKE_E, 2.4), 0.0, 0.07, 0x8ecae6)
     # the rink: an oval on the west ice, the skaters spread round it
     N = 14
     rc, rx, rz = (-2.0, 4.0), 4.5, 5.5
@@ -1956,17 +2124,18 @@ def frozen_lake():
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
         with animated('anim_path:c=rink:p=26:o=%.3f:f=1#%d' % (n / 6, n), at):
             skater(at[0], at[1], at[2], coat, hat, k=0.19)
-    # the shanty village on the north-west ice, a fishing hole by each door;
-    # all of it inside nine units of the middle, where the drawn ice is flat
-    # (past that the ground's 9 u grid rises toward the banks over the ice)
-    for (x, z, c, yw, pipe) in ((-5.25, -4.5, 0xcf534f, 0.2, True), (-6.45, -3.15, 0x3f7bd9, -0.3, False),
-                                (-4.2, -6.0, 0x61cb8b, 0.5, False), (-6.9, -5.55, 0xffc044, 0.1, True),
-                                (-4.8, -2.55, 0xa878e8, -0.6, False), (-3.15, -4.2, 0xff7e44, 0.3, False),
-                                (-5.7, -7.2, 0x3f7bd9, 0.4, False)):
+    # the shanty village on the east ice, a fishing hole by each door, the
+    # doors turned up the road to the racer coming down off the bridge (+Z)
+    ex, ez, face = 21.0, -9.0, -1.95
+    for (dx, dz, c, yw, pipe) in ((-0.05, 0.2, 0xcf534f, 0.2, True), (-1.25, 1.55, 0x3f7bd9, -0.3, False),
+                                  (1.0, -1.3, 0x61cb8b, 0.5, False), (1.7, 0.85, 0xffc044, 0.1, True),
+                                  (0.4, 2.15, 0xa878e8, -0.6, False), (-1.6, -1.0, 0xff7e44, 0.3, False),
+                                  (-0.5, -2.5, 0x3f7bd9, 0.4, False)):
+        x, z, yw = ex + 1.4 * dx, ez + 1.4 * dz, yw + face
         shanty(x, z, c, yw, pipe)
         hx, hz = turned(x, z, yw, 0.62, 0.15)
         box((0.24, 0.02, 0.24), (hx, 0.075, hz), 0x2f3a4a, yaw=yw)        # its hole
-    sx, sz = -2.2, -6.6                                                  # the fisher out in the open
+    sx, sz = 19.8, -15.0                                                 # the fisher out in the open
     box((0.3, 0.02, 0.3), (sx + 0.42, 0.075, sz), 0x2f3a4a)
     cyl(0.09, 0.16, (sx, 0.07, sz), 0x555b66, segs=8)                    # his bucket
     seated(sx, 0.23, sz, 0x6e4a32, 0xffc044)
@@ -2090,6 +2259,15 @@ def avalanche_slide():
             x *= G
             z = 0.4 * G * (i % 2 * 2 - 1)
             rock((x, -0.3, z), 0.9, yaw=i * 1.9)
+        # earth braking mounds across the runout, two staggered rows, the
+        # debris piled up behind them and thinning out between them; nothing
+        # past the second row, whose backs stop short of the crest's berm
+        MOUNDS = ((3.0, -7.5, 0.15, 2.4), (3.0, 0.0, 0.0, 2.4), (3.0, 7.5, -0.15, 2.4),
+                  (8.0, -3.8, 0.1, 1.7), (8.0, 3.8, -0.1, 1.7))
+        for mx, mz, myaw, down in MOUNDS:
+            braking_mound(mx, mz, myaw, down=down)
+        def clear_of_mounds(x, z):
+            return x < 10.0 and all(abs(x - mx) > 1.7 or abs(z - mz) > 2.0 for mx, mz, _, _ in MOUNDS)
         # the debris fan: tumbled snow blocks over it, the runout thinning on
         # toward the road (+X). The fan stops a grid cell short of the road,
         # where the deck's cap would hold the land under it.
@@ -2099,15 +2277,18 @@ def avalanche_slide():
                                        (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8), (-4.5, 3.8, 1.0),
                                        (0.0, -6.0, 0.9), (-2.0, 6.5, 0.8), (3.0, 7.0, 0.7), (8.5, -4.0, 0.7)]):
             x, z, k = x * G, z * G, k * 0.5
+            if not clear_of_mounds(x, z):
+                continue
             snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, 0.15 * k, z), 0xf3f7fb,
                       yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
         for i, (x, z, k) in enumerate([(3.0, 0.8, 1.0), (5.0, -1.2, 0.8), (1.0, 2.2, 0.9), (6.2, 2.0, 0.7),
                                        (-4.5, -1.0, 0.9)]):
-            rock((x * G, -0.2, z * G), k, yaw=i * 1.4)
+            if clear_of_mounds(x * G, z * G):
+                rock((x * G, -0.2, z * G), k, yaw=i * 1.4)
         # the snapped pine: its stump on the slope, the trunk thrown down the fan
         cyl(0.18, 0.8, (-1.0 * G, -0.3, -3.2 * G), 0x7a5a3a, r2=0.15, segs=6)
         cyl(0.16, 3.2, (5.6 * G, 0.05, -5.0 * G), 0x7a5a3a, r2=0.09, segs=6, axis='across', yaw=0.5)
-        sled(5.0 * G, -0.05, 3.6 * G, 0.8, 0xcf534f, L=0.5)
+        sled(5.6 * G, -0.05, 1.0 * G, 0.8, 0xcf534f, L=0.5)
     draped('debris', debris)
     x, z = 6.5 * G, -6.4 * G
     pine((x, H(x, z) - 0.3, z), 1.7)
@@ -2700,45 +2881,111 @@ def advanced_camp():
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
           'drape_camp')
 
-def snow_rake(x, z0, z1):
-    """A row of snow rakes across a slope at `x`, from z0 to z1, built on the
-    plain for a drape: posts a unit tall leaning into the hill (-X), the
-    slatted boards between them."""
-    n = max(2, int(round((z1 - z0) / 2.0)))
-    zs = [z0 + (z1 - z0) * i / n for i in range(n + 1)]
-    for z in zs:                                                    # posts, leaning into the hill
-        box((0.1, 1.3, 0.1), (x, 0.35, z), 0x6e4a32, roll=0.35)
-    for za, zb in zip(zs[:-1], zs[1:]):                             # the slatted boards between them
-        box((0.06, 0.7, zb - za), (x - 0.08, 0.55, (za + zb) / 2), 0x8a6a46, roll=0.35)
+def frac(v):
+    return v - math.floor(v)
+
+def jitter(i, j, seed):
+    """A hash in [-0.5, 0.5) per integer grid point: what a faceted form is jittered by."""
+    return frac(math.sin(i * 12.9898 + j * 78.233 + seed * 3.17) * 43758.5453) - 0.5
+
+def colored_faces(polys, name):
+    """Faces [(colour, [glTF points, ...]), ...] as one object per colour."""
+    buckets = {}
+    for color, pts in polys:
+        buckets.setdefault(color, []).append(pts)
+    objs = []
+    for color, fs in buckets.items():
+        verts, faces = [], []
+        for pts in fs:
+            faces.append(tuple(range(len(verts), len(verts) + len(pts))))
+            verts += pts
+        me = bpy.data.meshes.new(name)
+        me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+        me.update()
+        o = bpy.data.objects.new(name, me)
+        bpy.context.scene.collection.objects.link(o)
+        objs.append(paint(o, color))
+    return objs
+
+def braking_mound(x, z, yaw=0.0, k=1.0, down=2.4):
+    """An earth braking mound in an avalanche's runout, at its real size: a
+    heap of earth a car and a half high, longer across the fall line than
+    down it, its crest toward the slope (-X) so the face the slide strikes is
+    steep and the back falls away long and gentle toward the road (`down`).
+    Rounded and faceted like the kit's own hills, its rim sunk under the
+    snow; the snow lies on its crown and back, the steep face shows its earth
+    and the stones pitched into it. Built on the plain for a drape; turned by
+    `yaw`."""
+    H, UP, ALONG, SINK = 1.3 * k, 1.35 * k, 2.5 * k, 0.35
+    RINGS, SEGS = 3, 12
+    cx = -0.3 * k                                   # the crest, toward the slope
+    def radius(a):
+        c, s = math.cos(a), math.sin(a)
+        rx = down * k if c > 0 else UP
+        return 1.0 / math.sqrt((c / rx) ** 2 + (s / ALONG) ** 2)
+    def point(i, j):
+        if i == 0:
+            lx, lz, y = cx, 0.0, H
+        else:
+            t = i / RINGS
+            a = 2 * math.pi * j / SEGS
+            r = radius(a) * t
+            shape = 1.6 if math.cos(a) > 0 else 0.6      # a long back, a full steep face
+            y = (H + SINK) * math.cos(t * math.pi / 2) ** shape - SINK
+            if i < RINGS:
+                y += 0.08 * jitter(i * 7 + j, int(x * 10), z)
+            lx, lz = cx + math.cos(a) * r, math.sin(a) * r
+        wx, wz = turned(x, z, yaw, lx, lz)
+        return (wx, y, wz), lx
+    polys = []
+    def face(idx):
+        pts = [point(i, j) for i, j in idx]
+        p = [q[0] for q in pts]
+        if len(p) == 3:
+            u = [p[1][m] - p[0][m] for m in range(3)]
+            v = [p[2][m] - p[0][m] for m in range(3)]
+        else:
+            u = [p[2][m] - p[0][m] for m in range(3)]
+            v = [p[3][m] - p[1][m] for m in range(3)]
+        n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+        if n[1] < 0:
+            p, n = p[::-1], tuple(-c for c in n)
+        ny = n[1] / (math.sqrt(sum(c * c for c in n)) or 1.0)
+        uphill = sum(q[1] for q in pts) / len(pts) < cx
+        if ny < 0.74 and uphill:
+            color = 'grey' if jitter(len(polys), 5, x + z) > 0.25 else 0x8a6a46   # earth, stones in it
+        else:
+            color = 0xf3f7fb
+        polys.append((color, p))
+    for j in range(SEGS):
+        face([(0, 0), (1, j), (1, (j + 1) % SEGS)])
+    for i in range(1, RINGS):
+        for j in range(SEGS):
+            face([(i, j), (i + 1, j), (i + 1, (j + 1) % SEGS), (i, (j + 1) % SEGS)])
+    for o in colored_faces(polys, 'mound'):
+        if o['swatch'] == 'white':
+            snowy(o, 0.45)
 
 @piece(1.0)
 def avalanche_fence():
     # Avalanche: the defences on the mountainside the road runs under, at
-    # their real size beside a car: rows of snow rakes across the slope above
-    # the verge (a unit tall, leaning into the hill, each one a rail of
-    # upright slats on posts braced from below), stepping up the face one
-    # above the other so the lines read across the white from the road, and
-    # at the foot a run of slatted snow fence with the drift it caught. The
-    # mountainside is the track's terrain (SET_GROUND).
+    # their real size beside a car: two earth braking mounds staggered at the
+    # slope's foot, where a slide would run out toward the road, forest up
+    # the face and rock showing through the snow between the trees. The
+    # mountainside is the track's terrain (SET_GROUND). No rakes and no snow
+    # fence: from the road their slats read as fence rails.
     H = set_ground('avalanche-fence')
-    for x, z, k in ((-14.0, -12.6, 1.8), (-19.6, 11.2, 1.9), (-30.8, -19.6, 1.8)):
+    for x, z, k in ((-14.0, -12.6, 1.8), (-19.6, 11.2, 1.9), (-30.8, -19.6, 1.8),
+                    (-10.5, 7.5, 1.6), (-24.0, -4.0, 1.7)):
         pine((x, H(x, z) - 0.6, z), k)
-    # The rakes and the fence are draped: built from y = 0 as if on the plain,
-    # each laid on the slope as the renderer draws it (its 9 u grid's chords
-    # stray a unit and more off the curve at the foot), so none floats or sinks.
+    # Draped: built from y = 0 as if on the plain and laid on the slope as
+    # the renderer draws it.
     def defences():
-        for (x, half) in ((-6.0, 6.0), (-10.5, 7.5), (-15.0, 8.5), (-19.5, 8.0)):
-            snow_rake(x, -half, half)
-        # the snow fence at the foot, its slats upright, the drift along its back
-        L = 7.0
-        for i in range(5):
-            z = -L / 2 + i * L / 4
-            box((0.1, 1.1, 0.1), (0.1, 0.4, z), 0x6e4a32)
-        for i in range(4):
-            z = -L / 2 + (i + 0.5) * L / 4
-            box((0.06, 0.75, L / 4 - 0.12), (0.18, 0.5, z), 0xb06041 if i % 2 else 0x8a6a46)
-        snowy(box((0.6, 0.35, L - 0.4), (-0.25, 0.07, 0), 0xf3f7fb))
-    draped('rakes', defences)
+        braking_mound(-1.0, -2.6, 0.1)
+        braking_mound(-4.2, 2.4, -0.1)
+        for x, z, k in ((-8.0, -7.5, 0.9), (-15.5, 2.5, 1.1), (-21.0, 9.0, 0.8)):
+            rock((x, -0.3 * k, z), k, yaw=x * 0.7)
+    draped('mounds', defences)
 
 @piece(1.0)
 def warning_sign():
@@ -2746,10 +2993,7 @@ def warning_sign():
     # is the track's terrain, SET_GROUND), at its real size beside a car: a
     # yellow diamond with the slope and its tumbling snow on it, on a post
     # beside a red and white marker pole; rocks that came down lie at its
-    # foot and up the face, a pine. Above it the slope's defences, three rows
-    # of snow rakes stepping up the face: the sign alone is a speck from the
-    # road, the rakes are lines across the white a racer reads as the
-    # avalanche fences' slope.
+    # foot and up the face, a pine.
     H = set_ground('warning-sign')
     for x, z, k in ((-11.2, 11.2, 1.8), (-14.0, -8.0, 1.7)):
         pine((x, H(x, z) - 0.6, z), k)
@@ -2767,147 +3011,332 @@ def warning_sign():
         for k in range(5):
             box((0.08, 0.22, 0.08), (0.0, 0.11 + k * 0.22, 0.6), 0xff5040 if k % 2 == 0 else 0xfff6eb)
         snow_heap((-0.5, -0.1, -0.5), 0.5, yaw=0.3)
-        for (x, half) in ((-9.5, 5.0), (-14.0, 6.0), (-18.5, 6.5)):
-            snow_rake(x, -half, half)
     draped('sign', sign)
 
-def rock_length(seep):
-    """A length of Avalanche's road cut, the cut the road was blasted
-    through the mountain's foot (12 units along Z, as Wash's canyon_wall),
-    the face toward the road (+X): blue-grey granite, faceted as a blasted
-    face is, in four strata that step back as they go up (grey and lavender:
-    the palette's blue-greys), three to four and a half units tall, lower
-    than Wash's walls, so the snow slope shows over it from the road; snow
-    lying on every ledge, its edge showing from below, and over the ragged
-    crest, where a bank carries on back into the hill; icicles off the
-    ledges, snow-capped boulders at its foot and, with `seep`, a frozen seep
-    down the face. It DRAPES: every vertex rides the land, so the foot
-    follows the verge and the bank runs into the slope behind. The face is
-    periodic over its length, so the lengths placed end to end meet."""
-    L, D, nz, STEP, BATTER = 12.0, 4.0, 9, 0.45, 0.1
-    zs = [-L / 2 + L * i / (nz - 1) for i in range(nz)]
-    def fan(v):
-        # The length widens with depth (none at the foot of the face): on a
-        # bend's outside, where the lengths' backs spread apart, each overlaps
-        # the next instead of leaving a dark notch between them.
-        x, y, z = v
-        return x, y, z * (1 - 0.03 * x)
-    def rnd(i, j):
-        v = math.sin((i % (nz - 1)) * 12.9898 + j * 78.233) * 43758.5453
-        return v - math.floor(v)
-    def wave(z, k, ph):
-        return math.sin(2 * math.pi * k * z / L + ph)
-    # the strata's bounds: the foot (sunk), three bedding planes dipping
-    # along the cut, and the ragged crest
-    bounds = [[-0.3] * nz] + [[y0 + 0.26 * wave(z, 1, 1.7 * b) for z in zs] for b, y0 in enumerate((1.15, 2.15, 2.95))]
-    bounds.append([max(bounds[3][i] + 0.45, 3.3 + rnd(i, 7) + 0.15 * wave(zs[i], 2, 0.4)) for i in range(nz)])
-    def face(b, r):
-        """Row r (0 foot, 1 middle, 2 top) of stratum b, as (x, y, z) per column."""
-        out = []
-        for i, z in enumerate(zs):
-            y0, y1 = bounds[b][i], bounds[b + 1][i]
-            y = y0 + (y1 - y0) * r / 2
-            out.append((-b * STEP - BATTER * (y - y0) + 0.22 * (rnd(i, 10 * b + r) - 0.5), y, z))
-        return out
-    def strip(a, c, color, out):
-        """Quads between two rows of points, each turned to face `out` (glTF)."""
-        n = len(a)
-        me = bpy.data.meshes.new('strip')
-        me.from_pydata([tuple(P(*fan(v))) for v in a + c], [],
-                       [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)])
-        me.update()
-        o = P(*out)
-        for p in me.polygons:
-            if p.normal.dot(o) < 0:
-                p.flip()
-        ob = bpy.data.objects.new('strip', me)
-        bpy.context.scene.collection.objects.link(ob)
-        return paint(ob, color)
-    def cap(pts, color, out):
-        """One polygon, an end of the cut, turned to face `out`."""
-        me = bpy.data.meshes.new('cap')
-        me.from_pydata([tuple(P(*fan(v))) for v in pts], [], [tuple(range(len(pts)))])
-        me.update()
-        if me.polygons[0].normal.dot(P(*out)) < 0:
-            me.polygons[0].flip()
-        ob = bpy.data.objects.new('cap', me)
-        bpy.context.scene.collection.objects.link(ob)
-        return paint(ob, color)
-    X, UP = (1, 0, 0), (0, 1, 0)
-    rows = [[face(b, r) for r in range(3)] for b in range(4)]
-    profile = []                      # the end's outline, foot to crest
-    for b, col in enumerate(('grey', 'lavender', 'grey', 'lavender')):
-        rs = (0, 1, 2) if b < 2 else (0, 2)          # the short upper strata take one row of facets
-        for r0, r1 in zip(rs, rs[1:]):
-            strip(rows[b][r0], rows[b][r1], col, X)
-        profile += [rows[b][r] for r in rs if b == 0 or r > 0]   # a ledge's drift ends on its foot
-        top = rows[b][2]
-        if b < 3:
-            # the snow on the ledge: its edge, then the drift against the stratum above
-            lip = [(x + 0.05, y - 0.02, z) for x, y, z in top]
-            rim = [(x + 0.05, y + 0.18, z) for x, y, z in top]
-            back = [(x, y + 0.22, z) for (x, y, z) in face(b + 1, 0)]
-            snowy(strip(lip, rim, 'white', X))
-            snowy(strip(rim, back, 'white', UP))
-            profile += [lip, rim, back]
-    # the crest's snow, its edge over the face, the cap back to the hill and
-    # the bank falling into the land behind, short and its far edge sunk deep:
-    # where the slope behind rises, a longer bank rode up it as a roof
-    crest = rows[3][2]
-    lip = [(x + 0.06, y - 0.02, z) for x, y, z in crest]
-    rim = [(x + 0.06, y + 0.25, z) for x, y, z in crest]
-    cap_back = [(-D, y + 0.2, z) for x, y, z in crest]
-    bank = [(-D - 3.5, -1.0, z) for z in zs]
-    snowy(strip(lip, rim, 'white', X))
-    snowy(strip(rim, cap_back, 'white', UP))
-    snowy(strip(cap_back, bank, 'white', UP))
-    # the two ends: the rock's section, and the snow's over it (white, so
-    # where a bend pokes one length's end through the next's crest it shows
-    # as snow, not as a dark notch)
-    for i, sz in ((0, -1), (nz - 1, 1)):
-        x, y, z = crest[i]
-        cap([p[i] for p in profile] + [(-D, y - 0.2, z), (-D, -0.3, z)], 'grey', (0, 0, sz))
-        snowy(cap([crest[i], lip[i], rim[i], cap_back[i], bank[i], (-D, -0.3, z), (-D, y - 0.2, z)],
-                  'white', (0, 0, sz)))
-    def at(b, f):
-        """The top edge of stratum b a fraction f of the way along the cut."""
-        k = min(nz - 2, int(f * (nz - 1)))
-        t = f * (nz - 1) - k
-        a, c = rows[b][2][k], rows[b][2][k + 1]
-        return tuple(a[j] + (c[j] - a[j]) * t for j in range(3))
+# ---- Avalanche: the galleries, and the cut in the slope they stand in ----
+#
+# The road runs under the slope on the outside of the lap's last loop, in two
+# stretches: the descent into the bend and the run to the slide's foot, then
+# the straight after the slide. Each is one piece placed astride the road (lat
+# 0, yaw 0): a snow shed over the road and the cut in the mountainside it is
+# built into. Both follow the road through its bends, which a rigid box cannot,
+# so each piece carries the road's centreline in its own frame (ROAD_A,
+# ROAD_B: (x, z, nx, nz, deck) a unit apart along the road, (nx, nz) the road's
+# valley-ward normal, `deck` its height). They were sampled from the built
+# track (ttp_track_frames_json) at the placements tracks.js gives them, so the
+# two move together: re-sample if either does.
+
+ROAD_A = (  # about u 0.825, from u 0.782 to 0.8687
+    (3.868, -18.975, 0.7873, 0.6165, 0.36), (3.284, -18.168, 0.8202, 0.5721, 0.295),
+    (2.737, -17.334, 0.8506, 0.5257, 0.23), (2.242, -16.467, 0.8792, 0.4764, 0.165),
+    (1.799, -15.576, 0.9042, 0.427, 0.11), (1.393, -14.662, 0.9265, 0.3763, 0.063),
+    (1.053, -13.723, 0.946, 0.3243, 0.03), (0.754, -12.771, 0.964, 0.266, -0.002),
+    (0.524, -11.794, 0.9804, 0.1971, -0.013), (0.359, -10.809, 0.9905, 0.1375, -0.015),
+    (0.24, -9.812, 0.9952, 0.0983, -0.01), (0.152, -8.816, 0.9966, 0.0818, 0.0),
+    (0.083, -7.819, 0.998, 0.0629, 0.0), (0.03, -6.822, 0.9993, 0.0364, 0.0),
+    (-0.0, -5.825, 0.9998, 0.0195, 0.0), (-0.012, -4.827, 1.0, 0.0079, 0.0),
+    (-0.014, -3.82, 1.0, 0.0006, 0.0), (-0.007, -2.822, 1.0, -0.0038, 0.0),
+    (-0.008, -1.825, 1.0, -0.0051, 0.0), (-0.0, -0.827, 1.0, -0.0036, 0.0),
+    (-0.002, 0.174, 1.0, 0.0007, 0.0), (-0.004, 1.178, 1.0, 0.0081, 0.0),
+    (-0.023, 2.176, 0.9996, 0.0293, 0.0), (-0.066, 3.173, 0.9988, 0.0492, 0.0),
+    (-0.121, 4.17, 0.9982, 0.0592, 0.0), (-0.176, 5.177, 0.9981, 0.0619, 0.0),
+    (-0.242, 6.173, 0.9984, 0.0562, 0.0), (-0.287, 7.171, 0.9992, 0.0411, 0.0),
+    (-0.318, 8.168, 0.9999, 0.0167, 0.0), (-0.312, 9.165, 0.9998, -0.021, 0.0),
+    (-0.269, 10.164, 0.9971, -0.0761, 0.0), (-0.156, 11.16, 0.9879, -0.1553, 0.0),
+    (0.024, 12.142, 0.9799, -0.1994, 0.0), (0.244, 13.117, 0.9699, -0.2435, 0.0),
+    (0.521, 14.079, 0.9517, -0.3071, 0.0), (0.872, 15.018, 0.9177, -0.3973, 0.0),
+    (1.326, 15.904, 0.8547, -0.5192, 0.0), (1.915, 16.712, 0.7432, -0.669, 0.0),
+    (2.651, 17.387, 0.6226, -0.7825, 0.0), (3.474, 17.955, 0.5018, -0.865, 0.0),
+    (4.369, 18.39, 0.3777, -0.9259, 0.0))
+ROAD_B = (  # about u 0.722, from u 0.682 to 0.7471
+    (6.857, -15.798, 0.4878, 0.8729, 1.99), (6.019, -15.289, 0.5491, 0.8357, 1.837),
+    (5.217, -14.716, 0.6078, 0.7941, 1.663), (4.457, -14.093, 0.6654, 0.7464, 1.484),
+    (3.755, -13.41, 0.717, 0.6971, 1.289), (3.101, -12.675, 0.764, 0.6453, 1.094),
+    (2.506, -11.901, 0.8097, 0.5868, 0.889), (1.975, -11.071, 0.8531, 0.5217, 0.716),
+    (1.502, -10.21, 0.8898, 0.4563, 0.542), (1.095, -9.308, 0.9209, 0.3899, 0.384),
+    (0.76, -8.379, 0.9475, 0.3197, 0.246), (0.492, -7.419, 0.9721, 0.2346, 0.146),
+    (0.314, -6.436, 0.9893, 0.1462, 0.079), (0.202, -5.446, 0.9959, 0.0908, 0.036),
+    (0.126, -4.446, 0.9975, 0.0709, 0.006), (0.07, -3.445, 0.9989, 0.0474, -0.015),
+    (0.031, -2.446, 0.9996, 0.0286, -0.03), (0.016, -1.448, 0.9999, 0.0156, -0.04),
+    (0.003, -0.452, 1.0, 0.0043, -0.05), (0.005, 0.55, 1.0, -0.005, -0.05),
+    (0.016, 1.551, 0.9999, -0.014, -0.05), (0.032, 2.549, 0.9997, -0.023, -0.045),
+    (0.056, 3.549, 0.9994, -0.0332, -0.04), (0.098, 4.548, 0.9989, -0.0459, -0.03),
+    (0.154, 5.546, 0.998, -0.0637, -0.01), (0.221, 6.541, 0.997, -0.0775, 0.014),
+    (0.3, 7.543, 0.9955, -0.0947, 0.048), (0.408, 8.532, 0.9911, -0.1333, 0.091),
+    (0.562, 9.525, 0.981, -0.1939, 0.144), (0.782, 10.489, 0.9647, -0.2634, 0.207),
+    (1.074, 11.453, 0.947, -0.3212, 0.272))
+GROUND_Y = -0.517   # Avalanche's plain: where a piece that drapes stands (y = 0 here)
+OVER_GAP = 3.0      # spotIssue: anything over the deck clears it by this
+
+def smooth01(t):
+    t = min(1.0, max(0.0, t))
+    return t * t * (3 - 2 * t)
+
+def wobble(t, seed, scale=6.0):
+    """Smooth noise in about [-1, 1] along a run, `t` in units: three sines at
+    incommensurate wavelengths with seeded phases, so no stretch repeats."""
+    s = 0.0
+    for k, (w, a) in enumerate(((1.0, 0.55), (0.43, 0.3), (0.19, 0.15))):
+        ph = 2 * math.pi * frac(math.sin(seed * 12.9898 + k * 78.233) * 43758.5453)
+        s += a * math.sin(2 * math.pi * t / (scale * w) + ph)
+    return s
+
+def on_road(road, i, l, y):
+    """The point `l` across from the road's centreline at sample i (valley-
+    ward positive), `y` up, in the piece frame."""
+    x, z, nx, nz, _ = road[i]
+    return (x + nx * l, y, z + nz * l)
+
+def road_yaw(road, i):
+    """box()'s yaw that runs a block's +Z along the road at sample i."""
+    return math.atan2(-road[i][3], road[i][2])
+
+def noise2(a, b, seed):
+    """Smooth value noise in about [-0.5, 0.5] over a plane: a seeded hash on
+    the integer lattice, eased between its corners."""
+    ia, ib = math.floor(a), math.floor(b)
+    fa, fb = smooth01(a - ia), smooth01(b - ib)
+    def h(i, j):
+        return jitter(i, j, seed)
+    top = h(ia, ib) + (h(ia + 1, ib) - h(ia, ib)) * fa
+    bot = h(ia, ib + 1) + (h(ia + 1, ib + 1) - h(ia, ib + 1)) * fa
+    return top + (bot - top) * fb
+
+def face_normal(p):
+    """The unit normal of a triangle or quad of glTF points, by its winding."""
+    if len(p) == 3:
+        u = [p[1][k] - p[0][k] for k in range(3)]
+        v = [p[2][k] - p[0][k] for k in range(3)]
+    else:
+        u = [p[2][k] - p[0][k] for k in range(3)]
+        v = [p[3][k] - p[1][k] for k in range(3)]
+    n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    m = math.sqrt(sum(c * c for c in n)) or 1.0
+    return tuple(c / m for c in n)
+
+def sheet(rows, color_of, name, skip=None, facet=None):
+    """Quads between consecutive rows of glTF points (rows of one length),
+    wound one way over the whole sheet and turned so most of it faces up (an
+    overhang's underside then faces down, as it should), each painted
+    color_of(i, j, normal): one object per colour. A quad `facet(i, j)` names
+    is split into its two triangles, the diagonal alternating, each painted
+    by its own normal: rock breaks into facets where snow lies smooth.
+    `skip(i, j)` drops a quad no one can see."""
+    quads = []
+    for i in range(len(rows) - 1):
+        a, b = rows[i], rows[i + 1]
+        for j in range(len(a) - 1):
+            if skip and skip(i, j):
+                continue
+            quads.append((i, j, (a[j], b[j], b[j + 1], a[j + 1])))
+    flip = sum(face_normal(q)[1] for _, _, q in quads) < 0
+    polys = []
+    for i, j, q in quads:
+        if flip:
+            q = q[::-1]
+        if facet and facet(i, j):
+            tris = ((q[0], q[1], q[2]), (q[0], q[2], q[3])) if (i + j) % 2 else ((q[0], q[1], q[3]), (q[1], q[2], q[3]))
+            cs = [color_of(i, j, face_normal(t)) for t in tris]
+            if not (cs[0] == cs[1] == SNOW):
+                polys += [(cs[0], list(tris[0])), (cs[1], list(tris[1]))]
+                continue
+        polys.append((color_of(i, j, face_normal(q)), list(q)))
+    return colored_faces(polys, name)
+
+def swept_block(road, i0, i1, l0, l1, y0, y1, color, sides, ext=0.0, step=2):
+    """A block of section l0..l1 across, y0..y1 up, swept along the road from
+    sample i0 to i1 (every `step`th sample), `ext` past each end, closed at
+    both ends. `sides` names the long faces anyone sees: 'bottom', 'top',
+    'valley' (+l), 'hill' (-l)."""
+    idx = list(range(i0, i1, step)) + [i1]
+    def ring(i, along):
+        x, z, nx, nz, _ = road[i]
+        tx, tz = -nz, nx
+        return [(x + nx * l + tx * along, y, z + nz * l + tz * along)
+                for l, y in ((l0, y0), (l1, y0), (l1, y1), (l0, y1))]
+    rings = [ring(i, -ext if k == 0 else (ext if k == len(idx) - 1 else 0.0)) for k, i in enumerate(idx)]
+    faces_of = {'bottom': (0, 1), 'valley': (1, 2), 'top': (2, 3), 'hill': (3, 0)}
+    polys = []
+    for side in sides:
+        a, b = faces_of[side]
+        for r0, r1 in zip(rings[:-1], rings[1:]):
+            polys.append((color, [r0[a], r0[b], r1[b], r1[a]]))
+    # Wound out of the block as built: with the ring (l0 y0, l1 y0, l1 y1,
+    # l0 y1) and the road running on along +T, each long face's normal is
+    # its side's, the last ring's cap faces on along the road and the first
+    # ring's, reversed, back along it.
+    polys += [(color, rings[0][::-1]), (color, rings[-1])]
+    return colored_faces(polys, 'swept')[0]
+
+ROCK, SHADE, SNOW = 'grey', 'slate', 0xf3f7fb
+CONCRETE, TIMBER = 'grey', 0x8a6a46
+GALLERY_BEAM = 4.0       # a gallery's beams' underside over the plain
+GALLERY_SLAB = (4.32, 4.78)
+
+def cut_run(road, i0, i1, s0, s1, seed, ledge, verge, crags=(), boulders=()):
+    """Avalanche's road cut along the verge from sample i0 to i1: the slope's
+    foot blasted back for the road, broken rock faces stepping up into the
+    mountain behind. From the road out: scree at the foot, a lower face, a
+    ledge, an upper face, the snow slope over it to a crest with rock crags
+    in it. Ribs stand out of the face and gullies cut back into it; the ledge
+    widens to hold snow and narrows to nothing where the two faces run into
+    one; every point is pushed about by a smooth noise and every steep quad
+    breaks into two facets, so no band runs on and nothing repeats. The run
+    rises out of the slope at one end and sinks back into it at the other.
+    Under a gallery (samples s0..s1) the face is the gallery's back wall: it
+    stands nearer the road, in shade, and its ledge is at the roof (`ledge`),
+    so the roof's snow runs on up the mountain. Snow lies wherever a facet is
+    flat enough to hold it. `verge(i)` is how far out the face's foot stands
+    at sample i: further where the road's embankment (a berm) reaches out, so
+    no part of the cut lies in it. DRAPED: every vertex rides the land, so the
+    foot follows the verge and the back runs into whatever rises behind."""
+    VERGE_IN = 5.9
+    rows = []
+    for i in range(i0, i1 + 1):
+        t = float(i - i0)
+        taper = smooth01(t / 4.5) * smooth01((i1 - i) / 4.5)
+        shed = smooth01((i - (s0 - 3)) / 3.0) * smooth01(((s1 + 3) - i) / 3.0)
+        rib = wobble(t, seed + 6, 2.2)                       # ribs out, gullies back, a few units apart
+        h1 = 2.4 + 0.9 * wobble(t, seed, 7.0) + 0.5 * rib
+        h1 += (ledge - h1) * shed
+        wl = max(0.0, 0.7 + 0.9 * wobble(t, seed + 1, 4.0))  # the ledge: none at all in places
+        h2 = h1 + 1.5 + 0.9 * wobble(t, seed + 2, 5.0) + 0.6 * rib
+        h3 = h2 + 0.9 + 0.6 * wobble(t, seed + 3, 3.5)
+        for ci, ch, cw in crags:
+            h3 += ch * max(0.0, 1.0 - ((i - ci) / cw) ** 2) ** 1.5
+        foot = verge(i) + (VERGE_IN - verge(i)) * shed + max(-0.3, -0.75 * rib) * (1 - shed)
+        scree = (0.18 + 0.12 * wobble(t, seed + 5, 3.0)) * (1 - shed)
+        toe = -1.0 - 0.1 * shed
+        prof = [(toe, -0.3), (toe * 0.5, 0.05 + 0.6 * scree), (-0.2, 0.2 + scree),
+                (0.2, 0.2 + 0.3 * (h1 - 0.2)), (0.45, 0.2 + 0.55 * (h1 - 0.2)), (0.75, 0.2 + 0.8 * (h1 - 0.2)),
+                (1.0, h1), (1.0 + wl, h1 + 0.15 + 0.1 * wl),
+                (1.35 + wl, h1 + 0.4 * (h2 - h1)), (1.75 + wl, h1 + 0.75 * (h2 - h1)), (2.05 + wl, h2),
+                (3.2 + wl, h2 + 0.5 * (h3 - h2)), (4.3 + wl, h3), (6.0 + wl, -0.6)]
+        row = []
+        for j, (d, y) in enumerate(prof):
+            if 3 <= j <= 12:
+                d += 0.5 * noise2(t / 1.6, j * 0.9, seed + 11)
+                y += (0.55 if j < 10 else 0.3) * noise2(t / 1.4 + 7.3, j * 1.1, seed + 12) * min(1.0, y / 1.5)
+            row.append(on_road(road, i, -(foot + d), taper * y - (1 - taper) * 0.4))
+        rows.append(row)
+    in_shed = lambda r: s0 <= r + i0 <= s1
+    # Rock is dark where a facet turns from the light and pale where it
+    # faces it, so the dark runs in whole facets with the rock's shape
+    # (picked at random per quad it read as tiles); the face under a roof
+    # is in its shade but for the facets turned to the mouth a racer comes
+    # in by, which catch the daylight from it.
+    L = (0.55, 0.75, 0.37)
+    def color(r, j, n):
+        if n[1] > 0.6:
+            return SNOW
+        if in_shed(r) and j <= 6:
+            return ROCK if n[2] < -0.3 else SHADE
+        return ROCK if n[0] * L[0] + n[1] * L[1] + n[2] * L[2] > 0.25 else SHADE
+    # In chunks a draw each (a 40 u run in one part is never culled), each
+    # its own drape so the grid's chords lay it as drawn.
+    CH = 10
+    for c, a in enumerate(range(0, len(rows) - 1, CH)):
+        part = rows[a:a + CH + 1]
+        def build(part=part, a=a):
+            for o in sheet(part, lambda r, j, n: color(r + a, j, n), 'cut', facet=lambda r, j: 2 <= j <= 12):
+                if o['swatch'] == 'white':
+                    snowy(o, 0.45)
+        draped('cut%d' % c, build)
+    def fallen():
+        with plain_parts():
+            for k, (i, off, s) in enumerate(boulders):
+                x, y, z = on_road(road, i, -(verge(i) - off), 0.0)
+                yaw = road_yaw(road, i) + 1.3 * k
+                box((s * 1.25, s * 0.75, s), (x, s * 0.25, z), ROCK, yaw=yaw, roll=0.2 * math.sin(k * 2.1))
+                if k % 2 == 0:
+                    snowy(box((s * 1.0, s * 0.2, s * 0.8), (x, s * 0.68, z), SNOW, yaw=yaw + 0.15), 0.45)
+    if boulders:
+        draped('scree', fallen)
+
+def gallery_shed(road, s0, s1, seed):
+    """An avalanche gallery over the road from sample s0 to s1, at its real
+    size beside a car, built into the cut: open on the valley side, square
+    concrete columns carrying a lintel, timber beams across under a concrete
+    roof, the roof's far edge on a concrete seat let into the rock, so the
+    mountain itself is the gallery's back wall. The slope's snow lies on the
+    roof, deepest against the mountain, and hangs over the valley edge in a
+    cornice with icicles and over each mouth in a lip. Every part over the
+    road clears the highest deck under it by OVER_GAP; the camera rides lower
+    still."""
+    BEAM, (SLAB0, SLAB1) = GALLERY_BEAM, GALLERY_SLAB
+    for i in range(s0, s1 + 1):
+        if BEAM + GROUND_Y - road[i][4] < OVER_GAP + 0.15:
+            raise SystemExit('gallery: the beams clear the deck at sample %d by %.2f'
+                             % (i, BEAM + GROUND_Y - road[i][4]))
+    COL, SEAT = 4.75, -6.0
+    # the roof slab, from the rock out past the valley side; its fascia over
+    # each mouth
+    snowy(swept_block(road, s0, s1, -8.6, 5.6, SLAB0, SLAB1, CONCRETE, ('bottom', 'valley'), ext=0.3), 0.6)
+    # the seat the roof's far edge rests on, let into the rock
+    snowy(swept_block(road, s0, s1, -7.4, SEAT + 0.3, BEAM - 0.45, SLAB0, CONCRETE, ('bottom', 'valley'), ext=0.3), 0.6)
+    # the lintel along the columns' heads
+    snowy(swept_block(road, s0, s1, COL - 0.35, COL + 0.35, BEAM - 0.05, SLAB0, CONCRETE,
+                      ('bottom', 'valley', 'hill'), ext=0.3), 0.6)
+    cols = list(range(s0, s1 + 1, 4))
+    if s1 - cols[-1] > 1:
+        cols.append(s1)
+    for i in cols:
+        x, _, z = on_road(road, i, COL, 0)
+        snowy(box((0.6, BEAM + 0.45, 0.6), (x, (BEAM - 0.45) / 2, z), CONCRETE, yaw=road_yaw(road, i)), 0.6)
+    for i in range(s0 + 1, s1, 2):
+        x, _, z = on_road(road, i, (COL + SEAT) / 2, 0)
+        box((COL - SEAT, 0.32, 0.36), (x, BEAM + 0.16, z), TIMBER, yaw=road_yaw(road, i))
+    # the snow on the roof: deepest against the mountain, lumpy, over the
+    # valley edge in a cornice; a row past each end hangs over the mouth
+    prof_l = (-9.2, -7.0, -4.5, -1.5, 1.5, 4.0, 5.55, 5.95, 6.1, 5.95)
+    rows = []
+    idx = [s0 - 1] + list(range(s0, s1 + 1, 2)) + ([s1] if (s1 - s0) % 2 else []) + [s1 + 1]
+    for k, i in enumerate(idx):
+        end = k == 0 or k == len(idx) - 1
+        x, z, nx, nz, _ = road[min(max(i, s0), s1)]
+        tx, tz = -nz, nx
+        along = (-0.6 if k == 0 else 0.6) if end else 0.0
+        over = 1.0 + 0.25 * wobble(i, seed + 7, 3.0)
+        row = []
+        for j, l in enumerate(prof_l):
+            if j < 7:
+                y = SLAB1 + (1.35, 1.0, 0.75, 0.55, 0.45, 0.38, 0.3)[j] + 0.12 * jitter(i, j, seed)
+            else:
+                y = SLAB1 + (0.28 * over, 0.02, -0.32 * over)[j - 7]
+            if end:
+                y = min(y, SLAB1 + 0.25) - 0.3
+            lw = l + (0.25 * over if j >= 7 else 0.0)
+            row.append((x + nx * lw + tx * along, y, z + nz * lw + tz * along))
+        rows.append(row)
+    for o in sheet(rows, lambda i, j, n: SNOW, 'roof_snow'):
+        snowy(o, 0.4)
+    # icicles off the cornice's lip, on the snow's own rows
     with plain_parts():
-        # icicles off the ledges' lips
-        for b, f, ln in ((0, 0.18, 0.55), (0, 0.71, 0.4), (1, 0.38, 0.6), (2, 0.86, 0.45)):
-            x, y, z = at(b, f)
-            cyl(0.012, ln, (x + 0.02, y + 0.04 - ln, z), 'sky', r2=0.1, segs=3, stem=True)
-        if seep:
-            # the frozen seep down the two lower strata, its ice fanned at the foot
-            def across(row, f0, f1):
-                return [tuple(row[4][j] + (row[5][j] - row[4][j]) * f + (0.05 if j == 0 else 0) for j in range(3))
-                        for f in (f0, f1)]
-            for b in (0, 1):
-                for r in range(2):
-                    strip(across(rows[b][r], 0.15 + 0.1 * b, 0.75 - 0.05 * b),
-                          across(rows[b][r + 1], 0.2 + 0.1 * b, 0.7 - 0.05 * b), 'sky', X)
-            box((1.0, 0.14, 1.4), (0.45, 0.04, 0.7), 'sky', yaw=0.2)
-        # snow-capped boulders fallen at the foot
-        for z, s, yaw in ((3.6, 0.7, 1.5),) if seep else ((-3.8, 0.9, 0.3), (1.4, 0.5, 2.2)):
-            x = 0.25 + s * 0.6
-            box((s * 1.3, s * 0.8, s), (x, s * 0.3, z), 'grey', yaw=yaw)
-            snowy(box((s * 1.1, s * 0.22, s * 0.8), (x - 0.05, s * 0.75, z), 'white', yaw=yaw + 0.1))
-    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+        for i in range(s0 + 2, s1 - 1, 4):
+            over = 1.0 + 0.25 * wobble(i, seed + 7, 3.0)
+            ln = 0.35 + 0.35 * (jitter(i, 3, seed) + 0.5)
+            x, _, z = on_road(road, i, 5.9 + 0.25 * over, 0)
+            cyl(0.02, ln, (x, SLAB1 - 0.32 * over + 0.06 - ln, z), 'sky', r2=0.11, segs=3, stem=True)
 
 @piece(1.0)
-def rock_cut():
-    # Avalanche: a length of the road cut (rock_length), placed end to end
-    # along the outside verge under the slopes.
-    rock_length(False)
+def avalanche_gallery():
+    # Avalanche: the long gallery on the straight under the slope, and the
+    # cut it is built into, from the slide's runout to the bend at the end.
+    cut_run(ROAD_A, 1, 39, 7, 35, seed=3.0, ledge=5.0, verge=lambda i: 6.5 + 0.4 * smooth01((8 - i) / 3.0),
+            crags=((9, 1.6, 2.0), (17, 2.2, 1.6), (24, 1.3, 2.2), (31, 1.9, 1.7)),
+            boulders=((2, 0.9, 0.5), (3, 0.4, 0.35), (37, 0.8, 0.55), (38, 0.3, 0.4)))
+    gallery_shed(ROAD_A, 7, 35, seed=3.0)
 
 @piece(1.0)
-def rock_cut_seep():
-    # ...and the length with a frozen seep down its face, one to a run of
-    # lengths: on every length it read as a row of drainpipes.
-    rock_length(True)
+def avalanche_gallery_short():
+    # Avalanche: the shorter gallery on the run to the slide's foot, and the
+    # cut round the bend before it, which a racer coming down the descent
+    # looks straight at.
+    cut_run(ROAD_B, 1, 29, 15, 24, seed=11.0, ledge=5.0,
+            verge=lambda i: 6.5 + 1.4 * smooth01((14 - i) / 3.0) + 0.35 * smooth01((i - 24) / 2.0),
+            crags=((3, 1.5, 1.8), (8, 2.0, 1.6), (18, 1.4, 2.0)),
+            boulders=((2, 0.7, 0.45), (4, 0.7, 0.6), (6, 0.7, 0.5), (7, 0.5, 0.35), (9, 0.8, 0.5), (28, 0.8, 0.45)))
+    gallery_shed(ROAD_B, 15, 24, seed=11.0)
 
 # ====================================================================================
 # BACKYARD

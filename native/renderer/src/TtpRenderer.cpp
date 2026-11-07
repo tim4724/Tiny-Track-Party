@@ -864,6 +864,8 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.pal[7] = th.road.sand;
     out.kerbW = th.road.kerbW;
     out.kerbH = th.road.kerbH;
+    out.kerbBank = th.road.kerbBank;
+    out.kerbSlush = th.road.kerbSlush;
     out.edgeLines = th.road.edgeLines;
 
     out.sky[0] = th.sky[0]; out.sky[1] = th.sky[1]; out.sky[2] = th.sky[2];

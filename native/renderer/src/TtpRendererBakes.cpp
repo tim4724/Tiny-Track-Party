@@ -646,7 +646,8 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v6: the beach's sand rose into dunes inland, so its ground maps went stale
 // the same way.
 // v7: the ground rose to meet low road too (kVergeDrop), the same again.
-constexpr uint32_t kBakeVersion = 7u;
+// v8: a sunk sea took the beach down with it under Riptide's causeway.
+constexpr uint32_t kBakeVersion = 8u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);

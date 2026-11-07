@@ -296,13 +296,18 @@ export const SET_GROUND = {
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
-  // Flurry's lake: the ice lies on the plain, unraised, and a snow bank rings
-  // it (the road crosses its east edge on that bank). The road lies near the
-  // plain beside the lake, so the bank is kept under a racer's eye: a taller
-  // one walls the ice off from the road.
+  // Flurry's lake: the ice lies on the plain, unraised, in two sheets with
+  // the road crossing between them on its stilts and its berm, the west one
+  // round the skaters' rink and the east one filling the inside of the bend
+  // the road turns round it, its ground short of the cabin beyond (a piece
+  // levels its clearing to the lowest ground under it). The ice may not run
+  // under the deck, so the ground there wears its blue. No bank rings the
+  // lake: it would rise under the ice.
   'set-frozen-lake': [
-    { kind: 'plain', r: 15.5, w: 4, tint: 0xdcecf8 },
-    { kind: 'ring', r: 21, w: 6, h: 0.7 }
+    { kind: 'plain', z: -1.5, len: 7, r: 15.5, w: 4, tint: 0xdcecf8 },
+    { kind: 'plain', x: 23, z: -7, len: 10, r: 6.2, w: 2, tint: 0xdcecf8 },
+    { kind: 'plain', x: 21.5, z: 7, len: 10, r: 6, w: 2, tint: 0xdcecf8 },
+    { kind: 'paint', x: 11.9, z: 1.5, len: 23, r: 3.5, w: 3, tint: 0xa9d7ee }
   ],
   // Glacier's toboggan hill: the penguins' slide comes down its long face
   // toward the road (+X) to the water hole on the flat at its foot; broad
@@ -442,14 +447,18 @@ export const TRACKS = {
     // The pirates' cove: the sea comes in to the road past the hop (its
     // `shore`, as near as the renderer lets it come), the jetty running out
     // past the surf to its rowing boat afloat and the ship riding at anchor
-    // off its head; the old wreck lies run up the beach after the start, the
-    // crew's camp smokes before it, and Skull Rock ends a headland between
-    // the two bends.
+    // off its head; the old wreck lies in the surf of the west bend (the
+    // second `shore` brings the sea in to it), bow run up the sand, and
+    // Skull Rock ends a headland between the two bends. The crew's camp
+    // smokes on the sand at the first bend, where the start straight looks.
+    // The sea cannot come to the start: the curve is polar about the origin,
+    // which lies on the start straight, so its outer side is never the
+    // road's reach (native/renderer/CLAUDE.md).
     set: [
       { model: 'set-pirate-ship', u: 0.475, lat: 26, yaw: 180, y: -0.3 },
       { model: 'set-jetty', u: 0.47, lat: 7.5 },
-      { model: 'set-shipwreck-ribs', u: 0.1, lat: 11, yaw: 90 },
-      { model: 'set-pirate-camp', u: 0.82, lat: 7.5, yaw: 20 },
+      { model: 'set-shipwreck-ribs', u: 0.795, lat: 10.5, yaw: 75, y: -0.2 },
+      { model: 'set-pirate-camp', u: 0.09, lat: 7.5, yaw: -20 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 }
     ],
     // Skull Rock is the end of a headland: a ridge running out from the
@@ -460,7 +469,8 @@ export const TRACKS = {
     // a crest that wide and a tint that deep reads green from the road.
     land: [
       { kind: 'ridge', u: 0.64, lat: 42, yaw: 90, len: 24, r: 13, h: 12, top: 0.45, tint: 0x84c890 },
-      { kind: 'shore', u: 0.45, lat: 10, len: 56, r: 30 }
+      { kind: 'shore', u: 0.45, lat: 10, len: 56, r: 30 },
+      { kind: 'shore', u: 0.795, lat: 9, len: 24, r: 18 }
     ]
   },
   driftwood: {
@@ -497,11 +507,15 @@ export const TRACKS = {
     // line's own axis, and holds that line the length of the swim line and
     // past it: the line lies on the water, a swim's width out, end to end.
     // From the hop on, the road runs out over the shallows (the second
-    // `shore`, whose `w` lets the water in past the road), the hop on timber
-    // piles (its `trestle`, scripts/gen-tracks.mjs) and then a low causeway:
-    // open sea outside, a strip of lagoon inside, then the beach.
+    // `shore`, whose `w` lets the water in past the road and the sea down
+    // under it), the hop on timber piles (its `trestle`, scripts/gen-tracks.mjs)
+    // and then a causeway on the renderer's bents: open sea outside, a strip
+    // of lagoon inside, then the beach. Where it sets out, the town's end of
+    // the beach: the promenade's huts and kiosk on a boardwalk at the outer
+    // kerb, facing the cars down the straight, its pier out into the sea.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 }
+      { model: 'set-lifeguard-tower', u: 0.23, lat: -6.5 },
+      { model: 'set-promenade', u: 0.393, lat: -6, yaw: 180 }
     ],
     land: [
       { kind: 'shore', u: 0.23, lat: -10, len: 90, r: 30 },
@@ -522,7 +536,7 @@ export const TRACKS = {
     name: 'Flurry', waypoints: GEN_TRACKS.flurry,
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
-      { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 172 },
+      { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
       // the village round the lap, close by the road where a racer reads a
       // cabin (see:landmarks): by the start, on the east loop, on the run in
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
@@ -597,20 +611,18 @@ export const TRACKS = {
       { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
       { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
       { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 },
-      // The road cut along the outside verge under the slopes, its face to
-      // the road: the run to the slide's foot, then a gap where the debris
-      // runs out to the kerb, then the straight after it under its bank. Each
-      // length is 12 u, spaced along the verge (not the centreline) so they
-      // meet round the bends; a run carries one seep.
-      { model: 'set-rock-cut', u: 0.709, lat: 6.5 },
-      { model: 'set-rock-cut-seep', u: 0.731, lat: 6.5 },
-      { model: 'set-rock-cut', u: 0.792, lat: 6.5 },
-      { model: 'set-rock-cut', u: 0.811, lat: 6.5 },
-      { model: 'set-rock-cut-seep', u: 0.834, lat: 6.5 },
-      { model: 'set-rock-cut', u: 0.854, lat: 6.5 }
+      // Where the road runs under the slope, on the outside of the last
+      // loop, it is cut into the mountainside and roofed over: two galleries,
+      // each with the cut it stands in, astride the road. The shorter on the
+      // run to the slide's foot, its cut wrapping the bend before it; the
+      // longer on the straight after the slide. Each piece carries the road's
+      // centreline in its own frame (set_prototypes.py ROAD_A, ROAD_B), so a
+      // gallery's u here and its samples there move together.
+      { model: 'set-avalanche-gallery-short', u: 0.722, lat: 0 },
+      { model: 'set-avalanche-gallery', u: 0.825, lat: 0 }
     ],
-    // the slope that straight is cut into, rising behind the cut: clear of
-    // the slide's and the fences' mounds, which would swallow it (landforms)
+    // the slope the long gallery's cut is in, rising behind it: clear of the
+    // slide's and the fences' mounds, which would swallow it (landforms)
     land: [
       { kind: 'ridge', u: 0.82, lat: 24, len: 44, r: 14, h: 9, top: 0.2, tint: 0xa8b2c4 }
     ]

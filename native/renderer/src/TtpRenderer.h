@@ -1039,6 +1039,30 @@ private:
     // The plain is kept kShoreKeep inside the waterline (past the wet sand's
     // inner edge) and the land is back to full kShoreRamp further in.
     static constexpr float kShoreKeep = 15.0f, kShoreRamp = 18.0f;
+    // THE SUNK SEA. Where a `shore` lets the water in under the road (its
+    // `w`), the sea there lies kSeaSink under the plain, so the deck, whose
+    // slab bottoms out a few cm over the plain, stands clear of it on legs
+    // (buildStructures) instead of lying on it. Out to kSinkHold past the
+    // road's support the sea holds that level and it is back at the plain's
+    // by kSinkOpen, inside the beach region's border, so the flat sheet
+    // beyond the grid never shows through. The beach goes down to it over
+    // kSinkBeach, meeting it kSinkShore inside the waterline, and the bed lies
+    // kSinkBed under the water; the sheet reaches kSinkInset in under the
+    // beach, so wherever the grid's chords put the edge, there is water to
+    // meet it (bedSink). It is the one place the ground goes under groundY,
+    // so the bake's floor proxy goes down with it.
+    static constexpr float kSeaSink = 0.8f, kSinkHold = 6.0f, kSinkOpen = 24.0f;
+    static constexpr float kSinkBeach = 10.0f, kSinkShore = 1.0f, kSinkBed = 0.3f;
+    static constexpr float kSinkInset = 11.0f;
+    // The sea sheet's height over the plain (buildWater), where nothing sinks it.
+    static constexpr float kWaterLift = 0.12f;
+    // Per spoke, with mShoreR: the track's support and the sunk bays' weight.
+    // Empty when no shore sinks the sea.
+    std::vector<float> mShoreSup, mShoreSink;
+    // How far the sea stands under its usual level at (x, z), and how far the
+    // ground lies under the plain there. 0 off a sunk bay.
+    float seaSink(float x, float z) const;
+    float bedSink(float x, float z) const;
     void setupBeachMask(const TrackBin& tb);
     // The share of the land that stands at (x, z), and through `inland`
     // whether that is inside the loop. 1 and 1 off the beach.
@@ -1165,11 +1189,14 @@ private:
         // Where a track's `shore` landform brings the sea in to the road: at
         // bearing `a` the waterline stands `gap` past the road's support,
         // held for `half` of shore either side (arc length at radius `r`) and
-        // back out to the open shore over `fade`.
-        struct Bay { float a, r, gap, half, fade; };
+        // back out to the open shore over `fade`. A bay that lets the water
+        // in under the road (`sunk`) also lets the sea down (kSeaSink).
+        struct Bay { float a, r, gap, half, fade; bool sunk; };
         std::vector<Bay> bays;
         float support(float a) const;   // the track's reach at bearing a
         float at(float a) const;   // the radius at bearing a
+        float sunk(float a) const;   // the sunk bays' weight at bearing a, 0..1
+        float bayWeight(const Bay& b, float a) const;
         static float harm(const float (*h)[2], int n, const float* ph, float a);
     };
     static Shoreline shoreline(const TrackBin& tb);

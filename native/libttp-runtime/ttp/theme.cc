@@ -297,6 +297,16 @@ void snowProps(Theme& t, std::initializer_list<SnowProp> list) {
   }
 }
 
+// A road through the snow is edged by what the plough threw up, not by a
+// racing kerb: a lumpy white bank up to a little over a car's wheel, slush
+// on its road face (RoadPalette::kerbBank). Every snow track but the resort,
+// whose banks are its race course's.
+void ploughBanks(Theme& t) {
+  t.road.kerbA = 0xf3f7fb; t.road.kerbB = 0xf3f7fb;
+  t.road.kerbH = 0.42f;
+  t.road.kerbBank = true; t.road.kerbSlush = 0xa3aab4;
+}
+
 // Powder is a ski resort: the banks are the race course's red and blue gate
 // colours, the gantry's posts banded like slalom poles, and what lies about
 // is the guests' (a snowman by the road, sleds), at their real size beside a
@@ -317,6 +327,7 @@ void powderResort(Theme& t) {
 // sleds left by the road for the slope down to the ice; its one snowman is
 // the set's, on the lake.
 void flurryLake(Theme& t) {
+  ploughBanks(t);
   t.scenery.density = 0.42f;
   t.props.scatterDensity = 0.28f;
   snowProps(t, { { "sled", 0.35f, 0.4f, 0.1f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
@@ -324,12 +335,11 @@ void flurryLake(Theme& t) {
 }
 
 // Glacier is wild ice: no cabin and no village leavings, few trees (open
-// snow, where the penguins read), rock the ice dropped, and banks the blue of
-// the glacier's own ice.
+// snow, where the penguins read), rock the ice dropped.
 void penguinGlacier(Theme& t) {
   t.landmarks.clear();
   t.scenery.density = 0.3f;
-  t.road.kerbA = 0xd6ebfb; t.road.kerbB = 0xb8daf3;
+  ploughBanks(t);
   snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false },
                  { "rocks-large", 0.20f, 0.85f, 0.35f, false, false }, { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
 }
@@ -338,6 +348,7 @@ void penguinGlacier(Theme& t) {
 // snow) along the road, and the gantry's posts banded orange and black like
 // the avalanche poles that mark a road through a slide path.
 void avalanchePass(Theme& t) {
+  ploughBanks(t);
   t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
   snowProps(t, { { "rocks-medium", 0.30f, 0.9f, 0.4f, false, false }, { "rocks-large", 0.25f, 0.85f, 0.35f, false, false },
                  { "snow-pile", 0.30f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });

@@ -87,6 +87,12 @@ struct RoadPalette {
   uint32_t sand = 0xe4cc94;      // the strip between asphalt and kerb on a track that has one
   float kerbW = 0.22f, kerbH = 0.20f;  // kerb cross-section (visual only)
   bool edgeLines = true;         // false drops the painted side lines
+  // The kerb drawn as a plough's snowbank (buildRoadMesh): rounded and lumpy,
+  // its height wandering under kerbH, slush (`kerbSlush`) on its road face,
+  // no bands, its outer slope running down to the land. Visual only,
+  // post-corpus (theme_check does not serialize either).
+  bool kerbBank = false;
+  uint32_t kerbSlush = 0xa3aab4;
   // Whether this deck has ever been REPAIRED — the asphalt patches of
   // ttp/wear.h. A moulded-plastic deck has not: a patch on it reads as a
   // stain, not as a season of racing. Post-corpus (theme_check does not

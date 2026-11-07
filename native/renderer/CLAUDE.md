@@ -533,9 +533,11 @@ buried.
   stays at the hump's foot and the pillars keep their height, and a sliver
   of skirt shows at every ramp's foot. Only a finer grid near the road would
   change that, and the grid's step is a cost.
-- **NEVER BELOW `groundY`.** The sun bake's flat caster proxy sits at
-  `groundY`: ground under it bakes fully shadowed, and the posts standing on it
-  would hang. A valley is land left UNRAISED, not dug.
+- **NEVER BELOW `groundY`, but for a sunk sea.** The sun bake's flat caster
+  proxy sits at the lowest ground: ground under it bakes fully shadowed, and
+  the posts standing on the plain would hang. A valley is land left UNRAISED,
+  not dug. The one exception is the sea a causeway crosses (below), and what
+  stands in it is drawn down to its bed.
 - **A PIECE STANDS WHERE THE LAND LIES.** A set piece's or landmark's
   clearing is levelled to the lowest natural ground under its footprint
   (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
@@ -604,7 +606,14 @@ buried.
   sea, the sea moves to meet the track. It stops short of the road unless
   the shore carries a `w`, which lets the waterline in that far inside the
   road's reach, so the deck runs over the sea on a causeway (Riptide past
-  its hop). The curve is polar about the world origin, so a shore can only
+  its hop). There the sea also SINKS (`kSeaSink`, `seaSink`/`bedSink`): low
+  road's slab bottoms out a few cm over the plain, so on a sea at its usual
+  level it lies on the water. The sunk sea stands clear under the deck, the
+  deck stands on timber bents the renderer adds wherever it clears the water
+  (nothing collides with them), the beach slopes down to it, and its lagoon
+  wears no surf. The 9 u grid's chords decide where that slope meets the
+  water, so the sheet reaches in under the beach and the drawn sand sets the
+  edge. The curve is polar about the world origin, so a shore can only
   reach a stretch of road that is the outermost on its bearing; anchored
   anywhere else it lands far off.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
