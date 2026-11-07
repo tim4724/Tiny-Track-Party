@@ -942,6 +942,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
     std::vector<float> dellV(P.size(), 0.0f), bedV(P.size(), 0.0f);
     std::vector<uint8_t> live(P.size(), 0);
     std::vector<float> over(P.size(), 1.0f);   // how far into the hand-over to the grid
+    std::vector<float> lift(P.size(), 0.0f);   // how far over the grid it stands
     for (int k = 0; k < K; k++) {
         const float s = rings[sel[k]].s;
         for (int side = 0; side < 2; side++) {
@@ -951,7 +952,9 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const float b0 = lerp(kBandBlend, kBandRow[kBandNarrow] + 1.0f, wide[q]);
             const float b1 = lerp(kBandRow[kBandNarrow], kBandRow[R - 1], wide[q]);
             for (int r = 0; r < R; r++) {
-                const float o = r == 0 ? kBandRow[0] : std::min(kBandRow[r], e.reach);
+                // The first row tucks under the kerb, kBandKerbIn short of
+                // its inner face (a wide bank's foot is under the bank too).
+                const float o = r == 0 ? std::min(kBandRow[0], kBandKerbIn - cw) : std::min(kBandRow[r], e.reach);
                 const float px = e.E.x + e.l.x * o, pz = e.E.z + e.l.y * o;
                 const size_t v = vi(k, side, r);
                 const float field = landAt(e, px, pz, o, &dellV[v], &bedV[v]);
@@ -988,6 +991,32 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 live[v] = hold > 0 && y > grid - kBandTuck;
                 P[v] = { px, y, pz };
                 over[v] = smooth01((o - b0) / (b1 - b0));
+                lift[v] = y - grid;
+            }
+        }
+    }
+    // THE BAND ENDS WHERE IT STOPS MATTERING: past the apron, a row that only
+    // copies the grid (within kBandFlat) costs its vertices in every cell and
+    // shows nothing, so each ring's band goes under at the first row from
+    // which on it would, and its neighbours' ends hold it out a ring either
+    // side so the edge runs smooth.
+    {
+        std::vector<int> end((size_t) K * 2, R - 1);
+        for (size_t q = 0; q < end.size(); q++) {
+            int e = R - 1;
+            while (e > kBandMinEnd && std::fabs(lift[q * R + e - 1] - kBandLift) < kBandFlat) e--;
+            end[q] = e;
+        }
+        for (int k = 0; k < K; k++) {
+            for (int side = 0; side < 2; side++) {
+                int e = end[(size_t) k * 2 + side];
+                for (const int d : { -1, 1 }) e = std::max(e, end[(size_t) ((k + d + K) % K) * 2 + side]);
+                for (int r = e; r < R; r++) {
+                    const size_t v = vi(k, side, r);
+                    if (!live[v]) continue;
+                    live[v] = 0;
+                    P[v].y -= lift[v] + kBandTuck;
+                }
             }
         }
     }

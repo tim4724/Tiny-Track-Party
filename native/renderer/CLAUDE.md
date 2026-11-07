@@ -541,7 +541,10 @@ enough to do both:
   hands over to the grid at its end (light, normal and colour terms too) and
   dives under it there. Where the grid cannot draw what stands at the usual
   end (a `near` flank the cap pulls down) it runs on to its last row, eased
-  along the road.
+  along the road. Every band vertex is paid in every cell that sees it, so
+  it ends at the first row past the apron from which on it would only copy
+  the grid (`kBandFlat`): over most of a lap it is a strip a couple of units
+  wide (`npm run budget:scene` prices it).
 - **It yields**: inside a footprint (it comes down to the grid by
   `kHoldSlope` a unit as it nears one, so a piece's flat parts stand at their
   level), at the sea and a pond, along a street, where another road at its

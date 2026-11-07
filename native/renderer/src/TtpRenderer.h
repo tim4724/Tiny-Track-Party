@@ -1180,14 +1180,22 @@ private:
     // lookups (groundSurfaceY, the camera's GroundGrid::at) read the higher.
     void buildVergeBand(const TrackBin& tb);
     static constexpr int kBandRows = 10, kBandNarrow = 7;
-    static constexpr float kBandRow[kBandRows] = { -0.05f, 0.7f, 1.8f, 3.2f, 5.0f, 7.5f, 10.5f, 14.0f, 19.0f, 25.0f };
+    static constexpr float kBandRow[kBandRows] = { -0.05f, 0.7f, 2.0f, 3.5f, 5.5f, 8.0f, 11.0f, 14.0f, 19.0f, 25.0f };
     // Where the field stands kBandWide over the grid at row kBandNarrow, the
     // band runs on to its last row (buildVergeBand).
     static constexpr float kBandWide = 0.8f;
     // How far past the apron the band may stand over the grid, but for a
     // form authored `near` (its rise rides on top).
     static constexpr float kBandOver = 0.4f;
-    static constexpr float kBandStep = 2.4f, kBandTurnCos = 0.9962f;   // 5 degrees
+    // A row standing within kBandFlat of kBandLift over the grid shows
+    // nothing the grid does not; the band goes under at the first row from
+    // which on all do, but never before row kBandMinEnd (the apron's level).
+    static constexpr float kBandFlat = 0.2f;
+    // How far short of the kerb's inner face the band's first row stops: the
+    // chords between rings round a bend may not carry it under the deck.
+    static constexpr float kBandKerbIn = 0.17f;
+    static constexpr int kBandMinEnd = 2;
+    static constexpr float kBandStep = 4.0f, kBandTurnCos = 0.9848f;   // 10 degrees
     static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
     static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f;
     static constexpr float kApronFull = kVergeLow - 0.1f, kApronNone = kVergeLow + 0.4f, kApronCut = 0.3f;
