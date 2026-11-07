@@ -509,12 +509,40 @@ memory until another track builds or the renderer goes.
 track lies near it except on its crossings' ramps and its hills
 (`scripts/track-gen.mjs` localLift). The renderer's ground (`terrainY`,
 `TtpRendererTrack.cpp`) rises toward the deck and rolls into hills away from
-it. LOW road sits IN the land: the ground meets the slab inside its skirt
-(`kVergeDrop` under the top), so nothing flat beside it hides behind a step.
-Only RAISED road, a crossing or a ramp's upper half, shows stilts
-(`kRaiseDrop`), the toy-track read. It is renderer-only: the sim never reads
-it, and pillars, berms and the gantry still stand on `groundY` with their feet
-buried.
+it. LOW road sits IN the land: the field stands `kVergeDrop` under the deck's
+top beside it, and the VERGE BAND (below) lays the land up to the kerb's foot,
+so only the kerb stands over the ground. Only RAISED road, a crossing or a
+ramp's upper half, shows stilts (`kRaiseDrop`), the toy-track read. It is
+renderer-only: the sim never reads it, and pillars, berms and the gantry still
+stand on `groundY` with their feet buried.
+
+THE GROUND IS TWO SURFACES IN ONE MESH: the 9 u grid, and the verge band laid
+over it along the road (`buildVergeBand`, `TtpRenderer.h` has its numbers). The
+drawn ground is the HIGHER of them, and so is every lookup (`groundSurfaceY`,
+the camera's `GroundGrid::at`, the bake of the ground's sun map, which is
+depth-tested for it). The grid cannot meet a road at the road's height: the
+deck cap holds every triangle a deck touches under that deck's LOWEST section,
+and its chords cannot rise within a cell of the kerb. The band is a strip of
+rows out from the kerb's outer foot on rings a couple of units apart, fine
+enough to do both:
+
+- **The apron.** On low road the band stands just under the deck's top from
+  under the kerb out a little past it, then eases down to the land. Road
+  climbing past `kVergeLow` over the plain rises out of it (fill 0 keeps the
+  grid's ground, so a ramp keeps its stilts and what lies under it); road the
+  land itself stands beside keeps it however high it runs (a cut). A short
+  rise in the deck (a jump's lip, a crest hump) stands out of the land: the
+  apron follows the deck's top less what it rises over the chord either side.
+- **The land at the kerb.** Past the apron the band is the field as its OWN
+  road raises it (another road's raised ground, a ramp's beside it, is the
+  grid's), handing over to the grid at its end and diving under it there.
+  Where the grid cannot draw what stands at the usual end (a mountain's flank
+  the cap pulls down) the band runs on to its last row, eased along the road.
+- **It yields**: inside a footprint (it comes down to the grid by
+  `kHoldSlope` a unit as it nears one, so a piece's flat parts stand at their
+  level), at the sea and a pond, along a street, where another road at its
+  height is nearer (that road's band takes the ground), and under another
+  strand's deck it is capped like the grid.
 
 - **NO GROUND THROUGH A DECK, PROVABLY.** The cap is per grid vertex
   (`buildTerrainCap`): every triangle a deck section touches keeps its corners
@@ -527,12 +555,11 @@ buried.
   leg), so no bank walls the road under a bridge.
   `tests/e2e/terrain-ground.spec.js` reads the cap and the stilts off the
   drawn ground.
-- **The cap, not the lift, sets the stilt on a short crest.** A grid vertex
-  sits under the LOWEST deck section crossing any triangle around it, two
-  cells (up to 18 u) of road, so under a hump shorter than that the ground
-  stays at the hump's foot and the pillars keep their height, and a sliver
-  of skirt shows at every ramp's foot. Only a finer grid near the road would
-  change that, and the grid's step is a cost.
+- **The cap, not the lift, sets the GRID's stilt on a short crest.** A grid
+  vertex sits under the LOWEST deck section crossing any triangle around it,
+  two cells (up to 18 u) of road, so the grid alone stays at a hump's foot.
+  The band is what meets the road; a finer grid would cost its step
+  everywhere, the band only along the road.
 - **NEVER BELOW `groundY`, but for a sunk sea.** The sun bake's flat caster
   proxy sits at the lowest ground: ground under it bakes fully shadowed, and
   the posts standing on the plain would hang. A valley is land left UNRAISED,
@@ -594,6 +621,21 @@ buried.
   sunk under the formula has its upper blocks read as feet by the spec. A
   fan narrower than about two grid cells cannot be drawn either: the 9 u
   chords cut through whatever lies on it (a chute's scar).
+- **A BIG LANDFORM AT THE KERB is a ridge or ring with `near`**: its flank
+  keeps full height to that many units past the kerb (reaching it over
+  `kNearRamp`), where every other form clears the road's corridor. The band
+  draws it at its own resolution from the verge out, so a massif tens of
+  units high and as wide as the scene can rise straight off the kerb zone (a
+  rock piece at the kerb hands over to it within a few units), and the slope
+  rock (below) dresses its face. Author it round the OUTSIDE of a bend or
+  along a straight: on a bend's inside it walls the road ahead off. Glacier's
+  massif over its top straight is the worked example.
+- **ROCK WHERE THE LAND IS STEEP.** The ground's vertex alpha carries how
+  steep the land is (`rockWeight`, per biome); `vground.mat` replaces the
+  canvas there with the biome's rock, in strata by world height under ledges
+  (`setRockParams`: the rock set pieces' own colours). One branch in the
+  receiver material, no pass and no tap: everything else (structures, berms,
+  the flat sheet) keeps alpha 1 and skips it.
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
   glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the
@@ -642,7 +684,8 @@ parameterisation, and the reasons are the rule:
 
 - **The GROUND** (vground.mat) taps a map on the LIGHT's own grid (vvis.mat
   renders it through the ESM's camera), which works only for a surface that is
-  single-valued under a near-overhead sun. One surface, no depth buffer.
+  single-valued under a near-overhead sun. Depth-tested, so the verge band
+  lying over the grid wins its texels.
 - **The STRUCTURES and BERMS** (also vground.mat, white albedo) share a SECOND
   light-space map, DEPTH-TESTED. One map cannot hold the ground and an occluder
   above it: drawing the occluder erases the very texels of its own cast shadow.

@@ -43,6 +43,7 @@ float smooth01(float t) {
     t = std::min(1.0f, std::max(0.0f, t));
     return t * t * (3.0f - 2.0f * t);
 }
+float lerp(float a, float b, float t) { return a + (b - a) * t; }
 } // namespace
 
 // The open-country biomes (lawn, redrock, snow) get a shaped ground: it rises
@@ -112,7 +113,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
             LandShape s{ l.kind, l.piece,
                     px + (ax * l.x - az * l.z) * k, pz + (az * l.x + ax * l.z) * k, ax, az,
                     l.len * k, l.r * k, l.r1 * k, l.w * k, l.rz * k, l.h * k, l.h1 * k,
-                    l.top, l.shape, 0, 0, 0, 0, 0, tint };
+                    l.top, l.shape, 0, 0, 0, 0, 0, tint, l.near > 0 ? l.near + tb.kerbW : 0.0f };
             // What the form reaches, as a box on its own axes: +X, -X, +-Z.
             float px1 = 0, nx1 = 0, zz = 0, fade = 1.0f;
             switch (s.kind) {
@@ -484,7 +485,7 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
 // buildTerrainGrid): the pillars, posts and berms stand on groundY, and
 // ground below it would leave them hanging.
 float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-        float* dell, float* bed) const {
+        float* dell, float* bed, float liftCap) const {
     if (dell) *dell = 0;
     if (bed) *bed = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
@@ -495,7 +496,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
             std::min(z - mTerrainZ0, mTerrainZ1 - z));
     if (border <= 0) return tb.groundY;
     float edge;
-    const float lift = roadLift(tb, x, z, edge);
+    const float lift = std::min(liftCap, roadLift(tb, x, z, edge));
     // The hills: clear of the road's corridor, full height 28 u out.
     float hill = 0;
     const float mask = smooth01((edge - kFlatR) / kRampR);
@@ -599,7 +600,9 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
             h = s.h;
         }
         if (t >= 1.0f) continue;
-        hill += h * profile(t, s.top) * clear;
+        // A form authored `near` keeps its height to that close past the
+        // kerb (the verge band draws it there); the rest clear the corridor.
+        hill += h * profile(t, s.top) * (s.near > 0 ? smooth01((edge - s.near) / kNearRamp) : clear);
         if (dell) *dell *= 1.0f - profile(t, 0);
     }
     // The mounds first, then the fans: a fan is debris lying ON what is under
@@ -783,6 +786,241 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     }
 }
 
+float TtpRenderer::bandHold(float x, float z, float& rise) const {
+    float hold = 1.0f;
+    if (mShoreFn) {
+        const float d = mShoreFn(std::atan2(z, x)) - std::hypot(x, z);
+        hold = std::min(hold, smooth01((d - 1.0f) / 2.0f));
+    }
+    for (const LandShape& s : mLand) {
+        if (s.kind != 7) continue;
+        const float dx = x - s.x, dz = z - s.z;
+        const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
+        const float half = 0.5f * s.len, c = std::min(half, std::max(-half, lz));
+        hold = std::min(hold, smooth01((std::sqrt(lx * lx + (lz - c) * (lz - c)) - s.r - 1.0f) / 2.0f));
+    }
+    // A footprint: what lies flat on it stands at the grid's level there, so
+    // the band comes down to it, kHoldSlope a unit, and goes under inside.
+    rise = 1e30f;
+    const auto box = [&](float fx, float fz, float ax, float az, float hx, float hz) {
+        const float dx = x - fx, dz = z - fz;
+        const float u = std::max(0.0f, std::fabs(dx * ax + dz * az) - hx);
+        const float v = std::max(0.0f, std::fabs(dz * ax - dx * az) - hz);
+        rise = std::min(rise, kHoldSlope * std::sqrt(u * u + v * v) - kBandTuck);
+    };
+    for (const TerrainFlat& f : mTerrainFlats) box(f.x, f.z, f.ax, f.az, f.hx, f.hz);
+    for (const SetFoot& f : mSetFeet) box(f.x, f.z, f.ax, f.az, f.hx, f.hz);
+    return hold;
+}
+
+void TtpRenderer::buildVergeBand(const TrackBin& tb) {
+    mBandVerts.clear();
+    mBandNormals.clear();
+    mBandIdx.clear();
+    mGroundGrid.bandP.clear();
+    mGroundGrid.bandTri.clear();
+    mGroundGrid.indexBand();
+    const auto& rings = tb.rings;
+    const size_t N = rings.size();
+    if (mTerrainAmp <= 0 || mGroundGrid.h.empty() || N < 8) return;
+    // The rings it keeps: kBandStep apart, closer where the road turns or
+    // crests, and the last held off ring 0 so the closing span is no sliver.
+    std::vector<uint32_t> sel{ 0 };
+    {
+        float arc = 0;
+        float3 t0 = rings[0].tangent();
+        for (size_t i = 1; i < N; i++) {
+            arc += length(rings[i].pos - rings[i - 1].pos);
+            const float3 t = rings[i].tangent();
+            if (arc >= kBandStep || dot(t, t0) < kBandTurnCos) {
+                sel.push_back((uint32_t) i);
+                arc = 0;
+                t0 = t;
+            }
+        }
+        if (sel.size() > 2 && length(rings[sel.back()].pos - rings[0].pos) < 0.5f * kBandStep) sel.pop_back();
+    }
+    const int K = (int) sel.size(), R = kBandRows;
+    const auto vi = [&](int k, int side, int r) { return ((size_t) k * 2 + side) * R + r; };
+    const float cw = tb.kerbW;
+    // Per ring and side (2k + side): the kerb's outer foot and the way out
+    // from it, the level the apron keeps, how far it may reach (the inside of
+    // a bend), and how much of it lies in the land (fill).
+    struct Edge { float3 E; float2 l; float top, lev, hump, reach, fill; };
+    std::vector<Edge> edges((size_t) K * 2);
+    for (int k = 0; k < K; k++) {
+        const TrackBin::Sample& f = rings[sel[k]];
+        const float half = 0.5f * f.width;
+        // A street's kerb is its pavement (buildRoadMesh), the village's own.
+        float street = 0;
+        for (const ttp::rt::Landform& l : tb.land) {
+            if (l.kind != 9) continue;
+            float d = std::fabs(f.s - l.u * tb.length);
+            d = std::min(d, tb.length - d);
+            street = std::max(street, 1.0f - smooth01((d - 0.5f * l.len + kStreetEase) / kStreetEase));
+        }
+        // The turn here, for the inside of a bend: rows past its centre fold.
+        const TrackBin::Sample& fa = rings[sel[(k + K - 1) % K]];
+        const TrackBin::Sample& fb = rings[sel[(k + 1) % K]];
+        const float2 ta = normalize(float2{ fa.tangent().x, fa.tangent().z });
+        const float2 tbn = normalize(float2{ fb.tangent().x, fb.tangent().z });
+        const float turn = std::acos(std::min(1.0f, std::max(-1.0f, dot(ta, tbn))));
+        const float arc = length(float2{ fb.pos.x - fa.pos.x, fb.pos.z - fa.pos.z });
+        const float2 latH = normalize(float2{ f.lat.x, f.lat.z });
+        const float toward = dot(tbn - ta, latH);   // > 0: turning toward +lat
+        const TrackBin::Sample f0 = tb.frameAt(f.s - kHumpRun), f1 = tb.frameAt(f.s + kHumpRun);
+        for (int side = 0; side < 2; side++) {
+            const float sg = side ? 1.0f : -1.0f;
+            Edge& e = edges[(size_t) k * 2 + side];
+            e.E = f.pos + f.lat * (sg * (half + cw));
+            e.l = latH * sg;
+            // A short rise in the deck (a jump's lip, a hump) stands out of
+            // the land: the apron follows the deck's top less what it rises
+            // over the chord kHumpRun either side.
+            e.top = e.E.y;
+            const float y0 = (f0.pos + f0.lat * (sg * (0.5f * f0.width + cw))).y;
+            const float y1 = (f1.pos + f1.lat * (sg * (0.5f * f1.width + cw))).y;
+            e.lev = std::min(e.top, 0.5f * (y0 + y1));
+            e.hump = e.top - e.lev;
+            e.reach = 1e30f;
+            if (turn > 1e-4f && toward * sg > 0) e.reach = std::max(0.0f, 0.85f * (arc / turn - half - cw));
+            // LOW road (over the plain no higher than the field's own verge
+            // rule calls low, kVergeLow) lies in the land; road climbing past
+            // it rises out of it onto its stilts. And road the land itself
+            // stands up beside, the raise the road brings left out (a cut
+            // through a mountain's foot), lies in it however high it runs.
+            const float o = std::min(kApronRef, e.reach);
+            const float rx = e.E.x + e.l.x * o, rz = e.E.z + e.l.y * o;
+            float edge;
+            const float natural = terrainField(tb, rx, rz, true) - roadLift(tb, rx, rz, edge);
+            const float low = 1.0f - smooth01((e.lev - tb.groundY - kApronFull) / (kApronNone - kApronFull));
+            const float cut = 1.0f - smooth01((e.lev - natural - kApronCut) / (kApronNone - kApronFull));
+            e.fill = std::max(low, cut) * (1.0f - street);
+        }
+    }
+    // The land at (px, pz), o past the kerb, as this road alone raises it:
+    // another road's raised ground (a ramp's, beside it) is the grid's to lay.
+    const auto landAt = [&](const Edge& e, float px, float pz, float o, float* dell, float* bed) {
+        const float h = e.lev - tb.groundY;
+        const float liftOwn = std::max(0.0f, std::min(h - kVergeDrop, std::max(kVergeLow - kVergeDrop, h - kRaiseDrop)))
+                * (1.0f - smooth01((o + cw - kRaiseFlatR) / kRaiseRampR));
+        return std::max(tb.groundY - bedSink(px, pz), terrainField(tb, px, pz, true, dell, bed, liftOwn));
+    };
+    // WIDE where the grid cannot draw what stands at the band's usual end (a
+    // mountain's flank the deck cap pulls down): the band runs on to its last
+    // row there, eased in and out along the road so its end never steps.
+    std::vector<float> wide((size_t) K * 2, 0.0f);
+    {
+        constexpr float O = kBandRow[kBandNarrow];
+        std::vector<float> want(wide.size(), 0.0f);
+        for (size_t q = 0; q < edges.size(); q++) {
+            const Edge& e = edges[q];
+            if (e.fill <= 0 || e.reach < O) continue;
+            const float px = e.E.x + e.l.x * O, pz = e.E.z + e.l.y * O;
+            want[q] = landAt(e, px, pz, O, nullptr, nullptr) - mGroundGrid.gridAt(px, pz) > kBandWide ? 1.0f : 0.0f;
+        }
+        for (size_t q = 0; q < want.size(); q++) {
+            const int k = (int) (q / 2), side = (int) (q % 2);
+            for (int d = -2; d <= 2; d++) wide[q] = std::max(wide[q], want[(size_t) ((k + d + K) % K) * 2 + side]);
+        }
+        for (int pass = 0; pass < 2; pass++) {
+            std::vector<float> eased(wide.size());
+            for (size_t q = 0; q < wide.size(); q++) {
+                const int k = (int) (q / 2), side = (int) (q % 2);
+                float sum = 0;
+                for (int d = -2; d <= 2; d++) sum += (float) (3 - std::abs(d)) * wide[(size_t) ((k + d + K) % K) * 2 + side];
+                eased[q] = sum / 9.0f;
+            }
+            wide.swap(eased);
+        }
+    }
+    std::vector<float3> P((size_t) K * 2 * R);
+    std::vector<float> dellV(P.size(), 0.0f), bedV(P.size(), 0.0f);
+    std::vector<uint8_t> live(P.size(), 0);
+    for (int k = 0; k < K; k++) {
+        const float s = rings[sel[k]].s;
+        for (int side = 0; side < 2; side++) {
+            const size_t q = (size_t) k * 2 + side;
+            const Edge& e = edges[q];
+            // The hand-over to the grid, from b0 to the band's end b1.
+            const float b0 = lerp(kBandBlend, kBandRow[kBandNarrow] + 1.0f, wide[q]);
+            const float b1 = lerp(kBandRow[kBandNarrow], kBandRow[R - 1], wide[q]);
+            for (int r = 0; r < R; r++) {
+                const float o = r == 0 ? kBandRow[0] : std::min(kBandRow[r], e.reach);
+                const float px = e.E.x + e.l.x * o, pz = e.E.z + e.l.y * o;
+                const size_t v = vi(k, side, r);
+                const float field = landAt(e, px, pz, o, &dellV[v], &bedV[v]);
+                // landAt's walk left the samples in reach of (px, pz) in mTsiNear.
+                const float grid = mGroundGrid.gridAt(px, pz);
+                float a = e.lev - (r == 0 ? kApronTuck : kApronGap);
+                if (o > kApronLevel) {
+                    const float land = std::max(field - e.hump * (1.0f - smooth01((o - kApronRun) / kRaiseRampR)),
+                                                grid + kBandLift);
+                    a = lerp(a, land, smooth01((o - kApronLevel) / kApronRun));
+                }
+                // Raised road keeps the ground the grid lays under it (fill 0).
+                float y = lerp(grid + kBandLift, a, e.fill);
+                y = lerp(y, grid + kBandLift, smooth01((o - b0) / (b1 - b0)));
+                bool mine = o < b1 - 0.01f && e.fill > 0;
+                const float own = o + cw;
+                for (const auto& [i, d] : mTsiNear) {
+                    const TrackBin::Sample& sm = tb.samples[i];
+                    const float ds = std::fabs(sm.s - s);
+                    if (std::min(ds, tb.length - ds) < kBandOwnS) continue;
+                    if (std::fabs(sm.pos.y - e.top) < kBandRival) {
+                        if (d < own - 0.25f) mine = false;
+                    } else if (d < cw + kBandStep) {
+                        y = std::min(y, mTsiTopY[i] - kDeckClear);
+                    }
+                }
+                float rise = 0.0f;
+                const float hold = mine ? bandHold(px, pz, rise) : 0.0f;
+                y = lerp(grid - kBandTuck, std::min(y, grid + rise), hold);
+                live[v] = hold > 0 && y > grid - kBandTuck;
+                P[v] = { px, y, pz };
+            }
+        }
+    }
+    // Quads between consecutive kept rings, any of whose corners stands.
+    std::vector<float3> nrm(P.size(), float3{ 0 });
+    for (int k = 0; k < K; k++) {
+        const int kn = (k + 1) % K;
+        for (int side = 0; side < 2; side++) {
+            for (int r = 0; r + 1 < R; r++) {
+                const size_t a = vi(k, side, r), b = vi(kn, side, r);
+                const size_t c = vi(kn, side, r + 1), d = vi(k, side, r + 1);
+                if (!(live[a] | live[b] | live[c] | live[d])) continue;
+                for (const auto& t : { std::array<size_t, 3>{ a, b, c }, std::array<size_t, 3>{ a, c, d } }) {
+                    float3 n = cross(P[t[1]] - P[t[0]], P[t[2]] - P[t[0]]);
+                    if (n.y < 0) n = -n;
+                    for (const size_t q : t) {
+                        nrm[q] += n;
+                        mBandIdx.push_back((uint32_t) q);
+                    }
+                }
+            }
+        }
+    }
+    if (mBandIdx.empty()) return;
+    // Compact to the vertices the quads use.
+    std::vector<uint32_t> remap(P.size(), UINT32_MAX);
+    for (uint32_t& q : mBandIdx) {
+        if (remap[q] == UINT32_MAX) {
+            remap[q] = (uint32_t) mBandVerts.size();
+            const float3 n = length(nrm[q]) > 1e-9f ? normalize(nrm[q]) : float3{ 0, 1, 0 };
+            const float3& p = P[q];
+            mBandVerts.push_back({ p.x, p.y, p.z,
+                    packAlbedo(groundTint(tb.groundKind, dellV[q], bedV[q], n.y) * landTint(p.x, p.z), 1.0f,
+                               1.0f - rockWeight(tb.groundKind, n.y)) });
+            mBandNormals.push_back(n);
+            mGroundGrid.bandP.insert(mGroundGrid.bandP.end(), { p.x, p.y, p.z });
+        }
+        q = remap[q];
+    }
+    mGroundGrid.bandTri = mBandIdx;
+    mGroundGrid.indexBand();
+}
+
 // Three terms, all tied to a shape and all gentle, because the grid's 9 u
 // interpolation turns them into broad gradients: dells out among the hills a
 // shade deeper, a steep face turning to what lies under the surface (earth
@@ -808,6 +1046,45 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
     float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
     c = mix(c, c * floor, std::min(1.0f, std::max(0.0f, bed)));
     return mix(c, c * face, 0.55f * steep);
+}
+
+// How much of the ground at a vertex is the biome's rock (vground.mat), by
+// how steep it lies: snow keeps to its flats and ledges, the badlands break
+// to rock soonest, a lawn only on a genuinely steep face.
+float TtpRenderer::rockWeight(uint32_t groundKind, float upY) {
+    float from, span;
+    switch (groundKind) {
+        case 0: from = 0.21f; span = 0.14f; break;   // lawn: from about 38 degrees
+        case 1: from = 0.13f; span = 0.12f; break;   // sand: a headland's sandstone
+        case 2: from = 0.06f; span = 0.10f; break;   // redrock: from about 20 degrees
+        case 3: from = 0.16f; span = 0.18f; break;   // snow: from about 33 degrees
+        default: return 0.0f;
+    }
+    return smooth01((1.0f - upY - from) / span);
+}
+
+// Each biome's rock, display-encoded like the canvas: the two strata, the
+// ledge on each, and the banding (per unit of height, wobble, ledge share).
+// The colours are the rock set pieces' own (set_prototypes.py): the canyon's
+// brown and salmon cliffs on tan benches, the snow cut's grey under snow.
+void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind) const {
+    struct Rock { uint32_t a, b, l; float perUnit, breakup, wobble, ledge; };
+    Rock r;
+    switch (groundKind) {
+        case 0: r = { 0x8f7752u, 0x9d998eu, 0x7fa055u, 1.0f / 3.0f, 0.25f, 0.1f, 0.25f }; break;
+        case 1: r = { 0xc9a27au, 0xb48b65u, 0xe6cfa4u, 1.0f / 2.2f, 0.2f, 0.1f, 0.22f }; break;
+        case 2: r = { 0xb06041u, 0xd68f62u, 0xf2bf99u, 1.0f / 3.4f, 0.15f, 0.1f, 0.18f }; break;
+        case 3: r = { 0x868ba1u, 0x7a7f95u, 0xf3f7fbu, 1.0f / 4.0f, 0.35f, 0.15f, 0.0f }; break;
+        default: return;
+    }
+    const auto c = [](uint32_t h) {
+        return float4{ (float) ((h >> 16) & 0xff) / 255.0f, (float) ((h >> 8) & 0xff) / 255.0f,
+                       (float) (h & 0xff) / 255.0f, 1.0f };
+    };
+    mi->setParameter("rockA", c(r.a));
+    mi->setParameter("rockB", c(r.b));
+    mi->setParameter("rockL", c(r.l));
+    mi->setParameter("strata", float4{ r.perUnit, r.breakup, r.wobble, r.ledge });
 }
 
 // The grounding rule for chunky pieces: the LOWEST surface point under the
@@ -2258,6 +2535,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     buildLandmarks(tb);
     phases.mark("w:struct+land");
     buildTerrainGrid(tb); // the clearings are carved; freeze the surface
+    buildVergeBand(tb);   // and lay the road's verge over it, before anything stands there
     phases.mark("w:terrain");
     buildSightLines(tb);  // the scatter and the props keep out of them
     buildScenery(tb);
@@ -2334,7 +2612,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const size_t gv = (size_t) r * (cols + 1) + c;
                     mGround.verts.push_back({ x, hAt(c, r), z,
                             packAlbedo(groundTint(tb.groundKind, mGroundDell[gv], mGroundBed[gv], n.y)
-                                       * landTint(x, z), 1.0f) });
+                                       * landTint(x, z), 1.0f, 1.0f - rockWeight(tb.groundKind, n.y)) });
                     mGround.uvs.push_back({ x / TILE, z / TILE });
                     mGround.normals.push_back(n);
                 }
@@ -2346,6 +2624,18 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const uint32_t d = a + (uint32_t) cols + 1, e = d + 1;
                     mGround.idx.insert(mGround.idx.end(), { a, d, b, b, d, e });
                 }
+            }
+            // The verge band (buildVergeBand) after the grid: the vis bake
+            // draws the ground depth-tested, and the band lies over it.
+            {
+                const uint32_t base = (uint32_t) mGround.verts.size();
+                for (size_t i = 0; i < mBandVerts.size(); i++) {
+                    const Vertex& v = mBandVerts[i];
+                    mGround.verts.push_back(v);
+                    mGround.uvs.push_back({ v.px / TILE, v.pz / TILE });
+                    mGround.normals.push_back(mBandNormals[i]);
+                }
+                for (const uint32_t q : mBandIdx) mGround.idx.push_back(base + q);
             }
             const auto flatQuad = flatSheet;
             flatQuad(-G, -G, mTerrainX0, G);            // west strip
@@ -2393,6 +2683,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 smp.setAnisotropy(4.0f);
                 gmi->setParameter("albedo", mGroundTex, smp);
             }
+            setRockParams(gmi, tb.groundKind);
             if (!buildMesh(mGround, true, gmi)) return false;
         } else if (!buildMesh(mGround)) {
             return false;

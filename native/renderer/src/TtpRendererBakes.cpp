@@ -403,9 +403,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     // per texel. Drawing the structures into the ground's map would overwrite
     // the ground texels they cover as seen from the sun — which are exactly the
     // texels of their own cast shadow — and erase the shadow a free-standing
-    // loop shaft throws on the ground. So the ground keeps a map of its own (one
-    // surface, no depth buffer), and the structures and berms share a second,
-    // DEPTH-TESTED so the surface nearest the sun wins each texel.
+    // loop shaft throws on the ground. So the ground keeps a map of its own,
+    // and the structures and berms share a second. Both are DEPTH-TESTED so
+    // the surface nearest the sun wins each texel: the ground's own two
+    // layers (the verge band lying over the grid) as much as an occluder.
     //
     // 512²: the softness lives in the ESM (whose own floor measured at 512 —
     // 256 scallops), and these maps only re-sample it.
@@ -426,7 +427,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     };
     if (esm.map) {
         if (mVisMaterial) {
-            mVisMap = bakeVis({ &mGround }, false);
+            mVisMap = bakeVis({ &mGround }, true);
             mStructVisMap = bakeVis({ &mStructures, &mBerms }, true);
         }
         bake.mark("vis");
@@ -647,7 +648,9 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // the same way.
 // v7: the ground rose to meet low road too (kVergeDrop), the same again.
 // v8: a sunk sea took the beach down with it under Riptide's causeway.
-constexpr uint32_t kBakeVersion = 8u;
+// v9: the verge band laid the land up to the kerb, and the ground's map is
+// baked depth-tested so the band over the grid wins its texels.
+constexpr uint32_t kBakeVersion = 9u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);

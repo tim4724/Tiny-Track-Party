@@ -997,8 +997,9 @@ private:
     float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
     // `dell`, if asked: how far down a swell the point lies, 0 near the road;
     // `bed`: how far inside a `plain` landform's floor (1 on it, 0 clear of it).
+    // `liftCap` holds the road's raised ground under it (the verge band's own road).
     float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-            float* dell = nullptr, float* bed = nullptr) const;
+            float* dell = nullptr, float* bed = nullptr, float liftCap = 1e30f) const;
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
@@ -1012,9 +1013,12 @@ private:
         float x0, z0, x1, z1;
         float base;
         filament::math::float3 tint;
+        float near;   // a ridge's or ring's clearance past the road's edge; 0: the default (landforms)
     };
     std::vector<LandShape> mLand;
     static constexpr float kPondFloor = 3.0f;   // a pond's flat floor past its water
+    // A form with a `near` reaches full height kNearRamp past it.
+    static constexpr float kNearRamp = 3.0f;
     float landforms(float x, float z, float edge, float lift, float hill, float* dell,
             float* bed) const;
     // The landforms' tints at (x, z), multiplied: what the ground's colour
@@ -1149,6 +1153,52 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
+    // THE VERGE BAND (buildVergeBand): the ground beside the road, as a strip
+    // that follows it, rows kBandRow out from the kerb's outer foot on rings
+    // at most kBandStep apart (closer through a turn or over a crest). It
+    // lies over the grid, which cannot meet a road at the road's own height:
+    // the deck cap holds every 9 u triangle a deck touches under the deck's
+    // LOWEST section across it, and its chords cannot rise within a cell of
+    // the kerb. The band is fine enough to do both:
+    //  - LOW ROAD SITS IN THE LAND. Within kApronLevel of the kerb the band
+    //    stands kApronGap under the deck's top, so only the kerb stands over
+    //    the ground and no slab side shows, then eases down to the land over
+    //    kApronRun. Its height over the plain fades that apron out from
+    //    kApronFull to kApronNone (the field's own low/raised line), so road
+    //    climbing onto its stilts rises out of the land; a cut keeps it.
+    //  - THE LAND KEEPS ITS SHAPE AT THE KERB: past the apron the band is the
+    //    field itself (a cut face, a mountain's foot), handing over to the
+    //    grid from kBandBlend to its last row, which lies kBandTuck under it.
+    // Elsewhere it lies kBandLift over the grid, so the two never share a
+    // depth. It yields (sinks under the grid) inside a piece's footprint, at
+    // the sea and a pond, along a street, and where another road at its
+    // height is nearer; no deck of another strand comes through it. The
+    // lookups (groundSurfaceY, the camera's GroundGrid::at) read the higher.
+    void buildVergeBand(const TrackBin& tb);
+    static constexpr int kBandRows = 10, kBandNarrow = 7;
+    static constexpr float kBandRow[kBandRows] = { -0.15f, 0.7f, 1.8f, 3.2f, 5.0f, 7.5f, 10.5f, 14.0f, 19.0f, 25.0f };
+    // Where the field stands kBandWide over the grid at row kBandNarrow, the
+    // band runs on to its last row (buildVergeBand).
+    static constexpr float kBandWide = 0.8f;
+    static constexpr float kBandStep = 2.4f, kBandTurnCos = 0.9962f;   // 5 degrees
+    static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
+    static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f;
+    static constexpr float kApronFull = kVergeLow - 0.1f, kApronNone = kVergeLow + 0.4f, kApronCut = 0.3f;
+    static constexpr float kBandBlend = 8.0f, kBandLift = 0.05f, kBandTuck = 0.12f;
+    // Another road's band takes the ground nearer it when its deck stands
+    // within kBandRival of this one's; a deck further above or below is a
+    // bridge or the road under one, and only holds the band under it.
+    static constexpr float kBandRival = 2.0f;
+    // How far the band's own ring counts as its road, along the lap.
+    static constexpr float kBandOwnS = 3.0f;
+    // 0 where the band yields to the water at (x, z), easing to 1 clear of
+    // it; `rise`, how far over the grid it may stand there by a footprint.
+    float bandHold(float x, float z, float& rise) const;
+    static constexpr float kHoldSlope = 0.25f, kHumpRun = 4.0f;
+    // The band's mesh, appended to the ground's (normals for its light).
+    std::vector<Vertex> mBandVerts;
+    std::vector<filament::math::float3> mBandNormals;
+    std::vector<uint32_t> mBandIdx;
     // Per grid vertex, terrainField's dell and bed terms, for the ground's colour.
     std::vector<float> mGroundDell, mGroundBed;
     // The ground colour at a grid vertex: a low-contrast tint off the shape of
@@ -1156,6 +1206,10 @@ private:
     // the biome's texture. Never per-vertex noise: a speckle reads as a texture
     // pattern.
     filament::math::float3 groundTint(uint32_t groundKind, float dell, float bed, float upY) const;
+    // The rock (vground.mat): how much of a vertex it covers, carried as 1
+    // less the vertex alpha, and the biome's colours and banding.
+    static float rockWeight(uint32_t groundKind, float upY);
+    void setRockParams(filament::MaterialInstance* mi, uint32_t groundKind) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.

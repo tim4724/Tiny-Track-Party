@@ -129,6 +129,7 @@ Value themeOf(const rt::Theme& t) {
       e.set("r", f(l.r)); e.set("r1", f(l.r1)); e.set("w", f(l.w)); e.set("rz", f(l.rz));
       e.set("h", f(l.h)); e.set("h1", f(l.h1)); e.set("top", f(l.top)); e.set("shape", f(l.shape));
       e.set("tint", u(l.tint));
+      if (l.near > 0) e.set("near", f(l.near));   // absent at its default, so older lines stand
       land.push(e);
     }
     o.set("land", land);

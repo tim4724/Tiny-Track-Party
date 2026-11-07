@@ -263,6 +263,10 @@ const BOXES = {
 // multiplier over the ground's colour where the form lies (fading with its
 // flank, or a plain's or paint's `w`); the ground's grid is 9 u, so a tint is
 // a broad wash.
+// A ridge or ring clears the road's corridor (no height within a few units
+// of it, all of it some 16 u out) unless it carries `near`: then its flank
+// stands at full height from that many units past the kerb, a massif's face
+// rising off the verge (native/renderer/CLAUDE.md, a big landform).
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.

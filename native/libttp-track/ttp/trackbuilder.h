@@ -94,6 +94,8 @@ struct LandDef {
   double top;         // ridge / ring: the flat crest, a fraction of the radius
   double shape;       // mound: its flank exponent
   unsigned tint;      // 0xRRGGBB over the ground it covers; 0 = none
+  double near;        // ridge / ring: how close past the kerb its flank may
+                      // stand at full height; 0 = the ground's own clearance
 };
 
 struct TrackDef {

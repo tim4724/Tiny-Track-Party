@@ -211,6 +211,7 @@ struct Landform {
   float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
   float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
   uint32_t tint = 0;          // 0xRRGGBB over the ground it covers; 0 = none
+  float near = 0;             // ridge / ring: its flank's clearance past the kerb; 0 = the default
 };
 
 // One scenery model's recolour, resolved against that model's authored glTF

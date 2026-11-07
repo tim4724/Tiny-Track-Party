@@ -878,6 +878,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
       l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
       l.h = (float) d.h; l.h1 = (float) d.h1; l.top = (float) d.top; l.shape = (float) d.shape;
       l.tint = d.tint;
+      l.near = (float) d.near;
       t.land.push_back(l);
     }
   }
