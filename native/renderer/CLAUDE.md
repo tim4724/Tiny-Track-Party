@@ -536,11 +536,13 @@ stand on `groundY` with their feet buried.
   art direction rejects.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
-  ground drawn under it (`bakePlacements`), so a spine longer than any
-  clearing follows the land instead of flattening it. A model with one stands
-  on the plain and levels nothing (`mSetDrapes`): its other parts are built
-  from the plain up (a post sunk through whatever land it meets). Only the
-  baked path drapes; a model the bake refuses stands flat.
+  ground drawn under it over the placement's foot (`bakePlacements`), so a
+  spine longer than any clearing follows the land instead of flattening it,
+  and a small part on `SET_GROUND` (a sign, a rock, a rake on a slope) sits
+  on the 9 u grid's chords rather than the curve they cut across. A model
+  with one stands on the plain and levels nothing (`mSetDrapes`): its other
+  parts are built from the plain up (a post sunk through whatever land it
+  meets). Only the baked path drapes; a model the bake refuses stands flat.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
@@ -569,7 +571,10 @@ stand on `groundY` with their feet buried.
   dunes read as a wall and hid it), and everything, the authored landforms
   included, sinks to exactly the plain short of the waterline, where the sea
   and the wet sand lie flat on it. The sea and the dunes read one shoreline
-  (`shoreline()`).
+  (`shoreline()`), and so does every keep-out (`inSea`: scatter, props,
+  clutter, `spotIssue`). A `shore` landform brings that one curve in to a
+  stretch of road (Riptide's surf beach): the track never moves to meet the
+  sea, the sea moves to meet the track.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.
@@ -699,7 +704,7 @@ So:
   their vertex colours at build (`Mesh::bakeLight`, `bakedMatteLight`); the static
   kit copies do the same through their merged groups; the shadow RECEIVERS keep it
   in custom0 (above). What lights live is only what MOVES — the cars, the cone
-  pool, the windmill, the plane, the rockets. Lighting the kit material per vertex
+  pool, the plane, the rockets. Lighting the kit material per vertex
   for those measured a null. The one visible difference of a vertex bake is a
   coarse smooth-normal cylinder lit between its vertices.
 - **Triangle ORDER is a cost too.** A tiler re-shades a vertex per primitive batch,

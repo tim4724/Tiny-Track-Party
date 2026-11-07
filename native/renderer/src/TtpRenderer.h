@@ -948,7 +948,7 @@ private:
     uint32_t mTerrainSeed = 0;
     float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
     // Clearings the set pieces and landmark spots level into the relief (so a
-    // windmill never stands on a slope), each at its own height `y`: the
+    // cabin never stands on a slope), each at its own height `y`: the
     // ground already there, never a plinth raised for it. Registered BEFORE
     // the ground mesh and the scatter sample the field — see the builder order.
     // A rounded rectangle: half extents hx, hz along the axes (ax, az) and
@@ -1110,6 +1110,13 @@ private:
     struct Shoreline {
         std::vector<filament::math::float2> pts;
         float shorePh[4], crinklePh[3], swashPh[3];
+        // Where a track's `shore` landform brings the sea in to the road: at
+        // bearing `a` the waterline stands `gap` past the road's support,
+        // held for `half` of shore either side (arc length at radius `r`) and
+        // back out to the open shore over `fade`.
+        struct Bay { float a, r, gap, half, fade; };
+        std::vector<Bay> bays;
+        float support(float a) const;   // the track's reach at bearing a
         float at(float a) const;   // the radius at bearing a
         static float harm(const float (*h)[2], int n, const float* ph, float a);
     };
@@ -1736,6 +1743,8 @@ private:
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // Within `margin` of the sea, or in it (false where there is none).
+    bool inSea(float x, float z, float margin) const;
     // The chase camera's view up the road, one segment every 2 u of the lap
     // (buildSightLines), and whether something standing at (x, z), plan
     // radius r, rising to `top`, would cut one — the scatter's keep-out on
@@ -1797,7 +1806,6 @@ private:
     void buildSmokePuffs(const filament::math::float3& origin);
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
-    Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
     // Chimney smoke (cabin): three soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
@@ -1832,7 +1840,6 @@ private:
     // field, which is every build but the gallery's.
     float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
-    filament::math::mat4f mWindmillBase{};
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
     std::vector<filament::math::float4> mShadowSpots; // x, z, radius, height (0: no disc)
@@ -2307,12 +2314,13 @@ private:
     bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
     // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
-    // by the land under it over the plain (a set piece's `drape` part).
+    // by the land under it over `foot`, the height its placement stands at (a
+    // set piece's `drape` part: modelled from its foot, it lands on the ground).
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             const std::vector<filament::math::float3>& factor,
-            const TrackBin* drapeOn = nullptr);
+            const TrackBin* drapeOn = nullptr, float foot = 0.0f);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,

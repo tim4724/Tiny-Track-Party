@@ -131,6 +131,9 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
     // the kerb.
     std::erase_if(placements, [&](const Placement& p) { return inBerm(tb, p.x, p.z, 0); });
     std::erase_if(boulders, [&](const Boulder& b) { return inBerm(tb, b.x, b.z, b.rr); });
+    // ...and out of the sea, where a `shore` brings it in over the verge.
+    std::erase_if(placements, [&](const Placement& p) { return inSea(p.x, p.z, 1.5f); });
+    std::erase_if(boulders, [&](const Boulder& b) { return inSea(b.x, b.z, b.rr); });
 
     // Where each tree and boulder stands, for the landmark gallery's sight
     // lines (scatterLayout): [x, z, plan radius, world top].
@@ -335,6 +338,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                 placements.push_back({ e->slot, x, 0.0f, z, s, yaw });   // y: grounded below
             }
         }
+        // Filtered after the stream, as the scenery's berms are, so no other roll moves.
+        std::erase_if(placements, [&](const Placement& p) { return inSea(p.x, p.z, 1.0f); });
     }
 
     mPropAssets.resize(tb.prModelCount, nullptr);
@@ -466,7 +471,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
         }
-        return !inSetFoot(x, z, 0.5f);
+        return !inSetFoot(x, z, 0.5f) && !inSea(x, z, 0.5f);
     };
     int geoms = 0;
     const auto put = [&](Prim p, const mat4f& m, uint32_t hex, float shade) {
@@ -1011,7 +1016,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         if (!lowest || a.z < lowest->z) lowest = &a; // .z carries `top`
     }
     if (has(ttp::rt::LM_LIGHTHOUSE) && lowest) { // lighthouse — banded tower on its island
-        constexpr float LH = 1.75f; // LH_SCALE (~16.5u tall)
+        // ~9.5 u tall: a tall real lighthouse (40 m) beside a 0.9 car, out on
+        // its island (the beach's scale rule: big things only as big as in life).
+        constexpr float LH = 1.0f;
         const Spot at{ lowest->x * mHillSf, lowest->y * mHillSf, 0, true };
         const float baseY = lowest->z - 0.8f; // sunk into the island crown
         const auto seg = [&](float r0, float r1, float h, float cy, uint32_t hex,
@@ -1038,8 +1045,10 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const float wy = gy + 0.12f; // rides ON the water sheet (WATER_LIFT)
         const float yaw = (float) rnd() * 2.0f * (float) M_PI;
         constexpr float HEEL = 0.09f; // a sailing boat leans
+        // Built 5.5 long; at BOAT a 10 m yacht beside a 0.9 car.
+        constexpr float BOAT = 0.45f;
         const mat4f frame = mat4f::translation(float3{ bx, wy, bz })
-                * rotY(yaw) * rotZ(HEEL);
+                * rotY(yaw) * rotZ(HEEL) * mat4f::scaling(float3{ BOAT });
         const auto bpart = [&](Prim prim, float lx, float ly, float lz, uint32_t hex) {
             const mat4f m = frame * mat4f::translation(float3{ lx, ly, lz });
             const uint32_t c = packAlbedo(srgbToLinear(hex), 1.0f);
@@ -1132,133 +1141,12 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    // NO has(4). The snowman that stood here was procedural, and the snow biome
-    // plants the Holiday Kit's own instead (theme.cc, the prop scatter) — so the
-    // geometry went with the placement rather than sitting here unreachable. The
-    // KIND is still in LandmarkKind: renumbering that enum would rewrite every
-    // biome's recorded landmark list to say nothing new.
-
-    if (has(ttp::rt::LM_BLOCKS)) { // blocks — giant alphabet blocks (playroom)
-        static const uint32_t TONES[3] = { 0xe66a5a, 0x5a8fd8, 0xf2c14e };
-        const auto block = [&](float bx, float bz, float size, float cy, float yaw,
-                uint32_t hex) {
-            const Spot at{ bx, bz, yaw, true };
-            part(primBox(size, size, size), 0, cy + size / 2, 0, at, hex,
-                    0.97f + (float) rnd() * 0.06f);
-            // Face panels: lighter plates proud of the four sides + the top
-            // (a plain cube reads as a shipping crate).
-            const float pw = size * 0.72f, t = 0.05f, off = size / 2 + t / 2 - 0.01f;
-            const float PL[5][6] = {
-                { off, 0, 0, t, pw, pw }, { -off, 0, 0, t, pw, pw },
-                { 0, 0, off, pw, pw, t }, { 0, 0, -off, pw, pw, t },
-                { 0, off, 0, pw, t, pw },
-            };
-            for (const auto& p : PL) {
-                part(applyPre(primBox(p[3], p[4], p[5]),
-                            mat4f::translation(float3{ p[0], p[1], p[2] })),
-                        0, cy + size / 2, 0, at, 0xf7ead2, 0.98f);
-            }
-        };
-        for (float s = 55; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 6.0f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 5)) continue;
-            const float3 tan = f.tangent();
-            block(x, z, 3.2f, 0, (float) rnd() * 0.6f, TONES[0]);
-            block(x + tan.x * 3.4f + f.lat.x * side * 1.3f,
-                  z + tan.z * 3.4f + f.lat.z * side * 1.3f,
-                  2.6f, 0, 0.5f + (float) rnd() * 0.5f, TONES[1]);
-            block(x + tan.x * 0.4f, z + tan.z * 0.4f, 2.4f, 3.2f,
-                  (float) rnd() * (float) M_PI * 0.5f, TONES[2]);
-            placed.push_back({ x, z, 5.5f });
-            mShadowSpots.push_back({ x, z, 2.2f, 3.2f });
-            break;
-        }
-    }
-
-    if (has(ttp::rt::LM_DUCK)) { // duck — a chunky bath-toy spectator (playroom)
-        constexpr uint32_t YELLOW = 0xf6cf46, BILL = 0xf2953c;
-        for (float s = 30; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 4.2f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 3)) continue;
-            const float fx = -f.lat.x * side, fz = -f.lat.z * side;
-            const Spot sp{ x, z, std::atan2(fx, fz), true };
-            part(applyPre(primIcoDetail(1.5f, 1),
-                        mat4f::scaling(float3{ 1.1f, 0.82f, 1.35f })),
-                    0, 1.2f, -0.2f, sp, YELLOW); // chesty hull
-            for (const int sd : { -1, 1 }) { // wing slabs against the hull
-                part(applyPre(primIcoDetail(0.8f, 1),
-                            rotZ(sd * 0.22f) * rotX(-0.38f)
-                                    * mat4f::scaling(float3{ 0.3f, 0.66f, 1.2f })),
-                        sd * 1.44f, 1.55f, -0.45f, sp, YELLOW, 0.94f);
-            }
-            part(applyPre(primCone(0.55f, 1.1f, 6), rotX(-(float) M_PI / 2 - 0.65f)),
-                    0, 1.75f, -1.85f, sp, YELLOW, 0.98f); // tail flicks up and aft
-            part(primIcoDetail(0.9f, 1), 0, 2.72f, 0.7f, sp, YELLOW, 1.02f); // head
-            part(applyPre(primIcoDetail(0.5f, 1),
-                        mat4f::scaling(float3{ 1.7f, 0.45f, 1.15f })),
-                    0, 2.55f, 1.5f, sp, BILL); // one broad smiling paddle
-            for (const int sd : { -1, 1 }) { // eyes wide apart on the sides
-                part(primIcoDetail(0.14f, 1), sd * 0.68f, 2.99f, 1.23f, sp, 0x343a44);
-            }
-            placed.push_back({ x, z, 3 });
-            mShadowSpots.push_back({ x, z, 1.6f, 2.7f });
-            break;
-        }
-    }
-
-    if (has(ttp::rt::LM_BALL)) { // ball — the classic panelled play ball (playroom)
-        constexpr float BR = 1.5f;
-        static const uint32_t PANELS[6] = { 0xdf4a3c, 0xf5f2ea, 0x3f6fd1,
-                                            0xf5f2ea, 0xf2c14e, 0xf5f2ea };
-        for (float s = 85; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 4.8f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 2.8f)) continue;
-            // Panels are painted PER FACE by centroid longitude (per-vertex
-            // lerping smears the seams) with white polar caps cut at a whole
-            // latitude ring, then the ball is tilted — a settled ball never
-            // sits pole-up, and the tilt is what makes the panels read.
-            const Prim sph = primSphere(BR, 14, 10);
-            const float rz = 0.35f + (float) rnd() * 0.4f;
-            const float ry = (float) rnd() * 2.0f * (float) M_PI;
-            const mat4f m = mat4f::translation(float3{ x, gy + BR * 0.92f, z })
-                    * rotY(ry) * rotZ(rz);
-            constexpr float CAP_LAT = (float) M_PI / 6;
-            for (size_t t = 0; t + 2 < sph.i.size(); t += 3) {
-                const float3 a = sph.v[sph.i[t]], b = sph.v[sph.i[t + 1]];
-                const float3 c = sph.v[sph.i[t + 2]];
-                const float3 ctr = (a + b + c) / 3.0f;
-                const float polar = std::acos(ctr.y / std::max(1e-6f, length(ctr)));
-                const uint32_t hex = (polar < CAP_LAT || polar > (float) M_PI - CAP_LAT)
-                        ? 0xf5f2eau
-                        : PANELS[(size_t) std::floor(
-                                ((std::atan2(ctr.z, ctr.x) + (float) M_PI)
-                                        / (2 * (float) M_PI)) * 6) % 6];
-                const uint32_t col = packAlbedo(srgbToLinear(hex), 1.0f);
-                const uint32_t base = (uint32_t) mLandmarks.verts.size();
-                for (const float3& v : { a, b, c }) {
-                    const float3 w = (m * float4{ v, 1 }).xyz;
-                    smooth((uint32_t) mLandmarks.verts.size(), m, v);
-                    mLandmarks.verts.push_back({ w.x, w.y, w.z, col });
-                }
-                mLandmarks.idx.insert(mLandmarks.idx.end(), { base, base + 1, base + 2 });
-            }
-            placed.push_back({ x, z, 2.5f });
-            mShadowSpots.push_back({ x, z, 1.5f, 3.0f });
-            break;
-        }
-    }
+    // NO snowman, and none of the playroom's giants (alphabet blocks, bath
+    // duck, play ball, crayons, picture books). The snowman was procedural and
+    // the snow biome plants the Holiday Kit's own instead (theme.cc, the prop
+    // scatter); the giants stood many times a toy car's scale, and the
+    // playroom's toys are its tracks' set pieces now, at their real size. The
+    // geometry went with the placement rather than sitting here unreachable.
 
     if (has(ttp::rt::LM_UMBRELLA)) { // umbrella — a day at the beach
         const Spot sp = findSpot(45, 5.2f, 4);
@@ -1364,116 +1252,59 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(ttp::rt::LM_WINDMILL)) { // windmill — a western water-pump derrick with a spinning rotor
-        const Spot sp = findSpot(70, 13 + (float) rnd() * 5, 5);
-        if (sp.ok) {
-            constexpr float H = 10.5f; // hub height
-            constexpr uint32_t TIMBER = 0x9a7050, STEEL = 0xc6cbd6;
-            // Four legs leaning in from a 2.7-square base to a 0.7-square top.
-            for (const int sx2 : { 1, -1 }) {
-                for (const int sz2 : { 1, -1 }) {
-                    const float3 dir{ (0.35f - 1.35f) * sx2, H, (0.35f - 1.35f) * sz2 };
-                    const float len = length(dir);
-                    const quatf q = quatf::fromDirectedRotation(float3{ 0, 1, 0 },
-                            normalize(dir));
-                    part(applyPre(primCylinder(0.1f, 0.15f, len, 6),
-                                mat4f(q) * mat4f::translation(float3{ 0, len / 2, 0 })),
-                            1.35f * sx2, 0, 1.35f * sz2, sp, TIMBER,
-                            0.94f + ((sx2 + sz2 + 2) % 3) * 0.04f);
-                }
-            }
-            for (const float bh : { 3.6f, 7.0f }) { // two brace frames
-                const float hw = 1.35f + (0.35f - 1.35f) * (bh / H);
-                const float B[4][4] = { { 0, hw, hw * 2 + 0.2f, 0.09f },
-                                        { 0, -hw, hw * 2 + 0.2f, 0.09f },
-                                        { hw, 0, 0.09f, hw * 2 + 0.2f },
-                                        { -hw, 0, 0.09f, hw * 2 + 0.2f } };
-                for (const auto& b : B) {
-                    part(primBox(b[2], 0.09f, b[3]), b[0], bh, b[1], sp, TIMBER, 0.9f);
-                }
-            }
-            part(primBox(1.35f, 0.14f, 1.35f), 0, H + 0.07f, 0, sp, TIMBER, 1.05f);
-            part(primBox(0.45f, 0.4f, 0.8f), 0, H + 0.35f, 0.05f, sp, STEEL, 0.9f);
-            part(primBox(0.08f, 0.08f, 1.6f), 0, H + 0.35f, -0.95f, sp, STEEL, 0.85f);
-            part(primBox(0.05f, 0.75f, 0.9f), 0, H + 0.42f, -1.85f, sp, 0xd8463f);
-            // The rotor is its own mesh — the render loop spins it about the
-            // facing axis (the JS registers it with the per-track anim list).
-            {
-                const auto rpart = [&](const Prim& prim, uint32_t hex, float shade) {
-                    const uint32_t c = packAlbedo(srgbToLinear(hex), shade);
-                    const uint32_t base = (uint32_t) mWindmill.verts.size();
-                    for (const float3& v : prim.v) {
-                        mWindmill.verts.push_back({ v.x, v.y, v.z, c });
-                    }
-                    for (const uint32_t i : prim.i) mWindmill.idx.push_back(base + i);
-                };
-                rpart(applyPre(primCylinder(0.22f, 0.22f, 0.2f, 10),
-                            rotX((float) M_PI / 2)), STEEL, 1.05f);
-                for (int bi = 0; bi < 12; bi++) { // 12 flat blades fanned in XY
-                    rpart(applyPre(primBox(0.3f, 1.8f, 0.04f),
-                                rotZ(((float) bi / 12) * 2.0f * (float) M_PI)
-                                        * mat4f::translation(float3{ 0, 1.1f, 0 })),
-                            STEEL, 0.92f + (bi % 3) * 0.05f);
-                }
-                rpart(applyPre(primTorusArc(1.95f, 0.045f, 6, 28, 2.0f * (float) M_PI),
-                            rotX((float) M_PI / 2)), STEEL, 0.88f); // the outer band
-                accumulateNormals(mWindmill);
-                buildMesh(mWindmill);
-                const float fx = std::sin(sp.yaw), fz = std::cos(sp.yaw);
-                mWindmillBase = mat4f::translation(
-                        float3{ sp.x + fx * 0.75f, gy + sp.y + H + 0.35f, sp.z + fz * 0.75f })
-                        * mat4f::rotation(sp.yaw, float3{ 0, 1, 0 });
-            }
-            mShadowSpots.push_back({ sp.x, sp.z, 2.0f, 10.5f });
-        }
-    }
-
     if (has(ttp::rt::LM_CABIN)) { // cabin — a log cabin with smoke curling from the chimney
         const Spot sp = findSpot(65, 10 + (float) rnd() * 5, 5);
         if (sp.ok) {
             constexpr uint32_t LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
+            // Authored five units long; built at K, a real cabin's two and a
+            // half beside a 0.9 car (the scenery's 4-5 m to the unit).
+            constexpr float K = 0.55f;
+            const auto cpart = [&](const Prim& prim, float lx, float ly, float lz, uint32_t hex,
+                    float shade = 1.0f) {
+                part(applyPre(prim, mat4f::scaling(float3{ K, K, K })), lx * K, ly * K, lz * K, sp, hex, shade);
+            };
             for (int row = 0; row < 5; row++) { // log courses
                 const float ly = 0.26f + row * 0.5f;
                 for (const float zoff : { 1.8f, -1.8f }) { // front/back along local X
-                    part(applyPre(primCylinder(0.26f, 0.26f, 5.0f, 7),
+                    cpart(applyPre(primCylinder(0.26f, 0.26f, 5.0f, 7),
                                 rotZ((float) M_PI / 2)),
-                            0, ly, zoff, sp, row % 2 ? LOG : LOG2,
+                            0, ly, zoff, row % 2 ? LOG : LOG2,
                             0.97f + (row % 3) * 0.03f);
                 }
                 for (const float xoff : { 2.3f, -2.3f }) { // sides, half a course up
-                    part(applyPre(primCylinder(0.26f, 0.26f, 4.0f, 7),
+                    cpart(applyPre(primCylinder(0.26f, 0.26f, 4.0f, 7),
                                 rotX((float) M_PI / 2)),
-                            xoff, ly + 0.25f, 0, sp, row % 2 ? LOG2 : LOG,
+                            xoff, ly + 0.25f, 0, row % 2 ? LOG2 : LOG,
                             0.96f + (row % 2) * 0.04f);
                 }
             }
             for (int gi = 0; gi < 3; gi++) { // gable ends shorten toward the ridge
                 const float ly = 2.76f + gi * 0.48f;
                 for (const float zoff : { 1.8f, -1.8f }) {
-                    part(applyPre(primCylinder(0.24f, 0.24f, 3.4f - gi * 1.1f, 7),
+                    cpart(applyPre(primCylinder(0.24f, 0.24f, 3.4f - gi * 1.1f, 7),
                                 rotZ((float) M_PI / 2)),
-                            0, ly, zoff, sp, gi % 2 ? LOG : LOG2);
+                            0, ly, zoff, gi % 2 ? LOG : LOG2);
                 }
             }
             for (const int sd : { -1, 1 }) { // snow-heaped roof slabs
-                part(applyPre(primBox(3.05f, 0.22f, 5.4f), rotZ(sd * 0.6f)),
-                        sd * -1.2f, 3.6f, 0, sp, SNOWC);
+                cpart(applyPre(primBox(3.05f, 0.22f, 5.4f), rotZ(sd * 0.6f)),
+                        sd * -1.2f, 3.6f, 0, SNOWC);
             }
-            part(applyPre(primCylinder(0.18f, 0.18f, 5.45f, 7), rotX((float) M_PI / 2)),
-                    0, 4.32f, 0, sp, SNOWC, 0.98f); // snow-capped ridge log
-            part(primBox(0.9f, 1.5f, 0.14f), 0.95f, 0.75f, 1.98f, sp, 0x4a3a2e);  // door
-            part(primBox(0.78f, 0.68f, 0.14f), -1.0f, 1.35f, 1.98f, sp, 0xffd98a); // lit window
-            part(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, sp, 0x4a3a2e);  // lintel
-            part(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, sp, 0x9fa8ba); // chimney
-            part(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, sp, 0xb9c1d0);
+            cpart(applyPre(primCylinder(0.18f, 0.18f, 5.45f, 7), rotX((float) M_PI / 2)),
+                    0, 4.32f, 0, SNOWC, 0.98f); // snow-capped ridge log
+            cpart(primBox(0.9f, 1.5f, 0.14f), 0.95f, 0.75f, 1.98f, 0x4a3a2e);  // door
+            cpart(primBox(0.78f, 0.68f, 0.14f), -1.0f, 1.35f, 1.98f, 0xffd98a); // lit window
+            cpart(primBox(0.92f, 0.1f, 0.16f), -1.0f, 1.74f, 1.99f, 0x4a3a2e);  // lintel
+            cpart(primBox(0.55f, 2.3f, 0.55f), -0.95f, 3.5f, -0.95f, 0x9fa8ba); // chimney
+            cpart(primBox(0.68f, 0.14f, 0.68f), -0.95f, 4.68f, -0.95f, 0xb9c1d0);
             // Chimney smoke, unless a set piece's chimney already has it: one
             // smoking chimney a track.
             if (mSmoke.empty()) {
                 const float cy2 = std::cos(sp.yaw), sy2 = std::sin(sp.yaw);
-                buildSmokePuffs({ sp.x + (-0.95f) * cy2 + (-0.95f) * sy2, gy + sp.y + 4.75f,
-                                  sp.z - (-0.95f) * sy2 + (-0.95f) * cy2 });
+                buildSmokePuffs({ sp.x + (-0.95f * K) * cy2 + (-0.95f * K) * sy2, gy + sp.y + 4.75f * K,
+                                  sp.z - (-0.95f * K) * sy2 + (-0.95f * K) * cy2 });
             }
-            mShadowSpots.push_back({ sp.x, sp.z, 3.0f, 4.3f });
+            mShadowSpots.push_back({ sp.x, sp.z, 3.0f * K, 4.3f * K });
         }
     }
 
@@ -1532,57 +1363,6 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primBox(0.76f, 0.14f, 0.54f), -0.85f, 0.6f, -0.7f, sp, 0xf5f0e2);
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), -0.35f, 0.07f, 0.9f, sp, 0xf7f5ee);
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), 0.55f, 0.07f, -0.55f, sp, 0xf7f5ee);
-        }
-    }
-
-    if (has(ttp::rt::LM_CRAYONS)) { // crayons — four fat wax sticks spilled, a fifth thrown across
-        const Spot sp = findSpot(110, 4.4f, 3);
-        if (sp.ok) {
-            static const uint32_t COLS[5] = { 0xd8463f, 0x3f6fd1, 0x3fa14e,
-                                              0xf2a83c, 0x8a76d8 };
-            const float a0 = (float) rnd() * 2.0f * (float) M_PI; // the spill's heading
-            const float px2 = std::sin(a0), pz2 = std::cos(a0);   // spread axis
-            for (int i = 0; i < 5; i++) {
-                const bool onTop = i == 4;
-                const float ai = onTop ? a0 + 1.25f
-                                       : a0 + ((float) rnd() - 0.5f) * 0.2f;
-                const float off = onTop ? 0.15f : (i - 1.5f) * 0.6f;
-                const float slide = onTop ? 0.0f : ((float) rnd() - 0.5f) * 0.8f;
-                const float ox = px2 * off + std::cos(ai) * slide;
-                const float oz = pz2 * off - std::sin(ai) * slide;
-                const float lift = onTop ? 0.33f : 0.0f;
-                const Spot at{ sp.x, sp.z, 0, true, sp.y };
-                const auto make = [&](Prim g, uint32_t hex, float shade) {
-                    part(applyPre(g, rotY(ai) * rotZ((float) M_PI / 2)),
-                            ox, 0.17f + lift, oz, at, hex, shade);
-                };
-                make(primCylinder(0.16f, 0.16f, 2.3f, 9), COLS[i], 1.0f);
-                make(applyPre(primCone(0.16f, 0.42f, 9),
-                            mat4f::translation(float3{ 0, 1.36f, 0 })), COLS[i], 1.08f);
-                make(primCylinder(0.18f, 0.18f, 1.3f, 9), COLS[i], 0.88f); // paper band
-            }
-            mShadowSpots.push_back({ sp.x, sp.z, 1.4f, 0.4f });
-        }
-    }
-
-    if (has(ttp::rt::LM_BOOKS)) { // books — three stacked picture books, spines askew
-        const Spot sp = findSpot(130, 8 + (float) rnd() * 3, 3);
-        if (sp.ok) {
-            static const uint32_t COVERS[3] = { 0x3f6fd1, 0xd8463f, 0x3fa14e };
-            float ty = 0;
-            for (int i = 0; i < 3; i++) {
-                const float w = 2.6f - i * 0.35f, d = 1.9f - i * 0.22f, h = 0.42f;
-                const float a = ((float) rnd() - 0.5f) * 0.7f;
-                const Spot at{ sp.x, sp.z, a, true, sp.y };
-                part(primBox(w - 0.18f, h - 0.13f, d - 0.12f), 0.06f, ty + h / 2, 0,
-                        at, 0xf7f5ee);
-                part(primBox(w, 0.07f, d), 0, ty + h - 0.035f, 0, at, COVERS[i]);
-                part(primBox(w, 0.07f, d), 0, ty + 0.035f, 0, at, COVERS[i], 0.94f);
-                part(primBox(0.1f, h, d), -w / 2 + 0.05f, ty + h / 2, 0, at,
-                        COVERS[i], 0.88f);
-                ty += h;
-            }
-            mShadowSpots.push_back({ sp.x, sp.z, 1.5f, 1.3f });
         }
     }
 
@@ -1860,8 +1640,12 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
         const float u = dx * f.ax + dz * f.az, v = -dx * f.az + dz * f.ax;
         if (std::fabs(u) < f.hx + PIECE_MARGIN && std::fabs(v) < f.hz + PIECE_MARGIN) return "piece";
     }
-    if (mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - SEA_MARGIN) return "sea";
+    if (inSea(x, z, SEA_MARGIN)) return "sea";
     return "";
+}
+
+bool TtpRenderer::inSea(float x, float z, float margin) const {
+    return mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - margin;
 }
 
 // Consecutive rings are stitched into a strip. A point is read in every strip
@@ -2026,7 +1810,25 @@ TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
     for (float& p : s.shorePh) p = rnd() * 2.0f * (float) M_PI;
     for (float& p : s.crinklePh) p = rnd() * 2.0f * (float) M_PI;
     for (float& p : s.swashPh) p = rnd() * 2.0f * (float) M_PI;
+    // A `shore` landform: the waterline runs through its anchor. Never closer
+    // than SHORE_MIN_GAP past the road's centre, so the surf cannot reach the
+    // deck wherever the anchor was put.
+    constexpr float SHORE_MIN_GAP = 5.0f;
+    for (const ttp::rt::Landform& l : tb.land) {
+        if (l.kind != 6 || l.piece >= 0) continue;
+        const TrackBin::Sample f = tb.frameAt(l.u * tb.length);
+        const float px = f.pos.x + f.lat.x * l.lat, pz = f.pos.z + f.lat.z * l.lat;
+        const float a = std::atan2(pz, px), r = std::sqrt(px * px + pz * pz);
+        s.bays.push_back({ a, r, std::max(SHORE_MIN_GAP, r - s.support(a)), 0.5f * l.len, l.r });
+    }
     return s;
+}
+
+float TtpRenderer::Shoreline::support(float a) const {
+    const float cx = std::cos(a), cz = std::sin(a);
+    float best = 0;
+    for (const float2& p : pts) best = std::max(best, p.x * cx + p.y * cz);
+    return best;
 }
 
 float TtpRenderer::Shoreline::harm(const float (*h)[2], int n, const float* ph, float a) {
@@ -2039,12 +1841,17 @@ float TtpRenderer::Shoreline::at(float a) const {
     constexpr float SHORE_MARGIN = 26, SHORE_WOBBLE = 22, SHORE_CRINKLE = 2.6f;
     static const float SHORE_H[4][2] = { { 2, 1 }, { 3, 0.72f }, { 5, 0.44f }, { 7, 0.26f } };
     static const float CRINKLE_H[3][2] = { { 11, 1 }, { 17, 0.62f }, { 29, 0.34f } };
-    const float cx = std::cos(a), cz = std::sin(a);
-    float support = 0;
-    for (const float2& p : pts) support = std::max(support, p.x * cx + p.y * cz);
-    return support + SHORE_MARGIN
-            + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
-            + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    const float sup = support(a);
+    const float crinkle = SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    float r = sup + SHORE_MARGIN + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a)) + crinkle;
+    for (const Bay& b : bays) {
+        const float d = std::fabs(std::remainder(a - b.a, 2.0f * (float) M_PI)) * b.r;
+        if (d >= b.half + b.fade) continue;
+        const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / b.fade));
+        const float w = 1.0f - t * t * (3.0f - 2.0f * t);
+        r = std::min(r, r + (sup + b.gap + 0.3f * crinkle - r) * w);
+    }
+    return r;
 }
 
 // The sea ring (theme.water): a flat ring around the play field whose radial
@@ -2087,7 +1894,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     mShoreFn = [shore](float a) { return shore.at(a); };
     const auto harm = Shoreline::harm;
     const float* swashPh = shore.swashPh;
-    std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1);
+    std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1), landK(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {
         const float a = (float) (si % SEG) / SEG * 2.0f * (float) M_PI;
@@ -2095,6 +1902,12 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
         shoreR[si] = shore.at(a);
         swashF[si] = 1 + SWASH_RANGE * harm(SWASH_H, 3, swashPh, a);
         outer = std::max(outer, shoreR[si]);
+        // Where a bay brings the sea in to the road, the damp sand narrows
+        // with the beach, so the strip between them is not all wet. The open
+        // shore stands well past WET_FULL, so it keeps its band whole.
+        constexpr float WET_FULL = 20.0f;
+        landK[si] = shore.bays.empty() ? 1.0f
+                : std::min(1.0f, std::max(0.35f, (shoreR[si] - shore.support(a)) / WET_FULL));
     }
     const float y = tb.groundY + WATER_LIFT;
     const float3 foam = srgbToLinear(tb.waterFoam);
@@ -2111,8 +1924,9 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
             const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
             const uint32_t col = colAt(ri);
             for (int si = 0; si <= SEG; si++) {
+                const float o = off < 0 ? off * landK[si] : off;
                 const float r = shoreR[si] * (1 - t) + outer * t
-                        + off * (1 + (swashF[si] - 1) * sw);
+                        + o * (1 + (swashF[si] - 1) * sw);
                 m.verts.push_back({ cosA[si] * r, y + lift, sinA[si] * r, col });
             }
         }
@@ -2567,6 +2381,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
     }
     for (gltfio::FilamentInstance* inst : insts) {
         const utils::Entity* ents = inst->getEntities();
+        // Where the placement stands: a part that drapes is lifted by the land
+        // over THAT, so it lands on the ground whether the piece stands on the
+        // plain or on its own ground's raised base (mSetOwnGround).
+        const float foot = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
         // Each part's tile, on a grid anchored at the placement's own corner,
         // so a piece narrower than a tile is one mesh wherever it stands.
         std::vector<float3> centre(parts.size());
@@ -2586,7 +2404,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     + (int64_t) ((centre[j].x - x0) / mPieceTile);
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
-                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr);
+                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot);
             g.sources.push_back(src);
         }
         for (auto& [key, g] : tiles) {

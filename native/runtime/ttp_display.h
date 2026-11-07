@@ -834,7 +834,7 @@ TTP_ABI void ttp_display_antialias(int on);
  *
  * dress_keep is the fraction of each merged group's COPIES that is kept (1 =
  * all of them); dress_sheets is whether the one-renderable SHEETS -- boulders,
- * landmarks, windmill, clutter, smoke, signs -- are in the scene at all.
+ * landmarks, clutter, smoke, signs -- are in the scene at all.
  *
  * WHY BOTH EXIST. Measured on the reference Android box at four players, the
  * copies are 40k vertices a frame and hold ~1.1 ms that no render scale can
