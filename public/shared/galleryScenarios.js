@@ -156,7 +156,7 @@ export const GALLERY_SCENARIOS = [
   { id: 'rocket', key: 'racing', title: 'Rocket strike', animated: true, store: 6,
     params: { track: 'tangle', players: 4, seed: 1 }, hold: { simMs: 35850 } },
   { id: 'monster', key: 'racing', title: 'Monster truck', animated: true, store: 8,
-    params: { track: 'driftwood', players: 4, seed: 1 }, hold: { simMs: 43600 } },
+    params: { track: 'driftwood', players: 4, seed: 1 }, hold: { simMs: 12000 } },
   // No bot holds the ITEM button, so the held banana is STAGED (ttp/shot_hold.h),
   // twice over. The live card runs the banana showcase: every few seconds the
   // player with the nearest car behind holds one, then drops it. A capture takes

@@ -100,7 +100,7 @@ const FAVICON_RADIUS = Math.round(32 * 0.22);
 // the lobby thumbnails use (scripts/capture-car-thumbs.js) so the car on the
 // launcher is the car in the game rather than a drawing of one:
 //
-//   node scripts/capture-car-thumbs.js --name vehicle-speedster \
+//   node scripts/capture-car-thumbs.js --name vehicle-lemans \
 //     --yaw 240 --pitch 23 --size 2048 --aspect 1.0 --frames 1 --bias 0 \
 //     --out public/assets/brand/car-hero.png
 //
