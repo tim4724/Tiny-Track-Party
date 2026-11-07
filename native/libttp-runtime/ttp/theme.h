@@ -41,9 +41,10 @@ namespace rt {
 
 enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUND_SNOW, GROUND_WOOD };
 // A shape change rebuilds the horizon ring: 'dome' soft meadow mounds, 'mesa'
-// flat-topped buttes, 'block' giant toy building blocks, 'island' a sparse low
-// offshore chain with sea gaps between features.
-enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_BLOCK, HILL_ISLAND };
+// flat-topped buttes, 'room' the playroom's furniture (a bed, a sofa, a
+// bookshelf, a toy chest), 'island' a sparse low offshore chain with sea gaps
+// between features.
+enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
 // Ambient particle motion presets (trackPayload.js AMB_KINDS).
 enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE
@@ -194,10 +195,11 @@ struct SetSpec {
 // the set pieces modelled on one): ttp::LandDef's fields, as the renderer's
 // terrain reads them. A function of the track alone, like the set.
 struct Landform {
-  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound (LandDef)
+  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint (LandDef)
   int piece = -1;             // anchored on set.pieces[piece]; -1: on u/lat/yaw
   float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
   float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
+  uint32_t tint = 0;          // 0xRRGGBB over the ground it covers; 0 = none
 };
 
 // One scenery model's recolour, resolved against that model's authored glTF

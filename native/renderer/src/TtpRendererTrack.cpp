@@ -46,17 +46,21 @@ float smooth01(float t) {
 } // namespace
 
 // The open-country biomes (lawn, redrock, snow) get a shaped ground: it rises
-// under raised road and rolls into hills away from it. Sand stays flat — the
-// beach's shoreline and water sheet assume the plane — and so does the
-// playroom's wood floor: an indoor floor with hills under the boards reads as
-// a defect, not a landscape.
+// under raised road and rolls into hills away from it. Sand gets dunes, but
+// only inland of the road and never at the water (beachMask): the shoreline
+// and the water sheet assume the plane there. The playroom's wood floor stays
+// flat: an indoor floor with hills under the boards reads as a defect, not a
+// landscape.
 void TtpRenderer::setupTerrain(const TrackBin& tb) {
     switch (tb.groundKind) {
         case 0: mTerrainAmp = 4.6f; break;  // lawn
+        case 1: mTerrainAmp = 3.6f; break;  // sand — soft dunes, inland only
         case 2: mTerrainAmp = 6.5f; break;  // redrock — badlands earn the drama
         case 3: mTerrainAmp = 5.2f; break;  // snow
-        default: mTerrainAmp = 0; break;    // sand, wood
+        default: mTerrainAmp = 0; break;    // wood
     }
+    mInland.clear();
+    mShoreR.clear();
     mGroundGrid = {};
     mGroundGrid.flatY = tb.groundY;
     mTerrainCap.clear();
@@ -70,8 +74,11 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
         z0 = std::min(z0, s.pos.z); z1 = std::max(z1, s.pos.z);
     }
     // Hills live in the track's own neighbourhood; past the region the flat
-    // sheet resumes, well before the horizon ring's feature bases.
-    const float EXT = 90.0f, LIM = 390.0f;
+    // sheet resumes, well before the horizon ring's feature bases. The beach's
+    // dunes stand inside the loop, so its region only needs the border fade's
+    // room past the road (a landform out on the beach grows it below): every
+    // grid vertex out there would be flat sand costing what a hill does.
+    const float EXT = tb.groundKind == 1 ? kRampR + 6.0f : 90.0f, LIM = 390.0f;
     x0 -= EXT; x1 += EXT; z0 -= EXT; z1 += EXT;
     if (tb.samples.empty()) mTerrainAmp = 0;
     // The landforms, into the world. One whose reach passes the region grows
@@ -95,16 +102,21 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
             const float ax = std::cos(hd), az = -std::sin(hd);
             const float px = f.pos.x + f.lat.x * lat, pz = f.pos.z + f.lat.z * lat;
             if (l.piece >= 0) anchors[(size_t) l.piece] = { px, pz };
+            const float3 tint = l.tint ? float3{ (float) ((l.tint >> 16) & 0xff),
+                    (float) ((l.tint >> 8) & 0xff), (float) (l.tint & 0xff) } / 255.0f : float3{ 1.0f };
             LandShape s{ l.kind, l.piece,
                     px + (ax * l.x - az * l.z) * k, pz + (az * l.x + ax * l.z) * k, ax, az,
                     l.len * k, l.r * k, l.r1 * k, l.w * k, l.rz * k, l.h * k, l.h1 * k,
-                    l.top, l.shape, 0, 0, 0, 0, 0 };
+                    l.top, l.shape, 0, 0, 0, 0, 0, tint };
             // What the form reaches, as a box on its own axes: +X, -X, +-Z.
             float px1 = 0, nx1 = 0, zz = 0, fade = 1.0f;
             switch (s.kind) {
                 case 0: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; break; // ridge
                 case 1: px1 = nx1 = zz = s.r + s.w; break;                               // ring
-                case 2: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // plain
+                case 2: px1 = nx1 = s.r + (s.h > 0 ? 2.6f : 1.0f) * s.w;                 // plain, its banks
+                        zz = 0.5f * s.len + px1; break;
+                case 5: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // paint
+                case 4: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; fade = 1.3f; break; // fan
                 default: px1 = s.r; nx1 = s.r1; zz = s.rz; fade = 1.3f; break;          // mound
             }
             // The world box, for the quick reject, takes in a mound's fade too;
@@ -130,6 +142,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     mTerrainX0 = std::max(x0, -LIM); mTerrainX1 = std::min(x1, LIM);
     mTerrainZ0 = std::max(z0, -LIM); mTerrainZ1 = std::min(z1, LIM);
     if (mTerrainAmp <= 0) return;
+    if (tb.groundKind == 1) setupBeachMask(tb);
     // The grid's cell is decided here, before anything samples the field,
     // because the deck cap is kept per grid vertex (buildTerrainCap).
     //
@@ -149,16 +162,65 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     mGroundGrid.sz = (mTerrainZ1 - mTerrainZ0) / mGroundGrid.rows;
     buildTerrainSampleIndex(tb);
     buildTerrainCap(tb);
-    // A piece whose ground is a mound stands where the land is raised at its
-    // anchor, and its mound rises from there (LandShape::base): the parts at
-    // its foot meet the raised verge rather than being buried by it.
+    // A piece whose ground is a mound or a fan stands where the land is
+    // raised at its anchor, and its ground rises from there (LandShape::base):
+    // the parts at its foot meet the raised verge rather than being buried by it.
     for (LandShape& s : mLand) {
-        if (s.kind != 3 || s.piece < 0) continue;
+        if ((s.kind != 3 && s.kind != 4) || s.piece < 0) continue;
         const float2 a = anchors[(size_t) s.piece];
         float edge;
         s.base = roadLift(tb, a.x, a.y, edge);
         mSetOwnGround[(size_t) s.piece] = s.base;
     }
+}
+
+// The beach's two masks (see mInland in TtpRenderer.h). The loop's inside is
+// rasterised once by scanline over the centreline polygon; a cell is only 2 u
+// and the road's own corridor keeps the hills down for several units either
+// side of the centreline, so the raster's steps never show. The shoreline is
+// tabled by bearing off the very curve the sea is drawn on.
+void TtpRenderer::setupBeachMask(const TrackBin& tb) {
+    const size_t n = tb.samples.size();
+    mInlandCols = std::max(1, (int) std::ceil((mTerrainX1 - mTerrainX0) / kInlandCell));
+    mInlandRows = std::max(1, (int) std::ceil((mTerrainZ1 - mTerrainZ0) / kInlandCell));
+    mInland.assign((size_t) mInlandCols * mInlandRows, 0);
+    std::vector<float> cross;
+    for (int r = 0; r < mInlandRows && tb.closed; r++) {
+        const float z = mTerrainZ0 + (r + 0.5f) * kInlandCell;
+        cross.clear();
+        for (size_t i = 0; i < n; i++) {
+            const float3 a = tb.samples[i].pos, b = tb.samples[(i + 1) % n].pos;
+            if ((a.z <= z) == (b.z <= z)) continue;
+            cross.push_back(a.x + (b.x - a.x) * (z - a.z) / (b.z - a.z));
+        }
+        std::sort(cross.begin(), cross.end());
+        for (size_t k = 0; k + 1 < cross.size(); k += 2) {
+            const int c0 = std::max(0, (int) std::ceil((cross[k] - mTerrainX0) / kInlandCell - 0.5f));
+            const int c1 = std::min(mInlandCols - 1,
+                    (int) std::floor((cross[k + 1] - mTerrainX0) / kInlandCell - 0.5f));
+            for (int c = c0; c <= c1; c++) mInland[(size_t) r * mInlandCols + c] = 1;
+        }
+    }
+    if (!tb.hasWater) return;
+    const Shoreline shore = shoreline(tb);
+    mShoreR.resize(kShoreSpokes);
+    for (int k = 0; k < kShoreSpokes; k++) mShoreR[k] = shore.at(k * 2.0f * (float) M_PI / kShoreSpokes);
+}
+
+float TtpRenderer::beachMask(float x, float z, float& inland) const {
+    inland = 1.0f;
+    if (mInland.empty()) return 1.0f;
+    const int c = (int) std::floor((x - mTerrainX0) / kInlandCell);
+    const int r = (int) std::floor((z - mTerrainZ0) / kInlandCell);
+    inland = c >= 0 && r >= 0 && c < mInlandCols && r < mInlandRows
+            && mInland[(size_t) r * mInlandCols + c] ? 1.0f : 0.0f;
+    if (mShoreR.empty()) return 1.0f;
+    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
+    if (f < 0) f += kShoreSpokes;
+    const int k = std::min(kShoreSpokes - 1, (int) f);
+    const float t = f - k;
+    const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * t;
+    return smooth01((R - kShoreKeep - std::sqrt(x * x + z * z)) / kShoreRamp);
 }
 
 // A bucket index over the track samples in XZ, so terrainY can ask "how far to
@@ -363,8 +425,9 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
 // and the sun bake's flat proxy all stand on groundY, and ground below it
 // would bake fully shadowed and leave them hanging.
 float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-        float* dell) const {
+        float* dell, float* bed) const {
     if (dell) *dell = 0;
+    if (bed) *bed = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -390,8 +453,13 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         // colour's dell term (groundTint).
         if (dell) *dell = mask * (1.0f - shape) * smooth01(border / kRampR);
     }
-    const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell);
-    float y = tb.groundY + land * smooth01(border / kRampR);
+    // The beach rolls inland only, and nothing stands at the water.
+    float inland;
+    const float shore = beachMask(x, z, inland);
+    hill *= inland;
+    if (dell) *dell *= inland * shore;
+    const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell, bed);
+    float y = tb.groundY + land * shore * smooth01(border / kRampR);
     if (withFlats) {
         // Cut only: a clearing lowers what stands above its level and leaves
         // a dip alone, so nothing is ever filled up under a piece.
@@ -411,13 +479,13 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
 // above the plain, in three passes so the order of authoring never matters: a
 // plain withholds the lift and the hills under it, ridges and rings add to the
 // hills (fading out toward the road so a flank never walls a verge), and the
-// mounds a set piece brought (SET_GROUND) take the land under them: their
-// union (the highest of them, each risen from its piece's base), or the raised
-// ground where that stands higher, with the hills withheld — so the piece's
-// parts stand on the very surface they were modelled on, and the road beside
-// its foot keeps its short stilts.
+// mounds and fans a set piece brought (SET_GROUND) take the land under them:
+// their union (the highest of them, each risen from its piece's base), or the
+// raised ground where that stands higher, with the hills withheld — so the
+// piece's parts stand on the very surface they were modelled on, and the road
+// beside its foot keeps its short stilts. A paint shapes nothing (landTint).
 float TtpRenderer::landforms(float x, float z, float edge, float lift, float hill,
-        float* dell) const {
+        float* dell, float* bed) const {
     const auto local = [&](const LandShape& s, float& lx, float& lz) {
         const float dx = x - s.x, dz = z - s.z;
         lx = dx * s.ax + dz * s.az;
@@ -434,17 +502,28 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         return t <= top ? 1.0f : 1.0f - smooth01((t - top) / (1.0f - top));
     };
     const auto in = [&](const LandShape& s) { return x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1; };
+    // A plain with a height `h` is a channel: a bank that tall along both
+    // sides, its crest where the floor's fade ends, falling away over 1.6 of
+    // that fade behind. The highest bank of any plain, and only where no
+    // plain keeps its floor (`keepAll`), so the bank of one reach never runs
+    // across the floor of the next round a bend.
+    float keepAll = 1.0f, bank = 0.0f;
     for (const LandShape& s : mLand) {
         if (s.kind != 2 || !in(s)) continue;
         float lx, lz, at;
         local(s, lx, lz);
         const float d = spine(s, lx, lz, at);
-        const float keep = smooth01((d - s.r) / std::max(0.01f, s.w));
+        const float w = std::max(0.01f, s.w);
+        const float keep = smooth01((d - s.r) / w);
         lift *= keep;
         hill *= keep;
+        keepAll *= keep;
         if (dell) *dell *= keep;
+        if (bed) *bed = std::max(*bed, 1.0f - keep);
+        if (s.h > 0) bank = std::max(bank, s.h * keep * (1.0f - smooth01((d - s.r - w) / (1.6f * w))));
     }
     const float clear = smooth01((edge - kFlatR) / 12.0f);
+    hill += bank * keepAll * clear;
     for (const LandShape& s : mLand) {
         if ((s.kind != 0 && s.kind != 1) || !in(s)) continue;
         float lx, lz, at = 0;
@@ -462,23 +541,64 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         hill += h * profile(t, s.top) * clear;
         if (dell) *dell *= 1.0f - profile(t, 0);
     }
+    // The mounds first, then the fans: a fan is debris lying ON what is under
+    // it (a mound's foot), so its rise adds to theirs.
     float own = 0, top = 0;
-    for (const LandShape& s : mLand) {
-        if (s.kind != 3 || !in(s)) continue;
-        float lx, lz;
-        local(s, lx, lz);
-        // set_prototypes.py mound(): an oval reaching r toward +X, r1 behind,
-        // rz along, its flank cos(t·π/2)^shape.
-        const float rx = lx > 0 ? s.r : s.r1;
-        const float t = std::sqrt((lx / rx) * (lx / rx) + (lz / s.rz) * (lz / s.rz));
-        const float o = 1.0f - smooth01((t - 1.0f) / 0.3f);
-        if (o <= 0) continue;
-        own = std::max(own, o);
-        top = std::max(top, s.base * o
-                + (t < 1.0f ? s.h * std::pow(std::cos(t * (float) M_PI * 0.5f), s.shape) : 0.0f));
+    for (const uint32_t kind : { 3u, 4u }) {
+        for (const LandShape& s : mLand) {
+            if (s.kind != kind || !in(s)) continue;
+            float lx, lz, t, rise;
+            local(s, lx, lz);
+            if (kind == 3) {
+                // set_prototypes.py mound(): an oval reaching r toward +X, r1
+                // behind, rz along, its flank cos(t·π/2)^shape.
+                const float rx = lx > 0 ? s.r : s.r1;
+                t = std::sqrt((lx / rx) * (lx / rx) + (lz / s.rz) * (lz / s.rz));
+                rise = t < 1.0f ? s.h * std::pow(std::cos(t * (float) M_PI * 0.5f), s.shape) : 0.0f;
+            } else {
+                // A fan: a ridge's capsule and crest.
+                float at;
+                const float d = spine(s, lx, lz, at);
+                t = d / (s.r + (s.r1 - s.r) * at);
+                rise = t < 1.0f ? (s.h + (s.h1 - s.h) * at) * profile(t, s.top) : 0.0f;
+            }
+            const float o = 1.0f - smooth01((t - 1.0f) / 0.3f);
+            if (o <= 0) continue;
+            own = std::max(own, o);
+            top = kind == 3 ? std::max(top, s.base * o + rise) : std::max(top, s.base * o) + rise;
+        }
     }
     if (dell) *dell *= 1.0f - own;
     return (lift + hill) * (1.0f - own) + std::max(top, lift) * own;
+}
+
+// Each tinted form lays its tint where it lies: over a ridge, ring or fan its
+// crest, fading down its flank to the foot; over a plain or paint its width,
+// fading over `w`. Colour only, sampled at the grid's vertices, so a tint
+// reads as a broad wash, never an edge.
+float3 TtpRenderer::landTint(float x, float z) const {
+    float3 c{ 1.0f };
+    for (const LandShape& s : mLand) {
+        if (s.tint == float3{ 1.0f } || x <= s.x0 || x >= s.x1 || z <= s.z0 || z >= s.z1) continue;
+        const float dx = x - s.x, dz = z - s.z;
+        const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
+        const float half = 0.5f * s.len;
+        const float lc = std::min(half, std::max(-half, lz));
+        const float at = s.len > 0 ? (lc + half) / s.len : 0.0f;
+        const float d = std::sqrt(lx * lx + (lz - lc) * (lz - lc));
+        // Over a crest its whole width (its flat `top`), then fading to the foot.
+        const auto crest = [&](float t) {
+            return t <= s.top ? 1.0f : 1.0f - smooth01((t - s.top) / (1.0f - s.top));
+        };
+        float w;
+        switch (s.kind) {
+            case 2: case 5: w = 1.0f - smooth01((d - s.r) / std::max(0.01f, s.w)); break;
+            case 1: w = crest(std::fabs(std::sqrt(lx * lx + lz * lz) - s.r) / s.w); break;
+            default: w = crest(d / (s.r + (s.r1 - s.r) * at)); break;   // ridge, fan
+        }
+        c *= mix(float3{ 1.0f }, s.tint, w);
+    }
+    return c;
 }
 
 float TtpRenderer::naturalFootY(const TrackBin& tb, const TerrainFlat& f) const {
@@ -522,10 +642,12 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     const auto vi = [&](int c, int r) { return (size_t) r * (cols + 1) + c; };
     std::vector<float> h(nv);
     mGroundDell.assign(nv, 0.0f);
+    mGroundBed.assign(nv, 0.0f);
     for (int r = 0; r <= rows; r++) {
         for (int c = 0; c <= cols; c++) {
             const size_t v = vi(c, r);
-            h[v] = terrainField(tb, mTerrainX0 + c * sx, mTerrainZ0 + r * sz, true, &mGroundDell[v]);
+            h[v] = terrainField(tb, mTerrainX0 + c * sx, mTerrainZ0 + r * sz, true, &mGroundDell[v],
+                    &mGroundBed[v]);
         }
     }
     mGroundGrid.h.resize(nv);
@@ -535,7 +657,9 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
             float y = h[v];
             const float x = mTerrainX0 + c * sx, z = mTerrainZ0 + r * sz;
             bool mound = false;
-            for (const LandShape& s : mLand) mound |= s.kind == 3 && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1;
+            for (const LandShape& s : mLand) {
+                mound |= (s.kind == 3 || s.kind == 4) && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1;
+            }
             if (mound && c > 0 && r > 0 && c < cols && r < rows) {
                 // The second differences along X, Z and the mesh's diagonal
                 // (the b–d split runs from (c+1, r) to (c, r+1)).
@@ -549,23 +673,30 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     }
 }
 
-// Two terms, both tied to a shape and both gentle, because the grid's 9 u
+// Three terms, all tied to a shape and all gentle, because the grid's 9 u
 // interpolation turns them into broad gradients: dells out among the hills a
-// shade deeper, and a steep face turning to what lies under the surface (earth
-// under lawn, darker rust on the badlands, grey rock through the snow). Linear
-// multipliers over the biome texture; 1 is the texture as painted, which is
-// what the road's verge and the berms keep, so nothing seams at a berm's foot.
-float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float upY) const {
-    float3 deep{ 1.0f }, face{ 1.0f };
+// shade deeper, a steep face turning to what lies under the surface (earth
+// under lawn, darker rust on the badlands, grey rock through the snow, the
+// sandstone of a headland under the beach), and the floor of a `plain`
+// landform (`bed`) wearing what a dry creek leaves (the badlands' grey-khaki
+// gravel). Linear multipliers over the biome texture; 1 is the texture as
+// painted, which is what the road's verge and the berms keep, so nothing seams
+// at a berm's foot. Multipliers only darken, so a bed can only shift toward a
+// duller colour, never a paler one.
+float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float upY) const {
+    float3 deep{ 1.0f }, face{ 1.0f }, floor{ 1.0f };
     switch (groundKind) {
         case 0: deep = { 0.88f, 0.92f, 0.86f }; face = { 0.86f, 0.76f, 0.58f }; break;  // lawn
-        case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f }; break;  // redrock
+        case 2: deep = { 0.92f, 0.88f, 0.86f }; face = { 0.76f, 0.62f, 0.56f };         // redrock
+                floor = { 0.62f, 0.80f, 0.96f }; break;
         case 3: deep = { 0.90f, 0.93f, 0.99f }; face = { 0.62f, 0.66f, 0.74f }; break;  // snow
+        case 1: deep = { 0.94f, 0.91f, 0.85f }; face = { 0.70f, 0.64f, 0.62f }; break;  // sand: rock under a headland
         default: return float3{ 1.0f };
     }
     // From about 20 degrees, fully by about 42.
     const float steep = smooth01((1.0f - upY - 0.06f) / 0.2f);
-    const float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
+    float3 c = mix(float3{ 1.0f }, deep, std::min(1.0f, std::max(0.0f, dell)));
+    c = mix(c, c * floor, std::min(1.0f, std::max(0.0f, bed)));
     return mix(c, c * face, 0.55f * steep);
 }
 
@@ -1463,6 +1594,59 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
              28000.0f * (tb.hemiIntensity / 2.2f) };
 }
 
+// The playroom's horizon is the ROOM the floor belongs to: a bed, a sofa, a
+// bookshelf and a toy chest standing round it past the fog, as silhouettes
+// that say "furniture" at a glance. Ten boxes, the count the giant toy blocks
+// they replace had, so the ring costs what it did. Each piece stands at a
+// bearing `a` and radius `r` and faces the floor's middle; a part sits in
+// that frame (`t` along the ring, `d` outward, `y0` its foot) and takes its
+// colour from the theme's hill list by index (theme.cc playroomTheme).
+void TtpRenderer::buildRoomRing(const TrackBin& tb, float sf) {
+    struct Part { float a, r, t, d, y0, w, h, depth; int color; };
+    static const Part ROOM[] = {
+        // the bed, long side to the floor: mattress, headboard, a pillow
+        { 0.55f, 172, 0, 0, 0, 66, 12, 36, 1 },
+        { 0.55f, 172, 35, 0, 0, 4, 27, 38, 4 },
+        { 0.55f, 172, 26, 0, 12, 11, 4, 26, 5 },
+        // a chaise sofa: seat, back on the far side, one arm
+        { 2.15f, 176, 0, 0, 0, 70, 11, 26, 0 },
+        { 2.15f, 176, 0, 11, 0, 70, 24, 8, 0 },
+        { 2.15f, 176, -37, 0, 0, 8, 16, 26, 0 },
+        // the bookshelf, a band of books standing proud across its middle
+        { 3.65f, 196, 0, 0, 0, 42, 32, 10, 4 },
+        { 3.65f, 196, 0, -0.6f, 15, 36, 9, 10, 3 },
+        // the toy chest and its lid
+        { 5.05f, 166, 0, 0, 0, 30, 14, 18, 2 },
+        { 5.05f, 166, 0, 0, 14, 32, 3, 20, 0 },
+    };
+    for (const Part& p : ROOM) {
+        const float ca = std::cos(p.a), sa = std::sin(p.a);
+        // outward along (ca, sa), along the ring (sa, -ca): a turn, never a
+        // mirror, so the boxes keep their winding
+        const float cx = ca * (p.r + p.d) + sa * p.t, cz = sa * (p.r + p.d) - ca * p.t;
+        const float reach = 0.5f * std::max(p.w, p.depth);
+        if (mKitFieldMaxX > mKitFieldMinX   // the gallery's field wins, as in the ring
+                && (cx + reach) * sf > mKitFieldMinX - ttp::rt::kKitFieldClear
+                && (cx - reach) * sf < mKitFieldMaxX + ttp::rt::kKitFieldClear
+                && (cz + reach) * sf > mKitFieldMinZ - ttp::rt::kKitFieldClear
+                && (cz - reach) * sf < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
+            continue;
+        }
+        mHillAnchors.push_back({ cx, cz, p.y0 + p.h - 1.0f }); // authored coords
+        const float3 hc = srgbToLinear(tb.hillColors.empty() ? 0x8cc578u
+                : tb.hillColors[(size_t) p.color % tb.hillColors.size()]);
+        const uint32_t col = packAlbedo(hc, 1.0f);
+        const Prim pr = primBox(1, 1, 1);
+        const uint32_t base = (uint32_t) mHills.verts.size();
+        for (const float3& v : pr.v) {
+            const float lt = v.x * p.w, ld = v.z * p.depth;
+            const float x = (cx + sa * lt + ca * ld) * sf, z = (cz - ca * lt + sa * ld) * sf;
+            mHills.verts.push_back({ x, p.y0 + (v.y + 0.5f) * p.h - 1.0f, z, col });
+        }
+        for (const uint32_t idx : pr.i) mHills.idx.push_back(base + idx);
+    }
+}
+
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
@@ -1560,11 +1744,12 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const float sf = std::max(1.0f, (maxR + 60.0f) / 150.0f);
         mHillSf = sf; // the balloon's orbit radius scales with the same push-out
         // Four silhouettes (buildHillRingGeometry): meadow domes, canyon mesas
-        // (flat-topped 9-sided talus cones), playroom blocks (yawed near-cubes)
+        // (flat-topped 9-sided talus cones), the playroom's furniture (below)
         // and beach islands (fewer, lower, farther domes — the sea has to show
         // BETWEEN them). Feature count, scale and radius all vary per shape.
         const uint32_t shape = tb.hillShape;
-        const int count = shape == 1 ? 14 : shape == 2 ? 10 : shape == 3 ? 9 : 18;
+        const int count = shape == 1 ? 14 : shape == 2 ? 0 : shape == 3 ? 9 : 18;
+        if (shape == 2) buildRoomRing(tb, sf);
         for (int i = 0; i < count; i++) {
             float sx, sy, sz, a, r, yaw = 0;
             if (shape == 1) {        // mesa
@@ -1573,12 +1758,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 sx = 20 + (i % 4) * 8; sz = 16 + ((i + 2) % 4) * 7;
                 a = ((float) i / count) * 2.0f * (float) M_PI + (i % 5) * 0.17f;
                 r = 152 + (i % 3) * 20;
-            } else if (shape == 2) { // block
-                sy = 13 + (i % 3) * 5;
-                sx = 14 + (i % 4) * 5; sz = 14 + ((i + 2) % 4) * 5;
-                yaw = (i % 7) * 0.85f; // scaled BEFORE the yaw — a sheared box loses the block read
-                a = ((float) i / count) * 2.0f * (float) M_PI + (i % 5) * 0.23f;
-                r = 158 + (i % 3) * 22;
             } else if (shape == 3) { // island
                 sy = 3.5f + (i % 3) * 2.2f;
                 sx = 28 + (i % 4) * 11; sz = 20 + ((i + 1) % 4) * 8;
@@ -1614,22 +1793,16 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const auto rot = [&](const float3& p) {
                 return float3{ p.x * cyw + p.z * syw, p.y, -p.x * syw + p.z * cyw };
             };
-            // The mesa yaws BEFORE its non-uniform scale (facet phase), the
-            // block scales first (yawing a scaled box would shear it, and the
-            // crisp block silhouette is the whole point).
-            const bool yawFirst = (shape == 1);
+            // The mesa yaws BEFORE its non-uniform scale (facet phase).
             const auto place = [&](float3 p) {
-                if (yaw != 0 && yawFirst) p = rot(p);
+                if (yaw != 0) p = rot(p);
                 p = { p.x * sx, p.y * sy, p.z * sz };
-                if (yaw != 0 && !yawFirst) p = rot(p);
                 return float3{ (p.x + cx) * sf, p.y - 1.0f, (p.z + cz) * sf };
             };
-            if (shape == 1 || shape == 2) {
-                // Unit protos with their base at y=0 (so the y scale IS the
-                // feature height): a 9-sided talus cone with a 0.58 plateau,
-                // or a cube.
-                const Prim pr = (shape == 1) ? primCylinder(0.58f, 1.0f, 1.0f, 9)
-                                             : primBox(1, 1, 1);
+            if (shape == 1) {
+                // A unit proto with its base at y=0 (so the y scale IS the
+                // feature height): a 9-sided talus cone with a 0.58 plateau.
+                const Prim pr = primCylinder(0.58f, 1.0f, 1.0f, 9);
                 const uint32_t base = (uint32_t) mHills.verts.size();
                 for (const float3& v : pr.v) {
                     const float3 w = place({ v.x, v.y + 0.5f, v.z });
@@ -1879,9 +2052,10 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const float3 n = normalize(float3{
                             (hAt(c - 1, r) - hAt(c + 1, r)) / (2 * sx), 1.0f,
                             (hAt(c, r - 1) - hAt(c, r + 1)) / (2 * sz) });
-                    const float dell = mGroundDell[(size_t) r * (cols + 1) + c];
+                    const size_t gv = (size_t) r * (cols + 1) + c;
                     mGround.verts.push_back({ x, hAt(c, r), z,
-                            packAlbedo(groundTint(tb.groundKind, dell, n.y), 1.0f) });
+                            packAlbedo(groundTint(tb.groundKind, mGroundDell[gv], mGroundBed[gv], n.y)
+                                       * landTint(x, z), 1.0f) });
                     mGround.uvs.push_back({ x / TILE, z / TILE });
                     mGround.normals.push_back(n);
                 }

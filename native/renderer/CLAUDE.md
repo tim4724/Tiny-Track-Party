@@ -534,6 +534,13 @@ stand on `groundY` with their feet buried.
   (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
   fills nothing, since a piece on its own knoll reads as a plinth, which the
   art direction rejects.
+- **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
+  (a hose across a lawn, a post's pad) has each baked vertex lifted by the
+  ground drawn under it (`bakePlacements`), so a spine longer than any
+  clearing follows the land instead of flattening it. A model with one stands
+  on the plain and levels nothing (`mSetDrapes`): its other parts are built
+  from the plain up (a post sunk through whatever land it meets). Only the
+  baked path drapes; a model the bake refuses stands flat.
 - **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
@@ -543,12 +550,26 @@ stand on `groundY` with their feet buried.
   renderer lays, and the piece levels no clearing. Its mounds take the land
   under them as the HIGHEST of them or of the raised ground, so two pieces'
   slopes join without a trough and the road along a mountain's foot keeps its
-  short stilts (a part at the foot may be buried a little there). The formula
-  lives three times — `landforms`, `set_prototypes.py set_ground()` and
-  `tracks.js setGroundY` — and the e2e spec catches the C++ and the GLB
-  disagreeing. On a convex slope the grid's chords run under the curve the
+  short stilts (a part at the foot may be buried a little there); its fans
+  (debris) add their rise on top. The formula lives three times —
+  `landforms`, `set_prototypes.py set_ground()` and `tracks.js setGroundY` —
+  and the e2e spec catches the C++ and the GLB disagreeing. Within a grid
+  cell of a deck the cap holds the land lower than any of them, so a fan
+  stops a cell short of the road: a part built on it there floats, and one
+  sunk under the formula has its upper blocks read as feet by the spec. A
+  fan narrower than about two grid cells cannot be drawn either: the 9 u
+  chords cut through whatever lies on it (a chute's scar).
+- **A form's `tint` is the ground's colour, never a texture**: a multiplier
+  per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
+  glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the
   parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
   chord misses; a part floats only if that is bypassed.
+- **The beach rolls inland only** (`beachMask`): its dunes stand inside the
+  lap's loop, never on the beach between the road and the sea (a ring of
+  dunes read as a wall and hid it), and everything, the authored landforms
+  included, sinks to exactly the plain short of the waterline, where the sea
+  and the wet sand lie flat on it. The sea and the dunes read one shoreline
+  (`shoreline()`).
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.
@@ -788,7 +809,9 @@ the static runs but in its node's frame, light frozen at rest, and moved by one
 transform a frame that is a closed form of the scene clock and the cars, so it
 has no state to reset. Hence the verbs: spins about the part's own axis,
 sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
-runs inside something opaque. A part that travels leaves the sun bake; one that
+runs inside something opaque (or whose loop is closed in sight). A part inside
+another rides on it: its pose composes onto the outer part's pose of the same
+frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
 moves in place keeps its rest shadow. The static merge leaves every `anim_`
 slot alone, so a merge change (per-placement bakes) must too.
 

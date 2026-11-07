@@ -5,27 +5,21 @@
 // from the road, and no other gate opens a GLB.
 //
 // FLOATING names the pieces allowed to float, with how many islands each
-// floats: on purpose (water drops in the air, a boat on the sea), or not yet
-// fixed. A piece that floats more than its entry, or one with no entry, fails;
-// one that floats less fails too until its entry comes down, so the list only
-// shrinks.
+// floats: on purpose (a boat on the sea), or not yet fixed. A piece that
+// floats more than its entry, or one with no entry, fails; one that floats
+// less fails too until its entry comes down, so the list only shrinks.
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 
 const FLOATING = {
-  'set-garden-hose': 12,      // the sprinkler's spray
-  'set-sprinkler': 15,        // its spray
   'set-pirate-ship': 4,       // the rowboat on the sea beside it
   // Not yet fixed:
   'set-cow-skull': 10,
   'set-dead-cottonwood': 10,
-  'set-lifeguard-tower': 4,
   'set-log-pile': 1,
-  'set-mine-portal': 1,
   'set-pirate-camp': 1,
   'set-ski-lift': 3,
-  'set-water-tower': 9,
   'set-windsock': 5
 };
 

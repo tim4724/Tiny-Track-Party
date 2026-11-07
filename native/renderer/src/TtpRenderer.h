@@ -961,28 +961,54 @@ private:
     // land lies before any of them (`withFlats` false) — the height a clearing
     // is levelled TO, so a piece stands where the ground already was.
     float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
-    // `dell`, if asked: how far down a swell the point lies, 0 near the road.
+    // `dell`, if asked: how far down a swell the point lies, 0 near the road;
+    // `bed`: how far inside a `plain` landform's floor (1 on it, 0 clear of it).
     float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-            float* dell = nullptr) const;
+            float* dell = nullptr, float* bed = nullptr) const;
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
-    // `piece` the set piece it came with (-1: the track's own), and `base`
-    // what that piece's mound rises from (setupTerrain).
+    // `piece` the set piece it came with (-1: the track's own), `base` what
+    // that piece's mound or fan rises from (setupTerrain), `tint` the
+    // multiplier it lays over the ground's colour (1: none).
     struct LandShape {
         uint32_t kind;
         int piece;
         float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
         float x0, z0, x1, z1;
         float base;
+        filament::math::float3 tint;
     };
     std::vector<LandShape> mLand;
-    float landforms(float x, float z, float edge, float lift, float hill, float* dell) const;
+    float landforms(float x, float z, float edge, float lift, float hill, float* dell,
+            float* bed) const;
+    // The landforms' tints at (x, z), multiplied: what the ground's colour
+    // wears there over groundTint (a glacier's ice, a piste).
+    filament::math::float3 landTint(float x, float z) const;
     float roadLift(const TrackBin& tb, float x, float z, float& edge) const;
     // Per set piece that brings its own ground (SET_GROUND), how far over the
     // plain it stands, as it was modelled on it, levelling no clearing: 0, or
     // for a mound the land's lift at its anchor. -1 for every other piece.
     std::vector<float> mSetOwnGround;
+    // THE BEACH'S DUNES. Sand rolls like the other biomes, but only on the
+    // LAND side of the road: inside the lap's loop (mInland, a raster of the
+    // centreline polygon), never on the beach between the road and the sea, so
+    // the sea shows from every stretch of road (a ring of dunes round the
+    // island read as a wall and hid it). Everything, the authored landforms
+    // included, sinks to exactly the plain short of the waterline (mShoreR),
+    // where the water sheet and the wet sand lie flat on it.
+    std::vector<uint8_t> mInland;
+    int mInlandCols = 0, mInlandRows = 0;
+    static constexpr float kInlandCell = 2.0f;
+    std::vector<float> mShoreR;   // the shoreline's radius, kShoreSpokes bearings round
+    static constexpr int kShoreSpokes = 360;
+    // The plain is kept kShoreKeep inside the waterline (past the wet sand's
+    // inner edge) and the land is back to full kShoreRamp further in.
+    static constexpr float kShoreKeep = 15.0f, kShoreRamp = 18.0f;
+    void setupBeachMask(const TrackBin& tb);
+    // The share of the land that stands at (x, z), and through `inland`
+    // whether that is inside the loop. 1 and 1 off the beach.
+    float beachMask(float x, float z, float& inland) const;
     // The lowest the land lies under a clearing's footprint (sampled at most
     // the grid's step apart), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
@@ -1046,12 +1072,13 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
-    // Per grid vertex, terrainField's dell term, for the ground's colour.
-    std::vector<float> mGroundDell;
+    // Per grid vertex, terrainField's dell and bed terms, for the ground's colour.
+    std::vector<float> mGroundDell, mGroundBed;
     // The ground colour at a grid vertex: a low-contrast tint off the shape of
-    // the land (its dells, its steep faces), multiplied over the biome's
-    // texture. Never per-vertex noise: a speckle reads as a texture pattern.
-    filament::math::float3 groundTint(uint32_t groundKind, float dell, float upY) const;
+    // the land (its dells, its steep faces, a creek's floor), multiplied over
+    // the biome's texture. Never per-vertex noise: a speckle reads as a texture
+    // pattern.
+    filament::math::float3 groundTint(uint32_t groundKind, float dell, float bed, float upY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.
@@ -1078,6 +1105,15 @@ private:
     // The fitted shoreline radius at a bearing (buildWater); the sailboat
     // anchors off the same curve. Null when the theme carries no water.
     std::function<float(float)> mShoreFn;
+    // What the shoreline is drawn from: the track's samples and the phases its
+    // shore seed gives (shoreline()), so the sea and the dunes read one curve.
+    struct Shoreline {
+        std::vector<filament::math::float2> pts;
+        float shorePh[4], crinklePh[3], swashPh[3];
+        float at(float a) const;   // the radius at bearing a
+        static float harm(const float (*h)[2], int n, const float* ph, float a);
+    };
+    static Shoreline shoreline(const TrackBin& tb);
     std::vector<Mesh> mCars; // box markers — fallback when a car has no GLB
 
     // Real car models (gltfio). mCarAssets[i] is null when car i fell back to
@@ -1687,6 +1723,16 @@ private:
     // whole verge — which every later placement pass keeps out of.
     std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
+    // Per set model: whether it has a `drape` part (isDrapeName). A part that
+    // DRAPES lies on the land as the renderer draws it -- a hose across a
+    // lawn, the foot of a post -- its baked vertices lifted by the ground
+    // under each (bakePlacements), so it needs no ground of its own. A model
+    // with one stands on the plain and levels nothing: what it brings to the
+    // land follows it instead of flattening it.
+    std::vector<bool> mSetDrapes;
+    static bool isDrapeName(const char* name) {
+        return name && std::strncmp(name, "drape", 5) == 0;
+    }
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
@@ -1726,6 +1772,8 @@ private:
         float scale = 1;                    // its uniform world scale
         float phase = 0;
         int path = -1;                      // into mSetPaths
+        int parent = -1;                    // the mover it rides, built before it
+        filament::math::mat4f onParent;     // its rest in the parent's rest frame
         ttp::rt::SetMotion motion;
     };
     struct SetPath {                        // a closed polyline in world space
@@ -1735,9 +1783,11 @@ private:
     std::vector<SetMover> mSetMovers;
     std::vector<SetPath> mSetPaths;
     std::vector<ttp::rt::SetMotionCar> mSetMotionCars;   // per-frame scratch
-    // The outermost `anim_` node over `ent` in a set piece, or null.
+    std::vector<filament::math::mat4f> mSetMoverNow;      // per-frame: each mover's world
+    // The outermost `anim_` node over `ent` in a set piece (the nearest with
+    // `outermost` false), or null.
     utils::Entity setAnimRoot(const filament::gltfio::FilamentAsset* asset,
-            utils::Entity ent) const;
+            utils::Entity ent, bool outermost = true) const;
     void keepTravellersOutOfBake(const filament::gltfio::FilamentAsset* asset,
             filament::gltfio::FilamentInstance* inst);
     void buildSetMovers();
@@ -2256,10 +2306,13 @@ private:
             utils::Entity src0);
     bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
+    // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
+    // by the land under it over the plain (a set piece's `drape` part).
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
-            const std::vector<filament::math::float3>& factor);
+            const std::vector<filament::math::float3>& factor,
+            const TrackBin* drapeOn = nullptr);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,
@@ -2280,6 +2333,7 @@ private:
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
     void buildKitField(const TrackBin& tb);
+    void buildRoomRing(const TrackBin& tb, float sf);
     void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
