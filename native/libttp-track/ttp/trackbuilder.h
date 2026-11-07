@@ -77,7 +77,9 @@ struct LandDef {
   int kind;           // 0 ridge (a hill when len is 0), 1 ring, 2 plain, 3 mound,
                       // 4 fan (a set piece's ridge it lies on), 5 paint (colour only),
                       // 6 shore (the waterline runs through the anchor: len of
-                      // shore held, r its fade back to the open shore)
+                      // shore held, r its fade back to the open shore),
+                      // 8 clear (no seeded scatter within r of its spine),
+                      // 9 street (len of road centred on u: its kerb a kerbstone)
   int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
   double u, lat, yaw; // the anchor when piece is -1, like a set piece's; on a
                       // piece, yaw alone turns the form in the piece's frame

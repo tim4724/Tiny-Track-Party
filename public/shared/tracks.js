@@ -246,9 +246,17 @@ const BOXES = {
 //          road's reach (the road then runs over the water). It only reaches
 //          road that is the island's outermost on its bearing from the origin
 //          (native/renderer/CLAUDE.md, the beach).
-// Any of them but a mound may carry a `tint`, 0xRRGGBB, a multiplier over the
-// ground's colour where the form lies (fading with its flank, or a plain's or
-// paint's `w`); the ground's grid is 9 u, so a tint is a broad wash.
+//   clear  a capsule like a plain that shapes nothing: no seeded tree, prop,
+//          clutter or landmark stands within `r` of its spine (an avenue's
+//          verge, kept to its own trees)
+//   street `len` of road centred on `u` running through a village: its kerb
+//          a low kerbstone instead of the biome's racing kerb, so the
+//          pavement and front gardens beside it show from the seat. No lat,
+//          r or yaw: it is the road's, both sides
+// Any but a mound, a clear or a street may carry a `tint`, 0xRRGGBB, a
+// multiplier over the ground's colour where the form lies (fading with its
+// flank, or a plain's or paint's `w`); the ground's grid is 9 u, so a tint is
+// a broad wash.
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.
@@ -613,21 +621,21 @@ export const TRACKS = {
     name: 'Ribbon', waypoints: GEN_TRACKS.ribbon,
     oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
     // The village: the church on the east terrace where the grid straight
-    // looks, the maypole on its green; rows of cottages along the lanes the
-    // circuit runs down, by the grid straight (in front of the climb to the
-    // first bridge, which hid a row behind it), past the north loop, the long
-    // diagonal, round the south loop and at the west bend's exit, on the
-    // flat by the road (the deck's cap holds any bank there down to it),
+    // looks, the maypole on its green; the long diagonal runs down the
+    // village street, cottages on both sides with their doors and open front
+    // lawns on a pavement at the road's own level, the kerb a kerbstone there
+    // (the `street`); another row of cottages at the west bend's exit, on
+    // the flat by the road (the deck's cap holds any bank there down to it),
     // washing out in the gardens; the windmill turning in the middle of the
-    // south loop
+    // south loop, closing the view down the street
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
-      { model: 'set-cottage-row', u: 0.438, lat: 14.5, yaw: 1.72 },
-      { model: 'set-cottage-row', u: 0.828, lat: 26, yaw: 0 },
-      { model: 'set-cottage-row', u: 0.045, lat: -19, yaw: 180 },
+      { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
+      { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
+      { model: 'set-village-street-b', u: 0.3812, lat: -4.05, yaw: 180 },
+      { model: 'set-village-street', u: 0.4145, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
-      { model: 'set-cottage-row', u: 0.88, lat: 14.5, yaw: 0 }
+      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 }
     ],
     // the valley the village lies in: two terraces climbing either side of
     // the circuit, a long bank behind the north loop and a round hill to the
@@ -638,7 +646,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.38249, lat: 25.92, yaw: 156.65, len: 120, r: 16, h: 3, top: 0.6 },
       { kind: 'ridge', u: 0.37558, lat: 34.185, yaw: 157.64, len: 100, r: 9, h: 3, top: 0.45 },
       { kind: 'ridge', u: 0.2, lat: -46, len: 60, r: 24, h: 6, top: 0.35 },
-      { kind: 'ridge', u: 0.66022, lat: -27.168, r: 24, h: 7, top: 0.15 }
+      { kind: 'ridge', u: 0.66022, lat: -27.168, r: 24, h: 7, top: 0.15 },
+      { kind: 'street', u: 0.39565, len: 32 }
     ]
   },
   pretzel: {
@@ -650,13 +659,20 @@ export const TRACKS = {
     // pavilion across it from the road, standing up behind the game over the
     // kerb that hides the lines; their camp by the
     // diagonal's top, where the racer comes off the north hairpin, the fire
-    // smoking
+    // smoking; an avenue of oaks either side of the start straight from the
+    // overpass to the bend, through the gantry, its verge kept to them (the
+    // `clear`)
     set: [
+      { model: 'set-avenue-oaks', u: 0.01011, lat: 5.5, yaw: 0 },
+      { model: 'set-avenue-oaks', u: 0.01011, lat: -5.5, yaw: 180 },
       { model: 'set-treehouse', u: 0.065, lat: 23, yaw: 25.44 },
-      { model: 'set-football-pitch', u: 0.92176, lat: -9.578, yaw: 1.41 },
+      { model: 'set-football-pitch', u: 0.91, lat: -8.6, yaw: 1.41 },
       { model: 'set-den-camp', u: 0.534, lat: 11.842, yaw: 13.39, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 }
+    ],
+    land: [
+      { kind: 'clear', u: 0.01011, len: 28, r: 14 }
     ]
   },
   tangle: {
@@ -717,9 +733,10 @@ export const TRACKS = {
     name: 'Wash', waypoints: GEN_TRACKS.wash,
     oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes,
     // A dry wash and the canyon it cut: out of the start the road drops into
-    // the wash's canyon, banded rock walls close on both sides down the
-    // straight and round the outside of the bend (set-canyon-wall, the ridges
-    // in `land` rising behind them), the inside of the bend left open so the
+    // the wash's canyon, mountainsides of banded rock rising from both verges
+    // down the straight and round the outside of the bend (set-canyon-peaks,
+    // set-canyon-spur and set-canyon-bend-wash, the ridges in `land` carrying
+    // the range on behind them), the inside of the bend left open so the
     // road ahead stays in sight. Out on the plain the wash winds across the
     // whole map, its gravel bed laid reach by reach (set-wash-bed, each
     // bringing its channel; the far north-west reaches, out of a racer's
@@ -747,32 +764,24 @@ export const TRACKS = {
       { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
       { model: 'set-wash-bed', u: 0.5332, lat: -17.6, yaw: 68 },
       { model: 'set-wash-bed', u: 0.5182, lat: 8.6, yaw: -91 },
-      // the canyon's walls, the face of each toward the road: the left (outer)
-      // wall the whole way, the right one down the straight and after the bend
-      { model: 'set-canyon-wall', u: 0.014, lat: -6.5, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.038, lat: -6.5, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.062, lat: -6.5, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.082, lat: -6.8, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.098, lat: -7, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.114, lat: -7, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.131, lat: -6.8, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.154, lat: -6.5, yaw: 180 },
-      { model: 'set-canyon-wall', u: 0.03, lat: 6.5 },
-      { model: 'set-canyon-wall', u: 0.054, lat: 6.5 },
-      { model: 'set-canyon-wall', u: 0.138, lat: 6.5 },
-      { model: 'set-canyon-wall', u: 0.161, lat: 6.5 }
+      // the canyon's mountainsides, each face toward the road: the outer
+      // range (left) down the straight, round the bend and on, lower spurs
+      // on the inside of the straight and after the bend, the inside of the
+      // bend left open so the road ahead stays in sight
+      { model: 'set-canyon-peaks-a', u: 0.0198, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-peaks-b', u: 0.0582, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-bend-wash', u: 0.101, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-peaks-c', u: 0.1449, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-spur-a', u: 0.0439, lat: 5.2 },
+      { model: 'set-canyon-spur-b', u: 0.1504, lat: 5.2 }
     ],
-    // the canyon's rock rising behind its walls
+    // the range the canyon's mountainsides belong to, rising behind them
     land: [
-      { kind: 'ridge', u: 0.0084, lat: -18.9, len: 17.6, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.042, lat: -18.7, len: 16.8, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.0749, lat: -18.4, yaw: -1, len: 17.5, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.0926, lat: -17.2, len: 19.1, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1054, lat: -17.1, len: 20.6, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1212, lat: -18, yaw: 1, len: 17.4, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1519, lat: -18.8, len: 18.5, r: 10, h: 10, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.0485, lat: 12.1, yaw: -127, len: 13, r: 9, h: 6, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1514, lat: 10.5, yaw: 127, len: 8.4, r: 9, h: 6, top: 0.3, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.03, lat: -25, len: 30, r: 14, h: 9, top: 0.45, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.1, lat: -25, len: 8, r: 14, h: 10, top: 0.45, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.15, lat: -25, len: 14, r: 14, h: 7.5, top: 0.45, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.044, lat: 18, len: 18, r: 11, h: 6, top: 0.4, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.15, lat: 18, len: 12, r: 11, h: 5.5, top: 0.4, tint: 0xc8846a },
       // the wash's far reaches north-west of the creek, its channel only
       { kind: 'plain', u: 0.9863, lat: -74.2, yaw: -112, len: 38, r: 7, w: 8, h: 1.5 },
       { kind: 'plain', u: 0.9728, lat: -54.7, yaw: 66, len: 38, r: 7, w: 8, h: 1.5 }
@@ -781,7 +790,10 @@ export const TRACKS = {
   gulch: {
     name: 'Gulch', waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
-    // A gold mine at its own size: the adit, a car high, cut into the rock
+    // A gold mine at its own size, reached down a canyon of mountainsides off
+    // the crest (the long left-hander and the tight bend into the yard): the
+    // stamp mill across the start straight, its ore tramway's buckets riding
+    // over the road to the adit, a car high, cut into the rock
     // face of a spur under the long ridge north of the start straight, one
     // ore line winding out of its yard along the whole start straight (on a
     // timber trestle beside it) and round the east bend to the headframe
@@ -792,7 +804,20 @@ export const TRACKS = {
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
       { model: 'set-ore-line', u: 0.018, lat: 16 },
-      { model: 'set-headframe', u: 0.2188, lat: 22.9, yaw: 67 }
+      { model: 'set-headframe', u: 0.2188, lat: 22.9, yaw: 67 },
+      // the gulch itself: off the crest the road drops into a canyon of
+      // mountainsides, the range on the outside of the long left-hander, down
+      // the straight and round the tight bend into the mine yard, a lower spur
+      // on the inside until the straight (Wash's lengths reused between bends)
+      { model: 'set-canyon-bend-gulch', u: 0.862, lat: 5.2 },
+      { model: 'set-canyon-peaks-a', u: 0.904, lat: 5.2 },
+      { model: 'set-canyon-hairpin-gulch', u: 0.937, lat: 5.2 },
+      { model: 'set-canyon-spur-a', u: 0.968, lat: 5.2 },
+      { model: 'set-canyon-inside-gulch', u: 0.864, lat: -5.2, yaw: 180 },
+      // the stamp mill cascading down its spoil heap across the start
+      // straight from the adit, its tramway's buckets riding the sagging
+      // ropes over the road to the tower beside the adit
+      { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 }
     ],
     // the ridge the mine is in, its spoil heaps (waste rock, greyer than the land)
     land: [
@@ -800,13 +825,17 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.202, lat: 43.4, len: 6, r: 10, h: 6, top: 0.15, tint: 0xb0a49c },
       { kind: 'ridge', u: 0.9715, lat: 30, r: 9, h: 5, top: 0.15, tint: 0xb0a49c },
       { kind: 'ridge', u: 0.3367, lat: 22.9, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
-      { kind: 'ridge', u: 0.8963, lat: 22.6, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c }
+      { kind: 'ridge', u: 0.8963, lat: 44, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
+      // the range the gulch's mountainsides belong to
+      { kind: 'ridge', u: 0.862, lat: 24, len: 22, r: 13, h: 9, top: 0.45, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.925, lat: 23, len: 12, r: 13, h: 8.5, top: 0.45, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.864, lat: -16, len: 10, r: 10, h: 5, top: 0.4, tint: 0xc8846a }
     ]
   },
   crag: {
     name: 'Crag', waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
-    // A ranch in butte country: lone flat-topped buttes stand round the map
+    // A ranch in butte country: buttes stand at the bends of both loops
     // and fields of hoodoos between them (rock: big as rock is), and the
     // ranch, every building at its own size, stands on the open plain at the
     // head of the long straight: house, barn, water tower, the windpump
@@ -826,11 +855,14 @@ export const TRACKS = {
       { model: 'set-hoodoos', u: 0.3, lat: 18 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
-      { model: 'set-butte', u: 0.02, lat: -48, yaw: 180 },
-      { model: 'set-butte', u: 0.12, lat: -45, yaw: 180 },
-      { model: 'set-butte', u: 0.35, lat: 42 },
-      { model: 'set-butte', u: 0.64, lat: -48, yaw: 180 },
-      { model: 'set-butte', u: 0.82, lat: 45 }
+      // the buttes: rock of the land's own strata standing in the talus they
+      // shed (rock in slopes, not sand), on the outsides of the two loops'
+      // bends where the road runs at them: a broad butte, then a pair of its
+      // towers, round each loop
+      { model: 'set-rimrock-butte', u: 0.32, lat: 24, yaw: 90 },
+      { model: 'set-rimrock-spires', u: 0.38, lat: 23, yaw: 20 },
+      { model: 'set-rimrock-butte', u: 0.8, lat: 24, yaw: -100, scale: 0.95 },
+      { model: 'set-rimrock-spires', u: 0.865, lat: 23, yaw: 200, scale: 1.05 }
     ]
   },
   sidewinder: {
@@ -841,17 +873,24 @@ export const TRACKS = {
     // a little oil field outside the north loop, its old derrick standing
     // over the tank battery, its pumpjacks nodding and tumbleweeds blowing
     // by, and mesa rims closing the west as
-    // near backdrops (the north and east stay open). Everything by the road
-    // at its own size.
+    // near backdrops (the north and east stay open). Past the start the
+    // long straight runs into a mountain of banded rock and through it in a
+    // tunnel: the massif rises off its right to a summit, throws a spur
+    // across the road that falls away into the low ground inside the bend
+    // beyond, and runs on off the right as a ridge of the land. Everything by the road
+    // at its own size, the rock as big as rock is.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
-      { model: 'set-oil-field', u: 0.77, lat: 15 }
+      { model: 'set-oil-field', u: 0.77, lat: 15 },
+      { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
-    // horizon from any point of the road
+    // horizon from any point of the road; and the mountain's range running
+    // on from its west end, rock-tinted
     land: [
+      { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
       { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 }
     ]

@@ -68,6 +68,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     // its stream) keeps every existing tree/clutter/landmark roll untouched.
     mTerrainSeed = tb.scSeed1 ^ 0x7465726eu;
     mTerrainFlats.clear();
+    mVergeHolds.clear();
     float x0 = 1e30f, z0 = 1e30f, x1 = -1e30f, z1 = -1e30f;
     for (const auto& s : tb.samples) {
         x0 = std::min(x0, s.pos.x); x1 = std::max(x1, s.pos.x);
@@ -89,6 +90,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     if (mTerrainAmp > 0) {
         for (const ttp::rt::Landform& l : tb.land) {
             if (l.kind == 6) continue;   // a shore moves the sea, not the land (shoreline())
+            if (l.kind == 9) continue;   // a street is the road's kerb (buildRoadMesh)
             float u = l.u, lat = l.lat, yaw = l.yaw, k = 1.0f;
             if (l.piece >= 0) {
                 if ((size_t) l.piece >= tb.setPieces.size()) continue;
@@ -117,6 +119,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
                 case 2: px1 = nx1 = s.r + (s.h > 0 ? 2.6f : 1.0f) * s.w;                 // plain, its banks
                         zz = 0.5f * s.len + px1; break;
                 case 5: px1 = nx1 = s.r + s.w; zz = 0.5f * s.len + px1; break;           // paint
+                case 8: px1 = nx1 = s.r; zz = 0.5f * s.len + px1; break;                 // clear
                 case 4: px1 = nx1 = std::max(s.r, s.r1); zz = 0.5f * s.len + px1; fade = 1.3f; break; // fan
                 default: px1 = s.r; nx1 = s.r1; zz = s.rz; fade = 1.3f; break;          // mound
             }
@@ -400,11 +403,20 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
     // cone each OTHER strand of road allows (a crossing, the far side of a
     // hairpin: further along the lap than a strand's own reach) — flat out to
     // kRaiseFlatR past it, climbing kStrandSlope past that — so no bank rises
-    // beside the lower road and the road under a bridge stays open.
+    // beside the lower road and the road under a bridge stays open. A verge
+    // hold (TtpRenderer.h) brings its footprint's nearest road edge to every
+    // point on or around it: the distance the band fades by, not the hills'.
+    float reach = edge;
+    for (const VergeHold& h : mVergeHolds) {
+        const float dx = x - h.x, dz = z - h.z;
+        const float u = std::max(0.0f, std::fabs(dx * h.ax + dz * h.az) - h.hx);
+        const float v = std::max(0.0f, std::fabs(dz * h.ax - dx * h.az) - h.hz);
+        reach = std::min(reach, h.e0 + std::sqrt(u * u + v * v));
+    }
     float lift = 0;
-    if (wSum > 0 && edge < raiseR) {
+    if (wSum > 0 && reach < raiseR) {
         const float blend = tSum / wSum, nearTop = mTsiTopY[nearest];
-        float target = nearTop + (blend - nearTop) * smooth01((edge - kRaiseFlatR) / 12.0f);
+        float target = nearTop + (blend - nearTop) * smooth01((reach - kRaiseFlatR) / 12.0f);
         const float s0 = tb.samples[nearest].s;
         for (const auto& [i, d] : mTsiNear) {
             const float ds = std::fabs(tb.samples[i].s - s0);
@@ -413,7 +425,7 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
         }
         const float h = target - tb.groundY;
         lift = std::max(0.0f, std::min(h - kVergeDrop, std::max(kVergeLow - kVergeDrop, h - kRaiseDrop)))
-             * (1.0f - smooth01((edge - kRaiseFlatR) / kRaiseRampR));
+             * (1.0f - smooth01((reach - kRaiseFlatR) / kRaiseRampR));
     }
     return lift;
 }
@@ -618,6 +630,52 @@ float TtpRenderer::naturalFootY(const TrackBin& tb, const TerrainFlat& f) const 
         }
     }
     return y;
+}
+
+// The footprint sampled half a unit apart, each sample marking the corners of
+// the triangle it lies in (split like the mesh and GroundGrid::at), so every
+// triangle the footprint touches is held at its level however the grid falls.
+// Never a corner of the VERGE, though: a corner the road's raised ground holds
+// up keeps that much (the land under it, where that is lower), or the road
+// beside a piece lower than the verge would stand on a step again. A piece
+// that low is buried at its road side; its level wants moving, not the verge.
+// Nor a corner of another piece's own ground (a mound or fan: its parts stand
+// on it as modelled, and would hang).
+void TtpRenderer::capFootprint(const TrackBin& tb, const TerrainFlat& f, float grow) {
+    if (mTerrainCap.empty()) return;
+    const int cols = mGroundGrid.cols, rows = mGroundGrid.rows;
+    const float ex = f.hx + grow, ez = f.hz + grow;
+    const int nx = std::max(1, (int) std::ceil(2 * ex / 0.5f));
+    const int nz = std::max(1, (int) std::ceil(2 * ez / 0.5f));
+    std::vector<size_t> corners;
+    for (int i = 0; i <= nx; i++) {
+        for (int j = 0; j <= nz; j++) {
+            const float u = -ex + 2 * ex * i / nx, v = -ez + 2 * ez * j / nz;
+            const float du = std::max(0.0f, std::fabs(u) - f.hx), dv = std::max(0.0f, std::fabs(v) - f.hz);
+            if (du * du + dv * dv > grow * grow) continue;   // the rounded corners
+            const float gu = (f.x + u * f.ax - v * f.az - mTerrainX0) / mGroundGrid.sx;
+            const float gv = (f.z + u * f.az + v * f.ax - mTerrainZ0) / mGroundGrid.sz;
+            if (gu < 0 || gv < 0 || gu > cols || gv > rows) continue;
+            const int c = std::min(cols - 1, (int) gu), r = std::min(rows - 1, (int) gv);
+            const size_t ia = (size_t) r * (cols + 1) + c, ib = ia + 1;
+            const size_t id = ia + (size_t) cols + 1, ie = id + 1;
+            const bool lower = (gu - c) + (gv - r) <= 1.0f;
+            corners.insert(corners.end(), { lower ? ia : ie, ib, id });
+        }
+    }
+    std::sort(corners.begin(), corners.end());
+    corners.erase(std::unique(corners.begin(), corners.end()), corners.end());
+    for (const size_t k : corners) {
+        const float x = mTerrainX0 + (float) (k % (size_t) (cols + 1)) * mGroundGrid.sx;
+        const float z = mTerrainZ0 + (float) (k / (size_t) (cols + 1)) * mGroundGrid.sz;
+        if (std::any_of(mLand.begin(), mLand.end(), [&](const LandShape& s) {
+                return (s.kind == 3 || s.kind == 4) && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1; })) {
+            continue;
+        }
+        float edge;
+        const float verge = std::min(terrainField(tb, x, z, false), tb.groundY + roadLift(tb, x, z, edge));
+        mTerrainCap[k] = std::min(mTerrainCap[k], std::max(f.y, verge));
+    }
 }
 
 // Sample the field once at the mesh's own resolution (setupTerrain chose it).
@@ -868,8 +926,28 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // launch strip may fill the deck edge to edge without climbing a kerb.
     constexpr float OFF_DECK_LAT = 1000.0f;
 
+    // A STREET (a `street` landform): where the road runs through a village
+    // its kerb is the PAVEMENT, not the biome's racing kerb: a kerbstone's
+    // step kStreetKerbH tall and paving kStreetKerbW wide, out to the margin
+    // a set piece keeps from the road (spotIssue), where the street's own
+    // piece takes over at the same height. The ground grid cannot rise to the
+    // kerb, so the road brings the first strip of the street with it.
+    // Per ring, how far into one (0..1), easing in over kStreetEase at each
+    // end so the kerb ramps down and narrows rather than steps.
+    std::vector<float> street(N, 0.0f);
+    for (const ttp::rt::Landform& l : tb.land) {
+        if (l.kind != 9) continue;
+        for (uint32_t i = 0; i < N; i++) {
+            float d = std::fabs(((float) i / N) * L - l.u * L);
+            d = std::min(d, L - d);
+            street[i] = std::max(street[i], 1.0f - smooth01((d - 0.5f * l.len + kStreetEase) / kStreetEase));
+        }
+    }
+    const float3 KERB_STREET = srgbToLinear(kStreetKerb);
     // Every ring's profile points, once: the sweep, the strip normals and the
-    // far ribbon's chord test each read the same points many times over.
+    // far ribbon's chord test each read the same points many times over. A
+    // street lowers the kerb's raised points and moves its outer face (and
+    // the skirt under it) out; the deck's points stay.
     // A point's lateral offset from its kerb at ring i: the gap's two edges
     // follow that ring's own gap (the sand, where there is some).
     const auto offAt = [&](uint32_t i, int j) {
@@ -885,9 +963,13 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     std::vector<float3> ringPts((size_t) N * kPts);
     for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
+        const float kerbK = 1.0f + street[i] * (kStreetKerbH / ch - 1.0f);
+        const float wider = street[i] * (kStreetKerbW - cw);
         for (int j = 0; j < kPts; j++) {
-            const float l = P[j].sign * halfAt(i) + offAt(i, j);
-            ringPts[(size_t) i * kPts + j] = f.pos + f.up * P[j].y + f.lat * l;
+            const bool outer = P[j].off * P[j].sign > cw * 0.5f;   // the kerb's outer face and the skirt
+            const float l = P[j].sign * halfAt(i) + offAt(i, j) + (outer ? P[j].sign * wider : 0.0f);
+            const float y = P[j].y > 0 ? P[j].y * kerbK : P[j].y;
+            ringPts[(size_t) i * kPts + j] = f.pos + f.up * y + f.lat * l;
         }
     }
     const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * kPts + j]; };
@@ -994,7 +1076,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     std::vector<uint32_t> quadKey((size_t) N * kLaid);
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
-        const float3 colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
+        const float3 colL = street[i] > 0 ? KERB_STREET : bandCol(kerbL, i);
+        const float3 colR = street[i] > 0 ? KERB_STREET : bandCol(kerbR, i);
         const bool bare = bareAsphalt(i);
         for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];

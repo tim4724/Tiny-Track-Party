@@ -540,7 +540,27 @@ buried.
   clearing is levelled to the lowest natural ground under its footprint
   (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
   fills nothing, since a piece on its own knoll reads as a plinth, which the
-  art direction rejects.
+  art direction rejects. Two rules keep what lies FLAT on it (a pitch's
+  lines, a path, a bed) out of the ground:
+  - a footprint reaching into the verge's level band is a **verge hold**
+    (`mVergeHolds`): the band's height carries across it, fading from its
+    edge as from the road's, so a piece beside low road stands on the verge
+    it meets rather than cutting a step under the deck;
+  - every grid triangle a footprint touches is **capped** at its level
+    (`capFootprint`), since the 9 u chords from a corner outside, up a bank,
+    climb over the footprint's edge. Never a verge corner below the verge:
+    a piece lower than the verge it sits by keeps a buried road-side edge,
+    and the fix is its spot, not the road's step. A cap reaches a cell past
+    the footprint, so a neighbour within it drops to that level (levels are
+    settled to a fixed point before anything stands). A box longer than
+    `kFloorHalf` a side is a row along the road (a telegraph line), mostly
+    bare land, and is neither held nor capped.
+- **A `clear` KEEPS THE SEEDED PASSES OFF** a capsule of verge (`inSetFoot`):
+  an avenue's verge holds its own trees, never a random one between them.
+- **A STREET'S PAVEMENT IS THE ROAD'S.** Neither the grid nor a piece can
+  reach the kerb (the cap, spotIssue's margin), so a `street` landform turns
+  the kerb along its stretch into a kerbstone's step and paving out to that
+  margin (`kStreetKerbW`), and the street's piece carries on at its height.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
   ground drawn under it over the placement's foot (`bakePlacements`), so a

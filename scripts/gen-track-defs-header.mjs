@@ -175,7 +175,7 @@ function setInit(p) {
 // anchored on the piece itself (its index), since the model was built standing
 // on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
 // but shape (1), a plain's or paint's fade (8) and tint (0, none).
-const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6 };
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6, clear: 8, street: 9 };
 const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint'];
 function landInit(l, piece, where) {
   checkKeys(l, LAND_KEYS, where);
@@ -183,10 +183,12 @@ function landInit(l, piece, where) {
   if (piece < 0 && (typeof l.u !== 'number' || l.u < 0 || l.u >= 1)) fail(`${where}: u ${JSON.stringify(l.u)} must be a number in [0, 1)`);
   if (piece >= 0 && (l.u != null || l.lat != null)) fail(`${where}: a set piece's ground is anchored on the piece; it takes no u/lat (yaw turns it in the piece's frame)`);
   if (piece < 0 && (l.kind === 'mound' || l.kind === 'fan')) fail(`${where}: a ${l.kind} is the ground a set piece was modelled on: it belongs in SET_GROUND`);
-  if (!(l.r > 0)) fail(`${where}: r must be positive`);
+  if (l.kind === 'street' && (piece >= 0 || l.lat != null || l.r != null || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a street is the stretch of road through a village, its kerb a low kerbstone: len of road centred on u, nothing else`);
+  if (l.kind === 'clear' && (piece >= 0 || l.h != null || l.tint != null)) fail(`${where}: a clear only keeps the seeded scatter off (r round its spine, len along it): no height or tint, never on a piece`);
+  if (l.kind !== 'street' && !(l.r > 0)) fail(`${where}: r must be positive`);
   if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
   if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
-  if (l.kind !== 'plain' && l.kind !== 'paint' && l.kind !== 'shore' && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (!['plain', 'paint', 'shore', 'clear', 'street'].includes(l.kind) && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
   if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0) || (l.w != null && !(l.w > 0)))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds), r (its fade) and, to let the water in past the road, w (how far inside the road's reach it may come); no height or tint, never on a piece`);
   if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
   if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);

@@ -885,6 +885,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         TerrainFlat f{ x, z, 1, 0, 0, 0, m + 1.0f, gy };
         f.y = naturalFootY(tb, f);
         mTerrainFlats.push_back(f);
+        capFootprint(tb, f, m);
         return f.y - gy;
     };
     const auto findSpot = [&](float s0, float off, float m) -> Spot {
@@ -1455,6 +1456,69 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         }
     }
     auto& tcm = mEngine->getTransformManager();
+    // Where piece i stands and what it covers, from the composition's own
+    // bounds: its anchor and heading, and the footprint as a clearing.
+    struct Placed { float x, z, yaw; TerrainFlat foot; };
+    const auto place = [&](const TrackBin::SetPiece& p) {
+        const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
+        const float3 t = f.tangent();
+        const float yaw = std::atan2(t.x, t.z) + p.yaw;
+        const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
+        const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
+        const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
+        const float cz = 0.5f * (bb.min.z + bb.max.z) * p.scale;
+        const float ax = std::cos(yaw), az = -std::sin(yaw);   // local +X in the world
+        const float hx = 0.5f * (bb.max.x - bb.min.x) * p.scale;
+        const float hz = 0.5f * (bb.max.z - bb.min.z) * p.scale;
+        return Placed{ x, z, yaw, { x + ax * cx - az * cz, z + az * cx + ax * cz, ax, az, hx, hz, 1.0f, tb.groundY } };
+    };
+    const auto levels = [&](size_t i) {
+        const auto& p = tb.setPieces[i];
+        return p.slot < mSetAssets.size() && mSetAssets[p.slot] && !mSetDrapes[p.slot]
+            && !(i < mSetOwnGround.size() && mSetOwnGround[i] >= 0);
+    };
+    // The verge holds first, every one before any piece is levelled, so each
+    // piece's level and every later clearing read the same ground. A
+    // footprint's nearest road edge is found on a lattice no coarser than the
+    // grid, like naturalFootY's.
+    if (mTerrainAmp > 0) {
+        const float step = std::max(1.0f, std::min(mGroundGrid.sx, mGroundGrid.sz));
+        for (size_t i = 0; i < tb.setPieces.size(); i++) {
+            if (!levels(i)) continue;
+            const TerrainFlat f = place(tb.setPieces[i]).foot;
+            if (std::max(f.hx, f.hz) > kFloorHalf) continue;
+            const int nx = std::max(1, (int) std::ceil(2 * f.hx / step));
+            const int nz = std::max(1, (int) std::ceil(2 * f.hz / step));
+            float e0 = 1e30f;
+            for (int a = 0; a <= nx; a++) {
+                for (int b = 0; b <= nz; b++) {
+                    const float u = -f.hx + 2 * f.hx * a / nx, v = -f.hz + 2 * f.hz * b / nz;
+                    float edge;
+                    roadLift(tb, f.x + u * f.ax - v * f.az, f.z + u * f.az + v * f.ax, edge);
+                    e0 = std::min(e0, edge);
+                }
+            }
+            if (e0 < kRaiseFlatR) mVergeHolds.push_back({ f.x, f.z, f.ax, f.az, f.hx, f.hz, std::max(0.0f, e0) });
+        }
+    }
+    // Then every level. A floor's cap reaches a cell past its footprint, so
+    // a neighbour standing within it would hang over the capped corner: each
+    // level is read again under every cap laid since, and a piece that drops
+    // caps again, until none moves. Caps only ever lower, so it settles, the
+    // same whatever order the pieces are authored in.
+    std::vector<float> level(tb.setPieces.size(), tb.groundY);
+    for (int pass = 0, moved = 1; moved && pass < 8; pass++) {
+        moved = 0;
+        for (size_t i = 0; i < tb.setPieces.size(); i++) {
+            if (!levels(i)) continue;
+            TerrainFlat f = place(tb.setPieces[i]).foot;
+            const float y = naturalFootY(tb, f);
+            if (pass > 0 && y >= level[i] - 1e-4f) continue;
+            level[i] = f.y = y;
+            if (std::max(f.hx, f.hz) <= kFloorHalf) capFootprint(tb, f, 0.25f);
+            moved = 1;
+        }
+    }
     std::vector<size_t> next(nModels, 0);
     std::vector<std::vector<float>> offRoad(nModels);   // each instance's |lat|
     int nRows = 0;
@@ -1462,33 +1526,28 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const auto& p = tb.setPieces[i];
         if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
         offRoad[p.slot].push_back(std::fabs(p.lat));
-        const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
-        const float3 t = f.tangent();
-        const float yaw = std::atan2(t.x, t.z) + p.yaw;
-        const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
-        // What it covers, from the composition's own bounds.
+        const Placed at = place(p);
+        const float x = at.x, z = at.z, yaw = at.yaw;
         const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
-        const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
-        const float cz = 0.5f * (bb.min.z + bb.max.z) * p.scale;
-        const float ax = std::cos(yaw), az = -std::sin(yaw);   // local +X in the world
-        const float wx = x + ax * cx - az * cz, wz = z + az * cx + ax * cz;
-        const float hx = 0.5f * (bb.max.x - bb.min.x) * p.scale;
-        const float hz = 0.5f * (bb.max.z - bb.min.z) * p.scale;
+        const float wx = at.foot.x, wz = at.foot.z, ax = at.foot.ax, az = at.foot.az;
+        const float hx = at.foot.hx, hz = at.foot.hz;
         // It stands where the land already lies — the lowest of it under the
         // footprint, so no corner hangs — and one clearing the shape of the
         // footprint levels the relief to that, so a ship never stands on a
-        // slope with a corner in the air. The ground is never raised FOR a
-        // piece: a piece on its own knoll reads as a plinth. A piece that
+        // slope with a corner in the air, and no triangle the footprint
+        // touches climbs over it (capFootprint). The ground is never raised
+        // FOR a piece: a piece on its own knoll reads as a plinth; beside the
+        // road the verge it meets is held under it (mVergeHolds). A piece that
         // brings its own ground (SET_GROUND) stands where that ground rises
         // from (the plain, or for a mound the land raised at its anchor), as it
         // was modelled, and levels nothing.
-        TerrainFlat clearing{ wx, wz, ax, az, hx, hz, 1.0f, tb.groundY };
+        TerrainFlat clearing = at.foot;
         if (i < mSetOwnGround.size() && mSetOwnGround[i] >= 0) {
             clearing.y += mSetOwnGround[i];
         } else if (mSetDrapes[p.slot]) {
             // A piece that drapes lies on the land as it is (mSetDrapes).
         } else {
-            clearing.y = naturalFootY(tb, clearing);
+            clearing.y = level[i];
             mTerrainFlats.push_back(clearing);
         }
         const float base = clearing.y + p.y;
@@ -1623,11 +1682,16 @@ bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
     // own pines and rocks dress it, as they did when it was part of the model —
     // and the keep-out is the box it had then, so no verge it kept clear
     // fills up with scatter.
+    // A `clear` keeps the same passes off the verge it covers: within r of
+    // its spine.
     for (const LandShape& s : mLand) {
-        if (s.kind != 3 && s.kind != 4) continue;
+        if (s.kind != 3 && s.kind != 4 && s.kind != 8) continue;
         const float dx = x - s.x, dz = z - s.z;
         const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
-        if (s.kind == 3) {
+        if (s.kind == 8) {
+            const float c = std::min(0.5f * s.len, std::max(-0.5f * s.len, lz));
+            if (lx * lx + (lz - c) * (lz - c) < (s.r + margin) * (s.r + margin)) return true;
+        } else if (s.kind == 3) {
             if (lx < s.r + margin && lx > -s.r1 - margin && std::fabs(lz) < s.rz + margin) return true;
         } else {
             const float reach = std::max(s.r, s.r1) + margin;

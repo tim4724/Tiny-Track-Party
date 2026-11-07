@@ -2973,11 +2973,11 @@ def person(at, yaw, shirt, k=1.0, hair=0, legs=0x4f5260, sit=False, arm=0.0, kic
     box((0.4 * k, 0.4 * k, 0.38 * k), L(0, b + 0.84 * k, 0), SKIN, yaw=yaw)
     box((0.44 * k, 0.14 * k, 0.42 * k), L(-0.03 * k, b + 1.08 * k, 0), HAIR[hair % 4], yaw=yaw)
 
-def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5):
+def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5, cap=True):
     """A pitched roof over walls D across (X) and L along (Z), H tall, its
     ridge along Z: the gable ends a square beam turned along the ridge (its
     upper half stands over the walls as the end walls' triangles), two slabs
-    and a ridge cap. Returns the ridge height."""
+    and a ridge cap (unless `cap` is off). Returns the ridge height."""
     a = math.radians(pitch_deg)
     rise = D / 2 * math.tan(a)
     g = D / math.sqrt(2)
@@ -2989,7 +2989,8 @@ def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5)
         cx = k * (w / 2 * math.cos(a) + math.sin(a) * t / 2)
         cy = y0 + H + rise - w / 2 * math.sin(a) + math.cos(a) * t / 2
         box((w, t, L + 2 * over * 0.8), F(cx, cy, 0), roof, yaw=yaw, roll=k * a)
-    box((t * 1.3, t * 1.3, L + 2 * over * 0.8 + 0.1), F(0, y0 + H + rise + t * 0.55, 0), roof, yaw=yaw)
+    if cap:
+        box((t * 1.3, t * 1.3, L + 2 * over * 0.8 + 0.1), F(0, y0 + H + rise + t * 0.55, 0), roof, yaw=yaw)
     return y0 + H + rise
 
 def window(F, yaw, x, y, z, w=1.3, h=1.3, glass='slate'):
@@ -2997,16 +2998,17 @@ def window(F, yaw, x, y, z, w=1.3, h=1.3, glass='slate'):
     box((0.14, h + 0.3, w + 0.3), F(x + 0.05, y, z), 'white', yaw=yaw)
     box((0.14, h, w), F(x + 0.11, y, z), glass, yaw=yaw)
 
-def cottage(at, yaw, wall, roof, door=0x339cf2, L=8.0, D=5.5, H=4.2, smoke=False, chimney=1):
+def cottage(at, yaw, wall, roof, door=0x339cf2, L=8.0, D=5.5, H=4.2, smoke=False, chimney=1, cap=True):
     """A cottage, its front on +X turned by `yaw`: a steep pitched roof (ridge
-    along its length, Z), a chimney at one gable, a door and two windows in
-    white frames standing proud as a car's lamps do."""
+    along its length, Z), a chimney at one gable (none at `chimney` 0), a door
+    and two windows in white frames standing proud as a car's lamps do."""
     F = local(at[0], at[2], yaw)
     y0 = at[1]
     box((D, H, L), F(0, y0 + H / 2, 0), wall, yaw=yaw)
-    ridge = gable_roof(F, yaw, y0, D, L, H, roof, wall)
+    ridge = gable_roof(F, yaw, y0, D, L, H, roof, wall, cap=cap)
     cz = chimney * (L / 2 - 1.1)
-    box((1.1, 2.6, 1.1), F(-0.6, ridge - 0.6, cz), 0xb06041, yaw=yaw)
+    if chimney:
+        box((1.1, 2.6, 1.1), F(-0.6, ridge - 0.6, cz), 0xb06041, yaw=yaw)
     if smoke:
         marker('anim_smoke', F(-0.6, ridge + 0.8, cz))
     box((0.14, 2.4, 1.5), F(D / 2 + 0.05, 1.2 + y0, 0), 'white', yaw=yaw)
@@ -3101,6 +3103,64 @@ def cottage_row():
     for k in range(2):
         box((0.6, 0.5, 5.4), (-8.0 + k * 2.0, 0.45, 0.0), 0x61cb8b)
     join_still('cottages')
+
+def street_side(look):
+    # One side of the village street the long diagonal runs down, the road on
+    # +X, all of it at the ROAD's level: the land beside low road stands a
+    # little under the deck (the renderer's verge) and the 9 u ground grid
+    # cannot rise to the kerb, so the street brings its own ground. The
+    # pavement is the road's (a `street` in the track's land turns its kerb
+    # into a kerbstone and paving out to the margin a piece keeps from the
+    # deck); this takes over at its edge, a step under it (PH over the
+    # piece's foot, which stands about that far under the deck's top, so
+    # where the road's curve brings the paving over the lawn, the paving
+    # wins): the front lawns OPEN
+    # (a path to each door, a flower bed, a shrub: no fence, hedge or wall),
+    # four cottages standing on that lawn with their doors on the street. The
+    # lawn ends where the houses do, a step down to the back gardens, and each
+    # end ramps down. Laid twice along each side, right at yaw 0 and left at
+    # yaw 180, each turned to its own chord of the road's curve, a lane's
+    # width apart, one of each (village_street_b's cottages wear the
+    # colours in another order). Plain blocks (no chamfer), no ridge caps, half the
+    # chimneys: the merged bake draws a triangle's corners apiece, and the
+    # street is seen from far down the lap.
+    GARDEN, D, PH = 4.0, 5.5, 1.08                # build units (x4 at REAL)
+    PITCH, N = 11.5, 4
+    WALL = (0xf8f8fb, 0xfde4c7, 0xd0e8ff, 0xfde4c7)
+    ROOF = (0xcf534f, 0x4f5260, 0xd9b054, 0xb06041)
+    DOOR = (0x339cf2, 0xff5040, 0x22c46e, 0x339cf2)
+    LEN = (8.0, 7.0, 8.5, 7.5)
+    FLOWERS = ((0xff5040, 0xffc044), (0xa878e8, 0xff5040), (0xffc044, 0xf8f8fb), (0xff5040, 0xa878e8))
+    run = PITCH * N
+    back = GARDEN + D                                                         # the lawn's depth
+    box((back, PH, run), (-back / 2, PH / 2, 0.0), 0x6cae55)                  # the lawn
+    for e in (-1, 1):                                                          # the ends ramp down
+        z0, z1 = e * run / 2, e * (run / 2 + 4 * PH)
+        ground_poly([(0, PH, z0), (-back, PH, z0), (-back, 0, z1), (0, 0, z1)], [(0, 1, 2, 3)], 0x6cae55)
+    for i in range(N):
+        z = -run / 2 + PITCH * (i + 0.5)
+        q = (i * 3 + look) % 4
+        cottage((-GARDEN - D / 2, PH, z), 0.0, WALL[q], ROOF[(i + 2 * look) % 4], DOOR[(i + 1 + look) % 4], L=LEN[q],
+                D=D, H=4.2 - 0.2 * ((i + look) % 2), smoke=(i == 2 and not look), chimney=(0, -1, 0, 1)[(i + look) % 4],
+                cap=False)
+        gx = -GARDEN / 2
+        box((GARDEN, 0.12, 1.4), (gx, PH + 0.06, z), 'cream')                 # the path to the door
+        sd = (1, -1)[(i + look) % 2]                                          # a flower bed beside it
+        box((1.6, 0.4, 2.8), (gx + 0.4, PH + 0.2, z + sd * 2.7), 0x7a5a3a)
+        for k, col in enumerate(FLOWERS[(i + look) % 4]):
+            box((0.8, 0.7, 0.8), (gx + 0.4, PH + 0.75, z + sd * (2.1 + 1.2 * k)), col)
+        sphere(1.1, (gx - 0.4, PH + 0.75, z - sd * 3.0), 0x4f9a48, scale=(1.0, 0.8, 1.0))   # a shrub
+    for o in bpy.context.scene.objects:                  # plain blocks: no chamfer (see above)
+        o['chamfer'] = 0
+    join_still('street')
+
+@piece(REAL)
+def village_street():
+    street_side(0)
+
+@piece(REAL)
+def village_street_b():
+    street_side(1)
 
 @piece(REAL)
 def village_church():
@@ -3304,6 +3364,27 @@ def swing_oak():
         torus(0.55, 0.1, (2.2, 0.12, -2.0 + z), 0x2a2735, segs=10)
     box((0.12, 0.12, 1.8), (2.2, 0.2, -2.0), 0xff5040)
     join_still('oak')
+
+@piece(REAL)
+def avenue_oaks():
+    # One side of an avenue down a straight: five matched oaks, the garden's
+    # own broadleaf (the swing oak's tree, a size smaller and without its
+    # swing), 20 apart along Z (5 u in the world), the trunks by x = 0 with
+    # the road off +X. Each crown leans back off the road, so its edge stays
+    # clear of the deck's margin. Laid either side of the road, right at yaw 0,
+    # left at yaw 180. The scatter is kept off the avenue's verge by a `clear`
+    # landform in the track's `land`, not by this footprint.
+    BARK, STEP, N = 0x7a5a3a, 20.0, 5
+    for i in range(N):
+        z = STEP * (i - (N - 1) / 2)
+        cyl(0.95, 10.0, (-0.6, -0.5, z), BARK, r2=0.65, segs=7)
+        for a, r, h in ((2.4, 0.4, 3.6), (4.0, 0.36, 3.2)):           # two boughs, back from the road
+            o = cyl(r, h, (-0.6, 6.0, z), BARK, r2=0.18, segs=6, smooth=False)
+            tilted(o, math.cos(a) * 0.85, math.sin(a) * 0.85)
+        for (x, y, dz), r in (((-1.6, 11.8, 0.0), 4.4), ((-4.4, 10.6, 2.2), 3.3), ((0.6, 10.9, -2.0), 3.0),
+                              ((-2.0, 14.4, 1.0), 3.0)):
+            sphere(r, (x, y, z + dz * (1, -1)[i % 2]), 0x5f9f4a if r > 4.0 else 0x6cae55, subdiv=1)
+    join_still('avenue')
 
 @piece(REAL)
 def football_pitch():
@@ -4281,6 +4362,136 @@ def mine_loco(at, yaw=0.0):
         for sz in (-1, 1):
             cyl(0.26, 0.16, at2(sx * 0.6 - (0.16 if sx > 0 else 0), 0.3, 0.1 + sz * 0.6), ROPE, segs=8, axis='across', yaw=yaw)
 
+# ---- GULCH: the stamp mill and its ore tramway ----------------------------------------
+# Across the start straight from the adit, the mine's stamp mill cascades down
+# its spoil bank toward the road, the way a mill is built down a hillside: the
+# ore bin under the tramway's terminal at the top, the battery house with its
+# five stamps lifting and dropping in turn open to the road below it, the
+# tables' house at the foot, each a lean-to roof of tin stepping down from the
+# one above, the boiler house and its iron stack beside them. The bank is the
+# mill's own waste rock, geometry falling to the yard round it. Buckets ride
+# the tramway's two ropes from the terminal over the start straight to the
+# tower beside the adit and back, the ropes sagging between, a bucket's foot
+# never under OVER_GAP (3 u) plus a margin over the deck where it crosses it.
+# Authored in metres, grown REAL; +X to the road and on over it. Square-edged
+# (plain_parts): at a metre a post, the chamfer cannot be seen.
+
+IRON, RUST, TIN = 0x38383d, 0xb06041, 'grey'
+
+def stamp_battery(x, y, z0, n=5, pitch=2.2):
+    """A battery of stamps across Z at x: the frame, the cam shaft over it and
+    `n` stems with their shoes, each lifting and dropping a little in turn."""
+    half = (n - 1) * pitch / 2
+    for s in (-1, 1):
+        box((0.6, 6.4, 0.6), (x - 0.6, y + 3.2, z0 + s * (half + 1.2)), TIMBER)
+        box((0.6, 6.4, 0.6), (x + 0.9, y + 3.2, z0 + s * (half + 1.2)), TIMBER)
+    box((2.2, 0.6, 2 * half + 3.2), (x + 0.15, y + 6.2, z0), TIMBER)                 # the cap sill
+    box((2.2, 0.5, 2 * half + 3.2), (x + 0.15, y + 0.25, z0), 'grey')                # the mortar
+    cyl(0.45, 2 * half + 3.4, (x + 0.15, y + 6.9, z0 - half - 1.7), IRON, segs=8, axis='along')  # cam shaft
+    for k in range(n):
+        z = z0 - half + k * pitch
+        with animated('anim_bob:h=1.2:p=1.4:b=1:o=%.2f#stamp%d' % (k / n, k), (x + 0.15, y + 0.5, z)):
+            box((0.7, 5.0, 0.7), (x + 0.15, y + 3.4, z), 'cream')                    # stem
+            box((1.3, 1.2, 1.3), (x + 0.15, y + 1.1, z), IRON)                       # shoe
+            box((1.0, 0.6, 1.0), (x + 0.15, y + 5.3, z), 'red')                      # tappet
+
+def lean_to(x0, x1, w, y, hb, hf, open_front=False, windows=0):
+    """A timber house from x0 (its back, uphill) to x1 (its front, toward the
+    road), w across Z, standing at y: walls hf tall at the front and hb at the
+    back under one tin roof falling to the front, the gable triangles filled.
+    Returns the roof's height at its front edge."""
+    d = x1 - x0
+    back = x0 + (d * 0.45 if open_front else d)       # an open front: the walls stop short
+    box((back - x0, hf, w), ((x0 + back) / 2, y + hf / 2, 0.0), TIMBER)
+    box((0.5, hb - hf, w), (x0 + 0.25, y + hf + (hb - hf) / 2, 0.0), TIMBER)    # the back wall's rise
+    for sz in (-1, 1):                                                           # the gables' triangles
+        zz = sz * w / 2
+        poly([(x0, y + hf, zz), (x0, y + hb, zz), (x1, y + hf, zz)], [(0, 1, 2)], TIMBER)
+        if open_front:
+            box((d - (back - x0), hf, 0.4), ((back + x1) / 2, y + hf / 2, zz - sz * 0.2), TIMBER)
+    run = math.hypot(d + 1.4, hb - hf)
+    box((run, 0.35, w + 1.2), ((x0 + x1) / 2, y + (hb + hf) / 2 + 0.25, 0.0), TIN,
+        roll=-math.atan2(hb - hf, d))
+    for k in range(windows):
+        window(local(0.0, 0.0, 0.0), 0.0, x1, y + hf * 0.55, -w / 2 + w * (k + 0.5) / windows, w=1.4, h=1.6)
+    return y + hf
+
+def ore_bucket(at):
+    x, y, z = at
+    box((0.35, 2.2, 0.35), (x, y - 1.1, z), IRON)                                    # hanger
+    box((2.4, 1.8, 2.0), (x, y - 3.1, z), RUST)
+    box((1.6, 0.5, 1.3), (x, y - 2.0, z), 0xffc044)                                  # ore heaped in it
+
+@piece(REAL)
+@plain
+def stamp_mill():
+    ROPE_Y, SAG, GAP = 24.0, 4.0, 3.0              # the ropes at their towers, their sag, each one's offset across
+    T0 = -11.0                                     # the terminal's bull wheel, along +X
+    OUT = 27.0 / REAL                              # the tower beside the adit
+    # the bank: a heap of the mill's pale tailings, level where its houses stand,
+    # rough slopes between, falling away behind and to the yard either side
+    # and spilling a fan of tailings toward the road
+    xs = (-40.0, -30.0, -25.0, -9.0, -6.5, 2.0, 4.0, 11.5, 16.5)
+    ys = (-1.2, 6.5, 10.5, 10.5, 6.0, 6.0, 2.4, 2.4, -1.2)
+    zs = (-27.0, -19.0, -12.0, 0.0, 12.0, 19.0, 27.0)
+    n = len(xs)
+    def bank(i, j):
+        f = max(0.0, min(1.0, (27.0 - abs(zs[j])) / 12.0))
+        f = f * f * (3 - 2 * f)
+        pad = 0 < i < n - 1 and (ys[i] == ys[i - 1] or ys[i] == ys[i + 1]) and f == 1.0
+        rough = 0.0 if pad or i in (0, n - 1) or j in (0, len(zs) - 1) else 1.0
+        return (xs[i] + rough * 0.9 * math.sin(3.1 * j + 1.7 * i),
+                ys[i] * f - 1.2 * (1 - f) + rough * 0.7 * math.sin(2.3 * j - 1.1 * i + 0.4), zs[j])
+    verts = [bank(i, j) for j in range(len(zs)) for i in range(n)]
+    ground_poly(verts, [(j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i)
+                        for j in range(len(zs) - 1) for i in range(n - 1)], 'tan')
+    # the ore bin at the top and the tramway's terminal over its front
+    top = lean_to(-24.0, -10.0, 13.0, 10.5, 10.0, 7.0)
+    for sz in (-1, 1):
+        for lx in (-13.5, -8.5):
+            box((0.7, ROPE_Y + 0.6 - top, 0.7), (lx, (ROPE_Y + 0.6 + top) / 2, sz * 4.2), TIMBER)
+        strut((-13.5, top + 1.0, sz * 4.2), (-8.5, ROPE_Y - 0.6, sz * 4.2), 0.45, TIMBER)
+    box((6.4, 0.7, 9.6), (-11.0, ROPE_Y + 0.9, 0.0), TIMBER)                          # the terminal's deck
+    cyl(GAP + 0.3, 0.5, (T0, ROPE_Y - 0.25, 0.0), IRON, segs=14)                      # the bull wheel
+    # the battery house, open to the road, the battery under its roof's front
+    lean_to(-6.5, 3.0, 16.0, 6.0, 11.0, 7.4, open_front=True)
+    stamp_battery(1.0, 6.0, 0.0)
+    box((7.0, 0.5, 0.9), (-7.0, 13.2, -5.5), TIMBER, roll=0.45)                       # the ore chute down from the bin
+    # the boiler house beside it, its stack the mill's tallest thing
+    box((6.0, 5.0, 5.0), (-3.0, 8.5, 11.0), TIMBER)
+    gable_roof(local(-3.0, 11.0, 0.0), 0.0, 6.0, 6.0, 5.0, 5.0, 'slate', TIMBER)
+    cyl(0.8, 19.0, (-4.0, 6.0, 12.0), IRON, segs=8, stem=True)
+    cyl(1.15, 0.7, (-4.0, 25.0, 12.0), IRON, segs=8)
+    marker('anim_smoke', (-4.0, 26.2, 12.0))
+    # the tables' house at the foot, its windows to the road
+    lean_to(4.0, 11.0, 14.0, 2.4, 7.0, 4.6, windows=3)
+    # the tower beside the adit: two splayed legs each side, braced, the head
+    # with a sheave for each rope
+    for s in (-1, 1):
+        for lx in (-3.0, 3.0):
+            strut((OUT + lx, -2.0, s * 4.8), (OUT + lx * 0.25, ROPE_Y + 0.4, s * (GAP + 0.6)), 0.9, TIMBER)
+        strut((OUT - 2.4, 8.0, s * 4.2), (OUT + 2.4, 8.0, s * 4.2), 0.55, TIMBER)
+        strut((OUT - 2.4, 8.0, s * 4.2), (OUT + 1.3, 16.0, s * 4.0), 0.45, TIMBER)
+    box((3.0, 1.0, 2 * GAP + 3.0), (OUT, ROPE_Y + 1.0, 0.0), TIMBER)
+    for s in (-1, 1):
+        cyl(1.2, 0.5, (OUT, ROPE_Y + 0.1, s * GAP - 0.25), IRON, segs=10, axis='along')
+    # the two ropes sagging over the road, fat enough to read in a split cell
+    ropes = [sag((T0, ROPE_Y, s * GAP), (OUT, ROPE_Y, s * GAP), SAG, n=7) for s in (-1, 1)]
+    for pts in ropes:
+        for a, b in zip(pts, pts[1:]):
+            strut(a, b, 0.6, 'dark')
+    join_still('mill')
+    # the buckets: out on one rope, round the tower's sheave, home on the
+    # other, round the bull wheel
+    loop = ropes[0] + [(OUT + 1.2, ROPE_Y, 0.0)] + ropes[1][::-1] + [(T0 - GAP, ROPE_Y, 0.0)]
+    for i, p in enumerate(loop):
+        marker('path_tram_%d' % i, p)
+    span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1])) * REAL
+    N = 8
+    for k in range(N):
+        with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (span / 1.2, k / N, k), loop[0]):
+            ore_bucket(loop[0])
+
 @piece(1.0)
 def telegraph_line():
     # Sidewinder: a telegraph line straight across the desert along the long
@@ -4290,11 +4501,13 @@ def telegraph_line():
     # between poles. Where the figure-eight's two strands cross the line
     # (the gap in the poles) it carries no wire: at a real pole's height a
     # span would hang across the low road at the driver's eye and thread
-    # under the overpass. Each end pole is stayed by a guy wire to an anchor, and
+    # under the overpass. Nor over the mountain the straight tunnels through
+    # (set-mountain-tunnel): the line goes over the pass, out of sight, a
+    # pole standing at each foot. Each end pole is stayed by a guy wire to an anchor, and
     # the line drops into a lineman's hut at its far end; a highway sign
     # faces the oncoming traffic by the straight. Grouped in runs of four
     # spans, a draw each, so a cell draws only the runs it sees.
-    zs = [-122, -106, -90, -74, -42, -26, -10, 6, 22, 38, 54, 70, 86, 102, 118, 134, 150]
+    zs = [-122, -106, -90, -74, -42, -26, -10, 6, 22, 54, 70, 86, 102, 118, 134, 150]
     H = 1.9
     arm = (-0.32, 0.0, 0.32)
     for r0 in range(0, len(zs), 4):
@@ -4539,46 +4752,613 @@ def hoodoos():
         box((s * 1.4, s * 0.8, s), (x, s * 0.4, z), 0xa96545, yaw=0.9 * i)
     join_still('hoodoos')
 
-@piece(1.0)
-def butte():
-    # Crag: a butte, a lone flat-topped stack of banded red rock (natural, a
-    # small hill's size, eight and a half units tall), its sheer walls stepped where the
-    # softer bands weather back, a hard dark caprock, and the blocks that
-    # fell from it on the scree at its foot. Its long side faces +X.
-    for (y0, h, sx, sz, col, yw) in ((0.0, 3.0, 12.0, 8.4, 0xa96545, 0.0), (3.0, 2.0, 11.2, 7.8, 0xc47a52, 0.03),
-                                     (5.0, 1.3, 10.8, 7.4, 0xe3cfa4, -0.02), (6.3, 1.5, 10.4, 7.2, 0xd68f62, 0.02),
-                                     (7.8, 0.7, 11.0, 7.8, 0x8a4a32, 0.0)):
-        box((sz, h, sx), (0, y0 + h / 2, 0), col, yaw=yw)
-    for (x, z, sx, sy, sz, yw) in ((4.2, 3.6, 2.6, 5.4, 3.0, 0.2), (-3.8, -4.4, 3.0, 6.6, 3.4, -0.3),
-                                   (4.0, -5.0, 2.2, 4.2, 2.8, 0.5)):
-        box((sx, sy, sz), (x, sy / 2, z), 0xb4714d, yaw=yw)                     # buttresses breaking the walls
-    for i, (x, z, s) in enumerate(((5.6, 1.0, 1.4), (5.2, -2.4, 1.0), (-5.4, 2.2, 1.2), (1.4, 6.8, 1.1),
-                                   (-1.8, -7.0, 1.3), (6.2, 4.6, 0.8))):
-        box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
-    join_still('butte')
+# The canyons' mountainsides: the rock a canyon road is cut through, rising
+# from its verge as a mountain does, not as a wall. Terrain cannot rise at the
+# kerb (a 9 u grid under the deck cap), so the near slope is geometry and the
+# track's own ridges carry the range on behind it. Per column along the road
+# the profile is a talus apron off the verge, then strata that each stand as
+# a short battered cliff with a bench on top, stepping back, then the slope to
+# an irregular crest of peaks and saddles, and the back falling into the land
+# behind. The strata are level (a saddle cuts down through them, as erosion
+# does) and coloured band by band; every vertex is jittered, so no face is a
+# flat slab. Each length is its own seed: its crest, its benches and its foot
+# never repeat, and both ends fall away to the verge, so lengths laid
+# overlapping read as one range with a saddle between summits, and the last
+# one of a run ends as a mountain ends. `R` bends the foot round a curve of
+# that radius, the road's centre on the +X side (the outside of a bend) or,
+# negative, behind (the inside). Each length DRAPES: every vertex rides the
+# land under it.
+MTN_BANDS = (2.3, 3.9, 5.6, 7.5)                         # the benches' heights, before their wobble
+MTN_CLIFF = ('brown', 'salmon', 'brown', 'salmon', 'brown')   # each stratum's face, foot up
+
+def canyon_mountain(seed, L, H, R=0.0, D=13.0):
+    import random
+    rnd = random.Random(seed)
+    def noise(waves):
+        ph = [(rnd.uniform(0.0, 2 * math.pi), lam, a) for lam, a in waves]
+        tot = sum(a for _, _, a in ph)
+        return lambda s: sum(a * math.sin(2 * math.pi * s / lam + p) for p, lam, a in ph) / tot
+    def smooth(t):
+        t = max(0.0, min(1.0, t))
+        return t * t * (3 - 2 * t)
+    def jit(*k):
+        v = math.sin(sum(c * m for c, m in zip(k, (12.9898, 78.233, 37.719))) + seed * 4.1) * 43758.5453
+        return v - math.floor(v) - 0.5
+    n_crest = noise(((L * 0.83, 1.0), (L * 0.37, 0.75), (L * 0.16, 0.35)))
+    n_back = noise(((L * 0.61, 1.0), (L * 0.23, 0.5)))
+    n_foot = noise(((7.5, 1.0), (3.4, 0.4)))
+    n_bench = [noise(((L * 0.47, 1.0), (7.1, 0.5))) for _ in MTN_BANDS]
+    n_wob = [noise(((L * 0.9, 1.0), (4.3, 0.4))) for _ in MTN_BANDS]
+    dip = rnd.uniform(-0.05, 0.05)
+    # gullies cut back into the face about every 7 u, each spilling a scree
+    # fan over the talus at its mouth
+    nf = max(1, int(L / 7))
+    fans = [-L / 2 + L * (k + 0.5 + 0.5 * (rnd.random() - 0.5)) / nf for k in range(nf)]
+    deep = [rnd.uniform(1.4, 2.4) for _ in fans]
+    nz = max(9, int(round(L / 1.45)) + 1)
+    ss = [-L / 2 + L * i / (nz - 1) for i in range(nz)]
+    def world(x, y, s):
+        if not R:
+            return (x, y, s)
+        a, r = s / R, R - x
+        return (R - r * math.cos(a), y, r * math.sin(a))
+    cols = []
+    for i, s in enumerate(ss):
+        end = min(s + L / 2, L / 2 - s)
+        taper = 0.08 + 0.92 * smooth(end / 4.5)
+        hc = max(0.35, H * (0.5 + 0.5 * (0.5 + 0.5 * n_crest(s)) ** 1.3) * taper)
+        hc += 0.5 * jit(i, 7) * taper
+        xf = 0.6 * n_foot(s) - 1.4 * (1 - taper)           # buttresses and gullies; a tail draws back
+        xc = xf - (1.6 + 0.6 * hc + 0.9 * (0.5 + 0.5 * n_back(s)))
+        crest = (xc + 0.4 * jit(i, 8), hc)
+        fan = taper * max(math.exp(-((s - f) / 1.9) ** 2) for f in fans)
+        gully = taper * max(d * math.exp(-((s - f) / 1.5) ** 2) for f, d in zip(fans, deep))
+        hc -= 0.5 * gully
+        talus = min(0.85 + 1.2 * fan, MTN_BANDS[0] - 0.5, hc - 0.05)
+        pts = [(min(xf + 0.8 + 0.5 * fan, 1.3), -0.6), (xf + 0.15 + 0.3 * fan + 0.2 * jit(i, 1), talus)]
+        x, y = pts[-1]
+        for b, y0 in enumerate(MTN_BANDS):
+            yt = y0 + 0.45 * n_wob[b](s) + dip * s + 0.06 * jit(i, 2, b)
+            if yt > hc - 0.45:
+                pts += [crest, crest]
+                x, y = crest
+                continue
+            cx = x - 0.38 * (yt - y) + 0.15 * jit(i, 3, b)  # the cliff, battered and broken
+            bx = max(cx - (0.6 + 1.5 * (0.5 + 0.5 * n_bench[b](s))), xc + 0.5)
+            pts += [(cx, yt), (bx, yt + 0.12 + 0.05 * jit(i, 4, b))]
+            x, y = pts[-1]
+        pts.append(crest)
+        pts.append((-D * (0.25 + 0.75 * taper), -1.0))      # the back, sunk in the land behind
+        pts = pts[:1] + [(px - gully * smooth((py - 0.4) / 3.5), py) for px, py in pts[1:-1]] + pts[-1:]
+        cols.append([world(px, py, s) for px, py in pts])
+    def strip(r, color):
+        verts, faces = [], []
+        for i in range(nz - 1):
+            q = [cols[i][r], cols[i + 1][r], cols[i + 1][r + 1], cols[i][r + 1]]
+            if q[0] == q[3] and q[1] == q[2]:
+                continue                                    # a stratum the crest cut away
+            faces.append(tuple(range(len(verts), len(verts) + 4)))
+            verts += q
+        if not faces:
+            return
+        me = bpy.data.meshes.new('mtn')
+        me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+        me.update()
+        for p in me.polygons:                               # outward: nothing overhangs, so up
+            if p.normal.z < 0:
+                p.flip()
+        ob = bpy.data.objects.new('mtn', me)
+        bpy.context.scene.collection.objects.link(ob)
+        paint(ob, color)
+    rows = len(cols[0])
+    strip(0, 'salmon')                                      # the talus off the verge
+    for b in range(len(MTN_BANDS)):
+        strip(1 + 2 * b, MTN_CLIFF[b])                      # the stratum's cliff
+        strip(2 + 2 * b, 'tan')                             # the bench on it
+    strip(rows - 3, MTN_CLIFF[len(MTN_BANDS)])              # the last slope to the crest
+    strip(rows - 2, 'salmon')                               # the back
+    for i, out in ((0, -1), (nz - 1, 1)):                   # the two tails' sections
+        c = [p for k, p in enumerate(cols[i]) if k == 0 or p != cols[i][k - 1]]
+        sect = c + [(c[-1][0], -1.0, c[-1][2]), (c[0][0], -1.0, c[0][2])]
+        me = bpy.data.meshes.new('cap')
+        me.from_pydata([tuple(P(*v)) for v in sect], [], [tuple(range(len(sect)))])
+        me.update()
+        along = Vector(P(*cols[i][0])) - Vector(P(*cols[i - out][0]))
+        if me.polygons[0].normal.dot(along) < 0:
+            me.polygons[0].flip()
+        ob = bpy.data.objects.new('cap', me)
+        bpy.context.scene.collection.objects.link(ob)
+        paint(ob, 'salmon')
+    with plain_parts():
+        # blocks fallen off the cliffs onto the talus
+        for k in range(max(2, int(L / 6))):
+            s = -L / 2 + L * (k + 0.5 + 0.6 * jit(k, 9)) / max(2, int(L / 6))
+            if min(s + L / 2, L / 2 - s) < 3.0:
+                continue
+            q = 0.45 + 0.35 * (jit(k, 10) + 0.5)
+            px, _, pz = world(0.6 * n_foot(s) + 0.25, 0.0, s)
+            box((q * 1.4, q * 0.8, q * 1.1), (px, q * 0.25, pz), 'salmon', yaw=3.0 * jit(k, 11), roll=0.2 * jit(k, 12))
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+
+def mountains(**lengths):
+    """One piece per length: its name, and canyon_mountain's arguments."""
+    for name, kw in lengths.items():
+        def build(kw=kw):
+            canyon_mountain(**kw)
+        build.__name__ = name
+        piece(1.0)(build)
+
+# Wash's start canyon: the outer range down the straight, round the bend and
+# on, lower spurs on the inside of the straight and after the bend.
+mountains(canyon_peaks_a=dict(seed=7, L=21.0, H=10.0),
+          canyon_peaks_b=dict(seed=19, L=26.0, H=9.5),
+          canyon_peaks_c=dict(seed=23, L=26.0, H=10.5),
+          canyon_bend_wash=dict(seed=31, L=34.0, H=10.5, R=14.8),
+          canyon_spur_a=dict(seed=41, L=24.0, H=6.5, D=10.0),
+          canyon_spur_b=dict(seed=43, L=22.0, H=6.0, D=10.0))
+
+# Gulch's descent: round the outside of the long left-hander off the crest,
+# down the short straight and round the tight bend into the mine yard (with
+# Wash's straight lengths between), a lower spur on the inside of the
+# left-hander.
+mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2),
+          canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
+          canyon_inside_gulch=dict(seed=61, L=22.0, H=6.5, R=-17.8, D=9.0))
+
+# ---- stepped rock: a mountain cut into level strata --------------------------------
+#
+# The canyon's mountains are a smooth height M(x, z) cut into level strata.
+# Each stratum is the outline where M rises past it (marching squares over a
+# fine grid, simplified to facets a couple of units long and weathered in and
+# out), stood up as a cliff one stratum tall and capped by a bench set back
+# from its edge. So the rock steps back as it climbs, into as many peaks and
+# ridges as M has, and its outline is its own at every level: no block
+# repeated, no face one flat slab.
+
+def hash1(x, z, k=0.0):
+    """A repeatable number in [-1, 1) for a point."""
+    v = math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453
+    return 2.0 * (v - math.floor(v)) - 1.0
+
+def contour_rings(F, xs, zs, level):
+    """The outlines of F >= level over a grid (F[j][i] at (xs[i], zs[j])) as
+    closed rings of (x, z), each with the inside on its left in the (x, z)
+    plane. The grid's border must lie outside, so every ring closes."""
+    T = {1: (0, 3), 2: (1, 0), 3: (1, 3), 4: (2, 1), 6: (2, 0), 7: (2, 3), 8: (3, 2), 9: (0, 2),
+         11: (1, 2), 12: (3, 1), 13: (0, 1), 14: (3, 0)}
+    nxt = {}
+    for j in range(len(zs) - 1):
+        r0, r1 = F[j], F[j + 1]
+        for i in range(len(xs) - 1):
+            c = (r0[i] >= level) | (r0[i + 1] >= level) << 1 | (r1[i + 1] >= level) << 2 | (r1[i] >= level) << 3
+            if c in (0, 15):
+                continue
+            e = ((0, i, j), (1, i + 1, j), (0, i, j + 1), (1, i, j))
+            if c in (5, 10):
+                mid = (r0[i] + r0[i + 1] + r1[i] + r1[i + 1]) / 4 >= level
+                pairs = {(5, True): ((0, 1), (2, 3)), (5, False): ((0, 3), (2, 1)),
+                         (10, True): ((3, 0), (1, 2)), (10, False): ((1, 0), (3, 2))}[(c, mid)]
+            else:
+                pairs = (T[c],)
+            for a, b in pairs:
+                nxt[e[a]] = e[b]
+    def point(k):
+        h, i, j = k
+        if h == 0:
+            fa, fb = F[j][i], F[j][i + 1]
+            return (xs[i] + (xs[i + 1] - xs[i]) * (level - fa) / (fb - fa), zs[j])
+        fa, fb = F[j][i], F[j + 1][i]
+        return (xs[i], zs[j] + (zs[j + 1] - zs[j]) * (level - fa) / (fb - fa))
+    rings = []
+    while nxt:
+        k0 = next(iter(nxt))
+        ring, k = [point(k0)], nxt.pop(k0)
+        while k != k0:
+            ring.append(point(k))
+            k = nxt.pop(k)
+        rings.append(ring)
+    return rings
+
+def ring_area(r):
+    return 0.5 * sum(r[i - 1][0] * r[i][1] - r[i][0] * r[i - 1][1] for i in range(len(r)))
+
+def _dp(pts, tol):
+    """Douglas-Peucker on an open run of points."""
+    if len(pts) < 3:
+        return list(pts)
+    (ax, az), (bx, bz) = pts[0], pts[-1]
+    dx, dz = bx - ax, bz - az
+    L = math.hypot(dx, dz) or 1e-9
+    k, best = 0, -1.0
+    for i in range(1, len(pts) - 1):
+        d = abs((pts[i][0] - ax) * dz - (pts[i][1] - az) * dx) / L
+        if d > best:
+            k, best = i, d
+    if best <= tol:
+        return [pts[0], pts[-1]]
+    return _dp(pts[:k + 1], tol)[:-1] + _dp(pts[k:], tol)
+
+def rock_ring(ring, tol, step, jitter, seed, keep=None):
+    """A contour as a cliff's foot: simplified to `tol`, no facet longer than
+    `step`, every corner pushed out or in along its normal by up to `jitter`
+    (a weathered edge). `keep(q)` may move a corner back where it must not go."""
+    k = max(range(len(ring)), key=lambda i: (ring[i][0] - ring[0][0]) ** 2 + (ring[i][1] - ring[0][1]) ** 2)
+    pts = _dp(ring[:k + 1], tol)[:-1] + _dp(ring[k:] + [ring[0]], tol)[:-1]
+    out = []
+    for i, a in enumerate(pts):
+        b = pts[(i + 1) % len(pts)]
+        n = max(1, int(math.ceil(math.hypot(b[0] - a[0], b[1] - a[1]) / step)))
+        out += [(a[0] + (b[0] - a[0]) * t / n, a[1] + (b[1] - a[1]) * t / n) for t in range(n)]
+    res = []
+    for i, p in enumerate(out):
+        a, b = out[i - 1], out[(i + 1) % len(out)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(tx, tz) or 1.0
+        j = jitter * hash1(p[0], p[1], seed)
+        q = (p[0] + j * tz / L, p[1] - j * tx / L)            # outward: the inside is on the left
+        res.append(keep(q) if keep else q)
+    return res
+
+def inset_ring(ring, d):
+    """The ring moved inward, each corner along its mitre by d (a number, or
+    d(x, z) per corner: a facet whose corners move alike stays parallel to
+    the one below it)."""
+    n, out = len(ring), []
+    for i in range(n):
+        a, p, b = ring[i - 1], ring[i], ring[(i + 1) % n]
+        ns = []
+        for u, v in ((a, p), (p, b)):
+            tx, tz = v[0] - u[0], v[1] - u[1]
+            L = math.hypot(tx, tz) or 1.0
+            ns.append((-tz / L, tx / L))
+        c = max(0.35, 1.0 + ns[0][0] * ns[1][0] + ns[0][1] * ns[1][1])
+        k = d(*p) if callable(d) else d
+        out.append((p[0] + k * (ns[0][0] + ns[1][0]) / c, p[1] + k * (ns[0][1] + ns[1][1]) / c))
+    return out
+
+def inside_ring(p, r):
+    """Whether point p lies inside ring r (even-odd)."""
+    x, z, hit = p[0], p[1], False
+    for i in range(len(r)):
+        (ax, az), (bx, bz) = r[i - 1], r[i]
+        if (az > z) != (bz > z) and x < ax + (z - az) * (bx - ax) / (bz - az):
+            hit = not hit
+    return hit
+
+def strata_band(bottoms, y0, y1, d, color, dark=None, floor=False, peaks=()):
+    """One stratum: each ring of `bottoms` stood up from y0 as a cliff to y1,
+    its top edge set back `d` and capped there (a bench), or, for a ring in
+    `peaks` (no stratum above it), drawn up to a point: a summit, not a
+    table; `floor` also closes it underneath (where it roofs a tunnel). A
+    wall facet whose middle `dark` picks, and the floor, are a second part
+    shaded down the swatch's whole ramp: rock out of the sun (the sun bake
+    darkens what a piece shades, not the piece). Returns the parts."""
+    import bmesh
+    lit, shut = bmesh.new(), bmesh.new()
+    tops = [inset_ring(r, d) for r in bottoms]
+    for r, t in zip(bottoms, tops):
+        n = len(r)
+        for i in range(n):
+            k = (i + 1) % n
+            mx, mz = (r[i][0] + r[k][0]) / 2, (r[i][1] + r[k][1]) / 2
+            bm = shut if dark and dark(mx, mz) else lit
+            vs = [bm.verts.new(P(r[i][0], y0, r[i][1])), bm.verts.new(P(r[k][0], y0, r[k][1])),
+                  bm.verts.new(P(t[k][0], y1, t[k][1])), bm.verts.new(P(t[i][0], y1, t[i][1]))]
+            f = bm.faces.new(vs)
+            f.normal_update()
+            tx, tz = r[k][0] - r[i][0], r[k][1] - r[i][1]
+            if f.normal.dot(P(tz, 0.0, -tx)) < 0:                # outward: the inside is on the left
+                f.normal_flip()
+    def fill(bm, rings, y, up):
+        edges = []
+        for r in rings:
+            vs = [bm.verts.new(P(x, y, z)) for x, z in r]
+            edges += [bm.edges.new((vs[i - 1], vs[i])) for i in range(len(vs))]
+        made = bmesh.ops.triangle_fill(bm, use_beauty=True, use_dissolve=False, edges=edges)
+        for f in made['geom']:
+            if isinstance(f, bmesh.types.BMFace):
+                f.normal_update()
+                if (f.normal.z < 0) == up:
+                    f.normal_flip()
+    flat = [t for k, t in enumerate(tops) if k not in peaks]
+    if flat:
+        fill(lit, flat, y1, True)
+    for k in peaks:
+        t = tops[k]
+        cx, cz = sum(p[0] for p in t) / len(t), sum(p[1] for p in t) / len(t)
+        apex = lit.verts.new(P(cx, y1 + min(4.0, 0.6 * math.sqrt(abs(ring_area(t)))), cz))
+        for i in range(len(t)):
+            f = lit.faces.new((lit.verts.new(P(t[i - 1][0], y1, t[i - 1][1])), lit.verts.new(P(t[i][0], y1, t[i][1])), apex))
+            f.normal_update()
+            if f.normal.z < 0:
+                f.normal_flip()
+    if floor:
+        fill(shut, bottoms, y0, False)
+    parts = []
+    for bm, tag in ((lit, 'lit'), (shut, 'shut')):
+        if not bm.faces:
+            bm.free()
+            continue
+        me = bpy.data.meshes.new('stratum_' + tag)
+        bm.to_mesh(me)
+        bm.free()
+        o = bpy.data.objects.new('stratum_' + tag, me)
+        bpy.context.scene.collection.objects.link(o)
+        if tag == 'shut':
+            paint(o, 0xa96545)                    # every band's rock the same brown in there
+            o['ramp'] = 1.6
+        else:
+            paint(o, color)
+        parts.append(o)
+    return parts
+
+def strata_massif(M, x0, x1, z0, z1, bands, corridor=None, grid=0.5, tol=0.35, step=2.6, jitter=0.3, summits=True):
+    """A mountain of level strata over M(x, z) on [x0, x1] x [z0, z1]:
+    `bands` is ((y0, y1, colour, setback), ...) from the foot up. The first
+    band's foot is where M passes 0 (the band starts sunk), every other's
+    where M passes 0.3 of the way up it. With `corridor` = (W, roof) the
+    road runs along z at x = 0 through every band below `roof` in a cut W
+    either side, its walls never weathered into it, and the band from `roof`
+    up is closed underneath: a tunnel wherever M stands over the road past
+    that band's foot, its facets shut from the sun. Returns the tunnel's
+    (z0, z1), or None."""
+    nx, nz = int(round((x1 - x0) / grid)) + 1, int(round((z1 - z0) / grid)) + 1
+    xs = [x0 + grid * i for i in range(nx)]
+    zs = [z0 + grid * j for j in range(nz)]
+    base = [[M(x, z) for x in xs] for z in zs]
+    for j in range(nz):
+        base[j][0] = base[j][-1] = -1e9
+    base[0] = base[-1] = [-1e9] * nx
+    level = lambda bi: 0.0 if bi == 0 else bands[bi][0] + 0.3 * (bands[bi][1] - bands[bi][0])
+    W, roof = corridor or (0.0, 1e9)
+    rb = next((i for i, b in enumerate(bands) if b[0] >= roof - 1e-6), None)
+    tunnel, dark, parts = None, None, []
+    if corridor:
+        i0 = min(range(nx), key=lambda i: abs(xs[i]))
+        over = [zs[j] for j in range(nz) if base[j][i0] >= level(rb)]
+        if over:
+            tunnel = (min(over), max(over))
+            dark = lambda x, z: abs(x) < W + 1.0 and tunnel[0] - 0.5 < z < tunnel[1] + 0.5
+    every = []
+    for bi, (y0, y1, col, back) in enumerate(bands):
+        low = corridor is not None and y1 <= roof + 1e-6
+        F = [[min(v, 8.0 * (abs(x) - W)) for x, v in zip(xs, row)] for row in base] if low else base
+        # a corner weathered into the corridor goes as far back out of it
+        keep = (lambda q: (math.copysign(2 * W - abs(q[0]), q[0]) if abs(q[0]) < W else q[0], q[1])) if low else None
+        # facets longer up the mountain, where no racer comes near them
+        every.append([rock_ring(r, tol, step * (1.0 if low else 1.25), jitter * (1.5 if low else 1.0), bi * 7.1, keep)
+                      for r in contour_rings(F, xs, zs, level(bi)) if abs(ring_area(r)) > 4.0])
+    for bi, (y0, y1, col, back) in enumerate(bands):
+        above = every[bi + 1] if bi + 1 < len(every) else []
+        # a ring with nothing standing on it is a summit, drawn up to a point
+        # over its middle (only a ring that holds its middle: a crescent's
+        # point would stand off it)
+        peaks = [k for k, r in enumerate(every[bi]) if summits and not any(inside_ring(p, r) for q in above for p in q)
+                 and inside_ring((sum(p[0] for p in r) / len(r), sum(p[1] for p in r) / len(r)), r)]
+        low = corridor is not None and y1 <= roof + 1e-6
+        # The setback, corner by corner, against the contours' spacing there
+        # (how far in the stratum above stands): a cliff (back >= 0) steps
+        # back that much, never past most of that way; a slope (back < 0)
+        # lies back -back of it, so it follows the mountain, steep where M is
+        # steep and gentle where it is gentle. No stratum overhangs the one below.
+        gap = (level(bi + 1) if bi + 1 < len(bands) else y1 + 1.0) - level(bi)
+        F = (lambda x, z: min(M(x, z), 8.0 * (abs(x) - W))) if low else M
+        def setback(x, z, F=F, gap=gap, back=back):
+            g = math.hypot(F(x + 0.25, z) - F(x - 0.25, z), F(x, z + 0.25) - F(x, z - 0.25)) / 0.5
+            room = gap / max(g, 0.05)
+            return min(back, 0.75 * room) if back >= 0 else min(-back * room, 3.0)
+        parts += strata_band(every[bi], -0.6 if bi == 0 else y0, y1, setback, col, dark=dark if low else None,
+                             floor=bi == rb and tunnel is not None, peaks=peaks)
+    chunked(parts, 20.0, 25.0, 'rock')
+    return tunnel
+
+def chunked(objs, sx, sz, name):
+    """Re-cut `objs` by where each face's middle falls on an sx by sz grid
+    (glTF x, z), one part per cell holding every object's share of it: a
+    piece as wide as a mountain then culls and takes its far form a
+    corner at a time (the renderer's tiles go by whole part)."""
+    import bmesh
+    cells = {}
+    for o in objs:
+        for poly in o.data.polygons:
+            c = poly.center                                        # Blender (x, -z, y)
+            cells.setdefault((math.floor(c.x / sx), math.floor(-c.y / sz)), {}).setdefault(o.name, set()).add(poly.index)
+    for k, (key, share) in enumerate(sorted(cells.items())):
+        made = []
+        for oname, keep in share.items():
+            src = bpy.data.objects[oname]
+            bm = bmesh.new()
+            bm.from_mesh(src.data)
+            bm.faces.ensure_lookup_table()
+            bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in keep], context='FACES')
+            me = bpy.data.meshes.new(oname + '_%d' % k)
+            bm.to_mesh(me)
+            bm.free()
+            me.materials.append(atlas_material())
+            o = bpy.data.objects.new(oname + '_%d' % k, me)
+            bpy.context.scene.collection.objects.link(o)
+            for prop in src.keys():
+                o[prop] = src[prop]
+            made.append(o)
+        group(made, '%s%d' % (name, k))
+    for o in objs:
+        bpy.data.objects.remove(o)
+
+def massif_height(forms, rough=1.0, seed=0.0, warp=2.0):
+    """M(x, z) for strata_massif: the smooth union of `forms`, each (x, z, h,
+    rx, rz, yaw, p, len) a peak (a ridge `len` long along its own z) falling
+    from h to nothing at (rx, rz) on a (1 - t)^p flank (concave as a peak's
+    is for p over 1, a steep-sided spur under it), the plane bent by a few
+    long waves first (`warp` units: no outline a circle or a straight line),
+    roughened (none at the foot) and its rim sunk half a unit."""
+    def form(x, z, cx, cz, h, rx, rz, yaw, p, ln):
+        c, s = math.cos(yaw), math.sin(yaw)
+        lx, lz = (x - cx) * c - (z - cz) * s, (x - cx) * s + (z - cz) * c
+        t = math.hypot(lx / rx, max(0.0, abs(lz) - ln / 2) / rz)
+        return h * max(0.0, 1.0 - t) ** p
+    def M(x, z):
+        x, z = (x + warp * (math.sin(0.21 * z + 0.7 + seed) + 0.55 * math.sin(0.43 * z + 2.0)),
+                z + warp * (math.sin(0.19 * x + 1.9 + seed) + 0.5 * math.sin(0.47 * x + 0.3)))
+        m = 0.0
+        for f in forms:
+            v = form(x, z, *f)
+            k = max(0.0, 3.0 - abs(v - m)) / 3.0                  # a smooth max: saddles between peaks
+            m = max(m, v) + 0.75 * k * k * min(1.0, min(m, v) / 3.0) if min(m, v) > 0.0 else max(m, v)
+        if m > 0.0:
+            n = (0.9 * math.sin(0.31 * x + 0.53 * z + 1.3 + seed) * math.cos(0.27 * z - 0.41 * x + 0.4)
+                 + 0.5 * math.sin(0.83 * x - 0.2 * z + 2.1 + seed) * math.sin(0.71 * z + 0.9 * x + 0.3))
+            m += rough * n * min(1.0, m / 3.0)
+        return m - 0.5
+    return M
 
 @piece(1.0)
 @plain
-def canyon_wall():
-    # Wash: a length of the slot canyon's wall (12 units along Z), the face
-    # toward the road (+X), five units tall and more, its strata in bands
-    # that step back as they go up, the blocks of each band jutting and
-    # receding along it, boulders fallen at its foot. It DRAPES: every vertex
-    # rides the land under it, so the foot follows the canyon floor and the
-    # back runs into the ridge behind (the track's own land).
-    L, D = 12.0, 4.0
-    bands = ((0.0, 1.5, 0xa96545), (1.5, 1.1, 0xd68f62), (2.6, 1.3, 0xb4714d), (3.9, 0.8, 0xe3cfa4),
-             (4.7, 1.3, 0xa96545), (6.0, 0.5, 0x8a4a32))
-    for bi, (y0, h, col) in enumerate(bands):
-        n = 4
-        for k in range(n):
-            z = -L / 2 + L * (k + 0.5) / n
-            jut = (((k * 7 + bi * 3) % 5) - 2) * 0.16
-            box((D, h, L / n + 0.25), (-D / 2 + jut - bi * 0.14, y0 + h / 2, z), col,
-                yaw=(((k + bi) % 3) - 1) * 0.05)
-    for i, (z, s) in enumerate(((-4.2, 0.7), (-0.6, 0.5), (3.4, 0.8))):
-        box((s * 1.4, s * 0.8, s * 1.1), (0.5 + s * 0.4, s * 0.4, z), 0xa96545, yaw=0.7 * i)
-    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+def mountain_tunnel():
+    # Sidewinder: the long straight runs through a mountain. A massif of the
+    # canyon's banded rock rises off its right, peaks seventeen units and
+    # fourteen over the plain, and throws a spur across the road that falls
+    # away into the low ground inside the bend beyond; the road goes through
+    # the spur in a tunnel (local z), its walls the lower strata cut a
+    # corridor wide (past spotIssue's 3.7 u road margin), its ceiling the
+    # first stratum over 3.9 (3.45 over the deck, past OVER_GAP and every
+    # chase camera). Ahead of and behind the tunnel the corridor runs on as
+    # a cutting through the strata's feet. Rock, so big as rock is, and it
+    # stands from the plain: its scree drapes, so it levels no clearing.
+    # +X is the road's left.
+    M = massif_height((
+        (0.0, 0.5, 11.0, 12.0, 10.0, 0.5 * math.pi, 0.5, 5.0),     # the saddle over the road, steep-faced
+        (8.0, -1.0, 14.5, 7.0, 8.5, 0.3, 1.0, 0.0),                # the peak left of the tunnel
+        (-8.0, 0.5, 17.0, 8.5, 9.0, -0.4, 1.1, 0.0),               # the peak right of it
+        (-20.0, 5.0, 14.0, 10.0, 9.0, -1.19, 1.0, 18.0),           # the ridge running off to the right
+        (-19.0, 4.0, 23.0, 11.5, 10.5, 0.9, 1.3, 3.0),             # its summit
+        (-30.0, 6.0, 11.0, 7.0, 8.0, 0.0, 1.0, 0.0),               # its end, where the range runs on as land
+        (-12.0, -9.0, 10.0, 6.0, 5.0, 0.5, 1.0, 0.0),              # a buttress toward the approach
+        (-14.0, 13.0, 11.0, 9.0, 6.0, 0.3, 1.0, 0.0)), rough=1.4)  # the back of the massif
+    # foot to summit: slopes of the softer rock lying back as the mountain
+    # does, broken by cliffs of the harder (a small setback)
+    S = -0.85
+    BANDS = ((-0.6, 1.3, 0xa96545, S), (1.3, 2.6, 0xd68f62, 0.2), (2.6, 3.9, 0xa96545, S),
+             (3.9, 6.0, 0xd68f62, S), (6.0, 8.0, 0xe3cfa4, 0.25), (8.0, 10.0, 0xa96545, S),
+             (10.0, 12.0, 0xd68f62, 0.2), (12.0, 13.6, 0xa96545, S), (13.6, 15.6, 0xe3cfa4, 0.25),
+             (15.6, 17.4, 0xd68f62, S), (17.4, 19.6, 0xa96545, 0.25), (19.6, 21.2, 0xb4714d, S),
+             (21.2, 23.0, 0x8a4a32, S))
+    tunnel = strata_massif(M, -40.0, 18.0, -24.0, 26.0, BANDS, corridor=(4.5, 3.9), step=3.3, tol=0.5)
+    print('MOUNTAIN tunnel z', tunnel, ' M at x=+-4.5:',
+          [(z, round(M(-4.5, z), 1), round(M(4.5, z), 1)) for z in range(-12, 13, 3)])
+    print('MOUNTAIN telegraph poles (x -9.2): ', [(z, round(M(-9.2, z), 1)) for z in (-16, 0, 16)])
+    def scree():
+        # blocks fallen from the cutting's walls and the spur, lying on the verge and the plain
+        for i, (x, z, s) in enumerate(((5.6, -12.5, 0.9), (-5.8, -11.5, 1.1), (5.9, 10.5, 0.8),
+                                       (-6.2, 11.5, 1.0), (14.0, -4.0, 1.2), (-14.0, -14.0, 1.3))):
+            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+    draped('scree', scree)
+
+def butte_rock(towers, talus, width, low, high, seed=0.0, n=24, step=0.2):
+    """Buttes standing in the talus they shed. Each of `towers` (x, z, h,
+    rx, rz) is a stack of the strata round an uneven oval, alcoves cut into
+    it and buttresses standing out: a sheer lower cliff (`low`, bands as
+    (y1, colour) from the talus up), a bench where it steps back, and an
+    upper cliff on its own uneven outline (`high`, up to h). Every band of a
+    tier shares its corners (a cliff's face runs straight up through its
+    strata, never a stack of plates), each a hair further in than the band
+    below. Round each, the talus (rock fallen from it, not sand) runs down
+    a concave apron `width` units out from `talus` high, sunk at its rim."""
+    import bmesh
+    def ring_mesh(rings_y, color, cap=None):
+        bm = bmesh.new()
+        for (ra, ya), (rb, yb) in zip(rings_y, rings_y[1:]):
+            for i in range(len(ra)):
+                k = (i + 1) % len(ra)
+                f = bm.faces.new([bm.verts.new(P(ra[i][0], ya, ra[i][1])), bm.verts.new(P(ra[k][0], ya, ra[k][1])),
+                                  bm.verts.new(P(rb[k][0], yb, rb[k][1])), bm.verts.new(P(rb[i][0], yb, rb[i][1]))])
+                f.normal_update()
+                mx, mz = (ra[i][0] + ra[k][0]) / 2, (ra[i][1] + ra[k][1]) / 2
+                if f.normal.dot(P(mx - cx, 0.0, mz - cz)) < 0:
+                    f.normal_flip()
+        if cap:
+            r, y = cap
+            f = bm.faces.new([bm.verts.new(P(x, y, z)) for x, z in r])
+            f.normal_update()
+            if f.normal.z < 0:
+                f.normal_flip()
+            bmesh.ops.triangulate(bm, faces=[f], quad_method='BEAUTY', ngon_method='BEAUTY')
+        me = bpy.data.meshes.new('butte')
+        bm.to_mesh(me)
+        bm.free()
+        o = bpy.data.objects.new('butte', me)
+        bpy.context.scene.collection.objects.link(o)
+        return paint(o, color)
+    for t, (cx, cz, h, rx, rz) in enumerate(towers):
+        ph = seed + 2.3 * t
+        angles = [2 * math.pi * (i + 0.3 * hash1(i, t, seed)) / n for i in range(n)]
+        def radius(a, k, cut):
+            e = 1.0 / math.sqrt((math.cos(a) / rx) ** 2 + (math.sin(a) / rz) ** 2)
+            w = (1.0 + 0.09 * math.sin(2 * a + ph * k) + 0.06 * math.sin(3 * a + 1.7 * ph + k)
+                 + 0.04 * math.sin(7 * a + ph) + 0.03 * math.sin(11 * a + 2.0 * ph))
+            # gullies the weather cut, a buttress it left
+            for c in range(5):
+                c0 = ph * 1.9 + c * 1.31 + k + 0.4 * hash1(c, t, seed)
+                d = math.atan2(math.sin(a - c0), math.cos(a - c0))
+                w += (0.6 * cut if c == 2 else -cut) * max(0.0, 1.0 - abs(d) / 0.22)
+            return e * w
+        outer = [radius(a, 0.0, 0.2) for a in angles]
+        # the upper cliff stands back from the lower at a ledge, wide on one
+        # side and nothing on another
+        upper = [r * (0.93 - step * max(0.0, math.sin(a + ph * 1.3)) ** 2) for r, a in zip(outer, angles)]
+        def ring(rs, inset=0.0):
+            return [(cx + (r - inset) * math.cos(a), cz + (r - inset) * math.sin(a)) for r, a in zip(rs, angles)]
+        # the talus: from the cliff's foot down a concave apron to its sunk rim
+        rim = [r + width * (1.0 + 0.2 * hash1(a, t, seed + 5)) for r, a in zip(outer, angles)]
+        mid = [r + 0.42 * (q - r) for r, q in zip(outer, rim)]
+        ring_mesh([(ring(outer), talus), (ring(mid), 0.36 * talus)], 0xc47a52)
+        ring_mesh([(ring(mid), 0.36 * talus), (ring(rim), -0.4)], 0xa96545)
+        # the lower cliff, then the bench and the upper cliff
+        # (an upper cliff stops at the tower's own height: its last band tops out there)
+        mine = [(y1, col) for i, (y1, col) in enumerate(high) if i == 0 or high[i - 1][0] < h - 0.5]
+        mine[-1] = (h, mine[-1][1])
+        y = talus - 0.6
+        for rs, bands in ((outer, low), (upper, mine)):
+            for k, (y1, col) in enumerate(bands):
+                ring_mesh([(ring(rs, 0.07 * k), y), (ring(rs, 0.07 * (k + 1)), y1)], col,
+                          cap=(ring(rs, 0.07 * (k + 1)), y1) if k == len(bands) - 1 else None)
+                y = y1
+
+# Crag's strata in its cliffs, (top, colour) from the talus up.
+CRAG_LOW = ((7.8, 0xb4714d), (10.6, 0xd68f62))
+CRAG_HIGH = ((13.4, 0xa96545), (15.4, 0xd68f62), (16.4, 0x8a4a32))
+
+def crag_rubble(spots):
+    """Blocks fallen past the talus, lying on the plain: they drape, so the
+    piece stands from the plain and levels no clearing."""
+    def rubble():
+        for i, (x, z, s) in enumerate(spots):
+            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+    draped('rubble', rubble)
+
+@piece(1.0)
+@plain
+def rimrock_butte():
+    # Crag: a butte of the land's own rock, twenty-four units by seventeen and
+    # sixteen to its caprock: a sheer cliff of its strata round an uneven oval,
+    # alcoves cut into it and buttresses standing out, stepping back at a
+    # bench to an upper cliff on an outline of its own, standing in the talus
+    # it sheds (rock in slopes, not a mound of sand). Rock, so big as rock is:
+    # a hill's size. Its long side faces +X.
+    butte_rock(((0.0, 0.0, 16.4, 12.0, 8.5),), 4.8, 7.0, CRAG_LOW, CRAG_HIGH, seed=0.4)
+    join_still('rock')
+    crag_rubble(((19.5, 3.0, 1.3), (-19.0, 2.5, 1.2), (-5.0, -16.0, 1.3)))
+
+@piece(1.0)
+@plain
+def rimrock_spires():
+    # ...and two of its towers standing out from one talus, the taller twenty
+    # units high, the other fifteen and a half: buttes the weather has nearly
+    # finished, so no two of the track's rocks read as one model.
+    butte_rock(((-2.5, -3.0, 20.0, 5.0, 4.2), (6.0, 4.5, 15.4, 4.4, 3.6)), 4.8, 6.5,
+               CRAG_LOW, ((13.4, 0xa96545), (16.6, 0xd68f62), (18.8, 0xa96545), (20.0, 0x8a4a32)),
+               seed=1.9, n=15, step=0.0)
+    join_still('rock')
+    crag_rubble(((14.0, -3.0, 1.2), (-12.5, -9.0, 1.0), (10.0, 13.0, 1.1)))
 
 @piece(1.0)
 def filling_station():

@@ -969,6 +969,27 @@ private:
     // inside, back to the land over 8 u.
     struct TerrainFlat { float x, z, ax, az, hx, hz, r, y; };
     std::vector<TerrainFlat> mTerrainFlats;
+    // THE VERGE HOLDS. A set piece whose footprint reaches into the raised
+    // ground's level band (within kRaiseFlatR of the road) keeps that band's
+    // height across it: the raised ground fades from the footprint's edge as
+    // it does from the road's, its nearest road edge `e0` out (roadLift). So a
+    // pitch or a street beside low road stands on the verge it meets, never
+    // cut down to a step under the deck (the ground under the piece is the
+    // verge's, not raised for the piece: no plinth). Registered before any
+    // piece is levelled (buildSetPieces).
+    struct VergeHold { float x, z, ax, az, hx, hz, e0; };
+    std::vector<VergeHold> mVergeHolds;
+    // Every grid triangle a clearing's footprint (grown by `grow`) touches
+    // keeps its corners at the clearing's level or under, through the cap
+    // (mTerrainCap): the 9 u grid's chords from a corner outside, up a bank,
+    // would otherwise climb over the footprint's edge and bury what lies flat
+    // there (a pitch's lines, a garden path). Cut only, like the clearing.
+    void capFootprint(const TrackBin& tb, const TerrainFlat& f, float grow);
+    // Both of the above take a set piece whose footprint is a FLOOR: no side
+    // longer than twice this. A longer box is a row strung along the road (a
+    // telegraph line), mostly bare land, and holding or capping its every
+    // cell would lay a strip of the plain down the verge on both sides.
+    static constexpr float kFloorHalf = 30.0f;
     void setupTerrain(const TrackBin& tb);
     // The ground's height at (x, z): with the clearings levelled in, or as the
     // land lies before any of them (`withFlats` false) — the height a clearing
@@ -1068,6 +1089,15 @@ private:
     // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
     // supports stop under.
     static constexpr float kDeckDepth = 0.34f;
+    // A street's pavement kerb (buildRoadMesh): the kerbstone's step, how wide
+    // its paving runs (to spotIssue's MARGIN past the edge and a little over:
+    // the road's own curve brings it nearer at a piece's ends), its
+    // colour (sRGB, the street pieces' cream as it lights) and how far along
+    // the road it eases in from the racing kerb.
+    static constexpr float kStreetKerbH = 0.06f;
+    static constexpr float kStreetKerbW = 1.5f;
+    static constexpr uint32_t kStreetKerb = 0xeedcc0u;
+    static constexpr float kStreetEase = 1.5f;
     std::vector<float> mTerrainCap;
     void buildTerrainCap(const TrackBin& tb);
     float terrainCapAt(float x, float z) const;
