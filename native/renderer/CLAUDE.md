@@ -655,12 +655,19 @@ to do both:
   between the strands around, so a loop's middle gets a piece's face, not
   land. Glacier's massif over its top straight, Avalanche's mountains round
   its last loop and Gulch's range along its descent are the worked examples.
-- **ROCK WHERE THE LAND IS STEEP.** The ground's vertex alpha carries how
-  steep the land is (`rockWeight`, per biome); `vground.mat` replaces the
-  canvas there with the biome's rock, in strata by world height under ledges
-  (`setRockParams`: the rock set pieces' own colours). One branch in the
-  receiver material, no pass and no tap: everything else (structures, berms,
-  the flat sheet) keeps alpha 1 and skips it.
+- **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `vground.mat` makes a
+  ground triangle rock when its flat normal (screen derivatives of the world
+  position) is steeper than the biome's slope (`groundRock`), so the edge is
+  the mesh's own and as crisp as the rock pieces' cut faces. An interpolated
+  weight or a noise threshold blurs it into camouflage blobs: never go back to
+  one. The vertex alpha is only the gate (`gateRock`: 0 on every corner of a
+  triangle steep enough, so the branch covers whole facets); structures,
+  berms and the flat sheet keep 1 and skip it. Strata stack on the square
+  root of height over the plain, so a tall face shows a few thick bands, not a
+  contour map, and their edges are filtered by the pixel's height span (no
+  shimmer in a 4P cell). Snow rock is one grey, unbanded. The beach has none.
+  No pass and no tap; the derivatives sit outside the branch because a
+  derivative in a branch a quad splits is undefined.
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
   glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the

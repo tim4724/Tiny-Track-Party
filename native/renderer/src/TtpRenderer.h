@@ -1259,10 +1259,10 @@ private:
     // the biome's texture. Never per-vertex noise: a speckle reads as a texture
     // pattern.
     filament::math::float3 groundTint(uint32_t groundKind, float dell, float bed, float upY) const;
-    // The rock (vground.mat): how much of a vertex it covers, carried as 1
-    // less the vertex alpha, and the biome's colours and banding.
-    static float rockWeight(uint32_t groundKind, float upY);
-    void setRockParams(filament::MaterialInstance* mi, uint32_t groundKind) const;
+    // The rock (vground.mat): the gate in the ground's vertex alpha, and the
+    // biome's colours, slope and banding.
+    static void gateRock(Mesh& m, uint32_t groundKind);
+    void setRockParams(filament::MaterialInstance* mi, uint32_t groundKind, float groundY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.

@@ -1089,8 +1089,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const float dell = lerp(dellV[q], gridTerm(mGroundDell, p.x, p.z), over[q]);
             const float bed = lerp(bedV[q], gridTerm(mGroundBed, p.x, p.z), over[q]);
             mBandVerts.push_back({ p.x, p.y, p.z,
-                    packAlbedo(groundTint(tb.groundKind, dell, bed, n.y) * landTint(p.x, p.z), 1.0f,
-                               1.0f - rockWeight(tb.groundKind, n.y)) });
+                    packAlbedo(groundTint(tb.groundKind, dell, bed, n.y) * landTint(p.x, p.z), 1.0f) });
             mBandNormals.push_back(n);
             mGroundGrid.bandP.insert(mGroundGrid.bandP.end(), { p.x, p.y, p.z });
         }
@@ -1127,43 +1126,67 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
     return mix(c, c * face, 0.55f * steep);
 }
 
-// How much of the ground at a vertex is the biome's rock (vground.mat), by
-// how steep it lies: snow keeps to its flats and ledges, the badlands break
-// to rock soonest, a lawn only on a genuinely steep face.
-float TtpRenderer::rockWeight(uint32_t groundKind, float upY) {
-    float from, span;
+// Each biome's rock (vground.mat), display-encoded like the canvas. The
+// colours are the rock set pieces' own (set_prototypes.py): the canyon's brown
+// and salmon cliffs on tan benches, the snow cut's grey (one grey, no bands:
+// its faces are cut, not layered). A ground facet is rock where its normal's
+// y is under `upY`: the badlands break to rock soonest, snow keeps every slope
+// a skier would take (Powder's dome stands near 45 degrees and stays white),
+// a lawn only a cliff. The beach has none: its land sinks to the plain short
+// of the sea, so no dune of it is a cliff, and rock on one reads as a canyon.
+namespace {
+struct GroundRock {
+    uint32_t a, b, l;
+    float upY;
+    float perRoot;   // strata per square root of a unit over the plain (0: none, rock is `a`)
+    float wobble;    // how far (u) the broad lattice bends them
+    float ledge;     // the bench's share of a stratum
+};
+const GroundRock* groundRock(uint32_t groundKind) {
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f };      // past 52 degrees
+    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.95f, 1.0f, 0.3f, 0.12f };  // past 18 degrees
+    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f };     // past 46 degrees
     switch (groundKind) {
-        case 0: from = 0.21f; span = 0.14f; break;   // lawn: from about 38 degrees
-        case 1: from = 0.13f; span = 0.12f; break;   // sand: a headland's sandstone
-        case 2: from = 0.06f; span = 0.10f; break;   // redrock: from about 20 degrees
-        case 3: from = 0.16f; span = 0.18f; break;   // snow: from about 33 degrees
-        default: return 0.0f;
+        case 0: return &lawn;
+        case 2: return &redrock;
+        case 3: return &snow;
+        default: return nullptr;
     }
-    return smooth01((1.0f - upY - from) / span);
+}
+}  // namespace
+
+// The rock's gate (vground.mat): alpha 0 on every corner of a triangle steep
+// enough to be rock, so the branch covers the whole facet and the shader's own
+// per-facet test draws the edge. The slack keeps a facet the GPU's derivatives
+// put just under the slope inside the gate.
+void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
+    const GroundRock* r = groundRock(groundKind);
+    if (!r) return;
+    for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
+        const auto p = [&](size_t k) { const Vertex& v = m.verts[m.idx[i + k]]; return float3{ v.px, v.py, v.pz }; };
+        const float3 n = cross(p(1) - p(0), p(2) - p(0));
+        const float len = length(n);
+        if (!(len > 1e-9f) || std::abs(n.y) / len >= r->upY + 0.03f) continue;
+        for (size_t k = 0; k < 3; k++) m.verts[m.idx[i + k]].abgr &= 0x00ffffffu;
+    }
 }
 
-// Each biome's rock, display-encoded like the canvas: the two strata, the
-// ledge on each, and the banding (per unit of height, wobble, ledge share).
-// The colours are the rock set pieces' own (set_prototypes.py): the canyon's
-// brown and salmon cliffs on tan benches, the snow cut's grey under snow.
-void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind) const {
-    struct Rock { uint32_t a, b, l; float perUnit, breakup, wobble, ledge; };
-    Rock r;
-    switch (groundKind) {
-        case 0: r = { 0x8f7752u, 0x9d998eu, 0x7fa055u, 1.0f / 3.0f, 0.25f, 0.1f, 0.25f }; break;
-        case 1: r = { 0xc9a27au, 0xb48b65u, 0xe6cfa4u, 1.0f / 2.2f, 0.2f, 0.1f, 0.22f }; break;
-        case 2: r = { 0xb06041u, 0xd68f62u, 0xf2bf99u, 1.0f / 3.4f, 0.15f, 0.1f, 0.18f }; break;
-        case 3: r = { 0x868ba1u, 0x7a7f95u, 0xf3f7fbu, 1.0f / 4.0f, 0.35f, 0.15f, 0.0f }; break;
-        default: return;
-    }
-    const auto c = [](uint32_t h) {
+// The rock's colours, slope, banding over the plain at `groundY`, and the
+// shading of each facet by its own normal (a gain on the sun's term about a
+// steep face's, so a face reads cut against its neighbours).
+void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float groundY) const {
+    const GroundRock* r = groundRock(groundKind);
+    if (!r) return;
+    const auto c = [](uint32_t h, float a) {
         return float4{ (float) ((h >> 16) & 0xff) / 255.0f, (float) ((h >> 8) & 0xff) / 255.0f,
-                       (float) (h & 0xff) / 255.0f, 1.0f };
+                       (float) (h & 0xff) / 255.0f, a };
     };
-    mi->setParameter("rockA", float4{ c(r.a).xyz, kGroundTile });
-    mi->setParameter("rockB", c(r.b));
-    mi->setParameter("rockL", c(r.l));
-    mi->setParameter("strata", float4{ r.perUnit, r.breakup, r.wobble, r.ledge });
+    constexpr float kFacetGain = 0.6f, kFacetMid = 0.7f;
+    mi->setParameter("rockA", c(r->a, kGroundTile));
+    mi->setParameter("rockB", c(r->b, r->upY));
+    mi->setParameter("rockL", c(r->l, r->ledge));
+    mi->setParameter("strata", float4{ r->perRoot, r->wobble, 0.0f, groundY });
+    mi->setParameter("facet", float4{ kToSun * kFacetGain, 1.0f - kFacetGain * kFacetMid });
 }
 
 // The grounding rule for chunky pieces: the LOWEST surface point under the
@@ -2706,7 +2729,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const size_t gv = (size_t) r * (cols + 1) + c;
                     mGround.verts.push_back({ x, hAt(c, r), z,
                             packAlbedo(groundTint(tb.groundKind, mGroundDell[gv], mGroundBed[gv], n.y)
-                                       * landTint(x, z), 1.0f, 1.0f - rockWeight(tb.groundKind, n.y)) });
+                                       * landTint(x, z), 1.0f) });
                     mGround.uvs.push_back({ x / TILE, z / TILE });
                     mGround.normals.push_back(n);
                 }
@@ -2731,6 +2754,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 }
                 for (const uint32_t q : mBandIdx) mGround.idx.push_back(base + q);
             }
+            gateRock(mGround, tb.groundKind);
             const auto flatQuad = flatSheet;
             flatQuad(-G, -G, mTerrainX0, G);            // west strip
             flatQuad(mTerrainX1, -G, G, G);             // east strip
@@ -2777,7 +2801,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 smp.setAnisotropy(4.0f);
                 gmi->setParameter("albedo", mGroundTex, smp);
             }
-            setRockParams(gmi, tb.groundKind);
+            setRockParams(gmi, tb.groundKind, groundY);
             if (!buildMesh(mGround, true, gmi)) return false;
         } else if (!buildMesh(mGround)) {
             return false;
