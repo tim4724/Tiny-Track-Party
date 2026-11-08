@@ -1187,13 +1187,21 @@ const GroundRock* groundRock(uint32_t groundKind) {
 // A cliff's run joins through facets this much (in normal y) under the slope
 // too, so one gentler facet in a face does not split it into two short runs.
 constexpr float kRockRunSlack = 0.03f;
+// A rock facet's shade: a gain on the sun's term about a steep face's, so a
+// face reads cut against its neighbours. Its corners carry it over
+// kFacetShadeMax in their red channel (vground.mat's facet.x scales it back):
+// the shade tops out near 1.2.
+constexpr float kFacetGain = 0.6f, kFacetMid = 0.7f, kFacetShadeMax = 1.25f;
 }  // namespace
 
 // The rock (vground.mat), decided per TRIANGLE here: alpha 0 on a rock
 // facet's corners, 1 on the rest, exact, so the shader's branch covers whole
-// facets and the edge is the mesh's own. A corner shared by rock and grass or
-// sand is split in two (the copy carries the rock's alpha), so no facet's
-// alpha is interpolated across it.
+// facets and the edge is the mesh's own. Every rock facet has corners of its
+// own, carrying its shade (kFacetShadeMax) in their colour, so a face reads
+// cut and no facet's alpha or shade is interpolated across an edge. Baked
+// here rather than taken from the world position's screen derivatives in
+// the shader: on the Android box that normal was most of what a bare rock
+// pixel cost.
 //
 // Where the biome asks a `rise`, only a CLIFF is rock: the steep facets joined
 // through their corners must climb that far between them, so a spoil heap's
@@ -1241,37 +1249,42 @@ void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
             rock[t] = rock[t] && sp.y - sp.x >= r->rise;
         }
     }
-    // The corners: 1 = a plain facet's, 2 = a rock facet's, 3 = both (split).
-    std::vector<uint8_t> use(m.verts.size(), 0);
+    // The corners: a plain facet's stay as they are and shared among them; a
+    // rock facet takes a corner no plain facet uses if no rock facet took it
+    // first, and a copy of any other.
+    std::vector<uint8_t> plain(m.verts.size(), 0), taken(m.verts.size(), 0);
     for (size_t t = 0; t < T; t++) {
-        for (size_t k = 0; k < 3; k++) use[m.idx[t * 3 + k]] |= rock[t] ? 2 : 1;
+        if (rock[t]) continue;
+        for (size_t k = 0; k < 3; k++) plain[m.idx[t * 3 + k]] = 1;
     }
-    std::vector<uint32_t> copy(m.verts.size(), UINT32_MAX);
     for (size_t t = 0; t < T; t++) {
         if (!rock[t]) continue;
+        const auto p = [&](size_t k) { const Vertex& v = m.verts[m.idx[t * 3 + k]]; return float3{ v.px, v.py, v.pz }; };
+        float3 n = cross(p(1) - p(0), p(2) - p(0));
+        n = (n.y < 0.0f ? -n : n) / std::max(length(n), 1e-12f);
+        const float shade = dot(n, kToSun) * kFacetGain + 1.0f - kFacetGain * kFacetMid;
+        const uint32_t q8 = (uint32_t) std::lround(std::min(1.0f, std::max(0.0f, shade / kFacetShadeMax)) * 255.0f);
+        const uint32_t abgr = q8 | q8 << 8 | q8 << 16;   // alpha 0: rock
         for (size_t k = 0; k < 3; k++) {
             uint32_t& q = m.idx[t * 3 + k];
-            if (use[q] == 2) {
-                m.verts[q].abgr &= 0x00ffffffu;
+            if (!plain[q] && !taken[q]) {
+                taken[q] = 1;
+                m.verts[q].abgr = abgr;
             } else {
-                if (copy[q] == UINT32_MAX) {
-                    copy[q] = (uint32_t) m.verts.size();
-                    Vertex v = m.verts[q];
-                    v.abgr &= 0x00ffffffu;
-                    m.verts.push_back(v);
-                    m.uvs.push_back(m.uvs[q]);
-                    m.normals.push_back(m.normals[q]);
-                }
-                q = copy[q];
+                Vertex v = m.verts[q];
+                v.abgr = abgr;
+                m.verts.push_back(v);
+                m.uvs.push_back(m.uvs[q]);
+                m.normals.push_back(m.normals[q]);
+                q = (uint32_t) m.verts.size() - 1;
             }
         }
     }
 }
 
-// The rock's colours, its banding over the plain at `groundY`, and the
-// shading of each facet by its own normal (a gain on the sun's term about a
-// steep face's, so a face reads cut against its neighbours). The lite tier
-// has no strata: on the box the banding is what a rock pixel costs, and a
+// The rock's colours, its banding over the plain at `groundY`, and the scale
+// its facets' baked shade comes back by (gateRock). The lite tier has no
+// strata: on the box the banding is most of what a rock pixel costs, and a
 // canyon's walls fill the frame (native/renderer/CLAUDE.md, "The detail tier").
 void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float groundY) const {
     const GroundRock* r = groundRock(groundKind);
@@ -1280,12 +1293,11 @@ void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float
         return float4{ (float) ((h >> 16) & 0xff) / 255.0f, (float) ((h >> 8) & 0xff) / 255.0f,
                        (float) (h & 0xff) / 255.0f, a };
     };
-    constexpr float kFacetGain = 0.6f, kFacetMid = 0.7f;
     mi->setParameter("rockA", c(r->a, kGroundTile));
     mi->setParameter("rockB", c(r->b, 0.0f));
     mi->setParameter("rockL", c(r->l, r->ledge));
     mi->setParameter("strata", float4{ mLite ? 0.0f : r->perRoot, r->wobble, 0.0f, groundY });
-    mi->setParameter("facet", float4{ kToSun * kFacetGain, 1.0f - kFacetGain * kFacetMid });
+    mi->setParameter("facet", float4{ kFacetShadeMax, 0.0f, 0.0f, 0.0f });
 }
 
 // The grounding rule for chunky pieces: the LOWEST surface point under the

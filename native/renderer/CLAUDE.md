@@ -696,6 +696,9 @@ to do both:
   is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
   weight or a noise threshold blurs it into camouflage blobs: never go back to
   one. Structures, berms and the flat sheet keep 1 and skip the branch.
+  Every rock facet has corners of its own carrying its shade in their colour,
+  baked from its normal: the shader's screen-derivative normal was most of
+  what a bare rock pixel cost on the box.
   Only a CLIFF is rock where the biome asks a `rise` (the badlands): steep
   facets joined through their corners must climb that far between them, so
   a spoil heap, a dune's lee, a road's bank or one lone steep facet keeps its
