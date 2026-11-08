@@ -364,8 +364,10 @@ void playroomTrack(Theme& t, const std::string& track) {
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
   } else if (track == "skyline") {
     t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
-    // the skyway's U stands on the town's stacked toy blocks
-    t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
+    // the skyway's U stands on stacked toy blocks in two of the rails' blues,
+    // so under a town of coloured blocks they read as the track's own
+    // supports, not more towers
+    t.structureStack = { 0x4a6fc4, 0x6f93df };
   } else if (track == "helix") {
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
     // the skyway and both spirals stand on the marble run's own stacked

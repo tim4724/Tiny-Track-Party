@@ -1813,13 +1813,15 @@ constexpr SetDef kSet_gauntlet[] = {
   { "set-toy-soldiers", 0x1.999999999999ap-1, 0x1.acccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-siege-tower", 0x1.9eb851eb851ecp-1, -0x1.1666666666666p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-castle-gate", 0x1.b333333333333p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-toy-soldiers", 0x1.cp-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-castle-watchtower", 0x1.209d495182a99p-1, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-barbican", 0x1.38a0902de00d2p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-cannon-battery", 0x1.59b3d07c84b5ep-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1.3333333333333p+0, 1 },
   { "set-toy-dragon", 0x1.e666666666666p-1, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-block-fortress", 0x1.aca57a786c227p-2, -0x1.dc28f5c28f5c3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-siege-camp", 0x1.eab367a0f9097p-4, -0x1.0bd70a3d70a3dp+3, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
   { "set-trebuchet", 0x1.d013a92a30553p-4, -0x1.1c51eb851eb85p+4, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-siege-tower", 0x1.8ff972474538fp-3, -0x1.7c28f5c28f5c3p+2, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-siege-tower", 0x1.3e425aee631f9p-4, 0x1.6p+3, 0x1.18p+5, 0x0p+0, 0x1p+0, 1 },
   { "set-toy-soldiers", 0x1.fed288ce703bp-1, -0x1.1666666666666p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 
@@ -1905,7 +1907,8 @@ constexpr SetDef kSet_skyline[] = {
   { "set-block-street", 0x1.26e978d4fdf3bp-6, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-block-westside", 0x1.d35a858793dd9p-3, -0x1.11eb851eb851fp+3, -0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-block-high-street", 0x1.bb22d0e560419p-1, -0x1.3428f5c28f5c3p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-block-towers", 0x1p-1, -0x1.ep+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-block-uptown", 0x1.d04816f0068dcp-2, -0x1.a8f5c28f5c28fp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-block-street-west", 0x1.6b851eb851eb8p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-block-towers", 0x1.89374bc6a7efap-1, -0x1.ep+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 
@@ -2103,9 +2106,9 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 11, nullptr, 0 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 4, kLand_sidewinder, 3 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 7, nullptr, 0 },
-  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 11, nullptr, 0 },
+  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 13, nullptr, 0 },
   { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 6, nullptr, 0 },
-  { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 7, nullptr, 0 },
+  { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 8, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "gym", "Gym", nullptr, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3, kKickers_gym, 1, nullptr, 0, nullptr, 0 },
