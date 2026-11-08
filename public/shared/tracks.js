@@ -1091,13 +1091,16 @@ export const TRACKS = {
     // straight to the bridge (canyon lengths, set_prototypes.py
     // canyon_mountain, the rim's own massif rising behind them in `land`).
     // Off the bridge the road runs at the mesa standing between the
-    // north-east loop and the S: the loop rounds its north end and the S its
-    // west side. A butte stands on the outside of the south loop's bend and
-    // a pair of spires on the outside of each loop (strata over a butte's
-    // height, set_prototypes.py crag_butte: a sheer cliff of the one hard
-    // sandstone on talus slopes banded in the soft beds, never a striped
-    // drum), fields of hoodoos between them, and the skyline all round is
-    // mesas and buttes of the land. Out on the range the ranch's windpumps
+    // north-east loop and the S, a table with a butte broken away from it
+    // past a gap of sky: the loop rounds the table and the S passes the
+    // butte. A butte stands on the outside of the south loop's bend and a
+    // pair of spires on the outside of each loop (strata over a butte's
+    // height, set_prototypes.py crag_butte: a cliff of the one hard
+    // sandstone in gullies and buttresses on a talus of one colour, never a
+    // striped drum nor one long face), small spires of the same rock between
+    // them, and the skyline all round is mesas and buttes of the land. A
+    // stand of saguaros marks the start straight. Out on the range the
+    // ranch's windpumps
     // turn over their stock tanks near the road, its herds come in to them
     // (a cow alone is a speck from the road; tower, tank and herd read as
     // one). Every wheel, the ranch's included, faces the one wind: the west
@@ -1111,15 +1114,16 @@ export const TRACKS = {
       { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
       { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: -137 },
       { model: 'set-hoodoos', u: 0.32, lat: -12 },
-      { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
+      { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
+      { model: 'set-crag-saguaros', u: 0.05, lat: 10 },
       // the rock, each piece's talus coming to a couple of units past the
       // kerb (a chase camera rounding a bend passed through a talus on the
       // road), its blocks out at the ends, never by a kerb
-      { model: 'set-rimrock-mesa', u: 0.5845, lat: -38.5, yaw: 147 },
-      { model: 'set-rimrock-spires', u: 0.38, lat: 22, yaw: 20 },
-      { model: 'set-rimrock-butte', u: 0.795, lat: 26, yaw: 10 },
-      { model: 'set-rimrock-mitten', u: 0.865, lat: 20.5, yaw: 200 },
+      { model: 'set-rimrock-mesa', u: 0.5845, lat: -35, yaw: 147 },
+      { model: 'set-rimrock-spires', u: 0.38, lat: 21, yaw: 20 },
+      { model: 'set-rimrock-butte', u: 0.795, lat: 23.5, yaw: 10 },
+      { model: 'set-rimrock-mitten', u: 0.865, lat: 17.5, yaw: 200 },
       // the rim's mountainside, each face toward the road (the hairpin's
       // entry is looser than its apex, so its length is bent wider)
       { model: 'set-canyon-rim-crag-a', u: 0.036, lat: -5.2, yaw: 180 },
@@ -1129,13 +1133,22 @@ export const TRACKS = {
     ],
     land: [
       // the rim: the mesa the canyon lengths are the near faces of, rising
-      // from past their backs (`near`, Gulch's massifs), low enough that its
-      // flat top shows against the sky down the long straight (taller, it
-      // filled the picture as one banded wall), its south end a shoulder
-      // short of the ranch
-      { kind: 'ridge', u: 0.04, lat: -28.8, yaw: -178.3, len: 30, r: 24, h: 14, top: 0.5, near: 16 },
-      { kind: 'ridge', u: 0.0968, lat: -26, yaw: -129.3, len: 16, r: 26, h: 18, top: 0.5, near: 16 },
-      { kind: 'ridge', u: 0.137, lat: -30, yaw: 0.2, len: 24, r: 24, r1: 18, h: 16, h1: 13, top: 0.5, near: 16 },
+      // from past their backs (`near`, Gulch's massifs), scarcely over their
+      // crests, so its flat top shows against the sky down the long straight
+      // (taller, it filled the picture as one banded wall, and its steep land
+      // is rock the box pays for per pixel), its south end a shoulder short
+      // of the ranch
+      { kind: 'ridge', u: 0.04, lat: -28.8, yaw: -178.3, len: 30, r: 24, h: 13, top: 0.5, near: 16 },
+      { kind: 'ridge', u: 0.0968, lat: -26, yaw: -129.3, len: 16, r: 26, h: 12, top: 0.5, near: 16 },
+      { kind: 'ridge', u: 0.137, lat: -30, yaw: 0.2, len: 24, r: 24, r1: 18, h: 13, h1: 12, top: 0.5, near: 16 },
+      // low swells of the land coming to the kerb out on the range, under
+      // the ten units a slope must climb to turn to rock (so sand, and none
+      // of the box's dear rock pixels): past the north-east spires, before
+      // the bend beyond them, and on the S's outside, joining the mesa's
+      // broken-off butte's talus (each short of every other strand: a flank
+      // reaching one is cut into a cliff there, a crease and a flap)
+      { kind: 'ridge', u: 0.392, lat: 15, len: 8, r: 9, h: 4.5, top: 0.3, near: 2 },
+      { kind: 'ridge', u: 0.618, lat: -13, len: 12, r: 10, h: 2.8, top: 0.3, near: 3 },
       // the skyline: mesas and buttes standing apart on the plain, 55 to 95
       // units out (a ring of them read as the walls of a box), each broad
       // enough for the ground's 9 u grid to draw a table, not a pyramid

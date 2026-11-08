@@ -75,6 +75,7 @@
     "set-cottage-row.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cow-farm.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crab-pots.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-crag-saguaros.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-culvert.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dead-cottonwood.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-den-camp.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
