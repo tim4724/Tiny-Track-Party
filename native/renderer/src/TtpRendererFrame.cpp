@@ -2554,17 +2554,17 @@ void TtpRenderer::flushSkidLayer() {
         uploadSkidRects();
         mSkidMipsDirty = true;
     }
-    // Frames went by undrawn (advance) since the last draw: the throttle's premise
-    // below — a fresh mark sits under the car for its 150 ms — does not hold for
-    // marks laid a lap ago, so refresh every level now and the first drawn frame
-    // after a wind is complete.
+    // Frames went by undrawn (advance) since the last draw: the deep levels' throttle
+    // below assumes their marks are a few frames stale at worst, which does not hold
+    // for marks laid a lap ago, so finish the deep pass now (the near levels went up
+    // with the upload above) and the first drawn frame after a wind is complete.
     if (mSkidCatchUp) {
         mSkidCatchUp = false;
         mSkidMipsDirty = false; mSkidMipsAt = mTime;
         do { refreshSkidMips(); } while (mSkidMipLevel != 0 || !mSkidMipDirty.empty());
         return;
     }
-        // Refresh the rubber layer's mip chain, throttled. The tap is mipped
+        // Refresh the rubber layer's DEEP mip levels, throttled. The tap is mipped
     // (bindSkidLayer): without mips, the deck ahead minifies a
     // 8k-wide layer through single-texel lookups and every mark
     // SCINTILLATES in motion, which the eye reads as the track itself
@@ -2572,11 +2572,9 @@ void TtpRenderer::flushSkidLayer() {
     // dirty rects, per-level sub-rect uploads (refreshSkidMips) — because
     // the full-chain generateMipmaps this used to be measured ~10 dropped
     // frames/s on the reference Android box, invisible in the GPU median.
-    // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
-    // for those 150 ms, where no one can see the difference. A pass then
-    // runs ONE LEVEL PER FRAME (refreshSkidMips says why), so the four-cell
-    // slowdown this used to carry against the pass's burst is gone with
-    // the burst.
+    // The near levels already followed level 0 in uploadSkidRects; only the
+    // far deck reads what is left, so it rides a ~7 Hz throttle, ONE LEVEL
+    // PER FRAME (refreshSkidMips says why both).
     if (mSkidTex && (mSkidMipLevel > 0
             || (mSkidMipsDirty && mTime - mSkidMipsAt > 0.15f))) {
         if (mSkidMipLevel == 0) { mSkidMipsDirty = false; mSkidMipsAt = mTime; }

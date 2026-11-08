@@ -378,10 +378,14 @@ opacity so lines do not ghost through it.
   mark beside the path whenever the body is yawed off its travel (drift, spin-out).
 - **Ink is permanent until the race-restart wipe.** A decay pass was the layer's
   whole recurring GPU cost. **Do not add a per-frame fullscreen pass here without
-  measuring on the weakest shell** — the mip refresh is throttled for exactly
-  that reason. The chain is needed (the deck ahead minifies an 8k-wide texture;
-  `mMaxTextureDim` is a chosen ceiling, clamped down by the driver, never up);
-  its throttle rides `mTime`, so its timestamp is cleared with the texture.
+  measuring on the weakest shell** — the deep mip levels are throttled for
+  exactly that reason. The chain is needed (the deck ahead minifies an 8k-wide
+  texture; `mMaxTextureDim` is a chosen ceiling, clamped down by the driver,
+  never up); its throttle rides `mTime`, so its timestamp is cleared with the
+  texture. **The NEAR levels (`kSkidNearLevels`) must follow level 0 on every
+  stamping frame**: the tap picks a level by the viewer's distance, so a
+  rival's trail ahead is drawn from them (`refreshSkidMips` has the two
+  cadences).
   The tap samples the chain bilinear from the NEAREST mip, without
   anisotropy, on every platform, chosen by eye: trilinear + anisotropic read
   the same, and no box has measured a saving either way (`bindSkidLayer` has

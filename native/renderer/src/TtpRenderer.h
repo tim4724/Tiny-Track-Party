@@ -1347,11 +1347,17 @@ private:
     struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
     std::vector<SkidRect> mSkidDirty;
     static constexpr size_t kSkidDirtyMax = 32;   // past this the list is one union rect
-    bool mSkidCatchUp = false;                    // undrawn frames stamped; refresh all mips
+    bool mSkidCatchUp = false;                    // undrawn frames stamped; finish the deep pass
     static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
+    // One mip level refiltered and uploaded under rects in level l-1 texels,
+    // which come back in level l texels.
+    void filterSkidLevel(int l, std::vector<SkidRect>& rects);
+    // Mip levels refreshed on every stamping frame; the rest ride the
+    // throttled deep pass (refreshSkidMips has the two cadences).
+    static constexpr int kSkidNearLevels = 3;
     // The mip chain's CPU truth, levels 1.. (level 0 is mSkidPix), plus the
-    // PHYSICAL-x rects awaiting the throttled per-level refresh — see
-    // refreshSkidMips for why generateMipmaps could not stay.
+    // rects, in level kSkidNearLevels texels, awaiting the deep pass — see
+    // filterSkidLevel for why generateMipmaps could not stay.
     std::vector<std::vector<uint8_t>> mSkidMips;
     std::vector<SkidRect> mSkidMipDirty;
     // A refresh pass in flight: the rects the NEXT level is filtered under,

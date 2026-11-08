@@ -207,6 +207,7 @@ void TtpRenderer::mergeUploadRects(std::vector<SkidRect>& rects) {
 void TtpRenderer::uploadSkidRects() {
     const int W = (int) mSkidTexW, H = (int) mSkidTexH;
     mergeUploadRects(mSkidDirty);
+    std::vector<SkidRect> physRects;
     for (const SkidRect& r : mSkidDirty) {
         const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
         if (y0 >= y1) continue;
@@ -231,17 +232,21 @@ void TtpRenderer::uploadSkidRects() {
             const int sx0 = spans[s][0], sx1 = spans[s][1];
             const int sw = sx1 - sx0, sh = y1 - y0;
             if (sw <= 0 || sh <= 0) continue;
-            // The same PHYSICAL rect feeds the throttled mip refresh — one
-            // wrap-split, owned here, so the two paths cannot disagree on it.
-            mSkidMipDirty.push_back({ sx0, y0, sx1, y1 });
+            // The same PHYSICAL rect feeds the mip refresh — one wrap-split,
+            // owned here, so the two paths cannot disagree on it.
+            physRects.push_back({ sx0, y0, sx1, y1 });
             uploadSkidLevel(mSkidTex, 0, sx0, y0, sx1, y1);
         }
     }
     mSkidDirty.clear();
+    // The near mip levels follow level 0 in the same frame; what they leave is
+    // the deep pass's work (refreshSkidMips has the two cadences).
+    for (int l = 1; l <= kSkidNearLevels; l++) filterSkidLevel(l, physRects);
+    mSkidMipDirty.insert(mSkidMipDirty.end(), physRects.begin(), physRects.end());
 }
 
-// The rubber layer's mip refresh: box-filter the accumulated dirty rects down
-// the CPU chain and upload only those sub-rects, level by level. This REPLACED
+// One mip level of the rubber layer: box-filter the dirty rects down from the
+// level above on the CPU and upload only those sub-rects. This REPLACED
 // the throttled generateMipmaps, and the difference is not the filtering — the
 // 2x2 average below is what the blit computed — it is what the driver was
 // asked to do: a full-chain generateMipmaps on the 8192-wide layer is a dozen
@@ -258,16 +263,85 @@ void TtpRenderer::uploadSkidRects() {
 // wants. The seam is deliberately NOT wrapped — generateMipmaps never wrapped
 // either, and the marks the stamper lays keep clear of the clamp rows.
 //
-// ONE LEVEL PER CALL. A pass used to land every level's copies in one frame,
-// and on the Android box each copy is its own kick (kUploadEventTexels): the
-// pass was the p95 of otherwise-quiet seconds — GPU p50 13.4 with p95 17.4
-// and three skips in the second — twice a second at four cells. Spread over
-// the chain's dozen frames it is a couple of copies a frame, like any other.
-// The chain stays consistent: a level is always the filter of the level
-// above as of an earlier frame, and the next pass recomputes every level
-// under whatever changed since.
+// Rects arrive in level l-1 texels and leave in level l texels; past the last
+// level they leave empty.
+void TtpRenderer::filterSkidLevel(int l, std::vector<SkidRect>& rects) {
+    const size_t li = (size_t) l - 1;
+    if (li >= mSkidMips.size()) { rects.clear(); return; }
+    const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
+    const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
+    const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
+    const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
+    uint8_t* dst = mSkidMips[li].data();
+    // Halve every rect, then merge overlaps — O(n²) over a handful.
+    std::vector<SkidRect> next;
+    for (const SkidRect& r : rects) {
+        SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
+                    std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
+        if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
+        bool merged = false;
+        for (SkidRect& m : next) {
+            if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
+                m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
+                m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
+                merged = true;
+                break;
+            }
+        }
+        if (!merged) next.push_back(d);
+    }
+    mergeUploadRects(next);
+    for (const SkidRect& d : next) {
+        for (int y = d.y0; y < d.y1; y++) {
+            const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
+            const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
+            uint8_t* drow = dst + (size_t) y * dw;
+            // 2x+1 <= sw-1 for every x < sw/2, so the clamps only bind on
+            // the tail. The interior is the same integer sum unclamped, which
+            // the clamps kept scalar and which vectorises on armeabi-v7a.
+            const int xe = std::min(d.x1, sw / 2);
+            int x = d.x0;
+            for (; x < xe; x++) {
+                drow[x] = (uint8_t) (((int) row0[2 * x] + row0[2 * x + 1]
+                        + row1[2 * x] + row1[2 * x + 1] + 2) >> 2);
+            }
+            for (; x < d.x1; x++) {
+                const int sx0 = std::min(2 * x, sw - 1);
+                const int sx1 = std::min(2 * x + 1, sw - 1);
+                drow[x] = (uint8_t) (((int) row0[sx0] + row0[sx1]
+                        + row1[sx0] + row1[sx1] + 2) >> 2);
+            }
+        }
+        uploadSkidLevel(mSkidTex, l, d.x0, d.y0, d.x1, d.y1);
+    }
+    rects.swap(next);
+}
+
+// The mip chain runs at TWO CADENCES, because the tap picks its level by the
+// VIEWER's distance, not the stamping car's. The NEAR levels (kSkidNearLevels)
+// follow level 0 on every frame that stamps (uploadSkidRects): a rival's trail
+// a few car lengths ahead is drawn from them, and on the throttled pass alone
+// that trail grew in visible jumps beside the player's own, which sits at
+// level 0 under the camera. The DEEP levels only draw the far deck, where a
+// mark is a few pixels, and ride this pass.
+//
+// How many levels are near is measured (the 2026-11-08 row of
+// docs/perf/androidtv-frame-map.md): the whole chain every frame is free on
+// the box's Vulkan but not on its GL fallback, where the ring makes every copy
+// two; fewer near levels buy GL nothing and let the stepping back in; a
+// CAPPED chain (fewer levels in the texture) costs the same and sharpens the
+// far deck into streaks.
+//
+// The deep pass goes ONE LEVEL PER CALL. A pass used to land every level's
+// copies in one frame, and on the Android box each copy is its own kick
+// (kUploadEventTexels): the pass was the p95 of otherwise-quiet seconds, twice
+// a second at four cells. Spread over the chain's frames it is one copy a
+// frame, like any other. The chain stays consistent: a level is always the
+// filter of the level above as of an earlier frame, and the next pass
+// recomputes every level under whatever the near levels left in mSkidMipDirty
+// since it began.
 void TtpRenderer::refreshSkidMips() {
-    if (!mSkidTex || mSkidMips.empty()) {
+    if (!mSkidTex || mSkidMips.size() <= (size_t) kSkidNearLevels) {
         mSkidMipDirty.clear(); mSkidMipRects.clear(); mSkidMipLevel = 0;
         return;
     }
@@ -275,64 +349,11 @@ void TtpRenderer::refreshSkidMips() {
         if (mSkidMipDirty.empty()) return;
         mSkidMipRects.swap(mSkidMipDirty);
         mSkidMipDirty.clear();
-        mSkidMipLevel = 1;
+        mSkidMipLevel = kSkidNearLevels + 1;
     }
-    const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
-    std::vector<SkidRect> rects = std::move(mSkidMipRects);
-    mSkidMipRects.clear();
-    {
-        const size_t li = (size_t) mSkidMipLevel - 1;
-        if (li >= mSkidMips.size() || rects.empty()) { mSkidMipLevel = 0; return; }
-        const int l = mSkidMipLevel;
-        const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
-        const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
-        const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
-        uint8_t* dst = mSkidMips[li].data();
-        // Halve every rect, then merge overlaps — O(n²) over a handful.
-        std::vector<SkidRect> next;
-        for (const SkidRect& r : rects) {
-            SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
-                        std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
-            if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
-            bool merged = false;
-            for (SkidRect& m : next) {
-                if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
-                    m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
-                    m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
-                    merged = true;
-                    break;
-                }
-            }
-            if (!merged) next.push_back(d);
-        }
-        mergeUploadRects(next);
-        for (const SkidRect& d : next) {
-            for (int y = d.y0; y < d.y1; y++) {
-                const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
-                const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
-                uint8_t* drow = dst + (size_t) y * dw;
-                // 2x+1 <= sw-1 for every x < sw/2, so the clamps only bind on
-                // the tail. The interior is the same integer sum unclamped, which
-                // the clamps kept scalar and which vectorises on armeabi-v7a.
-                const int xe = std::min(d.x1, sw / 2);
-                int x = d.x0;
-                for (; x < xe; x++) {
-                    drow[x] = (uint8_t) (((int) row0[2 * x] + row0[2 * x + 1]
-                            + row1[2 * x] + row1[2 * x + 1] + 2) >> 2);
-                }
-                for (; x < d.x1; x++) {
-                    const int sx0 = std::min(2 * x, sw - 1);
-                    const int sx1 = std::min(2 * x + 1, sw - 1);
-                    drow[x] = (uint8_t) (((int) row0[sx0] + row0[sx1]
-                            + row1[sx0] + row1[sx1] + 2) >> 2);
-                }
-            }
-            uploadSkidLevel(mSkidTex, l, d.x0, d.y0, d.x1, d.y1);
-        }
-        mSkidMipRects = std::move(next);
-        mSkidMipLevel = (mSkidMipRects.empty() || (size_t) mSkidMipLevel >= mSkidMips.size())
-                ? 0 : mSkidMipLevel + 1;
-    }
+    filterSkidLevel(mSkidMipLevel, mSkidMipRects);
+    mSkidMipLevel = (mSkidMipRects.empty() || (size_t) mSkidMipLevel >= mSkidMips.size())
+            ? 0 : mSkidMipLevel + 1;
 }
 
 
