@@ -484,12 +484,17 @@ export const TRACKS = {
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
       // the cave and the lookout level nothing (their gear drapes) and the
       // land's 9 u chords rise under them, so each is lifted onto them
-      { model: 'set-smugglers-cave', u: 0.975, lat: -7.3, yaw: 180, y: 1.35 },
+      { model: 'set-smugglers-cave', u: 0.975, lat: -6.8, yaw: 145, y: 0.95 },
       { model: 'set-jungle-grove', u: 0.915, lat: -12, yaw: 180 },
       { model: 'set-pirate-lookout', u: 0.205, lat: 14, y: 2.6 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
+      // palms on the beach outside the west bend, where the chase camera
+      // looks through it (the bend's inside wraps round on the camera's left,
+      // out of its frame)
+      { model: 'set-palm-stand', u: 0.815, lat: 7.6 },
+      { model: 'set-palm-stand', u: 0.84, lat: 7.8, yaw: 20 },
       { model: 'set-palm-clumps', u: 0.27, lat: -24, yaw: 180 },
       { model: 'set-palm-clumps', u: 0.6, lat: -22, yaw: 180 }
     ],
@@ -505,10 +510,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.22, lat: -21, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.96, lat: -22, len: 40, r: 18, h: 5, top: 0.2, near: 6, tint: 0x7ab878 },
       // the spur the cave is cut into
-      { kind: 'ridge', u: 0.975, lat: -11.8, len: 10, r: 6, h: 3.2, top: 0.25, near: 1.1, tint: 0x7ab878 },
+      { kind: 'ridge', u: 0.975, lat: -12.6, len: 14, r: 7, h: 4.6, top: 0.25, near: 0.9, tint: 0x7ab878 },
       // low green hills inside the S-bends before the finish
       { kind: 'ridge', u: 0.835, lat: -20, yaw: 40, len: 16, r: 11, h: 3, top: 0.3, tint: 0x6aaa6a },
-      { kind: 'ridge', u: 0.81, lat: -15, yaw: 20, len: 10, r: 10, h: 2.4, top: 0.3, near: 0.5, tint: 0x7ab878 },
+      { kind: 'ridge', u: 0.81, lat: -11.5, yaw: 20, len: 12, r: 8, h: 4.6, top: 0.3, near: 0.5, tint: 0x6aaa6a },
       { kind: 'ridge', u: 0.885, lat: -20, len: 16, r: 12, h: 2.5, top: 0.25, near: 2, tint: 0x7ab878 },
       // the grassy rise the lookout stands on
       { kind: 'ridge', u: 0.222, lat: 17, len: 26, r: 10, h: 3.2, top: 0.3, near: 2.3, tint: 0x7ab878 },

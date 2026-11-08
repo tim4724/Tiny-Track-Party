@@ -1747,39 +1747,41 @@ def smugglers_cave():
     # about where the land is. No one keeps the door: a person that size is a
     # speck from the seat, and a still one reads uncanny. +X is the road.
     rows = []
-    N = 9
+    N = 11
     for i in range(N):
-        z = -3.4 + 6.8 * i / (N - 1)
-        k = 0.25 + 0.75 * math.sin(math.pi * i / (N - 1)) ** 0.7       # sinking into the slope at its ends
+        z = -4.6 + 9.2 * i / (N - 1)
+        k = 0.2 + 0.8 * math.sin(math.pi * i / (N - 1)) ** 0.6       # sinking into the slope at its ends
         j = lambda a, m: m * jitter(i, a, 57.0)
-        prof = [(-0.3 + j(1, 0.1), -0.4),
-                (-0.55 + j(2, 0.15), 0.85 * k),
-                (-1.1 + j(3, 0.2), 1.55 * k + j(4, 0.15)),
-                (-1.9 + j(5, 0.2), 2.05 * k + j(6, 0.2)),
-                (-3.3 + j(7, 0.3), 2.3 * k - 0.35)]
+        prof = [(-0.3 + j(1, 0.1), -0.5),
+                (-0.6 + j(2, 0.15), 1.3 * k),
+                (-1.3 + j(3, 0.25), 2.4 * k + j(4, 0.2)),
+                (-2.4 + j(5, 0.25), 3.1 * k + j(6, 0.25)),
+                (-4.2 + j(7, 0.3), 3.4 * k - 0.45)]
         rows.append([(x, y, z + j(8, 0.15)) for x, y in prof])
     def color(i, jj, n):
         lit = n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2]
         return 'tan' if lit > 0.25 or n[1] > 0.6 else 'brown'
     sheet(rows, color, 'scarp', facet=lambda i, jj: True)
-    # the mouth: black, arched, in the face's foot; its jambs and lintel
-    prism([(-0.62, -0.1), (0.62, -0.1), (0.62, 0.75), (0.36, 1.08), (-0.36, 1.08), (-0.62, 0.75)],
-          -0.5, 0.12, 0x1d1d22)
-    box((1.3, 1.1, 1.2), (-1.2, 0.45, 0.0), 0x1d1d22)
-    stone(-0.55, -0.95, 0.9, 0.6, 21.0, squat=1.4, rock=('tan', 'brown'), top='tan', y=-0.1)
-    stone(-0.55, 0.95, 0.9, 2.1, 22.0, squat=1.3, rock=('tan', 'brown'), top='tan', y=-0.1)
-    stone(-0.75, 0.0, 1.3, 0.3, 23.0, squat=0.55, rock=('tan', 'brown'), top='tan', y=0.95)
-    box((0.05, 0.3, 0.05), (-0.42, 1.0, 0.68), 0x38383d)                          # the lantern's bracket
-    box((0.1, 0.2, 0.12), (-0.38, 0.8, 0.68), 0xffc044)                           # the lantern
+    # the mouth: a big black arch in the face's foot, its dark rim, the
+    # passage going back into the hill; jambs and a lintel of the face's rock
+    arch = [(-1.05, -0.2), (1.05, -0.2), (1.05, 1.2), (0.7, 1.75), (0.0, 1.95), (-0.7, 1.75), (-1.05, 1.2)]
+    prism([(z * 1.18, y * 1.08 - 0.02) for z, y in arch], -0.62, 0.1, 'dark')
+    prism(arch, -0.55, 0.12, 0x101014)
+    box((2.0, 1.9, 2.4), (-1.75, 0.75, 0.0), 0x101014)
+    stone(-0.6, -1.45, 1.1, 0.6, 21.0, squat=1.6, rock=('tan', 'brown'), top='tan', y=-0.15)
+    stone(-0.6, 1.45, 1.1, 2.1, 22.0, squat=1.5, rock=('tan', 'brown'), top='tan', y=-0.15)
+    stone(-0.85, 0.0, 1.9, 0.3, 23.0, squat=0.5, rock=('tan', 'brown'), top='tan', y=1.75)
+    box((0.05, 0.3, 0.05), (-0.5, 1.6, 1.25), 0x38383d)                           # the lantern's bracket
+    box((0.12, 0.24, 0.14), (-0.45, 1.38, 1.25), 0xffc044)                        # the lantern
     # a palm on the spur over it, the flag beside it
-    palm((-3.0, 1.85, -1.2), h=2.3, lean=0.25, yaw=math.radians(150), trunk='tan', sink=0.6)
-    kit_flag('flag-pirate-high', (-2.3, 1.75, 1.0), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.2')
+    palm((-4.0, 2.7, -1.6), h=2.4, lean=0.25, yaw=math.radians(150), trunk='tan', sink=0.7)
+    kit_flag('flag-pirate-high', (-3.2, 2.55, 1.4), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.2')
     join_still('cave')
     # the haul at the threshold, on the sand as it lies
     def gear():
-        kit('pirate', 'barrel', (0.1, 0, -0.85), yaw=0.4, scale=0.2)
-        kit('pirate', 'chest', (0.35, 0, 0.5), yaw=math.radians(-80), scale=0.17)
-        for (gx, gz) in ((0.6, 0.35), (0.55, 0.67), (0.7, 0.53)):
+        kit('pirate', 'barrel', (0.1, 0, -1.5), yaw=0.4, scale=0.2)
+        kit('pirate', 'chest', (0.35, 0, 1.25), yaw=math.radians(-80), scale=0.17)
+        for (gx, gz) in ((0.6, 1.1), (0.55, 1.42), (0.7, 1.28)):
             box((0.07, 0.04, 0.07), (gx, 0.02, gz), 'yellow', yaw=gx * 3)
     draped('haul', gear)
 
@@ -1821,6 +1823,21 @@ def jungle_grove():
     def litter():
         with plain_parts():
             for (x, z) in ((0.9, -4.6), (-0.2, 0.9), (1.2, 4.4), (-0.6, 6.2)):
+                box((0.13, 0.13, 0.13), (x, 0.065, z), 0x9a6a46, yaw=x + z)
+    draped('litter', litter)
+
+@piece(1.0)
+def palm_stand():
+    # Cove: a short stand of palms for the inside of a tight bend, where a
+    # grove's straight run would reach the kerb at its ends: three clumps in
+    # some 8 u (palm_clump), a few fallen coconuts draped. +X is the road.
+    palm_clump('a', 0.2, -3.0, ((0.3, -0.4, 2.8, 0.25, 40), (-0.9, 0.7, 2.2, 0.3, 230)), ((0.9, 0.5, 0.45),))
+    palm_clump('b', -1.0, 0.6, ((0.5, 0.2, 3.1, 0.15, 300), (-0.6, -0.9, 2.5, 0.3, 120), (0.2, 1.4, 2.0, 0.25, 190)),
+               ((1.0, -0.6, 0.42), (-0.7, 1.1, 0.4)))
+    palm_clump('c', 0.1, 3.8, ((0.0, 0.0, 2.6, 0.3, 160), (-1.0, 0.8, 2.2, 0.2, 20)), ((0.9, 0.4, 0.42),))
+    def litter():
+        with plain_parts():
+            for (x, z) in ((0.8, -2.2), (-0.1, 1.9), (0.7, 4.3)):
                 box((0.13, 0.13, 0.13), (x, 0.065, z), 0x9a6a46, yaw=x + z)
     draped('litter', litter)
 
