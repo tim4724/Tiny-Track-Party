@@ -847,37 +847,53 @@ export const TRACKS = {
     // timber trestle beside it) and round the east bend to the headframe
     // over the shaft up the east side, its wheel turning over the east
     // bend, a little train of ore riding the line from the adit to
-    // the shaft; grey spoil heaps at both workings and out by the far
-    // bends, timber supports round the lap.
+    // the shaft; grey spoil heaps at the shaft, timber supports round the
+    // lap. The west of the map is a range of mountains and mesas the
+    // descent cuts through.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
       { model: 'set-ore-line', u: 0.018, lat: 16 },
       { model: 'set-headframe', u: 0.2188, lat: 22.9, yaw: 67 },
-      // the gulch itself: off the crest the road drops into a canyon of
-      // mountainsides, the range on the outside of the long left-hander, down
-      // the straight and round the tight bend into the mine yard, a lower spur
-      // on the inside until the straight (Wash's lengths reused between bends)
+      // the gulch itself: off the crest the road drops into a canyon, its
+      // faces at the kerb the near faces of the range's massifs (`land`): on
+      // the outside from the crest round the long left-hander, down the
+      // straight and round the tight bend into the mine yard, one on the
+      // inside round the left-hander (Wash's lengths reused between bends).
+      // The loop's middle stays low: the deck cap holds the land there under
+      // the road, and the yard opens on the stamp mill.
+      { model: 'set-canyon-peaks-c', u: 0.795, lat: 5.2 },
       { model: 'set-canyon-bend-gulch', u: 0.862, lat: 5.2 },
       { model: 'set-canyon-peaks-a', u: 0.904, lat: 5.2 },
       { model: 'set-canyon-hairpin-gulch', u: 0.937, lat: 5.2 },
       { model: 'set-canyon-spur-a', u: 0.968, lat: 5.2 },
-      { model: 'set-canyon-inside-gulch', u: 0.864, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-inside-gulch', u: 0.857, lat: -5.2, yaw: 180 },
       // the stamp mill cascading down its spoil heap across the start
       // straight from the adit, its tramway's buckets riding the sagging
       // ropes over the road to the tower beside the adit
       { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 }
     ],
-    // the ridge the mine is in, its spoil heaps (waste rock, greyer than the land)
+    // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
+    // than the land), and the range
     land: [
       { kind: 'ridge', u: 0.0004, lat: 48, len: 80, r: 22, h: 18, top: 0.3 },
       { kind: 'ridge', u: 0.202, lat: 43.4, len: 6, r: 10, h: 6, top: 0.15, tint: 0xb0a49c },
-      { kind: 'ridge', u: 0.9715, lat: 30, r: 9, h: 5, top: 0.15, tint: 0xb0a49c },
       { kind: 'ridge', u: 0.3367, lat: 22.9, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
-      { kind: 'ridge', u: 0.8963, lat: 44, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
-      // the range the gulch's mountainsides belong to
-      { kind: 'ridge', u: 0.862, lat: 24, len: 22, r: 13, h: 9, top: 0.45, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.925, lat: 23, len: 12, r: 13, h: 8.5, top: 0.45, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.864, lat: -16, len: 10, r: 10, h: 5, top: 0.4, tint: 0xc8846a }
+      // the range: massifs behind the canyon faces, each rising from just
+      // past the faces' crests (`near`, so a face stands whole on the verge
+      // and its back slopes up into the massif), all on the outside of the
+      // descent; mesas and peaks behind them, the skyline from the seat
+      { kind: 'ridge', u: 0.8159, lat: 30.6, yaw: -25.31, len: 26, r: 22, r1: 32, h: 14, h1: 34, top: 0.3, near: 12.5 },
+      { kind: 'ridge', u: 0.8418, lat: 33.43, r: 26, h: 36, top: 0.2, near: 12.5 },
+      { kind: 'ridge', u: 0.8828, lat: 31.9, yaw: -2.48, len: 36, r: 34, h: 36, top: 0.3, near: 12.5 },
+      { kind: 'ridge', u: 0.9292, lat: 28.37, r: 30, h: 44, top: 0.08, near: 12.5 },
+      { kind: 'ridge', u: 0.9542, lat: 30.88, yaw: -0.6, len: 28, r: 30, r1: 24, h: 36, h1: 24, top: 0.3, near: 12.5 },
+      { kind: 'ridge', u: 0.872, lat: 70.8, yaw: 12.18, len: 36, r: 30, h: 46, top: 0.42 },
+      { kind: 'ridge', u: 0.9036, lat: 72.99, yaw: -12.83, len: 20, r: 30, h: 56, top: 0.1 },
+      { kind: 'ridge', u: 0.8212, lat: 69.09, yaw: -27.36, len: 40, r: 28, h: 40, top: 0.45 },
+      { kind: 'ridge', u: 0.8461, lat: 68.35, r: 26, h: 50, top: 0.08 },
+      { kind: 'ridge', u: 0.9596, lat: 64.67, yaw: -9.05, len: 30, r: 26, h: 38, top: 0.45 },
+      { kind: 'ridge', u: 0.9382, lat: 70.46, r: 28, h: 50, top: 0.1 },
+      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38 }
     ]
   },
   crag: {

@@ -5611,11 +5611,12 @@ mountains(canyon_peaks_a=dict(seed=7, L=21.0, H=10.0),
 
 # Gulch's descent: round the outside of the long left-hander off the crest,
 # down the short straight and round the tight bend into the mine yard (with
-# Wash's straight lengths between), a lower spur on the inside of the
-# left-hander.
+# Wash's straight lengths between), and the inside's face round the
+# left-hander, its back falling into the middle of the loop (the land there
+# sits under the deck cap and cannot rise), which opens on the yard.
 mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2),
           canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
-          canyon_inside_gulch=dict(seed=61, L=22.0, H=6.5, R=-17.8, D=9.0))
+          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0))
 
 # ---- stepped rock: a mountain cut into level strata --------------------------------
 #

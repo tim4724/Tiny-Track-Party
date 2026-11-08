@@ -644,11 +644,17 @@ to do both:
   their own formula. Its rise also passes the band's hold by a piece that
   levels nothing (one that drapes, one on its own ground), never a clearing:
   a gallery stands IN the mountainside it is let into. A rock piece at the
-  kerb stands in front of the flank's ramp and tucks under the land past it,
-  built over the plain against the ground drawn there, never draped (a draped
-  face rides the ramp up). Glacier's massif over its top straight and
-  Avalanche's mountains round its last loop, the galleries' cuts in them
-  (set_prototypes.py `cut_face`), are the worked examples.
+  kerb either stands in front of the flank's ramp and tucks under the land
+  past it, built over the plain against the ground drawn there (Avalanche's
+  galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
+  length) with `near` set past its crest: the drape rides the drawn ground,
+  so a flank rising under the crest stretches it into spikes; past it, the
+  face stands whole and its back slopes up into the massif (Gulch). A massif
+  cannot stand in the middle of a loop ringed by road: the cap holds the
+  grid there, the band holds it off every footprint nearby and splits it
+  between the strands around, so a loop's middle gets a piece's face, not
+  land. Glacier's massif over its top straight, Avalanche's mountains round
+  its last loop and Gulch's range along its descent are the worked examples.
 - **ROCK WHERE THE LAND IS STEEP.** The ground's vertex alpha carries how
   steep the land is (`rockWeight`, per biome); `vground.mat` replaces the
   canvas there with the biome's rock, in strata by world height under ledges
