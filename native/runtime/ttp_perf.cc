@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "ttp/detail.h"
 #include "ttp/perf_stats.h"
 
 namespace perf = ttp::rt::perf;
@@ -42,6 +43,7 @@ const char* ttp_perf_readout_json(int cells, int width, int height, double dpr,
   d.height = height;
   d.dpr = dpr;
   d.track = trackOrNull ? trackOrNull : "";
+  d.detail = ttp::rt::detail_name(ttp::rt::detail_in_force());
   g_buf = perf::readoutJson(perf::monitor().fold(), d);
   return g_buf.c_str();
 }

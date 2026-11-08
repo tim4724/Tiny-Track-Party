@@ -224,6 +224,12 @@ final class DisplayHost {
             _ in UserDefaults.standard.integer(forKey: "ttpTags") == 0
         } ?? false
 
+    /// `-ttpDetail lite|full` draws that detail tier instead of this
+    /// platform's (full): Android's `debug.ttp.detail` twin, so the box's lite
+    /// world can be filmed and priced here. Absent or anything else leaves the
+    /// C++'s pick (`ttp_display_detail`).
+    private static let detailAsk = UserDefaults.standard.string(forKey: "ttpDetail")
+
     /// The scale in force. 1.0 is the panel's own resolution, and the only way
     /// past it is the measurement pin above — the RULE's ceiling is 1. Read by
     /// `MetalSurfaceView` when it sizes the drawable.
@@ -347,9 +353,9 @@ final class DisplayHost {
         // on without a build.
         ttp_display_antialias(Int32(Self.antialiasPin ?? 0))
         // THE DETAIL TIER, decided in C++ from the platform: full here, the world
-        // as authored (the lite tier is the Android TV box's). Before the first
-        // build, which meshes it.
-        print("[ttp] detail tier \(TTP.strOrEmpty(ttp_display_detail(PartyNet.pbPlatform, nil)))")
+        // as authored (the lite tier is the Android TV box's), unless
+        // `-ttpDetail` asks. Before the first build, which meshes it.
+        print("[ttp] detail tier \(TTP.strOrEmpty(ttp_display_detail(PartyNet.pbPlatform, Self.detailAsk)))")
         applyFeaturePin()
     }
 

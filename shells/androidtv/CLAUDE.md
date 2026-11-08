@@ -397,7 +397,11 @@ branch, before any build), and what lite takes off the frame is
 baseline and ceilings are this box's, and a world change is priced against
 them; `full`'s are the Apple TV's. `setprop debug.ttp.detail full` draws the
 full world here instead, read when the surface is created: the A/B for what
-lite buys on this GPU, which no host count can say.
+lite buys on this GPU, which no host count can say. `perf-race --detail
+lite|full` sets the property before its launch and clears it after, and every
+create logs its answer (`DisplayHost: detail tier lite (debug.ttp.detail
+unset)`). Read the tier off the bench header, which prints the readout's
+`detail` — the engine's word for the world it drew, not the flag's.
 
 `docs/perf/androidtv-frame-map.md` is the perf record: where the frame stands,
 what each shipped lever bought, what is still open, and the ledger of levers
@@ -485,7 +489,7 @@ sweep runs, logs nothing about it, and reports the free-running scaler's numbers
 as pinned arms — and the shipping configuration cannot be ablated at all.
 Checked once on release at a pinned scale: the GPU-bound half of this section
 does transfer between the variants, which was previously an assumption.
-`perf-race.android.mjs` restores ALL FOUR knobs on every exit path, because a
+`perf-race.android.mjs` restores EVERY knob it sets on every exit path, because a
 property outlives a force-stop and a reinstall, and a leftover one reaches a
 RELEASE build too. It used to skip `debug.ttp.hz` — the one knob nothing else
 ever cleared — while this file claimed every knob was restored.

@@ -87,6 +87,8 @@ const flag = (name) => process.argv.includes(`--${name}`);
  *                              the run is a results board over a still picture.
  *   dpr                        the buffer as a fraction of the panel; 0 hands
  *                              the buffer back to the adaptive rule
+ *   detail                     `-ttpDetail lite|full`; null leaves this
+ *                              platform's full tier
  *
  * tvOS-only flags, read off argv:
  *   --sim            drive the booted tvOS simulator instead of the paired box
@@ -177,8 +179,10 @@ export function makeTvosBackend() {
   };
 
   return {
-    async launch({ players, track, seconds, dpr }) {
+    async launch({ players, track, seconds, dpr, detail }) {
       const args = ['-ttpScenario', SCENARIO,
+        // The detail tier (`DisplayHost.detailAsk`); absent = this box's full.
+        ...(detail ? ['-ttpDetail', detail] : []),
         ...(track ? ['-ttpTrack', String(track)] : []),
         ...(players ? ['-ttpPlayers', String(players)] : []),
         // The shell reads this with `double(forKey:)`, which COERCES: the

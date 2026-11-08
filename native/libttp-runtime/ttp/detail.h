@@ -33,5 +33,16 @@ inline Detail detail_for(const char* platform, const char* ask) {
 
 inline const char* detail_name(Detail d) { return d == Detail::Lite ? "lite" : "full"; }
 
+// THE TIER IN FORCE: what ttp_display_detail last handed a display, Full until
+// one is told otherwise, as a fresh renderer is. Process state like the one
+// display, and the live display's because every shell asks after each
+// ttp_display_create. The frame-cost readout states it (ttp_perf.h), so a
+// bench reports the world it measured, not the flag it passed — read here,
+// never through a shell.
+inline Detail& detail_in_force() {
+    static Detail d = Detail::Full;
+    return d;
+}
+
 }  // namespace rt
 }  // namespace ttp
