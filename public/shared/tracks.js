@@ -1067,7 +1067,7 @@ export const TRACKS = {
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
       { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
-      { model: 'set-block-fortress', u: 0.4186, lat: -14.88 },
+      { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
       { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
       { model: 'set-siege-tower', u: 0.0777, lat: 11, yaw: 35 },

@@ -7881,6 +7881,9 @@ def block_fortress():
     # the kerb, its panels and letters to the road.
     TX, TZ, T = 8.25, 6.4, 1.8                    # the corner towers' centres, their block
     S = 1.3
+    TSE = S                                       # the corner the racers pass closest, round its
+                                                  # bend: the wall's own blocks, never one big
+                                                  # letter block filling the frame's edge
     # the curtain wall, between the towers' faces; the gate in the +Z wall,
     # a mid-wall tower in each of the others
     GW = 1.25                                     # half the gateway's opening
@@ -7890,11 +7893,12 @@ def block_fortress():
     wall_top['n'] = block_run((-TX + T / 2, TZ), (-GT - S / 2, TZ), 0.0, 1, faces=('+z', '+y'), crenels=True)
     block_run((GT + S / 2, TZ), (TX - T / 2, TZ), 0.0, 2, faces=('+z', '+y'), crenels=True)
     wall_top['s'] = block_run((-TX + T / 2, -TZ), (-M, -TZ), 0.0, 3, faces=('-z', '+y'), crenels=True)
-    block_run((M, -TZ), (TX - T / 2, -TZ), 0.0, 1, faces=('-z', '+y'), crenels=True)
+    wall_top['se'] = block_run((M, -TZ), (TX - TSE / 2, -TZ), 0.0, 1, faces=('-z', '+y'), crenels=True)
     for sx in (-1, 1):
         face = '+x' if sx > 0 else '-x'
-        wall_top['x'] = block_run((sx * TX, -TZ + T / 2), (sx * TX, -M), 0.0, 0 if sx > 0 else 2, faces=(face, '+y'), crenels=True)
-        block_run((sx * TX, M), (sx * TX, TZ - T / 2), 0.0, 3 if sx > 0 else 1, faces=(face, '+y'), crenels=True)
+        wall_top['xs' if sx > 0 else 'ws'] = block_run((sx * TX, -TZ + (TSE if sx > 0 else T) / 2), (sx * TX, -M), 0.0,
+                                                      0 if sx > 0 else 2, faces=(face, '+y'), crenels=True)
+        wall_top['x'] = block_run((sx * TX, M), (sx * TX, TZ - T / 2), 0.0, 3 if sx > 0 else 1, faces=(face, '+y'), crenels=True)
     for k, (x, z, face) in enumerate(((0.0, -TZ, '-z'), (TX, 0.0, '+x'), (-TX, 0.0, '-x'))):
         for j in range(3):
             block(S, (x, S / 2 + j * S, z), TOY[(j + k + 1) % 4], faces=('+x', '-x', '+z', '-z'),
@@ -7905,7 +7909,8 @@ def block_fortress():
     for sx in (-1, 1):
         for sz in (-1, 1):
             face = '+x' if sx > 0 else '-x'
-            block_tower(sx * TX, sz * TZ, T, 3, n, 0x6cbf6c if (sx + sz) == 0 else 0xe66a5a, face,
+            se = sx > 0 and sz < 0
+            block_tower(sx * TX, sz * TZ, TSE if se else T, 4 if se else 3, n, 0x6cbf6c if (sx + sz) == 0 else 0xe66a5a, face,
                         pennant='anim_sway:a=x:d=24:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=-sz)   # over the court, clear of the ring
             n += 1
     # the gatehouse: a tower of four blocks either side of the opening, the
@@ -7946,10 +7951,10 @@ def block_fortress():
     # either side of the gate, facing the camp, one on each other wall
     for x in (-5.55, -3.15, 4.35, 6.75):          # on the blocks the crenels leave free
         knight((x, wall_top['n'], TZ - 0.15), DEFENDERS, -math.pi / 2)
-    for x in (-2.66, 2.66):
-        knight((x, wall_top['s'], -TZ + 0.15), DEFENDERS, math.pi / 2)
-    for z in (-3.68, 2.47):
-        knight((TX - 0.15, wall_top['x'], z), DEFENDERS, 0.0)
+    knight((-2.66, wall_top['s'], -TZ + 0.15), DEFENDERS, math.pi / 2)
+    knight((2.74, wall_top['se'], -TZ + 0.15), DEFENDERS, math.pi / 2)
+    knight((TX - 0.15, wall_top['xs'], -3.84), DEFENDERS, 0.0)
+    knight((TX - 0.15, wall_top['x'], 2.47), DEFENDERS, 0.0)
     knight((-TX + 0.15, wall_top['x'], 2.47), DEFENDERS, math.pi)
     merge_paint()
 

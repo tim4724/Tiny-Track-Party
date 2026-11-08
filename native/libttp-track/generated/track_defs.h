@@ -1818,7 +1818,7 @@ constexpr SetDef kSet_gauntlet[] = {
   { "set-barbican", 0x1.38a0902de00d2p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-cannon-battery", 0x1.59b3d07c84b5ep-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1.3333333333333p+0, 1 },
   { "set-toy-dragon", 0x1.e666666666666p-1, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-block-fortress", 0x1.aca57a786c227p-2, -0x1.dc28f5c28f5c3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-block-fortress", 0x1.ad5cfaacd9e84p-2, -0x1.c28f5c28f5c29p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-siege-camp", 0x1.eab367a0f9097p-4, -0x1.0bd70a3d70a3dp+3, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
   { "set-trebuchet", 0x1.d013a92a30553p-4, -0x1.1c51eb851eb85p+4, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
   { "set-siege-tower", 0x1.3e425aee631f9p-4, 0x1.6p+3, 0x1.18p+5, 0x0p+0, 0x1p+0, 1 },
