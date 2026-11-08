@@ -908,15 +908,37 @@ constexpr SetDef kSet_ribbon[] = {
   { "set-village-street", 0x1.a872b020c49bap-2, -0x1p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cottage-row", 0x1.374bc6a7ef9dbp-1, -0x1.e666666666666p+2, 0x1.61f5c28f5c28fp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-windmill", 0x1.3333333333333p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-yard", 0x1.3333333333333p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-field-wheat", 0x1.6538ef34d6a16p-1, 0x1.8p+3, 0x1.ecccccccccccdp+2, 0x0p+0, 0x1p+0, 1 },
+  { "set-field-stubble", 0x1.3cc63f141205cp-1, 0x1.4c28f5c28f5c3p+3, -0x1.40e147ae147aep+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-village-pond", 0x1.32617c1bda512p-3, 0x1.6b33333333333p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-village-fete", 0x1.999999999999ap-7, 0x1.1333333333333p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.020c49ba5e354p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.1db22d0e56042p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block-b", 0x1.3a5e353f7ced9p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.4dd2f1a9fbe77p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.6147ae147ae14p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.73b645a1cac08p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block-b", 0x1.872b020c49ba6p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.999999999999ap-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.ad0e560418937p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.c083126e978d5p-3, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block-b", 0x1.d4fdf3b645a1dp-3, -0x1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.e978d4fdf3b64p-3, -0x1.0666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.fdf3b645a1cacp-3, -0x1.0666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-orchard-block", 0x1.09374bc6a7efap-2, -0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-cow-farm", 0x1.c8b4395810625p-1, -0x1.1666666666666p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-sheep-meadow", 0x1.6666666666666p-1, -0x1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_ribbon[] = {
   { 4, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p-1, 0x0p+0, 0x1.4p+3, 0x1.8p+3, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1.e666666666666p+0, 0x1.e666666666666p+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x0p+0 },
-  { 0, -1, 0x1.da79bbadc0981p-1, 0x1.3cccccccccccdp+4, 0x1.fc28f5c28f5c3p+1, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x0p+0 },
+  { 0, -1, 0x1.d47ae147ae148p-1, 0x1.719999999999ap+4, -0x1p+2, 0x0p+0, 0x0p+0, 0x1.6p+5, 0x1.4p+4, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1p-2, 0x1p+0, 0x0u, 0x1.3333333333333p-1 },
   { 0, -1, 0x1.dadc0980b242p-1, 0x1.dd16872b020c5p+4, 0x1.570a3d70a3d71p+1, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u, 0x0p+0 },
   { 0, -1, 0x1.87ab7564302b4p-2, 0x1.9eb851eb851ecp+4, 0x1.394cccccccccdp+7, 0x0p+0, 0x0p+0, 0x1.ep+6, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x0p+0 },
   { 0, -1, 0x1.80980b242070cp-2, 0x1.117ae147ae148p+5, 0x1.3b47ae147ae14p+7, 0x0p+0, 0x0p+0, 0x1.9p+6, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.ccccccccccccdp-2, 0x1p+0, 0x0u, 0x0p+0 },
-  { 0, -1, 0x1.999999999999ap-3, -0x1.7p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+5, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.6666666666666p-2, 0x1p+0, 0x0u, 0x0p+0 },
-  { 0, -1, 0x1.52085b18548aap-1, -0x1.b2b020c49ba5ep+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1.3333333333333p-3, 0x1p+0, 0x0u, 0x0p+0 },
+  { 0, -1, 0x1.999999999999ap-3, -0x1.2p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+5, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1p+3, 0x1p+3, 0x1.6666666666666p-2, 0x1p+0, 0x0u, 0x0p+0 },
+  { 0, -1, 0x1.52085b18548aap-1, -0x1.6p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.2p+3, 0x1.2p+3, 0x1.3333333333333p-3, 0x1p+0, 0x0u, 0x0p+0 },
+  { 7, -1, 0x1.32617c1bda512p-3, 0x1.6b33333333333p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+1, 0x1.599999999999ap+2, 0x1.599999999999ap+2, 0x1p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
   { 9, -1, 0x1.9525460aa64c3p-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
 };
 
@@ -2088,7 +2110,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 4, kLand_flurry, 22 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 7, kLand_glacier, 21 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 10, kLand_avalanche, 12 },
-  { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 7, kLand_ribbon, 8 },
+  { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 28, kLand_ribbon, 9 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 7, kLand_pretzel, 3 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 13, kLand_tangle, 2 },
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 3, kLand_cloverleaf, 3 },
@@ -2112,8 +2134,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { nullptr };
-constexpr int TTP_LITE_MODEL_COUNT = 0;
+constexpr const char* TTP_LITE_MODELS[] = { "set-orchard-block", "set-orchard-block-b", "set-village-fete" };
+constexpr int TTP_LITE_MODEL_COUNT = 3;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.
