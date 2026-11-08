@@ -778,7 +778,11 @@ constexpr LandDef kLand_avalanche[] = {
   { 3, 3, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.9e66666666666p+4, 0x1.9333333333333p+4, 0x0p+0, 0x1.2333333333333p+5, 0x1.6666666666666p+4, 0x1.6666666666666p+4, 0x0p+0, 0x1.999999999999ap+0, 0x0u, 0x0p+0 },
   { 3, 4, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.a99999999999ap+4, 0x1.9333333333333p+4, 0x0p+0, 0x1.2333333333333p+5, 0x1.6666666666666p+4, 0x1.6666666666666p+4, 0x0p+0, 0x1.999999999999ap+0, 0x0u, 0x0p+0 },
   { 3, 5, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.a99999999999ap+4, 0x1.9333333333333p+4, 0x0p+0, 0x1.2333333333333p+5, 0x1.6666666666666p+4, 0x1.6666666666666p+4, 0x0p+0, 0x1.999999999999ap+0, 0x0u, 0x0p+0 },
-  { 0, -1, 0x1.a3d70a3d70a3dp-1, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.6p+5, 0x1.cp+3, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x1.2p+3, 0x1.2p+3, 0x1.999999999999ap-3, 0x1p+0, 0xa8b2c4u, 0x0p+0 },
+  { 0, -1, 0x1.6e631f8a0902ep-1, 0x1.8p+4, -0x1.94p+6, -0x1.999999999999ap-1, 0x0p+0, 0x1p+5, 0x1.4p+3, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1p+3, 0x1.cp+3, 0x1.3333333333333p-2, 0x1p+0, 0x0u, 0x1.e666666666666p+1 },
+  { 0, -1, 0x1.6b0f27bb2fec5p-1, 0x1.0d9999999999ap+6, 0x0p+0, 0x1.3333333333333p-1, -0x1.8p+0, 0x0p+0, 0x1.fp+5, 0x1.fp+5, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x1.999999999999ap-4, 0x1p+0, 0x0u, 0x1.e666666666666p+1 },
+  { 0, -1, 0x1.ab780346dc5d6p-1, 0x1.a0ccccccccccdp+5, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x1.4p+4, 0x1.fp+5, 0x1.fp+5, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x1.999999999999ap-4, 0x1p+0, 0x0u, 0x1.e666666666666p+1 },
+  { 0, -1, 0x1.ac985f06f6944p-1, 0x1p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+4, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.4p+3, 0x0p+0, 0x1p+0, 0x0u, 0x1.e666666666666p+1 },
+  { 0, -1, 0x1.b7a786c22680ap-1, 0x1.ee66666666666p+5, 0x0p+0, -0x1.199999999999ap+2, 0x1.4cccccccccccdp+1, 0x0p+0, 0x1.4p+5, 0x1.4p+5, 0x0p+0, 0x0p+0, 0x1.2p+4, 0x1.2p+4, 0x1.999999999999ap-4, 0x1p+0, 0x0u, 0x1.e666666666666p+1 },
 };
 
 constexpr WptDef kW_ribbon[] = {
@@ -2060,7 +2064,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 2, kLand_powder, 5 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 4, kLand_flurry, 22 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 6, kLand_glacier, 11 },
-  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 8, kLand_avalanche, 7 },
+  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 8, kLand_avalanche, 11 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 7, kLand_ribbon, 8 },
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 7, kLand_pretzel, 3 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 13, kLand_tangle, 2 },

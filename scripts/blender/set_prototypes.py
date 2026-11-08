@@ -3013,18 +3013,21 @@ def warning_sign():
         snow_heap((-0.5, -0.1, -0.5), 0.5, yaw=0.3)
     draped('sign', sign)
 
-# ---- Avalanche: the galleries, and the cut in the slope they stand in ----
+# ---- Avalanche: the galleries, and the cut in the mountainside they stand in ----
 #
-# The road runs under the slope on the outside of the lap's last loop, in two
-# stretches: the descent into the bend and the run to the slide's foot, then
-# the straight after the slide. Each is one piece placed astride the road (lat
-# 0, yaw 0): a snow shed over the road and the cut in the mountainside it is
-# built into. Both follow the road through its bends, which a rigid box cannot,
-# so each piece carries the road's centreline in its own frame (ROAD_A,
-# ROAD_B: (x, z, nx, nz, deck) a unit apart along the road, (nx, nz) the road's
-# valley-ward normal, `deck` its height). They were sampled from the built
-# track (ttp_track_frames_json) at the placements tracks.js gives them, so the
-# two move together: re-sample if either does.
+# The road runs under the mountains on the outside of the lap's last loop, in
+# two stretches: the bend and the run to the slide's foot, then the straight
+# after the slide. The mountainside is the track's terrain (tracks.js avalanche
+# `land`, standing `near` the kerb); each stretch is one piece placed astride
+# the road (lat 0, yaw 0): a snow shed over the road and the cut its foot was
+# blasted back by. Both follow the road through its bends, which a rigid box
+# cannot, so each piece carries the road's centreline in its own frame
+# (ROAD_A, ROAD_B: (x, z, nx, nz, deck) a unit apart along the road, (nx, nz)
+# the road's valley-ward normal, `deck` its height) and the land beside it
+# (FACE_A, FACE_B). They were sampled from the built track
+# (ttp_track_frames_json, and the drawn ground) at the placements tracks.js
+# gives them, so they move together: re-sample if the road, the placement or
+# the land does.
 
 ROAD_A = (  # about u 0.825, from u 0.782 to 0.8687
     (3.868, -18.975, 0.7873, 0.6165, 0.36), (3.284, -18.168, 0.8202, 0.5721, 0.295),
@@ -3065,6 +3068,50 @@ ROAD_B = (  # about u 0.722, from u 0.682 to 0.7471
     (0.3, 7.543, 0.9955, -0.0947, 0.048), (0.408, 8.532, 0.9911, -0.1333, 0.091),
     (0.562, 9.525, 0.981, -0.1939, 0.144), (0.782, 10.489, 0.9647, -0.2634, 0.207),
     (1.074, 11.453, 0.947, -0.3212, 0.272))
+# The ground beside each gallery's road as the renderer draws it (the cut
+# stands in front of it, cut_face): per sample of ROAD_A / ROAD_B, the
+# display's groundY over the plain at FACE_L hill-ward of the centreline
+# along the sample's normal. The land, the road and the band all shape it.
+FACE_L = (5.5, 6.5, 7, 7.5, 8, 9, 10, 11, 12, 13.5)
+FACE_A = (
+    (0.1, 0.1, 0.4, 0.8, 1.1, 1.9, 2.7, 3.3, 3.8, 4.4), (0.1, 0.1, 0.5, 0.9, 1.2, 2.1, 3.0, 3.8, 4.3, 5.0),
+    (0.1, 0.1, 0.7, 1.2, 1.6, 2.7, 3.7, 4.5, 5.1, 5.9), (0.1, 0.1, 0.7, 1.4, 1.9, 3.0, 4.3, 5.2, 5.8, 6.7),
+    (0.1, 0.1, 0.6, 1.3, 1.9, 3.2, 4.5, 5.8, 6.5, 7.4), (0.1, 0.1, 1.0, 1.7, 2.4, 3.9, 5.3, 6.6, 7.2, 8.2),
+    (0.1, 0.1, 1.1, 2.0, 2.7, 4.3, 6.0, 7.2, 7.9, 8.9), (0.1, 0.1, 0.9, 1.9, 2.8, 4.5, 6.2, 7.9, 8.6, 9.6),
+    (0.1, 0.1, 1.1, 2.1, 3.0, 4.9, 6.6, 8.3, 9.1, 10.2), (0.1, 0.2, 1.3, 2.3, 3.2, 5.1, 7.0, 8.7, 9.5, 10.6),
+    (0.1, 0.1, 1.2, 2.3, 3.3, 5.2, 7.2, 8.9, 9.7, 10.9), (0.1, 0.1, 1.1, 2.2, 3.3, 5.3, 7.2, 9.0, 9.9, 11.1),
+    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.1, 10.0, 11.2), (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3),
+    (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3), (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.4),
+    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.1, 11.4), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.3),
+    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2),
+    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 9.9, 11.1),
+    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 9.9, 11.0), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 9.9, 11.0),
+    (0.1, 0.1, 1.0, 2.1, 3.3, 5.4, 7.3, 9.3, 10.0, 10.9), (0.1, 0.2, 1.1, 2.2, 3.3, 5.4, 7.4, 9.3, 10.0, 10.9),
+    (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0), (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0),
+    (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.5, 10.1, 11.0), (0.2, 0.2, 1.1, 2.2, 3.3, 5.5, 7.4, 9.4, 10.1, 11.0),
+    (0.2, 0.2, 1.2, 2.4, 3.5, 5.5, 7.5, 9.4, 10.4, 11.3), (0.2, 0.3, 1.3, 2.4, 3.4, 5.5, 7.3, 9.2, 10.3, 11.6),
+    (0.2, 0.2, 1.2, 2.2, 3.3, 5.2, 7.1, 9.0, 10.0, 11.6), (0.2, 0.9, 1.4, 2.5, 3.5, 5.1, 7.0, 8.8, 9.6, 11.3),
+    (0.6, 1.7, 2.2, 2.7, 3.8, 5.3, 6.8, 8.5, 9.5, 10.7), (1.3, 2.4, 3.0, 3.5, 4.1, 5.4, 6.7, 8.1, 8.8, 9.9),
+    (1.9, 3.1, 3.6, 4.2, 4.8, 5.8, 6.6, 7.2, 7.7, 8.6), (2.2, 3.0, 3.4, 3.7, 4.1, 4.8, 5.5, 5.9, 6.2, 6.7),
+    (1.3, 2.0, 2.3, 2.6, 3.0, 3.6, 4.2, 4.5, 4.8, 5.2), (0.5, 0.8, 1.1, 1.4, 1.7, 2.2, 2.8, 3.2, 3.4, 3.7),
+    (0.4, 0.6, 0.7, 0.8, 0.9, 1.2, 1.4, 1.7, 2.0, 2.3))
+FACE_B = (
+    (0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3, 0.4), (0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.3, 0.4),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4), (0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4),
+    (0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.4, 0.7), (0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.5, 0.7, 1.0),
+    (0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.3, 0.6, 1.0, 1.5), (0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 0.9, 1.3, 1.7, 2.3),
+    (0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 1.3, 1.9, 2.3, 3.0), (0.0, 0.0, 0.0, 0.0, 0.1, 0.5, 1.2, 1.9, 2.7, 3.6),
+    (0.0, 0.0, 0.6, 0.7, 0.8, 1.7, 2.6, 3.4, 4.2, 5.3), (0.0, 0.0, 0.6, 1.3, 1.8, 2.8, 4.5, 5.5, 6.4, 7.7),
+    (0.0, 0.0, 0.8, 1.5, 2.1, 3.7, 5.4, 7.1, 8.0, 9.4), (0.0, 0.0, 1.2, 2.1, 2.8, 4.4, 6.2, 7.9, 8.4, 9.9),
+    (0.0, 0.0, 1.2, 2.5, 3.2, 4.9, 6.8, 8.5, 9.0, 10.2), (0.0, 0.0, 1.2, 2.4, 3.6, 5.3, 7.3, 9.1, 9.6, 10.5),
+    (0.0, 0.0, 1.0, 2.3, 3.5, 5.7, 7.6, 9.6, 10.1, 11.0), (0.0, 0.0, 1.0, 2.2, 3.4, 5.6, 7.5, 9.4, 9.9, 10.7),
+    (0.0, 0.0, 1.0, 2.1, 3.3, 5.5, 7.4, 9.3, 9.8, 10.5), (0.0, 0.0, 1.0, 2.1, 3.2, 5.4, 7.3, 9.2, 9.6, 10.3),
+    (0.0, 0.0, 0.9, 2.1, 3.2, 5.3, 7.1, 9.0, 9.5, 10.1), (0.0, 0.0, 0.4, 1.5, 2.6, 4.2, 6.0, 7.9, 8.4, 9.1),
+    (0.0, 0.0, 0.0, 0.7, 1.8, 3.2, 4.4, 6.3, 7.0, 7.6), (0.0, 0.0, 0.0, 0.2, 0.9, 2.3, 2.8, 4.6, 5.3, 6.1),
+    (0.0, 0.0, 0.0, 0.2, 0.4, 1.3, 1.8, 2.8, 3.5, 4.4), (0.0, 0.0, 0.0, 0.2, 0.3, 0.7, 1.2, 1.7, 2.2, 3.2),
+    (0.0, 0.0, 0.0, 0.2, 0.3, 0.6, 1.1, 1.6, 2.0, 2.9), (0.0, 0.0, 0.0, 0.1, 0.3, 0.6, 0.9, 1.4, 1.7, 2.5),
+    (0.0, 0.0, 0.0, 0.1, 0.2, 0.5, 0.8, 1.2, 1.4, 2.0), (0.0, 0.0, 0.0, 0.1, 0.3, 0.5, 0.8, 1.1, 1.3, 1.7),
+    (0.0, 0.0, 0.0, 0.2, 0.4, 0.9, 1.2, 1.5, 1.7, 2.1))
 GROUND_Y = -0.517   # Avalanche's plain: where a piece that drapes stands (y = 0 here)
 OVER_GAP = 3.0      # spotIssue: anything over the deck clears it by this
 
@@ -3173,52 +3220,84 @@ CONCRETE, TIMBER = 'grey', 0x8a6a46
 GALLERY_BEAM = 4.0       # a gallery's beams' underside over the plain
 GALLERY_SLAB = (4.32, 4.78)
 
-def cut_run(road, i0, i1, s0, s1, seed, ledge, verge, crags=(), boulders=()):
-    """Avalanche's road cut along the verge from sample i0 to i1: the slope's
-    foot blasted back for the road, broken rock faces stepping up into the
-    mountain behind. From the road out: scree at the foot, a lower face, a
-    ledge, an upper face, the snow slope over it to a crest with rock crags
-    in it. Ribs stand out of the face and gullies cut back into it; the ledge
-    widens to hold snow and narrows to nothing where the two faces run into
-    one; every point is pushed about by a smooth noise and every steep quad
-    breaks into two facets, so no band runs on and nothing repeats. The run
-    rises out of the slope at one end and sinks back into it at the other.
-    Under a gallery (samples s0..s1) the face is the gallery's back wall: it
-    stands nearer the road, in shade, and its ledge is at the roof (`ledge`),
-    so the roof's snow runs on up the mountain. Snow lies wherever a facet is
-    flat enough to hold it. `verge(i)` is how far out the face's foot stands
-    at sample i: further where the road's embankment (a berm) reaches out, so
-    no part of the cut lies in it. DRAPED: every vertex rides the land, so the
-    foot follows the verge and the back runs into whatever rises behind."""
-    VERGE_IN = 5.9
-    rows = []
+def face_ground(face, i, l):
+    """The drawn ground's height over the plain `l` hill-ward of the road's
+    centreline at sample i, from the piece's FACE table (FACE_L apart)."""
+    row = face[i]
+    if l <= FACE_L[0]:
+        return row[0]
+    for k in range(1, len(FACE_L)):
+        if l <= FACE_L[k]:
+            f = (l - FACE_L[k - 1]) / (FACE_L[k] - FACE_L[k - 1])
+            return row[k - 1] + (row[k] - row[k - 1]) * f
+    return row[-1]
+
+def cut_face(road, face, i0, i1, s0, s1, seed, ledge, verge):
+    """Avalanche's road cut, from sample i0 to i1: where the road runs along
+    the mountainside the track's terrain raises beside it (tracks.js
+    avalanche `land`, its forms `near` the kerb), the slope's foot blasted
+    back for the road. The terrain stands up off the verge in one smooth
+    ramp; this is that ramp as broken rock, standing just proud of it so the
+    ground never shows through, and going back under it at its top and at
+    both ends: no base, no crest, no end. From the road out: scree at the
+    foot, a lower face, a ledge, an upper face, and its top following the
+    land up to where it tucks under it. Ribs stand out of the face and
+    gullies cut back into it; the ledge widens to hold snow and narrows to
+    nothing where the two faces run into one; every point is pushed about by
+    a smooth noise and every steep quad breaks into two facets, so no band
+    runs on and nothing repeats. Under a gallery (samples s0..s1) the face is
+    the gallery's back wall: it stands nearer the road, in shade, and its
+    ledge is at the roof (`ledge`), so the roof's snow runs on up the
+    mountain. Snow lies wherever a facet is flat enough to hold it. `verge(i)`
+    is how far out the foot stands at sample i: further where the road's
+    embankment (a berm) reaches out, so no part of the cut lies in it. The
+    land is the FACE table (the drawn ground, sampled), so the rock is built
+    over the plain, not draped: re-sample it whenever the land or the road
+    moves."""
+    VERGE_IN, PROUD = 5.9, 0.25
+    rows, under = [], []
     for i in range(i0, i1 + 1):
         t = float(i - i0)
-        taper = smooth01(t / 4.5) * smooth01((i1 - i) / 4.5)
+        g = lambda l: face_ground(face, i, l)
         shed = smooth01((i - (s0 - 3)) / 3.0) * smooth01(((s1 + 3) - i) / 3.0)
         rib = wobble(t, seed + 6, 2.2)                       # ribs out, gullies back, a few units apart
-        h1 = 2.4 + 0.9 * wobble(t, seed, 7.0) + 0.5 * rib
+        foot = verge(i) + (VERGE_IN - verge(i)) * shed + max(-0.3, -0.6 * rib) * (1 - shed)
+        wl = max(0.0, 0.6 + 0.8 * wobble(t, seed + 1, 4.0))  # the ledge: none at all in places
+        top_l = foot + 2.0 + wl
+        # Only where the land stands up beside the road: a cut in flat snow
+        # is a wall on the plain.
+        taper = smooth01(t / 3.5) * smooth01((i1 - i) / 3.5) * smooth01((g(top_l + 1.0) - 0.8) / 2.0)
+        h2 = g(top_l + 1.0) + 0.3 + 0.4 * wobble(t, seed + 2, 5.0)
+        h1 = h2 * (0.45 + 0.1 * wobble(t, seed, 7.0)) + 0.3 * rib
         h1 += (ledge - h1) * shed
-        wl = max(0.0, 0.7 + 0.9 * wobble(t, seed + 1, 4.0))  # the ledge: none at all in places
-        h2 = h1 + 1.5 + 0.9 * wobble(t, seed + 2, 5.0) + 0.6 * rib
-        h3 = h2 + 0.9 + 0.6 * wobble(t, seed + 3, 3.5)
-        for ci, ch, cw in crags:
-            h3 += ch * max(0.0, 1.0 - ((i - ci) / cw) ** 2) ** 1.5
-        foot = verge(i) + (VERGE_IN - verge(i)) * shed + max(-0.3, -0.75 * rib) * (1 - shed)
+        h2 = max(h2, h1 + 1.0)
         scree = (0.18 + 0.12 * wobble(t, seed + 5, 3.0)) * (1 - shed)
-        toe = -1.0 - 0.1 * shed
-        prof = [(toe, -0.3), (toe * 0.5, 0.05 + 0.6 * scree), (-0.2, 0.2 + scree),
-                (0.2, 0.2 + 0.3 * (h1 - 0.2)), (0.45, 0.2 + 0.55 * (h1 - 0.2)), (0.75, 0.2 + 0.8 * (h1 - 0.2)),
-                (1.0, h1), (1.0 + wl, h1 + 0.15 + 0.1 * wl),
-                (1.35 + wl, h1 + 0.4 * (h2 - h1)), (1.75 + wl, h1 + 0.75 * (h2 - h1)), (2.05 + wl, h2),
-                (3.2 + wl, h2 + 0.5 * (h3 - h2)), (4.3 + wl, h3), (6.0 + wl, -0.6)]
-        row = []
+        tuck = top_l + 2.6 + 0.5 * wobble(t, seed + 3, 3.5)
+        g0 = g(foot)
+        prof = [(foot - 0.9, g(foot - 0.9) - 0.3), (foot - 0.45, g0 + 0.05 + 0.6 * scree), (foot - 0.15, g0 + 0.2 + scree),
+                (foot + 0.15, g0 + 0.2 + 0.3 * (h1 - g0 - 0.2)), (foot + 0.4, g0 + 0.2 + 0.55 * (h1 - g0 - 0.2)),
+                (foot + 0.7, g0 + 0.2 + 0.8 * (h1 - g0 - 0.2)), (foot + 0.95, h1), (foot + 0.95 + wl, h1 + 0.15 + 0.1 * wl),
+                (foot + 1.3 + wl, h1 + 0.4 * (h2 - h1)), (foot + 1.7 + wl, h1 + 0.75 * (h2 - h1)), (top_l, h2),
+                (tuck - 1.6, None), (tuck - 0.7, None), (tuck, None)]
+        row, low = [], []
         for j, (d, y) in enumerate(prof):
             if 3 <= j <= 12:
-                d += 0.5 * noise2(t / 1.6, j * 0.9, seed + 11)
-                y += (0.55 if j < 10 else 0.3) * noise2(t / 1.4 + 7.3, j * 1.1, seed + 12) * min(1.0, y / 1.5)
-            row.append(on_road(road, i, -(foot + d), taper * y - (1 - taper) * 0.4))
+                # never so far that a row crosses its neighbour (a fold
+                # reads as a white sliver or a spike)
+                d += (0.12 if j <= 6 else 0.35) * noise2(t / 1.6, j * 0.9, seed + 11)
+            if j == len(prof) - 1:
+                y = g(d) - 0.6                               # under the land again
+            elif y is None:
+                y = g(d) + (0.45 if j == 11 else 0.3)
+            if 3 <= j <= 10:
+                y += 0.4 * noise2(t / 1.4 + 7.3, j * 1.1, seed + 12) * min(1.0, y / 1.5)
+            if 2 <= j < len(prof) - 1:
+                y = max(y, g(d) + PROUD)                     # proud of the ramp it stands in front of
+            y = g(d) + taper * (y - g(d)) - (1 - taper) * 0.4
+            row.append(on_road(road, i, -d, y))
+            low.append(y < g(d) - 0.05)
         rows.append(row)
+        under.append(low)
     in_shed = lambda r: s0 <= r + i0 <= s1
     # Rock is dark where a facet turns from the light and pale where it
     # faces it, so the dark runs in whole facets with the rock's shape
@@ -3226,32 +3305,28 @@ def cut_run(road, i0, i1, s0, s1, seed, ledge, verge, crags=(), boulders=()):
     # is in its shade but for the facets turned to the mouth a racer comes
     # in by, which catch the daylight from it.
     L = (0.55, 0.75, 0.37)
+    # Over its top, where it follows the land up to the tuck, it is the
+    # mountainside's own: whole quads, rock where the land is steep and snow
+    # where it eases, as the terrain's slope rock is (a split quad there,
+    # one half snow and one rock, ran along the top as a white zigzag).
+    TOP = 10
     def color(r, j, n):
+        if j >= TOP:
+            return SNOW if n[1] > 0.77 else ROCK
         if n[1] > 0.6:
             return SNOW
         if in_shed(r) and j <= 6:
             return ROCK if n[2] < -0.3 else SHADE
         return ROCK if n[0] * L[0] + n[1] * L[1] + n[2] * L[2] > 0.25 else SHADE
-    # In chunks a draw each (a 40 u run in one part is never culled), each
-    # its own drape so the grid's chords lay it as drawn.
+    # In chunks a part each (a 40 u run in one part is never culled).
     CH = 10
-    for c, a in enumerate(range(0, len(rows) - 1, CH)):
-        part = rows[a:a + CH + 1]
-        def build(part=part, a=a):
-            for o in sheet(part, lambda r, j, n: color(r + a, j, n), 'cut', facet=lambda r, j: 2 <= j <= 12):
-                if o['swatch'] == 'white':
-                    snowy(o, 0.45)
-        draped('cut%d' % c, build)
-    def fallen():
-        with plain_parts():
-            for k, (i, off, s) in enumerate(boulders):
-                x, y, z = on_road(road, i, -(verge(i) - off), 0.0)
-                yaw = road_yaw(road, i) + 1.3 * k
-                box((s * 1.25, s * 0.75, s), (x, s * 0.25, z), ROCK, yaw=yaw, roll=0.2 * math.sin(k * 2.1))
-                if k % 2 == 0:
-                    snowy(box((s * 1.0, s * 0.2, s * 0.8), (x, s * 0.68, z), SNOW, yaw=yaw + 0.15), 0.45)
-    if boulders:
-        draped('scree', fallen)
+    for a in range(0, len(rows) - 1, CH):
+        # a quad wholly under the land (the toe, the tapered ends) is no one's
+        hidden = lambda r, j, a=a: all(under[r + a + di][j + dj] for di in (0, 1) for dj in (0, 1))
+        for o in sheet(rows[a:a + CH + 1], lambda r, j, n, a=a: color(r + a, j, n), 'cut', skip=hidden,
+                       facet=lambda r, j: 2 <= j < TOP):
+            if o['swatch'] == 'white':
+                snowy(o, 0.45)
 
 def gallery_shed(road, s0, s1, seed):
     """An avalanche gallery over the road from sample s0 to s1, at its real
@@ -3318,25 +3393,37 @@ def gallery_shed(road, s0, s1, seed):
             x, _, z = on_road(road, i, 5.9 + 0.25 * over, 0)
             cyl(0.02, ln, (x, SLAB1 - 0.32 * over + 0.06 - ln, z), 'sky', r2=0.11, segs=3, stem=True)
 
+def fallen_rock(road, boulders):
+    """Rocks come down off the face onto the verge at its foot: (sample, how
+    far out from the road's centreline, size). DRAPED: each lies on the land
+    as drawn there, the mountainside's foot."""
+    def build():
+        with plain_parts():
+            for k, (i, l, s) in enumerate(boulders):
+                x, y, z = on_road(road, i, -l, 0.0)
+                yaw = road_yaw(road, i) + 1.3 * k
+                box((s * 1.25, s * 0.75, s), (x, s * 0.25, z), ROCK, yaw=yaw, roll=0.2 * math.sin(k * 2.1))
+                if k % 2 == 0:
+                    snowy(box((s * 1.0, s * 0.2, s * 0.8), (x, s * 0.68, z), SNOW, yaw=yaw + 0.15), 0.45)
+    draped('scree', build)
+
 @piece(1.0)
 def avalanche_gallery():
-    # Avalanche: the long gallery on the straight under the slope, and the
-    # cut it is built into, from the slide's runout to the bend at the end.
-    cut_run(ROAD_A, 1, 39, 7, 35, seed=3.0, ledge=5.0, verge=lambda i: 6.5 + 0.4 * smooth01((8 - i) / 3.0),
-            crags=((9, 1.6, 2.0), (17, 2.2, 1.6), (24, 1.3, 2.2), (31, 1.9, 1.7)),
-            boulders=((2, 0.9, 0.5), (3, 0.4, 0.35), (37, 0.8, 0.55), (38, 0.3, 0.4)))
+    # Avalanche: the long gallery on the straight after the slide, the cut
+    # it is let into, and rock fallen at its mouths.
+    cut_face(ROAD_A, FACE_A, 1, 39, 7, 35, seed=3.0, ledge=5.0, verge=lambda i: 6.5 + 0.4 * smooth01((8 - i) / 3.0))
     gallery_shed(ROAD_A, 7, 35, seed=3.0)
+    fallen_rock(ROAD_A, ((3, 6.0, 0.5), (4, 6.5, 0.35), (36, 6.0, 0.55), (37, 6.6, 0.4)))
 
 @piece(1.0)
 def avalanche_gallery_short():
     # Avalanche: the shorter gallery on the run to the slide's foot, and the
-    # cut round the bend before it, which a racer coming down the descent
-    # looks straight at.
-    cut_run(ROAD_B, 1, 29, 15, 24, seed=11.0, ledge=5.0,
-            verge=lambda i: 6.5 + 1.4 * smooth01((14 - i) / 3.0) + 0.35 * smooth01((i - 24) / 2.0),
-            crags=((3, 1.5, 1.8), (8, 2.0, 1.6), (18, 1.4, 2.0)),
-            boulders=((2, 0.7, 0.45), (4, 0.7, 0.6), (6, 0.7, 0.5), (7, 0.5, 0.35), (9, 0.8, 0.5), (28, 0.8, 0.45)))
+    # cut through the spur's toe it is let into, which a racer coming round
+    # the bend before it looks straight at.
+    cut_face(ROAD_B, FACE_B, 1, 29, 15, 24, seed=11.0, ledge=5.0,
+             verge=lambda i: 6.5 + 1.4 * smooth01((14 - i) / 3.0) + 0.35 * smooth01((i - 24) / 2.0))
     gallery_shed(ROAD_B, 15, 24, seed=11.0)
+    fallen_rock(ROAD_B, ((10, 6.6, 0.5), (12, 6.9, 0.35), (13, 6.4, 0.45), (26, 6.2, 0.45)))
 
 # ====================================================================================
 # BACKYARD

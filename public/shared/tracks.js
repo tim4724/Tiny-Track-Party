@@ -627,20 +627,30 @@ export const TRACKS = {
       { model: 'set-warning-sign', u: 0.374, lat: 22.5, yaw: 55 },
       { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
       { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 },
-      // Where the road runs under the slope, on the outside of the last
+      // Where the road runs under the mountains, on the outside of the last
       // loop, it is cut into the mountainside and roofed over: two galleries,
       // each with the cut it stands in, astride the road. The shorter on the
-      // run to the slide's foot, its cut wrapping the bend before it; the
+      // run to the slide's foot, in the cut through the spur's toe; the
       // longer on the straight after the slide. Each piece carries the road's
-      // centreline in its own frame (set_prototypes.py ROAD_A, ROAD_B), so a
-      // gallery's u here and its samples there move together.
+      // centreline and the land beside it in its own frame (set_prototypes.py
+      // ROAD_A/FACE_A, ROAD_B/FACE_B), so a gallery's u here, its samples
+      // there and the land below move together: re-sample them after either.
       { model: 'set-avalanche-gallery-short', u: 0.722, lat: 0 },
       { model: 'set-avalanche-gallery', u: 0.825, lat: 0 }
     ],
-    // the slope the long gallery's cut is in, rising behind it: clear of the
-    // slide's and the fences' mounds, which would swallow it (landforms)
+    // The mountains round the last loop, its outside a cirque the slide comes
+    // down into: a spur off the western massif runs down to the kerb, the
+    // short gallery's cut through its toe; the southern massif's flank stands
+    // off the verge along the long gallery's straight, a peak on it and a
+    // lower one toward the fences' slope. Every flank stands `near` the kerb
+    // (the galleries' cuts stand in front of it) and joins the slide's
+    // mountain either side of its chute, clear of its forest.
     land: [
-      { kind: 'ridge', u: 0.82, lat: 24, len: 44, r: 14, h: 9, top: 0.2, tint: 0xa8b2c4 }
+      { kind: 'ridge', u: 0.7156, lat: 24.0, yaw: -101, x: -0.8, len: 32, r: 10, r1: 24, h: 8, h1: 14, top: 0.3, near: 3.8 },
+      { kind: 'ridge', u: 0.7091, lat: 67.4, x: 0.6, z: -1.5, r: 62, h: 28, top: 0.1, near: 3.8 },
+      { kind: 'ridge', u: 0.8349, lat: 52.1, yaw: 3, len: 20, r: 62, h: 28, top: 0.1, near: 3.8 },
+      { kind: 'ridge', u: 0.8371, lat: 64.0, r: 20, h: 10, near: 3.8 },
+      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
