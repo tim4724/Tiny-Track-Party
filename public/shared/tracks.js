@@ -471,7 +471,8 @@ export const TRACKS = {
     // a headland between the two bends. The crew's camp smokes on the sand
     // at the first bend, and their lookout watches the east beach from its
     // tower on the grassy rise by the palms there. The east foothill falls
-    // away toward its north end so the ship shows over it down the straight.
+    // away toward its north end and carries no grove, so the ship shows over
+    // it down the straight.
     // The sea cannot come to the start: the curve is polar about the origin,
     // which lies on the start straight, so its outer side is never the
     // road's reach (native/renderer/CLAUDE.md).
@@ -484,7 +485,6 @@ export const TRACKS = {
       // the cave and the lookout level nothing (their gear drapes) and the
       // land's 9 u chords rise under them, so each is lifted onto them
       { model: 'set-smugglers-cave', u: 0.975, lat: -7.3, yaw: 180, y: 1.35 },
-      { model: 'set-jungle-grove', u: 0.3, lat: -12, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.915, lat: -12, yaw: 180 },
       { model: 'set-pirate-lookout', u: 0.205, lat: 14, y: 2.6 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
@@ -502,7 +502,7 @@ export const TRACKS = {
       // the island's peak in the middle of the lap; its foothills come down
       // to the east straight and the start straight
       { kind: 'ridge', u: 0.27, lat: -32, len: 40, r: 24, r1: 20, h: 15, h1: 9, top: 0.15, tint: 0x3fae52 },
-      { kind: 'ridge', u: 0.23, lat: -21, len: 36, r: 18, r1: 12, h: 5.5, h1: 2, top: 0.2, near: 4, tint: 0x7ab878 },
+      { kind: 'ridge', u: 0.22, lat: -21, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.96, lat: -22, len: 40, r: 18, h: 5, top: 0.2, near: 6, tint: 0x7ab878 },
       // the spur the cave is cut into
       { kind: 'ridge', u: 0.975, lat: -11.8, len: 10, r: 6, h: 3.2, top: 0.25, near: 1.1, tint: 0x7ab878 },
