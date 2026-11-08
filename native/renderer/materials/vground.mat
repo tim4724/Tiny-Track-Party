@@ -31,7 +31,7 @@
 // ROCK WHERE THE LAND IS STEEP, decided per FACET, so its edge is the mesh's
 // own and as crisp as the rock set pieces' cut faces: the ground's vertex
 // alpha is 0 on every corner of a rock triangle and 1 on every other, exactly
-// (TtpRenderer::gateRock decides, and splits a corner rock and snow share),
+// (TtpRenderer::gateRock decides, and splits a corner a rock facet shares),
 // so the branch covers whole facets. Never an interpolated weight or a
 // noise: either blurs the edge into blobs. The structures and berms keep 1,
 // so most fragments skip the branch. Rock is strata of rockA and rockB, each topped

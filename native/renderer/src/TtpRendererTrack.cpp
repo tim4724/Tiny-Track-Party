@@ -1141,27 +1141,16 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
 
 // Each biome's rock (vground.mat), display-encoded like the canvas. The
 // colours are the rock set pieces' own (set_prototypes.py): the canyon's brown
-// and salmon cliffs on tan benches, the snow cut's grey (one grey, no bands:
-// its faces are cut, not layered). A ground facet is rock where its normal's
+// and salmon cliffs on tan benches. A ground facet is rock where its normal's
 // y is under `upY`: the badlands break to rock soonest, but only on a cliff
 // (gateRock's `rise`): a dune, a spoil heap or a road's bank keeps its sand,
 // since banded rock on one paints a striped dome, so strata show on mesas
-// and the massifs' faces; snow keeps every slope a skier would take
-// (Powder's dome stands near 45 degrees and stays white), a lawn only a
-// cliff. The beach has none: its land sinks to the plain short of the sea,
-// so no dune of it is a cliff, and rock on one reads as a canyon.
-//
-// Snow rock comes in MASSES (`massed`): a 9 u facet just past the slope, alone
-// on a snow dome, read as a painted stripe, and one snow facet left in a rock
-// face as a white tooth. So a snow facet is rock only where it belongs to a
-// mass: past the slope with every neighbour past it too (a core), or beside a
-// core and steeper than the fill slope (the mass's rim and the notches in
-// it); and a facet whose every neighbour is rock is rock. A lone sheer facet
-// stays snow too: grey, it stood out of the slope as a tooth. The verge band
-// is never rock: its rows run with the road, so a mass on it had the road's
-// straight edges and read as a stripe along the mountainside, and a sheer
-// facet alone as a spike. A cut at the kerb is a set piece's (Avalanche's
-// galleries).
+// and the massifs' faces; a lawn only on a cliff. The beach has none: its land
+// sinks to the plain short of the sea, so no dune of it is a cliff, and rock on
+// one reads as a canyon. Snow has none either: a 9 u facet is too big to be a
+// crag, and rock on one read as a grey panel painted on the slope (alone, in a
+// small mass, or a whole face of them). Its rock is geometry: crags draped on
+// the massifs' crests (set_prototypes.py `crag`), the galleries' cut faces.
 namespace {
 struct GroundRock {
     uint32_t a, b, l;
@@ -1170,21 +1159,16 @@ struct GroundRock {
     float wobble;    // how far (u) the broad lattice bends them
     float ledge;     // the bench's share of a stratum
     float rise;      // how far (u) a run of steep facets must climb to be rock (0: any)
-    bool massed;     // rock only in masses (above), else every facet past the slope
 };
 const GroundRock* groundRock(uint32_t groundKind) {
-    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 0.0f, false };       // past 52 degrees
-    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.866f, 1.0f, 0.3f, 0.12f, 10.0f, false }; // past 30 degrees
-    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f, 0.0f, true };        // past 46 degrees
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 0.0f };       // past 52 degrees
+    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.866f, 1.0f, 0.3f, 0.12f, 10.0f }; // past 30 degrees
     switch (groundKind) {
         case 0: return &lawn;
         case 2: return &redrock;
-        case 3: return &snow;
         default: return nullptr;
     }
 }
-// A massed rock's rim takes a facet beside a core to this slope (36 degrees).
-constexpr float kRockFillUpY = 0.81f;
 // A cliff's run joins through facets this much (in normal y) under the slope
 // too, so one gentler facet in a face does not split it into two short runs.
 constexpr float kRockRunSlack = 0.03f;
@@ -1192,9 +1176,9 @@ constexpr float kRockRunSlack = 0.03f;
 
 // The rock (vground.mat), decided per TRIANGLE here: alpha 0 on a rock
 // facet's corners, 1 on the rest, exact, so the shader's branch covers whole
-// facets and the edge is the mesh's own. A corner shared by rock and snow is
-// split in two (the copy carries the rock's alpha), so no facet's alpha is
-// interpolated across it.
+// facets and the edge is the mesh's own. A corner shared by rock and grass or
+// sand is split in two (the copy carries the rock's alpha), so no facet's
+// alpha is interpolated across it.
 //
 // Where the biome asks a `rise`, only a CLIFF is rock: the steep facets joined
 // through their corners must climb that far between them, so a spoil heap's
@@ -1202,7 +1186,7 @@ constexpr float kRockRunSlack = 0.03f;
 // massif's face is rock to its foot. The band's skirt (a face diving under the
 // grid) is a short run on low land, so its sliver never pokes through the grid
 // as a crawling dotted line of rock.
-void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind, size_t bandTri) {
+void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
     const GroundRock* r = groundRock(groundKind);
     if (!r) return;
     const size_t T = m.idx.size() / 3;
@@ -1242,45 +1226,7 @@ void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind, size_t bandTri) {
             rock[t] = rock[t] && sp.y - sp.x >= r->rise;
         }
     }
-    if (r->massed) {
-        // The grid's facets; the band's are never rock. Each facet's
-        // neighbours across its edges (-1: the mesh's border).
-        const size_t G = std::min(T, bandTri);
-        std::fill(rock.begin() + (ptrdiff_t) G, rock.end(), 0);
-        std::vector<std::pair<uint64_t, uint32_t>> edges;
-        edges.reserve(G * 3);
-        for (size_t t = 0; t < G; t++) {
-            for (size_t k = 0; k < 3; k++) {
-                const uint64_t a = m.idx[t * 3 + k], b = m.idx[t * 3 + (k + 1) % 3];
-                edges.push_back({ std::min(a, b) << 32 | std::max(a, b), (uint32_t) t });
-            }
-        }
-        std::sort(edges.begin(), edges.end());
-        std::vector<std::array<int32_t, 3>> nb(G, { -1, -1, -1 });
-        std::vector<uint8_t> nn(G, 0);
-        for (size_t i = 0; i + 1 < edges.size(); i++) {
-            if (edges[i].first != edges[i + 1].first) continue;
-            const uint32_t s = edges[i].second, u = edges[i + 1].second;
-            if (nn[s] < 3) nb[s][nn[s]++] = (int32_t) u;
-            if (nn[u] < 3) nb[u][nn[u]++] = (int32_t) s;
-            i++;
-        }
-        // Every neighbour rock (the border counts as rock).
-        const auto ringed = [&](const std::vector<uint8_t>& v, size_t t) {
-            for (const int32_t q : nb[t]) if (q >= 0 && !v[(size_t) q]) return false;
-            return true;
-        };
-        std::vector<uint8_t> core(G);
-        for (size_t t = 0; t < G; t++) core[t] = rock[t] && ringed(rock, t);
-        std::vector<uint8_t> massed(G);
-        for (size_t t = 0; t < G; t++) {
-            bool rim = false;
-            for (const int32_t q : nb[t]) rim |= q >= 0 && core[(size_t) q];
-            massed[t] = core[t] || (rim && up[t] < kRockFillUpY);
-        }
-        for (size_t t = 0; t < G; t++) rock[t] = massed[t] || ringed(massed, t);
-    }
-    // The corners: 1 = a snow facet's, 2 = a rock facet's, 3 = both (split).
+    // The corners: 1 = a plain facet's, 2 = a rock facet's, 3 = both (split).
     std::vector<uint8_t> use(m.verts.size(), 0);
     for (size_t t = 0; t < T; t++) {
         for (size_t k = 0; k < 3; k++) use[m.idx[t * 3 + k]] |= rock[t] ? 2 : 1;
@@ -2119,8 +2065,10 @@ const GroundPalette& groundPalette(uint32_t kind) {
                 f[1] = rust ? 0.972f : 1.024f;
                 f[2] = rust ? 0.958f : 1.036f;
             } };
-    static const GroundPalette snow{ 10, 0xedf2f7, // whisper-contrast drift banding
-            [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.012f : 0.988f; } };
+    // Snow is one white: the canvas maps world XZ, so on a mountain's face
+    // its bands stood as vertical pleats down the slope.
+    static const GroundPalette snow{ 1, 0xedf2f7,
+            [](int, float* f) { f[0] = f[1] = f[2] = 1.0f; } };
     static const GroundPalette wood{ 8, 0xc99c68,  // planks: per-board tone
             [](int i, float* f) { f[0] = f[1] = f[2] = 0.96f + ((i * 37) % 5) * 0.02f; } };
     static const GroundPalette lawn{ 8, LAWN_SRGB, // mowing stripes
@@ -2890,7 +2838,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 }
                 for (const uint32_t q : mBandIdx) mGround.idx.push_back(base + q);
             }
-            gateRock(mGround, tb.groundKind, (size_t) rows * cols * 2);
+            gateRock(mGround, tb.groundKind);
             const auto flatQuad = flatSheet;
             flatQuad(-G, -G, mTerrainX0, G);            // west strip
             flatQuad(mTerrainX1, -G, G, G);             // east strip

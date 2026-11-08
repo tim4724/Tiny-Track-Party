@@ -620,7 +620,15 @@ export const TRACKS = {
       // stage flat); it runs back past the bend and ends in its round
       // shoulder a good way short of the fort, whose clearing and capped
       // cells would slice it off (z)
-      { kind: 'ridge', u: 0.185, lat: -38, z: -40, len: 50, r: 34, h: 13, top: 0.2, near: 2.5 }
+      { kind: 'ridge', u: 0.185, lat: -38, z: -40, len: 50, r: 34, h: 13, top: 0.2, near: 2.5 },
+      // ...and four spurs down its face toward the approach and the bend
+      // (yaw -90: +Z runs down the face, x along the spine), each with its
+      // rib on it, so the face is spurs and gullies, not one smooth dome; two
+      // grid cells wide, or the 9 u grid draws them as pyramids
+      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -56, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 4, h1: 0.5 },
+      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -40, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 5, h1: 0.5 },
+      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -24, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 4, h1: 0.5 },
+      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -8, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 3, h1: 0.5 }
     ]
   },
   avalanche: {
