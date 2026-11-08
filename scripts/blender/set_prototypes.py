@@ -2002,6 +2002,129 @@ def ski_lift():
         x, z = x * G, z * G
         pine((x, H(x, z) - 0.6, z), k)   # sunk past the grid's chords
 
+# Powder's second lift runs up the foothills over the start straight's
+# outside (tracks.js powder `land`, its forms `near` the kerb), so it stands
+# on the TRACK's terrain, not a mound of its own: the ground along its line as
+# the renderer draws it, sampled (the display's groundY over the plain) every
+# 2 u along the piece's +X from the bottom wheel to the top wheel. Re-sample
+# whenever the land or the piece moves.
+CHAIRLIFT_GROUND = ((-14.0, 1.0), (-12.0, 0.9), (-10.0, 0.7), (-8.0, 0.5), (-6.0, 0.4), (-4.0, 0.4), (-2.0, 0.3),
+                    (0.0, 0.3), (2.0, 0.3), (4.0, 0.5), (6.0, 1.5), (8.0, 2.4), (10.0, 3.2), (12.0, 4.1), (14.0, 5.1),
+                    (16.0, 6.3), (18.0, 7.5), (20.0, 8.7), (22.0, 9.9), (24.0, 10.2), (26.0, 10.5), (28.0, 10.9),
+                    (30.0, 11.2), (32.0, 11.1), (34.0, 10.5))
+
+def chairlift_ground(x):
+    pts = CHAIRLIFT_GROUND
+    if x <= pts[0][0]:
+        return pts[0][1]
+    for (x0, h0), (x1, h1) in zip(pts, pts[1:]):
+        if x <= x1:
+            return h0 + (h1 - h0) * (x - x0) / (x1 - x0)
+    return pts[-1][1]
+
+@piece(1.0)
+def powder_chairlift():
+    # Powder: the resort's second chairlift, from its base inside the north
+    # loop over the start straight and up the foothills to their crest, the
+    # chairs (skiers riding up, the odd one coming down empty) crossing over
+    # the cars' heads. Placed at u 0.0317, lat 0, yaw 0: +X north, up the
+    # line (the road crosses it at x -3..3), +Z east along the straight. Every
+    # part at its real size; the two towers either side of the road hold the
+    # rope high enough that a chair clears the deck by OVER_GAP. What stands
+    # on the snow lies on it as drawn (drape_), so the piece stands on the
+    # plain and levels nothing; the line is built over the plain against
+    # CHAIRLIFT_GROUND, the towers' and stations' feet down through the hill
+    # to the plain.
+    H = chairlift_ground
+    yaw = math.pi / 2                                 # the line runs along +X
+    X0, X1 = -12.0, 30.0                              # the valley and top wheels
+    y0, y1 = H(X0) + 1.1, H(X1) + 1.1                 # where the chairs are boarded
+    towers = ((-5.0, 5.0), (7.0, 5.6), (17.0, H(17.0) + 3.0), (25.0, H(25.0) + 3.0))
+    line = [(X0, y0)] + list(towers) + [(X1, y1)]
+    def cy(x):
+        for (xa, ya), (xb, yb) in zip(line, line[1:]):
+            if xa <= x <= xb:
+                return ya + (yb - ya) * (x - xa) / (xb - xa)
+        return line[-1][1]
+    for x, h in towers:
+        pylon((x, 0, 0.0), h, yaw)                    # its foot in the hill, down to the plain
+    for s in (-GAUGE, GAUGE):
+        for (xa, ya), (xb, yb) in zip(line, line[1:]):
+            strut((xa, ya, s), (xb, yb, s), 0.07, 0x2a2735)
+    up = [(x, y, GAUGE) for x, y in line]
+    down = [(x, y, -GAUGE) for x, y in reversed(line)]
+    for k, pt in enumerate(up + down):
+        marker('path_plift_%d' % k, pt)
+    COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
+    for k in range(8):
+        x = X0 + (X1 - X0) * (k + 1) / 9
+        at = (x, cy(x), GAUGE)
+        riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
+        with animated('anim_path:c=plift:p=42:o=%.3f:f=1#%d' % (k / 8, k), at):
+            chair(at, yaw, (0xff5040, 0x3f7bd9)[k % 2], riders)
+    # the two stations, their legs down through the snow to the plain
+    station(X0, 0.0, y0, 0.0, yaw)
+    station(X1, 0.0, y1, 0.0, yaw)
+    # On the snow as drawn: the stations' huts, the resort's chalets either
+    # side of the valley station along the straight's verge (doors to the
+    # road), the queue at its gate, the racked skis, the towers' footings.
+    def build():
+        cabin_hut(1.6, 0.9, 1.2, (X0 - 2.0, -0.1, 0.0), 0x9a7b55, 0xeef4f9)
+        cabin_hut(1.6, 0.9, 1.2, (X1 + 2.0, -0.1, 0.0), 0x9a7b55, 0xeef4f9)
+        for (x, z, w, d, wall, ry) in ((-7.5, -6.5, 2.2, 1.6, 0x9a5f3c, 0.15), (-8.0, 6.0, 1.9, 1.5, 0xcf534f, -0.2),
+                                       (-11.0, 10.5, 2.0, 1.5, 0x9a7b55, 0.35), (-11.5, -11.0, 1.8, 1.4, 0x3f7bd9, -0.3)):
+            cabin_hut(w, 0.95, d, (x, -0.15, z), wall, 0xeef4f9, yaw=ry)
+        for k in range(4):
+            snow_person(X0 + 2.4 - 0.32 * k, 0.0, -1.0 + 0.1 * (k % 2), COATS[(k + 1) % 6], COATS[(k + 3) % 6], yaw=math.pi)
+        for k in range(5):
+            box((0.06, 0.44, 0.07), (X0 - 0.6, 0.22, 1.4 + k * 0.16), COATS[k], roll=0.15)
+        for x, _ in towers:
+            box((0.9, 0.5, 0.9), (x, 0.05, 0.0), 0x868ba1)
+    draped('base', build)
+
+# Stands of pines up the foothills the snow tracks' `land` raises by the road
+# (tracks.js powder and flurry), where the verge's scatter never reaches: the
+# white flanks read as mountainside only with forest on them. Each stand is a
+# piece of its own, so its footprint (which keeps the scatter out) is only the
+# stand's. Every tree is (x, z, ground, size) in its piece's frame: the ground
+# the renderer draws there over the plain, SAMPLED (the display's groundY), so
+# re-sample a stand whenever the land under it moves.
+FORESTS = {
+    'powder-forest-a': ((-0.3, 10.0, 11.31, 1.60), (-2.7, 13.2, 10.42, 1.68), (1.0, -10.2, 9.65, 1.73), (-4.1, -1.6, 10.51, 1.92), (-4.5, 5.7, 10.29, 1.82), (4.8, 4.4, 12.51, 1.42), (-7.6, 2.3, 8.88, 1.82), (-5.0, 0.6, 10.29, 1.99), (-0.5, 6.5, 11.59, 1.81), (1.0, -0.4, 12.23, 1.66), (4.0, 8.3, 12.14, 1.43), (6.0, -11.2, 9.84, 1.61), (0.7, 1.6, 12.06, 1.92), (8.0, 5.4, 12.37, 1.58), (-7.2, 6.4, 8.98, 2.11), (9.0, -1.5, 12.28, 1.99), (-1.7, -7.0, 10.32, 1.84), (7.8, -7.2, 11.03, 1.79), (5.9, -4.5, 11.84, 2.03), (-3.1, -13.4, 7.58, 2.15), (0.4, -7.2, 10.57, 1.39), (2.0, -8.7, 10.29, 1.73), (3.1, -13.7, 8.43, 1.43), (0.7, 14.8, 10.82, 1.97)),
+    'powder-forest-b': ((2.4, 9.4, 9.97, 2.01), (4.6, 10.0, 9.73, 2.03), (3.2, -9.8, 11.91, 2.01), (-5.4, 8.0, 7.64, 1.95), (6.2, 0.8, 11.45, 1.91), (6.7, 5.9, 10.17, 1.43), (-6.2, -9.6, 9.39, 1.88), (-0.0, -0.3, 11.07, 2.03), (-5.2, 3.8, 8.21, 1.68), (-3.4, 8.8, 8.13, 2.08), (-5.5, -7.3, 9.61, 1.81), (-4.3, 0.0, 9.26, 2.02), (-4.3, -11.2, 10.48, 1.52), (-2.0, -9.0, 11.40, 1.89), (2.2, 4.6, 10.50, 1.42), (1.1, -9.7, 11.70, 1.48), (-7.4, -3.2, 8.84, 2.01), (8.0, 0.1, 11.67, 1.80), (3.0, -2.3, 11.53, 2.01), (3.6, 7.2, 10.11, 2.15)),
+    'powder-forest-c': ((3.8, -0.8, 12.44, 2.03), (0.0, -3.4, 11.32, 1.93), (0.2, -10.1, 12.05, 1.79), (3.3, -7.2, 12.84, 2.01), (5.5, 6.7, 12.33, 2.08), (2.2, 2.9, 11.55, 1.89), (7.3, -0.3, 13.08, 1.66), (5.3, -3.8, 13.17, 1.44), (7.8, 4.5, 12.91, 1.73), (-7.0, -4.9, 8.66, 2.04), (1.2, -5.7, 11.97, 1.51), (-2.4, -7.0, 10.81, 2.00), (3.9, 2.4, 12.22, 1.94), (6.6, 1.6, 12.82, 1.69), (0.6, 6.9, 10.67, 1.72), (-5.2, 6.5, 8.09, 1.67), (-6.0, -0.7, 8.67, 1.44), (1.5, 9.8, 10.76, 1.77), (-3.0, -9.7, 10.87, 1.35)),
+    'powder-forest-d': ((-7.1, -0.1, 11.31, 1.64), (0.6, 3.7, 16.47, 1.48), (-7.7, 5.8, 9.53, 2.08), (-0.5, 5.5, 15.34, 2.05), (-2.2, 8.0, 12.47, 1.36), (-7.8, -3.5, 10.41, 1.47), (1.3, -4.8, 17.53, 2.10), (-4.1, -1.3, 14.25, 1.89), (-0.9, -0.3, 16.09, 1.95), (8.6, -3.8, 19.02, 1.61), (-9.5, 0.7, 8.20, 2.14), (6.6, -6.1, 18.16, 2.10), (2.5, 8.0, 15.52, 1.93), (-1.7, 4.1, 14.74, 1.58), (2.5, 1.4, 18.15, 1.76), (-1.2, -8.8, 14.37, 1.48), (-0.0, -2.1, 17.10, 1.57)),
+    'powder-forest-e': ((7.9, 1.2, 10.18, 1.74), (0.9, -12.8, 11.29, 1.68), (4.1, 1.2, 11.46, 1.52), (0.7, 8.3, 11.83, 1.62), (1.0, -9.5, 11.43, 1.59), (4.0, -11.8, 10.70, 1.61), (-9.3, -1.4, 13.09, 2.11), (-5.2, -3.1, 12.59, 1.36), (-7.4, 5.1, 11.94, 2.11), (5.1, 9.0, 10.80, 1.47), (-1.0, 1.9, 12.01, 1.87), (2.5, 3.9, 11.29, 1.77), (-4.7, -8.9, 13.05, 1.85), (7.5, 4.0, 9.87, 1.96), (7.5, -1.4, 10.90, 1.53), (4.4, -7.6, 11.26, 1.48), (7.6, -3.9, 11.30, 1.43), (-0.4, -6.2, 12.05, 1.92), (-4.9, 1.4, 12.43, 1.71), (-9.0, -3.8, 13.62, 1.59), (-4.1, -6.1, 12.85, 1.90), (6.3, 5.4, 10.24, 1.50)),
+    'powder-forest-f': ((-1.3, 3.5, 9.27, 1.76), (0.9, -0.9, 10.20, 1.58), (-5.8, -0.1, 7.69, 2.09), (-0.1, 1.5, 10.13, 1.68), (-3.7, 5.2, 7.54, 1.76), (0.8, 5.7, 9.55, 1.64), (3.2, -1.7, 11.22, 1.90), (5.2, 1.5, 11.38, 1.96), (-3.2, -4.2, 7.92, 1.79), (-1.2, 7.2, 8.41, 2.01), (-1.6, -2.4, 8.83, 1.83), (0.2, -6.2, 9.14, 1.79)),
+    'powder-forest-g': ((2.8, -10.2, 11.97, 1.39), (3.5, 3.2, 11.78, 1.83), (-2.5, 10.9, 7.49, 1.35), (-2.8, 5.9, 8.46, 1.77), (4.5, -8.5, 12.72, 2.02), (4.9, -6.1, 12.91, 1.68), (4.9, 5.2, 11.63, 1.45), (1.3, 4.9, 10.72, 1.60), (-5.3, -7.4, 8.20, 2.05), (-1.9, 1.2, 9.91, 1.48), (5.5, 1.6, 12.58, 2.08), (2.2, 7.5, 10.26, 1.42), (2.0, -1.8, 12.11, 1.59), (-0.9, -7.4, 10.55, 2.03), (-4.6, 3.6, 7.80, 1.83), (-2.8, 3.9, 8.82, 1.52), (4.5, 8.6, 10.64, 1.58), (-3.4, -2.6, 9.28, 2.08)),
+    'flurry-forest-a': ((-1.4, 0.0, 9.67, 1.65), (4.5, 1.5, 5.42, 1.38), (-6.6, -4.6, 12.56, 1.85), (-2.7, 1.6, 10.03, 1.99), (-1.0, -5.6, 9.53, 1.70), (-4.5, -10.3, 9.82, 1.78), (2.9, -1.4, 8.29, 1.44), (-6.8, -2.0, 13.18, 1.45), (-5.7, 4.0, 11.77, 1.38), (-7.8, -6.3, 12.82, 1.79), (-0.9, 7.9, 8.00, 1.90), (3.1, -11.8, 7.38, 1.89), (0.0, -2.6, 9.20, 1.85), (-6.1, 1.1, 12.75, 1.61), (-0.4, -11.9, 8.49, 1.50), (6.1, 9.3, 2.92, 1.66), (-3.2, 5.6, 9.95, 1.90), (1.7, -3.7, 8.70, 1.42), (-1.3, 10.4, 7.50, 1.76), (-3.9, -0.4, 11.10, 1.90)),
+    'flurry-forest-b': ((-3.9, -11.3, 19.05, 2.08), (5.7, 0.6, 9.67, 1.63), (7.1, 4.8, 8.17, 1.91), (0.4, -4.2, 13.23, 1.40), (0.0, -0.8, 11.86, 1.79), (2.3, -1.9, 11.87, 2.10), (1.2, -11.0, 18.26, 1.41), (-3.8, -9.0, 17.01, 1.57), (-4.3, 8.0, 11.70, 1.40), (0.9, -9.1, 17.13, 1.65), (-5.6, 2.4, 12.35, 1.48), (4.5, 11.6, 7.77, 2.03), (-2.7, -2.9, 13.25, 1.60), (-1.8, 4.1, 11.24, 2.03), (-7.9, -8.2, 16.76, 1.68), (-1.7, -7.8, 16.04, 1.96), (5.6, -3.3, 10.95, 2.13), (7.4, 2.5, 8.47, 1.86), (1.9, 4.2, 10.00, 1.77), (2.6, 7.1, 9.25, 1.73)),
+    'flurry-forest-c': ((0.8, -2.8, 8.68, 1.69), (5.1, -0.1, 7.25, 1.98), (-0.2, 1.4, 8.83, 1.40), (1.8, -8.7, 8.26, 1.43), (-1.7, -1.2, 9.11, 1.88), (0.5, 7.2, 8.50, 1.54), (0.2, -5.2, 8.70, 1.56), (-1.9, -3.7, 9.06, 1.62), (-1.4, -7.5, 8.88, 1.53), (-2.5, 1.1, 9.13, 1.73), (-4.4, 2.9, 9.29, 1.93), (3.7, 4.3, 7.94, 1.72), (0.8, 4.5, 8.57, 1.51), (-3.6, 6.5, 9.04, 2.00)),
+    'flurry-forest-d': ((2.5, 12.0, 7.00, 2.12), (3.4, 10.4, 7.27, 1.43), (2.6, -0.7, 9.34, 1.46), (0.7, -5.0, 9.57, 1.52), (4.3, 2.7, 9.08, 1.50), (-2.6, -8.1, 10.84, 1.68), (5.4, 1.3, 9.00, 1.60), (-4.1, 3.8, 9.09, 2.11), (2.7, -2.9, 9.34, 1.92), (-2.9, 5.9, 8.75, 2.14), (4.0, -5.4, 9.27, 1.46), (-6.7, -5.4, 9.81, 2.05), (-2.3, 9.3, 7.97, 1.65), (-0.2, 0.4, 9.32, 1.52), (-3.2, -9.9, 11.37, 1.43), (-7.5, -0.4, 9.38, 1.64), (-0.7, 10.6, 7.63, 1.77), (-5.5, 6.1, 8.64, 2.03), (3.1, -7.8, 9.45, 1.82), (-1.4, -4.2, 9.73, 1.58)),
+    'flurry-forest-e': ((-1.2, 5.1, 7.43, 2.13), (5.3, 4.0, 7.19, 2.13), (1.2, 7.2, 6.92, 2.03), (-4.5, -4.0, 6.70, 1.59), (-2.9, 4.3, 7.19, 1.50), (5.1, 0.2, 7.27, 1.60), (-2.4, 2.0, 7.52, 1.47), (-5.5, 3.0, 6.84, 1.83), (-3.5, 6.0, 6.89, 1.61), (-5.9, -1.2, 6.70, 2.11), (0.1, 1.1, 7.73, 1.86), (-0.3, 3.0, 7.71, 1.58), (5.8, -3.8, 7.07, 1.92), (-0.9, 7.7, 6.87, 1.57)),
+}
+
+def forest(trees):
+    """A stand of pines on the sampled ground, each trunk run on down through
+    the hill to the plain (unseen, so unchamfered; it holds the tree up for
+    set-check), and snow heaped at a few of their feet lying on the drawn
+    slope (drape_), so the stand stands on the plain and levels nothing."""
+    for x, z, g, k in trees:
+        pine((x, g - 0.35 * k, z), k)
+        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    join_still('pines')
+    def heaps():
+        for i, (x, z, g, k) in enumerate(trees[::4]):
+            snow_heap((x + 0.9, -0.1, z + 0.4), 0.55, yaw=1.7 * i)
+    draped('heaps', heaps)
+
+# Each stand and its lite build (every other tree: a stand up a slope is what
+# the box's cells barely see; native/renderer/CLAUDE.md, the detail tier).
+for _name, _trees in FORESTS.items():
+    for _n, _t in ((_name, _trees), (_name + '-lite', _trees[::2])):
+        PIECES[_n] = (lambda trees: lambda: forest(trees))(_t)
+        GROW[_n] = 1.0
+
 def skater(x, y, z, coat, hat, k=1.0):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
     arms straight out for balance, a hat and a scarf in a second colour: nine
@@ -2452,6 +2575,121 @@ def log_cabin():
     woodpile(0.2, -2.2, 0.3)
     snow_person(1.8, 0, -0.6, 0x3f7bd9, 0xcf534f, yaw=-0.4)
     join_still('cabins')
+
+def ramp(a, b, w, t, color):
+    """A deck `w` wide and `t` thick under the line from glTF point a to b, its
+    top on the line: a span of a ski jump's in-run."""
+    dx, dy, dz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+    L = math.sqrt(dx * dx + dy * dy + dz * dz)
+    h = math.hypot(dx, dz)
+    nx, ny, nz = -dx * dy / (L * h), h / L, -dz * dy / (L * h)      # the deck's up
+    mid = ((a[0] + b[0]) / 2 - nx * t / 2, (a[1] + b[1]) / 2 - ny * t / 2, (a[2] + b[2]) / 2 - nz * t / 2)
+    return box((w, t, L), mid, color, yaw=math.atan2(dx, dz), pitch=math.atan2(dy, h))
+
+@piece(1.0)
+def ski_jump():
+    # Flurry: the village's ski jump on the hill past the west loop, its
+    # landing hill (SET_GROUND, a mound whose flank falls convex from the
+    # knoll, steepest halfway and easing into the outrun) facing the start
+    # straight, which drives straight up its axis at it as a crowd in the
+    # stand would look. At its real size beside a car: the in-run a concrete
+    # tower and a red-sided ramp on legs, rising a dozen units over the
+    # knoll at 33 degrees, easing through its transition onto the takeoff;
+    # the judges' tower beside the landing hill; distance boards down both
+    # sides of the landing slope, flags at the outrun's end. A jumper rides
+    # it every half minute (anim_path): down the in-run, a long flight close
+    # over the slope, the landing, the outrun, then back under the snow and
+    # up inside the tower to the start. Placed on the west loop's outside at
+    # u 0.0763, lat 11.08, yaw 31.2: +X along the start straight toward the
+    # cars (the outrun ends a few units past the kerb), the in-run behind.
+    H = set_ground('ski-jump')
+    G = lambda x: H(x, 0.0)
+    T0, T1 = -60.0, -40.0                  # the in-run's top (over the tower) and its takeoff edge
+    W = 1.5                                # the in-run's width
+    # The in-run's line, from the takeoff back up: the table at 10 degrees
+    # down, the transition easing it to 33, then straight to the top.
+    s1, s2 = math.tan(math.radians(33.0)), math.tan(math.radians(10.0))
+    def slope(x):
+        return s2 + (s1 - s2) * smooth01((T1 - 1.5 - x) / 4.5)
+    run = [(T1, G(T1) + 0.6)]
+    x = T1
+    while x > T0 + 1e-6:
+        step = min(1.0, x - T0)
+        run.append((x - step, run[-1][1] + slope(x - step / 2) * step))
+        x -= step
+    run.reverse()                          # top to takeoff
+    ytop = run[0][1]
+    TOWER, SIDE, SNOWT, LEG = 0x868ba1, 0xcf534f, 0xf3f7fb, 0x555b66
+    # the deck, its snow track and the low side walls, a span a unit
+    for (xa, ya), (xb, yb) in zip(run, run[1:]):
+        ramp((xa, ya, 0.0), (xb, yb, 0.0), W, 0.3, TOWER)
+        ramp((xa, ya + 0.05, 0.0), (xb, yb + 0.05, 0.0), W - 0.3, 0.1, SNOWT)
+        for s in (-1, 1):
+            ramp((xa, ya + 0.32, s * (W / 2 - 0.08)), (xb, yb + 0.32, s * (W / 2 - 0.08)), 0.16, 0.36, SIDE)
+    # the takeoff's lip, and the legs down to the hill every 3 units, a
+    # pair across, braced; feet sunk past the grid's chords
+    box((W, 0.12, 0.12), (T1, run[-1][1] - 0.06, 0.0), SIDE)
+    for x, y in run[4:-1:3]:
+        g = min(H(x, -0.6), H(x, 0.6))
+        for s in (-1, 1):
+            box((0.22, y - 0.3 - g + 0.5, 0.22), (x, (y - 0.3 + g - 0.5) / 2, s * 0.6), LEG)
+        box((0.14, 0.14, 1.3), (x, (y - 0.3 + g) / 2, 0.0), LEG)
+    # the tower under the in-run's top, the jumpers' lift shaft, and the
+    # start hut on it
+    g = min(H(T0 + dx, dz) for dx in (-1.1, 1.1) for dz in (-1.1, 1.1))
+    box((2.2, ytop - g + 0.4, 2.2), (T0, (ytop + g - 0.4) / 2 - 0.2, 0.0), TOWER)
+    box((2.6, 0.2, 2.6), (T0, ytop - 0.1, 0.0), 0x555b66)
+    cabin_hut(1.4, 1.0, 1.4, (T0 - 0.4, ytop, 0.0), 0xcf534f, 0xeef4f9)
+    flag_across((T0 + 0.9, ytop, 1.0), 1.4, 0x3f7bd9, 'anim_sway:a=x:d=14:p=2.6#top', w=0.9, fh=0.55)
+    # the judges' tower beside the landing hill, its glass to the slope
+    jx, jz = -27.0, 8.0
+    g = min(H(jx + dx, jz + dz) for dx in (-0.9, 0.9) for dz in (-0.8, 0.8))
+    box((1.8, 3.0 + (H(jx, jz) - g), 1.6), (jx, g + (3.0 + H(jx, jz) - g) / 2 - 0.3, jz), 0xfff6eb)
+    box((1.9, 0.6, 0.08), (jx, H(jx, jz) + 2.0, jz - 0.8), 0x2f3a4a)
+    box((2.2, 0.18, 2.0), (jx, H(jx, jz) + 2.75, jz), 0x3f7bd9)
+    # distance boards down both sides of the landing slope, the K point's red
+    COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
+    def boards():
+        for k, x in enumerate(range(-34, -9, 3)):
+            for s in (-1, 1):
+                c = 0xcf534f if x == -19 else (0x3f7bd9 if k % 2 else 0xfff6eb)
+                box((0.7, 0.45, 0.08), (x, 0.3, s * 5.2), c)
+                box((0.08, 0.3, 0.08), (x, 0.0, s * 5.2), 0x555b66)
+        # the outrun's end: a few onlookers either side, still
+        for k in range(5):
+            s = 1 if k % 2 else -1
+            snow_person(-4.5 + 0.5 * k, 0.0, s * (6.2 + 0.3 * k), COATS[k], COATS[(k + 2) % 6], yaw=-s * 1.4)
+    draped('boards', boards)
+    for k, (z, c) in enumerate(((-6.5, 0xcf534f), (6.5, 0x3f7bd9), (-8.5, 0x3f7bd9), (8.5, 0xcf534f))):
+        x = -1.5 - 1.5 * (k // 2)
+        flag_across((x, H(x, z) - 0.2, z), 2.2, c, 'anim_sway:a=x:d=12:p=%.1f#f%d' % (2.3 + 0.3 * k, k))
+    # The jumper's loop: down the in-run on its snow, off the takeoff and
+    # close over the slope to the landing, the outrun, then under the snow
+    # back to the tower and up inside it to the start.
+    XL, XE = -19.0, -3.0
+    pts = [(x, y + 0.18, 0.0) for x, y in run[1:]]
+    y0 = run[-1][1] + 0.18
+    for k in range(1, 9):
+        f = k / 9.0
+        x = T1 + (XL - T1) * f
+        pts.append((x, (1 - f) ** 2 * y0 + (1 - (1 - f) ** 2) * (G(x) + 0.12) + 1.5 * math.sin(math.pi * f) ** 1.5, 0.0))
+    for x in (XL, -15.0, -11.0, -7.5):
+        pts.append((x, G(x) + 0.12, 0.0))
+    # the outrun turns off into the timing hut at its side, and the way back
+    # runs from in there under the snow
+    hx, hz = -5.5, 3.0
+    pts += [(-6.0, H(-6.0, 1.2) + 0.12, 1.2), (hx, H(hx, hz) + 0.12, hz), (hx - 0.3, H(hx, hz) - 1.8, hz)]
+    for x in (-14.0, -24.0, -34.0, -44.0, -52.0, T0):
+        pts.append((x, G(x) - 1.8, 0.0))
+    pts.append((T0, ytop - 0.6, 0.0))
+    for k, p in enumerate(pts):
+        marker('path_jump_%d' % k, p)
+    g = min(H(hx + dx, hz + dz) for dx in (-0.8, 0.8) for dz in (-0.7, 0.7))
+    cabin_hut(1.5, 1.0, 1.3, (hx, g - 0.05, hz), 0x9a7b55, 0xeef4f9, yaw=-math.pi / 2)
+    for k in range(2):
+        x, y, z = pts[3]
+        with animated('anim_path:c=jump:p=30:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
+            skier(x, y - 0.18, z, (0xcf534f, 0x3f7bd9)[k], 0xfff6eb)
 
 # ---- snow companions: small scenes that carry a track's story round its lap ----
 
@@ -3675,6 +3913,74 @@ def glacier_peaks():
             alp(cx + 0.15 * r, cz + side * 0.5 * r * stretch, 0.66 * h, 0.6 * r, seed + 50.0, stretch, turn + 0.5,
                 (0.0, 0.0), sun)
         draped('peak%d' % k, build)
+
+def peak_range(sun, peaks):
+    """A range of alp() peaks, one part each, every one with a lesser summit
+    on its shoulder along the range, to one side or the other, so its skyline
+    breaks in two teeth, not one cone (Glacier's range, glacier_peaks). Each
+    peak is (cx, cz, h, r, stretch, seed, turn, lean) in the piece frame, the
+    range running along Z; `sun` is the renderer's kToSun in that frame."""
+    for k, (cx, cz, h, r, stretch, seed, turn, lean) in enumerate(peaks):
+        side = 1.0 if k % 2 else -1.0
+        def build():
+            alp(cx, cz, h, r, seed, stretch, turn, lean, sun)
+            alp(cx + 0.15 * r, cz + side * 0.5 * r * stretch, 0.62 * h, 0.6 * r, seed + 50.0, stretch, turn + 0.5,
+                (0.0, 0.0), sun)
+        draped('peak%d' % k, build)
+
+@piece(1.0)
+def powder_peaks():
+    # Powder: the range over the start straight's outside, the resort's back
+    # wall, which the long run north drives at and the start straight runs
+    # along: four peaks, each on a summit of the massif behind the foothills
+    # at the kerb (tracks.js powder `land`). Placed at u 0.03, lat -60, yaw
+    # 0: +X north, away from the road, +Z east along the start straight (the
+    # frame Glacier's range has, so the same sun).
+    peak_range((-0.122, 0.979, 0.163), (
+        (-15.0, -72.0, 9.0, 12.0, 1.6, 29.0, 0.3, (0.05, 0.1)),       # west, over the ski mountain's shoulder
+        (10.0, -32.0, 12.0, 14.0, 1.7, 21.0, 0.15, (0.08, -0.06)),
+        (22.0, 13.0, 14.0, 16.0, 1.8, 23.0, -0.1, (-0.05, 0.08)),     # the highest, the horn
+        (-5.0, 55.0, 12.0, 14.0, 1.7, 27.0, 0.2, (0.1, 0.0))))        # east, over the bend
+
+@piece(1.0)
+def flurry_peaks_ne():
+    # Flurry: the peaks on the massif past the east loop's outside, behind
+    # the foothills at its kerb (tracks.js flurry `land`), the range the
+    # crossing's descent and the loop drive at. Placed at u 0.64, lat 45:
+    # +X toward the loop, the range along Z, north-west to south-east.
+    peak_range((-0.021, 0.979, -0.202), (
+        (24.0, -51.4, 11.0, 13.0, 1.6, 31.0, 0.2, (0.05, 0.1)),
+        (11.6, -5.9, 13.0, 15.0, 1.7, 33.0, -0.1, (-0.05, 0.05)),
+        (11.6, 48.6, 12.0, 14.0, 1.7, 35.0, 0.15, (0.08, 0.0))))
+
+@piece(1.0)
+def flurry_peaks_sw():
+    # Flurry: the peaks on the massif past the west loop's outside, behind
+    # the foothills at its kerb, south of the ski jump's hill. Placed at
+    # u 0.12, lat 45: +X toward the loop, the range along Z.
+    peak_range((0.022, 0.979, 0.202), (
+        (-1.3, -3.6, 13.0, 15.0, 1.7, 41.0, 0.1, (0.05, -0.05)),
+        (13.3, 48.5, 11.0, 13.0, 1.6, 45.0, 0.25, (0.05, 0.0))))
+
+@piece(1.0)
+def flurry_peaks_nw():
+    # Flurry: the peaks on the long snow ridge closing the valley's north-west
+    # side (tracks.js flurry `land`, u 0.39 lat -70), which the run north to
+    # the lake and the crossing look over. Placed on the ridge's spine, at
+    # u 0.39, lat -70: +X away from the road, the ridge along Z.
+    peak_range((-0.188, 0.979, 0.079), (
+        (4.0, -28.0, 11.0, 13.0, 1.6, 51.0, 0.15, (0.05, 0.05)),
+        (2.0, -1.0, 8.0, 10.0, 1.5, 53.0, -0.2, (0.0, 0.1)),
+        (4.0, 24.0, 12.0, 14.0, 1.7, 55.0, 0.1, (-0.05, 0.0))))
+
+@piece(1.0)
+def flurry_peaks_se():
+    # Flurry: the peaks on the ridge closing the south-east side (u 0.92
+    # lat -68), over the run in to the start. Placed on its spine: +X away
+    # from the road, the ridge along Z.
+    peak_range((0.190, 0.979, -0.072), (
+        (4.0, -15.0, 11.0, 13.0, 1.6, 61.0, 0.2, (0.05, 0.0)),
+        (3.0, 20.0, 9.0, 11.0, 1.5, 63.0, -0.1, (0.0, -0.08))))
 
 @piece(1.0)
 def avalanche_crags():
