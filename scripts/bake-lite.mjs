@@ -47,7 +47,7 @@ const jobs = process.argv.slice(2).map((arg) => {
   return { model, ratio };
 });
 if (!jobs.length) {
-  for (const [file, src] of Object.entries(sources.models)) {
+  for (const src of Object.values(sources.models)) {
     if (src.generated === SELF) jobs.push({ model: src.from.replace(/\.glb$/, ''), ratio: src.ratio });
   }
 }
