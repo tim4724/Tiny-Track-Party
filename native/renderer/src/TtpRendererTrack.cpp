@@ -1270,7 +1270,9 @@ void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
 
 // The rock's colours, its banding over the plain at `groundY`, and the
 // shading of each facet by its own normal (a gain on the sun's term about a
-// steep face's, so a face reads cut against its neighbours).
+// steep face's, so a face reads cut against its neighbours). The lite tier
+// has no strata: on the box the banding is what a rock pixel costs, and a
+// canyon's walls fill the frame (native/renderer/CLAUDE.md, "The detail tier").
 void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float groundY) const {
     const GroundRock* r = groundRock(groundKind);
     if (!r) return;
@@ -1282,7 +1284,7 @@ void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float
     mi->setParameter("rockA", c(r->a, kGroundTile));
     mi->setParameter("rockB", c(r->b, 0.0f));
     mi->setParameter("rockL", c(r->l, r->ledge));
-    mi->setParameter("strata", float4{ r->perRoot, r->wobble, 0.0f, groundY });
+    mi->setParameter("strata", float4{ mLite ? 0.0f : r->perRoot, r->wobble, 0.0f, groundY });
     mi->setParameter("facet", float4{ kToSun * kFacetGain, 1.0f - kFacetGain * kFacetMid });
 }
 
