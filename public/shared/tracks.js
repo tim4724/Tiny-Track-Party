@@ -947,34 +947,68 @@ export const TRACKS = {
   crag: {
     name: 'Crag', waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
-    // A ranch in butte country: buttes stand at the bends of both loops
-    // and fields of hoodoos between them (rock: big as rock is), and the
-    // ranch, every building at its own size, stands on the open plain at the
-    // head of the long straight: house, barn, water tower, the windpump
-    // turning, the corral with cattle. Out on the range its windpumps turn
-    // over their stock tanks near the road, its herds come in to them (a cow
-    // alone is a speck from the road; tower, tank and herd read as one).
-    // Every wheel, the ranch's included, faces the one wind: the west wind
-    // that blows the sand and the clouds east (+X) across the map, its tail
-    // vane downwind. Each yaw turns its pump's wheel to the world's -X; the
-    // ranch's own is turned inside its piece (set_prototypes.py
+    // A ranch in butte country. The long straight runs from the ranch on
+    // the open plain at its head (house, barn, water tower, the windpump
+    // turning, the corral with cattle) at the rim, the mesa closing the west
+    // of the map: down its left the rim's mountainside comes to the verge,
+    // round the outside of the hairpin under it and on along the north
+    // straight to the bridge (canyon lengths, set_prototypes.py
+    // canyon_mountain, the rim's own massif rising behind them in `land`).
+    // Off the bridge the road runs at the mesa standing between the
+    // north-east loop and the S: the loop rounds its north end and the S its
+    // west side. A butte stands on the outside of the south loop's bend and
+    // a pair of spires on the outside of each loop (strata over a butte's
+    // height, set_prototypes.py crag_butte: a sheer cliff of the one hard
+    // sandstone on talus slopes banded in the soft beds, never a striped
+    // drum), fields of hoodoos between them, and the skyline all round is
+    // mesas and buttes of the land. Out on the range the ranch's windpumps
+    // turn over their stock tanks near the road, its herds come in to them
+    // (a cow alone is a speck from the road; tower, tank and herd read as
+    // one). Every wheel, the ranch's included, faces the one wind: the west
+    // wind that blows the sand and the clouds east (+X) across the map, its
+    // tail vane downwind. Each yaw turns its pump's wheel to the world's -X;
+    // the ranch's own is turned inside its piece (set_prototypes.py
     // RANCH_WIND_YAW, for the ranch as it stands here).
     set: [
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
       { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
-      { model: 'set-windpump', u: 0.58, lat: -14, yaw: 154 },
+      { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
       { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: -137 },
-      { model: 'set-hoodoos', u: 0.3, lat: 18 },
+      { model: 'set-hoodoos', u: 0.32, lat: -12 },
       { model: 'set-hoodoos', u: 0.62, lat: -16, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
-      // the buttes: rock of the land's own strata standing in the talus they
-      // shed (rock in slopes, not sand), on the outsides of the two loops'
-      // bends where the road runs at them: a broad butte, then a pair of its
-      // towers, round each loop
-      { model: 'set-rimrock-butte', u: 0.32, lat: 24, yaw: 90 },
-      { model: 'set-rimrock-spires', u: 0.38, lat: 23, yaw: 20 },
-      { model: 'set-rimrock-butte', u: 0.8, lat: 24, yaw: -100, scale: 0.95 },
-      { model: 'set-rimrock-spires', u: 0.865, lat: 23, yaw: 200, scale: 1.05 }
+      // the rock, each piece's talus coming to a couple of units past the
+      // kerb (a chase camera rounding a bend passed through a talus on the
+      // road), its blocks out at the ends, never by a kerb
+      { model: 'set-rimrock-mesa', u: 0.5845, lat: -38.5, yaw: 147 },
+      { model: 'set-rimrock-spires', u: 0.38, lat: 22, yaw: 20 },
+      { model: 'set-rimrock-butte', u: 0.795, lat: 26, yaw: 10 },
+      { model: 'set-rimrock-mitten', u: 0.865, lat: 20.5, yaw: 200 },
+      // the rim's mountainside, each face toward the road (the hairpin's
+      // entry is looser than its apex, so its length is bent wider)
+      { model: 'set-canyon-rim-crag-a', u: 0.036, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-hairpin-crag', u: 0.09, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-exit-crag', u: 0.108, lat: -5.2, yaw: 180 },
+      { model: 'set-canyon-rim-crag-b', u: 0.134, lat: -5.2, yaw: 180 }
+    ],
+    land: [
+      // the rim: the mesa the canyon lengths are the near faces of, rising
+      // from past their backs (`near`, Gulch's massifs), low enough that its
+      // flat top shows against the sky down the long straight (taller, it
+      // filled the picture as one banded wall), its south end a shoulder
+      // short of the ranch
+      { kind: 'ridge', u: 0.04, lat: -28.8, yaw: -178.3, len: 30, r: 24, h: 14, top: 0.5, near: 16 },
+      { kind: 'ridge', u: 0.0968, lat: -26, yaw: -129.3, len: 16, r: 26, h: 18, top: 0.5, near: 16 },
+      { kind: 'ridge', u: 0.137, lat: -30, yaw: 0.2, len: 24, r: 24, r1: 18, h: 16, h1: 13, top: 0.5, near: 16 },
+      // the skyline: mesas and buttes standing apart on the plain, 55 to 95
+      // units out (a ring of them read as the walls of a box), each broad
+      // enough for the ground's 9 u grid to draw a table, not a pyramid
+      { kind: 'ridge', u: 0.4487, lat: 73.7, yaw: 146.2, len: 80, r: 24, h: 16, top: 0.5 },
+      { kind: 'ridge', u: 0.3683, lat: 55.5, yaw: 141.4, len: 14, r: 20, h: 22, top: 0.55 },
+      { kind: 'ridge', u: 0.33, lat: 65.9, yaw: -4.6, len: 70, r: 24, h: 18, top: 0.5 },
+      { kind: 'ridge', u: 0.8738, lat: 94, yaw: -116.4, len: 50, r: 22, h: 15, top: 0.5 },
+      { kind: 'ridge', u: 0.8177, lat: 62.4, yaw: 14.8, len: 70, r: 26, h: 20, top: 0.5 },
+      { kind: 'ridge', u: 0.1052, lat: -71.9, yaw: -152.1, len: 14, r: 18, h: 20, top: 0.55 }
     ]
   },
   sidewinder: {
