@@ -1769,11 +1769,12 @@ def smugglers_cave():
 @piece(1.0)
 def jungle_grove():
     # Cove: the jungle where the island's green foothills come down to the
-    # road: a stand of palms of every height leaning every way, the island's
-    # broad-leaved scrub round their feet and a few dark rocks among them, so
-    # the hill reads as jungle from the seat and not as a lawn. DRAPED, all
-    # of it one part laid on the slope as drawn. +X is the road; it runs
-    # along the road (+Z), thinning toward its ends.
+    # road: a stand of palms of every height leaning every way and the
+    # island's broad-leaved scrub round their feet, so the hill reads as
+    # jungle from the seat and not as a lawn. DRAPED, all of it one part laid
+    # on the slope as drawn (no rocks: a draped boulder lies flat along the
+    # slope and read as a black slab). +X is the road; it runs along the road
+    # (+Z), thinning toward its ends.
     def build():
         for k, (x, z, h, lean, yw) in enumerate((
                 (0.6, -6.5, 2.3, 0.3, 200), (-1.4, -5.2, 3.0, 0.2, 150), (0.2, -3.6, 2.7, 0.35, 230),
@@ -1783,13 +1784,11 @@ def jungle_grove():
                 (-2.8, 6.4, 2.9, 0.2, 130), (-0.9, 7.6, 2.3, 0.3, 200))):
             palm((x, 0, z), h=h, lean=lean, yaw=math.radians(yw))
         with plain_parts():
-            for (x, z, r, c) in ((0.9, -5.4, 0.55, 0x2f8f5b), (-0.5, -4.2, 0.7, 0x3c9a5a), (1.2, -2.2, 0.5, 0x2f8f5b),
-                                 (-1.6, -0.6, 0.75, 0x3c9a5a), (0.8, 1.0, 0.6, 0x2f8f5b), (-2.6, 1.6, 0.65, 0x3c9a5a),
-                                 (1.0, 2.6, 0.5, 0x3c9a5a), (-0.6, 3.2, 0.7, 0x2f8f5b), (0.9, 4.8, 0.55, 0x2f8f5b),
-                                 (-1.9, 5.4, 0.7, 0x3c9a5a), (0.6, 6.9, 0.5, 0x3c9a5a)):
+            for (x, z, r, c) in ((0.9, -5.4, 0.55, 'green'), (-0.5, -4.2, 0.7, 'green'), (1.2, -2.2, 0.5, 'green'),
+                                 (-1.6, -0.6, 0.75, 'green'), (0.8, 1.0, 0.6, 'green'), (-2.6, 1.6, 0.65, 'green'),
+                                 (1.0, 2.6, 0.5, 'green'), (-0.6, 3.2, 0.7, 'green'), (0.9, 4.8, 0.55, 'green'),
+                                 (-1.9, 5.4, 0.7, 'green'), (0.6, 6.9, 0.5, 'green')):
                 sphere(r, (x, r * 0.45, z), c, subdiv=1, scale=(1.2, 0.75, 1.0), yaw=x * z)
-        for (x, z, k, yw) in ((1.3, -4.0, 0.35, 0.5), (-1.0, 2.6, 0.45, 1.7), (1.4, 5.8, 0.3, 2.6)):
-            boulder((x, 0, z), k=k, yaw=yw, color='slate')
     draped('grove', build)
 
 @piece(1.0)
