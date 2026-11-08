@@ -208,9 +208,6 @@ struct AutoPole { double s, lat, radius; };         // top-level autoPoles; seri
 
 struct Pillar { double x, z, baseY, topY, radius; };
 struct HillRing { double cx, cz, lx, lz, halfW, topL, topR; };
-// How far a hill ring's top edges stand under the deck's top edges. The
-// renderer reads it to find the deck again under a ring.
-inline constexpr double HILL_TUCK = 0.15;
 struct SupportPost {
   double x, z, radius, baseY;
   Vec3 contactPos, contactUp;

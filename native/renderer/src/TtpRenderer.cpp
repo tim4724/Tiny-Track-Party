@@ -1107,20 +1107,14 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
                 { (float) p.contactUp.x, (float) p.contactUp.y, (float) p.contactUp.z } });
     }
 
-    // A berm's top stands under the slab, not up its side: the road on a hill
-    // is raised road and shows its whole edge. Tucked HILL_TUCK under the
-    // deck's top, the berm left a sliver of the slab's side over it, which
-    // from across the map broke into a dotted line crawling along the crest.
     out.berms.clear();
     out.berms.reserve(geo.hills.size());
-    const float underSlab = (float) ttp::HILL_TUCK - kDeckDepth - kBermGap, gy = (float) geo.groundY;
     for (const std::vector<ttp::HillRing>& run : geo.hills) {
         std::vector<TrackBin::BermRing> rings;
         rings.reserve(run.size());
         for (const ttp::HillRing& r : run) {
-            rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz, (float) r.halfW,
-                              std::max(gy, (float) r.topL + underSlab), std::max(gy, (float) r.topR + underSlab),
-                              bermFlare(r, geo) });
+            rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz,
+                              (float) r.halfW, (float) r.topL, (float) r.topR, bermFlare(r, geo) });
         }
         out.berms.push_back(std::move(rings));
     }

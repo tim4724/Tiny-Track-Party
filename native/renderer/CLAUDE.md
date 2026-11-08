@@ -512,12 +512,13 @@ track lies near it except on its crossings' ramps and its hills
 it. LOW road sits IN the land: the field stands `kVergeDrop` under the deck's
 top beside it, and the VERGE BAND (below) lays the land up to the kerb's foot,
 so only the kerb stands over the ground. Only RAISED road, a crossing or a
-ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read,
-and road on a hill shows its whole slab edge over its berm: the berm's top
-stands under the slab (`kBermGap`), never up its side, since a sliver of the
-side over the land breaks into a dotted line crawling along the crest from
-across the map. It is renderer-only: the sim never reads it, and pillars,
-berms and the gantry still stand on `groundY` with their feet buried.
+ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read.
+Road on a hill keeps its berm's top tucked just under the deck's top, so it
+too shows only the kerb. Dropping the berm under the slab cures a sub-pixel
+sliver of slab side that crawls along a far crest at 4P, but bares a dark slab
+edge under every far kerb on a hill; the user kept the kerb-only look. It is
+renderer-only: the sim never reads it, and pillars, berms and the gantry still
+stand on `groundY` with their feet buried.
 
 THE GROUND IS TWO SURFACES IN ONE MESH: the 9 u grid, and the verge band laid
 over it along the road (`buildVergeBand`, `TtpRenderer.h` has its numbers). The

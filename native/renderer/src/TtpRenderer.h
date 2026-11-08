@@ -1154,8 +1154,6 @@ private:
     // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
     // supports stop under.
     static constexpr float kDeckDepth = 0.34f;
-    // How far a berm's top stands under the slab's underside (fillGeometry).
-    static constexpr float kBermGap = 0.02f;
     // A street's pavement kerb (buildRoadMesh): the kerbstone's step, how wide
     // its paving runs (to spotIssue's MARGIN past the edge and a little over:
     // the road's own curve brings it nearer at a piece's ends), its
