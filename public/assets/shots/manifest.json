@@ -3,13 +3,39 @@
   "shots": [
     {
       "scenario": "banana-aim",
+      "platform": "androidtv",
+      "file": "androidtv/banana-aim.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 32444,
+      "capturedAt": "2026-11-08T09:18:56.093Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceKind": "emulator",
+      "deviceId": "emulator-5584"
+    },
+    {
+      "scenario": "banana-aim",
+      "platform": "tvos",
+      "file": "tvos/banana-aim.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 33510,
+      "capturedAt": "2026-11-08T09:00:48.583Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "banana-aim",
       "platform": "web",
       "file": "web/banana-aim.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 35310,
-      "capturedAt": "2026-10-24T18:08:42.455Z",
-      "gitSha": "a52ff64a"
+      "bytes": 31224,
+      "capturedAt": "2026-11-08T09:14:50.440Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "countdown",
@@ -17,12 +43,12 @@
       "file": "androidtv/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 485456,
-      "capturedAt": "2026-10-24T09:25:02.922Z",
-      "gitSha": "5bf45a43",
-      "deviceName": "google Google TV Streamer",
-      "deviceKind": "device",
-      "deviceId": "192.168.1.150:5555"
+      "bytes": 460610,
+      "capturedAt": "2026-11-08T09:12:07.106Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceKind": "emulator",
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "countdown",
@@ -30,12 +56,12 @@
       "file": "tvos/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 476762,
-      "capturedAt": "2026-10-24T09:22:54.995Z",
-      "gitSha": "5bf45a43",
-      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
-      "deviceKind": "simulator",
-      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
+      "bytes": 454915,
+      "capturedAt": "2026-11-08T09:00:47.163Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "countdown",
@@ -43,9 +69,9 @@
       "file": "web/countdown.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 303308,
-      "capturedAt": "2026-10-24T09:20:07.269Z",
-      "gitSha": "5bf45a43"
+      "bytes": 303819,
+      "capturedAt": "2026-11-08T09:09:09.926Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "disconnected",
@@ -53,12 +79,12 @@
       "file": "androidtv/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 9966,
-      "capturedAt": "2026-10-17T14:12:27.012Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 11254,
+      "capturedAt": "2026-11-08T09:19:23.123Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "disconnected",
@@ -66,12 +92,12 @@
       "file": "tvos/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 6540,
-      "capturedAt": "2026-10-17T14:12:35.317Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 6922,
+      "capturedAt": "2026-11-08T09:00:48.949Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "disconnected",
@@ -79,9 +105,9 @@
       "file": "web/disconnected.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 9632,
-      "capturedAt": "2026-10-17T14:19:37.984Z",
-      "gitSha": "8e974d48"
+      "bytes": 9456,
+      "capturedAt": "2026-11-08T09:14:54.948Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "finished",
@@ -89,12 +115,12 @@
       "file": "androidtv/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 52846,
-      "capturedAt": "2026-10-17T14:13:29.415Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 59164,
+      "capturedAt": "2026-11-08T09:20:10.492Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "finished",
@@ -102,12 +128,12 @@
       "file": "tvos/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51446,
-      "capturedAt": "2026-10-17T14:12:35.667Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 58626,
+      "capturedAt": "2026-11-08T09:00:49.405Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "finished",
@@ -115,9 +141,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48192,
-      "capturedAt": "2026-10-17T14:19:56.681Z",
-      "gitSha": "8e974d48"
+      "bytes": 52414,
+      "capturedAt": "2026-11-08T09:15:00.212Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "info",
@@ -125,12 +151,12 @@
       "file": "androidtv/info.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 22756,
-      "capturedAt": "2026-10-17T14:14:36.324Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 23850,
+      "capturedAt": "2026-11-08T09:20:41.988Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "info",
@@ -138,12 +164,12 @@
       "file": "tvos/info.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 23130,
-      "capturedAt": "2026-10-17T14:12:36.021Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 24184,
+      "capturedAt": "2026-11-08T09:00:49.884Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "intermission",
@@ -151,12 +177,12 @@
       "file": "androidtv/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16434,
-      "capturedAt": "2026-10-17T14:14:11.071Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 18894,
+      "capturedAt": "2026-11-08T09:20:29.853Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "intermission",
@@ -164,12 +190,12 @@
       "file": "tvos/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13994,
-      "capturedAt": "2026-10-17T14:12:35.848Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 14858,
+      "capturedAt": "2026-11-08T09:00:49.653Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "intermission",
@@ -177,9 +203,9 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16322,
-      "capturedAt": "2026-10-17T14:20:12.129Z",
-      "gitSha": "8e974d48"
+      "bytes": 17178,
+      "capturedAt": "2026-11-08T09:15:08.557Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "licenses",
@@ -187,12 +213,12 @@
       "file": "androidtv/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 24636,
-      "capturedAt": "2026-10-17T17:27:36.679Z",
-      "gitSha": "36e867e8",
-      "deviceName": "HexStacker_TV_36",
+      "bytes": 25664,
+      "capturedAt": "2026-11-08T09:20:44.821Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5554"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "licenses",
@@ -200,12 +226,12 @@
       "file": "tvos/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 24686,
-      "capturedAt": "2026-10-17T17:27:36.175Z",
-      "gitSha": "36e867e8",
-      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
-      "deviceKind": "simulator",
-      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
+      "bytes": 26056,
+      "capturedAt": "2026-11-08T09:00:49.994Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "licenses",
@@ -213,9 +239,9 @@
       "file": "web/licenses.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 39060,
-      "capturedAt": "2026-10-17T17:22:23.211Z",
-      "gitSha": "36e867e8"
+      "bytes": 37808,
+      "capturedAt": "2026-11-08T09:15:15.795Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "lobby-cup",
@@ -223,12 +249,12 @@
       "file": "androidtv/lobby-cup.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46126,
-      "capturedAt": "2026-10-17T14:04:14.832Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 53400,
+      "capturedAt": "2026-11-08T09:11:34.689Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "lobby-cup",
@@ -236,12 +262,12 @@
       "file": "tvos/lobby-cup.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51118,
-      "capturedAt": "2026-10-17T14:12:34.043Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 49902,
+      "capturedAt": "2026-11-08T09:00:46.742Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "lobby-cup",
@@ -249,9 +275,9 @@
       "file": "web/lobby-cup.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49812,
-      "capturedAt": "2026-10-17T14:00:45.095Z",
-      "gitSha": "8e974d48"
+      "bytes": 51610,
+      "capturedAt": "2026-11-08T09:09:01.232Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "lobby-empty",
@@ -259,12 +285,12 @@
       "file": "androidtv/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 37656,
-      "capturedAt": "2026-10-17T14:03:59.011Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 50758,
+      "capturedAt": "2026-11-08T09:11:21.952Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "lobby-empty",
@@ -272,12 +298,12 @@
       "file": "tvos/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45432,
-      "capturedAt": "2026-10-17T14:12:33.938Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 44230,
+      "capturedAt": "2026-11-08T09:00:46.600Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "lobby-empty",
@@ -285,9 +311,9 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42552,
-      "capturedAt": "2026-10-17T14:00:38.088Z",
-      "gitSha": "8e974d48"
+      "bytes": 42248,
+      "capturedAt": "2026-11-08T09:08:57.720Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "lobby-loading",
@@ -295,12 +321,12 @@
       "file": "androidtv/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 12100,
-      "capturedAt": "2026-10-17T14:03:36.779Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 12828,
+      "capturedAt": "2026-11-08T09:11:10.972Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "lobby-loading",
@@ -308,12 +334,12 @@
       "file": "tvos/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 10710,
-      "capturedAt": "2026-10-17T14:12:33.838Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 11526,
+      "capturedAt": "2026-11-08T09:00:46.458Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "lobby-loading",
@@ -321,9 +347,9 @@
       "file": "web/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 12490,
-      "capturedAt": "2026-10-17T14:00:27.536Z",
-      "gitSha": "8e974d48"
+      "bytes": 12532,
+      "capturedAt": "2026-11-08T09:08:54.061Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "lobby-random",
@@ -331,12 +357,12 @@
       "file": "androidtv/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42576,
-      "capturedAt": "2026-10-17T14:04:47.225Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 55106,
+      "capturedAt": "2026-11-08T09:11:56.346Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "lobby-random",
@@ -344,12 +370,12 @@
       "file": "tvos/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46448,
-      "capturedAt": "2026-10-17T14:12:34.264Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 49362,
+      "capturedAt": "2026-11-08T09:00:47.030Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "lobby-random",
@@ -357,9 +383,9 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47076,
-      "capturedAt": "2026-10-17T14:00:59.321Z",
-      "gitSha": "8e974d48"
+      "bytes": 45816,
+      "capturedAt": "2026-11-08T09:09:08.169Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "lobby-tour",
@@ -367,12 +393,12 @@
       "file": "androidtv/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42680,
-      "capturedAt": "2026-10-17T14:04:29.696Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 42232,
+      "capturedAt": "2026-11-08T09:11:47.758Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "lobby-tour",
@@ -380,12 +406,12 @@
       "file": "tvos/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49380,
-      "capturedAt": "2026-10-17T14:12:34.157Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 47796,
+      "capturedAt": "2026-11-08T09:00:46.881Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "lobby-tour",
@@ -393,9 +419,9 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46970,
-      "capturedAt": "2026-10-17T14:00:52.231Z",
-      "gitSha": "8e974d48"
+      "bytes": 49174,
+      "capturedAt": "2026-11-08T09:09:04.703Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "monster",
@@ -403,12 +429,12 @@
       "file": "androidtv/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 421434,
-      "capturedAt": "2026-10-17T14:11:35.133Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 346981,
+      "capturedAt": "2026-11-08T09:17:19.302Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "monster",
@@ -416,12 +442,12 @@
       "file": "tvos/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 417163,
-      "capturedAt": "2026-10-17T14:12:35.073Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 343229,
+      "capturedAt": "2026-11-08T09:00:48.444Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "monster",
@@ -429,9 +455,9 @@
       "file": "web/monster.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 258819,
-      "capturedAt": "2026-10-17T14:19:22.321Z",
-      "gitSha": "8e974d48"
+      "bytes": 221870,
+      "capturedAt": "2026-11-08T09:13:20.175Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "paused",
@@ -439,12 +465,12 @@
       "file": "androidtv/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 11428,
-      "capturedAt": "2026-10-17T14:11:54.923Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 10646,
+      "capturedAt": "2026-11-08T09:19:09.204Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "paused",
@@ -452,12 +478,12 @@
       "file": "tvos/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 6934,
-      "capturedAt": "2026-10-17T14:12:35.160Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 6724,
+      "capturedAt": "2026-11-08T09:00:48.706Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "paused",
@@ -465,9 +491,9 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 9276,
-      "capturedAt": "2026-10-17T14:19:29.151Z",
-      "gitSha": "8e974d48"
+      "bytes": 9166,
+      "capturedAt": "2026-11-08T09:14:52.220Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "podium",
@@ -475,12 +501,12 @@
       "file": "androidtv/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16310,
-      "capturedAt": "2026-10-17T14:14:31.397Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 17538,
+      "capturedAt": "2026-11-08T09:20:39.188Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "podium",
@@ -488,12 +514,12 @@
       "file": "tvos/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13848,
-      "capturedAt": "2026-10-17T14:12:35.929Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 13642,
+      "capturedAt": "2026-11-08T09:00:49.777Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "podium",
@@ -501,9 +527,9 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16178,
-      "capturedAt": "2026-10-17T14:20:22.012Z",
-      "gitSha": "8e974d48"
+      "bytes": 15984,
+      "capturedAt": "2026-11-08T09:15:14.732Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "race-backyard",
@@ -511,12 +537,12 @@
       "file": "androidtv/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 391160,
-      "capturedAt": "2026-10-17T14:08:16.073Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 420042,
+      "capturedAt": "2026-11-08T09:14:51.411Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "race-backyard",
@@ -524,12 +550,12 @@
       "file": "tvos/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 388167,
-      "capturedAt": "2026-10-17T14:12:34.802Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 410801,
+      "capturedAt": "2026-11-08T09:00:47.883Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "race-backyard",
@@ -537,9 +563,9 @@
       "file": "web/race-backyard.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 240107,
-      "capturedAt": "2026-10-17T14:12:13.989Z",
-      "gitSha": "8e974d48"
+      "bytes": 270938,
+      "capturedAt": "2026-11-08T09:11:21.229Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "race-beach",
@@ -547,12 +573,12 @@
       "file": "androidtv/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 390585,
-      "capturedAt": "2026-10-17T14:06:18.493Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 358978,
+      "capturedAt": "2026-11-08T09:13:01.901Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "race-beach",
@@ -560,12 +586,12 @@
       "file": "tvos/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 384525,
-      "capturedAt": "2026-10-17T14:12:34.671Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 353100,
+      "capturedAt": "2026-11-08T09:00:47.611Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "race-beach",
@@ -573,9 +599,9 @@
       "file": "web/race-beach.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 236551,
-      "capturedAt": "2026-10-17T14:04:20.107Z",
-      "gitSha": "8e974d48"
+      "bytes": 227610,
+      "capturedAt": "2026-11-08T09:09:45.409Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "race-canyon",
@@ -583,12 +609,12 @@
       "file": "androidtv/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 208035,
-      "capturedAt": "2026-10-17T14:09:22.906Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 203947,
+      "capturedAt": "2026-11-08T09:15:48.001Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "race-canyon",
@@ -596,12 +622,12 @@
       "file": "tvos/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 208453,
-      "capturedAt": "2026-10-17T14:12:34.871Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 203533,
+      "capturedAt": "2026-11-08T09:00:48.021Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "race-canyon",
@@ -609,9 +635,9 @@
       "file": "web/race-canyon.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 120415,
-      "capturedAt": "2026-10-17T14:14:32.811Z",
-      "gitSha": "8e974d48"
+      "bytes": 124664,
+      "capturedAt": "2026-11-08T09:12:10.604Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "race-playroom",
@@ -619,12 +645,12 @@
       "file": "androidtv/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 435809,
-      "capturedAt": "2026-10-17T14:09:54.426Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 375638,
+      "capturedAt": "2026-11-08T09:16:14.862Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "race-playroom",
@@ -632,12 +658,12 @@
       "file": "tvos/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 447777,
-      "capturedAt": "2026-10-17T14:12:34.929Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 378443,
+      "capturedAt": "2026-11-08T09:00:48.163Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "race-playroom",
@@ -645,9 +671,9 @@
       "file": "web/race-playroom.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 274249,
-      "capturedAt": "2026-10-17T14:15:32.218Z",
-      "gitSha": "8e974d48"
+      "bytes": 243575,
+      "capturedAt": "2026-11-08T09:12:29.682Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "race-snow",
@@ -655,12 +681,12 @@
       "file": "androidtv/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 276568,
-      "capturedAt": "2026-10-17T14:06:57.526Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 266598,
+      "capturedAt": "2026-11-08T09:13:39.122Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "race-snow",
@@ -668,12 +694,12 @@
       "file": "tvos/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 275759,
-      "capturedAt": "2026-10-17T14:12:34.732Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 264172,
+      "capturedAt": "2026-11-08T09:00:47.743Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "race-snow",
@@ -681,9 +707,9 @@
       "file": "web/race-snow.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 168394,
-      "capturedAt": "2026-10-17T14:05:47.948Z",
-      "gitSha": "8e974d48"
+      "bytes": 174131,
+      "capturedAt": "2026-11-08T09:10:16.303Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "racing",
@@ -691,12 +717,12 @@
       "file": "androidtv/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 54314,
-      "capturedAt": "2026-10-17T14:05:25.206Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 60732,
+      "capturedAt": "2026-11-08T09:12:19.958Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "racing",
@@ -704,12 +730,12 @@
       "file": "tvos/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 53800,
-      "capturedAt": "2026-10-17T14:12:34.490Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 60154,
+      "capturedAt": "2026-11-08T09:00:47.317Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "racing",
@@ -717,9 +743,9 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51630,
-      "capturedAt": "2026-10-17T14:01:28.637Z",
-      "gitSha": "8e974d48"
+      "bytes": 57104,
+      "capturedAt": "2026-11-08T09:09:16.253Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "racing-sidewinder",
@@ -727,12 +753,12 @@
       "file": "androidtv/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45266,
-      "capturedAt": "2026-10-17T14:05:47.351Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 53500,
+      "capturedAt": "2026-11-08T09:12:32.708Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "racing-sidewinder",
@@ -740,12 +766,12 @@
       "file": "tvos/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 44684,
-      "capturedAt": "2026-10-17T14:12:34.593Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 53416,
+      "capturedAt": "2026-11-08T09:00:47.471Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "racing-sidewinder",
@@ -753,9 +779,9 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 43500,
-      "capturedAt": "2026-10-17T14:02:21.342Z",
-      "gitSha": "8e974d48"
+      "bytes": 50414,
+      "capturedAt": "2026-11-08T09:09:22.617Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "reconnect",
@@ -763,12 +789,12 @@
       "file": "androidtv/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 70550,
-      "capturedAt": "2026-10-17T14:12:47.956Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 67558,
+      "capturedAt": "2026-11-08T09:19:37.321Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "reconnect",
@@ -776,12 +802,12 @@
       "file": "tvos/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 67068,
-      "capturedAt": "2026-10-17T14:12:35.439Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 65428,
+      "capturedAt": "2026-11-08T09:00:49.105Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "reconnect",
@@ -789,9 +815,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 64176,
-      "capturedAt": "2026-10-17T14:19:44.598Z",
-      "gitSha": "8e974d48"
+      "bytes": 59670,
+      "capturedAt": "2026-11-08T09:14:56.717Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "reconnect-solo",
@@ -799,12 +825,12 @@
       "file": "androidtv/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 40004,
-      "capturedAt": "2026-10-17T14:13:09.159Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 38260,
+      "capturedAt": "2026-11-08T09:19:50.611Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "reconnect-solo",
@@ -812,12 +838,12 @@
       "file": "tvos/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 38132,
-      "capturedAt": "2026-10-17T14:12:35.550Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 38708,
+      "capturedAt": "2026-11-08T09:00:49.251Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "reconnect-solo",
@@ -825,9 +851,9 @@
       "file": "web/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 35622,
-      "capturedAt": "2026-10-17T14:19:50.680Z",
-      "gitSha": "8e974d48"
+      "bytes": 34804,
+      "capturedAt": "2026-11-08T09:14:58.442Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "reconnecting",
@@ -835,12 +861,12 @@
       "file": "androidtv/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 9694,
-      "capturedAt": "2026-10-17T14:12:10.109Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 10962,
+      "capturedAt": "2026-11-08T09:19:15.829Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "reconnecting",
@@ -848,12 +874,12 @@
       "file": "tvos/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 6492,
-      "capturedAt": "2026-10-17T14:12:35.239Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 6098,
+      "capturedAt": "2026-11-08T09:00:48.827Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "reconnecting",
@@ -861,9 +887,9 @@
       "file": "web/reconnecting.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 9232,
-      "capturedAt": "2026-10-17T14:19:33.243Z",
-      "gitSha": "8e974d48"
+      "bytes": 9112,
+      "capturedAt": "2026-11-08T09:14:53.578Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "results",
@@ -871,12 +897,12 @@
       "file": "androidtv/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14374,
-      "capturedAt": "2026-10-17T14:13:50.724Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 15230,
+      "capturedAt": "2026-11-08T09:20:20.543Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "results",
@@ -884,12 +910,12 @@
       "file": "tvos/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 12398,
-      "capturedAt": "2026-10-17T14:12:35.756Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 12164,
+      "capturedAt": "2026-11-08T09:00:49.529Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "results",
@@ -897,9 +923,9 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14510,
-      "capturedAt": "2026-10-17T14:20:02.272Z",
-      "gitSha": "8e974d48"
+      "bytes": 14326,
+      "capturedAt": "2026-11-08T09:15:02.398Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "rocket",
@@ -907,12 +933,12 @@
       "file": "androidtv/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 427229,
-      "capturedAt": "2026-10-17T14:10:41.070Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP_ToyBox_TV_agent2",
+      "bytes": 411873,
+      "capturedAt": "2026-11-08T09:16:59.075Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Television_4K_Android_TV",
       "deviceKind": "emulator",
-      "deviceId": "emulator-5600"
+      "deviceId": "emulator-5584"
     },
     {
       "scenario": "rocket",
@@ -920,12 +946,12 @@
       "file": "tvos/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 416267,
-      "capturedAt": "2026-10-17T14:12:34.989Z",
-      "gitSha": "8e974d48",
-      "deviceName": "TTP Toy Box tvOS 2",
-      "deviceKind": "simulator",
-      "deviceId": "B3995054-3EF1-4D5E-BB82-481AFF942B34"
+      "bytes": 400742,
+      "capturedAt": "2026-11-08T09:00:48.301Z",
+      "gitSha": "cbb860c4",
+      "deviceName": "Spielzimmer",
+      "deviceKind": "device",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },
     {
       "scenario": "rocket",
@@ -933,9 +959,9 @@
       "file": "web/rocket.jpg",
       "w": 1920,
       "h": 1080,
-      "bytes": 258874,
-      "capturedAt": "2026-10-17T14:17:22.701Z",
-      "gitSha": "8e974d48"
+      "bytes": 265449,
+      "capturedAt": "2026-11-08T09:13:06.861Z",
+      "gitSha": "cbb860c4"
     },
     {
       "scenario": "welcome",
@@ -943,9 +969,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 17094,
-      "capturedAt": "2026-10-17T14:00:22.403Z",
-      "gitSha": "8e974d48"
+      "bytes": 17166,
+      "capturedAt": "2026-11-08T09:08:52.912Z",
+      "gitSha": "cbb860c4"
     }
   ]
 }
