@@ -696,6 +696,9 @@ to do both:
   is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
   weight or a noise threshold blurs it into camouflage blobs: never go back to
   one. Structures, berms and the flat sheet keep 1 and skip the branch.
+  Every rock facet has corners of its own carrying its shade in their colour,
+  baked from its normal: the shader's screen-derivative normal was most of
+  what a bare rock pixel cost on the box.
   Only a CLIFF is rock where the biome asks a `rise` (the badlands): steep
   facets joined through their corners must climb that far between them, so
   a spoil heap, a dune's lee, a road's bank or one lone steep facet keeps its
@@ -1056,6 +1059,10 @@ its code:
 - **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
   paid all of the full one; the gradient between rings strays a few code values.
 - **Octagonal ground-shadow discs**: the rim fades to nothing.
+- **Unbanded ground rock** (`setRockParams`): `vground.mat`'s strata are off,
+  so a rock facet is the plain `rockA`, still shaded by its own normal. The
+  banding is the expensive part of a rock pixel on the box, and a canyon's
+  walls are much of its frame.
 - **The small-thing cut** (`CutRange`, `chooseCuts`): a run of scatter or
   props, or a chunk of clutter, leaves a cell's scene once what it holds covers
   under `kCutPx` pixels of THAT cell. Per cell like the far forms, so a 1P cell
