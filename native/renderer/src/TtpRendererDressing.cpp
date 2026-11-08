@@ -232,7 +232,13 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (const Boulder& b : boulders) {
             const uint32_t col = packAlbedo(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
-            const float by = footprintY(tb, b.x, b.z, b.rr);
+            // Grounded at its footprint's lowest point, a boulder on land
+            // climbing more than its own height across it is buried on the
+            // uphill side, a half-sunk lump in a mountain's flank: it lies
+            // only where it can sit.
+            const float2 span = footprintSpan(tb, b.x, b.z, b.rr);
+            if (span.y - span.x > b.rr * (0.25f + b.sy)) continue;
+            const float by = span.x;
             if (tb.scRockBlocks) {
                 // A child's building block left on the floor, `rr` on a side:
                 // a cube, or (the flatter third of the squash roll) a long
@@ -2809,7 +2815,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         const ttp::rt::GlbMeshNode* node;
         const ttp::kitcolors::Mesh* colors;
         std::vector<float3> factor;
-        bool drape;
+        bool drape, wall;
     };
     std::vector<Part> parts;
     for (const auto& [slot, mesh] : still) {
@@ -2819,7 +2825,8 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             if (n.mesh == mesh) { node = &n; break; }
         }
         if (!node) return false;
-        Part p{ slot, node, &colors.meshes[mesh], {}, mTrack && isDrapeName(node->name.c_str()) };
+        const bool drape = mTrack && isDrapeName(node->name.c_str());
+        Part p{ slot, node, &colors.meshes[mesh], {}, drape, drape && node->name.compare(0, 10, "drape_wall") == 0 };
         if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
             return false;
         }
@@ -2830,7 +2837,9 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         // Where the placement stands: a part that drapes is lifted by the land
         // over THAT, so it lands on the ground whether the piece stands on the
         // plain or on its own ground's raised base (mSetOwnGround).
-        const float foot = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
+        const float3 spot = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].xyz;
+        const float foot = spot.y;
+        const float2 wallAt{ spot.x, spot.z };
         // Each part's tile, on a grid anchored at the placement's own corner,
         // so a piece narrower than a tile is one mesh wherever it stands.
         std::vector<float3> centre(parts.size());
@@ -2850,7 +2859,8 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
                     + (int64_t) ((centre[j].x - x0) / mPieceTile);
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
-                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot);
+                    p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot,
+                    p.wall ? &wallAt : nullptr);
             g.sources.push_back(src);
         }
         const auto row = mSetRowOf.find(inst);

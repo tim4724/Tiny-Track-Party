@@ -1154,6 +1154,8 @@ private:
     // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
     // supports stop under.
     static constexpr float kDeckDepth = 0.34f;
+    // How far a berm's top stands under the slab's underside (fillGeometry).
+    static constexpr float kBermGap = 0.02f;
     // A street's pavement kerb (buildRoadMesh): the kerbstone's step, how wide
     // its paving runs (to spotIssue's MARGIN past the edge and a little over:
     // the road's own curve brings it nearer at a piece's ends), its
@@ -2530,11 +2532,17 @@ private:
     // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
     // by the land under it over `foot`, the height its placement stands at (a
     // set piece's `drape` part: modelled from its foot, it lands on the ground).
+    // `wallAt`, the placement's spot, for a `drape_wall` part (a canyon
+    // length): a vertex rides the lowest land along a little of the wall's
+    // own length, and by at most its own height over the lowest land between
+    // it and that spot (the face's foot), so a summit over a short rise and a
+    // tail over a massif's flank never stretch into needles.
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             const std::vector<filament::math::float3>& factor,
-            const TrackBin* drapeOn = nullptr, float foot = 0.0f);
+            const TrackBin* drapeOn = nullptr, float foot = 0.0f,
+            const filament::math::float2* wallAt = nullptr);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,

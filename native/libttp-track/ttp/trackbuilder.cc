@@ -231,7 +231,7 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
   // ---- Grass hills (berms) under raised, NON-pillared road.
   std::vector<std::vector<HillRing>> hills;
   {
-    const double HILL_MIN = 0.15, MIN_RUN = 1.0, TUCK = 0.15, EDGE = 0.25,
+    const double HILL_MIN = 0.15, MIN_RUN = 1.0, TUCK = HILL_TUCK, EDGE = 0.25,
                  LEVEL_GAP = 1.0, REACH = 3.2, ARC_GUARD = 12;
     auto isHill = [&](int i) -> bool {
       const OutSample& s = samples[i];
