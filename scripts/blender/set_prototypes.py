@@ -5616,7 +5616,8 @@ mountains(canyon_peaks_a=dict(seed=7, L=21.0, H=10.0),
 # sits under the deck cap and cannot rise), which opens on the yard.
 mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2),
           canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
-          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0))
+          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0),
+          canyon_crest_gulch=dict(seed=67, L=28.0, H=9.5, R=29.0))
 
 # ---- stepped rock: a mountain cut into level strata --------------------------------
 #

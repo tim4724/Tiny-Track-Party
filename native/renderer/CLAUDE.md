@@ -649,7 +649,12 @@ to do both:
   galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
   length) with `near` set past its crest: the drape rides the drawn ground,
   so a flank rising under the crest stretches it into spikes; past it, the
-  face stands whole and its back slopes up into the massif (Gulch). A massif
+  face stands whole and its back slopes up into the massif (Gulch). `near`
+  counts from EVERY strand: where a massif's flank reaches toward another
+  strand it is cut a ramp's width into a cliff that far off that kerb, and a
+  face whose back lies within that reach has no land to sink into, so its
+  back stands bare as one flat plane. Give that strand its own face with the
+  massif behind it, or end the face and the flank short of it. A massif
   cannot stand in the middle of a loop ringed by road: the cap holds the
   grid there, the band holds it off every footprint nearby and splits it
   between the strands around, so a loop's middle gets a piece's face, not

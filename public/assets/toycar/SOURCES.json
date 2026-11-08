@@ -54,6 +54,7 @@
     "set-bonfire.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-bend-gulch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-bend-wash.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-canyon-crest-gulch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-hairpin-gulch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-inside-gulch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-canyon-peaks-a.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
