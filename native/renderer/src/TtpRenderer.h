@@ -1170,14 +1170,15 @@ private:
     //    kApronRun. Its height over the plain fades that apron out from
     //    kApronFull to kApronNone (the field's own low/raised line), so road
     //    climbing onto its stilts rises out of the land; a cut keeps it.
-    //  - THE LAND KEEPS ITS SHAPE AT THE KERB: past the apron the band is the
-    //    field itself (a cut face, a mountain's foot), handing over to the
-    //    grid from kBandBlend to its last row, which lies kBandTuck under it.
+    //  - THE LAND AT THE KERB: past the apron the band is the field as its own
+    //    road raises it, within kBandOver of the grid but for a form authored
+    //    `near` (a mountain's foot), handing over to the grid from kBandBlend
+    //    and going under it (kBandTuck) where it would only copy it.
     // Elsewhere it lies kBandLift over the grid, so the two never share a
-    // depth. It yields (sinks under the grid) inside a piece's footprint, at
-    // the sea and a pond, along a street, and where another road at its
-    // height is nearer; no deck of another strand comes through it. The
-    // lookups (groundSurfaceY, the camera's GroundGrid::at) read the higher.
+    // depth. It yields (sinks under the grid) by a piece's footprint, at the
+    // sea and a pond, along a street, and where another road at its height
+    // is nearer; no deck of another strand comes through it. The lookups
+    // (groundSurfaceY, the camera's GroundGrid::at) read the higher.
     void buildVergeBand(const TrackBin& tb);
     static constexpr int kBandRows = 10, kBandNarrow = 7;
     static constexpr float kBandRow[kBandRows] = { -0.05f, 0.7f, 2.0f, 3.5f, 5.5f, 8.0f, 11.0f, 14.0f, 19.0f, 25.0f };

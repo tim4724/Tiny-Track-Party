@@ -854,13 +854,15 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
     for (int k = 0; k < K; k++) {
         const TrackBin::Sample& f = rings[sel[k]];
         const float half = 0.5f * f.width;
-        // A street's kerb is its pavement (buildRoadMesh), the village's own.
+        // A street's kerb is its pavement (buildRoadMesh), the village's own:
+        // the band is out of it a ring's step past either end, so no span
+        // between two rings carries the apron in over its pieces.
         float street = 0;
         for (const ttp::rt::Landform& l : tb.land) {
             if (l.kind != 9) continue;
             float d = std::fabs(f.s - l.u * tb.length);
             d = std::min(d, tb.length - d);
-            street = std::max(street, 1.0f - smooth01((d - 0.5f * l.len + kStreetEase) / kStreetEase));
+            street = std::max(street, 1.0f - smooth01((d - 0.5f * l.len - kBandStep) / kStreetEase));
         }
         // The turn here, for the inside of a bend: rows past its centre fold.
         const TrackBin::Sample& fa = rings[sel[(k + K - 1) % K]];
@@ -1143,7 +1145,7 @@ void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind) const
         return float4{ (float) ((h >> 16) & 0xff) / 255.0f, (float) ((h >> 8) & 0xff) / 255.0f,
                        (float) (h & 0xff) / 255.0f, 1.0f };
     };
-    mi->setParameter("rockA", c(r.a));
+    mi->setParameter("rockA", float4{ c(r.a).xyz, kGroundTile });
     mi->setParameter("rockB", c(r.b));
     mi->setParameter("rockL", c(r.l));
     mi->setParameter("strata", float4{ r.perUnit, r.breakup, r.wobble, r.ledge });

@@ -35,8 +35,8 @@
 // (strata.x a stratum per unit), each topped by a ledge of rockL (snow, a
 // bench, grass) strata.w of a stratum thick, the bands wobbled by strata.z.
 // The 9 u mesh carries the weight as a broad gradient, so its edge is broken
-// by the same cheap wobble (strata.y of it), never a texture tap. World XZ is uv0 times the
-// canvas tile (kGroundTile), world Y rides suv.w.
+// by the same cheap wobble (strata.y of it), never a texture tap. World XZ
+// is uv0 times the canvas tile (rockA.a, kGroundTile), world Y rides suv.w.
 material {
     name : TtpVground,
     // Every receiver (ground, structures, berms) is built in world units on an
@@ -78,7 +78,8 @@ material {
         { type : sampler2d, name : visMap },
         { type : mat4, name : shadowFromWorld, precision : high },
         // The rock (above): display-encoded colours (float4 on purpose: a
-        // float3 parameter read wrong on the box's Vulkan) and its banding.
+        // float3 parameter read wrong on the box's Vulkan; rockA.a carries
+        // the canvas tile) and its banding.
         { type : float4, name : rockA },
         { type : float4, name : rockB },
         { type : float4, name : rockL },
@@ -107,7 +108,7 @@ fragment {
         vec4 tint = getColor();
         vec3 base = albedoAt(getUV0()) * tint.rgb;
         if (tint.a < 0.995) {
-            highp vec2 xz = getUV0() * 33.333333;
+            highp vec2 xz = getUV0() * materialParams.rockA.a;
             highp float y = variable_suv.w;
             // Two octaves of a sine lattice, ~25 u and ~6 u: both break the
             // rock's edge, the broad one alone bends its strata.

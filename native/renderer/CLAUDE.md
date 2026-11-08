@@ -523,8 +523,8 @@ the camera's `GroundGrid::at`, the bake of the ground's sun map, which is
 depth-tested for it). The grid cannot meet a road at the road's height: the
 deck cap holds every triangle a deck touches under that deck's LOWEST section,
 and its chords cannot rise within a cell of the kerb. The band is a strip of
-rows out from the kerb's outer foot on rings a couple of units apart, fine
-enough to do both:
+rows out from the kerb's outer foot on rings a few units apart, fine enough
+to do both:
 
 - **The apron.** On low road the band stands just under the deck's top from
   under the kerb out a little past it, then eases down to the land. Road
@@ -559,7 +559,10 @@ enough to do both:
   may meet the slab inside its skirt, where the opaque deck hides it. Change
   the lift freely; never bypass the cap. Beside the road the lift is held
   under every OTHER strand nearby (a crossing's lower road, a hairpin's far
-  leg), so no bank walls the road under a bridge.
+  leg), so no bank walls the road under a bridge. The band holds to the same
+  rule its own way: under another strand's deck it is capped per vertex, and
+  under its own it never reaches: its first row stops `kBandKerbIn` short of
+  the kerb's inner face, past what a chord between rings sags round a bend.
   `tests/e2e/terrain-ground.spec.js` reads the cap and the stilts off the
   drawn ground.
 - **The cap, not the lift, sets the GRID's stilt on a short crest.** A grid
