@@ -1078,25 +1078,31 @@ export const TRACKS = {
     name: 'Gauntlet', segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege, one set of toy knights split into two sides,
-    // laid across the long home straight: the red besiegers' siege tower, a
-    // rank marching before it, inside it, and a rank of the castle's blue
-    // knights with their cannon, and its dragon, outside, facing them across
-    // the road. The race runs through no-man's land and under the castle's
-    // outer gatehouse (set-castle-gate, astride the road) toward the block
-    // castle itself, where the straight points. Another blue rank stands in
-    // the infield, another siege tower where the grid straight points and the
-    // besiegers' trebuchet, its arm just thrown toward the castle, where the
-    // south straight points (a rank alone is a speck down a long straight; a
-    // tall engine reads from its far end).
+    // and the race runs the gauntlet between them. The block castle stands
+    // in the lap's heart, in the loop the road makes inside it, so the race
+    // circles its walls on four sides and the ramp climbs past its gate to
+    // thread the ring. Across the ramp lie the red besiegers' camp of
+    // pavilions, their trebuchet just thrown at the castle and a siege
+    // tower rolling up on it; a blue rank of the castle's knights holds the
+    // gap between it and the grid straight. Off the plunge the road runs
+    // through the castle's barbican, its covered outer passage of blocks,
+    // and down past the besiegers' guns aimed across it at the castle. On
+    // the long home straight the siege goes on: a red rank and a siege
+    // tower inside it, a blue rank with their cannon outside, the castle's
+    // outer gatehouse astride the road and its dragon on guard where the
+    // straight points.
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
-      { model: 'set-toy-dragon', u: 0.825, lat: 8 },
       { model: 'set-castle-gate', u: 0.85, lat: 0 },
-      { model: 'set-block-castle', u: 0.9568, lat: 16, yaw: 24 },
-      { model: 'set-toy-soldiers', u: 0.4, lat: 7.5, yaw: 20 },
-      { model: 'set-siege-tower', u: 0.0777, lat: 14.5, yaw: 35 },
-      { model: 'set-trebuchet', u: 0.186, lat: 17.2, yaw: 270 }
+      { model: 'set-barbican', u: 0.6106, lat: 0 },
+      { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
+      { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
+      { model: 'set-block-fortress', u: 0.4186, lat: -14.88 },
+      { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
+      { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
+      { model: 'set-siege-tower', u: 0.1953, lat: -5.94, yaw: -90 },
+      { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 }
     ]
   },
   helix: {
@@ -1125,16 +1131,27 @@ export const TRACKS = {
   skyline: {
     name: 'Skyline', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline,
-    // Block city: a town of wooden blocks on a city play rug past the top
-    // straight, ahead of both the grid straight and the skyway, a crane
-    // turning on its building site; towers a child stacked to the skyway's
-    // own height stand past where the skyway lands, where the two legs
-    // beside the skyway point and where the back straight points
+    // Block city: the lap is laid through a town of wooden blocks on city
+    // play rugs, the skyway an elevated road over its streets. The infield
+    // is one rug: downtown's tower blocks stacked up to the skyway's own
+    // height along its run, a wooden train going round past the station
+    // beside the south edge, houses facing the grid straight and the top
+    // straight across their kerbs and a park in the middle. Across the
+    // road from each, more of the town: the west side's street under the
+    // skyway with its building site and crane by the south-bound leg, a
+    // street of houses and a clock tower outside the grid straight, the
+    // shops and the fire station outside the south edge, and past the top
+    // straight the old town, a crane turning on its building site. Towers
+    // a child stacked to the skyway's height stand outside its U and
+    // outside the corner the south-bound leg turns.
     set: [
-      { model: 'set-block-city', u: 0.125, lat: -18, yaw: 180 },
-      { model: 'set-block-towers', u: 0.5319, lat: -14.9, yaw: -138 },
-      { model: 'set-block-towers', u: 0.802, lat: -13.6, yaw: -172 },
-      { model: 'set-block-towers', u: 0.975, lat: -14.5, yaw: 138 }
+      { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
+      { model: 'set-block-town', u: 0.0147, lat: 24.35 },
+      { model: 'set-block-street', u: 0.018, lat: 0 },
+      { model: 'set-block-westside', u: 0.2282, lat: -8.56, yaw: -180 },
+      { model: 'set-block-high-street', u: 0.8655, lat: -9.63, yaw: 180 },
+      { model: 'set-block-towers', u: 0.5, lat: -7.5, yaw: 180 },
+      { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 }
     ]
   }
 };
