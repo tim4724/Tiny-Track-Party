@@ -93,6 +93,7 @@
     "set-net-huts.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-oil-field.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ore-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-palm-clumps.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-park-railway.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-penguin-chute.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-penguin-group.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
