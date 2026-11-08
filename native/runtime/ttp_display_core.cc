@@ -33,6 +33,7 @@
 #include "TtpRenderer.h"
 #include "ttp/blobstore.h"
 #include "ttp/canonical.h"
+#include "ttp/detail.h"
 #include "ttp/frame_builder.h"
 #include "ttp/json_read.h"
 #include "ttp/framing.h"
@@ -864,6 +865,12 @@ const double* ttp_display_profile(void) {
 
 void ttp_display_antialias(int on) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setAntialias(on != 0);
+}
+
+const char* ttp_display_detail(const char* platform, const char* ask) {
+    const ttp::rt::Detail d = ttp::rt::detail_for(platform, ask);
+    if (g_disp && g_disp->renderer) g_disp->renderer->setLite(d == ttp::rt::Detail::Lite);
+    return ttp::rt::detail_name(d);
 }
 
 void ttp_display_dress_keep(float frac) {

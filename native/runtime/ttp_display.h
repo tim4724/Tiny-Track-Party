@@ -828,6 +828,19 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
  * The shell decides, because affordability is a fact about ITS device. */
 TTP_ABI void ttp_display_antialias(int on);
 
+/* THE DETAIL TIER (ttp/detail.h): "full", the world as authored, or "lite",
+ * the same world with what a racer barely sees taken off the frame. Decided
+ * HERE, not by the shell: `platform` is the shell's `pbp` value ("web",
+ * "tvos", "androidtv", as ttp_net.h takes it) and lite is the Android TV box's.
+ * `ask`, "full" or "lite", overrides the platform so a tier can be filmed and
+ * priced where it does not ship (the web's ?detail=, the box's
+ * debug.ttp.detail); null or anything else leaves the platform's.
+ *
+ * Latched like the biome: the next ttp_display_build meshes the tier (a change
+ * rebuilds the static scene). Call it after ttp_display_create. Answers the
+ * tier in force, "full" or "lite" — the decision, with or without a display. */
+TTP_ABI const char* ttp_display_detail(const char* platform, const char* ask);
+
 /* THE DRESSING ABLATION, split in two because the group's cost is.
  * `ttp_display_debug_features` hides the group whole (TTP_FEAT_DRESSING) and
  * every layer bit is spoken for, so these two take the halves apart instead.

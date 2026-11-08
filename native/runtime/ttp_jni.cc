@@ -387,6 +387,12 @@ void n_ttp_display_destroy(JNIEnv* env, jclass) {
     ttp_display_destroy();
 }
 
+jbyteArray n_ttp_display_detail(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
+    CStr s0(env, a0);
+    CStr s1(env, a1);
+    return toBytes(env, ttp_display_detail(s0.get(), s1.get()));
+}
+
 void n_ttp_display_dividers(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_dividers((int) a0);
@@ -1518,6 +1524,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_debug_sand_dust", "(ID)D", (void*) n_ttp_display_debug_sand_dust },
     { "ttp_display_debug_wipe_skids", "()V", (void*) n_ttp_display_debug_wipe_skids },
     { "ttp_display_destroy", "()V", (void*) n_ttp_display_destroy },
+    { "ttp_display_detail", "([B[B)[B", (void*) n_ttp_display_detail },
     { "ttp_display_dividers", "(I)V", (void*) n_ttp_display_dividers },
     { "ttp_display_drain", "()V", (void*) n_ttp_display_drain },
     { "ttp_display_dress_keep", "(F)V", (void*) n_ttp_display_dress_keep },

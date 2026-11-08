@@ -390,6 +390,15 @@ tagged**: HWUI's own 3D kick per frame rides the same queue, and a frame
 stride that ignores it turns every cell boundary into a "cross-frame
 overlap" (the frame map's traps have both failures).
 
+**THIS BOX DRAWS THE LITE DETAIL TIER.** The C++ decides it from
+`PartyNet.CP_PLATFORM` (`ttp_display_detail`, called on `DisplayHost`'s create
+branch, before any build), and what lite takes off the frame is
+`native/renderer/CLAUDE.md`'s "The detail tier". So the scene budget's `lite`
+baseline and ceilings are this box's, and a world change is priced against
+them; `full`'s are the Apple TV's. `setprop debug.ttp.detail full` draws the
+full world here instead, read when the surface is created: the A/B for what
+lite buys on this GPU, which no host count can say.
+
 `docs/perf/androidtv-frame-map.md` is the perf record: where the frame stands,
 what each shipped lever bought, what is still open, and the ledger of levers
 measured dead — dated, stamped with its build, and kept out of this file

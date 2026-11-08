@@ -252,14 +252,11 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // mSkidRing) so each upload lands in a texture no in-flight frame samples.
     // The terrain sheets: a draw costs this driver CPU where the extra vertices
     // a coarser tile submits cost the GPU nothing it is bound on, so the sheets
-    // tile twice as coarse here (TtpRenderer.h, mSheetTile). The frame map's
-    // GL section has every reading.
+    // tile twice as coarse here (buildStatic, which the lite tier shares). The
+    // frame map's GL section has every reading.
     if (mAndroidGl) {
         mMaxTextureDim = std::min<uint32_t>(mMaxTextureDim, 4096);
         mSkidRingN = 2;
-        mSheetTile = 2.0f * kSheetTile;
-        mSheetMinTris = 4 * kSheetMinTris;
-        mPieceTile = 2.0f * kPieceTile;
     }
 #endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);
@@ -1826,6 +1823,11 @@ void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) 
 void TtpRenderer::applyDressSheets() {
     if (!mScene) return;
     const bool on = mDressSheets;
+    // Every sheet is in (or out) whole now, so no lite cut stands on one; the
+    // next cell's chooseCuts takes the small ones out again.
+    for (CutRange& c : mCuts) {
+        if (c.sheet) c.cut = false;
+    }
     forEachDressSheet([&](const Mesh& m) {
         const auto one = [&](utils::Entity e) {
             if (e.isNull()) return;
@@ -2192,6 +2194,7 @@ void TtpRenderer::releaseStatic() {
     // be handed back to the scene (the asset drops below take them out again,
     // properly, on their own path). The parsed-geometry cache stays — it is
     // keyed by the kit's bytes, which do not change between scenes.
+    restoreCuts();
     destroyMergedGroups(mMergedDress);
     mDressMergeDirty = false;
     mAssetMeshKey.clear();

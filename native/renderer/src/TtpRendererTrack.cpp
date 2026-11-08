@@ -2283,6 +2283,16 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb, float sf) {
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
+    // THE TILES (tileMajor, bakePlacements), twice as coarse where a draw costs
+    // more than the vertices a coarser tile submits: the Android GL fallback
+    // (a draw is driver CPU there; init) and the lite tier, whose box is as
+    // bound by draws as by vertices at four players. Lite's cut that a racer
+    // cannot see at all: measured on the heavy tracks, a quarter of the 4P
+    // frame's draws for 2-3% more of its vertices (less of each sheet culled).
+    const bool coarse = mAndroidGl || mLite;
+    mSheetTile = coarse ? 2.0f * kSheetTile : kSheetTile;
+    mSheetMinTris = coarse ? 4 * kSheetMinTris : kSheetMinTris;
+    mPieceTile = coarse ? 2.0f * kPieceTile : kPieceTile;
 
     TrackBin tb;
     applyTheme(tb, theme);
@@ -2507,10 +2517,15 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     .package(vsky->second.data(), vsky->second.size())
                     .build(*mEngine);
         }
+        // LITE: a third of the rings and three quarters of the spokes. The
+        // dome is never culled, so every cell pays all of it, about 7% of the
+        // 4P frame's vertices; the coarse one is a quarter of that, and the
+        // gradient between its rings strays a few code values.
+        const int R = mLite ? 16 : SKY_DOME_RINGS, S = mLite ? 24 : SKY_DOME_SEGS;
+        mSkyInset = std::cos((float) M_PI / S) * std::cos((float) M_PI / (2 * R));
         if (mSkyMaterial) {
             const float3 top = skyLinear(tb.sky[0]), hor = skyLinear(tb.sky[1]),
                          low = skyLinear(tb.sky[2]);
-            constexpr int R = SKY_DOME_RINGS, S = SKY_DOME_SEGS;
             mSkyDome.verts.clear();
             mSkyDome.idx.clear();
             for (int r = 0; r <= R; r++) {
@@ -3033,7 +3048,9 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             // straight across grid creases, and over a valley crease the chord
             // dips under the drawn ground. Half the span, a quarter the sag.
             constexpr float LIFT = 0.03f;
-            const int SEG = 14;
+            // LITE: an octagon. The rim fades to nothing, so its corners do
+            // not read; the discs were several percent of the 4P frame.
+            const int SEG = mLite ? 8 : 14;
             const uint32_t mid = packShown(srgbToLinear(0x2a2735), 1.0f, 0.15f);
             const uint32_t base = (uint32_t) mGroundShadows.verts.size();
             mGroundShadows.verts.push_back(

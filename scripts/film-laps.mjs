@@ -23,14 +23,19 @@
 //
 // --tree films another worktree's build: its own server, page and wasm (its
 // scripts/lib/capture.mjs, which serves the tree it lives in). The tag
-// defaults to the tree's directory name.
+// defaults to the tree's directory name, with `-lite` on a --detail lite film.
+//
+// --detail lite|full films that detail tier (ttp/detail.h; default full, the
+// web's own), so a board can show what the Android TV's lite tier gives up:
+// the same race, frame for frame, since the tier changes no sim.
 //
 // Output, in --out (default scratch/eval/films): <track>-<tag>-<1p|4p>.mp4
 // (1280x720 1P, or the TV's 540p four-cell picture at 960x540), a poster .jpg
 // at 1 s and a .json with cell 0's car per frame as [t, s, lat], s from the
 // line. A 4P film is another race (four player seats change the field).
 //
-// Usage: npm run film:laps -- --track id [--tree path] [--players 1|4] [--tag name] [--out dir] [--fps 30]
+// Usage: npm run film:laps -- --track id [--tree path] [--players 1|4] [--detail lite|full]
+//        [--tag name] [--out dir] [--fps 30]
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -40,7 +45,9 @@ import { args, ROOT } from './lib/capture.mjs';
 const SIM_HZ = 60;
 const a = args();
 const TREE = path.resolve(typeof a.tree === 'string' ? a.tree : ROOT);
-const TAG = typeof a.tag === 'string' ? a.tag : path.basename(TREE);
+const DETAIL = a.detail === undefined ? 'full' : String(a.detail);
+if (DETAIL !== 'full' && DETAIL !== 'lite') throw new Error('--detail: lite or full');
+const TAG = typeof a.tag === 'string' ? a.tag : path.basename(TREE) + (DETAIL === 'lite' ? '-lite' : '');
 const OUT = path.resolve(typeof a.out === 'string' ? a.out : path.join(ROOT, 'scratch', 'eval', 'films'));
 const PLAYERS = Number(a.players) === 4 ? 4 : 1;
 const FPS = Number(a.fps) || 30;
@@ -75,7 +82,7 @@ const app = await serveApp();
 const browser = await launchBrowser();
 try {
   const page = await browser.page({ viewport: VIEW, deviceScaleFactor: 1 });
-  await page.goto(displayURL(app.port, { scenario: 'racing', track, players: PLAYERS, dpr: 1, gate: 1, hud: 0 }));
+  await page.goto(displayURL(app.port, { scenario: 'racing', track, players: PLAYERS, dpr: 1, gate: 1, hud: 0, detail: DETAIL }));
   // The field's build must have LANDED, not just begun: while it is in
   // flight a frame skips the renderer (Display.setTrack has released the
   // field) but still steps the sim, so the scene clock every set piece's
@@ -84,6 +91,9 @@ try {
   await page.waitForFunction((n) => window.__scene && window.__engine && window.__scene.cars.size >= n
                              && window.__scene.sceneBuilt(), PLAYERS, { timeout: 180000, polling: 250 });
   await page.evaluate(() => document.fonts && document.fonts.ready);
+  // A tree that predates the tier ignores ?detail= and would film full under a lite name.
+  const tier = await page.evaluate(() => window.__scene.detail);
+  if (DETAIL === 'lite' && tier !== 'lite') throw new Error(`${TREE} has no lite tier (it drew ${tier ?? 'no tier'})`);
   await hideChrome(page);
   await page.evaluate((hz) => window.__scene.setFixedStep(1 / hz), SIM_HZ);
   // The lap the sim counts: the tree's own builder's length, which any tree
@@ -122,7 +132,7 @@ try {
   await done;
 
   const lapSeconds = +(frames.length / FPS).toFixed(3);
-  fs.writeFileSync(`${base}.json`, JSON.stringify({ track, tag: TAG, tree: TREE, players: PLAYERS, fps: FPS, len, lapSeconds, frames }));
+  fs.writeFileSync(`${base}.json`, JSON.stringify({ track, tag: TAG, tree: TREE, players: PLAYERS, detail: DETAIL, fps: FPS, len, lapSeconds, frames }));
   console.log(`${path.basename(base)}: ${frames.length} frames, lap ${lapSeconds} s -> ${base}.mp4`);
 } finally {
   await browser.close();

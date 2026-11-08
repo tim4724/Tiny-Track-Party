@@ -54,7 +54,7 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'car_pose', 'car_pose_clear', 'ground_y',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
-                      'biome', 'showcase',
+                      'biome', 'showcase', 'detail',
                       // What still has to be fetched, and the derived bytes kept
                       // between runs. Both are WALKS this side performs every
                       // build (asset_plan, asset_textures) or every frame
@@ -71,6 +71,22 @@ test('the shipped module exports the display ABI the shell binds to', async () =
 test('slot ids answer [] with no display — a HUD with no rows, not a crash', async () => {
   const M = await load();
   assert.equal(M.cwrap('ttp_display_slot_ids_json', 'string', [])(), '[]');
+});
+
+// THE DETAIL TIER IS DECIDED IN C++ (ttp/detail.h), from the platform each
+// shell names, and answered with or without a display — so the decision itself
+// is pinned here, where nothing else executes it: lite on the Android TV box
+// alone, full on the web and the Apple TV, and an explicit ask over either.
+test('the detail tier: lite on the Android TV, full elsewhere, an ask over both', async () => {
+  const M = await load();
+  const detail = M.cwrap('ttp_display_detail', 'string', ['string', 'string']);
+  assert.equal(detail('androidtv', null), 'lite');
+  assert.equal(detail('web', null), 'full');
+  assert.equal(detail('tvos', null), 'full');
+  assert.equal(detail('web', 'lite'), 'lite');
+  assert.equal(detail('androidtv', 'full'), 'full');
+  assert.equal(detail('androidtv', 'bogus'), 'lite', 'an unknown ask leaves the platform\'s tier');
+  assert.equal(detail(null, null), 'full');
 });
 
 test('the cell-overlay setters are a safe no-op with no display', async () => {

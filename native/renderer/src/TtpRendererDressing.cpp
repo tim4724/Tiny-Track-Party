@@ -2880,6 +2880,7 @@ void TtpRenderer::paintSetIds() {
 // deliberately hold PER-INSTANCE materials, which is the one thing a shared
 // instanced draw cannot express.
 void TtpRenderer::buildDressingMerge() {
+    restoreCuts();
     destroyMergedGroups(mMergedDress);
     if (!mScene) return;
     for (size_t m = 0; m < mSceneryAssets.size() && m < mSceneryInstances.size(); m++) {
@@ -2888,11 +2889,38 @@ void TtpRenderer::buildDressingMerge() {
     for (size_t m = 0; m < mPropAssets.size() && m < mPropInstances.size(); m++) {
         mergeInstancedSet(mPropAssets[m], mPropInstances[m], false);
     }
+    // LITE: the scatter's and the props' runs, and the clutter's chunks, are
+    // small things (chooseCuts). Taken here, before the set pieces join the
+    // list: those are the world and stay.
+    if (mLite) {
+        for (const MergedGroup& g : mMergedDress) {
+            if (!g.dynamic) addCut(g.ent, 0.0f, false);
+        }
+        // A flower patch or a pebble stands well under half a unit; the box
+        // of a chunk spans the ground it lies on, not that.
+        addCut(mClutter.entity, 0.5f, true);
+        for (const utils::Entity e : mClutter.chunks) addCut(e, 0.5f, true);
+    }
     for (size_t m = 0; m < mSetAssets.size() && m < mSetInstances.size(); m++) {
         mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
     }
     buildSetMovers();
     mergeInstancedSet(mConeAsset, mConeInstances, true);
+}
+
+void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri = e.isNull() ? RenderableManager::Instance{} : rcm.getInstance(e);
+    if (!ri) return;
+    // Every listed mesh is built in world units on an identity transform.
+    const filament::Box b = rcm.getAxisAlignedBoundingBox(ri);
+    CutRange c;
+    c.entity = e;
+    c.lo = b.getMin();
+    c.hi = b.getMax();
+    c.size = size > 0.0f ? size : c.hi.y - c.lo.y;
+    c.sheet = sheet;
+    mCuts.push_back(c);
 }
 
 std::vector<std::pair<std::string, int>> TtpRenderer::debugLiveDressing() const {

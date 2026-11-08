@@ -28,6 +28,7 @@ import { CAM, Display, RECT_STRIDE, TAG_STRIDE, assetCache } from './render/Disp
 import { PerfHud } from './render/PerfHud.js';
 import { PresentPacer } from './presentPacer.js';
 import { ITEM_IDS } from './engine/contract.js';
+import { CP_PLATFORM } from './NativeSessionModel.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
 
 // Labels are the vocabulary, shouted — derived, not re-typed.
@@ -269,6 +270,9 @@ export class Stage {
     // Seven hex digits: 0x8009FFC and 0x809FFC are different masks.
     const fm = parseInt(params.get('features'), 16);
     this._features = Number.isFinite(fm) ? fm : null;
+    // ?detail=lite|full: the detail tier this platform does not ship, to film
+    // and price it in a browser (ttp_display_detail); null keeps the web's.
+    this._detailAsk = params.get('detail');
     this._superArmed = false;
     this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
@@ -341,6 +345,7 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    this.detail = this.display.detail(CP_PLATFORM, this._detailAsk);
     if (this._dressKeep !== null) this.display.dressKeep(this._dressKeep);
     if (this._dressSheetsOff) this.display.dressSheets(false);
     if (this._features !== null) this.display.debugFeatures(this._features);

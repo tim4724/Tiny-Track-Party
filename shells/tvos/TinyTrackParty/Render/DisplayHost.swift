@@ -346,6 +346,10 @@ final class DisplayHost {
         // at every rung. The pin still overrides, so `--aa 1` measures it back
         // on without a build.
         ttp_display_antialias(Int32(Self.antialiasPin ?? 0))
+        // THE DETAIL TIER, decided in C++ from the platform: full here, the world
+        // as authored (the lite tier is the Android TV box's). Before the first
+        // build, which meshes it.
+        print("[ttp] detail tier \(TTP.strOrEmpty(ttp_display_detail(PartyNet.pbPlatform, nil)))")
         applyFeaturePin()
     }
 
