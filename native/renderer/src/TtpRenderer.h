@@ -1201,11 +1201,14 @@ private:
     // LOWEST section across it, and its chords cannot rise within a cell of
     // the kerb. The band is fine enough to do both:
     //  - LOW ROAD SITS IN THE LAND. Within kApronLevel of the kerb the band
-    //    stands kApronGap under the deck's top, so only the kerb stands over
-    //    the ground and no slab side shows, then eases down to the land over
-    //    kApronRun. Its height over the plain fades that apron out from
-    //    kApronFull to kApronNone (the field's own low/raised line), so road
-    //    climbing onto its stilts rises out of the land; a cut keeps it.
+    //    stands kApronGap under the deck's top (its first row, inside the
+    //    kerb, kApronKerb over it), so only the kerb stands over the ground
+    //    and no slab side shows, then eases down to the land over kApronRun.
+    //    Its height over the plain fades that apron out from kApronFull to
+    //    kApronNone (the field's own low/raised line), so road climbing onto
+    //    its stilts rises out of the land; a cut keeps it. Wherever the deck
+    //    stands on its own pillars (within kStiltNear, fading over
+    //    kStiltFade) the band yields to the grid, so every pier shows.
     //  - THE LAND AT THE KERB: past the apron the band is the field as its own
     //    road raises it, within kBandOver of the grid but for a form authored
     //    `near` (a mountain's foot), handing over to the grid from kBandBlend
@@ -1234,7 +1237,11 @@ private:
     static constexpr int kBandMinEnd = 2;
     static constexpr float kBandStep = 4.0f, kBandTurnCos = 0.9848f;   // 10 degrees
     static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
-    static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f;
+    static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f, kApronKerb = 0.02f;
+    // A pillar is this ring's own when its top sits within kStiltMatch of
+    // kDeckDepth under the ring's deck, a ramp's climb to it included (the
+    // other strand of a crossing is a bridge's clearance off).
+    static constexpr float kStiltMatch = 0.6f, kStiltNear = 2.0f, kStiltFade = 2.5f;
     static constexpr float kApronFull = kVergeLow - 0.1f, kApronNone = kVergeLow + 0.4f, kApronCut = 0.3f;
     static constexpr float kBandBlend = 8.0f, kBandLift = 0.05f, kBandTuck = 0.12f;
     // Another road's band takes the ground nearer it when its deck stands

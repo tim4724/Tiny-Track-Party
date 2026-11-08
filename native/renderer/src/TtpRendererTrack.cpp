@@ -887,6 +887,15 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         const float2 latH = normalize(float2{ f.lat.x, f.lat.z });
         const float toward = dot(tbn - ta, latH);   // > 0: turning toward +lat
         const TrackBin::Sample f0 = tb.frameAt(f.s - kHumpRun), f1 = tb.frameAt(f.s + kHumpRun);
+        // A deck on its own pillars keeps them in sight: the band yields
+        // there, so a bridge's or a hop's piers stand on the grid's ground
+        // from the first, not in a bank of land the apron ramps up under it.
+        float stilts = 0;
+        for (const TrackBin::Pillar& p : tb.pillars) {
+            if (std::fabs(p.topY - (f.pos.y - kDeckDepth)) > kStiltMatch) continue;
+            const float d = length(float2{ p.x - f.pos.x, p.z - f.pos.z });
+            stilts = std::max(stilts, 1.0f - smooth01((d - kStiltNear) / kStiltFade));
+        }
         for (int side = 0; side < 2; side++) {
             const float sg = side ? 1.0f : -1.0f;
             Edge& e = edges[(size_t) k * 2 + side];
@@ -913,7 +922,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const float natural = terrainField(tb, rx, rz, true) - roadLift(tb, rx, rz, edge);
             const float low = 1.0f - smooth01((e.lev - tb.groundY - kApronFull) / (kApronNone - kApronFull));
             const float cut = 1.0f - smooth01((e.lev - natural - kApronCut) / (kApronNone - kApronFull));
-            e.fill = std::max(low, cut) * (1.0f - street);
+            e.fill = std::max(low, cut) * (1.0f - street) * (1.0f - stilts);
         }
     }
     // The land at (px, pz), o past the kerb, as this road alone raises it:
@@ -977,7 +986,11 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 // mTsiNear, and what the `near` forms raise there in mNearRise.
                 const float nearRise = mNearRise;
                 const float grid = mGroundGrid.gridAt(px, pz);
-                float a = e.lev - (r == 0 ? kApronTuck : kApronGap);
+                // Row 0 stands kApronKerb over the deck's top inside the kerb,
+                // so no sliver of the slab's side shows at the kerb's outer
+                // foot; under a plough bank, whose slope runs on down into
+                // the land, it tucks under instead.
+                float a = e.lev + (r ? -kApronGap : tb.kerbBank ? -kApronTuck : kApronKerb);
                 if (o > kApronLevel) {
                     // The land keeps to the grid's within kBandOver, but for a
                     // form authored `near`: the band follows the road, not

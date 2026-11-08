@@ -45,6 +45,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
     // No default half-width here: isClear measures each SAMPLE's own width, so a
     // track that narrows or widens is respected.
     const float MARGIN = 2.2f;
+    const float TRUNK = 0.4f;   // a tree's foot, as a share of its canopy's reach
     const auto isClear = [&](float x, float z) {
         for (const auto& s : tb.samples) {
             const float half = s.width / 2 + MARGIN;
@@ -189,7 +190,10 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         size_t k = 0;
         for (const auto& p : placements) {
             if (p.model != m) continue;
-            const float gy = groundSurfaceY(tb, p.x, p.z) - p.sink * p.s;
+            // At the lowest point under its trunk (TRUNK of the canopy's
+            // reach), so a slope leaves its downhill side in the land, never
+            // over it: the verge band's apron by the kerb is one.
+            const float gy = footprintY(tb, p.x, p.z, TRUNK * reach * p.s) - p.sink * p.s;
             const float top = gy + bb.max.y * p.s * p.syJit;
             if (blocksRoadAhead(p.x, p.z, reach * p.s, top)) continue;
             record(p.x, p.z, reach * p.s, top);
@@ -310,7 +314,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         return !inBerm(tb, x, z, m);
     };
 
-    struct Placement { uint32_t slot; float x, y, z, s, yaw; };
+    struct Placement { uint32_t slot; float x, y, z, s, yaw, gx = 0, gz = 0; };   // gx, gz: the slope it lies on
     std::vector<Placement> placements;
 
     // Scattered pieces, the buildScenery idiom: a candidate every 9u per side,
@@ -411,18 +415,45 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     // only held the CENTRE off the deck, which a crate clears and a big model
     // does not.
     const float CLEAR = 0.35f;   // daylight between two things that both stand
+    const float LIE_TALL = 1.5f, LIE_SLOPE = 0.4f;   // what lies on a slope, and how steep
     std::vector<size_t> kept;
     for (size_t i = 0; i < placements.size(); i++) {
         Placement& p = placements[i];
         const float pr = reach[p.slot] * p.s;   // what this prop covers
         if (!isClearP(p.x, p.z, pr + ROAD_CLEAR * 0.5f)) continue;
-        // Grounded at the LOWEST point under its own footprint (footprintSpan),
-        // so the downhill edge never hangs; the uphill edge is then that much
-        // inside the hill. Past a quarter of the prop's height it reads as
-        // buried, and the prop is dropped like any other loser.
-        const float2 ground = footprintSpan(tb, p.x, p.z, pr);
-        if (ground.y - ground.x > 0.25f * tall[p.slot] * p.s) continue;
-        p.y = ground.x;
+        // Grounded on the land under its own footprint: the centre and eight
+        // probes round its reach. A SQUAT model (a bale, a crate, a rock: no
+        // taller than LIE_TALL times its reach) LIES on it, tilted to the
+        // slope across the probes (up to LIE_SLOPE), as a thing set down on a
+        // bank does, so the verge band's apron by the kerb takes it; a tall
+        // one stands plumb. Either way it stands at the lowest probe against
+        // its own base, so the downhill edge never hangs; the uphill edge is
+        // then that much inside the land. Past a quarter of the prop's height
+        // it reads as buried, and the prop is dropped like any other loser.
+        const float gc = groundSurfaceY(tb, p.x, p.z);
+        const float gxp = groundSurfaceY(tb, p.x + pr, p.z), gxn = groundSurfaceY(tb, p.x - pr, p.z);
+        const float gzp = groundSurfaceY(tb, p.x, p.z + pr), gzn = groundSurfaceY(tb, p.x, p.z - pr);
+        if (tall[p.slot] <= LIE_TALL * reach[p.slot] && !spins[p.slot] && pr > 1e-3f) {
+            p.gx = (gxp - gxn) / (2 * pr);
+            p.gz = (gzp - gzn) / (2 * pr);
+            const float g = std::hypot(p.gx, p.gz);
+            if (g > LIE_SLOPE) { p.gx *= LIE_SLOPE / g; p.gz *= LIE_SLOPE / g; }
+        }
+        // Each probe against the base plane through the centre, the
+        // footprint's diagonals too (a slope's curve shows there first).
+        const float d = pr * 0.7071f;
+        const float3 probes[8] = {   // (x, z) off the centre, and the ground there
+            { pr, 0, gxp }, { -pr, 0, gxn }, { 0, pr, gzp }, { 0, -pr, gzn },
+            { d, d, groundSurfaceY(tb, p.x + d, p.z + d) }, { d, -d, groundSurfaceY(tb, p.x + d, p.z - d) },
+            { -d, d, groundSurfaceY(tb, p.x - d, p.z + d) }, { -d, -d, groundSurfaceY(tb, p.x - d, p.z - d) } };
+        float lo = gc, hi = gc;
+        for (const float3& o : probes) {
+            const float off = o.z - p.gx * o.x - p.gz * o.y;
+            lo = std::min(lo, off);
+            hi = std::max(hi, off);
+        }
+        p.y = lo;
+        if (hi - lo > 0.25f * tall[p.slot] * p.s) continue;
         if (blocksRoadAhead(p.x, p.z, pr, p.y + tall[p.slot] * p.s)) continue;
         bool clash = false;
         for (const float4& spot : mShadowSpots) {
@@ -445,7 +476,13 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         for (const size_t i : kept) {
             const Placement& p = placements[i];
             if (p.slot != m) continue;
-            const mat4f xf = mat4f::translation(float3{ p.x, p.y, p.z })
+            // Lying on a slope: +Y turned to the land's normal there.
+            mat4f lie;
+            if (p.gx != 0 || p.gz != 0) {
+                const float3 n = normalize(float3{ -p.gx, 1.0f, -p.gz });
+                lie = mat4f::rotation(std::acos(n.y), normalize(float3{ n.z, 0, -n.x }));
+            }
+            const mat4f xf = mat4f::translation(float3{ p.x, p.y, p.z }) * lie
                     * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
                     * mat4f::scaling(float3{ p.s, p.s, p.s });
             tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()), xf);
@@ -516,7 +553,11 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 1.6f;
             const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 1.6f;
             if (!isClearC(x, z)) continue;
-            const float gy = groundSurfaceY(tb, x, z); // every piece stands on the relief
+            // Every part stands on the relief at its OWN foot (the lowest
+            // point under it, r across), not the spot's: the verge band's
+            // apron climbs to the kerb through the very strip this lays.
+            const auto foot = [&](float px, float pz, float r) { return footprintY(tb, px, pz, r); };
+            const float gy = groundSurfaceY(tb, x, z);
             const double r = rnd(); // weighted kind pick (one draw)
             double acc = 0;
             const TrackBin::ClutterKind* entry = &tb.clKinds.back();
@@ -533,7 +574,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                         const float rz = 0.12f + (float) rnd() * 0.1f;
                         const float ry = (float) rnd() * 2.0f * (float) M_PI;
                         put(primSphereBand(rr, 8, 4, 0, (float) M_PI / 2),
-                                T(x, gy + 0.03f, z) * RY(ry) * RZ(rz) * SC(1, 0.55f, 1.2f),
+                                T(x, foot(x, z, 1.2f * rr) + 0.03f, z) * RY(ry) * RZ(rz) * SC(1, 0.55f, 1.2f),
                                 pick(entry), 0.96f + (float) rnd() * 0.1f);
                         break;
                     }
@@ -541,11 +582,12 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                         const uint32_t hex = pick(entry);
                         const float a0 = (float) rnd() * 2.0f * (float) M_PI;
                         const float sc = 0.8f + (float) rnd() * 0.5f;
+                        const float fy = foot(x, z, 0.3f * sc);
                         const PartFn emit = [&](const Prim& p, float lx, float ly,
                                 float lz, uint32_t h2, float shade) {
                             Prim s2 = p;
                             for (auto& q : s2.v) q *= sc;
-                            put(s2, T(x, gy, z) * RY(a0)
+                            put(s2, T(x, fy, z) * RY(a0)
                                     * T(lx * sc, ly * sc, lz * sc), h2, shade);
                         };
                         buildStarfishModel(emit, mModelVariant[MODEL_STARFISH], hex);
@@ -554,12 +596,20 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                     case 3: { // driftwood — two thin rods, kinked where they meet
                         const uint32_t hex = pick(entry);
                         const float a = (float) rnd() * 2.0f * (float) M_PI;
+                        // A rod lies along RY(b)'s +X: its foot is the lowest
+                        // of its middle and both ends.
+                        const auto rod = [&](float cx, float cz, float b, float half) {
+                            const float ex = std::cos(b) * half, ez = -std::sin(b) * half;
+                            return std::min({ groundSurfaceY(tb, cx, cz), groundSurfaceY(tb, cx + ex, cz + ez),
+                                              groundSurfaceY(tb, cx - ex, cz - ez) });
+                        };
                         put(applyPre(primCylinder(0.07f, 0.09f, 1.5f, 6),
                                     mat4f::rotation((float) M_PI / 2, float3{ 0, 0, 1 })),
-                                T(x, gy + 0.08f, z) * RY(a), hex, 1.0f);
+                                T(x, rod(x, z, a, 0.75f) + 0.08f, z) * RY(a), hex, 1.0f);
+                        const float x2 = x + std::cos(a) * 0.55f, z2 = z - std::sin(a) * 0.55f;
                         put(applyPre(primCylinder(0.05f, 0.06f, 0.9f, 6),
                                     mat4f::rotation((float) M_PI / 2, float3{ 0, 0, 1 })),
-                                T(x + std::cos(a) * 0.55f, gy + 0.06f, z - std::sin(a) * 0.55f)
+                                T(x2, rod(x2, z2, a + 0.6f, 0.45f) + 0.06f, z2)
                                         * RY(a + 0.6f), hex, 0.92f);
                         break;
                     }
@@ -568,7 +618,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                         const float sy = 0.28f + (float) rnd() * 0.12f;
                         const float sz = 0.55f + (float) rnd() * 0.5f;
                         const float ry = (float) rnd() * 2.0f * (float) M_PI;
-                        put(primIcoDetail(1.0f, 1), T(x, gy + 0.07f, z) * RY(ry) * SC(sx, sy, sz),
+                        put(primIcoDetail(1.0f, 1), T(x, foot(x, z, std::max(sx, sz)) + 0.07f, z) * RY(ry) * SC(sx, sy, sz),
                                 pick(entry), 0.97f + (float) rnd() * 0.06f);
                         break;
                     }
@@ -578,7 +628,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                             const float rr = 0.3f + (float) rnd() * 0.18f;
                             const float sy = 0.55f + (float) rnd() * 0.2f;
                             const float ry = (float) rnd() * 2.0f * (float) M_PI;
-                            put(primIco(rr), T(x + i * 0.5f, gy + 0.12f, z + i * 0.3f)
+                            put(primIco(rr), T(x + i * 0.5f, foot(x + i * 0.5f, z + i * 0.3f, rr) + 0.12f, z + i * 0.3f)
                                             * RY(ry) * SC(1, sy, 1),
                                     pick(entry), 0.9f + (float) rnd() * 0.2f);
                         }
@@ -590,7 +640,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                             const float rr = 0.09f + (float) rnd() * 0.09f;
                             const float ox = ((float) rnd() - 0.5f) * 0.7f;
                             const float oz = ((float) rnd() - 0.5f) * 0.7f;
-                            put(primIco(rr), T(x + ox, gy + rr * 0.5f, z + oz),
+                            put(primIco(rr), T(x + ox, foot(x + ox, z + oz, rr) + rr * 0.5f, z + oz),
                                     pick(entry), 0.9f + (float) rnd() * 0.2f);
                         }
                         break;
@@ -660,26 +710,27 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                 if (!found) continue;
                 spots.push_back({ fx, fz, headR });
                 const float h = (0.26f + (float) rnd() * 0.12f) * s;
+                const float by = foot(fx, fz, 0.16f * s);   // its own foot, leaves and all
                 const uint32_t hex = entry->tints.empty() ? 0xffffffu
                         : entry->tints[(size_t) std::floor(rnd() * entry->tints.size())];
                 const float ph = (float) rnd() * 2.0f * (float) M_PI;
-                put(primCylinder(0.038f * s, 0.05f * s, h, 3), T(fx, gy + h / 2, fz),
+                put(primCylinder(0.038f * s, 0.05f * s, h, 3), T(fx, by + h / 2, fz),
                         0x4e8a44, 0.92f + (float) rnd() * 0.14f);
                 for (int k = 0; k < 2; k++) {
                     const float la = ph + k * 2.4f + 0.7f;
                     put(primSphere(0.1f * s, 4, 3),
-                            T(fx + std::cos(la) * 0.16f * s, gy + 0.03f, fz + std::sin(la) * 0.16f * s)
+                            T(fx + std::cos(la) * 0.16f * s, by + 0.03f, fz + std::sin(la) * 0.16f * s)
                                     * RY(-la) * SC(1.7f, 0.3f, 0.7f),
                             0x5a9a50, 0.9f + (float) rnd() * 0.12f);
                 }
                 for (int k = 0; k < 5; k++) {
                     const float pa = ph + ((float) k / 5) * 2.0f * (float) M_PI;
                     put(primSphere(0.09f * s, 4, 3),
-                            T(fx + std::cos(pa) * 0.13f * s, gy + h + 0.02f * s, fz + std::sin(pa) * 0.13f * s)
+                            T(fx + std::cos(pa) * 0.13f * s, by + h + 0.02f * s, fz + std::sin(pa) * 0.13f * s)
                                     * RY(-pa) * RZ(0.4f) * SC(1.5f, 0.4f, 0.85f),
                             hex, 0.95f + (float) rnd() * 0.1f);
                 }
-                put(primSphere(0.08f * s, 4, 3), T(fx, gy + h + 0.03f * s, fz) * SC(1, 0.7f, 1),
+                put(primSphere(0.08f * s, 4, 3), T(fx, by + h + 0.03f * s, fz) * SC(1, 0.7f, 1),
                         0xf2c14e, 1.05f);
             }
         }
