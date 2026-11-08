@@ -6702,64 +6702,14 @@ def slinky():
         tube(pts[k:k + BAND + 1], WIRE, RAIN[(k // BAND) % 6], res=1, bevel_res=0)
         bpy.ops.object.shade_smooth()
 
-@piece(0.8)
-def block_castle():
-    # Gauntlet: a castle of alphabet blocks on the floor, the toy siege the
-    # track's knights and their dragon lay. The curtain wall runs along the road
-    # with its gate to the road (+X), towers at the four corners flying
-    # pennants that flap, the king's banner over the gate, side and back
-    # walls closing the court, a moat along the front with the drawbridge
-    # down across it. A block is about 5 cm; a pennant a toy's, cut big
-    # enough to see flapping from the road.
-    S, C = 1.4, 0.0                               # a block; the ground it stands on
-    front = ('+x', '+y')
-    for i in range(7):                           # the curtain wall, two courses
-        z = (i - 3) * S
-        if i != 3:
-            block(S, (0, C + S / 2, z), TOY[(i + 1) % 4], faces=front, letters={'+x': ABC[i]})
-        block(S, (0, C + S * 1.5, z), TOY[i % 4], faces=front)
-        if i % 2 == 0:
-            box((S * 0.6, S * 0.5, S * 0.6), (0, C + S * 2.25, z), 0xf2c14e)
-    box((0.5, S * 1.05, S * 0.9), (0.2, C + S * 0.52, 0), 0x3a2a22)              # the gateway
-    GT = C + S * 2                                                              # the banner over it
-    box((BAR * 1.6, 2.6, BAR * 1.6), (0, GT + 1.3, 0), 0x2a2735)
-    with animated('anim_sway:a=x:d=20:p=2.4#banner', (0, GT + 2.55, 0)):
-        box((0.08, 1.1, 1.9), (0, GT + 1.98, 1.0), 0x5a8fd8)
-        box((0.1, 0.4, 0.4), (0, GT + 1.98, 1.0), 0xf2c14e)                    # its crest
-    n = 0
-    for sz in (-1, 1):
-        z = sz * 4 * S
-        for x, h in ((0, 3), (-3 * S, 2)):          # front and rear towers
-            for j in range(h):
-                block(S, (x, C + S / 2 + j * S, z), TOY[(j + sz + 2) % 4], faces=('+x', '+z', '-z', '-x'),
-                      letters={'+x': ABC[(j + 4 + sz) % 8]} if x == 0 else None)
-            top = C + h * S
-            cyl(S * 0.78, S * 0.9, (x, top, z), 0x6cbf6c if x == 0 else 0xe66a5a, r2=0.05, segs=10)
-            box((BAR * 1.4, 1.8, BAR * 1.4), (x, top + 1.3, z), 0x2a2735)
-            with animated('anim_sway:a=x:d=24:p=%.1f#%d' % (1.6 + 0.2 * n, n), (x, top + 2.15, z)):
-                box((0.08, 0.8, 1.2), (x, top + 1.75, z + 0.65), 0xff5040)  # the pennant flaps, all
-                box((0.08, 0.44, 0.6), (x, top + 1.75, z + 1.5), 0xff5040)  # four the banner's way
-            n += 1
-        for j in (1, 2):                            # the side walls
-            block(S, (-j * S, C + S / 2, z), TOY[(j + 1) % 4], faces=('+y', '+z', '-z'))
-    for i in range(7):                              # the back wall, one course
-        block(S, (-3 * S, C + S / 2, (i - 3) * S), TOY[(i + 2) % 4], faces=('+y', '-x'))
-    # the moat along the front, the drawbridge down across it
-    box((1.6, 0.08, 9 * S), (S / 2 + 1.1, C + 0.04, 0), 0x5a8fd8)
-    L = 2.4
-    box((L, 0.14, S * 0.85), (S / 2 + L / 2, C + 0.16, 0), 0xb08a5a, roll=0.06)
-    for s in (-1, 1):
-        tube([(S / 2 + 0.05, C + S * 0.95, s * S * 0.38), (S / 2 + L - 0.15, C + 0.3, s * S * 0.38)], 0.03, 0x2a2735, res=2, bevel_res=0)
-    merge_paint()
-
 @piece(1.0)
 def castle_gate():
     # Gauntlet: the home straight runs THROUGH the block castle's gatehouse,
     # the castle itself standing beside the road just short of it. Placed at
     # lat 0, so x = 0 is the road's centreline (deck 5 wide, kerbs to 2.76),
     # +Z the way the racers drive and +X their left. Built from the castle's
-    # own blocks (block_castle's 1.4 at its grow 0.8): only the towers are
-    # taller than the castle's, because the lintel must clear the road. A
+    # own blocks (block_fortress's, a little smaller): only the towers are
+    # taller than the castle's walls, because the lintel must clear the road. A
     # tower of five blocks on each kerb (inner faces 4 u off the centreline,
     # past the road's 1.2 u margin) and a lintel of seven blocks between
     # them, its underside 3.6 up: 3.18 over the deck top, past spotIssue's
@@ -7270,6 +7220,24 @@ def stack_tower(x, z, sizes, colors, cap):
     cyl(sizes[-1] * 0.55, sizes[-1] * 1.1, (x, y, z), cap, r2=0.05, segs=8)
     return y
 
+def toy_crane(CX, CZ, CH, G, tag='', p=12):
+    """A toy tower crane on the floor at (CX, CZ), its mast CH tall on a rug
+    G thick: the jib toward -Z at rest slews +-45 degrees every `p` s, and
+    the block on its hook swings under the jib's tip, riding it."""
+    box((1.8, 0.4, 1.8), (CX, G + 0.2, CZ), 0x555b66)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box((0.2, CH, 0.2), (CX + sx * 0.32, G + CH / 2, CZ + sz * 0.32), 0xf2c14e)
+    for k in range(int((CH - 1.2) / 1.3) + 1):
+        box((0.84, 0.14, 0.84), (CX, G + 1.2 + k * 1.3, CZ), 0xf2c14e)
+    with animated('anim_sway:a=y:d=45:p=%g%s' % (p, tag), (CX, G + CH, CZ)):
+        box((1.0, 0.9, 1.0), (CX, G + CH + 0.45, CZ), 0xff5040)                   # the cab
+        box((0.45, 0.4, 5.4), (CX, G + CH + 1.05, CZ - 1.9), 0xf2c14e)            # the jib
+        box((0.9, 0.7, 1.0), (CX, G + CH + 0.8, CZ + 1.3), 0x555b66)              # the counterweight
+        with animated('anim_sway:a=z:d=7:p=2.6%s' % tag, (CX, G + CH + 0.85, CZ - 4.2)):
+            bar((CX, G + CH + 0.85, CZ - 4.2), (CX, G + CH - 2.0, CZ - 4.2), 0.06, 0.06, 0x2a2735)
+            box((0.7, 0.7, 0.7), (CX, G + CH - 2.4, CZ - 4.2), 0x5a8fd8)           # a block on the hook
+
 @piece(1.0)
 def block_city():
     # Skyline: a town of wooden toy blocks built on a city play rug (printed
@@ -7326,24 +7294,11 @@ def block_city():
     for k, (x, z, s, c) in enumerate(((-10.2, 10.0, 0.9, 0xe66a5a), (-9.1, 10.2, 0.9, WOOD), (-9.7, 10.1, 0.9, 0x5a8fd8),
                                       (-10.4, 11.4, 0.8, 0xf2c14e), (-8.0, 13.6, 1.0, 0x6cbf6c))):
         box((s, s, s), (x, G + s / 2 + (0.9 if k == 2 else 0), z), c, yaw=0.3 * k)
-    CX, CZ, CH = -6.0, 11.8, 5.6
-    box((1.8, 0.4, 1.8), (CX, G + 0.2, CZ), 0x555b66)
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            box((0.2, CH, 0.2), (CX + sx * 0.32, G + CH / 2, CZ + sz * 0.32), 0xf2c14e)
-    for k in range(4):
-        box((0.84, 0.14, 0.84), (CX, G + 1.2 + k * 1.3, CZ), 0xf2c14e)
     # The crane slews to and fro over the site's edge and the cross street
     # (its jib toward the town at rest, so the load never swings off the
     # rug), as a crane works, and the block on its hook swings (a pendulum
     # about the jib's own line, riding the jib).
-    with animated('anim_sway:a=y:d=45:p=12', (CX, G + CH, CZ)):
-        box((1.0, 0.9, 1.0), (CX, G + CH + 0.45, CZ), 0xff5040)                   # the cab
-        box((0.45, 0.4, 5.4), (CX, G + CH + 1.05, CZ - 1.9), 0xf2c14e)            # the jib
-        box((0.9, 0.7, 1.0), (CX, G + CH + 0.8, CZ + 1.3), 0x555b66)              # the counterweight
-        with animated('anim_sway:a=z:d=7:p=2.6', (CX, G + CH + 0.85, CZ - 4.2)):
-            bar((CX, G + CH + 0.85, CZ - 4.2), (CX, G + CH - 2.0, CZ - 4.2), 0.06, 0.06, 0x2a2735)
-            box((0.7, 0.7, 0.7), (CX, G + CH - 2.4, CZ - 4.2), 0x5a8fd8)           # a block on the hook
+    toy_crane(-6.0, 11.8, 5.6, G)
     for x, z, c, ax in ((2.6, -10.5, 0xff5040, False), (1.4, 9.0, 0x6cbf6c, False)):
         o0 = set(bpy.context.scene.objects)
         mini_car(x, z, c, along_x=ax)
@@ -7841,6 +7796,724 @@ def trebuchet():
     for k in range(3):
         soldier((4.6, 0.2, -1.5 + k * 1.5), BESIEGERS)
     merge_paint()
+
+# ---- Gauntlet: the castle the lap rings, and the camp across the ramp ----
+
+class transformed:
+    """Parts built inside are turned `yaw` about the upright through `at`
+    (box()'s sense) and sized by `k` about it: a knight built facing +X at a
+    toy set's own size, stood on a wall facing its own way. Nothing that
+    moves goes inside: its pivot would stay where it was built."""
+    def __init__(self, at, yaw=0.0, k=1.0):
+        self.at, self.yaw, self.k = at, yaw, k
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        return self
+    def __exit__(self, *exc):
+        bpy.context.view_layer.update()
+        c = P(*self.at)
+        m = Matrix.Translation(c) @ Matrix.Rotation(self.yaw, 4, 'Z') @ Matrix.Scale(self.k, 4) @ Matrix.Translation(-c)
+        for o in bpy.context.scene.objects:
+            if o not in self.before and o.parent is None:
+                o.matrix_world = m @ o.matrix_world
+        return False
+
+def knight(at, color, yaw):
+    """One of the toy knights (soldier()) at the toy set's size, facing (cos
+    yaw, -sin yaw)."""
+    with transformed(at, yaw, 0.55):
+        soldier(at, color)
+
+def block_run(a, b, y, color0, courses=1, faces=('+x',), letters=True, crenels=False):
+    """A wall of alphabet blocks from (x, z) a to b along X or Z, whole
+    blocks about 1.3 a side, `courses` high from `y`, its cream panels on
+    `faces` (the face turned to the road) and a letter on every other one."""
+    L = math.hypot(b[0] - a[0], b[1] - a[1])
+    n = max(1, round(L / 1.3))
+    s = L / n
+    along_x = abs(b[0] - a[0]) > abs(b[1] - a[1])
+    for c in range(courses):
+        for i in range(n):
+            f = (i + 0.5) / n
+            x, z = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
+            lt = {faces[0]: ABC[(i * 3 + c * 5) % 8]} if letters and (i + c) % 2 == 0 else None
+            block(s, (x, y + s / 2 + c * s, z), TOY[(i + c + color0) % 4], faces=faces, letters=lt)
+            if crenels and c == courses - 1 and i % 2 == 0:
+                box((s * 0.55 if along_x else s * 0.6, s * 0.45, s * 0.6 if along_x else s * 0.55),
+                    (x, y + courses * s + s * 0.22, z), 0xf2c14e)
+    return y + courses * s
+
+def block_tower(x, z, T, n, color0, roof, face, pennant=None, fly=1):
+    """A corner tower: `n` big blocks of `T` stacked, a cone roof, and a
+    pennant on a pole over it that sways (`pennant` names its motion),
+    flying toward +Z (`fly` -1: toward -Z)."""
+    for j in range(n):
+        block(T, (x, T / 2 + j * T, z), TOY[(j + color0) % 4], faces=('+x', '-x', '+z', '-z'),
+              letters={face: ABC[(j * 3 + color0) % 8]})
+    top = n * T
+    cyl(T * 0.72, T * 0.9, (x, top, z), roof, r2=0.05, segs=10)
+    if pennant:
+        box((BAR * 1.4, 1.7, BAR * 1.4), (x, top + 1.3, z), 0x2a2735)
+        with animated(pennant, (x, top + 2.1, z)):
+            box((0.08, 0.8, 1.2), (x, top + 1.7, z + fly * 0.65), 0xff5040)
+            box((0.08, 0.44, 0.6), (x, top + 1.7, z + fly * 1.5), 0xff5040)
+    return top
+
+@piece(1.0)
+def block_fortress():
+    # Gauntlet: the toy castle the lap is laid round, built of the alphabet
+    # blocks a child keeps. It fills the
+    # loop the road makes inside the lap (placed so its frame is the
+    # world's: +Z toward the ramp, +X toward the ring's run home), so the
+    # racers circle its walls on four sides: a curtain
+    # wall of two courses with its crenels, a big tower at each corner
+    # flying a red pennant, the gatehouse in the wall toward the ramp with
+    # its drawbridge down toward the besiegers' camp beyond, the keep
+    # standing over the court with the king's banner, and the castle's blue
+    # knights on the wall walk either side of the gate. Every wall stands
+    # 3 u off the kerb, its panels and letters to the road.
+    TX, TZ, T = 8.25, 6.4, 1.8                    # the corner towers' centres, their block
+    S = 1.3
+    # the curtain wall, between the towers' faces; the gate in the +Z wall
+    GW = 1.25                                     # half the gateway's opening
+    GT = GW + S / 2                               # the gate towers' centres
+    wall_top = {}                                 # each wall's height, for the knights on it
+    for sz in (-1, 1):
+        face = '+z' if sz > 0 else '-z'
+        z = sz * TZ
+        if sz > 0:
+            wall_top['n'] = block_run((-TX + T / 2, z), (-GT - S / 2, z), 0.0, 1, courses=2, faces=(face, '+y'), crenels=True)
+            block_run((GT + S / 2, z), (TX - T / 2, z), 0.0, 2, courses=2, faces=(face, '+y'), crenels=True)
+        else:
+            wall_top['s'] = block_run((-TX + T / 2, z), (TX - T / 2, z), 0.0, 3, courses=2, faces=(face, '+y'), crenels=True)
+    for sx in (-1, 1):
+        face = '+x' if sx > 0 else '-x'
+        wall_top['x'] = block_run((sx * TX, -TZ + T / 2), (sx * TX, TZ - T / 2), 0.0, 0 if sx > 0 else 2,
+                                  courses=2, faces=(face, '+y'), crenels=True)
+    # the corner towers
+    n = 0
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            face = '+x' if sx > 0 else '-x'
+            block_tower(sx * TX, sz * TZ, T, 3, n, 0x6cbf6c if (sx + sz) == 0 else 0xe66a5a, face,
+                        pennant='anim_sway:a=x:d=24:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=-sz)   # over the court, clear of the ring
+            n += 1
+    # the gatehouse: a tower of four blocks either side of the opening, the
+    # lintel over it, the dark gateway, the drawbridge down on the floor
+    for sx in (-1, 1):
+        for j in range(4):
+            block(S, (sx * GT, S / 2 + j * S, TZ), TOY[(j + (sx > 0)) % 4], faces=('+z', '+x' if sx > 0 else '-x'),
+                  letters={'+z': ABC[(2 * j + (sx > 0)) % 8]})
+        cyl(S * 0.75, S * 0.85, (sx * GT, 4 * S, TZ), 0x5a8fd8, r2=0.05, segs=10)
+    for sx, c, ch in ((-1, 0xf2c14e, 'A'), (1, 0xe66a5a, 'H')):                  # the lintel's two blocks
+        block(GW, (sx * GW / 2, 2 * S + GW / 2, TZ), c, faces=('+z', '+y'), letters={'+z': ch})
+    for sx in (-1, 1):
+        box((S * 0.5, S * 0.45, S * 0.6), (sx * GW / 2, 2 * S + GW + S * 0.22, TZ), 0xf2c14e)
+    box((2 * GW, S * 2, S * 0.7), (0, S, TZ + 0.05), 0x3a2a22)                       # the gateway, dark
+    box((2 * GW + 0.4, 0.16, S * 0.9), (0, 2 * S + 0.02, TZ), 0x7a5a3a)             # its lintel beam
+    L = 2.5
+    box((2 * GW - 0.2, 0.16, L), (0, 0.14, TZ + S / 2 + L / 2), 0xb08a5a, pitch=-0.05)  # the drawbridge
+    for sx in (-1, 1):
+        tube([(sx * (GW - 0.25), S * 1.9, TZ + S / 2 + 0.05), (sx * (GW - 0.25), 0.32, TZ + S / 2 + L - 0.15)],
+             0.03, 0x2a2735, res=2, bevel_res=0)
+    # the keep over the court: four big blocks a course, three courses, a
+    # crenel at each corner, a pyramid roof and the king's banner on its pole
+    K, KZ = 1.6, -0.6
+    for j in range(3):
+        for i, (dx, dz) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+            block(K, (dx * K / 2, K / 2 + j * K, KZ + dz * K / 2), TOY[(i + j) % 4],
+                  faces=('+x' if dx > 0 else '-x', '+z' if dz > 0 else '-z'),
+                  letters={('+z' if dz > 0 else '-z'): ABC[(i * 2 + j) % 8]} if (i + j) % 2 == 0 else None)
+    KT = 3 * K
+    for dx, dz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        box((0.6, 0.55, 0.6), (dx * (K - 0.3), KT + 0.27, KZ + dz * (K - 0.3)), 0xf2c14e)
+    cyl(K * 1.05, 1.9, (0, KT, KZ), 0x5a8fd8, r2=0.05, segs=4, yaw=math.pi / 4)
+    box((BAR * 1.6, 2.4, BAR * 1.6), (0, KT + 1.9 + 1.0, KZ), 0x2a2735)
+    with animated('anim_sway:a=x:d=20:p=2.6#banner', (0, KT + 1.9 + 2.15, KZ)):
+        box((0.08, 1.1, 1.9), (0, KT + 1.9 + 1.6, KZ + 1.0), 0x5a8fd8)
+        box((0.1, 0.4, 0.4), (0, KT + 1.9 + 1.6, KZ + 1.0), 0xf2c14e)
+    # the castle's blue knights on the wall walk, behind the crenels: two
+    # either side of the gate, facing the camp, one on each other wall
+    for x in (-5.55, -3.15, 4.35, 6.75):          # on the blocks the crenels leave free
+        knight((x, wall_top['n'], TZ - 0.15), DEFENDERS, -math.pi / 2)
+    knight((0.0, wall_top['s'], -TZ + 0.15), DEFENDERS, math.pi / 2)
+    knight((TX - 0.15, wall_top['x'], -0.69), DEFENDERS, 0.0)
+    knight((-TX + 0.15, wall_top['x'], 2.06), DEFENDERS, math.pi)
+    merge_paint()
+
+def pavilion(x, z, r, h, wall, roof, trim=0xfdf4de, flag=0xff5040):
+    """A knight's pavilion: a round striped wall (eight panels, the wall's
+    colour and cream by turns), a gored cone roof over it, a scalloped trim
+    at the eaves, the dark door to +X and a pennant on its pole."""
+    n = 8
+    w = 2 * r * math.tan(math.pi / n) + 0.02
+    for i in range(n):
+        a = i * 2 * math.pi / n
+        box((0.1, h, w), (x + r * math.cos(a), h / 2, z + r * math.sin(a)), wall if i % 2 == 0 else trim, yaw=-a + math.pi / 2)
+    top = (x, h + r * 1.05, z)
+    for i in range(n):
+        a0, a1 = (i - 0.5) * 2 * math.pi / n, (i + 0.5) * 2 * math.pi / n
+        rim0 = (x + math.cos(a0) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a0) * (r + 0.25) / math.cos(math.pi / n))
+        rim1 = (x + math.cos(a1) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a1) * (r + 0.25) / math.cos(math.pi / n))
+        poly([top, rim0, rim1], [(0, 1, 2)], roof if i % 2 == 0 else trim)
+    for i in range(n):                                           # the scallops at the eaves
+        a = i * 2 * math.pi / n
+        box((0.08, 0.28, w * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)), roof, yaw=-a + math.pi / 2)
+    plate_x(x + r + 0.06, 0.0, h * 0.7, z - 0.3, z + 0.3, 0x3a2a22)          # the door
+    box((BAR, 1.0, BAR), (x, top[1] + 0.4, z), 0x2a2735)
+    box((0.08, 0.36, 0.7), (x, top[1] + 0.72, z + 0.36), flag)
+
+def ram(x, z):
+    """The besiegers' battering ram, rolled up ready: a roofed timber frame
+    on four wheels, its iron-headed log slung under the roof's ridge,
+    pointing -Z (at the castle)."""
+    WOODC, DARK = 0xc8955a, 0x7a5a3a
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            cyl(0.6, 0.3, (x + sx * 1.15, 0.6, z + sz * 1.3), DARK, segs=10, axis='across')
+        box((0.3, 0.3, 3.6), (x + sx * 1.0, 0.75, z), DARK)                       # the bed's rails
+        for sz in (-1, 1):
+            box((0.25, 2.0, 0.25), (x + sx * 1.0, 1.9, z + sz * 1.5), WOODC)       # its posts
+    for s in (-1, 1):                                                           # the gabled roof
+        box((1.5, 0.14, 3.9), (x + s * 0.62, 3.25, z), 0xe66a5a, roll=s * 0.75)
+    box((0.3, 0.3, 4.0), (x, 3.75, z), DARK)                                    # the ridge
+    cyl(0.32, 4.6, (x, 1.9, z - 2.5), 0x9a7b55, segs=8, axis='along', stem=True) # the log
+    cyl(0.3, 0.6, (x, 1.9, z - 3.1), 0x868ba1, r2=0.42, segs=8, axis='along')    # its iron head
+    for sz in (-0.9, 0.9):                                                       # the slings
+        box((0.1, 1.7, 0.1), (x, 2.9, z + sz), 0x2a2735)
+
+@piece(1.0)
+def siege_camp():
+    # Gauntlet: the besiegers' camp in the infield across the ramp from the
+    # castle (placed so its frame is the world's, the castle toward -Z): a
+    # ring of knights' pavilions striped in the red side's colours, the
+    # commander's big one in the middle with the red standard over it, a
+    # supply cart and barrels, a rank marching out toward the castle, and
+    # the battering ram rolled up ready. The trebuchet and a siege tower
+    # stand before it, nearer the ramp (their own pieces). Tents stand
+    # within a few units of the grid straight, the east leg and the boost
+    # leg, their doors to the camp's middle.
+    R0, CR = 0xff5040, 0xfdf4de
+    for x, z, r, h, wall, roof in ((-13.6, -2.4, 1.35, 1.5, R0, R0), (-13.4, 2.1, 1.25, 1.4, 0xf2c14e, R0),
+                                   (-8.4, 2.6, 1.3, 1.5, R0, 0xf2c14e), (-3.6, 2.6, 1.25, 1.4, 0x6cbf6c, R0),
+                                   (5.6, 2.6, 1.3, 1.5, R0, R0), (10.2, 2.1, 1.25, 1.4, 0xf2c14e, R0),
+                                   (14.4, -2.2, 1.3, 1.5, R0, 0x6cbf6c)):
+        # each tent turned so its door faces the camp's middle
+        a = math.atan2(-0.5 - z, 1.0 - x)
+        with transformed((x, 0, z), -a):
+            pavilion(x, z, r, h, wall, roof)
+    # the commander's pavilion, and the standard over the camp
+    pavilion(1.0, -0.4, 1.9, 1.9, R0, R0, flag=0xf2c14e)
+    box((BAR * 1.6, 3.6, BAR * 1.6), (3.4, 1.8, -2.4), 0x2a2735)
+    with animated('anim_sway:a=x:d=22:p=2.4#standard', (3.4, 3.55, -2.4)):
+        box((0.08, 1.2, 2.0), (3.4, 2.9, -1.35), R0)
+        box((0.1, 0.45, 0.45), (3.4, 2.9, -1.35), 0xf2c14e)
+    # the supply cart and its barrels
+    WOODC, DARK = 0xc8955a, 0x7a5a3a
+    box((1.6, 0.6, 2.6), (-7.6, 0.9, -2.2), WOODC)
+    for sz in (-1, 1):
+        cyl(0.55, 0.25, (-8.5, 0.55, -2.2 + sz * 0.8), DARK, segs=10, axis='across')
+        cyl(0.55, 0.25, (-6.95, 0.55, -2.2 + sz * 0.8), DARK, segs=10, axis='across')
+    bar((-7.6, 0.9, -3.5), (-7.6, 0.4, -5.2), 0.15, 0.15, DARK)
+    for x, z in ((-7.9, -1.6), (-7.3, -2.7)):
+        cyl(0.42, 0.85, (x, 1.2, z), 0xb06041, r2=0.38, segs=8)
+    for x, z in ((-5.6, -1.2), (-5.0, -0.4), (-5.5, 0.4)):
+        cyl(0.42, 0.85, (x, 0.0, z), 0xb06041, r2=0.38, segs=8)
+    # a rank marching out toward the castle, on their stand
+    box((6.4 * 0.55, 0.11, 1.2 * 0.55), (-2.2, 0.055, -3.6), 0x6cbf6c)
+    for k in range(4):
+        knight((-2.2 + (k - 1.5) * 0.83, 0.11, -3.6), BESIEGERS, math.pi / 2)
+    ram(8.6, -2.0)
+    merge_paint()
+
+# ---- Skyline: the block town round the lap ----
+
+def facing_house(x, z, w, d, h, body, roof, kind, yaw):
+    """house() turned about its own centre so its door and gable face
+    (cos yaw, -sin yaw): 0 is +X, pi is -X, -pi/2 is +Z."""
+    with transformed((x, 0, z), yaw):
+        house(x, z, w, d, h, body, roof, kind)
+
+def windows(o, face, half, w, h, cols, rows, y0, glass=0x8ecae6):
+    """Rows of windows on `face` of box `o` (its scale applied), `half` out
+    from its centre: `cols` across its `w`, `rows` up its `h` from `y0`
+    under its centre (o's frame)."""
+    for r in range(rows):
+        for c in range(cols):
+            u = (c + 0.5) / cols * w - w / 2
+            v = y0 + (r + 0.5) / rows * h
+            face_rect(o, face, half + 0.012, u - 0.17, u + 0.17, v - 0.22, v + 0.22, glass)
+
+def skyscraper(x, z, w, d, h, body, roof, faces, top='slab'):
+    """A wooden toy tower block: a tall painted block with rows of windows
+    on `faces`, a roof slab (or a stepped crown, or a spire) on top."""
+    box((w, h, d), (x, h / 2, z), body)
+    o = bpy.context.active_object
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    rows = max(2, int((h - 0.8) / 0.95))
+    for f in faces:
+        span = d if f in ('+x', '-x') else w
+        half = w / 2 if f in ('+x', '-x') else d / 2
+        windows(o, f, half, span * 0.86, h - 0.9, max(2, round(span / 0.7)), rows, -h / 2 + 0.35)
+    if top == 'slab':
+        box((w + 0.2, 0.3, d + 0.2), (x, h + 0.15, z), roof)
+    elif top == 'crown':
+        box((w * 0.7, 0.8, d * 0.7), (x, h + 0.4, z), roof)
+        box((w * 0.4, 0.6, d * 0.4), (x, h + 1.1, z), body)
+    else:
+        box((w + 0.2, 0.3, d + 0.2), (x, h + 0.15, z), roof)
+        cyl(min(w, d) * 0.3, 1.6, (x, h + 0.3, z), roof, r2=0.04, segs=4, yaw=math.pi / 4)
+
+def wooden_tree(x, z, k=1.0):
+    cyl(0.14 * k, 0.7 * k, (x, 0, z), 0x9a7b55, segs=6)
+    cyl(0.6 * k, 1.5 * k, (x, 0.6 * k, z), 0x6cbf6c, r2=0.05, segs=8)
+
+def traffic_light(x, z, yaw):
+    """A toy traffic light on its post, its lamps to (cos yaw, -sin yaw)."""
+    box((BAR, 1.6, BAR), (x, 0.8, z), 0x38383d)
+    with transformed((x, 0, z), yaw):
+        box((0.3, 0.75, 0.3), (x + 0.12, 1.75, z), 0x38383d)
+        for k, c in enumerate((0xff5040, 0xf2c14e, 0x6cbf6c)):
+            box((0.06, 0.16, 0.16), (x + 0.29, 2.0 - k * 0.24, z), c)
+
+def rug(x0, x1, z0, z1, streets, parks, name):
+    """A city play rug lying on the floor: the cream mat with its blue
+    border, printed grey streets [(x0, x1, z0, z1)], dashed down their
+    middles, and green parks; ONE `floor` part, so the deck's baked shadow
+    falls on it and it passes under the road."""
+    q = [floor_quad([(x0 - 0.35, z0 - 0.35), (x1 + 0.35, z0 - 0.35), (x1 + 0.35, z1 + 0.35), (x0 - 0.35, z1 + 0.35)], 0.025, 0x5a8fd8),
+         floor_quad([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], 0.035, 0xfdf4de)]
+    for a0, a1, b0, b1 in streets:
+        q.append(floor_quad([(a0, b0), (a1, b0), (a1, b1), (a0, b1)], 0.045, 0x868ba1))
+        if a1 - a0 > b1 - b0:                            # dashes down its middle
+            m = (b0 + b1) / 2
+            for k in range(int((a1 - a0) / 2.2)):
+                xa = a0 + 0.6 + k * 2.2
+                q.append(floor_quad([(xa, m - 0.08), (xa + 1.0, m - 0.08), (xa + 1.0, m + 0.08), (xa, m + 0.08)], 0.052, 0xfdf4de))
+        else:
+            m = (a0 + a1) / 2
+            for k in range(int((b1 - b0) / 2.2)):
+                za = b0 + 0.6 + k * 2.2
+                q.append(floor_quad([(m - 0.08, za), (m + 0.08, za), (m + 0.08, za + 1.0), (m - 0.08, za + 1.0)], 0.052, 0xfdf4de))
+    for a0, a1, b0, b1 in parks:
+        q.append(floor_quad([(a0, b0), (a1, b0), (a1, b1), (a0, b1)], 0.045, 0x6cbf6c))
+    group(q, name)
+
+def oval(x0, x1, zc, r, step=0.5):
+    """Points round a stadium oval: the near straight at zc - r from x0 to
+    x1 heading +X, round the +X end, back along zc + r, round the -X end."""
+    pts = []
+    L = x1 - x0
+    for i in range(int(L / step)):
+        pts.append((x0 + i * L / int(L / step), zc - r))
+    n = int(math.pi * r / step)
+    for i in range(n):
+        a = -math.pi / 2 + math.pi * i / n
+        pts.append((x1 + r * math.cos(a), zc + r * math.sin(a)))
+    for i in range(int(L / step)):
+        pts.append((x1 - i * L / int(L / step), zc + r))
+    for i in range(n):
+        a = math.pi / 2 + math.pi * i / n
+        pts.append((x0 + r * math.cos(a), zc + r * math.sin(a)))
+    return pts
+
+def wooden_track(pts, w, t):
+    """A closed wooden train track along [(x, z)]: a pale beech board `w`
+    wide and `t` thick with its two dark grooves on top."""
+    n = len(pts)
+    def edge(i, off):
+        (xa, za), (xb, zb) = pts[(i - 1) % n], pts[(i + 1) % n]
+        l = math.hypot(xb - xa, zb - za) or 1.0
+        nx, nz = -(zb - za) / l, (xb - xa) / l
+        return pts[i][0] + nx * off, pts[i][1] + nz * off
+    vs, fs = [], []
+    for i in range(n):
+        lx, lz = edge(i, w / 2)
+        rx, rz = edge(i, -w / 2)
+        vs += [(lx, t, lz), (rx, t, rz), (rx, 0.0, rz), (lx, 0.0, lz)]
+    for i in range(n):
+        a, b = 4 * i, 4 * ((i + 1) % n)
+        fs += [(a, b, b + 1, a + 1), (a + 1, b + 1, b + 2, a + 2), (a + 3, a + 0, b + 0, b + 3)]
+    me = bpy.data.meshes.new('track')
+    me.from_pydata([tuple(P(*v)) for v in vs], [], fs)
+    me.update()
+    for f in me.polygons:                      # wound to face out and up
+        if f.normal.z < -0.5:
+            f.flip()
+    o = bpy.data.objects.new('track', me)
+    bpy.context.scene.collection.objects.link(o)
+    paint(o, 0xf2bf99)
+    for off in (-w * 0.22, w * 0.22):          # the grooves
+        gv, gf = [], []
+        for i in range(n):
+            ax, az = edge(i, off - 0.05)
+            bx, bz = edge(i, off + 0.05)
+            gv += [(ax, t + 0.006, az), (bx, t + 0.006, bz)]
+        for i in range(n):
+            a, b = 2 * i, 2 * ((i + 1) % n)
+            gf.append((a, b, b + 1, a + 1))
+        me = bpy.data.meshes.new('groove')
+        me.from_pydata([tuple(P(*v)) for v in gv], [], gf)
+        me.update()
+        for f in me.polygons:
+            if f.normal.z < 0:
+                f.flip()
+        g = bpy.data.objects.new('groove', me)
+        bpy.context.scene.collection.objects.link(g)
+        paint(g, 0x9a7b55)
+
+def train_car(x, y, z, kind, color):
+    """A wooden toy train's car standing at (x, y, z), its nose to +X (a
+    path traveller faces along its path by its +X): the engine with its
+    boiler, cab and funnel, an open wagon of blocks, or a coach."""
+    DARK = 0x38383d
+    for sx in (-0.42, 0.42):                   # the wheels, either side
+        for sz in (-1, 1):
+            cyl(0.22, 0.12, (x + sx, y + 0.22, z + sz * 0.33 - 0.06), 0xe66a5a if kind == 'engine' else DARK,
+                segs=8, axis='along')
+    box((1.3, 0.16, 0.66), (x, y + 0.3, z), 0x9a7b55)                       # the chassis
+    if kind == 'engine':
+        cyl(0.3, 0.8, (x - 0.1, y + 0.66, z), color, segs=10, axis='across')   # the boiler, along +X
+        box((0.5, 0.7, 0.62), (x - 0.35, y + 0.73, z), color)                 # the cab
+        box((0.62, 0.12, 0.72), (x - 0.35, y + 1.14, z), 0x38383d)            # its roof
+        cyl(0.11, 0.42, (x + 0.48, y + 0.9, z), DARK, r2=0.15, segs=6)        # the funnel
+        box((0.12, 0.14, 0.4), (x + 0.68, y + 0.36, z), DARK)                 # the buffer beam
+    elif kind == 'wagon':
+        box((1.1, 0.42, 0.62), (x, y + 0.59, z), color)
+        for k, (dx, c) in enumerate(((-0.25, 0xf2c14e), (0.22, 0x5a8fd8))):
+            box((0.36, 0.36, 0.36), (x + dx, y + 0.95, z + (0.06 if k else -0.08)), c, yaw=0.3 * k)
+    else:
+        box((1.15, 0.62, 0.62), (x, y + 0.69, z), color)
+        box((1.25, 0.12, 0.7), (x, y + 1.06, z), 0xfdf4de)
+        for dx in (-0.3, 0.05, 0.4):                                         # its windows
+            for sz in (-1, 1):
+                box((0.24, 0.22, 0.02), (x + dx - 0.06, y + 0.8, z + sz * 0.315), 0x8ecae6)
+
+@piece(1.0)
+def block_town():
+    # Skyline: the block town the lap runs round, on a city play rug that
+    # fills the infield (placed so its frame is the world's, centred on the
+    # infield: +X toward the grid straight, +Z toward the top straight).
+    # Downtown stands along the skyway's run, tower blocks a child stacked
+    # up to the deck's own height, so the skyway rides past their tops; along the south edge a wooden train runs
+    # round its oval past the station, the same way the racers go; houses
+    # and shops face the grid straight and the top straight across their
+    # kerbs, and a park lies in the middle. Everything to the roads stands
+    # 1.5 u past the kerb.
+    rug(-20.6, 21.9, -18.4, 18.4,
+        [(-20.6, 21.9, 0.6, 2.8), (-1.2, 1.0, -18.4, 18.4), (-14.5, -12.5, 2.8, 18.4), (12.5, 14.5, -9.2, 0.6)],
+        [(-11.2, -2.6, 4.4, 13.2), (2.6, 11.0, -8.0, -0.6)], 'floor_town')
+    # downtown, along the skyway: the front row's west faces 1.6 past its kerb
+    for z, w, d, h, body, roof, top in ((-13.2, 2.2, 2.4, 6.4, 0xfdf4de, 0x5a8fd8, 'slab'),
+                                        (-9.4, 2.2, 2.6, 7.4, 0x8ecae6, 0xe66a5a, 'crown'),
+                                        (-5.2, 2.2, 2.4, 5.6, 0xf2c14e, 0x6cbf6c, 'spire'),
+                                        (-1.1, 2.2, 2.6, 7.2, 0xe66a5a, 0xfdf4de, 'slab'),
+                                        (4.6, 2.2, 2.4, 6.6, 0xfdf4de, 0xa878e8, 'crown'),
+                                        (8.6, 2.2, 2.6, 7.4, 0x5a8fd8, 0xf2c14e, 'slab'),
+                                        (12.6, 2.2, 2.2, 5.2, WOOD, 0xe66a5a, 'spire')):
+        skyscraper(-19.2, z, w, d, h, body, roof, ('-x', '+z', '-z'), top)
+    for z, w, d, h, body, roof, top in ((-7.2, 2.6, 2.4, 5.2, 0x6cbf6c, 0xfdf4de, 'crown'),
+                                        (-3.2, 2.4, 2.2, 3.6, 0xfdf4de, 0xe66a5a, 'slab'),
+                                        (6.6, 2.4, 2.4, 4.6, 0xe66a5a, 0xf2c14e, 'spire'),
+                                        (10.6, 2.6, 2.2, 3.8, 0xa878e8, 0xfdf4de, 'slab')):
+        skyscraper(-15.9, z, w, d, h, body, roof, ('-x', '+x', '+z', '-z'), top)
+    # the houses facing the grid straight, the gap where the gantry stands
+    for z, w, d, h, body, roof, kind in ((-12.2, 2.2, 2.0, 1.8, 0xfdf4de, 0xe66a5a, 'gable'),
+                                         (-9.2, 2.4, 2.2, 2.6, 0x8ecae6, 0xf2c14e, 'flat'),
+                                         (-1.6, 2.2, 2.0, 1.6, WOOD, 0x6cbf6c, 'gable'),
+                                         (1.4, 2.0, 1.8, 2.2, 0xe66a5a, 0xfdf4de, 'flat'),
+                                         (4.4, 2.2, 2.0, 1.8, 0xf2c14e, 0x5a8fd8, 'gable'),
+                                         (7.4, 2.4, 2.2, 3.0, 0xfdf4de, 0xa878e8, 'pyramid'),
+                                         (10.6, 2.2, 2.0, 1.6, 0x6cbf6c, 0xe66a5a, 'gable')):
+        facing_house(19.3, z, w, d, h, body, roof, kind, 0.0)
+    for z, w, d, h, body, roof, kind in ((-12.0, 2.4, 2.2, 3.4, WOOD, 0xe66a5a, 'flat'),
+                                         (-1.0, 2.6, 2.4, 4.2, 0xfdf4de, 0x5a8fd8, 'flat'),
+                                         (5.8, 2.4, 2.2, 2.4, 0x8ecae6, 0xe66a5a, 'gable'),
+                                         (10.4, 2.4, 2.4, 3.6, 0xf2c14e, 0xfdf4de, 'pyramid')):
+        facing_house(16.2, z, w, d, h, body, roof, kind, 0.0)
+    # the houses facing the top straight
+    for x, w, d, h, body, roof, kind in ((-10.8, 2.2, 2.0, 1.8, 0xe66a5a, 0xfdf4de, 'gable'),
+                                         (-7.8, 2.2, 2.2, 2.6, 0xfdf4de, 0x6cbf6c, 'flat'),
+                                         (-4.6, 2.2, 2.0, 1.6, 0x5a8fd8, 0xf2c14e, 'gable'),
+                                         (2.6, 2.2, 2.2, 2.2, WOOD, 0xe66a5a, 'pyramid'),
+                                         (5.8, 2.4, 2.0, 1.8, 0xf2c14e, 0xa878e8, 'gable'),
+                                         (9.0, 2.2, 2.2, 2.8, 0x8ecae6, 0xfdf4de, 'flat'),
+                                         (12.0, 2.2, 2.0, 1.6, 0xfdf4de, 0xe66a5a, 'gable')):
+        facing_house(x, 16.7, w, d, h, body, roof, kind, -math.pi / 2)
+    # the park, and the tower a child stacked in it
+    for x, z in ((-9.8, 5.6), (-8.0, 11.6), (-4.4, 12.2), (-3.6, 6.0), (-6.4, 8.4), (4.0, -6.6), (9.4, -2.0), (6.2, -1.8)):
+        wooden_tree(x, z)
+    stack_tower(-7.0, 8.6, (1.3, 1.25, 1.2, 1.15, 1.1, 1.05), (0xe66a5a, WOOD, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xfdf4de), 0xff5040)
+    for x, z, yaw in ((1.6, 3.4, 0.0), (-1.8, -0.2, math.pi), (14.9, 1.2, 0.0), (-13.0, 3.4, math.pi)):
+        traffic_light(x, z, yaw)
+    for x, z, c, ax in ((-6.0, 1.7, 0xff5040, True), (8.2, 1.7, 0x6cbf6c, True), (0.0, 10.6, 0xf2c14e, False)):
+        mini_car(x, z, c, along_x=ax)
+    # the toy train's oval along the south edge, the station on its far side
+    X0, X1, ZC, R = -13.6, 11.8, -13.8, 3.4
+    ring = oval(X0, X1, ZC, R)
+    wooden_track(ring, 0.9, 0.12)
+    box((8.0, 0.4, 1.4), (-1.0, 0.2, ZC + R + 1.25), 0xb0b6c8)                            # the platform
+    facing_house(-1.0, ZC + R + 3.3, 2.0, 4.4, 2.2, 0xe66a5a, 0x5a8fd8, 'gable', math.pi / 2)
+    for dx in (-4.2, 2.2):
+        box((BAR, 1.8, BAR), (dx, 1.3, ZC + R + 1.25), 0x38383d)
+    box((7.0, 0.14, 1.6), (-1.0, 2.25, ZC + R + 1.25), 0x5a8fd8)                          # its canopy
+    box((BAR, 1.9, BAR), (X1 + 1.0, 0.95, ZC - R - 1.0), 0x38383d)                        # a signal
+    box((0.3, 0.5, 0.3), (X1 + 1.0, 2.1, ZC - R - 1.0), 0x38383d)
+    box((0.06, 0.18, 0.18), (X1 + 1.17, 2.2, ZC - R - 1.0), 0x6cbf6c)
+    for i, (x, z) in enumerate(ring):
+        marker('path_rail_%d' % i, (x, 0.12, z))
+    L = sum(math.hypot(ring[(i + 1) % len(ring)][0] - ring[i][0], ring[(i + 1) % len(ring)][1] - ring[i][1]) for i in range(len(ring)))
+    x0, z0 = ring[0]
+    for k, (kind, c) in enumerate((('coach', 0x5a8fd8), ('wagon', 0x6cbf6c), ('coach', 0xf2c14e), ('engine', 0xe66a5a))):
+        with animated('anim_path:c=rail:p=26:f=1:o=%.4f#%d' % (k * 1.45 / L, k), (x0, 0.12, z0)):
+            train_car(x0, 0.12, z0, kind, c)
+    merge_paint()
+    keep_light(0.1)
+
+@piece(1.0)
+def block_street():
+    # Skyline: the town's other side of the grid straight, outside it (placed
+    # so its frame is the world's, +X away from the road): a row of houses
+    # and shops on its own strip of the city rug facing the racers across
+    # the kerb, a second row of taller blocks behind, the cross street where
+    # the gantry stands and another further up, a clock tower at the corner,
+    # toy cars parked down the side streets.
+    rug(2.6, 12.4, -18.6, 18.4, [(2.6, 12.4, -7.6, -5.4), (2.6, 12.4, 4.4, 6.6)], [(9.6, 12.4, -18.6, -12.6)], 'floor_street')
+    for z, w, d, h, body, roof, kind in ((-17.0, 2.2, 2.0, 1.8, 0xf2c14e, 0xe66a5a, 'gable'),
+                                         (-14.0, 2.4, 2.2, 2.4, 0xfdf4de, 0x5a8fd8, 'flat'),
+                                         (-11.0, 2.2, 2.0, 1.6, 0x6cbf6c, 0xfdf4de, 'gable'),
+                                         (-8.6, 2.0, 1.6, 2.0, 0xe66a5a, 0xf2c14e, 'pyramid'),
+                                         (-3.6, 2.2, 2.0, 1.8, WOOD, 0xe66a5a, 'gable'),
+                                         (-0.6, 2.4, 2.2, 2.8, 0x8ecae6, 0xfdf4de, 'flat'),
+                                         (8.6, 2.2, 2.0, 2.2, 0x5a8fd8, 0xf2c14e, 'gable'),
+                                         (11.6, 2.4, 2.2, 1.8, 0xf2c14e, 0xa878e8, 'flat'),
+                                         (14.6, 2.2, 2.0, 2.6, 0xe66a5a, 0xfdf4de, 'pyramid'),
+                                         (17.4, 2.0, 1.8, 1.6, 0xfdf4de, 0x5a8fd8, 'gable')):
+        facing_house(5.2, z, w, d, h, body, roof, kind, math.pi)
+    for z, w, d, h, body, roof, top in ((-15.6, 2.4, 2.6, 4.6, 0xfdf4de, 0xe66a5a, 'slab'),
+                                        (-10.6, 2.4, 2.4, 3.6, 0x5a8fd8, 0xfdf4de, 'crown'),
+                                        (-1.8, 2.6, 2.6, 5.4, 0xf2c14e, 0x6cbf6c, 'slab'),
+                                        (9.8, 2.4, 2.4, 4.2, 0xe66a5a, 0x5a8fd8, 'spire'),
+                                        (15.6, 2.4, 2.6, 3.8, WOOD, 0xe66a5a, 'slab')):
+        skyscraper(9.0, z, w, d, h, body, roof, ('-x', '+z', '-z'), top)
+    # the clock tower on the corner of the far cross street
+    box((1.6, 4.8, 1.6), (5.0, 2.4, 3.3), 0xfdf4de)
+    box((1.9, 0.3, 1.9), (5.0, 4.95, 3.3), 0xe66a5a)
+    cyl(1.15, 1.6, (5.0, 5.1, 3.3), 0x5a8fd8, r2=0.05, segs=4, yaw=math.pi / 4)
+    cyl(0.55, 0.06, (4.18, 3.9, 3.3), 0xfdf4de, segs=12, axis='across')
+    box((0.04, 0.4, 0.07), (4.13, 4.05, 3.3), 0x2a2735)
+    box((0.04, 0.07, 0.3), (4.13, 3.9, 3.42), 0x2a2735)
+    for x, z, yaw in ((4.3, -4.9, math.pi), (4.3, 7.1, math.pi)):
+        traffic_light(x, z, yaw)
+    for x, z, c in ((8.4, -6.5, 0x5a8fd8), (10.8, 5.5, 0xff5040)):
+        mini_car(x, z, c, along_x=True)
+    for x, z in ((10.6, -17.4), (11.4, -14.2), (10.2, -13.6)):
+        wooden_tree(x, z)
+    merge_paint()
+    keep_light(0.1)
+
+def toy_truck(x, z, color, yaw):
+    """A toy dump truck the racers' size, its cab to (cos yaw, -sin yaw), its
+    bed tipped up a little with a load of blocks."""
+    with transformed((x, 0, z), yaw):
+        for sx in (-0.45, 0.4):
+            for sz in (-1, 1):
+                cyl(0.2, 0.14, (x + sx, 0.2, z + sz * 0.3 - 0.07), 0x2a2735, segs=8, axis='along')
+        box((1.5, 0.16, 0.6), (x, 0.3, z), 0x555b66)
+        box((0.45, 0.45, 0.6), (x + 0.5, 0.6, z), color)                          # the cab
+        box((0.06, 0.2, 0.44), (x + 0.73, 0.68, z), 0x8ecae6)
+        box((0.9, 0.36, 0.64), (x - 0.25, 0.62, z), 0xf2c14e, roll=0.18)           # the bed
+        for k, (dx, c) in enumerate(((-0.45, 0xe66a5a), (-0.1, 0x5a8fd8))):
+            box((0.3, 0.3, 0.3), (x + dx, 0.95 - 0.06 * k, z + 0.08 * (k - 0.5)), c, yaw=0.4 * k)
+
+@piece(1.0)
+def block_westside():
+    # Skyline: the town's west side, across the approach from downtown, so
+    # the skyway rides over a street with blocks on both sides of it (placed
+    # so its frame is the world's turned to face the approach, +X toward
+    # it): a row of houses and tower blocks on its strip of rug, their
+    # fronts 1.2 u past the approach's kerb and their backs to the dive and
+    # the toy loop, a tower a child stacked to the skyway's height at its
+    # north end where the U turns round it, and at its south end the
+    # building site where the town is still going up: an unfinished block
+    # with its corner columns and first floor, piles of blocks, a dump truck
+    # and the crane slewing over it by the south-bound leg.
+    rug(-11.0, 5.9, -23.4, -7.6, [(-11.0, 5.9, -9.2, -7.6)], [], 'floor_site')
+    rug(-2.6, 5.9, -7.6, 24.6, [(-2.6, 5.9, 9.4, 11.4)], [], 'floor_west')
+    for z, w, d, h, body, roof, kind in ((-5.6, 2.2, 2.0, 1.8, 0xfdf4de, 0xe66a5a, 'gable'),
+                                         (-2.6, 2.4, 2.2, 2.6, 0x5a8fd8, 0xf2c14e, 'flat'),
+                                         (0.4, 2.2, 2.0, 1.6, 0xf2c14e, 0x6cbf6c, 'gable'),
+                                         (3.4, 2.2, 2.2, 2.2, 0xe66a5a, 0xfdf4de, 'pyramid'),
+                                         (6.6, 2.4, 2.2, 2.8, 0xfdf4de, 0xa878e8, 'flat'),
+                                         (13.6, 2.2, 2.0, 1.8, WOOD, 0x5a8fd8, 'gable'),
+                                         (16.6, 2.4, 2.0, 2.4, 0x6cbf6c, 0xfdf4de, 'flat'),
+                                         (19.6, 2.2, 2.2, 1.6, 0xfdf4de, 0xe66a5a, 'gable')):
+        facing_house(3.4, z, w, d, h, body, roof, kind, 0.0)
+    for z, w, d, h, body, roof, top in ((-3.6, 2.2, 2.4, 4.8, 0xe66a5a, 0xfdf4de, 'slab'),
+                                        (2.2, 2.2, 2.6, 6.2, 0x8ecae6, 0xf2c14e, 'crown'),
+                                        (14.8, 2.2, 2.4, 5.4, 0xf2c14e, 0x5a8fd8, 'spire'),
+                                        (19.8, 2.2, 2.4, 4.2, 0xfdf4de, 0x6cbf6c, 'slab')):
+        skyscraper(0.2, z, w, d, h, body, roof, ('+x', '-x', '+z', '-z'), top)
+    stack_tower(0.6, 23.2, (1.4, 1.35, 1.3, 1.25, 1.2, 1.15, 1.1), (0x5a8fd8, WOOD, 0xe66a5a, 0xf2c14e, 0x6cbf6c, 0xfdf4de), 0xf2c14e)
+    for x, z, yaw in ((4.4, 8.6, 0.0), (4.4, 12.2, 0.0)):
+        traffic_light(x, z, yaw)
+    mini_car(0.0, 10.4, 0x5a8fd8, along_x=True)
+    # the building site: the unfinished block, its four corner columns of
+    # blocks two high and its first floor on them, the blocks for the next
+    # stacked by it, a truck bringing more and the crane over it all
+    UX, UZ, UW = 1.6, -15.4, 3.2
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            for j in range(2):
+                box((0.8, 0.8, 0.8), (UX + sx * (UW / 2 - 0.4), 0.4 + j * 0.8, UZ + sz * (UW / 2 - 0.4)), TOY[(j + sx + sz + 2) % 4])
+    box((UW + 0.2, 0.3, UW + 0.2), (UX, 1.75, UZ), 0xfdf4de)
+    for sx in (-1, 1):
+        box((0.8, 0.8, 0.8), (UX + sx * (UW / 2 - 0.4), 2.3, UZ - (UW / 2 - 0.4)), TOY[(sx + 1) % 4])
+    for k, (x, z, c) in enumerate(((-2.4, -19.8, 0xe66a5a), (-1.5, -19.9, WOOD), (-2.0, -19.0, 0x5a8fd8),
+                                   (-1.4, -18.9, 0xf2c14e), (-2.0, -19.4, 0x6cbf6c))):
+        box((0.85, 0.85, 0.85), (x, 0.42 + (0.85 if k == 4 else 0.0), z), c, yaw=0.25 * k)
+    toy_truck(-4.6, -12.6, 0xe66a5a, 2.4)
+    toy_crane(-6.4, -17.2, 6.2, 0.0, tag='#site', p=14)
+    merge_paint()
+    keep_light(0.1)
+
+
+@piece(1.0)
+def barbican():
+    # Gauntlet: the castle's barbican, its covered outer passage, astride the
+    # run out east of the plunge (placed at lat 0: x = 0 is the centreline,
+    # +Z the way the racers drive): four arches of the castle's blocks,
+    # three high on each side of the road (their inner faces 4 u off the
+    # centreline, past the road's margin), a long plank across each and the
+    # roof of planks laid along them, crenels down both its edges and a
+    # pennant at each end. Its underside stands 4.1 over the floor, past
+    # spotIssue's OVER_GAP and the highest camera: the racers drive through
+    # its shade. Built from the castle gate's blocks.
+    S, H = 1.2, 3                                           # a column's block, its height in blocks
+    XI = 4.0 + S / 2                                         # the columns' centres off the centreline
+    ZS = (-5.25, -1.75, 1.75, 5.25)                          # the arches along the road
+    for k, z in enumerate(ZS):
+        for sx in (-1, 1):
+            face = '-x' if sx > 0 else '+x'                  # the face turned to the road
+            for j in range(H):
+                block(S, (sx * XI, S / 2 + j * S, z), TOY[(j + k + (sx > 0)) % 4], faces=(face, '+z', '-z'),
+                      letters={face: ABC[(3 * j + 2 * k + (sx > 0)) % 8]} if (j + k) % 2 == 0 else None)
+        box((2 * XI + S + 0.4, 0.5, S), (0, H * S + 0.25, z), WOOD)                  # the plank across
+    LZ = ZS[-1] - ZS[0] + S + 1.0
+    RY = H * S + 0.5
+    for i in range(4):                                                               # the roof's planks
+        box((2.6, 0.3, LZ), (-3.9 + i * 2.6, RY + 0.15, 0), (WOOD, 0xe8b48a)[i % 2])
+    for sx in (-1, 1):                                                               # crenels down its edges
+        for i in range(6):
+            box((0.6, 0.55, 0.6), (sx * (XI + 0.5), RY + 0.3 + 0.27, -LZ / 2 + 0.6 + i * (LZ - 1.2) / 5), 0xf2c14e)
+    for n, z in enumerate((-LZ / 2 + 0.6, LZ / 2 - 0.6)):                            # a pennant at each end
+        box((BAR * 1.4, 1.8, BAR * 1.4), (-(XI + 0.5), RY + 0.3 + 0.9, z), 0x2a2735)
+        with animated('anim_sway:a=x:d=24:p=%.1f#%d' % (1.8 + 0.3 * n, n), (-(XI + 0.5), RY + 0.3 + 1.75, z)):
+            box((0.08, 0.8, 1.2), (-(XI + 0.5), RY + 0.3 + 1.35, z + 0.65), 0xff5040)
+            box((0.08, 0.44, 0.6), (-(XI + 0.5), RY + 0.3 + 1.35, z + 1.5), 0xff5040)
+    merge_paint()
+
+
+def toy_cannon(x, z, color):
+    """A toy cannon on its wheeled carriage, its barrel to +X."""
+    for sz in (-1, 1):
+        cyl(0.6, 0.2, (x, 0.6, z + sz * 0.55 - (0.2 if sz < 0 else 0.0)), 0x7a5a3a, segs=10, axis='along')
+        cyl(0.22, 0.26, (x, 0.6, z + sz * 0.62 - (0.26 if sz < 0 else 0.0)), 0xf2c14e, segs=6, axis='along')
+    box((1.4, 0.45, 0.8), (x - 0.1, 0.75, z), color)                              # the carriage
+    bar((x - 0.6, 0.7, z), (x - 1.7, 0.12, z), 0.4, 0.3, color)                   # its trail on the floor
+    cyl(0.34, 2.0, (x - 0.7, 1.15, z), 0x38383d, r2=0.27, segs=8, axis='across')  # the barrel
+    cyl(0.36, 0.18, (x + 1.15, 1.15, z), 0x38383d, segs=8, axis='across')         # its muzzle ring
+
+@piece(1.0)
+def cannon_battery():
+    # Gauntlet: the besiegers' guns, run out along the leg the racers come
+    # down after the barbican (placed on its outside, +X to the road): three
+    # toy cannons in the red side's colours aimed across the road at the
+    # castle, so the race runs the gauntlet between the castle's knights and
+    # the guns; barrels of powder and a pyramid of shot by them, a red rank
+    # of gunners behind, and a red flag on its pole at the battery's end.
+    for k, z in enumerate((-5.0, 0.0, 5.0)):
+        toy_cannon(0.0, z, (0xe66a5a, 0xc8955a, 0xe66a5a)[k])
+    for x, z in ((-1.6, -2.6), (-1.1, -2.2), (-1.5, 2.6)):
+        cyl(0.36, 0.75, (x, 0.0, z), 0xb06041, r2=0.32, segs=8)
+    for x, y, z in ((-0.6, 0.0, 2.3), (-0.6, 0.0, 2.9), (-1.1, 0.0, 2.6), (-0.8, 0.42, 2.6)):
+        box((0.42, 0.42, 0.42), (x, y + 0.21, z), 0x38383d)
+    box((6.4 * 0.55, 0.11, 1.2 * 0.55), (-3.2, 0.055, 0.0), 0x6cbf6c, yaw=math.pi / 2)
+    for k in range(4):
+        knight((-3.2, 0.11, (k - 1.5) * 0.83), BESIEGERS, 0.0)
+    box((BAR * 1.4, 3.4, BAR * 1.4), (-1.6, 1.7, -7.0), 0x2a2735)
+    with animated('anim_sway:a=x:d=22:p=2.2#flag', (-1.6, 3.35, -7.0)):
+        box((0.08, 0.9, 1.4), (-1.6, 2.85, -6.25), 0xff5040)
+        box((0.08, 0.5, 0.7), (-1.6, 2.85, -5.2), 0xff5040)
+    merge_paint()
+
+
+def shop(x, z, w, d, h, body, awning, sign):
+    """A wooden toy shop facing +X: its block, a door and a wide window, a
+    striped awning sloping out over them and its sign board over that."""
+    box((w, h, d), (x, h / 2, z), body)
+    plate_x(x + w / 2 + 0.01, 0, 0.75, z + d * 0.18 - 0.22, z + d * 0.18 + 0.22, 0x3a2a22)
+    plate_x(x + w / 2 + 0.01, 0.3, 0.85, z - d * 0.42, z - d * 0.02, 0x8ecae6)
+    n = max(2, round(d / 0.5))
+    for k in range(n):                                       # the awning's stripes
+        zz = z - d / 2 + (k + 0.5) * d / n
+        box((0.9, 0.08, d / n), (x + w / 2 + 0.38, 1.12, zz), awning if k % 2 == 0 else 0xfdf4de, roll=-0.35)
+    box((0.1, 0.42, d * 0.8), (x + w / 2 + 0.06, h - 0.35 if h > 1.8 else 1.5, z), sign)
+    box((w + 0.16, 0.22, d + 0.16), (x, h + 0.11, z), 0xfdf4de)
+
+def fire_engine(x, z, yaw):
+    """A toy fire engine, its cab to (cos yaw, -sin yaw)."""
+    with transformed((x, 0, z), yaw):
+        for sx in (-0.5, 0.45):
+            for sz in (-1, 1):
+                cyl(0.2, 0.14, (x + sx, 0.2, z + sz * 0.32 - 0.07), 0x2a2735, segs=8, axis='along')
+        box((1.6, 0.5, 0.62), (x, 0.5, z), 0xe66a5a)
+        box((0.5, 0.36, 0.62), (x + 0.55, 0.93, z), 0xe66a5a)
+        box((0.06, 0.2, 0.46), (x + 0.81, 0.95, z), 0x8ecae6)
+        box((1.0, 0.1, 0.24), (x - 0.25, 0.86, z), 0xfdf4de)          # the ladder
+        box((0.16, 0.12, 0.3), (x + 0.55, 1.17, z), 0x5a8fd8)          # the lamp
+
+@piece(1.0)
+def block_high_street():
+    # Skyline: the town's shops along the south edge, outside it across the
+    # road from the station and the train (placed on its outside, +X to the
+    # road): a row of toy shops with striped awnings and sign boards on
+    # their strip of the city rug, fronts 1.5 u past the kerb, the fire
+    # station with its engine out front at the street's middle, office
+    # blocks behind, a car park of toy cars at one end.
+    rug(-4.2, 7.0, -22.6, 22.6, [(-4.2, 7.0, -1.4, 1.4), (-4.2, -2.2, -22.6, 22.6)], [], 'floor_shops')
+    shops = ((-20.6, 2.0, 0xfdf4de, 0xe66a5a, 0x5a8fd8), (-18.0, 2.4, 0xf2c14e, 0x5a8fd8, 0xe66a5a),
+             (-15.4, 1.8, 0x8ecae6, 0xe66a5a, 0xf2c14e), (-12.8, 2.6, 0xe66a5a, 0x6cbf6c, 0xfdf4de),
+             (-10.2, 2.0, WOOD, 0x5a8fd8, 0x6cbf6c), (-7.6, 2.2, 0xfdf4de, 0xa878e8, 0xe66a5a),
+             (-5.0, 1.8, 0x6cbf6c, 0xe66a5a, 0xf2c14e),
+             (5.0, 2.2, 0xf2c14e, 0xe66a5a, 0x5a8fd8), (7.6, 1.8, 0xfdf4de, 0x6cbf6c, 0xe66a5a),
+             (10.2, 2.4, 0x5a8fd8, 0xf2c14e, 0xfdf4de), (12.8, 2.0, 0xe66a5a, 0x5a8fd8, 0xf2c14e))
+    for z, h, body, awning, sign in shops:
+        shop(3.8, z, 2.0, 2.4, h, body, awning, sign)
+    # the fire station: a red block with three dark doors, a tower for its
+    # hoses, the engine parked out front
+    box((2.8, 2.4, 4.6), (3.2, 1.2, 0.0), 0xe66a5a)
+    for dz in (-1.4, 0.0, 1.4):
+        plate_x(4.61, 0.0, 1.5, dz - 0.5, dz + 0.5, 0x3a2a22)
+    box((3.0, 0.26, 4.8), (3.2, 2.53, 0.0), 0xfdf4de)
+    box((1.4, 4.2, 1.4), (2.4, 2.1, -2.9), 0xe66a5a)
+    box((1.6, 0.26, 1.6), (2.4, 4.33, -2.9), 0xfdf4de)
+    fire_engine(4.9, 1.0, 0.0)
+    # office blocks behind the shops
+    for z, w, d, h, body, roof, top in ((-19.0, 2.4, 2.6, 4.4, 0x8ecae6, 0xe66a5a, 'slab'),
+                                        (-13.6, 2.4, 2.4, 5.6, 0xfdf4de, 0x5a8fd8, 'crown'),
+                                        (-8.2, 2.2, 2.4, 3.8, 0xf2c14e, 0x6cbf6c, 'slab'),
+                                        (7.2, 2.4, 2.6, 5.0, 0xe66a5a, 0xfdf4de, 'spire'),
+                                        (12.4, 2.2, 2.4, 4.0, WOOD, 0x5a8fd8, 'slab')):
+        skyscraper(0.2, z, w, d, h, body, roof, ('+x', '+z', '-z'), top)
+    # the car park at the street's east end
+    for k, c in enumerate((0xff5040, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa878e8)):
+        mini_car(3.4 + (k % 2) * 1.6, 16.0 + (k // 2) * 1.6, c, along_x=True)
+    for x, z in ((1.0, 17.0), (1.4, 19.6), (0.6, 21.4)):
+        wooden_tree(x, z)
+    traffic_light(4.6, -1.8, 0.0)
+    merge_paint()
+    keep_light(0.1)
 
 # ---- build + export ----------------------------------------------------------------
 
