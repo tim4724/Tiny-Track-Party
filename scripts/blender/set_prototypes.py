@@ -3072,46 +3072,46 @@ ROAD_B = (  # about u 0.722, from u 0.682 to 0.7471
 # stands in front of it, cut_face): per sample of ROAD_A / ROAD_B, the
 # display's groundY over the plain at FACE_L hill-ward of the centreline
 # along the sample's normal. The land, the road and the band all shape it.
-FACE_L = (5.5, 6.5, 7, 7.5, 8, 9, 10, 11, 12, 13.5)
+FACE_L = (4, 4.5, 5, 5.5, 6.5, 7, 7.5, 8, 9, 10, 11, 12, 13.5)
 FACE_A = (
-    (0.1, 0.1, 0.4, 0.8, 1.1, 1.9, 2.7, 3.3, 3.8, 4.4), (0.1, 0.1, 0.5, 0.9, 1.2, 2.1, 3.0, 3.8, 4.3, 5.0),
-    (0.1, 0.1, 0.7, 1.2, 1.6, 2.7, 3.7, 4.5, 5.1, 5.9), (0.1, 0.1, 0.7, 1.4, 1.9, 3.0, 4.3, 5.2, 5.8, 6.7),
-    (0.1, 0.1, 0.6, 1.3, 1.9, 3.2, 4.5, 5.8, 6.5, 7.4), (0.1, 0.1, 1.0, 1.7, 2.4, 3.9, 5.3, 6.6, 7.2, 8.2),
-    (0.1, 0.1, 1.1, 2.0, 2.7, 4.3, 6.0, 7.2, 7.9, 8.9), (0.1, 0.1, 0.9, 1.9, 2.8, 4.5, 6.2, 7.9, 8.6, 9.6),
-    (0.1, 0.1, 1.1, 2.1, 3.0, 4.9, 6.6, 8.3, 9.1, 10.2), (0.1, 0.2, 1.3, 2.3, 3.2, 5.1, 7.0, 8.7, 9.5, 10.6),
-    (0.1, 0.1, 1.2, 2.3, 3.3, 5.2, 7.2, 8.9, 9.7, 10.9), (0.1, 0.1, 1.1, 2.2, 3.3, 5.3, 7.2, 9.0, 9.9, 11.1),
-    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.1, 10.0, 11.2), (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3),
-    (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3), (0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.4),
-    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.1, 11.4), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.3),
-    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2),
-    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 9.9, 11.1),
-    (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 9.9, 11.0), (0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 9.9, 11.0),
-    (0.1, 0.1, 1.0, 2.1, 3.3, 5.4, 7.3, 9.3, 10.0, 10.9), (0.1, 0.2, 1.1, 2.2, 3.3, 5.4, 7.4, 9.3, 10.0, 10.9),
-    (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0), (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0),
-    (0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.5, 10.1, 11.0), (0.2, 0.2, 1.1, 2.2, 3.3, 5.5, 7.4, 9.4, 10.1, 11.0),
-    (0.2, 0.2, 1.2, 2.4, 3.5, 5.5, 7.5, 9.4, 10.4, 11.3), (0.2, 0.3, 1.3, 2.4, 3.4, 5.5, 7.3, 9.2, 10.3, 11.6),
-    (0.2, 0.2, 1.2, 2.2, 3.3, 5.2, 7.1, 9.0, 10.0, 11.6), (0.2, 0.9, 1.4, 2.5, 3.5, 5.1, 7.0, 8.8, 9.6, 11.3),
-    (0.6, 1.7, 2.2, 2.7, 3.8, 5.3, 6.8, 8.5, 9.5, 10.7), (1.3, 2.4, 3.0, 3.5, 4.1, 5.4, 6.7, 8.1, 8.8, 9.9),
-    (1.9, 3.1, 3.6, 4.2, 4.8, 5.8, 6.6, 7.2, 7.7, 8.6), (2.2, 3.0, 3.4, 3.7, 4.1, 4.8, 5.5, 5.9, 6.2, 6.7),
-    (1.3, 2.0, 2.3, 2.6, 3.0, 3.6, 4.2, 4.5, 4.8, 5.2), (0.5, 0.8, 1.1, 1.4, 1.7, 2.2, 2.8, 3.2, 3.4, 3.7),
-    (0.4, 0.6, 0.7, 0.8, 0.9, 1.2, 1.4, 1.7, 2.0, 2.3))
+    (0.3, 0.2, 0.1, 0.1, 0.1, 0.4, 0.8, 1.1, 1.9, 2.7, 3.3, 3.8, 4.4), (0.2, 0.1, 0.1, 0.1, 0.1, 0.5, 0.9, 1.2, 2.1, 3.0, 3.8, 4.3, 5.0),
+    (0.2, 0.1, 0.1, 0.1, 0.1, 0.7, 1.2, 1.6, 2.7, 3.7, 4.5, 5.1, 5.9), (0.1, 0.1, 0.1, 0.1, 0.1, 0.7, 1.4, 1.9, 3.0, 4.3, 5.2, 5.8, 6.7),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 0.6, 1.3, 1.9, 3.2, 4.5, 5.8, 6.5, 7.4), (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.7, 2.4, 3.9, 5.3, 6.6, 7.2, 8.2),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.0, 2.7, 4.3, 6.0, 7.2, 7.9, 8.9), (0.1, 0.1, 0.1, 0.1, 0.1, 0.9, 1.9, 2.8, 4.5, 6.2, 7.9, 8.5, 9.6),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.1, 2.1, 3.0, 4.9, 6.6, 8.4, 9.1, 10.1), (0.1, 0.1, 0.1, 0.1, 0.2, 1.3, 2.3, 3.2, 5.1, 7.0, 8.7, 9.5, 10.6),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.2, 2.3, 3.3, 5.2, 7.2, 8.9, 9.7, 10.9), (0.1, 0.1, 0.1, 0.1, 0.1, 1.1, 2.2, 3.3, 5.3, 7.2, 9.0, 9.9, 11.1),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.1, 10.0, 11.2), (0.1, 0.1, 0.1, 0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.3), (0.1, 0.1, 0.1, 0.1, 0.1, 1.1, 2.2, 3.3, 5.4, 7.3, 9.2, 10.1, 11.4),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.3, 5.3, 7.3, 9.2, 10.1, 11.4), (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.3),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2), (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.2),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 10.0, 11.1), (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 10.0, 11.1),
+    (0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 2.1, 3.2, 5.3, 7.2, 9.2, 9.9, 11.0), (0.1, 0.1, 0.1, 0.1, 0.2, 1.0, 2.1, 3.2, 5.3, 7.3, 9.2, 9.9, 11.0),
+    (0.1, 0.1, 0.1, 0.2, 0.2, 1.0, 2.2, 3.3, 5.4, 7.3, 9.3, 10.0, 10.9), (0.1, 0.2, 0.2, 0.2, 0.2, 1.1, 2.2, 3.3, 5.4, 7.4, 9.3, 10.0, 11.0),
+    (0.2, 0.2, 0.2, 0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0), (0.2, 0.2, 0.2, 0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.4, 10.0, 11.0),
+    (0.2, 0.2, 0.2, 0.2, 0.2, 1.2, 2.3, 3.4, 5.5, 7.5, 9.5, 10.1, 11.0), (0.2, 0.2, 0.2, 0.2, 0.2, 1.1, 2.2, 3.3, 5.5, 7.4, 9.4, 10.1, 11.0),
+    (0.2, 0.2, 0.2, 0.2, 0.2, 1.3, 2.4, 3.5, 5.6, 7.5, 9.4, 10.4, 11.3), (0.2, 0.2, 0.2, 0.2, 0.3, 1.3, 2.4, 3.4, 5.5, 7.3, 9.2, 10.3, 11.6),
+    (0.2, 0.2, 0.2, 0.2, 0.2, 1.2, 2.3, 3.3, 5.2, 7.1, 9.0, 10.0, 11.6), (0.2, 0.2, 0.2, 0.2, 0.9, 1.5, 2.5, 3.5, 5.1, 7.0, 8.8, 9.6, 11.3),
+    (0.2, 0.2, 0.2, 0.6, 1.7, 2.2, 2.7, 3.8, 5.3, 6.8, 8.5, 9.5, 10.7), (0.2, 0.3, 0.8, 1.3, 2.4, 3.0, 3.5, 4.1, 5.4, 6.7, 8.1, 8.9, 9.9),
+    (0.2, 0.8, 1.4, 1.9, 3.1, 3.6, 4.2, 4.8, 5.8, 6.6, 7.2, 7.7, 8.6), (0.5, 1.1, 1.7, 2.2, 3.0, 3.4, 3.7, 4.1, 4.8, 5.5, 5.9, 6.2, 6.7),
+    (0.4, 0.7, 1.0, 1.3, 2.0, 2.3, 2.6, 3.0, 3.6, 4.2, 4.6, 4.8, 5.2), (0.2, 0.3, 0.4, 0.5, 0.8, 1.1, 1.4, 1.7, 2.2, 2.8, 3.2, 3.4, 3.7),
+    (0.2, 0.2, 0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 1.2, 1.4, 1.7, 2.0, 2.3))
 FACE_B = (
-    (0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3, 0.4), (0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.3, 0.4),
-    (0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4), (0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4),
-    (0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.4, 0.7), (0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.5, 0.7, 1.0),
-    (0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.3, 0.6, 1.0, 1.5), (0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 0.9, 1.3, 1.7, 2.3),
-    (0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 1.3, 1.9, 2.3, 3.0), (0.0, 0.0, 0.0, 0.0, 0.1, 0.5, 1.2, 1.9, 2.7, 3.6),
-    (0.0, 0.0, 0.6, 0.7, 0.8, 1.7, 2.6, 3.4, 4.2, 5.3), (0.0, 0.0, 0.6, 1.3, 1.8, 2.8, 4.5, 5.5, 6.4, 7.7),
-    (0.0, 0.0, 0.8, 1.5, 2.1, 3.7, 5.4, 7.1, 8.0, 9.4), (0.0, 0.0, 1.2, 2.1, 2.8, 4.4, 6.2, 7.9, 8.4, 9.9),
-    (0.0, 0.0, 1.2, 2.5, 3.2, 4.9, 6.8, 8.5, 9.0, 10.2), (0.0, 0.0, 1.2, 2.4, 3.6, 5.3, 7.3, 9.1, 9.6, 10.5),
-    (0.0, 0.0, 1.0, 2.3, 3.5, 5.7, 7.6, 9.6, 10.1, 11.0), (0.0, 0.0, 1.0, 2.2, 3.4, 5.6, 7.5, 9.4, 9.9, 10.7),
-    (0.0, 0.0, 1.0, 2.1, 3.3, 5.5, 7.4, 9.3, 9.8, 10.5), (0.0, 0.0, 1.0, 2.1, 3.2, 5.4, 7.3, 9.2, 9.6, 10.3),
-    (0.0, 0.0, 0.9, 2.1, 3.2, 5.3, 7.1, 9.0, 9.5, 10.1), (0.0, 0.0, 0.4, 1.5, 2.6, 4.2, 6.0, 7.9, 8.4, 9.1),
-    (0.0, 0.0, 0.0, 0.7, 1.8, 3.2, 4.4, 6.3, 7.0, 7.6), (0.0, 0.0, 0.0, 0.2, 0.9, 2.3, 2.8, 4.6, 5.3, 6.1),
-    (0.0, 0.0, 0.0, 0.2, 0.4, 1.3, 1.8, 2.8, 3.5, 4.4), (0.0, 0.0, 0.0, 0.2, 0.3, 0.7, 1.2, 1.7, 2.2, 3.2),
-    (0.0, 0.0, 0.0, 0.2, 0.3, 0.6, 1.1, 1.6, 2.0, 2.9), (0.0, 0.0, 0.0, 0.1, 0.3, 0.6, 0.9, 1.4, 1.7, 2.5),
-    (0.0, 0.0, 0.0, 0.1, 0.2, 0.5, 0.8, 1.2, 1.4, 2.0), (0.0, 0.0, 0.0, 0.1, 0.3, 0.5, 0.8, 1.1, 1.3, 1.7),
-    (0.0, 0.0, 0.0, 0.2, 0.4, 0.9, 1.2, 1.5, 1.7, 2.1))
+    (0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3, 0.4), (0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4),
+    (0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4), (0.0, 0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.4),
+    (0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.4, 0.7), (0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.5, 0.7, 1.0),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.3, 0.6, 1.0, 1.5), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 0.9, 1.3, 1.7, 2.3),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.6, 1.3, 1.9, 2.3, 3.0), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.5, 1.2, 1.9, 2.7, 3.6),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.7, 0.8, 1.7, 2.6, 3.4, 4.2, 5.3), (0.1, 0.0, 0.0, 0.0, 0.0, 0.6, 1.3, 1.8, 2.8, 4.5, 5.5, 6.4, 7.7),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 1.5, 2.1, 3.7, 5.4, 7.1, 8.0, 9.4), (0.0, 0.0, 0.0, 0.0, 0.0, 1.3, 2.1, 2.8, 4.5, 6.3, 7.9, 8.4, 9.9),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 1.2, 2.5, 3.2, 4.9, 6.8, 8.5, 9.0, 10.2), (0.0, 0.0, 0.0, 0.0, 0.0, 1.2, 2.4, 3.6, 5.3, 7.3, 9.1, 9.6, 10.5),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 1.1, 2.3, 3.5, 5.7, 7.6, 9.6, 10.1, 11.0), (0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.2, 3.4, 5.6, 7.5, 9.5, 9.9, 10.7),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.1, 3.4, 5.5, 7.4, 9.3, 9.8, 10.5), (0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.1, 3.2, 5.4, 7.3, 9.2, 9.6, 10.3),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 2.1, 3.2, 5.3, 7.1, 9.0, 9.5, 10.1), (0.0, 0.0, 0.0, 0.0, 0.0, 0.4, 1.5, 2.6, 4.2, 6.0, 7.9, 8.4, 9.1),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 1.8, 3.2, 4.4, 6.3, 7.0, 7.6), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.9, 2.3, 2.8, 4.6, 5.3, 6.1),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.4, 1.3, 1.8, 2.8, 3.5, 4.4), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.7, 1.2, 1.7, 2.2, 3.2),
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.6, 1.1, 1.5, 2.0, 2.9), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.3, 0.6, 0.9, 1.4, 1.7, 2.5),
+    (0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.5, 0.8, 1.2, 1.4, 2.0), (0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.5, 0.8, 1.1, 1.3, 1.7),
+    (0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.2, 0.4, 0.9, 1.2, 1.5, 1.7, 2.1))
 GROUND_Y = -0.517   # Avalanche's plain: where a piece that drapes stands (y = 0 here)
 OVER_GAP = 3.0      # spotIssue: anything over the deck clears it by this
 
@@ -3216,9 +3216,23 @@ def swept_block(road, i0, i1, l0, l1, y0, y1, color, sides, ext=0.0, step=2):
     return colored_faces(polys, 'swept')[0]
 
 ROCK, SHADE, SNOW = 'grey', 'slate', 0xf3f7fb
+SUN = (0.55, 0.75, 0.37)  # rock facing it is ROCK, turned from it SHADE
 CONCRETE, TIMBER = 'grey', 0x8a6a46
 GALLERY_BEAM = 4.0       # a gallery's beams' underside over the plain
 GALLERY_SLAB = (4.32, 4.78)
+# the snow on a gallery's roof, from the mountain out: (across, depth over the slab)
+ROOF_SNOW = ((-9.2, 1.35), (-7.0, 1.0), (-4.5, 0.75), (-1.5, 0.55), (1.5, 0.45), (4.0, 0.38), (5.55, 0.3))
+
+def roof_snow(l):
+    """The roof snow's depth over the slab `l` across (valley-ward positive),
+    least of its lumps (gallery_shed jitters each by up to 0.06)."""
+    pts = ROOF_SNOW
+    if l <= pts[0][0]:
+        return pts[0][1] - 0.06
+    for (l0, h0), (l1, h1) in zip(pts, pts[1:]):
+        if l <= l1:
+            return h0 + (h1 - h0) * (l - l0) / (l1 - l0) - 0.06
+    return pts[-1][1] - 0.06
 
 def face_ground(face, i, l):
     """The drawn ground's height over the plain `l` hill-ward of the road's
@@ -3232,99 +3246,108 @@ def face_ground(face, i, l):
             return row[k - 1] + (row[k] - row[k - 1]) * f
     return row[-1]
 
-def cut_face(road, face, i0, i1, s0, s1, seed, ledge, verge):
+def cut_face(road, face, i0, i1, s0, s1, seed, ledge, verge, inner):
     """Avalanche's road cut, from sample i0 to i1: where the road runs along
     the mountainside the track's terrain raises beside it (tracks.js
     avalanche `land`, its forms `near` the kerb), the slope's foot blasted
     back for the road. The terrain stands up off the verge in one smooth
     ramp; this is that ramp as broken rock, standing just proud of it so the
     ground never shows through, and going back under it at its top and at
-    both ends: no base, no crest, no end. From the road out: scree at the
-    foot, a lower face, a ledge, an upper face, and its top following the
-    land up to where it tucks under it. Ribs stand out of the face and
-    gullies cut back into it; the ledge widens to hold snow and narrows to
-    nothing where the two faces run into one; every point is pushed about by
-    a smooth noise and every steep quad breaks into two facets, so no band
-    runs on and nothing repeats. Under a gallery (samples s0..s1) the face is
-    the gallery's back wall: it stands nearer the road, in shade, and its
-    ledge is at the roof (`ledge`), so the roof's snow runs on up the
-    mountain. Snow lies wherever a facet is flat enough to hold it. `verge(i)`
-    is how far out the foot stands at sample i: further where the road's
-    embankment (a berm) reaches out, so no part of the cut lies in it. The
-    land is the FACE table (the drawn ground, sampled), so the rock is built
-    over the plain, not draped: re-sample it whenever the land or the road
+    both ends: no base, no end. From the road out: scree at the foot, a
+    lower face, a ledge, an upper face and its crest, from which it dives
+    straight back under the land (whatever of it lay along the land past
+    the crest stood a hand's breadth over the drawn ground in some places
+    and under it in others, and read as loose shards and a dashed line on
+    the slope). Ribs stand out of the face and gullies cut back into it; the
+    ledge widens to hold snow and narrows to nothing where the two faces run
+    into one; every point is pushed about by a smooth noise and every steep
+    quad breaks into two facets, so no band runs on and nothing repeats.
+    Toward either end it shrinks toward its foot and sinks, keeping its
+    pitch: what is left is a smaller face standing out of the slope, never
+    a skin pressed flat along it (that read as blades of rock).
+    Under a gallery (samples s0..s1) the face is the gallery's back wall: it
+    stands nearer the road, in shade, its ledge at the roof (`ledge`), and
+    it stops under the roof's snow and, past the roof's back edge, under the
+    land, so the roof meets the mountainside with no rock poking through its
+    snow (a face just about the snow's height broke through it as a row of
+    teeth). The face is rock throughout: snow lies only on the ledge where
+    it is wide enough to hold it, in whole quads (snow on the up-turned half
+    of a split facet ran along the face as white teeth, and snowy scree at
+    the foot climbed the land's rise by a mouth as a white stripe across the
+    rock). `verge(i)` is how far out the foot stands at sample i, `inner(i)`
+    how far under a roof: further where the road's embankment (a berm)
+    reaches out, so no part of the cut lies in it, nearer where the land
+    rises off the verge, whose bank would show under the foot. The land is
+    the FACE table (the drawn ground, sampled), so the rock is built over
+    the plain, not draped: re-sample it whenever the land or the road
     moves."""
-    VERGE_IN, PROUD = 5.9, 0.25
-    rows, under = [], []
+    PROUD, END = 0.25, 5.0
+    CREST, LEDGE = 10, 6      # the profile's rows: the crest; the ledge's quad
+    rows, under, ledges = [], [], []
     for i in range(i0, i1 + 1):
         t = float(i - i0)
         g = lambda l: face_ground(face, i, l)
         shed = smooth01((i - (s0 - 3)) / 3.0) * smooth01(((s1 + 3) - i) / 3.0)
         rib = wobble(t, seed + 6, 2.2)                       # ribs out, gullies back, a few units apart
-        foot = verge(i) + (VERGE_IN - verge(i)) * shed + max(-0.3, -0.6 * rib) * (1 - shed)
+        foot = verge(i) + (inner(i) - verge(i)) * shed + max(-0.3, -0.6 * rib) * (1 - shed)
         wl = max(0.0, 0.6 + 0.8 * wobble(t, seed + 1, 4.0))  # the ledge: none at all in places
         top_l = foot + 2.0 + wl
         # Only where the land stands up beside the road: a cut in flat snow
         # is a wall on the plain.
-        taper = smooth01(t / 3.5) * smooth01((i1 - i) / 3.5) * smooth01((g(top_l + 1.0) - 0.8) / 2.0)
+        taper = smooth01(t / END) * smooth01((i1 - i) / END) * smooth01((g(top_l + 1.0) - 0.8) / 2.0)
         h2 = g(top_l + 1.0) + 0.3 + 0.4 * wobble(t, seed + 2, 5.0)
         h1 = h2 * (0.45 + 0.1 * wobble(t, seed, 7.0)) + 0.3 * rib
         h1 += (ledge - h1) * shed
         h2 = max(h2, h1 + 1.0)
         scree = (0.18 + 0.12 * wobble(t, seed + 5, 3.0)) * (1 - shed)
-        tuck = top_l + 2.6 + 0.5 * wobble(t, seed + 3, 3.5)
         g0 = g(foot)
         prof = [(foot - 0.9, g(foot - 0.9) - 0.3), (foot - 0.45, g0 + 0.05 + 0.6 * scree), (foot - 0.15, g0 + 0.2 + scree),
                 (foot + 0.15, g0 + 0.2 + 0.3 * (h1 - g0 - 0.2)), (foot + 0.4, g0 + 0.2 + 0.55 * (h1 - g0 - 0.2)),
                 (foot + 0.7, g0 + 0.2 + 0.8 * (h1 - g0 - 0.2)), (foot + 0.95, h1), (foot + 0.95 + wl, h1 + 0.15 + 0.1 * wl),
-                (foot + 1.3 + wl, h1 + 0.4 * (h2 - h1)), (foot + 1.7 + wl, h1 + 0.75 * (h2 - h1)), (top_l, h2),
-                (tuck - 1.6, None), (tuck - 0.7, None), (tuck, None)]
+                (foot + 1.3 + wl, h1 + 0.4 * (h2 - h1)), (foot + 1.7 + wl, h1 + 0.75 * (h2 - h1)), (top_l, h2)]
         row, low = [], []
         for j, (d, y) in enumerate(prof):
-            if 3 <= j <= 12:
+            if 3 <= j:
                 # never so far that a row crosses its neighbour (a fold
                 # reads as a white sliver or a spike)
                 d += (0.12 if j <= 6 else 0.35) * noise2(t / 1.6, j * 0.9, seed + 11)
-            if j == len(prof) - 1:
-                y = g(d) - 0.6                               # under the land again
-            elif y is None:
-                y = g(d) + (0.45 if j == 11 else 0.3)
-            if 3 <= j <= 10:
                 y += 0.4 * noise2(t / 1.4 + 7.3, j * 1.1, seed + 12) * min(1.0, y / 1.5)
-            if 2 <= j < len(prof) - 1:
+            if 2 <= j:
                 y = max(y, g(d) + PROUD)                     # proud of the ramp it stands in front of
-            y = g(d) + taper * (y - g(d)) - (1 - taper) * 0.4
+            d = foot + taper * (d - foot)
+            y = g0 + taper * (y - g0) - (1 - taper) * 0.6
+            if s0 <= i <= s1:
+                y = min(y, GALLERY_SLAB[1] + roof_snow(-d) - 0.25 if d <= -ROOF_SNOW[0][0] else g(d) - 0.2)
             row.append(on_road(road, i, -d, y))
             low.append(y < g(d) - 0.05)
+        # past the crest it only goes back under the land
+        for dd, dy in ((0.7, -0.3), (1.5, -0.7), (2.4, -1.1)):
+            row.append(on_road(road, i, -(d + dd), g(d + dd) + dy))
+            low.append(True)
         rows.append(row)
         under.append(low)
+        ledges.append(wl * taper)
     in_shed = lambda r: s0 <= r + i0 <= s1
     # Rock is dark where a facet turns from the light and pale where it
     # faces it, so the dark runs in whole facets with the rock's shape
     # (picked at random per quad it read as tiles); the face under a roof
     # is in its shade but for the facets turned to the mouth a racer comes
     # in by, which catch the daylight from it.
-    L = (0.55, 0.75, 0.37)
-    # Over its top, where it follows the land up to the tuck, it is the
-    # mountainside's own: whole quads, rock where the land is steep and snow
-    # where it eases, as the terrain's slope rock is (a split quad there,
-    # one half snow and one rock, ran along the top as a white zigzag).
-    TOP = 10
     def color(r, j, n):
-        if j >= TOP:
-            return SNOW if n[1] > 0.77 else ROCK
-        if n[1] > 0.6:
-            return SNOW
+        if j == LEDGE and n[1] > 0.8 and min(ledges[r], ledges[r + 1]) > 0.45:
+            return SNOW                                 # a ledge too narrow to hold it reads as a sliver
+        if j >= CREST:
+            return ROCK
         if in_shed(r) and j <= 6:
             return ROCK if n[2] < -0.3 else SHADE
-        return ROCK if n[0] * L[0] + n[1] * L[1] + n[2] * L[2] > 0.25 else SHADE
+        return ROCK if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.25 else SHADE
     # In chunks a part each (a 40 u run in one part is never culled).
     CH = 10
     for a in range(0, len(rows) - 1, CH):
         # a quad wholly under the land (the toe, the tapered ends) is no one's
         hidden = lambda r, j, a=a: all(under[r + a + di][j + dj] for di in (0, 1) for dj in (0, 1))
         for o in sheet(rows[a:a + CH + 1], lambda r, j, n, a=a: color(r + a, j, n), 'cut', skip=hidden,
-                       facet=lambda r, j: 2 <= j < TOP):
+                       facet=lambda r, j: 2 <= j < CREST and j != LEDGE):
             if o['swatch'] == 'white':
                 snowy(o, 0.45)
 
@@ -3363,7 +3386,7 @@ def gallery_shed(road, s0, s1, seed):
         box((COL - SEAT, 0.32, 0.36), (x, BEAM + 0.16, z), TIMBER, yaw=road_yaw(road, i))
     # the snow on the roof: deepest against the mountain, lumpy, over the
     # valley edge in a cornice; a row past each end hangs over the mouth
-    prof_l = (-9.2, -7.0, -4.5, -1.5, 1.5, 4.0, 5.55, 5.95, 6.1, 5.95)
+    prof_l = tuple(l for l, _ in ROOF_SNOW) + (5.95, 6.1, 5.95)
     rows = []
     idx = [s0 - 1] + list(range(s0, s1 + 1, 2)) + ([s1] if (s1 - s0) % 2 else []) + [s1 + 1]
     for k, i in enumerate(idx):
@@ -3375,7 +3398,7 @@ def gallery_shed(road, s0, s1, seed):
         row = []
         for j, l in enumerate(prof_l):
             if j < 7:
-                y = SLAB1 + (1.35, 1.0, 0.75, 0.55, 0.45, 0.38, 0.3)[j] + 0.12 * jitter(i, j, seed)
+                y = SLAB1 + ROOF_SNOW[j][1] + 0.12 * jitter(i, j, seed)
             else:
                 y = SLAB1 + (0.28 * over, 0.02, -0.32 * over)[j - 7]
             if end:
@@ -3393,6 +3416,39 @@ def gallery_shed(road, s0, s1, seed):
             x, _, z = on_road(road, i, 5.9 + 0.25 * over, 0)
             cyl(0.02, ln, (x, SLAB1 - 0.32 * over + 0.06 - ln, z), 'sky', r2=0.11, segs=3, stem=True)
 
+def stone(x, z, s, yaw, seed):
+    """A broken rock `s` across lying on the plain at (x, z): a lump of
+    fifteen facets, no two alike, wider than tall and bedded a little in the
+    ground, rock where a facet turns to the side and snow where it faces the
+    sky. A box with a slab of snow on it read as a crate."""
+    N = 5
+    c, sn = math.cos(yaw), math.sin(yaw)
+    def at(a, r, y):
+        lx, lz = r * math.cos(a), 0.8 * r * math.sin(a)
+        return (x + lx * c + lz * sn, y, z - lx * sn + lz * c)
+    low = [at(2 * math.pi * k / N, s * (0.55 + 0.2 * jitter(k, 1, seed)), -0.12 * s) for k in range(N)]
+    high = [at(2 * math.pi * (k + 0.5) / N + 0.3 * jitter(k, 2, seed), s * (0.38 + 0.14 * jitter(k, 3, seed)),
+               s * (0.42 + 0.12 * jitter(k, 4, seed))) for k in range(N)]
+    apex = at(0.7 * seed, 0.12 * s, s * (0.62 + 0.08 * jitter(0, 5, seed)))
+    tris = []
+    for k in range(N):
+        a, b, h0, h1 = low[k], low[(k + 1) % N], high[k], high[(k + 1) % N]
+        tris += [(a, b, h0), (b, h1, h0), (h0, h1, apex)]
+    polys = []
+    for t in tris:
+        n = face_normal(t)
+        out = [sum(p[k] for p in t) / 3 - o for k, o in enumerate((x, 0.25 * s, z))]
+        if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0:   # wound out of the lump
+            t, n = t[::-1], tuple(-v for v in n)
+        if n[1] > 0.75:
+            col = SNOW
+        else:
+            col = ROCK if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.25 else SHADE
+        polys.append((col, list(t)))
+    for o in colored_faces(polys, 'stone'):
+        if o['swatch'] == 'white':
+            snowy(o, 0.45)
+
 def fallen_rock(road, boulders):
     """Rocks come down off the face onto the verge at its foot: (sample, how
     far out from the road's centreline, size). DRAPED: each lies on the land
@@ -3400,20 +3456,19 @@ def fallen_rock(road, boulders):
     def build():
         with plain_parts():
             for k, (i, l, s) in enumerate(boulders):
-                x, y, z = on_road(road, i, -l, 0.0)
-                yaw = road_yaw(road, i) + 1.3 * k
-                box((s * 1.25, s * 0.75, s), (x, s * 0.25, z), ROCK, yaw=yaw, roll=0.2 * math.sin(k * 2.1))
-                if k % 2 == 0:
-                    snowy(box((s * 1.0, s * 0.2, s * 0.8), (x, s * 0.68, z), SNOW, yaw=yaw + 0.15), 0.45)
+                x, _, z = on_road(road, i, -l, 0.0)
+                stone(x, z, s * 1.5, road_yaw(road, i) + 1.3 * k, 3.1 * k + i)
     draped('scree', build)
 
 @piece(1.0)
 def avalanche_gallery():
     # Avalanche: the long gallery on the straight after the slide, the cut
     # it is let into, and rock fallen at its mouths.
-    cut_face(ROAD_A, FACE_A, 1, 39, 7, 35, seed=3.0, ledge=5.0, verge=lambda i: 6.5 + 0.4 * smooth01((8 - i) / 3.0))
+    pull = lambda i: smooth01((i - 32) / 3.0)          # the land's bank by the far mouth
+    cut_face(ROAD_A, FACE_A, 0, 40, 7, 35, seed=3.0, ledge=5.0,
+             verge=lambda i: 6.5 + 0.4 * smooth01((8 - i) / 3.0) - 1.6 * pull(i), inner=lambda i: 5.9 - 1.0 * pull(i))
     gallery_shed(ROAD_A, 7, 35, seed=3.0)
-    fallen_rock(ROAD_A, ((3, 6.0, 0.5), (4, 6.5, 0.35), (36, 6.0, 0.55), (37, 6.6, 0.4)))
+    fallen_rock(ROAD_A, ((3, 6.0, 0.5), (4, 6.5, 0.35), (38, 4.5, 0.5), (39, 4.6, 0.4)))
 
 @piece(1.0)
 def avalanche_gallery_short():
@@ -3421,7 +3476,7 @@ def avalanche_gallery_short():
     # cut through the spur's toe it is let into, which a racer coming round
     # the bend before it looks straight at.
     cut_face(ROAD_B, FACE_B, 1, 29, 15, 24, seed=11.0, ledge=5.0,
-             verge=lambda i: 6.5 + 1.4 * smooth01((14 - i) / 3.0) + 0.35 * smooth01((i - 24) / 2.0))
+             verge=lambda i: 6.5 + 1.4 * smooth01((14 - i) / 3.0) + 0.35 * smooth01((i - 24) / 2.0), inner=lambda i: 5.9)
     gallery_shed(ROAD_B, 15, 24, seed=11.0)
     fallen_rock(ROAD_B, ((10, 6.6, 0.5), (12, 6.9, 0.35), (13, 6.4, 0.45), (26, 6.2, 0.45)))
 

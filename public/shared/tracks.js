@@ -650,7 +650,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.7091, lat: 67.4, x: 0.6, z: -1.5, r: 62, h: 28, top: 0.1, near: 3.8 },
       { kind: 'ridge', u: 0.8349, lat: 52.1, yaw: 3, len: 20, r: 62, h: 28, top: 0.1, near: 3.8 },
       { kind: 'ridge', u: 0.8371, lat: 64.0, r: 20, h: 10, near: 3.8 },
-      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 }
+      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 },
+      // no rock cluster on the open snow the run to the loop looks over: it
+      // stood alone on the plain like a dropped asset
+      { kind: 'clear', u: 0.605, lat: -10, r: 1 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
