@@ -699,14 +699,16 @@ export const TRACKS = {
     // with their doors and open front lawns on a pavement at the road's own
     // level, the kerb a kerbstone there (the `street`); another row of
     // cottages at the west bend's exit, washing out in the gardens. The fete
-    // is on beside the grid straight. The south loop rings the village pond,
-    // and the orchard at the south hill's foot rings the loop, a block of
-    // trees laid along the road at each spot. The windmill turns in the north
-    // loop over its fields (each field a rectangle well inside the kerbs), the
-    // sheep graze round the loop's outside, and the dairy farm stands inside
-    // the west bend. A piece's box holds the verge band down under it
-    // (bandHold), so nothing here is one piece over a whole loop: every box
-    // keeps 2 u or more off the kerbs, and the road keeps its verge.
+    // is on beside the grid straight. The orchard at the south hill's foot
+    // rings the south loop, a block of trees laid along the road at each spot,
+    // turned either way round, two tall pines at the band's far end (at its
+    // near end they stood in the view of the church). The
+    // windmill turns in the north loop beside its wheat field, a rectangle
+    // well inside the kerbs; the sheep graze round the loop's outside and
+    // under the flyover, and the dairy farm stands inside the west bend. A
+    // piece's box holds the verge band down under it (bandHold), so nothing
+    // here is one piece over a whole loop: every box keeps 2 u or more off
+    // the kerbs, and the road keeps its verge.
     set: [
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
@@ -715,32 +717,28 @@ export const TRACKS = {
       { model: 'set-village-street', u: 0.4145, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
       { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
-      { model: 'set-mill-yard', u: 0.6, lat: 13, yaw: 0 },
       { model: 'set-field-wheat', u: 0.6977, lat: 12, yaw: 7.7 },
-      { model: 'set-field-stubble', u: 0.6187, lat: 10.38, yaw: -80.22 },
-      { model: 'set-village-pond', u: 0.1496, lat: 11.35, yaw: 0 },
       { model: 'set-village-fete', u: 0.0125, lat: 8.6, yaw: 0 },
       { model: 'set-orchard-block', u: 0.126, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.1395, lat: -7.5 },
-      { model: 'set-orchard-block-b', u: 0.1535, lat: -7.5 },
+      { model: 'set-orchard-block', u: 0.1395, lat: -7.5, yaw: 180 },
+      { model: 'set-orchard-block-b', u: 0.1535, lat: -7.5, yaw: 180 },
       { model: 'set-orchard-block', u: 0.163, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.1725, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.1815, lat: -7.5 },
-      { model: 'set-orchard-block-b', u: 0.191, lat: -7.5 },
+      { model: 'set-orchard-block', u: 0.1815, lat: -7.5, yaw: 180 },
+      { model: 'set-orchard-block-b', u: 0.191, lat: -7.5, yaw: 180 },
       { model: 'set-orchard-block', u: 0.2, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.2095, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.219, lat: -7.5 },
-      { model: 'set-orchard-block-b', u: 0.229, lat: -8 },
-      { model: 'set-orchard-block', u: 0.239, lat: -8.2 },
-      { model: 'set-orchard-block', u: 0.249, lat: -8.2 },
-      { model: 'set-orchard-block', u: 0.259, lat: -7.5 },
+      { model: 'set-orchard-block', u: 0.219, lat: -7.5, yaw: 180 },
+      { model: 'set-orchard-block-b', u: 0.229, lat: -8.4, yaw: 180 },
+      { model: 'set-orchard-block', u: 0.239, lat: -8.6 },
+      { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
+      { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
       { model: 'set-cow-farm', u: 0.892, lat: -8.7, yaw: 180 },
-      { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 }
+      { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
+      { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 }
     ],
     // the valley the village lies in: the west side rises off the west
     // bend's verge (`near`) to a terrace above it, the east terraces climb
     // behind the street, the south hill stands behind the orchard and the
-    // north-east hill behind the sheep; the pond fills the south loop
+    // north-east hill behind the sheep
     land: [
       { kind: 'ridge', u: 0.915, lat: 23.1, yaw: -4, len: 44, r: 20, h: 7, top: 0.25, near: 0.6 },
       { kind: 'ridge', u: 0.92746, lat: 29.818, yaw: 2.68, len: 100, r: 9, h: 3, top: 0.45 },
@@ -748,7 +746,6 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.37558, lat: 34.185, yaw: 157.64, len: 100, r: 9, h: 3, top: 0.45 },
       { kind: 'ridge', u: 0.2, lat: -36, len: 60, r: 24, h: 8, top: 0.35 },
       { kind: 'ridge', u: 0.66022, lat: -22, r: 24, h: 9, top: 0.15 },
-      { kind: 'pond', u: 0.1496, lat: 11.35, len: 2, r: 5.4, w: 2 },
       { kind: 'street', u: 0.39565, len: 32 }
     ]
   },
