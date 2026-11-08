@@ -593,7 +593,9 @@ export const TRACKS = {
       { model: 'set-penguin-group', u: 0.7, lat: 9, yaw: 255 },
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
       { model: 'set-advanced-camp', u: 0.897, lat: -13, yaw: 328 },
-      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 }
+      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 },
+      // the massif's crags, along its crest (`land`)
+      { model: 'set-glacier-crags', u: 0.185, lat: -38 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -612,11 +614,13 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, x: 8, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, x: -3, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 },
-      // the massif over the top straight's outside, its face rising from
-      // the verge (near) into rock and snow twenty units up; it runs back
-      // past the bend and ends in its round shoulder a good way short of the
-      // fort, whose clearing and capped cells would slice it off (z)
-      { kind: 'ridge', u: 0.185, lat: -30, z: -35, len: 60, r: 26, h: 22, top: 0.25, near: 2.5 }
+      // the massif over the top straight's outside: a snow slope rising off
+      // the verge (near) to a crest thirteen units up, its crags the piece on
+      // it (set-glacier-crags; a 9 u facet of rock at the kerb read as a
+      // stage flat); it runs back past the bend and ends in its round
+      // shoulder a good way short of the fort, whose clearing and capped
+      // cells would slice it off (z)
+      { kind: 'ridge', u: 0.185, lat: -38, z: -40, len: 50, r: 34, h: 13, top: 0.2, near: 2.5 }
     ]
   },
   avalanche: {
@@ -638,7 +642,12 @@ export const TRACKS = {
       // ROAD_A/FACE_A, ROAD_B/FACE_B), so a gallery's u here, its samples
       // there and the land below move together: re-sample them after either.
       { model: 'set-avalanche-gallery-short', u: 0.722, lat: 0 },
-      { model: 'set-avalanche-gallery', u: 0.825, lat: 0 }
+      { model: 'set-avalanche-gallery', u: 0.825, lat: 0 },
+      // the crags the southern and western massifs' crests break out in
+      // (`land`): the snow keeps their 9 u facets, rock in them read as
+      // stripes on a dome
+      { model: 'set-avalanche-crags', u: 0.8349, lat: 52.1, yaw: 3 },
+      { model: 'set-avalanche-crags-west', u: 0.7091, lat: 67.4 }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
     // down into: a spur off the western massif runs down to the kerb, the

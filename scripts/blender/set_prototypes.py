@@ -3328,14 +3328,29 @@ def cut_face(road, face, i0, i1, s0, s1, seed, ledge, verge, inner):
         under.append(low)
         ledges.append(wl * taper)
     in_shed = lambda r: s0 <= r + i0 <= s1
+    # Snow lies on a ledge wide and level enough to hold it (a narrow one
+    # reads as a sliver), and only along a run of such quads: one or two
+    # alone read as slivers hanging on the face.
+    held = [min(ledges[r], ledges[r + 1]) > 0.45
+            and abs(face_normal((rows[r][LEDGE], rows[r + 1][LEDGE], rows[r + 1][LEDGE + 1], rows[r][LEDGE + 1]))[1]) > 0.8
+            for r in range(len(rows) - 1)]
+    run = [False] * len(held)
+    r = 0
+    while r < len(held):
+        e = r
+        while e < len(held) and held[e]:
+            e += 1
+        for k in range(r, e):
+            run[k] = e - r >= 3
+        r = e + 1
     # Rock is dark where a facet turns from the light and pale where it
     # faces it, so the dark runs in whole facets with the rock's shape
     # (picked at random per quad it read as tiles); the face under a roof
     # is in its shade but for the facets turned to the mouth a racer comes
     # in by, which catch the daylight from it.
     def color(r, j, n):
-        if j == LEDGE and n[1] > 0.8 and min(ledges[r], ledges[r + 1]) > 0.45:
-            return SNOW                                 # a ledge too narrow to hold it reads as a sliver
+        if j == LEDGE and n[1] > 0.8 and run[r]:
+            return SNOW
         if j >= CREST:
             return ROCK
         if in_shed(r) and j <= 6:
@@ -3459,6 +3474,115 @@ def fallen_rock(road, boulders):
                 x, _, z = on_road(road, i, -l, 0.0)
                 stone(x, z, s * 1.5, road_yaw(road, i) + 1.3 * k, 3.1 * k + i)
     draped('scree', build)
+
+def crag(spine, peaks, seed, sink=2.5):
+    """A crest of the mountain's own rock breaking out of its snow, along
+    `spine` ((x, z) points in the piece frame): sections across it about 2 u
+    apart, each a foot either side sunk `sink` under the snow, a shoulder and
+    the crest, the crest's height read off `peaks` ((share of the spine,
+    height) pairs) and jagged by a noise, so it rises in teeth, not a wall.
+    Toward either end it sinks under the snow it stands in: no base and no
+    end. Every quad breaks into two facets; rock where a facet turns to the
+    side, snow where it faces the sky. DRAPED, so y = 0 is the snow as drawn:
+    stand it on a crest, where the land under it lies near level, or the
+    drape shears it."""
+    pts = [spine[0]]
+    for a, b in zip(spine, spine[1:]):
+        n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / 2.0 + 0.5))
+        pts += [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(1, n + 1)]
+    run = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        run.append(run[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
+    L = run[-1]
+    def height(f):
+        for (f0, h0), (f1, h1) in zip(peaks, peaks[1:]):
+            if f <= f1:
+                return h0 + (h1 - h0) * (f - f0) / max(1e-6, f1 - f0)
+        return peaks[-1][1]
+    rows = []
+    for i, (x, z) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        m = math.hypot(tx, tz) or 1.0
+        nx, nz = tz / m, -tx / m
+        s = run[i]
+        end = smooth01(min(s, L - s) / 4.0)
+        # summits: the crest rises and falls by a third of its height over
+        # some ten units (a tooth every two read as a picket)
+        hc = height(s / L) * (0.82 + 0.3 * wobble(s, seed, 9.0))
+        hc = end * hc - (1 - end) * sink
+        w = 0.85 * max(hc, 0.0) + 2.2
+        off = 0.2 * w * wobble(s, seed + 3, 11.0)           # the crest wanders off the spine
+        j = lambda k, a: a * jitter(i, k, seed)
+        prof = [(-w * (1.0 + j(2, 0.15)), -sink),
+                (-w * (0.72 + j(3, 0.1)) + off, hc * (0.2 + j(4, 0.1))),
+                (-w * (0.38 + j(5, 0.1)) + off, hc * (0.62 + j(6, 0.1))),
+                (off + j(7, 0.12) * w, hc),
+                (w * (0.34 + j(8, 0.1)) + off, hc * (0.66 + j(9, 0.1))),
+                (w * (0.7 + j(10, 0.1)) + off, hc * (0.24 + j(11, 0.1))),
+                (w * (1.0 + j(12, 0.15)), -sink)]
+        rows.append([(x + nx * d, y, z + nz * d) for d, y in prof])
+    def color(i, j, n):
+        if n[1] > 0.68:
+            return SNOW
+        return ROCK if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.25 else SHADE
+    for o in sheet(rows, color, 'crag', facet=lambda i, j: True):
+        if o['swatch'] == 'white':
+            snowy(o, 0.45)
+
+@piece(1.0)
+def snow_boulder():
+    # The snow tracks' scatter rock (theme.cc snowProps) in place of the kit's
+    # rocks, which read as stacked crates: three faceted lumps bedded in the
+    # snow, snow on what faces the sky, some three units across at scale 1
+    # and squat (a lump as tall as the galleries' read as a dark cone).
+    stone(0.0, 0.0, 2.0, 0.3, 1.0)
+    stone(1.15, 0.55, 1.25, 1.7, 2.0)
+    stone(-0.95, 0.75, 0.85, 2.9, 3.0)
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH':
+            for v in o.data.vertices:
+                v.co.z *= 0.65
+
+@piece(1.0)
+def glacier_crags():
+    # Glacier: the massif over the top straight's outside (tracks.js glacier
+    # `land`) breaks out of its snow along its crest in rock, a summit in the
+    # middle and lesser teeth either side, and ribs running down its snow
+    # face toward the road and the bend, each sinking into the snow short of
+    # the foot. Placed on the massif's spine (u 0.185, lat -38), +X away from
+    # the road, +Z along it.
+    def build():
+        crag([(1.0, -64.0), (-0.5, -52.0), (0.5, -40.0), (-1.0, -28.0), (0.5, -16.0)],
+             ((0.0, 4.0), (0.3, 8.0), (0.5, 12.0), (0.7, 7.0), (1.0, 4.0)), seed=21.0)
+        crag([(-2.0, -22.0), (-8.0, -14.0), (-13.0, -9.0)], ((0.0, 6.0), (0.5, 4.5), (1.0, 2.5)), seed=27.0)
+        crag([(-4.0, -38.0), (-12.0, -39.0), (-20.0, -42.0)], ((0.0, 6.0), (0.5, 4.0), (1.0, 2.0)), seed=29.0)
+        crag([(-4.0, -52.0), (-11.0, -55.0), (-17.0, -56.0)], ((0.0, 5.0), (0.5, 3.5), (1.0, 2.0)), seed=31.0)
+    draped('crags', build)
+
+@piece(1.0)
+def avalanche_crags():
+    # Avalanche: the southern massif over the long gallery's straight
+    # (tracks.js avalanche `land`) breaks out of its snow along its crest,
+    # running on toward the lower peak, a jagged skyline the racer drives at
+    # off the slide's foot. Placed on the massif's spine (u 0.8349, lat
+    # 52.1, yaw 3), +X toward the road, +Z along it; the lower peak's summit
+    # is at (-5.5, 44).
+    def build():
+        crag([(2.0, -20.0), (-1.0, -8.0), (0.0, 4.0), (-2.0, 16.0), (-4.0, 28.0), (-5.0, 38.0)],
+             ((0.0, 5.0), (0.2, 11.0), (0.4, 14.0), (0.6, 9.0), (0.8, 10.0), (1.0, 5.0)), seed=33.0)
+    draped('crags', build)
+
+@piece(1.0)
+def avalanche_crags_west():
+    # Avalanche: the western massif's summit (tracks.js avalanche `land`)
+    # breaks out of its snow, the crest the run to the short gallery looks
+    # at. Placed on its summit (u 0.7091, lat 67.4), +X toward the road, +Z
+    # along it.
+    def build():
+        crag([(2.0, -16.0), (0.0, -4.0), (-1.0, 4.0), (-3.0, 13.0)],
+             ((0.0, 4.0), (0.4, 11.0), (0.7, 8.0), (1.0, 4.0)), seed=41.0)
+    draped('crags', build)
 
 @piece(1.0)
 def avalanche_gallery():

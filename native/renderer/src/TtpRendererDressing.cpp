@@ -114,7 +114,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
                 placeTree(x, z, (int) tb.scBush.model, bs, tb.scBush.sink);
             } else if (!tb.scRocks.empty()) {
                 // A biome may carry no boulder palette at all — the snow cup
-                // dresses its verges with snow-capped kit rock instead, and
+                // dresses its verges with its faceted prop rock instead, and
                 // grey granite beside that reads as a different game.
                 Boulder b;
                 b.rr = tb.scRockS[0] + (float) rnd() * tb.scRockS[1];

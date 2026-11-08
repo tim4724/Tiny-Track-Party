@@ -319,7 +319,7 @@ void powderResort(Theme& t) {
   t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
   t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
   snowProps(t, { { "snowman", 0.12f, 0.45f, 0.1f, true, true }, { "sled", 0.25f, 0.4f, 0.1f, false, true },
-                 { "snow-pile", 0.38f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false } });
+                 { "snow-pile", 0.38f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.25f, 0.6f, 0.3f, false, false } });
 }
 
 // Flurry is a frozen lake below a village: open snow round the ice (fewer
@@ -331,7 +331,7 @@ void flurryLake(Theme& t) {
   t.scenery.density = 0.42f;
   t.props.scatterDensity = 0.28f;
   snowProps(t, { { "sled", 0.35f, 0.4f, 0.1f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
-                 { "rocks-medium", 0.15f, 0.9f, 0.4f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
+                 { "set-snow-boulder", 0.15f, 0.6f, 0.3f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
 // Glacier is wild ice: no cabin and no village leavings, few trees (open
@@ -340,8 +340,8 @@ void penguinGlacier(Theme& t) {
   t.landmarks.clear();
   t.scenery.density = 0.3f;
   ploughBanks(t);
-  snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "rocks-medium", 0.25f, 0.9f, 0.4f, false, false },
-                 { "rocks-large", 0.20f, 0.85f, 0.35f, false, false }, { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
+  snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.45f, 0.6f, 0.6f, false, false },
+                 { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
 }
 
 // Avalanche is a pass under a slope that lets go: debris (rock and tumbled
@@ -350,7 +350,7 @@ void penguinGlacier(Theme& t) {
 void avalanchePass(Theme& t) {
   ploughBanks(t);
   t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
-  snowProps(t, { { "rocks-medium", 0.30f, 0.9f, 0.4f, false, false }, { "rocks-large", 0.25f, 0.85f, 0.35f, false, false },
+  snowProps(t, { { "set-snow-boulder", 0.55f, 0.6f, 0.6f, false, false },
                  { "snow-pile", 0.30f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
@@ -552,7 +552,7 @@ Theme snowTheme() {
   s.hasBush = false;
   s.mixTree = 0.55f; s.mixBush = 0.55f;
   // NO boulder palette: the flat-shaded grey granite this cup used to scatter
-  // sat wrong beside the snow-capped kit rock in the props below, which is the
+  // sat wrong beside the snow-capped rock in the props below, which is the
   // rock this biome has now. An empty palette places none (buildScenery).
   s.rocks = {};
   s.density = 0.55f;
@@ -560,19 +560,18 @@ Theme snowTheme() {
   s.clutterDensity = 0.3f;
   deriveModels(s);
   // The snow the crates used to stand in for: a greeter by the road, sleds left
-  // out, wind-heaped drifts and snow-capped rock, all Holiday Kit. The SNOWMAN
+  // out, wind-heaped drifts, all Holiday Kit, and faceted rock (the kit's read
+  // as stacked crates; set_prototypes.py snow_boulder, at its scale). The SNOWMAN
   // is here rather than in the landmark list it used to head, because a scatter
   // gives several a lap where a landmark gives one a track — and it is the same
   // object either way.
-  t.props.models = { "snowman", "sled", "snow-pile", "rocks-medium", "rocks-large",
-                     "snow-bunker" };
+  t.props.models = { "snowman", "sled", "snow-pile", "set-snow-boulder", "snow-bunker" };
   t.props.scatterDensity = 0.34f;
   t.props.scatter = { { 0, 0.18f, 1.0f, 0.3f, true, true },  // snowman, at the kerb facing the cars
                       { 1, 0.16f, 1.0f, 0.3f, false, true }, // sled, left by the road
                       { 2, 0.20f, 1.0f, 0.6f },        // drift
-                      { 3, 0.20f, 0.9f, 0.4f },        // rock cluster
-                      { 4, 0.08f, 0.85f, 0.35f },      // the big one, sparingly
-                      { 5, 0.18f, 1.0f, 0.3f } };      // snow bunker
+                      { 3, 0.28f, 0.6f, 0.6f },        // rock, small to big
+                      { 4, 0.18f, 1.0f, 0.3f } };      // snow bunker
   return t;
 }
 
