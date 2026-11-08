@@ -547,7 +547,7 @@ to do both:
   wide (`npm run budget:scene` prices it).
 - **It yields**: inside a footprint (it comes down to the grid by
   `kHoldSlope` a unit as it nears one, so a piece's flat parts stand at their
-  level), at the sea and a pond, along a street, where another road at its
+  level; a `near` form's rise passes, below), at the sea and a pond, along a street, where another road at its
   height is nearer (that road's band takes the ground), and under another
   strand's deck it is capped like the grid.
 
@@ -635,11 +635,20 @@ to do both:
   keeps full height to that many units past the kerb (reaching it over
   `kNearRamp`), where every other form clears the road's corridor. The band
   draws it at its own resolution from the verge out, so a massif tens of
-  units high and as wide as the scene can rise straight off the kerb zone (a
-  rock piece at the kerb hands over to it within a few units), and the slope
-  rock (below) dresses its face. Author it round the OUTSIDE of a bend or
-  along a straight: on a bend's inside it walls the road ahead off. Glacier's
-  massif over its top straight is the worked example.
+  units high and as wide as the scene can rise straight off the kerb zone,
+  and the slope rock (below) dresses its face. Author it round the OUTSIDE of
+  a bend or along a straight: on a bend's inside it walls the road ahead off.
+  A set piece's mound withholds every other form under it, but JOINS a
+  `near` one, the higher of the two (`landforms`): a mountainside runs on
+  round a piece's slope. Keep it clear of that piece's parts, which stand on
+  their own formula. Its rise also passes the band's hold by a piece that
+  levels nothing (one that drapes, one on its own ground), never a clearing:
+  a gallery stands IN the mountainside it is let into. A rock piece at the
+  kerb stands in front of the flank's ramp and tucks under the land past it,
+  built over the plain against the ground drawn there, never draped (a draped
+  face rides the ramp up). Glacier's massif over its top straight and
+  Avalanche's mountains round its last loop, the galleries' cuts in them
+  (set_prototypes.py `cut_face`), are the worked examples.
 - **ROCK WHERE THE LAND IS STEEP.** The ground's vertex alpha carries how
   steep the land is (`rockWeight`, per biome); `vground.mat` replaces the
   canvas there with the biome's rock, in strata by world height under ledges

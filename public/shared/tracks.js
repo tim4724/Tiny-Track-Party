@@ -266,7 +266,10 @@ const BOXES = {
 // A ridge or ring clears the road's corridor (no height within a few units
 // of it, all of it some 16 u out) unless it carries `near`: then its flank
 // stands at full height from that many units past the kerb, a massif's face
-// rising off the verge (native/renderer/CLAUDE.md, a big landform).
+// rising off the verge (native/renderer/CLAUDE.md, a big landform). A set
+// piece's mound withholds every other form under it, but joins a `near` one,
+// the higher of the two: run a mountainside on round a piece's slope, clear
+// of what stands on it.
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.

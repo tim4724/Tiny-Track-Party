@@ -1208,8 +1208,9 @@ private:
     // How far the band's own ring counts as its road, along the lap.
     static constexpr float kBandOwnS = 3.0f;
     // 0 where the band yields to the water at (x, z), easing to 1 clear of
-    // it; `rise`, how far over the grid it may stand there by a footprint.
-    float bandHold(float x, float z, float& rise) const;
+    // it; `rise`, how far over the grid it may stand there by a footprint
+    // (`nearRise` more by a piece that levels nothing).
+    float bandHold(float x, float z, float nearRise, float& rise) const;
     static constexpr float kHoldSlope = 0.25f, kHumpRun = 4.0f;
     // The band's mesh, appended to the ground's (normals for its light).
     std::vector<Vertex> mBandVerts;

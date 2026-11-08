@@ -542,9 +542,10 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
 // hills (fading out toward the road so a flank never walls a verge), and the
 // mounds and fans a set piece brought (SET_GROUND) take the land under them:
 // their union (the highest of them, each risen from its piece's base), or the
-// raised ground where that stands higher, with the hills withheld — so the
-// piece's parts stand on the very surface they were modelled on, and the road
-// beside its foot keeps its short stilts. A paint shapes nothing (landTint).
+// raised ground where that stands higher, with the hills withheld (a form
+// authored `near` joins the union instead) — so the piece's parts stand on
+// the very surface they were modelled on, and the road beside its foot keeps
+// its short stilts. A paint shapes nothing (landTint).
 float TtpRenderer::landforms(float x, float z, float edge, float lift, float hill,
         float* dell, float* bed) const {
     const auto local = [&](const LandShape& s, float& lx, float& lz) {
@@ -587,6 +588,7 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
     }
     const float clear = smooth01((edge - kFlatR) / 12.0f);
     hill += bank * keepAll * clear;
+    float near = 0;
     for (const LandShape& s : mLand) {
         if ((s.kind != 0 && s.kind != 1) || !in(s)) continue;
         float lx, lz, at = 0;
@@ -605,7 +607,7 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         // kerb (the verge band draws it there); the rest clear the corridor.
         const float rise = h * profile(t, s.top) * (s.near > 0 ? smooth01((edge - s.near) / kNearRamp) : clear);
         hill += rise;
-        if (s.near > 0) mNearRise += rise;
+        if (s.near > 0) near += rise;
         if (dell) *dell *= 1.0f - profile(t, 0);
     }
     // The mounds first, then the fans: a fan is debris lying ON what is under
@@ -639,7 +641,13 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         }
     }
     if (dell) *dell *= 1.0f - own;
-    return (lift + hill) * (1.0f - own) + std::max(top, lift) * own;
+    // A form authored `near` is not withheld under a mound: it joins their
+    // union, the higher of them (a mountainside the road is cut into, running
+    // on round a set piece's slope). mNearRise is what it adds as drawn.
+    const float under = std::max(top, lift);
+    const float joined = near > 0 ? std::max(top, lift + near) : under;
+    mNearRise = near * (1.0f - own) + (joined - under) * own;
+    return (lift + hill) * (1.0f - own) + joined * own;
 }
 
 // Each tinted form lays its tint where it lies: over a ridge, ring or fan its
@@ -789,7 +797,7 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     }
 }
 
-float TtpRenderer::bandHold(float x, float z, float& rise) const {
+float TtpRenderer::bandHold(float x, float z, float nearRise, float& rise) const {
     float hold = 1.0f;
     if (mShoreFn) {
         const float d = mShoreFn(std::atan2(z, x)) - std::hypot(x, z);
@@ -804,15 +812,20 @@ float TtpRenderer::bandHold(float x, float z, float& rise) const {
     }
     // A footprint: what lies flat on it stands at the grid's level there, so
     // the band comes down to it, kHoldSlope a unit, and goes under inside.
-    rise = 1e30f;
+    // A form authored `near` (nearRise here) passes the footprint of a piece
+    // that levels nothing (one that drapes, one on its own ground: its parts
+    // lie on the land as drawn or as modelled), never a clearing: a gallery
+    // stands in the mountainside it is let into.
     const auto box = [&](float fx, float fz, float ax, float az, float hx, float hz) {
         const float dx = x - fx, dz = z - fz;
         const float u = std::max(0.0f, std::fabs(dx * ax + dz * az) - hx);
         const float v = std::max(0.0f, std::fabs(dz * ax - dx * az) - hz);
-        rise = std::min(rise, kHoldSlope * std::sqrt(u * u + v * v) - kBandTuck);
+        return kHoldSlope * std::sqrt(u * u + v * v) - kBandTuck;
     };
-    for (const TerrainFlat& f : mTerrainFlats) box(f.x, f.z, f.ax, f.az, f.hx, f.hz);
-    for (const SetFoot& f : mSetFeet) box(f.x, f.z, f.ax, f.az, f.hx, f.hz);
+    float flats = 1e30f, feet = 1e30f;
+    for (const TerrainFlat& f : mTerrainFlats) flats = std::min(flats, box(f.x, f.z, f.ax, f.az, f.hx, f.hz));
+    for (const SetFoot& f : mSetFeet) feet = std::min(feet, box(f.x, f.z, f.ax, f.az, f.hx, f.hz));
+    rise = std::min(flats, feet + nearRise);
     return hold;
 }
 
@@ -960,7 +973,9 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 const float px = e.E.x + e.l.x * o, pz = e.E.z + e.l.y * o;
                 const size_t v = vi(k, side, r);
                 const float field = landAt(e, px, pz, o, &dellV[v], &bedV[v]);
-                // landAt's walk left the samples in reach of (px, pz) in mTsiNear.
+                // landAt's walk left the samples in reach of (px, pz) in
+                // mTsiNear, and what the `near` forms raise there in mNearRise.
+                const float nearRise = mNearRise;
                 const float grid = mGroundGrid.gridAt(px, pz);
                 float a = e.lev - (r == 0 ? kApronTuck : kApronGap);
                 if (o > kApronLevel) {
@@ -968,7 +983,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                     // form authored `near`: the band follows the road, not
                     // every swell the grid smoothed away.
                     const float land = std::max(std::min(field - e.hump * (1.0f - smooth01((o - kApronRun) / kRaiseRampR)),
-                                                         grid + kBandOver + mNearRise),
+                                                         grid + kBandOver + nearRise),
                                                 grid + kBandLift);
                     a = lerp(a, land, smooth01((o - kApronLevel) / kApronRun));
                 }
@@ -988,7 +1003,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                     }
                 }
                 float rise = 0.0f;
-                const float hold = mine ? bandHold(px, pz, rise) : 0.0f;
+                const float hold = mine ? bandHold(px, pz, nearRise, rise) : 0.0f;
                 y = lerp(grid - kBandTuck, std::min(y, grid + rise), hold);
                 live[v] = hold > 0 && y > grid - kBandTuck;
                 P[v] = { px, y, pz };
