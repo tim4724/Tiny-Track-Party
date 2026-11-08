@@ -1725,13 +1725,15 @@ def net_huts():
 @piece(1.0)
 def smugglers_cave():
     # Cove: the pirates' cave at the foot of the island's peak, where its
-    # jungle comes down to the east straight: an outcrop of the island's
-    # dark rock standing out of the hillside, the cave's black mouth in its
-    # face to the road framed in timber, a lantern hung at it, the haul
-    # stacked outside (barrels, crates, a chest open on its gold), a pirate
-    # keeping the door, palms on the rock and the Jolly Roger flying over
-    # it. It stands on the plain and levels nothing (its gear is draped):
-    # the hillside rises behind it and buries its back. +X is the road.
+    # jungle comes down to the start straight by the grid: an outcrop of the
+    # island's dark rock standing out of the hillside, the cave's black mouth
+    # in its face to the road framed in timber, a lantern hung at it, the
+    # haul stacked outside (barrels, crates, a chest open on its gold), palms
+    # on the rock and the Jolly Roger flying over it. No one keeps the door:
+    # a person that size is a speck from the seat, and a still one reads
+    # uncanny. It stands on the plain and levels nothing (its gear is
+    # draped): the hillside rises behind it and buries its back. +X is the
+    # road.
     rock = ('grey', 'slate')
     # the outcrop, heaped round the mouth: the mass behind, a buttress either
     # side of it, the lintel over it
@@ -1752,7 +1754,7 @@ def smugglers_cave():
     palm((-2.9, 1.7, 2.4), h=2.0, lean=0.3, yaw=math.radians(60))
     kit_flag('flag-pirate-high', (-2.6, 2.75, 0.8), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.2')
     join_still('cave')
-    # the haul and its keeper before the mouth, on the sand as it lies
+    # the haul before the mouth, on the sand as it lies
     def gear():
         kit('pirate', 'barrel', (0.55, 0, -1.15), yaw=0.4, scale=0.2)
         kit('pirate', 'barrel', (0.35, 0, -1.55), yaw=1.1, scale=0.2)
@@ -1762,8 +1764,6 @@ def smugglers_cave():
         kit('pirate', 'chest', (0.95, 0, 0.75), yaw=math.radians(-80), scale=0.17)
         for (gx, gz) in ((1.2, 0.55), (1.12, 0.95), (1.3, 0.8)):
             box((0.07, 0.04, 0.07), (gx, 0.02, gz), 'yellow', yaw=gx * 3)
-        figure((0.55, 0, -0.35), 0.0, shirt=0xcf534f, legs=0x38383d, hair=0x38383d)
-        beam((0.68, 0.22, -0.48), (0.86, 0.55, -0.55), 0.04, 0x9aa1b4)            # his cutlass
     draped('haul', gear)
 
 @piece(1.0)
