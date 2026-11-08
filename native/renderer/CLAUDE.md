@@ -640,7 +640,7 @@ to do both:
   `kNearRamp`), where every other form clears the road's corridor. The band
   draws it at its own resolution from the verge out, so a massif tens of
   units high and as wide as the scene can rise straight off the kerb zone,
-  and the slope rock (below) dresses its face, but a snow one's (below).
+  and the slope rock (below) dresses its face, except a snow one's (below).
   Author it round the OUTSIDE of a bend or along a straight: on a bend's
   inside it walls the road ahead off.
   A set piece's mound withholds every other form under it, but JOINS a
@@ -652,9 +652,13 @@ to do both:
   kerb either stands in front of the flank's ramp and tucks under the land
   past it, built over the plain against the ground drawn there (Avalanche's
   galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
-  length) with `near` set past its crest: the drape rides the drawn ground,
-  so a flank rising under the crest stretches it into spikes; past it, the
-  face stands whole and its back slopes up into the massif (Gulch). `near`
+  length) with `near` set past its BACK: the drape rides the drawn ground,
+  so a flank rising under the face stretches it (under the crest into
+  spikes, under the back into a slab that stands out of the ramp's foot as
+  pale needles from across the map); past it, the face stands whole and its
+  back sinks into the land at the massif's foot (Gulch). A shoulder low
+  enough to need no face may be its own face instead: a `near` of a couple
+  of units brings its flank to the verge (Gulch's crest). `near`
   counts from EVERY strand: where a massif's flank reaches toward another
   strand it is cut a ramp's width into a cliff that far off that kerb, and a
   face whose back lies within that reach has no land to sink into, so its
@@ -676,6 +680,13 @@ to do both:
   is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
   weight or a noise threshold blurs it into camouflage blobs: never go back to
   one. Structures, berms and the flat sheet keep 1 and skip the branch.
+  Only a CLIFF is rock where the biome asks a `rise` (the badlands): steep
+  facets joined through their corners must climb that far between them, so
+  a spoil heap, a dune's lee, a road's bank or one lone steep facet keeps its
+  sand (banded rock on one paints a striped dome) while a massif's face is
+  rock to its foot. The band's skirt (a face diving under the grid) is a
+  short run on low land, so its sliver never pokes through the grid as a
+  crawling dotted line of rock.
   SNOW ROCK IS MASSED: a 9 u facet just past the slope, alone on a dome, read
   as a painted stripe, and one snow facet left in a face as a white tooth, so
   there a facet is rock only as part of a mass (a core whose neighbours are

@@ -869,16 +869,17 @@ export const TRACKS = {
       { model: 'set-ore-line', u: 0.018, lat: 16 },
       { model: 'set-headframe', u: 0.2188, lat: 22.9, yaw: 67 },
       // the gulch itself: off the crest the road drops into a canyon, its
-      // faces at the kerb the near faces of the range's massifs (`land`): one
-      // round the outside of the crest's left-hander; then from the run-in on
-      // the outside round the long left-hander, down the straight and round
-      // the tight bend into the mine yard, one on the inside round the
-      // left-hander (Wash's lengths reused between bends). The run-in's face
+      // faces at the kerb the near faces of the range's massifs (`land`):
+      // from the run-in on the outside round the long left-hander, down the
+      // straight and round the tight bend into the mine yard, one on the
+      // inside round the left-hander (Wash's lengths reused between bends).
+      // The crest's left-hander has no face: its shoulder is the land's own
+      // (a face there stood as pyramids on the sand from across the map,
+      // where the shoulder reads as one banded mountain). The run-in's face
       // starts west of the sight line from the crest's descent to the stamp
       // mill, so the mill reads from there across the yard. The loop's middle
       // stays low: the deck cap holds the land there under the road, and the
       // yard opens on the stamp mill.
-      { model: 'set-canyon-crest-gulch', u: 0.4254, lat: 5.2 },
       { model: 'set-canyon-peaks-c', u: 0.817, lat: 5.2 },
       { model: 'set-canyon-bend-gulch', u: 0.862, lat: 5.2 },
       { model: 'set-canyon-peaks-a', u: 0.904, lat: 5.2 },
@@ -897,17 +898,19 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.202, lat: 43.4, len: 6, r: 10, h: 6, top: 0.15, tint: 0xb0a49c },
       { kind: 'ridge', u: 0.3367, lat: 22.9, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
       // the range: massifs behind the canyon faces, each rising from just
-      // past the faces' crests (`near`, so a face stands whole on the verge
-      // and its back slopes up into the massif), all on the outside of the
-      // crest and the descent; behind the crest's face a low shoulder first,
-      // so the range steps back from the road. Mesas and peaks behind them,
-      // the skyline from the seat, each a ridge with a crest (`len`, `top`):
-      // a round form with a low top reads as a cone.
-      { kind: 'ridge', u: 0.4294, lat: 20.83, yaw: 179.7, len: 29, r: 12, h: 11, top: 0.5, near: 12.5 },
-      { kind: 'ridge', u: 0.8345, lat: 37.85, yaw: -127.34, len: 32, r: 22, h: 30, h1: 38, top: 0.3, near: 12.5 },
-      { kind: 'ridge', u: 0.8828, lat: 31.9, yaw: -2.48, len: 36, r: 34, h: 36, top: 0.3, near: 12.5 },
-      { kind: 'ridge', u: 0.9292, lat: 28.37, yaw: -35, len: 20, r: 30, h: 38, top: 0.3, near: 12.5 },
-      { kind: 'ridge', u: 0.9542, lat: 30.88, yaw: -0.6, len: 28, r: 30, r1: 24, h: 36, h1: 24, top: 0.3, near: 12.5 },
+      // past the faces' backs (`near`, so a face stands whole on the verge
+      // and its back sinks into the land at the massif's foot; a flank
+      // rising under a back stretched it into needles), all on the outside
+      // of the crest and the descent; round the crest's left-hander a low
+      // shoulder rising off the verge itself, so the range steps back from
+      // the road. Mesas and peaks behind them, the skyline from the seat,
+      // each a ridge with a crest (`len`, `top`): a round form with a low
+      // top reads as a cone.
+      { kind: 'ridge', u: 0.4294, lat: 20.83, yaw: 179.7, len: 29, r: 12, h: 11, top: 0.5, near: 2 },
+      { kind: 'ridge', u: 0.8345, lat: 37.85, yaw: -127.34, len: 32, r: 22, h: 30, h1: 38, top: 0.3, near: 16 },
+      { kind: 'ridge', u: 0.8828, lat: 31.9, yaw: -2.48, len: 36, r: 34, h: 36, top: 0.3, near: 16 },
+      { kind: 'ridge', u: 0.9292, lat: 28.37, yaw: -35, len: 20, r: 30, h: 38, top: 0.3, near: 16 },
+      { kind: 'ridge', u: 0.9542, lat: 30.88, yaw: -0.6, len: 28, r: 30, r1: 24, h: 36, h1: 24, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.872, lat: 70.8, yaw: 12.18, len: 36, r: 30, h: 46, top: 0.42 },
       { kind: 'ridge', u: 0.9036, lat: 72.99, yaw: -12.83, len: 20, r: 30, h: 50, top: 0.3 },
       { kind: 'ridge', u: 0.8221, lat: 92.21, yaw: -21.59, len: 30, r: 26, h: 36, top: 0.3 },

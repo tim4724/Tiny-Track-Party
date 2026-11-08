@@ -1143,10 +1143,13 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
 // colours are the rock set pieces' own (set_prototypes.py): the canyon's brown
 // and salmon cliffs on tan benches, the snow cut's grey (one grey, no bands:
 // its faces are cut, not layered). A ground facet is rock where its normal's
-// y is under `upY`: the badlands break to rock soonest, snow keeps every slope
-// a skier would take (Powder's dome stands near 45 degrees and stays white),
-// a lawn only a cliff. The beach has none: its land sinks to the plain short
-// of the sea, so no dune of it is a cliff, and rock on one reads as a canyon.
+// y is under `upY`: the badlands break to rock soonest, but only on a cliff
+// (gateRock's `rise`): a dune, a spoil heap or a road's bank keeps its sand,
+// since banded rock on one paints a striped dome, so strata show on mesas
+// and the massifs' faces; snow keeps every slope a skier would take
+// (Powder's dome stands near 45 degrees and stays white), a lawn only a
+// cliff. The beach has none: its land sinks to the plain short of the sea,
+// so no dune of it is a cliff, and rock on one reads as a canyon.
 //
 // Snow rock comes in MASSES (`massed`): a 9 u facet just past the slope, alone
 // on a snow dome, read as a painted stripe, and one snow facet left in a rock
@@ -1166,12 +1169,13 @@ struct GroundRock {
     float perRoot;   // strata per square root of a unit over the plain (0: none, rock is `a`)
     float wobble;    // how far (u) the broad lattice bends them
     float ledge;     // the bench's share of a stratum
+    float rise;      // how far (u) a run of steep facets must climb to be rock (0: any)
     bool massed;     // rock only in masses (above), else every facet past the slope
 };
 const GroundRock* groundRock(uint32_t groundKind) {
-    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, false };      // past 52 degrees
-    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.95f, 1.0f, 0.3f, 0.12f, false };  // past 18 degrees
-    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f, true };      // past 46 degrees
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 0.0f, false };       // past 52 degrees
+    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.866f, 1.0f, 0.3f, 0.12f, 10.0f, false }; // past 30 degrees
+    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f, 0.0f, true };        // past 46 degrees
     switch (groundKind) {
         case 0: return &lawn;
         case 2: return &redrock;
@@ -1181,6 +1185,9 @@ const GroundRock* groundRock(uint32_t groundKind) {
 }
 // A massed rock's rim takes a facet beside a core to this slope (36 degrees).
 constexpr float kRockFillUpY = 0.81f;
+// A cliff's run joins through facets this much (in normal y) under the slope
+// too, so one gentler facet in a face does not split it into two short runs.
+constexpr float kRockRunSlack = 0.03f;
 }  // namespace
 
 // The rock (vground.mat), decided per TRIANGLE here: alpha 0 on a rock
@@ -1188,6 +1195,13 @@ constexpr float kRockFillUpY = 0.81f;
 // facets and the edge is the mesh's own. A corner shared by rock and snow is
 // split in two (the copy carries the rock's alpha), so no facet's alpha is
 // interpolated across it.
+//
+// Where the biome asks a `rise`, only a CLIFF is rock: the steep facets joined
+// through their corners must climb that far between them, so a spoil heap's
+// flank, a dune's steep lee or a lone steep facet keeps its sand while a
+// massif's face is rock to its foot. The band's skirt (a face diving under the
+// grid) is a short run on low land, so its sliver never pokes through the grid
+// as a crawling dotted line of rock.
 void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind, size_t bandTri) {
     const GroundRock* r = groundRock(groundKind);
     if (!r) return;
@@ -1201,6 +1215,33 @@ void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind, size_t bandTri) {
     }
     std::vector<uint8_t> rock(T);
     for (size_t t = 0; t < T; t++) rock[t] = up[t] < r->upY;
+    if (r->rise > 0.0f) {
+        std::vector<uint32_t> run(m.verts.size());
+        std::iota(run.begin(), run.end(), 0u);
+        const auto root = [&](uint32_t v) {
+            while (run[v] != v) v = run[v] = run[run[v]];
+            return v;
+        };
+        const auto joins = [&](size_t t) { return up[t] < r->upY + kRockRunSlack; };
+        for (size_t t = 0; t < T; t++) {
+            if (!joins(t)) continue;
+            run[root(m.idx[t * 3 + 1])] = root(m.idx[t * 3]);
+            run[root(m.idx[t * 3 + 2])] = root(m.idx[t * 3]);
+        }
+        std::vector<float2> span(m.verts.size(), float2{ 1e30f, -1e30f });
+        for (size_t t = 0; t < T; t++) {
+            if (!joins(t)) continue;
+            for (size_t k = 0; k < 3; k++) {
+                float2& sp = span[root(m.idx[t * 3 + k])];
+                const float y = m.verts[m.idx[t * 3 + k]].py;
+                sp = { std::min(sp.x, y), std::max(sp.y, y) };
+            }
+        }
+        for (size_t t = 0; t < T; t++) {
+            const float2 sp = span[root(m.idx[t * 3])];
+            rock[t] = rock[t] && sp.y - sp.x >= r->rise;
+        }
+    }
     if (r->massed) {
         // The grid's facets; the band's are never rock. Each facet's
         // neighbours across its edges (-1: the mesh's border).
