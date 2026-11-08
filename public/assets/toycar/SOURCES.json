@@ -75,7 +75,7 @@
     "set-football-pitch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-frozen-lake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-game-box.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-glacier-crags.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-peaks.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-headframe.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hoodoos.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jetty.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

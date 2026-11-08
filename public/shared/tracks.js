@@ -594,8 +594,9 @@ export const TRACKS = {
       { model: 'set-penguin-group', u: 0.39, lat: 7.5, yaw: 285 },
       { model: 'set-advanced-camp', u: 0.897, lat: -13, yaw: 328 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 },
-      // the massif's crags, along its crest (`land`)
-      { model: 'set-glacier-crags', u: 0.185, lat: -38 }
+      // the range over the top straight (`land` lays the snowfield and the
+      // foothills in front of it)
+      { model: 'set-glacier-peaks', u: 0.185, lat: -60 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -614,21 +615,33 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, x: 8, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, x: -3, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 },
-      // the massif over the top straight's outside: a snow slope rising off
-      // the verge (near) to a crest thirteen units up, its crags the piece on
-      // it (set-glacier-crags; a 9 u facet of rock at the kerb read as a
-      // stage flat); it runs back past the bend and ends in its round
-      // shoulder a good way short of the fort, whose clearing and capped
-      // cells would slice it off (z)
-      { kind: 'ridge', u: 0.185, lat: -38, z: -40, len: 50, r: 34, h: 13, top: 0.2, near: 2.5 },
-      // ...and four spurs down its face toward the approach and the bend
-      // (yaw -90: +Z runs down the face, x along the spine), each with its
-      // rib on it, so the face is spurs and gullies, not one smooth dome; two
-      // grid cells wide, or the 9 u grid draws them as pyramids
-      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -56, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 4, h1: 0.5 },
-      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -40, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 5, h1: 0.5 },
-      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -24, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 4, h1: 0.5 },
-      { kind: 'ridge', u: 0.185, lat: -38, yaw: -90, x: -8, z: 14.5, len: 23, r: 9.5, r1: 7.5, h: 3, h1: 0.5 }
+      // The range over the top straight's outside stands 45 to 90 units back
+      // (set-glacier-peaks; its peaks drape on the land, so a swell under one
+      // is its foot). At u 0.185 the frame is the world's: lat is Z, z is X.
+      // The snowfield between the road and the range rises in one broad, low
+      // swell, whose reach is the furthest north Glacier's land goes: no form
+      // below reaches past it, since a form reaching further out would move
+      // every vertex of the ground's grid round the lap (native/renderer/
+      // CLAUDE.md, authored landforms).
+      { kind: 'ridge', u: 0.185, lat: -38, z: -40, len: 50, r: 34, h: 1.2 },
+      // ...a swell under the far western peak and one in front of the middle
+      // one...
+      { kind: 'ridge', u: 0.185, lat: -40, z: -109, len: 20, r: 20, h: 5, top: 0.15 },
+      { kind: 'ridge', u: 0.185, lat: -52, z: -44, len: 24, r: 18, h: 3, top: 0.15 },
+      // ...two rows of snowy foothills in front of the rest, short of the
+      // fort's clearing...
+      { kind: 'ridge', u: 0.185, lat: -48, z: -24, len: 20, r: 14, h: 3 },
+      { kind: 'ridge', u: 0.185, lat: -45, z: 16, len: 22, r: 13, h: 2.8 },
+      { kind: 'ridge', u: 0.185, lat: -24, z: -54, yaw: 40, len: 14, r: 15, h: 2.5 },
+      { kind: 'ridge', u: 0.185, lat: -30, z: -17, len: 26, r: 13, h: 2.2 },
+      { kind: 'ridge', u: 0.185, lat: -33, z: 43, len: 20, r: 12, h: 2.5 },
+      // ...and drifts on the snowfield between them and the road, too low to
+      // stand into the picture however close they pass
+      { kind: 'ridge', u: 0.185, lat: 0, z: -35, yaw: 30, len: 12, r: 7, h: 1.6 },
+      { kind: 'ridge', u: 0.185, lat: -18, z: 9, len: 18, r: 7, h: 1.8 },
+      // nothing seeded on the verge in front of the penguin chute's pool: a
+      // boulder there stood between the run to the line and the pool
+      { kind: 'clear', u: 0.945, lat: -9.5, len: 18, r: 4.5 }
     ]
   },
   avalanche: {

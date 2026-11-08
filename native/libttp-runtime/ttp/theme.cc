@@ -339,6 +339,7 @@ void flurryLake(Theme& t) {
 void penguinGlacier(Theme& t) {
   t.landmarks.clear();
   t.scenery.density = 0.3f;
+  t.fogTune = 1.2f;  // clear alpine air: the range a lap's length away must read from the opening
   ploughBanks(t);
   snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.45f, 0.6f, 0.6f, false, false },
                  { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });

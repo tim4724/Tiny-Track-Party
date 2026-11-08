@@ -633,7 +633,11 @@ to do both:
   grid as the mesh draws it — never `tb.groundY`.
 - **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
   `landforms`), never more noise: short wavelengths read as lumps tracing the
-  road. A set piece modelled standing on terrain carries it as `SET_GROUND`;
+  road. The grid is laid over the track and every form's reach
+  (`setupTerrain`), so a form reaching past the others moves every grid
+  vertex round the lap, and with them the footing of every piece placed and
+  scored against that ground: reshape a track's land inside the reach it
+  already has. A set piece modelled standing on terrain carries it as `SET_GROUND`;
   the Blender builder reads the same numbers, so its parts stand on what the
   renderer lays, and the piece levels no clearing. Its mounds take the land
   under them as the HIGHEST of them or of the raised ground, so two pieces'
@@ -683,8 +687,8 @@ to do both:
   clearing cuts it and `capFootprint` caps every grid triangle the
   footprint touches, which slices the flank off in a sheer face; end it in
   its own shoulder a grid cell and the clearing's fade short of the
-  footprint. Glacier's massif over its top straight, Avalanche's mountains round
-  its last loop and Gulch's range along its descent are the worked examples.
+  footprint. Avalanche's mountains round its last loop and Gulch's range
+  along its descent are the worked examples.
 - **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `gateRock` decides
   each ground triangle, past the biome's slope (`groundRock`), and writes it
   into the vertex alpha exactly (0 rock, 1 not; a corner a rock facet shares
@@ -703,9 +707,12 @@ to do both:
   Alone it read as a painted stripe, in a small mass as a grey panel on the
   slope (Flurry's peaks), and a whole face of them as a stage flat. A snow
   massif is snow and wears its rock as geometry: crags draped on its crest
-  and ribs down the spurs of its face (set_prototypes.py `crag`, Glacier's
-  and Avalanche's crags), the galleries' cut faces. Nor does the snow canvas
-  band: it maps world XZ, so on a steep face its bands stood as pleats down
+  (set_prototypes.py `crag`, Avalanche's crags), whole peaks draped on the
+  land (`alp`, Glacier's range), the galleries' cut faces. Ribs down a face
+  by the road hung into the top of the picture as loose shards, so what
+  rises near the road stays low, and a skyline peak keeps its summit under
+  the top of the chase camera's picture where it comes nearest in sight. Nor
+  does the snow canvas band: it maps world XZ, so on a steep face its bands stood as pleats down
   the slope. Strata stack on the square root of height over the plain, so a
   tall face shows a few thick bands, not a contour map, and their edges are
   filtered by the pixel's height span (no shimmer in a 4P cell). The beach

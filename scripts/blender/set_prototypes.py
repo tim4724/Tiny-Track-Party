@@ -3563,22 +3563,118 @@ def snow_boulder():
         stone(x, z, s, yaw, seed, squat=0.8, rock=('lavender', 'lavender'))
     join_still('boulder')
 
+def alp(cx, cz, h, r, seed, stretch=1.0, turn=0.0, lean=(0.0, 0.0), sun=(0.0, 1.0, 0.0), sink=2.0):
+    """One alpine peak of a range running along Z, standing `h` over the land
+    it drapes on, its foot `r` across (cx, cz) and `stretch` times that along
+    the range. Four aretes fall from the summit: two along the range, which
+    keep their height long so they meet the next peak's in a saddle well up
+    its flank, and a spur toward the road (-X) and one behind, falling
+    straight. Between them a face falls steep from the summit and levels out
+    low (a cirque), so rock shows where a face is steep and snow lies on the
+    aretes' backs and the lower slopes. The summit stands `lean` (a share of
+    r) off the foot's centre; the foot sinks `sink` under the snow. Every
+    quad breaks into two facets painted alike, by the quad's normal (paint_of
+    below); the foot's are snow whatever their slope, so the peak stands in
+    the land's snow, not on a dark rim. DRAPED, so y = 0 is the land as
+    drawn."""
+    NS = 16
+    T = (0.0, 0.1, 0.2, 0.32, 0.46, 0.62, 0.78, 0.9, 1.0)
+    sx, sz = cx + lean[0] * r, cz + lean[1] * r
+    spokes = []
+    for j in range(NS):
+        k = j % 4
+        rho = 1.0 if k == 0 else (0.0 if k == 2 else 0.45)       # arete, flank, face
+        a = turn + 2 * math.pi * (j + 0.2 * jitter(j, 1, seed)) / NS
+        along = math.sin(a) ** 2
+        # the profile's exponent: an arete along the range falls straight and
+        # long, a spur a little steeper, a face steep from the summit and
+        # levelling out low
+        p = rho * (1.15 - 0.2 * along) + (1 - rho) * 1.9
+        spokes.append((a, rho, p, 1.0 + (stretch - 1.0) * along))
+    rows = []
+    for i, t in enumerate(T):
+        row = []
+        for j, (a, rho, p, ell) in enumerate(spokes):
+            if i == 0:
+                row.append((sx, h, sz))
+                continue
+            if i == len(T) - 1:
+                y, tt = -sink, 1.12
+            else:
+                y, tt = h * (1 - t) ** p * (1 + 0.14 * jitter(i, j + 7, seed)), t
+                if rho == 1.0:                                     # a tooth on each arete
+                    y += h * 0.06 * math.sin(math.pi * min(1.0, t / 0.5)) * (0.5 + jitter(i, j + 3, seed))
+            rr = r * ell * tt * (0.82 + 0.18 * rho + 0.12 * jitter(i, j + 13, seed))
+            ox, oz = sx + (cx - sx) * min(t, 1.0), sz + (cz - sz) * min(t, 1.0)
+            row.append((ox + rr * math.cos(a), y, oz + rr * math.sin(a)))
+        row.append(row[0])
+        rows.append(row)
+    sh = math.hypot(sun[0], sun[2]) or 1.0
+    def paint_of(n, foot):
+        # Snow where it can lie and on the faces the sun is on; rock where a
+        # face turns from it (the dark side every peak shows, which is what
+        # makes it read as a solid in a flat-lit world) or is too steep to hold
+        # snow at all. A cap of rock over snowy shoulders read as a crown.
+        if n[1] < 0:
+            n = tuple(-c for c in n)
+        toward = (n[0] * sun[0] + n[2] * sun[2]) / ((math.hypot(n[0], n[2]) or 1.0) * sh)
+        if foot or n[1] > 0.84:
+            return SNOW
+        if toward < 0.0:
+            return SHADE
+        if toward < 0.4 or n[1] < 0.55:
+            return ROCK
+        return SNOW
+    # One colour a quad, by the quad's normal: its two facets painted apart
+    # read as a scatter of dark shards over the face (crag()'s checkerboard).
+    polys = []
+    for i in range(len(rows) - 1):
+        a, b = rows[i], rows[i + 1]
+        for j in range(NS):
+            if i == 0:
+                tris = [(a[j], b[j], b[j + 1])]
+                col = paint_of(face_normal(tris[0]), False)
+            else:
+                col = paint_of(face_normal((a[j], b[j], b[j + 1], a[j + 1])), i >= len(rows) - 2)
+                if (i + j) % 2:
+                    tris = [(a[j], b[j], b[j + 1]), (a[j], b[j + 1], a[j + 1])]
+                else:
+                    tris = [(a[j], b[j], a[j + 1]), (b[j], b[j + 1], a[j + 1])]
+            for t in tris:
+                if face_normal(t)[1] < 0:
+                    t = t[::-1]
+                polys.append((col, list(t)))
+    for o in colored_faces(polys, 'alp'):
+        snowy(o, 0.12 if o['swatch'] == 'white' else 0.35)
+
 @piece(1.0)
-def glacier_crags():
-    # Glacier: the massif over the top straight's outside (tracks.js glacier
-    # `land`) breaks out of its snow along its crest in rock, a summit in the
-    # middle and lesser teeth either side, running on down its shoulder past
-    # the bend, and a rib down each spur of its face toward the road (the
-    # spurs are `land` too), each lower as it goes and sinking into the snow
-    # short of the foot. Placed on the massif's spine (u 0.185, lat -38), +X
-    # away from the road, +Z along it.
-    def build():
-        crag([(1.0, -66.0), (-0.5, -54.0), (0.5, -40.0), (-1.0, -26.0), (0.5, -12.0), (-0.5, -2.0)],
-             ((0.0, 4.0), (0.25, 8.0), (0.45, 12.0), (0.7, 7.0), (0.88, 5.0), (1.0, 3.0)), seed=21.0)
-        for z, seed in ((-56.0, 31.0), (-40.0, 29.0), (-24.0, 27.0), (-8.0, 25.0)):
-            crag([(-3.0, z), (-11.0, z - 1.5), (-19.0, z + 0.5), (-25.0, z - 1.0), (-31.0, z + 0.5)],
-                 ((0.0, 6.0), (0.35, 4.2), (0.65, 2.8), (0.88, 1.8), (1.0, 1.2)), seed=seed)
-    draped('crags', build)
+def glacier_peaks():
+    # Glacier: the range over the top straight's outside, set back 45 to 90
+    # units from it, which the opening drives toward and the straight runs
+    # along: six peaks whose aretes along the range meet in saddles, zigzag
+    # in depth so they overlap from the road, the foothills in front of them
+    # (tracks.js glacier `land`). Each summit stands a little under the top of
+    # the chase camera's picture where it comes nearest ahead, so a peak reads
+    # whole; the camera banking through the bend under the range still clips
+    # a flank at the picture's top-left corner. Placed at u 0.185, lat -60:
+    # +X north, away from the road, +Z east along the straight; one part a
+    # peak, so each culls and takes its far form alone.
+    sun = (-0.122, 0.979, 0.163)            # the renderer's kToSun in this frame
+    for k, (cx, cz, h, r, stretch, seed, turn, lean) in enumerate((
+            (-20.0, -109.0, 14.5, 15.0, 1.8, 13.0, 0.25, (0.0, 0.1)),     # far west
+            (18.0, -81.0, 20.0, 19.0, 1.8, 3.0, 0.1, (0.08, -0.08)),      # west
+            (10.0, -44.0, 14.5, 16.0, 1.9, 5.0, -0.12, (-0.1, 0.05)),     # the middle one, nearest
+            (30.0, -4.0, 20.0, 19.0, 1.8, 7.0, 0.15, (0.05, 0.1)),        # furthest back
+            (26.0, 43.0, 21.5, 18.0, 1.8, 9.0, -0.08, (-0.08, -0.06)),
+            (0.0, 81.0, 16.5, 16.0, 1.9, 11.0, 0.2, (0.1, 0.0)))):        # east, over the straight's end
+        # Each with a lesser summit on its shoulder along the range, to one
+        # side or the other, so its skyline breaks in two teeth, not one cone.
+        side = 1.0 if k % 2 else -1.0
+        def build():
+            alp(cx, cz, h, r, seed, stretch, turn, lean, sun)
+            alp(cx + 0.15 * r, cz + side * 0.5 * r * stretch, 0.66 * h, 0.6 * r, seed + 50.0, stretch, turn + 0.5,
+                (0.0, 0.0), sun)
+        draped('peak%d' % k, build)
 
 @piece(1.0)
 def avalanche_crags():
