@@ -163,6 +163,9 @@ const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.le
 // (?bots=0 = race alone) instead of topping the grid up to a full field.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
+// ?laps=<n> — DEBUG: every race, lobby start and cup race alike, runs n laps
+// instead of TOTAL_LAPS (?laps=1 tours the catalogue quickly).
+const RACE_LAPS = Math.max(0, parseInt(_trackParams.get('laps'), 10) || 0) || TOTAL_LAPS;
 // ?bootdelay=<ms> — DEBUG: hold the engine boot this long, so the pre-boot NEW
 // GAME path (the caught click held pressed, then the lobby reveal and the
 // ticket's QR/URL fade) can be watched by hand instead of racing a fast machine.
@@ -184,7 +187,7 @@ const {
 } = await bootEngine({
   maxPlayers: MAX_PLAYERS, fieldSize: FIELD_SIZE, carModels: CAR_MODELS, carColors: CAR_COLORS,
   carNames: window.CAR_NAMES || [], carStatsRows: CAR_MODELS.map((_, i) => carStats(i)),
-  totalLaps: TOTAL_LAPS
+  totalLaps: RACE_LAPS
 });
 // The livery hex palette (colorIndex → colour) rides the retained room snapshot
 // beside the two chooser payloads, so a phone's livery dots always match the car
@@ -199,7 +202,7 @@ if (_qTrack && !built.has(_qTrack)) {
   // Dev ranges are in the wasm's track table too (gen-track-defs-header.mjs
   // carries DEV_TRACKS past the catalogue), so this only has to name one.
   const _devDef = DEV_TRACKS[_qTrack];
-  if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }, TOTAL_LAPS));
+  if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }, RACE_LAPS));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 // Only an EXPLICIT ?track= preselects a room PICK (DisplayNet's defaultTrackId
@@ -314,7 +317,7 @@ function selectTrack(id) {
   selectedTrackId = id;
   previewShownMs = 0;
   track = built.get(id);
-  track.totalLaps = TOTAL_LAPS;
+  track.totalLaps = RACE_LAPS;
   window.__track = track;
   if (sceneReady && net.roomState === ROOM_STATE.LOBBY) {
     // Swap the picked track with a crossfade — see fadeBackdrop. Track→track dissolves one
