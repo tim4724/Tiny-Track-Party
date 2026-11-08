@@ -12,11 +12,11 @@
 // verdict is what calibrates a tier's `ceiling` and `drawCeiling`.
 //
 // ONE BASELINE PER DETAIL TIER (ttp/detail.h). The Android TV draws LITE and
-// the web and the Apple TV draw FULL, so each tier is priced, tracked and
-// ceilinged on its own: `lite` carries the box's ceilings below, and `full`
-// carries a PROVISIONAL 260k / 360 that awaits an Apple TV calibration (the
-// same stress-build method, on the Apple TV at 4P and the operating point it
-// settles on). Until one is read, full's ceilings are a guess, not a box fact.
+// the web and the Apple TV draw FULL, so each tier is priced and tracked on its
+// own. Only `lite` has ceilings, the box's below. FULL IS UNCAPPED (the user's
+// call, 2026-11-08): the world is authored as rich as it should be, and what
+// the box cannot carry is cut in the lite tier (`lite: false`, <model>-lite.glb;
+// native/renderer/CLAUDE.md, "The detail tier"). Its ceilings are null.
 //
 // THE CALIBRATION (lite's ceilings). On the Google TV Streamer (GE9215,
 // Vulkan, render scale pinned at 0.5: 4P at 540 lines), 40 s timeline races of
@@ -214,11 +214,11 @@ for (const tier of TIERS) {
           + ` (+${(100 * (row.worst / was - 1)).toFixed(1)}%) — re-record with --record if intended`);
       }
       if (!RECORD && was == null) failures.push(`${tier} ${id} ${players}P: no recorded figure — run with --record`);
-      if (players === 4 && TRACKS[id] && row.worst > base.ceiling) {
+      if (players === 4 && TRACKS[id] && base.ceiling != null && row.worst > base.ceiling) {
         failures.push(`${tier} ${id} 4P: worst frame ${k(row.worst).trim()}/cell is over the ceiling `
           + `${k(base.ceiling).trim()} — move it off the vista or make it lighter`);
       }
-      if (players === 4 && TRACKS[id] && maxDraws > base.drawCeiling) {
+      if (players === 4 && TRACKS[id] && base.drawCeiling != null && maxDraws > base.drawCeiling) {
         failures.push(`${tier} ${id} 4P: ${maxDraws.toFixed(0)} draws/cell at the lap's busiest frame, over the `
           + `draw ceiling ${base.drawCeiling} — move pieces off the vista or merge them`);
       }

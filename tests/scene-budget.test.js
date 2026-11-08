@@ -1,7 +1,7 @@
 'use strict';
 // The scene budget's baseline must price every track (and only those) in both
-// detail tiers, at every player count the gate reads, and carry each tier's
-// two 4P ceilings.
+// detail tiers, at every player count the gate reads, and carry lite's two 4P
+// ceilings (full has none).
 //
 // WHY. `npm run budget:scene` needs a browser and a lap per track, so it does
 // not run here — and a gate that is only run by hand is a gate that drifts. A
@@ -42,13 +42,12 @@ test('scene budget: each tier prices every track at 1 and 4 players', async () =
   }
 });
 
-test('scene budget: each tier sets its 4P ceilings, and lite\'s are the tighter', () => {
-  for (const tier of TIERS) {
-    assert.ok(baseline[tier].ceiling > 0, `tests/fixtures/scene-budget.json: ${tier} needs a ceiling`);
-    assert.ok(baseline[tier].drawCeiling > 0, `tests/fixtures/scene-budget.json: ${tier} needs a drawCeiling`);
-  }
-  // Lite exists for the weakest device; a full ceiling under it would make
-  // the tier that ships on the stronger ones the one held tighter.
-  assert.ok(baseline.full.ceiling >= baseline.lite.ceiling, 'full ceiling under lite\'s');
-  assert.ok(baseline.full.drawCeiling >= baseline.lite.drawCeiling, 'full drawCeiling under lite\'s');
+test('scene budget: lite carries the box\'s 4P ceilings, full none', () => {
+  // The lite ceilings are the Google TV box's calibration (scripts/scene-budget.mjs).
+  // The full tier is uncapped by decision: priced and tracked, never ceilinged,
+  // so a number that crept back in would gate the web and the Apple TV on a guess.
+  assert.ok(baseline.lite.ceiling > 0, 'tests/fixtures/scene-budget.json: lite needs a ceiling');
+  assert.ok(baseline.lite.drawCeiling > 0, 'tests/fixtures/scene-budget.json: lite needs a drawCeiling');
+  assert.strictEqual(baseline.full.ceiling, null, 'the full tier is uncapped');
+  assert.strictEqual(baseline.full.drawCeiling, null, 'the full tier is uncapped');
 });

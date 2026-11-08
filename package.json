@@ -5,6 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "bake:cues": "node scripts/bake-cues.mjs",
+    "bake:lite": "node scripts/bake-lite.mjs",
     "bake:shelf": "node scripts/bake-shelf.mjs",
     "build:androidtv": "shells/androidtv/scripts/build.sh",
     "build:tvos": "shells/tvos/scripts/build.sh",

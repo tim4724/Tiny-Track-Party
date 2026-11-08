@@ -293,23 +293,27 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
     'the legend spans kinds no single biome carries');
 });
 
-// ---- a decoration is cheap ---------------------------------------------------
-// A biome prop is stamped many times a lap and drawn in every cell that sees it,
-// while what it has to carry at the verge is a silhouette. The kit authors a
-// barrel or a skateboard with as many vertices as a whole car, so a model over
-// the cap is slimmed (scripts/slim-kit-models.mjs) or not planted. The toy train
-// set is the one exception: an animated ring of track, sparse by design, whose
-// spin subtree a decimation would break.
+// ---- a decoration is cheap on the box ---------------------------------------
+// A biome prop is stamped many times a lap and drawn in every cell that sees it.
+// The full tier (the web, the Apple TV) is uncapped; the cap holds the LITE tier
+// (the Android TV box), which draws a model's lite build where it has one
+// (<model>-lite.glb, ttp/theme.h lite_models). So a prop over the cap gets a
+// lite build (scripts/bake-lite.mjs) or a slimmer original
+// (scripts/slim-kit-models.mjs). The toy train set is the one exception: an
+// animated ring of track, sparse by design, whose spin subtree a decimation
+// would break.
 const PROP_VERTEX_CAP = 400;
-test('every biome prop stays under the decoration vertex cap', async () => {
+test('every biome prop the lite tier draws stays under the decoration vertex cap', async () => {
   const M = await load();
   const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
   const propModels = M.cwrap('ttp_theme_prop_models', 'string', ['string']);
   const heavy = [];
+  const glb = (m) => path.join(ROOT, 'public/assets/toycar', `${m}.glb`);
   for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
-    for (const m of JSON.parse(propModels(nameAt(i)))) {
-      if (m === 'trainset') continue;
-      const b = fs.readFileSync(path.join(ROOT, 'public/assets/toycar', `${m}.glb`));
+    for (const full of JSON.parse(propModels(nameAt(i)))) {
+      if (full === 'trainset') continue;
+      const m = fs.existsSync(glb(`${full}-lite`)) ? `${full}-lite` : full;
+      const b = fs.readFileSync(glb(m));
       const j = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString());
       const v = j.meshes.flatMap((x) => x.primitives)
         .reduce((s, p) => s + j.accessors[p.attributes.POSITION].count, 0);

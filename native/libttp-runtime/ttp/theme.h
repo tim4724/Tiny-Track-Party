@@ -327,7 +327,15 @@ const char* biome_for_track(const char* trackId);
 // track's own patch over its biome (weather, props, carriers), the shoreline
 // seed and the set pieces. Its props keep the biome's slot order
 // (ttp_theme_prop_models), whatever order the patch named them in.
+//
+// In the LITE tier in force (detail.h) a piece authored `lite: false` is left
+// out, and every model with a lite build is named by it (lite_models), so the
+// shell fetches and the renderer builds the lite world from the same lists.
 Theme resolve_theme(const char* biomeName, const char* trackId);
+
+// Each model that has a lite build (<model>-lite.glb, TTP_LITE_MODELS) renamed
+// to it, in place.
+void lite_models(std::vector<std::string>& models);
 
 // The recolour table for `model`, resolved against that model's own authored
 // glTF materials.

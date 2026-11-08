@@ -158,15 +158,20 @@ const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', '
 // `model` names a GLB under public/assets/toycar that scripts/gen-set-pieces.mjs
 // composed; the rest place it. Absent yaw/y read 0 and absent scale reads 1, so
 // a plain 0 would not be faithful for scale — it is carried as authored.
-const SET_KEYS = ['model', 'u', 'lat', 'yaw', 'y', 'scale'];
+// `lite: false` keeps a piece off the lite tier (Android TV) altogether; a
+// piece that brings its own ground (SET_GROUND) cannot, since that ground is
+// anchored on it.
+const SET_KEYS = ['model', 'u', 'lat', 'yaw', 'y', 'scale', 'lite'];
 function setInit(p) {
   checkKeys(p, SET_KEYS, 'set piece');
   if (typeof p.model !== 'string' || !/^[a-z0-9-]+$/.test(p.model)) fail(`set piece model ${JSON.stringify(p.model)} is not a GLB base name`);
   if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${p.model}.glb`))) fail(`set piece model "${p.model}" has no public/assets/toycar/${p.model}.glb`);
   if (typeof p.u !== 'number' || p.u < 0 || p.u >= 1) fail(`set piece u ${JSON.stringify(p.u)} must be a number in [0, 1)`);
   if (p.scale != null && !(p.scale > 0)) fail(`set piece scale ${JSON.stringify(p.scale)} must be positive`);
-  // Field order MUST match SetDef: model, u, lat, yaw, y, scale.
-  return `{ ${JSON.stringify(p.model)}, ${D(p.u)}, ${D(p.lat || 0)}, ${D(p.yaw || 0)}, ${D(p.y || 0)}, ${D(p.scale ?? 1)} }`;
+  if (p.lite != null && p.lite !== false) fail(`set piece lite ${JSON.stringify(p.lite)}: only \`lite: false\` is meaningful`);
+  if (p.lite === false && SET_GROUND[p.model]) fail(`set piece "${p.model}" brings its own ground, so it cannot leave the lite tier`);
+  // Field order MUST match SetDef: model, u, lat, yaw, y, scale, lite.
+  return `{ ${JSON.stringify(p.model)}, ${D(p.u)}, ${D(p.lat || 0)}, ${D(p.yaw || 0)}, ${D(p.y || 0)}, ${D(p.scale ?? 1)}, ${p.lite === false ? 0 : 1} }`;
 }
 
 // ---- landforms (renderer-only, like the set) ----
@@ -310,6 +315,20 @@ out.push('// The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).');
 out.push(`constexpr int TTP_TRACK_COUNT = ${trackIds.length};`);
 out.push('// Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.');
 out.push(`constexpr int TTP_TRACK_TOTAL = ${trackIds.length + devIds.length};`);
+out.push('');
+
+// ---- the lite tier's own models -------------------------------------------
+// A model <m> with a <m>-lite.glb beside it is drawn from that file in the lite
+// tier (Android TV): a simpler build of the same thing (scripts/bake-lite.mjs,
+// or authored). The full tier is uncapped; this is where the box's cost is cut.
+const LITE = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
+  .filter((f) => f.endsWith('-lite.glb')).map((f) => f.slice(0, -'-lite.glb'.length)).sort();
+for (const m of LITE) {
+  if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${m}.glb`))) fail(`${m}-lite.glb has no ${m}.glb to stand in for`);
+}
+out.push('// The models with a lite-tier build (<model>-lite.glb), sorted.');
+out.push(`constexpr const char* TTP_LITE_MODELS[] = { ${LITE.length ? LITE.map((m) => JSON.stringify(m)).join(', ') : 'nullptr'} };`);
+out.push(`constexpr int TTP_LITE_MODEL_COUNT = ${LITE.length};`);
 out.push('');
 
 // ---- the cups ---------------------------------------------------------------

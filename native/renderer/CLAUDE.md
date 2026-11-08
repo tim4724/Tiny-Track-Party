@@ -1007,20 +1007,22 @@ slot alone, so a merge change (per-placement bakes) must too.
 `npm run budget:scene` counts what each cell submits over a whole lap (the
 count is decided in this C++ before any backend sees it, so it transfers to
 the box), in BOTH detail tiers (below), and fails a track whose worst frame
-grows, a shipped track's 4P frame over its tier's `ceiling` or its 4P draws
-per cell over the tier's `drawCeiling`, and any static dressing the merge left
+grows, a shipped track's lite 4P frame over the box's `ceiling` or its 4P draws
+per cell over its `drawCeiling`, and any static dressing the merge left
 live-lit (`ttp_display_debug_live_dressing` names it). The ceilings are device
 facts, the most vertices and the most draws a track may have while 4P still
-holds. LITE's are the box's: there each limits as much as the other, so both
-are gated (the calibration is in `scripts/scene-budget.mjs`). FULL's are
-PROVISIONAL, a guess at the Apple TV that awaits a calibration there. Both move
-only on a device reading. Over budget: move it off the vista (what every cell
-sees down the straight), then make it lighter or merge it. Never a
-per-fragment term, a blended material or a new material.
-A biome PROP is capped per model before it is priced at all
-(`tests/display-abi.test.js`): it is stamped many times a lap, and the kit
-authors a barrel with a car's vertices. `scripts/slim-kit-models.mjs`
-decimates a kit model from the ratio SOURCES.json records for it.
+holds on the box: there each limits as much as the other, so both are gated
+(the calibration is in `scripts/scene-budget.mjs`), and they move only on a
+box reading. **FULL IS UNCAPPED** (the user's call, 2026-11-08): the world is
+authored as rich as it should look, and what the box cannot carry is cut in
+the lite tier (below), not from the world. Over the box's budget: cut it in
+lite (a lite build, `lite: false`), move it off the vista (what every cell
+sees down the straight), or merge it. Never a per-fragment term, a blended
+material or a new material.
+A biome PROP is capped per model in the lite tier (`tests/display-abi.test.js`):
+it is stamped many times a lap. Over the cap, it gets a lite build
+(`scripts/bake-lite.mjs`) or a slimmer original (`scripts/slim-kit-models.mjs`
+decimates a kit model from the ratio SOURCES.json records for it).
 
 ## The detail tier
 
@@ -1029,10 +1031,24 @@ so the weakest device (the Android TV box at 4P/540) holds while the web and
 the Apple TV draw FULL and keep the headroom over it. The tier is decided in
 C++ (`ttp/detail.h`, from the platform each shell names to
 `ttp_display_detail`) and latched like the shadows: `setLite` drops the static
-key, since most cuts are built in. The landforms, the set pieces, the deck and
-the cars are the world and lite leaves them whole (car far forms were rejected
+key, since most cuts are built in, and the static scene's key (`bakeKeyFor`)
+names the tier, since the two tiers build different worlds. The shell asks for
+the tier before it fetches a track's models, because the theme names the lite
+ones by the tier in force. The landforms, the set pieces, the deck and
+the cars are the world and lite leaves them whole unless their author says
+otherwise (car far forms were rejected
 on look; the deck is the surface the cars sit on). What it cuts, each beside
 its code:
+
+- **A model's lite build**: a model with a `<model>-lite.glb` beside it is
+  drawn from that file (`ttp/theme.h` `lite_models`, from the generated
+  `TTP_LITE_MODELS`), for set pieces, props and scenery alike, recoloured as
+  the model it stands in for. `scripts/bake-lite.mjs model:ratio` decimates a
+  static model into one; a model with moving parts gets one authored in its
+  builder.
+- **Full-only pieces**: a set entry authored `lite: false` is left out of the
+  lite tier's list altogether (not a piece that brings its own ground,
+  SET_GROUND, which the generator refuses).
 
 - **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
   16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a

@@ -215,12 +215,14 @@ const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int
 // (stageBlob's flip note): without it a device the boot canary flips between
 // Vulkan and GL would find the other backend's blob under its own name —
 // refused on import, and blocking the store dedupe from ever writing a good
-// one over it.
+// one over it. The DETAIL TIER is present because it is a different world:
+// coarser ground, other models, fewer pieces.
 static std::string bakeKeyFor(const char* trackId, const char* biome) {
     return (trackId ? std::string(trackId) : std::string())
             + "|" + (biome ? biome : "")
             + "|" + (g_disp && g_disp->showcase ? "1" : "0")
-            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0);
+            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0)
+            + "|" + ttp::rt::detail_name(ttp::rt::detail_in_force());
 }
 
 // Defined with the rest of the blob walk below; called from the end of a build,

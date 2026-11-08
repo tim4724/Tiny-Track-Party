@@ -8,6 +8,7 @@
 
 #include "generated/track_defs.h"
 #include "ttp/canonical.h"
+#include "ttp/detail.h"
 #include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
 #include "ttp/race_track.h"
@@ -860,9 +861,16 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 
   // The set pieces, deduped into slots in first-appearance order — the order
   // the shell fetches them in (ttp_theme_set_models).
+  const bool lite = detail_in_force() == Detail::Lite;
   if (const TrackDef* def = trackId ? find_track_def(trackId) : nullptr) {
+    // A piece authored `lite: false` is not in the lite tier's list at all; a
+    // landform anchored on a piece (SET_GROUND) follows it to its new index,
+    // and the generator refuses `lite: false` on such a piece.
+    std::vector<int> pieceAt((size_t) def->nSet, -1);
     for (int i = 0; i < def->nSet; i++) {
       const SetDef& d = def->set[i];
+      if (lite && !d.lite) continue;
+      pieceAt[(size_t) i] = (int) t.set.pieces.size();
       uint32_t slot = 0;
       while (slot < t.set.models.size() && t.set.models[slot] != d.model) slot++;
       if (slot == t.set.models.size()) t.set.models.push_back(d.model);
@@ -872,7 +880,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     for (int i = 0; i < def->nLand; i++) {
       const LandDef& d = def->land[i];
       Landform l;
-      l.kind = (uint32_t) d.kind; l.piece = d.piece;
+      l.kind = (uint32_t) d.kind; l.piece = d.piece < 0 ? d.piece : pieceAt[(size_t) d.piece];
       l.u = (float) d.u; l.lat = (float) d.lat; l.yaw = (float) (d.yaw * M_PI / 180.0);
       l.x = (float) d.x; l.z = (float) d.z; l.len = (float) d.len;
       l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
@@ -882,15 +890,31 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
       t.land.push_back(l);
     }
   }
+  if (lite) {
+    lite_models(t.scenery.models);
+    lite_models(t.props.models);
+    lite_models(t.set.models);
+  }
   return t;
+}
+
+void lite_models(std::vector<std::string>& models) {
+  for (std::string& m : models) {
+    for (int i = 0; i < TTP_LITE_MODEL_COUNT; i++) {
+      if (m == TTP_LITE_MODELS[i]) { m += "-lite"; break; }
+    }
+  }
 }
 
 std::vector<MatTint> resolve_model_tints(const std::string& model,
                                          const uint8_t* glb, size_t len) {
   std::vector<MatTint> out;
+  // A lite build (<model>-lite.glb) is recoloured as the model it stands in for.
+  const std::string base = model.size() > 5 && model.compare(model.size() - 5, 5, "-lite") == 0
+      ? model.substr(0, model.size() - 5) : model;
   const ModelTintDef* def = nullptr;
   for (const ModelTintDef& d : kModelTints) {
-    if (model == d.model) { def = &d; break; }
+    if (base == d.model) { def = &d; break; }
   }
   if (!def) return out;
 

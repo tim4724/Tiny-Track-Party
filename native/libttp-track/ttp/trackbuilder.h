@@ -65,6 +65,7 @@ struct SetDef {
   double yaw;         // degrees about +y, from the track's own heading there
   double y;           // lift (+) or sink (-) from the ground
   double scale;       // uniform; 1 = as composed
+  int lite;           // 0: the full tier only (`lite: false`); 1: the lite tier draws it too
 };
 
 // A LANDFORM: a shape the RENDERER sums into this track's ground (public/

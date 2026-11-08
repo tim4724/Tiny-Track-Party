@@ -1,7 +1,7 @@
 {
   "full": {
-    "ceiling": 260000,
-    "drawCeiling": 360,
+    "ceiling": null,
+    "drawCeiling": null,
     "tracks": {
       "tidepool": {
         "1": {
