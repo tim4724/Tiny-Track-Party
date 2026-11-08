@@ -639,7 +639,14 @@ to do both:
   rock piece at the kerb hands over to it within a few units), and the slope
   rock (below) dresses its face. Author it round the OUTSIDE of a bend or
   along a straight: on a bend's inside it walls the road ahead off. Glacier's
-  massif over its top straight is the worked example.
+  massif over its top straight is the worked example. Behind a draped rock
+  face at the kerb (a canyon length), set `near` past the face's crest: the
+  drape rides the drawn ground, so a flank rising under the crest stretches
+  it into spikes; past it, the face stands whole and its back slopes up into
+  the massif (Gulch). A massif cannot stand in the middle of a loop ringed
+  by road: the cap holds the grid there, the band holds it off every
+  footprint nearby and splits it between the strands around, so a loop's
+  middle gets a piece's face, not land.
 - **ROCK WHERE THE LAND IS STEEP.** The ground's vertex alpha carries how
   steep the land is (`rockWeight`, per biome); `vground.mat` replaces the
   canvas there with the biome's rock, in strata by world height under ledges
