@@ -149,6 +149,8 @@
     "set-powder-forest-f.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-powder-forest-g-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-powder-forest-g.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-powder-forest-h-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-powder-forest-h.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-powder-peaks.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-promenade.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ranch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
