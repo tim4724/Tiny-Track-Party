@@ -1577,6 +1577,279 @@ def promenade():
                 figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')
     draped('sand', sand)
 
+# ---- Driftwood's storm coast ----
+
+@piece(1.0)
+def lighthouse():
+    # Driftwood: the light on the point where the dune pass comes out onto
+    # the beach, at a real lighthouse's size (some 35 m: a car is 0.9): the
+    # round tower in the red and white of the gantry's posts on its stone
+    # foot, the gallery with its rail, and the lantern on top where the lamp
+    # turns behind the glazing bars; the keeper's cottage at its foot, its
+    # chimney smoking, and before them the storm signal mast flying the gale
+    # cone and a pennant streaming in the wind. The pass drives straight at
+    # it for the length of the diagonal. +X is the road.
+    white, red, dark = 0xfff6eb, 0xcf534f, 0x38383d
+    TX, TZ = -1.7, 0.0                                   # the tower, back from the road
+    H, R0, R1, B = 6.0, 0.8, 0.52, 0.3                    # its height, its radii, its foot's top
+    def r_at(y):
+        return R0 + (R1 - R0) * (y - B) / H
+    cyl(1.1, B + 0.3, (TX, -0.3, TZ), 'grey', r2=1.02, segs=12)                   # the stone foot
+    cyl(R0, H, (TX, B, TZ), white, r2=R1, segs=12)                                 # the tower
+    for y0, y1 in ((1.5, 2.6), (3.7, 4.8)):                                        # its red bands
+        cyl(r_at(y0) + 0.03, y1 - y0, (TX, y0, TZ), red, r2=r_at(y1) + 0.03, segs=12)
+    # the door to the road under a red hood, a window up each white stretch
+    box((0.12, 0.72, 0.42), (TX + r_at(0.6) - 0.02, B + 0.36, TZ), 'slate')
+    box((0.22, 0.08, 0.56), (TX + r_at(1.1) + 0.02, B + 0.78, TZ), red)
+    for y in (3.15, 5.35):
+        box((0.1, 0.36, 0.24), (TX + r_at(y) - 0.01, y, TZ), 'slate')
+    # the gallery: a deck proud of the tower, its rail on posts
+    G = B + H
+    cyl(0.95, 0.14, (TX, G - 0.02, TZ), dark, segs=12)
+    for k in range(8):
+        a = k / 8 * 2 * math.pi
+        box((0.08, 0.36, 0.08), (TX + 0.86 * math.cos(a), G + 0.3, TZ + 0.86 * math.sin(a)), dark)
+    torus(0.86, 0.03, (TX, G + 0.46, TZ), dark, segs=12)
+    # the lantern: a white drum, the lamp behind eight glazing bars, the red
+    # cupola, its ball and vane
+    cyl(0.56, 0.3, (TX, G + 0.12, TZ), white, segs=10)
+    L0, L1 = G + 0.42, G + 1.12
+    for k in range(8):
+        a = (k + 0.5) / 8 * 2 * math.pi
+        box((0.07, L1 - L0, 0.07), (TX + 0.5 * math.cos(a), (L0 + L1) / 2, TZ + 0.5 * math.sin(a)), dark, yaw=-a)
+    cyl(0.2, L1 - L0, (TX, L0, TZ), 0xffc044, segs=8)                             # the lamp
+    with animated('anim_spin:a=y:w=1.1#lamp', (TX, (L0 + L1) / 2, TZ)):            # its lens, turning
+        box((0.74, 0.4, 0.12), (TX, (L0 + L1) / 2, TZ), 0xffc044)
+        for s in (-1, 1):
+            box((0.22, 0.22, 0.04), (TX + 0.2 * s, (L0 + L1) / 2, TZ + 0.07), white)
+            box((0.22, 0.22, 0.04), (TX + 0.2 * s, (L0 + L1) / 2, TZ - 0.07), white)
+    cyl(0.6, 0.12, (TX, L1, TZ), red, segs=10)
+    cyl(0.56, 0.5, (TX, L1 + 0.12, TZ), red, r2=0.1, segs=10)
+    box((0.16, 0.16, 0.16), (TX, L1 + 0.68, TZ), dark)
+    box((0.04, 0.4, 0.04), (TX, L1 + 0.9, TZ), dark)
+    box((0.04, 0.06, 0.36), (TX, L1 + 1.0, TZ + 0.06), dark)
+    # the keeper's cottage beside it, door to the road, the chimney smoking
+    CX, CZ = TX - 0.1, TZ + 2.3
+    hut(1.3, 0.75, 1.7, (CX, 0, CZ), white, red, t=0.3)
+    box((0.24, 0.6, 0.24), (CX - 0.25, 1.25, CZ + 0.55), 'grey')
+    marker('anim_smoke', (CX - 0.25, 1.55, CZ + 0.55))
+    figure((CX + 0.95, 0, CZ - 0.3), 0.0, shirt=0x6794d9, legs=0x38383d, hair=0xfff6eb)
+    # the storm signal mast before them: its crosstree, the black gale cone
+    # hoisted point down, a pennant streaming off the masthead across the
+    # piece (+Z), so the road sees its cloth
+    MX, MZ = 0.5, TZ - 2.2
+    cyl(0.18, 0.2, (MX, 0, MZ), 'grey', segs=6)
+    box((0.1, 3.6, 0.1), (MX, 1.8, MZ), white)
+    box((0.08, 0.08, 1.4), (MX, 2.9, MZ), white)
+    for s in (-1, 1):
+        beam((MX, 3.5, MZ), (MX, 2.9, MZ + s * 0.68), 0.04, white)
+    box((0.03, 0.4, 0.03), (MX, 2.7, MZ + 0.55), dark)
+    o = cyl(0.24, 0.42, (MX, 2.08, MZ + 0.55), dark, r2=0.02, segs=8)
+    o.rotation_euler = (math.pi, 0, 0)
+    o.location = P(MX, 2.5, MZ + 0.55)
+    with animated('anim_sway:a=x:d=22:p=1.4#pennant', (MX, 3.6, MZ)):
+        box((0.05, 0.3, 0.7), (MX, 3.45, MZ + 0.38), red)
+        box((0.05, 0.18, 0.5), (MX, 3.47, MZ + 0.95), red, yaw=0.15)
+    # rocks bedded in the sand round the foot
+    for (x, z, k, yw) in ((TX + 1.3, TZ - 0.9, 0.42, 0.4), (TX - 1.1, TZ - 1.0, 0.5, 1.3),
+                          (TX + 1.0, TZ + 1.1, 0.3, 2.1), (MX + 0.5, MZ + 0.9, 0.28, 0.7)):
+        boulder((x, 0, z), k=k, yaw=yw)
+    join_still('light')
+
+def net_hut(x, z, w, d, h, door, trim):
+    """A fishermen's net hut, tall and narrow and tarred black, its gable and
+    doors to the road (+X): the shed, its pitched roof, the ground door and
+    the loft door over it with the hoist beam out over that."""
+    dark = 0x38383d
+    box((w, h, d), (x, h / 2, z), dark)
+    for y in (h * 0.33, h * 0.66):                                       # the boards' laps
+        box((w + 0.04, 0.05, d + 0.04), (x, y, z), 0x4f5260)
+    prism([(z - d / 2 - 0.08, h), (z + d / 2 + 0.08, h), (z, h + 0.42 * d)], x, w + 0.12, 0x4f5260)
+    box((0.06, 0.8, d * 0.5 + 0.1), (x + w / 2 + 0.01, 0.42, z), trim)
+    box((0.06, 0.74, d * 0.5), (x + w / 2 + 0.03, 0.39, z), door)
+    box((0.06, 0.42, d * 0.42), (x + w / 2 + 0.03, h * 0.72, z), door)
+    box((0.42, 0.1, 0.1), (x + w / 2 + 0.18, h * 0.72 + 0.32, z), 0x8a6a46)
+
+@piece(1.0)
+def net_huts():
+    # Driftwood: the fishermen's end of the beach by the start straight, at
+    # their real size: a row of tall black net huts with their doors to the
+    # road (Hastings' are three storeys on a footprint a car could cover),
+    # the beach boat hauled up the sand on its skids beside them with the
+    # capstan that winched it up, nets heaped to dry, fish boxes stacked,
+    # pots and floats, and a gull on a ridge watching the cars. The row runs
+    # along the road (+Z); +X is the road.
+    for (z, h, door, trim) in ((-3.0, 2.2, 0xcf534f, 0xfff6eb), (-1.75, 2.75, 0x38383d, 0xfff6eb),
+                               (-0.5, 2.4, 0x6794d9, 0xfff6eb), (0.75, 2.95, 0x38383d, 0xcf534f),
+                               (2.0, 2.5, 0xffc044, 0x38383d)):
+        net_hut(-0.7, z, 0.85, 0.95, h, door, trim)
+    with plain_parts():
+        # nets heaped by the huts, their floats along them
+        for (x, z, c) in ((0.2, -2.4, 0x2f8f5b), (0.25, 0.1, 0x3f6f8f), (0.1, 1.4, 0x2f8f5b)):
+            box((0.55, 0.18, 0.7), (x, 0.09, z), c, yaw=0.3 * z)
+            box((0.4, 0.14, 0.45), (x + 0.05, 0.25, z - 0.05), c, yaw=0.3 * z + 0.4)
+            for k in range(3):
+                box((0.09, 0.09, 0.09), (x + 0.3, 0.06, z - 0.25 + k * 0.25), 0xff7e44)
+        # fish boxes stacked by the door, two crab pots
+        for k, (dz, y) in enumerate(((0.0, 0.0), (0.0, 0.16), (0.36, 0.0))):
+            box((0.32, 0.15, 0.32), (0.35, y + 0.075, -1.1 + dz), 0x6794d9 if k % 2 else 0xcf534f, yaw=0.1)
+        creel((0.4, 0, 0.75), 0.4)
+        creel((0.5, 0, 2.6), -0.3)
+    # the beach boat hauled up on its skids past the row's end, bow to the
+    # sea (-X), the capstan behind that winched it up
+    BX, BZ = -0.4, -5.6
+    for dz in (-0.35, 0.35):
+        box((2.6, 0.08, 0.14), (BX - 0.2, 0.04, BZ + dz), 0x8a6a46)              # the skids
+    def b(size, dx, dy, dz, color, yaw=0.0, roll=0.0):
+        box(size, (BX + dx, dy, BZ + dz), color, yaw=yaw, roll=roll)
+    b((1.7, 0.42, 0.78), 0.1, 0.33, 0, 0x6794d9)                                 # the hull
+    b((0.5, 0.42, 0.5), -0.85, 0.33, 0, 0x6794d9, yaw=math.pi / 4)               # its bow
+    b((1.75, 0.08, 0.82), 0.1, 0.46, 0, 0xcf534f)                                # the wale
+    b((1.8, 0.06, 0.86), 0.1, 0.56, 0, 0xfff6eb)                                 # the gunwale
+    b((0.5, 0.4, 0.6), 0.45, 0.75, 0, 0xfff6eb)                                  # the cuddy
+    b((0.54, 0.06, 0.64), 0.45, 0.96, 0, 0xcf534f)
+    box((0.08, 1.3, 0.08), (BX - 0.3, 1.1, BZ), 0x8a6a46)                         # the mast, stepped down
+    box((0.6, 0.16, 0.06), (BX - 0.3, 1.65, BZ), 0xcf534f)                         # its flag
+    CX, CZ = BX + 2.6, BZ
+    cyl(0.28, 0.5, (CX, 0, CZ), 0x8a6a46, segs=8)                                 # the capstan
+    cyl(0.34, 0.1, (CX, 0.5, CZ), 0x8a6a46, segs=8)
+    for k in range(2):
+        a = k * math.pi / 2
+        box((1.3, 0.08, 0.08), (CX, 0.45, CZ), 0x9a6a46, yaw=a)
+    tube([(CX - 0.28, 0.25, CZ), (BX + 1.3, 0.22, BZ - 0.1), (BX + 0.95, 0.3, BZ)], 0.03, 0xfde4c7, wire=True)
+    gull((-0.7, 2.95 + 0.42 * 0.95, 0.75), math.pi / 2, 'anim_watch:r=24#gull')
+    join_still('huts')
+
+# ---- Cove's island ----
+
+@piece(1.0)
+def smugglers_cave():
+    # Cove: the pirates' cave at the foot of the island's peak, where its
+    # jungle comes down to the east straight: an outcrop of the island's
+    # dark rock standing out of the hillside, the cave's black mouth in its
+    # face to the road framed in timber, a lantern hung at it, the haul
+    # stacked outside (barrels, crates, a chest open on its gold), a pirate
+    # keeping the door, palms on the rock and the Jolly Roger flying over
+    # it. It stands on the plain and levels nothing (its gear is draped):
+    # the hillside rises behind it and buries its back. +X is the road.
+    rock = ('grey', 'slate')
+    # the outcrop, heaped round the mouth: the mass behind, a buttress either
+    # side of it, the lintel over it
+    stone(-3.2, 0.0, 5.0, 0.3, 11.0, squat=1.15, rock=rock, top='grey')
+    stone(-2.6, -3.0, 3.6, 1.4, 12.0, squat=1.0, rock=rock, top='grey')
+    stone(-2.8, 3.2, 3.8, 2.2, 13.0, squat=0.95, rock=rock, top='grey')
+    stone(-0.9, -1.55, 1.9, 0.8, 14.0, squat=1.2, rock=rock, top='grey')
+    stone(-0.9, 1.6, 2.0, 2.6, 15.0, squat=1.15, rock=rock, top='grey')
+    boulder((-1.05, 1.2, 0.05), k=1.05, yaw=0.4, squash=0.55)                    # the lintel over the mouth
+    # the mouth: black, framed in timber
+    box((1.4, 1.35, 1.2), (-0.8, 0.62, 0.0), 0x1d1d22)
+    for s in (-1, 1):
+        box((0.14, 1.45, 0.14), (-0.08, 0.72, s * 0.62), 0x8a6a46)
+    box((0.16, 0.16, 1.5), (-0.08, 1.45, 0.0), 0x8a6a46)
+    box((0.1, 0.22, 0.12), (0.02, 1.25, 0.5), 0xffc044)                          # the lantern
+    # palms on the rock, the flag over it
+    palm((-3.4, 2.6, -0.6), h=2.4, lean=0.25, yaw=math.radians(150))
+    palm((-2.9, 1.7, 2.4), h=2.0, lean=0.3, yaw=math.radians(60))
+    kit_flag('flag-pirate-high', (-2.6, 2.75, 0.8), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.2')
+    join_still('cave')
+    # the haul and its keeper before the mouth, on the sand as it lies
+    def gear():
+        kit('pirate', 'barrel', (0.55, 0, -1.15), yaw=0.4, scale=0.2)
+        kit('pirate', 'barrel', (0.35, 0, -1.55), yaw=1.1, scale=0.2)
+        kit('pirate', 'barrel', (0.48, 0.26, -1.33), yaw=0.2, scale=0.18)
+        kit('pirate', 'crate', (0.6, 0, 1.25), yaw=0.3, scale=0.25)
+        kit('pirate', 'crate', (0.3, 0, 1.65), yaw=-0.4, scale=0.25)
+        kit('pirate', 'chest', (0.95, 0, 0.75), yaw=math.radians(-80), scale=0.17)
+        for (gx, gz) in ((1.2, 0.55), (1.12, 0.95), (1.3, 0.8)):
+            box((0.07, 0.04, 0.07), (gx, 0.02, gz), 'yellow', yaw=gx * 3)
+        figure((0.55, 0, -0.35), 0.0, shirt=0xcf534f, legs=0x38383d, hair=0x38383d)
+        beam((0.68, 0.22, -0.48), (0.86, 0.55, -0.55), 0.04, 0x9aa1b4)            # his cutlass
+    draped('haul', gear)
+
+@piece(1.0)
+def jungle_grove():
+    # Cove: the jungle where the island's green foothills come down to the
+    # road: a stand of palms of every height leaning every way, the island's
+    # broad-leaved scrub round their feet and a few dark rocks among them, so
+    # the hill reads as jungle from the seat and not as a lawn. DRAPED, all
+    # of it one part laid on the slope as drawn. +X is the road; it runs
+    # along the road (+Z), thinning toward its ends.
+    def build():
+        for k, (x, z, h, lean, yw) in enumerate((
+                (0.6, -6.5, 2.3, 0.3, 200), (-1.4, -5.2, 3.0, 0.2, 150), (0.2, -3.6, 2.7, 0.35, 230),
+                (-2.6, -2.8, 3.3, 0.15, 120), (-0.8, -1.4, 2.5, 0.3, 190), (0.9, -0.2, 2.2, 0.4, 250),
+                (-2.0, 0.6, 3.1, 0.2, 140), (-0.2, 1.9, 2.8, 0.3, 210), (-3.2, 2.6, 2.6, 0.25, 100),
+                (0.7, 3.4, 2.4, 0.35, 260), (-1.5, 4.3, 3.2, 0.2, 170), (0.1, 5.8, 2.6, 0.3, 220),
+                (-2.8, 6.4, 2.9, 0.2, 130), (-0.9, 7.6, 2.3, 0.3, 200))):
+            palm((x, 0, z), h=h, lean=lean, yaw=math.radians(yw))
+        with plain_parts():
+            for (x, z, r, c) in ((0.9, -5.4, 0.55, 0x2f8f5b), (-0.5, -4.2, 0.7, 0x3c9a5a), (1.2, -2.2, 0.5, 0x2f8f5b),
+                                 (-1.6, -0.6, 0.75, 0x3c9a5a), (0.8, 1.0, 0.6, 0x2f8f5b), (-2.6, 1.6, 0.65, 0x3c9a5a),
+                                 (1.0, 2.6, 0.5, 0x3c9a5a), (-0.6, 3.2, 0.7, 0x2f8f5b), (0.9, 4.8, 0.55, 0x2f8f5b),
+                                 (-1.9, 5.4, 0.7, 0x3c9a5a), (0.6, 6.9, 0.5, 0x3c9a5a)):
+                sphere(r, (x, r * 0.45, z), c, subdiv=1, scale=(1.2, 0.75, 1.0), yaw=x * z)
+        for (x, z, k, yw) in ((1.3, -4.0, 0.35, 0.5), (-1.0, 2.6, 0.45, 1.7), (1.4, 5.8, 0.3, 2.6)):
+            boulder((x, 0, z), k=k, yaw=yw, color='slate')
+    draped('grove', build)
+
+@piece(1.0)
+def pirate_lookout():
+    # Cove: the crew's lookout over the east beach, where the straight runs
+    # up to the cove: a timber tower at its real size (some 18 m), its four
+    # legs splayed and braced, a ladder up one side to the platform, which
+    # carries a rail, a sailcloth awning and the bell, a pirate up there
+    # with his spyglass on the sea and the Jolly Roger on a pole over it all;
+    # at its foot a cannon run out to the sea (-X) beside its shot. +X is the
+    # road.
+    wood, dark = 0x8a6a46, 0x6e5b3a
+    H, S0, S1 = 3.6, 0.85, 0.5                       # the platform's height, the legs' spread at foot and top
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            beam((sx * S0, 0.0, sz * S0), (sx * S1, H, sz * S1), 0.14, wood)
+    for y0, y1 in ((0.2, 1.8), (1.8, 3.4)):           # the braces, crossing on each side
+        f0, f1 = y0 / H, y1 / H
+        r0, r1 = S0 + (S1 - S0) * f0, S0 + (S1 - S0) * f1
+        for sz in (-1, 1):
+            beam((-r0, y0, sz * r0), (r1, y1, sz * r1), 0.08, dark)
+            beam((r0, y0, sz * r0), (-r1, y1, sz * r1), 0.08, dark)
+        for sx in (-1, 1):
+            beam((sx * r0, y0, -r0), (sx * r1, y1, r1), 0.08, dark)
+    box((1.5, 0.12, 1.5), (0, H + 0.06, 0), 0xb06041)                         # the platform
+    for k in range(4):
+        a = k * math.pi / 2
+        c, s = math.cos(a), math.sin(a)
+        box((0.07, 0.4, 0.07), (0.7 * (c - s), H + 0.3, 0.7 * (s + c)), wood)
+        box((0.06, 0.06, 1.42) if k % 2 == 0 else (1.42, 0.06, 0.06),
+            (0.7 * c, H + 0.48, 0.7 * s), wood)
+    for sx in (-1, 1):                                                        # the awning's posts and cloth
+        box((0.07, 0.9, 0.07), (sx * 0.65, H + 0.57, -0.65), wood)
+    box((1.5, 0.05, 0.95), (0, H + 1.0, -0.25), 0xfde4c7, pitch=0.25)
+    cyl(0.12, 0.18, (0.55, H + 0.75, -0.62), 0xffc044, r2=0.08, segs=6)       # the bell
+    # the ladder up the road side
+    for sz in (-1, 1):
+        beam((S0 + 0.35, 0.0, sz * 0.22), (S1 + 0.08, H, sz * 0.22), 0.07, wood)
+    for i in range(8):
+        t = (i + 0.5) / 8
+        x = S0 + 0.35 + (S1 + 0.08 - S0 - 0.35) * t
+        box((0.05, 0.05, 0.5), (x, H * t, 0), dark)
+    # the lookout on the platform, spyglass to the sea; the flag over him
+    figure((-0.3, H + 0.12, 0.25), math.pi, shirt=0xfff6eb, legs=0x38383d, hair=0xcf534f)
+    beam((-0.45, H + 0.47, 0.25), (-0.75, H + 0.5, 0.25), 0.06, 0xffc044)
+    box((0.08, 1.6, 0.08), (0.55, H + 0.92, 0.55), wood)
+    kit_flag('flag-pirate-high', (0.55, H + 1.0, 0.55), math.radians(90), 0.5, 'anim_sway:a=x:d=24:p=2.0')
+    # the cannon at its foot, run out to the sea, its shot piled by it
+    with plain_parts():
+        for sz in (-1, 1):
+            cyl(0.22, 0.08, (-1.6, 0.22, -1.4 + sz * 0.22), dark, segs=8, axis='along')
+        box((0.6, 0.18, 0.4), (-1.6, 0.28, -1.4), wood)
+        cyl(0.13, 0.95, (-1.3, 0.42, -1.4), 0x38383d, r2=0.1, segs=8, axis='across')
+        o = bpy.context.active_object
+        o.location = P(-1.25, 0.42, -1.4)
+        o.rotation_euler = (0, -math.pi / 2, 0)
+        for (dx, dz, y) in ((0, 0, 0.07), (0.15, 0, 0.07), (0.07, 0.13, 0.07), (0.07, 0.05, 0.19)):
+            box((0.13, 0.13, 0.13), (-1.0 + dx, y, -0.75 + dz), 0x38383d)
+    join_still('lookout')
+
 # ====================================================================================
 # SNOW
 # ====================================================================================
@@ -3433,12 +3706,14 @@ def gallery_shed(road, s0, s1, seed):
             x, _, z = on_road(road, i, 5.9 + 0.25 * over, 0)
             cyl(0.02, ln, (x, SLAB1 - 0.32 * over + 0.06 - ln, z), 'sky', r2=0.11, segs=3, stem=True)
 
-def stone(x, z, s, yaw, seed, squat=1.0, rock=(ROCK, SHADE)):
+def stone(x, z, s, yaw, seed, squat=1.0, rock=(ROCK, SHADE), top=None):
     """A broken rock `s` across lying on the plain at (x, z): a lump of
     fifteen facets, no two alike, wider than tall and bedded a little in the
     ground, rock where a facet turns to the side and snow where it faces the
     sky. A box with a slab of snow on it read as a crate. `squat` scales its
-    height before the snow is laid; `rock` is its (sunlit, turned) swatches."""
+    height before the snow is laid; `rock` is its (sunlit, turned) swatches;
+    `top` what lies on what faces the sky (snow unless named: bare rock on
+    the beach)."""
     N = 5
     c, sn = math.cos(yaw), math.sin(yaw)
     def at(a, r, y):
@@ -3459,7 +3734,7 @@ def stone(x, z, s, yaw, seed, squat=1.0, rock=(ROCK, SHADE)):
         if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0:   # wound out of the lump
             t, n = t[::-1], tuple(-v for v in n)
         if n[1] > 0.75:
-            col = SNOW
+            col = SNOW if top is None else top
         else:
             col = rock[0] if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.25 else rock[1]
         polys.append((col, list(t)))
@@ -3478,7 +3753,7 @@ def fallen_rock(road, boulders):
                 stone(x, z, s * 1.5, road_yaw(road, i) + 1.3 * k, 3.1 * k + i)
     draped('scree', build)
 
-def crag(spine, peaks, seed, sink=2.5):
+def crag(spine, peaks, seed, sink=2.5, top=None):
     """A crest of the mountain's own rock breaking out of its snow, along
     `spine` ((x, z) points in the piece frame): sections across it about 2 u
     apart, each a foot either side sunk `sink` under the snow, a shoulder and
@@ -3543,7 +3818,7 @@ def crag(spine, peaks, seed, sink=2.5):
     def color(i, j, n):
         n = tuple(up * c for c in qn[i, j])
         if n[1] > 0.68:
-            return SNOW
+            return SNOW if top is None else top
         return 'lavender' if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.25 else ROCK
     for o in sheet(rows, color, 'crag', facet=lambda i, j: True):
         if o['swatch'] == 'white':
