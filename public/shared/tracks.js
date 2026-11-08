@@ -326,6 +326,15 @@ export const SET_GROUND = {
   // toward the road (+X) to the water hole on the flat at its foot; broad
   // enough that the ground's 9 u grid draws it as a hill, not a cone.
   'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
+  // Flurry's ski jump: its landing hill, the knoll under the takeoff (-X)
+  // and the flank falling toward the road (+X), convex from the knoll,
+  // steepest halfway and easing into the outrun (a cos^2 flank), so the
+  // jumpers fly close over a slope as a real hill's; the landing slope
+  // groomed a faint blue down its middle.
+  'set-ski-jump': [
+    { kind: 'mound', x: -48, h: 16, r: 50, r1: 24, rz: 22, shape: 2 },
+    { kind: 'paint', yaw: 90, z: -25, len: 32, r: 3, w: 4, tint: 0xdde7f5 }
+  ],
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
@@ -540,9 +549,49 @@ export const TRACKS = {
   powder: {
     name: 'Powder', waypoints: GEN_TRACKS.powder,
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
+    // A ski resort in its valley: the ski mountain and its lift to the west,
+    // the resort's back wall of peaks over the start straight to the north
+    // and east, its foothills coming down to the kerb along the straight and
+    // round the east bend, and the second lift running from the base inside
+    // the north loop over the start straight and up them, its chairs over
+    // the cars. Forest stands on the foothills, a shoulder of the ski
+    // mountain by the crossings' west lobe, a spur at the south-west bend,
+    // knolls by the south loop and the east hill; the valley stays open to
+    // the south-east. The lift and the stands are built on the ground drawn
+    // under them, sampled (set_prototypes.py CHAIRLIFT_GROUND, FORESTS):
+    // re-sample them after moving the land they stand on.
     set: [
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
-      { model: 'set-ski-school', u: 0.54, lat: -10.2, yaw: 160 }
+      { model: 'set-ski-school', u: 0.54, lat: -10.2, yaw: 160 },
+      { model: 'set-powder-peaks', u: 0.03, lat: -60 },
+      { model: 'set-powder-chairlift', u: 0.0317, lat: 0 },
+      { model: 'set-powder-forest-a', u: 0.9718, lat: -23.79 },
+      { model: 'set-powder-forest-b', u: 0.0691, lat: -23.04 },
+      { model: 'set-powder-forest-c', u: 0.1223, lat: -20.77 },
+      { model: 'set-powder-forest-d', u: 0.5939, lat: -20.86 },
+      { model: 'set-powder-forest-e', u: 0.3354, lat: 30.49 },
+      { model: 'set-powder-forest-f', u: 0.6284, lat: -18.55 },
+      { model: 'set-powder-forest-g', u: 0.2058, lat: -24.78 }
+    ],
+    land: [
+      // the foothills at the start straight's and the east bend's kerb
+      { kind: 'ridge', u: 0.9782, lat: -25.76, r: 30, h: 8, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.0619, lat: -28.13, r: 32, h: 9, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.115, lat: -27.22, yaw: 4.4, len: 50, r: 30, h: 10, top: 0.2, near: 4 },
+      // the massif behind them, each summit carrying a peak (set-powder-peaks)
+      { kind: 'ridge', u: 0.9708, lat: -69.87, r: 34, h: 18, top: 0.15 },
+      { kind: 'ridge', u: 0.056, lat: -81.93, r: 40, h: 20, top: 0.12 },
+      { kind: 'ridge', u: 0.079, lat: -65.97, r: 36, h: 18, top: 0.12 },
+      { kind: 'ridge', u: 0.1109, lat: -54.04, yaw: 1.8, z: -0.86, len: 50, r: 28, h: 14, top: 0.12 },
+      { kind: 'ridge', u: 0.9494, lat: -57.92, r: 36, h: 14, top: 0.12 },
+      // the spur at the south-west bend, running back to the ski mountain
+      { kind: 'ridge', u: 0.5929, lat: -28.96, r: 30, h: 18, top: 0.12, near: 4 },
+      { kind: 'ridge', u: 0.6006, lat: -39.99, yaw: 156.6, len: 34, r: 30, h: 18, top: 0.12 },
+      // the east hill, the ski mountain's shoulder by the west lobe, the knoll
+      // in the bay north of the south loop
+      { kind: 'ridge', u: 0.4123, lat: -38.61, r: 40, h: 12, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.3322, lat: 38.06, r: 38, h: 12, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.6284, lat: -16.7, r: 22, h: 6, top: 0.25, near: 4 }
     ]
   },
   flurry: {
@@ -554,34 +603,44 @@ export const TRACKS = {
       // cabin (see:landmarks): by the start, on the east loop, on the run in
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
       { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
-      { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 }
+      { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
+      { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
+      { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
+      { model: 'set-ski-jump', u: 0.0763, lat: 11.08, yaw: 31.2 },
+      { model: 'set-flurry-forest-a', u: 0.5859, lat: 14.08 },
+      { model: 'set-flurry-forest-b', u: 0.6674, lat: 20.64 },
+      { model: 'set-flurry-forest-c', u: 0.7109, lat: 19.97 },
+      { model: 'set-flurry-forest-d', u: 0.1402, lat: 18.74 },
+      { model: 'set-flurry-forest-e', u: 0.1919, lat: 19.92 },
+      { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
+      { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
-    // a frozen stream runs from the village loop under the crossing down to
-    // the lake; the valley is closed by mountains on the outside of the lap,
-    // one off each of its four sides, open between them at both ends of its
-    // long axis so it reads as a valley, not a bowl: each a long snow ridge
-    // with its peaks on it, the peaks' crests tinted rock, and a dark wash of
-    // forest along its foot. Their crests stand about where the fog begins,
-    // and their reach stays inside the terrain's 48-cell cap.
+    // A frozen stream runs from the village loop under the crossing down to
+    // the lake. The village's ski jump stands on its hill past the west
+    // loop, its landing slope facing the start straight, which drives up
+    // its axis. The valley is closed by mountains on all four sides, open
+    // between them: past the two end loops a massif whose foothills come
+    // down to the outside kerb, forest on them (sampled, set_prototypes.py
+    // FORESTS: re-sample after moving the land), a range of peaks on its
+    // summits behind; along the two long sides the far snow ridges, peaks on
+    // their crests. Their reach stays inside the terrain's 48-cell cap.
     land: [
       { kind: 'plain', u: 0.4413, lat: 5, yaw: -142, len: 54, r: 3, w: 5, tint: 0xc8e0f6 },
-      { kind: 'ridge', u: 0.15, lat: 68, len: 120, r: 28, h: 16, top: 0.15 },
-      { kind: 'ridge', u: 0.15, lat: 72, z: -38, len: 8, r: 24, h: 16, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.15, lat: 70, z: 2, len: 12, r: 20, h: 11, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.15, lat: 74, z: 36, len: 6, r: 24, h: 15, top: 0.2, tint: 0x56607a },
+      // past the east loop: the foothills at its kerb, the massif behind
+      { kind: 'ridge', u: 0.5816, lat: 18.59, r: 26, h: 8, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.6598, lat: 20.75, r: 28, h: 9, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.7109, lat: 18.08, r: 26, h: 7, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.6337, lat: 33.68, r: 34, h: 18, top: 0.12 },
+      { kind: 'ridge', u: 0.5903, lat: 42.93, r: 30, h: 15, top: 0.12 },
+      { kind: 'ridge', u: 0.6848, lat: 49.96, r: 34, h: 18, top: 0.12 },
+      // past the west loop, beside the ski jump's hill: the same
+      { kind: 'ridge', u: 0.1371, lat: 18.51, r: 26, h: 9, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.1919, lat: 17.74, r: 24, h: 7, top: 0.2, near: 4 },
+      { kind: 'ridge', u: 0.1186, lat: 46.36, r: 34, h: 18, top: 0.12 },
+      { kind: 'ridge', u: 0.16, lat: 51.74, r: 30, h: 15, top: 0.12 },
+      // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
-      { kind: 'ridge', u: 0.39, lat: -74, z: -28, len: 8, r: 22, h: 14, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.39, lat: -74, z: 24, len: 6, r: 24, h: 17, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.65, lat: 68, len: 120, r: 30, h: 17, top: 0.15 },
-      { kind: 'ridge', u: 0.65, lat: 72, z: -40, len: 10, r: 22, h: 13, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.65, lat: 74, z: 0, len: 6, r: 26, h: 18, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.65, lat: 72, z: 38, len: 8, r: 22, h: 12, top: 0.2, tint: 0x56607a },
-      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
-      { kind: 'ridge', u: 0.92, lat: -72, z: -15, len: 8, r: 22, h: 13, top: 0.2, tint: 0x56607a },
-      { kind: 'paint', u: 0.15, lat: 42, len: 120, r: 3, w: 8, tint: 0x3f6050 },
-      { kind: 'paint', u: 0.39, lat: -44, len: 100, r: 3, w: 8, tint: 0x3f6050 },
-      { kind: 'paint', u: 0.65, lat: 42, len: 120, r: 3, w: 8, tint: 0x3f6050 },
-      { kind: 'paint', u: 0.92, lat: -42, len: 80, r: 3, w: 8, tint: 0x3f6050 }
+      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 }
     ]
   },
   glacier: {
