@@ -640,8 +640,9 @@ to do both:
   `kNearRamp`), where every other form clears the road's corridor. The band
   draws it at its own resolution from the verge out, so a massif tens of
   units high and as wide as the scene can rise straight off the kerb zone,
-  and the slope rock (below) dresses its face. Author it round the OUTSIDE of
-  a bend or along a straight: on a bend's inside it walls the road ahead off.
+  and the slope rock (below) dresses its face, but a snow one's (below).
+  Author it round the OUTSIDE of a bend or along a straight: on a bend's
+  inside it walls the road ahead off.
   A set piece's mound withholds every other form under it, but JOINS a
   `near` one, the higher of the two (`landforms`): a mountainside runs on
   round a piece's slope. Keep it clear of that piece's parts, which stand on
@@ -668,19 +669,28 @@ to do both:
   its own shoulder a grid cell and the clearing's fade short of the
   footprint. Glacier's massif over its top straight, Avalanche's mountains round
   its last loop and Gulch's range along its descent are the worked examples.
-- **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `vground.mat` makes a
-  ground triangle rock when its flat normal (screen derivatives of the world
-  position) is steeper than the biome's slope (`groundRock`), so the edge is
-  the mesh's own and as crisp as the rock pieces' cut faces. An interpolated
+- **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `gateRock` decides
+  each ground triangle, past the biome's slope (`groundRock`), and writes it
+  into the vertex alpha exactly (0 rock, 1 not; a corner rock and snow share
+  is split in two), so `vground.mat`'s branch covers whole facets and the edge
+  is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
   weight or a noise threshold blurs it into camouflage blobs: never go back to
-  one. The vertex alpha is only the gate (`gateRock`: 0 on every corner of a
-  triangle steep enough, so the branch covers whole facets); structures,
-  berms and the flat sheet keep 1 and skip it. Strata stack on the square
+  one. Structures, berms and the flat sheet keep 1 and skip the branch.
+  SNOW ROCK IS MASSED: a 9 u facet just past the slope, alone on a dome, read
+  as a painted stripe, and one snow facet left in a face as a white tooth, so
+  there a facet is rock only as part of a mass (a core whose neighbours are
+  all past the slope, its rim and notches up to a gentler fill slope, a facet
+  ringed by rock), and the verge band is never rock (its rows run with the
+  road, so a mass on it is a stripe along the mountainside). A 9 u facet is
+  too big to be a crag at kerb range: a snow massif keeps the face toward the
+  road a snow slope and wears its crags as geometry draped on its crest
+  (set_prototypes.py `crag`; Glacier's and Avalanche's crags). Strata stack on the square
   root of height over the plain, so a tall face shows a few thick bands, not a
   contour map, and their edges are filtered by the pixel's height span (no
   shimmer in a 4P cell). Snow rock is one grey, unbanded. The beach has none.
-  No pass and no tap; the derivatives sit outside the branch because a
-  derivative in a branch a quad splits is undefined.
+  No pass and no tap; the derivatives (the facet's shading normal) sit
+  outside the branch because a derivative in a branch a quad splits is
+  undefined.
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
   glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the

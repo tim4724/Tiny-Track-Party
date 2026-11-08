@@ -29,19 +29,19 @@
 // straight through.
 //
 // ROCK WHERE THE LAND IS STEEP, decided per FACET, so its edge is the mesh's
-// own and as crisp as the rock set pieces' cut faces: a ground triangle whose
-// flat normal (the world position's screen derivatives) has a y under rockB.a
-// is rock, the rest keeps the canvas. Never an interpolated weight or a
-// noise: either blurs the edge into blobs. The ground's vertex alpha is 0 on
-// every corner of a triangle steep enough to be rock (TtpRenderer::gateRock,
-// with slack) and 1 elsewhere, and the structures and berms keep 1, so most
-// fragments skip the branch. Rock is strata of rockA and rockB, each topped
+// own and as crisp as the rock set pieces' cut faces: the ground's vertex
+// alpha is 0 on every corner of a rock triangle and 1 on every other, exactly
+// (TtpRenderer::gateRock decides, and splits a corner rock and snow share),
+// so the branch covers whole facets. Never an interpolated weight or a
+// noise: either blurs the edge into blobs. The structures and berms keep 1,
+// so most fragments skip the branch. Rock is strata of rockA and rockB, each topped
 // by a bench of rockL rockL.a of a stratum thick, stacked by height over the
 // plain (strata.w) on a square root, so a low face shows a few bands and a
 // tall one a few thick ones rather than a contour map, bent by a broad sine
 // lattice (strata.y u of it) and filtered over the pixel's height span so no
 // band edge shimmers in a small cell; a biome with strata.x 0 has none, only
-// rockA. Each facet is shaded by its own normal (facet: the sun times
+// rockA. Each facet is shaded by its own flat normal (the world position's
+// screen derivatives; facet: the sun times
 // a gain, and an offset), so a rock face reads cut, not smooth. World XZ is
 // uv0 times the canvas tile (rockA.a, kGroundTile), world Y rides suv.w.
 material {
@@ -86,7 +86,7 @@ material {
         { type : mat4, name : shadowFromWorld, precision : high },
         // The rock (above): display-encoded colours (float4 on purpose: a
         // float3 parameter read wrong on the box's Vulkan; rockA.a carries
-        // the canvas tile, rockB.a the slope), its banding and its facets.
+        // the canvas tile, rockB.a is spare), its banding and its facets.
         { type : float4, name : rockA },
         { type : float4, name : rockB },
         { type : float4, name : rockL },
@@ -123,28 +123,26 @@ fragment {
         if (tint.a < 0.5) {
             highp vec3 fn = normalize(cross(dpx, dpy));
             fn = fn.y < 0.0 ? -fn : fn;
-            if (fn.y < materialParams.rockB.a) {
-                vec3 rc = materialParams.rockA.rgb;
-                if (materialParams.strata.x > 0.0) {
-                    // Two crossed sines of ~30 u bend the strata.
-                    float n1 = sin(wp.x * 0.21 + wp.z * 0.17) + sin(wp.z * 0.23 - wp.x * 0.19);
-                    highp float h = max(wp.y - materialParams.strata.w + materialParams.strata.y * n1, 0.0) + 1.0;
-                    highp float t = materialParams.strata.x * sqrt(h);
-                    // Two strata (A then B, each under its bench) per 2 of t,
-                    // unevenly thick, every edge filtered over the pixel's
-                    // height span (dx/dh is strata.x / (4 sqrt h), with room
-                    // for the unevenness).
-                    highp float x = fract(0.5 * (t + 0.12 * sin(3.7 * t)));
-                    float k = sqrt(h) / max(0.4 * materialParams.strata.x * (abs(dpx.y) + abs(dpy.y)), 1e-4);
-                    float w = materialParams.rockL.a;
-                    rc = mix(materialParams.rockL.rgb, rc, clamp(x * k + 0.5, 0.0, 1.0));
-                    rc = mix(rc, materialParams.rockL.rgb, clamp((x - 0.5 + w) * k + 0.5, 0.0, 1.0));
-                    rc = mix(rc, materialParams.rockB.rgb, clamp((x - 0.5) * k + 0.5, 0.0, 1.0));
-                    rc = mix(rc, materialParams.rockL.rgb, clamp((x - 1.0 + w) * k + 0.5, 0.0, 1.0));
-                    rc = mix(rc, materialParams.rockA.rgb, clamp((x - 1.0) * k + 0.5, 0.0, 1.0));
-                }
-                base = rc * (dot(fn, materialParams.facet.xyz) + materialParams.facet.w);
+            vec3 rc = materialParams.rockA.rgb;
+            if (materialParams.strata.x > 0.0) {
+                // Two crossed sines of ~30 u bend the strata.
+                float n1 = sin(wp.x * 0.21 + wp.z * 0.17) + sin(wp.z * 0.23 - wp.x * 0.19);
+                highp float h = max(wp.y - materialParams.strata.w + materialParams.strata.y * n1, 0.0) + 1.0;
+                highp float t = materialParams.strata.x * sqrt(h);
+                // Two strata (A then B, each under its bench) per 2 of t,
+                // unevenly thick, every edge filtered over the pixel's
+                // height span (dx/dh is strata.x / (4 sqrt h), with room
+                // for the unevenness).
+                highp float x = fract(0.5 * (t + 0.12 * sin(3.7 * t)));
+                float k = sqrt(h) / max(0.4 * materialParams.strata.x * (abs(dpx.y) + abs(dpy.y)), 1e-4);
+                float w = materialParams.rockL.a;
+                rc = mix(materialParams.rockL.rgb, rc, clamp(x * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockL.rgb, clamp((x - 0.5 + w) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockB.rgb, clamp((x - 0.5) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockL.rgb, clamp((x - 1.0 + w) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockA.rgb, clamp((x - 1.0) * k + 0.5, 0.0, 1.0));
             }
+            base = rc * (dot(fn, materialParams.facet.xyz) + materialParams.facet.w);
         }
         // The light terms arrive scaled by (1 - fog) and the fog's own term
         // rides the spare components (the vertex block), so the composite is

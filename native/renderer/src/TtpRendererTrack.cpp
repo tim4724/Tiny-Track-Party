@@ -1147,6 +1147,18 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
 // a skier would take (Powder's dome stands near 45 degrees and stays white),
 // a lawn only a cliff. The beach has none: its land sinks to the plain short
 // of the sea, so no dune of it is a cliff, and rock on one reads as a canyon.
+//
+// Snow rock comes in MASSES (`massed`): a 9 u facet just past the slope, alone
+// on a snow dome, read as a painted stripe, and one snow facet left in a rock
+// face as a white tooth. So a snow facet is rock only where it belongs to a
+// mass: past the slope with every neighbour past it too (a core), or beside a
+// core and steeper than the fill slope (the mass's rim and the notches in
+// it); and a facet whose every neighbour is rock is rock. A lone sheer facet
+// stays snow too: grey, it stood out of the slope as a tooth. The verge band
+// is never rock: its rows run with the road, so a mass on it had the road's
+// straight edges and read as a stripe along the mountainside, and a sheer
+// facet alone as a spike. A cut at the kerb is a set piece's (Avalanche's
+// galleries).
 namespace {
 struct GroundRock {
     uint32_t a, b, l;
@@ -1154,11 +1166,12 @@ struct GroundRock {
     float perRoot;   // strata per square root of a unit over the plain (0: none, rock is `a`)
     float wobble;    // how far (u) the broad lattice bends them
     float ledge;     // the bench's share of a stratum
+    bool massed;     // rock only in masses (above), else every facet past the slope
 };
 const GroundRock* groundRock(uint32_t groundKind) {
-    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f };      // past 52 degrees
-    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.95f, 1.0f, 0.3f, 0.12f };  // past 18 degrees
-    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f };     // past 46 degrees
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, false };      // past 52 degrees
+    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.95f, 1.0f, 0.3f, 0.12f, false };  // past 18 degrees
+    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f, true };      // past 46 degrees
     switch (groundKind) {
         case 0: return &lawn;
         case 2: return &redrock;
@@ -1166,25 +1179,94 @@ const GroundRock* groundRock(uint32_t groundKind) {
         default: return nullptr;
     }
 }
+// A massed rock's rim takes a facet beside a core to this slope (36 degrees).
+constexpr float kRockFillUpY = 0.81f;
 }  // namespace
 
-// The rock's gate (vground.mat): alpha 0 on every corner of a triangle steep
-// enough to be rock, so the branch covers the whole facet and the shader's own
-// per-facet test draws the edge. The slack keeps a facet the GPU's derivatives
-// put just under the slope inside the gate.
-void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
+// The rock (vground.mat), decided per TRIANGLE here: alpha 0 on a rock
+// facet's corners, 1 on the rest, exact, so the shader's branch covers whole
+// facets and the edge is the mesh's own. A corner shared by rock and snow is
+// split in two (the copy carries the rock's alpha), so no facet's alpha is
+// interpolated across it.
+void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind, size_t bandTri) {
     const GroundRock* r = groundRock(groundKind);
     if (!r) return;
-    for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
-        const auto p = [&](size_t k) { const Vertex& v = m.verts[m.idx[i + k]]; return float3{ v.px, v.py, v.pz }; };
+    const size_t T = m.idx.size() / 3;
+    std::vector<float> up(T, 1.0f);
+    for (size_t t = 0; t < T; t++) {
+        const auto p = [&](size_t k) { const Vertex& v = m.verts[m.idx[t * 3 + k]]; return float3{ v.px, v.py, v.pz }; };
         const float3 n = cross(p(1) - p(0), p(2) - p(0));
         const float len = length(n);
-        if (!(len > 1e-9f) || std::abs(n.y) / len >= r->upY + 0.03f) continue;
-        for (size_t k = 0; k < 3; k++) m.verts[m.idx[i + k]].abgr &= 0x00ffffffu;
+        if (len > 1e-9f) up[t] = std::abs(n.y) / len;
+    }
+    std::vector<uint8_t> rock(T);
+    for (size_t t = 0; t < T; t++) rock[t] = up[t] < r->upY;
+    if (r->massed) {
+        // The grid's facets; the band's are never rock. Each facet's
+        // neighbours across its edges (-1: the mesh's border).
+        const size_t G = std::min(T, bandTri);
+        std::fill(rock.begin() + (ptrdiff_t) G, rock.end(), 0);
+        std::vector<std::pair<uint64_t, uint32_t>> edges;
+        edges.reserve(G * 3);
+        for (size_t t = 0; t < G; t++) {
+            for (size_t k = 0; k < 3; k++) {
+                const uint64_t a = m.idx[t * 3 + k], b = m.idx[t * 3 + (k + 1) % 3];
+                edges.push_back({ std::min(a, b) << 32 | std::max(a, b), (uint32_t) t });
+            }
+        }
+        std::sort(edges.begin(), edges.end());
+        std::vector<std::array<int32_t, 3>> nb(G, { -1, -1, -1 });
+        std::vector<uint8_t> nn(G, 0);
+        for (size_t i = 0; i + 1 < edges.size(); i++) {
+            if (edges[i].first != edges[i + 1].first) continue;
+            const uint32_t s = edges[i].second, u = edges[i + 1].second;
+            if (nn[s] < 3) nb[s][nn[s]++] = (int32_t) u;
+            if (nn[u] < 3) nb[u][nn[u]++] = (int32_t) s;
+            i++;
+        }
+        // Every neighbour rock (the border counts as rock).
+        const auto ringed = [&](const std::vector<uint8_t>& v, size_t t) {
+            for (const int32_t q : nb[t]) if (q >= 0 && !v[(size_t) q]) return false;
+            return true;
+        };
+        std::vector<uint8_t> core(G);
+        for (size_t t = 0; t < G; t++) core[t] = rock[t] && ringed(rock, t);
+        std::vector<uint8_t> massed(G);
+        for (size_t t = 0; t < G; t++) {
+            bool rim = false;
+            for (const int32_t q : nb[t]) rim |= q >= 0 && core[(size_t) q];
+            massed[t] = core[t] || (rim && up[t] < kRockFillUpY);
+        }
+        for (size_t t = 0; t < G; t++) rock[t] = massed[t] || ringed(massed, t);
+    }
+    // The corners: 1 = a snow facet's, 2 = a rock facet's, 3 = both (split).
+    std::vector<uint8_t> use(m.verts.size(), 0);
+    for (size_t t = 0; t < T; t++) {
+        for (size_t k = 0; k < 3; k++) use[m.idx[t * 3 + k]] |= rock[t] ? 2 : 1;
+    }
+    std::vector<uint32_t> copy(m.verts.size(), UINT32_MAX);
+    for (size_t t = 0; t < T; t++) {
+        if (!rock[t]) continue;
+        for (size_t k = 0; k < 3; k++) {
+            uint32_t& q = m.idx[t * 3 + k];
+            if (use[q] == 2) {
+                m.verts[q].abgr &= 0x00ffffffu;
+            } else {
+                if (copy[q] == UINT32_MAX) {
+                    copy[q] = (uint32_t) m.verts.size();
+                    Vertex v = m.verts[q];
+                    v.abgr &= 0x00ffffffu;
+                    m.verts.push_back(v);
+                    m.uvs.push_back(m.uvs[q]);
+                    m.normals.push_back(m.normals[q]);
+                }
+                q = copy[q];
+            }
+        }
     }
 }
 
-// The rock's colours, slope, banding over the plain at `groundY`, and the
+// The rock's colours, its banding over the plain at `groundY`, and the
 // shading of each facet by its own normal (a gain on the sun's term about a
 // steep face's, so a face reads cut against its neighbours).
 void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float groundY) const {
@@ -1196,7 +1278,7 @@ void TtpRenderer::setRockParams(MaterialInstance* mi, uint32_t groundKind, float
     };
     constexpr float kFacetGain = 0.6f, kFacetMid = 0.7f;
     mi->setParameter("rockA", c(r->a, kGroundTile));
-    mi->setParameter("rockB", c(r->b, r->upY));
+    mi->setParameter("rockB", c(r->b, 0.0f));
     mi->setParameter("rockL", c(r->l, r->ledge));
     mi->setParameter("strata", float4{ r->perRoot, r->wobble, 0.0f, groundY });
     mi->setParameter("facet", float4{ kToSun * kFacetGain, 1.0f - kFacetGain * kFacetMid });
@@ -2767,7 +2849,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 }
                 for (const uint32_t q : mBandIdx) mGround.idx.push_back(base + q);
             }
-            gateRock(mGround, tb.groundKind);
+            gateRock(mGround, tb.groundKind, (size_t) rows * cols * 2);
             const auto flatQuad = flatSheet;
             flatQuad(-G, -G, mTerrainX0, G);            // west strip
             flatQuad(mTerrainX1, -G, G, G);             // east strip
