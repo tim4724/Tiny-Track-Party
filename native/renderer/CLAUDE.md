@@ -512,7 +512,7 @@ track lies near it except on its crossings' ramps and its hills
 it. LOW road sits IN the land: the field stands `kVergeDrop` under the deck's
 top beside it, and the VERGE BAND (below) lays the land up to the kerb's foot,
 so only the kerb stands over the ground. Only RAISED road, a crossing or a
-ramp's upper half, shows stilts (`kRaiseDrop`), the toy-track read. It is
+ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read. It is
 renderer-only: the sim never reads it, and pillars, berms and the gantry still
 stand on `groundY` with their feet buried.
 
@@ -527,9 +527,13 @@ rows out from the kerb's outer foot on rings a few units apart, fine enough
 to do both:
 
 - **The apron.** On low road the band stands just under the deck's top from
-  under the kerb out a little past it, then eases down to the land. Road
-  climbing past `kVergeLow` over the plain rises out of it (fill 0 keeps the
-  grid's ground, so a ramp keeps its stilts and what lies under it); road the
+  under the kerb out a little past it, then eases down to the land; its
+  first row, inside the kerb, stands a hair over the deck's top, so no
+  sliver of the slab shows at the kerb's foot. Road climbing past
+  `kVergeLow` over the plain rises out of it (fill 0 keeps the grid's
+  ground, so a ramp keeps its stilts and what lies under it), and so does
+  road on its own pillars however low (a hop over the beach shows every
+  pier, not a sand wedge swallowing them); road the
   land itself stands beside keeps it however high it runs (a cut). A short
   rise in the deck (a jump's lip, a crest hump) stands out of the land: the
   apron follows the deck's top less what it rises over the chord either side.
@@ -923,8 +927,13 @@ build time, never frame time. And everything seeded after them keeps out of
 their oriented footprints (`mSetFeet`): they are authored, so they win their
 ground. The scatters keep out of the grass berms the same way (`inBerm`), since
 they ground a piece on the terrain beneath one; the verge band starts at the
-berm's foot, and a prop is grounded under its model's own footprint and
-dropped, never sunk, where its uphill edge would bury a quarter of its height.
+berm's foot. **What the scatters stand reads the ground at its own foot**,
+since the band's apron is a slope through the very strip they dress: a prop
+under its model's own footprint, lying tilted on the slope if it is squat (a
+bale on a bank) and standing plumb if tall, dropped, never sunk, where its
+uphill edge would still bury a quarter of its height; a tree at the lowest
+point under its trunk; each part of the clutter (a flower, a pebble, a rod
+of driftwood) under itself, not its spot's centre.
 **Each scatter SPOT draws from its own seeded stream** (`spotSeed`): with one
 stream for the pass, a spot a piece's foot skipped shifted the draws of every
 spot after it, so moving one set piece re-rolled every tree further round the

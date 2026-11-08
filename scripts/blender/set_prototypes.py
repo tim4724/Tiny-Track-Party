@@ -6127,7 +6127,9 @@ def rimrock_spires():
                CRAG_LOW, ((13.4, 0xa96545), (16.6, 0xd68f62), (18.8, 0xa96545), (20.0, 0x8a4a32)),
                seed=1.9, n=15, step=0.0)
     join_still('rock')
-    crag_rubble(((14.0, -3.0, 1.2), (-12.5, -9.0, 1.0), (10.0, 13.0, 1.1)))
+    # none on the road's side: there the verge buries the talus, and a block
+    # on it read as a box jutting from the cliff's foot
+    crag_rubble(((14.0, -3.0, 1.2), (10.0, 13.0, 1.1)))
 
 @piece(1.0)
 def filling_station():
