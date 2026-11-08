@@ -5741,25 +5741,32 @@ def ranch():
     cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
     join_still('ranch')
 
-def hoodoo(x, z, h, k, yaw=0.0):
-    """A hoodoo: a spire of soft banded rock under a hard dark cap, wider at
-    the foot, `h` tall and `k` across, its tiers turned a little each."""
-    tiers = ((0.0, 0.4, 1.0, 0xc47a52), (0.4, 0.3, 0.74, 0xd68f62), (0.7, 0.2, 0.52, 0xe3cfa4))
-    for i, (y0, f, w, col) in enumerate(tiers):
-        box((w * k, f * h, w * k * 0.9), (x, (y0 + f / 2) * h, z), col, yaw=yaw + 0.25 * i)
-    box((0.95 * k, 0.1 * h, 0.85 * k), (x, 0.95 * h, z), 0x8a4a32, yaw=yaw + 0.4)   # the cap
+@piece(1.0)
+def crag_saguaros():
+    # Crag: a stand of saguaros by the start straight, three of them and an
+    # ocotillo among brush and barrel cacti, green against the plain and the
+    # sky (the stand that stood here before the rim came to the verge read as
+    # the start's landmark). They drape, so they stand on the ground as drawn.
+    def stand():
+        saguaro((0.0, 0, 0.0), 4.6, arms=((0.3, 0.36, 0.42), (3.5, 0.48, 0.36), (1.9, 0.6, 0.26)))
+        saguaro((1.3, 0, -1.6), 3.3, arms=((2.2, 0.45, 0.36),))
+        saguaro((-1.2, 0, 2.0), 2.6, arms=((4.6, 0.5, 0.34),))
+        ocotillo((1.6, 0, 1.4), 1.8, seed=2)
+        brush((-1.4, 0, -1.1), 0.9)
+        brush((2.4, 0, 0.3), 0.7, yaw=1.1)
+        barrel_cactus((0.6, 0, 2.6), 1.1)
+        barrel_cactus((-0.4, 0, -2.4), 0.9)
+    draped('cacti', stand)
 
 @piece(1.0)
+@plain
 def hoodoos():
-    # Crag: a field of hoodoos, spires of banded red rock under dark caps
-    # (natural and big: two to six units tall), with tumbled blocks between.
-    for i, (x, z, h, k) in enumerate(((0.0, 0.0, 5.6, 1.6), (2.6, 2.0, 3.8, 1.2), (-2.2, 2.8, 4.6, 1.4),
-                                      (1.8, -2.6, 3.2, 1.1), (4.4, -0.6, 2.2, 0.9), (-4.0, 0.2, 3.4, 1.2),
-                                      (-1.4, -3.6, 2.4, 1.0))):
-        hoodoo(x, z, h, k, yaw=0.7 * i)
-    for i, (x, z, s) in enumerate(((1.4, 0.6, 0.6), (-2.8, -1.4, 0.5))):
-        box((s * 1.4, s * 0.8, s), (x, s * 0.4, z), 0xa96545, yaw=0.9 * i)
-    join_still('hoodoos')
+    # Crag: hoodoos, three spires of the buttes' own rock (five to nine units
+    # tall, one colour each) on one apron of their talus: the stacked blocks
+    # they were read as toy totems beside the buttes.
+    crag_butte(((0.0, 0.0, 9.0, 2.6, 2.2, 0.3, 0.0, 0.5), (3.6, 2.4, 6.5, 2.4, 2.0, -0.4, 0.0, 0.5),
+                (-3.0, 2.8, 5.0, 2.2, 1.9, 0.9, 0.0, 0.5)), 1.2, 3.5, 12.0, 4.4, jag=0.12)
+    crag_rubble(((-5.5, -3.5, 0.5),))
 
 # The canyons' mountainsides: the rock a canyon road is cut through, rising
 # from its verge as a mountain does, not as a wall. Terrain cannot rise at the
@@ -6271,22 +6278,32 @@ def mountain_tunnel():
             box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
     draped('scree', scree)
 
-# Crag's buttes: the canyon's level strata (strata_massif) over a butte's
+# Crag's rock: the canyon's level strata (strata_massif) over a butte's
 # height, its tables left flat (no summit drawn up to a point): rock standing
 # in the talus it sheds, every stratum on an outline of its own, so the cliff
-# steps and weathers in and out as it climbs instead of standing as a drum.
+# weathers in and out as it climbs instead of standing as a drum.
 def butte_height(tiers, talus, reach, seed, jag):
     """M(x, z) for strata_massif: each of `tiers` (x, z, top, rx, rz, yaw,
     len, taper) a table `top` high on a capsule `len` along its own z, its
     cliff falling from its rim (rx, rz) and leaning back `taper` of that as
-    it climbs, the rim cut into alcoves and buttresses by a few waves round
-    it and roughened by `jag` of it over the plane (so each stratum's outline
+    it climbs. The rim is cut into alcoves and buttresses by a few waves
+    round it, its long sides into gullies and the buttresses between them
+    about every 4.5 u (a long side left straight stood as one flat wall), and
+    it is roughened by `jag` of it over the plane (so each stratum's outline
     is its own, not the one below grown or shrunk); under them the talus,
     `talus` high at the rims, falling concave to nothing `reach` past them.
     The plane is bent by long waves first, so no outline is an oval."""
     def rim(a, k):
         return 1.0 + (0.07 * math.sin(3 * a + 1.3 * k + seed) + 0.05 * math.sin(5 * a + 2.1 * k + 1.7 * seed)
                       + 0.04 * math.sin(9 * a + 0.7 * k + 2.9 * seed) + 0.025 * math.sin(14 * a + k + 0.3 * seed))
+    def gullies(k, lz, side, span):
+        n = max(2, int(span / 4.5))
+        v = 0.0
+        for i in range(n):
+            z0 = -span / 2 + span * (i + 0.5 + 0.3 * hash1(i, k, seed + side)) / n
+            w = 0.9 + 0.4 * abs(hash1(i, k, seed + 2.3 * side))
+            v += 0.22 * hash1(i, 3.0 * k + side, seed + 1.7) * math.exp(-((lz - z0) / w) ** 2)
+        return v
     def M(x, z):
         x, z = (x + 1.6 * (math.sin(0.23 * z + 0.4 + seed) + 0.5 * math.sin(0.51 * z + 2.2)),
                 z + 1.6 * (math.sin(0.21 * x + 1.1 + seed) + 0.5 * math.sin(0.47 * x + 0.8)))
@@ -6297,8 +6314,14 @@ def butte_height(tiers, talus, reach, seed, jag):
             c, s = math.cos(yaw), math.sin(yaw)
             lx, lz = (x - cx) * c - (z - cz) * s, (x - cx) * s + (z - cz) * c
             ez = math.copysign(max(0.0, abs(lz) - ln / 2), lz)
-            t = math.hypot(lx / rx, ez / rz) / rim(math.atan2(ez / rz, lx / rx), k) + n
-            past = min(past, (t - 1.0) * math.sqrt(rx * rz))
+            west = max(0.0, min(1.0, 0.5 + lx / rx))                   # which side's gullies, blended over the tip
+            cut = west * gullies(k, lz, 1, ln + 2 * rz) + (1 - west) * gullies(k, lz, -1, ln + 2 * rz)
+            shape = math.hypot(lx / rx, ez / rz) / rim(math.atan2(ez / rz, lx / rx), k)
+            t = shape * (1.0 + cut) + n
+            # the talus off the smooth outline: off the rough one, its contours
+            # broke into islands that strata_massif's slope inset folded
+            # inside out, a dark shard on a hump
+            past = min(past, (shape - 1.0) * math.sqrt(rx * rz))
             v = top * min(1.0, max(0.0, (1.0 - t) / taper)) ** 0.8
             q = max(0.0, 3.0 - abs(v - m)) / 3.0                      # a smooth max: a fillet where tiers meet
             m = max(m, v) + 0.6 * q * q * min(1.0, min(m, v) / 3.0) if min(m, v) > 0.0 else max(m, v)
@@ -6306,29 +6329,39 @@ def butte_height(tiers, talus, reach, seed, jag):
         return max(m, fall) - 0.5
     return M
 
-# Crag's strata, foot up: the soft beds as talus slopes banded in their
-# colours, lying back as the slope does; then the one hard sandstone standing
-# as a sheer cliff of a single colour (its beds step back a little each, but
-# a cliff striped bed by bed read as a stack of drums), the dark caprock on it.
-CRAG_TALUS = ((-0.6, 1.6, 0xd68f62, -0.9), (1.6, 3.4, 0xc47a52, -0.9), (3.4, 5.0, 0xd68f62, -0.8),
-              (5.0, 6.4, 0xb4714d, -0.6))
-CRAG_CLIFF, CRAG_CAP = 0xa96545, 0x8a4a32
+# Crag's strata, foot up: the talus one colour, near the sand's, lying back as
+# the slope does (banded, its stripes read as the walls the user rejected);
+# then the one hard sandstone standing as a cliff, each bed stepping back
+# most of the way to the next (a full ledge on every bed left a pale sliver,
+# sparkling down the face; a slope's lean, which strata_massif lets reach 3 u,
+# folded a small tower's rings inside out), with a pale bed or two across a
+# broad table's cliff (a tower
+# stays one colour: striped bed by bed it read as a stack of drums), and the
+# caprock on the highest tier.
+CRAG_TALUS, CRAG_CLIFF, CRAG_PALE = 0xd68f62, 0xa96545, 0xd68f62
 
-def crag_butte(tiers, talus, reach, extent, seed, jag=0.07):
-    """A butte of Crag's strata over butte_height, on [-extent, extent]^2:
-    its cliff's beds about 5.5 high, each stepping back at a ledge, up to a
-    caprock a unit thick on the highest tier. (Beds half that tall left
-    ledges too thin to read: a pale sliver on every one, sparkling down
-    the face.)"""
+def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07):
+    """A butte of Crag's strata over butte_height, on [-extent, extent]^2,
+    with `pale` light beds across its cliff."""
     M = butte_height(tiers, talus, reach, seed, jag)
     top = max(t[2] for t in tiers)
-    y0, n = CRAG_TALUS[-1][1], max(1, round((top - 1.0 - CRAG_TALUS[-1][1]) / 5.5))
-    dy = (top - 1.0 - y0) / n
-    bands = list(CRAG_TALUS) + [(y0 + dy * i, y0 + dy * (i + 1), CRAG_CLIFF, 0.3) for i in range(n)]
-    bands.append((top - 1.0, top, CRAG_CAP, 0.08))
+    k = talus / 5.0
+    c0 = 6.4 * k
+    bands = [(-0.6, 1.6 * k, CRAG_TALUS, -0.9), (1.6 * k, 3.4 * k, CRAG_TALUS, -0.9),
+             (3.4 * k, 5.0 * k, CRAG_TALUS, -0.8), (5.0 * k, c0, CRAG_TALUS, -0.6)]
+    cap = min(1.0, 0.12 * top)
+    c1 = top - cap
+    light = [c0 + (c1 - c0) * (i + 1) / (pale + 1) for i in range(pale)]
+    cuts = sorted(set([c0, c1] + [y for l in light for y in (l - 0.6, l + 0.6)]))
+    for y0, y1 in zip(cuts, cuts[1:]):
+        dark = not any(l - 0.6 <= y0 < l + 0.6 for l in light)
+        n = max(1, round((y1 - y0) / 3.0))
+        for i in range(n):
+            bands.append((y0 + (y1 - y0) * i / n, y0 + (y1 - y0) * (i + 1) / n, CRAG_CLIFF if dark else CRAG_PALE, 1.0))
+    bands.append((c1, top, CRAG_CLIFF, 0.08))
     strata_massif(M, -extent, extent, -extent, extent, bands, step=2.2, tol=0.3, jitter=0.35, summits=False)
-    # blocks fallen off the cliff lying on the talus, each dropped onto the
-    # strata as built (a band's slope lies a little under M)
+    # stones fallen off the cliff lying on the talus, in its colour (dark
+    # ones read as holes), each dropped onto the strata as built
     import random
     from mathutils.bvhtree import BVHTree
     bpy.context.view_layer.update()
@@ -6341,53 +6374,60 @@ def crag_butte(tiers, talus, reach, extent, seed, jag=0.07):
     with plain_parts():
         n = 0
         for _ in range(4000):
-            if n >= int(extent * 1.2):
+            if n >= int(extent * 0.8):
                 break
             x, z = rnd.uniform(-extent, extent), rnd.uniform(-extent, extent)
-            if not 0.8 < M(x, z) < CRAG_TALUS[-1][1] - 0.6:
+            if not 0.6 < M(x, z) < c0 - 0.6:
                 continue
-            q = rnd.uniform(0.35, 0.9)
+            q = rnd.uniform(0.35, 0.8)
             ys = [ground(x + dx, z + dz) for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
             if None in ys or max(ys) - min(ys) > 0.5 * q:
                 continue                                        # astride a step: it would hang
-            box((q * 1.5, q * 0.8, q * 1.1), (x, min(ys) + 0.2 * q, z), CRAG_CLIFF, yaw=rnd.uniform(0, 3.1),
+            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) + 0.15 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
                 roll=rnd.uniform(-0.15, 0.15), pitch=rnd.uniform(-0.1, 0.1))
             n += 1
 
 def crag_rubble(spots):
-    """Blocks fallen past the talus, lying on the plain: they drape, so the
-    piece stands from the plain and levels no clearing."""
+    """Low stones past the talus, lying on the plain in its colour: they
+    drape, so the piece stands from the plain and levels no clearing."""
     def rubble():
         for i, (x, z, s) in enumerate(spots):
-            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+            box((s * 1.5, s * 0.5, s * 1.2), (x, s * 0.15, z), CRAG_TALUS, yaw=0.8 * i)
     draped('rubble', rubble)
 
 @piece(1.0)
 @plain
 def rimrock_mesa():
-    # Crag: the mesa between the north-east loop and the S, fifty-odd units
-    # long: a table of the strata eighteen units to its caprock, a higher
-    # table on its south end (-z) and a low shoulder off its east side (-X),
-    # standing in the talus it sheds, so the loop rounds its north end and
-    # the S its west side (+X). Rock, so big as rock is.
-    crag_butte(((0.0, 0.0, 18.0, 11.0, 11.0, 0.0, 34.0, 0.2), (1.0, -13.0, 24.0, 8.0, 9.0, 0.1, 8.0, 0.2),
-                (-4.0, 10.0, 9.0, 13.0, 12.0, -0.1, 16.0, 0.25)), 5.0, 9.0, 46.0, 2.7)
-    crag_rubble(((-24.0, -30.0, 1.2), (-27.0, 22.0, 1.3)))          # on the east side, off both roads
+    # Crag: the mesa between the north-east loop and the S: a table of the
+    # strata thirteen units to its caprock behind a bench seven high on its
+    # west side (+X, where the loop runs along it), a higher table set back
+    # east of it, and south, past a gap of sky, a butte that broke away and a
+    # fin beyond that, all standing in the talus they shed, so the loop
+    # rounds the table and the S passes the butte's west side. Low enough
+    # that its caprock stays in a racer's picture as the road runs at it,
+    # never one long face: a single table half again as long, a sheer side
+    # broadside to the bridge, read as a wall, and one sheer face by the loop
+    # as a band across the top of a 4P cell.
+    crag_butte(((0.5, 13.0, 7.0, 9.0, 9.5, 0.25, 10.0, 0.25), (-5.0, 13.0, 13.0, 6.5, 7.5, 0.25, 8.0, 0.2),
+                (-7.0, 15.0, 16.0, 3.5, 4.0, 0.4, 2.0, 0.2),
+                (12.5, -24.0, 14.0, 6.0, 6.5, -0.3, 3.0, 0.22), (1.0, -39.0, 11.0, 2.8, 2.4, 0.0, 1.5, 0.45)),
+               4.0, 8.0, 46.0, 2.7, pale=1)
+    crag_rubble(((-16.0, -32.0, 0.8), (-22.0, 26.0, 0.9)))           # on the east side, off both roads
     # a hawk riding the air off the north end, where the loop rounds it
     hawk_circle((2.0, 27.0), 9.0, 6.0, 17.0)
 
 @piece(1.0)
 @plain
 def rimrock_butte():
-    # Crag: a butte of the land's own rock, a table thirty-odd units long and
-    # twenty-two to its caprock over a lower tier of its strata, the bench
-    # between them wide on one side and gone on the other, standing in the
-    # talus it sheds (rock in slopes, not a mound of sand). Rock, so big as
-    # rock is: a hill's size. Its long side faces +X.
-    crag_butte(((0.0, 1.0, 22.0, 9.0, 12.0, 0.15, 10.0, 0.2), (2.0, -2.0, 11.0, 13.0, 15.0, -0.1, 14.0, 0.2)),
-               5.0, 9.0, 40.0, 0.4)
-    # none on the road's side: a block by the kerb read as a crate
-    crag_rubble(((-31.0, 2.5, 1.2), (-6.0, -33.0, 1.3), (-14.0, 30.0, 1.1)))
+    # Crag: a butte of the land's own rock, a table fifteen units to its
+    # caprock set back behind a bench of its strata on the road's side (+X),
+    # and off its south end, past a gap of sky, a smaller butte that broke
+    # away, both standing in the talus they shed. Rock, so big as rock is:
+    # a hill's size, but no taller than a racer's picture holds as the
+    # bridge runs at it (at twenty-two its cap left the frame).
+    crag_butte(((-2.0, 4.0, 15.0, 8.0, 9.0, 0.15, 8.0, 0.2), (2.0, 0.0, 8.0, 12.0, 12.5, -0.1, 10.0, 0.25),
+                (3.0, -26.0, 12.0, 5.0, 5.0, 0.2, 2.0, 0.25)), 4.0, 8.0, 42.0, 0.4, pale=1)
+    crag_rubble(((-31.0, 2.5, 0.8), (-12.0, 30.0, 0.8)))              # behind it, never by a kerb
 
 @piece(1.0)
 @plain
@@ -6398,8 +6438,7 @@ def rimrock_spires():
     # one model.
     crag_butte(((-2.5, -3.0, 24.0, 5.6, 3.4, 0.3, 2.5, 0.45), (6.0, 4.5, 17.0, 4.6, 3.0, -0.6, 2.0, 0.4),
                 (1.5, 0.5, 6.0, 9.5, 7.0, 0.6, 6.0, 0.3)), 3.5, 7.0, 26.0, 1.9, jag=0.12)
-    # out at the ends, never by a kerb: there a block read as a crate
-    crag_rubble(((2.0, -21.0, 1.2), (-3.0, 20.0, 1.1)))
+    crag_rubble(((2.0, -21.0, 0.8), (-3.0, 20.0, 0.8)))               # out at the ends, never by a kerb
 
 @piece(1.0)
 @plain
@@ -6410,7 +6449,7 @@ def rimrock_mitten():
     # as one model.
     crag_butte(((-3.0, 0.0, 21.0, 5.5, 4.0, 0.2, 5.0, 0.35), (5.5, 3.0, 18.0, 2.8, 2.6, 0.0, 0.0, 0.5),
                 (0.5, 1.0, 5.5, 10.0, 7.5, 0.3, 6.0, 0.3)), 3.5, 7.0, 26.0, 3.3, jag=0.12)
-    crag_rubble(((1.0, -21.0, 1.1), (-2.0, 21.0, 1.2)))
+    crag_rubble(((1.0, -21.0, 0.8), (-2.0, 21.0, 0.8)))
 
 @piece(1.0)
 def filling_station():
