@@ -613,8 +613,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, x: -3, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 },
       // the massif over the top straight's outside, its face rising from
-      // the verge (near) into rock and snow twenty units up
-      { kind: 'ridge', u: 0.185, lat: -30, len: 60, r: 26, h: 22, top: 0.25, near: 2.5 }
+      // the verge (near) into rock and snow twenty units up; it runs back
+      // past the bend and ends in its round shoulder a good way short of the
+      // fort, whose clearing and capped cells would slice it off (z)
+      { kind: 'ridge', u: 0.185, lat: -30, z: -35, len: 60, r: 26, h: 22, top: 0.25, near: 2.5 }
     ]
   },
   avalanche: {
@@ -650,7 +652,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.7091, lat: 67.4, x: 0.6, z: -1.5, r: 62, h: 28, top: 0.1, near: 3.8 },
       { kind: 'ridge', u: 0.8349, lat: 52.1, yaw: 3, len: 20, r: 62, h: 28, top: 0.1, near: 3.8 },
       { kind: 'ridge', u: 0.8371, lat: 64.0, r: 20, h: 10, near: 3.8 },
-      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 }
+      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 },
+      // no rock cluster on the open snow the run to the loop looks over: it
+      // stood alone on the plain like a dropped asset
+      { kind: 'clear', u: 0.605, lat: -10, r: 1 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,

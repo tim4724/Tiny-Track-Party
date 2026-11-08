@@ -653,7 +653,11 @@ to do both:
   cannot stand in the middle of a loop ringed by road: the cap holds the
   grid there, the band holds it off every footprint nearby and splits it
   between the strands around, so a loop's middle gets a piece's face, not
-  land. Glacier's massif over its top straight, Avalanche's mountains round
+  land. Nor may a massif run on under a piece that levels a clearing: the
+  clearing cuts it and `capFootprint` caps every grid triangle the
+  footprint touches, which slices the flank off in a sheer face; end it in
+  its own shoulder a grid cell and the clearing's fade short of the
+  footprint. Glacier's massif over its top straight, Avalanche's mountains round
   its last loop and Gulch's range along its descent are the worked examples.
 - **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `vground.mat` makes a
   ground triangle rock when its flat normal (screen derivatives of the world
