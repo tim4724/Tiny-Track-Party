@@ -307,10 +307,13 @@ class DisplayHost(
             // this box (shells/androidtv/CLAUDE.md, under "The frame budget on
             // this GPU"), or what `debug.ttp.detail` asks for (PerfDebug).
             // Before the first build, which meshes it; on the CREATE branch,
-            // since a recreated surface is a new display.
+            // since a recreated surface is a new display. Logged once per
+            // display with the ask beside it, so a box's log says which world
+            // it drew.
+            val detailAsk = PerfDebug.getprop("debug.ttp.detail")
             val tier = TtpJson.str(Ttp.ttp_display_detail(TtpJson.arg(PartyNet.CP_PLATFORM),
-                TtpJson.arg(PerfDebug.getprop("debug.ttp.detail"))))
-            Log.i(TAG, "detail tier $tier")
+                TtpJson.arg(detailAsk)))
+            Log.i(TAG, "detail tier $tier (debug.ttp.detail ${detailAsk ?: "unset"})")
             // The overscan margin the per-cell HUD is placed inside. Android has
             // nothing to ask — a TV does not tell an app what it crops — so this
             // is the authored margin, taken from the token the web's CSS

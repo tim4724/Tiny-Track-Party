@@ -30,8 +30,10 @@ npm run check:artifact            # Is the checked-in wasm current?
 npm run check:blob-cache          # Do blobs kept between RUNS survive the round
                                   # trip? No suite can see that (tests/CLAUDE.md)
 npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|3|4] [--track id]
-                                  # THE BENCH: one live race, autopiloted players at the
-                                  # back of a full grid, one readout shape on all three
+                   [--detail lite|full]   # THE BENCH: one live race, autopiloted players at
+                                  # the back of a full grid, one readout shape on all three;
+                                  # --detail overrides the platform's tier, and the header
+                                  # names the tier the engine drew
 npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap, in
                                   # each detail tier (full: web + Apple TV, lite: Android
                                   # TV), against tests/fixtures/scene-budget.json. Run it

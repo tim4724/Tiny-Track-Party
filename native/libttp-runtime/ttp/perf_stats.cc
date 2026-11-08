@@ -237,6 +237,7 @@ std::string readoutJson(const Readout& r, const Dims& d) {
   v.set("budgetMs", Value::Num(r.budgetMs));
   v.set("cells", Value::Num(d.cells));
   v.set("cpu", statVal(r.cpu));
+  v.set("detail", d.detail.empty() ? Value::Null() : Value::Str(d.detail));
   v.set("dpr", Value::Num(d.dpr));
   v.set("drops", Value::Num(r.drops));
   v.set("fps", Value::Num(r.fps));

@@ -19,7 +19,7 @@
 //                                           of race has gone by and ENDS it
 //                                           when the run is over (opts.seconds)
 //   stop()                                  tear the run down; always awaited
-//   opts: { players, track, seconds, dpr }
+//   opts: { players, track, seconds, dpr, detail }
 //
 // Everything below THE LINE is platform-free: it picks the `TtpPerf ` lines out
 // of the stream, parses one canonical readout per line, folds them and prints.
@@ -57,6 +57,11 @@ const SEED = parseInt(arg('seed', '1'), 10);
 // adaptive render scale off, so a run measures one resolution instead of
 // wandering between two while the controller hunts.
 const DPR = parseFloat(arg('dpr', '1'));
+// The detail tier to draw (ttp/detail.h): `lite` or `full`, or absent for the
+// platform's own pick (lite on the Android TV box, full elsewhere). Each
+// backend hands it to its shell the way that shell reads an ask; the header
+// prints the tier the ENGINE says it drew, off the readout itself.
+const DETAIL = arg('detail', null);
 
 // How long a race runs before its lines COUNT, on every platform. The grid is
 // eight cars packed at close range and the render scale has not settled, so the
@@ -127,7 +132,7 @@ function makeWebBackend() {
   let timer = null;
 
   return {
-    async launch({ players, track, seconds, dpr }) {
+    async launch({ players, track, seconds, dpr, detail }) {
       // Both imported dynamically so the two TV backends need neither at module
       // load (capture.mjs statically imports playwright). The seam provides the
       // SERVER half only — allocated port, dead-child-fatal spawn; the browser
@@ -154,7 +159,7 @@ function makeWebBackend() {
       page.on('pageerror', (e) => console.error('  [page]', e.message));
 
       const url = `http://127.0.0.1:${server.port}/?test=1&scenario=bench&players=${players}`
-          + `&track=${track}&seed=${SEED}&dpr=${dpr}`;
+          + `&track=${track}&seed=${SEED}&dpr=${dpr}${detail ? `&detail=${detail}` : ''}`;
       console.log(`# ${url}`);
       await page.goto(url);
       // The scenario publishes the session it is racing; waiting on the scene
@@ -213,7 +218,14 @@ function report(rows) {
   const n = (v, d) => (v == null ? '   —  ' : v.toFixed(d));
   console.log(`\n# ${PLATFORM} · ${last.track || TRACK} · ${PLAYERS} player`
       + `${PLAYERS === 1 ? '' : 's'} · ${last.width}×${last.height} @ dpr ${last.dpr}`
-      + ` · ${last.cells} cell${last.cells === 1 ? '' : 's'} · ${rows.length} readouts`);
+      + ` · ${last.cells} cell${last.cells === 1 ? '' : 's'} · ${last.detail ?? '?'} detail`
+      + ` · ${rows.length} readouts`);
+  // The ENGINE's word for the tier, never the flag's: an install that predates
+  // the field, or a shell that dropped the ask, says so here.
+  if (!last.detail) console.log('# the readout names no detail tier: the engine predates it');
+  else if (DETAIL && last.detail !== DETAIL) {
+    console.log(`# ASKED FOR ${DETAIL}, THE ENGINE DREW ${last.detail}: this run prices the other world`);
+  }
   if (!of(rows, (r) => r.gpu && r.gpu.p50).length) {
     console.log('# no GPU timer on this platform: cost is the CPU and the cadence only');
   }
@@ -299,10 +311,16 @@ async function main() {
     console.error(`unknown --platform ${PLATFORM} (have: ${Object.keys(BACKENDS).join(', ')})`);
     process.exit(2);
   }
+  if (DETAIL !== null && DETAIL !== 'lite' && DETAIL !== 'full') {
+    console.error(`--detail ${DETAIL}: lite or full (absent = the platform's)`);
+    process.exit(2);
+  }
   const backend = make();
   const rows = [];
   try {
-    const lines = await backend.launch({ players: PLAYERS, track: TRACK, seconds: SECONDS, dpr: DPR });
+    const lines = await backend.launch({
+      players: PLAYERS, track: TRACK, seconds: SECONDS, dpr: DPR, detail: DETAIL
+    });
     for await (const line of lines) {
       const r = readoutOf(line);
       if (r) rows.push(r);

@@ -1014,7 +1014,9 @@ Priced at the box's 4P buffer on the heavy tracks, lite's worst frame has
 about 30% fewer draws and 6-13% fewer vertices than full's; most of the rest
 of the vertices are the road, the cars and the ground, which it does not touch. It
 changes no sim, so `film:laps -- --detail lite` films the same race frame for
-frame beside full, and `score:verge -- --detail lite` scores it.
+frame beside full, and `score:verge -- --detail lite` scores it. `perf:race --
+--detail lite|full` prices either tier on any of the three shells; the
+readout's `detail` is the tier the display was handed, read in C++.
 
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one

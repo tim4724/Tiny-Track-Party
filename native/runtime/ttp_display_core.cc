@@ -869,7 +869,10 @@ void ttp_display_antialias(int on) {
 
 const char* ttp_display_detail(const char* platform, const char* ask) {
     const ttp::rt::Detail d = ttp::rt::detail_for(platform, ask);
-    if (g_disp && g_disp->renderer) g_disp->renderer->setLite(d == ttp::rt::Detail::Lite);
+    if (g_disp && g_disp->renderer) {
+        g_disp->renderer->setLite(d == ttp::rt::Detail::Lite);
+        ttp::rt::detail_in_force() = d;
+    }
     return ttp::rt::detail_name(d);
 }
 

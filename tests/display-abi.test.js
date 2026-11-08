@@ -87,6 +87,11 @@ test('the detail tier: lite on the Android TV, full elsewhere, an ask over both'
   assert.equal(detail('androidtv', 'full'), 'full');
   assert.equal(detail('androidtv', 'bogus'), 'lite', 'an unknown ask leaves the platform\'s tier');
   assert.equal(detail(null, null), 'full');
+  // The readout states the tier a DISPLAY was handed, so a decision taken with
+  // none up leaves it at a fresh renderer's full.
+  const readout = M.cwrap('ttp_perf_readout_json', 'string',
+    ['number', 'number', 'number', 'number', 'string']);
+  assert.equal(JSON.parse(readout(1, 960, 540, 1, null)).detail, 'full');
 });
 
 test('the cell-overlay setters are a safe no-op with no display', async () => {
