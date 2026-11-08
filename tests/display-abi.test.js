@@ -269,8 +269,7 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
   const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps, ...placed]);
-  // A drawn model's lite build is drawn in its place in the lite tier
-  // (native/renderer/CLAUDE.md, "The detail tier").
+  // A lite build (<m>-lite.glb) is what the lite tier draws in m's place.
   for (const m of [...drawnBy]) drawnBy.add(`${m}-lite`);
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
