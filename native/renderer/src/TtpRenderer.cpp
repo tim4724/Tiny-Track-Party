@@ -1107,14 +1107,20 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
                 { (float) p.contactUp.x, (float) p.contactUp.y, (float) p.contactUp.z } });
     }
 
+    // A berm's top stands under the slab, not up its side: the road on a hill
+    // is raised road and shows its whole edge. Tucked HILL_TUCK under the
+    // deck's top, the berm left a sliver of the slab's side over it, which
+    // from across the map broke into a dotted line crawling along the crest.
     out.berms.clear();
     out.berms.reserve(geo.hills.size());
+    const float underSlab = (float) ttp::HILL_TUCK - kDeckDepth - kBermGap, gy = (float) geo.groundY;
     for (const std::vector<ttp::HillRing>& run : geo.hills) {
         std::vector<TrackBin::BermRing> rings;
         rings.reserve(run.size());
         for (const ttp::HillRing& r : run) {
-            rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz,
-                              (float) r.halfW, (float) r.topL, (float) r.topR, bermFlare(r, geo) });
+            rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz, (float) r.halfW,
+                              std::max(gy, (float) r.topL + underSlab), std::max(gy, (float) r.topR + underSlab),
+                              bermFlare(r, geo) });
         }
         out.berms.push_back(std::move(rings));
     }
@@ -1420,8 +1426,15 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
-        const TrackBin* drapeOn, float foot) {
+        const TrackBin* drapeOn, float foot, const float2* wallAt) {
     const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+    // How many points of the way from a wall's vertex to its foot are read,
+    // and how far along the wall (each way, kWallAlong apart) its lift may
+    // dip: a wall rides the lowest land along that much of its own length,
+    // so a short rise under its crest never pulls a summit up into a spike.
+    constexpr int kWallSteps = 4, kWallAlongSteps = 1;
+    constexpr float kWallAlong = 2.0f;
+    const float3 along = normalize(float3{ xf[2].x, 0.0f, xf[2].z });
     for (size_t p = 0; p < prims.size(); p++) {
         const ttp::rt::GlbMeshPrim& sp = prims[p];
         const uint8_t* rgb = colors.prims[p].rgb;
@@ -1430,7 +1443,23 @@ void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         for (size_t i = 0; i < nv; i++) {
             float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
                     sp.pos[i * 3 + 2], 1.0f }).xyz;
-            if (drapeOn) pw.y += groundSurfaceY(*drapeOn, pw.x, pw.z) - foot;
+            if (drapeOn) {
+                float lift = groundSurfaceY(*drapeOn, pw.x, pw.z) - foot;
+                if (wallAt) {
+                    float low = lift;
+                    for (int k = 1; k <= kWallSteps; k++) {
+                        const float t = (float) k / kWallSteps;
+                        low = std::min(low, groundSurfaceY(*drapeOn, pw.x + (wallAt->x - pw.x) * t,
+                                                           pw.z + (wallAt->y - pw.z) * t) - foot);
+                    }
+                    for (int k = -kWallAlongSteps; k <= kWallAlongSteps; k++) {
+                        const float3 q = pw + along * ((float) k * kWallAlong);
+                        lift = std::min(lift, groundSurfaceY(*drapeOn, q.x, q.z) - foot);
+                    }
+                    lift = std::min(lift, low + std::max(0.0f, pw.y - foot));
+                }
+                pw.y += lift;
+            }
             const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
                     sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
             const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),

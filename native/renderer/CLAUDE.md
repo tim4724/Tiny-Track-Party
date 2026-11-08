@@ -512,9 +512,12 @@ track lies near it except on its crossings' ramps and its hills
 it. LOW road sits IN the land: the field stands `kVergeDrop` under the deck's
 top beside it, and the VERGE BAND (below) lays the land up to the kerb's foot,
 so only the kerb stands over the ground. Only RAISED road, a crossing or a
-ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read. It is
-renderer-only: the sim never reads it, and pillars, berms and the gantry still
-stand on `groundY` with their feet buried.
+ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read,
+and road on a hill shows its whole slab edge over its berm: the berm's top
+stands under the slab (`kBermGap`), never up its side, since a sliver of the
+side over the land breaks into a dotted line crawling along the crest from
+across the map. It is renderer-only: the sim never reads it, and pillars,
+berms and the gantry still stand on `groundY` with their feet buried.
 
 THE GROUND IS TWO SURFACES IN ONE MESH: the 9 u grid, and the verge band laid
 over it along the road (`buildVergeBand`, `TtpRenderer.h` has its numbers). The
@@ -543,7 +546,9 @@ to do both:
   `near`: the band follows the road, not every swell the grid smoothed away,
   so the land the set pieces were placed and scored against stays put. It
   hands over to the grid at its end (light, normal and colour terms too) and
-  dives under it there. Where the grid cannot draw what stands at the usual
+  dives under it there, from its own last standing corners, never up to the
+  grid's height a row out: at a massif's foot that chord runs over the
+  grid's concave foot as a pale sliver standing out of the slope. Where the grid cannot draw what stands at the usual
   end (a `near` flank the cap pulls down) it runs on to its last row, eased
   along the road. Every band vertex is paid in every cell that sees it, so
   it ends at the first row past the apron from which on it would only copy
@@ -613,6 +618,12 @@ to do both:
   with one stands on the plain and levels nothing (`mSetDrapes`): its other
   parts are built from the plain up (a post sunk through whatever land it
   meets). Only the baked path drapes; a model the bake refuses stands flat.
+  A `drape_wall` part (a canyon length) drapes as a wall: each vertex rides
+  the lowest land along a few units of the wall's own length, and at most
+  its own height over the lowest land between it and the placement's spot
+  (the face's foot). A summit stays a summit over a short rise in the land,
+  and a tail over a massif's flank sinks into it instead of standing on it
+  as a needle.
 - **A `floor…` PART IS A PRINT ON THE FLOOR** (a play mat): it joins
   `mStructures`, the static receiver, instead of the dressing merge, so the
   deck's baked shadow falls on it (`appendFloorPart`), and `spotIssue` lets a
@@ -653,10 +664,10 @@ to do both:
   past it, built over the plain against the ground drawn there (Avalanche's
   galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
   length) with `near` set past its BACK: the drape rides the drawn ground,
-  so a flank rising under the face stretches it (under the crest into
-  spikes, under the back into a slab that stands out of the ramp's foot as
-  pale needles from across the map); past it, the face stands whole and its
-  back sinks into the land at the massif's foot (Gulch). A shoulder low
+  so a flank rising under the face lifts it (a wall's drape keeps that from
+  stretching it into needles, above, but a back over the ramp's foot still
+  stands out of it as a slab); past it, the face stands whole and its back
+  sinks into the land at the massif's foot (Gulch). A shoulder low
   enough to need no face may be its own face instead: a `near` of a couple
   of units brings its flank to the verge (Gulch's crest). `near`
   counts from EVERY strand: where a massif's flank reaches toward another
@@ -951,7 +962,9 @@ berm's foot. **What the scatters stand reads the ground at its own foot**,
 since the band's apron is a slope through the very strip they dress: a prop
 under its model's own footprint, lying tilted on the slope if it is squat (a
 bale on a bank) and standing plumb if tall, dropped, never sunk, where its
-uphill edge would still bury a quarter of its height; a tree at the lowest
+uphill edge would still bury a quarter of its height; a boulder at the
+lowest point under it, dropped where the land climbs more than its own height
+across it (half-sunk in a flank it read as a lump); a tree at the lowest
 point under its trunk; each part of the clutter (a flower, a pebble, a rod
 of driftwood) under itself, not its spot's centre.
 **Each scatter SPOT draws from its own seeded stream** (`spotSeed`): with one

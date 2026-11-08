@@ -910,11 +910,14 @@ export const TRACKS = {
       // and its back sinks into the land at the massif's foot; a flank
       // rising under a back stretched it into needles), all on the outside
       // of the crest and the descent; round the crest's left-hander a low
-      // shoulder rising off the verge itself, so the range steps back from
-      // the road. Mesas and peaks behind them, the skyline from the seat,
+      // shoulder rising off the verge itself and stepping up to a second,
+      // higher summit set back (two forms, so its flank turns instead of
+      // standing as one plane), so the range steps back from the road.
+      // Mesas and peaks behind them, the skyline from the seat,
       // each a ridge with a crest (`len`, `top`): a round form with a low
       // top reads as a cone.
-      { kind: 'ridge', u: 0.4294, lat: 20.83, yaw: 179.7, len: 29, r: 12, h: 11, top: 0.5, near: 2 },
+      { kind: 'ridge', u: 0.4194, lat: 20.5, yaw: 172, len: 17, r: 12, h: 11, top: 0.5, near: 2 },
+      { kind: 'ridge', u: 0.4414, lat: 23.5, yaw: -168, len: 15, r: 13, h: 14.5, top: 0.45, near: 2 },
       { kind: 'ridge', u: 0.8345, lat: 37.85, yaw: -127.34, len: 32, r: 22, h: 30, h1: 38, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.8828, lat: 31.9, yaw: -2.48, len: 36, r: 34, h: 36, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.9292, lat: 28.37, yaw: -35, len: 20, r: 30, h: 38, top: 0.3, near: 16 },

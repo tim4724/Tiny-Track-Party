@@ -1072,6 +1072,21 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         }
     }
     if (mBandIdx.empty()) return;
+    // A face diving under the grid dives from its own standing corners, never
+    // from the grid's height at its far corner: at a massif's foot the grid
+    // climbs a row out, and a skirt laid up to it ran its chord over the
+    // grid's concave foot as a pale sliver standing out of the slope.
+    for (size_t t = 0; t + 2 < mBandIdx.size(); t += 3) {
+        float low = 1e30f;
+        for (size_t k = 0; k < 3; k++) {
+            if (live[mBandIdx[t + k]]) low = std::min(low, P[mBandIdx[t + k]].y);
+        }
+        if (low > 1e29f) continue;
+        for (size_t k = 0; k < 3; k++) {
+            float3& p = P[mBandIdx[t + k]];
+            if (!live[mBandIdx[t + k]]) p.y = std::min(p.y, low - kBandTuck);
+        }
+    }
     // Compact to the vertices the quads use.
     // The grid's own light, normal and colour terms where the band hands over
     // to it, so the two meet without a seam (buildStatic's normal, the mesh's
