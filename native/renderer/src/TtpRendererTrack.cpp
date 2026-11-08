@@ -1143,10 +1143,13 @@ float3 TtpRenderer::groundTint(uint32_t groundKind, float dell, float bed, float
 // colours are the rock set pieces' own (set_prototypes.py): the canyon's brown
 // and salmon cliffs on tan benches, the snow cut's grey (one grey, no bands:
 // its faces are cut, not layered). A ground facet is rock where its normal's
-// y is under `upY`: the badlands break to rock soonest, snow keeps every slope
-// a skier would take (Powder's dome stands near 45 degrees and stays white),
-// a lawn only a cliff. The beach has none: its land sinks to the plain short
-// of the sea, so no dune of it is a cliff, and rock on one reads as a canyon.
+// y is under `upY`: the badlands break to rock soonest, but only on a cliff
+// (gateRock's `rise`): a dune, a spoil heap or a road's bank keeps its sand,
+// since banded rock on one paints a striped dome, so strata show on mesas
+// and the massifs' faces; snow keeps every slope a skier would take
+// (Powder's dome stands near 45 degrees and stays white), a lawn only a
+// cliff. The beach has none: its land sinks to the plain short of the sea,
+// so no dune of it is a cliff, and rock on one reads as a canyon.
 namespace {
 struct GroundRock {
     uint32_t a, b, l;
@@ -1154,11 +1157,12 @@ struct GroundRock {
     float perRoot;   // strata per square root of a unit over the plain (0: none, rock is `a`)
     float wobble;    // how far (u) the broad lattice bends them
     float ledge;     // the bench's share of a stratum
+    float rise;      // how far (u) a run of steep facets must climb to be rock (0: any)
 };
 const GroundRock* groundRock(uint32_t groundKind) {
-    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f };      // past 52 degrees
-    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.95f, 1.0f, 0.3f, 0.12f };  // past 18 degrees
-    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f };     // past 46 degrees
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 0.0f };      // past 52 degrees
+    static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.866f, 1.0f, 0.3f, 0.12f, 10.0f }; // past 30 degrees
+    static const GroundRock snow{ 0x868ba1u, 0x868ba1u, 0x868ba1u, 0.69f, 0.0f, 0.0f, 0.0f, 0.0f };     // past 46 degrees
     switch (groundKind) {
         case 0: return &lawn;
         case 2: return &redrock;
@@ -1171,15 +1175,42 @@ const GroundRock* groundRock(uint32_t groundKind) {
 // The rock's gate (vground.mat): alpha 0 on every corner of a triangle steep
 // enough to be rock, so the branch covers the whole facet and the shader's own
 // per-facet test draws the edge. The slack keeps a facet the GPU's derivatives
-// put just under the slope inside the gate.
+// put just under the slope inside the gate. Where the biome asks a `rise`,
+// only a CLIFF is rock: the steep facets joined through their corners must
+// climb that far between them, so a spoil heap's flank, a dune's steep lee or
+// a lone steep facet keeps its sand while a massif's face is rock to its foot.
+// Joined through corners, a run left out shares no corner with one let in, so
+// no gated corner can leak rock into a steep facet left out.
 void TtpRenderer::gateRock(Mesh& m, uint32_t groundKind) {
     const GroundRock* r = groundRock(groundKind);
     if (!r) return;
+    std::vector<uint32_t> run(m.verts.size());
+    std::iota(run.begin(), run.end(), 0u);
+    const auto root = [&](uint32_t v) {
+        while (run[v] != v) v = run[v] = run[run[v]];
+        return v;
+    };
+    std::vector<size_t> steep;
     for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
         const auto p = [&](size_t k) { const Vertex& v = m.verts[m.idx[i + k]]; return float3{ v.px, v.py, v.pz }; };
         const float3 n = cross(p(1) - p(0), p(2) - p(0));
         const float len = length(n);
         if (!(len > 1e-9f) || std::abs(n.y) / len >= r->upY + 0.03f) continue;
+        steep.push_back(i);
+        run[root(m.idx[i + 1])] = root(m.idx[i]);
+        run[root(m.idx[i + 2])] = root(m.idx[i]);
+    }
+    std::vector<float2> span(m.verts.size(), float2{ 1e30f, -1e30f });
+    for (const size_t i : steep) {
+        for (size_t k = 0; k < 3; k++) {
+            float2& s = span[root(m.idx[i + k])];
+            const float y = m.verts[m.idx[i + k]].py;
+            s = { std::min(s.x, y), std::max(s.y, y) };
+        }
+    }
+    for (const size_t i : steep) {
+        const float2 s = span[root(m.idx[i])];
+        if (s.y - s.x < r->rise) continue;
         for (size_t k = 0; k < 3; k++) m.verts[m.idx[i + k]].abgr &= 0x00ffffffu;
     }
 }

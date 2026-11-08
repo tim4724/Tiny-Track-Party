@@ -651,9 +651,13 @@ to do both:
   kerb either stands in front of the flank's ramp and tucks under the land
   past it, built over the plain against the ground drawn there (Avalanche's
   galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
-  length) with `near` set past its crest: the drape rides the drawn ground,
-  so a flank rising under the crest stretches it into spikes; past it, the
-  face stands whole and its back slopes up into the massif (Gulch). `near`
+  length) with `near` set past its BACK: the drape rides the drawn ground,
+  so a flank rising under the face stretches it (under the crest into
+  spikes, under the back into a slab that stands out of the ramp's foot as
+  pale needles from across the map); past it, the face stands whole and its
+  back sinks into the land at the massif's foot (Gulch). A shoulder low
+  enough to need no face may be its own face instead: a `near` of a couple
+  of units brings its flank to the verge (Gulch's crest). `near`
   counts from EVERY strand: where a massif's flank reaches toward another
   strand it is cut a ramp's width into a cliff that far off that kerb, and a
   face whose back lies within that reach has no land to sink into, so its
@@ -675,7 +679,15 @@ to do both:
   weight or a noise threshold blurs it into camouflage blobs: never go back to
   one. The vertex alpha is only the gate (`gateRock`: 0 on every corner of a
   triangle steep enough, so the branch covers whole facets); structures,
-  berms and the flat sheet keep 1 and skip it. Strata stack on the square
+  berms and the flat sheet keep 1 and skip it. Only a CLIFF is rock where the
+  biome asks a `rise` (the badlands): steep facets joined through their
+  corners must climb that far between them, so a spoil heap, a dune's lee,
+  a road's bank or one lone steep facet keeps its sand (banded rock on one
+  paints a striped dome) while a massif's face is rock to its foot. Joined
+  through corners, a run left out shares no corner with a gated one, so no
+  alpha leaks rock into it. The band's skirt (a face diving under the grid)
+  is a short run on low land, so its sliver no longer pokes through the
+  grid as a crawling dotted line of rock. Strata stack on the square
   root of height over the plain, so a tall face shows a few thick bands, not a
   contour map, and their edges are filtered by the pixel's height span (no
   shimmer in a 4P cell). Snow rock is one grey, unbanded. The beach has none.
