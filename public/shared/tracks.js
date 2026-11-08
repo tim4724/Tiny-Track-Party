@@ -1231,26 +1231,29 @@ export const TRACKS = {
     // in the lap's heart, in the loop the road makes inside it, so the race
     // circles its walls on four sides and the ramp climbs past its gate to
     // thread the ring. Across the ramp lie the red besiegers' camp of
-    // pavilions, their trebuchet just thrown at the castle and a siege
-    // tower rolling up on it; a blue rank of the castle's knights holds the
-    // gap between it and the grid straight. Off the plunge the road runs
-    // through the castle's barbican, its covered outer passage of blocks,
-    // and down past the besiegers' guns aimed across it at the castle. On
-    // the long home straight the siege goes on: a red rank and a siege
-    // tower inside it, a blue rank with their cannon outside, the castle's
-    // outer gatehouse astride the road and its dragon on guard where the
-    // straight points.
+    // pavilions and their trebuchet just thrown at the castle, a siege
+    // tower rolling up where the grid straight points; a blue rank of the
+    // castle's knights holds the gap between the castle and the grid
+    // straight. The castle's watchtower stands over the bridge out of the
+    // plunge, then the road runs through its barbican, a covered passage
+    // of blocks, and down past the besiegers' guns aimed across it at the
+    // castle and their tents. On the long home straight the siege goes on:
+    // a red rank and a siege tower inside it, two blue ranks with their
+    // cannon outside, the castle's outer gatehouse astride the road and
+    // its dragon on guard where the straight points.
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
       { model: 'set-castle-gate', u: 0.85, lat: 0 },
+      { model: 'set-toy-soldiers', u: 0.875, lat: 7 },
+      { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
       { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
-      { model: 'set-block-fortress', u: 0.4186, lat: -14.88 },
+      { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
       { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
-      { model: 'set-siege-tower', u: 0.1953, lat: -5.94, yaw: -90 },
+      { model: 'set-siege-tower', u: 0.0777, lat: 11, yaw: 35 },
       { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 }
     ]
   },
@@ -1288,18 +1291,21 @@ export const TRACKS = {
     // straight across their kerbs and a park in the middle. Across the
     // road from each, more of the town: the west side's street under the
     // skyway with its building site and crane by the south-bound leg, a
-    // street of houses and a clock tower outside the grid straight, the
-    // shops and the fire station outside the south edge, and past the top
-    // straight the old town, a crane turning on its building site. Towers
-    // a child stacked to the skyway's height stand outside its U and
-    // outside the corner the south-bound leg turns.
+    // street of houses and a clock tower outside the grid straight,
+    // another with the water tower outside the south-bound leg, the shops
+    // and the fire station outside the south edge, and past the top
+    // straight the old town, a crane turning on its building site. The
+    // town's tallest blocks stand beside the skyway where it turns for the
+    // U, their roofs at its deck, and towers a child stacked stand outside
+    // the corner the south-bound leg turns.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
       { model: 'set-block-street', u: 0.018, lat: 0 },
       { model: 'set-block-westside', u: 0.2282, lat: -8.56, yaw: -180 },
       { model: 'set-block-high-street', u: 0.8655, lat: -9.63, yaw: 180 },
-      { model: 'set-block-towers', u: 0.5, lat: -7.5, yaw: 180 },
+      { model: 'set-block-uptown', u: 0.4534, lat: -6.64 },
+      { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 }
     ]
   }
