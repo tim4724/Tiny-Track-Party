@@ -640,7 +640,7 @@ to do both:
   `kNearRamp`), where every other form clears the road's corridor. The band
   draws it at its own resolution from the verge out, so a massif tens of
   units high and as wide as the scene can rise straight off the kerb zone,
-  and the slope rock (below) dresses its face, except a snow one's (below).
+  and the slope rock (below) dresses its face, but on snow (below).
   Author it round the OUTSIDE of a bend or along a straight: on a bend's
   inside it walls the road ahead off.
   A set piece's mound withholds every other form under it, but JOINS a
@@ -675,7 +675,7 @@ to do both:
   its last loop and Gulch's range along its descent are the worked examples.
 - **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `gateRock` decides
   each ground triangle, past the biome's slope (`groundRock`), and writes it
-  into the vertex alpha exactly (0 rock, 1 not; a corner rock and snow share
+  into the vertex alpha exactly (0 rock, 1 not; a corner a rock facet shares
   is split in two), so `vground.mat`'s branch covers whole facets and the edge
   is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
   weight or a noise threshold blurs it into camouflage blobs: never go back to
@@ -687,18 +687,17 @@ to do both:
   rock to its foot. The band's skirt (a face diving under the grid) is a
   short run on low land, so its sliver never pokes through the grid as a
   crawling dotted line of rock.
-  SNOW ROCK IS MASSED: a 9 u facet just past the slope, alone on a dome, read
-  as a painted stripe, and one snow facet left in a face as a white tooth, so
-  there a facet is rock only as part of a mass (a core whose neighbours are
-  all past the slope, its rim and notches up to a gentler fill slope, a facet
-  ringed by rock), and the verge band is never rock (its rows run with the
-  road, so a mass on it is a stripe along the mountainside). A 9 u facet is
-  too big to be a crag at kerb range: a snow massif keeps the face toward the
-  road a snow slope and wears its crags as geometry draped on its crest
-  (set_prototypes.py `crag`; Glacier's and Avalanche's crags). Strata stack on the square
-  root of height over the plain, so a tall face shows a few thick bands, not a
-  contour map, and their edges are filtered by the pixel's height span (no
-  shimmer in a 4P cell). Snow rock is one grey, unbanded. The beach has none.
+  SNOW HAS NO GROUND ROCK: a 9 u facet is too big to be a crag at any range.
+  Alone it read as a painted stripe, in a small mass as a grey panel on the
+  slope (Flurry's peaks), and a whole face of them as a stage flat. A snow
+  massif is snow and wears its rock as geometry: crags draped on its crest
+  and ribs down the spurs of its face (set_prototypes.py `crag`, Glacier's
+  and Avalanche's crags), the galleries' cut faces. Nor does the snow canvas
+  band: it maps world XZ, so on a steep face its bands stood as pleats down
+  the slope. Strata stack on the square root of height over the plain, so a
+  tall face shows a few thick bands, not a contour map, and their edges are
+  filtered by the pixel's height span (no shimmer in a 4P cell). The beach
+  has none either.
   No pass and no tap; the derivatives (the facet's shading normal) sit
   outside the branch because a derivative in a branch a quad splits is
   undefined.
