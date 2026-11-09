@@ -970,9 +970,9 @@ export const TRACKS = {
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-spring-cascade', u: 0.7335, lat: -8.8, yaw: 180, scale: 1.5 },
-      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180, scale: 0.65 },
-      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10, scale: 0.65 }
+      { model: 'set-spring-cascade', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
+      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180 },
+      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 }
     ],
     // the north lawn's hump the stream bends round, and the pond under the
     // first bridge's west span; the stream's hill along the north loop's top

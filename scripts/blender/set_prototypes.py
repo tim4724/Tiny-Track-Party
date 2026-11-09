@@ -5890,53 +5890,84 @@ def kite_flyers():
         kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=9)
 
 # ---- TANGLE: the spring the stream rises from --------------------------------------
-# The stream's source, at the foot of the hill beyond the north loop's top
-# straight (tracks.js `land`): the spring rising in a cleft among dark wet
-# boulders and falling in one broad white sheet over their lip into a pool,
-# a heron standing in it; from there it goes under the top straight (a
-# culvert each side) and on as the stream. Low on the hill's toe, so it is
-# one outcrop and not a stair of blocks up the slope, and dark round the
-# white water, which pale rock on green did not show. Front (+X) to the
-# road, metres; on the left at yaw 180. It DRAPES on the hill as drawn.
+# The stream's source, cut into the steep foot of the hill beyond the north
+# loop's top straight (tracks.js `land`): three round ledges of wet slate
+# stepping up the hill, the water running over each and off the lowest in
+# one broad white sheet into a pool, a heron standing in it; from there it
+# goes under the top straight (a culvert each side) and on as the stream.
+# The ledges stand LEVEL at their own heights, their backs buried in the
+# hill, so the grass meets the rock and only the steps show: mid-dark slate,
+# as neither pale rock (lost on the green) nor black rock (a slab dropped on
+# the hill) reads. The sheet wraps the lowest ledge's round face turned
+# toward the racer coming up the road. Front (+X) to the road, metres; on
+# the left at yaw 180. The ledges are built against the ground the hill
+# draws under them at that spot (scratch probe, not a source); the pool,
+# its stones and the heron DRAPE.
 @piece(REAL)
 def spring_cascade():
-    WET, WET2, WATER, FOAM = 'dark', 'slate', 0x8ecae6, 'white'
-    TURN = math.radians(35)
+    ROCK, WATER, FOAM = 'slate', 0x8ecae6, 'white'
+    # the ledges: centre (x, z), radius, foot, top
+    LEDGES = (((-5.0, 0.0), 4.2, 0.0, 6.4), ((-9.6, 0.8), 3.4, 5.4, 10.0), ((-13.4, -0.6), 2.6, 9.0, 13.4))
+    CAP = 0.5           # each ledge's top is stepped in once, a round shoulder
+    FALLS = (35, 20, 10)  # the bearing each ledge's water goes over its lip at, degrees from +X toward +Z
+    def on(i, r, deg):
+        (cx, cz), _, _, _ = LEDGES[i]
+        a = math.radians(deg)
+        return (cx + r * math.cos(a), cz + r * math.sin(a))
+    def sheet(i, deg, n, step, y0, y1):
+        """n strips of white and blue water down ledge i's round face."""
+        R = LEDGES[i][1]
+        for k in range(n):
+            d = deg + (k - (n - 1) / 2) * step
+            w = 2 * (R + 0.3) * math.sin(math.radians(step) / 2) + 0.08
+            x, z = on(i, R + 0.3 - 0.1 * (k % 2), d)
+            box((0.6 - 0.2 * (k % 2), y1 - y0, w), (x, (y0 + y1) / 2, z), (FOAM, WATER)[k % 2], yaw=-math.radians(d))
+    def run(a, b, y, w):
+        """Water lying on a ledge's top from a to b."""
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        box((math.hypot(dx, dz), 0.24, w), ((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2), FOAM, yaw=-math.atan2(dz, dx))
+    for (cx, cz), r, y0, y1 in LEDGES:
+        o = cyl(r, y1 - y0 - CAP, (cx, y0, cz), ROCK, segs=12)
+        o['ramp'] = 0.4
+        o = cyl(r - 0.6, CAP, (cx, y1 - CAP, cz), ROCK, segs=12)
+        o['ramp'] = 0.4
+    # the water: the spring welling on the top ledge, over each lip in turn,
+    # across each ledge between
+    T = [y1 for _, _, _, y1 in LEDGES]
+    cyl(1.1, 0.3, (*on(2, 0.6, 190)[:1], T[2] - 0.1, on(2, 0.6, 190)[1]), FOAM, segs=10)
+    run(on(2, 0.6, 190), on(2, LEDGES[2][1] - 0.6, FALLS[2]), T[2] + 0.02, 1.4)
+    sheet(2, FALLS[2], 2, 20, T[1] + 0.3, T[2] + 0.2)
+    run(on(2, LEDGES[2][1] + 0.3, FALLS[2]), on(1, LEDGES[1][1] - 0.6, FALLS[1]), T[1] + 0.02, 1.8)
+    sheet(1, FALLS[1], 3, 17, T[0] + 0.3, T[1] + 0.2)
+    run(on(1, LEDGES[1][1] + 0.3, FALLS[1]), on(0, LEDGES[0][1] - 0.6, FALLS[0]), T[0] + 0.02, 2.4)
+    sheet(0, FALLS[0], 5, 15, 0.0, T[0] + 0.2)
+    join_still('ledges')
     def still():
-        # the pool at the foot, foam on it where the fall comes in, dark wet
-        # boulders round its banks
-        cyl(4.6, 0.3, (3.6, 0.0, 0.0), WATER, segs=14)
-        cyl(3.2, 0.42, (1.6, 0.0, 0.0), FOAM, segs=10)
-        for k, deg in enumerate((60, 120, 240, 300)):
+        # the pool at the foot, foam where the sheet comes in, spray, round
+        # wet stones on its banks and beside the fall, and the run down to
+        # the culvert's mouth
+        px, pz = on(0, 7.0, FALLS[0])
+        cyl(3.4, 0.3, (px, 0.0, pz), WATER, segs=14)
+        fx, fz = on(0, 5.6, FALLS[0])
+        cyl(2.4, 0.42, (fx, 0.0, fz), FOAM, segs=10)
+        for d in (-14, 0, 14):
+            sphere(1.1, (*on(0, 5.1, FALLS[0] + d)[:1], 0.4, on(0, 5.1, FALLS[0] + d)[1]), FOAM, scale=(1.0, 0.6, 1.0))
+        for k, (d, rr, r, h) in enumerate(((FALLS[0] - 50, 5.4, 1.6, 2.2), (FALLS[0] + 50, 5.4, 1.6, 2.2),
+                                           (FALLS[0] - 78, 4.8, 1.9, 2.8), (FALLS[0] + 80, 4.9, 1.8, 2.6))):
+            x, z = on(0, rr, d)
+            o = cyl(r, h, (x, -0.4, z), ROCK, segs=10)
+            o['ramp'] = 0.4
+        for k, deg in enumerate((70, 150, 230)):
             a = math.radians(deg)
-            boulder((3.6 + 4.9 * math.cos(a), 0.0, 4.9 * math.sin(a)), 1.2 + 0.2 * (k % 2), yaw=0.7 * k, color=(WET, WET2)[k % 2])
-        # the run from the pool down to the culvert's mouth, toward the road
-        box((2.6, 0.26, 2.6), (9.2, 0.13, 0.0), WATER)
-        # the outcrop: dark wet boulders banked either side of the fall, the
-        # fall one broad white sheet off the lip into the pool, spray at its
-        # foot. All of it turned TURN about the pool toward +Z, so the sheet
-        # faces down the road at the racer coming up it, not across the road.
-        c, s = math.cos(TURN), math.sin(TURN)
-        def at(x, y, z):
-            x -= 3.6
-            return (3.6 + x * c - z * s, y, x * s + z * c)
-        for k, (x, z, r) in enumerate(((-1.6, -6.0, 2.6), (-1.6, 6.0, 2.6), (-4.6, -3.4, 3.0), (-4.4, 3.6, 2.9),
-                                      (-1.0, -8.6, 1.8), (-0.8, 8.6, 1.9), (-7.0, 0.0, 3.0))):
-            boulder(at(x, 0.0, z), r, yaw=0.9 * k - TURN, color=(WET, WET2)[k % 2], squash=0.9)
-        box((3.0, 4.2, 6.4), at(-4.0, 2.1, 0.0), WET, yaw=-TURN)                   # the lip
-        for k in range(5):                                                         # the fall, in
-            z = (k - 2) * 1.24                                                     # white and blue
-            o = box((0.7 - 0.2 * (k % 2), 4.6, 1.24), at(-1.6 - 0.1 * (k % 2), 2.2, z), (FOAM, WATER)[k % 2], yaw=-TURN)
-            o.rotation_euler.y = -0.22
-        for k, (x, y, z, r) in enumerate(((0.6, 0.7, -1.8, 1.3), (0.8, 0.8, 1.7, 1.4), (1.4, 0.5, 0.0, 1.1))):
-            sphere(r, at(x, y, z), FOAM, scale=(1.0, 0.7, 1.0))                       # its spray
-        # above: the spring comes out of a cleft and runs white to the lip
-        for k in (-1, 1):
-            box((3.6, 3.4, 3.0), at(-11.0, 1.7, k * 2.6), (WET, WET2)[k > 0], yaw=0.4 * k - TURN)
-        box((1.6, 1.8, 1.6), at(-11.4, 0.9, 0.0), 0x2a2735, yaw=-TURN)
-        box((4.4, 0.34, 2.2), at(-7.4, 4.1, 0.0), FOAM, yaw=-TURN)
+            o = cyl(1.1 + 0.2 * (k % 2), 0.9, (px + 4.0 * math.cos(a), -0.3, pz + 4.0 * math.sin(a)), ROCK, segs=9)
+            o['ramp'] = 0.4
+        mx, mz = 4.4, 0.0                                       # the culvert's mouth
+        dx, dz = mx - px, mz - pz
+        L = math.hypot(dx, dz)
+        a0 = (px + dx / L * 2.8, pz + dz / L * 2.8)
+        box((L - 2.8 + 0.4, 0.26, 2.2), ((a0[0] + mx) / 2, 0.13, (a0[1] + mz) / 2), WATER, yaw=-math.atan2(dz, dx))
         # the heron, standing in the pool on its long legs, watching the water
-        HX, HZ = 5.6, 2.6
+        HX, HZ = px + 0.8, pz + 1.2
         with plain_parts():
             for s in (-1, 1):
                 box((0.12, 1.3, 0.12), (HX, 0.65, HZ + 0.18 * s), 'dark')

@@ -1230,9 +1230,9 @@ constexpr SetDef kSet_tangle[] = {
   { "set-culvert", 0x1.b245f5ad96a6ap-1, 0x1.1ae147ae147aep+2, -0x1.090a3d70a3d71p+5, 0x0p+0, 0x1p+0, 1 },
   { "set-culvert", 0x1.b9192641b328bp-1, -0x1.20f5c28f5c28fp+2, 0x1.28p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-pond-ducks", 0x1.2de00d1b71759p-3, -0x1.2dc28f5c28f5cp+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-spring-cascade", 0x1.778d4fdf3b646p-1, -0x1.199999999999ap+3, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
-  { "set-culvert", 0x1.778d4fdf3b646p-1, -0x1.1cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1.4cccccccccccdp-1, 1 },
-  { "set-culvert", 0x1.778d4fdf3b646p-1, 0x1.1cccccccccccdp+2, 0x1.4p+3, 0x0p+0, 0x1.4cccccccccccdp-1, 1 },
+  { "set-spring-cascade", 0x1.778d4fdf3b646p-1, -0x1.3333333333333p+3, 0x1.68p+7, 0x0p+0, 0x1.999999999999ap+0, 1 },
+  { "set-culvert", 0x1.778d4fdf3b646p-1, -0x1.1cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-culvert", 0x1.778d4fdf3b646p-1, 0x1.1cccccccccccdp+2, 0x1.4p+3, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_tangle[] = {
   { 0, -1, 0x1.8e3150dae3e6cp-2, -0x1.abc6a7ef9db23p+4, 0x1.24d1eb851eb85p+7, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x0p+0 },
