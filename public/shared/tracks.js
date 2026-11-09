@@ -276,6 +276,8 @@ const BOXES = {
 // piece's mound withholds every other form under it, but joins a `near` one,
 // the higher of the two: run a mountainside on round a piece's slope, clear
 // of what stands on it.
+// `lite: false` keeps a form off the lite tier (the Android TV box), like a set
+// piece's: land behind other land that the box's frame cannot carry.
 // Ground never rises through a deck (the renderer caps it under every road),
 // but a form's flank beside a bend still hides the road ahead: keep them to
 // the outsides of bends and to the open side of the lap.
@@ -1109,20 +1111,22 @@ export const TRACKS = {
       // standing as one plane), so the range steps back from the road.
       // Mesas and peaks behind them, the skyline from the seat,
       // each a ridge with a crest (`len`, `top`): a round form with a low
-      // top reads as a cone.
+      // top reads as a cone. Those (the last seven) are full-only (`lite:
+      // false`): on the Android box they were the range's cost at 1080, and
+      // the massifs at the faces still carry the range there.
       { kind: 'ridge', u: 0.4194, lat: 20.5, yaw: 172, len: 17, r: 12, h: 11, top: 0.5, near: 2 },
       { kind: 'ridge', u: 0.4414, lat: 23.5, yaw: -168, len: 15, r: 13, h: 14.5, top: 0.45, near: 2 },
       { kind: 'ridge', u: 0.8345, lat: 37.85, yaw: -127.34, len: 32, r: 22, h: 30, h1: 38, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.8828, lat: 31.9, yaw: -2.48, len: 36, r: 34, h: 36, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.9292, lat: 28.37, yaw: -35, len: 20, r: 30, h: 38, top: 0.3, near: 16 },
       { kind: 'ridge', u: 0.9542, lat: 30.88, yaw: -0.6, len: 28, r: 30, r1: 24, h: 36, h1: 24, top: 0.3, near: 16 },
-      { kind: 'ridge', u: 0.872, lat: 70.8, yaw: 12.18, len: 36, r: 30, h: 46, top: 0.42 },
-      { kind: 'ridge', u: 0.9036, lat: 72.99, yaw: -12.83, len: 20, r: 30, h: 50, top: 0.3 },
-      { kind: 'ridge', u: 0.8221, lat: 92.21, yaw: -21.59, len: 30, r: 26, h: 36, top: 0.3 },
-      { kind: 'ridge', u: 0.8452, lat: 71.26, yaw: -155.83, len: 18, r: 26, h: 46, top: 0.25 },
-      { kind: 'ridge', u: 0.9596, lat: 64.67, yaw: -9.05, len: 30, r: 26, h: 38, top: 0.45 },
-      { kind: 'ridge', u: 0.9382, lat: 70.46, yaw: 30, len: 22, r: 28, h: 46, top: 0.3 },
-      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38 }
+      { kind: 'ridge', u: 0.872, lat: 70.8, yaw: 12.18, len: 36, r: 30, h: 46, top: 0.42, lite: false },
+      { kind: 'ridge', u: 0.9036, lat: 72.99, yaw: -12.83, len: 20, r: 30, h: 50, top: 0.3, lite: false },
+      { kind: 'ridge', u: 0.8221, lat: 92.21, yaw: -21.59, len: 30, r: 26, h: 36, top: 0.3, lite: false },
+      { kind: 'ridge', u: 0.8452, lat: 71.26, yaw: -155.83, len: 18, r: 26, h: 46, top: 0.25, lite: false },
+      { kind: 'ridge', u: 0.9596, lat: 64.67, yaw: -9.05, len: 30, r: 26, h: 38, top: 0.45, lite: false },
+      { kind: 'ridge', u: 0.9382, lat: 70.46, yaw: 30, len: 22, r: 28, h: 46, top: 0.3, lite: false },
+      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false }
     ]
   },
   crag: {

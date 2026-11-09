@@ -181,7 +181,7 @@ function setInit(p) {
 // on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
 // but shape (1), a plain's or paint's fade (8) and tint (0, none).
 const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6, pond: 7, clear: 8, street: 9 };
-const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint', 'near'];
+const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint', 'near', 'lite'];
 function landInit(l, piece, where) {
   checkKeys(l, LAND_KEYS, where);
   if (!(l.kind in LAND_KINDS)) fail(`${where}: kind ${JSON.stringify(l.kind)} is not one of ${Object.keys(LAND_KINDS).join(', ')}`);
@@ -203,12 +203,14 @@ function landInit(l, piece, where) {
   if (l.top != null && !(l.top >= 0 && l.top < 1)) fail(`${where}: top must be in [0, 1)`);
   if (l.tint != null && !(Number.isInteger(l.tint) && l.tint > 0 && l.tint <= 0xffffff)) fail(`${where}: tint must be a 0xRRGGBB colour`);
   if (l.near != null && (!['ridge', 'ring'].includes(l.kind) || !(l.near > 0))) fail(`${where}: near (how close past the kerb a flank stands at full height) is a ridge's or ring's, and positive`);
+  if (l.lite != null && l.lite !== false) fail(`${where}: lite ${JSON.stringify(l.lite)}: only \`lite: false\` is meaningful`);
+  if (l.lite === false && piece >= 0) fail(`${where}: a set piece's ground follows its piece, so it cannot leave the lite tier alone`);
   const n = (v, d = 0) => D(v ?? d);
   const fades = l.kind === 'plain' || l.kind === 'paint' || l.kind === 'pond';
-  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape, tint, near.
+  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape, tint, near, lite.
   return `{ ${LAND_KINDS[l.kind]}, ${piece}, ${n(l.u)}, ${n(l.lat)}, ${n(l.yaw)}, ${n(l.x)}, ${n(l.z)}, `
     + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, fades ? 8 : 0)}, ${n(l.rz)}, `
-    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)}, 0x${(l.tint || 0).toString(16)}u, ${n(l.near)} }`;
+    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)}, 0x${(l.tint || 0).toString(16)}u, ${n(l.near)}, ${l.lite === false ? 0 : 1} }`;
 }
 for (const [model, list] of Object.entries(SET_GROUND)) {
   if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${model}.glb`))) fail(`SET_GROUND "${model}" has no GLB`);

@@ -97,6 +97,7 @@ struct LandDef {
   unsigned tint;      // 0xRRGGBB over the ground it covers; 0 = none
   double near;        // ridge / ring: how close past the kerb its flank may
                       // stand at full height; 0 = the ground's own clearance
+  int lite;           // 0: the full tier only (`lite: false`); 1: the lite tier has it too
 };
 
 struct TrackDef {

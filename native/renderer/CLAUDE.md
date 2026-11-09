@@ -1049,9 +1049,10 @@ its code:
   the model it stands in for. `scripts/bake-lite.mjs model:ratio` decimates a
   static model into one; a model with moving parts gets one authored in its
   builder.
-- **Full-only pieces**: a set entry authored `lite: false` is left out of the
-  lite tier's list altogether (not a piece that brings its own ground,
-  SET_GROUND, which the generator refuses).
+- **Full-only pieces and land**: a set entry or a `land` form authored
+  `lite: false` is left out of the lite tier's list altogether (not a piece
+  that brings its own ground, SET_GROUND, nor that ground, which the
+  generator refuses).
 
 - **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
   16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a

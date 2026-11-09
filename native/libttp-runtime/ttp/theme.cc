@@ -869,9 +869,9 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   // the shell fetches them in (ttp_theme_set_models).
   const bool lite = detail_in_force() == Detail::Lite;
   if (const TrackDef* def = trackId ? find_track_def(trackId) : nullptr) {
-    // A piece authored `lite: false` is not in the lite tier's list at all; a
-    // landform anchored on a piece (SET_GROUND) follows it to its new index,
-    // and the generator refuses `lite: false` on such a piece.
+    // A piece or a form authored `lite: false` is not in the lite tier's list
+    // at all; a landform anchored on a piece (SET_GROUND) follows it to its
+    // new index, and the generator refuses `lite: false` on such a piece.
     std::vector<int> pieceAt((size_t) def->nSet, -1);
     for (int i = 0; i < def->nSet; i++) {
       const SetDef& d = def->set[i];
@@ -885,6 +885,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     }
     for (int i = 0; i < def->nLand; i++) {
       const LandDef& d = def->land[i];
+      if (lite && !d.lite) continue;
       Landform l;
       l.kind = (uint32_t) d.kind; l.piece = d.piece < 0 ? d.piece : pieceAt[(size_t) d.piece];
       l.u = (float) d.u; l.lat = (float) d.lat; l.yaw = (float) (d.yaw * M_PI / 180.0);
