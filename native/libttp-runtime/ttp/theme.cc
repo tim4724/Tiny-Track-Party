@@ -415,7 +415,10 @@ void backyardTrack(Theme& t, const std::string& track) {
   } else if (track == "tangle") {
     // The mill's water meadows: open grass mown along the stream, so the
     // stream reads across it, fewer trees and wildflowers (the hose's lawn
-    // used to keep both off half the map). Meadow-green kerbs and gantry.
+    // used to keep both off half the map), the hay made and no tents (a
+    // tent in a mill's meadow told no story). Meadow-green kerbs and gantry.
+    t.props.models = { "prop-hay" };
+    t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.1f;
     t.scenery.density = 0.45f;
     t.road.kerbA = 0x2bb673;
