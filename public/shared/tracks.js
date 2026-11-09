@@ -915,8 +915,10 @@ export const TRACKS = {
     // pavilion across it from the road, standing up behind the game over the
     // kerb that hides the lines; their camp on the lawn at the road's level
     // where the racer comes off the diagonal's top, the fire smoking; the
-    // kite hill rising off the verge beyond the top loop, three children on
-    // its crest with their kites high over it; an avenue of oaks either side
+    // kite hill rising off the verge beyond the top loop and on down the
+    // diagonal's outside, three children on its face with their kites (a
+    // long dragon among them) flying low over it and out over the verge; an
+    // avenue of oaks either side
     // of the start straight from the overpass to the bend, through the
     // gantry, its verge kept to them (the `clear`)
     set: [
@@ -927,12 +929,13 @@ export const TRACKS = {
       { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-kite-flyers', u: 0.718, lat: -15.5, yaw: 180 }
+      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
     ],
     land: [
       { kind: 'clear', u: 0.01011, len: 28, r: 14 },
       { kind: 'ridge', u: 0.715, lat: -17.3, len: 18, r: 14, h: 5.5, top: 0.3, near: 0.6 },
-      { kind: 'ridge', u: 0.668, lat: -13.3, len: 6, r: 10, h: 4, top: 0.3, near: 0.6 }
+      { kind: 'ridge', u: 0.674, lat: -13.3, len: 8, r: 10, h: 4, top: 0.3, near: 0.6 },
+      { kind: 'ridge', u: 0.81, lat: -16.3, len: 16, r: 13, h: 4.5, top: 0.3, near: 0.6 }
     ]
   },
   tangle: {
@@ -967,9 +970,9 @@ export const TRACKS = {
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-spring-cascade', u: 0.7335, lat: -11, yaw: 180, scale: 1.3 },
-      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180 },
-      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 }
+      { model: 'set-spring-cascade', u: 0.7335, lat: -8.8, yaw: 180, scale: 1.5 },
+      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180, scale: 0.65 },
+      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10, scale: 0.65 }
     ],
     // the north lawn's hump the stream bends round, and the pond under the
     // first bridge's west span; the stream's hill along the north loop's top

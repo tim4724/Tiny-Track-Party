@@ -5809,12 +5809,14 @@ def boating_lake():
     join_still('lake')
 
 # ---- PRETZEL: the kite hill --------------------------------------------------------
-# Three children on the crest of the hill beyond the top loop (tracks.js
-# `land`), standing still with their kites up: a diamond, a box kite and a
-# delta, bright against the sky out over the hill's face on long strings,
-# each with a ribboned tail, nodding in the wind about the end of its string. The
-# children stand; the wind moves the kites. Front (+X) to the road, metres; on
-# the left at yaw 180. The children DRAPE onto the crest as drawn.
+# Three children on the face of the hill beyond the top loop (tracks.js
+# `land`), standing still with their kites up: a long dragon kite, a diamond
+# and a box kite, low over the hill's foot toward the road's verge, bright,
+# with long ribboned tails, nodding in the wind about the ends of their
+# strings. The road comes at the hill head-on before it turns past, so the
+# kites spread along it and face it: the approach sees every one face-on.
+# The children stand; the wind moves the kites. Front (+X) to the road,
+# metres; on the left at yaw 180. The children DRAPE onto the crest as drawn.
 def kite_string(a, b, n=6):
     """A kite's string from the hand at a up to the kite at b, sagging a little."""
     pts = sag(a, b, 0.06 * math.dist(a, b), n + 1)
@@ -5833,72 +5835,108 @@ def kite_tail(top, colors, n=6):
 
 @piece(REAL)
 def kite_flyers():
-    RED, BLUE, YELLOW, PURPLE = 0xcf534f, 0x339cf2, 0xffc044, 0xa878e8
-    KIDS = ((0.0, -7.0, 0x339cf2, 2), (-0.6, 0.5, 0xcf534f, 0), (0.4, 7.5, 0x22c46e, 3))
-    KITES = ((7.0, 17.0, -13.0), (10.0, 22.0, 1.0), (6.0, 15.0, 14.0))     # out over the hill's face, toward the road
+    RED, BLUE, YELLOW, GREEN, PURPLE = 0xcf534f, 0x339cf2, 0xffc044, 0x22c46e, 0xa878e8
+    KIDS = ((0.0, -10.0, BLUE, 2), (0.5, 6.0, RED, 0), (-0.4, 18.0, GREEN, 3))
+    DRAGON = (22.0, 10.5, -18.0)                 # the dragon's head, its body trailing along +Z
+    DIAMOND = (24.0, 11.5, 18.0)
+    BOX = (22.0, 9.0, 32.0)
     def still():
-        for (x, z, shirt, hair), k in zip(KIDS, KITES):
+        for (x, z, shirt, hair), k in zip(KIDS, (DRAGON, DIAMOND, BOX)):
             person((x, 0.0, z), 0.0, shirt, k=0.75, hair=hair, arm=1.1)
             kite_string((x + 0.5, 1.5, z), k)
     draped('kids', still)
-    # the kites, flying out over the hill's face toward the road, each moving
-    # about the end of its string (and lifted with the land under it, as the
-    # strings are), the strings standing still; big kites, twice a child's
-    # height, so they read against the sky from the road
-    S = 2.6
-    for i, (kx, ky, kz) in enumerate(KITES):
-        with animated('anim_drape+sway:a=x:d=12:p=%.1f#k%d' % (3.2 + 0.7 * i, i), (kx, ky, kz)):
-            if i == 0:                                       # the diamond
-                poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
-                     [(0, 1, 2), (0, 2, 3)], RED)
-                poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
-                     [(0, 1, 2)], YELLOW)
-                kite_tail((kx, ky - 3.0 * S, kz), (YELLOW, BLUE, RED), n=8)
-            elif i == 1:                                     # the box kite
-                for s in (-1, 1):
-                    box((1.4 * S, 1.2 * S, 1.4 * S), (kx, ky + s * 1.0 * S, kz), (BLUE, YELLOW)[s > 0])
-                for sx in (-1, 1):
-                    for sz in (-1, 1):
-                        box((0.16, 3.4 * S, 0.16), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
-                kite_tail((kx, ky - 1.7 * S, kz), (RED, BLUE), n=7)
-            else:                                            # the delta
-                poly([(kx, ky + 1.6 * S, kz), (kx, ky - 1.4 * S, kz - 2.6 * S), (kx, ky - 1.4 * S, kz + 2.6 * S)],
-                     [(0, 1, 2)], PURPLE)
-                box((0.16, 3.0 * S, 0.16), (kx, ky, kz), 'white')
-                kite_tail((kx, ky - 1.4 * S, kz), (YELLOW, RED, PURPLE), n=8)
+    # the kites, low over the hill's foot and out toward the road's verge, each
+    # face-on to the road (+X), which comes at them head-on before it turns
+    # past; each moves about the end of its string (and is lifted with the
+    # land under it, as the strings are), the strings standing still. The
+    # dragon: a big head and a long body of discs in the four colours,
+    # bellying in the wind.
+    hx, hy, hz = DRAGON
+    with animated('anim_drape+sway:a=x:d=10:p=4.2#dragon', DRAGON):
+        box((2.0, 3.4, 3.6), (hx, hy, hz), RED)                                 # the head
+        box((2.1, 0.9, 2.6), (hx, hy - 1.3, hz - 2.0), RED)                     # its jaw
+        for s in (-1, 1):
+            box((0.3, 0.9, 0.9), (hx + 1.05, hy + 0.6, hz + s * 1.0), YELLOW)    # its eyes
+            box((0.4, 2.0, 0.6), (hx, hy + 2.3, hz + s * 1.2), GREEN, roll=0.4 * s)  # its horns
+        COLS = (YELLOW, GREEN, BLUE, RED)
+        prev = (hx, hy + 1.2, hz + 1.8)                                          # the cord's start, on the head
+        for i in range(10):
+            t = (i + 1) / 10
+            z = hz + 3.2 + 3.0 * i
+            y = hy - 2.4 * math.sin(math.pi * t) + 0.7 * math.sin(2.5 * t * math.pi)
+            r = 2.2 - 0.08 * i
+            cyl(r, 0.3, (hx - 0.15, y, z), COLS[i % 4], segs=10, axis='across')
+            # the cord the discs hang from, rim to rim (a rim's corner is
+            # where the disc and the cord meet)
+            rim = (hx, y + r, z)
+            strut(prev, rim, 0.16, 'white')
+            prev = rim
+    S = 2.0
+    kx, ky, kz = DIAMOND
+    with animated('anim_drape+sway:a=x:d=12:p=3.4#diamond', DIAMOND):
+        poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
+             [(0, 1, 2), (0, 2, 3)], BLUE)
+        poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
+             [(0, 1, 2)], YELLOW)
+        kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=10)
+    S = 2.2
+    kx, ky, kz = BOX
+    with animated('anim_drape+sway:a=x:d=12:p=3.9#box', BOX):
+        for s in (-1, 1):
+            box((1.4 * S, 1.2 * S, 1.4 * S), (kx, ky + s * 1.0 * S, kz), (RED, PURPLE)[s > 0])
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                box((0.16, 3.4 * S, 0.16), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
+        kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=9)
 
 # ---- TANGLE: the spring the stream rises from --------------------------------------
 # The stream's source, at the foot of the hill beyond the north loop's top
-# straight (tracks.js `land`): the spring rising in a cleft among round
-# boulders and falling white over their lip into a pool, a heron standing
-# in it; from there it goes under the top straight (a culvert each side) and
-# on as the stream. Low on the hill's toe, so it is one outcrop and not a
-# stair of blocks up the slope. Front (+X) to the road, metres; on the left
-# at yaw 180. It DRAPES on the hill as drawn.
+# straight (tracks.js `land`): the spring rising in a cleft among dark wet
+# boulders and falling in one broad white sheet over their lip into a pool,
+# a heron standing in it; from there it goes under the top straight (a
+# culvert each side) and on as the stream. Low on the hill's toe, so it is
+# one outcrop and not a stair of blocks up the slope, and dark round the
+# white water, which pale rock on green did not show. Front (+X) to the
+# road, metres; on the left at yaw 180. It DRAPES on the hill as drawn.
 @piece(REAL)
 def spring_cascade():
-    ROCK, ROCK2, WATER, FOAM = 'grey', 'lavender', 0x8ecae6, 'white'
+    WET, WET2, WATER, FOAM = 'dark', 'slate', 0x8ecae6, 'white'
+    TURN = math.radians(35)
     def still():
-        # the pool at the foot, round boulders on its banks
-        cyl(5.0, 0.3, (7.0, 0.0, 0.0), WATER, segs=14)
-        for k, deg in enumerate((40, 100, 160, 200, 260, 320)):
+        # the pool at the foot, foam on it where the fall comes in, dark wet
+        # boulders round its banks
+        cyl(4.6, 0.3, (3.6, 0.0, 0.0), WATER, segs=14)
+        cyl(3.2, 0.42, (1.6, 0.0, 0.0), FOAM, segs=10)
+        for k, deg in enumerate((60, 120, 240, 300)):
             a = math.radians(deg)
-            boulder((7.0 + 5.4 * math.cos(a), 0.0, 5.4 * math.sin(a)), 1.1 + 0.2 * (k % 3), yaw=0.7 * k, color=(ROCK, ROCK2)[k % 2])
-        box((2.4, 0.3, 1.8), (4.0, 0.15, 0.0), FOAM)
+            boulder((3.6 + 4.9 * math.cos(a), 0.0, 4.9 * math.sin(a)), 1.2 + 0.2 * (k % 2), yaw=0.7 * k, color=(WET, WET2)[k % 2])
         # the run from the pool down to the culvert's mouth, toward the road
-        box((7.6, 0.26, 2.6), (14.2, 0.13, 0.0), WATER)
-        # the low outcrop the spring falls over, round boulders banked in a
-        # horseshoe either side of a broad white fall into the pool
-        for k, (x, z, r) in enumerate(((-1.0, -4.2, 2.4), (-1.2, 4.0, 2.2), (-3.8, -2.4, 2.6), (-3.6, 2.6, 2.5),
-                                      (-1.2, -7.0, 1.6), (-1.0, 7.0, 1.7), (-6.0, 0.0, 2.6))):
-            boulder((x, 0.0, z), r, yaw=0.9 * k, color=(ROCK, ROCK2)[k % 2], squash=0.85)
-        o = box((0.5, 2.6, 3.2), (0.8, 1.2, 0.0), FOAM)                              # the fall
-        o.rotation_euler.y = -0.3
-        # the spring, a dark cleft in the boulders at the top, running to the lip
-        box((1.2, 1.2, 1.4), (-6.0, 1.9, 0.0), 0x2a2735)
-        box((3.4, 0.3, 1.6), (-3.2, 2.3, 0.0), WATER)
+        box((2.6, 0.26, 2.6), (9.2, 0.13, 0.0), WATER)
+        # the outcrop: dark wet boulders banked either side of the fall, the
+        # fall one broad white sheet off the lip into the pool, spray at its
+        # foot. All of it turned TURN about the pool toward +Z, so the sheet
+        # faces down the road at the racer coming up it, not across the road.
+        c, s = math.cos(TURN), math.sin(TURN)
+        def at(x, y, z):
+            x -= 3.6
+            return (3.6 + x * c - z * s, y, x * s + z * c)
+        for k, (x, z, r) in enumerate(((-1.6, -6.0, 2.6), (-1.6, 6.0, 2.6), (-4.6, -3.4, 3.0), (-4.4, 3.6, 2.9),
+                                      (-1.0, -8.6, 1.8), (-0.8, 8.6, 1.9), (-7.0, 0.0, 3.0))):
+            boulder(at(x, 0.0, z), r, yaw=0.9 * k - TURN, color=(WET, WET2)[k % 2], squash=0.9)
+        box((3.0, 4.2, 6.4), at(-4.0, 2.1, 0.0), WET, yaw=-TURN)                   # the lip
+        for k in range(5):                                                         # the fall, in
+            z = (k - 2) * 1.24                                                     # white and blue
+            o = box((0.7 - 0.2 * (k % 2), 4.6, 1.24), at(-1.6 - 0.1 * (k % 2), 2.2, z), (FOAM, WATER)[k % 2], yaw=-TURN)
+            o.rotation_euler.y = -0.22
+        for k, (x, y, z, r) in enumerate(((0.6, 0.7, -1.8, 1.3), (0.8, 0.8, 1.7, 1.4), (1.4, 0.5, 0.0, 1.1))):
+            sphere(r, at(x, y, z), FOAM, scale=(1.0, 0.7, 1.0))                       # its spray
+        # above: the spring comes out of a cleft and runs white to the lip
+        for k in (-1, 1):
+            box((3.6, 3.4, 3.0), at(-11.0, 1.7, k * 2.6), (WET, WET2)[k > 0], yaw=0.4 * k - TURN)
+        box((1.6, 1.8, 1.6), at(-11.4, 0.9, 0.0), 0x2a2735, yaw=-TURN)
+        box((4.4, 0.34, 2.2), at(-7.4, 4.1, 0.0), FOAM, yaw=-TURN)
         # the heron, standing in the pool on its long legs, watching the water
-        HX, HZ = 8.0, 2.4
+        HX, HZ = 5.6, 2.6
         with plain_parts():
             for s in (-1, 1):
                 box((0.12, 1.3, 0.12), (HX, 0.65, HZ + 0.18 * s), 'dark')
