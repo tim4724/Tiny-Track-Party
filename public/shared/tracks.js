@@ -335,12 +335,11 @@ export const SET_GROUND = {
   // Flurry's ski jump: its landing hill, the knoll under the takeoff (-X)
   // and the flank falling toward the road (+X), convex from the knoll,
   // steepest halfway and easing into the outrun (a cos^2 flank), so the
-  // jumpers fly close over a slope as a real hill's; the landing slope
-  // groomed blue down its middle.
-  'set-ski-jump': [
-    { kind: 'mound', x: -48, h: 16, r: 50, r1: 24, rz: 22, shape: 2 },
-    { kind: 'paint', yaw: 90, z: -24, len: 34, r: 4, w: 4, tint: 0xc4d6f2 }
-  ],
+  // jumpers fly close over a slope as a real hill's. Broad, so the 9 u grid
+  // draws it as a hill, not a cone, and no higher than lets the tower on its
+  // back stand whole in the chase camera's frame from the line, where the
+  // start straight drives at it from forty units off.
+  'set-ski-jump': [{ kind: 'mound', x: -22, h: 6.8, r: 18, r1: 16, rz: 18, shape: 2 }],
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
@@ -701,7 +700,7 @@ export const TRACKS = {
       { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
-      { model: 'set-ski-jump', u: 0.0763, lat: 11.08, yaw: 1.2 },
+      { model: 'set-ski-jump', u: 0.09, lat: 7.5, yaw: -11.6 },
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
@@ -711,9 +710,11 @@ export const TRACKS = {
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
-    // the lake. The village's ski jump stands on its hill past the west
-    // loop, its landing slope toward the start straight, which drives at it
-    // a third of a right angle off its axis, so the in-run shows its slope.
+    // the lake. The village's ski jump stands on its hill at the west loop's
+    // outside kerb, where the start straight and the run in to the line look
+    // straight at it: its outrun ends at the kerb, its tower stands thirty
+    // units back, and the straight sees it at a slant, the landing hill's
+    // face and the in-run's track rising to the tower both showing.
     // The valley is closed by mountains on all four sides, open between
     // them: past the two end loops a massif whose foothills rise off the
     // outside verge, forest down their faces (sampled, set_prototypes.py
