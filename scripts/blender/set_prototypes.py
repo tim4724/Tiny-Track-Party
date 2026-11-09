@@ -7673,14 +7673,28 @@ def tunnel_foothills():
 @piece(1.0)
 @plain
 def hogback():
-    # Sidewinder: a hogback along the east straight, a long fin of the
-    # massif's strata tilted up out of the plain, its crest sharp, seven
-    # units high and some forty long (+Z along the road, its face to +X).
-    M = massif_height(((0.0, 0.0, 7.5, 3.6, 12.0, 0.0, 0.75, 22.0),
-                       (-1.5, 9.0, 5.0, 3.0, 8.0, 0.08, 0.9, 8.0)), rough=0.8, seed=5.3)
-    strata_massif(M, -10.0, 10.0, -32.0, 32.0, [b for b in CANYON_STRATA if b[0] < 7.5], step=2.4, tol=0.4)
+    # Sidewinder: a hogback along the east straight, the massif's strata
+    # tilted up out of the plain: its dip slope rises gently from the road's
+    # side (+X) to a sharp crest seven units up and drops away behind in a
+    # short scarp, so a racer sees banded rock sloping away, not a face (a
+    # symmetric fin stood broadside as a wall). Two notches the weather cut
+    # through it break its forty-odd units into three.
+    def M(x, z):
+        L = 22.0
+        end = max(0.0, min(1.0, min(z + L, L - z) / 6.0))
+        end = end * end * (3 - 2 * end)
+        notch = max(0.8 * math.exp(-((z - zc) / 1.7) ** 2) for zc in (-7.5, 8.5))
+        H = 7.5 * end * (1.0 - notch) * (1.0 + 0.12 * math.sin(0.37 * z + 1.0))
+        c = -1.5 + 0.6 * math.sin(0.21 * z)                         # the crest
+        if x >= c:
+            f = max(0.0, 1.0 - (x - c) / 6.5) ** 1.15               # the dip slope, toward the road
+        else:
+            f = max(0.0, 1.0 - (c - x) / 2.2) ** 0.6                # the scarp behind
+        return H * f + 0.25 * math.sin(1.3 * x + 0.9 * z) * f - 0.5
+    strata_massif(M, -6.0, 8.0, -26.0, 26.0, [b for b in CANYON_STRATA if b[0] < 7.5], step=2.2, tol=0.35,
+                  summits=False)
     def scree():
-        for i, (x, z, s) in enumerate(((-5.5, -24.0, 0.8), (-6.0, 22.0, 0.9))):
+        for i, (x, z, s) in enumerate(((-4.5, -24.0, 0.8), (-4.8, 23.0, 0.9))):
             box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
     draped('scree', scree)
 

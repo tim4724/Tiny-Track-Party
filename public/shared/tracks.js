@@ -1254,7 +1254,8 @@ export const TRACKS = {
     // beyond, and runs on off the right as a ridge of the land. Out of the
     // tunnel the road rounds the massif's foothills, in its own strata
     // (geometry: by the road, steep land is the Android box's dear rock), a
-    // hogback of the same rock runs beside the east straight, a motel and
+    // hogback of the same rock tilted up beside the east straight, its dip
+    // slope to the road and two notches through it, a motel and
     // diner stand at the junction past the S, their sign's arrow turning,
     // and the oil field and its tank farm come to the north loop's kerbs.
     // Everything by the road at its own size, the rock as big as rock is.
@@ -1266,7 +1267,7 @@ export const TRACKS = {
       { model: 'set-roadside-junction', u: 0.385, lat: 5.5 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
-      { model: 'set-hogback', u: 0.455, lat: 9.5, yaw: 180 }
+      { model: 'set-hogback', u: 0.455, lat: 8.5 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
