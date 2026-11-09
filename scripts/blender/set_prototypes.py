@@ -6475,12 +6475,12 @@ def ore_line():
         t = min(1.0, max(0.0, (s - acc[i]) / d))
         return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ((b[0] - a[0]) / d, (b[1] - a[1]) / d)
     RAIL, TIE, Y = 12.0, 5.5, 0.3                                # a rail chord, the sleepers' spacing, rail height
-    # Beside the low start straight the line crosses the flat on a timber
-    # trestle, up a ramp out of the yard and down one into its cutting where
-    # the land rises toward the east bend: rails on the sand are a line a
-    # racer cannot read at that distance, a trestle a car high with the train
-    # riding along it is the mine's line seen from the road.
-    T0, T1, RISE, RAMP = 5.0 / k, 36.0 / k, 1.4 / k, 7.0 / k
+    # Beside the low start straight the line crosses the flat on a low timber
+    # trestle a few units past the kerb, up a ramp out of the yard and down
+    # one into its cutting where the land rises toward the east bend, the
+    # train riding along it at the racers' side (rails on the sand twelve
+    # units out were a line a racer could not read).
+    T0, T1, RISE, RAMP = 5.0 / k, 44.0 / k, 0.7 / k, 7.0 / k
     def ry(s):
         """The rails' height at `s` along the line."""
         t = min(1.0, max(0.0, (s - T0) / RAMP), max(0.0, (T1 - s) / RAMP))
@@ -6547,6 +6547,180 @@ def ore_line():
     for n in range(1, 4):
         with animated('anim_path:c=ore:p=%.1f:o=%.4f:f=1#%d' % (period, 1.0 - n * gap, n), (x0, Y, z0)):
             ore_cart((x0, Y, z0), yaw=math.pi / 2, ore_color='yellow')
+
+def equine(at, yaw, coat, L=0.62, ears=0.12, life=None, mane=0x5a4632):
+    """A horse or a burro at its own size beside a car (a horse some 0.6
+    long, a burro less, its ears longer), facing +X turned by `yaw`, in the
+    cow's blocks: its head on a neck hinged for `life` (a calm dip and lift)."""
+    x, y, z = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    def p(dx, dy, dz):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
+    k = L / 0.62
+    with plain_parts():
+        for lx in (-0.22 * k, 0.2 * k):
+            for lz in (-0.06 * k, 0.06 * k):
+                box((0.07 * k, 0.32 * k, 0.07 * k), p(lx, 0.16 * k, lz), coat, yaw=yaw)
+        box((0.1 * k, 0.24 * k, 0.04 * k), p(-0.33 * k, 0.3 * k, 0), mane, yaw=yaw, roll=0.4)     # the tail
+    box((0.56 * k, 0.24 * k, 0.22 * k), p(0, 0.43 * k, 0), coat, yaw=yaw)                         # the body
+    def head():
+        box((0.16 * k, 0.3 * k, 0.12 * k), p(0.3 * k, 0.56 * k, 0), coat, yaw=yaw, roll=-0.6)    # the neck
+        box((0.26 * k, 0.12 * k, 0.13 * k), p(0.44 * k, 0.66 * k, 0), coat, yaw=yaw, roll=0.5)   # the head
+        for ez in (-0.04 * k, 0.04 * k):
+            box((0.04 * k, ears * k, 0.03 * k), p(0.36 * k, 0.75 * k + ears * k / 2, ez), mane, yaw=yaw)
+    if life:
+        with animated(life, p(0.24 * k, 0.5 * k, 0), yaw):
+            head()
+    else:
+        head()
+
+def wagon(at, yaw, body=0x9a7b55, cover=None):
+    """A buckboard (or, with a `cover`, a chuck wagon under its canvas), a
+    racer and a half long, its tongue to +X turned by `yaw`."""
+    x, y, z = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    def p(dx, dy, dz):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
+    for lx, r in ((-0.42, 0.27), (0.42, 0.22)):
+        for lz in (-0.33, 0.33):
+            cyl(r, 0.06, p(lx, r, lz - 0.03), 0x5a4632, segs=10, axis='along', yaw=yaw)
+    box((1.3, 0.12, 0.6), p(0, 0.42, 0), body, yaw=yaw)                          # the bed
+    for lz in (-0.28, 0.28):
+        box((1.3, 0.16, 0.05), p(0, 0.55, lz), body, yaw=yaw)
+    box((0.12, 0.3, 0.6), p(0.5, 0.62, 0), body, yaw=yaw)                         # the seat's back
+    box((0.9, 0.05, 0.05), p(1.0, 0.3, 0), 0x5a4632, yaw=yaw, roll=0.2)           # the tongue
+    if cover:
+        for i in range(4):
+            box((0.06, 0.55, 0.66), p(-0.5 + i * 0.3, 0.86, 0), cover, yaw=yaw)
+        box((0.96, 0.06, 0.66), p(-0.05, 1.12, 0), cover, yaw=yaw)
+
+def false_front(z, w, d, h, body, front, kind='store', yaw=0.0):
+    """A boomtown building at z on the street (its front at x 0 facing +X):
+    `w` along the street, `d` deep, `h` to its eaves, a false front standing
+    over the roof in `front`, a porch roof on posts over the boardwalk, a
+    door and windows, its name on a board. `kind` dresses it: a `saloon`
+    has batwing doors and its sign hanging from the porch, swinging."""
+    box((d, h, w), (-d / 2, h / 2, z), body)
+    box((d + 0.1, 0.1, w + 0.1), (-d / 2, h + 0.05, z), 0x8a5f3e)                  # the roof
+    fh = h + 0.45
+    box((0.12, fh, w), (0.0, fh / 2, z), front)                                    # the false front
+    box((0.14, 0.12, w + 0.12), (0.0, fh + 0.06, z), 0x8a5f3e)                     # its cap
+    box((0.1, 0.32, w * 0.7), (0.08, fh - 0.3, z), 0x4f5260)                       # the name board
+    box((0.11, 0.12, w * 0.5), (0.1, fh - 0.3, z), 0xfde4c7)
+    with plain_parts():
+        box((0.7, 0.06, w), (0.4, h * 0.62, z), 0x8a5f3e)                          # the porch roof
+        for sz in (-1, 1):
+            box((0.07, h * 0.62, 0.07), (0.72, h * 0.31, z + sz * (w / 2 - 0.1)), 0x8a5f3e)
+        box((0.06, h * 0.5, 0.34), (0.07, h * 0.25, z), 0x2a2735)                   # the door
+        for sz in (-1, 1):
+            box((0.06, 0.3, 0.3), (0.07, h * 0.42, z + sz * w * 0.3), 0x8ecae6)
+        if kind == 'saloon':
+            for sz in (-0.09, 0.09):
+                box((0.05, 0.22, 0.16), (0.12, h * 0.25, z + sz), 0xfde4c7)       # the batwings
+            box((0.05, 0.1, 0.05), (0.62, h * 0.62 - 0.08, z + w / 2 - 0.4), 0x2a2735)
+            with animated('anim_sway:a=x:d=10:p=3.1#sign', (0.62, h * 0.62 - 0.12, z + w / 2 - 0.4)):
+                box((0.05, 0.3, 0.5), (0.62, h * 0.62 - 0.32, z + w / 2 - 0.4), 0xc0392b)
+
+def boardwalk(z0, z1):
+    """The boardwalk along the fronts, flush with the ground (no step)."""
+    with plain_parts():
+        box((0.8, 0.06, z1 - z0), (0.4, 0.03, (z0 + z1) / 2), 0x9a7b55)
+
+def water_tower_wild(x, z):
+    """A railroad water tower on timber legs, its tank and spout."""
+    with plain_parts():
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                strut((x + sx * 0.6, 0, z + sz * 0.6), (x + sx * 0.45, 2.0, z + sz * 0.45), 0.12, 0x8a5f3e)
+        box((1.1, 0.1, 1.1), (x, 2.02, z), 0x8a5f3e)
+    cyl(0.62, 0.95, (x, 2.07, z), 0x9a7b55, segs=12)
+    cyl(0.7, 0.4, (x, 3.02, z), 0x6e5b3a, r2=0.06, segs=12)
+    box((0.08, 0.08, 0.5), (x + 0.35, 2.3, z + 0.5), 0x4f5260, pitch=-0.5)
+
+@piece(1.0)
+def boomtown_north():
+    # Gulch: the gold camp's boomtown, its main street the north loop's top
+    # (this side the street's north, +X the road, +Z the way the racers
+    # run, west): a livery stable with a horse tied at its rail, the general
+    # store, the saloon with its sign swinging under the porch, the assay
+    # office, and the water tower at the west end, each at its own size
+    # beside a car, on one boardwalk flush with the ground.
+    hut(2.4, 1.5, 2.8, (-1.3, 0, -9.0), 0x9a7b55, 0x8a5f3e, t=0.4)                 # the livery
+    with plain_parts():
+        box((0.06, 0.06, 1.6), (0.45, 0.4, -6.6), 0x8a5f3e)                       # its hitching rail
+        for sz in (-0.75, 0.75):
+            box((0.06, 0.4, 0.06), (0.45, 0.2, -6.6 + sz), 0x8a5f3e)
+    equine((0.2, 0, -6.6), math.pi / 2, 0x8a5a3c, life='anim_sway:a=z:d=20:p=6.3:r=0.7#h')
+    false_front(-3.6, 2.6, 2.2, 1.5, 0xf2bf99, 0xfde4c7)                          # the general store
+    false_front(0.0, 3.0, 2.6, 1.8, 0x9a7b55, 0xc0392b, kind='saloon')
+    false_front(3.6, 2.2, 2.0, 1.4, 0x868ba1, 0x6794d9)                           # the assay office
+    boardwalk(-5.0, 4.8)
+    water_tower_wild(-1.4, 7.6)
+    join_still('north')
+
+@piece(1.0)
+def boomtown_south():
+    # ...and the street's south side (+X the road, +Z east, so its -Z end is
+    # the west): the hotel, the barber's, the bank with a buckboard and its
+    # horse standing at the boardwalk, and the chapel at the west end, its
+    # steeple the street's vista as the racers run down it.
+    false_front(5.6, 3.0, 2.6, 2.1, 0xfde4c7, 0x6794d9)                           # the hotel
+    false_front(2.2, 2.0, 2.0, 1.4, 0xf2bf99, 0xcf534f)                           # the barber's
+    false_front(-1.2, 2.6, 2.4, 1.6, 0x868ba1, 0xfde4c7)                          # the bank
+    boardwalk(-2.6, 7.2)
+    wagon((0.6, 0, -0.6), math.pi / 2)
+    equine((0.6, 0, 0.75), math.pi / 2, 0x5a3a28, life='anim_sway:a=z:d=18:p=7.4:r=0.72#b')
+    # the chapel: a white gable hall, its steeple over the door to the street
+    hut(2.8, 1.4, 2.0, (-1.4, 0, -6.6), 0xfdf4de, 0x6e5b3a, t=0.4)
+    box((0.7, 1.6, 0.7), (-0.2, 1.6, -6.6), 0xfdf4de)
+    cyl(0.5, 1.1, (-0.2, 2.4, -6.6), 0x6e5b3a, r2=0.04, segs=4, yaw=math.pi / 4)
+    join_still('south')
+
+@piece(1.0)
+def tailings_dump():
+    # Gulch: the mine's tailings dump filling the inner loop: a grey heap of
+    # waste rock (geometry: the loop's middle is held under the deck cap, so
+    # no land can rise there), a timber incline up its side and at its top
+    # an ore cart on its tipple, tipping and coming back slowly.
+    mound(3.6, 0.0, 0.0, 6.5, 6.5, 6.5, color='grey', rings=6, segs=16, sink=0.4, shape=1.3, jitter=0.25)
+    with plain_parts():
+        for i in range(6):                                                         # the incline's trestle
+            t = i / 5
+            x, y = 5.4 - 5.0 * t, 3.6 * t * 0.95
+            for sz in (-0.35, 0.35):
+                box((0.1, y + 0.3, 0.1), (x, (y + 0.3) / 2 - 0.15, sz), 0x8a5f3e)
+        beam((5.6, 0.3, 0.0), (0.6, 3.75, 0.0), 0.8, 0x8a5f3e)
+    box((1.0, 0.14, 1.0), (0.3, 3.7, 0.0), 0x8a5f3e)                               # the tipple's deck
+    with animated('anim_sway:a=z:d=28:p=9.5#tip', (0.0, 3.85, 0.0)):
+        ore_cart((0.0, 3.8, 0.0), yaw=math.pi / 2, ore_color=0x868ba1)
+    join_still('dump')
+
+@piece(1.0)
+def miners_camp():
+    # Gulch: the miners' camp before the canyon (+X the road): three canvas
+    # wall tents, the chuck wagon under its canvas, two burros standing by,
+    # the cook fire's ring of stones with a thin wisp of smoke, and a sluice
+    # box on its trestles, at their own size beside a car.
+    for k, (x, z, yaw) in enumerate(((-2.4, -2.8, 0.2), (-2.8, 0.3, -0.1), (-2.2, 3.2, 0.3))):
+        tent((x, 0, z), yaw, 0xfde4c7, L=1.5, W=1.2, H=0.95)
+    wagon((-0.2, 0, -4.8), 0.3, cover=0xfdf4de)
+    equine((0.1, 0, 2.2), 2.6, 0x868ba1, L=0.48, ears=0.18, life='anim_sway:a=z:d=22:p=7.9:r=0.7#b1')
+    equine((0.6, 0, 3.1), 1.9, 0x8a5a3c, L=0.46, ears=0.18, life='anim_sway:a=z:d=24:p=9.1:r=0.74#b2')
+    with plain_parts():
+        for i in range(7):                                                        # the fire ring
+            a = 2 * math.pi * i / 7
+            box((0.16, 0.1, 0.14), (-0.6 + 0.3 * math.cos(a), 0.05, -1.3 + 0.3 * math.sin(a)), 0x868ba1, yaw=a)
+        box((0.4, 0.06, 0.08), (-0.6, 0.07, -1.3), 0x5a4632, yaw=0.5)
+        box((0.4, 0.06, 0.08), (-0.6, 0.09, -1.3), 0x5a4632, yaw=-0.6)
+    marker('anim_smoke:s=0.6', (-0.6, 0.15, -1.3))
+    with plain_parts():                                                            # the sluice box
+        for z in (5.0, 6.4, 7.8):
+            for sx in (-0.16, 0.16):
+                box((0.06, 0.7 - (z - 5.0) * 0.1, 0.06), (-1.6 + sx, (0.7 - (z - 5.0) * 0.1) / 2, z), 0x8a5f3e)
+        box((0.34, 0.06, 3.4), (-1.6, 0.6, 6.4), 0x9a7b55, pitch=0.1)
+        for sx in (-1, 1):
+            box((0.04, 0.14, 3.4), (-1.6 + sx * 0.17, 0.66, 6.4), 0x9a7b55, pitch=0.1)
+    join_still('camp')
 
 def mine_loco(at, yaw=0.0):
     """A little battery loco for the mine line, along its local Z (its front
@@ -7431,6 +7605,15 @@ def massif_height(forms, rough=1.0, seed=0.0, warp=2.0):
         return m - 0.5
     return M
 
+# The canyon's strata (Sidewinder's massif, its foothills, Wash's butte), foot
+# to summit: slopes of the softer rock lying back as the mountain does, broken
+# by cliffs of the harder (a small setback).
+CANYON_STRATA = ((-0.6, 1.3, 0xa96545, -0.85), (1.3, 2.6, 0xd68f62, 0.2), (2.6, 3.9, 0xa96545, -0.85),
+                    (3.9, 6.0, 0xd68f62, -0.85), (6.0, 8.0, 0xe3cfa4, 0.25), (8.0, 10.0, 0xa96545, -0.85),
+                    (10.0, 12.0, 0xd68f62, 0.2), (12.0, 13.6, 0xa96545, -0.85), (13.6, 15.6, 0xe3cfa4, 0.25),
+                    (15.6, 17.4, 0xd68f62, -0.85), (17.4, 19.6, 0xa96545, 0.25), (19.6, 21.2, 0xb4714d, -0.85),
+                    (21.2, 23.0, 0x8a4a32, -0.85))
+
 @piece(1.0)
 @plain
 def mountain_tunnel():
@@ -7454,15 +7637,7 @@ def mountain_tunnel():
         (-30.0, 6.0, 11.0, 7.0, 8.0, 0.0, 1.0, 0.0),               # its end, where the range runs on as land
         (-12.0, -9.0, 10.0, 6.0, 5.0, 0.5, 1.0, 0.0),              # a buttress toward the approach
         (-14.0, 13.0, 11.0, 9.0, 6.0, 0.3, 1.0, 0.0)), rough=1.4)  # the back of the massif
-    # foot to summit: slopes of the softer rock lying back as the mountain
-    # does, broken by cliffs of the harder (a small setback)
-    S = -0.85
-    BANDS = ((-0.6, 1.3, 0xa96545, S), (1.3, 2.6, 0xd68f62, 0.2), (2.6, 3.9, 0xa96545, S),
-             (3.9, 6.0, 0xd68f62, S), (6.0, 8.0, 0xe3cfa4, 0.25), (8.0, 10.0, 0xa96545, S),
-             (10.0, 12.0, 0xd68f62, 0.2), (12.0, 13.6, 0xa96545, S), (13.6, 15.6, 0xe3cfa4, 0.25),
-             (15.6, 17.4, 0xd68f62, S), (17.4, 19.6, 0xa96545, 0.25), (19.6, 21.2, 0xb4714d, S),
-             (21.2, 23.0, 0x8a4a32, S))
-    tunnel = strata_massif(M, -40.0, 18.0, -24.0, 26.0, BANDS, corridor=(4.5, 3.9), step=3.3, tol=0.5)
+    tunnel = strata_massif(M, -40.0, 18.0, -24.0, 26.0, CANYON_STRATA, corridor=(4.5, 3.9), step=3.3, tol=0.5)
     print('MOUNTAIN tunnel z', tunnel, ' M at x=+-4.5:',
           [(z, round(M(-4.5, z), 1), round(M(4.5, z), 1)) for z in range(-12, 13, 3)])
     print('MOUNTAIN telegraph poles (x -9.2): ', [(z, round(M(-9.2, z), 1)) for z in (-16, 0, 16)])
@@ -7472,6 +7647,80 @@ def mountain_tunnel():
                                        (-6.2, 11.5, 1.0), (14.0, -4.0, 1.2), (-14.0, -14.0, 1.3))):
             box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
     draped('scree', scree)
+
+@piece(1.0)
+@plain
+def tunnel_foothills():
+    # Sidewinder: the tunnel massif's foothills, in its own strata, curling
+    # round the outside of the hairpin past the tunnel (placed on the
+    # tunnel's own anchor, so this frame is its: the road runs out along +Z,
+    # turns left round the apex at z ~31 and back along -Z at x ~14-24), the
+    # inside of the bend left low where the massif's spur falls away. Rock
+    # by the road is geometry: steep land is the Android box's dear pixels.
+    M = massif_height((
+        (-10.0, 31.0, 7.5, 5.5, 6.0, 0.3, 1.0, 6.0),                # off the run-in's right, at the bend
+        (2.0, 43.5, 9.0, 7.0, 5.5, -0.2, 1.1, 8.0),                # round the apex
+        (17.0, 41.0, 7.0, 6.0, 5.0, 0.5, 1.0, 4.0),
+        (30.5, 26.0, 7.5, 5.5, 6.5, 0.1, 1.0, 8.0),                # off the return leg's right
+        (31.0, 10.0, 6.0, 5.0, 6.0, 0.0, 1.0, 6.0)), rough=1.0, seed=3.1)
+    strata_massif(M, -20.0, 46.0, 14.0, 56.0, [b for b in CANYON_STRATA if b[0] < 9.0],
+                  step=2.6, tol=0.4)
+    def scree():
+        for i, (x, z, s) in enumerate(((-15.0, 38.0, 0.9), (11.0, 50.0, 1.0), (41.0, 18.0, 0.8))):
+            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+    draped('scree', scree)
+
+@piece(1.0)
+@plain
+def hogback():
+    # Sidewinder: a hogback along the east straight, a long fin of the
+    # massif's strata tilted up out of the plain, its crest sharp, seven
+    # units high and some forty long (+Z along the road, its face to +X).
+    M = massif_height(((0.0, 0.0, 7.5, 3.6, 12.0, 0.0, 0.75, 22.0),
+                       (-1.5, 9.0, 5.0, 3.0, 8.0, 0.08, 0.9, 8.0)), rough=0.8, seed=5.3)
+    strata_massif(M, -10.0, 10.0, -32.0, 32.0, [b for b in CANYON_STRATA if b[0] < 7.5], step=2.4, tol=0.4)
+    def scree():
+        for i, (x, z, s) in enumerate(((-5.5, -24.0, 0.8), (-6.0, 22.0, 0.9))):
+            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+    draped('scree', scree)
+
+@piece(1.0)
+@plain
+def wash_butte():
+    # Wash: a butte in the knot of strands at the map's middle, inside the
+    # low hairpin, a table of the canyon's banded strata on its talus (+X
+    # the low road): one broad, tall form the low road rounds and the high
+    # road passes, geometry, so its cliffs cost the box no rock pixels.
+    M = massif_height(((0.0, 0.0, 14.0, 4.6, 5.4, 0.3, 0.5, 2.0),), rough=0.7, seed=6.1)
+    strata_massif(M, -10.0, 10.0, -11.0, 11.0, [b for b in CANYON_STRATA if b[0] < 9.0], step=2.2, tol=0.35,
+                  summits=False)
+    def scree():
+        for i, (x, z, s) in enumerate(((-6.5, 3.0, 0.7), (-3.0, -7.0, 0.8))):
+            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
+    draped('scree', scree)
+
+@piece(1.0)
+def tinaja():
+    # Wash: a tinaja where the side wash meets the road past the east loop,
+    # a hollow in the slickrock holding the rain (+X the road): a pool of
+    # standing water in a rim of pale rock ledges, three wild burros come
+    # to drink at it, one dipping its head, one looking up, one standing by.
+    # Water and rock only; nothing green.
+    with plain_parts():
+        for i in range(11):                                                      # the slickrock rim
+            a = 2 * math.pi * (i + 0.3 * hash1(i, 2.0)) / 11
+            r = 2.0 + 0.3 * hash1(i, 5.0)
+            box((1.1, 0.3 + 0.12 * (i % 3), 0.8), (-1.4 + r * 1.2 * math.cos(a), 0.12, r * math.sin(a)),
+                0xe3cfa4 if i % 2 else 0xd68f62, yaw=a + 0.5)
+        ground_poly([(-1.4 + 1.95 * math.cos(2 * math.pi * k / 14) * 1.15, 0.05,
+                      1.75 * math.sin(2 * math.pi * k / 14)) for k in range(14)],
+                    [tuple(range(14))], 0x62d3c8)                                 # the water
+    equine((0.1, 0, -0.4), math.pi * 0.9, 0x868ba1, L=0.48, ears=0.18,
+           life='anim_sway:a=z:d=26:p=5.7:r=0.62#d')                            # dipping to drink
+    equine((0.5, 0, 0.9), math.pi * 1.1, 0x8a5a3c, L=0.46, ears=0.18,
+           life='anim_sway:a=z:d=12:p=8.3:r=0.8#l')
+    equine((-0.2, 0, 2.6), math.pi * 1.4, 0x5a4632, L=0.44, ears=0.17)
+    join_still('tinaja')
 
 # Crag's rock: the canyon's level strata (strata_massif) over a butte's
 # height, its tables left flat (no summit drawn up to a point): rock standing
@@ -7676,6 +7925,105 @@ def filling_station():
             box((0.18, 0.12, 0.12), (2.6, 3.7, -2.6), 'yellow')
     hawk_circle((0.4, -0.6), 4.6, 3.6, 14.0)
     join_still('station')
+
+def pickup(x, z, color, yaw=0.0):
+    """A pickup truck, a racer and a half long (its cab to +Z), standing in
+    a colour no racer wears."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def part(dx, dy, dz, size, col):
+        box(size, (x + dx * c + dz * s, dy, z - dx * s + dz * c), col, yaw=yaw)
+    for sx in (-1, 1):
+        for sz in (-0.48, 0.42):
+            part(sx * 0.3, 0.15, sz, (0.12, 0.3, 0.3), 0x2a2735)
+    part(0, 0.36, 0.0, (0.62, 0.26, 1.42), color)                    # the body
+    part(0, 0.62, 0.3, (0.56, 0.3, 0.5), color)                      # the cab
+    part(0, 0.66, 0.56, (0.5, 0.2, 0.04), 0x8ecae6)                  # its windscreen
+    for sx in (-1, 1):                                               # the bed's sides
+        part(sx * 0.28, 0.56, -0.38, (0.06, 0.16, 0.66), color)
+    part(0, 0.56, -0.72, (0.62, 0.16, 0.06), color)
+
+def camper(x, z, yaw=0.0):
+    """A camper van, two racers long and taller than one, cream over a brown
+    band: parked, it reads as a guest's van, never a racer."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def part(dx, dy, dz, size, col):
+        box(size, (x + dx * c + dz * s, dy, z - dx * s + dz * c), col, yaw=yaw)
+    for sx in (-1, 1):
+        for sz in (-0.6, 0.55):
+            part(sx * 0.34, 0.15, sz, (0.12, 0.3, 0.3), 0x2a2735)
+    part(0, 0.62, 0.0, (0.72, 0.8, 1.8), 0xfdf4de)
+    part(0, 0.42, 0.0, (0.74, 0.2, 1.82), 0x9a7b55)                  # the band
+    part(0, 0.8, 0.91, (0.6, 0.3, 0.04), 0x8ecae6)                   # the windscreen
+    for sx in (-1, 1):
+        part(sx * 0.37, 0.8, -0.2, (0.04, 0.24, 0.9), 0x8ecae6)       # side windows
+    part(0, 1.08, -0.3, (0.5, 0.12, 0.7), 'grey')                    # a roof box
+
+@piece(1.0)
+def roadside_junction():
+    # Sidewinder: the junction on the desert highway, at its own size beside
+    # a car: a single-storey motel, its rooms' doors to the road (+X) under
+    # a covered walk, its office wing turned toward the road at one end; a
+    # diner in chrome and sky blue at the other; a guest's pickup and camper
+    # parked on the lot between (in colours no racer wears), and the motel's
+    # tall sign on its pole at the lot's far corner, its arrow turning
+    # slowly, so the road out of the S and the start straight beyond it
+    # both see it. The lot is flush with the ground: no plinth.
+    with plain_parts():
+        ground_poly([(-2.0, 0.02, -4.4), (0.9, 0.02, -4.4), (0.9, 0.02, 7.2), (-2.0, 0.02, 7.2)],
+                    [(0, 1, 2, 3)], 0xb8a686)
+    # the motel: rooms along Z, the office wing at -Z turned to the road
+    box((1.3, 1.25, 6.4), (-2.75, 0.625, 0.0), 0xfdf4de)
+    box((1.5, 0.12, 6.6), (-2.75, 1.31, 0.0), 0xc0392b)                         # its roof's red edge
+    box((0.7, 0.08, 6.4), (-1.75, 1.08, 0.0), 'white')                          # the walk's roof
+    for z in (-3.0, -1.0, 1.0, 3.0):
+        box((0.08, 1.08, 0.08), (-1.45, 0.54, z), 'white')
+    for i in range(5):
+        z = -2.4 + 1.2 * i
+        box((0.06, 0.78, 0.42), (-2.07, 0.39, z), 0x6794d9 if i % 2 else 0xc0392b)    # doors
+        box((0.06, 0.3, 0.3), (-2.07, 0.75, z + 0.42), 0x8ecae6)               # windows
+    box((2.0, 1.4, 1.4), (-2.4, 0.7, -3.9), 0xfdf4de)                          # the office
+    box((2.2, 0.14, 1.6), (-2.4, 1.45, -3.9), 0xc0392b)
+    box((0.06, 0.8, 0.5), (-1.38, 0.4, -3.9), 0x8ecae6)
+    # the diner: a streamlined car of chrome with a sky-blue band, rounded ends
+    for zc in (4.3, 6.7):
+        cyl(0.7, 1.1, (-1.4, 0, zc), 'white', segs=12)
+    box((1.4, 1.1, 2.4), (-1.4, 0.55, 5.5), 'white')
+    box((1.44, 0.24, 2.4), (-1.4, 0.48, 5.5), 0x8ecae6)
+    for zc in (4.3, 6.7):
+        cyl(0.72, 0.24, (-1.4, 0.36, zc), 0x8ecae6, segs=12)
+    box((1.46, 0.28, 2.0), (-1.4, 0.82, 5.5), 'slate')                          # its windows
+    box((0.12, 0.42, 1.6), (-1.4, 1.36, 5.5), 0xc0392b)                         # its roof sign
+    box((0.16, 0.16, 1.2), (-1.4, 1.36, 5.5), 'white')
+    # the guests' vehicles on the lot
+    pickup(-0.4, 1.7, 0xfdf4de)
+    camper(-0.4, -1.0)
+    # the sign on its pole, its arrow turning
+    with plain_parts():
+        box((0.14, 3.9, 0.14), (0.4, 1.95, -4.9), 'slate')
+        box((0.12, 1.0, 1.4), (0.4, 2.9, -4.9), 0xc0392b)
+        box((0.14, 0.8, 1.2), (0.4, 2.9, -4.9), 'white')
+        box((0.16, 0.3, 0.9), (0.4, 2.95, -4.9), 0x6794d9)
+        with animated('anim_spin:a=y:w=0.6#arrow', (0.4, 3.75, -4.9)):
+            box((0.1, 0.24, 1.2), (0.4, 3.75, -4.9), 0xffc044)
+            box((0.1, 0.5, 0.3), (0.4, 3.75, -5.45), 0xffc044)
+    join_still('junction')
+
+@piece(1.0)
+@plain
+def tank_farm():
+    # Sidewinder: the oil field's tank farm inside the north loop: three
+    # broad storage tanks, rust and white (a real lease tank's size beside a
+    # car), their ladders and the pipe that joins them.
+    for k, (x, z, r, h, col) in enumerate(((0.0, -2.6, 1.15, 1.6, 'white'), (0.3, 0.0, 1.0, 1.4, 0xc0392b),
+                                           (-0.2, 2.5, 1.15, 1.6, 'white'))):
+        cyl(r, h, (x, 0, z), col, segs=14)
+        cyl(r + 0.05, 0.12, (x, h, z), 'slate', segs=14)
+        cyl(r * 0.5, 0.18, (x, h + 0.06, z), 'grey', segs=10)
+        box((0.05, h, 0.24), (x + r + 0.05, h / 2, z), 'slate')                # a ladder up its road side
+    box((0.14, 0.14, 5.6), (1.25, 0.5, 0.0), 'slate')                          # the pipe
+    for z in (-2.6, 0.0, 2.5):
+        box((0.36, 0.14, 0.14), (1.1, 0.5, z), 'slate')
+    join_still('tanks')
 
 def pumpjack(x0, z0, yaw, tag, period):
     """An oil pumpjack, the nodding donkey, its beam along its local X turned
