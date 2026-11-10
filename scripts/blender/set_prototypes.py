@@ -2981,8 +2981,8 @@ def ski_jump():
     # reads at speed against snow and sky: the in-run a dark steel girder
     # between red side walls capped white, on dark legs; its tower banded
     # red and white like a mast, the start hut blue; the judges' tower
-    # blue, let into the landing hill's flank toward the line, the hill
-    # behind it from the road; flags at the outrun's end. No boards or
+    # blue, seated low in the landing hill's far flank, beside the in-run
+    # from the road; flags at the outrun's end. No boards or
     # lanes down the slope's edges (from the road a row of them reads as a
     # fence), and no K line across it (on the chords it bent into a red
     # chevron in the air). At its real size beside a car: the in-run
@@ -3065,16 +3065,16 @@ def ski_jump():
     box((2.0, 1.0, 2.0), (T0 - 0.4, top + 0.5, 0.0), BLUE)
     box((0.06, 0.4, 1.3), (T0 + 0.62, top + 0.62, 0.0), GLASS)
     box((2.2, 0.14, 2.2), (T0 - 0.4, top + 1.07, 0.0), STEEL)
-    # the judges' tower let into the landing hill's flank toward the line,
-    # by the landing, the hill behind it from the road: a shaft down through
-    # the hill and the glazed box on it over the slope's middle, glass on
-    # three sides, its back up the slope
-    jx, jz = -10.0, -8.5
-    jy = G(jx) + 2.6
-    box((1.1, jy - 0.9, 1.0), (jx, (jy - 0.9) / 2, jz), BLUE)
+    # the judges' tower seated in the landing hill's far flank from the line,
+    # by the landing: from the straight it stands beside the in-run, not in
+    # front of it, its cab under the lip. A stem down through the hill to
+    # the plain, the glazed box on it two units over the flank as drawn there
+    # (sampled), its glass to the slope and down it.
+    jx, jz = -16.0, 6.5
+    jy = 2.17 + 1.9
+    box((1.3, jy - 0.9, 1.2), (jx, (jy - 0.9) / 2, jz), BLUE)
     box((2.1, 0.9, 1.7), (jx, jy - 0.45, jz), BLUE)
-    for sz in (-1, 1):
-        box((1.8, 0.45, 0.08), (jx, jy - 0.45, jz + sz * 0.85), GLASS)
+    box((1.8, 0.45, 0.08), (jx, jy - 0.45, jz - 0.85), GLASS)
     box((0.08, 0.45, 1.4), (jx + 1.05, jy - 0.45, jz), GLASS)
     box((2.4, 0.2, 2.0), (jx, jy + 0.1, jz), RED)
     # flags at the outrun's end, each pole down through the land to the
