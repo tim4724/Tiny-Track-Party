@@ -467,7 +467,12 @@ export const TRACKS = {
       { model: 'set-reef-shelf', u: 0.739, lat: 18.4, yaw: 18 },
       { model: 'set-reef-shelf', u: 0.797, lat: 18.2, yaw: -3 },
       { model: 'set-crab-pots', u: 0.64, lat: 10.2, yaw: 10 },
-      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 }
+      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
+      // palms on the downs' near flanks below the crests, placed by hand:
+      // the `clear`s that keep seeded crates off the hilltops keep its
+      // seeded palms off too
+      { model: 'set-palm-stand', u: 0.15, lat: -9, yaw: 180 },
+      { model: 'set-palm-stand', u: 0.42, lat: -9, yaw: 180 }
     ],
     land: [
       // the sea round Seal Rock and up to the reef on the east bend
@@ -572,7 +577,9 @@ export const TRACKS = {
       // the island down to the kerb of the S on its west side
       { kind: 'ridge', u: 0.58, lat: -14, len: 44, r: 10, h: 5, top: 0.25, near: 0.5 },
       { kind: 'paint', u: 0.58, lat: -14, len: 44, r: 7, w: 4, tint: 0x5f9f5f },
-      { kind: 'shore', u: 0.795, lat: 10.5, len: 24, r: 18 }
+      { kind: 'shore', u: 0.795, lat: 10.5, len: 24, r: 18 },
+      // no seeded crate on the island's face above the bend past Skull Rock
+      { kind: 'clear', u: 0.69, lat: -10, len: 20, r: 6 }
     ]
   },
   driftwood: {
@@ -595,7 +602,7 @@ export const TRACKS = {
       { model: 'set-strand-line', u: 0.33, lat: -10.2, yaw: 176 },
       { model: 'set-strand-line', u: 0.39, lat: -9.3, yaw: -4 },
       { model: 'set-bonfire', u: 0.45, lat: -8.7, yaw: 160 },
-      { model: 'set-driftwood-forts', u: 0.423, lat: -7.8 },
+      { model: 'set-driftwood-forts', u: 0.423, lat: -9.3 },
       { model: 'set-lighthouse', u: 0.855, lat: -9.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
       // them; lifted to the verge they stand on
@@ -618,7 +625,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 5, top: 0.2 },
       // a low grassy line of dunes inland of the strand line, the sea side
       // left open
-      { kind: 'ridge', u: 0.315, lat: 13, yaw: 20, len: 12, r: 10, h: 4.2, top: 0.3, near: 0.5, tint: 0x96c47c },
+      { kind: 'ridge', u: 0.315, lat: 12, yaw: 120, len: 18, r: 9, h: 3.8, top: 0.45, near: 0.5, tint: 0x96c47c },
       { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 10, h: 4.5, top: 0.3, near: 0.5, tint: 0x96c47c },
       { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 10, h: 4, top: 0.3, near: 0.5, tint: 0x96c47c },
       // and a broader one behind them, turned broadside to the run down to
@@ -668,7 +675,10 @@ export const TRACKS = {
       { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
       { model: 'set-surf-club', u: 0.035, lat: -9, yaw: 180 },
-      { model: 'set-surf-campers', u: 0.72, lat: -8, yaw: 180 }
+      { model: 'set-surf-campers', u: 0.72, lat: -8, yaw: 180 },
+      // palms on the Point's lower flank, placed by hand (its `clear` keeps
+      // the seeded ones off), none on the marram dune
+      { model: 'set-palm-stand', u: 0.95, lat: -9, yaw: 180 }
     ],
     land: [
       { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
