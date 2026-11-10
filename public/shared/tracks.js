@@ -629,12 +629,11 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 5, top: 0.2 },
       // a low grassy line of dunes inland of the strand line, the sea side
       // left open
-      { kind: 'ridge', u: 0.315, lat: 12, yaw: 120, len: 18, r: 9, h: 3.8, top: 0.45, near: 0.5, tint: 0x96c47c },
-      { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 10, h: 4.5, top: 0.3, near: 0.5, tint: 0x96c47c },
-      { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 10, h: 4, top: 0.3, near: 0.5, tint: 0x96c47c },
-      // and a broader one behind them, turned broadside to the run down to
-      // the strand: end-on it read as a peak dead ahead
-      { kind: 'ridge', u: 0.37, lat: 24, yaw: 70, len: 30, r: 13, h: 5, top: 0.4, tint: 0x96c47c },
+      // kept low: ridge heights add, so taller ones here stacked with the
+      // dune behind into a pale peak over the run down to the strand
+      { kind: 'ridge', u: 0.315, lat: 13, yaw: 20, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 8.5, h: 2.6, top: 0.3, near: 0.5, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
       { kind: 'ridge', u: 0.975, lat: -14, len: 26, r: 6.5, h: 3, top: 0.3, near: 2.8, tint: 0xa8d090 },
       // nothing seeded on the dunes' faces
