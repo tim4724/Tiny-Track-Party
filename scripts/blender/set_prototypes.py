@@ -4877,16 +4877,18 @@ def round_tree(at, h=5.0, r=2.0, color=0x5f9f4a):
     cyl(0.25 * r / 2, h * 0.5, at, 0x7a5a3a, segs=6)
     sphere(r, (at[0], at[1] + h - r, at[2]), color, subdiv=1)
 
-def tent(at, yaw, color, L=2.4, W=1.8, H=1.3):
+def tent(at, yaw, color, L=2.4, W=1.8, H=1.3, door=0x2a2735, trim=None):
     """A ridge tent, its door end on +X: two pitched sheets, a back wall and
-    an open, dark door."""
+    an open door, dark (or `door`), a `trim` along its ridge if given."""
     F = local(at[0], at[2], yaw)
     y0 = at[1]
     a = math.atan2(H, W / 2)
     w = math.hypot(W / 2, H)
     for k in (-1, 1):
         box((L, 0.1, w), F(0, y0 + H / 2, k * W / 4), color, yaw=yaw, pitch=-k * a)
-    box((0.2, H * 0.85, 0.5), F(L / 2 - 0.05, y0 + H * 0.42, 0), 0x2a2735, yaw=yaw)
+    box((0.2, H * 0.85, 0.5), F(L / 2 - 0.05, y0 + H * 0.42, 0), door, yaw=yaw)
+    if trim:
+        box((L + 0.04, 0.1, 0.16), F(0, y0 + H - 0.02, 0), trim, yaw=yaw)
 
 def kennel(at, yaw):
     """A dog's kennel, its door on +X, and the dog sitting at it."""
@@ -7113,14 +7115,18 @@ def ore_line():
     span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1])) * k
     period = span / 2.0
     gap = 2.4 / (span / k)                                       # a wagon's length and its coupling, of the loop
+    # its phase puts it on the start straight's trestle as a race's second
+    # lap opens (the scene clock's, so the films' lap): a train a lap's
+    # length behind it was only ever seen at the headframe
+    PHASE = 0.65
     x0, z0 = pts[0]
-    with animated('anim_path:c=ore:p=%.1f:o=0:f=1#0' % period, (x0, Y, z0)):
+    with animated('anim_path:c=ore:p=%.1f:o=%.4f:f=1#0' % (period, PHASE), (x0, Y, z0)):
         mine_loco((x0, Y, z0), yaw=math.pi / 2)
     for n in range(1, 4):
-        with animated('anim_path:c=ore:p=%.1f:o=%.4f:f=1#%d' % (period, 1.0 - n * gap, n), (x0, Y, z0)):
+        with animated('anim_path:c=ore:p=%.1f:o=%.4f:f=1#%d' % (period, (PHASE - n * gap) % 1.0, n), (x0, Y, z0)):
             ore_cart((x0, Y, z0), yaw=math.pi / 2, ore_color='yellow')
 
-def equine(at, yaw, coat, L=0.62, ears=0.12, life=None, mane=0x5a4632):
+def equine(at, yaw, coat, L=0.62, ears=0.12, life=None, mane=0x5a4632, muzzle=0xf2bf99):
     """A horse or a burro at its own size beside a car (a horse some 0.6
     long, a burro less, its ears longer), facing +X turned by `yaw`, in the
     cow's blocks: its head on a neck hinged for `life` (a calm dip and lift)."""
@@ -7138,6 +7144,7 @@ def equine(at, yaw, coat, L=0.62, ears=0.12, life=None, mane=0x5a4632):
     def head():
         box((0.16 * k, 0.3 * k, 0.12 * k), p(0.3 * k, 0.56 * k, 0), coat, yaw=yaw, roll=-0.6)    # the neck
         box((0.26 * k, 0.12 * k, 0.13 * k), p(0.44 * k, 0.66 * k, 0), coat, yaw=yaw, roll=0.5)   # the head
+        box((0.1 * k, 0.09 * k, 0.14 * k), p(0.56 * k, 0.6 * k, 0), muzzle, yaw=yaw, roll=0.5)  # its pale muzzle
         for ez in (-0.04 * k, 0.04 * k):
             box((0.04 * k, ears * k, 0.03 * k), p(0.36 * k, 0.75 * k + ears * k / 2, ez), mane, yaw=yaw)
     if life:
@@ -7241,7 +7248,7 @@ def boomtown_south():
     false_front(-1.2, 2.6, 2.4, 1.6, 0x868ba1, 0xfde4c7)                          # the bank
     boardwalk(-2.6, 7.2)
     wagon((0.6, 0, -0.6), math.pi / 2)
-    equine((0.6, 0, 0.75), math.pi / 2, 0x5a3a28, life='anim_sway:a=z:d=18:p=7.4:r=0.72#b')
+    equine((0.6, 0, 0.75), math.pi / 2, 0x9a6a46, life='anim_sway:a=z:d=18:p=7.4:r=0.72#b')     # a bay
     # the chapel: a white gable hall, its steeple over the door to the street
     hut(2.8, 1.4, 2.0, (-1.4, 0, -6.6), 0xfdf4de, 0x6e5b3a, t=0.4)
     box((0.7, 1.6, 0.7), (-0.2, 1.6, -6.6), 0xfdf4de)
@@ -7250,21 +7257,28 @@ def boomtown_south():
 
 @piece(1.0)
 def tailings_dump():
-    # Gulch: the mine's tailings dump filling the inner loop: a grey heap of
-    # waste rock (geometry: the loop's middle is held under the deck cap, so
-    # no land can rise there), a timber incline up its side and at its top
-    # an ore cart on its tipple, tipping and coming back slowly.
-    mound(3.6, 0.0, 0.0, 6.5, 6.5, 6.5, color='grey', rings=6, segs=16, sink=0.4, shape=1.3, jitter=0.25)
+    # Gulch: the mine's tailings dump filling the inner loop: waste rock
+    # tipped in two benches with a ragged lip (geometry: the loop's middle is
+    # held under the deck cap, so no land can rise there), rubble fallen
+    # round its foot, and up its face toward the road (-X) a timber incline
+    # to the tipple at its top, where an ore cart tips and comes back slowly.
+    mound(2.0, 0.0, 0.0, 6.6, 6.6, 6.4, color='grey', rings=6, segs=18, sink=0.4, shape=0.55, jitter=0.35)
+    mound(3.9, 0.6, 0.4, 3.6, 3.9, 3.8, color='grey', rings=5, segs=14, sink=0.2, shape=0.9, jitter=0.3)
     with plain_parts():
+        for i in range(7):                                                         # rubble round its foot
+            a = 2 * math.pi * (i + 0.4 * hash1(i, 7.0)) / 7
+            q = 0.45 + 0.2 * (hash1(i, 3.0) + 1)
+            box((q * 1.4, q * 0.8, q), (6.9 * math.cos(a), q * 0.3, 6.7 * math.sin(a)),
+                'grey' if i % 2 else 0xa96545, yaw=a, roll=0.2 * hash1(i, 9.0))
         for i in range(6):                                                         # the incline's trestle
             t = i / 5
-            x, y = 5.4 - 5.0 * t, 3.6 * t * 0.95
+            x, y = -5.8 + 5.0 * t, 3.9 * t * 0.96
             for sz in (-0.35, 0.35):
                 box((0.1, y + 0.3, 0.1), (x, (y + 0.3) / 2 - 0.15, sz), 0x8a5f3e)
-        beam((5.6, 0.3, 0.0), (0.6, 3.75, 0.0), 0.8, 0x8a5f3e)
-    box((1.0, 0.14, 1.0), (0.3, 3.7, 0.0), 0x8a5f3e)                               # the tipple's deck
-    with animated('anim_sway:a=z:d=28:p=9.5#tip', (0.0, 3.85, 0.0)):
-        ore_cart((0.0, 3.8, 0.0), yaw=math.pi / 2, ore_color=0x868ba1)
+        beam((-6.0, 0.3, 0.0), (-1.0, 4.05, 0.0), 0.8, 0x8a5f3e)
+    box((1.0, 0.14, 1.0), (-0.7, 4.0, 0.0), 0x8a5f3e)                              # the tipple's deck
+    with animated('anim_sway:a=z:d=28:p=9.5#tip', (-1.0, 4.15, 0.0)):
+        ore_cart((-1.0, 4.1, 0.0), yaw=math.pi / 2, ore_color=0x868ba1)
     join_still('dump')
 
 @piece(1.0)
@@ -7273,8 +7287,10 @@ def miners_camp():
     # wall tents, the chuck wagon under its canvas, two burros standing by,
     # the cook fire's ring of stones with a thin wisp of smoke, and a sluice
     # box on its trestles, at their own size beside a car.
+    # (pale canvas with black doors read as black slabs on the sand: the
+    # canvas warm, the openings brown, a red trim along each ridge)
     for k, (x, z, yaw) in enumerate(((-2.4, -2.8, 0.2), (-2.8, 0.3, -0.1), (-2.2, 3.2, 0.3))):
-        tent((x, 0, z), yaw, 0xfde4c7, L=1.5, W=1.2, H=0.95)
+        tent((x, 0, z), yaw, 0xffffff, L=1.5, W=1.2, H=0.95, door=0x8a5f3e, trim=0xc0392b)
     wagon((-0.2, 0, -4.8), 0.3, cover=0xfdf4de)
     equine((0.1, 0, 2.2), 2.6, 0x868ba1, L=0.48, ears=0.18, life='anim_sway:a=z:d=22:p=7.9:r=0.7#b1')
     equine((0.6, 0, 3.1), 1.9, 0x8a5a3c, L=0.46, ears=0.18, life='anim_sway:a=z:d=24:p=9.1:r=0.74#b2')
@@ -8247,24 +8263,28 @@ def tunnel_foothills():
 def hogback():
     # Sidewinder: a hogback along the east straight, the massif's strata
     # tilted up out of the plain: its dip slope rises gently from the road's
-    # side (+X) to a sharp crest seven units up and drops away behind in a
-    # short scarp, so a racer sees banded rock sloping away, not a face (a
-    # symmetric fin stood broadside as a wall). Two notches the weather cut
-    # through it break its forty-odd units into three.
+    # side (+X) to a sharp crest and drops away behind in a short scarp, so a
+    # racer sees banded rock sloping away, not a face. Three fins the weather
+    # cut it into, each crest highest in its middle and falling to rounded
+    # ends (one level crest read as a wall as the road passed; a fin's end
+    # cut square read as a wedge on the sand), blocks fallen down the slope.
+    FINS = ((-14.5, 7.5, 6.2), (1.0, 7.5, 7.6), (16.0, 6.5, 5.6))   # middle, half length, crest
     def M(x, z):
-        L = 22.0
-        end = max(0.0, min(1.0, min(z + L, L - z) / 6.0))
-        end = end * end * (3 - 2 * end)
-        notch = max(0.8 * math.exp(-((z - zc) / 1.7) ** 2) for zc in (-7.5, 8.5))
-        H = 7.5 * end * (1.0 - notch) * (1.0 + 0.12 * math.sin(0.37 * z + 1.0))
-        c = -1.5 + 0.6 * math.sin(0.21 * z)                         # the crest
-        if x >= c:
-            f = max(0.0, 1.0 - (x - c) / 6.5) ** 1.15               # the dip slope, toward the road
+        H = 0.0
+        for c, half, peak in FINS:
+            t = abs(z - c) / half
+            if t < 1.0:
+                H = max(H, peak * (1.0 - t * t) ** 0.8)
+        cr = -1.5 + 0.6 * math.sin(0.21 * z)                        # the crest's line
+        if x >= cr:
+            f = max(0.0, 1.0 - (x - cr) / 6.5) ** 1.15              # the dip slope, toward the road
         else:
-            f = max(0.0, 1.0 - (c - x) / 2.2) ** 0.6                # the scarp behind
+            f = max(0.0, 1.0 - (cr - x) / 2.2) ** 0.6               # the scarp behind
         return H * f + 0.25 * math.sin(1.3 * x + 0.9 * z) * f - 0.5
-    strata_massif(M, -6.0, 8.0, -26.0, 26.0, [b for b in CANYON_STRATA if b[0] < 7.5], step=2.2, tol=0.35,
+    strata_massif(M, -6.0, 8.0, -26.0, 26.0, [b for b in CANYON_STRATA if b[0] < 7.6], step=2.2, tol=0.35,
                   summits=False)
+    drop_blocks(((2.6, -16.0, 1.3, 0.4), (3.0, -3.0, 1.5, 1.9), (2.2, 5.5, 1.1, 2.6), (3.2, 13.5, 1.4, 0.9),
+                 (1.6, 19.0, 1.0, 2.2)), 0xa96545)
     def scree():
         for i, (x, z, s) in enumerate(((-4.5, -24.0, 0.8), (-4.8, 23.0, 0.9))):
             box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
@@ -8286,26 +8306,55 @@ def wash_butte():
     draped('scree', scree)
 
 @piece(1.0)
+def bench_ledge():
+    # Wash: the bench's edge beside the high road (+X the road, Z along it):
+    # broken ledges of its banded sandstone one to two car heights, in four
+    # runs with gaps, a stand of saguaros and brush behind them, all draped
+    # on the bench as drawn (the rock is geometry: steep land rock is the
+    # Android box's dear pixels). Never at the kerb.
+    def ledge():
+        for run, (z0, z1) in enumerate(((-11.0, -6.5), (-4.5, -0.5), (1.5, 6.0), (8.0, 11.5))):
+            n = max(2, int((z1 - z0) / 1.3))
+            for i in range(n):
+                z = z0 + (z1 - z0) * (i + 0.5) / n
+                h = 0.9 + 0.8 * (0.5 + 0.5 * math.sin(1.7 * z + run))
+                x = 0.3 * math.sin(0.9 * z + 2.0 * run)
+                for k, (dy, col) in enumerate(((0.0, 0xd68f62), (h * 0.55, 0xa96545))):
+                    box((1.4 - 0.3 * k, h * 0.55, (z1 - z0) / n + 0.1), (x - 0.2 * k, dy + h * 0.275, z),
+                        col, yaw=0.08 * math.sin(2.3 * z))
+        saguaro((-2.2, 0, -8.0), 4.0, arms=((0.3, 0.42, 0.36), (3.5, 0.52, 0.3)))
+        saguaro((-1.9, 0, 0.6), 4.8, arms=((2.2, 0.38, 0.4), (5.3, 0.5, 0.3), (0.9, 0.62, 0.22)))
+        saguaro((-2.5, 0, 7.4), 3.6, arms=((4.0, 0.48, 0.32),))
+        for z in (-5.5, 3.5, 10.0):
+            brush((-1.8, 0, z), 0.8, yaw=z)
+        barrel_cactus((-1.4, 0, -2.0), 1.0)
+    draped('ledge', ledge)
+
+@piece(1.0)
 def tinaja():
     # Wash: a tinaja where the side wash meets the road past the east loop,
     # a hollow in the slickrock holding the rain (+X the road): a pool of
-    # standing water in a rim of pale rock ledges, three wild burros come
-    # to drink at it, one dipping its head, one looking up, one standing by.
-    # Water and rock only; nothing green.
+    # standing water in a rim of pale rock ledges tilted to the road, three
+    # wild burros (grey-brown, pale-muzzled: a near-black one read as a
+    # blob) come to drink at it. Water and rock only; nothing green.
     with plain_parts():
-        for i in range(11):                                                      # the slickrock rim
-            a = 2 * math.pi * (i + 0.3 * hash1(i, 2.0)) / 11
-            r = 2.0 + 0.3 * hash1(i, 5.0)
-            box((1.1, 0.3 + 0.12 * (i % 3), 0.8), (-1.4 + r * 1.2 * math.cos(a), 0.12, r * math.sin(a)),
+        # the slickrock rim, tilted to the road: low on the near side (+X),
+        # standing up behind, so the pool shows from the kerb
+        for i in range(13):
+            a = 2 * math.pi * (i + 0.3 * hash1(i, 2.0)) / 13
+            r = 2.6 + 0.3 * hash1(i, 5.0)
+            far = 0.5 - 0.5 * math.cos(a)                                        # 0 toward the road, 1 behind
+            box((1.2, 0.14 + 0.75 * far + 0.1 * (i % 3), 0.85),
+                (-1.8 + r * 1.2 * math.cos(a), 0.04 + 0.3 * far, r * math.sin(a)),
                 0xe3cfa4 if i % 2 else 0xd68f62, yaw=a + 0.5)
-        ground_poly([(-1.4 + 1.95 * math.cos(2 * math.pi * k / 14) * 1.15, 0.05,
-                      1.75 * math.sin(2 * math.pi * k / 14)) for k in range(14)],
-                    [tuple(range(14))], 0x62d3c8)                                 # the water
-    equine((0.1, 0, -0.4), math.pi * 0.9, 0x868ba1, L=0.48, ears=0.18,
+        ground_poly([(-1.8 + 2.6 * math.cos(2 * math.pi * k / 16) * 1.15, 0.05,
+                      2.35 * math.sin(2 * math.pi * k / 16)) for k in range(16)],
+                    [tuple(range(16))], 0x62d3c8)                                 # the water
+    equine((0.4, 0, -0.6), math.pi * 0.9, 0x868ba1, L=0.48, ears=0.18,
            life='anim_sway:a=z:d=26:p=5.7:r=0.62#d')                            # dipping to drink
-    equine((0.5, 0, 0.9), math.pi * 1.1, 0x8a5a3c, L=0.46, ears=0.18,
+    equine((0.8, 0, 0.9), math.pi * 1.1, 0x9a7b55, L=0.46, ears=0.18,
            life='anim_sway:a=z:d=12:p=8.3:r=0.8#l')
-    equine((-0.2, 0, 2.6), math.pi * 1.4, 0x5a4632, L=0.44, ears=0.17)
+    equine((0.2, 0, 2.9), math.pi * 1.4, 0x868ba1, L=0.44, ears=0.17)
     join_still('tinaja')
 
 # Crag's rock: the canyon's level strata (strata_massif) over a butte's
@@ -8393,13 +8442,7 @@ def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07):
     # stones fallen off the cliff lying on the talus, in its colour (dark
     # ones read as holes), each dropped onto the strata as built
     import random
-    from mathutils.bvhtree import BVHTree
-    bpy.context.view_layer.update()
-    deps = bpy.context.evaluated_depsgraph_get()
-    trees = [BVHTree.FromObject(o, deps) for o in bpy.context.scene.objects if o.type == 'MESH']
-    def ground(x, z):
-        hits = [t.ray_cast(P(x, 60.0, z), Vector((0.0, 0.0, -1.0))) for t in trees]
-        return max((h[0].z for h in hits if h[0] is not None), default=None)
+    ground = built_ground()
     rnd = random.Random(seed)
     with plain_parts():
         n = 0
@@ -8416,6 +8459,30 @@ def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07):
             box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) + 0.15 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
                 roll=rnd.uniform(-0.15, 0.15), pitch=rnd.uniform(-0.1, 0.1))
             n += 1
+
+def built_ground():
+    """The height of the meshes built so far at (x, z) (None off them): what
+    a block is dropped onto, the strata as built, a band's slope lying a
+    little under its height function."""
+    from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
+    deps = bpy.context.evaluated_depsgraph_get()
+    trees = [BVHTree.FromObject(o, deps) for o in bpy.context.scene.objects if o.type == 'MESH']
+    def ground(x, z):
+        hits = [t.ray_cast(P(x, 60.0, z), Vector((0.0, 0.0, -1.0))) for t in trees]
+        return max((h[0].z for h in hits if h[0] is not None), default=None)
+    return ground
+
+def drop_blocks(spots, color):
+    """Big blocks fallen off a rock piece, each (x, z, size, yaw) dropped onto
+    the rock as built (or the plain past it) and bedded in the slope it lands
+    on: sunk at its uphill side, never hanging at its downhill one."""
+    ground = built_ground()
+    with plain_parts():
+        for i, (x, z, q, yaw) in enumerate(spots):
+            ys = [ground(x + dx, z + dz) or 0.0 for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
+            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) + 0.2 * q, z), color, yaw=yaw,
+                roll=0.12 * math.sin(3.1 * i), pitch=0.08 * math.cos(2.3 * i))
 
 def crag_rubble(spots):
     """Low stones past the talus, lying on the plain in its colour: they
@@ -8442,6 +8509,10 @@ def rimrock_mesa():
                 (-7.0, 15.0, 16.0, 3.5, 4.0, 0.4, 2.0, 0.2),
                 (12.5, -24.0, 14.0, 6.0, 6.5, -0.3, 3.0, 0.22), (1.0, -39.0, 11.0, 2.8, 2.4, 0.0, 1.5, 0.45)),
                4.0, 8.0, 46.0, 2.7, pale=1)
+    # big blocks fallen down the broken-off butte's apron toward the S,
+    # back from its kerb, so the slope reads as the mesa's foot, not sand
+    drop_blocks(((19.5, -17.5, 1.6, 0.5), (18.5, -22.5, 1.9, 2.1), (20.0, -27.5, 1.4, 1.2),
+                 (17.5, -31.0, 1.7, 2.7), (13.5, -8.5, 1.5, 0.2)), CRAG_CLIFF)
     crag_rubble(((-16.0, -32.0, 0.8), (-22.0, 26.0, 0.9)))           # on the east side, off both roads
     # a hawk riding the air off the north end, where the loop rounds it
     hawk_circle((2.0, 27.0), 9.0, 6.0, 17.0)
@@ -8598,10 +8669,12 @@ def roadside_junction():
 @plain
 def tank_farm():
     # Sidewinder: the oil field's tank farm inside the north loop: three
-    # broad storage tanks, rust and white (a real lease tank's size beside a
-    # car), their ladders and the pipe that joins them.
-    for k, (x, z, r, h, col) in enumerate(((0.0, -2.6, 1.15, 1.6, 'white'), (0.3, 0.0, 1.0, 1.4, 0xc0392b),
-                                           (-0.2, 2.5, 1.15, 1.6, 'white'))):
+    # broad storage tanks in a row (+Z toward the road, the rust one at that
+    # end: in a row along the road the camera saw them one behind the other),
+    # a real lease tank's size beside a car, their ladders and the pipe that
+    # joins them.
+    for k, (x, z, r, h, col) in enumerate(((0.0, -2.6, 1.15, 1.6, 'white'), (0.3, 0.0, 1.15, 1.6, 'white'),
+                                           (-0.2, 2.5, 1.0, 1.4, 0xc0392b))):
         cyl(r, h, (x, 0, z), col, segs=14)
         cyl(r + 0.05, 0.12, (x, h, z), 'slate', segs=14)
         cyl(r * 0.5, 0.18, (x, h + 0.06, z), 'grey', segs=10)

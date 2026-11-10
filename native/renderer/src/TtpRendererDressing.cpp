@@ -1204,12 +1204,27 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         for (float s = 35; s < tb.length - 10; s += 3) {
             const TrackBin::Sample f = tb.frameAt(s);
             if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 6.5f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            // Off the set pieces too: a family placed inside a canyon's rock
-            // face stood buried in it, its cap a stray block mid-cliff.
-            if (!isClear(x, z, 5) || inSetFoot(x, z, 5)) continue;
+            // Off the set pieces too (a family placed inside a canyon's rock
+            // face stood buried in it, its cap a stray block mid-cliff), and
+            // far enough off that the tall one stands whole in the chase
+            // camera's picture as it passes (6.5 u past the edge, cut off by
+            // the frame's top, it read as a square post). Where a piece holds
+            // the drawn side, the other side of the same spot first: a family
+            // stays at the stretch it marked.
+            const int first = rnd() < 0.5 ? -1 : 1;
+            int side = 0;
+            float x = 0, z = 0;
+            for (const int sd : { first, -first }) {
+                const float lat = sd * (f.width / 2 + 9.0f);
+                const float cx = f.pos.x + f.lat.x * lat, cz = f.pos.z + f.lat.z * lat;
+                if (isClear(cx, cz, 5) && !inSetFoot(cx, cz, 5)) {
+                    side = sd;
+                    x = cx;
+                    z = cz;
+                    break;
+                }
+            }
+            if (!side) continue;
             const float3 tan = f.tangent();
             hoodoo(x, z, 8.6f); // the tall one
             hoodoo(x + tan.x * 3.8f + f.lat.x * side * 1.6f,
