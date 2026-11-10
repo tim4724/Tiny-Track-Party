@@ -8946,10 +8946,8 @@ def rimrock_mesa():
                 (-7.0, 15.0, 16.0, 3.5, 4.0, 0.4, 2.0, 0.2),
                 (12.5, -24.0, 14.0, 6.0, 6.5, -0.3, 3.0, 0.22), (1.0, -39.0, 11.0, 2.8, 2.4, 0.0, 1.5, 0.45)),
                4.0, 8.0, 46.0, 2.7, pale=1)
-    # big blocks fallen down the broken-off butte's apron toward the S,
-    # back from its kerb, so the slope reads as the mesa's foot, not sand
-    drop_blocks(((19.5, -17.5, 1.6, 0.5), (18.5, -22.5, 1.9, 2.1), (20.0, -27.5, 1.4, 1.2),
-                 (17.5, -31.0, 1.7, 2.7), (13.5, -8.5, 1.5, 0.2)), CRAG_CLIFF)
+    # (no blocks on the apron: its stepped slope buries all but their shaded
+    # faces, which read as holes torn in the sand)
     crag_rubble(((-16.0, -32.0, 0.8), (-22.0, 26.0, 0.9)))           # on the east side, off both roads
     # a hawk riding the air off the north end, where the loop rounds it
     hawk_circle((2.0, 27.0), 9.0, 6.0, 17.0)
