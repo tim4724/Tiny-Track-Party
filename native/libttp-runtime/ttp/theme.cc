@@ -346,14 +346,14 @@ void penguinGlacier(Theme& t) {
                  { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
 }
 
-// Avalanche is a pass under a slope that lets go: debris (rock and tumbled
-// snow) along the road, and the gantry's posts banded orange and black like
+// Avalanche is a pass under a slope that lets go: tumbled snow along the
+// road (no lone rock on the open snow: it read as dropped crates; its rock is
+// the cirque's crags and cut), and the gantry's posts banded orange and black like
 // the avalanche poles that mark a road through a slide path.
 void avalanchePass(Theme& t) {
   ploughBanks(t);
   t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
-  snowProps(t, { { "set-snow-boulder", 0.55f, 0.6f, 0.6f, false, false },
-                 { "snow-pile", 0.30f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
+  snowProps(t, { { "snow-pile", 0.65f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.35f, 1.0f, 0.3f, false, false } });
 }
 
 // Each playroom track is one game played on the floor at the toy cars' own
