@@ -67,6 +67,5 @@ function compose(kit, name, build) {
 const SHIP = 0.65;
 compose(PIRATE, 'set-pirate-ship', (put) => {
   put('ship-pirate-large', { x: 0, z: 0, y: -0.35 * SHIP, yaw: 0.12, scale: SHIP, name: 'anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2' });
-  // tracks.js sinks the ship a third of a unit; the longboat floats, so it rides that back up
-  put('boat-row-large', { x: 3.4, z: -2.9, y: 0.3, yaw: 0.9, scale: 0.34, name: 'anim_bob:h=0.08:p=3.4' });
+  put('boat-row-large', { x: 3.4, z: -2.9, y: 0, yaw: 0.9, scale: 0.34, name: 'anim_bob:h=0.08:p=3.4' });
 });

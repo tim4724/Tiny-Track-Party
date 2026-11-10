@@ -12,9 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 
-const FLOATING = {
-  'set-pirate-ship': 4        // the rowboat on the sea beside it
-};
+const FLOATING = {};
 
 test('no shipped set piece floats a part beyond its FLOATING entry', async () => {
   const { checkPiece, shippedPieces, SET_DIR } = await import(path.join(__dirname, '../scripts/set-check.mjs'));
