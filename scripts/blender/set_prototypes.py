@@ -2946,13 +2946,14 @@ def ramp(a, b, w, t, color):
 # DRAWN, sampled (the display's groundY over the piece's own base) every unit
 # along its -X from the outrun's end back over the hill. Re-sample whenever
 # the land or the piece moves.
-JUMP_GROUND = ((2.0, 0.06), (1.0, 0.01), (0.0, -0.14), (-1.0, -0.10), (-2.0, -0.05), (-3.0, 0.00), (-4.0, 0.06),
-               (-5.0, 0.11), (-6.0, 0.16), (-7.0, 0.67), (-8.0, 1.19), (-9.0, 1.70), (-10.0, 2.21), (-11.0, 2.73),
-               (-12.0, 3.24), (-13.0, 3.74), (-14.0, 4.19), (-15.0, 4.63), (-16.0, 4.85), (-17.0, 5.02),
-               (-18.0, 5.20), (-19.0, 5.38), (-20.0, 5.55), (-21.0, 5.79), (-22.0, 6.03), (-23.0, 6.28),
-               (-24.0, 6.53), (-25.0, 6.17), (-26.0, 5.61), (-27.0, 5.04), (-28.0, 4.46), (-29.0, 3.85),
-               (-30.0, 3.24), (-31.0, 2.63), (-32.0, 2.02), (-33.0, 1.41), (-34.0, 1.23), (-35.0, 1.33),
-               (-36.0, 1.50), (-37.0, 1.69), (-38.0, 1.88))
+JUMP_GROUND = ((2.0, -0.10), (1.0, -0.16), (0.0, -0.13), (-1.0, -0.10), (-2.0, -0.05), (-3.0, 0.00), (-4.0, 0.05),
+               (-5.0, 0.11), (-6.0, 0.14), (-7.0, 0.36), (-8.0, 0.57), (-9.0, 0.79), (-10.0, 1.00), (-11.0, 1.21),
+               (-12.0, 1.43), (-13.0, 1.68), (-14.0, 2.01), (-15.0, 2.33), (-16.0, 2.79), (-17.0, 3.26),
+               (-18.0, 3.73), (-19.0, 4.21), (-20.0, 4.68), (-21.0, 5.08), (-22.0, 5.47), (-23.0, 5.85),
+               (-24.0, 6.23), (-25.0, 5.85), (-26.0, 5.21), (-27.0, 4.56), (-28.0, 3.90), (-29.0, 3.20),
+               (-30.0, 2.49), (-31.0, 1.79), (-32.0, 1.08), (-33.0, 0.37), (-34.0, 0.25), (-35.0, 0.48),
+               (-36.0, 0.77), (-37.0, 1.08), (-38.0, 1.39), (-39.0, 1.70), (-40.0, 2.01), (-41.0, 2.32),
+               (-42.0, 2.63), (-43.0, 2.77), (-44.0, 2.74))
 
 def jump_ground(x):
     pts = JUMP_GROUND
@@ -2965,41 +2966,45 @@ def jump_ground(x):
 
 @piece(1.0)
 def ski_jump():
-    # Flurry: the village's ski jump at the west loop's outside kerb, where
-    # the start straight and the run in to the line look straight at it
-    # (tracks.js flurry), a third of a right angle off its axis: the landing
-    # hill's face and the in-run's track rising to the tower both show. Its
-    # outrun ends a few units off the kerb, its landing hill (SET_GROUND, a
-    # mound whose flank falls convex from the knoll, steepest halfway and
-    # easing into the outrun) rises behind, and its tower stands on the
-    # hill's back, low enough that the chase camera holds the whole jump in
-    # frame from the line until the bend turns it away. Drawn in what a racer
+    # Flurry: the village's ski jump at the west loop's outside kerb,
+    # where the start straight and the run in to the line look straight at
+    # it (tracks.js flurry), a third of a right angle off its axis: the
+    # landing hill's face and the in-run's track rising to the tower both
+    # show. Its outrun ends a few units off the kerb and its landing hill
+    # (SET_GROUND) rises behind: the hill's crest is the knoll under the
+    # takeoff, its long face falls steepest under the lip and eases into
+    # the outrun, and its back is short, so the in-run climbs on its legs
+    # clear of the hill to the tower behind it, low enough that the chase
+    # camera holds the whole jump in frame from the line until the bend
+    # turns it away. The table runs out past the crest and stops in the
+    # air over the face, its red front the lip. Drawn in what a racer
     # reads at speed against snow and sky: the in-run a dark steel girder
-    # between red side walls capped white, on dark legs; its tower banded red
-    # and white like a mast, the start hut blue; the judges' tower blue, up
-    # the landing slope's side; flags at the outrun's end. No boards or lanes
-    # down the slope's edges (from the road a row of them reads as a fence),
-    # and no K line across it (on the chords it bent into a red chevron in
-    # the air). At its real size beside a car: the in-run rising five units
-    # over its takeoff at 33 degrees, easing through its transition onto the
-    # table. A jumper rides it every quarter minute (anim_path): down the
-    # in-run, a flight close over the slope, the landing, the outrun into the
-    # timing hut, then back under the snow and up inside the tower to the
-    # start. +X toward the cars, the in-run behind. The hill's ground stands
-    # on the verge it meets at the anchor (its base), so y = 0 is that, and
-    # the outrun's end lies below it. Every part on the hill is built down to
-    # y = 0, through the land, so it stands on the ground however the chords
-    # draw it.
+    # between red side walls capped white, on dark legs; its tower banded
+    # red and white like a mast, the start hut blue; the judges' tower
+    # blue, let into the landing hill's flank toward the line, the hill
+    # behind it from the road; flags at the outrun's end. No boards or
+    # lanes down the slope's edges (from the road a row of them reads as a
+    # fence), and no K line across it (on the chords it bent into a red
+    # chevron in the air). At its real size beside a car: the in-run
+    # rising five units over its takeoff at 33 degrees, easing through its
+    # transition onto the table. A jumper rides it every quarter minute
+    # (anim_path): down the in-run, a flight close over the slope, the
+    # landing, the outrun into the timing hut, then back under the snow
+    # and up inside the tower to the start. +X toward the cars, the in-run
+    # behind. The hill's ground stands on the verge it meets at the anchor
+    # (its base), so y = 0 is that, and the outrun's end lies below it.
+    # Every part on the hill is built down to y = 0, through the land, so
+    # it stands on the ground however the chords draw it.
     H = set_ground('ski-jump')
     G = jump_ground
-    T0, T1 = -30.3, -19.0                  # the in-run's top (over the tower) and its takeoff edge
-    W = 2.0                                # the in-run's width
+    T0, T1 = -32.3, -21.0                  # the in-run's top (over the tower) and its takeoff edge
+    W = 2.4                                # the in-run's width
     # The in-run's line, from the takeoff back up: the table at 10 degrees
     # down, the transition easing it to 33, then straight to the top.
     s1, s2 = math.tan(math.radians(33.0)), math.tan(math.radians(10.0))
     def slope(x):
         return s2 + (s1 - s2) * smooth01((T1 - 1.5 - x) / 4.5)
-    run = [(T1, G(T1) + 0.9)]
+    run = [(T1, G(T1) + 1.4)]
     x = T1
     while x > T0 + 1e-6:
         step = min(1.0, x - T0)
@@ -3014,28 +3019,35 @@ def ski_jump():
     # the chords draw the knoll under the mound's curve) the girder runs on
     # down into the land, and the track and the walls down to the ground as
     # drawn: the in-run's foot rests on the hill, its red sides to the snow.
+    # The table, its last two units, is a thinner slab run out from there
+    # over the face, its lip in the air.
     for (xa, ya), (xb, yb) in zip(run, run[1:]):
         lo = min(ya, yb)
-        near = lo - 1.0 < max(H(q, s * W / 2) for q in (xa, xb) for s in (-1, 1)) + 0.25
+        table = xa > T1 - 2.0 - 1e-6
+        near = not table and lo - 1.0 < max(H(q, s * W / 2) for q in (xa, xb) for s in (-1, 1)) + 0.25
         sink = 1.25 * (lo - min(G(xa), G(xb)) + 0.5)       # a pitched slab's depth to under the ground
-        ramp((xa, ya, 0.0), (xb, yb, 0.0), W, lo + 0.5 if near else 1.0, STEEL)
+        ramp((xa, ya, 0.0), (xb, yb, 0.0), W, lo + 0.5 if near else 0.5 if table else 1.0, STEEL)
         # the track and the caps a hair past each end, so where the line
-        # bends the spans still meet on top instead of baring the girder
+        # bends the spans still meet on top instead of baring the girder; the
+        # track deep into the girder, since a slab thinner than the far
+        # form's tolerance (TtpRenderer kFarTol) gets its top folded onto its
+        # underside there and striped with the underside's light
         L = math.hypot(xb - xa, yb - ya)
         ex, ey = 0.06 * (xb - xa) / L, 0.06 * (yb - ya) / L
-        ramp((xa - ex, ya - ey + 0.05, 0.0), (xb + ex, yb + ey + 0.05, 0.0), W - 0.4, sink if near else 0.1, SNOWT)
+        ramp((xa - ex, ya - ey + 0.05, 0.0), (xb + ex, yb + ey + 0.05, 0.0), W - 0.4, sink if near else 0.45, SNOWT)
         for s in (-1, 1):
             ramp((xa, ya + 0.5, s * (W / 2 - 0.11)), (xb, yb + 0.5, s * (W / 2 - 0.11)), 0.22,
                  sink + 0.45 if near else 0.9, RED)
             ramp((xa - ex, ya - ey + 0.56, s * (W / 2 - 0.11)), (xb + ex, yb + ey + 0.56, s * (W / 2 - 0.11)),
                  0.3, 0.12, WHITE)
-    # the takeoff's lip, its red face down to the knoll
-    lip = run[-1][1] - G(T1) + 0.5
-    box((0.16, lip, W), (T1, run[-1][1] - lip / 2, 0.0), RED)
-    # its legs, a pair across every two units, down through the hill
-    for x, y in run[2:-1:2]:
+    # the takeoff's lip: the table's red front, a unit over the face falling
+    # away under it
+    box((0.3, 1.1, W + 0.04), (T1 - 0.1, run[-1][1] + 0.05, 0.0), RED)
+    # its legs, a pair across every two units back from the table's root,
+    # down through the hill
+    for x, y in run[2:-2:2]:
         for s in (-1, 1):
-            box((0.3, y - 1.0, 0.3), (x, (y - 1.0) / 2, s * 0.75), STEEL)
+            box((0.3, y - 1.0, 0.3), (x, (y - 1.0) / 2, s * (W / 2 - 0.25)), STEEL)
         if y - 1.5 > H(x, 0.0) + 0.3:                  # braced where it clears the hill
             box((0.18, 0.18, 1.8), (x, y - 1.4, 0.0), STEEL)
     # the tower under the in-run's top, the jumpers' lift shaft, banded red
@@ -3047,38 +3059,40 @@ def ski_jump():
         a, b = g + (top - g) * i / n, g + (top - g) * (i + 1) / n
         if i == 0:
             a = 0.0
-        box((2.4, b - a, 2.4), (T0, (a + b) / 2, 0.0), RED if (n - 1 - i) % 2 == 0 else WHITE)
+        box((2.8, b - a, 2.8), (T0, (a + b) / 2, 0.0), RED if (n - 1 - i) % 2 == 0 else WHITE)
     # the start hut on its platform, a window down the in-run
-    box((3.0, 0.24, 3.0), (T0, top - 0.12, 0.0), STEEL)
-    box((1.7, 1.0, 1.7), (T0 - 0.35, top + 0.5, 0.0), BLUE)
-    box((0.06, 0.4, 1.1), (T0 + 0.52, top + 0.62, 0.0), GLASS)
-    box((1.9, 0.14, 1.9), (T0 - 0.35, top + 1.07, 0.0), STEEL)
-    # the judges' tower up the landing slope's far side from the line: a
-    # shaft down through the hill and the glazed box on it three units up,
-    # its glass to the slope and down it
-    jx, jz = -16.0, 6.5
-    jy = H(jx, jz) + 2.8
-    box((1.2, jy - 0.9, 1.1), (jx, (jy - 0.9) / 2, jz), BLUE)
-    box((1.9, 0.9, 1.6), (jx, jy - 0.45, jz), BLUE)
-    box((1.95, 0.45, 0.08), (jx, jy - 0.45, jz - 0.8), GLASS)
-    box((0.08, 0.45, 1.3), (jx + 0.95, jy - 0.45, jz), GLASS)
-    box((2.2, 0.2, 1.9), (jx, jy + 0.1, jz), RED)
+    box((3.4, 0.24, 3.4), (T0, top - 0.12, 0.0), STEEL)
+    box((2.0, 1.0, 2.0), (T0 - 0.4, top + 0.5, 0.0), BLUE)
+    box((0.06, 0.4, 1.3), (T0 + 0.62, top + 0.62, 0.0), GLASS)
+    box((2.2, 0.14, 2.2), (T0 - 0.4, top + 1.07, 0.0), STEEL)
+    # the judges' tower let into the landing hill's flank toward the line,
+    # by the landing, the hill behind it from the road: a shaft down through
+    # the hill and the glazed box on it over the slope's middle, glass on
+    # three sides, its back up the slope
+    jx, jz = -10.0, -8.5
+    jy = G(jx) + 2.6
+    box((1.1, jy - 0.9, 1.0), (jx, (jy - 0.9) / 2, jz), BLUE)
+    box((2.1, 0.9, 1.7), (jx, jy - 0.45, jz), BLUE)
+    for sz in (-1, 1):
+        box((1.8, 0.45, 0.08), (jx, jy - 0.45, jz + sz * 0.85), GLASS)
+    box((0.08, 0.45, 1.4), (jx + 1.05, jy - 0.45, jz), GLASS)
+    box((2.4, 0.2, 2.0), (jx, jy + 0.1, jz), RED)
     # flags at the outrun's end, each pole down through the land to the
     # plain; the cloth two units over the ground drawn there (sampled)
-    for k, (fx, fz, gy, c) in enumerate(((-1.5, -6.5, -0.15, RED), (-1.5, 6.5, 0.32, BLUE),
-                                         (-3.0, -8.5, -0.10, BLUE), (-3.0, 8.5, 0.53, RED))):
+    for k, (fx, fz, gy, c) in enumerate(((-1.5, -6.5, -0.16, RED), (-1.5, 6.5, 0.55, BLUE),
+                                         (-3.0, -8.5, -0.16, BLUE), (-3.0, 8.5, 0.83, RED))):
         flag_across((fx, -1.2, fz), gy + 3.4, c, 'anim_sway:a=x:d=12:p=%.1f#f%d' % (2.3 + 0.3 * k, k))
     # The jumper's loop: down the in-run on its snow, off the takeoff and
     # close over the slope to the landing, the outrun, then under the snow
     # back to the tower and up inside it to the start.
-    XL = -10.0
+    XL = -13.0
     pts = [(x, y + 0.18, 0.0) for x, y in run[1:]]
     y0 = run[-1][1] + 0.18
     for k in range(1, 8):
         f = k / 8.0
         x = T1 + (XL - T1) * f
         pts.append((x, (1 - f) ** 2 * y0 + (1 - (1 - f) ** 2) * (G(x) + 0.12) + 1.0 * math.sin(math.pi * f) ** 1.5, 0.0))
-    for x in (XL, -7.5, -5.0):
+    for x in (XL, -9.5, -6.5, -4.5):
         pts.append((x, G(x) + 0.12, 0.0))
     # the outrun turns off into the timing hut at its side, and the way back
     # runs from in there under the snow
@@ -3089,9 +3103,11 @@ def ski_jump():
     pts.append((T0, ytop - 0.6, 0.0))
     for k, p in enumerate(pts):
         marker('path_jump_%d' % k, p)
-    # the timing hut on the outrun's side, its walls run down to the plain
-    box((1.5, 1.5, 1.3), (hx, -0.65, hz), 0x9a7b55)
-    cabin_hut(1.5, 1.0, 1.3, (hx, 0.1, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2)
+    # the timing hut on the outrun's side, on the ground drawn there
+    # (sampled), its walls run down to the plain
+    fy = 0.30
+    box((1.5, 1.5, 1.3), (hx, fy - 0.75, hz), 0x9a7b55)
+    cabin_hut(1.5, 1.0, 1.3, (hx, fy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2)
     for k in range(2):
         x, y, z = pts[3]
         with animated('anim_path:c=jump:p=30:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):

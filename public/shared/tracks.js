@@ -332,14 +332,16 @@ export const SET_GROUND = {
   // toward the road (+X) to the water hole on the flat at its foot; broad
   // enough that the ground's 9 u grid draws it as a hill, not a cone.
   'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
-  // Flurry's ski jump: its landing hill, the knoll under the takeoff (-X)
-  // and the flank falling toward the road (+X), convex from the knoll,
-  // steepest halfway and easing into the outrun (a cos^2 flank), so the
-  // jumpers fly close over a slope as a real hill's. Broad, so the 9 u grid
-  // draws it as a hill, not a cone, and no higher than lets the tower on its
-  // back stand whole in the chase camera's frame from the line, where the
-  // start straight drives at it from forty units off.
-  'set-ski-jump': [{ kind: 'mound', x: -22, h: 6.8, r: 18, r1: 16, rz: 18, shape: 2 }],
+  // Flurry's ski jump: its landing hill, its crest the knoll under the
+  // takeoff (-X), its long face falling toward the road (+X), steepest under
+  // the lip and easing into the outrun at the kerb (a cos^2 flank), and its
+  // back short, so the in-run rises on its legs clear of the hill to the
+  // tower behind instead of lying along a dome. The crest stands on a vertex
+  // of the 9 u grid, so the grid draws it sharp; broad, so the grid draws a
+  // hill, not a cone; and no higher than lets the tower stand whole in the
+  // chase camera's frame from the line, where the start straight drives at
+  // it from forty units off.
+  'set-ski-jump': [{ kind: 'mound', x: -24, h: 5.75, r: 16, r1: 10, rz: 26, shape: 2 }],
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
