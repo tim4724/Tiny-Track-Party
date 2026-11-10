@@ -1995,53 +1995,58 @@ def reef_shelf():
         disc(r, (x, 0.02, z), 'blue', segs=8, h=0.05)['ramp'] = 0.25
     join_still('reef')
 
+def hauled_seal(x, y, z, yaw, k):
+    """A seal lying on a ledge, its head to +X turned by `yaw`, pale
+    mottled grey-brown; the head and neck lift now and then (a gesture,
+    then a long rest)."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(dx, dy, dz):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
+    sphere(0.45, at(-0.08, 0.24, 0.0), 'tan', scale=(1.75, 0.62, 0.95), yaw=yaw)
+    box((0.2, 0.06, 0.16), at(-0.2, 0.47, 0.1), 'grey', yaw=yaw)              # its mottling
+    box((0.16, 0.06, 0.14), at(0.12, 0.46, -0.12), 'grey', yaw=yaw + 0.4)
+    box((0.33, 0.08, 0.38), at(-0.82, 0.08, 0.0), 'grey', yaw=yaw + 0.3)       # the tail flippers
+    with animated('anim_sway:a=z:d=28:p=%.1f:r=0.7#seal%d' % (6.0 + 0.9 * (k % 5), k), at(0.48, 0.3, 0.0), yaw):
+        box((0.33, 0.3, 0.3), at(0.6, 0.39, 0.0), 'tan', yaw=yaw)             # neck and head
+        box((0.14, 0.1, 0.14), at(0.8, 0.37, 0.0), 0x38383d, yaw=yaw)          # the nose
 @piece(1.0)
 def seal_rock():
     # Tidepool: the seals' rock off the east bend, a tidal island at its real
-    # size (some 18 u across, 7 u to its grassy top), standing in the open
-    # water the shore brings round it (tracks.js): its foot dark and wet with
-    # the weed band the tide leaves, grey rock above streaked white where the
-    # birds sit, a cap of grass. Seals lie hauled out on its low ledges at a
-    # seal's size beside a car (a little chunky), lifting their heads now and
-    # then, one bobbing in the water off it, and gulls wheel over the top.
-    # The east run points dead at it for five seconds: dark rock on blue sea.
+    # size (some 20 u across, 5 u to its grassy top), low and broad in the
+    # open water the shore brings round it (tracks.js): its foot dark and wet
+    # with the weed band the tide leaves, grey rock above, a cap of grass.
+    # Seals lie hauled out on its ledges, the most of them on the broad shelf
+    # at the waterline that faces the east run, pale mottled grey-brown
+    # against the grey rock (a grey seal on grey stone was never seen) and a
+    # little chunky, lifting their heads now and then; one bobs in the water
+    # off it, and gulls wheel over the top. The east run points dead at it
+    # for five seconds: dark rock on blue sea.
     rock = ('grey', WET)
-    stone(0.0, 0.0, 13.0, 0.4, 31.0, squat=0.85, rock=rock, top='green', y=-0.6)
-    stone(-3.6, 3.4, 9.0, 1.7, 32.0, squat=0.8, rock=rock, top='green', y=-0.4)
-    stone(3.2, -3.8, 7.0, 2.6, 33.0, squat=0.7, rock=rock, top='white', y=-0.3)
-    stone(-4.4, -4.6, 5.0, 0.9, 34.0, squat=0.9, rock=rock, top='white', y=2.2)
+    stone(0.0, 0.0, 15.0, 0.4, 31.0, squat=0.6, rock=rock, top='green', y=-0.6)
+    stone(-3.8, 3.6, 11.0, 1.7, 32.0, squat=0.5, rock=rock, top='green', y=-0.4)
+    stone(3.4, -3.6, 8.0, 2.6, 33.0, squat=0.5, rock=rock, top='green', y=-0.3)
     # the wet foot and its weed band, all round in the water
-    for k in range(9):
-        a = k / 9 * 2 * math.pi + 0.3
-        stone(8.2 * math.cos(a), 7.4 * math.sin(a), 4.2, a, 40.0 + k, squat=0.22,
+    for k in range(10):
+        a = k / 10 * 2 * math.pi + 0.3
+        stone(9.6 * math.cos(a), 8.8 * math.sin(a), 5.0, a, 40.0 + k, squat=0.2,
               rock=(WET, 'dark'), top=WEED if k % 2 else WET, y=-0.5)
-    # the ledges the seals lie on: low, flat-topped, on the sea side and the
-    # road side (+X), each a seal or three
-    LEDGES = ((6.4, 2.6, 2.2, 0.55), (5.6, -3.4, 2.0, 0.45), (-1.8, 7.2, 2.4, 0.5), (1.6, -7.0, 2.1, 0.4))
+    # the ledges the seals lie on: low, flat-topped; the broad shelf at the
+    # waterline faces the cars coming down the east run (-Z, +X the road)
+    LEDGES = ((6.2, -5.6, 3.4, 0.35), (7.2, 2.4, 2.2, 0.5), (-1.8, 8.4, 2.4, 0.45), (1.0, -8.6, 2.2, 0.4))
     for k, (x, z, r, h) in enumerate(LEDGES):
-        cyl(r, h + 0.6, (x, -0.6, z), 'grey', r2=r * 0.85, segs=9)
-        cyl(r * 1.08, 0.25, (x, -0.15, z), WEED, r2=r, segs=9)
-    def seal(x, y, z, yaw, k):
-        """A grey seal lying on a ledge, its head to +X turned by `yaw`; the
-        head and neck lift now and then (a gesture, then a long rest)."""
-        c, s = math.cos(yaw), math.sin(yaw)
-        def at(dx, dy, dz):
-            return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
-        sphere(0.3, at(-0.05, 0.16, 0.0), 0x868ba1, scale=(1.75, 0.62, 0.95), yaw=yaw)
-        box((0.22, 0.06, 0.26), at(-0.55, 0.06, 0.0), 0x4f5260, yaw=yaw + 0.3)    # the tail flippers
-        with animated('anim_sway:a=z:d=28:p=%.1f:r=0.7#seal%d' % (6.0 + 0.9 * (k % 5), k), at(0.32, 0.2, 0.0), yaw):
-            box((0.22, 0.2, 0.2), at(0.4, 0.26, 0.0), 0x9aa1b4, yaw=yaw)          # neck and head
-            box((0.1, 0.07, 0.1), at(0.53, 0.25, 0.0), 0x38383d, yaw=yaw)         # the nose
-    spots = ((6.4, 2.6, 0.55, 0.2), (6.9, 3.4, 0.55, 1.2), (5.8, 1.8, 0.55, -0.6),
-             (5.6, -3.4, 0.45, 0.4), (6.1, -2.8, 0.45, 2.6),
-             (-1.8, 7.2, 0.5, 1.9), (-1.1, 7.9, 0.5, 0.9), (-2.6, 6.8, 0.5, 3.0),
-             (1.6, -7.0, 0.4, -1.0), (2.3, -6.6, 0.4, 0.5))
+        cyl(r, h + 0.6, (x, -0.6, z), 'grey', r2=r * 0.88, segs=10)
+        cyl(r * 1.08, 0.25, (x, -0.15, z), WEED, r2=r, segs=10)
+    spots = ((6.6, -6.4, 0.35, 2.3), (5.2, -5.0, 0.35, 2.0), (7.4, -4.8, 0.35, 1.4),
+             (5.4, -6.8, 0.35, 2.7), (6.9, -5.6, 0.35, 1.8),
+             (7.2, 2.4, 0.5, 0.6), (7.6, 3.4, 0.5, 1.6),
+             (-1.8, 8.4, 0.45, 1.9), (-1.0, 9.0, 0.45, 0.9),
+             (1.0, -8.6, 0.4, -1.0), (1.8, -8.0, 0.4, 0.5))
     for k, (x, z, h, yw) in enumerate(spots):
-        seal(x, h, z, yw, k)
+        hauled_seal(x, h, z, yw, k)
     # one in the water off the road-side ledge, its head bobbing on the swell
-    with animated('anim_bob:h=0.07:p=3.4#swimmer', (9.8, 0.0, 0.6)):
-        box((0.22, 0.24, 0.22), (9.8, 0.12, 0.6), 0x9aa1b4)
-        box((0.1, 0.07, 0.1), (9.95, 0.16, 0.6), 0x38383d)
+    with animated('anim_bob:h=0.07:p=3.4#swimmer', (11.0, 0.0, -1.0)):
+        box((0.33, 0.34, 0.33), (11.0, 0.17, -1.0), 'tan')
+        box((0.14, 0.1, 0.14), (11.22, 0.22, -1.0), 0x38383d)
     # gulls wheeling over the top on a slow loop
     ring = [(5.0 * math.cos(t), 9.5 + 0.6 * math.sin(2 * t), 4.4 * math.sin(t)) for t in (i / 12 * 2 * math.pi for i in range(12))]
     for i, p in enumerate(ring):
@@ -2051,6 +2056,20 @@ def seal_rock():
             box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
             box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
     join_still('rock')
+
+@piece(1.0)
+def reef_seals():
+    # Tidepool: a few of Seal Rock's seals hauled out on a ledge of the reef
+    # by the east bend, the rock's story carried on past it: a low hump of
+    # wet rock on the surf line, its weed band at the foot, three seals on
+    # it. A flat-topped ledge read as a plinth in the water. +X is the road.
+    stone(0.0, 0.0, 5.2, 0.4, 50.0, squat=0.2, rock=('grey', WET), top='grey', y=-0.25)
+    stone(-1.9, 1.5, 3.0, 1.9, 51.0, squat=0.3, rock=(WET, 'dark'), top='grey', y=-0.3)
+    for k, (x, z, sz, yw) in enumerate(((2.0, -1.4, 2.0, 0.5), (1.6, 1.9, 1.8, 1.4), (-2.2, -1.8, 2.0, 2.4))):
+        stone(x, z, sz, yw, 52.0 + k, squat=0.16, rock=(WEED, WEED), top=WEED, y=-0.2)
+    for k, (x, z, yw) in enumerate(((0.7, -0.7, 2.2), (-0.1, 0.5, 1.6), (0.9, 0.9, 0.9))):
+        hauled_seal(x, 0.3, z, yw, 20 + k)
+    join_still('ledge')
 
 @piece(1.0)
 def rock_poolers_park():
@@ -2146,72 +2165,39 @@ def surf_campers():
         box((0.3, 0.06, 0.7), (0.65, 0.03 + 0.06 * k, 2.3), col, yaw=0.1 * k)
     join_still('campers')
 
-# ---- Cove's longboat landing, Driftwood's forts ----
-
-@piece(1.0)
-def longboat_landing():
-    # Cove: where the crew's longboat came ashore between the bay and Skull
-    # Rock: the boat run up the sand with its oars shipped, barrels landed by
-    # it, and the treasure dug up: the chest open on its gold by the hole,
-    # the spoil heaped and two spades stuck in it. No one about. +X is the
-    # road.
-    kit('pirate', 'boat-row-small', (-1.3, -0.02, -0.4), yaw=math.radians(70), scale=0.7, roll=0.06)
-    for k in range(2):
-        beam((-1.75 + 0.6 * k, 0.42, -1.4), (-1.0 + 0.6 * k, 0.44, 0.7), 0.05, 0x9a6a46)   # the oars, shipped
-    # an oar stood up in the sand by the boat, the crew's rag flying from it
-    beam((0.1, -0.3, 0.6), (0.1, 1.7, 0.6), 0.06, 0x9a6a46)
-    kit_flag('flag-pirate-high', (0.1, 0.9, 0.6), math.radians(90), 0.45, 'anim_sway:a=x:d=22:p=2.3#rag')
-    kit('pirate', 'barrel', (0.0, 0, -2.0), yaw=0.4, scale=0.2)
-    kit('pirate', 'barrel', (0.35, 0, -1.6), yaw=1.2, scale=0.2)
-    kit('pirate', 'barrel', (0.15, 0, -2.4), yaw=2.0, scale=0.18)
-    join_still('boat')
-    def dig():
-        cyl(0.42, 0.2, (0.3, 0, 1.7), 'tan', r2=0.12, segs=8)                       # the spoil
-        disc(0.34, (0.9, 0.0, 1.3), 0x9a6a46, segs=10, h=0.04)                       # the hole
-        disc(0.24, (0.9, 0.01, 1.3), 'dark', segs=10, h=0.04)
-        kit('pirate', 'chest', (1.0, 0.0, 0.5), yaw=math.radians(-60), scale=0.2)
-        for (gx, gz) in ((1.3, 0.4), (1.25, 0.75), (1.4, 0.6), (0.75, 0.45)):
-            box((0.07, 0.04, 0.07), (gx, 0.02, gz), 'yellow', yaw=gx * 3)
-        for (ax_, az_, tx, tz) in ((0.25, 1.6, 0.3, 1.9), (0.42, 1.75, 0.6, 1.95)):
-            beam((ax_, 0.12, az_), (tx, 0.55, tz), 0.04, 0x9a6a46)                   # the spades
-            box((0.12, 0.14, 0.03), (ax_, 0.1, az_), 'grey', yaw=0.4)
-    draped('dig', dig)
+# ---- Driftwood's forts ----
 
 @piece(1.0)
 def driftwood_forts():
     # Driftwood: the forts the beachcombers build from the storm's logs, at
-    # their real size (about a car's height): two lean-tos of bleached poles
-    # against a ridge pole and a teepee of logs leant together, tucked against
-    # the dune's foot inside the strand hairpin, their poles running on under
-    # the sand. Static, no one about. +X is the road; they run along it (+Z).
-    def lean_to(cz, yaw, L=1.6, R=0.85, B=1.0):
-        c, s = math.cos(yaw), math.sin(yaw)
-        def at(dx, dy, dz):
-            return (dx * c + dz * s, dy, cz - dx * s + dz * c)
-        with bleached():
-            for z in (-L / 2, L / 2):
-                rod(at(0.0, 0.0, z), at(0.0, R, z), 0.06, 'lavender', segs=5)
-            rod(at(0.0, R, -L / 2 - 0.15), at(0.0, R, L / 2 + 0.15), 0.06, 'tan', segs=5)
-            for i in range(9):
-                z = -L / 2 + i * L / 8
-                rod(at(0.0, R, z), at(-B, 0.0, z + 0.05 * (i % 2)), 0.06, 'lavender' if i % 2 else 'tan', segs=5)
-    lean_to(-2.4, 0.15)
-    lean_to(2.2, -0.2)
-    with bleached():
-        tx, tz, TH = -0.4, 0.0, 1.15
-        for i in range(9):
-            a = i / 9 * 2 * math.pi + 0.2
-            rod((tx + math.cos(a) * 0.55, 0.0, tz + math.sin(a) * 0.55),
-                (tx - math.cos(a) * 0.08, TH + 0.08 * (i % 3), tz - math.sin(a) * 0.08), 0.055,
-                'lavender' if i % 2 else 'tan', r2=0.035, segs=5)
+    # their real size (a little over a car's height): two teepees of logs
+    # leant together and a pile of logs stacked by them, silver-brown against
+    # the pale sand (bleached pale they vanished into it, and slatted
+    # lean-tos read as fence panels), on the open sand outside the strand
+    # hairpin where the road points at them (inside it the dunes climb from
+    # the kerb), their poles running on under the sand. Static, no one
+    # about. +X is the road; they run along it (+Z).
+    def teepee(tx, tz, TH, R, n, seed):
+        for i in range(n):
+            a = i / n * 2 * math.pi + seed
+            rod((tx + math.cos(a) * R, -0.3, tz + math.sin(a) * R),
+                (tx - math.cos(a) * 0.1, TH + 0.1 * (i % 3), tz - math.sin(a) * 0.1), 0.07,
+                'grey' if i % 2 else 0x9a6a46, r2=0.045, segs=5)
+    teepee(-0.5, -1.4, 1.4, 0.75, 11, 0.2)
+    teepee(-0.3, 1.5, 1.1, 0.6, 9, 0.9)
+    # the log pile between them: logs laid along the road, stacked
+    for k, (x, y, z0, z1, r) in enumerate(((0.2, 0.12, -0.6, 0.7, 0.13), (-0.08, 0.12, -0.5, 0.8, 0.14),
+                                           (-0.36, 0.12, -0.7, 0.6, 0.12), (0.06, 0.35, -0.55, 0.65, 0.12),
+                                           (-0.22, 0.35, -0.4, 0.75, 0.13), (-0.08, 0.57, -0.5, 0.55, 0.11))):
+        rod((x, y, z0), (x + 0.04 * (k % 2), y, z1), r, 'grey' if k % 2 else 0x9a6a46, segs=7)
     join_still('forts')
     # a cold fire ring before them, on the sand as it lies: the piece stands
-    # on the land as it is and levels nothing, so the dune rises behind it
+    # on the land as it is and levels nothing
     def ring():
         with plain_parts():
             for i in range(7):
                 a = i / 7 * 2 * math.pi
-                box((0.12, 0.08, 0.1), (0.8 + 0.28 * math.cos(a), 0.04, 0.3 + 0.28 * math.sin(a)), 'grey', yaw=-a)
+                box((0.12, 0.08, 0.1), (0.9 + 0.28 * math.cos(a), 0.04, 0.0 + 0.28 * math.sin(a)), 'grey', yaw=-a)
     draped('ring', ring)
 
 # ====================================================================================
