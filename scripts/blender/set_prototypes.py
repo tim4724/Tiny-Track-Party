@@ -10618,16 +10618,16 @@ def tv_tower(x, z):
     blocks narrowing upward, the round pod with its band of windows a storey
     over the skyway's U, a cap and the red and white mast."""
     y = 0.0
-    for k, sz in enumerate((1.4, 1.3, 1.2, 1.1, 1.0, 0.95, 0.9)):
-        box((sz, sz, sz), (x, y + sz / 2, z), (0x5a8fd8, WOOD, 0xe66a5a, 0xf2c14e, 0x6cbf6c, 0xfdf4de, 0x5a8fd8)[k],
+    for k, sz in enumerate((1.4, 1.3, 1.2, 1.1, 1.0, 0.95, 0.9, 0.85)):
+        box((sz, sz, sz), (x, y + sz / 2, z), (0x5a8fd8, WOOD, 0xe66a5a, 0xf2c14e, 0x6cbf6c, 0xfdf4de, 0x5a8fd8, 0xe66a5a)[k],
             yaw=0.12 * ((k * 5) % 3 - 1))
         y += sz
     cyl(1.0, 0.4, (x, y, z), 0xfdf4de, r2=1.7, segs=12)                     # the pod's underside
     cyl(1.7, 1.3, (x, y + 0.4, z), 0x5a8fd8, segs=12)                       # the pod
     cyl(1.72, 0.45, (x, y + 0.85, z), 0x8ecae6, segs=12)                    # its band of windows
     cyl(1.7, 0.5, (x, y + 1.7, z), 0xfdf4de, r2=0.6, segs=12)               # its cap
-    for k in range(4):                                                     # the mast, red and white
-        box((0.3, 0.6, 0.3), (x, y + 2.5 + k * 0.6, z), (0xe66a5a, 0xfdf4de)[k % 2])
+    for k in range(6):                                                     # the mast, red and white
+        box((0.45, 0.7, 0.45), (x, y + 2.55 + k * 0.7, z), (0xe66a5a, 0xfdf4de)[k % 2])
 
 def toy_truck(x, z, color, yaw):
     """A toy dump truck the racers' size, its cab to (cos yaw, -sin yaw), its
@@ -10943,70 +10943,75 @@ def slab_on(top, t, color):
             f.flip()
     return paint(o, color)
 
-@piece(1.0)
-def marble_racer():
-    # Helix: a wooden marble racer along the grid straight's infield side
-    # (placed at the world's frame, the road toward -X): a long board of
-    # five lanes on stepped trestles, its high end by the corner the lap
-    # comes round, sloping down toward the far end, tilted steeply toward
-    # the road (its near edge about a car's height, under the chase
-    # camera) so its lanes face the camera rather than its edge. Five marbles race down it, one a
-    # lane, a race beside the race; at the foot they drop through a slot
-    # into the board and roll back up inside it, out of sight, to come out
-    # at the top again (one travelling part: they keep their order).
-    W, Z0, Z1, Y0, Y1, TILT, T = 3.2, -19.0, 19.0, 2.1, 1.35, 0.68, 0.7
+def racer_section(Z0, Z1, Y0, Y1, tag, colors):
+    """One board of the marble racer from Z0 to Z1 (high end Y0, low end Y1
+    along its middle), four lanes tilted gently toward the road, on its own
+    trestles, its four marbles one travelling part: down the lanes, through
+    the slot at its foot into the thick board and back up inside it to the
+    slot at its head, out of sight."""
+    W, TILT, T, L, MR = 3.6, 0.42, 1.0, 4, 0.38
     def S(x, z):
         return Y0 + (Y1 - Y0) * (z - Z0) / (Z1 - Z0) + x * TILT
     slab_on([(-W / 2, S(-W / 2, Z0), Z0), (W / 2, S(W / 2, Z0), Z0), (W / 2, S(W / 2, Z1), Z1), (-W / 2, S(-W / 2, Z1), Z1)], T, 0xd8a878)
-    L = 5
     for k in range(L):                                                      # the lanes, painted
-        x0, x1 = -W / 2 + k * W / L + 0.07, -W / 2 + (k + 1) * W / L - 0.07
+        x0, x1 = -W / 2 + k * W / L + 0.08, -W / 2 + (k + 1) * W / L - 0.08
         quad([(x0, S(x0, Z0) + 0.01, Z0), (x1, S(x1, Z0) + 0.01, Z0), (x1, S(x1, Z1) + 0.01, Z1), (x0, S(x0, Z1) + 0.01, Z1)][::-1],
-             TOY[k % 4])
+             TOY[(k + tag) % 4])
     for k in range(L + 1):                                                  # the dividers and the side walls
         x = -W / 2 + k * W / L
-        hh = 0.32 if k in (0, L) else 0.14
-        bar((x, S(x, Z0) + hh / 2, Z0), (x, S(x, Z1) + hh / 2, Z1), 0.09 if 0 < k < L else 0.14, hh, 0xfdf4de)
-    for z in (Z0 + 0.6, Z1 - 0.9):                                          # the slots the marbles drop through
-        quad([(-W / 2 + 0.1, S(-W / 2 + 0.1, z) + 0.02, z - 0.25), (W / 2 - 0.1, S(W / 2 - 0.1, z) + 0.02, z - 0.25),
-              (W / 2 - 0.1, S(W / 2 - 0.1, z) + 0.02, z + 0.25), (-W / 2 + 0.1, S(-W / 2 + 0.1, z) + 0.02, z + 0.25)][::-1], 0x2a2735)
-    for z in (-16.5, -9.0, -1.5, 6.0, 13.5):                                # the stepped trestles
+        hh = 0.36 if k in (0, L) else 0.18
+        bar((x, S(x, Z0) + hh / 2, Z0), (x, S(x, Z1) + hh / 2, Z1), 0.1 if 0 < k < L else 0.16, hh, 0xfdf4de)
+    for z in (Z0 + 0.8, Z1 - 1.0):                                          # the slots the marbles drop through
+        quad([(-W / 2 + 0.1, S(-W / 2 + 0.1, z) + 0.02, z - 0.45), (W / 2 - 0.1, S(W / 2 - 0.1, z) + 0.02, z - 0.45),
+              (W / 2 - 0.1, S(W / 2 - 0.1, z) + 0.02, z + 0.45), (-W / 2 + 0.1, S(-W / 2 + 0.1, z) + 0.02, z + 0.45)][::-1], 0x2a2735)
+    for z in (Z0 + 1.5, (Z0 + Z1) / 2, Z1 - 1.5):                            # its trestles
         for sx in (-1, 1):
             x = sx * (W / 2 - 0.3)
             if S(x, z) - T > 0.15:
-                bar((x, 0.0, z - 0.6), (x, S(x, z) - T, z), 0.22, 0.22, 0x9a7b55)
-                bar((x, 0.0, z + 0.6), (x, S(x, z) - T, z), 0.22, 0.22, 0x9a7b55)
-        bar((-W / 2 + 0.3, S(0, z) - T - 0.25 + (-W / 2) * TILT, z), (W / 2 - 0.3, S(0, z) - T - 0.25 + (W / 2) * TILT, z), 0.2, 0.2, 0x9a7b55)
-    # the marbles: one traveller, a marble a lane, staggered as in a race
-    MR = 0.22
-    path = [(0.0, S(0.0, z) + MR * 1.2, z) for z in [Z0 + 1.2 + (Z1 - 2.1 - Z0 - 1.2) * i / 24 for i in range(25)]]
-    path += [(0.0, S(0.0, Z1 - 0.9) - 0.35, Z1 - 0.9)]
-    path += [(0.0, S(0.0, z) - 0.35, z) for z in [Z1 - 1.5 - (Z1 - 2.1 - Z0) * i / 12 for i in range(13)]]
+                bar((x, 0.0, z - 0.7), (x, S(x, z) - T, z), 0.26, 0.26, 0x9a7b55)
+                bar((x, 0.0, z + 0.7), (x, S(x, z) - T, z), 0.26, 0.26, 0x9a7b55)
+    path = [(0.0, S(0.0, z) + MR * 1.06, z) for z in [Z0 + 1.4 + (Z1 - 2.6 - Z0 - 1.4) * i / 14 for i in range(15)]]
+    path += [(0.0, S(0.0, Z1 - 1.0) - 0.5, Z1 - 1.0)]
+    path += [(0.0, S(0.0, z) - 0.5, z) for z in [Z1 - 1.6 - (Z1 - 2.4 - Z0) * i / 8 for i in range(9)]]
     for k, p in enumerate(path):
-        marker('path_lanes_%d' % k, p)
-    # built round the path's first point (its pivot, on the middle lane by
-    # the top slot), each resting on its own lane
+        marker('path_lanes%d_%d' % (tag, k), p)
     px, py, pz = path[0]
     slope = (Y1 - Y0) / (Z1 - Z0)
-    with animated('anim_path:c=lanes:p=14:f=0#race', path[0]):
-        for k, dz in enumerate((0.0, 0.7, -0.5, 1.2, 0.3)):
+    with animated('anim_path:c=lanes%d:p=9:f=0:o=%.2f#race%d' % (tag, 0.37 * tag, tag), path[0]):
+        for k, dz in enumerate((0.0, 0.9, -0.6, 0.4)):
             x = -W / 2 + (k + 0.5) * W / L
-            sphere(MR, (x, py + x * TILT + dz * slope, pz + dz), (0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa878e8)[k],
-                   subdiv=2, flat=False)
+            sphere(MR, (x, py + x * TILT + dz * slope, pz + dz), colors[k], subdiv=2, flat=False)
+
+@piece(1.0)
+def marble_racer():
+    # Helix: a wooden marble racer along the grid straight's infield side
+    # (placed at the world's frame, the road toward -X): two boards of four
+    # lanes, one stepping down to the next with a gap and trestles between
+    # them, its high end toward the corner the lap comes round, each tilted
+    # to the road and set low, its near edge under the chase camera, so the
+    # camera looks down onto its lanes (higher, it showed a thick wooden
+    # side), marbles the size of a car's wheel racing down every lane. Two
+    # short boards with daylight between them read as a toy; one long one
+    # read as a striped wall along the road.
+    racer_section(-17.0, -2.5, 1.8, 1.4, 0, (0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c))
+    racer_section(1.5, 16.0, 1.25, 1.0, 1, (0xa878e8, 0xe66a5a, 0x6cbf6c, 0x5a8fd8))
     merge_paint()
 
 @piece(1.0)
 def sky_snake():
-    # Skysnake's hero, in the eye of its spiral: the board's wooden snakes'
-    # big sibling, a jointed toy snake of the same green and yellow blocks
+    # Skysnake's hero, at the inside of the sky weave's first bend: the
+    # board's wooden snakes' big sibling, a jointed toy snake of the same green and yellow blocks
     # rising out of a round woven basket, its body coiled up the snake
     # charmer's way to its head just over the spiral's top deck, the head
-    # swaying slowly side to side as the racers climb round it. The inside
-    # of the spiral is where the chase camera looks all the way up.
+    # swaying slowly side to side as the racers pass it, its face to the
+    # road (+X).
     R, H = 2.0, 2.0
-    cyl(R, H, (0, 0, 0), 0xc8955a, segs=14)                                  # the basket
+    cyl(R, H, (0, 0, 0), 0xd8a878, segs=14)                                  # the basket
     for y in (0.45, 0.95, 1.45):                                           # its woven bands
         torus(R + 0.03, 0.09, (0, y, 0), 0xb06041, segs=14)
+    for k in range(14):                                                    # and the wicker ribs between them
+        a = (k + 0.5) * 2 * math.pi / 14
+        box((0.1, H - 0.1, 0.16), (math.cos(a) * (R + 0.02), H / 2, math.sin(a) * (R + 0.02)), 0x9a7b55, yaw=-a)
     torus(R + 0.05, 0.16, (0, H, 0), 0x9a7b55, segs=14)                       # its rim
     cyl(R - 0.15, 0.05, (0, H - 0.08, 0), 0x3a2a22, segs=14)                  # the dark inside
     # the coil: blocks along a rising, narrowing helix, tapering to the neck
@@ -11035,17 +11040,34 @@ def sky_snake():
             box((0.12, 0.16, 0.16), (hx + 0.26, hy + 0.32, nz + sd * 0.47), 0x2a2735)
         bar((hx + 0.62, hy - 0.22, nz), (hx + 1.15, hy - 0.28, nz), 0.12, 0.07, 0xff5040)
 
+def round_die(x, y, z, s, yaw, body, pip, faces):
+    """A soft foam die `s` a side standing at (x, y, z), turned `yaw`, its
+    round pips on the four sides named in `faces` [(face, n)]."""
+    with transformed((x, 0, z), yaw):
+        box((s, s, s), (x, y + s / 2, z), body)
+        for face, n in faces:
+            nrm, right = FACES[face]
+            for u, v in PIP[n]:
+                cx = x + nrm[0] * s / 2 + right[0] * u * 0.27 * s
+                cz = z + nrm[2] * s / 2 + right[2] * u * 0.27 * s
+                cy = y + s / 2 + v * 0.27 * s
+                h = 0.06
+                if face in ('+x', '-x'):
+                    cyl(0.11 * s, h, (cx - (h if face == '-x' else 0.0) + (-0.01 if face == '+x' else 0.01), cy, cz), pip, segs=8, axis='across')
+                else:
+                    cyl(0.11 * s, h, (cx, cy, cz - (h if face == '-z' else 0.0) + (-0.01 if face == '+z' else 0.01)), pip, segs=8, axis='along')
+
 @piece(1.0)
 def dice_tower():
-    # Skysnake: a slalom gate in the sky, the floor mat's own soft foam dice
-    # stacked three high by a child at the inside of a weave bend, one of
-    # the game's big pawns on top, so the road weaves round a tower whose
-    # top stands over the deck.
+    # Skysnake: a slalom gate in the sky, the floor mat's own soft foam dice,
+    # cream with round red and blue pips, stacked four high by a child, one
+    # of the game's big pawns on top, so two dice and the pawn stand over
+    # the deck the road weaves round.
     S = 2.0
     y = 0.0
-    for k, (c, yaw) in enumerate(((0xe66a5a, 0.15), (0x5a8fd8, -0.25), (0xe66a5a, 0.4))):
-        die((0, y, 0), S, yaw, color=c, pip=0xfdf4de,
-            faces=(('+x', (5, 3, 6)[k]), ('-z', (2, 4, 1)[k]), ('+z', (3, 6, 4)[k]), ('-x', (4, 1, 2)[k])))
+    for k, (yaw, p) in enumerate(((0.15, 0xe66a5a), (-0.25, 0x5a8fd8), (0.4, 0xe66a5a), (-0.1, 0x5a8fd8))):
+        round_die(0, y, 0, S, yaw, 0xfdf4de, p,
+                  (('+x', (5, 3, 6, 2)[k]), ('-z', (2, 4, 1, 5)[k]), ('+z', (3, 6, 4, 1)[k]), ('-x', (4, 1, 2, 6)[k])))
         y += S
     pawn((0, y, 0), 0xf2c14e, k=0.9)
     merge_paint()
