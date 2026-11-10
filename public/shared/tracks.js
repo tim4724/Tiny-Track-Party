@@ -970,7 +970,8 @@ export const TRACKS = {
       { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
+      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 },
+      { model: 'set-park-grove', u: 0.81, lat: -9, yaw: 180, scale: 1.1 }
     ],
     land: [
       { kind: 'clear', u: 0.01011, len: 28, r: 14 },
@@ -984,8 +985,9 @@ export const TRACKS = {
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
     // The mill stream: it springs from the foot of the hill beyond the north
     // loop's top straight, falling white over a boulder lip into a pool, a
-    // heron in it, and goes under the straight (a culvert each side) into
-    // the north loop, then winds over the east,
+    // heron in it, runs into a drain by the kerb and goes under the
+    // straight, out of a culvert beyond into the north loop, then winds over
+    // the east,
     // middle and north lawns and round the north-west corner into the race of
     // the watermill on its pond, straight ahead of the grid (the wheel turns
     // with the water going down the race into the pond). The road lies on
@@ -1012,8 +1014,14 @@ export const TRACKS = {
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
       { model: 'set-spring-cascade', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
-      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180 },
-      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 }
+      { model: 'set-spring-drain', u: 0.7335, lat: -4.45, yaw: 180 },
+      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 },
+      { model: 'set-park-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
+      { model: 'set-park-grove', u: 0.68, lat: -5.8, yaw: 180 },
+      { model: 'set-park-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
+      { model: 'set-park-grove', u: 0.905, lat: 5.8, yaw: 0, scale: 0.9 },
+      { model: 'set-park-grove', u: 0.935, lat: -5.8, yaw: 180 },
+      { model: 'set-park-grove', u: 0.03, lat: 5.8, yaw: 0, scale: 1.1 }
     ],
     // the north lawn's hump the stream bends round, and the pond under the
     // first bridge's west span; the stream's hill along the north loop's top
@@ -1036,18 +1044,31 @@ export const TRACKS = {
     // roundabout going with a child on it, the park's ice-cream van parked
     // up there with the children queueing at it; another corner of the park
     // in the S between the two decks, seen from both; the boating lake in
-    // the finger lobe, swan pedalos going round it, its fountain playing over
-    // the bank and the boathouse kiosk at the far end. Built at the toy
+    // the finger lobe, swan pedalos going round it and its fountain playing,
+    // the boathouse on the near shore where the road comes down off the
+    // bridge pointing at it, a willow on each end's bank. Built at the toy
     // world's chunkiness, so it reads from the road. The corner stands on
     // the flat by the road: the deck's cap holds any knoll there down to it.
-    // The park's railway rings the lawn inside the top loop, its line three
-    // units past the start straight's kerb and on round the hairpin, the top
-    // straight and the bridge's leg, so its train runs beside the racers
+    // The park's miniature railway: a little oval by the start straight, its
+    // train going round past the halt. Clumps of the park's trees stand by
+    // the top straight, the climb and the S, so the lawn reads as a park
     set: [
       { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96, y: -0.05, scale: 1.3 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
-      { model: 'set-boating-lake', u: 0.8815, lat: -9.65, yaw: 178.89 }
+      { model: 'set-boating-lake', u: 0.8815, lat: -9.65, yaw: 178.89 },
+      { model: 'set-boathouse', u: 0.7171, lat: -6.58, yaw: 154.66 },
+      { model: 'set-lake-willow', u: 0.728, lat: -6.2, yaw: 61.02, scale: 0.72 },
+      { model: 'set-lake-willow', u: 0.7982, lat: -7.79, yaw: -40.66 },
+      { model: 'set-park-grove', u: 0.13, lat: -5.8, yaw: 180 },
+      { model: 'set-park-grove', u: 0.15, lat: 5.8, yaw: 0, scale: 0.9 },
+      { model: 'set-park-grove', u: 0.17, lat: -5.8, yaw: 180, scale: 1.1 },
+      { model: 'set-park-grove', u: 0.21, lat: -5.8, yaw: 180 },
+      { model: 'set-park-grove', u: 0.36, lat: -6, yaw: 180, scale: 0.9 },
+      { model: 'set-park-grove', u: 0.38, lat: 6.4, yaw: 0 },
+      { model: 'set-park-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
+      { model: 'set-park-grove', u: 0.51, lat: -5.8, yaw: 180, scale: 0.9 },
+      { model: 'set-park-grove', u: 0.55, lat: -5.8, yaw: 180 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west,
     // its foothill coming down to the S's west leg; the boating lake filling
@@ -1055,7 +1076,7 @@ export const TRACKS = {
     land: [
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 },
-      { kind: 'pond', u: 0.8815, lat: -9.65, yaw: 178.89, len: 8, r: 4, w: 2 },
+      { kind: 'pond', u: 0.8815, lat: -9.65, yaw: 178.89, len: 8, r: 3.5, w: 2 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 }
     ]
   },
