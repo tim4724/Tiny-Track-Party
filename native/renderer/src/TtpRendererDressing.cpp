@@ -1207,7 +1207,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const int side = rnd() < 0.5 ? -1 : 1;
             const float lat = side * (f.width / 2 + 6.5f);
             const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 5)) continue;
+            // Off the set pieces too: a family placed inside a canyon's rock
+            // face stood buried in it, its cap a stray block mid-cliff.
+            if (!isClear(x, z, 5) || inSetFoot(x, z, 5)) continue;
             const float3 tan = f.tangent();
             hoodoo(x, z, 8.6f); // the tall one
             hoodoo(x + tan.x * 3.8f + f.lat.x * side * 1.6f,

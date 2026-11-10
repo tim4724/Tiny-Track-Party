@@ -389,8 +389,9 @@ export const SET_GROUND = {
     { kind: 'plain', yaw: 90, len: 8, r: 4, w: 5 },
     { kind: 'ridge', x: -13, len: 30, r: 8, h: 9, top: 0.3 }
   ],
-  // Its ore line (placed on the portal's own anchor), from the yard round the
-  // start straight and the east bend to the headframe: the level bed it
+  // Its ore line (placed on the portal's own anchor), from the yard along
+  // the start straight a few units past its kerb, so its train paces the
+  // racers, and round the east bend to the headframe: the level bed it
   // lies in, one plain per chord of its route, so it never steps where the
   // land rolls; its floor wider than a cell of the ground's grid (9 u), which
   // would otherwise draw its chords over the rails and leave the line in
@@ -400,16 +401,16 @@ export const SET_GROUND = {
   // (TtpRenderer::setupTerrain).
   'set-ore-line': [
     { kind: 'plain', yaw: 71.57, x: 0.16, z: 1.9, len: 2.85, r: 6, w: 5 },
-    { kind: 'plain', yaw: 21.16, x: 2.66, z: 3.66, len: 3.32, r: 6, w: 5 },
-    { kind: 'plain', yaw: 11.32, x: 3.53, z: 8.42, len: 7.27, r: 6, w: 5 },
-    { kind: 'plain', yaw: -22.05, x: 9.58, z: 12.33, len: 8.4, r: 6, w: 5 },
-    { kind: 'plain', yaw: 2.5, x: 1.85, z: 22.35, len: 6.66, r: 6, w: 5 },
-    { kind: 'plain', yaw: -39.05, x: 18.41, z: 22.88, len: 9.78, r: 6, w: 5 },
-    { kind: 'plain', yaw: -11.54, x: 3.5, z: 41.33, len: 16.39, r: 6, w: 5 },
-    { kind: 'plain', yaw: -1.42, x: -5.26, z: 57.47, len: 16.2, r: 6, w: 5 },
-    { kind: 'plain', yaw: 31.02, x: -39.61, z: 60.12, len: 15.21, r: 6, w: 5 },
-    { kind: 'plain', yaw: 38.44, x: -48.02, z: 70.02, len: 15.94, r: 6, w: 5 },
-    { kind: 'plain', yaw: 67.13, x: -79.57, z: 53.39, len: 16.06, r: 6, w: 5 }
+    { kind: 'plain', yaw: 47.64, x: 1.49, z: 5.27, len: 4.6, r: 6, w: 5 },
+    { kind: 'plain', yaw: 25.58, x: 4.23, z: 10.76, len: 8.6, r: 6, w: 5 },
+    { kind: 'plain', yaw: -4.48, x: 11.2, z: 15.14, len: 8.46, r: 6, w: 5 },
+    { kind: 'plain', yaw: -12.12, x: 13.68, z: 21.66, len: 7.89, r: 6, w: 5 },
+    { kind: 'plain', yaw: -21.63, x: 17.72, z: 27.05, len: 8.12, r: 6, w: 5 },
+    { kind: 'plain', yaw: -22.76, x: 18.33, z: 35.51, len: 9.51, r: 6, w: 5 },
+    { kind: 'plain', yaw: -7.1, x: 6.78, z: 49.23, len: 11.02, r: 6, w: 5 },
+    { kind: 'plain', yaw: 16.29, x: -15.51, z: 58.41, len: 10.95, r: 6, w: 5 },
+    { kind: 'plain', yaw: 39.19, x: -39.14, z: 58.28, len: 10.92, r: 6, w: 5 },
+    { kind: 'plain', yaw: 62.12, x: -60.89, z: 48.99, len: 11.08, r: 6, w: 5 }
   ]
 };
 
@@ -1017,7 +1018,10 @@ export const TRACKS = {
     // what grows along it: saguaros, ocotillo and
     // brush on its banks (each reach brings a stand on each side), and two
     // dead cottonwoods standing bare over the start's bends, a vulture on
-    // each. A desert of rock, sand and cactus: nothing green but cactus.
+    // each. The high road runs along a sandstone bench over the two low
+    // strands, a butte of the strata stands in the knot of strands, and
+    // wild burros drink at a tinaja past the east loop. A desert of rock,
+    // sand and cactus: nothing green but cactus.
     set: [
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
       { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
@@ -1039,7 +1043,11 @@ export const TRACKS = {
       { model: 'set-canyon-bend-wash', u: 0.101, lat: -5.2, yaw: 180 },
       { model: 'set-canyon-peaks-c', u: 0.1449, lat: -5.2, yaw: 180 },
       { model: 'set-canyon-spur-a', u: 0.0439, lat: 5.2 },
-      { model: 'set-canyon-spur-b', u: 0.1504, lat: 5.2 }
+      { model: 'set-canyon-spur-b', u: 0.1504, lat: 5.2 },
+      // a butte of the strata inside the low hairpin, and the tinaja where
+      // the side wash meets the road past the east loop, burros at it
+      { model: 'set-wash-butte', u: 0.85, lat: -10, scale: 0.75 },
+      { model: 'set-tinaja', u: 0.715, lat: -6.6, yaw: 180, scale: 1.5 }
     ],
     // the range the canyon's mountainsides belong to, rising behind them
     land: [
@@ -1050,7 +1058,23 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.15, lat: 18, len: 12, r: 11, h: 5.5, top: 0.4, tint: 0xc8846a },
       // the wash's far reaches north-west of the creek, its channel only
       { kind: 'plain', u: 0.9863, lat: -74.2, yaw: -112, len: 38, r: 7, w: 8, h: 1.5 },
-      { kind: 'plain', u: 0.9728, lat: -54.7, yaw: 66, len: 38, r: 7, w: 8, h: 1.5 }
+      { kind: 'plain', u: 0.9728, lat: -54.7, yaw: 66, len: 38, r: 7, w: 8, h: 1.5 },
+      // the sandstone bench the high road runs along, its top just under the
+      // deck's slab (the road stood on a ribbon 2.8 u over the sand; any
+      // higher and it buries the stilts terrain-ground.spec guards), the low
+      // strands running through it in cuts under each bridge (`near` counts
+      // from every strand). Chords of the road's curve, each ridge's spine
+      // 1.7 r past the last: their crests sum to about the bench's height there
+      // (overlapping, they stood double); under the ten units that turn to
+      // rock, so sand, none of the box's dear rock pixels
+{ kind: 'ridge', u: 0.2838, lat: -8.35, yaw: 1.1, z: 0.25, len: 11.4, r: 6, h: 1.06, h1: 2.00, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.3508, lat: -7.24, yaw: 0.1, z: 0.01, len: 11.9, r: 6, h: 2.00, h1: 2.07, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.2715, lat: 5.68, yaw: -0.1, z: 0.02, len: 11.9, r: 6, h: 1.06, h1: 2.01, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.3078, lat: 6.04, yaw: -0.3, z: -0.10, len: 12.0, r: 6, h: 2.00, h1: 2.00, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.3480, lat: 6.01, yaw: -0.0, z: -0.01, len: 12.1, r: 6, h: 2.00, h1: 2.00, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.3848, lat: 6.35, yaw: -1.1, z: -0.31, len: 7.6, r: 6, h: 1.96, h1: 1.20, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.4500, lat: -7.29, yaw: -2.9, z: 1.53, len: 11.9, r: 6, h: 1.55, h1: 1.47, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.4413, lat: 5.69, yaw: -0.2, z: -0.10, len: 11.9, r: 6, h: 1.55, h1: 2.04, top: 0.6, near: 0.5 }
     ]
   },
   gulch: {
@@ -1062,16 +1086,19 @@ export const TRACKS = {
     // over the road to the adit, a car high, cut into the rock
     // face of a spur under the long ridge north of the start straight, one
     // ore line winding out of its yard along the whole start straight (on a
-    // timber trestle beside it) and round the east bend to the headframe
-    // over the shaft up the east side, its wheel turning over the east
-    // bend, a little train of ore riding the line from the adit to
-    // the shaft; grey spoil heaps at the shaft, timber supports round the
-    // lap. The west of the map is a range of mountains and mesas the
-    // descent cuts through.
+    // low timber trestle a few units past its kerb, its train pacing the
+    // racers) and round the east bend to the headframe over the shaft at
+    // the bend's kerb, its wheel turning over the road, a little train of
+    // ore riding the line from the adit to the shaft; grey spoil heaps at
+    // the shaft, timber supports round the
+    // lap. The gold camp's boomtown lines the north loop's top, its saloon's
+    // sign swinging; the tailings dump fills the inner loop, a cart tipping
+    // at its top; the miners' camp stands before the canyon. The west of
+    // the map is a range of mountains and mesas the descent cuts through.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
       { model: 'set-ore-line', u: 0.018, lat: 16 },
-      { model: 'set-headframe', u: 0.2188, lat: 22.9, yaw: 67 },
+      { model: 'set-headframe', u: 0.2072, lat: 5.8, yaw: 75.6 },
       // the gulch itself: off the crest the road drops into a canyon, its
       // faces at the kerb the near faces of the range's massifs (`land`):
       // from the run-in on the outside round the long left-hander, down the
@@ -1093,13 +1120,20 @@ export const TRACKS = {
       // the stamp mill cascading down its spoil heap across the start
       // straight from the adit, its tramway's buckets riding the sagging
       // ropes over the road to the tower beside the adit
-      { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 }
+      { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 },
+      // the boomtown down the north loop's top, both sides of the road; the
+      // tailings dump filling the inner loop; the miners' camp before the
+      // canyon, the left there left open for the sight line to the mill
+      { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
+      { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
+      { model: 'set-tailings-dump', u: 0.6152, lat: -11.2 },
+      { model: 'set-miners-camp', u: 0.775, lat: 6.5 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
     // than the land), and the range
     land: [
       { kind: 'ridge', u: 0.0004, lat: 48, len: 80, r: 22, h: 18, top: 0.3 },
-      { kind: 'ridge', u: 0.202, lat: 43.4, len: 6, r: 10, h: 6, top: 0.15, tint: 0xb0a49c },
+      { kind: 'ridge', u: 0.18, lat: 12.5, len: 4, r: 5, h: 4, top: 0.15, near: 2, tint: 0xb0a49c },
       { kind: 'ridge', u: 0.3367, lat: 22.9, len: 14, r: 11, h: 7, top: 0.15, tint: 0xb0a49c },
       // the range: massifs behind the canyon faces, each rising from just
       // past the faces' backs (`near`, so a face stands whole on the verge
@@ -1159,7 +1193,7 @@ export const TRACKS = {
       { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
       { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
       { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
-      { model: 'set-windpump', u: 0.48, lat: 12.5, yaw: -137 },
+      { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
       { model: 'set-hoodoos', u: 0.32, lat: -12 },
       { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
@@ -1195,7 +1229,7 @@ export const TRACKS = {
       // broken-off butte's talus (each short of every other strand: a flank
       // reaching one is cut into a cliff there, a crease and a flap)
       { kind: 'ridge', u: 0.392, lat: 15, len: 8, r: 9, h: 4.5, top: 0.3, near: 2 },
-      { kind: 'ridge', u: 0.618, lat: -13, len: 12, r: 10, h: 2.8, top: 0.3, near: 3 },
+      { kind: 'ridge', u: 0.618, lat: -15, len: 12, r: 10, h: 1.8, top: 0.3, near: 3 },
       // the skyline: mesas and buttes standing apart on the plain, 55 to 95
       // units out (a ring of them read as the walls of a box), each broad
       // enough for the ground's 9 u grid to draw a table, not a pyramid
@@ -1219,13 +1253,23 @@ export const TRACKS = {
     // long straight runs into a mountain of banded rock and through it in a
     // tunnel: the massif rises off its right to a summit, throws a spur
     // across the road that falls away into the low ground inside the bend
-    // beyond, and runs on off the right as a ridge of the land. Everything by the road
-    // at its own size, the rock as big as rock is.
+    // beyond, and runs on off the right as a ridge of the land. Out of the
+    // tunnel the road rounds the massif's foothills, in its own strata
+    // (geometry: by the road, steep land is the Android box's dear rock), a
+    // hogback of the same rock tilted up beside the east straight, its dip
+    // slope to the road and two notches through it, a motel and
+    // diner stand at the junction past the S, their sign's arrow turning,
+    // and the oil field and its tank farm come to the north loop's kerbs.
+    // Everything by the road at its own size, the rock as big as rock is.
     set: [
-      { model: 'set-telegraph-line', u: 0.02, lat: 9.2 },
+      { model: 'set-telegraph-line', u: 0.02, lat: 6 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
-      { model: 'set-oil-field', u: 0.77, lat: 15 },
-      { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 }
+      { model: 'set-oil-field', u: 0.77, lat: 8 },
+      { model: 'set-tank-farm', u: 0.69, lat: -7, yaw: 180, scale: 1.4 },
+      { model: 'set-roadside-junction', u: 0.385, lat: 5.5 },
+      { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
+      { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
+      { model: 'set-hogback', u: 0.455, lat: 8.5 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
