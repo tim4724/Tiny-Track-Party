@@ -929,8 +929,7 @@ export const TRACKS = {
       { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 },
-      { model: 'set-park-grove', u: 0.81, lat: -9, yaw: 180, scale: 1.1 }
+      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
     ],
     land: [
       { kind: 'clear', u: 0.01011, len: 28, r: 14 },
@@ -945,7 +944,7 @@ export const TRACKS = {
     // The mill stream: it springs from the foot of the hill beyond the north
     // loop's top straight, falling white over a boulder lip into a pool, a
     // heron in it, runs into a drain by the kerb and goes under the
-    // straight, out of a culvert beyond into the north loop, then winds over
+    // straight, out of its twin beyond into the north loop, then winds over
     // the east,
     // middle and north lawns and round the north-west corner into the race of
     // the watermill on its pond, straight ahead of the grid (the wheel turns
@@ -974,7 +973,7 @@ export const TRACKS = {
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
       { model: 'set-spring-cascade', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
       { model: 'set-spring-drain', u: 0.7335, lat: -4.45, yaw: 180 },
-      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 },
+      { model: 'set-spring-drain', u: 0.7335, lat: 4.45, yaw: 10 },
       { model: 'set-park-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-park-grove', u: 0.68, lat: -5.8, yaw: 180 },
       { model: 'set-park-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
@@ -1005,7 +1004,10 @@ export const TRACKS = {
     // in the S between the two decks, seen from both; the boating lake in
     // the finger lobe, swan pedalos going round it and its fountain playing,
     // the boathouse on the near shore where the road comes down off the
-    // bridge pointing at it, a willow on each end's bank. Built at the toy
+    // bridge, its other awning to the return leg, a willow on each end's
+    // bank and reeds and shrubs along the west bank, so the water lies
+    // against green from the return leg (the land cannot rise in a loop
+    // ringed by road, and the water stays on the plain). Built at the toy
     // world's chunkiness, so it reads from the road. The corner stands on
     // the flat by the road: the deck's cap holds any knoll there down to it.
     // The park's miniature railway: a little oval by the start straight, its
@@ -1016,9 +1018,10 @@ export const TRACKS = {
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
       { model: 'set-boating-lake', u: 0.8815, lat: -9.65, yaw: 178.89 },
-      { model: 'set-boathouse', u: 0.7171, lat: -6.58, yaw: 154.66 },
+      { model: 'set-boathouse', u: 0.7175, lat: -6.8, yaw: 154.66, scale: 1.3 },
       { model: 'set-lake-willow', u: 0.728, lat: -6.2, yaw: 61.02, scale: 0.72 },
-      { model: 'set-lake-willow', u: 0.7982, lat: -7.79, yaw: -40.66 },
+      { model: 'set-lake-willow', u: 0.7982, lat: -7.79, yaw: -40.66, scale: 1.2 },
+      { model: 'set-lake-reeds', u: 0.7611, lat: -7.92, yaw: -0.63 },
       { model: 'set-park-grove', u: 0.13, lat: -5.8, yaw: 180 },
       { model: 'set-park-grove', u: 0.15, lat: 5.8, yaw: 0, scale: 0.9 },
       { model: 'set-park-grove', u: 0.17, lat: -5.8, yaw: 180, scale: 1.1 },
@@ -1035,7 +1038,7 @@ export const TRACKS = {
     land: [
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 },
-      { kind: 'pond', u: 0.8815, lat: -9.65, yaw: 178.89, len: 8, r: 3.5, w: 2 },
+      { kind: 'pond', u: 0.8815, lat: -9.65, yaw: 178.89, len: 8, r: 3, w: 2 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 }
     ]
   },
