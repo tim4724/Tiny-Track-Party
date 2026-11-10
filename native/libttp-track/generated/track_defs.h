@@ -1438,7 +1438,8 @@ constexpr SetDef kSet_wash[] = {
   { "set-canyon-spur-a", 0x1.67a0f9096bb99p-5, 0x1.4cccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-spur-b", 0x1.3404ea4a8c155p-3, 0x1.4cccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-butte", 0x1.b333333333333p-1, -0x1.4p+3, 0x0p+0, 0x0p+0, 0x1.8p-1, 1 },
-  { "set-tinaja", 0x1.6e147ae147ae1p-1, -0x1.a666666666666p+2, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
+  { "set-bench-ledge", 0x1.45a1cac083127p-2, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-tinaja", 0x1.6e147ae147ae1p-1, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
 };
 constexpr LandDef kLand_wash[] = {
   { 2, 0, 0x0p+0, 0x0p+0, 0x1.68p+6, 0x0p+0, 0x0p+0, 0x1.3p+6, 0x1.8p+2, 0x1.8p+2, 0x1p+3, 0x0p+0, 0x1.8p+0, 0x1.8p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
@@ -1458,10 +1459,10 @@ constexpr LandDef kLand_wash[] = {
   { 2, -1, 0x1.f8fc504816fp-1, -0x1.28ccccccccccdp+6, -0x1.cp+6, 0x0p+0, 0x0p+0, 0x1.3p+5, 0x1.cp+2, 0x1.cp+2, 0x1p+3, 0x0p+0, 0x1.8p+0, 0x1.8p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
   { 2, -1, 0x1.f212d77318fc5p-1, -0x1.b59999999999ap+5, 0x1.08p+6, 0x0p+0, 0x0p+0, 0x1.3p+5, 0x1.cp+2, 0x1.cp+2, 0x1p+3, 0x0p+0, 0x1.8p+0, 0x1.8p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
   { 0, -1, 0x1.229c779a6b50bp-2, -0x1.0b33333333333p+3, 0x1.199999999999ap+0, 0x0p+0, 0x1p-2, 0x1.6cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.0f5c28f5c28f6p+0, 0x1p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
-  { 0, -1, 0x1.67381d7dbf488p-2, -0x1.cf5c28f5c28f6p+2, 0x1.999999999999ap-4, 0x0p+0, 0x1.47ae147ae147bp-7, 0x1.7cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1p+1, 0x1.08f5c28f5c28fp+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
+  { 0, -1, 0x1.67381d7dbf488p-2, -0x1.cf5c28f5c28f6p+2, 0x1.999999999999ap-4, 0x0p+0, 0x1.47ae147ae147bp-7, 0x1.7cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.4cccccccccccdp+0, 0x1.4cccccccccccdp+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
   { 0, -1, 0x1.1604189374bc7p-2, 0x1.6b851eb851eb8p+2, -0x1.999999999999ap-4, 0x0p+0, 0x1.47ae147ae147bp-6, 0x1.7cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.0f5c28f5c28f6p+0, 0x1.0147ae147ae14p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
   { 0, -1, 0x1.3b2fec56d5cfbp-2, 0x1.828f5c28f5c29p+2, -0x1.3333333333333p-2, 0x0p+0, -0x1.999999999999ap-4, 0x1.8p+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1p+1, 0x1p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
-  { 0, -1, 0x1.645a1cac08312p-2, 0x1.80a3d70a3d70ap+2, -0x0p+0, 0x0p+0, -0x1.47ae147ae147bp-7, 0x1.8333333333333p+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1p+1, 0x1p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
+  { 0, -1, 0x1.645a1cac08312p-2, 0x1.80a3d70a3d70ap+2, -0x0p+0, 0x0p+0, -0x1.47ae147ae147bp-7, 0x1.8333333333333p+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.4cccccccccccdp+0, 0x1.4cccccccccccdp+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
   { 0, -1, 0x1.8a0902de00d1bp-2, 0x1.9666666666666p+2, -0x1.199999999999ap+0, 0x0p+0, -0x1.3d70a3d70a3d7p-2, 0x1.e666666666666p+2, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.f5c28f5c28f5cp+0, 0x1.3333333333333p+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
   { 0, -1, 0x1.ccccccccccccdp-2, -0x1.d28f5c28f5c29p+2, -0x1.7333333333333p+1, 0x0p+0, 0x1.87ae147ae147bp+0, 0x1.7cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.8cccccccccccdp+0, 0x1.7851eb851eb85p+0, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
   { 0, -1, 0x1.c3e425aee632p-2, 0x1.6c28f5c28f5c3p+2, -0x1.999999999999ap-3, 0x0p+0, -0x1.999999999999ap-4, 0x1.7cccccccccccdp+3, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.8cccccccccccdp+0, 0x1.051eb851eb852p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1p-1 },
@@ -1581,7 +1582,7 @@ constexpr SetDef kSet_gulch[] = {
   { "set-boomtown-north", 0x1.6b851eb851eb8p-2, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-south", 0x1.6b851eb851eb8p-2, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-tailings-dump", 0x1.3afb7e90ff972p-1, -0x1.6666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-miners-camp", 0x1.8cccccccccccdp-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-miners-camp", 0x1.91eb851eb851fp-1, 0x1.099999999999ap+3, -0x1.ep+4, 0x0p+0, 0x1.3333333333333p+0, 1 },
 };
 constexpr LandDef kLand_gulch[] = {
   { 2, 0, 0x0p+0, 0x0p+0, 0x1.68p+6, 0x0p+0, 0x0p+0, 0x1p+3, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0 },
@@ -1839,11 +1840,11 @@ constexpr SetDef kSet_sidewinder[] = {
   { "set-telegraph-line", 0x1.47ae147ae147bp-6, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-filling-station", 0x1.f1a9fbe76c8b4p-1, -0x1.3p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-oil-field", 0x1.8a3d70a3d70a4p-1, 0x1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-tank-farm", 0x1.6147ae147ae14p-1, -0x1.cp+2, 0x1.68p+7, 0x0p+0, 0x1.6666666666666p+0, 1 },
-  { "set-roadside-junction", 0x1.8a3d70a3d70a4p-2, 0x1.6p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-tank-farm", 0x1.6147ae147ae14p-1, -0x1.b99999999999ap+2, 0x1.68p+7, 0x0p+0, 0x1.6666666666666p+0, 1 },
+  { "set-roadside-junction", 0x1.7ae147ae147aep-2, -0x1.4p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-mountain-tunnel", 0x1.a9930be0ded29p-4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-tunnel-foothills", 0x1.a9930be0ded29p-4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-hogback", 0x1.d1eb851eb851fp-2, 0x1.1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-hogback", 0x1.d1eb851eb851fp-2, 0x1p+3, -0x1.ep+3, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_sidewinder[] = {
   { 0, -1, 0x1.d70a3d70a3d71p-4, 0x1.dp+5, 0x1.4p+6, 0x0p+0, 0x0p+0, 0x1.4p+5, 0x1.ap+3, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1.2p+3, 0x1.2p+3, 0x1.3333333333333p-2, 0x1p+0, 0xc8846au, 0x0p+0 },
@@ -2232,7 +2233,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 7, kLand_pretzel, 3 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 13, kLand_tangle, 2 },
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 3, kLand_cloverleaf, 3 },
-  { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 19, kLand_wash, 24 },
+  { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 20, kLand_wash, 24 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 14, kLand_gulch, 29 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 16, kLand_crag, 11 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 8, kLand_sidewinder, 3 },

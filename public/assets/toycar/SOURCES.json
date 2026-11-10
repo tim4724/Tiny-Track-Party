@@ -49,6 +49,7 @@
     "set-avalanche-slide.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avenue-oaks.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-barbican.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-bench-ledge.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-city.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-fortress.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-high-street.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
