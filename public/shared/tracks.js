@@ -374,7 +374,6 @@ export const SET_GROUND = {
   // tower stood a storey deep in the hill.
   'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
   // Pretzel's den camp on a bank of its own, the same shape.
-  'set-den-camp': [{ kind: 'fan', len: 6, r: 9, h: 1.4, top: 0.6 }],
   // Cloverleaf's playground hill: a broad round top the playground stands on
   // (flat for its whole width), steeper to the road (+X), falling away behind;
   // low enough that its crest does not hide the playground from the corner.
@@ -896,12 +895,14 @@ export const TRACKS = {
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
       { model: 'set-cow-farm', u: 0.892, lat: -8.7, yaw: 180 },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
-      { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 }
+      { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
+      { model: 'set-hay-meadow', u: 0.458, lat: -9, yaw: 180 }
     ],
     // the valley the village lies in: the west side rises off the west
     // bend's verge (`near`) to a terrace above it, the east terraces climb
     // behind the street, the south hill stands behind the orchard and the
-    // north-east hill behind the sheep
+    // north-east hill behind the sheep; past the street's end the west side
+    // comes down to the verge as a hay bank
     land: [
       { kind: 'ridge', u: 0.915, lat: 23.1, yaw: -4, len: 44, r: 20, h: 7, top: 0.25, near: 0.6 },
       { kind: 'ridge', u: 0.92746, lat: 29.818, yaw: 2.68, len: 100, r: 9, h: 3, top: 0.45 },
@@ -909,6 +910,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.37558, lat: 34.185, yaw: 157.64, len: 100, r: 9, h: 3, top: 0.45 },
       { kind: 'ridge', u: 0.2, lat: -36, len: 60, r: 24, h: 8, top: 0.35 },
       { kind: 'ridge', u: 0.66022, lat: -22, r: 24, h: 9, top: 0.15 },
+      { kind: 'ridge', u: 0.458, lat: -13.3, len: 10, r: 10, h: 3, top: 0.4, near: 0.6 },
       { kind: 'street', u: 0.39565, len: 32 }
     ]
   },
@@ -919,28 +921,38 @@ export const TRACKS = {
     // past the north-west corner, where the start diagonal points, its den
     // round the foot; the pitch beside the diagonal with a game on, its
     // pavilion across it from the road, standing up behind the game over the
-    // kerb that hides the lines; their camp by the
-    // diagonal's top, where the racer comes off the north hairpin, the fire
-    // smoking; an avenue of oaks either side of the start straight from the
-    // overpass to the bend, through the gantry, its verge kept to them (the
-    // `clear`)
+    // kerb that hides the lines; their camp on the lawn at the road's level
+    // where the racer comes off the diagonal's top, the fire smoking; the
+    // kite hill rising off the verge beyond the top loop and on down the
+    // diagonal's outside, three children on its face with their kites (a
+    // long dragon among them) flying low over it and out over the verge; an
+    // avenue of oaks either side
+    // of the start straight from the overpass to the bend, through the
+    // gantry, its verge kept to them (the `clear`)
     set: [
       { model: 'set-avenue-oaks', u: 0.01011, lat: 5.5, yaw: 0 },
       { model: 'set-avenue-oaks', u: 0.01011, lat: -5.5, yaw: 180 },
       { model: 'set-treehouse', u: 0.065, lat: 23, yaw: 25.44 },
       { model: 'set-football-pitch', u: 0.91, lat: -8.6, yaw: 1.41 },
-      { model: 'set-den-camp', u: 0.534, lat: 11.842, yaw: 13.39, scale: 1.4 },
+      { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
-      { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 }
+      { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
+      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
     ],
     land: [
-      { kind: 'clear', u: 0.01011, len: 28, r: 14 }
+      { kind: 'clear', u: 0.01011, len: 28, r: 14 },
+      { kind: 'ridge', u: 0.715, lat: -17.3, len: 18, r: 14, h: 5.5, top: 0.3, near: 0.6 },
+      { kind: 'ridge', u: 0.674, lat: -13.3, len: 8, r: 10, h: 4, top: 0.3, near: 0.6 },
+      { kind: 'ridge', u: 0.81, lat: -16.3, len: 16, r: 13, h: 4.5, top: 0.3, near: 0.6 }
     ]
   },
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
-    // The mill stream: it rises inside the north loop, winds over the east,
+    // The mill stream: it springs from the foot of the hill beyond the north
+    // loop's top straight, falling white over a boulder lip into a pool, a
+    // heron in it, and goes under the straight (a culvert each side) into
+    // the north loop, then winds over the east,
     // middle and north lawns and round the north-west corner into the race of
     // the watermill on its pond, straight ahead of the grid (the wheel turns
     // with the water going down the race into the pond). The road lies on
@@ -965,13 +977,21 @@ export const TRACKS = {
       { model: 'set-stream-reach', u: 0.83755, lat: 10.952, yaw: 55.43 },
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
-      { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 }
+      { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
+      { model: 'set-spring-cascade', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
+      { model: 'set-culvert', u: 0.7335, lat: -4.45, yaw: 180 },
+      { model: 'set-culvert', u: 0.7335, lat: 4.45, yaw: 10 }
     ],
     // the north lawn's hump the stream bends round, and the pond under the
-    // first bridge's west span
+    // first bridge's west span; the stream's hill along the north loop's top
+    // straight and on round its west side, and a hill on the outside of the
+    // east loop, each rising off the verge (`near`)
     land: [
       { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 },
-      { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 }
+      { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 },
+      { kind: 'ridge', u: 0.757, lat: -20.3, len: 20, r: 15, h: 6.5, top: 0.25, near: 0.6 },
+      { kind: 'ridge', u: 0.66, lat: -20, len: 12, r: 15, h: 4.5, top: 0.3, near: 0.6 },
+      { kind: 'ridge', u: 0.283, lat: -19.5, len: 14, r: 16, h: 6, top: 0.3, near: 0.6 }
     ]
   },
   cloverleaf: {
@@ -982,7 +1002,9 @@ export const TRACKS = {
     // points, the climbing net its tallest thing, every swing, seesaw and
     // roundabout going with a child on it, the park's ice-cream van parked
     // up there with the children queueing at it; another corner of the park
-    // in the S between the two decks, seen from both. Built at the toy
+    // in the S between the two decks, seen from both; the boating lake in
+    // the finger lobe, swan pedalos going round it, its fountain playing over
+    // the bank and the boathouse kiosk at the far end. Built at the toy
     // world's chunkiness, so it reads from the road. The corner stands on
     // the flat by the road: the deck's cap holds any knoll there down to it.
     // The park's railway rings the lawn inside the top loop, its line three
@@ -991,12 +1013,17 @@ export const TRACKS = {
     set: [
       { model: 'set-playground', u: 0.082, lat: -17, yaw: 171.96, y: -0.05, scale: 1.3 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
-      { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 }
+      { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
+      { model: 'set-boating-lake', u: 0.8815, lat: -9.65, yaw: 178.89 }
     ],
-    // the round hill beyond the south bend and a long ridge closing the west
+    // the round hill beyond the south bend and a long ridge closing the west,
+    // its foothill coming down to the S's west leg; the boating lake filling
+    // the finger lobe
     land: [
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
-      { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 }
+      { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 },
+      { kind: 'pond', u: 0.8815, lat: -9.65, yaw: 178.89, len: 8, r: 4, w: 2 },
+      { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 }
     ]
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked

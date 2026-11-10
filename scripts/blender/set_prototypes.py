@@ -5034,6 +5034,20 @@ def orchard_block_b_lite():
 def orchard_block_end_lite():
     orchard(2, True, pines=True)
 
+# The hay made on the bank past the village street's end (tracks.js `land`):
+# round bales lying in two loose rows across the slope where the mower left
+# them, a couple of haycocks among them. It DRAPES on the bank as drawn.
+# Front (+X) to the road, metres; on the left at yaw 180.
+@piece(REAL)
+def hay_meadow():
+    def still():
+        for k, (x, z) in enumerate(((-2.0, -12.0), (-1.0, -3.5), (-2.4, 5.0), (-1.2, 13.0),
+                                    (-11.0, -8.0), (-10.0, 1.0), (-11.5, 9.5))):
+            round_bale((x, 0.0, z), yaw=0.5 * k + 0.3, color=('yellow', 'tan')[k % 2])
+        for x, z in ((-6.0, -15.0), (-6.5, 15.5)):
+            cyl(1.4, 2.4, (x, 0.0, z), 'yellow', r2=0.3, segs=8)
+    draped('hay', still)
+
 # The dairy farm on the lawn inside the west bend, where the bend's driver
 # looks across it: the red barn with its silo, the herd grazing out in front
 # of it, side on to the road and a body length or more apart so each reads as
@@ -5558,11 +5572,11 @@ def football_pitch():
 
 @piece(REAL)
 def den_camp():
-    # Pretzel: the children's camp out on the far side of the garden, on its
-    # bank (SET_GROUND, like Ribbon's cottages): three tents round a fire
-    # with its smoke going up, the children on logs round it, their flag on a
-    # pole, a rope swing from the old tree behind.
-    s0 = set_ground('den-camp')(0.0, 0.0)
+    # Pretzel: the children's camp on the lawn by the road where it comes off
+    # the diagonal's top: three tents round a fire with its smoke going up,
+    # the children on logs round it, their flag on a pole, a rope swing from
+    # the old tree behind. On the flat at the road's level (it stood up a
+    # bank once, above the frame).
     for k, (a, c) in enumerate(((0.5, 0xff5040), (2.4, 0x339cf2), (4.3, 0x22c46e))):
         tent((4.2 * math.cos(a), 0, 4.2 * math.sin(a)), math.pi - a, c)
     for k in range(6):                                   # the fire's ring of stones
@@ -5586,9 +5600,6 @@ def den_camp():
         strut((TX + 2.6, 5.9, TZ), (TX + 2.6, 0.9, TZ), 0.08, 0x9a7b55)
         box((0.5, 0.1, 0.7), (TX + 2.6, 0.85, TZ), 0x9a7b55)
         person((TX + 2.5, 0.9, TZ), 0.0, 0x339cf2, k=0.64, hair=2, sit=True, arm=1.3)
-    for o in bpy.context.scene.objects:          # onto the bank
-        o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
     join_still('camp')
 
 # ---- TANGLE: the mill stream ------------------------------------------------------------
@@ -5798,6 +5809,227 @@ def culvert():
     for sd in (-1, 1):                       # wing walls, short and splayed along the banks
         box((0.8, 0.45, 0.42), (face - 0.3, 0.225, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45)
     join_still('culvert')
+
+# ---- CLOVERLEAF: the boating lake ----------------------------------------------------
+# The park's boating lake in the finger lobe, the track's `pond` landform (its
+# water and shore drawn by the renderer, 16 round a spine 32 long here), and
+# its life: swan pedalos going slowly round, the
+# fountain playing in the middle, the boathouse kiosk at the far end with its
+# striped awning and a jetty out over the water, two pedalos tied up at it.
+# All of it kept well inside the water's edge, since a piece's box holds the
+# verge band down under it (bandHold). Metres, +Z along the lake.
+LAKE_Y = 0.36
+
+def swan_pedalo(at, body):
+    """A swan pedalo facing +X: the white hull, the seat's blue back, the
+    swan's neck and head at the bow."""
+    x, y, z = at
+    box((2.6, 0.7, 1.6), (x, y + 0.35, z), body)
+    box((1.6, 0.5, 1.4), (x - 0.4, y + 0.85, z), 0x339cf2)                      # the seat back
+    strut((x + 1.0, y + 0.6, z), (x + 1.5, y + 2.0, z), 0.4, body)               # the neck
+    box((0.7, 0.45, 0.4), (x + 1.75, y + 2.1, z), body)                          # the head
+    box((0.4, 0.15, 0.2), (x + 2.2, y + 2.05, z), 0xff7e44)                      # the beak
+
+@piece(REAL)
+def boating_lake():
+    WY = LAKE_Y
+    n = 16
+    for k in range(n):
+        a = -k * 2 * math.pi / n
+        marker('path_pedalo_%d' % k, (7.0 * math.cos(a), WY, 16.0 * math.sin(a)))
+    for j in range(3):
+        with animated('anim_path:c=pedalo:p=80:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 3, j), (7.0, WY, 0.0)):
+            swan_pedalo((7.0, WY, 0.0), 'white')
+    # the fountain on its stone basin in the middle, its jet playing high
+    # over the lake so it shows over the bank from both legs, rising and
+    # falling gently
+    cyl(2.4, 0.8, (0.0, 0.0, 0.0), 'grey', segs=12)
+    cyl(2.0, 0.2, (0.0, 0.8, 0.0), 0x8ecae6, segs=12)
+    cyl(1.6, 1.0, (0.0, 0.9, 0.0), 'white', r2=0.5, segs=10)                    # the jet's foot
+    with animated('anim_bob:h=1.2:p=3.4', (0.0, 1.8, 0.0)):
+        cyl(0.55, 8.0, (0.0, 1.8, 0.0), 'white', r2=0.25, segs=8)
+        sphere(1.3, (0.0, 9.8, 0.0), 'white', scale=(1.0, 0.7, 1.0))
+    # the boathouse at the far end: the kiosk under its striped awning, the
+    # jetty out over the water, two pedalos tied up at it
+    BZ = 34.5                                                   # on the shore past the water's end
+    stall((0.0, 0, BZ), math.pi / 2, (0xcf534f, 'white'), (0xffc044, 0x339cf2))
+    for i in range(7):
+        box((2.4, 0.16, 1.0), (0.0, 0.85, BZ - 2.5 - i * 1.05), TIMBER)
+    for sx in (-1, 1):
+        for i in (0, 3, 6):
+            box((0.24, 1.0, 0.24), (sx * 1.1, 0.45, BZ - 2.5 - i * 1.05), 0x7a5a3a)
+    for sx in (-1, 1):
+        swan_pedalo((sx * 2.6, WY, BZ - 7.0), 'white')
+    join_still('lake')
+
+# ---- PRETZEL: the kite hill --------------------------------------------------------
+# Three children on the face of the hill beyond the top loop (tracks.js
+# `land`), standing still with their kites up: a long dragon kite, a diamond
+# and a box kite, low over the hill's foot toward the road's verge, bright,
+# with long ribboned tails, nodding in the wind about the ends of their
+# strings. The road comes at the hill head-on before it turns past, so the
+# kites spread along it and face it: the approach sees every one face-on.
+# The children stand; the wind moves the kites. Front (+X) to the road,
+# metres; on the left at yaw 180. The children DRAPE onto the crest as drawn.
+def kite_string(a, b, n=6):
+    """A kite's string from the hand at a up to the kite at b, sagging a little."""
+    pts = sag(a, b, 0.06 * math.dist(a, b), n + 1)
+    with plain_parts():
+        for i in range(n):
+            strut(pts[i], pts[i + 1], 0.08, 'white')
+
+def kite_tail(top, colors, n=6):
+    """A kite's tail hanging from `top`: a ribbon with a bow tied on it every
+    so often."""
+    with plain_parts():
+        pts = [(top[0], top[1] - 0.9 * i, top[2] + 0.25 * math.sin(i)) for i in range(n + 1)]
+        for i in range(n):
+            strut(pts[i], pts[i + 1], 0.08, 'white')
+            box((0.12, 0.3, 0.7), pts[i + 1], colors[i % len(colors)], yaw=0.5 * i)
+
+@piece(REAL)
+def kite_flyers():
+    RED, BLUE, YELLOW, GREEN, PURPLE = 0xcf534f, 0x339cf2, 0xffc044, 0x22c46e, 0xa878e8
+    KIDS = ((0.0, -10.0, BLUE, 2), (0.5, 6.0, RED, 0), (-0.4, 18.0, GREEN, 3))
+    DRAGON = (22.0, 10.5, -18.0)                 # the dragon's head, its body trailing along +Z
+    DIAMOND = (24.0, 11.5, 18.0)
+    BOX = (22.0, 9.0, 32.0)
+    def still():
+        for (x, z, shirt, hair), k in zip(KIDS, (DRAGON, DIAMOND, BOX)):
+            person((x, 0.0, z), 0.0, shirt, k=0.75, hair=hair, arm=1.1)
+            kite_string((x + 0.5, 1.5, z), k)
+    draped('kids', still)
+    # the kites, low over the hill's foot and out toward the road's verge, each
+    # face-on to the road (+X), which comes at them head-on before it turns
+    # past; each moves about the end of its string (and is lifted with the
+    # land under it, as the strings are), the strings standing still. The
+    # dragon: a big head and a long body of discs in the four colours,
+    # bellying in the wind.
+    hx, hy, hz = DRAGON
+    with animated('anim_drape+sway:a=x:d=10:p=4.2#dragon', DRAGON):
+        box((2.0, 3.4, 3.6), (hx, hy, hz), RED)                                 # the head
+        box((2.1, 0.9, 2.6), (hx, hy - 1.3, hz - 2.0), RED)                     # its jaw
+        for s in (-1, 1):
+            box((0.3, 0.9, 0.9), (hx + 1.05, hy + 0.6, hz + s * 1.0), YELLOW)    # its eyes
+            box((0.4, 2.0, 0.6), (hx, hy + 2.3, hz + s * 1.2), GREEN, roll=0.4 * s)  # its horns
+        COLS = (YELLOW, GREEN, BLUE, RED)
+        prev = (hx, hy + 1.2, hz + 1.8)                                          # the cord's start, on the head
+        for i in range(10):
+            t = (i + 1) / 10
+            z = hz + 3.2 + 3.0 * i
+            y = hy - 2.4 * math.sin(math.pi * t) + 0.7 * math.sin(2.5 * t * math.pi)
+            r = 2.2 - 0.08 * i
+            cyl(r, 0.3, (hx - 0.15, y, z), COLS[i % 4], segs=10, axis='across')
+            # the cord the discs hang from, rim to rim (a rim's corner is
+            # where the disc and the cord meet)
+            rim = (hx, y + r, z)
+            strut(prev, rim, 0.16, 'white')
+            prev = rim
+    S = 2.0
+    kx, ky, kz = DIAMOND
+    with animated('anim_drape+sway:a=x:d=12:p=3.4#diamond', DIAMOND):
+        poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
+             [(0, 1, 2), (0, 2, 3)], BLUE)
+        poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
+             [(0, 1, 2)], YELLOW)
+        kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=10)
+    S = 2.2
+    kx, ky, kz = BOX
+    with animated('anim_drape+sway:a=x:d=12:p=3.9#box', BOX):
+        for s in (-1, 1):
+            box((1.4 * S, 1.2 * S, 1.4 * S), (kx, ky + s * 1.0 * S, kz), (RED, PURPLE)[s > 0])
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                box((0.16, 3.4 * S, 0.16), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
+        kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=9)
+
+# ---- TANGLE: the spring the stream rises from --------------------------------------
+# The stream's source, cut into the steep foot of the hill beyond the north
+# loop's top straight (tracks.js `land`): three round ledges of wet slate
+# stepping up the hill, the water running over each and off the lowest in
+# one broad white sheet into a pool, a heron standing in it; from there it
+# goes under the top straight (a culvert each side) and on as the stream.
+# The ledges stand LEVEL at their own heights, their backs buried in the
+# hill, so the grass meets the rock and only the steps show: mid-dark slate,
+# as neither pale rock (lost on the green) nor black rock (a slab dropped on
+# the hill) reads. The sheet wraps the lowest ledge's round face turned
+# toward the racer coming up the road. Front (+X) to the road, metres; on
+# the left at yaw 180. The ledges are built against the ground the hill
+# draws under them at that spot (scratch probe, not a source); the pool,
+# its stones and the heron DRAPE.
+@piece(REAL)
+def spring_cascade():
+    ROCK, WATER, FOAM = 'slate', 0x8ecae6, 'white'
+    # the ledges: centre (x, z), radius, foot, top
+    LEDGES = (((-5.0, 0.0), 4.2, 0.0, 6.4), ((-9.6, 0.8), 3.4, 5.4, 10.0), ((-13.4, -0.6), 2.6, 9.0, 13.4))
+    CAP = 0.5           # each ledge's top is stepped in once, a round shoulder
+    FALLS = (35, 20, 10)  # the bearing each ledge's water goes over its lip at, degrees from +X toward +Z
+    def on(i, r, deg):
+        (cx, cz), _, _, _ = LEDGES[i]
+        a = math.radians(deg)
+        return (cx + r * math.cos(a), cz + r * math.sin(a))
+    def sheet(i, deg, n, step, y0, y1):
+        """n strips of white and blue water down ledge i's round face."""
+        R = LEDGES[i][1]
+        for k in range(n):
+            d = deg + (k - (n - 1) / 2) * step
+            w = 2 * (R + 0.3) * math.sin(math.radians(step) / 2) + 0.08
+            x, z = on(i, R + 0.3 - 0.1 * (k % 2), d)
+            box((0.6 - 0.2 * (k % 2), y1 - y0, w), (x, (y0 + y1) / 2, z), (FOAM, WATER)[k % 2], yaw=-math.radians(d))
+    def run(a, b, y, w):
+        """Water lying on a ledge's top from a to b."""
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        box((math.hypot(dx, dz), 0.24, w), ((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2), FOAM, yaw=-math.atan2(dz, dx))
+    for (cx, cz), r, y0, y1 in LEDGES:
+        o = cyl(r, y1 - y0 - CAP, (cx, y0, cz), ROCK, segs=12)
+        o['ramp'] = 0.4
+        o = cyl(r - 0.6, CAP, (cx, y1 - CAP, cz), ROCK, segs=12)
+        o['ramp'] = 0.4
+    # the water: the spring welling on the top ledge, over each lip in turn,
+    # across each ledge between
+    T = [y1 for _, _, _, y1 in LEDGES]
+    cyl(1.1, 0.3, (*on(2, 0.6, 190)[:1], T[2] - 0.1, on(2, 0.6, 190)[1]), FOAM, segs=10)
+    run(on(2, 0.6, 190), on(2, LEDGES[2][1] - 0.6, FALLS[2]), T[2] + 0.02, 1.4)
+    sheet(2, FALLS[2], 2, 20, T[1] + 0.3, T[2] + 0.2)
+    run(on(2, LEDGES[2][1] + 0.3, FALLS[2]), on(1, LEDGES[1][1] - 0.6, FALLS[1]), T[1] + 0.02, 1.8)
+    sheet(1, FALLS[1], 3, 17, T[0] + 0.3, T[1] + 0.2)
+    run(on(1, LEDGES[1][1] + 0.3, FALLS[1]), on(0, LEDGES[0][1] - 0.6, FALLS[0]), T[0] + 0.02, 2.4)
+    sheet(0, FALLS[0], 5, 15, 0.0, T[0] + 0.2)
+    join_still('ledges')
+    def still():
+        # the pool at the foot, foam where the sheet comes in, spray, round
+        # wet stones on its banks and beside the fall, and the run down to
+        # the culvert's mouth
+        px, pz = on(0, 7.0, FALLS[0])
+        cyl(3.4, 0.3, (px, 0.0, pz), WATER, segs=14)
+        fx, fz = on(0, 5.6, FALLS[0])
+        cyl(2.4, 0.42, (fx, 0.0, fz), FOAM, segs=10)
+        for d in (-14, 0, 14):
+            sphere(1.1, (*on(0, 5.1, FALLS[0] + d)[:1], 0.4, on(0, 5.1, FALLS[0] + d)[1]), FOAM, scale=(1.0, 0.6, 1.0))
+        for k, (d, rr, r, h) in enumerate(((FALLS[0] - 50, 5.4, 1.6, 2.2), (FALLS[0] + 50, 5.4, 1.6, 2.2),
+                                           (FALLS[0] - 78, 4.8, 1.9, 2.8), (FALLS[0] + 80, 4.9, 1.8, 2.6))):
+            x, z = on(0, rr, d)
+            o = cyl(r, h, (x, -0.4, z), ROCK, segs=10)
+            o['ramp'] = 0.4
+        for k, deg in enumerate((70, 150, 230)):
+            a = math.radians(deg)
+            o = cyl(1.1 + 0.2 * (k % 2), 0.9, (px + 4.0 * math.cos(a), -0.3, pz + 4.0 * math.sin(a)), ROCK, segs=9)
+            o['ramp'] = 0.4
+        mx, mz = 4.4, 0.0                                       # the culvert's mouth
+        dx, dz = mx - px, mz - pz
+        L = math.hypot(dx, dz)
+        a0 = (px + dx / L * 2.8, pz + dz / L * 2.8)
+        box((L - 2.8 + 0.4, 0.26, 2.2), ((a0[0] + mx) / 2, 0.13, (a0[1] + mz) / 2), WATER, yaw=-math.atan2(dz, dx))
+        # the heron, standing in the pool on its long legs, watching the water
+        HX, HZ = px + 0.8, pz + 1.2
+        with plain_parts():
+            for s in (-1, 1):
+                box((0.12, 1.3, 0.12), (HX, 0.65, HZ + 0.18 * s), 'dark')
+            box((1.2, 0.6, 0.6), (HX, 1.55, HZ), 'grey', roll=0.25)
+            strut((HX + 0.45, 1.7, HZ), (HX + 0.9, 2.6, HZ), 0.2, 'white')
+            box((0.44, 0.3, 0.26), (HX + 1.0, 2.66, HZ), 'white')
+            box((0.6, 0.1, 0.1), (HX + 1.4, 2.6, HZ), 'yellow')
+    draped('spring', still)
 
 # ---- CLOVERLEAF: the park railway in the top loop ------------------------------------
 # A park's narrow-gauge line on the lawn inside the top loop, the way the racers
