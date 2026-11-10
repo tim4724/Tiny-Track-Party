@@ -141,6 +141,7 @@
     "set-jointed-snake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jungle-grove.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-kite-flyers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-lake-reeds.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lake-willow.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lifeguard-tower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lighthouse.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

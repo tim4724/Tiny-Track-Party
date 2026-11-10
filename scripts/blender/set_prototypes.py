@@ -6402,25 +6402,32 @@ def boating_lake():
     for j in range(3):
         with animated('anim_path:c=pedalo:p=80:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 3, j), (7.0, WY, 0.0)):
             swan_pedalo((7.0, WY, 0.0), 'white')
-    # the fountain on its stone basin in the middle: a fat white plume and a
-    # crown of spray over it, the crown swelling and settling gently
+    # the fountain on its stone basin in the middle: a fat plume, faintly
+    # blue, and its spray falling outward round the top in a ring of drops,
+    # the drops rising and falling gently
     cyl(2.4, 0.8, (0.0, 0.0, 0.0), 'grey', segs=12)
     cyl(2.0, 0.2, (0.0, 0.8, 0.0), 0x8ecae6, segs=12)
-    cyl(1.8, 7.0, (0.0, 0.9, 0.0), 'white', r2=0.7, segs=10)                    # the plume
+    cyl(1.6, 7.4, (0.0, 0.9, 0.0), 'sky', r2=0.5, segs=10)                      # the plume
     with animated('anim_bob:h=0.35:p=2.6', (0.0, 7.6, 0.0)):
-        for k in range(4):
-            a = k * math.pi / 2 + 0.4
-            sphere(1.3, (1.3 * math.cos(a), 7.6, 1.3 * math.sin(a)), 'white', scale=(1.0, 0.75, 1.0))
-        sphere(1.5, (0.0, 8.6, 0.0), 'white', scale=(1.0, 0.8, 1.0))
+        for k in range(8):                       # eight jets arcing out and down, beaded with drops
+            a = k * math.pi / 4
+            prev = (0.0, 8.2, 0.0)
+            for r, y, d in ((1.3, 8.1, 0.55), (2.3, 7.1, 0.5), (3.1, 5.7, 0.45)):
+                p = (r * math.cos(a), y, r * math.sin(a))
+                with plain_parts():
+                    strut(prev, p, 0.2, 'white')
+                box((d, d * 1.3, d), p, 'white', yaw=a)
+                prev = p
     join_still('lake')
 
 @piece(REAL)
 def boathouse():
     # The lake's boathouse on its near shore, where the road comes down off
-    # the bridge pointing at it: the kiosk under its striped awning toward the
-    # road, a flag on its roof, the jetty behind it out over the water and two
-    # pedalos tied up there. Front (+X) to the road. It DRAPES, the jetty
-    # lying over the pond's flat floor as the water does.
+    # the bridge: the kiosk under its striped awning toward that road, a
+    # second awning and hatch on the lake side (-X), the face the return leg
+    # looks at, with lifebuoys hung either side, a flag on its roof, the
+    # jetty out from it over the water and two pedalos tied up there. Front (+X) to the road.
+    # It DRAPES, the jetty lying over the pond's flat floor as the water does.
     RED, WHITE, BLUE, CREAM = 0xcf534f, 0xf8f8fb, 0x339cf2, 0xfde4c7
     F = local(0.0, 0.0, 0.0)
     def still():
@@ -6433,6 +6440,18 @@ def boathouse():
                 box((2.6, 0.14, 6.0 / 6), (3.2, 2.55, -3.0 + 6.0 * (k + 0.5) / 6), (RED, WHITE)[k % 2], roll=-0.25)
             box((0.2, 3.2, 0.2), (-0.6, 4.2 + 1.6, 0.0), WHITE)               # the flag's pole
             poly([(-0.6, 7.6, 0.0), (-0.6, 6.4, 0.0), (1.4, 7.0, 0.0)], [(0, 1, 2)], RED)
+            # the lake side, which the return leg looks at: a second striped
+            # awning over the hatch at the jetty's head, a lifebuoy hung on
+            # the wall either side
+            for k in range(6):
+                box((2.6, 0.14, 6.0 / 6), (-3.2, 2.55, -3.0 + 6.0 * (k + 0.5) / 6), (RED, WHITE)[k % 2], roll=0.25)
+            for sz in (-1, 1):
+                for j in range(8):
+                    a = j * math.pi / 4
+                    box((0.18, 0.42, 0.42), (-2.06, 1.5 + 0.55 * math.sin(a), sz * 1.85 + 0.55 * math.cos(a)),
+                        (RED, WHITE)[j % 2], pitch=a)
+        box((0.1, 1.0, 2.0), (-2.02, 1.75, 0.0), 0x2a2735)                    # the lake-side hatch
+        box((0.7, 0.2, 2.2), (-2.3, 1.2, 0.0), 0xffc044)                      # its counter
         for i in range(10):                                                  # the jetty
             box((1.0, 0.16, 2.4), (-2.6 - i * 1.05, 0.55, 0.0), TIMBER)
         for sz in (-1, 1):
@@ -6441,6 +6460,29 @@ def boathouse():
         for sz in (-1, 1):
             swan_pedalo((-11.0, LAKE_Y, sz * 2.6), 'white')
     draped('boathouse', still)
+
+@piece(REAL)
+def lake_reeds():
+    # The lake's west bank: reeds standing in clumps at the water's edge and
+    # round shrubs banked up behind them, so from the return leg the water
+    # lies against a green bank, not flat lawn, and the first leg passes a
+    # lakeside, not grass. The pond's water stays on the plain and the land
+    # cannot rise in a loop ringed by road, so the bank is built. Along Z,
+    # +X toward the water. It DRAPES.
+    def still():
+        for k in range(9):
+            z = -15.0 + 3.75 * k + 0.8 * math.sin(k * 2.1)
+            for j in range(5):                                               # a clump of reeds
+                a = j * 2 * math.pi / 5 + k
+                x = 3.4 + 0.6 * math.cos(a)
+                h = 2.2 + 0.6 * ((j + k) % 3)
+                cyl(0.0, h, (x, -0.2, z + 0.6 * math.sin(a)), (0x4f9a48, 0x22c46e)[(j + k) % 2], r2=0.26, segs=3, yaw=a)
+            if k % 3 == 1:                                                   # a bulrush head or two
+                box((0.24, 0.7, 0.24), (3.4, 2.6, z), 0x7a5a3a)
+        for k, (x, z, r) in enumerate(((-1.5, -13.0, 2.2), (-2.6, -8.0, 2.6), (-1.2, -3.0, 2.0), (-2.4, 2.0, 2.7),
+                                       (-1.4, 7.0, 2.2), (-2.5, 12.0, 2.4), (0.4, -10.5, 1.6), (0.6, 4.5, 1.7))):
+            sphere(r, (x, r * 0.35, z), (0x4f9a48, 0x5f9f4a)[k % 2], scale=(1.1, 0.8, 1.0), yaw=k)
+    draped('reeds', still)
 
 @piece(REAL)
 def lake_willow():
@@ -6576,19 +6618,26 @@ def spring_cascade():
         a = math.radians(deg)
         return (cx + r * math.cos(a), cz + r * math.sin(a))
     def sheet(i, deg, n, step, y0, y1):
-        """Water down ledge i's round face: n white strips with blue showing
-        thinly between them, and a roll of foam where it goes over the lip."""
+        """Water down ledge i's round face: n white strips over a blue sheet,
+        their tops and feet staggered so no edge lines up, blue showing
+        between them and at the foot, and round puffs of foam where it goes
+        over the lip."""
         R = LEDGES[i][1]
         w = 2 * (R + 0.3) * math.sin(math.radians(step) / 2)
         for k in range(n):
             d = deg + (k - (n - 1) / 2) * step
             x, z = on(i, R + 0.1, d)
             box((0.3, y1 - y0, w + 0.06), (x, (y0 + y1) / 2, z), WATER, yaw=-math.radians(d))
+            top = y1 - (0.0, 0.3, 0.15, 0.4)[k % 4]
+            foot = y0 + (0.5, 0.9, 0.7, 1.1)[k % 4] * (0.5 if y0 > 0 else 1.0)
             x, z = on(i, R + 0.35, d)
             ww = w * (0.72, 0.86, 0.78)[k % 3]
-            box((0.5, y1 - y0, ww), (x, (y0 + y1) / 2, z), FOAM, yaw=-math.radians(d))
-            x, z = on(i, R + 0.45, d)
-            box((0.8, 0.7, w + 0.1), (x, y1 - 0.3, z), FOAM, yaw=-math.radians(d))
+            box((0.5, top - foot, ww), (x, (top + foot) / 2, z), FOAM, yaw=-math.radians(d))
+        m = max(2, n - 1)
+        for k in range(m):
+            d = deg + (k - (m - 1) / 2) * step * n / m
+            x, z = on(i, R + 0.3, d)
+            sphere(0.75 + 0.12 * (k % 2), (x, y1 - 0.15 + 0.12 * (k % 2), z), FOAM, scale=(1.0, 0.7, 1.0), yaw=k)
     def run(a, b, y, w):
         """Water lying on a ledge's top from a to b."""
         dx, dz = b[0] - a[0], b[1] - a[1]
@@ -6654,7 +6703,7 @@ def spring_cascade():
 # The spring's run, from the pool on to the kerb: a shallow stony channel
 # edged in the cascade's slate, ending in a low slate lip with the dark mouth
 # of the drain under it, the water going under the top straight there to
-# come out of the culvert on the far side. Low and flat, so no slab stands
+# come out of the same drain on the far side and run on as the stream. Low and flat, so no slab stands
 # by the kerb. It stands LEVEL (it does not drape): its footprint holds the
 # hill's `near` ramp back off the pool behind it, as the culvert that stood
 # here did. World units, front (+X) to the road; on the left at yaw 180.
