@@ -1260,10 +1260,10 @@ export const TRACKS = {
     // down the middle of, its big pawns and foam dice stood on it, and just
     // past the mat's end the racers' toy car park on the infield, its lift
     // and spiral ramp running. Up in the sky the biggest snake of all rises
-    // coiled out of a woven basket in the eye of the spiral climb, its head
-    // swaying just over the top deck, and the game's foam dice stacked three
-    // high with a pawn on top stand at the inside of each weave bend (the
-    // slalom's gates) and outside the climb.
+    // coiled out of a woven basket at the inside of the weave's first bend,
+    // its head swaying over the deck, and the game's foam dice stacked four
+    // high with a pawn on top stand at the inside of the other bends (the
+    // slalom's gates) and outside the climb, where the camera looks.
     set: [
       { model: 'set-floor-mat', u: 0, lat: 0 },
       { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
@@ -1272,8 +1272,8 @@ export const TRACKS = {
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
       { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 },
-      { model: 'set-sky-snake', u: 0.319, lat: -8.39, yaw: -40 },
-      { model: 'set-dice-tower', u: 0.525, lat: 6 },
+      { model: 'set-sky-snake', u: 0.525, lat: 6 },
+      { model: 'set-dice-tower', u: 0.47, lat: 6.6 },
       { model: 'set-dice-tower', u: 0.556, lat: -6, yaw: 40 },
       { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 },
       { model: 'set-dice-tower', u: 0.215, lat: -13.4, yaw: 20 },
@@ -1298,8 +1298,9 @@ export const TRACKS = {
     // a red rank and a siege tower inside it, two blue ranks with their
     // cannon outside, the castle's outer gatehouse astride the road and
     // its dragon on guard where the straight points. The besiegers' ram,
-    // its log swinging, stands at the inside of the corner after the guns,
-    // and the castle's corner towers fly tall blue pennants.
+    // its log swinging, stands with their guns outside the corner after
+    // them, aimed across at the castle, and the castle's corner towers fly
+    // tall blue pennants.
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
@@ -1308,7 +1309,7 @@ export const TRACKS = {
       { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
-      { model: 'set-siege-ram', u: 0.725, lat: -6, yaw: 180 },
+      { model: 'set-siege-ram', u: 0.7241, lat: 8.5, yaw: -150.5 },
       { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
       { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
@@ -1333,9 +1334,10 @@ export const TRACKS = {
     // marbles racing the cars along it. In the eye of each spiral a marble
     // lift turns its screw inside a cage of the kit's stacked cylinders as
     // wide as the eye allows, its cup a storey over the top deck; zigzags
-    // stand outside the spirals where the camera looks round them; and
-    // along the grid straight a wooden marble racer tilted to the road runs
-    // its five marbles down their lanes beside the cars.
+    // stand outside the spirals where the camera looks round them, and one
+    // inside the corner home; and along the grid straight a wooden marble
+    // racer of two stepped boards runs its marbles down their lanes beside
+    // the cars.
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
@@ -1345,8 +1347,10 @@ export const TRACKS = {
       { model: 'set-marble-skyway', u: 0.477, lat: -5 },
       { model: 'set-marble-lift', u: 0.2629, lat: -8.39 },
       { model: 'set-marble-lift', u: 0.69, lat: -8.36, yaw: 45 },
-      { model: 'set-marble-racer', u: 0.029, lat: -7.5 },
-      { model: 'set-marble-zigzag', u: 0.2612, lat: 6.63, yaw: 89.2 },
+      { model: 'set-marble-racer', u: 0.029, lat: -8.5 },
+      { model: 'set-marble-zigzag', u: 0.27, lat: 6.63, yaw: 90 },
+      { model: 'set-marble-zigzag', u: 0.34, lat: 6.6, yaw: 90 },
+      { model: 'set-marble-zigzag', u: 0.93, lat: -6.6, yaw: -90 },
       { model: 'set-marble-zigzag', u: 0.6976, lat: 6.63, yaw: 90.8 },
       { model: 'set-marble-zigzag', u: 0.4146, lat: 6.66, yaw: 90.7 }
     ]
@@ -1367,8 +1371,8 @@ export const TRACKS = {
     // and the fire station outside the south edge, and past the top
     // straight the old town, a crane turning on its building site. The
     // town's tallest blocks stand beside the skyway where it turns for the
-    // U, its TV tower in the U's eye, and towers a child stacked stand
-    // outside the corner the south-bound leg turns.
+    // U and again outside it, its TV tower in the U's eye, and towers a
+    // child stacked stand outside the corner the south-bound leg turns.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -1376,6 +1380,7 @@ export const TRACKS = {
       { model: 'set-block-westside', u: 0.2282, lat: -8.56, yaw: -180 },
       { model: 'set-block-high-street', u: 0.8655, lat: -9.63, yaw: 180 },
       { model: 'set-block-uptown', u: 0.4534, lat: -6.64 },
+      { model: 'set-block-uptown', u: 0.485, lat: -9, yaw: 90 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 }
     ]
