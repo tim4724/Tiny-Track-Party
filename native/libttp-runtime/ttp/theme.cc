@@ -373,6 +373,10 @@ void playroomTrack(Theme& t, const std::string& track) {
     // the skyway and both spirals stand on the marble run's own stacked
     // toy cylinders (set_prototypes.py marble_run's TOY colours)
     t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
+    // the marble run's own pieces fill the floor; the loose blocks and
+    // marbles strewn across it read as coloured specks at distance
+    t.scenery.density = 0.08f;
+    t.scenery.clutterDensity = 0.05f;
   } else if (track == "gauntlet") {
     t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
     // the bridge past the ring stands on the castle's stacked toy blocks

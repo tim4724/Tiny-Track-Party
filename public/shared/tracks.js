@@ -69,19 +69,20 @@ const loop = (radius, opts = {}) => ({ kind: 'loop', radius, ...opts });
 // loops. Same-hand spirals wind the lap to a net -1080° (3 full turns — the plan is
 // still a simple rounded rectangle). Composed by
 // scripts/compose-stunt.mjs: the grid/top-leg lengths are its closure solve, each
-// stunt's `roll` its probe-measured holonomy trim (spiral-down needs ~none — the
-// descent's twist self-cancels against the same-hand climb already trimmed upstream).
+// stunt's `roll` its probe-measured holonomy trim, swept with no tilt allowance so
+// every floor leg and the skyway ride level and the spirals keep their own 10° bank
+// (compose-stunt's 12° allowance had left the legs leaning 13-15°).
 export const HELIX = [
   straight(28),                                                      // grid, north-bound
   arc(RL, -90),                                                      // NE corner (unbanked — the spirals carry the cup's lean)
   straight(26),                                                      // top leg, east-bound
-  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 39.6 }), // SPIRAL UP
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 35.3 }), // SPIRAL UP
   straight(28, { pillars: true }),                                   // THE SKYWAY, south-bound at height
-  arc(RL, -450, { rise: -2.6, bank: 10, pillars: true, roll: -0.5 }),// SPIRAL DOWN (same hand)
+  arc(RL, -450, { rise: -2.6, bank: 10, pillars: true, roll: -35.4 }),// SPIRAL DOWN (same hand)
   straight(8),                                                       // south leg — boost — straight into
-  loop(2.2, { drift: 3, roll: 52 }),                                 // TOY LOOP L
+  loop(2.2, { drift: 3, roll: 74.7 }),                               // TOY LOOP L
   straight(10),                                                      // beat (rings stay 20 world apart)
-  loop(2.2, { drift: -3, roll: -57.1 }),                             // TOY LOOP R (the S-pair)
+  loop(2.2, { drift: -3, roll: -75.7 }),                             // TOY LOOP R (the S-pair)
   straight(8),                                                       // south-west run home
   arc(RL, -90)                                                       // SW corner into the grid
 ];
@@ -145,18 +146,19 @@ export const GAUNTLET = [
 
 // ---- Skysnake (Hard): a slalom IN THE SKY. The spiral climbs to 5.2 world, the road
 // weaves an S-S through the clouds on pillars, then dives home past a toy loop.
-// Composed by scripts/compose-stunt.mjs (solved grid leg + probe-measured roll trims).
+// Composed by scripts/compose-stunt.mjs (solved grid leg + probe-measured roll trims,
+// swept with no tilt allowance, as Helix's, so the floor legs ride level).
 export const SKYSNAKE = [
   straight(40.837),                                                  // grid straight (closure-solved)
   arc(RL, -90),                                                      // east
   straight(10),
-  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 18 }),   // SPIRAL UP → south
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 35.2 }), // SPIRAL UP → south
   arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
   arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
   straight(6, { pillars: true }),
   straight(10, { rise: -2.6, pillars: true }),                       // dive to ground
   straight(5),                                                       // boost — straight into
-  loop(2.2, { drift: -3, roll: -90 }),                               // TOY LOOP
+  loop(2.2, { drift: -3, roll: -76.2 }),                             // TOY LOOP
   straight(8),
   arc(RL, -90),                                                      // west
   straight(7),
@@ -1257,7 +1259,11 @@ export const TRACKS = {
     // straight's end. The game again as a floor mat the grid straight runs
     // down the middle of, its big pawns and foam dice stood on it, and just
     // past the mat's end the racers' toy car park on the infield, its lift
-    // and spiral ramp running
+    // and spiral ramp running. Up in the sky the biggest snake of all rises
+    // coiled out of a woven basket in the eye of the spiral climb, its head
+    // swaying just over the top deck, and the game's foam dice stacked three
+    // high with a pawn on top stand at the inside of each weave bend (the
+    // slalom's gates) and outside the climb.
     set: [
       { model: 'set-floor-mat', u: 0, lat: 0 },
       { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
@@ -1265,7 +1271,13 @@ export const TRACKS = {
       { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
-      { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 }
+      { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 },
+      { model: 'set-sky-snake', u: 0.319, lat: -8.39, yaw: -40 },
+      { model: 'set-dice-tower', u: 0.525, lat: 6 },
+      { model: 'set-dice-tower', u: 0.556, lat: -6, yaw: 40 },
+      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 },
+      { model: 'set-dice-tower', u: 0.215, lat: -13.4, yaw: 20 },
+      { model: 'set-dice-tower', u: 0.5828, lat: -9.95, yaw: 155.8 }
     ]
   },
   gauntlet: {
@@ -1285,7 +1297,9 @@ export const TRACKS = {
     // castle and their tents. On the long home straight the siege goes on:
     // a red rank and a siege tower inside it, two blue ranks with their
     // cannon outside, the castle's outer gatehouse astride the road and
-    // its dragon on guard where the straight points.
+    // its dragon on guard where the straight points. The besiegers' ram,
+    // its log swinging, stands at the inside of the corner after the guns,
+    // and the castle's corner towers fly tall blue pennants.
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
@@ -1294,6 +1308,7 @@ export const TRACKS = {
       { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
+      { model: 'set-siege-ram', u: 0.725, lat: -6, yaw: 180 },
       { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
       { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
@@ -1315,14 +1330,25 @@ export const TRACKS = {
     // outside the raised straight and again by the loop's entry; a tin
     // humming top and a wooden one spin short of the run; and the run's high
     // chute beside the skyway inside its bend, at the deck's own height, its
-    // marbles racing the cars along it
+    // marbles racing the cars along it. In the eye of each spiral a marble
+    // lift turns its screw inside a cage of the kit's stacked cylinders as
+    // wide as the eye allows, its cup a storey over the top deck; zigzags
+    // stand outside the spirals where the camera looks round them; and
+    // along the grid straight a wooden marble racer tilted to the road runs
+    // its five marbles down their lanes beside the cars.
     set: [
       { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
       { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
       { model: 'set-marble-zigzag', u: 0.8246, lat: 9.4, yaw: 148 },
-      { model: 'set-marble-zigzag', u: 0.5174, lat: 12.2, yaw: 100 },
-      { model: 'set-marble-skyway', u: 0.477, lat: -5 }
+      { model: 'set-marble-zigzag', u: 0.5174, lat: 6.5, yaw: 90 },
+      { model: 'set-marble-skyway', u: 0.477, lat: -5 },
+      { model: 'set-marble-lift', u: 0.2629, lat: -8.39 },
+      { model: 'set-marble-lift', u: 0.69, lat: -8.36, yaw: 45 },
+      { model: 'set-marble-racer', u: 0.029, lat: -7.5 },
+      { model: 'set-marble-zigzag', u: 0.2612, lat: 6.63, yaw: 89.2 },
+      { model: 'set-marble-zigzag', u: 0.6976, lat: 6.63, yaw: 90.8 },
+      { model: 'set-marble-zigzag', u: 0.4146, lat: 6.66, yaw: 90.7 }
     ]
   },
   skyline: {
@@ -1341,8 +1367,8 @@ export const TRACKS = {
     // and the fire station outside the south edge, and past the top
     // straight the old town, a crane turning on its building site. The
     // town's tallest blocks stand beside the skyway where it turns for the
-    // U, their roofs at its deck, and towers a child stacked stand outside
-    // the corner the south-bound leg turns.
+    // U, its TV tower in the U's eye, and towers a child stacked stand
+    // outside the corner the south-bound leg turns.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
