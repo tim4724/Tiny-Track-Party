@@ -350,10 +350,6 @@ export const SET_GROUND = {
   // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:
   // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
-  // ...and its advanced camp, past the bend where a racer looks at it, on a
-  // bank kept low and a footprint kept small: there the ground already rises
-  // toward the snow ridge, and the base camp's bank on it tipped every tent.
-  'set-advanced-camp': [{ kind: 'fan', x: -0.5, z: 0.5, len: 4, r: 7, h: 1.3, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), its gentle face to
   // the road, its foot reaching under the school's hut and arch so the whole
   // school stands up on it over the kerb of the road beside it.
@@ -658,7 +654,7 @@ export const TRACKS = {
       { model: 'set-powder-forest-e', u: 0.3311, lat: 17.72 },
       { model: 'set-powder-forest-f', u: 0.6284, lat: -15.4 },
       { model: 'set-powder-forest-g', u: 0.4238, lat: -19.86 },
-      { model: 'set-powder-forest-h', u: 0.4836, lat: -11.28 }
+      { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -680,7 +676,7 @@ export const TRACKS = {
       // ski school, the knoll in the bay north of the south loop
       { kind: 'ridge', u: 0.3289, lat: 37.16, r: 34, h: 18, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.4248, lat: -31.52, r: 28, h: 14, top: 0.2, near: 2 },
-      { kind: 'ridge', u: 0.4855, lat: -30.42, r: 26, h: 18, top: 0.2, near: 2 },
+      { kind: 'ridge', u: 0.4855, lat: -29.42, r: 26, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6274, lat: -25.74, r: 22, h: 7, top: 0.25, near: 2 },
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
@@ -747,8 +743,13 @@ export const TRACKS = {
       // each rookery turned so its white fronts face the car coming at it:
       // one off the run into the bottom loop, one below the NE bend's crest
       { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 80 },
-      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 48 },
-      { model: 'set-advanced-camp', u: 0.897, lat: -13, yaw: 328 },
+      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 73 },
+      // the advanced camp up on the crest of the glacier's lateral bank, on
+      // the snow as drawn (no bank of its own: a bank's foot withholds the
+      // land it stands in, and nearer the road the ground is held down to the
+      // decks by the grid cells the roads cross, so a camp there sinks
+      // behind the raised east leg)
+      { model: 'set-advanced-camp', u: 0.886, lat: -19.5, yaw: 20 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
@@ -758,7 +759,10 @@ export const TRACKS = {
       { model: 'set-glacier-peaks-south', u: 0.661, lat: -70 },
       { model: 'set-glacier-peaks-east', u: 0.45, lat: -66 },
       // the expedition's airstrip inside the top loop, beside the top straight
-      { model: 'set-glacier-airstrip', u: 0.2, lat: 9.5 }
+      { model: 'set-glacier-airstrip', u: 0.2, lat: 9 },
+      // pines up the face of the foothill over the bottom loop, so it reads as
+      // mountainside, not a white wall (sampled, set_prototypes.py FORESTS)
+      { model: 'set-glacier-forest-a', u: 0.8423, lat: 14.87 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -773,7 +777,7 @@ export const TRACKS = {
     // straight at
     land: [
       { kind: 'ridge', u: 0.0491, lat: -126.1, yaw: 151, len: 60, r: 42, h: 28 },
-      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 15, r1: 11, h: 5.5, h1: 2.8, top: 0.5, tint: 0x74b4f0 },
+      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 15, r1: 9, h: 5.5, h1: 1.2, top: 0.5, tint: 0x74b4f0 },
       // the bands the ice carries down its lower tongue (ogives)
       { kind: 'paint', u: 0.9454, lat: -36.57, yaw: 148.5, len: 18, r: 2, w: 4, tint: 0x5c9be6 },
       { kind: 'paint', u: 0.9709, lat: -53.51, yaw: 148, len: 20, r: 2, w: 4, tint: 0x5c9be6 },
@@ -808,20 +812,23 @@ export const TRACKS = {
       // nothing seeded on the verge in front of the penguin chute's pool: a
       // boulder there stood between the run to the line and the pool
       { kind: 'clear', u: 0.945, lat: -9.5, len: 18, r: 4.5 },
+      // ...nor between the road and the airstrip, where two pines stood in
+      // front of the plane on the closest pass
+      { kind: 'clear', u: 0.212, lat: 5.5, len: 22, r: 2.5 },
       // foothills rising off the outside verge of the NE bend, the east leg,
       // the return beside it, the run from the line and the corner onto the
       // top straight (their flanks low where the near ramp ends),
       // the massif behind them carrying set-glacier-peaks-east
-      { kind: 'ridge', u: 0.2775, lat: -27.31, r: 24, h: 6.5, top: 0.25, near: 2 },
-      { kind: 'ridge', u: 0.3168, lat: -27.36, r: 24, h: 7, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.2775, lat: -27.31, r: 24, h: 5, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.3168, lat: -27.36, r: 24, h: 5.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.4286, lat: -27.3, r: 24, h: 6.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.846, lat: 27.32, r: 24, h: 6, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.6143, lat: -25.81, r: 22, h: 6, top: 0.25, near: 2 },
-      { kind: 'ridge', u: 0.0817, lat: -25.72, r: 22, h: 6, top: 0.25, near: 2 },
-      { kind: 'ridge', u: 0.1338, lat: -25.77, z: -0.49, r: 22, h: 6, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.0817, lat: -25.72, r: 22, h: 3.5, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.1338, lat: -25.77, z: -0.49, r: 22, h: 3.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.3027, lat: -54.42, r: 30, h: 12, top: 0.15 },
       { kind: 'ridge', u: 0.8661, lat: 61.97, r: 32, h: 13, top: 0.15 },
-      { kind: 'ridge', u: 0.8209, lat: 47.88, z: 0.97, r: 28, h: 11, top: 0.15 },
+      { kind: 'ridge', u: 0.8209, lat: 47.88, z: 0.97, r: 28, h: 7, top: 0.15 },
       // past the moraine: the snowfield the south range stands over, a swell
       // under each of its summits
       { kind: 'ridge', u: 0.6596, lat: -41.43, yaw: 171.8, len: 100, r: 26, h: 1.6 },
@@ -910,12 +917,20 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.3012, lat: 45.94, z: 0.56, r: 28, h: 16, top: 0.12 },
       { kind: 'ridge', u: 0.3883, lat: 42.95, r: 28, h: 16, top: 0.12 },
       { kind: 'ridge', u: 0.5721, lat: -29.36, r: 26, h: 11, top: 0.2, near: 2 },
+      // The ground's region held where the warning signs' cones set it (east
+      // and south) before this mountainside replaced them: a region that
+      // moves moves every vertex of the ground's 9 u grid, and the cirque's
+      // faces and the two cirque galleries' cuts (sampled, ROAD_A/FACE_A,
+      // ROAD_B/FACE_B) stand on the ground as it was drawn. Each clears a
+      // unit of scatter and does nothing else.
+      { kind: 'clear', u: 0.277, lat: 0, yaw: -168.87048, x: 89.0467, z: 6.5189, r: 1 },
+      { kind: 'clear', u: 0.374, lat: 0, yaw: 93.24529, x: -4.1748, z: -82.9726, r: 1 },
       // the fence slope's foot brought down to the turn, its path churned
       { kind: 'ridge', u: 0.0943, lat: -27.78, z: 0.6, r: 24, h: 10, top: 0.2, near: 2 },
-      { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xd7d9e8 },
-      { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xd7d9e8 },
-      { kind: 'paint', u: 0.3334, lat: 19.81, yaw: 99.3, x: 0.51, len: 32, r: 3, w: 3, tint: 0xd7d9e8 },
-      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xd7d9e8 }
+      { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xc8cfdf },
+      { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xc8cfdf },
+      { kind: 'paint', u: 0.3334, lat: 19.81, yaw: 99.3, x: 0.51, len: 32, r: 3, w: 3, tint: 0xc8cfdf },
+      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
