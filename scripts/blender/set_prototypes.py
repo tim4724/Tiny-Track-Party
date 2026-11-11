@@ -11875,6 +11875,31 @@ def dice_tower():
     merge_paint()
 
 @piece(1.0)
+def snake_ladder():
+    # Skysnake: the game's ladder made a toy, up the outside of the spiral
+    # climb. Its feet on the floor outside the low road, it leans in (+X, at
+    # the eye) over that road onto the top deck's outer kerb, the climb the
+    # racers drive made the move up a ladder, one of the board's pawns
+    # partway up it. Placed at the foot (lat 6.5 at u 0.4775), where the top
+    # deck's kerb edge stands REACH in and KERB up.
+    REACH, KERB, BROWN = 3.96, 5.45, 0xb06041
+    T, HALF = 0.28, 0.72                          # a rail's side; the rails' centres off the middle
+    a = math.atan2(KERB + T / 2, REACH)           # the rails' underside on the kerb's edge
+    C = math.hypot(REACH, KERB + T / 2)           # along a rail to the kerb's edge
+    L = C + 0.75                                  # its end a little past it
+    ca, sa = math.cos(a), math.sin(a)
+    def at(d, z=0.0):
+        return (d * ca, T / 2 + d * sa, z)
+    for z in (-HALF, HALF):
+        strut(at(0.0, z), at(L, z), T, BROWN)
+    for d in [0.55 + 0.8 * k for k in range(8)] + [L - 0.25]:   # the rungs, a racer's wheel apart; one over the kerb
+        x, y, _ = at(d)
+        cyl(0.11, 2 * HALF, (x, y, -HALF), CREAM, axis='along')
+    x, y, _ = at(0.55 + 0.8 * 3)                  # a red pawn on the fourth, climbing
+    pawn((x - 0.05, y + 0.1, 0), 0xe66a5a, k=0.6)
+    merge_paint()
+
+@piece(1.0)
 def siege_ram():
     # Gauntlet: the besiegers' battering ram rolled into the corner after
     # their guns, aimed across the infield at the castle (-Z), its log

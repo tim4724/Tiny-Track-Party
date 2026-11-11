@@ -1520,15 +1520,16 @@ export const TRACKS = {
     // only a sliver over the kerb), and its box stood on edge where the grid
     // straight points; the board's wooden snakes have come
     // alive, one rearing at the racers inside the bend where the south leg
-    // turns for the line, two more slithering round either side of the grid
+    // turns for the line, another slithering round its ring beside the grid
     // straight's end. The game again as a floor mat the grid straight runs
     // down the middle of, its big pawns and foam dice stood on it, and just
     // past the mat's end the racers' toy car park on the infield, its lift
-    // and spiral ramp running. Up in the sky the biggest snake of all rises
-    // coiled out of a woven basket at the inside of the weave's first bend,
-    // its head swaying over the deck, and the game's foam dice stacked four
-    // high with a pawn on top stand at the inside of the other bends (the
-    // slalom's gates) and outside the climb, where the camera looks.
+    // and spiral ramp running. The climb is the game's ladder: a wooden one
+    // leans from the floor onto the spiral's top deck, a red pawn partway up.
+    // Up in the sky the biggest snake of all rises coiled out of a woven
+    // basket at the inside of the weave's first bend, its head swaying over
+    // the deck, and at the inside of its last the game's foam dice stand
+    // stacked four high with a pawn on top, the slalom's one gate.
     set: [
       { model: 'set-floor-mat', u: 0, lat: 0 },
       { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
@@ -1536,13 +1537,9 @@ export const TRACKS = {
       { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
-      { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 },
       { model: 'set-sky-snake', u: 0.525, lat: 6 },
-      { model: 'set-dice-tower', u: 0.47, lat: 6.6 },
-      { model: 'set-dice-tower', u: 0.556, lat: -6, yaw: 40 },
-      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 },
-      { model: 'set-dice-tower', u: 0.215, lat: -13.4, yaw: 20 },
-      { model: 'set-dice-tower', u: 0.5828, lat: -9.95, yaw: 155.8 }
+      { model: 'set-snake-ladder', u: 0.4775, lat: 6.5 },
+      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 }
     ]
   },
   gauntlet: {

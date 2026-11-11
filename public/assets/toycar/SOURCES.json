@@ -231,6 +231,7 @@
     "set-skull-rock.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-sky-snake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-smugglers-cave.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-snake-ladder.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snakes-ladders.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snow-boulder.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snow-fort.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
