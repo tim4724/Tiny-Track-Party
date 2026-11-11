@@ -741,6 +741,7 @@ class moved:
         return False
 
 SEA = 0.12   # the sea's surface over the sand a piece in it stands on (buildWater's WATER_LIFT)
+SEA_SUNK = 0.8   # how far a `shore` with a `w` lets the sea down by the road (TtpRenderer.h kSeaSink)
 
 def stadium(cx, cz, r, half, n):
     """A closed loop of (x, z) like a running track: two straights along Z
@@ -1439,15 +1440,23 @@ def swim_line():
 
 # ---- Riptide's promenade ----
 
-def beach_hut(x, y, z, body, trim=0xfff6eb):
-    """A bathing hut a little chunkier than life (2.7 m to the ridge), its
-    gable and door to the road (+X): a painted box, a white door and a
-    pitched roof in its own colour, standing on the boardwalk at `y`."""
-    w, h, d = 0.6, 0.66, 0.62
-    box((w, h, d), (x, y + h / 2, z), body)
-    box((0.05, h * 0.74, d * 0.48), (x + w / 2 + 0.01, y + h * 0.38, z), trim)              # the door
-    peak = 0.28
-    prism([(z - d / 2 - 0.07, y + h), (z + d / 2 + 0.07, y + h), (z, y + h + peak)], x, w + 0.08, body)  # the roof
+def beach_hut(x, y, z, yaw, body, trim=0xfff6eb):
+    """A bathing hut a little chunkier than life (about 5 m to the ridge), its
+    gable and door to the front (+X turned by `yaw`): a box in one colour, a
+    white door, a pitched roof in its own colour with white bargeboards,
+    standing on the boardwalk at `y`."""
+    w, h, d, peak = 0.8, 0.86, 0.8, 0.34
+    c, sn = math.cos(yaw), math.sin(yaw)
+    def T(lx, ly, lz):
+        return (x + lx * c + lz * sn, ly, z - lx * sn + lz * c)
+    box((w, h, d), (x, y + h / 2, z), body, yaw=yaw)
+    box((0.05, h * 0.74, d * 0.42), T(w / 2 + 0.015, y + h * 0.37, 0.0), trim, yaw=yaw)       # the door
+    e, o = w / 2 + 0.06, d / 2 + 0.07
+    verts = [T(e, y + h, -o), T(e, y + h, o), T(e, y + h + peak, 0.0),
+             T(-e, y + h, -o), T(-e, y + h, o), T(-e, y + h + peak, 0.0)]
+    poly(verts, [(0, 1, 2), (3, 5, 4), (0, 2, 5, 3), (1, 4, 5, 2), (0, 3, 4, 1)], body)        # the roof
+    for side in (-1, 1):                                                                         # its bargeboards
+        beam(T(e + 0.02, y + h, side * o), T(e + 0.02, y + h + peak, 0.0), 0.05, 0xfff6eb)
 
 def angler(x, y, z, yaw, shirt, rod_to):
     """A fisher sitting on the pier's edge, legs over it, rod out to sea."""
@@ -1458,17 +1467,19 @@ def angler(x, y, z, yaw, shirt, rod_to):
 def promenade():
     # Riptide's town end of the beach, where the causeway sets out: a timber
     # boardwalk at the road's own level along the straight's outer kerb (+X
-    # is the road; its edge keeps the set pieces' 1.2 u off the deck),
-    # bathing huts standing on it with their doors to the cars, the kiosk
-    # between the two rows, and the fishing pier running straight on from the
-    # boardwalk's end out over the sea where the road swings away onto the
-    # causeway, so the chase camera looks down the pier the length of the
-    # straight. At yaw 180 +Z runs against the cars, so the huts come first
-    # and the pier last. The piece stands on the plain and levels nothing (the
-    # umbrellas on the sand are draped): the deck and the piles are built from
-    # well under it, so they reach the sand wherever it lies and stand in a
-    # sea the causeway has sunk.
-    wood, dark, deck_y = 0x9a7b55, 0x8a6a46, 0.38
+    # is the road; its edge keeps the set pieces' 1.2 u off the deck), one
+    # even row of bathing huts on it turned to the cars coming down the
+    # straight, the kiosk at the row's end, and the sea pier running on from
+    # there out over the water (the track's `shore` brings the sea in under
+    # it) to its pavilion: white, a red hipped roof, a lantern and a flag,
+    # corner turrets to the land, a landing stage across its seaward side and
+    # the excursion boat moored alongside. A seaside pier, not a fairground:
+    # a big wheel read as a funfair on a surf beach. At yaw 180 +Z runs
+    # against the cars, so the huts come first and the pier last, and the
+    # straight points at the pavilion. The piece stands on the plain and
+    # levels nothing (the umbrella on the sand drapes): the decks and piles
+    # are built from well under it, so they reach the sand wherever it lies.
+    wood, dark, white, red, deck_y = 0x9a7b55, 0x8a6a46, 0xfff6eb, 0xff5040, 0.38
     BW0, BW1, Z0, Z1 = -0.2, 2.2, -4.6, 9.0          # the boardwalk, 2.4 u wide
     FOOT = -1.2
     box((BW1 - BW0, 0.1, Z1 - Z0), ((BW0 + BW1) / 2, deck_y - 0.05, (Z0 + Z1) / 2), wood)
@@ -1476,19 +1487,19 @@ def promenade():
         for k in range(3):
             z = Z0 + 0.3 + k * (Z1 - Z0 - 0.6) / 2
             box((0.14, deck_y - FOOT, 0.14), (BW0 + 0.12, (deck_y + FOOT) / 2, z), dark)
-    # the huts on it, two rows of three either side of the kiosk, their doors
-    # a stride back from the boardwalk's edge
-    HX = 0.62
-    for z, c in ((8.2, 0xff5040), (7.45, 0x339cf2), (6.7, 0xfff6eb), (2.4, 0x22c46e), (1.65, 0xffc044), (0.9, 0x339cf2)):
-        beach_hut(HX, deck_y, z, c, trim=0x339cf2 if c == 0xfff6eb else 0xfff6eb)
-    # the kiosk: a counter to the cars under a red and white awning, an ice
-    # cream on its roof, a queue of two on the boards
-    KX, KZ = 0.5, 4.55
-    box((0.8, 0.66, 1.3), (KX, deck_y + 0.33, KZ), 0xfff6eb)
+    # the huts: one even row, each in one colour, turned toward the cars
+    # coming down the straight so their doors and gables show (two tight
+    # clumps side on read as a jumble of blocks at the frame's edge)
+    for k, c in enumerate((red, 0x339cf2, 0x22c46e, 0xffc044, white, red, 0x339cf2, 0x22c46e)):
+        beach_hut(0.7, deck_y, 8.6 - 1.25 * k, -0.6, c, trim=0x339cf2 if c == white else white)
+    # the kiosk at the row's end by the pier's root: a counter to the cars
+    # under a red and white awning, an ice cream on its roof, a queue of two
+    KX, KZ = 0.5, -1.9
+    box((0.8, 0.66, 1.3), (KX, deck_y + 0.33, KZ), white)
     box((0.9, 0.07, 1.4), (KX, deck_y + 0.69, KZ), 0x339cf2)                           # the roof
     for i in range(3):
         box((0.46, 0.05, 1.4 / 3), (KX + 0.62, deck_y + 0.62, KZ - 0.47 + i * 0.467),
-            0xff5040 if i % 2 == 0 else 0xfff6eb, roll=0.35)
+            red if i % 2 == 0 else white, roll=0.35)
     cyl(0.12, 0.28, (KX, deck_y + 0.72, KZ), 0xf2bf99, r2=0.02, segs=6)               # the cone, point down
     o = bpy.context.active_object
     o.location = P(KX, deck_y + 1.0, KZ)
@@ -1497,71 +1508,115 @@ def promenade():
     with square():
         figure((1.5, deck_y, KZ - 0.2), math.pi, shirt=0x339cf2, legs=0x4f5260, hair=0x38383d)
         figure((1.8, deck_y, KZ + 0.25), math.pi, shirt=0xff7e44, legs=0x339cf2, hair=0xffc044)
-    # the pier: on from the boardwalk's end at its level and out over the
-    # sea, turned a little off the road's line so the boardwalk's huts do not
-    # stand in front of it; square piles, a wider head, no rail
-    A, LEN, W = 0.45, 18.0, 1.2
+    flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (red, white), 'anim_sway:a=z:d=20:p=2.0#kiosk')
+    # the pier: on from the boardwalk's end a step down (its root lies
+    # under the boardwalk's end, and two decks at one level fight), out over
+    # the sea, turned a little off the road's line toward the water; railed
+    # in white, lamps on white posts, square piles
+    pd = deck_y - 0.04
+    PFOOT = -2.2                                      # under the bed of the sea the track's shore lets down
+    A, LEN, W = 0.5, 13.0, 1.6
     dx, dz = -math.sin(A), -math.cos(A)              # along the pier, away from the huts
     px0, pz0 = 0.75, Z0 + 0.3                         # where it leaves the boardwalk
     def at(t, s=0.0):
+        """The pier's frame: `t` out along it, `s` across it (+ to the sea)."""
         return px0 + dx * t + dz * s, pz0 + dz * t - dx * s
+    def put(t, s, y):
+        x, z = at(t, s)
+        return (x, y, z)
     for k in range(3):
         x, z = at(LEN * (k + 0.5) / 3)
-        box((W, 0.1, LEN / 3 - 0.04), (x, deck_y - 0.05, z), 0xb06041 if k % 2 else wood, yaw=A)
-    hx, hz = at(LEN + 1.0)
-    box((2.2, 0.1, 2.0), (hx, deck_y - 0.05, hz), wood, yaw=A)                         # the head
+        box((W, 0.1, LEN / 3 - 0.04), (x, pd - 0.05, z), 0xb06041 if k % 2 else wood, yaw=A)
+    R = W / 2 - 0.04
+    for side in (-1, 1):
+        beam(put(0.3, side * R, pd + 0.42), put(LEN, side * R, pd + 0.42), 0.05, white)   # the rails
+        for k in range(1, int(LEN)):
+            box((0.05, 0.42, 0.05), put(k, side * R, pd + 0.21), white, yaw=A)
+        for t in (2.0, 6.0, 10.0):                                                         # the lamps
+            box((0.07, 1.0, 0.07), put(t, side * (R + 0.08), pd + 0.5), white, yaw=A)
+            sphere(0.12, put(t, side * (R + 0.08), pd + 1.06), 0xfde4c7)
     with square():
-        for k in range(3):
-            for s in (-0.46, 0.46):
-                x, z = at(1.6 + k * (LEN - 1.6) / 2, s)
-                box((0.13, deck_y - FOOT, 0.13), (x, (deck_y + FOOT) / 2, z), dark, yaw=A)
-        for s in (-0.9, 0.9):
-            x, z = at(LEN + 1.6, s)
-            box((0.14, deck_y - FOOT, 0.14), (x, (deck_y + FOOT) / 2, z), dark, yaw=A)
-        # still anglers at the head, rods out over the water
-        for s, shirt in ((-0.45, 0xff5040), (0.5, 0x339cf2)):
-            x, z = at(LEN + 1.85, s)
-            tx, tz = at(LEN + 2.9, s * 1.6)
-            angler(x, deck_y, z, A + math.pi / 2, shirt, (tx, deck_y + 0.85, tz))
-    # the bait shed at its head, its roof the pier's mark against the sea
-    sx, sz = at(LEN + 0.6, 0.0)
-    box((0.9, 0.6, 0.8), (sx, deck_y + 0.3, sz), 0xfff6eb, yaw=A)
-    box((1.05, 0.12, 0.95), (sx, deck_y + 0.66, sz), 0xff5040, yaw=A)
-    flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (0xff5040, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.0#kiosk')
-    # the big wheel on a platform past the head, turning slowly: its disc to
-    # the cars coming down the straight (they look along -Z), a ring of
-    # gondolas that hang level as it turns (each counter-turns on its hanger)
-    wx, wz = at(LEN + 3.6)
-    box((3.0, 0.12, 2.6), (wx, deck_y - 0.06, wz), wood, yaw=A)                       # the platform
+        for k in range(6):
+            for side in (-1, 1):
+                x, z = at(1.0 + k * (LEN - 1.0) / 5, side * (R - 0.08))
+                box((0.13, pd - PFOOT, 0.13), (x, (pd + PFOOT) / 2, z), dark, yaw=A)
+    # the head: a broad deck for the pavilion and, across its seaward side,
+    # the landing stage (the T), on piles
+    TC = LEN + 2.2                                    # the pavilion's centre along the pier
+    box((6.4, 0.1, 4.4), put(TC, 0.0, pd - 0.05), wood, yaw=A)
+    box((8.6, 0.1, 1.6), put(TC + 3.0, 0.0, pd - 0.05), wood, yaw=A)
     with square():
-        for sx in (-1.2, 1.2):
-            for sz in (-1.0, 1.0):
-                x, z = wx + sx * math.cos(A) + sz * math.sin(A), wz - sx * math.sin(A) + sz * math.cos(A)
-                box((0.15, deck_y - FOOT, 0.15), (x, (deck_y + FOOT) / 2, z), dark, yaw=A)
-    HUB, RAD = deck_y + 3.8, 3.2
-    for sz in (-0.45, 0.45):                                                            # the A-frames either side
-        for sx in (-1.3, 1.3):
-            beam((wx + sx, deck_y, wz + sz), (wx, HUB, wz + sz), 0.16, 0xfff6eb)
-    box((0.3, 0.3, 1.2), (wx, HUB, wz), 0x9aa1b4)                                      # the axle
-    with animated('anim_spin:a=z:w=0.22#wheel', (wx, HUB, wz)):
-        torus(RAD, 0.07, (wx, HUB, wz), 0xfff6eb, segs=24, axis='along')
-        torus(RAD * 0.55, 0.05, (wx, HUB, wz), 0xff5040, segs=16, axis='along')
-        for k in range(12):
-            a = k / 12 * 2 * math.pi
-            beam((wx, HUB, wz), (wx + RAD * math.cos(a), HUB + RAD * math.sin(a), wz), 0.07, 0xfff6eb)
-        for k in range(8):
-            a = k / 8 * 2 * math.pi
-            gx, gy = wx + RAD * math.cos(a), HUB + RAD * math.sin(a)
-            with animated('anim_spin:a=z:w=-0.22#gondola%d' % k, (gx, gy, wz)):
-                box((0.06, 0.32, 0.06), (gx, gy - 0.16, wz), 0x9aa1b4)
-                box((0.5, 0.36, 0.42), (gx, gy - 0.48, wz), (0xff5040, 0x339cf2, 0xffc044, 0x22c46e)[k % 4])
-                box((0.56, 0.08, 0.48), (gx, gy - 0.28, wz), 0xfff6eb)
+        for (t, sx) in ((TC - 2.0, 3.0), (TC + 1.9, 3.0), (TC + 3.6, 4.1), (TC + 3.6, 1.5)):
+            for side in (-1, 1):
+                box((0.15, pd - PFOOT, 0.15), put(t, side * sx, (pd + PFOOT) / 2), dark, yaw=A)
+    # the pavilion: white walls with a band of blue windows all round, a
+    # door to the pier, a white cornice under a red hipped roof, the lantern
+    # with its dome and flag on the ridge, two turrets at its landward corners
+    WH, HW, HD = 1.9, 2.75, 1.6                        # wall height, half width, half depth
+    box((2 * HW, WH, 2 * HD), put(TC, 0.0, pd + WH / 2), white, yaw=A)
+    box((2 * HW + 0.16, 0.12, 2 * HD + 0.16), put(TC, 0.0, pd + WH - 0.09), white, yaw=A)   # the cornice
+    for k in range(5):                                 # the windows, the door in the middle of the front
+        sk = -2.0 + k
+        for face in (-1, 1):
+            if face == -1 and k == 2:
+                box((0.75, 1.25, 0.08), put(TC - HD - 0.02, 0.0, pd + 0.62), 0x339cf2, yaw=A)
+                continue
+            box((0.6, 0.62, 0.08), put(TC + face * (HD + 0.02), sk, pd + 1.12), 0x339cf2, yaw=A)
+    for k in range(3):
+        for side in (-1, 1):
+            box((0.08, 0.62, 0.6), put(TC - 1.0 + k, side * (HW + 0.02), pd + 1.12), 0x339cf2, yaw=A)
+    ER, ET, EW = HD + 0.25, HW + 0.25, 3.3             # the eaves' half depth and width, the roof's top
+    ridge = ET - ER
+    roof = [put(TC - ER, -ET, pd + WH), put(TC - ER, ET, pd + WH),
+            put(TC + ER, ET, pd + WH), put(TC + ER, -ET, pd + WH),
+            put(TC, -ridge, pd + EW), put(TC, ridge, pd + EW)]
+    poly(roof, [(0, 1, 5, 4), (2, 3, 4, 5), (1, 2, 5), (3, 0, 4)], red)
+    lx, ly, lz = put(TC, 0.0, pd + EW - 0.25)
+    cyl(0.45, 0.95, (lx, ly, lz), white, segs=8)                                      # the lantern
+    cyl(0.47, 0.32, (lx, ly + 0.42, lz), 0x339cf2, segs=8)                             # its glazing
+    sphere(0.45, (lx, ly + 0.95, lz), red, scale=(1.0, 0.85, 1.0))                    # the dome
+    flag_on_pole((lx, ly + 1.3, lz), 1.0, (red, white), 'anim_sway:a=z:d=20:p=2.0#pavilion', w=0.5, fh=0.32)
+    for side in (-1, 1):                                                                # the turrets
+        tx, ty, tz = put(TC - HD, side * HW, pd)
+        cyl(0.42, 2.45, (tx, ty, tz), white, segs=8)
+        cyl(0.52, 1.1, (tx, ty + 2.45, tz), red, r2=0.03, segs=8)
+    # still anglers at the ends of the landing stage, rods out to sea
+    with square():
+        for s, shirt in ((-3.6, red), (3.7, 0x339cf2)):
+            x, z = at(TC + 3.7, s)
+            tx, tz = at(TC + 4.9, s * 1.1)
+            angler(x, pd, z, A + math.pi / 2, shirt, (tx, pd + 0.85, tz))
     join_still('promenade')
-    # umbrellas on the sand between the boardwalk and the sea, as the sand lies
+    # the excursion boat moored alongside the head on the road side, bow to
+    # the landing stage: a white hull with a blue band, its wheelhouse; it
+    # rides the swell and rolls a little, on the sea the shore lets down
+    bx, bz = at(TC + 0.6, -3.75)
+    sea = SEA - SEA_SUNK
+    with animated('anim_bob:h=0.05:p=3.2+sway:a=z:d=3:p=4.1#boat', (bx, sea, bz), yaw=A):
+        c, sn = math.cos(A), math.sin(A)
+        def B(lx, ly, lz):
+            return (bx + lx * c + lz * sn, ly, bz - lx * sn + lz * c)
+        box((0.8, 0.42, 1.8), B(0.0, sea + 0.08, 0.2), white, yaw=A)                   # the hull
+        box((0.57, 0.42, 0.57), B(0.0, sea + 0.08, -0.72), white, yaw=A + math.pi / 4)   # its bow
+        box((0.84, 0.1, 1.84), B(0.0, sea + 0.2, 0.2), 0x339cf2, yaw=A)                 # the band
+        box((0.6, 0.42, 0.6), B(0.0, sea + 0.5, 0.45), white, yaw=A)                    # the wheelhouse
+        box((0.64, 0.14, 0.64), B(0.0, sea + 0.62, 0.45), 0x339cf2, yaw=A)              # its windows
+        box((0.7, 0.06, 0.7), B(0.0, sea + 0.74, 0.45), red, yaw=A)                     # its roof
+    # gulls wheeling over the pavilion on a slow loop
+    gx, gz = at(TC, 0.0)
+    ring = [(gx + 3.0 * math.cos(t), pd + 5.6 + 0.5 * math.sin(2 * t), gz + 2.6 * math.sin(t))
+            for t in (i / 12 * 2 * math.pi for i in range(12))]
+    for i, q in enumerate(ring):
+        marker('path_gulls_%d' % i, q)
+    for m in range(2):
+        with animated('anim_path:c=gulls:p=18:f=1:o=%.2f#g%d' % (m * 0.5, m), (0.0, 0.0, 0.0)):
+            box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
+            box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
+    # an umbrella on the sand between the boardwalk and the sea, as it lies
     def sand():
         with square():
-            for (x, z, c) in ((-2.2, 4.6, 0xff5040),):
-                umbrella((x, 0, z), 0.46, 0.72, (c, 0xfff6eb), gores=6)
+            for (x, z, c) in ((-2.2, 4.6, red),):
+                umbrella((x, 0, z), 0.46, 0.72, (c, white), gores=6)
                 box((0.46, 0.04, 0.24), (x - 0.38, 0.02, z + 0.1), 0xffc044, yaw=0.1)
                 figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')
     draped('sand', sand)
