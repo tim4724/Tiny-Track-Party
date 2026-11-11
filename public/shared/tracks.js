@@ -1473,8 +1473,9 @@ export const TRACKS = {
     // land is the Android box's dear rock). Then the field: its drilling rig
     // on the S's left, where the camera points three times a lap (out of
     // the hairpin, beside the S, down the start straight); a lone red
-    // pumpjack dead ahead out of the S at the east bend; the tank farm at
-    // the end of the east straight, outside the north loop's first corner
+    // pumpjack dead ahead out of the S at the east bend, a flowing well's
+    // christmas tree at the bend's exit; the tank farm at the end of the
+    // east straight, outside the north loop's first corner
     // where the whole straight points; the field's three jacks nodding and
     // tumbleweeds blowing by outside its second corner; and at the line the
     // field's own filling station, its sign turning and a hawk over it, the
@@ -1488,6 +1489,7 @@ export const TRACKS = {
       { model: 'set-tank-farm', u: 0.63, lat: 12 },
       { model: 'set-drilling-rig', u: 0.368, lat: -8, yaw: 180 },
       { model: 'set-well-pad', u: 0.42, lat: 9 },
+      { model: 'set-wellhead', u: 0.47, lat: 7 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 }
     ],
@@ -1499,22 +1501,25 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
       { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
-      // The field's stretch (the S to the north loop's top) keeps the biome's
-      // hoodoo family off: it stands at the first spot off the road and the
-      // pieces from the tunnel on, and every such spot here put its tall
-      // stack beside the rig's mast or the lone jack as the camera saw them
-      // (or on the fin's old ground). These thin clears (a unit round their
-      // spines, so they take little scatter with them) cover those spots, as
-      // the hoodoo's 5 u keep-out reads them, and the family stands outside
-      // the loop's top between the tanks and the pumping wells, as the
-      // desert's own rock.
+      // The field (the S round the north loop) keeps the biome's hoodoo
+      // family off: it stands at the first spot off the road and the pieces
+      // from the tunnel on, and every such spot here put its tall stack
+      // beside the rig's mast or the lone jack, or centre frame in the loop
+      // between the tanks and the pumping wells, as the camera saw them.
+      // These thin clears (a unit round their spines, so they take little
+      // scatter with them) cover those spots, as the hoodoo's 5 u keep-out
+      // reads them, and the family stands east of the crossing, on the open
+      // skyline past the field, as the desert's own rock.
       { kind: 'clear', u: 0.335, lat: 11.5, len: 14, r: 1 },
       { kind: 'clear', u: 0.402, lat: 11.5, len: 14, r: 1 },
       { kind: 'clear', u: 0.43, lat: -11.5, len: 4, r: 1 },
       { kind: 'clear', u: 0.472, lat: 11.5, len: 34, r: 1 },
       { kind: 'clear', u: 0.495, lat: -11.5, len: 2, r: 1 },
       { kind: 'clear', u: 0.66, lat: -11.5, len: 6, r: 1 },
-      { kind: 'clear', u: 0.684, lat: 11.5, len: 6, r: 1 }
+      { kind: 'clear', u: 0.684, lat: 11.5, len: 6, r: 1 },
+      { kind: 'clear', u: 0.72, lat: 11.5, len: 26, r: 1 },
+      { kind: 'clear', u: 0.78, lat: -14.8, len: 17, r: 1 },
+      { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).

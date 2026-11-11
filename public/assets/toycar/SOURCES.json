@@ -252,6 +252,8 @@
     "set-wash-butte.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-watermill.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-well-pad.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-wellhead.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-wellhead.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windmill.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windpump.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windsock.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

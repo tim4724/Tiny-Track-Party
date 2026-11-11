@@ -9015,20 +9015,32 @@ def tank_farm():
     # corner, where the whole east straight points: three broad crude tanks
     # at a real farm's size (the big one some twenty metres across) in a
     # triangle, so the straight sees all three side by side: the big one in
-    # front, white under the company's red band, its stair winding up its
-    # side and the company's mark turned to the straight (bearing YAW); the
-    # middle one white behind its right, the small rust one off its left.
-    # A low manifold on short supports joins them to a pump house between,
-    # all on a flush dirt pad (+X is the road, wrapping round the corner).
+    # front, its stair winding up its side and the company's mark turned to
+    # the straight (bearing YAW); the middle one white behind its right, the
+    # small rust one off its left. Each wears the company's band under a dark
+    # roof rim, the white ones the seams of their courses, and the two
+    # smaller ones a ladder up their road side. A low manifold on short
+    # supports joins them to a pump house between, all on a flush dirt pad
+    # (+X is the road, wrapping round the corner).
     YAW = math.radians(44.6)
     ground_poly([(-3.6, 0.03, -6.6), (7.6, 0.03, -6.6), (8.2, 0.03, 5.8), (2.0, 0.03, 6.4), (-3.8, 0.03, 0.8)],
                 [(0, 1, 2, 3, 4)], 0xb8a686)
     B, M, S = (4.4, -2.8, 2.3, 3.6), (5.0, 3.2, 1.8, 3.0), (-1.2, -3.6, 1.3, 2.2)
+    def ladder(x, z, r, h):
+        # up the tank's road side (+X): two rails and their rungs
+        for t in (-0.13, 0.13):
+            strut((x + r + 0.1, 0.0, z + t), (x + r + 0.1, h + 0.25, z + t), 0.05, 'slate')
+        for k in range(1, int(h / 0.3) + 1):
+            box((0.04, 0.04, 0.26), (x + r + 0.1, 0.3 * k, z), 'slate')
     for (x, z, r, h), col in ((B, 'white'), (M, 'white'), (S, 0xc0392b)):
         cyl(r, h, (x, 0, z), col, segs=16)
         cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=16)   # its roof
+        cyl(r + 0.06, 0.1, (x, h - 0.04, z), 'slate', segs=16)                  # the roof's rim
+        cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red' if col == 'white' else 'white', segs=16)   # the band
+        if col == 'white':
+            for y in (h / 3, 2 * h / 3):
+                cyl(r + 0.02, 0.05, (x, y, z), 'grey', segs=16)                 # its courses' seams
     x, z, r, h = B
-    cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red', segs=16)                        # the company's band
     emblem((x + (r - 0.16) * math.cos(YAW), 2.0, z - (r - 0.16) * math.sin(YAW)), YAW, 0.75, d=0.24)
     n = int((h - 0.3) / 0.27) + 1
     for k in range(n):                                                           # the stair, winding up
@@ -9045,8 +9057,8 @@ def tank_farm():
         if k < posts - 1:
             strut((x + rr * math.cos(a0), 0.6 + 0.81 * k, z - rr * math.sin(a0)),
                   (x + rr * math.cos(a1), 0.6 + 0.81 * (k + 1), z - rr * math.sin(a1)), 0.06, 'slate')
-    x, z, r, h = M
-    box((0.06, h, 0.3), (x + r + 0.04, h / 2, z), 'slate')                       # a ladder up its road side
+    ladder(*M)
+    ladder(*S)
     # the pump house between them and the manifold, on supports a knee high
     PX, PZ = 0.8, 0.6
     hut(1.2, 0.9, 1.0, (PX, 0, PZ), 'white', 'red', t=0.4)
@@ -9176,7 +9188,7 @@ def drilling_rig():
                 box((0.12, 0.1, 2 * w(y + 0.03) + 0.1), (s_ * w(y + 0.03), y + 0.03, 0), col)
         for y0, y1 in zip(lv, lv[1:]):                                          # a brace up each face
             for a, b in (((1, 1), (1, -1)), ((-1, -1), (-1, 1)), ((1, -1), (-1, -1)), ((-1, 1), (1, 1))):
-                strut((a[0] * w(y0), y0, a[1] * w(y0)), (b[0] * w(y1), y1, b[1] * w(y1)), 0.07, 'white')
+                strut((a[0] * w(y0), y0, a[1] * w(y0)), (b[0] * w(y1), y1, b[1] * w(y1)), 0.1, 'white')
         box((1.0, 0.14, 1.0), (0, H1 + 0.07, 0), 'white')
         box((0.8, 0.4, 0.6), (0, H1 + 0.34, 0), 'red')                          # the crown block
         box((0.06, 0.9, 0.06), (0, H1 + 0.99, 0), 'white')                      # the flag's pole
@@ -9201,7 +9213,8 @@ def drilling_rig():
         box((2.5, 0.1, 1.5), (0, 1.25, 2.8), 'white')
         box((0.6, 0.72, 0.04), (0.6, 0.38, 3.52), 'slate')
         for x in (-0.6, 0.3):
-            cyl(0.13, 0.7, (x, 1.3, 3.0), 'slate', segs=8)
+            cyl(0.13, 0.7, (x, 1.3, 3.0), 'grey', segs=10, stem=True, smooth=True)
+            cyl(0.16, 0.08, (x, 1.96, 3.0), 'slate', segs=10)
         # the mud tanks and their line to the floor
         for x in (-2.6, -3.6):
             box((0.8, 1.0, 3.0), (x, 0.5, -2.7), 'brown')
@@ -9211,14 +9224,14 @@ def drilling_rig():
         # the V-door's ramp down to the catwalk, the pipe rack beside it
         box((0.6, 0.08, math.hypot(1.7, 0.55)), (0, 0.725, -2.35), 'grey', pitch=math.atan2(0.55, 1.7))
         box((0.7, 0.45, 3.0), (0, 0.225, -4.7), 'grey')
-        for z in (-3.6, -5.8):
-            box((2.6, 0.12, 0.2), (1.75, 0.42, z), 'slate')
-            for x in (0.6, 2.9):
-                box((0.14, 0.36, 0.14), (x, 0.18, z), 'slate')
-        for i in range(7):
-            cyl(0.09, 4.0, (0.75 + 0.3 * i, 0.58, -6.7), 'grey', axis='along')
-        for i in range(5):
-            cyl(0.09, 4.0, (0.9 + 0.3 * i, 0.79, -6.7), 'grey', axis='along')
+        for z in (-3.4, -6.0):
+            box((2.7, 0.18, 0.22), (1.75, 0.09, z), 'slate')                     # the rack's beams
+            for x in (0.5, 3.0):
+                box((0.1, 0.5, 0.1), (x, 0.25, z), 'slate')                      # their stops
+        pipes = [(0.75 + 0.3 * i, 0.27) for i in range(7)] + [(0.9 + 0.3 * i, 0.38) for i in range(5)]
+        for x, y in pipes:                                                       # the drill pipe, round,
+            cyl(0.09, 4.0, (x, y, -6.7), 'lavender', segs=10, axis='along', stem=True, smooth=True)
+            cyl(0.105, 0.08, (x, y, -2.74), 'white', segs=8, axis='along')     # its protectors to the S
     # the company's pickup by the engine house, in no racer's colour
     pickup(-3.4, 2.6, 0xfdf4de, yaw=0.3)
     join_still('rig')
@@ -9244,6 +9257,33 @@ def well_pad():
     cyl(TR + 0.03, 0.08, (TX, 1.12, TZ), 'slate', segs=14)
     emblem((TX + (TR - 0.1) * math.cos(SEEN), 0.62, TZ - (TR - 0.1) * math.sin(SEEN)), SEEN, 0.3, d=0.14)
     join_still('wellpad')
+
+@piece(1.0)
+@plain
+def wellhead():
+    # Sidewinder: a flowing well past the lone jack, at the east bend's exit:
+    # no pump on it, only its christmas tree, at a real one's size beside a
+    # car: the casing head on its cellar collar, two red master valves with
+    # white hand wheels, the cross with a wing valve each side, one turned
+    # down to the flowline going into the ground, a gauge on the cap; a
+    # flush dirt pad (+X is the road).
+    ground_poly([(-1.5, 0.03, -1.5), (1.5, 0.03, -1.5), (1.5, 0.03, 1.5), (-1.5, 0.03, 1.5)],
+                [(0, 1, 2, 3)], 0xb8a686)
+    cyl(0.45, 0.14, (0, 0, 0), 'slate', segs=12)                                # the cellar's collar
+    cyl(0.32, 0.3, (0, 0.14, 0), 'grey', segs=12)                               # the casing head
+    cyl(0.14, 1.1, (0, 0.44, 0), 'grey', segs=10)                               # the spool through
+    for y in (0.44, 0.84):                                                      # the master valves
+        box((0.36, 0.32, 0.36), (0, y + 0.16, 0), 'red')
+        cyl(0.2, 0.05, (0.18, y + 0.16, 0), 'white', segs=12, axis='across')    # a hand wheel
+    box((0.28, 0.28, 1.3), (0, 1.38, 0), 'red')                                 # the cross
+    for sz in (-1, 1):
+        box((0.36, 0.34, 0.3), (0, 1.38, sz * 0.8), 'red')                      # its wing valves
+        cyl(0.18, 0.05, (0, 1.55, sz * 0.8), 'white', segs=12)                  # their wheels, on top
+    strut((0, 1.38, 0.95), (0, 0.03, 1.4), 0.14, 'slate')                       # the flowline, down
+    cyl(0.2, 0.3, (0, 1.52, 0), 'white', segs=12)                               # the cap
+    cyl(0.05, 0.2, (0.0, 1.82, 0), 'slate', segs=10)                            # the gauge's stem
+    cyl(0.16, 0.06, (0.0, 2.05, -0.03), 'white', segs=12, axis='along')         # the gauge
+    join_still('wellhead')
 
 @piece(0.6)
 @plain
