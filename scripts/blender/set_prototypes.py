@@ -116,9 +116,11 @@ def shade():
     for o in parts:
         me, (x, y) = o.data, SWATCH[o['swatch']]
         uv, k = me.uv_layers[0], o.get('ramp', 1.0)
+        row = o.get('row')                        # rowed(): one shade off the ramp, whatever the height
         for loop in me.loops:
             f = max(0.0, min(1.0, (o.matrix_world @ me.vertices[loop.vertex_index].co).z / top))
-            uv.data[loop.index].uv = ((x + 12) / 128, 1 - (y + 0.5 + (1 - f) * RAMP * k) / 128)
+            r = row if row is not None else (1 - f) * RAMP * k
+            uv.data[loop.index].uv = ((x + 12) / 128, 1 - (y + 0.5 + r) / 128)
 
 # ---- primitives (glTF frame) ---------------------------------------------------
 
@@ -246,6 +248,28 @@ def poly(verts, faces, color):
     me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
     me.update()
     o = bpy.data.objects.new('poly', me)
+    bpy.context.scene.collection.objects.link(o)
+    return paint(o, color)
+
+def rowed(o, row):
+    """Fix `o` at one row (0-31) of its swatch's ramp, top to bottom: a shade
+    the swatch's own colour does not give (the sky ramp's water blues, the
+    grey ramp's lifted slate), the same at every height."""
+    o['row'] = row
+    return o
+
+def skin(verts, faces, color, out):
+    """One-sided faces (a sheet of water on rock), each turned to face `out`
+    (a glTF direction): poly()'s two-sided sheet would fight the rock it
+    lies on for the depth test."""
+    me = bpy.data.meshes.new('skin')
+    me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+    me.update()
+    o_ = P(*out)
+    for f in me.polygons:
+        if f.normal.dot(o_) < 0:
+            f.flip()
+    o = bpy.data.objects.new('skin', me)
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
@@ -6630,136 +6654,200 @@ def kite_flyers():
                 box((0.16, 3.4 * S, 0.16), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
         kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=6)
 
-# ---- TANGLE: the spring the stream rises from --------------------------------------
-# The stream's source, cut into the steep foot of the hill beyond the north
-# loop's top straight (tracks.js `land`): three round ledges of wet slate
-# stepping up the hill, the water running over each and off the lowest in
-# one broad white sheet into a pool, a heron standing in it; from there it
-# runs into the drain by the kerb (set-spring-drain), goes under the top
-# straight and comes out of the culvert beyond, on as the stream.
-# The ledges stand LEVEL at their own heights, their backs buried in the
-# hill, so the grass meets the rock and only the steps show: mid-dark slate,
-# as neither pale rock (lost on the green) nor black rock (a slab dropped on
-# the hill) reads. The sheet wraps the lowest ledge's round face turned
-# toward the racer coming up the road. Front (+X) to the road, metres; on
-# the left at yaw 180. The ledges are built against the ground the hill
-# draws under them at that spot (scratch probe, not a source); the pool,
-# its stones and the heron DRAPE.
+# ---- TANGLE: the springhouse the stream rises under -------------------------------
+# The stream's source, at the toe of the hill beyond the north loop's top
+# straight (tracks.js `land`), where the road heads straight at it: a small
+# fieldstone springhouse cut into the slope under a red roof, its back wall in
+# the hill so the grass runs up behind it, a weathervane turning on the ridge.
+# The spring runs out of a dark arch under its front, down a short stone
+# channel into a pool banded as a pond is, a heron on a boulder at the
+# pool's uphill edge; from the pool it runs into the drain by the kerb
+# (set-spring-drain). The house, its channel and the heron stand LEVEL on the
+# ground the hill draws here (SPRING_HILL, a scratch probe, not a source); the
+# pool and its reeds DRAPE. Metres, front (+X) to the road; on the left at yaw
+# 180.
+SPRING_HILL_X0, SPRING_HILL_DX = -26.0, 2.0
+SPRING_HILL = {      # ground over the piece's foot, metres, by z (rows) and x (-26 .. 10)
+    -9: (20.5, 20.2, 20.0, 19.7, 19.5, 17.5, 15.1, 12.8, 10.6, 8.3, 6.0, 3.7, 2.0, 1.7, 1.4, 0.9, 0.9, 0.9, 0.7),
+    -6: (20.5, 20.0, 19.6, 19.4, 19.1, 17.2, 14.8, 12.4, 10.0, 7.9, 5.6, 3.3, 1.6, 1.3, 0.9, 0.6, 0.6, 0.6, 0.7),
+    -3: (20.5, 19.8, 19.1, 18.9, 18.6, 16.7, 14.3, 11.9, 9.6, 7.7, 5.5, 3.2, 1.5, 1.3, 0.9, 0.6, 0.6, 0.6, 0.6),
+    0: (20.3, 19.5, 18.6, 18.4, 18.1, 16.2, 13.8, 11.4, 9.1, 7.3, 5.4, 3.1, 1.4, 1.2, 0.9, 0.6, 0.5, 0.5, 0.5),
+    3: (19.0, 18.5, 18.1, 17.9, 17.6, 15.8, 13.4, 11.0, 8.6, 6.8, 5.0, 3.0, 1.3, 1.1, 0.9, 0.6, 0.5, 0.5, 0.5),
+    6: (18.0, 17.8, 17.6, 17.4, 17.1, 15.3, 12.9, 10.5, 8.1, 6.3, 4.5, 2.7, 1.2, 1.0, 0.8, 0.6, 0.5, 0.5, 0.5),
+    9: (17.5, 17.1, 16.8, 16.4, 16.1, 15.0, 12.6, 10.2, 7.8, 6.5, 4.7, 3.0, 1.3, 1.1, 0.9, 0.7, 0.6, 0.5, 0.5),
+}
+
+def spring_hill(x, z):
+    zs = sorted(SPRING_HILL)
+    z = max(zs[0], min(zs[-1], z))
+    def row(zk):
+        r = SPRING_HILL[zk]
+        f = max(0.0, min(len(r) - 1.001, (x - SPRING_HILL_X0) / SPRING_HILL_DX))
+        i = int(f)
+        return r[i] + (r[i + 1] - r[i]) * (f - i)
+    for z0, z1 in zip(zs, zs[1:]):
+        if z0 <= z <= z1:
+            t = (z - z0) / (z1 - z0)
+            return row(z0) + (row(z1) - row(z0)) * t
+    return row(zs[-1])
+
 @piece(REAL)
-def spring_cascade():
-    ROCK, WATER, FOAM = 'slate', 0x8ecae6, 'white'
-    # the ledges: centre (x, z), radius, foot, top
-    LEDGES = (((-5.0, 0.0), 4.2, 0.0, 6.4), ((-9.6, 0.8), 3.4, 5.4, 10.0), ((-13.4, -0.6), 2.6, 9.0, 13.4))
-    CAP = 0.5           # each ledge's top is stepped in once, a round shoulder
-    FALLS = (35, 20, 10)  # the bearing each ledge's water goes over its lip at, degrees from +X toward +Z
-    def on(i, r, deg):
-        (cx, cz), _, _, _ = LEDGES[i]
-        a = math.radians(deg)
-        return (cx + r * math.cos(a), cz + r * math.sin(a))
-    def sheet(i, deg, n, step, y0, y1):
-        """Water down ledge i's round face: n white strips over a blue sheet,
-        their tops and feet staggered so no edge lines up, blue showing
-        between them and at the foot, and round puffs of foam where it goes
-        over the lip."""
-        R = LEDGES[i][1]
-        w = 2 * (R + 0.3) * math.sin(math.radians(step) / 2)
-        for k in range(n):
-            d = deg + (k - (n - 1) / 2) * step
-            x, z = on(i, R + 0.1, d)
-            box((0.3, y1 - y0, w + 0.06), (x, (y0 + y1) / 2, z), WATER, yaw=-math.radians(d))
-            top = y1 - (0.0, 0.3, 0.15, 0.4)[k % 4]
-            foot = y0 + (0.5, 0.9, 0.7, 1.1)[k % 4] * (0.5 if y0 > 0 else 1.0)
-            x, z = on(i, R + 0.35, d)
-            ww = w * (0.72, 0.86, 0.78)[k % 3]
-            box((0.5, top - foot, ww), (x, (top + foot) / 2, z), FOAM, yaw=-math.radians(d))
-        m = max(2, n - 1)
-        for k in range(m):
-            d = deg + (k - (m - 1) / 2) * step * n / m
-            x, z = on(i, R + 0.3, d)
-            sphere(0.75 + 0.12 * (k % 2), (x, y1 - 0.15 + 0.12 * (k % 2), z), FOAM, scale=(1.0, 0.7, 1.0), yaw=k)
-    def run(a, b, y, w):
-        """Water lying on a ledge's top from a to b."""
-        dx, dz = b[0] - a[0], b[1] - a[1]
-        box((math.hypot(dx, dz), 0.24, w), ((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2), FOAM, yaw=-math.atan2(dz, dx))
-    for i, ((cx, cz), r, y0, y1) in enumerate(LEDGES):
-        o = cyl(r, y1 - y0 - CAP, (cx, y0, cz), ROCK, segs=12)
-        o['ramp'] = 0.4
-        o = cyl(r - 0.6, CAP, (cx, y1 - CAP, cz), ROCK, segs=12)
-        o['ramp'] = 0.4
-        # a smaller round stone shouldered into each ledge's far side, so
-        # its outline is a rock's and not a drum's
-        for d, k, h in ((FALLS[i] + 115, 0.55, 0.7), (FALLS[i] - 130, 0.45, 0.55)):
-            x, z = on(i, r * 0.75, d)
-            o = cyl(r * k, (y1 - y0) * h, (x, y0, z), ROCK, segs=9, yaw=0.3 * i + k)
-            o['ramp'] = 0.4
-    # the water: the spring welling on the top ledge, over each lip in turn,
-    # across each ledge between
-    T = [y1 for _, _, _, y1 in LEDGES]
-    cyl(1.1, 0.3, (*on(2, 0.6, 190)[:1], T[2] - 0.1, on(2, 0.6, 190)[1]), FOAM, segs=10)
-    run(on(2, 0.6, 190), on(2, LEDGES[2][1] - 0.6, FALLS[2]), T[2] + 0.02, 2.0)
-    sheet(2, FALLS[2], 2, 20, T[1] + 0.3, T[2] + 0.2)
-    run(on(2, LEDGES[2][1] + 0.3, FALLS[2]), on(1, LEDGES[1][1] - 0.6, FALLS[1]), T[1] + 0.02, 2.6)
-    sheet(1, FALLS[1], 3, 17, T[0] + 0.3, T[1] + 0.2)
-    run(on(1, LEDGES[1][1] + 0.3, FALLS[1]), on(0, LEDGES[0][1] - 0.6, FALLS[0]), T[0] + 0.02, 3.2)
-    sheet(0, FALLS[0], 5, 15, 0.0, T[0] + 0.2)
-    join_still('ledges')
+def springhouse():
+    STONE, ROOF, WOOD = 0x7d6f5f, 0xcf534f, 0x7a5a3a
+    HX, D, L, H = -3.7, 4.6, 5.6, 3.2           # the house: centre x, across, along, wall height
+    y0 = min(spring_hill(HX + D / 2, z) for z in (-L / 2, 0.0, L / 2)) - 0.3   # the front's foot, set in
+    F = local(HX, 0.0, 0.0)
+    # the walls, down to the piece's foot (all of it under the hill's ground,
+    # the back ones in the slope), a plinth of bigger stones along the front's foot
+    box((D, y0 + H, L), (HX, (y0 + H) / 2, 0.0), STONE)
+    rowed(box((0.5, 0.6, L + 0.4), (HX + D / 2 + 0.05, y0 + 0.3, 0.0), 'grey'), SLATE_ROW)
+    ridge = gable_roof(F, 0.0, y0, D, L, H, ROOF, STONE, t=0.35, over=0.45)
+    # the front: a plank door, a slatted vent high in it, the arch the spring runs out of
+    AZ = 0.4                                     # the arch, over the pool's deep end
+    box((0.14, 2.1, 1.3), (HX + D / 2 + 0.05, y0 + 1.65, -1.7), WOOD)
+    for k in range(3):
+        box((0.1, 0.12, 1.0), (HX + D / 2 + 0.08, y0 + 2.75 - 0.24 * k, AZ), 0x2a2735)
+    box((0.12, 0.9, 1.5), (HX + D / 2 + 0.08, y0 + 0.75, AZ), 0x2a2735)
+    # the weathervane on the ridge: a post, and an arrow with a cockerel turning on it
+    vx = HX
+    strut((vx, ridge, 1.6), (vx, ridge + 1.5, 1.6), 0.12, 'dark')
+    with animated('anim_spin:a=y:w=0.35#vane', (vx, ridge + 1.4, 1.6)):
+        box((1.6, 0.08, 0.08), (vx, ridge + 1.4, 1.6), 'dark')
+        poly([(vx + 0.8, ridge + 1.4, 1.6), (vx + 0.5, ridge + 1.6, 1.6), (vx + 0.5, ridge + 1.2, 1.6)], [(0, 1, 2)], 'dark')
+        poly([(vx - 0.8, ridge + 1.25, 1.6), (vx - 0.5, ridge + 1.4, 1.6), (vx - 0.8, ridge + 1.55, 1.6)], [(0, 1, 2)], 'dark')
+        box((0.5, 0.4, 0.08), (vx + 0.1, ridge + 1.75, 1.6), 0xcf534f)
+    # round shrubs bedding the house into the slope, a darker green than the lawn
+    for k, (dx, dz, r) in enumerate(((-0.8, -3.6, 1.3), (0.6, 3.7, 1.1), (-2.2, 3.4, 1.4), (-2.0, -3.3, 1.2))):
+        x, z = HX + dx, dz
+        sphere(r, (x, spring_hill(x, z) + 0.2, z), 0x4f9a48, scale=(1.1, 0.85, 1.0), yaw=k)
+    # the channel from the arch to the pool: stone edges, the pond's blues, a riffle
+    cx0, cx1, cz = HX + D / 2 + 0.1, -0.3, AZ
+    for x0, x1 in ((cx0, cx1),):
+        ya, yb = spring_hill(x0, cz), spring_hill(x1, cz)
+        for z0, z1, row in ((-0.55, -0.2, 19), (-0.2, 0.2, 27), (0.2, 0.55, 19)):
+            rowed(skin([(x0, ya + 0.12, cz + z0), (x0, ya + 0.12, cz + z1), (x1, yb + 0.12, cz + z1), (x1, yb + 0.12, cz + z0)],
+                       [(0, 1, 2, 3)], 'sky', (0, 1, 0)), row)
+        for s in (-1, 1):
+            rowed(strut((x0, ya + 0.15, cz + s * 0.75), (x1, yb + 0.15, cz + s * 0.75), 0.45, 'grey'), SLATE_ROW)
+    # the heron on a boulder at the pool's uphill edge
+    hx, hz = 0.4, 4.6
+    hy = spring_hill(hx, hz)
+    rowed(sphere(1.1, (hx, hy + 0.2, hz), 'grey', scale=(1.2, 0.7, 1.0), yaw=0.6), SLATE_ROW)
+    heron(hx - 0.3, hy + 0.95, hz)
+    join_still('springhouse')
+    # the pool (draped), reeds round its far side, flecks turning on it
+    PX, PZ, PR = 2.0, 0.4, 2.6
     def still():
-        # the pool at the foot, foam where the sheet comes in, spray, round
-        # wet stones on its banks and beside the fall, and the run down to
-        # the culvert's mouth
-        px, pz = on(0, 7.0, FALLS[0])
-        cyl(3.4, 0.3, (px, 0.0, pz), WATER, segs=14)
-        fx, fz = on(0, 5.6, FALLS[0])
-        cyl(2.4, 0.42, (fx, 0.0, fz), FOAM, segs=10)
-        for d in (-14, 0, 14):
-            sphere(1.1, (*on(0, 5.1, FALLS[0] + d)[:1], 0.4, on(0, 5.1, FALLS[0] + d)[1]), FOAM, scale=(1.0, 0.6, 1.0))
-        for k, (d, rr, r, h) in enumerate(((FALLS[0] - 50, 5.4, 1.6, 2.2), (FALLS[0] + 50, 5.4, 1.6, 2.2),
-                                           (FALLS[0] - 78, 4.8, 1.9, 2.8), (FALLS[0] + 80, 4.9, 1.8, 2.6))):
-            x, z = on(0, rr, d)
-            o = cyl(r, h, (x, -0.4, z), ROCK, segs=10)
-            o['ramp'] = 0.4
-        for k, deg in enumerate((70, 150, 230)):
-            a = math.radians(deg)
-            o = cyl(1.1 + 0.2 * (k % 2), 0.9, (px + 4.0 * math.cos(a), -0.3, pz + 4.0 * math.sin(a)), ROCK, segs=9)
-            o['ramp'] = 0.4
-        mx, mz = 4.6, 0.0                     # on into the drain (set-spring-drain)
-        dx, dz = mx - px, mz - pz
-        L = math.hypot(dx, dz)
-        a0 = (px + dx / L * 2.8, pz + dz / L * 2.8)
-        box((L - 2.8 + 0.4, 0.26, 2.2), ((a0[0] + mx) / 2, 0.13, (a0[1] + mz) / 2), WATER, yaw=-math.atan2(dz, dx))
-        # the heron, standing in the pool on its long legs, watching the water
-        HX, HZ = px + 0.8, pz + 1.2
-        with plain_parts():
-            for s in (-1, 1):
-                box((0.12, 1.3, 0.12), (HX, 0.65, HZ + 0.18 * s), 'dark')
-            box((1.2, 0.6, 0.6), (HX, 1.55, HZ), 'grey', roll=0.25)
-            strut((HX + 0.45, 1.7, HZ), (HX + 0.9, 2.6, HZ), 0.2, 'white')
-            box((0.44, 0.3, 0.26), (HX + 1.0, 2.66, HZ), 'white')
-            box((0.6, 0.1, 0.1), (HX + 1.4, 2.6, HZ), 'yellow')
+        spring_pool(PX, PZ, PR, deep=(-1.0, 0.0), gap=1.6, stones=False)   # nothing in front of the arch
+        for k, a_ in enumerate((100, 235, 260)):
+            r = PR * 1.12
+            cx, cz_ = PX + r * math.cos(math.radians(a_)), PZ + r * math.sin(math.radians(a_))
+            for j in range(4):
+                aa = j * 2 * math.pi / 4 + k
+                cyl(0.2, 1.6 + 0.4 * ((j + k) % 3), (cx + 0.4 * math.cos(aa), -0.2, cz_ + 0.4 * math.sin(aa)),
+                    (0x4f9a48, 0x22c46e)[(j + k) % 2], r2=0.0, segs=3, yaw=aa)
     draped('spring', still)
+    with animated('anim_drape+spin:a=y:w=0.3#flecks', (PX, 0.2, PZ)):
+        for k in range(6):
+            a = k * 2 * math.pi / 6
+            box((0.55, 0.08, 0.25), (PX + 1.5 * math.cos(a), 0.2, PZ + 1.5 * math.sin(a)), 'white', yaw=a)
 
 # ---- TANGLE: where the spring goes under the road ---------------------------------
-# The spring's run, from the pool on to the kerb: a shallow stony channel
-# edged in the cascade's slate, ending in a low slate lip with the dark mouth
-# of the drain under it, the water going under the top straight there to
-# come out of the same drain on the far side and run on as the stream. Low and flat, so no slab stands
-# by the kerb. It stands LEVEL (it does not drape): its footprint holds the
-# hill's `near` ramp back off the pool behind it, as the culvert that stood
-# here did. World units, front (+X) to the road; on the left at yaw 180.
+# The spring's run, from the pool on to the kerb: a shallow channel edged in
+# rounded stones of the lifted slate, its water in the pond's blues, a white
+# riffle where it drops into the dark mouth of the drain under a low lip,
+# going under the top straight there to come out of the same drain on the
+# far side and run on as the stream. Low and round, so no slab and no point
+# stands by the kerb. It stands LEVEL (nothing in it drapes): its footprint
+# holds the hill's `near` ramp back off the pool behind it, as the culvert
+# that stood here did. World units, front (+X) to the road; on the left at
+# yaw 180.
+SLATE_ROW = 30     # the grey ramp's slate, lighter than 'slate': lit faces at about 45%, shaded over 32%
+
 @piece()
 def spring_drain():
-    WATER, ROCK = 0x8ecae6, 'slate'
-    box((3.1, 0.1, 0.95), (-1.85, 0.05, 0.0), WATER)                            # the run
-    for sz in (-1, 1):                                                         # its slate edging
-        o = box((3.2, 0.16, 0.35), (-1.8, 0.08, sz * 0.62), ROCK, yaw=0.03 * sz)
-        o['ramp'] = 0.4
-        for k, (x, w) in enumerate(((-2.9, 0.9), (-1.6, 1.1), (-0.6, 0.8))):     # flat stones beyond it
-            o = box((w, 0.12, 0.8), (x, 0.06, sz * (1.25 + 0.15 * (k % 2))), ROCK, yaw=0.3 * k * sz)
-            o['ramp'] = 0.4
-    o = box((0.35, 0.3, 1.7), (-0.25, 0.15, 0.0), ROCK)                          # the lip
-    o['ramp'] = 0.4
-    box((0.08, 0.16, 0.8), (-0.45, 0.1, 0.0), 0x2a2735)                         # the drain's mouth
+    for z0, z1, row in ((-0.48, -0.22, 19), (-0.22, 0.22, 27), (0.22, 0.48, 19)):   # the run: edge, middle
+        rowed(box((3.1, 0.1, z1 - z0), (-1.85, 0.05, (z0 + z1) / 2), 'sky'), row)
+    box((0.14, 0.13, 0.9), (-0.55, 0.075, 0.0), 'white')                          # the riffle
+    for sz in (-1, 1):                                                           # the rounded stones
+        for k, (x, r) in enumerate(((-3.0, 0.42), (-2.25, 0.36), (-1.5, 0.44), (-0.75, 0.38))):
+            rowed(sphere(r, (x, 0.06, sz * (0.72 + 0.06 * (k % 2))), 'grey', scale=(1.35, 0.4, 0.9), yaw=0.4 * k), SLATE_ROW)
+        for k, (x, r) in enumerate(((-2.6, 0.4), (-1.1, 0.46))):                 # and a couple beyond
+            rowed(sphere(r, (x, 0.05, sz * 1.35), 'grey', scale=(1.3, 0.35, 1.0), yaw=0.9 * k), SLATE_ROW)
+    rowed(sphere(0.5, (-0.22, 0.1, 0.0), 'grey', scale=(0.6, 0.45, 2.0)), SLATE_ROW)  # the lip
+    box((0.08, 0.16, 0.8), (-0.45, 0.1, 0.0), 0x2a2735)                           # the drain's mouth
     join_still('drain')
+
+# A spring pool, a pond's water drawn in the piece: a ragged outline and four
+# bands of the pond's blues (buildPonds: a pale rim, deepening to the middle),
+# the deep middle off toward `deep` (where the water comes in), a band of
+# pebbles round the side toward +X except a gap at z 0 (`gap`) where the run
+# leaves it, and rounded slate boulders on the uphill side (-X). Laid flat at
+# the piece's y 0, for a DRAPED group.
+def spring_pool(cx, cz, R, deep=(-1.0, 0.0), gap=1.5, stones=True):
+    N = 10
+    def ring(k, f):
+        ox, oz = cx + deep[0] * R * 0.12 * k, cz + deep[1] * R * 0.12 * k
+        pts = []
+        for j in range(N):
+            a = 2 * math.pi * j / N
+            r = R * f * (1 + 0.12 * math.sin(3 * a + 1.3) + 0.07 * math.sin(5 * a + 0.4))
+            pts.append((ox + r * math.cos(a), oz + r * math.sin(a)))
+        return pts
+    BANDS = ((1.0, 3), (0.78, 18), (0.56, 26), (0.34, 30))     # (size, the sky ramp's row)
+    rings = [ring(k, f) for k, (f, _) in enumerate(BANDS)]
+    Y = 0.08
+    for k in range(len(BANDS)):
+        o_, i_ = rings[k], rings[k + 1] if k + 1 < len(BANDS) else None
+        if i_ is None:
+            verts = [(x, Y, z) for x, z in o_] + [(sum(p[0] for p in o_) / N, Y, sum(p[1] for p in o_) / N)]
+            faces = [(j, (j + 1) % N, N) for j in range(N)]
+        else:
+            verts = [(x, Y, z) for x, z in o_] + [(x, Y, z) for x, z in i_]
+            faces = [(j, (j + 1) % N, N + (j + 1) % N, N + j) for j in range(N)]
+        rowed(skin(verts, faces, 'sky', (0, 1, 0)), BANDS[k][1])
+    # the pebbles: the rim pushed out 0.7, on the +X half, clear of the gap
+    rim = rings[0]
+    verts, faces = [], []
+    for j in range(N):
+        a0, a1 = 2 * math.pi * j / N, 2 * math.pi * (j + 1) / N
+        p0, p1 = rim[j], rim[(j + 1) % N]
+        if math.cos((a0 + a1) / 2) < 0.2 or (min(p0[1], p1[1]) - cz < gap and max(p0[1], p1[1]) - cz > -gap
+                                            and math.cos((a0 + a1) / 2) > 0.8):
+            continue
+        q = []
+        for (x, z) in (p0, p1):
+            dx, dz = x - cx, z - cz
+            d = math.hypot(dx, dz) or 1.0
+            q.append((x + dx / d * 0.7, z + dz / d * 0.7))
+        n = len(verts)
+        verts += [(p0[0], Y, p0[1]), (p1[0], Y, p1[1]), (q[1][0], Y, q[1][1]), (q[0][0], Y, q[0][1])]
+        faces.append((n, n + 1, n + 2, n + 3))
+    if faces:
+        rowed(skin(verts, faces, 'cream', (0, 1, 0)), 28)
+    if stones:
+        for k, (dz, r) in enumerate(((-0.75, 1.0), (0.85, 1.15), (0.1, 0.8))):
+            rowed(sphere(r, (cx - R * 0.95 - 0.3 * (k == 2), 0.25, cz + dz * R), 'grey',
+                         scale=(1.2, 0.65, 1.0), yaw=0.7 * k), SLATE_ROW)
+
+def heron(x, y, z):
+    """A grey heron standing facing +X (REAL metres): long dark legs, a
+    tapered grey body with darker wings folded on it, an S-shaped white neck,
+    a black crest stripe and a long yellow bill. One gesture: now and then
+    the neck dips toward the water and comes back up."""
+    with plain_parts():
+        for s in (-1, 1):
+            strut((x, y, z + 0.14 * s), (x + 0.05, y + 1.3, z + 0.1 * s), 0.12, 'dark')
+        cyl(0.42, 1.35, (x - 0.6, y + 1.5, z), 'grey', r2=0.2, segs=6, axis='across')
+        for s in (-1, 1):
+            rowed(box((1.1, 0.34, 0.1), (x - 0.15, y + 1.55, z + 0.38 * s), 'grey', roll=0.15), SLATE_ROW)
+        with animated('anim_sway:a=z:d=-24:p=7:r=0.8#heron', (x + 0.6, y + 1.65, z)):
+            pts = ((x + 0.6, y + 1.65), (x + 0.78, y + 2.1), (x + 0.62, y + 2.45), (x + 0.82, y + 2.78))
+            for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+                strut((ax, ay, z), (bx, by, z), 0.15, 'white')
+            box((0.4, 0.26, 0.22), (x + 0.92, y + 2.82, z), 'white')
+            box((0.34, 0.07, 0.24), (x + 0.82, y + 2.97, z), 'dark')
+            box((0.8, 0.08, 0.08), (x + 1.48, y + 2.8, z), 'yellow')
 
 # ---- CLOVERLEAF: the park railway by the start straight ------------------------------
 # A park's miniature line, a little oval on the lawn inside the top loop
