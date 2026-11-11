@@ -2111,20 +2111,16 @@ constexpr FurnDef kBoxes_helix[] = {
   { 0x1.68f5c28f5c28fp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_helix[] = {
-  { "set-marble-run", 0x1.1b8bac710cb29p-2, 0x1.6p+4, -0x1.06p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-marble-tower", 0x1.009d495182a99p-3, 0x1.dp+3, -0x1.68p+5, 0x0p+0, 0x1p+0, 1 },
   { "set-spinning-top", 0x1.b851eb851eb85p-3, -0x1.6p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.a631f8a0902dep-1, 0x1.2cccccccccccdp+3, 0x1.28p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.08e8a71de69adp-1, 0x1.ap+2, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-skyway", 0x1.e872b020c49bap-2, -0x1.4p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-lift", 0x1.0d35a858793dep-2, -0x1.0c7ae147ae148p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-lift", 0x1.6147ae147ae14p-1, -0x1.0b851eb851eb8p+3, 0x1.68p+5, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-racer", 0x1.db22d0e560419p-6, -0x1.1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.147ae147ae148p-2, 0x1.a851eb851eb85p+2, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.5c28f5c28f5c3p-2, 0x1.a666666666666p+2, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.dc28f5c28f5c3p-1, -0x1.a666666666666p+2, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.652bd3c361134p-1, 0x1.a851eb851eb85p+2, 0x1.6b33333333333p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-marble-zigzag", 0x1.a88ce703afb7fp-2, 0x1.aa3d70a3d70a4p+2, 0x1.6accccccccccdp+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-head", 0x1.8a46e08f21709p-4, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-wheel", 0x1.6f15e7c8d1959p-3, -0x1.be147ae147ae1p+2, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-summit", 0x1.ef57f737da61ep-3, -0x1.be147ae147ae1p+2, -0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-skyway", 0x1.e61e0c5a8155dp-2, 0x1.bd70a3d70a3d7p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-vortex", 0x1.0acf7446f9b99p-1, 0x1.bd70a3d70a3d7p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-loop", 0x1.9f01b866e43aap-1, 0x1.c1eb851eb851fp+2, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-stair", 0x1.de6ba493c89f4p-1, 0x1.c1eb851eb851fp+2, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-marble-run-racer", 0x1.2684cf0739b02p-5, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
 };
 
 constexpr SegDef kS_skyline[] = {
@@ -2369,7 +2365,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 8, kLand_sidewinder, 3 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 13, nullptr, 0 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 14, nullptr, 0 },
-  { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 14, nullptr, 0 },
+  { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 10, nullptr, 0 },
   { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 9, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
@@ -2383,8 +2379,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-glacier-forest-a", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
-constexpr int TTP_LITE_MODEL_COUNT = 26;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
+constexpr int TTP_LITE_MODEL_COUNT = 34;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.
