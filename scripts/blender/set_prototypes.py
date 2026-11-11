@@ -10357,25 +10357,26 @@ def run_head(lite):
     run_marbles('head', [(tx, out[1], tz)] + line, lite)
 
 def marble_wheel(cx, cy, cz, R):
-    """A marble wheel turning about z on two grey A-frames: two coloured
-    flanges with cups round their rims and the marbles' groove between them
-    (they ride it down out of sight), turning slowly."""
+    """A marble wheel turning slowly about z: two open paddle wheels on one
+    drum, the marbles riding the drum down between them on the side the
+    chute feeds, carried by the paddles. Rims, radial paddles and two plain
+    upright posts: nothing hangs from the rim and nothing straddles it on
+    legs (on an A-frame with boxes round its rim it read as a Ferris wheel)."""
     for s in (-1, 1):
-        z = cz + s * 0.85
-        for dx in (-1.1, 1.1):
-            bar((cx + dx, 0.0, z), (cx, cy, z), 0.22, 0.22, GREY)
-        cyl(0.3, 0.12, (cx - 1.1, 0, z), COLLAR, segs=8)
-        cyl(0.3, 0.12, (cx + 1.1, 0, z), COLLAR, segs=8)
-    cyl(0.14, 1.9, (cx, cy, cz - 0.95), COLLAR, segs=8, axis='along')       # the axle
+        z = cz + s * 1.0
+        cyl(0.32, 0.12, (cx, 0, z), COLLAR, segs=8)
+        cyl(0.2, cy + 0.25, (cx, 0, z), GREY, segs=8)
+        cyl(0.3, 0.2, (cx, cy - 0.1, z - 0.1), COLLAR, segs=8, axis='along')   # the bearing
+    cyl(0.14, 2.3, (cx, cy, cz - 1.15), COLLAR, segs=8, axis='along')           # the axle
     with animated('anim_spin:a=z:w=-0.8#wheel', (cx, cy, cz)):
-        for s, c in ((-1, 0x5a8fd8), (1, 0x5a8fd8)):
-            cyl(R, 0.1, (cx, cy, cz + s * 0.47 - 0.05), c, segs=16, axis='along')
-        cyl(0.45, 1.04, (cx, cy, cz - 0.52), 0xf2c14e, segs=10, axis='along')   # the hub
-        for k in range(8):
-            a = k * math.pi / 4
-            x, y = cx + (R - 0.18) * math.cos(a), cy + (R - 0.18) * math.sin(a)
-            box((0.34, 0.34, 1.2), (x, y, cz), (0xe66a5a, 0xf2c14e)[k % 2], roll=a)          # the cups
-            bar((cx + 0.45 * math.cos(a), cy + 0.45 * math.sin(a), cz + 0.53), (x, y, cz + 0.53), 0.14, 0.1, CREAM)
+        cyl(0.77, 1.56, (cx, cy, cz - 0.78), 0xf2c14e, segs=16, axis='along')  # the drum the marbles ride on
+        for s in (-1, 1):                         # each wheel: a broad rim, the paddles inside it
+            zp, zr = cz + s * 0.59, cz + s * 0.8
+            torus(R - 0.22, 0.2, (cx, cy, zr), 0x5a8fd8, segs=20, axis='along')
+            for k in range(8):
+                a = math.pi / 8 + k * math.pi / 4
+                bar((cx + 0.4 * math.cos(a), cy + 0.4 * math.sin(a), zp), (cx + (R - 0.1) * math.cos(a), cy + (R - 0.1) * math.sin(a), zp),
+                    0.38, 0.1, 0xe66a5a)
 
 def run_wheel(lite):
     # E: from the corner's inner post east along the top leg's infield, about
@@ -10383,7 +10384,7 @@ def run_wheel(lite):
     # tops (behind them), turning away from the road to the catch tray.
     D2 = (6.4, 8.55, 57.3)
     Z, WX, WY, R = 55.4, 27.0, 4.85, 1.6
-    top = fillet([toward(D2, (9.6, 8.35, Z)), (9.6, 8.35, Z), (WX - 1.05, 6.55, Z)], r=1.4)
+    top = fillet([toward(D2, (9.6, 8.35, Z)), (9.6, 8.35, Z), (WX - 1.35, 6.5, Z)], r=1.4)   # its end over the paddles' tips
     run_chute(top, 0xf2c14e)
     low = fillet([(WX + 0.35, 2.95, Z), (37.0, 2.2, Z), (44.3, 1.3, 48.9), (45.4, 1.2, 47.8)], r=2.2)
     run_chute(low, 0xf2c14e)
