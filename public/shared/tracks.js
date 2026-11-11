@@ -765,6 +765,10 @@ export const TRACKS = {
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
       { model: 'set-flurry-forest-d', u: 0.1371, lat: 15.35 },
       { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39 },
+      // the west gap the start straight looks into: a clump where the outrun
+      // of the old jump stood at the first bend, and pines on the low far ridge
+      { model: 'set-flurry-forest-f', u: 0.095, lat: 10.5 },
+      { model: 'set-flurry-forest-g', u: 0.075, lat: 50 },
       { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
@@ -797,7 +801,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.16, lat: 51.74, r: 30, h: 15, top: 0.12 },
       // the open west gap the start straight looks into, closed low and far
       // off, under the frame's top from the grid and short of the terrain's
-      // west edge
+      // west edge, pines on its near face (forest-g)
       { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
