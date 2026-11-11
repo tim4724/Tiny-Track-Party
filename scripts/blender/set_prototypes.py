@@ -10313,7 +10313,7 @@ def resample(pts, step=0.6):
         out += [tuple(a[j] + (b[j] - a[j]) * i / k for j in range(3)) for i in range(1, k + 1)]
     return out
 
-def run_marbles(chain, seen, lite):
+def run_marbles(chain, seen, lite, colors=RUN_MARBLES):
     """A section's marbles: along `seen` (their centres, from the post they
     come up out of to the one they drop into), then down that post, back
     under the floor and up the first one, a loop at RUN_SPEED with a marble
@@ -10327,7 +10327,7 @@ def run_marbles(chain, seen, lite):
     for j in range(n):
         at = seen[1 + (len(seen) - 2) * j // n]   # at rest on the run, past the post it comes up out of
         with animated('anim_path:c=%s:p=%.2f:o=%.4f:f=0#%d' % (chain, length / RUN_SPEED, j / n, j), at):
-            sphere(RUN_MR, at, RUN_MARBLES[j % len(RUN_MARBLES)], subdiv=1 if lite else 2, flat=False)
+            sphere(RUN_MR, at, colors[j % len(colors)], subdiv=1 if lite else 2, flat=False)
             bpy.ops.object.shade_smooth()
 
 def run_section(name, lite):
@@ -10369,7 +10369,7 @@ def marble_wheel(cx, cy, cz, R):
         cyl(0.3, 0.2, (cx, cy - 0.1, z - 0.1), COLLAR, segs=8, axis='along')   # the bearing
     cyl(0.14, 2.3, (cx, cy, cz - 1.15), COLLAR, segs=8, axis='along')           # the axle
     with animated('anim_spin:a=z:w=-0.8#wheel', (cx, cy, cz)):
-        cyl(0.77, 1.56, (cx, cy, cz - 0.78), 0xf2c14e, segs=16, axis='along')  # the drum the marbles ride on
+        cyl(0.77, 1.64, (cx, cy, cz - 0.82), 0xf2c14e, segs=16, axis='along')  # the drum the marbles ride on, past the paddles' faces (on its caps they fought)
         for s in (-1, 1):                         # each wheel: a broad rim, the paddles inside it
             zp, zr = cz + s * 0.59, cz + s * 0.8
             torus(R - 0.22, 0.2, (cx, cy, zr), 0x5a8fd8, segs=20, axis='along')
@@ -10630,7 +10630,7 @@ def run_stair(lite):
     run_chute(high, 0xf2c14e)
     for x, z in ((-6.7, -9.6), (-7.0, -3.0)):
         trestle(on(resample(high, 0.3), x, z))
-    slot = (-7.0, 2.6, 2.3)                       # onto the racer's head and down through its slot
+    slot = (-7.0, 2.85, 2.3)                      # level onto the racer's head (lower, it sank into the wood) and down through its slot
     run_marbles('stair', [J0] + floor + hop[1:] + high + [slot], lite)
 
 def racer_board(X, Z0, Z1, Y0, Y1, tag, lanes, colors, groups):
@@ -10692,7 +10692,7 @@ def run_racer(lite):
     floor = fillet([(X, 0.72, 47.2), (-12.5, 0.7, 54.0), (-13.5, 0.68, 68.0), (-11.5, 0.66, 75.6), (cup[0] - 0.55, 0.65, cup[2])], r=2.5)
     run_chute(floor, 0x6cbf6c)
     joint(cup[0], cup[2], cup[1])
-    run_marbles('home', [(X, 0.65, 46.0)] + floor + [cup], lite)
+    run_marbles('home', [(X, 0.65, 46.0)] + floor + [cup], lite, colors=[c for c in RUN_MARBLES if c != 0x6cbf6c])   # none green on the green chute
 
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
              'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer}
