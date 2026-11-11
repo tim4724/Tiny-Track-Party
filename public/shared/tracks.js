@@ -307,7 +307,7 @@ export const SET_GROUND = {
   // slalom and on to the finish on the flat (faint: a groomed run is white,
   // and a deeper blue read as a stain); Avalanche's slide face, the debris
   // fan over the chute's end (stopping a grid cell short of the road, whose
-  // cap would leave what lies on it floating), and the slopes its fences and
+  // cap would leave what lies on it floating), and the slopes its pines and
   // warning signs stand under.
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
@@ -359,7 +359,7 @@ export const SET_GROUND = {
   // the road, its foot reaching under the school's hut and arch so the whole
   // school stands up on it over the kerb of the road beside it.
   'set-ski-school': [{ kind: 'mound', x: -7, h: 4.2, r: 13, r1: 10, rz: 13, shape: 1.3 }],
-  'set-avalanche-fence': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
+  'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Pretzel's oak on the crest of the knoll it grew on, its summit under the
   // trunk: short toward the road (+X), the hill falling away behind it and
   // along it over the corner of the garden.
@@ -923,21 +923,29 @@ export const TRACKS = {
       // down through its forest to the road, a warning sign at the foot of
       // the first two, the third coming down onto the snow shed's roof
       { model: 'set-warning-sign', u: 0.27, lat: 4.4, yaw: 44 },
+      // ...and the first path's slide come down across the road, ploughed
+      // through (the blocks stand at the ground sampled under them)
+      { model: 'set-avalanche-debris-lobe', u: 0.276, lat: 0 },
       { model: 'set-warning-sign', u: 0.317, lat: 4.4, yaw: 46 },
-      // and at the foot of the fence slope's path, at the turn onto the crossing
+      // and at the foot of the west slope's path, at the turn onto the crossing
       { model: 'set-warning-sign', u: 0.085, lat: -4.4, yaw: 115 },
-      // forest down the mountainside, the S-bend's spur, the fence slope and the
+      // forest down the mountainside, the S-bend's spur, the west slope and the
       // wedge inside the S, kept off the paths (sampled, set_prototypes.py FORESTS)
-      { model: 'set-avalanche-forest-a', u: 0.2693, lat: 18.62 },
-      { model: 'set-avalanche-forest-b', u: 0.3109, lat: 21.4 },
-      { model: 'set-avalanche-forest-c', u: 0.3442, lat: 17.52 },
-      { model: 'set-avalanche-forest-d', u: 0.3912, lat: 24.51 },
-      { model: 'set-avalanche-forest-e', u: 0.418, lat: 21 },
-      { model: 'set-avalanche-forest-f', u: 0.0943, lat: -16.58 },
-      { model: 'set-avalanche-forest-g', u: 0.5731, lat: -19.14 },
-      { model: 'set-avalanche-forest-h', u: 0.0322, lat: 10.42 },
-      { model: 'set-avalanche-fence', u: 0.87, lat: 16, yaw: 20 },
-      { model: 'set-avalanche-fence', u: 0.1, lat: -32.5, yaw: 160 },
+      { model: 'set-avalanche-forest-a', u: 0.2664, lat: 18.70 },
+      { model: 'set-avalanche-forest-b', u: 0.3120, lat: 13.43 },
+      { model: 'set-avalanche-forest-c', u: 0.3420, lat: 17.80 },
+      { model: 'set-avalanche-forest-d', u: 0.3922, lat: 17.58 },
+      { model: 'set-avalanche-forest-e', u: 0.4190, lat: 16.98 },
+      { model: 'set-avalanche-forest-f', u: 0.0943, lat: -10.71 },
+      { model: 'set-avalanche-forest-g', u: 0.5700, lat: -13.62 },
+      { model: 'set-avalanche-forest-h', u: 0.0300, lat: 11.75 },
+      // forest on the cirque's lower faces up to a ragged treeline, trimmed
+      // along the slide's chute (sampled, set_prototypes.py FORESTS)
+      { model: 'set-avalanche-forest-i', u: 0.7165, lat: 28.61 },
+      { model: 'set-avalanche-forest-j', u: 0.7785, lat: 26.84 },
+      { model: 'set-avalanche-forest-k', u: 0.8458, lat: 16.93 },
+      { model: 'set-avalanche-slope', u: 0.87, lat: 16, yaw: 20 },
+      { model: 'set-avalanche-slope', u: 0.1, lat: -32.5, yaw: 160 },
       // Where the road runs under the mountains, on the outside of the last
       // loop, it is cut into the mountainside and roofed over: two galleries,
       // each with the cut it stands in, astride the road. The shorter on the
@@ -957,13 +965,25 @@ export const TRACKS = {
       // (`land`): the snow keeps their 9 u facets, rock in them read as
       // stripes on a dome
       { model: 'set-avalanche-crags', u: 0.8349, lat: 52.1, yaw: 3 },
-      { model: 'set-avalanche-crags-west', u: 0.7091, lat: 67.4 }
+      { model: 'set-avalanche-crags-west', u: 0.7091, lat: 67.4 },
+      // the high peaks the slides start from, east of the mountainside, its
+      // stands their foothills (the piece's frame is the world's: yaw cancels
+      // the road's heading at u 0.276)
+      { model: 'set-avalanche-peaks-east', u: 0.276, lat: 48.12, yaw: -167.06 },
+      // the cirque's faces: ribs of rock down their fall lines, a cornice and
+      // a band of rock over the slide's crown (the frame the world's)
+      { model: 'set-avalanche-cirque-rock', u: 0.776, lat: 5.5, yaw: -44.22 },
+      // a creek frozen across the wedge inside the S-bend, under both roads
+      // in culverts (the frame the world's)
+      { model: 'set-avalanche-creek', u: 0.5935, lat: 13.13, yaw: 23.54 },
+      // big old firs on the creek's bank (sampled, set_prototypes.py FORESTS)
+      { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
     // down into: a spur off the western massif runs down to the kerb, the
     // short gallery's cut through its toe; the southern massif's flank stands
     // off the verge along the long gallery's straight, a peak on it and a
-    // lower one toward the fences' slope. Every flank stands `near` the kerb
+    // lower one toward the cirque's slope. Every flank stands `near` the kerb
     // (the galleries' cuts stand in front of it) and joins the slide's
     // mountain either side of its chute, clear of its forest.
     land: [
@@ -1000,7 +1020,7 @@ export const TRACKS = {
       // unit of scatter and does nothing else.
       { kind: 'clear', u: 0.277, lat: 0, yaw: -168.87048, x: 89.0467, z: 6.5189, r: 1 },
       { kind: 'clear', u: 0.374, lat: 0, yaw: 93.24529, x: -4.1748, z: -82.9726, r: 1 },
-      // the fence slope's foot brought down to the turn, its path churned
+      // the west slope's foot brought down to the turn, its path churned
       { kind: 'ridge', u: 0.0943, lat: -27.78, z: 0.6, r: 24, h: 10, top: 0.2, near: 2 },
       { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xc8cfdf },
