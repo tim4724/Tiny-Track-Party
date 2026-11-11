@@ -664,7 +664,7 @@ export const TRACKS = {
     // and then a causeway on the renderer's bents: open sea outside, a strip
     // of lagoon inside, then the beach. Where it sets out, the town's end of
     // the beach: the promenade's row of huts and its kiosk on a boardwalk at
-    // the outer kerb, facing the cars down the straight, and its sea pier
+    // the outer kerb, facing the road, and its sea pier
     // out over the water (the third `shore` brings the sea in under it) to
     // the white pavilion on its head that the straight points at, the
     // excursion boat moored alongside. Behind, a wider lagoon by

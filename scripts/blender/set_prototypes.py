@@ -1443,8 +1443,9 @@ def swim_line():
 def beach_hut(x, y, z, yaw, body, trim=0xfff6eb):
     """A bathing hut a little chunkier than life (about 5 m to the ridge), its
     gable and door to the front (+X turned by `yaw`): a box in one colour, a
-    white door, a pitched roof in its own colour with white bargeboards,
-    standing on the boardwalk at `y`."""
+    white door, a pitched roof in its own colour with white bargeboards on
+    both gables (a row seen from behind closes up into one striped box
+    unless each back shows its pitch), standing on the boardwalk at `y`."""
     w, h, d, peak = 0.8, 0.86, 0.8, 0.34
     c, sn = math.cos(yaw), math.sin(yaw)
     def T(lx, ly, lz):
@@ -1455,8 +1456,9 @@ def beach_hut(x, y, z, yaw, body, trim=0xfff6eb):
     verts = [T(e, y + h, -o), T(e, y + h, o), T(e, y + h + peak, 0.0),
              T(-e, y + h, -o), T(-e, y + h, o), T(-e, y + h + peak, 0.0)]
     poly(verts, [(0, 1, 2), (3, 5, 4), (0, 2, 5, 3), (1, 4, 5, 2), (0, 3, 4, 1)], body)        # the roof
-    for side in (-1, 1):                                                                         # its bargeboards
-        beam(T(e + 0.02, y + h, side * o), T(e + 0.02, y + h + peak, 0.0), 0.05, 0xfff6eb)
+    for end in (-1, 1):                                                                          # its bargeboards
+        for side in (-1, 1):
+            beam(T(end * (e + 0.02), y + h, side * o), T(end * (e + 0.02), y + h + peak, 0.0), 0.05, 0xfff6eb)
 
 def angler(x, y, z, yaw, shirt, rod_to):
     """A fisher sitting on the pier's edge, legs over it, rod out to sea."""
@@ -1468,8 +1470,8 @@ def promenade():
     # Riptide's town end of the beach, where the causeway sets out: a timber
     # boardwalk at the road's own level along the straight's outer kerb (+X
     # is the road; its edge keeps the set pieces' 1.2 u off the deck), one
-    # even row of bathing huts on it turned to the cars coming down the
-    # straight, the kiosk at the row's end, and the sea pier running on from
+    # even row of bathing huts on it, their doors to the road, the kiosk at
+    # the row's end, and the sea pier running on from
     # there out over the water (the track's `shore` brings the sea in under
     # it) to its pavilion: white, a red hipped roof, a lantern and a flag,
     # corner turrets to the land, a landing stage across its seaward side and
@@ -1487,11 +1489,14 @@ def promenade():
         for k in range(3):
             z = Z0 + 0.3 + k * (Z1 - Z0 - 0.6) / 2
             box((0.14, deck_y - FOOT, 0.14), (BW0 + 0.12, (deck_y + FOOT) / 2, z), dark)
-    # the huts: one even row, each in one colour, turned toward the cars
-    # coming down the straight so their doors and gables show (two tight
-    # clumps side on read as a jumble of blocks at the frame's edge)
+    # the huts: one even row, each in one colour, doors and gables to the
+    # road. The S-bend before the straight sees the row from behind and the
+    # straight from the road side, each looking along it, so each hut shows
+    # only the end of it its neighbour leaves uncovered: from the bend its
+    # back gable, from the straight its front (turned toward the straight,
+    # the bend saw only their sides, closed up into one striped box)
     for k, c in enumerate((red, 0x339cf2, 0x22c46e, 0xffc044, white, red, 0x339cf2, 0x22c46e)):
-        beach_hut(0.7, deck_y, 8.6 - 1.25 * k, -0.6, c, trim=0x339cf2 if c == white else white)
+        beach_hut(0.7, deck_y, 8.6 - 1.25 * k, 0.0, c, trim=0x339cf2 if c == white else white)
     # the kiosk at the row's end by the pier's root: a counter to the cars
     # under a red and white awning, an ice cream on its roof, a queue of two
     KX, KZ = 0.5, -1.9
@@ -1512,7 +1517,7 @@ def promenade():
     # the pier: on from the boardwalk's end a step down (its root lies
     # under the boardwalk's end, and two decks at one level fight), out over
     # the sea, turned a little off the road's line toward the water; railed
-    # in white, lamps on white posts, square piles
+    # in white, a lamp either side where it sets out, square piles
     pd = deck_y - 0.04
     PFOOT = -2.2                                      # under the bed of the sea the track's shore lets down
     A, LEN, W = 0.5, 13.0, 1.6
@@ -1530,9 +1535,9 @@ def promenade():
     R = W / 2 - 0.04
     for side in (-1, 1):
         beam(put(0.3, side * R, pd + 0.42), put(LEN, side * R, pd + 0.42), 0.05, white)   # the rails
-        for k in range(1, int(LEN)):
+        for k in range(2, int(LEN) + 1, 2):
             box((0.05, 0.42, 0.05), put(k, side * R, pd + 0.21), white, yaw=A)
-        for t in (2.0, 6.0, 10.0):                                                         # the lamps
+        for t in (2.0,):   # the lamps, at the root only: out along the pier they cross the pavilion's windows
             box((0.07, 1.0, 0.07), put(t, side * (R + 0.08), pd + 0.5), white, yaw=A)
             sphere(0.12, put(t, side * (R + 0.08), pd + 1.06), 0xfde4c7)
     with square():
@@ -1587,10 +1592,12 @@ def promenade():
             tx, tz = at(TC + 4.9, s * 1.1)
             angler(x, pd, z, A + math.pi / 2, shirt, (tx, pd + 0.85, tz))
     join_still('promenade')
-    # the excursion boat moored alongside the head on the road side, bow to
-    # the landing stage: a white hull with a blue band, its wheelhouse; it
-    # rides the swell and rolls a little, on the sea the shore lets down
-    bx, bz = at(TC + 0.6, -3.75)
+    # the excursion boat moored alongside the head on its sea side, which
+    # the lifeguard straight looks across at (the road sees the head end on,
+    # and the kerb hides the water there), bow to the landing stage: a white
+    # hull with a blue band, its wheelhouse; it rides the swell and rolls a
+    # little, on the sea the shore lets down
+    bx, bz = at(TC + 0.6, 3.75)
     sea = SEA - SEA_SUNK
     with animated('anim_bob:h=0.05:p=3.2+sway:a=z:d=3:p=4.1#boat', (bx, sea, bz), yaw=A):
         c, sn = math.cos(A), math.sin(A)
