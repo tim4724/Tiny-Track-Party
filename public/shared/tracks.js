@@ -922,6 +922,8 @@ export const TRACKS = {
       // the mountainside outside the top loop: three avalanche paths come
       // down through its forest to the road, a warning sign at the foot of
       // the first two, the third coming down onto the snow shed's roof
+      // a log cabin by the crossing, a little back from it
+      { model: 'set-avalanche-cabin', u: 0.232, lat: -17.5, yaw: 150 },
       { model: 'set-warning-sign', u: 0.27, lat: 4.4, yaw: 44 },
       // ...and the first path's slide come down across the road, ploughed
       // through (the blocks stand at the ground sampled under them)
@@ -931,7 +933,7 @@ export const TRACKS = {
       { model: 'set-warning-sign', u: 0.085, lat: -4.4, yaw: 115 },
       // forest down the mountainside, the S-bend's spur, the west slope and the
       // wedge inside the S, kept off the paths (sampled, set_prototypes.py FORESTS)
-      { model: 'set-avalanche-forest-a', u: 0.2664, lat: 18.70 },
+      { model: 'set-avalanche-forest-a', u: 0.2693, lat: 15.72 },
       { model: 'set-avalanche-forest-b', u: 0.3120, lat: 13.43 },
       { model: 'set-avalanche-forest-c', u: 0.3420, lat: 17.80 },
       { model: 'set-avalanche-forest-d', u: 0.3922, lat: 17.58 },
@@ -971,11 +973,13 @@ export const TRACKS = {
       // the road's heading at u 0.276)
       { model: 'set-avalanche-peaks-east', u: 0.276, lat: 48.12, yaw: -167.06 },
       // the cirque's faces: ribs of rock down their fall lines, a cornice and
-      // a band of rock over the slide's crown (the frame the world's)
-      { model: 'set-avalanche-cirque-rock', u: 0.776, lat: 5.5, yaw: -44.22 },
+      // a band of rock over the slide's crown, a piece a face so no footprint
+      // spans the loop (the frames the world's)
+      { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
+      { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
       // a creek frozen across the wedge inside the S-bend, under both roads
       // in culverts (the frame the world's)
-      { model: 'set-avalanche-creek', u: 0.5935, lat: 13.13, yaw: 23.54 },
+      { model: 'set-avalanche-creek', u: 0.5935, lat: 13.13, yaw: 23.54, lite: false },
       // big old firs on the creek's bank (sampled, set_prototypes.py FORESTS)
       { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
     ],

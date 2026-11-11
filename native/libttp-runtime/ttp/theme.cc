@@ -826,12 +826,13 @@ void patchTrack(Theme& t, const BiomeEntry* b, const std::string& track) {
 
   // No procedural landmark beside a set piece that contradicts it. Where
   // the track's set has its own houses (Flurry's smoking log cabins, Powder's
-  // chalets round the valley station), the procedural cabin goes: never a
-  // lone cabin beside a village of other ones.
+  // chalets round the valley station, Avalanche's cabin by the crossing), the
+  // procedural cabin goes: never a lone cabin beside a village of other ones,
+  // nor two cabins.
   const auto drop = [&](uint32_t k) {
     t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
   };
-  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
+  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry" || track == "avalanche")) {
     drop(LM_CABIN);
   }
 }
