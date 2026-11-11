@@ -10068,25 +10068,80 @@ def helix_pts(cx, cz, R, y0, y1, a0, turns, per=16):
     return [(cx + R * math.cos(a0 + 2 * math.pi * turns * i / n), y0 + (y1 - y0) * i / n,
              cz + R * math.sin(a0 + 2 * math.pi * turns * i / n)) for i in range(n + 1)]
 
-def chute(pts, color, mr, half=0.75, wall=0.55, inner=None):
+def chute(pts, color, mr, half=0.75, wall=0.55, inner=None, t=0.08):
     """A marble run's chute: a U channel under the marbles (radius `mr`),
-    swept along their line [(x, y, z)]; its inside and outside are separate
-    faces so each keeps its own light, and `inner` paints the channel's floor
-    its own colour (a separate part): from above, two coloured rims and a
-    pale floor read as a channel where one colour reads as a plank."""
+    swept along their line [(x, y, z)], a closed solid with walls `t` thick
+    (piece units): the channel, its outside, a lip along each top edge and a
+    cap at each end, each its own vertices so it keeps its own light. The kit
+    draws both sides of every face, lit per vertex, so two shells on one
+    surface fight in the depth buffer: no face here lies on another. `inner`
+    paints the channel's floor its own colour (a separate part): from above,
+    two coloured rims and a pale floor read as a channel where one colour
+    reads as a plank."""
     n = len(pts)
-    verts = []
+    ins, outs, axis = [], [], []
     for i, p in enumerate(pts):
         a, b = pts[min(i + 1, n - 1)], pts[max(i - 1, 0)]
         tx, tz = a[0] - b[0], a[2] - b[2]
         l = math.hypot(tx, tz) or 1.0
-        ox, oz = -tz / l * half, tx / l * half
+        nx, nz = -tz / l, tx / l
         y = p[1] - mr - 0.05
-        verts += [(p[0] + ox, y + wall, p[2] + oz), (p[0] + ox, y, p[2] + oz),
-                  (p[0] - ox, y, p[2] - oz), (p[0] - ox, y + wall, p[2] - oz)]
-    front = [(4 * i + k, 4 * (i + 1) + k, 4 * (i + 1) + k + 1, 4 * i + k + 1) for i in range(n - 1) for k in range(3)]
-    m = len(verts)
-    def part(vs, faces, c):
+        for ring, h, lo in ((ins, half, y), (outs, half + t, y - t)):
+            ring.append([(p[0] + nx * h, y + wall, p[2] + nz * h), (p[0] + nx * h, lo, p[2] + nz * h),
+                         (p[0] - nx * h, lo, p[2] - nz * h), (p[0] - nx * h, y + wall, p[2] - nz * h)])
+        axis.append((p[0], y + wall / 2, p[2]))
+    def strip(rings, ks):
+        """Quads along the sweep over the profile's edges `ks`, sharing the
+        profile's vertices between them (smooth round the U's corners)."""
+        vs = [v for r in rings for v in r]
+        return vs, [(4 * i + k, 4 * (i + 1) + k, 4 * (i + 1) + k + 1, 4 * i + k + 1) for i in range(n - 1) for k in ks]
+    def orient(vs, faces, toward):
+        """Wind every face so its normal points along toward(centre, i)."""
+        out = []
+        for f in faces:
+            q = [vs[j] for j in f]
+            c = [sum(v[j] for v in q) / len(q) for j in range(3)]
+            nrm = [0.0, 0.0, 0.0]
+            for j in range(len(q)):                  # Newell's normal
+                u, w = q[j], q[(j + 1) % len(q)]
+                nrm[0] += (u[1] - w[1]) * (u[2] + w[2])
+                nrm[1] += (u[2] - w[2]) * (u[0] + w[0])
+                nrm[2] += (u[0] - w[0]) * (u[1] + w[1])
+            d = toward(c, f[0] // 4)
+            out.append(f if sum(nrm[j] * d[j] for j in range(3)) >= 0 else tuple(reversed(f)))
+        return out
+    def mid(i):                                      # the channel's middle between sections i and i + 1
+        a, b = axis[min(i, n - 1)], axis[min(i + 1, n - 1)]
+        return [(a[j] + b[j]) / 2 for j in range(3)]
+    def into(c, i):                                  # into the channel: toward its middle
+        return [mid(i)[j] - c[j] for j in range(3)]
+    def away(c, i):
+        return [c[j] - mid(i)[j] for j in range(3)]
+    groups = {color: ([], [])}                       # a colour's surfaces, each on its own vertices, one part
+    def add(c, vs, faces):
+        gv, gf = groups.setdefault(c, ([], []))
+        gf += [tuple(len(gv) + j for j in f) for f in faces]
+        gv += vs
+    if inner is not None:                            # the channel's floor (profile edge 1), and its walls
+        vs, fs = strip(ins, (1,))
+        add(inner, vs, orient(vs, fs, into))
+        vs, fs = strip(ins, (0, 2))
+        add(color, vs, orient(vs, fs, into))
+    else:
+        vs, fs = strip(ins, (0, 1, 2))
+        add(color, vs, orient(vs, fs, into))
+    vs, fs = strip(outs, (0, 1, 2))
+    add(color, vs, orient(vs, fs, away))
+    lips = [[ins[i][k], outs[i][k]] for i in range(n) for k in (0, 3)]
+    vs = [v for pair in lips for v in pair]          # 4 vertices a section: in0, out0, in3, out3
+    fs = [(4 * i + o, 4 * (i + 1) + o, 4 * (i + 1) + o + 1, 4 * i + o + 1) for i in range(n - 1) for o in (0, 2)]
+    add(color, vs, orient(vs, fs, lambda c, i: (0.0, 1.0, 0.0)))
+    for i, sgn in ((0, -1), (n - 1, 1)):             # the end caps: three quads tile the U's section
+        a, b = pts[min(i + 1, n - 1)], pts[max(i - 1, 0)]
+        d = (sgn * (a[0] - b[0]), sgn * (a[1] - b[1]), sgn * (a[2] - b[2]))
+        vs = ins[i] + outs[i]
+        add(color, vs, orient(vs, [(0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6)], lambda c, _i: d))
+    for c, (vs, faces) in groups.items():
         me = bpy.data.meshes.new('chute')
         me.from_pydata([tuple(P(*v)) for v in vs], [], faces)
         for f in me.polygons:
@@ -10094,11 +10149,7 @@ def chute(pts, color, mr, half=0.75, wall=0.55, inner=None):
         me.update()
         o = bpy.data.objects.new('chute', me)
         bpy.context.scene.collection.objects.link(o)
-        return paint(o, c)
-    if inner is not None:                        # front faces look into the U; k = 1 is its floor
-        part(verts, front[1::3], inner)
-        return part(verts, front[0::3] + front[2::3] + [tuple(reversed(f)) for f in front], color)
-    return part(verts + verts, front + [tuple(m + v for v in reversed(f)) for f in front], color)
+        paint(o, c)
 
 @piece(0.62)
 def marble_run():
@@ -10127,15 +10178,15 @@ def marble_run():
             cyl(1.25, h / n, (0, 0.4 + k * h / n, zc), TOY[k % 4], segs=10)
     cyl(1.0, 1.1, (0, TOPA, ZA), 0xfdf4de, r2=2.0, segs=10)       # the cup the marbles come up into
     cyl(1.5, 0.5, (0, 0.4 + HIGH_B + 1.0, ZB), 0xfdf4de, segs=10)
-    chute(up, 0xe66a5a, MR)
-    chute(down, 0x5a8fd8, MR)
-    chute([up[-1], down[0]], 0xf2c14e, MR)        # the high run from A's top to B's
-    chute([down[-1], up[0]], 0xf2c14e, MR)        # and the low run home along the floor
+    chute(up, 0xe66a5a, MR, t=0.08 / 0.62)
+    chute(down, 0x5a8fd8, MR, t=0.08 / 0.62)
+    chute([up[-1], down[0]], 0xf2c14e, MR, t=0.08 / 0.62)        # the high run from A's top to B's
+    chute([down[-1], up[0]], 0xf2c14e, MR, t=0.08 / 0.62)        # and the low run home along the floor
     over = TOPA + 1.1 + MR + 0.03                 # a marble's height clear of the cup's lip
     rim = (-2.05, over, ZA)                       # out over the lip, down onto A's screw
-    chute([rim, up[-1]], 0xf2c14e, MR)
+    chute([rim, up[-1]], 0xf2c14e, MR, t=0.08 / 0.62)
     foot = (1.3, LOW, ZA)                         # in at A's foot
-    chute([up[0], foot], 0xf2c14e, MR)
+    chute([up[0], foot], 0xf2c14e, MR, t=0.08 / 0.62)
     # spokes from each tower to its screw, and legs under the high chute
     for zc, pts in ((ZA, up), (ZB, down)):
         for i in range(4, len(pts) - 1, 8):
@@ -10190,9 +10241,9 @@ def marble_tower():
     top = 0.4 * K + h
     cyl(1.0 * K, 1.1 * K, (TX, top, 0), 0xfdf4de, r2=2.0 * K, segs=10)        # the cup the marbles come up into
     down = helix_pts(TX, 0, R, HIGH, LOW, 0.0, TURNS)
-    chute(down, 0x6cbf6c, MR, half=0.75 * K, wall=0.55 * K)
+    chute(down, 0x6cbf6c, MR, half=0.75 * K, wall=0.55 * K, t=0.06 / 0.65)
     foot = (TX + 0.6 * K * math.cos(2 * math.pi * TURNS), LOW, 0.6 * K * math.sin(2 * math.pi * TURNS))
-    chute([down[-1], foot], 0xf2c14e, MR, half=0.75 * K, wall=0.55 * K)          # into the column's foot
+    chute([down[-1], foot], 0xf2c14e, MR, half=0.75 * K, wall=0.55 * K, t=0.06 / 0.65)   # into the column's foot
     for i in range(4, len(down) - 1, 8):                                         # spokes from the column
         p = down[i]
         dx, dz = p[0] - TX, p[2]
@@ -10301,7 +10352,7 @@ def marble_zigzag():
         y1 = HIGH - (HIGH - LOW) * (i + 1) / N + 0.25 * K
         a, b = (ends if i % 2 == 0 else ends[::-1])
         ramp = [(a, y0, 0), (b, y1, 0)]
-        chute(ramp, TOY[i % 4], MR, half=0.75 * K, wall=0.55 * K)
+        chute(ramp, TOY[i % 4], MR, half=0.75 * K, wall=0.55 * K, t=0.08 / 0.65)
         loop += ramp + [((XB if i % 2 == 0 else XA), y1 - 0.12 * K, 0)]   # through the column at the turn
     # up the tall column's middle, out of the cup, onto the first chute
     loop += [(XA, LOW + (top - LOW) * j / 6, 0) for j in range(1, 7)] + [(XA, top + 0.5 * K, 0)]

@@ -370,9 +370,10 @@ void playroomTrack(Theme& t, const std::string& track) {
     t.structureStack = { 0x4a6fc4, 0x6f93df };
   } else if (track == "helix") {
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
-    // the skyway and both spirals stand on the marble run's own stacked
-    // toy cylinders (set_prototypes.py marble_run's TOY colours)
-    t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
+    // the skyway and both spirals stand on the kit's connector blues (as
+    // Skyline's U does): a striped stack in the marble colours is a station
+    // of the marble run, so the supports must not wear them
+    t.structureStack = { 0x4a6fc4, 0x6f93df };
     // the marble run's own pieces fill the floor; the loose blocks and
     // marbles strewn across it read as coloured specks at distance
     t.scenery.density = 0.08f;
