@@ -11892,16 +11892,17 @@ def snake_ladder():
     T, HALF = 0.28, 0.72                          # a rail's side; the rails' centres off the middle
     a = math.atan2(KERB + T / 2, REACH)           # the rails' underside on the kerb's edge
     C = math.hypot(REACH, KERB + T / 2)           # along a rail to the kerb's edge
-    L = C + 0.75                                  # its end a little past it
+    L = C + 0.35                                  # its ends just past it (longer, they stood over the kerb as a hurdle)
     ca, sa = math.cos(a), math.sin(a)
     def at(d, z=0.0):
         return (d * ca, T / 2 + d * sa, z)
     for z in (-HALF, HALF):
         strut(at(0.0, z), at(L, z), T, BROWN)
-    for d in [0.55 + 0.8 * k for k in range(8)] + [L - 0.25]:   # the rungs, a racer's wheel apart; one over the kerb
+    RUNG = [0.55 + (C - 0.95) * k / 8 for k in range(9)]   # nine rungs, about a racer's wheel apart, the top one under the kerb
+    for d in RUNG:
         x, y, _ = at(d)
         cyl(0.11, 2 * HALF, (x, y, -HALF), CREAM, axis='along')
-    x, y, _ = at(0.55 + 0.8 * 3)                  # a red pawn on the fourth, climbing
+    x, y, _ = at(RUNG[3])                         # a red pawn on the fourth, climbing
     pawn((x - 0.05, y + 0.1, 0), 0xe66a5a, k=0.6)
     merge_paint()
 
