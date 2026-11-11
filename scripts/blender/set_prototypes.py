@@ -8697,38 +8697,6 @@ def tunnel_foothills():
 
 @piece(1.0)
 @plain
-def hogback():
-    # Sidewinder: a hogback along the east straight, the massif's strata
-    # tilted up out of the plain: its dip slope rises gently from the road's
-    # side (+X) to a sharp crest and drops away behind in a short scarp, so a
-    # racer sees banded rock sloping away, not a face. Three fins the weather
-    # cut it into, each crest highest in its middle and falling to rounded
-    # ends (one level crest read as a wall as the road passed; a fin's end
-    # cut square read as a wedge on the sand), blocks fallen down the slope.
-    FINS = ((-14.5, 7.5, 6.2), (1.0, 7.5, 7.6), (16.0, 6.5, 5.6))   # middle, half length, crest
-    def M(x, z):
-        H = 0.0
-        for c, half, peak in FINS:
-            t = abs(z - c) / half
-            if t < 1.0:
-                H = max(H, peak * (1.0 - t * t) ** 0.8)
-        cr = -1.5 + 0.6 * math.sin(0.21 * z)                        # the crest's line
-        if x >= cr:
-            f = max(0.0, 1.0 - (x - cr) / 6.5) ** 1.15              # the dip slope, toward the road
-        else:
-            f = max(0.0, 1.0 - (cr - x) / 2.2) ** 0.6               # the scarp behind
-        return H * f + 0.25 * math.sin(1.3 * x + 0.9 * z) * f - 0.5
-    strata_massif(M, -6.0, 8.0, -26.0, 26.0, [b for b in CANYON_STRATA if b[0] < 7.6], step=2.2, tol=0.35,
-                  summits=False)
-    drop_blocks(((2.6, -16.0, 1.3, 0.4), (3.0, -3.0, 1.5, 1.9), (2.2, 5.5, 1.1, 2.6), (3.2, 13.5, 1.4, 0.9),
-                 (1.6, 19.0, 1.0, 2.2)), 0xa96545)
-    def scree():
-        for i, (x, z, s) in enumerate(((-4.5, -24.0, 0.8), (-4.8, 23.0, 0.9))):
-            box((s * 1.5, s * 0.8, s * 1.2), (x, s * 0.3, z), 0xa96545, yaw=0.8 * i, roll=0.15)
-    draped('scree', scree)
-
-@piece(1.0)
-@plain
 def wash_butte():
     # Wash: a butte in the knot of strands at the map's middle, inside the
     # low hairpin, a table of the canyon's banded strata on its talus (+X
@@ -8910,17 +8878,6 @@ def built_ground():
         return max((h[0].z for h in hits if h[0] is not None), default=None)
     return ground
 
-def drop_blocks(spots, color):
-    """Big blocks fallen off a rock piece, each (x, z, size, yaw) dropped onto
-    the rock as built (or the plain past it) and bedded in the slope it lands
-    on: sunk at its uphill side, never hanging at its downhill one."""
-    ground = built_ground()
-    with plain_parts():
-        for i, (x, z, q, yaw) in enumerate(spots):
-            ys = [ground(x + dx, z + dz) or 0.0 for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
-            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) + 0.2 * q, z), color, yaw=yaw,
-                roll=0.12 * math.sin(3.1 * i), pitch=0.08 * math.cos(2.3 * i))
-
 def crag_rubble(spots):
     """Low stones past the talus, lying on the plain in its colour: they
     drape, so the piece stands from the plain and levels no clearing."""
@@ -8987,12 +8944,29 @@ def rimrock_mitten():
                 (0.5, 1.0, 5.5, 10.0, 7.5, 0.3, 6.0, 0.3)), 3.5, 7.0, 26.0, 3.3, jag=0.12)
     crag_rubble(((1.0, -21.0, 0.8), (-2.0, 21.0, 0.8)))
 
+def emblem(at, yaw, r, d=0.04):
+    """The oil company's mark, facing +X turned by `yaw`: a white disc in a
+    red rim, a red drop of oil on it. `at` is the back of the rim, `d` its
+    depth (deeper where it sits on a curved wall, so its edge meets it)."""
+    fx, fz = math.cos(yaw), -math.sin(yaw)
+    def out(k):
+        return (at[0] + k * fx, at[1], at[2] + k * fz)
+    cyl(r * 1.15, d, at, 'red', segs=16, axis='across', yaw=yaw)
+    cyl(r, 0.04, out(d - 0.01), 'white', segs=16, axis='across', yaw=yaw)
+    # the drop: a round belly under a point, a board cut to shape
+    a, c = 0.42 * r, -0.18 * r
+    rim = [(-a * math.cos(math.radians(f)), c + a * math.sin(math.radians(f))) for f in range(130, 411, 35)]
+    o = prism([(0.0, 0.62 * r)] + rim, 0.0, 0.03, 'red')
+    o.location = P(*out(d + 0.05))
+    o.rotation_euler = (0.0, 0.0, yaw)
+
 @piece(1.0)
 def filling_station():
-    # Sidewinder: the filling station on the desert highway, at its own size
-    # beside a car: the shop with its door to the road (+X), a canopy over
-    # two pumps in front of it, a stack of tyres and oil drums, and the tall
-    # sign by the road turning on its pole (anim_spin). A hawk circles over it.
+    # Sidewinder: the oil field's own filling station by the start line, at
+    # its own size beside a car: the shop with its door to the road (+X), a
+    # canopy over two pumps in front of it, a stack of tyres and oil drums,
+    # and the tall sign by the road turning on its pole (anim_spin), the
+    # company's mark on both its faces. A hawk circles over it.
     hut(2.6, 1.2, 2.0, (-2.2, 0, 0), 0xf2efe6, 0xc0392b)
     box((0.1, 0.3, 1.6), (-0.85, 1.05, 0), 0xc0392b)                             # its name board
     for sx in (0.2, 2.6):
@@ -9013,8 +8987,8 @@ def filling_station():
         box((0.14, 3.0, 0.14), (2.6, 1.5, -2.6), 'slate')                            # the sign's pole
         with animated('anim_spin:a=y:w=0.9#s', (2.6, 3.3, -2.6)):
             box((0.12, 0.6, 1.2), (2.6, 3.3, -2.6), 0xc0392b)
-            box((0.16, 0.2, 0.9), (2.6, 3.35, -2.6), 'white')
-            box((0.18, 0.12, 0.12), (2.6, 3.7, -2.6), 'yellow')
+            emblem((2.66, 3.3, -2.6), 0.0, 0.24)
+            emblem((2.54, 3.3, -2.6), math.pi, 0.24)
     hawk_circle((0.4, -0.6), 4.6, 3.6, 14.0)
     join_still('station')
 
@@ -9034,100 +9008,69 @@ def pickup(x, z, color, yaw=0.0):
         part(sx * 0.28, 0.56, -0.38, (0.06, 0.16, 0.66), color)
     part(0, 0.56, -0.72, (0.62, 0.16, 0.06), color)
 
-def camper(x, z, yaw=0.0):
-    """A camper van, two racers long and taller than one, cream over a brown
-    band: parked, it reads as a guest's van, never a racer."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def part(dx, dy, dz, size, col):
-        box(size, (x + dx * c + dz * s, dy, z - dx * s + dz * c), col, yaw=yaw)
-    for sx in (-1, 1):
-        for sz in (-0.6, 0.55):
-            part(sx * 0.34, 0.15, sz, (0.12, 0.3, 0.3), 0x2a2735)
-    part(0, 0.62, 0.0, (0.72, 0.8, 1.8), 0xfdf4de)
-    part(0, 0.42, 0.0, (0.74, 0.2, 1.82), 0x9a7b55)                  # the band
-    part(0, 0.8, 0.91, (0.6, 0.3, 0.04), 0x8ecae6)                   # the windscreen
-    for sx in (-1, 1):
-        part(sx * 0.37, 0.8, -0.2, (0.04, 0.24, 0.9), 0x8ecae6)       # side windows
-    part(0, 1.08, -0.3, (0.5, 0.12, 0.7), 'grey')                    # a roof box
-
-@piece(1.0)
-def roadside_junction():
-    # Sidewinder: the junction on the desert highway, at its own size beside
-    # a car: a single-storey motel, its rooms' doors to the road (+X) under
-    # a covered walk, its office wing turned toward the road at one end; a
-    # diner in chrome and sky blue at the other; a guest's pickup and camper
-    # parked on the lot between (in colours no racer wears), and the motel's
-    # tall sign on its pole at the lot's far corner, its arrow turning
-    # slowly, so the road out of the S and the start straight beyond it
-    # both see it. The lot is flush with the ground: no plinth.
-    with plain_parts():
-        ground_poly([(-2.0, 0.02, -4.4), (0.9, 0.02, -4.4), (0.9, 0.02, 7.2), (-2.0, 0.02, 7.2)],
-                    [(0, 1, 2, 3)], 0xb8a686)
-    # the motel: rooms along Z, the office wing at -Z turned to the road
-    box((1.3, 1.25, 6.4), (-2.75, 0.625, 0.0), 0xfdf4de)
-    box((1.5, 0.12, 6.6), (-2.75, 1.31, 0.0), 0xc0392b)                         # its roof's red edge
-    box((0.7, 0.08, 6.4), (-1.75, 1.08, 0.0), 'white')                          # the walk's roof
-    for z in (-3.0, -1.0, 1.0, 3.0):
-        box((0.08, 1.08, 0.08), (-1.45, 0.54, z), 'white')
-    for i in range(5):
-        z = -2.4 + 1.2 * i
-        box((0.06, 0.78, 0.42), (-2.07, 0.39, z), 0x6794d9 if i % 2 else 0xc0392b)    # doors
-        box((0.06, 0.3, 0.3), (-2.07, 0.75, z + 0.42), 0x8ecae6)               # windows
-    box((2.0, 1.4, 1.4), (-2.4, 0.7, -3.9), 0xfdf4de)                          # the office
-    box((2.2, 0.14, 1.6), (-2.4, 1.45, -3.9), 0xc0392b)
-    box((0.06, 0.8, 0.5), (-1.38, 0.4, -3.9), 0x8ecae6)
-    # the diner: a streamlined car of chrome with a sky-blue band, rounded ends
-    for zc in (4.3, 6.7):
-        cyl(0.7, 1.1, (-1.4, 0, zc), 'white', segs=12)
-    box((1.4, 1.1, 2.4), (-1.4, 0.55, 5.5), 'white')
-    box((1.44, 0.24, 2.4), (-1.4, 0.48, 5.5), 0x8ecae6)
-    for zc in (4.3, 6.7):
-        cyl(0.72, 0.24, (-1.4, 0.36, zc), 0x8ecae6, segs=12)
-    box((1.46, 0.28, 2.0), (-1.4, 0.82, 5.5), 'slate')                          # its windows
-    box((0.12, 0.42, 1.6), (-1.4, 1.36, 5.5), 0xc0392b)                         # its roof sign
-    box((0.16, 0.16, 1.2), (-1.4, 1.36, 5.5), 'white')
-    # the guests' vehicles on the lot
-    pickup(-0.4, 1.7, 0xfdf4de)
-    camper(-0.4, -1.0)
-    # the sign on its pole, its arrow turning
-    with plain_parts():
-        box((0.14, 3.9, 0.14), (0.4, 1.95, -4.9), 'slate')
-        box((0.12, 1.0, 1.4), (0.4, 2.9, -4.9), 0xc0392b)
-        box((0.14, 0.8, 1.2), (0.4, 2.9, -4.9), 'white')
-        box((0.16, 0.3, 0.9), (0.4, 2.95, -4.9), 0x6794d9)
-        with animated('anim_spin:a=y:w=0.6#arrow', (0.4, 3.75, -4.9)):
-            box((0.1, 0.24, 1.2), (0.4, 3.75, -4.9), 0xffc044)
-            box((0.1, 0.5, 0.3), (0.4, 3.75, -5.45), 0xffc044)
-    join_still('junction')
-
 @piece(1.0)
 @plain
 def tank_farm():
-    # Sidewinder: the oil field's tank farm inside the north loop: three
-    # broad storage tanks in a row (+Z toward the road, the rust one at that
-    # end: in a row along the road the camera saw them one behind the other),
-    # a real lease tank's size beside a car, their ladders and the pipe that
-    # joins them.
-    for k, (x, z, r, h, col) in enumerate(((0.0, -2.6, 1.15, 1.6, 'white'), (0.3, 0.0, 1.15, 1.6, 'white'),
-                                           (-0.2, 2.5, 1.0, 1.4, 0xc0392b))):
-        cyl(r, h, (x, 0, z), col, segs=14)
-        cyl(r + 0.05, 0.12, (x, h, z), 'slate', segs=14)
-        cyl(r * 0.5, 0.18, (x, h + 0.06, z), 'grey', segs=10)
-        box((0.05, h, 0.24), (x + r + 0.05, h / 2, z), 'slate')                # a ladder up its road side
-    box((0.14, 0.14, 5.6), (1.25, 0.5, 0.0), 'slate')                          # the pipe
-    for z in (-2.6, 0.0, 2.5):
-        box((0.36, 0.14, 0.14), (1.1, 0.5, z), 'slate')
+    # Sidewinder: the field's tank farm outside the north loop's first
+    # corner, where the whole east straight points: three broad crude tanks
+    # at a real farm's size (the big one some twenty metres across) in a
+    # triangle, so the straight sees all three side by side: the big one in
+    # front, white under the company's red band, its stair winding up its
+    # side and the company's mark turned to the straight (bearing YAW); the
+    # middle one white behind its right, the small rust one off its left.
+    # A low manifold on short supports joins them to a pump house between,
+    # all on a flush dirt pad (+X is the road, wrapping round the corner).
+    YAW = math.radians(44.6)
+    ground_poly([(-3.6, 0.03, -6.6), (7.6, 0.03, -6.6), (8.2, 0.03, 5.8), (2.0, 0.03, 6.4), (-3.8, 0.03, 0.8)],
+                [(0, 1, 2, 3, 4)], 0xb8a686)
+    B, M, S = (4.4, -2.8, 2.3, 3.6), (5.0, 3.2, 1.8, 3.0), (-1.2, -3.6, 1.3, 2.2)
+    for (x, z, r, h), col in ((B, 'white'), (M, 'white'), (S, 0xc0392b)):
+        cyl(r, h, (x, 0, z), col, segs=16)
+        cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=16)   # its roof
+    x, z, r, h = B
+    cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red', segs=16)                        # the company's band
+    emblem((x + (r - 0.16) * math.cos(YAW), 2.0, z - (r - 0.16) * math.sin(YAW)), YAW, 0.75, d=0.24)
+    n = int((h - 0.3) / 0.27) + 1
+    for k in range(n):                                                           # the stair, winding up
+        a = math.radians(-58 + 6.5 * k)
+        y = 0.12 + 0.27 * k
+        rr = r + 0.1
+        box((0.22, 0.06, 0.42), (x + rr * math.cos(a), y, z - rr * math.sin(a)), 'slate', yaw=a)
+    rr = r + 0.18
+    posts = (n - 1) // 3 + 1
+    for k in range(posts):                                                       # and its rail on posts
+        a0, a1 = math.radians(-58 + 6.5 * 3 * k), math.radians(-58 + 6.5 * 3 * (k + 1))
+        strut((x + rr * math.cos(a0), 0.15 + 0.81 * k, z - rr * math.sin(a0)),
+              (x + rr * math.cos(a0), 0.6 + 0.81 * k, z - rr * math.sin(a0)), 0.06, 'slate')
+        if k < posts - 1:
+            strut((x + rr * math.cos(a0), 0.6 + 0.81 * k, z - rr * math.sin(a0)),
+                  (x + rr * math.cos(a1), 0.6 + 0.81 * (k + 1), z - rr * math.sin(a1)), 0.06, 'slate')
+    x, z, r, h = M
+    box((0.06, h, 0.3), (x + r + 0.04, h / 2, z), 'slate')                       # a ladder up its road side
+    # the pump house between them and the manifold, on supports a knee high
+    PX, PZ = 0.8, 0.6
+    hut(1.2, 0.9, 1.0, (PX, 0, PZ), 'white', 'red', t=0.4)
+    for (x, z, r, h) in (B, M, S):
+        d = math.hypot(PX - x, PZ - z)
+        ux, uz = (PX - x) / d, (PZ - z) / d
+        a, b = (x + ux * r, 0.4, z + uz * r), (PX - ux * 0.62, 0.4, PZ - uz * 0.55)
+        strut(a, b, 0.14, 'slate')
+        mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
+        box((0.1, 0.34, 0.1), (mx, 0.17, mz), 'grey')
+        cyl(0.12, 0.08, (mx + ux * 0.4, 0.52, mz + uz * 0.4), 'red', segs=8)    # a valve wheel
     join_still('tanks')
 
-def pumpjack(x0, z0, yaw, tag, period):
+def pumpjack(x0, z0, yaw, tag, period, paint=('slate', 'yellow', 'red')):
     """An oil pumpjack, the nodding donkey, its beam along its local X turned
     by `yaw`: a skid, the A-frame samson post, the walking beam with the
-    horsehead over the wellhead at +X and the gearbox with its red
+    horsehead over the wellhead at +X and the gearbox with its
     counterweights at -X. The beam and the horsehead nod (anim_sway about
     the beam's pivot), the bridle hanging from the head riding with them into
     the wellhead's stuffing box, and the pitman arms hanging from the far end
     riding with them down beside the counterweights, so the beam reads as
-    driven. Two units tall, a real one's height and a half."""
+    driven. Two units tall, a real one's height and a half. `paint` is its
+    frame, its horsehead and its counterweights."""
+    frame, head, weights = paint
     c, s = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x0 + dx * c + dz * s, dy, z0 - dx * s + dz * c)
@@ -9136,26 +9079,27 @@ def pumpjack(x0, z0, yaw, tag, period):
     part((2.9, 0.14, 0.8), -0.1, 0.07, 0, 'grey')                               # the skid
     for sx in (-1, 1):                                                          # the samson post
         for sz in (-1, 1):
-            strut(at(sx * 0.42, 0.1, sz * 0.34), at(0, 1.5, sz * 0.12), 0.1, 'slate')
-    part((0.5, 0.56, 0.5), -1.05, 0.42, 0, 'slate')                             # the gearbox
+            strut(at(sx * 0.42, 0.1, sz * 0.34), at(0, 1.5, sz * 0.12), 0.1, frame)
+    part((0.5, 0.56, 0.5), -1.05, 0.42, 0, frame)                               # the gearbox
     for sz in (-1, 1):
-        part((0.6, 0.34, 0.08), -1.05, 0.46, sz * 0.32, 'red')                  # its counterweights
+        part((0.6, 0.34, 0.08), -1.05, 0.46, sz * 0.32, weights)                # its counterweights
     part((0.26, 0.5, 0.26), 1.32, 0.25, 0, 'slate')                             # the wellhead
     part((0.36, 0.1, 0.36), 1.32, 0.52, 0, 'grey')
     with animated('anim_sway:a=z:d=16:p=%.1f#%s' % (period, tag), at(0, 1.6, 0), yaw):
-        part((2.6, 0.16, 0.16), -0.05, 1.6, 0, 'slate')                         # the walking beam
-        part((0.2, 0.62, 0.22), 1.28, 1.42, 0, 'yellow')                        # the horsehead
-        part((0.12, 0.1, 0.22), 1.36, 1.76, 0, 'yellow')
+        part((2.6, 0.16, 0.16), -0.05, 1.6, 0, frame)                           # the walking beam
+        part((0.2, 0.62, 0.22), 1.28, 1.42, 0, head)                            # the horsehead
+        part((0.12, 0.1, 0.22), 1.36, 1.76, 0, head)
         part((0.06, 0.66, 0.06), 1.36, 0.88, 0, 'dark')                         # the bridle
-        part((0.3, 0.22, 0.24), -1.28, 1.56, 0, 'slate')                        # the equalizer
-        part((0.12, 0.1, 0.96), -1.2, 1.48, 0, 'slate')                         # its cross bar
+        part((0.3, 0.22, 0.24), -1.28, 1.56, 0, frame)                          # the equalizer
+        part((0.12, 0.1, 0.96), -1.2, 1.48, 0, frame)                           # its cross bar
         for sz in (-1, 1):                                                      # the pitman arms, down to
             part((0.08, 1.0, 0.08), -1.2, 0.98, sz * 0.44, 'dark')              # the cranks
 
 @piece(1.0)
 def oil_field():
-    # Sidewinder: a little oil field on the desert by the highway, every
-    # piece at its own size beside a car: three pumpjacks on their dirt pads,
+    # Sidewinder: the oil field's pumping wells outside the north loop's
+    # second corner, every piece at its own size beside a car (the lap's one
+    # derrick is the drilling rig at the S): three pumpjacks on their dirt pads,
     # out of step, nodding (anim_sway); a pair of tanks; and tumbleweeds
     # blowing along the field's road side (+X), bouncing as they roll, out of
     # a rock pile at one end and into one at the other (anim_path+spin+bob,
@@ -9173,29 +9117,6 @@ def oil_field():
             cyl(1.0, 1.5, (x, 0, z), 'white' if k else 'red', segs=12)
             cyl(1.04, 0.1, (x, 1.5, z), 'slate', segs=12)
         box((0.12, 0.12, 1.4), (-6.6, 1.2, 4.2), 'slate')                       # their pipe
-    # the old timber derrick the field was struck with, still standing over
-    # its well behind the jacks: a cable-tool rig's height (about 22 m), its
-    # four legs leaning in to the crown block, girts and braces up its faces,
-    # the bull-wheel shed at its foot; the field's mark from across the map
-    DX, DZ, DH = -6.4, -2.4, 5.0
-    def leg(sx, sz, y):
-        w = 0.95 + (0.28 - 0.95) * y / DH
-        return (DX + sx * w, y, DZ + sz * w)
-    with plain_parts():
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                strut(leg(sx, sz, 0.0), leg(sx, sz, DH), 0.14, TIMBER)
-        lv = (0.3, 1.5, 2.6, 3.6, 4.4)
-        for y in lv:                                                             # the girts
-            w = 0.95 + (0.28 - 0.95) * y / DH
-            for s in (-1, 1):
-                box((2 * w + 0.1, 0.1, 0.1), (DX, y, DZ + s * w), TIMBER)
-                box((0.1, 0.1, 2 * w + 0.1), (DX + s * w, y, DZ), TIMBER)
-        for y0, y1 in zip(lv, lv[1:]):                                           # a brace up each face
-            for a, b in (((1, 1), (1, -1)), ((-1, -1), (-1, 1)), ((1, -1), (-1, -1)), ((-1, 1), (1, 1))):
-                strut(leg(*a, y0), leg(*b, y1), 0.07, TIMBER)
-        box((0.9, 0.3, 0.9), (DX, DH + 0.15, DZ), TIMBER)                        # the crown block
-    hut(1.6, 0.9, 1.3, (DX + 0.2, 0, DZ - 2.1), 0x9a7b55, 'slate', t=0.5)
     # the weeds' run along the road side
     L, R, X = 26.0, 0.25, 2.2
     for sz in (-1, 1):
@@ -9209,6 +9130,120 @@ def oil_field():
                       % (n / 3, 0.72 + 0.07 * n, n), (X, R, z)):
             tumbleweed((X, R, z), R)
     join_still('field')
+
+@piece(1.0)
+def drilling_rig():
+    # Sidewinder: the field's drilling rig on the S's left, where the camera
+    # points three times a lap, a working rotary rig at its own size beside
+    # a car (its crown some thirty metres up), on a flush dirt pad (+X is the
+    # S's side, -Z the way it runs): the drill floor a unit up on its
+    # substructure over the red blowout preventer; the white steel mast
+    # tapering over it to the red crown block, its top two girts red, the
+    # company's flag flying from the crown (anim_sway); the travelling block
+    # riding up and down inside it (anim_bob) over the kelly turning in the
+    # rotary table (anim_spin); the doghouse off the floor's back, the engine
+    # house behind with its two stacks, two rust mud tanks, and the catwalk
+    # ramping down from the V-door beside the rack of drill pipe lying along
+    # the road. The lap's one derrick, in steel and paint, never the timber
+    # of Gulch's headframe.
+    with plain_parts():
+        ground_poly([(-4.4, 0.03, -7.2), (3.4, 0.03, -7.2), (3.4, 0.03, 4.0), (-4.4, 0.03, 4.0)],
+                    [(0, 1, 2, 3)], 0xb8a686)
+        # the substructure and the floor, the blowout preventer under it
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                box((0.3, 0.84, 0.3), (sx * 1.35, 0.42, sz * 1.35), 'grey')
+        for (a, b) in (((-1.35, -1.35), (-1.35, 1.35)), ((-1.35, -1.35), (1.35, -1.35))):
+            strut((a[0], 0.1, a[1]), (b[0], 0.78, b[1]), 0.1, 'grey')
+            strut((b[0], 0.1, b[1]), (a[0], 0.78, a[1]), 0.1, 'grey')
+        box((3.0, 0.18, 3.0), (0, 0.91, 0), 'grey')
+        cyl(0.46, 0.2, (0, 0, 0), 'red', segs=10)
+        cyl(0.34, 0.36, (0, 0.2, 0), 'red', segs=10)
+        box((0.9, 0.22, 0.6), (0, 0.66, 0), 'red')
+        cyl(0.4, 0.08, (0, 0.995, 0), 'slate', segs=10)                         # the rotary table
+        # the mast: four legs from the floor's corners leaning in to the crown
+        H0, H1, W0, W1 = 1.0, 6.5, 1.3, 0.35
+        def w(y):
+            return W0 + (W1 - W0) * (y - H0) / (H1 - H0)
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                strut((sx * W0, H0, sz * W0), (sx * W1, H1, sz * W1), 0.16, 'white')
+        lv = (H0, 2.3, 3.5, 4.6, 5.6)
+        for k, y in enumerate(lv[1:]):
+            col = 'red' if k >= 2 else 'white'
+            for s_ in (-1, 1):
+                box((2 * w(y) + 0.1, 0.12, 0.12), (0, y, s_ * w(y)), col)
+                box((0.12, 0.1, 2 * w(y + 0.03) + 0.1), (s_ * w(y + 0.03), y + 0.03, 0), col)
+        for y0, y1 in zip(lv, lv[1:]):                                          # a brace up each face
+            for a, b in (((1, 1), (1, -1)), ((-1, -1), (-1, 1)), ((1, -1), (-1, -1)), ((-1, 1), (1, 1))):
+                strut((a[0] * w(y0), y0, a[1] * w(y0)), (b[0] * w(y1), y1, b[1] * w(y1)), 0.07, 'white')
+        box((1.0, 0.14, 1.0), (0, H1 + 0.07, 0), 'white')
+        box((0.8, 0.4, 0.6), (0, H1 + 0.34, 0), 'red')                          # the crown block
+        box((0.06, 0.9, 0.06), (0, H1 + 0.99, 0), 'white')                      # the flag's pole
+    with animated('anim_sway:a=x:d=20:p=2.6#flag', (0, H1 + 1.44, 0)), plain_parts():
+        box((0.06, 0.5, 0.8), (0, H1 + 1.18, 0.43), 'red')
+        for side, yaw in ((0.03, 0.0), (-0.03, math.pi)):
+            emblem((side, H1 + 1.18, 0.43), yaw, 0.17)
+    with animated('anim_bob:h=3:p=12:r=0.4#block', (0, 2.7, 0)), plain_parts():
+        box((0.36, 0.55, 0.3), (0, 2.7, 0), 'yellow')                            # the travelling block
+        box((0.12, 0.25, 0.12), (0, 2.3, 0), 'slate')                            # its hook
+    with animated('anim_spin:a=y:w=0.8#kelly', (0, 1.0, 0)), plain_parts():
+        box((0.16, 1.1, 0.16), (0, 1.6, 0), 'slate')
+    with plain_parts():
+        # the doghouse off the floor's back, on stilts
+        box((1.4, 1.0, 1.0), (-2.25, 1.5, 0.7), 0xc0392b)
+        box((1.5, 0.1, 1.1), (-2.25, 2.05, 0.7), 'white')
+        box((0.04, 0.3, 0.44), (-2.97, 1.62, 0.7), 0x8ecae6)
+        for z in (0.3, 1.1):
+            box((0.18, 0.98, 0.18), (-2.8, 0.49, z), 'grey')
+        # the engine house behind, two stacks on it
+        box((2.4, 1.2, 1.4), (0, 0.6, 2.8), 'grey')
+        box((2.5, 0.1, 1.5), (0, 1.25, 2.8), 'white')
+        box((0.6, 0.72, 0.04), (0.6, 0.38, 3.52), 'slate')
+        for x in (-0.6, 0.3):
+            cyl(0.13, 0.7, (x, 1.3, 3.0), 'slate', segs=8)
+        # the mud tanks and their line to the floor
+        for x in (-2.6, -3.6):
+            box((0.8, 1.0, 3.0), (x, 0.5, -2.7), 'brown')
+            for z in (-3.6, -1.9):
+                box((0.3, 0.24, 0.3), (x, 1.12, z), 'slate')
+        strut((-2.2, 0.86, -1.5), (-0.5, 0.86, -0.5), 0.1, 'slate')
+        # the V-door's ramp down to the catwalk, the pipe rack beside it
+        box((0.6, 0.08, math.hypot(1.7, 0.55)), (0, 0.725, -2.35), 'grey', pitch=math.atan2(0.55, 1.7))
+        box((0.7, 0.45, 3.0), (0, 0.225, -4.7), 'grey')
+        for z in (-3.6, -5.8):
+            box((2.6, 0.12, 0.2), (1.75, 0.42, z), 'slate')
+            for x in (0.6, 2.9):
+                box((0.14, 0.36, 0.14), (x, 0.18, z), 'slate')
+        for i in range(7):
+            cyl(0.09, 4.0, (0.75 + 0.3 * i, 0.58, -6.7), 'grey', axis='along')
+        for i in range(5):
+            cyl(0.09, 4.0, (0.9 + 0.3 * i, 0.79, -6.7), 'grey', axis='along')
+    # the company's pickup by the engine house, in no racer's colour
+    pickup(-3.4, 2.6, 0xfdf4de, yaw=0.3)
+    join_still('rig')
+
+@piece(1.25)
+@plain
+def well_pad():
+    # Sidewinder: a lone pumpjack on its own well pad outside the east bend,
+    # dead ahead out of the S between the rig and the tank farm: the field's
+    # biggest jack (a quarter bigger than the field's three, grown), in the
+    # company's red with a white horsehead, its beam broadside to the S
+    # (bearing JAW), nodding slowly; its white lease tank past its wellhead,
+    # beside it as the S sees it, wearing the company's mark toward the S
+    # (bearing SEEN); a flush dirt pad under both.
+    JAW, SEEN = math.radians(-52.0), math.radians(37.7)
+    c, s_ = math.cos(JAW), math.sin(JAW)
+    pad = [(-1.9, -1.6), (3.5, -1.6), (3.5, 1.6), (-1.9, 1.6)]
+    ground_poly([(x * c + z * s_, 0.03, -x * s_ + z * c) for x, z in pad], [(0, 1, 2, 3)], 0xb8a686)
+    pumpjack(0.0, 0.0, JAW, 'lone', 6.0, paint=('red', 'white', 'slate'))
+    TR = 0.72
+    TX, TZ = 2.6 * c, -2.6 * s_
+    cyl(TR, 1.12, (TX, 0, TZ), 'white', segs=14)
+    cyl(TR + 0.03, 0.08, (TX, 1.12, TZ), 'slate', segs=14)
+    emblem((TX + (TR - 0.1) * math.cos(SEEN), 0.62, TZ - (TR - 0.1) * math.sin(SEEN)), SEEN, 0.3, d=0.14)
+    join_still('wellpad')
 
 @piece(0.6)
 @plain

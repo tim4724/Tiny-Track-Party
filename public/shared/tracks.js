@@ -1463,34 +1463,33 @@ export const TRACKS = {
   sidewinder: {
     name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
-    // A desert highway: the telegraph line along the long straight, a
-    // filling station on its verge with its sign turning and a hawk over it,
-    // a little oil field outside the north loop, its old derrick standing
-    // over the tank battery, its pumpjacks nodding and tumbleweeds blowing
-    // by, and mesa rims closing the west as
-    // near backdrops (the north and east stay open). Past the start the
-    // long straight runs into a mountain of banded rock and through it in a
-    // tunnel: the massif rises off its right to a summit, throws a spur
-    // across the road that falls away into the low ground inside the bend
-    // beyond, and runs on off the right as a ridge of the land. Out of the
-    // tunnel the road rounds the massif's foothills, in its own strata
-    // (geometry: by the road, steep land is the Android box's dear rock), a
-    // hogback of the same rock tilted up beside the east straight, its dip
-    // slope to the road, three fins turned off the road's line, a motel and
-    // diner stand at the junction on the S's left, where the camera points
-    // through it (on its right they stayed out of frame), their sign's
-    // arrow turning, and the oil field and its tank farm come to the north
-    // loop's kerbs.
+    // An oil field in the desert, one company's (white and red, its mark a
+    // red drop on a white disc). Past the start the long straight runs into
+    // a mountain of banded rock and through it in a tunnel: the massif rises
+    // off its right to a summit, throws a spur across the road that falls
+    // away into the low ground inside the bend beyond, and runs on off the
+    // right as a ridge of the land. Out of the tunnel the road rounds the
+    // massif's foothills, in its own strata (geometry: by the road, steep
+    // land is the Android box's dear rock). Then the field: its drilling rig
+    // on the S's left, where the camera points three times a lap (out of
+    // the hairpin, beside the S, down the start straight); a lone red
+    // pumpjack dead ahead out of the S at the east bend; the tank farm at
+    // the end of the east straight, outside the north loop's first corner
+    // where the whole straight points; the field's three jacks nodding and
+    // tumbleweeds blowing by outside its second corner; and at the line the
+    // field's own filling station, its sign turning and a hawk over it, the
+    // telegraph line along the long straight. Mesa rims close the west as
+    // near backdrops (the north and east stay open).
     // Everything by the road at its own size, the rock as big as rock is.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 6 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
-      { model: 'set-oil-field', u: 0.77, lat: 8 },
-      { model: 'set-tank-farm', u: 0.69, lat: -6.9, yaw: 180, scale: 1.4 },
-      { model: 'set-roadside-junction', u: 0.37, lat: -5, yaw: 180 },
+      { model: 'set-oil-field', u: 0.77, lat: 7 },
+      { model: 'set-tank-farm', u: 0.63, lat: 12 },
+      { model: 'set-drilling-rig', u: 0.368, lat: -8, yaw: 180 },
+      { model: 'set-well-pad', u: 0.42, lat: 9 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
-      { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
-      { model: 'set-hogback', u: 0.455, lat: 8, yaw: -15 }
+      { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
@@ -1499,7 +1498,23 @@ export const TRACKS = {
     land: [
       { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
-      { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 }
+      { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
+      // The field's stretch (the S to the north loop's top) keeps the biome's
+      // hoodoo family off: it stands at the first spot off the road and the
+      // pieces from the tunnel on, and every such spot here put its tall
+      // stack beside the rig's mast or the lone jack as the camera saw them
+      // (or on the fin's old ground). These thin clears (a unit round their
+      // spines, so they take little scatter with them) cover those spots, as
+      // the hoodoo's 5 u keep-out reads them, and the family stands outside
+      // the loop's top between the tanks and the pumping wells, as the
+      // desert's own rock.
+      { kind: 'clear', u: 0.335, lat: 11.5, len: 14, r: 1 },
+      { kind: 'clear', u: 0.402, lat: 11.5, len: 14, r: 1 },
+      { kind: 'clear', u: 0.43, lat: -11.5, len: 4, r: 1 },
+      { kind: 'clear', u: 0.472, lat: 11.5, len: 34, r: 1 },
+      { kind: 'clear', u: 0.495, lat: -11.5, len: 2, r: 1 },
+      { kind: 'clear', u: 0.66, lat: -11.5, len: 6, r: 1 },
+      { kind: 'clear', u: 0.684, lat: 11.5, len: 6, r: 1 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
