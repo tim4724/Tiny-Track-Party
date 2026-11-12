@@ -82,6 +82,7 @@
     "set-avenue-oaks.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-bandstand.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-barbican.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-beach-day.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-bench-ledge.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-city.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-block-fortress.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

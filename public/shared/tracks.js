@@ -523,15 +523,15 @@ export const TRACKS = {
     // which lies on the start straight, so its outer side is never the
     // road's reach (native/renderer/CLAUDE.md).
     set: [
-      { model: 'set-pirate-ship', u: 0.483, lat: 18.5, yaw: 230, y: -0.1 },
+      { model: 'set-pirate-ship', u: 0.483, lat: 17.5, yaw: 230, y: 0.15, scale: 1.4 },
       { model: 'set-jungle-grove', u: 0.56, lat: -8, yaw: 180 },
       { model: 'set-jetty', u: 0.47, lat: 9.7 },
       { model: 'set-shipwreck-ribs', u: 0.795, lat: 13, yaw: 75, y: -0.2 },
-      { model: 'set-pirate-camp', u: 0.09, lat: 9.7, yaw: -20 },
+      { model: 'set-pirate-camp', u: 0.09, lat: 11.2, yaw: -20, scale: 1.5 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
       // the cave and the lookout level nothing (their gear drapes) and the
       // land's 9 u chords rise under them, so each is lifted onto them
-      { model: 'set-smugglers-cave', u: 0.975, lat: -8.0, yaw: 155, y: 0.7 },
+      { model: 'set-smugglers-cave', u: 0.975, lat: -9.6, yaw: 165, y: 0.5 },
       { model: 'set-jungle-grove', u: 0.915, lat: -12, yaw: 180 },
       { model: 'set-pirate-lookout', u: 0.205, lat: 14, y: 2.6 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
@@ -577,6 +577,12 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.58, lat: -14, len: 44, r: 10, h: 5, top: 0.25, near: 0.5 },
       { kind: 'paint', u: 0.58, lat: -14, len: 44, r: 7, w: 4, tint: 0x5f9f5f },
       { kind: 'shore', u: 0.795, lat: 10.5, len: 24, r: 18 },
+      // the camp's own rise on the east beach: its shelter, its fire and its
+      // pirates stand at the road's height instead of under the kerb
+      { kind: 'ridge', u: 0.09, lat: 14.5, len: 8, r: 9, h: 1.5, top: 0.55, near: 0.6 },
+      // the foothill's face before the cave, green to the kerb (a facet of
+      // it lay bare sand on the hillside)
+      { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
       // no seeded crate on the island's face above the bend past Skull Rock
       { kind: 'clear', u: 0.69, lat: -10, len: 20, r: 6 }
     ]
@@ -638,7 +644,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 8.5, h: 2.6, top: 0.3, near: 0.5, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
-      { kind: 'ridge', u: 0.975, lat: -14, len: 26, r: 6.5, h: 3, top: 0.3, near: 2.8, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.975, lat: -18.5, len: 26, r: 6.5, h: 3, top: 0.3, near: 6.5, tint: 0xa8d090 },
       // marram at the dunes' feet along the pass, a green wash by the kerb
       // where the inland faces were bare sand
       { kind: 'paint', u: 0.61, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
@@ -678,10 +684,10 @@ export const TRACKS = {
     // the outer kerb, facing the road, and its sea pier
     // out over the water (the third `shore` brings the sea in under it) to
     // the white pavilion on its head that the straight points at, the
-    // excursion boat moored alongside. Along the causeway, the sailing
-    // club's dinghies ride in the lagoon (their sails' heads over the kerb)
-    // and kite surfers work the open water outside, their kites over the
-    // road. Behind, a wider lagoon by the hook and the surfers' camp beside
+    // excursion boat moored alongside. Off the causeway, kite surfers work
+    // the open water, their kites over the road, and the sailing club's
+    // dinghies ride at their buoys beyond them (never in the lagoon: the
+    // road would stand between them and the sea). Behind, a wider lagoon by the hook and the surfers' camp beside
     // it; the north run is a pass between the great marram dune inside the
     // lap and the Point, a big grassy headland north of the start straight,
     // the surf contest's site strung along its kerb, and the surf club
@@ -689,10 +695,11 @@ export const TRACKS = {
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
-      { model: 'set-surf-club', u: 0.075, lat: -10.5, yaw: 180 },
+      { model: 'set-surf-club', u: 0.09, lat: -11, yaw: 180 },
       { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180 },
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
-      { model: 'set-lagoon-fleet', u: 0.53, lat: 8.5 },
+      { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180 },
+      { model: 'set-lagoon-fleet', u: 0.555, lat: -27, yaw: 180 },
       { model: 'set-kite-surfers', u: 0.545, lat: -13.5, yaw: 180 },
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
       // the seeded ones off), none on the marram dune
