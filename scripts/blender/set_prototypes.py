@@ -3888,27 +3888,6 @@ def slab(outline, y0, y1, color):
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
-# Flurry's lake, placed at yaw 180 so the piece's +X is the road's right: the
-# road comes down off the bridge across it, running down -Z from (12.4, 21)
-# to (11.4, -2) on its stilts, then on its berm (z 0.5 .. -11), and bends
-# right round the east ice at z -12 .. -22 to run off along z -23. The ice
-# never goes under the deck. The west sheet stops on lines along the road
-# (LAKE_ROAD, the road there as a straight line): 4.3 u off its centreline
-# beside the stilts, 6.2 u beside the berm. The east sheet fills the inside
-# of the bend, outlined as close: clear of the deck, the berms on both ramps,
-# the start straight to the north and the cabin to the east (LAKE_E).
-# Flurry's SET_GROUND holds the plain under both.
-LAKE_ROAD = ((12.4, 21.0), (11.4, -2.0))
-LAKE_BERM_Z = 1.5
-LAKE_W = dict(cx=0.0, cz=-1.5, half=3.5, r=15.0, off=4.3, berm=6.2)
-LAKE_E = ((16.3, 13.0), (25.5, 14.0), (26.8, 9.0), (27.0, 3.0), (28.5, -1.5), (28.5, -13.5),
-          (26.5, -16.0), (19.6, -16.7), (17.9, -11.0), (17.9, 0.0), (16.0, 2.0))
-
-def road_clear(off):
-    """keep(x, z) >= 0 west of LAKE_ROAD by `off`."""
-    (x0, z0), (x1, z1) = LAKE_ROAD
-    return lambda x, z: x0 + (z - z0) * (x1 - x0) / (z1 - z0) - off - x
-
 def shrink(pts, d):
     """An outline pulled in toward its centroid by `d` all round."""
     cx = sum(x for x, _ in pts) / len(pts)
@@ -3930,77 +3909,6 @@ def rounded(pts, times=2):
             out.append((ax * 0.25 + bx * 0.75, az * 0.25 + bz * 0.75))
         pts = out
     return pts
-
-def lake_west(inset, seed):
-    """The west sheet's shore, `inset` in from it: the old running-track oval
-    (LAKE_W) worn into bays and points (never past it: the plain under it
-    ends there), and along the road no line ruled beside it but a shore that
-    wanders in and out, keeping the old clearances (off the stilts, further
-    off the berm, eased from one to the other)."""
-    W = LAKE_W
-    (x0, z0), (x1, z1) = LAKE_ROAD
-    R, half, N = W['r'], W['half'], 60
-    pts = []
-    for i in range(N):
-        a = i / N * 2 * math.pi
-        dx, dz = math.cos(a), math.sin(a)
-        t = R / abs(dx) if abs(dx) > 1e-6 else 1e9
-        if abs(t * dz) > half:
-            t = abs(dz) * half + math.sqrt(max(0.0, (dz * half) ** 2 - half * half + R * R))
-        t = t * (0.925 + 0.075 * wobble(i, seed, 11.0)) - inset
-        x, z = W['cx'] + dx * t, W['cz'] + dz * t
-        off = W['off'] + (W['berm'] - W['off']) * smooth01((LAKE_BERM_Z + 1.5 - z) / 3.0)
-        lim = x0 + (z - z0) * (x1 - x0) / (z1 - z0) - off - inset - 0.9 * (0.5 + 0.5 * wobble(z, seed + 2, 6.0))
-        pts.append((min(x, lim), z))
-    return pts
-
-def lake_east(inset, seed):
-    """The east sheet's shore: the outline that clears the roads round it
-    (LAKE_E), a little inside it, its corners worn round and its line
-    wandering inward here and there."""
-    pts = rounded(shrink(LAKE_E, 0.25 + inset), 2)
-    cx = sum(x for x, _ in pts) / len(pts)
-    cz = sum(z for _, z in pts) / len(pts)
-    out = []
-    for i, (x, z) in enumerate(pts):
-        l = math.hypot(x - cx, z - cz)
-        d = 0.35 * (0.5 + 0.5 * wobble(i, seed, 7.0))
-        out.append((x - (x - cx) / l * d, z - (z - cz) / l * d))
-    return out
-
-def shore_snow(pts, seed):
-    """The snow at the ice's edge: a soft lip lying over it all the way round
-    (its crest a hand's breadth up, wider and narrower as it goes), so the
-    sheet ends under a bank of snow instead of at a slab's cut edge."""
-    cx = sum(x for x, _ in pts) / len(pts)
-    cz = sum(z for _, z in pts) / len(pts)
-    rows = []
-    n = len(pts)
-    for i in range(n + 1):
-        x, z = pts[i % n]
-        (ax, az), (bx, bz) = pts[(i - 1) % n], pts[(i + 1) % n]
-        tx, tz = bx - ax, bz - az
-        m = math.hypot(tx, tz) or 1.0
-        nx, nz = tz / m, -tx / m
-        if nx * (x - cx) + nz * (z - cz) < 0:
-            nx, nz = -nx, -nz
-        w = 0.5 + 0.3 * wobble(i % n, seed, 5.0)
-        rows.append([(x - nx * (0.35 + w), 0.085, z - nz * (0.35 + w)), (x - nx * 0.1, 0.2 + 0.08 * w, z - nz * 0.1),
-                     (x + nx * 0.75, -0.04, z + nz * 0.75)])
-    for o in sheet(rows, lambda i, j, nn: SNOW, 'shore'):
-        snowy(o, 0.4)
-
-def ice_drift(x, z, L, w, yaw, seed):
-    """Snow the wind has blown across the ice: a thin ragged tongue `L` long
-    and `w` wide, turned by `yaw`."""
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    pts = []
-    for i in range(12):
-        a = i / 12 * 2 * math.pi
-        r = 1.0 + 0.3 * jitter(i, 3, seed)
-        lx, lz = math.cos(a) * L / 2 * r, math.sin(a) * w / 2 * r
-        pts.append((x + lx * c + lz * s2, z - lx * s2 + lz * c))
-    snowy(slab(pts, 0.0, 0.09, 0xf3f7fb), 0.4)
 
 def ice_fisher(x, z, yaw, coat, hat, n, seat=0xcf534f, rod=True, screen=None, sledge=None, flag=False):
     """Someone fishing through the ice at (x, z), sat facing +X turned by
@@ -4056,60 +3964,103 @@ def ice_fisher(x, z, yaw, coat, hat, n, seat=0xcf534f, rod=True, screen=None, sl
         box((0.3, 0.05, 0.05), at(-0.1, 0.6, -0.5), 0xff7e44, yaw=yaw)
         box((0.14, 0.14, 0.14), at(-0.1, 0.07, -0.5), 0x868ba1, yaw=yaw)
 
+# Flurry's lake, placed at yaw 180 (u 0.3355, lat -11.4) so the piece's +X is
+# toward the road: the road comes down off the bridge beside it, running down
+# -Z at x ~12 on its stilts and then its berm, and bends away round to +X. The
+# lake keeps five units and more off it. Flurry's SET_GROUND holds the plain
+# under it (a `plain`: nothing goes under the plain, so the ice lies ON it and
+# the bank round it stands up from it).
+LAKE_C, LAKE_RX, LAKE_RZ = (-3.0, -1.5), 9.0, 12.0
+
+def lake_rim(a, inset=0.0):
+    """The lake's shore at angle `a` round its middle, `inset` in from it: an
+    oval worn a little out of true, smooth all round."""
+    k = 1.0 + 0.05 * math.sin(2 * a + 0.6) + 0.03 * math.sin(3 * a + 1.9)
+    return (LAKE_C[0] + math.cos(a) * (LAKE_RX * k - inset), LAKE_C[1] + math.sin(a) * (LAKE_RZ * k - inset))
+
 @piece(1.0)
 def frozen_lake():
-    # Flurry: a frozen lake at the bottom of the land, the plain it lies on is
-    # the track's terrain (SET_GROUND), and the road crosses it between its
-    # two sheets on its stilts. Built in world units, everything on the ice at
-    # its real size beside a car: six skaters (half a unit tall) glide round a
-    # rink on the west ice at a skater's pace (anim_path; carried by their
-    # skates, they hold their pose); on the east ice, ahead on the right of a
-    # racer coming down off the bridge, the village's ice fishers sat at
-    # their holes (ice_fisher), each with what they brought; a snowman on the
-    # ice by the rink. Both sheets have a lake's shore: bays and points, the
-    # snow lying over the ice's edge, drifts blown across it (lake_west,
-    # lake_east, shore_snow), nothing ruled.
-    west = lake_west(0.0, 3.0)
-    slab(west, 0.0, 0.06, 0xa9d7ee)
-    slab(lake_west(3.0, 8.0), 0.0, 0.07, 0x8ecae6)                    # the clear ice in the middle
-    shore_snow(west, 4.0)
-    east = lake_east(0.0, 5.0)
-    slab(east, 0.0, 0.06, 0xa9d7ee)
-    slab(lake_east(2.3, 9.0), 0.0, 0.07, 0x8ecae6)
-    shore_snow(east, 6.0)
-    for i, (x, z, L, w, yw) in enumerate(((-10.5, -8.0, 5.0, 1.6, 0.5), (-11.0, 9.5, 4.2, 1.4, -0.6),
-                                          (3.5, -12.5, 4.6, 1.3, 0.2), (-4.0, 13.5, 3.6, 1.2, 0.15),
-                                          (4.0, 12.0, 2.6, 1.0, -0.3), (-12.5, 1.0, 2.8, 1.1, 1.3),
-                                          (24.5, 9.0, 3.4, 1.2, 0.7), (25.0, -3.0, 3.0, 1.1, -0.5),
-                                          (20.5, 6.5, 2.4, 0.9, 0.2))):
-        ice_drift(x, z, L, w, yw, 2.0 + i)
-    # the rink: an oval on the west ice, the skaters spread round it
-    N = 14
-    rc, rx, rz = (-2.0, 4.0), 4.5, 5.5
-    for j in range(N):
-        a = j / N * 2 * math.pi
+    # Flurry: a frozen lake beside the run down off the bridge, a racer
+    # looking down onto it from the deck: one smooth oval of ice lying a hand
+    # under the bank of snow drifted round its shore, pale at the edge and a
+    # deeper blue in the middle where the ice is clear and thick, cracks
+    # running across it from the shore and a ring of them where it has
+    # heaved. On it the village's skaters glide round their rink (anim_path;
+    # carried by their skates, they hold their pose), the ice fishers sit by
+    # their shanties to the south, a snowman stands by the rink. (Two flat
+    # sheets of jagged ice either side of the road read as nothing from the
+    # seat: no bank, no depth, no line on them.)
+    N = 48
+    def ring(inset, y):
+        return [(x, y, z) for x, z in (lake_rim(i / N * 2 * math.pi, inset) for i in range(N + 1))]
+    # the ice, out from the middle: the clear deep blue, then paler to the shore
+    rings = [[(LAKE_C[0], 0.05, LAKE_C[1])] * (N + 1), ring(5.0, 0.05), ring(2.6, 0.05), ring(0.0, 0.05)]
+    for j, row in ((0, 13), (1, 7), (2, 3)):
+        o = sheet([rings[j], rings[j + 1]], lambda i, jj, nn: 'sky', 'ice')[0]
+        rowed(o, row)
+    # the bank of snow round it: up from the ice to a crest over the shore and
+    # down to the plain outside, wider and higher in turn round the lake
+    bank = []
+    for i in range(N + 1):
+        a = i / N * 2 * math.pi
+        w = 0.35 + 0.15 * math.sin(3 * a + 0.4)
+        prof = [(0.0, 0.05), (-0.35, 0.3 + w * 0.3), (-0.8 - w, 0.42 + w * 0.3), (-1.5 - 2 * w, 0.2), (-2.4 - 2 * w, -0.06)]
+        bank.append([(lambda p: (p[0], y, p[1]))(lake_rim(a, d)) for d, y in prof])
+    for o in sheet(bank, lambda i, j, nn: SNOW, 'bank'):
+        snowy(o, 0.4)
+    # the cracks: dark lines in the ice, a hand wide, jagged, in from the
+    # shore and round the heave, each a strip of quads a hair over the ice
+    def crack(pts, w=0.13):
+        rows = []
+        for i, (x, z) in enumerate(pts):
+            (ax, az), (bx, bz) = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+            tx, tz = bx - ax, bz - az
+            ln = math.hypot(tx, tz) or 1.0
+            nx, nz = tz / ln, -tx / ln
+            ww = w * (0.4 if i in (0, len(pts) - 1) else 1.0)
+            rows.append([(x - nx * ww / 2, 0.065, z - nz * ww / 2), (x + nx * ww / 2, 0.065, z + nz * ww / 2)])
+        for o in sheet(rows, lambda i, j, nn: 'blue', 'crack'):
+            rowed(o, 12)
+    def jag(x0, z0, x1, z1, n, amp, seed):
+        out = []
+        for i in range(n + 1):
+            t = i / n
+            off = 0.0 if i in (0, n) else amp * jitter(i, 7, seed) * 2
+            dx, dz = x1 - x0, z1 - z0
+            ln = math.hypot(dx, dz)
+            out.append((x0 + dx * t - dz / ln * off, z0 + dz * t + dx / ln * off))
+        return out
+    for k, (a0, a1, f) in enumerate(((0.3, 1.2, 0.55), (1.9, 2.6, 0.6), (3.4, 3.0, 0.5), (4.6, 5.3, 0.62),
+                                     (5.6, 0.1, 0.45))):
+        x0, z0 = lake_rim(a0, 0.4)
+        x1, z1 = lake_rim(a1, LAKE_RX * f)
+        crack(jag(x0, z0, x1, z1, 6, 0.35, 11 + k))
+    heave = [(LAKE_C[0] + 1.5 + math.cos(a) * 2.2, LAKE_C[1] - 4.0 + math.sin(a) * 1.6)
+             for a in (i / 9 * 2 * math.pi for i in range(10))]
+    crack(heave, 0.11)
+    # the rink: an oval on the ice, the skaters spread round it
+    M = 14
+    rc, rx, rz = (-3.0, 3.5), 4.0, 4.8
+    for j in range(M):
+        a = j / M * 2 * math.pi
         marker('path_rink_%d' % j, (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz))
     for n, (coat, hat) in enumerate(((0xcf534f, 0x3f7bd9), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f),
-                                     (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9), (0xfff6eb, 0xcf534f))):
-        a = n / 6 * 2 * math.pi
+                                     (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9))):
+        a = n / 5 * 2 * math.pi
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
-        with animated('anim_path:c=rink:p=26:o=%.3f:f=1#%d' % (n / 6, n), at):
-            skater(at[0], at[1], at[2], coat, hat, k=0.19)
-    # the fishers on the east ice, turned every which way round their holes,
-    # the nearest by the shore the racer runs along (the bend's inside)
-    FISH = ((20.4, -8.6, 2.6, 0xcf534f, 0xcf534f, 0xffc044, 0x3f7bd9, True),
-            (21.6, -11.6, 1.2, 0x3f7bd9, 0xffc044, None, 0xcf534f, False),
-            (22.6, -6.0, -2.4, 0xffc044, 0x38383d, 0xcf534f, None, True),
-            (20.2, -3.4, 2.0, 0x61cb8b, 0xfff6eb, None, 0xff7e44, False),
-            (24.2, -10.2, -1.2, 0xa878e8, 0x3f7bd9, 0x61cb8b, None, False),
-            (21.2, 1.6, -2.9, 0xff7e44, 0x38383d, 0x3f7bd9, 0xffc044, True),
-            (23.6, -1.4, 0.6, 0xcf534f, 0xfff6eb, None, None, False),
-            (22.6, 6.2, 2.7, 0x3f7bd9, 0xcf534f, 0xffc044, 0x61cb8b, False))
-    for n, (fx, fz, fyaw, coat, hat, screen, sledge, flag) in enumerate(FISH):
+        with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / 5, n), at):
+            skater(at[0], at[1], at[2], coat, hat, k=0.24)
+    # the ice fishers to the south, by their shanties, facing every way
+    for n, (x, z, yw, c) in enumerate(((-6.5, -8.5, 0.4, 0xcf534f), (-1.0, -10.0, 2.2, 0x3f7bd9))):
+        shanty(x, z, c, yaw=yw, pipe=n == 0)
+    for n, (fx, fz, fyaw, coat, hat, screen, sledge, flag) in enumerate((
+            (-4.6, -8.0, 2.6, 0xcf534f, 0xcf534f, 0xffc044, 0x3f7bd9, True),
+            (0.6, -8.2, 1.2, 0x3f7bd9, 0xffc044, None, 0xcf534f, False),
+            (-3.0, -11.2, -2.4, 0xffc044, 0x38383d, 0xcf534f, None, True))):
         ice_fisher(fx, fz, fyaw, coat, hat, n, seat=(0xcf534f, 0x3f7bd9, 0x9a7b55)[n % 3], screen=screen,
                    sledge=sledge, flag=flag)
     # on the ice by the rink, a snowman in a hat
-    snowman((-7.6, 0.07, 5.0), 0.15, hat=True)
+    snowman((-9.0, 0.07, 4.5), 0.2, hat=True)
 
 @piece(1.0)
 def snow_fort():
@@ -4772,6 +4723,94 @@ def ski_jump():
             for k in range(11):
                 box((0.5, 0.06, 0.14), (-25.0 + 1.6 * k, 0.03, s * 3.0), 0x61cb8b)
     draped('patch', lines)
+
+def flurry_skier(x, y, z, coat, hat, k=1.4):
+    """A skier running toward +X at `k` times a person's size beside a car
+    (chunky, so it reads at speed: blocks, no face to read): the skis, boots
+    and bent legs, a coat leaning into the turn, arms out with the poles, a
+    helmet and dark goggles. Joined into one moving part by its caller."""
+    def b(size, dx, dy, dz, color, roll=0.0):
+        return box([q * k for q in size], (x + dx * k, y + dy * k, z + dz * k), color, roll=roll)
+    for sd in (-1, 1):
+        b((0.56, 0.04, 0.07), 0.04, 0.02, sd * 0.07, 0x2a2735)                   # the skis
+        b((0.04, 0.3, 0.04), -0.1, 0.24, sd * 0.2, 0x555b66, roll=0.5)          # the poles, trailing
+    b((0.12, 0.17, 0.17), 0.0, 0.13, 0.0, 0x38383d, roll=-0.35)                 # bent legs
+    b((0.16, 0.19, 0.2), 0.04, 0.3, 0.0, coat, roll=-0.4)                       # the coat, leaning in
+    b((0.08, 0.06, 0.38), 0.07, 0.33, 0.0, coat)                                # arms out
+    b((0.11, 0.1, 0.11), 0.1, 0.44, 0.0, 0xf2bf99)                              # the head
+    b((0.13, 0.07, 0.13), 0.09, 0.51, 0.0, hat)                                 # the helmet
+    b((0.03, 0.035, 0.1), 0.16, 0.45, 0.0, 0x2a2735)                            # the goggles
+
+@piece(1.0)
+def flurry_piste():
+    # Flurry: the village's piste down the foothill on the outside of the
+    # east loop, cut through the forest between two of its stands, its
+    # corduroy groomed straight down the fall line to the verge (placed on
+    # the right, yaw 0: +X to the road, the slope rising away from it to -X). The groomer crawls up one side of it
+    # and back down the other, pitched to the slope (anim_path, `drape`), and
+    # three skiers come out of the top hut and carve down it in turns into
+    # the warming hut at its foot, by the road; their way back up is out of
+    # sight, under the snow, hut to hut. All of it draped, built on y = 0 and
+    # laid on the land as the renderer draws it (the slope is the track's
+    # `land`, its foothill rising off the verge).
+    X0, X1, W = 2.8, -10.0, 2.3                        # the piste's foot, its top, its half-width
+    def piste():
+        n = 26
+        rows = []
+        for i in range(n + 1):
+            x = X0 + (X1 - X0) * i / n
+            w = W + 0.25 * math.sin(i * 0.7)
+            rows.append([(x, 0.03, -w), (x, 0.03, w)])
+        for o in sheet(rows, lambda i, j, nn: 'white', 'piste'):
+            rowed(o, 9)
+        # the corduroy, down the fall line
+        with plain_parts():
+            for k in range(-3, 4):
+                rowed(box((X0 - X1 - 0.4, 0.02, 0.22), ((X0 + X1) / 2, 0.05, k * 0.6), 'white'), 18)
+        # the huts: the warming hut at the foot by the road, the top hut
+        cabin_hut(1.8, 1.0, 1.4, (X0 + 1.4, 0.0, -W - 1.2), 0x9a5f3c, 0xeef4f9, yaw=-math.pi / 2)
+        cabin_hut(1.5, 0.9, 1.2, (X1 - 0.6, 0.0, W + 1.0), 0xcf534f, 0xeef4f9, yaw=math.pi / 2)
+        # the piste's marker poles down both edges, orange
+        for i in range(5):
+            x = X0 - 1.0 - i * (X0 - X1 - 2.0) / 4
+            for sd in (-1, 1):
+                box((0.12, 1.0, 0.12), (x, 0.4, sd * (W + 0.5)), 0xff7e44)
+    draped('piste', piste)
+    # the groomer's loop: up the far lane, round at the top, down the near
+    # lane, round at the foot
+    loop = []
+    for i in range(10):
+        loop.append((X0 - 0.6 + (X1 + 1.0 - X0 + 0.6) * i / 9, 0.0, -1.1))
+    for i in range(1, 6):
+        a = math.pi * i / 6
+        loop.append((X1 + 1.0 - 1.1 * math.sin(a), 0.0, -1.1 * math.cos(a)))
+    for i in range(10):
+        loop.append((X1 + 1.0 + (X0 - 0.6 - X1 - 1.0) * i / 9, 0.0, 1.1))
+    for i in range(1, 6):
+        a = math.pi * i / 6
+        loop.append((X0 - 0.6 + 1.1 * math.sin(a), 0.0, 1.1 * math.cos(a)))
+    for k, pt in enumerate(loop):
+        marker('path_drapegroom_%d' % k, pt)
+    x, _, z = loop[3]
+    with animated('anim_path:c=drapegroom:p=34:f=2#cat', (x, 0.0, z)):
+        snowcat(x, 0.0, z, k=0.6)
+    # the skiers' loop: out of the top hut's door, down the piste in turns,
+    # into the warming hut's, home under the snow
+    tx, tz = X1 - 0.6, W + 1.0                          # the top hut
+    bx, bz = X0 + 1.4, -W - 1.2                         # the warming hut
+    run = [(tx, -1.4, tz), (tx, 0.0, tz), (tx + 0.4, 0.0, tz - 1.0), (X1 + 1.2, 0.0, 0.8)]
+    m = 9
+    for i in range(1, m + 1):
+        x = X1 + 1.2 + (X0 - 0.4 - X1 - 1.2) * i / m
+        run.append((x, 0.0, 1.35 * math.sin(i * math.pi / 2.2)))
+    run += [(bx - 0.6, 0.0, bz + 1.2), (bx, 0.0, bz), (bx, -1.6, bz)]
+    run += [(bx + (tx - bx) * f, -1.6, bz + (tz - bz) * f) for f in (0.33, 0.66)]
+    for k, pt in enumerate(run):
+        marker('path_drapeski_%d' % k, pt)
+    for n, (coat, hat) in enumerate(((0xcf534f, 0xfff6eb), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f))):
+        x, y, z = run[4 + 3 * n]
+        with animated('anim_path:c=drapeski:p=12:o=%.3f#%d' % (n / 3, n), (x, 0.0, z)):
+            flurry_skier(x, 0.0, z, coat, hat)
 
 # ---- snow companions: small scenes that carry a track's story round its lap ----
 

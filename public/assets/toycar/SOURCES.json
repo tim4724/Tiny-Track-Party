@@ -168,6 +168,7 @@
     "set-flurry-peaks-nw.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-flurry-peaks-se.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-flurry-peaks-sw.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-flurry-piste.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-football-pitch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-frozen-lake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-game-box.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

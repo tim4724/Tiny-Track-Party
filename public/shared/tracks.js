@@ -331,18 +331,11 @@ export const SET_GROUND = {
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
-  // Flurry's lake: the ice lies on the plain, unraised, in two sheets with
-  // the road crossing between them on its stilts and its berm, the west one
-  // round the skaters' rink and the east one filling the inside of the bend
-  // the road turns round it, its ground short of the cabin beyond (a piece
-  // levels its clearing to the lowest ground under it). The ice may not run
-  // under the deck, so the ground there wears its blue. No bank rings the
-  // lake: it would rise under the ice.
+  // Flurry's lake: the ice lies on the plain, unraised, beside the run down
+  // off the bridge, and the bank of snow round its shore is the piece's own
+  // (set_prototypes.py frozen_lake), standing up from the plain.
   'set-frozen-lake': [
-    { kind: 'plain', z: -1.5, len: 7, r: 15.5, w: 4, tint: 0xdcecf8 },
-    { kind: 'plain', x: 23, z: -7, len: 10, r: 6.2, w: 2, tint: 0xdcecf8 },
-    { kind: 'plain', x: 21.5, z: 7, len: 10, r: 6, w: 2, tint: 0xdcecf8 },
-    { kind: 'paint', x: 11.9, z: 1.5, len: 23, r: 3.5, w: 3, tint: 0xa9d7ee }
+    { kind: 'plain', z: -1.5, len: 7, r: 15.5, w: 4, tint: 0xdcecf8 }
   ],
   // Glacier's toboggan hill: the penguins' slide comes down its long face
   // toward the road (+X) to the water hole on the flat at its foot; broad
@@ -831,6 +824,10 @@ export const TRACKS = {
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
+      // the village piste down the foothill outside the east loop, cut
+      // through the forest between stands b and c, the groomer working it,
+      // skiers coming down it to the verge
+      { model: 'set-flurry-piste', u: 0.684, lat: 12, yaw: 0 },
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },

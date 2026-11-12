@@ -664,6 +664,7 @@ constexpr SetDef kSet_flurry[] = {
   { "set-flurry-peaks-ne", 0x1.47ae147ae147bp-1, 0x1.68p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-peaks-sw", 0x1.eb851eb851eb8p-4, 0x1.68p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-ski-jump", 0x1.1525460aa64c3p-1, 0x1.3970a3d70a3d7p+4, 0x1.96ccccccccccdp+6, 0x0p+0, 0x1p+0, 1 },
+  { "set-flurry-piste", 0x1.5e353f7ced917p-1, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-forest-a", 0x1.2b780346dc5d6p-1, 0x1.23851eb851eb8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-forest-b", 0x1.51d14e3bcd35bp-1, 0x1.a47ae147ae148p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-forest-c", 0x1.6acd9e83e425bp-1, 0x1.64ccccccccccdp+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -682,9 +683,6 @@ constexpr SetDef kSet_flurry[] = {
 };
 constexpr LandDef kLand_flurry[] = {
   { 2, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.8p+0, 0x1.cp+2, 0x1.fp+3, 0x1.fp+3, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdcecf8u, 0x0p+0, 1 },
-  { 2, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.7p+4, -0x1.cp+2, 0x1.4p+3, 0x1.8cccccccccccdp+2, 0x1.8cccccccccccdp+2, 0x1p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdcecf8u, 0x0p+0, 1 },
-  { 2, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.58p+4, 0x1.cp+2, 0x1.4p+3, 0x1.8p+2, 0x1.8p+2, 0x1p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdcecf8u, 0x0p+0, 1 },
-  { 5, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.7cccccccccccdp+3, 0x1.8p+0, 0x1.7p+4, 0x1.cp+1, 0x1.cp+1, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xa9d7eeu, 0x0p+0, 1 },
   { 2, -1, 0x1.c3e425aee632p-2, 0x1.4p+2, -0x1.1cp+7, 0x0p+0, 0x0p+0, 0x1.bp+5, 0x1.8p+1, 0x1.8p+1, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xc8e0f6u, 0x0p+0, 1 },
   { 0, -1, 0x1.29c779a6b50b1p-1, 0x1.fp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.4p+3, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x1p+1, 1 },
   { 0, -1, 0x1.51d14e3bcd35bp-1, 0x1.0533333333333p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x1.6p+3, 0x1.6p+3, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x1p+1, 1 },
@@ -2462,7 +2460,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 11, kLand_driftwood, 29 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 9, kLand_riptide, 16 },
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 13, kLand_powder, 22 },
-  { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 22, kLand_flurry, 23 },
+  { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 23, kLand_flurry, 20 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 13, kLand_glacier, 39 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 29, kLand_avalanche, 25 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 25, kLand_ribbon, 9 },
