@@ -1603,233 +1603,93 @@ def bonfire():
 
 # ---- Riptide ----
 
-# Where along the beach the swim line's middle lies off the tower: a little
-# up the beach toward the cars coming (-Z), not far, because up there the
-# waterline turns in round the bend before it and the line's end would lie in
-# the surf; past the tower (+Z) Riptide's shore (tracks.js) runs on long
-# enough to hold the line's other end on the water.
-SWIM_Z = -3.5
-
 @piece(1.0)
 def lifeguard_tower():
-    # Riptide: the surf patrol's station on the beach by the waterline, at a
-    # car's scale: a white hut on stilts a car's height up, its lookout window
-    # to the sea (+X), the ramp down its back toward the road, a red roof
-    # under the patrol's flag and a red cross for the road to see. Round it:
-    # the rescue board and the ring buoy, a rack of surfboards, the red rescue
-    # boat pulled up toward the water, and the red-and-yellow flags that mark
-    # where to swim. The lifeguard on the deck watches the water through
-    # binoculars and turns them on the cars going by; the flags fly.
-    # The patrol's whole beach is this one piece: the swimmers' umbrellas
-    # either side of the tower and the swim line and the surf off it. Each of
-    # them alone is a car's size, a speck from the road; together, close round
-    # the tower, they read as one beach for as long as the tower does.
-    white, red, wood = 0xfff6eb, 0xff5040, 0x9a7b55
-    S, top = 0.95, 0.95                       # the stilts' spread, the deck's height
+    # Riptide: the surf patrol's tower on the beach where the cars land off
+    # the hop, on its own patch of sand at the road's height (a beach rise,
+    # tracks.js), so a racer coming over the crest looks straight at it.
+    # One chunky thing at a lifeguard tower's real size and a half: a white
+    # hut on four stout stilts a car's height and more up, its lookout window
+    # to the sea (+X), a red roof, a big red cross on a white board to the
+    # road, the ramp down its back to the road side, and the patrol's flag
+    # high over it on a mast of its own. Round its foot, big enough to read
+    # from the seat: three beach umbrellas, the red rescue boat, a rack of
+    # boards and the red-and-yellow flags. No people: a person at a car's
+    # size is a speck (and a still one reads uncanny).
+    white, red, yellow, wood, blue = 0xfff6eb, 0xff5040, 0xffc044, 0x9a7b55, 0x339cf2
+    S, top = 1.4, 1.35                         # the stilts' spread, the deck's height
     for sx in (-1, 1):
         for sz in (-1, 1):
-            box((0.09, top, 0.09), (sx * S / 2, top / 2, sz * S / 2), white)
-    for sz in (-1, 1):                        # cross braces under the deck
-        beam((-S / 2, 0.12, sz * S / 2), (S / 2, top - 0.12, sz * S / 2), 0.06, white)
-    box((S + 0.4, 0.07, S + 0.3), (0.08, top + 0.035, 0), wood)               # the deck, its lookout end proud
-    W, D, H, hx = 0.78, 0.85, 0.6, -0.12
-    y0 = top + 0.07
+            box((0.2, top + 0.4, 0.2), (sx * S / 2, (top - 0.4) / 2, sz * S / 2), white)
+    for sz in (-1, 1):                         # cross braces under the deck, front and back
+        beam((-S / 2, 0.2, sz * S / 2), (S / 2, top - 0.15, sz * S / 2), 0.12, white)
+        beam((S / 2, 0.2, sz * S / 2), (-S / 2, top - 0.15, sz * S / 2), 0.12, white)
+    box((S + 0.7, 0.14, S + 0.5), (0.15, top + 0.07, 0), wood)                  # the deck, its lookout end proud
+    W, D, H, hx = 1.2, 1.3, 1.0, -0.1
+    y0 = top + 0.14
     box((W, H, D), (hx, y0 + H / 2, 0), white)
-    box((W + 0.03, 0.1, D + 0.03), (hx, y0 + 0.1, 0), red)                     # the red band
-    box((0.06, 0.24, D * 0.72), (hx + W / 2 + 0.01, y0 + H * 0.64, 0), 0x8ecae6)  # the lookout window
+    box((W + 0.04, 0.16, D + 0.04), (hx, y0 + 0.14, 0), red)                    # the red band
+    box((0.08, 0.38, D * 0.74), (hx + W / 2 + 0.02, y0 + H * 0.62, 0), 0x8ecae6)  # the lookout window
     for sz in (-1, 1):
-        box((W * 0.5, 0.2, 0.06), (hx + 0.08, y0 + H * 0.64, sz * (D / 2 + 0.01)), 0x8ecae6)
-    for sz in (-1, 1):                        # the roof, peaked along the hut
-        box((W + 0.3, 0.06, 0.5 * (D + 0.3) / math.cos(0.45)), (hx, y0 + H + 0.13, sz * (D + 0.3) / 4), red,
-            pitch=-sz * 0.45)
-    box((0.06, 0.24, 0.08), (hx - W / 2 - 0.02, y0 + H * 0.5, 0), red)          # the red cross, to the road
-    box((0.06, 0.08, 0.24), (hx - W / 2 - 0.02, y0 + H * 0.5, 0), red)
-    # the rail round the lookout end, a ring buoy on it
-    for sz in (-1, 1):
-        box((0.06, 0.3, 0.06), (0.08 + (S + 0.4) / 2 - 0.04, top + 0.2, sz * ((S + 0.3) / 2 - 0.04)), white)
-        box((0.5, 0.06, 0.06), (0.08 + (S + 0.4) / 2 - 0.27, top + 0.35, sz * ((S + 0.3) / 2 - 0.04)), white)
-    box((0.06, 0.06, S + 0.3), (0.08 + (S + 0.4) / 2 - 0.04, top + 0.35, 0), white)
-    cyl(0.1, 0.06, (0.08 + (S + 0.4) / 2, top + 0.24, 0.3), 0xff7e44, segs=8, axis='across')
+        box((W * 0.56, 0.32, 0.08), (hx + 0.12, y0 + H * 0.62, sz * (D / 2 + 0.02)), 0x8ecae6)
+    for sz in (-1, 1):                         # the roof, peaked along the hut, deep eaves
+        box((W + 0.5, 0.12, 0.5 * (D + 0.5) / math.cos(0.5)), (hx, y0 + H + 0.2, sz * (D + 0.5) / 4), red,
+            pitch=-sz * 0.5)
+    box((W + 0.56, 0.14, 0.18), (hx, y0 + H + 0.33 + 0.12, 0), white)            # its ridge
+    # the cross on a white board to the road (-X), the size of a car's side
+    box((0.08, 0.9, 0.9), (hx - W / 2 - 0.05, y0 + H * 0.52, 0), white)
+    box((0.08, 0.64, 0.2), (hx - W / 2 - 0.1, y0 + H * 0.52, 0), red)
+    box((0.08, 0.2, 0.64), (hx - W / 2 - 0.1, y0 + H * 0.52, 0), red)
+    # the rail round the lookout end
+    ex = 0.15 + (S + 0.7) / 2 - 0.06
+    for sz in (-1, 0, 1):
+        box((0.1, 0.42, 0.1), (ex, top + 0.35, sz * ((S + 0.5) / 2 - 0.06)), white)
+    box((0.1, 0.1, S + 0.5), (ex, top + 0.56, 0), white)
+    cyl(0.2, 0.1, (ex + 0.05, top + 0.36, 0.35), 0xff7e44, segs=8, axis='across')  # the ring buoy
     # the ramp down its back to the sand, toward the road
-    fx, bx = -1.85, -(S + 0.4) / 2 + 0.08
+    fx, bx = -2.6, -(S + 0.7) / 2 + 0.15
     for sz in (-1, 1):
-        beam((fx, 0.02, sz * 0.2), (bx, top, sz * 0.2), 0.06, wood)
+        beam((fx, 0.04, sz * 0.32), (bx, top, sz * 0.32), 0.12, wood)
     for i in range(7):
         t = (i + 0.5) / 7
-        box((0.16, 0.04, 0.44), (fx + (bx - fx) * t, 0.04 + (top - 0.02) * t, 0), wood,
+        box((0.24, 0.07, 0.72), (fx + (bx - fx) * t, 0.07 + (top - 0.04) * t, 0), wood,
             roll=math.atan2(top, bx - fx))
-    # the patrol's flag over the roof
-    flag_on_pole((hx - W / 2 + 0.06, y0 + H + 0.1, -D / 2 + 0.06), 0.5, (red, 0xffc044),
-                 'anim_sway:a=z:d=24:p=1.8#roof')
-    # the lifeguard out on the deck beside the hut, on the side the cars come
-    # from so they see him past it, binoculars up to the water; he turns them
-    # on the cars as they come by (watch)
-    gx, gy, gz = 0.5, top + 0.07, -0.5
-    def guard():
-        figure((gx, gy, gz), 0.0, shirt=red, legs=red, hair=0xffc044)
-        for s in (-1, 1):                                                  # forearms up to them
-            beam((gx + 0.02, gy + 0.32, gz + s * 0.1), (gx + 0.08, gy + 0.42, gz + s * 0.05), 0.06, red)
-        box((0.07, 0.06, 0.14), (gx + 0.1, gy + 0.43, gz), 0x38383d)          # the binoculars
-    with animated('anim_watch:r=20:d=100#guard', (gx, gy, gz)):
-        guard()
-    # the rescue board against a stilt, the rack of surfboards beside the hut
-    box((0.05, 0.62, 0.15), (S / 2 + 0.12, 0.3, -S / 2 - 0.1), red, roll=0.2)
-    for z in (1.0, 1.6):
-        box((0.06, 0.38, 0.06), (0.0, 0.19, z), wood)
-    box((0.06, 0.06, 0.72), (0.0, 0.36, 1.3), wood)
-    half = [(0.0, 0.0), (0.04, 0.01), (0.06, 0.08), (0.067, 0.2), (0.06, 0.33), (0.04, 0.43), (0.0, 0.48)]
+    # the patrol's flag on its own mast off the deck's corner, high over the
+    # roof: what shows first over the crest
+    mx, mz = ex - 0.1, -(S + 0.5) / 2 + 0.12
+    box((0.13, 4.3 - top, 0.13), (mx, top + (4.3 - top) / 2, mz), white)
+    box((0.22, 0.22, 0.22), (mx, 4.36, mz), red)
+    with animated('anim_sway:a=x:d=22:p=1.9#patrol', (mx, 4.2, mz)):
+        box((0.06, 0.5, 0.42), (mx, 3.95, mz - 0.27), red)
+        box((0.06, 0.5, 0.42), (mx, 3.95, mz - 0.69), yellow, yaw=0.12)
+    # three big beach umbrellas on the road side of it, either way along
+    for (x, z, c) in ((-1.4, -2.9, (red, white)), (-0.9, 2.8, (blue, white)), (0.4, 4.6, (yellow, red))):
+        umbrella((x, 0, z), 1.0, 1.45, c, gores=8)
+        box((0.8, 0.06, 0.46), (x + 0.5, 0.03, z + 0.4), c[0], yaw=0.3)           # a towel under it
+    # the rescue boat pulled up toward the water, and its trolley
+    with plain_parts():
+        box((0.62, 0.28, 1.5), (2.3, 0.14, -1.1), red, yaw=0.2)
+        box((0.44, 0.28, 0.44), (2.3 + 0.75 * math.sin(0.2), 0.14, -1.1 + 0.75 * math.cos(0.2)), red,
+            yaw=0.2 + math.pi / 4)
+        box((0.66, 0.08, 1.54), (2.3, 0.31, -1.1), white, yaw=0.2)
+    # the board rack against the back stilts, three boards on it
+    for z in (1.15, 2.1):
+        box((0.12, 0.6, 0.12), (-0.9, 0.3, z), wood)
+    box((0.12, 0.12, 1.1), (-0.9, 0.56, 1.62), wood)
+    half = [(0.0, 0.0), (0.07, 0.02), (0.1, 0.14), (0.11, 0.4), (0.1, 0.66), (0.07, 0.86), (0.0, 0.96)]
     outline = [(z, y) for z, y in half] + [(-z, y) for z, y in reversed(half[1:-1])]
-    for k, (c, st) in enumerate(((0xff5040, 0xfff6eb), (0x339cf2, 0xffc044), (0xffc044, 0xff5040))):
-        zc = 1.08 + k * 0.22
-        board = prism([(zc + z, y) for z, y in outline], 0.07, 0.035, c)
+    for k, (c, st) in enumerate(((red, white), (blue, yellow), (yellow, red))):
+        zc = 1.3 + k * 0.32
+        board = prism([(zc + z, y) for z, y in outline], -0.8, 0.06, c)
         board.rotation_euler.y = -0.2
-        box((0.04, 0.36, 0.025), (0.07 - 0.24 * math.sin(0.2), 0.24, zc), st, roll=-0.2)
-    # the rescue boat, pulled up toward the water
-    boat((1.75, 0, -0.7), 0.15, red)
-    # the swimming flags either side of the patrol's water (the swim line's
-    # middle, SWIM_Z below)
-    for k, z in enumerate((SWIM_Z - 2.3, SWIM_Z + 2.6)):
-        flag_on_pole((1.1, 0, z), 1.0, (red, 0xffc044), 'anim_sway:a=z:d=24:p=%.1f#swim%d' % (2.0 + 0.3 * k, k))
-    # Each group stands still as a part of its own, so a cell that sees only
-    # the tower or only the water draws only that.
-    def still(name, build, x, z):
-        before = set(bpy.context.scene.objects)
-        with moved(x, z):
-            build()
-        group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'
-               and o.get('anim') is None], name)
-    # Square blocks on the beach and the water: a sunbather's, a float's or a
-    # deck chair's rounded edge is under a pixel from the road, and they cost
-    # the vista frame's vertices.
-    def beach(tag):
-        with square():
-            swimmers_beach(tag)
-    still('beach_a', lambda: beach('a'), 0.0, -6.0)
-    still('beach_b', lambda: beach('b'), 0.0, 6.0)
-    def swim():
-        with square():
-            swim_line()
-    still('swim', swim, 12.0, SWIM_Z)
-    group([o for o in bpy.context.scene.objects
-           if o.type == 'MESH' and o.get('anim') is None and o.get('group') is None], 'tower')
-
-def swimmers_beach(tag):
-    # Riptide: the swimmers' stretch of beach by the patrol, at a car's scale:
-    # striped umbrellas a little over a car's height in a loose row along the
-    # sand, a towel under each with its sunbather, deck chairs turned to the
-    # sea (+X), a cool box, a sandcastle, and two children by the water
-    # throwing a beach ball between them.
-    for (x, z, c) in ((0.1, -2.6, 0xff5040), (-0.3, -1.3, 0x339cf2), (0.2, 0.1, 0xffc044),
-                      (-0.2, 1.4, 0xff5040), (0.15, 2.7, 0x22c46e)):
-        umbrella((x, 0, z), 0.42, 0.68, (c, 0xfff6eb))
-    for (x, z, c, yw, who) in ((0.35, -2.5, 0x22c46e, 0.1, 0xcf534f), (-0.05, -1.2, 0xff7e44, -0.15, None),
-                               (0.45, 0.2, 0x339cf2, 0.05, 0x6794d9), (0.05, 1.5, 0xffc044, -0.1, 0xa878e8)):
-        box((0.44, 0.03, 0.22), (x, 0.015, z), c, yaw=yw)
-        if who:
-            figure((x, 0.03, z), yw, shirt=who, legs=who, pose='lie')
-    for (x, z, c) in ((0.55, 2.5, 0xff5040), (0.55, 2.9, 0x339cf2)):            # deck chairs to the sea
-        beam((x - 0.12, 0.08, z), (x + 0.1, 0.03, z), 0.1, c, d=0.14)
-        beam((x - 0.12, 0.08, z), (x - 0.25, 0.28, z), 0.1, c, d=0.14)
-    box((0.16, 0.12, 0.12), (-0.5, 0.06, 0.6), 0x339cf2)                       # the cool box
-    box((0.17, 0.03, 0.13), (-0.5, 0.135, 0.6), 0xfff6eb)
-    for (dx, dz, s) in ((0, 0, 0.16), (0.1, 0.09, 0.1), (-0.09, 0.08, 0.1)):    # the sandcastle
-        box((s, s * 0.8, s), (0.85 + dx, s * 0.4, -0.6 + dz), 0xe6d29a)
-    figure((1.25, 0, -1.2), -math.pi / 2, shirt=0xffc044, legs=0x339cf2)
-    figure((1.25, 0, 0.0), math.pi / 2, shirt=0x61cb8b, legs=0xff5040, hair=0x38383d)
-    # the ball lobbed from one child's hands to the other's and back, turning
-    # over in the air (anim_path along the arc and back: it turns round in
-    # their hands)
-    arc = [(1.25, 0.36 + 0.55 * (1 - (2 * t - 1) ** 2), -1.08 + 0.96 * t) for t in (i / 8 for i in range(9))]
-    for k, at in enumerate(arc + arc[-2:0:-1]):
-        marker('path_ball%s_%d' % (tag, k), at)
-    with animated('anim_path:c=ball%s:p=2.4:f=0+spin:a=x:w=5' % tag, arc[0]):
-        box((0.1, 0.1, 0.1), arc[0], 0xff5040)
-        box((0.11, 0.03, 0.11), arc[0], 0xfff6eb)                              # its white band
-
-def swim_line():
-    # Riptide: the swimming line off the patrol's beach, at a car's scale: a
-    # rope of red and white floats lying on the water between two marker
-    # buoys, each flying a flag, swimmers inside it, and out past it the
-    # surf. The swell lifts it all: the markers rock and bob, the line rides
-    # up and down in two lengths, out of step, the swimmers' heads ride it,
-    # a surfer sits her board waiting; the lifeguard paddles a rescue board
-    # round the swimmers, and either side of the flags a wave rolls in with
-    # a surfer riding it. The sea is the ground's (+X out to sea, the water
-    # SEA over the sand at 0); what moves rides on it, so no figure stands.
-    for k, (s, flag) in enumerate(((-1, 0xff5040), (1, 0xffc044))):
-        zb = s * 15.0
-        with animated('anim_sway:a=z:d=20:p=3.1+bob:h=0.12:p=3.1#m%d' % k, (0, 0.0, zb)):
-            cyl(0.17, 0.26, (0, 0.0, zb), 0xff5040, r2=0.11, segs=8)
-            cyl(0.11, 0.08, (0, 0.26, zb), 0xfff6eb, r2=0.08, segs=8)
-            box((0.05, 0.4, 0.05), (0, 0.5, zb), 0x2a2735)
-            box((0.03, 0.14, 0.22), (0, 0.63, zb - s * 0.13), flag)
-    for g in range(2):
-        z0 = -14.6 + g * 14.6
-        with animated('anim_bob:h=0.1:p=%.1f#f%d' % (2.6 + 0.5 * g, g), (0, 0.14, z0 + 7.3)):
-            box((0.06, 0.06, 14.4), (0, 0.17, z0 + 7.3), 0xfff6eb)
-            for k in range(7):                        # each float down through the water to the sand
-                zf = z0 + 0.5 + k * 2.2
-                box((0.12, 0.24, 0.16), (0, 0.12, zf), 0xfff6eb if (g * 7 + k) % 2 else 0xff5040)
-    def board(x, z, color, yaw, y=None):
-        """A surfboard along +Z turned by `yaw`: lying on the water at `y`
-        (a ridden one), else its keel down through the water to the sand."""
-        c, s = math.cos(yaw), math.sin(yaw)
-        t, cy = (0.06, y) if y is not None else (0.17, 0.085)
-        box((0.13, t, 0.5), (x, cy, z), color, yaw=yaw)
-        box((0.09, t, 0.12), (x + 0.25 * s, cy, z + 0.25 * c), color, yaw=yaw + math.pi / 4)
-    with animated('anim_bob:h=0.08:p=3.4#sit', (5.0, 0.14, 0.0)):
-        board(5.0, 0.0, 0xffc044, 0.3)
-        figure((5.0, 0.17, -0.05), -1.3, shirt=0x38383d, legs=0x38383d, hair=0xffc044, pose='sit')
-    # swimmers between the flags, in the white water inside the line: heads
-    # and shoulders out of it, riding the swell (a pair together, one alone)
-    for k, (heads, lift, beat) in enumerate(((((-2.8, -1.2, 0xffc044), (-2.6, -0.85, 0x339cf2)), 0.05, 2.9),
-                                             (((-2.4, 1.4, 0xff5040),), 0.06, 3.3))):
-        with animated('anim_bob:h=%.2f:p=%.1f#swimmer%d' % (lift, beat, k), (heads[0][0], 0.0, heads[0][1])), square():
-            for (x, z, cap) in heads:
-                box((0.1, 0.1, 0.2), (x, SEA - 0.03, z), 0xf2bf99)            # shoulders, awash
-                box((0.11, 0.11, 0.11), (x, SEA + 0.07, z), 0xf2bf99)
-                box((0.12, 0.05, 0.12), (x - 0.01, SEA + 0.135, z), cap)       # a swim cap
-    # the lifeguard on the rescue board, kneeling, paddling slow laps along
-    # the outside of the line off the swimmers (a stadium of two straights,
-    # the board bow first), clear of the surf either side
-    patrol = stadium(1.4, 0.0, 0.5, 4.5, 6)
-    for k, (x, z) in enumerate(patrol):
-        marker('path_patrol_%d' % k, (x, SEA - 0.06, z))
-    x0, z0 = patrol[0]
-    with animated('anim_path:c=patrol:p=40:f=1+bob:h=0.03:p=1.7#rescue', (x0, SEA - 0.06, z0)), square():
-        box((0.62, 0.08, 0.16), (x0, SEA - 0.02, z0), 0xff5040)                 # the board, bow to +X
-        box((0.16, 0.08, 0.12), (x0 + 0.33, SEA - 0.02, z0), 0xff5040, yaw=math.pi / 4)
-        figure((x0 - 0.04, SEA + 0.02, z0), 0.0, shirt=0xff5040, legs=0xff5040, hair=0xffc044, pose='crouch')
-        beam((x0 + 0.12, SEA + 0.0, z0 + 0.14), (x0 - 0.02, SEA + 0.36, z0 + 0.1), 0.06, 0x9a7b55)   # the paddle
-    # the surf either side of the flags: a wave rolls up out of the swell
-    # with a surfer riding it across and in, and short of the line it breaks
-    # and pitches him over into the water (a wipeout: he never sinks upright).
-    # The wave and its rider are one rigid part on a closed path that faces
-    # it along its way (f=2, so the dive tips it forward and the climb tilts
-    # it back), its node turned to the ride so the rest pose is the ride's;
-    # the way back out runs deep under the sand, where the turns are hidden.
-    for k, s in enumerate((-1, 1)):
-        d = (-math.sqrt(0.5), -s * math.sqrt(0.5))            # the ride's way, in and across
-        x0, z0 = 7.4, s * 12.0
-        x1, z1 = 2.6, s * 7.2
-        ride = [(x0, 0.0, z0), (x1, 0.0, z1),
-                (x1 + 0.8 * d[0], -1.8, z1 + 0.8 * d[1]),    # the dive, 66 degrees down
-                (x0 - 3.1 * d[0], -1.8, z0 - 3.1 * d[1])]    # back out; up again at 30 degrees
-        for i, at in enumerate(ride):
-            marker('path_surf%d_%d' % (k, i), at)
-        with animated('anim_path:c=surf%d:p=14:o=%.1f:f=2#surf%d' % (k, 0.5 * k, k), ride[0],
-                      yaw=s * 3 * math.pi / 4), square():
-            wave(ride[0], 2.8)
-            yb = -math.pi / 2 - s * math.pi / 4                # the board along the ride, in and across
-            board(x0 - 0.1, z0, (0x339cf2, 0xff5040)[k], yb, y=SEA + 0.14)
-            # standing side on, facing in to the beach, arms out
-            yf = yb + math.pi
-            figure((x0 - 0.1, SEA + 0.17, z0), yf, shirt=(0xff7e44, 0x61cb8b)[k], legs=0x38383d,
-                   hair=(0x7a5a3a, 0xffc044)[k])
-            c, sn = math.cos(yf), math.sin(yf)
-            for side in (-1, 1):
-                beam((x0 - 0.1 + side * 0.1 * sn, SEA + 0.52, z0 + side * 0.1 * c),
-                     (x0 - 0.1 + side * 0.3 * sn, SEA + 0.44, z0 + side * 0.3 * c), 0.06, 0xf2bf99)
+    # the swimming flags either side of the patrol's water, toward the sea
+    for k, z in enumerate((-3.4, 3.2)):
+        box((0.1, 1.9, 0.1), (3.2, 0.95, z), white)
+        with animated('anim_sway:a=x:d=22:p=%.1f#swim%d' % (2.0 + 0.3 * k, k), (3.2, 1.85, z)):
+            box((0.05, 0.28, 0.6), (3.2, 1.72, z - 0.33), red)
+            box((0.05, 0.28, 0.6), (3.2, 1.44, z - 0.33), yellow)
+    join_still('tower')
+    on_a_rise()
 
 # ---- Riptide's promenade ----
 
@@ -2042,6 +1902,384 @@ def promenade():
                 box((0.46, 0.04, 0.24), (x - 0.38, 0.02, z + 0.1), 0xffc044, yaw=0.1)
                 figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')
     draped('sand', sand)
+
+# ---- Riptide's seafront ----
+#
+# The run from the patrol's beach to the promenade is the town's front: the
+# sea wall along the kerb on the sea side, its walk at the road's height, and
+# across the road the terrace of guest houses and the hotel looking out over
+# it, their backs in the dune. Each is a few sections, a piece each (a piece's
+# box keeps the verge's apron off, so none spans the bend), every section
+# built against the road as it runs past it: the centreline's x in the
+# section's frame as a quadratic in z, and the deck's top at a few z (both
+# read off the shipped track), so the wall and the house fronts keep one
+# distance from the kerb round the bend. Both sides have the road at +X (the
+# wall stands at yaw 180 on the left). They level nothing (a draped foot) and
+# stand on the beach's plain, RIPTIDE_PLAIN under the road; the walls and
+# houses run on under it.
+
+RIPTIDE_PLAIN = 0.77
+
+class riptide_road:
+    """The road past a seafront section: `fit` (a, b, c), its centreline at
+    x = a + b z + c z^2 in the piece's frame; `ys` [(z, y)], the deck's top."""
+    def __init__(self, fit, ys):
+        self.a, self.b, self.c = fit
+        self.ys = sorted(ys)
+    def x(self, z):
+        return self.a + self.b * z + self.c * z * z
+    def y(self, z):
+        ys = self.ys
+        if z <= ys[0][0]:
+            return RIPTIDE_PLAIN + ys[0][1]
+        for (z0, y0), (z1, y1) in zip(ys, ys[1:]):
+            if z <= z1:
+                return RIPTIDE_PLAIN + y0 + (y1 - y0) * (z - z0) / (z1 - z0)
+        return RIPTIDE_PLAIN + ys[-1][1]
+    def yaw(self, z):
+        return math.atan(self.b + 2 * self.c * z)
+    def at(self, z, d):
+        """The point `d` off the centreline toward the piece at z (x, z)."""
+        a = self.yaw(z)
+        return self.x(z) - d * math.cos(a), z + d * math.sin(a)
+
+def riptide_along(road, z0, z1, d0, d1, y0, y1, color, step=2.0, row=None, dy=0.0):
+    """A strip `d0`..`d1` off the centreline from z0 to z1, its bottom y0 and
+    top y1 over the road's top at each step (plus `dy` over the plain where
+    y0 is None: from under the beach), cut in steps that turn with the road."""
+    with plain_parts():   # square: a strip in short lengths
+        n = max(1, int(round(abs(z1 - z0) / step)))
+        out = []
+        for i in range(n):
+            za, zb = z0 + (z1 - z0) * i / n, z0 + (z1 - z0) * (i + 1) / n
+            zm = (za + zb) / 2
+            a = road.yaw(zm)
+            x, z = road.at(zm, (d0 + d1) / 2)
+            top = road.y(zm) + y1
+            bot = (road.y(zm) + y0) if y0 is not None else dy
+            o = box((abs(d1 - d0), top - bot, abs(zb - za) / math.cos(a) + 0.06), (x, (top + bot) / 2, z), color, yaw=a)
+            if row is not None:
+                rowed(o, row)
+            out.append(o)
+    return out
+
+def riptide_lamp(road, z, d, color=0x339cf2):
+    """A seafront lamp `d` off the centreline on the walk: a stout post on
+    its base, a lantern and its cap, as tall as a car is long twice over."""
+    with plain_parts():
+        x, zz = road.at(z, d)
+        y = road.y(z) + 0.05
+        box((0.26, 0.3, 0.26), (x, y + 0.15, zz), color)
+        box((0.13, 1.6, 0.13), (x, y + 1.0, zz), color)
+        box((0.34, 0.36, 0.34), (x, y + 1.95, zz), 0xfde4c7)
+        cyl(0.3, 0.26, (x, y + 2.13, zz), color, r2=0.04, segs=4, yaw=math.pi / 4)
+
+def riptide_seat(road, z, d):
+    """A seafront bench on the walk, its back to the road, facing the sea."""
+    with plain_parts():
+        x, zz = road.at(z, d)
+        a = road.yaw(z)
+        y = road.y(z) + 0.05
+        c, s = math.cos(a), math.sin(a)
+        def T(lx, ly, lz):
+            return (x + lx * c + lz * s, y + ly, zz - lx * s + lz * c)
+        box((0.42, 0.1, 1.3), T(0.0, 0.36, 0.0), 0x9a7b55, yaw=a)
+        box((0.1, 0.42, 1.3), T(0.2, 0.62, 0.0), 0x9a7b55, yaw=a)
+        for e in (-0.55, 0.55):
+            box((0.42, 0.36, 0.1), T(0.0, 0.18, e), 0x38383d, yaw=a)
+
+def riptide_sea_wall(road, z0, z1, gap=None):
+    """The sea wall from z0 to z1: the walk (paving) from just past the
+    beach strip to 8.9 off the centreline at the road's height, its face of
+    dressed stone down to the beach, the cream coping proud of the face and
+    the cream parapet along the sea edge (open over `gap`, (z0, z1), where
+    steps go down)."""
+    riptide_along(road, z0, z1, 5.1, 9.05, None, -0.07, 'grey', row=15, dy=-0.5)       # the wall's body
+    riptide_along(road, z0, z1, 5.1, 8.85, -0.1, 0.05, 'grey', row=4)                 # the walk
+    riptide_along(road, z0, z1, 8.75, 9.25, -0.05, 0.1, 0xfde4c7)                     # the coping
+    spans = [(z0, z1)] if gap is None else [(z0, gap[0]), (gap[1], z1)]
+    for (a, b) in spans:
+        if abs(b - a) > 0.2:
+            riptide_along(road, a, b, 8.8, 9.1, 0.05, 0.42, 0xfde4c7, step=1.5)     # the parapet
+
+def riptide_steps(road, za, zb, n=5):
+    """Stone steps down the wall's face to the sand, along it from za (at the
+    walk) to zb (on the beach)."""
+    for i in range(n):
+        t0, t1 = i / n, (i + 1) / n
+        zm = za + (zb - za) * (t0 + t1) / 2
+        x, z = road.at(zm, 9.6)
+        top = road.y(zm) + 0.05 - (road.y(zm) + 0.05) * t1
+        a = road.yaw(zm)
+        rowed(box((0.9, top + 0.5, abs(zb - za) / n + 0.04), (x, (top - 0.5) / 2, z), 'grey', yaw=a), 8)
+
+@piece(1.0)
+def seafront_wall_a():
+    # Riptide: the sea wall where it sets out from the patrol's beach: its
+    # end pier, steps down to the sand, lamps and a bench facing the sea.
+    road = riptide_road((9.497, -0.0112, -0.00014), [(-6.0, -0.01), (6.0, 0.0)])
+    riptide_sea_wall(road, -5.8, 5.8, gap=(2.6, 4.4))
+    riptide_steps(road, 2.7, 5.4)
+    x, z = road.at(5.6, 8.95)                                                     # the end pier
+    y = road.y(5.6)
+    box((0.6, y + 1.2, 0.6), (x, (y + 1.2 - 0.5) / 2, z), 0xfde4c7)
+    sphere(0.3, (x, y + 0.82, z), 0xfde4c7)
+    for zl in (-4.6, 0.4):
+        riptide_lamp(road, zl, 8.55)
+    riptide_seat(road, -2.1, 7.6)
+    join_still('wall')
+    on_a_rise()
+
+@piece(1.0)
+def seafront_wall_b():
+    # Riptide: the sea wall's shelter, a seafront one: four posts and a
+    # glazed back to the road under a red hipped roof, its bench to the sea.
+    road = riptide_road((9.513, 0.0204, -0.01106), [(-5.96, 0.18), (-3.0, 0.11), (0.0, 0.05), (3.0, 0.0), (6.0, -0.01)])
+    riptide_sea_wall(road, -5.8, 5.8)
+    zc = 0.6
+    x, z = road.at(zc, 7.3)
+    a = road.yaw(zc)
+    y = road.y(zc) + 0.05
+    c, s = math.cos(a), math.sin(a)
+    def T(lx, ly, lz):
+        return (x + lx * c + lz * s, y + ly, z - lx * s + lz * c)
+    for lx in (-0.55, 0.55):
+        for lz in (-0.95, 0.95):
+            box((0.14, 1.5, 0.14), T(lx, 0.75, lz), 0xfff6eb, yaw=a)
+    box((0.06, 0.9, 1.8), T(0.55, 0.85, 0.0), 0x8ecae6, yaw=a)                   # the glazed back
+    box((0.42, 0.1, 1.7), T(-0.25, 0.36, 0.0), 0x9a7b55, yaw=a)                  # its bench
+    box((1.4, 0.12, 2.2), T(0.0, 1.55, 0.0), 0xfff6eb, yaw=a)
+    for side in (-1, 1):                                                          # the roof
+        box((0.85, 0.1, 2.3), T(side * 0.36, 1.82, 0.0), 0xcf534f, yaw=a, roll=side * 0.62)
+    box((0.12, 0.14, 1.4), T(0.0, 2.08, 0.0), 0xcf534f, yaw=a)
+    for zl in (-4.0, 4.2):
+        riptide_lamp(road, zl, 8.55)
+    join_still('wall')
+    on_a_rise()
+
+@piece(1.0)
+def seafront_wall_c():
+    # Riptide: the seafront's clock on a bastion of the wall standing out
+    # onto the beach at the bend, where the straight from the patrol's beach
+    # points: a stone foot, a white shaft, the clock stage with a face to
+    # every side, the red spire and its vane: the front's tall mark.
+    road = riptide_road((9.5, 0.0015, -0.01644), [(-5.96, 0.26), (-3.0, 0.32), (0.0, 0.30), (3.0, 0.24), (6.0, 0.17)])
+    riptide_sea_wall(road, -5.8, 5.8, gap=(-1.75, 1.75))
+    # the bastion: the wall's body, walk and parapet carried out round it
+    y = road.y(0.0) + 0.05
+    x0, _ = road.at(0.0, 0.0)
+    rowed(box((2.6, y + 0.43, 3.6), (x0 - 10.1, (y - 0.07 - 0.5) / 2, 0.0), 'grey'), 15)
+    rowed(box((2.5, 0.15, 3.5), (x0 - 10.05, y - 0.025, 0.0), 'grey'), 4)
+    box((0.3, 0.47, 3.8), (x0 - 11.3, y + 0.19, 0.0), 0xfde4c7)                     # its parapet
+    for e in (-1, 1):
+        box((2.5, 0.47, 0.3), (x0 - 10.1, y + 0.19, e * 1.75), 0xfde4c7)
+    # the clock tower
+    tx = x0 - 10.0
+    box((1.3, 0.5, 1.3), (tx, y + 0.25, 0.0), 'grey')
+    box((0.9, 2.5, 0.9), (tx, y + 1.75, 0.0), 0xfff6eb)
+    box((0.96, 0.16, 0.96), (tx, y + 1.3, 0.0), 0x339cf2)                         # a blue band
+    box((1.15, 0.14, 1.15), (tx, y + 3.05, 0.0), 0xfde4c7)                        # the clock stage's sill
+    box((1.05, 0.95, 1.05), (tx, y + 3.6, 0.0), 0xfff6eb)
+    cy = y + 3.6
+    for k in (-1, 1):                                                              # a face to every side
+        cyl(0.4, 0.06, (tx + k * 0.555 - (0.06 if k < 0 else 0.0), cy, 0.0), 0x38383d, segs=12, axis='across')
+        cyl(0.33, 0.06, (tx + k * 0.585 - (0.06 if k < 0 else 0.0), cy, 0.0), 0xfff6eb, segs=12, axis='across')
+        box((0.04, 0.26, 0.06), (tx + k * 0.66, cy + 0.1, 0.0), 0x38383d)
+        box((0.04, 0.06, 0.2), (tx + k * 0.66, cy, 0.08), 0x38383d)
+        cyl(0.4, 0.06, (tx, cy, k * 0.555 - (0.06 if k < 0 else 0.0)), 0x38383d, segs=12, axis='along')
+        cyl(0.33, 0.06, (tx, cy, k * 0.585 - (0.06 if k < 0 else 0.0)), 0xfff6eb, segs=12, axis='along')
+        box((0.06, 0.26, 0.04), (tx, cy + 0.1, k * 0.66), 0x38383d)
+        box((0.2, 0.06, 0.04), (tx + 0.08, cy, k * 0.66), 0x38383d)
+    box((1.2, 0.14, 1.2), (tx, y + 4.13, 0.0), 0xfde4c7)
+    cyl(0.84, 1.1, (tx, y + 4.2, 0.0), 0xcf534f, r2=0.04, segs=4, yaw=math.pi / 4)  # the spire
+    box((0.07, 0.6, 0.07), (tx, y + 5.5, 0.0), 0x38383d)
+    with animated('anim_sway:a=y:d=40:p=6.0#vane', (tx, y + 5.6, 0.0)):
+        box((0.05, 0.14, 0.6), (tx, y + 5.65, 0.1), 0x38383d)
+        box((0.05, 0.22, 0.14), (tx, y + 5.65, -0.22), 0x38383d)
+    for zl in (-4.6, 4.6):
+        riptide_lamp(road, zl, 8.55)
+    join_still('wall')
+    on_a_rise()
+
+@piece(1.0)
+def seafront_wall_d():
+    # Riptide: the sea wall's last length before the promenade's boardwalk:
+    # the tea kiosk on the walk under its striped awning, two tables under
+    # big umbrellas, steps down to the sand and lamps.
+    road = riptide_road((9.5, -0.0011, -0.01625), [(-5.96, 0.01), (-3.0, 0.07), (0.0, 0.13), (3.0, 0.20), (6.0, 0.27)])
+    riptide_sea_wall(road, -5.8, 5.8, gap=(-5.6, -3.6))
+    riptide_steps(road, -3.7, -5.6)
+    zc = 1.2
+    x, z = road.at(zc, 7.6)
+    a = road.yaw(zc)
+    y = road.y(zc) + 0.05
+    c, s = math.cos(a), math.sin(a)
+    def T(lx, ly, lz):
+        return (x + lx * c + lz * s, y + ly, z - lx * s + lz * c)
+    box((1.1, 1.15, 1.7), T(-0.1, 0.575, 0.0), 0xfff6eb, yaw=a)                   # the kiosk
+    box((1.3, 0.12, 1.9), T(-0.1, 1.2, 0.0), 0x339cf2, yaw=a)
+    for i in range(4):                                                             # its awning to the road
+        box((0.55, 0.08, 1.9 / 4), T(0.65, 1.05, -0.71 + i * 0.475), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.4)
+    box((0.12, 0.5, 1.5), T(0.47, 0.55, 0.0), 0x339cf2, yaw=a)                    # the counter
+    for (lz, cols) in ((-2.2, (0xff5040, 0xfff6eb)), (3.6, (0x339cf2, 0xfff6eb))):
+        px, pz = road.at(zc + lz, 7.5)
+        py = road.y(zc + lz) + 0.05
+        umbrella((px, py, pz), 0.95, 1.35, cols, gores=8)
+        box((0.5, 0.08, 0.5), (px, py + 0.5, pz), 0xfff6eb)                         # the table
+        box((0.12, 0.5, 0.12), (px, py + 0.25, pz), 0x38383d)
+    for zl in (-2.8, 5.0):
+        riptide_lamp(road, zl, 8.55)
+    join_still('wall')
+    on_a_rise()
+
+def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, front=6.3, dep=2.8, door=0x339cf2):
+    """A seaside house in the terrace, its front `front` off the centreline
+    at zc, `w` along the road, `floors` storeys of 0.78: windows in white
+    frames, its door, a gabled roof along the road with chimneys on the
+    ridge; a bay window up its first two floors, or a balcony on the first.
+    It runs on under the beach and its back into the dune."""
+    a = road.yaw(zc)
+    xf, zf = road.at(zc, front + dep / 2)
+    y = road.y(zc) + 0.05
+    c, s = math.cos(a), math.sin(a)
+    def T(lx, ly, lz):
+        return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
+    H = 0.2 + 0.78 * floors
+    box((dep, H + 1.0, w), T(0.0, (H - 1.0) / 2, 0.0), wall, yaw=a)
+    fx = dep / 2
+    # the roof: two slabs meeting over the ridge along the road, the gables filled
+    rh = 0.75
+    ang = math.atan2(rh, dep / 2)
+    run = (dep / 2 + 0.2) / math.cos(ang)
+    for side in (-1, 1):
+        box((run, 0.12, w + 0.24), T(side * (dep / 2 + 0.2) / 2, H + rh - 0.5 * (dep / 2 + 0.2) * math.tan(ang) + 0.06, 0.0),
+            roof, yaw=a, roll=side * ang)
+    for e in (-1, 1):
+        poly([T(-dep / 2, H, e * w / 2), T(dep / 2, H, e * w / 2), T(0.0, H + rh, e * w / 2)], [(0, 1, 2)], wall)
+    box((0.3, 0.6, 0.3), T(0.0, H + rh + 0.1, w / 2 - 0.35), wall, yaw=a)            # the chimney
+    box((0.36, 0.08, 0.36), T(0.0, H + rh + 0.42, w / 2 - 0.35), 'grey', yaw=a)
+    with plain_parts():   # its dressing square-edged: the frame keeps the chamfer
+        # the front
+        box((0.08, 0.66, 0.42), T(fx + 0.02, 0.35, -w / 4), 0xfff6eb, yaw=a)            # the door in its frame
+        box((0.08, 0.6, 0.34), T(fx + 0.05, 0.32, -w / 4), door, yaw=a)
+        cols = (-w / 4, w / 4) if w < 2.0 else (-w / 3, 0.0, w / 3)
+        for f in range(floors):
+            wy = 0.2 + 0.78 * f + 0.42
+            for cz in cols:
+                if f == 0 and abs(cz + w / 4) < 0.5:
+                    continue
+                if bay and f < 2 and cz == cols[-1]:
+                    continue
+                box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
+                box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
+        if bay:                                                                         # a bay window, two floors
+            bz = cols[-1]
+            box((0.42, 1.5, 0.78), T(fx + 0.2, 0.2 + 0.75, bz), wall, yaw=a)
+            for f in range(2):
+                box((0.08, 0.42, 0.56), T(fx + 0.43, 0.2 + 0.78 * f + 0.42, bz), 0x8ecae6, yaw=a)
+            box((0.56, 0.1, 0.92), T(fx + 0.22, 1.76, bz), roof, yaw=a)
+        if balcony:                                                                     # a balcony on the first floor
+            box((0.4, 0.1, w * 0.7), T(fx + 0.2, 0.98, 0.0), 0xfff6eb, yaw=a)
+            box((0.08, 0.32, w * 0.7), T(fx + 0.38, 1.18, 0.0), 0xfff6eb, yaw=a)
+
+def riptide_pavement(road, z0, z1):
+    """The pavement before the terrace, at the road's height past the beach strip."""
+    riptide_along(road, z0, z1, 5.1, 6.4, None, 0.05, 'grey', row=4, dy=-0.5)
+
+@piece(1.0)
+def seafront_hotel():
+    # Riptide: the seafront hotel and its neighbours, across the road from
+    # the sea wall where the straight from the patrol's beach comes in: four
+    # floors, white with blue balconies all along, a flat roof behind a
+    # parapet with its red sign and two flags; the guest houses either side.
+    road = riptide_road((8.989, 0.0287, 0.0124), [(-7.0, -0.01), (-3.5, 0.0), (0.0, 0.06), (3.5, 0.14), (7.0, 0.22)])
+    riptide_pavement(road, -7.0, 7.0)
+    riptide_house(road, -6.2, 2.2, 3, 0xd0e8ff, 0x4f5260, bay=True)
+    riptide_house(road, -4.0, 2.2, 2, 0xfde4c7, 0xcf534f, balcony=True)
+    zc, w, dep, floors = -0.6, 4.6, 3.0, 4
+    a = road.yaw(zc)
+    xf, zf = road.at(zc, 6.3 + dep / 2)
+    y = road.y(zc) + 0.05
+    c, s = math.cos(a), math.sin(a)
+    def T(lx, ly, lz):
+        return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
+    H = 0.25 + 0.78 * floors
+    fx = dep / 2
+    box((dep, H + 1.0, w), T(0.0, (H - 1.0) / 2, 0.0), 0xfff6eb, yaw=a)
+    box((dep + 0.12, 0.16, w + 0.12), T(0.0, H, 0.0), 0xfde4c7, yaw=a)            # the cornice
+    box((dep, 0.32, w), T(0.0, H + 0.24, 0.0), 0xfff6eb, yaw=a)                     # the parapet
+    with plain_parts():
+        box((0.1, 0.9, 1.1), T(fx + 0.04, 0.45, 0.0), 0xfde4c7, yaw=a)                  # the entrance
+        box((0.1, 0.78, 0.8), T(fx + 0.08, 0.4, 0.0), 0x339cf2, yaw=a)
+        box((0.7, 0.1, 1.4), T(fx + 0.3, 0.98, 0.0), 0xff5040, yaw=a)                   # its canopy
+        for f in range(floors):
+            wy = 0.25 + 0.78 * f + 0.42
+            for k in range(5):
+                cz = -w / 2 + 0.5 + k * (w - 1.0) / 4
+                if f == 0 and abs(cz) < 0.7:
+                    continue
+                box((0.08, 0.46, 0.44), T(fx + 0.02, wy, cz), 0xfde4c7, yaw=a)
+                box((0.08, 0.38, 0.34), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
+            if f > 0:                                                                   # a balcony along each upper floor
+                box((0.36, 0.08, w - 0.3), T(fx + 0.18, wy - 0.36, 0.0), 0xfff6eb, yaw=a)
+                box((0.08, 0.26, w - 0.3), T(fx + 0.34, wy - 0.2, 0.0), 0x339cf2, yaw=a)
+        # the sign on the roof, to the road and the sea: a red board, white bars on it
+        box((0.18, 0.62, 3.0), T(0.4, H + 0.7, 0.0), 0xff5040, yaw=a)
+        for k in range(5):
+            box((0.08, 0.3, 0.3), T(0.52, H + 0.72, -1.1 + k * 0.55), 0xfff6eb, yaw=a)
+        for e in (-1, 1):
+            box((0.12, 0.62, 0.12), T(0.4, H + 0.2, e * 1.2), 0x38383d, yaw=a)
+        for k, e in enumerate((-1, 1)):                                                 # two flags on the roof
+            px, py, pz = T(-0.6, H + 0.4, e * (w / 2 - 0.35))
+            box((0.1, 1.5, 0.1), (px, py + 0.75, pz), 0xfff6eb)
+            with animated('anim_sway:a=x:d=20:p=%.1f#hotel%d' % (1.9 + 0.3 * k, k), (px, py + 1.5, pz)):
+                box((0.05, 0.42, 0.7), (px, py + 1.26, pz + 0.38), (0x339cf2, 0xff5040)[k])
+    riptide_house(road, 3.4, 2.2, 3, 0xf1976c, 0xcf534f, balcony=True, door=0xfff6eb)
+    riptide_house(road, 5.6, 2.2, 2, 0xfff6eb, 0x339cf2, bay=True)
+    join_still('terrace')
+    on_a_rise()
+
+@piece(1.0)
+def seafront_terrace():
+    # Riptide: the guest houses round the bend, a row of them in the
+    # seaside's colours, each its own height, with bays and balconies, their
+    # doors to the road and the dune behind them.
+    road = riptide_road((9.0, -0.0017, 0.01645), [(-7.0, 0.22), (-3.5, 0.30), (0.0, 0.31), (3.5, 0.24), (7.0, 0.16)])
+    riptide_pavement(road, -7.0, 7.0)
+    for (zc, w, fl, wall, roof, bay, bal) in ((-5.6, 2.2, 3, 0xffc044, 0x4f5260, False, True),
+                                               (-3.3, 2.2, 3, 0xfff6eb, 0x339cf2, True, False),
+                                               (-1.0, 2.2, 2, 0x61cb8b, 0xcf534f, False, False),
+                                               (1.3, 2.2, 3, 0xa0a8c9, 0x4f5260, True, False),
+                                               (3.6, 2.2, 3, 0xfde4c7, 0xcf534f, False, True),
+                                               (5.9, 2.2, 2, 0xd0e8ff, 0x4f5260, True, False)):
+        riptide_house(road, zc, w, fl, wall, roof, bay=bay, balcony=bal)
+    join_still('terrace')
+    on_a_rise()
+
+@piece(1.0)
+def seafront_cafe():
+    # Riptide: the terrace's end by the promenade: two more houses and the
+    # corner cafe, its striped awning over tables on the pavement.
+    road = riptide_road((9.008, 0.013, 0.01811), [(-7.0, 0.16), (-3.5, 0.08), (0.0, 0.02), (3.5, -0.01), (7.0, -0.01)])
+    riptide_pavement(road, -7.0, 7.0)
+    riptide_house(road, -5.6, 2.2, 3, 0xf2bf99, 0xcf534f, bay=True)
+    riptide_house(road, -3.3, 2.2, 2, 0xfff6eb, 0x4f5260, balcony=True, door=0xff5040)
+    riptide_house(road, 0.0, 4.4, 2, 0xfff6eb, 0xcf534f, door=0xff5040)
+    # the cafe's awning along its front, red and white, and its tables
+    zc = 0.0
+    a = road.yaw(zc)
+    for i in range(7):
+        x, z = road.at(zc - 1.9 + i * 0.63, 5.95)
+        box((0.7, 0.08, 0.64), (x, road.y(zc) + 0.95, z), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.35)
+    for lz in (-1.2, 1.2):
+        x, z = road.at(zc + lz, 5.6)
+        y = road.y(zc + lz) + 0.05
+        box((0.5, 0.08, 0.5), (x, y + 0.5, z), 0xfff6eb)
+        box((0.12, 0.5, 0.12), (x, y + 0.25, z), 0x38383d)
+    riptide_house(road, 3.3, 2.2, 3, 0xd0e8ff, 0xcf534f, bay=True)
+    riptide_house(road, 5.5, 2.2, 2, 0x61cb8b, 0x4f5260, balcony=True)
+    join_still('terrace')
+    on_a_rise()
 
 # ---- Driftwood's storm coast ----
 
@@ -2944,88 +3182,206 @@ def beach_day():
     join_still('beach')
     on_a_rise()
 
-def moored_dinghy(x, z, yaw, hull, sail, k):
-    """A sailing dinghy riding at its buoy off the beach, bow to +X turned
-    by `yaw`: the hull a car and a half long, a tall rig, sheeted in along
-    the boat so the road sees its side; it lifts and rocks a little on the
-    swell. Its water is the open sea's, past where the causeway's bay is
-    let down (tracks.js moors the fleet that far out)."""
-    sea = SEA
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s, sea + dy, z - dx * s + dz * c)
-    with animated('anim_bob:h=0.05:p=%.1f+sway:a=x:d=5:p=%.1f#dinghy%d' % (2.9 + 0.3 * (k % 3), 3.3 + 0.4 * (k % 4), k),
-                  at(0, 0, 0), yaw):
-        box((1.3, 0.3, 0.5), at(-0.1, 0.02, 0), hull, yaw=yaw)
-        box((0.36, 0.3, 0.36), at(0.6, 0.02, 0), hull, yaw=yaw + math.pi / 4)           # the bow
-        box((1.34, 0.06, 0.54), at(-0.1, 0.19, 0), 0xfff6eb, yaw=yaw)
-        box((0.09, 3.5, 0.09), at(0.2, 1.9, 0), 0xfff6eb, yaw=yaw)                      # the mast
-        box((1.5, 0.07, 0.07), at(-0.52, 1.2, 0), 0xfff6eb, yaw=yaw)                    # the boom, high over the cockpit
-        poly([at(0.15, 1.26, 0), at(-1.25, 1.26, 0), at(-0.95, 2.4, 0), at(0.15, 2.5, 0)], [(0, 1, 2, 3)], 0xfff6eb)
-        poly([at(0.15, 2.5, 0), at(-0.95, 2.4, 0), at(-0.42, 3.5, 0), at(0.15, 3.62, 0)], [(0, 1, 2, 3)], sail)
-    with square():
-        box((0.2, 0.2, 0.2), (x + 1.3 * c, sea + 0.04, z - 1.3 * s), 0xff7e44)          # its buoy
+def riptide_dinghy(hull, sail, trim=0xfff6eb):
+    """A sailing dinghy under sail, built bow to +X at the origin (a path
+    faces its part's +X along its way): the hull a car and a half long, its
+    gunwale, a tall mast, the mainsail on its boom and the jib, big enough
+    that the sails read from the road."""
+    box((1.6, 0.34, 0.6), (-0.1, 0.06, 0.0), hull)
+    box((0.44, 0.34, 0.44), (0.72, 0.06, 0.0), hull, yaw=math.pi / 4)             # the bow
+    box((1.64, 0.07, 0.64), (-0.1, 0.25, 0.0), trim)
+    box((0.13, 4.0, 0.13), (0.26, 2.2, 0.0), trim)                                # the mast
+    box((1.7, 0.1, 0.1), (-0.55, 0.64, 0.0), trim)                                # the boom
+    poly([(0.18, 0.7, 0.0), (-1.4, 0.7, 0.0), (0.18, 4.1, 0.0)], [(0, 1, 2)], 0xfff6eb)        # the mainsail
+    poly([(0.18, 1.9, 0.02), (-0.7, 1.9, 0.02), (0.18, 3.5, 0.02)], [(0, 1, 2)], sail)          # its colour panel
+    poly([(0.34, 0.5, 0.0), (1.1, 0.3, 0.0), (0.34, 3.1, 0.0)], [(0, 1, 2)], sail)                # the jib
+
+def riptide_water(L):
+    """The sea's surface over the plain `L` off the causeway's centreline:
+    the bay the shore lets in under the road lies kSeaSink down within
+    kSinkHold of the road's support and eases back to the open sea's by
+    kSinkOpen (TtpRenderer::seaSink; the support taken at the deck's edge
+    and a little)."""
+    t = min(1.0, max(0.0, (L - 10.7) / 18.0))
+    return SEA - SEA_SUNK * (1.0 - t)
 
 @piece(1.0)
 def lagoon_fleet():
-    # Riptide: the sailing club's dinghies moored on the open sea off the
-    # causeway, outside the kite surfers' run (inside it, in the lagoon, the
-    # road stood between them and the sea): five of them at their buoys,
-    # sails up, each its own colour, all swung to the same wind and rocking
-    # a little on the swell. +X is the road.
-    for k, (x, z, hull, sail) in enumerate(((0.6, -9.5, 0xfff6eb, 0xff5040), (-1.2, -5.0, 0x339cf2, 0xffc044),
-                                            (0.9, -0.4, 0xfff6eb, 0x339cf2), (-0.9, 4.2, 0xff5040, 0xfff6eb),
-                                            (0.4, 9.0, 0xffc044, 0xff7e44))):
-        moored_dinghy(x, z, 0.35 + 0.08 * (k % 3), hull, sail, k)
-    join_still('buoys')
-    def stone_anchor():      # a mooring block on the bed: draped, so the fleet rides on the plain's level
+    # Riptide: the sailing club's race off the causeway, where the lap runs
+    # out over the water: three dinghies, each its own colours, beating up
+    # the course along the road in short tacks, rounding the far mark and
+    # running back outside, round and round. What a racer sees is three
+    # big sails crossing the water beside the road, turning at every tack;
+    # the two orange marks stand at the course's ends. The water they sail
+    # is the bay the causeway's shore lets down (riptide_water). +X is the
+    # road (placed at yaw 180), the course along it.
+    def road_x(z):
+        return 17.871 + 0.1568 * z + 0.01446 * z * z       # the causeway's centreline here (scratch fit)
+    course = [(8.0, 7.0), (3.5, 2.5), (8.5, -2.5), (3.5, -7.5), (8.5, -12.5), (4.0, -17.5), (8.0, -22.0),
+              (2.0, -24.5), (-2.0, -16.0), (-2.5, -4.0), (-1.5, 4.5), (3.0, 9.5)]
+    for k, (x, z) in enumerate(course):
+        marker('path_race_%d' % k, (x, riptide_water(road_x(z) - x) - 0.04, z))
+    for k, (hull, sail, o) in enumerate(((0xfff6eb, 0xff5040, 0.0), (0x339cf2, 0xffc044, 0.34),
+                                         (0xff5040, 0x339cf2, 0.67))):
+        x0, z0 = course[0]
+        with animated('anim_path:c=race:p=48:f=1:o=%.2f+bob:h=0.05:p=%.1f#dinghy%d' % (o, 1.5 + 0.2 * k, k),
+                      (0.0, 0.0, 0.0)):
+            riptide_dinghy(hull, sail)
+    with square():                                                    # the course's marks
+        for (x, z) in ((5.0, -25.5), (2.0, 10.6)):
+            y = riptide_water(road_x(z) - x)
+            cyl(0.3, 0.7, (x, y - 0.2, z), 0xff7e44, r2=0.22, segs=8)
+            box((0.1, 0.5, 0.1), (x, y + 0.7, z), 0xff7e44)
+    join_still('marks')
+    def stone_anchor():      # a mooring block on the bed: draped, so the race sails over the plain's level
         with plain_parts():
-            box((0.3, 0.2, 0.3), (0.0, 0.1, 0.0), 'slate')
+            box((0.3, 0.2, 0.3), (0.0, -0.6, 0.0), 'slate')
     draped('mooring', stone_anchor)
 
-def kite_rider(k, colors, phase):
-    """A kite surfer working along the shore: the rider on the board, the
-    lines up to the kite flying high downwind of them (+X, over toward the
-    road), a crescent in the piece's X-Y plane so the cars see its face. One
-    part riding the closed path `kite`, never turning (the kite stays
-    downwind both ways), lifting a little over the chop."""
-    y0 = SEA - 0.62                         # the bay's water this far off the causeway (kSeaSink eases out)
-    KX, KY, R = 2.6, 5.6, 1.45
-    with animated('anim_path:c=kite:p=38:f=0:o=%.2f+bob:h=0.07:p=1.4#rider%d' % (phase, k), (0.0, y0, 0.0)):
-        with square():
-            box((0.2, 0.05, 0.75), (0.0, y0 + 0.03, 0.0), colors[0])                # the board
-            figure((0.0, y0 + 0.05, 0.0), 0.0, shirt=0x38383d, legs=0x38383d, hair=colors[1])
-            box((0.05, 0.05, 0.4), (0.22, y0 + 0.36, 0.0), 0x38383d)                 # the bar
-        arc = [math.radians(a) for a in (18, 47, 76, 104, 133, 162)]
-        pts = [(KX + R * math.cos(a), y0 + KY + 0.62 * R * math.sin(a)) for a in arc]
-        for i in range(5):
-            (xa, ya), (xb, yb) = pts[i], pts[i + 1]
-            poly([(xa, ya, -0.45), (xb, yb, -0.45), (xb, yb, 0.45), (xa, ya, 0.45)], [(0, 1, 2, 3)], colors[i % 2])
-        for (xa, ya) in (pts[0], pts[-1]):
-            beam((0.22, y0 + 0.36, 0.0), (xa, ya, 0.0), 0.04, 0xfff6eb)
+@piece(1.0)
+def channel_beacon():
+    # Riptide: the beacon marking the channel under the hop, where the
+    # causeway bridges the gap between the sea and the lagoon: a stone foot
+    # in the water, a stout post banded red and white, its red topmark and
+    # lamp, as tall as the club's mast, against the sky as the road climbs
+    # to the hop. It stands in the bay the shore lets down (riptide_water).
+    rowed(cyl(0.8, 1.45, (0.0, -1.25, 0.0), 'grey', r2=0.7, segs=8), 15)
+    box((1.2, 0.12, 1.2), (0.0, 0.26, 0.0), 0xfde4c7)
+    for k in range(5):
+        box((0.5, 1.0, 0.5), (0.0, 0.82 + k, 0.0), (0xff5040, 0xfff6eb)[k % 2])
+    box((0.7, 0.12, 0.7), (0.0, 5.36, 0.0), 0x38383d)
+    box((0.34, 0.36, 0.34), (0.0, 5.6, 0.0), 0xffc044)                      # the lamp
+    cyl(0.42, 0.55, (0.0, 5.78, 0.0), 0xff5040, segs=8)                      # the topmark
+    cyl(0.46, 0.55, (0.0, 6.33, 0.0), 0xff5040, r2=0.04, segs=8)
+    for sz in (-1, 1):                                                     # the ladder's rails, to the water
+        box((0.08, 4.6, 0.08), (0.33, 2.9, sz * 0.14), 0x38383d)
+    join_still('beacon')
+    on_a_rise()
 
 @piece(1.0)
-def kite_surfers():
-    # Riptide: the kite surfers off the causeway, where the lap ran out
-    # over open water with nothing on it: three of them reaching up and
-    # down the shore outside the road, each under a kite of its own colours
-    # flying five car-lengths up, downwind toward the road, where a racer
-    # sees it over the kerb the length of the causeway. People only as
-    # riders; the kites do the moving. +X is the road; the run is along it.
-    loop = stadium(-3.4, 0.0, 1.6, 10.0, 4)
-    for i, (x, z) in enumerate(loop):
-        marker('path_kite_%d' % i, (x, 0.0, z))
-    kite_rider(0, (0xff5040, 0xfff6eb), 0.0)
-    kite_rider(1, (0xffc044, 0x339cf2), 0.36)
-    kite_rider(2, (0x22c46e, 0xfff6eb), 0.71)
-    with square():
-        for z in (-11.5, 11.5):                                                      # the run's marker buoys
-            box((0.3, 0.34, 0.3), (-3.4, SEA - 0.6, z), 0xff7e44)
-    join_still('buoys')
-    def anchor():
-        with plain_parts():
-            box((0.3, 0.2, 0.3), (-3.4, 0.1, 0.0), 'slate')
-    draped('mooring', anchor)
+def coastguard_lookout():
+    # Riptide: the coastguard's lookout on the Point's green flank over the
+    # start straight, where the lap sets out and comes home: a white house
+    # cut into the slope, its glazed lookout room on top under a red roof,
+    # windows to the bay, and its signal mast beside it, the yard's flags
+    # and the pennant at the head flying. +X is the road (placed at yaw 180
+    # on the straight's left); the hill rises behind it, and the house runs
+    # on under the slope.
+    white, red, yellow, blue = 0xfff6eb, 0xff5040, 0xffc044, 0x339cf2
+    W, D, H = 2.2, 2.6, 1.7
+    box((W, H + 1.6, D), (0.0, (H - 1.6) / 2, 0.0), white)
+    box((W + 0.12, 0.14, D + 0.12), (0.0, H, 0.0), 0xfde4c7)                 # the cornice
+    for dz in (-0.7, 0.7):                                                 # windows to the road
+        box((0.08, 0.5, 0.5), (W / 2 + 0.02, 0.95, dz), 0xfde4c7)
+        box((0.08, 0.4, 0.4), (W / 2 + 0.05, 0.95, dz), 0x4f5260)
+    box((0.08, 0.7, 0.5), (W / 2 + 0.02, 0.35, 0.0), 0xfde4c7)              # the door
+    box((0.08, 0.62, 0.4), (W / 2 + 0.05, 0.32, 0.0), blue)
+    # the lookout room: glazed all round, a white frame, the red roof
+    LW, LD, LH = 1.5, 1.8, 0.9
+    box((LW, 0.16, LD), (0.0, H + 0.15, 0.0), white)
+    box((LW - 0.08, LH, LD - 0.08), (0.0, H + 0.23 + LH / 2, 0.0), 0x8ecae6)
+    for (sx, sz) in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+        box((0.14, LH, 0.14), (sx * (LW / 2 - 0.05), H + 0.23 + LH / 2, sz * (LD / 2 - 0.05)), white)
+    box((0.12, 0.1, LD), (LW / 2 - 0.02, H + 0.23 + LH * 0.55, 0.0), white)
+    cyl(1.35, 0.7, (0.0, H + 0.23 + LH, 0.0), red, r2=0.08, segs=4, yaw=math.pi / 4)
+    # the signal mast on the slope beside it, toward the cars coming (+Z)
+    mx, mz = 0.6, 2.6
+    box((0.36, 0.3, 0.36), (mx, 0.15, mz), 'grey')
+    box((0.17, 6.0, 0.17), (mx, 3.0, mz), white)
+    box((0.13, 0.13, 2.6), (mx, 4.6, mz), white)                           # the yard
+    box((0.22, 0.22, 0.22), (mx, 6.06, mz), red)
+    for k, (dz, cols) in enumerate(((-1.2, (red, yellow)), (1.2, (blue, white)))):
+        with animated('anim_sway:a=x:d=18:p=%.1f#signal%d' % (1.9 + 0.35 * k, k), (mx, 4.6, mz + dz)):
+            for i, c in enumerate(cols):
+                box((0.06, 0.42, 0.5), (mx, 4.25 - 0.5 * i, mz + dz), c)
+    with animated('anim_sway:a=x:d=22:p=1.6#pennant', (mx, 5.9, mz)):
+        poly([(mx, 5.95, mz), (mx, 5.45, mz), (mx, 5.7, mz - 1.2)], [(0, 1, 2)], red)
+    join_still('lookout')
+    on_a_rise()
+
+def riptide_kite(stake, at, span, colors, tag, p):
+    """A big kite flown from a stake on the beach, its line a bar a
+    racer can see (never a hairline), the kite's face across the piece
+    (+X-Y plane, toward the road at +X), a tail of fat bows; kite, line
+    and tail swing together about the stake on the wind."""
+    sx, sy, sz = stake
+    kx, ky, kz = at
+    with animated('anim_sway:a=z:d=9:p=%.1f#kite%s' % (p, tag), (sx, sy, sz)):
+        beam((sx, sy, sz), (kx, ky - 0.1, kz), 0.09, 0xfff6eb)
+        h = span * 0.62
+        # a diamond in two colours, its spars along its axes
+        top, bot, lft, rgt = (kx, ky + h, kz), (kx, ky - h * 1.3, kz), (kx - span / 2, ky, kz), (kx + span / 2, ky, kz)
+        poly([top, lft, (kx, ky, kz)], [(0, 1, 2)], colors[0])
+        poly([top, (kx, ky, kz), rgt], [(0, 1, 2)], colors[1])
+        poly([lft, bot, (kx, ky, kz)], [(0, 1, 2)], colors[1])
+        poly([(kx, ky, kz), bot, rgt], [(0, 1, 2)], colors[0])
+        beam(top, bot, 0.08, 0x38383d)
+        beam(lft, rgt, 0.08, 0x38383d)
+        tail = [(kx + 0.3 * math.sin(i * 1.3), ky - h * 1.3 - 0.45 * i, kz) for i in range(5)]
+        for i in range(4):
+            beam(tail[i], tail[i + 1], 0.08, 0xfff6eb)
+            box((0.42, 0.14, 0.1), tail[i + 1], colors[i % 2], roll=0.3 * (1 if i % 2 else -1))
+
+@piece(1.0)
+def sailing_club():
+    # Riptide: the sailing club on the bank outside the hook, where the
+    # causeway points: the white boathouse with its blue doors to the road,
+    # the club's mast with its yard and signal flags, three dinghies on
+    # their trolleys on the hard before it with their sails up, rigged to
+    # go down the slip to the race off the causeway, and two big kites the
+    # club's school flies from a stake on the sand over the hook. +X is the
+    # road (placed at yaw 180); the hook wraps round it.
+    white, blue, red, yellow, wood = 0xfff6eb, 0x339cf2, 0xff5040, 0xffc044, 0x9a7b55
+    # the boathouse: a long white shed under a grey roof, ridge along Z
+    bx, bz, W, D, H = -2.4, 0.0, 2.6, 4.2, 1.7
+    box((W, H + 0.6, D), (bx, (H - 0.6) / 2, bz), white)
+    for k in range(4):                                                    # its weatherboards' laps
+        box((W + 0.04, 0.05, D + 0.04), (bx, 0.35 + 0.35 * k, bz), 0xfde4c7)
+    ang = math.atan2(0.9, W / 2)
+    run = (W / 2 + 0.25) / math.cos(ang)
+    for sx in (-1, 1):
+        box((run, 0.12, D + 0.4), (bx + sx * (W / 2 + 0.25) / 2, H + 0.9 - 0.5 * (W / 2 + 0.25) * math.tan(ang) + 0.06, bz),
+            0x4f5260, roll=sx * ang)
+    for e in (-1, 1):
+        poly([(bx - W / 2, H, bz + e * D / 2), (bx + W / 2, H, bz + e * D / 2), (bx, H + 0.9, bz + e * D / 2)], [(0, 1, 2)], white)
+    for dz in (-1.0, 1.0):                                                # the two big doors to the road
+        box((0.08, 1.3, 1.5), (bx + W / 2 + 0.02, 0.65, bz + dz), white)
+        box((0.08, 1.2, 1.36), (bx + W / 2 + 0.05, 0.6, bz + dz), blue)
+    box((0.1, 0.42, 2.6), (bx + W / 2 + 0.06, H - 0.12, bz), red)          # the club's red board over them
+    # the club's mast: a white pole, its yard, a gaff, signal flags strung
+    # from the yard's ends and the burgee at the head, all flying
+    mx, mz = 0.2, 3.4
+    box((0.3, 0.3, 0.3), (mx, 0.15, mz), 'grey')
+    box((0.16, 5.0, 0.16), (mx, 2.5, mz), white)
+    box((0.12, 0.12, 2.2), (mx, 3.9, mz), white)                         # the yard, across the road's view
+    box((0.2, 0.2, 0.2), (mx, 5.06, mz), red)
+    for k, (dz, cols) in enumerate(((-1.0, (red, yellow)), (1.0, (blue, white)))):
+        with animated('anim_sway:a=x:d=18:p=%.1f#signal%d' % (1.8 + 0.4 * k, k), (mx, 3.9, mz + dz)):
+            for i, c in enumerate(cols):
+                box((0.06, 0.4, 0.46), (mx, 3.55 - 0.48 * i, mz + dz), c)
+    with animated('anim_sway:a=x:d=22:p=1.7#burgee', (mx, 4.9, mz)):
+        poly([(mx, 4.95, mz), (mx, 4.45, mz), (mx, 4.7, mz - 1.0)], [(0, 1, 2)], red)
+    # the dinghies on their trolleys on the hard, bows to the road, sails up
+    for k, (z, hull, sail) in enumerate(((-3.2, white, red), (-1.0, red, blue), (1.3, blue, yellow))):
+        dx = 1.4
+        for sz in (-0.24, 0.24):
+            scenery_wheel(dx - 0.2, 0.14, z + sz, 0.14, 0.08)
+        box((1.1, 0.08, 0.3), (dx - 0.2, 0.26, z), 0x38383d)
+        before = set(bpy.context.scene.objects)
+        riptide_dinghy(hull, sail)
+        for o in bpy.context.scene.objects:
+            if o not in before and o.parent is None:
+                o.location += P(dx, 0.36, z)
+    # the hard: concrete down from the boathouse to the slip at the hook's edge
+    with plain_parts():
+        rowed(box((4.2, 0.08, 8.6), (0.6, 0.04, 0.0), 'grey'), 6)
+    # the kite school's stake and its two kites over the hook
+    sx, sz = 2.8, -5.6
+    box((0.32, 0.9, 0.32), (sx, 0.45, sz), wood)
+    box((0.42, 0.14, 0.42), (sx, 0.9, sz), red)
+    riptide_kite((sx, 0.85, sz), (sx + 1.4, 6.4, sz - 4.2), 1.9, (red, yellow), 'a', 3.1)
+    riptide_kite((sx, 0.85, sz), (sx - 0.8, 5.2, sz - 6.8), 1.6, (blue, white), 'b', 3.7)
+    join_still('club')
 
 # ---- Driftwood: the strand the storm left ----
 
