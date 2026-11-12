@@ -3181,11 +3181,15 @@ def draped(name, build):
     things on a piece's own ground are built from y = 0 as if on the plain
     and land on the drawn slope instead of floating off it or sinking in.
     A moving part built inside keeps its own node (a grazing head: give it
-    the `drape` verb so it lands with the body)."""
+    the `drape` verb so it lands with the body). What it marks `turf` (a
+    garden's lawn, a brook's grass bank) is a part of its own, `drape_turf`,
+    which the renderer paints in the ground's own colour where it lies."""
     before = set(bpy.context.scene.objects)
     build()
-    return group([o for o in bpy.context.scene.objects
-                  if o not in before and o.type == 'MESH' and o.get('anim') is None], 'drape_' + name)
+    made = [o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH' and o.get('anim') is None]
+    if any(o.get('turf') for o in made):
+        group([o for o in made if o.get('turf')], 'drape_turf')
+    return group([o for o in made if not o.get('turf')], 'drape_' + name)
 
 def turned(cx, cz, yaw, lx, lz):
     """A point (lx, lz) in a frame at (cx, cz) turned by `yaw` (box()'s sense:
@@ -7156,6 +7160,7 @@ def strut(a, b, t, color):
 # keep their proportions at the size of real things. Nothing everyday is
 # giant: what is big is land, water and many real things together.
 REAL = 0.25
+SLATE_ROW = 30     # the grey ramp's slate, lighter than 'slate': lit faces at about 45%, shaded over 32%
 
 def local(cx, cz, yaw):
     """Points in a frame at (cx, cz) turned by `yaw` (box()'s sense)."""
@@ -8408,69 +8413,214 @@ def den_camp():
         person((TX + 2.5, 0.9, TZ), 0.0, 0x339cf2, k=0.64, hair=2, sit=True, arm=1.3)
     join_still('camp')
 
-# ---- TANGLE: the mill stream ------------------------------------------------------------
-# Tangle's stream rises in the north loop, runs under the S-bend's bridge
-# and the first bridge and over the north lawn to the mill pond on the west,
-# ahead of the grid, where the watermill's wheel turns in the race. The
-# stream is laid reach by reach (set-stream-reach, each placed along its
-# stretch, their tapered ends overlapping); the mill is the hero. Water is a
-# flat sheet on the lawn: from the road, eye height over the grass, it is a
-# line of blue beside the kerb, so each reach brings a willow on its bank, the tall
-# thing that says stream. The water is the kit's sky swatch at the foot of its
-# ramp, and the pond it opens into (a `pond` landform the renderer draws,
-# TtpRenderer::buildPonds) is painted the same blue: one water.
-WATER, MUD = 0x8ecae6, 0xb08a5a
-STREAM_W, REACH = 4.2, 88.0   # its half width; a reach's length between its end circles
+# ---- TANGLE: the brook ------------------------------------------------------------------
+# Tangle's brook rises at the springhouse beyond the north loop's top straight,
+# goes under that straight and down the loop to a culvert under the start
+# straight, runs down the straight's left kerb to a second culvert, back
+# under it and round the outside of the first bend, through the watermill's
+# race under its wheel, and over a sill into the duck pond under the first
+# bridge. The water lies BELOW its banks: a channel walled in slate, the
+# lawn rolling up to its coping a hand over the water, darker down the
+# middle, white where it riffles, reeds on the banks. It is one curve laid in the WORLD
+# (scratch geometry, as the park railway's) and cut into lengths, each its own
+# piece in its own frame along its chord (BROOK_ROUTE: what each end meets, the
+# neighbours' points that set its end tangents, then (x, z, half width) along
+# it), so the water turns its bends and no two reaches overlap. World units;
+# all of it DRAPES.
+BROOK_WY, BROOK_H = 0.05, 0.27                            # the water; the walls' top, a hand over it
+BROOK_COPE, BROOK_BANK = 0.16, 0.9                        # the coping's width; the grass bank's, down to the lawn
+BROOK_BANDS = (((-1.0, -0.55), ('sky', 28)), ((-0.55, -0.2), ('blue', 6)), ((-0.2, 0.2), ('blue', 16)),
+               ((0.2, 0.55), ('blue', 6)), ((0.55, 1.0), ('sky', 28)))
+BROOK_STONE = (('grey', 20), ('grey', SLATE_ROW))           # the coping's two stones
+BROOK_ROUTE = {
+    'brook-a': ("outfall", "culvert", None, None, (
+        (-1.377, -8.085, 0.8), (-1.578, -7.329, 0.82), (-1.802, -6.579, 0.85), (-1.965, -5.815, 0.87), (-2, -5.035, 0.9), (-1.859, -4.267, 0.92),
+        (-1.587, -3.535, 0.94), (-1.254, -2.827, 0.95), (-0.9, -2.129, 0.97), (-0.549, -1.43, 0.98), (-0.222, -0.72, 0.99), (0.054, 0.012, 1),
+        (0.244, 0.77, 1), (0.305, 1.549, 1), (0.248, 2.329, 0.98), (0.115, 3.099, 0.96), (-0.068, 3.86, 0.94), (-0.283, 4.612, 0.92),
+        (-0.518, 5.358, 0.89), (-0.762, 6.101, 0.86), (-1.002, 6.846, 0.84), (-1.22, 7.597, 0.82), (-1.377, 8.363, 0.8),
+    )),
+    'brook-b': ("culvert", "join", None, (-0.42, 12.406), (
+        (-0.427, -11.456, 0.8), (-0.143, -10.713, 0.83), (-0.023, -9.925, 0.88), (0.021, -9.129, 0.92), (0.039, -8.331, 0.96), (0.058, -7.533, 0.99),
+        (0.087, -6.736, 1.01), (0.102, -5.938, 1.02), (0.104, -5.14, 1.03), (0.097, -4.342, 1.04), (0.084, -3.544, 1.04), (0.066, -2.746, 1.04),
+        (0.044, -1.949, 1.04), (0.019, -1.151, 1.04), (-0.009, -0.354, 1.04), (-0.039, 0.444, 1.04), (-0.07, 1.241, 1.04), (-0.102, 2.039, 1.03),
+        (-0.135, 2.836, 1.03), (-0.169, 3.633, 1.03), (-0.203, 4.43, 1.02), (-0.237, 5.228, 1.02), (-0.27, 6.025, 1.02), (-0.302, 6.822, 1.01),
+        (-0.333, 7.62, 1.01), (-0.362, 8.417, 1.01), (-0.388, 9.215, 1), (-0.41, 10.012, 1), (-0.424, 10.81, 1), (-0.426, 11.608, 0.99),
+    )),
+    'brook-c': ("join", "join", (0.54, -12.294), (0.744, 12.097), (
+        (0.587, -11.497, 0.99), (0.643, -10.701, 0.99), (0.705, -9.906, 0.99), (0.768, -9.11, 0.98), (0.83, -8.315, 0.97), (0.883, -7.519, 0.97),
+        (0.923, -6.722, 0.96), (0.945, -5.924, 0.96), (0.943, -5.126, 0.95), (0.913, -4.329, 0.95), (0.849, -3.533, 0.95), (0.735, -2.744, 0.95),
+        (0.579, -1.961, 0.95), (0.395, -1.185, 0.96), (0.193, -0.413, 0.96), (-0.013, 0.358, 0.97), (-0.214, 1.13, 0.97), (-0.396, 1.907, 0.97),
+        (-0.55, 2.69, 0.97), (-0.662, 3.48, 0.96), (-0.722, 4.276, 0.95), (-0.715, 5.073, 0.94), (-0.639, 5.867, 0.91), (-0.515, 6.656, 0.88),
+        (-0.358, 7.438, 0.85), (-0.179, 8.216, 0.82), (0.013, 8.99, 0.78), (0.21, 9.763, 0.74), (0.404, 10.537, 0.71), (0.586, 11.314, 0.68),
+    )),
+    'brook-d': ("join", "culvert", (0.682, -11.493), None, (
+        (0.979, -10.753, 0.68), (1.254, -10.004, 0.65), (1.49, -9.241, 0.62), (1.659, -8.462, 0.61), (1.71, -7.667, 0.62), (1.56, -6.887, 0.66),
+        (1.203, -6.175, 0.73), (0.753, -5.516, 0.81), (0.341, -4.834, 0.89), (0.073, -4.084, 0.95), (-0.045, -3.296, 0.97), (-0.09, -2.499, 0.99),
+        (-0.091, -1.701, 1), (-0.063, -0.904, 1.01), (-0.014, -0.108, 1.01), (0.049, 0.688, 1), (0.124, 1.482, 1), (0.206, 2.276, 0.99),
+        (0.291, 3.07, 0.98), (0.377, 3.863, 0.97), (0.458, 4.657, 0.96), (0.528, 5.452, 0.95), (0.613, 6.245, 0.94), (0.743, 7.032, 0.91),
+        (0.892, 7.816, 0.88), (1.028, 8.602, 0.85), (1.098, 9.396, 0.82), (0.98, 10.181, 0.8),
+    )),
+    'brook-e': ("culvert", "join", None, (2.029, 11.461), (
+        (1.806, -11.323, 0.8), (1.377, -10.643, 0.81), (1.034, -9.916, 0.82), (0.749, -9.163, 0.84), (0.51, -8.395, 0.85), (0.311, -7.615, 0.87),
+        (0.148, -6.828, 0.88), (0.019, -6.033, 0.89), (-0.074, -5.234, 0.9), (-0.133, -4.432, 0.9), (-0.155, -3.627, 0.9), (-0.15, -2.823, 0.9),
+        (-0.124, -2.018, 0.89), (-0.083, -1.215, 0.89), (-0.028, -0.412, 0.88), (0.038, 0.39, 0.88), (0.115, 1.191, 0.87), (0.202, 1.991, 0.86),
+        (0.298, 2.79, 0.85), (0.404, 3.588, 0.85), (0.518, 4.384, 0.84), (0.642, 5.179, 0.83), (0.774, 5.973, 0.82), (0.917, 6.765, 0.81),
+        (1.069, 7.555, 0.8), (1.233, 8.343, 0.79), (1.409, 9.128, 0.78), (1.598, 9.91, 0.77), (1.804, 10.688, 0.76),
+    )),
+    'brook-f': ("join", "join", (5.223, -10.951), (5.117, 9.848), (
+        (4.606, -10.435, 0.76), (4.001, -9.903, 0.75), (3.413, -9.354, 0.73), (2.848, -8.782, 0.72), (2.316, -8.178, 0.71), (1.841, -7.529, 0.7),
+        (1.468, -6.817, 0.68), (1.228, -6.051, 0.67), (1.104, -5.256, 0.65), (1.044, -4.454, 0.63), (0.976, -3.652, 0.62), (0.829, -2.862, 0.62),
+        (0.575, -2.099, 0.63), (0.269, -1.354, 0.64), (-0.013, -0.601, 0.65), (-0.199, 0.181, 0.67), (-0.228, 0.983, 0.69), (-0.086, 1.774, 0.7),
+        (0.181, 2.533, 0.72), (0.517, 3.264, 0.73), (0.896, 3.973, 0.74), (1.305, 4.666, 0.75), (1.736, 5.346, 0.76), (2.185, 6.013, 0.78),
+        (2.649, 6.671, 0.79), (3.124, 7.321, 0.8), (3.61, 7.962, 0.81), (4.104, 8.597, 0.82), (4.607, 9.225, 0.83),
+    )),
+    'brook-g': ("join", "pond", (1.403, -12.332), None, (
+        (1.24, -11.544, 0.83), (1.087, -10.754, 0.84), (0.942, -9.962, 0.85), (0.806, -9.169, 0.86), (0.677, -8.375, 0.87), (0.556, -7.579, 0.88),
+        (0.443, -6.782, 0.89), (0.337, -5.985, 0.9), (0.239, -5.186, 0.91), (0.15, -4.386, 0.92), (0.07, -3.586, 0.92), (0, -2.784, 0.93),
+        (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.016, 1.231, 0.97), (0.134, 2.027, 0.98),
+        (0.28, 2.818, 0.98), (0.446, 3.605, 0.99), (0.619, 4.391, 0.99), (0.782, 5.179, 1), (0.916, 5.972, 1), (1.005, 6.772, 1),
+        (1.075, 7.574, 1), (1.132, 8.376, 1), (1.185, 9.179, 1), (1.241, 9.982, 1),
+    )),
+}
 
-@piece(REAL)
-def stream_reach():
-    # One reach of the stream, a steady width with a round end each side:
-    # laid end to end, each reach's end circle on the next one's, the water
-    # joins round any bend (same height, same colour, so where two lie over
-    # each other nothing shows). REACH between the two circles' centres; a
-    # mud margin, a few stones and reeds. ONE part, one draw wherever it is,
-    # and it DRAPES: the water lies on the lawn as the renderer draws it, up
-    # the ground raised under a deck as well, never sunk under it.
-    W, M = STREAM_W, 1.2
-    zc = REACH / 2
-    def ribbon(w, y, color, cuts):
-        pts = []
-        for t in range(7):                                  # the +Z cap, from its tip
-            a = (6 - t) * math.pi / 12
-            pts.append((zc + w * math.sin(a), w * math.cos(a)))
-        for i in range(1, 10):
-            pts.append((zc - REACH * i / 10, w))
-        for t in range(7):                                  # the -Z cap, to its tip
-            a = t * math.pi / 12
-            pts.append((-zc - w * math.sin(a), w * math.cos(a)))
-        # Both ribbons are cut at the water's edges and down the middle, so
-        # where the drawn ground kinks under a reach the water rides it at
-        # the very points the mud does and stays on top (the mud's one flat
-        # span from margin to margin rose over the water on a cross slope).
-        fr = [f / w for f in cuts]
-        n = len(fr)
-        verts, faces = [], []
-        for i, (z, h) in enumerate(pts):
-            verts += [(h * f, y, z) for f in fr]
-            if i:
-                for j in range(n - 1):
-                    faces.append((n * (i - 1) + j, n * i + j, n * i + j + 1, n * (i - 1) + j + 1))
-        ground_poly(verts, faces, color)
-    ribbon(W + M, 0.12, MUD, (W + M, W, 0.0, -W, -(W + M)))
-    ribbon(W, 0.28, WATER, (W, 0.0, -W))
-    for i, (x, z, r) in enumerate(((4.4, -30.0, 0.9), (-4.6, -10.0, 0.8), (4.8, 14.0, 1.0), (-0.4, 2.6, 0.7))):
-        box((r * 1.3, 0.6 * r, r), (x, 0.3 * r, z), ('grey', 'lavender')[i % 2], yaw=i * 0.9)
-    for k, (x, z) in enumerate(((5.6, -20.0), (-5.6, 26.0))):
+def brook_frames(pts, prev, nxt):
+    """(x, z, w, ax, az) per point: (ax, az) across the flow, to its left."""
+    out = []
+    for i, (x, z, w) in enumerate(pts):
+        a = pts[i - 1][:2] if i else (prev or pts[i][:2])
+        b = pts[i + 1][:2] if i < len(pts) - 1 else (nxt or pts[i][:2])
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        d = math.hypot(tx, tz) or 1.0
+        out.append((x, z, w, -tz / d, tx / d))
+    return out
+
+def brook_mesh(verts, faces, facing, color, row):
+    """Faces in the piece frame, each turned toward its `facing` (a glTF
+    direction per face): a wall's face toward the water or the lawn, a top up."""
+    me = bpy.data.meshes.new('brook')
+    me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+    me.update()
+    for f, want in zip(me.polygons, facing):
+        if f.normal.dot(P(*want)) < 0:
+            f.flip()
+    o = bpy.data.objects.new('brook', me)
+    bpy.context.scene.collection.objects.link(o)
+    return rowed(paint(o, color), row)
+
+def brook_channel(fr, start, end, k=1.0):
+    """The water's bands and both walls along the frames `fr`, in a frame of
+    `k` world units a unit (the heights and widths are the world's)."""
+    n = len(fr)
+    WY, H, C = BROOK_WY / k, BROOK_H / k, BROOK_COPE / k
+    def lay(profile, color, row, facing, pick=None):
+        verts, faces, face_dirs = [], [], []
+        m = len(profile(fr[0][2]))
+        for x, z, w, ax, az in fr:
+            for o, y in profile(w):
+                verts.append((x + ax * o, y, z + az * o))
+        for i in range(n - 1):
+            if pick and not pick(i):
+                continue
+            x, z, w, ax, az = fr[i]
+            for c in range(m - 1):
+                faces.append((m * i + c, m * (i + 1) + c, m * (i + 1) + c + 1, m * i + c + 1))
+                face_dirs.append(facing(ax, az))
+        if faces:
+            brook_mesh(verts, faces, face_dirs, color, row)
+    up = lambda ax, az: (0.0, 1.0, 0.0)
+    for (f0, f1), (color, row) in BROOK_BANDS:
+        lay(lambda w, f0=f0, f1=f1: ((f0 * w, WY), (f1 * w, WY)), color, row, up)
+    B = BROOK_BANK / k
+    for sd in (-1, 1):
+        # the wall's face down into the water, toward it
+        lay(lambda w: ((sd * w, WY - 0.04 / k), (sd * w, H)), 'grey', SLATE_ROW,
+            lambda ax, az: (-sd * ax, 0.0, -sd * az))
+        # the coping, two stones in turn, a block a stride
+        for j, (color, row) in enumerate(BROOK_STONE):
+            lay(lambda w: ((sd * w, H), (sd * (w + C), H)), color, row, up, pick=lambda i, j=j: (i // 2) % 2 == j)
+        # the grass bank rolling down from it to the lawn, in the field's own
+        # colour (turf: the renderer paints it the ground's)
+        before = set(bpy.context.scene.objects)
+        lay(lambda w: ((sd * (w + C), H), (sd * (w + C + 0.35 * B), 0.62 * H), (sd * (w + C + B), -0.04 / k)),
+            'green', 22, lambda ax, az: (sd * ax, 1.0, sd * az))
+        for o in set(bpy.context.scene.objects) - before:
+            o['turf'] = 1
+    # riffles: short white marks on the water, leaning with the flow, now one
+    # side now the other, and a broken white run off each culvert's mouth
+    marks = []
+    for i in range(2, n - 2, 3):
+        if hash01(i, n, 3.1) < 0.45:
+            continue
+        x, z, w, ax, az = fr[i]
+        o = (0.5 if (i // 3) % 2 else -0.5) * w * (0.4 + 0.6 * hash01(i, 7.7))
+        marks.append((x + ax * o, z + az * o, ax, az, (0.32 + 0.25 * hash01(i, 1.3)) / k, 0.09 / k))
+    for at, sgn in ((0, 1), (n - 1, -1)):
+        kind = start if at == 0 else end
+        if kind not in ('culvert', 'outfall'):
+            continue
+        for j in range(4):
+            i = min(n - 1, max(0, at + sgn * (1 + j // 2)))
+            x, z, w, ax, az = fr[i]
+            o = (-0.45 + 0.9 * hash01(j, at, 5.5)) * w
+            marks.append((x + ax * o, z + az * o, ax, az, 0.45 / k, 0.14 / k))
+    for x, z, ax, az, L, t in marks:
+        tx, tz = az, -ax                      # along the flow
+        q = [(x + tx * L / 2 + ax * t, WY + 0.02 / k, z + tz * L / 2 + az * t),
+             (x + tx * L / 2 - ax * t, WY + 0.02 / k, z + tz * L / 2 - az * t),
+             (x - tx * L / 2 - ax * t * 0.4, WY + 0.02 / k, z - tz * L / 2 - az * t * 0.4),
+             (x - tx * L / 2 + ax * t * 0.4, WY + 0.02 / k, z - tz * L / 2 + az * t * 0.4)]
+        rowed(ground_poly(q, [(0, 1, 2, 3)], 'white'), 4)
+    # reeds on the banks, a clump now and then on alternate sides
+    for i in range(1, n - 1, 5):
+        if hash01(i, n, 9.1) < 0.35:
+            continue
+        x, z, w, ax, az = fr[i]
+        sd = 1 if (i // 5) % 2 else -1
+        cx, cz = x + ax * sd * (w + C + 0.3 * B), z + az * sd * (w + C + 0.3 * B)
         for j in range(3):
-            a = j * 1.7 + k
-            box((0.18, 1.6 - 0.2 * j, 0.18), (x + 0.4 * math.cos(a), 0.8 - 0.1 * j, z + 0.4 * math.sin(a)),
-                (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
-    # a willow on the -X bank a quarter of the way along, hanging over the
-    # water: the tall thing that says stream from the road on the lawn,
-    # where the water itself is a line beside the kerb. Turning a reach
-    # half round puts it on the other bank at the other end.
-    willow((-W - 3.4, 0, -REACH / 4))
-    join_still('drape_reach')
+            a = j * 2.1 + i
+            cyl(0.07 / k, (0.55 + 0.15 * ((i + j) % 3)) / k, (cx + 0.12 / k * math.cos(a), -0.05 / k, cz + 0.12 / k * math.sin(a)),
+                (0x4f9a48, 0x22c46e, 0x61cb8b)[j], r2=0.0, segs=3, yaw=a)
+
+def brook_ends(fr, start, end):
+    H, C = BROOK_H, BROOK_COPE
+    for kind, i, sgn in ((start, 0, -1), (end, len(fr) - 1, 1)):
+        x, z, w, ax, az = fr[i]
+        tx, tz = az, -ax                      # along the flow
+        yaw = math.atan2(tx, tz)
+        span = 2 * (w + C) + 0.2
+        if kind == 'outfall':
+            # where the spring's water comes back out from under the road: a
+            # headwall across the head of the channel, a dark pipe mouth low in
+            # it and a white tongue of water falling out of it
+            hx, hz = x - tx * 0.18, z - tz * 0.18
+            box((span + 0.3, 0.75, 0.32), (hx, 0.36, hz), 'grey', yaw=yaw)
+            rowed(box((span + 0.45, 0.12, 0.42), (hx, 0.78, hz), 'grey', yaw=yaw), 16)
+            box((0.62, 0.42, 0.06), (x - tx * 0.0, 0.3, z - tz * 0.0), 0x2a2735, yaw=yaw)
+            rowed(ground_poly([(x + ax * 0.3, BROOK_WY + 0.03, z + az * 0.3), (x - ax * 0.3, BROOK_WY + 0.03, z - az * 0.3),
+                               (x - ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z - az * 0.2 + tz * 0.9),
+                               (x + ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z + az * 0.2 + tz * 0.9)], [(0, 1, 2, 3)], 'white'), 2)
+        elif kind == 'pond':
+            # the sill it spills over into the pond, the walls ending in a
+            # stone each side, the spill white past the sill
+            box((2 * w + 0.1, 0.16, 0.3), (x, BROOK_WY + 0.06, z), 'grey', yaw=yaw)
+            for sd in (-1, 1):
+                rowed(box((C + 0.2, H + 0.12, 0.5), (x + ax * sd * (w + C / 2), (H + 0.12) / 2 - 0.04, z + az * sd * (w + C / 2)),
+                          'grey', yaw=yaw), SLATE_ROW)
+            rowed(ground_poly([(x + ax * w + tx * 0.16, BROOK_WY + 0.02, z + az * w + tz * 0.16),
+                               (x - ax * w + tx * 0.16, BROOK_WY + 0.02, z - az * w + tz * 0.16),
+                               (x - ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z - az * w * 0.7 + tz * 0.9),
+                               (x + ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z + az * w * 0.7 + tz * 0.9)],
+                              [(0, 1, 2, 3)], 'white'), 3)
+
+def brook_piece(start, end, prev, nxt, pts):
+    fr = brook_frames(pts, prev, nxt)
+    draped('brook', lambda: (brook_channel(fr, start, end), brook_ends(fr, start, end)))
+
+for _name, (_s, _e, _p, _n, _pts) in BROOK_ROUTE.items():
+    PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts))
+    GROW[_name] = 1.0
+
 
 def willow(at):
     """A weeping willow by the water, about as tall as a garden oak (three
@@ -8497,33 +8647,31 @@ def duck(at, color=0xf8f8fb):
     box((0.3, 0.42, 0.3), (x + 0.36, y + 0.55, z), 0x22c46e if color != 0xf8f8fb else color)
     box((0.26, 0.1, 0.18), (x + 0.6, y + 0.62, z), 0xff7e44)
 
-@piece(REAL)
+# The mill's race runs along its local Z at x = MILL_RACE, a set-brook piece
+# laid through here (the route BROOK_ROUTE holds was laid through them),
+# and the mill is grown MILL_GROW, a real mill's size a little chunky.
+MILL_GROW, MILL_RACE = REAL * 1.25, 7.2
+
+@piece(MILL_GROW)
 def watermill():
-    # The mill on its pond: a stone mill house (front +X, to the road) under
-    # a red tile roof, the wheel on its road side turning in the race that
-    # runs past it into the pond; ducks going round the pond, a weeping
-    # willow over the water, someone fishing off the bank. Real size: the
-    # house is two cars long, the wheel nearly two across.
+    # The mill on the outside of the first bend, straight ahead of the grid:
+    # a stone mill house (front +X, to the road) under a red tile roof, its
+    # wheel on the road side turning IN the brook, which runs past the house
+    # in its race (+Z downstream, on to the duck pond), white where the
+    # paddles churn it and streaked below; a willow over the race's tail,
+    # sacks at the door. Real size: the house is two cars long, the wheel
+    # nearly two across.
     STONE, TILE = 0xfde4c7, 0xcf534f
-    PX, PZ, PR = -1.0, -20.0, 13.0                    # the pond, upstream (-Z) of the house
-    cyl(PR + 1.4, 0.14, (PX, 0, PZ), MUD, segs=20)
-    cyl(PR, 0.3, (PX, 0, PZ), WATER, segs=20)
-    # the race: from +Z past the wheel into the pond's +X side
-    RX = 6.6
-    # A broad mill pool against the house's wall, out past the wheel toward
-    # the road, so the wheel stands IN water a racer sees in front of it (a
-    # narrow race between kerbs was a grey bar with the wheel hung over it);
-    # a low stone edge, the water white where the paddles churn it and
-    # streaked where it runs on to the pond.
-    box((9.4, 0.14, 27.0), (8.6, 0.07, 2.0), MUD)
-    box((8.2, 0.3, 26.0), (8.6, 0.15, 2.0), WATER)
-    box((0.5, 0.42, 26.0), (12.9, 0.21, 2.0), 'grey')
-    for k, (dx, dz, l) in enumerate(((1.6, -5.5, 3.2), (0.4, -8.5, 2.6), (2.6, -10.0, 2.2), (-0.6, -4.2, 1.8))):
-        ground_poly([(RX + dx - 0.25, 0.32, dz), (RX + dx + 0.25, 0.32, dz), (RX + dx + 0.18, 0.32, dz - l),
-                     (RX + dx - 0.18, 0.32, dz - l)], [(0, 3, 2, 1)], 'white')
-    with animated('anim_bob:h=0.1:p=0.9', (RX, 0.3, -3.2)):
-        for k, (dx, dz) in enumerate(((-0.7, -3.3), (0.0, -3.7), (0.7, -3.2), (0.3, -2.9), (-0.4, -2.8))):
-            box((0.6, 0.5, 0.6), (RX + dx, 0.4, dz), 'white', yaw=0.6 * k)
+    RX, WY = MILL_RACE, BROOK_WY / MILL_GROW
+    # the riffles where the wheel has turned the water over: white streaks
+    # downstream of its foot, on the brook's water
+    for k, (dx, dz, l) in enumerate(((0.9, 4.2, 3.2), (-0.7, 5.6, 2.6), (0.2, 8.4, 2.4), (-1.1, 10.4, 1.8),
+                                     (1.0, 12.6, 1.6))):
+        ground_poly([(RX + dx - 0.3, WY + 0.06, dz), (RX + dx + 0.3, WY + 0.06, dz), (RX + dx + 0.18, WY + 0.06, dz + l),
+                     (RX + dx - 0.18, WY + 0.06, dz + l)], [(0, 3, 2, 1)], 'white')
+    with animated('anim_bob:h=0.12:p=0.9', (RX, WY, 2.4)):         # the churn at the wheel's foot
+        for k, (dx, dz) in enumerate(((-0.8, 2.3), (0.0, 2.9), (0.8, 2.4), (0.4, 3.4), (-0.5, 3.3))):
+            box((0.7, 0.45, 0.7), (RX + dx, WY + 0.05, dz), 'white', yaw=0.6 * k)
     # the house
     F = local(0, 0, 0)
     D, L, H = 9.0, 11.0, 7.0
@@ -8534,42 +8682,24 @@ def watermill():
     for z in (-3.0, 3.0):
         window(F, 0.0, D / 2, 4.6, z, w=1.2, h=1.2)
     box((1.2, 1.0, 1.0), (2.0, 0.5, L / 2 + 1.2), 0xfde4c7)                       # sacks at the door
-    # the wheel, axle across (X), turning so its foot runs downstream: the
-    # stream comes down the race INTO the pond (its last reach meets the
-    # race's +Z end), so the foot runs toward the pond (-Z)
-    WX, WY, WZ, R = RX, 3.0, 0.0, 3.4          # its foot under the water
-    with animated('anim_spin:a=x:w=0.9', (WX, WY, WZ)):
-        cyl(0.5, 1.8, (WX - 0.9, WY, WZ), 0x2a2735, segs=8, axis='across')
+    # the wheel, axle across (X) out of the wall, turning so its foot runs
+    # downstream (+Z) with the water
+    WX, WZ, R = RX, 0.0, 3.4
+    AY = 3.0                                    # the axle's height: the foot a hand under the water
+    with animated('anim_spin:a=x:w=-0.9', (WX, AY, WZ)):
+        cyl(0.5, WX + 0.9 - D / 2, (D / 2, AY, WZ), 0x2a2735, segs=8, axis='across')
         for s in (-1, 1):
-            torus(R, 0.22, (WX + s * 0.6, WY, WZ), 0x7a5a3a, segs=16, axis='across')
+            torus(R, 0.22, (WX + s * 0.6, AY, WZ), 0x7a5a3a, segs=16, axis='across')
         for k in range(12):
             a = k * 2 * math.pi / 12
             dy, dz = math.sin(a), math.cos(a)
-            box((1.4, 0.16, 1.0), (WX, WY + dy * (R - 0.3), WZ + dz * (R - 0.3)), 0x9a7b55, pitch=a)
+            box((1.4, 0.16, 1.0), (WX, AY + dy * (R - 0.3), WZ + dz * (R - 0.3)), 0x9a7b55, pitch=a)
         for k in range(4):
             a = k * math.pi / 4
             for s in (-1, 1):
-                box((0.25, 0.25, 2 * R), (WX + s * 0.6, WY, WZ), 0x7a5a3a, pitch=a)
-    # the pond's life: three ducks going round it, the willow, the angler
-    n = 10
-    for k in range(n):
-        a = -k * 2 * math.pi / n
-        marker('path_duck_%d' % k, (PX + 8.0 * math.cos(a), 0.3, PZ + 8.0 * math.sin(a)))
-    for j in range(3):
-        a0 = 0.0
-        with animated('anim_path:c=duck:p=44:o=%.3f:f=1+bob:h=0.015:p=1.6#%d' % (j / 3 + 0.04 * j, j), (PX + 8.0, 0.3, PZ)):
-            duck((PX + 8.0, 0.3, PZ), (0xf8f8fb, 0x9a7b55, 0xf8f8fb)[j])
-    willow((PX - 10.0, 0, PZ - 8.0))
-    AX, AZ = PX - PR - 2.2, PZ + 4.0
-    bench((AX, 0, AZ), yaw=math.pi / 2)
-    person((AX - 0.1, 0.5, AZ), 0.0, 0x22c46e, hair=1, sit=True, arm=0.6)
-    with animated('anim_sway:a=z:d=9:p=4.5:r=0.75#rod', (AX + 0.3, 0.9, AZ + 0.35)):   # the rod jigs
-        strut((AX + 0.3, 0.9, AZ + 0.35), (AX + 5.0, 3.0, AZ + 0.35), 0.1, 0x2a2735)
-    for k, (x, z) in enumerate(((PX - 12.0, PZ + 5.0), (PX + 6.0, PZ - 11.5), (PX - 4.0, PZ + 12.6))):
-        for j in range(4):
-            a = j * 1.7 + k
-            box((0.2, 1.8 - 0.2 * j, 0.2), (x + 0.5 * math.cos(a), 0.9 - 0.1 * j, z + 0.5 * math.sin(a)),
-                (0x4f9a48, 0x61cb8b, 0x9a7b55, 0x4f9a48)[j], yaw=a)
+                box((0.25, 0.25, 2 * R), (WX + s * 0.6, AY, WZ), 0x7a5a3a, pitch=a)
+    # a willow at the house's back corner
+    willow((-8.0, 0, 9.5))
     join_still('mill')
 
 @piece(REAL)
@@ -8577,10 +8707,10 @@ def pond_ducks():
     # Life on Tangle's pond and its shore, on the half of it clear of the
     # bridge (+X toward the bridge, whose deck and spotIssue's margin start
     # 5.7 u out): two ducks going round, lily pads, reeds in the shallows of
-    # the far bank and stones on the pebble shore. The pond is the track's
+    # the far bank. The pond is the track's
     # `pond` landform (its cap centred here, 5.3 u round; the renderer draws
-    # its water and shore, TtpRenderer::buildPonds); its sheet lies 0.09 u
-    # over the plain, so the ducks float at 0.1 u (0.4 here).
+    # its water and its slate coping, TtpRenderer::buildPonds); its sheet
+    # lies 0.09 u over the plain, so the ducks float at 0.1 u (0.4 here).
     WY, R = 0.4, 21.6                        # the water; the shore's line, 5.4 u
     n = 10
     for k in range(n):
@@ -8598,12 +8728,6 @@ def pond_ducks():
     for k, (x, z, r) in enumerate(((-12.0, -2.0, 1.0), (-13.5, 3.0, 0.8))):   # lily pads, flat on the water
         ground_poly([(x, WY, z)] + [(x + r * math.cos(a * math.pi / 3), WY, z + r * math.sin(a * math.pi / 3))
                                          for a in range(6)], [(0, 1 + a, 1 + (a + 1) % 6) for a in range(6)], 0x4f9a48)
-    # stones on the shore: round the cap, and down both sides to the margin
-    stones = [(R * math.cos(math.radians(d)), R * math.sin(math.radians(d))) for d in (125, 190, 238)]
-    stones += [(7.0, -R), (17.0, -R - 0.6), (11.0, R + 0.3)]
-    with plain_parts():
-        for k, (x, z) in enumerate(stones):
-            box((1.5 - 0.15 * (k % 3), 0.7 - 0.1 * (k % 2), 1.2), (x, 0.3, z), ('grey', 'lavender')[k % 2], yaw=0.7 * k)
     # What stands up off the water, so the pond reads from the roads round
     # it: a reed bed along the far bank's shallows, bulrushes among it, a
     # willow over it, and a plank jetty off the side bank with a rowing boat
@@ -8619,12 +8743,12 @@ def pond_ducks():
         if k % 3 == 1:
             box((0.26, 0.8, 0.26), (x0, WY + 2.7, z0), 0x7a5a3a)
     willow((1.14 * R * math.cos(math.radians(205)), 0, 1.14 * R * math.sin(math.radians(205))))
-    JX = 3.0
+    JX, JY = 3.0, 1.75                       # its deck clear of the pond's coping (buildPonds)
     for i in range(9):
-        box((2.2, 0.16, 1.0), (JX, 0.72, R + 1.5 - i * 1.05), 0x8a5f3e)
+        box((2.2, 0.16, 1.0), (JX, JY, R + 1.5 - i * 1.05), 0x8a5f3e)
     for i in (0, 4, 8):
         for sx in (-1, 1):
-            box((0.24, 1.2, 0.24), (JX + sx * 1.0, 0.4, R + 1.5 - i * 1.05), 0x7a5a3a)
+            box((0.24, JY + 0.5, 0.24), (JX + sx * 1.0, (JY + 0.5) / 2 - 0.4, R + 1.5 - i * 1.05), 0x7a5a3a)
     BX, BZ = JX + 2.3, R - 5.2
     box((1.6, 0.6, 3.6), (BX, WY + 0.3, BZ), 0xcf534f)
     box((1.15, 0.6, 1.15), (BX, WY + 0.3, BZ - 1.9), 0xcf534f, yaw=math.pi / 4)
@@ -8636,19 +8760,21 @@ def pond_ducks():
 
 @piece()
 def culvert():
-    # The stone barrel that carries the brook under the low road on the run to
-    # the line, seen where it comes out each side: a low barrel along the
-    # stream (+X toward the road), its inner end at spotIssue's 1.2 u past the
-    # deck, and at its outer end a headwall with a dark arched mouth over the
-    # water and wing walls splayed along the banks. World units. Low (its top
-    # a hand over the road's surface), so it reads as the road's own
-    # embankment over the brook, not a box beside it; no parapet along the
-    # kerb. The water itself is the stream reach under it.
+    # The stone barrel that carries the brook under the low road, seen where
+    # it comes out each side: a low barrel along the brook (+X toward the
+    # road), its inner end at spotIssue's 1.2 u past the deck, and at its
+    # outer end a headwall with a dark arched mouth over the water, its
+    # coping the brook's own slate, and wing walls splayed along the banks,
+    # so the brook's walls run into it (set-brook: its water and walls end at
+    # the headwall's face, 2.7 u out). World units. Low (the
+    # barrel's top a hand over the road's surface), so it reads as the road's
+    # own embankment over the brook, the headwall standing a little over it.
     L, W, HB = 2.4, 2.6, 0.55               # the barrel: length, width, height
-    T, WH, HH, R = 0.35, 3.4, 0.8, 0.72     # the headwall: thickness, width, height; the mouth's radius
+    T, WH, HH, R = 0.35, 3.4, 0.95, 0.72    # the headwall: thickness, width, height; the mouth's radius
     box((L, HB, W), (-L / 2, HB / 2, 0), 'grey')
     x = -L - T / 2 + 0.05
-    box((T, HH, WH), (x, HH / 2, 0), 'lavender')
+    rowed(box((T, HH, WH), (x, HH / 2, 0), 'grey'), 20)
+    rowed(box((T + 0.16, 0.14, WH + 0.2), (x, HH + 0.04, 0), 'grey'), 12)        # its coping
     face = x - T / 2 - 0.02
     def mouth(fx, r):
         arc = [(fx, r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
@@ -8656,7 +8782,7 @@ def culvert():
     mouth(face, R)                           # where the brook comes out, away from the road
     mouth(0.02, 0.42)                        # and the barrel's end at the road, the water going under it
     for sd in (-1, 1):                       # wing walls, short and splayed along the banks
-        box((0.8, 0.45, 0.42), (face - 0.3, 0.225, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45)
+        rowed(box((0.9, 0.5, 0.42), (face - 0.35, 0.25, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45), SLATE_ROW)
     join_still('culvert')
 
 # ---- CLOVERLEAF: the boating lake ----------------------------------------------------
@@ -9101,7 +9227,9 @@ def spring_hill(x, z):
             return row(z0) + (row(z1) - row(z0)) * t
     return row(zs[-1])
 
-@piece(REAL)
+SPRING_GROW = REAL * 1.6
+
+@piece(SPRING_GROW)
 def springhouse():
     STONE, ROOF, WOOD = 0x7d6f5f, 0xcf534f, 0x7a5a3a
     HX, D, L, H = -3.7, 4.6, 5.6, 3.2           # the house: centre x, across, along, wall height
@@ -9135,9 +9263,9 @@ def springhouse():
     # pond's blue at its edges, stone either side
     cx0, cx1, cz = HX + D / 2 + 0.1, -0.3, AZ
     ya, yb = spring_hill(cx0, cz), spring_hill(cx1, cz)
-    for z0, z1, row in ((-0.55, -0.2, 19), (-0.2, 0.2, None), (0.2, 0.55, 19)):
+    for z0, z1, row in ((-0.55, -0.2, 28), (-0.2, 0.2, None), (0.2, 0.55, 28)):
         o = skin([(cx0, ya + 0.12, cz + z0), (cx0, ya + 0.12, cz + z1), (cx1, yb + 0.12, cz + z1), (cx1, yb + 0.12, cz + z0)],
-                 [(0, 1, 2, 3)], 'white' if row is None else 'sky', (0, 1, 0))
+                 [(0, 1, 2, 3)], 'white' if row is None else 'sky', (0, 1, 0))   # the brook's edge blue
         if row is not None:
             rowed(o, row)
     skin([(cx0 - 0.02, ya + 0.32, cz - 0.6), (cx0 - 0.02, ya + 0.32, cz + 0.6), (cx0 + 0.55, ya + 0.2, cz + 0.42),
@@ -9149,8 +9277,18 @@ def springhouse():
     # side, flecks turning on it
     PX, PZ, PR = 2.0, 0.4, 2.6
     def still():
-        spring_pool(PX, PZ, PR, deep=(-1.0, 0.0), gap=1.6, stones=False)   # nothing in front of the arch
+        spring_pool(PX, PZ, PR, deep=(-1.0, 0.0), gap=1.3, stones=False, k=SPRING_GROW)   # nothing in front of the arch
         pool_heron(PX, PZ, PR, -40)                # grass behind it from the road, not the wall
+        # the outlet: the pool's water on toward the kerb in a short reach of
+        # the brook's channel, into a pipe under a low headwall; it comes out
+        # beyond the road as the brook's head (set-brook-a)
+        OX0, OX1 = PX + PR - 0.3, 12.0
+        brook_channel(brook_frames([(OX0 + (OX1 - OX0) * t / 6, PZ, 1.1) for t in range(7)], None, None),
+                      'join', 'culvert', k=SPRING_GROW)
+        hx = OX1 + 0.4
+        rowed(box((0.8, 1.15, 5.2), (hx, 0.5, PZ), 'grey'), 20)          # a low headwall, no block at the kerb
+        rowed(box((1.0, 0.22, 5.5), (hx, 1.12, PZ), 'grey'), 12)
+        box((0.06, 0.75, 1.4), (hx - 0.42, 0.42, PZ), 0x2a2735)
         for k, a_ in enumerate((100, 235, 260)):
             r = PR * 1.12
             cx, cz_ = PX + r * math.cos(math.radians(a_)), PZ + r * math.sin(math.radians(a_))
@@ -9164,83 +9302,67 @@ def springhouse():
             a = k * 2 * math.pi / 6
             box((0.55, 0.08, 0.25), (PX + 1.5 * math.cos(a), 0.2, PZ + 1.5 * math.sin(a)), 'white', yaw=a)
 
-# ---- TANGLE: where the spring goes under the road ---------------------------------
-# The spring's run, from the pool on to the kerb: a shallow channel edged in
-# rounded stones of the lifted slate, its water in the pond's blues, a white
-# riffle where it drops into the dark mouth of the drain under a low lip,
-# going under the top straight there to come out of the same drain on the
-# far side and run on as the stream. Low and round, so no slab and no point
-# stands by the kerb. It stands LEVEL (nothing in it drapes): its footprint
-# holds the hill's `near` ramp back off the pool behind it, as the culvert
-# that stood here did. World units, front (+X) to the road; on the left at
-# yaw 180.
-SLATE_ROW = 30     # the grey ramp's slate, lighter than 'slate': lit faces at about 45%, shaded over 32%
-
-@piece()
-def spring_drain():
-    for z0, z1, row in ((-0.55, -0.25, 19), (-0.25, 0.25, 27), (0.25, 0.55, 19)):   # the run: edge, middle
-        rowed(box((3.1, 0.1, z1 - z0), (-1.85, 0.05, (z0 + z1) / 2), 'sky'), row)
-    box((0.14, 0.13, 0.9), (-0.55, 0.075, 0.0), 'white')                          # the riffle
-    for sz in (-1, 1):                                                           # a few rounded stones
-        for k, (x, r) in enumerate(((-3.0, 0.42), (-1.75, 0.36), (-0.8, 0.38))):
-            rowed(sphere(r, (x, 0.06, sz * (0.88 + 0.07 * (k % 2))), 'grey', scale=(1.35, 0.4, 0.8), yaw=0.4 * k), 20)
-        # a flat pebble out on the grass, where the footprint ends
-        rowed(sphere(0.44, (-1.85, 0.02, sz * 1.42), 'grey', scale=(1.0, 0.18, 1.0), yaw=0.5), 12)
-    rowed(sphere(0.5, (-0.22, 0.1, 0.0), 'grey', scale=(0.6, 0.45, 2.0)), 20)       # the lip
-    box((0.08, 0.16, 0.8), (-0.45, 0.1, 0.0), 0x2a2735)                           # the drain's mouth
-    join_still('drain')
-
-# A spring pool, a pond's water drawn in the piece: a ragged outline and four
-# bands of the pond's blues (buildPonds: a pale rim, deepening to the middle),
-# the deep middle off toward `deep` (where the water comes in), a band of
-# pebbles round the side toward +X except a gap at z 0 (`gap`) where the run
-# leaves it, and rounded slate boulders on the uphill side (-X). Laid flat at
-# the piece's y 0, for a DRAPED group.
-def spring_pool(cx, cz, R, deep=(-1.0, 0.0), gap=1.5, stones=True):
-    N = 10
-    def ring(k, f):
-        ox, oz = cx + deep[0] * R * 0.12 * k, cz + deep[1] * R * 0.12 * k
+# ---- TANGLE: the spring's pool ------------------------------------------------------
+# A spring pool in the brook's grammar: water set below a ring of the
+# brook's slate coping, a ragged outline in its blues, deepening toward
+# `deep` (where the water comes in), and rounded slate boulders on the
+# uphill side (-X). The coping is open at z `gap` both sides at z `gap`: the inlet toward -X, the outlet +X. Laid at the piece's y 0 in a frame of `k` world units a unit, for a
+# DRAPED group.
+def spring_pool(cx, cz, R, deep=(-1.0, 0.0), gap=1.5, stones=True, k=1.0):
+    N = 12
+    WY, H, C = BROOK_WY / k, BROOK_H / k, 0.38 / k        # a built pool: a broad coping all round
+    def ring(j, f):
+        ox, oz = cx + deep[0] * R * 0.12 * j, cz + deep[1] * R * 0.12 * j
         pts = []
-        for j in range(N):
-            a = 2 * math.pi * j / N
+        for i in range(N):
+            a = 2 * math.pi * i / N
             r = R * f * (1 + 0.12 * math.sin(3 * a + 1.3) + 0.07 * math.sin(5 * a + 0.4))
             pts.append((ox + r * math.cos(a), oz + r * math.sin(a)))
         return pts
-    BANDS = ((1.0, 3), (0.78, 18), (0.56, 26), (0.34, 30))     # (size, the sky ramp's row)
-    rings = [ring(k, f) for k, (f, _) in enumerate(BANDS)]
-    Y = 0.08
-    for k in range(len(BANDS)):
-        o_, i_ = rings[k], rings[k + 1] if k + 1 < len(BANDS) else None
+    BANDS = ((1.0, ('sky', 28)), (0.72, ('blue', 6)), (0.42, ('blue', 16)))
+    rings = [ring(j, f) for j, (f, _) in enumerate(BANDS)]
+    for j, (_, (color, row)) in enumerate(BANDS):
+        o_, i_ = rings[j], rings[j + 1] if j + 1 < len(BANDS) else None
         if i_ is None:
-            verts = [(x, Y, z) for x, z in o_] + [(sum(p[0] for p in o_) / N, Y, sum(p[1] for p in o_) / N)]
-            faces = [(j, (j + 1) % N, N) for j in range(N)]
+            verts = [(x, WY, z) for x, z in o_] + [(sum(p[0] for p in o_) / N, WY, sum(p[1] for p in o_) / N)]
+            faces = [(i, (i + 1) % N, N) for i in range(N)]
         else:
-            verts = [(x, Y, z) for x, z in o_] + [(x, Y, z) for x, z in i_]
-            faces = [(j, (j + 1) % N, N + (j + 1) % N, N + j) for j in range(N)]
-        rowed(skin(verts, faces, 'sky', (0, 1, 0)), BANDS[k][1])
-    # the pebbles: the rim pushed out 0.7, on the +X half, clear of the gap
+            verts = [(x, WY, z) for x, z in o_] + [(x, WY, z) for x, z in i_]
+            faces = [(i, (i + 1) % N, N + (i + 1) % N, N + i) for i in range(N)]
+        rowed(skin(verts, faces, color, (0, 1, 0)), row)
+    # the coping round the rim, open where the outlet leaves
     rim = rings[0]
-    verts, faces = [], []
-    for j in range(N):
-        a0, a1 = 2 * math.pi * j / N, 2 * math.pi * (j + 1) / N
-        p0, p1 = rim[j], rim[(j + 1) % N]
-        if math.cos((a0 + a1) / 2) < 0.2 or (min(p0[1], p1[1]) - cz < gap and max(p0[1], p1[1]) - cz > -gap
-                                            and math.cos((a0 + a1) / 2) > 0.8):
+    def out(p, d):
+        dx, dz = p[0] - cx, p[1] - cz
+        n = math.hypot(dx, dz) or 1.0
+        return (p[0] + dx / n * d, p[1] + dz / n * d)
+    walls, tops, backs = ([], []), ([], []), ([], [])
+    for i in range(N):
+        p0, p1 = rim[i], rim[(i + 1) % N]
+        if abs((p0[1] + p1[1]) / 2 - cz) < gap:     # the inlet (-X) and the outlet (+X)
             continue
-        q = []
-        for (x, z) in (p0, p1):
-            dx, dz = x - cx, z - cz
-            d = math.hypot(dx, dz) or 1.0
-            q.append((x + dx / d * 0.7, z + dz / d * 0.7))
-        n = len(verts)
-        verts += [(p0[0], Y, p0[1]), (p1[0], Y, p1[1]), (q[1][0], Y, q[1][1]), (q[0][0], Y, q[0][1])]
-        faces.append((n, n + 1, n + 2, n + 3))
-    if faces:
-        rowed(skin(verts, faces, 'cream', (0, 1, 0)), 28)
+        q0, q1 = out(p0, C), out(p1, C)
+        r0, r1 = out(p0, C + 0.12 / k), out(p1, C + 0.12 / k)
+        for (vs, fs), quad in ((walls, [(p0[0], WY - 0.04 / k, p0[1]), (p1[0], WY - 0.04 / k, p1[1]), (p1[0], H, p1[1]), (p0[0], H, p0[1])]),
+                               (tops, [(p0[0], H, p0[1]), (p1[0], H, p1[1]), (q1[0], H, q1[1]), (q0[0], H, q0[1])]),
+                               (backs, [(q0[0], H, q0[1]), (q1[0], H, q1[1]), (r1[0], -0.06 / k, r1[1]), (r0[0], -0.06 / k, r0[1])])):
+            b = len(vs)
+            vs.extend(quad)
+            fs.append((b, b + 1, b + 2, b + 3))
+    # each face toward the water (the wall), up (the top) or the lawn (the back)
+    for (vs, fs), color, row, want in ((walls, 'grey', SLATE_ROW, -1), (tops, 'grey', 20, 0), (backs, 'grey', SLATE_ROW, 1)):
+        if not fs:
+            continue
+        dirs = []
+        for f in fs:
+            fx = sum(vs[v][0] for v in f) / 4 - cx
+            fz = sum(vs[v][2] for v in f) / 4 - cz
+            dirs.append((0.0, 1.0, 0.0) if want == 0 else (want * fx, 0.3 * want, want * fz))
+        brook_mesh(vs, fs, dirs, color, row)
     if stones:
-        for k, (dz, r) in enumerate(((-0.75, 1.0), (0.85, 1.15), (0.1, 0.8))):
-            rowed(sphere(r, (cx - R * 0.95 - 0.3 * (k == 2), 0.25, cz + dz * R), 'grey',
-                         scale=(1.2, 0.65, 1.0), yaw=0.7 * k), SLATE_ROW)
+        for j, (dz, r) in enumerate(((-0.75, 1.0), (0.85, 1.15), (0.1, 0.8))):
+            rowed(sphere(r, (cx - R * 0.95 - 0.3 * (j == 2), 0.25, cz + dz * R), 'grey',
+                         scale=(1.2, 0.65, 1.0), yaw=0.7 * j), SLATE_ROW)
 
 def heron(x, z, yaw=0.0):
     """A grey heron standing facing +X turned by `yaw` (REAL metres, its
@@ -9438,7 +9560,7 @@ def park_track(pts):
         d = math.hypot(tx, tz)
         return tx / d, tz / d
     def band(profile, color):
-        m = len(profile)
+        m = len(profile(fr[0][2]))
         verts, faces = [], []
         for i, (x, z) in enumerate(pts):
             tx, tz = frame(i)

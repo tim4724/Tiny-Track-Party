@@ -2203,27 +2203,33 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
 
 // Inland water: each `pond` landform (kind 7) is a sheet over the flat floor
 // its plain keeps (kPondFloor past the water), on its own outline, the
-// landform's capsule with a gentle wobble: a thin pale line at the edge, then
-// the stream's own blue (set_prototypes.py WATER, the kit's sky swatch at the
-// foot of its ramp) deepening to the middle, so the brook and the pond it
-// opens into are one water. Round it a shore: a band of pebbles with a crisp
-// edge on the lawn, not a mud fade. Blended and polygon-offset like the sea,
-// so it lies on the ground it covers and every keep-out (inSea) holds the
-// dressing off it.
+// landform's capsule with a wobble, set BELOW its bank: a slate coping
+// stands kCopeY over the floor round its edge, the water a hand under it,
+// and the lawn rolls up to it in the ground's own colour (the brook's
+// grammar, set_prototypes.py brook_channel: one water). Pale where it meets
+// the stone, then the brook's blues deepening to the middle. The sheet is
+// blended and polygon-offset like the sea, so it lies on the ground it covers
+// and every keep-out (inSea) holds the dressing off it; the coping and its
+// bank are solid, so they join mStructures, the static receiver: their light
+// baked, the deck's shadow on them.
 void TtpRenderer::buildPonds(const TrackBin& tb) {
     if (!mBlendMaterial) return;
-    const float3 rim = srgbToLinear(0xd4e6f8u), shallow = srgbToLinear(0x8cb2e7u);
-    const float3 mid = srgbToLinear(0x7da6e2u), deep = srgbToLinear(0x6c97d9u);
-    const float3 pebble = srgbToLinear(0xc9b994u);
+    const float3 rim = srgbToLinear(0xc4dbf2u), shallow = srgbToLinear(0x6b9bdcu);
+    const float3 mid = srgbToLinear(0x5a86d0u), deep = srgbToLinear(0x4a6fc2u);
+    // the coping: its face to the water, its top in two stones; the bank
+    // past it down to the lawn
+    const uint32_t face = packAlbedo(srgbToLinear(0x5f6475u), 1.0f);
+    const uint32_t stone[2] = { packAlbedo(srgbToLinear(0x777c8cu), 1.0f), packAlbedo(srgbToLinear(0x6a6f80u), 1.0f) };
+    constexpr float kWaterY = 0.09f, kCopeY = 0.34f, kCopeW = 0.22f, kBank = 1.1f;
     constexpr int ARC = 10, SIDE = 2;
     constexpr int N = 2 * (ARC + SIDE);
-    constexpr float WOBBLE = 0.7f;
-    // [offset past r (u), colour (0 rim, 1 shallow, 2 mid, 3 deep), alpha]
-    static const float WATER[5][3] = {
-        { -99, 3, 1 }, { -2.2f, 2, 1 }, { -0.4f, 1, 1 }, { -0.08f, 0, 0.95f }, { 0.02f, 0, 0 },
+    constexpr float WOBBLE = 1.1f;
+    // [offset past r (u), colour (0 rim, 1 shallow, 2 mid, 3 deep), alpha]:
+    // the last ring tucks under the coping's face
+    constexpr int RINGS = 7;
+    static const float WATER[RINGS][3] = {
+        { -99, 3, 1 }, { -2.6f, 2, 1 }, { -1.0f, 1, 1 }, { -0.36f, 1, 1 }, { -0.24f, 0, 1 }, { -0.04f, 0, 1 }, { 0.06f, 0, 1 },
     };
-    // [offset past r (u), alpha]: under the water's edge, out to a hard edge
-    static const float SHORE[3][2] = { { -0.5f, 1 }, { 0.45f, 1 }, { 0.55f, 0 } };
     uint32_t seed = 0x706f6e64u;
     for (const LandShape& s : mLand) {
         if (s.kind != 7) continue;
@@ -2251,44 +2257,66 @@ void TtpRenderer::buildPonds(const TrackBin& tb) {
         }
         for (int i = 0; i < N; i++) {
             const float f = 6.2831853f * i / N;
-            wob[i] = WOBBLE * (0.6f * std::sin(3 * f + p1) + 0.4f * std::sin(5 * f + p2));
+            wob[i] = WOBBLE * (0.5f * std::sin(2 * f + p2) + 0.35f * std::sin(3 * f + p1) + 0.25f * std::sin(5 * f + p2));
         }
-        const auto ring = [&](Mesh& m, float off, float y, uint32_t col) {
+        // outline point i (wrapping), `off` past the water's reach, at height y
+        const auto at = [&](int i, float off, float y) {
+            const int j = i % N;
             const float rho = std::max(0.0f, s.r + off), share = std::min(1.0f, rho / s.r);
-            for (int i = 0; i < N; i++) {
-                const float rr = rho + wob[i] * share;
-                const float lx = bx[i] + dx[i] * rr, lz = bz[i] + dz[i] * rr;
-                m.verts.push_back({ s.x + s.ax * lx - s.az * lz, y, s.z + s.az * lx + s.ax * lz, col });
-            }
+            const float rr = rho + wob[j] * share;
+            const float lx = bx[j] + dx[j] * rr, lz = bz[j] + dz[j] * rr;
+            return float3{ s.x + s.ax * lx - s.az * lz, y, s.z + s.az * lx + s.ax * lz };
         };
-        const auto stitch = [&](Mesh& m, uint32_t base, int rings) {
-            for (int ri = 0; ri + 1 < rings; ri++) {
-                for (int i = 0; i < N; i++) {
-                    const uint32_t a = base + ri * N + i, a1 = base + ri * N + (i + 1) % N;
-                    const uint32_t b = a + N, b1 = a1 + N;
-                    m.idx.insert(m.idx.end(), { a, a1, b, a1, b1, b });
-                }
-            }
-        };
-        uint32_t base = (uint32_t) mPondBank.verts.size();
-        for (const auto& b : SHORE) ring(mPondBank, b[0], tb.groundY + 0.05f, packShown(pebble, 1.0f, b[1]));
-        stitch(mPondBank, base, 3);
-        base = (uint32_t) mPond.verts.size();
+        const uint32_t base = (uint32_t) mPond.verts.size();
         for (const auto& b : WATER) {
             const float t = b[1];
             // A pond's tint is its WATER's (a park lake greener and deeper than a
             // brook's pond), not the land's round it (landTint).
             const float3 c = (t <= 1 ? mix(rim, shallow, t) : t <= 2 ? mix(shallow, mid, t - 1) : mix(mid, deep, t - 2))
                     * (t >= 1 ? s.tint : mix(float3{ 1.0f }, s.tint, t));
-            ring(mPond, b[0], tb.groundY + 0.09f, packShown(c, 1.0f, b[2]));
+            const uint32_t col = packShown(c, 1.0f, b[2]);
+            for (int i = 0; i < N; i++) {
+                const float3 p = at(i, b[0], tb.groundY + kWaterY);
+                mPond.verts.push_back({ p.x, p.y, p.z, col });
+            }
         }
-        stitch(mPond, base, 5);
+        for (int ri = 0; ri + 1 < RINGS; ri++) {
+            for (int i = 0; i < N; i++) {
+                const uint32_t a = base + ri * N + i, a1 = base + ri * N + (i + 1) % N;
+                const uint32_t b = a + N, b1 = a1 + N;
+                mPond.idx.insert(mPond.idx.end(), { a, a1, b, a1, b1, b });
+            }
+        }
+        // The coping and its bank, a quad a segment for each face, each with
+        // corners of its own so its normal is its own (accumulateNormals),
+        // wound to face `want`; a `col` of 0 is the ground's own (groundColorAt,
+        // landTint), the lawn rolling up to the stone.
+        const float gy = tb.groundY;
+        const auto quad = [&](float3 a, float3 b, float3 c, float3 d, uint32_t col, float3 want) {
+            if (dot(cross(b - a, d - a), want) < 0) std::swap(b, d);
+            const uint32_t q = (uint32_t) mStructures.verts.size();
+            for (const float3& p : { a, b, c, d }) {
+                mStructures.verts.push_back({ p.x, p.y, p.z,
+                        col ? col : packAlbedo(groundColorAt(p.x) * landTint(p.x, p.z), 1.0f) });
+            }
+            mStructures.idx.insert(mStructures.idx.end(), { q, q + 1, q + 2, q, q + 2, q + 3 });
+        };
+        for (int i = 0; i < N; i++) {
+            const float3 c0 = at(i, 0.0f, gy), c1 = at(i + 1, 0.0f, gy);
+            const float3 out = normalize(float3{ (c0.x + c1.x) * 0.5f - s.x, 0, (c0.z + c1.z) * 0.5f - s.z });
+            quad(at(i, -0.02f, gy + kWaterY - 0.05f), at(i + 1, -0.02f, gy + kWaterY - 0.05f),
+                 at(i + 1, -0.02f, gy + kCopeY), at(i, -0.02f, gy + kCopeY), face, -out);
+            quad(at(i, -0.02f, gy + kCopeY), at(i + 1, -0.02f, gy + kCopeY),
+                 at(i + 1, kCopeW, gy + kCopeY), at(i, kCopeW, gy + kCopeY), stone[i % 2], float3{ 0, 1, 0 });
+            const float yb = gy + 0.62f * kCopeY, xb = kCopeW + 0.35f * kBank;
+            quad(at(i, kCopeW, gy + kCopeY), at(i + 1, kCopeW, gy + kCopeY),
+                 at(i + 1, xb, yb), at(i, xb, yb), 0, out + float3{ 0, 1, 0 });
+            quad(at(i, xb, yb), at(i + 1, xb, yb),
+                 at(i + 1, kCopeW + kBank, gy - 0.04f), at(i, kCopeW + kBank, gy - 0.04f), 0, out + float3{ 0, 1, 0 });
+        }
     }
     if (mPond.verts.empty()) return;
     MaterialInstance* mi = sceneInstance(mBlendMaterial);
-    mi->setPolygonOffset(-1.0f, -1.0f);
-    buildMesh(mPondBank, true, mi, 1);
-    mi = sceneInstance(mBlendMaterial);
     mi->setPolygonOffset(-1.0f, -1.0f);
     buildMesh(mPond, true, mi, 2);
 }
@@ -2835,7 +2863,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         const ttp::rt::GlbMeshNode* node;
         const ttp::kitcolors::Mesh* colors;
         std::vector<float3> factor;
-        bool drape, wall;
+        bool drape, wall, turf;
     };
     std::vector<Part> parts;
     for (const auto& [slot, mesh] : still) {
@@ -2846,7 +2874,8 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         }
         if (!node) return false;
         const bool drape = mTrack && isDrapeName(node->name.c_str());
-        Part p{ slot, node, &colors.meshes[mesh], {}, drape, drape && node->name.compare(0, 10, "drape_wall") == 0 };
+        Part p{ slot, node, &colors.meshes[mesh], {}, drape, drape && node->name.compare(0, 10, "drape_wall") == 0,
+                drape && node->name.compare(0, 10, "drape_turf") == 0 };
         if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
             return false;
         }
@@ -2880,7 +2909,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
                     p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot,
-                    p.wall ? &wallAt : nullptr);
+                    p.wall ? &wallAt : nullptr, p.turf);
             g.sources.push_back(src);
         }
         const auto row = mSetRowOf.find(inst);
