@@ -464,6 +464,8 @@ void backyardTrack(Theme& t, const std::string& track) {
     // as on Pretzel: the road lies on the grass, its verge open to them.
     t.scenery.clutterDensity = 0.15f;
     // The park's trees are its cherries, in blossom.
+    // No tents or hay bales on a town park's lawn.
+    t.props.scatterDensity = 0.0f;
     // Thin on the open lawn: a park plants its trees in avenues and groves
     // (the set).
     lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });

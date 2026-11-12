@@ -295,6 +295,7 @@
     "set-toy-soldiers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-trebuchet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-alder.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-tree-apple-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-apple.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-cherry-white.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-cherry.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
