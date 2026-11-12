@@ -639,6 +639,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
       { kind: 'ridge', u: 0.975, lat: -14, len: 26, r: 6.5, h: 3, top: 0.3, near: 2.8, tint: 0xa8d090 },
+      // marram at the dunes' feet along the pass, a green wash by the kerb
+      // where the inland faces were bare sand
+      { kind: 'paint', u: 0.61, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
+      { kind: 'paint', u: 0.73, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
       // nothing seeded on the dunes' faces
       { kind: 'clear', u: 0.56, lat: 14, len: 40, r: 9.5 },
       { kind: 'clear', u: 0.67, lat: 14, len: 40, r: 9.5 },

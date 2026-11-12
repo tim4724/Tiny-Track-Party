@@ -334,6 +334,8 @@ constexpr LandDef kLand_driftwood[] = {
   { 0, -1, 0x1.7ae147ae147aep-2, 0x1.bp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+4, 0x1.1p+3, 0x1.1p+3, 0x0p+0, 0x0p+0, 0x1.4cccccccccccdp+1, 0x1.4cccccccccccdp+1, 0x1.3333333333333p-2, 0x1p+0, 0xa8d090u, 0x1p-1, 1 },
   { 0, -1, 0x1.b333333333333p-2, 0x1.ap+3, -0x1.9p+4, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1p+3, 0x1p+3, 0x0p+0, 0x0p+0, 0x1.199999999999ap+1, 0x1.199999999999ap+1, 0x1.3333333333333p-2, 0x1p+0, 0xa8d090u, 0x1p-1, 1 },
   { 0, -1, 0x1.f333333333333p-1, -0x1.cp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ap+4, 0x1.ap+2, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1.8p+1, 0x1.8p+1, 0x1.3333333333333p-2, 0x1p+0, 0xa8d090u, 0x1.6666666666666p+1, 1 },
+  { 5, -1, 0x1.3851eb851eb85p-1, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+5, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xa8d090u, 0x0p+0, 1 },
+  { 5, -1, 0x1.75c28f5c28f5cp-1, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+5, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xa8d090u, 0x0p+0, 1 },
   { 8, -1, 0x1.1eb851eb851ecp-1, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+5, 0x1.3p+3, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 8, -1, 0x1.570a3d70a3d71p-1, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+5, 0x1.3p+3, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 8, -1, 0x1.8f5c28f5c28f6p-1, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+4, 0x1.3p+3, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
@@ -2424,7 +2426,7 @@ constexpr SegDef kS_drift[] = {
 constexpr TrackDef TTP_TRACKS[] = {
   { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tidepool, 15, kLand_tidepool, 21 },
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 17, kLand_cove, 15 },
-  { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 11, kLand_driftwood, 26 },
+  { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 11, kLand_driftwood, 28 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 8, kLand_riptide, 13 },
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 12, kLand_powder, 21 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 16, kLand_flurry, 18 },
