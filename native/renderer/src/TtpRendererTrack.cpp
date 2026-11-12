@@ -2741,7 +2741,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 const float el = ((float) r / R - 0.5f) * (float) M_PI;   // nadir .. zenith
                 const float t = std::sin(el), ce = std::cos(el);
                 const float3 c = t >= 0
-                        ? mix(hor, top, std::pow(t, 0.65f))
+                        ? mix(hor, top, std::pow(t, tb.skyCurve))
                         : mix(hor, low, std::min(1.0f, -t * 3.0f));
                 const uint32_t col = packShown(c, 1.0f);
                 for (int sg = 0; sg <= S; sg++) {

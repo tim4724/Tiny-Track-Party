@@ -906,6 +906,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.edgeLines = th.road.edgeLines;
 
     out.sky[0] = th.sky[0]; out.sky[1] = th.sky[1]; out.sky[2] = th.sky[2];
+    out.skyCurve = th.skyCurve;
     out.fog = th.fog;
     out.hillShape = th.hillShape;
     out.hillColors = th.hills;

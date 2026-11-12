@@ -494,7 +494,11 @@ void backyardTrack(Theme& t, const std::string& track) {
 // across the mesas.
 Theme canyonTheme() {
   Theme t;
-  t.sky[0] = 0x4292d4; t.sky[1] = 0xe8c8a2; t.sky[2] = 0xf4e3c6;
+  // A clear desert blue over the dust: the canyon's one colour that is not
+  // the rock's, turning blue just over the mesas (skyCurve) instead of
+  // meeting the dust halfway up the frame as a mauve.
+  t.sky[0] = 0x4cbaf2; t.sky[1] = 0xe8c8a2; t.sky[2] = 0xf4e3c6;
+  t.skyCurve = 0.36f;
   t.fog = 0xe8c8a2;
   t.boost = 0x7a4fd0;  // violet — teal/aqua washes out in the sand-fog
   t.hemi = { 0xffeedd, 0xb9825e, 2.15f };
@@ -535,8 +539,9 @@ Theme canyonTheme() {
   s.rockS[0] = 0.6f; s.rockS[1] = 0.9f;
   s.density = 0.45f;  // sparser than the shore; deserts read empty on purpose
   // Scrub and red pebbles only: no driftwood, which is the beach's (and dead
-  // wood reads as the trees a canyon has none of).
-  s.clutter = { { CL_SCRUB, 0.62f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
+  // wood reads as the trees a canyon has none of). The scrub is sagebrush's
+  // grey-green, the one green beside the cacti that is not a lawn's.
+  s.clutter = { { CL_SCRUB, 0.62f, { 0x93a37a, 0x86996c, 0xa3ad86 } },
                 { CL_PEBBLES, 0.38f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
@@ -548,36 +553,45 @@ Theme canyonTheme() {
   // resolves no track), so a track picks among these by slot in its scatter
   // (canyonTrack) and never re-lists them. A list of its own would bind its
   // slots to the biome's models: rocks drawn as crates, lamps as barrels.
-  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones", "prop-hay", "construction-light" };
+  // The spring bloom and the sagebrush (set_prototypes.py canyon_bloom,
+  // canyon_sage) stand on the verge on every track: the purple and yellow of
+  // the flowers and the brush's grey-green are the desert's second colour,
+  // beside sand, rock and kerb that are all one orange.
+  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones", "prop-hay", "construction-light",
+                     "set-canyon-bloom", "set-canyon-sage" };
   t.props.scatterDensity = 0.24f;
-  t.props.scatter = { { 0, 0.22f, 0.9f, 0.3f, false, true }, { 1, 0.26f, 0.42f, 0.12f, false, true },
-                      { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.22f, 1.4f, 0.5f } };
+  t.props.scatter = { { 0, 0.18f, 0.9f, 0.3f, false, true }, { 1, 0.2f, 0.42f, 0.12f, false, true },
+                      { 2, 0.24f, 1.5f, 0.6f }, { 3, 0.16f, 1.4f, 0.5f },
+                      { 6, 0.12f, 1.0f, 0.4f, false, true }, { 7, 0.1f, 1.0f, 0.4f, false, true } };
   return t;
 }
 
 // Each canyon track tells its own story (its `set` and `land` in tracks.js),
 // and the biome's scatter and structures follow it. The props are re-chosen
 // from the biome's list by slot (0 crate, 1 barrel, 2 sandstone rocks,
-// 3 stones, 4 hay, 5 road-works lamp): no story gets another's leftovers. The
-// hoodoos stand on every track: they are the badlands themselves, not a story.
+// 3 stones, 4 hay, 5 road-works lamp, 6 bloom, 7 sagebrush): no story gets
+// another's leftovers. The hoodoos, the bloom and the brush stand on every
+// track: they are the badlands themselves, not a story.
 //   wash        a dry wash and its canyon: the rock alone, rocks and stones
 //   gulch       a gold mine: timber supports like a trestle, crates and
 //               barrels of supplies, broken stone, no hay
 //   crag        a ranch in butte country: hay by the fences, a barrel, rocks
-//   sidewinder  a desert highway: road-works lights on the verge, stones
+//   sidewinder  an oil field: road-works lights on the verge, stones
 void canyonTrack(Theme& t, const std::string& track) {
+  const PropStamp bloom = { 6, 0.0f, 1.0f, 0.4f, false, true }, sage = { 7, 0.0f, 1.0f, 0.4f, false, true };
+  const auto with = [&](PropStamp p, float w) { p.w = w; return p; };
   if (track == "wash") {
-    t.props.scatter = { { 2, 0.55f, 1.6f, 0.6f }, { 3, 0.45f, 1.4f, 0.5f } };
+    t.props.scatter = { { 2, 0.36f, 1.6f, 0.6f }, { 3, 0.3f, 1.4f, 0.5f }, with(bloom, 0.18f), with(sage, 0.16f) };
   } else if (track == "gulch") {
     t.structure = 0x8a6a46;  // timber, like the mine's own trestles
-    t.props.scatter = { { 0, 0.34f, 0.6f, 0.2f, false, true }, { 1, 0.30f, 0.3f, 0.08f, false, true },
-                        { 3, 0.36f, 1.4f, 0.5f } };
+    t.props.scatter = { { 0, 0.26f, 0.6f, 0.2f, false, true }, { 1, 0.22f, 0.3f, 0.08f, false, true },
+                        { 3, 0.28f, 1.4f, 0.5f }, with(bloom, 0.12f), with(sage, 0.12f) };
   } else if (track == "crag") {
-    t.props.scatter = { { 4, 0.30f, 0.6f, 0.25f, false, true }, { 1, 0.16f, 0.3f, 0.08f, false, true },
-                        { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.24f, 1.4f, 0.5f } };
+    t.props.scatter = { { 4, 0.22f, 0.6f, 0.25f, false, true }, { 1, 0.12f, 0.3f, 0.08f, false, true },
+                        { 2, 0.22f, 1.5f, 0.6f }, { 3, 0.18f, 1.4f, 0.5f }, with(bloom, 0.14f), with(sage, 0.12f) };
   } else if (track == "sidewinder") {
-    t.props.scatter = { { 5, 0.22f, 2.4f, 0.4f, true, true }, { 2, 0.42f, 1.5f, 0.6f },
-                        { 3, 0.36f, 1.4f, 0.5f } };
+    t.props.scatter = { { 5, 0.18f, 2.4f, 0.4f, true, true }, { 2, 0.32f, 1.5f, 0.6f },
+                        { 3, 0.26f, 1.4f, 0.5f }, with(bloom, 0.12f), with(sage, 0.12f) };
   }
 }
 

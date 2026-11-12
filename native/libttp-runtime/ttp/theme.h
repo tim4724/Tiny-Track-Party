@@ -222,6 +222,12 @@ struct MatTint { std::string name; uint32_t rgb = 0xffffff; };
 struct Theme {
   RoadPalette road;
   uint32_t sky[3] = { 0x59a7e8, 0x8ecae6, 0xc8e9f2 };  // zenith / horizon / below
+  // How fast the dome climbs from the horizon's colour to the zenith's: the
+  // mix's exponent over the sine of the elevation. Lower turns the sky above a
+  // chase camera's horizon to the zenith's sooner, where two far-apart colours
+  // (the canyon's dust over a blue) would otherwise meet as a third, a mauve.
+  // Post-corpus, like groundBase.
+  float skyCurve = 0.65f;
   uint32_t fog = 0x8ecae6;        // race + overview + perimeter fog AND the background
   uint32_t hillShape = HILL_DOME;
   std::vector<uint32_t> hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
