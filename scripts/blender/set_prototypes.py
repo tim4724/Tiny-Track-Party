@@ -11645,9 +11645,9 @@ def toy_wheel(x, z, r, w, along_x, color=0x2a2735):
     """A toy vehicle's wheel standing on the floor at (x, z), round, `w`
     thick, its axle across the vehicle (a vehicle `along_x` runs along X)."""
     if along_x:
-        cyl(r, w, (x, r, z - w / 2), color, segs=12, axis='along')
+        cyl(r, w, (x, r, z - w / 2), color, segs=12, axis='along', smooth=True)    # a smooth tread: rounder, and fewer vertices
     else:
-        cyl(r, w, (x - w / 2, r, z), color, segs=12, axis='across')
+        cyl(r, w, (x - w / 2, r, z), color, segs=12, axis='across', smooth=True)
 
 def mini_car(x, z, color, along_x=False):
     """A toy car the racers' own size (0.9 long), standing on the rug."""
