@@ -803,6 +803,14 @@ export const TRACKS = {
       { model: 'set-flurry-forest-f', u: 0.095, lat: 10.5 },
       { model: 'set-flurry-forest-g', u: 0.075, lat: 50 },
       { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
+      // forest in the hollows of the north-west ridge's face and along its
+      // foot (the frame the ridge's: +X up the face, +Z along it)
+      { model: 'set-flurry-forest-h', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-i', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-j', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-k', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-l', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-m', u: 0.39, lat: -50 },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
@@ -838,7 +846,17 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
-      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 }
+      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
+      // the north-west ridge's face is no one white wall: spurs run down it
+      // toward the valley, each its own length and height, hollows between
+      // them in a little shade, forest up the hollows and along the foot to
+      // a ragged treeline (forest-h to -k, sampled, set_prototypes.py
+      // FORESTS). All inside the ridge's own reach.
+      { kind: 'ridge', u: 0.39, lat: -51, z: -33, yaw: 90, len: 14, r: 10, h: 5.5, top: 0.2 },
+      { kind: 'ridge', u: 0.39, lat: -49, z: -5, yaw: 78, len: 18, r: 11, h: 6.5, top: 0.2 },
+      { kind: 'ridge', u: 0.39, lat: -52, z: 24, yaw: 100, len: 12, r: 9, h: 4.5, top: 0.2 },
+      { kind: 'paint', u: 0.39, lat: -52, z: -19, yaw: 90, len: 14, r: 4, w: 5, tint: 0xdbe4f4 },
+      { kind: 'paint', u: 0.39, lat: -52, z: 10, yaw: 90, len: 14, r: 4, w: 5, tint: 0xdbe4f4 }
     ]
   },
   glacier: {
