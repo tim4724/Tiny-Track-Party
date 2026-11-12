@@ -182,6 +182,9 @@ int main(int argc, char** argv) {
   ttp::rt::parse_set_motion("anim_spin:w=2", m);
   check(near(ttp::rt::set_motion_pose(m, 3, 0, nullptr, 0).spin
                  - ttp::rt::set_motion_pose(m, 1, 0, nullptr, 0).spin, 4), "spin turns at its rate");
+  ttp::rt::parse_set_motion("anim_spin:w=2:o=0.25", m);
+  check(m.spinPinned && near(ttp::rt::set_motion_pose(m, 0, 0.7f, nullptr, 0).spin, 0.25f * 6.2831853f),
+        "a pinned spin starts at its own turn, whatever the part's phase");
   ttp::rt::parse_set_motion("anim_path:p=4:o=0.75", m);
   for (float t : { 0.0f, 0.99f, 1.0f, 7.3f, 1e4f }) {
     const float u = ttp::rt::set_motion_path_at(m, t);
