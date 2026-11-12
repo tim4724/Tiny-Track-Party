@@ -336,16 +336,6 @@ export const SET_GROUND = {
   // toward the road (+X) to the water hole on the flat at its foot; broad
   // enough that the ground's 9 u grid draws it as a hill, not a cone.
   'set-penguin-chute': [{ kind: 'mound', x: -19, h: 7, r: 21, r1: 17, rz: 18, shape: 1.5 }],
-  // Flurry's ski jump: its landing hill, its crest the knoll under the
-  // takeoff (-X), its long face falling toward the road (+X), steepest under
-  // the lip and easing into the outrun at the kerb (a cos^2 flank), and its
-  // back short, so the in-run rises on its legs clear of the hill to the
-  // tower behind instead of lying along a dome. The crest stands on a vertex
-  // of the 9 u grid, so the grid draws it sharp; broad, so the grid draws a
-  // hill, not a cone; and no higher than lets the tower stand whole in the
-  // chase camera's frame from the line, where the start straight drives at
-  // it from forty units off.
-  'set-ski-jump': [{ kind: 'mound', x: -24, h: 5.75, r: 16, r1: 10, rz: 26, shape: 2 }],
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
@@ -775,21 +765,25 @@ export const TRACKS = {
       { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
-      { model: 'set-ski-jump', u: 0.09, lat: 7.5, yaw: -11.6 },
+      { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
       { model: 'set-flurry-forest-d', u: 0.1371, lat: 15.35 },
       { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39 },
+      // the west gap the start straight looks into: a clump where the outrun
+      // of the old jump stood at the first bend, and pines on the low far ridge
+      { model: 'set-flurry-forest-f', u: 0.095, lat: 10.5 },
+      { model: 'set-flurry-forest-g', u: 0.075, lat: 50 },
       { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
-    // the lake. The village's ski jump stands on its hill at the west loop's
-    // outside kerb, where the start straight and the run in to the line look
-    // straight at it: its outrun ends at the kerb, its tower stands thirty
-    // units back, and the straight sees it at a slant, the landing hill's
-    // face and the in-run's track rising to the tower both showing.
+    // the lake. The village's ski jump is cut into the south shoulder of the
+    // massif past the east loop, beside its forest: the in-run lies down the
+    // shoulder, the table runs out over its foot and the outrun stops on the
+    // flat, flying out over the open snowfield, away from every road. The
+    // crossing and the run in to the loop see it three-quarter from the front.
     // The valley is closed by mountains on all four sides, open between
     // them: past the two end loops a massif whose foothills rise off the
     // outside verge, forest down their faces (sampled, set_prototypes.py
@@ -798,18 +792,23 @@ export const TRACKS = {
     // their crests. Their reach stays inside the terrain's 48-cell cap.
     land: [
       { kind: 'plain', u: 0.4413, lat: 5, yaw: -142, len: 54, r: 3, w: 5, tint: 0xc8e0f6 },
-      // past the east loop: the foothills at its kerb, the massif behind
+      // past the east loop: the foothills at its kerb, the massif behind, the
+      // ski jump cut into the first one's south shoulder
       { kind: 'ridge', u: 0.5816, lat: 31, r: 28, h: 10, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6598, lat: 32.65, r: 30, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.7109, lat: 31.05, r: 28, h: 9, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6337, lat: 33.68, r: 34, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.5903, lat: 42.93, r: 30, h: 15, top: 0.12 },
       { kind: 'ridge', u: 0.6848, lat: 49.96, r: 34, h: 18, top: 0.12 },
-      // past the west loop, beside the ski jump's hill: the same
+      // past the west loop: the same
       { kind: 'ridge', u: 0.1371, lat: 30.95, r: 28, h: 10, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.1907, lat: 29.39, r: 26, h: 9, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.1186, lat: 46.36, r: 34, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.16, lat: 51.74, r: 30, h: 15, top: 0.12 },
+      // the open west gap the start straight looks into, closed low and far
+      // off, under the frame's top from the grid and short of the terrain's
+      // west edge, pines on its near face (forest-g)
+      { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
       { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 }
