@@ -6620,18 +6620,58 @@ def hash01(*v):
     """A repeatable number in [0, 1) from a few numbers (a tree's size, its lean)."""
     return frac(math.sin(sum(x * k for x, k in zip(v, (12.9898, 78.233, 37.719, 4.1414)))) * 43758.5453)
 
-def lawn_pine(at, scale):
-    """The lawn's own tall pine (the scatter's kit tree), at `scale` of the kit's
-    size in a REAL piece's metres. Not `pine`: that is the snowy pine, and a
-    second def of the name here replaced it for every snow piece baked after
-    (their stands came out bare kit trees)."""
-    kit('toy-car', 'tree-pine', at, yaw=hash01(at[0], at[2]) * 6.28, scale=scale)
+# ---- the lawn's own trees ------------------------------------------------------------
+# No kit fir stands on a lawn: every tree of the grass world is built here,
+# and each backyard track keeps to ONE family, its scatter (the tree_* pieces
+# below, theme.cc backyardTrack) and its set pieces alike, so everything in a
+# frame belongs together. Pretzel: faceted broadleaf oaks. Cloverleaf: cherries
+# in blossom. Tangle: tall dark alders and the weeping willows. Ribbon: the
+# orchard's smooth round-lobed trees and poplars of the same make. Metres
+# (a REAL piece's), the foot at y = 0; none is named `pine` (the snowy pine).
+def lawn_oak(x, z, k=1.0):
+    """Pretzel's oak: a stout trunk under four faceted lobes."""
+    cyl(0.7 * k, 7.5 * k, (x, -0.5, z), 0x7a5a3a, r2=0.5 * k, segs=7)
+    for (dx, y, dz), r, c in (((0.0, 8.6, 0.0), 3.4, 0x5f9f4a), ((-2.2, 7.6, 1.4), 2.6, 0x6cae55),
+                              ((0.6, 7.9, -1.8), 2.4, 0x6cae55), ((-0.8, 10.6, 0.4), 2.4, 0x5f9f4a)):
+        sphere(r * k, (x + dx * k, y * k, z + dz * k), c, subdiv=1)
+
+CHERRY_CROWN = (((0.0, 7.4, 0.0), 2.9), ((-2.1, 6.4, 1.3), 2.2), ((1.9, 6.6, -1.5), 2.1),
+                ((0.3, 8.9, 0.5), 1.9), ((-0.6, 6.0, -2.2), 1.7))
+
+def lawn_cherry(x, z, k, c, i=0):
+    """Cloverleaf's cherry in blossom, `c` 'pink' or 'white' with one lobe of
+    the other: a dark forked trunk under five pale faceted lobes."""
+    other = 'white' if c == 'pink' else 'pink'
+    cyl(0.5 * k, 5.0 * k, (x, -0.5, z), 0x5a3a2a, r2=0.32 * k, segs=6)
+    for a, t in ((0.6 + i, 0.8), (2.9 + i, 0.75)):
+        o = cyl(0.3 * k, 3.2 * k, (x, 3.6 * k, z), 0x5a3a2a, r2=0.14 * k, segs=5, smooth=False)
+        tilted(o, math.cos(a) * t, math.sin(a) * t)
+    for j, ((dx, y, dz), r) in enumerate(CHERRY_CROWN):     # pale: the top of the swatch's ramp
+        sphere(r * k, (x + dx * k, y * k, z + dz * k), other if j == 3 else c, subdiv=1)['ramp'] = 0.12
+
+def lawn_alder(x, z, k=1.0, turn=0.0):
+    """Tangle's alder: tall and narrow, a dark trunk under three faceted
+    lobes stood one over another, the valley's dark green (far down the
+    swatch's ramp), so a stand of them is a dark wood."""
+    cyl(0.5 * k, 8.0 * k, (x, -0.5, z), 0x5a3a2a, r2=0.32 * k, segs=6)
+    c, s = math.cos(turn), math.sin(turn)
+    for (dx, y, dz), r, sy, row in (((0.0, 7.4, 0.0), 3.3, 1.35, 21), ((0.6, 11.8, -0.4), 2.5, 1.45, 17),
+                                    ((-1.6, 5.8, 1.0), 2.5, 1.15, 25)):
+        rowed(sphere(r * k, (x + (dx * c + dz * s) * k, y * k, z + (dz * c - dx * s) * k), 0x5f9f4a, subdiv=1,
+                     scale=(1.0, sy, 1.0), yaw=turn), row)
+
+def lawn_poplar(x, z, k=1.0):
+    """Ribbon's poplar: the tall shape among its orchards, a slim column of
+    two smooth lobes, the apple trees' make."""
+    cyl(0.4 * k, 4.0 * k, (x, -0.3, z), 0x7a5a3a, r2=0.3 * k, segs=6, stem=True)
+    sphere(2.1 * k, (x, 7.4 * k, z), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 2.3, 1.0))
+    sphere(1.5 * k, (x + 0.2 * k, 11.8 * k, z - 0.1 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 2.1, 1.0))
 
 # The windmill's field, in the north loop's east side: the wheat standing
 # golden, a crop that comes up over the kerb's height, its rows packed close
 # and ragged at their ends where the harvest has not reached; the far end
 # already cut, the stubble with round bales on it and the tractor going round
-# them; two of the lawn's tall pines left standing in it by its east edge. A
+# them; two poplars left standing in it by its east edge. A
 # rectangle kept 2.4 u inside every kerb (the largest that fits, scratch
 # geometry): a piece's box holds the verge band down under it (bandHold), so
 # one piece over the whole loop stood the road on a step. It DRAPES, lying on
@@ -6674,7 +6714,7 @@ def field_wheat():
         for k, (x, z) in enumerate(((-15.0, 28.0), (15.0, 40.0), (-2.0, 33.0), (8.0, 27.0), (-9.0, 41.0))):
             round_bale((x, 0.2, z), yaw=0.6 * k, color=('yellow', 'tan')[k % 2])
         for px, pz, k in PINES:
-            lawn_pine((px, 0.0, pz), k)
+            lawn_poplar(px, pz, k / 16.0)
     draped('wheat', still)
 
 # The orchard round the outside of the south loop, at the foot of the south
@@ -6685,7 +6725,7 @@ def field_wheat():
 # little; apples red on most, yellow on a few. Three kinds of block, turned
 # either way round as they are laid: a second with a ladder up a tree and
 # crates of picked apples, and a third, at the band's end, standing two of the
-# lawn's tall pines among its apple trees, so the loop keeps its tall shapes. A block,
+# village's poplars among its apple trees, so the loop keeps its tall shapes. A block,
 # not one piece round the loop: a piece's box holds the verge band down under
 # it (bandHold), so one over the whole loop stood the road on a step. It
 # DRAPES: the trees stand on the land as drawn. The lite builds (the Android
@@ -6719,8 +6759,8 @@ def orchard_trees(seed, lite, pines=False):
     for i in range(3):
         for j in range(3):
             x, z = (i - 1) * ORCH_SP, (j - 1) * ORCH_SP
-            if pines and i == 2 and j != 1:                     # the outer row's corners: tall pines
-                lawn_pine((x, 0.0, z), 16.0 + 2.0 * j / 2)
+            if pines and i == 2 and j != 1:                     # the outer row's corners: poplars
+                lawn_poplar(x, z, 1.0 + 0.12 * j / 2)
             else:
                 apple_tree(x, z, seed, lite)
 
@@ -6769,7 +6809,7 @@ def orchard_block_end_lite():
 # round bales in two straight rows along the slope where the baler dropped
 # them, all one straw yellow and lying one way, and the tractor going slowly
 # round the far row with its trailer, two bales already on it; two of the
-# lawn's tall pines left standing at the back. Scattered at odd angles in two
+# village's poplars left standing at the back. Scattered at odd angles in two
 # colours the bales read as speckle from the road; in rows they read as a
 # field. It DRAPES on the bank as drawn. Front (+X) to the road, metres; on
 # the left at yaw 180.
@@ -6807,8 +6847,8 @@ def hay_meadow():
         for o in bpy.context.scene.objects:      # straw yellow, not run down the ramp to orange
             if o not in before:
                 o['ramp'] = 0.25
-        pine((-8.0, 0.0, -11.0), 16.0)
-        pine((-9.5, 0.0, 9.0), 14.5)
+        lawn_poplar(-8.0, -11.0, 1.0)
+        lawn_poplar(-9.5, 9.0, 0.9)
     draped('hay', still)
 
 # The dairy farm on the lawn inside the west bend, where the bend's driver
@@ -7733,27 +7773,15 @@ def lake_reeds():
     draped('reeds', still)
 
 @piece(REAL)
-def lake_willow():
-    # A weeping willow on a bank, the tall thing that says water from the road.
-    draped('willow', lambda: willow((0.0, 0.0, 0.0)))
-
-@piece(REAL)
-def park_grove():
-    # A clump of the park's trees by the road: two broadleaf oaks and two of
-    # the lawn's pines behind them, so a stretch of lawn reads as a park and
-    # not as grass. Front (+X) to the road; the oaks' crowns stay inside x 3.4.
-    # It DRAPES, standing on a foothill's flank as drawn.
-    BARK = 0x7a5a3a
-    def oak(x, z, k):
-        cyl(0.7 * k, 7.5 * k, (x, -0.5, z), BARK, r2=0.5 * k, segs=7)
-        for (dx, y, dz), r, c in (((0.0, 8.6, 0.0), 3.4, 0x5f9f4a), ((-2.2, 7.6, 1.4), 2.6, 0x6cae55),
-                                  ((0.6, 7.9, -1.8), 2.4, 0x6cae55), ((-0.8, 10.6, 0.4), 2.4, 0x5f9f4a)):
-            sphere(r * k, (x + dx * k, y * k, z + dz * k), c, subdiv=1)
+def alder_grove():
+    # A clump of the valley's alders by the road on Tangle's lawns, a willow
+    # at its end: the wood's own trees where no hillside stands. Front (+X)
+    # to the road, the crowns inside x 3.4. It DRAPES.
     def still():
-        oak(0.0, -4.0, 1.0)
-        oak(-3.0, 5.0, 0.9)
-        pine((-8.0, -0.6, -1.0), 16.0)
-        pine((-9.5, -0.6, 8.0), 14.0)
+        lawn_alder(0.0, -4.5, 1.0, 0.4)
+        lawn_alder(-3.2, 2.0, 1.2, 2.1)
+        lawn_alder(-7.5, -2.5, 1.1, 3.6)
+        lawn_alder(-1.0, 8.0, 0.85, 5.0)
     draped('grove', still)
 
 # ---- CLOVERLEAF: the park's cherry trees in blossom ----------------------------------
@@ -7764,18 +7792,9 @@ def park_grove():
 # what says park. Front (+X) to the road, the crowns inside x 3.4 like the
 # grove's, so it stands where a grove stood. It DRAPES.
 def blossom_trees(trees, seat=None):
-    BARK = 0x5a3a2a
-    CROWN = (((0.0, 7.4, 0.0), 2.9), ((-2.1, 6.4, 1.3), 2.2), ((1.9, 6.6, -1.5), 2.1),
-             ((0.3, 8.9, 0.5), 1.9), ((-0.6, 6.0, -2.2), 1.7))
     def still():
         for i, (x, z, k, c) in enumerate(trees):
-            other = 'white' if c == 'pink' else 'pink'
-            cyl(0.5 * k, 5.0 * k, (x, -0.5, z), BARK, r2=0.32 * k, segs=6)
-            for a, t in ((0.6 + i, 0.8), (2.9 + i, 0.75)):
-                o = cyl(0.3 * k, 3.2 * k, (x, 3.6 * k, z), BARK, r2=0.14 * k, segs=5, smooth=False)
-                tilted(o, math.cos(a) * t, math.sin(a) * t)
-            for j, ((dx, y, dz), r) in enumerate(CROWN):     # pale: the top of the swatch's ramp
-                sphere(r * k, (x + dx * k, y * k, z + dz * k), other if j == 3 else c, subdiv=1)['ramp'] = 0.12
+            lawn_cherry(x, z, k, c, i)
             n, R = 9, 3.3 * k                       # the fallen petals
             rim = [(x + R * (0.75 + 0.3 * hash01(i, q)) * math.cos(q * 2 * math.pi / n), 0.07,
                     z + R * (0.75 + 0.3 * hash01(q, i)) * math.sin(q * 2 * math.pi / n)) for q in range(n)]
@@ -7829,15 +7848,9 @@ def bandstand():
 # these are the trees a racer passes. Front (+X) to the road. It DRAPES.
 @piece(REAL)
 def summer_oaks():
-    BARK = 0x7a5a3a
-    def oak(x, z, k):
-        cyl(0.7 * k, 7.5 * k, (x, -0.5, z), BARK, r2=0.5 * k, segs=7)
-        for (dx, y, dz), r, c in (((0.0, 8.6, 0.0), 3.4, 0x5f9f4a), ((-2.2, 7.6, 1.4), 2.6, 0x6cae55),
-                                  ((0.6, 7.9, -1.8), 2.4, 0x6cae55), ((-0.8, 10.6, 0.4), 2.4, 0x5f9f4a)):
-            sphere(r * k, (x + dx * k, y * k, z + dz * k), c, subdiv=1)
     def still():
-        oak(-1.5, -5.0, 1.3)
-        oak(-5.0, 6.0, 1.0)
+        lawn_oak(-1.5, -5.0, 1.3)
+        lawn_oak(-5.0, 6.0, 1.0)
         before = set(bpy.context.scene.objects)
         for x, z, yaw in ((2.4, 1.5, 0.3), (1.4, 5.0, 1.2), (2.8, -2.4, -0.5)):
             round_bale((x, 0.0, z), yaw)
@@ -7847,19 +7860,70 @@ def summer_oaks():
     draped('oaks', still)
 
 # ---- TANGLE: the valley's woods ----------------------------------------------------------
-# The mill valley's sides are wooded: a stand of the lawn's tall pines up a
-# hillside, front (+X) to the road and the stream, deep enough that the
-# slope behind the first trees is trees too. It DRAPES, each tree on the
-# slope as drawn. Turned half round for the next stand along, so no two
-# neighbours are the same wood.
+# The mill valley's sides are wooded: a stand of its alders up a hillside,
+# a willow or two at its front, front (+X) to the road and the stream, deep
+# enough that the slope behind the first trees is trees too. It DRAPES,
+# each tree on the slope as drawn. Turned half round for the next stand
+# along, so no two neighbours are the same wood.
 MILL_WOOD = ((-1.0, -26.0, 17.0), (-3.0, -15.0, 20.0), (0.5, -5.0, 16.0), (-2.0, 6.0, 21.0), (0.0, 17.0, 17.5),
              (-2.5, 27.0, 19.0), (-10.0, -21.0, 21.0), (-11.0, -9.0, 18.0), (-9.0, 1.0, 22.5), (-11.5, 12.0, 19.0),
              (-9.5, 23.0, 21.5), (-19.0, -15.0, 22.0), (-20.0, -3.0, 20.0), (-18.0, 8.0, 23.0), (-20.5, 19.0, 20.5),
-             (-28.0, -9.0, 22.0), (-29.0, 3.0, 23.5), (-27.0, 14.0, 21.0))
+             (-28.0, -9.0, 22.0), (-29.0, 3.0, 23.5), (-27.0, 14.0, 21.0),
+             (-6.0, -20.5, 18.0), (-5.5, 0.0, 19.0), (-6.5, 21.0, 17.0), (-14.5, -4.0, 21.0), (-15.0, 16.0, 20.0),
+             (-24.0, -12.0, 22.0), (-24.5, 9.0, 21.5))
 
 @piece(REAL)
 def mill_wood():
-    draped('wood', lambda: [lawn_pine((x, 0.0, z), k) for x, z, k in MILL_WOOD])
+    draped('wood', lambda: [lawn_alder(x, z, k / 17.0, 1.7 * i) for i, (x, z, k) in enumerate(MILL_WOOD)])
+
+@piece(REAL)
+def mill_wood_lite():
+    # The lite tier's wood: every other tree (a stand up a slope is what the
+    # box's cells barely see; native/renderer/CLAUDE.md, the detail tier).
+    draped('wood', lambda: [lawn_alder(x, z, k / 17.0, 1.7 * i) for i, (x, z, k) in enumerate(MILL_WOOD) if i % 2 == 0])
+
+# ---- the lawn's scatter ---------------------------------------------------------------
+# One tree each, the scatter's models (theme.cc grassScenery; a stamp sizes
+# and turns it): the families above, so a track's scattered trees are its
+# set pieces' trees. And the lawn's shrub, the scatter's bush.
+def scatter_tree(build):
+    build()
+    join_still('tree')
+
+@piece(REAL)
+def tree_oak():
+    scatter_tree(lambda: lawn_oak(0.0, 0.0, 1.0))
+
+@piece(REAL)
+def tree_cherry():
+    scatter_tree(lambda: lawn_cherry(0.0, 0.0, 1.0, 'pink'))
+
+@piece(REAL)
+def tree_cherry_white():
+    scatter_tree(lambda: lawn_cherry(0.0, 0.0, 1.0, 'white', 2))
+
+@piece(REAL)
+def tree_alder():
+    scatter_tree(lambda: lawn_alder(0.0, 0.0, 1.0))
+
+@piece(REAL)
+def tree_willow():
+    scatter_tree(lambda: willow((0.0, 0.0, 0.0)))
+
+@piece(REAL)
+def tree_apple():
+    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, False))
+
+@piece(REAL)
+def tree_poplar():
+    scatter_tree(lambda: lawn_poplar(0.0, 0.0, 1.0))
+
+@piece(REAL)
+def lawn_shrub():
+    def build():
+        for (x, y, z), r in (((0.0, 0.9, 0.0), 1.5), ((1.3, 0.6, 0.6), 1.05), ((-0.9, 0.55, -0.9), 0.95)):
+            sphere(r, (x, y, z), 0x5f9f4a, subdiv=1, scale=(1.1, 0.8, 1.0))
+    scatter_tree(build)
 
 # ---- PRETZEL: the kite hill --------------------------------------------------------
 # Three children down the face of the hill beyond the top loop (tracks.js

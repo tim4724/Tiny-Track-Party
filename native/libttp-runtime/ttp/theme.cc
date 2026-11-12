@@ -56,19 +56,27 @@ void deriveModels(ScenerySpec& s) {
 
 // ---------------------------------------------------------------------------
 // Green-parkland scenery, shared by every biome that keeps the grass world
-// (grass + sunset — golden light over the SAME trees is the sunset look). Every
-// value is the VERBATIM pre-theming constant from buildScenery; do not drift it,
-// or grass-cup tracks lose their byte-identical guarantee (scenery placement is
-// seeded, so any changed literal reshuffles the whole scatter).
+// (grass + sunset: golden light over the SAME trees is the sunset look).
+// No kit fir stands on a lawn: the trees are our own build
+// (scripts/blender/set_prototypes.py, the tree_* pieces), one family per
+// backyard track, the same trees its set pieces are made of. The list names
+// every family, because the shell fetches a biome's scenery by the BIOME
+// (ttp_theme_scenery_models); a track picks its own by weight (lawnTrees),
+// and a lawn outside the cup wears the oak.
 // ---------------------------------------------------------------------------
 ScenerySpec grassScenery() {
   ScenerySpec s;
   s.trees = {
-    { "tree", 0.65f, 4.1f, 2.0f },       // round oak — the staple
-    { "tree-pine", 0.35f, 4.1f, 2.0f },  // pine as the accent
+    { "set-tree-oak", 1.0f, 1.0f, 0.4f },           // Pretzel's faceted broadleaf
+    { "set-tree-cherry", 0.0f, 1.1f, 0.4f },        // Cloverleaf's blossom, pink
+    { "set-tree-cherry-white", 0.0f, 1.1f, 0.4f },  // and white
+    { "set-tree-alder", 0.0f, 0.95f, 0.45f },       // Tangle's tall dark wood
+    { "set-tree-willow", 0.0f, 0.95f, 0.3f },       // and its willows
+    { "set-tree-apple", 0.0f, 1.3f, 0.6f },         // Ribbon's round orchard tree
+    { "set-tree-poplar", 0.0f, 0.9f, 0.4f },        // and its poplar
   };
   s.hasBush = true;
-  s.bush = { "tree", 1.1f, 0.7f, 0.3f };
+  s.bush = { "set-lawn-shrub", 0.9f, 0.5f, 0.0f };
   s.mixTree = 0.62f; s.mixBush = 0.9f;
   s.rocks = { 0xc6cbd6, 0xb4bac8, 0x9aa1b4 };  // pillar-concrete family
   s.rockS[0] = 0.3f; s.rockS[1] = 0.45f;
@@ -395,6 +403,14 @@ void playroomTrack(Theme& t, const std::string& track) {
 // scale, so no garden keeps them; its verge things stand at their real size
 // (a hay bale a third of a car, a tent half one) and what is smaller than
 // that is left out. Each garden wears its idea on the kerbs and the gantry.
+// A track's tree family: the scatter's weights by model, the rest at none.
+void lawnTrees(Theme& t, std::initializer_list<std::pair<const char*, float>> mix) {
+  for (TreeSpec& tr : t.scenery.trees) {
+    tr.w = 0;
+    for (const auto& m : mix) if (tr.model == m.first) tr.w = m.second;
+  }
+}
+
 void backyardTrack(Theme& t, const std::string& track) {
   if (track != "ribbon" && track != "pretzel" && track != "tangle" && track != "cloverleaf") return;
   t.landmarks.clear();
@@ -409,6 +425,8 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.12f;
     t.scenery.density = 0.55f;
+    // The orchard's round trees and poplars of the same make.
+    lawnTrees(t, { { "set-tree-apple", 0.5f }, { "set-tree-poplar", 0.5f } });
     t.road.kerbA = 0x339cf2;
     t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
   } else if (track == "pretzel") {
@@ -420,9 +438,10 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.scenery.clutterDensity = 0.15f;
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
-    // High summer on the downs: the garden's broadleaf oaks only, and the
-    // far hills gone to hay.
-    t.scenery.density = 0.12f;
+    // High summer on the downs: the garden's broadleaf oaks, well apart,
+    // and the far hills gone to hay.
+    lawnTrees(t, { { "set-tree-oak", 1.0f } });
+    t.scenery.density = 0.4f;
     t.hills = { 0xb7bf6c, 0xa8b160, 0xc5cb7e };
     t.groundBase = 0xa2b654;
   } else if (track == "tangle") {
@@ -434,8 +453,8 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.1f;
     t.scenery.density = 0.6f;
-    // A wooded valley: the lawn's pines nearly alone, dark hills beyond.
-    t.scenery.trees[0].w = 0.12f; t.scenery.trees[1].w = 0.88f;
+    // A wooded valley: tall dark alders and the stream's willows, dark hills beyond.
+    lawnTrees(t, { { "set-tree-alder", 0.8f }, { "set-tree-willow", 0.2f } });
     t.hills = { 0x5f9f6a, 0x4f8f5c, 0x6fae78 };
     t.groundBase = 0x4f9a58;
     t.road.kerbA = 0x2bb673;
@@ -444,7 +463,9 @@ void backyardTrack(Theme& t, const std::string& track) {
     // The park: the gantry in the climbing frame's blue. Fewer wildflowers,
     // as on Pretzel: the road lies on the grass, its verge open to them.
     t.scenery.clutterDensity = 0.15f;
-    t.scenery.density = 0.3f;   // the park's trees are its cherries (the set)
+    // The park's trees are its cherries, in blossom.
+    lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });
+    t.scenery.density = 0.5f;
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
   }
 }

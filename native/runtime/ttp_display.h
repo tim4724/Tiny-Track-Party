@@ -235,7 +235,7 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * So the shell says what it WOULD hand over and the engine says what it still
  * needs. `wantJson` is, in fetch order:
  *
- *   [{"name":"scenery0.glb","tag":"tree"},
+ *   [{"name":"scenery0.glb","tag":"set-tree-oak"},
  *    {"name":"car-model2.glb","tag":"vehicle-gt"},
  *    {"name":"car-model2-ghost.glb","tag":"vehicle-gt","from":"car-model2.glb"}]
  *

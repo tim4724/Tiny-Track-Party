@@ -1556,10 +1556,12 @@ void themeThroughAbi() {
   check(ttp_theme_hill_color("playroom", 6) == 0u, "an out-of-range hill index is 0");
   check(ttp_theme_hill_color("grass", -1) == 0u, "a negative hill index is 0");
 
-  // Slot order is the contract, and the bush donor must not get a slot of its
-  // own when it is already one of the trees (grass sinks the oak as its bush).
-  check(std::strcmp(ttp_theme_scenery_models("grass"), "[\"tree\",\"tree-pine\"]") == 0,
-        "grass stamps two scenery models, the bush donor sharing the oak's slot");
+  // Slot order is the contract: every tree family of the lawn in the order
+  // authored, then the bush donor (its own model, the lawn's shrub).
+  check(std::strcmp(ttp_theme_scenery_models("grass"),
+                    "[\"set-tree-oak\",\"set-tree-cherry\",\"set-tree-cherry-white\",\"set-tree-alder\","
+                    "\"set-tree-willow\",\"set-tree-apple\",\"set-tree-poplar\",\"set-lawn-shrub\"]") == 0,
+        "grass stamps its seven tree families and the shrub, in authored order");
   check(std::strcmp(ttp_theme_scenery_models("playroom"), "[]") == 0,
         "the playroom stamps no scenery models — no trees indoors");
 
@@ -1570,7 +1572,7 @@ void themeThroughAbi() {
   // sides of that gap. The playroom is the case that would catch a
   // biome-dependent answer here, since its own list is empty.
   const std::string showModels = ttp_theme_showcase_models();
-  check(showModels.find("\"tree\"") != std::string::npos
+  check(showModels.find("\"set-tree-oak\"") != std::string::npos
                 && showModels.find("\"cactus-tall\"") != std::string::npos
                 && showModels.find("\"tree-snow-c\"") != std::string::npos,
         "the showcase model list spans every biome's scenery");

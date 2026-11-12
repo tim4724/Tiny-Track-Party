@@ -1362,12 +1362,12 @@ constexpr SetDef kSet_tangle[] = {
   { "set-springhouse", 0x1.778d4fdf3b646p-1, -0x1.3333333333333p+3, 0x1.68p+7, 0x0p+0, 0x1.999999999999ap+0, 1 },
   { "set-spring-drain", 0x1.778d4fdf3b646p-1, -0x1.1cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-spring-drain", 0x1.778d4fdf3b646p-1, 0x1.1cccccccccccdp+2, 0x1.4p+3, 0x0p+0, 0x1p+0, 1 },
-  { "set-park-grove", 0x1.1eb851eb851ecp-2, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1.199999999999ap+0, 1 },
-  { "set-park-grove", 0x1.5c28f5c28f5c3p-1, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-park-grove", 0x1.828f5c28f5c29p-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1.3333333333333p+0, 1 },
-  { "set-park-grove", 0x1.cf5c28f5c28f6p-1, 0x1.7333333333333p+2, 0x0p+0, 0x0p+0, 0x1.ccccccccccccdp-1, 1 },
-  { "set-park-grove", 0x1.deb851eb851ecp-1, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-park-grove", 0x1.eb851eb851eb8p-6, 0x1.7333333333333p+2, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 1 },
+  { "set-alder-grove", 0x1.1eb851eb851ecp-2, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1.199999999999ap+0, 1 },
+  { "set-alder-grove", 0x1.5c28f5c28f5c3p-1, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-alder-grove", 0x1.828f5c28f5c29p-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1.3333333333333p+0, 1 },
+  { "set-alder-grove", 0x1.cf5c28f5c28f6p-1, 0x1.7333333333333p+2, 0x0p+0, 0x0p+0, 0x1.ccccccccccccdp-1, 1 },
+  { "set-alder-grove", 0x1.deb851eb851ecp-1, -0x1.7333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-alder-grove", 0x1.eb851eb851eb8p-6, 0x1.7333333333333p+2, 0x0p+0, 0x0p+0, 0x1.199999999999ap+0, 1 },
 };
 constexpr LandDef kLand_tangle[] = {
   { 2, 11, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.6p+4, 0x1.999999999999ap+0, 0x1.999999999999ap+0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
@@ -1492,8 +1492,8 @@ constexpr SetDef kSet_cloverleaf[] = {
   { "set-park-railway", 0x1.9fd36f7e3d1ccp-6, 0x1.350e560418937p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-boating-lake", 0x1.a9c779a6b50b1p-1, 0x1.d5c28f5c28f5cp+3, -0x1.552e147ae147bp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boathouse", 0x1.a5a1cac083127p-1, 0x1.90a3d70a3d70ap+3, 0x1.98e147ae147aep+5, 0x0p+0, 0x1.4cccccccccccdp+0, 1 },
-  { "set-lake-willow", 0x1.a147ae147ae14p-1, 0x1.2p+3, 0x1.e828f5c28f5c3p+5, 0x0p+0, 0x1p+0, 1 },
-  { "set-lake-willow", 0x1.aee631f8a0903p-1, 0x1.1e66666666666p+3, -0x1.4547ae147ae14p+5, 0x0p+0, 0x1.3333333333333p+0, 1 },
+  { "set-blossom-grove-b", 0x1.9fbe76c8b4396p-1, 0x1.1p+3, 0x0p+0, 0x0p+0, 0x1.ccccccccccccdp-1, 1 },
+  { "set-blossom-grove", 0x1.b0a3d70a3d70ap-1, 0x1.ep+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-lake-reeds", 0x1.ac2f837b4a234p-1, 0x1.3c28f5c28f5c3p+2, 0x1.4f9999999999ap+7, 0x0p+0, 0x1p+0, 1 },
   { "set-bandstand", 0x1.d70a3d70a3d71p-3, -0x1.38p+4, 0x1.68p+7, 0x0p+0, 0x1.6666666666666p+0, 1 },
   { "set-blossom-grove-b", 0x1.3333333333333p-1, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
@@ -2453,8 +2453,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
-constexpr int TTP_LITE_MODEL_COUNT = 40;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
+constexpr int TTP_LITE_MODEL_COUNT = 41;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.

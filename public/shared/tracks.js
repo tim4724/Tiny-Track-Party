@@ -1072,7 +1072,7 @@ export const TRACKS = {
     // cottages at the west bend's exit, washing out in the gardens. The fete
     // is on beside the grid straight. The orchard at the south hill's foot
     // rings the south loop, a block of trees laid along the road at each spot,
-    // turned either way round, two tall pines at the band's far end (at its
+    // turned either way round, two tall poplars at the band's far end (at its
     // near end they stood in the view of the church). The
     // windmill turns in the north loop beside its wheat field, a rectangle
     // well inside the kerbs; the sheep graze round the loop's outside and
@@ -1211,12 +1211,12 @@ export const TRACKS = {
       { model: 'set-springhouse', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
       { model: 'set-spring-drain', u: 0.7335, lat: -4.45, yaw: 180 },
       { model: 'set-spring-drain', u: 0.7335, lat: 4.45, yaw: 10 },
-      { model: 'set-park-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
-      { model: 'set-park-grove', u: 0.68, lat: -5.8, yaw: 180 },
-      { model: 'set-park-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
-      { model: 'set-park-grove', u: 0.905, lat: 5.8, yaw: 0, scale: 0.9 },
-      { model: 'set-park-grove', u: 0.935, lat: -5.8, yaw: 180 },
-      { model: 'set-park-grove', u: 0.03, lat: 5.8, yaw: 0, scale: 1.1 }
+      { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
+      { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
+      { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
+      { model: 'set-alder-grove', u: 0.905, lat: 5.8, yaw: 0, scale: 0.9 },
+      { model: 'set-alder-grove', u: 0.935, lat: -5.8, yaw: 180 },
+      { model: 'set-alder-grove', u: 0.03, lat: 5.8, yaw: 0, scale: 1.1 }
     ],
     // the north lawn's hump and the pond under the first bridge; the valley's
     // sides: a hill beyond the stream on each side of the start straight,
@@ -1256,8 +1256,8 @@ export const TRACKS = {
       { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
       { model: 'set-boating-lake', u: 0.8316, lat: 14.68, yaw: -170.59 },
       { model: 'set-boathouse', u: 0.8235, lat: 12.52, yaw: 51.11, scale: 1.3 },
-      { model: 'set-lake-willow', u: 0.815, lat: 9, yaw: 61.02 },
-      { model: 'set-lake-willow', u: 0.8416, lat: 8.95, yaw: -40.66, scale: 1.2 },
+      { model: 'set-blossom-grove-b', u: 0.812, lat: 8.5, yaw: 0, scale: 0.9 },
+      { model: 'set-blossom-grove', u: 0.845, lat: 7.5, yaw: 0 },
       { model: 'set-lake-reeds', u: 0.8363, lat: 4.94, yaw: 167.8 },
       { model: 'set-bandstand', u: 0.23, lat: -19.5, yaw: 180, scale: 1.4 },
       { model: 'set-blossom-grove-b', u: 0.6, lat: -6, yaw: 180 },
