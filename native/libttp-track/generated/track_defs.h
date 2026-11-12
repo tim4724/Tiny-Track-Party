@@ -1239,6 +1239,8 @@ constexpr SetDef kSet_pretzel[] = {
   { "set-swing-oak", 0x1.5c28f5c28f5c3p-3, 0x1.ep+2, 0x1.3dae147ae147bp+5, 0x0p+0, 0x1p+0, 1 },
   { "set-swing-oak", 0x1.828f5c28f5c29p-1, -0x1.2p+3, 0x1.1ceb851eb851fp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-picnic-oak", 0x1.b851eb851eb85p-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-hay-wain-oak", 0x1.0a3d70a3d70a4p-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-paddling-pool-oak", 0x1.5c28f5c28f5c3p-2, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-kite-flyers", 0x1.6e147ae147ae1p-1, -0x1.7p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_pretzel[] = {
@@ -2447,7 +2449,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 11, kLand_glacier, 39 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 29, kLand_avalanche, 25 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 25, kLand_ribbon, 9 },
-  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 9, kLand_pretzel, 7 },
+  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 11, kLand_pretzel, 7 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 30, kLand_tangle, 16 },
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 23, kLand_cloverleaf, 8 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 20, kLand_wash, 24 },

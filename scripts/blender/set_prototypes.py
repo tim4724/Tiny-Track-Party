@@ -3171,8 +3171,11 @@ def join_still(name):
     each, so a piece spread wide over the sand (a reef run, a dune with its
     boardwalk) would cost a dozen draws a placement; as one part it costs
     one wherever it stands. Call it last, after the moving parts are built."""
-    return group([o for o in bpy.context.scene.objects
-                  if o.type == 'MESH' and o.get('anim') is None], name)
+    still = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None]
+    turf = [o for o in still if o.get('turf') and not o.get('group')]
+    if turf:                                       # a grass part keeps its own (draped(): `drape_turf`)
+        group(turf, 'drape_turf')
+    return group([o for o in still if not o.get('turf')], name)
 
 def draped(name, build):
     """Run `build` and make what it made ONE part named `drape_<name>`: the
@@ -9068,6 +9071,61 @@ def picnic_oak():
         sphere(0.55, (BX + 4.6, 0.55, BZ - 3.2), 'white')                       # the ball, out on the grass
     draped('picnic', still)
 
+# ---- PRETZEL: the hay wain and the paddling pool ------------------------------------
+# Two more of the downs' great oaks, each with its own summer under it, so no
+# two oaks by the road tell the same thing: the hay wain left loaded in the
+# shade with two big bales beside it, and a paddling pool with its slide,
+# its water a hand below the blown-up rim (the water family's grammar).
+# Front (+X) to the road. Each DRAPES.
+@piece(REAL)
+def hay_wain_oak():
+    def still():
+        lawn_oak(-4.5, -2.0, 1.45)
+        WX, WZ, W, L = 2.4, 3.0, 3.6, 7.0               # the wagon: centre, width, length (along Z)
+        box((W, 0.4, L), (WX, 1.6, WZ), 0x9a7b55)                                  # its bed
+        for sx in (-1, 1):
+            for k in range(3):                                                    # slatted sides
+                box((0.2, 0.25, L), (WX + sx * W / 2, 2.0 + 0.45 * k, WZ), 0x7a5a3a)
+            for sz in (-1, 1):
+                cyl(1.05, 0.4, (WX + sx * (W / 2 + 0.05) - (0.4 if sx > 0 else 0.0), 1.05, WZ + sz * 2.3),
+                    0x2a2735, segs=10, axis='across')
+                cyl(0.45, 0.46, (WX + sx * (W / 2 + 0.08) - (0.46 if sx > 0 else 0.0), 1.05, WZ + sz * 2.3),
+                    0xcf534f, segs=8, axis='across')
+        for sx in (-0.8, 0.8):                                                    # the shafts, down on the grass
+            strut((WX + sx, 1.5, WZ + L / 2), (WX + sx * 0.7, 0.3, WZ + L / 2 + 3.2), 0.35, 0x9a7b55)
+        before = set(bpy.context.scene.objects)
+        sphere(2.6, (WX, 3.0, WZ), 'yellow', subdiv=1, scale=(0.75, 0.6, 1.4))     # the load of hay
+        for k, (x, z, yaw) in enumerate(((5.6, -3.0, 0.4), (3.0, -5.6, 1.3))):     # two big bales
+            cyl(1.3, 2.0, (x, 1.3, z), 'yellow', segs=12, axis='along', yaw=yaw)
+        for o in bpy.context.scene.objects:      # straw yellow (the hay meadow's)
+            if o not in before:
+                o['ramp'] = 0.25
+        strut((WX + 1.2, 0.0, WZ - L / 2 - 1.2), (WX + 0.8, 4.2, WZ - L / 2 + 0.2), 0.25, 0x9a7b55)   # a pitchfork
+    draped('wain', still)
+
+@piece(REAL)
+def paddling_pool_oak():
+    def still():
+        lawn_oak(-5.0, 3.0, 1.3)
+        PX, PZ, R = 2.6, -1.0, 3.3                      # the pool: centre, rim radius
+        torus(R, 0.7, (PX, 0.7, PZ), 0x339cf2, segs=16)                              # its blown-up rings
+        torus(R, 0.62, (PX, 1.95, PZ), 'white', segs=16)
+        torus(R - 0.05, 0.3, (PX, 2.65, PZ), 0xcf534f, segs=16)
+        rowed(cyl(R - 0.4, 0.1, (PX, 1.55, PZ), 'sky', segs=16), 26)                 # the water, below the rim
+        rowed(cyl(R - 1.6, 0.1, (PX, 1.58, PZ), 'blue', segs=12), 6)
+        sphere(0.7, (PX + 0.8, 2.0, PZ - 0.9), 0xffc044)                              # a ball floating
+        # the slide into it from the oak's side, a little ladder up its back
+        SX, SZ = PX - R - 2.6, PZ
+        a = math.atan2(2.6, 3.0)
+        box((3.4, 0.3, 1.4), (SX + 1.4, 1.6, SZ), 0xff7e44, roll=-a)
+        for sz in (-1, 1):
+            box((3.4, 0.5, 0.25), (SX + 1.4, 1.85, SZ + sz * 0.65), 0xff7e44, roll=-a)
+            box((0.35, 3.2, 0.35), (SX - 0.3, 1.6, SZ + sz * 0.65), 0x22c46e)
+        box((0.9, 0.3, 1.6), (SX - 0.1, 3.1, SZ), 0x22c46e)
+        for k in range(3):
+            box((0.3, 0.2, 1.3), (SX - 0.4, 0.8 + 0.8 * k, SZ), 0x22c46e)
+    draped('pool', still)
+
 # ---- TANGLE: the valley's woods ----------------------------------------------------------
 # The mill valley's sides are wooded: stands of its alders up the hillsides,
 # front (+X) to the road and the brook, deep enough that the slope behind the
@@ -9617,17 +9675,11 @@ def park_coach(at, color, riders, k=1.0):
         box((0.2 * k, 0.24 * k, 0.24 * k), (x + dx, y + 0.72 * k, z), shirt)
         box((0.15 * k, 0.15 * k, 0.15 * k), (x + dx, y + 0.92 * k, z), 0xf2bf99)
 
-def park_waiting(at, yaw, shirt):
-    """Someone standing on the platform waiting for the train, still: legs,
-    body, head, at a person's size beside a car."""
-    x, y, z = at
-    box((0.14, 0.24, 0.18), (x, y + 0.12, z), 0x4f5260, yaw=yaw)
-    box((0.18, 0.22, 0.24), (x, y + 0.35, z), shirt, yaw=yaw)
-    box((0.14, 0.14, 0.14), (x, y + 0.53, z), 0xf2bf99, yaw=yaw)
-
 def park_track(pts):
-    """The line along `pts`: a ballast bank, a sleeper every unit and two
-    rails, each one band (a dozen vertices a unit of track)."""
+    """The line along `pts` on a low grass embankment (turf, the field's own
+    colour), so it stands up off the lawn where a racer sees it: a ballast
+    bank on top, a sleeper every unit and two rails, each one band (a dozen
+    vertices a unit of track)."""
     n = len(pts)
     closed = math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 0.01
     if closed:
@@ -9639,7 +9691,7 @@ def park_track(pts):
         d = math.hypot(tx, tz)
         return tx / d, tz / d
     def band(profile, color):
-        m = len(profile(fr[0][2]))
+        m = len(profile)
         verts, faces = [], []
         for i, (x, z) in enumerate(pts):
             tx, tz = frame(i)
@@ -9652,18 +9704,22 @@ def park_track(pts):
         o = ground_poly(verts, faces, color)
         for f in o.data.polygons:                              # one normal a corner: no seam per face
             f.use_smooth = True
-    band(((0.85, 0.0), (0.55, 0.15), (-0.55, 0.15), (-0.85, 0.0)), 'lavender')  # the ballast bank
+        return o
+    B = PARK_BANK
+    band(((1.75, -0.04), (1.0, B), (-1.0, B), (-1.75, -0.04)), 'green')['turf'] = 1   # the embankment
+    band(((0.85, B), (0.55, B + 0.15), (-0.55, B + 0.15), (-0.85, B)), 'lavender')   # the ballast on it
     verts, faces = [], []
     for i, (x, z) in enumerate(pts):
         tx, tz = frame(i)
         for a, o in ((-0.11, 0.48), (0.11, 0.48), (0.11, -0.48), (-0.11, -0.48)):
-            verts.append((x + tx * a + tz * o, 0.17, z + tz * a - tx * o))
+            verts.append((x + tx * a + tz * o, B + 0.17, z + tz * a - tx * o))
         faces.append(tuple(range(4 * i, 4 * i + 4)))
     ground_poly(verts, faces, 'brown')
     for sd in (-1, 1):
         band(((sd * 0.27 + 0.05, PARK_RAIL_Y), (sd * 0.27 - 0.05, PARK_RAIL_Y)), 'slate')
 
-PARK_RAIL_Y = 0.2                                                 # the rails' top
+PARK_BANK = 0.4                                                   # the embankment's crest
+PARK_RAIL_Y = PARK_BANK + 0.2                                     # the rails' top
 
 for _name, _pts in PARK_ROUTE.items():
     PIECES[_name] = (lambda pts: lambda: (park_track(pts), join_still('drape_line')))(_pts)
@@ -9671,17 +9727,15 @@ for _name, _pts in PARK_ROUTE.items():
 
 def park_platform(side):
     """A halt beside the line through the origin along Z, on its `side`: a
-    platform, a shelter open to the line, a lamp, two people waiting."""
-    PX = side * 1.45
-    box((0.9, 0.3, 3.6), (PX, 0.15, 0.0), 'cream')
-    box((0.12, 0.75, 1.5), (PX + side * 0.35, 0.6, -0.5), 'red')              # the shelter's back
+    platform at the embankment's height, a shelter open to the line, a lamp."""
+    PX, B = side * 1.45, PARK_BANK
+    box((0.9, B + 0.3, 3.6), (PX, (B + 0.3) / 2, 0.0), 'cream')
+    box((0.12, 0.75, 1.5), (PX + side * 0.35, B + 0.6, -0.5), 'red')          # the shelter's back
     for sz in (-1, 1):
-        box((0.6, 0.75, 0.1), (PX + side * 0.08, 0.6, -0.5 + sz * 0.7), 'red')
-    box((0.85, 0.1, 1.75), (PX + side * 0.05, 1.02, -0.5), 'dark')            # its roof
-    box((0.06, 1.1, 0.06), (PX + side * 0.3, 0.85, 1.5), 'dark')              # the lamp
-    box((0.16, 0.16, 0.16), (PX + side * 0.3, 1.45, 1.5), 'white')
-    park_waiting((PX - side * 0.15, 0.3, 0.8), 0.0, 0x339cf2)
-    park_waiting((PX - side * 0.05, 0.3, 1.25), 0.4, 0xffc044)
+        box((0.6, 0.75, 0.1), (PX + side * 0.08, B + 0.6, -0.5 + sz * 0.7), 'red')
+    box((0.85, 0.1, 1.75), (PX + side * 0.05, B + 1.02, -0.5), 'dark')        # its roof
+    box((0.1, 1.1, 0.1), (PX + side * 0.3, B + 0.85, 1.5), 'dark')            # the lamp
+    box((0.16, 0.16, 0.16), (PX + side * 0.3, B + 1.45, 1.5), 'white')
 
 @piece()
 def park_railway():
