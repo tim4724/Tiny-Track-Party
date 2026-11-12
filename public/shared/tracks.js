@@ -857,7 +857,7 @@ export const TRACKS = {
       // decks by the grid cells the roads cross, so a camp there sinks
       // behind the raised east leg)
       { model: 'set-advanced-camp', u: 0.886, lat: -19.5, yaw: 20 },
-      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 },
+      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 137 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
       { model: 'set-glacier-peaks', u: 0.185, lat: -60 },
@@ -918,7 +918,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.185, lat: -18, z: 9, len: 18, r: 7, h: 1.8 },
       // nothing seeded on the verge in front of the penguin chute's pool: a
       // boulder there stood between the run to the line and the pool
-      { kind: 'clear', u: 0.945, lat: -9.5, len: 18, r: 4.5 },
+      { kind: 'clear', u: 0.955, lat: -9.5, len: 30, r: 5 },
       // ...nor between the road and the airstrip, where two pines stood in
       // front of the plane on the closest pass
       { kind: 'clear', u: 0.212, lat: 5.5, len: 22, r: 2.5 },
@@ -1009,10 +1009,7 @@ export const TRACKS = {
       // spans the loop (the frames the world's)
       { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
       { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
-      // a creek frozen across the wedge inside the S-bend, under both roads
-      // in culverts (the frame the world's)
-      { model: 'set-avalanche-creek', u: 0.5935, lat: 13.13, yaw: 23.54, lite: false },
-      // big old firs on the creek's bank (sampled, set_prototypes.py FORESTS)
+      // big old firs in the wedge inside the S-bend (sampled, set_prototypes.py FORESTS)
       { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
