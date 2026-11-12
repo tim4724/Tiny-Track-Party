@@ -49,6 +49,11 @@
     <span class="lm-lines" id="lm-lines" title="The stage's drawing buffer height"></span>
   </div>
 
+  <div class="group seg">
+    <button class="ctrl" id="lm-tier" title="The detail tier drawn: Full is the web and the Apple TV, Lite the Android TV box (L)">Tier: Full</button>
+    <button class="ctrl" id="lm-tour" title="Step through every landmark, then the next track (T)">Tour</button>
+  </div>
+
   <div class="group">
     <button class="ctrl" id="lm-prev" title="Previous landmark (Left arrow)">Prev</button>
     <button class="ctrl" id="lm-next" title="Next landmark (Right arrow)">Next</button>
@@ -81,12 +86,26 @@
       <div><dt><kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>track</dd></div>
       <div><dt><kbd>C</kbd><kbd>&#8679;C</kbd></dt><dd>camera</dd></div>
       <div><dt><kbd>1</kbd>-<kbd>4</kbd></dt><dd>players</dd></div>
+      <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>placement</dd></div>
+      <div><dt><kbd>T</kbd></dt><dd>tour</dd></div>
+      <div><dt><kbd>L</kbd></dt><dd>lite / full tier</dd></div>
       <div><dt><kbd>X</kbd></dt><dd>spread</dd></div>
       <div><dt><kbd>M</kbd></dt><dd>slow motion</dd></div>
       <div><dt><kbd>Home</kbd></dt><dd>first landmark</dd></div>
       <div><dt><kbd>?</kbd></dt><dd>hide these keys</dd></div>
     </dl>
     <p class="legend__hint keys-off" id="lm-keys-off"><kbd>?</kbd> keys</p>
+    <div class="lm-card" id="lm-card"></div>
+    <div class="lm-bar">
+      <select id="lm-sort" aria-label="Order">
+        <option value="size">Biggest first</option>
+        <option value="lap">Lap order</option>
+        <option value="cost">Costliest first</option>
+        <option value="seen">Least read first</option>
+      </select>
+      <button class="ctrl" id="lm-score" title="Drive one autopiloted lap and say how long a racer reads each piece">Score lap</button>
+    </div>
+    <p class="legend__note" id="lm-sum"></p>
     <div id="lm-list"></div>
   </aside>
 </section>

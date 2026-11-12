@@ -941,6 +941,7 @@ export function runDisplayScenario(opts, ctx) {
       let seats = players;
       let mode = 'driver';
       let focusAt = 0;
+      let placeAt = 0;            // which placement of the focused model is framed
       let spreadOn = false;
       let layout = display.setLayout();
       // The scenery trees and boulders as [x, z, r, top]: a sight line through
@@ -970,8 +971,9 @@ export function runDisplayScenario(opts, ctx) {
         const by = new Map();
         lay.pieces.forEach((p, i) => {
           const m = by.get(p.model);
-          if (m) { m.count++; return; }
-          by.set(p.model, { model: p.model, label: labelOf(p.model), count: 1, index: i,
+          if (m) { m.count++; m.indices.push(i); return; }
+          by.set(p.model, { model: p.model, label: labelOf(p.model), count: 1, index: i, indices: [i],
+                            s: p.s,
                             size: 4 * p.hx * p.hz * Math.max(p.top - p.y, 0) });
         });
         return [...by.values()].sort((a, b) => b.size - a.size);
@@ -1004,6 +1006,7 @@ export function runDisplayScenario(opts, ctx) {
         scatter = display.scatterLayout();
         marks = listMarks(layout);
         focusAt = Math.min(focusAt, Math.max(marks.length - 1, 0));
+        placeAt = 0;
       }
 
       const v3 = (a) => ({ x: a[0], y: a[1], z: a[2] });
@@ -1012,7 +1015,10 @@ export function runDisplayScenario(opts, ctx) {
       // k-th after it.
       function indexFor(k) {
         if (!marks.length) return -1;
-        return marks[(focusAt + (spreadOn ? k : 0)) % marks.length].index;
+        const m = marks[(focusAt + (spreadOn ? k : 0)) % marks.length];
+        // The focused model's chosen placement (place()); a spread cell's own
+        // model at its first.
+        return k === 0 || !spreadOn ? m.indices[placeAt % m.indices.length] : m.index;
       }
       // What cell k frames: the piece, or for a LONG one the stretch of it
       // round its anchor (`of` is the piece itself, for the sight lines).
@@ -2135,6 +2141,7 @@ export function runDisplayScenario(opts, ctx) {
           if (!next) throw new Error(`no catalogue track '${id}'`);
           track = next;
           focusAt = 0;
+          placeAt = 0;
           await seat();
           setView(mode);
           return layout;
@@ -2165,11 +2172,22 @@ export function runDisplayScenario(opts, ctx) {
         focus(i) {
           const n = marks.length || 1;
           focusAt = (((i | 0) % n) + n) % n;
+          placeAt = 0;
           if (mode === 'free') openFree();
           aim();
           return focusAt;
         },
         focused: () => focusAt,
+        // Frame the focused model's k-th placement (a model stood nine times
+        // round a lap is nine places to judge), wrapping; answers which.
+        place(k) {
+          const n = marks.length ? marks[focusAt].indices.length : 1;
+          placeAt = (((k | 0) % n) + n) % n;
+          if (mode === 'free') openFree();
+          aim();
+          return placeAt;
+        },
+        placed: () => placeAt,
         // Park cell 0's car at (s, lat) under its own chase rig, the driver
         // view's camera: a moment of the lap (a score's `at`) to look at.
         park(s, lat) {

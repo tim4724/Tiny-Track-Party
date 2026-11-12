@@ -156,6 +156,20 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
   await page.evaluate(() => window.__landmarks.spread(false));
   await expect(page.evaluate(() => window.__landmarks.view('nope'))).rejects.toThrow(/unknown landmark view/);
 
+  // A model stood more than once: place() frames each of its placements in
+  // turn, wraps, and a new focus starts again at the first.
+  const many = marks.findIndex((m) => m.count > 1);
+  expect(many).toBeGreaterThanOrEqual(0);
+  await page.evaluate((i) => window.__landmarks.focus(i), many);
+  const stood = marks[many].indices;
+  expect((await poses(page))[0].piece).toBe(stood[0]);
+  expect(await page.evaluate(() => window.__landmarks.place(1))).toBe(1);
+  expect((await poses(page)).map((q) => q.piece)).toEqual([stood[1], stood[1], stood[1], stood[1]]);
+  expect(await page.evaluate(() => window.__landmarks.place(-1))).toBe(stood.length - 1);
+  expect(await page.evaluate((n) => window.__landmarks.place(n), stood.length)).toBe(0);
+  await page.evaluate(() => { window.__landmarks.place(1); window.__landmarks.focus(0); });
+  expect(await page.evaluate(() => window.__landmarks.placed())).toBe(0);
+
   // Race drives: the field leaves the grid.
   await page.evaluate(() => window.__landmarks.view('race'));
   const at = () => page.evaluate(() => window.__engine.getSnapshot().cars.map((c) => c.pose.pos.x + c.pose.pos.z));

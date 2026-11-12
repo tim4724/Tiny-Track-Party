@@ -286,6 +286,17 @@ section.stage iframe {
 .kit-row__tris { color: #6f7699; font-size: 10px; }
 /* The landmark stage's buffer height beside its Res toggle. */
 .lm-lines { color: #8b93b8; font-size: 11px; font-variant-numeric: tabular-nums; min-width: 5.5em; }
+/* The landmark gallery's side panel: the focused piece's card over the list. */
+.lm-card h2 { font-size: 13px; color: #fff; margin-bottom: 4px; }
+.lm-card__facts div { display: flex; gap: 8px; }
+.lm-card__facts dt { flex: none; width: 2.6em; color: #6f7699; }
+.lm-card__facts dd { color: #d5d5ee; min-width: 0; overflow-wrap: anywhere; }
+.lm-card__facts dd.is-poor, .kit-row__tris--poor { color: #ff8f8f; }
+.lm-card__step { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: #9aa3c7; }
+.lm-bar { display: flex; gap: 6px; margin: 10px 0 2px; }
+.lm-bar select { flex: 1; min-width: 0; }
+.kit-row--family { color: #9aa3c7; }
+.kit-row--member { padding-left: 16px; }
 /* A concept car's own description, under its name. */
 .kit-row__note { flex-basis: 100%; padding-bottom: 4px; color: #8b93b8; font-size: 10px; line-height: 1.4; }
 /* Already in the game: dimmed, because the eye is here for the candidates. */
