@@ -346,10 +346,11 @@ export const SET_GROUND = {
   // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:
   // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
-  // Powder's ski school: the nursery slope behind it (-X), its gentle face to
-  // the road, its foot reaching under the school's hut and arch so the whole
-  // school stands up on it over the kerb of the road beside it.
-  'set-ski-school': [{ kind: 'mound', x: -7, h: 4.2, r: 13, r1: 10, rz: 13, shape: 1.3 }],
+  // Powder's ski school: the nursery slope behind it (-X), a real run down
+  // its face to the road (the school's slalom drops some six units from the
+  // carpet's head to its foot), its foot reaching under the school's hut and
+  // arch so the whole school stands up on it over the kerb of the road beside it.
+  'set-ski-school': [{ kind: 'mound', x: -11, h: 7.2, r: 17, r1: 11, rz: 15, shape: 1.25 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Tangle's stream lies in its own bed: the low line the valley's sides and
   // the land raised toward the road stand over, a reach at a time.
@@ -750,7 +751,10 @@ export const TRACKS = {
       { model: 'set-powder-forest-e', u: 0.3311, lat: 17.72 },
       { model: 'set-powder-forest-f', u: 0.6284, lat: -15.4 },
       { model: 'set-powder-forest-g', u: 0.4238, lat: -19.86 },
-      { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 }
+      { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
+      // the snowman field, inside the bend the run from the ski school comes
+      // up to: dead ahead on the way in, beside the kerb at road height
+      { model: 'set-snowman-field', u: 0.665, lat: -9.5, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -777,7 +781,9 @@ export const TRACKS = {
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
-      { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 }
+      { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 },
+      // nor between the road and the snowman field
+      { kind: 'clear', u: 0.665, lat: -4.5, len: 16, r: 3 }
     ]
   },
   flurry: {
