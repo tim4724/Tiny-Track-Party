@@ -606,11 +606,51 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
         float scale, bool lockBorder) {
     LodRange r;
     if (!(scale > 0.0f)) return r;
-    std::vector<uint32_t> dst(idxN);
+    // A BIG FACE KEEPS ITS OWN CORNERS. A vertex carries its face's baked
+    // light, and a collapse re-points a corner at a vertex the range already
+    // owns: across a block's chamfer that hands a wall a corner lit as the
+    // roof is. On a small block nobody sees it; a house's wall wore a
+    // gradient from end to end until the near form swapped back in (a toy
+    // house changing colour as the racer came up to it). So a triangle over
+    // kFarFace is kept as it is, and so is every triangle at one of its
+    // corners that spans two shades (the chamfer beside it: corners further
+    // apart than kFarShade a channel). The rest is simplified with its
+    // border locked, which holds what it shares with the kept ones.
+    const uint32_t* src = m.idx.data() + idx0;
+    const auto shade = [&](uint32_t a, uint32_t b) {
+        const uint32_t x = m.verts[a].abgr, y = m.verts[b].abgr;
+        for (int sh = 0; sh < 24; sh += 8) {
+            if (std::abs((int) (x >> sh & 255) - (int) (y >> sh & 255)) > kFarShade) return true;
+        }
+        return false;
+    };
+    const auto big = [&](size_t i) {
+        const Vertex& a = m.verts[src[i]];
+        const Vertex& b = m.verts[src[i + 1]];
+        const Vertex& c = m.verts[src[i + 2]];
+        const float3 n = cross(float3{ b.px - a.px, b.py - a.py, b.pz - a.pz },
+                float3{ c.px - a.px, c.py - a.py, c.pz - a.pz });
+        return dot(n, n) > 4.0f * kFarFace * kFarFace;
+    };
+    std::vector<bool> faced(m.verts.size(), false);
+    for (size_t i = 0; i < idxN; i += 3) {
+        if (big(i)) faced[src[i]] = faced[src[i + 1]] = faced[src[i + 2]] = true;
+    }
+    std::vector<uint32_t> keep, pool;
+    for (size_t i = 0; i < idxN; i += 3) {
+        const uint32_t a = src[i], b = src[i + 1], c = src[i + 2];
+        const bool held = big(i) || ((faced[a] || faced[b] || faced[c])
+                && (shade(a, b) || shade(b, c) || shade(c, a)));
+        (held ? keep : pool).insert(held ? keep.end() : pool.end(), src + i, src + i + 3);
+    }
+    std::vector<uint32_t> dst(pool.size());
     float err = 0;
-    dst.resize(meshopt_simplify(dst.data(), m.idx.data() + idx0, idxN, &m.verts[0].px,
-            m.verts.size(), sizeof(Vertex), 0, kFarTol / scale,
-            lockBorder ? meshopt_SimplifyLockBorder : 0, &err));
+    if (!pool.empty()) {
+        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), &m.verts[0].px,
+                m.verts.size(), sizeof(Vertex), 0, kFarTol / scale,
+                lockBorder || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
+    }
+    dst.insert(dst.end(), keep.begin(), keep.end());
     if (dst.empty() || dst.size() * 5 > idxN * 4) return r;
     r.farOff = (uint32_t) m.idx.size();
     r.farCnt = (uint32_t) dst.size();
