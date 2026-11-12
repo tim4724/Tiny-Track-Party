@@ -465,21 +465,19 @@ export const TRACKS = {
     // Inland, grassy downs fill both lobes of the lap, their flanks to the
     // kerb; the rock-poolers' vans are parked by the start straight.
     set: [
+      { model: 'set-tidepool-cutting', u: 0.5, lat: 0 },
       { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
-      // the reef beside the road, a stretch at a time (each its own piece:
-      // a piece's box keeps the verge's apron off, so none spans the bend):
-      // the east bend's, the seals hauled out on its middle; the west bend's
-      // skerries in the surf; its low ledges and pools along the top run
-      { model: 'set-reef-head', u: 0.272, lat: 12.5 },
-      { model: 'set-reef-seals', u: 0.319, lat: 12.5 },
-      { model: 'set-reef-tail', u: 0.366, lat: 12.5 },
-      { model: 'set-reef-teeth', u: 0.735, lat: 12.5 },
-      { model: 'set-reef-skerry', u: 0.78, lat: 12.5 },
-      { model: 'set-reef-spit', u: 0.826, lat: 12.5 },
-      { model: 'set-reef-flats', u: 0.545, lat: 14 },
-      { model: 'set-reef-outlier', u: 0.41, lat: 12.5 },
-      { model: 'set-reef-stack', u: 0.927, lat: 13.5 },
+      // the reef in three forms on the outsides of the bends, where the
+      // camera swings to them: the seals' shelf round the east bend, the
+      // headland and its sea arch where the west run points, the stacks at
+      // the west bend's end (each built along its bend, placed on the road)
+      { model: 'set-reef-shelf', u: 0.32, lat: 0 },
+      { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
+      { model: 'set-crab-boat', u: 0.76, lat: 0 },
+      { model: 'set-reef-stacks', u: 0.83, lat: 0 },
+      { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
+      { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
       // palms on the downs' near flanks below the crests, placed by hand:
@@ -507,6 +505,13 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
+      // the backbone's turf: the downs' green carried out along the slate
+      // spine the road cuts through, and the downs it rises out of
+      { kind: 'paint', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 7, w: 5, tint: 0x6faa62 },
+      { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
+      { kind: 'clear', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 8 },
+      // the lifeboat station's rock over the beach, at the road's height
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
       // the hard the crab fishers' landing stands on, at the hop's height
       { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
       // the sand the tide has just left, darker and cooler round the reef
