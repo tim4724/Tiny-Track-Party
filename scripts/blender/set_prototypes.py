@@ -1566,57 +1566,60 @@ def riptide_along(road, z0, z1, d0, d1, y0, y1, color, step=2.0, row=None, dy=0.
     """A strip `d0`..`d1` off the centreline from z0 to z1, its bottom y0 and
     top y1 over the road's top at each step (plus `dy` over the plain where
     y0 is None: from under the beach), cut in steps that turn with the road."""
-    n = max(1, int(round(abs(z1 - z0) / step)))
-    out = []
-    for i in range(n):
-        za, zb = z0 + (z1 - z0) * i / n, z0 + (z1 - z0) * (i + 1) / n
-        zm = (za + zb) / 2
-        a = road.yaw(zm)
-        x, z = road.at(zm, (d0 + d1) / 2)
-        top = road.y(zm) + y1
-        bot = (road.y(zm) + y0) if y0 is not None else dy
-        o = box((abs(d1 - d0), top - bot, abs(zb - za) / math.cos(a) + 0.06), (x, (top + bot) / 2, z), color, yaw=a)
-        if row is not None:
-            rowed(o, row)
-        out.append(o)
+    with plain_parts():   # square: a strip in short lengths
+        n = max(1, int(round(abs(z1 - z0) / step)))
+        out = []
+        for i in range(n):
+            za, zb = z0 + (z1 - z0) * i / n, z0 + (z1 - z0) * (i + 1) / n
+            zm = (za + zb) / 2
+            a = road.yaw(zm)
+            x, z = road.at(zm, (d0 + d1) / 2)
+            top = road.y(zm) + y1
+            bot = (road.y(zm) + y0) if y0 is not None else dy
+            o = box((abs(d1 - d0), top - bot, abs(zb - za) / math.cos(a) + 0.06), (x, (top + bot) / 2, z), color, yaw=a)
+            if row is not None:
+                rowed(o, row)
+            out.append(o)
     return out
 
 def riptide_lamp(road, z, d, color=0x339cf2):
     """A seafront lamp `d` off the centreline on the walk: a stout post on
     its base, a lantern and its cap, as tall as a car is long twice over."""
-    x, zz = road.at(z, d)
-    y = road.y(z) + 0.05
-    box((0.26, 0.3, 0.26), (x, y + 0.15, zz), color)
-    box((0.13, 1.6, 0.13), (x, y + 1.0, zz), color)
-    box((0.34, 0.36, 0.34), (x, y + 1.95, zz), 0xfde4c7)
-    cyl(0.3, 0.26, (x, y + 2.13, zz), color, r2=0.04, segs=4, yaw=math.pi / 4)
+    with plain_parts():
+        x, zz = road.at(z, d)
+        y = road.y(z) + 0.05
+        box((0.26, 0.3, 0.26), (x, y + 0.15, zz), color)
+        box((0.13, 1.6, 0.13), (x, y + 1.0, zz), color)
+        box((0.34, 0.36, 0.34), (x, y + 1.95, zz), 0xfde4c7)
+        cyl(0.3, 0.26, (x, y + 2.13, zz), color, r2=0.04, segs=4, yaw=math.pi / 4)
 
 def riptide_seat(road, z, d):
     """A seafront bench on the walk, its back to the road, facing the sea."""
-    x, zz = road.at(z, d)
-    a = road.yaw(z)
-    y = road.y(z) + 0.05
-    c, s = math.cos(a), math.sin(a)
-    def T(lx, ly, lz):
-        return (x + lx * c + lz * s, y + ly, zz - lx * s + lz * c)
-    box((0.42, 0.1, 1.3), T(0.0, 0.36, 0.0), 0x9a7b55, yaw=a)
-    box((0.1, 0.42, 1.3), T(0.2, 0.62, 0.0), 0x9a7b55, yaw=a)
-    for e in (-0.55, 0.55):
-        box((0.42, 0.36, 0.1), T(0.0, 0.18, e), 0x38383d, yaw=a)
+    with plain_parts():
+        x, zz = road.at(z, d)
+        a = road.yaw(z)
+        y = road.y(z) + 0.05
+        c, s = math.cos(a), math.sin(a)
+        def T(lx, ly, lz):
+            return (x + lx * c + lz * s, y + ly, zz - lx * s + lz * c)
+        box((0.42, 0.1, 1.3), T(0.0, 0.36, 0.0), 0x9a7b55, yaw=a)
+        box((0.1, 0.42, 1.3), T(0.2, 0.62, 0.0), 0x9a7b55, yaw=a)
+        for e in (-0.55, 0.55):
+            box((0.42, 0.36, 0.1), T(0.0, 0.18, e), 0x38383d, yaw=a)
 
 def riptide_sea_wall(road, z0, z1, gap=None):
     """The sea wall from z0 to z1: the walk (paving) from just past the
-    beach strip to 7.4 off the centreline at the road's height, its face of
+    beach strip to 8.9 off the centreline at the road's height, its face of
     dressed stone down to the beach, the cream coping proud of the face and
     the cream parapet along the sea edge (open over `gap`, (z0, z1), where
     steps go down)."""
-    riptide_along(road, z0, z1, 5.1, 7.55, None, -0.07, 'grey', row=15, dy=-0.5)       # the wall's body
-    riptide_along(road, z0, z1, 5.1, 7.35, -0.1, 0.05, 'grey', row=4)                 # the walk
-    riptide_along(road, z0, z1, 7.25, 7.75, -0.05, 0.1, 0xfde4c7)                     # the coping
+    riptide_along(road, z0, z1, 5.1, 9.05, None, -0.07, 'grey', row=15, dy=-0.5)       # the wall's body
+    riptide_along(road, z0, z1, 5.1, 8.85, -0.1, 0.05, 'grey', row=4)                 # the walk
+    riptide_along(road, z0, z1, 8.75, 9.25, -0.05, 0.1, 0xfde4c7)                     # the coping
     spans = [(z0, z1)] if gap is None else [(z0, gap[0]), (gap[1], z1)]
     for (a, b) in spans:
         if abs(b - a) > 0.2:
-            riptide_along(road, a, b, 7.3, 7.6, 0.05, 0.42, 0xfde4c7, step=1.5)     # the parapet
+            riptide_along(road, a, b, 8.8, 9.1, 0.05, 0.42, 0xfde4c7, step=1.5)     # the parapet
 
 def riptide_steps(road, za, zb, n=5):
     """Stone steps down the wall's face to the sand, along it from za (at the
@@ -1624,7 +1627,7 @@ def riptide_steps(road, za, zb, n=5):
     for i in range(n):
         t0, t1 = i / n, (i + 1) / n
         zm = za + (zb - za) * (t0 + t1) / 2
-        x, z = road.at(zm, 8.1)
+        x, z = road.at(zm, 9.6)
         top = road.y(zm) + 0.05 - (road.y(zm) + 0.05) * t1
         a = road.yaw(zm)
         rowed(box((0.9, top + 0.5, abs(zb - za) / n + 0.04), (x, (top - 0.5) / 2, z), 'grey', yaw=a), 8)
@@ -1636,13 +1639,13 @@ def seafront_wall_a():
     road = riptide_road((9.497, -0.0112, -0.00014), [(-6.0, -0.01), (6.0, 0.0)])
     riptide_sea_wall(road, -5.8, 5.8, gap=(2.6, 4.4))
     riptide_steps(road, 2.7, 5.4)
-    x, z = road.at(5.6, 7.45)                                                     # the end pier
+    x, z = road.at(5.6, 8.95)                                                     # the end pier
     y = road.y(5.6)
     box((0.6, y + 1.2, 0.6), (x, (y + 1.2 - 0.5) / 2, z), 0xfde4c7)
     sphere(0.3, (x, y + 0.82, z), 0xfde4c7)
     for zl in (-4.6, 0.4):
-        riptide_lamp(road, zl, 7.1)
-    riptide_seat(road, -2.1, 6.6)
+        riptide_lamp(road, zl, 8.55)
+    riptide_seat(road, -2.1, 7.6)
     join_still('wall')
     on_a_rise()
 
@@ -1653,7 +1656,7 @@ def seafront_wall_b():
     road = riptide_road((9.513, 0.0204, -0.01106), [(-5.96, 0.18), (-3.0, 0.11), (0.0, 0.05), (3.0, 0.0), (6.0, -0.01)])
     riptide_sea_wall(road, -5.8, 5.8)
     zc = 0.6
-    x, z = road.at(zc, 6.35)
+    x, z = road.at(zc, 7.3)
     a = road.yaw(zc)
     y = road.y(zc) + 0.05
     c, s = math.cos(a), math.sin(a)
@@ -1669,7 +1672,7 @@ def seafront_wall_b():
         box((0.85, 0.1, 2.3), T(side * 0.36, 1.82, 0.0), 0xcf534f, yaw=a, roll=side * 0.62)
     box((0.12, 0.14, 1.4), T(0.0, 2.08, 0.0), 0xcf534f, yaw=a)
     for zl in (-4.0, 4.2):
-        riptide_lamp(road, zl, 7.1)
+        riptide_lamp(road, zl, 8.55)
     join_still('wall')
     on_a_rise()
 
@@ -1684,13 +1687,13 @@ def seafront_wall_c():
     # the bastion: the wall's body, walk and parapet carried out round it
     y = road.y(0.0) + 0.05
     x0, _ = road.at(0.0, 0.0)
-    rowed(box((2.6, y + 0.43, 3.6), (x0 - 8.6, (y - 0.07 - 0.5) / 2, 0.0), 'grey'), 15)
-    rowed(box((2.5, 0.15, 3.5), (x0 - 8.55, y - 0.025, 0.0), 'grey'), 4)
-    box((0.3, 0.47, 3.8), (x0 - 9.8, y + 0.19, 0.0), 0xfde4c7)                     # its parapet
+    rowed(box((2.6, y + 0.43, 3.6), (x0 - 10.1, (y - 0.07 - 0.5) / 2, 0.0), 'grey'), 15)
+    rowed(box((2.5, 0.15, 3.5), (x0 - 10.05, y - 0.025, 0.0), 'grey'), 4)
+    box((0.3, 0.47, 3.8), (x0 - 11.3, y + 0.19, 0.0), 0xfde4c7)                     # its parapet
     for e in (-1, 1):
-        box((2.5, 0.47, 0.3), (x0 - 8.6, y + 0.19, e * 1.75), 0xfde4c7)
+        box((2.5, 0.47, 0.3), (x0 - 10.1, y + 0.19, e * 1.75), 0xfde4c7)
     # the clock tower
-    tx = x0 - 8.5
+    tx = x0 - 10.0
     box((1.3, 0.5, 1.3), (tx, y + 0.25, 0.0), 'grey')
     box((0.9, 2.5, 0.9), (tx, y + 1.75, 0.0), 0xfff6eb)
     box((0.96, 0.16, 0.96), (tx, y + 1.3, 0.0), 0x339cf2)                         # a blue band
@@ -1713,7 +1716,7 @@ def seafront_wall_c():
         box((0.05, 0.14, 0.6), (tx, y + 5.65, 0.1), 0x38383d)
         box((0.05, 0.22, 0.14), (tx, y + 5.65, -0.22), 0x38383d)
     for zl in (-4.6, 4.6):
-        riptide_lamp(road, zl, 7.1)
+        riptide_lamp(road, zl, 8.55)
     join_still('wall')
     on_a_rise()
 
@@ -1726,7 +1729,7 @@ def seafront_wall_d():
     riptide_sea_wall(road, -5.8, 5.8, gap=(-5.6, -3.6))
     riptide_steps(road, -3.7, -5.6)
     zc = 1.2
-    x, z = road.at(zc, 6.6)
+    x, z = road.at(zc, 7.6)
     a = road.yaw(zc)
     y = road.y(zc) + 0.05
     c, s = math.cos(a), math.sin(a)
@@ -1738,13 +1741,13 @@ def seafront_wall_d():
         box((0.55, 0.08, 1.9 / 4), T(0.65, 1.05, -0.71 + i * 0.475), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.4)
     box((0.12, 0.5, 1.5), T(0.47, 0.55, 0.0), 0x339cf2, yaw=a)                    # the counter
     for (lz, cols) in ((-2.2, (0xff5040, 0xfff6eb)), (3.6, (0x339cf2, 0xfff6eb))):
-        px, pz = road.at(zc + lz, 6.4)
+        px, pz = road.at(zc + lz, 7.5)
         py = road.y(zc + lz) + 0.05
         umbrella((px, py, pz), 0.95, 1.35, cols, gores=8)
         box((0.5, 0.08, 0.5), (px, py + 0.5, pz), 0xfff6eb)                         # the table
         box((0.12, 0.5, 0.12), (px, py + 0.25, pz), 0x38383d)
     for zl in (-2.8, 5.0):
-        riptide_lamp(road, zl, 7.1)
+        riptide_lamp(road, zl, 8.55)
     join_still('wall')
     on_a_rise()
 
@@ -1774,28 +1777,29 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
         poly([T(-dep / 2, H, e * w / 2), T(dep / 2, H, e * w / 2), T(0.0, H + rh, e * w / 2)], [(0, 1, 2)], wall)
     box((0.3, 0.6, 0.3), T(0.0, H + rh + 0.1, w / 2 - 0.35), wall, yaw=a)            # the chimney
     box((0.36, 0.08, 0.36), T(0.0, H + rh + 0.42, w / 2 - 0.35), 'grey', yaw=a)
-    # the front
-    box((0.08, 0.66, 0.42), T(fx + 0.02, 0.35, -w / 4), 0xfff6eb, yaw=a)            # the door in its frame
-    box((0.08, 0.6, 0.34), T(fx + 0.05, 0.32, -w / 4), door, yaw=a)
-    cols = (-w / 4, w / 4) if w < 2.0 else (-w / 3, 0.0, w / 3)
-    for f in range(floors):
-        wy = 0.2 + 0.78 * f + 0.42
-        for cz in cols:
-            if f == 0 and abs(cz + w / 4) < 0.5:
-                continue
-            if bay and f < 2 and cz == cols[-1]:
-                continue
-            box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
-            box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
-    if bay:                                                                         # a bay window, two floors
-        bz = cols[-1]
-        box((0.42, 1.5, 0.78), T(fx + 0.2, 0.2 + 0.75, bz), wall, yaw=a)
-        for f in range(2):
-            box((0.08, 0.42, 0.56), T(fx + 0.43, 0.2 + 0.78 * f + 0.42, bz), 0x8ecae6, yaw=a)
-        box((0.56, 0.1, 0.92), T(fx + 0.22, 1.76, bz), roof, yaw=a)
-    if balcony:                                                                     # a balcony on the first floor
-        box((0.4, 0.1, w * 0.7), T(fx + 0.2, 0.98, 0.0), 0xfff6eb, yaw=a)
-        box((0.08, 0.32, w * 0.7), T(fx + 0.38, 1.18, 0.0), 0xfff6eb, yaw=a)
+    with plain_parts():   # its dressing square-edged: the frame keeps the chamfer
+        # the front
+        box((0.08, 0.66, 0.42), T(fx + 0.02, 0.35, -w / 4), 0xfff6eb, yaw=a)            # the door in its frame
+        box((0.08, 0.6, 0.34), T(fx + 0.05, 0.32, -w / 4), door, yaw=a)
+        cols = (-w / 4, w / 4) if w < 2.0 else (-w / 3, 0.0, w / 3)
+        for f in range(floors):
+            wy = 0.2 + 0.78 * f + 0.42
+            for cz in cols:
+                if f == 0 and abs(cz + w / 4) < 0.5:
+                    continue
+                if bay and f < 2 and cz == cols[-1]:
+                    continue
+                box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
+                box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
+        if bay:                                                                         # a bay window, two floors
+            bz = cols[-1]
+            box((0.42, 1.5, 0.78), T(fx + 0.2, 0.2 + 0.75, bz), wall, yaw=a)
+            for f in range(2):
+                box((0.08, 0.42, 0.56), T(fx + 0.43, 0.2 + 0.78 * f + 0.42, bz), 0x8ecae6, yaw=a)
+            box((0.56, 0.1, 0.92), T(fx + 0.22, 1.76, bz), roof, yaw=a)
+        if balcony:                                                                     # a balcony on the first floor
+            box((0.4, 0.1, w * 0.7), T(fx + 0.2, 0.98, 0.0), 0xfff6eb, yaw=a)
+            box((0.08, 0.32, w * 0.7), T(fx + 0.38, 1.18, 0.0), 0xfff6eb, yaw=a)
 
 def riptide_pavement(road, z0, z1):
     """The pavement before the terrace, at the road's height past the beach strip."""
@@ -1823,31 +1827,32 @@ def seafront_hotel():
     box((dep, H + 1.0, w), T(0.0, (H - 1.0) / 2, 0.0), 0xfff6eb, yaw=a)
     box((dep + 0.12, 0.16, w + 0.12), T(0.0, H, 0.0), 0xfde4c7, yaw=a)            # the cornice
     box((dep, 0.32, w), T(0.0, H + 0.24, 0.0), 0xfff6eb, yaw=a)                     # the parapet
-    box((0.1, 0.9, 1.1), T(fx + 0.04, 0.45, 0.0), 0xfde4c7, yaw=a)                  # the entrance
-    box((0.1, 0.78, 0.8), T(fx + 0.08, 0.4, 0.0), 0x339cf2, yaw=a)
-    box((0.7, 0.1, 1.4), T(fx + 0.3, 0.98, 0.0), 0xff5040, yaw=a)                   # its canopy
-    for f in range(floors):
-        wy = 0.25 + 0.78 * f + 0.42
+    with plain_parts():
+        box((0.1, 0.9, 1.1), T(fx + 0.04, 0.45, 0.0), 0xfde4c7, yaw=a)                  # the entrance
+        box((0.1, 0.78, 0.8), T(fx + 0.08, 0.4, 0.0), 0x339cf2, yaw=a)
+        box((0.7, 0.1, 1.4), T(fx + 0.3, 0.98, 0.0), 0xff5040, yaw=a)                   # its canopy
+        for f in range(floors):
+            wy = 0.25 + 0.78 * f + 0.42
+            for k in range(5):
+                cz = -w / 2 + 0.5 + k * (w - 1.0) / 4
+                if f == 0 and abs(cz) < 0.7:
+                    continue
+                box((0.08, 0.46, 0.44), T(fx + 0.02, wy, cz), 0xfde4c7, yaw=a)
+                box((0.08, 0.38, 0.34), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
+            if f > 0:                                                                   # a balcony along each upper floor
+                box((0.36, 0.08, w - 0.3), T(fx + 0.18, wy - 0.36, 0.0), 0xfff6eb, yaw=a)
+                box((0.08, 0.26, w - 0.3), T(fx + 0.34, wy - 0.2, 0.0), 0x339cf2, yaw=a)
+        # the sign on the roof, to the road and the sea: a red board, white bars on it
+        box((0.18, 0.62, 3.0), T(0.4, H + 0.7, 0.0), 0xff5040, yaw=a)
         for k in range(5):
-            cz = -w / 2 + 0.5 + k * (w - 1.0) / 4
-            if f == 0 and abs(cz) < 0.7:
-                continue
-            box((0.08, 0.46, 0.44), T(fx + 0.02, wy, cz), 0xfde4c7, yaw=a)
-            box((0.08, 0.38, 0.34), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
-        if f > 0:                                                                   # a balcony along each upper floor
-            box((0.36, 0.08, w - 0.3), T(fx + 0.18, wy - 0.36, 0.0), 0xfff6eb, yaw=a)
-            box((0.08, 0.26, w - 0.3), T(fx + 0.34, wy - 0.2, 0.0), 0x339cf2, yaw=a)
-    # the sign on the roof, to the road and the sea: a red board, white bars on it
-    box((0.18, 0.62, 3.0), T(0.4, H + 0.7, 0.0), 0xff5040, yaw=a)
-    for k in range(5):
-        box((0.08, 0.3, 0.3), T(0.52, H + 0.72, -1.1 + k * 0.55), 0xfff6eb, yaw=a)
-    for e in (-1, 1):
-        box((0.12, 0.62, 0.12), T(0.4, H + 0.2, e * 1.2), 0x38383d, yaw=a)
-    for k, e in enumerate((-1, 1)):                                                 # two flags on the roof
-        px, py, pz = T(-0.6, H + 0.4, e * (w / 2 - 0.35))
-        box((0.1, 1.5, 0.1), (px, py + 0.75, pz), 0xfff6eb)
-        with animated('anim_sway:a=x:d=20:p=%.1f#hotel%d' % (1.9 + 0.3 * k, k), (px, py + 1.5, pz)):
-            box((0.05, 0.42, 0.7), (px, py + 1.26, pz + 0.38), (0x339cf2, 0xff5040)[k])
+            box((0.08, 0.3, 0.3), T(0.52, H + 0.72, -1.1 + k * 0.55), 0xfff6eb, yaw=a)
+        for e in (-1, 1):
+            box((0.12, 0.62, 0.12), T(0.4, H + 0.2, e * 1.2), 0x38383d, yaw=a)
+        for k, e in enumerate((-1, 1)):                                                 # two flags on the roof
+            px, py, pz = T(-0.6, H + 0.4, e * (w / 2 - 0.35))
+            box((0.1, 1.5, 0.1), (px, py + 0.75, pz), 0xfff6eb)
+            with animated('anim_sway:a=x:d=20:p=%.1f#hotel%d' % (1.9 + 0.3 * k, k), (px, py + 1.5, pz)):
+                box((0.05, 0.42, 0.7), (px, py + 1.26, pz + 0.38), (0x339cf2, 0xff5040)[k])
     riptide_house(road, 3.4, 2.2, 3, 0xf1976c, 0xcf534f, balcony=True, door=0xfff6eb)
     riptide_house(road, 5.6, 2.2, 2, 0xfff6eb, 0x339cf2, bay=True)
     join_still('terrace')
