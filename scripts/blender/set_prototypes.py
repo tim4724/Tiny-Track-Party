@@ -10117,7 +10117,7 @@ def cactus_pear():
         prickly_pear((0, 0, 0), 1.0, pads=4)
     join_still('cactus')
 
-# The canyon's second colour (theme.cc canyonTheme's props, on the verge of
+# The canyon's second colour (theme.cc canyonTheme's props, beside the road on
 # every canyon track): a spring bloom, low mats of purple sand verbena and
 # yellow desert marigold run together on the sand, and a band of sagebrush,
 # grey-green. Faceted mounds, a few dozen faces each: a prop is stamped many
@@ -10132,10 +10132,10 @@ def canyon_mat(at, r, h, color, row=None, yaw=0.0, segs=6):
 def canyon_bloom():
     with plain_parts():
         for i, (x, z, r, h, c, row) in enumerate((
-                (-0.6, -0.5, 0.62, 0.16, 'purple', 6), (0.35, -0.75, 0.48, 0.14, 'purple', 14),
-                (-0.1, 0.55, 0.55, 0.15, 'purple', 10), (0.85, 0.35, 0.36, 0.26, 'yellow', 4),
-                (-0.95, 0.4, 0.32, 0.24, 'yellow', 8), (0.2, -0.05, 0.3, 0.28, 'yellow', 2),
-                (1.05, -0.55, 0.3, 0.12, 'sage', 6))):
+                (-0.6, -0.5, 0.62, 0.3, 'purple', 6), (0.35, -0.75, 0.48, 0.26, 'purple', 14),
+                (-0.1, 0.55, 0.55, 0.28, 'purple', 10), (0.85, 0.35, 0.36, 0.44, 'yellow', 4),
+                (-0.95, 0.4, 0.32, 0.4, 'yellow', 8), (0.2, -0.05, 0.3, 0.48, 'yellow', 2),
+                (1.05, -0.55, 0.3, 0.2, 'sage', 6))):
             canyon_mat((x, 0.0, z), r, h, c, row, yaw=0.7 * i)
     join_still('bloom')
 
@@ -10804,7 +10804,7 @@ def tailings_dump():
     # the colour of its face and its bench: one polar mesh on shared spokes
     TIERS = ((7.0, 5.9, 1.1, 'brown', ('gravel', 26)), (5.2, 4.3, 2.1, ('salmon', 26), ('gravel', 18)),
              (3.7, 2.9, 3.0, 'brown', ('gravel', 28)), (2.4, 1.7, 3.9, ('salmon', 26), ('gravel', 14)))
-    N = 30
+    N = 18 if LITE else 30                                  # the box draws a coarser outline
     def ragged(a, t):
         return 1.0 + 0.13 * math.sin(3 * a + 1.1 + 0.9 * t) + 0.08 * math.sin(5 * a + 1.3 * t) + 0.05 * math.sin(9 * a + 2.0 + t)
     OFF = ((0.0, 0.0), (0.45, -0.5), (0.2, -1.1), (0.75, -0.9))   # each tier tipped off the last, not stacked on its middle
@@ -10875,7 +10875,7 @@ def tailings_dump():
         for sz in (-0.36, 0.36):
             box((1.5, 0.1, 0.1), (TX + 0.2, TY + 0.05, TZ + sz * KT), 'slate')
         box((0.16, 0.4, 0.85), (TX - 0.62, TY + 0.2, TZ), 0x8a5f3e)                  # the stop at the lip
-        for i, (dx, dz, q) in enumerate(((-1.9, 0.0, 0.42), (-2.6, 0.5, 0.36), (-3.3, -0.3, 0.32), (-2.3, -0.6, 0.28))):
+        for i, (dx, dz, q) in enumerate(() if LITE else ((-1.9, 0.0, 0.42), (-2.6, 0.5, 0.36), (-3.3, -0.3, 0.32), (-2.3, -0.6, 0.28))):
             rock_lump(q, (TX + dx, TY - 0.55 * (i + 1.2), TZ + dz), ('yellow', 'tan', 'yellow', 'brown')[i],
                       (1.4, 0.45, 1.1), 0.4 * i, seed=11.0 + i)
     with animated('anim_sway:a=z:d=60:p=9:r=0.6#tip', (TX - 0.5, TY + 0.2, TZ)):
