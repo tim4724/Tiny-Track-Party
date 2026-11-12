@@ -1112,8 +1112,8 @@ constexpr SetDef kSet_ribbon[] = {
   { "set-village-church", 0x1.48c692f6e8295p-2, 0x1.5b16872b020c5p+4, 0x1.3ab851eb851ecp+5, 0x0p+0, 0x1p+0, 1 },
   { "set-village-street", 0x1.83d1cc100e6bp-2, 0x1p+2, 0x1p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-village-street-b", 0x1.a678c0053e2d6p-2, 0x1p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-village-street-b", 0x1.86594af4f0d84p-2, -0x1.0333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-village-street", 0x1.a872b020c49bap-2, -0x1p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-village-street-c", 0x1.86594af4f0d84p-2, -0x1.0333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-village-street-d", 0x1.a872b020c49bap-2, -0x1p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cottage-row", 0x1.374bc6a7ef9dbp-1, -0x1.e666666666666p+2, 0x1.61f5c28f5c28fp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-windmill", 0x1.3333333333333p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-field-wheat", 0x1.6538ef34d6a16p-1, 0x1.8p+3, 0x1.ecccccccccccdp+2, 0x0p+0, 0x1p+0, 1 },
@@ -1238,16 +1238,7 @@ constexpr SetDef kSet_pretzel[] = {
   { "set-den-camp", 0x1.2147ae147ae14p-1, 0x1.099999999999ap+3, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0, 1 },
   { "set-swing-oak", 0x1.5c28f5c28f5c3p-3, 0x1.ep+2, 0x1.3dae147ae147bp+5, 0x0p+0, 0x1p+0, 1 },
   { "set-swing-oak", 0x1.828f5c28f5c29p-1, -0x1.2p+3, 0x1.1ceb851eb851fp+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.999999999999ap-4, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.147ae147ae148p-3, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.5c28f5c28f5c3p-2, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.851eb851eb852p-2, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.0a3d70a3d70a4p-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.3333333333333p-1, 0x1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.570a3d70a3d71p-1, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.999999999999ap-1, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.b851eb851eb85p-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-summer-oaks", 0x1.dc28f5c28f5c3p-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-picnic-oak", 0x1.b851eb851eb85p-1, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-kite-flyers", 0x1.6e147ae147ae1p-1, -0x1.7p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_pretzel[] = {
@@ -1361,14 +1352,14 @@ constexpr FurnDef kBoxes_tangle[] = {
 constexpr SetDef kSet_tangle[] = {
   { "set-watermill", 0x1.7ef9db22d0e56p-4, 0x1.599999999999ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-mill-wood", 0x1.c51eb851eb852p-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.d70a3d70a3d71p-1, -0x1.9p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.e8f5c28f5c28fp-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-b", 0x1.d70a3d70a3d71p-1, -0x1.9p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-c", 0x1.e8f5c28f5c28fp-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-mill-wood", 0x1.fd70a3d70a3d7p-1, 0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.eb851eb851eb8p-6, 0x1.9p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.28f5c28f5c28fp-1, -0x1.1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-b", 0x1.eb851eb851eb8p-6, 0x1.9p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-c", 0x1.28f5c28f5c28fp-1, -0x1.1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-mill-wood", 0x1.3851eb851eb85p-1, -0x1.1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.23d70a3d70a3dp-2, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-mill-wood", 0x1.947ae147ae148p-1, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-b", 0x1.23d70a3d70a3dp-2, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-mill-wood-c", 0x1.947ae147ae148p-1, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-mill-wood", 0x1.88ce703afb7e9p-4, 0x1.65eb851eb851fp+4, 0x1.1dc28f5c28f5cp+4, 0x0p+0, 0x1p+0, 1 },
   { "set-culvert", 0x1.b245f5ad96a6ap-1, 0x1.1ae147ae147aep+2, -0x1.090a3d70a3d71p+5, 0x0p+0, 0x1p+0, 1 },
   { "set-culvert", 0x1.b9192641b328bp-1, -0x1.20f5c28f5c28fp+2, 0x1.28p+7, 0x0p+0, 0x1p+0, 1 },
@@ -1521,14 +1512,7 @@ constexpr SetDef kSet_cloverleaf[] = {
   { "set-park-halt", 0x1.b95feda661284p-1, 0x1.906a7ef9db22dp+3, -0x1.4f0a3d70a3d71p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boating-lake", 0x1.a9c779a6b50b1p-1, 0x1.028f5c28f5c29p+4, -0x1.552e147ae147bp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boathouse", 0x1.a6809d495182bp-1, 0x1.9333333333333p+3, 0x1.54b851eb851ecp+5, 0x0p+0, 0x1.4cccccccccccdp+0, 1 },
-  { "set-lake-reeds", 0x1.a985f06f69446p-1, 0x1.7147ae147ae14p+2, -0x1.508p+7, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.ad1b71758e219p-1, 0x1.24ccccccccccdp+3, 0x1.c3f5c28f5c28fp+6, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.ad6a161e4f766p-1, 0x1.163d70a3d70a4p+4, 0x1.01f5c28f5c28fp+6, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.ac2f837b4a234p-1, 0x1.7b0a3d70a3d71p+4, 0x1.0666666666666p+5, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.aa64c2f837b4ap-1, 0x1.a3ae147ae147bp+4, 0x1.33d70a3d70a3dp+2, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.a84b5dcc63f14p-1, 0x1.9e8f5c28f5c29p+4, -0x1.60a3d70a3d70ap+4, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-lake-reeds", 0x1.a71de69ad42c4p-1, 0x1.535c28f5c28f6p+4, -0x1.b3eb851eb851fp+5, 0x0p+0, 0x1.6666666666666p-1, 1 },
-  { "set-bandstand", 0x1.d70a3d70a3d71p-3, -0x1.7p+4, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
+  { "set-bandstand", 0x1.b851eb851eb85p-3, -0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
   { "set-cherry-avenue", 0x1.28f5c28f5c28fp-3, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cherry-avenue", 0x1.0cccccccccccdp-1, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cherry-avenue", 0x1.91eb851eb851fp-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -1540,7 +1524,7 @@ constexpr SetDef kSet_cloverleaf[] = {
   { "set-blossom-grove", 0x1.b0a3d70a3d70ap-1, 0x1.1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_cloverleaf[] = {
-  { 3, 20, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.5p+3, 0x1.ep+3, 0x0p+0, 0x1.cp+3, 0x1.999999999999ap+1, 0x1.999999999999ap+1, 0x0p+0, 0x1.3333333333333p-1, 0x0u, 0x0p+0, 1 },
+  { 3, 13, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.5p+3, 0x1.ep+3, 0x0p+0, 0x1.cp+3, 0x1.999999999999ap+1, 0x1.999999999999ap+1, 0x0p+0, 0x1.3333333333333p-1, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.999999999999ap-3, -0x1.8p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+5, 0x1p+5, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.4p+3, 0x1.3333333333333p-3, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.6e978d4fdf3b6p-4, -0x1.1p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+4, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.8p+2, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.0a3d70a3d70a4p-1, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.18p+6, 0x1.ap+4, 0x1.ap+4, 0x0p+0, 0x0p+0, 0x1.cp+2, 0x1.cp+2, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x0p+0, 1 },
@@ -2463,9 +2447,9 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 11, kLand_glacier, 39 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 29, kLand_avalanche, 25 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 25, kLand_ribbon, 9 },
-  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 18, kLand_pretzel, 7 },
+  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 9, kLand_pretzel, 7 },
   { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 30, kLand_tangle, 16 },
-  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 30, kLand_cloverleaf, 8 },
+  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 23, kLand_cloverleaf, 8 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 20, kLand_wash, 24 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 14, kLand_gulch, 29 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 19, kLand_crag, 10 },
@@ -2486,8 +2470,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-gallery-loop", "set-boomtown-north", "set-boomtown-south", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-glacier-forest-a", "set-headframe", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-ranch-herd", "set-ranch-herd-east", "set-snowman-field", "set-stamp-mill", "set-tailings-dump", "set-tree-apple", "set-village-fete", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
-constexpr int TTP_LITE_MODEL_COUNT = 64;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-gallery-loop", "set-boomtown-north", "set-boomtown-south", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-glacier-forest-a", "set-headframe", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-mill-wood-b", "set-mill-wood-c", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-ranch-herd", "set-ranch-herd-east", "set-snowman-field", "set-stamp-mill", "set-tailings-dump", "set-tree-apple", "set-village-fete", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
+constexpr int TTP_LITE_MODEL_COUNT = 66;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.

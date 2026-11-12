@@ -1154,8 +1154,8 @@ export const TRACKS = {
       { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
       { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
-      { model: 'set-village-street-b', u: 0.3812, lat: -4.05, yaw: 180 },
-      { model: 'set-village-street', u: 0.4145, lat: -4, yaw: 180 },
+      { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
+      { model: 'set-village-street-d', u: 0.4145, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
       { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
       { model: 'set-field-wheat', u: 0.6977, lat: 12, yaw: 7.7 },
@@ -1199,13 +1199,13 @@ export const TRACKS = {
     // The children's summer on sun-yellowed downs (the theme's ground colour;
     // theme.cc backyardTrack): the treehouse oak on the flat outside the
     // north-west bend, straight ahead down the avenue of oaks the diagonal
-    // ends in, its den round the foot; the pitch beside the diagonal with a
-    // game on, bunting down its road-side touchline; their camp where the
-    // racer comes off the diagonal's top, the fire smoking; the kite hill
-    // rising off the verge beyond the top loop, three children on its face
-    // with their kites. The lawn's conifers are thinned out here: the trees
-    // a racer passes are the garden's broadleaf oaks, the hay made in round
-    // bales beside them (set-summer-oaks, each on the outside of its bend).
+    // ends in; the pitch beside the diagonal, greener than the downs, bunting
+    // down its road-side touchline; the children's blanket den under its oak
+    // where the racer comes off the diagonal's top; a picnic left under the
+    // great oak out by the bend; the kite hill rising off the verge beyond
+    // the top loop, three kites up over its face on their stakes. Nobody is
+    // about (children that small read as specks). The trees a racer passes
+    // are the lawn's own scatter of the garden's broadleaf oaks.
     set: [
       { model: 'set-avenue-oaks', u: 0.01011, lat: 5.5, yaw: 0 },
       { model: 'set-avenue-oaks', u: 0.01011, lat: -5.5, yaw: 180 },
@@ -1214,16 +1214,7 @@ export const TRACKS = {
       { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-summer-oaks', u: 0.1, lat: 6.5, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.135, lat: 6.5, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.34, lat: 6.5, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.38, lat: 6.5, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.52, lat: 6.5, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.6, lat: 8, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.67, lat: -6.5, yaw: 180 },
-      { model: 'set-summer-oaks', u: 0.8, lat: -6.5, yaw: 180 },
-      { model: 'set-summer-oaks', u: 0.86, lat: 7, yaw: 0 },
-      { model: 'set-summer-oaks', u: 0.93, lat: 6.5, yaw: 0 },
+      { model: 'set-picnic-oak', u: 0.86, lat: 7, yaw: 0 },
       { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
@@ -1241,7 +1232,7 @@ export const TRACKS = {
   tangle: {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
-    // The mill valley: wooded sides (set-mill-wood on the hills in `land`)
+    // The mill valley: wooded sides (set-mill-wood, -b, -c: three woods on the hills in `land`)
     // and the brook down its floor, set below its slate walls (set-brook-*,
     // laid in the world and cut into lengths). It rises at the springhouse
     // beyond the north loop's top straight, goes under it in a pipe, comes
@@ -1256,14 +1247,14 @@ export const TRACKS = {
     set: [
       { model: 'set-watermill', u: 0.0935, lat: 10.8, yaw: 0 },
       { model: 'set-mill-wood', u: 0.885, lat: -12, yaw: 180 },
-      { model: 'set-mill-wood', u: 0.92, lat: -12.5, yaw: 180 },
-      { model: 'set-mill-wood', u: 0.955, lat: -12, yaw: 180 },
+      { model: 'set-mill-wood-b', u: 0.92, lat: -12.5, yaw: 180 },
+      { model: 'set-mill-wood-c', u: 0.955, lat: -12, yaw: 180 },
       { model: 'set-mill-wood', u: 0.995, lat: 12, yaw: 0 },
-      { model: 'set-mill-wood', u: 0.03, lat: 12.5, yaw: 0 },
-      { model: 'set-mill-wood', u: 0.58, lat: -8.5, yaw: 180 },
+      { model: 'set-mill-wood-b', u: 0.03, lat: 12.5, yaw: 0 },
+      { model: 'set-mill-wood-c', u: 0.58, lat: -8.5, yaw: 180 },
       { model: 'set-mill-wood', u: 0.61, lat: -8.5, yaw: 180 },
-      { model: 'set-mill-wood', u: 0.285, lat: -9, yaw: 180 },
-      { model: 'set-mill-wood', u: 0.79, lat: -9, yaw: 180 },
+      { model: 'set-mill-wood-b', u: 0.285, lat: -9, yaw: 180 },
+      { model: 'set-mill-wood-c', u: 0.79, lat: -9, yaw: 180 },
       { model: 'set-mill-wood', u: 0.0959, lat: 22.37, yaw: 17.86 },
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
@@ -1309,20 +1300,19 @@ export const TRACKS = {
     // A spring park: cherries in pale blossom, planted as a park plants them,
     // in avenues beside the straights (set-cherry-avenue) and in groves at the
     // bends, few alone on the lawn. The park's miniature railway runs from a
-    // loop by the start straight, under the high road, round the bandstand's
+    // loop by the start straight, under the high road, past the bandstand's
     // knoll and along the finger lobe to a loop by the lake, a halt at each
     // end, its one train going out and back (set-park-rails-*, laid by
-    // scratch geometry in set_prototypes.py PARK_ROUTE; it crosses no road
-    // at grade). The playground on
-    // the flat outside the south-west hairpin, where the start straight
-    // points, on its own bark-chip ground inside a low fence, its hill behind
-    // it (on the hill's top it stood a grid cell off the road and read as a
-    // dot). The bandstand on the mound beside the high road, level with a
-    // racer up on the deck. The boating lake beyond the finger lobe's end,
-    // straight ahead down the lobe's first leg: a round pond ringed with
-    // reeds, an islet with a cherry on it, a stone fountain of a park's size,
-    // swan pedalos going round, the boathouse on the near shore. Another
-    // corner of the playground in the S between the two decks.
+    // scratch geometry in set_prototypes.py PARK_ROUTE; it crosses no road at
+    // grade). The playground on the flat outside the south-west hairpin,
+    // where the start straight points: big climbing frames standing on the
+    // grass, its hill behind it. The bandstand on its mound close under the
+    // high road's outside, level with a racer up on the deck. The boating
+    // lake beyond the finger lobe's end, straight ahead down the lobe's first
+    // leg: a round pond under a stone lip, an islet with a cherry on it, a
+    // stone fountain of a park's size, swan pedalos going round, the
+    // boathouse on the near shore. Another corner of the playground in the S
+    // between the two decks.
     set: [
       { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
@@ -1337,14 +1327,7 @@ export const TRACKS = {
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
       { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
-      { model: 'set-lake-reeds', u: 0.8311, lat: 5.77, yaw: -168.25, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8381, lat: 9.15, yaw: 112.99, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8387, lat: 17.39, yaw: 64.49, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8363, lat: 23.69, yaw: 32.8, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8328, lat: 26.23, yaw: 4.81, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8287, lat: 25.91, yaw: -22.04, scale: 0.7 },
-      { model: 'set-lake-reeds', u: 0.8264, lat: 21.21, yaw: -54.49, scale: 0.7 },
-      { model: 'set-bandstand', u: 0.23, lat: -23, yaw: 180, scale: 1.5 },
+      { model: 'set-bandstand', u: 0.215, lat: -13, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
