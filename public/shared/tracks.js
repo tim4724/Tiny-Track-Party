@@ -1583,6 +1583,10 @@ export const TRACKS = {
       // mine yard and an oil camp); the rim begins at the hairpin
       { model: 'set-ranch-fence', u: 0.032, lat: -5.4, yaw: 180 },
       { model: 'set-ranch-fence', u: 0.036, lat: 5.4 },
+      // the herd on the range inside the fences: a dozen head and calves in
+      // loose bunches on the ranch's side, a few more across the road
+      { model: 'set-ranch-herd', u: 0.035, lat: -5.9, yaw: 180 },
+      { model: 'set-ranch-herd-east', u: 0.02, lat: 5.9 },
       // the rock, each piece's talus coming to a couple of units past the
       // kerb (a chase camera rounding a bend passed through a talus on the
       // road), its blocks out at the ends, never by a kerb
@@ -1643,9 +1647,9 @@ export const TRACKS = {
     // where the whole straight points; the field's three jacks nodding and
     // tumbleweeds blowing by outside its second corner; and at the line the
     // field's own filling station, its sign turning and a hawk over it. The
-    // telegraph line runs from the station (over the road on two tall
-    // poles) along the long straight, over the mountain on its benches and
-    // down to a lineman's hut past the far mouth. Mesa rims close the west as
+    // telegraph line comes in across the open desert from the east to the
+    // station (over the road on two tall poles), clear of the mountain. Mesa
+    // rims close the west as
     // near backdrops (the north and east stay open).
     // Everything by the road at its own size, the rock as big as rock is.
     set: [
