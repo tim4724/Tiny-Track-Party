@@ -585,21 +585,9 @@ def snow_heap(at, k=1.0, yaw=0.0):
     snowy(box((0.9 * k, 0.35 * k, 0.7 * k), (x + 0.1 * k, y + 0.6 * k, z), 0xf3f7fb, yaw=yaw + 0.5))
 
 def pine(at, k=1.0):
-    """A snowy pine: three faceted tiers on a stub of trunk, snow lying on
-    the upper part of each tier as it lies on the ambient pines round it (a
-    bare green pine beside them read as another season). The snow is a shell
-    just outside the tier from a third of its height up, so it shows as a
-    white band above each green skirt, as on the Holiday Kit pines, and the
-    top tier's is the white tip; a cone set inside the tier showed as a
-    hairline."""
-    x, y, z = at
-    box((0.3 * k, 0.5 * k, 0.3 * k), (x, y + 0.25 * k, z), 0x7a5a3a)
-    F, S = 0.32, 1.07                       # where the snow starts up a tier; how far proud
-    for i, (r, h) in enumerate(((0.75, 0.7), (0.58, 0.6), (0.4, 0.5))):
-        y0 = y + (0.4 + i * 0.42) * k
-        cyl(r * k, h * k, (x, y0, z), 0x61cb8b, r2=0.08 * k, segs=6)
-        snowy(cyl(S * (r - (r - 0.08) * F) * k, (1 - F) * h * k, (x, y0 + F * h * k, z), 0xf3f7fb,
-                  r2=S * 0.08 * k, segs=6), 0.45)
+    """A snowy fir of size `k`: the Holiday Kit's (kit_fir), as tall as the
+    stacked-tier pine this was."""
+    kit_fir('a', at, 1.9 * k)
 
 def rock(at, k=1.0, yaw=0.0, color=0x868ba1):
     """A grey rock: two blocks, one tipped on the other."""
@@ -3672,34 +3660,68 @@ FORESTS = {
     'avalanche-forest-l': ((4.0, -0.6, 0.37, 2.97, 0, 0), (3.3, 1.9, 0.34, 2.75, 1, 0), (5.3, -1.3, 0.36, 2.79, 0, 0), (5.2, -3.0, 0.37, 2.91, 0, 0), (-2.1, 0.1, 0.33, 2.62, 0, 0), (-4.0, 4.0, 0.22, 2.83, 0, 0), (-0.3, 4.1, 0.24, 2.71, 1, 0), (-6.8, -3.0, 0.52, 2.95, 0, 1), (-4.5, -3.7, 0.46, 2.82, 0, 0)),
 }
 
-def spruce(at, k=1.0):
-    """A snow-laden spruce beside the pines: slimmer and taller, four tiers
-    drooping steep, the snow lying further down each tier the higher it is,
-    so its top is more white than green."""
+# THE SNOW CUP'S ONE FIR is the Holiday Kit's (tree-snow-a/b/c), the scatter's
+# tree: the stands and every piece that plants a fir instance the same three
+# models, so a track has one make of tree (the stacked-tier firs built here
+# before stood beside them as a second make, and the user sent them back).
+# A lite stand (FIR_LITE) plants the kit fir's lite build, the decimated
+# model the box's scatter draws.
+FIR_LITE = False
+_KIT_FIRS = {}
+
+def kit_fir(kind, at, tall):
+    """The kit fir `kind` (a, b or c) at `at`, `tall` units high, turned its
+    own way (a hash of where it stands)."""
+    key = (kind, FIR_LITE)
+    if key in _KIT_FIRS:
+        try:
+            _KIT_FIRS[key][0].name          # the scene is cleared between pieces: the mesh may be gone
+        except ReferenceError:
+            del _KIT_FIRS[key]
+    if key not in _KIT_FIRS:
+        path = (os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'public', 'assets', 'toycar',
+                             'tree-snow-%s-lite.glb' % kind) if FIR_LITE
+                else os.path.join(KIT_CACHE, 'holiday', 'models', 'tree-snow-%s.glb' % kind))
+        before = set(bpy.context.scene.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        new = [o for o in bpy.context.scene.objects if o not in before]
+        src = next(o for o in new if o.type == 'MESH')
+        bpy.ops.object.select_all(action='DESELECT')
+        src.select_set(True)
+        bpy.context.view_layer.objects.active = src
+        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        me = src.data
+        for i, m in enumerate(list(me.materials)):
+            if 'tex:holiday' in bpy.data.materials:
+                me.materials[i] = bpy.data.materials['tex:holiday']
+            else:
+                m.name = 'tex:holiday'
+        h = max(v.co.z for v in me.vertices)
+        for o in new:
+            bpy.data.objects.remove(o, do_unlink=True)
+        _KIT_FIRS[key] = (me, h)
+    me, h = _KIT_FIRS[key]
+    o = bpy.data.objects.new('fir', me.copy())
+    bpy.context.scene.collection.objects.link(o)
+    sc = tall / h
+    o.scale = (sc, sc, sc)
+    o.rotation_mode = 'XYZ'
     x, y, z = at
-    box((0.26 * k, 0.45 * k, 0.26 * k), (x, y + 0.22 * k, z), 0x7a5a3a)
-    S = 1.07
-    for i, (r, h) in enumerate(((0.6, 0.7), (0.48, 0.64), (0.36, 0.58), (0.24, 0.56))):
-        y0 = y + (0.35 + i * 0.42) * k
-        F = 0.4 - 0.11 * i                     # where its snow starts up the tier
-        cyl(r * k, h * k, (x, y0, z), 0x61cb8b, r2=0.05 * k, segs=6)
-        snowy(cyl(S * (r - (r - 0.05) * F) * k, (1 - F) * h * k, (x, y0 + F * h * k, z), 0xf3f7fb,
-                  r2=S * 0.05 * k, segs=6), 0.45)
+    # its spine: an unseen bar up the middle from under its foot, through
+    # every tier (the kit's tiers are parts of their own, a hand apart: this
+    # is what holds them, and the tree, for set-check)
+    lo = y - 0.22 * tall
+    box((0.05 * tall, 0.82 * tall - (lo - y), 0.05 * tall), (x, (lo + y + 0.82 * tall) / 2, z), 0x7a5a3a)['chamfer'] = 0
+    return place(o, at, yaw=frac(math.sin(x * 12.9898 + z * 78.233) * 43758.5453) * 2 * math.pi)
+
+def spruce(at, k=1.0):
+    """The taller of the kit's firs."""
+    kit_fir('b', at, 2.2 * k)
 
 def dark_pine(at, k=1.0):
-    """A pine the wind has shaken most of its snow off: pine()'s tiers, the
-    snow only a rim along the top of the lower two and the top tier's tip,
-    so a stand mixed with them has a dark mass among its white-striped
-    cones (a stand of nothing but those read as wallpaper)."""
-    x, y, z = at
-    box((0.3 * k, 0.5 * k, 0.3 * k), (x, y + 0.25 * k, z), 0x7a5a3a)
-    S = 1.07
-    for i, (r, h) in enumerate(((0.75, 0.7), (0.58, 0.6), (0.4, 0.5))):
-        y0 = y + (0.4 + i * 0.42) * k
-        F = 0.32 if i == 2 else 0.7             # where the snow starts up the tier
-        cyl(r * k, h * k, (x, y0, z), 0x61cb8b, r2=0.08 * k, segs=6)
-        snowy(cyl(S * (r - (r - 0.08) * F) * k, (1 - F) * h * k, (x, y0 + F * h * k, z), 0xf3f7fb,
-                  r2=S * 0.08 * k, segs=6), 0.45)
+    """The third of the kit's firs."""
+    kit_fir('c', at, 1.9 * k)
 
 def snapped_trunk(x, g, z, k, yaw):
     """A trunk a slide snapped and laid down, its broken end jagged, bedded
@@ -3715,7 +3737,7 @@ def stump(x, g, z, k, yaw):
     box((0.1 * k, 0.4 * k, 0.12 * k), (x + 0.06 * k, g + 0.62 * k, z), 0x8a6a46, yaw=yaw, roll=0.35)
     snowy(box((0.26 * k, 0.06 * k, 0.26 * k), (x, g + 0.5 * k, z), 0xf3f7fb, yaw=yaw), 0.45)
 
-def forest(trees):
+def forest(trees, lite=False):
     """A stand of pines on the sampled ground, each trunk run on down through
     the hill to the plain (unseen, so unchamfered; it holds the tree up for
     set-check), and a patch of snow under the first one's skirt lying on the
@@ -3724,6 +3746,8 @@ def forest(trees):
     block on a steep face stretches with it. A row may carry a form (0 pine,
     1 spruce, 2 a snapped trunk lying, 3 a stump, 4 a dark pine) and whether
     the lite build keeps it."""
+    global FIR_LITE
+    FIR_LITE = lite
     for i, t in enumerate(trees):
         x, z, g, k = t[:4]
         form = t[4] if len(t) > 4 else 0
@@ -3739,6 +3763,7 @@ def forest(trees):
             dark_pine((x, g - 0.35 * k, z), k)
         top = g + 0.4 * k if form in (2, 3) else g      # a trunk or a stump is held from its break
         box((0.24 * k, top, 0.24 * k), (x, top / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    FIR_LITE = False
     join_still('pines')
     x, z, _, k = trees[0][:4]
     draped('patch', lambda: box((0.5 * k, 0.1, 0.5 * k), (x, -0.06, z), 0xf3f7fb))
@@ -3772,7 +3797,7 @@ def darkened(name, trees):
 for _name, _trees in FORESTS.items():
     _trees = darkened(_name, _trees)
     for _n, _t in ((_name, _trees), (_name + '-lite', lite_trees(_name, _trees))):
-        PIECES[_n] = (lambda trees: lambda: forest(trees))(_t)
+        PIECES[_n] = (lambda trees, lite: lambda: forest(trees, lite))(_t, _n.endswith('-lite'))
         GROW[_n] = 1.0
 
 def skater(x, y, z, coat, hat, k=1.0):
