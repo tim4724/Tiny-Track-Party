@@ -523,9 +523,12 @@ Theme canyonTheme() {
   t.birds.rc = 150; t.birds.rb = 20; t.birds.speed = 0.1f; t.birds.flap = 0.15f; t.birds.flapHz = 0.5f;
   t.gate = 0xffdec2;  // hot dusty gate grade
   t.gantry.pylon = 0x8a5f3e; t.gantry.finial = 0xfff6eb;  // weathered timber posts
-  // Saguaros as the signature silhouette, barrel cacti as the low accent.
+  // Saguaros as the signature silhouette, prickly pear as the low accent:
+  // the set pieces' own cacti (set_prototypes.py saguaro), in their dusty
+  // grey-green, so a track's scatter and its stands are one family.
   ScenerySpec& s = t.scenery;
-  s.trees = { { "cactus-tall", 0.6f, 2.3f, 0.7f }, { "cactus-short", 0.4f, 1.15f, 0.55f } };
+  s.trees = { { "set-cactus-saguaro", 0.4f, 0.8f, 0.35f }, { "set-cactus-spear", 0.32f, 0.75f, 0.4f },
+              { "set-cactus-pear", 0.28f, 0.9f, 0.5f } };
   s.hasBush = false;
   s.mixTree = 0.4f; s.mixBush = 0.4f;
   s.rocks = { 0xc07a55, 0xa8623f, 0xd39a70 };  // rust -> dusty ochre family
@@ -791,8 +794,6 @@ const TintPair kPalmBend[] = { { "70e6d6", 0x54b573 }, { "f2be9e", 0xb8926c } };
 const ModelTintDef kModelTints[] = {
   { "palm-tall", false, 0, kPalmTall, 2 },
   { "palm-bend", false, 0, kPalmBend, 2 },
-  { "cactus-tall", true, 0x6da85c, nullptr, 0 },
-  { "cactus-short", true, 0x7cb464, nullptr, 0 },
 };
 
 // glTF baseColorFactor is LINEAR; the theme's keys are authored as sRGB hex.

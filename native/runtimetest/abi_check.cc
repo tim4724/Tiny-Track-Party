@@ -1573,7 +1573,7 @@ void themeThroughAbi() {
   // biome-dependent answer here, since its own list is empty.
   const std::string showModels = ttp_theme_showcase_models();
   check(showModels.find("\"set-tree-oak\"") != std::string::npos
-                && showModels.find("\"cactus-tall\"") != std::string::npos
+                && showModels.find("\"set-cactus-saguaro\"") != std::string::npos
                 && showModels.find("\"tree-snow-c\"") != std::string::npos,
         "the showcase model list spans every biome's scenery");
   check(showModels != ttp_theme_scenery_models("playroom"),

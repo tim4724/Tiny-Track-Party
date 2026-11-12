@@ -2581,15 +2581,67 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 return float3{ (p.x + cx) * sf, p.y - 1.0f, (p.z + cz) * sf };
             };
             if (shape == 1) {
-                // A unit proto with its base at y=0 (so the y scale IS the
-                // feature height): a 9-sided talus cone with a 0.58 plateau.
-                const Prim pr = primCylinder(0.58f, 1.0f, 1.0f, 9);
-                const uint32_t base = (uint32_t) mHills.verts.size();
-                for (const float3& v : pr.v) {
-                    const float3 w = place({ v.x, v.y + 0.5f, v.z });
-                    mHills.verts.push_back({ w.x, w.y, w.z, col });
+                // A mesa as the canyon's rock stands: a talus apron, then
+                // cliffs of level strata stepping back over a bench to a
+                // flat cap, each stratum its own colour of the palette with
+                // a pale seam under each bench, on a ragged nine-sided
+                // outline every level shares (so a cliff stands plumb).
+                // Every third one is a low table with no upper tier, every
+                // other one's upper tier is a butte standing well in from
+                // the bench. Each facet has corners of its own: flat faces
+                // (a smooth cone read as a sand lump, never as rock).
+                constexpr int N = 9;
+                const bool low = i % 3 == 2;
+                const float up = i % 2 ? 0.44f : 0.585f; // the upper tier's radius
+                // {radius, height} of each ring, foot to cap
+                const float ring[8][2] = {
+                    { 1.0f, 0.0f }, { 0.74f, 0.36f }, { 0.7f, 0.58f }, { 0.695f, 0.65f },
+                    { up + 0.02f, 0.67f }, { up, 0.87f }, { up - 0.005f, 0.93f }, { up - 0.01f, 1.0f } };
+                // The lite tier's has no seams: the box's frame cannot show
+                // a stratum that thin, and the ring stands in every cell.
+                const int liteRing[5] = { 0, 1, 3, 4, 7 };
+                const uint32_t liteBand[4] = { 0, 1, 3, 4 };
+                const int rings = mLite ? (low ? 3 : 5) : (low ? 4 : 8);
+                const auto rock = [&](int k) {
+                    return srgbToLinear(tb.hillColors.empty() ? 0x8cc578u
+                            : tb.hillColors[(size_t) (i + k) % tb.hillColors.size()]);
+                };
+                const auto tone = [&](int k, float f) { return packAlbedo(rock(k) * f, 1.0f); };
+                // the pale stratum: the palette's rock bleached toward white
+                const uint32_t seam = packAlbedo(mix(rock(2), float3{ 1.0f }, 0.45f), 1.0f);
+                // talus, cliff, seam, bench, cliff, seam, cap rock
+                const uint32_t band[7] = { tone(0, 1.0f), tone(1, 0.92f), seam, tone(2, 1.0f),
+                                           tone(1, 1.0f), seam, tone(0, 0.8f) };
+                float jag[N];
+                for (int k = 0; k < N; k++) {
+                    jag[k] = 0.84f + 0.24f * std::fabs(std::sin((float) (i * 7 + k * 13) * 1.37f));
                 }
-                for (const uint32_t idx : pr.i) mHills.idx.push_back(base + idx);
+                const auto at = [&](int r, int k) {
+                    const float a = (float) (k % N) / N * 2.0f * (float) M_PI;
+                    // the foot spreads rounder than the cliffs over it
+                    const float j = r == 0 ? 0.5f + 0.5f * jag[k % N] : jag[k % N];
+                    const float* const at = ring[mLite ? liteRing[r] : r];
+                    return place({ std::cos(a) * at[0] * j, at[1], std::sin(a) * at[0] * j });
+                };
+                const auto quad = [&](const float3& a, const float3& b, const float3& c,
+                        const float3& d, uint32_t colour) {
+                    const uint32_t base = (uint32_t) mHills.verts.size();
+                    for (const float3& p : { a, b, c, d }) mHills.verts.push_back({ p.x, p.y, p.z, colour });
+                    for (const uint32_t t : { 0u, 2u, 1u, 0u, 3u, 2u }) mHills.idx.push_back(base + t);
+                };
+                for (int r = 0; r + 1 < rings; r++) {
+                    const uint32_t colour = band[mLite ? liteBand[r] : (uint32_t) r];
+                    for (int k = 0; k < N; k++) quad(at(r, k), at(r, k + 1), at(r + 1, k + 1), at(r + 1, k), colour);
+                }
+                const float3 mid = place({ 0, ring[mLite ? liteRing[rings - 1] : rings - 1][1], 0 });
+                const uint32_t capCol = tone(2, 1.0f);
+                for (int k = 0; k < N; k++) {
+                    const uint32_t base = (uint32_t) mHills.verts.size();
+                    for (const float3& p : { at(rings - 1, k), at(rings - 1, k + 1), mid }) {
+                        mHills.verts.push_back({ p.x, p.y, p.z, capCol });
+                    }
+                    for (const uint32_t t : { 0u, 2u, 1u }) mHills.idx.push_back(base + t);
+                }
             } else {
                 appendSphere(mHills, 8, 5, place,
                         [&](const float3&) { return col; }, true);
