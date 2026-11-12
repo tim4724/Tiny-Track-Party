@@ -355,6 +355,10 @@ export const SET_GROUND = {
   // road, so the rows stand one over another above the kerb, as the rookery's do.
   'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
+  // Cloverleaf's bandstand on the crown of its own knoll: a broad round top
+  // the floor lies flush in, steeper to the road (+X, clear of the raised
+  // road's stilts), falling away behind.
+  'set-bandstand': [{ kind: 'mound', h: 3.2, r: 10.5, r1: 15, rz: 14, shape: 0.6 }],
   // Tangle's stream lies in its own bed: the low line the valley's sides and
   // the land raised toward the road stand over, a reach at a time.
   'set-stream-reach': [{ kind: 'plain', len: 22, r: 1.6, w: 2.5 }],
@@ -1242,8 +1246,8 @@ export const TRACKS = {
       { model: 'set-culvert', u: 0.024, lat: -4.5, yaw: -147 },
       { model: 'set-culvert', u: 0.0375, lat: 4.42, yaw: 33 },
       { model: 'set-stream-reach', u: 0.0672, lat: 8.52, yaw: -9.93, scale: 1.25 },
-      { model: 'set-stream-reach', u: 0.1139, lat: 9.04, yaw: -171.34 },
-      { model: 'set-stream-reach', u: 0.10125, lat: 10.084, yaw: -162.76 },
+      { model: 'set-stream-reach', u: 0.131, lat: 8.87, yaw: -1.95 },
+      { model: 'set-stream-reach', u: 0.1035, lat: 5.95, yaw: -12.82, scale: 0.59 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
       { model: 'set-springhouse', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
       { model: 'set-spring-drain', u: 0.7335, lat: -4.45, yaw: 180 },
@@ -1277,8 +1281,13 @@ export const TRACKS = {
     name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
     // A spring park: cherries in pale blossom, planted as a park plants them,
-    // in avenues down gravel paths beside the straights (set-cherry-avenue)
-    // and in groves at the bends, few alone on the lawn. The playground on
+    // in avenues beside the straights (set-cherry-avenue) and in groves at the
+    // bends, few alone on the lawn. The park's miniature railway runs from a
+    // loop by the start straight, under the high road, round the bandstand's
+    // knoll and along the finger lobe to a loop by the lake, a halt at each
+    // end, its one train going out and back (set-park-rails-*, laid by
+    // scratch geometry in set_prototypes.py PARK_ROUTE; it crosses no road
+    // at grade). The playground on
     // the flat outside the south-west hairpin, where the start straight
     // points, on its own bark-chip ground inside a low fence, its hill behind
     // it (on the hill's top it stood a grid cell off the road and read as a
@@ -1287,12 +1296,19 @@ export const TRACKS = {
     // straight ahead down the lobe's first leg: a round pond ringed with
     // reeds, an islet with a cherry on it, a stone fountain of a park's size,
     // swan pedalos going round, the boathouse on the near shore. Another
-    // corner of the playground in the S between the two decks, and the
-    // miniature railway by the start straight.
+    // corner of the playground in the S between the two decks.
     set: [
       { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
-      { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
+      { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
+      { model: 'set-park-rails-a', u: 0.23569, lat: 6.061, yaw: 116.1 },
+      { model: 'set-park-rails-b', u: 0.23452, lat: -8.196, yaw: 45.76 },
+      { model: 'set-park-rails-c', u: 0.92932, lat: 9.073, yaw: 165.75 },
+      { model: 'set-park-rails-d', u: 0.89364, lat: 12.196, yaw: -172.87 },
+      { model: 'set-park-rails-e', u: 0.86206, lat: 12.513, yaw: -165.87 },
+      { model: 'set-park-rails-loop-a', u: 0.0503, lat: 8.47, yaw: 0 },
+      { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
+      { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
       { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
       { model: 'set-lake-reeds', u: 0.8311, lat: 5.77, yaw: -168.25, scale: 0.7 },
@@ -1302,12 +1318,11 @@ export const TRACKS = {
       { model: 'set-lake-reeds', u: 0.8328, lat: 26.23, yaw: 4.81, scale: 0.7 },
       { model: 'set-lake-reeds', u: 0.8287, lat: 25.91, yaw: -22.04, scale: 0.7 },
       { model: 'set-lake-reeds', u: 0.8264, lat: 21.21, yaw: -54.49, scale: 0.7 },
-      { model: 'set-bandstand', u: 0.23, lat: -19.5, yaw: 180, scale: 1.4 },
+      { model: 'set-bandstand', u: 0.23, lat: -23, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
       { model: 'set-cherry-avenue', u: 0.89, lat: 6.5, yaw: 0 },
-      { model: 'set-cherry-avenue', u: 0.955, lat: 6.5, yaw: 0 },
       { model: 'set-blossom-grove-b', u: 0.21, lat: -5.8, yaw: 180 },
       { model: 'set-blossom-grove-b', u: 0.38, lat: 6.4, yaw: 0 },
       { model: 'set-blossom-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
@@ -1325,8 +1340,7 @@ export const TRACKS = {
       { kind: 'pond', u: 0.8316, lat: 16.16, yaw: -170.59, len: 4, r: 10, w: 4, tint: 0x8fc2b0 },
       { kind: 'ridge', u: 0.8334, lat: 43.42, yaw: -177.69, len: 30, r: 16, h: 7, top: 0.25 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 },
-      { kind: 'ridge', u: 0.448, lat: -17.06, r: 18, h: 6, top: 0.3, near: 0.6 },
-      { kind: 'ridge', u: 0.23, lat: -24, r: 22, h: 5.6, top: 0.45 }
+      { kind: 'ridge', u: 0.448, lat: -17.06, r: 18, h: 6, top: 0.3, near: 0.6 }
     ]
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
