@@ -13194,6 +13194,7 @@ def marble_tower():
     chute(down, 0x6cbf6c, MR, half=0.75 * K, wall=0.55 * K, t=0.06 / 0.65)
     foot = (TX + 0.6 * K * math.cos(2 * math.pi * TURNS), LOW, 0.6 * K * math.sin(2 * math.pi * TURNS))
     chute([down[-1], foot], 0xf2c14e, MR, half=0.75 * K, wall=0.55 * K, t=0.06 / 0.65)   # into the column's foot
+    box((1.9 * K, 1.5 * K, 0.4 * K), (foot[0], LOW + 0.1 * K, foot[2] + 0.62 * K), 0x2a2735)   # its doorway
     for i in range(4, len(down) - 1, 8):                                         # spokes from the column
         p = down[i]
         dx, dz = p[0] - TX, p[2]
@@ -13230,10 +13231,11 @@ def marble_tower():
 # connector posts with collars.
 
 RUN_MR, RUN_HALF, RUN_WALL = 0.38, 0.55, 0.26     # a marble (a car's wheel), a chute's half width and wall (low: most of a marble shows over it)
-RUN_SPEED, RUN_GAP = 3.5, 6.0                    # every section's marbles: u/s, and the gap between them
+RUN_SPEED, RUN_GAP = 3.5, 5.0                    # every section's marbles: u/s, and the gap between them
 RUN_UNDER = -1.5                                 # the way back, under the floor
 GREY, CREAM, COLLAR = 0x9aa1b4, 0xfdf4de, 0x868ba1
 RUN_MARBLES = (0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa878e8, 0xff7e44)
+RUN_COLORS = (0xe66a5a, 0xf2c14e, 0x5a8fd8, 0x6cbf6c)   # the conveyor's four, the racer's lanes' colours in their order
 TOWER = (-1.66, 72.11)                           # set-marble-tower's column (u 0.1253 lat 14.5 yaw -45)
 TOWER_RIM = (0.4 + 13.4 + 0.3 + 1.1) * 0.62      # its cup's rim over the floor (marble_tower at its grow)
 RUN_D2 = (6.4, 5.4, 57.3)                        # the head's inner post, where the wheel's leg takes over
@@ -13274,19 +13276,35 @@ def trestle(p):
     cyl(r, top, (x, 0, z), GREY, segs=8)
     cyl(r + 0.14, 0.22, (x, top - 0.26, z), COLLAR, segs=8)   # under the post's top: level with it, the two caps flickered
 
-def joint(x, z, h):
-    """Where a section hands its marbles on: a fat connector post up to a
-    cream cup, its rim under the marbles' line at `h`. One section's marbles
-    drop into it and the next one's come up out of it, down and up inside the
-    post (out of sight)."""
-    rim = h - 0.22
-    if rim < 1.0:                                # a low one is the cup alone, on the floor
-        cyl(0.5, rim, (x, 0, z), CREAM, r2=0.7, segs=10)
-        return
-    cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=10)
-    cyl(0.44, rim - 0.45, (x, 0, z), GREY, segs=10)
-    cyl(0.5, 0.2, (x, rim - 0.75, z), COLLAR, segs=10)
-    cyl(0.48, 0.45, (x, rim - 0.45, z), CREAM, r2=0.7, segs=10)
+def joint(x, z, h, toward=(), color=0x5a8fd8):
+    """A STATION, where one section hands its marbles to the next: a closed
+    drum under a cream lid on a fat connector post (a low one stands on the
+    floor), the marbles' line through its middle at `h`, a dark mouth in its
+    wall toward each of `toward` [(x, z)], where a chute or a pair of rails
+    runs in. The hand-over happens inside it: one section's marble dives
+    down the post as the next one's, the same marble on the run's conveyor
+    (run_marbles), carries on out of the far mouth. Nothing appears or
+    vanishes in sight."""
+    lo = max(0.0, h - 0.8)
+    if lo > 0.9:
+        cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=10)
+        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=10)
+        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=10)
+    else:
+        lo = 0.0
+    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=12)
+    cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=12)
+    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=8)
+    for tx, tz in toward:
+        dx, dz = tx - x, tz - z
+        l = math.hypot(dx, dz)
+        box((1.3, 1.0, 0.3), (x + dx / l * 0.9, h + 0.07, z + dz / l * 0.9), 0x2a2735, yaw=math.atan2(dx, dz))
+
+def mouth(at, toward, w=1.3, h=1.0):
+    """A dark doorway on a housing's wall at `at` (x, y, z), facing `toward`
+    (x, z): where a chute runs into a drum, a column or a box."""
+    dx, dz = toward[0] - at[0], toward[1] - at[2]
+    box((w, h, 0.3), at, 0x2a2735, yaw=math.atan2(dx, dz))
 
 def run_station(x, z, top, c0, r=0.8):
     """One of the run's stations: the kit's stacked toy cylinders, a band to
@@ -13331,21 +13349,49 @@ def resample(pts, step=0.6):
         out += [tuple(a[j] + (b[j] - a[j]) * i / k for j in range(3)) for i in range(1, k + 1)]
     return out
 
-def run_marbles(chain, seen, lite, colors=RUN_MARBLES):
-    """A section's marbles: along `seen` (their centres, from the post they
-    come up out of to the one they drop into), then down that post, back
-    under the floor and up the first one, a loop at RUN_SPEED with a marble
-    every RUN_GAP (a third as many in the lite build)."""
+RUN_ARCS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_arcs.json')
+
+def run_arc(chain, value=None):
+    """Where chain `chain` ENDS on the run's conveyor (below), kept in
+    run_arcs.json so one section baked alone still meets its neighbours;
+    `value` records it."""
+    arcs = json.load(open(RUN_ARCS)) if os.path.exists(RUN_ARCS) else {}
+    if value is not None and abs(arcs.get(chain, 1e9) - value) > 1e-6:
+        arcs[chain] = round(value, 6)
+        with open(RUN_ARCS, 'w') as f:
+            json.dump(arcs, f, indent=1, sort_keys=True)
+            f.write('\n')
+    return arcs[chain]
+
+def run_marbles(chain, seen, lite, after=None, lane=None):
+    """A section's marbles: along `seen` (their centres, from the station or
+    housing they come out of to the one they go into), then down, back under
+    the floor and up the first one, a loop at RUN_SPEED.
+
+    THE RUN IS ONE CONVEYOR. Marble i of the whole run is RUN_GAP * i behind
+    marble 0 along it and wears RUN_COLORS[i % 4], and a chain `after`
+    another starts where that one ends, so at a station the marble diving
+    out of sight and the one coming on are the same marble: same place, same
+    moment, same colour. For that every loop is a whole number of colour
+    cycles long (padded under the floor) and every chain runs at one speed.
+    The lite build draws every third marble of the same conveyor. A `lane`
+    (0-3) takes only its own colour's marbles: the racer's sorter."""
+    mult = 3 if lite else 1
+    s0 = run_arc(after) if after else 0.0
+    vis = sum(math.dist(a, b) for a, b in zip(seen, seen[1:]))
+    run_arc(chain, s0 + vis)
     (sx, _, sz), (ex, _, ez) = seen[0], seen[-1]
-    loop = list(seen) + [(ex, RUN_UNDER, ez), (sx, RUN_UNDER, sz)]
-    length = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    for k, q in enumerate(loop):
+    cycle = 4 * mult * RUN_GAP
+    raw = vis + (seen[-1][1] - RUN_UNDER) + math.hypot(ex - sx, ez - sz) + (seen[0][1] - RUN_UNDER)
+    length = math.ceil(raw / cycle) * cycle
+    deep = RUN_UNDER - (length - raw) / 2
+    for k, q in enumerate(list(seen) + [(ex, deep, ez), (sx, deep, sz)]):
         marker('path_%s_%d' % (chain, k), q)
-    n = max(1, round(length / (RUN_GAP * (3 if lite else 1))))
-    for j in range(n):
-        at = seen[1 + (len(seen) - 2) * j // n]   # at rest on the run, past the post it comes up out of
-        with animated('anim_path:c=%s:p=%.2f:o=%.4f:f=0#%d' % (chain, length / RUN_SPEED, j / n, j), at):
-            sphere(RUN_MR, at, colors[j % len(colors)], subdiv=1 if lite else 2, flat=False)
+    first, step = (0, mult) if lane is None else ((9 * lane) % 12 if lite else lane, 4 * mult)
+    for j in range(round(length / (step * RUN_GAP))):
+        i = first + j * step
+        with animated('anim_path:c=%s:p=%.4f:o=%.5f:f=0#%d' % (chain, length / RUN_SPEED, ((-s0 - i * RUN_GAP) / length) % 1.0, j), seen[1]):
+            sphere(RUN_MR, seen[1], RUN_COLORS[i % 4], subdiv=1 if lite else 2, flat=False)
             bpy.ops.object.shade_smooth()
 
 def run_section(name, lite):
@@ -13375,7 +13421,7 @@ def run_head(lite):
     span = resample([line[-2], toward(D2, line[-2], 0.6)])
     rails(span, 0xe66a5a)
     trestle(D1)
-    joint(D2[0], D2[2], D2[1])
+    joint(D2[0], D2[2], D2[1], toward=(line[-2][0::2], (9.6, 55.4)), color=0xe66a5a)
     run_marbles('head', [(tx, out[1], tz)] + line, lite)
 
 def marble_wheel(cx, cy, cz, R):
@@ -13404,95 +13450,92 @@ def run_wheel(lite):
     # E: from the corner's inner post east along the top leg's infield, about
     # 9 u in from the road, falling through a marble wheel, past the spinning
     # tops (behind them), turning away from the road to the catch tray.
-    D2 = (RUN_D2[0], RUN_D2[1] - 0.05, RUN_D2[2])
+    D2 = RUN_D2
     Z, WX, WY, R = 55.4, 27.0, 2.6, 1.6
     top = fillet([toward(D2, (9.6, D2[1] - 0.2, Z)), (9.6, D2[1] - 0.2, Z), (WX - 1.35, WY + 1.65, Z)], r=1.4)   # its end over the paddles' tips
     run_chute(top, 0xf2c14e)
-    low = fillet([(WX + 0.35, WY - 1.9, Z), (37.0, 0.66, Z), (44.3, 0.62, 48.9), (45.4, 0.6, 47.8)], r=2.2)
+    low = fillet([(WX + 0.35, WY - 1.9, Z), (40.0, 0.66, Z), LIFT_PORT], r=2.2)   # along the floor into the screw lift's foot
     run_chute(low, 0xf2c14e)
     marble_wheel(WX, WY, Z, R)
     for x in (13.5, 20.0):
         trestle(on(top, x, Z))
-    for f in (0.2, 0.45, 0.7, 0.9):                 # sleepers under the floor chute
-        a, b = low[int(len(low) * f)], low[int(len(low) * f) + 1]
+    lows = resample(low, 0.5)
+    for f in (0.2, 0.4, 0.6, 0.8):                  # sleepers under the floor chute
+        a, b = lows[int(len(lows) * f)], lows[int(len(lows) * f) + 1]
         box((1.0, 0.1, 0.3), (a[0], 0.05, a[2]), COLLAR, yaw=math.atan2(b[0] - a[0], b[2] - a[2]))
     ride = [(WX + 1.15 * math.cos(a), WY + 1.15 * math.sin(a), Z) for a in (math.pi * (0.5 - k / 8) for k in range(9))]
-    tray = (46.2, 0.55, 46.6)
-    run_marbles('wheel', [D2] + top + ride + low + [tray], lite)
+    run_marbles('wheel', [D2] + top + ride + low + [(LIFT[0], 0.6, LIFT[1])], lite, after='head')
+
+LIFT = (52.8, 42.7)                              # the summit screw lift's axis
+LIFT_PORT = (50.75, 0.6, 44.2)                   # where the floor chute meets its foot drum's wall
 
 def screw_lift(cx, cz, H, RP, lite):
     """The summit lift: six posts of the kit's stacked cylinders round a
-    turning yellow screw, cream hoops binding them, a cup on top; its
-    marbles ride the screw's flight (the screw, its shaft and they turn as
-    one part)."""
-    cyl(RP + 0.45, 0.3, (cx, 0, cz), GREY, segs=16)
+    turning yellow screw, cream hoops binding them, between two closed
+    drums. The floor chute runs into the foot drum; the marbles come up out
+    of it on the screw's flight (each keeps its side of the cage, the posts
+    hold it there, and rides the flight up at the flight's own climb, a
+    pitch a turn), into the head drum, and the chute beyond leaves that. So
+    a marble is in sight on the chute, on the screw and on the next chute,
+    and changes hands only inside a drum."""
+    FOOT, HEAD = 1.3, H - 1.0                     # the foot drum's top, the head drum's underside
+    cyl(RP + 0.45, FOOT, (cx, 0, cz), GREY, segs=16)
+    cyl(1.55, 0.04, (cx, FOOT, cz), 0x2a2735, segs=16)                          # the well the screw comes up out of
     for k in range(6):
         a = math.pi / 6 + k * math.pi / 3
         x, z = cx + RP * math.cos(a), cz + RP * math.sin(a)
         n = 7
         for j in range(n):
-            cyl(0.28, (H - 0.3) / n, (x, 0.3 + j * (H - 0.3) / n, z), TOY[(j + k) % 4], segs=8)
-    for y in (H * 0.36, H * 0.7):
+            cyl(0.28, (H - FOOT) / n, (x, FOOT + j * (H - FOOT) / n, z), TOY[(j + k) % 4], segs=8)
+    for y in (H * 0.4, H * 0.68):
         torus(RP, 0.13, (cx, y, cz), CREAM, segs=18)
-    torus(RP, 0.18, (cx, H, cz), 0xf2c14e, segs=18)
-    for k in range(3):
-        a = math.pi / 6 + k * 2 * math.pi / 3
-        bar((cx + RP * math.cos(a), H, cz + RP * math.sin(a)), (cx + 0.75 * math.cos(a), H + 0.15, cz + 0.75 * math.sin(a)), 0.2, 0.2, CREAM)
-    cyl(0.7, 0.85, (cx, H - 0.05, cz), CREAM, r2=1.45, segs=12)                # the cup
-    # The screw turns and its marbles RISE on it, as a screw lift's do: each
-    # keeps its side of the cage (the posts hold it there) and rides the
-    # flight up at the flight's own climb, a pitch a turn, over the top into
-    # the cup and back down inside the shaft, out of sight. Turning with the
-    # screw, as they were once built, they went round and round at one
-    # height. `o=0` pins the screw's turn to the clock, so the flight is
-    # under every marble: at a column's side A the flight stands at
-    # 0.6 + C * (A + w t) and one pitch on each turn above it.
+    cyl(RP - 0.2, 1.6, (cx, HEAD, cz), 0xa878e8, segs=16)                       # the head drum
+    cyl(RP + 0.1, 0.22, (cx, HEAD + 1.6, cz), CREAM, segs=16)
+    cyl(0.4, 0.3, (cx, HEAD + 1.82, cz), 0xa878e8, segs=8)
+    # `o=0` pins the screw's turn to the clock, so the flight is under every
+    # marble: at a column's side A it stands at Y0 + C * (A + w t) and one
+    # pitch on each turn above it.
     W, TURNS, Y0, Y1, RM = 2.0, 9, 0.6, H - 0.5, 1.05
     PITCH = (Y1 - Y0) / TURNS
     C = PITCH / (2 * math.pi)
     with animated('anim_spin:a=y:w=%.1f:o=0#screw' % W, (cx, 0, cz)):
         cyl(0.45, H - 0.3, (cx, 0.3, cz), 0x868ba1, segs=10)                     # the shaft (marbles come down inside it)
         tube(helix_pts(cx, cz, RM, Y0, Y1, 0.0, TURNS, per=12), 0.2, 0xf2c14e, res=1, bevel_res=0)
-    N, UP = 24, 8                                  # the loop in pitches; of them the climb in sight
-    cols = (math.pi,) if lite else (math.pi, math.pi / 3, -math.pi / 3)   # between the cage's posts
+    N, UP = 24, 9                                  # the loop in pitches; of them the climb, drum to drum
+    cols = (math.pi / 3,) if lite else (math.pi, math.pi / 3, -math.pi / 3)   # between the cage's posts
     for k, A in enumerate(cols):
-        yb = Y0 + 0.52 + C * (A % (2 * math.pi))   # on the flight at t = 0
+        yb = Y0 + 0.52 + C * (A % (2 * math.pi)) - PITCH   # on the flight at t = 0, inside the foot drum
         x, z = cx + RM * math.cos(A), cz + RM * math.sin(A)
-        yt = yb + UP * PITCH
+        yt = yb + UP * PITCH                       # inside the head drum
         deep = (N * PITCH - (yt - yb) - 2 * RM - (yt + yb)) / 2       # under the floor, so the loop is N pitches
         loop = [(x, yb, z), (x, yt, z), (cx, yt, cz), (cx, -deep, cz), (x, -deep, z)]
         for j, q in enumerate(loop):
             marker('path_lift%d_%d' % (k, j), q)
         step = 6 if lite else 3                    # a marble every so many turns of the flight
         for j in range(N // step):
-            with animated('anim_path:c=lift%d:p=%.4f:o=%.5f:f=0#%d' % (k, N * 2 * math.pi / W, (j * step + k) / N, j), loop[0]):
-                sphere(RUN_MR, loop[0], RUN_MARBLES[(j + 2 * k) % 6], subdiv=1 if lite else 2, flat=False)
+            with animated('anim_path:c=lift%d:p=%.4f:o=%.5f:f=0#%d' % (k, N * 2 * math.pi / W, (j * step + k) / N, j), loop[1]):
+                sphere(RUN_MR, loop[1], RUN_COLORS[(j + k) % 4], subdiv=1 if lite else 2, flat=False)
                 bpy.ops.object.shade_smooth()
+    return HEAD
 
 def run_summit(lite):
-    # F + G: the top leg's marbles pour into a catch tray on the floor
-    # outside the climb's middle; beside it the summit screw lift, the
-    # tallest thing in the room, takes them up to its cup, and a chute
-    # leaves it east on one trestle for the post by the skyway.
-    TX, TZ = 47.5, 46.0
-    box((4.0, 0.16, 3.0), (TX, 0.08, TZ), 0xa878e8)                        # the tray
-    for s in (-1, 1):
-        box((4.0, 0.5, 0.16), (TX, 0.25, TZ + s * 1.42), 0xa878e8)
-        box((0.16, 0.5, 2.68), (TX + s * 1.92, 0.25, TZ), 0xa878e8)
-    for k, (dx, dz) in enumerate(((-1.2, -0.6), (-0.4, 0.5), (0.5, -0.3), (1.2, 0.6), (-0.9, 0.4), (0.2, 0.8),
-                                  (1.0, -0.8), (-0.2, -0.7))[:5 if lite else 8]):
-        sphere(RUN_MR, (TX + dx, 0.16 + RUN_MR, TZ + dz), RUN_MARBLES[k % 6], subdiv=1 if lite else 2, flat=False)
-    LX, LZ, H = 52.8, 42.7, 11.0
-    screw_lift(LX, LZ, H, 2.0, lite)
-    stub = [(TX + 1.6, 0.6, TZ - 1.1), (LX - 1.9, 0.6, LZ + 0.7)]               # the tray's outlet to the lift's foot
-    run_chute(stub, 0xa878e8)
-    rim = H + 0.8
-    J = (63.7, 11.2, 42.25)
-    line = [(LX + 1.55, rim + 0.43, LZ - 0.05), (58.5, 11.75, 42.5), (J[0] - 0.55, J[1] + 0.05, J[2])]
+    # F + G: the top leg's floor chute runs into the foot of the summit screw
+    # lift outside the climb's middle, the tallest thing in the room; the
+    # lift takes the marbles up into its head drum, and a chute leaves that
+    # east on one trestle for the station by the skyway.
+    LX, LZ = LIFT
+    H = 11.0
+    head = screw_lift(LX, LZ, H, 2.0, lite)
+    px, py, pz = LIFT_PORT
+    mouth((px, py + 0.1, pz), (40.0, 55.4))
+    J = (63.7, 10.75, 42.25)
+    y0 = head + 1.0                               # the marbles' line inside the head drum
+    line = [(LX + 1.2, y0, LZ - 0.05), (58.5, 10.9, 42.5), (J[0] - 0.55, J[1] + 0.05, J[2])]
     run_chute(line, 0x6cbf6c)
+    mouth((LX + 1.75, y0 + 0.07, LZ - 0.05), (58.5, 42.5))
     trestle(line[1])
-    joint(J[0], J[2], J[1])
-    run_marbles('summit', [(TX + 0.8, 0.55, TZ - 0.5)] + stub + [(LX, 0.6, LZ), (LX, rim + 0.43, LZ)] + line + [J], lite)
+    joint(J[0], J[2], J[1], toward=((58.5, 42.5), (75.2, J[2])), color=0x6cbf6c)
+    run_marbles('summit', [(LX, y0, LZ)] + line + [J], lite)
 
 def run_skyway(lite):
     # H + J: over the skyway on twin rails, about 5 u over its deck, to a
@@ -13500,11 +13543,11 @@ def run_skyway(lite):
     # racers' eyes, the marbles ticking down a stair of five tone bars, still
     # over their eyes at its foot (lower, the deck's kerb hides the run).
     LOW = 7.8                                     # the run's height at the vortex's post
-    J0, X = (63.7, 11.15, 42.25), 75.2
-    span = resample([(J0[0] + 0.5, 11.1, J0[2]), (X - 1.4, 10.8, J0[2])])
+    J0, X = (63.7, 10.75, 42.25), 75.2
+    span = resample([(J0[0] + 0.5, 10.7, J0[2]), (X - 1.4, 10.45, J0[2])])
     rails(span, 0x5a8fd8)
-    run_station(X, J0[2], 10.75 - RUN_MR - 0.09, 1)   # its cap inside the chute's floor over it
-    bend = fillet([(X - 1.4, 10.8, J0[2]), (X, 10.75, J0[2]), (X, 10.6, J0[2] - 1.6), (X, LOW + 1.55, 20.6)], r=1.2)
+    run_station(X, J0[2], 10.4 - RUN_MR - 0.09, 1)   # its cap inside the chute's floor over it
+    bend = fillet([(X - 1.4, 10.45, J0[2]), (X, 10.4, J0[2]), (X, 10.25, J0[2] - 1.6), (X, LOW + 1.55, 20.6)], r=1.2)
     run_chute(bend, 0x5a8fd8)
     bars = []                                                                  # the stair: five tone bars, each a step down
     for k, c in enumerate((0xe66a5a, 0xff7e44, 0xf2c14e, 0x6cbf6c, 0x5a8fd8)):
@@ -13521,8 +13564,8 @@ def run_skyway(lite):
         trestle(on(resample(bend, 0.3), X, z))    # resampled: the bend's long straight is one segment, and three posts stood at its ends
     for z in (17.0, 13.0):
         trestle(on(resample(tail, 0.3), X, z))
-    joint(X, end[2], end[1])
-    run_marbles('sky', [J0] + span + bend + bars + tail + [end], lite)
+    joint(X, end[2], end[1], toward=((X, end[2] + 1.0), (X, end[2] - 1.0)), color=0xf2c14e)
+    run_marbles('sky', [J0] + span + bend + bars + tail + [end], lite, after='summit')
 
 def bowl(cx, cz, r0, y0, r1, y1, outside, inside, segs=20):
     """A vortex bowl: open, round, its floor curving from the hole (r0, at
@@ -13595,8 +13638,8 @@ def run_vortex(lite):
     end = (69.6, 2.35, -15.3)
     out = [helix[-1], (end[0] + 0.55, end[1] + 0.03, end[2])]
     run_chute(out, 0xe66a5a)
-    joint(end[0], end[2], end[1])
-    run_marbles('vortex', [J0] + in_ + spiral + [(BX, Y0 - 0.2, BZ)] + spout + helix[1:] + out + [end], lite)
+    joint(end[0], end[2], end[1], toward=(helix[-1][0::2], (64.0, -19.5)), color=0xe66a5a)
+    run_marbles('vortex', [J0] + in_ + spiral + [(BX, Y0 - 0.2, BZ)] + spout + helix[1:] + out + [end], lite, after='sky')
 
 def run_loop(lite):
     # M: west along the south leg's outside, stepping out round the first
@@ -13628,8 +13671,8 @@ def run_loop(lite):
         cyl(0.3, 0.12, (CX, 0, z), COLLAR, segs=8)
     bar((CX, CY + R + 0.55, Z0 + 0.55), (CX, CY + R + 0.55, Z0 - SH - 0.55), 0.2, 0.2, GREY)
     end = (33.4, 0.6, Z0 - SH)
-    joint(end[0], end[2], end[1])
-    run_marbles('loop', [J0] + line + loop + [end], lite)
+    joint(end[0], end[2], end[1], toward=((35.6, Z0 - SH), (26.0, -27.5)), color=0x6cbf6c)
+    run_marbles('loop', [J0] + line + loop + [end], lite, after='vortex')
 
 def run_stair(lite):
     # M -> A -> B: low along the floor from the loop, swinging out away from
@@ -13676,7 +13719,7 @@ def run_stair(lite):
     run_chute(high, 0xf2c14e)
     for x, z in ((-7.9, -9.6), (jx, -5.4)):
         trestle(on(resample(high, 0.3), x, z))
-    run_marbles('stair', [J0] + floor + hop[1:] + high + [(jx, jh, jz)], lite, colors=RACER_LANES)   # the four the racer sorts
+    run_marbles('stair', [J0] + floor + hop[1:] + high + [(jx, jh, jz)], lite, after='loop')
 
 RACER_LANES = (0xe66a5a, 0xf2c14e, 0x5a8fd8, 0x6cbf6c)   # the racer's lanes, far side to the road's: the sorter's four colours
 RACER_X, RACER_W, RACER_TILT = -7.0, 3.6, -0.55
@@ -13755,13 +13798,11 @@ def run_racer(lite):
     bar((X - W / 2, S1(X - W / 2, B1) + 0.15, B1), (X + W / 2, S1(X + W / 2, B1) + 0.15, B1), 0.16, 0.3, CREAM)   # the gutter's end wall
     zf = B1 - FOOT / 2
     xo = racer_lane(3)
-    quad([(xo - 0.4, S1(xo - 0.4, zf) + 0.03, zf - 0.4), (xo + 0.4, S1(xo + 0.4, zf) + 0.03, zf - 0.4),
-          (xo + 0.4, S1(xo + 0.4, zf) + 0.03, zf + 0.4), (xo - 0.4, S1(xo - 0.4, zf) + 0.03, zf + 0.4)][::-1], 0x2a2735)   # the hole
     # the feed: out of the hand-over cup onto the head's far side
     R = RUN_MR * 1.06
     jx, jh, jz = RACER_FEED
-    joint(jx, jz, jh)
     x_in = racer_lane(0)
+    joint(jx, jz, jh, toward=((jx, jz - 1.0), (x_in, A0)), color=0xa878e8)
     feed = [(jx, jh + 0.03, jz + 0.55), (x_in, S0(x_in, A0) + R + 0.1, A0 - 0.05)]
     run_chute(feed, 0xa878e8)
     trestle(feed[1])
@@ -13775,24 +13816,24 @@ def run_racer(lite):
         deck += [on1(xo, zf)] if k < 3 else []
         seen = [(jx, jh, jz), feed[0]] + fillet(deck, r=0.45, n=4) + [(xo, S1(xo, zf) - 0.5, zf)]
         loops.append(seen)
-    def length(seen, deep):
-        loop = seen + [(xo, deep, zf), (jx, deep, jz)]
-        return sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    longest = max(length(q, RUN_UNDER) for q in loops)
-    n = max(1, round(longest / (4 * 2.2 * (3 if lite else 1))))
+    # the foot: a box with a lid over the hole, the gutter and the last lane
+    # running into it, the chute home running out of it
+    by = S1(xo, zf)
+    box((1.3, 1.5, 1.3), (xo, by + 0.6, zf + 0.05), 0x6cbf6c)
+    box((1.5, 0.2, 1.5), (xo, by + 1.45, zf + 0.05), CREAM)
+    mouth((xo - 0.6, by + R + 0.25, zf), (xo - 2.0, zf), w=0.9, h=0.9)
+    mouth((xo, by + R + 0.1, zf - 0.55), (xo, zf - 2.0), w=0.8, h=0.9)
     for k, seen in enumerate(loops):
-        deep = RUN_UNDER - (longest - length(seen, RUN_UNDER)) / 2
-        for i, q in enumerate(seen + [(xo, deep, zf), (jx, deep, jz)]):
-            marker('path_sort%d_%d' % (k, i), q)
-        for j in range(n):
-            with animated('anim_path:c=sort%d:p=%.3f:o=%.4f:f=0#%d' % (k, longest / RUN_SPEED, (j + k / 4) / n, j), seen[1]):
-                sphere(RUN_MR, seen[1], RACER_LANES[k], subdiv=1 if lite else 2, flat=False)
-                bpy.ops.object.shade_smooth()
-    cup = (-2.8, 0.6, 75.4)                       # behind the tower, clear of its screw's foot
-    floor = fillet([(X, 0.72, 47.2), (-12.5, 0.7, 54.0), (-13.5, 0.68, 68.0), (-11.5, 0.66, 75.6), (cup[0] - 0.55, 0.65, cup[2])], r=2.5)
+        run_marbles('sort%d' % k, seen[:-1], lite, after='stair', lane=k)
+    # the chute home: out of the box, away from the road, round behind the
+    # slinky and into the marble tower's foot
+    tx, tz = TOWER
+    port = (tx - 0.95, 0.68, tz - 0.35)           # on the column's west side, where its own helix stands highest over the floor
+    floor = fillet([(xo, 0.72, zf + 0.6), (xo, 0.72, B1 + 1.2), (-12.5, 0.7, 54.0), (-13.0, 0.68, 64.0), port], r=2.2)
     run_chute(floor, 0x6cbf6c)
-    joint(cup[0], cup[2], cup[1])
-    run_marbles('home', [(X, 0.65, 46.0)] + floor + [cup], lite, colors=[c for c in RUN_MARBLES if c != 0x6cbf6c])   # none green on the green chute
+    mouth((xo, 0.75, zf + 0.72), (xo, zf + 2.0), w=1.2, h=0.9)
+    mouth((tx - 0.7, 0.65, tz - 0.26), (-13.0, 64.0), w=1.25, h=1.3)   # down to the floor: the column is the tower's own piece
+    run_marbles('home', [(xo, by + R, zf)] + floor + [(tx, 0.66, tz)], lite)
 
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
              'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer}

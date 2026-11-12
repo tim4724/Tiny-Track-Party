@@ -836,6 +836,11 @@ private:
     static constexpr float kDeckLodTol = 0.08f;
     // How far a static mesh's simplified far form may stray (buildMesh).
     static constexpr float kFarTol = 0.2f;
+    // The far form holds a face over kFarFace square units and the chamfer
+    // round it wherever that spans two shades, corners further apart than
+    // kFarShade of 255 in a channel (farForm).
+    static constexpr float kFarFace = 1.0f;
+    static constexpr int kFarShade = 10;
     // Picks every listed renderable's range for a camera at `cam` in a cell
     // with `pxPerRad` pixels per radian; 0 puts them all on their near range.
     void chooseLods(const filament::math::float3& cam, float pxPerRad);
