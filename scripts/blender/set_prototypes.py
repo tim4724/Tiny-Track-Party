@@ -631,6 +631,8 @@ def fir(at, k, tiers, snow, slim=1.0):
         tiers = tiers[::2]                 # its stands: three tiers of four boughs, under what the old pine cost
     seed = math.floor(x * 7.0 + z * 13.0)
     step = 1.24 / max(1, len(tiers) - 1)
+    if FIR_LITE:
+        tiers = [(r, max(h, step + 0.2)) for r, h in tiers]    # fewer tiers are taller ones: each reaches into the next
     for i, (r, h) in enumerate(tiers):
         r *= slim
         y0 = y + (0.4 + i * step) * k

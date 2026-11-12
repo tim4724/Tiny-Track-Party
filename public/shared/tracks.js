@@ -351,6 +351,9 @@ export const SET_GROUND = {
   // carpet's head to its foot), its foot reaching under the school's hut and
   // arch so the whole school stands up on it over the kerb of the road beside it.
   'set-ski-school': [{ kind: 'mound', x: -11, h: 6.4, r: 17, r1: 11, rz: 15, shape: 1.25 }],
+  // Powder's snowman field: a low rise behind the crowd (-X), its face to the
+  // road, so the rows stand one over another above the kerb, as the rookery's do.
+  'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Tangle's stream lies in its own bed: the low line the valley's sides and
   // the land raised toward the road stand over, a reach at a time.
@@ -754,7 +757,7 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman field, inside the bend the run from the ski school comes
       // up to: dead ahead on the way in, beside the kerb at road height
-      { model: 'set-snowman-field', u: 0.665, lat: -9.5, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.66, lat: -8.6, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -783,7 +786,7 @@ export const TRACKS = {
       // deck from the road below
       { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 },
       // nor between the road and the snowman field
-      { kind: 'clear', u: 0.665, lat: -4.5, len: 16, r: 3 }
+      { kind: 'clear', u: 0.66, lat: -4, len: 18, r: 3 }
     ]
   },
   flurry: {
