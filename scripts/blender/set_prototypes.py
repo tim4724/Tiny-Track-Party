@@ -9754,6 +9754,9 @@ def tailings_dump():
             beam((A[0], A[1] - 0.1, sz), (B[0], B[1] - 0.1, sz), 0.12, 0x8a5f3e)
             beam((A[0], A[1] - 0.01, sz), (B[0], B[1] - 0.01, sz), 0.05, 'slate')
         box((1.5, 0.1, 1.1), (B[0] + 0.55, B[1] - 0.08, 0.0), 0x8a5f3e)           # the head's deck
+        for sx in (-0.1, 1.2):                                                     # on its own legs into the heap
+            for sz in (-0.45, 0.45):
+                box((0.1, 1.6, 0.1), (B[0] + sx, B[1] - 0.9, sz), 0x8a5f3e)
         for sz in (-0.42, 0.42):                                                   # the winch frame over it
             box((0.1, 1.1, 0.1), (B[0] + 0.9, B[1] + 0.5, sz), 0x8a5f3e)
             strut((B[0] + 0.3, B[1], sz), (B[0] + 0.9, B[1] + 0.9, sz), 0.07, 0x8a5f3e)
@@ -10945,7 +10948,7 @@ def tinaja():
     # round the back of the water and open to the road, so the pool shows
     # from the kerb; three wild burros (grey-brown, pale-muzzled, a dark
     # stripe down the back) come to drink at it. Water and rock only.
-    dome = massif_height(((-4.6, 0.0, 2.4, 2.8, 4.6, 0.0, 1.0, 3.0), (-1.0, 0.0, 0.9, 4.4, 4.8, 0.0, 0.5, 1.0)),
+    dome = massif_height(((-4.6, 0.0, 2.4, 2.8, 4.6, 0.0, 1.0, 3.0), (-1.0, 0.0, 1.0, 4.8, 5.0, 0.0, 0.5, 1.0)),
                          rough=0.5, seed=2.3, warp=0.6)
     PX, PZ, PR = -1.3, 0.0, 1.9
     def M(x, z):
@@ -10959,11 +10962,11 @@ def tinaja():
                         PZ + (1.62 + 0.14 * math.sin(2.3 * k)) / 0.9 * math.sin(2 * math.pi * k / 14)) for k in range(14)],
                       [tuple(range(14))], 'sky'), 17)                    # the water
     with plain_parts():                                                  # the shelf under their hooves, in the rock
-        for x, z in ((1.0, -0.7), (1.4, 0.9), (0.8, 2.7)):
-            box((0.6, 0.3, 0.4), (x, 0.06, z), 0xd68f62)
-    equine((1.0, 0.2, -0.7), math.pi * 0.95, L=0.48, ears=0.18, life='anim_sway:a=z:d=26:p=5.7:r=0.62#d', **BURRO)
-    equine((1.4, 0.2, 0.9), math.pi * 1.1, L=0.46, ears=0.18, life='anim_sway:a=z:d=12:p=8.3:r=0.8#l', **BURRO)
-    equine((0.8, 0.2, 2.7), math.pi * 1.35, L=0.44, ears=0.17, **BURRO)
+        for x, z in ((0.8, -0.7), (1.0, 0.9), (0.25, 2.3)):
+            box((0.5, 0.3, 0.3), (x, 0.04, z), 0xd68f62)
+    equine((0.8, 0.2, -0.7), math.pi * 0.95, L=0.48, ears=0.18, life='anim_sway:a=z:d=26:p=5.7:r=0.62#d', **BURRO)
+    equine((1.0, 0.2, 0.9), math.pi * 1.1, L=0.46, ears=0.18, life='anim_sway:a=z:d=12:p=8.3:r=0.8#l', **BURRO)
+    equine((0.25, 0.2, 2.3), math.pi * 1.35, L=0.44, ears=0.17, **BURRO)
     join_still('tinaja')
 
 # Crag's rock: the canyon's level strata (strata_massif) over a butte's
