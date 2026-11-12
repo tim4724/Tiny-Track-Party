@@ -1239,7 +1239,7 @@ export const TRACKS = {
     land: [
       { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 },
       { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 },
-      { kind: 'ridge', u: 0.0538, lat: 32.83, yaw: 8.07, len: 23, r: 26, h: 9, top: 0.1, near: 7.5 },
+      { kind: 'ridge', u: 0.0538, lat: 32.83, yaw: 8.07, len: 23, r: 26, h: 9, top: 0.1, near: 10.5 },
       { kind: 'ridge', u: 0.8939, lat: -34.87, yaw: 1.04, len: 18, r: 28, h: 9, top: 0.1, near: 7.5 },
       { kind: 'ridge', u: 0.0947, lat: 36, r: 24, h: 8, top: 0.1 },
       { kind: 'ridge', u: 0.757, lat: -20.3, len: 20, r: 15, h: 6.5, top: 0.25, near: 0.6 },
@@ -1301,7 +1301,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.8334, lat: 43.42, yaw: -177.69, len: 30, r: 16, h: 7, top: 0.25 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 },
       { kind: 'ridge', u: 0.448, lat: -17.06, r: 18, h: 6, top: 0.3, near: 0.6 },
-      { kind: 'ridge', u: 0.23, lat: -24, r: 20, h: 6.2, top: 0.3, near: 8.5 }
+      { kind: 'ridge', u: 0.23, lat: -24, r: 22, h: 5.6, top: 0.45 }
     ]
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
