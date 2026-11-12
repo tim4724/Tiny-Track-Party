@@ -1285,15 +1285,21 @@ def crab_boat():
         loop.append((x, 0.0, z))
     for i, p in enumerate(loop):
         marker('path_crab_%d' % i, p)
-    with animated('anim_path:c=crab:p=34:f=1+bob:h=0.12:p=2.6#boat', (0.0, 0.0, 0.0)):
-        # bow to +Z (a path's travel), built about its own origin
-        box((1.0, 0.45, 2.3), (0.0, SEA + 0.1, -0.1), 0x339cf2)
-        box((0.7, 0.45, 0.7), (0.0, SEA + 0.1, 1.15), 0x339cf2, yaw=math.pi / 4)
+    beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99)
+
+def beach_sailing_boat(chain, period, hull, sail):
+    """A beach boat under sail riding the closed path `chain` (bow along
+    its travel), at a boat's size beside a car: its hull, a white
+    wheelhouse, a lugsail on its mast, a wake at its stern, rising and
+    falling on the swell."""
+    with animated('anim_path:c=%s:p=%.0f:f=1+bob:h=0.12:p=2.6#boat' % (chain, period), (0.0, 0.0, 0.0)):
+        box((1.0, 0.45, 2.3), (0.0, SEA + 0.1, -0.1), hull)
+        box((0.7, 0.45, 0.7), (0.0, SEA + 0.1, 1.15), hull, yaw=math.pi / 4)
         box((1.08, 0.12, 2.4), (0.0, SEA + 0.38, -0.1), 0xfff6eb)
         box((0.7, 0.6, 0.7), (0.0, SEA + 0.72, -0.6), 0xfff6eb)                   # the wheelhouse
         box((0.8, 0.1, 0.8), (0.0, SEA + 1.06, -0.6), 0xcf534f)
         box((0.12, 2.4, 0.12), (0.0, SEA + 1.5, 0.35), 0x8a6a46)                  # the mast
-        prism([(0.4, SEA + 0.85), (0.5, SEA + 2.6), (-0.9, SEA + 2.2), (-0.7, SEA + 0.85)], 0.08, 0.06, 0xf2bf99)
+        prism([(0.4, SEA + 0.85), (0.5, SEA + 2.6), (-0.9, SEA + 2.2), (-0.7, SEA + 0.85)], 0.08, 0.06, sail)
         for k in range(3):                                                         # the wake
             box((0.5 + 0.3 * k, 0.04, 0.3), (0.0, SEA + 0.02, -1.5 - 0.45 * k), 0xfff6eb)
 
@@ -1486,24 +1492,23 @@ def bonfire():
     # Driftwood: the beach fire at the end of the strand line, at a car's
     # scale: driftwood stood up in a cone in its ring of stones, the flames
     # flickering up out of it, its smoke going up over the beach; two logs
-    # drawn up as seats with three of the beach's people round it, and a
-    # lean-to of driftwood poles behind them out of the wind.
-    for k in range(8):
-        a = k / 8 * 2 * math.pi
-        box((0.1, 0.08, 0.08), (math.cos(a) * 0.32, 0.04, math.sin(a) * 0.32), 0x868ba1, yaw=-a)
-    disc(0.27, (0, 0.0, 0), 0x38383d, segs=10, h=0.03)
-    flames(((0.05, 0.0, 0.13, 0.34, 0.05, 0.31), (-0.07, 0.06, 0.1, 0.27, 0.045, 0.37),
-            (-0.03, -0.08, 0.09, 0.23, 0.04, 0.27)), (0.01, 0.01, 0.07, 0.44, 0.06, 0.23))
-    for k in range(6):
-        a = k / 6 * 2 * math.pi + 0.3
-        rod((math.cos(a) * 0.24, 0.02, math.sin(a) * 0.24), (math.cos(a) * 0.03, 0.42, math.sin(a) * 0.03),
-            0.035, 0x8a6a46, segs=5)
+    # drawn up as seats round it, and a lean-to of driftwood poles behind
+    # them out of the wind. No one about (round 10: three people half a car
+    # long read as specks): a fire the size a beach party builds, its
+    # flames as tall as a car, is what a racer sees of it.
+    for k in range(9):
+        a = k / 9 * 2 * math.pi
+        box((0.22, 0.18, 0.2), (math.cos(a) * 0.62, 0.09, math.sin(a) * 0.62), 0x868ba1, yaw=-a)
+    disc(0.55, (0, 0.0, 0), 0x38383d, segs=10, h=0.03)
+    flames(((0.1, 0.0, 0.26, 0.7, 0.1, 0.31), (-0.14, 0.12, 0.2, 0.56, 0.09, 0.37),
+            (-0.06, -0.16, 0.18, 0.48, 0.08, 0.27)), (0.02, 0.02, 0.14, 0.9, 0.12, 0.23))
+    for k in range(7):
+        a = k / 7 * 2 * math.pi + 0.3
+        rod((math.cos(a) * 0.5, 0.02, math.sin(a) * 0.5), (math.cos(a) * 0.06, 0.85, math.sin(a) * 0.06),
+            0.08, 0x8a6a46, segs=5)
     with bleached():
-        for z in (-0.75, 0.75):                          # bleached driftwood, like the strand line's
-            rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'tan', segs=7)
-    figure((0.0, 0.17, -0.75), math.pi / 2, shirt=0xcf534f, legs=0x38383d, pose='sit')
-    figure((0.15, 0.17, 0.75), -math.pi / 2, shirt=0x6794d9, legs=0xf2bf99, hair=0xffc044, pose='sit')
-    figure((-0.62, 0, 0.1), 0.0, shirt=0x61cb8b, legs=0x38383d, pose='crouch')
+        for z in (-1.05, 1.05):                          # bleached driftwood, like the strand line's
+            rod((-0.7, 0.16, z), (0.75, 0.16, z * 1.05), 0.17, 'tan', segs=7)
     # the lean-to: driftwood poles against a ridge pole, out of the wind,
     # about twice a standing person (THE SCALE RULE: a person is half a
     # unit), the tall end of a real one and half as much again (round 8: the
@@ -1535,17 +1540,12 @@ def bonfire():
     with bleached():
         drift_snag(-2.6, -2.4, 3.2, 0.2, 2.6, 11.0)
         drift_snag(-1.9, 4.6, 2.4, 0.3, 0.9, 12.0, limbs=3)
-    # the party's own colour: a striped windbreak across the camp's open
-    # end, towels on the seats, a cool box
+    # the party's own colour: a striped windbreak across the camp's open end
     for i in range(6):
         box((0.4, 0.75, 0.04), (-0.95 + 0.4 * i, 0.5, -2.0), (0xff5040, 0xfff6eb)[i % 2])
     for i in range(4):
         box((0.06, 1.0, 0.06), (-1.15 + 0.8 * i, 0.5, -2.0), 0x9a6a46)
-    box((0.34, 0.03, 0.2), (0.3, 0.19, -0.75), 0xffc044)
-    box((0.3, 0.03, 0.2), (-0.25, 0.19, 0.78), 0x339cf2)
-    box((0.3, 0.24, 0.2), (0.75, 0.12, 0.3), 0x339cf2)
-    box((0.32, 0.05, 0.22), (0.75, 0.26, 0.3), 0xfff6eb)
-    marker('anim_smoke', (0.0, 0.5, 0.0))
+    marker('anim_smoke', (0.0, 0.9, 0.0))
     join_still('fire')
     on_a_rise()
 
@@ -3058,25 +3058,26 @@ def dune_fence(name, seed, half, breaks):
     to a person; sea pinks or yellow at the foot of one patch in three.
     DRAPED whole: every slat and blade stands on the dune as it is drawn."""
     def build():
-        n = int(2 * half / 0.34)
+        # round 10: thin slats a stride apart read as hairlines at speed, so
+        # thick posts twice a person's height, every couple of strides, and
+        # two heavy rails between them
+        n = int(2 * half / 1.5)
         with plain_parts(), bleached():
+            prev = None
             for i in range(n + 1):
                 f = i / n
-                if any(abs(f - b) < 0.035 for b in breaks):
-                    continue
                 z = -half + 2 * half * f
                 x = 0.9 * wobble(z, seed, 9.0)
-                sunk = 0.3 * max(0.0, wobble(z, seed + 1, 6.0))
-                lean = 0.25 * wobble(z, seed + 2, 4.0)
-                post = i % 5 == 0
-                box((0.07, 0.72 if post else 0.56, 0.12 if post else 0.2), (x, (0.36 if post else 0.28) - sunk, z),
-                    'brown' if post else ('tan', 'cream')[i % 2], roll=lean)
-                if i % 5 == 0 and i + 5 <= n and not any(abs((i + 2.5) / n - b) < 0.07 for b in breaks):
-                    z1 = z + 5 * 2 * half / n
-                    x1 = 0.9 * wobble(z1, seed, 9.0)
-                    for y in (0.2, 0.42):
-                        beam((x + 0.05, y - sunk, z), (x1 + 0.05, y - 0.3 * max(0.0, wobble(z1, seed + 1, 6.0)), z1),
-                             0.05, 'tan')
+                if any(abs(f - b) < 0.05 for b in breaks):
+                    prev = None
+                    continue
+                sunk = 0.25 * max(0.0, wobble(z, seed + 1, 6.0))
+                lean = 0.18 * wobble(z, seed + 2, 4.0)
+                box((0.2, 1.5, 0.2), (x, 0.55 - sunk, z), ('brown', 'tan')[i % 2], roll=lean)
+                if prev:
+                    for y in (0.42, 0.95):
+                        beam((prev[0] + 0.1, y - prev[1], prev[2]), (x + 0.1, y - sunk, z), 0.12, 'tan')
+                prev = (x, sunk, z)
         with plain_parts():
             patches = int(half / 2.2)
             for p in range(patches):
@@ -3088,11 +3089,11 @@ def dune_fence(name, seed, half, breaks):
                     a0 = 2.4 * k + p
                     d = 0.25 + 0.55 * frac(k * 0.37 + p * 0.21)
                     x, z = px + d * math.cos(a0), pz + 1.5 * d * math.sin(a0)
-                    for j in range(5):                                # a tussock: thin blades fanned out of one foot
+                    for j in range(5):                                # a tussock: blades fanned out of one foot
                         a = 1.26 * j + k
-                        hgt = 0.28 + 0.2 * frac(k * 0.29 + j * 0.4 + p * 0.13)
-                        o = beam((x + 0.04 * math.cos(a), -0.05, z + 0.04 * math.sin(a)),
-                                 (x + 0.2 * math.cos(a), hgt, z + 0.2 * math.sin(a)), 0.06,
+                        hgt = 0.55 + 0.3 * frac(k * 0.29 + j * 0.4 + p * 0.13)
+                        o = beam((x + 0.05 * math.cos(a), -0.05, z + 0.05 * math.sin(a)),
+                                 (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.1,
                                  ('green', 'cream', 'green', 'tan', 'green')[(j + k) % 5])
                         o['ramp'] = 0.15
                 if p % 3 == 0:
@@ -3155,14 +3156,19 @@ def strand_groynes():
     # the kerb and point at the sea, so a racer reads them the whole way
     # past. +X is the road; the sea is -X.
     with bleached():
-        groyne(-5.5, 2.2, -10.5, 2.0, 1.25, 1.0)
-        groyne(5.5, 2.4, -9.0, 1.8, 1.2, 2.0, gaps=(5, 6, 10))
-    for (z, x, h, col) in ((-5.5, -11.4, 3.3, 0xff5040), (5.5, -9.9, 2.9, 0x22c46e)):   # the beacon posts, port and starboard
+        # round 10: on out past the waterline into the surf, the posts
+        # standing lower as the beach shelves, the sea breaking along them
+        groyne(-5.5, 2.2, -19.0, 2.0, 0.9, 1.0)
+        groyne(5.5, 2.4, -17.5, 1.8, 0.85, 2.0, gaps=(5, 6, 10))
+    for (z, x, h, col) in ((-5.5, -19.9, 2.6, 0xff5040), (5.5, -18.4, 2.4, 0x22c46e)):   # the beacon posts, port and starboard
         box((0.3, h + 0.5, 0.3), (x, (h - 0.5) / 2, z), 0xfff6eb)
         box((0.32, 0.6, 0.32), (x, h * 0.55, z), col)
         box((0.7, 0.6, 0.7), (x, h + 0.25, z), col)
         box((0.5, 0.12, 0.5), (x, h - 0.2, z), 0xfff6eb)
-    gull((-11.4, 3.78, -5.5), 2.0, 'anim_watch:r=26#beacon')
+    gull((-19.9, 3.08, -5.5), 2.0, 'anim_watch:r=26#beacon')
+    for k, (x, z) in enumerate(((-15.0, -6.1), (-13.5, 4.9), (-18.5, -4.9))):
+        with animated('anim_bob:h=0.3:p=%.1f:r=0.35#break%d' % (3.0 + 0.6 * k, k), (x, 0.0, z)):
+            box((1.6, 0.3, 0.6), (x, SEA + 0.05, z), 0xfff6eb, yaw=0.2 * k)
     with bleached():
         # the storm's logs: heaped against the near groyne's weather side...
         for k, (x0, x1, y0, y1, dz, r) in enumerate(((1.6, -3.4, 0.25, 0.22, -0.75, 0.25), (0.4, -5.2, 0.2, 0.2, -1.35, 0.2),
@@ -3243,6 +3249,173 @@ def driftwood_forts():
                 a = i / 7 * 2 * math.pi
                 box((0.12, 0.08, 0.1), (0.5 + 0.28 * math.cos(a), 0.04, 0.0 + 0.28 * math.sin(a)), 'grey', yaw=-a)
     draped('ring', ring)
+
+# The dune at the end of Driftwood's pass that the lighthouse stands on:
+# sand on its faces, marram over its back (round 10, r10-drive-through).
+DUNE_BEDS = ((-0.6, 0.8, 'cream', -0.85), (0.8, 2.2, 'sage', -0.85), (2.2, 3.6, 'sage', -0.85),
+             (3.6, 5.4, 'sage', -0.85), (5.4, 7.2, 'sage', -0.85), (7.2, 8.4, 'sage', -0.85),
+             (8.4, 10.5, 'sage', -0.85))
+
+@piece(1.0)
+def lighthouse_dune():
+    # Driftwood: the great dune at the end of the pass, which the road goes
+    # through in a tunnel and the lighthouse stands on (tracks.js sets it on
+    # the dune's seaward shoulder, a flat of marram at 6.2): the pass drives
+    # straight at the light on its dune and into the dune's dark mouth, and
+    # comes out at the point. The tunnel's walls are the sand cut back to
+    # stone, its mouths framed in stone with a lintel well over every car's
+    # roof and chase camera. Placed on the road's centreline: +X is its left,
+    # the sea's side.
+    with plain_parts():
+        M = massif_height(((0.0, 0.0, 9.6, 12.0, 16.0, math.pi / 2, 0.6, 14.0),   # the dune's back, across the road
+                           (10.5, 0.5, 9.0, 9.0, 7.5, 0.2, 0.25, 5.0),            # its seaward shoulder, the light's
+                           (-14.0, -1.0, 7.0, 9.0, 8.0, -0.4, 0.8, 6.0)),          # its inland flank
+                          rough=0.3, seed=1.9, warp=1.0)
+        tunnel = strata_massif(M, -32.0, 30.0, -18.0, 18.0, DUNE_BEDS, corridor=(5.6, 3.6), step=2.6, tol=0.4)
+        for o in bpy.context.scene.objects:
+            if o.type == 'MESH' and o.get('swatch') and o.get('row') is None:
+                if o['swatch'] == 'brown':                          # the tunnel's lining, out of the sun
+                    o['swatch'] = 'grey'
+                    rowed(o, 26)
+                else:
+                    rowed(o, {'cream': 31, 'sage': 3}.get(o['swatch'], 16))
+        print('PROBE dune tunnel', tunnel, [(round(x), round(M(x, 0.5), 2)) for x in (6, 8, 10, 11, 12, 14)])
+        if tunnel:
+            for z, sgn in ((tunnel[0] - 0.3, -1), (tunnel[1] + 0.3, 1)):   # the portals, stone, a lintel over
+                for sx in (-1, 1):
+                    box((1.0, 3.9, 1.0), (sx * 5.3, 1.75, z), 'grey')
+                    box((1.2, 0.3, 1.2), (sx * 5.3, 0.05, z), 'slate')
+                box((12.0, 0.75, 1.1), (0.0, 3.95, z), 'grey')
+                box((1.1, 0.95, 1.2), (0.0, 3.95, z + 0.06 * sgn), 'lavender')   # the keystone
+                box((12.6, 0.2, 1.3), (0.0, 4.4, z), 'lavender')
+    def foot():
+        with plain_parts():
+            box((0.3, 0.3, 0.3), (-20.0, -0.4, 0.0), 'grey')
+    draped('foot', foot)
+
+def drift_boat_hut(cz, L, W, H, door, seed):
+    """An old beach boat turned keel up and roofed into a store, as the
+    fishers of a storm coast keep their gear: its tarred hull, laps of
+    planking down it, the stern sawn off square and walled with planks, a
+    door in it to the road (+X), a stove pipe through the keel. The hull
+    runs along the road (+Z), its stern end at -Z."""
+    rows = []
+    n, m = 9, 7
+    for i in range(n):
+        t = -1.0 + 2.0 * i / (n - 1)
+        w = 0.5 * W * max(0.05, 1.0 - 0.9 * max(0.0, t) ** 2.5 - 0.15 * min(0.0, t) ** 2)
+        h = H * (1.0 - 0.18 * t * t)
+        rows.append([(w * math.cos(math.pi * j / (m - 1)), h * math.sin(math.pi * j / (m - 1)) - 0.08, cz + 0.5 * L * t)
+                     for j in range(m)])
+    for o in sheet(rows, lambda i, j, nn: 'brown', 'hull'):
+        rowed(o, 24)
+    for j in (1, 3):                                                       # the laps of planking
+        beam((0.5 * W * math.cos(math.pi * j / 6) + 0.03 * (1 if j < 3 else -1), H * math.sin(math.pi * j / 6),
+              cz - 0.5 * L), (0.2 * W * math.cos(math.pi * j / 6), 0.9 * H * math.sin(math.pi * j / 6), cz + 0.42 * L),
+             0.08, 'tan')
+    box((0.16, 0.14, L * 0.92), (0.0, H - 0.02, cz - 0.03 * L), 'tan')    # the keel, up top
+    zs = cz - 0.5 * L
+    box((W * 0.95, H * 0.95, 0.12), (0.0, H * 0.45, zs), 0xfde4c7)         # the sawn-off stern, walled
+    box((0.12, H * 0.62, W * 0.34), (0.5 * W * 0.55, H * 0.31, zs + 0.2), door)   # its door to the road
+    box((0.5, 0.9, 0.14), (0.25 * W, H * 0.33, zs - 0.03), door)
+    cyl(0.1, 0.9, (-0.1, H - 0.1, cz + 0.15 * L), 'grey', segs=6, stem=True)   # the stove pipe
+    box((0.28, 0.08, 0.28), (-0.1, H + 0.82, cz + 0.15 * L), 'slate')
+
+@piece(1.0)
+def boat_huts():
+    # Driftwood: where the pass leaves the beach, the fishers' stores in the
+    # marram: three old beach boats hauled up and turned keel up into huts,
+    # their sterns walled and doored to the road, a stove pipe smoking
+    # through one keel; their gear between them, creels stacked, a capstan,
+    # nets hung over a frame of thick spars. +X is the road; the row runs
+    # along it (+Z).
+    for k, (z, L, W, H, door) in enumerate(((-6.5, 4.6, 2.0, 1.5, 0xcf534f), (0.0, 5.2, 2.2, 1.7, 0x339cf2),
+                                            (6.4, 4.2, 1.9, 1.4, 0x61cb8b))):
+        drift_boat_hut(z, L, W, H, door, k)
+    marker('anim_smoke', (-0.1, 2.6, 0.78))
+    for (x, y, z) in ((1.4, 0.0, -3.4), (1.4, 0.0, -2.9), (1.4, 0.32, -3.15), (1.6, 0.0, 3.2)):
+        crab_pot((x, y, z), 0.0)
+    cyl(0.32, 0.7, (1.5, 0.0, 9.4), 0x8a6a46, segs=8, stem=True)            # the capstan
+    box((1.6, 0.14, 0.14), (1.5, 0.62, 9.4), 'tan')
+    with bleached():                                                        # the net frame
+        for z in (-9.6, -8.0):
+            box((0.16, 2.2, 0.16), (0.9, 1.1, z), 'tan')
+        box((0.14, 0.14, 1.9), (0.9, 2.15, -8.8), 'tan')
+    for i, c in enumerate(('green', 'sky', 'green')):
+        box((0.06, 1.3, 0.5), (0.9, 1.45, -9.4 + 0.55 * i), c)
+    join_still('huts')
+
+@piece(1.0)
+def drift_coble():
+    # Driftwood: a beach boat under its brown lugsail working in and out
+    # past the groynes' ends (placed on the groynes' spot, on the road's
+    # centreline): the sea's side is +X here.
+    for i in range(14):
+        t = i / 14 * 2 * math.pi
+        marker('path_coble_%d' % i, (13.0 + 3.0 * math.sin(t), 0.0, 11.0 * math.cos(t)))
+    beach_sailing_boat('coble', 30.0, 0xcf534f, 0xb06041)
+
+@piece(1.0)
+def smokehouse():
+    # Driftwood: the fishers' smokehouse where the start straight bends away
+    # (the straight points at it): a tall tarred timber house, its roof
+    # vented along the ridge where the smoke comes out, a lean-to of split
+    # logs for the fires; the beach boat hauled up beside it on its skids,
+    # the capstan that winched it up the shingle, fish boxes stacked. At a
+    # building's real size beside a car. +X is the road; along it (+Z).
+    tar, trim = 0x8d5741, 0xfde4c7
+    box((2.6, 3.4, 3.2), (-1.8, 1.4, 0.0), 'brown')                          # the house, its feet in the sand
+    for y in (1.0, 2.0):                                                     # the boards' laps
+        box((2.66, 0.07, 3.26), (-1.8, y, 0.0), 'tan')
+    for sz in (-1, 1):                                                       # its roof, steep
+        box((1.75, 0.14, 3.6), (-1.8 + sz * 0.72, 3.62, 0.0), 'grey', roll=sz * 0.95)
+    box((0.9, 0.5, 3.0), (-1.8, 4.35, 0.0), tar)                              # the louvred vent along the ridge
+    box((1.1, 0.12, 3.2), (-1.8, 4.66, 0.0), 'grey')
+    for k in range(4):
+        box((0.95, 0.08, 0.1), (-1.8, 4.3, -1.2 + 0.8 * k), 'slate')
+    marker('anim_smoke', (-1.8, 4.8, 0.0))
+    box((0.07, 1.3, 1.0), (-0.47, 0.65, -0.6), trim)                         # the door to the road
+    box((0.07, 1.2, 0.86), (-0.45, 0.6, -0.6), 0xcf534f)
+    box((0.07, 0.5, 0.6), (-0.47, 2.2, 0.8), 'slate')
+    # the log store against its end
+    for k in range(3):
+        for j in range(3 - k):
+            cyl(0.2, 1.4, (-2.6 + 0.42 * j + 0.21 * k, 0.2 + 0.36 * k, 1.9), 'tan', segs=7, axis='along', stem=True)
+    box((1.6, 0.1, 1.2), (-2.1, 1.35, 2.25), 'grey', pitch=0.2)
+    # the beach boat hauled up on its skids, bow to the sea (-X), its mast
+    BX, BZ = -1.2, -4.4
+    box((3.0, 0.7, 1.2), (BX, 0.55, BZ), 0x339cf2)
+    box((0.85, 0.7, 0.85), (BX - 1.7, 0.55, BZ), 0x339cf2, yaw=math.pi / 4)
+    box((3.1, 0.16, 1.3), (BX, 0.95, BZ), trim)
+    box((0.14, 3.0, 0.14), (BX - 0.3, 2.3, BZ), 0x8a6a46)
+    for dz in (-0.4, 0.4):
+        box((3.6, 0.18, 0.18), (BX, 0.12, BZ + dz), 0x8a6a46)
+    cyl(0.36, 0.8, (1.0, 0.0, BZ - 0.2), 0x8a6a46, segs=8, stem=True)        # the capstan
+    box((1.9, 0.16, 0.16), (1.0, 0.7, BZ - 0.2), 'tan')
+    beam((0.75, 0.4, BZ - 0.2), (BX + 1.5, 0.6, BZ), 0.09, 0x38383d)          # its cable to the bow ring
+    for (x, y, z) in ((0.2, 0.0, 2.1), (0.2, 0.32, 2.1), (0.2, 0.0, 2.75), (0.6, 0.0, 2.4)):
+        box((0.7, 0.3, 0.5), (x, y + 0.15, z), (0xcf534f, 0x339cf2, 0xfde4c7, 0xcf534f)[int(z * 3 + y * 5) % 4])
+    join_still('smokehouse')
+
+@piece(1.0)
+def point_wrack():
+    # Driftwood: what the storms pile on the point under the lighthouse,
+    # where the road turns back from the sea: a great heap of driftwood, whole
+    # trunks thrown one over another and two root plates reared up on edge
+    # twice a car's height, bleached, a dead tree standing out of it. It
+    # faces the road's exit from the tunnel. +X is the road.
+    with bleached():
+        for k, (a, b, r) in enumerate((((-0.5, 0.3, -4.0), (-1.5, 0.35, 3.8), 0.36),
+                                       ((0.5, 0.25, -2.5), (-2.6, 0.9, 2.6), 0.3),
+                                       ((-2.8, 0.3, -3.2), (-0.4, 1.0, 1.6), 0.28),
+                                       ((-1.2, 0.95, -3.0), (-2.2, 0.8, 2.2), 0.26),
+                                       ((-0.2, 1.35, -1.6), (-2.6, 1.6, 1.0), 0.22),
+                                       ((0.9, 0.2, 0.6), (-1.0, 0.3, 4.6), 0.3))):
+            rod(a, b, r, ('tan', 'cream')[k % 2], r2=r * 0.75, segs=7)
+        root_plate((-1.6, 0.0, -4.2), 1.5, face=-1)
+        root_plate((-2.4, 0.0, 3.9), 1.2, face=1)
+        drift_snag(-3.4, 0.4, 4.2, 0.2, 2.4, 13.0, limbs=4)
+    join_still('wrack')
 
 # ====================================================================================
 # SNOW

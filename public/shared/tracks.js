@@ -638,11 +638,21 @@ export const TRACKS = {
       { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
       { model: 'set-bonfire', u: 0.468, lat: -10.2, yaw: 160, y: 0.87 },
       { model: 'set-driftwood-forts', u: 0.438, lat: -11.0, y: 0.86 },
+      // the fishers' upturned-boat stores where the pass leaves the beach
+      { model: 'set-boat-huts', u: 0.575, lat: 10.5 },
       // storm fence and marram along the dune pass, a length each side
       { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
-      { model: 'set-dune-fence-b', u: 0.69, lat: -9.6, yaw: 180 },
-      { model: 'set-dune-fence-a', u: 0.75, lat: 9.4, yaw: 180 },
-      { model: 'set-lighthouse', u: 0.855, lat: -9.5, yaw: 180 },
+      { model: 'set-dune-fence-b', u: 0.735, lat: -9.6, yaw: 180 },
+      // the lighthouse's dune at the pass's end, the road through it in a
+      // tunnel, and the light on its seaward shoulder (8.4 up)
+      { model: 'set-lighthouse-dune', u: 0.79, lat: 0 },
+      { model: 'set-lighthouse', u: 0.7953, lat: -11, yaw: 180, y: 8.4 },
+      // a beach boat working in and out past the groynes
+      { model: 'set-drift-coble', u: 0.389, lat: 0, scale: 1.5 },
+      // the storm's wrack piled on the point where the road turns back
+      { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
+      // the smokehouse where the start straight bends away, which it points at
+      { model: 'set-smokehouse', u: 0.075, lat: -10.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
       // them; lifted to the verge they stand on
       { model: 'set-net-huts', u: 0.97, lat: -8.6, yaw: 180, y: 0.59 }
