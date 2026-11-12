@@ -411,6 +411,7 @@ struct TtpRenderer::TrackBin {
     // per-kind ambient presets, the cloud/bird/plane defaults and the per-track
     // ambient patch are folded in there, so nothing here applies a default.
     uint32_t groundKind = 0;             // 0 lawn 1 sand 2 redrock 3 snow 4 wood
+    uint32_t groundBase = 0;             // the canvas's base colour; 0 = the kind's own
     float fogTune = 1;
     uint32_t keyCol = 0xfff1d0;
     float keyIntensity = 1.4f;

@@ -420,6 +420,11 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.scenery.clutterDensity = 0.15f;
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
+    // High summer on the downs: the garden's broadleaf oaks only, and the
+    // far hills gone to hay.
+    t.scenery.density = 0.12f;
+    t.hills = { 0xb7bf6c, 0xa8b160, 0xc5cb7e };
+    t.groundBase = 0xa2b654;
   } else if (track == "tangle") {
     // The mill's water meadows: open grass mown along the stream, so the
     // stream reads across it, fewer trees and wildflowers (the hose's lawn
@@ -428,13 +433,18 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.props.models = { "prop-hay" };
     t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.1f;
-    t.scenery.density = 0.45f;
+    t.scenery.density = 0.6f;
+    // A wooded valley: the lawn's pines nearly alone, dark hills beyond.
+    t.scenery.trees[0].w = 0.12f; t.scenery.trees[1].w = 0.88f;
+    t.hills = { 0x5f9f6a, 0x4f8f5c, 0x6fae78 };
+    t.groundBase = 0x4f9a58;
     t.road.kerbA = 0x2bb673;
     t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
   } else if (track == "cloverleaf") {
     // The park: the gantry in the climbing frame's blue. Fewer wildflowers,
     // as on Pretzel: the road lies on the grass, its verge open to them.
     t.scenery.clutterDensity = 0.15f;
+    t.scenery.density = 0.3f;   // the park's trees are its cherries (the set)
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
   }
 }

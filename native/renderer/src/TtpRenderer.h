@@ -1276,7 +1276,7 @@ private:
     filament::math::float2 footprintSpan(const TrackBin& tb, float x, float z, float r) const;
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
-    filament::Texture* buildGroundTexture(uint32_t kind);
+    filament::Texture* buildGroundTexture(uint32_t kind, uint32_t baseColor);
     // The split-screen grid for n cells — SceneRenderer's bestGrid, so the 3D
     // cells land where the DOM HUD puts its labels. cellRect tiles with it.
     struct GridDims { uint32_t cols, rows; };

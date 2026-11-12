@@ -917,6 +917,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.structureStack = th.structureStack;
 
     out.groundKind = th.groundKind;
+    out.groundBase = th.groundBase;
     out.fogTune = th.fogTune;
     out.keyCol = th.key.color;
     out.keyIntensity = th.key.intensity;

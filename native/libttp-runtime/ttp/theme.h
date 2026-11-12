@@ -234,6 +234,11 @@ struct Theme {
   // marble kit). Empty: plain columns in `structure`.
   std::vector<uint32_t> structureStack;
   uint32_t groundKind = GROUND_LAWN;
+  // The ground canvas's base colour where a track's land is not its kind's
+  // own (a hay-yellow down, a water meadow); 0 keeps the kind's. A landform
+  // tint only multiplies, so it cannot warm or lighten a lawn. Post-corpus
+  // (theme_check does not serialize it).
+  uint32_t groundBase = 0;
   float fogTune = 1;              // scalar on the RACE + lobby-perimeter fog distances
   KeyLight key;
   HemiLight hemi;

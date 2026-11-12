@@ -2125,7 +2125,7 @@ constexpr float kWoodSeamAlpha = 0.55f;
 //
 // 256², sRGB, repeat-wrapped, mipmapped: three tiles the same 256² canvas at
 // 33.3 world-u, so the texel density and tiling cadence match.
-Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
+Texture* TtpRenderer::buildGroundTexture(uint32_t kind, uint32_t baseColor) {
     constexpr int S = 256;
     std::vector<uint8_t> px((size_t) S * S * 4, 255);
     const auto at = [&](int x, int y) { return &px[((size_t) y * S + x) * 4]; };
@@ -2161,8 +2161,9 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
         }
     };
     const GroundPalette& pal = groundPalette(kind);
-    const int base[3] = { (int) ((pal.base >> 16) & 0xff),
-                          (int) ((pal.base >> 8) & 0xff), (int) (pal.base & 0xff) };
+    const uint32_t col = baseColor ? baseColor : pal.base;
+    const int base[3] = { (int) ((col >> 16) & 0xff),
+                          (int) ((col >> 8) & 0xff), (int) (col & 0xff) };
     sweep(pal.bands, base, pal.factor);
     if (kind == 4) { // wood — the texture-only extras over the plank bands
         const int BOARDS = pal.bands;
@@ -2493,7 +2494,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             for (int i = 0; i < pal.bands; i++) {
                 float f[3];
                 pal.factor(i, f);
-                bands.push_back({ 1.0f / pal.bands, shade(pal.base, f[0], f[1], f[2]) });
+                bands.push_back({ 1.0f / pal.bands,
+                        shade(tb.groundBase ? tb.groundBase : pal.base, f[0], f[1], f[2]) });
             }
         }
         // The bands stay — the berms sample them by world x (groundColorAt),
@@ -2901,7 +2903,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         tileMajor(mGround, mSheetTile, mSheetMinTris);
         bakeVertexLight(mGround);
         if (mGroundMaterial) {
-            mGroundTex = buildGroundTexture(tb.groundKind);
+            mGroundTex = buildGroundTexture(tb.groundKind, tb.groundBase);
             MaterialInstance* gmi = sceneInstance(mGroundMaterial);
             mGroundInst = gmi; // bound to its visibility map once it is baked
             if (mGroundTex) {
