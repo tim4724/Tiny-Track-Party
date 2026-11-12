@@ -1520,15 +1520,16 @@ export const TRACKS = {
     // only a sliver over the kerb), and its box stood on edge where the grid
     // straight points; the board's wooden snakes have come
     // alive, one rearing at the racers inside the bend where the south leg
-    // turns for the line, two more slithering round either side of the grid
+    // turns for the line, another slithering round its ring beside the grid
     // straight's end. The game again as a floor mat the grid straight runs
     // down the middle of, its big pawns and foam dice stood on it, and just
     // past the mat's end the racers' toy car park on the infield, its lift
-    // and spiral ramp running. Up in the sky the biggest snake of all rises
-    // coiled out of a woven basket at the inside of the weave's first bend,
-    // its head swaying over the deck, and the game's foam dice stacked four
-    // high with a pawn on top stand at the inside of the other bends (the
-    // slalom's gates) and outside the climb, where the camera looks.
+    // and spiral ramp running. The climb is the game's ladder: a wooden one
+    // leans from the floor onto the spiral's top deck, a red pawn partway up.
+    // Up in the sky the biggest snake of all rises coiled out of a woven
+    // basket at the inside of the weave's first bend, its head swaying over
+    // the deck, and at the inside of its last the game's foam dice stand
+    // stacked four high with a pawn on top, the slalom's one gate.
     set: [
       { model: 'set-floor-mat', u: 0, lat: 0 },
       { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
@@ -1536,13 +1537,9 @@ export const TRACKS = {
       { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
       { model: 'set-game-box', u: 0.29, lat: 12 },
       { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
-      { model: 'set-toy-snake-loop', u: 0.25, lat: 9, yaw: 120 },
       { model: 'set-sky-snake', u: 0.525, lat: 6 },
-      { model: 'set-dice-tower', u: 0.47, lat: 6.6 },
-      { model: 'set-dice-tower', u: 0.556, lat: -6, yaw: 40 },
-      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 },
-      { model: 'set-dice-tower', u: 0.215, lat: -13.4, yaw: 20 },
-      { model: 'set-dice-tower', u: 0.5828, lat: -9.95, yaw: 155.8 }
+      { model: 'set-snake-ladder', u: 0.4775, lat: 6.5 },
+      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 }
     ]
   },
   gauntlet: {
@@ -1586,38 +1583,33 @@ export const TRACKS = {
   helix: {
     name: 'Helix', segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
-    // The marble run: the lap in small (about 50 cm of it) where the top
-    // straight points, marbles up inside one tower and out of its cup, down
-    // its own screw or along the high chute and down the other's (the two
-    // spirals and the skyway), then home along the floor, never rolling
-    // uphill in sight; more of the kit stands about the room: a marble screw
-    // round a column, a slinky walking down off an alphabet block beside
-    // it, where the grid straight points, and a zigzag of chutes between two columns
-    // outside the raised straight and again by the loop's entry; a tin
-    // humming top and a wooden one spin short of the run; and the run's high
-    // chute beside the skyway inside its bend, at the deck's own height, its
-    // marbles racing the cars along it. In the eye of each spiral a marble
-    // lift turns its screw inside a cage of the kit's stacked cylinders as
-    // wide as the eye allows, its cup a storey over the top deck; zigzags
-    // stand outside the spirals where the camera looks round them, and one
-    // inside the corner home; and along the grid straight a wooden marble
-    // racer of two stepped boards runs its marbles down their lanes beside
-    // the cars.
+    // The marble run: ONE run round the whole room in the race's direction,
+    // its marbles rolling only downhill but at its three lifts, each a
+    // different machine. Up inside the marble tower's column, where the grid
+    // straight points (a slinky walking down off its block beside it), out
+    // of its cup and over the corner after the straight on twin rails; along
+    // the top leg's infield through a marble wheel, behind a tin humming top
+    // and a wooden one spinning short of it, into a catch tray and up the
+    // summit screw lift outside the climb, the tallest thing in the room;
+    // over the skyway and south along its outside, ticking down a stair of
+    // tone bars, into a vortex bowl and a helix outside the descent; along
+    // the south leg's outside and round a loop of its own beside the mid
+    // leg's; on the floor to a stair lift at the corner home, onto a wooden
+    // marble racer of two stepped boards beside the grid straight, and from
+    // its foot back into the tower's. Each section is built in the world's
+    // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
+    // the heading's opposite.
     set: [
-      { model: 'set-marble-run', u: 0.2769, lat: 22, yaw: -131 },
       { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
       { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
-      { model: 'set-marble-zigzag', u: 0.8246, lat: 9.4, yaw: 148 },
-      { model: 'set-marble-zigzag', u: 0.5174, lat: 6.5, yaw: 90 },
-      { model: 'set-marble-skyway', u: 0.477, lat: -5 },
-      { model: 'set-marble-lift', u: 0.2629, lat: -8.39 },
-      { model: 'set-marble-lift', u: 0.69, lat: -8.36, yaw: 45 },
-      { model: 'set-marble-racer', u: 0.029, lat: -8.5 },
-      { model: 'set-marble-zigzag', u: 0.27, lat: 6.63, yaw: 90 },
-      { model: 'set-marble-zigzag', u: 0.34, lat: 6.6, yaw: 90 },
-      { model: 'set-marble-zigzag', u: 0.93, lat: -6.6, yaw: -90 },
-      { model: 'set-marble-zigzag', u: 0.6976, lat: 6.63, yaw: 90.8 },
-      { model: 'set-marble-zigzag', u: 0.4146, lat: 6.66, yaw: 90.7 }
+      { model: 'set-marble-run-head', u: 0.096259, lat: 7, yaw: 0 },
+      { model: 'set-marble-run-wheel', u: 0.179241, lat: -6.97, yaw: -90 },
+      { model: 'set-marble-run-summit', u: 0.241867, lat: -6.97, yaw: -90 },
+      { model: 'set-marble-run-skyway', u: 0.474724, lat: 6.96, yaw: 180 },
+      { model: 'set-marble-run-vortex', u: 0.521114, lat: 6.96, yaw: 180 },
+      { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
+      { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
+      { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 }
     ]
   },
   skyline: {
