@@ -5010,7 +5010,8 @@ def penguin_chute_build(apart):
         poly(verts, faces, 0xbcd8f5)
         for sd in (-1, 1):                                            # its lips of snow
             for (xa, xb) in zip(xs[:-1:6], xs[6::6]):
-                snowy(box((xb - xa + 0.1, 0.16, 0.18), ((xa + xb) / 2, 0.06, sd * 0.52), 0xf3f7fb), 0.45)
+                # low: a lip a hand higher hid the ice from a car that sees the slide side-on
+                snowy(box((xb - xa + 0.1, 0.09, 0.18), ((xa + xb) / 2, 0.035, sd * 0.52), 0xf3f7fb), 0.45)
         disc(2.1, (HOLE, 0.0, 0.0), 0xd0e8ff, segs=24, h=0.05)        # the ice round the hole
         disc(1.35, (HOLE, 0.01, 0.0), 0x4f7fd0, segs=20, h=0.05)      # open water
     draped('chute', static)
