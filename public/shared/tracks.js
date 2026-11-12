@@ -346,10 +346,14 @@ export const SET_GROUND = {
   // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:
   // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
-  // Powder's ski school: the nursery slope behind it (-X), its gentle face to
-  // the road, its foot reaching under the school's hut and arch so the whole
-  // school stands up on it over the kerb of the road beside it.
-  'set-ski-school': [{ kind: 'mound', x: -7, h: 4.2, r: 13, r1: 10, rz: 13, shape: 1.3 }],
+  // Powder's ski school: the nursery slope behind it (-X), a real run down
+  // its face to the road (the school's slalom drops some six units from the
+  // carpet's head to its foot), its foot reaching under the school's hut and
+  // arch so the whole school stands up on it over the kerb of the road beside it.
+  'set-ski-school': [{ kind: 'mound', x: -11, h: 6.4, r: 17, r1: 11, rz: 15, shape: 1.25 }],
+  // Powder's snowman field: a low rise behind the crowd (-X), its face to the
+  // road, so the rows stand one over another above the kerb, as the rookery's do.
+  'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Tangle's stream lies in its own bed: the low line the valley's sides and
   // the land raised toward the road stand over, a reach at a time.
@@ -757,7 +761,10 @@ export const TRACKS = {
       { model: 'set-powder-forest-e', u: 0.3311, lat: 17.72 },
       { model: 'set-powder-forest-f', u: 0.6284, lat: -15.4 },
       { model: 'set-powder-forest-g', u: 0.4238, lat: -19.86 },
-      { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 }
+      { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
+      // the snowman field, inside the bend the run from the ski school comes
+      // up to: dead ahead on the way in, beside the kerb at road height
+      { model: 'set-snowman-field', u: 0.66, lat: -8.6, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -784,7 +791,9 @@ export const TRACKS = {
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
-      { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 }
+      { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 },
+      // nor between the road and the snowman field
+      { kind: 'clear', u: 0.66, lat: -4, len: 18, r: 3 }
     ]
   },
   flurry: {
@@ -810,6 +819,15 @@ export const TRACKS = {
       { model: 'set-flurry-forest-f', u: 0.095, lat: 10.5 },
       { model: 'set-flurry-forest-g', u: 0.075, lat: 50 },
       { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
+      // forest in the hollows of the north-west ridge's face and along its
+      // foot (the frame the ridge's: +X up the face, +Z along it)
+      { model: 'set-flurry-forest-h', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-i', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-j', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-k', u: 0.39, lat: -50 },
+      // (the belt along the foot is the full tier's: the box keeps the hollows)
+      { model: 'set-flurry-forest-l', u: 0.39, lat: -50, lite: false },
+      { model: 'set-flurry-forest-m', u: 0.39, lat: -50, lite: false },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
@@ -845,7 +863,17 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
-      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 }
+      { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
+      // the north-west ridge's face is no one white wall: spurs run down it
+      // toward the valley, each its own length and height, hollows between
+      // them in a little shade, forest up the hollows and along the foot to
+      // a ragged treeline (forest-h to -k, sampled, set_prototypes.py
+      // FORESTS). All inside the ridge's own reach.
+      { kind: 'ridge', u: 0.39, lat: -51, z: -33, yaw: 90, len: 14, r: 10, h: 5.5, top: 0.2 },
+      { kind: 'ridge', u: 0.39, lat: -49, z: -5, yaw: 78, len: 18, r: 11, h: 6.5, top: 0.2 },
+      { kind: 'ridge', u: 0.39, lat: -52, z: 24, yaw: 100, len: 12, r: 9, h: 4.5, top: 0.2 },
+      { kind: 'paint', u: 0.39, lat: -52, z: -19, yaw: 90, len: 14, r: 4, w: 5, tint: 0xdbe4f4 },
+      { kind: 'paint', u: 0.39, lat: -52, z: 10, yaw: 90, len: 14, r: 4, w: 5, tint: 0xdbe4f4 }
     ]
   },
   glacier: {
@@ -864,7 +892,7 @@ export const TRACKS = {
       // decks by the grid cells the roads cross, so a camp there sinks
       // behind the raised east leg)
       { model: 'set-advanced-camp', u: 0.886, lat: -19.5, yaw: 20 },
-      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 130 },
+      { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 137 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
       { model: 'set-glacier-peaks', u: 0.185, lat: -60 },
@@ -925,7 +953,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.185, lat: -18, z: 9, len: 18, r: 7, h: 1.8 },
       // nothing seeded on the verge in front of the penguin chute's pool: a
       // boulder there stood between the run to the line and the pool
-      { kind: 'clear', u: 0.945, lat: -9.5, len: 18, r: 4.5 },
+      { kind: 'clear', u: 0.955, lat: -9.5, len: 30, r: 5 },
       // ...nor between the road and the airstrip, where two pines stood in
       // front of the plane on the closest pass
       { kind: 'clear', u: 0.212, lat: 5.5, len: 22, r: 2.5 },
@@ -1016,10 +1044,7 @@ export const TRACKS = {
       // spans the loop (the frames the world's)
       { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
       { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
-      // a creek frozen across the wedge inside the S-bend, under both roads
-      // in culverts (the frame the world's)
-      { model: 'set-avalanche-creek', u: 0.5935, lat: 13.13, yaw: 23.54, lite: false },
-      // big old firs on the creek's bank (sampled, set_prototypes.py FORESTS)
+      // big old firs in the wedge inside the S-bend (sampled, set_prototypes.py FORESTS)
       { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
