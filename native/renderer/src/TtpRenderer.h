@@ -1080,6 +1080,12 @@ private:
     // The plain is kept kShoreKeep inside the waterline (past the wet sand's
     // inner edge) and the land is back to full kShoreRamp further in.
     static constexpr float kShoreKeep = 15.0f, kShoreRamp = 18.0f;
+    // A beach rise (a ridge with `near` and `w`) is the sand's own swell under
+    // a piece by the road: it keeps its height to its `w` inside the waterline
+    // and is down to the plain kBeachRamp further out, where every other form
+    // has long gone flat. Without it the beach by a `shore` is the plain, the
+    // road stands most of a unit over it, and what stands there is under the kerb.
+    static constexpr float kBeachRamp = 5.0f;
     // THE SUNK SEA. Where a `shore` lets the water in under the road (its
     // `w`), the sea there lies kSeaSink under the plain, so the deck, whose
     // slab bottoms out a few cm over the plain, stands clear of it on legs
@@ -1177,6 +1183,9 @@ private:
     // the point it last sampled (the verge band lets the land stand that
     // much over the grid).
     mutable float mNearRise = 0;
+    // What the last landforms() call found of beach rises (a `near` ridge
+    // carrying a `w`): terrainY lays it under its own, tighter shore mask.
+    mutable float mBeachRise = 0, mBeachKeep = 0;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;

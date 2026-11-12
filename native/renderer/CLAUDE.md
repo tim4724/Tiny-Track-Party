@@ -749,6 +749,15 @@ to do both:
   edge. The curve is polar about the world origin, so a shore can only
   reach a stretch of road that is the outermost on its bearing; anchored
   anywhere else it lands far off.
+- **A BEACH RISE is the one form that stands on that beach**: a ridge with
+  both `near` and `w`. The road stands most of a unit over the plain, so a
+  piece on the sea side of it is under the kerb from the seat. `landforms`
+  keeps such a ridge out of the hills and `terrainField` lays it under its
+  own mask (full to `w` inside the waterline, gone `kBeachRamp` further out)
+  as a FILL: the sand comes up to it and it adds nothing where the land
+  already stands that high (the raised ground beside a hop). The piece on it
+  must level nothing, or its clearing cuts back down to the rise's foot; the
+  authoring side is in `tracks.js`'s landform header.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

@@ -873,6 +873,58 @@ def flag_on_pole(at, h, colors, wave, w=0.32, fh=0.2):
         for i, c in enumerate(colors):
             box((w, fh / n, 0.03), (x + w / 2 + 0.02, y + h - fh * (i + 0.5) / n, z), c)
 
+def on_a_rise():
+    """For a piece tracks.js stands on a beach rise: a stone buried under its
+    middle as a DRAPED part, which is what tells the renderer the piece
+    levels nothing (it would cut its clearing down to the lowest land under
+    its footprint, the rise's foot by the kerb, and stand in a hole). The
+    piece then stands on the plain plus its `y`, the rise's height. Call it
+    after join_still()."""
+    def foot():
+        with plain_parts():
+            box((0.3, 0.3, 0.3), (0.0, -0.6, 0.0), 'slate')
+    draped('foot', foot)
+
+def gabled_house(cx, cz, w, d, h, rh, wall, roof, eave=0.16):
+    """A house as one solid: walls `w` across (X) and `d` along (Z), `h` to
+    the eaves, running on under the ground; a plain gabled roof over them,
+    its ridge along Z `rh` over the eaves, two slabs that meet at the ridge
+    and oversail the walls by `eave`; the gables filled in the wall's own
+    colour up to the roof. Nothing of the wall stands through the roof."""
+    box((w, h + 0.5, d), (cx, (h - 0.5) / 2, cz), wall)
+    for sz in (-1, 1):
+        poly([(cx - w / 2, h, cz + sz * d / 2), (cx + w / 2, h, cz + sz * d / 2), (cx, h + rh, cz + sz * d / 2)],
+             [(0, 1, 2)], wall)
+    a = math.atan2(rh, w / 2)
+    run = (w / 2 + eave) / math.cos(a)
+    for sx in (-1, 1):
+        mx = cx + sx * (w / 2 + eave) / 2
+        my = h + rh - 0.5 * (w / 2 + eave) * math.tan(a) + 0.05
+        box((run, 0.1, d + 2 * eave), (mx, my, cz), roof, roll=sx * a)
+    box((0.2, 0.1, d + 2 * eave + 0.04), (cx, h + rh + 0.06, cz), roof)
+
+def crab_pot(at, yaw=0.0):
+    """A crab pot as the fishers stack them: a half barrel of netting on a
+    plank base, a hoop at each end, a third of a car long."""
+    x, y, z = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    box((0.34, 0.05, 0.5), (x, y + 0.025, z), 0x9a7b55, yaw=yaw)
+    o = cyl(0.17, 0.46, (x - 0.23 * s, y + 0.1, z - 0.23 * c), 'sky', segs=10, axis='along', yaw=yaw, stem=True)
+    o['ramp'] = 0.3
+    for d in (-0.22, 0.0, 0.22):
+        cyl(0.185, 0.035, (x + (d - 0.017) * s, y + 0.1, z + (d - 0.017) * c), 0xff7e44, segs=10, axis='along', yaw=yaw)
+
+def gravel_yard(rects):
+    """Gravel laid for vehicles on the sand: flat grey beds (the palette's
+    pale lavender read as blue paving), each (x0,
+    x1, z0, z1), a few fingers thick, overlapping at slightly different
+    levels so no two tops fight; the last may be the track to the kerb."""
+    with plain_parts():
+        for k, (x0, x1, z0, z1) in enumerate(rects):
+            o = box((x1 - x0, 0.06 + 0.012 * k, z1 - z0), ((x0 + x1) / 2, 0.02 + 0.006 * k, (z0 + z1) / 2), 'grey')
+            rowed(o, 3 + 2 * (k % 2))
+
+# ---- Tidepool ----
 # ---- Tidepool ----
 
 @piece(1.0)
@@ -959,7 +1011,10 @@ def crab_pots():
     # it stands in front of from the road), creels stacked high by the slip, a
     # net drying on two poles, and the fisher in yellow oilskins sorting the
     # catch, who turns to watch the cars go by.
-    hut(1.5, 1.0, 1.6, (-0.8, 0, 0), 0x6794d9, 0xcf534f, t=0.25)
+    gabled_house(-0.8, 0.0, 1.5, 1.7, 1.0, 0.6, 0x6794d9, 0xcf534f)
+    box((0.06, 0.74, 0.5), (-0.03, 0.37, 0.0), 0xfff6eb)                       # the door, in its white frame
+    box((0.06, 0.66, 0.4), (-0.01, 0.34, 0.0), 0x4f5260)
+    box((0.06, 0.3, 0.36), (-0.03, 0.62, -0.55), 0x8ecae6)                     # a window
     for z in (-0.45, -0.1, 0.25):
         box((0.13, 0.13, 0.07), (-0.8 + z, 0.55, 0.84), 0xff7e44)            # floats on the wall
     # The dinghy sits up on its launching trolley, as a boat kept up the beach
@@ -986,27 +1041,28 @@ def crab_pots():
     box((0.07, 1.35, 0.07), (bx, 0.75 + T, bz), 0x9a7b55)                     # the mast
     sail = [(bz - 0.75, 0.42 + T), (bz - 0.05, 1.38 + T), (bz - 0.05, 0.35 + T)]
     prism([(z, y) for z, y in sail], bx + 0.02, 0.03, 0xfff6eb)               # the sail, hung up to dry
-    for (x, y, z, yw) in ((0.45, 0, 0.95, 0.1), (0.45, 0, 1.35, -0.05), (0.75, 0, 1.15, 0.4),
-                          (0.45, 0.2, 1.15, 0.2), (0.6, 0.4, 1.15, -0.1), (0.5, 0.2, 1.4, 0.3),
-                          (0.55, 0.6, 1.2, 0.15)):
-        creel((x, y, z), yw)
+    # the crab pots, stacked three, two and one on the sand before the hut
+    for (x, y, z) in ((0.55, 0.0, 0.8), (0.55, 0.0, 1.36), (0.55, 0.0, 1.92), (0.55, 0.3, 1.08), (0.55, 0.3, 1.64),
+                      (0.55, 0.6, 1.36)):
+        crab_pot((x, y, z), 0.0)
     # a net hung over a line between two poles to dry: green, sagging with
     # the line and hanging deepest in the middle, not a board on two posts
     # (round 8: on tall drying poles, twice a person and more, the net hung
     # deep with its floats along the head rope: the landing's one tall thing,
     # which shows over the kerb where the hut and the creels do not)
-    for z in (1.9, 3.7):
+    for z in (2.6, 4.4):
         box((0.09, 2.0, 0.09), (-0.2, 1.0, z), 0x9a7b55)
-    line = sag((-0.2, 1.95, 1.93), (-0.2, 1.95, 3.67), 0.14, n=7)
+    line = sag((-0.2, 1.95, 2.63), (-0.2, 1.95, 4.37), 0.14, n=7)
     for i in range(6):
         (_, y0, z0), (_, y1, z1) = line[i], line[i + 1]
         drop = 0.95 + 0.25 * (1 - abs(i - 2.5) / 2.5)
         box((0.03, drop, z1 - z0 + 0.02), (-0.2, (y0 + y1) / 2 - drop / 2, (z0 + z1) / 2), 'green' if i % 2 else 'sky')
         beam(line[i], line[i + 1], 0.04, 0x9a7b55)
         box((0.1, 0.1, 0.1), (-0.2, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2), 0xff7e44)
-    with animated('anim_watch:r=22:d=70#fisher', (1.05, 0, 0.55)):
-        figure((1.05, 0, 0.55), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
+    with animated('anim_watch:r=22:d=70#fisher', (1.25, 0, 0.1)):
+        figure((1.25, 0, 0.1), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
     join_still('landing')
+    on_a_rise()
 
 # ---- Cove ----
 
@@ -1059,6 +1115,7 @@ def pirate_camp():
     kit_flag('flag-pirate-high', (-0.45, 0, 0.9), math.radians(90), 0.6,    # cloth to the road, it flaps
              'anim_sway:a=x:d=24:p=2.1')
     join_still('camp')
+    on_a_rise()
 
 @piece(1.0)
 def shipwreck_ribs():
@@ -1226,6 +1283,7 @@ def bonfire():
     box((0.32, 0.05, 0.22), (0.75, 0.26, 0.3), 0xfff6eb)
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
+    on_a_rise()
 
 # ---- Riptide ----
 
@@ -1726,19 +1784,21 @@ def lighthouse():
     # chimney smoking on the ridge, a lean-to store against the tower
     # end, and a low stone wall round its yard with the gate to the road
     CX, CZ = TX - 0.3, TZ + 3.6
-    hut(1.9, 1.15, 3.4, (CX, 0, CZ), white, red, t=0.45)
+    gabled_house(CX, CZ, 1.9, 3.4, 1.15, 0.75, white, red)
+    box((0.06, 0.86, 0.56), (CX + 0.97, 0.43, CZ), white)                        # the door, in its frame
+    box((0.06, 0.78, 0.46), (CX + 0.99, 0.39, CZ), 0x339cf2)
     fx = CX + 0.95
     for dz in (-1.05, 1.05):                                                       # the windows either side of the door
         box((0.08, 0.5, 0.56), (fx + 0.02, 0.68, CZ + dz), white)
         box((0.08, 0.4, 0.46), (fx + 0.05, 0.68, CZ + dz), 'slate')
-    box((0.5, 0.08, 0.9), (fx + 0.25, 1.0, CZ), red, roll=-0.25)                   # the porch
+    box((0.5, 0.08, 0.9), (fx + 0.22, 0.98, CZ), red, roll=-0.25)                  # the porch
     for dz in (-0.38, 0.38):
         box((0.07, 0.95, 0.07), (fx + 0.44, 0.47, CZ + dz), white)
-    box((0.34, 1.0, 0.34), (CX - 0.5, 1.9, CZ), 'grey')                              # the chimney, through the ridge
-    box((0.42, 0.1, 0.42), (CX - 0.5, 2.42, CZ), dark)
-    marker('anim_smoke', (CX - 0.5, 2.6, CZ))
-    box((1.3, 0.8, 0.9), (CX - 0.2, 0.4, CZ - 2.1), white)                         # the lean-to store
-    box((1.4, 0.08, 1.0), (CX - 0.2, 0.86, CZ - 2.1), red, pitch=0.18)
+    box((0.34, 1.1, 0.34), (CX, 1.75, CZ + 1.0), 'grey')                             # the chimney, on the ridge
+    box((0.42, 0.1, 0.42), (CX, 2.33, CZ + 1.0), dark)
+    marker('anim_smoke', (CX, 2.5, CZ + 1.0))
+    box((1.3, 1.1, 0.9), (CX - 0.2, 0.25, CZ - 2.1), white)                        # the lean-to store
+    box((1.5, 0.1, 1.1), (CX - 0.2, 0.86, CZ - 2.15), red, pitch=0.2)
     with plain_parts():                                                            # the yard wall, the gate's gap to the road
         WX = fx + 1.1
         for (z0, z1) in ((CZ - 2.6, CZ - 0.5), (CZ + 0.5, CZ + 2.4)):
@@ -1777,7 +1837,9 @@ def net_hut(x, z, w, d, h, door, trim):
     box((w, h + 0.6, d), (x, (h - 0.6) / 2, z), 'brown')
     for y in (h * 0.3, h * 0.62):                                         # the boards' laps
         box((w + 0.04, 0.06, d + 0.04), (x, y, z), 'tan')
-    prism([(z - d / 2 - 0.08, h), (z + d / 2 + 0.08, h), (z, h + 0.42 * d)], x, w + 0.12, 'slate')
+    prism([(z - d / 2 - 0.1, h), (z + d / 2 + 0.1, h), (z, h + 0.42 * d)], x, w + 0.16, 'grey')
+    for sgn in (-1, 1):                                                   # white barge boards on the road gable
+        beam((x + w / 2 + 0.09, h - 0.02, z + sgn * (d / 2 + 0.1)), (x + w / 2 + 0.09, h + 0.42 * d, z), 0.07, 0xfde4c7)
     box((0.06, 0.66, d * 0.5 + 0.1), (x + w / 2 + 0.01, 0.35, z), trim)
     box((0.06, 0.6, d * 0.5), (x + w / 2 + 0.03, 0.32, z), door)
     box((0.06, 0.34, d * 0.42), (x + w / 2 + 0.03, h * 0.7, z), door)
@@ -1795,10 +1857,11 @@ def net_huts():
     # cars. It stands on the land as it is and levels nothing (its gear is
     # draped), so the bank runs on up behind it. The row runs along the road
     # (+Z); +X is the road.
-    for (z, h, door, trim) in ((-3.0, 1.55, 0xcf534f, 0xfde4c7), (-1.75, 1.9, 0x6794d9, 0xfde4c7),
-                               (-0.5, 1.7, 0x61cb8b, 0xfde4c7), (0.75, 2.05, 0xffc044, 0xfde4c7),
-                               (2.0, 1.75, 0xcf534f, 0xfde4c7)):
-        net_hut(-0.7, z, 0.85, 0.95, h, door, trim)
+    # (five small ones in a row read from the road as one dark jumble: three
+    # now, tall and apart, each its own height and door colour)
+    for (z, h, door, trim) in ((-2.7, 2.3, 0xcf534f, 0xfde4c7), (-0.6, 2.9, 0x6794d9, 0xfde4c7),
+                               (1.5, 2.5, 0xffc044, 0xfde4c7)):
+        net_hut(-0.7, z, 1.15, 1.35, h, door, trim)
     # the beach boat hauled up on its skids past the row's end, bow to the
     # sea (-X), the capstan behind that winched it up; skids, keel and the
     # capstan's barrel run on under the sand
@@ -1821,21 +1884,19 @@ def net_huts():
     for k in range(2):
         box((1.3, 0.08, 0.08), (CX, 0.45, CZ), 0x9a6a46, yaw=k * math.pi / 2)
     tube([(CX - 0.28, 0.25, CZ), (BX + 1.3, 0.22, BZ - 0.1), (BX + 0.95, 0.3, BZ)], 0.03, 0xfde4c7, wire=True)
-    gull((-0.7, 2.05 + 0.42 * 0.95, 0.75), math.pi / 2, 'anim_watch:r=24#gull')
+    gull((-0.7, 2.9 + 0.42 * 1.35, -0.6), math.pi / 2, 'anim_watch:r=24#gull')
     join_still('huts')
     # nets heaped by the huts, their floats along them, fish boxes stacked by
     # a door, two crab pots: on the sand as it lies
     def gear():
         with plain_parts():
-            for (x, z, c) in ((0.2, -2.4, 0x61cb8b), (0.25, 0.1, 0x6794d9), (0.1, 1.4, 0x61cb8b)):
+            for (x, z, c) in ((0.45, -1.65, 0x61cb8b),):
                 box((0.55, 0.18, 0.7), (x, 0.09, z), c, yaw=0.3 * z)
                 box((0.4, 0.14, 0.45), (x + 0.05, 0.25, z - 0.05), c, yaw=0.3 * z + 0.4)
                 for k in range(3):
                     box((0.09, 0.09, 0.09), (x + 0.3, 0.06, z - 0.25 + k * 0.25), 0xff7e44)
-            for k, (dz, y) in enumerate(((0.0, 0.0), (0.0, 0.16), (0.36, 0.0))):
-                box((0.32, 0.15, 0.32), (0.35, y + 0.075, -1.1 + dz), 0x6794d9 if k % 2 else 0xcf534f, yaw=0.1)
-            creel((0.4, 0, 0.75), 0.4)
-            creel((0.5, 0, 2.6), -0.3)
+            for k, (dz, y) in enumerate(((0.0, 0.0), (0.56, 0.0), (0.28, 0.3))):
+                crab_pot((0.5, y, 0.25 + dz), 0.0)
     draped('gear', gear)
 
 # ---- Cove's island ----
@@ -1846,10 +1907,10 @@ def smugglers_cave():
     # jungle comes down to the start straight by the grid: an outcrop of the
     # island's own grey rock (Skull Rock's stone) standing out of the green
     # slope, grass on its top where the hill runs over it, and in its foot
-    # the way in, timbered like a mine's adit: props and a lintel standing
-    # proud of the rock, plank cheeks, the dark of the passage behind, a
-    # lantern, a plank threshold, a barrel and a chest open on its gold, the
-    # Jolly Roger on the rock's brow. (A scarp of pale sandstone was tried
+    # the way in, which goes DOWN: a stone sill, steps and handrails
+    # dropping into the dark under a roof pitched down after them, rock
+    # either side of the mouth and over it, a lantern, a barrel and a chest
+    # open on its gold, the Jolly Roger on the rock's brow. (A scarp of pale sandstone was tried
     # twice and read as a lump of dough with a black hole.) It stands on the
     # land as it is and levels nothing (its haul is draped); tracks.js lifts
     # it onto the slope the foothill's chords draw at its foot. No one keeps
@@ -1866,21 +1927,39 @@ def smugglers_cave():
                 rowed(o, 14)
             elif o['swatch'] == 'slate':
                 rowed(o, 1)
-    # the adit: its dark, its timbering standing out of the rock
+    # the way in, and down: a stone sill at the threshold, then steps going
+    # down into the hill between plank cheeks, a handrail either side
+    # dropping with them, the roof boards pitched down after them into the
+    # dark, and the island's rock standing round the opening (a flat black
+    # door in a frame said shed, not cave)
     wood, plank = 0x8a6a46, 0x9a7b55
-    X0, X1, HW, HH = -2.4, 1.2, 1.15, 2.2
-    box((X1 - X0 - 0.3, HH, 2 * HW - 0.1), ((X0 + X1) / 2 - 0.15, HH / 2 - 0.05, 0.0), 0x101014)
+    X1, HW, HH, SILL = 1.0, 1.25, 2.4, 0.45
+    for k, (x, z, s, sq, y) in enumerate(((X1 - 0.5, -(HW + 1.5), 3.8, 1.0, -0.1), (X1 - 0.4, HW + 1.4, 3.4, 1.05, -0.1),
+                                          (X1 - 2.2, 0.0, 6.0, 0.6, HH - 0.1), (X1 + 0.5, -(HW + 0.5), 1.6, 0.8, -0.05),
+                                          (X1 + 0.6, HW + 0.6, 1.4, 0.8, -0.05))):
+        stone(x, z, s, 1.57 + 0.5 * k, 80.0 + k, squat=sq, rock=rock, top='green' if k == 2 else 'grey', y=y)
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH' and o.name.startswith('stone') and o.get('row') is None:
+            if o['swatch'] == 'grey':
+                rowed(o, 14)
+            elif o['swatch'] == 'slate':
+                rowed(o, 1)
+    # the dark stands close behind the props: the hill's own ground runs
+    # through the passage further in and would show in the frame
+    box((0.2, HH + 0.4, 2 * HW - 0.1), (X1 - 0.8, HH / 2 - 0.2, 0.0), 0x101014)
+    box((2.9, 0.5, 2 * HW - 0.1), (X1 - 1.4, -0.15, 0.0), 0x101014)                       # and under the steps
+    rowed(box((0.9, SILL + 0.3, 2 * HW + 0.5), (X1 + 0.25, SILL / 2 - 0.15, 0.0), 'grey'), 8)   # the sill
+    for i in range(7):
+        box((0.36, 0.1, 2 * HW - 0.4), (X1 - 0.25 - 0.36 * i, SILL - 0.05 - 0.17 * i, 0.0), plank)
     for sz in (-1, 1):
-        box((X1 - X0, HH, 0.12), ((X0 + X1) / 2, HH / 2, sz * HW), plank)               # the cheeks
-        for x in (X1, X1 - 1.2):
-            box((0.26, HH + 0.1, 0.26), (x, HH / 2, sz * (HW + 0.06)), wood)            # the props
-    box((X1 - X0, 0.14, 2 * HW + 0.2), ((X0 + X1) / 2, HH + 0.05, 0.0), plank)           # the roof boards
-    for x in (X1, X1 - 1.2):
-        box((0.3, 0.3, 2 * HW + 0.7), (x, HH + 0.2, 0.0), wood)                           # the lintels
-    for k2 in range(4):
-        box((0.9, 0.08, 0.5), (X1 + 0.5, 0.04, -0.78 + 0.52 * k2), plank, yaw=0.06 * (k2 % 2))
-    box((0.05, 0.4, 0.05), (X1 + 0.16, HH - 0.15, HW - 0.2), 0x38383d)                   # the lantern's bracket
-    box((0.16, 0.28, 0.18), (X1 + 0.18, HH - 0.45, HW - 0.2), 0xffc044)                  # the lantern
+        box((3.0, HH + 0.6, 0.12), (X1 - 1.5, HH / 2 - 0.3, sz * HW), plank)               # the cheeks
+        box((0.28, HH + 0.2, 0.28), (X1, HH / 2, sz * (HW + 0.06)), wood)                  # the props
+        beam((X1 + 0.1, SILL + 0.95, sz * (HW - 0.22)), (X1 - 2.4, SILL - 0.2, sz * (HW - 0.22)), 0.09, wood)   # the rail
+        box((0.09, 0.95, 0.09), (X1 + 0.1, SILL + 0.47, sz * (HW - 0.22)), wood)
+    box((0.32, 0.32, 2 * HW + 0.8), (X1, HH + 0.2, 0.0), wood)                              # the lintel
+    box((3.0, 0.12, 2 * HW + 0.1), (X1 - 1.45, HH - 0.42, 0.0), plank, roll=0.3)            # the roof, pitched down inward
+    box((0.05, 0.4, 0.05), (X1 + 0.18, HH - 0.15, HW - 0.3), 0x38383d)                     # the lantern's bracket
+    box((0.16, 0.28, 0.18), (X1 + 0.2, HH - 0.45, HW - 0.3), 0xffc044)                     # the lantern
     kit_flag('flag-pirate-high', (-4.6, 4.9, 0.6), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.2')
     join_still('cave')
     # the haul at the threshold, on the land as it lies
@@ -1905,8 +1984,8 @@ def palm_clump(tag, cx, cz, palms, bushes):
     n = ord(tag[-1])
     sway = 'sway:a=%s:d=3:p=%.1f' % ('xz'[n % 2], 3.2 + 0.3 * (n % 5))
     with animated('anim_drape+%s#%s' % (sway, tag), (cx, 0.0, cz)):
-        for (dx, dz, h, lean, yw) in palms:
-            palm((cx + dx, 0, cz + dz), h=h, lean=lean, yaw=math.radians(yw), trunk='tan', sink=0.7)
+        for (dx, dz, h, lean, yw) in palms:                # close in: a palm a stride uphill of the pivot stood buried to its crown
+            palm((cx + 0.5 * dx, 0, cz + 0.5 * dz), h=h, lean=lean, yaw=math.radians(yw), trunk='tan', sink=1.1)
 
 @piece(1.0)
 def jungle_grove():
@@ -1928,7 +2007,7 @@ def jungle_grove():
     def litter():
         with plain_parts():
             for (x, z) in ((0.9, -4.6), (-0.2, 0.9), (1.2, 4.4), (-0.6, 6.2)):
-                box((0.13, 0.13, 0.13), (x, 0.065, z), 0x9a6a46, yaw=x + z)
+                box((0.13, 0.13, 0.13), (x, -0.5, z), 0x9a6a46, yaw=x + z)
     draped('litter', litter)
 
 @piece(1.0)
@@ -1943,7 +2022,7 @@ def palm_stand():
     def litter():
         with plain_parts():
             for (x, z) in ((0.8, -2.2), (-0.1, 1.9), (0.7, 4.3)):
-                box((0.13, 0.13, 0.13), (x, 0.065, z), 0x9a6a46, yaw=x + z)
+                box((0.13, 0.13, 0.13), (x, -0.5, z), 0x9a6a46, yaw=x + z)
     draped('litter', litter)
 
 @piece(1.0)
@@ -1962,7 +2041,7 @@ def palm_clumps():
     def litter():
         with plain_parts():
             for (x, z) in ((2.6, -12.0), (-2.2, -4.1), (1.8, 3.8), (2.2, 14.6)):
-                box((0.13, 0.13, 0.13), (x, 0.065, z), 0x9a6a46, yaw=x + z)
+                box((0.13, 0.13, 0.13), (x, -0.5, z), 0x9a6a46, yaw=x + z)
     draped('litter', litter)
 
 @piece(1.0)
@@ -2192,6 +2271,8 @@ def rock_poolers_park():
     bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
     bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
     kiosk(0.4, 0.0, 0.0)
+    # the car park's gravel under the vans and the bus, and its track to the kerb
+    gravel_yard(((-1.9, 0.4, -5.4, 7.9), (-2.1, 0.1, -4.9, 4.6), (-1.7, 0.7, 4.9, 7.7), (0.2, 4.6, -3.6, -1.4)))
     flag_on_pole((0.9, 0, 1.0), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
     for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
         surfboard(-0.2 + 0.03 * k, 2.95 + 0.0 * k + 0.22 * k - 0.22, 0.0, col, st, lean=0.3)
@@ -2461,6 +2542,7 @@ def surf_club():
     for k, z in enumerate((-9.0, -6.6, -4.4, 5.0, 7.2)):
         pennant((1.4, 0.0, z), 2.1, ((red, yellow), (yellow, red))[k % 2], 'club%d' % k)
     join_still('club')
+    on_a_rise()
 
 @piece(1.0)
 def surf_campers():
@@ -2490,6 +2572,10 @@ def surf_campers():
     camper(-1.9, 11.8, -1.1, 'salmon', boards=(0xfff6eb, 0x339cf2), pop=True)         # one more, past the palms
     for k, z in enumerate((11.4, 13.4)):
         pennant((0.6, 0.0, z), 2.2, ((0xff7e44, 0xfff6eb), (0x339cf2, 0xffc044))[k], 'camp%d' % k)
+    # the camp's gravel under the vans, and its track to the kerb where the
+    # camp begins (+Z: the bend closes on the other end)
+    gravel_yard(((-2.5, -0.3, -6.6, -2.4), (-2.6, -0.4, 2.4, 6.9), (-2.9, -0.9, 10.6, 12.9), (-2.2, -0.6, -2.6, 11.0),
+                 (-0.8, 3.6, 5.0, 7.0)))
     cyl(0.14, 0.12, (-0.2, 0.34, 0.1), 0x38383d, segs=8)                               # the barbecue
     with plain_parts():
         for (dx, dz) in ((-0.08, -0.08), (0.08, -0.08), (0.0, 0.1)):
@@ -2521,6 +2607,7 @@ def surf_campers():
     for i in range(4):
         beam(ham[i], ham[i + 1], 0.26, 0xfde4c7, d=0.05)
     join_still('camp')
+    on_a_rise()
 
 @piece(1.0)
 def surf_contest():
@@ -2625,6 +2712,7 @@ def beach_day():
     box((0.62, 0.1, 0.92), (0.7, 0.72, 9.6), 0xf378f0)
     umbrella((0.7, 0.7, 9.6), 0.7, 0.9, (0xf378f0, white), gores=8)
     join_still('beach')
+    on_a_rise()
 
 def moored_dinghy(x, z, yaw, hull, sail, k):
     """A sailing dinghy riding at its buoy off the beach, bow to +X turned

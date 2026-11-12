@@ -279,6 +279,17 @@ const BOXES = {
 // piece's mound withholds every other form under it, but joins a `near` one,
 // the higher of the two: run a mountainside on round a piece's slope, clear
 // of what stands on it.
+// A BEACH RISE is a ridge carrying both `near` and `w`: the sand's own swell
+// under a piece on the sea side of a beach road. Past a `shore` the beach is
+// the plain and the road stands most of a unit over it, so what stands there
+// is under the kerb from the seat; a rise keeps its height to `w` units
+// inside the waterline (every other form is flat long before) and fills the
+// sand up to it, adding nothing where raised ground already stands, low and broad
+// (a dozen units of radius: the ground's 9 u grid cannot draw less) with a
+// flat `top`, so the piece on it stands at the road's height. The piece must
+// level nothing (set_prototypes.py on_a_rise()), or its clearing cuts down to
+// the rise's foot by the kerb: it stands on the plain, and takes the rise's
+// height as its `y`.
 // `lite: false` keeps a form off the lite tier (the Android TV box), like a set
 // piece's: land behind other land that the box's frame cannot carry.
 // Ground never rises through a deck (the renderer caps it under every road),
@@ -465,7 +476,7 @@ export const TRACKS = {
       { model: 'set-reef-flats', u: 0.545, lat: 14 },
       { model: 'set-reef-outlier', u: 0.41, lat: 12.5 },
       { model: 'set-reef-stack', u: 0.927, lat: 13.5 },
-      { model: 'set-crab-pots', u: 0.64, lat: 10.2, yaw: 10 },
+      { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
       // palms on the downs' near flanks below the crests, placed by hand:
       // the `clear`s that keep seeded crates off the hilltops keep its
@@ -492,6 +503,8 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
+      // the hard the crab fishers' landing stands on, at the hop's height
+      { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
       // the sand the tide has just left, darker and cooler round the reef
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
@@ -531,11 +544,11 @@ export const TRACKS = {
       { model: 'set-jungle-grove', u: 0.56, lat: -8, yaw: 180 },
       { model: 'set-jetty', u: 0.47, lat: 9.7 },
       { model: 'set-shipwreck-ribs', u: 0.795, lat: 13, yaw: 75, y: -0.2 },
-      { model: 'set-pirate-camp', u: 0.09, lat: 11.2, yaw: -20, scale: 1.5 },
+      { model: 'set-pirate-camp', u: 0.09, lat: 10.0, yaw: -20, scale: 1.5, y: 0.9 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
       // the cave and the lookout level nothing (their gear drapes) and the
       // land's 9 u chords rise under them, so each is lifted onto them
-      { model: 'set-smugglers-cave', u: 0.975, lat: -9.6, yaw: 165, y: 0.5 },
+      { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.9 },
       { model: 'set-jungle-grove', u: 0.915, lat: -12, yaw: 180 },
       { model: 'set-pirate-lookout', u: 0.205, lat: 14, y: 2.6 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
@@ -583,7 +596,7 @@ export const TRACKS = {
       { kind: 'shore', u: 0.795, lat: 10.5, len: 24, r: 18 },
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
-      { kind: 'ridge', u: 0.09, lat: 14.5, len: 8, r: 9, h: 1.5, top: 0.55, near: 0.6 },
+      { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
       // the foothill's face before the cave, green to the kerb (a facet of
       // it lay bare sand on the hillside)
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
@@ -614,8 +627,8 @@ export const TRACKS = {
       { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
       { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
       { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
-      { model: 'set-bonfire', u: 0.46, lat: -9.6, yaw: 160 },
-      { model: 'set-driftwood-forts', u: 0.432, lat: -10.3 },
+      { model: 'set-bonfire', u: 0.468, lat: -10.2, yaw: 160, y: 0.87 },
+      { model: 'set-driftwood-forts', u: 0.438, lat: -11.0, y: 0.86 },
       // storm fence and marram along the dune pass, a length each side
       { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
       { model: 'set-dune-fence-b', u: 0.69, lat: -9.6, yaw: 180 },
@@ -627,19 +640,19 @@ export const TRACKS = {
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
-      { kind: 'ridge', u: 0.53, lat: 23, yaw: 25, len: 14, r: 19, h: 5.2, top: 0.2 },
-      { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 5.2, top: 0.2 },
-      { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 4.8, top: 0.2 },
-      { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 4.5, top: 0.2 },
+      { kind: 'ridge', u: 0.53, lat: 23, yaw: 25, len: 14, r: 19, h: 4.0, top: 0.5 },
+      { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 4.0, top: 0.5 },
+      { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 3.8, top: 0.5 },
+      { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 3.6, top: 0.5 },
       { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0xa8d090 },
       // the great dune in the middle of the loop, over the rest
-      { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 9, top: 0.25 },
+      { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 5.5, top: 0.6 },
       // dunes inside the start straight and the east side
-      { kind: 'ridge', u: 0.95, lat: 22, yaw: 20, len: 16, r: 16, h: 5.5, top: 0.2 },
-      { kind: 'ridge', u: 0.03, lat: 23, yaw: -25, len: 14, r: 16, h: 6, top: 0.2 },
-      { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 5, top: 0.2 },
+      { kind: 'ridge', u: 0.95, lat: 22, yaw: 20, len: 16, r: 16, h: 3.0, top: 0.5 },
+      { kind: 'ridge', u: 0.03, lat: 23, yaw: -25, len: 14, r: 16, h: 2.5, top: 0.5 },
+      { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 2.0, top: 0.5 },
       // a low grassy line of dunes inland of the strand line, the sea side
       // left open
       // kept low: ridge heights add, so taller ones here stacked with the
@@ -653,6 +666,9 @@ export const TRACKS = {
       // where the inland faces were bare sand
       { kind: 'paint', u: 0.61, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
       { kind: 'paint', u: 0.73, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
+      // the fort's and the fire's rise on the strand, at the road's height
+      // (a beach rise)
+      { kind: 'ridge', u: 0.452, lat: -16, len: 16, r: 12, h: 0.85, top: 0.55, near: 0.4, w: 2 },
       // nothing seeded on the dunes' faces
       { kind: 'clear', u: 0.56, lat: 14, len: 40, r: 9.5 },
       { kind: 'clear', u: 0.67, lat: 14, len: 40, r: 9.5 },
@@ -699,10 +715,10 @@ export const TRACKS = {
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
-      { model: 'set-surf-club', u: 0.09, lat: -11, yaw: 180 },
-      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180 },
+      { model: 'set-surf-club', u: 0.09, lat: -11, yaw: 180, y: 0.8 },
+      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180, y: 0.8 },
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
-      { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180 },
+      { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180, y: 0.85 },
       { model: 'set-lagoon-fleet', u: 0.555, lat: -27, yaw: 180 },
       { model: 'set-kite-surfers', u: 0.545, lat: -13.5, yaw: 180 },
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
@@ -727,6 +743,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.0, lat: -12, len: 50, r: 6, w: 4, tint: 0x5f9f5f },
       { kind: 'ridge', u: 0.85, lat: 35, r: 18, h: 9, top: 0.2, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.84, lat: 12, len: 40, r: 9, h: 4.5, top: 0.2, near: 0.5, tint: 0xa8d090 },
+      // the surf club's rise by the hop and the camp's by the hook, each at
+      // the road's height (a beach rise)
+      { kind: 'ridge', u: 0.09, lat: -18, len: 10, r: 13, h: 0.8, top: 0.55, near: 0.4, w: 6 },
+      { kind: 'ridge', u: 0.715, lat: -17, len: 22, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
+      { kind: 'ridge', u: 0.905, lat: -17, len: 14, r: 13, h: 0.88, top: 0.55, near: 0.4, w: 6 },
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
       { kind: 'clear', u: 0.85, lat: 35, r: 18 },

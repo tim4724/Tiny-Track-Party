@@ -489,6 +489,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
     if (dell) *dell = 0;
     if (bed) *bed = 0;
     mNearRise = 0;
+    mBeachRise = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -520,7 +521,20 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
     hill *= inland;
     if (dell) *dell *= inland * shore;
     const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell, bed);
-    float y = tb.groundY + land * shore * smooth01(border / kRampR) - bedSink(x, z);
+    // A beach rise keeps its own, tighter distance from the water (its `w`,
+    // which landforms() folded into mBeachRise as the smallest among them).
+    float beach = 0;
+    if (mBeachRise > 0 && !mShoreR.empty()) {
+        float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
+        if (f < 0) f += kShoreSpokes;
+        const int k = std::min(kShoreSpokes - 1, (int) f);
+        const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * (f - k);
+        // It fills the sand UP TO its height and adds nothing where the land
+        // already stands there (the raised ground under a hop beside it).
+        beach = std::max(0.0f, mBeachRise * smooth01((R - mBeachKeep - std::sqrt(x * x + z * z)) / kBeachRamp) - land * shore);
+        mNearRise += beach;   // the verge band draws it at its own resolution, as it does a `near` form
+    }
+    float y = tb.groundY + (land * shore + beach) * smooth01(border / kRampR) - bedSink(x, z);
     if (withFlats) {
         // Cut only: a clearing lowers what stands above its level and leaves
         // a dip alone, so nothing is ever filled up under a piece.
@@ -606,6 +620,11 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
         // A form authored `near` keeps its height to that close past the
         // kerb (the verge band draws it there); the rest clear the corridor.
         const float rise = h * profile(t, s.top) * (s.near > 0 ? smooth01((edge - s.near) / kNearRamp) : clear);
+        if (s.kind == 0 && s.near > 0 && s.w > 0) {   // a beach rise: terrainY's own mask, not the shore's
+            mBeachRise += rise;
+            mBeachKeep = mBeachRise > rise ? std::min(mBeachKeep, s.w) : s.w;
+            continue;
+        }
         hill += rise;
         if (s.near > 0) near += rise;
         if (dell) *dell *= 1.0f - profile(t, 0);
