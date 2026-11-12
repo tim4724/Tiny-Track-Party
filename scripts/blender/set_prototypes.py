@@ -625,6 +625,8 @@ def fir(at, k, tiers, snow, slim=1.0):
     """`tiers` as (radius, height) from the foot up, each a third of a unit
     over the last; `snow(i)` where the snow starts up tier i (0 the skirt, 1
     none); `slim` narrows it."""
+    if FIR_STYLE in FIR_PROTOS and not FIR_LITE:      # a prototype on trial (see FIR_STYLE)
+        return FIR_PROTOS[FIR_STYLE](at, k, snow(0), slim)
     x, y, z = at
     box((0.24 * k, 0.45 * k, 0.24 * k), (x, y + 0.22 * k, z), 0x7a5a3a)
     n = (7, 4, 5)[int(FIR_LITE)]
@@ -646,6 +648,94 @@ def fir(at, k, tiers, snow, slim=1.0):
         if F < 0.95:
             snowy(bough_tier(1.09 * r * (1 - F) * k, (1 - F) * h * k + 0.02 * k, (x, y0 + F * h * k, z), 0xf3f7fb,
                              n=n, turn=turn, droop=0.05 * k, cap=False), 0.45)
+
+# ---- SNOW FIR PROTOTYPES (round 9, for the user to choose from) ----------------
+# Four other firs beside the shipped one, built only when TTP_FIR_STYLE names
+# one (A, B, C or D): then EVERY snow fir this module builds (the stands'
+# pine/spruce/dark_pine and the scatter's tree-snow-a/b/c) comes out in that
+# style, so a whole forest can be baked and judged from the seat:
+#   TTP_FIR_STYLE=A node scripts/gen-set-prototypes.mjs avalanche-forest-a ... tree-snow-a tree-snow-b tree-snow-c
+# Unset, nothing here runs and the shipped fir (fir() below) is untouched. To
+# adopt one: make its body fir()'s (it takes fir()'s `snow(0)` as how much
+# snow the tree carries, 0.3 laden to 0.55 shaken, and `slim`), then delete
+# the rest of this block. scratch stills: r9/snow2/firs/.
+FIR_STYLE = os.environ.get('TTP_FIR_STYLE', '')
+
+def fir_proto_a(at, k, snowf, slim):
+    """A, the laden spruce: tall and narrow, seven tiers of long boughs that
+    HANG (their tips well under their roots), deep green in the shade under
+    them, the snow lying heavy on each as a hanging star of its own."""
+    x, y, z = at
+    box((0.2 * k, 0.5 * k, 0.2 * k), (x, y + 0.25 * k, z), 0x7a5a3a)
+    seed = math.floor(x * 7.0 + z * 13.0)
+    N = 7
+    for i in range(N):
+        f = i / (N - 1)
+        r = (0.62 - 0.46 * f) * slim * k
+        y0 = y + (0.55 + 1.75 * f) * k
+        turn = seed * 0.9 + i * 0.63
+        rowed(bough_tier(r, 0.5 * k, (x, y0, z), 0x61cb8b, n=6, inner=0.5, turn=turn, droop=0.24 * k), 24 - 2 * i)
+        if snowf < 0.5 or i >= N - 2:
+            snowy(bough_tier(r * 0.86, 0.36 * k, (x, y0 + 0.12 * k, z), 0xf3f7fb, n=6, inner=0.42, turn=turn,
+                             droop=0.2 * k, cap=False), 0.45)
+
+def fir_proto_b(at, k, snowf, slim):
+    """B, cones under snow caps: four smooth round cones, each a size
+    smaller, mid green; on each a cap of snow that sits ON it like icing, its
+    edge in five soft lobes hanging over the skirt, and a white tip."""
+    x, y, z = at
+    box((0.26 * k, 0.45 * k, 0.26 * k), (x, y + 0.22 * k, z), 0x7a5a3a)
+    seed = math.floor(x * 7.0 + z * 13.0)
+    for i, (r, h) in enumerate(((0.8, 0.8), (0.64, 0.72), (0.48, 0.66), (0.32, 0.62))):
+        r *= slim
+        y0 = y + (0.4 + i * 0.46) * k
+        rowed(cyl(r * k, h * k, (x, y0, z), 0x61cb8b, r2=0.04 * k, segs=12, stem=True), 14)
+        F = snowf + 0.12 - 0.08 * i
+        snowy(bough_tier(1.3 * r * (1 - F) * k, (1 - F) * h * k + 0.1 * k, (x, y0 + F * h * k, z), 0xf3f7fb,
+                         n=5, inner=0.88, turn=seed * 0.7 + i * 0.9, droop=0.12 * k), 0.45)
+
+def fir_proto_c(at, k, snowf, slim):
+    """C, the slim alpine fir: a spire. A tall bare trunk, then a narrow
+    column of nine short tiers barely stepping in, dark blue-green, snow only
+    dusted along the upper tiers' edges and a white leader at the top."""
+    x, y, z = at
+    box((0.16 * k, 0.9 * k, 0.16 * k), (x, y + 0.45 * k, z), 0x7a5a3a)
+    seed = math.floor(x * 7.0 + z * 13.0)
+    N = 9
+    for i in range(N):
+        f = i / (N - 1)
+        r = (0.4 - 0.3 * f) * slim * k
+        y0 = y + (0.8 + 1.75 * f) * k
+        turn = seed * 0.9 + i * 0.5
+        rowed(bough_tier(r, 0.42 * k, (x, y0, z), 0x61cb8b, n=5, inner=0.7, turn=turn, droop=0.06 * k), 27 - i)
+        if snowf < 0.5 or i % 2 == 1 or i >= N - 2:
+            F = min(0.7, snowf - 0.05)
+            snowy(bough_tier(1.2 * r * (1 - F), (1 - F) * 0.42 * k + 0.04 * k, (x, y0 + F * 0.42 * k, z), 0xf3f7fb, n=5,
+                             inner=0.7, turn=turn, droop=0.03 * k), 0.45)
+    snowy(box((0.07 * k, 0.3 * k, 0.07 * k), (x, y + 3.05 * k, z), 0xf3f7fb), 0.45)
+
+def fir_proto_d(at, k, snowf, slim):
+    """D, the round toy fir: three fat, soft tiers (domes, not cones), a
+    bright toy green, a thick pillow of snow on each and a round white top:
+    a tree out of a toy box."""
+    x, y, z = at
+    box((0.34 * k, 0.5 * k, 0.34 * k), (x, y + 0.25 * k, z), 0x7a5a3a)
+    for i, (r, h) in enumerate(((0.82, 0.62), (0.62, 0.56), (0.42, 0.52))):
+        r *= slim
+        y0 = y + (0.62 + i * 0.56) * k
+        rowed(sphere(r * k, (x, y0, z), 0x61cb8b, subdiv=2, scale=(1.0, h / r, 1.0), flat=False), 9)
+        if snowf < 0.5 or i == 2:
+            snowy(sphere(r * 0.92 * k, (x, y0 + h * 0.55 * k, z), 0xf3f7fb, subdiv=2, scale=(1.0, 0.6 * h / r, 1.0),
+                         flat=False), 0.45)
+
+FIR_PROTOS = {'A': fir_proto_a, 'B': fir_proto_b, 'C': fir_proto_c, 'D': fir_proto_d}
+
+def fir_trio():
+    # the prototypes' close still: three firs of mixed size, in whichever style is on
+    pine((0.0, 0.0, -2.3), 1.7)
+    spruce((0.6, 0.0, 0.1), 2.2)
+    dark_pine((-0.4, 0.0, 2.2), 1.2)
+    join_still('trio')
 
 FIR_TIERS = ((0.78, 0.56), (0.66, 0.52), (0.53, 0.48), (0.4, 0.44), (0.26, 0.46))
 
@@ -3741,6 +3831,10 @@ def scatter_fir(kind, lite=False):
         FIR_LITE = False
         join_still('tree-snow-' + kind)
     return build
+
+if os.environ.get('TTP_FIR_TRIO'):     # the prototypes' close still, never shipped
+    PIECES['fir-trio'] = fir_trio
+    GROW['fir-trio'] = 1.0
 
 for _kind in 'abc':
     for _lite in (False, True):
