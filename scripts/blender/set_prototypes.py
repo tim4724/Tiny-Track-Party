@@ -3289,23 +3289,39 @@ def pylon(at, h, yaw, ground=0.0):
 
 GAUGE = 0.55   # half the lift's gauge: the haul rope either side of the towers
 
-def chair(at, yaw, color=0x3f7bd9, riders=()):
+def powder_lift_tower(at, h, yaw, ground=0.0):
+    """Powder's ski-mountain lift tower standing on `ground`, its crossarm at
+    `h` across the line (along its turned +Z): a stout red column, broader at
+    the foot, a white band under the arm, the grey crossarm with the sheave
+    trains at the gauge, a footing sunk under the slope."""
+    x, _, z = at
+    mid = ground + (h - ground) * 0.55
+    box((0.8, mid - ground + 0.6, 0.8), (x, (mid + ground - 0.6) / 2, z), 0xcf534f, yaw=yaw)
+    box((0.6, h - mid, 0.6), (x, (h + mid) / 2 - 0.15, z), 0xcf534f, yaw=yaw)
+    box((0.64, 0.34, 0.64), (x, h - 0.5, z), 0xfff6eb, yaw=yaw)
+    box((0.32, 0.3, 2.0), (x, h + 0.12, z), 0x555b66, yaw=yaw + math.pi / 2)
+    for sd in (-1, 1):
+        gx, gz = turned(x, z, yaw, sd * GAUGE, 0)
+        box((0.22, 0.2, 0.9), (gx, h, gz), 0x2a2735, yaw=yaw)
+    box((1.0, 0.7, 1.0), (x, ground - 0.25, z), 0x868ba1, yaw=yaw)
+
+def chair(at, yaw, color=0x3f7bd9, riders=(), k=1.0):
     """A two-seat chair hanging under the cable at `at`, facing down the line,
-    half a unit across; `riders` are the coats of whoever sits in it. Returns
-    its parts."""
+    half a unit across (`k` sizes it); `riders` are the coats of whoever sits
+    in it. Returns its parts."""
     x, y, z = at
     # the hanger runs up past the rope to its grip: the rope is a smooth curve
     # through the towers, so between them it sits a little off the line
-    parts = [box((0.06, 0.72, 0.06), (x, y - 0.06, z), 0x2a2735, yaw=yaw)]
+    parts = [box((0.06 * k, 0.72 * k, 0.06 * k), (x, y - 0.06 * k, z), 0x2a2735, yaw=yaw)]
     for (lx, ly, lz, size, c) in ((0, -0.45, 0.04, (0.52, 0.06, 0.2), color),
                                   (0, -0.35, -0.07, (0.52, 0.2, 0.06), color)):
-        px, pz = turned(x, z, yaw, lx, lz)
-        parts.append(box(size, (px, y + ly, pz), c, yaw=yaw))
+        px, pz = turned(x, z, yaw, lx * k, lz * k)
+        parts.append(box(tuple(e * k for e in size), (px, y + ly * k, pz), c, yaw=yaw))
     for i, coat in enumerate(riders):
         lx = (-0.13, 0.13)[i]
-        px, pz = turned(x, z, yaw, lx, -0.01)
-        parts.append(box((0.13, 0.16, 0.12), (px, y - 0.34, pz), coat, yaw=yaw))
-        parts.append(box((0.09, 0.09, 0.09), (px, y - 0.21, pz), 0xf2bf99, yaw=yaw))
+        px, pz = turned(x, z, yaw, lx * k, -0.01 * k)
+        parts.append(box((0.13 * k, 0.16 * k, 0.12 * k), (px, y - 0.34 * k, pz), coat, yaw=yaw))
+        parts.append(box((0.09 * k, 0.09 * k, 0.09 * k), (px, y - 0.21 * k, pz), 0xf2bf99, yaw=yaw))
     return parts
 
 def station(x, z, y, ground, yaw, roof=0xff5040):
@@ -3346,11 +3362,13 @@ def ski_lift():
     # Powder: a ski mountain standing along the road, its summit behind (-X)
     # and its long flank toward the road, so the lap drives past the whole of
     # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
-    # what stands on it, every part at its real size: a chairlift's towers
-    # (four units at most) march up that flank on the diagonal from a valley
-    # station by the road to the top station on the summit, the chairs (half
-    # a unit across, skiers sat in most going up) riding up one side and down
-    # the other round the haul rope's loop (anim_path); skiers run down the
+    # what stands on it: a chairlift's four towers, stout red columns with a
+    # broad crossarm, march up that flank on the diagonal from a valley
+    # station by the road to the top station on the summit, the chairs (a
+    # little over real size, skiers sat in most going up) riding up one side
+    # and down the other round the haul rope's loop (anim_path), the rope a
+    # bar thick enough to read (seven thin towers and a hairline cable read as
+    # a dotted line up the hill from the road); skiers run down the
     # slalom on the other diagonal to the finish banner on the flat, where
     # they ski into the timing hut (their way back up is out of sight, under
     # the snow, to the top hut); a groomer crawls up and down the piste. A
@@ -3363,10 +3381,21 @@ def ski_lift():
     L = math.hypot(dx, dz)
     yaw = math.atan2(dx, dz)
     nx, nz = dz / L, -dx / L                          # across the line
-    CAB = 3.0                                         # the cable over the snow at a tower
+    CAB, CLEAR = 3.2, 1.7                             # the cable over the snow at a tower, and anywhere
     y0, y1 = 1.1, H(*T) + 1.1                         # and at the wheels, where the chairs are boarded
-    fr = [k / 8 for k in range(1, 8)]
-    line = [(0.0, y0)] + [(f, H(V[0] + dx * f, V[1] + dz * f) + CAB) for f in fr] + [(1.0, y1)]
+    fr = [0.2, 0.4, 0.6, 0.8]
+    line = [[0.0, y0]] + [[f, H(V[0] + dx * f, V[1] + dz * f) + CAB] for f in fr] + [[1.0, y1]]
+    # four towers leave long spans over a convex flank: lift a span's towers
+    # until the straight rope between them clears the snow everywhere
+    for _ in range(6):
+        for i in range(len(line) - 1):
+            (fa, ya), (fb, yb) = line[i], line[i + 1]
+            short = max(H(V[0] + dx * f, V[1] + dz * f) + CLEAR - (ya + (yb - ya) * (f - fa) / (fb - fa))
+                        for f in (fa + (fb - fa) * j / 20 for j in range(1, 20)))
+            if short > 0:
+                for j in (i, i + 1):
+                    if 0 < j < len(line) - 1:
+                        line[j][1] += short
     def cy(f):
         for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
             if fa <= f <= fb:
@@ -3374,13 +3403,14 @@ def ski_lift():
         return line[-1][1]
     for f in fr:
         x, z = V[0] + dx * f, V[1] + dz * f
-        pylon((x, 0, z), cy(f), yaw, ground=H(x, z))
+        powder_lift_tower((x, 0, z), cy(f), yaw, ground=H(x, z))
     # the rope in straight spans from sheave to sheave, a bar a span (a
-    # third of the vertices a swept tube fine enough to lie on them costs)
+    # third of the vertices a swept tube fine enough to lie on them costs),
+    # thick enough to read from the road
     for s in (-GAUGE, GAUGE):
         for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
             strut((V[0] + dx * fa + nx * s, ya, V[1] + dz * fa + nz * s),
-                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), 0.07, 0x2a2735)
+                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), 0.15, 0x2a2735)
     # the haul rope's loop: up one side, round the top wheel, down the other;
     # the renderer carries the chairs round it (anim_path), facing their way
     up = [(V[0] + dx * f + nx * GAUGE, y, V[1] + dz * f + nz * GAUGE) for f, y in line]
@@ -3388,12 +3418,12 @@ def ski_lift():
     for k, pt in enumerate(up + down):
         marker('path_lift_%d' % k, pt)
     COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
-    for k in range(8):
-        f = (k + 1) / 9                                # clear of the wheels, where the rope curls
+    for k in range(10):
+        f = (k + 1) / 11                               # clear of the wheels, where the rope curls
         at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
-        with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 8, k), at):
-            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders)   # faces +X, the way it rides
+        with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 10, k), at):
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, k=1.5)   # faces +X, the way it rides
     # valley station on the flat by the road, its hut behind it, skis racked,
     # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw)
@@ -4945,69 +4975,37 @@ def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='o
 
 @piece(1.0)
 def snowman_field():
-    # Powder: where the resort's children have been at it all week. A field
-    # of snowmen by the road, a crowd of two dozen facing it, no two alike:
-    # a giant in the middle with a bucket on its head and a broom, families
-    # in rows from the tall one down to the smallest, some with their arms
-    # up, one with its head rolled off beside it, a pair leaning together, a
-    # snow dog and a snow cat, one only begun (the big ball, the next beside
-    # it, the shovel stood in the snow), and what the builders left: a sled,
-    # a bucket of coal, a heap of spare snowballs. The little ones stand at
-    # the front by the road, the tall ones behind, so a car going by sees
-    # every row. Built on y = 0 and laid on the snow as drawn (draped).
-    R, B, G, Y, P, O, D, W = 0xff5040, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44, 0x2a2735, 0xfff6eb
+    # Powder: a family of snowmen the resort's children built on the verge
+    # of the east bend, stood in a row facing the road: the father in his top
+    # hat with a broom, the mother in a bobble hat, two children with their
+    # arms up, a snow dog at their feet, a sled and a heap of spare snowballs
+    # left by them. Each a unit or more tall, so it reads from the chase cam
+    # at speed: a field of thirty half-unit snowmen read as specks. Built on
+    # y = 0 and laid on the snow as drawn (draped).
+    R, B, G, P, O, D = 0xff5040, 0x3f7bd9, 0x61cb8b, 0xa878e8, 0xff7e44, 0x2a2735
     def build():
         F = (  # x (to the road), z, height, yaw, hat, hat colour, scarf, arms, balls, lean, broom
-            (-2.6, 0.2, 2.1, 0.05, 'bucket', 0x868ba1, R, 'out', 3, 0.0, True),      # the giant
-            (-3.4, -3.4, 1.35, 0.3, 'top', D, B, 'up', 3, 0.0, False),
-            (-3.2, 3.6, 1.45, -0.25, 'bobble', R, G, 'out', 3, 0.0, False),
-            (-4.6, 1.9, 1.2, -0.1, 'cone', P, Y, 'down', 3, 0.0, False),
-            (-4.8, -1.4, 1.25, 0.15, 'top', D, O, 'out', 3, 0.05, False),
-            (-1.0, -2.3, 1.1, 0.2, 'bobble', B, Y, 'up', 3, 0.0, False),             # a family, tall to small
-            (-0.5, -3.3, 0.9, 0.3, 'bobble', G, R, 'out', 3, 0.0, False),
-            (0.1, -4.2, 0.68, 0.4, 'bobble', Y, B, 'out', 2, 0.0, False),
-            (0.6, -4.9, 0.5, 0.5, None, D, P, 'none', 2, 0.0, False),
-            (-0.9, 2.6, 1.05, -0.2, 'top', D, P, 'out', 3, 0.0, True),
-            (-0.2, 3.8, 0.95, -0.35, 'cone', O, B, 'up', 3, 0.0, False),
-            (0.9, 1.5, 0.75, -0.05, 'bucket', R, G, 'out', 2, 0.0, False),
-            (1.3, -0.4, 0.62, 0.1, 'bobble', P, O, 'up', 2, 0.0, False),
-            (0.3, 0.3, 0.85, 0.0, None, D, R, 'down', 3, -0.06, False),              # a pair leaning together
-            (0.3, -0.55, 0.9, 0.0, 'cone', G, Y, 'down', 3, 0.06, False),
-            (1.9, 3.0, 0.55, -0.4, 'top', D, R, 'out', 2, 0.0, False),
-            (2.2, -2.6, 0.58, 0.45, 'bucket', B, Y, 'out', 2, 0.0, False),
-            (-5.9, -3.6, 1.1, 0.35, 'bobble', O, P, 'out', 3, 0.0, False),
-            (-6.1, 0.4, 1.3, 0.0, 'top', D, G, 'up', 3, 0.0, False),
-            (-5.7, 4.4, 1.0, -0.4, None, D, B, 'out', 3, 0.0, False),
-            (-2.0, 5.6, 0.8, -0.5, 'bucket', 0x868ba1, O, 'down', 3, 0.0, False),
-            (-2.2, -5.8, 0.85, 0.55, 'cone', R, G, 'out', 3, 0.0, False),
+            (-0.3, -1.9, 1.5, 0.12, 'top', D, R, 'out', 3, 0.0, True),         # the father
+            (0.0, 0.0, 1.3, 0.0, 'bobble', P, G, 'out', 3, 0.0, False),        # the mother
+            (0.55, 1.6, 0.92, -0.15, 'bucket', B, 0xffc044, 'up', 3, 0.0, False),
+            (0.75, 2.85, 0.74, -0.3, 'cone', O, B, 'up', 2, 0.04, False),
         )
         for (fx, fz, h, yw, hat, hc, sc, arms, balls, lean, broom) in F:
             snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom)
-        # the one that lost its head: the body standing, the head in the snow
-        snow_ball(0.36, (2.8, 0.26, 0.9))
-        snow_ball(0.26, (2.8, 0.78, 0.9))
-        snow_ball(0.19, (3.35, 0.12, 1.45))
-        cyl(0.06, 0.14, (3.5, 0.14, 1.5), 0xff7e44, r2=0.02, segs=6, axis='across', yaw=-0.6, stem=True)
-        # the snow dog and the snow cat
-        for (ax_, az_, c_) in ((3.2, -1.2, R), (1.6, 4.6, Y)):
-            snow_ball(0.2, (ax_, 0.15, az_))
-            snow_ball(0.2, (ax_ - 0.3, 0.15, az_))
-            snow_ball(0.15, (ax_ + 0.22, 0.36, az_))
-            for sd in (-1, 1):
-                snowy(box((0.07, 0.12, 0.07), (ax_ + 0.22, 0.52, az_ + sd * 0.08), 0xf3f7fb), 0.5)
-            box((0.1, 0.06, 0.06), (ax_ + 0.38, 0.35, az_), 0x2a2735)
-            box((0.26, 0.06, 0.28), (ax_ + 0.12, 0.27, az_), c_)
-            snowy(box((0.3, 0.07, 0.07), (ax_ - 0.55, 0.2, az_), 0xf3f7fb, roll=-0.5), 0.5)
-        # the one only begun, and what the builders left
-        snow_ball(0.42, (3.4, 0.3, -3.9))
-        snow_ball(0.3, (4.2, 0.2, -3.2))
-        box((0.06, 0.8, 0.06), (3.9, 0.4, -4.6), 0x8a6a46)
-        box((0.24, 0.26, 0.06), (3.9, 0.12, -4.6), 0x868ba1)
-        sled(4.0, 0, 3.6, 0.5, R, L=0.7)
-        cyl(0.14, 0.2, (3.3, 0.0, 4.2), 0x868ba1, r2=0.17, segs=8, stem=True)
-        box((0.2, 0.05, 0.2), (3.3, 0.2, 4.2), 0x2a2735)
-        for i in range(5):
-            snow_ball(0.12, (4.4 + 0.2 * (i % 3), 0.08 + 0.17 * (i // 3), -1.0 + 0.2 * (i % 2)))
+        # the snow dog at the father's feet, a red collar on
+        ax_, az_, k = 1.0, -3.3, 1.8
+        snow_ball(0.2 * k, (ax_, 0.15 * k, az_))
+        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_))
+        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_))
+        for sd in (-1, 1):
+            snowy(box((0.07 * k, 0.12 * k, 0.07 * k), (ax_ + 0.22 * k, 0.52 * k, az_ + sd * 0.08 * k), 0xf3f7fb), 0.5)
+        box((0.1 * k, 0.06 * k, 0.06 * k), (ax_ + 0.38 * k, 0.35 * k, az_), D)
+        box((0.26 * k, 0.06 * k, 0.28 * k), (ax_ + 0.12 * k, 0.27 * k, az_), R)
+        snowy(box((0.3 * k, 0.07 * k, 0.07 * k), (ax_ - 0.55 * k, 0.2 * k, az_), 0xf3f7fb, roll=-0.5), 0.5)
+        # what the children left: the sled, the spare snowballs
+        sled(1.4, 0, 3.9, 0.4, R, L=0.9)
+        for i in range(6):
+            snow_ball(0.17, (1.7 + 0.3 * (i % 3), 0.12 + 0.24 * (i // 3), -0.4 + 0.28 * (i % 2)))
     draped('field', build)
 
 def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):

@@ -362,9 +362,6 @@ export const SET_GROUND = {
   // carpet's head to its foot), its foot reaching under the school's hut and
   // arch so the whole school stands up on it over the kerb of the road beside it.
   'set-ski-school': [{ kind: 'mound', x: -19.5, h: 9, r: 25.5, r1: 11, rz: 16, shape: 1.3 }],
-  // Powder's snowman field: a low rise behind the crowd (-X), its face to the
-  // road, so the rows stand one over another above the kerb, as the rookery's do.
-  'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Cloverleaf's bandstand on the crown of its own knoll: a broad round top
   // the floor lies flush in, steeper to the road (+X, clear of the raised
@@ -787,9 +784,9 @@ export const TRACKS = {
       { model: 'set-powder-forest-f', u: 0.6284, lat: -15.4 },
       { model: 'set-powder-forest-g', u: 0.4238, lat: -19.86 },
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
-      // the snowman field, inside the bend the run from the ski school comes
-      // up to: dead ahead on the way in, beside the kerb at road height
-      { model: 'set-snowman-field', u: 0.66, lat: -8.6, yaw: 180 }
+      // the snowman family on the outside verge of the east bend, at road
+      // height, ahead of a car coming over the hump off the start straight
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -817,8 +814,8 @@ export const TRACKS = {
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
       { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 },
-      // nor between the road and the snowman field
-      { kind: 'clear', u: 0.66, lat: -4, len: 18, r: 3 }
+      // nor between the road and the snowman family
+      { kind: 'clear', u: 0.15, lat: -4.5, len: 10, r: 2 }
     ]
   },
   flurry: {
