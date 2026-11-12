@@ -1671,8 +1671,8 @@ export const TRACKS = {
       // the company's tank train over the east straight on its viaduct,
       // between two knolls of the strata it tunnels into
       { model: 'set-tank-train', u: 0.462, lat: 0, yaw: 90 },
-      // a dust devil wandering the flats inside the south loop
-      { model: 'set-dust-devil', u: 0.21, lat: -15 },
+      // a dust devil wandering the flats inside the north loop
+      { model: 'set-dust-devil', u: 0.7, lat: -12 },
       // the trunk line on its stilts, span by span along the right-hand
       // verge, each span a chord of the road's curve with a support at every
       // joint: from the tank farm round the north loop, swinging out behind

@@ -12543,7 +12543,7 @@ def tank_train():
 
 @piece(1.0)
 def dust_devil():
-    # Sidewinder: a dust devil wandering the flats inside the south loop,
+    # Sidewinder: a dust devil wandering the flats inside the north loop,
     # coming to within a few units of the kerb on its round: a whirl of
     # dust some four cars tall, three bands of it winding up and out from a
     # skirt kicked up off the sand, grit and a tumbleweed caught in it, the
@@ -12553,7 +12553,7 @@ def dust_devil():
     loop = []
     for i in range(N):
         a = 2 * math.pi * i / N
-        loop.append((7.5 * math.cos(a) + 1.2 * math.sin(3 * a + 0.5), 0.0, 10.0 * math.sin(a) + 1.5 * math.sin(2 * a + 1.0)))
+        loop.append((3.0 + 4.0 * math.cos(a) + 1.0 * math.sin(3 * a + 0.5), 0.0, 9.0 * math.sin(a) + 1.5 * math.sin(2 * a + 1.0)))
     for i, p in enumerate(loop):
         marker('path_drapedevil_%d' % i, p)
     span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))

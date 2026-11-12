@@ -142626,7 +142626,7 @@ inline const Model kModels[] = {
     { 7646114008908607603ull, 47u, k_set_dry_creek },  // set-dry-creek.glb
     { 6521752175965849829ull, 1u, k_set_dune_fence_a },  // set-dune-fence-a.glb
     { 9180834600824157423ull, 1u, k_set_dune_fence_b },  // set-dune-fence-b.glb
-    { 2819023953141222045ull, 1u, k_set_dust_devil },  // set-dust-devil.glb
+    { 12631594134271776897ull, 1u, k_set_dust_devil },  // set-dust-devil.glb
     { 5705663496623647955ull, 2u, k_set_expedition_camp },  // set-expedition-camp.glb
     { 11634805211794531775ull, 2u, k_set_field_wheat },  // set-field-wheat.glb
     { 4911768711838929945ull, 3u, k_set_filling_station },  // set-filling-station.glb
