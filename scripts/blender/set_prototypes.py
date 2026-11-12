@@ -2094,28 +2094,33 @@ def reef_outcrop(x_in, z, gap, h, squat, seed, skirt=True):
     s = h / (0.62 * squat)
     x = x_in - gap - 0.6 * s
     yaw = math.pi / 2 + 0.3 * jitter(seed, 1, 8.0)
-    stone(x, z, s, yaw, seed, squat=squat, rock=('grey', WET), top='grey', y=-0.1)
+    stone(x, z, s, yaw, seed, squat=squat, rock=('grey', WET), top=REEF_TOP, y=-0.1)
     stone(x - 0.5 * s, z + 0.5 * s * jitter(seed, 2, 8.0), 0.72 * s, yaw + 0.9, seed + 0.31,
-          squat=0.6 * squat, rock=('grey', WET), top='grey', y=-0.2)
+          squat=0.6 * squat, rock=('grey', WET), top=REEF_TOP, y=-0.2)
     # a buttress either way along the road: a ridge of rock, not a cone
     for sgn in (-1, 1):
         stone(x + 0.12 * s * jitter(seed, 4 + sgn, 8.0), z + sgn * (0.5 + 0.1 * jitter(seed, 6 + sgn, 8.0)) * s, 0.56 * s,
               yaw + 0.7 * sgn, seed + 0.13 * sgn, squat=squat * (0.85 + 0.3 * jitter(seed, 8 + sgn, 8.0)),
-              rock=('grey', WET), top='grey', y=-0.15)
+              rock=('grey', WET), top=REEF_TOP, y=-0.15)
     if skirt:
         stone(x - 0.95 * s, z + 0.6 * s * jitter(seed, 3, 8.0), 0.8 * s, yaw + 1.7, seed + 0.67,
               squat=0.2, rock=(WET, 'dark'), top=WEED if int(seed) % 2 else WET, y=-0.25)
     return x
 
+REEF_TOP = 'lavender'   # what faces the sky on the reef: its own swatch, so reef_tone() can set it apart
+
 def reef_tone():
-    """The reef's rock at one mid-dark value whatever its height (rowed()):
-    slate between a third and a half, sunlit to turned. Down the full ramp a
-    tall knuckle's top came out as pale as the road and the wet ledges at
-    its foot near black, and rock by water wants neither."""
+    """The reef's rock in three mid-dark values whatever its height
+    (rowed()): what faces the sky, what the sun strikes, what is turned from
+    it, slate from a half down to a third. Down the full ramp a tall
+    knuckle's top came out as pale as the road and the wet ledges at its
+    foot near black, and rock by water wants neither."""
     for o in bpy.context.scene.objects:
-        if o.type != 'MESH' or not o.name.startswith(('stone', 'rib')) or o.get('row') is not None:
+        if o.type != 'MESH' or not o.name.startswith('stone') or o.get('row') is not None:
             continue
-        if o['swatch'] == 'grey':
+        if o['swatch'] == REEF_TOP:
+            rowed(o, 29)
+        elif o['swatch'] == 'grey':
             rowed(o, 17)
         elif o['swatch'] == 'slate':
             rowed(o, 1)
@@ -2131,7 +2136,7 @@ def reef_stretch(name, x_in, outcrops, loose, seed):
     for k, (z, gap, h, squat) in enumerate(outcrops):
         reef_outcrop(x_in, z, gap, h, squat, seed + 3.0 * k)
     for k, (x, z, s) in enumerate(loose):
-        stone(x, z, s, 1.3 * k + seed, seed + 40.0 + k, squat=0.55, rock=('grey', WET), top='grey', y=-0.08)
+        stone(x, z, s, 1.3 * k + seed, seed + 40.0 + k, squat=0.55, rock=('grey', WET), top=REEF_TOP, y=-0.08)
     reef_tone()
     join_still(name)
     def litter():
@@ -2159,10 +2164,10 @@ def reef_seals():
     # now and then; the reef rising behind it and running on either side.
     S = 7.4
     hx = REEF_IN - 0.3 - 0.6 * S
-    stone(hx, 0.0, S, math.pi / 2, 71.0, squat=0.32, rock=('grey', WET), top='grey', y=0.2)
+    stone(hx, 0.0, S, math.pi / 2, 71.0, squat=0.32, rock=('grey', WET), top=REEF_TOP, y=0.2)
     for k, (dx, dz, yw) in enumerate(((1.4, -1.5, 0.5), (0.9, 0.5, -0.3), (1.3, 1.8, 0.9), (-0.6, -0.9, 2.4),
                                       (-0.2, 1.9, 1.4))):
-        hauled_seal(hx + dx, 1.45 - 0.5 * math.hypot(dx / 2.2, dz / 2.8), dz, yw, 30 + k)   # on the hump's back
+        hauled_seal(hx + dx, 1.6 - 0.5 * math.hypot(dx / 2.2, dz / 2.8), dz, yw, 30 + k)   # on the hump's back
     reef_stretch('reef', REEF_IN, ((-6.2, 2.6, 2.3, 0.66), (6.3, 2.0, 1.7, 0.6)),
                  ((4.4, -4.6, 1.1), (4.2, 4.8, 1.2)), 73.0)
 
@@ -2214,54 +2219,35 @@ def reef_outlier():
 
 @piece(1.0)
 def reef_stack():
-    # Tidepool: the reef's end past the west bend's hop: one tall stack on
-    # the sand, a broken shoulder beside it.
-    reef_stretch('reef', REEF_IN, ((-3.4, 1.4, 1.5, 0.56), (2.6, 0.6, 3.3, 0.9)),
-                 ((4.5, -0.6, 1.0), (4.2, 6.0, 1.3)), 141.0)
-
-def reef_rib(a, b, h, seed):
-    """A rib of the reef's bedding standing out of the sand from (x, z) `a`
-    to `b`: its scarp, short and steep, to the cars coming (-Z), its back
-    dipping long and gentle the other way; the crest wanders and sinks under
-    the sand at both ends."""
-    L = math.hypot(b[0] - a[0], b[1] - a[1])
-    tx, tz = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-    nx, nz = (tz, -tx) if -tx > 0 else (-tz, tx)        # across the rib, toward +Z
-    n = max(4, int(L / 1.5 + 0.5))
-    rows = []
-    for i in range(n + 1):
-        t = i / n
-        e = smooth01(min(t, 1 - t) / 0.3)
-        hc = e * h * (0.9 + 0.22 * wobble(t * L, seed, 7.0)) - (1 - e) * 0.4
-        w = max(hc, 0.2)
-        x, z = a[0] + tx * L * t, a[1] + tz * L * t
-        off = 0.3 * wobble(t * L, seed + 2, 7.0)
-        row = [(-0.6 * w - 0.3 + off, -0.4), (-0.18 * w + off, 0.72 * hc), (0.25 * w + off, hc),
-               (1.5 * w + 0.4 + off, 0.55 * hc), (3.0 * w + 1.0 + off, -0.4)]
-        rows.append([(x + nx * d, y, z + nz * d) for d, y in row])
-    def color(i, j, nrm):
-        if nrm[1] > 0.8:
-            return 'grey'
-        return 'grey' if nrm[0] * SUN[0] + nrm[1] * SUN[1] + nrm[2] * SUN[2] > 0.25 else WET
-    sheet(rows, color, 'rib', facet=lambda i, j: True)
+    # Tidepool: the reef's end past the west bend's hop: a last back of
+    # rock on the sand, lower shoulders either side (one tall stack alone
+    # read as a boulder dropped on the beach).
+    reef_stretch('reef', REEF_IN, ((-4.6, 1.6, 1.3, 0.5), (0.6, 0.7, 2.4, 0.66), (5.4, 1.4, 1.6, 0.56)),
+                 ((4.5, -2.2, 1.0), (4.3, 3.0, 0.8), (3.8, 7.6, 1.2)), 141.0)
 
 @piece(1.0)
-def reef_ribs():
+def reef_flats():
     # Tidepool: the reef under the beach, along the top run where the sand
-    # is wide: its bedding breaks the surface in long parallel ribs running
-    # down the beach from the kerb toward the sea, each a scarp to the cars
-    # coming and a long back behind, pools of the tide's water caught in the
-    # troughs between them. DRAPED, so the ribs stand out of the sand as it
-    # lies there. +X is the road.
-    def ribs():
-        for k, (z, h, reach) in enumerate(((-12.0, 1.1, 9.0), (-7.0, 1.6, 11.0), (-1.6, 1.2, 8.0), (3.6, 1.8, 10.0),
-                                           (8.0, 1.0, 6.0))):
-            reef_rib((4.6, z), (4.6 - reach, z + 0.45 * reach), h, 120.0 + k)
-        for (x, z, r) in ((1.0, -8.6, 1.0), (-0.6, -2.8, 1.2), (0.6, 2.2, 0.9), (-1.6, 6.6, 1.1)):
+    # is wide: its low backs break the surface in a scatter of rounded
+    # ledges from the kerb down the beach, none over a car and a half high,
+    # pools of the tide's water caught between them, starfish on the sand.
+    # (Long ribs of bedding were tried first and read as dark slabs laid on
+    # the beach.) DRAPED whole, so the ledges stand out of the sand as it
+    # lies, a hand under the deck's level here. +X is the road.
+    def flats():
+        for k, (x, z, s, sq) in enumerate(((2.6, -11.0, 3.6, 0.6), (-0.6, -9.0, 5.0, 0.3), (3.0, -6.2, 2.6, 0.5),
+                                           (0.8, -3.6, 4.4, 0.36), (-3.4, -5.4, 4.0, 0.26), (2.8, 0.4, 3.4, 0.66),
+                                           (-1.6, 1.6, 5.4, 0.3), (2.2, 4.6, 2.8, 0.4), (0.0, 7.4, 4.6, 0.34),
+                                           (-4.4, 5.6, 3.6, 0.24), (3.0, 9.6, 3.0, 0.44), (-2.2, 11.0, 4.0, 0.28))):
+            stone(x, z, s, 1.1 * k, 150.0 + k, squat=sq, rock=('grey', WET), top=REEF_TOP, y=-0.05)
+        reef_tone()
+        for (x, z, r) in ((-2.6, -1.8, 1.1), (0.4, 3.0, 0.8), (-2.8, 8.4, 1.0), (1.2, -7.6, 0.7)):
             disc(r + 0.3, (x, 0.02, z), 'sky', segs=8, h=0.04)['ramp'] = 0.25
             disc(r, (x, 0.04, z), 'blue', segs=8, h=0.04)['ramp'] = 0.25
-        reef_tone()
-    draped('ribs', ribs)
+        with plain_parts():
+            for k, (x, z) in enumerate(((4.4, -8.6), (4.0, -1.6), (4.6, 2.6), (4.2, 7.0), (1.6, 10.2))):
+                box((0.34, 0.08, 0.34), (x, 0.04, z), (0xe4784f, 0xf2c14e)[k % 2], yaw=0.8 * k)
+    draped('flats', flats)
 
 # ---- Riptide: the surf club, the camp, the contest, the fleet ----
 
