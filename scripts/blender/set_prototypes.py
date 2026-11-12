@@ -1087,16 +1087,19 @@ def jetty():
 # ---- Driftwood ----
 
 class bleached:
-    """Wood built inside is driftwood the sea and the sun bleached silver: the
-    light end of its swatch's ramp (shade()). On the full ramp a log lying
-    that low darkens to slate and reads as a steel pipe."""
+    """Wood built inside is driftwood the sea and the sun bleached: warm,
+    never grey (the palette's silver is lavender, and a beach of it read
+    grey from the seat). Its body is the tan swatch down most of its ramp,
+    honey in the sun at a limb's end and ochre at the wet foot (further down
+    it turned terracotta); pale limbs are cream, and anything else keeps the
+    light end of its ramp."""
     def __enter__(self):
         self.before = set(bpy.context.scene.objects)
         return self
     def __exit__(self, *exc):
         for o in bpy.context.scene.objects:
             if o not in self.before and o.get('swatch'):
-                o['ramp'] = 0.35
+                o['ramp'] = {'tan': 0.9, 'cream': 0.7}.get(o['swatch'], 0.35)
         return False
 
 @piece(1.0)
@@ -1118,7 +1121,7 @@ def bonfire():
             0.035, 0x8a6a46, segs=5)
     with bleached():
         for z in (-0.75, 0.75):                          # bleached driftwood, like the strand line's
-            rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'lavender', segs=7)
+            rod((-0.4, 0.09, z), (0.45, 0.09, z * 1.05), 0.09, 'tan', segs=7)
     figure((0.0, 0.17, -0.75), math.pi / 2, shirt=0xcf534f, legs=0x38383d, pose='sit')
     figure((0.15, 0.17, 0.75), -math.pi / 2, shirt=0x6794d9, legs=0xf2bf99, hair=0xffc044, pose='sit')
     figure((-0.62, 0, 0.1), 0.0, shirt=0x61cb8b, legs=0x38383d, pose='crouch')
@@ -1130,11 +1133,11 @@ def bonfire():
     R, B, H = 1.35, 1.1, 1.7                             # the ridge's height, how far back the poles reach, half its length
     with bleached():
         for z in (-H + 0.1, H - 0.1):                    # the uprights and ridge grey: white, they framed a goal
-            rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'lavender', segs=5)
-        rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'lavender', segs=5)
+            rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'tan', segs=5)
+        rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'tan', segs=5)
         for i in range(11):
             z = -H + 0.1 + i * (2 * H - 0.2) / 10
-            rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'lavender' if i % 2 else 'white', segs=5)
+            rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'tan' if i % 2 else 'cream', segs=5)
     # an old sail over the poles: without it the frame reads as a swing
     box((math.hypot(R, B) - 0.05, 0.03, 2 * H), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 'cream',
         roll=math.atan2(R, B))
@@ -1147,12 +1150,23 @@ def bonfire():
             a = i / 8 * 2 * math.pi + 0.2
             rod((tx + math.cos(a) * 0.5, 0.0, tz + math.sin(a) * 0.5),
                 (tx - math.cos(a) * 0.06, TH + 0.08 * (i % 3), tz - math.sin(a) * 0.06), 0.05,
-                'lavender' if i % 2 else 'white', r2=0.03, segs=5)
+                'tan' if i % 2 else 'cream', r2=0.03, segs=5)
     # two of the strand's dead trees over the camp, which is what a racer
     # sees of it from up the road
     with bleached():
         drift_snag(-2.6, -2.4, 3.2, 0.2, 2.6, 11.0)
-        drift_snag(-1.9, 4.6, 2.4, 0.3, 0.9, 12.0, limbs=3)
+        drift_snag(-1.9, 4.6, 2.4, 0.3, 0.9, 12.0, limbs=3, catch=1)
+    hang_catch()
+    # the party's own colour: a striped windbreak across the camp's open
+    # end, towels on the seats, a cool box
+    for i in range(6):
+        box((0.4, 0.75, 0.04), (-0.95 + 0.4 * i, 0.5, -2.0), (0xff5040, 0xfff6eb)[i % 2])
+    for i in range(4):
+        box((0.06, 1.0, 0.06), (-1.15 + 0.8 * i, 0.5, -2.0), 0x9a6a46)
+    box((0.34, 0.03, 0.2), (0.3, 0.19, -0.75), 0xffc044)
+    box((0.3, 0.03, 0.2), (-0.25, 0.19, 0.78), 0x339cf2)
+    box((0.3, 0.24, 0.2), (0.75, 0.12, 0.3), 0x339cf2)
+    box((0.32, 0.05, 0.22), (0.75, 0.26, 0.3), 0xfff6eb)
     marker('anim_smoke', (0.0, 0.5, 0.0))
     join_still('fire')
 
@@ -2541,24 +2555,58 @@ def kite_surfers():
 
 # ---- Driftwood: the strand the storm left ----
 
-def drift_snag(x, z, h, lean, yaw, seed, limbs=4):
+CATCH = []   # nets waiting to be hung, built once the bleached block has closed (hang_catch())
+
+def hang_catch():
+    for a, b, k0 in CATCH:
+        net_tangle(a, b, 0.7, k0=k0)
+    CATCH.clear()
+
+FLOATS = (0xff7e44, 0xff5040, 0x339cf2, 0xffc044, 0x22c46e)   # what a fishing float is painted
+
+def flotsam(points, r=0.3, k0=0):
+    """Fishing floats the storm threw up, one at each (x, y, z) (its foot):
+    chunky blocks in the fleet's colours, turned every way."""
+    for k, (x, y, z) in enumerate(points):
+        box((r, r, r), (x, y + r / 2, z), FLOATS[(k + k0) % len(FLOATS)], yaw=0.7 * k + k0)
+
+def net_tangle(a, b, drop, floats=3, k0=0):
+    """A lost net caught between glTF points a and b and hanging `drop`
+    below them: green mesh in a slab, its head rope's floats along the top."""
+    L = math.hypot(b[0] - a[0], b[2] - a[2])
+    yaw = math.atan2(b[0] - a[0], b[2] - a[2])
+    # in three hanks of uneven depth, sea green at the light end of its ramp
+    # (one deep slab, down the ramp, hung there as a black board)
+    for j, (f0, f1, d) in enumerate(((0.0, 0.38, 0.75), (0.34, 0.7, 1.0), (0.66, 1.0, 0.55))):
+        px = [a[i] + (b[i] - a[i]) * (f0 + f1) / 2 for i in range(3)]
+        o = box((0.05, drop * d, L * (f1 - f0)), (px[0], px[1] - drop * d / 2, px[2]), 'green', yaw=yaw)
+        o['ramp'] = 0.25 + 0.5 * ((j + k0) % 2)
+    for k in range(floats):
+        f = (k + 0.5) / floats
+        box((0.28, 0.28, 0.28), (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f + 0.02, a[2] + (b[2] - a[2]) * f),
+            FLOATS[(k + k0) % len(FLOATS)], yaw=yaw)
+
+def drift_snag(x, z, h, lean, yaw, seed, limbs=4, catch=None):
     """A tree the sea killed, still standing where the storm left it: the
-    trunk leaning, its bare limbs up, bleached silver (build inside
-    bleached()). Its foot runs on under the sand."""
+    trunk leaning, its bare limbs up, bleached (build inside bleached()).
+    Its foot runs on under the sand. `catch` hangs a lost net with its
+    floats from its lowest limb (the number picks the floats' colours)."""
     dx, dz = math.cos(yaw), math.sin(yaw)
     r0 = 0.07 * h + 0.07
     def trunk(t):
         return (x + dx * lean * h * t * t, h * t, z + dz * lean * h * t * t)
     pts = [(x, -0.4, z), trunk(0.4), trunk(0.75), trunk(1.0)]
     for i in range(3):
-        rod(pts[i], pts[i + 1], r0 * (1 - 0.27 * i), 'lavender', r2=r0 * (1 - 0.27 * (i + 1)), segs=6)
+        rod(pts[i], pts[i + 1], r0 * (1 - 0.27 * i), 'tan', r2=r0 * (1 - 0.27 * (i + 1)), segs=6)
     for k in range(limbs):
         t = 0.42 + 0.5 * k / limbs
         bx, by, bz = trunk(t)
         a = yaw + 2.4 * k + seed
         reach = h * (0.36 - 0.05 * k)
-        rod((bx, by, bz), (bx + math.cos(a) * reach * 0.8, by + reach * 0.7, bz + math.sin(a) * reach * 0.8),
-            r0 * 0.36, 'white' if k % 2 else 'lavender', r2=0.035, segs=5)
+        tip = (bx + math.cos(a) * reach * 0.8, by + reach * 0.7, bz + math.sin(a) * reach * 0.8)
+        rod((bx, by, bz), tip, r0 * 0.36, 'cream' if k % 2 else 'tan', r2=0.035, segs=5)
+        if k == 0 and catch is not None:
+            CATCH.append(((bx, by, bz), tuple(p + (q - p) * 0.75 for p, q in zip((bx, by, bz), tip)), catch))
 
 def root_plate(at, r, face=1):
     """A thrown tree's root plate reared up on edge at `at` (its foot), `r`
@@ -2587,15 +2635,19 @@ def driftwood_trunk():
     with bleached():
         spine = [(0.0, 1.05, -L / 2 + 0.3), (0.1, 0.8, -L / 4), (0.0, 0.52, 0), (-0.12, 0.34, L / 4), (0.05, 0.2, L / 2)]
         for i, rr in enumerate((0.42, 0.36, 0.3, 0.23)):
-            rod(spine[i], spine[i + 1], rr, 'lavender', r2=rr - 0.05, segs=7)
+            rod(spine[i], spine[i + 1], rr, 'tan', r2=rr - 0.05, segs=7)
         root_plate((0.0, 0.0, -L / 2), 1.2)
         for (z, y, tip) in ((-1.6, 0.7, (0.9, 2.3, -1.0)), (0.6, 0.5, (-0.8, 2.0, 1.1)), (2.4, 0.36, (0.6, 1.5, 3.0))):
-            rod((0.0, y, z), tip, 0.13, 'white', r2=0.05, segs=6)
-        rod((1.2, 0.12, -1.0), (1.9, 0.11, 1.4), 0.13, 'lavender', r2=0.09)
-        rod((-1.0, 0.1, 1.5), (-1.6, 0.09, 3.2), 0.1, 'white', r2=0.07)
-        rod((0.9, 0.16, -3.6), (-1.1, 0.5, -2.4), 0.15, 'white', r2=0.1)               # one thrown across the trunk's foot
+            rod((0.0, y, z), tip, 0.13, 'cream', r2=0.05, segs=6)
+        rod((1.2, 0.12, -1.0), (1.9, 0.11, 1.4), 0.13, 'tan', r2=0.09)
+        rod((-1.0, 0.1, 1.5), (-1.6, 0.09, 3.2), 0.1, 'cream', r2=0.07)
+        rod((0.9, 0.16, -3.6), (-1.1, 0.5, -2.4), 0.15, 'cream', r2=0.1)               # one thrown across the trunk's foot
         drift_snag(-1.6, -3.2, 3.6, 0.2, 2.2, 1.0)
-    figure((0.0, 0.84, -0.6), 0.0, shirt=0x6794d9, legs=0xf2bf99, pose='sit')
+    net_tangle((0.0, 0.95, 0.4), (0.0, 0.72, 2.6), 0.5, floats=4)                      # a net the sea left over it
+    flotsam(((0.9, 0.0, -3.9), (1.3, 0.0, -3.2), (-0.9, 0.0, -4.0), (0.7, 0.0, 3.4)), r=0.44, k0=1)
+    box((0.5, 0.36, 0.4), (-0.8, 0.18, -1.2), 0x339cf2, yaw=0.5)                       # a fish box
+    box((0.52, 0.06, 0.42), (-0.8, 0.39, -1.2), 0xfff6eb, yaw=0.5)
+    figure((0.0, 0.84, -0.6), 0.0, shirt=0xff5040, legs=0xf2bf99, pose='sit')
     gull((0.0, 2.28, -L / 2), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     join_still('trunk')
 
@@ -2608,7 +2660,7 @@ def strand_line():
     # trees the sea killed where they stood, their bare limbs up over the
     # kerb: the low line alone lay hidden behind the road. It runs along Z,
     # two piles to the piece, their root plates at its two ends.
-    wood, pale, dark = 'lavender', 'white', 'grey'
+    wood, pale, dark = 'tan', 'cream', 'brown'
     def pile(m, phase):
         """One pile, `m` = -1 mirrors it along Z (its root plate to +Z)."""
         def x_at(z):
@@ -2631,7 +2683,18 @@ def strand_line():
             box((0.5, 0.04, 0.24), at(x_at(z) - 0.5, 0.02, z), 0x2f8f5b, yaw=-m * 0.6 * math.sin(z * 1.3))
         for z in (-3.0, 2.0):
             box((0.4, 0.04, 0.2), at(x_at(z) + 0.55, 0.02, z), 0x7a5a3a, yaw=-m * 0.8 * math.cos(z))
-        box((0.13, 0.13, 0.13), at(x_at(-0.2) + 0.6, 0.065, -0.2), 0xff7e44)
+        # what the storm brought with the wood: floats heaped on the pile
+        # and in the wrack, a net over the piled logs, and by one pile a
+        # hull plank still in its paint, by the other a skiff stove in
+        flotsam((at(x_at(0.0) + 0.1, 1.1, 0.0), at(x_at(0.6) + 0.3, 1.05, 0.5), at(x_at(-0.2) + 0.75, 0.0, -0.2),
+                 at(x_at(2.6) + 0.6, 0.0, 2.6), at(x_at(-3.2) - 0.7, 0.0, -3.2)), r=0.44, k0=0 if m > 0 else 2)
+        net_tangle(at(x_at(-1.4) + 0.4, 0.82, -1.4), at(x_at(1.0), 0.72, 1.0), 0.45, floats=3, k0=3 if m > 0 else 1)
+        if m > 0:
+            box((0.1, 1.5, 0.5), at(x_at(3.4) + 0.2, 0.62, 3.4), 0x339cf2, roll=0.5)
+            box((0.11, 0.3, 0.52), at(x_at(3.4) + 0.42, 0.95, 3.4), 0xfff6eb, roll=0.5)
+        else:
+            sx, _, sz = at(x_at(3.6) + 0.9, 0.0, 3.6)
+            boat((sx, 0.1, sz), 0.7, 0xff5040, trim=0xfff6eb, L=1.7)
         box((0.12, 0.04, 0.75), at(x_at(3.2) + 0.7, 0.02, 3.2), 0x9a6a46, yaw=-m * 0.5)
         box((0.24, 0.2, 0.3), at(x_at(-3.8) - 0.6, 0.1, -3.8), 0xb06041, yaw=-m * 0.4)
     with moved(0.0, -4.9):
@@ -2640,9 +2703,10 @@ def strand_line():
         pile(-1, 1.3)
     with bleached():
         drift_snag(1.3, -8.4, 3.0, 0.25, 0.4, 3.0)
-        drift_snag(-1.4, -1.2, 3.8, 0.15, 2.6, 4.0, limbs=5)
+        drift_snag(-1.4, -1.2, 3.8, 0.15, 2.6, 4.0, limbs=5, catch=0)
         drift_snag(1.1, 3.4, 2.6, 0.32, 5.2, 5.0, limbs=3)
-        drift_snag(-0.9, 8.8, 3.3, 0.2, 1.4, 6.0)
+        drift_snag(-0.9, 8.8, 3.3, 0.2, 1.4, 6.0, catch=2)
+    hang_catch()
     join_still('strand')
 
 @piece(1.0)
@@ -2655,10 +2719,12 @@ def strand_snags():
         for k, (x, z, h, lean, yw, limbs) in enumerate(((0.8, -7.0, 2.6, 0.3, 0.3, 3), (-0.9, -4.2, 3.4, 0.12, 2.2, 4),
                                                         (0.4, -0.6, 4.4, 0.1, 4.0, 5), (-1.6, 1.6, 2.9, 0.26, 1.2, 4),
                                                         (0.9, 4.4, 3.6, 0.18, 5.4, 4), (-0.6, 7.6, 2.4, 0.34, 3.0, 3))):
-            drift_snag(x, z, h, lean, yw, 20.0 + k, limbs=limbs)
-        rod((1.6, 0.2, -3.4), (-1.8, 0.24, -1.6), 0.22, 'lavender', r2=0.15, segs=7)
-        rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'white', r2=0.1, segs=7)
+            drift_snag(x, z, h, lean, yw, 20.0 + k, limbs=limbs, catch=(None, None, 3, None, 0, None)[k])
+        rod((1.6, 0.2, -3.4), (-1.8, 0.24, -1.6), 0.22, 'tan', r2=0.15, segs=7)
+        rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'cream', r2=0.1, segs=7)
         root_plate((1.5, 0.0, 1.9), 0.8)
+    hang_catch()
+    flotsam(((1.8, 0.0, -2.6), (1.2, 0.0, -1.9), (1.9, 0.0, 3.6), (0.2, 0.0, 5.8), (-0.6, 0.3, -2.3)), r=0.44, k0=2)
     gull((0.4 + math.cos(4.0) * 0.44, 4.38, -0.6 + math.sin(4.0) * 0.44), 1.0, 'anim_watch:r=26#snag')   # on its top
     join_still('snags')
 
@@ -2681,23 +2747,28 @@ def dune_fence(name, seed, half, breaks):
                 lean = 0.25 * wobble(z, seed + 2, 4.0)
                 post = i % 5 == 0
                 box((0.07, 0.72 if post else 0.56, 0.12 if post else 0.2), (x, (0.36 if post else 0.28) - sunk, z),
-                    'grey' if post else ('lavender', 'white')[i % 2], roll=lean)
+                    'brown' if post else ('tan', 'cream')[i % 2], roll=lean)
                 if i % 5 == 0 and i + 5 <= n and not any(abs((i + 2.5) / n - b) < 0.07 for b in breaks):
                     z1 = z + 5 * 2 * half / n
                     x1 = 0.9 * wobble(z1, seed, 9.0)
                     for y in (0.2, 0.42):
                         beam((x + 0.05, y - sunk, z), (x1 + 0.05, y - 0.3 * max(0.0, wobble(z1, seed + 1, 6.0)), z1),
-                             0.05, 'grey')
+                             0.05, 'tan')
         with plain_parts():
-            for k in range(int(half * 1.6)):
+            for k in range(int(half * 3.2)):
                 z = -half + 2 * half * frac(k * 0.618 + 0.11 * seed)
                 x = 0.9 * wobble(z, seed, 9.0) + (0.5 + 0.9 * frac(k * 0.37)) * (-1 if k % 2 else 1)
                 for j in range(6):              # a tussock: thin blades fanned out of one foot
                     a = 1.05 * j + k
                     hgt = 0.45 + 0.3 * frac(k * 0.29 + j * 0.4)
                     o = beam((x + 0.06 * math.cos(a), -0.05, z + 0.06 * math.sin(a)),
-                             (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.07, 'green' if (k + j) % 3 else 'cream')
+                             (x + 0.34 * math.cos(a), 1.1 * hgt, z + 0.34 * math.sin(a)), 0.08, 'green')
                     o['ramp'] = 0.2
+                if k % 3 == 0:                  # flowers at the tussock's foot: sea pink, yellow
+                    for j in range(3):
+                        fx, fz = x + 0.45 * math.cos(2.0 * j + k), z + 0.45 * math.sin(2.0 * j + k)
+                        box((0.04, 0.26, 0.04), (fx, 0.1, fz), 'green')
+                        box((0.16, 0.12, 0.16), (fx, 0.27, fz), 'pink' if k % 2 else 'yellow')
     draped(name, build)
 
 @piece(1.0)
@@ -2748,33 +2819,40 @@ def strand_groynes():
     # the sea comes nearest the road: two rows of timber posts running from
     # the verge down into the surf, the far one broken through by the last
     # storm, the storm's logs heaped against their weather side and thrown
-    # over them, a beacon post at each one's seaward end (red topped, a gull
-    # on the nearer) and a dead tree standing between them. They start at
+    # over them, a beacon post at each one's seaward end (one red, one
+    # green, a gull on the nearer), a lost net and its floats wrapped on the
+    # near posts, and a dead tree standing between them. They start at
     # the kerb and point at the sea, so a racer reads them the whole way
     # past. +X is the road; the sea is -X.
     with bleached():
         groyne(-5.5, 2.2, -10.5, 2.0, 1.25, 1.0)
         groyne(5.5, 2.4, -9.0, 1.8, 1.2, 2.0, gaps=(5, 6, 10))
-    for (z, x, h) in ((-5.5, -11.4, 3.3), (5.5, -9.9, 2.9)):                         # the beacon posts
+    for (z, x, h, col) in ((-5.5, -11.4, 3.3, 0xff5040), (5.5, -9.9, 2.9, 0x22c46e)):   # the beacon posts, port and starboard
         box((0.3, h + 0.5, 0.3), (x, (h - 0.5) / 2, z), 0xfff6eb)
-        box((0.6, 0.5, 0.6), (x, h + 0.2, z), 0xff5040)
+        box((0.32, 0.6, 0.32), (x, h * 0.55, z), col)
+        box((0.7, 0.6, 0.7), (x, h + 0.25, z), col)
         box((0.5, 0.12, 0.5), (x, h - 0.2, z), 0xfff6eb)
+    net_tangle((1.25, 1.75, -5.3), (-1.6, 1.6, -5.3), 0.8, floats=4, k0=1)              # a net wrapped on the near posts
+    flotsam(((1.9, 0.0, -4.6), (0.6, 0.0, -4.4), (-3.0, 0.0, 6.4), (1.4, 0.0, 6.6), (-0.4, 0.0, 4.6)), r=0.44)
+    box((0.1, 1.3, 0.46), (2.2, 0.55, 4.9), 0xffc044, roll=0.45)                         # a painted plank against the far one
+    box((0.11, 0.26, 0.48), (2.38, 0.85, 4.9), 0x339cf2, roll=0.45)
     gull((-11.4, 3.78, -5.5), 2.0, 'anim_watch:r=26#beacon')
     with bleached():
         # the storm's logs: heaped against the near groyne's weather side...
         for k, (x0, x1, y0, y1, dz, r) in enumerate(((1.6, -3.4, 0.25, 0.22, -0.75, 0.25), (0.4, -5.2, 0.2, 0.2, -1.35, 0.2),
                                                      (1.0, -2.6, 0.66, 0.6, -0.95, 0.2), (-2.2, -6.6, 0.24, 0.2, -0.7, 0.22),
                                                      (-1.0, -4.4, 0.84, 0.8, -0.62, 0.16))):
-            rod((x0, y0, -5.5 + dz), (x1, y1, -5.5 + dz - 0.3 * jitter(k, 1, 9.0)), r, ('lavender', 'white')[k % 2],
+            rod((x0, y0, -5.5 + dz), (x1, y1, -5.5 + dz - 0.3 * jitter(k, 1, 9.0)), r, ('tan', 'cream')[k % 2],
                 r2=r * 0.75, segs=7)
-        rod((-0.6, 0.1, -7.6), (-2.4, 2.25, -5.3), 0.2, 'lavender', r2=0.13, segs=7)     # one thrown up over it
+        rod((-0.6, 0.1, -7.6), (-2.4, 2.25, -5.3), 0.2, 'tan', r2=0.13, segs=7)     # one thrown up over it
         # ...and through the far one's breach
-        rod((-2.0, 0.2, 3.4), (-4.4, 0.24, 7.6), 0.26, 'lavender', r2=0.2, segs=7)
-        rod((-3.6, 0.5, 4.4), (-1.2, 0.2, 7.0), 0.18, 'white', r2=0.12, segs=7)
-        rod((0.8, 0.16, 4.2), (1.8, 0.14, 1.0), 0.16, 'white', r2=0.1, segs=7)
+        rod((-2.0, 0.2, 3.4), (-4.4, 0.24, 7.6), 0.26, 'tan', r2=0.2, segs=7)
+        rod((-3.6, 0.5, 4.4), (-1.2, 0.2, 7.0), 0.18, 'cream', r2=0.12, segs=7)
+        rod((0.8, 0.16, 4.2), (1.8, 0.14, 1.0), 0.16, 'cream', r2=0.1, segs=7)
         root_plate((-4.6, 0.0, 7.9), 0.9, face=-1)
-        drift_snag(0.2, 0.2, 3.9, 0.18, 3.6, 7.0, limbs=5)
+        drift_snag(0.2, 0.2, 3.9, 0.18, 3.6, 7.0, limbs=5, catch=4)
         drift_snag(-4.4, -1.4, 2.7, 0.3, 1.0, 8.0, limbs=3)
+    hang_catch()
     join_still('groynes')
 
 @piece(1.0)
@@ -2816,7 +2894,18 @@ def driftwood_forts():
         poly([(-1.4, 3.52, -0.4), (-2.0, 3.36, -0.4), (-1.4, 3.16, -0.4)], [(0, 1, 2)], 0xff5040)
     with bleached():
         drift_snag(-3.2, -3.6, 3.4, 0.22, 2.9, 9.0)
-        drift_snag(-2.9, 4.6, 2.6, 0.3, 0.8, 10.0, limbs=3)
+        drift_snag(-2.9, 4.6, 2.6, 0.3, 0.8, 10.0, limbs=3, catch=2)
+    hang_catch()
+    # the builders' finds: floats strung from the tall teepee to the small
+    # one, a blue tarpaulin on the tall one's weather side
+    line = sag((-1.4, 2.7, -0.4), (0.5, 1.5, 3.2), 0.3, n=7)
+    for i in range(6):
+        beam(line[i], line[i + 1], 0.04, 0x9a6a46)
+        mx, my, mz = [(p + q) / 2 for p, q in zip(line[i], line[i + 1])]
+        box((0.22, 0.22, 0.22), (mx, my - 0.1, mz), FLOATS[i % len(FLOATS)])
+    poly([(-1.5, 2.6, -0.5), (-2.4, 1.0, -0.9), (-1.9, 1.0, -1.4)], [(0, 1, 2)], 0x339cf2)
+    poly([(-1.5, 2.6, -0.5), (-1.9, 1.0, -1.4), (-1.0, 1.0, -1.4)], [(0, 1, 2)], 0x339cf2)
+    flotsam(((0.2, 0.0, -3.4), (-0.3, 0.0, 4.6), (1.0, 0.0, 1.6)), r=0.44, k0=3)
     join_still('forts')
     # a cold fire ring before them, on the sand as it lies: the piece stands
     # on the land as it is and levels nothing
