@@ -347,10 +347,10 @@ export const SET_GROUND = {
   // the ground's 9 u grid draws a bank this size as a dome, not a terrace.
   'set-expedition-camp': [{ kind: 'fan', x: -2, z: -0.8, len: 7, r: 10, h: 2.6, top: 0.6 }],
   // Powder's ski school: the nursery slope behind it (-X), a real run down
-  // its face to the road (the school's slalom drops some six units from the
+  // its face to the road (the school's slalom drops some nine units over twenty from the
   // carpet's head to its foot), its foot reaching under the school's hut and
   // arch so the whole school stands up on it over the kerb of the road beside it.
-  'set-ski-school': [{ kind: 'mound', x: -11, h: 6.4, r: 17, r1: 11, rz: 15, shape: 1.25 }],
+  'set-ski-school': [{ kind: 'mound', x: -19.5, h: 9, r: 25.5, r1: 11, rz: 16, shape: 1.3 }],
   // Powder's snowman field: a low rise behind the crowd (-X), its face to the
   // road, so the rows stand one over another above the kerb, as the rookery's do.
   'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
@@ -880,7 +880,8 @@ export const TRACKS = {
     name: 'Glacier', waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
-      { model: 'set-snow-fort', u: 0.237, lat: -10, yaw: 0 },
+      // the snow castle, its gate to the road
+      { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       // each rookery turned so its white fronts face the car coming at it:
       // one off the run into the bottom loop, one below the NE bend's crest
