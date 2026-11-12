@@ -347,13 +347,16 @@ void penguinGlacier(Theme& t) {
 }
 
 // Avalanche is a pass under a slope that lets go: tumbled snow along the
-// road (no lone rock on the open snow: it read as dropped crates; its rock is
-// the cirque's crags and cut), and the gantry's posts banded orange and black like
-// the avalanche poles that mark a road through a slide path.
+// road, young spruce growing back on the verge and now and then a trunk a
+// slide snapped (no lone rock on the open snow: it read as dropped crates;
+// its rock is the cirque's and the cuts'), and the gantry's posts banded
+// orange and black like the avalanche poles that mark a road through a
+// slide path.
 void avalanchePass(Theme& t) {
   ploughBanks(t);
   t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
-  snowProps(t, { { "snow-pile", 0.65f, 1.0f, 0.6f, false, false }, { "snow-bunker", 0.35f, 1.0f, 0.3f, false, false } });
+  snowProps(t, { { "snow-pile", 0.55f, 1.0f, 0.6f, false, false }, { "set-snow-sapling", 0.35f, 1.0f, 0.25f, false, false },
+                 { "set-snow-log", 0.1f, 1.0f, 0.2f, false, true } });
 }
 
 // Each playroom track is one game played on the floor at the toy cars' own
@@ -824,12 +827,13 @@ void patchTrack(Theme& t, const BiomeEntry* b, const std::string& track) {
 
   // No procedural landmark beside a set piece that contradicts it. Where
   // the track's set has its own houses (Flurry's smoking log cabins, Powder's
-  // chalets round the valley station), the procedural cabin goes: never a
-  // lone cabin beside a village of other ones.
+  // chalets round the valley station, Avalanche's cabin by the crossing), the
+  // procedural cabin goes: never a lone cabin beside a village of other ones,
+  // nor two cabins.
   const auto drop = [&](uint32_t k) {
     t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
   };
-  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry")) {
+  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry" || track == "avalanche")) {
     drop(LM_CABIN);
   }
 }
