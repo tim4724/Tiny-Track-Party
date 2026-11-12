@@ -1,5 +1,5 @@
 {
-  "sourceHash": "72f278ef07df19a93480e4b7cb3f93e9ee6a4c052b78da004a4c0170794ae079",
+  "sourceHash": "a6497340211e9213b9eaa3ef5f04371ccd6f6cbc720d6669b2cb03dd3b619c05",
   "filament": "79b9733821cf5850ba3db881025d44c63a02d66f",
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
   "note": "sourceHash covers every file feeding ttp_runtime_web (native/scripts/runtime-source-hash.mjs). Rebuild with native/scripts/build-runtime-web.sh after touching native/."

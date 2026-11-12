@@ -304,6 +304,7 @@
     "set-snow-fort.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snow-log.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-snow-sapling.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-snowman-field-lite.glb": { "generated": "scripts/bake-lite.mjs", "from": "set-snowman-field.glb", "ratio": 0.45 },
     "set-snowman-field.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-spinning-top.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-spring-drain.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
