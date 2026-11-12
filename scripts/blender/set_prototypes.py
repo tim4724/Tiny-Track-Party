@@ -614,8 +614,8 @@ def bough_tier(r, h, at, color, n=7, inner=0.76, turn=0.0, droop=0.0, cap=True):
 # the one under it, its tips hanging, in a fir's deep green lightening toward
 # the top; the snow lies on the upper part of each tier and follows the
 # boughs, so its lower edge is scalloped and no band is ruled round the tree.
-# FIR_LITE (the Android TV's stands) builds it with fewer boughs and a tier
-# less: a stand up a far slope is what the box's cells barely see.
+# FIR_LITE (the Android TV's stands) builds it with four boughs a tier and
+# three tiers: a stand up a far slope is what the box's cells barely see.
 FIR_LITE = False
 
 def fir(at, k, tiers, snow, slim=1.0):
@@ -624,9 +624,11 @@ def fir(at, k, tiers, snow, slim=1.0):
     none); `slim` narrows it."""
     x, y, z = at
     box((0.24 * k, 0.45 * k, 0.24 * k), (x, y + 0.22 * k, z), 0x7a5a3a)
-    n = 5 if FIR_LITE else 7
-    if FIR_LITE:
-        tiers = tiers[:1] + tiers[2:] if len(tiers) > 3 else tiers
+    n = (7, 4, 5)[int(FIR_LITE)]
+    if FIR_LITE == 2:
+        tiers = tiers[:3] + tiers[4:]      # the box's scatter: four tiers of five boughs
+    elif FIR_LITE:
+        tiers = tiers[::2]                 # its stands: three tiers of four boughs, under what the old pine cost
     seed = math.floor(x * 7.0 + z * 13.0)
     step = 1.24 / max(1, len(tiers) - 1)
     for i, (r, h) in enumerate(tiers):
@@ -3583,7 +3585,7 @@ def dark_pine(at, k=1.0):
     along the top of its lower tiers and the tip's own cap, so a stand mixed
     with them has a dark mass among its white ones (a stand of nothing but
     those read as wallpaper)."""
-    fir(at, k, FIR_TIERS, lambda i: 0.3 if i == len(FIR_TIERS) - 1 else (0.6 if i % 2 == 0 else 0.8))
+    fir(at, k, FIR_TIERS, lambda i: 0.3 if i == len(FIR_TIERS) - 1 else (0.52 if i % 2 == 0 else 0.68))
 
 def snapped_trunk(x, g, z, k, yaw):
     """A trunk a slide snapped and laid down, its broken end jagged, bedded
@@ -3635,14 +3637,14 @@ def forest(trees, lite=False):
 # Avalanche's mountainside is wooded from the kerb to the crest, and its
 # snowy pines keep most of their vertices in their far forms (the snow shell
 # rides proud of each tier), so its lite stands keep what the row marks: every
-# tree within 8 u of the kerb (1), every other one at a cirque face's foot (2;
+# tree within 8 u of the kerb (1), every third one at a cirque face's foot (2;
 # all of them put the run to the S-bend over the box's 4P ceiling, the cirque
 # ahead in every cell), and a tenth of the rest.
 def lite_trees(name, trees):
     if not name.startswith('avalanche-'):
         return trees[::2]
     near = lambda t: t[5] if len(t) > 5 else 0
-    return [t for i, t in enumerate(trees) if near(t) == 1 or (near(t) == 2 and i % 2 == 0) or i % 10 == 0]
+    return [t for i, t in enumerate(trees) if near(t) == 1 or (near(t) == 2 and i % 3 == 0) or i % 10 == 0]
 
 # Avalanche's old giants and a third of its grown pines are dark pines, the
 # dark mass in its stands; the saplings and the spruces keep their snow.
@@ -3662,20 +3664,24 @@ for _name, _trees in FORESTS.items():
 # snow track at 1.05 to 1.45 of this), once the Holiday Kit's banded pines: the
 # same fir as the stands', so a track's trees are one family. Each at the
 # kit's size (some two units tall, its foot at the origin), one part.
-def scatter_fir(kind):
+def scatter_fir(kind, lite=False):
     def build():
+        global FIR_LITE
+        FIR_LITE = 2 if lite else False
         if kind == 'a':
             pine((0.0, 0.0, 0.0), 0.92)
         elif kind == 'b':
             spruce((0.0, 0.0, 0.0), 0.9)
         else:
             dark_pine((0.0, 0.0, 0.0), 0.86)
+        FIR_LITE = False
         join_still('tree-snow-' + kind)
     return build
 
 for _kind in 'abc':
-    PIECES['tree-snow-' + _kind] = scatter_fir(_kind)
-    GROW['tree-snow-' + _kind] = 1.0
+    for _lite in (False, True):
+        PIECES['tree-snow-' + _kind + ('-lite' if _lite else '')] = scatter_fir(_kind, _lite)
+        GROW['tree-snow-' + _kind + ('-lite' if _lite else '')] = 1.0
 
 def skater(x, y, z, coat, hat, k=1.0):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
@@ -4491,7 +4497,7 @@ def ski_jump():
         top_y = fg + 5.0
         box((0.22, top_y, 0.22), (fx, top_y / 2, fz), STEEL)
         sgn = -1 if fz > 0 else 1
-        box((1.5, 0.9, 0.14), (fx, top_y + 0.3, fz + sgn * 0.12), 0x2a2735)
+        box((1.5, 0.9, 0.14), (fx, top_y + 0.3, fz + sgn * 0.12), 0x868ba1)
         for i in range(3):
             for j in range(2):
                 box((0.34, 0.28, 0.1), (fx - 0.48 + 0.48 * i, top_y + 0.1 + 0.4 * j, fz + sgn * 0.2), WHITE)
@@ -4579,7 +4585,7 @@ def ski_school():
     CZ, C0, C1 = -1.6, 1.0, -11.6                                    # the carpet: its line, foot, head
     GATES = [(-10.4, 3.4), (-9.0, 1.2), (-7.6, 3.6), (-6.2, 1.2), (-4.8, 3.6), (-3.4, 1.2), (-2.0, 3.4)]
     AX, AZ = -0.4, 2.3                                               # the finish arch
-    ARCHES = ((-8.3, 2.4, 1.0), (-5.5, 2.4, 1.0), (AX, AZ, 1.15))    # two more to ski through on the way down
+    ARCHES = ((-8.3, 2.4, 1.3), (-5.5, 2.4, 1.3), (AX, AZ, 1.5))    # two more to ski through on the way down
     def static():
         for z in (-0.55, 0.55):                                       # the ski rack
             box((0.06, 0.34, 0.06), (2.5, 0.17, z - 2.6), 0x9a7b55)
@@ -4621,7 +4627,7 @@ def ski_school():
             cols = ((0xffc044, 0x61cb8b), (0xa878e8, 0xffc044), (0xff5040, 0x3f7bd9))[n_]
             for i in range(7):
                 t = (i + 0.5) / 7 * math.pi
-                box((0.34, 0.34, R * math.pi / 7 + 0.04), (ax_, R * math.sin(t), az_ + R * math.cos(t)),
+                box((0.42, 0.42, R * math.pi / 7 + 0.04), (ax_, R * math.sin(t), az_ + R * math.cos(t)),
                     cols[i % 2], pitch=t - math.pi / 2)
         # the run's edge marked down the fall line: a rope of bunting on short
         # poles along the outside of the slalom, and a mogul or two to hop
@@ -4661,7 +4667,7 @@ def ski_school():
     for n in range(7):
         at = loop[n]
         with animated('anim_path:c=drapekids:p=62:o=%.3f:f=1#%d' % (n / 7, n), at), plain_parts():
-            kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6], k=0.95)
+            kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6], k=1.1)
 
 def snowman(at, k=1.0, hat=False):
     """Three blocks of snow, coal eyes and buttons, a carrot facing +X, stick
@@ -6616,6 +6622,10 @@ def avalanche_gallery_short():
     # cut's foot by the bend, a stone showed as a white fleck or a dark claw
     fallen_rock(ROAD_B, ((26, 6.2, 0.45),))
 
+# The box's machines (the lite build) leave out what a cell there never
+# resolves: grilles, mirrors, lamps, hazard blocks, the ladder, the hubs.
+WORKS_LITE = False
+
 def works_wheel(at, yaw, k, r=0.3):
     """A works truck's wheel at `at` (its hub's middle), its axle across the
     truck: a fat dark tyre with a grey hub standing proud either side."""
@@ -6623,8 +6633,9 @@ def works_wheel(at, yaw, k, r=0.3):
     x, y, z = at
     w = 0.26 * k
     cyl(r * k, w, (x - c * w / 2, y, z + s2 * w / 2), 0x38383d, axis='across', yaw=yaw, segs=10, stem=True)
-    cyl(r * 0.5 * k, w + 0.06 * k, (x - c * (w / 2 + 0.03 * k), y, z + s2 * (w / 2 + 0.03 * k)), 0x868ba1,
-        axis='across', yaw=yaw, segs=8, stem=True)
+    if not WORKS_LITE:
+        cyl(r * 0.5 * k, w + 0.06 * k, (x - c * (w / 2 + 0.03 * k), y, z + s2 * (w / 2 + 0.03 * k)), 0x868ba1,
+            axis='across', yaw=yaw, segs=8, stem=True)
 
 def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
     """A rotary snowplough (a snow blower on a works truck) facing +Z turned
@@ -6652,19 +6663,26 @@ def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
     box(sz(1.1, 0.24, 2.3), at(0, 0.5, -0.15), DARK, yaw=yaw)                           # the chassis
     box(sz(1.3, 0.62, 1.15), at(0, 0.98, -0.75), ORANGE, yaw=yaw)                       # the engine deck
     for sd in (-1, 1):                                                                  # its grilles
-        for g in range(3):
-            box(sz(0.06, 0.08, 0.8), at(sd * 0.66, 0.84 + 0.15 * g, -0.75), DARK, yaw=yaw)
-    box(sz(1.34, 0.08, 1.19), at(0, 1.32, -0.75), GREY, yaw=yaw)                        # its lid
+        if not WORKS_LITE:
+            for g in range(3):
+                box(sz(0.06, 0.08, 0.8), at(sd * 0.66, 0.84 + 0.15 * g, -0.75), DARK, yaw=yaw)
+    if not WORKS_LITE:
+        box(sz(1.34, 0.08, 1.19), at(0, 1.32, -0.75), GREY, yaw=yaw)                        # its lid
     box(sz(0.12, 0.75, 0.12), at(-0.45, 1.7, -0.3), DARK, yaw=yaw)                      # the exhaust
-    box(sz(0.18, 0.06, 0.18), at(-0.45, 2.1, -0.3), GREY, yaw=yaw)
+    if not WORKS_LITE:
+        box(sz(0.18, 0.06, 0.18), at(-0.45, 2.1, -0.3), GREY, yaw=yaw)
     box(sz(1.24, 0.95, 0.9), at(0, 1.2, 0.3), ORANGE, yaw=yaw)                          # the cab
     box(sz(1.0, 0.4, 0.06), at(0, 1.36, 0.76), GLASS, yaw=yaw)                          # windscreen
     for sd in (-1, 1):
         box(sz(0.06, 0.4, 0.6), at(sd * 0.63, 1.36, 0.32), GLASS, yaw=yaw)              # side glass
-        box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 0.72), DARK, yaw=yaw)               # mirrors
-        box(sz(0.2, 0.05, 0.05), at(sd * 0.7, 1.42, 0.72), DARK, yaw=yaw)
-        box(sz(0.16, 0.12, 0.08), at(sd * 0.42, 1.8, 0.72), WHITE, yaw=yaw)             # work lamps
-        box(sz(0.2, 0.14, 0.06), at(sd * 0.44, 0.78, 0.77), WHITE, yaw=yaw)             # headlamps
+        if not WORKS_LITE:
+            box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 0.72), DARK, yaw=yaw)               # mirrors
+        if not WORKS_LITE:
+            box(sz(0.2, 0.05, 0.05), at(sd * 0.7, 1.42, 0.72), DARK, yaw=yaw)
+        if not WORKS_LITE:
+            box(sz(0.16, 0.12, 0.08), at(sd * 0.42, 1.8, 0.72), WHITE, yaw=yaw)             # work lamps
+        if not WORKS_LITE:
+            box(sz(0.2, 0.14, 0.06), at(sd * 0.44, 0.78, 0.77), WHITE, yaw=yaw)             # headlamps
     box(sz(1.3, 0.1, 0.96), at(0, 1.72, 0.3), WHITE, yaw=yaw)                           # the roof
     box(sz(0.7, 0.14, 0.2), at(0, 1.84, 0.2), AMBER, yaw=yaw)                           # the beacon bar
     # the blower: its intake box open to the front, the reel in its mouth
@@ -6675,8 +6693,9 @@ def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
     for sd in (-1, 1):
         box(sz(0.1, 1.06, 0.74), at(sd * 0.98, 0.7, 1.5), ORANGE, yaw=yaw)              # cheeks
         box(sz(0.14, 0.1, 0.9), at(sd * 0.98, 0.14, 1.5), GREY, yaw=yaw)                # skids
-    for g in range(5):                                                                  # hazard blocks
-        box(sz(0.4, 0.14, 0.08), at(-0.8 + 0.4 * g, 1.2, 1.87), AMBER if g % 2 == 0 else DARK, yaw=yaw)
+    if not WORKS_LITE:
+        for g in range(5):                                                                  # hazard blocks
+            box(sz(0.4, 0.14, 0.08), at(-0.8 + 0.4 * g, 1.2, 1.87), AMBER if g % 2 == 0 else DARK, yaw=yaw)
     with animated(rotor, at(0, 0.62, 1.58), yaw):
         box(sz(1.76, 0.22, 0.22), at(0, 0.62, 1.58), GREY, yaw=yaw)                      # the reel's shaft
         for i in range(4):
@@ -6721,21 +6740,28 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
         box(sz(1.38, 0.86, 0.1), at(0, 1.08, dz), ORANGE, yaw=yaw)
     box(sz(1.38, 0.1, 1.9), at(0, 1.5, -0.8), ORANGE, yaw=yaw)                          # its rim
     snowy(sphere(0.62 * k, at(0, 1.5, -0.8), 0xe9eff6, subdiv=1, scale=(0.9, 0.42, 1.3)), 0.5)   # the grit, snowed on
-    for g in range(4):                                                                  # the ladder
-        box(sz(0.06, 0.06, 0.34), at(0.7, 0.72 + 0.22 * g, -1.2), DARK, yaw=yaw)
-    for dz in (-1.36, -1.04):
-        box(sz(0.06, 0.9, 0.06), at(0.7, 1.05, dz), DARK, yaw=yaw)
+    if not WORKS_LITE:
+        for g in range(4):                                                                  # the ladder
+            box(sz(0.06, 0.06, 0.34), at(0.7, 0.72 + 0.22 * g, -1.2), DARK, yaw=yaw)
+    if not WORKS_LITE:
+        for dz in (-1.36, -1.04):
+            box(sz(0.06, 0.9, 0.06), at(0.7, 1.05, dz), DARK, yaw=yaw)
     box(sz(0.5, 0.3, 0.3), at(0, 0.6, -1.85), DARK, yaw=yaw)                            # the spinner's chute
     cyl(0.36 * k, 0.07 * k, at(0, 0.34, -1.95), ORANGE, segs=10)                        # the spinner
     box(sz(1.24, 0.95, 0.95), at(0, 1.2, 0.72), YELLOW, yaw=yaw)                        # the cab
     box(sz(1.0, 0.4, 0.06), at(0, 1.36, 1.2), GLASS, yaw=yaw)
     for sd in (-1, 1):
         box(sz(0.06, 0.4, 0.62), at(sd * 0.63, 1.36, 0.76), GLASS, yaw=yaw)
-        box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 1.16), DARK, yaw=yaw)
-        box(sz(0.2, 0.05, 0.05), at(sd * 0.7, 1.42, 1.16), DARK, yaw=yaw)
-        box(sz(0.2, 0.14, 0.06), at(sd * 0.44, 0.84, 1.21), WHITE, yaw=yaw)             # headlamps
-        box(sz(0.16, 0.12, 0.16), at(sd * 0.48, 1.84, 0.72), 0xff7e44, yaw=yaw)         # beacons
-    box(sz(1.0, 0.2, 0.08), at(0, 0.84, 1.22), DARK, yaw=yaw)                           # the grille
+        if not WORKS_LITE:
+            box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 1.16), DARK, yaw=yaw)
+        if not WORKS_LITE:
+            box(sz(0.2, 0.05, 0.05), at(sd * 0.7, 1.42, 1.16), DARK, yaw=yaw)
+        if not WORKS_LITE:
+            box(sz(0.2, 0.14, 0.06), at(sd * 0.44, 0.84, 1.21), WHITE, yaw=yaw)             # headlamps
+        if not WORKS_LITE:
+            box(sz(0.16, 0.12, 0.16), at(sd * 0.48, 1.84, 0.72), 0xff7e44, yaw=yaw)         # beacons
+    if not WORKS_LITE:
+        box(sz(1.0, 0.2, 0.08), at(0, 0.84, 1.22), DARK, yaw=yaw)                           # the grille
     box(sz(1.3, 0.1, 1.0), at(0, 1.72, 0.72), WHITE, yaw=yaw)                           # the roof
     box(sz(0.12, 0.7, 0.12), at(0.52, 1.75, 0.18), DARK, yaw=yaw)                       # the exhaust
     # the V plough on its arms
@@ -6744,10 +6770,18 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
         a = yaw + sd * 0.5
         box(sz(1.25, 0.62, 0.12), at(sd * 0.55, 0.52, 1.72), ORANGE, yaw=a, pitch=-0.18)
         box(sz(1.27, 0.12, 0.13), at(sd * 0.55, 0.86, 1.67), DARK, yaw=a, pitch=-0.18)   # the hazard strip
-        for g in range(2):
-            box(sz(0.3, 0.13, 0.14), at(sd * (0.25 + 0.6 * g), 0.86, 1.86 - 0.33 * g), YELLOW, yaw=a, pitch=-0.18)
+        if not WORKS_LITE:
+            for g in range(2):
+                box(sz(0.3, 0.13, 0.14), at(sd * (0.25 + 0.6 * g), 0.86, 1.86 - 0.33 * g), YELLOW, yaw=a, pitch=-0.18)
         box(sz(1.27, 0.1, 0.1), at(sd * 0.55, 0.2, 1.78), GREY, yaw=a)                   # the cutting edge
     box(sz(0.2, 0.7, 0.2), at(0, 0.55, 2.05), ORANGE, yaw=yaw)                          # the V's nose
+
+@piece(1.0)
+def avalanche_gallery_loop_lite():
+    global WORKS_LITE
+    WORKS_LITE = True
+    avalanche_gallery_loop()
+    WORKS_LITE = False
 
 @piece(1.0)
 def avalanche_gallery_loop():

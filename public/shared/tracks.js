@@ -350,7 +350,7 @@ export const SET_GROUND = {
   // its face to the road (the school's slalom drops some six units from the
   // carpet's head to its foot), its foot reaching under the school's hut and
   // arch so the whole school stands up on it over the kerb of the road beside it.
-  'set-ski-school': [{ kind: 'mound', x: -11, h: 7.2, r: 17, r1: 11, rz: 15, shape: 1.25 }],
+  'set-ski-school': [{ kind: 'mound', x: -11, h: 6.4, r: 17, r1: 11, rz: 15, shape: 1.25 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Tangle's stream lies in its own bed: the low line the valley's sides and
   // the land raised toward the road stand over, a reach at a time.
@@ -815,8 +815,9 @@ export const TRACKS = {
       { model: 'set-flurry-forest-i', u: 0.39, lat: -50 },
       { model: 'set-flurry-forest-j', u: 0.39, lat: -50 },
       { model: 'set-flurry-forest-k', u: 0.39, lat: -50 },
-      { model: 'set-flurry-forest-l', u: 0.39, lat: -50 },
-      { model: 'set-flurry-forest-m', u: 0.39, lat: -50 },
+      // (the belt along the foot is the full tier's: the box keeps the hollows)
+      { model: 'set-flurry-forest-l', u: 0.39, lat: -50, lite: false },
+      { model: 'set-flurry-forest-m', u: 0.39, lat: -50, lite: false },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
     ],
     // A frozen stream runs from the village loop under the crossing down to

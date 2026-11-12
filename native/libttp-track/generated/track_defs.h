@@ -547,7 +547,7 @@ constexpr LandDef kLand_powder[] = {
   { 2, 0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.1p+4, 0x0p+0, 0x1.08p+6, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 5, 0, 0x0p+0, 0x0p+0, 0x1.a447ae147ae14p+6, -0x1.1a3d70a3d70a4p+2, -0x1.bcp+4, 0x1.22ccccccccccdp+5, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdde7f5u, 0x0p+0, 1 },
   { 5, 0, 0x0p+0, 0x0p+0, 0x1.82f5c28f5c28fp+5, -0x1.4dc28f5c28f5cp+3, 0x1.d6147ae147ae1p+3, 0x1.04147ae147ae1p+5, 0x1p+2, 0x1p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xdde7f5u, 0x0p+0, 1 },
-  { 3, 1, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.6p+3, 0x0p+0, 0x0p+0, 0x1.1p+4, 0x1.6p+3, 0x0p+0, 0x1.ep+3, 0x1.ccccccccccccdp+2, 0x1.ccccccccccccdp+2, 0x0p+0, 0x1.4p+0, 0x0u, 0x0p+0, 1 },
+  { 3, 1, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.6p+3, 0x0p+0, 0x0p+0, 0x1.1p+4, 0x1.6p+3, 0x0p+0, 0x1.ep+3, 0x1.999999999999ap+2, 0x1.999999999999ap+2, 0x0p+0, 0x1.4p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.f4d6a161e4f76p-1, -0x1.23ae147ae147bp+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.1p+5, 0x1.1p+5, 0x0p+0, 0x0p+0, 0x1.6p+3, 0x1.6p+3, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x1p+1, 1 },
   { 0, -1, 0x1.fb15b573eab36p-5, -0x1.23ae147ae147bp+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.1p+5, 0x1.1p+5, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x1p+1, 1 },
   { 0, -1, 0x1.85f06f6944674p-4, -0x1.f828f5c28f5c3p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x1.6p+3, 0x1.6p+3, 0x1.999999999999ap-3, 0x1p+0, 0x0u, 0x1p+1, 1 },
@@ -668,8 +668,8 @@ constexpr SetDef kSet_flurry[] = {
   { "set-flurry-forest-i", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-forest-j", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-flurry-forest-k", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-flurry-forest-l", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-flurry-forest-m", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-flurry-forest-l", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 0 },
+  { "set-flurry-forest-m", 0x1.8f5c28f5c28f6p-2, -0x1.9p+5, 0x0p+0, 0x0p+0, 0x1p+0, 0 },
   { "set-flurry-peaks-se", 0x1.d70a3d70a3d71p-1, -0x1.1p+6, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_flurry[] = {
@@ -2468,8 +2468,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-flurry-forest-l", "set-flurry-forest-m", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
-constexpr int TTP_LITE_MODEL_COUNT = 49;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-gallery-loop", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
+constexpr int TTP_LITE_MODEL_COUNT = 51;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.
