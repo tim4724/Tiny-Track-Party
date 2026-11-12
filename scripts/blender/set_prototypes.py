@@ -916,8 +916,7 @@ def crab_pots():
         return (bx + dx * c + dz * s, bz - dx * s + dz * c)
     for sd in (-1, 1):
         wx, wz = on_boat(sd * 0.21, -0.1)
-        cyl(0.085, 0.06, (wx - sd * 0.03 * c, 0.085, wz + sd * 0.03 * s), 'dark', segs=8, axis='across',
-            yaw=0.25)
+        scenery_wheel(wx, 0.1, wz, 0.1, 0.06, 0.25)
         bx0, bz0 = on_boat(sd * 0.12, -0.5)
         bx1, bz1 = on_boat(sd * 0.12, 0.3)
         beam((bx0, T - 0.04, bz0), (bx1, T - 0.04, bz1), 0.05, 0x9a7b55)
@@ -1980,6 +1979,19 @@ def pirate_lookout():
 
 WET, WEED = 'slate', 'green'      # rock the tide leaves wet, the weed band at its foot
 
+def scenery_wheel(cx, cy, cz, r, w, yaw=0.0, hub=0xfde4c7):
+    """A parked vehicle's wheel centred at (cx, cy, cz), its axle across the
+    vehicle (the piece's X turned by `yaw`): a round tyre of sixteen sides,
+    dark, and a pale hub standing a little proud of it on both faces, with
+    a darker cap, so it reads as a wheel from the road (a square block of
+    tyre colour, or an eight-sided disc, read as a brick under the van)."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    def at(d):                                           # a point `d` along the axle from the wheel's middle
+        return (cx + d * c, cy, cz - d * s)
+    cyl(r, w, at(-w / 2), 0x2a2735, segs=16, axis='across', yaw=yaw, smooth=True)
+    cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=12, axis='across', yaw=yaw)
+    cyl(0.2 * r, w + 0.07, at(-w / 2 - 0.035), 0x9aa1b4, segs=8, axis='across', yaw=yaw, stem=True)
+
 def camper(x, z, yaw, lower, upper=0xfff6eb, boards=(), pop=False):
     """A camper van parked on the sand, its nose to +Z turned by `yaw`: some
     1.5 u long and taller than a racer, two-tone in a colour no racer wears,
@@ -1990,7 +2002,7 @@ def camper(x, z, yaw, lower, upper=0xfff6eb, boards=(), pop=False):
         box(size, (x + dx * c + dz * s, dy, z - dx * s + dz * c), color, yaw=yaw, pitch=pitch)
     for sx in (-1, 1):
         for sz in (-0.46, 0.46):
-            b((0.12, 0.3, 0.3), sx * 0.31, 0.15, sz, 0x2a2735)
+            scenery_wheel(x + sx * 0.3 * c + sz * s, 0.18, z - sx * 0.3 * s + sz * c, 0.18, 0.13, yaw)
     b((0.66, 0.36, 1.5), 0, 0.36, 0, lower)
     b((0.66, 0.34, 1.34), 0, 0.71, -0.06, upper)
     b((0.68, 0.16, 1.0), 0, 0.73, -0.12, 'sky')                      # the window band
@@ -2119,7 +2131,7 @@ def rock_poolers_park():
         box(size, (-0.6 + dx * c + dz * s, dy, 6.4 - dx * s + dz * c), color, yaw=-math.pi / 2)
     for sx in (-1, 1):
         for sz in (-0.8, 0.8):
-            bus((0.12, 0.32, 0.32), sx * 0.36, 0.16, sz, 0x2a2735)
+            scenery_wheel(-0.6 + sx * 0.35 * c + sz * s, 0.2, 6.4 - sx * 0.35 * s + sz * c, 0.2, 0.14, -math.pi / 2)
     bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
     bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
     bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
@@ -2385,7 +2397,7 @@ def surf_club():
             beam((TX + s * 0.22, 0.4, TZ + 0.7), (TX, 0.4, TZ + 1.45), 0.06, 0x38383d)
         box((0.06, 0.3, 0.06), (TX, 0.27, TZ + 1.42), 0x38383d)                       # the jockey leg
     for s in (-1, 1):
-        cyl(0.17, 0.08, (TX + s * 0.34, 0.31, TZ - 0.1), 0x2a2735, segs=8, axis='across')
+        scenery_wheel(TX + s * 0.36, 0.31, TZ - 0.1, 0.17, 0.09)
         rod((TX + s * 0.25, 0.56, TZ - 0.65), (TX + s * 0.25, 0.56, TZ + 0.55), 0.12, 0xff7e44, segs=7)
     box((0.42, 0.06, 1.1), (TX, 0.47, TZ - 0.05), 0x4f5260)
     box((0.3, 0.2, 0.14), (TX, 0.58, TZ - 0.66), 0x38383d)
@@ -2553,7 +2565,7 @@ def beach_day():
     flag_on_pole((-1.6, 0.0, 12.0), 2.2, (red, yellow), 'anim_sway:a=z:d=22:p=2.2#beach')
     box((0.6, 0.5, 0.9), (0.7, 0.45, 9.6), white)
     for z in (9.3, 9.9):
-        cyl(0.2, 0.06, (0.98, 0.2, z), 0x2a2735, segs=8, axis='across')
+        scenery_wheel(1.02, 0.2, z, 0.2, 0.07)
     box((0.62, 0.1, 0.92), (0.7, 0.72, 9.6), 0xf378f0)
     umbrella((0.7, 0.7, 9.6), 0.7, 0.9, (0xf378f0, white), gores=8)
     join_still('beach')
