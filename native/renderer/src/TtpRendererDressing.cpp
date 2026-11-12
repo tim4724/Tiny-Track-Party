@@ -2276,7 +2276,10 @@ void TtpRenderer::buildPonds(const TrackBin& tb) {
         base = (uint32_t) mPond.verts.size();
         for (const auto& b : WATER) {
             const float t = b[1];
-            const float3 c = t <= 1 ? mix(rim, shallow, t) : t <= 2 ? mix(shallow, mid, t - 1) : mix(mid, deep, t - 2);
+            // A pond's tint is its WATER's (a park lake greener and deeper than a
+            // brook's pond), not the land's round it (landTint).
+            const float3 c = (t <= 1 ? mix(rim, shallow, t) : t <= 2 ? mix(shallow, mid, t - 1) : mix(mid, deep, t - 2))
+                    * (t >= 1 ? s.tint : mix(float3{ 1.0f }, s.tint, t));
             ring(mPond, b[0], tb.groundY + 0.09f, packShown(c, 1.0f, b[2]));
         }
         stitch(mPond, base, 5);

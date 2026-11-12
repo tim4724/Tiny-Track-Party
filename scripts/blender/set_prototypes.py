@@ -56,6 +56,9 @@ SWATCH = {
     'dark': (0, 96), 'grey': (16, 96), 'slate': (32, 96), 'lavender': (48, 96),
     'white': (64, 96), 'salmon': (80, 96), 'brown': (96, 96), 'tan': (112, 96),
     'pink': (0, 32),
+    # Ours, painted into the atlas's unused rows for the park's cherries: by
+    # NAME only (not in SWATCH_RGB), so no other piece's colour snaps to them.
+    'blossom': (16, 32), 'petal': (32, 32), 'bark': (48, 32), 'leaf': (64, 32), 'gravel': (80, 32),
 }
 SWATCH_RGB = {
     'cream': 0xfde4c7, 'green': 0x61cb8b, 'yellow': 0xffc044, 'orange': 0xff7e44,
@@ -6635,19 +6638,24 @@ def lawn_oak(x, z, k=1.0):
                               ((0.6, 7.9, -1.8), 2.4, 0x6cae55), ((-0.8, 10.6, 0.4), 2.4, 0x5f9f4a)):
         sphere(r * k, (x + dx * k, y * k, z + dz * k), c, subdiv=1)
 
-CHERRY_CROWN = (((0.0, 7.4, 0.0), 2.9), ((-2.1, 6.4, 1.3), 2.2), ((1.9, 6.6, -1.5), 2.1),
-                ((0.3, 8.9, 0.5), 1.9), ((-0.6, 6.0, -2.2), 1.7))
+CHERRY_CROWN = (((0.0, 7.2, 0.0), 2.9, 0), ((-2.2, 6.2, 1.3), 2.2, 0), ((1.9, 6.5, -1.6), 2.1, 1),
+                ((0.4, 8.8, 0.5), 1.9, 0), ((-0.5, 5.4, -2.3), 1.6, 2))
 
 def lawn_cherry(x, z, k, c, i=0):
-    """Cloverleaf's cherry in blossom, `c` 'pink' or 'white' with one lobe of
-    the other: a dark forked trunk under five pale faceted lobes."""
-    other = 'white' if c == 'pink' else 'pink'
-    cyl(0.5 * k, 5.0 * k, (x, -0.5, z), 0x5a3a2a, r2=0.32 * k, segs=6)
-    for a, t in ((0.6 + i, 0.8), (2.9 + i, 0.75)):
-        o = cyl(0.3 * k, 3.2 * k, (x, 3.6 * k, z), 0x5a3a2a, r2=0.14 * k, segs=5, smooth=False)
-        tilted(o, math.cos(a) * t, math.sin(a) * t)
-    for j, ((dx, y, dz), r) in enumerate(CHERRY_CROWN):     # pale: the top of the swatch's ramp
-        sphere(r * k, (x + dx * k, y * k, z + dz * k), other if j == 3 else c, subdiv=1)['ramp'] = 0.12
+    """Cloverleaf's cherry in blossom, `c` 'pink' or 'white': grey-brown bark,
+    a forked trunk under four lobes of pale blossom (one of the other shade)
+    and a low one in young leaf. `i` turns the crown, so no two in a row are
+    one tree."""
+    main, other = ('blossom', 'petal') if c == 'pink' else ('petal', 'blossom')
+    cyl(0.5 * k, 5.0 * k, (x, -0.5, z), 'bark', r2=0.32 * k, segs=6)
+    a = 0.6 + 2.1 * i
+    o = cyl(0.3 * k, 3.2 * k, (x, 3.6 * k, z), 'bark', r2=0.14 * k, segs=5, smooth=False)
+    tilted(o, math.cos(a) * 0.8, math.sin(a) * 0.8)
+    t = 1.3 * i
+    ct, st = math.cos(t), math.sin(t)
+    for (dx, y, dz), r, kind in CHERRY_CROWN:
+        sphere(r * k, (x + (dx * ct + dz * st) * k, y * k, z + (dz * ct - dx * st) * k),
+               (main, other, 'leaf')[kind], subdiv=1, yaw=t)['ramp'] = 0.75
 
 def lawn_alder(x, z, k=1.0, turn=0.0):
     """Tangle's alder: tall and narrow, a dark trunk under three faceted
@@ -7686,26 +7694,39 @@ def boating_lake():
     n = 16
     for k in range(n):
         a = -k * 2 * math.pi / n
-        marker('path_pedalo_%d' % k, (19.0 * math.cos(a), WY, 44.0 * math.sin(a)))
-    for j in range(4):
-        with animated('anim_path:c=pedalo:p=110:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 4, j), (19.0, WY, 0.0)):
-            swan_pedalo((19.0, WY, 0.0), 'white')
+        marker('path_pedalo_%d' % k, (12.0 + 10.0 * math.cos(a), WY, 30.0 * math.sin(a)))
+    for j in range(3):
+        with animated('anim_path:c=pedalo:p=110:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 3, j), (22.0, WY, 0.0)):
+            swan_pedalo((22.0, WY, 0.0), 'white')
     # the fountain on its stone basin: a fat plume, faintly blue, and its
     # spray falling outward round the top in a ring of drops, rising and
     # falling gently
-    cyl(4.4, 1.0, (0.0, 0.0, 0.0), 'grey', segs=12)
-    cyl(3.9, 0.25, (0.0, 1.0, 0.0), 0x8ecae6, segs=12)
-    cyl(3.0, 19.0, (0.0, 1.1, 0.0), 'sky', r2=0.8, segs=10)                     # the plume
-    with animated('anim_bob:h=0.5:p=2.6', (0.0, 19.4, 0.0)):
-        for k in range(8):                       # eight jets arcing out and down, beaded with drops
-            a = k * math.pi / 4
-            prev = (0.0, 20.4, 0.0)
-            for r, y, d in ((2.6, 20.2, 1.0), (4.8, 18.0, 0.9), (6.4, 15.0, 0.8)):
-                p = (r * math.cos(a), y, r * math.sin(a))
-                with plain_parts():
-                    strut(prev, p, 0.3, 'white')
-                box((d, d * 1.3, d), p, 'white', yaw=a)
-                prev = p
+    FX = -15.0                                    # toward the near bank, where the road looks
+    cyl(3.4, 0.9, (FX, 0.0, 0.0), 'grey', segs=12)
+    cyl(3.0, 0.2, (FX, 0.9, 0.0), 0x8ecae6, segs=12)
+    cyl(0.5, 2.2, (FX, 0.9, 0.0), 'grey', segs=8)
+    cyl(1.6, 0.35, (FX, 3.0, 0.0), 'grey', r2=1.9, segs=10)
+    cyl(0.6, 4.2, (FX, 3.3, 0.0), 'sky', r2=0.18, segs=8)                        # the jet
+    with animated('anim_bob:h=0.15:p=2.2', (FX, 6.0, 0.0)):
+        for k in range(6):                       # its water falling back into the bowl
+            a = k * math.pi / 3
+            with plain_parts():
+                strut((FX, 7.4, 0.0), (FX + 1.5 * math.cos(a), 5.4, 1.5 * math.sin(a)), 0.2, 'white')
+            box((0.36, 0.5, 0.36), (FX + 1.5 * math.cos(a), 5.3, 1.5 * math.sin(a)), 'white', yaw=a)
+    # an islet off the far bank, a young cherry on it and reeds at its foot:
+    # what breaks the water's outline, as a park lake's does
+    IX, IZ = -3.0, 17.0
+    sphere(6.5, (IX, WY - 0.6, IZ), 0x5f9f4a, subdiv=1, scale=(1.25, 0.28, 1.0), yaw=0.5)
+    lawn_cherry(IX + 0.5, IZ, 1.25, 'pink', 3)
+    lawn_cherry(IX - 3.5, IZ + 2.5, 0.7, 'white', 1)
+    for j in range(7):
+        a = j * 0.9
+        cyl(0.0, 2.2 + 0.5 * (j % 3), (IX + 7.2 * math.cos(a), WY - 0.2, IZ + 5.8 * math.sin(a)),
+            (0x4f9a48, 0x22c46e)[j % 2], r2=0.28, segs=3, yaw=a)
+    for k, (x, z, r) in enumerate(((8.0, 30.0, 1.4), (10.5, 33.0, 1.0), (-6.0, -34.0, 1.3), (-9.0, -31.0, 1.0),
+                                   (14.0, -18.0, 1.1))):                           # lily pads
+        ground_poly([(x, WY + 0.02, z)] + [(x + r * math.cos(q * math.pi / 3), WY + 0.02, z + r * math.sin(q * math.pi / 3))
+                                           for q in range(6)], [(0, 1 + (q + 1) % 6, 1 + q) for q in range(6)], 0x4f9a48)
     join_still('lake')
 
 @piece(REAL)
@@ -7791,17 +7812,55 @@ def alder_grove():
 # lawn's scatter is the kit's conifers on all four gardens, so the blossom is
 # what says park. Front (+X) to the road, the crowns inside x 3.4 like the
 # grove's, so it stands where a grove stood. It DRAPES.
+def cherry_petals(x, z, k, i):
+    """The petals fallen under a cherry: a ragged pale ring on the lawn."""
+    n, R = 9, 3.3 * k
+    rim = [(x + R * (0.75 + 0.3 * hash01(i, q)) * math.cos(q * 2 * math.pi / n), 0.07,
+            z + R * (0.75 + 0.3 * hash01(q, i)) * math.sin(q * 2 * math.pi / n)) for q in range(n)]
+    ground_poly([(x, 0.07, z)] + rim, [(0, 1 + (q + 1) % n, 1 + q) for q in range(n)], 'petal')['ramp'] = 0.1
+
 def blossom_trees(trees, seat=None):
     def still():
         for i, (x, z, k, c) in enumerate(trees):
             lawn_cherry(x, z, k, c, i)
-            n, R = 9, 3.3 * k                       # the fallen petals
-            rim = [(x + R * (0.75 + 0.3 * hash01(i, q)) * math.cos(q * 2 * math.pi / n), 0.07,
-                    z + R * (0.75 + 0.3 * hash01(q, i)) * math.sin(q * 2 * math.pi / n)) for q in range(n)]
-            ground_poly([(x, 0.07, z)] + rim, [(0, 1 + (q + 1) % n, 1 + q) for q in range(n)], c)['ramp'] = 0.12
+            cherry_petals(x, z, k, i)
         if seat:
             bench(seat, yaw=math.pi / 2)
     draped('blossom', still)
+
+# An avenue of cherries down a gravel path beside the road, the way a park
+# plants them: two rows, the trees of different ages, a lamp and a bench by
+# the path. Along Z; front (+X) to the road, the near row's crowns inside
+# x 3.4. It DRAPES, the path laid in short lengths so it follows the lawn.
+@piece(REAL)
+def cherry_avenue():
+    L, PX, PW = 56.0, -3.4, 1.7
+    def still():
+        n = 14
+        verts, faces = [], []
+        for q in range(n + 1):
+            z = -L / 2 + L * q / n
+            w = PW * (1.0 + 0.08 * math.sin(q * 1.9))
+            verts += [(PX + w, 0.06, z), (PX - w, 0.06, z)]
+            if q:
+                faces.append((2 * q - 2, 2 * q, 2 * q + 1, 2 * q - 1))
+        ground_poly(verts, faces, 'gravel')['ramp'] = 0.15
+        row = (((0.2, -24.0, 1.15, 'pink'), (-0.2, -13.0, 0.8, 'white'), (0.3, -2.0, 1.25, 'pink'),
+                (0.0, 10.0, 0.9, 'pink'), (0.2, 22.0, 1.1, 'white')),
+               ((-7.0, -19.0, 0.95, 'white'), (-6.6, -7.0, 1.2, 'pink'), (-7.1, 4.5, 0.75, 'pink'),
+                (-6.8, 16.0, 1.3, 'white'), (-7.0, 26.0, 0.9, 'pink')))
+        i = 0
+        for line in row:
+            for x, z, k, c in line:
+                lawn_cherry(x, z, k, c, i)
+                cherry_petals(x, z, k, i)
+                i += 1
+        for z in (-8.0, 15.0):                            # a lamp by the path
+            cyl(0.12, 3.6, (PX + PW + 0.5, 0, z), 0x2a2735, segs=6)
+            box((0.5, 0.5, 0.5), (PX + PW + 0.5, 3.8, z), 'white')
+        bench((PX - PW - 0.7, 0, 3.0), yaw=math.pi / 2)
+        bench((PX - PW - 0.7, 0, -20.0), yaw=math.pi / 2)
+    draped('avenue', still)
 
 @piece(REAL)
 def blossom_grove():
@@ -8454,6 +8513,22 @@ def playground():
     # size under the kerb (and no nearer the road, where the land a deck
     # holds down falls away under it)
     ice_cream_van(4.0, -15.0)
+    # its ground: a bark-chip pad under the equipment, a low timber fence
+    # round it with the gate to the road, and the path out to the van
+    HX, Z0, Z1 = 10.0, -11.5, 13.0
+    ground_poly([(-HX, 0.05, Z0), (HX, 0.05, Z0), (HX, 0.05, Z1), (-HX, 0.05, Z1)], [(0, 3, 2, 1)], 'gravel')['ramp'] = 0.5
+    ground_poly([(2.5, 0.05, -18.5), (5.5, 0.05, -18.5), (5.5, 0.05, Z0), (2.5, 0.05, Z0)], [(0, 3, 2, 1)], 'gravel')['ramp'] = 0.15
+    ring = [(-HX, Z0), (-HX, Z1), (HX, Z1), (HX, Z0), (-HX, Z0)]
+    for (x0, z0), (x1, z1) in zip(ring, ring[1:]):
+        n = max(1, round(math.hypot(x1 - x0, z1 - z0) / 4.0))
+        for q in range(n):
+            a = (x0 + (x1 - x0) * q / n, 0.0, z0 + (z1 - z0) * q / n)
+            b = (x0 + (x1 - x0) * (q + 1) / n, 0.0, z0 + (z1 - z0) * (q + 1) / n)
+            if x0 == HX and x1 == HX and abs((a[2] + b[2]) / 2) < 2.5:
+                continue                                  # the gate, to the road
+            if z0 == Z0 and z1 == Z0 and 2.0 < (a[0] + b[0]) / 2 < 6.0:
+                continue                                  # and the path to the van
+            post_and_rail(a, b, 1.0, 0x9a7b55, r=0.1)
     for o in bpy.context.scene.objects:          # onto the summit
         o.location.z += s0
     ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]

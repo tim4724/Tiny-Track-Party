@@ -68,8 +68,8 @@ ScenerySpec grassScenery() {
   ScenerySpec s;
   s.trees = {
     { "set-tree-oak", 1.0f, 1.0f, 0.4f },           // Pretzel's faceted broadleaf
-    { "set-tree-cherry", 0.0f, 1.1f, 0.4f },        // Cloverleaf's blossom, pink
-    { "set-tree-cherry-white", 0.0f, 1.1f, 0.4f },  // and white
+    { "set-tree-cherry", 0.0f, 0.8f, 0.7f },        // Cloverleaf's blossom, pink, young to old
+    { "set-tree-cherry-white", 0.0f, 0.8f, 0.7f },  // and white
     { "set-tree-alder", 0.0f, 0.95f, 0.45f },       // Tangle's tall dark wood
     { "set-tree-willow", 0.0f, 0.95f, 0.3f },       // and its willows
     { "set-tree-apple", 0.0f, 1.3f, 0.6f },         // Ribbon's round orchard tree
@@ -464,8 +464,10 @@ void backyardTrack(Theme& t, const std::string& track) {
     // as on Pretzel: the road lies on the grass, its verge open to them.
     t.scenery.clutterDensity = 0.15f;
     // The park's trees are its cherries, in blossom.
+    // Thin on the open lawn: a park plants its trees in avenues and groves
+    // (the set).
     lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });
-    t.scenery.density = 0.5f;
+    t.scenery.density = 0.26f;
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
   }
 }

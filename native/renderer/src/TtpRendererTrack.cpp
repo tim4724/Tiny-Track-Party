@@ -657,7 +657,7 @@ float TtpRenderer::landforms(float x, float z, float edge, float lift, float hil
 float3 TtpRenderer::landTint(float x, float z) const {
     float3 c{ 1.0f };
     for (const LandShape& s : mLand) {
-        if (s.tint == float3{ 1.0f } || x <= s.x0 || x >= s.x1 || z <= s.z0 || z >= s.z1) continue;
+        if (s.tint == float3{ 1.0f } || s.kind == 7 || x <= s.x0 || x >= s.x1 || z <= s.z0 || z >= s.z1) continue;
         const float dx = x - s.x, dz = z - s.z;
         const float lx = dx * s.ax + dz * s.az, lz = dz * s.ax - dx * s.az;
         const float half = 0.5f * s.len;

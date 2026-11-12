@@ -243,7 +243,8 @@ const BOXES = {
 //   pond   open water on the plain: a capsule like a plain (`len`, `r` the
 //          water's reach, `w` the land's fade back), its floor kept flat a
 //          little past the water and the sheet drawn on it with its own
-//          outline and a pebble shore. Only under a deck on pillars well over
+//          outline and a pebble shore (its `tint` is the water's, not the
+//          land's). Only under a deck on pillars well over
 //          the plain, never against a low slab; the dressing keeps off it as
 //          off the sea
 //   paint  a capsule like a plain that shapes nothing: it only colours the
@@ -1239,40 +1240,43 @@ export const TRACKS = {
   cloverleaf: {
     name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
-    // The park in blossom: cherry trees, pink and white, beside every stretch
-    // of the road (set-blossom-grove; the lawn's conifers are thinned out).
-    // The playground on the flat outside the south-west hairpin, where the
-    // start straight points, its hill behind it: on the hill's top it stood
-    // a grid cell off the road and read as a dot. The bandstand on the mound
-    // beside the high road, level with a racer up on the deck. The boating
-    // lake beyond the finger lobe's end, straight ahead down the lobe's
-    // first leg: its fountain the park's tallest thing, swan pedalos going
-    // round, the boathouse on the near shore, willows and reeds on the bank
-    // the road turns along. Another corner of the playground in the S
-    // between the two decks, and the miniature railway by the start straight.
+    // A spring park: cherries in pale blossom, planted as a park plants them,
+    // in avenues down gravel paths beside the straights (set-cherry-avenue)
+    // and in groves at the bends, few alone on the lawn. The playground on
+    // the flat outside the south-west hairpin, where the start straight
+    // points, on its own bark-chip ground inside a low fence, its hill behind
+    // it (on the hill's top it stood a grid cell off the road and read as a
+    // dot). The bandstand on the mound beside the high road, level with a
+    // racer up on the deck. The boating lake beyond the finger lobe's end,
+    // straight ahead down the lobe's first leg: a round pond ringed with
+    // reeds, an islet with a cherry on it, a stone fountain of a park's size,
+    // swan pedalos going round, the boathouse on the near shore. Another
+    // corner of the playground in the S between the two decks, and the
+    // miniature railway by the start straight.
     set: [
       { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
       { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-park-railway', u: 0.02538, lat: 9.658, yaw: 0 },
-      { model: 'set-boating-lake', u: 0.8316, lat: 14.68, yaw: -170.59 },
-      { model: 'set-boathouse', u: 0.8235, lat: 12.52, yaw: 51.11, scale: 1.3 },
-      { model: 'set-blossom-grove-b', u: 0.812, lat: 8.5, yaw: 0, scale: 0.9 },
-      { model: 'set-blossom-grove', u: 0.845, lat: 7.5, yaw: 0 },
-      { model: 'set-lake-reeds', u: 0.8363, lat: 4.94, yaw: 167.8 },
+      { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
+      { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
+      { model: 'set-lake-reeds', u: 0.8311, lat: 5.77, yaw: -168.25, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8381, lat: 9.15, yaw: 112.99, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8387, lat: 17.39, yaw: 64.49, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8363, lat: 23.69, yaw: 32.8, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8328, lat: 26.23, yaw: 4.81, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8287, lat: 25.91, yaw: -22.04, scale: 0.7 },
+      { model: 'set-lake-reeds', u: 0.8264, lat: 21.21, yaw: -54.49, scale: 0.7 },
       { model: 'set-bandstand', u: 0.23, lat: -19.5, yaw: 180, scale: 1.4 },
-      { model: 'set-blossom-grove-b', u: 0.6, lat: -6, yaw: 180 },
-      { model: 'set-blossom-grove', u: 0.77, lat: 6.2, yaw: 0 },
-      { model: 'set-blossom-grove-b', u: 0.875, lat: 6, yaw: 0 },
-      { model: 'set-blossom-grove', u: 0.91, lat: 6, yaw: 0 },
-      { model: 'set-blossom-grove', u: 0.13, lat: -5.8, yaw: 180 },
-      { model: 'set-blossom-grove-b', u: 0.15, lat: 5.8, yaw: 0, scale: 0.9 },
-      { model: 'set-blossom-grove', u: 0.17, lat: -5.8, yaw: 180, scale: 1.1 },
+      { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
+      { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
+      { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
+      { model: 'set-cherry-avenue', u: 0.89, lat: 6.5, yaw: 0 },
+      { model: 'set-cherry-avenue', u: 0.955, lat: 6.5, yaw: 0 },
       { model: 'set-blossom-grove-b', u: 0.21, lat: -5.8, yaw: 180 },
-      { model: 'set-blossom-grove-b', u: 0.58, lat: -6, yaw: 180, scale: 0.9 },
       { model: 'set-blossom-grove-b', u: 0.38, lat: 6.4, yaw: 0 },
       { model: 'set-blossom-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
-      { model: 'set-blossom-grove-b', u: 0.51, lat: -5.8, yaw: 180, scale: 0.9 },
-      { model: 'set-blossom-grove', u: 0.55, lat: -5.8, yaw: 180 }
+      { model: 'set-blossom-grove-b', u: 0.6, lat: -6, yaw: 180 },
+      { model: 'set-blossom-grove', u: 0.845, lat: 8.5, yaw: 0 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west,
     // the playground's hill, the lake and the hill behind it, the bandstand's
@@ -1282,7 +1286,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.2, lat: -48, r: 32, h: 10, top: 0.15 },
       { kind: 'ridge', u: 0.0895, lat: -34, r: 20, h: 6, top: 0.2 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 },
-      { kind: 'pond', u: 0.8316, lat: 14.68, yaw: -170.59, len: 20, r: 8, w: 4 },
+      { kind: 'pond', u: 0.8316, lat: 16.16, yaw: -170.59, len: 4, r: 10, w: 4, tint: 0x8fc2b0 },
       { kind: 'ridge', u: 0.8334, lat: 43.42, yaw: -177.69, len: 30, r: 16, h: 7, top: 0.25 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 },
       { kind: 'ridge', u: 0.448, lat: -17.06, r: 18, h: 6, top: 0.3, near: 0.6 },

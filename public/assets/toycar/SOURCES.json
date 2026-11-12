@@ -115,6 +115,7 @@
     "set-canyon-spur-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-castle-gate.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-castle-watchtower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-cherry-avenue.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cottage-row.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cow-farm.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crab-pots.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
