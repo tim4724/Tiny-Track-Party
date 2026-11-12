@@ -1108,8 +1108,8 @@ export const TRACKS = {
     name: 'Tangle', waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
     // The mill stream: it springs from the foot of the hill beyond the north
-    // loop's top straight, falling white over a boulder lip into a pool, a
-    // heron in it, runs into a drain by the kerb and goes under the
+    // loop's top straight, out from under a springhouse into a pool, a heron
+    // beside it, runs into a drain by the kerb and goes under the
     // straight, out of its twin beyond into the north loop, then winds over
     // the east,
     // middle and north lawns and round the north-west corner into the race of
@@ -1137,7 +1137,7 @@ export const TRACKS = {
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-spring-cascade', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
+      { model: 'set-springhouse', u: 0.7335, lat: -9.6, yaw: 180, scale: 1.6 },
       { model: 'set-spring-drain', u: 0.7335, lat: -4.45, yaw: 180 },
       { model: 'set-spring-drain', u: 0.7335, lat: 4.45, yaw: 10 },
       { model: 'set-park-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
