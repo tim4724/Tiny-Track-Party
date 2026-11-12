@@ -663,9 +663,11 @@ export const TRACKS = {
     // under it), the hop on timber piles (its `trestle`, scripts/gen-tracks.mjs)
     // and then a causeway on the renderer's bents: open sea outside, a strip
     // of lagoon inside, then the beach. Where it sets out, the town's end of
-    // the beach: the promenade's huts and kiosk on a boardwalk at the outer
-    // kerb, facing the cars down the straight, its pier out into the sea,
-    // the big wheel turning slowly on its head. Behind, a wider lagoon by
+    // the beach: the promenade's row of huts and its kiosk on a boardwalk at
+    // the outer kerb, facing the road, and its sea pier
+    // out over the water (the third `shore` brings the sea in under it) to
+    // the white pavilion on its head that the straight points at, the
+    // excursion boat moored alongside. Behind, a wider lagoon by
     // the hook and the surfers' campers parked beside it; the north run is a
     // pass between the great marram dune inside the lap and the Point, a
     // big grassy headland north of the start straight, the surf club at its
@@ -682,6 +684,10 @@ export const TRACKS = {
     land: [
       { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
       { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 17 },
+      // the sea under the pier: its `w` lets the bay in past the causeway's
+      // reach on that bearing (the polar shore keeps 5 u past it otherwise),
+      // held narrow so no road meets it
+      { kind: 'shore', u: 0.40, lat: -13, len: 16, r: 10, w: 9 },
       // the Point, a big grassy headland north of the start straight, its
       // foothill climbing from the straight's kerb; the interior's great
       // marram dune, its flank along the north run
