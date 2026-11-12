@@ -5208,8 +5208,52 @@ def penguin_chute_build(apart):
             for (xa, xb) in zip(xs[:-1:6], xs[6::6]):
                 # low: a lip a hand higher hid the ice from a car that sees the slide side-on
                 snowy(box((xb - xa + 0.1, 0.09, 0.18), ((xa + xb) / 2, 0.035, sd * 0.52), 0xf3f7fb), 0.45)
-        disc(2.1, (HOLE, 0.0, 0.0), 0xd0e8ff, segs=24, h=0.05)        # the ice round the hole
-        disc(1.35, (HOLE, 0.01, 0.0), 0x4f7fd0, segs=20, h=0.05)      # open water
+        # The hole the slide ends in: open water in a hole in the ice. Nothing
+        # here can go under the ground, so the ICE stands over the water: a
+        # shelf of ice round an uneven opening, its top a hand over the
+        # water, its inner wall showing the ice's thickness in a deeper blue,
+        # snow lying on its outer half and running out to nothing; the dark
+        # water inside, a step down. The shelf dips to the water where the
+        # slide runs in (toward -X), so the groove meets it with no wall
+        # across. Water, wall and shelf are one polar mesh on shared rings
+        # and spokes: each vertex lies on the land as drawn, and two flat
+        # discs a hair apart (as this was) cut through each other wherever
+        # the ground's grid folded under them.
+        N, WY, TOPY = 28, 0.035, 0.17
+        def rim(a):                                                   # the opening's uneven edge
+            return 1.32 * (1.0 + 0.09 * math.sin(2 * a + 0.7) + 0.06 * math.sin(3 * a + 2.1) + 0.04 * math.sin(5 * a))
+        def gate(a):                                                  # 0 where the slide runs in, 1 elsewhere
+            d = abs(math.atan2(math.sin(a - math.pi), math.cos(a - math.pi)))
+            return smooth01((d - 0.32) / 0.3)
+        rows = []
+        for i in range(N + 1):
+            a = i / N * 2 * math.pi
+            c, sn = math.cos(a), math.sin(a)
+            r0 = rim(a)
+            top = WY + 0.02 + (TOPY - WY - 0.02) * gate(a)
+            out = r0 + 0.62 + 0.14 * math.sin(4 * a + 1.0)
+            prof = [(0.0, WY), (0.45 * r0, WY), (0.8 * r0, WY), (r0, WY),            # the water
+                    (r0 + 0.07, top), (r0 + 0.3, top + 0.01),                         # the wall, the bare ice
+                    (out, top * 0.75), (out + 0.4, -0.04)]                            # the snow on it, down to the land
+            rows.append([(HOLE + c * r, y, sn * r) for r, y in prof])
+        def pool_color(i, j, nn):
+            return ('water', 'water', 'water', 'wall', 'ice', 'snow', 'snow')[j]
+        polys = {}
+        for i in range(N):
+            for j in range(7):
+                polys.setdefault(pool_color(i, j, None), []).append(
+                    [rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
+        for kind, quads in polys.items():
+            o = colored_faces([({'snow': 'white', 'water': 'blue'}.get(kind, 'sky'), q) for q in quads], 'pool')[0]
+            for pl in o.data.polygons:                       # all of it faces up
+                if pl.normal.z < 0:
+                    pl.flip()
+            if kind == 'water':
+                rowed(o, 17)                                 # deep water: well down the blue ramp, short of its violet end
+            elif kind == 'wall':
+                rowed(o, 27)                                 # the ice's thickness: the sky ramp's deep end
+            else:
+                snowy(o, 0.45 if kind == 'snow' else 0.3)
     draped('chute', static)
     # the watchers, every one alive (penguin_knot): two knots at the water's
     # edge facing the road, one lying on its belly to rest, two on the top,
@@ -5217,14 +5261,28 @@ def penguin_chute_build(apart):
     # each line turned to the slide to watch (along the face, so it stands
     # level across it)
     H = set_ground('penguin-chute')
-    penguin_knot('w0', HOLE + 1.4, 1.5, -0.5, 3, H, 1, apart=apart)
-    penguin_knot('w1', HOLE + 1.6, -1.4, 0.5, 4, H, 4, lying=True, apart=apart)
+    penguin_knot('w0', HOLE + 1.75, 1.85, -0.5, 3, H, 1, apart=apart)
+    penguin_knot('w1', HOLE + 1.95, -1.75, 0.5, 4, H, 4, lying=True, apart=apart)
     penguin_knot('w2', TOP, -1.6, 0.2, 2, H, 2, apart=apart)
     for i in range(7):
         r, a = math.sqrt((i + 0.5) / 7), i * 2.39996 + 0.9
         x, z = -6.5 + 5.2 * r * math.cos(a), -4.7 + 2.3 * r * math.sin(a)
         penguin_knot('c%d' % i, x, z, -math.pi / 2 + 0.2 * math.sin(i * 2.7), 5 + i % 3, H, i + 5,
                      lying=i % 3 == 1, file=True, apart=apart)
+    # On the water: two floes of broken ice riding it, rocking a little, and
+    # where the sliders go in a ring spreading (a pale ring that rises
+    # through the surface and sinks again, in time with nothing).
+    for n, (fx, fz, w, yw) in enumerate(((HOLE + 0.45, 0.55, 0.5, 0.4), (HOLE + 0.2, -0.75, 0.36, 1.3))):
+        with animated('anim_drape+bob:h=0.025:p=%.1f+sway:a=y:d=7:p=%.1f#floe%d' % (2.6 + 0.7 * n, 7.0 + 2 * n, n),
+                      (fx, 0.0, fz)):
+            snowy(cyl(w, 0.11, (fx, 0.02, fz), 0xd0e8ff, segs=5, yaw=yw, stem=True), 0.3)
+            snowy(cyl(w * 0.8, 0.04, (fx, 0.12, fz), 0xf3f7fb, segs=5, yaw=yw, stem=True), 0.45)
+    RX = HOLE - 0.55
+    with animated('anim_drape+bob:h=0.05:p=2.9#ripple', (RX, 0.0, 0.0)):
+        ring = [[(RX + math.cos(a) * r, 0.0, math.sin(a) * r) for r in (0.42, 0.52)]
+                for a in (i / 14 * 2 * math.pi for i in range(15))]
+        for o in sheet(ring, lambda i, j, nn: 0xd0e8ff, 'ring'):
+            snowy(o, 0.3)
     # the sliders' loop: up out of the snow behind the crest, over it and down
     # the groove, across the flat and into the water, home under the ice and
     # the hill
@@ -5244,7 +5302,7 @@ def penguin_chute_build(apart):
     # the climbers' loop: out of the water, up the flank in a line, over the
     # top and down behind it, home under the hill; uphill no faster than the
     # colony's walkers go on the flat
-    climb = [(HOLE + 0.3, -0.7, 1.0), (HOLE - 0.4, 0.02, 1.5), (0.0, 0.0, 3.2), (-4.5, 0.0, 5.2),
+    climb = [(HOLE + 0.3, -0.7, 0.9), (HOLE - 0.35, 0.19, 1.5), (HOLE - 1.1, 0.02, 2.5), (0.0, 0.0, 3.2), (-4.5, 0.0, 5.2),
              (-9.0, 0.0, 5.8), (-13.5, 0.0, 4.6), (-17.0, 0.0, 2.6), (TOP - 0.6, 0.0, 1.2),
              (TOP - 2.6, 0.0, 0.9), (TOP - 4.2, -1.3, 0.9)]
     climb += [(TOP - 2.0 + 4.0 * i, -1.7, 2.6) for i in range(1, int((HOLE - TOP + 2.0) / 4.0))]
