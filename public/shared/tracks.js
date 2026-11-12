@@ -908,10 +908,15 @@ export const TRACKS = {
       // the snow castle, its gate to the road
       { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
-      // each rookery turned so its white fronts face the car coming at it:
-      // one off the run into the bottom loop, one below the NE bend's crest
-      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 80 },
-      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 73 },
+      // each rookery turned so its white fronts face the road and the car
+      // coming at it: one off the run into the bottom loop, one below the NE
+      // bend's crest
+      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 35 },
+      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
+      // beside the raised straight: the dog team's trail along the drift on
+      // its left, the flagged crevasses of the glacier's snout on its right
+      { model: 'set-glacier-dog-trail', u: 0.432, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-crevasses', u: 0.52, lat: 15, yaw: 0 },
       // the advanced camp up on the crest of the glacier's lateral bank, on
       // the snow as drawn (no bank of its own: a bank's foot withholds the
       // land it stands in, and nearer the road the ground is held down to the

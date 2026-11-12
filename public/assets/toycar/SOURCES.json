@@ -172,6 +172,8 @@
     "set-frozen-lake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-game-box.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-airstrip.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-crevasses.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-dog-trail.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-forest-a-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-forest-a.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-peaks-east.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
