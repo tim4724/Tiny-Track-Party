@@ -454,13 +454,13 @@ export const TRACKS = {
       // a piece's box keeps the verge's apron off, so none spans the bend):
       // the east bend's, the seals hauled out on its middle; the west bend's
       // skerries in the surf; the ribs of its bedding along the top run
-      { model: 'set-reef-head', u: 0.275, lat: 12.5 },
-      { model: 'set-reef-seals', u: 0.31, lat: 12.5 },
-      { model: 'set-reef-tail', u: 0.358, lat: 12.5 },
-      { model: 'set-reef-teeth', u: 0.74, lat: 12.5 },
+      { model: 'set-reef-head', u: 0.272, lat: 12.5 },
+      { model: 'set-reef-seals', u: 0.319, lat: 12.5 },
+      { model: 'set-reef-tail', u: 0.366, lat: 12.5 },
+      { model: 'set-reef-teeth', u: 0.735, lat: 12.5 },
       { model: 'set-reef-skerry', u: 0.78, lat: 12.5 },
-      { model: 'set-reef-spit', u: 0.82, lat: 12.5 },
-      { model: 'set-reef-ribs', u: 0.53, lat: 13.5 },
+      { model: 'set-reef-spit', u: 0.826, lat: 12.5 },
+      { model: 'set-reef-ribs', u: 0.542, lat: 14 },
       { model: 'set-reef-outlier', u: 0.41, lat: 12.5 },
       { model: 'set-reef-stack', u: 0.925, lat: 12.5 },
       { model: 'set-crab-pots', u: 0.64, lat: 10.2, yaw: 10 },
@@ -493,7 +493,7 @@ export const TRACKS = {
       // the sand the tide has just left, darker and cooler round the reef
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
-      { kind: 'paint', u: 0.53, lat: 15, len: 30, r: 7, w: 6, tint: 0xc4bcae },
+      { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the downs: a crate on a crest read as a prop
       // dropped on a hilltop
       { kind: 'clear', u: 0.25, lat: -32, len: 30, r: 22 },
@@ -600,15 +600,15 @@ export const TRACKS = {
     // reared up, and the bonfire waits past the last hop.
     set: [
       { model: 'set-strand-snags', u: 0.15, lat: -9.5, yaw: 180 },
-      { model: 'set-driftwood-trunk', u: 0.29, lat: -8.2, yaw: 180 },
-      { model: 'set-strand-line', u: 0.33, lat: -10.2, yaw: 176 },
-      { model: 'set-strand-groynes', u: 0.385, lat: -9.5, yaw: 180 },
-      { model: 'set-bonfire', u: 0.452, lat: -9.6, yaw: 160 },
-      { model: 'set-driftwood-forts', u: 0.423, lat: -9.3 },
+      { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
+      { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
+      { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
+      { model: 'set-bonfire', u: 0.46, lat: -9.6, yaw: 160 },
+      { model: 'set-driftwood-forts', u: 0.432, lat: -10.3 },
       // storm fence and marram along the dune pass, a length each side
-      { model: 'set-dune-fence-a', u: 0.57, lat: 9.2 },
-      { model: 'set-dune-fence-b', u: 0.655, lat: -9.4, yaw: 180 },
-      { model: 'set-dune-fence-a', u: 0.745, lat: 9.2, yaw: 180 },
+      { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
+      { model: 'set-dune-fence-b', u: 0.69, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-fence-a', u: 0.75, lat: 9.4, yaw: 180 },
       { model: 'set-lighthouse', u: 0.855, lat: -9.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
       // them; lifted to the verge they stand on
@@ -682,7 +682,7 @@ export const TRACKS = {
       { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
       { model: 'set-surf-club', u: 0.075, lat: -10.5, yaw: 180 },
-      { model: 'set-surf-campers', u: 0.72, lat: -8.2, yaw: 180 },
+      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180 },
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
       { model: 'set-lagoon-fleet', u: 0.53, lat: 8.5 },
       { model: 'set-kite-surfers', u: 0.545, lat: -13.5, yaw: 180 },

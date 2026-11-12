@@ -2107,6 +2107,22 @@ def reef_outcrop(x_in, z, gap, h, squat, seed, skirt=True):
               squat=0.2, rock=(WET, 'dark'), top=WEED if int(seed) % 2 else WET, y=-0.25)
     return x
 
+def reef_tone():
+    """The reef's rock at one mid-dark value whatever its height (rowed()):
+    slate between a third and a half, sunlit to turned. Down the full ramp a
+    tall knuckle's top came out as pale as the road and the wet ledges at
+    its foot near black, and rock by water wants neither."""
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH' or not o.name.startswith(('stone', 'rib')) or o.get('row') is not None:
+            continue
+        if o['swatch'] == 'grey':
+            rowed(o, 17)
+        elif o['swatch'] == 'slate':
+            rowed(o, 1)
+        elif o['swatch'] == 'dark':
+            o['swatch'] = 'slate'
+            rowed(o, 14)
+
 def reef_stretch(name, x_in, outcrops, loose, seed):
     """A stretch of reef: its outcrops ((z, gap, h, squat) each), the loose
     stones between them and the kerb ((x, z, size) each), and a few starfish
@@ -2116,6 +2132,7 @@ def reef_stretch(name, x_in, outcrops, loose, seed):
         reef_outcrop(x_in, z, gap, h, squat, seed + 3.0 * k)
     for k, (x, z, s) in enumerate(loose):
         stone(x, z, s, 1.3 * k + seed, seed + 40.0 + k, squat=0.55, rock=('grey', WET), top='grey', y=-0.08)
+    reef_tone()
     join_still(name)
     def litter():
         with plain_parts():
@@ -2160,8 +2177,16 @@ def reef_tail():
 def reef_teeth():
     # Tidepool: the west bend's skerries, standing in the surf a stride off
     # the kerb, taller and more broken than the east reef: two teeth of rock
-    # with the sea between them, lower ledges round their feet, a gull on the
-    # taller who watches the cars.
+    # with the sea between them, lower ledges round their feet, gulls
+    # wheeling over them.
+    ring = [(-1.0 + 4.6 * math.cos(a), 5.6 + 0.5 * math.sin(2 * a), 4.0 * math.sin(a))
+            for a in (i / 12 * 2 * math.pi for i in range(12))]
+    for i, p in enumerate(ring):
+        marker('path_gulls_%d' % i, p)
+    for m in range(3):
+        with animated('anim_path:c=gulls:p=15:f=1:o=%.2f#g%d' % (m * 0.31, m), (0.0, 0.0, 0.0)):
+            box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
+            box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
     reef_stretch('reef', REEF_IN, ((-5.4, 0.6, 2.7, 0.8), (-0.8, 2.6, 1.5, 0.56), (3.8, 0.5, 3.2, 0.85),
                                    (7.0, 2.2, 1.2, 0.5)),
                  ((4.5, -2.0, 1.0), (4.3, 6.2, 1.1)), 91.0)
@@ -2218,8 +2243,7 @@ def reef_rib(a, b, h, seed):
         if nrm[1] > 0.8:
             return 'grey'
         return 'grey' if nrm[0] * SUN[0] + nrm[1] * SUN[1] + nrm[2] * SUN[2] > 0.25 else WET
-    for o in sheet(rows, color, 'rib', facet=lambda i, j: True):
-        o['ramp'] = 0.3            # low rock: the full ramp took it to near black
+    sheet(rows, color, 'rib', facet=lambda i, j: True)
 
 @piece(1.0)
 def reef_ribs():
@@ -2230,12 +2254,13 @@ def reef_ribs():
     # troughs between them. DRAPED, so the ribs stand out of the sand as it
     # lies there. +X is the road.
     def ribs():
-        for k, (z, h, reach) in enumerate(((-12.0, 1.1, 9.0), (-7.0, 1.6, 11.0), (-1.6, 1.2, 8.0), (3.6, 1.8, 12.0),
-                                           (9.0, 1.3, 9.5))):
+        for k, (z, h, reach) in enumerate(((-12.0, 1.1, 9.0), (-7.0, 1.6, 11.0), (-1.6, 1.2, 8.0), (3.6, 1.8, 10.0),
+                                           (8.0, 1.0, 6.0))):
             reef_rib((4.6, z), (4.6 - reach, z + 0.45 * reach), h, 120.0 + k)
-        for (x, z, r) in ((1.0, -8.6, 1.0), (-0.6, -2.8, 1.2), (0.6, 2.2, 0.9), (-1.2, 7.4, 1.3)):
+        for (x, z, r) in ((1.0, -8.6, 1.0), (-0.6, -2.8, 1.2), (0.6, 2.2, 0.9), (-1.6, 6.6, 1.1)):
             disc(r + 0.3, (x, 0.02, z), 'sky', segs=8, h=0.04)['ramp'] = 0.25
             disc(r, (x, 0.04, z), 'blue', segs=8, h=0.04)['ramp'] = 0.25
+        reef_tone()
     draped('ribs', ribs)
 
 # ---- Riptide: the surf club, the camp, the contest, the fleet ----
@@ -2258,7 +2283,7 @@ def surf_club():
     # Riptide: the surf lifesaving club where the lap sets out along the
     # beach: the boat hall, white with the patrol's red band, its two doors
     # to the road (+X), boards racked along its wall; the watch room on its
-    # roof, glazed all round under a red hip roof; the signal mast over it
+    # roof, glazed all round under a red roof; the signal mast over it
     # flying the red and yellow; the rescue boat on its trailer on the apron
     # and the patrol's flags along the sand either side. A real club's size
     # (a hall for the boats, three storeys to the mast's foot), so it stands
@@ -2286,7 +2311,7 @@ def surf_club():
         box((0.06, 0.06, HD + 0.3), (fx + 0.15, RY + 0.36, 0.0), white)
         for k in range(7):
             box((0.06, 0.36, 0.06), (fx + 0.15, RY + 0.18, -HD / 2 - 0.15 + k * (HD + 0.3) / 6), white)
-    # the watch room on the roof, toward the cars coming (-Z)
+    # the watch room on the roof, at the hall's far end from the stair
     WZ, WW, WH = -1.5, 1.7, 0.9
     box((WW, WH, WW + 0.2), (HX, RY + WH / 2, WZ), white)
     box((WW + 0.04, 0.34, WW + 0.24), (HX, RY + 0.52, WZ), 0x8ecae6)                  # glazed all round
@@ -2337,8 +2362,10 @@ def surf_campers():
     # for shade, the barbecue under it smoking thin, a fence of boards stood
     # in the sand, a signpost of painted arrows, bunting from the tall pole
     # to a palm and a hammock slung between that palm and the next, two
-    # feather banners where the camp begins. No one about. +X is the road; the camp runs along it (+Z).
-    for (x, z, yw, lower, boards, pop) in ((-0.9, -5.6, -1.3, 'sky', (0xffc044, 0xff5040), True),
+    # feather banners where the camp begins. No one about. +X is the road;
+    # the camp runs along it (+Z). It stands outside a bend that closes on
+    # its -Z end, so that end keeps back from the kerb.
+    for (x, z, yw, lower, boards, pop) in ((-1.3, -5.6, -1.3, 'sky', (0xffc044, 0xff5040), True),
                                            (-1.6, -3.4, -1.7, 'tan', (0x339cf2,), False),
                                            (-1.4, 3.4, -1.9, 'lavender', (0xffc044,), False),
                                            (-0.9, 5.8, -1.5, 'cream', (0xff5040, 0x22c46e), False)):
@@ -2351,9 +2378,9 @@ def surf_campers():
     poly([A, B, C], [(0, 1, 2)], 0xff7e44)
     poly([(A[0], A[1] - 0.02, A[2]), ((A[0] + B[0]) / 2, (A[1] + B[1]) / 2 - 0.02, (A[2] + B[2]) / 2),
           ((A[0] + C[0]) / 2, (A[1] + C[1]) / 2 - 0.02, (A[2] + C[2]) / 2)], [(0, 1, 2)], 0xffc044)
-    camper(-1.2, -8.4, -1.1, 'salmon', boards=(0xfff6eb, 0x339cf2), pop=True)         # one more, up the beach
-    for k, z in enumerate((-10.6, -12.6)):
-        pennant((1.3, 0.0, z), 2.2, ((0xff7e44, 0xfff6eb), (0x339cf2, 0xffc044))[k], 'camp%d' % k)
+    camper(-1.9, 11.8, -1.1, 'salmon', boards=(0xfff6eb, 0x339cf2), pop=True)         # one more, past the palms
+    for k, z in enumerate((11.4, 13.4)):
+        pennant((0.6, 0.0, z), 2.2, ((0xff7e44, 0xfff6eb), (0x339cf2, 0xffc044))[k], 'camp%d' % k)
     cyl(0.14, 0.12, (-0.2, 0.34, 0.1), 0x38383d, segs=8)                               # the barbecue
     with plain_parts():
         for (dx, dz) in ((-0.08, -0.08), (0.08, -0.08), (0.0, 0.1)):
@@ -2362,15 +2389,15 @@ def surf_campers():
     # the fence of boards along the road side
     cols = ((0xff5040, 0xfff6eb), (0x22c46e, 0xffc044), (0x339cf2, 0xfff6eb), (0xffc044, 0x339cf2),
             (0xfff6eb, 0xff5040), (0xff7e44, 0xfff6eb), (0x339cf2, 0xffc044))
-    box((0.08, 0.07, 3.2), (1.5, 0.62, -4.4), 0x9a6a46)
+    box((0.08, 0.07, 3.2), (0.6, 0.62, -4.4), 0x9a6a46)
     for z in (-5.9, -2.9):
-        box((0.08, 0.66, 0.08), (1.5, 0.33, z), 0x9a6a46)
+        box((0.08, 0.66, 0.08), (0.6, 0.33, z), 0x9a6a46)
     for k, (col, st) in enumerate(cols):
-        surfboard(1.44, -5.7 + k * 0.44, 0.0, col, st, lean=0.14, h=1.05 + 0.1 * (k % 3))
+        surfboard(0.54, -5.7 + k * 0.44, 0.0, col, st, lean=0.14, h=1.05 + 0.1 * (k % 3))
     # the signpost
-    box((0.1, 2.3, 0.1), (1.3, 1.15, 3.4), 0x9a6a46)
+    box((0.1, 2.3, 0.1), (1.0, 1.15, 3.4), 0x9a6a46)
     for k, (col, yw) in enumerate(((0xff5040, 0.3), (0xfff6eb, -0.5), (0x339cf2, 0.9), (0xffc044, -0.2))):
-        box((0.07, 0.2, 0.8), (1.3, 2.1 - 0.3 * k, 3.4), col, yaw=yw)
+        box((0.07, 0.2, 0.8), (1.0, 2.1 - 0.3 * k, 3.4), col, yaw=yw)
     # the tall pole, the bunting to the palm, the hammock
     box((0.09, 2.6, 0.09), (0.6, 1.3, 4.8), 0xfff6eb)
     palm((0.2, 0, 7.6), h=2.9, lean=0.22, yaw=math.radians(250))
@@ -2565,9 +2592,9 @@ def root_plate(at, r, face=1):
 def driftwood_trunk():
     # Driftwood: a whole tree the storm brought in, where the strand line
     # begins: a forest giant lying along the verge, stripped and bleached,
-    # its root plate reared up twice a car's height at the end the cars come
-    # to, its broken limbs standing up off the trunk, smaller logs washed up
-    # against it and two dead trees still standing in the sand beside it. A
+    # its root plate reared up twice a car's height at one end, its broken
+    # limbs standing up off the trunk, smaller logs washed up
+    # against it and a dead tree still standing in the sand behind its roots. A
     # beachcomber sits on the trunk; the gull on the roots watches the cars
     # and hops off as one goes by. +X is the road.
     L = 9.0
@@ -2581,8 +2608,7 @@ def driftwood_trunk():
         rod((1.2, 0.12, -1.0), (1.9, 0.11, 1.4), 0.13, 'lavender', r2=0.09)
         rod((-1.0, 0.1, 1.5), (-1.6, 0.09, 3.2), 0.1, 'white', r2=0.07)
         rod((0.9, 0.16, -3.6), (-1.1, 0.5, -2.4), 0.15, 'white', r2=0.1)               # one thrown across the trunk's foot
-        drift_snag(-1.5, -6.6, 3.6, 0.2, 2.2, 1.0)
-        drift_snag(0.7, 6.4, 2.8, 0.3, 0.6, 2.0, limbs=3)
+        drift_snag(-1.6, -3.2, 3.6, 0.2, 2.2, 1.0)
     figure((0.0, 0.84, -0.6), 0.0, shirt=0x6794d9, legs=0xf2bf99, pose='sit')
     gull((0.0, 2.28, -L / 2), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     join_still('trunk')
@@ -2679,7 +2705,7 @@ def dune_fence(name, seed, half, breaks):
         with plain_parts():
             for k in range(int(half * 1.6)):
                 z = -half + 2 * half * frac(k * 0.618 + 0.11 * seed)
-                x = 0.9 * wobble(z, seed, 9.0) + (1.0 + 1.8 * frac(k * 0.37)) * (1 if k % 3 else -1)
+                x = 0.9 * wobble(z, seed, 9.0) + (0.5 + 0.9 * frac(k * 0.37)) * (-1 if k % 2 else 1)
                 for j in range(6):              # a tussock: thin blades fanned out of one foot
                     a = 1.05 * j + k
                     hgt = 0.45 + 0.3 * frac(k * 0.29 + j * 0.4)
