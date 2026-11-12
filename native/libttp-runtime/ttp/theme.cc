@@ -379,6 +379,10 @@ void playroomTrack(Theme& t, const std::string& track) {
     // so under a town of coloured blocks they read as the track's own
     // supports, not more towers
     t.structureStack = { 0x4a6fc4, 0x6f93df };
+    // the town runs its own wooden train round the infield (set-block-town):
+    // the biome's train set beside it was a second, different railway
+    t.props.scatter = { { 1, 1.0f, 3.5f, 0.5f, false, true } };
+    t.props.scatterDensity = 0.14f;
   } else if (track == "helix") {
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
     // the skyway and both spirals stand on one plain connector blue: a
@@ -393,6 +397,17 @@ void playroomTrack(Theme& t, const std::string& track) {
     t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
     // the bridge past the ring stands on the castle's stacked toy blocks
     t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
+    // One story: nothing lies about this floor that is not the tourney's.
+    // The biome's train set and skateboard, its loose blocks, marbles and
+    // dominoes are another game's toys; here the scatter is racks of
+    // shields and archery butts at the kerb and the sides' banners further
+    // out (set_prototypes.py, round 9).
+    t.scenery.density = 0;
+    t.scenery.clutterDensity = 0;
+    t.props.models = { "set-tourney-shields", "set-tourney-butt", "set-tourney-banner" };
+    t.props.scatterDensity = 0.3f;
+    t.props.scatter = { { 0, 0.4f, 1.0f, 0.15f, true, true }, { 1, 0.25f, 1.0f, 0.15f, true, true },
+                        { 2, 0.35f, 1.0f, 0.2f, true, false } };
   }
 }
 

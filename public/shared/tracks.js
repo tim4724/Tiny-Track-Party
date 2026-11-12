@@ -1678,7 +1678,12 @@ export const TRACKS = {
     // its dragon on guard where the straight points. The besiegers' ram,
     // its log swinging, stands with their guns outside the corner after
     // them, aimed across at the castle, and the castle's corner towers fly
-    // tall blue pennants.
+    // tall blue pennants. Between the fights the two sides hold a tourney:
+    // the lists outside the grid straight, a red knight and a blue riding at
+    // each other along the tilt before the king's stand, and the castle's
+    // knights' camp inside the home straight, its archery butts and
+    // quintain. The floor's scatter is the tourney's too (theme.cc): shields,
+    // butts and banners, none of the biome's other toys.
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
@@ -1693,7 +1698,9 @@ export const TRACKS = {
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
       { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
       { model: 'set-siege-tower', u: 0.0777, lat: 11, yaw: 35 },
-      { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 }
+      { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 },
+      { model: 'set-tilt-yard', u: 0.027, lat: 8.5 },
+      { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 }
     ]
   },
   helix: {

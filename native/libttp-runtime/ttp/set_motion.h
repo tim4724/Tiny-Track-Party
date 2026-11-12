@@ -51,6 +51,9 @@
 // puts the part IN STEP: it counts from its placement's clock, not its own,
 // `o` of a cycle on, so parts of one piece keep time (a robot's legs and body,
 // a snake's tail joints). Without it every part keeps a phase of its own.
+// On a spin `o` PINS the turn to the scene clock, `o` of a turn at t = 0, the
+// clock a path runs on: a screw lift's flight stays under the marbles riding
+// their path up it.
 //
 // EVERY POSE IS A PURE FUNCTION of the scene clock, a per-node phase and where
 // the cars are now. Nothing accumulates, so nothing needs resetting between
@@ -75,6 +78,8 @@ struct SetMotion {
        hop = false, path = false, smoke = false, drape = false;
   char spinAxis = 'y';
   float spinRate = 1.0f;                     // rad/s, signed
+  bool spinPinned = false;                   // `o` on a spin: its turn at t = 0, not a phase of its own
+  float spinTurn = 0.0f;
   char swayAxis = 'z';
   float swayDeg = 25.0f, swayPeriod = 2.0f;  // a sway under ~20 degrees does not read
   float swayRest = -1.0f;                    // < 0: either side, no rest
@@ -140,7 +145,8 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
       const char axis = val.empty() ? 'y' : val[0];
       bool known = true;
       if (v == "spin") {
-        if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f; else known = false;
+        if (key == 'a') m.spinAxis = axis; else if (key == 'w') m.spinRate = f;
+        else if (key == 'o') { m.spinPinned = true; m.spinTurn = f; } else known = false;
       } else if (key == 'o' && (v == "sway" || v == "bob" || v == "waddle")) {
         m.inStep = true;
         m.step = f;
@@ -231,7 +237,7 @@ inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
     const SetMotionCar* cars, size_t nCars) {
   constexpr float TAU = 6.28318530718f, DEG = 0.0174532925f;
   SetMotionPose p;
-  if (m.spin) p.spin = m.spinRate * t + phase * TAU;
+  if (m.spin) p.spin = m.spinRate * t + (m.spinPinned ? m.spinTurn : phase) * TAU;
   if (m.sway) {
     p.sway = m.swayRest < 0 ? m.swayDeg * DEG * std::sin(TAU * (t / m.swayPeriod + phase))
                             : m.swayDeg * DEG * set_motion_once(t / m.swayPeriod + phase, m.swayRest);
