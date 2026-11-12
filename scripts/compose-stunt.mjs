@@ -329,24 +329,31 @@ function alignGauntlet(segs) {
   if (err > 1.0) throw new Error(`gauntlet crest ${err.toFixed(2)} world off the ring axis`);
 }
 
-// SKYSNAKE — a slalom IN THE SKY: spiral up to 5.2 world, weave an S-S through the
-// clouds on pillars, then dive home past a toy loop.
+// SKYSNAKE — snakes and ladders, raced across the board: up two LADDERS (straight
+// climbs, each cresting in a hop) to the top deck at 5.2 world, the S-S weave in
+// the sky, round the top corner and down the SNAKE (one long dive, west) to the
+// board, then home past a toy loop.
 export function designSkysnake() {
   const segs = [
-    straight(14, { _leg: true }),                                     // grid θ=0
+    straight(14, { _leg: true }),                                     // grid θ=0, on the board
     arc(RL, -90),                                                     // east
-    straight(10, { _leg: true }),
-    arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90) → south
+    straight(5, { _leg: true }),
+    straight(10, { rise: 1.3, pillars: true }),                       // LADDER 1 → 2.6 world
+    straight(8, { pillars: true }),                                   // the mid deck
+    arc(RL, -90, { pillars: true }),                                  // south, on the mid deck
+    straight(8, { pillars: true }),
+    straight(10, { rise: 1.3, pillars: true }),                       // LADDER 2 → 5.2 world
+    straight(6, { pillars: true }),                                   // (its kicker's landing)
     arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),  // THE SKY WEAVE (net 0)
     arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
-    straight(6, { pillars: true }),
-    straight(10, { rise: -2.6, pillars: true }),                      // dive to ground
+    straight(3, { pillars: true }),
+    arc(RL, -90, { pillars: true }),                                  // west, on the top deck
+    straight(3, { pillars: true }),
+    straight(13, { rise: -2.6, pillars: true }),                      // THE SNAKE, down to the board
     straight(5),                                                      // boost — straight into
     loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP
-    straight(8, { _leg: true }),
-    arc(RL, -90),                                                     // west
-    straight(12, { _leg: true }),
-    arc(RL, -90)                                                      // home (net -720)
+    straight(9),
+    arc(RL, -90)                                                      // home (net -360)
   ];
   return { name: 'skysnake', segs };
 }

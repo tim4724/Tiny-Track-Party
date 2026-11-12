@@ -1420,11 +1420,17 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     if (mTrack && !mPlane.entity.isNull()) {
         const TrackBin& t = *mTrack;
         const float ph = mTime * t.planeSpeed;
-        const float cx = std::cos(t.planeA0) * t.planeRc * mHillSf;
-        const float cz = std::sin(t.planeA0) * t.planeRc * mHillSf;
-        const float3 p{ cx + std::cos(ph) * t.planeRb,
+        float cx = std::cos(t.planeA0) * t.planeRc * mHillSf;
+        float cz = std::sin(t.planeA0) * t.planeRc * mHillSf;
+        float rb = t.planeRb;
+        if (mRoom.z > mRoom.x) {   // indoors: round the middle of the room, clear of its walls
+            cx = 0.5f * (mRoom.x + mRoom.z);
+            cz = 0.5f * (mRoom.y + mRoom.w);
+            rb = std::min(rb, 0.5f * std::min(mRoom.z - mRoom.x, mRoom.w - mRoom.y) - 12.0f);
+        }
+        const float3 p{ cx + std::cos(ph) * rb,
                         t.planeY + std::sin(ph * 2.1f) * 1.1f, // long shallow swoops
-                        cz + std::sin(ph) * t.planeRb };
+                        cz + std::sin(ph) * rb };
         const float yaw = std::atan2(-std::sin(ph), std::cos(ph));
         tcm.setTransform(tcm.getInstance(mPlane.entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })

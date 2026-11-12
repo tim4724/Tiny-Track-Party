@@ -975,6 +975,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.gantryHasRings = th.gantry.hasRings;
     out.gantryRings = th.gantry.rings;
     out.boostCol = th.boost;
+    out.kickerCol = th.kicker;
     out.hasWater = th.hasWater;
     if (th.hasWater) {
         out.waterFoam = th.water.foam;
@@ -2421,6 +2422,7 @@ void TtpRenderer::releaseStatic() {
     mShoreFn = nullptr;
     mTrack.reset();
     mHillSf = 1;
+    mRoom = { 0, 0, -1, -1 };
     mTime = 0;
     mBoxScale = 1.0f;
 }

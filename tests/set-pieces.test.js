@@ -12,7 +12,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 
-const FLOATING = {};
+const FLOATING = {
+  // Skysnake's snake rears out of the side of the top deck (the deck holds
+  // it, not the GLB): its neck and head, 5 u over the floor.
+  'set-board-snake': 13
+};
 
 test('no shipped set piece floats a part beyond its FLOATING entry', async () => {
   const { checkPiece, shippedPieces, SET_DIR } = await import(path.join(__dirname, '../scripts/set-check.mjs'));

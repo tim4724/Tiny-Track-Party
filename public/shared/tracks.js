@@ -144,24 +144,30 @@ export const GAUNTLET = [
   straight(7.815)                                                    //  keeping closure exact)
 ];
 
-// ---- Skysnake (Hard): a slalom IN THE SKY. The spiral climbs to 5.2 world, the road
-// weaves an S-S through the clouds on pillars, then dives home past a toy loop.
-// Composed by scripts/compose-stunt.mjs (solved grid leg + probe-measured roll trims,
-// swept with no tilt allowance, as Helix's, so the floor legs ride level).
+// ---- Skysnake (Hard): snakes and ladders, raced across the board. Up two LADDERS
+// (straight climbs, each cresting in a hop) to the top deck at 5.2 world, the S-S
+// weave in the sky, round the top corner and down the SNAKE (one long dive) to the
+// board, then home past a toy loop. Composed by scripts/compose-stunt.mjs (solved
+// grid and first legs + the loop's probe-measured roll trim).
 export const SKYSNAKE = [
-  straight(40.837),                                                  // grid straight (closure-solved)
+  straight(35.837),                                                  // grid straight (closure-solved)
   arc(RL, -90),                                                      // east
-  straight(10),
-  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 35.2 }), // SPIRAL UP → south
+  straight(12),                                                      // (closure-solved)
+  straight(10, { rise: 1.3, pillars: true }),                        // LADDER 1 → 2.6 world
+  straight(8, { pillars: true }),                                    // the mid deck
+  arc(RL, -90, { pillars: true }),                                   // south
+  straight(8, { pillars: true }),
+  straight(10, { rise: 1.3, pillars: true }),                        // LADDER 2 → 5.2 world
+  straight(6, { pillars: true }),                                    // (its kicker's landing)
   arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
   arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
-  straight(6, { pillars: true }),
-  straight(10, { rise: -2.6, pillars: true }),                       // dive to ground
+  straight(3, { pillars: true }),
+  arc(RL, -90, { pillars: true }),                                   // west, on the top deck
+  straight(3, { pillars: true }),
+  straight(13, { rise: -2.6, pillars: true }),                       // THE SNAKE, down to the board
   straight(5),                                                       // boost — straight into
-  loop(2.2, { drift: -3, roll: -76.2 }),                             // TOY LOOP
-  straight(8),
-  arc(RL, -90),                                                      // west
-  straight(7),
+  loop(2.2, { drift: -3, roll: -84 }),                               // TOY LOOP
+  straight(9),
   arc(RL, -90)                                                       // home
 ];
 
@@ -184,7 +190,7 @@ const OILS = {
   helix:      [ { u: 0.198, lat: 0.7 }, { u: 0.818, lat: -0.7 } ],
   skyline:    [ { u: 0.834, lat: 0.7 }, { u: 0.245, lat: -0.7 } ],
   gauntlet:   [ { u: 0.29, lat: 0.7 }, { u: 0.795, lat: -0.7 } ],
-  skysnake:   [ { u: 0.266, lat: 0.7 }, { u: 0.827, lat: -0.7 } ]
+  skysnake:   [ { u: 0.222, lat: 0.7 }, { u: 0.915, lat: -0.7 } ]
 };
 
 // Boost pads — drive-over speed strips, position-scaled for catch-up. Place on STRAIGHTS
@@ -197,7 +203,7 @@ const PADS = {
   helix:      [ { u: 0.063, lat: 0.0 }, { u: 0.443, lat: 0.0 } ],
   skyline:    [ { u: 0.103, lat: 0.0 }, { u: 0.575, lat: 0.0 } ],
   gauntlet:   [ { u: 0.105, lat: 0.0 }, { u: 0.683, lat: 0.0 } ],
-  skysnake:   [ { u: 0.066, lat: 0.0 }, { u: 0.608, lat: 0.0 } ]
+  skysnake:   [ { u: 0.065, lat: 0.0 }, { u: 0.446, lat: 0.0 } ]
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
@@ -213,7 +219,7 @@ const BOXES = {
   helix:      boxRows(0.086, 0.705),  // auto-placed: the grid run, then the south leg past the loops
   skyline:    boxRows(0.131, 0.695),  // auto-placed: the north leg, then the flat past the toy loop
   gauntlet:   boxRows(0.128, 0.559),  // auto-placed: the east leg, then the exit run past the plunge
-  skysnake:   boxRows(0.096, 0.692)   // auto-placed: the grid straight, then the flat past the toy loop
+  skysnake:   boxRows(0.093, 0.632)   // the grid straight (auto-placed), then the top deck past the weave
 };
 
 // Set pieces — `set`, per track: the big landmarks that make one circuit look
@@ -262,7 +268,13 @@ const BOXES = {
 //          a low kerbstone instead of the biome's racing kerb, so the
 //          pavement and front gardens beside it show from the seat. No lat,
 //          r or yaw: it is the road's, both sides
-// Any but a mound, a clear or a street may carry a `tint`, 0xRRGGBB, a
+//   snake  `len` of road centred on `u` that is the board's snake made a
+//          slide (Skysnake): its deck the toy snake's green and yellow bands
+//          from kerb to kerb, its kerbs and slab side its green flanks. No
+//          lat, r or yaw, like a street
+//   ladder the same for one of the board's ladders: its kerbs the wooden
+//          rails, its rungs across the deck
+// Any but a mound, a clear, a street, a snake or a ladder may carry a `tint`, 0xRRGGBB, a
 // multiplier over the ground's colour where the form lies (fading with its
 // flank, or a plain's or paint's `w`); the ground's grid is 9 u, so a tint is
 // a broad wash.
@@ -1705,32 +1717,25 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Snakes and ladders, at the toy cars' own scale: the board stood up half
-    // open past the dive's loop, outside the bend the loop runs out into, its
-    // face turned to the racers coming down the dive (lying flat, it showed
-    // only a sliver over the kerb), and its box stood on edge where the grid
-    // straight points; the board's wooden snakes have come
-    // alive, one rearing at the racers inside the bend where the south leg
-    // turns for the line, another slithering round its ring beside the grid
-    // straight's end. The game again as a floor mat the grid straight runs
-    // down the middle of, its big pawns and foam dice stood on it, and just
-    // past the mat's end the racers' toy car park on the infield, its lift
-    // and spiral ramp running. The climb is the game's ladder: a wooden one
-    // leans from the floor onto the spiral's top deck, a red pawn partway up.
-    // Up in the sky the biggest snake of all rises coiled out of a woven
-    // basket at the inside of the weave's first bend, its head swaying over
-    // the deck, and at the inside of its last the game's foam dice stand
-    // stacked four high with a pawn on top, the slalom's one gate.
+    // Each ladder ends in a kicker: the racers kick up off its top rung onto
+    // the next deck.
+    kickers: [ { u: 0.336 }, { u: 0.523 } ],
+    // Snakes and ladders, raced across the board at the toy cars' own scale.
     set: [
-      { model: 'set-floor-mat', u: 0, lat: 0 },
-      { model: 'set-toy-garage', u: 0.08, lat: -10, yaw: 180 },
-      { model: 'set-jointed-snake', u: 0.9754, lat: 10, yaw: 180 },
-      { model: 'set-snakes-ladders', u: 0.8454, lat: 14, yaw: 45 },
-      { model: 'set-game-box', u: 0.29, lat: 12 },
-      { model: 'set-toy-snake-loop', u: 0.17, lat: -8 },
-      { model: 'set-sky-snake', u: 0.525, lat: 6 },
-      { model: 'set-snake-ladder', u: 0.4775, lat: 6.5 },
-      { model: 'set-dice-tower', u: 0.584, lat: 6, yaw: -30 }
+      { model: 'set-snake-board', u: 0, lat: 0 },
+      { model: 'set-board-snake', u: 0.7031, lat: 0 },
+      { model: 'set-dice-tower', u: 0.196, lat: 11 },
+      { model: 'set-game-box', u: 0.957, lat: 11 },
+      { model: 'set-windup-chicks', u: 0.12, lat: 3.9 },
+      { model: 'set-room-train-skysnake', u: 0, lat: 0 },
+      { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
+    ],
+    // The climbs are the board's ladders, the dive its snake, from the top
+    // deck down to the board.
+    land: [
+      { kind: 'ladder', u: 0.3092, len: 23 },
+      { kind: 'ladder', u: 0.4927, len: 23 },
+      { kind: 'snake', u: 0.744, len: 31 }
     ]
   },
   gauntlet: {
@@ -1749,8 +1754,10 @@ export const TRACKS = {
     // of blocks, and down past the besiegers' guns aimed across it at the
     // castle and their tents. On the long home straight the siege goes on:
     // a red rank and a siege tower inside it, two blue ranks with their
-    // cannon outside, the castle's outer gatehouse astride the road and
-    // its dragon on guard where the straight points. The besiegers' ram,
+    // cannon outside, the castle's outer gatehouse astride the road (the
+    // racers drive through its arch, under the portcullis), a tin knight of
+    // each side wound up and marching the kerb, and the castle's dragon on
+    // guard where the straight points. The besiegers' ram,
     // its log swinging, stands with their guns outside the corner after
     // them, aimed across at the castle, and the castle's corner towers fly
     // tall blue pennants. Between the fights the two sides hold a tourney:
@@ -1762,7 +1769,7 @@ export const TRACKS = {
     set: [
       { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
       { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
-      { model: 'set-castle-gate', u: 0.85, lat: 0 },
+      { model: 'set-castle-gate', u: 0.83, lat: 0 },
       { model: 'set-toy-soldiers', u: 0.875, lat: 7 },
       { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
       { model: 'set-barbican', u: 0.6106, lat: 0 },
@@ -1775,7 +1782,11 @@ export const TRACKS = {
       { model: 'set-siege-tower', u: 0.0777, lat: 11, yaw: 35 },
       { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 },
       { model: 'set-tilt-yard', u: 0.027, lat: 8.5 },
-      { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 }
+      { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
+      { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
+      { model: 'set-play-rug', u: 0.885, lat: 0, yaw: 90 },
+      { model: 'set-room-train-gauntlet', u: 0, lat: 0 },
+      { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
   helix: {
@@ -1807,7 +1818,11 @@ export const TRACKS = {
       { model: 'set-marble-run-vortex', u: 0.521114, lat: 6.96, yaw: 180 },
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
-      { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 }
+      { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
+      { model: 'set-windup-robots', u: 0.06, lat: 3.9 },
+      { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
+      { model: 'set-room-train-helix', u: 0, lat: 0 },
+      { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
     ]
   },
   skyline: {
@@ -1837,7 +1852,10 @@ export const TRACKS = {
       { model: 'set-block-uptown', u: 0.4534, lat: -6.64 },
       { model: 'set-block-uptown', u: 0.485, lat: -9, yaw: 90 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
-      { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 }
+      { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 },
+      { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
+      { model: 'set-room-train-skyline', u: 0, lat: 0 },
+      { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }
 };
