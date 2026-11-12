@@ -41,7 +41,6 @@
     "set-advanced-camp.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-alder-grove.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-cabin.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-avalanche-crags-west.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-crags.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-debris-lobe.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-forest-a-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

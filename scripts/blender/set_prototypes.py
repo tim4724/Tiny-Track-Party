@@ -3685,7 +3685,7 @@ FORESTS = {
     'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (-2.2, 1.6, 0.21, 1.84, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (-2.1, 3.0, 0.18, 2.81, 1, 0), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
     'glacier-forest-a': ((3.0, 6.5, 3.27, 2.00), (-0.7, -3.5, 5.05, 1.67), (-5.9, -0.4, 7.72, 2.09), (-0.6, 3.1, 5.61, 1.75), (-4.6, -9.8, 5.91, 1.93), (3.2, 1.5, 3.33, 2.13), (-1.4, 8.5, 5.76, 1.58), (6.9, 17.2, 0.56, 2.01), (2.3, -8.4, 2.79, 1.63), (-0.9, 12.5, 4.91, 2.07), (-4.6, 12.0, 6.33, 1.68), (2.0, 15.8, 2.41, 1.96), (7.8, -7.5, 0.58, 1.46), (-1.2, -10.5, 4.35, 1.44), (6.9, -12.1, 0.64, 1.47), (7.9, -2.3, 0.75, 2.06), (0.8, -9.0, 3.59, 2.14), (4.9, 1.4, 2.29, 2.08), (-1.3, -5.3, 5.13, 1.83), (0.8, -5.7, 3.91, 1.82), (1.5, 7.8, 4.13, 2.11), (-5.5, -3.1, 7.27, 2.10), (4.0, -9.4, 1.68, 1.91), (2.3, -2.9, 3.39, 2.14), (3.6, 8.7, 2.89, 1.36), (-5.9, 13.6, 6.28, 2.12), (5.6, 15.9, 0.86, 1.46), (5.3, 11.3, 1.91, 1.94), (-3.6, -6.9, 5.71, 1.93), (-3.7, -15.5, 3.82, 1.48), (4.0, -11.2, 1.63, 1.59), (-2.6, 9.7, 6.05, 2.12), (0.5, 14.2, 3.65, 1.72), (6.9, -9.3, 0.60, 1.41), (6.6, 0.3, 1.38, 1.99), (7.6, 7.9, 1.10, 1.77), (5.6, 3.3, 1.88, 1.60), (0.2, 10.3, 4.69, 2.07), (6.3, -3.7, 1.26, 1.91), (-4.6, -5.5, 6.55, 1.99)),
     'avalanche-forest-i': ((-11.0, 15.3, 13.77, 2.62, 0, 0), (-8.6, 12.2, 17.03, 2.74, 0, 0), (-10.1, 13.9, 15.40, 1.64, 0, 0), (-6.3, 17.0, 11.97, 1.55, 0, 0), (-4.0, 15.9, 10.65, 2.01, 0, 0), (-7.0, 19.8, 13.63, 1.57, 1, 0), (-3.5, 18.0, 11.23, 2.12, 0, 0), (-8.5, 19.5, 14.26, 2.09, 1, 0), (-13.7, 15.8, 15.18, 1.70, 1, 0), (-10.2, 17.9, 13.48, 2.09, 0, 0), (-11.2, 16.7, 12.81, 2.05, 0, 0), (-16.4, 17.1, 15.57, 1.50, 0, 0), (-13.5, 18.3, 14.18, 2.85, 0, 0), (-21.2, 18.8, 18.02, 2.06, 1, 0), (11.3, -5.2, 13.12, 2.08, 0, 0), (12.4, -8.8, 10.07, 2.06, 1, 0), (10.0, -9.6, 12.63, 1.78, 1, 0), (10.1, -4.3, 14.57, 1.74, 0, 0), (13.9, -6.7, 10.19, 1.95, 0, 0), (9.6, -11.2, 12.27, 1.91, 0, 0), (9.7, -7.2, 13.90, 1.66, 0, 0), (7.2, -10.8, 15.98, 1.97, 0, 0), (-3.9, -24.5, 15.86, 1.95, 0, 0), (-5.1, -23.4, 17.80, 2.09, 1, 0), (-1.5, -24.3, 13.34, 2.85, 0, 0), (-0.8, -21.7, 15.63, 2.95, 1, 0), (-2.4, -20.9, 18.08, 2.07, 1, 0), (10.9, -21.5, 3.60, 2.01, 1, 2), (5.0, -30.8, 5.77, 1.42, 0, 2), (7.8, 8.4, 10.02, 1.86, 0, 0), (4.9, 5.3, 14.99, 2.13, 0, 0), (16.3, -17.6, 2.89, 1.98, 0, 2), (5.4, 12.3, 7.57, 1.42, 0, 0), (9.4, -19.3, 6.25, 1.69, 1, 2)),
-    'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (18.6, -12.7, 1.86, 1.71, 0, 2), (14.3, -13.7, 4.53, 1.63, 0, 2), (14.8, -9.8, 2.54, 1.59, 0, 2), (17.0, -11.6, 2.23, 2.06, 0, 2), (16.8, -9.3, 1.16, 1.41, 1, 2), (15.5, -13.0, 3.70, 1.94, 0, 2), (15.9, -14.4, 3.69, 1.99, 0, 2), (12.7, -11.7, 4.68, 1.70, 1, 2), (18.0, -13.9, 2.40, 1.47, 0, 2), (15.2, -11.5, 3.18, 1.64, 1, 2), (18.1, -10.8, 1.20, 1.70, 1, 2), (13.6, -10.6, 3.61, 1.93, 0, 2), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (11.8, -7.6, 3.19, 1.71, 0, 2), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
+    'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
     'avalanche-forest-l': ((4.0, -0.6, 0.37, 2.97, 0, 0), (3.3, 1.9, 0.34, 2.75, 1, 0), (5.3, -1.3, 0.36, 2.79, 0, 0), (5.2, -3.0, 0.37, 2.91, 0, 0), (-2.1, 0.1, 0.33, 2.62, 0, 0), (-4.0, 4.0, 0.22, 2.83, 0, 0), (-0.3, 4.1, 0.24, 2.71, 1, 0), (-6.8, -3.0, 0.52, 2.95, 0, 1), (-4.5, -3.7, 0.46, 2.82, 0, 0)),
 }
@@ -4226,13 +4226,11 @@ def snow_fort():
 @piece(1.0)
 def avalanche_slide():
     # Avalanche: a broad mountain behind the verge (summit at -X) whose face
-    # let go: the broken crown near the top, the bare rock of the chute below
-    # it, and the debris fan of tumbled snow blocks and rocks spread out at
-    # its foot toward the road, a pine snapped and its trunk thrown down, a
-    # buried sled. Forest stands either side of the chute. The mountain and
-    # the fan are the track's terrain (SET_GROUND); this is what lies on them,
-    # at its real size: blocks of snow the size of a car or less, pines as
-    # tall as the ambient ones.
+    # let go: its path down through the forest, and the runout of churned
+    # snow and heaped blocks at its foot toward the road, trunks it snapped
+    # lying on it, a buried sled. The mountain and the fan are the track's
+    # terrain (SET_GROUND); this is what lies on them, at its real size:
+    # blocks of snow the size of a car, pines as tall as the ambient ones.
     H = set_ground('avalanche-slide')
     G = 1.45                                   # the old build's grow: where things lie on the slope
     # What lies on the face and the fan is draped: built from y = 0 as if on
@@ -4240,52 +4238,43 @@ def avalanche_slide():
     # 9 u grid's chords stray a unit off the curve), so no block floats and
     # none is swallowed.
     def debris():
-        for z in (-2.6, 0.0, 2.6):                 # the crown: the broken edge of the slab
-            x = (-28.0 + 0.4 * abs(z)) * G
-            box((1.3, 1.4, 4.0), (x, 0.3, z * G), 0x868ba1, yaw=0.15 * z)
-        # the chute: the scar the slab left, scoured to grey rock, lying on the
-        # face and widening as it runs down into the fan, whose blocks cover
-        # its end; fine enough to follow the drawn slope, and lifted a little
-        # over it so the grid's folds between its corners stay under
-        xs = [(-27.0 + 1.65 * i) * G for i in range(15)]
-        verts = []
-        for i, x in enumerate(xs):
-            w = (1.8 + 0.225 * i) * G
-            for f in (-1.0, -0.5, 0.0, 0.5, 1.0):
-                verts.append((x, 0.35 - 0.1 * abs(f), f * w + 0.3 * G * math.sin(i / 2)))
-        faces = [(5 * i + j, 5 * i + j + 1, 5 * (i + 1) + j + 1, 5 * (i + 1) + j)
-                 for i in range(len(xs) - 1) for j in range(4)]
-        poly(verts, faces, 0x9aa1b4)
-        for i, x in enumerate((-20.0, -12.0, -4.0)):
-            x *= G
-            z = 0.4 * G * (i % 2 * 2 - 1)
-            rock((x, -0.3, z), 0.9, yaw=i * 1.9)
-        # earth braking mounds across the runout, two staggered rows, the
-        # debris piled up behind them and thinning out between them; nothing
-        # past the second row, whose backs stop short of the crest's berm
+        # The path the slide took down the face stays clear snow between its
+        # forest (no scar: a grey band down the slope with the crown's blocks
+        # at its top read as a lilac strip with two black tabs). At its foot
+        # the runout: a low tongue of churned snow over the fan, earth braking
+        # mounds across it in two staggered rows, the debris piled in heaps
+        # of big blocks behind and between them, trunks the slide snapped
+        # lying along the contour on the heaps, a pine snapped off at its
+        # stump, a sled half buried; nothing past the second row, whose
+        # backs stop short of the crest's berm.
+        rows = []
+        nr, nc = 11, 11
+        for i in range(nr):
+            t = i / (nr - 1)
+            x = (7.5 - 15.5 * t) * G                     # from the toe up
+            w = (6.2 - 2.6 * t) * G * (0.9 + 0.1 * math.sin(i * 1.3))
+            rows.append([(x + 0.4 * G * math.sin(j * 0.9 + i), -w + 2 * w * j / (nc - 1)) for j in range(nc)])
+        debris_tongue(rows, 5.0)
         MOUNDS = ((3.0, -7.5, 0.15, 2.4), (3.0, 0.0, 0.0, 2.4), (3.0, 7.5, -0.15, 2.4),
                   (8.0, -3.8, 0.1, 1.7), (8.0, 3.8, -0.1, 1.7))
         for mx, mz, myaw, down in MOUNDS:
             braking_mound(mx, mz, myaw, down=down)
-        def clear_of_mounds(x, z):
-            return x < 10.0 and all(abs(x - mx) > 1.7 or abs(z - mz) > 2.0 for mx, mz, _, _ in MOUNDS)
-        # the debris fan: tumbled snow blocks over it, the runout thinning on
-        # toward the road (+X). The fan stops a grid cell short of the road,
-        # where the deck's cap would hold the land under it.
-        for i, (x, z, k) in enumerate([(-6.0, 0.5, 1.5), (-3.0, -2.5, 1.4), (-1.0, 3.0, 1.3), (2.0, -1.0, 1.7),
-                                       (3.5, 2.5, 1.4), (4.0, -3.5, 1.3), (5.5, 0.5, 1.2), (6.5, -2.0, 1.0),
-                                       (7.0, 3.0, 0.9), (2.5, 4.5, 1.1), (1.5, -4.5, 1.2), (8.0, 0.0, 0.8),
-                                       (4.8, 5.2, 0.8), (6.0, -6.0, 0.9), (7.5, 5.8, 0.8), (-4.5, 3.8, 1.0),
-                                       (0.0, -6.0, 0.9), (-2.0, 6.5, 0.8), (3.0, 7.0, 0.7), (8.5, -4.0, 0.7)]):
-            x, z, k = x * G, z * G, k * 0.5
-            if not clear_of_mounds(x, z):
-                continue
-            snowy(box((1.3 * k, 0.9 * k, 1.1 * k), (x, 0.15 * k, z), 0xf3f7fb,
-                      yaw=i * 1.1, roll=0.3 * math.sin(i * 2.3), pitch=0.25 * math.cos(i * 1.7)), 0.5)
-        for i, (x, z, k) in enumerate([(3.0, 0.8, 1.0), (5.0, -1.2, 0.8), (1.0, 2.2, 0.9), (6.2, 2.0, 0.7),
-                                       (-4.5, -1.0, 0.9)]):
-            if clear_of_mounds(x * G, z * G):
-                rock((x * G, -0.2, z * G), k, yaw=i * 1.4)
+        # the heaps of blocks: big, all snow, a pale blue in their shade
+        before = set(bpy.context.scene.objects)
+        HEAPS = ((-5.5, -3.0, 6), (-3.0, 4.2, 5), (-0.6, -0.2, 4), (5.6, -0.4, 4))
+        for h, (hx, hz, n) in enumerate(HEAPS):
+            for i in range(n):
+                a = i * 2.39996 + h
+                r = 0.55 * math.sqrt(i + 0.3) * G
+                s = (1.6 - 0.12 * i) * (0.85 + 0.15 * math.sin(i * 3.1 + h))
+                stone(hx * G + r * math.cos(a), hz * G + r * math.sin(a), s, a, 3.0 + h * 1.7 + i * 0.37,
+                      squat=0.72, rock=(SNOW, 'sky'), y=0.12 + (0.25 if i == 0 else 0.0))
+        for o in set(bpy.context.scene.objects) - before:
+            if o.get('swatch') == 'sky':     # the blue in a block's shade, not greyed down the ramp
+                snowy(o, 0.35)
+        # trunks the slide snapped, along the contour on the heaps
+        for (x0, z0, x1, z1, k) in ((-5.0, -5.6, -4.4, -1.2, 1.3), (-2.6, 1.8, -3.3, 6.4, 1.2), (5.4, 1.6, 5.9, 5.4, 1.1)):
+            lying_trunk((x0 * G, 0.3, z0 * G), (x1 * G, 0.3, z1 * G), k)
         # the snapped pine: its stump on the slope, the trunk thrown down the fan
         cyl(0.18, 0.8, (-1.0 * G, -0.3, -3.2 * G), 0x7a5a3a, r2=0.15, segs=6)
         cyl(0.16, 3.2, (5.6 * G, 0.05, -5.0 * G), 0x7a5a3a, r2=0.09, segs=6, axis='across', yaw=0.5)
@@ -6011,14 +6000,11 @@ def avalanche_slope():
     # Avalanche: two of its slopes, the track's terrain (SET_GROUND: one
     # under the west slope by the turn onto the crossing, its forest and path
     # sampled on it; one in the cirque, whose ground the long gallery's cut
-    # is sampled on), with the pines that stand on them. No snow fence on
-    # them: at their range the fences were specks. A patch of snow lies
-    # draped under the first pine, so the piece stands on the plain and
-    # levels nothing.
-    H = set_ground('avalanche-slope')
-    for x, z, k in ((-14.0, -12.6, 1.8), (-19.6, 11.2, 1.9), (-30.8, -19.6, 1.8),
-                    (-10.5, 7.5, 1.6), (-24.0, -4.0, 1.7)):
-        pine((x, H(x, z) - 0.6, z), k)
+    # is sampled on), so the piece is their ground and nearly nothing else:
+    # the five pines that stood on them were behind the land from every seat
+    # (see:landmarks, 0 s readable a lap). A patch of snow lies draped on the
+    # slope, so the piece stands on the plain and levels nothing.
+    set_ground('avalanche-slope')
     draped('patch', lambda: box((0.5, 0.1, 0.5), (-14.0, -0.06, -12.6), 0xf3f7fb))
 
 @piece(1.0)
@@ -6974,17 +6960,6 @@ def avalanche_crags():
     def build():
         crag([(2.0, -20.0), (-1.0, -8.0), (0.0, 4.0), (-2.0, 16.0), (-4.0, 28.0), (-5.0, 38.0)],
              ((0.0, 5.0), (0.2, 11.0), (0.4, 14.0), (0.6, 9.0), (0.8, 10.0), (1.0, 5.0)), seed=33.0)
-    draped('crags', build)
-
-@piece(1.0)
-def avalanche_crags_west():
-    # Avalanche: the western massif's summit (tracks.js avalanche `land`)
-    # breaks out of its snow, the crest the run to the short gallery looks
-    # at. Placed on its summit (u 0.7091, lat 67.4), +X toward the road, +Z
-    # along it.
-    def build():
-        crag([(2.0, -16.0), (0.0, -4.0), (-1.0, 4.0), (-3.0, 13.0)],
-             ((0.0, 4.0), (0.4, 11.0), (0.7, 8.0), (1.0, 4.0)), seed=41.0)
     draped('crags', build)
 
 # Rock ribs down the cirque faces' fall lines (scratch/ribs.mjs, traced on the

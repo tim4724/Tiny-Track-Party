@@ -1055,11 +1055,11 @@ export const TRACKS = {
       // work at its east mouth (set_prototypes.py ROAD_C / FACE_C: re-sample
       // with the road or the land)
       { model: 'set-avalanche-gallery-loop', u: 0.37, lat: 0 },
-      // the crags the southern and western massifs' crests break out in
-      // (`land`): the snow keeps their 9 u facets, rock in them read as
-      // stripes on a dome
+      // the crags the southern massif's crest breaks out in (`land`): the
+      // snow keeps their 9 u facets, rock in them read as stripes on a dome.
+      // (The western massif's summit crags were hidden by the spur from
+      // every seat; its east face's ribs carry its rock.)
       { model: 'set-avalanche-crags', u: 0.8349, lat: 52.1, yaw: 3 },
-      { model: 'set-avalanche-crags-west', u: 0.7091, lat: 67.4 },
       // the high peaks the slides start from, east of the mountainside, its
       // stands their foothills (the piece's frame is the world's: yaw cancels
       // the road's heading at u 0.276)
