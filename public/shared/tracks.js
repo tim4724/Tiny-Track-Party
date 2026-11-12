@@ -1394,9 +1394,14 @@ export const TRACKS = {
     name: 'Gulch', waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine at its own size, reached down a canyon of mountainsides off
-    // the crest (the long left-hander and the tight bend into the yard): the
+    // the crest (the long left-hander and the tight bend into the yard). The
+    // ore's way is the lap's story: up the shaft under the headframe at the
+    // east bend into its ore bin, by the little train along the line to the
+    // mine yard, from the yard's tipple up a boarded gallery to the
+    // tramway's terminal and in its buckets over the road to the stamp
+    // mill, whose waste is the tailings dump. The
     // stamp mill across the start straight, its ore tramway's buckets riding
-    // over the road to the adit, a car high, cut into the rock
+    // over the road to the terminal by the adit, a car high, cut into the rock
     // face of a spur under the long ridge north of the start straight, one
     // ore line winding out of its yard along the whole start straight (on a
     // low timber trestle a few units past its kerb, its train pacing the
@@ -1481,9 +1486,9 @@ export const TRACKS = {
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
     // A ranch in butte country. The long straight runs from the ranch on
     // the open plain at its head (house, barn, water tower, the windpump
-    // turning, the corral with cattle) at the rim, the mesa closing the west
-    // of the map: down its left the rim's mountainside comes to the verge,
-    // round the outside of the hairpin under it and on along the north
+    // turning, the corral with cattle) down the ranch's fenced range to the
+    // rim, the mesa closing the west of the map: at the hairpin the rim's
+    // mountainside comes to the verge, round its outside and on along the north
     // straight to the bridge (canyon lengths, set_prototypes.py
     // canyon_mountain, the rim's own massif rising behind them in `land`).
     // Off the bridge the road runs at the mesa standing between the
@@ -1513,6 +1518,11 @@ export const TRACKS = {
       { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
       { model: 'set-crag-saguaros', u: 0.05, lat: 10 },
+      // the start is the ranch's open range, fenced along both verges, its
+      // gateway on the ranch's side (the cup's other starts are a canyon, a
+      // mine yard and an oil camp); the rim begins at the hairpin
+      { model: 'set-ranch-fence', u: 0.032, lat: -5.4, yaw: 180 },
+      { model: 'set-ranch-fence', u: 0.036, lat: 5.4 },
       // the rock, each piece's talus coming to a couple of units past the
       // kerb (a chase camera rounding a bend passed through a talus on the
       // road), its blocks out at the ends, never by a kerb
@@ -1522,7 +1532,6 @@ export const TRACKS = {
       { model: 'set-rimrock-mitten', u: 0.865, lat: 17.5, yaw: 200 },
       // the rim's mountainside, each face toward the road (the hairpin's
       // entry is looser than its apex, so its length is bent wider)
-      { model: 'set-canyon-rim-crag-a', u: 0.036, lat: -5.2, yaw: 180 },
       { model: 'set-canyon-hairpin-crag', u: 0.09, lat: -5.2, yaw: 180 },
       { model: 'set-canyon-exit-crag', u: 0.108, lat: -5.2, yaw: 180 },
       { model: 'set-canyon-rim-crag-b', u: 0.134, lat: -5.2, yaw: 180 }
@@ -1534,7 +1543,6 @@ export const TRACKS = {
       // (taller, it filled the picture as one banded wall, and its steep land
       // is rock the box pays for per pixel), its south end a shoulder short
       // of the ranch
-      { kind: 'ridge', u: 0.04, lat: -28.8, yaw: -178.3, len: 30, r: 24, h: 13, top: 0.5, near: 16 },
       { kind: 'ridge', u: 0.0968, lat: -26, yaw: -129.3, len: 16, r: 26, h: 12, top: 0.5, near: 16 },
       { kind: 'ridge', u: 0.137, lat: -30, yaw: 0.2, len: 24, r: 24, r1: 18, h: 13, h1: 12, top: 0.5, near: 16 },
       // low swells of the land coming to the kerb out on the range, under
@@ -1574,8 +1582,10 @@ export const TRACKS = {
     // east straight, outside the north loop's first corner
     // where the whole straight points; the field's three jacks nodding and
     // tumbleweeds blowing by outside its second corner; and at the line the
-    // field's own filling station, its sign turning and a hawk over it, the
-    // telegraph line along the long straight. Mesa rims close the west as
+    // field's own filling station, its sign turning and a hawk over it. The
+    // telegraph line runs from the station (over the road on two tall
+    // poles) along the long straight, over the mountain on its benches and
+    // down to a lineman's hut past the far mouth. Mesa rims close the west as
     // near backdrops (the north and east stay open).
     // Everything by the road at its own size, the rock as big as rock is.
     set: [

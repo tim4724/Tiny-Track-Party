@@ -1912,17 +1912,17 @@ constexpr SetDef kSet_crag[] = {
   { "set-hoodoos", 0x1.3851eb851eb85p-1, 0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-hoodoos", 0x1.ccccccccccccdp-1, 0x1p+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-crag-saguaros", 0x1.999999999999ap-5, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-ranch-fence", 0x1.0624dd2f1a9fcp-5, -0x1.599999999999ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-ranch-fence", 0x1.26e978d4fdf3bp-5, 0x1.599999999999ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-rimrock-mesa", 0x1.2b4395810624ep-1, -0x1.18p+5, 0x1.26p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-rimrock-spires", 0x1.851eb851eb852p-2, 0x1.5p+4, 0x1.4p+4, 0x0p+0, 0x1p+0, 1 },
   { "set-rimrock-butte", 0x1.970a3d70a3d71p-1, 0x1.78p+4, 0x1.4p+3, 0x0p+0, 0x1p+0, 1 },
   { "set-rimrock-mitten", 0x1.bae147ae147aep-1, 0x1.18p+4, 0x1.9p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-canyon-rim-crag-a", 0x1.26e978d4fdf3bp-5, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-hairpin-crag", 0x1.70a3d70a3d70ap-4, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-exit-crag", 0x1.ba5e353f7ced9p-4, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-rim-crag-b", 0x1.126e978d4fdf4p-3, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_crag[] = {
-  { 0, -1, 0x1.47ae147ae147bp-5, -0x1.ccccccccccccdp+4, -0x1.649999999999ap+7, 0x0p+0, 0x0p+0, 0x1.ep+4, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.ap+3, 0x1p-1, 0x1p+0, 0x0u, 0x1p+4, 1 },
   { 0, -1, 0x1.8c7e28240b78p-4, -0x1.ap+4, -0x1.029999999999ap+7, 0x0p+0, 0x0p+0, 0x1p+4, 0x1.ap+4, 0x1.ap+4, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.8p+3, 0x1p-1, 0x1p+0, 0x0u, 0x1p+4, 1 },
   { 0, -1, 0x1.189374bc6a7fp-3, -0x1.ep+4, 0x1.999999999999ap-3, 0x0p+0, 0x0p+0, 0x1.8p+4, 0x1.8p+4, 0x1.2p+4, 0x0p+0, 0x0p+0, 0x1.ap+3, 0x1.8p+3, 0x1p-1, 0x1p+0, 0x0u, 0x1p+4, 1 },
   { 0, -1, 0x1.916872b020c4ap-2, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+3, 0x1.2p+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.2p+2, 0x1.2p+2, 0x1.3333333333333p-2, 0x1p+0, 0x0u, 0x1p+1, 1 },
@@ -2441,7 +2441,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 23, kLand_cloverleaf, 8 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 20, kLand_wash, 24 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 14, kLand_gulch, 29 },
-  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 16, kLand_crag, 11 },
+  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 17, kLand_crag, 10 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 9, kLand_sidewinder, 13 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 16, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 9, nullptr, 0 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 14, nullptr, 0 },
@@ -2459,8 +2459,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-glacier-forest-a", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-village-fete" };
-constexpr int TTP_LITE_MODEL_COUNT = 41;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-boomtown-north", "set-boomtown-south", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-glacier-forest-a", "set-headframe", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-stamp-mill", "set-tailings-dump", "set-village-fete" };
+constexpr int TTP_LITE_MODEL_COUNT = 50;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.
