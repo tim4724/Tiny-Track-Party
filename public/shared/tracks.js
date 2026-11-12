@@ -430,27 +430,36 @@ export const TRACKS = {
   tidepool: {
     name: 'Tidepool', sand: BEACH_SAND, waypoints: GEN_TRACKS.tidepool,
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
-    // Low tide: the reef the sea left bare runs along the waterline round the
-    // lap (a spine of shelves, each turned to the shore), with its big rock
-    // pool where the reef comes closest to the road, people at its edge, and
-    // the crab fishers' landing above the reef just before it. The pool lies
-    // beside the low west run that points at it, not at the waterline: out
-    // there it hid behind the hump and read as a few grey lumps. On the two
-    // outer bends the sea comes in to a few strides past the kerb (the
-    // `shore`s), and the reef stands in that surf, its low wet ledges
-    // stepping into it. Off the east bend, where the east run points, Seal
-    // Rock stands in open water, seals hauled out on its ledges. Inland,
-    // grassy downs fill both lobes of the lap, their flanks to the kerb; the
-    // rock-poolers' vans are parked on the sand by the start straight.
+    // Low tide: the reef the sea left bare is the land the lap drives
+    // beside. On the two outer bends the sea comes in to a few strides past
+    // the kerb (the `shore`s) and the reef stands between them, knuckles of
+    // slate a car's height and more from the kerb out into the surf (out at
+    // the waterline, and low, it lay under the road's own kerb and read as
+    // grey specks): the east bend's with seals hauled out a stride from the
+    // road, the west bend's taller and broken, gulls over it; an outlier
+    // either side of them, and along the top run, where the beach is wide,
+    // its low ledges and the pools between them. The big rock pool
+    // lies beside the low west run that points at it, people at its edge,
+    // the crab fishers' landing just before it. Off the east bend, where the
+    // east run points, Seal Rock stands in open water, seals on its ledges.
+    // Inland, grassy downs fill both lobes of the lap, their flanks to the
+    // kerb; the rock-poolers' vans are parked by the start straight.
     set: [
       { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
-      { model: 'set-reef-seals', u: 0.34, lat: 12.8 },
-      { model: 'set-reef-shelf', u: 0.297, lat: 18.1, yaw: -10 },
-      { model: 'set-reef-shelf', u: 0.353, lat: 18.2, yaw: 3 },
-      { model: 'set-reef-shelf', u: 0.429, lat: 30.3, yaw: 19 },
-      { model: 'set-reef-shelf', u: 0.739, lat: 18.4, yaw: 18 },
-      { model: 'set-reef-shelf', u: 0.797, lat: 18.2, yaw: -3 },
+      // the reef beside the road, a stretch at a time (each its own piece:
+      // a piece's box keeps the verge's apron off, so none spans the bend):
+      // the east bend's, the seals hauled out on its middle; the west bend's
+      // skerries in the surf; its low ledges and pools along the top run
+      { model: 'set-reef-head', u: 0.272, lat: 12.5 },
+      { model: 'set-reef-seals', u: 0.319, lat: 12.5 },
+      { model: 'set-reef-tail', u: 0.366, lat: 12.5 },
+      { model: 'set-reef-teeth', u: 0.735, lat: 12.5 },
+      { model: 'set-reef-skerry', u: 0.78, lat: 12.5 },
+      { model: 'set-reef-spit', u: 0.826, lat: 12.5 },
+      { model: 'set-reef-flats', u: 0.545, lat: 14 },
+      { model: 'set-reef-outlier', u: 0.41, lat: 12.5 },
+      { model: 'set-reef-stack', u: 0.927, lat: 13.5 },
       { model: 'set-crab-pots', u: 0.64, lat: 10.2, yaw: 10 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
       // palms on the downs' near flanks below the crests, placed by hand:
@@ -478,6 +487,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
+      // the sand the tide has just left, darker and cooler round the reef
+      { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
+      { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
+      { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the downs: a crate on a crest read as a prop
       // dropped on a hilltop
       { kind: 'clear', u: 0.25, lat: -32, len: 30, r: 22 },
@@ -578,16 +591,24 @@ export const TRACKS = {
     // Seeded scatter keeps off the dunes' faces (the `clear`s): driftwood
     // on a clean slope read as specks. The sea comes up to the
     // road on the flat stretch (its `shore`), and the line the storm tide
-    // left runs along the sand above it, from the great trunk to the
-    // bonfire, wandering as it goes. The hops on that stretch hide what lies
-    // low beyond them, so the line is long pieces with their root plates
-    // reared up, and the bonfire waits past the last hop.
+    // left runs along the sand above it, from the boneyard of dead trees on
+    // the east beach and the great trunk to the bonfire. That beach is the
+    // plain and the road stands most of a unit over it behind its kerb, so
+    // the line is told in what stands up: root plates reared twice a car's
+    // height, the trees the sea killed where they stood, the groynes'
+    // posts running down into the surf, the beachcombers' fort on its jam
+    // of logs. Up the pass, storm fence and marram hold the dunes' feet.
     set: [
-      { model: 'set-driftwood-trunk', u: 0.29, lat: -8.2, yaw: 180 },
-      { model: 'set-strand-line', u: 0.33, lat: -10.2, yaw: 176 },
-      { model: 'set-strand-line', u: 0.39, lat: -9.3, yaw: -4 },
-      { model: 'set-bonfire', u: 0.45, lat: -8.7, yaw: 160 },
-      { model: 'set-driftwood-forts', u: 0.423, lat: -9.3 },
+      { model: 'set-strand-snags', u: 0.15, lat: -9.5, yaw: 180 },
+      { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
+      { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
+      { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
+      { model: 'set-bonfire', u: 0.46, lat: -9.6, yaw: 160 },
+      { model: 'set-driftwood-forts', u: 0.432, lat: -10.3 },
+      // storm fence and marram along the dune pass, a length each side
+      { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
+      { model: 'set-dune-fence-b', u: 0.69, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-fence-a', u: 0.75, lat: 9.4, yaw: 180 },
       { model: 'set-lighthouse', u: 0.855, lat: -9.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
       // them; lifted to the verge they stand on
@@ -652,16 +673,22 @@ export const TRACKS = {
     // the outer kerb, facing the road, and its sea pier
     // out over the water (the third `shore` brings the sea in under it) to
     // the white pavilion on its head that the straight points at, the
-    // excursion boat moored alongside. Behind, a wider lagoon by
-    // the hook and the surfers' campers parked beside it; the north run is a
-    // pass between the great marram dune inside the lap and the Point, a
-    // big grassy headland north of the start straight, the surf club at its
-    // foot where the lap crosses the line.
+    // excursion boat moored alongside. Along the causeway, the sailing
+    // club's dinghies ride in the lagoon (their sails' heads over the kerb)
+    // and kite surfers work the open water outside, their kites over the
+    // road. Behind, a wider lagoon by the hook and the surfers' camp beside
+    // it; the north run is a pass between the great marram dune inside the
+    // lap and the Point, a big grassy headland north of the start straight,
+    // the surf contest's site strung along its kerb, and the surf club
+    // where the lap sets out along the beach past the line.
     set: [
       { model: 'set-lifeguard-tower', u: 0.23, lat: -8.7 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
-      { model: 'set-surf-club', u: 0.035, lat: -9, yaw: 180 },
-      { model: 'set-surf-campers', u: 0.72, lat: -8, yaw: 180 },
+      { model: 'set-surf-club', u: 0.075, lat: -10.5, yaw: 180 },
+      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180 },
+      { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
+      { model: 'set-lagoon-fleet', u: 0.53, lat: 8.5 },
+      { model: 'set-kite-surfers', u: 0.545, lat: -13.5, yaw: 180 },
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
       // the seeded ones off), none on the marram dune
       { model: 'set-palm-stand', u: 0.95, lat: -9, yaw: 180 }
