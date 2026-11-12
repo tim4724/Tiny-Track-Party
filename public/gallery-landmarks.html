@@ -24,12 +24,12 @@
   </div>
 
   <div class="group seg" role="group" aria-label="Camera" id="lm-views">
+    <button class="ctrl" data-view="race" title="A live 1P race you can pause, rewind and annotate">Race</button>
     <button class="ctrl" data-view="driver" title="The race's chase rig on the approach">Driver</button>
     <button class="ctrl" data-view="glance" title="The approach, looking at the landmark">Glance</button>
     <button class="ctrl" data-view="high" title="From above, across the road">High</button>
     <button class="ctrl" data-view="orbit" title="A slow walk round the landmark">Orbit</button>
     <button class="ctrl" data-view="top" title="Straight down over the whole lap">Top</button>
-    <button class="ctrl" data-view="race" title="A live race, chase cams">Race</button>
     <button class="ctrl" data-view="free" title="Fly it yourself: drag, scroll, WASD, Q/E">Free</button>
   </div>
 
@@ -42,6 +42,7 @@
 
   <div class="group seg">
     <button class="ctrl" id="lm-slow" title="Slow motion: the scene at a quarter speed (M)">Slow</button>
+    <button class="ctrl" id="lm-fast" title="Double speed (F)">Fast</button>
   </div>
 
   <div class="group">
@@ -82,19 +83,37 @@
   <iframe id="lm-stage" title="Landmarks"></iframe>
   <aside class="legend" id="lm-legend">
     <dl class="keys" id="lm-keys">
-      <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>landmark</dd></div>
+      <div><dt><kbd>Space</kbd></dt><dd>pause the race</dd></div>
+      <div><dt><kbd>C</kbd></dt><dd>camera: chase, free, top</dd></div>
+      <div><dt><kbd>N</kbd></dt><dd>note on a screenshot</dd></div>
+      <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>2 s back / on (&#8679; 10 s); landmark outside the race</dd></div>
+      <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>one frame back / on</dd></div>
       <div><dt><kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>track</dd></div>
-      <div><dt><kbd>C</kbd><kbd>&#8679;C</kbd></dt><dd>camera</dd></div>
+      <div><dt><kbd>V</kbd><kbd>&#8679;V</kbd></dt><dd>view</dd></div>
       <div><dt><kbd>1</kbd>-<kbd>4</kbd></dt><dd>players</dd></div>
       <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>placement</dd></div>
       <div><dt><kbd>T</kbd></dt><dd>tour</dd></div>
       <div><dt><kbd>L</kbd></dt><dd>lite / full tier</dd></div>
       <div><dt><kbd>X</kbd></dt><dd>spread</dd></div>
       <div><dt><kbd>M</kbd></dt><dd>slow motion</dd></div>
+      <div><dt><kbd>F</kbd></dt><dd>double speed</dd></div>
       <div><dt><kbd>Home</kbd></dt><dd>first landmark</dd></div>
       <div><dt><kbd>?</kbd></dt><dd>hide these keys</dd></div>
     </dl>
     <p class="legend__hint keys-off" id="lm-keys-off"><kbd>?</kbd> keys</p>
+    <div class="lm-race" id="lm-race">
+      <div class="lm-race__row">
+        <button class="ctrl" id="lm-pause" title="Pause or resume the race (Space)">Pause</button>
+        <input type="range" id="lm-time" min="0" max="0" step="1" value="0" aria-label="Race time">
+        <span class="lm-lines" id="lm-clock">0:00.0</span>
+      </div>
+      <div class="lm-race__row">
+        <button class="ctrl" id="lm-cam" title="Whose eye the race is seen through (C)">Cam: Chase</button>
+        <button class="ctrl" id="lm-note" title="Screenshot this moment and write a note on it (N)">Note</button>
+      </div>
+      <p class="legend__note" id="lm-tier-out"></p>
+      <p class="legend__note" id="lm-saved"></p>
+    </div>
     <div class="lm-card" id="lm-card"></div>
     <div class="lm-bar">
       <select id="lm-sort" aria-label="Order">
@@ -109,6 +128,21 @@
     <div id="lm-list"></div>
   </aside>
 </section>
+
+<dialog class="lm-note" id="lm-note-dialog">
+  <form method="dialog" class="lm-note__form">
+    <div class="lm-note__pic" id="lm-note-pic"><img id="lm-note-img" alt="The stage at this moment"></div>
+    <div class="lm-note__side">
+      <p class="legend__note">Click the picture to pin what you mean; each pin takes its own line.</p>
+      <div id="lm-note-pins"></div>
+      <textarea id="lm-note-text" rows="6" placeholder="What should change, or what do you want to know?"></textarea>
+      <div class="lm-race__row">
+        <button class="ctrl" type="button" id="lm-note-save" title="Save (Cmd or Ctrl + Enter)">Save note</button>
+        <button class="ctrl" type="button" id="lm-note-cancel">Cancel</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <script type="module" src="/gallery-landmarks.js"></script>
 </body>

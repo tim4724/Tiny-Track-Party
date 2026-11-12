@@ -176,6 +176,10 @@ export class Stage {
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
     this._periodMs = 0;      // the panel's vsync period, averaged off rAF deltas (see _loop)
     this._undrawn = false;   // step everything but the draw (see setUndrawn)
+    // Draw with the renderer's own clock stopped: the chase rigs, the dust and
+    // the clouds hold while the viewer's camera still flies. The landmark
+    // gallery's paused race is a still of the moment, not a camera easing in on it.
+    this.frozen = false;
     this._freshFrames = 0;   // frames drawn since the last build or resize (see _hiddenIdle)
     this._dimSince = null;   // when #scene last went transparent, and its fade-out's length
     this._dimFadeMs = 0;
@@ -1659,7 +1663,7 @@ export class Stage {
   _renderFrame(dt, cells) {
     this.perf.setCells(cells);
     this.perf.gpuBegin();
-    this.display.frame(dt);
+    this.display.frame(this.frozen ? 0 : dt);
     this.perf.gpuEnd();
     this._freshFrames++;
     // ONLY WITH A READER. The CPU term feeds the panel and the benched log and

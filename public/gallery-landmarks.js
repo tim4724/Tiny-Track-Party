@@ -10,9 +10,9 @@ import { MAX_BUFFER_H } from './display/Stage.js';
 
 // This page's own memory. gallery-common's state is shared by every gallery
 // page, and a track or view picked here means nothing on the others.
-const STATE_KEY = 'tinytrack_gallery_landmarks_v1';
+const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
-  const d = { track: '', players: 1, view: 'driver', spread: false, res: 'sharp', slow: false, keys: true,
+  const d = { track: '', players: 1, view: 'race', spread: false, res: 'sharp', slow: false, fast: false, keys: true,
               tier: 'full', sort: 'size' };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
@@ -26,6 +26,7 @@ const spreadBox = document.getElementById('lm-spread');
 const list = document.getElementById('lm-list');
 const resBtn = document.getElementById('lm-res');
 const slowBtn = document.getElementById('lm-slow');
+const fastBtn = document.getElementById('lm-fast');
 const legend = document.getElementById('lm-legend');
 let lm = null;   // the hook, once the frame has built its first scene
 const linesOut = document.getElementById('lm-lines');
@@ -161,6 +162,8 @@ function paintButtons() {
   spreadBox.checked = state.spread;
   resBtn.textContent = state.res === 'sharp' ? 'Res: Sharp' : 'Res: Auto';
   slowBtn.classList.toggle('is-on', state.slow);
+  fastBtn.classList.toggle('is-on', state.fast);
+  tierBtn.classList.toggle('is-on', state.tier === 'lite');
   tierBtn.textContent = state.tier === 'lite' ? 'Tier: Lite' : 'Tier: Full';
   tourBtn.classList.toggle('is-on', !!tour);
   sortSel.value = state.sort;
@@ -345,6 +348,7 @@ function setView(v) {
   if (!lm) return;
   lm.view(v);
   paintList();
+  paintRace();
 }
 // THE LAP SCORE, on the list: how long a racer READS each model over one
 // autopiloted lap, counted in pixels off the stage's own picture (the hook's
@@ -407,7 +411,8 @@ function setTier() {
 }
 // A remembered view this build no longer has falls back to the default.
 function restoreView() {
-  try { lm.view(state.view); } catch (_) { state.view = 'driver'; save(); paintButtons(); lm.view(state.view); }
+  try { lm.view(state.view); } catch (_) { state.view = 'race'; save(); paintButtons(); lm.view(state.view); }
+  paintRace();
 }
 // The camera buttons' own order is the cycle.
 function stepView(d) {
@@ -421,12 +426,22 @@ function setSpread(on) {
   if (lm) { lm.spread(on); paintList(); }
 }
 // Slow motion: the scene at a quarter of real time, to judge how a piece moves.
-const SLOW = 0.25;
+const SLOW = 0.25, FAST = 2;
+const rate = () => (state.slow ? SLOW : state.fast ? FAST : 1);
 function setSlow(on) {
   state.slow = on;
+  if (on) state.fast = false;
   save();
   paintButtons();
-  if (lm) lm.timeScale(on ? SLOW : 1);
+  if (lm) lm.timeScale(rate());
+}
+// Double speed, to get round a lap to the stretch worth looking at.
+function setFast(on) {
+  state.fast = on;
+  if (on) state.slow = false;
+  save();
+  paintButtons();
+  if (lm) lm.timeScale(rate());
 }
 function stepTrack(d) {
   if (!lm) return;
@@ -440,6 +455,7 @@ for (const b of viewBtns) b.addEventListener('click', () => { setView(b.dataset.
 trackSel.addEventListener('change', () => { setTrack(trackSel.value); frame.focus(); });
 spreadBox.addEventListener('change', () => { setSpread(spreadBox.checked); frame.focus(); });
 slowBtn.addEventListener('click', () => { setSlow(!state.slow); frame.focus(); });
+fastBtn.addEventListener('click', () => { setFast(!state.fast); frame.focus(); });
 tierBtn.addEventListener('click', setTier);
 tourBtn.addEventListener('click', () => { setTour(!tour); frame.focus(); });
 scoreBtn.addEventListener('click', () => { scoreLap(); frame.focus(); });
@@ -461,12 +477,191 @@ document.getElementById('lm-next').addEventListener('click', () => { step(1); fr
 // flies the free camera), and the rest must still reach here. The letters keep
 // clear of the free camera's W A S D Q E; the legend in the side panel lists
 // them. A field being typed into keeps its keys.
+// THE RACE VIEW'S TRANSPORT. The stage keeps every update it gave its race, so a
+// moment is an update count: the slider and the keys seek to one (back is the
+// same race wound again from its grid), and a note names the one it was taken at.
+const raceBox = document.getElementById('lm-race');
+const pauseBtn = document.getElementById('lm-pause');
+const timeIn = document.getElementById('lm-time');
+const clock = document.getElementById('lm-clock');
+const camBtn = document.getElementById('lm-cam');
+const savedOut = document.getElementById('lm-saved');
+const tierOut = document.getElementById('lm-tier-out');
+const inRace = () => !!lm && state.view === 'race' && lm.mode() === 'race';
+function paintRace() {
+  raceBox.hidden = state.view !== 'race';
+  if (!inRace()) return;
+  const r = lm.race(), t = r.seconds;
+  pauseBtn.textContent = r.paused ? 'Play' : 'Pause';
+  pauseBtn.classList.toggle('is-on', r.paused);
+  camBtn.textContent = 'Cam: ' + r.cam.charAt(0).toUpperCase() + r.cam.slice(1);
+  timeIn.max = String(r.max);
+  if (document.activeElement !== timeIn) timeIn.value = String(r.step);
+  clock.textContent = `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+  tierOut.textContent = `${state.tier === 'lite' ? 'Lite tier (Android TV)' : 'Full tier (web, Apple TV)'}${state.fast ? ' · 2x' : state.slow ? ' · slow' : ''}`;
+}
+setInterval(paintRace, 200);
+function pause(on) {
+  if (!inRace()) { setView('race'); return; }
+  lm.pause(on);
+  paintRace();
+}
+function seekBy(sec) {
+  if (!inRace()) return;
+  lm.seekBy(sec);
+  paintRace();
+}
+function frameStep(d) {
+  if (!inRace()) return;
+  lm.pause(true);
+  lm.seek(lm.race().step + d);
+  paintRace();
+}
+function stepCam(d) {
+  const cams = lm.raceCams();
+  lm.raceCam(cams[(cams.indexOf(lm.race().cam) + d + cams.length) % cams.length]);
+  paintRace();
+}
+pauseBtn.addEventListener('click', () => { pause(); frame.focus(); });
+camBtn.addEventListener('click', () => { if (inRace()) stepCam(1); frame.focus(); });
+timeIn.addEventListener('input', () => { if (inRace()) { lm.pause(true); lm.seek(+timeIn.value); } });
+timeIn.addEventListener('change', () => { frame.focus(); paintRace(); });
+
+// A REVIEW NOTE: the stage's picture at this moment, pins the viewer drops on
+// it and what they wrote, posted to the dev server (scratch/review/) with
+// where and when it was taken and which set piece each pin points at. A
+// server that will not take it (a deployed preview) gets a download instead.
+const noteDlg = document.getElementById('lm-note-dialog');
+const noteImg = document.getElementById('lm-note-img');
+const notePic = document.getElementById('lm-note-pic');
+const notePins = document.getElementById('lm-note-pins');
+const noteText = document.getElementById('lm-note-text');
+let noteShot = null, pins = [];
+function paintPins() {
+  for (const n of notePic.querySelectorAll('.lm-note__pin')) n.remove();
+  notePins.replaceChildren();
+  pins.forEach((p, i) => {
+    const dot = document.createElement('span');
+    dot.className = 'lm-note__pin';
+    dot.textContent = String(i + 1);
+    dot.style.left = p.fx * 100 + '%';
+    dot.style.top = p.fy * 100 + '%';
+    notePic.appendChild(dot);
+    const row = document.createElement('div');
+    row.className = 'lm-note__row';
+    const b = document.createElement('b');
+    b.textContent = String(i + 1);
+    const input = document.createElement('input');
+    input.value = p.text;
+    input.placeholder = 'What about this?';
+    input.addEventListener('input', () => { p.text = input.value; });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'ctrl';
+    del.textContent = '×';
+    del.title = 'Remove this pin';
+    del.addEventListener('click', () => { pins.splice(i, 1); paintPins(); });
+    row.append(b, input, del);
+    notePins.appendChild(row);
+  });
+}
+function openNote() {
+  if (!lm || noteDlg.open) return;
+  setTour(false);
+  if (inRace()) lm.pause(true);
+  noteShot = lm.shot();
+  pins = [];
+  noteImg.src = noteShot.png;
+  noteText.value = '';
+  paintPins();
+  paintRace();
+  noteDlg.showModal();
+  noteText.focus();
+}
+notePic.addEventListener('click', (e) => {
+  const r = noteImg.getBoundingClientRect();
+  pins.push({ fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, text: '' });
+  paintPins();
+  notePins.lastElementChild.querySelector('input').focus();
+});
+// The picture with its pins drawn in, for a reader who has only the file.
+function markedJpeg() {
+  const c = document.createElement('canvas');
+  c.width = noteShot.w;
+  c.height = noteShot.h;
+  const g = c.getContext('2d');
+  g.drawImage(noteImg, 0, 0, c.width, c.height);
+  const r = Math.max(10, c.height / 60);
+  g.font = `700 ${Math.round(r * 1.2)}px system-ui, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  pins.forEach((p, i) => {
+    const x = p.fx * c.width, y = p.fy * c.height;
+    g.beginPath();
+    g.arc(x, y, r, 0, 2 * Math.PI);
+    g.fillStyle = '#ff2bd6';
+    g.fill();
+    g.lineWidth = Math.max(2, r / 5);
+    g.strokeStyle = '#fff';
+    g.stroke();
+    g.fillStyle = '#fff';
+    g.fillText(String(i + 1), x, y + 1);
+  });
+  return c.toDataURL('image/jpeg', 0.9);
+}
+function download(name, href) {
+  const a = document.createElement('a');
+  a.download = name;
+  a.href = href;
+  a.click();
+}
+let notes = 0;
+async function saveNote() {
+  if (!noteShot) return;
+  const at = pins.map((p) => ({ x: Math.round(p.fx * noteShot.w), y: Math.round(p.fy * noteShot.h) }));
+  const under = lm ? lm.under(at) : [];
+  const body = {
+    meta: { ...noteShot.meta, tier: state.tier, picture: { w: noteShot.w, h: noteShot.h }, link: location.href },
+    note: noteText.value.trim(),
+    pins: pins.map((p, i) => ({ n: i + 1, ...at[i], text: p.text.trim(), piece: under[i] || null })),
+    png: noteShot.png,
+    marked: pins.length ? markedJpeg() : null
+  };
+  noteDlg.close();
+  frame.focus();
+  try {
+    const res = await fetch('/api/review-note', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const { id, dir } = await res.json();
+    savedOut.textContent = `${++notes} saved this visit. Last: ${dir}/${id}.json`;
+  } catch (e) {
+    const stem = `review-${body.meta.track}-${Date.now()}`;
+    download(stem + (body.marked ? '-pins.jpg' : '.png'), body.marked || body.png);
+    const { png: _png, marked: _marked, ...rest } = body;
+    download(stem + '.json', URL.createObjectURL(new Blob([JSON.stringify(rest, null, 2)], { type: 'application/json' })));
+    savedOut.textContent = `Not saved on the server (${e && e.message ? e.message : e}); downloaded instead.`;
+  }
+}
+document.getElementById('lm-note').addEventListener('click', openNote);
+document.getElementById('lm-note-save').addEventListener('click', saveNote);
+document.getElementById('lm-note-cancel').addEventListener('click', () => { noteDlg.close(); frame.focus(); });
+noteDlg.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNote(); } });
+
 function onKey(e) {
+  if (noteDlg.open) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const t = e.target;
   if (t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (k === 'ArrowLeft') step(-1);
+  const race = inRace();
+  if (k === ' ') pause();
+  else if (k === 'n') openNote();
+  else if (race && k === 'c') stepCam(e.shiftKey ? -1 : 1);
+  else if (race && (k === 'ArrowLeft' || k === 'ArrowRight')) seekBy((k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2));
+  else if (race && (k === ',' || k === '.')) frameStep(k === ',' ? -1 : 1);
+  else if (k === 'v') stepView(e.shiftKey ? -1 : 1);
+  else if (k === 'ArrowLeft') step(-1);
   else if (k === 'ArrowRight') step(1);
   else if (k === 'ArrowUp') stepTrack(-1);
   else if (k === 'ArrowDown') stepTrack(1);
@@ -474,6 +669,7 @@ function onKey(e) {
   else if (k >= '1' && k <= '4') setPlayers(+k);
   else if (k === 'x') setSpread(!state.spread);
   else if (k === 'm') setSlow(!state.slow);
+  else if (k === 'f') setFast(!state.fast);
   else if (k === '[') place(-1);
   else if (k === ']') place(1);
   else if (k === 't') setTour(!tour);
@@ -506,7 +702,7 @@ function init(h) {
   trackSel.value = state.track;
   save();
   lm.spread(state.spread);
-  lm.timeScale(state.slow ? SLOW : 1);
+  lm.timeScale(rate());
   restoreView();
   // A link's piece, once: the model it names and which of its placements.
   const i = wantPiece ? lm.landmarks().findIndex((m) => m.model === 'set-' + wantPiece) : -1;

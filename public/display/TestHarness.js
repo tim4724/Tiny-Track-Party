@@ -956,6 +956,17 @@ export function runDisplayScenario(opts, ctx) {
       let poses = [];             // what aim() last pushed, per cell (window.__landmarks.poses)
       // Race mode performs its events like every live preview (raceEventPerformer).
       const log = raceLog();
+      // THE RACE VIEW'S CLOCK. The sim takes one update per frame of the
+      // frame's own dt, as a live race does (a fixed step against the display's
+      // refresh is zero, one or two updates a frame, and the field judders),
+      // and every dt it was given is kept in `dts`. A race is then a function
+      // of that list alone: `seek` goes BACK by dealing the same race again
+      // and feeding it the same dts undrawn (a simulation only runs forward).
+      // `step` counts updates; playing on from an earlier step drops the
+      // list's tail, since new frames make a new future. `cam` is whose eye
+      // the running race is seen through (RACE_CAMS).
+      const RACE_CAMS = ['chase', 'free', 'top'];
+      const race = { step: 0, dts: [], ms: 0, paused: false, cam: 'chase', winding: false };
       // Rebuilds are async; chained so a burst of clicks lands in order.
       let queue = Promise.resolve();
       const serial = (fn) => (queue = queue.then(fn, fn));
@@ -982,8 +993,12 @@ export function runDisplayScenario(opts, ctx) {
       // The parked field: `seats` autopiloted player seats in their own cells,
       // the CPU fill cell-less, on a fresh session nobody steps (race mode does).
       function newSession() {
+        const perform = mode === 'race' && raceEventPerformer(scene, log);
+        // A wind replays a race nobody watches: its pickups and strikes stay unperformed.
         engine = bareSession(field, track,
-                             mode === 'race' ? { bots, onRaceEvent: raceEventPerformer(scene, log) } : { bots });
+                             perform ? { bots, onRaceEvent: (...a) => { if (!race.winding) perform(...a); } } : { bots });
+        race.step = 0;
+        race.ms = 0;
         window.__engine = engine;
         scene.bindSession(engine.h);
         scene.hold(mode !== 'race');
@@ -1933,22 +1948,94 @@ export function runDisplayScenario(opts, ctx) {
         // The race HUD only in a race: elsewhere its pills and empty map box
         // sit over the very piece a view frames.
         scene.showHud = m === 'race';
-        if (engine && (m === 'race' || wasRace)) { engine.dispose(); newSession(); }
+        if (engine && (m === 'race' || wasRace)) {
+          engine.dispose();
+          newSession();
+          Object.assign(race, { dts: [], paused: false, cam: 'chase' });
+          scene.frozen = false;
+        }
         if (m === 'free') openFree();
         aim();
         return mode;
       }
 
+      // Whose eye the running race is seen through. Chase is the race's own
+      // picture; free opens the viewer's camera where the chase rig stood, the
+      // race going on (or paused) under it; top looks down on the whole lap.
+      function setRaceCam(c) {
+        if (mode !== 'race' || !RACE_CAMS.includes(c)) return race.cam;
+        race.cam = c;
+        if (free) closeFree();
+        display.cellLookClear();
+        scene.soloCam = c === 'free';
+        scene.showHud = c === 'chase';
+        scene.setFog(c === 'chase');
+        if (c === 'free') {
+          const me = field.find((f) => !f.ai).peerIndex;
+          const car = engine.getSnapshot().cars.find((x) => x.id === me);
+          const { pos, forward } = car.pose;
+          const rig = display.chaseRig(pos.x, pos.y, pos.z, forward.x, forward.z, car.spd);
+          const eye = v3(rig.eye), target = v3(rig.target);
+          const d = { x: target.x - eye.x, y: target.y - eye.y, z: target.z - eye.z };
+          document.documentElement.classList.add('cam-free');
+          free = scene.enableUserCamera({ eye, yaw: Math.atan2(d.x, d.z),
+                                          pitch: Math.asin(d.y / Math.hypot(d.x, d.y, d.z)) });
+        } else if (c === 'top') {
+          const b = scene.cellBoxes()[0];
+          const pose = topPose(b ? b.w / Math.max(b.h, 1) : 16 / 9);
+          display.cellLook(0, pose.eye, pose.target, pose.fov);
+        }
+        return race.cam;
+      }
+      const paintHud = () => { for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c); };
+      // The race at `to` updates from its grid. Forward is a wind from here;
+      // back is the same race dealt again and wound from the top on the kept
+      // dts (past their end, on 60 Hz ones, which join the list). Only the
+      // last seconds advance the renderer's own half, so the chase rig has
+      // settled behind the car by the frame that is drawn.
+      function seekRace(to) {
+        if (mode !== 'race' || !engine) return race.step;
+        to = Math.max(0, Math.round(to));
+        const cam = race.cam;
+        if (to < race.step) { engine.dispose(); newSession(); }
+        race.winding = true;
+        try {
+          while (race.step < to && !raceOver(engine.getSnapshot())) {
+            if (race.step === race.dts.length) race.dts.push(SEE_STEP_MS);
+            const ms = race.dts[race.step];
+            engine.update(ms);
+            race.step++;
+            race.ms += ms;
+            if (to - race.step < 120) display.advance(ms / 1000);
+          }
+        } finally { race.winding = false; }
+        if (cam !== 'free') setRaceCam(cam);
+        paintHud();
+        return race.step;
+      }
+      // The step `sec` seconds from here (a 60 Hz step each past the list's end).
+      function stepAfter(sec) {
+        let at = race.step, ms = sec * 1000;
+        for (; ms > 0; at++) ms -= at < race.dts.length ? race.dts[at] : SEE_STEP_MS;
+        for (; ms < 0 && at > 0; at--) ms += race.dts[at - 1];
+        return at;
+      }
+
       scene.onFrame = (dt, nowMs) => {
         if (mode === 'orbit') { orbitT += dt; aim(); return; }
-        if (mode !== 'race' || !engine) return;
-        engine.update(dt * 1000);
+        if (mode !== 'race' || !engine || race.paused) return;
+        const ms = dt * 1000;
+        race.dts.length = race.step;
+        race.dts.push(ms);
+        engine.update(ms);
+        race.step++;
+        race.ms += ms;
         const snap = engine.getSnapshot();
         if (nowMs - lastHud > HUD_TICK_MS) {
           lastHud = nowMs;
           for (const c of snap.cars) scene.setCarHud(c.id, c);
         }
-        if (raceOver(snap)) { engine.dispose(); newSession(); }
+        if (raceOver(snap)) { engine.dispose(); newSession(); race.dts = []; }
       };
 
       // The poses are fitted to each cell's aspect: a resize re-fits them.
@@ -1977,6 +2064,76 @@ export function runDisplayScenario(opts, ctx) {
       const SEE_RACE = (FEAT.ALL & ~(FEAT.SKY | FEAT.EFFECTS | FEAT.FOG_VERTEX)) | DEBUG.SET_ID;
       const SEE_ALONE = FEAT.DRESSING | DEBUG.SET_ID;
       let seeCanvas = null;
+      // The layout row a pixel of an id frame belongs to, or undefined: an id
+      // colour is one channel full, one empty and one on an 8-step.
+      function idRow(r, gg, b, ids) {
+        const hi = Math.max(r, gg, b), lo = Math.min(r, gg, b);
+        if (hi < 253 || lo > 2) return undefined;
+        const mid = r + gg + b - hi - lo;
+        const snap = 16 + 8 * Math.round((mid - 16) / 8);
+        if (Math.abs(mid - snap) > 2 || snap < 16 || snap > 248) return undefined;
+        const q = (v) => (v === hi ? 255 : v === lo ? 0 : snap);
+        return ids.get((q(r) << 16) | (q(gg) << 8) | q(b));
+      }
+      // A REVIEW NOTE'S PICTURE (window.__landmarks.shot): the stage as it
+      // stands, drawn once more so the buffer is whole, with where and when it
+      // was taken. The same moment is kept as an id frame like the pixel
+      // lap's, so `under` can say which set piece a pin on that picture
+      // (canvas pixels) points at: most of a small box round it.
+      let shotIds = null;
+      function under(pins) {
+        if (!shotIds) return pins.map(() => null);
+        const ids = new Map(layout.pieces.map((p, i) => [p.id, i]));
+        const g = shotIds.getContext('2d');
+        const R = 4;
+        return pins.map(({ x, y }) => {
+          const x0 = Math.max(0, Math.round(x) - R), y0 = Math.max(0, Math.round(y) - R);
+          const d = g.getImageData(x0, y0, 2 * R + 1, 2 * R + 1).data;
+          const votes = new Map();
+          for (let i = 0; i < d.length; i += 4) {
+            const row = idRow(d[i], d[i + 1], d[i + 2], ids);
+            if (row !== undefined) votes.set(row, (votes.get(row) || 0) + 1);
+          }
+          const best = [...votes].sort((a, b) => b[1] - a[1])[0];
+          if (!best) return null;
+          const p = layout.pieces[best[0]];
+          return { index: best[0], model: p.model, u: p.u, lat: p.lat };
+        });
+      }
+      function shot() {
+        display.frame(0);
+        const src = display.canvas;
+        const pic = document.createElement('canvas');
+        pic.width = src.width;
+        pic.height = src.height;
+        pic.getContext('2d').drawImage(src, 0, 0);
+        const png = pic.toDataURL('image/png');
+        display.antialias(false);
+        display.debugFeatures(SEE_RACE);
+        display.frame(0);
+        if (!shotIds) shotIds = document.createElement('canvas');
+        shotIds.width = src.width;
+        shotIds.height = src.height;
+        shotIds.getContext('2d', { willReadFrequently: true }).drawImage(src, 0, 0);
+        display.debugFeatures(FEAT.ALL);
+        display.antialias(true);
+        display.frame(0);
+        const me = field.find((f) => !f.ai);
+        const car = mode === 'race' && engine ? engine.getSnapshot().cars.find((x) => x.id === me.peerIndex) : null;
+        const round = (v) => Math.round(v * 100) / 100;
+        return {
+          png, w: pic.width, h: pic.height,
+          meta: {
+            track: track.id, view: mode, seats,
+            focus: marks[focusAt] ? { model: marks[focusAt].model, placement: placeAt } : null,
+            race: mode === 'race' ? { cam: race.cam, step: race.step, seconds: round(race.ms / 1000) } : null,
+            car: car ? { lap: car.lap, u: round((car.totalS % layout.length) / layout.length), lat: round(car.lat),
+                         x: round(car.pose.pos.x), y: round(car.pose.pos.y), z: round(car.pose.pos.z) } : null,
+            camera: free ? { eye: { x: round(free.eye.x), y: round(free.eye.y), z: round(free.eye.z) },
+                             yaw: round(free.yaw), pitch: round(free.pitch) } : poses[0] || null
+          }
+        };
+      }
       // Per layout row seen in `rect` of the drawn frame: its pixels, its
       // tallest column of them (how tall it stands where it stands tallest:
       // a flat pitch or a sliver along a kerb is low however wide, and a
@@ -1995,14 +2152,7 @@ export function runDisplayScenario(opts, ctx) {
         const d = g.getImageData(x, y, w, h).data;
         const found = new Map();
         for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-          const r = d[i], gg = d[i + 1], b = d[i + 2];
-          const hi = Math.max(r, gg, b), lo = Math.min(r, gg, b);
-          if (hi < 253 || lo > 2) continue;
-          const mid = r + gg + b - hi - lo;
-          const snap = 16 + 8 * Math.round((mid - 16) / 8);
-          if (Math.abs(mid - snap) > 2 || snap < 16 || snap > 248) continue;
-          const q = (v) => (v === hi ? 255 : v === lo ? 0 : snap);
-          const row = ids.get((q(r) << 16) | (q(gg) << 8) | q(b));
+          const row = idRow(d[i], d[i + 1], d[i + 2], ids);
           if (row === undefined) continue;
           let f = found.get(row);
           if (!f) found.set(row, f = { n: 0, ys: new Int32Array(h), xs: new Int32Array(w) });
@@ -2169,6 +2319,22 @@ export function runDisplayScenario(opts, ctx) {
         seats: () => seats,
         view: (m) => setView(m),
         mode: () => mode,
+        // The race view's transport: its clock in updates (`max` is how far
+        // this race has been run) and seconds, pause, seek to an update or by
+        // seconds, and whose eye it is seen through. The race view's alone.
+        race: () => ({ step: race.step, max: race.dts.length, seconds: race.ms / 1000, paused: race.paused, cam: race.cam }),
+        pause(on) {
+          race.paused = on === undefined ? !race.paused : !!on;
+          scene.frozen = race.paused;
+          return race.paused;
+        },
+        seek: (step) => seekRace(step),
+        seekBy: (sec) => seekRace(stepAfter(sec)),
+        raceCam: (c) => setRaceCam(c),
+        raceCams: () => RACE_CAMS.slice(),
+        // A review note's picture and its facts, and what its pins point at.
+        shot: () => shot(),
+        under: (pins) => under(pins),
         focus(i) {
           const n = marks.length || 1;
           focusAt = (((i | 0) % n) + n) % n;

@@ -197,13 +197,14 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
   }
 
   // Powder's ski lift stands up its mountain, in no stretch's lens: every
-  // cell turns onto it, each from its own distance, each keeping its own car
-  // in shot.
+  // cell turns onto it, each from a spot of its own (two may stand abreast,
+  // a lane apart, where the mountain leaves few clear ones), each keeping its
+  // own car in shot.
   await page.evaluate(() => window.__landmarks.track('powder'));
   await page.evaluate(() => window.__landmarks.focus(0));
   expect((await poses(page)).every((q) => q.look)).toBe(true);
   expect(await carInLens(page)).toEqual([true, true, true, true]);
-  expect(new Set((await poses(page)).map((q) => q.car.s)).size).toBe(4);
+  expect(new Set((await poses(page)).map((q) => `${q.car.s}:${q.car.lat}`)).size).toBe(4);
 
   // Skysnake's landmarks stand by loops and steep ramps: no car parks on one.
   await page.evaluate(() => window.__landmarks.track('skysnake'));
@@ -245,7 +246,7 @@ test('landmark gallery page: the Res toggle', async ({ page }) => {
 // catalogue, C cycles the camera in the buttons' order, and the rest do what
 // their buttons do.
 test('landmark gallery page: the keys', async ({ page }) => {
-  await page.goto('/gallery-landmarks.html');
+  await page.goto('/gallery-landmarks.html#view=driver');
   await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
   const lm = (call) => page.evaluate((c) => {
     const L = document.getElementById('lm-stage').contentWindow.__landmarks;
@@ -265,19 +266,20 @@ test('landmark gallery page: the keys', async ({ page }) => {
   await page.keyboard.press('Home');
   expect(await lm('focused')).toBe(0);
 
-  // Camera: C walks the buttons' order and shift-C back, from inside the frame too.
+  // View: V walks the buttons' order and shift-V back, from inside the frame too.
   const views = await page.$$eval('#lm-views [data-view]', (bs) => bs.map((b) => b.dataset.view));
-  expect(await lm('mode')).toBe(views[0]);
-  await page.keyboard.press('c');
-  expect(await lm('mode')).toBe(views[1]);
-  await expect(page.locator(`#lm-views [data-view="${views[1]}"]`)).toHaveClass(/is-on/);
+  const at = views.indexOf('driver');
+  expect(await lm('mode')).toBe('driver');
+  await page.keyboard.press('v');
+  expect(await lm('mode')).toBe(views[at + 1]);
+  await expect(page.locator(`#lm-views [data-view="${views[at + 1]}"]`)).toHaveClass(/is-on/);
   await page.evaluate(() => document.getElementById('lm-stage').contentWindow.focus());
-  await page.keyboard.press('c');
-  expect(await lm('mode')).toBe(views[2]);
-  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+C');
-  expect(await lm('mode')).toBe(views[views.length - 1]);
-  await page.keyboard.press('c');
-  expect(await lm('mode')).toBe(views[0]);
+  await page.keyboard.press('v');
+  expect(await lm('mode')).toBe(views[at + 2]);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+V');
+  expect(await lm('mode')).toBe(views[at - 1]);
+  await page.keyboard.press('v');
+  expect(await lm('mode')).toBe('driver');
 
   // Tracks: down is the next of the whole catalogue in cup order, up wraps.
   const order = await page.$$eval('#lm-track option', (os) => os.map((o) => o.value));
@@ -310,4 +312,72 @@ test('landmark gallery page: the keys', async ({ page }) => {
   await expect(page.locator('#lm-keys-off')).toBeVisible();
   await page.keyboard.press('?');
   await expect(page.locator('#lm-keys')).toBeVisible();
+});
+
+// The page opens on a race. What an eye cannot hold it to: that a pause stops
+// the sim, that going back and forth lands on the SAME race (a rewind is the
+// race dealt again and wound forward, so it is only a rewind while the race is
+// a function of its step count), that the race cameras change the eye and not
+// the race, and that a note carries the moment and what its pin points at.
+test('landmark gallery page: the race, paused, rewound and noted', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const L = (fn, arg) => page.evaluate(([f, a]) => {
+    const w = document.getElementById('lm-stage').contentWindow;
+    return new Function('L', 'E', 'a', `return (${f})(L, E, a)`)(w.__landmarks, w.__engine, a);
+  }, [fn.toString(), arg]);
+  const car = () => page.evaluate(() => {
+    const p = document.getElementById('lm-stage').contentWindow.__engine.getSnapshot().cars[0].pose.pos;
+    return [p.x, p.y, p.z];
+  });
+  expect(await L((l) => l.mode())).toBe('race');
+  expect(await L((l) => l.seats())).toBe(1);
+  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.race().step > 200);
+
+  await page.keyboard.press('Space');
+  const at = await L((l) => l.race());
+  expect(at.paused).toBe(true);
+  await expect(page.locator('#lm-pause')).toHaveText('Play');
+  const here = await car();
+  await page.waitForTimeout(200);
+  expect((await L((l) => l.race())).step).toBe(at.step);
+
+  // Back two seconds, a frame back, and forward again: the same car, to the bit.
+  await page.keyboard.press('ArrowLeft');
+  const back = await L((l) => l.race());
+  expect(at.seconds - back.seconds).toBeGreaterThan(1.9);
+  expect(at.seconds - back.seconds).toBeLessThan(2.1);
+  expect(await car()).not.toEqual(here);
+  await page.keyboard.press(',');
+  expect((await L((l) => l.race())).step).toBe(back.step - 1);
+  await L((l, e, to) => l.seek(to), at.step);
+  expect(await car()).toEqual(here);
+
+  // C is the race's cameras: the eye changes, the race does not.
+  for (const cam of ['free', 'top', 'chase']) {
+    await page.keyboard.press('c');
+    expect(await L((l) => l.race())).toMatchObject({ cam, step: at.step, paused: true });
+  }
+  expect(await L((l) => l.mode())).toBe('race');
+
+  // N: the note's picture, a pin on it, and the post it makes.
+  let posted = null;
+  await page.route('**/api/review-note', async (route) => {
+    posted = route.request().postDataJSON();
+    await route.fulfill({ json: { id: 'test', dir: 'scratch/review' } });
+  });
+  await page.keyboard.press('n');
+  await expect(page.locator('#lm-note-dialog')).toBeVisible();
+  await page.locator('#lm-note-img').click({ position: { x: 40, y: 40 } });
+  await page.locator('#lm-note-pins input').fill('this');
+  await page.locator('#lm-note-text').fill('too grey');
+  await page.locator('#lm-note-save').click();
+  await expect(page.locator('#lm-saved')).toContainText('scratch/review/test.json');
+  expect(posted.note).toBe('too grey');
+  expect(posted.meta).toMatchObject({ view: 'race', race: { cam: 'chase', step: at.step } });
+  expect(posted.pins).toHaveLength(1);
+  expect(posted.pins[0]).toMatchObject({ n: 1, text: 'this' });
+  expect('piece' in posted.pins[0]).toBe(true);
+  expect(posted.png.startsWith('data:image/png;base64,')).toBe(true);
+  expect(posted.marked.startsWith('data:image/jpeg;base64,')).toBe(true);
 });

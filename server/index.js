@@ -14,6 +14,8 @@ const zlib = require('zlib');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const REVIEW_DIR = path.join(__dirname, '..', 'scratch', 'review');
+const REVIEW_NOTE_MAX = 48 * 1024 * 1024;
 // partyplug (the transport kit) lives OUTSIDE public/ as a clearly-separate
 // vendored dependency, served via the remap below. Restricted to .js so
 // package artifacts / binaries can't be walked.
@@ -217,6 +219,34 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/api/trailer-shots' && req.method === 'GET') {
     if (!TRAILER_SHOTS) { sendJson(res, 404, { error: 'no shot list in this build' }); return; }
     sendJson(res, 200, { shots: TRAILER_SHOTS });
+    return;
+  }
+
+  // A REVIEW NOTE from /gallery-landmarks.html: a picture of the stage, what the
+  // viewer wrote on it and where in the lap it was taken, kept under scratch/
+  // (gitignored) for whoever works the note off. It writes to the checkout, so
+  // it exists only in development and answers only this machine.
+  if (urlPath === '/api/review-note' && req.method === 'POST') {
+    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+    if (IS_PROD || !local) { sendJson(res, 403, { error: 'review notes are saved on a local dev server only' }); return; }
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => { size += c.length; if (size > REVIEW_NOTE_MAX) req.destroy(); else chunks.push(c); });
+    req.on('end', () => {
+      try {
+        const { meta, note, pins, png, marked } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const track = String((meta && meta.track) || 'track').replace(/[^a-z0-9-]/gi, '');
+        const id = `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${track}`;
+        const image = (url, type) => Buffer.from(String(url).replace(new RegExp(`^data:image/${type};base64,`), ''), 'base64');
+        fs.mkdirSync(REVIEW_DIR, { recursive: true });
+        fs.writeFileSync(path.join(REVIEW_DIR, `${id}.png`), image(png, 'png'));
+        if (marked) fs.writeFileSync(path.join(REVIEW_DIR, `${id}-pins.jpg`), image(marked, 'jpeg'));
+        fs.writeFileSync(path.join(REVIEW_DIR, `${id}.json`), JSON.stringify({ id, note, pins, meta }, null, 2) + '\n');
+        sendJson(res, 200, { id, dir: path.relative(path.join(__dirname, '..'), REVIEW_DIR) });
+      } catch (e) {
+        sendJson(res, 400, { error: String((e && e.message) || e) });
+      }
+    });
     return;
   }
 

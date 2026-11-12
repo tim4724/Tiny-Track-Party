@@ -295,6 +295,25 @@ section.stage iframe {
 .lm-card__step { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: #9aa3c7; }
 .lm-bar { display: flex; gap: 6px; margin: 10px 0 2px; }
 .lm-bar select { flex: 1; min-width: 0; }
+/* The race view's transport, and the note taken on a screenshot of it. */
+.lm-race { margin-bottom: 10px; }
+.lm-race[hidden] { display: none; }
+.lm-race__row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.lm-race__row input[type=range] { flex: 1; min-width: 0; }
+.lm-note { width: min(1280px, 94vw); padding: 0; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+           background: #0c0c1c; color: #d5d5ee; }
+.lm-note::backdrop { background: rgba(0, 0, 0, 0.6); }
+.lm-note__form { display: flex; gap: 12px; padding: 12px; }
+.lm-note__pic { position: relative; flex: 1 1 auto; min-width: 0; align-self: flex-start; cursor: crosshair; line-height: 0; }
+.lm-note__pic img { width: 100%; height: auto; border-radius: 6px; }
+.lm-note__pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+                background: #ff2bd6; color: #fff; border: 2px solid #fff; font: 700 11px/18px system-ui, sans-serif;
+                text-align: center; pointer-events: none; }
+.lm-note__side { flex: none; width: 280px; display: flex; flex-direction: column; gap: 8px; }
+.lm-note__side textarea, .lm-note__row input { width: 100%; background: #13132a; color: #fff; font: inherit;
+                border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 8px; }
+.lm-note__row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.lm-note__row b { flex: none; width: 1.4em; color: #ff8fe9; }
 .kit-row--family { color: #9aa3c7; }
 .kit-row--member { padding-left: 16px; }
 /* A concept car's own description, under its name. */
