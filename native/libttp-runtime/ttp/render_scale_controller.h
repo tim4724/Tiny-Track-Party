@@ -137,6 +137,14 @@ class RenderScaleController {
   // panel.
   int rateHz(bool half) const;
 
+  // WHETHER THE FRAMES HAVE EARNED THE LITE TIER (render_scale.h,
+  // kLiteFloorSec): a race scene sat on the bottom rung of a surface with
+  // more than one for that long on end. Latched for the life of the process,
+  // like the half-rate offer: a device that could not hold the floor once is
+  // not handed the full world back between races to find out again. Read by
+  // ttp_display_detail, which only the next scene build performs.
+  bool liteEarned() const { return liteEarned_; }
+
  private:
   // Put `p` in force: the window it was judged on goes with the old buffer.
   bool moveTo(RenderScalePoint p, perf::Monitor& mon, RenderScalePoint* out);
@@ -200,6 +208,8 @@ class RenderScaleController {
   double lastPollMs_ = 0;
   bool halfRate_ = false;
   bool offered_ = false;
+  int floorRun_ = 0;         // judged seconds of this race scene on end at the bottom rung
+  bool liteEarned_ = false;
   double belowMs_ = -1.0;    // when it last fell below the anchor, -1 while not
 };
 
