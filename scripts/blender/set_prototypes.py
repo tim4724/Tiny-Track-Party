@@ -1285,23 +1285,28 @@ def crab_boat():
         loop.append((x, 0.0, z))
     for i, p in enumerate(loop):
         marker('path_crab_%d' % i, p)
-    beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99)
+    beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99, loop[0])
 
-def beach_sailing_boat(chain, period, hull, sail):
+def beach_sailing_boat(chain, period, hull, sail, at):
     """A beach boat under sail riding the closed path `chain` (bow along
     its travel), at a boat's size beside a car: its hull, a white
     wheelhouse, a lugsail on its mast, a wake at its stern, rising and
-    falling on the swell."""
-    with animated('anim_path:c=%s:p=%.0f:f=1+bob:h=0.12:p=2.6#boat' % (chain, period), (0.0, 0.0, 0.0)):
-        box((1.0, 0.45, 2.3), (0.0, SEA + 0.1, -0.1), hull)
-        box((0.7, 0.45, 0.7), (0.0, SEA + 0.1, 1.15), hull, yaw=math.pi / 4)
-        box((1.08, 0.12, 2.4), (0.0, SEA + 0.38, -0.1), 0xfff6eb)
-        box((0.7, 0.6, 0.7), (0.0, SEA + 0.72, -0.6), 0xfff6eb)                   # the wheelhouse
-        box((0.8, 0.1, 0.8), (0.0, SEA + 1.06, -0.6), 0xcf534f)
-        box((0.12, 2.4, 0.12), (0.0, SEA + 1.5, 0.35), 0x8a6a46)                  # the mast
-        prism([(0.4, SEA + 0.85), (0.5, SEA + 2.6), (-0.9, SEA + 2.2), (-0.7, SEA + 0.85)], 0.08, 0.06, sail)
+    falling on the swell. A traveller is drawn where its path puts it, so
+    its rest spot is only where the GLB holds it: `at`, the path's first
+    point, so a reader of the bare GLB (the gallery's sight lines) finds
+    the boat on its water rather than on the road at the piece's anchor."""
+    ax, az = at[0], at[2]
+    with animated('anim_path:c=%s:p=%.0f:f=1+bob:h=0.12:p=2.6#boat' % (chain, period), (ax, 0.0, az)):
+        box((1.0, 0.45, 2.3), (ax, SEA + 0.1, az - 0.1), hull)
+        box((0.7, 0.45, 0.7), (ax, SEA + 0.1, az + 1.15), hull, yaw=math.pi / 4)
+        box((1.08, 0.12, 2.4), (ax, SEA + 0.38, az - 0.1), 0xfff6eb)
+        box((0.7, 0.6, 0.7), (ax, SEA + 0.72, az - 0.6), 0xfff6eb)                   # the wheelhouse
+        box((0.8, 0.1, 0.8), (ax, SEA + 1.06, az - 0.6), 0xcf534f)
+        box((0.12, 2.4, 0.12), (ax, SEA + 1.5, az + 0.35), 0x8a6a46)                  # the mast
+        prism([(az + 0.4, SEA + 0.85), (az + 0.5, SEA + 2.6), (az - 0.9, SEA + 2.2), (az - 0.7, SEA + 0.85)],
+              ax + 0.08, 0.06, sail)
         for k in range(3):                                                         # the wake
-            box((0.5 + 0.3 * k, 0.04, 0.55), (0.0, SEA + 0.02, -1.45 - 0.45 * k), 0xfff6eb)
+            box((0.5 + 0.3 * k, 0.04, 0.55), (ax, SEA + 0.02, az - 1.45 - 0.45 * k), 0xfff6eb)
 
 @piece(1.0)
 def tidepool_cottages():
@@ -3814,10 +3819,11 @@ def drift_coble():
     # Driftwood: a beach boat under its brown lugsail working in and out
     # past the groynes' ends (placed on the groynes' spot, on the road's
     # centreline): the sea's side is +X here.
-    for i in range(14):
-        t = i / 14 * 2 * math.pi
-        marker('path_coble_%d' % i, (13.0 + 3.0 * math.sin(t), 0.0, 11.0 * math.cos(t)))
-    beach_sailing_boat('coble', 30.0, 0xcf534f, 0xb06041)
+    loop = [(13.0 + 3.0 * math.sin(i / 14 * 2 * math.pi), 0.0, 11.0 * math.cos(i / 14 * 2 * math.pi))
+            for i in range(14)]
+    for i, p in enumerate(loop):
+        marker('path_coble_%d' % i, p)
+    beach_sailing_boat('coble', 30.0, 0xcf534f, 0xb06041, loop[0])
 
 @piece(1.0)
 def smokehouse():

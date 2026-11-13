@@ -1530,7 +1530,7 @@ constexpr SetDef kSet_cloverleaf[] = {
   { "set-park-halt", 0x1.b95feda661284p-1, 0x1.906a7ef9db22dp+3, -0x1.4f0a3d70a3d71p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boating-lake", 0x1.a9c779a6b50b1p-1, 0x1.028f5c28f5c29p+4, -0x1.552e147ae147bp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boathouse", 0x1.a6809d495182bp-1, 0x1.9333333333333p+3, 0x1.54b851eb851ecp+5, 0x0p+0, 0x1.4cccccccccccdp+0, 1 },
-  { "set-bandstand", 0x1.b851eb851eb85p-3, -0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
+  { "set-bandstand", 0x1.d70a3d70a3d71p-3, -0x1.4p+4, 0x1.68p+7, 0x0p+0, 0x1.8p+0, 1 },
   { "set-cherry-avenue", 0x1.28f5c28f5c28fp-3, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cherry-avenue", 0x1.0cccccccccccdp-1, -0x1.ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-cherry-avenue", 0x1.91eb851eb851fp-1, 0x1.ap+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },

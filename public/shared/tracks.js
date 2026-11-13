@@ -1379,7 +1379,7 @@ export const TRACKS = {
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
       { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
-      { model: 'set-bandstand', u: 0.215, lat: -13, yaw: 180, scale: 1.5 },
+      { model: 'set-bandstand', u: 0.23, lat: -20, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
