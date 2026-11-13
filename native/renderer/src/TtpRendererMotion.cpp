@@ -360,13 +360,17 @@ void TtpRenderer::buildSetMovers() {
                     // reach from its anchor, turned any way and lifted, round
                     // the anchor or round every spot of the loop it rides.
                     const mat4f atRest = mv.rest * mv.toBake;
-                    float reach = 0;
+                    float reach = 0, own = 0;
                     for (const Vertex& v : pv) {
-                        reach = std::max(reach, length((atRest * float4{ v.px, v.py, v.pz, 1 }).xyz
-                                - mv.lodOrigin));
+                        const float3 w = (atRest * float4{ v.px, v.py, v.pz, 1 }).xyz;
+                        reach = std::max(reach, length(w - mv.lodOrigin));
+                        own = std::max(own, length(w - mv.rest[3].xyz));
                     }
                     reach += mv.lift;
-                    mv.reach = reach;
+                    // This frame's box (stepSetMovers): a rider turns about its
+                    // own pivot as it rides, so its reach round its traveller's
+                    // is bounded by the two, not by its rest pose alone.
+                    mv.reach = std::max(reach, length(mv.rest[3].xyz - mv.lodOrigin) + own + mv.lift);
                     if (lodPath < 0) {
                         skinLo = min(skinLo, mv.lodOrigin - reach);
                         skinHi = max(skinHi, mv.lodOrigin + reach);
@@ -415,7 +419,7 @@ void TtpRenderer::buildSetMovers() {
                     LodRange& r = mLods[li];
                     if (r.entity != mesh.entity) continue;
                     float3 lo{ 1e30f }, hi{ -1e30f };
-                    float cornerReach = 0;
+                    float cornerReach = 0, own = 0;
                     for (int c = 0; c < 8; c++) {
                         const float3 p{ (c & 1) ? r.hi.x : r.lo.x, (c & 2) ? r.hi.y : r.lo.y,
                                         (c & 4) ? r.hi.z : r.lo.z };
@@ -423,6 +427,7 @@ void TtpRenderer::buildSetMovers() {
                         lo = min(lo, w);
                         hi = max(hi, w);
                         cornerReach = std::max(cornerReach, length(w - mv.lodOrigin));
+                        own = std::max(own, length(w - rest[3].xyz));
                     }
                     if (lodPath >= 0) {
                         lo = float3{ 1e30f };
@@ -432,7 +437,7 @@ void TtpRenderer::buildSetMovers() {
                             hi = max(hi, q + cornerReach);
                         }
                         mv.lod = (int) li;
-                        mv.reach = cornerReach + mv.lift;
+                        mv.reach = std::max(cornerReach, length(rest[3].xyz - mv.lodOrigin) + own) + mv.lift;
                     }
                     r.lo = lo;
                     r.hi = hi;
