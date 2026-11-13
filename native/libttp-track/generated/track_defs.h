@@ -1157,7 +1157,7 @@ constexpr SetDef kSet_ribbon[] = {
   { "set-orchard-block", 0x1.e978d4fdf3b64p-3, -0x1.1333333333333p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-orchard-block", 0x1.fdf3b645a1cacp-3, -0x1.1333333333333p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-orchard-block-end", 0x1.09374bc6a7efap-2, -0x1.ecccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-cow-farm", 0x1.c8b4395810625p-1, -0x1.1666666666666p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-cow-farm", 0x1.c8b4395810625p-1, -0x1.2cccccccccccdp+3, 0x1.68p+7, 0x0p+0, 0x1.4cccccccccccdp+0, 1 },
   { "set-sheep-meadow", 0x1.6666666666666p-1, -0x1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-sheep-flock", 0x1.84189374bc6a8p-1, -0x1.b333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-sheepfold", 0x1.5a1cac083126fp-1, -0x1.1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },

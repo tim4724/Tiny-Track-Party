@@ -1273,7 +1273,7 @@ export const TRACKS = {
       { model: 'set-orchard-block', u: 0.239, lat: -8.6 },
       { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
-      { model: 'set-cow-farm', u: 0.892, lat: -8.7, yaw: 180 },
+      { model: 'set-cow-farm', u: 0.892, lat: -9.4, yaw: 180, scale: 1.3 },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
       { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
