@@ -6988,6 +6988,103 @@ def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='o
     elif hat == 'cone':
         cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=segs - 2 if rnd else 6, stem=True)
 
+# ---- Powder's sledging hill --------------------------------------------------------
+# The ground drawn over the plain in the knoll's hollow outside the south-west
+# bend (u 0.612, lat -12, yaw 180: +X down to the road), SAMPLED every two
+# units from (-10, -10) like a stand's (FORESTS): re-sample after moving the
+# piece or the land.
+SLEDGE_G = ((7.9, 7.3, 6.5, 5.7, 5.0, 4.4, 3.9, 3.3, 2.6),
+            (7.2, 6.5, 5.7, 4.9, 4.3, 3.8, 3.2, 2.7, 2.0),
+            (6.5, 5.7, 4.9, 4.3, 3.7, 3.2, 2.6, 2.0, 1.4),
+            (5.7, 5.0, 4.4, 3.9, 3.2, 2.5, 2.0, 1.4, 0.9),
+            (5.1, 4.5, 4.0, 3.4, 2.7, 2.0, 1.4, 0.8, 0.8),
+            (4.9, 4.1, 3.5, 2.9, 2.2, 1.5, 1.0, 0.8, 0.7),
+            (5.0, 3.8, 3.1, 2.5, 1.8, 1.9, 1.6, 0.8, 0.7),
+            (5.0, 3.8, 2.7, 2.3, 2.6, 2.9, 2.4, 1.2, 0.7),
+            (5.1, 3.9, 3.6, 3.3, 3.6, 3.9, 3.1, 1.9, 0.7),
+            (5.3, 5.4, 5.4, 4.5, 4.6, 4.9, 3.8, 2.6, 1.5),
+            (7.3, 7.4, 7.2, 6.4, 5.5, 5.7, 4.5, 3.5, 2.6))
+
+def powder_sledge_ground(x, z):
+    fx = min(max((x + 10.0) / 2.0, 0.0), 7.999)
+    fz = min(max((z + 10.0) / 2.0, 0.0), 9.999)
+    i, j = int(fx), int(fz)
+    a, b = fx - i, fz - j
+    g = SLEDGE_G
+    return (g[j][i] * (1 - a) + g[j][i + 1] * a) * (1 - b) + (g[j + 1][i] * (1 - a) + g[j + 1][i + 1] * a) * b
+
+@piece(1.0)
+def sledging_hill():
+    # Powder: the resort's sledging hill in the knoll's hollow outside the
+    # south-west bend, which the run down from the ski school drives at: two
+    # packed runs side by side down the hollow to a bank of snow at the
+    # verge, marker flags down their edges and a banner over the start; a
+    # rope tow up beside them on four posts; sleds riding down the run and
+    # towed back up, nobody on them, and the hire rack at the foot with its
+    # sleds stood in a row. The runs and the sleds' loop drape on the snow as
+    # drawn; the posts stand on the ground sampled under them (SLEDGE_G).
+    # Placed at yaw 180: +X down to the road.
+    G = powder_sledge_ground
+    WOOD, DARK = 0x8a6a46, 0x38383d
+    def post(x, z, h, t=0.2, color=WOOD):
+        g = G(x, z)
+        box((t, g + h + 0.3, t), (x, (g + h) / 2 - 0.15, z), color)
+        return g + h
+    # the rope tow: four posts, a cross arm and a wheel on each, the rope both ways
+    tow = [(5.6, -4.6), (0.8, -4.9), (-4.0, -5.1), (-8.8, -5.3)]
+    tops = []
+    for k, (x, z) in enumerate(tow):
+        y = post(x, z, 2.0, 0.24)
+        box((0.2, 0.2, 1.5), (x, y - 0.12, z + 0.55), WOOD)
+        cyl(0.26, 0.14, (x, y - 0.42, z + 1.1), DARK, segs=8)
+        snowy(box((0.34, 0.1, 1.6), (x, y + 0.04, z + 0.55), 0xf3f7fb), 0.5)
+        tops.append((x, y - 0.4, z))
+    for a, b in zip(tops, tops[1:]):
+        for dz in (0.85, 1.35):
+            strut((a[0], a[1], a[2] + dz), (b[0], b[1], b[2] + dz), 0.1, 0xfff6eb)
+    # the start: a banner over the top of the runs
+    for s in (-1, 1):
+        ys = post(-8.6, 0.6 + s * 2.3, 2.3, 0.22, 0x3f7bd9)
+    box((0.12, 0.6, 4.8), (-8.6, G(-8.6, 0.6) + 2.0, 0.6), 0xcf534f)
+    box((0.14, 0.2, 3.6), (-8.56, G(-8.6, 0.6) + 2.0, 0.6), 0xfff6eb)
+    # marker flags down the runs' edges, red on one side and blue on the other
+    for k in range(5):
+        x = -6.0 + 2.8 * k
+        for s, c in ((-1, 0xcf534f), (1, 0x3f7bd9)):
+            z = 0.6 + s * 2.2
+            y = post(x, z, 0.9, 0.12, 0xfff6eb)
+            box((0.34, 0.26, 0.07), (x + 0.2, y - 0.14, z), c)
+    # the hire rack at the foot: a rail on two posts, sleds stood against it
+    rx, rz = 4.6, 5.2
+    g = G(rx, rz)
+    for s in (-1, 1):
+        post(rx, rz + s * 1.5, 0.8, 0.18)
+    box((0.14, 0.14, 3.2), (rx, g + 0.72, rz), WOOD)
+    for k, c in enumerate((0xcf534f, 0x3f7bd9, 0xffc044, 0x61cb8b, 0xcf534f, 0xa878e8)):
+        box((0.1, 1.0, 0.34), (rx + 0.16, g + 0.46, rz - 1.25 + 0.5 * k), c, roll=0.28)
+        box((0.06, 1.0, 0.06), (rx + 0.24, g + 0.44, rz - 1.25 + 0.5 * k + 0.14), 0x555b66, roll=0.28)
+    snowy(box((0.26, 0.1, 3.3), (rx, g + 0.84, rz), 0xf3f7fb), 0.5)
+    join_still('hill')
+    # what lies on the snow as drawn: the two packed runs, the tow's track, the bank at the foot
+    def lying():
+        for z in (-0.5, 1.7):
+            for k in range(8):
+                rowed(box((1.95, 0.07, 1.5), (-8.2 + 1.85 * k, 0.0, z + 0.12 * math.sin(1.3 * k)), 'sky'), 1)
+        for k in range(8):
+            rowed(box((1.95, 0.07, 0.7), (-8.4 + 1.85 * k, 0.0, -3.6), 'sky'), 1)
+        for k in range(5):
+            snowy(box((1.0, 0.7, 1.3), (6.9, 0.3, -1.6 + 1.15 * k), 0xf3f7fb, yaw=0.2 * (k - 2)), 0.4)
+    draped('lying', lying)
+    # the sleds' loop: down a run, round at the foot, up the tow's track
+    loop = [(-8.6, 1.7), (-5.5, 1.8), (-2.0, 1.6), (1.5, 1.8), (4.6, 1.5), (5.7, 0.2), (5.4, -2.6), (3.0, -3.6),
+            (-1.0, -3.6), (-5.0, -3.6), (-8.4, -3.5), (-9.6, -1.6), (-9.4, 0.6)]
+    for k, (x, z) in enumerate(loop):
+        marker('path_drapesled_%d' % k, (x, 0.05, z))
+    for n, c in enumerate((0xcf534f, 0x3f7bd9, 0xffc044, 0x61cb8b)):
+        x, z = loop[0]
+        with animated('anim_path:c=drapesled:p=13:o=%.3f:f=1#%d' % (n / 4.0 + 0.03 * n, n), (x, 0.05, z)):
+            sled(x, 0.05, z, 0.0, color=c, L=1.1)
+
 @piece(1.0)
 def snowman_field():
     # Powder: a family of snowmen the resort's children built on the verge

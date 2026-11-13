@@ -848,7 +848,11 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman family on the outside verge of the east bend, at road
       // height, ahead of a car coming over the hump off the start straight
-      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 },
+      // the sledging hill in the knoll's hollow outside the south-west bend,
+      // dead ahead of the run down from the ski school (built on the ground
+      // sampled under it, set_prototypes.py SLEDGE_G)
+      { model: 'set-sledging-hill', u: 0.612, lat: -12, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
