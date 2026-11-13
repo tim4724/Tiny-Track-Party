@@ -343,6 +343,24 @@ section.stage iframe {
 .keys-off { display: none; }
 .legend.keys-hidden .keys { display: none; }
 .legend.keys-hidden .keys-off { display: block; }
+/* The landmark panel's fullscreen row, which holds the header's camera buttons
+   while the stage is fullscreen, and the review round over the keys. */
+.lm-fs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.lm-fs .seg { flex-wrap: wrap; }
+.lm-review { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.lm-review[hidden] { display: none; }
+.lm-review h2 { font-size: 13px; color: #fff; }
+.lm-review > .legend__note { margin: 0 0 4px; }
+.lm-review__item { margin: 4px 0 6px; padding: 8px; border-radius: 6px; background: #13132a; }
+.lm-review__item p { color: #d5d5ee; margin-bottom: 4px; }
+.lm-review__item ul { margin: 0 0 6px 1.2em; color: #b8bedc; }
+.lm-review__stops { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 6px; }
+.lm-review__stops button.ctrl { text-align: left; }
+.lm-review__item textarea { width: 100%; background: #0c0c1c; color: #fff; font: inherit;
+                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 8px; }
+.kit-row__tris.is-keep { color: #78dc96; }
+.kit-row__tris.is-rework { color: #b9c3ff; }
+.kit-row__tris.is-drop { color: #ff8f8f; }
 /* The other cells' landmarks while SPREAD is on: a step quieter than the focus. */
 .kit-row--also { background: #1b1b38; color: #c8c8f0; }
 /* The list stands BESIDE the scene, not over it: a split's top-right cell has

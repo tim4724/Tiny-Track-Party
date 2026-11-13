@@ -42,7 +42,7 @@
 
   <div class="group seg">
     <button class="ctrl" id="lm-slow" title="Slow motion: the scene at a quarter speed (M)">Slow</button>
-    <button class="ctrl" id="lm-fast" title="Double speed (F)">Fast</button>
+    <button class="ctrl" id="lm-fast" title="Double speed (Shift+M)">Fast</button>
   </div>
 
   <div class="group">
@@ -76,15 +76,23 @@
   </nav>
 </header>
 
-<section class="stage stage--beside">
+<section class="stage stage--beside" id="lm-box">
   <!-- The real display page on a catalogue track, driven through its
        window.__landmarks hook. Interactive like the asset stage: Free mode
        hands the camera to the viewer. -->
   <iframe id="lm-stage" title="Landmarks"></iframe>
   <aside class="legend" id="lm-legend">
+    <!-- In fullscreen the header's camera buttons move in here (gallery-landmarks.js). -->
+    <div class="lm-fs" id="lm-fs">
+      <button class="ctrl" id="lm-full" title="The stage fullscreen, this panel and all (F); Esc leaves">Fullscreen</button>
+    </div>
+    <div class="lm-review" id="lm-review" hidden></div>
     <dl class="keys" id="lm-keys">
       <div><dt><kbd>Space</kbd></dt><dd>pause the race</dd></div>
       <div><dt><kbd>C</kbd></dt><dd>camera: chase, free, top</dd></div>
+      <div><dt><kbd>G</kbd></dt><dd>free camera from here: drag looks, wheel flies, WASD Q E</dd></div>
+      <div><dt><kbd>O</kbd></dt><dd>orbit the piece: drag turns, wheel zooms</dd></div>
+      <div><dt><kbd>F</kbd></dt><dd>fullscreen; <kbd>H</kbd> hides this panel there</dd></div>
       <div><dt><kbd>N</kbd></dt><dd>note on a screenshot</dd></div>
       <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>2 s back / on (&#8679; 10 s); landmark outside the race</dd></div>
       <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>one frame back / on</dd></div>
@@ -95,8 +103,7 @@
       <div><dt><kbd>T</kbd></dt><dd>tour</dd></div>
       <div><dt><kbd>L</kbd></dt><dd>lite / full tier</dd></div>
       <div><dt><kbd>X</kbd></dt><dd>spread</dd></div>
-      <div><dt><kbd>M</kbd></dt><dd>slow motion</dd></div>
-      <div><dt><kbd>F</kbd></dt><dd>double speed</dd></div>
+      <div><dt><kbd>M</kbd><kbd>&#8679;M</kbd></dt><dd>slow motion / double speed</dd></div>
       <div><dt><kbd>Home</kbd></dt><dd>first landmark</dd></div>
       <div><dt><kbd>?</kbd></dt><dd>hide these keys</dd></div>
     </dl>
