@@ -1544,14 +1544,14 @@ export const TRACKS = {
       { model: 'set-canyon-hairpin-gulch', u: 0.937, lat: 5.2 },
       { model: 'set-canyon-spur-a', u: 0.968, lat: 5.2 },
       { model: 'set-canyon-inside-gulch', u: 0.857, lat: -5.2, yaw: 180 },
-      // the stamp mill cascading down its spoil heap across the start
-      // straight from the adit, its tramway's buckets riding the sagging
-      // ropes over the road to the tower beside the adit; and its tailings,
-      // in the mill's own frame: a pale terrace run out of its bank down
-      // the yard, fed along its launder from the battery house (sunk to
-      // the mill's level: its own clearing lies a little higher)
+      // the stamp mill stepping down its hill across the start straight
+      // from the adit, its tramway's buckets riding the sagging ropes over
+      // the road to the tower beside the adit; and its tailings, in the
+      // mill's own frame: a pale terraced heap down the yard, fed along its
+      // launder from the tables' house (the mill's clearing takes in the
+      // heap's, so both stand at one level)
       { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 },
-      { model: 'set-tailings-dump', u: 0.005, lat: -11, yaw: 180, y: -0.1 },
+      { model: 'set-tailings-dump', u: 0.005, lat: -11, yaw: 180 },
       // the boomtown down the north loop's top, both sides of the road; the
       // miners' camp before the canyon, the left there left open for the
       // sight line to the mill
