@@ -474,7 +474,7 @@ export const TRACKS = {
     // stands in open water, seals on its ledges. Inland, grassy downs fill
     // both lobes of the lap, their flanks to the kerb, and at the lap's waist
     // a knoll with the same rock breaking out of it; the rock-poolers' vans
-    // are parked by the start straight.
+    // are parked along their gravel lane by the start straight.
     set: [
       { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
       { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },

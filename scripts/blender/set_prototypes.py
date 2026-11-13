@@ -2985,32 +2985,99 @@ def seal_rock():
 
 @piece(1.0)
 def rock_poolers_park():
-    # Tidepool: the rock-poolers' car park on the sand by the start straight,
-    # at the vehicles' real size: camper vans and a minibus, all bigger than
-    # a racer and in colours no racer wears, nosed toward the sea (-X); the
-    # striped kiosk hung with buckets and crab lines, its flag, surfboards
-    # leant on a van. No one about: the tide is out and they are on the reef.
-    # +X is the road; the row runs along it (+Z).
-    for (z, lower, boards, pop) in ((-4.2, 'sky', (0xffc044,), True), (-2.4, 'tan', (), False),
-                                    (2.0, 'lavender', (0xff5040, 0x339cf2), False), (3.8, 'salmon', (), True)):
-        camper(-0.8, z, -math.pi / 2, lower, boards=boards, pop=pop)
-    # the minibus at the row's end, longer and taller still
-    c, s = math.cos(-math.pi / 2), math.sin(-math.pi / 2)
-    def bus(size, dx, dy, dz, color):
-        box(size, (-0.6 + dx * c + dz * s, dy, 6.4 - dx * s + dz * c), color, yaw=-math.pi / 2)
-    for sx in (-1, 1):
-        for sz in (-0.8, 0.8):
-            scenery_wheel(-0.6 + sx * 0.35 * c + sz * s, 0.2, 6.4 - sx * 0.35 * s + sz * c, 0.2, 0.14, -math.pi / 2)
-    bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
-    bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
-    bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
-    kiosk(0.4, 0.0, 0.0)
-    # the car park's gravel under the vans and the bus, and its track to the kerb
-    gravel_yard(((-1.9, 0.4, -5.4, 7.9), (-2.1, 0.1, -4.9, 4.6), (-1.7, 0.7, 4.9, 7.7), (0.2, 4.6, -3.6, -1.4)))
-    flag_on_pole((0.9, 0, 1.0), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
-    for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
-        surfboard(-0.2 + 0.03 * k, 2.95 + 0.0 * k + 0.22 * k - 0.22, 0.0, col, st, lean=0.3)
-    join_still('park')
+    # Tidepool: the rock-poolers' gravel lane on the sand by the start
+    # straight, at the vehicles' real size: it leaves the road at the
+    # straight's head, runs along beside it and bends away down onto the
+    # beach, its tan-grey gravel worn into two darker ruts with turf on the
+    # hump between, its edges ragged, marram and a few stones along them; the
+    # camper vans and the minibus are pulled off onto bays along its sea
+    # side, nosed toward the sea (-X), all bigger than a racer and in colours
+    # no racer wears; the striped kiosk hung with buckets and crab lines
+    # stands on its road side with its flag, surfboards leant on a van. No
+    # one about: the tide is out and they are on the reef. The lane DRAPES, a
+    # skin a hand's breadth over the sand as it is drawn, no sides (round 12:
+    # the old raised pads read "rather like plates"), so the piece levels
+    # nothing; what is parked on it is one rigid part laid on the land at
+    # its middle. +X is the road; the lane runs along it (+Z).
+    VANS = ((-8.0, 'sky', (0xffc044,), True), (-5.6, 'tan', (), False), (1.4, 'lavender', (0xff5040, 0x339cf2), False),
+            (3.8, 'salmon', (), True))
+    BUS = 9.6
+    bays = [z for z, *_ in VANS] + [BUS]
+    path = [(4.0, -16.0), (2.4, -14.2), (-0.4, -11.6), (-0.9, -6.0), (-0.6, 0.0), (-1.0, 6.0), (-1.3, 11.0),
+            (-3.2, 14.6), (-6.8, 17.4)]
+    for _ in range(3):                                    # Chaikin: its bends worn round
+        path = [path[0]] + [q for a_, b_ in zip(path, path[1:])
+                            for q in ((0.75 * a_[0] + 0.25 * b_[0], 0.75 * a_[1] + 0.25 * b_[1]),
+                                      (0.25 * a_[0] + 0.75 * b_[0], 0.25 * a_[1] + 0.75 * b_[1]))] + [path[-1]]
+    # across it, from its sea side: the ragged edge, the gravel, the ruts a
+    # car's track apart with the hump between, the gravel, the edge; a bay on
+    # the sea side for each van
+    RUT0, RUT1, Y = 0.3, 0.68, 0.05
+    rows = []
+    for i, (x, z) in enumerate(path):
+        a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
+        L = math.hypot(b_[0] - a_[0], b_[1] - a_[1]) or 1.0
+        nx, nz = -(b_[1] - a_[1]) / L, (b_[0] - a_[0]) / L          # to the left of the way it runs
+        sea = 1.4 + 0.3 * noise2(0.5 * i, 1.5, 4.2) + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
+        road = 1.4 + 0.3 * noise2(0.5 * i, 3.5, 4.2)
+        offs = (-sea, -0.5 * (sea + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (road + RUT1), road)
+        rows.append([(x + nx * o, Y, z + nz * o) for o in offs])
+    def lane():
+        groups = {}
+        for i in range(len(rows) - 1):
+            for j in range(7):
+                if j in (2, 4):
+                    key = ('bark', 12)                               # the ruts
+                elif j == 3 and noise2(0.35 * i, 0.5, 4.2) > 0.0:
+                    key = ('leaf', 24)                               # turf on the hump
+                else:                                                # the gravel, worn darker in long patches
+                    key = ('bark', 2) if noise2(0.3 * i, 0.9 * j, 7.7) > 0.12 else ('gravel', 31)
+                q = [rows[i][j], rows[i][j + 1], rows[i + 1][j + 1], rows[i + 1][j]]
+                if face_normal(q)[1] < 0:
+                    q = q[::-1]
+                groups.setdefault(key, []).append(q)
+        for (sw, row), qs in groups.items():
+            for o in colored_faces([(sw, q) for q in qs], 'lane'):
+                rowed(o, row)
+        # marram and a few stones along both edges, every couple of units
+        with plain_parts():
+            for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
+                for k in range(2, len(edge) - 2, 4):
+                    x, _, z = edge[k]
+                    if side < 0 and any(abs(z - bz) < 1.8 for bz in bays):
+                        continue                                     # the bays' mouths kept open
+                    (ax, _, az), (bx, _, bz) = edge[k - 1], edge[k + 1]
+                    L = math.hypot(bx - ax, bz - az) or 1.0
+                    ox, oz = -side * (bz - az) / L, side * (bx - ax) / L   # out from the lane
+                    d = 0.35 + 0.25 * (jitter(k, side, 6.1) + 0.5)
+                    if jitter(k, side + 3, 6.1) > 0.15:
+                        rowed(sphere(0.34, (x + ox * d, 0.1, z + oz * d), 'grey', scale=(1.3, 0.6, 1.0), yaw=k), 22)
+                        continue
+                    for t in range(3):
+                        aa = t * 1.7 + k
+                        cyl(0.09, 0.38 + 0.12 * ((t + k) % 3), (x + ox * (d + 0.3) + 0.14 * math.cos(aa), 0.0,
+                                                               z + oz * (d + 0.3) + 0.14 * math.sin(aa)),
+                            0x6faa62 if t % 2 else 'sage', r2=0.0, segs=3, yaw=aa, stem=True)
+    draped('lane', lane)
+    with animated('anim_drape#parked', (-1.2, 0.0, 0.0)):
+        for (z, lower, boards, pop) in VANS:
+            camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
+        # the minibus in the last bay, longer and taller still
+        c, s_ = math.cos(-math.pi / 2), math.sin(-math.pi / 2)
+        BX = -2.4
+        def bus(size, dx, dy, dz, color):
+            box(size, (BX + dx * c + dz * s_, dy, BUS - dx * s_ + dz * c), color, yaw=-math.pi / 2)
+        for sx in (-1, 1):
+            for sz in (-0.8, 0.8):
+                scenery_wheel(BX + sx * 0.35 * c + sz * s_, 0.2, BUS - sx * 0.35 * s_ + sz * c, 0.2, 0.14,
+                              -math.pi / 2)
+        bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
+        bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
+        bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
+        kiosk(1.3, -1.6, 0.0)
+        flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
+        for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
+            surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
 
 # ---- round 8: the three beaches' stories at the kerb ----
 #
