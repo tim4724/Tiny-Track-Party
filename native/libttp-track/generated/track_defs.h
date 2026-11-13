@@ -86,9 +86,10 @@ constexpr FurnDef kBoxes_tidepool[] = {
 };
 constexpr SetDef kSet_tidepool[] = {
   { "set-tidepool-knoll", 0x1p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-rock-pool", 0x1.599999999999ap-1, 0x1.0b33333333333p+4, 0x1p+2, 0x0p+0, 0x1p+0, 1 },
+  { "set-rock-pool", 0x1.599999999999ap-1, 0x1.bp+3, 0x1p+2, 0x0p+0, 0x1p+0, 1 },
   { "set-seal-rock", 0x1.e147ae147ae14p-3, 0x1.9p+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-reef-shelf", 0x1.47ae147ae147bp-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-tide-ledges", 0x1.947ae147ae148p-2, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-tidepool-headland", 0x1.70a3d70a3d70ap-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-crab-boat", 0x1.70a3d70a3d70ap-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-reef-stacks", 0x1.a8f5c28f5c28fp-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -2540,7 +2541,7 @@ constexpr SegDef kS_drift[] = {
 };
 
 constexpr TrackDef TTP_TRACKS[] = {
-  { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tidepool, 13, kLand_tidepool, 27 },
+  { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tidepool, 14, kLand_tidepool, 27 },
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 15, kLand_cove, 22 },
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 16, kLand_driftwood, 29 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 19, kLand_riptide, 17 },

@@ -907,6 +907,27 @@ def rock_pool():
                   top='lavender', y=0.1)
         reef_tone()
     draped('pool', pool)
+    # the rock-poolers' things at its road side (round 16: flat on the beach
+    # the pool is a sliver of blue from the seat, so what says "rock pool"
+    # is what stands at it): a striped windbreak, dip nets stood in the
+    # rock, buckets on the lip. No people.
+    def things():
+        with plain_parts():
+            # the windbreak across the pool's near end, its stripes to the
+            # cars coming (-Z), low: stood along the road side it hid the
+            # sea arch behind the pool
+            for k in range(5):
+                x = 1.2 + 0.9 * k
+                box((0.1, 0.95, 0.1), (x, 0.42, -5.3 + 0.12 * math.sin(k * 1.7)), 0xfff6eb)
+                if k < 4:
+                    box((0.9, 0.62, 0.05), (x + 0.45, 0.52, -5.3 + 0.06 * (math.sin(k * 1.7) + math.sin((k + 1) * 1.7))),
+                        (0xff5040, 0xfff6eb, 0x339cf2, 0xffc044)[k])
+            for (x, z, lean, c) in ((4.6, 1.9, 0.25, 0x22c46e), (4.3, 2.7, -0.2, 0xff5040), (3.3, -3.4, 0.15, 0xffc044)):
+                beam((x, -0.15, z), (x + lean, 1.15, z + 0.3 * lean), 0.09, 0xfff6eb)    # a dip net on its pole
+                box((0.36, 0.26, 0.36), (x + lean, 1.24, z + 0.3 * lean), c)
+            for (x, z, c) in ((4.4, 0.6, 0xff5040), (4.9, -1.2, 0x339cf2), (3.6, 3.6, 0xffc044)):
+                cyl(0.2, 0.36, (x, 0.3, z), c, r2=0.25, segs=8)                          # a bucket
+    draped('things', things)
     gull((math.cos(0.4) * 4.3, LIP, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     ring = [(6.0 + 7.0 * math.cos(i * math.pi / 8), 3.6, 1.0 + 7.0 * math.sin(i * math.pi / 8)) for i in range(16)]
     for i, at in enumerate(ring):
@@ -1344,7 +1365,7 @@ def reef_stacks():
 def lifeboat_station():
     # Tidepool: the lifeboat station on the rocks outside the bend before
     # the line, at a building's real size beside a car: the boathouse,
-    # white with a red roof and its name board, its great doors to the sea
+    # white under the cottages' slate, its name board, its great doors to the sea
     # (-X) at the head of the slipway, which runs down over the reef's
     # ledges into the surf; the lifeboat in its cradle at the top of the
     # slip, orange and navy, bow to the sea; the station's flag flying from
@@ -1353,7 +1374,7 @@ def lifeboat_station():
     # beach rise (tracks.js), so it stands at the road's height.
     white, red, navy, orange = 0xfff6eb, 0xcf534f, 0x38383d, 0xff7e44
     BX, BZ, W, D, H = -1.6, 0.0, 2.6, 4.2, 1.9
-    gabled_house(BX, BZ, W, D, H, 1.25, white, red)
+    gabled_house(BX, BZ, W, D, H, 1.25, white, 0x868ba1)
     box((0.08, 0.5, 2.6), (BX + W / 2 + 0.03, H - 0.45, BZ), 0x339cf2)                 # the name board to the road
     box((0.06, 0.32, 2.3), (BX + W / 2 + 0.07, H - 0.45, BZ), white)
     box((0.08, 1.6, 2.2), (BX - W / 2 - 0.03, 0.8, BZ), 0x339cf2)                       # the doors to the slip
@@ -1460,6 +1481,21 @@ def tidepool_cottages():
         box((0.46, 0.1, 0.46), (cx, CH + 0.58, z + d / 2 - 0.3), 'slate')
         if k == 2:                                                               # one smokes (one chimney a track)
             marker('anim_smoke', (cx, CH + 0.75, z + d / 2 - 0.3))
+        # the backs (-X), which the start straight passes a few strides off
+        # and the grid looks at (round 16: four blank walls): a tarred
+        # plinth all round, a back door in the house's colour, a window
+        # with its shutters, a little window in each gable
+        box((w + 0.08, 0.34, d + 0.08), (cx, 0.17, z), 'slate')
+        bx = cx - w / 2
+        box((0.07, 0.8, 0.5), (bx - 0.03, 0.4, z + 0.55), white)
+        box((0.07, 0.72, 0.4), (bx - 0.05, 0.36, z + 0.55), doors[k])
+        box((0.07, 0.5, 0.6), (bx - 0.03, 0.85, z - 0.6), white)
+        box((0.07, 0.4, 0.5), (bx - 0.05, 0.85, z - 0.6), 'slate')
+        for sz in (-1, 1):
+            box((0.07, 0.46, 0.2), (bx - 0.05, 0.85, z - 0.6 + sz * 0.42), doors[k])
+        for sz in (-1, 1):
+            box((0.5, 0.42, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.03)), white)
+            box((0.38, 0.3, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.05)), doors[(k + 2) % 4])
     # the dry-stone wall along the gardens, a gate's gap before each door
     with plain_parts():
         for z0, z1 in ((-8.4, -7.3), (-6.5, -4.0), (-3.2, -0.3), (0.5, 3.6), (4.4, 6.0)):
@@ -1467,6 +1503,21 @@ def tidepool_cottages():
             box((0.36, 0.1, z1 - z0 + 0.04), (1.3, 0.53, (z0 + z1) / 2), 'lavender')
     for (z, y) in ((-7.6, 0.0), (-7.6, 0.3), (5.5, 0.0)):
         crab_pot((0.7, y, z), 0.0)
+    # behind the row's first cottage, where the start straight leaves room:
+    # the nets hung to dry on their rack, pots stacked by it, a skiff pulled
+    # up, a length of the garden wall
+    with plain_parts():
+        for z in (-8.6, -6.2):
+            box((0.16, 1.5, 0.16), (-4.1, 0.75, z), 0x8a6a46)
+        box((0.14, 0.14, 2.7), (-4.1, 1.45, -7.4), 0x8a6a46)
+        box((0.06, 1.0, 2.1), (-4.1, 0.88, -7.4), 0x2f8f5b)                       # the net
+        for k in range(4):
+            box((0.12, 0.12, 0.12), (-4.1, 0.42, -8.2 + 0.55 * k), 0xff7e44)      # its floats
+        box((0.32, 0.5, 2.6), (-3.2, 0.25, -3.0), 'grey')
+        box((0.36, 0.1, 2.64), (-3.2, 0.53, -3.0), 'lavender')
+    for (x, y, z) in ((-3.4, 0.0, -5.6), (-3.4, 0.3, -5.6), (-3.9, 0.0, -5.2)):
+        crab_pot((x, y, z), 0.6)
+    boat((-4.3, 0.06, -9.9), 0.5, 0x339cf2, trim=0xfff6eb, L=1.5)
     join_still('row')
 
 # ---- Cove ----
@@ -3474,6 +3525,36 @@ def seal_rock():
             box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
             box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
     join_still('rock')
+
+@piece(1.0)
+def tide_ledges():
+    # Tidepool: the top run after the seals' bend, where the beach lay bare
+    # to the water: ribs of the reef the tide has left standing, running
+    # from a stride past the kerb down the beach to the sea (-X), and the
+    # line of kelp it dropped between them. Draped whole. +X is the road;
+    # it runs along it (+Z).
+    def build():
+        k = 0
+        for (z0, slant, n) in ((-9.5, 0.28, 5), (-1.5, -0.18, 6), (7.5, 0.22, 5)):
+            for i in range(n):
+                x = 2.2 - 2.5 * i - 0.4 * jitter(i, 1, z0)
+                z = z0 + slant * (2.2 - x) + 0.5 * jitter(i, 2, z0)
+                sz = 2.9 - 0.25 * i + 0.5 * jitter(i, 3, z0)
+                stone(x, z, sz, 0.9 * i + z0, 300.0 + k, squat=0.5 + 0.1 * jitter(i, 4, z0), rock=('grey', WET),
+                      top='lavender', y=0.05)
+                k += 1
+        reef_tone()
+        with plain_parts():
+            for i in range(13):                                      # the kelp: long dark straps, heaped where the ribs caught it
+                z = -11.0 + 1.75 * i
+                x = -1.6 + 1.3 * wobble(z, 3.0, 7.0)
+                heap = min(abs(z - c) for c in (-8.5, -1.0, 8.5)) < 1.6
+                o = box((0.7 if heap else 0.45, 0.3 if heap else 0.14, 2.0), (x, 0.1 if heap else 0.05, z),
+                        'olive' if i % 3 else 0x7a5a3a, yaw=0.5 * wobble(z, 5.0, 3.0))
+                rowed(o, 31)
+                if heap:
+                    rowed(box((0.5, 0.2, 1.1), (x + 0.5, 0.08, z + 0.3), 'olive', yaw=1.1 + i), 24)
+    draped('ledges', build)
 
 @piece(1.0)
 def rock_poolers_park():

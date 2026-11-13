@@ -402,6 +402,7 @@
     "set-tank-train-d-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tank-train-d.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-telegraph-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-tide-ledges.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tidepool-cottages.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tidepool-headland.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tidepool-knoll.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

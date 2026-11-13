@@ -477,13 +477,16 @@ export const TRACKS = {
     // are parked along their gravel lane by the start straight.
     set: [
       { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
-      { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 13.5, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
       // the reef in three forms on the outsides of the bends, where the
       // camera swings to them: the seals' shelf round the east bend, the
       // headland and its sea arch where the west run points, the stacks at
       // the west bend's end (each built along its bend, placed on the road)
       { model: 'set-reef-shelf', u: 0.32, lat: 0 },
+      // ...and its ribs running down the beach along the top run after it,
+      // the kelp the tide left between them
+      { model: 'set-tide-ledges', u: 0.395, lat: 10 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
       { model: 'set-crab-boat', u: 0.72, lat: 0 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
