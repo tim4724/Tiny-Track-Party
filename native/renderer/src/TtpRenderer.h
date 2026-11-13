@@ -1914,8 +1914,8 @@ private:
     // own shoreline.
     Mesh mWater, mWet;
     // Inland water (a `pond` landform, kind 7): a sheet with its own outline
-    // over the plain floor the landform keeps, and its pebble shore.
-    Mesh mPond, mPondBank;
+    // over the plain floor the landform keeps (its coping joins mStructures).
+    Mesh mPond;
     // Fliers (theme.birds / kites / paperPlane): billboard glyphs built as real
     // stroked geometry (the JS canvas sprites), plus the playroom's 3D dart.
     std::vector<Mesh> mBirds;
@@ -2566,13 +2566,16 @@ private:
     // length): a vertex rides the lowest land along a little of the wall's
     // own length, and by at most its own height over the lowest land between
     // it and that spot (the face's foot), so a summit over a short rise and a
-    // tail over a massif's flank never stretch into needles.
+    // tail over a massif's flank never stretch into needles. `turf`, for a
+    // `drape_turf` part (a garden's lawn, a brook's grassy bank): it wears the
+    // ground's own colour where each vertex lands (groundColorAt, landTint),
+    // so it reads as the field it lies in, not a tile laid on it.
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             const std::vector<filament::math::float3>& factor,
             const TrackBin* drapeOn = nullptr, float foot = 0.0f,
-            const filament::math::float2* wallAt = nullptr);
+            const filament::math::float2* wallAt = nullptr, bool turf = false);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,

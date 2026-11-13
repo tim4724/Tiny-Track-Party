@@ -1467,7 +1467,7 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
-        const TrackBin* drapeOn, float foot, const float2* wallAt) {
+        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf) {
     const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
     // How many points of the way from a wall's vertex to its foot are read,
     // and how far along the wall (each way, kWallAlong apart) its lift may
@@ -1503,7 +1503,8 @@ void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
             }
             const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
                     sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
-            const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
+            const float3 lin = turf ? groundColorAt(pw.x) * landTint(pw.x, pw.z)
+                    : float3{ srgbChannel(rgb[i * 3] / 255.0f),
                     srgbChannel(rgb[i * 3 + 1] / 255.0f),
                     srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
             m.verts.push_back({ pw.x, pw.y, pw.z,
@@ -1931,7 +1932,7 @@ void TtpRenderer::tagFeatures() {
     tagMesh(mRoad, kFeatRoad);
 
     // The world the deck stands in. mGroundProxy stays out (see tagEntities).
-    meshes({ &mGround, &mHills, &mWater, &mWet, &mPond, &mPondBank, &mStructures, &mBerms,
+    meshes({ &mGround, &mHills, &mWater, &mWet, &mPond, &mStructures, &mBerms,
              &mGroundShadows, &mGantry }, kFeatTerrain);
 
     // Set dressing: everything scattered beside the track. The sheets come
@@ -2319,7 +2320,6 @@ void TtpRenderer::releaseStatic() {
     destroyMesh(mWater);
     destroyMesh(mWet);
     destroyMesh(mPond);
-    destroyMesh(mPondBank);
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
