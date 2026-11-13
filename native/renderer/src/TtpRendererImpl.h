@@ -340,6 +340,7 @@ struct TtpRenderer::TrackBin {
     bool edgeLines = true;
     std::vector<std::pair<float, float>> zones; // launch strips: (s, halfLen+margin)
     uint32_t sky[3];                            // zenith horizon below (sRGB)
+    float skyCurve = 0.65f;                     // theme.skyCurve
     uint32_t fog = 0x8ecae6;
     uint32_t hillShape = 0;                     // 0 dome, 1 mesa, 2 room, 3 island
     std::vector<uint32_t> hillColors;

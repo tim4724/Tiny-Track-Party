@@ -1421,17 +1421,18 @@ export const TRACKS = {
     // wild burros drink at a tinaja past the east loop. A desert of rock,
     // sand and cactus: nothing green but cactus.
     set: [
+      // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
       { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
       { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
-      { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
-      { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },
-      { model: 'set-wash-bed', u: 0.5941, lat: -19, yaw: -93 },
+      { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
+      { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
+      { model: 'set-wash-bed-ford', u: 0.5941, lat: -19, yaw: 87 },
       { model: 'set-wash-bed', u: 0.5933, lat: -48.9, yaw: 95 },
       { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
-      { model: 'set-wash-bed', u: 0.5332, lat: -17.6, yaw: 68 },
-      { model: 'set-wash-bed', u: 0.5182, lat: 8.6, yaw: -91 },
+      { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
+      { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
       // the canyon's mountainsides, each face toward the road: the outer
       // range (left) down the straight, round the bend and on, lower spurs
       // on the inside of the straight and after the bend, the inside of the
@@ -1504,7 +1505,9 @@ export const TRACKS = {
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
       { model: 'set-ore-line', u: 0.018, lat: 16 },
-      { model: 'set-headframe', u: 0.2072, lat: 5.8, yaw: 75.6 },
+      // the headframe astride the road at the east bend, the ore line's
+      // loading shed under its bin on the outside verge where the line ends
+      { model: 'set-headframe', u: 0.205, lat: 0 },
       // the gulch itself: off the crest the road drops into a canyon, its
       // faces at the kerb the near faces of the range's massifs (`land`):
       // from the run-in on the outside round the long left-hander, down the
@@ -1683,19 +1686,79 @@ export const TRACKS = {
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 6 },
       { model: 'set-filling-station', u: 0.972, lat: -9.5, yaw: 180 },
-      { model: 'set-oil-field', u: 0.77, lat: 7 },
+      // the field's wells at the kerb: the pumping wells, the rig, the lone
+      // jack and the flowing well a step off the verge, where the chase
+      // camera passes them at their own size
+      { model: 'set-oil-field', u: 0.77, lat: 5.2 },
       { model: 'set-tank-farm', u: 0.63, lat: 12 },
-      { model: 'set-drilling-rig', u: 0.368, lat: -8, yaw: 180 },
-      { model: 'set-well-pad', u: 0.42, lat: 9 },
-      { model: 'set-wellhead', u: 0.47, lat: 7 },
+      { model: 'set-drilling-rig', u: 0.368, lat: -6.6, yaw: 180 },
+      { model: 'set-well-pad', u: 0.42, lat: 7 },
+      { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
-      { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 }
+      { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
+      // the company's tank train over the east straight on its viaduct,
+      // between two knolls of the strata it tunnels into
+      { model: 'set-tank-train', u: 0.462, lat: 0, yaw: 90 },
+      // a dust devil wandering the flats inside the north loop
+      { model: 'set-dust-devil', u: 0.7, lat: -12 },
+      // the trunk line on its stilts, span by span along the right-hand
+      // verge, each span a chord of the road's curve with a support at every
+      // joint: from the tank farm round the north loop, swinging out behind
+      // the pumping wells to their tank battery and back, under the knot;
+      // down the start straight and under the mountain; round the outside
+      // of the south loop and away under the S. Each span a thin footprint,
+      // so the scatter round it stands.
+      { model: 'set-pipeline-rise', u: 0.6270, lat: 6.50, yaw: -179.8 },
+      { model: 'set-pipeline-8', u: 0.6270, lat: 6.50, yaw: 2.5 },
+      { model: 'set-pipeline-8', u: 0.6430, lat: 6.47, yaw: 14.5 },
+      { model: 'set-pipeline-8', u: 0.6550, lat: 6.38, yaw: 12.8 },
+      { model: 'set-pipeline-8', u: 0.6667, lat: 6.33, yaw: 13.2 },
+      { model: 'set-pipeline-8', u: 0.6791, lat: 6.35, yaw: 12.7 },
+      { model: 'set-pipeline-12', u: 0.6907, lat: 6.33, yaw: 10.7 },
+      { model: 'set-pipeline-16', u: 0.7139, lat: 6.48, yaw: 8.1 },
+      { model: 'set-pipeline-8', u: 0.7389, lat: 8.76, yaw: -31.9 },
+      { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3 },
+      { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3 },
+      { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9 },
+      { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0 },
+      { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4 },
+      { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7 },
+      { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2 },
+      { model: 'set-pipeline-rise', u: 0.9150, lat: 7.50, yaw: 179.9 },
+      { model: 'set-pipeline-16', u: 0.9150, lat: 7.50, yaw: -1.2 },
+      { model: 'set-pipeline-16', u: 0.9510, lat: 7.50, yaw: -0.4 },
+      { model: 'set-pipeline-16', u: 0.9866, lat: 7.50, yaw: -0.1 },
+      { model: 'set-pipeline-16', u: 0.0220, lat: 7.50, yaw: 0.1 },
+      { model: 'set-pipeline-dive', u: 0.0573, lat: 7.50, yaw: 0.0 },
+      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.50, yaw: 179.8 },
+      { model: 'set-pipeline-8', u: 0.1421, lat: 6.50, yaw: 2.4 },
+      { model: 'set-pipeline-8', u: 0.1578, lat: 6.39, yaw: 13.4 },
+      { model: 'set-pipeline-8', u: 0.1689, lat: 6.27, yaw: 26.9 },
+      { model: 'set-pipeline-8', u: 0.1768, lat: 6.07, yaw: 20.4 },
+      { model: 'set-pipeline-8', u: 0.1857, lat: 6.14, yaw: 14.7 },
+      { model: 'set-pipeline-16', u: 0.1975, lat: 6.29, yaw: 5.0 },
+      { model: 'set-pipeline-8', u: 0.2305, lat: 6.34, yaw: 7.0 },
+      { model: 'set-pipeline-8', u: 0.2446, lat: 6.40, yaw: 7.4 },
+      { model: 'set-pipeline-8', u: 0.2590, lat: 6.43, yaw: 7.3 },
+      { model: 'set-pipeline-8', u: 0.2733, lat: 6.38, yaw: 6.9 },
+      { model: 'set-pipeline-dive', u: 0.2877, lat: 6.49, yaw: 1.7 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
     // horizon from any point of the road; and the mountain's range running
     // on from its west end, rock-tinted
     land: [
+      // a low ridge of the rust land along the outside of the south loop,
+      // rising from just past the trunk line (`near`), so the road runs
+      // round the foot of it; low enough to stay sand, each short of the
+      // next so their crests do not stack
+      { kind: 'ridge', u: 0.172, lat: 18, len: 8, r: 9, h: 3.6, top: 0.3, near: 4.6, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.214, lat: 18.5, len: 10, r: 9, h: 4.2, top: 0.3, near: 4.6, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.258, lat: 18, len: 8, r: 9, h: 3.4, top: 0.3, near: 4.6, tint: 0xc8846a },
+      // the low ridge the east straight cuts through, either side, the tank
+      // train's knolls of rock standing out of it (set-tank-train)
+      { kind: 'ridge', u: 0.462, lat: 14, len: 20, r: 9, h: 3.2, top: 0.3, near: 4, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.462, lat: -14, len: 18, r: 9, h: 3.0, top: 0.3, near: 4, tint: 0xc8846a },
       { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
       { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
