@@ -92,7 +92,6 @@
     "set-block-westside.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-blossom-grove-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-blossom-grove.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-board-snake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-boat-huts.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-boathouse.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-boating-lake.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

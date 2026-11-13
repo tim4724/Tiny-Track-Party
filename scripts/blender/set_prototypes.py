@@ -17412,65 +17412,6 @@ def snake_board():
     keep_light(0.3)
     merge_paint()
 
-# Skysnake's snake, at the top of its dive (tracks.js places it at the dive's
-# head, yaw 0: +Z down the dive, +X toward the infield, the deck's top
-# SNAKE_DECK over the floor there), and where its tail leaves the board's
-# road at the foot, SNAKE_TAIL_Z down the dive.
-SNAKE_DECK, SNAKE_TAIL_Z = 5.2 + 0.423, 29.0
-
-@piece(1.0)
-def board_snake():
-    # Skysnake: the board's great snake, whose back is the dive (tracks.js
-    # `snake`). Its neck rears out of the outside of the top deck where the
-    # dive begins, the head turned back to the racers coming out of the
-    # corner and swaying over the kerb, and at the foot its tail leaves the
-    # road and lies wriggling on the board, joint by joint (the jointed
-    # toy's, set_prototypes.py toy_snake).
-    k = 1.25
-    D = SNAKE_DECK
-    # the neck: out of the deck's outer edge, up and leaning over the road
-    NECK = ((-3.75, -0.4), (-4.0, 0.8), (-3.8, 1.9), (-3.2, 2.8), (-2.5, 3.4))
-    with animated('anim_sway:a=y:d=14:p=4.2#neck', (-3.75, D, 0.0)):
-        for i in range(len(NECK) - 1):
-            (x0, y0), (x1, y1) = NECK[i], NECK[i + 1]
-            bar((x0, D + y0, 0.0), (x1, D + y1, 0.0), 1.5 * k, 1.35 * k, SNAKE[i % 2])
-        hx, hy, hz = -1.9, D + 3.75, -0.6
-        d = (0.0, -1.0)                            # its face back up the deck, to the racers
-        yaw = math.atan2(d[0], d[1])
-        box((2.0 * k, 1.35 * k, 3.0 * k), (hx, hy, hz), 0x6cbf6c, yaw=yaw, pitch=-0.15)
-        box((1.6 * k, 0.4 * k, 2.6 * k), (hx, hy - 0.75 * k, hz - 0.2), 0xf2c14e, yaw=yaw, pitch=-0.15)
-        for sd in (-1, 1):
-            ex = hx + sd * 0.78 * k
-            box((0.55 * k, 0.55 * k, 0.55 * k), (ex, hy + 0.55 * k, hz - 0.7 * k), 0xfdf4de)
-            box((0.3 * k, 0.34 * k, 0.2 * k), (ex + sd * 0.05, hy + 0.58 * k, hz - 1.0 * k), 0x2a2735)
-        ty, tz = hy - 0.5 * k, hz - 1.8 * k
-        bar((hx, ty, tz), (hx, ty - 0.15, tz - 1.1 * k), 0.2 * k, 0.1 * k, 0xff5040)
-        for sd in (-1, 1):
-            bar((hx, ty - 0.15, tz - 1.1 * k), (hx + sd * 0.3 * k, ty - 0.2, tz - 1.55 * k), 0.16 * k, 0.1 * k, 0xff5040)
-    # the tail, off the road's outer edge at the foot onto the board,
-    # tapering, its last joints wiggling
-    ctrl = [(-3.4, SNAKE_TAIL_Z), (-6.2, SNAKE_TAIL_Z + 2.0), (-8.0, SNAKE_TAIL_Z + 5.5), (-7.0, SNAKE_TAIL_Z + 9.0),
-            (-9.5, SNAKE_TAIL_Z + 12.0)]
-    joints = curve(ctrl, 1.3)
-    n = len(joints)
-    def block(i):
-        (x0, z0), (x1, z1) = joints[i], joints[i + 1]
-        f = 1.0 - 0.6 * i / max(1, n - 2)
-        g = 0.12 / max(math.hypot(x1 - x0, z1 - z0), 0.01)
-        bar((x0 + (x1 - x0) * g, 0.55 * f, z0 + (z1 - z0) * g), (x1 - (x1 - x0) * g, 0.55 * f, z1 - (z1 - z0) * g),
-            1.5 * f, 1.1 * f, SNAKE[i % 2])
-    wig = 4
-    for i in range(n - 1 - wig):
-        block(i)
-    with contextlib.ExitStack() as chain:
-        for m in range(wig):
-            i = n - 1 - wig + m
-            j = joints[i]
-            chain.enter_context(animated('anim_sway:a=y:d=12:p=2.0:o=%.3f#tail%d' % ((1.0 - m * 0.14) % 1.0, m),
-                                         (j[0], 0.0, j[1])))
-            block(i)
-    merge_paint()
-
 # ---- the room: its train round the walls, the window's light on the floor ----
 
 # The room train's rails run ROOM_TRAIN_MARGIN past the lap's centreline box
