@@ -777,11 +777,12 @@ private:
     // own vertices: the one it ships and a cheaper one that strays at most
     // `err` world units from it. chooseLods points it at one of them per CELL,
     // the far one wherever the nearest point of its box is far enough that
-    // `err` covers under kLodPx pixels of THAT cell, so a big cell pushes the
-    // swap out on its own and a 4-way split's small ones pull it in. Nothing
-    // else about the renderable changes: culling, material and decal fold are
-    // its own. Listed: the deck's chunks (buildRoadMesh) and every static mesh
-    // built with `simplify` (buildMesh).
+    // `err` covers under kLodPx pixels of THAT cell (counted as at most
+    // kLodLines of a frame), so a big cell pushes the swap out on its own and
+    // a 4-way split's small ones pull it in. Nothing else about the renderable
+    // changes: culling, material and decal fold are its own. Listed: the
+    // deck's chunks (buildRoadMesh) and every static mesh built with
+    // `simplify` (buildMesh).
     struct LodRange {
         utils::Entity entity;
         filament::VertexBuffer* vb = nullptr;
@@ -827,11 +828,19 @@ private:
     std::vector<std::pair<int, int>> mShadowRings;
     // EVERY cell count draws the far forms past their gate, one player included
     // (the user's call for the deck, 2026-09-02; it began as a split-only
-    // trade). With the deck's tolerance a 270-line cell swaps past ~10 u, a
-    // 1080-line one past ~40 u and a 2160-line one past ~80 u. Dropping the
-    // gate altogether measured 1.2 ms more on the box's 4P heavy seconds and
-    // was shipped for an hour; the user wanted a threshold back.
+    // trade). With the deck's tolerance a 270-line cell swaps past ~10 u and a
+    // 1080-line one past ~40 u. Dropping the gate altogether measured 1.2 ms
+    // more on the box's 4P heavy seconds and was shipped for an hour; the user
+    // wanted a threshold back.
     static constexpr float kLodPx = 2.0f;   // the user asked for aggressive
+    // ...and the pixels are a frame's of at most kLodLines lines: a cell of a
+    // taller frame is judged as its share of a 1080-line one, so a 4K panel
+    // swaps where a 1080 one does (the user's call, 2026-11-13). Judged by its
+    // own lines, a 4K 4P cell kept the snow forests near to the fog, and with
+    // every far form forced on Avalanche 4P on the Apple TV ran 1.1 ms less
+    // GPU and lost its seconds over 16.7 ms. No frame at or under 1080 moves.
+    // Lite's cut (chooseCuts) is handed the same count.
+    static constexpr float kLodLines = 1080.0f;
     // How far a far-ribbon chord may leave the rings it spans (buildRoadMesh).
     static constexpr float kDeckLodTol = 0.08f;
     // How far a static mesh's simplified far form may stray (buildMesh).

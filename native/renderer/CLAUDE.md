@@ -912,8 +912,10 @@ So:
   is two pictures, the clean seconds and a few a lap where every cell looks across
   the whole circuit. A listed renderable owns a second index range that strays at
   most `err` world units, drawn past the distance where `err` covers `kLodPx`
-  pixels OF THAT CELL. The deck's is a ribbon over same-coloured rings; a static
-  unlit mesh opts in with `simplify`; the flowers do not (it strips the petals).
+  pixels OF THAT CELL, counted as its share of a frame no taller than
+  `kLodLines`, so a 4K panel swaps where a 1080 one does. The deck's is a
+  ribbon over same-coloured rings; a static unlit mesh opts in with
+  `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on
   stays NEAR in every cell** (`mShadowRings`, from `placeCarShadow`): the
   shadow pass is the fine rings' own planes, and under the far ribbon's
