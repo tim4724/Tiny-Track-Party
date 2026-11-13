@@ -13,7 +13,7 @@ import { MAX_BUFFER_H } from './display/Stage.js';
 const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
   const d = { track: '', players: 1, view: 'race', spread: false, res: 'sharp', slow: false, fast: false, keys: true,
-              tier: 'full', sort: 'size' };
+              tier: 'full', sort: 'size', item: '' };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -620,8 +620,10 @@ async function saveNote() {
   if (!noteShot) return;
   const at = pins.map((p) => ({ x: Math.round(p.fx * noteShot.w), y: Math.round(p.fy * noteShot.h) }));
   const under = lm ? lm.under(at) : [];
+  const item = round && round.items[itemAt];
   const body = {
-    meta: { ...noteShot.meta, tier: state.tier, picture: { w: noteShot.w, h: noteShot.h }, link: location.href },
+    meta: { ...noteShot.meta, tier: state.tier, picture: { w: noteShot.w, h: noteShot.h }, link: location.href,
+            review: item ? { round: round.round, item: item.id } : undefined },
     note: noteText.value.trim(),
     pins: pins.map((p, i) => ({ n: i + 1, ...at[i], text: p.text.trim(), piece: under[i] || null })),
     png: noteShot.png,
@@ -648,6 +650,184 @@ document.getElementById('lm-note-save').addEventListener('click', saveNote);
 document.getElementById('lm-note-cancel').addEventListener('click', () => { noteDlg.close(); frame.focus(); });
 noteDlg.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNote(); } });
 
+// LOOKING ROUND. G is a free camera from wherever the picture is now, and back:
+// in the race the race's own free cam (the race goes on under it), elsewhere
+// the Free view, which opens at the eye of the view it leaves. O is the orbit
+// round the focused piece, which a drag turns and the wheel zooms.
+let viewBeforeFree = 'orbit';
+function freeCam() {
+  if (!lm) return;
+  if (inRace()) { lm.raceCam(lm.race().cam === 'free' ? 'chase' : 'free'); paintRace(); return; }
+  if (state.view === 'free') { setView(viewBeforeFree); return; }
+  viewBeforeFree = state.view;
+  setView('free');
+}
+
+// FULLSCREEN: the stage and this panel, with the header's camera buttons moved
+// into the panel while it lasts. H hides the panel there for the whole picture.
+const box = document.getElementById('lm-box');
+const fullBtn = document.getElementById('lm-full');
+const viewsGroup = document.getElementById('lm-views');
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else box.requestFullscreen().catch(() => { /* refused (no gesture): stay windowed */ });
+}
+document.addEventListener('fullscreenchange', () => {
+  const on = document.fullscreenElement === box;
+  if (on) document.getElementById('lm-fs').prepend(viewsGroup);
+  else document.getElementById('lm-players').after(viewsGroup);
+  legend.hidden = false;
+  fullBtn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
+  fullBtn.classList.toggle('is-on', on);
+});
+fullBtn.addEventListener('click', () => { toggleFull(); frame.focus(); });
+
+// THE REVIEW ROUND: a dev server with scratch/review/round.json lists its items
+// here, to be judged on the live stage rather than off screenshots. An item's
+// STOPS are where to judge it from, each naming a `track` and one of: a set
+// piece (`piece`, its model, framed in `view`, orbit by default, at placement
+// `place`), a spot on the lap (`s`, `lat`: the driver's view parked there) or a
+// moment of the race (`step`, paused there, through race cam `cam`). The shape,
+// by example: scripts/review-round.example.json. A verdict (Keep, Rework or
+// Drop, and a note) is kept by the server in verdicts-<round>.json. Without a
+// round, as on a deployed preview, there is no panel.
+const reviewBox = document.getElementById('lm-review');
+const DECISIONS = ['keep', 'rework', 'drop'];
+let round = null, itemAt = -1, stopAt = -1, reviewSaid = '';
+const drafts = new Map();   // item id -> a note typed and not yet saved with a verdict
+const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+fetch('/api/review-round').then((r) => (r.ok ? r.json() : null)).then((j) => {
+  if (!j || !Array.isArray(j.items)) return;
+  round = { ...j, verdicts: j.verdicts || {} };
+  itemAt = round.items.findIndex((it) => it.id === state.item);
+  paintReview();
+}).catch(() => { /* no dev server: no panel */ });
+
+function stopLabel(st) {
+  const opt = [...trackSel.options].find((o) => o.value === st.track);
+  const what = st.piece ? st.piece.replace(/^set-/, '').replace(/-/g, ' ') + (st.place ? ` #${st.place + 1}` : '')
+    : st.s != null ? `s ${st.s}` : `step ${st.step}`;
+  const view = st.step != null ? 'race' + (st.cam ? ' ' + st.cam : '') : st.s != null ? 'driver' : st.view || 'orbit';
+  return `${opt ? opt.textContent : st.track} · ${what} · ${view}`;
+}
+function paintReview() {
+  reviewBox.hidden = !round;
+  if (!round) return;
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const judged = round.items.filter((it) => round.verdicts[it.id]).length;
+  const out = [el('h2', '', round.title || round.round),
+               el('p', 'legend__note', `${judged} of ${round.items.length} judged · ⇧[ ⇧] item`)];
+  round.items.forEach((it, i) => {
+    const row = el('button', 'kit-row' + (i === itemAt ? ' kit-row--at' : ''));
+    const v = round.verdicts[it.id];
+    row.append(el('span', 'kit-row__name', it.title || it.id),
+               el('span', 'kit-row__tris' + (v ? ' is-' + v.decision : ''), v ? upper(v.decision) : ''));
+    row.addEventListener('click', () => { pickItem(i); frame.focus(); });
+    out.push(row);
+    if (i !== itemAt) return;
+    const open = el('div', 'lm-review__item');
+    if (it.text) open.append(el('p', '', it.text));
+    if (it.ask && it.ask.length) {
+      const ul = el('ul');
+      for (const q of it.ask) ul.append(el('li', '', q));
+      open.append(ul);
+    }
+    const stops = el('div', 'lm-review__stops seg');
+    (it.stops || []).forEach((st, k) => {
+      const b = el('button', 'ctrl' + (k === stopAt ? ' is-on' : ''), stopLabel(st));
+      b.addEventListener('click', () => { goStop(k); frame.focus(); });
+      stops.append(b);
+    });
+    const say = el('div', 'lm-race__row seg');
+    for (const d of DECISIONS) {
+      const b = el('button', 'ctrl' + (v && v.decision === d ? ' is-on' : ''), upper(d));
+      b.dataset.decision = d;
+      b.addEventListener('click', () => { judge(d); frame.focus(); });
+      say.append(b);
+    }
+    const note = el('textarea');
+    note.rows = 3;
+    note.placeholder = 'Why? What should change?';
+    note.value = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
+    note.addEventListener('input', () => drafts.set(it.id, note.value));
+    // A note edited after the verdict is saved with it again.
+    note.addEventListener('change', () => { if (round.verdicts[it.id]) judge(round.verdicts[it.id].decision); });
+    open.append(stops, say, note, el('p', 'legend__note', reviewSaid));
+    out.push(open);
+  });
+  reviewBox.replaceChildren(...out);
+}
+function pickItem(i) {
+  if (!round || !round.items.length) return;
+  itemAt = i;
+  stopAt = -1;
+  reviewSaid = '';
+  state.item = round.items[i].id;
+  save();
+  paintReview();
+  if ((round.items[i].stops || []).length) goStop(0);
+}
+function stepItem(d) {
+  if (!round) return;
+  const n = round.items.length;
+  pickItem(itemAt < 0 ? (d > 0 ? 0 : n - 1) : (itemAt + d + n) % n);
+}
+async function goStop(k) {
+  const st = round.items[itemAt].stops[k];
+  if (!lm || !st) return;
+  stopAt = k;
+  paintReview();
+  setTour(false);
+  if (st.track && st.track !== state.track) await setTrack(st.track);
+  if (st.step != null) {
+    setView('race');
+    lm.pause(true);
+    lm.seek(st.step);
+    if (st.cam) lm.raceCam(st.cam);
+    paintRace();
+  } else if (st.s != null) {
+    lm.park(st.s, st.lat || 0);
+    state.view = 'driver';
+    save();
+    paintButtons();
+    paintRace();
+  } else if (st.piece) {
+    const i = lm.landmarks().findIndex((m) => m.model === st.piece || m.model === 'set-' + st.piece);
+    if (i >= 0) { lm.focus(i); lm.place(st.place || 0); }
+    setView(st.view || 'orbit');
+  }
+  paintList();
+  // The list has scrolled the panel to the piece; the review is what is being read.
+  reviewBox.querySelector('.kit-row--at')?.scrollIntoView({ block: 'start' });
+}
+// Verdicts post in order, so a note saved on blur cannot land after the
+// decision clicked next.
+let posting = Promise.resolve();
+function judge(decision) {
+  const it = round.items[itemAt];
+  const v = round.verdicts[it.id];
+  const note = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
+  posting = posting.then(async () => {
+    try {
+      const res = await fetch('/api/review-verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                       body: JSON.stringify({ round: round.round, id: it.id, decision, note }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error);
+      round.verdicts[it.id] = j.verdict;
+      drafts.delete(it.id);
+      reviewSaid = `${upper(decision)} saved in ${j.file}`;
+    } catch (e) {
+      reviewSaid = `Not saved (${e && e.message ? e.message : e})`;
+    }
+    paintReview();
+  });
+}
+
 function onKey(e) {
   if (noteDlg.open) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -668,8 +848,13 @@ function onKey(e) {
   else if (k === 'c') stepView(e.shiftKey ? -1 : 1);
   else if (k >= '1' && k <= '4') setPlayers(+k);
   else if (k === 'x') setSpread(!state.spread);
+  else if (k === 'm' && e.shiftKey) setFast(!state.fast);
   else if (k === 'm') setSlow(!state.slow);
-  else if (k === 'f') setFast(!state.fast);
+  else if (k === 'f') toggleFull();
+  else if (k === 'h' && document.fullscreenElement) legend.hidden = !legend.hidden;
+  else if (k === 'g') freeCam();
+  else if (k === 'o') setView('orbit');
+  else if (k === '{' || k === '}') stepItem(k === '{' ? -1 : 1);
   else if (k === '[') place(-1);
   else if (k === ']') place(1);
   else if (k === 't') setTour(!tour);
@@ -710,6 +895,7 @@ function init(h) {
   wantPiece = null;
   seen = null;
   rebuild(() => {});
+  paintReview();   // its stops name tracks, which have names now
 }
 
 paintButtons();

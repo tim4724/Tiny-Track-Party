@@ -222,19 +222,27 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // A REVIEW NOTE from /gallery-landmarks.html: a picture of the stage, what the
-  // viewer wrote on it and where in the lap it was taken, kept under scratch/
-  // (gitignored) for whoever works the note off. It writes to the checkout, so
-  // it exists only in development and answers only this machine.
-  if (urlPath === '/api/review-note' && req.method === 'POST') {
-    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
-    if (IS_PROD || !local) { sendJson(res, 403, { error: 'review notes are saved on a local dev server only' }); return; }
-    const chunks = [];
-    let size = 0;
-    req.on('data', (c) => { size += c.length; if (size > REVIEW_NOTE_MAX) req.destroy(); else chunks.push(c); });
-    req.on('end', () => {
-      try {
-        const { meta, note, pins, png, marked } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  // REVIEW, for /gallery-landmarks.html: notes taken on the stage, and a round
+  // of items set up to be judged there with the verdicts given on it. It reads
+  // and writes the checkout's scratch/review/ (gitignored), so it exists only in
+  // development and answers only this machine.
+  if (urlPath.startsWith('/api/review-')) {
+    if (IS_PROD || !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) {
+      sendJson(res, 403, { error: 'review is kept on a local dev server only' });
+      return;
+    }
+    const readJson = (max, use) => {
+      const chunks = [];
+      let size = 0;
+      req.on('data', (c) => { size += c.length; if (size > max) req.destroy(); else chunks.push(c); });
+      req.on('end', () => {
+        try { use(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { sendJson(res, 400, { error: String((e && e.message) || e) }); }
+      });
+    };
+    // A NOTE: a picture of the stage, what the viewer wrote on it and where in
+    // the lap it was taken, for whoever works the note off.
+    if (urlPath === '/api/review-note' && req.method === 'POST') {
+      readJson(REVIEW_NOTE_MAX, ({ meta, note, pins, png, marked }) => {
         const track = String((meta && meta.track) || 'track').replace(/[^a-z0-9-]/gi, '');
         const id = `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${track}`;
         const image = (url, type) => Buffer.from(String(url).replace(new RegExp(`^data:image/${type};base64,`), ''), 'base64');
@@ -243,11 +251,42 @@ const server = http.createServer((req, res) => {
         if (marked) fs.writeFileSync(path.join(REVIEW_DIR, `${id}-pins.jpg`), image(marked, 'jpeg'));
         fs.writeFileSync(path.join(REVIEW_DIR, `${id}.json`), JSON.stringify({ id, note, pins, meta }, null, 2) + '\n');
         sendJson(res, 200, { id, dir: path.relative(path.join(__dirname, '..'), REVIEW_DIR) });
+      });
+      return;
+    }
+    // A ROUND: round.json, written by whoever sets the round up (its shape is
+    // scripts/review-round.example.json), answered with the verdicts given on
+    // it so far. No round file is a 404, and the gallery shows no panel.
+    const roundFile = path.join(REVIEW_DIR, 'round.json');
+    const readRound = () => (fs.existsSync(roundFile) ? JSON.parse(fs.readFileSync(roundFile, 'utf8')) : null);
+    const verdictsFile = (round) => path.join(REVIEW_DIR, `verdicts-${String(round).replace(/[^\w-]/g, '')}.json`);
+    const readVerdicts = (round) => (fs.existsSync(verdictsFile(round)) ? JSON.parse(fs.readFileSync(verdictsFile(round), 'utf8')) : {});
+    if (urlPath === '/api/review-round' && req.method === 'GET') {
+      try {
+        const round = readRound();
+        if (!round) sendJson(res, 404, { error: 'no review round in scratch/review/' });
+        else sendJson(res, 200, { ...round, verdicts: readVerdicts(round.round) });
       } catch (e) {
-        sendJson(res, 400, { error: String((e && e.message) || e) });
+        sendJson(res, 500, { error: `scratch/review: ${(e && e.message) || e}` });
       }
-    });
-    return;
+      return;
+    }
+    // A VERDICT on one item of the current round: that item's one entry in
+    // verdicts-<round>.json, { decision, note, at, title }, a later verdict
+    // replacing it.
+    if (urlPath === '/api/review-verdict' && req.method === 'POST') {
+      readJson(64 * 1024, ({ round, id, decision, note }) => {
+        const current = readRound();
+        const item = current && current.round === round && (current.items || []).find((it) => it.id === id);
+        if (!item) { sendJson(res, 400, { error: `'${id}' is not an item of the current round` }); return; }
+        if (!['keep', 'rework', 'drop'].includes(decision)) { sendJson(res, 400, { error: 'a decision is keep, rework or drop' }); return; }
+        const verdicts = readVerdicts(round);
+        verdicts[id] = { decision, note: String(note || '').trim(), at: new Date().toISOString(), title: item.title || id };
+        fs.writeFileSync(verdictsFile(round), JSON.stringify(verdicts, null, 2) + '\n');
+        sendJson(res, 200, { verdict: verdicts[id], file: path.relative(path.join(__dirname, '..'), verdictsFile(round)) });
+      });
+      return;
+    }
   }
 
   // --- route remaps ---
