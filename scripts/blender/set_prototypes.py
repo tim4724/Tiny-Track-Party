@@ -12694,6 +12694,35 @@ def mine_portal():
     flagpole((-0.4, 0, -8.8), 3.4, 'red', w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.0#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None and not o.get('group')], 'yard')
 
+@piece(1.0)
+def powder_magazine():
+    # Gulch: the mine's powder magazine, out past the boomtown where a blast
+    # would hurt no one (+X the road): a low stone house dug into the hill,
+    # its iron door red, a red flag over it and kegs of powder stacked by
+    # the door; and the siding its powder goes down, two carts on a short
+    # length of the mine's gauge to a buffer stop.
+    with plain_parts():
+        rowed(box((3.0, 1.5, 3.4), (-1.6, 0.75, 0), 'grey'), 7)                   # the stone house, pale (dark, a black box)
+        box((3.3, 0.3, 3.7), (-1.6, 1.6, 0), 'slate')
+        box((2.6, 0.5, 3.0), (-1.9, 1.95, 0), 0xd68f62)                           # earth heaped on its roof
+        box((0.14, 1.15, 0.9), (-0.06, 0.6, 0), 'red')                            # the iron door
+        box((0.2, 1.4, 0.2), (0.0, 0.7, -0.62), TIMBER)
+        box((0.2, 1.4, 0.2), (0.0, 0.7, 0.62), TIMBER)
+        box((0.24, 0.2, 1.5), (0.0, 1.45, 0), TIMBER)
+        for k, (x, z, y) in enumerate(((0.7, -1.5, 0), (1.15, -1.3, 0), (0.9, -1.4, 0.42), (0.8, 1.6, 0))):
+            keg((x, y, z), r=0.2, h=0.42)
+        crate((1.3, 0, 1.5), 0.42, yaw=0.3)
+        for x in (1.75, 2.35):                                                    # the siding
+            box((0.12, 0.12, 6.4), (x, 0.1, 0.2), 'slate')
+        for k in range(8):
+            box((1.0, 0.1, 0.24), (2.05, 0.05, -2.8 + 0.8 * k), TIMBER)
+        box((0.9, 0.5, 0.24), (2.05, 0.3, 3.5), TIMBER)
+        box((1.0, 0.16, 0.16), (2.05, 0.5, 3.4), 'red')
+        ore_cart((2.05, 0.16, -1.6), yaw=0.0, ore=False, k=0.42)
+        ore_cart((2.05, 0.16, 0.2), yaw=0.0, ore_color='grey', k=0.42)
+    flagpole((-0.3, 1.6, -1.2), 2.2, 'red', w=0.9, fh=0.55, wave='anim_sway:a=z:d=24:p=2.3#1')
+    join_still('magazine')
+
 @piece(0.35)
 @plain
 def ore_line():
@@ -14141,17 +14170,15 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
 # calves in loose bunches, each (x, z, yaw, coat, patch, face, size, pose);
 # Herefords red with white faces, a few black baldies and roans among them.
 RED, BLACK, ROAN, CREAM_HIDE = 0x9a4a32, 0x38383d, 0xb06041, 0xf2bf99
-HERD_A = ((-1.2, -13.5, 0.4, RED, None, 0xf8f8fb, 1.0, 'graze'), (-2.6, -12.0, 2.2, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'up'),
-          (-3.9, -14.2, -0.6, BLACK, None, 0xf8f8fb, 1.0, 'graze'), (-2.9, -10.6, 1.6, RED, None, 0xf8f8fb, 0.55, 'up'),
-          (-5.6, -6.0, 3.3, ROAN, CREAM_HIDE, ROAN, 1.05, 'lie'), (-4.4, -4.6, -2.4, RED, None, 0xf8f8fb, 1.0, 'lie'),
-          (-6.4, -3.4, 0.9, BLACK, None, BLACK, 0.95, 'graze'),
-          (-1.4, 2.6, -1.0, RED, None, 0xf8f8fb, 1.0, 'up'), (-2.9, 4.4, 0.2, ROAN, None, 0xf8f8fb, 0.9, 'graze'),
-          (-1.9, 5.6, 2.7, RED, 0xf8f8fb, 0xf8f8fb, 0.55, 'graze'),
-          (-5.2, 9.5, -0.3, BLACK, 0xf8f8fb, 0xf8f8fb, 1.0, 'graze'), (-3.6, 11.6, 1.9, RED, None, 0xf8f8fb, 1.0, 'graze'),
-          (-6.6, 12.8, 3.6, RED, None, 0xf8f8fb, 0.95, 'up'), (-1.6, 14.4, -1.9, ROAN, CREAM_HIDE, 0xf8f8fb, 1.0, 'lie'))
-HERD_B = ((-2.0, -6.0, 1.2, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.4, -4.4, -0.4, BLACK, None, 0xf8f8fb, 1.0, 'up'),
-          (-2.6, 1.8, 2.6, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'graze'), (-3.9, 3.0, 0.8, RED, None, 0xf8f8fb, 0.55, 'up'),
-          (-5.4, 7.6, -1.2, ROAN, None, ROAN, 1.0, 'lie'))
+# (x off the fence, z along it, yaw, coat, patch, face, size, pose): few and
+# big, in bunches against the fence (a dozen scattered down the range were
+# specks from the road)
+HERD_A = ((-1.6, -11.5, 0.4, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.2, -10.2, 2.2, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'up'),
+          (-2.2, -8.4, -0.6, BLACK, None, 0xf8f8fb, 1.0, 'graze'), (-3.6, -7.6, 1.6, RED, None, 0xf8f8fb, 0.6, 'up'),
+          (-1.8, 3.0, -1.0, RED, None, 0xf8f8fb, 1.0, 'up'), (-3.4, 4.6, 0.2, ROAN, CREAM_HIDE, 0xf8f8fb, 0.95, 'graze'),
+          (-2.0, 6.4, 2.7, BLACK, 0xf8f8fb, 0xf8f8fb, 1.0, 'graze'), (-4.6, 5.8, 3.3, RED, None, 0xf8f8fb, 1.0, 'lie'))
+HERD_B = ((-1.8, -3.4, 1.2, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.4, -2.2, -0.4, BLACK, None, 0xf8f8fb, 1.0, 'up'),
+          (-2.0, -0.4, 2.6, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'graze'), (-3.8, 0.8, 0.8, ROAN, None, ROAN, 0.6, 'up'))
 
 def herd(cattle):
     """A bunch of range cattle as ONE draped part (each stands on the land as
@@ -14164,7 +14191,7 @@ def herd(cattle):
             life = None
             if i % 3 == 0 and pose != 'lie':
                 life = 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.76#h%d' % (7.0 + 0.7 * (i % 5), i)
-            range_cow((0.7 * x, 0, z), yaw, coat, patch, face, 1.25 * size, pose, life)   # bunched toward the fence, a size up to read over its rails
+            range_cow((x, 0, z), yaw, coat, patch, face, 1.55 * size, pose, life)   # a size and a half up, to read over the fence's rails
     draped('herd', build)
 
 @piece(1.0)
@@ -14784,6 +14811,29 @@ TUNNEL_FORMS, TUNNEL_ROUGH = (
     (-30.0, 6.0, 11.0, 7.0, 8.0, 0.0, 1.0, 0.0),               # its end, where the range runs on as land
     (-12.0, -9.0, 10.0, 6.0, 5.0, 0.5, 1.0, 0.0),              # a buttress toward the approach
     (-14.0, 13.0, 11.0, 9.0, 6.0, 0.3, 1.0, 0.0)), 1.4         # the back of the massif
+
+@piece(1.0)
+def flare_stack():
+    # Sidewinder: the field's flare, by the tank farm: a slim white stack
+    # five cars tall on a pad, braced by three struts, its tip a red collar
+    # with a small flame flickering on it (the gas the wells give off with
+    # the oil), a knock-out drum at its foot piped to it.
+    with plain_parts():
+        box((1.6, 0.16, 1.6), (0, 0.08, 0), 'grey')
+        box((0.26, 5.6, 0.26), (0, 2.96, 0), 'white')
+        for y in (1.9, 3.8):
+            box((0.32, 0.14, 0.32), (0, y, 0), 'grey')
+        box((0.44, 0.5, 0.44), (0, 5.85, 0), 'red')
+        for k in range(3):
+            a = 2.1 * k + 0.4
+            beam((1.5 * math.cos(a), 0.1, 1.5 * math.sin(a)), (0.1 * math.cos(a), 3.3, 0.1 * math.sin(a)), 0.12, 'slate')
+        cyl(0.42, 1.5, (-0.75, 0.55, 1.5), 'white', segs=10, axis='along')         # the knock-out drum
+        for dz in (1.8, 2.7):
+            box((0.7, 0.5, 0.16), (0, 0.25, dz), 'red')
+        beam((0, 1.0, 2.25), (0, 0.5, 0.2), 0.14, 'white')
+    flames(((0.1, 0.0, 0.24, 0.8, 0.12, 0.31), (-0.1, 0.08, 0.2, 0.62, 0.1, 0.37), (-0.02, -0.12, 0.18, 0.54, 0.09, 0.27)),
+           (0.0, 0.0, 0.13, 0.5, 0.07, 0.23), at=(0.0, 6.08, 0.0))
+    join_still('stack')
 
 @piece(1.0)
 @plain
@@ -15568,7 +15618,9 @@ def dust_devil():
     # dust some four cars tall, three bands of it winding up and out from a
     # skirt kicked up off the sand, grit and a tumbleweed caught in it, the
     # whole spinning as it drifts (anim_path+spin on a draped loop, so it
-    # keeps to the land as drawn). Pale against the sand, as dust is.
+    # keeps to the land as drawn). The sand's own colour a shade paler (white
+    # at the top, its rings read as a stack of plates), its rings close
+    # enough to close into one funnel.
     N = 14
     loop = []
     for i in range(N):
@@ -15588,13 +15640,11 @@ def dust_devil():
             def ring(t):
                 R, lean = 0.32 + 1.25 * t ** 1.4, 0.5 * t * t
                 return x0 + lean * math.cos(9.1 * t), 0.45 + 3.9 * t, z0 + lean * math.sin(9.1 * t), R
-            for j in range(8):
-                t = j / 7
+            for j in range(11):
+                t = j / 10
                 cx, cy, cz, R = ring(t)
-                tone = (('tan', 4), ('tan', 2), ('cream', 10), ('cream', 8), ('cream', 6), ('cream', 4), ('cream', 2),
-                        ('white', 2))[j]
-                rowed(torus(R, 0.14 + 0.16 * t, (cx, cy, cz), tone[0], segs=10 + 2 * (j // 3), minor=5), tone[1])
-            for k, (c, row) in enumerate((('tan', 6), ('cream', 12), ('salmon', 6))):
+                rowed(torus(R, 0.26 + 0.14 * t, (cx, cy, cz), 'tan', segs=10 + 2 * (j // 4), minor=5), 9 - (j * 6) // 10)
+            for k, (c, row) in enumerate((('tan', 12), ('tan', 1), ('salmon', 8))):
                 pts = [(x0 + 0.3 * math.cos(2.1 * k), 0.05, z0 + 0.3 * math.sin(2.1 * k))]
                 for j in range(29):
                     t = j / 28

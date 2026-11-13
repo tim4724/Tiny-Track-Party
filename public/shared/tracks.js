@@ -1584,7 +1584,9 @@ export const TRACKS = {
       // sight line to the mill
       { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
-      { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 }
+      { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 },
+      // the powder magazine past the town, dug into the hill's foot
+      { model: 'set-powder-magazine', u: 0.405, lat: 8.2 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
     // than the land), and the range
@@ -1660,7 +1662,7 @@ export const TRACKS = {
     // the ranch's own is turned inside its piece (set_prototypes.py
     // RANCH_WIND_YAW, for the ranch as it stands here).
     set: [
-      { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
+      { model: 'set-ranch', u: 0.986, lat: -13, yaw: 180 },
       { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
       { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
@@ -1673,8 +1675,8 @@ export const TRACKS = {
       // mine yard and an oil camp); the rim begins at the hairpin
       { model: 'set-ranch-fence', u: 0.032, lat: -5.4, yaw: 180 },
       { model: 'set-ranch-fence', u: 0.036, lat: 5.4 },
-      // the herd on the range inside the fences: a dozen head and calves in
-      // loose bunches on the ranch's side, a few more across the road
+      // the herd on the range inside the fences: eight head in two bunches
+      // against the fence on the ranch's side, four more across the road
       { model: 'set-ranch-herd', u: 0.035, lat: -5.9, yaw: 180 },
       { model: 'set-ranch-herd-east', u: 0.02, lat: 5.9 },
       // the rock, each piece's talus coming to a couple of units past the
@@ -1759,13 +1761,16 @@ export const TRACKS = {
       { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
+      // the field's flare past the tank farm, its flame small
+      { model: 'set-flare-stack', u: 0.662, lat: 11 },
       // a dust devil wandering the flats inside the north loop
       { model: 'set-dust-devil', u: 0.7, lat: -12 },
       // the railway round the field, length by length on the rim (laid in
       // the world by scratch geometry, set_prototypes.py SW_RING, each
       // length placed on its own chord): the rack behind the tank farm, the
-      // open line, and four trains, each built on a length of its own a
-      // quarter of the way round from the next; the rack fed from the farm
+      // open line (the lengths behind the south loop's ridge, h to m, never
+      // seen from the seat, are full-only), and four trains, each built on a
+      // length of its own a quarter of the way round from the next; the rack fed from the farm
       // through a pipe that comes up at the farm's edge
       { model: 'set-tank-rack', u: 0.63973, lat: 37.034, yaw: -1.586 },
       { model: 'set-tank-line-a', u: 0.652316, lat: 33.785, yaw: 6.158 },
@@ -1777,13 +1782,13 @@ export const TRACKS = {
       { model: 'set-tank-line-f', u: 0.764304, lat: 41.239, yaw: -32.089 },
       { model: 'set-tank-line-g', u: 0.052027, lat: 38.927, yaw: 5.107 },
       { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959 },
-      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553 },
-      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165 },
-      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059 },
-      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931 },
+      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553, lite: false },
+      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165, lite: false },
+      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059, lite: false },
+      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931, lite: false },
       { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488 },
-      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786 },
-      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96 },
+      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786, lite: false },
+      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96, lite: false },
       { model: 'set-tank-line-n', u: 0.408735, lat: 31.764, yaw: 32.096 },
       { model: 'set-tank-line-o', u: 0.427437, lat: 23.974, yaw: -0.487 },
       { model: 'set-tank-train-d', u: 0.44725, lat: 25.604, yaw: -5.485 },
