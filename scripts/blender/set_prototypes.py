@@ -6812,6 +6812,8 @@ def ski_jump():
     # its legs, a pair across every two units back from the table's root,
     # down through the hill to the plain
     for x, y in run[2:-2:2]:
+        if x > T1 - 3.0:                               # none under the table: its end hangs in the air
+            continue                                   # (two dark stubs under the lip read as a jumper's legs)
         for s in (-1, 1):
             box((0.3, y - 1.0, 0.3), (x, (y - 1.0) / 2, s * (W / 2 - WALL - 0.3)), STEEL)
         if y - 1.5 > G(x) + 0.3:                       # braced where it clears the hill
@@ -6917,14 +6919,18 @@ def ski_jump():
     # The jumper's loop: down the in-run on its snow, off the takeoff and
     # over the foot to the landing, the outrun, then under the snow back up
     # the hill to the tower and up inside it to the start.
-    XL = -17.5
+    # The flight leaves the table's lip along the table's own line (10 degrees
+    # down) and falls away from it as a thrown thing does, to land sixteen
+    # units out, well down the landing slope past the K line: a jumper who
+    # dropped off the lip to the snow under it read as falling off the jump.
+    XL = T1 + 16.0
     pts = [(x, y + 0.18, 0.0) for x, y in run[1:]]
     y0 = run[-1][1] + 0.18
-    for k in range(1, 8):
-        f = k / 8.0
-        x = T1 + (XL - T1) * f
-        pts.append((x, (1 - f) ** 2 * y0 + (1 - (1 - f) ** 2) * (G(x) + 0.12) + 1.0 * math.sin(math.pi * f) ** 1.5, 0.0))
-    for x in (XL, -14.5, -11.5, -8.5, -4.0):
+    fall = (y0 - s2 * (XL - T1) - (G(XL) + 0.12)) / (XL - T1) ** 2
+    for k in range(1, 12):
+        d = (XL - T1) * k / 12.0
+        pts.append((T1 + d, y0 - s2 * d - fall * d * d, 0.0))
+    for x in (XL, -10.5, -8.5, -4.0):
         pts.append((x, G(x) + 0.12, 0.0))
     # the outrun turns off into the timing hut at its side, and the way back
     # runs from in there under the snow
@@ -6941,15 +6947,15 @@ def ski_jump():
     cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2)
     for k in range(2):
         x, y, z = pts[3]
-        with animated('anim_path:c=jump:p=30:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
-            skier(x, y - 0.18, z, (RED, BLUE)[k], WHITE)
+        with animated('anim_path:c=jump:p=20:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
+            flurry_skier(x, y - 0.18, z, (RED, BLUE)[k], WHITE, k=2.0)
     # a patch of snow at the outrun's end laid under the land as drawn (out
     # of sight, clear of the ground's depth), so the jump stands on the plain
     # and levels nothing
     def lines():
         box((0.6, 0.1, 0.6), (4.0, -0.25, 0.0), SNOWT)
-        box((0.3, 0.06, 5.6), (-17.0, 0.03, 0.0), RED)                       # the K line
-        box((0.3, 0.06, 5.6), (-13.5, 0.03, 0.0), BLUE)
+        box((0.3, 0.06, 5.6), (-15.0, 0.03, 0.0), RED)                       # the K line
+        box((0.3, 0.06, 5.6), (-12.0, 0.03, 0.0), BLUE)
         for s in (-1, 1):                                                   # fir sprigs down the landing's edges
             for k in range(11):
                 box((0.5, 0.06, 0.14), (-25.0 + 1.6 * k, 0.03, s * 3.0), 0x61cb8b)
