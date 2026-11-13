@@ -5417,17 +5417,6 @@ def snow_person(x, y, z, coat, hat, yaw=0.0):
     box((0.09, 0.09, 0.09), at(0.01, 0.395), 0xf2bf99, yaw=yaw)
     box((0.1, 0.06, 0.1), at(0.0, 0.465), hat, yaw=yaw)
 
-def seated(x, y, z, coat, hat, yaw=0.0):
-    """Someone sitting (on a chair, a bucket), facing +X turned by `yaw`; `y`
-    is the seat."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy):
-        return (x + dx * c, y + dy, z - dx * s)
-    box((0.2, 0.07, 0.14), at(0.07, 0.035), 0x38383d, yaw=yaw)       # thighs
-    box((0.13, 0.17, 0.18), at(-0.02, 0.15), coat, yaw=yaw)
-    box((0.09, 0.09, 0.09), at(-0.01, 0.28), 0xf2bf99, yaw=yaw)
-    box((0.1, 0.06, 0.1), at(-0.02, 0.35), hat, yaw=yaw)
-
 def skier(x, y, z, coat, hat):
     """A skier running toward +X, crouched over the skis, at a person's size:
     the skis, bent legs, a coat leaning in, a head and hat. Joined into one
@@ -5876,9 +5865,8 @@ FORESTS = {
     'avalanche-forest-d': ((0.3, -12.0, 18.80, 1.81, 0, 0), (-1.0, -12.9, 19.49, 1.65, 1, 0), (-2.4, -13.3, 19.88, 2.09, 0, 0), (-3.9, -13.6, 21.24, 2.00, 1, 0), (-3.1, -15.7, 20.10, 0.84, 0, 0), (-5.2, -14.4, 22.36, 1.91, 0, 0), (-4.7, -15.8, 21.43, 0.71, 1, 0), (6.1, -2.1, 8.51, 1.64, 1, 0), (3.6, -3.1, 11.79, 2.67, 0, 0), (5.9, -0.8, 7.75, 2.09, 1, 0), (8.6, 0.8, 3.36, 1.46, 0, 1), (7.5, -1.3, 5.65, 1.66, 1, 1), (3.4, -0.7, 10.51, 1.60, 0, 0), (4.3, 0.4, 8.65, 1.95, 0, 0), (6.1, 0.6, 6.57, 1.62, 1, 0), (5.7, 2.2, 6.13, 1.84, 1, 0), (-6.2, -12.6, 23.86, 1.44, 0, 0), (-3.7, -8.1, 21.18, 1.67, 0, 0), (-3.2, -11.4, 21.09, 1.93, 0, 0), (-3.0, -9.4, 21.30, 1.42, 1, 0), (-4.8, -9.8, 22.82, 2.68, 0, 0), (-5.4, -7.5, 22.15, 2.15, 0, 0), (-6.4, -3.1, 21.16, 2.98, 1, 0), (-6.6, 0.3, 19.51, 1.47, 1, 0), (-4.9, 0.7, 17.88, 2.62, 0, 0), (-8.4, 0.2, 20.95, 2.19, 0, 0), (-5.4, -4.6, 20.84, 1.62, 1, 0), (-4.1, -2.0, 18.83, 2.14, 0, 0), (-7.7, -1.6, 21.60, 2.82, 0, 0), (7.6, 2.0, 4.76, 2.83, 0, 1), (9.1, 3.4, 3.36, 1.43, 0, 1), (7.4, 5.5, 5.17, 1.73, 0, 0), (5.0, 3.4, 6.86, 2.20, 1, 0), (6.0, 6.4, 6.28, 1.68, 0, 0), (4.8, 5.1, 7.02, 1.90, 1, 0), (7.0, 3.9, 5.36, 1.66, 0, 0), (3.9, 6.4, 7.72, 1.90, 0, 0), (2.7, 5.0, 9.28, 1.93, 0, 0), (2.4, 6.8, 9.35, 2.11, 0, 0), (5.8, 8.0, 6.45, 1.99, 1, 0), (3.5, 3.7, 8.55, 2.90, 0, 0), (4.2, 8.1, 7.58, 1.98, 0, 0), (-2.4, 11.0, 11.88, 1.78, 1, 0), (-3.4, 13.3, 12.81, 1.67, 0, 0), (-4.5, 10.8, 13.16, 1.81, 1, 0), (-6.0, 12.2, 13.40, 2.17, 0, 0), (-4.8, 9.4, 13.13, 1.49, 1, 0), (-4.5, 12.4, 13.35, 1.49, 1, 0), (-1.7, 0.1, 15.37, 1.97, 0, 0), (-0.9, 13.3, 11.27, 2.09, 1, 0), (-5.3, 3.8, 16.08, 1.90, 1, 0), (-1.5, -2.1, 16.43, 1.79, 1, 0), (3.1, 13.5, 8.68, 2.03, 0, 0)),
     'avalanche-forest-e': ((-6.4, -5.8, 11.28, 2.05, 0, 0), (-2.9, -10.2, 11.08, 1.40, 0, 0), (-6.2, -8.0, 12.37, 2.17, 0, 0), (-2.9, -8.6, 10.59, 1.96, 0, 0), (-0.9, -7.3, 8.93, 1.68, 1, 0), (-5.3, -10.0, 12.41, 2.01, 0, 0), (-3.4, -6.1, 10.01, 2.10, 1, 0), (-3.3, -3.3, 9.07, 1.45, 1, 0), (-6.0, -3.6, 9.98, 1.59, 0, 0), (-2.4, -4.6, 8.92, 1.58, 1, 0), (-4.5, -8.7, 11.56, 1.87, 0, 0), (9.4, 0.5, 1.14, 1.59, 0, 1), (6.4, 2.0, 1.94, 1.87, 1, 1), (6.5, 0.2, 2.30, 2.11, 0, 1), (6.0, 4.1, 1.64, 2.68, 1, 0), (4.7, -0.5, 3.28, 1.99, 1, 0), (3.5, 2.4, 3.12, 1.82, 0, 0), (3.5, 0.6, 3.59, 1.60, 0, 0), (7.3, 3.3, 1.37, 1.53, 1, 1), (9.9, 1.8, 0.70, 1.40, 0, 1), (2.0, -0.2, 4.72, 1.68, 1, 0), (0.6, -0.3, 5.63, 2.09, 0, 0), (-1.1, -0.8, 6.86, 1.59, 1, 0), (2.1, 2.5, 3.81, 2.11, 0, 0), (-0.8, 1.2, 6.06, 1.56, 0, 0), (1.3, -2.0, 5.73, 2.13, 1, 0), (0.5, 2.0, 4.98, 1.43, 0, 0), (-2.9, 4.5, 4.85, 1.78, 0, 0), (1.3, 4.1, 3.80, 2.06, 1, 0), (-3.9, 2.8, 5.97, 1.45, 1, 0), (-2.5, 2.6, 5.77, 2.11, 0, 0), (-0.4, 5.8, 3.51, 1.61, 0, 0), (-3.7, 1.3, 6.74, 2.09, 1, 0), (-0.2, -2.0, 6.68, 1.87, 1, 0), (-1.4, 3.9, 4.77, 1.84, 0, 0), (-3.1, -0.9, 7.76, 2.14, 0, 0), (0.9, 5.4, 3.37, 1.50, 0, 0), (-5.3, 8.5, 3.32, 1.76, 1, 0), (3.9, 9.9, 1.30, 1.89, 0, 0), (8.5, 7.4, 0.41, 1.64, 0, 1), (-10.0, 8.5, 4.71, 1.65, 1, 0)),
     'avalanche-forest-f': ((-9.3, 12.6, 0.18, 1.68, 0, 1), (-7.7, 12.6, 0.33, 1.75, 0, 1), (-6.4, 11.9, 0.41, 1.40, 0, 1), (-4.9, 11.5, 0.52, 1.82, 1, 1), (-3.4, 11.2, 0.65, 1.59, 0, 0), (-4.1, 5.7, 0.49, 1.19, 2, 1), (-4.6, 2.4, 0.24, 1.04, 1, 1), (-2.1, 10.4, 1.07, 1.74, 0, 0), (-3.9, 7.1, 0.54, 1.39, 3, 1), (-3.2, 1.9, 1.31, 2.06, 0, 1), (-0.6, 10.1, 1.88, 1.42, 1, 0), (-1.3, 7.9, 1.97, 1.29, 3, 0), (-1.6, 1.8, 2.94, 1.82, 0, 1), (0.8, 9.5, 3.15, 2.11, 0, 0), (0.1, 8.1, 2.93, 1.33, 2, 0), (-0.2, 1.3, 4.70, 2.14, 0, 1), (2.2, 9.2, 4.99, 1.51, 1, 0), (0.6, 3.2, 5.15, 1.13, 3, 0), (1.2, 0.6, 6.52, 1.74, 1, 0), (3.7, 8.9, 7.20, 1.57, 1, 0), (3.1, 4.1, 7.79, 1.29, 2, 0), (2.6, 0.1, 8.37, 2.04, 0, 0), (5.1, 8.4, 9.27, 1.99, 0, 0), (3.7, 3.3, 8.82, 1.06, 2, 0), (4.0, -0.4, 10.24, 2.11, 1, 0), (6.6, 8.0, 10.50, 2.06, 0, 0), (5.9, 2.6, 11.66, 0.77, 0, 0), (5.4, -0.8, 12.21, 1.41, 0, 0), (8.0, 7.6, 11.80, 1.78, 0, 0), (7.0, -0.9, 13.93, 1.55, 0, 0), (9.4, 7.0, 13.17, 1.64, 0, 0), (8.3, -1.7, 16.36, 1.81, 0, 0), (10.8, 6.6, 14.39, 1.80, 1, 0), (9.8, -2.0, 18.21, 1.84, 1, 0), (12.3, 6.4, 15.54, 2.07, 0, 0), (11.5, 2.9, 17.26, 0.97, 0, 0), (11.2, -2.4, 19.44, 2.12, 1, 0), (12.7, -2.6, 20.61, 1.51, 1, 0), (1.2, 11.7, 3.87, 2.19, 1, 0), (4.9, 9.8, 7.99, 2.95, 0, 0), (2.8, 11.3, 5.39, 1.78, 1, 0), (3.1, 13.0, 4.19, 1.76, 1, 0), (-0.5, 11.7, 1.92, 2.19, 1, 0), (-6.8, -13.6, 1.04, 1.72, 0, 1), (-5.2, -13.3, 2.22, 1.62, 1, 1), (-4.0, -17.9, 4.70, 1.98, 0, 0), (-7.0, -16.5, 1.94, 1.49, 0, 1), (-4.4, -15.1, 3.59, 1.63, 1, 1), (-5.2, -19.4, 4.21, 1.70, 1, 0), (-7.3, -19.7, 2.68, 1.87, 0, 1), (-7.8, -18.0, 1.69, 2.19, 0, 1), (-5.1, -16.7, 3.62, 3.00, 0, 1), (-7.5, -15.2, 1.10, 2.12, 0, 1), (-3.6, -16.2, 4.66, 1.76, 0, 0), (-5.8, -15.0, 2.42, 1.54, 0, 1), (3.3, -17.8, 10.08, 1.99, 0, 0), (1.3, -20.0, 8.75, 2.94, 0, 0), (-0.4, -17.2, 7.08, 1.59, 0, 0), (1.7, -17.3, 8.61, 2.04, 0, 0), (1.8, -15.4, 8.46, 1.53, 0, 0), (0.6, -18.7, 7.99, 1.73, 0, 0), (4.1, -16.7, 10.57, 2.12, 0, 0), (3.1, -19.6, 10.18, 2.05, 0, 0), (-7.7, 18.7, 1.17, 1.71, 0, 0), (-3.7, 16.2, 1.28, 1.80, 1, 0), (-3.6, 19.5, 1.45, 1.57, 1, 0), (-2.1, 18.0, 1.42, 2.02, 0, 0), (-5.1, 17.9, 1.32, 1.94, 0, 0), (-7.9, 16.8, 0.90, 1.62, 0, 0), (-5.5, 19.4, 1.38, 2.13, 1, 0), (-6.6, 15.3, 0.83, 1.54, 1, 0), (-6.0, 16.8, 1.11, 1.71, 0, 0), (-3.2, -2.8, 1.73, 1.86, 0, 1), (-2.7, -0.7, 1.93, 1.82, 1, 1), (-3.9, -4.4, 1.30, 1.79, 0, 1), (-1.5, -3.6, 3.95, 1.82, 1, 1), (-1.4, -2.0, 3.72, 2.12, 0, 1), (-4.3, -1.0, 0.28, 1.17, 0, 1), (1.2, -10.7, 7.72, 1.71, 1, 0), (-1.4, -11.2, 5.32, 2.90, 1, 0), (-2.8, -14.5, 4.69, 2.76, 1, 0), (4.2, -12.9, 10.97, 2.01, 0, 0), (-3.8, -13.3, 3.46, 2.08, 0, 1), (0.4, -12.2, 6.92, 2.13, 0, 0), (-0.9, -14.1, 5.95, 1.85, 0, 0), (3.4, -11.5, 10.30, 1.50, 0, 0), (9.1, 11.0, 9.68, 1.90, 1, 0), (9.6, -5.5, 18.73, 1.62, 0, 0), (4.0, 16.1, 4.32, 2.14, 0, 0), (5.7, -10.0, 13.15, 2.09, 0, 0), (7.8, 14.1, 6.44, 1.61, 0, 0), (-8.4, -11.7, 0.23, 1.50, 1, 1), (-6.9, -9.5, 0.22, 1.18, 0, 1), (-4.4, 0.7, 0.28, 1.33, 1, 1)),
-    'avalanche-forest-g': ((-3.9, 9.8, 3.37, 1.53, 0, 0), (-5.2, 4.3, 2.73, 1.46, 1, 1), (-5.7, 8.7, 2.16, 2.01, 0, 1), (-2.1, 5.4, 4.88, 1.70, 0, 0), (-1.1, 8.9, 5.24, 1.67, 0, 0), (-4.1, 8.0, 3.29, 1.40, 0, 1), (-0.7, 7.0, 5.66, 2.04, 0, 0), (-2.3, 9.8, 4.48, 1.96, 0, 0), (-0.4, 5.0, 6.10, 1.80, 1, 0), (7.3, 0.9, 11.51, 1.41, 0, 0), (7.3, 3.3, 11.29, 1.82, 0, 0), (9.5, 2.7, 12.82, 2.03, 0, 0), (9.7, 0.1, 12.92, 2.06, 1, 0), (8.4, 5.0, 11.96, 1.42, 0, 0), (5.3, 1.4, 10.18, 1.52, 0, 0), (6.0, 4.0, 10.32, 1.81, 0, 0), (7.8, -0.9, 11.42, 1.91, 0, 0), (0.4, -15.2, 1.63, 2.17, 0, 0), (-3.6, -11.2, 1.49, 1.57, 0, 0), (-1.0, -9.6, 3.51, 1.78, 0, 0), (-2.9, -15.3, 0.86, 1.61, 0, 0), (-0.9, -12.8, 2.06, 1.78, 0, 0), (-1.4, -14.7, 1.05, 1.88, 1, 0), (1.5, -12.7, 3.29, 1.66, 1, 0), (8.7, 1.4, 12.38, 2.10, 1, 0), (8.7, 6.3, 12.11, 1.79, 0, 0), (6.9, 5.5, 10.93, 1.41, 1, 0), (10.0, 5.0, 12.93, 1.61, 1, 0), (4.0, -1.7, 8.83, 1.68, 0, 0), (-2.3, 3.1, 5.02, 1.46, 1, 0), (2.6, 2.2, 8.40, 1.52, 0, 0), (-1.1, -0.6, 5.67, 1.67, 1, 0), (-0.2, 2.1, 6.55, 1.81, 0, 0), (2.2, -2.4, 7.49, 1.79, 0, 0), (-1.8, 1.1, 5.31, 2.03, 1, 0), (0.8, -1.0, 7.03, 2.11, 0, 0), (-6.2, 11.2, 1.95, 1.94, 0, 1), (-6.9, 6.8, 1.51, 1.68, 1, 1), (-7.7, 9.6, 0.87, 1.50, 1, 1), (-7.0, 4.8, 1.33, 1.90, 1, 1), (-8.8, 7.6, 0.37, 1.18, 0, 1), (-5.2, 6.4, 2.72, 2.77, 0, 1), (-8.3, 11.2, 0.57, 2.06, 0, 1), (-1.5, -18.3, 0.90, 1.88, 0, 0), (1.9, -18.6, 1.20, 1.43, 0, 0), (1.5, -16.2, 1.73, 1.89, 1, 0), (-3.3, -19.0, 0.59, 2.01, 0, 0), (0.4, -17.6, 1.19, 1.83, 0, 0), (-2.4, -16.6, 0.88, 1.70, 1, 0), (0.9, 10.5, 6.06, 2.07, 1, 0), (-6.3, 19.9, 1.67, 1.41, 0, 0), (3.2, 12.4, 7.09, 1.61, 0, 0), (5.2, 7.5, 9.61, 2.12, 1, 0), (2.8, -6.9, 6.40, 1.93, 0, 0), (-7.4, 0.0, 0.76, 1.31, 0, 1), (-7.7, 2.9, 0.66, 0.98, 1, 1)),
+    'avalanche-forest-g': ((7.3, 0.9, 11.51, 1.41, 0, 0), (7.3, 3.3, 11.29, 1.82, 0, 0), (9.5, 2.7, 12.82, 2.03, 0, 0), (9.7, 0.1, 12.92, 2.06, 1, 0), (8.4, 5.0, 11.96, 1.42, 0, 0), (5.3, 1.4, 10.18, 1.52, 0, 0), (7.8, -0.9, 11.42, 1.91, 0, 0), (0.4, -15.2, 1.63, 2.17, 0, 0), (-3.6, -11.2, 1.49, 1.57, 0, 0), (-1.0, -9.6, 3.51, 1.78, 0, 0), (-2.9, -15.3, 0.86, 1.61, 0, 0), (-0.9, -12.8, 2.06, 1.78, 0, 0), (-1.4, -14.7, 1.05, 1.88, 1, 0), (1.5, -12.7, 3.29, 1.66, 1, 0), (8.7, 1.4, 12.38, 2.10, 1, 0), (8.7, 6.3, 12.11, 1.79, 0, 0), (6.9, 5.5, 10.93, 1.41, 1, 0), (10.0, 5.0, 12.93, 1.61, 1, 0), (4.0, -1.7, 8.83, 1.68, 0, 0), (2.6, 2.2, 8.40, 1.52, 0, 0), (-1.1, -0.6, 5.67, 1.67, 1, 0), (2.2, -2.4, 7.49, 1.79, 0, 0), (-1.8, 1.1, 5.31, 2.03, 1, 0), (0.8, -1.0, 7.03, 2.11, 0, 0), (-8.8, 7.6, 0.37, 1.18, 0, 1), (-1.5, -18.3, 0.90, 1.88, 0, 0), (1.9, -18.6, 1.20, 1.43, 0, 0), (1.5, -16.2, 1.73, 1.89, 1, 0), (-3.3, -19.0, 0.59, 2.01, 0, 0), (0.4, -17.6, 1.19, 1.83, 0, 0), (-2.4, -16.6, 0.88, 1.70, 1, 0), (-6.3, 19.9, 1.67, 1.41, 0, 0), (2.8, -6.9, 6.40, 1.93, 0, 0), (-7.4, 0.0, 0.76, 1.31, 0, 1), (-7.7, 2.9, 0.66, 0.98, 1, 1)),
     'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (-2.2, 1.6, 0.21, 1.84, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (-2.1, 3.0, 0.18, 2.81, 1, 0), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
-    'glacier-forest-a': ((3.0, 6.5, 3.27, 2.00), (-0.7, -3.5, 5.05, 1.67), (-5.9, -0.4, 7.72, 2.09), (-0.6, 3.1, 5.61, 1.75), (-4.6, -9.8, 5.91, 1.93), (3.2, 1.5, 3.33, 2.13), (-1.4, 8.5, 5.76, 1.58), (6.9, 17.2, 0.56, 2.01), (2.3, -8.4, 2.79, 1.63), (-0.9, 12.5, 4.91, 2.07), (-4.6, 12.0, 6.33, 1.68), (2.0, 15.8, 2.41, 1.96), (7.8, -7.5, 0.58, 1.46), (-1.2, -10.5, 4.35, 1.44), (6.9, -12.1, 0.64, 1.47), (7.9, -2.3, 0.75, 2.06), (0.8, -9.0, 3.59, 2.14), (4.9, 1.4, 2.29, 2.08), (-1.3, -5.3, 5.13, 1.83), (0.8, -5.7, 3.91, 1.82), (1.5, 7.8, 4.13, 2.11), (-5.5, -3.1, 7.27, 2.10), (4.0, -9.4, 1.68, 1.91), (2.3, -2.9, 3.39, 2.14), (3.6, 8.7, 2.89, 1.36), (-5.9, 13.6, 6.28, 2.12), (5.6, 15.9, 0.86, 1.46), (5.3, 11.3, 1.91, 1.94), (-3.6, -6.9, 5.71, 1.93), (-3.7, -15.5, 3.82, 1.48), (4.0, -11.2, 1.63, 1.59), (-2.6, 9.7, 6.05, 2.12), (0.5, 14.2, 3.65, 1.72), (6.9, -9.3, 0.60, 1.41), (6.6, 0.3, 1.38, 1.99), (7.6, 7.9, 1.10, 1.77), (5.6, 3.3, 1.88, 1.60), (0.2, 10.3, 4.69, 2.07), (6.3, -3.7, 1.26, 1.91), (-4.6, -5.5, 6.55, 1.99)),
     'avalanche-forest-i': ((-11.0, 15.3, 13.77, 2.62, 0, 0), (-8.6, 12.2, 17.03, 2.74, 0, 0), (-10.1, 13.9, 15.40, 1.64, 0, 0), (-6.3, 17.0, 11.97, 1.55, 0, 0), (-4.0, 15.9, 10.65, 2.01, 0, 0), (-7.0, 19.8, 13.63, 1.57, 1, 0), (-3.5, 18.0, 11.23, 2.12, 0, 0), (-8.5, 19.5, 14.26, 2.09, 1, 0), (-13.7, 15.8, 15.18, 1.70, 1, 0), (-10.2, 17.9, 13.48, 2.09, 0, 0), (-11.2, 16.7, 12.81, 2.05, 0, 0), (-16.4, 17.1, 15.57, 1.50, 0, 0), (-13.5, 18.3, 14.18, 2.85, 0, 0), (-21.2, 18.8, 18.02, 2.06, 1, 0), (11.3, -5.2, 13.12, 2.08, 0, 0), (12.4, -8.8, 10.07, 2.06, 1, 0), (10.0, -9.6, 12.63, 1.78, 1, 0), (10.1, -4.3, 14.57, 1.74, 0, 0), (13.9, -6.7, 10.19, 1.95, 0, 0), (9.6, -11.2, 12.27, 1.91, 0, 0), (9.7, -7.2, 13.90, 1.66, 0, 0), (7.2, -10.8, 15.98, 1.97, 0, 0), (-3.9, -24.5, 15.86, 1.95, 0, 0), (-5.1, -23.4, 17.80, 2.09, 1, 0), (-1.5, -24.3, 13.34, 2.85, 0, 0), (-0.8, -21.7, 15.63, 2.95, 1, 0), (-2.4, -20.9, 18.08, 2.07, 1, 0), (10.9, -21.5, 3.60, 2.01, 1, 2), (5.0, -30.8, 5.77, 1.42, 0, 2), (7.8, 8.4, 10.02, 1.86, 0, 0), (4.9, 5.3, 14.99, 2.13, 0, 0), (16.3, -17.6, 2.89, 1.98, 0, 2), (5.4, 12.3, 7.57, 1.42, 0, 0), (9.4, -19.3, 6.25, 1.69, 1, 2)),
     'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
@@ -6041,19 +6029,6 @@ def skater(x, y, z, coat, hat, k=1.0):
     b((0.5, 0.5, 0.5), 0.2, 2.32, 0.0, SKIN)                            # the head
     b((0.56, 0.3, 0.56), 0.18, 2.64, 0.0, hat)                          # the hat
 
-def shanty(x, z, color, yaw=0.0, pipe=False):
-    """An ice-fishing shanty at its real size: a box hut on skids, a snowed
-    roof, a dark door to +X turned by `yaw`, maybe a stovepipe."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s, dy, z - dx * s + dz * c)
-    box((0.66, 0.06, 0.5), at(0, 0.03, 0), 0x6e4a32, yaw=yaw)
-    box((0.6, 0.48, 0.46), at(0, 0.3, 0), color, yaw=yaw)
-    snowy(box((0.7, 0.08, 0.56), at(0, 0.58, 0), 0xfff6eb, yaw=yaw, roll=0.12), 0.5)
-    box((0.06, 0.32, 0.2), at(0.31, 0.24, 0), 0x38383d, yaw=yaw)
-    if pipe:
-        box((0.07, 0.24, 0.07), at(-0.18, 0.72, 0.12), 0x555b66, yaw=yaw)
-
 def clip(pts, keep):
     """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
     `keep` linear (a half-plane)."""
@@ -6105,60 +6080,6 @@ def rounded(pts, times=2):
         pts = out
     return pts
 
-def ice_fisher(x, z, yaw, coat, hat, n, seat=0xcf534f, rod=True, screen=None, sledge=None, flag=False):
-    """Someone fishing through the ice at (x, z), sat facing +X turned by
-    `yaw` at their hole: bundled up and small (a seated figure a little over
-    a third of a unit, hood up, no face to read), on an upturned bucket or a
-    box, the dark hole in front in its ring of shaved ice, the short rod
-    held over it and jigged now and then (`rod`, a part of its own). Round
-    them what an ice fisher brings: a canvas windbreak at their back
-    (`screen`, its colour), a sledge with its box (`sledge`, its colour), a
-    tip-up's little flag over a second hole (`flag`), the catch laid on the
-    ice, the auger stood in the snow. Returns nothing: all of it stands on
-    the ice at y 0.07."""
-    Y = 0.07
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s2, Y + dy, z - dx * s2 + dz * c)
-    DARK = 0x38383d
-    cyl(0.3, 0.02, at(0.62, 0.0, 0.0), 0xfff6eb, segs=10)                       # the shaved ice round the hole
-    cyl(0.17, 0.03, at(0.62, 0.0, 0.0), 0x2f3a4a, segs=10)                      # the hole
-    box((0.2, 0.2, 0.2), at(0.0, 0.1, 0.0), seat, yaw=yaw)                       # what they sit on
-    box((0.3, 0.1, 0.2), at(0.12, 0.25, 0.0), DARK, yaw=yaw)                     # thighs
-    box((0.1, 0.24, 0.2), at(0.27, 0.12, 0.0), DARK, yaw=yaw)                    # shins and boots
-    box((0.22, 0.3, 0.26), at(-0.02, 0.42, 0.0), coat, yaw=yaw)                  # the coat, bundled
-    box((0.16, 0.14, 0.3), at(0.12, 0.4, 0.0), coat, yaw=yaw)                    # arms forward
-    box((0.17, 0.16, 0.18), at(0.0, 0.64, 0.0), hat, yaw=yaw)                    # the hood
-    box((0.06, 0.09, 0.12), at(0.085, 0.63, 0.0), 0xf2bf99, yaw=yaw)             # what shows of a face
-    if rod:
-        with animated('anim_sway:a=z:d=9:p=%.1f:r=%.2f#rod%d' % (1.6 + 0.3 * (n % 4), 0.45 + 0.08 * (n % 3), n),
-                      at(0.2, 0.42, 0.0), yaw):
-            box((0.5, 0.04, 0.04), at(0.44, 0.45, 0.0), 0x2a2735, yaw=yaw, roll=-0.12)
-            box((0.04, 0.4, 0.04), at(0.64, 0.28, 0.0), 0xfff6eb, yaw=yaw)        # the line down the hole
-    if screen is not None:
-        for sd in (-1, 1):
-            box((0.06, 0.7, 0.06), at(-0.45, 0.35, sd * 0.55), 0x7a5a3a, yaw=yaw)
-        box((0.06, 0.5, 1.1), at(-0.45, 0.42, 0.0), screen, yaw=yaw)
-        snowy(box((0.3, 0.12, 1.2), at(-0.62, 0.06, 0.0), 0xf3f7fb, yaw=yaw), 0.4)   # snow banked against it
-    if sledge is not None:
-        sx, sz = -0.15, 0.75
-        for sd in (-1, 1):
-            box((0.7, 0.05, 0.05), at(sx, 0.03, sz + sd * 0.13), 0x555b66, yaw=yaw)
-        box((0.6, 0.06, 0.34), at(sx - 0.03, 0.1, sz), sledge, yaw=yaw)
-        box((0.3, 0.2, 0.26), at(sx - 0.1, 0.23, sz), 0x9a7b55, yaw=yaw)         # its box
-        box((0.12, 0.12, 0.12), at(sx + 0.17, 0.19, sz), 0x3f7bd9, yaw=yaw)       # a flask
-    if flag:
-        cyl(0.13, 0.03, at(0.5, 0.0, -0.8), 0x2f3a4a, segs=8)                    # the tip-up's hole
-        box((0.34, 0.04, 0.04), at(0.5, 0.05, -0.8), 0x7a5a3a, yaw=yaw)
-        box((0.04, 0.4, 0.04), at(0.5, 0.2, -0.8), 0x7a5a3a, yaw=yaw)
-        box((0.16, 0.12, 0.04), at(0.58, 0.36, -0.8), 0xff7e44, yaw=yaw)
-    for k in range(1 + n % 3):                                                   # the catch
-        box((0.2, 0.05, 0.07), at(0.5 + 0.1 * k, 0.025, 0.42 + 0.11 * k), 0xa0a8c9, yaw=yaw + 0.4 * k)
-    if n % 2 == 0:                                                               # the auger, stood up
-        box((0.06, 0.6, 0.06), at(-0.1, 0.3, -0.5), 0x555b66, yaw=yaw)
-        box((0.3, 0.05, 0.05), at(-0.1, 0.6, -0.5), 0xff7e44, yaw=yaw)
-        box((0.14, 0.14, 0.14), at(-0.1, 0.07, -0.5), 0x868ba1, yaw=yaw)
-
 # Flurry's lake, placed at yaw 180 (u 0.3355, lat -11.4) so the piece's +X is
 # toward the road: the road comes down off the bridge beside it, running down
 # -Z at x ~12 on its stilts and then its berm, and bends away round to +X. The
@@ -6181,8 +6102,9 @@ def frozen_lake():
     # deeper blue in the middle where the ice is clear and thick, cracks
     # running across it from the shore and a ring of them where it has
     # heaved. On it the village's skaters glide round their rink (anim_path;
-    # carried by their skates, they hold their pose), the ice fishers sit by
-    # their shanties to the south, a snowman stands by the rink. (Two flat
+    # carried by their skates, they hold their pose), a snowman stands by the
+    # rink; the fishing huts at its south end are the hamlet's
+    # (set-lake-hamlet). (Two flat
     # sheets of jagged ice either side of the road read as nothing from the
     # seat: no bank, no depth, no line on them.)
     N = 48
@@ -6190,8 +6112,8 @@ def frozen_lake():
         return [(x, y, z) for x, z in (lake_rim(i / N * 2 * math.pi, inset) for i in range(N + 1))]
     # the ice, out from the middle: the clear deep blue, then paler to the shore
     rings = [[(LAKE_C[0], 0.05, LAKE_C[1])] * (N + 1), ring(5.0, 0.05), ring(2.6, 0.05), ring(0.0, 0.05)]
-    for j, row in ((0, 13), (1, 7), (2, 3)):
-        o = sheet([rings[j], rings[j + 1]], lambda i, jj, nn: 'sky', 'ice')[0]
+    for j, (sw, row) in enumerate((('blue', 3), ('sky', 17), ('sky', 8))):
+        o = sheet([rings[j], rings[j + 1]], (lambda sw: lambda i, jj, nn: sw)(sw), 'ice')[0]
         rowed(o, row)
     # the bank of snow round it: up from the ice to a crest over the shore and
     # down to the plain outside, wider and higher in turn round the lake
@@ -6245,15 +6167,6 @@ def frozen_lake():
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
         with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / 5, n), at):
             skater(at[0], at[1], at[2], coat, hat, k=0.24)
-    # the ice fishers to the south, by their shanties, facing every way
-    for n, (x, z, yw, c) in enumerate(((-6.5, -8.5, 0.4, 0xcf534f), (-1.0, -10.0, 2.2, 0x3f7bd9))):
-        shanty(x, z, c, yaw=yw, pipe=n == 0)
-    for n, (fx, fz, fyaw, coat, hat, screen, sledge, flag) in enumerate((
-            (-4.6, -8.0, 2.6, 0xcf534f, 0xcf534f, 0xffc044, 0x3f7bd9, True),
-            (0.6, -8.2, 1.2, 0x3f7bd9, 0xffc044, None, 0xcf534f, False),
-            (-3.0, -11.2, -2.4, 0xffc044, 0x38383d, 0xcf534f, None, True))):
-        ice_fisher(fx, fz, fyaw, coat, hat, n, seat=(0xcf534f, 0x3f7bd9, 0x9a7b55)[n % 3], screen=screen,
-                   sledge=sledge, flag=flag)
     # on the ice by the rink, a snowman in a hat
     snowman((-9.0, 0.07, 4.5), 0.2, hat=True)
 
@@ -6637,13 +6550,248 @@ def log_cabin():
     # a car: a log cabin two and a half units across and two smaller ones
     # either side of it, their chimneys smoking (the columns stand over the
     # kerb from far down the road, before the cabins do), the woodpile under its
-    # lean-to between them, a villager.
+    # lean-to between them, a sled by the door.
     log_cabin_at(0.0, 0.0, 0.58, smoke=1.5)
     log_cabin_at(-0.6, 3.0, 0.42, smoke=True)
     log_cabin_at(-0.4, -3.9, 0.48, smoke=True)
     woodpile(0.2, -2.2, 0.3)
-    snow_person(1.8, 0, -0.6, 0x3f7bd9, 0xcf534f, yaw=-0.4)
+    sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
     join_still('cabins')
+
+# ---- Flurry's lake hamlet ----------------------------------------------------
+# The ground drawn over the plain under the hamlet (u 0.375, lat -11, yaw 180:
+# +X to the road, +Z north to the lake), SAMPLED every two units from (-16, -20)
+# like a stand's (FORESTS): re-sample after moving the piece or the land.
+HAMLET_G = ((4.6, 5.6, 6.6, 6.7, 6.7, 5.5, 4.6, 5.1, 5.7, 5.9, 5.0, 3.9, 2.8),
+            (3.8, 4.8, 5.3, 5.3, 5.2, 4.4, 4.5, 5.1, 5.7, 6.1, 4.8, 3.5, 2.1),
+            (3.0, 3.9, 3.9, 3.8, 3.7, 3.8, 4.3, 4.7, 5.2, 5.0, 3.8, 2.4, 1.7),
+            (2.4, 2.5, 2.8, 3.0, 3.3, 3.2, 3.6, 4.1, 4.2, 3.7, 2.7, 1.8, 1.1),
+            (2.3, 2.4, 2.7, 2.9, 2.8, 2.5, 3.0, 3.4, 3.0, 2.5, 2.0, 1.1, 0.6),
+            (2.3, 2.3, 2.6, 2.7, 2.4, 2.0, 2.3, 2.2, 1.7, 1.2, 1.1, 0.6, 0.3),
+            (2.2, 2.2, 2.4, 2.2, 1.9, 1.6, 1.5, 1.0, 0.7, 0.4, 0.3, 0.2, 0.2),
+            (2.2, 2.1, 2.0, 1.7, 1.5, 1.3, 1.0, 0.7, 0.4, 0.2, 0.2, 0.2, 0.2),
+            (2.2, 2.1, 1.9, 1.7, 1.5, 1.2, 0.8, 0.5, 0.2, 0.2, 0.2, 0.2, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.5, 1.1, 0.6, 0.3, 0.1, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.4, 0.9, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.2, 0.7, 0.2, 0.0, 0.0, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.4, 0.9, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1),
+            (2.2, 2.1, 1.7, 1.1, 0.6, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            (2.3, 2.1, 1.4, 0.8, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+
+def flurry_hamlet_ground(x, z):
+    """The sampled ground under the hamlet at (x, z), between its samples."""
+    fx = min(max((x + 16.0) / 2.0, 0.0), 11.999)
+    fz = min(max((z + 20.0) / 2.0, 0.0), 13.999)
+    i, j = int(fx), int(fz)
+    a, b = fx - i, fz - j
+    g = HAMLET_G
+    return (g[j][i] * (1 - a) + g[j][i + 1] * a) * (1 - b) + (g[j + 1][i] * (1 - a) + g[j + 1][i + 1] * a) * b
+
+def flurry_stood(build, x, z, yaw=0.0, y=0.0, pivot=(0.0, 0.0)):
+    """Run `build` (which builds about `pivot` on y = 0) and stand what it
+    made at (x, y, z) turned by `yaw` (box()'s sense): a builder with no yaw
+    of its own, turned whole. Nothing that moves (a pivot would stay behind)."""
+    before = set(bpy.context.scene.objects)
+    build()
+    m = Matrix.Translation(P(x, y, z)) @ Matrix.Rotation(yaw, 4, 'Z') @ Matrix.Translation(-P(pivot[0], 0.0, pivot[1]))
+    bpy.context.view_layer.update()
+    for o in bpy.context.scene.objects:
+        if o not in before:
+            o.matrix_world = m @ o.matrix_world
+    bpy.context.view_layer.update()
+
+def flurry_ice_hut(color, pipe=False, window=0xffc044):
+    """An ice-fishing hut about the origin, its door to +X: a painted box a
+    unit across on two skids, a snowed roof pitched to the back, a lit window
+    in the side, maybe a stovepipe."""
+    for s in (-1, 1):
+        box((1.2, 0.1, 0.14), (0.0, 0.05, s * 0.32), 0x6e4a32)
+    box((0.95, 0.85, 0.85), (0.0, 0.52, 0.0), color)
+    box((1.0, 0.1, 0.9), (0.0, 0.14, 0.0), 0x6e4a32)
+    snowy(box((1.2, 0.16, 1.08), (-0.03, 1.02, 0.0), 0xf3f7fb, roll=-0.14), 0.5)
+    box((0.06, 0.62, 0.36), (0.48, 0.5, -0.12), 0x38383d)
+    box((0.3, 0.3, 0.06), (-0.05, 0.62, 0.43), 0xfff6eb)
+    box((0.2, 0.2, 0.06), (-0.05, 0.62, 0.45), window)
+    if pipe:
+        box((0.12, 0.42, 0.12), (-0.25, 1.25, -0.2), 0x555b66)
+
+def flurry_tip_up(x, z, y=0.06, yaw=0.0):
+    """A hole cut in the ice in its ring of shavings and a tip-up's flag over it."""
+    snowy(cyl(0.3, 0.04, (x, y, z), 0xf3f7fb, segs=8), 0.4)
+    cyl(0.17, 0.05, (x, y, z), 0x2f3a4a, segs=8)
+    box((0.07, 0.5, 0.07), (x + 0.28, y + 0.25, z), 0x7a5a3a)
+    box((0.06, 0.16, 0.24), (x + 0.28, y + 0.45, z + 0.14), 0xff7e44, yaw=yaw)
+
+def flurry_boat(color, upturned=True):
+    """A rowing boat about the origin along Z, keel up on the snow (or the
+    right way up): the hull a board cut to its sheer, a keel, two thwarts."""
+    L, W = 1.0, 0.62
+    if upturned:
+        prism([(-L, 0.0), (L * 0.85, 0.0), (L, 0.16), (L * 0.6, 0.36), (-L * 0.7, 0.38), (-L, 0.22)], 0.0, W, color)
+        box((0.1, 0.08, 1.7), (0.0, 0.41, -0.05), 0x6e4a32)
+        snowy(box((0.4, 0.07, 1.0), (0.0, 0.43, -0.1), 0xf3f7fb), 0.5)
+    else:
+        prism([(-L, 0.12), (-L * 0.7, 0.0), (L * 0.6, 0.0), (L, 0.2), (L, 0.42), (-L, 0.4)], 0.0, W, color)
+        snowy(box((W - 0.12, 0.08, 1.7), (0.0, 0.42, 0.0), 0xf3f7fb), 0.5)
+        for zz in (-0.4, 0.35):
+            box((W + 0.04, 0.07, 0.16), (0.0, 0.46, zz), 0x9a7b55)
+
+def flurry_boathouse():
+    """The boathouse about the origin, open to +X (the lake): plank walls on
+    three sides, a snowed roof falling to the back, a boat drawn up inside on
+    its trestles with its bow out of the door, oars racked on the side."""
+    W, D, H = 2.2, 2.6, 1.5
+    box((W, 0.16, D), (0.0, 0.08, 0.0), 0x868ba1)
+    box((0.16, H, D), (-W / 2 + 0.08, H / 2, 0.0), 0x8a5a3a)
+    for s in (-1, 1):
+        box((W, H, 0.16), (0.0, H / 2, s * (D / 2 - 0.08)), 0x9a5f3c)
+        box((0.2, H + 0.2, 0.2), (W / 2 - 0.1, (H + 0.2) / 2, s * (D / 2 - 0.1)), 0x6e4a32)
+    box((0.2, 0.2, D), (W / 2 - 0.1, H + 0.1, 0.0), 0x6e4a32)
+    snowy(box((W + 0.7, 0.24, D + 0.6), (0.0, H + 0.28, 0.0), 0xeef4f9, roll=0.16), 0.5)
+    box((W - 0.4, 0.5, D - 0.4), (-0.05, 0.75, 0.0), 0x38383d)                # the dark inside
+    flurry_stood(lambda: flurry_boat(0xcf534f, upturned=False), 0.75, 0.0, -math.pi / 2, 0.22)
+    for k in range(2):                                                         # oars on the side wall
+        box((1.9, 0.08, 0.08), (0.0, 0.7 + 0.3 * k, D / 2 + 0.06), 0xfff6eb)
+        box((0.4, 0.18, 0.08), (0.9, 0.7 + 0.3 * k, D / 2 + 0.06), 0xcf534f)
+
+def flurry_fish_rack():
+    """A drying rack about the origin along Z: two trestles, a beam, the catch
+    hung in a row."""
+    for s in (-1, 1):
+        for t in (-1, 1):
+            box((0.12, 1.5, 0.12), (t * 0.28, 0.72, s * 0.95), 0x7a5a3a, roll=-t * 0.36)
+    box((0.12, 0.12, 2.3), (0.0, 1.4, 0.0), 0x7a5a3a)
+    for k in range(6):
+        box((0.07, 0.4, 0.2), (0.0, 1.12, -0.75 + 0.3 * k), (0xa0a8c9, 0x868ba1)[k % 2])
+    snowy(box((0.2, 0.07, 2.0), (0.0, 1.49, 0.0), 0xf3f7fb), 0.5)
+
+def flurry_jetty(a, b, y=0.62, w=1.1):
+    """A timber jetty from `a` on the shore to `b` out on the ice, its deck
+    `y` over the plain: planks on a pair of piles every unit and a half, snow
+    lying along one edge, a wider head at the end with its lantern post, a
+    bench and a ladder down to the ice."""
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    L = math.hypot(dx, dz)
+    yaw = math.atan2(dx, dz)
+    ux, uz = dx / L, dz / L
+    def at(t, l, yy):
+        return (a[0] + ux * t + uz * l, yy, a[1] + uz * t - ux * l)
+    n = int(L / 0.55)
+    for k in range(n):
+        box((w - 0.05 * (k % 2), 0.1, L / n - 0.05), at((k + 0.5) * L / n, 0.0, y), (0x9a7b55, 0x8a6a46)[k % 2], yaw=yaw)
+    for s in (-1, 1):
+        box((0.14, 0.14, L), at(L / 2, s * (w / 2 - 0.1), y - 0.11), 0x6e4a32, yaw=yaw)
+    snowy(box((0.3, 0.09, L * 0.8), at(L * 0.45, -(w / 2 - 0.2), y + 0.08), 0xf3f7fb, yaw=yaw), 0.5)
+    t = 0.3
+    while t < L:
+        for s in (-1, 1):
+            box((0.2, y + 0.75, 0.2), at(t, s * (w / 2 + 0.06), (y + 0.75) / 2 - 0.3), 0x6e4a32, yaw=yaw)
+            snowy(box((0.26, 0.09, 0.26), at(t, s * (w / 2 + 0.06), y + 0.5), 0xf3f7fb, yaw=yaw), 0.5)
+        t += 1.55
+    # the head: a square of deck, a bench, the lantern on its post
+    for k in range(4):
+        box((2.0, 0.1, 0.48), at(L + 0.24 + 0.5 * k, 0.0, y), (0x9a7b55, 0x8a6a46)[k % 2], yaw=yaw)
+    for s in (-1, 1):
+        for tt in (L + 0.1, L + 1.9):
+            box((0.22, y + 0.75, 0.22), at(tt, s * 0.95, (y + 0.75) / 2 - 0.3), 0x6e4a32, yaw=yaw)
+            snowy(box((0.28, 0.09, 0.28), at(tt, s * 0.95, y + 0.5), 0xf3f7fb, yaw=yaw), 0.5)
+    box((0.16, 1.7, 0.16), at(L + 1.85, -0.95, y + 0.85), 0x6e4a32, yaw=yaw)
+    box((0.34, 0.34, 0.34), at(L + 1.85, -0.95, y + 1.8), 0xffc044, yaw=yaw)
+    snowy(box((0.44, 0.1, 0.44), at(L + 1.85, -0.95, y + 2.02), 0xf3f7fb, yaw=yaw), 0.5)
+    box((0.9, 0.1, 0.3), at(L + 1.0, 0.75, y + 0.35), 0x9a7b55, yaw=yaw)
+    for tt in (-0.35, 0.35):
+        box((0.1, 0.3, 0.26), at(L + 1.0 + tt, 0.75, y + 0.2), 0x6e4a32, yaw=yaw)
+    for s in (-1, 1):                                                          # the ladder down to the ice
+        box((0.1, y + 0.3, 0.1), at(L + 2.12, 0.3 + s * 0.22, (y + 0.3) / 2), 0x7a5a3a, yaw=yaw)
+    for k in range(3):
+        box((0.5, 0.07, 0.07), at(L + 2.12, 0.3, 0.14 + 0.2 * k), 0x9a7b55, yaw=yaw)
+
+def flurry_hamlet_build(lite):
+    # Flurry: the fishing hamlet on the lake's south shore, straight ahead of
+    # a car coming down off the bridge and on the outside of the bend that
+    # follows: three log cabins of three sizes stepping up the foot of the
+    # hill, each turned its own way to the lake and the road, their chimneys
+    # smoking; the boathouse on the shore with a boat drawn up inside and
+    # another keel-up beside it, the catch on its drying rack, a woodpile,
+    # sleds and skis by the doors; from the boathouse a timber jetty out over
+    # the bank onto the ice, a lantern at its head; and off the jetty, on the
+    # ice beside the road, the village's painted fishing huts round their
+    # holes, tip-ups flagged, a sledge of gear. Nobody about: their things say
+    # who lives here. Built on the ground sampled under it (HAMLET_G), the
+    # trodden paths between the doors draped, so it levels nothing; the ice is
+    # the lake's (set-frozen-lake), a hand over the plain. The lite build
+    # keeps every third fir of the forest's edge.
+    global FIR_LITE
+    G = flurry_hamlet_ground
+    def foot(x, z, r):
+        return min(G(x + dx, z + dz) for dx in (-r, 0, r) for dz in (-r, 0, r)) - 0.08
+    cabins = ((3.4, -3.6, 0.7, -0.5, 1.5), (-2.8, -0.2, 0.56, -1.05, True), (-1.0, -7.6, 0.5, -0.2, True))
+    def held(x, z, y):                     # a post under a floor, down to the plain (set-check)
+        box((0.3, y + 0.35, 0.3), (x, (y + 0.35) / 2 - 0.3, z), 0x868ba1)['chamfer'] = 0
+        return y
+    for n, (x, z, k, yaw, smoke) in enumerate(cabins):
+        flurry_stood((lambda k, smoke, n: lambda: log_cabin_at(0.0, 10.0 * n, k, smoke=smoke))(k, smoke, n),
+                     x, z, yaw, held(x, z, foot(x, z, 1.2 * k / 0.5)), pivot=(0.0, 10.0 * n))
+    # the boathouse at the jetty's foot, open to the lake
+    bx, bz = -5.6, 3.3
+    flurry_stood(flurry_boathouse, bx, bz, -1.2, held(bx, bz, foot(bx, bz, 1.2)))
+    flurry_stood(lambda: flurry_boat(0x3f7bd9), -2.2, 3.6, 0.9, G(-2.2, 3.6) - 0.04)
+    flurry_stood(flurry_fish_rack, 1.4, 1.6, -0.5, G(1.4, 1.6) - 0.05)
+    flurry_stood(lambda: woodpile(0.0, 0.0, 0.3), 5.4, -1.0, 0.4, G(5.4, -1.0) - 0.05)
+    # the jetty over the bank onto the ice, along the lake's own length
+    flurry_jetty((-4.5, 5.6), (-1.75, 12.7))
+    # the fishing huts on the ice off its head, toward the road
+    for x, z, yaw, color, pipe in ((1.6, 11.3, -0.9, 0xcf534f, True), (4.3, 12.6, -0.3, 0xffc044, False),
+                                   (1.2, 14.9, -1.5, 0x3f7bd9, True), (3.9, 15.9, 0.5, 0x61cb8b, False)):
+        flurry_stood((lambda color, pipe: lambda: flurry_ice_hut(color, pipe, 0xfff6eb if color == 0xffc044 else 0xffc044))(color, pipe),
+                     x, z, yaw, 0.06)
+    marker('anim_smoke:s=0.6#hut', (1.5, 1.5, 11.5))
+    for x, z in ((2.9, 10.9), (5.3, 14.0), (2.6, 16.4), (0.2, 12.9)):
+        flurry_tip_up(x, z, yaw=0.4 * x)
+    # a sledge of gear on the ice, the auger stood by it
+    sled(3.0, 0.06, 13.9, 0.6, color=0xcf534f, L=0.9)
+    box((0.42, 0.28, 0.3), (2.95, 0.3, 13.93), 0x9a7b55, yaw=0.6)
+    box((0.1, 0.8, 0.1), (3.7, 0.46, 14.4), 0x555b66)
+    box((0.4, 0.08, 0.08), (3.7, 0.86, 14.4), 0xff7e44)
+    # the forest's edge behind the cabins, up the hill the road bends away under
+    for n, (x, z, k) in enumerate(((-6.2, -4.2, 2.0), (-8.8, -1.2, 1.7), (-5.2, -9.6, 2.2), (-9.6, -7.4, 1.9),
+                                   (0.8, -11.2, 2.1), (4.2, -8.4, 1.7), (-2.6, -13.2, 2.3), (4.6, -13.4, 1.7),
+                                   (-11.5, -11.5, 2.1), (2.4, -15.6, 2.2), (-6.8, -15.2, 2.0), (-9.4, 4.6, 1.6),
+                                   (-12.6, -3.4, 1.9), (-13.6, 2.2, 1.6))):
+        if lite and n % 3:
+            continue
+        FIR_LITE = lite
+        g = G(x, z)
+        (spruce if n % 4 == 1 else pine)((x, g - 0.35 * k, z), k)
+        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    FIR_LITE = False
+    join_still('hamlet')
+    # what lies on the snow as drawn: the trodden paths, sleds and skis by the doors
+    def lying():
+        def path(p0, p1, w=0.7):
+            L = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+            n = max(2, int(L / 0.9))
+            for k in range(n):
+                t = (k + 0.5) / n
+                rowed(box((w, 0.07, L / n + 0.12), (p0[0] + (p1[0] - p0[0]) * t, 0.0, p0[1] + (p1[1] - p0[1]) * t), 'sky',
+                          yaw=math.atan2(p1[0] - p0[0], p1[1] - p0[1])), 1)
+        path((4.8, -2.4), (2.0, 2.6))
+        path((2.0, 2.6), (-3.6, 4.6))
+        path((-1.6, 1.2), (-0.6, 3.6))
+        path((0.2, -6.2), (2.2, -1.6), 0.6)
+        sled(5.4, 0.0, -4.8, 0.3, color=0xcf534f, L=0.9)
+        sled(-0.6, 0.0, 1.3, 2.0, color=0x3f7bd9, L=0.8)
+        for k in range(2):                           # a pair of skis stood in the snow by the big cabin's door
+            box((0.07, 1.1, 0.14), (5.4, 0.5, -2.3 + 0.2 * k), 0xcf534f, roll=0.12)
+    draped('lying', lying)
+
+@piece(1.0)
+def lake_hamlet():
+    flurry_hamlet_build(False)
+
+@piece(1.0)
+def lake_hamlet_lite():
+    flurry_hamlet_build(True)
 
 def ramp(a, b, w, t, color):
     """A deck `w` wide and `t` thick under the line from glTF point a to b, its
@@ -7211,6 +7359,103 @@ def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='o
             box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
     elif hat == 'cone':
         cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=segs - 2 if rnd else 6, stem=True)
+
+# ---- Powder's sledging hill --------------------------------------------------------
+# The ground drawn over the plain in the knoll's hollow outside the south-west
+# bend (u 0.612, lat -12, yaw 180: +X down to the road), SAMPLED every two
+# units from (-10, -10) like a stand's (FORESTS): re-sample after moving the
+# piece or the land.
+SLEDGE_G = ((7.9, 7.3, 6.5, 5.7, 5.0, 4.4, 3.9, 3.3, 2.6),
+            (7.2, 6.5, 5.7, 4.9, 4.3, 3.8, 3.2, 2.7, 2.0),
+            (6.5, 5.7, 4.9, 4.3, 3.7, 3.2, 2.6, 2.0, 1.4),
+            (5.7, 5.0, 4.4, 3.9, 3.2, 2.5, 2.0, 1.4, 0.9),
+            (5.1, 4.5, 4.0, 3.4, 2.7, 2.0, 1.4, 0.8, 0.8),
+            (4.9, 4.1, 3.5, 2.9, 2.2, 1.5, 1.0, 0.8, 0.7),
+            (5.0, 3.8, 3.1, 2.5, 1.8, 1.9, 1.6, 0.8, 0.7),
+            (5.0, 3.8, 2.7, 2.3, 2.6, 2.9, 2.4, 1.2, 0.7),
+            (5.1, 3.9, 3.6, 3.3, 3.6, 3.9, 3.1, 1.9, 0.7),
+            (5.3, 5.4, 5.4, 4.5, 4.6, 4.9, 3.8, 2.6, 1.5),
+            (7.3, 7.4, 7.2, 6.4, 5.5, 5.7, 4.5, 3.5, 2.6))
+
+def powder_sledge_ground(x, z):
+    fx = min(max((x + 10.0) / 2.0, 0.0), 7.999)
+    fz = min(max((z + 10.0) / 2.0, 0.0), 9.999)
+    i, j = int(fx), int(fz)
+    a, b = fx - i, fz - j
+    g = SLEDGE_G
+    return (g[j][i] * (1 - a) + g[j][i + 1] * a) * (1 - b) + (g[j + 1][i] * (1 - a) + g[j + 1][i + 1] * a) * b
+
+@piece(1.0)
+def sledging_hill():
+    # Powder: the resort's sledging hill in the knoll's hollow outside the
+    # south-west bend, which the run down from the ski school drives at: two
+    # packed runs side by side down the hollow to a bank of snow at the
+    # verge, marker flags down their edges and a banner over the start; a
+    # rope tow up beside them on four posts; sleds riding down the run and
+    # towed back up, nobody on them, and the hire rack at the foot with its
+    # sleds stood in a row. The runs and the sleds' loop drape on the snow as
+    # drawn; the posts stand on the ground sampled under them (SLEDGE_G).
+    # Placed at yaw 180: +X down to the road.
+    G = powder_sledge_ground
+    WOOD, DARK = 0x8a6a46, 0x38383d
+    def post(x, z, h, t=0.2, color=WOOD):
+        g = G(x, z)
+        box((t, g + h + 0.3, t), (x, (g + h) / 2 - 0.15, z), color)
+        return g + h
+    # the rope tow: four posts, a cross arm and a wheel on each, the rope both ways
+    tow = [(5.6, -4.6), (0.8, -4.9), (-4.0, -5.1), (-8.8, -5.3)]
+    tops = []
+    for k, (x, z) in enumerate(tow):
+        y = post(x, z, 2.0, 0.24)
+        box((0.2, 0.2, 1.5), (x, y - 0.12, z + 0.55), WOOD)
+        cyl(0.26, 0.14, (x, y - 0.42, z + 1.1), DARK, segs=8)
+        snowy(box((0.34, 0.1, 1.6), (x, y + 0.04, z + 0.55), 0xf3f7fb), 0.5)
+        tops.append((x, y - 0.4, z))
+    for a, b in zip(tops, tops[1:]):
+        for dz in (0.85, 1.35):
+            strut((a[0], a[1], a[2] + dz), (b[0], b[1], b[2] + dz), 0.1, 0xfff6eb)
+    # the start: a banner over the top of the runs
+    for s in (-1, 1):
+        ys = post(-8.6, 0.6 + s * 2.3, 2.3, 0.22, 0x3f7bd9)
+    box((0.12, 0.6, 4.8), (-8.6, G(-8.6, 0.6) + 2.0, 0.6), 0xcf534f)
+    box((0.14, 0.2, 3.6), (-8.56, G(-8.6, 0.6) + 2.0, 0.6), 0xfff6eb)
+    # marker flags down the runs' edges, red on one side and blue on the other
+    for k in range(5):
+        x = -6.0 + 2.8 * k
+        for s, c in ((-1, 0xcf534f), (1, 0x3f7bd9)):
+            z = 0.6 + s * 2.2
+            y = post(x, z, 0.9, 0.12, 0xfff6eb)
+            box((0.34, 0.26, 0.07), (x + 0.2, y - 0.14, z), c)
+    # the hire rack at the foot: a rail on two posts, sleds stood against it
+    rx, rz = 4.6, 5.2
+    g = G(rx, rz)
+    for s in (-1, 1):
+        post(rx, rz + s * 1.5, 0.8, 0.18)
+    box((0.14, 0.14, 3.2), (rx, g + 0.72, rz), WOOD)
+    for k, c in enumerate((0xcf534f, 0x3f7bd9, 0xffc044, 0x61cb8b, 0xcf534f, 0xa878e8)):
+        box((0.1, 1.0, 0.34), (rx + 0.16, g + 0.46, rz - 1.25 + 0.5 * k), c, roll=0.28)
+        box((0.06, 1.0, 0.06), (rx + 0.24, g + 0.44, rz - 1.25 + 0.5 * k + 0.14), 0x555b66, roll=0.28)
+    snowy(box((0.26, 0.1, 3.3), (rx, g + 0.84, rz), 0xf3f7fb), 0.5)
+    join_still('hill')
+    # what lies on the snow as drawn: the two packed runs, the tow's track, the bank at the foot
+    def lying():
+        for z in (-0.5, 1.7):
+            for k in range(8):
+                rowed(box((1.95, 0.07, 1.5), (-8.2 + 1.85 * k, 0.0, z + 0.12 * math.sin(1.3 * k)), 'sky'), 1)
+        for k in range(8):
+            rowed(box((1.95, 0.07, 0.7), (-8.4 + 1.85 * k, 0.0, -3.6), 'sky'), 1)
+        for k in range(5):
+            snowy(box((1.0, 0.7, 1.3), (6.9, 0.3, -1.6 + 1.15 * k), 0xf3f7fb, yaw=0.2 * (k - 2)), 0.4)
+    draped('lying', lying)
+    # the sleds' loop: down a run, round at the foot, up the tow's track
+    loop = [(-8.6, 1.7), (-5.5, 1.8), (-2.0, 1.6), (1.5, 1.8), (4.6, 1.5), (5.7, 0.2), (5.4, -2.6), (3.0, -3.6),
+            (-1.0, -3.6), (-5.0, -3.6), (-8.4, -3.5), (-9.6, -1.6), (-9.4, 0.6)]
+    for k, (x, z) in enumerate(loop):
+        marker('path_drapesled_%d' % k, (x, 0.05, z))
+    for n, c in enumerate((0xcf534f, 0x3f7bd9, 0xffc044, 0x61cb8b)):
+        x, z = loop[0]
+        with animated('anim_path:c=drapesled:p=13:o=%.3f:f=1#%d' % (n / 4.0 + 0.03 * n, n), (x, 0.05, z)):
+            sled(x, 0.05, z, 0.0, color=c, L=1.1)
 
 @piece(1.0)
 def snowman_field():
@@ -8252,17 +8497,19 @@ def avalanche_slope():
 def warning_sign():
     # Avalanche: an avalanche warning at the foot of a path the slides come
     # down, on the verge a few units off the kerb where a racer reads it, at
-    # its real size beside a car: a yellow diamond with the slope and its
-    # tumbling snow on it, on a post beside a red and white marker pole.
+    # half again its real size beside a car (at its real size the diamond was
+    # lost against the firs): a yellow diamond with the slope and its tumbling
+    # snow on it, on a post beside a red and white marker pole.
     # Draped, so it stands on the verge as drawn.
+    K = 1.6
     def sign():
-        box((0.1, 1.3, 0.1), (0, 0.45, 0), 0x555b66)
-        box((0.06, 0.62, 0.62), (0.04, 0.95, 0), 0x2a2735, pitch=math.pi / 4)
-        box((0.06, 0.54, 0.54), (0.07, 0.95, 0), 0xffc044, pitch=math.pi / 4)
-        prism([(0.17, 0.84), (-0.17, 0.84), (-0.04, 1.06)], 0.11, 0.03, 0x2a2735)
+        box((0.1 * K, 1.3 * K, 0.1 * K), (0, 0.45 * K, 0), 0x555b66)
+        box((0.06, 0.62 * K, 0.62 * K), (0.04 * K, 0.95 * K, 0), 0x2a2735, pitch=math.pi / 4)
+        box((0.06, 0.54 * K, 0.54 * K), (0.07 * K, 0.95 * K, 0), 0xffc044, pitch=math.pi / 4)
+        prism([(0.17 * K, 0.84 * K), (-0.17 * K, 0.84 * K), (-0.04 * K, 1.06 * K)], 0.11 * K, 0.03, 0x2a2735)
         for k in range(6):
-            box((0.1, 0.24, 0.1), (0.0, 0.12 + k * 0.24, 0.7), 0xff5040 if k % 2 == 0 else 0xfff6eb)
-        box((0.5, 0.18, 0.4), (-0.15, 0.0, 0.35), 0xf3f7fb)
+            box((0.1 * K, 0.24 * K, 0.1 * K), (0.0, (0.12 + k * 0.24) * K, 0.7 * K), 0xff5040 if k % 2 == 0 else 0xfff6eb)
+        box((0.5 * K, 0.18, 0.4 * K), (-0.15 * K, 0.0, 0.35 * K), 0xf3f7fb)
     draped('sign', sign)
 
 # ---- Avalanche: the galleries, and the cut in the mountainside they stand in ----
@@ -9091,6 +9338,137 @@ def peak_range(sun, peaks):
                 (0.0, 0.0), sun)
         draped('peak%d' % k, build)
 
+# ---- Glacier's terminal moraine, depot and marked route ---------------------------
+# What the ice left on the outside of the bottom loop, either side of the
+# rookery: each row a block (x, z, ground, size, yaw, kind) in its piece's
+# frame (+X to the road), kind 0 a slate erratic, 1 a block of blue ice the
+# glacier stranded; the ground the renderer draws there over the plain,
+# SAMPLED like a stand's (FORESTS): re-sample after moving a piece or the land.
+MORAINE = {
+    'a': ((0.5, -3.5, 0.70, 3.2, 0.4, 0), (2.0, -1.6, 0.37, 1.8, 1.9, 0), (-1.2, -1.4, 0.82, 2.0, 1.2, 1),
+          (2.4, -5.4, 0.61, 1.1, 2.6, 0), (0.8, 4.2, 0.74, 2.8, 0.8, 1), (-1.4, 5.6, 1.97, 2.4, 2.4, 0),
+          (2.3, 5.9, 0.51, 1.2, 1.7, 0), (2.4, 2.6, 0.19, 1.2, 0.2, 1), (-4.0, 0.5, 2.81, 3.4, 3.0, 0)),
+    'b': ((0.2, -4.2, 0.22, 3.0, 0.3, 0), (2.0, -2.6, 0.22, 1.7, 1.9, 1), (-1.8, -2.4, 0.23, 2.0, 0.9, 0),
+          (1.9, -6.2, 0.21, 1.3, 2.6, 1), (0.4, 4.6, 0.89, 2.6, 0.5, 1), (-1.6, 3.0, 1.59, 2.2, 1.4, 0),
+          (2.2, 6.4, 0.48, 1.4, 2.2, 0), (-2.2, 6.4, 2.72, 1.6, 2.9, 1), (-4.4, -0.2, 2.16, 3.2, 0.7, 0)),
+    'c': ((0.0, -3.5, 2.08, 3.2, 0.5, 0), (-2.0, -1.0, 3.10, 2.4, 1.7, 0), (1.8, -0.8, 1.05, 1.6, 2.3, 1),
+          (1.5, 3.2, 1.37, 2.2, 0.9, 0), (-1.2, 4.4, 2.53, 2.2, 2.8, 1), (-3.6, 2.0, 3.86, 3.0, 1.2, 0),
+          (2.2, -6.0, 0.95, 1.2, 0.1, 0)),
+}
+
+def glacier_moraine(rows, seed):
+    """A stretch of the terminal moraine: big slate erratics bedded in the
+    snow and blocks of blue ice among them, each at the ground sampled under
+    it (a draped block on the near ramp's step stretches), a patch of snow
+    draped so the piece levels nothing."""
+    before = set(bpy.context.scene.objects)
+    for i, (x, z, g, s, yaw, kind) in enumerate(rows):
+        if kind == 0:
+            stone(x, z, s, yaw, seed + 0.37 * i, y=g - 0.26 * s)
+        else:
+            stone(x, z, s, yaw, seed + 0.37 * i, squat=1.25, rock=('sky', 'blue'), y=g - 0.15 * s)
+        # held up from the plain (set-check) by a post inside it, up to just under its apex
+        sq = 1.0 if kind == 0 else 1.25
+        y0 = g - (0.26 if kind == 0 else 0.15) * s
+        sd = seed + 0.37 * i
+        lx, lz = 0.12 * s * math.cos(0.7 * sd), 0.8 * 0.12 * s * math.sin(0.7 * sd)
+        top = y0 + sq * s * (0.62 + 0.08 * jitter(0, 5, sd)) - 0.04
+        box((0.16, top + 0.3, 0.16), (x + lx * math.cos(yaw) + lz * math.sin(yaw), (top - 0.3) / 2,
+                                      z - lx * math.sin(yaw) + lz * math.cos(yaw)), SNOW)['chamfer'] = 0
+    for o in set(bpy.context.scene.objects) - before:
+        if o.get('swatch') in ('sky', 'blue'):     # the ice keeps its blue down the ramp
+            snowy(o, 0.35)
+    join_still('moraine')
+    x, z = rows[0][:2]
+    draped('patch', lambda: box((0.6, 0.1, 0.6), (x, -0.06, z), 0xf3f7fb))
+
+@piece(1.0)
+def glacier_moraine_a():
+    # Glacier: the terminal moraine at the mouth of the bottom loop, on the
+    # outside verge the long raised straight drives at: slate erratics the
+    # ice carried down and blocks of blue ice it left, in two heaps with one
+    # great block higher up the bank, the rookery beyond them.
+    glacier_moraine(MORAINE['a'], 3.0)
+
+@piece(1.0)
+def glacier_moraine_b():
+    # ...and round the loop's far side, on toward the base camp.
+    glacier_moraine(MORAINE['b'], 11.0)
+
+@piece(1.0)
+def glacier_moraine_c():
+    # ...and the lateral moraine at the nunatak's foot, up the steep verge of
+    # the bend back to the line.
+    glacier_moraine(MORAINE['c'], 19.0)
+
+@piece(1.0)
+def glacier_nunatak():
+    # Glacier: a nunatak, the rock of the east range breaking out of the
+    # foothill outside the bend back to the line, a lesser tooth on its
+    # shoulder and a lower rib south of it: the range's own peaks (alp), a
+    # third their size and a third as far off. (Pines stood on this face:
+    # a fir wood on a penguin glacier.) Placed at yaw 180, the frame the east
+    # range's: +X east, away from the road, so it takes the range's sun.
+    peak_range((0.140, 0.979, 0.148), (
+        (0.0, 2.0, 7.5, 9.5, 1.5, 211.0, 0.2, (0.05, 0.05)),
+        (2.5, -14.0, 4.6, 7.0, 1.4, 213.0, -0.2, (0.0, 0.05))))
+
+def glacier_wand(x, z, color, tag, h=2.1):
+    """A route marker: a bamboo wand and its flag flying to +X (toward the
+    road), the cloth square to a car coming along the line."""
+    box((0.12, h, 0.12), (x, h / 2 - 0.1, z), 0xc9a25f)
+    with animated('anim_drape+sway:a=z:d=22:p=%.2f#%s' % (1.5 + 0.13 * (ord(tag[-1]) % 4), tag), (x, h - 0.12, z)):
+        box((0.6, 0.4, 0.06), (x + 0.36, h - 0.34, z), color)
+        box((0.26, 0.32, 0.06), (x + 0.76, h - 0.4, z), color, roll=-0.25)
+
+@piece(1.0)
+def glacier_route_flags():
+    # Glacier: the expedition's marked route beside the start straight, a
+    # wand every six units along the outside verge from the line on toward
+    # the fort, red and orange turn about, the snow trodden between them.
+    # Draped: built on y = 0 and laid on the snow as drawn. Placed at yaw 180
+    # (+X to the road, the line along Z).
+    def trail():
+        for k in range(7):
+            rowed(box((0.7, 0.07, 4.6), (-0.9 + 0.12 * math.sin(1.7 * k), 0.0, -15.0 + 5.0 * k), 'sky',
+                      yaw=0.06 * math.sin(2.3 * k)), 1)
+        for k in range(6):
+            glacier_wand(0.0, -15.0 + 6.0 * k, (0xff5040, 0xff7e44)[k % 2], 'f%d' % k)
+    draped('trail', trail)
+
+@piece(1.0)
+def glacier_depot():
+    # Glacier: the expedition's fuel depot on the outside verge just past the
+    # line, where its marked route sets out: drums stood two deep on their pallets, red and blue, more lying
+    # on a rack beside them, a loaded cargo sledge and one of drums at the
+    # kerb, stores under a tarp, a wall of snow blocks at their back and the
+    # depot's flag on a tall wand over it all. Draped, built on y = 0.
+    DARK = 0x38383d
+    def depot():
+        for k in range(6):                                              # the wind wall behind
+            snowy(box((0.4, 0.5 + 0.12 * (k % 2), 0.9), (-2.6, 0.25, -2.5 + k * 1.0), 0xf3f7fb, yaw=0.08 * (k - 2)), 0.4)
+        for row in range(2):                                            # drums on their pallets
+            box((1.3, 0.12, 3.3), (-1.3 + 1.25 * row, 0.06, -0.4), 0x9a7b55)
+            for i in range(5 - row):
+                c = (0xcf534f, 0xcf534f, 0x3f7bd9)[(i + row) % 3]
+                for j in range(2):
+                    cyl(0.26, 0.66, (-1.6 + 1.25 * row + 0.56 * j, 0.12, -1.7 + 0.64 * i), c, segs=10, stem=True)
+                    box((0.36, 0.05, 0.36), (-1.6 + 1.25 * row + 0.56 * j, 0.8, -1.7 + 0.64 * i), DARK)
+        for i in range(3):                                              # a second tier lying on the back row
+            cyl(0.26, 0.66, (-1.65, 1.1, -1.4 + 0.75 * i), (0x3f7bd9, 0xcf534f, 0x3f7bd9)[i], segs=10, axis='across', stem=True)
+        box((1.0, 0.6, 0.9), (-1.2, 0.3, 2.4), 0xfde4c7)                   # stores under their tarp
+        box((0.7, 0.5, 0.7), (-0.2, 0.25, 2.7), 0x9a7b55)
+        box((1.1, 0.1, 1.0), (-1.2, 0.65, 2.4), 0x61cb8b)
+        for k in range(3):                                              # jerrycans by the sledge
+            box((0.24, 0.36, 0.16), (1.3, 0.18, 1.5 + 0.26 * k), 0xcf534f)
+        cargo_sledge(1.5, -2.6, ('drums',))
+        cargo_sledge(1.3, 3.6, ('crates',))
+        box((0.14, 3.2, 0.14), (-2.0, 1.5, 3.6), 0xc9a25f)
+        with animated('anim_drape+sway:a=x:d=22:p=1.8#flag', (-2.0, 3.1, 3.6)):
+            box((0.06, 0.6, 0.6), (-2.0, 2.76, 3.96), 0xff5040)
+            box((0.06, 0.54, 0.5), (-1.94, 2.72, 4.46), 0xff5040, yaw=0.3)
+    draped('depot', depot)
+
 @piece(1.0)
 def glacier_peaks_south():
     # Glacier: a second stretch of the range, closing the valley's south side
@@ -9252,8 +9630,12 @@ def cirque_ribs(face, k):
     ox, oz = RIB_AT[face]
     def build():
         for i, spine in enumerate(RIBS[face]):
-            crag([(x - ox, z - oz) for x, z in spine], ((0.0, 3.0), (0.25, 3.8), (0.7, 2.9), (1.0, 1.6)),
-                 seed=62.0 + 7 * k + i, sink=1.8, rock=(ROCK, ROCK), snow=0.86)
+            # (the west face's stand lower under more snow: full height, they read from
+            # the run to the loop as dark claw strokes on a smooth dome)
+            low = 0.72 if face == 'w' else 1.0
+            crag([(x - ox, z - oz) for x, z in spine],
+                 tuple((f, h * low) for f, h in ((0.0, 3.0), (0.25, 3.8), (0.7, 2.9), (1.0, 1.6))),
+                 seed=62.0 + 7 * k + i, sink=1.8, rock=(ROCK, ROCK), snow=0.74 if face == 'w' else 0.86)
     draped('ribs', build)
 
 @piece(1.0)
@@ -9419,16 +9801,6 @@ def debris_tongue(rows, seed):
         pts.append(r)
     for o in sheet(pts, lambda i, j, n: SNOW, 'tongue'):
         snowy(o, 0.3)
-
-@piece(1.0)
-def avalanche_cabin():
-    # Avalanche: the log cabin by the crossing, its chimney smoking, at its
-    # real size beside a car (a set piece, so it stands where it is put: the
-    # theme's procedural cabin re-rolled its spot whenever a piece's
-    # footprint moved, and came to the kerb, where its roof read as a slab
-    # on a crate). Placed at u 0.232, lat -17.5, yaw 150, door on +X.
-    log_cabin_at(0.0, 0.0, 0.58, smoke=True)
-    join_still('cabin')
 
 @piece(1.0)
 def avalanche_debris_lobe():
@@ -9731,6 +10103,114 @@ def avalanche_gallery_loop():
 # ====================================================================================
 # BACKYARD
 # ====================================================================================
+
+# ---- Avalanche's snow fences and the road keeper's depot -----------------------
+# The ground drawn over the plain on the open slope above the run to the last
+# loop (u 0.585, lat -13, yaw 180: +X down the fall line to the road), SAMPLED
+# every two units from (-8, -10) like a stand's (FORESTS): re-sample after
+# moving the piece or the land.
+FENCE_G = ((4.6, 3.6, 3.0, 2.7, 2.0, 1.4, 0.7, 0.4),
+           (4.8, 3.8, 3.0, 2.5, 1.8, 1.2, 0.6, 0.4),
+           (5.0, 4.0, 3.1, 2.7, 2.3, 1.9, 1.1, 0.4),
+           (6.0, 5.2, 4.1, 3.5, 3.1, 2.6, 1.4, 0.4),
+           (7.2, 6.3, 5.1, 4.4, 4.0, 2.9, 1.7, 0.4),
+           (8.5, 7.3, 6.1, 5.2, 4.5, 3.2, 2.0, 0.7),
+           (9.5, 8.3, 7.1, 6.1, 4.8, 3.6, 2.4, 1.1),
+           (10.5, 9.2, 7.9, 6.7, 5.4, 4.2, 3.0, 1.5),
+           (11.0, 9.7, 8.4, 7.2, 6.0, 4.8, 3.4, 1.9),
+           (11.5, 10.2, 9.0, 7.8, 6.6, 5.4, 3.8, 2.2),
+           (12.0, 10.7, 9.6, 8.4, 7.2, 5.8, 4.2, 2.5))
+
+def avalanche_fence_ground(x, z):
+    fx = min(max((x + 8.0) / 2.0, 0.0), 6.999)
+    fz = min(max((z + 10.0) / 2.0, 0.0), 9.999)
+    i, j = int(fx), int(fz)
+    a, b = fx - i, fz - j
+    g = FENCE_G
+    return (g[j][i] * (1 - a) + g[j][i + 1] * a) * (1 - b) + (g[j + 1][i] * (1 - a) + g[j + 1][i + 1] * a) * b
+
+def avalanche_snow_bridge(x, z, L=2.5):
+    """One length of avalanche barrier across the fall line at (x, z): a rack
+    of four steel beams along Z on two posts leaning out over the slope below
+    (+X), each propped from downhill, snow lying on its top beam and banked
+    behind it. Stands on the sampled slope, a post under each foot down to
+    the plain (set-check)."""
+    G = avalanche_fence_ground
+    STEEL, RUST = 0x555b66, 0x8a5a3a
+    g = G(x, z)
+    for s in (-1, 1):
+        zz = z + s * (L / 2 - 0.35)
+        gp = G(x, zz)
+        strut((x - 0.1, gp - 0.25, zz), (x + 0.55, gp + 1.75, zz), 0.2, RUST)
+        gd = G(x + 1.5, zz)
+        strut((x + 1.5, gd - 0.2, zz), (x + 0.42, gp + 1.3, zz), 0.16, RUST)
+        for fx, fg in ((x - 0.1, gp), (x + 1.5, gd)):
+            box((0.14, fg + 0.2, 0.14), (fx, (fg + 0.2) / 2 - 0.3, zz), STEEL)['chamfer'] = 0
+    for k in range(4):
+        h = 0.35 + 0.42 * k
+        box((0.14, 0.2, L), (x + 0.06 + 0.31 * h, g + h, z), STEEL)
+    snowy(box((0.3, 0.14, L - 0.1), (x + 0.6, g + 1.78, z), 0xf3f7fb), 0.5)
+    snowy(box((0.9, 0.6, L - 0.2), (x - 0.55, g + 0.45, z), 0xf3f7fb, roll=-0.5), 0.5)
+
+@piece(1.0)
+def avalanche_fences():
+    # Avalanche: avalanche barriers on the open slope above the run to the
+    # last loop: three rows of steel snow bridges across the fall line,
+    # stepping up the slope one above the other and staggered, each holding
+    # its bank of snow. Built on the ground sampled under it (FENCE_G), a
+    # patch of snow draped so it levels nothing. Placed at yaw 180: +X down
+    # the slope to the road.
+    for row, (x, z0, n) in enumerate(((3.2, -7.5, 5), (-0.6, -5.0, 5), (-4.4, -6.2, 5))):
+        for k in range(n):
+            avalanche_snow_bridge(x + 0.15 * math.sin(1.9 * k + row), z0 + 2.9 * k)
+    join_still('fences')
+    draped('patch', lambda: box((0.6, 0.1, 0.6), (3.2, -0.06, -7.5), 0xf3f7fb))
+
+@piece(1.0)
+def road_keeper():
+    # Avalanche: the road keeper's depot on the outside of the bend after the
+    # crossing, which the run off the bridge drives at: the keeper's hut, red
+    # under its snowed roof, its chimney smoking; beside it the open plough
+    # shed, the gritter parked in it nose out; a heap of grit with its
+    # shovel, spare marker poles racked against the shed, a fuel tank on its
+    # cradle and the pass's big avalanche warning by the kerb. Nobody about.
+    # Front to +X.
+    RED, TIMBER_, DARK = 0xcf534f, 0x8a5a3a, 0x38383d
+    # the hut
+    cabin_hut(2.3, 1.7, 2.6, (-0.6, 0.0, -3.4), RED, 0xeef4f9)
+    box((0.5, 1.5, 0.5), (-1.3, 2.4, -4.0), 0x868ba1)
+    snowy(box((0.62, 0.12, 0.62), (-1.3, 3.2, -4.0), 0xf3f7fb), 0.5)
+    marker('anim_smoke#keeper', (-1.3, 3.3, -4.0))
+    for s in (-1, 1):                                               # red shutters by the door
+        box((0.06, 0.6, 0.22), (0.58, 0.95, -3.4 + s * 0.78), 0xfff6eb)
+    # the plough shed: three walls, a roof falling to the back, open to +X
+    W, D, H = 4.2, 3.6, 2.6
+    sx, szc = -0.8, 1.6
+    box((0.18, H, D), (sx - W / 2 + 0.09, H / 2, szc), TIMBER_)
+    for s in (-1, 1):
+        box((W, H, 0.18), (sx, H / 2, szc + s * (D / 2 - 0.09)), 0x9a5f3c)
+        box((0.26, H + 0.3, 0.26), (sx + W / 2 - 0.13, (H + 0.3) / 2, szc + s * (D / 2 - 0.13)), 0x6e4a32)
+    box((0.26, 0.3, D), (sx + W / 2 - 0.13, H + 0.2, szc), 0x6e4a32)
+    snowy(box((W + 0.9, 0.3, D + 0.7), (sx, H + 0.5, szc), 0xeef4f9, roll=0.12), 0.5)
+    box((W - 0.5, 0.3, D - 0.5), (sx - 0.1, 0.16, szc), DARK)       # the oiled floor
+    plough_truck(sx - 0.2, szc, math.pi / 2, k=1.05, y=0.1)
+    # grit, poles, fuel
+    cyl(1.0, 0.9, (1.6, 0.0, 4.6), 0x9a7b55, r2=0.12, segs=9)
+    box((0.1, 1.0, 0.1), (2.3, 0.5, 4.1), 0x7a5a3a, roll=0.3)
+    box((0.3, 0.3, 0.06), (2.45, 0.9, 4.1), 0x868ba1, roll=0.3)
+    for k in range(4):                                              # spare marker poles against the shed
+        for j in range(5):
+            box((0.12, 0.36, 0.12), (1.45 + 0.09 * j, 0.2 + 0.36 * j, -0.5 + 0.26 * k), 0xff5040 if j % 2 == 0 else 0xfff6eb,
+                roll=-0.24)
+    cyl(0.42, 1.5, (-0.2, 0.55, -1.0), 0xfff6eb, segs=10, axis='across', stem=True)
+    for dx in (0.25, 1.05):
+        box((0.16, 0.6, 0.9), (-0.2 + dx, 0.3, -1.0), DARK)
+    # the pass's warning, big, by the kerb
+    box((0.16, 2.6, 0.16), (2.8, 1.3, -1.6), 0x555b66)
+    box((0.08, 1.24, 1.24), (2.86, 2.2, -1.6), 0x2a2735, pitch=math.pi / 4)
+    box((0.08, 1.08, 1.08), (2.9, 2.2, -1.6), 0xffc044, pitch=math.pi / 4)
+    prism([(-1.26, 1.98), (-1.94, 1.98), (-1.68, 2.42)], 2.96, 0.04, 0x2a2735)
+    join_still('depot')
 
 def strut(a, b, t, color):
     """A square bar `t` across from glTF point a to b: a ladder rail, a fork."""

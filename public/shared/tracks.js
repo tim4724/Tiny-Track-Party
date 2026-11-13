@@ -863,7 +863,11 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman family on the outside verge of the east bend, at road
       // height, ahead of a car coming over the hump off the start straight
-      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 },
+      // the sledging hill in the knoll's hollow outside the south-west bend,
+      // dead ahead of the run down from the ski school (built on the ground
+      // sampled under it, set_prototypes.py SLEDGE_G)
+      { model: 'set-sledging-hill', u: 0.612, lat: -12, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -900,13 +904,14 @@ export const TRACKS = {
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
-      // the village round the lap, close by the road where a racer reads a
-      // cabin (see:landmarks): by the start, past the lake in the bend's
-      // inside, on the east loop, on the run in
+      // the fishing hamlet on the lake's south shore, dead ahead of the run
+      // down off the bridge and outside the bend after it: cabins up the
+      // hill's foot, the boathouse, the jetty out onto the ice, the fishing
+      // huts on it beside the road (built on the ground sampled under it,
+      // set_prototypes.py HAMLET_G: re-sample after moving it or the land)
+      { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: 180 },
+      // one more corner of the village by the start
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
-      { model: 'set-log-cabin', u: 0.392, lat: 8, yaw: 20 },
-      { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
-      { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
@@ -989,20 +994,22 @@ export const TRACKS = {
       { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       // each rookery turned so its white fronts face the road and the car
-      // coming at it: one off the run into the bottom loop, one below the NE
-      // bend's crest
-      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 35 },
+      // coming at it: one on the moraine outside the bottom loop, dead ahead
+      // of the long raised straight, one below the NE bend's crest
+      { model: 'set-penguin-group', u: 0.645, lat: -10, yaw: 145 },
       { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
+      // the terminal moraine either side of that rookery, on the loop's
+      // outside verge: slate erratics and stranded blocks of blue ice (built
+      // on the ground sampled under them, set_prototypes.py MORAINE)
+      { model: 'set-glacier-moraine-a', u: 0.628, lat: -9, yaw: 180 },
+      { model: 'set-glacier-moraine-b', u: 0.678, lat: -9.5, yaw: 180 },
       // beside the raised straight: the dog team's trail along the drift on
       // its left, the flagged crevasses of the glacier's snout on its right
       { model: 'set-glacier-dog-trail', u: 0.432, lat: -8.5, yaw: 180 },
       { model: 'set-glacier-crevasses', u: 0.52, lat: 15, yaw: 0 },
-      // the advanced camp up on the crest of the glacier's lateral bank, on
-      // the snow as drawn (no bank of its own: a bank's foot withholds the
-      // land it stands in, and nearer the road the ground is held down to the
-      // decks by the grid cells the roads cross, so a camp there sinks
-      // behind the raised east leg)
-      { model: 'set-advanced-camp', u: 0.886, lat: -19.5, yaw: 20 },
+      // the advanced camp at the foot of the flagged crevasses, outside the
+      // bend east off the run back from the bottom loop, which drives at it
+      { model: 'set-advanced-camp', u: 0.76, lat: -7.5, yaw: 150 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 137 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
@@ -1013,9 +1020,15 @@ export const TRACKS = {
       { model: 'set-glacier-peaks-east', u: 0.45, lat: -66 },
       // the expedition's airstrip inside the top loop, beside the top straight
       { model: 'set-glacier-airstrip', u: 0.2, lat: 9 },
-      // pines up the face of the foothill over the bottom loop, so it reads as
-      // mountainside, not a white wall (sampled, set_prototypes.py FORESTS)
-      { model: 'set-glacier-forest-a', u: 0.8423, lat: 14.87 }
+      // a nunatak on the foothill outside the bend back to the line: the east
+      // range's rock breaking out of it (the frame the range's, +X east), the
+      // lateral moraine up the verge at its foot
+      { model: 'set-glacier-nunatak', u: 0.8423, lat: 24, yaw: 180 },
+      { model: 'set-glacier-moraine-c', u: 0.85, lat: 9.5 },
+      // the expedition's fuel depot just past the line, and its flagged
+      // route on along the start straight's outside verge
+      { model: 'set-glacier-depot', u: 0.012, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -1100,8 +1113,12 @@ export const TRACKS = {
       // the mountainside outside the top loop: three avalanche paths come
       // down through its forest to the road, a warning sign at the foot of
       // the first two, the third coming down onto the snow shed's roof
-      // a log cabin by the crossing, a little back from it
-      { model: 'set-avalanche-cabin', u: 0.232, lat: -17.5, yaw: 150 },
+      // the road keeper's depot outside the bend after the crossing, dead
+      // ahead of the run off the bridge: his hut, the plough shed, grit
+      { model: 'set-road-keeper', u: 0.485, lat: 11, yaw: 40 },
+      // avalanche barriers stepping up the open slope above the run to the
+      // last loop (built on the ground sampled under them, FENCE_G)
+      { model: 'set-avalanche-fences', u: 0.585, lat: -13, yaw: 180 },
       { model: 'set-warning-sign', u: 0.27, lat: 4.4, yaw: 44 },
       // ...and the first path's slide come down across the road, ploughed
       // through (the blocks stand at the ground sampled under them)
