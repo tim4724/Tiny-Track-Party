@@ -1071,7 +1071,7 @@ its code:
   that brings its own ground, SET_GROUND, nor that ground, which the
   generator refuses).
 
-- **The cup's ambient life** (`theme.life`: petals, tumbleweeds, spray,
+- **The cup's ambient life** (`theme.life`: petals, tumbleweeds,
   motes): blended sprites are fill, and none has been priced on the box yet
   (`resolve_theme`).
 

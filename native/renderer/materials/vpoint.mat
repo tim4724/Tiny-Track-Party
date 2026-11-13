@@ -40,7 +40,7 @@
 // material, and every knob it adds is a uniform that leaves the weather's path
 // as it was (each 0 there):
 //   - `mask` scales a sprite's alpha by the floor texture's G, the map of
-//     where that life lives (round a cherry, along the surf, by the road), and
+//     where that life lives (round a cherry, by the road), and
 //     lays the band on the floor texture's R, the ground under it, so the tap
 //     runs in a split's lite cells too;
 //   - `tile` (world units) wraps a sprite inside its own seed's tile of the
@@ -48,9 +48,7 @@
 //     a sunbeam's few dozen motes cost a few dozen sprites, not a camera box
 //     of them;
 //   - `hop` (rad/s) STANDS a sprite on the floor (R) instead of in the band
-//     and bounces it: a tumbleweed rolling, spray thrown up off the water
-//     (`hopFade` fades it into the water at the bottom of each throw, and
-//     throws neighbours together, so the surf bursts in runs);
+//     and bounces it: a tumbleweed rolling;
 //   - `flutter` turns a sprite edge-on and back, a petal tumbling;
 //   - `twig` draws the fragment as a see-through ball of stems, turned by the
 //     roll the vertex stage hands over in fog.y.
@@ -89,7 +87,6 @@ material {
         { type : float, name : mask },
         { type : float, name : tile, precision : high },
         { type : float, name : hop },
-        { type : float, name : hopFade },
         { type : float, name : flutter },
         { type : float, name : twig }
     ]
@@ -149,11 +146,9 @@ vertex {
         highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
         if (materialParams.hop > 0.0) {
             highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;
-            // Spray throws in runs along the shore; a tumbleweed hops alone.
-            highp float ph = materialParams.hopFade > 0.5 ? dot(posU.xz, vec2(0.23, 0.17)) : h1 * 61.0;
-            float up = abs(sin(t * materialParams.hop + ph));
+            float up = abs(sin(t * materialParams.hop + h1 * 61.0));
             posU.y = f.r + materialParams.halfSize + materialParams.bob * up;
-            material.color.a *= f.g * mix(1.0, up, materialParams.hopFade);
+            material.color.a *= f.g;
             material.fog.y = materialParams.wind * pace * t / max(materialParams.halfSize, 0.01);
         } else if (materialParams.mask > 0.5) {
             highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;

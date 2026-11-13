@@ -2223,9 +2223,9 @@ private:
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
     // THE CUP'S AMBIENT LIFE (theme.life): a second cloud through the same
     // material (vpoint.mat says what its uniforms add), with a texture of its
-    // own over the flake floor's grid: R the floor it lives on (the ground,
-    // or the water under spray), G where it lives (round the set pieces its
-    // `near` names, along the surf, by the road). Life that lives in a place
+    // own over the flake floor's grid: R the floor it lives on (the ground),
+    // G where it lives (round the set pieces its `near` names, by the road).
+    // Life that lives in a place
     // is SEEDED there, in kLifeTile tiles it never leaves; a tumbleweed, which
     // lives along every road, rides the camera box like the weather. Never
     // culled per cell: it is a few hundred sprites, not thousands.
