@@ -11504,14 +11504,18 @@ def football_pitch():
     # the club's pavilion across it from the road and match-day bunting down
     # the road's touchline. No game: players at this size read as specks.
     PW, PL, T = 26.0, 42.0, 0.42
+    TY = 0.2                                      # the turf's height
     W = 'white'
     n = 8                                         # the turf, mown across in eight stripes
     for q in range(n):
         z0, z1 = -PL / 2 - 3.0 + (PL + 6.0) * q / n, -PL / 2 - 3.0 + (PL + 6.0) * (q + 1) / n
-        rowed(ground_poly([(-PW / 2 - 3.0, 0.03, z0), (PW / 2 + 3.0, 0.03, z0), (PW / 2 + 3.0, 0.03, z1),
-                           (-PW / 2 - 3.0, 0.03, z1)], [(0, 3, 2, 1)], 'leaf'), (27, 31)[q % 2])
+        # (a hand over the clearing: the lawn the renderer levels under it
+        # lies a hair either side of the piece's own level, and at 0.03 it
+        # came through the turf in whole triangles)
+        rowed(ground_poly([(-PW / 2 - 3.0, TY, z0), (PW / 2 + 3.0, TY, z0), (PW / 2 + 3.0, TY, z1),
+                           (-PW / 2 - 3.0, TY, z1)], [(0, 3, 2, 1)], 'leaf'), (27, 31)[q % 2])
     def line(x, z, w, l, yaw=0.0):
-        box((w, 0.06, l), (x, 0.07, z), W, yaw=yaw)
+        box((w, 0.06, l), (x, TY + 0.04, z), W, yaw=yaw)
     for s in (-1, 1):
         line(s * PW / 2, 0, T, PL + T)
         line(0, s * PL / 2, PW, T)
@@ -12207,17 +12211,19 @@ def blossom_grove_b():
 # cherry either side and benches facing it. Front (+X) to the road.
 @piece(REAL)
 def bandstand():
-    # On the crown of its own knoll (SET_GROUND, a broad round top): the floor
-    # lies flush in the turf, a stone kerb round it sunk into the ground, the
-    # posts off the floor, and every other part (the bunting's poles, the
-    # benches, the steps down the road side) stands where the knoll's ground
-    # is under it. No base to stand proud of a slope.
+    # On the crown of its own knoll (SET_GROUND, a broad round top), on a
+    # low stone base a step and a half high, as a bandstand has: the knoll
+    # as DRAWN is the ground's 9 u chords, up to a hand over the formula at
+    # the crown, and a floor laid flush in the turf lay under it with its
+    # steps. The benches and the steps down the road side stand a little
+    # over the formula for the same reason, their feet sunk.
     RED, WHITE = 0xcf534f, 'white'
     H = set_ground('bandstand')
     s0 = H(0.0, 0.0)
-    cyl(3.7, 0.9, (0, s0 - 0.75, 0), 'cream', segs=8)                 # the kerb, its top a hand over the turf
-    cyl(3.3, 0.1, (0, s0 + 0.15, 0), 0x9a7b55, segs=8)                # the boards
-    F0 = s0 + 0.25
+    BASE = 1.1
+    cyl(3.7, BASE + 0.75, (0, s0 - 0.75, 0), 'cream', segs=8)         # the base
+    cyl(3.3, 0.1, (0, s0 + BASE, 0), 0x9a7b55, segs=8)                # the boards
+    F0 = s0 + BASE + 0.1
     for k in range(8):
         a = k * math.pi / 4 + math.pi / 8
         x, z = 3.0 * math.cos(a), 3.0 * math.sin(a)
@@ -12237,10 +12243,13 @@ def bandstand():
         bunting((4.2 * math.cos(a), F0 + 3.4, 4.2 * math.sin(a)), (px, top - 0.1, pz),
                 (0xff5040, 0xffc044, 0x339cf2, 0x22c46e, 'white'), n=7)
     for z in (-3.2, 3.2):
-        bench((6.0, H(6.0, z), z), yaw=math.pi / 2)
-    for i in range(7):                                             # stone steps down the road side
+        bench((6.0, H(6.0, z) + 0.4, z), yaw=math.pi / 2)
+        for sx in (-0.7, 0.7):
+            box((0.2, 0.6, 0.2), (6.0, H(6.0, z) + 0.1, z + sx), 0x7a5a3a)
+    for i in range(7):                                             # stone steps down the road side, the top two up the base
         x = 4.2 + 1.1 * i
-        box((1.15, 0.5, 2.2), (x, H(x + 0.5, 0.0) - 0.12, 0.0), 'grey')
+        top = max(H(x + 0.5, 0.0) + 0.45, s0 + BASE - 0.4 * (i + 1))
+        box((1.15, 1.0, 2.2), (x, top - 0.5, 0.0), 'grey')
     join_still('bandstand')
 
 # ---- PRETZEL: the picnic under the great oak -----------------------------------------
