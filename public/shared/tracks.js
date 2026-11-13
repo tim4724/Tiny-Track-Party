@@ -742,6 +742,8 @@ export const TRACKS = {
   },
   riptide: {
     name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
+    // no sand on the causeway: over the water the kerbs stand at the asphalt's edge
+    sandOffFrom: 0.44, sandOffTo: 0.585,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,
