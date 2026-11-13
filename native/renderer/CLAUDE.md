@@ -520,6 +520,14 @@ edge under every far kerb on a hill; the user kept the kerb-only look. It is
 renderer-only: the sim never reads it, and pillars, berms and the gantry still
 stand on `groundY` with their feet buried.
 
+**A cup builds its own piers** (`theme.pier`, `buildStructures`): stone in
+courses, painted concrete, timber. The sim's pillar is a 0.5 u column whatever
+is drawn, so a make stays inside the margin the builder keeps a pillar from
+any road (`RADIUS + MARGIN`), and nothing drawn reaches one. **The
+deck's underside is lit as the deck in shade**, baked (`buildRoadMesh`): lit as
+what it faces, it was a near-black slab over every road that passes under a
+bridge.
+
 THE GROUND IS TWO SURFACES IN ONE MESH: the 9 u grid, and the verge band laid
 over it along the road (`buildVergeBand`, `TtpRenderer.h` has its numbers). The
 drawn ground is the HIGHER of them, and so is every lookup (`groundSurfaceY`,
@@ -1042,7 +1050,8 @@ decimates a kit model from the ratio SOURCES.json records for it).
 so the weakest device (the Android TV box at 4P/540) holds while the web and
 the Apple TV draw FULL and keep the headroom over it. The tier is decided in
 C++ (`ttp/detail.h`, from the platform each shell names to
-`ttp_display_detail`) and latched like the shadows: `setLite` drops the static
+`ttp_display_detail`, and on the web from its frames: lite once the render
+scale has sat on its bottom rung for a race) and latched like the shadows: `setLite` drops the static
 key, since most cuts are built in, and the static scene's key (`bakeKeyFor`)
 names the tier, since the two tiers build different worlds. The shell asks for
 the tier before it fetches a track's models, because the theme names the lite
@@ -1062,6 +1071,10 @@ its code:
   `lite: false` is left out of the lite tier's list altogether (not a piece
   that brings its own ground, SET_GROUND, nor that ground, which the
   generator refuses).
+
+- **The cup's ambient life** (`theme.life`: petals, tumbleweeds, spray,
+  motes): blended sprites are fill, and none has been priced on the box yet
+  (`resolve_theme`).
 
 - **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
   16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a

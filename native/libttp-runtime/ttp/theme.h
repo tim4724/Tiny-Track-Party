@@ -45,8 +45,11 @@ enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUN
 // wall over it), 'island' a sparse low offshore chain with sea gaps between
 // features.
 enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
-// Ambient particle motion presets (trackPayload.js AMB_KINDS).
-enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE };
+// Ambient particle motion presets (trackPayload.js AMB_KINDS), and the three
+// the cups' ambient life added (Theme::life): a petal tumbling down, a
+// tumbleweed rolling on the floor, spray thrown up where the surf breaks.
+enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE,
+                          AMB_PETAL, AMB_TUMBLE, AMB_SPRAY };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.
@@ -174,6 +177,18 @@ struct AmbientSpec {
   float size = 0.3f, opacity = 0.85f;
   uint32_t tint = 0xffffff;
   float fall = 1, wind = 0.7f, bob = 0, band = 1;
+  // The rest is the ambient LIFE's (Theme::life), post-corpus: theme_check
+  // serializes the fields above only.
+  // `hop` (rad/s) stands a particle ON the floor and bounces it `bob` high
+  // instead of drifting in the band: the tumbleweed's and the spray's.
+  float hop = 0;
+  uint32_t tint2 = 0;     // every second particle's tint; 0 = `tint`
+  // Where it lives: round every set piece whose model name holds `near`, out
+  // to `reach` past its footprint (an avenue's petals, a sunbeam's motes).
+  // Empty: the kind's own place (the surf for spray, the road's verges for a
+  // tumbleweed), or everywhere.
+  std::string near;
+  float reach = 0;
 };
 struct BirdSpec {  // trackPayload.js DEF_BIRDS
   uint32_t count = 0, tint = 0xffffff;
@@ -185,6 +200,24 @@ struct PlaneSpec {  // trackPayload.js DEF_PLANE
   float size = 3.2f, y = 22, a0 = 1.3f, rc = 95, rb = 32, speed = 0.3f, bank = 0.4f;
 };
 struct BalloonSpec { std::vector<uint32_t> panels; float y = 44, size = 6; };
+// How a bridge pillar is BUILT (TtpRenderer::buildStructures), each cup's own
+// make: a plain column, a stone pier in courses (on snow, with snow lying on
+// its cap and its footing), a painted concrete pier on a footing under a cap,
+// or a timber post under a cap beam. The shaft wears `shaft`, or
+// `Theme::structure` where that is 0.
+// Renderer-only: the sim's pillar is a 0.5 u column whatever this says, and a
+// make stays inside the margin the builder keeps a pillar from any road
+// beside it, so nothing drawn reaches a road the sim lets a car onto.
+// Post-corpus (theme_check does not serialize it).
+enum PierKind : uint32_t { PIER_COLUMN = 0, PIER_STONE, PIER_PAINTED, PIER_TIMBER };
+struct PierSpec {
+  uint32_t kind = PIER_COLUMN;
+  uint32_t shaft = 0;   // 0: Theme::structure
+  uint32_t course = 0;  // STONE: every second course's stone
+  uint32_t cap = 0;     // the cap block (TIMBER: the cap beam)
+  uint32_t foot = 0;    // the footing
+  uint32_t snow = 0;    // STONE: the snow on the cap and the footing; 0 = none
+};
 struct IceSpec { uint32_t sheet = 0xa9d7ee, frost = 0xf0f8fd; };
 
 // The track's SET PIECES (public/shared/tracks.js `set`): composed landmark
@@ -231,8 +264,9 @@ struct Theme {
   uint32_t structure = 0x9aa1b4;  // pillars / poles / loop shafts (toy concrete)
   // Non-empty: the bridge pillars are a toy kit's stacked cylinders, one
   // colour per piece round this list, on a foot disc under a cap (Helix's
-  // marble kit). Empty: plain columns in `structure`.
+  // marble kit). Empty: piers of `pier`'s make.
   std::vector<uint32_t> structureStack;
+  PierSpec pier;
   uint32_t groundKind = GROUND_LAWN;
   // The ground canvas's base colour where a track's land is not its kind's
   // own (a hay-yellow down, a water meadow); 0 keeps the kind's. A landform
@@ -250,6 +284,12 @@ struct Theme {
   WaterSpec water;
   HazeSpec haze;
   AmbientSpec ambient;
+  // THE CUP'S AMBIENT LIFE, beside its weather: what tells the places apart in
+  // the corner of the eye (petals by Cloverleaf's cherries, tumbleweeds across
+  // the canyon roads, spray along the surf, motes in the playroom's sunbeam).
+  // The same cloud as `ambient` (vpoint.mat), a second draw; none on snow,
+  // whose weather is its life. Post-corpus, and left out of the lite tier.
+  AmbientSpec life;
   BirdSpec birds;
   KiteSpec kites;
   bool hasPlane = false;

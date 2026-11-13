@@ -610,6 +610,10 @@ export class Stage {
               this._freshFrames = 0;
               continue;
             }
+            // THE TIER, asked again for a NEW scene only (a new track, or
+            // rebuild()'s fresh race): the web's is earned by its frames
+            // (ttp_display_detail), and a roster-only rebuild can land mid-race.
+            if (sceneSig !== this._sceneSig) this.detail = this.display.detail(CP_PLATFORM, this._detailAsk);
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
             this.display.kitField(kit);              // …and see kitField()

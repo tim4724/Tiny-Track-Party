@@ -25,10 +25,19 @@ enum class Detail { Full, Lite };
 // tier can be filmed and priced where it does not ship (the web's ?detail=,
 // the box's debug.ttp.detail); anything else, null included, leaves the
 // platform's.
-inline Detail detail_for(const char* platform, const char* ask) {
+//
+// THE WEB'S TIER IS EARNED BY ITS FRAMES, not by its device. A browser runs on
+// anything, and there is no honest probe of what (public/display/CLAUDE.md),
+// so it draws full until the render scale has sat on its bottom rung for a
+// race (`floorHeld`, RenderScaleController::liteEarned) and lite from the next
+// scene build on. The Apple TV and the box are known hardware with a tier of
+// their own, so the same evidence moves neither.
+inline Detail detail_for(const char* platform, const char* ask, bool floorHeld) {
     if (ask && std::strcmp(ask, "lite") == 0) return Detail::Lite;
     if (ask && std::strcmp(ask, "full") == 0) return Detail::Full;
-    return platform && std::strcmp(platform, "androidtv") == 0 ? Detail::Lite : Detail::Full;
+    if (!platform) return Detail::Full;
+    if (std::strcmp(platform, "androidtv") == 0) return Detail::Lite;
+    return std::strcmp(platform, "web") == 0 && floorHeld ? Detail::Lite : Detail::Full;
 }
 
 inline const char* detail_name(Detail d) { return d == Detail::Lite ? "lite" : "full"; }

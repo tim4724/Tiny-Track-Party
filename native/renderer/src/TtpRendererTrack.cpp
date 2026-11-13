@@ -1752,6 +1752,14 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         return k;
     };
     std::vector<uint32_t> quadKey((size_t) N * kLaid);
+    // THE UNDERSIDE (the ring's last strip, P[19] back to P[0]) is seen from
+    // under every bridge, and lit as what it faces it bakes to the ground's
+    // bounce times the skirt's darkest corners: a near-black slab over the
+    // road. It is ROAD SEEN FROM BELOW: no corner shade, and at least the
+    // light the deck has in shade (after bakeVertexLight). Baked like the
+    // rest, so it costs a frame nothing.
+    constexpr int kUnderside = kFine - 1;
+    std::vector<uint32_t> underside;
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
         const float3 colL = street[i] > 0 ? KERB_STREET : bandCol(kerbL, i);
@@ -1828,7 +1836,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // A low bank's slope is snow lying on snow, not a kerb's foot
                 // in its shadow: its toe and shoulder darken only as it
                 // stands up against the slab, and its toe on the deck.
-                float ao = AO[pt];
+                float ao = s == kUnderside ? 1.0f : AO[pt];
                 if (tb.kerbBank && (pt <= 1 || pt >= kPts - 2)) {
                     const float c = bankDepth[2 * ri + (pt > 1 ? 1 : 0)];
                     const bool toe = pt == 0 || pt == kPts - 1;
@@ -1842,6 +1850,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
                           onDeck ? P[pt].sign * halfAt(ri) + offAt(ri, pt) : OFF_DECK_LAT });
+                if (s == kUnderside) underside.push_back(corner[v]);
                 roadRemap.push_back(corner[v]);
             }
             // The soup's two triangles, verbatim: (a@i, b@i, b@ni) then
@@ -1859,6 +1868,18 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // vertex per frame — it reads no map, so it is final at build whatever the
     // sun bake later does.
     bakeVertexLight(mRoad);
+    {
+        // The deck's light in shade: the sky's ambient, no sun. Raised to,
+        // never lowered: a loop's underside turned to the sky keeps its sun.
+        const float3 shade = displayLight(matteTerms(float3{ 0, 1, 0 }).xyz);
+        for (const uint32_t k : underside) {
+            for (math::half4* c : { &mRoad.custom0[k], &mRoad.custom1[k] }) {
+                c->x = std::max((float) c->x, shade.x);
+                c->y = std::max((float) c->y, shade.y);
+                c->z = std::max((float) c->z, shade.z);
+            }
+        }
+    }
     buildCarShadowDraws();
     buildSandDraws(tb);
     // The ring's mean baked light at full visibility, display-encoded, for
@@ -3188,6 +3209,10 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         mPollenMat->setParameter("floorTex", mAmbFloorTex,
                 TextureSampler(TextureSampler::MinFilter::LINEAR,
                         TextureSampler::MagFilter::LINEAR));
+        // The life's knobs (vpoint.mat), every one off: the weather's path.
+        for (const char* k : { "mask", "tile", "hop", "hopFade", "flutter", "twig" }) {
+            mPollenMat->setParameter(k, 0.0f);
+        }
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
         // The drawn positions follow the cameras, so no authored-time AABB can
         // bound them: make the box world-sized instead of culling on a lie.
@@ -3195,6 +3220,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         rcm.setAxisAlignedBoundingBox(rcm.getInstance(mPollen.entity),
                 { { 0, 0, 0 }, { 1e4f, 1e4f, 1e4f } });
     }
+    if (mPointMaterial && tb.life.kind != 0 && tb.life.count > 0) buildLife(tb);
 
     // Impact bursts, the JS spec (TrackProps): a THIN shockwave ring that
     // sweeps 0.25 → 2.0 world over IMPACT_TIME 0.7 s at CONSTANT width and
@@ -4085,4 +4111,206 @@ bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
     releaseField();
     resetRace();
     return buildField(roster);
+}
+
+// THE CUP'S AMBIENT LIFE (theme.life; TtpRenderer.h, mLife). Its texture
+// first, over the flake floor's grid: R the floor it lives on, G where.
+void TtpRenderer::buildLife(const TrackBin& tb) {
+    using ttp::rt::AMB_PETAL;
+    using ttp::rt::AMB_SPRAY;
+    using ttp::rt::AMB_TUMBLE;
+    const ttp::rt::AmbientSpec& a = tb.life;
+    constexpr int N = kAmbFloorN;
+    const float cell = 2 * kAmbR / (N - 1);
+    const bool spray = a.kind == AMB_SPRAY && mShoreFn;
+    if (a.kind == AMB_SPRAY && !spray) return;   // no sea, no surf
+    // Round the anchors: full inside 40% of the reach, nothing past it.
+    const auto nearAnchor = [&](float x, float z) {
+        float best = 1e30f;
+        for (const LifeAnchor& f : mLifeAnchors) {
+            const float dx = x - f.x, dz = z - f.z;
+            const float u = std::max(0.0f, std::fabs(dx * f.ax + dz * f.az) - f.hx);
+            const float v = std::max(0.0f, std::fabs(-dx * f.az + dz * f.ax) - f.hz);
+            best = std::min(best, u * u + v * v);
+        }
+        const float r = std::max(a.reach, 0.5f);
+        return 1.0f - smooth01((std::sqrt(best) - 0.4f * r) / (0.6f * r));
+    };
+    // Along the surf: the waterline and a little either side of it.
+    const auto surf = [&](float x, float z) {
+        const float d = std::hypot(x, z) - mShoreFn(std::atan2(z, x));   // + out to sea
+        return 1.0f - smooth01((std::fabs(d - 1.0f) - 1.0f) / 2.0f);
+    };
+    std::vector<float> g((size_t) N * N, 0.0f);
+    if (a.kind == AMB_TUMBLE && a.near.empty()) {
+        // Along the roads, on their verges and across them: splatted from
+        // the centreline every couple of units.
+        constexpr float IN = 9.0f, OUT = 6.0f;
+        const int span = (int) std::ceil((IN + OUT) / cell);
+        for (size_t k = 0; k < tb.samples.size(); k += 8) {
+            const float3 c = tb.samples[k].pos;
+            const int gx0 = (int) std::lround((c.x + kAmbR) / cell), gz0 = (int) std::lround((c.z + kAmbR) / cell);
+            for (int gz = std::max(0, gz0 - span); gz <= std::min(N - 1, gz0 + span); gz++) {
+                for (int gx = std::max(0, gx0 - span); gx <= std::min(N - 1, gx0 + span); gx++) {
+                    const float d = std::hypot(-kAmbR + gx * cell - c.x, -kAmbR + gz * cell - c.z);
+                    float& v = g[(size_t) gz * N + gx];
+                    v = std::max(v, 1.0f - smooth01((d - IN) / OUT));
+                }
+            }
+        }
+    }
+    const auto lives = [&](float x, float z) {
+        if (!a.near.empty()) return nearAnchor(x, z);
+        if (spray) return surf(x, z);
+        return 1.0f;
+    };
+    std::vector<float> floorY((size_t) N * N);
+    for (int gz = 0; gz < N; gz++) {
+        for (int gx = 0; gx < N; gx++) {
+            const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
+            floorY[(size_t) gz * N + gx] = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
+        }
+    }
+    // A tumbleweed stays off a slope the grid cannot draw it on: between a
+    // cut's floor and its rim the bilinear floor is a ramp through the air,
+    // and one rolling there hangs in front of the wall.
+    const auto level = [&](int gx, int gz) {
+        const float h = floorY[(size_t) gz * N + gx];
+        float rise = 0;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                const int nx = std::clamp(gx + dx, 0, N - 1), nz = std::clamp(gz + dz, 0, N - 1);
+                rise = std::max(rise, std::fabs(floorY[(size_t) nz * N + nx] - h));
+            }
+        }
+        return 1.0f - smooth01((rise - 0.5f) / 0.7f);
+    };
+    std::vector<math::half> texels((size_t) N * N * 2);
+    for (int gz = 0; gz < N; gz++) {
+        for (int gx = 0; gx < N; gx++) {
+            const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
+            const size_t i = (size_t) gz * N + gx;
+            texels[i * 2] = math::half(floorY[i]);
+            texels[i * 2 + 1] = math::half(a.kind == AMB_TUMBLE && a.near.empty() ? g[i] * level(gx, gz) : lives(x, z));
+        }
+    }
+    mLifeTex = Texture::Builder()
+            .width((uint32_t) N).height((uint32_t) N).levels(1)
+            .sampler(Texture::Sampler::SAMPLER_2D)
+            .format(Texture::InternalFormat::RG16F)
+            .build(*mEngine);
+    {
+        auto* px = new std::vector<math::half>(std::move(texels));   // heap-owned: the upload is async
+        mLifeTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+                px->data(), px->size() * sizeof(math::half),
+                Texture::Format::RG, Texture::Type::HALF,
+                [](void*, size_t, void* user) { delete (std::vector<math::half>*) user; }, px));
+    }
+
+    // The seeds: in the tiles where it lives, as many a tile as the camera
+    // box would hold over that much ground (`count` keeps the weather's
+    // meaning), grouped by kLifeChunk blocks of the world, each its own
+    // renderable culled on its own bounds (a shore's spray is a ring round
+    // the whole map, and a cell sees a few blocks of it); or, for a
+    // tumbleweed, the camera box itself.
+    const bool tiled = !a.near.empty() || spray;
+    const float bandH = std::max(2.0f, 34.0f * a.band);
+    const float floatH = a.hop > 0 ? a.bob + a.size : bandH;   // how high above its floor a sprite stands
+    uint32_t s = 0x1f3a5c7u;
+    const auto rnd = [&]() {
+        s = s * 1664525u + 1013904223u;
+        return (float) ((double) s / 4294967296.0);
+    };
+    constexpr uint32_t kMaxLife = 6000;
+    constexpr int kLifeChunk = 8;   // tiles a block's side: 32 u
+    std::vector<float3> seeds;
+    if (tiled) {
+        const float T = kLifeTile, per = (float) a.count * T * T / (kAmbBox * kAmbBox);
+        const int t0 = (int) std::floor(-kAmbR / T), t1 = (int) std::ceil(kAmbR / T);
+        for (int cz = t0; cz < t1; cz += kLifeChunk) {
+            for (int cx = t0; cx < t1; cx += kLifeChunk) {
+                const size_t first = seeds.size();
+                for (int tz = cz; tz < std::min(cz + kLifeChunk, t1); tz++) {
+                    for (int tx = cx; tx < std::min(cx + kLifeChunk, t1); tx++) {
+                        const float x0 = tx * T, z0 = tz * T;
+                        float m = 0;
+                        for (const float2 q : { float2{ 0.5f, 0.5f }, float2{ 0, 0 }, float2{ 1, 0 },
+                                                float2{ 0, 1 }, float2{ 1, 1 } }) {
+                            m = std::max(m, lives(x0 + q.x * T, z0 + q.y * T));
+                        }
+                        if (m < 0.05f) continue;
+                        const int k = (int) (per + rnd());
+                        for (int j = 0; j < k && seeds.size() < kMaxLife; j++) {
+                            // Clear of the tile's edges: the shader finds the
+                            // tile again from the reconstructed seed. Its height
+                            // is the floor's plus where in the band it starts,
+                            // which the band's wrap takes as a phase, and which
+                            // gives the block's bounds the right height.
+                            const float x = x0 + 0.05f + rnd() * (T - 0.1f), z = z0 + 0.05f + rnd() * (T - 0.1f);
+                            const float floor = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
+                            seeds.push_back({ x, floor + rnd() * floatH, z });
+                        }
+                    }
+                }
+                if (seeds.size() > first) mLife.tileStarts.push_back((uint32_t) first);   // one sprite, one triangle
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < std::min(a.count, kMaxLife); i++) {
+            seeds.push_back({ rnd() * kAmbBox, rnd() * bandH, rnd() * kAmbBox });
+        }
+    }
+    if (seeds.empty()) return;
+    const uint32_t tintA = packShown(srgbToLinear(a.tint), 1.0f, a.opacity);
+    const uint32_t tintB = packShown(srgbToLinear(a.tint2 ? a.tint2 : a.tint), 1.0f, a.opacity);
+    static const math::float2 CORNER[3] = { { 0, 2 }, { -1.7320508f, -1 }, { 1.7320508f, -1 } };
+    mLife.verts.resize(seeds.size() * 3);
+    mLife.uvs.resize(seeds.size() * 3);
+    mLife.idx.resize(seeds.size() * 3);
+    for (size_t i = 0; i < seeds.size(); i++) {
+        const Vertex v{ seeds[i].x, seeds[i].y, seeds[i].z, (i & 1) ? tintB : tintA };
+        for (int k = 0; k < 3; k++) {
+            mLife.verts[i * 3 + k] = v;
+            mLife.uvs[i * 3 + k] = CORNER[k];
+        }
+    }
+    std::iota(mLife.idx.begin(), mLife.idx.end(), 0u);
+    mLifeHalf = a.size * 0.5f;
+    mLifeBox = tiled ? 0.0f : kAmbBox;
+    mLifeMat = sceneInstance(mPointMaterial);
+    mLifeMat->setParameter("halfSize", mLifeHalf);
+    mLifeMat->setParameter("time", 0.0f);
+    mLifeMat->setParameter("fall", a.fall);
+    mLifeMat->setParameter("wind", a.wind);
+    mLifeMat->setParameter("bob", a.bob);
+    mLifeMat->setParameter("bandH", bandH);
+    mLifeMat->setParameter("boxXZ", kAmbBox);
+    mLifeMat->setParameter("lite", 0.0f);
+    mLifeMat->setParameter("floorOrigin", math::float2{ -kAmbR, -kAmbR });
+    mLifeMat->setParameter("floorInvSpan", 1.0f / (2 * kAmbR));
+    mLifeMat->setParameter("floorTex", mLifeTex,
+            TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    mLifeMat->setParameter("mask", 1.0f);
+    mLifeMat->setParameter("tile", tiled ? kLifeTile : 0.0f);
+    mLifeMat->setParameter("hop", a.hop);
+    mLifeMat->setParameter("hopFade", a.kind == AMB_SPRAY ? 1.0f : 0.0f);
+    mLifeMat->setParameter("flutter", a.kind == AMB_PETAL ? 1.0f : 0.0f);
+    mLifeMat->setParameter("twig", a.kind == AMB_TUMBLE ? 1.0f : 0.0f);
+    if (!buildMesh(mLife, true, mLifeMat)) return;
+    auto& rcm = mEngine->getRenderableManager();
+    if (!tiled) {
+        // Riding the camera box, like the weather: no build-time box bounds it.
+        rcm.setAxisAlignedBoundingBox(rcm.getInstance(mLife.entity), { { 0, 0, 0 }, { 1e4f, 1e4f, 1e4f } });
+        return;
+    }
+    // A block's seeds bound its sprites but for their drift out to the tile's
+    // edge, their size, and the band's (or the hop's) reach over the seed.
+    const float pad = 0.2f + a.size;
+    for (size_t i = 0; i <= mLife.chunks.size(); i++) {
+        const auto ri = rcm.getInstance(i ? mLife.chunks[i - 1] : mLife.entity);
+        if (!ri) continue;
+        const Box b = rcm.getAxisAlignedBoundingBox(ri);
+        const float3 lo = b.getMin() - float3{ pad, pad + floatH, pad }, hi = b.getMax() + float3{ pad, pad + floatH, pad };
+        rcm.setAxisAlignedBoundingBox(ri, Box().set(lo, hi));
+    }
 }

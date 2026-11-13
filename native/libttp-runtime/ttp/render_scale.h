@@ -296,6 +296,19 @@ inline int anchorPoint(const RenderScalePoint* l, int n, RenderScaleLimits b) {
   return at;
 }
 
+// ---- the tier the frames earn ------------------------------------------------
+//
+// THE RUNGS ONLY TRADE PIXELS; the WORLD is the detail tier's (ttp/detail.h),
+// and a browser's tier is measured the same way its resolution is, never
+// probed. A race that sat on the bottom rung for kLiteFloorSec of judged
+// seconds on end could not hold the world even at the softest picture the game
+// will show, so the web draws the box's world (lite) from the next scene build
+// on: that is between races, since a scene is built only there. A race is
+// three laps of 40-60 s, and this is most of one and longer than any lap's
+// heavy stretch. A surface with one rung (a window shorter than the floor) has
+// nothing to give up and is never judged on it.
+inline constexpr double kLiteFloorSec = 90.0;
+
 // ---- the learned panel period ------------------------------------------------
 //
 // Faster than this is not a present, it is two rAF callbacks landing inside one
