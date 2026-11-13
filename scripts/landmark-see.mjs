@@ -135,6 +135,11 @@ function fold(r, players) {
       reads: readRuns,
       hid,
       occluder: main(lost),
+      // Never more than a stray pixel, even with the deck and the terrain taken away: the
+      // piece draws as ground or as a `floor` part (a rug, a slope's mound),
+      // which the id pass cannot colour (or it stands beyond the draw range).
+      // Look at it before calling it unseen.
+      unpainted: !fr.some((f) => [f.a, f.b, f.road, f.ground, f.both].some((x) => x && x[1] >= NOISE_PX)),
       still: still >= 0 ? { k: r.frames[still].k, s: r.frames[still].s, lat: r.frames[still].lat } : null
     };
   });
@@ -152,11 +157,12 @@ for (const id of ids) {
   console.log('  piece                    u   read  seen   hid  peak%  med%  peakH  occluder');
   for (const p of mine) {
     const n = (v, w) => String(v).padStart(w);
-    console.log(`  ${p.label.padEnd(22)} ${n(p.u.toFixed(3), 5)} ${n(p.readable, 5)} ${n(p.visible, 5)} ${n(p.hidden, 5)} ${n(p.peak, 6)} ${n(p.median, 5)} ${n(p.peakH, 6)}  ${p.occluder || ''}`);
+    console.log(`  ${p.label.padEnd(22)} ${n(p.u.toFixed(3), 5)} ${n(p.readable, 5)} ${n(p.visible, 5)} ${n(p.hidden, 5)} ${n(p.peak, 6)} ${n(p.median, 5)} ${n(p.peakH, 6)}  ${p.unpainted ? '(never in the pass: ground/floor part, or out of range)' : p.occluder || ''}`);
   }
 }
-// Worst first: the fewest readable seconds, then the smallest it ever got.
-rows.sort((x, y) => x.readable - y.readable || x.peak - y.peak);
+// Worst first: the fewest readable seconds, then the smallest it ever got;
+// the pieces the pass cannot count go last.
+rows.sort((x, y) => x.unpainted - y.unpainted || x.readable - y.readable || x.peak - y.peak);
 const worst = rows.slice(0, WORST);
 
 if (a.four) {
@@ -206,7 +212,7 @@ if (OUT) {
     '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|'
   ];
   rows.forEach((p, n) => {
-    md.push(`| ${n + 1} | ${p.track} | ${p.label} | ${p.u.toFixed(3)} | ${p.readable} | ${p.visible} | ${p.hidden} | ${p.peak} | ${p.median} | ${p.peakH} | ${span(p.best)} | ${hidSpan(p.hid)} | ${p.occluder || ''} | ${p.four ? p.four.readable : ''} | ${p.shot ? `[still](${p.shot})` : ''} |`);
+    md.push(`| ${n + 1} | ${p.track} | ${p.label} | ${p.u.toFixed(3)} | ${p.readable} | ${p.visible} | ${p.hidden} | ${p.peak} | ${p.median} | ${p.peakH} | ${span(p.best)} | ${hidSpan(p.hid)} | ${p.unpainted ? 'never in the pass: a ground or floor part, or out of range' : p.occluder || ''} | ${p.four ? p.four.readable : ''} | ${p.shot ? `[still](${p.shot})` : ''} |`);
   });
   fs.writeFileSync(path.join(OUT, 'visibility.md'), md.join('\n') + '\n');
   console.log(`wrote ${OUT}`);
