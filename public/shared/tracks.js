@@ -520,6 +520,8 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
+      // the camper lane's gravel carried on to the kerb's foot at its mouth
+      { kind: 'paint', u: 0.9405, lat: 5.9, len: 3, r: 0.8, w: 1.2, tint: 0xcbbfae },
       // the knoll at the waist (the piece brings it: SET_GROUND), green to
       // the kerb; and the downs across the road
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
@@ -749,7 +751,9 @@ export const TRACKS = {
   riptide: {
     name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
     // no sand on the causeway: over the water the kerbs stand at the asphalt's edge
-    sandOffFrom: 0.44, sandOffTo: 0.585,
+    // (from past where the hop's piles begin: the strip easing out across that
+    // ring left the verge's apron inside the narrowing deck)
+    sandOffFrom: 0.452, sandOffTo: 0.585,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,

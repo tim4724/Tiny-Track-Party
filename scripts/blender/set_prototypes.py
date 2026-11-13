@@ -3546,7 +3546,9 @@ def rock_poolers_park():
     # the main road in a flared mouth at the kerb's foot and ends in a
     # turning circle round a turf island; its gravel is one colour and its
     # edges smooth, where patches per quad had stepped like pixels)
-    path = [(5.9, -11.5), (4.6, -11.8), (2.2, -11.6), (0.0, -10.2), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
+    # (its mouth stops at the margin every piece keeps from the deck, a
+    # stride short of the kerb's foot: tracks.js paints the sand between)
+    path = [(4.1, -10.8), (3.0, -11.0), (1.6, -10.8), (0.0, -9.6), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
             (-1.3, 10.4), (-2.0, 12.5)]
     CX, CZ, CR = -3.7, 14.9, 3.1                           # the turning circle
     for _ in range(3):                                    # Chaikin: its bends worn round
@@ -3562,7 +3564,7 @@ def rock_poolers_park():
         a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
         L = math.hypot(b_[0] - a_[0], b_[1] - a_[1]) or 1.0
         nx, nz = -(b_[1] - a_[1]) / L, (b_[0] - a_[0]) / L          # to the left of the way it runs
-        flare = 1.0 + 0.9 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
+        flare = 1.0 + 0.6 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
         sea = 1.4 * flare + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
         road = 1.4 * flare
         offs = (-sea, -0.5 * (sea + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (road + RUT1), road)
@@ -3597,10 +3599,13 @@ def rock_poolers_park():
         for (sw, row), qs in groups.items():
             for o in colored_faces([(sw, q) for q in qs], 'lane'):
                 rowed(o, row)
-        # marram and a few stones along both edges, every couple of units
+    # marram and a few stones along both edges, every couple of units: a
+    # part of their own, so the lane's skin alone (a print on the ground,
+    # which may run to the kerb) reaches the road's margin
+    def verge():
         with plain_parts():
             for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
-                for k in range(10, len(edge) - 2, 4):               # none at the mouth
+                for k in range(14, len(edge) - 2, 4):               # none at the mouth
                     x, _, z = edge[k]
                     if side < 0 and any(abs(z - bz) < 1.8 for bz in bays):
                         continue                                     # the bays' mouths kept open
@@ -3617,6 +3622,7 @@ def rock_poolers_park():
                         beam((cx, -0.05, cz), (cx + 0.32 * math.cos(aa), 0.3 + 0.1 * (t % 3), cz + 0.32 * math.sin(aa)),
                              0.1, 'olive' if t % 2 else 0x6faa62, d=0.04)
     draped('lane', lane)
+    draped('verge', verge)
     for (z, lower, boards, pop) in VANS:
         camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
     # the minibus in the last bay, longer and taller still
@@ -3995,11 +4001,11 @@ def lagoon_fleet():
 # Re-sample if the road, its sand or the placement moves (as DRIFT_ROAD).
 RIP_T = -40
 RIP_ROAD = (
-    (-24.082, -25.627, 0.0371, -0.9993, 0.75, 4.62), (-23.134, -25.566, 0.0937, -0.9956, 0.76, 4.46), (-22.188, -25.447, 0.1519, -0.9884, 0.78, 4.29), (-21.242, -25.284, 0.1895, -0.9819, 0.80, 4.13),
-    (-20.296, -25.083, 0.2258, -0.9742, 0.83, 3.97), (-19.356, -24.847, 0.2612, -0.9653, 0.87, 3.80), (-18.423, -24.577, 0.2960, -0.9552, 0.91, 3.64), (-17.503, -24.273, 0.3305, -0.9438, 0.96, 3.48),
-    (-16.598, -23.938, 0.3648, -0.9311, 1.01, 3.31), (-15.713, -23.572, 0.3994, -0.9168, 1.07, 3.15), (-14.838, -23.171, 0.4334, -0.9012, 1.14, 2.91), (-13.973, -22.735, 0.4663, -0.8847, 1.21, 2.74),
-    (-13.120, -22.265, 0.4981, -0.8671, 1.30, 2.58), (-12.283, -21.764, 0.5292, -0.8485, 1.39, 2.50), (-11.465, -21.233, 0.5599, -0.8286, 1.48, 2.50), (-10.671, -20.674, 0.5903, -0.8071, 1.56, 2.50),
-    (-9.904, -20.090, 0.6208, -0.7840, 1.63, 2.50), (-9.164, -19.480, 0.6510, -0.7591, 1.69, 2.50), (-8.445, -18.838, 0.6793, -0.7339, 1.74, 2.50), (-7.746, -18.167, 0.7059, -0.7083, 1.80, 2.50),
+    (-24.082, -25.627, 0.0371, -0.9993, 0.75, 4.70), (-23.134, -25.566, 0.0937, -0.9956, 0.76, 4.70), (-22.188, -25.447, 0.1519, -0.9884, 0.78, 4.70), (-21.242, -25.284, 0.1895, -0.9819, 0.80, 4.70),
+    (-20.296, -25.083, 0.2258, -0.9742, 0.83, 4.70), (-19.356, -24.847, 0.2612, -0.9653, 0.87, 4.54), (-18.423, -24.577, 0.2960, -0.9552, 0.91, 4.37), (-17.503, -24.273, 0.3305, -0.9438, 0.96, 4.21),
+    (-16.598, -23.938, 0.3648, -0.9311, 1.01, 4.05), (-15.713, -23.572, 0.3994, -0.9168, 1.07, 3.89), (-14.838, -23.171, 0.4334, -0.9012, 1.14, 3.64), (-13.973, -22.735, 0.4663, -0.8847, 1.21, 3.48),
+    (-13.120, -22.265, 0.4981, -0.8671, 1.30, 3.31), (-12.283, -21.764, 0.5292, -0.8485, 1.39, 3.15), (-11.465, -21.233, 0.5599, -0.8286, 1.48, 2.99), (-10.671, -20.674, 0.5903, -0.8071, 1.56, 2.83),
+    (-9.904, -20.090, 0.6208, -0.7840, 1.63, 2.66), (-9.164, -19.480, 0.6510, -0.7591, 1.69, 2.50), (-8.445, -18.838, 0.6793, -0.7339, 1.74, 2.50), (-7.746, -18.167, 0.7059, -0.7083, 1.80, 2.50),
     (-7.070, -17.468, 0.7314, -0.6819, 1.84, 2.50), (-6.420, -16.746, 0.7555, -0.6552, 1.88, 2.50), (-5.798, -16.002, 0.7785, -0.6276, 1.91, 2.50), (-5.207, -15.241, 0.8008, -0.5989, 1.92, 2.50),
     (-4.647, -14.463, 0.8224, -0.5689, 1.93, 2.50), (-4.113, -13.661, 0.8426, -0.5385, 1.91, 2.50), (-3.606, -12.835, 0.8615, -0.5078, 1.89, 2.50), (-3.127, -11.988, 0.8791, -0.4766, 1.85, 2.50),
     (-2.678, -11.124, 0.8958, -0.4445, 1.81, 2.50), (-2.262, -10.246, 0.9114, -0.4114, 1.76, 2.50), (-1.880, -9.358, 0.9263, -0.3769, 1.70, 2.50), (-1.536, -8.462, 0.9402, -0.3407, 1.65, 2.50),
