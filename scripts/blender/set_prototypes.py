@@ -5774,21 +5774,26 @@ def snowman(at, k=1.0, hat=False):
         box((0.95 * k, 0.1 * k, 0.95 * k), (x, y + 2.92 * k, z), 0x2a2735)
         box((0.6 * k, 0.55 * k, 0.6 * k), (x, y + 3.25 * k, z), 0x2a2735)
 
-def snow_ball(r, at, squash=0.9):
-    """A rolled ball of snow, round (a block at this size read as a crate)."""
-    return snowy(sphere(r, at, 0xf3f7fb, subdiv=1, scale=(1.0, squash, 1.0), flat=False), 0.35)
+def snow_ball(r, at, squash=0.9, subdiv=1):
+    """A rolled ball of snow, round (a block at this size read as a crate);
+    `subdiv` 3 for one big enough that a once-split ball shows its facets."""
+    return snowy(sphere(r, at, 0xf3f7fb, subdiv=subdiv, scale=(1.0, squash, 1.0), flat=False), 0.35)
 
 def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='out', balls=3, lean=0.0,
-             broom=False, buttons=0x38383d):
+             broom=False, buttons=0x38383d, subdiv=1):
     """One of the snowman field's crowd at (x, z), `h` tall, its carrot to +X
     turned by `yaw`: `balls` rolled balls (two for a child's), coal eyes and
     buttons, a carrot, stick arms (`arms`: out, up, down or none), a scarf
     in its own colour and a hat of its own kind (`hat`: top, bucket, bobble,
     cone or none); `lean` tips the head off its body, `broom` stands one in
-    its hand. No two of the crowd are the same build."""
+    its hand. No two of the crowd are the same build. `subdiv` over 1 makes
+    a big one round: its balls (snow_ball), and its scarf, hats and carrot
+    turned on twice the facets."""
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x + dx * c + dz * s2, dy, z - dx * s2 + dz * c)
+    rnd = subdiv > 1
+    segs = 16 if rnd else 8
     rs = (0.3, 0.22, 0.16) if balls == 3 else (0.3, 0.19)
     k = h / (1.62 * sum(rs))
     rs = [r * k for r in rs]
@@ -5798,44 +5803,55 @@ def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='o
         y += r * 1.62
     for i, r in enumerate(rs):
         off = lean * k if i == len(rs) - 1 else 0.0
-        snow_ball(r, at(0.0, cy[i], off))
+        snow_ball(r, at(0.0, cy[i], off), subdiv=subdiv)
     hr, hy, hz = rs[-1], cy[-1], lean * k
     # the carrot: a short cone out of the middle of the face, its root in the
     # head (a bar as long as the head, square at the tip, read as a stick
     # through it from the road)
-    cyl(0.3 * hr, 0.62 * hr, at(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.03, segs=6, axis='across', yaw=yaw,
-        stem=True)
+    cyl(0.3 * hr, 0.62 * hr, at(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.03, segs=10 if rnd else 6,
+        axis='across', yaw=yaw, stem=True)
     for sd in (-1, 1):
         box((0.06, 0.07 * k, 0.07 * k), at(hr * 0.88, hy + 0.3 * hr, hz + sd * 0.38 * hr), 0x2a2735, yaw=yaw)
     for i in range(2 if balls == 3 else 1):
         box((0.06, 0.08 * k, 0.08 * k), at(rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons, yaw=yaw)
     # the scarf: a band round the neck and an end hanging down the front
     ny = cy[-1] - hr * 0.82
-    box((hr * 1.7, 0.11 * k, hr * 1.7), at(0.0, ny, hz * 0.6), scarf, yaw=yaw)
+    if rnd:
+        cyl(hr * 0.9, 0.11 * k, at(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=segs, stem=True)
+    else:
+        box((hr * 1.7, 0.11 * k, hr * 1.7), at(0.0, ny, hz * 0.6), scarf, yaw=yaw)
     box((0.07, 0.3 * k, 0.12 * k), at(hr * 0.86, ny - 0.14 * k, hz * 0.6 + 0.3 * hr), scarf, yaw=yaw)
     ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
     L = 0.42 * k
+    stick = 0.04 * k                              # MIN_T on a small one; no hairline on a big one
     if arms != 'none':
         tip = {'out': 0.25, 'up': 0.95, 'down': -0.5}[arms]
         for sd in (-1, 1):
-            box((0.06, 0.06, L), at(0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
-                                    sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, yaw=yaw, pitch=sd * tip)
+            box((stick, stick, L), at(0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
+                                      sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, yaw=yaw, pitch=sd * tip)
     if broom:
         bz = ar * 0.9 + L * 0.9
-        box((0.06, 0.95 * h, 0.06), at(0.0, 0.47 * h, bz), 0x8a6a46, yaw=yaw)
+        box((stick, 0.95 * h, stick), at(0.0, 0.47 * h, bz), 0x8a6a46, yaw=yaw)
         box((0.1, 0.22 * k, 0.26 * k), at(0.0, 0.95 * h, bz), 0xffc044, yaw=yaw)
     top = hy + hr * 0.78
-    if hat == 'top':
+    if hat == 'top' and rnd:
+        cyl(hr * 1.0, 0.06, at(0.0, top - 0.03, hz), hat_c, segs=segs, stem=True)
+        cyl(hr * 0.62, hr * 1.1, at(0.0, top, hz), hat_c, segs=segs, stem=True)
+        cyl(hr * 0.65, 0.16 * hr, at(0.0, top + hr * 0.12, hz), 0xff5040, segs=segs, stem=True)
+    elif hat == 'top':
         box((hr * 2.0, 0.06, hr * 2.0), at(0.0, top, hz), hat_c, yaw=yaw)
         box((hr * 1.25, hr * 1.1, hr * 1.25), at(0.0, top + hr * 0.55, hz), hat_c, yaw=yaw)
         box((hr * 1.3, 0.06, hr * 1.3), at(0.0, top + hr * 0.2, hz), 0xff5040, yaw=yaw)
     elif hat == 'bucket':
-        cyl(hr * 0.8, hr * 0.95, at(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True)
+        cyl(hr * 0.8, hr * 0.95, at(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=segs, stem=True)
     elif hat == 'bobble':
-        cyl(hr * 0.95, hr * 0.7, at(0.0, top - 0.12 * k, hz), hat_c, r2=hr * 0.5, segs=8, stem=True)
-        box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
+        cyl(hr * 0.95, hr * 0.7, at(0.0, top - 0.12 * k, hz), hat_c, r2=hr * 0.5, segs=segs, stem=True)
+        if rnd:
+            sphere(0.08 * k, at(0.0, top + hr * 0.62, hz), 0xfff6eb, subdiv=2, flat=False)
+        else:
+            box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
     elif hat == 'cone':
-        cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=6, stem=True)
+        cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=segs - 2 if rnd else 6, stem=True)
 
 @piece(1.0)
 def snowman_field():
@@ -5843,33 +5859,37 @@ def snowman_field():
     # of the east bend, stood in a row facing the road: the father in his top
     # hat with a broom, the mother in a bobble hat, two children with their
     # arms up, a snow dog at their feet, a sled and a heap of spare snowballs
-    # left by them. Each a unit or more tall, so it reads from the chase cam
-    # at speed: a field of thirty half-unit snowmen read as specks. Built on
-    # y = 0 and laid on the snow as drawn (draped).
+    # left by them. Big, the father two and a half units tall, so they read
+    # from the chase cam at speed past the bend (a field of thirty half-unit
+    # snowmen read as specks, and a family a unit and a half tall as small),
+    # and round: rolled balls of snow split three times, smooth, so none of
+    # them reads as a faceted lump. Built on y = 0 and laid on the snow as
+    # drawn (draped).
     R, B, G, P, O, D = 0xff5040, 0x3f7bd9, 0x61cb8b, 0xa878e8, 0xff7e44, 0x2a2735
     def build():
         F = (  # x (to the road), z, height, yaw, hat, hat colour, scarf, arms, balls, lean, broom
-            (-0.3, -1.9, 1.5, 0.12, 'top', D, R, 'out', 3, 0.0, True),         # the father
-            (0.0, 0.0, 1.3, 0.0, 'bobble', P, G, 'out', 3, 0.0, False),        # the mother
-            (0.55, 1.6, 0.92, -0.15, 'bucket', B, 0xffc044, 'up', 3, 0.0, False),
-            (0.75, 2.85, 0.74, -0.3, 'cone', O, B, 'up', 2, 0.04, False),
+            (-0.6, -3.4, 2.5, 0.12, 'top', D, R, 'out', 3, 0.0, True),         # the father
+            (-0.3, 0.0, 2.2, 0.0, 'bobble', P, G, 'out', 3, 0.0, False),       # the mother
+            (0.3, 2.9, 1.6, -0.15, 'bucket', B, 0xffc044, 'up', 3, 0.0, False),
+            (0.5, 5.1, 1.3, -0.3, 'cone', O, B, 'up', 2, 0.07, False),
         )
         for (fx, fz, h, yw, hat, hc, sc, arms, balls, lean, broom) in F:
-            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom)
+            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom,
+                     subdiv=3)
         # the snow dog at the father's feet, a red collar on
-        ax_, az_, k = 1.0, -3.3, 1.8
-        snow_ball(0.2 * k, (ax_, 0.15 * k, az_))
-        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_))
-        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_))
+        ax_, az_, k = 0.6, -6.4, 2.8
+        snow_ball(0.2 * k, (ax_, 0.15 * k, az_), subdiv=3)
+        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_), subdiv=3)
+        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_), subdiv=3)
         for sd in (-1, 1):
             snowy(box((0.07 * k, 0.12 * k, 0.07 * k), (ax_ + 0.22 * k, 0.52 * k, az_ + sd * 0.08 * k), 0xf3f7fb), 0.5)
         box((0.1 * k, 0.06 * k, 0.06 * k), (ax_ + 0.38 * k, 0.35 * k, az_), D)
-        box((0.26 * k, 0.06 * k, 0.28 * k), (ax_ + 0.12 * k, 0.27 * k, az_), R)
+        cyl(0.15 * k, 0.06 * k, (ax_ + 0.12 * k, 0.24 * k, az_), R, segs=16, stem=True)
         snowy(box((0.3 * k, 0.07 * k, 0.07 * k), (ax_ - 0.55 * k, 0.2 * k, az_), 0xf3f7fb, roll=-0.5), 0.5)
         # what the children left: the sled, the spare snowballs
-        sled(1.4, 0, 3.9, 0.4, R, L=0.9)
+        sled(1.2, 0, 7.4, 0.4, R, L=1.3)
         for i in range(6):
-            snow_ball(0.17, (1.7 + 0.3 * (i % 3), 0.12 + 0.24 * (i // 3), -0.4 + 0.28 * (i % 2)))
+            snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)), subdiv=2)
     draped('field', build)
 
 def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
@@ -6683,24 +6703,32 @@ def glacier_climber(x, z, coat, sack, probe=False):
 def glacier_crevasses():
     # Glacier: the glacier's snout where it comes down to the roads beside
     # the raised straight (placed on the right, yaw 0: +X to the road, +Z the
-    # road's way), split by crevasses that run along it, the way the ice
-    # cracks across its flow; the expedition's route across them flagged with
-    # wands, red and orange, either side, and the roped team crossing the
-    # middle one on its snow bridge, three to the rope, the leader probing
-    # ahead (a one-way gesture and a rest, the one move a person makes). A
-    # crevasse is a dark blue slot between lips of snow, its wall the ice's
-    # deep blue (nothing may go under the ground, so it is drawn on it).
-    def crack(cx, half, w, seed):
-        """One crevasse along Z at x = cx, `half` long either way, `w` wide
-        at its widest, its line wandering a little: lips of snow either side,
-        the ice wall down, the dark slot in the middle."""
-        n = 16
+    # road's way), split by crevasses down the whole of the straight, from
+    # where the other leg comes in under it to the loop: long cracks along
+    # it (the way the ice cracks across its flow) in three lanes, the near
+    # two broken round the advanced camp (its own piece, standing in the
+    # field at CAMP). The expedition's route is flagged with a wand every few
+    # car lengths, red and orange in turn: from the camp down the corridor
+    # between the near lanes both ways, and north of it over the middle
+    # crevasse on its snow bridge, where the roped team is crossing, three
+    # to the rope, the leader probing ahead (a one-way gesture and a rest,
+    # the one move a person makes). A crevasse is a dark blue slot between
+    # lips of snow, its wall the ice's deep blue (nothing may go under the
+    # ground, so it is drawn on it).
+    def lane_x(cx, seed, z):
+        """Where a crevasse's line runs at z: its lane, wandering a little."""
+        return cx + 0.4 * math.sin(z * 0.33 + seed) + 0.15 * math.sin(z * 1.05 + seed * 2)
+    def crack(cx, seed, z0, z1, w):
+        """One crevasse along Z from z0 to z1 in lane cx, `w` wide at its
+        widest: lips of snow either side, the ice wall down, the dark slot
+        in the middle, a row of them every unit or so."""
+        n = max(16, int(round((z1 - z0) / 0.9)))
         rows = []
         for i in range(n + 1):
             t = -1.0 + 2.0 * i / n
-            z = t * half
-            x = cx + 0.35 * math.sin(t * 2.6 + seed) + 0.15 * math.sin(t * 7.0 + seed * 2)
-            ww = w * (1.0 - t * t) ** 0.6 * (0.8 + 0.2 * math.sin(t * 5.0 + seed)) + 0.04
+            z = z0 + (z1 - z0) * i / n
+            x = lane_x(cx, seed, z)
+            ww = w * (1.0 - t * t) ** 0.45 * (0.8 + 0.2 * math.sin(z * 0.6 + seed)) + 0.04
             prof = [(-ww - 0.45, -0.03), (-ww - 0.12, 0.14), (-ww, 0.1), (-ww * 0.45, 0.04),
                     (ww * 0.45, 0.04), (ww, 0.1), (ww + 0.12, 0.14), (ww + 0.45, -0.03)]
             rows.append([(x + dx, y, z) for dx, y in prof])
@@ -6718,32 +6746,50 @@ def glacier_crevasses():
                 rowed(o, 22)                     # dark: down the blue ramp, the sky ramp's deep end
             else:
                 snowy(o, 0.45)
-    BRIDGE = 0.0                                 # where the route crosses: z
+    # The lanes, nearest the road first, each (x, seed) and its cracks
+    # (z0, z1, widest), their ends staggered so the field reads as one
+    # (ends in step read as the same few cracks pasted twice). The far lanes
+    # go on past the camp.
+    A, B, C, D = (1.6, 4.2), (-2.8, 5.1), (-6.6, 3.7), (-10.0, 2.9)
+    LANES = ((A, ((-29.5, -13.0, 0.5), (-1.5, 9.0, 0.45))),
+             (B, ((-24.5, -10.0, 0.55), (-0.5, 12.5, 0.6))),
+             (C, ((-33.0, -4.0, 0.5), (-1.0, 14.0, 0.45))),
+             (D, ((-31.0, -9.0, 0.4),)))
+    CAMP = (-0.6, -6.3)                          # tracks.js set-advanced-camp, in this frame
+    BRIDGE = 4.0                                 # where the route crosses the middle lane: z
     def ice():
-        crack(1.0, 7.0, 0.42, 1.0)
-        crack(-2.6, 8.5, 0.55, 2.3)
-        crack(-6.2, 6.5, 0.4, 3.7)
+        for lane, cracks in LANES:
+            for z0, z1, w in cracks:
+                crack(*lane, z0, z1, w)
         # the snow bridge over the middle crevasse, where the route crosses it
-        snowy(box((1.6, 0.16, 1.5), (-2.6 + 0.35 * math.sin(2.3), 0.08, BRIDGE), 0xf3f7fb, yaw=0.1), 0.45)
+        bx = lane_x(*B, BRIDGE)
+        snowy(box((1.6, 0.16, 1.5), (bx, 0.08, BRIDGE), 0xf3f7fb, yaw=0.1), 0.45)
         # the wands: bamboo, a flag at the top of each, red and orange in
-        # turn, either side of the route from the road's side to the far one
-        for i, x in enumerate([3.4 - 1.5 * k for k in range(9)]):
-            for sd in (-1, 1):
-                z = BRIDGE + sd * 1.15 + 0.12 * math.sin(i * 1.7 + sd)
-                box((0.1, 1.35, 0.1), (x, 0.6, z), 0xd9b054)
-                c = 0xff5040 if (i + (sd > 0)) % 2 == 0 else 0xff7e44
-                box((0.05, 0.32, 0.46), (x, 1.12, z + 0.25), c, yaw=0.2)
-        # the rope between the three, sagging to the snow between them
-        for (xa, xb) in ((0.9, -0.7), (-0.7, -2.6)):
+        # turn, a few car lengths apart down the route, now one side of it,
+        # now the other: the corridor between the near lanes from the camp
+        # south, and north to the bridge, over it, and on up the corridor
+        # beyond
+        def mid(a, b, z):
+            return 0.5 * (lane_x(*a, z) + lane_x(*b, z)), z
+        route = [mid(A, B, CAMP[1] + dz) for dz in (-4.2, -8.7, -13.2, -17.7, -22.2, 4.3, 7.3)]
+        route += [(bx + 1.05, BRIDGE + 0.9), (bx - 1.05, BRIDGE - 0.9)]
+        route += [mid(B, C, z) for z in (8.5, 13.0)]
+        for i, (x, z) in enumerate(route):
+            x += 0.35 if i % 2 else -0.35
+            box((0.1, 1.35, 0.1), (x, 0.6, z), 0xd9b054)
+            box((0.05, 0.32, 0.46), (x, 1.12, z + 0.25), 0xff5040 if i % 2 == 0 else 0xff7e44, yaw=0.2)
+        # the two behind the leader in the corridor, stood braced, the rope
+        # paid out between the three, sagging to the snow
+        team = (0.2, -1.15, bx)
+        for xa, xb in zip(team, team[1:]):
             for f0, f1 in ((0.0, 0.5), (0.5, 1.0)):
                 ya = 0.4 - 0.32 * math.sin(math.pi * f0)
                 yb = 0.4 - 0.32 * math.sin(math.pi * f1)
                 strut((xa + (xb - xa) * f0, ya, BRIDGE), (xa + (xb - xa) * f1, yb, BRIDGE), 0.09, 0xff7e44)
-        # the two behind the leader, stood braced, the rope paid out between
-        for (x, coat, sack) in ((0.9, 0x3f7bd9, 0xffc044), (-0.7, 0x61cb8b, 0xff5040)):
+        for x, coat, sack in ((team[0], 0x3f7bd9, 0xffc044), (team[1], 0x61cb8b, 0xff5040)):
             glacier_climber(x, BRIDGE, coat, sack)
         # the leader on the bridge, probing the snow ahead with the axe
-        glacier_climber(-2.6, BRIDGE, 0xff5040, 0x3f7bd9, probe=True)
+        glacier_climber(bx, BRIDGE, 0xff5040, 0x3f7bd9, probe=True)
     draped('ice', ice)
 
 def frac(v):
@@ -9881,10 +9927,11 @@ def watermill():
     # The mill on the outside of the first bend, straight ahead of the grid:
     # a stone mill house (front +X, to the road) under a red tile roof, its
     # wheel on the road side turning IN the brook, which runs past the house
-    # in its race (+Z downstream, on to the duck pond), white where the
-    # paddles churn it and streaked below; a willow over the race's tail,
-    # sacks at the door. Real size: the house is two cars long, the wheel
-    # nearly two across.
+    # in its race (+Z downstream, on to the duck pond), streaked white below
+    # where the paddles turn it over; a willow over the race's tail, sacks at
+    # the door. Real size: the house is two cars long, the wheel nearly two
+    # across. Nothing on the water moves but the wheel: a white churn bobbing
+    # at its foot was taken out as needless.
     STONE, TILE = 0xfde4c7, 0xcf534f
     RX, WY = MILL_RACE, BROOK_WY / MILL_GROW
     # the riffles where the wheel has turned the water over: white streaks
@@ -9893,9 +9940,6 @@ def watermill():
                                      (1.0, 12.6, 1.6))):
         ground_poly([(RX + dx - 0.3, WY + 0.06, dz), (RX + dx + 0.3, WY + 0.06, dz), (RX + dx + 0.18, WY + 0.06, dz + l),
                      (RX + dx - 0.18, WY + 0.06, dz + l)], [(0, 3, 2, 1)], 'white')
-    with animated('anim_bob:h=0.12:p=0.9', (RX, WY, 2.4)):         # the churn at the wheel's foot
-        for k, (dx, dz) in enumerate(((-0.8, 2.3), (0.0, 2.9), (0.8, 2.4), (0.4, 3.4), (-0.5, 3.3))):
-            box((0.7, 0.45, 0.7), (RX + dx, WY + 0.05, dz), 'white', yaw=0.6 * k)
     # the house
     F = local(0, 0, 0)
     D, L, H = 9.0, 11.0, 7.0
@@ -17410,65 +17454,6 @@ def snake_board():
         lx, lz = L(x, z)
         die((lx, Y1, lz), 1.7, yaw, faces=faces, color=CREAMC, pip=0xe66a5a)
     keep_light(0.3)
-    merge_paint()
-
-# Skysnake's snake, at the top of its dive (tracks.js places it at the dive's
-# head, yaw 0: +Z down the dive, +X toward the infield, the deck's top
-# SNAKE_DECK over the floor there), and where its tail leaves the board's
-# road at the foot, SNAKE_TAIL_Z down the dive.
-SNAKE_DECK, SNAKE_TAIL_Z = 5.2 + 0.423, 29.0
-
-@piece(1.0)
-def board_snake():
-    # Skysnake: the board's great snake, whose back is the dive (tracks.js
-    # `snake`). Its neck rears out of the outside of the top deck where the
-    # dive begins, the head turned back to the racers coming out of the
-    # corner and swaying over the kerb, and at the foot its tail leaves the
-    # road and lies wriggling on the board, joint by joint (the jointed
-    # toy's, set_prototypes.py toy_snake).
-    k = 1.25
-    D = SNAKE_DECK
-    # the neck: out of the deck's outer edge, up and leaning over the road
-    NECK = ((-3.75, -0.4), (-4.0, 0.8), (-3.8, 1.9), (-3.2, 2.8), (-2.5, 3.4))
-    with animated('anim_sway:a=y:d=14:p=4.2#neck', (-3.75, D, 0.0)):
-        for i in range(len(NECK) - 1):
-            (x0, y0), (x1, y1) = NECK[i], NECK[i + 1]
-            bar((x0, D + y0, 0.0), (x1, D + y1, 0.0), 1.5 * k, 1.35 * k, SNAKE[i % 2])
-        hx, hy, hz = -1.9, D + 3.75, -0.6
-        d = (0.0, -1.0)                            # its face back up the deck, to the racers
-        yaw = math.atan2(d[0], d[1])
-        box((2.0 * k, 1.35 * k, 3.0 * k), (hx, hy, hz), 0x6cbf6c, yaw=yaw, pitch=-0.15)
-        box((1.6 * k, 0.4 * k, 2.6 * k), (hx, hy - 0.75 * k, hz - 0.2), 0xf2c14e, yaw=yaw, pitch=-0.15)
-        for sd in (-1, 1):
-            ex = hx + sd * 0.78 * k
-            box((0.55 * k, 0.55 * k, 0.55 * k), (ex, hy + 0.55 * k, hz - 0.7 * k), 0xfdf4de)
-            box((0.3 * k, 0.34 * k, 0.2 * k), (ex + sd * 0.05, hy + 0.58 * k, hz - 1.0 * k), 0x2a2735)
-        ty, tz = hy - 0.5 * k, hz - 1.8 * k
-        bar((hx, ty, tz), (hx, ty - 0.15, tz - 1.1 * k), 0.2 * k, 0.1 * k, 0xff5040)
-        for sd in (-1, 1):
-            bar((hx, ty - 0.15, tz - 1.1 * k), (hx + sd * 0.3 * k, ty - 0.2, tz - 1.55 * k), 0.16 * k, 0.1 * k, 0xff5040)
-    # the tail, off the road's outer edge at the foot onto the board,
-    # tapering, its last joints wiggling
-    ctrl = [(-3.4, SNAKE_TAIL_Z), (-6.2, SNAKE_TAIL_Z + 2.0), (-8.0, SNAKE_TAIL_Z + 5.5), (-7.0, SNAKE_TAIL_Z + 9.0),
-            (-9.5, SNAKE_TAIL_Z + 12.0)]
-    joints = curve(ctrl, 1.3)
-    n = len(joints)
-    def block(i):
-        (x0, z0), (x1, z1) = joints[i], joints[i + 1]
-        f = 1.0 - 0.6 * i / max(1, n - 2)
-        g = 0.12 / max(math.hypot(x1 - x0, z1 - z0), 0.01)
-        bar((x0 + (x1 - x0) * g, 0.55 * f, z0 + (z1 - z0) * g), (x1 - (x1 - x0) * g, 0.55 * f, z1 - (z1 - z0) * g),
-            1.5 * f, 1.1 * f, SNAKE[i % 2])
-    wig = 4
-    for i in range(n - 1 - wig):
-        block(i)
-    with contextlib.ExitStack() as chain:
-        for m in range(wig):
-            i = n - 1 - wig + m
-            j = joints[i]
-            chain.enter_context(animated('anim_sway:a=y:d=12:p=2.0:o=%.3f#tail%d' % ((1.0 - m * 0.14) % 1.0, m),
-                                         (j[0], 0.0, j[1])))
-            block(i)
     merge_paint()
 
 # ---- the room: its train round the walls, the window's light on the floor ----
