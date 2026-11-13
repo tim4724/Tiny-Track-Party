@@ -394,6 +394,8 @@ export const SET_GROUND = {
   // from both ends (turned 90 so the spine runs along the creek's X).
   'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 1.5 }],
   'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 1.5 }],
+  // ...and a reach the road runs down: the floor from bank to bank
+  'set-wash-road-reach': [{ kind: 'plain', len: 10, r: 9, w: 6, h: 1.4 }],
   // Gulch's mine: the rock spur rising behind the adit's rock face (-X; its
   // foot just behind the face, so the face stands whole on the yard instead
   // of poking out of the slope in shards) and the yard levelled in front of
@@ -1436,7 +1438,9 @@ export const TRACKS = {
     // sight, are channel only, in `land`), from the north-west past the
     // hero's stretch by the north straight (tumbleweeds blowing down it),
     // across the north strand, which fords it at the bed's level, into the
-    // east loop and out under the east bend's low trestle (gen-tracks SEEDS
+    // east loop, where the road itself runs down the bed from ford to ford
+    // (set-wash-road-reach: gravel from bank to bank, a cut bank past each
+    // kerb, the last flood's log jam on the bar), and out under the east bend's low trestle (gen-tracks SEEDS
     // `trestle`: the bend's hill stands on pillars over the bed, not on an
     // embankment across it); a side wash comes in from the south across the
     // south strand, another ford. The bed is a shallow
@@ -1451,8 +1455,8 @@ export const TRACKS = {
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
-      { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
+      { model: 'set-dead-cottonwood', u: 0.302, lat: 7 },
+      { model: 'set-dead-cottonwood', u: 0.95, lat: -7, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
@@ -1461,6 +1465,16 @@ export const TRACKS = {
       { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
       { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
       { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
+      // between the east loop's two fords the road runs down the bed itself,
+      // a cut bank past each kerb, and the last flood's log jam on the bar
+      { model: 'set-wash-road-reach', u: 0.537, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.553, lat: 0 },
+      { model: 'set-flood-jam', u: 0.558, lat: -6.2, yaw: 180 },
+      { model: 'set-wash-road-reach', u: 0.612, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.628, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.644, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.660, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.674, lat: 0 },
       // the canyon's mountainsides, each face toward the road: the outer
       // range (left) down the straight, round the bend and on, lower spurs
       // on the inside of the straight and after the bend, the inside of the
@@ -1539,7 +1553,11 @@ export const TRACKS = {
       // faces at the kerb the near faces of the range's massifs (`land`):
       // from the run-in on the outside round the long left-hander, down the
       // straight and round the tight bend into the mine yard, one on the
-      // inside round the left-hander (Wash's lengths reused between bends).
+      // inside round the left-hander. It is the mine's canyon: a timber
+      // flume on trestles pinned along the left-hander's face, from a header
+      // box in the cliff down to a sluice at the verge, and prospect adits
+      // in every face's foot, each with its grey spoil (the lengths bring
+      // them: set_prototypes.py gulch_flume, gulch_workings).
       // The crest's left-hander has no face: its shoulder is the land's own
       // (a face there stood as pyramids on the sand from across the map,
       // where the shoulder reads as one banded mountain). The run-in's face
@@ -1547,11 +1565,11 @@ export const TRACKS = {
       // mill, so the mill reads from there across the yard. The loop's middle
       // stays low: the deck cap holds the land there under the road, and the
       // yard opens on the stamp mill.
-      { model: 'set-canyon-peaks-c', u: 0.817, lat: 5.2 },
+      { model: 'set-canyon-run-gulch', u: 0.817, lat: 5.2 },
       { model: 'set-canyon-bend-gulch', u: 0.862, lat: 5.2 },
-      { model: 'set-canyon-peaks-a', u: 0.904, lat: 5.2 },
+      { model: 'set-canyon-drop-gulch', u: 0.904, lat: 5.2 },
       { model: 'set-canyon-hairpin-gulch', u: 0.937, lat: 5.2 },
-      { model: 'set-canyon-spur-a', u: 0.968, lat: 5.2 },
+      { model: 'set-canyon-yard-gulch', u: 0.968, lat: 5.2 },
       { model: 'set-canyon-inside-gulch', u: 0.857, lat: -5.2, yaw: 180 },
       // the stamp mill stepping down its hill across the start straight
       // from the adit, its tramway's buckets riding the sagging ropes over
@@ -1566,7 +1584,9 @@ export const TRACKS = {
       // sight line to the mill
       { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
-      { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 }
+      { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 },
+      // the powder magazine past the town, dug into the hill's foot
+      { model: 'set-powder-magazine', u: 0.405, lat: 8.2 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
     // than the land), and the range
@@ -1599,7 +1619,22 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.8452, lat: 71.26, yaw: -155.83, len: 18, r: 26, h: 46, top: 0.25, lite: false },
       { kind: 'ridge', u: 0.9596, lat: 64.67, yaw: -9.05, len: 30, r: 26, h: 38, top: 0.45, lite: false },
       { kind: 'ridge', u: 0.9382, lat: 70.46, yaw: 30, len: 22, r: 28, h: 46, top: 0.3, lite: false },
-      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false }
+      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false },
+      // the biome's hoodoo family keeps off the east bend, where its tall
+      // stack stood beside the headframe as a second tower, and off the
+      // boomtown's street after it
+      { kind: 'clear', u: 0.11, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.11, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.17, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.17, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.23, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.23, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.29, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.29, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.35, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.35, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.41, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.41, lat: -12.5, len: 28, r: 3 }
     ]
   },
   crag: {
@@ -1610,8 +1645,9 @@ export const TRACKS = {
     // turning, the corral with cattle) down the ranch's fenced range to the
     // rim, the mesa closing the west of the map: at the hairpin the rim's
     // mountainside comes to the verge, round its outside and on along the north
-    // straight to the bridge (canyon lengths, set_prototypes.py
-    // canyon_mountain, the rim's own massif rising behind them in `land`).
+    // straight to the bridge (lengths of the track's own rimrock,
+    // set_prototypes.py crag_rim: dark tables over a plain talus with sky in
+    // the notches between, the rim's own massif rising behind them in `land`).
     // Off the bridge the road runs at the mesa standing between the
     // north-east loop and the S, a table with a butte broken away from it
     // past a gap of sky: the loop rounds the table and the S passes the
@@ -1631,7 +1667,7 @@ export const TRACKS = {
     // the ranch's own is turned inside its piece (set_prototypes.py
     // RANCH_WIND_YAW, for the ranch as it stands here).
     set: [
-      { model: 'set-ranch', u: 0.986, lat: -19, yaw: 180 },
+      { model: 'set-ranch', u: 0.986, lat: -13, yaw: 180 },
       { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
       { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
@@ -1644,8 +1680,8 @@ export const TRACKS = {
       // mine yard and an oil camp); the rim begins at the hairpin
       { model: 'set-ranch-fence', u: 0.032, lat: -5.4, yaw: 180 },
       { model: 'set-ranch-fence', u: 0.036, lat: 5.4 },
-      // the herd on the range inside the fences: a dozen head and calves in
-      // loose bunches on the ranch's side, a few more across the road
+      // the herd on the range inside the fences: eight head in two bunches
+      // against the fence on the ranch's side, four more across the road
       { model: 'set-ranch-herd', u: 0.035, lat: -5.9, yaw: 180 },
       { model: 'set-ranch-herd-east', u: 0.02, lat: 5.9 },
       // the rock, each piece's talus coming to a couple of units past the
@@ -1730,13 +1766,16 @@ export const TRACKS = {
       { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
+      // the field's flare past the tank farm, its flame small
+      { model: 'set-flare-stack', u: 0.662, lat: 11 },
       // a dust devil wandering the flats inside the north loop
       { model: 'set-dust-devil', u: 0.7, lat: -12 },
       // the railway round the field, length by length on the rim (laid in
       // the world by scratch geometry, set_prototypes.py SW_RING, each
       // length placed on its own chord): the rack behind the tank farm, the
-      // open line, and four trains, each built on a length of its own a
-      // quarter of the way round from the next; the rack fed from the farm
+      // open line (the lengths behind the south loop's ridge, h to m, never
+      // seen from the seat, are full-only), and four trains, each built on a
+      // length of its own a quarter of the way round from the next; the rack fed from the farm
       // through a pipe that comes up at the farm's edge
       { model: 'set-tank-rack', u: 0.63973, lat: 37.034, yaw: -1.586 },
       { model: 'set-tank-line-a', u: 0.652316, lat: 33.785, yaw: 6.158 },
@@ -1748,13 +1787,13 @@ export const TRACKS = {
       { model: 'set-tank-line-f', u: 0.764304, lat: 41.239, yaw: -32.089 },
       { model: 'set-tank-line-g', u: 0.052027, lat: 38.927, yaw: 5.107 },
       { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959 },
-      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553 },
-      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165 },
-      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059 },
-      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931 },
+      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553, lite: false },
+      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165, lite: false },
+      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059, lite: false },
+      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931, lite: false },
       { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488 },
-      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786 },
-      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96 },
+      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786, lite: false },
+      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96, lite: false },
       { model: 'set-tank-line-n', u: 0.408735, lat: 31.764, yaw: 32.096 },
       { model: 'set-tank-line-o', u: 0.427437, lat: 23.974, yaw: -0.487 },
       { model: 'set-tank-train-d', u: 0.44725, lat: 25.604, yaw: -5.485 },
@@ -1839,7 +1878,11 @@ export const TRACKS = {
       { kind: 'clear', u: 0.684, lat: 11.5, len: 6, r: 1 },
       { kind: 'clear', u: 0.72, lat: 11.5, len: 26, r: 1 },
       { kind: 'clear', u: 0.78, lat: -14.8, len: 17, r: 1 },
-      { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 }
+      { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 },
+      // ...nor at the kerb before the tank farm, towering over its tanks
+      { kind: 'clear', u: 0.535, lat: 11.5, len: 16, r: 1 },
+      { kind: 'clear', u: 0.575, lat: 11.5, len: 22, r: 1 },
+      { kind: 'clear', u: 0.61, lat: 11.5, len: 12, r: 1 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).

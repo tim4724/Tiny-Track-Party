@@ -12576,6 +12576,57 @@ def wash_bed_build(ford):
 PIECES['wash-bed'], GROW['wash-bed'] = (lambda: wash_bed_build(False)), 1.0
 PIECES['wash-bed-ford'], GROW['wash-bed-ford'] = (lambda: wash_bed_build(True)), 1.0
 
+@piece(1.0)
+def wash_road_reach():
+    # Wash: a reach of the wash the ROAD runs down, between two fords: the
+    # gravel bed from bank to bank with the road along its middle (the deck
+    # lies on it, as at a ford), a cut bank either side a few units past
+    # each kerb, kerb-high and rust in the shade, stones on the bars between
+    # kerb and bank, brush along the banks' tops. Its SET_GROUND keeps the
+    # channel's floor under it. 10 units along Z, a chord of the road's
+    # curve (longer, its ends stood off a bend's kerbs), its banks dying
+    # away over the last unit at both ends, under the next reach's (a bed
+    # narrowing to nothing, as a wash reach does, drew its banks across the
+    # road); one mesh.
+    L, N = 10.0, 10
+    def half(z):
+        return 6.4 + 0.3 * math.sin(z * 0.6) + 0.2 * math.sin(z * 1.7 + 1.0)
+    zs_ = [-L / 2 + L * i / N for i in range(N + 1)]
+    tops = canyon_wash_channel([(0.0, z) for z in zs_], lambda i: half(zs_[i]), lip=0.75, seed=5.0,
+                               banked=lambda i: 0 < i < N)
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
+        o['ramp'] = 0.84
+    with plain_parts():
+        for i, (x, z, q) in enumerate(((5.3, -3.6, 0.3), (-5.6, -2.5, 0.24), (5.0, 1.5, 0.2), (-5.2, 3.4, 0.32),
+                                       (5.7, 3.9, 0.22), (-5.9, 0.6, 0.18))):
+            rock_lump(q, (x, q * 0.35, z), (0xd39a70, 'tan', 0xc07a55)[i % 3], (1.25, 0.6, 1.0), 0.9 * i, seed=11.0 + i)
+        for i, (x, z, sd) in enumerate(tops):
+            if abs(z) < L / 2 - 2.0:
+                brush((x, 0.5, z), 0.6 + 0.12 * (i % 3), yaw=i)
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
+
+@piece(1.0)
+def flood_jam():
+    # Wash: what the last flash flood left where the bed turns: a jam of
+    # bleached logs piled against a boulder on the bar (+X the road), a root
+    # wad on top, a tumbleweed caught in it. Dead wood only.
+    PALE = 'cream'
+    with plain_parts():
+        sandstone_rock((-0.6, 0, 0.4), 1.5, yaw=0.5)
+        for i, (a, b, r) in enumerate((((-0.2, 0.2, -2.6), (0.6, 0.9, 2.2), 0.24), ((0.9, 0.15, -1.8), (-1.2, 1.3, 1.6), 0.2),
+                                       ((1.3, 0.12, -0.6), (0.1, 0.5, 2.9), 0.18), ((-1.6, 0.15, -2.2), (0.7, 1.5, 0.2), 0.17),
+                                       ((0.2, 0.1, -3.0), (1.5, 0.35, -0.2), 0.15), ((-0.9, 1.0, -0.9), (1.2, 1.7, 1.2), 0.16),
+                                       ((1.6, 0.1, 0.8), (0.3, 0.2, 3.4), 0.14))):
+            rowed(rod(a, b, r * 1.2, PALE, r2=r * 0.85), (8, 13, 10)[i % 3])
+        # a root wad lying on the pile, its roots in the air
+        rowed(rod((-0.3, 0.9, 1.2), (1.1, 1.35, 2.7), 0.3, PALE, r2=0.24), 12)
+        for k in range(5):
+            a = 1.26 * k
+            rowed(rod((1.1, 1.35, 2.7), (1.3 + 0.2 * math.cos(a), 1.4 + 0.55 * math.sin(a), 3.0 + 0.5 * math.cos(a)), 0.1, PALE, r2=0.06), 12)
+        brush((1.5, 0, -2.4), 0.8)
+    tumbleweed((0.6, 0.75, -0.3), 0.4)
+    join_still('jam')
+
 @piece(0.35)
 def mine_portal():
     # Gulch: the mine, at the size of the thing (the builder works in units of
@@ -12642,6 +12693,35 @@ def mine_portal():
         box((0.16, 0.16, 0.6), (3.2 + k * 0.16, 1.7, -6.0), 'red')
     flagpole((-0.4, 0, -8.8), 3.4, 'red', w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.0#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None and not o.get('group')], 'yard')
+
+@piece(1.0)
+def powder_magazine():
+    # Gulch: the mine's powder magazine, out past the boomtown where a blast
+    # would hurt no one (+X the road): a low pale stone house dug into the hill,
+    # its iron door red, a red flag over it and kegs of powder stacked by
+    # the door; and the siding its powder goes down, two carts on a short
+    # length of the mine's gauge to a buffer stop.
+    with plain_parts():
+        rowed(box((3.0, 1.5, 3.4), (-1.6, 0.75, 0), 'cream'), 12)                 # the stone house, pale (grey, a black box)
+        box((3.3, 0.3, 3.7), (-1.6, 1.6, 0), TIMBER)
+        box((2.6, 0.5, 3.0), (-1.9, 1.95, 0), 0xd68f62)                           # earth heaped on its roof
+        box((0.14, 1.15, 0.9), (-0.06, 0.6, 0), 'red')                            # the iron door
+        box((0.2, 1.4, 0.2), (0.0, 0.7, -0.62), TIMBER)
+        box((0.2, 1.4, 0.2), (0.0, 0.7, 0.62), TIMBER)
+        box((0.24, 0.2, 1.5), (0.0, 1.45, 0), TIMBER)
+        for k, (x, z, y) in enumerate(((0.7, -1.5, 0), (1.15, -1.3, 0), (0.9, -1.4, 0.42), (0.8, 1.6, 0))):
+            keg((x, y, z), r=0.2, h=0.42)
+        crate((1.3, 0, 1.5), 0.42, yaw=0.3)
+        for x in (1.75, 2.35):                                                    # the siding
+            box((0.12, 0.12, 6.4), (x, 0.1, 0.2), 'slate')
+        for k in range(8):
+            box((1.0, 0.1, 0.24), (2.05, 0.05, -2.8 + 0.8 * k), TIMBER)
+        box((0.9, 0.5, 0.24), (2.05, 0.3, 3.5), TIMBER)
+        box((1.0, 0.16, 0.16), (2.05, 0.5, 3.4), 'red')
+        ore_cart((2.05, 0.16, -1.6), yaw=0.0, ore=False, k=0.42)
+        ore_cart((2.05, 0.16, 0.2), yaw=0.0, ore_color='grey', k=0.42)
+    flagpole((-0.3, 1.6, -1.2), 2.2, 'red', w=0.9, fh=0.55, wave='anim_sway:a=z:d=24:p=2.3#1')
+    join_still('magazine')
 
 @piece(0.35)
 @plain
@@ -14090,17 +14170,15 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
 # calves in loose bunches, each (x, z, yaw, coat, patch, face, size, pose);
 # Herefords red with white faces, a few black baldies and roans among them.
 RED, BLACK, ROAN, CREAM_HIDE = 0x9a4a32, 0x38383d, 0xb06041, 0xf2bf99
-HERD_A = ((-1.2, -13.5, 0.4, RED, None, 0xf8f8fb, 1.0, 'graze'), (-2.6, -12.0, 2.2, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'up'),
-          (-3.9, -14.2, -0.6, BLACK, None, 0xf8f8fb, 1.0, 'graze'), (-2.9, -10.6, 1.6, RED, None, 0xf8f8fb, 0.55, 'up'),
-          (-5.6, -6.0, 3.3, ROAN, CREAM_HIDE, ROAN, 1.05, 'lie'), (-4.4, -4.6, -2.4, RED, None, 0xf8f8fb, 1.0, 'lie'),
-          (-6.4, -3.4, 0.9, BLACK, None, BLACK, 0.95, 'graze'),
-          (-1.4, 2.6, -1.0, RED, None, 0xf8f8fb, 1.0, 'up'), (-2.9, 4.4, 0.2, ROAN, None, 0xf8f8fb, 0.9, 'graze'),
-          (-1.9, 5.6, 2.7, RED, 0xf8f8fb, 0xf8f8fb, 0.55, 'graze'),
-          (-5.2, 9.5, -0.3, BLACK, 0xf8f8fb, 0xf8f8fb, 1.0, 'graze'), (-3.6, 11.6, 1.9, RED, None, 0xf8f8fb, 1.0, 'graze'),
-          (-6.6, 12.8, 3.6, RED, None, 0xf8f8fb, 0.95, 'up'), (-1.6, 14.4, -1.9, ROAN, CREAM_HIDE, 0xf8f8fb, 1.0, 'lie'))
-HERD_B = ((-2.0, -6.0, 1.2, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.4, -4.4, -0.4, BLACK, None, 0xf8f8fb, 1.0, 'up'),
-          (-2.6, 1.8, 2.6, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'graze'), (-3.9, 3.0, 0.8, RED, None, 0xf8f8fb, 0.55, 'up'),
-          (-5.4, 7.6, -1.2, ROAN, None, ROAN, 1.0, 'lie'))
+# (x off the fence, z along it, yaw, coat, patch, face, size, pose): few and
+# big, in bunches against the fence (a dozen scattered down the range were
+# specks from the road)
+HERD_A = ((-1.6, -11.5, 0.4, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.2, -10.2, 2.2, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'up'),
+          (-2.2, -8.4, -0.6, BLACK, None, 0xf8f8fb, 1.0, 'graze'), (-3.6, -7.6, 1.6, RED, None, 0xf8f8fb, 0.6, 'up'),
+          (-1.8, 3.0, -1.0, RED, None, 0xf8f8fb, 1.0, 'up'), (-3.4, 4.6, 0.2, ROAN, CREAM_HIDE, 0xf8f8fb, 0.95, 'graze'),
+          (-2.0, 6.4, 2.7, BLACK, 0xf8f8fb, 0xf8f8fb, 1.0, 'graze'), (-4.6, 5.8, 3.3, RED, None, 0xf8f8fb, 1.0, 'lie'))
+HERD_B = ((-1.8, -3.4, 1.2, RED, None, 0xf8f8fb, 1.0, 'graze'), (-3.4, -2.2, -0.4, BLACK, None, 0xf8f8fb, 1.0, 'up'),
+          (-2.0, -0.4, 2.6, RED, 0xf8f8fb, 0xf8f8fb, 0.95, 'graze'), (-3.8, 0.8, 0.8, ROAN, None, ROAN, 0.6, 'up'))
 
 def herd(cattle):
     """A bunch of range cattle as ONE draped part (each stands on the land as
@@ -14113,7 +14191,7 @@ def herd(cattle):
             life = None
             if i % 3 == 0 and pose != 'lie':
                 life = 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.76#h%d' % (7.0 + 0.7 * (i % 5), i)
-            range_cow((0.7 * x, 0, z), yaw, coat, patch, face, 1.25 * size, pose, life)   # bunched toward the fence, a size up to read over its rails
+            range_cow((x, 0, z), yaw, coat, patch, face, 1.55 * size, pose, life)   # a size and a half up, to read over the fence's rails
     draped('herd', build)
 
 @piece(1.0)
@@ -14170,7 +14248,7 @@ def hoodoos():
 MTN_BANDS = (2.3, 3.9, 5.6, 7.5)                         # the benches' heights, before their wobble
 MTN_CLIFF = ('brown', 'salmon', 'brown', 'salmon', 'brown')   # each stratum's face, foot up
 
-def canyon_mountain(seed, L, H, R=0.0, D=13.0):
+def canyon_mountain(seed, L, H, R=0.0, D=13.0, dress=None):
     import random
     rnd = random.Random(seed)
     def noise(waves):
@@ -14277,6 +14355,12 @@ def canyon_mountain(seed, L, H, R=0.0, D=13.0):
             q = 0.45 + 0.35 * (jit(k, 10) + 0.5)
             px, _, pz = world(0.6 * n_foot(s) + 0.25, 0.0, s)
             box((q * 1.4, q * 0.8, q * 1.1), (px, q * 0.25, pz), 'salmon', yaw=3.0 * jit(k, 11), roll=0.2 * jit(k, 12))
+        if dress:
+            # what men built on this length (Gulch's mine workings), in the
+            # length's own (x off the foot line, y, s along it) through `at`,
+            # `foot(s)` the rock's foot there and `turn(s)` a box's yaw facing
+            # the road; part of the wall, so it rides the land with the rock
+            dress(L, world, lambda s: 0.6 * n_foot(s), (lambda s: s / R) if R else (lambda s: 0.0))
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
 
 def mountains(**lengths):
@@ -14301,16 +14385,101 @@ mountains(canyon_peaks_a=dict(seed=7, L=21.0, H=10.0),
 # Wash's straight lengths between), and the inside's face round the
 # left-hander, its back falling into the middle of the loop (the land there
 # sits under the deck cap and cannot rise), which opens on the yard.
-mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2),
-          canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
-          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0))
+def gulch_adit(at, turn, foot, ground, s, cart=False):
+    """A prospect adit in the foot of a canyon face at `s`: a dark mouth a
+    car high in a frame of pale boards, standing on the talus, and the
+    waste rock tipped out of it, a grey fan down to the verge."""
+    x = min(foot(s) + 0.3, 0.55)
+    g = ground(*at(x, 0.0, s)[::2]) or 0.9
+    yaw = turn(s)
+    box((1.2, 1.5, 1.1), at(x - 0.4, g + 0.6, s), ROPE, yaw=yaw)                    # the dark of it
+    for dz in (-0.68, 0.68):
+        box((0.34, 1.8, 0.28), at(x + 0.2, g + 0.75, s + dz), 'cream', yaw=yaw)
+    box((0.4, 0.3, 1.9), at(x + 0.2, g + 1.7, s), 'cream', yaw=yaw)
+    rowed(rock_lump(1.0, at(x + 0.4, g - 0.45, s + 0.4), 'gravel', (0.85, 0.9, 2.1), yaw, seed=s), 6)    # the spoil
+    rowed(rock_lump(0.6, at(x + 0.55, g - 0.5, s - 1.5), 'gravel', (0.8, 0.7, 1.4), yaw + 0.4, seed=s + 1), 10)
+    if cart:
+        ore_cart(at(x + 0.75, g - 0.05, s - 0.2), yaw=yaw + math.pi / 2, ore_color='grey', k=0.36)
 
-# Crag's rim: round the outside of the west hairpin (its entry looser than its
-# apex, so a wide bend's foot follows it) and out of it, and along the north
-# straight to the bridge. The start straight before it is open range.
-mountains(canyon_hairpin_crag=dict(seed=73, L=30.0, H=10.5, R=24.0),
-          canyon_exit_crag=dict(seed=79, L=20.0, H=9.5, R=14.0),
-          canyon_rim_crag_b=dict(seed=83, L=20.0, H=9.0))
+def gulch_crib(at, turn, foot, ground, s, n=4):
+    """Timbering: a crib of logs holding the talus back at the verge."""
+    x = min(foot(s) + 0.7, 1.05)
+    for k in range(n):
+        beam(at(x - 0.08 * k, 0.12 + 0.24 * k, s - 1.5), at(x - 0.08 * k, 0.12 + 0.24 * k, s + 1.5), 0.22, TIMBER)
+    for dz in (-1.2, 0.0, 1.2):
+        box((0.22, 0.3 + 0.24 * n, 0.22), at(x + 0.16, 0.12 * n + 0.05, s + dz), TIMBER, yaw=turn(s))
+
+def gulch_flume(L, at, foot, turn):
+    """Gulch's descent is the mine's canyon: a timber flume bringing water
+    down it to the mill, pinned along the face of the long left-hander on
+    trestle bents that stand on the talus and the first bench, out of a
+    header box at a notch in the cliff and down to a sluice at the verge;
+    prospect adits in the face under it, each with its fan of grey spoil,
+    and a crib of logs holding the talus where the flume comes down."""
+    ground = built_ground()
+    X = 0.95                                                   # the trough's line, clear of every buttress
+    s0, s1 = -L / 2 + 3.5, L / 2 - 7.0
+    n = int(round((s1 - s0) / 1.5))
+    ss = [s0 + (s1 - s0) * i / n for i in range(n + 1)]
+    y = lambda s: 3.25 - 0.55 * (s - s0) / (s1 - s0)           # falling the way the road does
+    pts = [at(X, y(s), s) for s in ss]
+    for a, b in zip(pts, pts[1:]):
+        rowed(beam(a, b, 0.62, 'grey', d=0.4), 10)             # the trough, weathered grey
+        beam((a[0], a[1] + 0.21, a[2]), (b[0], b[1] + 0.21, b[2]), 0.34, 'blue', d=0.04)   # the water in it
+    for i, s in enumerate(ss):
+        if i % 2:
+            continue
+        top = y(s) - 0.2
+        for dx in (-0.3, 0.3):                                 # a bent: two legs to the rock, a cap, a brace
+            fx = X + dx * 1.15
+            g = ground(*at(fx, 0.0, s)[::2])
+            beam(at(X + dx, top, s), at(fx, (g if g is not None else 0.0) - 0.3, s), 0.2, 'bark')
+        beam(at(X - 0.5, top - 0.02, s), at(X + 0.5, top - 0.02, s), 0.22, 'bark')
+        if i % 4 == 0 and i + 2 <= n:                          # every other bay braced along the run
+            beam(at(X + 0.3, top - 0.1, s), at(X + 0.35, y(ss[i + 2]) - 1.5, ss[i + 2]), 0.14, 'bark')
+    # the header box where the flume comes out of the cliff, and the sluice
+    # it ends in: three boxes stepping down the talus to a heap of tailings
+    box((1.3, 0.9, 1.5), at(X - 0.25, y(s0) + 0.1, s0 - 0.6), BOARD, yaw=turn(s0))
+    box((1.45, 0.14, 1.65), at(X - 0.25, y(s0) + 0.6, s0 - 0.6), TIMBER, yaw=turn(s0))
+    for k in range(3):
+        sk, yk = s1 + 0.9 + 1.5 * k, y(s1) - 0.75 * (k + 1)
+        rowed(beam(at(X, yk + 0.3, sk - 0.8), at(X, yk - 0.3, sk + 0.8), 0.7, 'grey', d=0.36), 10)
+        g = ground(*at(X, 0.0, sk)[::2]) or 0.0
+        box((0.24, max(0.3, yk - g + 0.3), 0.24), at(X, (yk + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+    rowed(rock_lump(0.9, at(X - 0.1, 0.1, s1 + 5.6), 'grey', (0.9, 0.6, 1.5), turn(s1), seed=4.0), 5)
+    # the adits, each where the face's foot stands back (so its spoil keeps
+    # off the kerb), a few bays apart
+    for k, s in enumerate(gulch_sites(foot, s0 + 3.0, s1 - 3.0, 3)):
+        gulch_adit(at, turn, foot, ground, s, cart=(k == 1))
+    gulch_crib(at, turn, foot, ground, s1 + 3.2)
+
+def gulch_sites(foot, s0, s1, n):
+    """`n` spots along a face's foot, 7 u apart or more, where it stands
+    furthest back from the kerb."""
+    picked = []
+    for s in sorted((s0 + 0.75 * k for k in range(int((s1 - s0) / 0.75) + 1)), key=foot):
+        if len(picked) < n and all(abs(s - q) > 7.0 for q in picked):
+            picked.append(s)
+    return sorted(picked)
+
+def gulch_workings(L, at, foot, turn):
+    """The rest of the descent's faces: prospect adits and their spoil, a
+    crib of logs between them."""
+    ground = built_ground()
+    sites = gulch_sites(foot, -L / 2 + 6.0, L / 2 - 6.0, 2)
+    for k, s in enumerate(sites):
+        gulch_adit(at, turn, foot, ground, s, cart=(k == 0))
+    if len(sites) == 2:
+        gulch_crib(at, turn, foot, ground, (sites[0] + sites[1]) / 2, n=3)
+
+mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2, dress=gulch_flume),
+          canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
+          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0),
+          # its straights, the canyon's own (Wash's lengths stood here)
+          canyon_run_gulch=dict(seed=89, L=26.0, H=10.5, dress=gulch_workings),
+          canyon_drop_gulch=dict(seed=97, L=21.0, H=10.0, dress=gulch_workings),
+          canyon_yard_gulch=dict(seed=101, L=24.0, H=6.5, D=10.0, dress=gulch_workings))
+
 
 # ---- stepped rock: a mountain cut into level strata --------------------------------
 #
@@ -14644,6 +14813,29 @@ TUNNEL_FORMS, TUNNEL_ROUGH = (
     (-14.0, 13.0, 11.0, 9.0, 6.0, 0.3, 1.0, 0.0)), 1.4         # the back of the massif
 
 @piece(1.0)
+def flare_stack():
+    # Sidewinder: the field's flare, by the tank farm: a slim white stack
+    # five cars tall on a pad, braced by three struts, its tip a red collar
+    # with a small flame flickering on it (the gas the wells give off with
+    # the oil), a knock-out drum at its foot piped to it.
+    with plain_parts():
+        box((1.6, 0.16, 1.6), (0, 0.08, 0), 'grey')
+        box((0.26, 5.6, 0.26), (0, 2.96, 0), 'white')
+        for y in (1.9, 3.8):
+            box((0.32, 0.14, 0.32), (0, y, 0), 'grey')
+        box((0.44, 0.5, 0.44), (0, 5.85, 0), 'red')
+        for k in range(3):
+            a = 2.1 * k + 0.4
+            beam((1.5 * math.cos(a), 0.1, 1.5 * math.sin(a)), (0.1 * math.cos(a), 3.3, 0.1 * math.sin(a)), 0.12, 'slate')
+        cyl(0.42, 1.5, (-0.75, 0.55, 1.5), 'white', segs=10, axis='along')         # the knock-out drum
+        for dz in (1.8, 2.7):
+            box((0.7, 0.5, 0.16), (0, 0.25, dz), 'red')
+        beam((0, 1.0, 2.25), (0, 0.5, 0.2), 0.14, 'white')
+    flames(((0.1, 0.0, 0.24, 0.8, 0.12, 0.31), (-0.1, 0.08, 0.2, 0.62, 0.1, 0.37), (-0.02, -0.12, 0.18, 0.54, 0.09, 0.27)),
+           (0.0, 0.0, 0.13, 0.5, 0.07, 0.23), at=(0.0, 6.08, 0.0))
+    join_still('stack')
+
+@piece(1.0)
 @plain
 def mountain_tunnel():
     # Sidewinder: the long straight runs through a mountain. A massif of the
@@ -14742,7 +14934,7 @@ def tinaja():
     # head up, a grey-brown mare) come to water at it. Water and rock only.
     dome = massif_height(((-4.6, 0.0, 2.4, 2.8, 4.6, 0.0, 1.0, 3.0), (-1.0, 0.0, 1.0, 4.8, 5.0, 0.0, 0.5, 1.0)),
                          rough=0.5, seed=2.3, warp=0.6)
-    PX, PZ, PR = -1.3, 0.0, 1.9
+    PX, PZ, PR = -0.75, 0.0, 1.35
     def rim(a):                                                          # the hollow's uneven outline
         return 1.0 + 0.07 * math.sin(3 * a + 0.4) + 0.04 * math.sin(5 * a + 2.2)
     def dist(x, z):
@@ -14754,18 +14946,20 @@ def tinaja():
     FLOOR, W, EDGE = 0.06, 0.26, 0.81
     def M(x, z):
         d = dist(x, z)
-        return min(dome(x, z), FLOOR + 2.6 * max(0.0, d - EDGE) + 1.6 * max(0.0, d * d - 1.0))   # the hollow
+        return min(dome(x, z), FLOOR + 3.4 * max(0.0, d - EDGE) + 1.6 * max(0.0, d * d - 1.0))   # the hollow
     canyon_rock(M, -9.0, 5.0, -8.0, 8.0,
-                ((-0.6, 0.2, 0xd68f62, 0.25), (0.2, 0.5, 0xe3cfa4, 0.3), (0.5, 0.85, 0xd68f62, 0.3),
+                ((-0.6, 0.2, 0xd68f62, 0.25), (0.2, 0.5, 0xa96545, 0.3), (0.5, 0.85, 0xd68f62, 0.3),
                  (0.85, 1.3, 0xa96545, 0.25), (1.3, 1.9, 0xd68f62, 0.2)),
                 'rock', grid=0.25, tol=0.12, step=1.2, jitter=0.12, summits=False)
-    # The water, one polar sheet on the hollow's outline: deep blue in the
-    # middle lightening ring by ring to the shallows, a ring of foam at the
-    # waterline, and its last ring running on under the rock wall so no gap
-    # opens between them.
+    # The water, one polar sheet on the hollow's outline: a small dark pool
+    # in the shade of its basin (bright, with a pale ring, it read as a
+    # paddling pool in the desert), deep blue in the middle, a little
+    # lighter in the shallows and a thin light line at the waterline, its
+    # last ring running on under the dark rock wall so no gap opens between
+    # them.
     N = 30
     RINGS = (0.0, 0.4, 0.62, 0.78, 0.875, 0.91, 1.0)
-    TONE = (('blue', 26), ('blue', 13), ('sky', 24), ('sky', 14), ('white', 1), ('white', 1))
+    TONE = (('blue', 31), ('blue', 29), ('blue', 26), ('blue', 23), ('blue', 15), ('blue', 26))
     ring = [[(PX + math.cos(a) * PR * rim(a) * f, W, PZ + math.sin(a) * PR * rim(a) * f / 0.9) for f in RINGS]
             for a in (2 * math.pi * i / N for i in range(N + 1))]
     for j, (sw, row) in enumerate(TONE):
@@ -14843,10 +15037,13 @@ def butte_height(tiers, talus, reach, seed, jag):
 # caprock on the highest tier.
 CRAG_TALUS, CRAG_CLIFF, CRAG_PALE = 0xd68f62, 0xa96545, 0xd68f62
 
-def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07):
+def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07, wrap=None):
     """A butte of Crag's strata over butte_height, on [-extent, extent]^2,
-    with `pale` light beds across its cliff."""
+    with `pale` light beds across its cliff (`wrap` reshapes the height: a
+    rim length's bend)."""
     M = butte_height(tiers, talus, reach, seed, jag)
+    if wrap:
+        M = wrap(M)
     top = max(t[2] for t in tiers)
     k = talus / 5.0
     c0 = 6.4 * k
@@ -14962,6 +15159,44 @@ def rimrock_mitten():
     crag_butte(((-3.0, 0.0, 21.0, 5.5, 4.0, 0.2, 5.0, 0.35), (5.5, 3.0, 18.0, 2.8, 2.6, 0.0, 0.0, 0.5),
                 (0.5, 1.0, 5.5, 10.0, 7.5, 0.3, 6.0, 0.3)), 3.5, 7.0, 26.0, 3.3, jag=0.12)
     crag_rubble(((1.0, -21.0, 0.8), (-2.0, 21.0, 0.8)))
+
+# Crag's rim: the mesa's edge where the road meets it, round the outside of
+# the west hairpin (its entry looser than its apex, so a wide bend's foot
+# follows it) and out of it, and along the north straight to the bridge, in
+# the track's own rock (crag_butte: tables of the one dark sandstone over a
+# plain talus, a bench before each and a tower broken off the end), where
+# the cup's banded canyon lengths stood (Wash's signature, and Gulch's). Each
+# length is authored along a straight foot line (z along the road, -X into
+# the rim, the kerb a unit past x = 1) and bent round `R` as canyon_mountain
+# bends its own; it drapes as a canyon length does, its back in the rim's
+# land (tracks.js `land`). The start straight before it is open range.
+def crag_rim(tiers, seed, R=0.0, extent=26.0):
+    def wrap(M0):
+        def M(x, z):
+            if R:
+                r = math.hypot(R - x, z)
+                x, z = R - r, R * math.atan2(z, R - x)
+            return min(M0(x + 1.5, z), 2.5 * (1.0 - x))         # the talus stops short of the kerb
+        return M
+    with plain_parts():
+        crag_butte(tiers, 2.8, 5.0, extent, seed, pale=1, jag=0.12, wrap=wrap)
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+
+for _name, _kw in dict(
+        canyon_hairpin_crag=dict(seed=1.3, R=24.0, extent=30.0, tiers=(
+            (-9.5, -7.5, 10.5, 5.5, 4.2, 0.08, 5.0, 0.22), (-10.0, 5.0, 8.5, 5.0, 3.8, -0.1, 3.5, 0.25),
+            (-8.0, 12.0, 9.5, 2.4, 2.2, 0.0, 0.5, 0.45), (-6.0, -6.0, 5.0, 3.4, 3.6, 0.0, 5.0, 0.3),
+            (-6.5, 0.5, 6.5, 1.8, 1.8, 0.3, 0.5, 0.5))),
+        canyon_exit_crag=dict(seed=2.9, R=14.0, extent=26.0, tiers=(
+            (-9.5, -2.0, 9.5, 4.8, 4.0, 0.1, 4.0, 0.22), (-7.5, 6.5, 7.5, 2.2, 2.0, 0.0, 0.5, 0.45),
+            (-6.2, -3.0, 4.8, 3.2, 3.4, 0.0, 4.0, 0.3))),
+        canyon_rim_crag_b=dict(seed=4.1, extent=22.0, tiers=(
+            (-10.0, 1.0, 9.0, 5.5, 4.5, -0.05, 8.0, 0.22), (-8.0, -8.0, 7.5, 2.4, 2.2, 0.0, 1.0, 0.45),
+            (-6.5, 3.0, 5.5, 3.8, 4.0, 0.0, 5.0, 0.3)))).items():
+    def _build(kw=_kw):
+        crag_rim(**kw)
+    _build.__name__ = _name
+    piece(1.0)(_build)
 
 def emblem(at, yaw, r, d=0.04):
     """The oil company's mark, facing +X turned by `yaw`: a white disc in a
@@ -15383,7 +15618,9 @@ def dust_devil():
     # dust some four cars tall, three bands of it winding up and out from a
     # skirt kicked up off the sand, grit and a tumbleweed caught in it, the
     # whole spinning as it drifts (anim_path+spin on a draped loop, so it
-    # keeps to the land as drawn). Pale against the sand, as dust is.
+    # keeps to the land as drawn). The sand's own colour a shade paler (white
+    # at the top, its rings read as a stack of plates), its rings close
+    # enough to close into one funnel.
     N = 14
     loop = []
     for i in range(N):
@@ -15403,13 +15640,11 @@ def dust_devil():
             def ring(t):
                 R, lean = 0.32 + 1.25 * t ** 1.4, 0.5 * t * t
                 return x0 + lean * math.cos(9.1 * t), 0.45 + 3.9 * t, z0 + lean * math.sin(9.1 * t), R
-            for j in range(8):
-                t = j / 7
+            for j in range(11):
+                t = j / 10
                 cx, cy, cz, R = ring(t)
-                tone = (('tan', 4), ('tan', 2), ('cream', 10), ('cream', 8), ('cream', 6), ('cream', 4), ('cream', 2),
-                        ('white', 2))[j]
-                rowed(torus(R, 0.14 + 0.16 * t, (cx, cy, cz), tone[0], segs=10 + 2 * (j // 3), minor=5), tone[1])
-            for k, (c, row) in enumerate((('tan', 6), ('cream', 12), ('salmon', 6))):
+                rowed(torus(R, 0.26 + 0.14 * t, (cx, cy, cz), 'tan', segs=10 + 2 * (j // 4), minor=5), 9 - (j * 6) // 10)
+            for k, (c, row) in enumerate((('tan', 12), ('tan', 1), ('salmon', 8))):
                 pts = [(x0 + 0.3 * math.cos(2.1 * k), 0.05, z0 + 0.3 * math.sin(2.1 * k))]
                 for j in range(29):
                     t = j / 28
