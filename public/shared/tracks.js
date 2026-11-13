@@ -356,7 +356,7 @@ export const SET_GROUND = {
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
-  'set-penguin-group': [{ kind: 'mound', x: -8, h: 2.6, r: 12, r1: 9, rz: 11, shape: 1.2 }],
+  'set-penguin-group': [{ kind: 'mound', x: -8, h: 3.8, r: 12, r1: 9, rz: 11, shape: 1.2 }],
   // Glacier's expedition camp on a snow bank of its own, flat on top like the
   // den camp's and set back from the road: a camp on the flat hid its tents
   // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:

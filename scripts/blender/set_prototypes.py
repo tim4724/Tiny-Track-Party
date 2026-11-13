@@ -7731,17 +7731,17 @@ def advanced_camp():
     # stood in the snow, two climbers by the tents. Close set, on a low bank
     # (SET_GROUND), so the slope it stands near tips no tent: draped, built on
     # y = 0 and laid on the snow as the renderer draws it.
-    for (z, c) in ((-1.3, 0xff7e44), (-0.43, 0xffc044), (0.43, 0xcf534f), (1.3, 0x3f7bd9)):
-        ridge_tent(0.2, z, c)
-    ridge_tent(-1.3, 0.0, 0x61cb8b, k=0.38, yaw=math.pi / 2)        # the store tent, behind
+    # (the tents half again a two-person tent's size and spread to match: at
+    # their real size the camp stood under the kerb's line from the seat)
+    for (z, c) in ((-1.9, 0xff7e44), (-0.63, 0xffc044), (0.63, 0xcf534f), (1.9, 0x3f7bd9)):
+        ridge_tent(0.3, z, c, k=0.4)
+    ridge_tent(-1.7, 0.0, 0x61cb8b, k=0.52, yaw=math.pi / 2)        # the store tent, behind
     for k in range(5):                                              # the wind wall behind them
-        snowy(box((0.18, 0.3, 0.55), (-2.35, 0.15, -1.4 + k * 0.7), 0xf3f7fb, yaw=0.1 * (k - 2)), 0.4)
-    for (x, z) in ((1.0, -0.2), (1.05, 0.05)):                      # ice axes stood in the snow
+        snowy(box((0.26, 0.45, 0.8), (-3.1, 0.22, -2.0 + k * 1.0), 0xf3f7fb, yaw=0.1 * (k - 2)), 0.4)
+    for (x, z) in ((1.5, -0.2), (1.55, 0.05)):                      # ice axes stood in the snow
         box((0.04, 0.32, 0.04), (x, 0.16, z), 0x555b66)
         box((0.16, 0.04, 0.04), (x, 0.32, z), 0x2a2735)
-    snow_person(1.2, 0, -0.9, 0x3f7bd9, 0xcf534f, yaw=0.4)
-    snow_person(1.3, 0, 0.8, 0x61cb8b, 0x38383d, yaw=-0.5)
-    MX, MZ, MH = -0.3, 2.3, 2.8
+    MX, MZ, MH = -0.3, 3.2, 3.6
     radio_mast(MX, MZ, MH, 7, 'anim_drape+sway:a=x:d=24:p=1.7#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
           'drape_camp')
