@@ -1710,16 +1710,18 @@ export const TRACKS = {
     // the hairpin, beside the S, down the start straight); a lone red
     // pumpjack dead ahead out of the S at the east bend, a flowing well's
     // christmas tree at the bend's exit; the tank farm at the end of the
-    // east straight, outside the north loop's first corner
-    // where the whole straight points, and left of it past the corner the
-    // company's tank train walking round its loading loop on the ground,
-    // filled at a rack off the trunk line; the field's three jacks nodding and
-    // tumbleweeds blowing by outside its second corner; and at the line the
-    // field's own filling station, its sign turning and a hawk over it. The
-    // telegraph line comes in across the open desert from the east to the
-    // station (over the road on two tall poles), clear of the mountain. Mesa
-    // rims close the west as
-    // near backdrops (the north and east stay open).
+    // east straight, outside the north loop's first corner, where the whole
+    // straight points; the field's three jacks nodding and tumbleweeds
+    // blowing by outside its second corner; and at the line the field's own
+    // filling station, its sign turning and a hawk over it. All round the
+    // field, on the rim of the basin the circuit lies in, runs the company's
+    // railway, its tank trains walking round and round it the way the race
+    // goes, filled at the rack behind the tank farm: on the ground the whole
+    // way, past the mountain through the pass between the massif and its
+    // range, and across no road. The telegraph line comes in across the open
+    // desert from the east to the station (over the railway and the road on
+    // tall poles), clear of the mountain. Mesa rims close the west as near
+    // backdrops (the north and east stay open).
     // Everything by the road at its own size, the rock as big as rock is.
     set: [
       { model: 'set-telegraph-line', u: 0.02, lat: 6 },
@@ -1734,13 +1736,39 @@ export const TRACKS = {
       { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
-      // the company's tank train walking round its loading loop on the
-      // outside of the north loop's first corner, beyond the trunk line
-      // that feeds its rack: ahead, left of the tank farm, the whole way
-      // up the east straight
-      { model: 'set-tank-train', u: 0.68, lat: 20 },
       // a dust devil wandering the flats inside the north loop
       { model: 'set-dust-devil', u: 0.7, lat: -12 },
+      // the railway round the field, length by length on the rim (laid in
+      // the world by scratch geometry, set_prototypes.py SW_RING, each
+      // length placed on its own chord): the rack behind the tank farm, the
+      // open line, and four trains, each built on a length of its own a
+      // quarter of the way round from the next; the rack fed from the farm
+      // through a pipe that comes up at the farm's edge
+      { model: 'set-tank-rack', u: 0.63973, lat: 37.034, yaw: -1.586 },
+      { model: 'set-tank-line-a', u: 0.652316, lat: 33.785, yaw: 6.158 },
+      { model: 'set-tank-line-b', u: 0.668314, lat: 30.645, yaw: 7.611 },
+      { model: 'set-tank-line-c', u: 0.685867, lat: 30.402, yaw: -6.683 },
+      { model: 'set-tank-train-a', u: 0.712178, lat: 34.01, yaw: -3.782 },
+      { model: 'set-tank-line-d', u: 0.733355, lat: 33.929, yaw: 0.284 },
+      { model: 'set-tank-line-e', u: 0.749814, lat: 33.838, yaw: 0.118 },
+      { model: 'set-tank-line-f', u: 0.764304, lat: 41.239, yaw: -32.089 },
+      { model: 'set-tank-line-g', u: 0.052027, lat: 38.927, yaw: 5.107 },
+      { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959 },
+      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553 },
+      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165 },
+      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059 },
+      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931 },
+      { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488 },
+      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786 },
+      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96 },
+      { model: 'set-tank-line-n', u: 0.408735, lat: 31.764, yaw: 32.096 },
+      { model: 'set-tank-line-o', u: 0.427437, lat: 23.974, yaw: -0.487 },
+      { model: 'set-tank-train-d', u: 0.44725, lat: 25.604, yaw: -5.485 },
+      { model: 'set-tank-line-p', u: 0.483383, lat: 29.707, yaw: -3.963 },
+      { model: 'set-tank-line-q', u: 0.874983, lat: -24.093, yaw: -162.897 },
+      { model: 'set-tank-line-r', u: 0.86413, lat: -29.847, yaw: 139.231 },
+      { model: 'set-pipeline-rise', u: 0.634694, lat: 17.544, yaw: 105.681 },
+      { model: 'set-pipeline-16', u: 0.634694, lat: 17.544, yaw: -74.319 },
       // the trunk line on its stilts, span by span along the right-hand
       // verge, each span a chord of the road's curve with a support at every
       // joint: from the tank farm round the north loop, swinging out behind
@@ -1786,7 +1814,8 @@ export const TRACKS = {
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
     // horizon from any point of the road; and the mountain's range running
-    // on from its west end, rock-tinted
+    // on from its west end, rock-tinted, a pass left between the two for the
+    // railway (the ridge's near end a crest's width clear of the massif)
     land: [
       // a low ridge of the rust land along the outside of the south loop,
       // rising from just past the trunk line (`near`), so the road runs
@@ -1795,10 +1824,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.172, lat: 18, len: 8, r: 9, h: 3.6, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.214, lat: 18.5, len: 10, r: 9, h: 4.2, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.258, lat: 18, len: 8, r: 9, h: 3.4, top: 0.3, near: 4.6, tint: 0xc8846a },
-      // the rail yard's floor, levelled out of the desert's swell round the
-      // loading loop (set-tank-train), the whole of its footprint and more
-      { kind: 'plain', u: 0.6765, lat: 18, len: 14, r: 16, w: 6 },
-      { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.106085, lat: 84.07, yaw: 80.369, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
       { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
       // The field (the S round the north loop) keeps the biome's hoodoo

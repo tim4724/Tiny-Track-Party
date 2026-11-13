@@ -13724,15 +13724,20 @@ def telegraph_line():
     # the dust takes it, to its corner pole on the straight's right verge by
     # the filling station; from there two tall poles carry it over the road
     # (the station's own piece has the near one, the span and the drop to
-    # its shop). It never comes near the mountain: a line over the tunnel
-    # read as wires through the rock. The run DRAPES, each pole on the land
-    # as drawn, so it stands on whatever rise the desert has out there. A
-    # highway sign faces the oncoming traffic by the straight. In runs of
-    # four spans, a draw each, so a cell draws only the runs it sees.
+    # its shop). Out on the rim it crosses the field's railway on two tall
+    # poles of its own, the span between them a little longer, so the
+    # trains pass under its wires (SW_RING, below: the line
+    # crosses between the fourth pole and the fifth). It never comes near
+    # the mountain: a line over the tunnel read as wires through the rock.
+    # The run DRAPES, each pole on the land as drawn, so it stands on
+    # whatever rise the desert has out there. A highway sign faces the
+    # oncoming traffic by the straight. In runs of four spans, a draw each,
+    # so a cell draws only the runs it sees.
     H = 1.9
     zc = TEL_CORNER[1]
-    xs = [0.0] + [-14.0 - 16.0 * i for i in range(12)]           # the corner pole, then out across the desert
+    xs = [0.0] + [-14.0 - 16.0 * i - (6.0 if i >= 3 else 0.0) for i in range(12)]   # the corner pole, then out across the desert
     hs = [TEL_TALL, 2.9] + [H] * (len(xs) - 2)
+    hs[3] = hs[4] = TEL_TALL                                     # either side of the railway
     for r0 in range(0, len(xs), 4):
         before = set(bpy.context.scene.objects)
         for i in range(r0, min(r0 + 4, len(xs))):
@@ -15021,23 +15026,140 @@ def pickup(x, z, color, yaw=0.0):
     part(0, 0.27, 0.75, (0.64, 0.07, 0.06), 0x868ba1)                # the bumpers
     part(0, 0.27, -0.75, (0.64, 0.07, 0.06), 0x868ba1)
 
-# Sidewinder's freight line: the company's tank train loading the field's
-# crude at its terminal, at a real train's size beside a car (a tank car some
-# four units long). Its track lies on the ground in a loading loop, a balloon
-# off the line in, so a train is filled without ever backing up: it walks
-# round and round through the loading rack, every rail of it in sight. It
-# stands on the outside of the north loop's first corner, beyond the trunk
-# line from the tank farm, which feeds the rack through a valve on a tee
-# (tracks.js sidewinder; a `plain` there keeps the yard flat). +X is the road.
-SW_RAIL = 0.34                                  # the rails' top over the yard
-SW_LOOP = (8.5, 10.0)                           # the loop's curve radius and its straights' length
-SW_PACE = 0.5                                   # the train's walk, units a second (a brisk walk at this scale)
-SW_FEED = (13.75, 0.6)                          # where the feed meets the trunk line, in the loop's frame
+# Sidewinder's freight line: the field's crude goes out by rail, on a line
+# laid all the way round the field, at a real train's size beside a car (a
+# tank car some four units long). It runs on the ground, on the rim of the
+# basin the circuit lies in: out of the road's corridor, on the desert's
+# broad swell where the land lies level across and climbs gently along,
+# round the outside of the whole circuit, so it crosses no road, and past
+# the mountain through the pass between the massif and the range running
+# on from it (tracks.js moved the range's ridge clear of the massif for
+# it). Trains, a diesel and six tank cars each, walk round and round
+# through the loading rack behind the tank farm, which fills them from the
+# farm through a pipe. The line is laid in the WORLD (scratch geometry,
+# checked against the ground as drawn) as SW_RING, a point every SW_STEP
+# from the rack's end, and cut into pieces: the rack's own length, the
+# lengths of open line, and a length for each train to be built standing
+# on. SW_PIECE gives each its run of SW_RING and the frame of its tracks.js
+# placement (x, z and heading, +Z along its chord), so a cell draws and
+# takes its far form a length at a time, and each length's box keeps the
+# scatter off its own rails only. Every length but the rack's DRAPES: its
+# ballast, ties and rails lie on the ground as it is drawn; the rack levels
+# its pad, and the lengths either side come down onto it. Each train is
+# its own piece, so in the full tier each is a draw of its own that culls
+# where it is (TtpRendererMotion.cpp), and rides the whole of SW_RING, a
+# `drape` chain: on the ground too.
+SW_RAIL = 0.34                                  # the rails' top over the ground
+SW_PACE = 0.5                                   # the trains' walk, units a second (a brisk walk at this scale)
+SW_FEED = (4.0, 0.6)                            # where the pipe from the farm meets the rack, in its frame
+SW_STEP = 1.000318
+SW_PIECE = {
+    'tank-rack': (0, 14, 154.002157, -115.79034, -3.154477),
+    'tank-line-a': (14, 41, 146.991579, -133.959378, -2.624365),
+    'tank-line-b': (41, 67, 128.615192, -151.524116, -2.041814),
+    'tank-line-c': (67, 94, 104.050169, -158.990604, -1.68748),
+    'tank-train-a': (94, 120, 78.692459, -155.993795, -1.20994),
+    'tank-line-d': (120, 147, 58.691613, -141.286633, -0.668193),
+    'tank-line-e': (147, 174, 48.567629, -117.305695, -0.120023),
+    'tank-line-f': (174, 200, 44.685473, -91.385637, -0.178207),
+    'tank-line-g': (200, 227, 32.024892, -70.824659, -0.919862),
+    'tank-train-b': (227, 253, 9.113201, -59.781556, -1.325602),
+    'tank-line-h': (253, 280, -11.199971, -45.906619, -0.64387),
+    'tank-line-i': (280, 307, -21.329307, -22.044758, -0.199358),
+    'tank-line-j': (307, 333, -22.639383, 3.514045, 0.104742),
+    'tank-line-k': (333, 360, -11.148204, 23.910954, 0.914888),
+    'tank-train-c': (360, 386, 11.736898, 32.301983, 1.526989),
+    'tank-line-l': (386, 413, 37.593349, 29.226628, 1.848617),
+    'tank-line-m': (413, 439, 61.763015, 19.403319, 2.081091),
+    'tank-line-n': (439, 466, 85.499978, 8.095695, 1.975609),
+    'tank-line-o': (466, 493, 109.302875, -3.262872, 2.048899),
+    'tank-train-d': (493, 519, 127.900362, -20.780958, 2.635827),
+    'tank-line-p': (519, 546, 135.834771, -45.299928, 3.011391),
+    'tank-line-q': (546, 572, 140.092007, -71.395274, -3.336089),
+    'tank-line-r': (572, 599, 147.938535, -96.469285, 2.733759),
+}
+SW_RING = (
+    (153.283, -108.839), (153.47, -109.821), (153.622, -110.81), (153.748, -111.803), (153.85, -112.798), (153.927, -113.795), (153.979, -114.794), (154.006, -115.794),
+    (154.007, -116.794), (153.983, -117.794), (153.932, -118.793), (153.854, -119.79), (153.751, -120.785), (153.62, -121.777), (153.462, -122.765), (153.277, -123.748),
+    (153.065, -124.725), (152.827, -125.697), (152.568, -126.663), (152.29, -127.624), (151.992, -128.579), (151.675, -129.528), (151.337, -130.469), (150.98, -131.404),
+    (150.603, -132.33), (150.205, -133.248), (149.785, -134.156), (149.344, -135.054), (148.88, -135.94), (148.392, -136.813), (147.88, -137.672), (147.342, -138.515),
+    (146.776, -139.34), (146.183, -140.146), (145.56, -140.928), (144.904, -141.684), (144.218, -142.411), (143.503, -143.111), (142.765, -143.786), (142.005, -144.436),
+    (141.226, -145.064), (140.431, -145.671), (139.622, -146.26), (138.801, -146.831), (137.968, -147.385), (137.127, -147.926), (136.277, -148.454), (135.42, -148.97),
+    (134.557, -149.476), (133.689, -149.973), (132.817, -150.463), (131.941, -150.946), (131.063, -151.425), (130.183, -151.901), (129.3, -152.372), (128.411, -152.83),
+    (127.516, -153.276), (126.615, -153.71), (125.708, -154.133), (124.796, -154.544), (123.879, -154.944), (122.958, -155.333), (122.031, -155.71), (121.101, -156.077),
+    (120.166, -156.433), (119.227, -156.777), (118.284, -157.111), (117.336, -157.433), (116.385, -157.743), (115.431, -158.041), (114.472, -158.327), (113.51, -158.6),
+    (112.544, -158.86), (111.574, -159.106), (110.602, -159.341), (109.627, -159.564), (108.649, -159.774), (107.668, -159.97), (106.684, -160.153), (105.698, -160.32),
+    (104.709, -160.471), (103.718, -160.606), (102.725, -160.723), (101.729, -160.821), (100.732, -160.901), (99.734, -160.961), (98.734, -161.001), (97.734, -161.019),
+    (96.734, -161.016), (95.734, -160.991), (94.734, -160.944), (93.736, -160.875), (92.74, -160.785), (91.746, -160.677), (90.754, -160.549), (89.764, -160.403),
+    (88.777, -160.238), (87.794, -160.057), (86.813, -159.859), (85.836, -159.644), (84.863, -159.413), (83.894, -159.166), (82.928, -158.903), (81.968, -158.625),
+    (81.012, -158.33), (80.061, -158.02), (79.115, -157.695), (78.174, -157.354), (77.24, -156.998), (76.311, -156.626), (75.388, -156.239), (74.473, -155.836),
+    (73.565, -155.417), (72.664, -154.981), (71.772, -154.529), (70.889, -154.059), (70.015, -153.573), (69.151, -153.068), (68.298, -152.545), (67.457, -152.004),
+    (66.628, -151.444), (65.813, -150.865), (65.008, -150.27), (64.214, -149.662), (63.43, -149.04), (62.659, -148.404), (61.9, -147.752), (61.155, -147.085),
+    (60.424, -146.401), (59.71, -145.702), (59.011, -144.985), (58.331, -144.252), (57.669, -143.502), (57.027, -142.735), (56.405, -141.952), (55.805, -141.151),
+    (55.227, -140.335), (54.673, -139.502), (54.141, -138.655), (53.629, -137.795), (53.138, -136.924), (52.664, -136.043), (52.208, -135.153), (51.768, -134.254),
+    (51.344, -133.348), (50.936, -132.435), (50.544, -131.515), (50.166, -130.589), (49.804, -129.656), (49.457, -128.718), (49.126, -127.774), (48.81, -126.825),
+    (48.512, -125.87), (48.23, -124.91), (47.967, -123.945), (47.723, -122.975), (47.5, -122), (47.309, -121.018), (47.158, -120.029), (47.043, -119.036),
+    (46.961, -118.039), (46.907, -117.04), (46.878, -116.04), (46.869, -115.04), (46.876, -114.039), (46.896, -113.039), (46.923, -112.039), (46.954, -111.04),
+    (46.984, -110.04), (47.008, -109.04), (47.023, -108.039), (47.022, -107.039), (47.001, -106.039), (46.976, -105.039), (46.964, -104.039), (46.964, -103.039),
+    (46.97, -102.038), (46.98, -101.038), (46.989, -100.038), (46.992, -99.037), (46.986, -98.037), (46.966, -97.037), (46.928, -96.037), (46.868, -95.039),
+    (46.78, -94.042), (46.662, -93.049), (46.51, -92.06), (46.333, -91.076), (46.144, -90.094), (45.942, -89.114), (45.725, -88.137), (45.493, -87.165),
+    (45.242, -86.196), (44.973, -85.233), (44.684, -84.275), (44.371, -83.325), (44.035, -82.383), (43.672, -81.451), (43.281, -80.53), (42.86, -79.623),
+    (42.406, -78.731), (41.917, -77.859), (41.4, -77.002), (40.859, -76.161), (40.295, -75.335), (39.709, -74.524), (39.102, -73.73), (38.473, -72.952),
+    (37.823, -72.191), (37.152, -71.449), (36.46, -70.727), (35.747, -70.026), (35.012, -69.347), (34.255, -68.693), (33.476, -68.065), (32.675, -67.467),
+    (31.85, -66.901), (30.997, -66.378), (30.119, -65.899), (29.221, -65.46), (28.305, -65.056), (27.377, -64.684), (26.437, -64.34), (25.49, -64.021),
+    (24.535, -63.722), (23.575, -63.441), (22.611, -63.173), (21.644, -62.918), (20.675, -62.67), (19.705, -62.426), (18.734, -62.184), (17.764, -61.942),
+    (16.786, -61.728), (15.802, -61.553), (14.812, -61.407), (13.819, -61.286), (12.824, -61.18), (11.829, -61.083), (10.833, -60.987), (9.838, -60.885),
+    (8.845, -60.767), (7.854, -60.626), (6.869, -60.454), (5.892, -60.24), (4.926, -59.978), (3.97, -59.685), (3.018, -59.379), (2.071, -59.056),
+    (1.131, -58.715), (0.198, -58.353), (-0.725, -57.967), (-1.637, -57.556), (-2.535, -57.116), (-3.418, -56.646), (-4.283, -56.144), (-5.128, -55.608),
+    (-5.949, -55.037), (-6.746, -54.433), (-7.522, -53.801), (-8.275, -53.144), (-9.008, -52.462), (-9.719, -51.759), (-10.41, -51.036), (-11.081, -50.294),
+    (-11.731, -49.533), (-12.361, -48.757), (-12.972, -47.964), (-13.562, -47.157), (-14.133, -46.335), (-14.684, -45.5), (-15.213, -44.652), (-15.715, -43.786),
+    (-16.19, -42.906), (-16.641, -42.013), (-17.069, -41.109), (-17.477, -40.196), (-17.866, -39.274), (-18.238, -38.346), (-18.595, -37.411), (-18.939, -36.472),
+    (-19.269, -35.528), (-19.589, -34.58), (-19.898, -33.628), (-20.199, -32.674), (-20.491, -31.718), (-20.778, -30.759), (-21.058, -29.799), (-21.327, -28.836),
+    (-21.581, -27.868), (-21.821, -26.897), (-22.048, -25.923), (-22.262, -24.946), (-22.465, -23.966), (-22.656, -22.984), (-22.837, -22), (-23.007, -21.015),
+    (-23.169, -20.028), (-23.323, -19.039), (-23.468, -18.049), (-23.607, -17.059), (-23.74, -16.067), (-23.867, -15.075), (-23.99, -14.082), (-24.112, -13.09),
+    (-24.236, -12.097), (-24.361, -11.104), (-24.485, -10.112), (-24.605, -9.119), (-24.72, -8.125), (-24.829, -7.131), (-24.929, -6.135), (-25.019, -5.139),
+    (-25.097, -4.142), (-25.16, -3.144), (-25.207, -2.144), (-25.236, -1.145), (-25.245, -0.144), (-25.23, 0.856), (-25.189, 1.855), (-25.119, 2.853),
+    (-25.018, 3.848), (-24.89, 4.841), (-24.748, 5.831), (-24.592, 6.819), (-24.419, 7.804), (-24.229, 8.786), (-24.021, 9.764), (-23.793, 10.738),
+    (-23.544, 11.707), (-23.272, 12.67), (-22.976, 13.625), (-22.653, 14.572), (-22.302, 15.509), (-21.919, 16.433), (-21.504, 17.343), (-21.052, 18.236),
+    (-20.562, 19.107), (-20.03, 19.954), (-19.457, 20.775), (-18.85, 21.569), (-18.21, 22.338), (-17.54, 23.08), (-16.842, 23.798), (-16.12, 24.49),
+    (-15.375, 25.157), (-14.608, 25.799), (-13.821, 26.417), (-13.016, 27.01), (-12.194, 27.58), (-11.355, 28.126), (-10.502, 28.647), (-9.634, 29.145),
+    (-8.753, 29.619), (-7.86, 30.068), (-6.95, 30.485), (-6.025, 30.866), (-5.088, 31.215), (-4.14, 31.535), (-3.184, 31.827), (-2.22, 32.095),
+    (-1.25, 32.34), (-0.275, 32.564), (0.704, 32.77), (1.686, 32.957), (2.672, 33.128), (3.66, 33.285), (4.65, 33.427), (5.642, 33.557),
+    (6.635, 33.675), (7.63, 33.782), (8.625, 33.88), (9.622, 33.968), (10.619, 34.046), (11.618, 34.105), (12.617, 34.145), (13.617, 34.167),
+    (14.617, 34.172), (15.618, 34.161), (16.618, 34.135), (17.617, 34.094), (18.616, 34.04), (19.614, 33.973), (20.611, 33.894), (21.607, 33.804),
+    (22.603, 33.704), (23.597, 33.593), (24.59, 33.473), (25.582, 33.345), (26.573, 33.209), (27.563, 33.065), (28.552, 32.915), (29.539, 32.755),
+    (30.525, 32.584), (31.509, 32.403), (32.491, 32.212), (33.47, 32.009), (34.448, 31.796), (35.422, 31.57), (36.394, 31.334), (37.363, 31.085),
+    (38.329, 30.824), (39.291, 30.551), (40.249, 30.264), (41.204, 29.965), (42.154, 29.652), (43.1, 29.326), (44.04, 28.985), (44.974, 28.626),
+    (45.899, 28.247), (46.817, 27.849), (47.727, 27.434), (48.63, 27.004), (49.527, 26.561), (50.419, 26.107), (51.305, 25.644), (52.188, 25.173),
+    (53.068, 24.697), (53.945, 24.217), (54.822, 23.734), (55.698, 23.252), (56.575, 22.771), (57.454, 22.294), (58.335, 21.82), (59.213, 21.34),
+    (60.087, 20.853), (60.957, 20.36), (61.824, 19.861), (62.689, 19.358), (63.552, 18.853), (64.414, 18.345), (65.276, 17.837), (66.138, 17.33),
+    (67, 16.823), (67.864, 16.32), (68.731, 15.819), (69.6, 15.324), (70.472, 14.834), (71.348, 14.352), (72.229, 13.877), (73.111, 13.405),
+    (73.993, 12.934), (74.876, 12.463), (75.76, 11.994), (76.645, 11.528), (77.531, 11.065), (78.42, 10.606), (79.311, 10.151), (80.204, 9.701),
+    (81.101, 9.257), (82.001, 8.82), (82.904, 8.391), (83.811, 7.97), (84.723, 7.558), (85.639, 7.155), (86.56, 6.765), (87.488, 6.392),
+    (88.422, 6.033), (89.36, 5.688), (90.303, 5.354), (91.249, 5.028), (92.197, 4.709), (93.146, 4.393), (94.096, 4.079), (95.045, 3.764),
+    (95.994, 3.446), (96.94, 3.122), (97.884, 2.791), (98.824, 2.448), (99.759, 2.094), (100.692, 1.732), (101.627, 1.376), (102.564, 1.026),
+    (103.502, 0.679), (104.44, 0.331), (105.377, -0.019), (106.312, -0.375), (107.243, -0.74), (108.171, -1.115), (109.092, -1.503), (110.007, -1.908),
+    (110.914, -2.331), (111.81, -2.775), (112.694, -3.243), (113.563, -3.738), (114.418, -4.258), (115.264, -4.792), (116.102, -5.337), (116.932, -5.896),
+    (117.753, -6.467), (118.565, -7.052), (119.365, -7.652), (120.154, -8.267), (120.93, -8.898), (121.692, -9.547), (122.438, -10.213), (123.167, -10.898),
+    (123.877, -11.602), (124.567, -12.327), (125.233, -13.073), (125.873, -13.841), (126.486, -14.632), (127.07, -15.444), (127.628, -16.274), (128.161, -17.121),
+    (128.669, -17.983), (129.154, -18.857), (129.618, -19.743), (130.062, -20.64), (130.486, -21.546), (130.893, -22.46), (131.283, -23.381), (131.658, -24.308),
+    (132.018, -25.241), (132.365, -26.18), (132.7, -27.122), (133.023, -28.069), (133.326, -29.022), (133.602, -29.984), (133.855, -30.951), (134.085, -31.925),
+    (134.296, -32.903), (134.489, -33.884), (134.667, -34.869), (134.833, -35.855), (134.988, -36.843), (135.135, -37.833), (135.276, -38.823), (135.414, -39.814),
+    (135.549, -40.805), (135.685, -41.796), (135.824, -42.787), (135.967, -43.777), (136.111, -44.767), (136.244, -45.758), (136.369, -46.75), (136.485, -47.744),
+    (136.595, -48.738), (136.7, -49.733), (136.8, -50.728), (136.897, -51.724), (136.993, -52.72), (137.088, -53.716), (137.183, -54.711), (137.279, -55.707),
+    (137.379, -56.702), (137.482, -57.697), (137.59, -58.692), (137.704, -59.686), (137.825, -60.679), (137.955, -61.67), (138.09, -62.662), (138.219, -63.653),
+    (138.344, -64.646), (138.465, -65.639), (138.584, -66.632), (138.704, -67.625), (138.827, -68.618), (138.952, -69.61), (139.084, -70.602), (139.223, -71.593),
+    (139.371, -72.582), (139.53, -73.57), (139.702, -74.555), (139.888, -75.538), (140.092, -76.517), (140.315, -77.492), (140.559, -78.462), (140.827, -79.426),
+    (141.122, -80.382), (141.448, -81.327), (141.805, -82.262), (142.188, -83.186), (142.594, -84.1), (143.019, -85.006), (143.46, -85.904), (143.912, -86.796),
+    (144.373, -87.684), (144.838, -88.569), (145.305, -89.454), (145.769, -90.34), (146.228, -91.229), (146.678, -92.122), (147.115, -93.022), (147.536, -93.93),
+    (147.936, -94.847), (148.324, -95.769), (148.72, -96.687), (149.121, -97.603), (149.525, -98.519), (149.929, -99.434), (150.329, -100.35), (150.724, -101.269),
+    (151.11, -102.192), (151.484, -103.12), (151.843, -104.054), (152.184, -104.994), (152.502, -105.943), (152.794, -106.899), (153.056, -107.865),
+)
 
 def sidewinder_track(line, s0):
     """Track along `line`, samples (x, z, tx, tz) of its middle and its unit
     heading: a low bed of grey ballast, timber ties across it at a steady
-    spacing counted from arclength `s0` (so a loop built in lengths keeps it
+    spacing counted from arclength `s0` (so a line built in lengths keeps it
     from one to the next), and two steel rails a car's gauge apart."""
     def rows(section):
         return [[(x + tz * o, y, z - tx * o) for o, y in section] for x, z, tx, tz in line]
@@ -15046,16 +15168,50 @@ def sidewinder_track(line, s0):
     for g in (-0.5, 0.5):
         sheet(rows(((g - 0.07, 0.22), (g - 0.07, SW_RAIL), (g + 0.07, SW_RAIL), (g + 0.07, 0.22))),
               lambda i, j, n: 'slate', 'rail')
+    # the ties: blocks every 0.9, or in the lite tier their tops alone (a
+    # face each, all one part) every 1.2, under the rails' feet
     tie = 1.2 if LITE else 0.9
     at, nxt = s0, math.ceil(s0 / tie) * tie
+    tops = []
     for (x0, z0, tx0, tz0), (x1, z1, tx1, tz1) in zip(line, line[1:]):
         d = math.hypot(x1 - x0, z1 - z0)
         while nxt <= at + d:
             f = (nxt - at) / d
-            box((1.6, 0.1, 0.28), (x0 + (x1 - x0) * f, 0.17, z0 + (z1 - z0) * f), TIMBER,
-                yaw=math.atan2(tx0 + (tx1 - tx0) * f, tz0 + (tz1 - tz0) * f))
+            x, z = x0 + (x1 - x0) * f, z0 + (z1 - z0) * f
+            tx, tz = tx0 + (tx1 - tx0) * f, tz0 + (tz1 - tz0) * f
+            if LITE:
+                n = math.hypot(tx, tz)
+                tx, tz = tx / n, tz / n
+                tops.append([(x + tz * a - tx * b, 0.2, z - tx * a - tz * b) for a, b in ((-0.8, -0.14), (0.8, -0.14), (0.8, 0.14), (-0.8, 0.14))])
+            else:
+                box((1.6, 0.1, 0.28), (x, 0.17, z), TIMBER, yaw=math.atan2(tx, tz))
             nxt += tie
         at += d
+    if tops:
+        ground_poly([v for q in tops for v in q], [tuple(range(4 * k, 4 * k + 4)) for k in range(len(tops))], TIMBER)
+
+def sidewinder_local(name, k):
+    """SW_RING's point `k` (round the ring) in piece `name`'s frame."""
+    _, _, X, Z, H = SW_PIECE[name]
+    x, z = SW_RING[k % len(SW_RING)]
+    dx, dz = x - X, z - Z
+    return dx * math.cos(H) - dz * math.sin(H), dx * math.sin(H) + dz * math.cos(H)
+
+def sidewinder_samples(name):
+    """Piece `name`'s run of SW_RING as sidewinder_track's samples and its
+    arclength: each point with its unit heading, the chord across it (the
+    points either side of the run give its ends theirs, so two lengths meet
+    square); in the lite tier every other point, its last kept."""
+    i0, i1 = SW_PIECE[name][:2]
+    pts = [sidewinder_local(name, k) for k in range(i0 - 1, i1 + 2)]
+    line = []
+    for a, p, b in zip(pts, pts[1:], pts[2:]):
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        d = math.hypot(tx, tz)
+        line.append((p[0], p[1], tx / d, tz / d))
+    if LITE:
+        line = line[::2] + ([line[-1]] if (len(line) - 1) % 2 else [])
+    return line, i0 * SW_STEP
 
 def sidewinder_tank_car(at, color):
     """A tank car on its bogies, along +Z, its middle at `at` (rail height):
@@ -15074,7 +15230,12 @@ def sidewinder_tank_car(at, color):
     cyl(0.26, 0.24, (x, y + 1.62, z), 'grey', segs=10)          # the dome
     box((0.3, 0.06, 3.0), (x, y + 1.7, z), 'grey')               # the walkway
     for side, yaw in ((0.6, 0.0), (-0.6, math.pi)):
-        emblem((x + side, y + 1.05, z), yaw, 0.32, d=0.08)
+        if LITE:                                                 # the mark as two discs, its drop left off
+            fx, fz = math.cos(yaw), -math.sin(yaw)
+            cyl(0.37, 0.08, (x + side, y + 1.05, z), 'red', segs=8, axis='across', yaw=yaw)
+            cyl(0.32, 0.04, (x + side + 0.07 * fx, y + 1.05, z + 0.07 * fz), 'white', segs=8, axis='across', yaw=yaw)
+        else:
+            emblem((x + side, y + 1.05, z), yaw, 0.32, d=0.08)
 
 def sidewinder_loco(at):
     """A diesel in the company's colours, its cab at the back (-Z)."""
@@ -15095,110 +15256,103 @@ def sidewinder_loco(at):
     cyl(0.1, 0.3, (x, y + 1.47, z + 1.3), 'slate', segs=8)        # the exhaust
     box((0.5, 0.2, 0.06), (x, y + 1.0, z + 1.92), 'yellow')        # the headlamp's plate
 
-@piece(1.0)
-def tank_train():
-    # The loop: two straights along Z joined by half circles, the near one
-    # (+X) through the rack; the line in leaves it off its east end (-Z)
-    # through a turnout, easing out toward the road, and ends at a buffer
-    # stop. A sample is (x, z, tx, tz), the track's middle and its heading.
-    R, S = SW_LOOP
-    span = 2 * S + 2 * math.pi * R
-    def loop_at(s):
-        s %= span
-        if s < S:                                                # the near straight, +Z
-            return R, -S / 2 + s, 0.0, 1.0
-        s -= S
-        if s < math.pi * R:                                      # the west end, round to the far side
-            a = s / R
-            return R * math.cos(a), S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
-        s -= math.pi * R
-        if s < S:                                                # the far straight, -Z
-            return -R, S / 2 - s, 0.0, -1.0
-        a = math.pi + (s - S) / R                                # the east end, back to the near side
-        return R * math.cos(a), -S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
-    step = 1.0 if LITE else 0.5
+def tank_line(name):
     with plain_parts():
-        # in its four lengths (each straight, each end), so a cell far off
-        # culls and takes its far form a length at a time
-        cuts = (0.0, S, S + math.pi * R, 2 * S + math.pi * R, span)
-        for a, b in zip(cuts, cuts[1:]):
-            n = max(2, int(math.ceil((b - a) / step)))
-            sidewinder_track([loop_at(a + (b - a) * k / n) for k in range(n + 1)], a)
-        # the line in: a turnout's curve, then straight, to its buffer stop
-        RT, L1, L2 = 22.0, 7.0, 5.5
-        line = []
-        for k in range(15):
-            t = (L1 + L2) * k / 14
-            th = min(t, L1) / RT
-            x, z = R + RT * (1 - math.cos(th)), -S / 2 - RT * math.sin(th)
-            x, z = x + max(0.0, t - L1) * math.sin(th), z - max(0.0, t - L1) * math.cos(th)
-            line.append((x, z, math.sin(th), -math.cos(th)))
-        sidewinder_track(line, 0.45)
-        x, z, tx, tz = line[-1]
-        bx, bz, yaw = x + tx * 0.5, z + tz * 0.5, math.atan2(tx, tz)
-        box((1.5, 0.5, 0.4), (bx, 0.75, bz), 'red', yaw=yaw)                                           # the buffer stop
-        box((1.54, 0.14, 0.44), (bx, 0.75, bz), 'white', yaw=yaw)
-        for s in (-0.55, 0.55):
-            box((0.2, 0.8, 0.2), (bx + s * tz, 0.4, bz - s * tx), 'slate', yaw=yaw)
-            strut((bx + s * tz + tx * 0.9, 0.0, bz - s * tx + tz * 0.9), (bx + s * tz, 0.8, bz - s * tx), 0.16, 'slate')
-        # the loading rack over the near straight: a canopy in the company's
-        # colours on steel legs either side of the train; the platform at the
-        # cars' tops on the road side, its stair down at the west end; a
-        # filling arm out over the track to each of two cars; and the feed:
-        # off the trunk line through its valve, up the rack's outer leg to
-        # the header under the platform
-        X0, X1, Z = R - 1.1, R + 2.3, 4.2                                     # the legs, inside and out; the rack's half length
-        DECK, TOP, PX = 2.2, 3.6, R + 1.6                                     # the platform, the canopy, the header's line
+        sidewinder_track(*sidewinder_samples(name))
+    join_still('drape_line')
+
+for _name in [n for n in SW_PIECE if n.startswith('tank-line-')]:
+    PIECES[_name], GROW[_name] = (lambda n=_name: tank_line(n)), 1.0
+    lite_too(_name)
+
+@piece(1.0)
+def tank_rack():
+    # The loading rack on the line behind the tank farm, the farm's side +X:
+    # a canopy in the company's colours on steel legs either side of the
+    # track; the platform at the cars' tops on the farm side, its stair down
+    # at the +Z end; a filling arm out over the track to each of two cars,
+    # high enough for the diesel's cab to pass under; the header under the
+    # platform; and the feed, off the pipe from the farm (tracks.js: a span
+    # of the trunk line's own and its rise at the farm's edge) through a
+    # valve, up the rack's outer leg to the header. It stands level on the
+    # pad its clearing cuts, its own length of the line under it, and keeps
+    # a grid cell and more off the farm's clearing, whose cap would sink the
+    # pad to the farm's level (TtpRenderer: a neighbour within it drops).
+    with plain_parts():
+        sidewinder_track(*sidewinder_samples('tank-rack'))
+        X0, X1, Z = -1.1, 2.3, 4.2                                            # the legs, inside and out; the rack's half length
+        DECK, TOP, PX = 2.2, 3.8, 1.6                                         # the platform, the canopy, the header's line
         for z in (-Z, -1.4, 1.4, Z):
             box((0.22, TOP, 0.22), (X0, TOP / 2, z), 'slate')
             box((0.22, TOP, 0.22), (X1, TOP / 2, z), 'slate')
             box((X1 - X0 + 0.22, 0.24, 0.22), ((X0 + X1) / 2, TOP - 0.12, z), 'slate')
-            box((0.18, DECK, 0.18), (R + 1.0, DECK / 2, z), 'slate')
-        box((X1 - X0 + 1.0, 0.22, 2 * Z + 1.0), ((X0 + X1) / 2, TOP + 0.11, 0.0), 'red')               # the canopy
+            box((0.18, DECK, 0.18), (1.0, DECK / 2, z), 'slate')
+        box((X1 - X0 + 1.0, 0.22, 2 * Z + 1.0), ((X0 + X1) / 2, TOP + 0.11, 0.0), 'red')                # the canopy
         box((X1 - X0 + 1.06, 0.12, 2 * Z + 1.06), ((X0 + X1) / 2, TOP - 0.02, 0.0), 'white')
-        box((X1 - R - 0.9, 0.12, 2 * Z + 0.2), ((R + 0.9 + X1) / 2, DECK - 0.06, 0.0), 'grey')           # the platform
+        box((X1 - 0.9, 0.12, 2 * Z + 0.2), ((0.9 + X1) / 2, DECK - 0.06, 0.0), 'grey')                   # the platform
         for z in (-Z, 0.0, Z):                                                                           # its rail
             box((0.1, 0.9, 0.1), (X1 - 0.12, DECK + 0.45, z), 'white')
         box((0.1, 0.1, 2 * Z), (X1 - 0.12, DECK + 0.9, 0.0), 'white')
         for k in range(7):                                                                               # the stair
-            box((1.1, 0.08, 0.32), ((R + 1.0 + X1) / 2, DECK - 0.275 * (k + 1), Z + 0.3 + 0.3 * k), 'grey')
-        for s in (R + 0.95, X1 + 0.05):
+            box((1.1, 0.08, 0.32), ((1.0 + X1) / 2, DECK - 0.275 * (k + 1), Z + 0.3 + 0.3 * k), 'grey')
+        for s in (0.95, X1 + 0.05):
             strut((s, DECK, Z), (s, 0.0, Z + 2.4), 0.1, 'slate')
         cyl(0.16, 2 * Z + 0.4, (PX, DECK - 0.35, -Z - 0.2), 'white', segs=10, axis='along', stem=True)  # the header
+        AY = DECK + 0.8
         for z in (-2.15, 2.15):                                                                          # the arms
-            cyl(0.12, 0.95, (PX, DECK - 0.35, z), 'white', segs=8, stem=True)
-            strut((PX, DECK + 0.6, z), (R - 0.05, DECK + 0.6, z), 0.14, 'slate')
-            box((0.16, 0.45, 0.16), (R, DECK + 0.4, z), 'slate')
-            cyl(0.14, 0.08, (PX, DECK + 0.25, z), 'red', segs=8)                                         # its valve wheel
+            cyl(0.12, AY - DECK + 0.35, (PX, DECK - 0.35, z), 'white', segs=8, stem=True)
+            strut((PX, AY, z), (-0.05, AY, z), 0.14, 'slate')
+            box((0.16, 0.45, 0.16), (0.0, AY - 0.2, z), 'slate')
+            cyl(0.14, 0.08, (PX, AY - 0.35, z), 'red', segs=8)                                            # its valve wheel
         FX, FZ = SW_FEED
         cyl(0.16, FX - X1 + 0.3, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, axis='across', stem=True)   # the feed
         cyl(0.16, DECK - 0.35 - PIPE_H, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, stem=True)
         cyl(0.16, X1 - 0.3 - PX, (PX, DECK - 0.35, FZ), 'white', segs=10, axis='across', stem=True)
         VX = (X1 + FX) / 2
-        for sx in (-0.3, 0.3):                                                                           # its stand, its valve
-            box((0.12, PIPE_H, 0.12), (VX + sx, PIPE_H / 2 - 0.1, FZ), 'slate')
-        box((0.8, 0.12, 0.3), (VX, PIPE_H - 0.22, FZ), 'slate')
-        cyl(0.22, 0.4, (VX + 0.5, PIPE_H - 0.2, FZ), 'red', segs=10)
-        cyl(0.26, 0.08, (VX + 0.5, PIPE_H + 0.2, FZ), 'red', segs=10)
-    # the train: a diesel and six tank cars, round and round at a walk
-    N = int(span)
-    for i in range(N):
-        x, z, _, _ = loop_at(span * i / N)
-        marker('path_tank_%d' % i, (x, SW_RAIL, z))
+        cyl(0.22, 0.4, (VX, PIPE_H - 0.2, FZ), 'red', segs=10)                                           # its valve
+        cyl(0.26, 0.08, (VX, PIPE_H + 0.2, FZ), 'red', segs=10)
+        for sz in (-0.38, 0.38):                                                                         # the pipe's last support
+            box((0.14, PIPE_H + 0.1, 0.14), (FX, (PIPE_H - 0.3) / 2, FZ + sz), 'slate')
+        box((0.2, 0.16, 0.92), (FX, PIPE_H - 0.3, FZ), 'slate')
+        box((0.34, 0.1, 0.34), (FX, PIPE_H - 0.18, FZ), 'red')
+    join_still('rack')
+
+lite_too('tank-rack')
+
+def tank_train(name):
+    # A train, built standing on its own length of the line: a diesel and
+    # six tank cars, starting from there and walking round and round the
+    # whole line the same way as the race. It rides SW_RING, a `drape`
+    # chain, so it keeps to the ground as the rails do, each car facing its
+    # way along the line and pitched with its grade (f=2).
+    with plain_parts():
+        sidewinder_track(*sidewinder_samples(name))
+    n = len(SW_RING)
+    for k in range(n):
+        x, z = sidewinder_local(name, k)
+        marker('path_drapetank_%d' % k, (x, SW_RAIL, z))
+    span = n * SW_STEP
     period, gap = span / SW_PACE, 4.3 / span
-    P0 = (R, SW_RAIL, -S / 2)
+    i0, i1 = SW_PIECE[name][:2]
+    home = (i0 + i1) // 2
+    x0, z0 = sidewinder_local(name, home)
+    P0 = (x0, SW_RAIL, z0)
+    o = home / n
     # A traveller faces its path with its node's +X, and these are built
     # along +Z: the turn names the node's frame (+X along the car, ahead)
     # and leaves the parts where they were built.
     AHEAD = -math.pi / 2
-    with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0, yaw=AHEAD):
-        sidewinder_loco(P0)
-    for n in range(1, 7):
-        with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0, yaw=AHEAD):
-            sidewinder_tank_car(P0, 'white' if n % 2 else 'red')
-    join_still('loop')
+    with plain_parts():
+        with animated('anim_path:c=drapetank:p=%.1f:o=%.4f:f=2#0' % (period, o), P0, yaw=AHEAD):
+            sidewinder_loco(P0)
+        for c in range(1, 7):
+            with animated('anim_path:c=drapetank:p=%.1f:o=%.4f:f=2#%d' % (period, (o - c * gap) % 1.0, c), P0, yaw=AHEAD):
+                sidewinder_tank_car(P0, 'white' if c % 2 else 'red')
+    join_still('drape_line')
 
-lite_too('tank-train')
+for _name in [n for n in SW_PIECE if n.startswith('tank-train-')]:
+    PIECES[_name], GROW[_name] = (lambda n=_name: tank_train(n)), 1.0
+    lite_too(_name)
 
 @piece(1.0)
 def dust_devil():

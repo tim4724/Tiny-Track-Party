@@ -176,10 +176,11 @@ void TtpRenderer::buildSetMovers() {
                     // took off the vertices: culling and the far form both.
                     rcm.setAxisAlignedBoundingBox(ri,
                             { (skinLo + skinHi) * 0.5f, (skinHi - skinLo) * 0.5f });
-                    for (LodRange& r : mLods) {
-                        if (r.entity != sm.entity) continue;
-                        r.lo = skinLo;
-                        r.hi = skinHi;
+                    for (size_t li = 0; li < mLods.size(); li++) {
+                        if (mLods[li].entity != sm.entity) continue;
+                        mLods[li].lo = skinLo;
+                        mLods[li].hi = skinHi;
+                        skin.lod = (int) li;
                     }
                     rcm.setLayerMask(ri, 0xFF, rcm.getLayerMask(rcm.getInstance(skinGroup.sources[0])));
                     rcm.setBones(ri, skin.bones.data(), skin.bones.size());
@@ -347,6 +348,11 @@ void TtpRenderer::buildSetMovers() {
                     mv.parent = rides;
                     mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * mv.rest;
                 }
+                // The traveller whose pivot its box follows: itself, or the
+                // one it rides (whose lodRoot is already set: outer first).
+                if (lodPath >= 0) {
+                    mv.lodRoot = motion.path ? (int) mSetMovers.size() : mSetMovers[(size_t) rides].lodRoot;
+                }
                 mv.motion = std::move(motion);
                 if (skinned) {
                     // A bone of the placement's open skinned draw. The draw's
@@ -354,20 +360,28 @@ void TtpRenderer::buildSetMovers() {
                     // reach from its anchor, turned any way and lifted, round
                     // the anchor or round every spot of the loop it rides.
                     const mat4f atRest = mv.rest * mv.toBake;
-                    float reach = 0;
+                    float reach = 0, own = 0;
                     for (const Vertex& v : pv) {
-                        reach = std::max(reach, length((atRest * float4{ v.px, v.py, v.pz, 1 }).xyz
-                                - mv.lodOrigin));
+                        const float3 w = (atRest * float4{ v.px, v.py, v.pz, 1 }).xyz;
+                        reach = std::max(reach, length(w - mv.lodOrigin));
+                        own = std::max(own, length(w - mv.rest[3].xyz));
                     }
                     reach += mv.lift;
+                    // This frame's box (stepSetMovers): a rider turns about its
+                    // own pivot as it rides, so its reach round its traveller's
+                    // is bounded by the two, not by its rest pose alone.
+                    mv.reach = std::max(reach, length(mv.rest[3].xyz - mv.lodOrigin) + own + mv.lift);
                     if (lodPath < 0) {
                         skinLo = min(skinLo, mv.lodOrigin - reach);
                         skinHi = max(skinHi, mv.lodOrigin + reach);
+                        skin.stillLo = min(skin.stillLo, mv.lodOrigin - reach);
+                        skin.stillHi = max(skin.stillHi, mv.lodOrigin + reach);
                     } else {
                         for (const float3& q : mSetPaths[(size_t) lodPath].pts) {
                             skinLo = min(skinLo, q - reach);
                             skinHi = max(skinHi, q + reach);
                         }
+                        skin.travels = true;
                     }
                     Mesh& sm = skinGroup.baked;
                     const uint32_t base = (uint32_t) sm.verts.size();
@@ -401,10 +415,11 @@ void TtpRenderer::buildSetMovers() {
                 // in-place motion never strays far from; for a traveller (or a
                 // part riding one), every spot of its loop with the part's
                 // reach round its traveller's origin, turned any way.
-                for (LodRange& r : mLods) {
+                for (size_t li = 0; li < mLods.size(); li++) {
+                    LodRange& r = mLods[li];
                     if (r.entity != mesh.entity) continue;
                     float3 lo{ 1e30f }, hi{ -1e30f };
-                    float cornerReach = 0;
+                    float cornerReach = 0, own = 0;
                     for (int c = 0; c < 8; c++) {
                         const float3 p{ (c & 1) ? r.hi.x : r.lo.x, (c & 2) ? r.hi.y : r.lo.y,
                                         (c & 4) ? r.hi.z : r.lo.z };
@@ -412,6 +427,7 @@ void TtpRenderer::buildSetMovers() {
                         lo = min(lo, w);
                         hi = max(hi, w);
                         cornerReach = std::max(cornerReach, length(w - mv.lodOrigin));
+                        own = std::max(own, length(w - rest[3].xyz));
                     }
                     if (lodPath >= 0) {
                         lo = float3{ 1e30f };
@@ -420,6 +436,8 @@ void TtpRenderer::buildSetMovers() {
                             lo = min(lo, q - cornerReach);
                             hi = max(hi, q + cornerReach);
                         }
+                        mv.lod = (int) li;
+                        mv.reach = std::max(cornerReach, length(rest[3].xyz - mv.lodOrigin) + own) + mv.lift;
                     }
                     r.lo = lo;
                     r.hi = hi;
@@ -538,9 +556,50 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         const mat4f base = mv.parent >= 0 ? mSetMoverNow[(size_t) mv.parent] * mv.onParent : mv.rest;
         place(k, base * local);
     }
+    // Each traveller's box is where it is this frame, its reach round the
+    // pivot of the traveller it rides: in lite its own far form's, in full
+    // the skin's, culling and far form both, with the box of what moves in
+    // place there. A loop's sweep stood in for it, and a line round the map
+    // swept the whole map: never culled, never far.
+    // The far-form range of `ent`, its index kept in `at` and found again
+    // when a rebuild elsewhere moved it (destroyMesh erases from mLods).
+    const auto lodOf = [&](int& at, utils::Entity ent) -> LodRange* {
+        if (at < 0) return nullptr;
+        if ((size_t) at >= mLods.size() || mLods[(size_t) at].entity != ent) {
+            at = -1;
+            for (size_t li = 0; li < mLods.size(); li++) {
+                if (mLods[li].entity == ent) { at = (int) li; break; }
+            }
+        }
+        return at >= 0 ? &mLods[(size_t) at] : nullptr;
+    };
+    for (SetSkin& sk : mSetSkins) {
+        sk.nowLo = sk.stillLo;
+        sk.nowHi = sk.stillHi;
+    }
+    for (SetMover& mv : mSetMovers) {
+        if (mv.lodRoot < 0) continue;
+        const float3 c = mSetMoverNow[(size_t) mv.lodRoot][3].xyz;
+        if (mv.skin >= 0) {
+            SetSkin& sk = mSetSkins[(size_t) mv.skin];
+            sk.nowLo = min(sk.nowLo, c - mv.reach);
+            sk.nowHi = max(sk.nowHi, c + mv.reach);
+        } else if (LodRange* r = lodOf(mv.lod, mv.ent)) {
+            r->lo = c - mv.reach;
+            r->hi = c + mv.reach;
+        }
+    }
     auto& rcm = mEngine->getRenderableManager();
-    for (const SetSkin& sk : mSetSkins) {
-        if (const auto ri = rcm.getInstance(sk.ent)) rcm.setBones(ri, sk.bones.data(), sk.bones.size());
+    for (SetSkin& sk : mSetSkins) {
+        const auto ri = rcm.getInstance(sk.ent);
+        if (!ri) continue;
+        rcm.setBones(ri, sk.bones.data(), sk.bones.size());
+        if (!sk.travels) continue;
+        rcm.setAxisAlignedBoundingBox(ri, { (sk.nowLo + sk.nowHi) * 0.5f, (sk.nowHi - sk.nowLo) * 0.5f });
+        if (LodRange* r = lodOf(sk.lod, sk.ent)) {
+            r->lo = sk.nowLo;
+            r->hi = sk.nowHi;
+        }
     }
 }
 
