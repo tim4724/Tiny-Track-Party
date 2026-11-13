@@ -426,6 +426,7 @@ struct TtpRenderer::TrackBin {
     bool gantryHasRings = false;         // rings → the pylon wears lighthouse bands
     uint32_t gantryRings = 0xff5040;
     uint32_t boostCol = 0x22c9b6;
+    uint32_t kickerCol = 0;              // 0: the boost disk's
     bool hasWater = false;
     uint32_t waterFoam = 0xffffff, waterShallow = 0x62d3c8;
     uint32_t waterDeep = 0x2596c8, waterWet = 0x7d5f34;

@@ -1174,6 +1174,16 @@ private:
     static constexpr float kStreetKerbW = 1.5f;
     static constexpr uint32_t kStreetKerb = 0xeedcc0u;
     static constexpr float kStreetEase = 1.5f;
+    // The board's pieces made road (buildRoadMesh). A snake's back: the
+    // jointed toy snake's green and yellow (set_prototypes.py SNAKE), its
+    // slab side a shade under the green, and how long a green block and a
+    // yellow band run along the road. A ladder: its cream rungs, its brown
+    // rails (the board's printed ladders') and their underside, and how long
+    // a rung and the gap to the next run.
+    static constexpr uint32_t kSnakeColors[3] = { 0x6cbf6cu, 0xf2c14eu, 0x4e9a55u };
+    static constexpr float kSnakeBody = 1.9f, kSnakeBand = 0.95f;
+    static constexpr uint32_t kLadderColors[3] = { 0xfde4c7u, 0xb06041u, 0x8a4a33u };
+    static constexpr float kLadderRung = 0.5f, kLadderGap = 1.45f;
     std::vector<float> mTerrainCap;
     void buildTerrainCap(const TrackBin& tb);
     float terrainCapAt(float x, float z) const;
@@ -1957,6 +1967,12 @@ private:
     static bool isFloorName(const char* name) {
         return name && std::strncmp(name, "floor", 5) == 0;
     }
+    // A set piece of the playroom's ROOM (set-room-...: the train round the
+    // walls), not of the lap: it casts no shadow and claims no floor, so
+    // neither the scatter nor the sun bake's box grows to the room's size.
+    static bool isRoomPiece(const std::string& model) {
+        return model.compare(0, 9, "set-room-") == 0;
+    }
     bool appendFloorPart(const filament::gltfio::FilamentAsset* asset, utils::Entity e);
     void buildStructuresReceiver();
     struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
@@ -2075,6 +2091,9 @@ private:
     float mBalloonY = 44, mBalloonSize = 6; // theme.balloon orbit height + scale
     float mBalloonExt = 0; // the unit mesh's reach from its origin (read at build)
     float mHillSf = 1; // hill-ring push-out factor (balloon orbit radius scales with it)
+    // The playroom's walls, (x0, z0, x1, z1); empty (x1 <= x0) on every other
+    // biome. The paper dart circles inside it.
+    filament::math::float4 mRoom{ 0, 0, -1, -1 };
     filament::gltfio::FilamentAsset* mConeAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mConeInstances;
     // Kickable-cone state — TrackProps._stepCones verbatim (cosmetic; the sim
@@ -2597,7 +2616,17 @@ private:
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
     void buildKitField(const TrackBin& tb);
-    void buildRoomRing(const TrackBin& tb, float sf);
+    void buildRoomRing(const TrackBin& tb);
+    // The playroom's room (buildRoomRing), in world units: its walls stand
+    // kRoomMargin past the lap's centreline on every side, kRoomH tall; a
+    // skirting board kRoomSkirt tall, a dado rail kRoomRail tall at kRoomDado,
+    // the window kRoomWinW by kRoomWinH over a sill at kRoomSill, and the
+    // bunting's pins every kBuntPin at kBuntY, each swag sagging kBuntSag.
+    // The room train's rails (set_prototypes.py ROOM_TRAIN_MARGIN) run inside it.
+    static constexpr float kRoomMargin = 40.0f, kRoomH = 60.0f, kRoomStep = 10.0f;
+    static constexpr float kRoomSkirt = 2.2f, kRoomDado = 13.0f, kRoomRail = 0.7f;
+    static constexpr float kRoomWinW = 34.0f, kRoomWinH = 24.0f, kRoomSill = 10.0f;
+    static constexpr float kBuntPin = 16.0f, kBuntY = 31.0f, kBuntSag = 3.5f;
     void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);

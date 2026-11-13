@@ -386,6 +386,8 @@ void avalanchePass(Theme& t) {
 void playroomTrack(Theme& t, const std::string& track) {
   if (track == "skysnake") {
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
+    // each ladder's kicker is its top rung, the ladders' cream
+    t.kicker = 0xfde4c7;
   } else if (track == "skyline") {
     t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
     // the skyway's U stands on stacked toy blocks in two of the rails' blues,
@@ -706,12 +708,15 @@ Theme playroomTheme() {
   t.hemi = { 0xfff2dc, 0xa88860, 2.2f };  // warm room light, wood-floor bounce
   t.key = { 0xffeac2, 1.5f };             // low afternoon sun through the window
   t.groundKind = GROUND_WOOD;
-  // The room round the floor, past the fog: its walls' skirting board and the
-  // wall over it, each picking its colour from this list by index (the
-  // renderer's ROOM table): red, blue, yellow, green, skirting wood, wall linen.
-  // hills[0] also tints the controller's cup panel, so the warm red keeps the
-  // playroom distinct from beach sand / canyon clay.
-  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xa8744a, 0xfdf4de };
+  // The room round the floor (the renderer's buildRoomRing), each part
+  // picking its colour from this list by index: red, blue, yellow, green (the
+  // toys', and the bunting's), then the white trim (skirting, dado rail, window frame), the
+  // wall over the rail, the deeper wall under it, the curtains, the daylight
+  // at the top and the foot of the window, and the curtain rod. hills[0] also
+  // tints the controller's cup panel, so the warm red keeps the playroom
+  // distinct from beach sand / canyon clay.
+  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xfbf6ec, 0x9ccbea, 0x5fae6a,
+              0xd9453a, 0x4f9fe6, 0xc0e2f8, 0x9a7b55 };
   t.hillShape = HILL_ROOM;
   // Indoors: no cumulus, just faint warm puffs of sunbeam bloom.
   t.clouds = { 3, 0.22f, 1.3f, 0.3f, 0xffedd2 };
@@ -760,19 +765,14 @@ Theme playroomTheme() {
                 { CL_DOMINO, 0.2f, { 0xf5f2ea } } };
   s.clutterDensity = 0.22f;
   deriveModels(s);
-  // The toy train, as the Holiday Kit's own set on a ring of its own rails
-  // (scripts/gen-trainset.mjs). ONE composed model, because a train set is one
-  // object to a player and a dozen to a scatter: dropped in as pieces this
-  // channel would strew rails across the floor. Drawn at a fixed 2x, because
-  // the kit's train is smaller than its cars and should stand at least as
-  // big as them; a ring that size is a landmark, so it is sparse.
-  // A toy skateboard (a fingerboard's big brother, about 14 cm) left on the
-  // floor stands at three and a half times its kit size, by the road.
-  t.props.models = { "trainset", "skateboard" };
-  // The ring keeps its own rate (0.03 a candidate) under the skateboard's
-  // density: at 2.8k vertices it is the heaviest thing the scatter plants.
+  // The room's one train runs round the walls on its own rails (a track's
+  // set-room-train piece), so the floor's scatter lays no train set of its
+  // own: a second railway would be another game's. A toy skateboard (a
+  // fingerboard's big brother, about 14 cm) left on the floor stands at
+  // three and a half times its kit size, by the road.
+  t.props.models = { "skateboard" };
   t.props.scatterDensity = 0.18f;
-  t.props.scatter = { { 0, 0.25f, 2.0f }, { 1, 0.75f, 3.5f, 0.5f, false, true } };
+  t.props.scatter = { { 0, 0.75f, 3.5f, 0.5f, false, true } };
   return t;
 }
 

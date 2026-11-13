@@ -93,7 +93,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     if (mTerrainAmp > 0) {
         for (const ttp::rt::Landform& l : tb.land) {
             if (l.kind == 6) continue;   // a shore moves the sea, not the land (shoreline())
-            if (l.kind == 9) continue;   // a street is the road's kerb (buildRoadMesh)
+            if (l.kind == 9 || l.kind == 10 || l.kind == 11) continue;   // the road's own (buildRoadMesh)
             float u = l.u, lat = l.lat, yaw = l.yaw, k = 1.0f;
             if (l.piece >= 0) {
                 if ((size_t) l.piece >= tb.setPieces.size()) continue;
@@ -1608,6 +1608,33 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         }
     }
     const float3 KERB_STREET = srgbToLinear(kStreetKerb);
+    // THE BOARD'S PIECES (Skysnake's `snake` and `ladder` landforms): a
+    // stretch of road that is one of the game's snakes or ladders made
+    // track. A snake's back is the jointed toy snake's (set_prototypes.py
+    // SNAKE), green blocks banded yellow from kerb to kerb, counted from its
+    // head, its flanks (the kerbs and the slab's side) green; a ladder's
+    // kerbs are its two wooden rails and its rungs cross the deck. Neither
+    // carries lane dashes. Per ring: -1 off any, else the livery and which of
+    // its two colours (2 * livery + band).
+    std::vector<int8_t> piece(N, -1);
+    for (const ttp::rt::Landform& l : tb.land) {
+        if (l.kind != 10 && l.kind != 11) continue;
+        const bool ladder = l.kind == 11;
+        const float on = ladder ? kLadderRung : kSnakeBody, off = ladder ? kLadderGap : kSnakeBand;
+        const float head = l.u * L - 0.5f * l.len;
+        for (uint32_t i = 0; i < N; i++) {
+            float d = ((float) i / N) * L - head;
+            d -= std::floor(d / L) * L;
+            if (d > l.len) continue;
+            piece[i] = (int8_t) (2 * (ladder ? 1 : 0) + (std::fmod(d, on + off) < on ? 0 : 1));
+        }
+    }
+    const float3 GAME[4][2] = {   // [livery * 2 + band]: { the deck, the kerb and slab side }
+        { srgbToLinear(kSnakeColors[0]), srgbToLinear(kSnakeColors[0]) },
+        { srgbToLinear(kSnakeColors[1]), srgbToLinear(kSnakeColors[0]) },
+        { srgbToLinear(kLadderColors[0]), srgbToLinear(kLadderColors[1]) },
+        { srgbToLinear(tb.pal[0]), srgbToLinear(kLadderColors[1]) } };
+    const float3 SNAKE_SIDE = srgbToLinear(kSnakeColors[2]), LADDER_SIDE = srgbToLinear(kLadderColors[2]);
     // Every ring's profile points, once: the sweep, the strip normals and the
     // far ribbon's chord test each read the same points many times over. A
     // street lowers the kerb's raised points and moves its outer face (and
@@ -1762,8 +1789,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     std::vector<uint32_t> underside;
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
-        const float3 colL = street[i] > 0 ? KERB_STREET : bandCol(kerbL, i);
-        const float3 colR = street[i] > 0 ? KERB_STREET : bandCol(kerbR, i);
+        const int game = piece[i];
+        const float3 colL = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbL, i);
+        const float3 colR = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbR, i);
         const bool bare = bareAsphalt(i);
         for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];
@@ -1781,7 +1809,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                     // the slab's edge where the bank sits on its deck at both
                     // rings (a quad from one to the other is the end of a
                     // pile); the underside stays
-                    cb = SKIRT;
+                    cb = game < 0 ? SKIRT : game < 2 ? SNAKE_SIDE : LADDER_SIDE;
                     if (tb.kerbBank && s != 19) {
                         const int k = s ? 1 : 0;
                         if (!bankOnDeck(bankDepth[2 * i + k]) || !bankOnDeck(bankDepth[2 * ni + k])) cb = colL;
@@ -1792,6 +1820,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_GAP: cb = tb.sand > 0 ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
                 default: cb = ASPHALT; break;
             }
+            if (game >= 0 && st.kind != K_KERB && st.kind != K_SKIRT) cb = GAME[game][0];
             quadKey[(size_t) i * kLaid + s] = packAlbedo(cb, 1.0f);
             const uint32_t ringIdx[4] = { i, i, ni, ni };
             // uv0's arclength must NOT wrap with the ring index. ringIdx uses
@@ -2411,49 +2440,199 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
              28000.0f * (tb.hemiIntensity / 2.2f) };
 }
 
-// The playroom's horizon is the foot of the room's walls: a skirting board
-// with the wall rising pale over it into the fog, in a ring past the floor.
-// At the toy cars' scale the room is all there is of the real world (1 u is
-// about 5.5 cm), so it is only ever seen as far-off planes, never as furniture
-// to recognise. Each panel stands at a bearing `a` and radius `r`, faces the
-// floor's middle and takes its colour from the theme's hill list by index
-// (theme.cc playroomTheme).
-void TtpRenderer::buildRoomRing(const TrackBin& tb, float sf) {
-    struct Part { float a, r, t, d, y0, w, h, depth; int color; };
-    constexpr int N = 24;
-    constexpr float R = 185;
-    const float w = 2 * R * std::tan((float) M_PI / N) + 1.0f;
-    Part ROOM[2 * N];
-    for (int i = 0; i < N; i++) {
-        const float a = (i + 0.5f) * 2.0f * (float) M_PI / N;
-        ROOM[2 * i] = { a, R, 0, 0, 0, w, 5, 1.6f, 4 };          // the skirting board
-        ROOM[2 * i + 1] = { a, R, 0, 0.8f, 0, w, 60, 1.0f, 5 };  // the wall over it
+// The playroom's horizon is the room the floor lies in: four walls standing
+// kRoomMargin past the lap's reach on every side, near enough for the fog to
+// leave them their colour. At the toy cars' scale (1 u is about 5.5 cm) the
+// room is all there is of the real world, so it is drawn as a room is seen
+// from the floor, never as furniture to recognise: a white skirting board
+// along the foot of every wall, a dado rail with the wall a deeper shade
+// under it, bunting strung round the walls, and one window, in the wall the
+// grid straight points at, with the daylight in it and its curtains drawn
+// back. Colours from the theme's
+// hill list by index (theme.cc playroomTheme). Every face is its own quad
+// with its own normal (flat shaded), and a wall is cut every kRoomStep so the
+// fog, which is per vertex, has corners to interpolate between.
+void TtpRenderer::buildRoomRing(const TrackBin& tb) {
+    float x0 = 1e30f, x1 = -1e30f, z0 = 1e30f, z1 = -1e30f;
+    for (const auto& s : tb.samples) {
+        x0 = std::min(x0, s.pos.x); x1 = std::max(x1, s.pos.x);
+        z0 = std::min(z0, s.pos.z); z1 = std::max(z1, s.pos.z);
     }
-    for (const Part& p : ROOM) {
-        const float ca = std::cos(p.a), sa = std::sin(p.a);
-        // outward along (ca, sa), along the ring (sa, -ca): a turn, never a
-        // mirror, so the boxes keep their winding
-        const float cx = ca * (p.r + p.d) + sa * p.t, cz = sa * (p.r + p.d) - ca * p.t;
-        const float reach = 0.5f * std::max(p.w, p.depth);
+    if (!(x1 > x0)) return;
+    x0 -= kRoomMargin; x1 += kRoomMargin; z0 -= kRoomMargin; z1 += kRoomMargin;
+    mRoom = { x0, z0, x1, z1 };
+    const float floorY = tb.groundY, foot = floorY - 1.0f;
+    const auto colour = [&](int i) {
+        return srgbToLinear(tb.hillColors.empty() ? 0x8cc578u
+                : tb.hillColors[(size_t) i % tb.hillColors.size()]);
+    };
+    const float3 TRIM = colour(4), WALL = colour(5), DADO = colour(6), CURTAIN = colour(7);
+    const float3 SKY_TOP = colour(8), SKY_LOW = colour(9), ROD = colour(10);
+    const float3 Y{ 0, 1, 0 };
+    // THE ROOM SHOWS ITS AUTHORED COLOURS. Under the warm room light a wall
+    // that faces away from the sun bakes to grey, so each face's colour is
+    // divided by the light its normal bakes (the sheet folds it back in) and
+    // given a fixed form shade instead: tops full, faces turned from the sun
+    // a little darker, undersides darker still, so the corners and the
+    // skirting's profile read.
+    const float3 sunFlat = normalize(float3{ kToSun.x, 0, kToSun.z });
+    const auto shown = [&](const float3& c, const float3& n) {
+        const float form = n.y > 0.5f ? 1.0f : n.y < -0.5f ? 0.72f
+                : 0.86f + 0.14f * std::max(0.0f, dot(n, sunFlat));
+        const float3 l = bakedMatteLight(n);
+        return float3{ std::min(1.0f, c.x * form / std::max(1e-3f, l.x)),
+                       std::min(1.0f, c.y * form / std::max(1e-3f, l.y)),
+                       std::min(1.0f, c.z * form / std::max(1e-3f, l.z)) };
+    };
+    // A quad p0 -> p1 -> p2 -> p3, wound to face `n`, a colour per corner.
+    const auto quad = [&](const float3 (&p)[4], const float3& n, const float3 (&c)[4]) {
+        const bool flip = dot(cross(p[1] - p[0], p[2] - p[0]), n) < 0;
+        const uint32_t base = (uint32_t) mHills.verts.size();
+        for (int j = 0; j < 4; j++) {
+            const int q = flip ? (4 - j) % 4 : j;
+            mHills.verts.push_back({ p[q].x, p[q].y, p[q].z, packAlbedo(shown(c[q], n), 1.0f) });
+            mHills.normals.push_back(n);
+        }
+        for (const uint32_t t : { 0u, 1u, 2u, 0u, 2u, 3u }) mHills.idx.push_back(base + t);
+    };
+    const auto flat = [&](const float3& a, const float3& b, const float3& c, const float3& d,
+            const float3& n, const float3& col) {
+        quad({ a, b, c, d }, n, { col, col, col, col });
+    };
+    // Each wall in its own frame: `o` its inner face's left end seen from the
+    // room, `t` along it to the right, `n` into the room, `len` long. The
+    // first is the window's (+z: every Playroom grid straight points at it).
+    struct Wall { float3 o, t, n; float len; };
+    const Wall walls[4] = {
+        { { x1, 0, z1 }, { -1, 0, 0 }, { 0, 0, -1 }, x1 - x0 },
+        { { x0, 0, z1 }, { 0, 0, -1 }, { 1, 0, 0 }, z1 - z0 },
+        { { x0, 0, z0 }, { 1, 0, 0 }, { 0, 0, 1 }, x1 - x0 },
+        { { x1, 0, z0 }, { 0, 0, 1 }, { -1, 0, 0 }, z1 - z0 },
+    };
+    // The window: centred where the grid straight points (x = 0, the lap's
+    // origin), kept clear of the corners.
+    const float winHalf = 0.5f * kRoomWinW;
+    const float winC = std::min(x1 - winHalf - 12.0f, std::max(x0 + winHalf + 12.0f, 0.0f));
+    const float winS = (x1 - winC) - winHalf, winE = winS + kRoomWinW;   // along the first wall
+    const float sill = floorY + kRoomSill, lintel = sill + kRoomWinH;
+    const float dado = floorY + kRoomDado, top = floorY + kRoomH;
+    for (int w = 0; w < 4; w++) {
+        const Wall& W = walls[w];
+        const float3 mid = W.o + W.t * (0.5f * W.len);
+        const float reach = 0.5f * W.len + 3.0f;
         if (mKitFieldMaxX > mKitFieldMinX   // the gallery's field wins, as in the ring
-                && (cx + reach) * sf > mKitFieldMinX - ttp::rt::kKitFieldClear
-                && (cx - reach) * sf < mKitFieldMaxX + ttp::rt::kKitFieldClear
-                && (cz + reach) * sf > mKitFieldMinZ - ttp::rt::kKitFieldClear
-                && (cz - reach) * sf < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
+                && mid.x + reach > mKitFieldMinX - ttp::rt::kKitFieldClear
+                && mid.x - reach < mKitFieldMaxX + ttp::rt::kKitFieldClear
+                && mid.z + reach > mKitFieldMinZ - ttp::rt::kKitFieldClear
+                && mid.z - reach < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
             continue;
         }
-        mHillAnchors.push_back({ cx, cz, p.y0 + p.h - 1.0f }); // authored coords
-        const float3 hc = srgbToLinear(tb.hillColors.empty() ? 0x8cc578u
-                : tb.hillColors[(size_t) p.color % tb.hillColors.size()]);
-        const uint32_t col = packAlbedo(hc, 1.0f);
-        const Prim pr = primBox(1, 1, 1);
-        const uint32_t base = (uint32_t) mHills.verts.size();
-        for (const float3& v : pr.v) {
-            const float lt = v.x * p.w, ld = v.z * p.depth;
-            const float x = (cx + sa * lt + ca * ld) * sf, z = (cz - ca * lt + sa * ld) * sf;
-            mHills.verts.push_back({ x, p.y0 + (v.y + 0.5f) * p.h - 1.0f, z, col });
+        mHillAnchors.push_back({ mid.x, mid.z, top - 1.0f });
+        // The face, in columns and in rows (the dado band, the rail's, the
+        // wall over it in two), the window's hole left out of the first.
+        const int cols = std::max(1, (int) std::ceil(W.len / kRoomStep));
+        const float rows[5] = { foot, dado, dado + kRoomRail, 0.5f * (dado + top), top };
+        for (int c = 0; c < cols; c++) {
+            const float s0 = W.len * c / cols, s1 = W.len * (c + 1) / cols;
+            for (int r = 0; r < 4; r++) {
+                const float3& col = r == 0 ? DADO : r == 1 ? TRIM : WALL;
+                const auto face = [&](float a, float b, float lo, float hi) {
+                    if (b <= a || hi <= lo) return;
+                    flat(W.o + W.t * a + Y * lo, W.o + W.t * b + Y * lo, W.o + W.t * b + Y * hi,
+                            W.o + W.t * a + Y * hi, W.n, col);
+                };
+                const float lo = rows[r], hi = rows[r + 1];
+                if (w == 0 && s1 > winS && s0 < winE && hi > sill && lo < lintel) {
+                    const float a = std::max(s0, winS), b = std::min(s1, winE);
+                    face(s0, a, lo, hi);
+                    face(b, s1, lo, hi);
+                    face(a, b, lo, std::max(lo, sill));
+                    face(a, b, std::min(hi, lintel), hi);
+                } else {
+                    face(s0, s1, lo, hi);
+                }
+            }
         }
-        for (const uint32_t idx : pr.i) mHills.idx.push_back(base + idx);
+        // A box standing `d` proud of the wall: [a, b] along it, [lo, hi] up.
+        const auto block = [&](float a, float b, float lo, float hi, float d, const float3& col) {
+            const float3 A = W.o + W.t * a, B = W.o + W.t * b, An = A + W.n * d, Bn = B + W.n * d;
+            flat(An + Y * lo, Bn + Y * lo, Bn + Y * hi, An + Y * hi, W.n, col);   // front
+            flat(A + Y * hi, B + Y * hi, Bn + Y * hi, An + Y * hi, Y, col);         // top
+            flat(A + Y * lo, B + Y * lo, Bn + Y * lo, An + Y * lo, -Y, col);        // underside
+            flat(A + Y * lo, An + Y * lo, An + Y * hi, A + Y * hi, -W.t, col);      // ends
+            flat(B + Y * lo, Bn + Y * lo, Bn + Y * hi, B + Y * hi, W.t, col);
+        };
+        // The skirting board with a bead along its top, and the dado rail,
+        // which stops at the window's frame.
+        block(0, W.len, foot, floorY + kRoomSkirt, 0.5f, TRIM);
+        block(0, W.len, floorY + kRoomSkirt, floorY + kRoomSkirt + 0.35f, 0.7f, TRIM);
+        const float frameS = winS - 1.4f, frameE = winE + 1.4f;   // the frame's outer edges (below)
+        if (w == 0 && dado + kRoomRail > sill - 2.2f) {
+            block(0, frameS, dado, dado + kRoomRail, 0.4f, TRIM);
+            block(frameE, W.len, dado, dado + kRoomRail, 0.4f, TRIM);
+        } else {
+            block(0, W.len, dado, dado + kRoomRail, 0.4f, TRIM);
+        }
+        // BUNTING all round the room: a string of flags in the toys' four
+        // colours, swagged between pins every kBuntPin, clear of the window
+        // and its curtains.
+        {
+            const float pinY = floorY + kBuntY, clearA = winS - 15.0f, clearB = winE + 15.0f;
+            const int spans = std::max(1, (int) std::floor((W.len - 8.0f) / kBuntPin));
+            const float s0 = 0.5f * (W.len - spans * kBuntPin);
+            int flag = w * 7;
+            for (int sp = 0; sp < spans; sp++) {
+                const float a = s0 + sp * kBuntPin, b = a + kBuntPin;
+                if (w == 0 && b > clearA && a < clearB) continue;
+                const int n = (int) std::floor(kBuntPin / 2.6f);
+                for (int k = 0; k < n; k++) {
+                    const float t0 = (k + 0.15f) / n, t1 = (k + 0.85f) / n, tm = 0.5f * (t0 + t1);
+                    const auto sag = [&](float t) { return pinY - kBuntSag * 4.0f * t * (1.0f - t); };
+                    const float3 o = W.o + W.n * 0.35f;
+                    const float3 p0 = o + W.t * (a + kBuntPin * t0) + Y * sag(t0);
+                    const float3 p1 = o + W.t * (a + kBuntPin * t1) + Y * sag(t1);
+                    const float3 tip = o + W.t * (a + kBuntPin * tm) + Y * (sag(tm) - 2.6f);
+                    const float3 c = colour(flag++ % 4);
+                    quad({ p0, p1, tip, tip }, W.n, { c, c, c, c });
+                }
+            }
+        }
+        if (w != 0) continue;
+        // THE WINDOW. Its glass is the daylight, a sky deeper at the top, in
+        // bands so the gradient has rows (lit full, as a top is: it is light).
+        const float3 g0 = W.o + W.t * winS + W.n * 0.05f, g1 = W.o + W.t * winE + W.n * 0.05f;
+        for (int k = 0; k < 4; k++) {
+            const float lo = sill + kRoomWinH * k / 4, hi = sill + kRoomWinH * (k + 1) / 4;
+            const float3 cl = SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) k / 4);
+            const float3 ch = SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) (k + 1) / 4);
+            quad({ g0 + Y * lo, g1 + Y * lo, g1 + Y * hi, g0 + Y * hi }, Y, { cl, cl, ch, ch });
+        }
+        // Two clouds going by outside, white blocks on the sky.
+        const float3 cloud{ 0.97f, 0.97f, 0.97f };
+        for (const float4& c : { float4{ 0.28f, 0.72f, 0.20f, 0.09f }, float4{ 0.70f, 0.52f, 0.14f, 0.07f } }) {
+            const float a = winS + kRoomWinW * (c.x - c.z), b = winS + kRoomWinW * (c.x + c.z);
+            const float lo = sill + kRoomWinH * (c.y - c.w), hi = sill + kRoomWinH * (c.y + c.w);
+            const float3 o = W.o + W.n * 0.1f;
+            quad({ o + W.t * a + Y * lo, o + W.t * b + Y * lo, o + W.t * b + Y * hi, o + W.t * a + Y * hi },
+                    Y, { cloud, cloud, cloud, cloud });
+        }
+        const float F = 1.4f, midS = 0.5f * (winS + winE), midY = 0.5f * (sill + lintel);
+        block(winS - F, winS, sill - F, lintel + F, 0.6f, TRIM);            // the frame
+        block(winE, winE + F, sill - F, lintel + F, 0.6f, TRIM);
+        block(winS, winE, lintel, lintel + F, 0.6f, TRIM);
+        block(winS - F - 1.2f, winE + F + 1.2f, sill - F - 0.8f, sill, 2.0f, TRIM);   // the sill
+        block(midS - 0.45f, midS + 0.45f, sill, lintel, 0.4f, TRIM);        // the glazing bars
+        block(winS, winE, midY - 0.45f, midY + 0.45f, 0.4f, TRIM);
+        // The curtains, drawn back either side in three folds, on a rod.
+        const float rod = lintel + 4.0f;
+        block(winS - 13.0f, winE + 13.0f, rod - 0.5f, rod + 0.5f, 1.6f, ROD);
+        for (const float side : { -1.0f, 1.0f }) {
+            const float edge = side < 0 ? winS - F + 2.5f : winE + F - 2.5f;
+            for (int k = 0; k < 3; k++) {
+                const float a = edge - side * (k * 3.2f), b = a - side * 3.2f;
+                block(std::min(a, b), std::max(a, b), sill - 6.0f, rod - 0.4f, 1.2f + 0.5f * (k % 2), CURTAIN);
+            }
+        }
     }
 }
 
@@ -2570,7 +2749,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // BETWEEN them). Feature count, scale and radius all vary per shape.
         const uint32_t shape = tb.hillShape;
         const int count = shape == 1 ? 14 : shape == 2 ? 0 : shape == 3 ? 9 : 18;
-        if (shape == 2) buildRoomRing(tb, sf);
+        if (shape == 2) buildRoomRing(tb);
         for (int i = 0; i < count; i++) {
             float sx, sy, sz, a, r, yaw = 0;
             if (shape == 1) {        // mesa
@@ -2687,7 +2866,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                         [&](const float3&) { return col; }, true);
             }
         }
-        if (shape == 1 || shape == 2) accumulateNormals(mHills);
+        if (shape == 1) accumulateNormals(mHills);   // the room lays its own (buildRoomRing)
         mHills.bakeLight = true;
         // The ring stands all round the circuit, so one renderable is in every
         // cell's frustum; tiles let each cell draw only the hills it faces.

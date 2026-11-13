@@ -239,7 +239,7 @@ struct SetSpec {
 // the set pieces modelled on one): ttp::LandDef's fields, as the renderer's
 // terrain reads them. A function of the track alone, like the set.
 struct Landform {
-  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint, 6 shore, 7 pond, 8 clear, 9 street (LandDef)
+  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint, 6 shore, 7 pond, 8 clear, 9 street, 10 snake, 11 ladder (LandDef)
   int piece = -1;             // anchored on set.pieces[piece]; -1: on u/lat/yaw
   float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
   float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
@@ -286,6 +286,9 @@ struct Theme {
   uint32_t gate = 0xffffff;       // near-white grade over the start/finish gate
   GantrySpec gantry;
   uint32_t boost = 0x22c9b6;      // the biome's ONE speed-accent identity colour
+  // A kicker ramp's slope; 0 wears the boost disk's (a ramp is a launch).
+  // Post-corpus (theme_check does not serialize it).
+  uint32_t kicker = 0;
   bool hasWater = false;
   WaterSpec water;
   HazeSpec haze;

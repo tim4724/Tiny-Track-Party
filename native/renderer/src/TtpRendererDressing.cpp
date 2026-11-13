@@ -1525,8 +1525,8 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
             // UNLIKE the scatter, a set piece CASTS into the sun bake: twenty
             // units of ship over a contact disc reads as pasted on, and the bake
             // is paid once per track, never per frame. The merged run inherits
-            // the caster layer (bakeMergedRun).
-            setShadows(inst->getEntities(), inst->getEntityCount(), true, false);
+            // the caster layer (bakeMergedRun). Not the room's own (isRoomPiece).
+            setShadows(inst->getEntities(), inst->getEntityCount(), !isRoomPiece(tb.setModels[m]), false);
         }
     }
     auto& tcm = mEngine->getTransformManager();
@@ -1636,7 +1636,14 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         }
         mSetRowOf[inst] = nRows;
         const float top = base + bb.max.y * p.scale;
-        mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
+        // The room's own pieces stand round the whole floor, so they claim
+        // none of it (an empty foot): the scatter and the sun bake's box keep
+        // to the lap's.
+        if (isRoomPiece(tb.setModels[p.slot])) {
+            mSetFeet.push_back({ wx, wz, ax, az, -1e3f, -1e3f, top });
+        } else {
+            mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
+        }
         if (p.slot < tb.setNear.size() && tb.setNear[p.slot]) mLifeAnchors.push_back({ wx, wz, ax, az, hx, hz });
         ttp::Value row = ttp::Value::Obj();
         row.set("model", ttp::Value::Str(tb.setModels[p.slot]));
@@ -2703,11 +2710,12 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     // Kicker ramps: a wedge across the road from its foot on the deck to its
     // lip KICKER_RISE up, swept along the deck so it follows whatever the road
-    // does under it. The slope wears the boost pad's colour, the flanks and the
-    // lip face the structures'. Every face keeps its own vertices so the
+    // does under it. The slope wears the boost pad's colour (or the theme's
+    // kicker: Skysnake's is a ladder's top rung), the flanks and the lip face
+    // the structures'. Every face keeps its own vertices so the
     // normals stay flat, and is wound to face out (slope up, lip forward).
-    const uint32_t slopeC = packAlbedo(
-            srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
+    const uint32_t slopeC = packAlbedo(srgbToLinear(tb.kickerCol ? tb.kickerCol
+            : ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
     const auto face = [&](const float3& a, const float3& b, const float3& c,
             const float3& d, uint32_t col) {
         const uint32_t base = (uint32_t) mStructures.verts.size();
