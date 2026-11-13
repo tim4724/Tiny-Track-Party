@@ -129,6 +129,7 @@
     "set-canyon-spur-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-castle-gate.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-castle-watchtower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-causeway-rail.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-channel-beacon.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cherry-avenue.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-coastguard-lookout.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

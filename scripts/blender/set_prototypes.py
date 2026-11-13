@@ -1752,7 +1752,9 @@ def lifeguard_tower():
     # boards and the red-and-yellow flags. No people: a person at a car's
     # size is a speck (and a still one reads uncanny).
     white, red, yellow, wood, blue = 0xfff6eb, 0xff5040, 0xffc044, 0x9a7b55, 0x339cf2
-    S, top = 1.4, 1.35                         # the stilts' spread, the deck's height
+    # (round 16: the deck up from 1.35, so the hut and its cross show over
+    # the hop's crest a moment sooner and stand clear of the kerb after it)
+    S, top = 1.4, 2.15                         # the stilts' spread, the deck's height
     for sx in (-1, 1):
         for sz in (-1, 1):
             box((0.2, top + 0.4, 0.2), (sx * S / 2, (top - 0.4) / 2, sz * S / 2), white)
@@ -1782,21 +1784,21 @@ def lifeguard_tower():
     box((0.1, 0.1, S + 0.5), (ex, top + 0.56, 0), white)
     cyl(0.2, 0.1, (ex + 0.05, top + 0.36, 0.35), 0xff7e44, segs=8, axis='across')  # the ring buoy
     # the ramp down its back to the sand, toward the road
-    fx, bx = -2.6, -(S + 0.7) / 2 + 0.15
+    fx, bx = -3.3, -(S + 0.7) / 2 + 0.15
     for sz in (-1, 1):
         beam((fx, 0.04, sz * 0.32), (bx, top, sz * 0.32), 0.12, wood)
-    for i in range(7):
-        t = (i + 0.5) / 7
+    for i in range(10):
+        t = (i + 0.5) / 10
         box((0.24, 0.07, 0.72), (fx + (bx - fx) * t, 0.07 + (top - 0.04) * t, 0), wood,
             roll=math.atan2(top, bx - fx))
     # the patrol's flag on its own mast off the deck's corner, high over the
     # roof: what shows first over the crest
     mx, mz = ex - 0.1, -(S + 0.5) / 2 + 0.12
-    box((0.13, 4.3 - top, 0.13), (mx, top + (4.3 - top) / 2, mz), white)
-    box((0.22, 0.22, 0.22), (mx, 4.36, mz), red)
-    with animated('anim_sway:a=x:d=22:p=1.9#patrol', (mx, 4.2, mz)):
-        box((0.06, 0.5, 0.42), (mx, 3.95, mz - 0.27), red)
-        box((0.06, 0.5, 0.42), (mx, 3.95, mz - 0.69), yellow, yaw=0.12)
+    box((0.13, 5.1 - top, 0.13), (mx, top + (5.1 - top) / 2, mz), white)
+    box((0.22, 0.22, 0.22), (mx, 5.16, mz), red)
+    with animated('anim_sway:a=x:d=22:p=1.9#patrol', (mx, 5.0, mz)):
+        box((0.06, 0.5, 0.42), (mx, 4.75, mz - 0.27), red)
+        box((0.06, 0.5, 0.42), (mx, 4.75, mz - 0.69), yellow, yaw=0.12)
     # three big beach umbrellas on the road side of it, either way along
     for (x, z, c) in ((-1.4, -2.9, (red, white)), (-0.9, 2.8, (blue, white)), (0.4, 4.6, (yellow, red))):
         umbrella((x, 0, z), 1.0, 1.45, c, gores=8)
@@ -3920,23 +3922,112 @@ def lagoon_fleet():
             box((0.3, 0.2, 0.3), (0.0, -0.6, 0.0), 'slate')
     draped('mooring', stone_anchor)
 
+# Riptide's causeway, the road's centreline in the rail's own frame (placed
+# astride it, lat 0, yaw 0, at tracks.js's u 0.515): (x, z, nx, nz, deck) a
+# unit apart from t = RIP_T, (nx, nz) the road's left, the open sea's side,
+# `deck` the road's top over the plain. Re-sample if the road or the
+# placement moves (as DRIFT_ROAD).
+RIP_T = -32
+RIP_ROAD = (
+    (-16.598, -23.938, 0.3648, -0.9311, 1.01), (-15.713, -23.572, 0.3994, -0.9168, 1.07), (-14.838, -23.171, 0.4334, -0.9012, 1.14), (-13.973, -22.735, 0.4663, -0.8847, 1.21),
+    (-13.120, -22.265, 0.4981, -0.8671, 1.30), (-12.283, -21.764, 0.5292, -0.8485, 1.39), (-11.465, -21.233, 0.5599, -0.8286, 1.48), (-10.671, -20.674, 0.5903, -0.8071, 1.56),
+    (-9.904, -20.090, 0.6208, -0.7840, 1.63), (-9.164, -19.480, 0.6510, -0.7591, 1.69), (-8.445, -18.838, 0.6793, -0.7339, 1.74), (-7.746, -18.167, 0.7059, -0.7083, 1.80),
+    (-7.070, -17.468, 0.7314, -0.6819, 1.84), (-6.420, -16.746, 0.7555, -0.6552, 1.88), (-5.798, -16.002, 0.7785, -0.6276, 1.91), (-5.207, -15.241, 0.8008, -0.5989, 1.92),
+    (-4.647, -14.463, 0.8224, -0.5689, 1.93), (-4.113, -13.661, 0.8426, -0.5385, 1.91), (-3.606, -12.835, 0.8615, -0.5078, 1.89), (-3.127, -11.988, 0.8791, -0.4766, 1.85),
+    (-2.678, -11.124, 0.8958, -0.4445, 1.81), (-2.262, -10.246, 0.9114, -0.4114, 1.76), (-1.880, -9.358, 0.9263, -0.3769, 1.70), (-1.536, -8.462, 0.9402, -0.3407, 1.65),
+    (-1.227, -7.553, 0.9526, -0.3042, 1.58), (-0.950, -6.627, 0.9633, -0.2683, 1.50), (-0.707, -5.687, 0.9725, -0.2327, 1.42), (-0.499, -4.738, 0.9804, -0.1972, 1.33),
+    (-0.325, -3.782, 0.9869, -0.1614, 1.24), (-0.186, -2.824, 0.9921, -0.1251, 1.16), (-0.083, -1.867, 0.9961, -0.0881, 1.09), (-0.020, -0.922, 0.9990, -0.0445, 1.03),
+    (0.000, 0.000, 1.0000, -0.0000, 0.97), (-0.019, 0.914, 0.9992, 0.0403, 0.93), (-0.072, 1.834, 0.9973, 0.0733, 0.88), (-0.153, 2.778, 0.9952, 0.0983, 0.85),
+    (-0.259, 3.761, 0.9934, 0.1148, 0.81), (-0.384, 4.799, 0.9924, 0.1233, 0.78), (-0.511, 5.792, 0.9913, 0.1316, 0.76), (-0.634, 6.675, 0.9893, 0.1457, 0.75),
+    (-0.780, 7.624, 0.9876, 0.1569, 0.74), (-0.944, 8.627, 0.9861, 0.1663, 0.73), (-1.125, 9.670, 0.9847, 0.1744, 0.73), (-1.318, 10.740, 0.9833, 0.1818, 0.73),
+    (-1.523, 11.824, 0.9821, 0.1886, 0.73), (-1.735, 12.907, 0.9808, 0.1952, 0.74), (-1.951, 13.977, 0.9794, 0.2018, 0.74), (-2.170, 15.021, 0.9780, 0.2087, 0.75),
+    (-2.388, 16.024, 0.9764, 0.2161, 0.76), (-2.603, 16.974, 0.9745, 0.2245, 0.76), (-2.811, 17.857, 0.9721, 0.2345, 0.76), (-3.010, 18.660, 0.9690, 0.2471, 0.77),
+    (-3.227, 19.483, 0.9655, 0.2603, 0.77), (-3.524, 20.561, 0.9614, 0.2752, 0.77), (-3.809, 21.490, 0.9490, 0.3153, 0.77), (-4.121, 22.341, 0.9262, 0.3770, 0.77),
+    (-4.502, 23.185, 0.8956, 0.4449, 0.77), (-4.969, 24.051, 0.8641, 0.5034, 0.77), (-5.500, 24.901, 0.8305, 0.5570, 0.77), (-6.086, 25.717, 0.7937, 0.6083, 0.77),
+    (-6.718, 26.490, 0.7526, 0.6585, 0.77),
+)
+
+def riptide_rail_at(t, d):
+    """(x, deck, z) of the point `d` left of the causeway `t` along it."""
+    f = min(max(t - RIP_T, 0.0), len(RIP_ROAD) - 1.001)
+    i = int(f)
+    a, b, k = RIP_ROAD[i], RIP_ROAD[i + 1], f - i
+    nx, nz = a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k
+    n = math.hypot(nx, nz)
+    return a[0] + (b[0] - a[0]) * k + nx / n * d, a[4] + (b[4] - a[4]) * k, a[1] + (b[1] - a[1]) * k + nz / n * d
+
+@piece(1.0)
+def causeway_rail():
+    # Riptide: what makes the road over the shallows a causeway from the
+    # seat (it read as one more beach road between its sand verges): timber
+    # piles standing out of the water a stride past each kerb, the hop's
+    # length and the causeway's, their heads a car's height over the deck,
+    # a heavy rope slung from head to head, a life ring on a pile here and
+    # there on the sea's side. One piece astride the road (RIP_ROAD); the
+    # sim never sees it, and it stands clear of both kerbs.
+    wood, dark, rope, red, white = 0x8a6a46, 0x6e5b3a, 0xfde4c7, 0xff5040, 0xfff6eb
+    STEP, D, HEAD, HANG = 3.4, 6.05, 1.05, 0.8
+    with plain_parts():
+        for side in (1, -1):
+            prev = None
+            n = int((26.0 + 30.0) / STEP)
+            for i in range(n + 1):
+                t = -30.0 + STEP * i
+                x, deck, z = riptide_rail_at(t, side * D)
+                top = deck + HEAD + 0.08 * jitter(i, side + 2, 4.0)
+                box((0.34, top + 1.2, 0.34), (x, (top - 1.2) / 2, z), wood if (i + side) % 3 else dark, yaw=0.5 * i)
+                box((0.44, 0.12, 0.44), (x, top + 0.02, z), white, yaw=0.5 * i)          # its cap
+                if prev:
+                    mid = ((prev[0] + x) / 2, (prev[1] + deck) / 2 + HANG - 0.22, (prev[2] + z) / 2)
+                    beam((prev[0], prev[1] + HANG, prev[2]), mid, 0.13, rope)
+                    beam(mid, (x, deck + HANG, z), 0.13, rope)
+                if side > 0 and i % 5 == 2:
+                    ox, _, oz = riptide_rail_at(t, side * (D - 0.24))
+                    torus(0.3, 0.1, (ox, deck + 0.45, oz), red, segs=8, axis='across', yaw=0.0)
+                prev = (x, deck, z)
+    join_still('rail')
+    on_a_rise()
+
 @piece(1.0)
 def channel_beacon():
     # Riptide: the beacon marking the channel under the hop, where the
-    # causeway bridges the gap between the sea and the lagoon: a stone foot
-    # in the water, a stout post banded red and white, its red topmark and
-    # lamp, as tall as the club's mast, against the sky as the road climbs
-    # to the hop. It stands in the bay the shore lets down (riptide_water).
-    rowed(cyl(0.8, 1.45, (0.0, -1.25, 0.0), 'grey', r2=0.7, segs=8), 15)
-    box((1.2, 0.12, 1.2), (0.0, 0.26, 0.0), 0xfde4c7)
-    for k in range(5):
-        box((0.5, 1.0, 0.5), (0.0, 0.82 + k, 0.0), (0xff5040, 0xfff6eb)[k % 2])
-    box((0.7, 0.12, 0.7), (0.0, 5.36, 0.0), 0x38383d)
-    box((0.34, 0.36, 0.34), (0.0, 5.6, 0.0), 0xffc044)                      # the lamp
-    cyl(0.42, 0.55, (0.0, 5.78, 0.0), 0xff5040, segs=8)                      # the topmark
-    cyl(0.46, 0.55, (0.0, 6.33, 0.0), 0xff5040, r2=0.04, segs=8)
+    # causeway bridges the gap between the sea and the lagoon, as tall as
+    # the club's mast, against the sky as the road climbs to the hop. It
+    # stands in the bay the shore lets down (riptide_water).
+    # (round 16: it was a red and white banded tower, Driftwood's light
+    # station over again. Now a pile beacon: four splayed timber piles
+    # braced across, a deck, the red port-hand daymark boards to the road
+    # and to the cars coming, its lamp on a short mast.)
+    wood, dark, red, white = 0x8a6a46, 0x6e5b3a, 0xff5040, 0xfff6eb
+    F, T, H = 1.05, 0.38, 4.5                  # the piles' spread at the bed and under the deck, the deck's height
+    with plain_parts():
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                beam((sx * F * 1.2, -1.3, sz * F * 1.2), (sx * T, H, sz * T), 0.26, wood)
+        for y0, y1 in ((0.35, 2.3), (2.3, H - 0.25)):          # the braces, crossing on each face
+            r0, r1 = F + (T - F) * y0 / H, F + (T - F) * y1 / H
+            for sgn in (-1, 1):
+                beam((-r0, y0, sgn * r0), (r1, y1, sgn * r1), 0.14, dark)
+                beam((r0, y0, sgn * r0), (-r1, y1, sgn * r1), 0.14, dark)
+                beam((sgn * r0, y0, -r0), (sgn * r1, y1, r1), 0.14, dark)
+                beam((sgn * r0, y0, r0), (sgn * r1, y1, -r1), 0.14, dark)
+        for y in (0.35, 2.3):                                  # a girt round at each tier
+            r = F + (T - F) * y / H
+            for sgn in (-1, 1):
+                box((2 * r + 0.2, 0.16, 0.16), (0.0, y, sgn * r), wood)
+                box((0.16, 0.16, 2 * r + 0.2), (sgn * r, y, 0.0), wood)
+    box((1.5, 0.16, 1.5), (0.0, H + 0.08, 0.0), 0xb06041)                     # the deck
+    # the daymarks: a red square board edged white, one to the road (-X),
+    # one to the cars coming up the causeway (-Z)
+    for (dx, dz, yaw) in ((-0.82, 0.0, 0.0), (0.0, -0.82, math.pi / 2)):
+        box((0.1, 1.5, 1.5), (dx * 0.88, H + 0.88, dz * 0.88), white, yaw=yaw)
+        box((0.16, 1.14, 1.14), (dx * 0.9, H + 0.88, dz * 0.9), red, yaw=yaw)
+    box((0.2, 2.3, 0.2), (0.0, H + 1.15, 0.0), white)                         # the lamp's mast
+    box((0.5, 0.1, 0.5), (0.0, H + 2.3, 0.0), 0x38383d)
+    rowed(box((0.36, 0.4, 0.36), (0.0, H + 2.55, 0.0), 'yellow'), 0)          # the lamp
+    cyl(0.4, 0.5, (0.0, H + 2.75, 0.0), red, r2=0.05, segs=8)                 # its cap
     for sz in (-1, 1):                                                     # the ladder's rails, to the water
-        box((0.08, 4.6, 0.08), (0.33, 2.9, sz * 0.14), 0x38383d)
+        box((0.1, H + 0.2, 0.1), (0.62, H / 2 - 0.1, sz * 0.16), 0x38383d, roll=-0.14)
     join_still('beacon')
     on_a_rise()
 

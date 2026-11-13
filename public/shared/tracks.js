@@ -768,7 +768,7 @@ export const TRACKS = {
     // Point, a big grassy headland north of the start straight, the surf
     // contest's site strung along its kerb.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.19, lat: -10, y: 0.78 },
+      { model: 'set-lifeguard-tower', u: 0.2, lat: -10, y: 0.78 },
       // the seafront: the sea wall along the kerb on the sea side, in four
       // lengths, and across the road the hotel and the guest houses
       { model: 'set-seafront-wall-a', u: 0.2614, lat: -9.5, yaw: 180 },
@@ -784,6 +784,10 @@ export const TRACKS = {
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
       { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180, y: 0.85 },
       { model: 'set-channel-beacon', u: 0.458, lat: -9.5 },
+      // the causeway's piles and rope rail, both kerbs, the hop's length and
+      // on to the hook: one piece astride the road (set_prototypes.py
+      // RIP_ROAD: re-sample it if this u or the road moves)
+      { model: 'set-causeway-rail', u: 0.515, lat: 0 },
       { model: 'set-lagoon-fleet', u: 0.52, lat: -18, yaw: 180 },
       { model: 'set-sailing-club', u: 0.62, lat: -11, yaw: 180 },
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
