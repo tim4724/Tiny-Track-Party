@@ -1402,18 +1402,16 @@ def lifeboat_station():
 def crab_boat():
     # Tidepool: the crab fishers' boat working the bay inside the headland,
     # at a boat's size beside a car: a blue hull with a white wheelhouse and
-    # a tan lugsail, sailing a long loop out past the arch and in under the
-    # stacks to the lifeboat slip and round again, rising and falling on the
-    # swell, a wake at its stern. Placed on the west bend's centreline: the
-    # loop lies in the sea off its outside (-X).
-    R = 27.0
-    loop = []
-    for k in range(14):
-        t = k / 14 * 2 * math.pi
-        th = 0.26 * math.cos(t) - 0.02
-        rho = R + 24.0 + 7.0 * math.sin(t)
-        x, z = tidepool_on_bend(R, rho, th)
-        loop.append((x, 0.0, z))
+    # a tan lugsail, working its pots round the sea arch (at (-22.7, -15.4)
+    # here): in to the water between the rock pool and the arch, where the
+    # west run looks, out round the arch's seaward side, where it shows
+    # through the hole, and back, rising and falling on the
+    # swell, a wake at its stern. Placed on the headland's own spot (the
+    # west bend's centreline, -X its outside): out past the stacks, where it
+    # sailed before, the bend had turned the camera away (0.6 s a lap).
+    loop = [(x, 0.0, z) for x, z in (
+        (-15.5, -24.3), (-21.0, -25.8), (-27.4, -25.1), (-32.0, -20.9), (-33.5, -14.3), (-31.9, -8.3), (-28.6, -4.5),
+        (-31.7, -5.0), (-35.0, -8.9), (-36.4, -15.5), (-34.3, -23.0), (-28.9, -27.7), (-21.6, -28.9), (-16.4, -27.8))]
     for i, p in enumerate(loop):
         marker('path_crab_%d' % i, p)
     beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99, loop[0])
@@ -4998,9 +4996,12 @@ def boat_huts():
 @piece(1.0)
 def drift_coble():
     # Driftwood: a beach boat under its brown lugsail working in and out
-    # past the groynes' ends (placed on the groynes' spot, on the road's
-    # centreline): the sea's side is +X here.
-    loop = [(13.0 + 3.0 * math.sin(i / 14 * 2 * math.pi), 0.0, 11.0 * math.cos(i / 14 * 2 * math.pi))
+    # BETWEEN the groynes (placed on the groynes' spot, on the road's
+    # centreline, grown 1.5 there): in to the shallows a few strides off the
+    # kerb, where the racers passing the groynes look, and out past the
+    # beacon posts and back. Its old round out beyond the groynes' ends read
+    # 0.4 s a lap and ran through their posts. The sea's side is +X here.
+    loop = [(18.5 + 6.0 * math.cos(i / 14 * 2 * math.pi), 0.0, 1.5 * math.sin(i / 14 * 2 * math.pi))
             for i in range(14)]
     for i, p in enumerate(loop):
         marker('path_coble_%d' % i, p)
