@@ -375,17 +375,17 @@ export const SET_GROUND = {
   // Tangle's brook lies in its own bed, a reach at a time: the low line the
   // valley's sides and the land raised toward the road stand over, so its
   // water lies level across: each bed is its reach's chord.
-  'set-brook-a': [{ kind: 'plain', x: -1.38, z: 0.14, len: 16.4, r: 1.6, w: 2.5 }],
-  'set-brook-b': [{ kind: 'plain', x: -0.43, z: 0.08, len: 23.1, r: 1.6, w: 2.5 }],
-  'set-brook-c': [{ kind: 'plain', x: 0.59, z: -0.09, len: 22.8, r: 1.6, w: 2.5 }],
-  'set-brook-d': [{ kind: 'plain', x: 0.98, z: -0.29, len: 20.9, r: 1.6, w: 2.5 }],
-  'set-brook-e': [{ kind: 'plain', x: 1.81, z: -0.32, len: 22, r: 1.6, w: 2.5 }],
-  'set-brook-f': [{ kind: 'plain', x: 4.61, z: -0.61, len: 19.7, r: 1.6, w: 2.5 }],
+  'set-brook-a': [{ kind: 'plain', x: -1.38, z: 0.14, len: 16.4, r: 1.6, w: 6 }],
+  'set-brook-b': [{ kind: 'plain', x: -0.43, z: 0.08, len: 23.1, r: 1.6, w: 6 }],
+  'set-brook-c': [{ kind: 'plain', x: 0.59, z: -0.09, len: 22.8, r: 1.6, w: 6 }],
+  'set-brook-d': [{ kind: 'plain', x: 0.98, z: -0.29, len: 20.9, r: 1.6, w: 6 }],
+  'set-brook-e': [{ kind: 'plain', x: 1.81, z: -0.32, len: 22, r: 1.6, w: 6 }],
+  'set-brook-f': [{ kind: 'plain', x: 4.61, z: -0.61, len: 19.7, r: 1.6, w: 6 }],
   // (the last reach turns in to the pond: its bed's chord is turned with
   // it, and a round floor at the mouth keeps the lawn's 9 u chords from
   // climbing over the corner of the pond the brook comes in at)
   'set-brook-g': [
-    { kind: 'plain', yaw: 7.96, x: 2.83, z: -2.83, len: 16.9, r: 1.6, w: 2.5 },
+    { kind: 'plain', yaw: 7.96, x: 2.83, z: -2.83, len: 16.9, r: 1.6, w: 6 },
     { kind: 'plain', x: 3.58, z: 5.15, len: 0, r: 6.5, w: 5 }
   ],
   // Pretzel's den camp on a bank of its own, the same shape.
@@ -1456,7 +1456,11 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.0895, lat: -34, r: 20, h: 6, top: 0.2 },
       { kind: 'ridge', u: 0.52, lat: -50, len: 70, r: 26, h: 7, top: 0.2 },
       { kind: 'pond', u: 0.8316, lat: 16.16, yaw: -170.59, len: 4, r: 10, w: 4, tint: 0x8fc2b0 },
-      { kind: 'ridge', u: 0.8334, lat: 43.42, yaw: -177.69, len: 30, r: 16, h: 7, top: 0.25 },
+      // the lake's shore, level a grid cell past its rim all round, and its
+      // hill standing back that far: nearer, the lawn's 9 u chords climbed
+      // over the coping and cut across the water
+      { kind: 'plain', u: 0.8316, lat: 16.16, yaw: -170.59, len: 4, r: 15, w: 6 },
+      { kind: 'ridge', u: 0.8334, lat: 47.5, yaw: -177.69, len: 30, r: 16, h: 7, top: 0.25 },
       { kind: 'ridge', u: 0.515, lat: -17.3, len: 28, r: 14, h: 5, top: 0.3, near: 0.6 },
       { kind: 'ridge', u: 0.448, lat: -17.06, r: 18, h: 6, top: 0.3, near: 0.6 }
     ]
