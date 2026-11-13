@@ -205,6 +205,7 @@
     "set-jungle-grove.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-kite-flyers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lagoon-fleet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-lake-hamlet-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lake-hamlet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lawn-shrub.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lifeboat-station.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

@@ -6347,8 +6347,7 @@ def flurry_jetty(a, b, y=0.62, w=1.1):
     for k in range(3):
         box((0.5, 0.07, 0.07), at(L + 2.12, 0.3, 0.14 + 0.2 * k), 0x9a7b55, yaw=yaw)
 
-@piece(1.0)
-def lake_hamlet():
+def flurry_hamlet_build(lite):
     # Flurry: the fishing hamlet on the lake's south shore, straight ahead of
     # a car coming down off the bridge and on the outside of the bend that
     # follows: three log cabins of three sizes stepping up the foot of the
@@ -6361,7 +6360,9 @@ def lake_hamlet():
     # holes, tip-ups flagged, a sledge of gear. Nobody about: their things say
     # who lives here. Built on the ground sampled under it (HAMLET_G), the
     # trodden paths between the doors draped, so it levels nothing; the ice is
-    # the lake's (set-frozen-lake), a hand over the plain.
+    # the lake's (set-frozen-lake), a hand over the plain. The lite build
+    # keeps every third fir of the forest's edge.
+    global FIR_LITE
     G = flurry_hamlet_ground
     def foot(x, z, r):
         return min(G(x + dx, z + dz) for dx in (-r, 0, r) for dz in (-r, 0, r)) - 0.08
@@ -6398,9 +6399,13 @@ def lake_hamlet():
                                    (0.8, -11.2, 2.1), (4.2, -8.4, 1.7), (-2.6, -13.2, 2.3), (4.6, -13.4, 1.7),
                                    (-11.5, -11.5, 2.1), (2.4, -15.6, 2.2), (-6.8, -15.2, 2.0), (-9.4, 4.6, 1.6),
                                    (-12.6, -3.4, 1.9), (-13.6, 2.2, 1.6))):
+        if lite and n % 3:
+            continue
+        FIR_LITE = lite
         g = G(x, z)
         (spruce if n % 4 == 1 else pine)((x, g - 0.35 * k, z), k)
         box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    FIR_LITE = False
     join_still('hamlet')
     # what lies on the snow as drawn: the trodden paths, sleds and skis by the doors
     def lying():
@@ -6420,6 +6425,14 @@ def lake_hamlet():
         for k in range(2):                           # a pair of skis stood in the snow by the big cabin's door
             box((0.07, 1.1, 0.14), (5.4, 0.5, -2.3 + 0.2 * k), 0xcf534f, roll=0.12)
     draped('lying', lying)
+
+@piece(1.0)
+def lake_hamlet():
+    flurry_hamlet_build(False)
+
+@piece(1.0)
+def lake_hamlet_lite():
+    flurry_hamlet_build(True)
 
 def ramp(a, b, w, t, color):
     """A deck `w` wide and `t` thick under the line from glTF point a to b, its
