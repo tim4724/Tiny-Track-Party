@@ -204,7 +204,7 @@ constexpr SetDef kSet_cove[] = {
   { "set-shipwreck-ribs", 0x1.999999999999ap-1, 0x1.3p+4, 0x1.4p+4, -0x1.6666666666666p-2, 0x1.4p+0, 1 },
   { "set-pirate-camp", 0x1.70a3d70a3d70ap-4, 0x1.4p+3, -0x1.4p+4, 0x1.ccccccccccccdp-1, 0x1p+0, 1 },
   { "set-skull-rock", 0x1.47ae147ae147bp-1, 0x1.4p+4, 0x1.ep+4, 0x0p+0, 0x1p+0, 1 },
-  { "set-jungle-ruin", 0x1.4f5c28f5c28f6p-1, -0x1.5p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-pirate-stockade", 0x1.4f5c28f5c28f6p-1, -0x1.5p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-smugglers-cave", 0x1.f333333333333p-1, -0x1.d99999999999ap+2, 0x1.68p+7, 0x1.ccccccccccccdp-1, 0x1p+0, 1 },
   { "set-jungle-grove", 0x1.dc28f5c28f5c3p-1, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-pirate-lookout", 0x1.147ae147ae148p-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },

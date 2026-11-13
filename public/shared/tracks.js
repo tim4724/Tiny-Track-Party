@@ -552,8 +552,9 @@ export const TRACKS = {
     // from the jungle to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
     // the wharf along its black sand where the longboat sails out to the
-    // ship riding at anchor and back. Outside the S an old stepped temple
-    // the jungle has half taken back faces Skull Rock across the road. The
+    // ship riding at anchor and back. Outside the S the crew's stockade
+    // stands on the island's flank, its guns trained across the road on
+    // Skull Rock. The
     // old wreck lies in the surf of the west bay's black sand (the second
     // `shore`), its ribs out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
@@ -568,7 +569,7 @@ export const TRACKS = {
       { model: 'set-shipwreck-ribs', u: 0.8, lat: 19, yaw: 20, y: -0.35, scale: 1.25 },
       { model: 'set-pirate-camp', u: 0.09, lat: 10.0, yaw: -20, y: 0.9 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
-      { model: 'set-jungle-ruin', u: 0.655, lat: -10.5, yaw: 180 },
+      { model: 'set-pirate-stockade', u: 0.655, lat: -10.5, yaw: 180 },
       // the cave levels nothing (its gear drapes) and the land's 9 u chords
       // rise under it, so it is lifted onto them
       { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.9 },
