@@ -2312,6 +2312,190 @@ export function runDisplayScenario(opts, ctx) {
                  frames, shots };
       }
 
+      // POP LAP (window.__landmarks.pops): what APPEARS in a racer's picture
+      // between one frame and the next, counted in pixels. The same stepped
+      // lap as the pixel lap, the shipped picture (antialias off). Each
+      // sample is drawn with the far-form choices of the sample before it
+      // held (TTP_DEBUG_LOD_HOLD) and then free: `pop` is the pixels that
+      // differ, which is exactly what swapped form on that frame, with no
+      // camera motion in it. Every `refEvery`-th sample is also drawn with no
+      // far forms (`far`: how much of the picture is a far form's doing),
+      // unculled on top (`cull`: pixels a renderable's box lost) and with the
+      // fog carried past its cutoff (`fog`: world standing out there in the
+      // clear, which flips to haze as the car closes). `tops` are the `keep`
+      // biggest pops with a still of each, held | free. The cars and the
+      // effects are out of every frame: they move by themselves, and a
+      // second draw of one moment does not repeat their shadows and rubber.
+      // One player only: the choice of forms is latched per frame, not per cell.
+      const POP_WORLD = FEAT.ALL & ~(FEAT.CARS | FEAT.EFFECTS);
+      const POP_DIFF = 24;          // a channel further apart than this differs
+      function grab(rect) {
+        const src = display.canvas;
+        if (!seeCanvas) seeCanvas = document.createElement('canvas');
+        if (seeCanvas.width !== src.width || seeCanvas.height !== src.height) {
+          seeCanvas.width = src.width;
+          seeCanvas.height = src.height;
+        }
+        const g = seeCanvas.getContext('2d', { willReadFrequently: true });
+        g.drawImage(src, 0, 0);
+        return g.getImageData(rect.x, rect.y, rect.w, rect.h);
+      }
+      // The differing pixels of two grabs: how many, and the 64 px tile that
+      // holds the most of them (where the biggest change is).
+      function differ(p, q, w, h) {
+        const a = p.data, b = q.data;
+        const T = 64, tw = Math.ceil(w / T), th = Math.ceil(h / T);
+        const tiles = new Int32Array(tw * th);
+        let n = 0;
+        for (let y = 0, i = 0; y < h; y++) {
+          const row = ((y / T) | 0) * tw;
+          for (let x = 0; x < w; x++, i += 4) {
+            if (Math.abs(a[i] - b[i]) > POP_DIFF || Math.abs(a[i + 1] - b[i + 1]) > POP_DIFF
+                || Math.abs(a[i + 2] - b[i + 2]) > POP_DIFF) {
+              n++;
+              tiles[row + ((x / T) | 0)]++;
+            }
+          }
+        }
+        let best = 0;
+        for (let t = 1; t < tiles.length; t++) if (tiles[t] > tiles[best]) best = t;
+        return { n, peak: tiles[best], x: (best % tw) * T + T / 2, y: ((best / tw) | 0) * T + T / 2 };
+      }
+      async function popLap(opts = {}) {
+        const every = Math.max(1, opts.every | 0 || 2);
+        const refEvery = Math.max(1, opts.refEvery | 0 || 5);
+        const keep = opts.keep === undefined ? 12 : opts.keep | 0;
+        const len = layout.length;
+        const cw = display.canvas.width, ch = display.canvas.height;
+        if (seats !== 1) throw new Error('the pop lap is a one-player probe');
+        const r = display.cellRects(seats);
+        const rect = { x: Math.round(r[0] * cw), y: Math.round(r[1] * ch),
+                       w: Math.round(r[2] * cw), h: Math.round(r[3] * ch) };
+        const me = field.find((f) => !f.ai).peerIndex;
+        const frames = [];
+        let tops = [];
+        let lost = null;            // the sample a box lost most at: culled | unculled
+        let clear = null;           // the sample with most standing unfogged past the cutoff: shipped | fogged
+        const wanted = new Set(opts.full || []), fulls = [];   // samples to hand back whole
+        scene.stop();
+        display.cellLookClear();
+        display.carPoseClear();
+        poses = [];
+        if (engine) engine.dispose();
+        engine = bareSession(field, track, { bots });
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        scene.hold(false);
+        display.antialias(false);
+        display.debugFeatures(POP_WORLD);
+        const dt = SEE_STEP_MS / 1000;
+        // Held beside free, a window round the tile that changed most.
+        const still = (held, free, d) => {
+          const W = Math.min(420, rect.w), H = Math.min(300, rect.h);
+          const x = Math.max(0, Math.min(rect.w - W, d.x - W / 2));
+          const y = Math.max(0, Math.min(rect.h - H, d.y - H / 2));
+          const out = document.createElement('canvas');
+          out.width = 2 * W + 4;
+          out.height = H;
+          const g = out.getContext('2d');
+          const tmp = document.createElement('canvas');
+          tmp.width = rect.w;
+          tmp.height = rect.h;
+          const tg = tmp.getContext('2d');
+          tg.putImageData(held, 0, 0);
+          g.drawImage(tmp, x, y, W, H, 0, 0, W, H);
+          tg.putImageData(free, 0, 0);
+          g.drawImage(tmp, x, y, W, H, W + 4, 0, W, H);
+          return out.toDataURL('image/jpeg', 0.9);
+        };
+        try {
+          let primed = false;
+          for (let step = 1, k = 0; ; step++) {
+            if (step * SEE_STEP_MS > LAP_MAX_S * 1000) throw new Error(`no two laps of '${track.id}' in ${LAP_MAX_S}s`);
+            engine.update(SEE_STEP_MS);
+            if (step % every) { display.advance(dt); continue; }
+            const c = engine.getSnapshot().cars.find((x) => x.id === me);
+            if (c.totalS >= 2 * len || c.finished) break;
+            if (c.totalS < len - 30) { display.advance(dt); continue; }
+            if (!primed || c.totalS < len) {      // the rig settled, the forms latched
+              display.frame(dt);
+              primed = true;
+              continue;
+            }
+            if (k % 10 === 0) await new Promise((res) => setTimeout(res, 0));
+            const at = { k, s: Math.round((c.totalS - len) * 10) / 10,
+                         x: Math.round(c.pose.pos.x * 10) / 10, z: Math.round(c.pose.pos.z * 10) / 10 };
+            display.debugFeatures(POP_WORLD | DEBUG.LOD_HOLD);
+            display.frame(dt);
+            const held = grab(rect);
+            display.debugFeatures(POP_WORLD);
+            display.frame(0);
+            const free = grab(rect);
+            // A still frame drawn again is the same picture, except where
+            // something moves by the frame, not by the clock (a rig easing
+            // over a jump or under a deck, blown sand): there the two draws
+            // differ by that too, and the sample says nothing about forms
+            // (`moved`).
+            display.frame(0);
+            const moved = differ(free, grab(rect), rect.w, rect.h).n;
+            const d = moved ? { n: 0, peak: 0, x: 0, y: 0 } : differ(held, free, rect.w, rect.h);
+            const rec = { ...at, pop: d.n, peak: d.peak, px: d.x, py: d.y };
+            if (moved) rec.moved = moved;
+            if (k % refEvery === 0 && !moved) {
+              display.debugFeatures(POP_WORLD | DEBUG.NO_LOD);
+              display.frame(0);
+              const near = grab(rect);
+              rec.far = differ(free, near, rect.w, rect.h).n;
+              display.debugFeatures(POP_WORLD | DEBUG.NO_LOD | DEBUG.NO_CULL);
+              display.frame(0);
+              const open = grab(rect);
+              const cd = differ(near, open, rect.w, rect.h);
+              rec.cull = cd.n;
+              if (keep && cd.peak > (lost ? lost.peak : 0)) lost = { ...at, cull: cd.n, peak: cd.peak, jpeg: still(near, open, cd) };
+              // The sky's own content stands past the cutoff on purpose.
+              display.debugFeatures((POP_WORLD & ~FEAT.SKY) | DEBUG.NO_LOD);
+              display.frame(0);
+              const cut = grab(rect);
+              display.debugFeatures((POP_WORLD & ~FEAT.SKY) | DEBUG.NO_LOD | DEBUG.FOG_WHOLE);
+              display.frame(0);
+              const whole = grab(rect);
+              const fd = differ(cut, whole, rect.w, rect.h);
+              rec.fog = fd.n;
+              if (keep && fd.peak > (clear ? clear.peak : 0)) clear = { ...at, fog: fd.n, peak: fd.peak, jpeg: still(cut, whole, fd) };
+              display.debugFeatures(POP_WORLD);
+              display.frame(0);              // the free choice latched again
+            }
+            frames.push(rec);
+            if (wanted.has(k)) {
+              const pic = (img) => {
+                const c = document.createElement('canvas');
+                c.width = rect.w;
+                c.height = rect.h;
+                c.getContext('2d').putImageData(img, 0, 0);
+                return c.toDataURL('image/png');
+              };
+              fulls.push({ ...rec, held: pic(held), free: pic(free) });
+            }
+            if (keep && d.n && (tops.length < keep || d.peak > tops[tops.length - 1].peak)) {
+              tops.push({ ...rec, jpeg: still(held, free, d) });
+              tops.sort((p, q) => q.peak - p.peak);
+              tops = tops.slice(0, keep);
+            }
+            k++;
+          }
+        } finally {
+          display.debugFeatures(FEAT.ALL);
+          display.antialias(true);
+          engine.dispose();
+          engine = null;
+          newSession();
+          setView(mode);
+          scene.start();
+        }
+        return { track: track.id, every: (every * SEE_STEP_MS) / 1000, length: len, cell: rect,
+                 frames, tops, lost, clear, fulls };
+      }
+
       const built = serial(async () => { await seat(); setView(mode); });
 
       // The gallery chrome's control surface, same-origin like __showroom. The
@@ -2405,6 +2589,8 @@ export function runDisplayScenario(opts, ctx) {
         // The pixel lap (seeLap): every piece's pixels in cell 0's picture
         // over a driven lap, or with `stills` that lap's moments photographed.
         see: (opts) => serial(async () => seeLap(opts)),
+        // The pop lap (popLap): what swaps form or is lost to its box, per frame.
+        pops: (opts) => serial(async () => popLap(opts)),
         // Better spots for the pieces a racer barely reads (the placement
         // search), for a cell of this aspect: per piece searched, where it
         // stands and reads now and where it would read better (`to`, null

@@ -40,18 +40,14 @@
 // material, and every knob it adds is a uniform that leaves the weather's path
 // as it was (each 0 there):
 //   - `mask` scales a sprite's alpha by the floor texture's G, the map of
-//     where that life lives (round a cherry, by the road), and
-//     lays the band on the floor texture's R, the ground under it, so the tap
-//     runs in a split's lite cells too;
+//     where that life lives (round a cherry), and lays the band on the floor
+//     texture's R, the ground under it, so the tap runs in a split's lite
+//     cells too;
 //   - `tile` (world units) wraps a sprite inside its own seed's tile of the
 //     world instead of round the camera: life seeded only where it lives, so
 //     a sunbeam's few dozen motes cost a few dozen sprites, not a camera box
 //     of them;
-//   - `hop` (rad/s) STANDS a sprite on the floor (R) instead of in the band
-//     and bounces it: a tumbleweed rolling;
-//   - `flutter` turns a sprite edge-on and back, a petal tumbling;
-//   - `twig` draws the fragment as a see-through ball of stems, turned by the
-//     roll the vertex stage hands over in fog.y.
+//   - `flutter` turns a sprite edge-on and back, a petal tumbling.
 // A sprite left with no alpha is collapsed to a point, so the cloud's masked
 // majority rasterizes nothing.
 material {
@@ -86,9 +82,7 @@ material {
         { type : sampler2d, name : floorTex },
         { type : float, name : mask },
         { type : float, name : tile, precision : high },
-        { type : float, name : hop },
-        { type : float, name : flutter },
-        { type : float, name : twig }
+        { type : float, name : flutter }
     ]
 }
 
@@ -120,9 +114,7 @@ vertex {
         // x/z: ride the wind, then wrap into a boxXZ-wide column centred on
         // the camera (GLSL mod is non-negative, so one mod suffices).
         highp float bx = materialParams.boxXZ;
-        // A thing on the floor rolls at its own pace; the weather's wind is one.
-        highp float pace = materialParams.hop > 0.0 ? 0.7 + 0.6 * h1 : 1.0;
-        highp vec2 p = seed.xz + vec2(materialParams.wind * pace * t, 0.0);
+        highp vec2 p = seed.xz + vec2(materialParams.wind * t, 0.0);
         highp vec2 rel;
         highp vec3 posU;
         if (materialParams.tile > 0.0) {
@@ -144,13 +136,7 @@ vertex {
         material.color.a *= edge;
         material.fog = vec4(0.0);
         highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
-        if (materialParams.hop > 0.0) {
-            highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;
-            float up = abs(sin(t * materialParams.hop + h1 * 61.0));
-            posU.y = f.r + materialParams.halfSize + materialParams.bob * up;
-            material.color.a *= f.g;
-            material.fog.y = materialParams.wind * pace * t / max(materialParams.halfSize, 0.01);
-        } else if (materialParams.mask > 0.5) {
+        if (materialParams.mask > 0.5) {
             highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;
             posU.y += f.r;
             // …and in on the band's way down, out as it lands: a band this
@@ -180,23 +166,6 @@ fragment {
         float d = length(getUV0());
         // makeSnowflakeTexture's stops: 1.0 at the centre, 0.9 at 0.4, 0 at 1.
         float a = d < 0.4 ? 1.0 - 0.25 * d : 0.9 * (1.0 - (d - 0.4) / 0.6);
-        if (materialParams.twig > 0.5) {
-            // Three families of wavy stems crossing at odd angles, turned by
-            // the roll, over a thin fill, inside a ragged outline: a tangle
-            // you can see through, not a wheel.
-            vec2 q = getUV0();
-            float r = variable_fog.y;
-            float stems = 0.0;
-            for (int k = 0; k < 3; k++) {
-                float th = r + float(k) * 2.1;
-                vec2 dir = vec2(cos(th), sin(th));
-                float v = dot(q, dir) * (2.6 + 0.9 * float(k))
-                        + 0.35 * sin(dot(q, vec2(-dir.y, dir.x)) * 4.0 + float(k));
-                stems = max(stems, 1.0 - smoothstep(0.07, 0.18, abs(fract(v) - 0.5)));
-            }
-            float ragged = d + 0.1 * sin(atan(q.y, q.x) * 5.0 + r) + 0.05 * sin(atan(q.y, q.x) * 11.0 - r);
-            a = max(stems, 0.28) * (1.0 - smoothstep(0.72, 0.9, ragged));
-        }
         material.baseColor.a *= clamp(a, 0.0, 1.0);
         // Premultiply, same as vblend: the vertex colour is displayed already.
         material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;

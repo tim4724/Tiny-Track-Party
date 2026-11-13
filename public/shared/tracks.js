@@ -1487,7 +1487,7 @@ export const TRACKS = {
     // whole map, its gravel bed laid reach by reach (set-wash-bed, each
     // bringing its channel; the far north-west reaches, out of a racer's
     // sight, are channel only, in `land`), from the north-west past the
-    // hero's stretch by the north straight (tumbleweeds blowing down it),
+    // hero's stretch by the north straight,
     // across the north strand, which fords it at the bed's level, into the
     // east loop, where the road itself runs down the bed from ford to ford
     // (set-wash-road-reach: gravel from bank to bank, a cut bank past each
@@ -1792,8 +1792,8 @@ export const TRACKS = {
     // pumpjack dead ahead out of the S at the east bend, a flowing well's
     // christmas tree at the bend's exit; the tank farm at the end of the
     // east straight, outside the north loop's first corner, where the whole
-    // straight points; the field's three jacks nodding and tumbleweeds
-    // blowing by outside its second corner; and at the line the field's own
+    // straight points; the field's three jacks nodding outside its second
+    // corner; and at the line the field's own
     // filling station, its sign turning and a hawk over it. All round the
     // field, on the rim of the basin the circuit lies in, runs the company's
     // railway, its tank trains walking round and round it the way the race

@@ -842,6 +842,9 @@ private:
     // more on the box's 4P heavy seconds and was shipped for an hour; the user
     // wanted a threshold back.
     static constexpr float kLodPx = 2.0f;   // the user asked for aggressive
+    // ...where the frame is the budget (lite). Full swaps at this many, of
+    // what the haze lets through (chooseLods): the user saw things plop in.
+    static constexpr float kLodPxFull = 0.5f;
     // ...and the pixels are a frame's of at most kLodLines lines: a cell of a
     // taller frame is judged as its share of a 1080-line one, so a 4K panel
     // swaps where a 1080 one does (the user's call, 2026-11-13). Judged by its
@@ -861,7 +864,9 @@ private:
     static constexpr int kFarShade = 10;
     // Picks every listed renderable's range for a camera at `cam` in a cell
     // with `pxPerRad` pixels per radian; 0 puts them all on their near range.
-    void chooseLods(const filament::math::float3& cam, float pxPerRad);
+    // `fogStart` and `fogDensity` are that cell's haze (density 0: none).
+    void chooseLods(const filament::math::float3& cam, float pxPerRad, float fogStart,
+            float fogDensity);
     // TTP_DEBUG_NO_LOD keeps every near range, so a sweep prices the far
     // forms as interleaved arms; TTP_DEBUG_LOD_ALL draws every far range,
     // gate or no gate, own car included: what the trade looks like where the
@@ -869,6 +874,13 @@ private:
     static constexpr uint32_t kDebugNoLod = 0x1000000;
     static constexpr uint32_t kDebugLodAll = 0x8000000;
     bool mLodOff = false, mLodAll = false;
+    // The pop probe's (ttp_display.h): LOD_HOLD leaves chooseLods' and
+    // chooseCuts' last answers standing, NO_CULL draws the cells unculled,
+    // FOG_WHOLE fogs past the cutoff too.
+    static constexpr uint32_t kDebugLodHold = 0x2000000;
+    static constexpr uint32_t kDebugNoCull = 0x20000000;
+    static constexpr uint32_t kDebugFogWhole = 0x40000000;
+    bool mLodHold = false, mNoCull = false, mFogWhole = false;
     // TTP_DEBUG_SHADOW_SOLID: every car shadow drawn as an opaque black
     // die-cut of its fitted rect (placeCarShadow), the probe for judging the
     // pass's placement and depth on a TV.
@@ -2070,6 +2082,9 @@ private:
         int lodRoot = -1;
         int lod = -1;
         ttp::rt::SetMotion motion;
+        // A `flutter` part's cloth frame; in full its cuts are the skin's
+        // bones `bone` .. `bone + motion.flutterJoints`.
+        ttp::rt::SetFlutterFrame cloth;
     };
     // THE SKIN: a placement's moving parts as ONE draw in full, a bone a part,
     // so a knot of penguins is one draw and each still waddles on its own.
@@ -2287,11 +2302,9 @@ private:
     // THE CUP'S AMBIENT LIFE (theme.life): a second cloud through the same
     // material (vpoint.mat says what its uniforms add), with a texture of its
     // own over the flake floor's grid: R the floor it lives on (the ground),
-    // G where it lives (round the set pieces its `near` names, by the road).
-    // Life that lives in a place
-    // is SEEDED there, in kLifeTile tiles it never leaves; a tumbleweed, which
-    // lives along every road, rides the camera box like the weather. Never
-    // culled per cell: it is a few hundred sprites, not thousands.
+    // G where it lives (round the set pieces its `near` names). It is SEEDED
+    // there, in kLifeTile tiles it never leaves. Never culled per cell: it is
+    // a few hundred sprites, not thousands.
     void buildLife(const TrackBin& tb);
     struct LifeAnchor { float x, z, ax, az, hx, hz; };   // a footprint (hx = hz = 0: a point)
     std::vector<LifeAnchor> mLifeAnchors;
@@ -2299,7 +2312,6 @@ private:
     filament::MaterialInstance* mLifeMat = nullptr;
     filament::Texture* mLifeTex = nullptr;
     float mLifeHalf = 0;    // the sprite's halfSize, world-sized (no rows fit)
-    float mLifeBox = 0;     // the camera box a box-riding life is fitted in, 0 when tiled
     uint32_t mLifeCells = 0;
     static constexpr float kLifeTile = 4.0f;
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
@@ -2358,8 +2370,8 @@ private:
     // all); `lockBorder` keeps a range's open edges where a neighbouring range
     // shares them. farFormByBone is a skinned range's, a part at a time.
     static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder,
-            uint32_t v0 = 0, uint32_t v1 = 0);
-    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN);
+            bool keepShades, uint32_t v0 = 0, uint32_t v1 = 0);
+    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN, bool keepShades);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);

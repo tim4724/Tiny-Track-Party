@@ -68,6 +68,61 @@ void TtpRenderer::keepTravellersOutOfBake(const gltfio::FilamentAsset* asset,
     }
 }
 
+namespace {
+// A cloth cut across its fly where `along` (each vertex's reach down the fly)
+// passes `cut`, so a joint has vertices of its own to carry (a flag is built
+// as a slab or two: eight corners and nothing between them). A triangle the
+// cut crosses becomes two or three, wound as it was, the new corners' colour
+// mixed along the edge.
+template <class Vertex>
+void cutCloth(std::vector<Vertex>& pv, std::vector<uint32_t>& pi,
+        std::vector<float>& along, float cut, float eps) {
+    std::vector<uint32_t> out;
+    out.reserve(pi.size() + 24);
+    const auto on = [&](uint32_t a, uint32_t b) {
+        const float t = (cut - along[a]) / (along[b] - along[a]);
+        const Vertex va = pv[a], vb = pv[b];
+        Vertex v{ va.px + (vb.px - va.px) * t, va.py + (vb.py - va.py) * t,
+                  va.pz + (vb.pz - va.pz) * t, 0 };
+        for (int sh = 0; sh < 32; sh += 8) {
+            const float ca = (float) (va.abgr >> sh & 255), cb = (float) (vb.abgr >> sh & 255);
+            v.abgr |= (uint32_t) std::lround(ca + (cb - ca) * t) << sh;
+        }
+        pv.push_back(v);
+        along.push_back(cut);
+        return (uint32_t) (pv.size() - 1);
+    };
+    for (size_t i = 0; i + 2 < pi.size(); i += 3) {
+        uint32_t t[3] = { pi[i], pi[i + 1], pi[i + 2] };
+        int side[3], up = 0, down = 0;
+        for (int c = 0; c < 3; c++) {
+            side[c] = along[t[c]] > cut + eps ? 1 : along[t[c]] < cut - eps ? -1 : 0;
+            up += side[c] > 0;
+            down += side[c] < 0;
+        }
+        if (!up || !down) {
+            out.insert(out.end(), t, t + 3);
+            continue;
+        }
+        // Turned so corner 0 is the one apart: the corner on the cut, or the
+        // one alone on its side.
+        int lone = 0;
+        for (int c = 0; c < 3; c++) {
+            if (up + down == 2 ? side[c] == 0 : side[c] == (up == 1 ? 1 : -1)) lone = c;
+        }
+        const uint32_t a = t[lone], b = t[(lone + 1) % 3], c = t[(lone + 2) % 3];
+        if (up + down == 2) {
+            const uint32_t m = on(b, c);
+            out.insert(out.end(), { a, b, m, a, m, c });
+        } else {
+            const uint32_t m1 = on(a, b), m2 = on(a, c);
+            out.insert(out.end(), { a, m1, m2, m1, b, c, m1, c, m2 });
+        }
+    }
+    pi.swap(out);
+}
+} // namespace
+
 // After the static merge (buildDressingMerge), which leaves every slot under an
 // `anim_` node to this. A part whose bake fails keeps its gltfio draw, standing
 // still and live-lit, and the scene budget's live-dressing gate names it.
@@ -353,8 +408,36 @@ void TtpRenderer::buildSetMovers() {
                 if (lodPath >= 0) {
                     mv.lodRoot = motion.path ? (int) mSetMovers.size() : mSetMovers[(size_t) rides].lodRoot;
                 }
+                // A cloth's frame, read off its vertices in the node's own
+                // (set_motion_flutter_frame). A part with no fly to speak of
+                // stands still.
+                std::vector<float> along;
+                if (motion.flutter) {
+                    std::vector<float3> q(pv.size());
+                    for (size_t i = 0; i < pv.size(); i++) {
+                        const float4 w{ pv[i].px, pv[i].py, pv[i].pz, 1 };
+                        q[i] = skinned ? (toNode * w).xyz : w.xyz;
+                    }
+                    mv.cloth = ttp::rt::set_motion_flutter_frame(&q[0].x, q.size(), 3, motion.flutterHoist);
+                    if (!(mv.cloth.len > 1e-4f)) {
+                        motion.flutter = false;
+                    } else if (skinned) {
+                        const float3 u{ mv.cloth.u[0], mv.cloth.u[1], mv.cloth.u[2] };
+                        along.resize(q.size());
+                        for (size_t i = 0; i < q.size(); i++) along[i] = dot(q[i], u);
+                        for (int j = 1; j < motion.flutterJoints; j++) {
+                            cutCloth(pv, pi, along, mv.cloth.len * (float) j / (float) motion.flutterJoints,
+                                    1e-3f * mv.cloth.len);
+                        }
+                    }
+                }
                 mv.motion = std::move(motion);
+                const bool cloth = mv.motion.flutter;
                 if (skinned) {
+                    // A cloth takes a bone a cut, the hoist and the free end
+                    // included; the rest a bone a part.
+                    const size_t nBones = cloth ? (size_t) mv.motion.flutterJoints + 1 : 1;
+                    if (skin.bones.size() + nBones > kSkinBones) closeSkin();
                     // A bone of the placement's open skinned draw. The draw's
                     // box holds every pose of the part: its rest vertices'
                     // reach from its anchor, turned any way and lifted, round
@@ -367,6 +450,9 @@ void TtpRenderer::buildSetMovers() {
                         own = std::max(own, length(w - mv.rest[3].xyz));
                     }
                     reach += mv.lift;
+                    // A cloth bends about every cut: a corner's way down the
+                    // fly and its way off it, end to end.
+                    if (cloth) reach *= 1.42f;
                     // This frame's box (stepSetMovers): a rider turns about its
                     // own pivot as it rides, so its reach round its traveller's
                     // is bounded by the two, not by its rest pose alone.
@@ -388,14 +474,28 @@ void TtpRenderer::buildSetMovers() {
                     const uint16_t bone = (uint16_t) skin.bones.size();
                     sm.verts.insert(sm.verts.end(), pv.begin(), pv.end());
                     sm.bones.resize(sm.verts.size(), Mesh::Bone{ { bone, 0, 0, 0 }, { 255, 0, 0, 0 } });
+                    if (cloth) {
+                        // Each corner on the cut it stands on, or shared
+                        // between the two it stands between.
+                        const int n = mv.motion.flutterJoints;
+                        for (size_t i = 0; i < pv.size(); i++) {
+                            const float x = std::min((float) n, std::max(0.0f,
+                                    along[i] / mv.cloth.len * (float) n));
+                            const int j = std::min(n - 1, (int) x);
+                            const int w = (int) std::lround((x - (float) j) * 255.0f);
+                            sm.bones[base + i] = Mesh::Bone{
+                                    { (uint16_t) (bone + j), (uint16_t) (bone + j + 1), 0, 0 },
+                                    { (uint8_t) (255 - w), (uint8_t) w, 0, 0 } };
+                        }
+                    }
                     for (const uint32_t ix : pi) sm.idx.push_back(base + ix);
                     skinGroup.sources.insert(skinGroup.sources.end(), parts.begin(), parts.end());
-                    skin.bones.push_back(atRest);
+                    skin.bones.insert(skin.bones.end(), nBones, atRest);
                     mv.skin = (int) mSetSkins.size();
                     mv.bone = bone;
                     moverOf[node] = mSetMovers.size();
                     mSetMovers.push_back(std::move(mv));
-                    if (skin.bones.size() == kSkinBones) closeSkin();
+                    if (skin.bones.size() >= kSkinBones) closeSkin();
                     continue;
                 }
                 MergedGroup g;
@@ -520,7 +620,7 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
             mat4f w{ float4{ rot[0] * mv.scale, 0 }, float4{ rot[1] * mv.scale, 0 },
                      float4{ rot[2] * mv.scale, 0 }, float4{ at, 1 } };
             // A traveller may also bob, spin and waddle in its own frame as it
-            // goes: a tumbleweed bounces and rolls along its path, a walking
+            // goes: a ball bounces and rolls along its path, a walking
             // penguin rocks from foot to foot.
             if (m.spin || m.bob || m.waddle) {
                 const ttp::rt::SetMotionPose pose = ttp::rt::set_motion_pose(m, mTime, mv.phase,
@@ -530,6 +630,34 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
                 if (pose.roll != 0) w = w * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
             }
             place(k, w);
+            continue;
+        }
+        if (m.flutter) {
+            // A cloth: in full every cut on its own bone, in lite the whole
+            // part swinging on its first joint's bend.
+            const mat4f base = mv.parent >= 0 ? mSetMoverNow[(size_t) mv.parent] * mv.onParent : mv.rest;
+            const ttp::rt::SetFlutterFrame& f = mv.cloth;
+            if (mv.skin >= 0) {
+                ttp::rt::SetFlutterJoint joints[ttp::rt::kFlutterMax + 1];
+                ttp::rt::set_motion_flutter_joints(m, f, mTime, mv.phase, joints);
+                const float3 u{ f.u[0], f.u[1], f.u[2] };
+                auto& bones = mSetSkins[(size_t) mv.skin].bones;
+                for (int j = 0; j <= m.flutterJoints; j++) {
+                    const float* r = joints[j].rot;
+                    const mat4f turn{ float4{ r[0], r[1], r[2], 0 }, float4{ r[3], r[4], r[5], 0 },
+                                      float4{ r[6], r[7], r[8], 0 },
+                                      float4{ joints[j].pos[0], joints[j].pos[1], joints[j].pos[2], 1 } };
+                    bones[mv.bone + (uint32_t) j] = base * turn
+                            * mat4f::translation(u * (-f.len * (float) j / (float) m.flutterJoints))
+                            * mv.toBake;
+                }
+                mSetMoverNow[k] = base;
+            } else {
+                float out = 0, dip = 0;
+                ttp::rt::set_motion_flutter_bend(m, mTime, mv.phase, 1, out, dip);
+                place(k, base * mat4f::rotation(out, float3{ f.h[0], f.h[1], f.h[2] })
+                        * mat4f::rotation(dip, float3{ f.n[0], f.n[1], f.n[2] }));
+            }
             continue;
         }
         size_t n = 0;

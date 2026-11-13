@@ -53,6 +53,9 @@ export const FEAT = {
 export const DEBUG = {
   // Every set-piece placement in its layout row's flat `id` colour (see/landmarks).
   SET_ID: 0x10000000,
+  // The pop probe's (see:pops): no far forms, the last frame's choice of them
+  // held, the cells unculled, and fog past its cutoff.
+  NO_LOD: 0x1000000, LOD_HOLD: 0x2000000, NO_CULL: 0x20000000, FOG_WHOLE: 0x40000000,
 };
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU

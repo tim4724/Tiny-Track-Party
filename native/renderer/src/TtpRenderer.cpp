@@ -520,8 +520,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         const float scale = meshopt_simplifyScale(&m.verts[0].px, m.verts.size(), sizeof(Vertex));
         for (size_t i = 0; i < ranges.size(); i++) {
             const auto [t0, n] = ranges[i];
-            far[i] = skin ? farFormByBone(m, t0 * 3, n * 3)
-                          : farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
+            far[i] = skin ? farFormByBone(m, t0 * 3, n * 3, !mLite)
+                          : farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1, !mLite);
         }
     }
     MaterialInstance* const mi = materialInstance ? materialInstance
@@ -614,8 +614,16 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
 // Answers the far offset, count and reached error (farCnt 0 = no far form).
 // [v0, v1) is the window of vertices the range draws from (v1 0: all of them),
 // which is all the simplifier is shown.
+//
+// `keepShades` (the full tier) holds every colour where it is: the simplifier
+// joins corners by position and counts only how far a surface strays, so it
+// slid a fir's snow tiers down its cone for no error at all, and the grove
+// turned green until the near form came back. Shown each shade a hair apart,
+// it sees a patch of one shade as a surface of its own and the locked border
+// keeps the patch's outline. Lite keeps the cheaper form: its frame is the
+// box's budget.
 TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
-        float scale, bool lockBorder, uint32_t v0, uint32_t v1) {
+        float scale, bool lockBorder, bool keepShades, uint32_t v0, uint32_t v1) {
     LodRange r;
     if (!v1) v1 = (uint32_t) m.verts.size();
     if (!(scale > 0.0f)) return r;
@@ -660,9 +668,26 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     float err = 0;
     if (!pool.empty()) {
         for (uint32_t& k : pool) k -= v0;
-        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), &m.verts[v0].px,
-                v1 - v0, sizeof(Vertex), 0, kFarTol / scale,
-                lockBorder || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
+        const float* at = &m.verts[v0].px;
+        size_t stride = sizeof(Vertex);
+        std::vector<float3> apart;
+        if (keepShades) {
+            // Eight steps a channel, each a fifth of a millimetre: apart to the
+            // simplifier's bitwise join, nothing to its error.
+            constexpr float kApart = 2e-4f;
+            apart.resize(v1 - v0);
+            for (uint32_t i = v0; i < v1; i++) {
+                const Vertex& v = m.verts[i];
+                apart[i - v0] = float3{ v.px + (float) (v.abgr >> 5 & 7) * kApart,
+                        v.py + (float) (v.abgr >> 13 & 7) * kApart,
+                        v.pz + (float) (v.abgr >> 21 & 7) * kApart };
+            }
+            at = &apart[0].x;
+            stride = sizeof(float3);
+        }
+        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), at,
+                v1 - v0, stride, 0, kFarTol / scale,
+                lockBorder || keepShades || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
         for (uint32_t& k : dst) k += v0;
     }
     dst.insert(dst.end(), keep.begin(), keep.end());
@@ -680,7 +705,7 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
 // another at rest (a run's marbles are built on one pivot), which left the
 // whole skin without a far form. A part that saves too little keeps its near
 // triangles in the far range; the range keeps a far form on farForm's terms.
-TtpRenderer::LodRange TtpRenderer::farFormByBone(Mesh& m, size_t idx0, size_t idxN) {
+TtpRenderer::LodRange TtpRenderer::farFormByBone(Mesh& m, size_t idx0, size_t idxN, bool keepShades) {
     LodRange r;
     const uint32_t start = (uint32_t) m.idx.size();
     float err = 0;
@@ -696,7 +721,7 @@ TtpRenderer::LodRange TtpRenderer::farFormByBone(Mesh& m, size_t idx0, size_t id
             }
         }
         const float scale = meshopt_simplifyScale(&m.verts[lo].px, hi - lo + 1, sizeof(Vertex));
-        const LodRange part = farForm(m, a, b - a, scale, false, lo, hi + 1);
+        const LodRange part = farForm(m, a, b - a, scale, false, keepShades, lo, hi + 1);
         if (part.farCnt) {
             err = std::max(err, part.err);
         } else {
@@ -2052,6 +2077,9 @@ void TtpRenderer::tagFeatures() {
     instVec(mBoxInstances, kFeatEffects);
     instVec(mBoxFadeInstances, kFeatEffects);
     instVec(mBananaInstances, kFeatEffects);
+    // The sand a car kicks up: left untagged it drew through every ablation,
+    // and its puffs are dealt afresh on every draw.
+    tagEntities(&mSandEntity, 1, kFeatEffects);
 }
 
 // The road shader's channels, switched by the uniforms that already gate them.
@@ -2112,6 +2140,9 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
+    mLodHold = (mask & kDebugLodHold) != 0;
+    mNoCull = (mask & kDebugNoCull) != 0;
+    mFogWhole = (mask & kDebugFogWhole) != 0;
     mShadowSolid = (mask & kDebugShadowSolid) != 0;   // read per frame by placeCarShadow
     const bool setId = (mask & kDebugSetId) != 0;
     if (setId != mSetIdOn) {

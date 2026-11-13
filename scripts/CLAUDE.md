@@ -41,6 +41,20 @@ CSS cannot hide the race HUD; `?hud=0` is the switch that can), and `encode` (Ch
 encoders; Node does not, and this repo does not need an image dependency for a
 dev-only tool).
 
+## Measuring pop-in: `npm run see:pops`
+
+`pop-see.mjs` drives the pixel lap's stepped race and draws each sample twice
+from one camera: with the far-form choices of the sample before held, then
+free. What differs is what swapped on that frame, with no camera motion in it.
+It also draws samples with no far forms, unculled, and with the fog carried
+past its cutoff, so a box that loses what it draws and world standing out past
+the fog are counted too. **The cars and the effects are out of every probe
+frame**: a second draw of one moment does not repeat their shadows and rubber,
+which reads as a culling fault that is not there. Run it before and after any
+change to a draw range, a far form or a cull box. It is a one-player probe
+(the forms' choice is latched per frame, not per cell): `--lines 540` is a
+four-way split's cell on a 1080 panel.
+
 ## Naming and homes
 
 `bake:*` renders and commits. `shots:*` photographs a platform for the screens

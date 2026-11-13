@@ -1003,7 +1003,17 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * included — the trade where the eye can resolve it:
  * TTP_FEAT_ALL | this = 0x8009FFC. */
 #define TTP_DEBUG_LOD_ALL 0x8000000
-/* 0x2000000 is unused (was TTP_DEBUG_BLOB_BILINEAR, deleted). */
+/* The pop probe's knobs (npm run see:pops). LOD_HOLD keeps every far-form
+ * and small-thing choice as the last frame left it, so the same camera drawn
+ * held and then free differs by exactly what swapped on that frame. NO_CULL
+ * turns the race cells' frustum culling off, so a picture that differs from
+ * the culled one names a renderable whose box does not hold what it draws. */
+#define TTP_DEBUG_LOD_HOLD 0x2000000
+#define TTP_DEBUG_NO_CULL 0x20000000
+/* SET fogs what stands past the fog's cutoff too (the sky content's exit,
+ * FOG_CUTOFF): a world surface that differs from the shipped picture stands
+ * out there unfogged, and flips as a car closes on it. */
+#define TTP_DEBUG_FOG_WHOLE 0x40000000
 /* SET draws every car shadow as an OPAQUE BLACK die-cut of its fitted rect
  * (vshadow.mat with the band at the ramp's half line): the probe for judging
  * the shadow pass's placement, depth and seams by eye, on a TV, in a race.
