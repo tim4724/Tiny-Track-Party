@@ -572,7 +572,6 @@ constexpr SetDef kSet_powder[] = {
   { "set-powder-forest-g", 0x1.b1f8a0902de01p-2, -0x1.3dc28f5c28f5cp+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-powder-forest-h", 0x1.ed288ce703afbp-2, -0x1.6666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-snowman-field", 0x1.3333333333333p-3, -0x1.cp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-sledging-hill", 0x1.395810624dd2fp-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_powder[] = {
   { 3, 0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.bp+5, 0x0p+0, 0x0p+0, 0x1.fp+5, 0x1.e6p+5, 0x0p+0, 0x1.95p+6, 0x1.44p+5, 0x1.44p+5, 0x0p+0, 0x1.2666666666666p+0, 0x0u, 0x0p+0, 1 },
@@ -821,7 +820,7 @@ constexpr FurnDef kBoxes_glacier[] = {
   { 0x1.8fdf3b645a1cbp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_glacier[] = {
-  { "set-snow-fort", 0x1.db22d0e560419p-3, -0x1.9p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-igloo-camp", 0x1.db22d0e560419p-3, -0x1.9p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-expedition-camp", 0x1.79db22d0e5604p-1, -0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-penguin-group", 0x1.4a3d70a3d70a4p-1, -0x1.4p+3, 0x1.22p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-penguin-group", 0x1.7ae147ae147aep-2, 0x1p+3, 0x1.18p+5, 0x0p+0, 0x1p+0, 1 },
@@ -842,8 +841,8 @@ constexpr SetDef kSet_glacier[] = {
 };
 constexpr LandDef kLand_glacier[] = {
   { 4, 1, 0x0p+0, 0x0p+0, 0x0p+0, -0x1p+1, -0x1.999999999999ap-1, 0x1.cp+2, 0x1.4p+3, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x1.4cccccccccccdp+1, 0x1.4cccccccccccdp+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
-  { 3, 2, 0x0p+0, 0x0p+0, 0x0p+0, -0x1p+3, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.2p+3, 0x0p+0, 0x1.6p+3, 0x1.4cccccccccccdp+1, 0x1.4cccccccccccdp+1, 0x0p+0, 0x1.3333333333333p+0, 0x0u, 0x0p+0, 1 },
-  { 3, 3, 0x0p+0, 0x0p+0, 0x0p+0, -0x1p+3, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.2p+3, 0x0p+0, 0x1.6p+3, 0x1.4cccccccccccdp+1, 0x1.4cccccccccccdp+1, 0x0p+0, 0x1.3333333333333p+0, 0x0u, 0x0p+0, 1 },
+  { 3, 2, 0x0p+0, 0x0p+0, 0x0p+0, -0x1p+3, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.2p+3, 0x0p+0, 0x1.6p+3, 0x1.e666666666666p+1, 0x1.e666666666666p+1, 0x0p+0, 0x1.3333333333333p+0, 0x0u, 0x0p+0, 1 },
+  { 3, 3, 0x0p+0, 0x0p+0, 0x0p+0, -0x1p+3, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.2p+3, 0x0p+0, 0x1.6p+3, 0x1.e666666666666p+1, 0x1.e666666666666p+1, 0x0p+0, 0x1.3333333333333p+0, 0x0u, 0x0p+0, 1 },
   { 3, 9, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.3p+4, 0x0p+0, 0x0p+0, 0x1.5p+4, 0x1.1p+4, 0x0p+0, 0x1.2p+4, 0x1.cp+2, 0x1.cp+2, 0x0p+0, 0x1.8p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.923a29c779a6bp-5, -0x1.f866666666666p+6, 0x1.2ep+7, 0x0p+0, 0x0p+0, 0x1.ep+5, 0x1.5p+5, 0x1.5p+5, 0x0p+0, 0x0p+0, 0x1.cp+4, 0x1.cp+4, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.fda5119ce075fp-1, -0x1.1eccccccccccdp+6, -0x1.e8p+6, 0x0p+0, 0x1.cp+2, 0x1.1p+7, 0x1.ep+3, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.6p+2, 0x1.3333333333333p+0, 0x1p-1, 0x1p+0, 0x74b4f0u, 0x0p+0, 1 },
@@ -2589,7 +2588,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 15, kLand_cove, 22 },
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 16, kLand_driftwood, 29 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 19, kLand_riptide, 17 },
-  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 14, kLand_powder, 22 },
+  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 13, kLand_powder, 22 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 22, kLand_flurry, 20 },
   { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 18, kLand_glacier, 39 },
   { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 29, kLand_avalanche, 25 },

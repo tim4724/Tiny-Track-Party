@@ -356,7 +356,7 @@ export const SET_GROUND = {
   // Glacier's rookery: the snow slope the colony stands up, its face to the
   // road (+X), so the crowd shows row over row instead of as a line along the
   // kerb; broad, like the ski school's nursery slope, so the grid draws a hill.
-  'set-penguin-group': [{ kind: 'mound', x: -8, h: 2.6, r: 12, r1: 9, rz: 11, shape: 1.2 }],
+  'set-penguin-group': [{ kind: 'mound', x: -8, h: 3.8, r: 12, r1: 9, rz: 11, shape: 1.2 }],
   // Glacier's expedition camp on a snow bank of its own, flat on top like the
   // den camp's and set back from the road: a camp on the flat hid its tents
   // behind the kerb; on the bank they show over it. The camp drapes, so it lies on the slope drawn:
@@ -863,11 +863,7 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman family on the outside verge of the east bend, at road
       // height, ahead of a car coming over the hump off the start straight
-      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 },
-      // the sledging hill in the knoll's hollow outside the south-west bend,
-      // dead ahead of the run down from the ski school (built on the ground
-      // sampled under it, set_prototypes.py SLEDGE_G)
-      { model: 'set-sledging-hill', u: 0.612, lat: -12, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -990,8 +986,8 @@ export const TRACKS = {
     name: 'Glacier', waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
-      // the snow castle, its gate to the road
-      { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
+      // the expedition's igloo camp, its doorways to the road
+      { model: 'set-igloo-camp', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       // each rookery turned so its white fronts face the road and the car
       // coming at it: one on the moraine outside the bottom loop, dead ahead
@@ -1032,7 +1028,7 @@ export const TRACKS = {
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
-    // fort and its igloo camp at the end of the top straight, short of the
+    // igloo camp at the end of the top straight, short of the
     // corridor down the middle whose vista the box cannot also pay a fort
     // for; the rookeries close by the low road; the expedition's base camp
     // and its smaller advanced camp by the bends.
@@ -1065,7 +1061,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.185, lat: -40, z: -109, len: 20, r: 20, h: 5, top: 0.15 },
       { kind: 'ridge', u: 0.185, lat: -52, z: -44, len: 24, r: 18, h: 3, top: 0.15 },
       // ...two rows of snowy foothills in front of the rest, short of the
-      // fort's clearing...
+      // igloo camp's clearing...
       { kind: 'ridge', u: 0.185, lat: -48, z: -24, len: 20, r: 14, h: 3 },
       { kind: 'ridge', u: 0.185, lat: -45, z: 16, len: 22, r: 13, h: 2.8 },
       { kind: 'ridge', u: 0.185, lat: -24, z: -54, yaw: 40, len: 14, r: 15, h: 2.5 },
