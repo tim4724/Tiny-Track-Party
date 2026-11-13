@@ -8007,10 +8007,11 @@ def glacier_dog_trail():
     # stretch is held down to the run to the line it flies over (the deck
     # cap), so a landform there never rose. It stands on the plain (the
     # piece drapes, so it levels nothing), its flanks sunk into the snow.
-    Z0, Z1 = 12.5, -17.0                               # the drift's ends
+    Z0, Z1 = 15.0, -20.5                               # the drift's ends
+    def ends(z):
+        return smooth01(max(0.0, min(1.0, (Z0 - z) / 6.5, (z - Z1) / 6.5)))   # they fall away, long
     def crest(z):
-        t = min(1.0, (Z0 - z) / 3.5, (z - Z1) / 3.5)   # its ends fall away
-        return (glacier_dog_deck(z) - 0.18) * smooth01(max(0.0, t)) ** 0.6
+        return (glacier_dog_deck(z) - 0.18) * ends(z) ** 0.6
     def drift():
         rows = []
         n = int(Z0 - Z1)
@@ -8018,9 +8019,15 @@ def glacier_dog_trail():
             z = Z0 - (Z0 - Z1) * i / n
             c = crest(z)
             w = 0.25 * math.sin(z * 0.7) + 0.15 * math.sin(z * 1.9)        # its edges wander
+            # Its back is a drift's lee: a long slope feathered out into the
+            # snow behind, wandering, drawn in toward the trail at the ends,
+            # so from above it is a drift, not a bench with a straight back
+            # edge and square ends.
+            b = (0.45 + 0.55 * ends(z)) * (1.0 + 0.12 * math.sin(z * 0.23 + 1.0) + 0.07 * math.sin(z * 0.51))
             prof = [(4.7 + w, -0.35), (4.1 + w, c * 0.2), (3.5 + w, c * 0.62), (2.9 + w, c * 0.92),
-                    (2.3, c - 0.03), (0.6, c), (-1.2, c), (-2.8, c - 0.06),
-                    (-3.9 - w, c * 0.75), (-5.0 - w, c * 0.35), (-6.2 - w, -0.35)]
+                    (2.3, c - 0.03), (0.6, c), (-1.2, c - 0.02), (-2.8, c - 0.1),
+                    (-2.8 - 1.6 * b, c * 0.8), (-2.8 - 3.4 * b, c * 0.55), (-2.8 - 5.4 * b, c * 0.3),
+                    (-2.8 - 7.4 * b, c * 0.1), (-2.8 - 9.0 * b, -0.35)]
             rows.append([(x, y, z) for x, y in prof])
         for o in sheet(rows, lambda i, j, nn: SNOW, 'drift'):
             snowy(o, 0.4)
@@ -9767,13 +9774,29 @@ def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
     box(sz(0.34, 1.1, 0.34), at(0.3, 1.8, 1.4), ORANGE, yaw=yaw)
     box(sz(0.9, 0.34, 0.4), at(-0.05, 2.3, 1.4), ORANGE, yaw=yaw)
     box(sz(0.1, 0.42, 0.46), at(-0.5, 2.3, 1.4), DARK, yaw=yaw)
-    jet = [(-0.45, 2.32), (-1.1, 2.5), (-1.75, 2.42), (-2.35, 2.1), (-2.85, 1.6), (-3.2, 0.95), (-3.45, 0.3)]
-    for i, ((xa, ya), (xb, yb)) in enumerate(zip(jet, jet[1:])):
-        w = 0.24 + 0.07 * i
-        L = math.hypot(xb - xa, yb - ya) + 0.12
-        snowy(box(sz(L, w, w + 0.1), at((xa + xb) / 2, (ya + yb) / 2, 1.4), 0xf3f7fb, yaw=yaw,
-                  roll=-math.atan2(yb - ya, xb - xa)), 0.5)
-    snowy(sphere(0.75 * k, at(-3.5, 0.0, 1.4), 0xf3f7fb, subdiv=1, scale=(1.2, 0.55, 1.3)), 0.5)
+    # The plume: a high arc of thrown snow, chunky, white with a blue shade
+    # under it so it shows against the snow behind, and MOVING: it whips up
+    # and down about the chute's mouth, and its outer half again about its
+    # own root, out of step (a still arc read as nothing at racing speed).
+    jet = [(-0.45, 2.32), (-1.2, 2.95), (-2.0, 3.3), (-2.8, 3.25), (-3.5, 2.8), (-4.05, 2.0), (-4.4, 1.0), (-4.6, 0.2)]
+    def span(i):
+        (xa, ya), (xb, yb) = jet[i], jet[i + 1]
+        w = 0.34 + 0.1 * i
+        L = math.hypot(xb - xa, yb - ya) + 0.16
+        roll = -math.atan2(yb - ya, xb - xa)
+        snowy(box(sz(L, w, w + 0.14), at((xa + xb) / 2, (ya + yb) / 2, 1.4), 0xf3f7fb, yaw=yaw, roll=roll), 0.5)
+        rowed(box(sz(L * 0.8, w * 0.5, w * 0.8), at((xa + xb) / 2, (ya + yb) / 2 - 0.3 * w, 1.4), 'sky', yaw=yaw,
+                  roll=roll), 6)
+        if i % 2:                                       # a clod flung off it
+            snowy(box(sz(0.3, 0.3, 0.3), at((xa + xb) / 2 + 0.1, (ya + yb) / 2 + 0.5 * w + 0.05, 1.4 + 0.3 * (1 if i % 4 == 1 else -1)),
+                      0xf3f7fb, yaw=yaw + 0.6), 0.5)
+    with animated('anim_sway:a=z:d=22:p=0.55#jet', at(jet[0][0], jet[0][1], 1.4), yaw):
+        for i in range(3):
+            span(i)
+        with animated('anim_sway:a=z:d=24:p=0.4#spray', at(jet[3][0], jet[3][1], 1.4), yaw):
+            for i in range(3, len(jet) - 1):
+                span(i)
+    snowy(sphere(0.9 * k, at(-4.6, 0.0, 1.4), 0xf3f7fb, subdiv=1, scale=(1.3, 0.6, 1.4)), 0.5)
 
 def plough_truck(x, z, yaw, k=1.0, y=0.0):
     """A highway plough and gritter parked, facing +Z turned by `yaw`, `k`
@@ -9919,7 +9942,7 @@ def avalanche_gallery_loop():
     g0, g1 = face_ground(FACE_C, 0, 5.6), face_ground(FACE_C, 1, 5.6)
     for k, d in enumerate((1.4, 0.6, -0.2, -1.0, -0.2, 0.6)):
         marker('path_blow_%d' % k, (x + tx * d, g0 + (g1 - g0) * (d - 0.9), z - 0.9 + tz * d))
-    with animated('anim_path:c=blow:p=5:f=0#blower', (x, 0.0, z - 0.9)):
+    with animated('anim_path:c=blow:p=2.5:f=0#blower', (x, 0.0, z - 0.9)):
         rotary_plough(x, z - 0.9, yw, 'anim_spin:a=x:w=5#rotor', k=1.35, y=0.12)
     with animated('anim_drape+bob:h=0.01:p=0.26#gritter', (x + 0.2, 0.0, z - 7.0)):
         plough_truck(x + 0.2, z - 7.0, yw, k=1.3, y=0.12)

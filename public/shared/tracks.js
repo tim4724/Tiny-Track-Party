@@ -1004,8 +1004,9 @@ export const TRACKS = {
       { model: 'set-glacier-dog-trail', u: 0.432, lat: -8.5, yaw: 180 },
       { model: 'set-glacier-crevasses', u: 0.52, lat: 15, yaw: 0 },
       // the advanced camp at the foot of the flagged crevasses, outside the
-      // bend east off the run back from the bottom loop, which drives at it
-      { model: 'set-advanced-camp', u: 0.76, lat: -7.5, yaw: 150 },
+      // bend east off the run back from the bottom loop, which drives at it;
+      // on the snow past the cracks' ends (a tent stood on one)
+      { model: 'set-advanced-camp', u: 0.772, lat: -6.8, yaw: 150 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 137 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)

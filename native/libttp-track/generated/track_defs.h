@@ -828,7 +828,7 @@ constexpr SetDef kSet_glacier[] = {
   { "set-glacier-moraine-b", 0x1.5b22d0e560419p-1, -0x1.3p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-glacier-dog-trail", 0x1.ba5e353f7ced9p-2, -0x1.1p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-glacier-crevasses", 0x1.0a3d70a3d70a4p-1, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-advanced-camp", 0x1.851eb851eb852p-1, -0x1.ep+2, 0x1.2cp+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-advanced-camp", 0x1.8b4395810624ep-1, -0x1.b333333333333p+2, 0x1.2cp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-penguin-chute", 0x1.f0a3d70a3d70ap-1, -0x1.ep+3, 0x1.12p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-glacier-peaks", 0x1.7ae147ae147aep-3, -0x1.ep+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-glacier-peaks-south", 0x1.526e978d4fdf4p-1, -0x1.18p+6, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
