@@ -11800,15 +11800,15 @@ def brook_ends(fr, start, end):
                               [(0, 1, 2, 3)], 'white'), 3)
 
 def brook_piece(start, end, prev, nxt, pts, road):
-    # A reach that meets a culvert runs on INTO it: most of a unit past the
-    # headwall's face along its own line, so however the two are turned to
+    # A reach that meets a culvert runs on INTO it: half a unit past the
+    # headwall's face along its own line (the wall's own thickness), so however the two are turned to
     # each other its water goes into the arch and both walls into the stone
     # (cut square at the face, a reach met it at one corner and left a wedge
-    # of lawn between the water and the mouth). The barrel hides the rest.
+    # of lawn between the water and the mouth).
     pts = list(pts)
     def on(a, b):
         d = math.hypot(a[0] - b[0], a[1] - b[1])
-        return (a[0] + (a[0] - b[0]) / d * 0.9, a[1] + (a[1] - b[1]) / d * 0.9, a[2])
+        return (a[0] + (a[0] - b[0]) / d * 0.5, a[1] + (a[1] - b[1]) / d * 0.5, a[2])
     if start == 'culvert':
         pts.insert(0, on(pts[0], pts[1]))
     if end == 'culvert':
@@ -11957,35 +11957,28 @@ def pond_ducks():
 
 @piece()
 def culvert():
-    # The stone barrel that carries the brook under the low road, seen where
-    # it comes out each side: a low barrel along the brook (+X toward the
-    # road), its inner end at spotIssue's 1.2 u past the deck, and at its
-    # outer end a headwall with a dark arched mouth over the water, its
-    # coping the brook's own slate, and wing walls splayed along the banks,
-    # so the brook's walls run into it (set-brook: its water and walls end at
-    # the headwall's face, 2.7 u out). World units. Low (the
-    # barrel's top a hand over the road's surface), so it reads as the road's
-    # own embankment over the brook, the headwall standing a little over it.
-    L, W, HB = 2.4, 2.6, 0.55               # the barrel: length, width, height
-    T, WH, HH, R = 0.35, 3.4, 0.95, 0.72    # the headwall: thickness, width, height; the mouth's radius
-    box((L, HB, W), (-L / 2, HB / 2, 0), 'grey')
-    x = -L - T / 2 + 0.05
+    # Where the brook goes under the low road: a stone headwall across it a
+    # few units out from the kerb (set-brook: its water and walls run on
+    # into the headwall's face, 2.7 u out), a dark arched mouth over the
+    # water, its coping the brook's own slate, wing walls splayed along the
+    # banks; from there the pipe lies under the lawn to the road. No barrel
+    # over the ground between: as a slab from the
+    # headwall to the road, stepped down to pass the road's margin, it read
+    # from the seat as a stone ramp beside the kerb. World units, +X toward
+    # the road.
+    L, W = 2.4, 2.6                         # the headwall's distance out; the pipe's width
+    T, WH, HH, R = 0.8, 4.2, 0.95, 0.72     # the headwall: thickness, width, height; the mouth's radius
+    x = -L - 0.3 + T / 2
     rowed(box((T, HH, WH), (x, HH / 2, 0), 'grey'), 20)
     rowed(box((T + 0.16, 0.14, WH + 0.2), (x, HH + 0.04, 0), 'grey'), 12)        # its coping
-    face = x - T / 2 - 0.02
+    face = -L - 0.3 - 0.02
     def mouth(fx, r):
         arc = [(fx, r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
         poly([(fx, 0.0, 0.0)] + arc, [(0, k + 1, k + 2) for k in range(8)], 0x2a2735)
-    mouth(face, R)                           # where the brook comes out, away from the road
+    mouth(face, R)                           # where the brook goes in
     for sd in (-1, 1):                       # wing walls, short and splayed along the banks
         rowed(box((0.9, 0.5, 0.42), (face - 0.35, 0.25, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45), SLATE_ROW)
     join_still('culvert')
-    # From the barrel's end on under the kerb: the same stone as a low
-    # apron, a part of its own, flat enough (spotIssue's floor print) to lie
-    # inside the road's margin where the barrel may not stand. Without it
-    # the barrel ended a unit and a half short of the road, a stone box on
-    # the lawn with a second arch facing the kerb.
-    group([box((1.7, 0.13, W), (0.8, 0.065, 0), 'grey')], 'apron')
 
 # ---- CLOVERLEAF: the boating lake ----------------------------------------------------
 # The park's boating lake in the finger lobe, the track's `pond` landform (its
@@ -12613,8 +12606,6 @@ def springhouse():
     for o in [o for o in bpy.context.scene.objects if o.get('turf')]:
         bpy.data.objects.remove(o, do_unlink=True)
     join_still('springhouse')
-    # the drain's stone on from its headwall under the kerb (the culverts' apron)
-    group([box((4.2, 0.3, 3.6), (7.9 + 0.4 + 2.1, 0.15, PZ), 'grey')], 'apron')
     with animated('anim_spin:a=y:w=0.3#flecks', (PX, 0.2, PZ)):
         for k in range(6):
             a = k * 2 * math.pi / 6
