@@ -9927,10 +9927,11 @@ def watermill():
     # The mill on the outside of the first bend, straight ahead of the grid:
     # a stone mill house (front +X, to the road) under a red tile roof, its
     # wheel on the road side turning IN the brook, which runs past the house
-    # in its race (+Z downstream, on to the duck pond), white where the
-    # paddles churn it and streaked below; a willow over the race's tail,
-    # sacks at the door. Real size: the house is two cars long, the wheel
-    # nearly two across.
+    # in its race (+Z downstream, on to the duck pond), streaked white below
+    # where the paddles turn it over; a willow over the race's tail, sacks at
+    # the door. Real size: the house is two cars long, the wheel nearly two
+    # across. Nothing on the water moves but the wheel: a white churn bobbing
+    # at its foot was taken out as needless.
     STONE, TILE = 0xfde4c7, 0xcf534f
     RX, WY = MILL_RACE, BROOK_WY / MILL_GROW
     # the riffles where the wheel has turned the water over: white streaks
@@ -9939,9 +9940,6 @@ def watermill():
                                      (1.0, 12.6, 1.6))):
         ground_poly([(RX + dx - 0.3, WY + 0.06, dz), (RX + dx + 0.3, WY + 0.06, dz), (RX + dx + 0.18, WY + 0.06, dz + l),
                      (RX + dx - 0.18, WY + 0.06, dz + l)], [(0, 3, 2, 1)], 'white')
-    with animated('anim_bob:h=0.12:p=0.9', (RX, WY, 2.4)):         # the churn at the wheel's foot
-        for k, (dx, dz) in enumerate(((-0.8, 2.3), (0.0, 2.9), (0.8, 2.4), (0.4, 3.4), (-0.5, 3.3))):
-            box((0.7, 0.45, 0.7), (RX + dx, WY + 0.05, dz), 'white', yaw=0.6 * k)
     # the house
     F = local(0, 0, 0)
     D, L, H = 9.0, 11.0, 7.0
