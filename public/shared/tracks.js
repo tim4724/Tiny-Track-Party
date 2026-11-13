@@ -1201,8 +1201,9 @@ export const TRACKS = {
     // north-west bend, straight ahead down the avenue of oaks the diagonal
     // ends in; the pitch beside the diagonal, greener than the downs, bunting
     // down its road-side touchline; the children's blanket den under its oak
-    // where the racer comes off the diagonal's top; under three great oaks
-    // out by the bends a picnic left out, a hay wain loaded, a paddling pool;
+    // where the racer comes off the diagonal's top; under four great oaks out
+    // by the bends a picnic left out, a hay wain loaded, a trampoline, a
+    // paddling pool;
     // the kite hill rising off the verge beyond the top loop, three kites up
     // over its face on their stakes. Nobody is about (children that small
     // read as specks). The other trees a racer passes are the lawn's own
@@ -1217,6 +1218,7 @@ export const TRACKS = {
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
       { model: 'set-picnic-oak', u: 0.86, lat: 7, yaw: 0 },
       { model: 'set-hay-wain-oak', u: 0.52, lat: 6.5, yaw: 0 },
+      { model: 'set-trampoline-oak', u: 0.115, lat: 6.5, yaw: 0 },
       { model: 'set-paddling-pool-oak', u: 0.34, lat: 6.5, yaw: 0 },
       { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
     ],

@@ -9089,9 +9089,9 @@ def picnic_oak():
     draped('picnic', still)
 
 # ---- PRETZEL: the hay wain and the paddling pool ------------------------------------
-# Two more of the downs' great oaks, each with its own summer under it, so no
-# two oaks by the road tell the same thing: the hay wain left loaded in the
-# shade with two big bales beside it, and a paddling pool with its slide,
+# Three more of the downs' great oaks, each with its own summer under it, so
+# no two oaks by the road tell the same thing: the hay wain left loaded in the
+# shade with two big bales beside it, a trampoline, and a paddling pool with its slide,
 # its water a hand below the blown-up rim (the water family's grammar).
 # Front (+X) to the road. Each DRAPES.
 @piece(REAL)
@@ -9142,6 +9142,28 @@ def paddling_pool_oak():
         for k in range(3):
             box((0.3, 0.2, 1.3), (SX - 0.4, 0.8 + 0.8 * k, SZ), 0x22c46e)
     draped('pool', still)
+
+@piece(REAL)
+def trampoline_oak():
+    # A fourth great oak's summer: the garden trampoline set out in its
+    # shade, its pad blue round a black mat, a ball left on it, a ladder
+    # hooked on its edge.
+    def still():
+        lawn_oak(-5.5, -1.0, 1.4)
+        TX, TZ, R, Y = 3.0, 1.5, 4.4, 1.6               # the trampoline: centre, radius, its mat's height
+        for k in range(6):
+            a = k * math.pi / 3 + 0.3
+            box((0.5, Y + 0.2, 0.5), (TX + (R - 0.2) * math.cos(a), (Y + 0.2) / 2 - 0.1, TZ + (R - 0.2) * math.sin(a)), 0x555b66)
+        torus(R - 0.2, 0.2, (TX, 0.15, TZ), 0x555b66, segs=12)                     # its foot ring
+        cyl(R - 0.7, 0.1, (TX, Y, TZ), 0x2a2735, segs=16)                           # the mat
+        torus(R - 0.35, 0.45, (TX, Y + 0.1, TZ), 0x339cf2, segs=16)                 # the pad
+        sphere(0.7, (TX + 1.2, Y + 0.75, TZ - 0.8), 0xcf534f)                       # a ball on it
+        for s in (-1, 1):                                                           # the ladder on its road side
+            strut((TX + R + 1.1, 0.0, TZ + s * 0.6), (TX + R - 0.1, Y + 0.2, TZ + s * 0.6), 0.3, 0x22c46e)
+        for k in range(2):
+            t = (k + 1) / 3
+            box((0.3, 0.2, 1.4), (TX + R + 1.1 - 1.2 * t, (Y + 0.2) * t, TZ), 0x22c46e)
+    draped('tramp', still)
 
 # ---- TANGLE: the valley's woods ----------------------------------------------------------
 # The mill valley's sides are wooded: stands of its alders up the hillsides,

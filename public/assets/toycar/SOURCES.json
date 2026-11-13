@@ -344,6 +344,7 @@
     "set-toy-garage.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-toy-snake-loop.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-toy-soldiers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-trampoline-oak.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-trebuchet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-alder.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tree-apple-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
