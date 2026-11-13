@@ -6798,6 +6798,16 @@ def ski_jump():
     # than twice that tolerance, which would fold it flat onto a neighbour.
     WALL = 0.45                            # a side wall's thickness
     zw = W / 2 - WALL / 2                  # its middle
+    # The straight's white caps and its snow track are ONE board each from
+    # the top to where the line eases: the far form holds a big face as it is
+    # (TtpRenderer kFarFace) and folds a unit's span of cap flat, so from the
+    # far hill the in-run turned from white-capped to bare red and back as
+    # the forms swapped (npm run see:pops).
+    straight = max(i for i, (x, _) in enumerate(run) if x <= T1 - 3.6)
+    (xa, ya), (xb, yb) = run[0], run[straight]
+    ramp((xa, ya + 0.07, 0.0), (xb, yb + 0.07, 0.0), W - 2 * WALL + 0.2, 0.45, SNOWT)
+    for s in (-1, 1):
+        ramp((xa, ya + 0.77, s * zw), (xb, yb + 0.77, s * zw), WALL + 0.14, 0.4, WHITE)
     for i, ((xa, ya), (xb, yb)) in enumerate(zip(run, run[1:])):
         lo = min(ya, yb)
         table = xa > T1 - 2.0 - 1e-6
@@ -6819,7 +6829,8 @@ def ski_jump():
         for s in (-1, 1):
             ramp((xa - wa * (xb - xa), ya - wa * (yb - ya) + 0.5, s * zw),
                  (xb + wb * (xb - xa), yb + wb * (yb - ya) + 0.5, s * zw), WALL, sink + 0.45 if near else 0.9, RED)
-            ramp((xa - ex, ya - ey + 0.75, s * zw), (xb + ex, yb + ey + 0.75, s * zw), WALL + 0.1, 0.25, WHITE)
+            if i >= straight:                          # (the straight's caps are one board a side, below)
+                ramp((xa - ex, ya - ey + 0.75, s * zw), (xb + ex, yb + ey + 0.75, s * zw), WALL + 0.1, 0.4, WHITE)
     # the takeoff's lip: the table's red front, in the air over the foot
     box((0.3, 1.1, W + 0.16), (T1 - 0.1, run[-1][1] + 0.05, 0.0), RED)
     # its legs, a pair across every two units back from the table's root,
@@ -6853,20 +6864,20 @@ def ski_jump():
             a = 0.0
         box((2.8, b - a, 2.8), (T0, (a + b) / 2, 0.0), RED if (n - 1 - i) % 2 == 0 else WHITE)
     # the start hut on its platform, a window down the in-run
-    box((3.4, 0.24, 3.4), (T0, top - 0.12, 0.0), STEEL)
+    box((3.4, 0.36, 3.4), (T0, top - 0.18, 0.0), STEEL)
     box((2.0, 1.0, 2.0), (T0 - 0.4, top + 0.5, 0.0), BLUE)
-    box((0.06, 0.4, 1.3), (T0 + 0.62, top + 0.62, 0.0), GLASS)
-    box((2.2, 0.14, 2.2), (T0 - 0.4, top + 1.07, 0.0), STEEL)
-    snowy(box((2.0, 0.14, 2.0), (T0 - 0.4, top + 1.2, 0.0), SNOWT), 0.4)
+    box((0.4, 0.4, 1.3), (T0 + 0.47, top + 0.62, 0.0), GLASS)
+    box((2.3, 0.3, 2.3), (T0 - 0.4, top + 1.1, 0.0), STEEL)
+    snowy(box((2.0, 0.3, 2.0), (T0 - 0.4, top + 1.36, 0.0), SNOWT), 0.4)
     for s in (-1, 1):                                  # its side windows, the shaft's lights below them
-        box((1.2, 0.4, 0.06), (T0 - 0.4, top + 0.6, s * 1.01), GLASS)
+        box((1.2, 0.4, 0.4), (T0 - 0.4, top + 0.6, s * 0.86), GLASS)
         for i in range(n - 1):
-            box((0.5, 0.5, 0.06), (T0, g + (top - g) * (i + 0.5) / n, s * 1.41), GLASS)
+            box((0.5, 0.5, 0.4), (T0, g + (top - g) * (i + 0.5) / n, s * 1.26), GLASS)
     for i in range(n - 1):
-        box((0.06, 0.5, 0.5), (T0 + 1.41, g + (top - g) * (i + 0.5) / n, 0.0), GLASS)
-    box((0.14, 0.14, W + 0.3), (T0 + 1.3, ytop + 0.95, 0.0), RED)               # the start bar
+        box((0.4, 0.5, 0.5), (T0 + 1.26, g + (top - g) * (i + 0.5) / n, 0.0), GLASS)
+    box((0.26, 0.26, W + 0.3), (T0 + 1.3, ytop + 0.95, 0.0), RED)               # the start bar
     for s in (-1, 1):
-        box((0.12, 0.9, 0.12), (T0 + 1.3, ytop + 0.5, s * (W / 2 + 0.1)), STEEL)
+        box((0.26, 0.9, 0.26), (T0 + 1.3, ytop + 0.5, s * (W / 2 + 0.1)), STEEL)
     flag_across((T0 - 1.1, top + 1.2, 0.9), 1.3, RED, 'anim_flutter:p=2.1#top')
     # the judges' cab seated in the far flank beside the landing (from the
     # road it stands clear of the in-run): a stem down through the hill to
@@ -6877,10 +6888,12 @@ def ski_jump():
     for lvl in range(3):                                                    # three glazed floors, stepped back
         y0 = jg + 0.3 + 0.78 * lvl
         w = 2.2 - 0.3 * lvl
-        box((w + 0.2, 0.1, 1.9), (jx - 0.15 * lvl, y0 + 0.05, jz), WHITE)
+        # (each floor's white slab and its glass thicker than the far form's reach, kFarTol,
+        # and well proud of the blue: a hand thick, they folded away on the far hill)
+        box((w + 0.5, 0.3, 2.2), (jx - 0.15 * lvl, y0 + 0.05, jz), WHITE)
         box((w, 0.68, 1.7), (jx - 0.15 * lvl, y0 + 0.44, jz), BLUE)
-        box((w - 0.3, 0.36, 0.08), (jx - 0.15 * lvl, y0 + 0.5, jz + 0.85), GLASS)
-        box((0.08, 0.36, 1.3), (jx - 0.15 * lvl + w / 2, y0 + 0.5, jz), GLASS)
+        box((w - 0.3, 0.36, 0.5), (jx - 0.15 * lvl, y0 + 0.5, jz + 0.72), GLASS)
+        box((0.5, 0.36, 1.3), (jx - 0.15 * lvl + w / 2 - 0.13, y0 + 0.5, jz), GLASS)
     jy = jg + 0.3 + 0.78 * 3
     box((1.9, 0.16, 2.1), (jx - 0.3, jy + 0.08, jz), RED)
     snowy(box((1.7, 0.12, 1.9), (jx - 0.3, jy + 0.2, jz), SNOWT), 0.4)
@@ -7033,15 +7046,22 @@ def flurry_piste():
                 x = X0 - 2.2 - i * (X0 - X1 - 3.4) / m
                 if sd * tz > 0 and x < X1 + 2.0:
                     continue                            # the top hut's door stays open to the run
-                box((0.14, 1.0, 0.14), (x, 0.42, sd * (W + 0.55)), 0x555b66)
-                if i < m:
-                    box((2.3, 0.5, 0.07), (x - (X0 - X1 - 3.4) / m / 2, 0.55, sd * (W + 0.55)), 0xff7e44)
+                box((0.26, 1.0, 0.26), (x, 0.42, sd * (W + 0.55)), 0x555b66)
+        # the net in long boards (faces the far form keeps whole; a hand
+        # thick and a span long, it folded away on the far hill)
+        for sd in (-1, 1):
+            xa = X0 - 2.2
+            xb = X1 + 1.2 + (2.2 if sd * tz > 0 else 0.0)
+            for j in range(3):                          # in three, so it drapes with the slope
+                box(((xa - xb) / 3 + 0.05, 0.55, 0.26), (xa - (xa - xb) * (j + 0.5) / 3, 0.55, sd * (W + 0.55)), 0xff7e44)
         # the slalom: a gate a turn, two poles and a panel between them
         for i, (x, z) in enumerate(GATES):
             c = (0xcf534f, 0x3f7bd9)[i % 2]
-            for dz in (-0.45, 0.45):
-                box((0.1, 1.1, 0.1), (x, 0.5, z + dz), c)
-            box((0.06, 0.4, 0.9), (x, 0.82, z), c)
+            # (the panel a chunky board down to short legs: the far form folded two
+            # poles and a cloth between them into a blob, and the gate changed shape)
+            for dz in (-0.5, 0.5):
+                box((0.26, 0.5, 0.26), (x, 0.2, z + dz), c)
+            box((0.3, 0.85, 1.3), (x, 0.8, z), c)
         # the groomer parked off the run beside the warming hut, a sled at the hut's door
         snowcat(X0 - 2.6, 0.0, W + 2.6, k=0.7)
         sled(bx - 1.6, 0.0, bz - 1.0, 0.4, color=0x3f7bd9, L=0.8)
@@ -9774,33 +9794,37 @@ def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
             for sd in (-1, 1):                                                           # paddles
                 box(sz(0.8, 0.08, 0.3), at(sd * 0.44, 0.62 + 0.2 * math.cos(a), 1.58 + 0.2 * math.sin(a)),
                     0xcf534f, yaw=yaw, pitch=-a)
-    # the chute and its jet, thrown over the truck's left (-X) onto the bank
+    # the chute and its jet, thrown AHEAD of the truck onto the foot of the
+    # cut it works toward: from the road the arc crosses the dark rock by the
+    # gallery's mouth (thrown up over the bank it was a pale column on pale
+    # sky and snowed firs)
     box(sz(0.34, 1.1, 0.34), at(0.3, 1.8, 1.4), ORANGE, yaw=yaw)
-    box(sz(0.9, 0.34, 0.4), at(-0.05, 2.3, 1.4), ORANGE, yaw=yaw)
-    box(sz(0.1, 0.42, 0.46), at(-0.5, 2.3, 1.4), DARK, yaw=yaw)
-    # The plume: a high arc of thrown snow, chunky, white with a blue shade
-    # under it so it shows against the snow behind, and MOVING: it whips up
-    # and down about the chute's mouth, and its outer half again about its
-    # own root, out of step (a still arc read as nothing at racing speed).
-    jet = [(-0.45, 2.32), (-1.2, 2.95), (-2.0, 3.3), (-2.8, 3.25), (-3.5, 2.8), (-4.05, 2.0), (-4.4, 1.0), (-4.6, 0.2)]
+    box(sz(0.4, 0.34, 0.9), at(0.3, 2.3, 1.75), ORANGE, yaw=yaw)
+    box(sz(0.46, 0.42, 0.1), at(0.3, 2.3, 2.2), DARK, yaw=yaw)
+    # The plume: an arc of thrown snow, chunky, white over the shadowed blue
+    # of a drift's lee along its whole underside, so it has an edge against
+    # snow and rock alike, and MOVING: it whips up and down about the chute's
+    # mouth, and its outer half again about its own root, out of step (a
+    # still arc read as nothing at racing speed).
+    jet = [(2.2, 2.32), (3.0, 2.85), (3.9, 3.05), (4.8, 2.9), (5.6, 2.45), (6.3, 1.8), (6.8, 1.05), (7.1, 0.3)]
     def span(i):
-        (xa, ya), (xb, yb) = jet[i], jet[i + 1]
-        w = 0.34 + 0.1 * i
-        L = math.hypot(xb - xa, yb - ya) + 0.16
-        roll = -math.atan2(yb - ya, xb - xa)
-        snowy(box(sz(L, w, w + 0.14), at((xa + xb) / 2, (ya + yb) / 2, 1.4), 0xf3f7fb, yaw=yaw, roll=roll), 0.5)
-        rowed(box(sz(L * 0.8, w * 0.5, w * 0.8), at((xa + xb) / 2, (ya + yb) / 2 - 0.3 * w, 1.4), 'sky', yaw=yaw,
-                  roll=roll), 6)
+        (za, ya), (zb, yb) = jet[i], jet[i + 1]
+        w = 0.4 + 0.11 * i
+        L = math.hypot(zb - za, yb - ya) + 0.16
+        pitch = math.atan2(yb - ya, zb - za)
+        snowy(box(sz(w + 0.14, w, L), at(0.3, (ya + yb) / 2, (za + zb) / 2), 0xf3f7fb, yaw=yaw, pitch=pitch), 0.5)
+        rowed(box(sz(w + 0.2, w * 0.6, L * 0.92), at(0.3, (ya + yb) / 2 - 0.42 * w, (za + zb) / 2), 'sky', yaw=yaw,
+                  pitch=pitch), 14)
         if i % 2:                                       # a clod flung off it
-            snowy(box(sz(0.3, 0.3, 0.3), at((xa + xb) / 2 + 0.1, (ya + yb) / 2 + 0.5 * w + 0.05, 1.4 + 0.3 * (1 if i % 4 == 1 else -1)),
-                      0xf3f7fb, yaw=yaw + 0.6), 0.5)
-    with animated('anim_sway:a=z:d=22:p=0.55#jet', at(jet[0][0], jet[0][1], 1.4), yaw):
+            snowy(box(sz(0.48, 0.48, 0.48), at(0.3 + 0.36 * (1 if i % 4 == 1 else -1), (ya + yb) / 2 + 0.5 * w + 0.1,
+                                               (za + zb) / 2 + 0.1), 0xf3f7fb, yaw=yaw + 0.6), 0.5)
+    with animated('anim_sway:a=x:d=20:p=0.55#jet', at(0.3, jet[0][1], jet[0][0]), yaw):
         for i in range(3):
             span(i)
-        with animated('anim_sway:a=z:d=24:p=0.4#spray', at(jet[3][0], jet[3][1], 1.4), yaw):
+        with animated('anim_sway:a=x:d=24:p=0.4#spray', at(0.3, jet[3][1], jet[3][0]), yaw):
             for i in range(3, len(jet) - 1):
                 span(i)
-    snowy(sphere(0.9 * k, at(-4.6, 0.0, 1.4), 0xf3f7fb, subdiv=1, scale=(1.3, 0.6, 1.4)), 0.5)
+    snowy(sphere(0.9 * k, at(0.3, 0.0, 7.1), 0xf3f7fb, subdiv=1, scale=(1.4, 0.6, 1.3)), 0.5)
 
 def plough_truck(x, z, yaw, k=1.0, y=0.0):
     """A highway plough and gritter parked, facing +Z turned by `yaw`, `k`
