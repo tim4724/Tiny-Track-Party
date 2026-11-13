@@ -13,6 +13,9 @@
 // `far` (the far forms' share of the picture, mean and worst, in pixels);
 // `cull` (worst pixels lost to a box, 0 when every box is right); `clear`
 // (worst pixels of world standing unfogged past the fog's cutoff).
+// A sample whose picture does not repeat when drawn again says nothing about
+// forms and is skipped (a chase rig easing by the frame over a jump or under
+// a deck, the beach's blown sand).
 // --out <dir> keeps the lap's json and a still of each of the worst pops,
 // held | free.
 //
@@ -57,19 +60,20 @@ for (const id of ids) {
   const ref = r.frames.filter((f) => f.far !== undefined);
   const mean = (list) => (list.length ? Math.round(list.reduce((s, v) => s + v, 0) / list.length) : 0);
   const row = {
-    track: id, lines, samples: r.frames.length, noise: r.noise,
+    track: id, lines, samples: r.frames.length,
     pops: pops.length,
     popWorst: Math.max(0, ...r.frames.map((f) => f.peak)),
     popPxLap: r.frames.reduce((s, f) => s + f.pop, 0),
     farMean: mean(ref.map((f) => f.far)),
     farWorst: Math.max(0, ...ref.map((f) => f.far)),
+    moved: r.frames.filter((f) => f.moved).length,
     cullWorst: Math.max(0, ...ref.map((f) => f.cull)),
     fogWorst: Math.max(0, ...ref.map((f) => f.fog))
   };
   rows.push(row);
   console.log(`${id.padEnd(12)} ${lines} lines  pops ${String(row.pops).padStart(4)}  worst ${String(row.popWorst).padStart(5)} px/tile  `
     + `swapped ${String(row.popPxLap).padStart(7)} px/lap  far mean ${String(row.farMean).padStart(6)} worst ${String(row.farWorst).padStart(6)}  `
-    + `cull worst ${row.cullWorst}  clear worst ${row.fogWorst}${r.noise ? `  (noise ${r.noise})` : ''}`);
+    + `cull worst ${row.cullWorst}  clear worst ${row.fogWorst}${row.moved ? `  (${row.moved} samples skipped: a second draw of the moment differed)` : ''}`);
   if (OUT) {
     r.tops.forEach((t, i) => {
       fs.writeFileSync(path.join(OUT, `${id}-${lines}-${String(i).padStart(2, '0')}-s${Math.round(t.s)}-${t.peak}px.jpg`),

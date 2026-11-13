@@ -2376,7 +2376,6 @@ export function runDisplayScenario(opts, ctx) {
         let lost = null;            // the sample a box lost most at: culled | unculled
         let clear = null;           // the sample with most standing unfogged past the cutoff: shipped | fogged
         const wanted = new Set(opts.full || []), fulls = [];   // samples to hand back whole
-        let noise = -1;
         scene.stop();
         display.cellLookClear();
         display.carPoseClear();
@@ -2431,13 +2430,17 @@ export function runDisplayScenario(opts, ctx) {
             display.debugFeatures(POP_WORLD);
             display.frame(0);
             const free = grab(rect);
-            if (noise < 0) {
-              display.frame(0);
-              noise = differ(free, grab(rect), rect.w, rect.h).n;
-            }
-            const d = differ(held, free, rect.w, rect.h);
+            // A still frame drawn again is the same picture, except where
+            // something moves by the frame, not by the clock (a rig easing
+            // over a jump or under a deck, blown sand): there the two draws
+            // differ by that too, and the sample says nothing about forms
+            // (`moved`).
+            display.frame(0);
+            const moved = differ(free, grab(rect), rect.w, rect.h).n;
+            const d = moved ? { n: 0, peak: 0, x: 0, y: 0 } : differ(held, free, rect.w, rect.h);
             const rec = { ...at, pop: d.n, peak: d.peak, px: d.x, py: d.y };
-            if (k % refEvery === 0) {
+            if (moved) rec.moved = moved;
+            if (k % refEvery === 0 && !moved) {
               display.debugFeatures(POP_WORLD | DEBUG.NO_LOD);
               display.frame(0);
               const near = grab(rect);
@@ -2489,7 +2492,7 @@ export function runDisplayScenario(opts, ctx) {
           scene.start();
         }
         return { track: track.id, every: (every * SEE_STEP_MS) / 1000, length: len, cell: rect,
-                 noise, frames, tops, lost, clear, fulls };
+                 frames, tops, lost, clear, fulls };
       }
 
       const built = serial(async () => { await seat(); setView(mode); });

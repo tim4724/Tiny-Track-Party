@@ -30,8 +30,8 @@
 // foot, like a `drape` part), so a traveller on a terrain hill stays on its
 // drawn slope. A traveller may also spin, bob and waddle in its own frame on
 // the way (`anim_path:c=run+spin:a=z:w=-4+bob:h=0.3:p=0.7`, a ball bouncing
-// down a run; a walking penguin rocks from foot to foot); the other verbs are in-place and a
-// path ignores them. `drape` moves nothing: an in-place part on a piece built
+// down a run; a walking penguin rocks from foot to foot); the other verbs
+// are in-place and a path ignores them. `drape` moves nothing: an in-place part on a piece built
 // on its own terrain (SET_GROUND) stands on the ground as the renderer draws
 // it, lifted by the land under its pivot over the piece's foot as the `drape`
 // parts round it are, so a flag stays on the top of its draped pole where the

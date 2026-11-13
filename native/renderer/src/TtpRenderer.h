@@ -2361,8 +2361,8 @@ private:
     // all); `lockBorder` keeps a range's open edges where a neighbouring range
     // shares them. farFormByBone is a skinned range's, a part at a time.
     static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder,
-            uint32_t v0 = 0, uint32_t v1 = 0);
-    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN);
+            bool keepShades, uint32_t v0 = 0, uint32_t v1 = 0);
+    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN, bool keepShades);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);

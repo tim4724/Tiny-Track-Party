@@ -917,8 +917,11 @@ So:
   rule. Full swaps at `kLodPxFull`, of what the haze lets through**: a far
   form is a different picture up close (a fir's snow tiers gone, a pole
   gone altogether, neither of which `err` counts), and at lite's gate whole
-  groves changed form 60 to 100 u ahead of a racer. `npm run see:pops`
-  counts what swaps per frame; hold a change to the gate to it. The deck's is a
+  groves changed form 60 to 100 u ahead of a racer. Full's far forms also
+  keep every shade where it is (`farForm`'s `keepShades`): the simplifier
+  counts how far a surface strays and nothing else, so it slid a fir's snow
+  down its cone for free. `npm run see:pops` counts what swaps per frame;
+  hold a change to the gate or the forms to it. The deck's is a
   ribbon over same-coloured rings; a static unlit mesh opts in with
   `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on
