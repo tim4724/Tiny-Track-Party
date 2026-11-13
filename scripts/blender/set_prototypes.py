@@ -12175,100 +12175,6 @@ def boomtown_south():
     join_still('south')
 
 @piece(1.0)
-def tailings_dump():
-    # Gulch: the mine's tailings dump beside the headframe: spoil tipped
-    # in four terraces, each a steep face of rust over a bench of ochre (the
-    # mill's waste weathers in bands), on a ragged outline, its foot sunk in
-    # the ground (geometry: the loop's middle is held under the deck cap, so
-    # no land can rise there), rubble fallen round its foot, and up its face
-    # toward the road (-X) a timber incline on its trestle to the winch frame
-    # at the top: a skip of waste rides up it on the winch's cable and back
-    # down, its tub level on a wedge of a frame, as an incline's cars are, at
-    # a mine cart's size. On the top's lip toward the road an ore cart tips
-    # its load down the face and rights itself (a one-way sway with a rest).
-    # (radius at the foot of each face, at its top, the bench's height) and
-    # the colour of its face and its bench: one polar mesh on shared spokes
-    TIERS = ((7.0, 5.9, 1.1, 'brown', ('gravel', 26)), (5.2, 4.3, 2.1, ('salmon', 26), ('gravel', 18)),
-             (3.7, 2.9, 3.0, 'brown', ('gravel', 28)), (2.4, 1.7, 3.9, ('salmon', 26), ('gravel', 14)))
-    N = 18 if LITE else 30                                  # the box draws a coarser outline
-    def ragged(a, t):
-        return 1.0 + 0.13 * math.sin(3 * a + 1.1 + 0.9 * t) + 0.08 * math.sin(5 * a + 1.3 * t) + 0.05 * math.sin(9 * a + 2.0 + t)
-    OFF = ((0.0, 0.0), (0.45, -0.5), (0.2, -1.1), (0.75, -0.9))   # each tier tipped off the last, not stacked on its middle
-    def at(a, t, r):
-        q = r * ragged(a, t)
-        ox, oz = OFF[min(t, 3)]
-        return math.cos(a) * q * 0.92 + ox, math.sin(a) * q * 1.12 + oz
-    y0 = -0.4
-    for t, (r0, r1, y1, face, bench) in enumerate(TIERS):
-        nxt = TIERS[t + 1][0] if t + 1 < len(TIERS) else 0.0
-        rows = []
-        for a in (2 * math.pi * i / N for i in range(N + 1)):
-            (x0_, z0_), (x1_, z1_) = at(a, t, r0), at(a, t, r1)
-            x2_, z2_ = at(a, t + 1, nxt) if nxt else at(a, t, 0.0)
-            rows.append([(x0_, y0, z0_), (x1_, y1 + 0.22 * math.sin(2 * a + t), z1_), (x2_, y1 + 0.1 * math.sin(3 * a), z2_)])
-        for j, c in enumerate((face, bench)):
-            sw, row = c if isinstance(c, tuple) else (c, None)
-            for o in sheet([[r[j], r[j + 1]] for r in rows], lambda i, jj, nn, sw=sw: sw, 'dump'):
-                if row is not None:
-                    rowed(o, row)
-        y0 = y1
-    A, B = (-6.4, 0.25), (-1.0, 4.0)                                              # the incline's foot and head (x, y)
-    slope = math.atan2(B[1] - A[1], B[0] - A[0])
-    with plain_parts():
-        for i in range(7):                                                         # rubble round its foot
-            a = 2 * math.pi * (i + 0.4 * hash1(i, 7.0)) / 7
-            q = 0.45 + 0.2 * (hash1(i, 3.0) + 1)
-            rock_lump(q * 0.7, (6.9 * math.cos(a), q * 0.2, 6.7 * math.sin(a)), 'tan' if i % 2 else 0xa96545,
-                      (1.3, 0.7, 1.0), a, seed=i)
-        for i in range(6):                                                         # the incline's trestle
-            t = i / 5
-            x, y = A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t - 0.12
-            for sz in (-0.3, 0.3):
-                box((0.1, y + 0.3, 0.1), (x, (y + 0.3) / 2 - 0.15, sz), 0x8a5f3e)
-            box((0.1, 0.1, 0.8), (x, y - 0.05, 0), 0x8a5f3e)
-        for sz in (-0.22, 0.22):                                                   # its stringers, the rails on them
-            beam((A[0], A[1] - 0.1, sz), (B[0], B[1] - 0.1, sz), 0.12, 0x8a5f3e)
-            beam((A[0], A[1] - 0.01, sz), (B[0], B[1] - 0.01, sz), 0.05, 'slate')
-        box((1.5, 0.1, 1.1), (B[0] + 0.55, B[1] - 0.08, 0.0), 0x8a5f3e)           # the head's deck
-        for sx in (-0.1, 1.2):                                                     # on its own legs into the heap
-            for sz in (-0.45, 0.45):
-                box((0.1, 1.6, 0.1), (B[0] + sx, B[1] - 0.9, sz), 0x8a5f3e)
-        for sz in (-0.42, 0.42):                                                   # the winch frame over it
-            box((0.1, 1.1, 0.1), (B[0] + 0.9, B[1] + 0.5, sz), 0x8a5f3e)
-            strut((B[0] + 0.3, B[1], sz), (B[0] + 0.9, B[1] + 0.9, sz), 0.07, 0x8a5f3e)
-        box((0.1, 0.1, 0.96), (B[0] + 0.9, B[1] + 1.05, 0.0), 0x8a5f3e)
-        cyl(0.2, 0.3, (B[0] + 0.9, B[1] + 0.75, -0.15), 0x4f5260, segs=8, axis='along')    # its drum
-        strut((A[0] + 0.9, A[1] + 0.75, 0.0), (B[0] + 0.9, B[1] + 0.8, 0.0), 0.09, ROPE)   # the cable
-    # the skip: up the incline and back (a two-point loop), never turning
-    K = 0.36
-    def on_incline(t):
-        return A[0] + t * (B[0] - A[0]), A[1] + t * (B[1] - A[1]) + 0.04
-    sx, sy = on_incline(0.14)
-    marker('path_skip_0', (sx, sy, 0.0))
-    marker('path_skip_1', on_incline(0.84) + (0.0,))
-    with animated('anim_path:c=skip:p=22:f=0#skip', (sx, sy, 0.0)):
-        w = 1.9 * K                                                                # the wedge under the tub
-        solid([(sx - w / 2, sy, -0.24), (sx + w / 2, sy + w * math.tan(slope), -0.24), (sx - w / 2, sy + w * math.tan(slope), -0.24),
-               (sx - w / 2, sy, 0.24), (sx + w / 2, sy + w * math.tan(slope), 0.24), (sx - w / 2, sy + w * math.tan(slope), 0.24)],
-              [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)], 0x8a5f3e)
-        ore_cart((sx, sy + w * math.tan(slope) - 0.44 * K, 0.0), yaw=math.pi / 2, ore_color=0x868ba1, k=K)
-    # the tipping cart on the top's lip toward the road, on its stub of
-    # rails, at a cart and a half's size so it reads from the kerb: its tub
-    # tips over the lip about the front axle (-X) and rights itself, a
-    # spill of spoil fanned down the face under it
-    TX, TZ, TY, KT = 0.3, 0.1, 3.9, 0.55
-    with plain_parts():
-        for sz in (-0.36, 0.36):
-            box((1.5, 0.1, 0.1), (TX + 0.2, TY + 0.05, TZ + sz * KT), 'slate')
-        box((0.16, 0.4, 0.85), (TX - 0.62, TY + 0.2, TZ), 0x8a5f3e)                  # the stop at the lip
-        for i, (dx, dz, q) in enumerate(() if LITE else ((-1.9, 0.0, 0.42), (-2.6, 0.5, 0.36), (-3.3, -0.3, 0.32), (-2.3, -0.6, 0.28))):
-            rock_lump(q, (TX + dx, TY - 0.55 * (i + 1.2), TZ + dz), ('yellow', 'tan', 'yellow', 'brown')[i],
-                      (1.4, 0.45, 1.1), 0.4 * i, seed=11.0 + i)
-    with animated('anim_sway:a=z:d=60:p=9:r=0.6#tip', (TX - 0.5, TY + 0.2, TZ)):
-        ore_cart((TX + 0.05, TY + 0.1, TZ), yaw=math.pi / 2, ore_color='yellow', k=KT)
-    join_still('dump')
-
-@piece(1.0)
 def miners_camp():
     # Gulch: the miners' camp before the canyon (+X the road): three canvas
     # wall tents, low walls under pitched roofs and their flies, doors tied
@@ -12496,6 +12402,69 @@ def stamp_mill():
     for k in range(N):
         with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (span / 1.2, k / N, k), loop[0]):
             ore_bucket(loop[0])
+
+# The mill's tailings: what is left of the ore once the stamps have crushed it
+# and the plates and tables have taken the gold. It leaves the battery house
+# as a pale slurry along a timber launder on its trestle and is tipped down
+# the yard beside the mill (its -Z), where it has built a flat-topped terrace
+# of fine grey sand out of the mill's own bank, the battery floor's height
+# less the launder's fall. The launder runs on out along its top to the spout
+# at its end, a wet tongue of fresh tailings down the face under it. Built in
+# the STAMP MILL'S frame (tracks.js stands both at one spot), in metres like
+# it: the launder starts under the battery house's roof, beside the battery.
+@piece(REAL)
+@plain
+def tailings_dump():
+    LX, Y0, Y1, Z0, Z1 = 1.6, 6.3, 5.6, -6.0, -50.0                # the launder: its line, its fall, its run
+    CX, CZ, HX, HZ, RUN = -1.0, -35.5, 6.5, 14.5, 7.5               # the terrace's top (an oval) and its slopes' run
+    TOP0, TOP1 = 4.0, 3.6                                           # the top's height at its near and far end
+    N = 16 if LITE else 28
+    def wob(a, k):
+        return 1.0 + 0.09 * math.sin(3 * a + 1.3 + k) + 0.06 * math.sin(5 * a + 0.4 + 2 * k) + 0.04 * math.sin(8 * a + k)
+    def top_y(z):
+        return TOP0 + (TOP1 - TOP0) * min(1.0, max(0.0, (CZ + HZ - z) / (2 * HZ)))
+    rings = []
+    for i in range(N):
+        a = 2 * math.pi * i / N
+        c, s = math.cos(a), math.sin(a)
+        tx, tz = CX + HX * wob(a, 0.0) * c, CZ + HZ * wob(a, 0.0) * s
+        yt = top_y(tz)
+        mx, mz = CX + (HX + 0.5 * RUN) * wob(a, 1.7) * c, CZ + (HZ + 0.5 * RUN) * wob(a, 1.7) * s
+        fx, fz = CX + (HX + RUN) * wob(a, 0.6) * c, CZ + (HZ + RUN) * wob(a, 0.6) * s
+        rings.append(((fx, -0.3, fz), (mx, 0.55 * yt - 0.1 * math.sin(4 * a), mz), (tx, yt, tz), a))
+    def off(a):                                                     # how far round from under the spout
+        return abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2)))
+    slope, fresh, top = [], [], []
+    for (f0, m0, t0, a0), (f1, m1, t1, a1) in zip(rings, rings[1:] + rings[:1]):
+        a = (a0 + a1) / 2 if a1 > a0 else a0
+        (fresh if off(a) < 0.42 else slope).append((m0, m1, f1, f0))     # wound out of the heap; the wet
+        (fresh if off(a) < 0.22 else slope).append((t0, t1, m1, m0))     # tongue fanning down from the spout
+        top.append((t1, t0, (CX, top_y(CZ) + 0.25, CZ)))
+    for polys, (color, row) in ((slope, ('gravel', 12)), (fresh, ('gravel', 31)), (top, ('gravel', 0))):
+        for o in colored_faces([(color, list(q)) for q in polys], 'dump'):
+            rowed(o, row)
+    # the launder: a board trough on a trestle of bents, falling gently the
+    # whole way, its bents on the bank and stood in the terrace's top
+    L = math.hypot(Z1 - Z0, Y0 - Y1)
+    pitch = math.atan2(Y0 - Y1, Z0 - Z1)
+    mid = (LX, (Y0 + Y1) / 2, (Z0 + Z1) / 2)
+    box((1.8, 0.24, L), mid, TIMBER, pitch=pitch)                                    # its floor
+    for sx in (-0.85, 0.85):                                                          # its sides
+        box((0.22, 1.0, L), (LX + sx, mid[1] + 0.5, mid[2]), BOARD, pitch=pitch)
+    def launder_y(z):
+        return Y0 + (Y1 - Y0) * (z - Z0) / (Z1 - Z0)
+    for z in (() if LITE else (-10.0,)) + (-16.0, -22.0, -29.0, -36.0, -43.0, -49.0):
+        y = launder_y(z) - 0.12
+        for sx in (-1.3, 1.3):
+            box((0.5, y + 1.0, 0.5), (LX + sx, (y - 1.0) / 2, z), TIMBER)
+        box((3.3, 0.45, 0.55), (LX, y - 0.22, z), TIMBER)
+        if y > 3.0 and not LITE:                                                      # a tall bent braced
+            strut((LX - 1.3, 0.6, z), (LX + 1.3, y - 0.6, z), 0.32, TIMBER)
+    # the spout over the end of the terrace, and the slurry falling from it
+    sy = launder_y(Z1)
+    box((1.0, 0.5, 1.6), (LX, sy + 0.05, Z1 - 0.6), TIMBER, pitch=0.5)
+    box((0.7, sy - top_y(Z1) + 0.4, 0.5), (LX, (sy + top_y(Z1)) / 2 - 0.1, Z1 - 1.3), 'grey')
+    join_still('dump')
 
 def telegraph_pole(at, H, yaw=0.0, corner=False):
     """A telegraph pole `H` tall, its crossarm across the line (the line runs
@@ -13827,13 +13796,41 @@ def pickup(x, z, color, yaw=0.0):
     part(0, 0.27, 0.75, (0.64, 0.07, 0.06), 0x868ba1)                # the bumpers
     part(0, 0.27, -0.75, (0.64, 0.07, 0.06), 0x868ba1)
 
-# Sidewinder's freight line: the company's tank train carrying the field's
-# crude away, at a real train's size beside a car (a tank car some four
-# units long). It runs across the east straight over the road on a viaduct
-# between two knolls of the canyon's strata, out of a tunnel in one and into
-# a tunnel in the other, home under the ground. Placed ON the road turned 90
-# (its +Z the road's left, the road along X at z = 0).
-TRAIN_Y = 3.6                                                    # the rails' height over the foot
+# Sidewinder's freight line: the company's tank train loading the field's
+# crude at its terminal, at a real train's size beside a car (a tank car some
+# four units long). Its track lies on the ground in a loading loop, a balloon
+# off the line in, so a train is filled without ever backing up: it walks
+# round and round through the loading rack, every rail of it in sight. It
+# stands on the outside of the north loop's first corner, beyond the trunk
+# line from the tank farm, which feeds the rack through a valve on a tee
+# (tracks.js sidewinder; a `plain` there keeps the yard flat). +X is the road.
+SW_RAIL = 0.34                                  # the rails' top over the yard
+SW_LOOP = (8.5, 10.0)                           # the loop's curve radius and its straights' length
+SW_PACE = 0.5                                   # the train's walk, units a second (a brisk walk at this scale)
+SW_FEED = (13.75, 0.6)                          # where the feed meets the trunk line, in the loop's frame
+
+def sidewinder_track(line, s0):
+    """Track along `line`, samples (x, z, tx, tz) of its middle and its unit
+    heading: a low bed of grey ballast, timber ties across it at a steady
+    spacing counted from arclength `s0` (so a loop built in lengths keeps it
+    from one to the next), and two steel rails a car's gauge apart."""
+    def rows(section):
+        return [[(x + tz * o, y, z - tx * o) for o, y in section] for x, z, tx, tz in line]
+    for o in sheet(rows(((-1.2, 0.0), (-0.85, 0.12), (0.85, 0.12), (1.2, 0.0))), lambda i, j, n: 'grey', 'ballast'):
+        rowed(o, 6)
+    for g in (-0.5, 0.5):
+        sheet(rows(((g - 0.07, 0.22), (g - 0.07, SW_RAIL), (g + 0.07, SW_RAIL), (g + 0.07, 0.22))),
+              lambda i, j, n: 'slate', 'rail')
+    tie = 1.2 if LITE else 0.9
+    at, nxt = s0, math.ceil(s0 / tie) * tie
+    for (x0, z0, tx0, tz0), (x1, z1, tx1, tz1) in zip(line, line[1:]):
+        d = math.hypot(x1 - x0, z1 - z0)
+        while nxt <= at + d:
+            f = (nxt - at) / d
+            box((1.6, 0.1, 0.28), (x0 + (x1 - x0) * f, 0.17, z0 + (z1 - z0) * f), TIMBER,
+                yaw=math.atan2(tx0 + (tx1 - tx0) * f, tz0 + (tz1 - tz0) * f))
+            nxt += tie
+        at += d
 
 def sidewinder_tank_car(at, color):
     """A tank car on its bogies, along +Z, its middle at `at` (rail height):
@@ -13875,70 +13872,106 @@ def sidewinder_loco(at):
 
 @piece(1.0)
 def tank_train():
-    # each knoll a short ridge of rock along the road (its len along x),
-    # broken off toward it, the crest of the low ridge the road cuts through
-    # (tracks.js sidewinder `land`), and a spur of it running back along the
-    # line from each mouth, high and broad enough that a car turning for
-    # home inside it never shows through its top
-    knolls = massif_height(((0.0, -13.0, 6.0, 5.2, 4.4, 0.5 * math.pi + 0.15, 0.8, 9.0),
-                            (0.6, 13.0, 5.6, 5.0, 4.2, 0.5 * math.pi - 0.2, 0.8, 7.0),
-                            (0.0, -14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0),
-                            (0.3, 14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0)),
-                           rough=0.6, seed=4.4, warp=0.6)
-    strata_massif(knolls, -12.0, 12.0, -20.0, 20.0, [b for b in CANYON_STRATA if b[0] < 6.5], step=2.0, tol=0.3,
-                  summits=False)
-    Y, Z0 = TRAIN_Y, 10.4                                         # the rails, and the tunnels' mouths
+    # The loop: two straights along Z joined by half circles, the near one
+    # (+X) through the rack; the line in leaves it off its east end (-Z)
+    # through a turnout, easing out toward the road, and ends at a buffer
+    # stop. A sample is (x, z, tx, tz), the track's middle and its heading.
+    R, S = SW_LOOP
+    span = 2 * S + 2 * math.pi * R
+    def loop_at(s):
+        s %= span
+        if s < S:                                                # the near straight, +Z
+            return R, -S / 2 + s, 0.0, 1.0
+        s -= S
+        if s < math.pi * R:                                      # the west end, round to the far side
+            a = s / R
+            return R * math.cos(a), S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
+        s -= math.pi * R
+        if s < S:                                                # the far straight, -Z
+            return -R, S / 2 - s, 0.0, -1.0
+        a = math.pi + (s - S) / R                                # the east end, back to the near side
+        return R * math.cos(a), -S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
+    step = 1.0 if LITE else 0.5
     with plain_parts():
-        for sz in (-1, 1):                                        # the tunnel mouths in the rock
-            z = sz * Z0
-            box((2.2, 2.8, 1.6), (0.0, Y + 1.1, z + sz * 0.3), 'tan')
-            box((1.5, 2.1, 1.7), (0.0, Y + 0.95, z + sz * 0.3), 'dark')
-            box((2.4, 0.3, 1.7), (0.0, Y + 2.55, z + sz * 0.3), 'brown')
-        # the rails and ties the length of the viaduct, into both mouths
-        for sx in (-0.5, 0.5):
-            box((0.12, 0.14, 2 * Z0 + 0.6), (sx, Y + 0.07, 0.0), 'slate')
-        z = -Z0
-        while z <= Z0:
-            box((1.5, 0.12, 0.3), (0.0, Y - 0.06, z), TIMBER)
-            z += 0.8
-        # the girder span over the road, the company's red, on its towers
-        for sx in (-0.82, 0.82):
-            box((0.2, 0.8, 7.6), (sx, Y - 0.5, 0.0), 'red')
-            box((0.26, 0.1, 7.6), (sx, Y - 0.08, 0.0), 'white')
-        for sz in (-3.8, 3.8, -6.8, 6.8):                         # the bents, timber, on stone feet
-            h = Y - 0.12
-            for sx in (-1, 1):
-                strut((sx * 1.05, -0.3, sz), (sx * 0.62, h, sz), 0.24, TIMBER)
-                box((0.5, 0.4, 0.5), (sx * 1.05, -0.1, sz), 'grey')
-            box((1.7, 0.22, 0.36), (0.0, h, sz), TIMBER)
-            strut((-1.0, 0.2, sz), (0.6, h - 0.3, sz), 0.12, TIMBER)
-            strut((1.0, 0.2, sz), (-0.6, h - 0.3, sz), 0.12, TIMBER)
-        for sz in (-1, 1):                                        # the stringers over the bents
-            for sx in (-0.55, 0.55):
-                box((0.22, 0.34, 7.0), (sx, Y - 0.29, sz * 7.0), TIMBER)
-    # the train: a diesel and eight tank cars (a unit train long enough to be
-    # on the bridge most of the time a racer passes), out of the right-hand
-    # tunnel (-Z), over the road and into the left-hand one, home under the
-    # ground. Each car stays level the whole way round (f=1): it drops
-    # straight down inside the spur once it is clear of the mouth (ZC, its
-    # tail still in the portal), so it never turns where it could be seen.
-    ZC = 12.1
-    loop = [(0.0, Y, -ZC), (0.0, Y, ZC), (0.0, -6.0, ZC), (0.0, -6.0, -ZC)]
-    for i, p in enumerate(loop):
-        marker('path_tank_%d' % i, p)
-    span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    period = span / 3.2                                          # a freight's walking pace over a bridge
-    gap = 4.3 / span
-    P0 = loop[0]
+        # in its four lengths (each straight, each end), so a cell far off
+        # culls and takes its far form a length at a time
+        cuts = (0.0, S, S + math.pi * R, 2 * S + math.pi * R, span)
+        for a, b in zip(cuts, cuts[1:]):
+            n = max(2, int(math.ceil((b - a) / step)))
+            sidewinder_track([loop_at(a + (b - a) * k / n) for k in range(n + 1)], a)
+        # the line in: a turnout's curve, then straight, to its buffer stop
+        RT, L1, L2 = 22.0, 7.0, 5.5
+        line = []
+        for k in range(15):
+            t = (L1 + L2) * k / 14
+            th = min(t, L1) / RT
+            x, z = R + RT * (1 - math.cos(th)), -S / 2 - RT * math.sin(th)
+            x, z = x + max(0.0, t - L1) * math.sin(th), z - max(0.0, t - L1) * math.cos(th)
+            line.append((x, z, math.sin(th), -math.cos(th)))
+        sidewinder_track(line, 0.45)
+        x, z, tx, tz = line[-1]
+        bx, bz, yaw = x + tx * 0.5, z + tz * 0.5, math.atan2(tx, tz)
+        box((1.5, 0.5, 0.4), (bx, 0.75, bz), 'red', yaw=yaw)                                           # the buffer stop
+        box((1.54, 0.14, 0.44), (bx, 0.75, bz), 'white', yaw=yaw)
+        for s in (-0.55, 0.55):
+            box((0.2, 0.8, 0.2), (bx + s * tz, 0.4, bz - s * tx), 'slate', yaw=yaw)
+            strut((bx + s * tz + tx * 0.9, 0.0, bz - s * tx + tz * 0.9), (bx + s * tz, 0.8, bz - s * tx), 0.16, 'slate')
+        # the loading rack over the near straight: a canopy in the company's
+        # colours on steel legs either side of the train; the platform at the
+        # cars' tops on the road side, its stair down at the west end; a
+        # filling arm out over the track to each of two cars; and the feed:
+        # off the trunk line through its valve, up the rack's outer leg to
+        # the header under the platform
+        X0, X1, Z = R - 1.1, R + 2.3, 4.2                                     # the legs, inside and out; the rack's half length
+        DECK, TOP, PX = 2.2, 3.6, R + 1.6                                     # the platform, the canopy, the header's line
+        for z in (-Z, -1.4, 1.4, Z):
+            box((0.22, TOP, 0.22), (X0, TOP / 2, z), 'slate')
+            box((0.22, TOP, 0.22), (X1, TOP / 2, z), 'slate')
+            box((X1 - X0 + 0.22, 0.24, 0.22), ((X0 + X1) / 2, TOP - 0.12, z), 'slate')
+            box((0.18, DECK, 0.18), (R + 1.0, DECK / 2, z), 'slate')
+        box((X1 - X0 + 1.0, 0.22, 2 * Z + 1.0), ((X0 + X1) / 2, TOP + 0.11, 0.0), 'red')               # the canopy
+        box((X1 - X0 + 1.06, 0.12, 2 * Z + 1.06), ((X0 + X1) / 2, TOP - 0.02, 0.0), 'white')
+        box((X1 - R - 0.9, 0.12, 2 * Z + 0.2), ((R + 0.9 + X1) / 2, DECK - 0.06, 0.0), 'grey')           # the platform
+        for z in (-Z, 0.0, Z):                                                                           # its rail
+            box((0.1, 0.9, 0.1), (X1 - 0.12, DECK + 0.45, z), 'white')
+        box((0.1, 0.1, 2 * Z), (X1 - 0.12, DECK + 0.9, 0.0), 'white')
+        for k in range(7):                                                                               # the stair
+            box((1.1, 0.08, 0.32), ((R + 1.0 + X1) / 2, DECK - 0.275 * (k + 1), Z + 0.3 + 0.3 * k), 'grey')
+        for s in (R + 0.95, X1 + 0.05):
+            strut((s, DECK, Z), (s, 0.0, Z + 2.4), 0.1, 'slate')
+        cyl(0.16, 2 * Z + 0.4, (PX, DECK - 0.35, -Z - 0.2), 'white', segs=10, axis='along', stem=True)  # the header
+        for z in (-2.15, 2.15):                                                                          # the arms
+            cyl(0.12, 0.95, (PX, DECK - 0.35, z), 'white', segs=8, stem=True)
+            strut((PX, DECK + 0.6, z), (R - 0.05, DECK + 0.6, z), 0.14, 'slate')
+            box((0.16, 0.45, 0.16), (R, DECK + 0.4, z), 'slate')
+            cyl(0.14, 0.08, (PX, DECK + 0.25, z), 'red', segs=8)                                         # its valve wheel
+        FX, FZ = SW_FEED
+        cyl(0.16, FX - X1 + 0.3, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, axis='across', stem=True)   # the feed
+        cyl(0.16, DECK - 0.35 - PIPE_H, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, stem=True)
+        cyl(0.16, X1 - 0.3 - PX, (PX, DECK - 0.35, FZ), 'white', segs=10, axis='across', stem=True)
+        VX = (X1 + FX) / 2
+        for sx in (-0.3, 0.3):                                                                           # its stand, its valve
+            box((0.12, PIPE_H, 0.12), (VX + sx, PIPE_H / 2 - 0.1, FZ), 'slate')
+        box((0.8, 0.12, 0.3), (VX, PIPE_H - 0.22, FZ), 'slate')
+        cyl(0.22, 0.4, (VX + 0.5, PIPE_H - 0.2, FZ), 'red', segs=10)
+        cyl(0.26, 0.08, (VX + 0.5, PIPE_H + 0.2, FZ), 'red', segs=10)
+    # the train: a diesel and six tank cars, round and round at a walk
+    N = int(span)
+    for i in range(N):
+        x, z, _, _ = loop_at(span * i / N)
+        marker('path_tank_%d' % i, (x, SW_RAIL, z))
+    period, gap = span / SW_PACE, 4.3 / span
+    P0 = (R, SW_RAIL, -S / 2)
     # A traveller faces its path with its node's +X, and these are built
     # along +Z: the turn names the node's frame (+X along the car, ahead)
     # and leaves the parts where they were built.
     AHEAD = -math.pi / 2
     with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0, yaw=AHEAD):
         sidewinder_loco(P0)
-    for n in range(1, 9):
+    for n in range(1, 7):
         with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0, yaw=AHEAD):
             sidewinder_tank_car(P0, 'white' if n % 2 else 'red')
+    join_still('loop')
 
 lite_too('tank-train')
 
