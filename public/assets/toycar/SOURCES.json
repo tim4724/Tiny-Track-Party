@@ -331,6 +331,7 @@
     "set-tailings-dump-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tailings-dump.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tank-farm.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-tank-train-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tank-train.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-telegraph-line.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-tilt-yard.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

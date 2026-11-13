@@ -12457,7 +12457,7 @@ def sidewinder_tank_car(at, color):
     for sz in (-1.25, 1.25):                                     # the bogies, their wheels
         box((0.9, 0.3, 0.95), (x, y + 0.2, z + sz), 'dark')
         for dz in (-0.3, 0.3):
-            for sx in (-0.42, 0.42):
+            for sx in (() if LITE else (-0.42, 0.42)):                # the box draws the bogie, not its wheels
                 cyl(0.2, 0.08, (x + sx, y + 0.2, z + sz + dz), 'slate', segs=8, axis='across')
     box((0.8, 0.14, 3.6), (x, y + 0.42, z), 'dark')              # the underframe
     cyl(0.62, 3.2, (x, y + 1.05, z - 1.6), color, segs=12, axis='along', stem=True, smooth=True)
@@ -12474,7 +12474,7 @@ def sidewinder_loco(at):
     for sz in (-1.3, 1.3):
         box((0.95, 0.34, 1.1), (x, y + 0.22, z + sz), 'dark')
         for dz in (-0.32, 0.32):
-            for sx in (-0.44, 0.44):
+            for sx in (() if LITE else (-0.44, 0.44)):
                 cyl(0.22, 0.08, (x + sx, y + 0.22, z + sz + dz), 'slate', segs=8, axis='across')
     box((1.0, 0.18, 4.0), (x, y + 0.48, z), 'dark')               # the frame
     box((0.82, 0.9, 2.5), (x, y + 1.02, z + 0.65), 'red')          # the long hood
@@ -12526,20 +12526,24 @@ def tank_train():
         for sz in (-1, 1):                                        # the stringers over the bents
             for sx in (-0.55, 0.55):
                 box((0.22, 0.34, 7.0), (sx, Y - 0.29, sz * 7.0), TIMBER)
-    # the train: a diesel and four tank cars, out of the right-hand tunnel
-    # (-Z), over the road and into the left-hand one, home under the ground
+    # the train: a diesel and eight tank cars (a unit train long enough to be
+    # on the bridge most of the time a racer passes), out of the right-hand
+    # tunnel (-Z), over the road and into the left-hand one, home under the
+    # ground
     loop = [(0.0, Y, -15.0), (0.0, Y, 15.0), (0.0, -6.0, 15.0), (0.0, -6.0, -15.0)]
     for i, p in enumerate(loop):
         marker('path_tank_%d' % i, p)
     span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    period = span / 3.6                                          # a freight's walking pace over a bridge
+    period = span / 3.2                                          # a freight's walking pace over a bridge
     gap = 4.3 / span
     P0 = loop[0]
     with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0):
         sidewinder_loco(P0)
-    for n in range(1, 5):
+    for n in range(1, 9):
         with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0):
             sidewinder_tank_car(P0, 'white' if n % 2 else 'red')
+
+lite_too('tank-train')
 
 @piece(1.0)
 def dust_devil():
