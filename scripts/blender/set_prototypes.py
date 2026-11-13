@@ -5774,21 +5774,26 @@ def snowman(at, k=1.0, hat=False):
         box((0.95 * k, 0.1 * k, 0.95 * k), (x, y + 2.92 * k, z), 0x2a2735)
         box((0.6 * k, 0.55 * k, 0.6 * k), (x, y + 3.25 * k, z), 0x2a2735)
 
-def snow_ball(r, at, squash=0.9):
-    """A rolled ball of snow, round (a block at this size read as a crate)."""
-    return snowy(sphere(r, at, 0xf3f7fb, subdiv=1, scale=(1.0, squash, 1.0), flat=False), 0.35)
+def snow_ball(r, at, squash=0.9, subdiv=1):
+    """A rolled ball of snow, round (a block at this size read as a crate);
+    `subdiv` 3 for one big enough that a once-split ball shows its facets."""
+    return snowy(sphere(r, at, 0xf3f7fb, subdiv=subdiv, scale=(1.0, squash, 1.0), flat=False), 0.35)
 
 def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='out', balls=3, lean=0.0,
-             broom=False, buttons=0x38383d):
+             broom=False, buttons=0x38383d, subdiv=1):
     """One of the snowman field's crowd at (x, z), `h` tall, its carrot to +X
     turned by `yaw`: `balls` rolled balls (two for a child's), coal eyes and
     buttons, a carrot, stick arms (`arms`: out, up, down or none), a scarf
     in its own colour and a hat of its own kind (`hat`: top, bucket, bobble,
     cone or none); `lean` tips the head off its body, `broom` stands one in
-    its hand. No two of the crowd are the same build."""
+    its hand. No two of the crowd are the same build. `subdiv` over 1 makes
+    a big one round: its balls (snow_ball), and its scarf, hats and carrot
+    turned on twice the facets."""
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x + dx * c + dz * s2, dy, z - dx * s2 + dz * c)
+    rnd = subdiv > 1
+    segs = 16 if rnd else 8
     rs = (0.3, 0.22, 0.16) if balls == 3 else (0.3, 0.19)
     k = h / (1.62 * sum(rs))
     rs = [r * k for r in rs]
@@ -5798,44 +5803,55 @@ def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='o
         y += r * 1.62
     for i, r in enumerate(rs):
         off = lean * k if i == len(rs) - 1 else 0.0
-        snow_ball(r, at(0.0, cy[i], off))
+        snow_ball(r, at(0.0, cy[i], off), subdiv=subdiv)
     hr, hy, hz = rs[-1], cy[-1], lean * k
     # the carrot: a short cone out of the middle of the face, its root in the
     # head (a bar as long as the head, square at the tip, read as a stick
     # through it from the road)
-    cyl(0.3 * hr, 0.62 * hr, at(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.03, segs=6, axis='across', yaw=yaw,
-        stem=True)
+    cyl(0.3 * hr, 0.62 * hr, at(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.03, segs=10 if rnd else 6,
+        axis='across', yaw=yaw, stem=True)
     for sd in (-1, 1):
         box((0.06, 0.07 * k, 0.07 * k), at(hr * 0.88, hy + 0.3 * hr, hz + sd * 0.38 * hr), 0x2a2735, yaw=yaw)
     for i in range(2 if balls == 3 else 1):
         box((0.06, 0.08 * k, 0.08 * k), at(rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons, yaw=yaw)
     # the scarf: a band round the neck and an end hanging down the front
     ny = cy[-1] - hr * 0.82
-    box((hr * 1.7, 0.11 * k, hr * 1.7), at(0.0, ny, hz * 0.6), scarf, yaw=yaw)
+    if rnd:
+        cyl(hr * 0.9, 0.11 * k, at(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=segs, stem=True)
+    else:
+        box((hr * 1.7, 0.11 * k, hr * 1.7), at(0.0, ny, hz * 0.6), scarf, yaw=yaw)
     box((0.07, 0.3 * k, 0.12 * k), at(hr * 0.86, ny - 0.14 * k, hz * 0.6 + 0.3 * hr), scarf, yaw=yaw)
     ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
     L = 0.42 * k
+    stick = 0.04 * k                              # MIN_T on a small one; no hairline on a big one
     if arms != 'none':
         tip = {'out': 0.25, 'up': 0.95, 'down': -0.5}[arms]
         for sd in (-1, 1):
-            box((0.06, 0.06, L), at(0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
-                                    sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, yaw=yaw, pitch=sd * tip)
+            box((stick, stick, L), at(0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
+                                      sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, yaw=yaw, pitch=sd * tip)
     if broom:
         bz = ar * 0.9 + L * 0.9
-        box((0.06, 0.95 * h, 0.06), at(0.0, 0.47 * h, bz), 0x8a6a46, yaw=yaw)
+        box((stick, 0.95 * h, stick), at(0.0, 0.47 * h, bz), 0x8a6a46, yaw=yaw)
         box((0.1, 0.22 * k, 0.26 * k), at(0.0, 0.95 * h, bz), 0xffc044, yaw=yaw)
     top = hy + hr * 0.78
-    if hat == 'top':
+    if hat == 'top' and rnd:
+        cyl(hr * 1.0, 0.06, at(0.0, top - 0.03, hz), hat_c, segs=segs, stem=True)
+        cyl(hr * 0.62, hr * 1.1, at(0.0, top, hz), hat_c, segs=segs, stem=True)
+        cyl(hr * 0.65, 0.16 * hr, at(0.0, top + hr * 0.12, hz), 0xff5040, segs=segs, stem=True)
+    elif hat == 'top':
         box((hr * 2.0, 0.06, hr * 2.0), at(0.0, top, hz), hat_c, yaw=yaw)
         box((hr * 1.25, hr * 1.1, hr * 1.25), at(0.0, top + hr * 0.55, hz), hat_c, yaw=yaw)
         box((hr * 1.3, 0.06, hr * 1.3), at(0.0, top + hr * 0.2, hz), 0xff5040, yaw=yaw)
     elif hat == 'bucket':
-        cyl(hr * 0.8, hr * 0.95, at(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True)
+        cyl(hr * 0.8, hr * 0.95, at(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=segs, stem=True)
     elif hat == 'bobble':
-        cyl(hr * 0.95, hr * 0.7, at(0.0, top - 0.12 * k, hz), hat_c, r2=hr * 0.5, segs=8, stem=True)
-        box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
+        cyl(hr * 0.95, hr * 0.7, at(0.0, top - 0.12 * k, hz), hat_c, r2=hr * 0.5, segs=segs, stem=True)
+        if rnd:
+            sphere(0.08 * k, at(0.0, top + hr * 0.62, hz), 0xfff6eb, subdiv=2, flat=False)
+        else:
+            box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
     elif hat == 'cone':
-        cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=6, stem=True)
+        cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=segs - 2 if rnd else 6, stem=True)
 
 @piece(1.0)
 def snowman_field():
@@ -5843,33 +5859,37 @@ def snowman_field():
     # of the east bend, stood in a row facing the road: the father in his top
     # hat with a broom, the mother in a bobble hat, two children with their
     # arms up, a snow dog at their feet, a sled and a heap of spare snowballs
-    # left by them. Each a unit or more tall, so it reads from the chase cam
-    # at speed: a field of thirty half-unit snowmen read as specks. Built on
-    # y = 0 and laid on the snow as drawn (draped).
+    # left by them. Big, the father two and a half units tall, so they read
+    # from the chase cam at speed past the bend (a field of thirty half-unit
+    # snowmen read as specks, and a family a unit and a half tall as small),
+    # and round: rolled balls of snow split three times, smooth, so none of
+    # them reads as a faceted lump. Built on y = 0 and laid on the snow as
+    # drawn (draped).
     R, B, G, P, O, D = 0xff5040, 0x3f7bd9, 0x61cb8b, 0xa878e8, 0xff7e44, 0x2a2735
     def build():
         F = (  # x (to the road), z, height, yaw, hat, hat colour, scarf, arms, balls, lean, broom
-            (-0.3, -1.9, 1.5, 0.12, 'top', D, R, 'out', 3, 0.0, True),         # the father
-            (0.0, 0.0, 1.3, 0.0, 'bobble', P, G, 'out', 3, 0.0, False),        # the mother
-            (0.55, 1.6, 0.92, -0.15, 'bucket', B, 0xffc044, 'up', 3, 0.0, False),
-            (0.75, 2.85, 0.74, -0.3, 'cone', O, B, 'up', 2, 0.04, False),
+            (-0.6, -3.4, 2.5, 0.12, 'top', D, R, 'out', 3, 0.0, True),         # the father
+            (-0.3, 0.0, 2.2, 0.0, 'bobble', P, G, 'out', 3, 0.0, False),       # the mother
+            (0.3, 2.9, 1.6, -0.15, 'bucket', B, 0xffc044, 'up', 3, 0.0, False),
+            (0.5, 5.1, 1.3, -0.3, 'cone', O, B, 'up', 2, 0.07, False),
         )
         for (fx, fz, h, yw, hat, hc, sc, arms, balls, lean, broom) in F:
-            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom)
+            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom,
+                     subdiv=3)
         # the snow dog at the father's feet, a red collar on
-        ax_, az_, k = 1.0, -3.3, 1.8
-        snow_ball(0.2 * k, (ax_, 0.15 * k, az_))
-        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_))
-        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_))
+        ax_, az_, k = 0.6, -6.4, 2.8
+        snow_ball(0.2 * k, (ax_, 0.15 * k, az_), subdiv=3)
+        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_), subdiv=3)
+        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_), subdiv=3)
         for sd in (-1, 1):
             snowy(box((0.07 * k, 0.12 * k, 0.07 * k), (ax_ + 0.22 * k, 0.52 * k, az_ + sd * 0.08 * k), 0xf3f7fb), 0.5)
         box((0.1 * k, 0.06 * k, 0.06 * k), (ax_ + 0.38 * k, 0.35 * k, az_), D)
-        box((0.26 * k, 0.06 * k, 0.28 * k), (ax_ + 0.12 * k, 0.27 * k, az_), R)
+        cyl(0.15 * k, 0.06 * k, (ax_ + 0.12 * k, 0.24 * k, az_), R, segs=16, stem=True)
         snowy(box((0.3 * k, 0.07 * k, 0.07 * k), (ax_ - 0.55 * k, 0.2 * k, az_), 0xf3f7fb, roll=-0.5), 0.5)
         # what the children left: the sled, the spare snowballs
-        sled(1.4, 0, 3.9, 0.4, R, L=0.9)
+        sled(1.2, 0, 7.4, 0.4, R, L=1.3)
         for i in range(6):
-            snow_ball(0.17, (1.7 + 0.3 * (i % 3), 0.12 + 0.24 * (i // 3), -0.4 + 0.28 * (i % 2)))
+            snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)), subdiv=2)
     draped('field', build)
 
 def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
