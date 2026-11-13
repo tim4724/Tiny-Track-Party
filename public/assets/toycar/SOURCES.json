@@ -148,6 +148,7 @@
     "set-dry-creek.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dune-fence-a.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dune-fence-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-dune-marram.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dust-devil.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-expedition-camp.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-field-wheat.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

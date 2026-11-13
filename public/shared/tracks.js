@@ -674,6 +674,9 @@ export const TRACKS = {
       // storm fence and marram along the dune pass, a length each side
       { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
       { model: 'set-dune-fence-b', u: 0.695, lat: -9.6, yaw: 180 },
+      // marram in drifts up the seaward dunes' faces, the pass's length
+      { model: 'set-dune-marram', u: 0.60, lat: -14.5, yaw: 180 },
+      { model: 'set-dune-marram', u: 0.70, lat: -15, yaw: 0 },
       // the lighthouse's dune at the pass's end, the road through it in a
       // tunnel and the light station on its seaward shoulder, all one piece
       // that carries the road in its own frame (set_prototypes.py
@@ -695,9 +698,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 4.0, top: 0.5 },
       { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 3.8, top: 0.5 },
       { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 3.6, top: 0.5 },
-      { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
       // the great dune in the middle of the loop, over the rest
       { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 5.5, top: 0.6 },
       // dunes inside the start straight and the east side

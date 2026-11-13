@@ -278,7 +278,7 @@ void lowTideReef(Theme& t) {
 // wind, no kites, no parasol or sandcastle (and no sailboat out in that sea);
 // the lighthouse stays, it is a storm coast. Driftwood lies thick along the
 // tide line, the freight the sea brought in is crates, and the gantry is
-// timber, like the trunk.
+// timber, like the trunk. No palms: the trees here are dead.
 void stormBeach(Theme& t) {
   t.landmarks = { LM_LIGHTHOUSE };
   t.kites.count = 0;
@@ -286,6 +286,12 @@ void stormBeach(Theme& t) {
   t.birds.count = 6; t.birds.speed = 0.34f; t.birds.flapHz = 2.8f;
   t.gantry.pylon = 0x8a6a46; t.gantry.hasRings = false; t.gantry.finial = 0xfff6eb;
   ScenerySpec& s = t.scenery;
+  // No living tree on a coast the storm killed the trees of: the snags are
+  // its one tree family (set_prototypes.py drift_snag), so the seeded palms
+  // go. Every spot that would have rolled one rolls a boulder instead, so
+  // the density falls by the palms' share to leave the boulders as they were.
+  s.mixTree = 0; s.mixBush = 0;
+  s.density *= 0.55f;
   s.clutter = { { CL_DRIFTWOOD, 0.55f, { 0xcbb794, 0xb8a686, 0x9a8a70 } },
                 { CL_SHELL, 0.3f, { 0xf5ead8, 0xecc8b4 } },
                 { CL_STARFISH, 0.15f, { 0xe4784f } } };

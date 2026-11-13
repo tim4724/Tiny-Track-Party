@@ -4102,6 +4102,23 @@ def root_plate(at, r, face=1):
             (x + 1.4 * r * math.cos(a), max(0.05, cy + 1.4 * r * math.sin(a) - 0.2), z + face * 0.5),
             0.1, 0x9a6a46, r2=0.035, segs=5)
 
+def drift_root_tangle(at, r, face=1, seed=0.0):
+    """A thrown tree's butt and the roots torn out with it, at `at` (its
+    foot), reaching `r`, toward Z (`face` -1: -Z): no plate, each root its
+    own length and kink (`seed`). The round plate (root_plate) is the great
+    trunk's alone: the same ringed disc at every pile read as a cog."""
+    x, y, z = at
+    cy = y + 0.6 * r
+    hub = (x, cy, z)
+    rod((x, cy - 0.1 * r, z - face * 0.9 * r), hub, 0.3 * r, 'tan', r2=0.4 * r, segs=7)
+    for k in range(7):
+        a = seed * 1.7 + k * 0.9 + 0.35 * math.sin(seed + k * 2.1)
+        L = r * (0.75 + 0.6 * abs(math.sin(seed * 3.1 + k * 1.7)))
+        mid = (x + 0.5 * L * math.cos(a), max(0.12, cy + 0.5 * L * math.sin(a)), z + face * 0.3 * r)
+        tip = (x + L * math.cos(a + 0.3), max(0.06, cy + L * math.sin(a + 0.3)), z + face * (0.45 + 0.3 * math.sin(k * 2.3 + seed)) * r)
+        rod(hub, mid, 0.17 * r, 0x9a6a46, r2=0.11 * r, segs=5)
+        rod(mid, tip, 0.11 * r, 0x9a6a46, r2=0.05, segs=5)
+
 @piece(1.0)
 def driftwood_trunk():
     # Driftwood: a whole tree the storm brought in, where the strand line
@@ -4131,11 +4148,11 @@ def driftwood_trunk():
 def strand_line():
     # Driftwood: the line the storm tide left along the beach, from the
     # great trunk on: whole trees thrown up and bleached, piled on one
-    # another, a root plate reared up out of each pile, the wrack between
+    # another, the torn roots of one reared up out of its pile, the wrack between
     # them (weed, a lost float, a broken plank, a crate), and through it the
     # trees the sea killed where they stood, their bare limbs up over the
     # kerb: the low line alone lay hidden behind the road. It runs along Z,
-    # two piles to the piece, their root plates at its two ends.
+    # two piles to the piece.
     wood, pale, dark = 'tan', 'cream', 'brown'
     def pile(m, phase):
         """One pile, `m` = -1 mirrors it along Z (its root plate to +Z)."""
@@ -4153,8 +4170,12 @@ def strand_line():
                 rod(at(x_at(z0) + dx0, y0, z0), at(x_at(z1) + dx1, y1, z1), r, c, r2=r * 0.7, segs=7)
             rx = x_at(-2.3) - 0.6
             pz = -2.3 if m > 0 else -2.1
-            root_plate(at(rx, 0.0, pz), 1.05, face=m)
-            rod(at(rx, 0.95, pz + 0.1), at(rx + 0.5, 0.35, pz + 3.6), 0.34, 'tan', r2=0.25, segs=8)
+            if m > 0:
+                x0, y0, z0 = at(rx, 0.0, pz)
+                drift_root_tangle((x0, y0, z0), 1.15, face=-m, seed=2.0)
+                rod(at(rx, 0.68, pz + 0.1), at(rx + 0.5, 0.35, pz + 3.6), 0.34, 'tan', r2=0.25, segs=8)
+            else:
+                rod(at(rx, 0.36, pz + 0.1), at(rx + 0.5, 0.3, pz + 3.6), 0.34, 'tan', r2=0.25, segs=8)
         for z in (-4.0, -0.6, 0.9, 3.4):
             box((0.5, 0.04, 0.24), at(x_at(z) - 0.5, 0.02, z), 0x2f8f5b, yaw=-m * 0.6 * math.sin(z * 1.3))
         for z in (-3.0, 2.0):
@@ -4191,7 +4212,6 @@ def strand_snags():
             drift_snag(x, z, h, lean, yw, 20.0 + k, limbs=limbs)
         rod((1.6, 0.2, -3.4), (-1.8, 0.24, -1.6), 0.22, 'tan', r2=0.15, segs=7)
         rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'cream', r2=0.1, segs=7)
-        root_plate((1.5, 0.0, 1.9), 0.8)
     gull((0.4 + math.cos(4.0) * 0.44, 4.38, -0.6 + math.sin(4.0) * 0.44), 1.0, 'anim_watch:r=26#snag')   # on its top
     join_still('snags')
 
@@ -4264,6 +4284,33 @@ def dune_fence_b():
     # the sand.
     dune_fence('fence', 8.0, 9.0, (0.5,))
 
+@piece(1.0)
+def dune_marram():
+    # Driftwood: marram on the seaward dunes' faces along the pass, which
+    # were smooth olive humps over the kerb: tussocks in drifts up the
+    # slope, bare sand between them, the dune's own grass (drift_marram's
+    # blades, a size up, since these stand a dune's face from the road).
+    # DRAPED whole. It runs along the road (+Z), +X the road.
+    def build():
+        with plain_parts():
+            for p in range(11):
+                if p in (3, 8):
+                    continue                                          # a blowout
+                pz = -16.0 + 3.2 * p + 1.4 * frac(p * 0.41 + 0.2)
+                px = 2.6 * wobble(pz, 5.0, 11.0) - (1.2 if p % 2 else -0.8)
+                for k in range(3 + p % 2):
+                    a0 = 2.4 * k + p
+                    d = 0.4 + 0.8 * frac(k * 0.37 + p * 0.21)
+                    x, z = px + d * math.cos(a0), pz + 1.4 * d * math.sin(a0)
+                    for j in range(5):
+                        a = 1.26 * j + k + p
+                        h = 0.8 + 0.55 * frac(k * 0.29 + j * 0.4 + p * 0.13)
+                        o = beam((x + 0.07 * math.cos(a), -0.15, z + 0.07 * math.sin(a)),
+                                 (x + 0.45 * math.cos(a), h, z + 0.45 * math.sin(a)), 0.15,
+                                 ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
+                        o['ramp'] = 0.15
+    draped('marram', build)
+
 def groyne(z, x0, x1, h0, h1, seed, gaps=()):
     """A timber groyne from x0 (by the road) down the beach to x1 in the
     surf: square posts a stride apart, `h0` tall at the road end falling to
@@ -4329,7 +4376,6 @@ def strand_groynes():
         rod((-2.0, 0.2, 3.4), (-4.4, 0.24, 7.6), 0.26, 'tan', r2=0.2, segs=7)
         rod((-3.6, 0.5, 4.4), (-1.2, 0.2, 7.0), 0.18, 'cream', r2=0.12, segs=7)
         rod((0.8, 0.16, 4.2), (1.8, 0.14, 1.0), 0.16, 'cream', r2=0.1, segs=7)
-        root_plate((-4.6, 0.0, 7.9), 0.9, face=-1)
         drift_snag(0.2, 0.2, 3.9, 0.18, 3.6, 7.0, limbs=5)
         drift_snag(-4.4, -1.4, 2.7, 0.3, 1.0, 8.0, limbs=3)
     join_still('groynes')
@@ -4634,7 +4680,7 @@ def drift_dune_sheet():
     me.materials.append(atlas_material())
     uv = me.uv_layers.new(name='UVMap')
     for p, kind in zip(me.polygons, kinds):
-        (sx, sy), row = (SWATCH['gravel'], 2) if kind == 'sand' else (SWATCH['leaf'], 5)
+        (sx, sy), row = (SWATCH['gravel'], 2) if kind == 'sand' else (SWATCH['olive'], 0)
         for li in p.loop_indices:
             uv.data[li].uv = ((sx + 12) / 128, 1 - (sy + 0.5 + row) / 128)
     o = bpy.data.objects.new('dune', me)
@@ -5005,8 +5051,8 @@ def smokehouse():
 def point_wrack():
     # Driftwood: what the storms pile on the point under the lighthouse,
     # where the road turns back from the sea: a great heap of driftwood, whole
-    # trunks thrown one over another and two root plates reared up on edge
-    # twice a car's height, bleached, a dead tree standing out of it. It
+    # trunks thrown one over another, the torn roots of the biggest reared up
+    # twice a car's height, bleached, dead trees standing out of it. It
     # faces the road's exit from the tunnel. +X is the road.
     with bleached():
         for k, (a, b, r) in enumerate((((-0.5, 0.3, -4.0), (-1.5, 0.35, 3.8), 0.36),
@@ -5016,9 +5062,9 @@ def point_wrack():
                                        ((-0.2, 1.0, -1.6), (-2.6, 1.15, 1.0), 0.22),
                                        ((0.9, 0.2, 0.6), (-1.0, 0.3, 4.6), 0.3))):
             rod(a, b, r, ('tan', 'cream')[k % 2], r2=r * 0.75, segs=7)
-        root_plate((-1.6, 0.0, -4.2), 1.5, face=-1)
-        root_plate((-2.4, 0.0, 3.9), 1.2, face=1)
+        drift_root_tangle((-0.5, 0.0, -4.4), 1.7, face=-1, seed=5.0)
         drift_snag(-3.4, 0.4, 4.2, 0.2, 2.4, 13.0, limbs=4)
+        drift_snag(-2.6, 3.6, 3.0, 0.3, 0.6, 14.0, limbs=3)
     join_still('wrack')
 
 # ====================================================================================
