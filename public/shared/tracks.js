@@ -381,7 +381,13 @@ export const SET_GROUND = {
   'set-brook-d': [{ kind: 'plain', x: 0.98, z: -0.29, len: 20.9, r: 1.6, w: 2.5 }],
   'set-brook-e': [{ kind: 'plain', x: 1.81, z: -0.32, len: 22, r: 1.6, w: 2.5 }],
   'set-brook-f': [{ kind: 'plain', x: 4.61, z: -0.61, len: 19.7, r: 1.6, w: 2.5 }],
-  'set-brook-g': [{ kind: 'plain', x: 1.24, z: -0.78, len: 21.5, r: 1.6, w: 2.5 }],
+  // (the last reach turns in to the pond: its bed's chord is turned with
+  // it, and a round floor at the mouth keeps the lawn's 9 u chords from
+  // climbing over the corner of the pond the brook comes in at)
+  'set-brook-g': [
+    { kind: 'plain', yaw: 7.96, x: 2.83, z: -2.83, len: 16.9, r: 1.6, w: 2.5 },
+    { kind: 'plain', x: 3.58, z: 5.15, len: 0, r: 6.5, w: 5 }
+  ],
   // Ribbon's church on the churchyard's own level ground, cut into the
   // terrace it stands on, the green before it: on the slope as it was, the
   // tower stood a storey deep in the hill.

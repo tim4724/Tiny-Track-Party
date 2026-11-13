@@ -2309,18 +2309,43 @@ void TtpRenderer::buildPonds(const TrackBin& tb) {
             }
             mStructures.idx.insert(mStructures.idx.end(), { q, q + 1, q + 2, q, q + 2, q + 3 });
         };
+        // A MOUTH: where a set piece's bed (its SET_GROUND plain: a brook's
+        // reach) runs through the outline, the coping and its bank stand
+        // open the bed's width, so the brook's own walls carry its water in
+        // at the pond's level instead of ending against a dam of stone. Only
+        // a segment a bed crosses is cut finer than one quad.
+        const auto inBed = [&](const float3& p) {
+            for (const LandShape& b : mLand) {
+                if (b.kind != 2 || b.piece < 0 || b.len <= 0) continue;   // a reach, not a round floor
+                const float bx2 = p.x - b.x, bz2 = p.z - b.z;
+                const float lx = bx2 * b.ax + bz2 * b.az, lz = bz2 * b.ax - bx2 * b.az;
+                const float c = std::min(0.5f * b.len, std::max(-0.5f * b.len, lz));
+                if (lx * lx + (lz - c) * (lz - c) < 0.49f * b.r * b.r) return true;
+            }
+            return false;
+        };
+        constexpr int CUT = 8;
         for (int i = 0; i < N; i++) {
             const float3 c0 = at(i, 0.0f, gy), c1 = at(i + 1, 0.0f, gy);
             const float3 out = normalize(float3{ (c0.x + c1.x) * 0.5f - s.x, 0, (c0.z + c1.z) * 0.5f - s.z });
-            quad(at(i, -0.02f, gy + kWaterY - 0.05f), at(i + 1, -0.02f, gy + kWaterY - 0.05f),
-                 at(i + 1, -0.02f, gy + kCopeY), at(i, -0.02f, gy + kCopeY), face, -out);
-            quad(at(i, -0.02f, gy + kCopeY), at(i + 1, -0.02f, gy + kCopeY),
-                 at(i + 1, kCopeW, gy + kCopeY), at(i, kCopeW, gy + kCopeY), stone[i % 2], float3{ 0, 1, 0 });
-            const float yb = gy + 0.62f * kCopeY, xb = kCopeW + 0.35f * kBank;
-            quad(at(i, kCopeW, gy + kCopeY), at(i + 1, kCopeW, gy + kCopeY),
-                 at(i + 1, xb, yb), at(i, xb, yb), 0, out + float3{ 0, 1, 0 });
-            quad(at(i, xb, yb), at(i + 1, xb, yb),
-                 at(i + 1, kCopeW + kBank, gy - 0.04f), at(i, kCopeW + kBank, gy - 0.04f), 0, out + float3{ 0, 1, 0 });
+            bool open[CUT];
+            bool any = false;
+            for (int j = 0; j < CUT; j++) any |= open[j] = inBed(mix(c0, c1, (j + 0.5f) / CUT));
+            const int cuts = any ? CUT : 1;
+            for (int j = 0; j < cuts; j++) {
+                if (any && open[j]) continue;
+                const float t0 = (float) j / cuts, t1 = (float) (j + 1) / cuts;
+                const auto on = [&](float t, float off, float y) { return mix(at(i, off, y), at(i + 1, off, y), t); };
+                quad(on(t0, -0.02f, gy + kWaterY - 0.05f), on(t1, -0.02f, gy + kWaterY - 0.05f),
+                     on(t1, -0.02f, gy + kCopeY), on(t0, -0.02f, gy + kCopeY), face, -out);
+                quad(on(t0, -0.02f, gy + kCopeY), on(t1, -0.02f, gy + kCopeY),
+                     on(t1, kCopeW, gy + kCopeY), on(t0, kCopeW, gy + kCopeY), stone[i % 2], float3{ 0, 1, 0 });
+                const float yb = gy + 0.62f * kCopeY, xb = kCopeW + 0.35f * kBank;
+                quad(on(t0, kCopeW, gy + kCopeY), on(t1, kCopeW, gy + kCopeY),
+                     on(t1, xb, yb), on(t0, xb, yb), 0, out + float3{ 0, 1, 0 });
+                quad(on(t0, xb, yb), on(t1, xb, yb),
+                     on(t1, kCopeW + kBank, gy - 0.04f), on(t0, kCopeW + kBank, gy - 0.04f), 0, out + float3{ 0, 1, 0 });
+            }
         }
     }
     if (mPond.verts.empty()) return;

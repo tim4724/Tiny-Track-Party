@@ -11699,9 +11699,8 @@ BROOK_ROUTE = {
     'brook-g': ("join", "pond", (1.403, -12.332), None, (
         (1.24, -11.544, 0.83), (1.087, -10.754, 0.84), (0.942, -9.962, 0.85), (0.806, -9.169, 0.86), (0.677, -8.375, 0.87), (0.556, -7.579, 0.88),
         (0.443, -6.782, 0.89), (0.337, -5.985, 0.9), (0.239, -5.186, 0.91), (0.15, -4.386, 0.92), (0.07, -3.586, 0.92), (0, -2.784, 0.93),
-        (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.016, 1.231, 0.97), (0.134, 2.027, 0.98),
-        (0.28, 2.818, 0.98), (0.446, 3.605, 0.99), (0.619, 4.391, 0.99), (0.782, 5.179, 1), (0.916, 5.972, 1), (1.005, 6.772, 1),
-        (1.075, 7.574, 1), (1.132, 8.376, 1), (1.185, 9.179, 1), (1.241, 9.982, 1),
+        (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.053, 1.225, 1), (0.328, 1.999, 1),
+        (0.727, 2.704, 1), (1.22, 3.34, 1), (1.783, 3.907, 1), (2.415, 4.423, 1), (3.08, 4.87, 1), (3.575, 5.154, 1),
     ), -1),
 }
 
@@ -11769,7 +11768,8 @@ def brook_channel(fr, start, end, k=1.0, near=0):
         # colour (turf: the renderer paints it the ground's)
         before = set(bpy.context.scene.objects)
         lay(lambda w: ((sd * (w + C), H), (sd * (w + C + 0.35 * B), 0.62 * H), (sd * (w + C + B), -0.04 / k)),
-            'green', 22, lambda ax, az: (sd * ax, 1.0, sd * az))
+            'green', 22, lambda ax, az: (sd * ax, 1.0, sd * az),
+            pick=(lambda i: i < n - 4) if end == 'pond' else None)    # no lawn out over the pond's water
         for o in set(bpy.context.scene.objects) - before:
             o['turf'] = 1
     # riffles: short white marks on the water, leaning with the flow, now one
@@ -11828,19 +11828,34 @@ def brook_ends(fr, start, end):
                                (x - ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z - az * 0.2 + tz * 0.9),
                                (x + ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z + az * 0.2 + tz * 0.9)], [(0, 1, 2, 3)], 'white'), 2)
         elif kind == 'pond':
-            # the sill it spills over into the pond, the walls ending in a
-            # stone each side, the spill white past the sill
-            box((2 * w + 0.1, 0.16, 0.3), (x, BROOK_WY + 0.06, z), 'grey', yaw=yaw)
+            # the mouth: the reach turns in and runs on through the pond's
+            # coping, which the renderer opens where a brook's bed crosses it
+            # (buildPonds), to end half a unit out in the pond, its water at
+            # the pond's own level: the walls ending in a stone each side,
+            # the run white out onto the pond's sheet (which lies 0.09 up)
             for sd in (-1, 1):
                 rowed(box((C + 0.2, H + 0.12, 0.5), (x + ax * sd * (w + C / 2), (H + 0.12) / 2 - 0.04, z + az * sd * (w + C / 2)),
                           'grey', yaw=yaw), SLATE_ROW)
-            rowed(ground_poly([(x + ax * w + tx * 0.16, BROOK_WY + 0.02, z + az * w + tz * 0.16),
-                               (x - ax * w + tx * 0.16, BROOK_WY + 0.02, z - az * w + tz * 0.16),
-                               (x - ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z - az * w * 0.7 + tz * 0.9),
-                               (x + ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z + az * w * 0.7 + tz * 0.9)],
+            rowed(ground_poly([(x + ax * w * 0.8 - tx * 0.3, 0.12, z + az * w * 0.8 - tz * 0.3),
+                               (x - ax * w * 0.8 - tx * 0.3, 0.12, z - az * w * 0.8 - tz * 0.3),
+                               (x - ax * w * 0.35 + tx * 0.6, 0.12, z - az * w * 0.35 + tz * 0.6),
+                               (x + ax * w * 0.35 + tx * 0.6, 0.12, z + az * w * 0.35 + tz * 0.6)],
                               [(0, 1, 2, 3)], 'white'), 3)
 
 def brook_piece(start, end, prev, nxt, pts, road):
+    # A reach that meets a culvert runs on INTO it: most of a unit past the
+    # headwall's face along its own line, so however the two are turned to
+    # each other its water goes into the arch and both walls into the stone
+    # (cut square at the face, a reach met it at one corner and left a wedge
+    # of lawn between the water and the mouth). The barrel hides the rest.
+    pts = list(pts)
+    def on(a, b):
+        d = math.hypot(a[0] - b[0], a[1] - b[1])
+        return (a[0] + (a[0] - b[0]) / d * 0.9, a[1] + (a[1] - b[1]) / d * 0.9, a[2])
+    if start == 'culvert':
+        pts.insert(0, on(pts[0], pts[1]))
+    if end == 'culvert':
+        pts.append(on(pts[-1], pts[-2]))
     fr = brook_frames(pts, prev, nxt)
     draped('brook', lambda: (brook_channel(fr, start, end, near=road), brook_ends(fr, start, end)))
 
@@ -12594,7 +12609,9 @@ def springhouse():
         cx0, cx1, cz = HX + D / 2 + 0.1, -0.3, AZ
         ya = yb = 0.0
         for z0, z1, row in ((-0.55, -0.2, 28), (-0.2, 0.2, None), (0.2, 0.55, 28)):
-            o = skin([(cx0, ya + 0.12, cz + z0), (cx0, ya + 0.12, cz + z1), (cx1, yb + 0.12, cz + z1), (cx1, yb + 0.12, cz + z0)],
+            # (a finger over the pool's water, which it runs out onto: at the
+            # water's own height the two sheets flickered through each other)
+            o = skin([(cx0, ya + 0.19, cz + z0), (cx0, ya + 0.19, cz + z1), (cx1, yb + 0.19, cz + z1), (cx1, yb + 0.19, cz + z0)],
                      [(0, 1, 2, 3)], 'white' if row is None else 'sky', (0, 1, 0))   # the brook's edge blue
             if row is not None:
                 rowed(o, row)
@@ -12609,8 +12626,11 @@ def springhouse():
         # the brook's channel, into a pipe under a low headwall; it comes out
         # beyond the road as the brook's head (set-brook-a)
         OX0, OX1 = PX + PR - 0.3, 7.5
+        before = set(bpy.context.scene.objects)
         brook_channel(brook_frames([(OX0 + (OX1 - OX0) * t / 4, PZ, 1.1) for t in range(5)], None, None),
                       'join', 'culvert', k=SPRING_GROW)
+        for o in set(bpy.context.scene.objects) - before:   # a finger under the pool's water and coping,
+            o.location.z -= 0.06                            # which it starts under: level with them, they flickered
         hx = OX1 + 0.4
         rowed(box((0.8, 1.15, 3.6), (hx, 0.5, PZ), 'grey'), 20)          # a low headwall, no block at the kerb
         rowed(box((1.0, 0.22, 3.9), (hx, 1.12, PZ), 'grey'), 12)
