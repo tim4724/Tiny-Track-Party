@@ -18802,7 +18802,7 @@ def block_fortress():
             face = '+x' if sx > 0 else '-x'
             se = sx > 0 and sz < 0
             block_tower(sx * TX, sz * TZ, TSE if se else T, 4 if se else 3, n, 0x6cbf6c if (sx + sz) == 0 else 0xe66a5a, face,
-                        pennant='anim_flutter:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=-sz)   # over the court, clear of the ring
+                        pennant='anim_flutter:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=1)   # one wind over the castle: every cloth flies the king's banner's way
             n += 1
     # the gatehouse: a tower of four blocks either side of the opening, the
     # lintel over it, the dark gateway, the drawbridge down on the floor
@@ -19788,8 +19788,10 @@ def snake_head():
     # down it, eyes up and its red tongue out. No taller than a pawn: a
     # rearing one over the deck was too big.
     G, Y = SNAKE
-    for x, z, yaw in ((3.9, -4.0, 0.8), (2.9, -2.9, 0.8)):                         # the neck, out from the kerb
-        box((2.0, 1.15, 1.5), (x, 0.575, z), G, yaw=yaw)
+    bar((5.05, 0.575, -5.05), (1.5, 0.575, -1.5), 2.0, 1.15, G)                    # the neck, one length from the kerb into the coil
+    for f in (0.3, 0.62):
+        x = 4.75 - 3.25 * f
+        bar((x + 0.15, 0.6, -x - 0.15), (x - 0.15, 0.6, -x + 0.15), 2.1, 1.22, Y)
     torus(1.75, 0.62, (0.0, 0.62, 0.0), G, segs=14, minor=6)                       # the coil, two turns
     torus(1.55, 0.6, (0.0, 1.78, 0.0), G, segs=14, minor=6)
     for a in range(0, 360, 60):                                                    # the road's own yellow bands
@@ -19876,7 +19878,14 @@ def snake_board():
     for i in range(NX):
         for j in range(NZ):
             x0, z0 = X0 + i * C, Z0 + j * C
-            col = CREAMC if (i + j) % 2 else TOY[(i + 3 * j) % 4]
+            # Away from the lap the racer only ever sees the board far off
+            # and at a grazing angle, where a strong check breaks into
+            # dashes that crawl: there the squares are two near tones.
+            mx, mz = x0 + C / 2, z0 + C / 2
+            dx = max(0.0 - mx, mx - 81.6, 0.0) if not 0.0 < mx < 81.6 else -min(mx, 81.6 - mx)
+            dz = max(-14.4 - mz, mz - 80.0, 0.0) if not -14.4 < mz < 80.0 else -min(mz + 14.4, 80.0 - mz)
+            far = (math.hypot(max(dx, 0.0), max(dz, 0.0)) if max(dx, dz) > 0 else -max(dx, dz)) > 11.0
+            col = CREAMC if (i + j) % 2 else (0xf2bf99 if far else TOY[(i + 3 * j) % 4])
             add(Y1, col, [(x0, z0), (x0 + C, z0), (x0 + C, z0 + C), (x0, z0 + C)])
     B = 1.6                                       # the board's blue edge
     xa, xb, za, zb = X0, X0 + NX * C, Z0, Z0 + NZ * C
