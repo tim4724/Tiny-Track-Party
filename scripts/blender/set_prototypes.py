@@ -12916,75 +12916,136 @@ def mine_loco(at, yaw=0.0):
             cyl(0.26, 0.16, at2(sx * 0.6 - (0.16 if sx > 0 else 0), 0.3, 0.1 + sz * 0.6), ROPE, segs=8, axis='across', yaw=yaw)
 
 # ---- GULCH: the stamp mill and its ore tramway ----------------------------------------
-# Across the start straight from the adit, the mine's stamp mill cascades down
-# its spoil bank toward the road, the way a mill is built down a hillside: the
-# ore bin under the tramway's terminal at the top, the battery house with its
-# five stamps lifting and dropping in turn open to the road below it, the
-# tables' house at the foot, each a lean-to roof of tin stepping down from the
-# one above, the boiler house and its iron stack beside them. The bank is the
-# mill's own waste rock, geometry falling to the yard round it. Buckets ride
-# the tramway's two ropes from the terminal over the start straight to the
-# tower beside the adit and back, the ropes sagging between, a bucket's foot
-# never under OVER_GAP (3 u) plus a margin over the deck where it crosses it.
-# Authored in metres, grown REAL; +X to the road and on over it. Square-edged
-# (plain_parts): at a metre a post, the chamfer cannot be seen.
+# Across the start straight from the adit, the mine's stamp mill steps down
+# its hill toward the road the way a gravity mill is built, each stage under
+# its own roof a floor below the one before: at the top the ore bin, the
+# tramway's terminal house standing on it, where the buckets tip; the crusher
+# house at the bin's foot; the battery house, tallest of the roofs, its ten
+# stamps dropping in a battery's order inside frames that stand clear of
+# its ridge, seen through the openings in its front; the tables' house
+# below it, whose launder carries the tailings out (tailings_dump). Beside
+# the battery the engine house and its iron stack, behind the bin the water
+# tank and its pipe down to the battery. The hill is the mill's own bank,
+# levelled where its houses stand and cribbed where a level drops to the
+# next. Buckets ride the tramway's two ropes from the terminal over the
+# start straight to the tower beside the adit and back, the ropes sagging
+# between, a bucket's foot never under OVER_GAP (3 u) plus a margin over the
+# deck where it crosses it, nor near a roof under it. Authored in metres,
+# grown REAL; +X to the road and on over it. Square-edged (plain_parts): at
+# a metre a post, the chamfer cannot be seen. Its colours are the materials:
+# weathered board walls (`bark`), red-brown timber, rusted iron roofs, iron.
 
 IRON, RUST, TIN = 0x38383d, 0xb06041, 'grey'
+BOARD = 0x9a7b55   # weathered board walls, lighter than the timbers that frame them (the canyon's other pieces)
+MILL_WALL = 'bark'
 
-def stamp_battery(x, y, z0, n=5, pitch=2.2):
-    """A battery of stamps across Z at x: the frame, the cam shaft over it and
-    `n` stems with their shoes, each lifting and dropping a little in turn."""
-    half = (n - 1) * pitch / 2
-    for s in (-1, 1):
-        box((0.6, 6.4, 0.6), (x - 0.6, y + 3.2, z0 + s * (half + 1.2)), TIMBER)
-        box((0.6, 6.4, 0.6), (x + 0.9, y + 3.2, z0 + s * (half + 1.2)), TIMBER)
-    box((2.2, 0.6, 2 * half + 3.2), (x + 0.15, y + 6.2, z0), TIMBER)                 # the cap sill
-    box((2.2, 0.5, 2 * half + 3.2), (x + 0.15, y + 0.25, z0), 'grey')                # the mortar
-    cyl(0.45, 2 * half + 3.4, (x + 0.15, y + 6.9, z0 - half - 1.7), IRON, segs=8, axis='along')  # cam shaft
-    for k in range(n):
-        z = z0 - half + k * pitch
-        with animated('anim_bob:h=1.2:p=1.4:b=1:o=%.2f#stamp%d' % (k / n, k), (x + 0.15, y + 0.5, z)):
-            box((0.7, 5.0, 0.7), (x + 0.15, y + 3.4, z), 'cream')                    # stem
-            box((1.3, 1.2, 1.3), (x + 0.15, y + 1.1, z), IRON)                       # shoe
-            box((1.0, 0.6, 1.0), (x + 0.15, y + 5.3, z), 'red')                      # tappet
+# The mill's levels (metres over the yard), each a step down the hill from
+# the one before: the hilltop the bin and the tank stand on, the crusher's
+# floor, the battery floor, the tables' floor. The tailings' launder leaves
+# the tables at TABLES plus a little (tailings_dump).
+MILL_BIN, MILL_CRUSHER, MILL_BATTERY, MILL_TABLES = 18.5, 15.5, 10.5, 7.0
+MILL_W = 14.0                  # the mill houses' width across Z
+STROKE = 0.15                  # a stamp's lift, WORLD units (anim_bob's h): 0.6 m, inside its frame
 
-BOARD = 0x9a7b55   # weathered board walls, lighter than the timbers that frame them
-
-def lean_to(x0, x1, w, y, hb, hf, open_front=False, windows=0, roof=TIN):
-    """A mill house from x0 (its back, uphill) to x1 (its front, toward the
-    road), w across Z, standing at y: board walls hf tall at the front and
-    hb at the back and the gables between them ONE solid, a tin roof lying
-    on it with an eave all round, a fascia under its front edge, timber
-    posts at its corners. `open_front` stops the walls short and carries the
-    roof on over the open bay on posts and a beam. Returns the roof's height
-    at its front edge."""
-    d = x1 - x0
-    back = x0 + (d * 0.45 if open_front else d)       # an open front: the walls stop short
-    hm = hb + (hf - hb) * (back - x0) / d             # the walls' height where they stop
-    sec = ((x0, 0.0), (back, 0.0), (back, hm), (x0, hb))
+def mill_shed(x0, x1, w, y, hb, hf, windows=0):
+    """A mill house from x0 (its back, uphill, against the level above) to
+    x1 (its front, toward the road), `w` across Z, standing at y: board
+    walls hf tall at the front and hb at the back, walls and gables ONE
+    solid, a lean-to roof of rusted iron on it running out over the front
+    and the sides but not back into the house above, timber posts at its
+    front corners, `windows` dark in timber frames along its front."""
+    sec = ((x0, 0.0), (x1, 0.0), (x1, hf), (x0, hb))
     verts = [(x, y + h, -w / 2) for x, h in sec] + [(x, y + h, w / 2) for x, h in sec]
-    solid(verts, [(0, 1, 2, 3), (7, 6, 5, 4)] + [(i, 4 + i, 4 + (i + 1) % 4, (i + 1) % 4) for i in range(4)], BOARD)
-    a = math.atan2(hb - hf, d)
-    ov, t = 0.9, 0.4
-    run = math.hypot(d, hb - hf) + 2 * ov
-    box((run, t, w + 2 * ov), ((x0 + x1) / 2 + math.sin(a) * t / 2, y + (hb + hf) / 2 + math.cos(a) * t / 2, 0.0), roof, roll=a)
-    box((0.3, 0.7, w + 2 * ov), (x1 + ov * math.cos(a), y + hf - ov * math.sin(a) - 0.2, 0.0), TIMBER)   # the fascia
+    solid(verts, [(0, 1, 2, 3), (7, 6, 5, 4)] + [(i, 4 + i, 4 + (i + 1) % 4, (i + 1) % 4) for i in range(4)], MILL_WALL)
+    a = math.atan2(hb - hf, x1 - x0)
+    L, ov, t = math.hypot(x1 - x0, hb - hf), 0.6, 0.3
+    box((L + ov, t, w + 2 * ov), ((x0 + x1) / 2 + (x1 - x0) / L * ov / 2 + math.sin(a) * t / 2,
+                                  y + (hb + hf) / 2 + (hf - hb) / L * ov / 2 + math.cos(a) * t / 2, 0.0), RUST, roll=a)
     for sz in (-1, 1):
-        for x, h in (() if LITE else ((x0, hb), (back, hm))):                     # the corner posts
-            box((0.5, h, 0.5), (x, y + h / 2, sz * w / 2), TIMBER)
-        if open_front:
-            box((0.6, hf, 0.6), (x1 - 0.3, y + hf / 2, sz * (w / 2 - 0.3)), TIMBER)
-    if open_front:
-        box((0.6, 0.6, w), (x1 - 0.3, y + hf - 0.3, 0.0), TIMBER)
+        box((0.45, hf, 0.45), (x1, y + hf / 2, sz * w / 2), TIMBER)
     for k in range(windows):
-        window(local(0.0, 0.0, 0.0), 0.0, x1, y + hf * 0.55, -w / 2 + w * (k + 0.5) / windows, w=1.4, h=1.6)
-    return y + hf
+        mill_window(x1, y + hf * 0.55, -w / 2 + w * (k + 0.5) / windows, 1.5, 1.7)
+
+def mill_window(x, y, z, w, h, face='+x'):
+    """A window on a wall at x (face '+x') or z (face '+z' / '-z'): a timber
+    frame standing proud, the dark glass in it."""
+    if face == '+x':
+        box((0.16, h + 0.4, w + 0.4), (x + 0.06, y, z), TIMBER)
+        box((0.16, h, w), (x + 0.12, y, z), 'slate')
+    else:
+        s = 1 if face == '+z' else -1
+        box((w + 0.4, h + 0.4, 0.16), (x, y, z + s * 0.06), TIMBER)
+        box((w, h, 0.16), (x, y, z + s * 0.12), 'slate')
+
+def mill_gable_wall(x0, x1, z, y0, he, hr):
+    """A board end wall at z, from x0 to x1, he tall to its eaves and its
+    gable rising to hr at the middle: one thin solid."""
+    xm = (x0 + x1) / 2
+    sec = ((x0, y0), (x1, y0), (x1, he), (xm, hr), (x0, he))
+    verts = [(x, y, z - 0.15) for x, y in sec] + [(x, y, z + 0.15) for x, y in sec]
+    solid(verts, [(0, 1, 2, 3, 4), (9, 8, 7, 6, 5)] + [(i, 5 + i, 5 + (i + 1) % 5, (i + 1) % 5) for i in range(5)], MILL_WALL)
+
+def stamp_battery(x, y):
+    """A ten-stamp mill's two batteries of five stamps, in a row across Z at
+    x on the battery floor at y: each mortar on its block,
+    each stem rising out of it through two guides to under a cap on posts,
+    the one cam shaft on the uphill side lifting each by its tappet. The
+    stamps drop in a battery's order (1-3-5-2-4), a lift of STROKE: at the
+    top of it a stem's head is still under the cap. A stamp and its fellow
+    in the other battery keep step, one moving part (a draw) between them."""
+    zs, n, pitch = (-3.05, 3.05), 5, 1.0
+    half = (n - 1) * pitch / 2
+    L = 2 * half + 1.6                                                             # a mortar's length
+    TOP = 7.6                                                                      # the cap's underside over the floor
+    for z0 in zs:
+        box((2.4, 0.6, L + 0.8), (x, y + 0.3, z0), 'slate')                        # its block
+        box((1.4, 1.1, L), (x, y + 1.15, z0), IRON)                               # the mortar
+        for s in (-1, 1):
+            for dx in (-0.85, 0.85):
+                box((0.55, TOP + 0.5, 0.55), (x + dx, y + (TOP + 0.5) / 2, z0 + s * (half + 0.85)), TIMBER)
+        box((2.3, 0.5, L + 1.2), (x, y + TOP + 0.25, z0), TIMBER)                 # the cap
+        for gy in (3.4, 6.2):                                                      # the guides
+            for dx in (-0.55, 0.55):
+                box((0.3, 0.45, L + 1.0), (x + dx, y + gy, z0), TIMBER)
+    sx = x - 1.45                                                                  # the cam shaft behind the frames
+    z0, z1 = min(zs) - half - 1.6, max(zs) + half + 1.6
+    cyl(0.3, z1 - z0, (sx, y + 4.2, z0), IRON, segs=8, axis='along', stem=True)
+    cyl(1.3, 0.45, (sx, y + 4.2, z1 - 0.45), IRON, segs=12, axis='along')          # its pulley, belted from the engine
+    order = (0, 3, 1, 4, 2)
+    for k in range(n):
+        with animated('anim_bob:h=%.2f:p=0.7:b=1:o=%.2f#stamp%d' % (STROKE, order[k] / n, k), (x, y + 1.7, zs[0] - half + k * pitch)):
+            for zc in zs:
+                z = zc - half + k * pitch
+                box((0.42, 5.6, 0.42), (x, y + 1.0 + 2.8, z), 'grey')            # the stem, its foot in the mortar
+                box((0.75, 0.45, 0.75), (x, y + 4.7, z), IRON)                     # its tappet
+        for zc in zs:
+            box((1.0, 0.3, 0.4), (sx + 0.55, y + 4.25, zc - half + k * pitch), IRON)   # its cam
+    return y + TOP + 0.5
 
 def ore_bucket(at):
     x, y, z = at
     box((0.35, 2.2, 0.35), (x, y - 1.1, z), IRON)                                    # hanger
     box((2.4, 1.8, 2.0), (x, y - 3.1, z), RUST)
     box((1.6, 0.5, 1.3), (x, y - 2.0, z), 0xffc044)                                  # ore heaped in it
+
+def mill_bank_y(x, z):
+    """The mill's hill at (x, z) (tailings_dump laps its -Z flank): a round
+    hill rising behind the mill to its crest, and cut into its face the
+    mill's levels, one under the other down to the yard, their flanks
+    falling away down the hill's sides."""
+    xs = (-33.0, -26.0, -10.9, -10.1, -6.4, -5.6, 4.6, 5.4, 13.5, 17.5, 22.5)
+    ys = (9.5, MILL_BIN, MILL_BIN, MILL_CRUSHER, MILL_CRUSHER, MILL_BATTERY, MILL_BATTERY, MILL_TABLES, MILL_TABLES, 3.2, -1.0)
+    if x <= xs[0]:
+        p = ys[0] - 0.8 * (xs[0] - x)
+    elif x >= xs[-1]:
+        p = ys[-1]
+    else:
+        i = next(i for i in range(len(xs) - 1) if xs[i + 1] >= x)
+        p = ys[i] + (ys[i + 1] - ys[i]) * (x - xs[i]) / (xs[i + 1] - xs[i])
+    f = max(0.0, min(1.0, 1 - max((-9.0 - z) / 18.0, (z - 19.0) / 15.0, 0.0)))
+    f = f * f * (3 - 2 * f)
+    d = ((x + 34.0) / 27.0) ** 2 + ((z - 5.0) / 32.0) ** 2                    # the hill behind, its crest at x -34
+    return max(p * f - 1.2 * (1 - f), 21.0 * max(0.0, 1 - d) ** 2 - 1.2)
 
 # Where the mine portal's tipple stands in the stamp mill's frame, metres (the
 # portal's piece is placed MILL_PORTAL world units on down the track and as
@@ -12996,65 +13057,151 @@ MILL_TIPPLE = ((27.0 - 6.0 * 0.35) / REAL, 6.6 * 0.35 / REAL, -MILL_PORTAL / REA
 @piece(REAL)
 @plain
 def stamp_mill():
-    ROPE_Y, SAG, GAP = 24.0, 4.0, 3.0              # the ropes at their towers, their sag, each one's offset across
-    T0 = -11.0                                     # the terminal's bull wheel, along +X
+    ROPE_Y, SAG, GAP = 27.0, 4.0, 3.0              # the ropes at their towers, their sag, each one's offset across
+    T0 = -16.0                                     # the terminal's bull wheel, along +X
     OUT = 27.0 / REAL                              # the tower beside the adit
-    # the bank: a heap of the mill's pale tailings, level where its houses stand,
-    # rough slopes between, falling away behind and to the yard either side
-    # and spilling a fan of tailings toward the road
-    xs = (-40.0, -30.0, -25.0, -9.0, -6.5, 2.0, 4.0, 11.5, 16.5)
-    ys = (-1.2, 6.5, 10.5, 10.5, 6.0, 6.0, 2.4, 2.4, -1.2)
-    zs = (-27.0, -19.0, -12.0, 0.0, 12.0, 19.0, 27.0)
+    W = MILL_W
+    # the bank: the stepped profile, rough on its slopes, its pads level
+    xs = (-63.0, -56.0, -49.0, -42.0, -36.0, -31.0, -26.0, -18.0, -10.9, -10.1, -6.4, -5.6, -1.0, 4.6, 5.4, 9.5, 13.5, 17.5, 22.5)
+    zs = (-34.0, -28.0, -22.0, -17.0, -13.0, -9.0, -4.0, 0.0, 4.0, 9.0, 14.0, 19.0, 24.0, 29.0, 34.0, 40.0)
     n = len(xs)
     def bank(i, j):
-        f = max(0.0, min(1.0, (27.0 - abs(zs[j])) / 12.0))
-        f = f * f * (3 - 2 * f)
-        pad = 0 < i < n - 1 and (ys[i] == ys[i - 1] or ys[i] == ys[i + 1]) and f == 1.0
-        rough = 0.0 if pad or i in (0, n - 1) or j in (0, len(zs) - 1) else 1.0
-        return (xs[i] + rough * 0.9 * math.sin(3.1 * j + 1.7 * i),
-                ys[i] * f - 1.2 * (1 - f) + rough * 0.7 * math.sin(2.3 * j - 1.1 * i + 0.4), zs[j])
+        x, z = xs[i], zs[j]
+        y = mill_bank_y(x, z)
+        level = -9.0 <= z <= 19.0 and -26.0 <= x <= 13.5
+        rough = 0.0 if level or i in (0, n - 1) or j in (0, len(zs) - 1) else 1.0
+        return (x + rough * 1.1 * math.sin(3.1 * j + 1.7 * i), y + rough * 0.9 * math.sin(2.3 * j - 1.1 * i + 0.4),
+                z + rough * 0.8 * math.sin(1.9 * i + 0.7 * j))
     verts = [bank(i, j) for j in range(len(zs)) for i in range(n)]
     ground_poly(verts, [(j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i)
                         for j in range(len(zs) - 1) for i in range(n - 1)], 'tan')
-    # the ore bin at the top, the tramway's terminal standing over its front
-    # under a roof of its own: the buckets come in under it and tip
-    top = lean_to(-24.0, -10.0, 13.0, 10.5, 10.0, 7.0, roof=RUST)
+    # the cribbing where a level drops to the next, beside the houses
+    for cx, y0, y1, zh in ((-10.65, MILL_CRUSHER, MILL_BIN, 4.5), (-6.15, MILL_BATTERY, MILL_CRUSHER, W / 2),
+                           (5.15, MILL_TABLES, MILL_BATTERY, W / 2)):
+        for z0, z1 in ((-9.0, -zh), (zh, 19.0)):
+            box((0.5, y1 - y0 + 0.3, z1 - z0), (cx, (y0 + y1) / 2 + 0.15, (z0 + z1) / 2), TIMBER)
+            for k in range(1, 3):
+                box((0.7, 0.35, z1 - z0), (cx + 0.1, y0 + (y1 - y0) * k / 3, (z0 + z1) / 2), TIMBER)
+    # THE ORE BIN on the hilltop, the terminal house standing on it, open to
+    # the road where the ropes come in round the bull wheel; the buckets tip
+    # through its floor into the bin
+    BX0, BX1, BZ = -22.0, -10.5, 5.5
+    FL = ROPE_Y - 4.8                                                                  # the tipping floor
+    box((BX1 - BX0, FL - MILL_BIN, 2 * BZ), ((BX0 + BX1) / 2, (MILL_BIN + FL) / 2, 0.0), TIMBER)
+    for bx in (BX0, (BX0 + BX1) / 2, BX1):
+        for sz in (-1, 1):
+            box((0.7, FL - MILL_BIN, 0.7), (bx, (MILL_BIN + FL) / 2, sz * BZ), TIMBER)
+    box((BX1 - BX0 + 0.3, 0.45, 2 * BZ + 0.3), ((BX0 + BX1) / 2, MILL_BIN + 1.6, 0.0), TIMBER)   # its girt
+    TX0, TX1, TZ, TE = BX0 - 0.3, BX1 + 0.3, 6.0, ROPE_Y + 2.0
+    box((TX1 - TX0 + 0.6, 0.5, 2 * TZ + 0.6), ((TX0 + TX1) / 2, FL + 0.25, 0.0), TIMBER)   # its floor
+    box((0.3, TE - FL, 2 * TZ), (TX0, (FL + TE) / 2, 0.0), MILL_WALL)                    # the back wall
     for sz in (-1, 1):
-        for lx in (-14.0, -8.0):
-            box((0.7, ROPE_Y + 4.2 - top, 0.7), (lx, (ROPE_Y + 4.2 + top) / 2, sz * 4.6), TIMBER)
-        strut((-14.0, top + 1.0, sz * 4.6), (-8.0, ROPE_Y - 2.0, sz * 4.6), 0.45, TIMBER)
-    box((7.4, 0.5, 10.4), (-11.0, ROPE_Y - 4.6, 0.0), TIMBER)                         # the tipping floor
-    frame_house((-11.0, ROPE_Y + 3.6, 0.0), math.pi / 2, 10.4, 7.4, 0.8, 2.4, BOARD, RUST, k=4.0)
-    cyl(GAP + 0.3, 0.5, (T0, ROPE_Y - 0.25, 0.0), IRON, segs=14)                      # the bull wheel
-    # the battery house, open to the road, the battery under its roof's front
-    lean_to(-6.5, 3.0, 16.0, 6.0, 11.0, 7.4, open_front=True)
-    stamp_battery(1.0, 6.0, 0.0)
-    box((7.0, 0.5, 0.9), (-7.0, 13.2, -5.5), TIMBER, roll=0.45)                       # the ore chute down from the bin
-    # the boiler house beside it, its stack the mill's tallest thing
-    frame_house((-3.0, 6.0, 11.0), 0.0, 6.0, 5.0, 5.0, 2.6, BOARD, RUST, k=4.0, door=('+x', 0.0, 1.6, 3.2, TIMBER),
-                windows=(('+z', 0.0, 3.0, 1.4, 1.6),))
-    cyl(0.8, 19.0, (-4.6, 6.0, 12.4), IRON, segs=8, stem=True)
-    cyl(1.15, 0.7, (-4.6, 25.0, 12.4), IRON, segs=8)
-    marker('anim_smoke', (-4.6, 26.2, 12.4))
-    # the tables' house at the foot, its windows to the road
-    lean_to(4.0, 11.0, 14.0, 2.4, 7.0, 4.6, windows=3, roof=RUST)
-    # the terminal beside the adit: a tower of two splayed legs each side,
-    # braced, the ore house on its head under its own roof, where the
-    # buckets are filled; the mine's ore comes up to it from the tipple's bin
-    # in a boarded gallery on trestle legs
+        box((TX1 - TX0, TE - FL, 0.3), ((TX0 + TX1) / 2, (FL + TE) / 2, sz * TZ), MILL_WALL)
+        box((0.6, TE - FL, 0.6), (TX1, (FL + TE) / 2, sz * TZ), TIMBER)                     # the open end's posts
+    box((0.6, 0.7, 2 * TZ), (TX1, TE - 0.35, 0.0), TIMBER)                                 # and its lintel
+    RR = 2.4                                                                               # the gables' rise
+    for gx in (TX0, TX1):
+        sec = ((-TZ, TE), (TZ, TE), (0.0, TE + RR))
+        solid([(gx - 0.15, y, z) for z, y in sec] + [(gx + 0.15, y, z) for z, y in sec],
+              [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)], MILL_WALL)
+    a = math.atan2(RR, TZ)
+    sl = math.hypot(TZ, RR) + 0.6
+    for s in (-1, 1):                                                                      # its roof, the ridge along X
+        box((TX1 - TX0 + 1.2, 0.3, sl), ((TX0 + TX1) / 2, TE + RR - sl / 2 * math.sin(a) + 0.15 * math.cos(a),
+                                         s * (sl / 2 * math.cos(a) + 0.15 * math.sin(a))), RUST, pitch=-s * a)
+    cyl(GAP + 0.3, 0.5, (T0, ROPE_Y - 0.25, 0.0), IRON, segs=14)                          # the bull wheel
+    box((0.7, ROPE_Y - 0.25 - FL - 0.5, 0.7), (T0, (FL + 0.5 + ROPE_Y - 0.25) / 2, 0.0), TIMBER)   # on its post
+    # THE CRUSHER at the bin's foot, under a lean-to of its own; a covered
+    # chute on into the battery house's feed bins
+    mill_shed(-10.5, -6.8, 9.0, MILL_CRUSHER, 5.2, 4.0)
+    box((0.9, 1.0, 1.6), (-6.4, MILL_CRUSHER + 1.0, 0.0), MILL_WALL)
+    # THE BATTERY HOUSE, its floor a level down: walls round a battery that
+    # stands inside them, its roof's ridge over the frame, the battery seen
+    # through three openings in its front over the tables' roof
+    HX0, HX1, HE, HR = -6.0, 5.0, MILL_BATTERY + 7.0, MILL_BATTERY + 9.6                 # its back, front, eaves, ridge
+    xm = (HX0 + HX1) / 2
+    def under(x):                                                                       # the roof's underside
+        return HR - (HR - HE) * abs(x - xm) / ((HX1 - HX0) / 2)
+    BXP = 0.0
+    cap = stamp_battery(BXP, MILL_BATTERY)
+    assert cap + 0.5 < under(BXP + 1.15), 'the battery stands under its roof'
+    box((0.3, HE - MILL_BATTERY, W), (HX0, (MILL_BATTERY + HE) / 2, 0.0), MILL_WALL)       # the back wall
+    for sz in (-1, 1):
+        mill_gable_wall(HX0, HX1, sz * W / 2, MILL_BATTERY, HE, HR)
+        for wx in (-2.0, 2.5):
+            mill_window(wx, MILL_BATTERY + 4.6, sz * W / 2, 1.6, 2.0, face='+z' if sz > 0 else '-z')
+    SILL, HEAD = MILL_BATTERY + 2.1, MILL_BATTERY + 6.3                                  # the front's openings
+    box((0.3, SILL - MILL_BATTERY, W), (HX1, (MILL_BATTERY + SILL) / 2, 0.0), MILL_WALL)
+    box((0.3, HE - HEAD, W), (HX1, (HEAD + HE) / 2, 0.0), MILL_WALL)
+    for pz in (-6.525, -2.175, 2.175, 6.525):
+        box((0.3, HEAD - SILL, 0.95), (HX1, (SILL + HEAD) / 2, pz), MILL_WALL)
+        box((0.45, HEAD - SILL + 0.4, 0.45), (HX1 + 0.12, (SILL + HEAD) / 2, pz), TIMBER)
+    box((0.45, 0.45, W + 0.4), (HX1 + 0.12, HEAD + 0.1, 0.0), TIMBER)
+    a = math.atan2(HR - HE, (HX1 - HX0) / 2)
+    sl = math.hypot((HX1 - HX0) / 2, HR - HE) + 0.6
+    for s in (-1, 1):
+        box((sl, 0.3, W + 1.2), (xm + s * (sl / 2 * math.cos(a) + 0.15 * math.sin(a)),
+                                 HR - sl / 2 * math.sin(a) + 0.15 * math.cos(a), 0.0), RUST, roll=s * a)
+    box((0.5, 0.35, W + 1.2), (xm, HR + 0.3, 0.0), RUST)                                  # the ridge's cap
+    # inside: the feed bins behind the battery the crusher's chute fills,
+    # their chutes to the mortar, the plates in front of it
+    box((3.8, 3.4, 12.6), (-4.0, MILL_BATTERY + 3.4, 0.0), MILL_WALL)
+    for pz in (-5.6, 0.0, 5.6):
+        box((0.5, 1.7, 0.5), (-3.6, MILL_BATTERY + 0.85, pz), TIMBER)
+    box((1.8, 0.3, 12.4), (-1.4, MILL_BATTERY + 2.1, 0.0), TIMBER, roll=0.45)
+    for pz in (-3.05, 3.05):
+        box((2.8, 0.15, 5.4), (2.3, MILL_BATTERY + 1.25, pz), 'salmon', roll=0.22)     # the copper plates
+        box((2.8, 1.0, 5.8), (2.3, MILL_BATTERY + 0.6, pz), TIMBER)
+    # THE TABLES' HOUSE a level down again, its windows to the road; the
+    # launder leaves its -Z end with the tailings (tailings_dump)
+    mill_shed(HX1, 13.5, W, MILL_TABLES, SILL - MILL_TABLES - 0.45, 3.4, windows=3)
+    # THE ENGINE HOUSE beside the battery, belted to its cam shaft; the
+    # boiler's iron stack, guyed, the mill's tallest thing, its smoke
+    frame_house((-2.0, MILL_BATTERY, 12.5), 0.0, 8.0, 7.0, 4.6, 2.2, MILL_WALL, RUST, k=4.0, sill=TIMBER, trim=TIMBER,
+                door=('+x', 0.0, 2.4, 3.2, IRON), windows=(('+z', 1.8, 2.8, 1.4, 1.7), ('+x', 2.4, 2.8, 1.2, 1.6)))
+    SX, SZ, SH = -3.6, 18.0, 25.5
+    box((2.6, 1.2, 2.6), (SX, MILL_BATTERY + 0.6, SZ), 'slate')
+    cyl(0.85, SH, (SX, MILL_BATTERY, SZ), IRON, segs=10, stem=True)
+    cyl(1.1, 0.6, (SX, MILL_BATTERY + SH - 0.6, SZ), IRON, segs=10)
+    box((1.1, 1.1, SZ - 16.0), (SX, MILL_BATTERY + 3.2, (SZ + 16.0) / 2 - 0.4), IRON)     # the breeching into it
+    for ga in (() if LITE else (0.5, 2.3, 4.2)):                                          # its guys
+        strut((SX, MILL_BATTERY + SH * 0.7, SZ), (SX + 9.0 * math.cos(ga), mill_bank_y(SX + 9.0 * math.cos(ga), SZ + 9.0 * math.sin(ga)),
+                                                SZ + 9.0 * math.sin(ga)), 0.22, ROPE)
+    marker('anim_smoke:s=2.4', (SX, MILL_BATTERY + SH + 0.3, SZ))
+    for i in range(0 if LITE else 3):                                                     # cordwood for the boiler
+        for j in range(3 - i):
+            cyl(0.38, 2.8, (0.6, MILL_BATTERY + 0.38 + 0.68 * i, 17.4 + 0.76 * j + 0.38 * i), 0x8a6a46, segs=6, axis='across', stem=True)
+    # THE WATER: a staved tank on the hilltop behind the bin, its pipe along
+    # the top and in through the battery house's back wall
+    WX, WZ, WR, WH = -21.5, 10.0, 3.4, 4.4
+    box((2 * WR + 0.6, 0.6, 2 * WR + 0.6), (WX, MILL_BIN + 0.3, WZ), TIMBER)
+    cyl(WR, WH, (WX, MILL_BIN + 0.6, WZ), 0x8a6a46, segs=14)
+    for hy in (() if LITE else (1.2,)) + (3.4,):
+        cyl(WR + 0.1, 0.3, (WX, MILL_BIN + 0.6 + hy, WZ), IRON, segs=14)
+    cyl(WR + 0.4, 1.3, (WX, MILL_BIN + 0.6 + WH, WZ), RUST, r2=0.4, segs=14)
+    PY, PZ = MILL_BIN + 1.0, 6.4
+    pipe = [(WX + WR - 0.3, PY, WZ), (WX + WR - 0.3, PY, PZ), (-10.7, PY, PZ), (-8.6, MILL_CRUSHER + 0.9, PZ), (HX0 - 0.1, MILL_CRUSHER + 0.9, PZ)]
+    for a_, b_ in zip(pipe, pipe[1:]):
+        rod(a_, b_, 0.32, IRON, segs=6)
+    box((0.5, PY - MILL_BIN, 0.5), (-14.0, (MILL_BIN + PY) / 2 - 0.15, PZ), TIMBER)
+    # THE TOWER beside the adit: two splayed legs each side, braced, the ore
+    # house on its head under its own roof, where the buckets are filled; the
+    # mine's ore comes up to it from the tipple's bin in a boarded gallery on
+    # trestle legs
     for s in (-1, 1):
         for lx in (-3.0, 3.0):
             strut((OUT + lx, -2.0, s * 4.8), (OUT + lx * 0.4, ROPE_Y - 4.6, s * (GAP + 1.0)), 0.9, TIMBER)
         strut((OUT - 2.6, 7.0, s * 4.4), (OUT + 2.6, 7.0, s * 4.4), 0.55, TIMBER)
         strut((OUT - 2.6, 7.0, s * 4.4), (OUT + 1.6, 15.0, s * 4.1), 0.45, TIMBER)
+        strut((OUT + 2.6, 15.0, s * 4.1), (OUT - 1.4, ROPE_Y - 5.0, s * 3.9), 0.45, TIMBER)
     box((8.6, 0.6, 2 * GAP + 4.0), (OUT + 1.5, ROPE_Y - 4.4, 0.0), TIMBER)            # its floor
     box((3.0, 6.4, 2 * GAP + 3.2), (OUT + 3.9, ROPE_Y - 0.9, 0.0), BOARD)             # the ore house behind the sheaves
     frame_house((OUT + 1.5, ROPE_Y + 2.3, 0.0), math.pi / 2, 2 * GAP + 4.4, 8.8, 0.7, 2.2, BOARD, RUST, k=4.0)
     for s in (-1, 1):
         box((0.5, 6.8, 0.5), (OUT - 2.4, ROPE_Y - 0.9, s * (GAP + 1.6)), TIMBER)
         cyl(1.2, 0.5, (OUT - 0.6, ROPE_Y + 0.1, s * GAP - 0.25), IRON, segs=10, axis='along')
-    TX, TY, TZ = MILL_TIPPLE
-    ga, gb = (TX, TY + 1.0, TZ), (OUT + 3.9, ROPE_Y - 2.6, -GAP - 1.4)
+    TX, TY, TZ_ = MILL_TIPPLE
+    ga, gb = (TX, TY + 1.0, TZ_), (OUT + 3.9, ROPE_Y - 2.6, -GAP - 1.4)
     beam(ga, gb, 2.0, BOARD)                                                          # the gallery
     beam((ga[0], ga[1] + 1.15, ga[2]), (gb[0], gb[1] + 1.15, gb[2]), 2.5, RUST, d=0.3)
     for f in (0.36, 0.7):                                                              # its trestle legs
@@ -13064,81 +13211,181 @@ def stamp_mill():
     # the two ropes sagging over the road, fat enough to read in a split cell
     ropes = [sag((T0, ROPE_Y, s * GAP), (OUT - 0.6, ROPE_Y, s * GAP), SAG, n=7) for s in (-1, 1)]
     for pts in ropes:
-        for a, b in zip(pts, pts[1:]):
-            strut(a, b, 0.6, 'dark')
+        for a_, b_ in zip(pts, pts[1:]):
+            strut(a_, b_, 0.6, 'dark')
+    # a bucket's foot clears every roof it passes over
+    for x, top in ((-8.6, MILL_CRUSHER + 5.5), (xm, HR + 0.5), (HX1 + 0.6, HE)):
+        t = (x - T0) / (OUT - 0.6 - T0)
+        assert ROPE_Y - SAG * 4 * t * (1 - t) - 4.0 > top + 0.5, 'a bucket through a roof at x %.1f' % x
     join_still('mill')
     # the buckets: out on one rope, round the tower's sheave, home on the
     # other, round the bull wheel
     loop = ropes[0] + [(OUT + 0.6, ROPE_Y, 0.0)] + ropes[1][::-1] + [(T0 - GAP, ROPE_Y, 0.0)]
     for i, p in enumerate(loop):
         marker('path_tram_%d' % i, p)
-    span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1])) * REAL
+    span = sum(math.dist(a_, b_) for a_, b_ in zip(loop, loop[1:] + loop[:1])) * REAL
     N = 8
     for k in range(N):
         with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (span / 1.2, k / N, k), loop[0]):
             ore_bucket(loop[0])
 
 # The mill's tailings: what is left of the ore once the stamps have crushed it
-# and the plates and tables have taken the gold. It leaves the battery house
-# as a pale slurry along a timber launder on its trestle and is tipped down
-# the yard beside the mill (its -Z), where it has built a flat-topped terrace
-# of fine grey sand out of the mill's own bank, the battery floor's height
-# less the launder's fall. The launder runs on out along its top to the spout
-# at its end, a wet tongue of fresh tailings down the face under it. Built in
-# the STAMP MILL'S frame (tracks.js stands both at one spot), in metres like
-# it: the launder starts under the battery house's roof, beside the battery.
+# and the plates and tables have taken the gold. It leaves the tables' house
+# as a pale slurry along a timber launder and runs out on its bents over the
+# heap it has built down the yard beside the mill (its -Z), out of the
+# mill's own bank: flat on top, a little under the launder, its faces
+# steep, a bench round them where an older stage stopped. Rain has cut
+# gullies down the faces, each spilling a fan at its foot; where the ore
+# carried pyrite, rust and yellow streak them. The launder runs to the far
+# end, where it pours: the coarse sand drops at the spout as a wet tongue
+# down the face, the fine slimes running on out over the yard in a pale
+# flat apron. Past it three cyanide vats stand on their sills, built to
+# work the old tailings over again. Nothing grows on it. Built in the
+# STAMP MILL'S frame (tracks.js stands both at one spot), in metres like it.
 @piece(REAL)
 @plain
 def tailings_dump():
-    LX, Y0, Y1, Z0, Z1 = 1.6, 6.3, 5.6, -6.0, -50.0                # the launder: its line, its fall, its run
-    CX, CZ, HX, HZ, RUN = -1.0, -35.5, 6.5, 14.5, 7.5               # the terrace's top (an oval) and its slopes' run
-    TOP0, TOP1 = 4.0, 3.6                                           # the top's height at its near and far end
-    N = 16 if LITE else 28
-    def wob(a, k):
-        return 1.0 + 0.09 * math.sin(3 * a + 1.3 + k) + 0.06 * math.sin(5 * a + 0.4 + 2 * k) + 0.04 * math.sin(8 * a + k)
-    def top_y(z):
-        return TOP0 + (TOP1 - TOP0) * min(1.0, max(0.0, (CZ + HZ - z) / (2 * HZ)))
+    L0, L1 = (11.0, MILL_TABLES + 0.85, -MILL_W / 2 - 0.2), (3.0, MILL_TABLES + 0.15, -53.0)   # the launder's line
+    AX, AZ, BX, BZ, R = 4.0, -15.0, 2.0, -44.0, 9.5                 # the heap's axis and its top's half-width
+    T0, T1 = MILL_TABLES - 0.3, MILL_TABLES - 0.85                  # the top's height at A and at B
+    K, BH, BW = 0.85, 3.0, 3.2                                      # its faces' slope, the bench's height and width
+    def wob(i):
+        return 1.0 + 0.07 * math.sin(2.3 * i + 0.7) + 0.05 * math.sin(5.1 * i + 2.0)
+    # the outline round the axis: +X side A to B, the far cap round B, the
+    # -X side B to A, the near cap round A (into the mill's bank)
+    ns, nc = (7, 6) if LITE else (11, 9)
+    ux, uz = BX - AX, BZ - AZ
+    ln = math.hypot(ux, uz)
+    ux, uz = ux / ln, uz / ln
+    nx, nz = -uz, ux                                                # +X side's normal (toward the road)
+    if nx < 0:
+        nx, nz = -nx, -nz
+    outline = []                                                     # (foot x, foot z, t, normal x, normal z)
+    for i in range(ns):
+        t = i / ns
+        outline.append((AX + (BX - AX) * t, AZ + (BZ - AZ) * t, t, nx, nz))
+    base = math.atan2(nz, nx)
+    for i in range(nc):
+        a = base - math.pi * i / nc
+        outline.append((BX, BZ, 1.0, math.cos(a), math.sin(a)))
+    for i in range(ns):
+        t = 1.0 - i / ns
+        outline.append((AX + (BX - AX) * t, AZ + (BZ - AZ) * t, t, -nx, -nz))
+    for i in range(nc):
+        a = base + math.pi - math.pi * i / nc
+        outline.append((AX, AZ, 0.0, math.cos(a), math.sin(a)))
+    M = len(outline)
+    def top_y(t):
+        return T0 + (T1 - T0) * t
+    # where the launder pours (the far cap, toward L1) and its gullies
+    spout = min(range(M), key=lambda i: math.hypot(outline[i][0] + R * outline[i][3] - L1[0],
+                                                     outline[i][1] + R * outline[i][4] - L1[2]))
+    near = set(range(ns + nc + ns + 1, M)) | {0, ns + nc + ns}      # the near cap, in the bank: no bench, no gully
+    gul, last = {}, -9                                              # the gullies, uneven, each its depth
+    for i in range(M):
+        if i in near or abs(i - spout) <= 1 or i - last < 2 or jitter(i, 3, 7.0) > 0.05:
+            continue
+        gul[i], last = 0.65 + 0.35 * (jitter(i, 5, 2.0) + 0.5), i
+    rust, yellow = set(list(gul)[::3]), set(list(gul)[1::3])       # the gullies the pyrite stains
     rings = []
-    for i in range(N):
-        a = 2 * math.pi * i / N
-        c, s = math.cos(a), math.sin(a)
-        tx, tz = CX + HX * wob(a, 0.0) * c, CZ + HZ * wob(a, 0.0) * s
-        yt = top_y(tz)
-        mx, mz = CX + (HX + 0.5 * RUN) * wob(a, 1.7) * c, CZ + (HZ + 0.5 * RUN) * wob(a, 1.7) * s
-        fx, fz = CX + (HX + RUN) * wob(a, 0.6) * c, CZ + (HZ + RUN) * wob(a, 0.6) * s
-        rings.append(((fx, -0.3, fz), (mx, 0.55 * yt - 0.1 * math.sin(4 * a), mz), (tx, yt, tz), a))
-    def off(a):                                                     # how far round from under the spout
-        return abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2)))
-    slope, fresh, top = [], [], []
-    for (f0, m0, t0, a0), (f1, m1, t1, a1) in zip(rings, rings[1:] + rings[:1]):
-        a = (a0 + a1) / 2 if a1 > a0 else a0
-        (fresh if off(a) < 0.42 else slope).append((m0, m1, f1, f0))     # wound out of the heap; the wet
-        (fresh if off(a) < 0.22 else slope).append((t0, t1, m1, m0))     # tongue fanning down from the spout
-        top.append((t1, t0, (CX, top_y(CZ) + 0.25, CZ)))
-    for polys, (color, row) in ((slope, ('gravel', 12)), (fresh, ('gravel', 31)), (top, ('gravel', 0))):
-        for o in colored_faces([(color, list(q)) for q in polys], 'dump'):
+    for i, (fx, fz, t, ox, oz) in enumerate(outline):
+        T = top_y(t)
+        r0 = R * wob(i)
+        a1 = (T - BH) / K
+        g = gul.get(i, 0.0)
+        bench = 0.0 if i in near else BW
+        prof = [(r0 - 1.7 * g, T - 0.9 * g),                        # the top's edge, a gully's head cut back
+                (r0 + a1 * 0.5 - 1.7 * g, (T + BH) / 2 - 1.3 * g),
+                (r0 + a1 - 0.8 * g, BH - 0.6 * g),                  # the bench
+                (r0 + a1 + bench, BH - 0.2 - 0.5 * g),
+                (r0 + a1 + bench + (BH + 0.3) / K + 2.2 * g, -0.3)]  # the toe, a gully's fan spilling out
+        if i == spout:
+            prof[-1] = (prof[-1][0] + 6.0, -0.3)
+        rings.append([(fx + ox * r, y, fz + oz * r) for r, y in prof] + [(fx, T + 0.02, fz)])
+    faces = {}                                                       # (swatch, row) -> faces
+    def put(c, pts):
+        faces.setdefault(c, []).append(pts)
+    for i in range(M):
+        j = (i + 1) % M
+        p, q = rings[i], rings[j]
+        wet = spout in (i, j)
+        top = ('gravel', 26) if wet else ('gravel', 4)
+        if math.dist(p[5], q[5]) < 1e-6:
+            put(top, [q[0], p[0], p[5]])
+        else:
+            put(top, [q[0], p[0], p[5], q[5]])
+        g = i if i in gul else j if j in gul else None                 # a face down a gully's side
+        for k in range(4):
+            if wet and k < 2:
+                c = ('gravel', 31)                                      # the wet tongue under the spout
+            elif k == 2:
+                c = ('gravel', 2)                                       # the bench's top
+            elif g in rust and k < 2:
+                c = ('tan', 26)                                         # rust run down a gully
+            elif g in yellow and k < 2:
+                c = ('cream', 31)                                       # and yellow
+            elif g is not None and k < 2:
+                c = ('gravel', 28)
+            else:
+                c = ('gravel', 12 if k < 2 else 16)
+            put(c, [p[k], q[k], q[k + 1], p[k + 1]])
+    # the slimes' apron past the far toe, round the spout: from where the
+    # face is a hand over the yard, out flat and under it
+    def foot(r):
+        (x3, y3, z3), (x4, y4, z4) = r[3], r[4]
+        f = (y3 - 0.25) / (y3 - y4)
+        return (x3 + (x4 - x3) * f, 0.25, z3 + (z4 - z3) * f)
+    for i in range(spout - 2, spout + 2):
+        p, q = rings[i % M], rings[(i + 1) % M]
+        po = (p[4][0] + (p[4][0] - p[5][0]) * 0.25, -0.25, p[4][2] + (p[4][2] - p[5][2]) * 0.25)
+        qo = (q[4][0] + (q[4][0] - q[5][0]) * 0.25, -0.25, q[4][2] + (q[4][2] - q[5][2]) * 0.25)
+        put(('gravel', 0), [foot(p), foot(q), qo, po])
+    for (color, row), fs in faces.items():
+        for o in colored_faces([(color, list(f)) for f in fs], 'dump'):
+            for poly_ in o.data.polygons:                               # every face of a heap looks up
+                if poly_.normal.z < 0:
+                    poly_.flip()
             rowed(o, row)
-    # the launder: a board trough on a trestle of bents, falling gently the
-    # whole way, its bents on the bank and stood in the terrace's top
-    L = math.hypot(Z1 - Z0, Y0 - Y1)
-    pitch = math.atan2(Y0 - Y1, Z0 - Z1)
-    mid = (LX, (Y0 + Y1) / 2, (Z0 + Z1) / 2)
-    box((1.8, 0.24, L), mid, TIMBER, pitch=pitch)                                    # its floor
-    for sx in (-0.85, 0.85):                                                          # its sides
-        box((0.22, 1.0, L), (LX + sx, mid[1] + 0.5, mid[2]), BOARD, pitch=pitch)
-    def launder_y(z):
-        return Y0 + (Y1 - Y0) * (z - Z0) / (Z1 - Z0)
-    for z in (() if LITE else (-10.0,)) + (-16.0, -22.0, -29.0, -36.0, -43.0, -49.0):
-        y = launder_y(z) - 0.12
-        for sx in (-1.3, 1.3):
-            box((0.5, y + 1.0, 0.5), (LX + sx, (y - 1.0) / 2, z), TIMBER)
-        box((3.3, 0.45, 0.55), (LX, y - 0.22, z), TIMBER)
-        if y > 3.0 and not LITE:                                                      # a tall bent braced
-            strut((LX - 1.3, 0.6, z), (LX + 1.3, y - 0.6, z), 0.32, TIMBER)
-    # the spout over the end of the terrace, and the slurry falling from it
-    sy = launder_y(Z1)
-    box((1.0, 0.5, 1.6), (LX, sy + 0.05, Z1 - 0.6), TIMBER, pitch=0.5)
-    box((0.7, sy - top_y(Z1) + 0.4, 0.5), (LX, (sy + top_y(Z1)) / 2 - 0.1, Z1 - 1.3), 'grey')
+    # the launder: a board trough on bents, falling gently the whole way
+    L = math.dist((L0[0], L0[2]), (L1[0], L1[2]))
+    yaw = math.atan2(L1[0] - L0[0], L1[2] - L0[2])
+    pitch = math.atan2(L1[1] - L0[1], L)
+    mid = tuple((L0[k] + L1[k]) / 2 for k in range(3))
+    box((1.3, 0.22, L), mid, TIMBER, yaw=yaw, pitch=pitch)
+    c, s_ = math.cos(yaw), math.sin(yaw)
+    for sx in (-0.6, 0.6):
+        box((0.18, 0.75, L), (mid[0] + sx * c, mid[1] + 0.37, mid[2] - sx * s_), BOARD, yaw=yaw, pitch=pitch)
+    def at(f):
+        return tuple(L0[k] + (L1[k] - L0[k]) * f for k in range(3))
+    def ground(x, z):
+        # the heap's top under the launder, or the mill's bank before it
+        t = max(0.0, min(1.0, ((x - AX) * (BX - AX) + (z - AZ) * (BZ - AZ)) / ln ** 2))
+        return max(top_y(t) if z < AZ + R * 0.5 else -9.0, mill_bank_y(x, z))
+    for f in [k / (5 if LITE else 8) for k in range(1, 5 if LITE else 8)]:
+        x, y, z = at(f)
+        gy = ground(x, z)
+        h = y - 0.11 - gy + 0.3
+        for sx in (-0.85, 0.85):
+            box((0.4, h, 0.4), (x + sx * c, gy - 0.3 + h / 2, z - sx * s_), TIMBER)
+        box((2.2, 0.35, 0.45), (x, y - 0.28, z), TIMBER, yaw=yaw)
+    # the spout over the far face, the grey slurry running from it down
+    # the wet tongue to the bench
+    sx_, sy, sz = L1
+    box((1.0, 0.5, 1.4), (sx_ + 0.6 * s_, sy, sz + 0.6 * c), TIMBER, yaw=yaw, pitch=-0.45)
+    lip = (sx_ + 1.1 * s_, sy - 0.5, sz + 1.1 * c)
+    (ex, ey, ez), (bx_, by_, bz_) = rings[spout][0], rings[spout][2]
+    beam(lip, (ex, ey + 0.15, ez), 0.8, 'grey', d=0.25)
+    beam((ex, ey + 0.15, ez), (bx_, by_ + 0.15, bz_), 0.8, 'grey', d=0.25)
+    # the cyanide vats past the far end: wide, low, open, the old sand in
+    # them, each on its sill
+    VZ, VR, VH = -82.0, 4.4, 2.4
+    for vx in (-9.0, 1.0, 11.0):
+        box((2 * VR + 0.6, 0.5, 2 * VR + 0.6), (vx, 0.15, VZ), TIMBER)
+        cyl(VR, VH, (vx, 0.4, VZ), 0x8a6a46, segs=16)
+        cyl(VR - 0.3, 0.12, (vx, 0.4 + VH, VZ), 'gravel', segs=16)
+        if not LITE:
+            cyl(VR + 0.08, 0.25, (vx, 0.4 + VH * 0.45, VZ), IRON, segs=16)
+    box((2 * 10.0 + 2 * VR, 0.3, 1.1), (1.0, 0.4 + VH + 0.27, VZ), TIMBER)              # the walk along their tops
     join_still('dump')
 
 def telegraph_pole(at, H, yaw=0.0, corner=False):
