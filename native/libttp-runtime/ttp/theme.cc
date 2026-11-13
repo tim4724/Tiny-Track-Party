@@ -394,9 +394,9 @@ void playroomTrack(Theme& t, const std::string& track) {
     // so under a town of coloured blocks they read as the track's own
     // supports, not more towers
     t.structureStack = { 0x4a6fc4, 0x6f93df };
-    // the town runs its own wooden train round the infield (set-block-town):
-    // the biome's train set beside it was a second, different railway
-    t.props.scatter = { { 1, 1.0f, 3.5f, 0.5f, false, true } };
+    // the town runs its own wooden train round the infield (set-block-town),
+    // so the skateboards stand sparser here
+    t.props.scatter = { { 0, 1.0f, 3.5f, 0.5f, false, true } };
     t.props.scatterDensity = 0.14f;
   } else if (track == "helix") {
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
