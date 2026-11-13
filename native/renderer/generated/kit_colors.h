@@ -157170,7 +157170,7 @@ inline const Model kModels[] = {
     { 13160025009967824325ull, 5u, k_set_coastguard_lookout },  // set-coastguard-lookout.glb
     { 10146318980444580432ull, 3u, k_set_cottage_row },  // set-cottage-row.glb
     { 676379759495524201ull, 7u, k_set_cow_farm },  // set-cow-farm.glb
-    { 6150171523922305867ull, 1u, k_set_crab_boat },  // set-crab-boat.glb
+    { 11437206067813633042ull, 1u, k_set_crab_boat },  // set-crab-boat.glb
     { 17945861972447532159ull, 3u, k_set_crab_pots },  // set-crab-pots.glb
     { 16532794684918178100ull, 1u, k_set_crag_saguaros },  // set-crag-saguaros.glb
     { 4301135649177589426ull, 1u, k_set_culvert },  // set-culvert.glb
@@ -157342,7 +157342,7 @@ inline const Model kModels[] = {
     { 11053697914239002213ull, 48u, k_set_rimrock_mesa },  // set-rimrock-mesa.glb
     { 12831018931086188933ull, 25u, k_set_rimrock_mitten },  // set-rimrock-mitten.glb
     { 12900285273054259213ull, 25u, k_set_rimrock_spires },  // set-rimrock-spires.glb
-    { 6861289548314586764ull, 4u, k_set_rock_pool },  // set-rock-pool.glb
+    { 5217340546360381104ull, 4u, k_set_rock_pool },  // set-rock-pool.glb
     { 2635553312305625250ull, 2u, k_set_rock_poolers_park },  // set-rock-poolers-park.glb
     { 9266918875649639029ull, 4u, k_set_room_train_helix_lite },  // set-room-train-helix-lite.glb
     { 408840509921583465ull, 6u, k_set_room_train_helix },  // set-room-train-helix.glb

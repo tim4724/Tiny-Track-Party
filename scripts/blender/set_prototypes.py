@@ -913,14 +913,14 @@ def rock_pool():
     # rock, buckets on the lip. No people.
     def things():
         with plain_parts():
-            # the windbreak across the pool's near end, its stripes to the
-            # cars coming (-Z), low: stood along the road side it hid the
-            # sea arch behind the pool
+            # the windbreak on the pool's sea side, its stripes to the road,
+            # low: along the road side or across the near end it stood in
+            # the west run's line to the sea arch and the crab boat
             for k in range(5):
-                x = 1.2 + 0.9 * k
-                box((0.1, 0.95, 0.1), (x, 0.42, -5.3 + 0.12 * math.sin(k * 1.7)), 0xfff6eb)
+                z = -4.4 + 0.9 * k
+                box((0.1, 0.95, 0.1), (-5.4 + 0.12 * math.sin(k * 1.7), 0.42, z), 0xfff6eb)
                 if k < 4:
-                    box((0.9, 0.62, 0.05), (x + 0.45, 0.52, -5.3 + 0.06 * (math.sin(k * 1.7) + math.sin((k + 1) * 1.7))),
+                    box((0.05, 0.62, 0.9), (-5.4 + 0.06 * (math.sin(k * 1.7) + math.sin((k + 1) * 1.7)), 0.52, z + 0.45),
                         (0xff5040, 0xfff6eb, 0x339cf2, 0xffc044)[k])
             for (x, z, lean, c) in ((4.6, 1.9, 0.25, 0x22c46e), (4.3, 2.7, -0.2, 0xff5040), (3.3, -3.4, 0.15, 0xffc044)):
                 beam((x, -0.15, z), (x + lean, 1.15, z + 0.3 * lean), 0.09, 0xfff6eb)    # a dip net on its pole
@@ -1424,15 +1424,19 @@ def crab_boat():
     # Tidepool: the crab fishers' boat working the bay inside the headland,
     # at a boat's size beside a car: a blue hull with a white wheelhouse and
     # a tan lugsail, working its pots round the sea arch (at (-22.7, -15.4)
-    # here): in to the water between the rock pool and the arch, where the
-    # west run looks, out round the arch's seaward side, where it shows
-    # through the hole, and back, rising and falling on the
+    # of the headland's frame): in to the water between the rock pool and
+    # the arch, where the west run looks, out past the arch's north side
+    # and back (a longer round behind the arch kept it too far off to
+    # read), rising and falling on the
     # swell, a wake at its stern. Placed on the headland's own spot (the
     # west bend's centreline, -X its outside): out past the stacks, where it
     # sailed before, the bend had turned the camera away (0.6 s a lap).
-    loop = [(x, 0.0, z) for x, z in (
-        (-15.5, -24.3), (-21.0, -25.8), (-27.4, -25.1), (-32.0, -20.9), (-33.5, -14.3), (-31.9, -8.3), (-28.6, -4.5),
-        (-31.7, -5.0), (-35.0, -8.9), (-36.4, -15.5), (-34.3, -23.0), (-28.9, -27.7), (-21.6, -28.9), (-16.4, -27.8))]
+    # (world units below: the piece is grown 1.5 where it stands, as the
+    # coble is, since at a boat's own size it stayed under the pixels a
+    # racer reads at that range)
+    loop = [(x / 1.5, 0.0, z / 1.5) for x, z in (
+        (-14.7, -24.7), (-19.9, -25.9), (-25.7, -26.1), (-31.0, -25.4), (-34.0, -22.6),
+        (-34.4, -26.4), (-29.9, -29.5), (-23.4, -30.2), (-17.5, -28.9), (-13.6, -27.0))]
     for i, p in enumerate(loop):
         marker('path_crab_%d' % i, p)
     beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99, loop[0])

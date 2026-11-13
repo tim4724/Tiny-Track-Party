@@ -488,7 +488,7 @@ export const TRACKS = {
       // the kelp the tide left between them
       { model: 'set-tide-ledges', u: 0.395, lat: 10 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
-      { model: 'set-crab-boat', u: 0.72, lat: 0 },
+      { model: 'set-crab-boat', u: 0.72, lat: 0, scale: 1.5 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
