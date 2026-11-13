@@ -1621,7 +1621,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.9382, lat: 70.46, yaw: 30, len: 22, r: 28, h: 46, top: 0.3, lite: false },
       { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false },
       // the biome's hoodoo family keeps off the east bend, where its tall
-      // stack stood beside the headframe as a second tower
+      // stack stood beside the headframe as a second tower, and off the
+      // boomtown's street after it
       { kind: 'clear', u: 0.11, lat: 12.5, len: 28, r: 3 },
       { kind: 'clear', u: 0.11, lat: -12.5, len: 28, r: 3 },
       { kind: 'clear', u: 0.17, lat: 12.5, len: 28, r: 3 },
@@ -1629,7 +1630,11 @@ export const TRACKS = {
       { kind: 'clear', u: 0.23, lat: 12.5, len: 28, r: 3 },
       { kind: 'clear', u: 0.23, lat: -12.5, len: 28, r: 3 },
       { kind: 'clear', u: 0.29, lat: 12.5, len: 28, r: 3 },
-      { kind: 'clear', u: 0.29, lat: -12.5, len: 28, r: 3 }
+      { kind: 'clear', u: 0.29, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.35, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.35, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.41, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.41, lat: -12.5, len: 28, r: 3 }
     ]
   },
   crag: {

@@ -12697,13 +12697,13 @@ def mine_portal():
 @piece(1.0)
 def powder_magazine():
     # Gulch: the mine's powder magazine, out past the boomtown where a blast
-    # would hurt no one (+X the road): a low stone house dug into the hill,
+    # would hurt no one (+X the road): a low pale stone house dug into the hill,
     # its iron door red, a red flag over it and kegs of powder stacked by
     # the door; and the siding its powder goes down, two carts on a short
     # length of the mine's gauge to a buffer stop.
     with plain_parts():
-        rowed(box((3.0, 1.5, 3.4), (-1.6, 0.75, 0), 'grey'), 7)                   # the stone house, pale (dark, a black box)
-        box((3.3, 0.3, 3.7), (-1.6, 1.6, 0), 'slate')
+        rowed(box((3.0, 1.5, 3.4), (-1.6, 0.75, 0), 'cream'), 12)                 # the stone house, pale (grey, a black box)
+        box((3.3, 0.3, 3.7), (-1.6, 1.6, 0), TIMBER)
         box((2.6, 0.5, 3.0), (-1.9, 1.95, 0), 0xd68f62)                           # earth heaped on its roof
         box((0.14, 1.15, 0.9), (-0.06, 0.6, 0), 'red')                            # the iron door
         box((0.2, 1.4, 0.2), (0.0, 0.7, -0.62), TIMBER)
@@ -14959,7 +14959,7 @@ def tinaja():
     # them.
     N = 30
     RINGS = (0.0, 0.4, 0.62, 0.78, 0.875, 0.91, 1.0)
-    TONE = (('blue', 30), ('blue', 26), ('blue', 21), ('blue', 16), ('sky', 22), ('blue', 24))
+    TONE = (('blue', 31), ('blue', 29), ('blue', 26), ('blue', 23), ('blue', 15), ('blue', 26))
     ring = [[(PX + math.cos(a) * PR * rim(a) * f, W, PZ + math.sin(a) * PR * rim(a) * f / 0.9) for f in RINGS]
             for a in (2 * math.pi * i / N for i in range(N + 1))]
     for j, (sw, row) in enumerate(TONE):
