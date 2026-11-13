@@ -13752,13 +13752,41 @@ def pickup(x, z, color, yaw=0.0):
     part(0, 0.27, 0.75, (0.64, 0.07, 0.06), 0x868ba1)                # the bumpers
     part(0, 0.27, -0.75, (0.64, 0.07, 0.06), 0x868ba1)
 
-# Sidewinder's freight line: the company's tank train carrying the field's
-# crude away, at a real train's size beside a car (a tank car some four
-# units long). It runs across the east straight over the road on a viaduct
-# between two knolls of the canyon's strata, out of a tunnel in one and into
-# a tunnel in the other, home under the ground. Placed ON the road turned 90
-# (its +Z the road's left, the road along X at z = 0).
-TRAIN_Y = 3.6                                                    # the rails' height over the foot
+# Sidewinder's freight line: the company's tank train loading the field's
+# crude at its terminal, at a real train's size beside a car (a tank car some
+# four units long). Its track lies on the ground in a loading loop, a balloon
+# off the line in, so a train is filled without ever backing up: it walks
+# round and round through the loading rack, every rail of it in sight. It
+# stands on the outside of the north loop's first corner, beyond the trunk
+# line from the tank farm, which feeds the rack through a valve on a tee
+# (tracks.js sidewinder; a `plain` there keeps the yard flat). +X is the road.
+SW_RAIL = 0.34                                  # the rails' top over the yard
+SW_LOOP = (8.5, 10.0)                           # the loop's curve radius and its straights' length
+SW_PACE = 0.5                                   # the train's walk, units a second (a brisk walk at this scale)
+SW_FEED = (13.75, 0.6)                          # where the feed meets the trunk line, in the loop's frame
+
+def sidewinder_track(line, s0):
+    """Track along `line`, samples (x, z, tx, tz) of its middle and its unit
+    heading: a low bed of grey ballast, timber ties across it at a steady
+    spacing counted from arclength `s0` (so a loop built in lengths keeps it
+    from one to the next), and two steel rails a car's gauge apart."""
+    def rows(section):
+        return [[(x + tz * o, y, z - tx * o) for o, y in section] for x, z, tx, tz in line]
+    for o in sheet(rows(((-1.2, 0.0), (-0.85, 0.12), (0.85, 0.12), (1.2, 0.0))), lambda i, j, n: 'grey', 'ballast'):
+        rowed(o, 6)
+    for g in (-0.5, 0.5):
+        sheet(rows(((g - 0.07, 0.22), (g - 0.07, SW_RAIL), (g + 0.07, SW_RAIL), (g + 0.07, 0.22))),
+              lambda i, j, n: 'slate', 'rail')
+    tie = 1.2 if LITE else 0.9
+    at, nxt = s0, math.ceil(s0 / tie) * tie
+    for (x0, z0, tx0, tz0), (x1, z1, tx1, tz1) in zip(line, line[1:]):
+        d = math.hypot(x1 - x0, z1 - z0)
+        while nxt <= at + d:
+            f = (nxt - at) / d
+            box((1.6, 0.1, 0.28), (x0 + (x1 - x0) * f, 0.17, z0 + (z1 - z0) * f), TIMBER,
+                yaw=math.atan2(tx0 + (tx1 - tx0) * f, tz0 + (tz1 - tz0) * f))
+            nxt += tie
+        at += d
 
 def sidewinder_tank_car(at, color):
     """A tank car on its bogies, along +Z, its middle at `at` (rail height):
@@ -13800,70 +13828,106 @@ def sidewinder_loco(at):
 
 @piece(1.0)
 def tank_train():
-    # each knoll a short ridge of rock along the road (its len along x),
-    # broken off toward it, the crest of the low ridge the road cuts through
-    # (tracks.js sidewinder `land`), and a spur of it running back along the
-    # line from each mouth, high and broad enough that a car turning for
-    # home inside it never shows through its top
-    knolls = massif_height(((0.0, -13.0, 6.0, 5.2, 4.4, 0.5 * math.pi + 0.15, 0.8, 9.0),
-                            (0.6, 13.0, 5.6, 5.0, 4.2, 0.5 * math.pi - 0.2, 0.8, 7.0),
-                            (0.0, -14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0),
-                            (0.3, 14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0)),
-                           rough=0.6, seed=4.4, warp=0.6)
-    strata_massif(knolls, -12.0, 12.0, -20.0, 20.0, [b for b in CANYON_STRATA if b[0] < 6.5], step=2.0, tol=0.3,
-                  summits=False)
-    Y, Z0 = TRAIN_Y, 10.4                                         # the rails, and the tunnels' mouths
+    # The loop: two straights along Z joined by half circles, the near one
+    # (+X) through the rack; the line in leaves it off its east end (-Z)
+    # through a turnout, easing out toward the road, and ends at a buffer
+    # stop. A sample is (x, z, tx, tz), the track's middle and its heading.
+    R, S = SW_LOOP
+    span = 2 * S + 2 * math.pi * R
+    def loop_at(s):
+        s %= span
+        if s < S:                                                # the near straight, +Z
+            return R, -S / 2 + s, 0.0, 1.0
+        s -= S
+        if s < math.pi * R:                                      # the west end, round to the far side
+            a = s / R
+            return R * math.cos(a), S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
+        s -= math.pi * R
+        if s < S:                                                # the far straight, -Z
+            return -R, S / 2 - s, 0.0, -1.0
+        a = math.pi + (s - S) / R                                # the east end, back to the near side
+        return R * math.cos(a), -S / 2 + R * math.sin(a), -math.sin(a), math.cos(a)
+    step = 1.0 if LITE else 0.5
     with plain_parts():
-        for sz in (-1, 1):                                        # the tunnel mouths in the rock
-            z = sz * Z0
-            box((2.2, 2.8, 1.6), (0.0, Y + 1.1, z + sz * 0.3), 'tan')
-            box((1.5, 2.1, 1.7), (0.0, Y + 0.95, z + sz * 0.3), 'dark')
-            box((2.4, 0.3, 1.7), (0.0, Y + 2.55, z + sz * 0.3), 'brown')
-        # the rails and ties the length of the viaduct, into both mouths
-        for sx in (-0.5, 0.5):
-            box((0.12, 0.14, 2 * Z0 + 0.6), (sx, Y + 0.07, 0.0), 'slate')
-        z = -Z0
-        while z <= Z0:
-            box((1.5, 0.12, 0.3), (0.0, Y - 0.06, z), TIMBER)
-            z += 0.8
-        # the girder span over the road, the company's red, on its towers
-        for sx in (-0.82, 0.82):
-            box((0.2, 0.8, 7.6), (sx, Y - 0.5, 0.0), 'red')
-            box((0.26, 0.1, 7.6), (sx, Y - 0.08, 0.0), 'white')
-        for sz in (-3.8, 3.8, -6.8, 6.8):                         # the bents, timber, on stone feet
-            h = Y - 0.12
-            for sx in (-1, 1):
-                strut((sx * 1.05, -0.3, sz), (sx * 0.62, h, sz), 0.24, TIMBER)
-                box((0.5, 0.4, 0.5), (sx * 1.05, -0.1, sz), 'grey')
-            box((1.7, 0.22, 0.36), (0.0, h, sz), TIMBER)
-            strut((-1.0, 0.2, sz), (0.6, h - 0.3, sz), 0.12, TIMBER)
-            strut((1.0, 0.2, sz), (-0.6, h - 0.3, sz), 0.12, TIMBER)
-        for sz in (-1, 1):                                        # the stringers over the bents
-            for sx in (-0.55, 0.55):
-                box((0.22, 0.34, 7.0), (sx, Y - 0.29, sz * 7.0), TIMBER)
-    # the train: a diesel and eight tank cars (a unit train long enough to be
-    # on the bridge most of the time a racer passes), out of the right-hand
-    # tunnel (-Z), over the road and into the left-hand one, home under the
-    # ground. Each car stays level the whole way round (f=1): it drops
-    # straight down inside the spur once it is clear of the mouth (ZC, its
-    # tail still in the portal), so it never turns where it could be seen.
-    ZC = 12.1
-    loop = [(0.0, Y, -ZC), (0.0, Y, ZC), (0.0, -6.0, ZC), (0.0, -6.0, -ZC)]
-    for i, p in enumerate(loop):
-        marker('path_tank_%d' % i, p)
-    span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    period = span / 3.2                                          # a freight's walking pace over a bridge
-    gap = 4.3 / span
-    P0 = loop[0]
+        # in its four lengths (each straight, each end), so a cell far off
+        # culls and takes its far form a length at a time
+        cuts = (0.0, S, S + math.pi * R, 2 * S + math.pi * R, span)
+        for a, b in zip(cuts, cuts[1:]):
+            n = max(2, int(math.ceil((b - a) / step)))
+            sidewinder_track([loop_at(a + (b - a) * k / n) for k in range(n + 1)], a)
+        # the line in: a turnout's curve, then straight, to its buffer stop
+        RT, L1, L2 = 22.0, 7.0, 5.5
+        line = []
+        for k in range(15):
+            t = (L1 + L2) * k / 14
+            th = min(t, L1) / RT
+            x, z = R + RT * (1 - math.cos(th)), -S / 2 - RT * math.sin(th)
+            x, z = x + max(0.0, t - L1) * math.sin(th), z - max(0.0, t - L1) * math.cos(th)
+            line.append((x, z, math.sin(th), -math.cos(th)))
+        sidewinder_track(line, 0.45)
+        x, z, tx, tz = line[-1]
+        bx, bz, yaw = x + tx * 0.5, z + tz * 0.5, math.atan2(tx, tz)
+        box((1.5, 0.5, 0.4), (bx, 0.75, bz), 'red', yaw=yaw)                                           # the buffer stop
+        box((1.54, 0.14, 0.44), (bx, 0.75, bz), 'white', yaw=yaw)
+        for s in (-0.55, 0.55):
+            box((0.2, 0.8, 0.2), (bx + s * tz, 0.4, bz - s * tx), 'slate', yaw=yaw)
+            strut((bx + s * tz + tx * 0.9, 0.0, bz - s * tx + tz * 0.9), (bx + s * tz, 0.8, bz - s * tx), 0.16, 'slate')
+        # the loading rack over the near straight: a canopy in the company's
+        # colours on steel legs either side of the train; the platform at the
+        # cars' tops on the road side, its stair down at the west end; a
+        # filling arm out over the track to each of two cars; and the feed:
+        # off the trunk line through its valve, up the rack's outer leg to
+        # the header under the platform
+        X0, X1, Z = R - 1.1, R + 2.3, 4.2                                     # the legs, inside and out; the rack's half length
+        DECK, TOP, PX = 2.2, 3.6, R + 1.6                                     # the platform, the canopy, the header's line
+        for z in (-Z, -1.4, 1.4, Z):
+            box((0.22, TOP, 0.22), (X0, TOP / 2, z), 'slate')
+            box((0.22, TOP, 0.22), (X1, TOP / 2, z), 'slate')
+            box((X1 - X0 + 0.22, 0.24, 0.22), ((X0 + X1) / 2, TOP - 0.12, z), 'slate')
+            box((0.18, DECK, 0.18), (R + 1.0, DECK / 2, z), 'slate')
+        box((X1 - X0 + 1.0, 0.22, 2 * Z + 1.0), ((X0 + X1) / 2, TOP + 0.11, 0.0), 'red')               # the canopy
+        box((X1 - X0 + 1.06, 0.12, 2 * Z + 1.06), ((X0 + X1) / 2, TOP - 0.02, 0.0), 'white')
+        box((X1 - R - 0.9, 0.12, 2 * Z + 0.2), ((R + 0.9 + X1) / 2, DECK - 0.06, 0.0), 'grey')           # the platform
+        for z in (-Z, 0.0, Z):                                                                           # its rail
+            box((0.1, 0.9, 0.1), (X1 - 0.12, DECK + 0.45, z), 'white')
+        box((0.1, 0.1, 2 * Z), (X1 - 0.12, DECK + 0.9, 0.0), 'white')
+        for k in range(7):                                                                               # the stair
+            box((1.1, 0.08, 0.32), ((R + 1.0 + X1) / 2, DECK - 0.275 * (k + 1), Z + 0.3 + 0.3 * k), 'grey')
+        for s in (R + 0.95, X1 + 0.05):
+            strut((s, DECK, Z), (s, 0.0, Z + 2.4), 0.1, 'slate')
+        cyl(0.16, 2 * Z + 0.4, (PX, DECK - 0.35, -Z - 0.2), 'white', segs=10, axis='along', stem=True)  # the header
+        for z in (-2.15, 2.15):                                                                          # the arms
+            cyl(0.12, 0.95, (PX, DECK - 0.35, z), 'white', segs=8, stem=True)
+            strut((PX, DECK + 0.6, z), (R - 0.05, DECK + 0.6, z), 0.14, 'slate')
+            box((0.16, 0.45, 0.16), (R, DECK + 0.4, z), 'slate')
+            cyl(0.14, 0.08, (PX, DECK + 0.25, z), 'red', segs=8)                                         # its valve wheel
+        FX, FZ = SW_FEED
+        cyl(0.16, FX - X1 + 0.3, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, axis='across', stem=True)   # the feed
+        cyl(0.16, DECK - 0.35 - PIPE_H, (X1 - 0.3, PIPE_H, FZ), 'white', segs=10, stem=True)
+        cyl(0.16, X1 - 0.3 - PX, (PX, DECK - 0.35, FZ), 'white', segs=10, axis='across', stem=True)
+        VX = (X1 + FX) / 2
+        for sx in (-0.3, 0.3):                                                                           # its stand, its valve
+            box((0.12, PIPE_H, 0.12), (VX + sx, PIPE_H / 2 - 0.1, FZ), 'slate')
+        box((0.8, 0.12, 0.3), (VX, PIPE_H - 0.22, FZ), 'slate')
+        cyl(0.22, 0.4, (VX + 0.5, PIPE_H - 0.2, FZ), 'red', segs=10)
+        cyl(0.26, 0.08, (VX + 0.5, PIPE_H + 0.2, FZ), 'red', segs=10)
+    # the train: a diesel and six tank cars, round and round at a walk
+    N = int(span)
+    for i in range(N):
+        x, z, _, _ = loop_at(span * i / N)
+        marker('path_tank_%d' % i, (x, SW_RAIL, z))
+    period, gap = span / SW_PACE, 4.3 / span
+    P0 = (R, SW_RAIL, -S / 2)
     # A traveller faces its path with its node's +X, and these are built
     # along +Z: the turn names the node's frame (+X along the car, ahead)
     # and leaves the parts where they were built.
     AHEAD = -math.pi / 2
     with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0, yaw=AHEAD):
         sidewinder_loco(P0)
-    for n in range(1, 9):
+    for n in range(1, 7):
         with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0, yaw=AHEAD):
             sidewinder_tank_car(P0, 'white' if n % 2 else 'red')
+    join_still('loop')
 
 lite_too('tank-train')
 

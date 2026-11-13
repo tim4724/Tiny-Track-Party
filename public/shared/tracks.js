@@ -1689,7 +1689,9 @@ export const TRACKS = {
     // pumpjack dead ahead out of the S at the east bend, a flowing well's
     // christmas tree at the bend's exit; the tank farm at the end of the
     // east straight, outside the north loop's first corner
-    // where the whole straight points; the field's three jacks nodding and
+    // where the whole straight points, and left of it past the corner the
+    // company's tank train walking round its loading loop on the ground,
+    // filled at a rack off the trunk line; the field's three jacks nodding and
     // tumbleweeds blowing by outside its second corner; and at the line the
     // field's own filling station, its sign turning and a hawk over it. The
     // telegraph line comes in across the open desert from the east to the
@@ -1710,9 +1712,11 @@ export const TRACKS = {
       { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
-      // the company's tank train over the east straight on its viaduct,
-      // between two knolls of the strata it tunnels into
-      { model: 'set-tank-train', u: 0.462, lat: 0, yaw: 90 },
+      // the company's tank train walking round its loading loop on the
+      // outside of the north loop's first corner, beyond the trunk line
+      // that feeds its rack: ahead, left of the tank farm, the whole way
+      // up the east straight
+      { model: 'set-tank-train', u: 0.68, lat: 20 },
       // a dust devil wandering the flats inside the north loop
       { model: 'set-dust-devil', u: 0.7, lat: -12 },
       // the trunk line on its stilts, span by span along the right-hand
@@ -1769,10 +1773,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.172, lat: 18, len: 8, r: 9, h: 3.6, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.214, lat: 18.5, len: 10, r: 9, h: 4.2, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.258, lat: 18, len: 8, r: 9, h: 3.4, top: 0.3, near: 4.6, tint: 0xc8846a },
-      // the low ridge the east straight cuts through, either side, the tank
-      // train's knolls of rock standing out of it (set-tank-train)
-      { kind: 'ridge', u: 0.462, lat: 14, len: 20, r: 9, h: 3.2, top: 0.3, near: 4, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.462, lat: -14, len: 18, r: 9, h: 3.0, top: 0.3, near: 4, tint: 0xc8846a },
+      // the rail yard's floor, levelled out of the desert's swell round the
+      // loading loop (set-tank-train), the whole of its footprint and more
+      { kind: 'plain', u: 0.6765, lat: 18, len: 14, r: 16, w: 6 },
       { kind: 'ridge', u: 0.115, lat: 58, yaw: 80, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
       { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
       { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
