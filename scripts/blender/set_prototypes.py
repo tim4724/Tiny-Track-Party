@@ -8398,9 +8398,10 @@ def den_camp():
     # Pretzel: the children's den on the lawn by the road where it comes off
     # the diagonal's top: one big den of blankets over a rope, tied from the
     # old oak's trunk to a stout forked post, its door end open to the road
-    # with cushions in it and its flag up, the tyre swing on the oak's bough
-    # going in the breeze. One shape a racer reads at speed, the size of a
-    # garden shed; nobody in it (people that small read as specks).
+    # with cushions in it and a big pinwheel spinning over it, the tyre swing
+    # on the oak's bough going in the breeze. One shape a racer reads at
+    # speed, the size of a garden shed; nobody in it (people that small read
+    # as specks).
     BARK, ROPE, WOOD = 0x7a5a3a, 0xd9b054, 0x9a7b55
     TX, TZ = -2.0, -6.0                                  # the oak, at the den's back end
     lawn_oak(TX - 1.2, TZ - 0.8, 1.1)
@@ -8432,7 +8433,16 @@ def den_camp():
     cyl(0.4, 2.2, (TX + 0.4, Y1 - 0.2, RZ1 - 0.1), 0x339cf2, segs=8, axis='across')
     for k, (dx, c) in enumerate(((-1.3, 0xa878e8), (0.2, 0xff7e44), (1.5, 0x22c46e))):
         box((1.3, 0.55, 1.2), (TX + dx, 0.28, RZ1 + 1.0 + 0.3 * (k % 2)), c, yaw=0.3 * k)
-    flagpole((TX, Y1 + 1.3, RZ1 + 0.3), 2.2, 0xff5040, w=1.6, fh=0.9, pole=WOOD, wave='anim_sway:a=z:d=22:p=1.4')
+    # a big garden pinwheel up on the post's fork, its face to the road,
+    # spinning in the breeze: what moves there at a racer's speed
+    PY, PZ = Y1 + 3.6, RZ1 + 0.3
+    box((0.5, 2.6, 0.5), (TX, Y1 + 2.3, PZ), WOOD)
+    with animated('anim_spin:a=x:w=2.2#pinwheel', (TX + 0.5, PY, PZ)):
+        for k, c in enumerate((0xff5040, 0xffc044, 0x339cf2, 0x22c46e)):
+            a = k * math.pi / 2
+            tip = lambda r, d: (TX + 0.5, PY + r * math.cos(a + d), PZ + r * math.sin(a + d))
+            poly([(TX + 0.5, PY, PZ), tip(3.0, 0.0), tip(2.2, 0.75)], [(0, 1, 2)], c)
+        box((0.4, 0.6, 0.6), (TX + 0.6, PY, PZ), 'white')
     # the tyre swing on the oak's low bough, out over the lawn toward the road
     BX, BY = TX + 3.6, 6.4
     strut((TX - 1.0, 5.6, TZ - 0.8), (BX + 0.4, BY + 0.3, TZ - 0.8), 0.6, BARK)
