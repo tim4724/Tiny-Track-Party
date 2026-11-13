@@ -20284,9 +20284,11 @@ def supply_wagon():
         for x, y, z in ((2.1, 0.0, 0.0), (2.1, 0.0, 0.5), (2.55, 0.0, 0.25), (2.25, 0.4, 0.25)):
             box((0.42, 0.42, 0.42), (x, y + 0.21, z), 0x38383d)
     box((BAR * 1.4, 4.2, BAR * 1.4), (0.0, 2.1 + 1.3, -3.1 * K), 0x2a2735)
-    with animated('anim_sway:a=x:d=22:p=2.3#flag', (0.0, 5.45, -3.1 * K)):
-        box((0.08, 0.9, 1.4), (0.0, 4.95, -3.1 * K - 0.75), 0xff5040)
-        box((0.08, 0.5, 0.7), (0.0, 4.95, -3.1 * K - 1.8), 0xff5040)
+    # the cloth flies across the wagon, toward the road: the racers come up
+    # behind it, and a cloth flying along their line is an edge to them
+    with animated('anim_sway:a=z:d=22:p=2.3#flag', (0.0, 5.45, -3.1 * K)):
+        box((1.4, 0.9, 0.08), (0.75, 4.95, -3.1 * K), 0xff5040)
+        box((0.7, 0.5, 0.08), (1.8, 4.95, -3.1 * K), 0xff5040)
     merge_paint()
 
 @piece(1.0)
