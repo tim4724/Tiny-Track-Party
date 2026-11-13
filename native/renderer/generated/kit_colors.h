@@ -155792,7 +155792,7 @@ inline const Model kModels[] = {
     { 9981576345511570054ull, 7u, k_set_ore_line },  // set-ore-line.glb
     { 16689053293809943083ull, 1u, k_set_paddling_pool_oak },  // set-paddling-pool-oak.glb
     { 7966580172549319539ull, 4u, k_set_palm_stand },  // set-palm-stand.glb
-    { 13195395598250580960ull, 1u, k_set_park_halt },  // set-park-halt.glb
+    { 18407285757263917512ull, 1u, k_set_park_halt },  // set-park-halt.glb
     { 9716617835556446942ull, 2u, k_set_park_rails_a },  // set-park-rails-a.glb
     { 3926826109570196207ull, 2u, k_set_park_rails_b },  // set-park-rails-b.glb
     { 10442898908492844606ull, 2u, k_set_park_rails_c },  // set-park-rails-c.glb
@@ -155800,7 +155800,7 @@ inline const Model kModels[] = {
     { 12025217532190809236ull, 2u, k_set_park_rails_e },  // set-park-rails-e.glb
     { 6437245315388260969ull, 2u, k_set_park_rails_loop_a },  // set-park-rails-loop-a.glb
     { 17507477323531788123ull, 2u, k_set_park_rails_loop_b },  // set-park-rails-loop-b.glb
-    { 8279806294806230212ull, 6u, k_set_park_railway },  // set-park-railway.glb
+    { 4886015860950402892ull, 6u, k_set_park_railway },  // set-park-railway.glb
     { 12837215530499934623ull, 19u, k_set_penguin_chute_lite },  // set-penguin-chute-lite.glb
     { 3197657599263052726ull, 36u, k_set_penguin_chute },  // set-penguin-chute.glb
     { 5901985575531695824ull, 12u, k_set_penguin_group_lite },  // set-penguin-group-lite.glb

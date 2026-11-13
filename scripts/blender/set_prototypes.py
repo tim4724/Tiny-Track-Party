@@ -12104,8 +12104,8 @@ def park_platform(side):
     box((0.14, 0.14, CL + 0.5), (PX, T + CH + 0.3, CZ), 'white')               # the ridge
     for sz in (-1, 1):                                                         # a white valance at each end
         box((1.0, 0.16, 0.06), (PX, T + CH - 0.02, CZ + sz * (CL / 2 + 0.15)), 'white')
-    box((0.06, 0.34, 1.3), (PX + side * 0.4, T + 0.82, CZ), 'white')           # the name board, a blue band on it
-    box((0.08, 0.12, 1.3), (PX + side * 0.4, T + 0.82, CZ), BLUE)
+    box((0.06, 0.34, CL - 0.1), (PX + side * 0.4, T + 0.82, CZ), 'white')      # the name board between the back posts,
+    box((0.08, 0.12, CL - 0.1), (PX + side * 0.4, T + 0.82, CZ), BLUE)         # a blue band on it
     box((0.3, 0.1, 1.1), (PX + side * 0.18, T + 0.3, CZ), WOOD)                # the seat
     for sz in (-1, 1):
         box((0.26, 0.3, 0.1), (PX + side * 0.18, T + 0.15, CZ + sz * 0.45), WOOD)
