@@ -14170,7 +14170,7 @@ def hoodoos():
 MTN_BANDS = (2.3, 3.9, 5.6, 7.5)                         # the benches' heights, before their wobble
 MTN_CLIFF = ('brown', 'salmon', 'brown', 'salmon', 'brown')   # each stratum's face, foot up
 
-def canyon_mountain(seed, L, H, R=0.0, D=13.0):
+def canyon_mountain(seed, L, H, R=0.0, D=13.0, dress=None):
     import random
     rnd = random.Random(seed)
     def noise(waves):
@@ -14277,6 +14277,12 @@ def canyon_mountain(seed, L, H, R=0.0, D=13.0):
             q = 0.45 + 0.35 * (jit(k, 10) + 0.5)
             px, _, pz = world(0.6 * n_foot(s) + 0.25, 0.0, s)
             box((q * 1.4, q * 0.8, q * 1.1), (px, q * 0.25, pz), 'salmon', yaw=3.0 * jit(k, 11), roll=0.2 * jit(k, 12))
+        if dress:
+            # what men built on this length (Gulch's mine workings), in the
+            # length's own (x off the foot line, y, s along it) through `at`,
+            # `foot(s)` the rock's foot there and `turn(s)` a box's yaw facing
+            # the road; part of the wall, so it rides the land with the rock
+            dress(L, world, lambda s: 0.6 * n_foot(s), (lambda s: s / R) if R else (lambda s: 0.0))
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
 
 def mountains(**lengths):
@@ -14301,16 +14307,101 @@ mountains(canyon_peaks_a=dict(seed=7, L=21.0, H=10.0),
 # Wash's straight lengths between), and the inside's face round the
 # left-hander, its back falling into the middle of the loop (the land there
 # sits under the deck cap and cannot rise), which opens on the yard.
-mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2),
-          canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
-          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0))
+def gulch_adit(at, turn, foot, ground, s, cart=False):
+    """A prospect adit in the foot of a canyon face at `s`: a dark mouth a
+    car high in a frame of pale boards, standing on the talus, and the
+    waste rock tipped out of it, a grey fan down to the verge."""
+    x = min(foot(s) + 0.3, 0.55)
+    g = ground(*at(x, 0.0, s)[::2]) or 0.9
+    yaw = turn(s)
+    box((1.2, 1.5, 1.1), at(x - 0.4, g + 0.6, s), ROPE, yaw=yaw)                    # the dark of it
+    for dz in (-0.68, 0.68):
+        box((0.34, 1.8, 0.28), at(x + 0.2, g + 0.75, s + dz), 'cream', yaw=yaw)
+    box((0.4, 0.3, 1.9), at(x + 0.2, g + 1.7, s), 'cream', yaw=yaw)
+    rowed(rock_lump(1.0, at(x + 0.4, g - 0.45, s + 0.4), 'gravel', (0.85, 0.9, 2.1), yaw, seed=s), 6)    # the spoil
+    rowed(rock_lump(0.6, at(x + 0.55, g - 0.5, s - 1.5), 'gravel', (0.8, 0.7, 1.4), yaw + 0.4, seed=s + 1), 10)
+    if cart:
+        ore_cart(at(x + 0.75, g - 0.05, s - 0.2), yaw=yaw + math.pi / 2, ore_color='grey', k=0.36)
 
-# Crag's rim: round the outside of the west hairpin (its entry looser than its
-# apex, so a wide bend's foot follows it) and out of it, and along the north
-# straight to the bridge. The start straight before it is open range.
-mountains(canyon_hairpin_crag=dict(seed=73, L=30.0, H=10.5, R=24.0),
-          canyon_exit_crag=dict(seed=79, L=20.0, H=9.5, R=14.0),
-          canyon_rim_crag_b=dict(seed=83, L=20.0, H=9.0))
+def gulch_crib(at, turn, foot, ground, s, n=4):
+    """Timbering: a crib of logs holding the talus back at the verge."""
+    x = min(foot(s) + 0.7, 1.05)
+    for k in range(n):
+        beam(at(x - 0.08 * k, 0.12 + 0.24 * k, s - 1.5), at(x - 0.08 * k, 0.12 + 0.24 * k, s + 1.5), 0.22, TIMBER)
+    for dz in (-1.2, 0.0, 1.2):
+        box((0.22, 0.3 + 0.24 * n, 0.22), at(x + 0.16, 0.12 * n + 0.05, s + dz), TIMBER, yaw=turn(s))
+
+def gulch_flume(L, at, foot, turn):
+    """Gulch's descent is the mine's canyon: a timber flume bringing water
+    down it to the mill, pinned along the face of the long left-hander on
+    trestle bents that stand on the talus and the first bench, out of a
+    header box at a notch in the cliff and down to a sluice at the verge;
+    prospect adits in the face under it, each with its fan of grey spoil,
+    and a crib of logs holding the talus where the flume comes down."""
+    ground = built_ground()
+    X = 0.95                                                   # the trough's line, clear of every buttress
+    s0, s1 = -L / 2 + 3.5, L / 2 - 7.0
+    n = int(round((s1 - s0) / 1.5))
+    ss = [s0 + (s1 - s0) * i / n for i in range(n + 1)]
+    y = lambda s: 3.25 - 0.55 * (s - s0) / (s1 - s0)           # falling the way the road does
+    pts = [at(X, y(s), s) for s in ss]
+    for a, b in zip(pts, pts[1:]):
+        rowed(beam(a, b, 0.62, 'grey', d=0.4), 10)             # the trough, weathered grey
+        beam((a[0], a[1] + 0.21, a[2]), (b[0], b[1] + 0.21, b[2]), 0.34, 'blue', d=0.04)   # the water in it
+    for i, s in enumerate(ss):
+        if i % 2:
+            continue
+        top = y(s) - 0.2
+        for dx in (-0.3, 0.3):                                 # a bent: two legs to the rock, a cap, a brace
+            fx = X + dx * 1.15
+            g = ground(*at(fx, 0.0, s)[::2])
+            beam(at(X + dx, top, s), at(fx, (g if g is not None else 0.0) - 0.3, s), 0.2, 'bark')
+        beam(at(X - 0.5, top - 0.02, s), at(X + 0.5, top - 0.02, s), 0.22, 'bark')
+        if i % 4 == 0 and i + 2 <= n:                          # every other bay braced along the run
+            beam(at(X + 0.3, top - 0.1, s), at(X + 0.35, y(ss[i + 2]) - 1.5, ss[i + 2]), 0.14, 'bark')
+    # the header box where the flume comes out of the cliff, and the sluice
+    # it ends in: three boxes stepping down the talus to a heap of tailings
+    box((1.3, 0.9, 1.5), at(X - 0.25, y(s0) + 0.1, s0 - 0.6), BOARD, yaw=turn(s0))
+    box((1.45, 0.14, 1.65), at(X - 0.25, y(s0) + 0.6, s0 - 0.6), TIMBER, yaw=turn(s0))
+    for k in range(3):
+        sk, yk = s1 + 0.9 + 1.5 * k, y(s1) - 0.75 * (k + 1)
+        rowed(beam(at(X, yk + 0.3, sk - 0.8), at(X, yk - 0.3, sk + 0.8), 0.7, 'grey', d=0.36), 10)
+        g = ground(*at(X, 0.0, sk)[::2]) or 0.0
+        box((0.24, max(0.3, yk - g + 0.3), 0.24), at(X, (yk + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+    rowed(rock_lump(0.9, at(X - 0.1, 0.1, s1 + 5.6), 'grey', (0.9, 0.6, 1.5), turn(s1), seed=4.0), 5)
+    # the adits, each where the face's foot stands back (so its spoil keeps
+    # off the kerb), a few bays apart
+    for k, s in enumerate(gulch_sites(foot, s0 + 3.0, s1 - 3.0, 3)):
+        gulch_adit(at, turn, foot, ground, s, cart=(k == 1))
+    gulch_crib(at, turn, foot, ground, s1 + 3.2)
+
+def gulch_sites(foot, s0, s1, n):
+    """`n` spots along a face's foot, 7 u apart or more, where it stands
+    furthest back from the kerb."""
+    picked = []
+    for s in sorted((s0 + 0.75 * k for k in range(int((s1 - s0) / 0.75) + 1)), key=foot):
+        if len(picked) < n and all(abs(s - q) > 7.0 for q in picked):
+            picked.append(s)
+    return sorted(picked)
+
+def gulch_workings(L, at, foot, turn):
+    """The rest of the descent's faces: prospect adits and their spoil, a
+    crib of logs between them."""
+    ground = built_ground()
+    sites = gulch_sites(foot, -L / 2 + 6.0, L / 2 - 6.0, 2)
+    for k, s in enumerate(sites):
+        gulch_adit(at, turn, foot, ground, s, cart=(k == 0))
+    if len(sites) == 2:
+        gulch_crib(at, turn, foot, ground, (sites[0] + sites[1]) / 2, n=3)
+
+mountains(canyon_bend_gulch=dict(seed=53, L=36.0, H=10.5, R=28.2, dress=gulch_flume),
+          canyon_hairpin_gulch=dict(seed=59, L=24.0, H=9.5, R=15.8),
+          canyon_inside_gulch=dict(seed=61, L=30.0, H=9.0, R=-17.8, D=13.0),
+          # its straights, the canyon's own (Wash's lengths stood here)
+          canyon_run_gulch=dict(seed=89, L=26.0, H=10.5, dress=gulch_workings),
+          canyon_drop_gulch=dict(seed=97, L=21.0, H=10.0, dress=gulch_workings),
+          canyon_yard_gulch=dict(seed=101, L=24.0, H=6.5, D=10.0, dress=gulch_workings))
+
 
 # ---- stepped rock: a mountain cut into level strata --------------------------------
 #
@@ -14843,10 +14934,13 @@ def butte_height(tiers, talus, reach, seed, jag):
 # caprock on the highest tier.
 CRAG_TALUS, CRAG_CLIFF, CRAG_PALE = 0xd68f62, 0xa96545, 0xd68f62
 
-def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07):
+def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07, wrap=None):
     """A butte of Crag's strata over butte_height, on [-extent, extent]^2,
-    with `pale` light beds across its cliff."""
+    with `pale` light beds across its cliff (`wrap` reshapes the height: a
+    rim length's bend)."""
     M = butte_height(tiers, talus, reach, seed, jag)
+    if wrap:
+        M = wrap(M)
     top = max(t[2] for t in tiers)
     k = talus / 5.0
     c0 = 6.4 * k
@@ -14962,6 +15056,44 @@ def rimrock_mitten():
     crag_butte(((-3.0, 0.0, 21.0, 5.5, 4.0, 0.2, 5.0, 0.35), (5.5, 3.0, 18.0, 2.8, 2.6, 0.0, 0.0, 0.5),
                 (0.5, 1.0, 5.5, 10.0, 7.5, 0.3, 6.0, 0.3)), 3.5, 7.0, 26.0, 3.3, jag=0.12)
     crag_rubble(((1.0, -21.0, 0.8), (-2.0, 21.0, 0.8)))
+
+# Crag's rim: the mesa's edge where the road meets it, round the outside of
+# the west hairpin (its entry looser than its apex, so a wide bend's foot
+# follows it) and out of it, and along the north straight to the bridge, in
+# the track's own rock (crag_butte: tables of the one dark sandstone over a
+# plain talus, a bench before each and a tower broken off the end), where
+# the cup's banded canyon lengths stood (Wash's signature, and Gulch's). Each
+# length is authored along a straight foot line (z along the road, -X into
+# the rim, the kerb a unit past x = 1) and bent round `R` as canyon_mountain
+# bends its own; it drapes as a canyon length does, its back in the rim's
+# land (tracks.js `land`). The start straight before it is open range.
+def crag_rim(tiers, seed, R=0.0, extent=26.0):
+    def wrap(M0):
+        def M(x, z):
+            if R:
+                r = math.hypot(R - x, z)
+                x, z = R - r, R * math.atan2(z, R - x)
+            return min(M0(x + 1.5, z), 2.5 * (1.0 - x))         # the talus stops short of the kerb
+        return M
+    with plain_parts():
+        crag_butte(tiers, 2.8, 5.0, extent, seed, pale=1, jag=0.12, wrap=wrap)
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'drape_wall')
+
+for _name, _kw in dict(
+        canyon_hairpin_crag=dict(seed=1.3, R=24.0, extent=30.0, tiers=(
+            (-9.5, -7.5, 10.5, 5.5, 4.2, 0.08, 5.0, 0.22), (-10.0, 5.0, 8.5, 5.0, 3.8, -0.1, 3.5, 0.25),
+            (-8.0, 12.0, 9.5, 2.4, 2.2, 0.0, 0.5, 0.45), (-6.0, -6.0, 5.0, 3.4, 3.6, 0.0, 5.0, 0.3),
+            (-6.5, 0.5, 6.5, 1.8, 1.8, 0.3, 0.5, 0.5))),
+        canyon_exit_crag=dict(seed=2.9, R=14.0, extent=26.0, tiers=(
+            (-9.5, -2.0, 9.5, 4.8, 4.0, 0.1, 4.0, 0.22), (-7.5, 6.5, 7.5, 2.2, 2.0, 0.0, 0.5, 0.45),
+            (-6.2, -3.0, 4.8, 3.2, 3.4, 0.0, 4.0, 0.3))),
+        canyon_rim_crag_b=dict(seed=4.1, extent=22.0, tiers=(
+            (-10.0, 1.0, 9.0, 5.5, 4.5, -0.05, 8.0, 0.22), (-8.0, -8.0, 7.5, 2.4, 2.2, 0.0, 1.0, 0.45),
+            (-6.5, 3.0, 5.5, 3.8, 4.0, 0.0, 5.0, 0.3)))).items():
+    def _build(kw=_kw):
+        crag_rim(**kw)
+    _build.__name__ = _name
+    piece(1.0)(_build)
 
 def emblem(at, yaw, r, d=0.04):
     """The oil company's mark, facing +X turned by `yaw`: a white disc in a

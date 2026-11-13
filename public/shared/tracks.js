@@ -1539,7 +1539,11 @@ export const TRACKS = {
       // faces at the kerb the near faces of the range's massifs (`land`):
       // from the run-in on the outside round the long left-hander, down the
       // straight and round the tight bend into the mine yard, one on the
-      // inside round the left-hander (Wash's lengths reused between bends).
+      // inside round the left-hander. It is the mine's canyon: a timber
+      // flume on trestles pinned along the left-hander's face, from a header
+      // box in the cliff down to a sluice at the verge, and prospect adits
+      // in every face's foot, each with its grey spoil (the lengths bring
+      // them: set_prototypes.py gulch_flume, gulch_workings).
       // The crest's left-hander has no face: its shoulder is the land's own
       // (a face there stood as pyramids on the sand from across the map,
       // where the shoulder reads as one banded mountain). The run-in's face
@@ -1547,11 +1551,11 @@ export const TRACKS = {
       // mill, so the mill reads from there across the yard. The loop's middle
       // stays low: the deck cap holds the land there under the road, and the
       // yard opens on the stamp mill.
-      { model: 'set-canyon-peaks-c', u: 0.817, lat: 5.2 },
+      { model: 'set-canyon-run-gulch', u: 0.817, lat: 5.2 },
       { model: 'set-canyon-bend-gulch', u: 0.862, lat: 5.2 },
-      { model: 'set-canyon-peaks-a', u: 0.904, lat: 5.2 },
+      { model: 'set-canyon-drop-gulch', u: 0.904, lat: 5.2 },
       { model: 'set-canyon-hairpin-gulch', u: 0.937, lat: 5.2 },
-      { model: 'set-canyon-spur-a', u: 0.968, lat: 5.2 },
+      { model: 'set-canyon-yard-gulch', u: 0.968, lat: 5.2 },
       { model: 'set-canyon-inside-gulch', u: 0.857, lat: -5.2, yaw: 180 },
       // the stamp mill stepping down its hill across the start straight
       // from the adit, its tramway's buckets riding the sagging ropes over
@@ -1610,8 +1614,9 @@ export const TRACKS = {
     // turning, the corral with cattle) down the ranch's fenced range to the
     // rim, the mesa closing the west of the map: at the hairpin the rim's
     // mountainside comes to the verge, round its outside and on along the north
-    // straight to the bridge (canyon lengths, set_prototypes.py
-    // canyon_mountain, the rim's own massif rising behind them in `land`).
+    // straight to the bridge (lengths of the track's own rimrock,
+    // set_prototypes.py crag_rim: dark tables over a plain talus with sky in
+    // the notches between, the rim's own massif rising behind them in `land`).
     // Off the bridge the road runs at the mesa standing between the
     // north-east loop and the S, a table with a butte broken away from it
     // past a gap of sky: the loop rounds the table and the S passes the
