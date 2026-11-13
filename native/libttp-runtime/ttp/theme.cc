@@ -470,11 +470,13 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
     t.pier.cap = 0x22c46e;
-    // High summer on the downs: the garden's broadleaf oaks, well apart (the
-    // trees a racer passes: no set piece repeats a stand of them round the
-    // lap), and the far hills gone to hay.
+    // High summer on the downs: the garden's broadleaf oaks (the trees a
+    // racer passes: no set piece repeats a stand of them round the lap, so
+    // the scatter is where the downs get their trees, most spots one and
+    // fewer of them a shrub or a stone), and the far hills gone to hay.
     lawnTrees(t, { { "set-tree-oak", 1.0f } });
-    t.scenery.density = 0.5f;
+    t.scenery.density = 0.85f;
+    t.scenery.mixTree = 0.85f;
     t.hills = { 0xb7bf6c, 0xa8b160, 0xc5cb7e };
     t.groundBase = 0xa2b654;
   } else if (track == "tangle") {
