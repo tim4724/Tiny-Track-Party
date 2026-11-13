@@ -10301,9 +10301,13 @@ def village_church():
     # The church: nave along Z under a slate roof, the tower at its -Z end
     # carrying the spire (the tallest thing in the village, about six cars),
     # a porch on the road side (+X), the clock; yews and headstones in the
-    # churchyard behind. On the green before it the maypole stands, its
-    # ribbons loose in the breeze, the children round it between dances.
-    s0 = set_ground('village-church')(0.0, 0.0) - 0.3
+    # churchyard behind. The churchyard is one flat yard inside a low stone
+    # wall, a lychgate in its road side and a gravel path from it to the
+    # porch; on the green inside the gate the maypole stands, its ribbons
+    # loose in the breeze. Nothing here drapes and the piece brings no
+    # ground of its own, so the renderer levels the yard a clearing: on a
+    # terrace of its own (SET_GROUND) it could not stand near the road,
+    # whose ground cap cut the terrace from under the green.
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
@@ -10333,30 +10337,38 @@ def village_church():
         cyl(2.4, 6.0, (-D / 2 - 4.5, 1.2, z), 0x4f9a48, r2=0.5, segs=8)
     for k in range(4):
         box((0.25, 1.0, 0.7), (-D / 2 - 2.0 - (k % 2) * 2.2, 0.5, -2.0 + (k // 2) * 3.0), 'grey')
-    # the green: a bench each side, the maypole
-    MX = D / 2 + 9.5
-    for z in (-6.0, 6.0):
-        bench((MX + 3.5, 0, z), yaw=-math.pi / 2)
-    box((0.35, 9.0, 0.35), (MX, 4.5, 0), 'white')
-    cyl(0.5, 0.5, (MX, 9.0, 0), 0xff5040, segs=8)
+    # the green: the maypole to one side of the path
+    MX, MZ = D / 2 + 8.0, -5.0
+    box((0.35, 9.0, 0.35), (MX, 4.5, MZ), 'white')
+    cyl(0.5, 0.5, (MX, 9.0, MZ), 0xff5040, segs=8)
     COLS = (0xff5040, 0x339cf2, 0xffc044, 0x22c46e, 0xa259e6, 0xf8f8fb, 0x339cf2, 0xff5040)
-    # The dance has stopped for a breather: the children stand round the
-    # pole and its ribbons hang loose off the crown, each lifting and
-    # falling in the breeze on its own. The wind moves, nobody does: a ring
-    # of children carried round the pole read as figures gliding over the
-    # grass, skipping or not.
-    cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
+    cyl(0.75, 0.5, (MX, 8.2, MZ), 0xffc044, segs=8)
     for k in range(6):
         a = k * 2 * math.pi / 6 + 0.5
-        ax, az = MX + 0.6 * math.cos(a), 0.6 * math.sin(a)
+        ax, az = MX + 0.6 * math.cos(a), MZ + 0.6 * math.sin(a)
         with animated('anim_sway:a=z:d=14:p=%.2f#rib%d' % (2.4 + 0.25 * k, k), (ax, 8.3, az), yaw=-a):
-            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
-    for k in range(6):
-        a = k * 2 * math.pi / 6
-        person((MX + 4.4 * math.cos(a), 0, 4.4 * math.sin(a)), math.pi - a, COLS[k], k=0.7, hair=k, arm=0.25 * (k % 2))
-    for o in bpy.context.scene.objects:          # onto its level ground
-        o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
+            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, MZ + 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
+    # the yard's wall, the church's own stone under a darker coping, from
+    # behind the yews round to the road side; the lychgate in it opposite
+    # the porch, two oak posts under a little slate roof
+    WX0, WX1, WZ, GZ, GW = -D / 2 - 8.0, D / 2 + 14.0, 13.5, 2.6, 2.4
+    def wall(a, b):
+        L, mx, mz = math.dist(a, b), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        yaw = math.atan2(b[0] - a[0], b[1] - a[1])
+        box((0.7, 1.5, L + 0.7), (mx, 0.55, mz), STONE, yaw=yaw)
+        rowed(box((0.95, 0.3, L + 0.95), (mx, 1.4, mz), 'grey', yaw=yaw), 14)
+    wall((WX0, -WZ), (WX0, WZ))
+    for sz in (-1, 1):
+        wall((WX0, sz * WZ), (WX1, sz * WZ))
+    wall((WX1, -WZ), (WX1, GZ - GW / 2 - 0.4))
+    wall((WX1, GZ + GW / 2 + 0.4), (WX1, WZ))
+    for sz in (-1, 1):
+        box((0.6, 3.6, 0.6), (WX1, 1.8, GZ + sz * (GW / 2 + 0.4)), 0x7a5a3a)
+    gable_roof(local(WX1, GZ, math.pi / 2), math.pi / 2, 0.0, 2.6, GW + 2.2, 3.4, SLATE, 0x7a5a3a, pitch_deg=45.0, t=0.3, over=0.3)
+    # the path: gravel from the gate to the porch, a hand over the yard (flat
+    # on it, the levelled lawn comes through), a bench beside it
+    box((WX1 - D / 2 - 2.6, 0.24, 1.9), ((WX1 + D / 2 + 3.0) / 2, 0.1, GZ), 'cream')
+    bench((MX + 2.5, 0, GZ + 3.2), yaw=math.pi)
     join_still('church')
 
 @piece(REAL)
@@ -10865,48 +10877,56 @@ def sheep_flock():
                (-0.3, 0.2, 1.9), (1.0, -2.6, -2.0)), 'f')
     draped('flock', still)
 
-# ---- RIBBON: the sheepfold and the walls up the hill ----------------------------------
-# The sheep's hill beyond the north loop, farmed: a round drystone fold by the
-# road with a hurdle gate, sheep penned in it, and from it the field walls
-# climbing the hill and running along its foot, the slate of the valley's
-# other stone, each a little taller than a kerb and thick enough to read as a
-# dark line on the grass from the seat. World units, front (+X) to the road;
-# on the left at yaw 180. All of it DRAPES, a wall in short lengths so it
-# rides the slope as drawn.
-def ribbon_wall(pts, h=0.5, t=0.3):
-    """A drystone wall along the (x, z) points, coping stones on its top."""
-    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-        L = math.hypot(x1 - x0, z1 - z0)
-        n = max(1, round(L / 1.7))
-        yaw = math.atan2(x1 - x0, z1 - z0)
-        for i in range(n):
-            cx, cz = x0 + (x1 - x0) * (i + 0.5) / n, z0 + (z1 - z0) * (i + 0.5) / n
-            rowed(box((t, h + 0.2, L / n + 0.05), (cx, h / 2 - 0.1, cz), 'grey', yaw=yaw), 21)
-            rowed(box((t * 0.6, 0.12, L / n * 0.7), (cx, h + 0.04, cz), 'grey', yaw=yaw), 14)
+# ---- RIBBON: the sheepfold and the fences up the hill --------------------------------
+# The sheep's hill beyond the north loop, farmed: a round timber fold by the
+# road, hurdles between stout posts with a gate in it, sheep penned inside,
+# and from it post-and-rail fences climbing the hill and running along its
+# foot, a field gate in one. Timber, pale against the grass (drystone walls
+# here read as blocks): posts a car's bonnet high, two rails, nothing
+# thinner than 0.09 u. World units, front (+X) to the road; on the left at
+# yaw 180. All of it DRAPES, a rail a post-to-post length so it rides the
+# slope as drawn.
+RIBBON_POST, RIBBON_RAIL = 0x7a5a3a, 0xc9a877
 
-def ribbon_hurdle(a, b, h=0.5):
-    """A wooden hurdle gate between two points: posts and three rails."""
+def ribbon_fence(pts, h=0.62, rails=(0.24, 0.48), step=1.0):
+    """A post-and-rail fence along the (x, z) points."""
+    posts = []
+    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+        n = max(1, round(math.hypot(x1 - x0, z1 - z0) / step))
+        posts += [(x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n) for i in range(n)]
+    posts.append(pts[-1])
+    with plain_parts():                      # square timber: no chamfer on a bar this slim
+        for x, z in posts:
+            box((0.14, h + 0.2, 0.14), (x, h / 2 - 0.1, z), RIBBON_POST)
+        for (x0, z0), (x1, z1) in zip(posts, posts[1:]):
+            for y in rails:
+                strut((x0, y, z0), (x1, y, z1), 0.09, RIBBON_RAIL)
+
+def ribbon_gate(a, b, h=0.62):
+    """A five-bar field gate between two points, braced, on taller posts."""
     for q in (a, b):
-        box((0.14, h + 0.25, 0.14), (q[0], (h + 0.25) / 2 - 0.05, q[1]), 0x7a5a3a)
-    for k in range(3):
-        y = 0.14 + 0.17 * k
-        strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0x9a7b55)
+        box((0.18, h + 0.4, 0.18), (q[0], (h + 0.4) / 2 - 0.1, q[1]), RIBBON_POST)
+    for y in (0.14, 0.3, 0.46, 0.6):
+        strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0xf8f8fb)
+    strut((a[0], 0.14, a[1]), (b[0], 0.6, b[1]), 0.09, 0xf8f8fb)
 
 @piece(1.0)
 def sheepfold():
     FX, FZ, R = 1.4, 0.0, 1.5                       # the fold: centre, radius
-    N = 12
+    N = 10
     ring = [(FX + R * math.cos(2 * math.pi * k / N), FZ + R * math.sin(2 * math.pi * k / N)) for k in range(N + 1)]
     def still():
-        ribbon_wall(ring[4:] + ring[:4])                               # open toward +Z: the gate
-        ribbon_hurdle(ring[3], ring[4])
-        # the walls from the fold: up the hill, and along its foot both ways
+        ribbon_fence(ring[3:] + ring[:3], rails=(0.18, 0.36, 0.54))    # hurdles, open toward +Z: the gate
+        ribbon_gate(ring[2], ring[3])
+        # the fences from the fold: up the hill, and along its foot both ways
         # (short toward -Z: the sheep meadow is the next thing down the road)
-        ribbon_wall(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
-        ribbon_wall(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
-        ribbon_wall(((-7.4, 0.2), (-8.0, -5.5)))
-        ribbon_wall((ring[2], (1.1, 6.0), (0.6, 10.0)))
-        ribbon_wall((ring[10], (1.0, -5.5)))
+        ribbon_fence(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
+        ribbon_fence(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
+        ribbon_fence(((-7.4, 0.2), (-8.0, -5.5)))
+        ribbon_fence((ring[1], (1.1, 4.6)))
+        ribbon_gate((1.1, 4.6), (1.0, 5.7))
+        ribbon_fence(((1.0, 5.7), (0.6, 10.0)))
+        ribbon_fence((ring[9], (1.0, -5.5)))
         # a hay rack in the fold, a trough outside it
         for sz in (-1, 1):
             box((0.1, 0.6, 0.1), (FX - 0.6, 0.3, FZ - 0.5 + sz * 0.4), 0x7a5a3a)
@@ -10943,41 +10963,78 @@ def pretzel_cart(x, z, yaw, color, tipped=False, y=0.0):
 
 @piece(1.0)
 def soapbox_run():
+    # A long gentle run: the course is laid ALONG the down, slanting across
+    # its face from the start ramp well up the slope at the piece's -Z end
+    # to the line by the verge at its +Z end, some twenty-four units of
+    # course for three and a half of fall (straight down the slope it was a
+    # third as long and as steep as the hill). It swings twice on the way, a
+    # chicane of bale stacks in the second swing.
     RED, BLUE, YELLOW, WOOD = 0xcf534f, 0x339cf2, 0xffc044, 0x9a7b55
-    X0, X1, W = -9.0, 1.2, 1.5                      # the course: its top, its foot, half its width
+    X0, Z0, X1, Z1, W = -7.6, -11.0, 1.3, 11.0, 1.3     # the start, the line, the course's half width
+    def mid(t):
+        return (X0 + (X1 - X0) * t + 0.9 * math.sin(2 * math.pi * t * 1.25) * math.sin(math.pi * t), Z0 + (Z1 - Z0) * t)
+    def frame(t):
+        (xa, za), (xb, zb) = mid(max(0.0, t - 0.01)), mid(min(1.0, t + 0.01))
+        d = math.hypot(xb - xa, zb - za)
+        tx, tz = (xb - xa) / d, (zb - za) / d
+        x, z = mid(t)
+        return x, z, tx, tz, tz, -tx                                  # the point, along, across (toward +X)
+    def gate(t, colors, n):
+        x, z, tx, tz, ax, az = frame(t)
+        a, b = (x - ax * (W + 0.3), z - az * (W + 0.3)), (x + ax * (W + 0.3), z + az * (W + 0.3))
+        for q in (a, b):
+            box((0.16, 2.3, 0.16), (q[0], 1.1, q[1]), 'white')
+        bunting((a[0], 2.2, a[1]), (b[0], 2.2, b[1]), colors, n=n)
+    def bale(x, z, yaw, y=0.2):
+        box((0.5, 0.4, 0.8), (x, y, z), 'yellow', yaw=yaw)['ramp'] = 0.25
     def still():
-        # the start: a boarded ramp tipping down the hill, a banner over it
-        box((2.2, 0.16, 2.0), (X0 + 0.4, 0.5, 0.0), WOOD, roll=0.0, pitch=0.0)
-        for sz in (-1, 1):
-            box((2.2, 0.5, 0.14), (X0 + 0.4, 0.25, sz * 0.95), 0x7a5a3a)
-            box((0.16, 2.3, 0.16), (X0 + 1.6, 1.1, sz * (W + 0.2)), 'white')
-        bunting((X0 + 1.6, 2.2, -(W + 0.2)), (X0 + 1.6, 2.2, W + 0.2), (RED, YELLOW, BLUE, 0x22c46e, 'white'), n=6)
-        # the course: bales down both sides, a pennant on a pole by every other one
-        n = 7
+        # the start: a boarded ramp tipping onto the course, a banner over it
+        x, z, tx, tz, ax, az = frame(0.0)
+        yaw = math.atan2(tx, tz)
+        box((2.0, 0.16, 2.2), (x - tx * 1.0, 0.5, z - tz * 1.0), WOOD, yaw=yaw)
+        for sd in (-1, 1):
+            box((0.14, 0.5, 2.2), (x - tx * 1.0 + ax * sd * 0.95, 0.25, z - tz * 1.0 + az * sd * 0.95), 0x7a5a3a, yaw=yaw)
+        gate(0.03, (RED, YELLOW, BLUE, 0x22c46e, 'white'), 6)
+        # the course: bales down both sides, a pennant on a pole by every third
+        n = 15
         for i in range(n):
-            x = X0 + 2.6 + (X1 - 1.0 - X0 - 2.6) * i / (n - 1)
-            for sz in (-1, 1):
-                z = sz * (W + 0.25 * math.sin(1.7 * i + sz))
-                box((0.8, 0.4, 0.5), (x + 0.3 * sz, 0.2, z), 'yellow', yaw=0.3 * sz * (i % 3 - 1))['ramp'] = 0.25
-                if i % 2 == 0:
-                    px, pz = x + 0.3 * sz + 0.6, z + 0.35 * sz
+            t = 0.07 + 0.86 * i / (n - 1)
+            x, z, tx, tz, ax, az = frame(t)
+            yaw = math.atan2(tx, tz)
+            for sd in (-1, 1):
+                bx, bz = x + ax * sd * W, z + az * sd * W
+                bale(bx, bz, yaw + 0.25 * sd * (i % 3 - 1))
+                if (i + (sd > 0)) % 3 == 0:
+                    px, pz = bx + ax * sd * 0.45, bz + az * sd * 0.45
                     box((0.1, 1.5, 0.1), (px, 0.75, pz), 'white')
-                    c = (RED, BLUE, YELLOW)[(i // 2 + (sz > 0)) % 3]
-                    poly([(px, 1.5, pz), (px, 1.1, pz), (px, 1.3, pz + 0.6 * sz)], [(0, 1, 2)], c)
-        # the line at the foot: chequers on the grass, a banner over it
+                    c = (RED, BLUE, YELLOW)[(i // 3 + (sd > 0)) % 3]
+                    poly([(px, 1.5, pz), (px, 1.1, pz), (px + tx * 0.6, 1.3, pz + tz * 0.6)], [(0, 1, 2)], c)
+        # the chicane: a stack of bales in from each side in turn
+        for t, sd in ((0.5, 1), (0.62, -1)):
+            x, z, tx, tz, ax, az = frame(t)
+            yaw = math.atan2(tx, tz)
+            for k in range(2):
+                bale(x + ax * sd * (W - 0.55 - 0.5 * k), z + az * sd * (W - 0.55 - 0.5 * k), yaw + math.pi / 2)
+            bale(x + ax * sd * (W - 0.8), z + az * sd * (W - 0.8), yaw + math.pi / 2, y=0.6)
+        # the line at the foot: chequers on the grass across the course, a banner over it
+        x, z, tx, tz, ax, az = frame(0.97)
         Q = 6
         for i in range(2):
             for j in range(Q):
-                x0, z0 = X1 - 0.9 + 0.4 * i, -W + 2 * W * j / Q
-                ground_poly([(x0, 0.05, z0), (x0 + 0.4, 0.05, z0), (x0 + 0.4, 0.05, z0 + 2 * W / Q), (x0, 0.05, z0 + 2 * W / Q)],
-                            [(0, 3, 2, 1)], (0x2a2735, 'white')[(i + j) % 2])
-        for sz in (-1, 1):
-            box((0.16, 2.3, 0.16), (X1 - 0.7, 1.1, sz * (W + 0.3)), 'white')
-        bunting((X1 - 0.7, 2.2, -(W + 0.3)), (X1 - 0.7, 2.2, W + 0.3), (0x2a2735, 'white'), n=8)
-        # the carts: the winner past the line, the other over in the bales
-        pretzel_cart(X1 + 0.5, -0.4, math.pi / 2 + 0.3, RED)
-        pretzel_cart(X1 - 3.4, W + 0.1, 0.9, BLUE, tipped=True)
-        pretzel_cart(X0 + 0.4, 0.3, math.pi / 2, 0x22c46e, y=0.5)             # a third waiting on the ramp
+                def at(u, v):
+                    return (x + tx * u + ax * v, 0.05, z + tz * u + az * v)
+                u0, v0 = -0.4 + 0.4 * i, -W + 2 * W * j / Q
+                ground_poly([at(u0, v0), at(u0 + 0.4, v0), at(u0 + 0.4, v0 + 2 * W / Q), at(u0, v0 + 2 * W / Q)],
+                            [(0, 1, 2, 3)], (0x2a2735, 'white')[(i + j) % 2])
+        gate(0.97, (0x2a2735, 'white'), 8)
+        # the carts: the winner past the line, one over in the chicane's
+        # bales, a third waiting on the ramp
+        yaw = math.atan2(tx, tz)
+        pretzel_cart(x + tx * 1.5 + ax * 0.3, z + tz * 1.5 + az * 0.3, yaw + 0.3, RED)
+        x, z, tx, tz, ax, az = frame(0.66)
+        pretzel_cart(x - ax * (W - 0.3), z - az * (W - 0.3), math.atan2(tx, tz) + 0.7, BLUE, tipped=True)
+        x, z, tx, tz, ax, az = frame(0.0)
+        pretzel_cart(x - tx * 1.0, z - tz * 1.0, math.atan2(tx, tz), 0x22c46e, y=0.5)
     draped('run', still)
 
 # The village fete on the green beside the start straight, its right, on race
@@ -11154,7 +11211,50 @@ def fete(lite):
         cyl(0.12, 4.6, (x, 0, z), WHITE, segs=6)
     if not lite:
         coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML)
+    fete_ground(lite, ((HX, HZ, TR + 3.0), (BX + 4.2, BZ, 2.4), (MX + MW / 2, MZ, 3.0), (CX, CZ, CR + 0.6),
+                       (6.6, 28.0, 7.5), (SX + 1.2, SZ, 3.0)))
     join_still('fete')
+
+def fete_ground(lite, stops):
+    """What makes the fete one fairground: a mown green under all of it, a
+    gravel walk down its road side with a spur to each attraction (`stops`:
+    where, and how wide a patch of gravel lies before it), the way in from
+    the road under a banner between two poles, and a post-and-rope fence
+    along the road and round both ends. The green and the gravel lie a hand
+    over the piece's level (flat on it, the levelled lawn comes through)."""
+    RED, WHITE = 0xcf534f, 0xf8f8fb
+    X0, X1, Z0, Z1 = -8.5, 15.5, -45.5, 49.5        # the green: back, road side, both ends
+    WALK, GY, PY = 13.0, 0.1, 0.14                  # the walk's line; the green's and the gravel's middles
+    n = 12                                          # mown in stripes, as a show field is
+    for q in range(n):
+        za, zb = Z0 + (Z1 - Z0) * q / n, Z0 + (Z1 - Z0) * (q + 1) / n
+        rowed(box((X1 - X0, 0.2, zb - za), ((X0 + X1) / 2, GY, (za + zb) / 2), 'leaf'), (22, 27)[q % 2])['chamfer'] = 0
+    box((2.4, 0.2, Z1 - Z0 - 4.0), (WALK, PY, (Z0 + Z1) / 2), 'cream')
+    for x, z, w in stops:
+        box((WALK - x + 1.0, 0.2, 1.8), ((WALK + x) / 2, PY, z), 'cream')          # the spur
+        box((2.2, 0.2, w), (x + 0.6, PY, z), 'cream')                              # the patch before it
+    # the way in, opposite the tea tent: gravel out to the verge, two tall
+    # poles and a striped banner between them
+    GZ, GW = 0.0, 5.0
+    box((X1 + 4.0 - WALK, 0.2, 3.0), ((X1 + 4.0 + WALK) / 2, PY, GZ), 'cream')
+    for sz in (-1, 1):
+        box((0.45, 5.6, 0.45), (X1, 2.8, GZ + sz * GW / 2), WHITE)
+        sphere(0.4, (X1, 5.8, GZ + sz * GW / 2), 0xffc044, subdiv=1)
+    for k in range(5):
+        box((0.2, 1.1, GW / 5), (X1, 4.7, GZ - GW / 2 + GW / 5 * (k + 0.5)), (RED, WHITE)[k % 2])
+    # the fence: white posts and a red rope, along the road and round the ends
+    def fence(a, b):
+        n = max(1, round(math.dist(a, b) / (8.0 if lite else 4.0)))
+        pts = [(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1)]
+        with plain_parts():
+            for x, z in pts:
+                box((0.4, 1.7, 0.4), (x, 0.85, z), WHITE)
+            for (xa, za), (xb, zb) in zip(pts, pts[1:]):
+                strut((xa, 1.35, za), (xb, 1.35, zb), 0.36, RED)
+    fence((X1, Z0), (X1, GZ - GW / 2))
+    fence((X1, GZ + GW / 2), (X1, Z1))
+    fence((X0, Z0), (X1, Z0))
+    fence((X0, Z1), (X1, Z1))
 
 def coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML):
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
@@ -11318,14 +11418,18 @@ def football_pitch():
     # the club's pavilion across it from the road and match-day bunting down
     # the road's touchline. No game: players at this size read as specks.
     PW, PL, T = 26.0, 42.0, 0.42
+    TY = 0.2                                      # the turf's height
     W = 'white'
     n = 8                                         # the turf, mown across in eight stripes
     for q in range(n):
         z0, z1 = -PL / 2 - 3.0 + (PL + 6.0) * q / n, -PL / 2 - 3.0 + (PL + 6.0) * (q + 1) / n
-        rowed(ground_poly([(-PW / 2 - 3.0, 0.03, z0), (PW / 2 + 3.0, 0.03, z0), (PW / 2 + 3.0, 0.03, z1),
-                           (-PW / 2 - 3.0, 0.03, z1)], [(0, 3, 2, 1)], 'leaf'), (27, 31)[q % 2])
+        # (a hand over the clearing: the lawn the renderer levels under it
+        # lies a hair either side of the piece's own level, and at 0.03 it
+        # came through the turf in whole triangles)
+        rowed(ground_poly([(-PW / 2 - 3.0, TY, z0), (PW / 2 + 3.0, TY, z0), (PW / 2 + 3.0, TY, z1),
+                           (-PW / 2 - 3.0, TY, z1)], [(0, 3, 2, 1)], 'leaf'), (27, 31)[q % 2])
     def line(x, z, w, l, yaw=0.0):
-        box((w, 0.06, l), (x, 0.07, z), W, yaw=yaw)
+        box((w, 0.06, l), (x, TY + 0.04, z), W, yaw=yaw)
     for s in (-1, 1):
         line(s * PW / 2, 0, T, PL + T)
         line(0, s * PL / 2, PW, T)
@@ -11513,9 +11617,8 @@ BROOK_ROUTE = {
     'brook-g': ("join", "pond", (1.403, -12.332), None, (
         (1.24, -11.544, 0.83), (1.087, -10.754, 0.84), (0.942, -9.962, 0.85), (0.806, -9.169, 0.86), (0.677, -8.375, 0.87), (0.556, -7.579, 0.88),
         (0.443, -6.782, 0.89), (0.337, -5.985, 0.9), (0.239, -5.186, 0.91), (0.15, -4.386, 0.92), (0.07, -3.586, 0.92), (0, -2.784, 0.93),
-        (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.016, 1.231, 0.97), (0.134, 2.027, 0.98),
-        (0.28, 2.818, 0.98), (0.446, 3.605, 0.99), (0.619, 4.391, 0.99), (0.782, 5.179, 1), (0.916, 5.972, 1), (1.005, 6.772, 1),
-        (1.075, 7.574, 1), (1.132, 8.376, 1), (1.185, 9.179, 1), (1.241, 9.982, 1),
+        (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.053, 1.225, 1), (0.328, 1.999, 1),
+        (0.727, 2.704, 1), (1.22, 3.34, 1), (1.783, 3.907, 1), (2.415, 4.423, 1), (3.08, 4.87, 1), (3.575, 5.154, 1),
     ), -1),
 }
 
@@ -11583,7 +11686,8 @@ def brook_channel(fr, start, end, k=1.0, near=0):
         # colour (turf: the renderer paints it the ground's)
         before = set(bpy.context.scene.objects)
         lay(lambda w: ((sd * (w + C), H), (sd * (w + C + 0.35 * B), 0.62 * H), (sd * (w + C + B), -0.04 / k)),
-            'green', 22, lambda ax, az: (sd * ax, 1.0, sd * az))
+            'green', 22, lambda ax, az: (sd * ax, 1.0, sd * az),
+            pick=(lambda i: i < n - 4) if end == 'pond' else None)    # no lawn out over the pond's water
         for o in set(bpy.context.scene.objects) - before:
             o['turf'] = 1
     # riffles: short white marks on the water, leaning with the flow, now one
@@ -11642,19 +11746,34 @@ def brook_ends(fr, start, end):
                                (x - ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z - az * 0.2 + tz * 0.9),
                                (x + ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z + az * 0.2 + tz * 0.9)], [(0, 1, 2, 3)], 'white'), 2)
         elif kind == 'pond':
-            # the sill it spills over into the pond, the walls ending in a
-            # stone each side, the spill white past the sill
-            box((2 * w + 0.1, 0.16, 0.3), (x, BROOK_WY + 0.06, z), 'grey', yaw=yaw)
+            # the mouth: the reach turns in and runs on through the pond's
+            # coping, which the renderer opens where a brook's bed crosses it
+            # (buildPonds), to end half a unit out in the pond, its water at
+            # the pond's own level: the walls ending in a stone each side,
+            # the run white out onto the pond's sheet (which lies 0.09 up)
             for sd in (-1, 1):
                 rowed(box((C + 0.2, H + 0.12, 0.5), (x + ax * sd * (w + C / 2), (H + 0.12) / 2 - 0.04, z + az * sd * (w + C / 2)),
                           'grey', yaw=yaw), SLATE_ROW)
-            rowed(ground_poly([(x + ax * w + tx * 0.16, BROOK_WY + 0.02, z + az * w + tz * 0.16),
-                               (x - ax * w + tx * 0.16, BROOK_WY + 0.02, z - az * w + tz * 0.16),
-                               (x - ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z - az * w * 0.7 + tz * 0.9),
-                               (x + ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z + az * w * 0.7 + tz * 0.9)],
+            rowed(ground_poly([(x + ax * w * 0.8 - tx * 0.3, 0.12, z + az * w * 0.8 - tz * 0.3),
+                               (x - ax * w * 0.8 - tx * 0.3, 0.12, z - az * w * 0.8 - tz * 0.3),
+                               (x - ax * w * 0.35 + tx * 0.6, 0.12, z - az * w * 0.35 + tz * 0.6),
+                               (x + ax * w * 0.35 + tx * 0.6, 0.12, z + az * w * 0.35 + tz * 0.6)],
                               [(0, 1, 2, 3)], 'white'), 3)
 
 def brook_piece(start, end, prev, nxt, pts, road):
+    # A reach that meets a culvert runs on INTO it: most of a unit past the
+    # headwall's face along its own line, so however the two are turned to
+    # each other its water goes into the arch and both walls into the stone
+    # (cut square at the face, a reach met it at one corner and left a wedge
+    # of lawn between the water and the mouth). The barrel hides the rest.
+    pts = list(pts)
+    def on(a, b):
+        d = math.hypot(a[0] - b[0], a[1] - b[1])
+        return (a[0] + (a[0] - b[0]) / d * 0.9, a[1] + (a[1] - b[1]) / d * 0.9, a[2])
+    if start == 'culvert':
+        pts.insert(0, on(pts[0], pts[1]))
+    if end == 'culvert':
+        pts.append(on(pts[-1], pts[-2]))
     fr = brook_frames(pts, prev, nxt)
     draped('brook', lambda: (brook_channel(fr, start, end, near=road), brook_ends(fr, start, end)))
 
@@ -12006,17 +12125,19 @@ def blossom_grove_b():
 # cherry either side and benches facing it. Front (+X) to the road.
 @piece(REAL)
 def bandstand():
-    # On the crown of its own knoll (SET_GROUND, a broad round top): the floor
-    # lies flush in the turf, a stone kerb round it sunk into the ground, the
-    # posts off the floor, and every other part (the bunting's poles, the
-    # benches, the steps down the road side) stands where the knoll's ground
-    # is under it. No base to stand proud of a slope.
+    # On the crown of its own knoll (SET_GROUND, a broad round top), on a
+    # low stone base a step and a half high, as a bandstand has: the knoll
+    # as DRAWN is the ground's 9 u chords, up to a hand over the formula at
+    # the crown, and a floor laid flush in the turf lay under it with its
+    # steps. The benches and the steps down the road side stand a little
+    # over the formula for the same reason, their feet sunk.
     RED, WHITE = 0xcf534f, 'white'
     H = set_ground('bandstand')
     s0 = H(0.0, 0.0)
-    cyl(3.7, 0.9, (0, s0 - 0.75, 0), 'cream', segs=8)                 # the kerb, its top a hand over the turf
-    cyl(3.3, 0.1, (0, s0 + 0.15, 0), 0x9a7b55, segs=8)                # the boards
-    F0 = s0 + 0.25
+    BASE = 1.1
+    cyl(3.7, BASE + 0.75, (0, s0 - 0.75, 0), 'cream', segs=8)         # the base
+    cyl(3.3, 0.1, (0, s0 + BASE, 0), 0x9a7b55, segs=8)                # the boards
+    F0 = s0 + BASE + 0.1
     for k in range(8):
         a = k * math.pi / 4 + math.pi / 8
         x, z = 3.0 * math.cos(a), 3.0 * math.sin(a)
@@ -12036,10 +12157,13 @@ def bandstand():
         bunting((4.2 * math.cos(a), F0 + 3.4, 4.2 * math.sin(a)), (px, top - 0.1, pz),
                 (0xff5040, 0xffc044, 0x339cf2, 0x22c46e, 'white'), n=7)
     for z in (-3.2, 3.2):
-        bench((6.0, H(6.0, z), z), yaw=math.pi / 2)
-    for i in range(7):                                             # stone steps down the road side
+        bench((6.0, H(6.0, z) + 0.4, z), yaw=math.pi / 2)
+        for sx in (-0.7, 0.7):
+            box((0.2, 0.6, 0.2), (6.0, H(6.0, z) + 0.1, z + sx), 0x7a5a3a)
+    for i in range(7):                                             # stone steps down the road side, the top two up the base
         x = 4.2 + 1.1 * i
-        box((1.15, 0.5, 2.2), (x, H(x + 0.5, 0.0) - 0.12, 0.0), 'grey')
+        top = max(H(x + 0.5, 0.0) + 0.45, s0 + BASE - 0.4 * (i + 1))
+        box((1.15, 1.0, 2.2), (x, top - 0.5, 0.0), 'grey')
     join_still('bandstand')
 
 # ---- PRETZEL: the picnic under the great oak -----------------------------------------
@@ -12408,7 +12532,9 @@ def springhouse():
         cx0, cx1, cz = HX + D / 2 + 0.1, -0.3, AZ
         ya = yb = 0.0
         for z0, z1, row in ((-0.55, -0.2, 28), (-0.2, 0.2, None), (0.2, 0.55, 28)):
-            o = skin([(cx0, ya + 0.12, cz + z0), (cx0, ya + 0.12, cz + z1), (cx1, yb + 0.12, cz + z1), (cx1, yb + 0.12, cz + z0)],
+            # (a finger over the pool's water, which it runs out onto: at the
+            # water's own height the two sheets flickered through each other)
+            o = skin([(cx0, ya + 0.19, cz + z0), (cx0, ya + 0.19, cz + z1), (cx1, yb + 0.19, cz + z1), (cx1, yb + 0.19, cz + z0)],
                      [(0, 1, 2, 3)], 'white' if row is None else 'sky', (0, 1, 0))   # the brook's edge blue
             if row is not None:
                 rowed(o, row)
@@ -12423,8 +12549,11 @@ def springhouse():
         # the brook's channel, into a pipe under a low headwall; it comes out
         # beyond the road as the brook's head (set-brook-a)
         OX0, OX1 = PX + PR - 0.3, 7.5
+        before = set(bpy.context.scene.objects)
         brook_channel(brook_frames([(OX0 + (OX1 - OX0) * t / 4, PZ, 1.1) for t in range(5)], None, None),
                       'join', 'culvert', k=SPRING_GROW)
+        for o in set(bpy.context.scene.objects) - before:   # a finger under the pool's water and coping,
+            o.location.z -= 0.06                            # which it starts under: level with them, they flickered
         hx = OX1 + 0.4
         rowed(box((0.8, 1.15, 3.6), (hx, 0.5, PZ), 'grey'), 20)          # a low headwall, no block at the kerb
         rowed(box((1.0, 0.22, 3.9), (hx, 1.12, PZ), 'grey'), 12)

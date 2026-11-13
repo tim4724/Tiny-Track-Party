@@ -381,11 +381,13 @@ export const SET_GROUND = {
   'set-brook-d': [{ kind: 'plain', x: 0.98, z: -0.29, len: 20.9, r: 1.6, w: 2.5 }],
   'set-brook-e': [{ kind: 'plain', x: 1.81, z: -0.32, len: 22, r: 1.6, w: 2.5 }],
   'set-brook-f': [{ kind: 'plain', x: 4.61, z: -0.61, len: 19.7, r: 1.6, w: 2.5 }],
-  'set-brook-g': [{ kind: 'plain', x: 1.24, z: -0.78, len: 21.5, r: 1.6, w: 2.5 }],
-  // Ribbon's church on the churchyard's own level ground, cut into the
-  // terrace it stands on, the green before it: on the slope as it was, the
-  // tower stood a storey deep in the hill.
-  'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
+  // (the last reach turns in to the pond: its bed's chord is turned with
+  // it, and a round floor at the mouth keeps the lawn's 9 u chords from
+  // climbing over the corner of the pond the brook comes in at)
+  'set-brook-g': [
+    { kind: 'plain', yaw: 7.96, x: 2.83, z: -2.83, len: 16.9, r: 1.6, w: 2.5 },
+    { kind: 'plain', x: 3.58, z: 5.15, len: 0, r: 6.5, w: 5 }
+  ],
   // Pretzel's den camp on a bank of its own, the same shape.
   // Tidepool's knoll at the lap's waist, its rock standing on its road side.
   'set-tidepool-knoll': [{ kind: 'mound', x: -3, h: 4.5, r: 10, r1: 12, rz: 13, shape: 1.3 }],
@@ -1249,14 +1251,13 @@ export const TRACKS = {
     // under the flyover, their fold and its drystone walls up the north-east
     // hill where the loop turns under it, and the dairy farm stands inside
     // the west bend. The church is the village's tallest thing, a quarter
-    // over its real size like the cup's other heroes; nearer the road its
-    // terrace falls inside the reach of the road's own ground and the green
-    // before it floats. A
+    // over its real size like the cup's other heroes, in a walled yard by
+    // the road with its lychgate to it. A
     // piece's box holds the verge band down under it (bandHold), so nothing
     // here is one piece over a whole loop: every box keeps 2 u or more off
     // the kerbs, and the road keeps its verge.
     set: [
-      { model: 'set-village-church', u: 0.32107, lat: 22, yaw: 39.34, scale: 1.25 },
+      { model: 'set-village-church', u: 0.32107, lat: 13.5, yaw: 39.34, scale: 1.25 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
       { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
       { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
@@ -1277,7 +1278,7 @@ export const TRACKS = {
       { model: 'set-orchard-block', u: 0.239, lat: -8.6 },
       { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
-      { model: 'set-cow-farm', u: 0.892, lat: -8.7, yaw: 180 },
+      { model: 'set-cow-farm', u: 0.892, lat: -9.4, yaw: 180, scale: 1.3 },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
       { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
