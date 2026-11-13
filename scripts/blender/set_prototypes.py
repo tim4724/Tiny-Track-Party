@@ -688,12 +688,6 @@ def boat(at, yaw, hull, trim=0xfff6eb, L=0.95):
     b((0.4, 0.05, L * 0.82), 0, 0.165, -L * 0.08, trim)
     b((0.3, 0.06, 0.08), 0, 0.17, 0.0, 0x9a7b55)                            # the thwart
 
-def creel(at, yaw=0.0):
-    """A crab pot a fifth of a car long: a plank base, its net drawn over."""
-    x, y, z = at
-    box((0.26, 0.06, 0.36), (x, y + 0.03, z), 0x9a7b55, yaw=yaw)
-    box((0.22, 0.16, 0.32), (x, y + 0.14, z), 'sky', yaw=yaw)
-
 def umbrella(at, r, h, colors, gores=8):
     """A beach umbrella: a pole and a canopy of gores in alternating colours,
     peaked over the pole and falling to its rim."""
@@ -16394,142 +16388,6 @@ def stand_open(B, phi):
         o.data.update()
 
 @piece(1.0)
-def snakes_ladders():
-    # Skysnake: a game of snakes and ladders past the dive's loop, outside
-    # the bend the loop runs out into: a 60 cm board of a hundred squares (a
-    # toy car fits on one) stood up half open like a book, its snakes and
-    # ladders to the road (lying flat, it showed only a sliver over the
-    # kerb), the pawns and two dice on the floor before it. The track's dive
-    # is its snake and its climb a ladder.
-    B, T = 5.5, 0.22
-    box((2 * B + 0.25, T, 2 * B + 0.25), (0, T / 2, 0), 0xb06041)        # the board's edge
-    box((2 * B, 0.04, 2 * B), (0, T + 0.02, 0), 0xfdf4de)                 # its printed face
-    C = 2 * B / 10
-    y = T + 0.06
-    for i in range(10):
-        for j in range(10):
-            if (i + j) % 2:
-                continue
-            x0, z0 = -B + i * C, -B + j * C
-            quad([(x0, y, z0), (x0 + C, y, z0), (x0 + C, y, z0 + C), (x0, y, z0 + C)], TOY[((i + j) // 2 + j) % 4])
-    # the printed ladders and snakes
-    for a, b in (((2.4, -4.1), (3.5, 1.4)), ((-4.6, -4.4), (-4.1, -0.6)), ((1.6, 2.0), (2.8, 4.8))):
-        print_ladder(a, b, 0.75, y + 0.01, 0xb06041)
-    for ctrl, c in (([(-2.5, 4.4), (-0.9, 3.0), (-2.6, 1.3), (-0.8, -0.5), (-1.6, -2.4)], 0x6cbf6c),
-                    ([(4.6, 4.3), (3.6, 3.0), (4.6, 1.2), (4.0, -1.0)], 0xe66a5a),
-                    ([(0.6, -1.2), (1.4, -2.4), (0.2, -3.4), (1.0, -4.7)], 0xa878e8)):
-        pts = curve(ctrl, 0.3)
-        print_band(pts, y + 0.02, 0.42, c)
-        hx, hz = ctrl[0]
-        quad([(hx - 0.35, y + 0.025, hz), (hx, y + 0.025, hz - 0.3), (hx + 0.35, y + 0.025, hz), (hx, y + 0.025, hz + 0.45)], c)
-    keep_light(0.4)
-    stand_open(B + 0.125, math.radians(28))
-    pawn((3.4, 0, -1.2), 0xe66a5a, k=0.4)
-    pawn((4.2, 0, 0.6), 0x5a8fd8, k=0.4)
-    pawn((2.6, 0, 0.3), 0xa878e8, k=0.4)
-    pawn((4.6, 0, -2.6), 0xf2c14e, k=0.4)
-    die((5.4, 0, 1.6), 0.6, 0.4)
-    die((5.9, 0, 0.4), 0.6, -0.3, faces=(('+x', 1), ('-z', 6), ('+z', 3), ('-x', 4)))
-    merge_paint()
-
-def toy_snake(ctrl, base, k, rear=None, tail=None, neck=None):
-    """A jointed wooden toy snake lying along the curve through `ctrl` [(x,
-    z)], its blocks alternating green and yellow with a gap at every joint,
-    tapering to the tail, `k` its size, standing on `base(x, z)`. With `rear`
-    (a direction (x, z)), its last joints rise and its head leans out that
-    way; otherwise its head lies at the curve's end. `neck` names the rearing
-    neck's motion (anim_), with its head. `tail` (n, degrees, period, lag)
-    wiggles the tail's last n blocks the way the toy's joints let it: each
-    block swings about the joint before it, riding the one before, each `lag`
-    of a swing behind the one before (anim_sway in step), so a wave runs down
-    to the tip."""
-    joints = curve(ctrl, 1.4 * k)
-    N = len(joints)
-    def body(i):
-        (x0, z0), (x1, z1) = joints[i], joints[i + 1]
-        f = min(1.0, 0.55 + 0.45 * i / 8)
-        g = 0.13 * k / max(math.hypot(x1 - x0, z1 - z0), 0.01)
-        y = max(base(x0, z0), base(x1, z1)) + 0.5 * f * k
-        bar((x0 + (x1 - x0) * g, y, z0 + (z1 - z0) * g), (x1 - (x1 - x0) * g, y, z1 - (z1 - z0) * g),
-            1.25 * f * k, 1.0 * f * k, SNAKE[i % 2])
-    if tail:
-        n, deg, period, lag = tail
-        with contextlib.ExitStack() as chain:
-            for m in range(n):
-                j = joints[n - m]
-                chain.enter_context(animated('anim_sway:a=y:d=%g:p=%g:o=%.3f#tail%d' % (deg, period, (1.0 - m * lag) % 1.0, m),
-                                             (j[0], base(*j), j[1])))
-                body(n - 1 - m)
-    for i in range(0 if not tail else tail[0], N - 1):
-        body(i)
-    def head(hx, hy, hz, d, pitch):
-        yaw = math.atan2(d[0], d[1])
-        box((1.5 * k, 1.05 * k, 2.4 * k), (hx, hy, hz), 0x6cbf6c, yaw=yaw, pitch=pitch)
-        box((1.2 * k, 0.3 * k, 2.0 * k), (hx + d[0] * 0.15 * k, hy - 0.57 * k, hz + d[1] * 0.15 * k), 0xf2c14e,
-            yaw=yaw, pitch=pitch)
-        sx, sz = d[1], -d[0]
-        for sd in (-1, 1):
-            ex, ez = hx + d[0] * 0.45 * k + sx * sd * 0.62 * k, hz + d[1] * 0.45 * k + sz * sd * 0.62 * k
-            box((0.42 * k, 0.42 * k, 0.42 * k), (ex, hy + 0.45 * k, ez), 0xfdf4de, yaw=yaw)
-            box((0.22 * k, 0.26 * k, 0.26 * k), (ex + sx * sd * 0.14 * k + d[0] * 0.1 * k, hy + 0.47 * k,
-                                                 ez + sz * sd * 0.14 * k + d[1] * 0.1 * k), 0x2a2735, yaw=yaw)
-        tx, tz, ty = hx + d[0] * 1.2 * k, hz + d[1] * 1.2 * k, hy - 0.4 * k
-        bar((tx, ty, tz), (tx + d[0] * 0.8 * k, ty - 0.1 * k, tz + d[1] * 0.8 * k), 0.14 * k, 0.08 * k, 0xff5040)
-        for sd in (-1, 1):
-            fx, fz = tx + d[0] * 0.8 * k, tz + d[1] * 0.8 * k
-            bar((fx, ty - 0.1 * k, fz), (fx + d[0] * 0.35 * k + sx * sd * 0.2 * k, ty - 0.13 * k, fz + d[1] * 0.35 * k + sz * sd * 0.2 * k),
-                0.12 * k, 0.08 * k, 0xff5040)
-    (px, pz), (ex, ez) = joints[-2], joints[-1]
-    if not rear:
-        l = math.hypot(ex - px, ez - pz) or 1.0
-        d = ((ex - px) / l, (ez - pz) / l)
-        head(ex + d[0] * 1.0 * k, base(ex, ez) + 0.55 * k, ez + d[1] * 1.0 * k, d, 0.0)
-        return
-    d, nx, nz, y0 = rear, ex, ez, base(ex, ez)
-    NECK = ((0, 0.55), (0.55, 1.5), (0.85, 2.5), (0.95, 3.5), (1.1, 4.4), (1.55, 5.2), (2.25, 5.7))
-    with animated(neck, (nx, y0, nz)) if neck else contextlib.nullcontext():
-        for i in range(len(NECK) - 1):
-            (h0, a0), (h1, a1) = NECK[i], NECK[i + 1]
-            bar((nx + d[0] * h0 * k, y0 + a0 * k, nz + d[1] * h0 * k), (nx + d[0] * h1 * k, y0 + a1 * k, nz + d[1] * h1 * k),
-                1.15 * k, 1.05 * k, SNAKE[(N + i) % 2])
-        head(nx + d[0] * 3.1 * k, y0 + 5.75 * k, nz + d[1] * 3.1 * k, d, -0.12)
-
-@piece(1.0)
-def jointed_snake():
-    # Skysnake's hero: the board's snake come alive, a wooden jointed toy
-    # snake (about 80 cm of it, as thick as a toy car is tall) lying in curves
-    # on the floor inside the bend before the line. It rears up at its -Z end
-    # and sways its head out over -X toward the racers coming at it down the
-    # straight, and its tail wiggles joint by joint as the wooden toy's
-    # does when it is shaken; a little one lies curled beside it, its own
-    # tail wiggling (a still snake beside a live one read as a broken toy).
-    # Its body runs along Z.
-    toy_snake([(0.0, 7.4), (1.6, 5.0), (-1.6, 2.6), (1.4, 0.0), (-1.3, -2.4), (0.9, -4.6), (0.0, -6.4)],
-              lambda x, z: 0.0, 0.62, rear=(-1.0, 0.0),
-              tail=(5, 10, 2.2, 0.13), neck='anim_sway:a=y:d=24:p=3.3#neck')
-    toy_snake([(-3.4, 7.8), (-4.6, 5.8), (-3.4, 4.0), (-4.5, 2.2)], lambda x, z: 0.0, 0.36,
-              tail=(3, 14, 1.7, 0.15))
-
-@piece(1.0)
-def toy_snake_loop():
-    # Skysnake: another of the game's wooden snakes slithering round on the
-    # floor. Its body lies on an arc of its circle and it travels round the
-    # circle head first (anim_path, facing its way), so every block follows
-    # the one ahead along the curve, as a snake's body does. A traveller,
-    # it leaves the sun bake: a shadow baked where it lay would stay behind.
-    # Its head rears up as it goes, a cobra's, so it reads over a kerb. As
-    # thick as the jointed snake (one game's snakes), on a ring wide enough
-    # to read from the straight it lies at the end of. Built with its head at
-    # +Z heading +X, where the loop starts.
-    R, k, N = 3.4, 0.6, 64
-    for i in range(N):
-        a = math.radians(90.0 - 360.0 * i / N)
-        marker('path_ring_%d' % i, (R * math.cos(a), 0, R * math.sin(a)))
-    ctrl = [(R * math.cos(math.radians(a)), R * math.sin(math.radians(a))) for a in range(330, 89, -30)]
-    with animated('anim_path:c=ring:p=14:f=1', (0, 0, R)):
-        toy_snake(ctrl, lambda x, z: 0.0, k, rear=(1.0, 0.0))
-
-@piece(1.0)
 def game_box():
     # Skysnake: the game's box (40 by 26 cm) stood on its edge by the spiral
     # climb, the lid's green snake, its drawn ladders and its yellow title
@@ -16560,63 +16418,6 @@ def floor_quad(pts, y, color):
     o = quad([(x, y, z) for x, z in pts], color)
     o.name = 'floorq'                   # not merge_paint's: the mat joins as one `floor` part
     return o
-
-@piece(1.0)
-def floor_mat():
-    # Skysnake's game again, as a floor mat the grid straight runs down the
-    # middle of (placed at lat 0): a 1.8 m snakes-and-ladders mat of 144
-    # squares lying flat on the boards, its printed snakes and ladders either
-    # side of the road, three big floor-game pawns and two foam dice stood on
-    # it. The mat is ONE `floor` part: the renderer lays it in the structures'
-    # receiver so the deck's shadow falls on it, and spotIssue lets a print
-    # that low pass under the deck.
-    N, C = 12, 2.7
-    B = N * C / 2
-    Y0, Y1, Y2 = 0.03, 0.05, 0.065
-    mat = [floor_quad([(-B - 0.4, -B - 0.4), (B + 0.4, -B - 0.4), (B + 0.4, B + 0.4), (-B - 0.4, B + 0.4)], Y0, 0x5a8fd8)]
-    for i in range(N):
-        for j in range(N):
-            x0, z0 = -B + i * C, -B + j * C
-            col = TOY[(i // 2 + j) % 4] if (i + j) % 2 == 0 else 0xfdf4de
-            mat.append(floor_quad([(x0, z0), (x0 + C, z0), (x0 + C, z0 + C), (x0, z0 + C)], Y1, col))
-    def band(pts, w, color, y):
-        for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-            l = math.hypot(x1 - x0, z1 - z0) or 1.0
-            nx, nz = -(z1 - z0) / l * w / 2, (x1 - x0) / l * w / 2
-            mat.append(floor_quad([(x0 - nx, z0 - nz), (x1 - nx, z1 - nz), (x1 + nx, z1 + nz), (x0 + nx, z0 + nz)], y, color))
-    def ladder(a, b, w):
-        l = math.hypot(b[0] - a[0], b[1] - a[1])
-        nx, nz = -(b[1] - a[1]) / l * w / 2, (b[0] - a[0]) / l * w / 2
-        for s in (-1, 1):
-            band([(a[0] + s * nx, a[1] + s * nz), (b[0] + s * nx, b[1] + s * nz)], 0.32, 0xb06041, Y2)
-        for k in range(1, max(2, int(l / 1.0))):
-            f = k / max(2, int(l / 1.0))
-            cx, cz = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
-            band([(cx - nx, cz - nz), (cx + nx, cz + nz)], 0.24, 0xb06041, Y2 + 0.005)
-    # the printed ladders and snakes, clear of the road down the middle (|x| < 3.5)
-    for a, b in (((6.0, -13.0), (8.5, 1.0)), ((-11.5, -11.0), (-9.0, 4.0)), ((12.5, 3.0), (13.5, 14.0)),
-                 ((-6.5, 6.0), (-5.0, 15.0)), ((14.0, -14.0), (15.0, -4.0))):
-        ladder(a, b, 1.8)
-    for ctrl, c in (([(-6.0, -4.0), (-8.5, -6.5), (-5.5, -9.0), (-8.0, -11.5), (-6.0, -14.5)], 0x6cbf6c),
-                    ([(12.0, -1.0), (9.5, -4.5), (12.0, -8.0), (10.0, -12.0)], 0xe66a5a),
-                    ([(-13.5, 15.0), (-10.5, 12.0), (-13.5, 9.0), (-11.5, 5.5)], 0xa878e8),
-                    ([(5.0, 15.0), (8.0, 12.0), (5.0, 8.5), (7.0, 4.5)], 0x6cbf6c),
-                    ([(16.0, 15.0), (14.5, 11.0), (16.5, 7.0)], 0xa878e8)):
-        pts = curve(ctrl, 0.6)
-        band(pts, 1.4, c, Y2 + 0.01)
-        hx, hz = ctrl[0]
-        mat.append(floor_quad([(hx - 0.8, hz), (hx, hz - 0.7), (hx + 0.8, hz), (hx, hz + 1.0)], Y2 + 0.015, c))
-    group(mat, 'floor_mat')
-    # the floor game's big pawns and its foam die, stood on the mat
-    pawn((-7.0, Y1, -1.5), 0xe66a5a, k=0.9)
-    pawn((6.5, Y1, 7.0), 0x5a8fd8, k=0.9)
-    pawn((10.5, Y1, -9.0), 0xf2c14e, k=0.9)
-    # foam dice in the toy colours, a little over a car's height: a cream
-    # one this big, its pips in rows, read as a house with windows
-    die((6.0, Y1, -5.0), 0.85, 0.5, color=0xe66a5a, pip=0xfdf4de)
-    die((-8.0, Y1, 10.5), 0.85, -0.4, faces=(('+x', 1), ('-z', 6), ('+z', 3), ('-x', 4)), color=0x5a8fd8, pip=0xfdf4de)
-    keep_light(0.2)
-    merge_paint()
 
 # ---- Skyline: a town of wooden blocks ---------------------------------------
 
@@ -17558,84 +17359,6 @@ for _n in RUN_BUILD:
         _name = 'marble-run-%s%s' % (_n, '-lite' if _lite else '')
         PIECES[_name] = (lambda n, lite: lambda: run_section(n, lite))(_n, _lite)
         GROW[_name] = 1.0
-
-@piece(1.0)
-def toy_garage():
-    # Skysnake: the racers' home, a multi-storey toy car park beside the
-    # grid in the track's green and yellow, about 20 cm tall (low, so a
-    # racer's eye looks down onto its ramp): a ground floor and a deck on four
-    # green columns, the roof a second deck, and on the roof a blue P block
-    # (the alphabet blocks' own) that says car park from down the straight
-    # where the open decks alone read as shelving. Its front (+X) faces the
-    # road. A toy car rides the lift up the front and
-    # down again (the platform bobs, the car on it), and two more roll down
-    # the spiral ramp at the side (+Z), half a loop apart, drive into the floor and go
-    # back up INSIDE the stair core at the back, out of sight, to the roof:
-    # the one place in the room a car goes uphill, and it does it on a
-    # machine or out of sight. Nothing else moves: no parked cars, so every
-    # toy car here moves.
-    GREEN, YEL, RED = 0x5cb168, 0xf2c14e, 0xe66a5a
-    W, FLOORS, T = 7.0, (1.7, 3.4), 0.25                       # body width, deck tops, slab
-    box((W + 0.6, 0.2, W + 0.6), (0, 0.1, 0), GREEN)                            # the base board
-    for y in FLOORS:
-        box((W, T, W), (0, y - T / 2, 0), YEL)                                   # the decks
-        box((0.12, T + 0.1, W + 0.04), (W / 2 + 0.06, y - T / 2, 0), GREEN)      # a green fascia to the road
-    # the columns stand 0.05 proud of the decks' edges: flush with them, a
-    # column's green face and a deck's yellow edge shared a plane and flickered
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            box((0.5, FLOORS[-1] + 0.3, 0.5), (sx * (W / 2 - 0.2), (FLOORS[-1] + 0.3) / 2, sz * (W / 2 - 0.2)), GREEN)
-    # parking bays painted on each deck and the floor
-    for y in (0.2,) + FLOORS:
-        for k in range(3):
-            z = -2.0 + k * 1.6
-            quad([(0.4, y + 0.01, z - 0.04), (2.9, y + 0.01, z - 0.04), (2.9, y + 0.01, z + 0.04), (0.4, y + 0.01, z + 0.04)], 0xfdf4de)
-    # the stair core at the back, where the ramp car climbs out of sight, a
-    # door at the floor and at the roof
-    CX = -2.3
-    box((2.0, FLOORS[-1] + 1.0, 2.0), (CX, (FLOORS[-1] + 1.0) / 2 + 0.2, 0), GREEN)
-    box((2.3, 0.3, 2.3), (CX, FLOORS[-1] + 1.35, 0), YEL)                        # its cap
-    for y in (0.2, FLOORS[-1]):
-        plate_x(CX + 1.01, y, y + 0.8, -0.5, 0.5, 0x2a2735)
-    block(1.2, (W / 2 - 0.95, FLOORS[-1] + 0.6, W / 2 - 0.95), 0x5a8fd8, faces=('+x', '+z', '-x', '-z', '+y'),
-          letters={'+x': 'P', '+z': 'P'})                                         # the car park's sign
-    # the lift up the front: two red rails, a beam over them, the platform
-    LX = W / 2 + 0.75
-    for sz in (-1, 1):
-        box((0.3, FLOORS[-1] + 1.2, 0.3), (LX, (FLOORS[-1] + 1.2) / 2, sz * 0.95), RED)
-    box((0.4, 0.35, 2.3), (LX, FLOORS[-1] + 1.2, 0), RED)
-    with animated('anim_bob:h=3.1:p=8:r=0.1#lift', (LX, 0.25, 0)):
-        box((1.3, 0.16, 1.5), (LX, 0.3, 0), YEL)
-        o0 = set(bpy.context.scene.objects)
-        mini_car(LX, 0, 0x5a8fd8)
-        for o in set(bpy.context.scene.objects) - o0:
-            o.location.z += 0.38                                                 # Blender Z is up
-    # the spiral ramp down the side: a low-lipped chute round a green post,
-    # two turns from the roof's edge to the floor
-    RZ, RR, TOP, LOW = W / 2 + 2.5, 2.4, FLOORS[-1] + 0.02, 0.24
-    cyl(0.45, TOP + 0.6, (0, 0, RZ), GREEN, segs=10)
-    spiral = helix_pts(0, RZ, RR, TOP, LOW, -math.pi / 2, 2, per=16)
-    chute(spiral, YEL, 0.0, half=0.6, wall=0.12)
-    for i in range(4, len(spiral) - 1, 8):                                       # spokes to the post
-        p = spiral[i]
-        dx, dz = p[0], p[2] - RZ
-        l = math.hypot(dx, dz)
-        bar((dx / l * 0.45, p[1] - 0.15, RZ + dz / l * 0.45), (p[0] - dx / l * 0.55, p[1] - 0.15, p[2] - dz / l * 0.55),
-            0.2, 0.2, GREEN)
-    # the ramp car's loop: down the spiral, in across the floor, up the core
-    # out of sight, out across the roof to the spiral's top
-    loop = spiral + [(0.0, LOW, 2.0), (CX + 0.6, LOW, 0.4), (CX, LOW, 0.0)]
-    loop += [(CX, LOW + (TOP - LOW) * j / 5, 0.0) for j in range(1, 6)]
-    loop += [(CX + 0.6, TOP, 0.4), (0.0, TOP, 2.0)]
-    for k, p in enumerate(loop):
-        marker('path_ramp_%d' % k, p)
-    for m, c in enumerate((RED, 0xa878e8)):                                      # two, half a loop apart
-        with animated('anim_path:c=ramp:p=14:f=2:o=%.1f#%d' % (m / 2, m), spiral[0]):
-            o0 = set(bpy.context.scene.objects)
-            mini_car(spiral[0][0], spiral[0][2], c, along_x=True)
-            for o in set(bpy.context.scene.objects) - o0:
-                o.location.z += spiral[0][1]
-    merge_paint()
 
 # ---- Gauntlet: the besiegers ----
 
@@ -18665,49 +18388,6 @@ def slab_on(top, t, color):
             f.flip()
     return paint(o, color)
 
-@piece(1.0)
-def sky_snake():
-    # Skysnake's hero, at the inside of the sky weave's first bend: the
-    # board's wooden snakes' big sibling, a jointed toy snake of the same green and yellow blocks
-    # rising out of a round woven basket, its body coiled up the snake
-    # charmer's way to its head just over the spiral's top deck, the head
-    # swaying slowly side to side as the racers pass it, its face to the
-    # road (+X).
-    R, H = 2.0, 2.0
-    cyl(R, H, (0, 0, 0), 0xd8a878, segs=14)                                  # the basket
-    for y in (0.45, 0.95, 1.45):                                           # its woven bands
-        torus(R + 0.03, 0.09, (0, y, 0), 0xb06041, segs=14)
-    for k in range(14):                                                    # and the wicker ribs between them
-        a = (k + 0.5) * 2 * math.pi / 14
-        box((0.1, H - 0.1, 0.16), (math.cos(a) * (R + 0.02), H / 2, math.sin(a) * (R + 0.02)), 0x9a7b55, yaw=-a)
-    torus(R + 0.05, 0.16, (0, H, 0), 0x9a7b55, segs=14)                       # its rim
-    cyl(R - 0.15, 0.05, (0, H - 0.08, 0), 0x3a2a22, segs=14)                  # the dark inside
-    # the coil: blocks along a rising, narrowing helix, tapering to the neck
-    pts = []
-    N = 22
-    for i in range(N + 1):
-        f = i / N
-        a = 2 * math.pi * 1.5 * f
-        r = 1.25 - 0.55 * f
-        pts.append((r * math.cos(a), H + 0.3 + 3.4 * f, r * math.sin(a)))
-    for i in range(N):
-        (x0, y0, z0), (x1, y1, z1) = pts[i], pts[i + 1]
-        g = 0.12
-        k = 1.0 - 0.3 * i / N
-        bar((x0 + (x1 - x0) * g, y0 + (y1 - y0) * g, z0 + (z1 - z0) * g),
-            (x1 - (x1 - x0) * g, y1 - (y1 - y0) * g, z1 - (z1 - z0) * g), 0.85 * k, 0.75 * k, SNAKE[i % 2])
-    nx, ny, nz = pts[-1]
-    with animated('anim_sway:a=y:d=35:p=7#head', (nx, ny, nz)):
-        for i, (h0, a0, h1, a1) in enumerate(((0.0, 0.0, 0.25, 0.55), (0.25, 0.55, 0.65, 0.95))):
-            bar((nx + h0, ny + a0, nz), (nx + h1, ny + a1, nz), 0.62, 0.58, SNAKE[(N + i) % 2])
-        hx, hy = nx + 1.05, ny + 1.05
-        box((0.95, 0.72, 1.25), (hx, hy, nz), 0x6cbf6c, yaw=math.pi / 2)        # the head, to +X
-        box((0.8, 0.2, 1.05), (hx + 0.08, hy - 0.4, nz), 0xf2c14e, yaw=math.pi / 2)
-        for sd in (-1, 1):
-            box((0.28, 0.28, 0.28), (hx + 0.15, hy + 0.3, nz + sd * 0.4), 0xfdf4de)
-            box((0.12, 0.16, 0.16), (hx + 0.26, hy + 0.32, nz + sd * 0.47), 0x2a2735)
-        bar((hx + 0.62, hy - 0.22, nz), (hx + 1.15, hy - 0.28, nz), 0.12, 0.07, 0xff5040)
-
 def round_die(x, y, z, s, yaw, body, pip, faces):
     """A soft foam die `s` a side standing at (x, y, z), turned `yaw`, its
     round pips on the four sides named in `faces` [(face, n)]."""
@@ -18738,32 +18418,6 @@ def dice_tower():
                   (('+x', (5, 3, 6, 2)[k]), ('-z', (2, 4, 1, 5)[k]), ('+z', (3, 6, 4, 1)[k]), ('-x', (4, 1, 2, 6)[k])))
         y += S
     pawn((0, y, 0), 0xf2c14e, k=0.9)
-    merge_paint()
-
-@piece(1.0)
-def snake_ladder():
-    # Skysnake: the game's ladder made a toy, up the outside of the spiral
-    # climb. Its feet on the floor outside the low road, it leans in (+X, at
-    # the eye) over that road onto the top deck's outer kerb, the climb the
-    # racers drive made the move up a ladder, one of the board's pawns
-    # partway up it. Placed at the foot (lat 6.5 at u 0.4775), where the top
-    # deck's kerb edge stands REACH in and KERB up.
-    REACH, KERB, BROWN = 3.96, 5.45, 0xb06041
-    T, HALF = 0.28, 0.72                          # a rail's side; the rails' centres off the middle
-    a = math.atan2(KERB + T / 2, REACH)           # the rails' underside on the kerb's edge
-    C = math.hypot(REACH, KERB + T / 2)           # along a rail to the kerb's edge
-    L = C + 0.35                                  # its ends just past it (longer, they stood over the kerb as a hurdle)
-    ca, sa = math.cos(a), math.sin(a)
-    def at(d, z=0.0):
-        return (d * ca, T / 2 + d * sa, z)
-    for z in (-HALF, HALF):
-        strut(at(0.0, z), at(L, z), T, BROWN)
-    RUNG = [0.55 + (C - 0.95) * k / 8 for k in range(9)]   # nine rungs, about a racer's wheel apart, the top one under the kerb
-    for d in RUNG:
-        x, y, _ = at(d)
-        cyl(0.11, 2 * HALF, (x, y, -HALF), CREAM, axis='along')
-    x, y, _ = at(RUNG[3])                         # a red pawn on the fourth, climbing
-    pawn((x - 0.05, y + 0.1, 0), 0xe66a5a, k=0.6)
     merge_paint()
 
 # ---- Round 10: the Playroom's board, its room and its wind-up toys ---------------
