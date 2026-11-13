@@ -479,15 +479,18 @@ export const TRACKS = {
     // are parked along their gravel lane by the start straight.
     set: [
       { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
-      { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
+      { model: 'set-rock-pool', u: 0.675, lat: 13.5, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
       // the reef in three forms on the outsides of the bends, where the
       // camera swings to them: the seals' shelf round the east bend, the
       // headland and its sea arch where the west run points, the stacks at
       // the west bend's end (each built along its bend, placed on the road)
       { model: 'set-reef-shelf', u: 0.32, lat: 0 },
+      // ...and its ribs running down the beach along the top run after it,
+      // the kelp the tide left between them
+      { model: 'set-tide-ledges', u: 0.395, lat: 10 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
-      { model: 'set-crab-boat', u: 0.76, lat: 0 },
+      { model: 'set-crab-boat', u: 0.72, lat: 0, scale: 1.5 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
@@ -544,7 +547,7 @@ export const TRACKS = {
   cove: {
     name: 'Cove', sand: BEACH_SAND, waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
-    // The pirates' island: a jungle island with black-sand coves. Its
+    // The pirates' island, jungle down to its coves. Its
     // peak, green with jungle, fills the middle of the lap, its foothills
     // coming down to the kerb of the east straight and the start straight,
     // tall groves of palms on them, and the crew's cave cut into a spur of
@@ -554,10 +557,10 @@ export const TRACKS = {
     // lookout watches the east beach from its tower, and the rope bridge
     // from the jungle to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
-    // the wharf along its black sand where the longboat sails out to the
+    // the wharf along its sand where the longboat sails out to the
     // ship riding at anchor and back; a little past her their stockade
     // stands on the sand, its jetty out into the bay. The old wreck lies in
-    // the surf of the west bay's black sand (the second `shore`), its ribs
+    // the surf of the west bay (the second `shore`), its ribs
     // out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
     // so the ship shows over it down the straight.
@@ -566,9 +569,10 @@ export const TRACKS = {
     // road's reach (native/renderer/CLAUDE.md).
     set: [
       { model: 'set-pirate-ship', u: 0.483, lat: 17.5, yaw: 230, y: 0.15, scale: 1.4 },
-      // set back up the island's flank: at lat -8 its palms' crowns hung over
-      // the road round the S's first bend
-      { model: 'set-jungle-grove', u: 0.56, lat: -10, yaw: 180 },
+      // the jungle down the island's west flank, along the S: one piece
+      // astride the road (set_prototypes.py COVE_ROAD: re-sample it if this u
+      // or the road moves)
+      { model: 'set-jungle-canopy', u: 0.65, lat: 0 },
       { model: 'set-jetty', u: 0.44, lat: 11.5 },
       // the crew's camp on the sand a little past the ship, on its rise
       { model: 'set-pirate-stockade', u: 0.54, lat: 12, y: 0.72 },
@@ -636,9 +640,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
       // no seeded crate on the island's face above the bend past Skull Rock
       { kind: 'clear', u: 0.69, lat: -10, len: 20, r: 6 },
-      // the coves' black sand, from the kerb's foot down into the surf
-      { kind: 'paint', u: 0.45, lat: 13, len: 60, r: 6, w: 4, tint: 0x34333a },
-      { kind: 'paint', u: 0.795, lat: 15, len: 34, r: 9, w: 4, tint: 0x34333a }
+      // the jungle's green carried on round the S's second bend, where the
+      // peak's own tint has faded out down its flank (bare sand facets showed
+      // between the canopy's crowns)
+      { kind: 'paint', u: 0.68, lat: -16, len: 30, r: 8, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f }
     ]
   },
   driftwood: {
@@ -673,12 +679,15 @@ export const TRACKS = {
       // storm fence and marram along the dune pass, a length each side
       { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
       { model: 'set-dune-fence-b', u: 0.695, lat: -9.6, yaw: 180 },
+      // marram in drifts up the seaward dunes' faces, the pass's length
+      { model: 'set-dune-marram', u: 0.60, lat: -14.5, yaw: 180 },
+      { model: 'set-dune-marram', u: 0.70, lat: -15, yaw: 0 },
       // the lighthouse's dune at the pass's end, the road through it in a
       // tunnel and the light station on its seaward shoulder, all one piece
       // that carries the road in its own frame (set_prototypes.py
       // DRIFT_ROAD: re-sample it if this u or the road moves)
       { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
-      // a beach boat working in and out past the groynes
+      // a beach boat working in and out between the groynes
       { model: 'set-drift-coble', u: 0.389, lat: 0, scale: 1.5 },
       // the storm's wrack piled on the point where the road turns back
       { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
@@ -694,9 +703,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 4.0, top: 0.5 },
       { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 3.8, top: 0.5 },
       { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 3.6, top: 0.5 },
-      { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
       // the great dune in the middle of the loop, over the rest
       { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 5.5, top: 0.6 },
       // dunes inside the start straight and the east side
@@ -764,7 +773,7 @@ export const TRACKS = {
     // Point, a big grassy headland north of the start straight, the surf
     // contest's site strung along its kerb.
     set: [
-      { model: 'set-lifeguard-tower', u: 0.19, lat: -10, y: 0.78 },
+      { model: 'set-lifeguard-tower', u: 0.2, lat: -10, y: 0.78 },
       // the seafront: the sea wall along the kerb on the sea side, in four
       // lengths, and across the road the hotel and the guest houses
       { model: 'set-seafront-wall-a', u: 0.2614, lat: -9.5, yaw: 180 },
@@ -780,6 +789,10 @@ export const TRACKS = {
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
       { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180, y: 0.85 },
       { model: 'set-channel-beacon', u: 0.458, lat: -9.5 },
+      // the causeway's piles and rope rail, both kerbs, the hop's length and
+      // on to the hook: one piece astride the road (set_prototypes.py
+      // RIP_ROAD: re-sample it if this u or the road moves)
+      { model: 'set-causeway-rail', u: 0.515, lat: 0 },
       { model: 'set-lagoon-fleet', u: 0.52, lat: -18, yaw: 180 },
       { model: 'set-sailing-club', u: 0.62, lat: -11, yaw: 180 },
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
