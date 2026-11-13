@@ -988,102 +988,164 @@ def crab_pots():
     join_still('landing')
     on_a_rise()
 
-# Tidepool's rock, the reef's own slate laid in beds: dark slate and its
-# paler grey in turn, a ledge where each hard bed stands out, and the turf
-# of the downs over the top. Its tone is fixed per bed (tidepool_tone), not
-# run down the ramp by height: a cliff's foot by the water came out near
-# black and its brow as pale as the road.
-TIDE_STRATA = ((-0.6, 0.7, 'grey', -0.85), (0.7, 1.6, 'lavender', 0.25), (1.6, 2.6, 'leaf', -0.85),
-               (2.6, 4.0, 'leaf', -0.85), (4.0, 7.5, 'leaf', -0.85))
+# Tidepool's rock: the reef, the headland and the knoll are weathered coastal
+# rock, rounded lumps run together into boulders and outcrops, their tops
+# rounded and their flanks steepening to the foot, no two alike. Round 10
+# laid the same rock in level beds with a ledge at each, and from the road its
+# benches and stepped knolls read as cuboid pyramids (round 12: "too simple
+# and cuboid"). One colour a face of a lump's mesh, never a colour per facet
+# (alp(): a quad's two triangles painted apart read as a scatter of shards),
+# each at a fixed row of its swatch, not run down the ramp by height: rock by
+# water wants neither a near black foot nor a brow as pale as the road.
+TIDE_ROWS = {'grey': 22, 'slate': 2, 'lavender': 30, 'leaf': 27}
 
-def tidepool_tone():
-    """Every stratum of a Tidepool rock piece at one row of its swatch:
-    the slate and its paler bed a little over half grey in the atlas, which
-    the shade of a face turned from the sun brings down to the slate rule's
-    35-45 per cent (the slate swatch itself came out near black), the turf
-    the downs' own green."""
-    for o in bpy.context.scene.objects:
-        if o.type != 'MESH' or not o.name.startswith('stratum') or o.get('row') is not None:
+def tide_lump(polys, at, h, rx, rz, yaw, seed, base=0.0, sink=1.0, lean=(0.0, 0.0), roundness=2.2, top=None,
+              wet=None):
+    """One weathered lump of Tidepool's rock, appended to `polys`: a dome `h`
+    over `base` on a foot `rx` across by `rz` along (turned `yaw`, box()'s
+    sense), h (1 - t^roundness)^0.55 from its middle out, so its top is round
+    and its flanks steepen to the foot (2 a boulder's, 3 or more a stack's
+    near sheer sides), each spoke's reach and each ring's height jittered by
+    `seed`; its summit stands `lean` (shares of rx, rz) off the middle, and its
+    foot runs on `sink` under `base`. A face near level is `top` when given
+    (the downs' turf, a sea rock's pale crown), one whose middle lies under
+    `wet` the tide's dark wet rock, the rest grey."""
+    cx, cz = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    T = (0.0, 0.17, 0.33, 0.48, 0.62, 0.74, 0.85, 0.93, 0.98, 1.07)
+    ns = max(9, min(18, int(round(4 + 1.6 * max(rx, rz)))))
+    ph2, ph3 = 6.28 * jitter(0, 3, seed), 6.28 * jitter(0, 4, seed)
+    clefts = {int((jitter(k, 7, seed) + 0.5) * ns) % ns for k in range(max(1, ns // 6))}
+    spokes = []
+    for j in range(ns):
+        a = 2 * math.pi * (j + 0.3 * jitter(j, 1, seed)) / ns
+        f = 1.0 + 0.18 * jitter(j, 2, seed) + 0.1 * math.sin(2 * a + ph2) + 0.07 * math.sin(3 * a + ph3)
+        spokes.append((a, f * (0.8 if j in clefts else 1.0)))    # a cleft weathered down the face
+    rows = []
+    for i, t in enumerate(T):
+        row = []
+        for j, (a, f) in enumerate(spokes):
+            if i == len(T) - 1:
+                y, k = base - sink, 1.0
+            else:
+                # each spoke its own shoulder, and the flank bulging and
+                # hollowing as it goes down: weathered, not turned
+                g = 1.0 + 0.16 * noise2(1.3 * j * 6.0 / ns, 0.5, seed + 11.0)
+                y = base + h * (1.0 - t ** roundness) ** (0.55 * g)
+                if 0 < i:
+                    y += 0.05 * h * jitter(i, j + 40, seed) * (1.0 - t)
+                k = 1.0 + 0.06 * jitter(i, j + 20, seed) + 0.22 * noise2(2.2 * t, 1.1 * j * 6.0 / ns, seed + 5.0) * t
+            lx = rx * f * t * k * math.cos(a) + lean[0] * rx * (1.0 - min(t, 1.0))
+            lz = rz * f * t * k * math.sin(a) + lean[1] * rz * (1.0 - min(t, 1.0))
+            row.append((cx + lx * c + lz * s, y, cz - lx * s + lz * c))
+        rows.append(row)
+    ax, az = cx + lean[0] * rx * c + lean[1] * rz * s, cz - lean[0] * rx * s + lean[1] * rz * c
+    mid = base + 0.35 * h
+    def out(tri):
+        n = face_normal(tri)
+        m = [sum(p[k] for p in tri) / 3 for k in range(3)]
+        if n[0] * (m[0] - ax) + n[1] * (m[1] - mid) + n[2] * (m[2] - az) < 0:
+            return tri[::-1], tuple(-v for v in n)
+        return tri, n
+    for i in range(len(T) - 1):
+        a_, b_ = rows[i], rows[i + 1]
+        for j in range(ns):
+            jn = (j + 1) % ns
+            if i == 0:
+                tris = [(a_[j], b_[j], b_[jn])]
+            elif (i + j) % 2:
+                tris = [(a_[j], b_[j], b_[jn]), (a_[j], b_[jn], a_[jn])]
+            else:
+                tris = [(a_[j], b_[j], a_[jn]), (b_[j], b_[jn], a_[jn])]
+            quad = [a_[j], b_[j], b_[jn]] + ([] if i == 0 else [a_[jn]])
+            _, n = out(tuple(quad[:3]))
+            my = sum(p[1] for p in quad) / len(quad)
+            if top and n[1] > 0.8:
+                col = top
+            elif wet is not None and my < wet:
+                col = 'slate'
+            else:
+                col = 'grey'
+            for t3 in tris:
+                polys.append((col, list(out(t3)[0])))
+
+def tide_arch(polys, at, yaw, W, H, r, seed, base=0.0, top=None, wet=None):
+    """A sea arch of the same rock, appended to `polys`: a lumpy rounded limb
+    bowed over a hole `W` wide and `H` high, `r` thick at its crown and
+    thicker toward its feet, which run on under `base`; its span runs along
+    the arch's own X turned by `yaw` (box()'s sense), so the hole looks along
+    its Z. Faces painted as tide_lump's."""
+    cx, cz = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    A, B = W / 2 + r, H + r
+    K, M = 16, 10
+    secs = []
+    for k in range(K + 1):
+        th = -0.22 + (math.pi + 0.44) * k / K
+        px, py = A * math.cos(th), base + B * math.sin(th)
+        tx, ty = -A * math.sin(th), B * math.cos(th)
+        L = math.hypot(tx, ty)
+        nx, ny = ty / L, -tx / L                             # in the arch's plane, out from the hole
+        if nx * math.cos(th) + ny * math.sin(th) < 0:
+            nx, ny = -nx, -ny
+        rk = r * (1.0 + 0.45 * (1.0 - max(0.0, math.sin(th))) ** 2)
+        ring = []
+        for m in range(M):
+            p = 2 * math.pi * m / M
+            q = rk * (1.0 + 0.14 * jitter(k, m, seed) + 0.08 * math.sin(3 * p + k))
+            lx = px + q * math.cos(p) * nx
+            ly = py + q * math.cos(p) * ny
+            lz = 1.2 * q * math.sin(p)
+            ring.append((cx + lx * c + lz * s, ly, cz - lx * s + lz * c))
+        secs.append((ring, px, py))
+    for k in range(K):
+        (r0, px0, py0), (r1, px1, py1) = secs[k], secs[k + 1]
+        mx, my = (px0 + px1) / 2, (py0 + py1) / 2
+        axis = (cx + mx * c, my, cz - mx * s)
+        for m in range(M):
+            mn = (m + 1) % M
+            quad = [r0[m], r1[m], r1[mn], r0[mn]]
+            n = face_normal(quad)
+            ctr = [sum(p[i] for p in quad) / 4 for i in range(3)]
+            if sum(n[i] * (ctr[i] - axis[i]) for i in range(3)) < 0:
+                quad, n = quad[::-1], tuple(-v for v in n)
+            col = top if top and n[1] > 0.75 else ('slate' if wet is not None and ctr[1] < wet else 'grey')
+            polys.append((col, [quad[0], quad[1], quad[2]]))
+            polys.append((col, [quad[0], quad[2], quad[3]]))
+
+def tide_height(polys, x, z):
+    """The top of the rock in `polys` over (x, z), or None off it."""
+    best = None
+    for _, t in polys:
+        (x0, y0, z0), (x1, y1, z1), (x2, y2, z2) = t[0], t[1], t[2]
+        d = (z1 - z2) * (x0 - x2) + (x2 - x1) * (z0 - z2)
+        if abs(d) < 1e-9:
             continue
-        rowed(o, {'grey': 16, 'lavender': 31, 'leaf': 27}.get(o['swatch'], 12))
+        a = ((z1 - z2) * (x - x2) + (x2 - x1) * (z - z2)) / d
+        b = ((z2 - z0) * (x - x2) + (x0 - x2) * (z - z2)) / d
+        if a < 0 or b < 0 or a + b > 1:
+            continue
+        y = a * y0 + b * y1 + (1 - a - b) * y2
+        best = y if best is None else max(best, y)
+    return best
 
-@piece(1.0)
-def tidepool_cutting():
-    with plain_parts():
-        tidepool_cutting_build()
+def tide_seat(polys, x, z, r=0.3):
+    """The height a thing `r` across sits at on the rock at (x, z): the
+    lowest of the rock's top under its middle and four points round it, so
+    it rests on the rock instead of hanging off a rounded crown."""
+    ys = [tide_height(polys, x + dx, z + dz) for dx, dz in ((0, 0), (r, 0), (-r, 0), (0, r), (0, -r))]
+    ys = [y for y in ys if y is not None]
+    return min(ys) if ys else 0.0
 
-def tidepool_cutting_build():
-    # Tidepool: the island's backbone, a spine of bedded slate under turf
-    # that runs from the east downs across the lap's waist (where the road
-    # goes through it in a cutting) and on west over the sand toward the
-    # headland, sinking as it goes into the reef's ledges. Placed on the
-    # road's centreline at the cutting (+Z along the road, +X its left):
-    # the cutting's walls stand clear of the sand strip, sheer slate beds
-    # the height of a cottage, the spine's back green. The spine runs off to
-    # the right (-X) toward the west coast (SPINE: its bearing in this frame).
-    SPINE = -1.38                                       # the yaw that runs a form's z along the spine
-    d = (math.sin(SPINE), math.cos(SPINE))
-    def on_spine(t, off=0.0):
-        return (d[0] * t + d[1] * off, d[1] * t - d[0] * off)
-    forms = []
-    for t, off, h, rx, rz, ln, p in ((-13.0, 0.5, 6.8, 9.0, 7.0, 6.0, 0.8),     # the east shoulder, into the downs
-                                     (-1.0, 0.0, 4.6, 8.5, 6.0, 6.0, 0.6),      # over the cutting
-                                     (10.0, -0.8, 6.0, 8.5, 6.0, 4.0, 0.8),     # a knoll west of it
-                                     (19.0, 0.6, 4.6, 8.0, 5.5, 6.0, 0.7),      # the saddle
-                                     (28.0, -0.4, 5.4, 8.5, 6.0, 4.0, 0.8),     # a last knoll
-                                     (37.0, 0.0, 2.6, 7.0, 5.0, 6.0, 0.9)):     # sinking toward the reef
-        cx, cz = on_spine(t, off)
-        forms.append((cx, cz, h, rx, rz, SPINE, p, ln))
-    M = massif_height(tuple(forms), rough=0.7, seed=4.3, warp=0.8)
-    strata_massif(M, -46.0, 24.0, -16.0, 24.0, TIDE_STRATA, corridor=(5.6, 4.0), step=2.4, tol=0.35,
-                  summits=False)
-    tidepool_tone()
-    def scree():
-        # slabs fallen from the cutting's walls, lying on the verge at their feet
-        for i, (x, z, s) in enumerate(((6.3, -4.5, 0.7), (-6.4, -3.0, 0.8), (6.5, 3.8, 0.6), (-6.6, 4.4, 0.65))):
-            stone(x, z, s * 1.6, 0.9 * i, 7.0 + i, squat=0.5, rock=('grey', WET), top='lavender', y=-0.05)
-        reef_tone()
-    draped('scree', scree)
-
-# Tidepool's reef in three forms, each its own silhouette (round 10: nine
-# near-alike heaps of boulders read as one row of grey stones): the seal
-# shelf along the east bend, the headland with its sea arch at the head of
-# the west bend, the stacks at its end. Each stands in the surf a stride off
-# the kerb on the outside of a bend, where the chase camera swings to it,
-# and is built along the road's own curve (BEND: the bend's centre is that
-# far to the road's left of the placement, on the centreline).
-REEF_BEDS = ((-0.6, 0.7, 'grey', 0.08), (0.7, 1.7, 'lavender', 0.18), (1.7, 2.7, 'grey', 0.08),
-             (2.7, 3.7, 'lavender', 0.16), (3.7, 4.8, 'grey', 0.08), (4.8, 5.9, 'lavender', 0.14),
-             (5.9, 7.0, 'grey', 0.08), (7.0, 7.6, 'leaf', -0.85))
+def tide_rock(polys, name='tiderock'):
+    """The lumps' faces as parts, one a colour, each at its row."""
+    for o in colored_faces(polys, name):
+        rowed(o, TIDE_ROWS.get(o['swatch'], 22))
 
 def tidepool_on_bend(R, rho, th):
     """The piece-frame point `rho` from a left-hand bend's centre (R to the
     road's left), `th` radians along it from the placement."""
     return (R - rho * math.cos(th), rho * math.sin(th))
-
-def tidepool_massif(M, x0, x1, z0, z1, bands, at=(0.0, 0.0), yaw=0.0, **kw):
-    """strata_massif built about its own origin, then turned by `yaw` and
-    set down at `at` (piece frame): an arch's corridor runs along the
-    massif's own z, whichever way the arch stands. Returns the tunnel."""
-    before = set(bpy.context.scene.objects)
-    tunnel = strata_massif(M, x0, x1, z0, z1, bands, **kw)
-    T = Matrix.Translation(P(at[0], 0.0, at[1])) @ Matrix.Rotation(yaw, 4, 'Z')
-    for o in bpy.context.scene.objects:
-        if o not in before and o.parent is None:
-            o.matrix_world = T @ o.matrix_world
-    return tunnel
-
-def tidepool_reef_tone():
-    """The reef's beds at fixed rows (tidepool_tone's reasoning), its arch's
-    shadowed vault the same grey instead of the canyon's brown."""
-    for o in bpy.context.scene.objects:
-        if o.type != 'MESH' or not o.name.startswith('stratum') and not o.name.startswith('rock'):
-            continue
-        if o.get('swatch') == 'brown':
-            o['swatch'] = 'grey'
-            rowed(o, 30)
-        elif o.get('row') is None and o.get('swatch'):
-            rowed(o, {'grey': 16, 'lavender': 31, 'leaf': 27}.get(o['swatch'], 16))
 
 def tidepool_surf(spots):
     """Surf breaking on the rock: a white crest of foam at each (x, z, len,
@@ -1098,116 +1160,172 @@ def tidepool_surf(spots):
                 box((0.7, h, ln / 3 + 0.1), (x + dz * s, SEA + h / 2 - 0.12, z + dz * c), 0xfff6eb,
                     yaw=yw + 0.12 * (j - 1))
 
-@piece(1.0)
-def reef_shelf():
-    # Tidepool: the seals' shelf, the reef along the outside of the east
-    # bend as one long bed of slate in steps, a car's height and a half at
-    # its back and shelving into the surf, its top flat as bedded rock is,
-    # broken by two gullies the sea runs into; the seals hauled out along
-    # it, lifting their heads now and then, gulls wheeling over, the surf
-    # breaking at its foot. Placed on the bend's centreline.
-    R = 25.5
-    def M(x, z):
-        rho = math.hypot(x - R, z)
-        th = math.atan2(z, R - x)
-        across = rho - R - 13.5                                  # 0 on the shelf's spine
-        if abs(th) > 0.78:
-            return -1.0
-        ends = smooth01((0.78 - abs(th)) / 0.18)
-        gully = 1.0 - 1.4 * max(math.exp(-((th + 0.24) / 0.07) ** 2), math.exp(-((th - 0.3) / 0.065) ** 2))
-        back = 2.7 + 0.6 * math.sin(3.1 * th + 0.6) + 0.4 * math.sin(7.3 * th) + 0.9 * noise2(x / 3.1, z / 3.1, 4.0)
-        prof = max(0.0, 1.0 - max(0.0, abs(across) - 1.2) / 4.2) ** 0.6
-        return (back * prof * gully + 0.3 * prof) * ends - 0.5
-    strata_massif(M, -24.0, 10.0, -26.0, 26.0, REEF_BEDS[:4], grid=0.5, step=2.0, tol=0.3, summits=False)
-    tidepool_reef_tone()
-    for k, (th, ac, yw) in enumerate(((-0.6, -0.3, 0.4), (-0.42, 0.4, -0.2), (-0.08, 0.1, 0.6), (0.12, -0.5, 1.0),
-                                      (0.5, 0.2, -0.4), (0.62, -0.2, 0.3))):
-        x, z = tidepool_on_bend(R, R + 13.5 + ac, th)
-        y = max(b[1] for b in REEF_BEDS[:4] if b[0] + 0.3 * (b[1] - b[0]) <= M(x, z) + 0.05)
-        hauled_seal(x, y - 0.02, z, th + 0.5 * yw, 40 + k)       # facing the road
-    ring = [(R - (R + 13) * math.cos(t), 6.0 + 0.6 * math.sin(3 * t), (R + 13) * math.sin(t))
-            for t in (i / 12 * 1.2 - 0.6 for i in range(12))]
-    ring += [(R - (R + 16) * math.cos(t), 7.0, (R + 16) * math.sin(t)) for t in (0.6 - i / 6 * 1.2 for i in range(1, 6))]
+def tidepool_gulls(ring, period):
+    """Two gulls wheeling round `ring` (glTF points), half a lap apart."""
     for i, p in enumerate(ring):
         marker('path_gulls_%d' % i, p)
     for m in range(2):
-        with animated('anim_path:c=gulls:p=18:f=1:o=%.2f#g%d' % (m * 0.5, m), (0.0, 0.0, 0.0)):
+        with animated('anim_path:c=gulls:p=%d:f=1:o=%.2f#g%d' % (period, m * 0.5, m), (0.0, 0.0, 0.0)):
             box((0.16, 0.1, 0.32), (0.0, 0.0, 0.0), 0xf8f8fb)
             box((0.8, 0.04, 0.16), (0.0, 0.04, -0.02), 0x9aa1b4)
-    surf = []
-    for k, th in enumerate((-0.62, -0.38, -0.15, 0.08, 0.32, 0.56)):
-        x, z = tidepool_on_bend(R, R + 19.2, th)
-        surf.append((x, z, 3.2, th))
-    tidepool_surf(surf)
-    join_still('shelf')
+
+def tidepool_foot():
+    """A speck draped out of sight under the sand: a piece with a draped part
+    stands on the plain and levels nothing (TtpRenderer mSetDrapes), so the
+    reef's foot stays in the surf the shore brings to it."""
     def sand():
         with plain_parts():
             box((0.3, 0.2, 0.3), (-8.0, -0.4, 0.0), 'grey')
     draped('foot', sand)
 
-def tidepool_arch(at, yaw):
-    """A sea arch: a fin of the reef's beds with the sea through it, the
-    hole a car and a half wide and two high, turf on its back."""
-    M = massif_height(((0.0, 0.0, 6.4, 2.6, 6.5, math.pi / 2, 0.3, 6.0),
-                       (-3.4, 0.4, 5.2, 2.4, 3.0, 0.3, 0.35, 0.0),
-                       (3.6, -0.3, 4.6, 2.2, 2.8, -0.2, 0.35, 0.0)), rough=0.7, seed=8.2, warp=0.6)
-    return tidepool_massif(M, -10.0, 10.0, -5.0, 5.0, REEF_BEDS, at=at, yaw=yaw, corridor=(1.5, 2.6),
-                           grid=0.4, step=1.8, tol=0.25)
+@piece(1.0)
+def tidepool_knoll():
+    # Tidepool: a grassy knoll beside the road at the lap's waist, on the
+    # outside of the left-hander into it, the downs' green painted over it
+    # (tracks.js), and the island's rock breaking out of its road side in
+    # rounded outcrops that stand level, their backs buried in the knoll so
+    # the grass meets the rock as it rises; a few boulders have come down onto
+    # the sand by the verge. It replaces the slate cutting the road used to
+    # run through (round 12: "I don't like this hill / rock"). Built on its
+    # own ground (SET_GROUND, the knoll), so the outcrops stand on the slope
+    # the renderer draws. +X is the road.
+    H = set_ground('tidepool-knoll')
+    polys = []
+    def lump(x, z, h, rx, rz, yw, seed, rd=2.2):
+        foot = [H(x + 1.1 * rx * math.cos(a) * math.cos(yw) + 1.1 * rz * math.sin(a) * math.sin(yw),
+                  z - 1.1 * rx * math.cos(a) * math.sin(yw) + 1.1 * rz * math.sin(a) * math.cos(yw))
+                for a in (k * math.pi / 4 for k in range(8))]
+        lo, hi = min(foot), max(foot)
+        tide_lump(polys, (x, z), h + (hi - lo) * 0.6, rx, rz, yw, seed, base=lo - 0.25, sink=hi - lo + 0.8,
+                  roundness=rd)
+    for k, (x, z, h, rx, rz, yw, rd) in enumerate((
+            (0.6, -1.2, 1.9, 3.4, 4.6, 0.3, 2.7),        # the shoulder
+            (2.6, 4.2, 1.3, 2.4, 3.0, -0.4, 2.5),
+            (3.4, -5.6, 1.1, 2.0, 2.4, 0.9, 2.5))):
+        lump(x, z, h, rx, rz, yw, 70.0 + 3.1 * k, rd)
+    for k, (x, z, sz) in enumerate(((6.6, 1.2, 0.8), (6.4, -3.4, 0.6), (6.2, 8.2, 0.7))):
+        lump(x, z, 0.8 * sz, sz, 0.85 * sz, 1.3 * k, 90.0 + k)
+    tide_rock(polys)
+    join_still('knoll')
+
+@piece(1.0)
+def reef_shelf():
+    # Tidepool: the seals' reef along the outside of the east bend, a run of
+    # rounded rock in the surf a stride off the kerb: big weathered lumps a
+    # car's height and a half over the sand, run together along the bend with
+    # gaps the sea runs into, low smooth backs of rock between them and the
+    # road where the seals lie hauled out, lifting their heads now and then;
+    # gulls wheel over, and the surf breaks at its foot. Placed on the bend's
+    # centreline (BEND: its centre R to the road's left).
+    R = 25.5
+    polys = []
+    spine = R + 13.5
+    # three outcrops, each a big lump with smaller ones run into it, the
+    # sea's gullies between them
+    for k, (th, d, h, rx, rz, rd, lean) in enumerate((
+            (-0.5, 0.2, 3.6, 4.2, 5.0, 2.3, (0.1, -0.15)), (-0.62, 1.6, 2.2, 2.8, 3.2, 2.1, (0.0, 0.0)),
+            (-0.4, -1.2, 2.6, 3.0, 3.4, 2.2, (0.0, 0.1)),
+            (-0.05, 0.4, 3.2, 4.4, 6.0, 2.0, (-0.1, 0.1)), (0.07, 1.8, 2.4, 2.8, 3.0, 2.2, (0.0, 0.0)),
+            (-0.15, -1.0, 1.6, 2.4, 2.8, 2.1, (0.0, 0.0)),
+            (0.45, 0.0, 3.8, 3.6, 4.4, 2.4, (0.15, 0.1)), (0.58, 0.6, 2.0, 2.6, 3.0, 2.1, (0.0, 0.0)),
+            (0.35, 1.6, 2.2, 2.6, 3.0, 2.2, (0.0, 0.0)))):
+        x, z = tidepool_on_bend(R, spine + d, th)
+        tide_lump(polys, (x, z), h, rx, rz, th + 0.4 * jitter(k, 9, 3.0), 40.0 + 1.7 * k, wet=0.45, roundness=rd,
+                  lean=lean)
+    # boulders out in the surf
+    for k, (th, d, sz) in enumerate(((-0.66, 5.0, 1.0), (-0.3, 5.5, 0.8), (-0.2, 4.2, 1.2), (0.2, 5.0, 0.9),
+                                     (0.3, 3.8, 0.7), (0.66, 4.6, 1.0))):
+        x, z = tidepool_on_bend(R, spine + d, th)
+        tide_lump(polys, (x, z), 1.1 * sz, 1.4 * sz, 1.2 * sz, 0.9 * k, 50.0 + k, wet=0.45)
+    # the low backs between the outcrops and the road, where the seals lie
+    seats = ((-0.55, 1.6), (-0.42, 1.5), (-0.1, 1.8), (0.05, 1.6), (0.38, 1.7), (0.52, 1.5))
+    for k, (th, h) in enumerate(seats):
+        x, z = tidepool_on_bend(R, spine - 4.2, th)
+        tide_lump(polys, (x, z), h, 2.4, 3.0, th, 60.0 + 2.3 * k, wet=0.35, roundness=2.8)
+    tide_rock(polys)
+    for k, (th, h) in enumerate(seats):
+        x, z = tidepool_on_bend(R, spine - 4.4, th + 0.02)
+        hauled_seal(x, tide_seat(polys, x, z) - 0.04, z, th + 0.25 * jitter(k, 1, 7.0), 40 + k)   # facing the road
+    ring = [(R - (R + 13) * math.cos(t), 6.0 + 0.6 * math.sin(3 * t), (R + 13) * math.sin(t))
+            for t in (i / 12 * 1.2 - 0.6 for i in range(12))]
+    ring += [(R - (R + 16) * math.cos(t), 7.0, (R + 16) * math.sin(t)) for t in (0.6 - i / 6 * 1.2 for i in range(1, 6))]
+    tidepool_gulls(ring, 18)
+    tidepool_surf([(*tidepool_on_bend(R, R + 18.8, th), 3.2, th) for th in (-0.62, -0.38, -0.15, 0.08, 0.32, 0.56)])
+    join_still('shelf')
+    tidepool_foot()
 
 @piece(1.0)
 def tidepool_headland():
     # Tidepool: the headland at the head of the west bend, where the west
-    # run points: a knoll of the reef's bedded slate with turf on its back,
-    # its cliffs standing in the surf, and off its point a sea arch, the sea
-    # breaking through it. Placed on the bend's centreline (+X its left).
+    # run points: a knoll of rounded, weathered rock in the surf, the downs'
+    # turf on its back, boulders tumbled round its foot, and off its point a
+    # sea arch of the same rock, the sea breaking through it. Placed on the
+    # bend's centreline (+X its left).
     R = 27.0
+    polys = []
+    for k, (rho, th, h, rx, rz, yw, rd, lean) in enumerate((
+            (17.5, -0.12, 6.2, 7.0, 6.0, 0.6, 2.8, (0.15, -0.1)),    # the knoll
+            (21.5, -0.04, 5.0, 4.4, 4.2, -0.5, 2.6, (-0.15, 0.05)),  # its shoulders
+            (13.8, -0.22, 3.4, 4.0, 3.6, 0.2, 2.5, (0.1, 0.1)),
+            (14.4, 0.03, 2.8, 3.2, 3.4, 1.0, 2.4, (0.1, 0.0)),
+            (23.5, 0.08, 3.2, 3.2, 3.8, -0.9, 2.4, (0.0, 0.0)),      # the spur running out to sea
+            (25.6, 0.14, 2.2, 2.6, 2.6, -0.6, 2.2, (0.0, 0.0)))):
+        x, z = tidepool_on_bend(R, R + rho, th)
+        tide_lump(polys, (x, z), h, rx, rz, yw, 20.0 + 2.9 * k, top='leaf' if h > 3.5 else 'lavender',
+                  wet=0.5, roundness=rd, lean=lean)
+    # knobs of harder rock standing out of the knoll's back
+    for k, (rho, th, h, rx, rz) in enumerate(((16.6, -0.17, 1.6, 2.2, 2.0), (19.8, -0.06, 1.3, 1.8, 1.6))):
+        x, z = tidepool_on_bend(R, R + rho, th)
+        tide_lump(polys, (x, z), h, rx, rz, 0.5 * k, 26.0 + k, base=tide_seat(polys, x, z, 1.0) - 0.5, sink=0.6,
+                  top='leaf', roundness=2.6)
+    for k, (rho, th, sz) in enumerate(((11.8, -0.16, 1.3), (12.2, -0.04, 1.0), (11.6, -0.32, 0.9),
+                                        (24.0, -0.08, 1.1), (16.4, 0.12, 1.2))):
+        x, z = tidepool_on_bend(R, R + rho, th)
+        tide_lump(polys, (x, z), 1.1 * sz, 1.3 * sz, 1.1 * sz, 0.7 * k, 30.0 + k, wet=0.45)
+    # the sea arch off the knoll's near end, in the surf, its hole along the
+    # line the west run looks down, so a racer coming at it sees through
+    ax, az = tidepool_on_bend(R, R + 25.0, -0.3)
+    AY = -1.15
+    tide_arch(polys, (ax, az), AY, 4.0, 3.0, 1.8, 8.2, base=-0.5, top='lavender', wet=0.5)
+    for k, (dx, h) in enumerate(((-4.9, 3.0), (4.9, 2.6))):
+        tide_lump(polys, (ax + dx * math.cos(AY), az - dx * math.sin(AY)), h, 2.4, 2.2, AY, 33.0 + k, base=-0.4,
+                  wet=0.5, top='lavender')
+    tide_rock(polys)
     kx, kz = tidepool_on_bend(R, R + 17.5, -0.12)
     sx, sz = tidepool_on_bend(R, R + 22.0, 0.02)
-    M = massif_height(((kx, kz, 7.8, 6.5, 5.5, 0.6, 0.35, 5.0),            # the knoll
-                       (sx, sz, 4.6, 3.0, 4.0, -0.9, 0.4, 6.0)),           # its spur out to the arch
-                      rough=1.5, seed=2.7, warp=1.4)
-    strata_massif(M, -50.0, -2.0, -22.0, 18.0, REEF_BEDS, grid=0.5, step=2.2, tol=0.3, summits=False)
-    ax, az = tidepool_on_bend(R, R + 27.0, 0.13)
-    tidepool_arch((ax, az), -0.95)
-    tidepool_reef_tone()
-    tidepool_surf([(ax - 1.5, az - 2.4, 3.0, -0.5), (ax + 1.8, az + 1.6, 2.6, -0.95), (kx - 6.5, kz - 1.0, 3.4, 0.3),
-                   (sx - 3.0, sz + 2.5, 3.0, 0.9)])
-    ring = [(ax + 5.0 * math.cos(t), 8.5 + 0.5 * math.sin(2 * t), az + 4.0 * math.sin(t))
-            for t in (i / 12 * 2 * math.pi for i in range(12))]
-    for i, p in enumerate(ring):
-        marker('path_gulls_%d' % i, p)
-    for m in range(2):
-        with animated('anim_path:c=gulls:p=15:f=1:o=%.2f#g%d' % (m * 0.5, m), (0.0, 0.0, 0.0)):
-            box((0.16, 0.1, 0.32), (0.0, 0.0, 0.0), 0xf8f8fb)
-            box((0.8, 0.04, 0.16), (0.0, 0.04, -0.02), 0x9aa1b4)
+    tidepool_surf([(ax - 1.6, az + 0.4, 3.0, AY + 1.57), (ax - 2.6, az - 3.6, 2.6, AY + 1.3),
+                   (kx - 7.8, kz - 1.0, 3.4, 0.3), (sx - 4.2, sz + 2.5, 3.0, 0.9)])
+    tidepool_gulls([(ax + 5.0 * math.cos(t), 8.5 + 0.5 * math.sin(2 * t), az + 4.0 * math.sin(t))
+                    for t in (i / 12 * 2 * math.pi for i in range(12))], 15)
     join_still('headland')
-    def sand():
-        with plain_parts():
-            box((0.3, 0.2, 0.3), (-8.0, -0.4, 0.0), 'grey')
-    draped('foot', sand)
+    tidepool_foot()
 
 @piece(1.0)
 def reef_stacks():
-    # Tidepool: the stacks at the end of the west bend, a tower of the
-    # reef's beds left standing in the surf when the headland it belonged to
-    # fell, turf still on its top and gulls on it, and a stump beside it.
+    # Tidepool: the stacks at the end of the west bend, a tall rounded stack
+    # of the reef's rock left standing in the surf when the headland it
+    # belonged to fell, turf still on its top and gulls on it, a lower one
+    # beside it and boulders round their feet.
     R = 27.0
+    polys = []
     ax, az = tidepool_on_bend(R, R + 16.0, 0.0)
     bx, bz = tidepool_on_bend(R, R + 19.5, 0.2)
     cx, cz = tidepool_on_bend(R, R + 13.5, -0.18)
-    M = massif_height(((ax, az, 7.4, 2.9, 3.3, 0.4, 0.3, 1.0),
-                       (bx, bz, 3.6, 2.2, 2.4, -0.3, 0.45, 0.0),
-                       (cx, cz, 1.8, 2.6, 3.2, 0.9, 0.7, 2.0)), rough=0.5, seed=5.9, warp=0.5)
-    strata_massif(M, -32.0, -6.0, -14.0, 16.0, REEF_BEDS, grid=0.4, step=1.8, tol=0.25, summits=False)
-    tidepool_reef_tone()
+    tide_lump(polys, (ax, az), 4.0, 3.6, 3.8, 0.4, 5.9, roundness=2.4, wet=0.6)              # its broad foot
+    tide_lump(polys, (ax + 0.3, az - 0.2), 7.4, 2.6, 2.9, 0.7, 6.1, roundness=2.8, top='leaf', wet=0.6,
+              lean=(0.15, -0.1))                                                               # the tower
+    tide_lump(polys, (ax - 1.4, az + 1.4), 5.0, 1.8, 2.0, 1.2, 6.4, roundness=2.6, wet=0.6)   # a shoulder
+    tide_lump(polys, (bx, bz), 3.8, 2.2, 2.4, -0.3, 6.9, roundness=2.6, top='lavender', wet=0.5, lean=(-0.1, 0.1))
+    tide_lump(polys, (bx + 1.2, bz - 1.0), 2.0, 1.6, 1.6, 0.5, 7.1, wet=0.5)
+    tide_lump(polys, (cx, cz), 1.9, 2.6, 3.0, 0.9, 7.3, roundness=2.2, top='lavender', wet=0.45)
+    for k, (dx, dz, sz) in enumerate(((2.4, -1.8, 1.1), (-2.8, -2.2, 0.9), (1.6, 2.6, 1.0), (-1.0, 3.2, 0.8))):
+        tide_lump(polys, (ax + dx, az + dz), 1.0 * sz, 1.2 * sz, 1.0 * sz, 0.9 * k, 8.0 + k, wet=0.45)
+    tide_rock(polys)
     for k, (dx, dz, yw) in enumerate(((0.4, -0.5, 0.0), (-0.6, 0.3, 2.1))):
-        gull((ax + dx, 7.0, az + dz), yw, 'anim_watch:r=24#gull%d' % k)
+        gull((ax + dx, tide_seat(polys, ax + dx, az + dz, 0.12) - 0.02, az + dz), yw, 'anim_watch:r=24#gull%d' % k)
     tidepool_surf([(ax - 3.6, az - 1.0, 3.0, 0.2), (bx - 2.6, bz + 0.6, 2.4, -0.4), (cx - 3.2, cz - 1.5, 2.8, 0.6)])
     join_still('stacks')
-    def sand():
-        with plain_parts():
-            box((0.3, 0.2, 0.3), (-8.0, -0.4, 0.0), 'grey')
-    draped('foot', sand)
+    tidepool_foot()
 
 @piece(1.0)
 def lifeboat_station():

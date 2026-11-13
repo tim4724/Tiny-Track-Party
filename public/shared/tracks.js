@@ -387,6 +387,8 @@ export const SET_GROUND = {
   // tower stood a storey deep in the hill.
   'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
   // Pretzel's den camp on a bank of its own, the same shape.
+  // Tidepool's knoll at the lap's waist, its rock standing on its road side.
+  'set-tidepool-knoll': [{ kind: 'mound', x: -3, h: 4.5, r: 10, r1: 12, rz: 13, shape: 1.3 }],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -461,20 +463,20 @@ export const TRACKS = {
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
     // Low tide: the reef the sea left bare is the land the lap drives
     // beside. On the two outer bends the sea comes in to a few strides past
-    // the kerb (the `shore`s) and the reef stands between them, knuckles of
-    // slate a car's height and more from the kerb out into the surf (out at
-    // the waterline, and low, it lay under the road's own kerb and read as
-    // grey specks): the east bend's with seals hauled out a stride from the
-    // road, the west bend's taller and broken, gulls over it; an outlier
-    // either side of them, and along the top run, where the beach is wide,
-    // its low ledges and the pools between them. The big rock pool
-    // lies beside the low west run that points at it, people at its edge,
-    // the crab fishers' landing just before it. Off the east bend, where the
-    // east run points, Seal Rock stands in open water, seals on its ledges.
-    // Inland, grassy downs fill both lobes of the lap, their flanks to the
-    // kerb; the rock-poolers' vans are parked by the start straight.
+    // the kerb (the `shore`s) and the reef stands between them, rounded,
+    // weathered rock a car's height and more from the kerb out into the surf
+    // (out at the waterline, and low, it lay under the road's own kerb and
+    // read as grey specks): the east bend's with seals hauled out a stride
+    // from the road, the west bend's taller, a headland with its sea arch and
+    // a stack, gulls over them. The big rock pool lies beside the low west
+    // run that points at it, people at its edge, the crab fishers' landing
+    // just before it. Off the east bend, where the east run points, Seal Rock
+    // stands in open water, seals on its ledges. Inland, grassy downs fill
+    // both lobes of the lap, their flanks to the kerb, and at the lap's waist
+    // a knoll with the same rock breaking out of it; the rock-poolers' vans
+    // are parked by the start straight.
     set: [
-      { model: 'set-tidepool-cutting', u: 0.5, lat: 0 },
+      { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
       { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
       // the reef in three forms on the outsides of the bends, where the
@@ -514,11 +516,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
-      // the backbone's turf: the downs' green carried out along the slate
-      // spine the road cuts through, and the downs it rises out of
-      { kind: 'paint', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 7, w: 5, tint: 0x6faa62 },
+      // the knoll at the waist (the piece brings it: SET_GROUND), green to
+      // the kerb; and the downs across the road
+      { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
+      { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      { kind: 'clear', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 8 },
       // the lifeboat station's rock over the beach, at the road's height
       { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
       // the hard the crab fishers' landing stands on, at the hop's height
