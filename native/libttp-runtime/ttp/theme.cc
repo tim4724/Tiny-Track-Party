@@ -28,10 +28,8 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_MOTE:   a.size = 0.13f; a.opacity = 0.5f;  a.fall = 0.05f; a.wind = 0.4f; a.bob = 0.4f;  a.band = 0.5f;  break;
     case AMB_SAND:   a.size = 0.17f; a.opacity = 0.4f;  a.fall = 0;     a.wind = 9;    a.bob = 0.5f;  a.band = 0.1f;  break;
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
-    // The life's two: a petal sinks slowly and sways, low; a tumbleweed
-    // rolls on the floor in the wind, hopping.
+    // The life's own: a petal sinks slowly and sways, low.
     case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
-    case AMB_TUMBLE: a.size = 0.9f;  a.opacity = 1.0f;  a.fall = 0;     a.wind = 2.4f; a.bob = 0.45f; a.band = 1;  a.hop = 2.8f;  break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }
@@ -554,8 +552,6 @@ Theme canyonTheme() {
   deriveRoad(t.road, /*dashSet=*/true, false, /*shoulderSet=*/true);
   // Grit on the wind: fast low sand streaks under the drifting dust banks.
   ambientKind(t.ambient, AMB_SAND); t.ambient.count = 240; t.ambient.tint = 0xe9c9a0;
-  // …and now and then a tumbleweed rolling across the road on it.
-  ambientKind(t.life, AMB_TUMBLE); t.life.count = 14; t.life.tint = 0xa07d4a; t.life.tint2 = 0x8c6c40;
   t.structure = 0xb4714d;  // supports read as red-rock columns, not city concrete
   // …built of the rock itself: sandstone in courses, a footing and a cap.
   t.pier = { PIER_STONE, 0, 0xa36443, 0xc4825c, 0x95583a, 0 };

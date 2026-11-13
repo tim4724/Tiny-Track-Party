@@ -30,6 +30,7 @@
     "score:landmarks": "node scripts/landmark-score.mjs",
     "place:landmarks": "node scripts/landmark-place.mjs",
     "see:landmarks": "node scripts/landmark-see.mjs",
+    "see:pops": "node scripts/pop-see.mjs",
     "film:laps": "node scripts/film-laps.mjs",
     "score:verge": "node scripts/score-verge.mjs",
     "pretest:e2e": "node scripts/require-e2e-deps.mjs",

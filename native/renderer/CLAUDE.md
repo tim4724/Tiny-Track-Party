@@ -913,7 +913,12 @@ So:
   the whole circuit. A listed renderable owns a second index range that strays at
   most `err` world units, drawn past the distance where `err` covers `kLodPx`
   pixels OF THAT CELL, counted as its share of a frame no taller than
-  `kLodLines`, so a 4K panel swaps where a 1080 one does. The deck's is a
+  `kLodLines`, so a 4K panel swaps where a 1080 one does. **That is lite's
+  rule. Full swaps at `kLodPxFull`, of what the haze lets through**: a far
+  form is a different picture up close (a fir's snow tiers gone, a pole
+  gone altogether, neither of which `err` counts), and at lite's gate whole
+  groves changed form 60 to 100 u ahead of a racer. `npm run see:pops`
+  counts what swaps per frame; hold a change to the gate to it. The deck's is a
   ribbon over same-coloured rings; a static unlit mesh opts in with
   `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on
@@ -1021,7 +1026,11 @@ each traveller is now. Lite keeps a draw per part (its builds group a knot
 into one part), because the skinned draw is a pipeline the box would compile
 on first sight, mid-race; warm it there before lite takes it. Hence the verbs: spins about the part's own axis,
 sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
-runs inside something opaque (or whose loop is closed in sight). A part inside
+runs inside something opaque (or whose loop is closed in sight). **Cloth
+(`flutter`: a flag, a pennant, a windsock) is the one part that bends**: the
+motion pass cuts it across its fly and gives each cut a bone of the skin, so a
+ripple runs down it; in lite, with no skin, it swings whole. A plate on a
+`sway` read as a board on a hinge. A part inside
 another rides on it: its pose composes onto the outer part's pose of the same
 frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
 moves in place keeps its rest shadow. Every part takes a far form (in full, the placement's skin
@@ -1082,8 +1091,8 @@ its code:
   that brings its own ground, SET_GROUND, nor that ground, which the
   generator refuses).
 
-- **The cup's ambient life** (`theme.life`: petals, tumbleweeds,
-  motes): blended sprites are fill, and none has been priced on the box yet
+- **The cup's ambient life** (`theme.life`: petals, motes): blended
+  sprites are fill, and none has been priced on the box yet
   (`resolve_theme`).
 
 - **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and

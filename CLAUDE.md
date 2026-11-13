@@ -45,6 +45,9 @@ npm run see:landmarks [-- --track id] [--out dir] [--four]
                                   # the same, counted in PIXELS off the real picture: every
                                   # piece in a flat id colour (TTP_DEBUG_SET_ID) over a driven
                                   # lap; readable s, what hides it, stills of the worst
+npm run see:pops [-- --track id] [--lines 540] [--out dir]
+                                  # what swaps form in a racer's picture per frame over a
+                                  # lap (far forms, cull boxes, the fog's cutoff), in pixels
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)

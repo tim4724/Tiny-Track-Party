@@ -444,10 +444,8 @@ def split_off(o, pick):
     return next(x for x in bpy.context.selected_objects if x is not o)
 
 def kit_flag(model, at, yaw, scale, flap):
-    """A kit flag whose cloth flaps: it dips and lifts about the cloth's own
-    normal, hinged at the top of the pole. Seen across, which is how a car sees
-    a flag turned to the road, that reads; a swing round the pole only narrows
-    the cloth. The pole stays in the static bake."""
+    """A kit flag whose cloth flies (`flap`, an `anim_flutter`), held at the
+    top of the pole. The pole stays in the static bake."""
     o = kit('pirate', model, at, yaw=yaw, scale=scale)
     cloth = split_off(o, lambda c: c.x > 0.25)   # the kit's cloth flies along its +X off a 0.2 pole
     bpy.context.view_layer.update()
@@ -498,9 +496,8 @@ def join_anims(k):
 # ---- shared sub-assemblies ------------------------------------------------------
 
 def flagpole(at, h, color, w=1.2, fh=0.7, pole=0xfff6eb, wave=None):
-    """`wave` names the cloth's motion (a `#n` tag apart per flag), hinged at
-    the top of the pole: a flap about z (the cloth's normal) dips and lifts it,
-    which is what reads from a car seeing it across (kit_flag)."""
+    """`wave` names the cloth's motion (an `anim_flutter`, a `#n` tag apart
+    per flag), held at the top of the pole."""
     x, y, z = at
     cyl(0.2, 0.3, (x, y, z), pole, segs=6)
     cyl(0.09, h, (x, y, z), pole, segs=6)
@@ -794,7 +791,7 @@ def flames(tongues, heart, at=(0.0, 0.0, 0.0)):
 
 def flag_on_pole(at, h, colors, wave, w=0.32, fh=0.2):
     """A slim pole `h` tall and a flag of horizontal bands flying to +X off its
-    top, hinged there; `wave` names the cloth's flap (set_motion.h)."""
+    top, held there; `wave` names the cloth's flutter (set_motion.h)."""
     x, y, z = at
     box((0.05, h, 0.05), (x, y + h / 2, z), 0xfff6eb)
     with animated(wave, (x, y + h, z)):
@@ -1404,7 +1401,7 @@ def lifeboat_station():
     for dz in (-0.35, 0.35):
         box((1.8, 0.24, 0.12), (LX, LY - 0.08, BZ + dz), 0x8a6a46)
     # the flagstaff at the road side of the station, its flag flying along it
-    flag_on_pole((0.2, 0.0, -2.8), 4.2, (red, white, red), 'anim_sway:a=x:d=20:p=1.9#flag', w=1.0, fh=0.6)
+    flag_on_pole((0.2, 0.0, -2.8), 4.2, (red, white, red), 'anim_flutter:p=1.9#flag', w=1.0, fh=0.6)
     # the bell under its little roof, by the doors
     for dz in (-0.3, 0.3):
         box((0.1, 1.2, 0.1), (BX + 1.9, 0.6, BZ + 2.9 + dz), 0x8a6a46)
@@ -1555,7 +1552,7 @@ def pirate_camp():
           (TX, H * 0.72, TZ - L / 2 + 0.3)], [(0, 1, 2)], 0x38383d)                       # the dark inside
     # the flag over the camp, the kit's Jolly Roger on its tall pole, the
     # cloth flying across the piece so the cars see its face
-    kit_flag('flag-pirate-high', (TX - 0.2, 0, TZ + L / 2 + 1.0), math.radians(90), 1.25, 'anim_sway:a=x:d=24:p=2.1')
+    kit_flag('flag-pirate-high', (TX - 0.2, 0, TZ + L / 2 + 1.0), math.radians(90), 1.25, 'anim_flutter:p=2.1')
     # the treasure chest open on its gold, before the tent
     kit('pirate', 'chest', (0.6, 0, TZ - 0.8), yaw=math.radians(100), scale=0.75)
     for k, (gx, gz) in enumerate(((1.1, TZ - 0.4), (1.2, TZ - 1.1), (0.95, TZ - 1.4), (1.3, TZ - 0.75))):
@@ -1694,7 +1691,7 @@ def jetty():
     kit('pirate', 'barrel', (-0.8, D + 0.8, -1.5), yaw=0.2, scale=0.62)
     kit('pirate', 'crate', (-0.9, D + 0.07, 1.2), yaw=0.2, scale=1.0)
     kit('pirate', 'crate', (-0.85, D + 0.84, 1.3), yaw=0.7, scale=0.8)
-    kit_flag('flag-pirate-high', (-QW - FL + 0.2, D, FZ + 0.6), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.3')
+    kit_flag('flag-pirate-high', (-QW - FL + 0.2, D, FZ + 0.6), math.radians(90), 0.6, 'anim_flutter:p=2.3')
     join_still('wharf')
     # the longboat under its red lugsail, its bow to its local +X (the way
     # its path faces it), sailing the loop out to the ship and back and
@@ -1852,7 +1849,7 @@ def lifeguard_tower():
     mx, mz = ex - 0.1, -(S + 0.5) / 2 + 0.12
     box((0.13, 5.1 - top, 0.13), (mx, top + (5.1 - top) / 2, mz), white)
     box((0.22, 0.22, 0.22), (mx, 5.16, mz), red)
-    with animated('anim_sway:a=x:d=22:p=1.9#patrol', (mx, 5.0, mz)):
+    with animated('anim_flutter:p=1.9#patrol', (mx, 5.0, mz)):
         box((0.06, 0.5, 0.42), (mx, 4.75, mz - 0.27), red)
         box((0.06, 0.5, 0.42), (mx, 4.75, mz - 0.69), yellow, yaw=0.12)
     # three big beach umbrellas on the road side of it, either way along
@@ -1878,7 +1875,7 @@ def lifeguard_tower():
     # the swimming flags either side of the patrol's water, toward the sea
     for k, z in enumerate((-3.4, 3.2)):
         box((0.1, 1.9, 0.1), (3.2, 0.95, z), white)
-        with animated('anim_sway:a=x:d=22:p=%.1f#swim%d' % (2.0 + 0.3 * k, k), (3.2, 1.85, z)):
+        with animated('anim_flutter:p=%.1f#swim%d' % (2.0 + 0.3 * k, k), (3.2, 1.85, z)):
             box((0.05, 0.28, 0.6), (3.2, 1.72, z - 0.33), red)
             box((0.05, 0.28, 0.6), (3.2, 1.44, z - 0.33), yellow)
     join_still('tower')
@@ -1959,7 +1956,7 @@ def promenade():
     with square():
         figure((1.5, deck_y, KZ - 0.2), math.pi, shirt=0x339cf2, legs=0x4f5260, hair=0x38383d)
         figure((1.8, deck_y, KZ + 0.25), math.pi, shirt=0xff7e44, legs=0x339cf2, hair=0xffc044)
-    flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (red, white), 'anim_sway:a=z:d=20:p=2.0#kiosk')
+    flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (red, white), 'anim_flutter:p=2.0#kiosk')
     # the pier: on from the boardwalk's end a step down (its root lies
     # under the boardwalk's end, and two decks at one level fight), out over
     # the sea, turned a little off the road's line toward the water; railed
@@ -2048,7 +2045,7 @@ def promenade():
     cyl(0.45, 0.95, (lx, ly, lz), white, segs=8)                                      # the lantern
     cyl(0.47, 0.32, (lx, ly + 0.42, lz), 0x339cf2, segs=8)                             # its glazing
     sphere(0.45, (lx, ly + 0.95, lz), red, scale=(1.0, 0.85, 1.0))                    # the dome
-    flag_on_pole((lx, ly + 1.3, lz), 1.0, (red, white), 'anim_sway:a=z:d=20:p=2.0#pavilion', w=0.5, fh=0.32)
+    flag_on_pole((lx, ly + 1.3, lz), 1.0, (red, white), 'anim_flutter:p=2.0#pavilion', w=0.5, fh=0.32)
     for side in (-1, 1):                                                                # the turrets
         tx, ty, tz = put(TC - HD, side * HW, pd)
         cyl(0.42, 2.45, (tx, ty, tz), white, segs=8)
@@ -2425,7 +2422,7 @@ def seafront_hotel():
         for k, e in enumerate((-1, 1)):                                                 # two flags on the roof
             px, py, pz = T(-0.6, H + 0.4, e * (w / 2 - 0.35))
             box((0.1, 1.5, 0.1), (px, py + 0.75, pz), 0xfff6eb)
-            with animated('anim_sway:a=x:d=20:p=%.1f#hotel%d' % (1.9 + 0.3 * k, k), (px, py + 1.5, pz)):
+            with animated('anim_flutter:p=%.1f#hotel%d' % (1.9 + 0.3 * k, k), (px, py + 1.5, pz)):
                 box((0.05, 0.42, 0.7), (px, py + 1.26, pz + 0.38), (0x339cf2, 0xff5040)[k])
     riptide_house(road, 3.4, 2.2, 3, 0xf1976c, 0xcf534f, balcony=True, door=0xfff6eb)
     riptide_house(road, 5.6, 2.2, 2, 0xfff6eb, 0x339cf2, bay=True)
@@ -2563,7 +2560,7 @@ def drift_light_station():
     with plain_parts():
         for s in (-1, 1):
             beam((MX, 3.0, MZ), (MX, 0.0, MZ + s * 1.2), 0.04, 0x9aa1b4)
-    with animated('anim_sway:a=x:d=20:p=1.6#pennant', (MX, 3.95, MZ)):
+    with animated('anim_flutter:p=1.6#pennant', (MX, 3.95, MZ)):
         box((0.05, 0.6, 0.55), (MX, 3.62, MZ + 0.33), red)
         box((0.05, 0.6, 0.5), (MX, 3.6, MZ + 0.82), white, yaw=0.1)
         box((0.05, 0.22, 0.24), (MX, 3.6, MZ + 0.82), red, yaw=0.1)
@@ -2799,7 +2796,7 @@ def smugglers_cave():
         box((0.08, 0.05, 0.08), (x, G(x, z) - 0.02, z), 'yellow', yaw=x * 7)
     tx, tz = M(-1.0, 0.4)
     kit_flag('flag-pirate-high', (tx, tide_seat(polys, tx, tz, 0.6) - 0.1, tz), math.radians(90) - A, 0.6,
-             'anim_sway:a=x:d=24:p=2.2')
+             'anim_flutter:p=2.2')
     join_still('cave')
     def gear():
         # the dark floor inside, laid on the land as it is drawn
@@ -3051,7 +3048,7 @@ def pirate_lookout():
         box((0.06, 0.5, 0.8), (wx, P0 + 1.05, wz), 0x38383d)
     box((0.8, 0.5, 0.06), (LX, P0 + 1.05, -0.96), 0x38383d)
     cyl(1.55, 0.9, (LX, P0 + 1.5, 0.0), 0xd9b054, r2=0.12, segs=8)                    # the thatch
-    kit_flag('flag-pirate-high', (LX, P0 + 1.9, 0.0), math.radians(90), 0.7, 'anim_sway:a=x:d=24:p=2.0')
+    kit_flag('flag-pirate-high', (LX, P0 + 1.9, 0.0), math.radians(90), 0.7, 'anim_flutter:p=2.0')
     # the island's platform among the palms
     IX = 8.6
     tower(IX, 1.2, 0.85)
@@ -3144,7 +3141,7 @@ def pirate_stockade():
     beam((X0, 2.3, GZ - GW - 0.35), (X0, 2.3, GZ + GW + 0.35), 0.3, wood)
     for sz in (-1, 1):
         box((1.0, 1.6, 0.14), (X0 + 0.45, 0.8, GZ + sz * (GW - 0.3)), plank, yaw=-sz * 0.75)
-    kit_flag('flag-pirate-high', (X0 - 0.05, 2.45, GZ), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.2#gate')
+    kit_flag('flag-pirate-high', (X0 - 0.05, 2.45, GZ), math.radians(90), 0.55, 'anim_flutter:p=2.2#gate')
     # the guns: one run out through the sea wall, one along the shore
     # through the end wall toward the ship's anchorage
     kit('pirate', 'cannon', (X0 + 1.0, 0, 2.0), yaw=math.radians(-90), scale=0.6)
@@ -3170,7 +3167,7 @@ def pirate_stockade():
         box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.15 - 0.15 * t), dark)
     for dx in (0.0, 0.6):
         beam((LX + dx, -0.4, LZ + 1.15), (LX + dx, P0, LZ + 1.0), 0.1, wood)
-    kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.0#tower')
+    kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_flutter:p=2.0#tower')
     # the log hut on the land side of the yard, its door to the yard
     BX, BZ, BW, BD, BH = 1.4, 2.0, 2.2, 2.8, 1.4
     box((BW - 0.2, BH + 0.4, BD - 0.2), (BX, (BH - 0.4) / 2, BZ), 0x6e4a32)
@@ -3653,7 +3650,7 @@ def rock_poolers_park():
     bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
     bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
     kiosk(1.3, -1.6, 0.0)
-    flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
+    flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_flutter:p=2.2#park')
     for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
         surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
     join_still('park')
@@ -3700,7 +3697,7 @@ def pennant(at, h, colors, tag, lean=0.0):
     x, y, z = at
     box((0.06, h, 0.06), (x, y + h / 2, z), 0xfff6eb)
     w = 0.26 * h
-    with animated('anim_sway:a=y:d=16:p=%.1f#%s' % (2.2 + 0.2 * (ord(tag[-1]) % 4), tag), (x, y, z)):
+    with animated('anim_flutter:a=y:p=%.1f#%s' % (2.2 + 0.2 * (ord(tag[-1]) % 4), tag), (x, y, z)):
         poly([(x - 0.03, y + 0.24 * h, z), (x - w, y + 0.3 * h, z), (x - 1.1 * w, y + 0.62 * h, z),
               (x - 0.03, y + 0.62 * h, z)], [(0, 1, 2, 3)], colors[0])
         poly([(x - 0.03, y + 0.62 * h, z), (x - 1.1 * w, y + 0.62 * h, z), (x - 0.75 * w, y + 0.92 * h, z),
@@ -3760,8 +3757,8 @@ def surf_club():
     box((0.07, 0.07, 1.8), (MX, MH - 0.9, MZ), white)
     for sz in (-1, 1):
         beam((MX, MH - 0.1, MZ), (MX, RY + 0.1, MZ + sz * 1.6), 0.04, 0x9aa1b4)       # the stays
-    flag_on_pole((MX, MH - 0.6, MZ), 0.7, (red, yellow), 'anim_sway:a=z:d=22:p=2.1#mast', w=0.7, fh=0.42)
-    with animated('anim_sway:a=x:d=18:p=2.6#yard', (MX, MH - 0.9, MZ + 0.85)):
+    flag_on_pole((MX, MH - 0.6, MZ), 0.7, (red, yellow), 'anim_flutter:p=2.1#mast', w=0.7, fh=0.42)
+    with animated('anim_flutter:p=2.6#yard', (MX, MH - 0.9, MZ + 0.85)):
         box((0.04, 0.34, 0.5), (MX, MH - 1.1, MZ + 0.62), 0x339cf2)
     # the rescue boat on its trailer, on the apron before the doors
     TX, TZ = 0.9, 1.2
@@ -3882,8 +3879,8 @@ def surf_contest():
         box((0.06, 0.3, 0.3), (-0.4 + S + 0.2, H1 - 0.5, -0.66 + 0.44 * k), col)       # the heat's four colours
     for sz in (-1, 1):
         box((2 * S + 0.7, 0.07, 0.6 * (2 * S + 0.7)), (-0.4, H2 + 1.05, sz * (2 * S + 0.7) / 4), blue, pitch=-sz * 0.3)
-    flag_on_pole((-0.4 - S, H2 + 0.9, -S), 0.8, (red, yellow), 'anim_sway:a=z:d=22:p=2.0#jt1', w=0.5, fh=0.3)
-    flag_on_pole((-0.4 - S, H2 + 0.9, S), 0.8, (blue, white), 'anim_sway:a=z:d=22:p=2.3#jt2', w=0.5, fh=0.3)
+    flag_on_pole((-0.4 - S, H2 + 0.9, -S), 0.8, (red, yellow), 'anim_flutter:p=2.0#jt1', w=0.5, fh=0.3)
+    flag_on_pole((-0.4 - S, H2 + 0.9, S), 0.8, (blue, white), 'anim_flutter:p=2.3#jt2', w=0.5, fh=0.3)
     for i in range(7):                                                                 # its stair, up the back
         t = (i + 0.5) / 7
         box((0.5, 0.06, 0.24), (-0.4 - S - 0.3, H1 * t, S + 1.7 - 1.7 * t), wood)
@@ -3943,7 +3940,7 @@ def beach_day():
     # the changing huts at the far end, and the ice-cream cart
     for i, c in enumerate((blue, yellow, red)):
         beach_hut(-1.6, 0.0, 8.4 + 1.25 * i, 0.0, c)
-    flag_on_pole((-1.6, 0.0, 12.0), 2.2, (red, yellow), 'anim_sway:a=z:d=22:p=2.2#beach')
+    flag_on_pole((-1.6, 0.0, 12.0), 2.2, (red, yellow), 'anim_flutter:p=2.2#beach')
     box((0.6, 0.5, 0.9), (0.7, 0.45, 9.6), white)
     for z in (9.3, 9.9):
         scenery_wheel(1.02, 0.2, z, 0.2, 0.07)
@@ -4150,10 +4147,10 @@ def coastguard_lookout():
     box((0.13, 0.13, 2.6), (mx, 4.6, mz), white)                           # the yard
     box((0.22, 0.22, 0.22), (mx, 6.06, mz), red)
     for k, (dz, cols) in enumerate(((-1.2, (red, yellow)), (1.2, (blue, white)))):
-        with animated('anim_sway:a=x:d=18:p=%.1f#signal%d' % (1.9 + 0.35 * k, k), (mx, 4.6, mz + dz)):
+        with animated('anim_flutter:a=z:p=%.1f#signal%d' % (1.9 + 0.35 * k, k), (mx, 4.6, mz + dz)):
             for i, c in enumerate(cols):
                 box((0.06, 0.42, 0.5), (mx, 4.25 - 0.5 * i, mz + dz), c)
-    with animated('anim_sway:a=x:d=22:p=1.6#pennant', (mx, 5.9, mz)):
+    with animated('anim_flutter:p=1.6#pennant', (mx, 5.9, mz)):
         poly([(mx, 5.95, mz), (mx, 5.45, mz), (mx, 5.7, mz - 1.2)], [(0, 1, 2)], red)
     join_still('lookout')
     on_a_rise()
@@ -4215,10 +4212,10 @@ def sailing_club():
     box((0.12, 0.12, 2.2), (mx, 3.9, mz), white)                         # the yard, across the road's view
     box((0.2, 0.2, 0.2), (mx, 5.06, mz), red)
     for k, (dz, cols) in enumerate(((-1.0, (red, yellow)), (1.0, (blue, white)))):
-        with animated('anim_sway:a=x:d=18:p=%.1f#signal%d' % (1.8 + 0.4 * k, k), (mx, 3.9, mz + dz)):
+        with animated('anim_flutter:a=z:p=%.1f#signal%d' % (1.8 + 0.4 * k, k), (mx, 3.9, mz + dz)):
             for i, c in enumerate(cols):
                 box((0.06, 0.4, 0.46), (mx, 3.55 - 0.48 * i, mz + dz), c)
-    with animated('anim_sway:a=x:d=22:p=1.7#burgee', (mx, 4.9, mz)):
+    with animated('anim_flutter:p=1.7#burgee', (mx, 4.9, mz)):
         poly([(mx, 4.95, mz), (mx, 4.45, mz), (mx, 4.7, mz - 1.0)], [(0, 1, 2)], red)
     # the dinghies on their trolleys on the hard, bows to the road, sails up
     for k, (z, hull, sail) in enumerate(((-3.2, white, red), (-1.0, red, blue), (1.3, blue, yellow))):
@@ -4596,7 +4593,7 @@ def driftwood_forts():
         teepee(-1.4, 4.9, 2.1, 1.0, 11, 0.2, tarp=(3, 4, 5))
         teepee(-1.2, -4.7, 1.4, 0.75, 9, 0.9)
         box((0.07, 0.8, 0.07), (-1.4, 2.55, 4.9), END)
-    with animated('anim_sway:a=y:d=20:p=2.4#fort', (-1.4, 2.9, 4.9)):
+    with animated('anim_flutter:p=2.4#fort', (-1.4, 2.9, 4.9)):
         poly([(-1.4, 2.93, 4.9), (-0.8, 2.78, 4.9), (-1.4, 2.6, 4.9)], [(0, 1, 2)], 0xff5040)
     # floats strung from the tall teepee to the small one over the stack:
     # round ones, on a rope, which is what a float looks like
@@ -5398,8 +5395,8 @@ def turned(cx, cz, yaw, lx, lz):
 
 def flag_across(at, h, color, wave, w=0.8, fh=0.5, pole=0xfff6eb):
     """A pole `h` tall and its flag flying ACROSS the piece (+Z), so a piece
-    facing the road (+X) shows the road the cloth, not its edge; `wave` flaps
-    it about its own normal (x), hinged at the top of the pole."""
+    facing the road (+X) shows the road the cloth, not its edge; `wave` is
+    its flutter, held at the top of the pole."""
     x, y, z = at
     box((0.08, h, 0.08), (x, y + h / 2, z), pole)
     with animated(wave, (x, y + h, z)):
@@ -6281,7 +6278,7 @@ def snow_fort():
         a_ = k / 4 * 2 * math.pi + 0.6
         course((0.7, CH * 3, 0.8), (KX + math.cos(a_) * (KR + 0.1), CH * 1.5, KZ + math.sin(a_) * (KR + 0.1)), 1, yaw=-a_)
     tx, tz = KX, KZ
-    flag_across((tx, kt + 0.15 + KR * 1.7 - 0.5, tz), 1.9, 0xff5040, 'anim_sway:a=x:d=22:p=1.9#flag', w=1.1, fh=0.65)
+    flag_across((tx, kt + 0.15 + KR * 1.7 - 0.5, tz), 1.9, 0xff5040, 'anim_flutter:p=1.9#flag', w=1.1, fh=0.65)
     # banners: one hung down the square tower, bunting across the gate
     box((0.06, 1.3, 0.7), (SE[0] + 0.9, st - 0.9, SE[1]), 0xcf534f)
     box((0.07, 0.3, 0.3), (SE[0] + 0.92, st - 0.9, SE[1]), 0xffc044)
@@ -6310,7 +6307,7 @@ def snow_fort():
                                                (NE[0], NE[1], rt + 0.15 + 1.15 * 1.7 - 0.45, 1, 0xa878e8))):
             box((0.06, 0.9, 0.06), (x, y0 + 0.45, z), 0x9a7b55)
             tri = [(z + 0.02 * sz, y0 + 0.86), (z + 0.02 * sz, y0 + 0.5), (z - 0.6 * sz, y0 + 0.68)]
-            with animated('anim_sway:a=x:d=%d:p=%.1f#pennant%d' % (22 * sz, 1.6 + 0.2 * k, k), (x, y0 + 0.86, z)):
+            with animated('anim_flutter:p=%.1f#pennant%d' % (1.6 + 0.2 * k, k), (x, y0 + 0.86, z)):
                 prism(tri if sz > 0 else tri[::-1], x, 0.04, c)
         for (x, z) in ((5.6, gz + 3.2), (5.9, gz - 3.0), (0.2, 3.9)):   # snowballs: four and one on top
             for dx, dz in ((-0.1, -0.1), (0.1, -0.1), (-0.1, 0.1), (0.1, 0.1)):
@@ -6467,7 +6464,7 @@ def windsock():
         box((0.6, 0.1, 0.24), (-1.0, 0.1, 3.6), 0xff7e44)
         box((0.5, 0.08, 0.16), (-1.0, 0.18, 3.6), 0xfff6eb)
     box((0.08, 1.6, 0.08), (1.0, 0.8, 0.9), 0x555b66)
-    with animated('anim_sway:a=y:d=40:p=5.5#sock', (1.0, 1.55, 0.9)):
+    with animated('anim_flutter:p=5.5#sock', (1.0, 1.55, 0.9)):
         box((0.06, 0.06, 0.06), (1.03, 1.55, 0.9), 0x2a2735)
         for k in range(4):
             c = 0xff5040 if k % 2 == 0 else 0xfff6eb
@@ -6953,7 +6950,7 @@ def ski_jump():
     box((0.14, 0.14, W + 0.3), (T0 + 1.3, ytop + 0.95, 0.0), RED)               # the start bar
     for s in (-1, 1):
         box((0.12, 0.9, 0.12), (T0 + 1.3, ytop + 0.5, s * (W / 2 + 0.1)), STEEL)
-    flag_across((T0 - 1.1, top + 1.2, 0.9), 1.3, RED, 'anim_sway:a=x:d=12:p=2.1#top')
+    flag_across((T0 - 1.1, top + 1.2, 0.9), 1.3, RED, 'anim_flutter:p=2.1#top')
     # the judges' cab seated in the far flank beside the landing (from the
     # road it stands clear of the in-run): a stem down through the hill to
     # the plain, the glazed box on it a unit over the flank as drawn there
@@ -6970,7 +6967,7 @@ def ski_jump():
     jy = jg + 0.3 + 0.78 * 3
     box((1.9, 0.16, 2.1), (jx - 0.3, jy + 0.08, jz), RED)
     snowy(box((1.7, 0.12, 1.9), (jx - 0.3, jy + 0.2, jz), SNOWT), 0.4)
-    flag_across((jx - 0.9, jy + 0.2, jz - 0.6), 1.0, BLUE, 'anim_sway:a=x:d=12:p=2.6#judges')
+    flag_across((jx - 0.9, jy + 0.2, jz - 0.6), 1.0, BLUE, 'anim_flutter:p=2.6#judges')
     # What says "ski jump" round the landing. The ground off the axis is the
     # drawn ground as sampled there (it falls away across the outrun, from
     # the far flank to the road side), and every post runs down to the plain.
@@ -7014,7 +7011,7 @@ def ski_jump():
     # units over the ground drawn there (sampled)
     for k, (fx, fz, gy, c) in enumerate(((4.5, -4.0, 2.68, RED), (4.5, 4.5, 1.53, BLUE),
                                          (3.0, -5.0, 2.81, BLUE), (3.0, 5.5, 1.4, RED))):
-        flag_across((fx, -1.2, fz), gy + 3.4, c, 'anim_sway:a=x:d=12:p=%.1f#f%d' % (2.3 + 0.3 * k, k))
+        flag_across((fx, -1.2, fz), gy + 3.4, c, 'anim_flutter:p=%.1f#f%d' % (2.3 + 0.3 * k, k))
     # The jumper's loop: down the in-run on its snow, off the takeoff and
     # over the foot to the landing, the outrun, then under the snow back up
     # the hill to the tower and up inside it to the start.
@@ -7247,7 +7244,7 @@ def ski_school():
     cabin_hut(1.4, 0.8, 1.1, (1.4, hy, -3.4), 0xcf534f, 0xeef4f9)
     # the feather flags' cloth, swinging round its pole as the wind shifts
     for n, (fz, c) in enumerate(((-0.9, 0xff5040), (4.2, 0x3f7bd9))):
-        with animated('anim_drape+sway:a=y:d=18:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
+        with animated('anim_drape+flutter:a=y:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
             box((0.04, 1.0, 0.36), (3.0, 0.95, fz + 0.2), c)
             box((0.05, 0.12, 0.2), (3.0, 0.75, fz + 0.2), 0xfff6eb)
     # the children's loop: up the carpet inside its gallery, off at the head,
@@ -7899,7 +7896,7 @@ def expedition_camp():
     snow_person(1.75, 0, 0.25, 0x3f7bd9, 0xffc044, yaw=-0.6)
     # the radio mast, banded, its guys pegged out round it
     MX, MZ, MH = -0.5, -2.2, 2.8
-    radio_mast(MX, MZ, MH, 7, 'anim_drape+sway:a=x:d=24:p=1.9#1')
+    radio_mast(MX, MZ, MH, 7, 'anim_drape+flutter:p=1.9#1')
     # draped, the flag too (`drape`): the bank's crest is drawn on the 9 u
     # grid, half a unit and more off its flat top
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
@@ -7926,7 +7923,7 @@ def advanced_camp():
     snow_person(1.2, 0, -0.9, 0x3f7bd9, 0xcf534f, yaw=0.4)
     snow_person(1.3, 0, 0.8, 0x61cb8b, 0x38383d, yaw=-0.5)
     MX, MZ, MH = -0.3, 2.3, 2.8
-    radio_mast(MX, MZ, MH, 7, 'anim_drape+sway:a=x:d=24:p=1.7#1')
+    radio_mast(MX, MZ, MH, 7, 'anim_drape+flutter:p=1.7#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None],
           'drape_camp')
 
@@ -8052,7 +8049,7 @@ def glacier_airstrip():
     WX, WZ, WH = -Wd / 2 - 1.6, -L / 2 + 1.5, 2.4
     for i in range(4):
         box((0.14, WH / 4, 0.14), (WX, WH / 8 * (2 * i + 1), WZ), 0xff5040 if i % 2 == 0 else 0xfff6eb)
-    with animated('anim_sway:a=y:d=35:p=6.5#sock', (WX, WH, WZ)):
+    with animated('anim_flutter:p=6.5#sock', (WX, WH, WZ)):
         box((0.1, 0.1, 0.1), (WX, WH, WZ), 0x2a2735)
         for k in range(5):
             c = 0xff5040 if k % 2 == 0 else 0xfff6eb
@@ -8084,7 +8081,7 @@ def glacier_airstrip():
     sled(-4.6, 0.0, 3.0, 0.0, color=0x9a7b55, L=1.6)
     for i, (dx, dz) in enumerate(((-0.35, -0.2), (0.15, -0.2), (-0.1, 0.25), (0.4, 0.25))):
         cyl(0.2, 0.55, (-4.6 + dx, 0.16, 3.0 + dz), (0xcf534f, 0x3f7bd9)[i % 2], segs=10)
-    radio_mast(-5.0, 9.0, 4.6, 9, 'anim_sway:a=x:d=20:p=1.9#flag')
+    radio_mast(-5.0, 9.0, 4.6, 9, 'anim_flutter:p=1.9#flag')
     snowcat(-6.5, 0.0, -13.0, k=0.45)
     # its train: two cargo sledges on a drawbar each, loaded (two bare decks
     # end to end read as a brown beam it dragged)
@@ -8246,7 +8243,7 @@ def glacier_dog_trail():
     cyl(0.22, 0.6, (SX + 0.7, 0.0, SZ - 1.3), 0xcf534f, segs=10, stem=True)
     for o in set(bpy.context.scene.objects) - before:
         o.location.z += g                              # Blender's up: onto the crest
-    flag_across((SX - 0.2, crest(SZ - 0.9), SZ - 0.9), 1.8, 0xff5040, 'anim_sway:a=x:d=22:p=1.8#flag', w=0.8, fh=0.48)
+    flag_across((SX - 0.2, crest(SZ - 0.9), SZ - 0.9), 1.8, 0xff5040, 'anim_flutter:p=1.8#flag', w=0.8, fh=0.48)
     # wands down the drift's far side marking the trail, draped (what makes
     # the piece drape, so it levels no clearing under the drift)
     def wands():
@@ -9417,7 +9414,7 @@ def glacier_wand(x, z, color, tag, h=2.1):
     """A route marker: a bamboo wand and its flag flying to +X (toward the
     road), the cloth square to a car coming along the line."""
     box((0.12, h, 0.12), (x, h / 2 - 0.1, z), 0xc9a25f)
-    with animated('anim_drape+sway:a=z:d=22:p=%.2f#%s' % (1.5 + 0.13 * (ord(tag[-1]) % 4), tag), (x, h - 0.12, z)):
+    with animated('anim_drape+flutter:p=%.2f#%s' % (1.5 + 0.13 * (ord(tag[-1]) % 4), tag), (x, h - 0.12, z)):
         box((0.6, 0.4, 0.06), (x + 0.36, h - 0.34, z), color)
         box((0.26, 0.32, 0.06), (x + 0.76, h - 0.4, z), color, roll=-0.25)
 
@@ -9464,7 +9461,7 @@ def glacier_depot():
         cargo_sledge(1.5, -2.6, ('drums',))
         cargo_sledge(1.3, 3.6, ('crates',))
         box((0.14, 3.2, 0.14), (-2.0, 1.5, 3.6), 0xc9a25f)
-        with animated('anim_drape+sway:a=x:d=22:p=1.8#flag', (-2.0, 3.1, 3.6)):
+        with animated('anim_drape+flutter:p=1.8#flag', (-2.0, 3.1, 3.6)):
             box((0.06, 0.6, 0.6), (-2.0, 2.76, 3.96), 0xff5040)
             box((0.06, 0.54, 0.5), (-1.94, 2.72, 4.46), 0xff5040, yaw=0.3)
     draped('depot', depot)
@@ -11228,7 +11225,7 @@ def fete(lite):
         cyl(TR + 0.15 - 0.04 * k, TH / 8, (HX, k * TH / 8, HZ), (RED, WHITE)[k % 2], r2=TR + 0.11 - 0.04 * (k + 1), segs=8)
     cyl(TR + 0.5, 0.3, (HX, TH, HZ), BLUE, segs=8)                 # the top platform's rim
     cyl(TR + 0.4, 2.8, (HX, TH + 0.3, HZ), RED, r2=0.1, segs=8)     # the cap
-    flagpole((HX, TH + 3.0, HZ), 1.6, YELLOW, w=1.0, fh=0.6, wave='anim_sway:a=y:d=20:p=2.4#hs')
+    flagpole((HX, TH + 3.0, HZ), 1.6, YELLOW, w=1.0, fh=0.6, wave='anim_flutter:p=2.4#hs')
     box((0.2, 1.8, 1.0), (HX + TR - 0.1, TH - 1.0, HZ), 0x2a2735)  # the door at the top
     box((0.2, 1.8, 1.0), (HX + TR + 0.05, 0.9, HZ), 0x2a2735)      # and at the foot
     # the slide: two and a half turns down from the door, a chute with a rim
@@ -11407,7 +11404,7 @@ def treehouse():
     gable_roof(HF, 0.0, PY + 0.17, 3.0, 4.0, 2.5, 0x7a5a3a, 0xd94f3d, t=0.25, over=0.3)
     box((0.12, 1.7, 0.9), HF(1.56, PY + 1.05, -0.8), 0x5a3a2a)
     window(HF, 0.0, 1.5, PY + 1.6, 0.9, w=0.8, h=0.7, glass=0x8ecae6)
-    flagpole((-3.1, PY + 1.0, -3.1), 2.6, 0x22c46e, w=1.4, fh=0.8, pole=WOOD, wave='anim_sway:a=z:d=22:p=1.5')
+    flagpole((-3.1, PY + 1.0, -3.1), 2.6, 0x22c46e, w=1.4, fh=0.8, pole=WOOD, wave='anim_flutter:p=1.5')
     # the ladder up the front, its foot out on the lawn
     for s in (-1, 1):
         strut((3.0 + s * 0.4, G(3.0, 5.4) - 0.1, 5.4), (3.0 + s * 0.4, PY, 3.3), 0.16, WOOD)
@@ -11558,7 +11555,7 @@ def football_pitch():
     for z in (-3.0, 3.0):
         window(PF, PY, D / 2, 2.0, z, w=1.4, h=1.0)
     flagpole(PF(0, ridge - 0.3, 0), 4.2, 0x339cf2, w=1.6, fh=0.9, pole='white',
-             wave='anim_sway:a=z:d=22:p=1.6#club')
+             wave='anim_flutter:p=1.6#club')
     # match-day bunting down the road's touchline on tall white posts, and a
     # flag at each corner: the kerb hides the lines, so these say pitch
     BX, BH = -PW / 2 - 1.6, 5.2
@@ -12105,7 +12102,7 @@ def boathouse():
                     (RED, WHITE)[j % 2], pitch=a)
     box((0.14, 2.3, 3.6), (-D / 2 - 0.03, 1.45, 0.0), 0x2a2735)               # the boat door, open to the lake
     box((0.2, 0.2, 4.0), (-D / 2 - 0.05, 2.7, 0.0), WHITE)
-    flagpole(F(0.0, ridge - 0.2, 0.0), 2.8, RED, w=1.3, fh=0.8, pole=WHITE, wave='anim_sway:a=z:d=22:p=1.7#boat')
+    flagpole(F(0.0, ridge - 0.2, 0.0), 2.8, RED, w=1.3, fh=0.8, pole=WHITE, wave='anim_flutter:p=1.7#boat')
     for i in range(10):                                                      # the jetty
         box((1.0, 0.16, 2.6), (-D / 2 - 0.6 - i * 1.05, 0.55, 0.0), TIMBER)
     for sz in (-1, 1):
@@ -13164,20 +13161,6 @@ def ground_poly(verts, faces, color):
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
-def tumbleweed(at, r):
-    """A ball of dry scrub: two faceted shells of one size, one turned in the
-    other, so their corners poke through each other's faces and it reads
-    twiggy rather than solid. Plain icosahedra: one this small would come out
-    of sphere() as a block."""
-    for rr, color, sy, yaw in ((r, 0xb8a686, 1.0, 0.0), (r * 0.97, 0x8a6a46, 1.08, 0.63)):
-        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=rr)
-        o = bpy.context.active_object
-        o.scale = (1.0, 1.0, sy)
-        o.location = P(*at)
-        o.rotation_euler = (0, 0, yaw)
-        bpy.ops.object.shade_flat()
-        paint(o, color)
-
 def hawk_circle(c, y, R, period, k=1.0, tag='hawk'):
     """A hawk circling over the piece: a closed loop of `path_<tag>_<n>`
     empties `R` round (cx, cz) at height `y`, and the bird riding it
@@ -13261,12 +13244,7 @@ def dry_creek():
     # left unraised under the bridges); this piece's SET_GROUND holds the same
     # floor under it and a low cut bank either side. A pale gravel bed along X
     # between dark banks, stones on the bars, a saguaro and an ocotillo on
-    # the bank. Tumbleweeds, each half a car high, blow down it: each rolls out of the
-    # rock pile at the upwind end, bowls the length of the bed at a gust's
-    # pace, bouncing and landing (a bob with a rest) and rolling as fast as it
-    # goes, and vanishes into the pile at the far end; the hidden half of the
-    # loop runs back under the ground (anim_path+spin+bob). A hawk circles
-    # over the bed.
+    # the bank, a rock pile at each end. A hawk circles over the bed.
     L, W = 54.0, 3.0
     zc = lambda x: 0.9 * math.sin(x / 6.5)                       # a wander inside the land's plain
     def wid(x):
@@ -13280,7 +13258,7 @@ def dry_creek():
                                      (4.1, 0.35, 0.2), (13.5, 0.1, 0.28), (19.0, -0.3, 0.22))):
         rock_lump(q, (x, q * 0.35, zc(x) + off), (0xd39a70, 'tan', 0xc07a55)[i % 3], (1.25, 0.6, 1.0), 0.7 * i, seed=3.0 + i)
     END = L / 2 - 1.5
-    for sx in (-1, 1):                                                 # the rock piles the weeds roll from and into
+    for sx in (-1, 1):                                                 # the rock piles at the bed's ends
         x = sx * END
         sandstone_rock((x, 0, zc(x) - 0.2), 1.7, yaw=0.5 + sx)
         sandstone_rock((x + sx * 1.0, 0, zc(x) + 1.0), 1.3, yaw=1.6 - sx)
@@ -13294,16 +13272,6 @@ def dry_creek():
                 brush((x, 0.2, z), 0.55 + 0.1 * (i % 3), yaw=i)
     sandstone_rock((-4.4, 0, zc(-4.4) + 3.2), 0.8, yaw=0.4)
     sandstone_rock((10.0, 0, zc(10.0) + 3.0), 0.7, yaw=1.2)
-    # the tumbleweeds' loop: down the bed at its own height, then back under it
-    R = 0.17
-    xs = [-END + 2 * END * i / 12 for i in range(13)]
-    for k, pt in enumerate([(x, R, zc(x)) for x in xs] + [(END, -1.9, zc(END)), (-END, -1.9, zc(-END))]):
-        marker('path_weed_%d' % k, pt)
-    for n in range(4):
-        x = xs[1 + 3 * n]
-        with animated('anim_path:c=weed:p=56:o=%.3f:f=1+spin:a=z:w=-11+bob:h=0.2:p=%.2f:r=0.35#%d'
-                      % (n / 4, 0.7 + 0.06 * n, n), (x, R, zc(x))):
-            tumbleweed((x, R, zc(x)), R)
     hawk_circle((2.0, 1.5), 3.6, 3.0, 15.0, k=1 / 1.45)
 
 def cactus_limb(path, radii, ribs, side=(1.0, 0.0, 0.0), color='sage', pleat=0.78):
@@ -13570,7 +13538,7 @@ def wash_road_reach():
 def flood_jam():
     # Wash: what the last flash flood left where the bed turns: a jam of
     # bleached logs piled against a boulder on the bar (+X the road), a root
-    # wad on top, a tumbleweed caught in it. Dead wood only.
+    # wad on top. Dead wood only.
     PALE = 'cream'
     with plain_parts():
         sandstone_rock((-0.6, 0, 0.4), 1.5, yaw=0.5)
@@ -13585,7 +13553,6 @@ def flood_jam():
             a = 1.26 * k
             rowed(rod((1.1, 1.35, 2.7), (1.3 + 0.2 * math.cos(a), 1.4 + 0.55 * math.sin(a), 3.0 + 0.5 * math.cos(a)), 0.1, PALE, r2=0.06), 12)
         brush((1.5, 0, -2.4), 0.8)
-    tumbleweed((0.6, 0.75, -0.3), 0.4)
     join_still('jam')
 
 @piece(0.35)
@@ -13652,7 +13619,7 @@ def mine_portal():
         box((0.9, 0.8, 0.9), (x, y + 0.4, z), 0x9a7b55, yaw=0.1 * k)
     for k in range(4):
         box((0.16, 0.16, 0.6), (3.2 + k * 0.16, 1.7, -6.0), 'red')
-    flagpole((-0.4, 0, -8.8), 3.4, 'red', w=1.0, fh=0.6, wave='anim_sway:a=z:d=24:p=2.0#1')
+    flagpole((-0.4, 0, -8.8), 3.4, 'red', w=1.0, fh=0.6, wave='anim_flutter:p=2.0#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None and not o.get('group')], 'yard')
 
 @piece(1.0)
@@ -13681,7 +13648,7 @@ def powder_magazine():
         box((1.0, 0.16, 0.16), (2.05, 0.5, 3.4), 'red')
         ore_cart((2.05, 0.16, -1.6), yaw=0.0, ore=False, k=0.42)
         ore_cart((2.05, 0.16, 0.2), yaw=0.0, ore_color='grey', k=0.42)
-    flagpole((-0.3, 1.6, -1.2), 2.2, 'red', w=0.9, fh=0.55, wave='anim_sway:a=z:d=24:p=2.3#1')
+    flagpole((-0.3, 1.6, -1.2), 2.2, 'red', w=0.9, fh=0.55, wave='anim_flutter:p=2.3#1')
     join_still('magazine')
 
 @piece(0.35)
@@ -14823,9 +14790,8 @@ def telegraph_line():
 def dead_cottonwood():
     # Wash's support: a lone dead cottonwood a big one's height on the bank
     # (some 23 m), a vulture perched on its top looking out at the road, a
-    # fallen limb, red rocks and a tumbleweed at its foot (the builder's
-    # units are 1/0.55 of the world's; the vulture and the weed keep their
-    # own size).
+    # fallen limb and red rocks at its foot (the builder's units are 1/0.55
+    # of the world's; the vulture keeps its own size).
     dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
     o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
     o.rotation_euler.z = 0.6
@@ -14845,7 +14811,6 @@ def dead_cottonwood():
             v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
     sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
     sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
-    tumbleweed((-1.8, 0.43, 2.2), 0.43)
     join_still('tree')
 
 def windpump_body(x0, z0, k, tag='', yaw=0.0):
@@ -16577,7 +16542,7 @@ def dust_devil():
     # Sidewinder: a dust devil wandering the flats inside the north loop,
     # coming to within a few units of the kerb on its round: a whirl of
     # dust some four cars tall, three bands of it winding up and out from a
-    # skirt kicked up off the sand, grit and a tumbleweed caught in it, the
+    # skirt kicked up off the sand, grit caught in it, the
     # whole spinning as it drifts (anim_path+spin on a draped loop, so it
     # keeps to the land as drawn). The sand's own colour a shade paler (white
     # at the top, its rings read as a stack of plates), its rings close
@@ -16845,11 +16810,9 @@ def oil_field():
     # one's flowline runs over the ground on low sleepers to the tank
     # battery behind them: two lease tanks, white and red, a real one's size
     # (some seven metres across and as tall), a stair and a catwalk over
-    # them, the separator before them on its saddles; and tumbleweeds blow
-    # along the field's road side (+X), bouncing as they roll, out of a rock
-    # pile at one end and into one at the other (anim_path+spin+bob, home
-    # under the ground). The jacks stand broadside to the road (beams along
-    # Z), the way a nod reads.
+    # them, the separator before them on its saddles; a rock pile at each
+    # end of the field's road side (+X). The jacks stand broadside to the
+    # road (beams along Z), the way a nod reads.
     PADS = ((-1.0, -6.5, 4.6), (-3.4, 0.4, 5.3), (-0.6, 6.8, 4.1))
     TKX, TKZ = -6.8, 4.2                                                        # the battery's middle
     for n, (x, z, per) in enumerate(PADS):
@@ -16880,18 +16843,8 @@ def oil_field():
         for z in (TKZ - 1.9, TKZ - 0.8):
             box((0.5, 0.3, 0.14), (TKX + 1.7, 0.15, z), 'slate')
         strut((TKX + 1.7, 0.85, TKZ - 1.35), (TKX + 0.8, 1.2, TKZ - 1.3), 0.07, 'slate')
-    # the weeds' run along the road side
-    L, R, X = 26.0, 0.25, 1.2
-    for sz in (-1, 1):
-        sandstone_rock((X - 0.5, 0, sz * (L / 2 + 0.6)), 1.0, yaw=0.5 + sz)
-    zs = [-L / 2 + L * i / 12 for i in range(13)]
-    for k, pt in enumerate([(X, R, z) for z in zs] + [(X, -1.6, L / 2), (X, -1.6, -L / 2)]):
-        marker('path_weeds_%d' % k, pt)
-    for n in range(3):
-        z = zs[1 + 4 * n]
-        with animated('anim_path:c=weeds:p=30:o=%.3f:f=1+spin:a=z:w=-7.5+bob:h=0.28:p=%.2f:r=0.35#%d'
-                      % (n / 3, 0.72 + 0.07 * n, n), (X, R, z)):
-            tumbleweed((X, R, z), R)
+    for sz in (-1, 1):                                                          # a rock pile at each end
+        sandstone_rock((0.7, 0, sz * 13.6), 1.0, yaw=0.5 + sz)
     join_still('field')
 
 @piece(1.0)
@@ -16943,7 +16896,7 @@ def drilling_rig():
         box((1.0, 0.14, 1.0), (0, H1 + 0.07, 0), 'white')
         box((0.8, 0.4, 0.6), (0, H1 + 0.34, 0), 'red')                          # the crown block
         box((0.06, 0.9, 0.06), (0, H1 + 0.99, 0), 'white')                      # the flag's pole
-    with animated('anim_sway:a=x:d=20:p=2.6#flag', (0, H1 + 1.44, 0)), plain_parts():
+    with animated('anim_flutter:p=2.6#flag', (0, H1 + 1.44, 0)), plain_parts():
         box((0.06, 0.5, 0.8), (0, H1 + 1.18, 0.43), 'red')
         for side, yaw in ((0.03, 0.0), (-0.03, math.pi)):
             emblem((side, H1 + 1.18, 0.43), yaw, 0.17)
@@ -18661,7 +18614,7 @@ def siege_tower():
     for sz in (-1, 1):
         bar((W / 2 + 0.45, 8.9, sz * 1.5), (W / 2 - 0.1, 9.1, sz * 1.5), 0.2, 0.2, 0x2a2735)
     box((BAR * 1.6, 3.7, BAR * 1.6), (0, 11.05, 0), 0x2a2735)                    # the pennant's pole
-    with animated('anim_sway:a=x:d=24:p=1.9#pennant', (0, 12.8, 0)):
+    with animated('anim_flutter:p=1.9#pennant', (0, 12.8, 0)):
         box((0.08, 0.9, 1.6), (0, 12.35, 0.85), 0x6cbf6c)
         box((0.08, 0.5, 0.8), (0, 12.35, 2.0), 0x6cbf6c)
     # the rank before it, on their stand
@@ -18816,7 +18769,7 @@ def block_fortress():
             face = '+x' if sx > 0 else '-x'
             se = sx > 0 and sz < 0
             block_tower(sx * TX, sz * TZ, TSE if se else T, 4 if se else 3, n, 0x6cbf6c if (sx + sz) == 0 else 0xe66a5a, face,
-                        pennant='anim_sway:a=x:d=24:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=-sz)   # over the court, clear of the ring
+                        pennant='anim_flutter:p=%.1f#%d' % (1.7 + 0.2 * n, n), fly=-sz)   # over the court, clear of the ring
             n += 1
     # the gatehouse: a tower of four blocks either side of the opening, the
     # lintel over it, the dark gateway, the drawbridge down on the floor
@@ -18849,7 +18802,7 @@ def block_fortress():
         box((0.6, 0.55, 0.6), (dx * (K - 0.3), KT + 0.27, KZ + dz * (K - 0.3)), 0xf2c14e)
     cyl(K * 1.05, 1.9, (0, KT, KZ), 0x5a8fd8, r2=0.05, segs=4, yaw=math.pi / 4)
     box((BAR * 1.6, 2.4, BAR * 1.6), (0, KT + 1.9 + 1.0, KZ), 0x2a2735)
-    with animated('anim_sway:a=x:d=20:p=2.6#banner', (0, KT + 1.9 + 2.15, KZ)):
+    with animated('anim_flutter:p=2.6#banner', (0, KT + 1.9 + 2.15, KZ)):
         box((0.08, 1.1, 1.9), (0, KT + 1.9 + 1.6, KZ + 1.0), 0x5a8fd8)
         box((0.1, 0.4, 0.4), (0, KT + 1.9 + 1.6, KZ + 1.0), 0xf2c14e)
     # the castle's blue knights on the wall walk, behind the crenels: two
@@ -18929,7 +18882,7 @@ def siege_camp():
     # the commander's pavilion, and the standard over the camp
     pavilion(1.0, -0.4, 1.9, 1.9, R0, R0, flag=0xf2c14e)
     box((BAR * 1.6, 3.6, BAR * 1.6), (3.4, 1.8, -2.4), 0x2a2735)
-    with animated('anim_sway:a=x:d=22:p=2.4#standard', (3.4, 3.55, -2.4)):
+    with animated('anim_flutter:p=2.4#standard', (3.4, 3.55, -2.4)):
         box((0.08, 1.2, 2.0), (3.4, 2.9, -1.35), R0)
         box((0.1, 0.45, 0.45), (3.4, 2.9, -1.35), 0xf2c14e)
     # the supply cart and its barrels
@@ -19424,7 +19377,7 @@ def barbican():
             box((0.6, 0.55, 0.6), (sx * (XI + 0.5), RY + 0.3 + 0.27, -LZ / 2 + 0.6 + i * (LZ - 1.2) / 5), 0xf2c14e)
     for n, z in enumerate((-LZ / 2 + 0.6, LZ / 2 - 0.6)):                            # a pennant at each end
         box((BAR * 1.4, 1.8, BAR * 1.4), (-(XI + 0.5), RY + 0.3 + 0.9, z), 0x2a2735)
-        with animated('anim_sway:a=x:d=24:p=%.1f#%d' % (1.8 + 0.3 * n, n), (-(XI + 0.5), RY + 0.3 + 1.75, z)):
+        with animated('anim_flutter:p=%.1f#%d' % (1.8 + 0.3 * n, n), (-(XI + 0.5), RY + 0.3 + 1.75, z)):
             box((0.08, 0.8, 1.2), (-(XI + 0.5), RY + 0.3 + 1.35, z + 0.65), 0xff5040)
             box((0.08, 0.44, 0.6), (-(XI + 0.5), RY + 0.3 + 1.35, z + 1.5), 0xff5040)
     merge_paint()
@@ -19474,7 +19427,7 @@ def cannon_battery():
     for dz in (-0.35, 0.35):
         cyl(0.3, 0.6, (0.6, 0.9, 10.9 + dz), 0xb06041, r2=0.27, segs=8)
     box((BAR * 1.4, 3.4, BAR * 1.4), (-1.6, 1.7, -7.0), 0x2a2735)
-    with animated('anim_sway:a=x:d=22:p=2.2#flag', (-1.6, 3.35, -7.0)):
+    with animated('anim_flutter:p=2.2#flag', (-1.6, 3.35, -7.0)):
         box((0.08, 0.9, 1.4), (-1.6, 2.85, -6.25), 0xff5040)
         box((0.08, 0.5, 0.7), (-1.6, 2.85, -5.2), 0xff5040)
     merge_paint()
@@ -19558,7 +19511,7 @@ def castle_watchtower():
     # crenellated wall either side, two of the castle's blue knights at its
     # foot and their cannon run out toward the road.
     T = 1.8
-    block_tower(0.0, 0.0, T, 4, 1, 0x5a8fd8, '+x', pennant='anim_sway:a=x:d=24:p=1.9#watch', fly=-1)
+    block_tower(0.0, 0.0, T, 4, 1, 0x5a8fd8, '+x', pennant='anim_flutter:p=1.9#watch', fly=-1)
     for sz in (-1, 1):
         block_run((0.0, sz * (T / 2)), (0.0, sz * (T / 2 + 3.9)), 0.0, 1 if sz > 0 else 3, faces=('+x', '+y'), crenels=True)
     for z in (-2.8, 2.8):
@@ -20247,7 +20200,7 @@ def siege_mantlets():
         bar((-1.7, 5.0, sz * 3.6), (-2.8, 0.1, sz * 3.6), 0.3, 0.3, DARK)
     box((0.34, 0.34, 7.6), (-1.7, 5.05, 0.2), DARK)                                # the trestle's beam
     box((BAR * 1.4, 2.4, BAR * 1.4), (-1.7, 6.3, 3.6), 0x2a2735)
-    with animated('anim_sway:a=x:d=22:p=2.1#pennant', (-1.7, 7.4, 3.6)):
+    with animated('anim_flutter:p=2.1#pennant', (-1.7, 7.4, 3.6)):
         box((0.08, 0.8, 1.3), (-1.7, 7.0, 4.3), 0xff5040)
         box((0.08, 0.45, 0.7), (-1.7, 7.0, 5.3), 0xff5040)
 
@@ -20284,7 +20237,7 @@ def supply_wagon():
         for x, y, z in ((2.1, 0.0, 0.0), (2.1, 0.0, 0.5), (2.55, 0.0, 0.25), (2.25, 0.4, 0.25)):
             box((0.42, 0.42, 0.42), (x, y + 0.21, z), 0x38383d)
     box((BAR * 1.4, 4.2, BAR * 1.4), (0.0, 2.1 + 1.3, -3.1 * K), 0x2a2735)
-    with animated('anim_sway:a=x:d=22:p=2.3#flag', (0.0, 5.45, -3.1 * K)):
+    with animated('anim_flutter:p=2.3#flag', (0.0, 5.45, -3.1 * K)):
         box((0.08, 0.9, 1.4), (0.0, 4.95, -3.1 * K - 0.75), 0xff5040)
         box((0.08, 0.5, 0.7), (0.0, 4.95, -3.1 * K - 1.8), 0xff5040)
     merge_paint()
@@ -20416,7 +20369,7 @@ def tilt_yard():
     shield_rack(0.6, -L - 2.4, (R0, Y0, R0))
     shield_rack(0.6, L + 2.4, (B0, CR, B0))
     for k, (z, c) in enumerate(((-L - 0.6, R0), (-L / 2, R0), (L / 2, B0), (L + 0.6, B0))):
-        gonfalon(-5.6 if abs(z) < L else -4.6, z, c, h=3.6, wave='anim_sway:a=z:d=14:p=%.1f#gon%d' % (2.6 + 0.3 * k, k))
+        gonfalon(-5.6 if abs(z) < L else -4.6, z, c, h=3.6, wave='anim_flutter:p=%.1f#gon%d' % (2.6 + 0.3 * k, k))
     for k in range(9):                                                         # the rope on its posts, toward the road
         box((0.16, 0.6, 0.16), (2.4, 0.3, -L - 1.0 + k * (2 * L + 2.0) / 8), CR)
     box((0.08, 0.08, 2 * L + 2.0), (2.4, 0.52, 0), 0xe66a5a)
@@ -20455,7 +20408,7 @@ def tourney_camp():
     toy_horse(1.0, 11.0, 0xfdf4de, B0, yaw=0.5, rider=None)
     box((BAR, 0.9, BAR), (2.2, 0.45, 10.2), 0x9a7b55)                           # its tethering post
     for k, (z, c) in enumerate(((-10.4, B0), (-0.9, Y0), (11.9, B0))):
-        gonfalon(-4.8, z, c, h=3.4, wave='anim_sway:a=z:d=14:p=%.1f#camp%d' % (2.5 + 0.35 * k, k))
+        gonfalon(-4.8, z, c, h=3.4, wave='anim_flutter:p=%.1f#camp%d' % (2.5 + 0.35 * k, k))
     merge_paint()
 
 # What lies about Gauntlet's floor (theme.cc playroomTrack: the scatter's

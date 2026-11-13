@@ -144,11 +144,12 @@ float3 TtpRenderer::fogColorGraded(const Camera* cam) const {
 // span. At the shipped race profile (70 → 170) that is 77.5 / 0.0185 — mean
 // |Δfog| 0.055 against the ramp, where fitting the far end alone crushed the
 // middle and a uniform-weight fit under-fogged the near deck.
-static View::FogOptions fogFor(float near, float far, const float3& color) {
+static View::FogOptions fogFor(float near, float far, const float3& color,
+        float cutOff = FOG_CUTOFF) {
     View::FogOptions fog{};
     fog.color = color;
     fog.heightFalloff = 0.0f;
-    fog.cutOffDistance = FOG_CUTOFF; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
+    fog.cutOffDistance = cutOff; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
     // ALWAYS DISABLED, AND THE OPTIONS STILL MATTER. `enabled` selects Filament's
     // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
     // inscattering pow behind uniform branches this scene never takes, for one
@@ -2631,24 +2632,13 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
             mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
         }
     }
-    // The cup's ambient life: world-sized, so no rows fit; a box-riding kind
-    // keeps the weather's density per unit of ground in a split, and tiled
-    // life is culled on its tiles' bounds.
+    // The cup's ambient life: world-sized, so no rows fit, and culled on its
+    // tiles' bounds.
     if (mLifeMat) {
         mLifeMat->setParameter("time", mTime);
         const uint32_t vc = input.viewCount;
         if (vc && vc != mLifeCells) {
             mLifeCells = vc;
-            if (mLifeBox > 0) {
-                auto& rcm = mEngine->getRenderableManager();
-                const auto ri = rcm.getInstance(mLife.entity);
-                const uint32_t n = (uint32_t) mLife.idx.size() / 3;
-                if (ri && n) {
-                    rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
-                            mLife.vb, mLife.ib, 0, std::max(1u, n / vc) * 3);
-                }
-                mLifeMat->setParameter("boxXZ", mLifeBox / std::sqrt((float) vc));
-            }
             mLifeMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
         }
     }
@@ -2966,7 +2956,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // own gate; only the overviews draw every near range.
     const bool lods = input.viewCount > 0 && (input.flags & TTP_FRAME_OVERVIEW) == 0;
     if (!lods) {
-        chooseLods(float3{ 0 }, 0.0f);
+        chooseLods(float3{ 0 }, 0.0f, 0.0f, 0.0f);
         chooseCuts(float3{ 0 }, 0.0f);
     }
     if (input.viewCount == 0) {
@@ -3037,7 +3027,8 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // and the overview each run their own ramp, and the gallery runs
             // none (fogFar <= fogNear).
             v->setFogOptions(mFogOn
-                    ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam))
+                    ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam),
+                            mFogWhole ? 1e9f : FOG_CUTOFF)
                     : fogFor(1.0f, 0.0f, fogColorGraded(cam)));   // far <= near disables
             applyDebugGlobals(v);
             // Per-cell monster fade: a truck looming in front of THIS cell's
@@ -3059,6 +3050,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                             mPollen.vb, mAmbCullIbs[slot], mAmbCellOff[i], mAmbCellCnt[i]);
                 }
             }
+            v->setFrustumCullingEnabled(!mNoCull);
             if (lods) {
                 // THIS cell's pixels per radian, so the trade scales itself to
                 // the pixels it has (TtpRenderer.h, LodRange), counted as its
@@ -3067,7 +3059,10 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                         * std::min(1.0f, kLodLines / (float) std::max(mHeight, 1u));
                 const float pxPerRad = lines
                         / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
-                chooseLods(world[3].xyz, pxPerRad);
+                // The haze this cell draws through, as fogFor lays it.
+                const float span = mFogOn ? views[i].fogFar - views[i].fogNear : 0.0f;
+                chooseLods(world[3].xyz, pxPerRad, views[i].fogNear + 0.075f * span,
+                        span > 0.0f ? 1.85f / span : 0.0f);
                 chooseCuts(world[3].xyz, pxPerRad);
             }
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
@@ -3102,19 +3097,34 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 // lap that decides whether a 4-way split holds 60, lose about a third of their
 // GPU time to its far ribbon. docs/perf/androidtv-frame-map.md, 2026-09-02, has every
 // arm; the decoration's far forms are priced beside it.
-void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
+//
+// FULL holds the swap to kLodPxFull pixels of what the haze lets through: a
+// far form is a different picture up close (a fir's snow tiers gone green, a
+// pole gone altogether, which the simplifier's error does not count), and at
+// kLodPx whole groves changed 60 to 100 u ahead of a racer (npm run
+// see:pops). Past the haze's onset the error is weighed by the share of a
+// surface's colour that still arrives, so a form swaps where the fog has
+// taken the difference. Lite keeps kLodPx and no haze term: its frame is the
+// box's budget.
+void TtpRenderer::chooseLods(const float3& cam, float pxPerRad, float fogStart, float fogDensity) {
     auto& rcm = mEngine->getRenderableManager();
-    const float k = mLodOff ? 0.0f : pxPerRad / kLodPx;
+    const float k = mLodOff ? 0.0f : pxPerRad / (mLite ? kLodPx : kLodPxFull);
+    const bool haze = !mLite && fogDensity > 0.0f;
     for (LodRange& r : mLods) {
-        const float near = r.err * k;
+        float near = r.err * k;
         const float3 d = clamp(cam, r.lo, r.hi) - cam;   // to the nearest point of the box
+        if (haze && dot(d, d) < near * near && dot(d, d) > fogStart * fogStart) {
+            near *= std::exp(-fogDensity * (std::sqrt(dot(d, d)) - fogStart));
+        }
         bool pinned = false;
         if (r.ring0 >= 0) {
             for (const auto& [a, b] : mShadowRings) {
                 if (a < r.ring1 && b > r.ring0) { pinned = true; break; }
             }
         }
-        const bool far = k > 0.0f && !pinned && (mLodAll || dot(d, d) > near * near);
+        // Held (the pop probe), a range keeps its form; the shadow pin still wins.
+        const bool far = mLodHold ? r.far && !pinned
+                : k > 0.0f && !pinned && (mLodAll || dot(d, d) > near * near);
         if (far == r.far) continue;
         r.far = far;
         const auto ri = rcm.getInstance(r.entity);
@@ -3131,6 +3141,7 @@ void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
 // and of its draws (the far scatter runs).
 void TtpRenderer::chooseCuts(const float3& cam, float pxPerRad) {
     const float k = pxPerRad / kCutPx;
+    if (mLodHold) return;
     for (CutRange& c : mCuts) {
         if (c.sheet && !mDressSheets) continue;   // the ablation holds them out
         const float3 d = clamp(cam, c.lo, c.hi) - cam;

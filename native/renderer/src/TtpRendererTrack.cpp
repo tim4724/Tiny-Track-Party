@@ -3389,7 +3389,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 TextureSampler(TextureSampler::MinFilter::LINEAR,
                         TextureSampler::MagFilter::LINEAR));
         // The life's knobs (vpoint.mat), every one off: the weather's path.
-        for (const char* k : { "mask", "tile", "hop", "flutter", "twig" }) {
+        for (const char* k : { "mask", "tile", "flutter" }) {
             mPollenMat->setParameter(k, 0.0f);
         }
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
@@ -3399,7 +3399,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         rcm.setAxisAlignedBoundingBox(rcm.getInstance(mPollen.entity),
                 { { 0, 0, 0 }, { 1e4f, 1e4f, 1e4f } });
     }
-    if (mPointMaterial && tb.life.kind != 0 && tb.life.count > 0) buildLife(tb);
+    if (mPointMaterial && tb.life.kind != 0 && tb.life.count > 0 && !tb.life.near.empty()) buildLife(tb);
 
     // Impact bursts, the JS spec (TrackProps): a THIN shockwave ring that
     // sweeps 0.25 → 2.0 world over IMPACT_TIME 0.7 s at CONSTANT width and
@@ -4296,7 +4296,6 @@ bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
 // first, over the flake floor's grid: R the floor it lives on, G where.
 void TtpRenderer::buildLife(const TrackBin& tb) {
     using ttp::rt::AMB_PETAL;
-    using ttp::rt::AMB_TUMBLE;
     const ttp::rt::AmbientSpec& a = tb.life;
     constexpr int N = kAmbFloorN;
     const float cell = 2 * kAmbR / (N - 1);
@@ -4312,56 +4311,13 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
         const float r = std::max(a.reach, 0.5f);
         return 1.0f - smooth01((std::sqrt(best) - 0.4f * r) / (0.6f * r));
     };
-    std::vector<float> g((size_t) N * N, 0.0f);
-    if (a.kind == AMB_TUMBLE && a.near.empty()) {
-        // Along the roads, on their verges and across them: splatted from
-        // the centreline every couple of units.
-        constexpr float IN = 9.0f, OUT = 6.0f;
-        const int span = (int) std::ceil((IN + OUT) / cell);
-        for (size_t k = 0; k < tb.samples.size(); k += 8) {
-            const float3 c = tb.samples[k].pos;
-            const int gx0 = (int) std::lround((c.x + kAmbR) / cell), gz0 = (int) std::lround((c.z + kAmbR) / cell);
-            for (int gz = std::max(0, gz0 - span); gz <= std::min(N - 1, gz0 + span); gz++) {
-                for (int gx = std::max(0, gx0 - span); gx <= std::min(N - 1, gx0 + span); gx++) {
-                    const float d = std::hypot(-kAmbR + gx * cell - c.x, -kAmbR + gz * cell - c.z);
-                    float& v = g[(size_t) gz * N + gx];
-                    v = std::max(v, 1.0f - smooth01((d - IN) / OUT));
-                }
-            }
-        }
-    }
-    const auto lives = [&](float x, float z) {
-        if (!a.near.empty()) return nearAnchor(x, z);
-        return 1.0f;
-    };
-    std::vector<float> floorY((size_t) N * N);
-    for (int gz = 0; gz < N; gz++) {
-        for (int gx = 0; gx < N; gx++) {
-            const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
-            floorY[(size_t) gz * N + gx] = groundSurfaceY(tb, x, z);
-        }
-    }
-    // A tumbleweed stays off a slope the grid cannot draw it on: between a
-    // cut's floor and its rim the bilinear floor is a ramp through the air,
-    // and one rolling there hangs in front of the wall.
-    const auto level = [&](int gx, int gz) {
-        const float h = floorY[(size_t) gz * N + gx];
-        float rise = 0;
-        for (int dz = -1; dz <= 1; dz++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                const int nx = std::clamp(gx + dx, 0, N - 1), nz = std::clamp(gz + dz, 0, N - 1);
-                rise = std::max(rise, std::fabs(floorY[(size_t) nz * N + nx] - h));
-            }
-        }
-        return 1.0f - smooth01((rise - 0.5f) / 0.7f);
-    };
     std::vector<math::half> texels((size_t) N * N * 2);
     for (int gz = 0; gz < N; gz++) {
         for (int gx = 0; gx < N; gx++) {
             const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
             const size_t i = (size_t) gz * N + gx;
-            texels[i * 2] = math::half(floorY[i]);
-            texels[i * 2 + 1] = math::half(a.kind == AMB_TUMBLE && a.near.empty() ? g[i] * level(gx, gz) : lives(x, z));
+            texels[i * 2] = math::half(groundSurfaceY(tb, x, z));
+            texels[i * 2 + 1] = math::half(nearAnchor(x, z));
         }
     }
     mLifeTex = Texture::Builder()
@@ -4380,11 +4336,8 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     // The seeds: in the tiles where it lives, as many a tile as the camera
     // box would hold over that much ground (`count` keeps the weather's
     // meaning), grouped by kLifeChunk blocks of the world, each its own
-    // renderable culled on its own bounds; or, for a tumbleweed, the camera
-    // box itself.
-    const bool tiled = !a.near.empty();
-    const float bandH = std::max(2.0f, 34.0f * a.band);
-    const float floatH = a.hop > 0 ? a.bob + a.size : bandH;   // how high above its floor a sprite stands
+    // renderable culled on its own bounds.
+    const float bandH = std::max(2.0f, 34.0f * a.band);   // how high above its floor a sprite stands
     uint32_t s = 0x1f3a5c7u;
     const auto rnd = [&]() {
         s = s * 1664525u + 1013904223u;
@@ -4393,7 +4346,7 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     constexpr uint32_t kMaxLife = 6000;
     constexpr int kLifeChunk = 8;   // tiles a block's side: 32 u
     std::vector<float3> seeds;
-    if (tiled) {
+    {
         const float T = kLifeTile, per = (float) a.count * T * T / (kAmbBox * kAmbBox);
         const int t0 = (int) std::floor(-kAmbR / T), t1 = (int) std::ceil(kAmbR / T);
         for (int cz = t0; cz < t1; cz += kLifeChunk) {
@@ -4405,7 +4358,7 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
                         float m = 0;
                         for (const float2 q : { float2{ 0.5f, 0.5f }, float2{ 0, 0 }, float2{ 1, 0 },
                                                 float2{ 0, 1 }, float2{ 1, 1 } }) {
-                            m = std::max(m, lives(x0 + q.x * T, z0 + q.y * T));
+                            m = std::max(m, nearAnchor(x0 + q.x * T, z0 + q.y * T));
                         }
                         if (m < 0.05f) continue;
                         const int k = (int) (per + rnd());
@@ -4417,16 +4370,12 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
                             // gives the block's bounds the right height.
                             const float x = x0 + 0.05f + rnd() * (T - 0.1f), z = z0 + 0.05f + rnd() * (T - 0.1f);
                             const float floor = groundSurfaceY(tb, x, z);
-                            seeds.push_back({ x, floor + rnd() * floatH, z });
+                            seeds.push_back({ x, floor + rnd() * bandH, z });
                         }
                     }
                 }
                 if (seeds.size() > first) mLife.tileStarts.push_back((uint32_t) first);   // one sprite, one triangle
             }
-        }
-    } else {
-        for (uint32_t i = 0; i < std::min(a.count, kMaxLife); i++) {
-            seeds.push_back({ rnd() * kAmbBox, rnd() * bandH, rnd() * kAmbBox });
         }
     }
     if (seeds.empty()) return;
@@ -4445,7 +4394,6 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     }
     std::iota(mLife.idx.begin(), mLife.idx.end(), 0u);
     mLifeHalf = a.size * 0.5f;
-    mLifeBox = tiled ? 0.0f : kAmbBox;
     mLifeMat = sceneInstance(mPointMaterial);
     mLifeMat->setParameter("halfSize", mLifeHalf);
     mLifeMat->setParameter("time", 0.0f);
@@ -4460,25 +4408,18 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     mLifeMat->setParameter("floorTex", mLifeTex,
             TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     mLifeMat->setParameter("mask", 1.0f);
-    mLifeMat->setParameter("tile", tiled ? kLifeTile : 0.0f);
-    mLifeMat->setParameter("hop", a.hop);
+    mLifeMat->setParameter("tile", kLifeTile);
     mLifeMat->setParameter("flutter", a.kind == AMB_PETAL ? 1.0f : 0.0f);
-    mLifeMat->setParameter("twig", a.kind == AMB_TUMBLE ? 1.0f : 0.0f);
     if (!buildMesh(mLife, true, mLifeMat)) return;
     auto& rcm = mEngine->getRenderableManager();
-    if (!tiled) {
-        // Riding the camera box, like the weather: no build-time box bounds it.
-        rcm.setAxisAlignedBoundingBox(rcm.getInstance(mLife.entity), { { 0, 0, 0 }, { 1e4f, 1e4f, 1e4f } });
-        return;
-    }
     // A block's seeds bound its sprites but for their drift out to the tile's
-    // edge, their size, and the band's (or the hop's) reach over the seed.
+    // edge, their size, and the band's reach over the seed.
     const float pad = 0.2f + a.size;
     for (size_t i = 0; i <= mLife.chunks.size(); i++) {
         const auto ri = rcm.getInstance(i ? mLife.chunks[i - 1] : mLife.entity);
         if (!ri) continue;
         const Box b = rcm.getAxisAlignedBoundingBox(ri);
-        const float3 lo = b.getMin() - float3{ pad, pad + floatH, pad }, hi = b.getMax() + float3{ pad, pad + floatH, pad };
+        const float3 lo = b.getMin() - float3{ pad, pad + bandH, pad }, hi = b.getMax() + float3{ pad, pad + bandH, pad };
         rcm.setAxisAlignedBoundingBox(ri, Box().set(lo, hi));
     }
 }

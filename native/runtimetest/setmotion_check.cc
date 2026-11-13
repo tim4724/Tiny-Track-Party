@@ -13,6 +13,11 @@
 //   4. A HOP lifts only while a car is close, and never past its height. A
 //      GESTURE (a sway or bob with a rest) goes one way and back, eased, and
 //      then stands still for its rest.
+//   4d. A CLOTH FLUTTERS: its frame is read off its own vertices however it
+//      was built, its hoist stays on the pole, its segments keep their length
+//      (it bends, it does not stretch), no joint bends past its bound, the
+//      bend moves smoothly, it does not come round with its period like a
+//      pendulum, and two cloths keep phases of their own.
 //   5. THE SHIPPED PIECES SAY WHAT THEY MEAN: in every set-*.glb, each `anim_`
 //      node parses with no unknown verb or key (a typo parses to a part that
 //      stands still, and nothing else would notice), does something, and a
@@ -289,6 +294,120 @@ int main(int argc, char** argv) {
   check(near(ttp::rt::set_motion_pose(m, 1.0f, 0, nullptr, 0).lift, 0, 1e-5f)
             && near(ttp::rt::set_motion_pose(m, 0.25f, 0, nullptr, 0).lift, 0.2f, 1e-5f),
         "a bounce lands every period and tops out between");
+
+  // 4d. Cloth.
+  {
+    std::string unk;
+    check(ttp::rt::parse_set_motion("anim_flutter:d=16:p=1.4:n=5#flag", m, &unk) && unk.empty()
+              && m.flutter && m.any() && !m.travels() && near(m.flutterDeg, 16)
+              && near(m.flutterPeriod, 1.4f) && m.flutterJoints == 5 && !m.flutterHoist, "a flag's flutter");
+    check(ttp::rt::parse_set_motion("anim_flutter:a=y:p=2.4#fb1", m, &unk) && unk.empty()
+              && m.flutterHoist == 'y', "a feather banner names its hoist");
+    check(ttp::rt::parse_set_motion("anim_drape+flutter#1", m, &unk) && unk.empty() && m.drape && m.flutter
+              && m.flutterJoints == 4, "a flag on a draped pole, four segments by default");
+    check(ttp::rt::parse_set_motion("anim_flutter:n=40", m) && m.flutterJoints == ttp::rt::kFlutterMax
+              && ttp::rt::parse_set_motion("anim_flutter:n=0", m) && m.flutterJoints == 2,
+          "the segments are clamped to what a skin can carry");
+    // A flag flying along +z off the top of its pole (the pivot), hanging
+    // down -y, a slab thin in x: the builders' flag_across.
+    std::vector<float> slab;
+    for (int i = 0; i < 8; i++) {
+      slab.insert(slab.end(), { (i & 1) ? 0.03f : -0.03f, (i & 2) ? 0.0f : -0.5f, (i & 4) ? 0.84f : 0.04f });
+    }
+    const ttp::rt::SetFlutterFrame f = ttp::rt::set_motion_flutter_frame(slab.data(), 8, 3);
+    check(near(f.u[2], 1, 1e-3f) && near(std::fabs(f.h[1]), 1, 1e-3f) && near(std::fabs(f.n[0]), 1, 1e-3f)
+              && near(f.len, 0.84f, 1e-3f), "a cloth's fly, hoist and normal are read off its vertices");
+    // The same slab built the other way round its pole flies the other way.
+    for (size_t i = 2; i < slab.size(); i += 3) slab[i] = -slab[i];
+    check(near(ttp::rt::set_motion_flutter_frame(slab.data(), 8, 3).u[2], -1, 1e-3f),
+          "the fly points off the pivot");
+    // A kit flag: a little taller than it flies, off a pole along y. It flies
+    // sideways all the same; a signal flag hung twice as long as wide hangs.
+    std::vector<float> kit, hung;
+    for (int i = 0; i < 8; i++) {
+      kit.insert(kit.end(), { (i & 1) ? 0.03f : -0.03f, (i & 2) ? -0.14f : -0.68f, (i & 4) ? 0.45f : 0.0f });
+      hung.insert(hung.end(), { (i & 1) ? 0.03f : -0.03f, (i & 2) ? -0.14f : -1.06f, (i & 4) ? 0.25f : -0.25f });
+    }
+    check(near(ttp::rt::set_motion_flutter_frame(kit.data(), 8, 3).u[2], 1, 1e-3f),
+          "a cloth near as tall as it flies flies sideways");
+    check(near(ttp::rt::set_motion_flutter_frame(hung.data(), 8, 3).u[1], -1, 1e-3f), "a hung cloth's fly points down");
+    // A feather banner: taller than it flies, held up its pole (y), flying to -x.
+    std::vector<float> feather;
+    for (int i = 0; i < 8; i++) {
+      feather.insert(feather.end(), { (i & 1) ? -0.03f : -0.6f, (i & 2) ? 0.5f : 2.2f, (i & 4) ? 0.02f : -0.02f });
+    }
+    const ttp::rt::SetFlutterFrame tall = ttp::rt::set_motion_flutter_frame(feather.data(), 8, 3);
+    const ttp::rt::SetFlutterFrame held = ttp::rt::set_motion_flutter_frame(feather.data(), 8, 3, 'y');
+    check(near(tall.u[1], 1, 1e-3f) && near(held.u[0], -1, 1e-3f) && near(held.h[1], 1, 1e-3f)
+              && near(std::fabs(held.n[2]), 1, 1e-3f) && near(held.len, 0.6f, 1e-3f),
+          "a named hoist turns the fly across it");
+    ttp::rt::parse_set_motion("anim_flutter:d=14:p=1.5:n=4", m);
+    const int n = m.flutterJoints;
+    constexpr int kMax = ttp::rt::kFlutterMax;
+    ttp::rt::SetFlutterJoint q[kMax + 1], q2[kMax + 1];
+    ttp::rt::set_motion_flutter_joints(m, f, 7.7f, 0.3f, q);
+    ttp::rt::set_motion_flutter_joints(m, f, 7.7f, 0.3f, q2);
+    bool same = true;
+    for (int j = 0; j <= n; j++) for (int c = 0; c < 3; c++) same = same && q[j].pos[c] == q2[j].pos[c];
+    check(same, "a cloth's pose is a function of its inputs");
+    float stretch = 0, skew = 0, bend = 0, dipMost = 0, jump = 0, tip = 0;
+    float lastOut[kMax] = {}, lastTip[3] = {};
+    for (int i = 0; i <= 6000; i++) {
+      const float t = i / 60.0f;          // a hundred seconds, a frame apart
+      ttp::rt::set_motion_flutter_joints(m, f, t, 0.3f, q);
+      check(q[0].pos[0] == 0 && q[0].pos[1] == 0 && q[0].pos[2] == 0, "the hoist stays on its pole");
+      for (int j = 0; j < n; j++) {
+        float d2 = 0;
+        for (int c = 0; c < 3; c++) d2 += (q[j + 1].pos[c] - q[j].pos[c]) * (q[j + 1].pos[c] - q[j].pos[c]);
+        stretch = std::max(stretch, std::fabs(std::sqrt(d2) - f.len / n));
+        float out, dip;
+        ttp::rt::set_motion_flutter_bend(m, t, 0.3f, j, out, dip);
+        bend = std::max(bend, std::fabs(out));
+        dipMost = std::max(dipMost, std::fabs(dip));
+        if (i) jump = std::max(jump, std::fabs(out - lastOut[j]));
+        lastOut[j] = out;
+      }
+      for (int j = 0; j <= n; j++) {
+        const float* r = q[j].rot;
+        skew = std::max(skew, std::fabs(r[0] * r[3] + r[1] * r[4] + r[2] * r[5]));
+        skew = std::max(skew, std::fabs(r[0] * r[0] + r[1] * r[1] + r[2] * r[2] - 1));
+      }
+      if (i) for (int c = 0; c < 3; c++) tip = std::max(tip, std::fabs(q[n].pos[c] - lastTip[c]));
+      for (int c = 0; c < 3; c++) lastTip[c] = q[n].pos[c];
+    }
+    check(stretch < 1e-4f, "a cloth bends and never stretches");
+    check(skew < 1e-4f, "a cut turns, it does not shear");
+    check(bend > 8 * DEG && bend <= 1.5f * 14 * DEG + 1e-5f && dipMost <= 0.9f * 14 * DEG + 1e-5f,
+          "a joint bends, never past its bound (" + std::to_string(bend / DEG) + " deg)");
+    check(jump < 3 * DEG && tip < 0.05f * f.len, "a cloth never jumps between frames (joint "
+          + std::to_string(jump / DEG) + " deg, tip " + std::to_string(tip / f.len) + " of its fly)");
+    // Not a pendulum: a period on, the cloth is somewhere else, every time.
+    float back = 0;
+    for (int i = 0; i < 40; i++) {
+      float o0, o1, d;
+      ttp::rt::set_motion_flutter_bend(m, i * 0.37f, 0.3f, n - 1, o0, d);
+      for (float beat : { 0.5f, 1.0f }) {   // the ripple's own period, and the cloth's
+        ttp::rt::set_motion_flutter_bend(m, i * 0.37f + beat * m.flutterPeriod, 0.3f, n - 1, o1, d);
+        back += std::fabs(o1 - o0) / 80;
+      }
+    }
+    check(back > 1 * DEG, "a cloth does not come round with its period (" + std::to_string(back / DEG)
+          + " deg off, on average)");
+    // The ripple runs hoist to fly: each joint's main swing lags the one before.
+    float lead = 0;
+    for (int i = 0; i < 3000; i++) {
+      float o1, o2, d;
+      const float t = i / 60.0f;
+      ttp::rt::set_motion_flutter_bend(m, t, 0.3f, 1, o1, d);
+      ttp::rt::set_motion_flutter_bend(m, t + m.flutterPeriod / (2.4f * n), 0.3f, 2, o2, d);
+      lead += o1 * o2;
+    }
+    check(lead > 0, "the ripple travels from the hoist to the fly");
+    float o0, o1, d;
+    ttp::rt::set_motion_flutter_bend(m, 3.0f, ttp::rt::set_motion_phase(11), n - 1, o0, d);
+    ttp::rt::set_motion_flutter_bend(m, 3.0f, ttp::rt::set_motion_phase(12), n - 1, o1, d);
+    check(o0 != o1, "two cloths keep phases of their own");
+  }
 
   check(ttp::rt::parse_set_motion("anim_swing+sway:deg=30", m) && m.sway && near(m.swayDeg, 25),
         "a typo'd verb or key changes nothing");

@@ -2112,6 +2112,9 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
+    mLodHold = (mask & kDebugLodHold) != 0;
+    mNoCull = (mask & kDebugNoCull) != 0;
+    mFogWhole = (mask & kDebugFogWhole) != 0;
     mShadowSolid = (mask & kDebugShadowSolid) != 0;   // read per frame by placeCarShadow
     const bool setId = (mask & kDebugSetId) != 0;
     if (setId != mSetIdOn) {
