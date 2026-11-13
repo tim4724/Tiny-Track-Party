@@ -880,7 +880,10 @@ def rock_pool():
         a = i / N * 2 * math.pi
         c, sn = math.cos(a), math.sin(a)
         r0, w = rim(a), shelf(a)
-        top = LIP + 0.12 * max(0.0, -c) + 0.05 * math.sin(3 * a)
+        # the lip low on the road side (+X), full on the sea side: on its
+        # terrace at the road's height (tracks.js) the seat looks over the
+        # near lip onto the water
+        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.12 * max(0.0, -c) + 0.03 * math.sin(3 * a)
         prof = [(0.0, WY - 0.03), (0.35 * r0, WY - 0.03), (0.68 * r0, WY), (0.9 * r0, WY), (r0, WY + 0.01),   # the water
                 (r0 + 0.12, WY + 0.02),                                                                        # the foam
                 (r0 + 0.2, top), (r0 + 0.45 * w, top + 0.06), (r0 + 0.85 * w, top * 0.7), (r0 + w + 0.5, -0.06)]
@@ -926,9 +929,9 @@ def rock_pool():
                 beam((x, -0.15, z), (x + lean, 1.15, z + 0.3 * lean), 0.09, 0xfff6eb)    # a dip net on its pole
                 box((0.36, 0.26, 0.36), (x + lean, 1.24, z + 0.3 * lean), c)
             for (x, z, c) in ((4.4, 0.6, 0xff5040), (4.9, -1.2, 0x339cf2), (3.6, 3.6, 0xffc044)):
-                cyl(0.2, 0.36, (x, 0.3, z), c, r2=0.25, segs=8)                          # a bucket
+                cyl(0.2, 0.5, (x, 0.02, z), c, r2=0.25, segs=8)                          # a bucket
     draped('things', things)
-    gull((math.cos(0.4) * 4.3, LIP, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
+    gull((math.cos(0.4) * 4.3, 0.12, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     ring = [(6.0 + 7.0 * math.cos(i * math.pi / 8), 3.6, 1.0 + 7.0 * math.sin(i * math.pi / 8)) for i in range(16)]
     for i, at in enumerate(ring):
         marker('path_soar_%d' % i, at)
@@ -3539,23 +3542,29 @@ def rock_poolers_park():
             (3.8, 'salmon', (), True))
     BUS = 9.6
     bays = [z for z, *_ in VANS] + [BUS]
-    path = [(4.0, -16.0), (2.4, -14.2), (-0.4, -11.6), (-0.9, -6.0), (-0.6, 0.0), (-1.0, 6.0), (-1.3, 11.0),
-            (-3.2, 14.6), (-6.8, 17.4)]
+    # (round 17, "the camper road starts and ends in nothing": it now leaves
+    # the main road in a flared mouth at the kerb's foot and ends in a
+    # turning circle round a turf island; its gravel is one colour and its
+    # edges smooth, where patches per quad had stepped like pixels)
+    path = [(5.9, -11.5), (4.6, -11.8), (2.2, -11.6), (0.0, -10.2), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
+            (-1.3, 10.4), (-2.0, 12.5)]
+    CX, CZ, CR = -3.7, 14.9, 3.1                           # the turning circle
     for _ in range(3):                                    # Chaikin: its bends worn round
         path = [path[0]] + [q for a_, b_ in zip(path, path[1:])
                             for q in ((0.75 * a_[0] + 0.25 * b_[0], 0.75 * a_[1] + 0.25 * b_[1]),
                                       (0.25 * a_[0] + 0.75 * b_[0], 0.25 * a_[1] + 0.75 * b_[1]))] + [path[-1]]
-    # across it, from its sea side: the ragged edge, the gravel, the ruts a
-    # car's track apart with the hump between, the gravel, the edge; a bay on
-    # the sea side for each van
+    # across it, from its sea side: the edge, the gravel, the ruts a car's
+    # track apart with the hump between, the gravel, the edge; a bay on the
+    # sea side for each van; wider at the mouth
     RUT0, RUT1, Y = 0.3, 0.68, 0.05
     rows = []
     for i, (x, z) in enumerate(path):
         a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
         L = math.hypot(b_[0] - a_[0], b_[1] - a_[1]) or 1.0
         nx, nz = -(b_[1] - a_[1]) / L, (b_[0] - a_[0]) / L          # to the left of the way it runs
-        sea = 1.4 + 0.3 * noise2(0.5 * i, 1.5, 4.2) + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
-        road = 1.4 + 0.3 * noise2(0.5 * i, 3.5, 4.2)
+        flare = 1.0 + 0.9 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
+        sea = 1.4 * flare + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
+        road = 1.4 * flare
         offs = (-sea, -0.5 * (sea + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (road + RUT1), road)
         rows.append([(x + nx * o, Y, z + nz * o) for o in offs])
     def lane():
@@ -3564,11 +3573,24 @@ def rock_poolers_park():
             for j in range(7):
                 if j in (2, 4):
                     key = ('bark', 12)                               # the ruts
-                elif j == 3 and noise2(0.35 * i, 0.5, 4.2) > 0.0:
+                elif j == 3 and 3 < i < len(rows) - 2:
                     key = ('leaf', 24)                               # turf on the hump
-                else:                                                # the gravel, worn darker in long patches
-                    key = ('bark', 2) if noise2(0.3 * i, 0.9 * j, 7.7) > 0.12 else ('gravel', 31)
+                else:
+                    key = ('gravel', 31)                             # the gravel
                 q = [rows[i][j], rows[i][j + 1], rows[i + 1][j + 1], rows[i + 1][j]]
+                if face_normal(q)[1] < 0:
+                    q = q[::-1]
+                groups.setdefault(key, []).append(q)
+        # the turning circle: turf island, gravel, the rut the vans wear round it, gravel
+        N = 24
+        for (r0, r1, key) in ((0.0, 1.0, ('leaf', 24)), (1.0, 1.5, ('gravel', 31)), (1.5, 1.95, ('bark', 12)),
+                              (1.95, CR, ('gravel', 31))):
+            for k in range(N):
+                a0, a1 = 2 * math.pi * k / N, 2 * math.pi * (k + 1) / N
+                q = [(CX + r0 * math.cos(a0), Y + 0.02, CZ + r0 * math.sin(a0)), (CX + r1 * math.cos(a0), Y + 0.02, CZ + r1 * math.sin(a0)),
+                     (CX + r1 * math.cos(a1), Y + 0.02, CZ + r1 * math.sin(a1)), (CX + r0 * math.cos(a1), Y + 0.02, CZ + r0 * math.sin(a1))]
+                if r0 == 0.0:
+                    q = q[:3]
                 if face_normal(q)[1] < 0:
                     q = q[::-1]
                 groups.setdefault(key, []).append(q)
@@ -3578,7 +3600,7 @@ def rock_poolers_park():
         # marram and a few stones along both edges, every couple of units
         with plain_parts():
             for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
-                for k in range(2, len(edge) - 2, 4):
+                for k in range(10, len(edge) - 2, 4):               # none at the mouth
                     x, _, z = edge[k]
                     if side < 0 and any(abs(z - bz) < 1.8 for bz in bays):
                         continue                                     # the bays' mouths kept open
@@ -4362,6 +4384,7 @@ def strand_snags():
         rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'cream', r2=0.1, segs=7)
     gull((0.4 + math.cos(4.0) * 0.44, 4.38, -0.6 + math.sin(4.0) * 0.44), 1.0, 'anim_watch:r=26#snag')   # on its top
     join_still('snags')
+    on_a_rise()
 
 def dune_fence(name, seed, half, breaks):
     """A run of storm fence along a dune's foot, `half` either way along
@@ -4501,14 +4524,16 @@ def strand_groynes():
     with bleached():
         # round 10: on out past the waterline into the surf, the posts
         # standing lower as the beach shelves, the sea breaking along them
-        groyne(-5.5, 2.2, -19.0, 2.0, 0.9, 1.0)
-        groyne(5.5, 2.4, -17.5, 1.8, 0.85, 2.0, gaps=(5, 6, 10))
-    for (z, x, h, col) in ((-5.5, -19.9, 2.6, 0xff5040), (5.5, -18.4, 2.4, 0x22c46e)):   # the beacon posts, port and starboard
+        # (round 17: taller, 2.0/1.8 falling to 0.9 stood under the kerb's
+        # line from the road for most of their length)
+        groyne(-5.5, 2.2, -19.0, 2.7, 1.5, 1.0)
+        groyne(5.5, 2.4, -17.5, 2.5, 1.4, 2.0, gaps=(5, 6, 10))
+    for (z, x, h, col) in ((-5.5, -19.9, 3.2, 0xff5040), (5.5, -18.4, 3.0, 0x22c46e)):   # the beacon posts, port and starboard
         box((0.3, h + 0.5, 0.3), (x, (h - 0.5) / 2, z), 0xfff6eb)
         box((0.32, 0.6, 0.32), (x, h * 0.55, z), col)
         box((0.7, 0.6, 0.7), (x, h + 0.25, z), col)
         box((0.5, 0.12, 0.5), (x, h - 0.2, z), 0xfff6eb)
-    gull((-19.9, 3.08, -5.5), 2.0, 'anim_watch:r=26#beacon')
+    gull((-19.9, 3.68, -5.5), 2.0, 'anim_watch:r=26#beacon')
     for k, (x, z) in enumerate(((-15.0, -6.1), (-13.5, 4.9), (-18.5, -4.9))):
         with animated('anim_bob:h=0.3:p=%.1f:r=0.35#break%d' % (3.0 + 0.6 * k, k), (x, 0.0, z)):
             box((1.6, 0.3, 0.6), (x, SEA + 0.05, z), 0xfff6eb, yaw=0.2 * k)
