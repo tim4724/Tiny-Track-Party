@@ -167,7 +167,6 @@ function paintButtons() {
   tierBtn.textContent = state.tier === 'lite' ? 'Tier: Lite' : 'Tier: Full';
   tourBtn.classList.toggle('is-on', !!tour);
   sortSel.value = state.sort;
-  legend.classList.toggle('keys-hidden', !state.keys);
 }
 
 // FAMILIES. A forest authored as twelve blocks, a stream as nine reaches: one
@@ -414,11 +413,6 @@ function restoreView() {
   try { lm.view(state.view); } catch (_) { state.view = 'race'; save(); paintButtons(); lm.view(state.view); }
   paintRace();
 }
-// The camera buttons' own order is the cycle.
-function stepView(d) {
-  const i = viewBtns.findIndex((b) => b.dataset.view === state.view);
-  setView(viewBtns[(i + d + viewBtns.length) % viewBtns.length].dataset.view);
-}
 function setSpread(on) {
   state.spread = on;
   save();
@@ -473,10 +467,6 @@ setInterval(() => {
 document.getElementById('lm-prev').addEventListener('click', () => { step(-1); frame.focus(); });
 document.getElementById('lm-next').addEventListener('click', () => { step(1); frame.focus(); });
 
-// Keys work from either document: after a click the FRAME has focus (so WASD
-// flies the free camera), and the rest must still reach here. The letters keep
-// clear of the free camera's W A S D Q E; the legend in the side panel lists
-// them. A field being typed into keeps its keys.
 // THE RACE VIEW'S TRANSPORT. The stage keeps every update it gave its race, so a
 // moment is an update count: the slider and the keys seek to one (back is the
 // same race wound again from its grid), and a note names the one it was taken at.
@@ -688,13 +678,16 @@ fullBtn.addEventListener('click', () => { toggleFull(); frame.focus(); });
 // piece (`piece`, its model, framed in `view`, orbit by default, at placement
 // `place`), a spot on the lap (`s`, `lat`: the driver's view parked there) or a
 // moment of the race (`step`, paused there, through race cam `cam`). The shape,
-// by example: scripts/review-round.example.json. A verdict (Keep, Rework or
-// Drop, and a note) is kept by the server in verdicts-<round>.json. Without a
+// by example: scripts/review-round.example.json. An item with no stops (an
+// idea, a question) is only read here. Each of an item's `ask` gets an answer
+// field. A verdict (Keep, Rework or Drop, a note and the answers, or the
+// answers alone) is kept by the server in verdicts-<round>.json. Without a
 // round, as on a deployed preview, there is no panel.
 const reviewBox = document.getElementById('lm-review');
 const DECISIONS = ['keep', 'rework', 'drop'];
 let round = null, itemAt = -1, stopAt = -1, reviewSaid = '';
 const drafts = new Map();   // item id -> a note typed and not yet saved with a verdict
+const answerDrafts = new Map();   // item id -> its answers typed and not yet saved
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 fetch('/api/review-round').then((r) => (r.ok ? r.json() : null)).then((j) => {
   if (!j || !Array.isArray(j.items)) return;
@@ -721,22 +714,31 @@ function paintReview() {
   };
   const judged = round.items.filter((it) => round.verdicts[it.id]).length;
   const out = [el('h2', '', round.title || round.round),
-               el('p', 'legend__note', `${judged} of ${round.items.length} judged · ⇧[ ⇧] item`)];
+               el('p', 'legend__note', `${judged} of ${round.items.length} judged · [ ] item`)];
   round.items.forEach((it, i) => {
     const row = el('button', 'kit-row' + (i === itemAt ? ' kit-row--at' : ''));
     const v = round.verdicts[it.id];
+    const badge = v ? (v.decision ? upper(v.decision) : 'Answered') : '';
     row.append(el('span', 'kit-row__name', it.title || it.id),
-               el('span', 'kit-row__tris' + (v ? ' is-' + v.decision : ''), v ? upper(v.decision) : ''));
+               el('span', 'kit-row__tris' + (v && v.decision ? ' is-' + v.decision : ''), badge));
     row.addEventListener('click', () => { pickItem(i); frame.focus(); });
     out.push(row);
     if (i !== itemAt) return;
     const open = el('div', 'lm-review__item');
     if (it.text) open.append(el('p', '', it.text));
-    if (it.ask && it.ask.length) {
-      const ul = el('ul');
-      for (const q of it.ask) ul.append(el('li', '', q));
-      open.append(ul);
-    }
+    // Each question gets its own answer, saved with the verdict (or alone:
+    // an idea or a question needs no Keep / Rework / Drop).
+    const asks = it.ask || [];
+    const answers = answersOf(it);
+    asks.forEach((q, n) => {
+      const a = el('textarea', 'lm-review__answer');
+      a.rows = 2;
+      a.placeholder = 'Your answer';
+      a.setAttribute('aria-label', q);
+      a.value = answers[n] || '';
+      a.addEventListener('input', () => { answers[n] = a.value; answerDrafts.set(it.id, answers); });
+      open.append(el('p', 'lm-review__ask', q), a);
+    });
     const stops = el('div', 'lm-review__stops seg');
     (it.stops || []).forEach((st, k) => {
       const b = el('button', 'ctrl' + (k === stopAt ? ' is-on' : ''), stopLabel(st));
@@ -750,7 +752,12 @@ function paintReview() {
       b.addEventListener('click', () => { judge(d); frame.focus(); });
       say.append(b);
     }
-    const note = el('textarea');
+    if (asks.length) {
+      const b = el('button', 'ctrl', 'Save answers');
+      b.addEventListener('click', () => judge(v ? v.decision : null));
+      say.append(b);
+    }
+    const note = el('textarea', 'lm-review__note');
     note.rows = 3;
     note.placeholder = 'Why? What should change?';
     note.value = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
@@ -808,19 +815,26 @@ async function goStop(k) {
 // Verdicts post in order, so a note saved on blur cannot land after the
 // decision clicked next.
 let posting = Promise.resolve();
+function answersOf(it) {
+  if (answerDrafts.has(it.id)) return answerDrafts.get(it.id);
+  const v = round.verdicts[it.id];
+  return v && Array.isArray(v.answers) ? v.answers.slice() : [];
+}
 function judge(decision) {
   const it = round.items[itemAt];
   const v = round.verdicts[it.id];
   const note = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
+  const answers = answersOf(it);
   posting = posting.then(async () => {
     try {
       const res = await fetch('/api/review-verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                       body: JSON.stringify({ round: round.round, id: it.id, decision, note }) });
+                                                       body: JSON.stringify({ round: round.round, id: it.id, decision, note, answers }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error);
       round.verdicts[it.id] = j.verdict;
       drafts.delete(it.id);
-      reviewSaid = `${upper(decision)} saved in ${j.file}`;
+      answerDrafts.delete(it.id);
+      reviewSaid = `${decision ? upper(decision) : 'Answers'} saved in ${j.file}`;
     } catch (e) {
       reviewSaid = `Not saved (${e && e.message ? e.message : e})`;
     }
@@ -828,47 +842,53 @@ function judge(decision) {
   });
 }
 
+// THE KEYS, few and the same in every view (the buttons do the rest).
+// The free camera lives in the stage frame and reads that window's keys, so a
+// camera key pressed while this page has focus is handed to it, and the arrows
+// up and down fly it up and down as E and Q do.
+const CAM_KEYS = { KeyW: 'KeyW', KeyA: 'KeyA', KeyS: 'KeyS', KeyD: 'KeyD', KeyQ: 'KeyQ', KeyE: 'KeyE',
+                   ArrowUp: 'KeyE', ArrowDown: 'KeyQ' };
+function camKey(e) {
+  const code = CAM_KEYS[e.code];
+  const w = frame.contentWindow;
+  if (!code || !w || e.handedOn) return false;
+  if (e.view === w && code === e.code) return false;   // the frame's own camera has it
+  const ev = new KeyboardEvent(e.type, { code });
+  ev.handedOn = true;                                  // not handed on again by the frame's listener
+  w.dispatchEvent(ev);
+  return true;
+}
+const typing = (t) => t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 function onKey(e) {
   if (noteDlg.open) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const t = e.target;
-  if (t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (typing(e.target)) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const race = inRace();
+  if (camKey(e)) { e.preventDefault(); return; }
   if (k === ' ') pause();
-  else if (k === 'n') openNote();
+  else if (k === 'g') freeCam();
+  else if (k === 'o') setView('orbit');
   else if (race && k === 'c') stepCam(e.shiftKey ? -1 : 1);
   else if (race && (k === 'ArrowLeft' || k === 'ArrowRight')) seekBy((k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2));
   else if (race && (k === ',' || k === '.')) frameStep(k === ',' ? -1 : 1);
-  else if (k === 'v') stepView(e.shiftKey ? -1 : 1);
-  else if (k === 'ArrowLeft') step(-1);
-  else if (k === 'ArrowRight') step(1);
-  else if (k === 'ArrowUp') stepTrack(-1);
-  else if (k === 'ArrowDown') stepTrack(1);
-  else if (k === 'c') stepView(e.shiftKey ? -1 : 1);
-  else if (k >= '1' && k <= '4') setPlayers(+k);
-  else if (k === 'x') setSpread(!state.spread);
-  else if (k === 'm' && e.shiftKey) setFast(!state.fast);
-  else if (k === 'm') setSlow(!state.slow);
+  else if (k === '[' || k === ']') stepItem(k === '[' ? -1 : 1);
   else if (k === 'f') toggleFull();
   else if (k === 'h' && document.fullscreenElement) legend.hidden = !legend.hidden;
-  else if (k === 'g') freeCam();
-  else if (k === 'o') setView('orbit');
-  else if (k === '{' || k === '}') stepItem(k === '{' ? -1 : 1);
-  else if (k === '[') place(-1);
-  else if (k === ']') place(1);
-  else if (k === 't') setTour(!tour);
-  else if (k === 'l') setTier();
-  else if (k === 'Home') focus(0);
-  else if (k === '?') { state.keys = !state.keys; save(); paintButtons(); }
+  else if (k === 'n') openNote();
   else return;
   e.preventDefault();
 }
+function onKeyUp(e) {
+  if (!typing(e.target) && camKey(e)) e.preventDefault();
+}
 window.addEventListener('keydown', onKey);
+window.addEventListener('keyup', onKeyUp);
 
 function init(h) {
   lm = h;
   frame.contentWindow.addEventListener('keydown', onKey);
+  frame.contentWindow.addEventListener('keyup', onKeyUp);
   // Grouped by cup, in catalogue order; once, a Res reload keeps it.
   const groups = new Map();
   for (const t of trackSel.options.length ? [] : lm.tracks()) {

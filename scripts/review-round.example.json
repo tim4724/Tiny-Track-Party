@@ -6,21 +6,57 @@
       "id": "r12-gulch-stamp-mill",
       "title": "Gulch: the stamp mill",
       "text": "Rebuilt taller and moved to the outside of the hairpin, so the chase camera meets it on the way in.",
-      "ask": ["Does it read as a mill at racing speed?", "Too close to the road?"],
+      "ask": [
+        "Does it read as a mill at racing speed?",
+        "Too close to the road?"
+      ],
       "stops": [
-        { "track": "gulch", "piece": "set-stamp-mill", "view": "orbit" },
-        { "track": "gulch", "piece": "set-stamp-mill", "view": "glance" },
-        { "track": "gulch", "s": 120, "lat": 0, "view": "driver" }
+        {
+          "track": "gulch",
+          "piece": "set-stamp-mill",
+          "view": "orbit"
+        },
+        {
+          "track": "gulch",
+          "piece": "set-stamp-mill",
+          "view": "glance"
+        },
+        {
+          "track": "gulch",
+          "s": 120,
+          "lat": 0,
+          "view": "driver"
+        }
       ]
     },
     {
       "id": "r12-sidewinder-oil-field",
       "title": "Sidewinder: the oil field from the race",
       "text": "Pump jacks now nod; the field sits on the long left-hander.",
-      "ask": ["Is the motion too busy?"],
+      "ask": [
+        "Is the motion too busy?"
+      ],
       "stops": [
-        { "track": "sidewinder", "step": 900, "view": "race", "cam": "free" },
-        { "track": "sidewinder", "piece": "set-oil-field", "place": 1, "view": "high" }
+        {
+          "track": "sidewinder",
+          "step": 900,
+          "view": "race",
+          "cam": "free"
+        },
+        {
+          "track": "sidewinder",
+          "piece": "set-oil-field",
+          "place": 1,
+          "view": "high"
+        }
+      ]
+    },
+    {
+      "id": "r12-idea-penguin-groups",
+      "title": "Idea: group Glacier's penguins in the full tier",
+      "text": "An item with no stops is an idea or a question: read it here, answer each question, and give a verdict or just save the answers.",
+      "ask": [
+        "Should a group of penguins move together, to save draws?"
       ]
     }
   ]

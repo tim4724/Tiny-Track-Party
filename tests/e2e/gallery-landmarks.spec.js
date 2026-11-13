@@ -241,77 +241,37 @@ test('landmark gallery page: the Res toggle', async ({ page }) => {
   expect(await src()).toBeNull();
 });
 
-// The page's keys, from either document (the chrome's, or the stage's once a
-// click has put focus in the frame): the arrows walk the landmarks and the
-// catalogue, C cycles the camera in the buttons' order, and the rest do what
-// their buttons do.
+// The page's keys are few (the buttons do the rest), and the free camera's
+// keys reach it from either document: pressed while the page's chrome has
+// focus they are handed to the stage frame, and the arrows up and down are its
+// E and Q.
 test('landmark gallery page: the keys', async ({ page }) => {
   await page.goto('/gallery-landmarks.html#view=driver');
   await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
-  const lm = (call) => page.evaluate((c) => {
-    const L = document.getElementById('lm-stage').contentWindow.__landmarks;
-    return c === 'count' ? L.tracks().length : L[c]();
-  }, call);
-  const trackIs = (id) => page.waitForFunction(
-    (t) => document.getElementById('lm-stage').contentWindow.__landmarks.trackId() === t, id);
+  const mode = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__landmarks.mode());
+  await page.evaluate(() => {
+    const w = document.getElementById('lm-stage').contentWindow;
+    w.__heard = [];
+    for (const type of ['keydown', 'keyup']) w.addEventListener(type, (e) => w.__heard.push(`${type} ${e.code}`));
+  });
+  const heard = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__heard.splice(0));
 
-  // Landmarks: right and left step the focus, the list follows; Home is the first.
-  expect(await lm('focused')).toBe(0);
-  await page.keyboard.press('ArrowRight');
-  expect(await lm('focused')).toBe(1);
-  await expect(page.locator('#lm-list .kit-row').nth(1)).toHaveClass(/kit-row--at/);
-  await page.keyboard.press('ArrowLeft');
-  expect(await lm('focused')).toBe(0);
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('Home');
-  expect(await lm('focused')).toBe(0);
-
-  // View: V walks the buttons' order and shift-V back, from inside the frame too.
-  const views = await page.$$eval('#lm-views [data-view]', (bs) => bs.map((b) => b.dataset.view));
-  const at = views.indexOf('driver');
-  expect(await lm('mode')).toBe('driver');
-  await page.keyboard.press('v');
-  expect(await lm('mode')).toBe(views[at + 1]);
-  await expect(page.locator(`#lm-views [data-view="${views[at + 1]}"]`)).toHaveClass(/is-on/);
-  await page.evaluate(() => document.getElementById('lm-stage').contentWindow.focus());
-  await page.keyboard.press('v');
-  expect(await lm('mode')).toBe(views[at + 2]);
-  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+V');
-  expect(await lm('mode')).toBe(views[at - 1]);
-  await page.keyboard.press('v');
-  expect(await lm('mode')).toBe('driver');
-
-  // Tracks: down is the next of the whole catalogue in cup order, up wraps.
-  const order = await page.$$eval('#lm-track option', (os) => os.map((o) => o.value));
-  expect(order.length).toBe(await lm('count'));
-  expect(await lm('trackId')).toBe(order[0]);
+  await page.keyboard.press('g');
+  expect(await mode()).toBe('free');
+  await page.locator('#lm-track').focus();
+  await page.locator('#lm-track').evaluate((el) => el.blur());
+  await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowDown');
-  await expect(page.locator('#lm-track')).toHaveValue(order[1]);
-  await trackIs(order[1]);
-  await page.keyboard.press('ArrowUp');
-  await page.keyboard.press('ArrowUp');
-  await expect(page.locator('#lm-track')).toHaveValue(order[order.length - 1]);
-  await trackIs(order[order.length - 1]);
+  await page.keyboard.press('w');
+  expect(await heard()).toEqual(['keydown KeyE', 'keyup KeyE', 'keydown KeyQ', 'keyup KeyQ', 'keydown KeyW', 'keyup KeyW']);
 
-  // Players, spread, slow motion and the legend itself.
-  await page.keyboard.press('2');
-  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.seats() === 2);
-  await page.keyboard.press('x');
-  await expect(page.locator('#lm-spread')).toBeChecked();
-  await page.keyboard.press('x');
-  await expect(page.locator('#lm-spread')).not.toBeChecked();
-  const scale = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__scene._timeScale);
-  await page.keyboard.press('m');
-  await expect(page.locator('#lm-slow')).toHaveClass(/is-on/);
-  expect(await scale()).toBe(0.25);
-  await page.keyboard.press('m');
-  expect(await scale()).toBe(1);
-  await expect(page.locator('#lm-keys')).toBeVisible();
-  await page.keyboard.press('?');
-  await expect(page.locator('#lm-keys')).toBeHidden();
-  await expect(page.locator('#lm-keys-off')).toBeVisible();
-  await page.keyboard.press('?');
-  await expect(page.locator('#lm-keys')).toBeVisible();
+  // The arrows no longer walk the catalogue: the track stays.
+  const track = await page.locator('#lm-track').inputValue();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#lm-track')).toHaveValue(track);
+
+  await page.keyboard.press('o');
+  expect(await mode()).toBe('orbit');
 });
 
 // The page opens on a race. What an eye cannot hold it to: that a pause stops

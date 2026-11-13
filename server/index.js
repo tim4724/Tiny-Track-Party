@@ -272,16 +272,21 @@ const server = http.createServer((req, res) => {
       return;
     }
     // A VERDICT on one item of the current round: that item's one entry in
-    // verdicts-<round>.json, { decision, note, at, title }, a later verdict
-    // replacing it.
+    // verdicts-<round>.json, { decision, note, answers, at, title }, a later
+    // verdict replacing it. `answers` follow the item's `ask` in order; an
+    // item that only asks (an idea, a question) may be answered with no
+    // decision.
     if (urlPath === '/api/review-verdict' && req.method === 'POST') {
-      readJson(64 * 1024, ({ round, id, decision, note }) => {
+      readJson(64 * 1024, ({ round, id, decision, note, answers }) => {
         const current = readRound();
         const item = current && current.round === round && (current.items || []).find((it) => it.id === id);
         if (!item) { sendJson(res, 400, { error: `'${id}' is not an item of the current round` }); return; }
-        if (!['keep', 'rework', 'drop'].includes(decision)) { sendJson(res, 400, { error: 'a decision is keep, rework or drop' }); return; }
+        if (decision != null && !['keep', 'rework', 'drop'].includes(decision)) { sendJson(res, 400, { error: 'a decision is keep, rework or drop' }); return; }
+        const said = Array.isArray(answers) ? answers.map((a) => String(a || '').trim()) : [];
+        if (decision == null && !said.some(Boolean) && !String(note || '').trim()) { sendJson(res, 400, { error: 'nothing to save' }); return; }
         const verdicts = readVerdicts(round);
-        verdicts[id] = { decision, note: String(note || '').trim(), at: new Date().toISOString(), title: item.title || id };
+        verdicts[id] = { decision: decision || null, note: String(note || '').trim(), answers: said,
+                         at: new Date().toISOString(), title: item.title || id };
         fs.writeFileSync(verdictsFile(round), JSON.stringify(verdicts, null, 2) + '\n');
         sendJson(res, 200, { verdict: verdicts[id], file: path.relative(path.join(__dirname, '..'), verdictsFile(round)) });
       });

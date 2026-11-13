@@ -49,15 +49,20 @@ test('landmark gallery review: the round, its stops and verdicts', async ({ page
   expect(await L(page, (l) => l.mode())).toBe('driver');
   await expect(page.locator('#lm-views [data-view="driver"]')).toHaveClass(/is-on/);
 
-  // A verdict posts the item it is given on, with the note.
-  await page.locator('.lm-review__item textarea').fill('taller');
+  // A question is answered on its own, with no decision...
+  await page.locator('.lm-review__answer').first().fill('it does');
+  await page.locator('.lm-review__item .ctrl', { hasText: 'Save answers' }).click();
+  await expect(rows.nth(0).locator('.kit-row__tris')).toHaveText('Answered');
+  expect(verdict).toEqual({ round: 't1', id: 't1-mill', decision: null, note: '', answers: ['it does'] });
+  // ...and a verdict posts the item it is given on, with the note and the answers.
+  await page.locator('.lm-review__note').fill('taller');
   await page.locator('.lm-review__item [data-decision="rework"]').click();
   await expect(rows.nth(0).locator('.kit-row__tris')).toHaveText('Rework');
-  expect(verdict).toEqual({ round: 't1', id: 't1-mill', decision: 'rework', note: 'taller' });
+  expect(verdict).toEqual({ round: 't1', id: 't1-mill', decision: 'rework', note: 'taller', answers: ['it does'] });
   await expect(page.locator('.lm-review__item')).toContainText('verdicts-t1.json');
 
-  // Shift-] is the next item: a moment of the race, paused, through its cam.
-  await page.keyboard.press('Shift+BracketRight');
+  // ] is the next item: a moment of the race, paused, through its cam.
+  await page.keyboard.press(']');
   await page.waitForFunction(() => {
     const l = document.getElementById('lm-stage').contentWindow.__landmarks;
     return l.trackId() === 'sidewinder' && l.mode() === 'race' && l.race().step === 120;
