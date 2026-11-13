@@ -5508,17 +5508,20 @@ def chair(at, yaw, color=0x3f7bd9, riders=(), k=1.0):
         parts.append(box((0.09 * k, 0.09 * k, 0.09 * k), (px, y - 0.21 * k, pz), 0xf2bf99, yaw=yaw))
     return parts
 
-def station(x, z, y, ground, yaw, roof=0xff5040):
+def station(x, z, y, ground, yaw, roof=0xff5040, k=1.0):
     """A lift station at its real size: the bullwheel the haul rope turns
-    round, at the gauge, under a red roof on four legs."""
+    round, at the gauge, under a red roof on four legs; `k` grows the roof
+    and its legs (a valley station is a hall, not a shelter)."""
     cyl(GAUGE + 0.03, 0.08, (x, y - 0.04, z), 0x555b66, segs=10)
     box((0.14, 0.52, 0.14), (x, y + 0.26, z), 0x555b66)
     top = y + 0.52
     for sx in (-1, 1):
         for sz in (-1, 1):
-            px, pz = turned(x, z, yaw, sx * 0.8, sz * 0.55)
-            box((0.1, top - ground + 0.3, 0.1), (px, (top + ground - 0.3) / 2, pz), 0x555b66, yaw=yaw)
-    box((2.0, 0.12, 1.4), (x, top + 0.06, z), roof, yaw=yaw)
+            px, pz = turned(x, z, yaw, sx * 0.8 * k, sz * 0.55 * k)
+            box((0.1 * k, top - ground + 0.3, 0.1 * k), (px, (top + ground - 0.3) / 2, pz), 0x555b66, yaw=yaw)
+    box((2.0 * k, 0.12 * k, 1.4 * k), (x, top + 0.06 * k, z), roof, yaw=yaw)
+    if k > 1.0:
+        snowy(box((1.8 * k, 0.1, 1.2 * k), (x, top + 0.12 * k + 0.05, z), 0xf3f7fb, yaw=yaw), 0.5)
 
 def snowcat(x, y, z, k=0.45):
     """A piste groomer facing +X, built like the cars: two broad tracks, a red
@@ -5610,19 +5613,25 @@ def ski_lift():
             chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, k=1.5)   # faces +X, the way it rides
     # valley station on the flat by the road, its hut behind it, skis racked,
     # a queue waiting at the gate
-    station(V[0], V[1], y0, 0.0, yaw)
-    hx, hz = turned(V[0], V[1], yaw, 0.0, -2.0)
-    cabin_hut(1.6, 0.9, 1.2, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
+    station(V[0], V[1], y0, 0.0, yaw, k=1.8)
+    hx, hz = turned(V[0], V[1], yaw, 0.0, -2.6)
+    cabin_hut(2.4, 1.3, 1.8, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
     for k in range(5):
         px, pz = turned(V[0], V[1], yaw, 1.5, -0.6 + k * 0.16)
         box((0.06, 0.44, 0.07), (px, 0.22, pz), COATS[k], yaw=yaw, roll=0.15)
     for k in range(3):
         px, pz = turned(V[0], V[1], yaw, -0.25 + 0.3 * k, 1.3 + 0.12 * (k % 2))
         snow_person(px, 0, pz, COATS[k + 1], COATS[k + 3], yaw=yaw - math.pi / 2)
-    # the resort's chalets round the valley station, on the flat toward the road
-    for (lx, lz, w, d, wall, ry) in ((4.5, -3.0, 2.2, 1.6, 0x9a5f3c, 0.3), (5.5, 1.2, 1.8, 1.4, 0xcf534f, -0.2),
-                                     (2.6, 4.2, 2.0, 1.5, 0x9a7b55, 0.5)):
-        cabin_hut(w, 0.95, d, (V[0] + lx, 0, V[1] + lz), wall, 0xeef4f9, yaw=ry)
+    # the resort's chalets by the valley station, out on the verge a few
+    # units from the kerb and a few car-lengths long each, so they read from
+    # the seat (round the station at a real cabin's size they were specks
+    # behind the kerb); each on its footing, on the verge as it is drawn
+    for (lx, lz, w, d, wall, ry) in ((8.2, 1.4, 3.8, 2.8, 0x9a5f3c, 0.3), (8.8, 6.8, 3.2, 2.5, 0xcf534f, -0.2),
+                                     (4.6, 10.6, 3.4, 2.6, 0x9a7b55, 0.5)):
+        box((w + 0.2, 0.5, d + 0.2), (V[0] + lx, 0.2, V[1] + lz), 0x868ba1, yaw=ry)
+        cabin_hut(w, 1.7, d, (V[0] + lx, 0.4, V[1] + lz), wall, 0xeef4f9, yaw=ry)
+        box((0.5, 1.3, 0.5), (V[0] + lx - 0.8, 2.9, V[1] + lz - 0.5), 0x868ba1)
+        snowy(box((0.6, 0.12, 0.6), (V[0] + lx - 0.8, 3.6, V[1] + lz - 0.5), 0xf3f7fb), 0.5)
     for k in range(2):
         snow_person(V[0] + 3.2 + 0.5 * k, 0, V[1] - 0.6 + 0.9 * (k % 2), COATS[k], COATS[(k + 2) % 6], yaw=1.2 * k)
     # top station on the summit, its hut behind it
