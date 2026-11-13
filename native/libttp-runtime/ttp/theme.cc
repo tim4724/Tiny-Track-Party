@@ -28,11 +28,10 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_MOTE:   a.size = 0.13f; a.opacity = 0.5f;  a.fall = 0.05f; a.wind = 0.4f; a.bob = 0.4f;  a.band = 0.5f;  break;
     case AMB_SAND:   a.size = 0.17f; a.opacity = 0.4f;  a.fall = 0;     a.wind = 9;    a.bob = 0.5f;  a.band = 0.1f;  break;
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
-    // The life's three: a petal sinks slowly and sways, low; a tumbleweed
-    // rolls on the floor in the wind, hopping; spray is thrown off the water.
+    // The life's two: a petal sinks slowly and sways, low; a tumbleweed
+    // rolls on the floor in the wind, hopping.
     case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
     case AMB_TUMBLE: a.size = 0.9f;  a.opacity = 1.0f;  a.fall = 0;     a.wind = 2.4f; a.bob = 0.45f; a.band = 1;  a.hop = 2.8f;  break;
-    case AMB_SPRAY:  a.size = 0.8f;  a.opacity = 0.8f;  a.fall = 0;     a.wind = 0.4f; a.bob = 1.4f;  a.band = 1;  a.hop = 1.3f;  break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }
@@ -223,9 +222,8 @@ Theme beachTheme() {
   t.props.models = { "prop-crate" };
   t.props.scatterDensity = 0.11f;
   t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
-  // Spray thrown up where the surf breaks, the foam's white.
-  ambientKind(t.life, AMB_SPRAY);
-  t.life.count = 900; t.life.tint = 0xf2fbf5;
+  // No ambient life: the spray once thrown up along the surf read as a glow
+  // in front of the rocks (round 13).
   return t;
 }
 

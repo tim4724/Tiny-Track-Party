@@ -387,6 +387,8 @@ export const SET_GROUND = {
   // tower stood a storey deep in the hill.
   'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
   // Pretzel's den camp on a bank of its own, the same shape.
+  // Tidepool's knoll at the lap's waist, its rock standing on its road side.
+  'set-tidepool-knoll': [{ kind: 'mound', x: -3, h: 4.5, r: 10, r1: 12, rz: 13, shape: 1.3 }],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -461,20 +463,20 @@ export const TRACKS = {
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
     // Low tide: the reef the sea left bare is the land the lap drives
     // beside. On the two outer bends the sea comes in to a few strides past
-    // the kerb (the `shore`s) and the reef stands between them, knuckles of
-    // slate a car's height and more from the kerb out into the surf (out at
-    // the waterline, and low, it lay under the road's own kerb and read as
-    // grey specks): the east bend's with seals hauled out a stride from the
-    // road, the west bend's taller and broken, gulls over it; an outlier
-    // either side of them, and along the top run, where the beach is wide,
-    // its low ledges and the pools between them. The big rock pool
-    // lies beside the low west run that points at it, people at its edge,
-    // the crab fishers' landing just before it. Off the east bend, where the
-    // east run points, Seal Rock stands in open water, seals on its ledges.
-    // Inland, grassy downs fill both lobes of the lap, their flanks to the
-    // kerb; the rock-poolers' vans are parked by the start straight.
+    // the kerb (the `shore`s) and the reef stands between them, rounded,
+    // weathered rock a car's height and more from the kerb out into the surf
+    // (out at the waterline, and low, it lay under the road's own kerb and
+    // read as grey specks): the east bend's with seals hauled out a stride
+    // from the road, the west bend's taller, a headland with its sea arch and
+    // a stack, gulls over them. The big rock pool lies beside the low west
+    // run that points at it, people at its edge, the crab fishers' landing
+    // just before it. Off the east bend, where the east run points, Seal Rock
+    // stands in open water, seals on its ledges. Inland, grassy downs fill
+    // both lobes of the lap, their flanks to the kerb, and at the lap's waist
+    // a knoll with the same rock breaking out of it; the rock-poolers' vans
+    // are parked along their gravel lane by the start straight.
     set: [
-      { model: 'set-tidepool-cutting', u: 0.5, lat: 0 },
+      { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
       { model: 'set-rock-pool', u: 0.675, lat: 16.7, yaw: 4 },
       { model: 'set-seal-rock', u: 0.235, lat: 25 },
       // the reef in three forms on the outsides of the bends, where the
@@ -488,7 +490,7 @@ export const TRACKS = {
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
-      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
+      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
       // palms on the downs' near flanks below the crests, placed by hand:
       // the `clear`s that keep seeded crates off the hilltops keep its
       // seeded palms off too
@@ -514,11 +516,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
-      // the backbone's turf: the downs' green carried out along the slate
-      // spine the road cuts through, and the downs it rises out of
-      { kind: 'paint', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 7, w: 5, tint: 0x6faa62 },
+      // the knoll at the waist (the piece brings it: SET_GROUND), green to
+      // the kerb; and the downs across the road
+      { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
+      { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      { kind: 'clear', u: 0.507, lat: 14.7, yaw: -79, len: 46, r: 8 },
       // the lifeboat station's rock over the beach, at the road's height
       { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
       // the hard the crab fishers' landing stands on, at the hop's height
@@ -550,8 +552,9 @@ export const TRACKS = {
     // from the jungle to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
     // the wharf along its black sand where the longboat sails out to the
-    // ship riding at anchor and back. Outside the S an old stepped temple
-    // the jungle has half taken back faces Skull Rock across the road. The
+    // ship riding at anchor and back. Outside the S the crew's stockade
+    // stands on the island's flank, its guns trained across the road on
+    // Skull Rock. The
     // old wreck lies in the surf of the west bay's black sand (the second
     // `shore`), its ribs out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
@@ -566,7 +569,7 @@ export const TRACKS = {
       { model: 'set-shipwreck-ribs', u: 0.8, lat: 19, yaw: 20, y: -0.35, scale: 1.25 },
       { model: 'set-pirate-camp', u: 0.09, lat: 10.0, yaw: -20, y: 0.9 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
-      { model: 'set-jungle-ruin', u: 0.655, lat: -10.5, yaw: 180 },
+      { model: 'set-pirate-stockade', u: 0.655, lat: -10.5, yaw: 180 },
       // the cave levels nothing (its gear drapes) and the land's 9 u chords
       // rise under it, so it is lifted onto them
       { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.9 },
@@ -595,8 +598,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.27, lat: -32, len: 40, r: 24, r1: 20, h: 15, h1: 9, top: 0.15, tint: 0x3fae52 },
       { kind: 'ridge', u: 0.22, lat: -21, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.96, lat: -22, len: 40, r: 18, h: 5, top: 0.2, near: 6, tint: 0x7ab878 },
-      // the spur the cave is cut into
+      // the spur the cave is cut into, green down to the cave's rock
       { kind: 'ridge', u: 0.975, lat: -15.5, len: 18, r: 8, h: 6, top: 0.25, near: 2.8, tint: 0x7ab878 },
+      { kind: 'paint', u: 0.975, lat: -12, len: 16, r: 5, w: 4, tint: 0x7ab878 },
       // low green hills inside the S-bends before the finish
       { kind: 'ridge', u: 0.835, lat: -20, yaw: 40, len: 16, r: 11, h: 3, top: 0.3, tint: 0x6aaa6a },
       { kind: 'ridge', u: 0.81, lat: -11.5, yaw: 20, len: 12, r: 8, h: 4.6, top: 0.3, near: 0.5, tint: 0x6aaa6a },

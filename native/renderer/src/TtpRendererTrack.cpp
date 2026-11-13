@@ -3389,7 +3389,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 TextureSampler(TextureSampler::MinFilter::LINEAR,
                         TextureSampler::MagFilter::LINEAR));
         // The life's knobs (vpoint.mat), every one off: the weather's path.
-        for (const char* k : { "mask", "tile", "hop", "hopFade", "flutter", "twig" }) {
+        for (const char* k : { "mask", "tile", "hop", "flutter", "twig" }) {
             mPollenMat->setParameter(k, 0.0f);
         }
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
@@ -4296,13 +4296,10 @@ bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
 // first, over the flake floor's grid: R the floor it lives on, G where.
 void TtpRenderer::buildLife(const TrackBin& tb) {
     using ttp::rt::AMB_PETAL;
-    using ttp::rt::AMB_SPRAY;
     using ttp::rt::AMB_TUMBLE;
     const ttp::rt::AmbientSpec& a = tb.life;
     constexpr int N = kAmbFloorN;
     const float cell = 2 * kAmbR / (N - 1);
-    const bool spray = a.kind == AMB_SPRAY && mShoreFn;
-    if (a.kind == AMB_SPRAY && !spray) return;   // no sea, no surf
     // Round the anchors: full inside 40% of the reach, nothing past it.
     const auto nearAnchor = [&](float x, float z) {
         float best = 1e30f;
@@ -4314,11 +4311,6 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
         }
         const float r = std::max(a.reach, 0.5f);
         return 1.0f - smooth01((std::sqrt(best) - 0.4f * r) / (0.6f * r));
-    };
-    // Along the surf: the waterline and a little either side of it.
-    const auto surf = [&](float x, float z) {
-        const float d = std::hypot(x, z) - mShoreFn(std::atan2(z, x));   // + out to sea
-        return 1.0f - smooth01((std::fabs(d - 1.0f) - 1.0f) / 2.0f);
     };
     std::vector<float> g((size_t) N * N, 0.0f);
     if (a.kind == AMB_TUMBLE && a.near.empty()) {
@@ -4340,14 +4332,13 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     }
     const auto lives = [&](float x, float z) {
         if (!a.near.empty()) return nearAnchor(x, z);
-        if (spray) return surf(x, z);
         return 1.0f;
     };
     std::vector<float> floorY((size_t) N * N);
     for (int gz = 0; gz < N; gz++) {
         for (int gx = 0; gx < N; gx++) {
             const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
-            floorY[(size_t) gz * N + gx] = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
+            floorY[(size_t) gz * N + gx] = groundSurfaceY(tb, x, z);
         }
     }
     // A tumbleweed stays off a slope the grid cannot draw it on: between a
@@ -4389,10 +4380,9 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     // The seeds: in the tiles where it lives, as many a tile as the camera
     // box would hold over that much ground (`count` keeps the weather's
     // meaning), grouped by kLifeChunk blocks of the world, each its own
-    // renderable culled on its own bounds (a shore's spray is a ring round
-    // the whole map, and a cell sees a few blocks of it); or, for a
-    // tumbleweed, the camera box itself.
-    const bool tiled = !a.near.empty() || spray;
+    // renderable culled on its own bounds; or, for a tumbleweed, the camera
+    // box itself.
+    const bool tiled = !a.near.empty();
     const float bandH = std::max(2.0f, 34.0f * a.band);
     const float floatH = a.hop > 0 ? a.bob + a.size : bandH;   // how high above its floor a sprite stands
     uint32_t s = 0x1f3a5c7u;
@@ -4426,7 +4416,7 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
                             // which the band's wrap takes as a phase, and which
                             // gives the block's bounds the right height.
                             const float x = x0 + 0.05f + rnd() * (T - 0.1f), z = z0 + 0.05f + rnd() * (T - 0.1f);
-                            const float floor = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
+                            const float floor = groundSurfaceY(tb, x, z);
                             seeds.push_back({ x, floor + rnd() * floatH, z });
                         }
                     }
@@ -4472,7 +4462,6 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     mLifeMat->setParameter("mask", 1.0f);
     mLifeMat->setParameter("tile", tiled ? kLifeTile : 0.0f);
     mLifeMat->setParameter("hop", a.hop);
-    mLifeMat->setParameter("hopFade", a.kind == AMB_SPRAY ? 1.0f : 0.0f);
     mLifeMat->setParameter("flutter", a.kind == AMB_PETAL ? 1.0f : 0.0f);
     mLifeMat->setParameter("twig", a.kind == AMB_TUMBLE ? 1.0f : 0.0f);
     if (!buildMesh(mLife, true, mLifeMat)) return;

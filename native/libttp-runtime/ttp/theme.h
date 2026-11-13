@@ -45,11 +45,11 @@ enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUN
 // wall over it), 'island' a sparse low offshore chain with sea gaps between
 // features.
 enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
-// Ambient particle motion presets (trackPayload.js AMB_KINDS), and the three
+// Ambient particle motion presets (trackPayload.js AMB_KINDS), and the two
 // the cups' ambient life added (Theme::life): a petal tumbling down, a
-// tumbleweed rolling on the floor, spray thrown up where the surf breaks.
+// tumbleweed rolling on the floor.
 enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE,
-                          AMB_PETAL, AMB_TUMBLE, AMB_SPRAY };
+                          AMB_PETAL, AMB_TUMBLE };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.
@@ -180,13 +180,13 @@ struct AmbientSpec {
   // The rest is the ambient LIFE's (Theme::life), post-corpus: theme_check
   // serializes the fields above only.
   // `hop` (rad/s) stands a particle ON the floor and bounces it `bob` high
-  // instead of drifting in the band: the tumbleweed's and the spray's.
+  // instead of drifting in the band: the tumbleweed's.
   float hop = 0;
   uint32_t tint2 = 0;     // every second particle's tint; 0 = `tint`
   // Where it lives: round every set piece whose model name holds `near`, out
   // to `reach` past its footprint (an avenue's petals, a sunbeam's motes).
-  // Empty: the kind's own place (the surf for spray, the road's verges for a
-  // tumbleweed), or everywhere.
+  // Empty: the kind's own place (the road's verges for a tumbleweed), or
+  // everywhere.
   std::string near;
   float reach = 0;
 };
@@ -295,9 +295,10 @@ struct Theme {
   AmbientSpec ambient;
   // THE CUP'S AMBIENT LIFE, beside its weather: what tells the places apart in
   // the corner of the eye (petals by Cloverleaf's cherries, tumbleweeds across
-  // the canyon roads, spray along the surf, motes in the playroom's sunbeam).
+  // the canyon roads, motes in the playroom's sunbeam).
   // The same cloud as `ambient` (vpoint.mat), a second draw; none on snow,
-  // whose weather is its life. Post-corpus, and left out of the lite tier.
+  // whose weather is its life, nor on the beach. Post-corpus, and left out of
+  // the lite tier.
   AmbientSpec life;
   BirdSpec birds;
   KiteSpec kites;
