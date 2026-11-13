@@ -11051,48 +11051,56 @@ def sheep_flock():
                (-0.3, 0.2, 1.9), (1.0, -2.6, -2.0)), 'f')
     draped('flock', still)
 
-# ---- RIBBON: the sheepfold and the walls up the hill ----------------------------------
-# The sheep's hill beyond the north loop, farmed: a round drystone fold by the
-# road with a hurdle gate, sheep penned in it, and from it the field walls
-# climbing the hill and running along its foot, the slate of the valley's
-# other stone, each a little taller than a kerb and thick enough to read as a
-# dark line on the grass from the seat. World units, front (+X) to the road;
-# on the left at yaw 180. All of it DRAPES, a wall in short lengths so it
-# rides the slope as drawn.
-def ribbon_wall(pts, h=0.5, t=0.3):
-    """A drystone wall along the (x, z) points, coping stones on its top."""
-    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-        L = math.hypot(x1 - x0, z1 - z0)
-        n = max(1, round(L / 1.7))
-        yaw = math.atan2(x1 - x0, z1 - z0)
-        for i in range(n):
-            cx, cz = x0 + (x1 - x0) * (i + 0.5) / n, z0 + (z1 - z0) * (i + 0.5) / n
-            rowed(box((t, h + 0.2, L / n + 0.05), (cx, h / 2 - 0.1, cz), 'grey', yaw=yaw), 21)
-            rowed(box((t * 0.6, 0.12, L / n * 0.7), (cx, h + 0.04, cz), 'grey', yaw=yaw), 14)
+# ---- RIBBON: the sheepfold and the fences up the hill --------------------------------
+# The sheep's hill beyond the north loop, farmed: a round timber fold by the
+# road, hurdles between stout posts with a gate in it, sheep penned inside,
+# and from it post-and-rail fences climbing the hill and running along its
+# foot, a field gate in one. Timber, pale against the grass (drystone walls
+# here read as blocks): posts a car's bonnet high, two rails, nothing
+# thinner than 0.09 u. World units, front (+X) to the road; on the left at
+# yaw 180. All of it DRAPES, a rail a post-to-post length so it rides the
+# slope as drawn.
+RIBBON_POST, RIBBON_RAIL = 0x7a5a3a, 0xc9a877
 
-def ribbon_hurdle(a, b, h=0.5):
-    """A wooden hurdle gate between two points: posts and three rails."""
+def ribbon_fence(pts, h=0.62, rails=(0.24, 0.48), step=1.0):
+    """A post-and-rail fence along the (x, z) points."""
+    posts = []
+    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+        n = max(1, round(math.hypot(x1 - x0, z1 - z0) / step))
+        posts += [(x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n) for i in range(n)]
+    posts.append(pts[-1])
+    with plain_parts():                      # square timber: no chamfer on a bar this slim
+        for x, z in posts:
+            box((0.14, h + 0.2, 0.14), (x, h / 2 - 0.1, z), RIBBON_POST)
+        for (x0, z0), (x1, z1) in zip(posts, posts[1:]):
+            for y in rails:
+                strut((x0, y, z0), (x1, y, z1), 0.09, RIBBON_RAIL)
+
+def ribbon_gate(a, b, h=0.62):
+    """A five-bar field gate between two points, braced, on taller posts."""
     for q in (a, b):
-        box((0.14, h + 0.25, 0.14), (q[0], (h + 0.25) / 2 - 0.05, q[1]), 0x7a5a3a)
-    for k in range(3):
-        y = 0.14 + 0.17 * k
-        strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0x9a7b55)
+        box((0.18, h + 0.4, 0.18), (q[0], (h + 0.4) / 2 - 0.1, q[1]), RIBBON_POST)
+    for y in (0.14, 0.3, 0.46, 0.6):
+        strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0xf8f8fb)
+    strut((a[0], 0.14, a[1]), (b[0], 0.6, b[1]), 0.09, 0xf8f8fb)
 
 @piece(1.0)
 def sheepfold():
     FX, FZ, R = 1.4, 0.0, 1.5                       # the fold: centre, radius
-    N = 12
+    N = 10
     ring = [(FX + R * math.cos(2 * math.pi * k / N), FZ + R * math.sin(2 * math.pi * k / N)) for k in range(N + 1)]
     def still():
-        ribbon_wall(ring[4:] + ring[:4])                               # open toward +Z: the gate
-        ribbon_hurdle(ring[3], ring[4])
-        # the walls from the fold: up the hill, and along its foot both ways
+        ribbon_fence(ring[3:] + ring[:3], rails=(0.18, 0.36, 0.54))    # hurdles, open toward +Z: the gate
+        ribbon_gate(ring[2], ring[3])
+        # the fences from the fold: up the hill, and along its foot both ways
         # (short toward -Z: the sheep meadow is the next thing down the road)
-        ribbon_wall(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
-        ribbon_wall(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
-        ribbon_wall(((-7.4, 0.2), (-8.0, -5.5)))
-        ribbon_wall((ring[2], (1.1, 6.0), (0.6, 10.0)))
-        ribbon_wall((ring[10], (1.0, -5.5)))
+        ribbon_fence(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
+        ribbon_fence(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
+        ribbon_fence(((-7.4, 0.2), (-8.0, -5.5)))
+        ribbon_fence((ring[1], (1.1, 4.6)))
+        ribbon_gate((1.1, 4.6), (1.0, 5.7))
+        ribbon_fence(((1.0, 5.7), (0.6, 10.0)))
+        ribbon_fence((ring[9], (1.0, -5.5)))
         # a hay rack in the fold, a trough outside it
         for sz in (-1, 1):
             box((0.1, 0.6, 0.1), (FX - 0.6, 0.3, FZ - 0.5 + sz * 0.4), 0x7a5a3a)
