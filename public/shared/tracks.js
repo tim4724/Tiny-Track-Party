@@ -1511,8 +1511,8 @@ export const TRACKS = {
     // ore riding the line from the adit to the shaft; grey spoil heaps at
     // the shaft, timber supports round the
     // lap. The gold camp's boomtown lines the north loop's top, its saloon's
-    // sign swinging; the tailings dump fills the inner loop, a cart tipping
-    // at its top; the miners' camp stands before the canyon. The west of
+    // sign swinging; the tailings dump stands by the headframe it came out
+    // of, a cart tipping at its top; the miners' camp stands before the canyon. The west of
     // the map is a range of mountains and mesas the descent cuts through.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
@@ -1543,11 +1543,12 @@ export const TRACKS = {
       // ropes over the road to the tower beside the adit
       { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 },
       // the boomtown down the north loop's top, both sides of the road; the
-      // tailings dump filling the inner loop; the miners' camp before the
+      // tailings dump by the headframe (the inner loop left it no room off
+      // the road); the miners' camp before the
       // canyon, the left there left open for the sight line to the mill
       { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
-      { model: 'set-tailings-dump', u: 0.6152, lat: -11.2 },
+      { model: 'set-tailings-dump', u: 0.195, lat: 18.15, yaw: 180 },
       { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
@@ -1875,7 +1876,6 @@ export const TRACKS = {
       { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
       { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
       { model: 'set-play-rug', u: 0.885, lat: 0, yaw: 90 },
-      { model: 'set-room-train-gauntlet', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
@@ -1944,7 +1944,6 @@ export const TRACKS = {
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 },
       { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
-      { model: 'set-room-train-skyline', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }

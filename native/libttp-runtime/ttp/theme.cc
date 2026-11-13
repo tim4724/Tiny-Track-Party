@@ -558,13 +558,9 @@ Theme canyonTheme() {
   // Saguaros as the signature silhouette, prickly pear as the low accent:
   // the set pieces' own cacti (set_prototypes.py saguaro), in their dusty
   // grey-green, so a track's scatter and its stands are one family.
-  // The spring bloom (set_prototypes.py canyon_bloom), low mats of purple
-  // verbena and yellow marigold, grows among them, in patches as a stand of
-  // cacti does: the desert's second colour beside sand, rock and kerb that
-  // are all one orange.
   ScenerySpec& s = t.scenery;
-  s.trees = { { "set-cactus-saguaro", 0.3f, 0.8f, 0.35f }, { "set-cactus-spear", 0.22f, 0.75f, 0.4f },
-              { "set-cactus-pear", 0.2f, 0.9f, 0.5f }, { "set-canyon-bloom", 0.28f, 1.0f, 0.5f } };
+  s.trees = { { "set-cactus-saguaro", 0.4f, 0.8f, 0.35f }, { "set-cactus-spear", 0.32f, 0.75f, 0.4f },
+              { "set-cactus-pear", 0.28f, 0.9f, 0.5f } };
   s.hasBush = false;
   s.mixTree = 0.4f; s.mixBush = 0.4f;
   s.rocks = { 0xc07a55, 0xa8623f, 0xd39a70 };  // rust -> dusty ochre family

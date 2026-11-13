@@ -1788,7 +1788,7 @@ constexpr SetDef kSet_gulch[] = {
   { "set-stamp-mill", 0x1.47ae147ae147bp-8, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-north", 0x1.6b851eb851eb8p-2, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-south", 0x1.6b851eb851eb8p-2, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-tailings-dump", 0x1.3afb7e90ff972p-1, -0x1.6666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-tailings-dump", 0x1.8f5c28f5c28f6p-3, 0x1.2266666666666p+4, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-miners-camp", 0x1.91eb851eb851fp-1, 0x1.099999999999ap+3, -0x1.ep+4, 0x0p+0, 0x1.3333333333333p+0, 1 },
 };
 constexpr LandDef kLand_gulch[] = {
@@ -2235,7 +2235,6 @@ constexpr SetDef kSet_gauntlet[] = {
   { "set-tourney-camp", 0x1.8624dd2f1a9fcp-1, -0x1.3p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-windup-knights", 0x1.d70a3d70a3d71p-1, 0x1.f333333333333p+1, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-play-rug", 0x1.c51eb851eb852p-1, 0x0p+0, 0x1.68p+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-room-train-gauntlet", 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-play-sunbeam", 0x1.645a1cac08312p-4, 0x1.e3d70a3d70a3dp+4, -0x1.22b851eb851ecp+6, 0x0p+0, 0x1p+0, 1 },
 };
 
@@ -2334,7 +2333,6 @@ constexpr SetDef kSet_skyline[] = {
   { "set-block-street-west", 0x1.6b851eb851eb8p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-block-towers", 0x1.89374bc6a7efap-1, -0x1.ep+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-windup-robots", 0x1.eb851eb851eb8p-5, -0x1.f333333333333p+1, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-room-train-skyline", 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-play-sunbeam", 0x1.6666666666666p-4, -0x1.863d70a3d70a4p+5, 0x1.523d70a3d70a4p+6, 0x0p+0, 0x1p+0, 1 },
 };
 
@@ -2532,9 +2530,9 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 19, kLand_crag, 10 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 45, kLand_sidewinder, 18 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 21, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, kKickers_skysnake, 2, kSet_skysnake, 7, kLand_skysnake, 3 },
-  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 20, nullptr, 0 },
+  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 19, nullptr, 0 },
   { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 14, nullptr, 0 },
-  { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 12, nullptr, 0 },
+  { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 11, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "gym", "Gym", nullptr, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3, kKickers_gym, 1, nullptr, 0, nullptr, 0 },
@@ -2547,8 +2545,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-gallery-loop", "set-boomtown-north", "set-boomtown-south", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-glacier-forest-a", "set-headframe", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-mill-wood-b", "set-mill-wood-c", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-ranch-herd", "set-ranch-herd-east", "set-room-train-gauntlet", "set-room-train-helix", "set-room-train-skyline", "set-room-train-skysnake", "set-snowman-field", "set-stamp-mill", "set-tailings-dump", "set-tank-train", "set-tree-apple", "set-village-fete", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
-constexpr int TTP_LITE_MODEL_COUNT = 71;
+constexpr const char* TTP_LITE_MODELS[] = { "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-gallery-loop", "set-boomtown-north", "set-boomtown-south", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-glacier-forest-a", "set-headframe", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wheel", "set-mill-wood", "set-mill-wood-b", "set-mill-wood-c", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-penguin-chute", "set-penguin-group", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-ranch-herd", "set-ranch-herd-east", "set-room-train-helix", "set-room-train-skysnake", "set-snowman-field", "set-stamp-mill", "set-tailings-dump", "set-tank-train", "set-tree-apple", "set-village-fete", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
+constexpr int TTP_LITE_MODEL_COUNT = 69;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.

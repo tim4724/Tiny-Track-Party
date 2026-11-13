@@ -11476,17 +11476,6 @@ def canyon_mat(at, r, h, color, row=None, yaw=0.0, segs=6):
     return rowed(o, row) if row is not None else o
 
 @piece(1.0)
-def canyon_bloom():
-    with plain_parts():
-        for i, (x, z, r, h, c, row) in enumerate((
-                (-0.6, -0.5, 0.62, 0.3, 'purple', 6), (0.35, -0.75, 0.48, 0.26, 'purple', 14),
-                (-0.1, 0.55, 0.55, 0.28, 'purple', 10), (0.85, 0.35, 0.36, 0.44, 'yellow', 4),
-                (-0.95, 0.4, 0.32, 0.4, 'yellow', 8), (0.2, -0.05, 0.3, 0.48, 'yellow', 2),
-                (1.05, -0.55, 0.3, 0.2, 'sage', 6))):
-            canyon_mat((x, 0.0, z), r, h, c, row, yaw=0.7 * i)
-    join_still('bloom')
-
-@piece(1.0)
 def canyon_sage():
     with plain_parts():
         for i, (z, r, h, c, row) in enumerate(((-1.2, 0.5, 0.42, 'sage', 2), (-0.35, 0.62, 0.52, 'sage', 8),
@@ -12143,7 +12132,7 @@ def boomtown_south():
 
 @piece(1.0)
 def tailings_dump():
-    # Gulch: the mine's tailings dump filling the inner loop: spoil tipped
+    # Gulch: the mine's tailings dump beside the headframe: spoil tipped
     # in four terraces, each a steep face of rust over a bench of ochre (the
     # mill's waste weathers in bands), on a ragged outline, its foot sunk in
     # the ground (geometry: the loop's middle is held under the deck cap, so
@@ -13844,9 +13833,13 @@ def sidewinder_loco(at):
 def tank_train():
     # each knoll a short ridge of rock along the road (its len along x),
     # broken off toward it, the crest of the low ridge the road cuts through
-    # (tracks.js sidewinder `land`)
+    # (tracks.js sidewinder `land`), and a spur of it running back along the
+    # line from each mouth, high and broad enough that a car turning for
+    # home inside it never shows through its top
     knolls = massif_height(((0.0, -13.0, 6.0, 5.2, 4.4, 0.5 * math.pi + 0.15, 0.8, 9.0),
-                            (0.6, 13.0, 5.6, 5.0, 4.2, 0.5 * math.pi - 0.2, 0.8, 7.0)),
+                            (0.6, 13.0, 5.6, 5.0, 4.2, 0.5 * math.pi - 0.2, 0.8, 7.0),
+                            (0.0, -14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0),
+                            (0.3, 14.5, 7.4, 4.5, 2.5, 0.0, 0.8, 7.0)),
                            rough=0.6, seed=4.4, warp=0.6)
     strata_massif(knolls, -12.0, 12.0, -20.0, 20.0, [b for b in CANYON_STRATA if b[0] < 6.5], step=2.0, tol=0.3,
                   summits=False)
@@ -13882,18 +13875,25 @@ def tank_train():
     # the train: a diesel and eight tank cars (a unit train long enough to be
     # on the bridge most of the time a racer passes), out of the right-hand
     # tunnel (-Z), over the road and into the left-hand one, home under the
-    # ground
-    loop = [(0.0, Y, -15.0), (0.0, Y, 15.0), (0.0, -6.0, 15.0), (0.0, -6.0, -15.0)]
+    # ground. Each car stays level the whole way round (f=1): it drops
+    # straight down inside the spur once it is clear of the mouth (ZC, its
+    # tail still in the portal), so it never turns where it could be seen.
+    ZC = 12.1
+    loop = [(0.0, Y, -ZC), (0.0, Y, ZC), (0.0, -6.0, ZC), (0.0, -6.0, -ZC)]
     for i, p in enumerate(loop):
         marker('path_tank_%d' % i, p)
     span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
     period = span / 3.2                                          # a freight's walking pace over a bridge
     gap = 4.3 / span
     P0 = loop[0]
-    with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0):
+    # A traveller faces its path with its node's +X, and these are built
+    # along +Z: the turn names the node's frame (+X along the car, ahead)
+    # and leaves the parts where they were built.
+    AHEAD = -math.pi / 2
+    with animated('anim_path:c=tank:p=%.1f:o=0.0:f=1#0' % period, P0, yaw=AHEAD):
         sidewinder_loco(P0)
     for n in range(1, 9):
-        with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0):
+        with animated('anim_path:c=tank:p=%.1f:o=%.4f:f=1#%d' % (period, (-n * gap) % 1.0, n), P0, yaw=AHEAD):
             sidewinder_tank_car(P0, 'white' if n % 2 else 'red')
 
 lite_too('tank-train')
@@ -17478,13 +17478,13 @@ def board_snake():
 # the train runs well inside them. Per track: where tracks.js stands the piece
 # (its line at u 0, heading +z, so the frame is the world's moved there), the
 # centreline's box (x0, x1, z0, z1), and whether the race runs up the box's
-# west side (+1, turning east) or its east side (-1, turning west).
+# west side (+1, turning east) or its east side (-1, turning west). Not every
+# room has one: Skyline's town runs its own train, and on Gauntlet everything
+# belongs to the tourney.
 ROOM_TRAIN_MARGIN, ROOM_TRAIN_GROW, ROOM_TRAIN_SPEED = 22.0, 1.5, 6.0
 ROOM_TRAIN = {
     'skysnake': ((0.0, 9.02), (0.0, 81.6, -14.4, 80.04), 1),
-    'skyline': ((0.0, 8.53), (-71.5, 0.0, -8.4, 56.0), -1),
     'helix': ((0.0, 8.50), (0.0, 68.7, -14.4, 64.4), 1),
-    'gauntlet': ((0.0, 0.0), (0.0, 106.1, -24.0, 36.4), 1),
 }
 
 def room_loop(x0, x1, z0, z1, r, step):
