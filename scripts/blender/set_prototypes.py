@@ -9867,7 +9867,7 @@ def avalanche_gallery_loop():
     before = set(bpy.context.scene.objects)
     hx, _, hz = on_road(ROAD_C, 2, -5.4, 0)
     mound(0.75, hx, hz, 1.1, 1.1, 1.8, color=0xf3f7fb, rings=4, segs=12, sink=0.3, shape=1.2)
-    for (bx, bz, bl) in ((x, z - 0.9, 3.9), (x + 0.2, z - 6.2, 4.6)):
+    for (bx, bz, bl) in ((x, z - 0.7, 6.3), (x + 0.2, z - 7.0, 4.6)):
         mound(0.42, bx, bz, 2.3, 2.3, bl / 2 + 1.2, color=0xf3f7fb, rings=4, segs=12, sink=0.3, shape=0.7)
     # The depot's lane: how the machines get onto the road. A ploughed strip
     # from under them back along the verge and down to the kerb behind them
@@ -9911,10 +9911,18 @@ def avalanche_gallery_loop():
               (px_ + (ex_ - px_) * (f + 0.1), 0.9 + 2.1 * (f + 0.1), pz_ + (ez_ - pz_) * (f + 0.1)), 0.17, 0xfff6eb)
     group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH' and o.get('anim') is None],
           'drape_plough')
-    with animated('anim_drape+bob:h=0.012:p=0.21#blower', (x, 0.0, z - 0.9)):
+    # The blower WORKS: it eats forward into the heap and backs off down its
+    # bed again and again, its rotor turning and its jet riding with it (a
+    # path it keeps its facing on, `f=0`, level on the ground sampled along
+    # it; draped, a path pitches its traveller to the bank): idling with a
+    # shiver, nobody at the wheel of a car saw it move.
+    g0, g1 = face_ground(FACE_C, 0, 5.6), face_ground(FACE_C, 1, 5.6)
+    for k, d in enumerate((1.4, 0.6, -0.2, -1.0, -0.2, 0.6)):
+        marker('path_blow_%d' % k, (x + tx * d, g0 + (g1 - g0) * (d - 0.9), z - 0.9 + tz * d))
+    with animated('anim_path:c=blow:p=5:f=0#blower', (x, 0.0, z - 0.9)):
         rotary_plough(x, z - 0.9, yw, 'anim_spin:a=x:w=5#rotor', k=1.35, y=0.12)
-    with animated('anim_drape+bob:h=0.01:p=0.26#gritter', (x + 0.2, 0.0, z - 6.2)):
-        plough_truck(x + 0.2, z - 6.2, yw, k=1.3, y=0.12)
+    with animated('anim_drape+bob:h=0.01:p=0.26#gritter', (x + 0.2, 0.0, z - 7.0)):
+        plough_truck(x + 0.2, z - 7.0, yw, k=1.3, y=0.12)
 
 # ====================================================================================
 # BACKYARD
