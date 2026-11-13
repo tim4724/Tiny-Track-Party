@@ -389,18 +389,6 @@ export const SET_GROUND = {
   // Pretzel's den camp on a bank of its own, the same shape.
   // Tidepool's knoll at the lap's waist, its rock standing on its road side.
   'set-tidepool-knoll': [{ kind: 'mound', x: -3, h: 4.5, r: 10, r1: 12, rz: 13, shape: 1.3 }],
-  // Cove's stockade on its own hill above the S. The island's flank falls
-  // about 0.4 a unit across the yard toward the road; this ridge, its spine
-  // square to that fall by the palisade's road-side corner, adds to it so
-  // the sum is a crest level to half a unit under the fort (a probe of the
-  // drawn land, not a source), falling steeply to the verge before the gate
-  // (+X). A ridge because it adds: a mound takes the land's place and left a
-  // trough behind the fort. `near` because the verge band then draws it this
-  // close to the road; the grid's cells here are pulled down by the deck cap.
-  'set-pirate-stockade': [
-    { kind: 'ridge', yaw: -34.5, x: 4.58, z: 0.49, len: 10, r: 14, h: 5.4, near: 2 },
-    { kind: 'paint', yaw: -34.5, x: 1.2, z: 0.5, len: 14, r: 10, w: 4, tint: 0x7ab878 }
-  ],
   // Wash's creek, the stretch by the road: the bed is the low line the raised
   // land stands over between its cut banks, the wash's own land carrying on
   // from both ends (turned 90 so the spine runs along the creek's X).
@@ -565,11 +553,10 @@ export const TRACKS = {
     // from the jungle to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
     // the wharf along its black sand where the longboat sails out to the
-    // ship riding at anchor and back. Outside the S the crew's stockade
-    // stands on its own hill (SET_GROUND), its guns trained down across the
-    // road on Skull Rock's cove, a path worn down to the road. The old
-    // wreck lies in the surf of the west bay's black sand (the second
-    // `shore`), its ribs out of the water, palms along the bay past it. The
+    // ship riding at anchor and back; a little past her their stockade
+    // stands on the sand, its jetty out into the bay. The old wreck lies in
+    // the surf of the west bay's black sand (the second `shore`), its ribs
+    // out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
     // so the ship shows over it down the straight.
     // The sea cannot come to the start: the curve is polar about the origin,
@@ -581,10 +568,11 @@ export const TRACKS = {
       // the road round the S's first bend
       { model: 'set-jungle-grove', u: 0.56, lat: -10, yaw: 180 },
       { model: 'set-jetty', u: 0.44, lat: 11.5 },
+      // the crew's camp on the sand a little past the ship, on its rise
+      { model: 'set-pirate-stockade', u: 0.54, lat: 12, y: 0.72 },
       { model: 'set-shipwreck-ribs', u: 0.8, lat: 19, yaw: 20, y: -0.35, scale: 1.25 },
       { model: 'set-pirate-camp', u: 0.09, lat: 10.0, yaw: -20, y: 0.9 },
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
-      { model: 'set-pirate-stockade', u: 0.69, lat: -15, yaw: 180 },
       // the cave levels nothing (its floor drapes) and the land's 9 u chords
       // rise under it, so it is lifted onto them
       { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.9 },
@@ -632,6 +620,12 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.58, lat: -14, len: 44, r: 10, h: 5, top: 0.25, near: 0.5 },
       { kind: 'paint', u: 0.58, lat: -14, len: 44, r: 7, w: 4, tint: 0x5f9f5f },
       { kind: 'shore', u: 0.795, lat: 17, len: 24, r: 18 },
+      // the stockade's rise on the anchorage's sand, so the camp stands at
+      // the road's height (on the plain it hid behind the kerb), and the bay
+      // brought in past it, so its jetty reaches the water: a rise falls to
+      // the sea over the last five units short of it (kBeachRamp)
+      { kind: 'ridge', u: 0.54, lat: 13, len: 14, r: 16, h: 0.92, top: 0.6, near: 0.4, w: 1 },
+      { kind: 'shore', u: 0.54, lat: 19.5, len: 20, r: 24 },
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },

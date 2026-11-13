@@ -2910,113 +2910,139 @@ def pirate_lookout():
 
 @piece(1.0)
 def pirate_stockade():
-    # Cove: the crew's fort on its own hill above the S, on the outside of
-    # the right-hander that the run down from the anchorage drives at, looking
-    # out over the road on Skull Rock's cove: a palisade of sharpened logs
-    # round the hilltop, the gate in its road face standing open under the
-    # Jolly Roger, two cannons run out through gaps either side of it, the
-    # log blockhouse inside, and a lookout platform on legs at its back
-    # corner, roofed in thatch with the crew's flag over it; a worn path with
-    # log steps comes down the hill from the gate to the road. Round 13 stood
-    # the same fort on a levelled yard of sand at the island's foot ("Not
-    # sure if it should be on a mountain or something? Weird position").
-    # The hill is the piece's own ground (SET_GROUND, tracks.js): a ridge
-    # with a flat crest the fort stands on, authored `near` so the verge band
-    # draws it at its own fine resolution (a mound there is drawn by the 9 u
-    # grid, whose cells by the road the deck cap pulls down: its crest came
-    # out as a slope four units across the yard). The whole fort DRAPES,
-    # built from the plain up, so every log stands on the crest as it is
-    # drawn. Chunky, at a fort's size beside a car; no one about. +X is the
-    # road.
+    # Cove: the crew's camp on the black sand of the anchorage, a little past
+    # where the ship rides, where they land from her by rowboat: a stockade
+    # on the flat beach, its palisade of sharpened logs standing level, its
+    # sea wall and gate to the water, a timber jetty from the gate across the
+    # sand's fall and out into the bay, the small boat tied at its end and the
+    # big one pulled up the sand beside it. In the sea wall a cannon run out to sea, in the
+    # end wall toward the ship another trained along the shore on her
+    # anchorage, and the thatched lookout at that corner, the Jolly Roger
+    # over it and over the gate. On the land side a low row of stakes, so the
+    # road sees into the yard as it passes: the log hut, the cold fire ring,
+    # the stores. Rounds 12 to 14 put a temple and then this fort on the
+    # island's flank and on a hill of its own over the S, and the user found
+    # each weird; the user chose this spot. It stands on the beach rise
+    # tracks.js lays here, at the road's height; the sand falls to the sea
+    # past the sea wall. +X is the road, +Z the way the cars go; the ship
+    # lies back along the shore (-Z).
     wood, dark, plank = 0x8a6a46, 0x6e5b3a, 0xb06041
-    X0, X1, Z0, Z1 = -6.0, 2.4, -4.6, 4.6          # the palisade's line
-    GATE, GUNS = 1.2, (-3.0, 3.0)                    # the gate's half width, the guns' gaps along the front
-    def logs(a, b, gaps=()):
+    X0, X1, Z0, Z1 = -3.6, 2.9, -4.4, 4.4            # the palisade's line
+    GZ, GW = -1.4, 1.0                                 # the gate in the sea wall, its half width
+    SEA_Y = SEA - 0.72                                 # the sea's surface, under the rise the camp stands on
+    def logs(a, b, gaps=(), tall=1.55):
         n = max(1, int(round(math.dist(a, b) / 0.36)))
         for i in range(n):
             t = (i + 0.5) / n
             x, z = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
-            if any(abs(z - g) < w for g, w in gaps):
+            if any(math.hypot(x - gx, z - gz) < w for gx, gz, w in gaps):
                 continue
-            h = 1.55 + 0.2 * jitter(i, int(x * 7 + z * 13), 3.3)
+            h = tall + 0.18 * tall * jitter(i, int(x * 7 + z * 13), 3.3)
             log = 'bark' if i % 3 else dark                 # weathered grey-brown, a darker one now and then
             cyl(0.18, h + 0.4, (x, -0.4, z), log, segs=6, stem=True)
-            cyl(0.18, 0.34, (x, h, z), log, r2=0.02, segs=6, stem=True)
-    def fort():
-        logs((X1, Z0), (X1, Z1), gaps=((0.0, GATE), (GUNS[0], 0.42), (GUNS[1], 0.42)))
-        logs((X0, Z0), (X0, Z1))
-        logs((X0, Z0), (X1, Z0))
-        logs((X0, Z1), (X1, Z1))
-        for sz in (-1, 1):                           # the rails the logs are pinned to, inside
-            beam((X1 - 0.25, 1.1, sz * (GATE + 0.1)), (X1 - 0.25, 1.1, sz * Z1), 0.14, dark)
-        beam((X0 + 0.25, 1.1, Z0), (X0 + 0.25, 1.1, Z1), 0.14, dark)
-        # the gate: tall posts, a log across them, its two leaves swung in
+            cyl(0.18, 0.3, (x, h, z), log, r2=0.02, segs=6, stem=True)
+    PORT = (X0 + 0.5, Z0)                              # the end wall's gun port, by the sea
+    logs((X0, Z0), (X0, Z1), gaps=((X0, GZ, GW), (X0, 2.0, 0.42)))
+    logs((X0, Z0), (X1, Z0), gaps=((PORT[0], PORT[1], 0.42),))
+    logs((X0, Z1), (X1, Z1))
+    logs((X1, Z0), (X1, Z1), gaps=((X1, 0.8, 0.8),), tall=0.55)    # the land side: stakes, a way in
+    beam((X0 + 0.25, 1.1, Z0), (X0 + 0.25, 1.1, GZ - GW - 0.1), 0.14, dark)   # the rails, inside
+    beam((X0 + 0.25, 1.1, GZ + GW + 0.1), (X0 + 0.25, 1.1, Z1), 0.14, dark)
+    for sz, z in ((-1, Z0), (1, Z1)):
+        beam((X0, 1.1, z - sz * 0.25), (X1, 1.1, z - sz * 0.25), 0.14, dark)
+    # the gate to the landing: tall posts, a log across them, its leaves
+    # swung in, the Jolly Roger over it
+    for sz in (-1, 1):
+        cyl(0.24, 2.9, (X0, -0.4, GZ + sz * (GW + 0.05)), dark, segs=6, stem=True)
+    beam((X0, 2.3, GZ - GW - 0.35), (X0, 2.3, GZ + GW + 0.35), 0.3, wood)
+    for sz in (-1, 1):
+        box((1.0, 1.6, 0.14), (X0 + 0.45, 0.8, GZ + sz * (GW - 0.3)), plank, yaw=-sz * 0.75)
+    kit_flag('flag-pirate-high', (X0 - 0.05, 2.45, GZ), math.radians(90), 0.55, 'anim_sway:a=x:d=24:p=2.2#gate')
+    # the guns: one run out through the sea wall, one along the shore
+    # through the end wall toward the ship's anchorage
+    kit('pirate', 'cannon', (X0 + 1.0, 0, 2.0), yaw=math.radians(-90), scale=0.6)
+    kit('pirate', 'cannon', (PORT[0], 0, Z0 + 1.1), yaw=math.radians(180), scale=0.6)
+    # the lookout at that corner: four legs braced, a plank platform with a
+    # rail, a thatch over it, the flag on top
+    LX, LZ, P0 = X0 + 1.4, Z0 + 1.5, 3.4
+    for sx in (-1, 1):
         for sz in (-1, 1):
-            cyl(0.24, 2.9, (X1, -0.4, sz * (GATE + 0.05)), dark, segs=6, stem=True)
-        beam((X1, 2.3, -GATE - 0.35), (X1, 2.3, GATE + 0.35), 0.3, wood)
+            beam((LX + sx * 0.95, -0.4, LZ + sz * 0.95), (LX + sx * 0.7, P0, LZ + sz * 0.7), 0.22, wood)
+    for sx in (-1, 1):
+        beam((LX + sx * 0.9, 0.4, LZ - 0.9), (LX + sx * 0.75, P0 - 0.4, LZ + 0.75), 0.13, dark)
+        beam((LX - 0.9, 0.4, LZ + sx * 0.9), (LX + 0.75, P0 - 0.4, LZ + sx * 0.75), 0.13, dark)
+    box((1.9, 0.2, 1.9), (LX, P0 + 0.1, LZ), plank)
+    for k in range(4):
+        a = k * math.pi / 2 + math.pi / 4
+        box((0.14, 0.8, 0.14), (LX + 0.85 * math.cos(a), P0 + 0.6, LZ + 0.85 * math.sin(a)), wood)
+    for sx in (-1, 1):
+        beam((LX + sx * 0.85, P0 + 0.9, LZ - 0.85), (LX + sx * 0.85, P0 + 0.9, LZ + 0.85), 0.1, wood)
+    cyl(1.35, 0.8, (LX, P0 + 1.0, LZ), 0xd9b054, r2=0.1, segs=8)             # the thatch
+    for i in range(8):                                                       # the ladder up its yard side
+        t = (i + 0.5) / 8
+        box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.15 - 0.15 * t), dark)
+    for dx in (0.0, 0.6):
+        beam((LX + dx, -0.4, LZ + 1.15), (LX + dx, P0, LZ + 1.0), 0.1, wood)
+    kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.0#tower')
+    # the log hut on the land side of the yard, its door to the yard
+    BX, BZ, BW, BD, BH = 1.4, 2.0, 2.2, 2.8, 1.4
+    box((BW - 0.2, BH + 0.4, BD - 0.2), (BX, (BH - 0.4) / 2, BZ), 0x6e4a32)
+    for j in range(4):
+        y = 0.22 + j * (BH - 0.25) / 3.5
+        for sx in (-1, 1):
+            rod((BX + sx * (BW / 2 - 0.15), y, BZ - BD / 2 - 0.25), (BX + sx * (BW / 2 - 0.15), y, BZ + BD / 2 + 0.25),
+                0.17, wood if (j + sx) % 2 else dark)
         for sz in (-1, 1):
-            box((1.15, 1.6, 0.14), (X1 - 0.5, 0.8, sz * (GATE - 0.35)), plank, yaw=sz * 0.75)
-        # the guns run out through their gaps, trained down over the road
-        for g in GUNS:
-            kit('pirate', 'cannon', (X1 - 0.35, 0, g), yaw=math.radians(90), scale=0.6)
-        # the blockhouse: log walls on their chinking, a plank roof, its door to the yard
-        BX, BZ, BW, BD, BH = -3.6, 1.6, 2.6, 3.2, 1.5
-        box((BW - 0.2, BH + 0.3, BD - 0.2), (BX, (BH - 0.3) / 2, BZ), 0x6e4a32)
-        for j in range(4):
-            y = 0.22 + j * (BH - 0.25) / 3.5
-            for sx in (-1, 1):
-                rod((BX + sx * (BW / 2 - 0.15), y, BZ - BD / 2 - 0.25), (BX + sx * (BW / 2 - 0.15), y, BZ + BD / 2 + 0.25),
-                    0.17, wood if (j + sx) % 2 else dark)
-            for sz in (-1, 1):
-                rod((BX - BW / 2 - 0.25, y + 0.17, BZ + sz * (BD / 2 - 0.15)),
-                    (BX + BW / 2 + 0.25, y + 0.17, BZ + sz * (BD / 2 - 0.15)), 0.17, dark if (j + sz) % 2 else wood)
-        for sz in (-1, 1):
-            box((BW + 0.7, 0.16, BD / 2 + 0.45), (BX, BH + 0.42, BZ + sz * (BD / 4 + 0.15)), plank, pitch=-sz * 0.5)
-        box((0.1, 1.1, 0.8), (BX + BW / 2 + 0.02, 0.6, BZ - 0.6), 0x38383d)
-        # the stores by the gate
-        for (x, z, yw) in ((X1 - 1.2, -2.0, 0.3), (X1 - 1.7, -2.5, 1.1), (X1 - 1.3, 2.0, 0.6)):
-            kit('pirate', 'barrel', (x, 0, z), yaw=yw, scale=0.6)
-        kit('pirate', 'crate', (X1 - 2.3, 0, -3.4), yaw=0.25, scale=0.9)
-        # the lookout at the back corner: four legs braced, a plank platform
-        # with a rail, a thatch over it
-        LX, LZ, P0 = X0 + 1.3, Z0 + 1.3, 3.4
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                beam((LX + sx * 0.95, -0.4, LZ + sz * 0.95), (LX + sx * 0.7, P0, LZ + sz * 0.7), 0.22, wood)
-        for sx in (-1, 1):
-            beam((LX + sx * 0.9, 0.4, LZ - 0.9), (LX + sx * 0.75, P0 - 0.4, LZ + 0.75), 0.13, dark)
-            beam((LX - 0.9, 0.4, LZ + sx * 0.9), (LX + 0.75, P0 - 0.4, LZ + sx * 0.75), 0.13, dark)
-        box((1.9, 0.2, 1.9), (LX, P0 + 0.1, LZ), plank)
-        for k in range(4):
-            a = k * math.pi / 2 + math.pi / 4
-            box((0.14, 0.8, 0.14), (LX + 0.85 * math.cos(a), P0 + 0.6, LZ + 0.85 * math.sin(a)), wood)
-        for sx in (-1, 1):
-            beam((LX + sx * 0.85, P0 + 0.9, LZ - 0.85), (LX + sx * 0.85, P0 + 0.9, LZ + 0.85), 0.1, wood)
-        cyl(1.35, 0.8, (LX, P0 + 1.0, LZ), 0xd9b054, r2=0.1, segs=8)             # the thatch
-        for i in range(8):                                                       # the ladder up its yard side
-            t = (i + 0.5) / 8
-            box((0.08, 0.08, 0.7), (LX + 1.15 - 0.15 * t, -0.4 + (P0 + 0.4) * t, LZ + 0.3), dark)
-        for dz in (0.0, 0.6):
-            beam((LX + 1.15, -0.4, LZ + dz), (LX + 1.0, P0, LZ + dz), 0.1, wood)
-        # the path the crew have worn down the hill from the gate to the
-        # road, sand-coloured earth with log steps across it
-        rows = []
+            rod((BX - BW / 2 - 0.25, y + 0.17, BZ + sz * (BD / 2 - 0.15)),
+                (BX + BW / 2 + 0.25, y + 0.17, BZ + sz * (BD / 2 - 0.15)), 0.17, dark if (j + sz) % 2 else wood)
+    RH = 0.75                                          # the roof's rise over the walls
+    run = math.hypot(BW / 2 + 0.35, RH)
+    for sx in (-1, 1):                                 # two plank slabs meeting over the ridge, along Z
+        box((run, 0.16, BD + 0.7), (BX + sx * (BW / 4 + 0.17), BH + RH / 2 + 0.05, BZ), plank,
+            roll=sx * math.atan2(RH, BW / 2 + 0.35))
+    for sz in (-1, 1):                                 # its gables, filled in the walls' log brown
+        poly([(BX - BW / 2 - 0.1, BH - 0.05, BZ + sz * (BD / 2 - 0.05)), (BX + BW / 2 + 0.1, BH - 0.05, BZ + sz * (BD / 2 - 0.05)),
+              (BX, BH + RH, BZ + sz * (BD / 2 - 0.05))], [(0, 1, 2)], 0x6e4a32)
+    box((0.1, 1.0, 0.75), (BX - BW / 2 - 0.02, 0.55, BZ - 0.4), 0x38383d)
+    # the cold fire ring in the yard: its stones, the charred ends of the
+    # last night's logs crossed in it
+    FX, FZ = -0.8, 0.6
+    for k in range(8):
+        a = k / 8 * 2 * math.pi
+        box((0.26, 0.18, 0.22), (FX + 0.5 * math.cos(a), 0.09, FZ + 0.5 * math.sin(a)), 'grey', yaw=-a)
+    for k, a in enumerate((0.3, 1.4, 2.5)):
+        rod((FX - 0.38 * math.cos(a), 0.08, FZ - 0.38 * math.sin(a)), (FX + 0.38 * math.cos(a), 0.12 + 0.03 * k,
+            FZ + 0.38 * math.sin(a)), 0.07, 'dark')
+    # the stores by the gate, inside
+    for (x, z, yw) in ((X0 + 0.9, GZ - 1.6, 0.3), (X0 + 1.5, GZ - 2.2, 1.1), (X0 + 1.0, GZ + 1.6, 0.6)):
+        kit('pirate', 'barrel', (x, 0, z), yaw=yw, scale=0.5)
+    kit('pirate', 'crate', (X1 - 0.8, 0, -2.6), yaw=0.25, scale=0.7)
+    kit('pirate', 'crate-bottles', (X1 - 0.9, 0, -1.6), yaw=-0.3, scale=0.55)
+    # the jetty from the gate out over the sand's fall into the sea: planks
+    # across on two stringers, piles down into the sea bed at both edges, a
+    # bollard at its end, a coil of rope and a crate on it
+    J0, J1, JW, D = X0 - 0.1, -17.6, 0.7, 0.12
+    n = int((J0 - J1) / 0.4)
+    for k in range(n):
+        box((0.36, 0.12, 2 * JW), (J0 - 0.2 - k * 0.4, D, GZ), plank if k % 3 else 0x9a6a46)
+    for sz in (-1, 1):
+        box((J0 - J1, 0.18, 0.18), ((J0 + J1) / 2, D - 0.15, GZ + sz * (JW - 0.1)), wood)
         for k in range(8):
-            x = X1 - 0.4 + k * 0.85
-            w = 0.75 + 0.06 * jitter(k, 2, 5.0)
-            rows.append([(x, 0.05, z + 0.25 * math.sin(0.6 * k)) for z in (-w, 0.0, w)])
-        for o in sheet(rows, lambda i, j, n: 'gravel', 'path'):
-            rowed(o, 16)
-        with plain_parts():
-            for k in range(2, 8):
-                x = X1 - 0.4 + k * 0.85
-                box((0.16, 0.14, 1.5), (x, 0.06, 0.25 * math.sin(0.6 * k)), 'bark', yaw=0.05 * jitter(k, 3, 5.0))
-        # the flags, on the gate and over the lookout: their poles drape
-        # with the fort, their cloths land with it (`drape`)
-        kit_flag('flag-pirate-high', (X1 + 0.05, 2.45, 0.0), math.radians(90), 0.55,
-                 'anim_drape+sway:a=x:d=24:p=2.2#gate')
-        kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_drape+sway:a=x:d=24:p=2.0#tower')
-    draped('fort', fort)
+            x = J0 - 0.6 - k * (J0 - J1 - 0.8) / 7
+            box((0.24, 2.6, 0.24), (x, D - 1.3, GZ + sz * (JW + 0.05)), dark)
+    box((0.3, 0.5, 0.3), (J1 + 0.25, D + 0.25, GZ + JW - 0.2), dark)
+    torus(0.24, 0.07, (J1 + 2.2, D + 0.12, GZ - 0.25), 0xcbb794)
+    kit('pirate', 'crate', (J1 + 0.9, D + 0.06, GZ - 0.25), yaw=0.4, scale=0.42)
+    # the small boat tied at the jetty's end, riding the swell
+    with animated('anim_bob:h=0.05:p=3.1#moored', (J1 - 0.2, SEA_Y, GZ - 1.45)):
+        kit('pirate', 'boat-row-small', (J1 + 0.6, SEA_Y - 0.15, GZ - 1.45), yaw=math.radians(90), scale=0.45)
+    join_still('camp')
+    # the big boat pulled up the sand beside the jetty, its bow up the beach,
+    # lying on the sand's fall to the sea as it is drawn
+    def beached():
+        kit('pirate', 'boat-row-large', (-6.0, -0.05, GZ - 2.2), yaw=math.radians(100), scale=0.45)
+    draped('boat', beached)
+    on_a_rise()
 
 
 # ---- round 6: Tidepool's Seal Rock and car park ----
