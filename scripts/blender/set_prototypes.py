@@ -2289,16 +2289,15 @@ def seafront_cafe():
 
 # ---- Driftwood's storm coast ----
 
-@piece(1.0)
-def lighthouse():
-    # Driftwood: the light on the point where the dune pass comes out onto
-    # the beach, at a real lighthouse's size (some 35 m: a car is 0.9): the
-    # round tower in the red and white of the gantry's posts on its stone
-    # foot, the gallery with its rail, and the lantern on top where the lamp
-    # turns behind the glazing bars; the keeper's cottage at its foot, its
-    # chimney smoking in its walled yard, and before them the station's
-    # flagstaff, its flag streaming in the wind. The pass drives straight at
-    # it for the length of the diagonal. +X is the road.
+def drift_light_station():
+    """Driftwood's light station, at a real lighthouse's size (some 35 m: a
+    car is 0.9): the round tower in the red and white of the gantry's posts
+    on its stone foot, the gallery with its rail, and the lantern on top
+    where the lamp turns behind the glazing bars; the keeper's cottage at
+    its foot, its chimney smoking in its walled yard, and before them the
+    station's flagstaff, its flag streaming in the wind. Built on level
+    ground at y = 0 (lighthouse_dune stands it on the dune's flat); +X is
+    the road."""
     white, red, dark = 0xfff6eb, 0xcf534f, 0x38383d
     TX, TZ = -1.7, 0.0                                   # the tower, back from the road
     H, R0, R1, B = 6.0, 0.8, 0.52, 0.3                    # its height, its radii, its foot's top
@@ -2366,7 +2365,6 @@ def lighthouse():
         box((WX - CX + 0.9, 0.36, 0.22), ((WX + CX - 0.9) / 2, 0.18, CZ + 2.4), 'grey')
         for dz in (-0.5, 0.5):
             box((0.26, 0.5, 0.26), (WX, 0.25, CZ + dz), 'grey')
-    figure((fx + 0.75, 0, CZ - 0.2), 0.0, shirt=0x6794d9, legs=0x38383d, hair=0xfff6eb)
     # the flagstaff before them: a white mast stayed to the ground, the
     # station's flag flying from its head across the piece (+Z), so the road
     # sees the cloth, and the storm cone hoisted on its halyard as one plain
@@ -2386,7 +2384,6 @@ def lighthouse():
     for (x, z, k, yw) in ((TX + 1.3, TZ - 0.9, 0.42, 0.4), (TX - 1.1, TZ - 1.0, 0.5, 1.3),
                           (TX + 1.2, TZ + 0.9, 0.3, 2.1), (MX + 0.5, MZ + 0.9, 0.28, 0.7)):
         boulder((x, 0, z), k=k, yaw=yw)
-    join_still('light')
 
 def net_hut(x, z, w, d, h, door, trim):
     """A fishermen's net hut, tall and narrow and tarred a warm brown, its
@@ -3720,47 +3717,504 @@ def driftwood_forts():
                 box((0.12, 0.08, 0.1), (0.5 + 0.28 * math.cos(a), 0.04, 0.0 + 0.28 * math.sin(a)), 'grey', yaw=-a)
     draped('ring', ring)
 
-# The dune at the end of Driftwood's pass that the lighthouse stands on:
-# sand on its faces, marram over its back (round 10, r10-drive-through).
-DUNE_BEDS = ((-0.6, 0.8, 'cream', -0.85), (0.8, 2.2, 'sage', -0.85), (2.2, 3.6, 'sage', -0.85),
-             (3.6, 5.4, 'sage', -0.85), (5.4, 7.2, 'sage', -0.85), (7.2, 8.4, 'sage', -0.85),
-             (8.4, 10.5, 'sage', -0.85))
+# ---- Driftwood: the lighthouse dune and the road's tunnel through it ----
+#
+# The pass ends in a great marram dune that the road runs through in a
+# tunnel: a stone vault under the dune, its mouths stone portals with
+# wingwalls holding back the sand of the cuttings, and the light station on
+# the dune's seaward shoulder. One piece placed astride the road (lat 0, yaw
+# 0); like Avalanche's galleries it follows the road, so it carries the
+# road's centreline in its own frame (DRIFT_ROAD: (x, z, nx, nz) a unit apart
+# along the road from t = DRIFT_T, (nx, nz) the road's left, the sea's
+# side), sampled from the built track at tracks.js's placement (u 0.7816):
+# re-sample if the road or the placement moves. The deck lies DRIFT_DECK
+# over the plain all through (gen-tracks.mjs levels its hump at the exit).
+DRIFT_ROAD = (  # u 0.7816 (the dune's anchor), t = -40 .. 24, a unit apart
+    (-4.009, -39.749, 0.9840, -0.1770), (-3.834, -38.764, 0.9846, -0.1739), (-3.662, -37.779, 0.9852, -0.1706), (-3.493, -36.794, 0.9858, -0.1672),
+    (-3.327, -35.807, 0.9864, -0.1635), (-3.166, -34.821, 0.9870, -0.1598), (-3.007, -33.833, 0.9875, -0.1565), (-2.853, -32.845, 0.9880, -0.1532),
+    (-2.701, -31.857, 0.9886, -0.1498), (-2.553, -30.868, 0.9891, -0.1463), (-2.408, -29.878, 0.9896, -0.1429), (-2.267, -28.888, 0.9901, -0.1394),
+    (-2.129, -27.898, 0.9906, -0.1358), (-1.995, -26.907, 0.9911, -0.1322), (-1.865, -25.915, 0.9916, -0.1285), (-1.738, -24.923, 0.9920, -0.1250),
+    (-1.615, -23.931, 0.9924, -0.1218), (-1.495, -22.938, 0.9929, -0.1182), (-1.378, -21.945, 0.9933, -0.1143), (-1.266, -20.951, 0.9938, -0.1103),
+    (-1.158, -19.957, 0.9942, -0.1061), (-1.054, -18.963, 0.9947, -0.1017), (-0.954, -17.968, 0.9952, -0.0970), (-0.859, -16.972, 0.9956, -0.0925),
+    (-0.769, -15.976, 0.9960, -0.0882), (-0.683, -14.980, 0.9964, -0.0839), (-0.602, -13.983, 0.9967, -0.0794), (-0.525, -12.986, 0.9971, -0.0747),
+    (-0.452, -11.989, 0.9975, -0.0699), (-0.385, -10.991, 0.9978, -0.0649), (-0.323, -9.993, 0.9981, -0.0597), (-0.266, -8.994, 0.9984, -0.0550),
+    (-0.213, -7.996, 0.9987, -0.0501), (-0.166, -6.997, 0.9989, -0.0451), (-0.123, -5.998, 0.9991, -0.0400), (-0.087, -4.998, 0.9993, -0.0342),
+    (-0.055, -3.999, 0.9995, -0.0279), (-0.031, -2.999, 0.9997, -0.0213), (-0.013, -2.000, 0.9998, -0.0135), (-0.003, -1.000, 0.9999, -0.0060),
+    (0.000, 0.000, 0.9999, 0.0000), (-0.004, 1.000, 0.9999, 0.0070), (-0.014, 2.000, 0.9998, 0.0146), (-0.033, 2.999, 0.9997, 0.0226),
+    (-0.060, 3.999, 0.9994, 0.0323), (-0.097, 4.998, 0.9991, 0.0427), (-0.145, 5.998, 0.9986, 0.0524), (-0.201, 6.996, 0.9981, 0.0613),
+    (-0.267, 7.994, 0.9975, 0.0701), (-0.343, 8.991, 0.9966, 0.0815), (-0.430, 9.987, 0.9955, 0.0942), (-0.533, 10.981, 0.9939, 0.1100),
+    (-0.649, 11.975, 0.9920, 0.1255), (-0.780, 12.966, 0.9905, 0.1375), (-0.924, 13.956, 0.9885, 0.1509), (-1.084, 14.943, 0.9851, 0.1716),
+    (-1.263, 15.927, 0.9813, 0.1920), (-1.469, 16.905, 0.9760, 0.2176), (-1.704, 17.877, 0.9691, 0.2466), (-1.961, 18.843, 0.9615, 0.2747),
+    (-2.247, 19.802, 0.9535, 0.3012), (-2.567, 20.749, 0.9401, 0.3408), (-2.932, 21.680, 0.9205, 0.3907), (-3.341, 22.593, 0.9047, 0.4259),
+    (-3.790, 23.486, 0.8800, 0.4748))
+DRIFT_T, DRIFT_DECK = -40, 0.75
+# The tunnel: its mouths at t0 and t1 (28 u of covered road); the vault's
+# walls DUNE_WV either side of the centreline (the kerb stands at 4.7), its
+# springing and crown over the plain, so the crown stands 5.45 over the deck
+# and the arch 3.9 over each kerb, over every car and chase camera; the
+# headwalls DUNE_WC either side and DUNE_HW tall.
+DUNE_T0, DUNE_T1 = -15.5, 12.5
+DUNE_WV, DUNE_SPRING, DUNE_CROWN = 5.8, 2.5, 6.2
+DUNE_WC, DUNE_HW = 6.9, 7.2
+# the light station's flat on the seaward shoulder: (x, z, height), level
+# for DUNE_FLAT round it, the station's parts within 5.3 of its middle
+DUNE_LIGHT, DUNE_FLAT = (13.0, -8.5, 8.0), 7.0
+DUNE_STONE, DUNE_DRESSED, DUNE_COPE = 'gravel', 'grey', 'lavender'
+
+
+def drift_road_at(t):
+    """(x, z, nx, nz) of the road t along it from the dune's anchor."""
+    f = min(max(t - DRIFT_T, 0.0), len(DRIFT_ROAD) - 1.001)
+    i = int(f)
+    a, b, k = DRIFT_ROAD[i], DRIFT_ROAD[i + 1], f - i
+    nx, nz = a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k
+    n = math.hypot(nx, nz)
+    return a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, nx / n, nz / n
+
+
+def drift_at(t, d, y=0.0, e=0.0, out=1.0):
+    """The point d across (+ the sea's side), y up and e along (`out` the
+    sign of along) from the road at t, in the dune's frame (glTF)."""
+    x, z, nx, nz = drift_road_at(t)
+    return (x + nx * d - nz * e * out, y, z + nz * d + nx * e * out)
+
+
+def drift_ease(e0, e1, v):
+    k = min(1.0, max(0.0, (v - e0) / (e1 - e0)))
+    return k * k * (3 - 2 * k)
+
+
+def drift_dune_body(x, z):
+    """The dune over the plain before the road's cut: a broad back across
+    the road, high over the whole tunnel so each mouth is cut into its
+    face, its windward face down the pass longer than its lee to the point;
+    the seaward shoulder the light stands on (flat round DUNE_LIGHT), and
+    its tails into the pass's dunes either side."""
+    wx = x + 1.2 * math.sin(0.19 * z + 0.6) + 0.6 * math.sin(0.41 * z + 2.0)
+    wz = z + 1.2 * math.sin(0.17 * x + 1.4) + 0.6 * math.sin(0.37 * x + 0.3)
+    def back(ax, bx, za, zb, h, lw, ll, end, p):
+        ez = (za - wz) / lw if wz < za else (wz - zb) / ll if wz > zb else 0.0
+        t = math.hypot((wx - min(max(wx, ax), bx)) / end, ez)
+        return h * math.cos(min(t, 1.0) * math.pi / 2) ** p
+    def knoll(cx, cz, h, rx, rz, p=1.2):
+        t = math.hypot((wx - cx) / rx, (wz - cz) / rz)
+        return h * math.cos(min(t, 1.0) * math.pi / 2) ** p
+    def smax(a, b, k):
+        q = max(k - abs(a - b), 0.0) / k
+        return max(a, b) + q * q * k * 0.25
+    m = back(-15.0, 4.0, -11.0 + 1.2 * math.sin(0.21 * x), 11.0 + 0.8 * math.sin(0.17 * x + 1.0),
+             10.2, 17.0, 9.0, 12.0, 1.15)
+    m = smax(m, knoll(15.0, 1.0, 8.6, 13.0, 15.0, 1.1), 2.5)        # the seaward shoulder
+    m = smax(m, knoll(23.0, -13.0, 5.6, 10.0, 12.0), 2.0)           # into the seaward pass dune
+    m = smax(m, knoll(-25.0, -7.0, 8.0, 10.0, 15.0), 2.5)           # into the inland pass dune
+    m += (0.55 * math.sin(0.43 * x + 0.71 * z + 1.3) * math.cos(0.37 * z - 0.52 * x + 0.4)
+          + 0.3 * math.sin(0.93 * x - 0.4 * z + 2.1) * math.sin(0.81 * z + 0.9 * x + 0.3)) * min(1.0, m / 3.0)
+    lx, lz, ly = DUNE_LIGHT
+    k = drift_ease(DUNE_FLAT, DUNE_FLAT + 3.5, math.hypot(x - lx, z - lz))
+    return ly + (m - ly) * k - 0.45 * k
+
+
+def drift_wall_line(t):
+    """How far either side of the road the wingwalls (the cutting's foot)
+    stand, at t outside the tunnel: splayed out from the headwall's ends."""
+    return DUNE_WC + 0.3 * max(DUNE_T0 - t, t - DUNE_T1, 0.0)
+
+
+def drift_wing_top(t):
+    """A wingwall's top at t: the headwall's at the mouth, down to the
+    cutting's floor at its end (the entrance's run up the pass longer)."""
+    lw = 8.0 if t < 0.5 * (DUNE_T0 + DUNE_T1) else 4.5
+    dt = max(DUNE_T0 - t, t - DUNE_T1, 0.0)
+    return DUNE_HW * max(0.0, 1.0 - dt / lw)
+
+
+def drift_dune_height(d, t, inside):
+    """The dune's surface d across the road at t, the road's cut taken out:
+    over the tunnel its roof, cut down to the headwall's top at each mouth
+    and lying back from it at the sand's slope; outside, the cutting's sand
+    banked at its wingwalls' tops and lying back from them. None inside the
+    cutting's walls (the road's, open to the sky)."""
+    a = abs(d)
+    x, _, z = drift_at(t, d)
+    h = drift_dune_body(x, z)
+    wl = DUNE_WC if inside else drift_wall_line(t)
+    # the sheet's rim sinks under the plain wherever the dune runs to it
+    h = min(h, min(1.6 * min(t + 32.0, 20.0 - t), 0.9 * (DUNE_OUT[-1] + wl - a)) - 0.45)
+    if inside:
+        cut = DUNE_HW + 0.85 * min(t - DUNE_T0, DUNE_T1 - t) + 0.9 * max(0.0, a - DUNE_WC)
+        h = min(h, cut)
+        if a <= DUNE_WC + 0.01:
+            h = max(h, DUNE_HW)                    # never thinner over the vault
+    else:
+        if a < wl - 0.01:
+            return None
+        h = min(h, drift_wing_top(t) + 0.9 * (a - wl))
+    return h
+
+
+# the sheet's columns: a share of the wall line inside it, then units past it
+DUNE_IN = (-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75)
+DUNE_OUT = (0.0, 0.5, 1.2, 2.0, 3.0, 4.0, 5.2, 6.5, 8.0, 9.5, 11.0, 12.5, 14.0, 15.5, 17.0, 19.0, 21.0, 23.5, 26.5)
+
+
+def drift_dune_sheet():
+    """The dune's surface as a sheet on a grid that follows the road: rows
+    a unit apart along it (each mouth's row twice, the cutting's and the
+    roof's, with the headwall between them), columns across it with the
+    wingwalls' line one of them. Sand on its faces and on the steep, marram
+    on its back where it lies gentler; smooth, as the land is."""
+    rows = []
+    t = -32.0
+    while t < DUNE_T0 - 1e-6:
+        rows.append((t, False))
+        t += 1.0
+    rows += [(DUNE_T0, False), (DUNE_T0, True)]
+    t = DUNE_T0 + 1.0
+    while t < DUNE_T1 - 1e-6:
+        rows.append((t, True))
+        t += 1.0
+    rows += [(DUNE_T1, True), (DUNE_T1, False)]
+    t = DUNE_T1 + 1.0
+    while t <= 20.0 + 1e-6:
+        rows.append((t, False))
+        t += 1.0
+    cols = [(-1, e) for e in reversed(DUNE_OUT)] + [(0, q) for q in DUNE_IN] + [(1, e) for e in DUNE_OUT]
+    grid = []
+    for (t, inside) in rows:
+        wl = DUNE_WC if inside else drift_wall_line(t)
+        row = []
+        for side, q in cols:
+            d = q * wl if side == 0 else side * (wl + q)
+            h = drift_dune_height(d, t, inside)
+            row.append(None if h is None else drift_at(t, d, h))
+        grid.append(row)
+    # how far each vertex's ground lies from level: its faces' mean
+    ups = {}
+    quads = []
+    for r in range(len(rows) - 1):
+        if rows[r][0] == rows[r + 1][0]:
+            continue                                # a mouth: the headwall stands here
+        for c in range(len(cols) - 1):
+            idx = [(r, c), (r, c + 1), (r + 1, c + 1), (r + 1, c)]
+            q = [grid[i][j] for i, j in idx]
+            if any(v is None for v in q) or all(v[1] < 0.0 for v in q):
+                continue
+            ux, uy, uz = (q[2][i] - q[0][i] for i in range(3))
+            vx, vy, vz = (q[3][i] - q[1][i] for i in range(3))
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            up = abs(ny) / (math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0)
+            for k in idx:
+                ups.setdefault(k, []).append(up)
+            quads.append((idx, q))
+    def grass(k, v):
+        # marram where the dune lies gentle and stands clear of the beach,
+        # in drifts with blowouts of bare sand between them; none on the steep
+        up = sum(ups[k]) / len(ups[k])
+        x, y, z = v
+        blow = math.sin(0.21 * x + 0.33 * z + 0.8) + 0.6 * math.sin(0.47 * x - 0.19 * z + 2.2)
+        return min(9.0 * (up - 0.8), 2.0 * (y - 1.5)) + 0.6 * blow - 2.5 * max(0.0, -blow - 0.7)
+    def clip(poly, fs):
+        out = []
+        for i in range(len(poly)):
+            a, b, fa, fb = poly[i], poly[(i + 1) % len(poly)], fs[i], fs[(i + 1) % len(poly)]
+            if fa >= 0:
+                out.append(a)
+            if (fa >= 0) != (fb >= 0):
+                k = fa / (fa - fb)
+                out.append(tuple(a[j] + (b[j] - a[j]) * k for j in range(3)))
+        return out if len(out) >= 3 else None
+    verts, index, polys, kinds = [], {}, [], []
+    for idx, q in quads:
+        fs = [grass(k, v) for k, v in zip(idx, q)]
+        for kind, sgn in (('marram', 1.0), ('sand', -1.0)):
+            part = clip(q, [sgn * f if f != 0 else sgn * 1e-6 for f in fs])
+            if not part:
+                continue
+            ids = []
+            for v in part:
+                key = tuple(round(c, 4) for c in v)
+                if key not in index:
+                    index[key] = len(verts)
+                    verts.append(P(*v))
+                ids.append(index[key])
+            if len(set(ids)) >= 3:
+                polys.append(ids)
+                kinds.append(kind)
+    me = bpy.data.meshes.new('dune')
+    me.from_pydata([tuple(v) for v in verts], [], polys)
+    me.update()
+    for p in me.polygons:
+        if p.normal.z < 0:
+            p.flip()
+        p.use_smooth = True
+    me.set_sharp_from_angle(angle=math.radians(40))
+    # one sheet, its two colours by face: the atlas swatch per face (shade()
+    # leaves a part with no `swatch` as built)
+    me.materials.append(atlas_material())
+    uv = me.uv_layers.new(name='UVMap')
+    for p, kind in zip(me.polygons, kinds):
+        (sx, sy), row = (SWATCH['gravel'], 2) if kind == 'sand' else (SWATCH['leaf'], 5)
+        for li in p.loop_indices:
+            uv.data[li].uv = ((sx + 12) / 128, 1 - (sy + 0.5 + row) / 128)
+    o = bpy.data.objects.new('dune', me)
+    bpy.context.scene.collection.objects.link(o)
+    return [o]
+
+
+def drift_strip(name, pts_a, pts_b, color, row, toward):
+    """Quads between two runs of points (glTF), each facing `toward(centre)`
+    (a glTF point the face must look at)."""
+    verts, polys = [], []
+    for i in range(len(pts_a) - 1):
+        q = [pts_a[i], pts_a[i + 1], pts_b[i + 1], pts_b[i]]
+        k = len(verts)
+        verts += [P(*v) for v in q]
+        polys.append([k, k + 1, k + 2, k + 3])
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([tuple(v) for v in verts], [], polys)
+    me.update()
+    for p in me.polygons:
+        c = p.center
+        g = P(*toward((c.x, c.z, -c.y)))
+        if p.normal.dot(g - c) < 0:
+            p.flip()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    paint(o, color)
+    rowed(o, row)
+    return o
+
+
+def drift_arch(n):
+    """The tunnel's section, foot to foot over the crown, as (d, y): the
+    walls up to the springing, then a half ellipse of `n` steps."""
+    pts = [(-DUNE_WV, -0.4)]
+    for i in range(n + 1):
+        a = math.pi * (1 - i / n)
+        pts.append((DUNE_WV * math.cos(a), DUNE_SPRING + (DUNE_CROWN - DUNE_SPRING) * math.sin(a)))
+    return pts + [(DUNE_WV, -0.4)]
+
+
+def drift_vault():
+    """The tunnel's lining, mouth to mouth along the road: its walls and its
+    vault out of the sun, a footway along each wall's foot level with the
+    deck, and lamps along the springing either side, warm in the dark."""
+    sec = drift_arch(12)
+    ts = [DUNE_T0 + (DUNE_T1 - DUNE_T0) * i / 28 for i in range(29)]
+    def tof(v):
+        # which t a glTF point lies at (the nearest ring's), for its face's axis point
+        return min(ts, key=lambda t: (drift_road_at(t)[0] - v[0]) ** 2 + (drift_road_at(t)[1] - v[2]) ** 2)
+    look = lambda c: drift_at(tof(c), 0.0, DUNE_SPRING)
+    for j in range(len(sec) - 1):
+        (d0, y0), (d1, y1) = sec[j], sec[j + 1]
+        wall = j == 0 or j == len(sec) - 2
+        drift_strip('vault', [drift_at(t, d0, y0) for t in ts], [drift_at(t, d1, y1) for t in ts],
+                    'grey' if wall else 'slate', 20 if wall else 6, look)
+    for s in (-1, 1):                                  # the footways, kerb to wall
+        top = [drift_at(t, s * 4.95, DRIFT_DECK + 0.08) for t in ts]
+        drift_strip('footway', top, [drift_at(t, s * DUNE_WV, DRIFT_DECK + 0.08) for t in ts], 'grey', 12,
+                    lambda c: (c[0], c[1] + 5.0, c[2]))
+        drift_strip('footway', [drift_at(t, s * 4.95, -0.2) for t in ts], top, 'grey', 18,
+                    lambda c, s=s: drift_at(tof(c), 0.0, c[1]))
+    with plain_parts():
+        for t in [DUNE_T0 + 2.0 + 4.0 * i for i in range(7)]:
+            _, _, nx, nz = drift_road_at(t)
+            for s in (-1, 1):
+                cx, _, cz = drift_at(t, s * (DUNE_WV - 0.12))
+                box((0.3, 0.36, 1.0), (cx, DUNE_SPRING - 0.3, cz), 0xffc044, yaw=math.atan2(-nz, nx))
+
+
+def drift_portal(t, out):
+    """A tunnel mouth at t, `out` the way out of the tunnel along the road:
+    a headwall of the coast's sandstone round a rounded arch of dressed
+    voussoirs with its keystone, pilasters at its ends and a coping over it,
+    and its wingwalls splaying out along the cutting, falling to the
+    cutting's floor, a pier at each one's end. The sand of the dune lies on
+    the coping and behind the wingwalls."""
+    _, _, nx, nz = drift_road_at(t)
+    yaw = math.atan2(-nz * out, nx * out)              # box(): +Z along the way out
+    at = lambda d, y, e: drift_at(t, d, y, e, out)
+    sec = drift_arch(12)
+    arch = sec[1:-1]                                     # springing to springing
+    # the headwall's face at e = E (proud of the mouth): over the arch to its
+    # top, and the piers either side full height; the arch's soffit from the
+    # face back to the vault
+    E = 0.5
+    away = lambda c: drift_at(t, 0.0, c[1], E + 5.0, out)
+    drift_strip('headwall', [at(d, y, E) for d, y in arch], [at(d, DUNE_HW, E) for d, y in arch], DUNE_STONE, 10, away)
+    for s in (-1, 1):
+        drift_strip('headwall', [at(s * DUNE_WV, -0.4, E), at(s * DUNE_WV, DUNE_HW, E)],
+                    [at(s * DUNE_WC, -0.4, E), at(s * DUNE_WC, DUNE_HW, E)], DUNE_STONE, 10, away)
+    drift_strip('soffit', [at(d, y, E) for d, y in sec], [at(d, y, 0.0) for d, y in sec],
+                'slate', 8, lambda c: drift_at(t, 0.0, DUNE_SPRING, 0.25, out))
+    # the voussoirs: blocks round the arch, proud of the face, two dressed
+    # tones in turn, the keystone standing out over the crown
+    n = 15
+    for i in range(n):
+        a0, a1 = math.pi * (1 - i / n), math.pi * (1 - (i + 1) / n)
+        key = i == n // 2
+        w = 0.95 if key else 0.75
+        pts = []
+        for a in (a0, a1):
+            c, s_ = math.cos(a), math.sin(a)
+            pts.append((DUNE_WV * c, DUNE_SPRING + (DUNE_CROWN - DUNE_SPRING) * s_))
+            # out along the ellipse's normal
+            gx, gy = c / DUNE_WV, s_ / (DUNE_CROWN - DUNE_SPRING)
+            g = math.hypot(gx, gy)
+            pts.append((DUNE_WV * c + w * gx / g, DUNE_SPRING + (DUNE_CROWN - DUNE_SPRING) * s_ + w * gy / g))
+        (ia, oa, ib, ob) = pts
+        e0, e1 = E - 0.05, E + (0.32 if key else 0.18)
+        corners = [at(*ia, e0), at(*ib, e0), at(*ob, e0), at(*oa, e0), at(*ia, e1), at(*ib, e1), at(*ob, e1), at(*oa, e1)]
+        quads = [(4, 5, 6, 7), (0, 3, 2, 1), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+        me = bpy.data.meshes.new('voussoir')
+        me.from_pydata([tuple(P(*v)) for v in corners], [], quads)
+        me.update()
+        me.validate()
+        cen = sum((P(*v) for v in corners), Vector()) / 8
+        for p in me.polygons:
+            if p.normal.dot(p.center - cen) < 0:
+                p.flip()
+        o = bpy.data.objects.new('voussoir', me)
+        bpy.context.scene.collection.objects.link(o)
+        paint(o, 'white' if key else (DUNE_DRESSED if i % 2 else DUNE_COPE))
+        o['chamfer'] = 1
+    # the imposts the arch springs from, the pilasters and the coping
+    for s in (-1, 1):
+        cx, _, cz = at(s * (DUNE_WV + 0.45), 0.0, E + 0.12)
+        box((1.1, 0.35, 0.5), (cx, DUNE_SPRING - 0.1, cz), DUNE_DRESSED, yaw=yaw)
+        cx, _, cz = at(s * (DUNE_WC - 0.3), 0.0, E + 0.2)
+        box((0.8, DUNE_HW + 0.6, 0.6), (cx, (DUNE_HW - 0.6) / 2, cz), DUNE_STONE, yaw=yaw)
+        box((1.0, 0.3, 0.8), (cx, DUNE_HW + 0.15, cz), DUNE_COPE, yaw=yaw)
+    cx, _, cz = at(0.0, 0.0, E - 0.15)
+    box((2 * DUNE_WC + 0.3, 0.35, 1.4), (cx, DUNE_HW + 0.12, cz), DUNE_COPE, yaw=yaw)
+    box((2 * DUNE_WC - 1.2, 0.25, 0.3), (at(0, 0, E + 0.1)[0], DUNE_HW - 0.7, at(0, 0, E + 0.1)[2]), DUNE_DRESSED, yaw=yaw)
+    # the headwall laid in courses (a band proud of the face either side of
+    # the ring) on a plinth of dressed stone at the piers' feet
+    rise = DUNE_CROWN - DUNE_SPRING
+    for y in (DUNE_SPRING + 2.2, DUNE_SPRING + 3.4):
+        ring = DUNE_WV * math.sqrt(max(0.0, 1.0 - ((y - DUNE_SPRING) / rise) ** 2)) + 0.85
+        for s in (-1, 1):
+            a0, a1 = ring, DUNE_WC - 0.7
+            if a1 - a0 < 0.3:
+                continue
+            cx, _, cz = at(s * (a0 + a1) / 2, 0.0, E + 0.05)
+            rowed(box((a1 - a0, 0.16, 0.2), (cx, y, cz), DUNE_STONE, yaw=yaw), 22)
+    for s in (-1, 1):
+        cx, _, cz = at(s * (DUNE_WV + DUNE_WC - 0.6) / 2, 0.0, E + 0.08)
+        box((DUNE_WC - DUNE_WV - 0.6, 1.3, 0.3), (cx, 0.25, cz), DUNE_DRESSED, yaw=yaw)
+    # the wingwalls along the cutting: a face to the road, its top falling
+    # with the sand behind it to the cutting's floor, coped, a pier at the end
+    lw = 8.0 if out < 0 else 4.5
+    ts = [t + out * lw * i / 10 for i in range(11)]
+    up = lambda c: (c[0], c[1] + 5.0, c[2])
+    for s in (-1, 1):
+        wl = [drift_wall_line(u) for u in ts]
+        top = [max(0.3, drift_wing_top(u)) for u in ts]
+        to_road = lambda c, s=s: (c[0] - s * 5.0 * nx, c[1], c[2] - s * 5.0 * nz)
+        drift_strip('wingwall', [drift_at(u, s * w, -0.4) for u, w in zip(ts, wl)],
+                    [drift_at(u, s * w, h) for u, w, h in zip(ts, wl, top)], DUNE_STONE, 12, to_road)
+        lip = [drift_at(u, s * (w - 0.12), h) for u, w, h in zip(ts, wl, top)]
+        cap = [drift_at(u, s * (w - 0.12), h + 0.24) for u, w, h in zip(ts, wl, top)]
+        back = [drift_at(u, s * (w + 0.8), h + 0.24) for u, w, h in zip(ts, wl, top)]
+        drift_strip('coping', lip, cap, DUNE_COPE, 14, to_road)
+        drift_strip('coping', cap, back, DUNE_COPE, 6, up)
+        drift_strip('wingwall', [drift_at(u, s * w, h) for u, w, h in zip(ts, wl, top)], lip, DUNE_STONE, 12, up)
+        cx, _, cz = drift_at(ts[-1], s * (wl[-1] + 0.3))
+        box((1.0, 1.5, 1.0), (cx, 0.35, cz), DUNE_STONE, yaw=yaw)
+        box((1.2, 0.25, 1.2), (cx, 1.15, cz), DUNE_COPE, yaw=yaw)
+
+
+def drift_marram(spots, seed):
+    """Tussocks of marram, each a clump of thick blades fanned from one
+    foot, pale green going to straw, at (x, y, z) spots on the dune."""
+    with plain_parts():
+        for k, (x, y, z) in enumerate(spots):
+            for j in range(6):
+                a = 1.05 * j + 0.9 * k + seed
+                h = 0.7 + 0.35 * frac(k * 0.31 + j * 0.43 + seed)
+                o = beam((x + 0.06 * math.cos(a), y - 0.1, z + 0.06 * math.sin(a)),
+                         (x + 0.38 * math.cos(a), y + h, z + 0.38 * math.sin(a)), 0.11,
+                         ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
+                o['ramp'] = 0.15
+
+
+class drift_turned:
+    """What is built inside, its moving parts and markers too, built about
+    the origin and turned by `yaw` (box()'s sense) to stand at (x, y, z)."""
+    def __init__(self, x, y, z, yaw):
+        self.at, self.yaw = (x, y, z), yaw
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        self.anims = len(ANIMS)
+        return self
+    def __exit__(self, *exc):
+        bpy.context.view_layer.update()
+        M = Matrix.Translation(P(*self.at)) @ Matrix.Rotation(self.yaw, 4, 'Z')
+        for o in bpy.context.scene.objects:
+            if o not in self.before and o.parent is None:
+                o.matrix_world = M @ o.matrix_world
+        c, s = math.cos(self.yaw), math.sin(self.yaw)
+        for i in range(self.anims, len(ANIMS)):
+            name, (px, py, pz), yaw, parent, tilt = ANIMS[i]
+            ANIMS[i] = (name, (self.at[0] + px * c + pz * s, self.at[1] + py, self.at[2] - px * s + pz * c),
+                        yaw + self.yaw, parent, tilt)
+        return False
+
 
 @piece(1.0)
 def lighthouse_dune():
     # Driftwood: the great dune at the end of the pass, which the road goes
-    # through in a tunnel and the lighthouse stands on (tracks.js sets it on
-    # the dune's seaward shoulder, a flat of marram at 6.2): the pass drives
-    # straight at the light on its dune and into the dune's dark mouth, and
-    # comes out at the point. The tunnel's walls are the sand cut back to
-    # stone, its mouths framed in stone with a lintel well over every car's
-    # roof and chase camera. Placed on the road's centreline: +X is its left,
-    # the sea's side.
-    with plain_parts():
-        M = massif_height(((0.0, 0.0, 9.6, 12.0, 16.0, math.pi / 2, 0.6, 14.0),   # the dune's back, across the road
-                           (10.5, 0.5, 9.0, 9.0, 7.5, 0.2, 0.25, 5.0),            # its seaward shoulder, the light's
-                           (-14.0, -1.0, 7.0, 9.0, 8.0, -0.4, 0.8, 6.0)),          # its inland flank
-                          rough=0.3, seed=1.9, warp=1.0)
-        tunnel = strata_massif(M, -32.0, 30.0, -18.0, 18.0, DUNE_BEDS, corridor=(5.6, 3.6), step=2.6, tol=0.4)
-        for o in bpy.context.scene.objects:
-            if o.type == 'MESH' and o.get('swatch') and o.get('row') is None:
-                if o['swatch'] == 'brown':                          # the tunnel's lining, out of the sun
-                    o['swatch'] = 'grey'
-                    rowed(o, 26)
-                else:
-                    rowed(o, {'cream': 31, 'sage': 3}.get(o['swatch'], 16))
-        print('PROBE dune tunnel', tunnel, [(round(x), round(M(x, 0.5), 2)) for x in (6, 8, 10, 11, 12, 14)])
-        if tunnel:
-            for z, sgn in ((tunnel[0] - 0.3, -1), (tunnel[1] + 0.3, 1)):   # the portals, stone, a lintel over
-                for sx in (-1, 1):
-                    box((1.0, 3.9, 1.0), (sx * 5.3, 1.75, z), 'grey')
-                    box((1.2, 0.3, 1.2), (sx * 5.3, 0.05, z), 'slate')
-                box((12.0, 0.75, 1.1), (0.0, 3.95, z), 'grey')
-                box((1.1, 0.95, 1.2), (0.0, 3.95, z + 0.06 * sgn), 'lavender')   # the keystone
-                box((12.6, 0.2, 1.3), (0.0, 4.4, z), 'lavender')
+    # through in a tunnel, the light station on its seaward shoulder: the
+    # pass drives straight at the light on its dune and into the dune's
+    # mouth, and comes out at the point. The dune is the pass's own: its
+    # tails run into the dunes either side (tracks.js `land`), sand on its
+    # faces and in the cuttings, marram over its back. Placed astride the
+    # road at the dune's anchor (DRIFT_ROAD): +X is the road's left, the
+    # sea's side.
+    sheet = drift_dune_sheet()
+    before = set(bpy.context.scene.objects)
+    drift_vault()
+    vault = [o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH']
+    chunked(sheet + vault, 20.0, 25.0, 'dune')
+    for t, out in ((DUNE_T0, -1), (DUNE_T1, 1)):
+        before = set(bpy.context.scene.objects)
+        drift_portal(t, out)
+        group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'],
+              'portal_in' if out < 0 else 'portal_out')
+    # marram on the coping's sand and along the wingwalls' tops, and in
+    # clumps over the dune's back
+    before = set(bpy.context.scene.objects)
+    spots = []
+    for t, out in ((DUNE_T0, -1), (DUNE_T1, 1)):
+        for d in (-6.2, -4.4, -2.1, 0.6, 2.9, 5.0, 6.6):
+            ti = t - out * 1.2
+            x, _, z = drift_at(ti, d)
+            spots.append((x, drift_dune_height(d, ti, True) - 0.15, z))
+    lx, lz, _ = DUNE_LIGHT
+    for k in range(60):
+        t = -28.0 + 44.0 * frac(k * 0.618 + 0.11)
+        d = (-1 if k % 2 else 1) * (8.5 + 18.0 * frac(k * 0.382 + 0.57))
+        inside = DUNE_T0 < t < DUNE_T1
+        y = drift_dune_height(d, t, inside)
+        x, _, z = drift_at(t, d)
+        if y is None or y < 2.0 or math.hypot(x - lx, z - lz) < DUNE_FLAT:
+            continue
+        spots.append((x, y - 0.15, z))
+    drift_marram(spots, 0.4)
+    group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'marram')
+    # the light station on the shoulder's flat over the entrance: the house
+    # at the tower's foot toward the pass, its door and windows to the road
+    lx, lz, ly = DUNE_LIGHT
+    before = set(bpy.context.scene.objects)
+    with drift_turned(lx - 1.0, ly, lz + 1.2, math.pi):      # its middle the flat's
+        drift_light_station()
+    group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH' and o.get('anim') is None],
+          'light')
+    # a stone buried under the plain, draped: the dune levels nothing, so the
+    # pass's dunes run on into it (on_a_rise)
     def foot():
         with plain_parts():
-            box((0.3, 0.3, 0.3), (-20.0, -0.4, 0.0), 'grey')
+            box((0.3, 0.3, 0.3), (-30.0, -0.6, -28.0), 'grey')
     draped('foot', foot)
 
 def drift_boat_hut(cz, L, W, H, door, seed):

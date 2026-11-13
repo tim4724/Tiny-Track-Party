@@ -631,8 +631,10 @@ export const TRACKS = {
     oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes,
     // A storm coast of dunes: the long diagonal is a pass between them, bare
     // sand inland and grass-topped on the seaward side, and it drives
-    // straight at the lighthouse on the point where it comes out onto the
-    // beach; the start straight runs past the fishermen's tarred net huts
+    // straight at the light station on the great dune that closes it, then
+    // through that dune in a stone-lined tunnel and out onto the point (the
+    // tunnel is one piece with the dune; gen-tracks.mjs levels the road
+    // through it); the start straight runs past the fishermen's tarred net huts
     // backed into a grassy bank, dunes on its inside and the east side's.
     // Seeded scatter keeps off the dunes' faces (the `clear`s): driftwood
     // on a clean slope read as specks. The sea comes up to the
@@ -655,11 +657,12 @@ export const TRACKS = {
       { model: 'set-boat-huts', u: 0.575, lat: 10.5 },
       // storm fence and marram along the dune pass, a length each side
       { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
-      { model: 'set-dune-fence-b', u: 0.735, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-fence-b', u: 0.695, lat: -9.6, yaw: 180 },
       // the lighthouse's dune at the pass's end, the road through it in a
-      // tunnel, and the light on its seaward shoulder (8.4 up)
-      { model: 'set-lighthouse-dune', u: 0.79, lat: 0 },
-      { model: 'set-lighthouse', u: 0.7953, lat: -11, yaw: 180, y: 8.4 },
+      // tunnel and the light station on its seaward shoulder, all one piece
+      // that carries the road in its own frame (set_prototypes.py
+      // DRIFT_ROAD: re-sample it if this u or the road moves)
+      { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
       // a beach boat working in and out past the groynes
       { model: 'set-drift-coble', u: 0.389, lat: 0, scale: 1.5 },
       // the storm's wrack piled on the point where the road turns back
