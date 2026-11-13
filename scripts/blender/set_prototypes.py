@@ -10228,8 +10228,8 @@ def ribbon_wall(pts, h=0.5, t=0.3):
         yaw = math.atan2(x1 - x0, z1 - z0)
         for i in range(n):
             cx, cz = x0 + (x1 - x0) * (i + 0.5) / n, z0 + (z1 - z0) * (i + 0.5) / n
-            rowed(box((t, h + 0.2, L / n + 0.05), (cx, h / 2 - 0.1, cz), 'grey', yaw=yaw), 25)
-            rowed(box((t * 0.6, 0.12, L / n * 0.7), (cx, h + 0.04, cz), 'grey', yaw=yaw), 18)
+            rowed(box((t, h + 0.2, L / n + 0.05), (cx, h / 2 - 0.1, cz), 'grey', yaw=yaw), 21)
+            rowed(box((t * 0.6, 0.12, L / n * 0.7), (cx, h + 0.04, cz), 'grey', yaw=yaw), 14)
 
 def ribbon_hurdle(a, b, h=0.5):
     """A wooden hurdle gate between two points: posts and three rails."""
@@ -10382,16 +10382,18 @@ def fete(lite):
     # coconut shy, the stallholders), and the slide is cut coarser
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
     # ---- the helter-skelter, at the near end
-    HX, HZ, TR, TH = 8.0, -38.0, 2.0, 10.0
+    # (no taller than this: at its ten metres it stood over the church, the
+    # village's tallest thing, from the grid)
+    HX, HZ, TR, TH = 8.0, -38.0, 2.0, 8.4
     for k in range(8):                                             # the tower, banded
         cyl(TR + 0.15 - 0.04 * k, TH / 8, (HX, k * TH / 8, HZ), (RED, WHITE)[k % 2], r2=TR + 0.11 - 0.04 * (k + 1), segs=8)
     cyl(TR + 0.5, 0.3, (HX, TH, HZ), BLUE, segs=8)                 # the top platform's rim
-    cyl(TR + 0.4, 3.2, (HX, TH + 0.3, HZ), RED, r2=0.1, segs=8)     # the cap
-    flagpole((HX, TH + 3.4, HZ), 1.6, YELLOW, w=1.0, fh=0.6, wave='anim_sway:a=y:d=20:p=2.4#hs')
+    cyl(TR + 0.4, 2.8, (HX, TH + 0.3, HZ), RED, r2=0.1, segs=8)     # the cap
+    flagpole((HX, TH + 3.0, HZ), 1.6, YELLOW, w=1.0, fh=0.6, wave='anim_sway:a=y:d=20:p=2.4#hs')
     box((0.2, 1.8, 1.0), (HX + TR - 0.1, TH - 1.0, HZ), 0x2a2735)  # the door at the top
     box((0.2, 1.8, 1.0), (HX + TR + 0.05, 0.9, HZ), 0x2a2735)      # and at the foot
     # the slide: two and a half turns down from the door, a chute with a rim
-    R0, TURNS, Y0, Y1 = TR + 1.6, 2.5, TH - 0.6, 0.5
+    R0, TURNS, Y0, Y1 = TR + 1.6, 2.0, TH - 0.6, 0.5
     N = 24 if lite else 40
     helix = []
     for i in range(N + 1):
@@ -12086,15 +12088,38 @@ for _name, _pts in PARK_ROUTE.items():
 
 def park_platform(side):
     """A halt beside the line through the origin along Z, on its `side`: a
-    platform at the embankment's height, a shelter open to the line, a lamp."""
-    PX, B = side * 1.45, PARK_BANK
-    box((0.9, B + 0.3, 3.6), (PX, (B + 0.3) / 2, 0.0), 'cream')
-    box((0.12, 0.75, 1.5), (PX + side * 0.35, B + 0.6, -0.5), 'red')          # the shelter's back
+    platform at the embankment's height under a pitched red canopy on white
+    posts, the name board and a seat under it, a fence along its back, a
+    lamp, and a semaphore signal past its end."""
+    RED, BLUE, WOOD = 0xcf534f, 0x339cf2, 0x9a7b55
+    PX, B = side * 1.55, PARK_BANK
+    T = B + 0.3                                                    # the platform's top
+    box((1.1, T, 4.6), (PX, T / 2, 0.0), 'cream')
+    box((0.14, 0.05, 4.6), (PX - side * 0.47, T + 0.01, 0.0), 'white')         # its edge by the line
+    CZ, CL, CH = -0.7, 2.4, 1.25                                   # the canopy: middle, length, post height
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box((0.12, CH, 0.12), (PX + sx * 0.4, T + CH / 2, CZ + sz * (CL / 2 - 0.1)), 'white')
+        box((0.78, 0.1, CL + 0.4), (PX + sx * 0.33, T + CH + 0.14, CZ), RED, roll=sx * 0.42)
+    box((0.14, 0.14, CL + 0.5), (PX, T + CH + 0.3, CZ), 'white')               # the ridge
+    for sz in (-1, 1):                                                         # a white valance at each end
+        box((1.0, 0.16, 0.06), (PX, T + CH - 0.02, CZ + sz * (CL / 2 + 0.15)), 'white')
+    box((0.06, 0.34, 1.3), (PX + side * 0.4, T + 0.82, CZ), 'white')           # the name board, a blue band on it
+    box((0.08, 0.12, 1.3), (PX + side * 0.4, T + 0.82, CZ), BLUE)
+    box((0.3, 0.1, 1.1), (PX + side * 0.18, T + 0.3, CZ), WOOD)                # the seat
     for sz in (-1, 1):
-        box((0.6, 0.75, 0.1), (PX + side * 0.08, B + 0.6, -0.5 + sz * 0.7), 'red')
-    box((0.85, 0.1, 1.75), (PX + side * 0.05, B + 1.02, -0.5), 'dark')        # its roof
-    box((0.1, 1.1, 0.1), (PX + side * 0.3, B + 0.85, 1.5), 'dark')            # the lamp
-    box((0.16, 0.16, 0.16), (PX + side * 0.3, B + 1.45, 1.5), 'white')
+        box((0.26, 0.3, 0.1), (PX + side * 0.18, T + 0.15, CZ + sz * 0.45), WOOD)
+    for k in range(6):                                                         # the fence along the open end's back
+        box((0.09, 0.5, 0.09), (PX + side * 0.48, T + 0.25, 0.75 + 0.3 * k), 'white')
+    box((0.09, 0.09, 1.6), (PX + side * 0.48, T + 0.42, 1.5), 'white')
+    box((0.1, 1.1, 0.1), (PX + side * 0.3, T + 0.55, 1.9), 'dark')             # the lamp
+    box((0.18, 0.18, 0.18), (PX + side * 0.3, T + 1.15, 1.9), 'white')
+    SZ = 3.1                                                                   # the signal, past the platform's end
+    box((0.14, 2.3, 0.14), (PX, 1.15, SZ), 'white')
+    box((0.26, 0.12, 0.26), (PX, 2.34, SZ), 'dark')
+    box((0.8, 0.2, 0.08), (PX - side * 0.38, 2.0, SZ + 0.1), RED, roll=side * 0.5)
+    box((0.12, 0.22, 0.09), (PX - side * 0.55, 2.0 + 0.08, SZ + 0.1), 'white', roll=side * 0.5)
+    box((0.16, 0.16, 0.12), (PX + side * 0.02, 1.95, SZ + 0.1), 'yellow')
 
 @piece()
 def park_railway():
