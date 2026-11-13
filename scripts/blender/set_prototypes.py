@@ -915,7 +915,7 @@ def rock_pool():
         with plain_parts():
             # the windbreak on the pool's sea side, its stripes to the road,
             # low: along the road side or across the near end it stood in
-            # the west run's line to the sea arch and the crab boat
+            # the west run's line to the sea arch
             for k in range(5):
                 z = -4.4 + 0.9 * k
                 box((0.1, 0.95, 0.1), (-5.4 + 0.12 * math.sin(k * 1.7), 0.42, z), 0xfff6eb)
@@ -1418,49 +1418,6 @@ def lifeboat_station():
     tidepool_surf([(SL1 - 1.0, -0.4, 3.0, 0.0)])
     join_still('station')
     on_a_rise()
-
-@piece(1.0)
-def crab_boat():
-    # Tidepool: the crab fishers' boat working the bay inside the headland,
-    # at a boat's size beside a car: a blue hull with a white wheelhouse and
-    # a tan lugsail, working its pots round the sea arch (at (-22.7, -15.4)
-    # of the headland's frame): in to the water between the rock pool and
-    # the arch, where the west run looks, out past the arch's north side
-    # and back (a longer round behind the arch kept it too far off to
-    # read), rising and falling on the
-    # swell, a wake at its stern. Placed on the headland's own spot (the
-    # west bend's centreline, -X its outside): out past the stacks, where it
-    # sailed before, the bend had turned the camera away (0.6 s a lap).
-    # (world units below: the piece is grown 1.5 where it stands, as the
-    # coble is, since at a boat's own size it stayed under the pixels a
-    # racer reads at that range)
-    loop = [(x / 1.5, 0.0, z / 1.5) for x, z in (
-        (-14.7, -24.7), (-19.9, -25.9), (-25.7, -26.1), (-31.0, -25.4), (-34.0, -22.6),
-        (-34.4, -26.4), (-29.9, -29.5), (-23.4, -30.2), (-17.5, -28.9), (-13.6, -27.0))]
-    for i, p in enumerate(loop):
-        marker('path_crab_%d' % i, p)
-    beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99, loop[0])
-
-def beach_sailing_boat(chain, period, hull, sail, at):
-    """A beach boat under sail riding the closed path `chain` (bow along
-    its travel), at a boat's size beside a car: its hull, a white
-    wheelhouse, a lugsail on its mast, a wake at its stern, rising and
-    falling on the swell. A traveller is drawn where its path puts it, so
-    its rest spot is only where the GLB holds it: `at`, the path's first
-    point, so a reader of the bare GLB (the gallery's sight lines) finds
-    the boat on its water rather than on the road at the piece's anchor."""
-    ax, az = at[0], at[2]
-    with animated('anim_path:c=%s:p=%.0f:f=1+bob:h=0.12:p=2.6#boat' % (chain, period), (ax, 0.0, az)):
-        box((1.0, 0.45, 2.3), (ax, SEA + 0.1, az - 0.1), hull)
-        box((0.7, 0.45, 0.7), (ax, SEA + 0.1, az + 1.15), hull, yaw=math.pi / 4)
-        box((1.08, 0.12, 2.4), (ax, SEA + 0.38, az - 0.1), 0xfff6eb)
-        box((0.7, 0.6, 0.7), (ax, SEA + 0.72, az - 0.6), 0xfff6eb)                   # the wheelhouse
-        box((0.8, 0.1, 0.8), (ax, SEA + 1.06, az - 0.6), 0xcf534f)
-        box((0.12, 2.4, 0.12), (ax, SEA + 1.5, az + 0.35), 0x8a6a46)                  # the mast
-        prism([(az + 0.4, SEA + 0.85), (az + 0.5, SEA + 2.6), (az - 0.9, SEA + 2.2), (az - 0.7, SEA + 0.85)],
-              ax + 0.08, 0.06, sail)
-        for k in range(3):                                                         # the wake
-            box((0.5 + 0.3 * k, 0.04, 0.55), (ax, SEA + 0.02, az - 1.45 - 0.45 * k), 0xfff6eb)
 
 @piece(1.0)
 def tidepool_cottages():
@@ -5169,20 +5126,6 @@ def boat_huts():
     for i, c in enumerate(('green', 'sky', 'green')):
         box((0.06, 1.3, 0.5), (0.9, 1.45, -9.4 + 0.55 * i), c)
     join_still('huts')
-
-@piece(1.0)
-def drift_coble():
-    # Driftwood: a beach boat under its brown lugsail working in and out
-    # BETWEEN the groynes (placed on the groynes' spot, on the road's
-    # centreline, grown 1.5 there): in to the shallows a few strides off the
-    # kerb, where the racers passing the groynes look, and out past the
-    # beacon posts and back. Its old round out beyond the groynes' ends read
-    # 0.4 s a lap and ran through their posts. The sea's side is +X here.
-    loop = [(18.5 + 6.0 * math.cos(i / 14 * 2 * math.pi), 0.0, 1.5 * math.sin(i / 14 * 2 * math.pi))
-            for i in range(14)]
-    for i, p in enumerate(loop):
-        marker('path_coble_%d' % i, p)
-    beach_sailing_boat('coble', 30.0, 0xcf534f, 0xb06041, loop[0])
 
 @piece(1.0)
 def smokehouse():

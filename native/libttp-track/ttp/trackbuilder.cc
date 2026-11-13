@@ -78,7 +78,8 @@ double intrusionOf(const Post& post, const std::vector<OutSample>& samples) {
 // value is at most the allowance at its own sample, so the ease never reaches
 // into the corner it eases toward. All zero for a track without sand.
 std::vector<double> sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>& tangents,
-                               const std::vector<double>& widths, double full) {
+                               const std::vector<double>& widths, double full,
+                               double offFrom, double offTo) {
   const int n = (int) worldPts.size();
   std::vector<double> sandAt(n, 0.0);
   if (!(full > 0)) return sandAt;
@@ -94,6 +95,9 @@ std::vector<double> sandWidths(const std::vector<Vec3>& worldPts, const std::vec
     double k = tangents[b].clone().sub(tangents[a]).length() / ds;
     double room = k > 1e-9 ? SAND_FOLD_MAX / k - widths[i] / 2 : full;
     allowed[i] = js_max(0.0, js_min(full, room));
+    // A stretch authored without sand allows none: the same erosion and
+    // average then ease the strip out before it and back in after it.
+    if (offTo > offFrom && cum[i] >= offFrom * ring && cum[i] <= offTo * ring) allowed[i] = 0.0;
   }
   const int R = (int)std::ceil(SAND_EASE / (ring / n));
   std::vector<double> eroded(n);
@@ -114,7 +118,7 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
                         std::vector<double> banks, std::vector<char> pillarFlags,
                         std::vector<char> hillFlags, std::vector<int> loopEntryIdx,
                         double trackWidth, bool startGate, double startU,
-                        double sand) {
+                        double sand, double sandOffFrom = 0, double sandOffTo = 0) {
   double gap = worldPts.back().distanceTo(worldPts.front());
   bool closed = gap < 0.5;
   if (worldPts.size() > 3 && worldPts.back().distanceTo(worldPts.front()) < DS) {
@@ -139,7 +143,7 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
   for (int i = 0; i < n; i++)
     tangents.push_back(worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize());
 
-  const std::vector<double> sandAt = sandWidths(worldPts, tangents, widths, sand * SCALE);
+  const std::vector<double> sandAt = sandWidths(worldPts, tangents, widths, sand * SCALE, sandOffFrom, sandOffTo);
   for (int i = 0; i < n; i++) widths[i] += 2 * sandAt[i];
 
   // Parallel transport an `up` vector around the ring (rotation-minimizing frame).
@@ -551,7 +555,7 @@ RaceTrack buildSplineTrack(const TrackDef& def) {
   }
   return finalizeTrack(std::move(worldPts), std::move(widths), std::move(banks),
                        std::move(pillarFlags), std::move(hillFlags), std::vector<int>{},
-                       trackWidth, true, startU, def.sand);
+                       trackWidth, true, startU, def.sand, def.sandOffFrom, def.sandOffTo);
 }
 
 // ---- Furniture resolve: descriptor (fraction-of-lap u) → arclength s.

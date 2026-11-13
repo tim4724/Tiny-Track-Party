@@ -122,6 +122,9 @@ struct TrackDef {
   const WptDef* wpts; int nWpts;
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
   double sand;     // sand strip per side, between the asphalt and the kerb; waypoint tracks only
+  // A stretch of the lap (u, from..to) that carries NO sand: a causeway over
+  // water, where the kerbs stand at the asphalt's edge. None when to <= from.
+  double sandOffFrom, sandOffTo;
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
   const FurnDef* pads; int nPads;

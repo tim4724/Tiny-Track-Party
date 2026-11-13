@@ -490,7 +490,6 @@ export const TRACKS = {
       // the kelp the tide left between them
       { model: 'set-tide-ledges', u: 0.395, lat: 10 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
-      { model: 'set-crab-boat', u: 0.72, lat: 0, scale: 1.5 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
@@ -687,8 +686,6 @@ export const TRACKS = {
       // that carries the road in its own frame (set_prototypes.py
       // DRIFT_ROAD: re-sample it if this u or the road moves)
       { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
-      // a beach boat working in and out between the groynes
-      { model: 'set-drift-coble', u: 0.389, lat: 0, scale: 1.5 },
       // the storm's wrack piled on the point where the road turns back
       { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
       // the smokehouse where the start straight bends away, which it points at
