@@ -331,18 +331,11 @@ export const SET_GROUND = {
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
     { kind: 'fan', yaw: 90, z: -17, len: 14, r: 11, r1: 12, h: 1.4, h1: 1.1, top: 0.35, tint: 0xc8cfdf }
   ],
-  // Flurry's lake: the ice lies on the plain, unraised, in two sheets with
-  // the road crossing between them on its stilts and its berm, the west one
-  // round the skaters' rink and the east one filling the inside of the bend
-  // the road turns round it, its ground short of the cabin beyond (a piece
-  // levels its clearing to the lowest ground under it). The ice may not run
-  // under the deck, so the ground there wears its blue. No bank rings the
-  // lake: it would rise under the ice.
+  // Flurry's lake: the ice lies on the plain, unraised, beside the run down
+  // off the bridge, and the bank of snow round its shore is the piece's own
+  // (set_prototypes.py frozen_lake), standing up from the plain.
   'set-frozen-lake': [
-    { kind: 'plain', z: -1.5, len: 7, r: 15.5, w: 4, tint: 0xdcecf8 },
-    { kind: 'plain', x: 23, z: -7, len: 10, r: 6.2, w: 2, tint: 0xdcecf8 },
-    { kind: 'plain', x: 21.5, z: 7, len: 10, r: 6, w: 2, tint: 0xdcecf8 },
-    { kind: 'paint', x: 11.9, z: 1.5, len: 23, r: 3.5, w: 3, tint: 0xa9d7ee }
+    { kind: 'plain', z: -1.5, len: 7, r: 15.5, w: 4, tint: 0xdcecf8 }
   ],
   // Glacier's toboggan hill: the penguins' slide comes down its long face
   // toward the road (+X) to the water hole on the flat at its foot; broad
@@ -362,9 +355,6 @@ export const SET_GROUND = {
   // carpet's head to its foot), its foot reaching under the school's hut and
   // arch so the whole school stands up on it over the kerb of the road beside it.
   'set-ski-school': [{ kind: 'mound', x: -19.5, h: 9, r: 25.5, r1: 11, rz: 16, shape: 1.3 }],
-  // Powder's snowman field: a low rise behind the crowd (-X), its face to the
-  // road, so the rows stand one over another above the kerb, as the rookery's do.
-  'set-snowman-field': [{ kind: 'mound', x: -6, h: 2.6, r: 11, r1: 7, rz: 10, shape: 1.2 }],
   'set-avalanche-slope': [{ kind: 'mound', x: -28, h: 22.4, r: 26.6, r1: 25.2, rz: 36.4, shape: 1.6 }],
   // Cloverleaf's bandstand on the crown of its own knoll: a broad round top
   // the floor lies flush in, steeper to the road (+X, clear of the raised
@@ -821,9 +811,9 @@ export const TRACKS = {
       { model: 'set-powder-forest-f', u: 0.6284, lat: -15.4 },
       { model: 'set-powder-forest-g', u: 0.4238, lat: -19.86 },
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
-      // the snowman field, inside the bend the run from the ski school comes
-      // up to: dead ahead on the way in, beside the kerb at road height
-      { model: 'set-snowman-field', u: 0.66, lat: -8.6, yaw: 180 }
+      // the snowman family on the outside verge of the east bend, at road
+      // height, ahead of a car coming over the hump off the start straight
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -851,8 +841,8 @@ export const TRACKS = {
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
       { kind: 'clear', u: 0.425, lat: -9, len: 26, r: 5 },
-      // nor between the road and the snowman field
-      { kind: 'clear', u: 0.66, lat: -4, len: 18, r: 3 }
+      // nor between the road and the snowman family
+      { kind: 'clear', u: 0.15, lat: -4.5, len: 10, r: 2 }
     ]
   },
   flurry: {
@@ -861,13 +851,19 @@ export const TRACKS = {
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
       // the village round the lap, close by the road where a racer reads a
-      // cabin (see:landmarks): by the start, on the east loop, on the run in
+      // cabin (see:landmarks): by the start, past the lake in the bend's
+      // inside, on the east loop, on the run in
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
+      { model: 'set-log-cabin', u: 0.392, lat: 8, yaw: 20 },
       { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
       { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
+      // the village piste down the foothill outside the east loop, cut
+      // through the forest between stands b and c, the groomer working it,
+      // skiers coming down it to the verge
+      { model: 'set-flurry-piste', u: 0.684, lat: 12, yaw: 0 },
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
@@ -942,10 +938,15 @@ export const TRACKS = {
       // the snow castle, its gate to the road
       { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
-      // each rookery turned so its white fronts face the car coming at it:
-      // one off the run into the bottom loop, one below the NE bend's crest
-      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 80 },
-      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 73 },
+      // each rookery turned so its white fronts face the road and the car
+      // coming at it: one off the run into the bottom loop, one below the NE
+      // bend's crest
+      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 35 },
+      { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
+      // beside the raised straight: the dog team's trail along the drift on
+      // its left, the flagged crevasses of the glacier's snout on its right
+      { model: 'set-glacier-dog-trail', u: 0.432, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-crevasses', u: 0.52, lat: 15, yaw: 0 },
       // the advanced camp up on the crest of the glacier's lateral bank, on
       // the snow as drawn (no bank of its own: a bank's foot withholds the
       // land it stands in, and nearer the road the ground is held down to the
@@ -1090,11 +1091,11 @@ export const TRACKS = {
       // work at its east mouth (set_prototypes.py ROAD_C / FACE_C: re-sample
       // with the road or the land)
       { model: 'set-avalanche-gallery-loop', u: 0.37, lat: 0 },
-      // the crags the southern and western massifs' crests break out in
-      // (`land`): the snow keeps their 9 u facets, rock in them read as
-      // stripes on a dome
+      // the crags the southern massif's crest breaks out in (`land`): the
+      // snow keeps their 9 u facets, rock in them read as stripes on a dome.
+      // (The western massif's summit crags were hidden by the spur from
+      // every seat; its east face's ribs carry its rock.)
       { model: 'set-avalanche-crags', u: 0.8349, lat: 52.1, yaw: 3 },
-      { model: 'set-avalanche-crags-west', u: 0.7091, lat: 67.4 },
       // the high peaks the slides start from, east of the mountainside, its
       // stands their foothills (the piece's frame is the world's: yaw cancels
       // the road's heading at u 0.276)
