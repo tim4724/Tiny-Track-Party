@@ -1394,17 +1394,18 @@ export const TRACKS = {
     // wild burros drink at a tinaja past the east loop. A desert of rock,
     // sand and cactus: nothing green but cactus.
     set: [
+      // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
       { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
       { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
-      { model: 'set-wash-bed', u: 0.68, lat: -3.6, yaw: 77 },
-      { model: 'set-wash-bed', u: 0.5997, lat: 10.7, yaw: 116 },
-      { model: 'set-wash-bed', u: 0.5941, lat: -19, yaw: -93 },
+      { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
+      { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
+      { model: 'set-wash-bed-ford', u: 0.5941, lat: -19, yaw: 87 },
       { model: 'set-wash-bed', u: 0.5933, lat: -48.9, yaw: 95 },
       { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
-      { model: 'set-wash-bed', u: 0.5332, lat: -17.6, yaw: 68 },
-      { model: 'set-wash-bed', u: 0.5182, lat: 8.6, yaw: -91 },
+      { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
+      { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
       // the canyon's mountainsides, each face toward the road: the outer
       // range (left) down the straight, round the bend and on, lower spurs
       // on the inside of the straight and after the bend, the inside of the

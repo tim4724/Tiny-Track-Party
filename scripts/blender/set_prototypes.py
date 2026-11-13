@@ -9867,14 +9867,15 @@ def sandstone_rock(at, k=1.0, yaw=0.0, color=0xc07a55):
     rock_lump(0.42 * k, (x + 0.7 * k * math.cos(yaw + 0.9), y + 0.1 * k, z - 0.7 * k * math.sin(yaw + 0.9)), 0xd39a70,
               (1.1, 0.6, 1.0), yaw + 0.6, seed=x - z)
 
-def canyon_wash_channel(pts, half, lip=0.36, seed=0.0):
+def canyon_wash_channel(pts, half, lip=0.36, seed=0.0, banked=lambda i: True):
     """A dry wash's channel along the glTF (x, z) points `pts` (`half(i)` the
     gravel bed's half-width at each, 0 at a reach's end): the bed of
     grey-khaki gravel on the floor, and each side a bank cut down to it,
     its face rust in the shade, a lip `lip` over the bed, and its back
     falling away to the sand a car's length out, sunk at the foot so no
-    edge stands on the ground. One sheet per colour. Returns the banks'
-    tops [(x, z, side)] for what grows along them."""
+    edge stands on the ground; where `banked(i)` is false (a road fords
+    the wash there) the banks die away to the bed. One sheet per colour.
+    Returns the banks' tops [(x, z, side)] for what grows along them."""
     n = len(pts)
     def across(i):
         a, b = pts[max(0, i - 1)], pts[min(n - 1, i + 1)]
@@ -9889,10 +9890,11 @@ def canyon_wash_channel(pts, half, lip=0.36, seed=0.0):
         nx, nz = across(i)
         h = half(i)
         w = 0.3 + 0.7 * min(1.0, h / 1.2)                       # the banks die away with the bed at its ends
+        w *= sum(1.0 for j in (i - 1, i, i + 1) if 0 <= j < n and banked(j)) / 3.0
         rows_bed.append([(x - nx * h, 0.03, z - nz * h), (x + nx * h, 0.03, z + nz * h)])
         for sd in (-1, 1):
             rows_bank[sd].append([(x + sd * nx * (h + o * w), y * w, z + sd * nz * (h + o * w)) for o, y in PROF])
-            if i % 3 == 1 and h > 0.6:
+            if i % 3 == 1 and h > 0.6 and banked(i):
                 tops.append((x + sd * nx * (h + 1.2), z + sd * nz * (h + 1.2), sd))
     for o in sheet(rows_bed, lambda i, j, nn: 'gravel', 'bed'):
         rowed(o, 24)
@@ -10147,8 +10149,7 @@ def canyon_sage():
             canyon_mat((0.15 * math.sin(2.1 * i), 0.0, z), r, h, c, row, yaw=1.1 * i, segs=7)
     join_still('sage')
 
-@piece(1.0)
-def wash_bed():
+def wash_bed_build(ford):
     # Wash: one reach of the dry wash's gravel bed, the floor of the channel
     # its own SET_GROUND cuts between low banks (the plain it lies on). Placed
     # end to end, each reach overlapping the next, the bed winds across the
@@ -10161,7 +10162,11 @@ def wash_bed():
         t = abs(z) / (L / 2)
         return (1.9 + 0.35 * math.sin(z * 0.7) + 0.25 * math.sin(z * 1.9 + 1.0)) * max(0.0, 1 - t ** 4) ** 0.5
     zs_ = [-L / 2 + L * i / N for i in range(N + 1)]
-    tops = canyon_wash_channel([(0.0, z) for z in zs_], lambda i: half(zs_[i]), lip=0.36, seed=2.0)
+    # a FORD reach (wash-bed-ford) is one a road crosses: its banks stand on
+    # its +Z half only, the road's half the bare bed it fords (tracks.js
+    # turns each so the road crosses its -Z half)
+    tops = canyon_wash_channel([(0.0, z) for z in zs_], lambda i: half(zs_[i]), lip=0.36, seed=2.0,
+                               banked=(lambda i: zs_[i] > 3.0) if ford else (lambda i: True))
     for i, (x, z, q) in enumerate(((0.8, -12.0, 0.32), (-1.0, -6.0, 0.26), (0.3, 1.0, 0.34),
                                    (1.1, 7.5, 0.22), (-0.6, 12.5, 0.3))):
         rock_lump(q, (x, q * 0.35, z), (0xd39a70, 'tan', 0xc07a55)[i % 3], (1.25, 0.6, 1.0), 0.9 * i, seed=7.0 + i)
@@ -10189,6 +10194,9 @@ def wash_bed():
             if abs(z) < L / 2 - 4.0 and not (-1.0 < z < 6.0):
                 brush((x, 0.2, z), 0.6 + 0.12 * (i % 3), yaw=i)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
+
+PIECES['wash-bed'], GROW['wash-bed'] = (lambda: wash_bed_build(False)), 1.0
+PIECES['wash-bed-ford'], GROW['wash-bed-ford'] = (lambda: wash_bed_build(True)), 1.0
 
 @piece(0.35)
 def mine_portal():

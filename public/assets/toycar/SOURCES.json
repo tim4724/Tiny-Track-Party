@@ -361,6 +361,7 @@
     "set-village-street-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-village-street.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-warning-sign.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-wash-bed-ford.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-wash-bed.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-wash-butte.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-watermill.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
