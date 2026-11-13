@@ -30,11 +30,13 @@ const SELF = new URL(import.meta.url).pathname;
 // carried flying cars into the outer kerb). `trestle` stands the named waypoints on
 // pillars: a decorated hill where a stream, a wash bed or the sea crosses the road,
 // which on an embankment would dam the water (or stand in the sea as a sand spit).
+// `level` lays the named waypoints flat: Driftwood's hump where the road leaves the
+// lighthouse dune's tunnel, which would lift the deck into the tunnel's roof.
 const SEEDS = {
   // Beach Cup (Easy)
   tidepool:   { seed: 88,  profile: 'easy', anchor: 47, jumps: [{ wp: 15, amp: 0.65 }, { wp: 45, amp: 0.4 }] },
   cove:       { seed: 250, profile: 'easy', anchor: 0, jumps: [{ wp: 9, amp: 1.0 }, { wp: 42, amp: 0.6 }] },
-  driftwood:  { seed: 138, profile: 'easy', anchor: 5, jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.35 }] },
+  driftwood:  { seed: 138, profile: 'easy', anchor: 5, jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.35 }], level: [44, 45, 46] },
   riptide:    { seed: 330, profile: 'easy', anchor: 2, jumps: [{ wp: 6, amp: 1.1 }, { wp: 36, amp: 0.35 }], trestle: [21, 22, 23, 24, 25] },
   // Snow Cup (Medium) — the gentle end of the mid grammar: low brake fraction, no
   // hairpins, roomy min radii, but still crossings, hills and jumps so nothing reads flat.
@@ -73,8 +75,8 @@ const report = (line) => { if (toStdout) process.stderr.write(`${line}\n`); else
 // a JSON round trip on its way into the bake. Re-serializing a parsed double is
 // byte-safe in practice, but "safe in practice" is the wrong standard for the
 // one file tests/codegen-freshness.test.js compares byte for byte.
-function bakeOne(id, { seed, profile, anchor, jumps, trestle }) {
-  const wp = bakeSeed(seed, profile, { anchor, jumps, trestle });
+function bakeOne(id, { seed, profile, anchor, jumps, trestle, level }) {
+  const wp = bakeSeed(seed, profile, { anchor, jumps, trestle, level });
   const src = { waypoints: wp };
   const t = buildTrack(src);
   const f = profile === 'classic'

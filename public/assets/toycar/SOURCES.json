@@ -207,7 +207,6 @@
     "set-lifeboat-station.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lifeguard-tower.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lighthouse-dune.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-lighthouse.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-log-cabin.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-marble-run-head-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-marble-run-head.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

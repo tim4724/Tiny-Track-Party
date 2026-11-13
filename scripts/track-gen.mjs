@@ -634,8 +634,9 @@ function chooseAnchor(plan, resolveAt) {
 // comparing against an old bake, not for shipping. A number pins it at that plan
 // waypoint: a shipped track whose start must not move when its elevation is re-solved
 // (everything on it is placed by lap fraction from that start). `jumps` are a track's
-// hand-placed crest hops (see JUMPS below).
-export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [], trestle = [] } = {}) {
+// hand-placed crest hops (see JUMPS below). `level` lays the named waypoints flat on the
+// ground: a decorated hump where the road runs under something (a tunnel's roof).
+export function resolveSeed(seed, profileName = 'classic', { anchor = true, jumps = [], trestle = [], level = [] } = {}) {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
   const plan0 = genPlan(seed, prof);
@@ -672,6 +673,7 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true, jump
   const r = anchor === true ? chooseAnchor(plan0, resolveAt) : resolveAt(anchor || 0);
   if (jumps.length) liftJumps(r.wps, jumps);
   for (const i of trestle) r.wps[i].bridge = true;
+  for (const i of level) r.wps[i].y = 0;
   if (prof !== PROFILES.classic) roundTightCorners(r.wps, r.h);   // classic is frozen provenance
   return r;
 }
