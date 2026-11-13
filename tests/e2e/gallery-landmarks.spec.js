@@ -332,7 +332,12 @@ test('landmark gallery page: the race, paused, rewound and noted', async ({ page
   });
   expect(await L((l) => l.mode())).toBe('race');
   expect(await L((l) => l.seats())).toBe(1);
-  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.race().step > 200);
+  // Enough race to go two seconds back and a frame further, in race TIME:
+  // the race steps once per drawn frame, and a software-GL runner draws few.
+  await page.waitForFunction(() => {
+    const r = document.getElementById('lm-stage').contentWindow.__landmarks.race();
+    return r.seconds > 3 && r.step > 10;
+  }, null, { timeout: 60000 });
 
   await page.keyboard.press('Space');
   const at = await L((l) => l.race());
