@@ -3633,8 +3633,6 @@ def rock_poolers_park():
                         aa = t * 2 * math.pi / 6 + k
                         beam((cx, -0.05, cz), (cx + 0.32 * math.cos(aa), 0.3 + 0.1 * (t % 3), cz + 0.32 * math.sin(aa)),
                              0.1, 'olive' if t % 2 else 0x6faa62, d=0.04)
-    draped('floor_lane', lane)
-    draped('floor_verge', verge)
     for (z, lower, boards, pop) in VANS:
         camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
     # the minibus in the last bay, longer and taller still
@@ -3657,6 +3655,10 @@ def rock_poolers_park():
     for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
         surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
     join_still('park')
+    # after the join, which would take them into `park` and leave them undraped
+    # (as the lane was until round 17, a flat skin at the piece's own height)
+    draped('floor_lane', lane)
+    draped('floor_verge', verge)
 
 # ---- round 8: the three beaches' stories at the kerb ----
 #

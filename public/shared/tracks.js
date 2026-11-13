@@ -536,6 +536,8 @@ export const TRACKS = {
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
+      // nothing seeded on the camper lane (its gravel claims no footprint)
+      { kind: 'clear', u: 0.973, lat: 10, len: 26, r: 5 },
       // nothing seeded on the downs: a crate on a crest read as a prop
       // dropped on a hilltop
       { kind: 'clear', u: 0.25, lat: -32, len: 30, r: 22 },
