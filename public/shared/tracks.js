@@ -394,6 +394,8 @@ export const SET_GROUND = {
   // from both ends (turned 90 so the spine runs along the creek's X).
   'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 1.5 }],
   'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 1.5 }],
+  // ...and a reach the road runs down: the floor from bank to bank
+  'set-wash-road-reach': [{ kind: 'plain', len: 10, r: 9, w: 6, h: 1.4 }],
   // Gulch's mine: the rock spur rising behind the adit's rock face (-X; its
   // foot just behind the face, so the face stands whole on the yard instead
   // of poking out of the slope in shards) and the yard levelled in front of
@@ -1436,7 +1438,9 @@ export const TRACKS = {
     // sight, are channel only, in `land`), from the north-west past the
     // hero's stretch by the north straight (tumbleweeds blowing down it),
     // across the north strand, which fords it at the bed's level, into the
-    // east loop and out under the east bend's low trestle (gen-tracks SEEDS
+    // east loop, where the road itself runs down the bed from ford to ford
+    // (set-wash-road-reach: gravel from bank to bank, a cut bank past each
+    // kerb, the last flood's log jam on the bar), and out under the east bend's low trestle (gen-tracks SEEDS
     // `trestle`: the bend's hill stands on pillars over the bed, not on an
     // embankment across it); a side wash comes in from the south across the
     // south strand, another ford. The bed is a shallow
@@ -1451,8 +1455,8 @@ export const TRACKS = {
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.302, lat: 10.5 },
-      { model: 'set-dead-cottonwood', u: 0.95, lat: -10, yaw: -180 },
+      { model: 'set-dead-cottonwood', u: 0.302, lat: 7 },
+      { model: 'set-dead-cottonwood', u: 0.95, lat: -7, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
@@ -1461,6 +1465,16 @@ export const TRACKS = {
       { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
       { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
       { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
+      // between the east loop's two fords the road runs down the bed itself,
+      // a cut bank past each kerb, and the last flood's log jam on the bar
+      { model: 'set-wash-road-reach', u: 0.537, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.553, lat: 0 },
+      { model: 'set-flood-jam', u: 0.558, lat: -6.2, yaw: 180 },
+      { model: 'set-wash-road-reach', u: 0.612, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.628, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.644, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.660, lat: 0 },
+      { model: 'set-wash-road-reach', u: 0.674, lat: 0 },
       // the canyon's mountainsides, each face toward the road: the outer
       // range (left) down the straight, round the bend and on, lower spurs
       // on the inside of the straight and after the bend, the inside of the

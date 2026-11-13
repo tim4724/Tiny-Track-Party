@@ -12576,6 +12576,57 @@ def wash_bed_build(ford):
 PIECES['wash-bed'], GROW['wash-bed'] = (lambda: wash_bed_build(False)), 1.0
 PIECES['wash-bed-ford'], GROW['wash-bed-ford'] = (lambda: wash_bed_build(True)), 1.0
 
+@piece(1.0)
+def wash_road_reach():
+    # Wash: a reach of the wash the ROAD runs down, between two fords: the
+    # gravel bed from bank to bank with the road along its middle (the deck
+    # lies on it, as at a ford), a cut bank either side a few units past
+    # each kerb, kerb-high and rust in the shade, stones on the bars between
+    # kerb and bank, brush along the banks' tops. Its SET_GROUND keeps the
+    # channel's floor under it. 10 units along Z, a chord of the road's
+    # curve (longer, its ends stood off a bend's kerbs), its banks dying
+    # away over the last unit at both ends, under the next reach's (a bed
+    # narrowing to nothing, as a wash reach does, drew its banks across the
+    # road); one mesh.
+    L, N = 10.0, 10
+    def half(z):
+        return 6.4 + 0.3 * math.sin(z * 0.6) + 0.2 * math.sin(z * 1.7 + 1.0)
+    zs_ = [-L / 2 + L * i / N for i in range(N + 1)]
+    tops = canyon_wash_channel([(0.0, z) for z in zs_], lambda i: half(zs_[i]), lip=0.75, seed=5.0,
+                               banked=lambda i: 0 < i < N)
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
+        o['ramp'] = 0.84
+    with plain_parts():
+        for i, (x, z, q) in enumerate(((5.3, -3.6, 0.3), (-5.6, -2.5, 0.24), (5.0, 1.5, 0.2), (-5.2, 3.4, 0.32),
+                                       (5.7, 3.9, 0.22), (-5.9, 0.6, 0.18))):
+            rock_lump(q, (x, q * 0.35, z), (0xd39a70, 'tan', 0xc07a55)[i % 3], (1.25, 0.6, 1.0), 0.9 * i, seed=11.0 + i)
+        for i, (x, z, sd) in enumerate(tops):
+            if abs(z) < L / 2 - 2.0:
+                brush((x, 0.5, z), 0.6 + 0.12 * (i % 3), yaw=i)
+    group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
+
+@piece(1.0)
+def flood_jam():
+    # Wash: what the last flash flood left where the bed turns: a jam of
+    # bleached logs piled against a boulder on the bar (+X the road), a root
+    # wad on top, a tumbleweed caught in it. Dead wood only.
+    PALE = 'cream'
+    with plain_parts():
+        sandstone_rock((-0.6, 0, 0.4), 1.5, yaw=0.5)
+        for i, (a, b, r) in enumerate((((-0.2, 0.2, -2.6), (0.6, 0.9, 2.2), 0.24), ((0.9, 0.15, -1.8), (-1.2, 1.3, 1.6), 0.2),
+                                       ((1.3, 0.12, -0.6), (0.1, 0.5, 2.9), 0.18), ((-1.6, 0.15, -2.2), (0.7, 1.5, 0.2), 0.17),
+                                       ((0.2, 0.1, -3.0), (1.5, 0.35, -0.2), 0.15), ((-0.9, 1.0, -0.9), (1.2, 1.7, 1.2), 0.16),
+                                       ((1.6, 0.1, 0.8), (0.3, 0.2, 3.4), 0.14))):
+            rowed(rod(a, b, r * 1.2, PALE, r2=r * 0.85), (8, 13, 10)[i % 3])
+        # a root wad lying on the pile, its roots in the air
+        rowed(rod((-0.3, 0.9, 1.2), (1.1, 1.35, 2.7), 0.3, PALE, r2=0.24), 12)
+        for k in range(5):
+            a = 1.26 * k
+            rowed(rod((1.1, 1.35, 2.7), (1.3 + 0.2 * math.cos(a), 1.4 + 0.55 * math.sin(a), 3.0 + 0.5 * math.cos(a)), 0.1, PALE, r2=0.06), 12)
+        brush((1.5, 0, -2.4), 0.8)
+    tumbleweed((0.6, 0.75, -0.3), 0.4)
+    join_still('jam')
+
 @piece(0.35)
 def mine_portal():
     # Gulch: the mine, at the size of the thing (the builder works in units of
@@ -14833,7 +14884,7 @@ def tinaja():
     # head up, a grey-brown mare) come to water at it. Water and rock only.
     dome = massif_height(((-4.6, 0.0, 2.4, 2.8, 4.6, 0.0, 1.0, 3.0), (-1.0, 0.0, 1.0, 4.8, 5.0, 0.0, 0.5, 1.0)),
                          rough=0.5, seed=2.3, warp=0.6)
-    PX, PZ, PR = -1.3, 0.0, 1.9
+    PX, PZ, PR = -0.75, 0.0, 1.35
     def rim(a):                                                          # the hollow's uneven outline
         return 1.0 + 0.07 * math.sin(3 * a + 0.4) + 0.04 * math.sin(5 * a + 2.2)
     def dist(x, z):
@@ -14845,18 +14896,20 @@ def tinaja():
     FLOOR, W, EDGE = 0.06, 0.26, 0.81
     def M(x, z):
         d = dist(x, z)
-        return min(dome(x, z), FLOOR + 2.6 * max(0.0, d - EDGE) + 1.6 * max(0.0, d * d - 1.0))   # the hollow
+        return min(dome(x, z), FLOOR + 3.4 * max(0.0, d - EDGE) + 1.6 * max(0.0, d * d - 1.0))   # the hollow
     canyon_rock(M, -9.0, 5.0, -8.0, 8.0,
-                ((-0.6, 0.2, 0xd68f62, 0.25), (0.2, 0.5, 0xe3cfa4, 0.3), (0.5, 0.85, 0xd68f62, 0.3),
+                ((-0.6, 0.2, 0xd68f62, 0.25), (0.2, 0.5, 0xa96545, 0.3), (0.5, 0.85, 0xd68f62, 0.3),
                  (0.85, 1.3, 0xa96545, 0.25), (1.3, 1.9, 0xd68f62, 0.2)),
                 'rock', grid=0.25, tol=0.12, step=1.2, jitter=0.12, summits=False)
-    # The water, one polar sheet on the hollow's outline: deep blue in the
-    # middle lightening ring by ring to the shallows, a ring of foam at the
-    # waterline, and its last ring running on under the rock wall so no gap
-    # opens between them.
+    # The water, one polar sheet on the hollow's outline: a small dark pool
+    # in the shade of its basin (bright, with a pale ring, it read as a
+    # paddling pool in the desert), deep blue in the middle, a little
+    # lighter in the shallows and a thin light line at the waterline, its
+    # last ring running on under the dark rock wall so no gap opens between
+    # them.
     N = 30
     RINGS = (0.0, 0.4, 0.62, 0.78, 0.875, 0.91, 1.0)
-    TONE = (('blue', 26), ('blue', 13), ('sky', 24), ('sky', 14), ('white', 1), ('white', 1))
+    TONE = (('blue', 30), ('blue', 26), ('blue', 21), ('blue', 16), ('sky', 22), ('blue', 24))
     ring = [[(PX + math.cos(a) * PR * rim(a) * f, W, PZ + math.sin(a) * PR * rim(a) * f / 0.9) for f in RINGS]
             for a in (2 * math.pi * i / N for i in range(N + 1))]
     for j, (sw, row) in enumerate(TONE):
