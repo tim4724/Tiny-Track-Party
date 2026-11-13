@@ -2918,9 +2918,10 @@ def pirate_stockade():
     # big one pulled up the sand beside it. In the sea wall a cannon run out to sea, in the
     # end wall toward the ship another trained along the shore on her
     # anchorage, and the thatched lookout at that corner, the Jolly Roger
-    # over it and over the gate. On the land side a low row of stakes, so the
-    # road sees into the yard as it passes: the log hut, the cold fire ring,
-    # the stores. Rounds 12 to 14 put a temple and then this fort on the
+    # over it and over the gate. The land side is a full wall with no way in
+    # (round 15 had low stakes and a gap there, which read as a wall too small
+    # and broken); the yard holds the log hut, the cold fire ring and the
+    # stores. Rounds 12 to 14 put a temple and then this fort on the
     # island's flank and on a hill of its own over the S, and the user found
     # each weird; the user chose this spot. It stands on the beach rise
     # tracks.js lays here, at the road's height; the sand falls to the sea
@@ -2945,8 +2946,9 @@ def pirate_stockade():
     logs((X0, Z0), (X0, Z1), gaps=((X0, GZ, GW), (X0, 2.0, 0.42)))
     logs((X0, Z0), (X1, Z0), gaps=((PORT[0], PORT[1], 0.42),))
     logs((X0, Z1), (X1, Z1))
-    logs((X1, Z0), (X1, Z1), gaps=((X1, 0.8, 0.8),), tall=0.55)    # the land side: stakes, a way in
+    logs((X1, Z0), (X1, Z1))                           # the land side: closed, as tall as the rest
     beam((X0 + 0.25, 1.1, Z0), (X0 + 0.25, 1.1, GZ - GW - 0.1), 0.14, dark)   # the rails, inside
+    beam((X1 - 0.25, 1.1, Z0), (X1 - 0.25, 1.1, Z1), 0.14, dark)
     beam((X0 + 0.25, 1.1, GZ + GW + 0.1), (X0 + 0.25, 1.1, Z1), 0.14, dark)
     for sz, z in ((-1, Z0), (1, Z1)):
         beam((X0, 1.1, z - sz * 0.25), (X1, 1.1, z - sz * 0.25), 0.14, dark)
