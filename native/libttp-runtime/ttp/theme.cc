@@ -82,7 +82,7 @@ ScenerySpec grassScenery() {
   s.hasBush = true;
   s.bush = { "set-lawn-shrub", 0.9f, 0.5f, 0.0f };
   s.mixTree = 0.62f; s.mixBush = 0.9f;
-  s.rocks = { 0xc6cbd6, 0xb4bac8, 0x9aa1b4 };  // pillar-concrete family
+  s.rocks = { 0x767c8c, 0x6a7080, 0x80869a };  // slate: pale stone read as dropped concrete on the grass
   s.rockS[0] = 0.3f; s.rockS[1] = 0.45f;
   s.density = 0.62f;
   // Near-field pass (own rand stream — the scatter above is untouched):
@@ -129,7 +129,9 @@ Theme grassTheme() {
   t.groundKind = GROUND_LAWN;
   t.hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
   // The Backyard is a PLACE, not the default: garden clutter trackside, drifting
-  // pollen in the sun, and a hot-air balloon over the meadow.
+  // pollen in the sun, and a hot-air balloon over the meadow. The cup's four
+  // tracks take their own from this (backyardTrack): no giants, and the
+  // balloon over Ribbon's fete alone.
   ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 7; t.ambient.tint = 0xfff2c4;
   t.balloon = { { 0xd94f3d, 0xf5f0e2 }, 44, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };
@@ -442,6 +444,8 @@ void lawnTrees(Theme& t, std::initializer_list<std::pair<const char*, float>> mi
 void backyardTrack(Theme& t, const std::string& track) {
   if (track != "ribbon" && track != "pretzel" && track != "tangle" && track != "cloverleaf") return;
   t.landmarks.clear();
+  // The balloon is the fete's: one sky per track (Pretzel's is its kites).
+  if (track != "ribbon") t.balloon.panels.clear();
   t.props.models = { "prop-hay", "tent-open" };
   t.props.scatter = { { 0, 0.7f, 0.34f, 0.08f, false, true }, { 1, 0.3f, 0.7f, 0.15f } };
   if (track == "ribbon") {

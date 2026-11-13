@@ -371,7 +371,7 @@ export const SET_GROUND = {
   // Cloverleaf's bandstand on the crown of its own knoll: a broad round top
   // the floor lies flush in, steeper to the road (+X, clear of the raised
   // road's stilts), falling away behind.
-  'set-bandstand': [{ kind: 'mound', h: 3.2, r: 10.5, r1: 15, rz: 14, shape: 0.6 }],
+  'set-bandstand': [{ kind: 'mound', h: 3.2, r: 8, r1: 15, rz: 14, shape: 0.6 }],
   // Tangle's brook lies in its own bed, a reach at a time: the low line the
   // valley's sides and the land raised toward the road stand over, so its
   // water lies level across: each bed is its reach's chord.
@@ -1209,12 +1209,17 @@ export const TRACKS = {
     // near end they stood in the view of the church). The
     // windmill turns in the north loop beside its wheat field, a rectangle
     // well inside the kerbs; the sheep graze round the loop's outside and
-    // under the flyover, and the dairy farm stands inside the west bend. A
+    // under the flyover, their fold and its drystone walls up the north-east
+    // hill where the loop turns under it, and the dairy farm stands inside
+    // the west bend. The church is the village's tallest thing, a quarter
+    // over its real size like the cup's other heroes; nearer the road its
+    // terrace falls inside the reach of the road's own ground and the green
+    // before it floats. A
     // piece's box holds the verge band down under it (bandHold), so nothing
     // here is one piece over a whole loop: every box keeps 2 u or more off
     // the kerbs, and the road keeps its verge.
     set: [
-      { model: 'set-village-church', u: 0.32107, lat: 21.693, yaw: 39.34 },
+      { model: 'set-village-church', u: 0.32107, lat: 22, yaw: 39.34, scale: 1.25 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
       { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
       { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
@@ -1238,6 +1243,7 @@ export const TRACKS = {
       { model: 'set-cow-farm', u: 0.892, lat: -8.7, yaw: 180 },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
+      { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
       { model: 'set-hay-meadow', u: 0.458, lat: -9, yaw: 180 }
     ],
     // the valley the village lies in: the west side rises off the west
@@ -1267,10 +1273,11 @@ export const TRACKS = {
     // where the racer comes off the diagonal's top; under four great oaks out
     // by the bends a picnic left out, a hay wain loaded, a trampoline, a
     // paddling pool;
-    // the kite hill rising off the verge beyond the top loop, three kites up
-    // over its face on their stakes. Nobody is about (children that small
-    // read as specks). The other trees a racer passes are the lawn's own
-    // scatter of the garden's broadleaf oaks.
+    // the kite hill rising off the verge beyond the top loop, three kites
+    // flying low over its foot from stakes up the slope; the soapbox run
+    // staked out down the east down to the road. Nobody is about (children
+    // that small read as specks). The other trees a racer passes are the
+    // lawn's own scatter of the garden's broadleaf oaks.
     set: [
       { model: 'set-avenue-oaks', u: 0.01011, lat: 5.5, yaw: 0 },
       { model: 'set-avenue-oaks', u: 0.01011, lat: -5.5, yaw: 180 },
@@ -1279,11 +1286,12 @@ export const TRACKS = {
       { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
       { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-picnic-oak', u: 0.86, lat: 7, yaw: 0 },
-      { model: 'set-hay-wain-oak', u: 0.52, lat: 6.5, yaw: 0 },
-      { model: 'set-trampoline-oak', u: 0.115, lat: 6.5, yaw: 0 },
-      { model: 'set-paddling-pool-oak', u: 0.34, lat: 6.5, yaw: 0 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -11.5, yaw: 180 }
+      { model: 'set-picnic-oak', u: 0.86, lat: 7.5, yaw: 0, scale: 1.35 },
+      { model: 'set-hay-wain-oak', u: 0.52, lat: 7, yaw: 0, scale: 1.35 },
+      { model: 'set-trampoline-oak', u: 0.115, lat: 7, yaw: 0, scale: 1.35 },
+      { model: 'set-paddling-pool-oak', u: 0.34, lat: 7, yaw: 0, scale: 1.35 },
+      { model: 'set-kite-flyers', u: 0.715, lat: -10, yaw: 180, scale: 1.4 },
+      { model: 'set-soapbox-run', u: 0.38, lat: 7.2, yaw: 0 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)
@@ -1336,7 +1344,7 @@ export const TRACKS = {
       { model: 'set-brook-f', u: 0.09588, lat: 9.104, yaw: -1.23 },
       { model: 'set-brook-g', u: 0.12394, lat: 10.621, yaw: -15.75 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-springhouse', u: 0.7335, lat: -9.6, yaw: 180 },
+      { model: 'set-springhouse', u: 0.7335, lat: -7.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
@@ -1395,7 +1403,7 @@ export const TRACKS = {
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
       { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
-      { model: 'set-bandstand', u: 0.23, lat: -20, yaw: 180, scale: 1.5 },
+      { model: 'set-bandstand', u: 0.23, lat: -16, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
