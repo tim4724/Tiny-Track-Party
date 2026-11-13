@@ -31,6 +31,7 @@ material {
 }
 
 fragment {
+    #define TTP_FOG_SKY
     #include "ttp_fog.inc"
 
     // Coverage of one blurred disc. A gaussian blur of a hard edge is an erf:
@@ -68,6 +69,7 @@ fragment {
 }
 
 vertex {
+    #define TTP_FOG_SKY
     #include "ttp_fog.inc"
 
     // The fog factor is the only thing this stage exists for: per vertex, so the
