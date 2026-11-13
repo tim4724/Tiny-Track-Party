@@ -2052,16 +2052,30 @@ private:
         int lodPath = -1;
         filament::math::float3 lodOrigin{ 0 };
         float lift = 0;                     // how high its verbs (and its ride's) raise it
+        // A traveller's (or its rider's) box is where it IS, not its loop's
+        // sweep (stepSetMovers): `reach` round the current pivot of the
+        // traveller it rides (`lodRoot`, itself for a traveller), and in lite
+        // its own far-form box in mLods (`lod`). A loop as wide as the map
+        // would otherwise never cull nor take its far form.
+        float reach = 0;
+        int lodRoot = -1;
+        int lod = -1;
         ttp::rt::SetMotion motion;
     };
     // THE SKIN: a placement's moving parts as ONE draw in full, a bone a part,
     // so a knot of penguins is one draw and each still waddles on its own.
     // `bones` is each part's pose this frame (stepSetMovers), handed over with
-    // setBones. The box is every pose's (buildSetMovers), since Filament culls
-    // a skinned draw on the box it is given.
+    // setBones. Filament culls a skinned draw on the box it is given, so the
+    // box holds every pose of the parts that move in place (`still`, set at
+    // build) and, frame by frame, where each traveller is now (`lod` is the
+    // skin's far form, measured to the same box).
     struct SetSkin {
         utils::Entity ent;                  // the draw; null if its build failed
         std::vector<filament::math::mat4f> bones;
+        filament::math::float3 stillLo{ 1e30f }, stillHi{ -1e30f };
+        filament::math::float3 nowLo, nowHi;   // this frame's box (stepSetMovers' scratch)
+        bool travels = false;
+        int lod = -1;
     };
     std::vector<SetSkin> mSetSkins;
     // Filament's bones per renderable; a placement with more opens another.

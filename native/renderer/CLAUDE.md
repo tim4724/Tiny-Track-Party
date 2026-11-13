@@ -1015,8 +1015,9 @@ the static runs, light frozen at rest, and moved by one transform a frame that
 is a closed form of the scene clock and the cars, so it has no state to reset.
 **In full a placement's parts are ONE skinned draw**, that transform each
 part's own bone, so a knot of penguins costs a draw and every penguin still
-moves by itself; its box is every pose's, since Filament culls a skinned draw
-on the box it is handed. Lite keeps a draw per part (its builds group a knot
+moves by itself; Filament culls a skinned draw on the box it is handed, so
+that box holds every pose of what moves in place and, frame by frame, where
+each traveller is now. Lite keeps a draw per part (its builds group a knot
 into one part), because the skinned draw is a pipeline the box would compile
 on first sight, mid-race; warm it there before lite takes it. Hence the verbs: spins about the part's own axis,
 sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
@@ -1024,8 +1025,10 @@ runs inside something opaque (or whose loop is closed in sight). A part inside
 another rides on it: its pose composes onto the outer part's pose of the same
 frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
 moves in place keeps its rest shadow. Every part takes a far form (in full, the placement's skin
-takes one); one that travels, or rides a traveller, measures it to the box its whole loop sweeps,
-since its rest box is wherever it was built.
+takes one); one that travels, or rides a traveller, measures it to its reach round that traveller's
+pivot THIS frame, since its rest box is wherever it was built. Measured to the whole loop's sweep,
+a line round the map (Sidewinder's trains) was never culled and never far. So a traveller's skin
+is only as tight as the placement: travellers spread round one loop belong in placements of their own.
 A traveller is drawn only on its path, so where it is built is just its pivot: a flier is built on
 the floor under its loop, or it would count in the piece's box, its sight points and the floating
 check as a part standing in the air. The static merge leaves every `anim_`
