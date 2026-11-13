@@ -1485,17 +1485,18 @@ def tidepool_cottages():
         # and the grid looks at (round 16: four blank walls): a tarred
         # plinth all round, a back door in the house's colour, a window
         # with its shutters, a little window in each gable
-        box((w + 0.08, 0.34, d + 0.08), (cx, 0.17, z), 'slate')
-        bx = cx - w / 2
-        box((0.07, 0.8, 0.5), (bx - 0.03, 0.4, z + 0.55), white)
-        box((0.07, 0.72, 0.4), (bx - 0.05, 0.36, z + 0.55), doors[k])
-        box((0.07, 0.5, 0.6), (bx - 0.03, 0.85, z - 0.6), white)
-        box((0.07, 0.4, 0.5), (bx - 0.05, 0.85, z - 0.6), 'slate')
-        for sz in (-1, 1):
-            box((0.07, 0.46, 0.2), (bx - 0.05, 0.85, z - 0.6 + sz * 0.42), doors[k])
-        for sz in (-1, 1):
-            box((0.5, 0.42, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.03)), white)
-            box((0.38, 0.3, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.05)), doors[(k + 2) % 4])
+        with plain_parts():                                                      # small and flat: no chamfer to pay for
+            box((w + 0.08, 0.34, d + 0.08), (cx, 0.17, z), 'slate')
+            bx = cx - w / 2
+            box((0.07, 0.8, 0.5), (bx - 0.03, 0.4, z + 0.55), white)
+            box((0.07, 0.72, 0.4), (bx - 0.05, 0.36, z + 0.55), doors[k])
+            box((0.07, 0.5, 0.6), (bx - 0.03, 0.85, z - 0.6), white)
+            box((0.07, 0.4, 0.5), (bx - 0.05, 0.85, z - 0.6), 'slate')
+            for sz in (-1, 1):
+                box((0.07, 0.46, 0.2), (bx - 0.05, 0.85, z - 0.6 + sz * 0.42), doors[k])
+            for sz in (-1, 1):
+                box((0.5, 0.42, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.03)), white)
+                box((0.38, 0.3, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.05)), doors[(k + 2) % 4])
     # the dry-stone wall along the gardens, a gate's gap before each door
     with plain_parts():
         for z0, z1 in ((-8.4, -7.3), (-6.5, -4.0), (-3.2, -0.3), (0.5, 3.6), (4.4, 6.0)):
