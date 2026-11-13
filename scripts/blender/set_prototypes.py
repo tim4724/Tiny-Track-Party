@@ -10925,7 +10925,7 @@ def sheepfold():
         ribbon_fence(((-7.4, 0.2), (-8.0, -5.5)))
         ribbon_fence((ring[1], (1.1, 4.6)))
         ribbon_gate((1.1, 4.6), (1.0, 5.7))
-        ribbon_fence(((1.0, 5.7), (0.6, 10.0)))
+        ribbon_fence(((1.0, 5.7), (0.6, 10.0), (-3.6, 9.5)))             # and back up to the cross fence: one closed paddock
         ribbon_fence((ring[9], (1.0, -5.5)))
         # a hay rack in the fold, a trough outside it
         for sz in (-1, 1):
@@ -11751,9 +11751,11 @@ def brook_ends(fr, start, end):
             # (buildPonds), to end half a unit out in the pond, its water at
             # the pond's own level: the walls ending in a stone each side,
             # the run white out onto the pond's sheet (which lies 0.09 up)
+            # (each stone a block where its wall crosses the pond's coping,
+            # broad enough to take that coping's cut end into it)
             for sd in (-1, 1):
-                rowed(box((C + 0.2, H + 0.12, 0.5), (x + ax * sd * (w + C / 2), (H + 0.12) / 2 - 0.04, z + az * sd * (w + C / 2)),
-                          'grey', yaw=yaw), SLATE_ROW)
+                rowed(box((C + 0.75, H + 0.2, 1.3), (x + ax * sd * (w + 0.3) - tx * 0.35, (H + 0.2) / 2 - 0.04,
+                                                     z + az * sd * (w + 0.3) - tz * 0.35), 'grey', yaw=yaw), SLATE_ROW)
             rowed(ground_poly([(x + ax * w * 0.8 - tx * 0.3, 0.12, z + az * w * 0.8 - tz * 0.3),
                                (x - ax * w * 0.8 - tx * 0.3, 0.12, z - az * w * 0.8 - tz * 0.3),
                                (x - ax * w * 0.35 + tx * 0.6, 0.12, z - az * w * 0.35 + tz * 0.6),
@@ -11938,10 +11940,15 @@ def culvert():
         arc = [(fx, r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
         poly([(fx, 0.0, 0.0)] + arc, [(0, k + 1, k + 2) for k in range(8)], 0x2a2735)
     mouth(face, R)                           # where the brook comes out, away from the road
-    mouth(0.02, 0.42)                        # and the barrel's end at the road, the water going under it
     for sd in (-1, 1):                       # wing walls, short and splayed along the banks
         rowed(box((0.9, 0.5, 0.42), (face - 0.35, 0.25, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45), SLATE_ROW)
     join_still('culvert')
+    # From the barrel's end on under the kerb: the same stone as a low
+    # apron, a part of its own, flat enough (spotIssue's floor print) to lie
+    # inside the road's margin where the barrel may not stand. Without it
+    # the barrel ended a unit and a half short of the road, a stone box on
+    # the lawn with a second arch facing the kerb.
+    group([box((1.7, 0.13, W), (0.8, 0.065, 0), 'grey')], 'apron')
 
 # ---- CLOVERLEAF: the boating lake ----------------------------------------------------
 # The park's boating lake in the finger lobe, the track's `pond` landform (its
@@ -12569,6 +12576,8 @@ def springhouse():
     for o in [o for o in bpy.context.scene.objects if o.get('turf')]:
         bpy.data.objects.remove(o, do_unlink=True)
     join_still('springhouse')
+    # the drain's stone on from its headwall under the kerb (the culverts' apron)
+    group([box((4.2, 0.3, 3.6), (7.9 + 0.4 + 2.1, 0.15, PZ), 'grey')], 'apron')
     with animated('anim_spin:a=y:w=0.3#flecks', (PX, 0.2, PZ)):
         for k in range(6):
             a = k * 2 * math.pi / 6
