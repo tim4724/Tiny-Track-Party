@@ -1648,7 +1648,7 @@ constexpr FurnDef kBoxes_wash[] = {
 };
 constexpr SetDef kSet_wash[] = {
   { "set-dry-creek", 0x1.d81d7dbf487fdp-1, -0x1.28p+4, 0x1.cp+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-dead-cottonwood", 0x1.353f7ced91687p-2, 0x1.cp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-dead-cottonwood", 0x1.353f7ced91687p-2, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-dead-cottonwood", 0x1.e666666666666p-1, -0x1.cp+2, -0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-bed", 0x1.6acd9e83e425bp-1, -0x1.9333333333333p+4, -0x1.2p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-bed-ford", 0x1.5c28f5c28f5c3p-1, -0x1.ccccccccccccdp+1, 0x1.34p+6, 0x0p+0, 0x1p+0, 1 },
@@ -1660,7 +1660,7 @@ constexpr SetDef kSet_wash[] = {
   { "set-wash-bed-ford", 0x1.095182a9930bep-1, 0x1.1333333333333p+3, -0x1.6cp+6, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-road-reach", 0x1.12f1a9fbe76c9p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-road-reach", 0x1.1b22d0e560419p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-flood-jam", 0x1.1db22d0e56042p-1, -0x1.8cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-flood-jam", 0x1.1db22d0e56042p-1, -0x1.b333333333333p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-road-reach", 0x1.395810624dd2fp-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-road-reach", 0x1.4189374bc6a7fp-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-road-reach", 0x1.49ba5e353f7cfp-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
