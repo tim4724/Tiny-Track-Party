@@ -28,6 +28,11 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_MOTE:   a.size = 0.13f; a.opacity = 0.5f;  a.fall = 0.05f; a.wind = 0.4f; a.bob = 0.4f;  a.band = 0.5f;  break;
     case AMB_SAND:   a.size = 0.17f; a.opacity = 0.4f;  a.fall = 0;     a.wind = 9;    a.bob = 0.5f;  a.band = 0.1f;  break;
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
+    // The life's three: a petal sinks slowly and sways, low; a tumbleweed
+    // rolls on the floor in the wind, hopping; spray is thrown off the water.
+    case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
+    case AMB_TUMBLE: a.size = 0.9f;  a.opacity = 1.0f;  a.fall = 0;     a.wind = 2.4f; a.bob = 0.45f; a.band = 1;  a.hop = 2.8f;  break;
+    case AMB_SPRAY:  a.size = 0.8f;  a.opacity = 0.8f;  a.fall = 0;     a.wind = 0.4f; a.bob = 1.4f;  a.band = 1;  a.hop = 1.3f;  break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }
@@ -131,6 +136,10 @@ Theme grassTheme() {
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };
   t.scenery = grassScenery();
   t.props = gardenProps();  // hay bales and toy crates on the verge
+  // A garden's bridges stand on painted concrete: a pale shaft on a raw
+  // concrete footing, under a cap each track paints its own colour
+  // (backyardTrack).
+  t.pier = { PIER_PAINTED, 0xece6d8, 0, 0xaaa79e, 0xaaa79e, 0 };
   deriveRoad(t.road, false, false, false);
   return t;
 }
@@ -181,6 +190,7 @@ Theme beachTheme() {
   t.road.asphalt = 0x6c6a74;
   deriveRoad(t.road, false, false, false);
   t.structure = 0x9a7b55;  // overpass supports stay timber piles — pier flavour
+  t.pier = { PIER_TIMBER, 0, 0, 0x7a5f40, 0, 0 };   // a post under a cap beam
   t.landmarks = { LM_LIGHTHOUSE, LM_SAILBOAT, LM_UMBRELLA, LM_SANDCASTLE };
   // Gulls working the shoreline, flapping busily.
   t.birds.count = 4; t.birds.tint = 0x51616d; t.birds.size = 3.0f; t.birds.y = 13;
@@ -213,6 +223,9 @@ Theme beachTheme() {
   t.props.models = { "prop-crate" };
   t.props.scatterDensity = 0.11f;
   t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  // Spray thrown up where the surf breaks, the foam's white.
+  ambientKind(t.life, AMB_SPRAY);
+  t.life.count = 900; t.life.tint = 0xf2fbf5;
   return t;
 }
 
@@ -444,6 +457,7 @@ void backyardTrack(Theme& t, const std::string& track) {
     lawnTrees(t, { { "set-tree-apple", 0.5f }, { "set-tree-poplar", 0.5f } });
     t.road.kerbA = 0x339cf2;
     t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
+    t.pier.cap = 0x339cf2;
   } else if (track == "pretzel") {
     // The children's summer: tents pitched round the garden. Timber kerbs
     // and gantry, the treehouse's. Fewer wildflowers: the road lies on the
@@ -453,6 +467,7 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.scenery.clutterDensity = 0.15f;
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
+    t.pier.cap = 0x22c46e;
     // High summer on the downs: the garden's broadleaf oaks, well apart,
     // and the far hills gone to hay.
     lawnTrees(t, { { "set-tree-oak", 1.0f } });
@@ -474,6 +489,7 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.groundBase = 0x4f9a58;
     t.road.kerbA = 0x2bb673;
     t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
+    t.pier.cap = 0x2bb673;
   } else if (track == "cloverleaf") {
     // The park: the gantry in the climbing frame's blue. Fewer wildflowers,
     // as on Pretzel: the road lies on the grass, its verge open to them.
@@ -485,7 +501,12 @@ void backyardTrack(Theme& t, const std::string& track) {
     // (the set).
     lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });
     t.scenery.density = 0.26f;
+    // Petals, pink and white, drifting off the avenues across the road.
+    ambientKind(t.life, AMB_PETAL);
+    t.life.count = 900; t.life.tint = 0xf2a2ba; t.life.tint2 = 0xfbe4ec;
+    t.life.near = "cherry-avenue"; t.life.reach = 9;
     t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
+    t.pier.cap = 0x339cf2;
   }
 }
 
@@ -516,7 +537,11 @@ Theme canyonTheme() {
   deriveRoad(t.road, /*dashSet=*/true, false, /*shoulderSet=*/true);
   // Grit on the wind: fast low sand streaks under the drifting dust banks.
   ambientKind(t.ambient, AMB_SAND); t.ambient.count = 240; t.ambient.tint = 0xe9c9a0;
+  // …and now and then a tumbleweed rolling across the road on it.
+  ambientKind(t.life, AMB_TUMBLE); t.life.count = 14; t.life.tint = 0xa07d4a; t.life.tint2 = 0x8c6c40;
   t.structure = 0xb4714d;  // supports read as red-rock columns, not city concrete
+  // …built of the rock itself: sandstone in courses, a footing and a cap.
+  t.pier = { PIER_STONE, 0, 0xa36443, 0xc4825c, 0x95583a, 0 };
   t.landmarks = { LM_HOODOO };
   // Vultures riding a thermal — soaring, barely a wing-beat.
   t.birds.count = 2; t.birds.tint = 0x3a322c; t.birds.size = 3.6f; t.birds.y = 36;
@@ -570,6 +595,7 @@ void canyonTrack(Theme& t, const std::string& track) {
     t.props.scatter = { { 2, 0.55f, 1.6f, 0.6f }, { 3, 0.45f, 1.4f, 0.5f } };
   } else if (track == "gulch") {
     t.structure = 0x8a6a46;  // timber, like the mine's own trestles
+    t.pier = { PIER_TIMBER, 0, 0, 0x6e5236, 0, 0 };
     t.props.scatter = { { 0, 0.34f, 0.6f, 0.2f, false, true }, { 1, 0.30f, 0.3f, 0.08f, false, true },
                         { 3, 0.36f, 1.4f, 0.5f } };
   } else if (track == "crag") {
@@ -612,6 +638,10 @@ Theme snowTheme() {
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
   t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
+  // Bridges on stone piers: slate in courses on a footing, under a dressed
+  // cap, snow lying on both. A shade over the rock rule's 35-45%, because a
+  // pier stands in the deck's shadow, where that slate reads near-black.
+  t.pier = { PIER_STONE, 0x6f7783, 0x5a616c, 0x7a828d, 0x5a616c, 0xf3f7fb };
   // The snowman that used to head this list is a Holiday Kit model now, in the
   // prop scatter below — one greeter a track became several a lap.
   t.landmarks = { LM_CABIN };
@@ -682,6 +712,11 @@ Theme playroomTheme() {
   // Dust motes hanging in the window sunbeams, and a paper airplane on a long
   // lazy glide around the room (REAL 3D — a folded dart that banks into turns).
   ambientKind(t.ambient, AMB_MOTE); t.ambient.count = 11; t.ambient.tint = 0xffdf9e;
+  // …and thick in the shaft of window light, wherever a track's sunbeam
+  // falls (a set piece named so: the playroom's set-play-sunbeam).
+  ambientKind(t.life, AMB_MOTE);
+  t.life.count = 2400; t.life.size = 0.15f; t.life.opacity = 0.9f; t.life.tint = 0xfff1c8;
+  t.life.near = "sunbeam"; t.life.reach = 4; t.life.band = 0.2f;
   t.hasPlane = true;
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
@@ -961,6 +996,9 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     }
   }
   if (lite) {
+    // The life is the corner of the eye's, and every millisecond on the box
+    // is the race's: none until it has been priced there.
+    t.life = AmbientSpec{};
     lite_models(t.scenery.models);
     lite_models(t.props.models);
     lite_models(t.set.models);

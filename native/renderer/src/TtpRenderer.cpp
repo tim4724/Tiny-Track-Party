@@ -955,6 +955,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.land = th.land;
     out.structureCol = th.structure;
     out.structureStack = th.structureStack;
+    out.pier = th.pier;
 
     out.groundKind = th.groundKind;
     out.groundBase = th.groundBase;
@@ -996,6 +997,11 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.ambWind = th.ambient.wind;
     out.ambBob = th.ambient.bob;
     out.ambBand = th.ambient.band;
+    out.life = th.life;
+    out.setNear.assign(th.set.models.size(), false);
+    for (size_t i = 0; i < th.set.models.size(); i++) {
+        out.setNear[i] = !th.life.near.empty() && th.set.models[i].find(th.life.near) != std::string::npos;
+    }
     out.birdCount = th.birds.count;
     out.birdTint = th.birds.tint;
     out.birdSize = th.birds.size;
@@ -1965,6 +1971,7 @@ void TtpRenderer::tagFeatures() {
 
     // Items and the transient pools.
     tagMesh(mPollen, kFeatEffects);
+    tagMesh(mLife, kFeatEffects);
     meshVec(mRockets, kFeatEffects);
     meshVec(mRocketFlames, kFeatEffects);
     for (const Mesh& m : mBurstMeshes) tagMesh(m, kFeatEffects);
@@ -2338,6 +2345,9 @@ void TtpRenderer::releaseStatic() {
     for (auto& m : mBurstBalls) destroyMesh(m);
     releaseAmbientCull();   // its parked renderables hold mPollen.vb
     destroyMesh(mPollen);
+    destroyMesh(mLife);
+    mLifeAnchors.clear();
+    mLifeCells = 0;
     mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
@@ -2414,8 +2424,10 @@ void TtpRenderer::releaseStatic() {
     mSmokeRow = -1;
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
+    mLifeMat = nullptr;
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
+    if (mLifeTex) { mEngine->destroy(mLifeTex); mLifeTex = nullptr; }
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;

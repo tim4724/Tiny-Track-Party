@@ -35,6 +35,27 @@
 // The fragment then rebuilds the sprite texture's radial gradient from the same
 // uv (opaque core, 0.9 at 0.4r, out to nothing at the rim), so the silhouette
 // is a circle no matter how few vertices are behind it.
+//
+// THE CUP'S AMBIENT LIFE (theme.life) is a second cloud through this same
+// material, and every knob it adds is a uniform that leaves the weather's path
+// as it was (each 0 there):
+//   - `mask` scales a sprite's alpha by the floor texture's G, the map of
+//     where that life lives (round a cherry, along the surf, by the road), and
+//     lays the band on the floor texture's R, the ground under it, so the tap
+//     runs in a split's lite cells too;
+//   - `tile` (world units) wraps a sprite inside its own seed's tile of the
+//     world instead of round the camera: life seeded only where it lives, so
+//     a sunbeam's few dozen motes cost a few dozen sprites, not a camera box
+//     of them;
+//   - `hop` (rad/s) STANDS a sprite on the floor (R) instead of in the band
+//     and bounces it: a tumbleweed rolling, spray thrown up off the water
+//     (`hopFade` fades it into the water at the bottom of each throw, and
+//     throws neighbours together, so the surf bursts in runs);
+//   - `flutter` turns a sprite edge-on and back, a petal tumbling;
+//   - `twig` draws the fragment as a see-through ball of stems, turned by the
+//     roll the vertex stage hands over in fog.y.
+// A sprite left with no alpha is collapsed to a point, so the cloud's masked
+// majority rasterizes nothing.
 material {
     name : TtpVpoint,
     // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
@@ -64,7 +85,13 @@ material {
         { type : float, name : lite },
         { type : float2, name : floorOrigin, precision : high },
         { type : float, name : floorInvSpan, precision : high },
-        { type : sampler2d, name : floorTex }
+        { type : sampler2d, name : floorTex },
+        { type : float, name : mask },
+        { type : float, name : tile, precision : high },
+        { type : float, name : hop },
+        { type : float, name : hopFade },
+        { type : float, name : flutter },
+        { type : float, name : twig }
     ]
 }
 
@@ -96,25 +123,56 @@ vertex {
         // x/z: ride the wind, then wrap into a boxXZ-wide column centred on
         // the camera (GLSL mod is non-negative, so one mod suffices).
         highp float bx = materialParams.boxXZ;
-        highp vec2 p = seed.xz + vec2(materialParams.wind * t, 0.0);
-        highp vec2 rel = mod(p - camU.xz, vec2(bx)) - 0.5 * bx;
-        highp vec3 posU = vec3(camU.x + rel.x, y, camU.z + rel.y);
+        // A thing on the floor rolls at its own pace; the weather's wind is one.
+        highp float pace = materialParams.hop > 0.0 ? 0.7 + 0.6 * h1 : 1.0;
+        highp vec2 p = seed.xz + vec2(materialParams.wind * pace * t, 0.0);
+        highp vec2 rel;
+        highp vec3 posU;
+        if (materialParams.tile > 0.0) {
+            // The seed's own tile: the CPU keeps every seed clear of its
+            // tile's edges, so worldPosition's reconstruction noise cannot
+            // move it to the next one.
+            bx = materialParams.tile;
+            highp vec2 c = (floor(seed.xz / bx) + 0.5) * bx;
+            rel = mod(p - c + 0.5 * bx, vec2(bx)) - 0.5 * bx;
+            posU = vec3(c.x + rel.x, y, c.y + rel.y);
+        } else {
+            rel = mod(p - camU.xz, vec2(bx)) - 0.5 * bx;
+            posU = vec3(camU.x + rel.x, y, camU.z + rel.y);
+        }
         // Dissolve at the wrap boundary (Chebyshev distance IS the distance to
         // the seam), and fade out against the local surface — an alpha fade
         // only, the vertex is never repositioned — instead of clipping it.
         float edge = 1.0 - smoothstep(0.8, 1.0, max(abs(rel.x), abs(rel.y)) / (0.5 * bx));
         material.color.a *= edge;
-        material.worldPosition.xyz = posU - off
-                + (w[0].xyz * material.uv0.x + w[1].xyz * material.uv0.y)
-                        * materialParams.halfSize;
         material.fog = vec4(0.0);
-        if (materialParams.lite < 0.5) {
-            highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
+        highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
+        if (materialParams.hop > 0.0) {
+            highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;
+            // Spray throws in runs along the shore; a tumbleweed hops alone.
+            highp float ph = materialParams.hopFade > 0.5 ? dot(posU.xz, vec2(0.23, 0.17)) : h1 * 61.0;
+            float up = abs(sin(t * materialParams.hop + ph));
+            posU.y = f.r + materialParams.halfSize + materialParams.bob * up;
+            material.color.a *= f.g * mix(1.0, up, materialParams.hopFade);
+            material.fog.y = materialParams.wind * pace * t / max(materialParams.halfSize, 0.01);
+        } else if (materialParams.mask > 0.5) {
+            highp vec2 f = textureLod(materialParams_floorTex, uv, 0.0).rg;
+            posU.y += f.r;
+            // …and in on the band's way down, out as it lands: a band this
+            // low is in shot top to bottom.
+            material.color.a *= f.g * smoothstep(0.0, 1.0, y - 0.5)
+                    * smoothstep(0.0, 1.0, materialParams.bandH + 0.5 - y);
+        } else if (materialParams.lite < 0.5) {
             material.color.a *= clamp(y - textureLod(materialParams_floorTex, uv, 0.0).r, 0.0, 1.0);
-            // LAST: this stage moves worldPosition, and the fog factor has to
-            // be measured from where the vertex actually ends up.
-            material.fog.x = ttpFogFactor(material.worldPosition.xyz);
         }
+        float wide = 1.0;
+        if (materialParams.flutter > 0.0) wide = 0.2 + 0.8 * abs(cos(t * 2.6 + h1 * 40.0));
+        float hs = materialParams.halfSize * step(0.004, material.color.a);
+        material.worldPosition.xyz = posU - off
+                + (w[0].xyz * (material.uv0.x * wide) + w[1].xyz * material.uv0.y) * hs;
+        // LAST: this stage moves worldPosition, and the fog factor has to be
+        // measured from where the vertex actually ends up.
+        if (materialParams.lite < 0.5) material.fog.x = ttpFogFactor(material.worldPosition.xyz);
     }
 }
 
@@ -127,6 +185,23 @@ fragment {
         float d = length(getUV0());
         // makeSnowflakeTexture's stops: 1.0 at the centre, 0.9 at 0.4, 0 at 1.
         float a = d < 0.4 ? 1.0 - 0.25 * d : 0.9 * (1.0 - (d - 0.4) / 0.6);
+        if (materialParams.twig > 0.5) {
+            // Three families of wavy stems crossing at odd angles, turned by
+            // the roll, over a thin fill, inside a ragged outline: a tangle
+            // you can see through, not a wheel.
+            vec2 q = getUV0();
+            float r = variable_fog.y;
+            float stems = 0.0;
+            for (int k = 0; k < 3; k++) {
+                float th = r + float(k) * 2.1;
+                vec2 dir = vec2(cos(th), sin(th));
+                float v = dot(q, dir) * (2.6 + 0.9 * float(k))
+                        + 0.35 * sin(dot(q, vec2(-dir.y, dir.x)) * 4.0 + float(k));
+                stems = max(stems, 1.0 - smoothstep(0.07, 0.18, abs(fract(v) - 0.5)));
+            }
+            float ragged = d + 0.1 * sin(atan(q.y, q.x) * 5.0 + r) + 0.05 * sin(atan(q.y, q.x) * 11.0 - r);
+            a = max(stems, 0.28) * (1.0 - smoothstep(0.72, 0.9, ragged));
+        }
         material.baseColor.a *= clamp(a, 0.0, 1.0);
         // Premultiply, same as vblend: the vertex colour is displayed already.
         material.baseColor.rgb = ttpFogMix(material.baseColor.rgb, variable_fog.x) * material.baseColor.a;

@@ -2625,6 +2625,27 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
             mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
         }
     }
+    // The cup's ambient life: world-sized, so no rows fit; a box-riding kind
+    // keeps the weather's density per unit of ground in a split, and tiled
+    // life is culled on its tiles' bounds.
+    if (mLifeMat) {
+        mLifeMat->setParameter("time", mTime);
+        const uint32_t vc = input.viewCount;
+        if (vc && vc != mLifeCells) {
+            mLifeCells = vc;
+            if (mLifeBox > 0) {
+                auto& rcm = mEngine->getRenderableManager();
+                const auto ri = rcm.getInstance(mLife.entity);
+                const uint32_t n = (uint32_t) mLife.idx.size() / 3;
+                if (ri && n) {
+                    rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mLife.vb, mLife.ib, 0, std::max(1u, n / vc) * 3);
+                }
+                mLifeMat->setParameter("boxXZ", mLifeBox / std::sqrt((float) vc));
+            }
+            mLifeMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
+        }
+    }
 
     // Frame pacing. beginFrame() drops a frame when the GPU is behind — it waits
     // on a fence from two frames ago, and on WEB that fence signals late enough

@@ -403,6 +403,7 @@ struct TtpRenderer::TrackBin {
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)
     std::vector<uint32_t> structureStack; // theme.structureStack: stacked pillars
+    ttp::rt::PierSpec pier;              // theme.pier: how a pillar is built
     float roadWidth = 5, sand = 0, groundY = 0, length = 0;
     bool closed = true;
 
@@ -434,6 +435,10 @@ struct TtpRenderer::TrackBin {
     uint32_t ambCount = 0, ambTint = 0xffffff;
     float ambSize = 0.3f, ambOpacity = 0.85f;
     float ambFall = 1, ambWind = 0.7f, ambBob = 0, ambBand = 1;
+    ttp::rt::AmbientSpec life;           // theme.life: the cup's ambient life
+    // Per set model: whether its name holds life.near, i.e. whether the life
+    // gathers round it (mLifeAnchors).
+    std::vector<bool> setNear;
     uint32_t birdCount = 0, birdTint = 0xffffff;
     float birdSize = 2.4f, birdY = 18, birdRc = 120, birdRb = 22;
     float birdSpeed = 0.2f, birdFlap = 0.8f, birdFlapHz = 1.8f, birdDys = 1;

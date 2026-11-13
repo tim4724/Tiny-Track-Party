@@ -1637,6 +1637,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         mSetRowOf[inst] = nRows;
         const float top = base + bb.max.y * p.scale;
         mSetFeet.push_back({ wx, wz, ax, az, hx, hz, top });
+        if (p.slot < tb.setNear.size() && tb.setNear[p.slot]) mLifeAnchors.push_back({ wx, wz, ax, az, hx, hz });
         ttp::Value row = ttp::Value::Obj();
         row.set("model", ttp::Value::Str(tb.setModels[p.slot]));
         row.set("u", num(p.u));
@@ -2501,13 +2502,150 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
                     p.baseY + (top - p.baseY) * (k + 1) / n, packAlbedo(srgbToLinear(c), 1.0f));
         }
     };
+    // A CUP'S PIER (theme.pier): a prism of `sides` flat faces, each face its
+    // own four vertices so it shades flat (dressed stone, a painted block),
+    // turned by `turn`, with an up-facing lid in `lid` when that is not 0.
+    const auto prism = [&](float x, float z, float r, float y0, float y1, int sides, float turn,
+            uint32_t col, uint32_t lid) {
+        const uint32_t c = packAlbedo(srgbToLinear(col), 1.0f);
+        const auto at = [&](int j, float y) {
+            const float a = turn + (float) j / sides * 2.0f * (float) M_PI;
+            return Vertex{ x + std::cos(a) * r, y, z + std::sin(a) * r, c };
+        };
+        for (int j = 0; j < sides; j++) {
+            const uint32_t base = (uint32_t) mStructures.verts.size();
+            for (const Vertex& v : { at(j, y0), at(j, y1), at(j + 1, y1), at(j + 1, y0) }) {
+                mStructures.verts.push_back(v);
+            }
+            // Wound to face OUT, as column's sides are.
+            mStructures.idx.insert(mStructures.idx.end(), { base, base + 1, base + 3, base + 1, base + 2, base + 3 });
+        }
+        if (!lid) return;
+        const uint32_t lc = packAlbedo(srgbToLinear(lid), 1.0f);
+        const uint32_t ctr = (uint32_t) mStructures.verts.size();
+        mStructures.verts.push_back({ x, y1, z, lc });
+        for (int j = 0; j < sides; j++) {
+            Vertex v = at(j, y1);
+            v.abgr = lc;
+            mStructures.verts.push_back(v);
+        }
+        for (int j = 0; j < sides; j++) {   // wound to face UP, as column's cap is
+            mStructures.idx.insert(mStructures.idx.end(),
+                    { ctr, ctr + 1 + (uint32_t) ((j + 1) % sides), ctr + 1 + (uint32_t) j });
+        }
+    };
+    // A box from its centre's foot, `half` along the unit `ax` and `depth`
+    // across it (horizontal both), y0 to y1: the timber cap beam. Every face
+    // its own vertices and wound out, the bottom included (a road passes
+    // under some).
+    const auto beam = [&](float3 c, float3 ax, float half, float depth, float y0, float y1, uint32_t col) {
+        const uint32_t k = packAlbedo(srgbToLinear(col), 1.0f);
+        const float3 cr{ -ax.z, 0, ax.x };
+        const auto P = [&](float a, float b, float y) {
+            const float3 q = c + ax * (a * half) + cr * (b * depth);
+            return float3{ q.x, y, q.z };
+        };
+        const auto quad4 = [&](float3 a, float3 b, float3 cc, float3 d, float3 n) {
+            if (dot(cross(b - a, cc - a), n) < 0) std::swap(b, d);
+            const uint32_t base = (uint32_t) mStructures.verts.size();
+            for (const float3& p : { a, b, cc, d }) mStructures.verts.push_back({ p.x, p.y, p.z, k });
+            mStructures.idx.insert(mStructures.idx.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
+        };
+        quad4(P(-1, -1, y1), P(1, -1, y1), P(1, 1, y1), P(-1, 1, y1), { 0, 1, 0 });
+        quad4(P(-1, -1, y0), P(1, -1, y0), P(1, 1, y0), P(-1, 1, y0), { 0, -1, 0 });
+        quad4(P(-1, -1, y0), P(1, -1, y0), P(1, -1, y1), P(-1, -1, y1), -cr);
+        quad4(P(-1, 1, y0), P(1, 1, y0), P(1, 1, y1), P(-1, 1, y1), cr);
+        quad4(P(-1, -1, y0), P(-1, 1, y0), P(-1, 1, y1), P(-1, -1, y1), -ax);
+        quad4(P(1, -1, y0), P(1, 1, y0), P(1, 1, y1), P(1, -1, y1), ax);
+    };
+    // The deck's direction over a pillar: the nearest sample standing over it.
+    const auto deckAxis = [&](const TrackBin::Pillar& p) {
+        float best = 1e30f;
+        float3 t{ 1, 0, 0 };
+        for (const TrackBin::Sample& s : tb.samples) {
+            if (s.pos.y < p.topY) continue;
+            const float d = (s.pos.x - p.x) * (s.pos.x - p.x) + (s.pos.z - p.z) * (s.pos.z - p.z);
+            if (d < best) { best = d; t = s.tangent(); }
+        }
+        const float l = std::hypot(t.x, t.z);
+        return l > 1e-4f ? float3{ t.x / l, 0, t.z / l } : float3{ 1, 0, 0 };
+    };
+    const ttp::rt::PierSpec& pier = tb.pier;
+    const uint32_t shaftC = pier.shaft ? pier.shaft : tb.structureCol;
     for (size_t i = 0; i < tb.pillars.size(); i++) {
         const TrackBin::Pillar& p = tb.pillars[i];
         if (!tb.structureStack.empty() && p.topY - tb.groundY > 0.8f) { stacked(p, i); continue; }
         // Down to the bed of a sunk sea, which lies under the plain they stand on.
         const float sink = bedSink(p.x, p.z);
         const float baseY = sink > 0 ? std::min(p.baseY, tb.groundY - sink - 0.1f) : p.baseY;
-        column(p.x, p.z, p.radius, baseY, std::max(p.baseY + 0.1f, p.topY), nullptr, nullptr);
+        const float topY = std::max(p.baseY + 0.1f, p.topY);
+        if (pier.kind == ttp::rt::PIER_COLUMN) {
+            column(p.x, p.z, p.radius, baseY, topY, nullptr, nullptr);
+            continue;
+        }
+        // The footing stands on the PLAIN, which is the lowest any ground
+        // lies (a rise in the land buries it, and the shaft comes up out of
+        // that); a pier too short for a footing and a cap keeps its shaft.
+        // Every part stands inside the margin the builder keeps a pillar
+        // from any road beside it (trackbuilder.cc, RADIUS + MARGIN: 0.8 u).
+        constexpr float FOOT_H = 0.35f, CAP_H = 0.32f, SNOW_H = 0.14f;
+        const float tall = topY - tb.groundY;
+        const bool foot = pier.foot && sink <= 0 && tall > 1.6f;
+        const bool cap = pier.cap && tall > 1.0f;
+        const float shaft0 = foot ? tb.groundY + FOOT_H : baseY;
+        const float shaft1 = cap ? topY - CAP_H : topY;
+        if (pier.kind == ttp::rt::PIER_TIMBER) {
+            // A square post, its faces square to the deck, under a cap beam
+            // across it.
+            const float3 ax = deckAxis(p);
+            const float turn = std::atan2(ax.z, ax.x) + (float) M_PI / 4;
+            prism(p.x, p.z, p.radius * 0.85f, baseY, shaft1, 4, turn, shaftC, 0);
+            if (cap) beam({ p.x, 0, p.z }, float3{ -ax.z, 0, ax.x }, p.radius * 1.5f, p.radius * 0.42f,
+                    shaft1, topY, pier.cap);
+            continue;
+        }
+        // Square, its faces square to the deck as a bridge pier's are: a
+        // block reads as built, and costs half an octagon's vertices.
+        const float3 ax = deckAxis(p);
+        const float turn = std::atan2(ax.z, ax.x) + (float) M_PI / 4;
+        const uint32_t snow = pier.kind == ttp::rt::PIER_STONE ? pier.snow : 0;
+        if (foot) {
+            prism(p.x, p.z, p.radius * 1.6f, baseY, tb.groundY + FOOT_H, 4, turn, pier.foot,
+                    snow ? snow : pier.foot);
+        }
+        if (cap) {
+            // On snow the cap's top course is the snow lying on it, a little
+            // proud of the stone, in the gap under the slab.
+            const float capTop = snow ? topY - SNOW_H : topY;
+            prism(p.x, p.z, p.radius * 1.5f, shaft1, capTop, 4, turn, pier.cap, 0);
+            if (snow) prism(p.x, p.z, p.radius * 1.6f, capTop, topY, 4, turn, snow, 0);
+        }
+        if (pier.kind == ttp::rt::PIER_PAINTED) {
+            // A round painted shaft, a little slimmer than the column it stands for.
+            const uint32_t pc = packAlbedo(srgbToLinear(shaftC), 1.0f);
+            const uint32_t base = (uint32_t) mStructures.verts.size();
+            constexpr int SEG = 12;
+            const float r = p.radius * 0.84f;
+            for (int j = 0; j <= SEG; j++) {
+                const float a = (float) j / SEG * 2.0f * (float) M_PI;
+                const float vx = p.x + std::cos(a) * r, vz = p.z + std::sin(a) * r;
+                mStructures.verts.push_back({ vx, shaft0, vz, pc });
+                mStructures.verts.push_back({ vx, shaft1, vz, pc });
+            }
+            for (int j = 0; j < SEG; j++) {
+                const uint32_t a0 = base + (uint32_t) j * 2, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
+                mStructures.idx.insert(mStructures.idx.end(), { a0, b0, a1, b0, b1, a1 });
+            }
+            continue;
+        }
+        // STONE: courses of about COURSE, alternating the two stones.
+        constexpr float COURSE = 0.75f;
+        const int n = std::max(1, (int) std::lround((shaft1 - shaft0) / COURSE));
+        for (int k = 0; k < n; k++) {
+            prism(p.x, p.z, p.radius * 1.2f, shaft0 + (shaft1 - shaft0) * k / n,
+                    shaft0 + (shaft1 - shaft0) * (k + 1) / n, 4, turn,
+                    (k % 2 && pier.course) ? pier.course : shaftC, 0);
+        }
     }
     // Poles: from the road surface (EMBED 0.06 below) up to just under the deck
     // crossing overhead (TUCK 0.34), or POST_UP 2.0 above the road with nothing

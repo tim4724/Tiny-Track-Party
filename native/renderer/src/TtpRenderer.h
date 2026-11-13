@@ -2202,6 +2202,24 @@ private:
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
+    // THE CUP'S AMBIENT LIFE (theme.life): a second cloud through the same
+    // material (vpoint.mat says what its uniforms add), with a texture of its
+    // own over the flake floor's grid: R the floor it lives on (the ground,
+    // or the water under spray), G where it lives (round the set pieces its
+    // `near` names, along the surf, by the road). Life that lives in a place
+    // is SEEDED there, in kLifeTile tiles it never leaves; a tumbleweed, which
+    // lives along every road, rides the camera box like the weather. Never
+    // culled per cell: it is a few hundred sprites, not thousands.
+    void buildLife(const TrackBin& tb);
+    struct LifeAnchor { float x, z, ax, az, hx, hz; };   // a footprint (hx = hz = 0: a point)
+    std::vector<LifeAnchor> mLifeAnchors;
+    Mesh mLife;
+    filament::MaterialInstance* mLifeMat = nullptr;
+    filament::Texture* mLifeTex = nullptr;
+    float mLifeHalf = 0;    // the sprite's halfSize, world-sized (no rows fit)
+    float mLifeBox = 0;     // the camera box a box-riding life is fitted in, 0 when tiled
+    uint32_t mLifeCells = 0;
+    static constexpr float kLifeTile = 4.0f;
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
     filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
