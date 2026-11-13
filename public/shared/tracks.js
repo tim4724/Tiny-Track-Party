@@ -1952,7 +1952,7 @@ export const TRACKS = {
       { model: 'set-card-house', u: 0.6054, lat: 7.25, yaw: -35 },
       { model: 'set-game-stack', u: 0.675, lat: 8 },
       { model: 'set-snake-head', u: 0.775, lat: 7.9 },
-      { model: 'set-game-pawns', u: 0.915, lat: 5.4 },
+      { model: 'set-game-pawns', u: 0.932, lat: 5.6 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
@@ -2012,7 +2012,7 @@ export const TRACKS = {
       { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
       { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
       { model: 'set-tourney-rug', u: 0.885, lat: 0, yaw: 90 },
-      { model: 'set-supply-wagon', u: 0.64, lat: 7 },
+      { model: 'set-supply-wagon', u: 0.64, lat: 8.4 },
       { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
@@ -2046,7 +2046,7 @@ export const TRACKS = {
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
-      { model: 'set-windup-robots', u: 0.06, lat: 3.9 },
+      { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
       { model: 'set-room-train-helix', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }

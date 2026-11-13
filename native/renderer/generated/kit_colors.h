@@ -160952,7 +160952,7 @@ inline const Model kModels[] = {
     { 4297795972277204028ull, 5u, k_set_strand_groynes },  // set-strand-groynes.glb
     { 7473600113658331127ull, 1u, k_set_strand_line },  // set-strand-line.glb
     { 12827804336130672784ull, 2u, k_set_strand_snags },  // set-strand-snags.glb
-    { 3249539436872143472ull, 62u, k_set_supply_wagon },  // set-supply-wagon.glb
+    { 11040618159885407289ull, 62u, k_set_supply_wagon },  // set-supply-wagon.glb
     { 16705897972177288726ull, 4u, k_set_surf_campers },  // set-surf-campers.glb
     { 534706727024673164ull, 9u, k_set_surf_club },  // set-surf-club.glb
     { 9333039390810514085ull, 11u, k_set_surf_contest },  // set-surf-contest.glb
