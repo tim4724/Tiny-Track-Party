@@ -189,6 +189,10 @@ public:
     void setLite(bool on) {
         if (on != mLite) { mLite = on; dropStaticKey(); }
     }
+    // A full-tier platform's three- and four-way splits on lite's far form
+    // gate, its forms still full's (ttp/detail.h, split_keeps_lite_gate: no
+    // platform asks today). Read per frame.
+    void setSplitGate(bool on) { mSplitGate = on; }
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
@@ -635,6 +639,8 @@ private:
     static constexpr float kPieceTile = 8.0f;
     float mPieceTile = kPieceTile;
     bool mLite = false;   // setLite
+    bool mSplitGate = false;   // setSplitGate
+    bool mLodLoose = false;    // this frame's cells swap at lite's gate (renderCells)
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -862,6 +868,9 @@ private:
     // kFarShade of 255 in a channel (farForm).
     static constexpr float kFarFace = 1.0f;
     static constexpr int kFarShade = 10;
+    // ...and, in full, every closed shape of this many triangles or fewer (a
+    // post, a rail, a ring: farForm).
+    static constexpr uint32_t kFarWhole = 64;
     // Picks every listed renderable's range for a camera at `cam` in a cell
     // with `pxPerRad` pixels per radian; 0 puts them all on their near range.
     // `fogStart` and `fogDensity` are that cell's haze (density 0: none).

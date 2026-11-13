@@ -33,8 +33,12 @@
 // (fogFor has always set it so), which collapses the optical path integral to a
 // single exponential.
 //
-// The NEAR exit is Filament's; the FAR one is what keeps the sky dome out of the
-// fog it is meant to be dissolving into (fogFor's cutOffDistance).
+// The NEAR exit is Filament's. The FAR one (fogFor's cutOffDistance) is the
+// SKY's alone: a material that draws sky content defines TTP_FOG_SKY before
+// including this (vcloud), and its sprites stand past the cutoff unfogged.
+// The world fogs all the way out: with the exit on every material, a roof or
+// a strip of sea 400 u off stood crisp in front of hazed hills, and flipped
+// as a car closed on it.
 //
 // THE ABLATION SWITCH (TTP_FEAT_FOG_VERTEX) takes .y of the view global
 // (`frameUniforms.custom[0]`, per View, set once per frame by
@@ -50,9 +54,10 @@ float ttpFogFactor(highp vec3 worldPos) {
     if (getMaterialGlobal0().y > 0.0) return 0.0;
     highp vec3 view = worldPos - getWorldCameraPosition();
     highp float d = length(view);
-    if (d < frameUniforms.fogStart || d > frameUniforms.fogCutOffDistance) {
-        return 0.0;
-    }
+    if (d < frameUniforms.fogStart) return 0.0;
+#if defined(TTP_FOG_SKY)
+    if (d > frameUniforms.fogCutOffDistance) return 0.0;
+#endif
     return min(1.0 - exp(-frameUniforms.fogDensity.z
             * (d - frameUniforms.fogStart)), frameUniforms.fogMaxOpacity);
 }

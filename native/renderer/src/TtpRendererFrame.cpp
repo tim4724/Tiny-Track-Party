@@ -2955,6 +2955,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // The far forms (LodRange) are every race cell's trade past that cell's
     // own gate; only the overviews draw every near range.
     const bool lods = input.viewCount > 0 && (input.flags & TTP_FRAME_OVERVIEW) == 0;
+    mLodLoose = mLite || (mSplitGate && input.viewCount >= 3);
     if (!lods) {
         chooseLods(float3{ 0 }, 0.0f, 0.0f, 0.0f);
         chooseCuts(float3{ 0 }, 0.0f);
@@ -3105,11 +3106,12 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 // see:pops). Past the haze's onset the error is weighed by the share of a
 // surface's colour that still arrives, so a form swaps where the fog has
 // taken the difference. Lite keeps kLodPx and no haze term: its frame is the
-// box's budget.
+// box's budget. A full-tier platform's splits could keep it too
+// (mSplitGate); ttp/detail.h says why none does.
 void TtpRenderer::chooseLods(const float3& cam, float pxPerRad, float fogStart, float fogDensity) {
     auto& rcm = mEngine->getRenderableManager();
-    const float k = mLodOff ? 0.0f : pxPerRad / (mLite ? kLodPx : kLodPxFull);
-    const bool haze = !mLite && fogDensity > 0.0f;
+    const float k = mLodOff ? 0.0f : pxPerRad / (mLodLoose ? kLodPx : kLodPxFull);
+    const bool haze = !mLodLoose && fogDensity > 0.0f;
     for (LodRange& r : mLods) {
         float near = r.err * k;
         const float3 d = clamp(cam, r.lo, r.hi) - cam;   // to the nearest point of the box

@@ -657,11 +657,48 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     for (size_t i = 0; i < idxN; i += 3) {
         if (big(i)) faced[src[i]] = faced[src[i + 1]] = faced[src[i + 2]] = true;
     }
+    // A SMALL THING IS KEPT WHOLE (with `keepShades`). A post, a rail, a ring
+    // is a closed shape of its own with a few dozen triangles, and the
+    // simplifier folds one along its own length for no error it counts: the
+    // far form simply had no post, and it stood up out of nothing as the car
+    // came on. So the range's triangles are grouped into the shapes they
+    // close (corners joined by position), and a shape of kFarWhole triangles
+    // or fewer stays as it is.
+    std::vector<uint32_t> shape, count;
+    if (keepShades) {
+        std::vector<uint32_t> order;
+        for (size_t i = 0; i < idxN; i++) order.push_back(src[i]);
+        std::sort(order.begin(), order.end());
+        order.erase(std::unique(order.begin(), order.end()), order.end());
+        const auto before = [&](uint32_t a, uint32_t b) {
+            const Vertex& p = m.verts[a];
+            const Vertex& q = m.verts[b];
+            return p.px != q.px ? p.px < q.px : p.py != q.py ? p.py < q.py : p.pz < q.pz;
+        };
+        std::sort(order.begin(), order.end(), before);
+        shape.resize(m.verts.size());
+        for (const uint32_t v : order) shape[v] = v;
+        const auto root = [&](uint32_t v) {
+            while (shape[v] != v) v = shape[v] = shape[shape[v]];
+            return v;
+        };
+        for (size_t k = 1; k < order.size(); k++) {
+            if (!before(order[k - 1], order[k])) shape[root(order[k])] = root(order[k - 1]);
+        }
+        for (size_t i = 0; i < idxN; i += 3) {
+            shape[root(src[i + 1])] = root(src[i]);
+            shape[root(src[i + 2])] = root(src[i]);
+        }
+        count.assign(m.verts.size(), 0);
+        for (size_t i = 0; i < idxN; i += 3) count[root(src[i])]++;
+        for (const uint32_t v : order) shape[v] = root(v);
+    }
     std::vector<uint32_t> keep, pool;
     for (size_t i = 0; i < idxN; i += 3) {
         const uint32_t a = src[i], b = src[i + 1], c = src[i + 2];
         const bool held = big(i) || ((faced[a] || faced[b] || faced[c])
-                && (shade(a, b) || shade(b, c) || shade(c, a)));
+                && (shade(a, b) || shade(b, c) || shade(c, a)))
+                || (keepShades && count[shape[a]] <= kFarWhole);
         (held ? keep : pool).insert(held ? keep.end() : pool.end(), src + i, src + i + 3);
     }
     std::vector<uint32_t> dst(pool.size());

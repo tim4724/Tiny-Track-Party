@@ -927,7 +927,17 @@ So:
   keep every shade where it is (`farForm`'s `keepShades`): the simplifier
   counts how far a surface strays and nothing else, so it slid a fir's snow
   down its cone for free. `npm run see:pops` counts what swaps per frame;
-  hold a change to the gate or the forms to it. The deck's is a
+  hold a change to the gate or the forms to it. Full's forms also keep a
+  small closed shape whole (`kFarWhole`: a post, a rail, a ring), which the
+  simplifier otherwise folds away for no error. **No full-tier platform keeps lite's gate in a split, the
+  Apple TV included** (`split_keeps_lite_gate`, `ttp/detail.h`, is the one
+  switch): its 4P 4K frame was tuned on the far forms' saving and could not
+  be measured when full's gate was tightened, but lite's gate in a 540-line
+  cell puts 15 to 55 pops a lap back against 1 to 3. Read `perf:race
+  --platform tvos --players 4` both ways before flipping it.
+  **The fog's far exit is the sky's alone** (`TTP_FOG_SKY`, `ttp_fog.inc`):
+  the world fogs all the way out, or a roof 400 u off stands crisp before
+  hazed hills. The deck's is a
   ribbon over same-coloured rings; a static unlit mesh opts in with
   `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on

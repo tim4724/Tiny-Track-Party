@@ -31,6 +31,21 @@ inline Detail detail_for(const char* platform, const char* ask) {
     return platform && std::strcmp(platform, "androidtv") == 0 ? Detail::Lite : Detail::Full;
 }
 
+// THE SPLIT'S FAR FORMS, on a full-tier platform: true would keep a three- or
+// four-way split's cells on lite's swap gate (TtpRenderer::chooseLods), where
+// the far forms come in close enough to pay. NO PLATFORM DOES. The Apple TV
+// is the candidate: at four players and 4K its frame was tuned on that
+// saving, and nobody could measure the device when full's gate was
+// tightened. But lite's gate in a 540-line cell, full's forms and all, puts
+// the pops back (`npm run see:pops -- --lines 540`: 15 to 55 a lap against 1
+// to 3), and the user's ask was that nothing plops in. So the Apple TV pays
+// in render scale if it has to. To revisit: answer true for "tvos", read
+// `perf:race --platform tvos --players 4` both ways, and look at the split.
+inline bool split_keeps_lite_gate(const char* platform) {
+    (void) platform;
+    return false;
+}
+
 inline const char* detail_name(Detail d) { return d == Detail::Lite ? "lite" : "full"; }
 
 // THE TIER IN FORCE: what ttp_display_detail last handed a display, Full until

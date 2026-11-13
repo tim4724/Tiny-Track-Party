@@ -3656,6 +3656,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         pushQuad(c110, c100, c111, c101, { 1, 0, 0 }, BSK);
         pushQuad(c000, c001, c100, c101, { 0, -1, 0 }, BSK);
         pushQuad(c010, c011, c110, c111, { 0, 1, 0 }, BSK);
+        // The sky's: no alpha tells vlit.mat to leave it unfogged.
+        for (Vertex& v : m.verts) v.abgr &= 0x00ffffffu;
         if (!buildMesh(m)) return false;
         // How far the unit mesh reaches from its origin, so the per-cell pose
         // can keep the whole balloon inside the far plane (orientCellBillboards).
