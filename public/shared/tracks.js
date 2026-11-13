@@ -1094,8 +1094,12 @@ export const TRACKS = {
       // the mountainside outside the top loop: three avalanche paths come
       // down through its forest to the road, a warning sign at the foot of
       // the first two, the third coming down onto the snow shed's roof
-      // a log cabin by the crossing, a little back from it
-      { model: 'set-avalanche-cabin', u: 0.232, lat: -17.5, yaw: 150 },
+      // the road keeper's depot outside the bend after the crossing, dead
+      // ahead of the run off the bridge: his hut, the plough shed, grit
+      { model: 'set-road-keeper', u: 0.485, lat: 11, yaw: 40 },
+      // avalanche barriers stepping up the open slope above the run to the
+      // last loop (built on the ground sampled under them, FENCE_G)
+      { model: 'set-avalanche-fences', u: 0.585, lat: -13, yaw: 180 },
       { model: 'set-warning-sign', u: 0.27, lat: 4.4, yaw: 44 },
       // ...and the first path's slide come down across the road, ploughed
       // through (the blocks stand at the ground sampled under them)
