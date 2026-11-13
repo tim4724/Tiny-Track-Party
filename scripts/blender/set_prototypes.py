@@ -8462,10 +8462,12 @@ def den_camp():
 # middle, white where it riffles, reeds on the banks. It is one curve laid in the WORLD
 # (scratch geometry, as the park railway's) and cut into lengths, each its own
 # piece in its own frame along its chord (BROOK_ROUTE: what each end meets, the
-# neighbours' points that set its end tangents, then (x, z, half width) along
-# it), so the water turns its bends and no two reaches overlap. World units;
+# neighbours' points that set its end tangents, (x, z, half width) along it,
+# and which bank faces the road), so the water turns its bends and no two
+# reaches overlap. World units;
 # all of it DRAPES.
 BROOK_WY, BROOK_H = 0.05, 0.27                            # the water; the walls' top, a hand over it
+BROOK_NEAR = 0.15                                         # the road side's lower bank, so the water shows
 BROOK_COPE, BROOK_BANK = 0.16, 0.9                        # the coping's width; the grass bank's, down to the lawn
 BROOK_BANDS = (((-1.0, -0.55), ('sky', 28)), ((-0.55, -0.2), ('blue', 6)), ((-0.2, 0.2), ('blue', 16)),
                ((0.2, 0.55), ('blue', 6)), ((0.55, 1.0), ('sky', 28)))
@@ -8476,53 +8478,53 @@ BROOK_ROUTE = {
         (-1.587, -3.535, 0.94), (-1.254, -2.827, 0.95), (-0.9, -2.129, 0.97), (-0.549, -1.43, 0.98), (-0.222, -0.72, 0.99), (0.054, 0.012, 1),
         (0.244, 0.77, 1), (0.305, 1.549, 1), (0.248, 2.329, 0.98), (0.115, 3.099, 0.96), (-0.068, 3.86, 0.94), (-0.283, 4.612, 0.92),
         (-0.518, 5.358, 0.89), (-0.762, 6.101, 0.86), (-1.002, 6.846, 0.84), (-1.22, 7.597, 0.82), (-1.377, 8.363, 0.8),
-    )),
+    ), -1),
     'brook-b': ("culvert", "join", None, (-0.42, 12.406), (
         (-0.427, -11.456, 0.8), (-0.143, -10.713, 0.83), (-0.023, -9.925, 0.88), (0.021, -9.129, 0.92), (0.039, -8.331, 0.96), (0.058, -7.533, 0.99),
         (0.087, -6.736, 1.01), (0.102, -5.938, 1.02), (0.104, -5.14, 1.03), (0.097, -4.342, 1.04), (0.084, -3.544, 1.04), (0.066, -2.746, 1.04),
         (0.044, -1.949, 1.04), (0.019, -1.151, 1.04), (-0.009, -0.354, 1.04), (-0.039, 0.444, 1.04), (-0.07, 1.241, 1.04), (-0.102, 2.039, 1.03),
         (-0.135, 2.836, 1.03), (-0.169, 3.633, 1.03), (-0.203, 4.43, 1.02), (-0.237, 5.228, 1.02), (-0.27, 6.025, 1.02), (-0.302, 6.822, 1.01),
         (-0.333, 7.62, 1.01), (-0.362, 8.417, 1.01), (-0.388, 9.215, 1), (-0.41, 10.012, 1), (-0.424, 10.81, 1), (-0.426, 11.608, 0.99),
-    )),
+    ), 1),
     'brook-c': ("join", "join", (0.54, -12.294), (0.744, 12.097), (
         (0.587, -11.497, 0.99), (0.643, -10.701, 0.99), (0.705, -9.906, 0.99), (0.768, -9.11, 0.98), (0.83, -8.315, 0.97), (0.883, -7.519, 0.97),
         (0.923, -6.722, 0.96), (0.945, -5.924, 0.96), (0.943, -5.126, 0.95), (0.913, -4.329, 0.95), (0.849, -3.533, 0.95), (0.735, -2.744, 0.95),
         (0.579, -1.961, 0.95), (0.395, -1.185, 0.96), (0.193, -0.413, 0.96), (-0.013, 0.358, 0.97), (-0.214, 1.13, 0.97), (-0.396, 1.907, 0.97),
         (-0.55, 2.69, 0.97), (-0.662, 3.48, 0.96), (-0.722, 4.276, 0.95), (-0.715, 5.073, 0.94), (-0.639, 5.867, 0.91), (-0.515, 6.656, 0.88),
         (-0.358, 7.438, 0.85), (-0.179, 8.216, 0.82), (0.013, 8.99, 0.78), (0.21, 9.763, 0.74), (0.404, 10.537, 0.71), (0.586, 11.314, 0.68),
-    )),
+    ), 1),
     'brook-d': ("join", "culvert", (0.682, -11.493), None, (
         (0.979, -10.753, 0.68), (1.254, -10.004, 0.65), (1.49, -9.241, 0.62), (1.659, -8.462, 0.61), (1.71, -7.667, 0.62), (1.56, -6.887, 0.66),
         (1.203, -6.175, 0.73), (0.753, -5.516, 0.81), (0.341, -4.834, 0.89), (0.073, -4.084, 0.95), (-0.045, -3.296, 0.97), (-0.09, -2.499, 0.99),
         (-0.091, -1.701, 1), (-0.063, -0.904, 1.01), (-0.014, -0.108, 1.01), (0.049, 0.688, 1), (0.124, 1.482, 1), (0.206, 2.276, 0.99),
         (0.291, 3.07, 0.98), (0.377, 3.863, 0.97), (0.458, 4.657, 0.96), (0.528, 5.452, 0.95), (0.613, 6.245, 0.94), (0.743, 7.032, 0.91),
         (0.892, 7.816, 0.88), (1.028, 8.602, 0.85), (1.098, 9.396, 0.82), (0.98, 10.181, 0.8),
-    )),
+    ), 1),
     'brook-e': ("culvert", "join", None, (2.029, 11.461), (
         (1.806, -11.323, 0.8), (1.377, -10.643, 0.81), (1.034, -9.916, 0.82), (0.749, -9.163, 0.84), (0.51, -8.395, 0.85), (0.311, -7.615, 0.87),
         (0.148, -6.828, 0.88), (0.019, -6.033, 0.89), (-0.074, -5.234, 0.9), (-0.133, -4.432, 0.9), (-0.155, -3.627, 0.9), (-0.15, -2.823, 0.9),
         (-0.124, -2.018, 0.89), (-0.083, -1.215, 0.89), (-0.028, -0.412, 0.88), (0.038, 0.39, 0.88), (0.115, 1.191, 0.87), (0.202, 1.991, 0.86),
         (0.298, 2.79, 0.85), (0.404, 3.588, 0.85), (0.518, 4.384, 0.84), (0.642, 5.179, 0.83), (0.774, 5.973, 0.82), (0.917, 6.765, 0.81),
         (1.069, 7.555, 0.8), (1.233, 8.343, 0.79), (1.409, 9.128, 0.78), (1.598, 9.91, 0.77), (1.804, 10.688, 0.76),
-    )),
+    ), -1),
     'brook-f': ("join", "join", (5.223, -10.951), (5.117, 9.848), (
         (4.606, -10.435, 0.76), (4.001, -9.903, 0.75), (3.413, -9.354, 0.73), (2.848, -8.782, 0.72), (2.316, -8.178, 0.71), (1.841, -7.529, 0.7),
         (1.468, -6.817, 0.68), (1.228, -6.051, 0.67), (1.104, -5.256, 0.65), (1.044, -4.454, 0.63), (0.976, -3.652, 0.62), (0.829, -2.862, 0.62),
         (0.575, -2.099, 0.63), (0.269, -1.354, 0.64), (-0.013, -0.601, 0.65), (-0.199, 0.181, 0.67), (-0.228, 0.983, 0.69), (-0.086, 1.774, 0.7),
         (0.181, 2.533, 0.72), (0.517, 3.264, 0.73), (0.896, 3.973, 0.74), (1.305, 4.666, 0.75), (1.736, 5.346, 0.76), (2.185, 6.013, 0.78),
         (2.649, 6.671, 0.79), (3.124, 7.321, 0.8), (3.61, 7.962, 0.81), (4.104, 8.597, 0.82), (4.607, 9.225, 0.83),
-    )),
+    ), -1),
     'brook-g': ("join", "pond", (1.403, -12.332), None, (
         (1.24, -11.544, 0.83), (1.087, -10.754, 0.84), (0.942, -9.962, 0.85), (0.806, -9.169, 0.86), (0.677, -8.375, 0.87), (0.556, -7.579, 0.88),
         (0.443, -6.782, 0.89), (0.337, -5.985, 0.9), (0.239, -5.186, 0.91), (0.15, -4.386, 0.92), (0.07, -3.586, 0.92), (0, -2.784, 0.93),
         (-0.057, -1.981, 0.94), (-0.098, -1.178, 0.95), (-0.105, -0.373, 0.96), (-0.066, 0.43, 0.97), (0.016, 1.231, 0.97), (0.134, 2.027, 0.98),
         (0.28, 2.818, 0.98), (0.446, 3.605, 0.99), (0.619, 4.391, 0.99), (0.782, 5.179, 1), (0.916, 5.972, 1), (1.005, 6.772, 1),
         (1.075, 7.574, 1), (1.132, 8.376, 1), (1.185, 9.179, 1), (1.241, 9.982, 1),
-    )),
+    ), -1),
 }
 
 def brook_frames(pts, prev, nxt):
-    """(x, z, w, ax, az) per point: (ax, az) across the flow, to its left."""
+    """(x, z, w, ax, az) per point: (ax, az) across the flow, to its right."""
     out = []
     for i, (x, z, w) in enumerate(pts):
         a = pts[i - 1][:2] if i else (prev or pts[i][:2])
@@ -8545,9 +8547,13 @@ def brook_mesh(verts, faces, facing, color, row):
     bpy.context.scene.collection.objects.link(o)
     return rowed(paint(o, color), row)
 
-def brook_channel(fr, start, end, k=1.0):
+def brook_channel(fr, start, end, k=1.0, near=0):
     """The water's bands and both walls along the frames `fr`, in a frame of
-    `k` world units a unit (the heights and widths are the world's)."""
+    `k` world units a unit (the heights and widths are the world's). The bank
+    on side `near` (+1 the flow's right, -1 its left) faces the road and
+    stands lower, so a racer looks over it onto the water against the far
+    bank's wall: below a full-height bank on both sides the water hid from
+    the seat behind the near one."""
     n = len(fr)
     WY, H, C = BROOK_WY / k, BROOK_H / k, BROOK_COPE / k
     def lay(profile, color, row, facing, pick=None):
@@ -8570,6 +8576,7 @@ def brook_channel(fr, start, end, k=1.0):
         lay(lambda w, f0=f0, f1=f1: ((f0 * w, WY), (f1 * w, WY)), color, row, up)
     B = BROOK_BANK / k
     for sd in (-1, 1):
+        H = (BROOK_NEAR if sd == near else BROOK_H) / k
         # the wall's face down into the water, toward it
         lay(lambda w: ((sd * w, WY - 0.04 / k), (sd * w, H)), 'grey', SLATE_ROW,
             lambda ax, az: (-sd * ax, 0.0, -sd * az))
@@ -8651,12 +8658,12 @@ def brook_ends(fr, start, end):
                                (x + ax * w * 0.7 + tx * 0.9, BROOK_WY - 0.02, z + az * w * 0.7 + tz * 0.9)],
                               [(0, 1, 2, 3)], 'white'), 3)
 
-def brook_piece(start, end, prev, nxt, pts):
+def brook_piece(start, end, prev, nxt, pts, road):
     fr = brook_frames(pts, prev, nxt)
-    draped('brook', lambda: (brook_channel(fr, start, end), brook_ends(fr, start, end)))
+    draped('brook', lambda: (brook_channel(fr, start, end, near=road), brook_ends(fr, start, end)))
 
-for _name, (_s, _e, _p, _n, _pts) in BROOK_ROUTE.items():
-    PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts))
+for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
+    PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts, _r))
     GROW[_name] = 1.0
 
 

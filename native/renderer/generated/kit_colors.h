@@ -141942,13 +141942,13 @@ inline const Model kModels[] = {
     { 17354697643196210287ull, 3u, k_set_boomtown_north },  // set-boomtown-north.glb
     { 1972157138401283272ull, 2u, k_set_boomtown_south_lite },  // set-boomtown-south-lite.glb
     { 9127719731560198489ull, 2u, k_set_boomtown_south },  // set-boomtown-south.glb
-    { 2235627489281668940ull, 2u, k_set_brook_a },  // set-brook-a.glb
-    { 2249236181184003003ull, 2u, k_set_brook_b },  // set-brook-b.glb
-    { 10997162461419067766ull, 2u, k_set_brook_c },  // set-brook-c.glb
-    { 17984663112470769857ull, 2u, k_set_brook_d },  // set-brook-d.glb
-    { 11890711251128856870ull, 2u, k_set_brook_e },  // set-brook-e.glb
-    { 5910967515588123414ull, 2u, k_set_brook_f },  // set-brook-f.glb
-    { 13201705462906584576ull, 2u, k_set_brook_g },  // set-brook-g.glb
+    { 7023223339367161672ull, 2u, k_set_brook_a },  // set-brook-a.glb
+    { 14886649420992691967ull, 2u, k_set_brook_b },  // set-brook-b.glb
+    { 508934929509643390ull, 2u, k_set_brook_c },  // set-brook-c.glb
+    { 9368126336190650733ull, 2u, k_set_brook_d },  // set-brook-d.glb
+    { 3910101521712537302ull, 2u, k_set_brook_e },  // set-brook-e.glb
+    { 639207394793186582ull, 2u, k_set_brook_f },  // set-brook-f.glb
+    { 11022508205798522324ull, 2u, k_set_brook_g },  // set-brook-g.glb
     { 12177485500360378481ull, 1u, k_set_cactus_pear_lite },  // set-cactus-pear-lite.glb
     { 16542618574661782354ull, 1u, k_set_cactus_pear },  // set-cactus-pear.glb
     { 10297511914014564541ull, 1u, k_set_cactus_saguaro_lite },  // set-cactus-saguaro-lite.glb
