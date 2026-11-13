@@ -14951,9 +14951,10 @@ def oval(x0, x1, zc, r, step=0.5):
         pts.append((x0 + r * math.cos(a), zc + r * math.sin(a)))
     return pts
 
-def wooden_track(pts, w, t):
+def wooden_track(pts, w, t, grooves=True):
     """A closed wooden train track along [(x, z)]: a pale beech board `w`
-    wide and `t` thick with its two dark grooves on top."""
+    wide and `t` thick with its two dark grooves on top (none in a lite
+    build)."""
     n = len(pts)
     def edge(i, off):
         (xa, za), (xb, zb) = pts[(i - 1) % n], pts[(i + 1) % n]
@@ -14977,7 +14978,7 @@ def wooden_track(pts, w, t):
     o = bpy.data.objects.new('track', me)
     bpy.context.scene.collection.objects.link(o)
     paint(o, 0xf2bf99)
-    for off in (-w * 0.22, w * 0.22):          # the grooves
+    for off in ((-w * 0.22, w * 0.22) if grooves else ()):   # the grooves
         gv, gf = [], []
         for i in range(n):
             ax, az = edge(i, off - 0.05)
@@ -15645,7 +15646,8 @@ def snake_board():
     # one where the snake let it down) and the two dice of the last throw lie
     # by the grid. The road's own ladders and its snake are the board's
     # pieces made track (tracks.js `land`); the dice tower and the game's box
-    # stand outside its corners. Authored in WORLD coordinates (L()).
+    # stand outside the corners the grid straight and the first ladder point
+    # at. Authored in WORLD coordinates (L()).
     ox, oz = SNAKE_BOARD_ORIGIN
     def L(x, z):
         return (x - ox, z - oz)
@@ -15722,7 +15724,7 @@ def snake_board():
     floors = [play_floor(q, y, c) for (y, c), q in layers.items()]
     group(floors, 'floor_board')
     # its pawns on their squares, and the last throw's dice
-    for (x, z), c in (((27.0, 85.5), 0xe66a5a), ((29.5, -21.0), 0x5a8fd8), ((-7.5, 18.0), 0xf2c14e), ((89.0, 86.0), 0x6cbf6c)):
+    for (x, z), c in (((27.0, 85.5), 0xe66a5a), ((29.5, -21.0), 0x5a8fd8), ((-7.5, 18.0), 0xf2c14e), ((90.5, 62.0), 0x6cbf6c)):
         lx, lz = L(x, z)
         pawn((lx, Y1, lz), c, k=1.0)
     for (x, z), yaw, faces in (((9.0, 26.0), 0.4, (('+x', 6), ('-z', 2), ('+z', 5), ('-x', 1))),
@@ -15824,34 +15826,38 @@ def room_loop(x0, x1, z0, z1, r, step):
     run(x1 - r, z0, x0 + r, z0); turn(x0 + r, z0 + r, -0.5 * math.pi)
     return pts
 
-def room_train(track):
+def room_train(track, lite=False):
     # The playroom's one train, a wooden toy train on its own beech rails
     # running round the room between the lap and the walls, the way the
     # racers go: the room's moving backdrop, seen over the kerbs. Built at
     # ROOM_TRAIN_GROW (a toy train a racer's size, the town's on Skyline is
-    # the same set), in the world's frame moved to the track's line.
+    # the same set), in the world's frame moved to the track's line. Its
+    # rails are in every cell's frame, so the lite build lays them coarser
+    # and without their grooves, and runs a shorter train.
     (ox, oz), (x0, x1, z0, z1), sense = ROOM_TRAIN[track]
     k, m = ROOM_TRAIN_GROW, ROOM_TRAIN_MARGIN
-    world = room_loop(x0 - m, x1 + m, z0 - m, z1 + m, 10.0, 0.75)
+    world = room_loop(x0 - m, x1 + m, z0 - m, z1 + m, 10.0, 2.0 if lite else 0.75)
     if sense < 0:
         world = world[::-1]
     ring = [((x - ox) / k, (z - oz) / k) for x, z in world]
-    wooden_track(ring, 0.9, 0.12)
+    wooden_track(ring, 0.9, 0.12, grooves=not lite)
     for i, (x, z) in enumerate(ring):
         marker('path_room_%d' % i, (x, 0.12, z))
     L = sum(math.hypot(ring[(i + 1) % len(ring)][0] - ring[i][0], ring[(i + 1) % len(ring)][1] - ring[i][1])
             for i in range(len(ring)))
     period = L * k / ROOM_TRAIN_SPEED
     x0_, z0_ = ring[0]
-    for c, (kind, col) in enumerate((('coach', 0x5a8fd8), ('wagon', 0x6cbf6c), ('coach', 0xf2c14e),
-                                      ('wagon', 0xa878e8), ('engine', 0xe66a5a))):
+    cars = (('coach', 0x5a8fd8), ('wagon', 0x6cbf6c), ('coach', 0xf2c14e), ('wagon', 0xa878e8), ('engine', 0xe66a5a))
+    for c, (kind, col) in enumerate(cars[2:] if lite else cars):
         with animated('anim_path:c=room:p=%.2f:f=1:o=%.5f#%d' % (period, c * 1.45 / L, c), (x0_, 0.12, z0_)):
             train_car(x0_, 0.12, z0_, kind, col)
     join_still('rails')
 
 for _track in ROOM_TRAIN:
-    PIECES['room-train-' + _track] = (lambda t: lambda: room_train(t))(_track)
-    GROW['room-train-' + _track] = ROOM_TRAIN_GROW
+    for _lite in (False, True):
+        _name = 'room-train-' + _track + ('-lite' if _lite else '')
+        PIECES[_name] = (lambda t, l: lambda: room_train(t, l))(_track, _lite)
+        GROW[_name] = ROOM_TRAIN_GROW
 
 @piece(1.0)
 def play_sunbeam():

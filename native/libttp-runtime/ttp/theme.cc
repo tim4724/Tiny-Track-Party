@@ -669,8 +669,8 @@ Theme playroomTheme() {
   // at the top and the foot of the window, and the curtain rod. hills[0] also
   // tints the controller's cup panel, so the warm red keeps the playroom
   // distinct from beach sand / canyon clay.
-  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xfbf6ec, 0xaed6ee, 0x86c48a,
-              0xe66a5a, 0x5fa8e8, 0xc8e6f8, 0x9a7b55 };
+  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xfbf6ec, 0x9ccbea, 0x5fae6a,
+              0xd9453a, 0x4f9fe6, 0xc0e2f8, 0x9a7b55 };
   t.hillShape = HILL_ROOM;
   // Indoors: no cumulus, just faint warm puffs of sunbeam bloom.
   t.clouds = { 3, 0.22f, 1.3f, 0.3f, 0xffedd2 };

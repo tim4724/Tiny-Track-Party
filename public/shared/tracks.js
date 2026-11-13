@@ -1725,7 +1725,7 @@ export const TRACKS = {
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-board-snake', u: 0.7031, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
-      { model: 'set-game-box', u: 0.957, lat: 11 },
+      { model: 'set-game-box', u: 0.39, lat: 11, scale: 1.4 },
       { model: 'set-windup-chicks', u: 0.12, lat: 3.9 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }

@@ -2448,13 +2448,28 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
     const float3 TRIM = colour(4), WALL = colour(5), DADO = colour(6), CURTAIN = colour(7);
     const float3 SKY_TOP = colour(8), SKY_LOW = colour(9), ROD = colour(10);
     const float3 Y{ 0, 1, 0 };
+    // THE ROOM SHOWS ITS AUTHORED COLOURS. Under the warm room light a wall
+    // that faces away from the sun bakes to grey, so each face's colour is
+    // divided by the light its normal bakes (the sheet folds it back in) and
+    // given a fixed form shade instead: tops full, faces turned from the sun
+    // a little darker, undersides darker still, so the corners and the
+    // skirting's profile read.
+    const float3 sunFlat = normalize(float3{ kToSun.x, 0, kToSun.z });
+    const auto shown = [&](const float3& c, const float3& n) {
+        const float form = n.y > 0.5f ? 1.0f : n.y < -0.5f ? 0.72f
+                : 0.86f + 0.14f * std::max(0.0f, dot(n, sunFlat));
+        const float3 l = bakedMatteLight(n);
+        return float3{ std::min(1.0f, c.x * form / std::max(1e-3f, l.x)),
+                       std::min(1.0f, c.y * form / std::max(1e-3f, l.y)),
+                       std::min(1.0f, c.z * form / std::max(1e-3f, l.z)) };
+    };
     // A quad p0 -> p1 -> p2 -> p3, wound to face `n`, a colour per corner.
     const auto quad = [&](const float3 (&p)[4], const float3& n, const float3 (&c)[4]) {
         const bool flip = dot(cross(p[1] - p[0], p[2] - p[0]), n) < 0;
         const uint32_t base = (uint32_t) mHills.verts.size();
         for (int j = 0; j < 4; j++) {
             const int q = flip ? (4 - j) % 4 : j;
-            mHills.verts.push_back({ p[q].x, p[q].y, p[q].z, packAlbedo(c[q], 1.0f) });
+            mHills.verts.push_back({ p[q].x, p[q].y, p[q].z, packAlbedo(shown(c[q], n), 1.0f) });
             mHills.normals.push_back(n);
         }
         for (const uint32_t t : { 0u, 1u, 2u, 0u, 2u, 3u }) mHills.idx.push_back(base + t);
@@ -2562,30 +2577,23 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
             }
         }
         if (w != 0) continue;
-        // THE WINDOW. Its glass is the daylight, a sky deeper at the top, lit
-        // by its own colour: a normal turned to the sun, and the colour divided
-        // by the light that normal bakes, so it shows as authored.
-        const float3 lift = bakedMatteLight(kToSun);
-        const auto daylight = [&](const float3& c) {
-            return float3{ std::min(1.0f, c.x / std::max(1e-3f, lift.x)),
-                           std::min(1.0f, c.y / std::max(1e-3f, lift.y)),
-                           std::min(1.0f, c.z / std::max(1e-3f, lift.z)) };
-        };
+        // THE WINDOW. Its glass is the daylight, a sky deeper at the top, in
+        // bands so the gradient has rows (lit full, as a top is: it is light).
         const float3 g0 = W.o + W.t * winS + W.n * 0.05f, g1 = W.o + W.t * winE + W.n * 0.05f;
-        for (int k = 0; k < 4; k++) {   // in bands, so the gradient has rows
+        for (int k = 0; k < 4; k++) {
             const float lo = sill + kRoomWinH * k / 4, hi = sill + kRoomWinH * (k + 1) / 4;
-            const float3 cl = daylight(SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) k / 4));
-            const float3 ch = daylight(SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) (k + 1) / 4));
-            quad({ g0 + Y * lo, g1 + Y * lo, g1 + Y * hi, g0 + Y * hi }, kToSun, { cl, cl, ch, ch });
+            const float3 cl = SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) k / 4);
+            const float3 ch = SKY_LOW + (SKY_TOP - SKY_LOW) * ((float) (k + 1) / 4);
+            quad({ g0 + Y * lo, g1 + Y * lo, g1 + Y * hi, g0 + Y * hi }, Y, { cl, cl, ch, ch });
         }
         // Two clouds going by outside, white blocks on the sky.
-        const float3 cloud = daylight(float3{ 0.97f, 0.97f, 0.97f });
+        const float3 cloud{ 0.97f, 0.97f, 0.97f };
         for (const float4& c : { float4{ 0.28f, 0.72f, 0.20f, 0.09f }, float4{ 0.70f, 0.52f, 0.14f, 0.07f } }) {
             const float a = winS + kRoomWinW * (c.x - c.z), b = winS + kRoomWinW * (c.x + c.z);
             const float lo = sill + kRoomWinH * (c.y - c.w), hi = sill + kRoomWinH * (c.y + c.w);
             const float3 o = W.o + W.n * 0.1f;
             quad({ o + W.t * a + Y * lo, o + W.t * b + Y * lo, o + W.t * b + Y * hi, o + W.t * a + Y * hi },
-                    kToSun, { cloud, cloud, cloud, cloud });
+                    Y, { cloud, cloud, cloud, cloud });
         }
         const float F = 1.4f, midS = 0.5f * (winS + winE), midY = 0.5f * (sill + lintel);
         block(winS - F, winS, sill - F, lintel + F, 0.6f, TRIM);            // the frame
