@@ -633,6 +633,12 @@ to do both:
   (the face's foot). A summit stays a summit over a short rise in the land,
   and a tail over a massif's flank sinks into it instead of standing on it
   as a needle.
+- **A `drape_floor…` PART CLAIMS NO GROUND** (a gravel lane, the stones along
+  it): it drapes like any other, but the piece's footprint is taken without it
+  (`mSetBox`), so the verge band does not come down at it and it may run on to
+  the kerb's foot; the gallery's clash shape leaves it out the same way
+  (`glbTriangles` marks it `print`). Keep what stands (a van, a kiosk) clear
+  of the kerb as before: the footprint is theirs.
 - **A `floor…` PART IS A PRINT ON THE FLOOR** (a play mat): it joins
   `mStructures`, the static receiver, instead of the dressing merge, so the
   deck's baked shadow falls on it (`appendFloorPart`), and `spotIssue` lets a

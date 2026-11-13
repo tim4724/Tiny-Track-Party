@@ -874,7 +874,10 @@ def rock_pool():
     def shelf(a):                                                    # how far the rock reaches past the water
         along = max(0.0, math.sin(a)) ** 2                           # long toward the headland (+Z)
         sea = max(0.0, -math.cos(a)) ** 1.5                          # broad on the sea side (-X)
-        return 1.6 + 5.5 * along + 1.8 * sea + 0.35 * math.sin(4 * a + 1.3)
+        # (round 17: its outline broken, in and out by a stride, where an even
+        # rim read from above as a grey disc laid on the sand)
+        return (1.6 + 5.5 * along + 1.8 * sea + 0.35 * math.sin(4 * a + 1.3)
+                + 0.8 * math.sin(2 * a + 0.7) + 0.55 * math.sin(5 * a + 2.1) + 0.4 * math.sin(7 * a + 0.3))
     rows = []
     for i in range(N + 1):
         a = i / N * 2 * math.pi
@@ -903,8 +906,13 @@ def rock_pool():
             rowed(o, {'deep': 16, 'mid': 6, 'shallow': 24, 'foam': 2, 'lip': 26, 'shelf': 30}[kind])
         # knuckles of the reef standing up out of the shelf on its sea side
         # and along toward the headland, so the shelf reads as rock, not a rim
+        # ...and boulders straddling its edge on the road side and at its
+        # near end, half on the rock and half in the sand, so no clean rim
+        # runs round it
         for k, (a, d, sz, sq) in enumerate(((2.7, 1.9, 3.4, 0.62), (3.3, 2.6, 3.8, 0.66), (3.9, 1.7, 3.0, 0.6),
-                                            (1.75, 4.9, 3.2, 0.6), (1.45, 3.4, 2.4, 0.55), (2.2, 2.6, 2.2, 0.5))):
+                                            (1.75, 4.9, 3.2, 0.6), (1.45, 3.4, 2.4, 0.55), (2.2, 2.6, 2.2, 0.5),
+                                            (0.75, 1.5, 1.7, 0.45), (-0.35, 1.3, 1.4, 0.4), (-1.1, 1.9, 2.0, 0.5),
+                                            (-1.75, 1.6, 1.5, 0.45), (4.6, 2.3, 2.2, 0.5), (0.2, 2.0, 1.1, 0.4))):
             r = rim(a) + 0.3 + d
             stone(r * math.cos(a), r * math.sin(a), sz, 1.3 * k, 230.0 + k, squat=sq, rock=('grey', WET),
                   top='lavender', y=0.1)
@@ -3546,9 +3554,10 @@ def rock_poolers_park():
     # the main road in a flared mouth at the kerb's foot and ends in a
     # turning circle round a turf island; its gravel is one colour and its
     # edges smooth, where patches per quad had stepped like pixels)
-    # (its mouth stops at the margin every piece keeps from the deck, a
-    # stride short of the kerb's foot: tracks.js paints the sand between)
-    path = [(4.1, -10.8), (3.0, -11.0), (1.6, -10.8), (0.0, -9.6), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
+    # (lane and verge are `drape_floor` parts, prints on the land that claim
+    # no footprint: the verge's ground runs on under them at the kerb's
+    # height and the mouth reaches the kerb's own foot)
+    path = [(5.85, -11.4), (4.6, -11.7), (2.4, -11.4), (0.2, -10.0), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
             (-1.3, 10.4), (-2.0, 12.5)]
     CX, CZ, CR = -3.7, 14.9, 3.1                           # the turning circle
     for _ in range(3):                                    # Chaikin: its bends worn round
@@ -3564,10 +3573,13 @@ def rock_poolers_park():
         a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
         L = math.hypot(b_[0] - a_[0], b_[1] - a_[1]) or 1.0
         nx, nz = -(b_[1] - a_[1]) / L, (b_[0] - a_[0]) / L          # to the left of the way it runs
-        flare = 1.0 + 0.6 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
-        sea = 1.4 * flare + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
+        flare = 1.0 + 0.9 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
+        sea = 1.4 * flare + max(1.7 * smooth01(1.6 - 0.55 * abs(z - bz)) for bz in bays)
         road = 1.4 * flare
-        offs = (-sea, -0.5 * (sea + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (road + RUT1), road)
+        # (n points to the sea, -X, as the lane runs +Z: the bays go on the
+        # positive side. They bulged toward the road until round 17, a
+        # ragged apron on the wrong side with the vans beside bare sand.)
+        offs = (-road, -0.5 * (road + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (sea + RUT1), sea)
         rows.append([(x + nx * o, Y, z + nz * o) for o in offs])
     def lane():
         groups = {}
@@ -3575,8 +3587,8 @@ def rock_poolers_park():
             for j in range(7):
                 if j in (2, 4):
                     key = ('bark', 12)                               # the ruts
-                elif j == 3 and 3 < i < len(rows) - 2:
-                    key = ('leaf', 24)                               # turf on the hump
+                elif j == 3 and 6 < i < len(rows) - 2 and noise2(0.12 * i, 0.5, 4.2) > 0.1:
+                    key = ('olive', 6)                               # a faint grass crown, in lengths
                 else:
                     key = ('gravel', 31)                             # the gravel
                 q = [rows[i][j], rows[i][j + 1], rows[i + 1][j + 1], rows[i + 1][j]]
@@ -3585,7 +3597,7 @@ def rock_poolers_park():
                 groups.setdefault(key, []).append(q)
         # the turning circle: turf island, gravel, the rut the vans wear round it, gravel
         N = 24
-        for (r0, r1, key) in ((0.0, 1.0, ('leaf', 24)), (1.0, 1.5, ('gravel', 31)), (1.5, 1.95, ('bark', 12)),
+        for (r0, r1, key) in ((0.0, 1.0, ('olive', 6)), (1.0, 1.5, ('gravel', 31)), (1.5, 1.95, ('bark', 12)),
                               (1.95, CR, ('gravel', 31))):
             for k in range(N):
                 a0, a1 = 2 * math.pi * k / N, 2 * math.pi * (k + 1) / N
@@ -3607,7 +3619,7 @@ def rock_poolers_park():
             for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
                 for k in range(14, len(edge) - 2, 4):               # none at the mouth
                     x, _, z = edge[k]
-                    if side < 0 and any(abs(z - bz) < 1.8 for bz in bays):
+                    if side > 0 and any(abs(z - bz) < 1.8 for bz in bays):
                         continue                                     # the bays' mouths kept open
                     (ax, _, az), (bx, _, bz) = edge[k - 1], edge[k + 1]
                     L = math.hypot(bx - ax, bz - az) or 1.0
@@ -3621,8 +3633,8 @@ def rock_poolers_park():
                         aa = t * 2 * math.pi / 6 + k
                         beam((cx, -0.05, cz), (cx + 0.32 * math.cos(aa), 0.3 + 0.1 * (t % 3), cz + 0.32 * math.sin(aa)),
                              0.1, 'olive' if t % 2 else 0x6faa62, d=0.04)
-    draped('lane', lane)
-    draped('verge', verge)
+    draped('floor_lane', lane)
+    draped('floor_verge', verge)
     for (z, lower, boards, pop) in VANS:
         camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
     # the minibus in the last bay, longer and taller still
@@ -3637,8 +3649,11 @@ def rock_poolers_park():
     bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
     bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
     bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
-    kiosk(1.3, -1.6, 0.0)
-    flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
+    # the kiosk on the sea side between the bays, with the vans: on the road
+    # side it was the piece's nearest corner to the kerb, and the verge came
+    # down to it in a bank
+    kiosk(-3.3, -1.6, math.pi)
+    flag_on_pole((-3.9, 0, -0.6), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
     for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
         surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
     join_still('park')

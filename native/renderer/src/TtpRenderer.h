@@ -1977,6 +1977,15 @@ private:
     // with one stands on the plain and levels nothing: what it brings to the
     // land follows it instead of flattening it.
     std::vector<bool> mSetDrapes;
+    // Per set model, the box its footprint is taken from: the asset's own,
+    // less its `drape_floor` parts. Such a part is a print draped on the land
+    // (a gravel lane, the stones along it): it claims no ground, so the verge
+    // band does not come down at it and it may run on to the kerb's foot.
+    struct SetBox { filament::math::float3 min, max; };
+    std::vector<SetBox> mSetBox;
+    static bool isPrintName(const char* name) {
+        return name && std::strncmp(name, "drape_floor", 11) == 0;
+    }
     static bool isDrapeName(const char* name) {
         return name && std::strncmp(name, "drape", 5) == 0;
     }
