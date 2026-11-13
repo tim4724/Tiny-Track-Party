@@ -1603,7 +1603,17 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.8452, lat: 71.26, yaw: -155.83, len: 18, r: 26, h: 46, top: 0.25, lite: false },
       { kind: 'ridge', u: 0.9596, lat: 64.67, yaw: -9.05, len: 30, r: 26, h: 38, top: 0.45, lite: false },
       { kind: 'ridge', u: 0.9382, lat: 70.46, yaw: 30, len: 22, r: 28, h: 46, top: 0.3, lite: false },
-      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false }
+      { kind: 'ridge', u: 0.9272, lat: 59.88, r: 30, h: 44, top: 0.38, lite: false },
+      // the biome's hoodoo family keeps off the east bend, where its tall
+      // stack stood beside the headframe as a second tower
+      { kind: 'clear', u: 0.11, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.11, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.17, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.17, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.23, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.23, lat: -12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.29, lat: 12.5, len: 28, r: 3 },
+      { kind: 'clear', u: 0.29, lat: -12.5, len: 28, r: 3 }
     ]
   },
   crag: {
@@ -1844,7 +1854,11 @@ export const TRACKS = {
       { kind: 'clear', u: 0.684, lat: 11.5, len: 6, r: 1 },
       { kind: 'clear', u: 0.72, lat: 11.5, len: 26, r: 1 },
       { kind: 'clear', u: 0.78, lat: -14.8, len: 17, r: 1 },
-      { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 }
+      { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 },
+      // ...nor at the kerb before the tank farm, towering over its tanks
+      { kind: 'clear', u: 0.535, lat: 11.5, len: 16, r: 1 },
+      { kind: 'clear', u: 0.575, lat: 11.5, len: 22, r: 1 },
+      { kind: 'clear', u: 0.61, lat: 11.5, len: 12, r: 1 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
