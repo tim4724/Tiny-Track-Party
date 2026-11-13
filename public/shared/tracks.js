@@ -597,8 +597,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.27, lat: -32, len: 40, r: 24, r1: 20, h: 15, h1: 9, top: 0.15, tint: 0x3fae52 },
       { kind: 'ridge', u: 0.22, lat: -21, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.96, lat: -22, len: 40, r: 18, h: 5, top: 0.2, near: 6, tint: 0x7ab878 },
-      // the spur the cave is cut into
+      // the spur the cave is cut into, green down to the cave's rock
       { kind: 'ridge', u: 0.975, lat: -15.5, len: 18, r: 8, h: 6, top: 0.25, near: 2.8, tint: 0x7ab878 },
+      { kind: 'paint', u: 0.975, lat: -12, len: 16, r: 5, w: 4, tint: 0x7ab878 },
       // low green hills inside the S-bends before the finish
       { kind: 'ridge', u: 0.835, lat: -20, yaw: 40, len: 16, r: 11, h: 3, top: 0.3, tint: 0x6aaa6a },
       { kind: 'ridge', u: 0.81, lat: -11.5, yaw: 20, len: 12, r: 8, h: 4.6, top: 0.3, near: 0.5, tint: 0x6aaa6a },

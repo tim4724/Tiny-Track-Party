@@ -2582,70 +2582,64 @@ def net_huts():
 @piece(1.0)
 def smugglers_cave():
     # Cove: the pirates' cave in the foot of the island's peak, where its
-    # jungle comes down to the start straight by the grid: an outcrop of the
-    # island's own grey rock (Skull Rock's stone) standing out of the green
-    # slope, grass on its top where the hill runs over it, and in its foot
-    # the way in, which goes DOWN: a stone sill, steps and handrails
-    # dropping into the dark under a roof pitched down after them, rock
-    # either side of the mouth and over it, a lantern, a barrel and a chest
-    # open on its gold, the Jolly Roger on the rock's brow. (A scarp of pale sandstone was tried
-    # twice and read as a lump of dough with a black hole.) It stands on the
-    # land as it is and levels nothing (its haul is draped); tracks.js lifts
-    # it onto the slope the foothill's chords draw at its foot. No one keeps
-    # the door. +X is the road.
-    rock = ('grey', WET)
-    for k, (x, z, s, sq, y) in enumerate(((-4.6, 0.0, 9.0, 0.8, 1.0), (-1.7, -4.6, 5.6, 0.85, 0.3),
-                                          (-1.4, 4.2, 5.2, 0.85, 0.3), (-4.4, -2.6, 7.0, 0.8, 1.4),
-                                          (-4.2, 3.0, 7.4, 0.76, 1.4), (0.6, -3.4, 2.4, 0.7, -0.1),
-                                          (0.8, 3.4, 2.0, 0.7, -0.1), (-0.6, -7.6, 3.0, 0.6, -0.1))):
-        stone(x, z, s, 1.57 + 0.4 * jitter(k, 1, 9.0), 60.0 + k, squat=sq, rock=rock, top='green', y=y)
-    for o in bpy.context.scene.objects:                 # Skull Rock's mid-dark slate, at one value
-        if o.type == 'MESH' and o.name.startswith('stone') and o.get('row') is None:
-            if o['swatch'] == 'grey':
-                rowed(o, 14)
-            elif o['swatch'] == 'slate':
-                rowed(o, 1)
-    # the way in, and down: a stone sill at the threshold, then steps going
-    # down into the hill between plank cheeks, a handrail either side
-    # dropping with them, the roof boards pitched down after them into the
-    # dark, and the island's rock standing round the opening (a flat black
-    # door in a frame said shed, not cave)
-    wood, plank = 0x8a6a46, 0x9a7b55
-    X1, HW, HH, SILL = 1.0, 1.25, 2.4, 0.45
-    for k, (x, z, s, sq, y) in enumerate(((X1 - 0.5, -(HW + 1.5), 3.8, 1.0, -0.1), (X1 - 0.4, HW + 1.4, 3.4, 1.05, -0.1),
-                                          (X1 - 2.2, 0.0, 6.0, 0.6, HH - 0.1), (X1 + 0.5, -(HW + 0.5), 1.6, 0.8, -0.05),
-                                          (X1 + 0.6, HW + 0.6, 1.4, 0.8, -0.05))):
-        stone(x, z, s, 1.57 + 0.5 * k, 80.0 + k, squat=sq, rock=rock, top='green' if k == 2 else 'grey', y=y)
-    for o in bpy.context.scene.objects:
-        if o.type == 'MESH' and o.name.startswith('stone') and o.get('row') is None:
-            if o['swatch'] == 'grey':
-                rowed(o, 14)
-            elif o['swatch'] == 'slate':
-                rowed(o, 1)
-    # the dark stands close behind the props: the hill's own ground runs
-    # through the passage further in and would show in the frame
-    box((0.2, HH + 0.4, 2 * HW - 0.1), (X1 - 0.8, HH / 2 - 0.2, 0.0), 0x101014)
-    box((2.9, 0.5, 2 * HW - 0.1), (X1 - 1.4, -0.15, 0.0), 0x101014)                       # and under the steps
-    rowed(box((0.9, SILL + 0.3, 2 * HW + 0.5), (X1 + 0.25, SILL / 2 - 0.15, 0.0), 'grey'), 8)   # the sill
-    for i in range(7):
-        box((0.36, 0.1, 2 * HW - 0.4), (X1 - 0.25 - 0.36 * i, SILL - 0.05 - 0.17 * i, 0.0), plank)
+    # jungle comes down to the start straight by the grid: a mouth of the
+    # island's own rounded grey rock (Tidepool's tide_arch, Skull Rock's
+    # mid-dark slate) cut into the foot of the spur, rounded shoulders either
+    # side of it with their backs in the slope, the hill's grass running over
+    # their tops. At the back of the mouth the crew's timber door frame stands
+    # in the dark, plank steps climbing to it over the dark floor; a lantern
+    # hangs on the frame, the haul (a barrel, a chest open on its gold) lies
+    # at the threshold, the Jolly Roger flies from the mouth's crown. Round 12
+    # called the last one "Clipped / Broken": boulders through
+    # its frame, a flat black door on a heap of stones. Nothing here is built
+    # into the rock's rim now; the frame stands inside the hole with room all
+    # round. It levels nothing (its haul and steps drape); tracks.js lifts it
+    # onto the verge the foothill's chords draw at its foot, and the slope
+    # behind it rises about 1.2 a unit from just behind the mouth (HILL, a
+    # scratch probe of the drawn ground, not a source). +X is the road.
+    def HILL(x):
+        return -0.3 + 1.2 * max(0.0, -x - 0.25)
+    polys = []
+    AX, W, H, BASE = 0.2, 3.6, 3.0, -0.5            # the mouth: its rock's middle, hole width and height
+    tide_arch(polys, (AX, 0.0), math.pi / 2, W, H, 1.0, 61.0, base=BASE, top='leaf')
+    for k, (x, z, h, rx, rz, rd) in enumerate((
+            (-0.6, -3.7, 3.6, 2.0, 1.9, 2.4), (-0.6, 3.7, 3.4, 2.0, 1.9, 2.4),     # the shoulders
+            (0.4, -5.8, 1.8, 1.5, 1.6, 2.2), (0.5, 5.6, 1.6, 1.5, 1.5, 2.2),
+            (-2.8, -3.2, 2.8, 2.0, 2.2, 2.3), (-2.8, 3.4, 2.6, 2.0, 2.2, 2.3))):   # up the slope behind them
+        lo, hi = HILL(x + rx), HILL(x - rx)
+        tide_lump(polys, (x, z), h, rx, rz, 0.0, 62.0 + 1.3 * k, base=lo - 0.3, sink=hi - lo + 0.8,
+                  roundness=rd, top='leaf')
+    tide_rock(polys, 'stone')
+    # the back of the mouth: the dark, wider and taller than the hole so its
+    # edge stays in the rock, the rock's own depth in front of it
+    BX = AX - 1.25
+    ring = [(BX, BASE + 1.2 * H * math.sin(math.pi * t / 12), 1.2 * W / 2 * math.cos(math.pi * t / 12))
+            for t in range(13)]
+    skin(ring + [(BX, BASE, 0.0)], [tuple(range(13))], 'dark', (1, 0, 0))
+    wood = 0x8a6a46
+    # the crew's door frame in the dark, clear of the rim all round
+    FX = BX + 0.12
     for sz in (-1, 1):
-        box((3.0, HH + 0.6, 0.12), (X1 - 1.5, HH / 2 - 0.3, sz * HW), plank)               # the cheeks
-        box((0.28, HH + 0.2, 0.28), (X1, HH / 2, sz * (HW + 0.06)), wood)                  # the props
-        beam((X1 + 0.1, SILL + 0.95, sz * (HW - 0.22)), (X1 - 2.4, SILL - 0.2, sz * (HW - 0.22)), 0.09, wood)   # the rail
-        box((0.09, 0.95, 0.09), (X1 + 0.1, SILL + 0.47, sz * (HW - 0.22)), wood)
-    box((0.32, 0.32, 2 * HW + 0.8), (X1, HH + 0.2, 0.0), wood)                              # the lintel
-    box((3.0, 0.12, 2 * HW + 0.1), (X1 - 1.45, HH - 0.42, 0.0), plank, roll=0.3)            # the roof, pitched down inward
-    box((0.05, 0.4, 0.05), (X1 + 0.18, HH - 0.15, HW - 0.3), 0x38383d)                     # the lantern's bracket
-    box((0.16, 0.28, 0.18), (X1 + 0.2, HH - 0.45, HW - 0.3), 0xffc044)                     # the lantern
-    kit_flag('flag-pirate-high', (-4.6, 4.9, 0.6), math.radians(90), 0.6, 'anim_sway:a=x:d=24:p=2.2')
+        box((0.22, 1.75, 0.22), (FX, HILL(FX) + 0.875, sz * 0.95), wood)
+    box((0.24, 0.22, 2.2), (FX, HILL(FX) + 1.86, 0.0), wood)
+    box((0.05, 0.4, 0.05), (FX + 0.18, HILL(FX) + 1.55, 0.7), 0x38383d)        # the lantern on the frame
+    box((0.18, 0.28, 0.18), (FX + 0.2, HILL(FX) + 1.25, 0.7), 0xffc044)
+    kit_flag('flag-pirate-high', (AX - 0.3, tide_seat(polys, AX - 0.3, 0.6) - 0.1, 0.6), math.radians(90), 0.6,
+             'anim_sway:a=x:d=24:p=2.2')
     join_still('cave')
-    # the haul at the threshold, on the land as it lies
     def gear():
-        kit('pirate', 'barrel', (1.7, 0, -1.9), yaw=0.4, scale=0.2)
-        kit('pirate', 'chest', (1.8, 0, 1.9), yaw=math.radians(-80), scale=0.17)
-        for (gx, gz) in ((2.05, 1.75), (2.0, 2.07), (2.15, 1.93)):
-            box((0.07, 0.04, 0.07), (gx, 0.02, gz), 'yellow', yaw=gx * 3)
+        # the mouth's dark floor and plank steps climbing it to the door, each
+        # laid on the land as it is drawn (the hill rises inside the mouth);
+        # the haul at the threshold
+        rows = [[(x, 0.03, z * (1.95 - 0.03 * k)) for z in (-1, 0, 1)]
+                for k, x in enumerate((AX + 1.3, AX + 0.6, AX - 0.1, AX - 0.8, BX))]
+        sheet(rows, lambda i, j, n: 'dark', 'floor')
+        for i in range(5):
+            box((0.4, 0.1, 1.2 - 0.06 * i), (AX + 1.1 - 0.5 * i, 0.05, 0.0), wood if i % 2 else 0x8a5f3e)
+        kit('pirate', 'barrel', (AX + 1.65, 0, -0.95), yaw=0.4, scale=0.2)
+        kit('pirate', 'chest', (AX + 1.65, 0, 0.9), yaw=math.radians(-80), scale=0.17)
+        for (gx, gz) in ((0.3, 0.6), (0.25, 0.4), (0.4, 0.5)):
+            box((0.07, 0.04, 0.07), (AX + 1.65 + gx, 0.02, gz), 'yellow', yaw=gx * 3)
     draped('haul', gear)
 
 def palm_clump(tag, cx, cz, palms, bushes):
