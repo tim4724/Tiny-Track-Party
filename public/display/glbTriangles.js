@@ -59,10 +59,11 @@ export function glbTriangles(bytes) {
   const tris = [];
   const draped = (name = '') => name.startsWith('drape')
     || (name.startsWith('anim_') && name.slice(5).split('#')[0].split('+').some((v) => v.split(':')[0] === 'drape'));
-  const walk = (ni, parent, drape) => {
+  const walk = (ni, parent, drape, print = false) => {
     const n = json.nodes[ni];
     const m = mul(parent, localMatrix(n));
     drape = drape || draped(n.name);
+    print = print || (n.name || '').startsWith('drape_floor');
     if (n.mesh != null) {
       for (const p of json.meshes[n.mesh].primitives) {
         if ((p.mode ?? 4) !== 4) continue;
@@ -73,11 +74,12 @@ export function glbTriangles(bytes) {
         for (let k = 0; k + 2 < idx.length; k += 3) {
           const t = [pos[idx[k]], pos[idx[k + 1]], pos[idx[k + 2]]];
           if (drape) t.drape = true;
+          if (print) t.print = true;   // a `drape_floor` part: a print on the land, no footprint (TtpRenderer mSetBox)
           tris.push(t);
         }
       }
     }
-    for (const c of n.children || []) walk(c, m, drape);
+    for (const c of n.children || []) walk(c, m, drape, print);
   };
   for (const ni of json.scenes[json.scene || 0].nodes) walk(ni, IDENTITY, false);
   return tris;

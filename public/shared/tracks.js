@@ -522,8 +522,6 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
-      // the camper lane's gravel carried on to the kerb's foot at its mouth
-      { kind: 'paint', u: 0.9405, lat: 5.9, len: 3, r: 0.8, w: 1.2, tint: 0xcbbfae },
       // the knoll at the waist (the piece brings it: SET_GROUND), green to
       // the kerb; and the downs across the road
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
@@ -540,6 +538,8 @@ export const TRACKS = {
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
+      // nothing seeded on the camper lane (its gravel claims no footprint)
+      { kind: 'clear', u: 0.973, lat: 10, len: 26, r: 5 },
       // nothing seeded on the downs: a crate on a crest read as a prop
       // dropped on a hilltop
       { kind: 'clear', u: 0.25, lat: -32, len: 30, r: 22 },
@@ -574,7 +574,9 @@ export const TRACKS = {
     // which lies on the start straight, so its outer side is never the
     // road's reach (native/renderer/CLAUDE.md).
     set: [
-      { model: 'set-pirate-ship', u: 0.483, lat: 17.5, yaw: 230, y: 0.15, scale: 1.4 },
+      // far enough out that her whole keel floats (at lat 17.5 her stern lay
+      // over dry sand)
+      { model: 'set-pirate-ship', u: 0.483, lat: 24, yaw: 230, y: 0.15, scale: 1.4 },
       // the jungle down the island's west flank, along the S: one piece
       // astride the road (set_prototypes.py COVE_ROAD: re-sample it if this u
       // or the road moves)

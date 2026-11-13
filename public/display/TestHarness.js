@@ -1138,7 +1138,8 @@ export function runDisplayScenario(opts, ctx) {
         await Promise.all(want.map(async (m) => {
           const res = await fetch(assetUrl(`/assets/toycar/${m}.glb`));
           if (!res.ok) throw new Error(`no ${m}.glb (${res.status})`);
-          shapes.set(m, shapeOf(glbTriangles(new Uint8Array(await res.arrayBuffer()))));
+          // less its prints on the land (`drape_floor` parts), which claim no ground
+          shapes.set(m, shapeOf(glbTriangles(new Uint8Array(await res.arrayBuffer())).filter((t) => !t.print)));
         }));
       }
       function shapeOf(tris) {

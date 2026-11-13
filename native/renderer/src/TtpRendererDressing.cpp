@@ -1505,6 +1505,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     mSetAssets.assign(nModels, nullptr);
     mSetInstances.assign(nModels, {});
     mSetDrapes.assign(nModels, false);
+    mSetBox.assign(nModels, SetBox{});
     for (uint32_t m = 0; m < nModels; m++) {
         size_t count = 0;
         for (const auto& p : tb.setPieces) if (p.slot == m) count++;
@@ -1514,6 +1515,32 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         if (!mSetAssets[m]) continue;
         for (size_t e = 0; e < mSetAssets[m]->getEntityCount(); e++) {
             if (isDrapeName(mSetAssets[m]->getName(mSetAssets[m]->getEntities()[e]))) mSetDrapes[m] = true;
+        }
+        // The footprint's box (mSetBox): the asset's, or without its prints
+        // the union of every other part's, in the model's own frame.
+        { const filament::Aabb whole = mSetAssets[m]->getBoundingBox(); mSetBox[m] = { whole.min, whole.max }; }
+        if (!mSetInstances[m].empty() && mSetInstances[m][0]) {
+            auto& rm = mEngine->getRenderableManager();
+            auto& tm = mEngine->getTransformManager();
+            gltfio::FilamentInstance* const i0 = mSetInstances[m][0];
+            const mat4f toModel = inverse(tm.getWorldTransform(tm.getInstance(i0->getRoot())));
+            float3 lo{ 1e30f }, hi{ -1e30f };
+            bool prints = false;
+            for (size_t e = 0; e < i0->getEntityCount(); e++) {
+                const utils::Entity ent = i0->getEntities()[e];
+                if (isPrintName(mSetAssets[m]->getName(ent))) { prints = true; continue; }
+                const auto ri = rm.getInstance(ent);
+                if (!ri) continue;
+                const filament::Box b = rm.getAxisAlignedBoundingBox(ri);
+                const mat4f xf = toModel * tm.getWorldTransform(tm.getInstance(ent));
+                for (int c = 0; c < 8; c++) {
+                    const float3 corner = b.center + b.halfExtent
+                            * float3{ c & 1 ? 1.0f : -1.0f, c & 2 ? 1.0f : -1.0f, c & 4 ? 1.0f : -1.0f };
+                    const float3 q = (xf * float4{ corner, 1.0f }).xyz;
+                    lo = min(lo, q); hi = max(hi, q);
+                }
+            }
+            if (prints && lo.x <= hi.x) mSetBox[m] = { lo, hi };
         }
         for (auto* inst : mSetInstances[m]) {
             // The buildScenery metal fix: the shared matte read on every piece.
@@ -1538,7 +1565,7 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
         const float3 t = f.tangent();
         const float yaw = std::atan2(t.x, t.z) + p.yaw;
         const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
-        const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
+        const SetBox bb = mSetBox[p.slot];
         const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
         const float cz = 0.5f * (bb.min.z + bb.max.z) * p.scale;
         const float ax = std::cos(yaw), az = -std::sin(yaw);   // local +X in the world
