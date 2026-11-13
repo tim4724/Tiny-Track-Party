@@ -149398,7 +149398,7 @@ inline const Model kModels[] = {
     { 10017338286619071495ull, 5u, k_vehicle_monster_truck },  // vehicle-monster-truck.glb
     { 11097497179406187367ull, 3u, k_vehicle_stock },  // vehicle-stock.glb
 };
-inline const size_t kModelCount = 393;
+inline const size_t kModelCount = 392;
 
 inline const Model* find(uint64_t key) {
     for (size_t i = 0; i < kModelCount; i++) if (kModels[i].key == key) return &kModels[i];
