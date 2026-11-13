@@ -5847,8 +5847,8 @@ FORESTS = {
     'powder-forest-g': ((6.8, 1.2, 15.15, 1.39), (-2.2, 5.7, 9.82, 1.83), (-3.6, 8.0, 8.13, 1.38), (4.8, -9.6, 11.34, 1.41), (-3.4, -4.1, 8.83, 1.61), (-2.2, -1.5, 10.60, 1.67), (-0.3, 7.2, 10.78, 2.03), (6.7, -4.3, 14.19, 1.88), (2.4, 2.0, 12.66, 1.55), (-6.5, 6.6, 6.69, 1.76), (4.2, 1.4, 13.76, 1.77), (3.4, 5.7, 13.23, 1.64), (-4.0, 11.5, 6.29, 1.77), (4.0, -6.6, 12.21, 2.06), (-2.6, 1.0, 10.08, 1.85), (-0.3, 12.4, 8.27, 1.94), (-5.8, 8.6, 6.96, 1.58), (0.3, 4.0, 11.35, 2.00)),
     'powder-forest-h': ((5.4, -5.8, 6.25, 1.81), (6.1, -2.0, 7.68, 2.08), (-1.9, -2.4, 2.54, 1.41), (8.9, 2.3, 10.50, 1.87), (1.5, -1.1, 4.74, 1.47), (7.3, 6.8, 9.53, 1.71), (0.3, -3.1, 3.50, 1.69), (2.3, 9.1, 5.40, 2.13), (-0.8, 5.8, 3.08, 1.61), (3.4, -6.6, 4.77, 1.71), (3.9, 4.1, 7.56, 1.42), (1.9, 0.8, 5.44, 1.53), (10.0, 5.5, 10.79, 1.91), (-2.7, -5.1, 1.92, 1.47), (0.4, -6.1, 3.18, 1.78), (0.4, 7.4, 3.87, 2.11), (-3.0, -7.0, 1.60, 2.10), (8.2, -1.8, 9.32, 1.58), (-2.3, -10.5, 1.37, 1.60), (-1.9, 1.3, 2.74, 1.93), (4.5, 10.6, 6.41, 1.78), (-4.0, 7.4, 1.40, 1.51), (1.7, 6.2, 5.25, 2.05), (10.6, 0.4, 11.35, 2.14), (7.0, 2.4, 9.40, 2.07), (1.3, 3.4, 5.06, 1.69)),
     'flurry-forest-a': ((-1.6, 0.3, 3.22, 1.65), (-2.9, 2.6, 3.69, 1.99), (-1.4, -7.8, 3.22, 1.70), (-11.1, -26.7, 3.80, 1.78), (-1.8, -2.2, 3.47, 1.80), (-14.9, -26.0, 4.59, 1.77), (-3.1, -0.8, 4.57, 2.09), (-15.3, -22.4, 6.32, 1.89), (-0.1, -3.5, 2.38, 1.85), (-6.7, 1.9, 7.54, 1.61), (-19.1, -21.7, 7.29, 1.50), (-18.7, -17.4, 10.25, 1.64), (-0.8, 15.4, 2.81, 1.76), (-2.0, 10.4, 2.84, 1.36), (-9.5, -3.3, 10.55, 1.64), (-3.2, 16.7, 4.39, 1.73), (-6.8, 7.3, 6.04, 2.14), (2.0, -6.7, 1.29, 1.79), (-22.2, -17.1, 11.18, 2.13), (-21.8, -12.9, 14.65, 1.74), (6.0, 15.6, 0.54, 1.70), (-8.4, 3.8, 8.82, 1.68), (-0.5, 9.0, 1.86, 1.89), (-25.8, -13.5, 14.76, 1.83), (-11.9, -31.3, 3.50, 2.08), (-8.8, 6.0, 8.68, 1.89), (-0.4, 12.4, 2.31, 1.36), (1.8, -4.9, 1.28, 1.93), (-0.8, 5.9, 1.84, 1.36), (-7.0, 5.5, 6.76, 2.07)),
-    'flurry-forest-b': ((-5.5, -11.7, 15.34, 2.08), (-5.0, 7.1, 8.81, 1.43), (0.4, -3.4, 6.08, 1.43), (-4.4, -9.7, 12.81, 1.64), (3.8, 5.0, 3.34, 1.45), (-3.0, -3.6, 11.54, 2.08), (-1.0, -13.4, 8.73, 1.78), (0.4, -10.2, 4.41, 1.65), (-6.6, 3.6, 11.37, 1.48), (6.3, 11.8, 1.86, 2.03), (-8.1, -7.0, 18.84, 1.53), (-10.3, -4.3, 18.80, 2.13), (-3.8, -6.2, 13.29, 1.84), (-1.7, 7.9, 5.95, 1.46), (1.8, 4.5, 4.97, 1.38), (3.7, 7.3, 2.48, 1.73), (-0.5, -7.9, 6.90, 1.36), (5.5, -2.6, 1.39, 1.38), (-8.9, 2.8, 13.40, 1.49), (4.0, 12.6, 2.54, 1.67), (-2.3, -0.5, 8.86, 1.82), (1.0, 7.3, 4.31, 1.49), (6.3, 8.0, 1.14, 1.57), (-5.8, -8.1, 15.10, 1.71), (-1.1, 4.5, 7.01, 1.93), (-8.0, 1.1, 13.53, 2.12), (6.5, -8.3, 0.80, 1.55), (-6.0, -5.3, 16.18, 1.96)),
-    'flurry-forest-c': ((0.8, -2.7, 2.71, 1.69), (-4.0, -2.8, 5.53, 1.39), (-1.8, -0.7, 3.89, 1.88), (0.7, 8.4, 2.23, 1.54), (0.1, -5.2, 2.69, 1.56), (-2.0, -3.3, 4.14, 1.62), (-1.6, -7.6, 3.17, 1.53), (-2.5, 1.9, 4.66, 1.73), (-4.3, 4.1, 6.33, 1.93), (3.8, 4.9, 1.02, 1.72), (1.0, 5.3, 2.64, 1.51), (-3.4, 7.9, 5.47, 2.00), (2.8, -1.9, 1.63, 1.42), (2.6, 2.7, 1.79, 2.00), (-5.9, 5.9, 7.38, 1.88), (-2.2, 9.6, 4.40, 1.79)),
+    'flurry-forest-b': ((-5.5, -11.7, 15.34, 2.08), (-5.0, 7.1, 8.81, 1.43), (0.4, -3.4, 6.08, 1.43), (-4.4, -9.7, 12.81, 1.64), (3.8, 5.0, 3.34, 1.45), (-3.0, -3.6, 11.54, 2.08), (-1.0, -13.4, 8.73, 1.78), (0.4, -10.2, 4.41, 1.65), (-6.6, 3.6, 11.37, 1.48), (-8.1, -7.0, 18.84, 1.53), (-10.3, -4.3, 18.80, 2.13), (-3.8, -6.2, 13.29, 1.84), (-1.7, 7.9, 5.95, 1.46), (1.8, 4.5, 4.97, 1.38), (3.7, 7.3, 2.48, 1.73), (-0.5, -7.9, 6.90, 1.36), (5.5, -2.6, 1.39, 1.38), (-8.9, 2.8, 13.40, 1.49), (-2.3, -0.5, 8.86, 1.82), (1.0, 7.3, 4.31, 1.49), (-5.8, -8.1, 15.10, 1.71), (-1.1, 4.5, 7.01, 1.93), (-8.0, 1.1, 13.53, 2.12), (6.5, -8.3, 0.80, 1.55), (-6.0, -5.3, 16.18, 1.96)),
+    'flurry-forest-c': ((0.8, -2.7, 2.71, 1.69), (-4.0, -2.8, 5.53, 1.39), (-1.8, -0.7, 3.89, 1.88), (0.7, 8.4, 2.23, 1.54), (0.1, -5.2, 2.69, 1.56), (-2.0, -3.3, 4.14, 1.62), (-2.5, 1.9, 4.66, 1.73), (-4.3, 4.1, 6.33, 1.93), (3.8, 4.9, 1.02, 1.72), (1.0, 5.3, 2.64, 1.51), (-3.4, 7.9, 5.47, 2.00), (2.8, -1.9, 1.63, 1.42), (2.6, 2.7, 1.79, 2.00), (-5.9, 5.9, 7.38, 1.88), (-2.2, 9.6, 4.40, 1.79)),
     'flurry-forest-d': ((3.0, 10.0, 3.15, 2.12), (-1.2, 8.5, 5.81, 1.44), (-2.1, 6.7, 6.66, 1.50), (-5.1, 3.8, 8.73, 1.57), (3.2, 8.0, 3.26, 2.02), (-3.1, 0.1, 8.04, 1.73), (-3.4, -5.7, 8.27, 1.98), (-3.2, 3.7, 7.74, 2.11), (2.1, -2.6, 4.48, 1.92), (3.3, -0.6, 3.70, 1.47), (-6.4, -7.4, 10.60, 1.88), (-0.9, -3.8, 6.46, 1.63), (6.0, -2.5, 1.88, 1.43), (4.0, -5.7, 3.25, 1.49), (1.5, 5.1, 4.68, 1.86), (-4.5, 2.0, 8.75, 1.88), (4.4, 2.8, 2.87, 1.40), (-4.3, 5.7, 8.00, 2.03), (2.1, -6.8, 4.26, 1.82), (7.3, 4.0, 1.07, 2.05)),
     'flurry-forest-e': ((-1.0, 4.8, 5.38, 2.13), (4.6, 3.4, 2.27, 2.13), (1.0, 6.8, 3.73, 2.03), (-3.9, -4.0, 6.88, 1.59), (-5.1, 1.3, 8.30, 1.76), (2.0, 0.1, 3.66, 1.48), (-2.2, 1.3, 6.31, 1.90), (4.3, -4.9, 2.02, 2.00), (-3.1, 5.9, 6.46, 1.61), (-5.1, -1.2, 8.01, 2.11), (0.1, 0.8, 4.68, 1.86), (-0.3, 2.7, 5.17, 1.58), (6.0, -0.8, 1.24, 2.07), (-2.4, -1.1, 6.18, 2.06)),
     'flurry-forest-f': ((3.7, -5.8, 0.22, 1.90), (-0.1, -4.2, 0.49, 2.10), (2.1, -1.8, 0.40, 1.60), (-2.5, -0.6, 0.84, 1.80), (0.5, 1.2, 0.68, 2.00), (1.5, 3.2, 0.53, 1.50), (-3.2, 4.2, 1.13, 1.70), (0.2, 5.7, 0.71, 1.90)),
@@ -6981,73 +6981,72 @@ def flurry_skier(x, y, z, coat, hat, k=1.4):
 @piece(1.0)
 def flurry_piste():
     # Flurry: the village's piste down the foothill on the outside of the
-    # east loop, cut through the forest between two of its stands, its
-    # corduroy groomed straight down the fall line to the verge (placed on
-    # the right, yaw 0: +X to the road, the slope rising away from it to -X). The groomer crawls up one side of it
-    # and back down the other, pitched to the slope (anim_path, `drape`), and
-    # three skiers come out of the top hut and carve down it in turns into
-    # the warming hut at its foot, by the road; their way back up is out of
-    # sight, under the snow, hut to hut. All of it draped, built on y = 0 and
-    # laid on the land as the renderer draws it (the slope is the track's
-    # `land`, its foothill rising off the verge).
-    X0, X1, W = 2.8, -10.0, 2.3                        # the piste's foot, its top, its half-width
+    # east loop, a real run for the slope it lies on: eight units wide and
+    # twenty-three long, cut through the forest between two of its stands
+    # from the top hut high on the face to the warming hut on the verge
+    # (placed on the right, yaw 0: +X to the road, the slope rising away from
+    # it to -X). Its corduroy is groomed down the fall line edge to edge,
+    # orange safety netting runs down both sides, and a slalom is set down
+    # its middle, red and blue gates turn about; three skiers come out of the
+    # top hut, carve through the gates and run into the warming hut, their
+    # way back up out of sight under the snow. The groomer is parked off the
+    # run beside the warming hut: at work on a strip its own width, among the
+    # skiers, nothing fitted. All of it draped, built on y = 0 and laid on
+    # the land as the renderer draws it.
+    X0, X1, W = 2.8, -20.0, 4.0                        # the piste's foot, its top, its half-width
+    GATES = [(X1 + 3.2 + 3.0 * i, 1.7 * (1 if i % 2 == 0 else -1)) for i in range(6)]
+    tx, tz = X1 - 0.8, -W - 0.2                         # the top hut
+    bx, bz = X0 + 1.2, W + 0.6                          # the warming hut
     def piste():
-        n = 26
+        n = 30
         rows = []
         for i in range(n + 1):
             x = X0 + (X1 - X0) * i / n
-            w = W + 0.25 * math.sin(i * 0.7)
+            w = W + 0.3 * math.sin(i * 0.5) + 1.2 * max(0.0, 1 - i / 6.0)
             rows.append([(x, 0.03, -w), (x, 0.03, w)])
         for o in sheet(rows, lambda i, j, nn: 'white', 'piste'):
-            rowed(o, 9)
-        # the corduroy, down the fall line
+            rowed(o, 8)
+        # the corduroy, down the fall line, edge to edge
         with plain_parts():
-            for k in range(-3, 4):
-                rowed(box((X0 - X1 - 0.4, 0.02, 0.22), ((X0 + X1) / 2, 0.05, k * 0.6), 'white'), 18)
+            for k in range(-8, 9):
+                rowed(box((X0 - X1 - 0.6, 0.02, 0.16), ((X0 + X1) / 2, 0.05, k * 0.44), 'white'), 15)
         # the huts: the warming hut at the foot by the road, the top hut
-        cabin_hut(1.8, 1.0, 1.4, (X0 + 1.4, 0.0, -W - 1.2), 0x9a5f3c, 0xeef4f9, yaw=-math.pi / 2)
-        cabin_hut(1.5, 0.9, 1.2, (X1 - 0.6, 0.0, W + 1.0), 0xcf534f, 0xeef4f9, yaw=math.pi / 2)
-        # the piste's marker poles down both edges, orange
-        for i in range(5):
-            x = X0 - 1.0 - i * (X0 - X1 - 2.0) / 4
-            for sd in (-1, 1):
-                box((0.12, 1.0, 0.12), (x, 0.4, sd * (W + 0.5)), 0xff7e44)
+        cabin_hut(2.4, 1.3, 1.9, (bx, 0.0, bz), 0x9a5f3c, 0xeef4f9, yaw=math.pi / 2)
+        cabin_hut(2.0, 1.2, 1.6, (tx, 0.0, tz), 0xcf534f, 0xeef4f9, yaw=-math.pi / 2)
+        # the safety netting down both edges: a post every two units and a half, orange net between
+        m = 9
+        for sd in (-1, 1):
+            for i in range(m + 1):
+                x = X0 - 2.2 - i * (X0 - X1 - 3.4) / m
+                if sd * tz > 0 and x < X1 + 2.0:
+                    continue                            # the top hut's door stays open to the run
+                box((0.14, 1.0, 0.14), (x, 0.42, sd * (W + 0.55)), 0x555b66)
+                if i < m:
+                    box((2.3, 0.5, 0.07), (x - (X0 - X1 - 3.4) / m / 2, 0.55, sd * (W + 0.55)), 0xff7e44)
+        # the slalom: a gate a turn, two poles and a panel between them
+        for i, (x, z) in enumerate(GATES):
+            c = (0xcf534f, 0x3f7bd9)[i % 2]
+            for dz in (-0.45, 0.45):
+                box((0.1, 1.1, 0.1), (x, 0.5, z + dz), c)
+            box((0.06, 0.4, 0.9), (x, 0.82, z), c)
+        # the groomer parked off the run beside the warming hut, a sled at the hut's door
+        snowcat(X0 - 2.6, 0.0, W + 2.6, k=0.7)
+        sled(bx - 1.6, 0.0, bz - 1.0, 0.4, color=0x3f7bd9, L=0.8)
     draped('piste', piste)
-    # the groomer's loop: up the far lane, round at the top, down the near
-    # lane, round at the foot
-    loop = []
-    for i in range(10):
-        loop.append((X0 - 0.6 + (X1 + 1.0 - X0 + 0.6) * i / 9, 0.0, -1.1))
-    for i in range(1, 6):
-        a = math.pi * i / 6
-        loop.append((X1 + 1.0 - 1.1 * math.sin(a), 0.0, -1.1 * math.cos(a)))
-    for i in range(10):
-        loop.append((X1 + 1.0 + (X0 - 0.6 - X1 - 1.0) * i / 9, 0.0, 1.1))
-    for i in range(1, 6):
-        a = math.pi * i / 6
-        loop.append((X0 - 0.6 + 1.1 * math.sin(a), 0.0, 1.1 * math.cos(a)))
-    for k, pt in enumerate(loop):
-        marker('path_drapegroom_%d' % k, pt)
-    x, _, z = loop[3]
-    with animated('anim_path:c=drapegroom:p=34:f=2#cat', (x, 0.0, z)):
-        snowcat(x, 0.0, z, k=0.6)
-    # the skiers' loop: out of the top hut's door, down the piste in turns,
-    # into the warming hut's, home under the snow
-    tx, tz = X1 - 0.6, W + 1.0                          # the top hut
-    bx, bz = X0 + 1.4, -W - 1.2                         # the warming hut
-    run = [(tx, -1.4, tz), (tx, 0.0, tz), (tx + 0.4, 0.0, tz - 1.0), (X1 + 1.2, 0.0, 0.8)]
-    m = 9
-    for i in range(1, m + 1):
-        x = X1 + 1.2 + (X0 - 0.4 - X1 - 1.2) * i / m
-        run.append((x, 0.0, 1.35 * math.sin(i * math.pi / 2.2)))
-    run += [(bx - 0.6, 0.0, bz + 1.2), (bx, 0.0, bz), (bx, -1.6, bz)]
+    # the skiers' loop: out of the top hut's door, round each gate on its
+    # outside, into the warming hut's, home under the snow
+    run = [(tx, -1.4, tz), (tx, 0.0, tz), (tx + 0.6, 0.0, tz + 1.4), (X1 + 1.4, 0.0, -0.6)]
+    for i, (x, z) in enumerate(GATES):
+        run.append((x - 1.5, 0.0, z * 0.2))
+        run.append((x, 0.0, z + (0.95 if z > 0 else -0.95)))
+    run += [(X0 - 3.2, 0.0, 0.6), (bx - 1.6, 0.0, bz - 1.4), (bx, 0.0, bz), (bx, -1.6, bz)]
     run += [(bx + (tx - bx) * f, -1.6, bz + (tz - bz) * f) for f in (0.33, 0.66)]
     for k, pt in enumerate(run):
         marker('path_drapeski_%d' % k, pt)
     for n, (coat, hat) in enumerate(((0xcf534f, 0xfff6eb), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f))):
         x, y, z = run[4 + 3 * n]
-        with animated('anim_path:c=drapeski:p=12:o=%.3f#%d' % (n / 3, n), (x, 0.0, z)):
-            flurry_skier(x, 0.0, z, coat, hat)
+        with animated('anim_path:c=drapeski:p=15:o=%.3f:f=1#%d' % (n / 3, n), (x, 0.0, z)):
+            flurry_skier(x, 0.0, z, coat, hat, k=1.8)
 
 # ---- snow companions: small scenes that carry a track's story round its lap ----
 
