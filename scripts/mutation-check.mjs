@@ -548,8 +548,8 @@ export const MUTATIONS = [
     // slow while it builds steps down off its own loading.
     name: 'render-scale/grace-judged',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'const bool judged = !gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0;',
-    replace: 'const bool judged = !gaps.empty() && !resizing;',
+    find: 'if (!gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {',
+    replace: 'if (!gaps.empty() && !resizing) {',
     expect: 'render_scale',
   },
   {
@@ -670,18 +670,8 @@ export const MUTATIONS = [
     // race of a four-player cup tries 1080 again on its first clean streak.
     name: 'render-scale/scene-clears-the-bars',
     file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: '  cleanRun_ = 0;\n  floorRun_ = 0;\n}\n\nbool RenderScaleController::poll(',
-    replace: '  cleanRun_ = 0;\n  floorRun_ = 0;\n  for (auto& r : bars_) for (Bar& b : r) b = Bar{};\n}\n\nbool RenderScaleController::poll(',
-    expect: 'render_scale',
-  },
-  {
-    // Only a race's frames earn the web the lite tier. Counted in the lobby
-    // too, a page left on the attract tour of a weak tab drops the world
-    // for a race nobody has measured.
-    name: 'render-scale/lobby-earns-lite',
-    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
-    find: 'floorRun_ = sceneCells_ >= 1 && at == 0 && n > 1 ? floorRun_ + 1 : 0;',
-    replace: 'floorRun_ = at == 0 && n > 1 ? floorRun_ + 1 : 0;',
+    find: '  lateRun_ = 0;\n  cleanRun_ = 0;\n}\n\nbool RenderScaleController::poll(',
+    replace: '  lateRun_ = 0;\n  cleanRun_ = 0;\n  for (auto& r : bars_) for (Bar& b : r) b = Bar{};\n}\n\nbool RenderScaleController::poll(',
     expect: 'render_scale',
   },
   {

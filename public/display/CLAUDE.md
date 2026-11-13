@@ -242,14 +242,6 @@ one all arrive as the same fact. It therefore adapts in the lobby too, where the
 load is a quarter of a race's — handled by the asymmetric holds, not by a special
 case.
 
-**The detail tier is measured the same way.** The rungs only trade pixels; a
-browser whose race sat on the bottom rung for most of a race has EARNED the
-lite world (`kLiteFloorSec`, `RenderScaleController::liteEarned`, decided in
-`ttp/detail.h`). `_rebuild` asks `ttp_display_detail` again before every NEW
-scene (a new track, or `rebuild()`'s fresh race), never for a roster-only
-build, which can land mid-race: so the switch is a static rebuild between
-races and nothing else. `?detail=` pins either tier.
-
 **This side no longer holds any of it.** The window is the READOUT's — `PerfHud`
 feeds `ttp_perf_sample` every callback and the rule folds off that same monitor,
 so a resolution can never be steered off numbers the overlay disagrees with. All

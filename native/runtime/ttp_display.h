@@ -837,12 +837,8 @@ TTP_ABI void ttp_display_antialias(int on);
  * debug.ttp.detail); null or anything else leaves the platform's.
  *
  * Latched like the biome: the next ttp_display_build meshes the tier (a change
- * rebuilds the static scene). Call it after ttp_display_create, and on the web
- * again before every full scene build: the web's tier is EARNED by its frames
- * (ttp/detail.h — the render scale sat on its bottom rung for a race), so the
- * answer can turn to "lite" between races, and asking only at a build is what
- * keeps the switch out of a race. Answers the tier in force, "full" or
- * "lite" — the decision, with or without a display. */
+ * rebuilds the static scene). Call it after ttp_display_create. Answers the
+ * tier in force, "full" or "lite" — the decision, with or without a display. */
 TTP_ABI const char* ttp_display_detail(const char* platform, const char* ask);
 
 /* THE DRESSING ABLATION, split in two because the group's cost is.

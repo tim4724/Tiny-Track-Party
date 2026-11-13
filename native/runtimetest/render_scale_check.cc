@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "ttp/detail.h"
 #include "ttp/render_scale.h"
 #include "ttp/render_scale_controller.h"
 
@@ -32,7 +31,6 @@ using ttp::rt::kJudgeSec;
 using ttp::rt::kDownMinSec;
 using ttp::rt::kUpSec;
 using ttp::rt::kTrySec;
-using ttp::rt::kLiteFloorSec;
 using ttp::rt::kBarSec;
 using ttp::rt::kScaleSceneGraceSec;
 using ttp::rt::belowAnchor;
@@ -876,75 +874,6 @@ int main() {
       }
       check(fast120.ctl.point().divisor == 2 && fast120.ctl.halfRate(), "the choice is performed as every other vsync");
       check(fast120.lines(k4K120) > 540.0, "…and the doubled budget buys back pixels");
-    }
-
-    // ---- THE TIER THE FRAMES EARN (kLiteFloorSec) ------------------------
-    //
-    // A race that sits on the bottom rung for most of a race earns the web the
-    // lite world for the next scene. Measured, never probed: a cheap race, the
-    // lobby, a one-rung window and a run broken by a new scene earn nothing.
-    const auto hopeless = [](double) { return 26.0; };
-    {
-      Box b;
-      b.cells = 1;
-      b.ctl.scene(b.t);
-      b.race(kScaleSceneGraceSec + 20, kHD, hopeless);
-      nearly(b.lines(kHD), 540.0, "a race late at every rung sits on the floor");
-      check(!b.ctl.liteEarned(), "…which earns nothing in its first seconds there");
-      b.race(kLiteFloorSec, kHD, hopeless);
-      check(b.ctl.liteEarned(), "…and the lite tier once it has sat there kLiteFloorSec");
-      b.ctl.scene(b.t);
-      b.race(30, kHD, [](double) { return 2.0; });
-      check(b.ctl.liteEarned(), "…for the rest of the session, through a cheap scene");
-    }
-    {
-      Box b;
-      b.cells = 1;
-      b.ctl.scene(b.t);
-      b.race(300, kHD, [](double) { return 4.0; });
-      check(!b.ctl.liteEarned(), "a race holding its ceiling earns nothing");
-    }
-    {
-      Box b;
-      b.cells = 0;
-      b.ctl.scene(b.t);
-      b.race(300, kHD, hopeless);
-      nearly(b.lines(kHD), 540.0, "a hopeless LOBBY sits on the floor too");
-      check(!b.ctl.liteEarned(), "…but only a race's frames earn the tier");
-    }
-    {
-      // A window shorter than the floor offers one rung, its own ceiling, and
-      // gives up nothing by sitting on it.
-      const RenderScaleLimits small{0.0, 1.0, 480.0, kHz60};
-      Box b;
-      b.cells = 1;
-      b.ctl.scene(b.t);
-      b.race(300, small, hopeless);
-      check(!b.ctl.liteEarned(), "a one-rung surface never earns the tier");
-    }
-    {
-      // ON END, inside one race scene: two races each on the floor for most
-      // of kLiteFloorSec do not add up to one.
-      Box b;
-      b.cells = 1;
-      for (int race = 0; race < 2; race++) {
-        b.ctl.scene(b.t);
-        b.race(kScaleSceneGraceSec + kLiteFloorSec - 10, kHD, hopeless);
-      }
-      check(!b.ctl.liteEarned(), "two short floor runs in two scenes earn nothing");
-    }
-    {
-      // THE TIER ITSELF (ttp/detail.h): the web's follows the frames, the two
-      // TVs' are their hardware's, and an ask pins either.
-      using ttp::rt::Detail;
-      using ttp::rt::detail_for;
-      check(detail_for("web", nullptr, false) == Detail::Full, "the web draws full");
-      check(detail_for("web", nullptr, true) == Detail::Lite, "…and lite once its frames earned it");
-      check(detail_for("web", "full", true) == Detail::Full, "…unless ?detail=full pins it");
-      check(detail_for("web", "lite", false) == Detail::Lite, "…or ?detail=lite asks for it");
-      check(detail_for("tvos", nullptr, true) == Detail::Full, "the Apple TV keeps full whatever its frames");
-      check(detail_for("androidtv", nullptr, false) == Detail::Lite, "the Android TV box is lite");
-      check(detail_for(nullptr, nullptr, true) == Detail::Full, "no platform: full");
     }
   }
 

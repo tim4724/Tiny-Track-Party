@@ -1050,8 +1050,7 @@ decimates a kit model from the ratio SOURCES.json records for it).
 so the weakest device (the Android TV box at 4P/540) holds while the web and
 the Apple TV draw FULL and keep the headroom over it. The tier is decided in
 C++ (`ttp/detail.h`, from the platform each shell names to
-`ttp_display_detail`, and on the web from its frames: lite once the render
-scale has sat on its bottom rung for a race) and latched like the shadows: `setLite` drops the static
+`ttp_display_detail`) and latched like the shadows: `setLite` drops the static
 key, since most cuts are built in, and the static scene's key (`bakeKeyFor`)
 names the tier, since the two tiers build different worlds. The shell asks for
 the tier before it fetches a track's models, because the theme names the lite

@@ -17,7 +17,6 @@ void RenderScaleController::scene(double tMs) {
   head_ = 0;
   lateRun_ = 0;
   cleanRun_ = 0;
-  floorRun_ = 0;
 }
 
 bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
@@ -81,8 +80,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // hidden tab, a stalled loop: the next present's gap carries the late one).
   const std::vector<double> gaps = mon.takeGaps();
   const bool resizing = resized_ && tMs - resizedMs_ < kScaleResizeGraceSec * 1000.0;
-  const bool judged = !gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0;
-  if (judged) {
+  if (!gaps.empty() && !resizing && tMs - sceneMs_ >= kScaleSceneGraceSec * 1000.0) {
     const double due = pointPeriodMs(point_, limits);
     int lateNow = 0, vsyncs = 0;
     for (double g : gaps) {
@@ -107,13 +105,6 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   const int n = operatingPoints(limits, list);
   const double clamped = std::min(std::max(point_.scale, limits.min), limits.max);
   const int at = pointAtOrBelow(RenderScalePoint{clamped, point_.divisor}, list, n);
-
-  // THE TIER THE FRAMES EARN (kLiteFloorSec): a second judged at the bottom
-  // rung of a race scene extends the run, any other judged second ends it.
-  if (judged) {
-    floorRun_ = sceneCells_ >= 1 && at == 0 && n > 1 ? floorRun_ + 1 : 0;
-    if (floorRun_ >= kLiteFloorSec) liteEarned_ = true;
-  }
 
   // PLACE THE SCENE, once its cell count is known and while it is still in its
   // grace: where that count left off this session. A count not seen yet stays
