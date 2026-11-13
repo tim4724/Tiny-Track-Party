@@ -1308,7 +1308,7 @@ def tidepool_cottages():
     # Tidepool: the crab fishers' row on the west downs' foot, where the
     # lap's waist bends away and the camera swings to them: four whitewashed
     # cottages at a house's size beside a car, stepped along the lane under
-    # slate roofs, each door its own colour, chimneys smoking, a dry-stone
+    # slate roofs, each door its own colour, a chimney smoking, a dry-stone
     # wall along their gardens at the road side and pots stacked by a gate.
     # +X is the road; the row runs along it (+Z).
     white, slate_roof = 0xfff6eb, 0x868ba1
@@ -1324,7 +1324,8 @@ def tidepool_cottages():
         CH = h + rh * 0.7
         box((0.38, 0.9, 0.38), (cx, CH + 0.1, z + d / 2 - 0.3), 'grey')                # the chimney on the gable
         box((0.46, 0.1, 0.46), (cx, CH + 0.58, z + d / 2 - 0.3), 'slate')
-        marker('anim_smoke', (cx, CH + 0.75, z + d / 2 - 0.3))
+        if k == 2:                                                               # one smokes (one chimney a track)
+            marker('anim_smoke', (cx, CH + 0.75, z + d / 2 - 0.3))
     # the dry-stone wall along the gardens, a gate's gap before each door
     with plain_parts():
         for z0, z1 in ((-8.4, -7.3), (-6.5, -4.0), (-3.2, -0.3), (0.5, 3.6), (4.4, 6.0)):
@@ -3789,14 +3790,13 @@ def drift_boat_hut(cz, L, W, H, door, seed):
 def boat_huts():
     # Driftwood: where the pass leaves the beach, the fishers' stores in the
     # marram: three old beach boats hauled up and turned keel up into huts,
-    # their sterns walled and doored to the road, a stove pipe smoking
-    # through one keel; their gear between them, creels stacked, a capstan,
+    # their sterns walled and doored to the road, stove pipes through the
+    # keels; their gear between them, creels stacked, a capstan,
     # nets hung over a frame of thick spars. +X is the road; the row runs
     # along it (+Z).
     for k, (z, L, W, H, door) in enumerate(((-6.5, 4.6, 2.0, 1.5, 0xcf534f), (0.0, 5.2, 2.2, 1.7, 0x339cf2),
                                             (6.4, 4.2, 1.9, 1.4, 0x61cb8b))):
         drift_boat_hut(z, L, W, H, door, k)
-    marker('anim_smoke', (-0.1, 2.6, 0.78))
     for (x, y, z) in ((1.4, 0.0, -3.4), (1.4, 0.0, -2.9), (1.4, 0.32, -3.15), (1.6, 0.0, 3.2)):
         crab_pot((x, y, z), 0.0)
     cyl(0.32, 0.7, (1.5, 0.0, 9.4), 0x8a6a46, segs=8, stem=True)            # the capstan
@@ -3823,7 +3823,7 @@ def drift_coble():
 def smokehouse():
     # Driftwood: the fishers' smokehouse where the start straight bends away
     # (the straight points at it): a tall tarred timber house, its roof
-    # vented along the ridge where the smoke comes out, a lean-to of split
+    # vented along the ridge, a lean-to of split
     # logs for the fires; the beach boat hauled up beside it on its skids,
     # the capstan that winched it up the shingle, fish boxes stacked. At a
     # building's real size beside a car. +X is the road; along it (+Z).
@@ -3837,7 +3837,6 @@ def smokehouse():
     box((1.1, 0.12, 3.2), (-1.8, 4.66, 0.0), 'grey')
     for k in range(4):
         box((0.95, 0.08, 0.1), (-1.8, 4.3, -1.2 + 0.8 * k), 'slate')
-    marker('anim_smoke', (-1.8, 4.8, 0.0))
     box((0.07, 1.3, 1.0), (-0.47, 0.65, -0.6), trim)                         # the door to the road
     box((0.07, 1.2, 0.86), (-0.45, 0.6, -0.6), 0xcf534f)
     box((0.07, 0.5, 0.6), (-0.47, 2.2, 0.8), 'slate')

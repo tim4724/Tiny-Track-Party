@@ -142953,7 +142953,7 @@ inline const Model kModels[] = {
     { 17199996545698628190ull, 104u, k_set_block_westside },  // set-block-westside.glb
     { 4109993266374072907ull, 1u, k_set_blossom_grove_b },  // set-blossom-grove-b.glb
     { 17536227713428529150ull, 1u, k_set_blossom_grove },  // set-blossom-grove.glb
-    { 14404583559626405072ull, 1u, k_set_boat_huts },  // set-boat-huts.glb
+    { 18269612446951081344ull, 1u, k_set_boat_huts },  // set-boat-huts.glb
     { 17263561077414965132ull, 2u, k_set_boathouse },  // set-boathouse.glb
     { 8881239745905040447ull, 5u, k_set_boating_lake },  // set-boating-lake.glb
     { 10232142224728749994ull, 6u, k_set_bonfire },  // set-bonfire.glb
@@ -143165,7 +143165,7 @@ inline const Model kModels[] = {
     { 2396640224434925142ull, 25u, k_set_ski_school },  // set-ski-school.glb
     { 4174790552734673589ull, 13u, k_set_skull_rock },  // set-skull-rock.glb
     { 14506257371056971969ull, 43u, k_set_sky_snake },  // set-sky-snake.glb
-    { 1856372027791465640ull, 1u, k_set_smokehouse },  // set-smokehouse.glb
+    { 12979071407659986956ull, 1u, k_set_smokehouse },  // set-smokehouse.glb
     { 12225558096158861302ull, 3u, k_set_smugglers_cave },  // set-smugglers-cave.glb
     { 8626979895719713885ull, 14u, k_set_snake_ladder },  // set-snake-ladder.glb
     { 1006821317341997478ull, 23u, k_set_snakes_ladders },  // set-snakes-ladders.glb
@@ -143193,7 +143193,7 @@ inline const Model kModels[] = {
     { 12640669739756166217ull, 2u, k_set_tailings_dump },  // set-tailings-dump.glb
     { 16207024352976243864ull, 1u, k_set_tank_farm },  // set-tank-farm.glb
     { 42443734548642116ull, 5u, k_set_telegraph_line },  // set-telegraph-line.glb
-    { 2068350256499229490ull, 1u, k_set_tidepool_cottages },  // set-tidepool-cottages.glb
+    { 8637034283759624848ull, 1u, k_set_tidepool_cottages },  // set-tidepool-cottages.glb
     { 7090380233617776549ull, 10u, k_set_tidepool_cutting },  // set-tidepool-cutting.glb
     { 5616854700197452043ull, 8u, k_set_tidepool_headland },  // set-tidepool-headland.glb
     { 16795040916950137796ull, 251u, k_set_tilt_yard },  // set-tilt-yard.glb
