@@ -16011,11 +16011,11 @@ def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07, wrap=None):
                 continue
             q = rnd.uniform(0.35, 0.8)
             ys = [ground(x + dx, z + dz) for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
-            if None in ys or max(ys) - min(ys) > 0.5 * q:
-                continue                                        # astride a step: it would hang
-            # bedded: its foot under the slope's lowest point below it (laid on
-            # that point, its downhill edge hung over the slope as a floating slab)
-            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) - 0.1 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
+            if None in ys or max(ys) - min(ys) > 0.25 * q:
+                continue                                        # astride a step or on a steep pitch: it would hang
+            # bedded: its foot well under the slope's lowest point below it (laid
+            # on that point, its downhill edge hung over the slope as a floating slab)
+            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) - 0.2 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
                 roll=rnd.uniform(-0.15, 0.15), pitch=rnd.uniform(-0.1, 0.1))
             n += 1
 

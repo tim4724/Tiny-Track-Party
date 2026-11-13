@@ -1506,7 +1506,7 @@ export const TRACKS = {
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.302, lat: 7 },
+      { model: 'set-dead-cottonwood', u: 0.302, lat: 9.5 },   // (nearer, its rocks lay on the start straight below)
       { model: 'set-dead-cottonwood', u: 0.95, lat: -7, yaw: -180 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
@@ -1520,7 +1520,7 @@ export const TRACKS = {
       // a cut bank past each kerb, and the last flood's log jam on the bar
       { model: 'set-wash-road-reach', u: 0.537, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.553, lat: 0 },
-      { model: 'set-flood-jam', u: 0.558, lat: -6.2, yaw: 180 },
+      { model: 'set-flood-jam', u: 0.558, lat: -6.8, yaw: 180 },
       { model: 'set-wash-road-reach', u: 0.612, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.628, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.644, lat: 0 },
