@@ -2,13 +2,25 @@
 // and how it is drawn. TtpRendererImpl.h carries what the topic files share.
 //
 // THE TIER. A moving part is baked like the static dressing (kit colour x live
-// factor x the matte light of its REST normals, one unlit vcolor mesh) but in
-// its node's own frame, so one transform a frame moves it: no lit vertex, no
-// instance buffer, a draw per visible part. The light stays frozen at the rest
-// pose, which is why the verbs are spins about the part's own axis, sways,
-// hops and small turns: the sun's horizontal share is a fifth of it
-// (kToSun), so a 60 degree turn moves a wall's light by under 0.2 of the sun
-// term, and a wheel turning about its axis keeps every face's light exact.
+// factor x the matte light of its REST normals, unlit vcolor), so one
+// transform a frame moves it: no lit vertex, no instance buffer. The light
+// stays frozen at the rest pose, which is why the verbs are spins about the
+// part's own axis, sways, hops and small turns: the sun's horizontal share is
+// a fifth of it (kToSun), so a 60 degree turn moves a wall's light by under
+// 0.2 of the sun term, and a wheel turning about its axis keeps every face's
+// light exact.
+//
+// THE SKIN. In full, a placement's parts are ONE skinned draw, baked in world
+// space at rest, each part's vertices carried whole by a bone of its own whose
+// matrix is that transform times the inverse of its rest: a knot of penguins
+// is one draw and every penguin still turns, waddles and slides by itself
+// (Glacier's busiest full frame drew a hundred-odd penguins one draw each).
+// LITE keeps a draw per part, in its node's own frame: its builds already
+// group a knot into one part, and the skinned draw is a pipeline of its own
+// that the Android box's driver would compile on first sight, mid-race.
+// meshopt groups corners by POSITION when it simplifies, which is why the
+// skin bakes in world space: in node frames two penguins of one model lie on
+// each other, and the far form would join them.
 //
 // THE SHADOW. The sun bake renders the gltfio originals at their rest pose,
 // before the merge exists. A part that moves in place keeps that shadow (it is
@@ -62,6 +74,7 @@ void TtpRenderer::keepTravellersOutOfBake(const gltfio::FilamentAsset* asset,
 void TtpRenderer::buildSetMovers() {
     mSetMovers.clear();
     mSetPaths.clear();
+    mSetSkins.clear();
     if (!mScene || !mBakeRig.valid) return;
     auto& rcm = mEngine->getRenderableManager();
     auto& tcm = mEngine->getTransformManager();
@@ -142,6 +155,51 @@ void TtpRenderer::buildSetMovers() {
                 order.push_back({ depth, e });
             }
             std::stable_sort(order.begin(), order.end());
+            const auto rowIt = mSetRowOf.find(inst);
+            const int setRow = rowIt != mSetRowOf.end() ? rowIt->second : -1;
+            // FULL: the placement's open skinned draw (THE SKIN, above), shut
+            // at kSkinBones parts and after the last. Its SetSkin is listed
+            // even when the build fails, so the movers' indices hold; its
+            // parts then stay in the scene, standing still.
+            MergedGroup skinGroup;
+            SetSkin skin;
+            float3 skinLo{ 1e30f }, skinHi{ -1e30f };
+            const auto closeSkin = [&]() {
+                if (skin.bones.empty()) return;
+                Mesh& sm = skinGroup.baked;
+                sm.weld = true;
+                sm.simplify = true;   // one far form for the lot (chooseLods)
+                sm.boneCount = (uint32_t) skin.bones.size();
+                if (buildMesh(sm)) {
+                    const auto ri = rcm.getInstance(sm.entity);
+                    // The box its bones sweep, never the rest box buildMesh
+                    // took off the vertices: culling and the far form both.
+                    rcm.setAxisAlignedBoundingBox(ri,
+                            { (skinLo + skinHi) * 0.5f, (skinHi - skinLo) * 0.5f });
+                    for (LodRange& r : mLods) {
+                        if (r.entity != sm.entity) continue;
+                        r.lo = skinLo;
+                        r.hi = skinHi;
+                    }
+                    rcm.setLayerMask(ri, 0xFF, rcm.getLayerMask(rcm.getInstance(skinGroup.sources[0])));
+                    rcm.setBones(ri, skin.bones.data(), skin.bones.size());
+                    for (const utils::Entity src : skinGroup.sources) mScene->remove(src);
+                    skinGroup.ent = sm.entity;
+                    skinGroup.feat = kFeatDressing;
+                    skinGroup.setRow = setRow;
+                    skin.ent = sm.entity;
+                    mMergedDress.push_back(std::move(skinGroup));
+                } else {
+                    utils::slog.w << "set motion: a skinned draw did not build; its "
+                            << skin.bones.size() << " parts stand still" << utils::io::endl;
+                    destroyMesh(sm);
+                }
+                mSetSkins.push_back(std::move(skin));
+                skinGroup = MergedGroup{};
+                skin = SetSkin{};
+                skinLo = float3{ 1e30f };
+                skinHi = float3{ -1e30f };
+            };
             for (const auto& slot : order) {
                 const size_t e = slot.second;
                 const utils::Entity node = ents[e];
@@ -175,21 +233,19 @@ void TtpRenderer::buildSetMovers() {
                 // The path a part's far-form box must cover: a traveller's own,
                 // or the one the traveller it rides goes round (a robot's legs).
                 int lodPath = -1;
-                float3 lodOrigin = rest[3].xyz;
                 if (motion.path) {
                     const auto p = pathOf.find(motion.chain);
                     if (p != pathOf.end()) lodPath = p->second;
                 } else if (rides >= 0) {
                     lodPath = mSetMovers[(size_t) rides].lodPath;
-                    lodOrigin = mSetMovers[(size_t) rides].lodOrigin;
                 }
-                MergedGroup g;
-                Mesh& mesh = g.baked;
-                mesh.weld = true;
-                // A far form like the static runs' (chooseLods); a part that
-                // travels measures to the box its whole loop sweeps (below).
-                mesh.simplify = true;
+                // Baked unlit like the static runs: in the node's own frame for
+                // a draw of its own, in world space at rest for a bone of the
+                // placement's skinned draw (`toBake` undoes it either way).
+                const bool skinned = !mLite;
                 const mat4f toNode = inverse(rest);
+                std::vector<Vertex> pv;
+                std::vector<uint32_t> pi;
                 bool ok = colorModel != nullptr;
                 for (const utils::Entity src : parts) {
                     if (!ok) break;
@@ -213,7 +269,7 @@ void TtpRenderer::buildSetMovers() {
                     }
                     const mat4f xf = tcm.getWorldTransform(tcm.getInstance(src));
                     const mat3f nm3 = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
-                    const mat4f into = toNode * xf;
+                    const mat4f into = skinned ? xf : toNode * xf;
                     for (size_t p = 0; p < prims.size() && ok; p++) {
                         const ttp::rt::GlbMeshPrim& sp = prims[p];
                         const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri, p);
@@ -227,7 +283,7 @@ void TtpRenderer::buildSetMovers() {
                         const float3 fe = mi->getParameter<float4>("baseColorFactor").xyz;
                         const float3 factor{ srgbChannel(fe.x), srgbChannel(fe.y), srgbChannel(fe.z) };
                         const uint8_t* rgb = colors.prims[p].rgb;
-                        const uint32_t base = (uint32_t) mesh.verts.size();
+                        const uint32_t base = (uint32_t) pv.size();
                         for (size_t i = 0; i < sp.pos.size() / 3; i++) {
                             const float4 pos{ sp.pos[i * 3], sp.pos[i * 3 + 1], sp.pos[i * 3 + 2], 1 };
                             const float3 pl = (into * pos).xyz;
@@ -236,63 +292,25 @@ void TtpRenderer::buildSetMovers() {
                             const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
                                     srgbChannel(rgb[i * 3 + 1] / 255.0f),
                                     srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor;
-                            mesh.verts.push_back({ pl.x, pl.y, pl.z,
+                            pv.push_back({ pl.x, pl.y, pl.z,
                                     packShown(lin * bakedMatteLight(nw), 1.0f) });
                         }
-                        for (const uint32_t ix : sp.idx) mesh.idx.push_back(base + ix);
+                        for (const uint32_t ix : sp.idx) pi.push_back(base + ix);
                     }
                 }
-                if (!ok || !buildMesh(mesh)) {
+                if (!ok || pv.empty() || pi.empty()) {
                     utils::slog.w << "set motion: " << (nodeName ? nodeName : "?")
                             << " did not bake; it stands still" << utils::io::endl;
-                    destroyMesh(mesh);
                     continue;
                 }
-                // chooseLods measures to a WORLD box: the rest pose's, which an
-                // in-place motion never strays far from; for a traveller (or a
-                // part riding one), every spot of its loop with the part's
-                // reach round its traveller's origin, turned any way.
-                for (LodRange& r : mLods) {
-                    if (r.entity != mesh.entity) continue;
-                    float3 lo{ 1e30f }, hi{ -1e30f };
-                    float reach = 0;
-                    for (int c = 0; c < 8; c++) {
-                        const float3 p{ (c & 1) ? r.hi.x : r.lo.x, (c & 2) ? r.hi.y : r.lo.y,
-                                        (c & 4) ? r.hi.z : r.lo.z };
-                        const float3 w = (rest * float4{ p, 1 }).xyz;
-                        lo = min(lo, w);
-                        hi = max(hi, w);
-                        reach = std::max(reach, length(w - lodOrigin));
-                    }
-                    if (lodPath >= 0) {
-                        lo = float3{ 1e30f };
-                        hi = float3{ -1e30f };
-                        for (const float3& q : mSetPaths[(size_t) lodPath].pts) {
-                            lo = min(lo, q - reach);
-                            hi = max(hi, q + reach);
-                        }
-                    }
-                    r.lo = lo;
-                    r.hi = hi;
-                }
-                // The originals' layer: a traveller's already lacks the caster bit.
-                if (const auto ri = rcm.getInstance(mesh.entity)) {
-                    rcm.setLayerMask(ri, 0xFF, rcm.getLayerMask(rcm.getInstance(parts[0])));
-                }
-                for (const utils::Entity src : parts) mScene->remove(src);
-                g.ent = mesh.entity;
-                g.feat = kFeatDressing;
-                g.sources = parts;
-                const auto row = mSetRowOf.find(inst);
-                g.setRow = row != mSetRowOf.end() ? row->second : -1;
                 SetMover mv;
-                mv.ent = g.ent;
                 mv.rest = rest;
                 // A `drape` part stands where the ground is drawn, as the
                 // draped parts round it do (appendBaked).
                 if (motion.drape && mTrack && !motion.travels()) {
                     mv.rest[3].y += groundSurfaceY(*mTrack, rest[3].x, rest[3].z) - baseY;
                 }
+                mv.toBake = skinned ? toNode : mat4f{};
                 mv.scale = length(rest[0].xyz);
                 const float inv = mv.scale > 0 ? 1.0f / mv.scale : 1.0f;
                 mv.restInv = transpose(mat3f{ rest[0].xyz * inv, rest[1].xyz * inv, rest[2].xyz * inv });
@@ -321,16 +339,106 @@ void TtpRenderer::buildSetMovers() {
                     }
                 }
                 mv.lodPath = lodPath;
-                mv.lodOrigin = lodOrigin;
+                mv.lodOrigin = rides >= 0 ? mSetMovers[(size_t) rides].lodOrigin : mv.rest[3].xyz;
+                mv.lift = mv.scale * ((motion.bob ? motion.bobHeight : 0.0f)
+                        + (motion.hop ? motion.hopHeight : 0.0f) + (motion.waddle ? 0.05f : 0.0f))
+                        + (rides >= 0 ? mSetMovers[(size_t) rides].lift : 0.0f);
                 if (rides >= 0) {
                     mv.parent = rides;
                     mv.onParent = inverse(mSetMovers[(size_t) rides].rest) * mv.rest;
                 }
                 mv.motion = std::move(motion);
+                if (skinned) {
+                    // A bone of the placement's open skinned draw. The draw's
+                    // box holds every pose of the part: its rest vertices'
+                    // reach from its anchor, turned any way and lifted, round
+                    // the anchor or round every spot of the loop it rides.
+                    const mat4f atRest = mv.rest * mv.toBake;
+                    float reach = 0;
+                    for (const Vertex& v : pv) {
+                        reach = std::max(reach, length((atRest * float4{ v.px, v.py, v.pz, 1 }).xyz
+                                - mv.lodOrigin));
+                    }
+                    reach += mv.lift;
+                    if (lodPath < 0) {
+                        skinLo = min(skinLo, mv.lodOrigin - reach);
+                        skinHi = max(skinHi, mv.lodOrigin + reach);
+                    } else {
+                        for (const float3& q : mSetPaths[(size_t) lodPath].pts) {
+                            skinLo = min(skinLo, q - reach);
+                            skinHi = max(skinHi, q + reach);
+                        }
+                    }
+                    Mesh& sm = skinGroup.baked;
+                    const uint32_t base = (uint32_t) sm.verts.size();
+                    const uint16_t bone = (uint16_t) skin.bones.size();
+                    sm.verts.insert(sm.verts.end(), pv.begin(), pv.end());
+                    sm.bones.resize(sm.verts.size(), Mesh::Bone{ { bone, 0, 0, 0 }, { 255, 0, 0, 0 } });
+                    for (const uint32_t ix : pi) sm.idx.push_back(base + ix);
+                    skinGroup.sources.insert(skinGroup.sources.end(), parts.begin(), parts.end());
+                    skin.bones.push_back(atRest);
+                    mv.skin = (int) mSetSkins.size();
+                    mv.bone = bone;
+                    moverOf[node] = mSetMovers.size();
+                    mSetMovers.push_back(std::move(mv));
+                    if (skin.bones.size() == kSkinBones) closeSkin();
+                    continue;
+                }
+                MergedGroup g;
+                Mesh& mesh = g.baked;
+                mesh.verts = std::move(pv);
+                mesh.idx = std::move(pi);
+                mesh.weld = true;
+                // A far form like the static runs' (chooseLods).
+                mesh.simplify = true;
+                if (!buildMesh(mesh)) {
+                    utils::slog.w << "set motion: " << (nodeName ? nodeName : "?")
+                            << " did not bake; it stands still" << utils::io::endl;
+                    destroyMesh(mesh);
+                    continue;
+                }
+                // chooseLods measures to a WORLD box: the rest pose's, which an
+                // in-place motion never strays far from; for a traveller (or a
+                // part riding one), every spot of its loop with the part's
+                // reach round its traveller's origin, turned any way.
+                for (LodRange& r : mLods) {
+                    if (r.entity != mesh.entity) continue;
+                    float3 lo{ 1e30f }, hi{ -1e30f };
+                    float cornerReach = 0;
+                    for (int c = 0; c < 8; c++) {
+                        const float3 p{ (c & 1) ? r.hi.x : r.lo.x, (c & 2) ? r.hi.y : r.lo.y,
+                                        (c & 4) ? r.hi.z : r.lo.z };
+                        const float3 w = (rest * float4{ p, 1 }).xyz;
+                        lo = min(lo, w);
+                        hi = max(hi, w);
+                        cornerReach = std::max(cornerReach, length(w - mv.lodOrigin));
+                    }
+                    if (lodPath >= 0) {
+                        lo = float3{ 1e30f };
+                        hi = float3{ -1e30f };
+                        for (const float3& q : mSetPaths[(size_t) lodPath].pts) {
+                            lo = min(lo, q - cornerReach);
+                            hi = max(hi, q + cornerReach);
+                        }
+                    }
+                    r.lo = lo;
+                    r.hi = hi;
+                }
+                // The originals' layer: a traveller's already lacks the caster bit.
+                if (const auto ri = rcm.getInstance(mesh.entity)) {
+                    rcm.setLayerMask(ri, 0xFF, rcm.getLayerMask(rcm.getInstance(parts[0])));
+                }
+                for (const utils::Entity src : parts) mScene->remove(src);
+                g.ent = mesh.entity;
+                g.feat = kFeatDressing;
+                g.sources = parts;
+                g.setRow = setRow;
+                mv.ent = g.ent;
                 mMergedDress.push_back(std::move(g));
                 moverOf[node] = mSetMovers.size();
                 mSetMovers.push_back(std::move(mv));
             }
+            closeSkin();
         }
     }
 }
@@ -356,13 +464,19 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         const float t = seg > 0 ? (s - p.at[i]) / seg : 0;
         return p.pts[i] + (p.pts[(i + 1) % n] - p.pts[i]) * t;
     };
-    // Where each mover is this frame, for the ones riding it (outer first).
+    // Where each mover is this frame, for the ones riding it (outer first),
+    // handed to its draw: its bone of the placement's skinned draw, or its own
+    // renderable's transform.
     mSetMoverNow.resize(mSetMovers.size());
+    const auto place = [&](size_t k, const mat4f& w) {
+        const SetMover& mv = mSetMovers[k];
+        mSetMoverNow[k] = w;
+        if (mv.skin >= 0) mSetSkins[(size_t) mv.skin].bones[mv.bone] = w * mv.toBake;
+        else if (const auto ti = tcm.getInstance(mv.ent)) tcm.setTransform(ti, w);
+    };
     for (size_t k = 0; k < mSetMovers.size(); k++) {
         const SetMover& mv = mSetMovers[k];
         mSetMoverNow[k] = mv.rest;
-        const auto ti = tcm.getInstance(mv.ent);
-        if (!ti) continue;
         const ttp::rt::SetMotion& m = mv.motion;
         if (m.path && mv.path >= 0) {
             // Along the path at a steady pace, facing along it. The heading is
@@ -397,8 +511,7 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
                 if (m.spin) w = w * axisTurn(m.spinAxis, pose.spin);
                 if (pose.roll != 0) w = w * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
             }
-            mSetMoverNow[k] = w;
-            tcm.setTransform(ti, w);
+            place(k, w);
             continue;
         }
         size_t n = 0;
@@ -423,8 +536,11 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
         if (m.spin) local = local * axisTurn(m.spinAxis, pose.spin);
         if (pose.roll != 0) local = local * mat4f::rotation(pose.roll, float3{ 1, 0, 0 });
         const mat4f base = mv.parent >= 0 ? mSetMoverNow[(size_t) mv.parent] * mv.onParent : mv.rest;
-        mSetMoverNow[k] = base * local;
-        tcm.setTransform(ti, mSetMoverNow[k]);
+        place(k, base * local);
+    }
+    auto& rcm = mEngine->getRenderableManager();
+    for (const SetSkin& sk : mSetSkins) {
+        if (const auto ri = rcm.getInstance(sk.ent)) rcm.setBones(ri, sk.bones.data(), sk.bones.size());
     }
 }
 

@@ -3061,8 +3061,11 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             }
             if (lods) {
                 // THIS cell's pixels per radian, so the trade scales itself to
-                // the pixels it has (TtpRenderer.h, LodRange).
-                const float pxPerRad = (float) rect.h
+                // the pixels it has (TtpRenderer.h, LodRange), counted as its
+                // share of a frame no taller than kLodLines.
+                const float lines = (float) rect.h
+                        * std::min(1.0f, kLodLines / (float) std::max(mHeight, 1u));
+                const float pxPerRad = lines
                         / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
                 chooseLods(world[3].xyz, pxPerRad);
                 chooseCuts(world[3].xyz, pxPerRad);
@@ -3486,7 +3489,12 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) { restoreCuts(); destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
+        if (mMergeOff) {
+            restoreCuts();
+            destroyMergedGroups(mMergedDress);
+            mSetMovers.clear();
+            mSetSkins.clear();
+        }
         else buildDressingMerge();
         if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;

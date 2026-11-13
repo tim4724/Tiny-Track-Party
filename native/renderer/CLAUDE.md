@@ -912,8 +912,10 @@ So:
   is two pictures, the clean seconds and a few a lap where every cell looks across
   the whole circuit. A listed renderable owns a second index range that strays at
   most `err` world units, drawn past the distance where `err` covers `kLodPx`
-  pixels OF THAT CELL. The deck's is a ribbon over same-coloured rings; a static
-  unlit mesh opts in with `simplify`; the flowers do not (it strips the petals).
+  pixels OF THAT CELL, counted as its share of a frame no taller than
+  `kLodLines`, so a 4K panel swaps where a 1080 one does. The deck's is a
+  ribbon over same-coloured rings; a static unlit mesh opts in with
+  `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on
   stays NEAR in every cell** (`mShadowRings`, from `placeCarShadow`): the
   shadow pass is the fine rings' own planes, and under the far ribbon's
@@ -977,8 +979,8 @@ piece). Each placement's still parts become one mesh per `mPieceTile` tile,
 split by whole part, so a big piece still culls and takes its far form a
 corner at a time (never through a part, so a tile's far form needs no locked
 border). **What hangs under an `anim_*` node is no static merge's**: the
-motion pass bakes it in the node's own frame (one unlit draw per moving part),
-and until it does the part draws live-lit and the live-dressing gate names it.
+motion pass bakes it (below), and until it does the part draws live-lit and
+the live-dressing gate names it.
 A `spin` subtree is mirrored per frame like the toy train's. Two more
 things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
@@ -1009,15 +1011,21 @@ names it).
 
 **A set piece's MOVING PART is a node named `anim_...`** (the grammar is
 `ttp/set_motion.h`, the drawing `TtpRendererMotion.cpp`): baked unlit like
-the static runs but in its node's frame, light frozen at rest, and moved by one
-transform a frame that is a closed form of the scene clock and the cars, so it
-has no state to reset. Hence the verbs: spins about the part's own axis,
+the static runs, light frozen at rest, and moved by one transform a frame that
+is a closed form of the scene clock and the cars, so it has no state to reset.
+**In full a placement's parts are ONE skinned draw**, that transform each
+part's own bone, so a knot of penguins costs a draw and every penguin still
+moves by itself; its box is every pose's, since Filament culls a skinned draw
+on the box it is handed. Lite keeps a draw per part (its builds group a knot
+into one part), because the skinned draw is a pipeline the box would compile
+on first sight, mid-race; warm it there before lite takes it. Hence the verbs: spins about the part's own axis,
 sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
 runs inside something opaque (or whose loop is closed in sight). A part inside
 another rides on it: its pose composes onto the outer part's pose of the same
 frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
-moves in place keeps its rest shadow. Every part takes a far form; one that travels, or rides a
-traveller, measures it to the box its whole loop sweeps, since its rest box is wherever it was built.
+moves in place keeps its rest shadow. Every part takes a far form (in full, the placement's skin
+takes one); one that travels, or rides a traveller, measures it to the box its whole loop sweeps,
+since its rest box is wherever it was built.
 A traveller is drawn only on its path, so where it is built is just its pivot: a flier is built on
 the floor under its loop, or it would count in the piece's box, its sight points and the floating
 check as a part standing in the air. The static merge leaves every `anim_`

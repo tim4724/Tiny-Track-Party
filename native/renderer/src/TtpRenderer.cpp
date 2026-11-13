@@ -452,7 +452,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // until the reorder below.
     const bool welded = (fold || m.weld) && !lit && !uv && !baked;
     if (welded) weldExact(m);
-    m.layout = Mesh::Layout{ lit, uv, baked };
+    const bool skin = !m.bones.empty();
+    m.layout = Mesh::Layout{ lit, uv, baked, skin };
     const uint8_t uvSlot = m.layout.uvSlot();
     const uint8_t customSlot = m.layout.customSlot();
     m.vb = buildVertexBuffer((uint32_t) m.verts.size(), m.layout);
@@ -462,6 +463,11 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         m.uvs.resize(m.verts.size(), math::float2{ 0, 0 });
         m.vb->setBufferAt(*mEngine, uvSlot, VertexBuffer::BufferDescriptor(
                 m.uvs.data(), m.uvs.size() * sizeof(math::float2), nullptr));
+    }
+    if (skin) {
+        m.bones.resize(m.verts.size(), Mesh::Bone{ { 0, 0, 0, 0 }, { 255, 0, 0, 0 } });
+        m.vb->setBufferAt(*mEngine, m.layout.skinSlot(), VertexBuffer::BufferDescriptor(
+                m.bones.data(), m.bones.size() * sizeof(Mesh::Bone), nullptr));
     }
     if (baked) {
         m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
@@ -514,7 +520,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         const float scale = meshopt_simplifyScale(&m.verts[0].px, m.verts.size(), sizeof(Vertex));
         for (size_t i = 0; i < ranges.size(); i++) {
             const auto [t0, n] = ranges[i];
-            far[i] = farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
+            far[i] = skin ? farFormByBone(m, t0 * 3, n * 3)
+                          : farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
         }
     }
     MaterialInstance* const mi = materialInstance ? materialInstance
@@ -557,8 +564,11 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         const auto [t0, n] = ranges[i];
         const auto [lo, hi] = boundsOf(t0 * 3, n * 3);
         utils::Entity e = utils::EntityManager::get().create();
-        RenderableManager::Builder(1)
-                .boundingBox({ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) })
+        RenderableManager::Builder rb(1);
+        // A skinned mesh's bones start at the identity; its owner poses them
+        // and states the box they sweep (buildSetMovers).
+        if (skin) rb.skinning(m.boneCount);
+        rb.boundingBox({ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) })
                 // Blend-pass draw order (default 4), for the few blended
                 // sheets that must stack deterministically instead of by an
                 // arbitrary depth sort.
@@ -602,9 +612,12 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
 // would otherwise each move their shared seam, and a near tile beside a far
 // one (or two far ones) would open a crack along it.
 // Answers the far offset, count and reached error (farCnt 0 = no far form).
+// [v0, v1) is the window of vertices the range draws from (v1 0: all of them),
+// which is all the simplifier is shown.
 TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
-        float scale, bool lockBorder) {
+        float scale, bool lockBorder, uint32_t v0, uint32_t v1) {
     LodRange r;
+    if (!v1) v1 = (uint32_t) m.verts.size();
     if (!(scale > 0.0f)) return r;
     // A BIG FACE KEEPS ITS OWN CORNERS. A vertex carries its face's baked
     // light, and a collapse re-points a corner at a vertex the range already
@@ -646,9 +659,11 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     std::vector<uint32_t> dst(pool.size());
     float err = 0;
     if (!pool.empty()) {
-        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), &m.verts[0].px,
-                m.verts.size(), sizeof(Vertex), 0, kFarTol / scale,
+        for (uint32_t& k : pool) k -= v0;
+        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), &m.verts[v0].px,
+                v1 - v0, sizeof(Vertex), 0, kFarTol / scale,
                 lockBorder || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
+        for (uint32_t& k : dst) k += v0;
     }
     dst.insert(dst.end(), keep.begin(), keep.end());
     if (dst.empty() || dst.size() * 5 > idxN * 4) return r;
@@ -656,6 +671,48 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     r.farCnt = (uint32_t) dst.size();
     r.err = err * scale;
     m.idx.insert(m.idx.end(), dst.begin(), dst.end());
+    return r;
+}
+
+// A SKINNED range's far form, a bone at a time: each part simplified on its
+// own vertices, as it was when each part was a draw of its own. Shown the
+// lot, the simplifier joins corners by POSITION, and parts may stand on one
+// another at rest (a run's marbles are built on one pivot), which left the
+// whole skin without a far form. A part that saves too little keeps its near
+// triangles in the far range; the range keeps a far form on farForm's terms.
+TtpRenderer::LodRange TtpRenderer::farFormByBone(Mesh& m, size_t idx0, size_t idxN) {
+    LodRange r;
+    const uint32_t start = (uint32_t) m.idx.size();
+    float err = 0;
+    std::vector<uint32_t> near;
+    for (size_t a = idx0; a < idx0 + idxN;) {
+        const uint16_t bone = m.bones[m.idx[a]].idx[0];
+        uint32_t lo = UINT32_MAX, hi = 0;
+        size_t b = a;
+        for (; b < idx0 + idxN && m.bones[m.idx[b]].idx[0] == bone; b += 3) {
+            for (size_t k = b; k < b + 3; k++) {
+                lo = std::min(lo, m.idx[k]);
+                hi = std::max(hi, m.idx[k]);
+            }
+        }
+        const float scale = meshopt_simplifyScale(&m.verts[lo].px, hi - lo + 1, sizeof(Vertex));
+        const LodRange part = farForm(m, a, b - a, scale, false, lo, hi + 1);
+        if (part.farCnt) {
+            err = std::max(err, part.err);
+        } else {
+            near.assign(m.idx.begin() + (std::ptrdiff_t) a, m.idx.begin() + (std::ptrdiff_t) b);
+            m.idx.insert(m.idx.end(), near.begin(), near.end());
+        }
+        a = b;
+    }
+    const size_t cnt = m.idx.size() - start;
+    if (!cnt || cnt * 5 > idxN * 4) {
+        m.idx.resize(start);
+        return r;
+    }
+    r.farOff = start;
+    r.farCnt = (uint32_t) cnt;
+    r.err = err;
     return r;
 }
 
@@ -695,8 +752,9 @@ ttp::rt::GlbMeshPrim TtpRenderer::weldPrimExact(const ttp::rt::GlbMeshPrim& p, b
 
 void TtpRenderer::weldExact(Mesh& m) {
     // The key is every attribute the vertex carries to the GPU, bit for bit —
-    // its position and colour; buildMesh only welds a mesh that has nothing
-    // else. A folded sheet's normals are spent and must not split it. meshopt
+    // its position and colour, and a skinned mesh's bone; buildMesh only welds
+    // a mesh that has nothing else. A folded sheet's normals are spent and
+    // must not split it. meshopt
     // numbers the unique vertices in order of first appearance, which keeps
     // each one's first slot; the order it is handed is the vertices' own,
     // padded to whole triangles (its precondition) with the last one again.
@@ -704,8 +762,10 @@ void TtpRenderer::weldExact(Mesh& m) {
     std::vector<uint32_t> order(nv + (3 - nv % 3) % 3, (uint32_t) nv - 1);
     for (size_t i = 0; i < nv; i++) order[i] = (uint32_t) i;
     std::vector<uint32_t> remap(nv);
-    const size_t unique = meshopt_generateVertexRemap(remap.data(), order.data(), order.size(),
-            m.verts.data(), nv, sizeof(Vertex));
+    const meshopt_Stream streams[] = { { m.verts.data(), sizeof(Vertex), sizeof(Vertex) },
+                                       { m.bones.data(), sizeof(Mesh::Bone), sizeof(Mesh::Bone) } };
+    const size_t unique = meshopt_generateVertexRemapMulti(remap.data(), order.data(),
+            order.size(), nv, streams, m.bones.size() == nv ? 2 : 1);
     std::vector<uint32_t> keep;
     keep.reserve(unique);
     for (size_t i = 0; i < nv; i++) {
@@ -720,13 +780,14 @@ void TtpRenderer::weldExact(Mesh& m) {
     };
     compact(m.verts);
     compact(m.normals);
+    compact(m.bones);
 }
 
 VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
     VertexBuffer::Builder vbb;
     vbb.vertexCount(vertexCount)
             .bufferCount((uint8_t)
-                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 2 : 0)))
+                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 2 : 0) + (l.skin ? 1 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
@@ -747,6 +808,13 @@ VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::L
                 VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
         vbb.attribute(VertexAttribute::CUSTOM1, (uint8_t) (l.customSlot() + 1),
                 VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+    }
+    if (l.skin) {
+        vbb.attribute(VertexAttribute::BONE_INDICES, l.skinSlot(),
+                VertexBuffer::AttributeType::USHORT4, 0, sizeof(Mesh::Bone));
+        vbb.attribute(VertexAttribute::BONE_WEIGHTS, l.skinSlot(),
+                VertexBuffer::AttributeType::UBYTE4, offsetof(Mesh::Bone, w), sizeof(Mesh::Bone))
+                .normalized(VertexAttribute::BONE_WEIGHTS);
     }
     return vbb.build(*mEngine);
 }
@@ -828,7 +896,7 @@ void TtpRenderer::buryMeshBuffers(Mesh& m) {
     // built for this scene, and a grave per never-used slot would age a hundred
     // empty vectors every frame.
     if (m.verts.empty() && m.idx.empty() && m.normals.empty()
-            && m.quats.empty() && m.uvs.empty() && m.custom0.empty()) {
+            && m.quats.empty() && m.uvs.empty() && m.custom0.empty() && m.bones.empty()) {
         return;
     }
     MeshGrave g;
@@ -838,12 +906,14 @@ void TtpRenderer::buryMeshBuffers(Mesh& m) {
     g.quats = std::move(m.quats);
     g.uvs = std::move(m.uvs);
     g.custom0 = std::move(m.custom0);
+    g.bones = std::move(m.bones);
     g.grace = kGraveGraceFrames;
     mGraves.push_back(std::move(g));
     // A moved-from vector is valid but unspecified; these are re-used by the
     // next build, so they are put back to a known empty rather than trusted.
     m.verts = {}; m.idx = {}; m.normals = {};
     m.quats = {}; m.uvs = {}; m.custom0 = {}; m.tileStarts = {};
+    m.bones = {}; m.boneCount = 0;
 }
 
 void TtpRenderer::ageGraves() {
@@ -2392,6 +2462,7 @@ void TtpRenderer::releaseStatic() {
     mPropSpins.clear();
     mSetMovers.clear();
     mSetPaths.clear();
+    mSetSkins.clear();
     mSetAssets.clear();
     mSetInstances.clear();
     mSetRowOf.clear();
