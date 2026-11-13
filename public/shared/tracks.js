@@ -1858,11 +1858,20 @@ export const TRACKS = {
     // the next deck.
     kickers: [ { u: 0.336 }, { u: 0.523 } ],
     // Snakes and ladders, raced across the board at the toy cars' own scale.
+    // The games shelf's other things stand where the floor cannot be seen:
+    // a house of cards and a stack of game boxes under a spinner outside the
+    // top deck, the snake's wooden head at the dive's foot, the game's big
+    // pawns and a spilled deck past the loop. The room's train runs over
+    // the board's edge, close enough to read.
     set: [
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
-      { model: 'set-game-box', u: 0.39, lat: 11, scale: 1.4 },
+      { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
       { model: 'set-windup-chicks', u: 0.12, lat: 3.9 },
+      { model: 'set-card-house', u: 0.6054, lat: 7.25, yaw: -35 },
+      { model: 'set-game-stack', u: 0.675, lat: 8 },
+      { model: 'set-snake-head', u: 0.775, lat: 7.9 },
+      { model: 'set-game-pawns', u: 0.915, lat: 5.4 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
@@ -1888,9 +1897,10 @@ export const TRACKS = {
     // straight. The castle's watchtower stands over the bridge out of the
     // plunge, then the road runs through its barbican, a covered passage
     // of blocks, and down past the besiegers' guns aimed across it at the
-    // castle and their tents. On the long home straight the siege goes on:
-    // a red rank and a siege tower inside it, two blue ranks with their
-    // cannon outside, the castle's outer gatehouse astride the road (the
+    // castle and their tents, their supply wagon of powder come up outside
+    // the bend before them. On the long home straight the siege goes on:
+    // a red rank behind its mantlets and scaling ladders inside it (a rank
+    // the lite tier leaves out), two blue ranks with their cannon outside, the castle's outer gatehouse astride the road (the
     // racers drive through its arch, under the portcullis), a tin knight of
     // each side wound up and marching the kerb, and the castle's dragon on
     // guard where the straight points. The besiegers' ram,
@@ -1903,8 +1913,8 @@ export const TRACKS = {
     // quintain. The floor's scatter is the tourney's too (theme.cc): shields,
     // butts and banners, none of the biome's other toys.
     set: [
-      { model: 'set-toy-soldiers', u: 0.8, lat: 6.7 },
-      { model: 'set-siege-tower', u: 0.81, lat: -8.7, yaw: 180 },
+      { model: 'set-toy-soldiers', u: 0.8, lat: 6.7, lite: false },
+      { model: 'set-siege-mantlets', u: 0.81, lat: -8.7, yaw: 180 },
       { model: 'set-castle-gate', u: 0.83, lat: 0 },
       { model: 'set-toy-soldiers', u: 0.875, lat: 7 },
       { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
@@ -1920,7 +1930,8 @@ export const TRACKS = {
       { model: 'set-tilt-yard', u: 0.027, lat: 8.5 },
       { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
       { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
-      { model: 'set-play-rug', u: 0.885, lat: 0, yaw: 90 },
+      { model: 'set-tourney-rug', u: 0.885, lat: 0, yaw: 90 },
+      { model: 'set-supply-wagon', u: 0.64, lat: 7 },
       { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
@@ -1976,8 +1987,9 @@ export const TRACKS = {
     // and the fire station outside the south edge, and past the top
     // straight the old town, a crane turning on its building site. The
     // town's tallest blocks stand beside the skyway where it turns for the
-    // U and again outside it, its TV tower in the U's eye, and towers a
-    // child stacked stand outside the corner the south-bound leg turns.
+    // U and others of their own outside it, its TV tower in the U's eye,
+    // and towers a child stacked stand outside the corner the south-bound
+    // leg turns. A tin bus and tram, wound up, run the grid's kerb.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -1985,10 +1997,10 @@ export const TRACKS = {
       { model: 'set-block-westside', u: 0.2282, lat: -8.56, yaw: -180 },
       { model: 'set-block-high-street', u: 0.8655, lat: -9.63, yaw: 180 },
       { model: 'set-block-uptown', u: 0.4534, lat: -6.64 },
-      { model: 'set-block-uptown', u: 0.485, lat: -9, yaw: 90 },
+      { model: 'set-block-midtown', u: 0.485, lat: -9, yaw: 90 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 },
-      { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
+      { model: 'set-windup-trams', u: 0.06, lat: -3.9, yaw: 180 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }
