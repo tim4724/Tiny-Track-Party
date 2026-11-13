@@ -817,8 +817,10 @@ export const TRACKS = {
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
       // the village round the lap, close by the road where a racer reads a
-      // cabin (see:landmarks): by the start, on the east loop, on the run in
+      // cabin (see:landmarks): by the start, past the lake in the bend's
+      // inside, on the east loop, on the run in
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
+      { model: 'set-log-cabin', u: 0.392, lat: 8, yaw: 20 },
       { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
       { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
