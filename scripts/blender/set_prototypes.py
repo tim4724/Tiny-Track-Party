@@ -19902,13 +19902,16 @@ def snake_board():
     for i in range(NX):
         for j in range(NZ):
             x0, z0 = X0 + i * C, Z0 + j * C
-            # Away from the lap the racer only ever sees the board far off
-            # and at a grazing angle, where a strong check breaks into
-            # dashes that crawl: there the squares are two near tones.
+            # A strong check breaks into dashes that crawl wherever the
+            # racer sees it far off at a grazing angle, and nothing filters
+            # a print's edges. So the toys' colours stay only where the car
+            # runs on the board close above them (beside the grid straight,
+            # and the low legs at the dive's foot and past the loop); every
+            # other square, under and beyond the ramps too, is two near tones.
             mx, mz = x0 + C / 2, z0 + C / 2
-            dx = max(0.0 - mx, mx - 81.6, 0.0) if not 0.0 < mx < 81.6 else -min(mx, 81.6 - mx)
-            dz = max(-14.4 - mz, mz - 80.0, 0.0) if not -14.4 < mz < 80.0 else -min(mz + 14.4, 80.0 - mz)
-            far = (math.hypot(max(dx, 0.0), max(dz, 0.0)) if max(dx, dz) > 0 else -max(dx, dz)) > 11.0
+            near_grid = abs(mx) < 8.0 and 0.0 < mz < 58.0
+            near_foot = abs(mz + 11.4) < 9.5 and 2.0 < mx < 38.0
+            far = not (near_grid or near_foot)
             col = CREAMC if (i + j) % 2 else (0xf2bf99 if far else TOY[(i + 3 * j) % 4])
             add(Y1, col, [(x0, z0), (x0 + C, z0), (x0 + C, z0 + C), (x0, z0 + C)])
     B = 1.6                                       # the board's blue edge
