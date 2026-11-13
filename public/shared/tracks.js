@@ -2045,7 +2045,10 @@ export const TRACKS = {
     // the south leg's outside and round a loop of its own beside the mid
     // leg's; on the floor to a stair lift at the corner home, onto a wooden
     // marble racer of two stepped boards beside the grid straight, and from
-    // its foot back into the tower's. Each section is built in the world's
+    // its foot back into the tower's. Where the lap climbs and comes down
+    // its spirals the run's sections lie on the floor under the decks, so a
+    // side run of its own stands round the outside of each at deck height.
+    // Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
     set: [
@@ -2059,6 +2062,8 @@ export const TRACKS = {
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
+      { model: 'set-marble-run-climb', u: 0.25, lat: -20, yaw: -90 },
+      { model: 'set-marble-run-dive', u: 0.5, lat: 5.26, yaw: 180 },
       { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
       { model: 'set-room-train-helix', u: 0, lat: 0 },

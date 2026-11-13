@@ -17982,7 +17982,8 @@ TOWER = (-1.66, 72.11)                           # set-marble-tower's column (u 
 TOWER_RIM = (0.4 + 13.4 + 0.3 + 1.1) * 0.62      # its cup's rim over the floor (marble_tower at its grow)
 RUN_D2 = (6.4, 5.4, 57.3)                        # the head's inner post, where the wheel's leg takes over
 RUN_ORIGIN = {'head': (-7.0, 50.0), 'wheel': (25.0, 57.4), 'summit': (52.0, 57.4), 'skyway': (75.7, 30.0),
-              'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0)}
+              'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0),
+              'climb': (54.9, 44.4), 'dive': (74.0, 20.0)}
 
 def fillet(pts, r=1.5, n=6):
     """A polyline of marble centres [(x, h, z)] with each corner rounded."""
@@ -18578,8 +18579,37 @@ def run_racer(lite):
     mouth((tx - 0.7, 0.65, tz - 0.26), (-13.0, 64.0), w=1.25, h=1.3)   # down to the floor: the column is the tower's own piece
     run_marbles('home', [(xo, by + R, zf)] + floor + [(tx, 0.66, tz)], lite)
 
+def run_ring(chain, cx, cz, R, a0, a1, y0, y1, color, lite):
+    """A side run round the outside of one of the road's spirals, at the
+    deck's own height where the floor's sections are under it: marbles out
+    of a station at (a0, y0), down a chute on beech posts round the arc to
+    a station at (a1, y1) (angles in degrees about the spiral's centre),
+    and back under the floor as every section's do."""
+    n = max(4, int(abs(a1 - a0) / (12 if lite else 6)))
+    pts = []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        pts.append((cx + R * math.cos(a), y0 + (y1 - y0) * i / n, cz + R * math.sin(a)))
+    run_chute(pts, color)
+    for i in range(2, n - 1, 2 if lite else 3):
+        trestle(pts[i])
+    joint(pts[0][0], pts[0][2], pts[0][1], toward=((pts[1][0], pts[1][2]),), color=color)
+    joint(pts[-1][0], pts[-1][2], pts[-1][1], toward=((pts[-2][0], pts[-2][2]),), color=color)
+    run_marbles(chain, pts, lite)
+
+def run_climb(lite):
+    # outside the climb's first turn, on the infield side: seen ahead over
+    # the kerb from where the spiral starts to where it comes round north
+    run_ring('climb', 60.3, 56.0, 14.0, 172.0, 282.0, 5.6, 3.6, 0xa878e8, lite)
+
+def run_dive(lite):
+    # outside the descent, on the room's side: seen ahead from the top leg's
+    # end and overhead from the turns below it
+    run_ring('dive', 60.3, 0.0, 14.0, 8.0, -112.0, 7.4, 6.0, 0x6cbf6c, lite)
+
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
-             'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer}
+             'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer,
+             'climb': run_climb, 'dive': run_dive}
 for _n in RUN_BUILD:
     for _lite in (False, True):
         _name = 'marble-run-%s%s' % (_n, '-lite' if _lite else '')
@@ -19808,28 +19838,33 @@ def game_pawns():
 @piece(1.0)
 def snake_head():
     # Skysnake: the dive is the board's snake made road, and this is its
-    # head: a wooden toy snake's, lying flat on the board beside the kerb
-    # at the dive's foot, its jointed neck curving out from under the road,
-    # eyes up and its red tongue out along the floor. Flat on the floor: a
+    # head: a wooden toy snake's neck comes out from under the kerb at the
+    # dive's foot and coils twice on the board, the head resting on the
+    # coil at kerb height, turned back up the dive at the racers coming
+    # down it, eyes up and its red tongue out. No taller than a pawn: a
     # rearing one over the deck was too big.
     G, Y = SNAKE
-    with transformed((0.0, 0.0, 0.0), -0.52):      # turned out from the road, so a racer coming down sees its profile
-        joints = ((2.0, -5.9, 0.62), (1.05, -4.3, 0.42), (0.4, -2.6, 0.2), (0.0, -1.5, 0.0))
-        for k, (x, z, yaw) in enumerate(joints[:-1]):
-            box((2.3, 1.2, 1.3), (x, 0.6, z), G, yaw=yaw)
-            nx, nz, nyaw = joints[k + 1]
-            box((2.36, 1.26, 0.42), ((x + nx) / 2, 0.63, (z + nz) / 2), Y, yaw=(yaw + nyaw) / 2)   # the road's own yellow bands
-        box((3.0, 1.4, 2.8), (0.0, 0.7, 0.0), G)                                       # the head
-        box((2.4, 1.1, 1.2), (0.0, 0.55, 1.9), G)                                      # its snout, stepped in
-        box((1.8, 0.85, 0.8), (0.0, 0.425, 2.8), G)
-        box((2.44, 0.26, 1.24), (0.0, 0.2, 1.9), Y)                                    # the jaw's yellow lip
-        box((1.84, 0.26, 0.84), (0.0, 0.2, 2.8), Y)
+    for x, z, yaw in ((3.9, -4.0, 0.8), (2.9, -2.9, 0.8)):                         # the neck, out from the kerb
+        box((2.0, 1.15, 1.5), (x, 0.575, z), G, yaw=yaw)
+    torus(1.75, 0.62, (0.0, 0.62, 0.0), G, segs=14, minor=6)                       # the coil, two turns
+    torus(1.55, 0.6, (0.0, 1.78, 0.0), G, segs=14, minor=6)
+    for a in range(0, 360, 60):                                                    # the road's own yellow bands
+        ar = math.radians(a)
+        box((0.42, 1.34, 1.3), (1.75 * math.cos(ar), 0.62, 1.75 * math.sin(ar)), Y, yaw=-ar)
+        box((0.4, 1.3, 1.26), (1.55 * math.cos(ar + 0.5), 1.78, 1.55 * math.sin(ar + 0.5)), Y, yaw=-ar - 0.5)
+    HY = 2.3                                                                       # the head lies on the coil
+    with transformed((0.0, 0.0, 0.0), 2.55):
+        box((2.6, 1.25, 2.6), (0.0, HY + 0.625, 0.4), G)
+        box((2.1, 1.0, 1.1), (0.0, HY + 0.5, 2.2), G)                              # its snout, stepped in
+        box((1.6, 0.8, 0.7), (0.0, HY + 0.4, 3.0), G)
+        box((2.14, 0.24, 1.14), (0.0, HY + 0.2, 2.2), Y)                           # the jaw's yellow lip
+        box((1.64, 0.24, 0.74), (0.0, HY + 0.2, 3.0), Y)
         for sd in (-1, 1):
-            box((0.9, 0.75, 0.95), (sd * 1.0, 1.55, 0.45), 0xfdf4de)                   # eyes up on the head
-            box((0.5, 0.5, 0.5), (sd * 1.12, 1.72, 0.75), CARD_DARK)
-            box((0.2, 0.12, 0.2), (sd * 0.5, 0.87, 2.9), CARD_DARK)                    # nostrils
-            bar((sd * 0.06, 0.1, 4.2), (sd * 0.62, 0.1, 5.3), 0.3, 0.14, 0xe66a5a)     # the tongue's fork
-        bar((0.0, 0.1, 3.0), (0.0, 0.1, 4.35), 0.4, 0.14, 0xe66a5a)
+            box((0.85, 0.7, 0.9), (sd * 0.9, HY + 1.4, 0.9), 0xfdf4de)             # eyes up on the head
+            box((0.5, 0.48, 0.5), (sd * 1.02, HY + 1.52, 1.2), CARD_DARK)
+            box((0.2, 0.12, 0.2), (sd * 0.45, HY + 0.82, 3.1), CARD_DARK)          # nostrils
+            bar((sd * 0.06, HY + 0.3, 3.9), (sd * 0.5, HY + 0.3, 4.7), 0.28, 0.14, 0xe66a5a)    # the tongue's fork
+        bar((0.0, HY + 0.3, 3.2), (0.0, HY + 0.3, 4.0), 0.36, 0.14, 0xe66a5a)
 
 # ---- Round 10: the Playroom's board, its room and its wind-up toys ---------------
 
@@ -19854,11 +19889,19 @@ def play_floor(quads, y, color):
     return paint(o, color)
 
 def play_band(pts, w, out):
-    """The quads of a band `w` wide along [(x, z)], onto `out`."""
-    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-        l = math.hypot(x1 - x0, z1 - z0) or 1.0
-        nx, nz = -(z1 - z0) / l * w / 2, (x1 - x0) / l * w / 2
-        out.append([(x0 - nx, z0 - nz), (x1 - nx, z1 - nz), (x1 + nx, z1 + nz), (x0 + nx, z0 + nz)])
+    """The quads of a band `w` wide along [(x, z)], onto `out`: ONE mitred
+    strip, each joint's edge shared by the quads either side of it (a quad
+    per segment squared off at its own ends tears open on the outside of
+    every bend and overlaps on the inside)."""
+    n = len(pts)
+    edge = []
+    for i, (x, z) in enumerate(pts):
+        (xa, za), (xb, zb) = pts[max(i - 1, 0)], pts[min(i + 1, n - 1)]
+        l = math.hypot(xb - xa, zb - za) or 1.0
+        nx, nz = -(zb - za) / l * w / 2, (xb - xa) / l * w / 2
+        edge.append(((x - nx, z - nz), (x + nx, z + nz)))
+    for (a0, a1), (b0, b1) in zip(edge, edge[1:]):
+        out.append([a0, b0, b1, a1])
 
 # Skysnake's line (u 0, heading +z), where tracks.js stands the board: placed
 # at yaw 0 there, its frame is the world's moved to this point.
@@ -19878,7 +19921,9 @@ def snake_board():
     ox, oz = SNAKE_BOARD_ORIGIN
     def L(x, z):
         return (x - ox, z - oz)
-    C, X0, NX, Z0, NZ = 2.5, -16.0, 46, -32.0, 52
+    # squares two cars wide: at half that the far board broke into dashes
+    # that crawled as the racer moved (nothing filters a print's edges)
+    C, X0, NX, Z0, NZ = 5.0, -16.0, 23, -32.0, 26
     Y0, Y1, Y2, Y3 = 0.03, 0.06, 0.12, 0.17
     CREAMC, BROWN = 0xfdf4de, 0xb06041
     layers = {}                                   # (y, colour) -> quads
@@ -19887,7 +19932,7 @@ def snake_board():
     for i in range(NX):
         for j in range(NZ):
             x0, z0 = X0 + i * C, Z0 + j * C
-            col = CREAMC if (i + j) % 2 else TOY[(i // 2 + 3 * (j // 2)) % 4]
+            col = CREAMC if (i + j) % 2 else TOY[(i + 3 * j) % 4]
             add(Y1, col, [(x0, z0), (x0 + C, z0), (x0 + C, z0 + C), (x0, z0 + C)])
     B = 1.6                                       # the board's blue edge
     xa, xb, za, zb = X0, X0 + NX * C, Z0, Z0 + NZ * C
