@@ -1832,8 +1832,35 @@ export function runDisplayScenario(opts, ctx) {
           fit = best;
           orbitFit.set(p, fit);
         }
-        return framedAt(c, reach * fit.k, dirAt(a0 + orbitT * ORBIT_RATE), fit.pitch, WIDE_FOV);
+        return framedAt(c, reach * fit.k * turn.zoom, dirAt(a0 + orbitT * ORBIT_RATE + turn.yaw),
+                        Math.max(TURN_PITCH[0], Math.min(TURN_PITCH[1], fit.pitch + turn.pitch)), WIDE_FOV);
       }
+      // ORBIT IN HAND: a drag on the stage turns the walk round the piece and
+      // tilts it (the world follows the pointer), the wheel steps in and out,
+      // and the first drag stops the walk where it is. A new piece, placement
+      // or view starts it again from the fitted reach and pitch.
+      const TURN_PITCH = [0.05, 1.45];
+      const TURN_ZOOM = [0.2, 5];
+      const turn = { yaw: 0, pitch: 0, zoom: 1, held: false, drag: null };
+      const unturn = () => Object.assign(turn, { yaw: 0, pitch: 0, zoom: 1, held: false });
+      scene.container.addEventListener('pointerdown', (e) => {
+        if (mode !== 'orbit') return;
+        turn.drag = { x: e.clientX, y: e.clientY };
+        turn.held = true;
+        scene.container.setPointerCapture(e.pointerId);
+      });
+      scene.container.addEventListener('pointermove', (e) => {
+        if (!turn.drag || mode !== 'orbit') return;
+        turn.yaw += (e.clientX - turn.drag.x) * 0.006;
+        turn.pitch += (e.clientY - turn.drag.y) * 0.004;
+        turn.drag = { x: e.clientX, y: e.clientY };
+      });
+      scene.container.addEventListener('pointerup', () => { turn.drag = null; });
+      scene.container.addEventListener('wheel', (e) => {
+        if (mode !== 'orbit') return;
+        e.preventDefault();
+        turn.zoom = Math.max(TURN_ZOOM[0], Math.min(TURN_ZOOM[1], turn.zoom * Math.exp(e.deltaY * 0.001)));
+      }, { passive: false });
       // Straight down over the whole lap and every piece on it, fitted to the
       // cell's aspect. The target leans a hair off vertical: a look straight
       // along world up has no basis.
@@ -1907,12 +1934,14 @@ export function runDisplayScenario(opts, ctx) {
           poses[k] = { ...pose, aspect, piece, look: true };
         });
       }
-      // Free starts where High's wide framing would stand (not High's fitted
-      // lens: a step back in a 12-degree view loses the piece), at the free
-      // camera's own lens.
+      // Free starts where the view it leaves had cell 0's eye, so a look round
+      // begins from the picture that prompted it; with none (out of a race, or
+      // a new piece while free) where High's wide framing would stand (not
+      // High's fitted lens: a step back in a 12-degree view loses the piece).
+      // Either way at the free camera's own lens.
       function openFree() {
         const p = pieceFor(0);
-        const pose = p ? framedPose(p, highDir(p), HIGH_PITCH) : topPose(16 / 9);
+        const pose = poses[0] || (p ? framedPose(p, highDir(p), HIGH_PITCH) : topPose(16 / 9));
         const d = { x: pose.target.x - pose.eye.x, y: pose.target.y - pose.eye.y,
                     z: pose.target.z - pose.eye.z };
         const start = { eye: pose.eye, yaw: Math.atan2(d.x, d.z),
@@ -1942,7 +1971,11 @@ export function runDisplayScenario(opts, ctx) {
         const wasRace = mode === 'race';
         mode = m;
         orbitT = 0;
+        unturn();
         if (free && m !== 'free') closeFree();
+        // Orbit takes drags on the canvas too (ORBIT IN HAND).
+        document.documentElement.classList.toggle('cam-free', m === 'orbit');
+        scene.container.style.cursor = m === 'orbit' ? 'grab' : '';
         scene.soloCam = m === 'free';
         scene.setFog(m === 'driver' || m === 'glance' || m === 'race');
         // The race HUD only in a race: elsewhere its pills and empty map box
@@ -2022,7 +2055,7 @@ export function runDisplayScenario(opts, ctx) {
       }
 
       scene.onFrame = (dt, nowMs) => {
-        if (mode === 'orbit') { orbitT += dt; aim(); return; }
+        if (mode === 'orbit') { if (!turn.held) orbitT += dt; aim(); return; }
         if (mode !== 'race' || !engine || race.paused) return;
         const ms = dt * 1000;
         race.dts.length = race.step;
@@ -2339,6 +2372,7 @@ export function runDisplayScenario(opts, ctx) {
           const n = marks.length || 1;
           focusAt = (((i | 0) % n) + n) % n;
           placeAt = 0;
+          unturn();
           if (mode === 'free') openFree();
           aim();
           return focusAt;
@@ -2349,6 +2383,7 @@ export function runDisplayScenario(opts, ctx) {
         place(k) {
           const n = marks.length ? marks[focusAt].indices.length : 1;
           placeAt = (((k | 0) % n) + n) % n;
+          unturn();
           if (mode === 'free') openFree();
           aim();
           return placeAt;
