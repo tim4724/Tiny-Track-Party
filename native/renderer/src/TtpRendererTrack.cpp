@@ -1198,7 +1198,7 @@ const GroundRock* groundRock(uint32_t groundKind) {
     // (a lawn's earth wants a rise too: with none, the band's skirt and every
     // sliver where it steps to meet the grid, a hand high and near upright,
     // drew as a brown blade some units long on the grass)
-    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 1.5f };       // past 52 degrees
+    static const GroundRock lawn{ 0x8f7752u, 0x9d998eu, 0x7fa055u, 0.62f, 1.0f, 0.3f, 0.2f, 4.0f };       // past 52 degrees, on a face a storey high
     static const GroundRock redrock{ 0xb06041u, 0xd68f62u, 0xf2bf99u, 0.866f, 1.0f, 0.3f, 0.12f, 10.0f }; // past 30 degrees
     switch (groundKind) {
         case 0: return &lawn;
