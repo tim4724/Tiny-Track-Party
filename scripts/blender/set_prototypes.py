@@ -3030,8 +3030,9 @@ def rock_poolers_park():
     # one about: the tide is out and they are on the reef. The lane DRAPES, a
     # skin a hand's breadth over the sand as it is drawn, no sides (round 12:
     # the old raised pads read "rather like plates"), so the piece levels
-    # nothing; what is parked on it is one rigid part laid on the land at
-    # its middle. +X is the road; the lane runs along it (+Z).
+    # nothing and stands on the plain; tracks.js lifts it to the sand the
+    # verge draws here, a level the width of the bays, where the vans stand.
+    # +X is the road; the lane runs along it (+Z).
     VANS = ((-8.0, 'sky', (0xffc044,), True), (-5.6, 'tan', (), False), (1.4, 'lavender', (0xff5040, 0x339cf2), False),
             (3.8, 'salmon', (), True))
     BUS = 9.6
@@ -3086,31 +3087,31 @@ def rock_poolers_park():
                     if jitter(k, side + 3, 6.1) > 0.15:
                         rowed(sphere(0.34, (x + ox * d, 0.1, z + oz * d), 'grey', scale=(1.3, 0.6, 1.0), yaw=k), 22)
                         continue
-                    for t in range(3):
-                        aa = t * 1.7 + k
-                        cyl(0.09, 0.38 + 0.12 * ((t + k) % 3), (x + ox * (d + 0.3) + 0.14 * math.cos(aa), 0.0,
-                                                               z + oz * (d + 0.3) + 0.14 * math.sin(aa)),
-                            0x6faa62 if t % 2 else 'sage', r2=0.0, segs=3, yaw=aa, stem=True)
+                    cx, cz = x + ox * (d + 0.2), z + oz * (d + 0.2)
+                    for t in range(6):                               # a clump of blades splayed out, low
+                        aa = t * 2 * math.pi / 6 + k
+                        beam((cx, -0.05, cz), (cx + 0.32 * math.cos(aa), 0.3 + 0.1 * (t % 3), cz + 0.32 * math.sin(aa)),
+                             0.1, 'olive' if t % 2 else 0x6faa62, d=0.04)
     draped('lane', lane)
-    with animated('anim_drape#parked', (-1.2, 0.0, 0.0)):
-        for (z, lower, boards, pop) in VANS:
-            camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
-        # the minibus in the last bay, longer and taller still
-        c, s_ = math.cos(-math.pi / 2), math.sin(-math.pi / 2)
-        BX = -2.4
-        def bus(size, dx, dy, dz, color):
-            box(size, (BX + dx * c + dz * s_, dy, BUS - dx * s_ + dz * c), color, yaw=-math.pi / 2)
-        for sx in (-1, 1):
-            for sz in (-0.8, 0.8):
-                scenery_wheel(BX + sx * 0.35 * c + sz * s_, 0.2, BUS - sx * 0.35 * s_ + sz * c, 0.2, 0.14,
-                              -math.pi / 2)
-        bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
-        bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
-        bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
-        kiosk(1.3, -1.6, 0.0)
-        flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
-        for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
-            surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
+    for (z, lower, boards, pop) in VANS:
+        camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
+    # the minibus in the last bay, longer and taller still
+    c, s_ = math.cos(-math.pi / 2), math.sin(-math.pi / 2)
+    BX = -2.4
+    def bus(size, dx, dy, dz, color):
+        box(size, (BX + dx * c + dz * s_, dy, BUS - dx * s_ + dz * c), color, yaw=-math.pi / 2)
+    for sx in (-1, 1):
+        for sz in (-0.8, 0.8):
+            scenery_wheel(BX + sx * 0.35 * c + sz * s_, 0.2, BUS - sx * 0.35 * s_ + sz * c, 0.2, 0.14,
+                          -math.pi / 2)
+    bus((0.78, 0.8, 2.4), 0, 0.62, 0, 0xfde4c7)
+    bus((0.8, 0.22, 2.0), 0, 0.78, -0.1, 'sky')
+    bus((0.8, 0.12, 2.42), 0, 0.3, 0, 'tan')
+    kiosk(1.3, -1.6, 0.0)
+    flag_on_pole((1.8, 0, 0.2), 1.4, (0x339cf2, 0xfff6eb), 'anim_sway:a=z:d=20:p=2.2#park')
+    for k, (col, st) in enumerate(((0xffc044, 0xff5040), (0x339cf2, 0xfff6eb), (0x22c46e, 0xffc044))):
+        surfboard(-1.6 + 0.03 * k, 3.6 + 0.22 * k, 0.0, col, st, lean=0.3)
+    join_still('park')
 
 # ---- round 8: the three beaches' stories at the kerb ----
 #

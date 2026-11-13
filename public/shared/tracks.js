@@ -490,7 +490,7 @@ export const TRACKS = {
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
-      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5 },
+      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
       // palms on the downs' near flanks below the crests, placed by hand:
       // the `clear`s that keep seeded crates off the hilltops keep its
       // seeded palms off too

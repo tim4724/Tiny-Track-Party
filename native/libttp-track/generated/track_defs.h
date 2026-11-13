@@ -95,7 +95,7 @@ constexpr SetDef kSet_tidepool[] = {
   { "set-lifeboat-station", 0x1.ccccccccccccdp-1, 0x1.4p+3, 0x0p+0, 0x1.ccccccccccccdp-1, 0x1.3333333333333p+0, 1 },
   { "set-tidepool-cottages", 0x1.2b851eb851eb8p-1, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-crab-pots", 0x1.47ae147ae147bp-1, 0x1.3333333333333p+3, 0x1.4p+3, 0x1.2147ae147ae14p+0, 0x1p+0, 1 },
-  { "set-rock-poolers-park", 0x1.ee147ae147ae1p-1, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-rock-poolers-park", 0x1.ee147ae147ae1p-1, 0x1.3p+3, 0x0p+0, 0x1.5c28f5c28f5c3p-1, 0x1p+0, 1 },
   { "set-palm-stand", 0x1.3333333333333p-3, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-palm-stand", 0x1.ae147ae147ae1p-2, -0x1.2p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
 };
