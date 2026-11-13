@@ -842,6 +842,40 @@ function judge(decision) {
   });
 }
 
+// THE PANEL'S WIDTH: its left edge drags (or takes the arrow keys while
+// focused), from narrow enough to leave the stage most of the screen to wide
+// enough to read a review item's questions; kept with the rest of the state.
+const grip = document.getElementById('lm-grip');
+const gripBox = document.getElementById('lm-box');
+const PANEL_MIN = 200;
+function setPanelWidth(w) {
+  const max = Math.max(PANEL_MIN, gripBox.clientWidth * 0.7);
+  state.panel = Math.round(Math.max(PANEL_MIN, Math.min(max, w)));
+  gripBox.style.setProperty('--legend-w', state.panel + 'px');
+}
+if (state.panel) setPanelWidth(state.panel);
+grip.addEventListener('pointerdown', (e) => {
+  grip.setPointerCapture(e.pointerId);
+  grip.classList.add('is-dragging');
+  const move = (ev) => setPanelWidth(gripBox.getBoundingClientRect().right - ev.clientX);
+  const up = () => {
+    grip.removeEventListener('pointermove', move);
+    grip.classList.remove('is-dragging');
+    save();
+  };
+  grip.addEventListener('pointermove', move);
+  grip.addEventListener('pointerup', up, { once: true });
+  grip.addEventListener('pointercancel', up, { once: true });
+  e.preventDefault();
+});
+grip.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  setPanelWidth(legend.getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 24 : -24));
+  save();
+  e.preventDefault();
+  e.stopPropagation();
+});
+
 // THE KEYS, few and the same in every view (the buttons do the rest).
 // The free camera lives in the stage frame and reads that window's keys, so a
 // camera key pressed while this page has focus is handed to it, and the arrows

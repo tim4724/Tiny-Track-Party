@@ -274,6 +274,24 @@ test('landmark gallery page: the keys', async ({ page }) => {
   expect(await mode()).toBe('orbit');
 });
 
+// The side panel's left edge drags to widen or narrow it, and the width is kept.
+test('landmark gallery page: the panel widens', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html#view=driver');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const width = () => page.locator('#lm-legend').evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const before = await width();
+  const g = await page.locator('#lm-grip').boundingBox();
+  await page.mouse.move(g.x + g.width / 2, g.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(g.x - 150, g.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const wider = await width();
+  expect(wider).toBeGreaterThan(before + 100);
+  await page.reload();
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  expect(Math.abs((await width()) - wider)).toBeLessThan(3);
+});
+
 // The page opens on a race. What an eye cannot hold it to: that a pause stops
 // the sim, that going back and forth lands on the SAME race (a rewind is the
 // race dealt again and wound forward, so it is only a rewind while the race is

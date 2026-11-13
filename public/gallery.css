@@ -370,15 +370,25 @@ section.stage iframe {
 .stage--beside iframe { flex: 1 1 auto; min-width: 0; width: auto; }
 .stage--beside .legend {
   position: static; flex: none; max-height: none;
+  width: var(--legend-w, 232px);
   border-radius: 0; border-width: 0 0 0 1px;
 }
+/* The panel's left edge: drag (or arrow keys while focused) to widen it. */
+.legend-grip { display: none; }
+.stage--beside .legend-grip {
+  display: block; flex: none; width: 6px; cursor: col-resize;
+  background: rgba(255, 255, 255, 0.06); touch-action: none;
+}
+.stage--beside .legend-grip:hover, .stage--beside .legend-grip:focus-visible,
+.stage--beside .legend-grip.is-dragging { background: rgba(140, 160, 255, 0.45); outline: none; }
 @media (max-width: 640px) {
   .stage--beside { display: block; }
   .stage--beside iframe { width: 100%; }
   .stage--beside .legend {
-    position: absolute; max-height: calc(100% - 24px);
+    position: absolute; max-height: calc(100% - 24px); width: 232px;
     border-radius: 10px; border-width: 1px;
   }
+  .stage--beside .legend-grip { display: none; }
 }
 
 /* Mobile: one card per row + compact, touch-friendly header.
