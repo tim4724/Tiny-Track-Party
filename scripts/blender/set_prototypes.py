@@ -13739,7 +13739,9 @@ def ore_line():
         d = max(1e-6, acc[i + 1] - acc[i])
         t = min(1.0, max(0.0, (s - acc[i]) / d))
         return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ((b[0] - a[0]) / d, (b[1] - a[1]) / d)
-    RAIL, TIE, Y = 12.0, 5.5, 0.3                                # a rail chord, the sleepers' spacing, rail height
+    # (a rail chord is short: only its ends drape, so a long one cut through
+    # the dune by the headframe and stood out of it past the bend's kerb)
+    RAIL, TIE, Y = 4.0, 5.5, 0.3                                 # a rail chord, the sleepers' spacing, rail height
     # Beside the low start straight the line crosses the flat on a low timber
     # trestle a few units past the kerb, up a ramp out of the yard and down
     # one into its cutting where the land rises toward the east bend, the
@@ -14960,7 +14962,11 @@ def ranch():
     # braced legs, the windpump turning over its stock tank, and the corral in
     # front toward the road (+X) with cattle in it, grazing, each lifting its
     # head now and then to look about; all on a dirt yard.
-    ground_poly([(-7.4, 0.03, -8.6), (3.8, 0.03, -8.6), (3.8, 0.03, 8.8), (-7.4, 0.03, 8.8)], [(0, 1, 2, 3)], 0xd39a70)
+    # the yard's trodden earth, a ragged patch (a rectangle read as a mat laid under the barn)
+    yard = [(-1.8 + (5.9 + 0.7 * math.sin(3 * a + 0.6) + 0.4 * math.sin(7 * a)) * math.cos(a), 0.03,
+             0.1 + (9.0 + 0.8 * math.sin(4 * a + 1.9) + 0.5 * math.sin(9 * a + 0.4)) * math.sin(a))
+            for a in (2 * math.pi * k / 22 for k in range(22))]
+    ground_poly(yard, [tuple(range(22))], 0xd39a70)
     # the house, door toward the road, a porch along its front
     hut(3.0, 1.2, 2.4, (-4.2, 0, -3.8), 0xe3cfa4, 0x8a4a32)
     box((0.9, 0.1, 2.8), (-2.25, 1.15, -3.8), 0x8a4a32, roll=-0.25)
@@ -15830,12 +15836,24 @@ def tunnel_foothills():
     # turns left round the apex at z ~31 and back along -Z at x ~14-24), the
     # inside of the bend left low where the massif's spur falls away. Rock
     # by the road is geometry: steep land is the Android box's dear pixels.
-    M = massif_height((
+    hills = massif_height((
         (-10.0, 31.0, 7.5, 5.5, 6.0, 0.3, 1.0, 6.0),                # off the run-in's right, at the bend
         (2.0, 43.5, 9.0, 7.0, 5.5, -0.2, 1.1, 8.0),                # round the apex
         (17.0, 41.0, 7.0, 6.0, 5.0, 0.5, 1.0, 4.0),
         (30.5, 26.0, 7.5, 5.5, 6.5, 0.1, 1.0, 8.0),                # off the return leg's right
         (31.0, 10.0, 6.0, 5.0, 6.0, 0.0, 1.0, 6.0)), rough=1.0, seed=3.1)
+    # The trunk line rounds the bend on the hills' road side (tracks.js lays
+    # it span by span; these are its joints in this frame): the rock's foot
+    # keeps a unit and a half off it, where two toes stood through the pipe.
+    TRUNK = ((-6.1, 17.6), (-5.3, 25.6), (-2.0, 32.8), (5.3, 36.2), (13.0, 34.8), (18.5, 29.1), (26.6, 15.7),
+             (29.4, 8.3), (30.0, 0.3), (28.8, -7.5), (25.8, -14.9), (23.5, -18.9))
+    def off(x, z):
+        best = 1e9
+        for (ax, az), (bx, bz) in zip(TRUNK, TRUNK[1:]):
+            t = max(0.0, min(1.0, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2)))
+            best = min(best, math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)))
+        return best
+    M = lambda x, z: min(hills(x, z), 2.2 * (off(x, z) - 1.5))
     strata_massif(M, -20.0, 46.0, 14.0, 56.0, [b for b in CANYON_STRATA if b[0] < 9.0],
                   step=2.6, tol=0.4)
     def scree():
@@ -16038,7 +16056,9 @@ def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07, wrap=None):
             ys = [ground(x + dx, z + dz) for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
             if None in ys or max(ys) - min(ys) > 0.5 * q:
                 continue                                        # astride a step: it would hang
-            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) + 0.15 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
+            # bedded: its foot under the slope's lowest point below it (laid on
+            # that point, its downhill edge hung over the slope as a floating slab)
+            box((q * 1.5, q * 0.7, q * 1.1), (x, min(ys) - 0.1 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
                 roll=rnd.uniform(-0.15, 0.15), pitch=rnd.uniform(-0.1, 0.1))
             n += 1
 
