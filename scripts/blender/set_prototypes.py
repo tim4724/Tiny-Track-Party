@@ -15152,7 +15152,7 @@ def herd(cattle):
             life = None
             if i % 3 == 0 and pose != 'lie':
                 life = 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.76#h%d' % (7.0 + 0.7 * (i % 5), i)
-            range_cow((x, 0, z), yaw, coat, patch, face, 1.55 * size, pose, life)   # a size and a half up, to read over the fence's rails
+            range_cow((0.75 * x, 0, z), yaw, coat, patch, face, 1.25 * size, pose, life)   # close on the fence, a size up to read over its rails (bigger, a cow outgrew the cars)
     draped('herd', build)
 
 @piece(1.0)
@@ -15355,8 +15355,8 @@ def gulch_adit(at, turn, foot, ground, s, cart=False):
     yaw = turn(s)
     box((1.2, 1.5, 1.1), at(x - 0.4, g + 0.6, s), ROPE, yaw=yaw)                    # the dark of it
     for dz in (-0.68, 0.68):
-        box((0.34, 1.8, 0.28), at(x + 0.2, g + 0.75, s + dz), 'cream', yaw=yaw)
-    box((0.4, 0.3, 1.9), at(x + 0.2, g + 1.7, s), 'cream', yaw=yaw)
+        rowed(box((0.34, 1.8, 0.28), at(x + 0.2, g + 0.75, s + dz), 'tan', yaw=yaw), 15)   # timber sets (cream, a stone doorway)
+    rowed(box((0.4, 0.3, 1.9), at(x + 0.2, g + 1.7, s), 'tan', yaw=yaw), 15)
     rowed(rock_lump(1.0, at(x + 0.4, g - 0.45, s + 0.4), 'gravel', (0.85, 0.9, 2.1), yaw, seed=s), 6)    # the spoil
     rowed(rock_lump(0.6, at(x + 0.55, g - 0.5, s - 1.5), 'gravel', (0.8, 0.7, 1.4), yaw + 0.4, seed=s + 1), 10)
     if cart:
@@ -16268,7 +16268,7 @@ def pickup(x, z, color, yaw=0.0):
 # where it is (TtpRendererMotion.cpp), and rides the whole of SW_RING, a
 # `drape` chain: on the ground too.
 SW_RAIL = 0.34                                  # the rails' top over the ground
-SW_PACE = 0.5                                   # the trains' walk, units a second (a brisk walk at this scale)
+SW_PACE = 0.65                                  # the trains' pace, units a second (at 0.5 they crawled)
 SW_FEED = (4.0, 0.6)                            # where the pipe from the farm meets the rack, in its frame
 SW_STEP = 1.000318
 SW_PIECE = {
