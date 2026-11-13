@@ -975,20 +975,22 @@ export const TRACKS = {
       { model: 'set-snow-fort', u: 0.232, lat: -12.5, yaw: 180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       // each rookery turned so its white fronts face the road and the car
-      // coming at it: one off the run into the bottom loop, one below the NE
-      // bend's crest
-      { model: 'set-penguin-group', u: 0.665, lat: 9.5, yaw: 35 },
+      // coming at it: one on the moraine outside the bottom loop, dead ahead
+      // of the long raised straight, one below the NE bend's crest
+      { model: 'set-penguin-group', u: 0.645, lat: -10, yaw: 145 },
       { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
+      // the terminal moraine either side of that rookery, on the loop's
+      // outside verge: slate erratics and stranded blocks of blue ice (built
+      // on the ground sampled under them, set_prototypes.py MORAINE)
+      { model: 'set-glacier-moraine-a', u: 0.628, lat: -9, yaw: 180 },
+      { model: 'set-glacier-moraine-b', u: 0.678, lat: -9.5, yaw: 180 },
       // beside the raised straight: the dog team's trail along the drift on
       // its left, the flagged crevasses of the glacier's snout on its right
       { model: 'set-glacier-dog-trail', u: 0.432, lat: -8.5, yaw: 180 },
       { model: 'set-glacier-crevasses', u: 0.52, lat: 15, yaw: 0 },
-      // the advanced camp up on the crest of the glacier's lateral bank, on
-      // the snow as drawn (no bank of its own: a bank's foot withholds the
-      // land it stands in, and nearer the road the ground is held down to the
-      // decks by the grid cells the roads cross, so a camp there sinks
-      // behind the raised east leg)
-      { model: 'set-advanced-camp', u: 0.886, lat: -19.5, yaw: 20 },
+      // the advanced camp at the foot of the flagged crevasses, outside the
+      // bend east off the run back from the bottom loop, which drives at it
+      { model: 'set-advanced-camp', u: 0.76, lat: -7.5, yaw: 150 },
       { model: 'set-penguin-chute', u: 0.97, lat: -15, yaw: 137 },
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
@@ -999,9 +1001,15 @@ export const TRACKS = {
       { model: 'set-glacier-peaks-east', u: 0.45, lat: -66 },
       // the expedition's airstrip inside the top loop, beside the top straight
       { model: 'set-glacier-airstrip', u: 0.2, lat: 9 },
-      // pines up the face of the foothill over the bottom loop, so it reads as
-      // mountainside, not a white wall (sampled, set_prototypes.py FORESTS)
-      { model: 'set-glacier-forest-a', u: 0.8423, lat: 14.87 }
+      // a nunatak on the foothill outside the bend back to the line: the east
+      // range's rock breaking out of it (the frame the range's, +X east), the
+      // lateral moraine up the verge at its foot
+      { model: 'set-glacier-nunatak', u: 0.8423, lat: 24, yaw: 180 },
+      { model: 'set-glacier-moraine-c', u: 0.85, lat: 9.5 },
+      // the expedition's fuel depot just past the line, and its flagged
+      // route on along the start straight's outside verge
+      { model: 'set-glacier-depot', u: 0.012, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
