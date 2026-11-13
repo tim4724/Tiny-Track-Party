@@ -12131,100 +12131,6 @@ def boomtown_south():
     join_still('south')
 
 @piece(1.0)
-def tailings_dump():
-    # Gulch: the mine's tailings dump beside the headframe: spoil tipped
-    # in four terraces, each a steep face of rust over a bench of ochre (the
-    # mill's waste weathers in bands), on a ragged outline, its foot sunk in
-    # the ground (geometry: the loop's middle is held under the deck cap, so
-    # no land can rise there), rubble fallen round its foot, and up its face
-    # toward the road (-X) a timber incline on its trestle to the winch frame
-    # at the top: a skip of waste rides up it on the winch's cable and back
-    # down, its tub level on a wedge of a frame, as an incline's cars are, at
-    # a mine cart's size. On the top's lip toward the road an ore cart tips
-    # its load down the face and rights itself (a one-way sway with a rest).
-    # (radius at the foot of each face, at its top, the bench's height) and
-    # the colour of its face and its bench: one polar mesh on shared spokes
-    TIERS = ((7.0, 5.9, 1.1, 'brown', ('gravel', 26)), (5.2, 4.3, 2.1, ('salmon', 26), ('gravel', 18)),
-             (3.7, 2.9, 3.0, 'brown', ('gravel', 28)), (2.4, 1.7, 3.9, ('salmon', 26), ('gravel', 14)))
-    N = 18 if LITE else 30                                  # the box draws a coarser outline
-    def ragged(a, t):
-        return 1.0 + 0.13 * math.sin(3 * a + 1.1 + 0.9 * t) + 0.08 * math.sin(5 * a + 1.3 * t) + 0.05 * math.sin(9 * a + 2.0 + t)
-    OFF = ((0.0, 0.0), (0.45, -0.5), (0.2, -1.1), (0.75, -0.9))   # each tier tipped off the last, not stacked on its middle
-    def at(a, t, r):
-        q = r * ragged(a, t)
-        ox, oz = OFF[min(t, 3)]
-        return math.cos(a) * q * 0.92 + ox, math.sin(a) * q * 1.12 + oz
-    y0 = -0.4
-    for t, (r0, r1, y1, face, bench) in enumerate(TIERS):
-        nxt = TIERS[t + 1][0] if t + 1 < len(TIERS) else 0.0
-        rows = []
-        for a in (2 * math.pi * i / N for i in range(N + 1)):
-            (x0_, z0_), (x1_, z1_) = at(a, t, r0), at(a, t, r1)
-            x2_, z2_ = at(a, t + 1, nxt) if nxt else at(a, t, 0.0)
-            rows.append([(x0_, y0, z0_), (x1_, y1 + 0.22 * math.sin(2 * a + t), z1_), (x2_, y1 + 0.1 * math.sin(3 * a), z2_)])
-        for j, c in enumerate((face, bench)):
-            sw, row = c if isinstance(c, tuple) else (c, None)
-            for o in sheet([[r[j], r[j + 1]] for r in rows], lambda i, jj, nn, sw=sw: sw, 'dump'):
-                if row is not None:
-                    rowed(o, row)
-        y0 = y1
-    A, B = (-6.4, 0.25), (-1.0, 4.0)                                              # the incline's foot and head (x, y)
-    slope = math.atan2(B[1] - A[1], B[0] - A[0])
-    with plain_parts():
-        for i in range(7):                                                         # rubble round its foot
-            a = 2 * math.pi * (i + 0.4 * hash1(i, 7.0)) / 7
-            q = 0.45 + 0.2 * (hash1(i, 3.0) + 1)
-            rock_lump(q * 0.7, (6.9 * math.cos(a), q * 0.2, 6.7 * math.sin(a)), 'tan' if i % 2 else 0xa96545,
-                      (1.3, 0.7, 1.0), a, seed=i)
-        for i in range(6):                                                         # the incline's trestle
-            t = i / 5
-            x, y = A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t - 0.12
-            for sz in (-0.3, 0.3):
-                box((0.1, y + 0.3, 0.1), (x, (y + 0.3) / 2 - 0.15, sz), 0x8a5f3e)
-            box((0.1, 0.1, 0.8), (x, y - 0.05, 0), 0x8a5f3e)
-        for sz in (-0.22, 0.22):                                                   # its stringers, the rails on them
-            beam((A[0], A[1] - 0.1, sz), (B[0], B[1] - 0.1, sz), 0.12, 0x8a5f3e)
-            beam((A[0], A[1] - 0.01, sz), (B[0], B[1] - 0.01, sz), 0.05, 'slate')
-        box((1.5, 0.1, 1.1), (B[0] + 0.55, B[1] - 0.08, 0.0), 0x8a5f3e)           # the head's deck
-        for sx in (-0.1, 1.2):                                                     # on its own legs into the heap
-            for sz in (-0.45, 0.45):
-                box((0.1, 1.6, 0.1), (B[0] + sx, B[1] - 0.9, sz), 0x8a5f3e)
-        for sz in (-0.42, 0.42):                                                   # the winch frame over it
-            box((0.1, 1.1, 0.1), (B[0] + 0.9, B[1] + 0.5, sz), 0x8a5f3e)
-            strut((B[0] + 0.3, B[1], sz), (B[0] + 0.9, B[1] + 0.9, sz), 0.07, 0x8a5f3e)
-        box((0.1, 0.1, 0.96), (B[0] + 0.9, B[1] + 1.05, 0.0), 0x8a5f3e)
-        cyl(0.2, 0.3, (B[0] + 0.9, B[1] + 0.75, -0.15), 0x4f5260, segs=8, axis='along')    # its drum
-        strut((A[0] + 0.9, A[1] + 0.75, 0.0), (B[0] + 0.9, B[1] + 0.8, 0.0), 0.09, ROPE)   # the cable
-    # the skip: up the incline and back (a two-point loop), never turning
-    K = 0.36
-    def on_incline(t):
-        return A[0] + t * (B[0] - A[0]), A[1] + t * (B[1] - A[1]) + 0.04
-    sx, sy = on_incline(0.14)
-    marker('path_skip_0', (sx, sy, 0.0))
-    marker('path_skip_1', on_incline(0.84) + (0.0,))
-    with animated('anim_path:c=skip:p=22:f=0#skip', (sx, sy, 0.0)):
-        w = 1.9 * K                                                                # the wedge under the tub
-        solid([(sx - w / 2, sy, -0.24), (sx + w / 2, sy + w * math.tan(slope), -0.24), (sx - w / 2, sy + w * math.tan(slope), -0.24),
-               (sx - w / 2, sy, 0.24), (sx + w / 2, sy + w * math.tan(slope), 0.24), (sx - w / 2, sy + w * math.tan(slope), 0.24)],
-              [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)], 0x8a5f3e)
-        ore_cart((sx, sy + w * math.tan(slope) - 0.44 * K, 0.0), yaw=math.pi / 2, ore_color=0x868ba1, k=K)
-    # the tipping cart on the top's lip toward the road, on its stub of
-    # rails, at a cart and a half's size so it reads from the kerb: its tub
-    # tips over the lip about the front axle (-X) and rights itself, a
-    # spill of spoil fanned down the face under it
-    TX, TZ, TY, KT = 0.3, 0.1, 3.9, 0.55
-    with plain_parts():
-        for sz in (-0.36, 0.36):
-            box((1.5, 0.1, 0.1), (TX + 0.2, TY + 0.05, TZ + sz * KT), 'slate')
-        box((0.16, 0.4, 0.85), (TX - 0.62, TY + 0.2, TZ), 0x8a5f3e)                  # the stop at the lip
-        for i, (dx, dz, q) in enumerate(() if LITE else ((-1.9, 0.0, 0.42), (-2.6, 0.5, 0.36), (-3.3, -0.3, 0.32), (-2.3, -0.6, 0.28))):
-            rock_lump(q, (TX + dx, TY - 0.55 * (i + 1.2), TZ + dz), ('yellow', 'tan', 'yellow', 'brown')[i],
-                      (1.4, 0.45, 1.1), 0.4 * i, seed=11.0 + i)
-    with animated('anim_sway:a=z:d=60:p=9:r=0.6#tip', (TX - 0.5, TY + 0.2, TZ)):
-        ore_cart((TX + 0.05, TY + 0.1, TZ), yaw=math.pi / 2, ore_color='yellow', k=KT)
-    join_still('dump')
-
-@piece(1.0)
 def miners_camp():
     # Gulch: the miners' camp before the canyon (+X the road): three canvas
     # wall tents, low walls under pitched roofs and their flies, doors tied
@@ -12452,6 +12358,69 @@ def stamp_mill():
     for k in range(N):
         with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (span / 1.2, k / N, k), loop[0]):
             ore_bucket(loop[0])
+
+# The mill's tailings: what is left of the ore once the stamps have crushed it
+# and the plates and tables have taken the gold. It leaves the battery house
+# as a pale slurry along a timber launder on its trestle and is tipped down
+# the yard beside the mill (its -Z), where it has built a flat-topped terrace
+# of fine grey sand out of the mill's own bank, the battery floor's height
+# less the launder's fall. The launder runs on out along its top to the spout
+# at its end, a wet tongue of fresh tailings down the face under it. Built in
+# the STAMP MILL'S frame (tracks.js stands both at one spot), in metres like
+# it: the launder starts under the battery house's roof, beside the battery.
+@piece(REAL)
+@plain
+def tailings_dump():
+    LX, Y0, Y1, Z0, Z1 = 1.6, 6.3, 5.6, -6.0, -50.0                # the launder: its line, its fall, its run
+    CX, CZ, HX, HZ, RUN = -1.0, -35.5, 6.5, 14.5, 7.5               # the terrace's top (an oval) and its slopes' run
+    TOP0, TOP1 = 4.0, 3.6                                           # the top's height at its near and far end
+    N = 16 if LITE else 28
+    def wob(a, k):
+        return 1.0 + 0.09 * math.sin(3 * a + 1.3 + k) + 0.06 * math.sin(5 * a + 0.4 + 2 * k) + 0.04 * math.sin(8 * a + k)
+    def top_y(z):
+        return TOP0 + (TOP1 - TOP0) * min(1.0, max(0.0, (CZ + HZ - z) / (2 * HZ)))
+    rings = []
+    for i in range(N):
+        a = 2 * math.pi * i / N
+        c, s = math.cos(a), math.sin(a)
+        tx, tz = CX + HX * wob(a, 0.0) * c, CZ + HZ * wob(a, 0.0) * s
+        yt = top_y(tz)
+        mx, mz = CX + (HX + 0.5 * RUN) * wob(a, 1.7) * c, CZ + (HZ + 0.5 * RUN) * wob(a, 1.7) * s
+        fx, fz = CX + (HX + RUN) * wob(a, 0.6) * c, CZ + (HZ + RUN) * wob(a, 0.6) * s
+        rings.append(((fx, -0.3, fz), (mx, 0.55 * yt - 0.1 * math.sin(4 * a), mz), (tx, yt, tz), a))
+    def off(a):                                                     # how far round from under the spout
+        return abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2)))
+    slope, fresh, top = [], [], []
+    for (f0, m0, t0, a0), (f1, m1, t1, a1) in zip(rings, rings[1:] + rings[:1]):
+        a = (a0 + a1) / 2 if a1 > a0 else a0
+        (fresh if off(a) < 0.42 else slope).append((m0, m1, f1, f0))     # wound out of the heap; the wet
+        (fresh if off(a) < 0.22 else slope).append((t0, t1, m1, m0))     # tongue fanning down from the spout
+        top.append((t1, t0, (CX, top_y(CZ) + 0.25, CZ)))
+    for polys, (color, row) in ((slope, ('gravel', 12)), (fresh, ('gravel', 31)), (top, ('gravel', 0))):
+        for o in colored_faces([(color, list(q)) for q in polys], 'dump'):
+            rowed(o, row)
+    # the launder: a board trough on a trestle of bents, falling gently the
+    # whole way, its bents on the bank and stood in the terrace's top
+    L = math.hypot(Z1 - Z0, Y0 - Y1)
+    pitch = math.atan2(Y0 - Y1, Z0 - Z1)
+    mid = (LX, (Y0 + Y1) / 2, (Z0 + Z1) / 2)
+    box((1.8, 0.24, L), mid, TIMBER, pitch=pitch)                                    # its floor
+    for sx in (-0.85, 0.85):                                                          # its sides
+        box((0.22, 1.0, L), (LX + sx, mid[1] + 0.5, mid[2]), BOARD, pitch=pitch)
+    def launder_y(z):
+        return Y0 + (Y1 - Y0) * (z - Z0) / (Z1 - Z0)
+    for z in (() if LITE else (-10.0,)) + (-16.0, -22.0, -29.0, -36.0, -43.0, -49.0):
+        y = launder_y(z) - 0.12
+        for sx in (-1.3, 1.3):
+            box((0.5, y + 1.0, 0.5), (LX + sx, (y - 1.0) / 2, z), TIMBER)
+        box((3.3, 0.45, 0.55), (LX, y - 0.22, z), TIMBER)
+        if y > 3.0 and not LITE:                                                      # a tall bent braced
+            strut((LX - 1.3, 0.6, z), (LX + 1.3, y - 0.6, z), 0.32, TIMBER)
+    # the spout over the end of the terrace, and the slurry falling from it
+    sy = launder_y(Z1)
+    box((1.0, 0.5, 1.6), (LX, sy + 0.05, Z1 - 0.6), TIMBER, pitch=0.5)
+    box((0.7, sy - top_y(Z1) + 0.4, 0.5), (LX, (sy + top_y(Z1)) / 2 - 0.1, Z1 - 1.3), 'grey')
+    join_still('dump')
 
 def telegraph_pole(at, H, yaw=0.0, corner=False):
     """A telegraph pole `H` tall, its crossarm across the line (the line runs

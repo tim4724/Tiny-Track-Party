@@ -1500,7 +1500,7 @@ export const TRACKS = {
     // east bend into its ore bin, by the little train along the line to the
     // mine yard, from the yard's tipple up a boarded gallery to the
     // tramway's terminal and in its buckets over the road to the stamp
-    // mill, whose waste is the tailings dump. The
+    // mill, whose waste runs down its launder to the tailings beside it. The
     // stamp mill across the start straight, its ore tramway's buckets riding
     // over the road to the terminal by the adit, a car high, cut into the rock
     // face of a spur under the long ridge north of the start straight, one
@@ -1511,8 +1511,7 @@ export const TRACKS = {
     // ore riding the line from the adit to the shaft; grey spoil heaps at
     // the shaft, timber supports round the
     // lap. The gold camp's boomtown lines the north loop's top, its saloon's
-    // sign swinging; the tailings dump stands by the headframe it came out
-    // of, a cart tipping at its top; the miners' camp stands before the canyon. The west of
+    // sign swinging; the miners' camp stands before the canyon. The west of
     // the map is a range of mountains and mesas the descent cuts through.
     set: [
       { model: 'set-mine-portal', u: 0.018, lat: 16 },
@@ -1540,15 +1539,17 @@ export const TRACKS = {
       { model: 'set-canyon-inside-gulch', u: 0.857, lat: -5.2, yaw: 180 },
       // the stamp mill cascading down its spoil heap across the start
       // straight from the adit, its tramway's buckets riding the sagging
-      // ropes over the road to the tower beside the adit
+      // ropes over the road to the tower beside the adit; and its tailings,
+      // in the mill's own frame: a pale terrace run out of its bank down
+      // the yard, fed along its launder from the battery house (sunk to
+      // the mill's level: its own clearing lies a little higher)
       { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 },
+      { model: 'set-tailings-dump', u: 0.005, lat: -11, yaw: 180, y: -0.1 },
       // the boomtown down the north loop's top, both sides of the road; the
-      // tailings dump by the headframe (the inner loop left it no room off
-      // the road); the miners' camp before the
-      // canyon, the left there left open for the sight line to the mill
+      // miners' camp before the canyon, the left there left open for the
+      // sight line to the mill
       { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
-      { model: 'set-tailings-dump', u: 0.195, lat: 18.15, yaw: 180 },
       { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer

@@ -1786,9 +1786,9 @@ constexpr SetDef kSet_gulch[] = {
   { "set-canyon-spur-a", 0x1.ef9db22d0e56p-1, 0x1.4cccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-inside-gulch", 0x1.b6c8b43958106p-1, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-stamp-mill", 0x1.47ae147ae147bp-8, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-tailings-dump", 0x1.47ae147ae147bp-8, -0x1.6p+3, 0x1.68p+7, -0x1.999999999999ap-4, 0x1p+0, 1 },
   { "set-boomtown-north", 0x1.6b851eb851eb8p-2, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-south", 0x1.6b851eb851eb8p-2, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-tailings-dump", 0x1.8f5c28f5c28f6p-3, 0x1.2266666666666p+4, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-miners-camp", 0x1.91eb851eb851fp-1, 0x1.099999999999ap+3, -0x1.ep+4, 0x0p+0, 0x1.3333333333333p+0, 1 },
 };
 constexpr LandDef kLand_gulch[] = {
