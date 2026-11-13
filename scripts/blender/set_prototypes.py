@@ -10487,9 +10487,13 @@ def village_church():
     # The church: nave along Z under a slate roof, the tower at its -Z end
     # carrying the spire (the tallest thing in the village, about six cars),
     # a porch on the road side (+X), the clock; yews and headstones in the
-    # churchyard behind. On the green before it the maypole stands, its
-    # ribbons loose in the breeze, the children round it between dances.
-    s0 = set_ground('village-church')(0.0, 0.0) - 0.3
+    # churchyard behind. The churchyard is one flat yard inside a low stone
+    # wall, a lychgate in its road side and a gravel path from it to the
+    # porch; on the green inside the gate the maypole stands, its ribbons
+    # loose in the breeze. Nothing here drapes and the piece brings no
+    # ground of its own, so the renderer levels the yard a clearing: on a
+    # terrace of its own (SET_GROUND) it could not stand near the road,
+    # whose ground cap cut the terrace from under the green.
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
@@ -10519,30 +10523,38 @@ def village_church():
         cyl(2.4, 6.0, (-D / 2 - 4.5, 1.2, z), 0x4f9a48, r2=0.5, segs=8)
     for k in range(4):
         box((0.25, 1.0, 0.7), (-D / 2 - 2.0 - (k % 2) * 2.2, 0.5, -2.0 + (k // 2) * 3.0), 'grey')
-    # the green: a bench each side, the maypole
-    MX = D / 2 + 9.5
-    for z in (-6.0, 6.0):
-        bench((MX + 3.5, 0, z), yaw=-math.pi / 2)
-    box((0.35, 9.0, 0.35), (MX, 4.5, 0), 'white')
-    cyl(0.5, 0.5, (MX, 9.0, 0), 0xff5040, segs=8)
+    # the green: the maypole to one side of the path
+    MX, MZ = D / 2 + 8.0, -5.0
+    box((0.35, 9.0, 0.35), (MX, 4.5, MZ), 'white')
+    cyl(0.5, 0.5, (MX, 9.0, MZ), 0xff5040, segs=8)
     COLS = (0xff5040, 0x339cf2, 0xffc044, 0x22c46e, 0xa259e6, 0xf8f8fb, 0x339cf2, 0xff5040)
-    # The dance has stopped for a breather: the children stand round the
-    # pole and its ribbons hang loose off the crown, each lifting and
-    # falling in the breeze on its own. The wind moves, nobody does: a ring
-    # of children carried round the pole read as figures gliding over the
-    # grass, skipping or not.
-    cyl(0.75, 0.5, (MX, 8.2, 0), 0xffc044, segs=8)
+    cyl(0.75, 0.5, (MX, 8.2, MZ), 0xffc044, segs=8)
     for k in range(6):
         a = k * 2 * math.pi / 6 + 0.5
-        ax, az = MX + 0.6 * math.cos(a), 0.6 * math.sin(a)
+        ax, az = MX + 0.6 * math.cos(a), MZ + 0.6 * math.sin(a)
         with animated('anim_sway:a=z:d=14:p=%.2f#rib%d' % (2.4 + 0.25 * k, k), (ax, 8.3, az), yaw=-a):
-            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
-    for k in range(6):
-        a = k * 2 * math.pi / 6
-        person((MX + 4.4 * math.cos(a), 0, 4.4 * math.sin(a)), math.pi - a, COLS[k], k=0.7, hair=k, arm=0.25 * (k % 2))
-    for o in bpy.context.scene.objects:          # onto its level ground
-        o.location.z += s0
-    ANIMS[:] = [(n, (x, y + s0, z), yaw, p, t) for n, (x, y, z), yaw, p, t in ANIMS]
+            strut((ax, 8.3, az), (MX + 2.2 * math.cos(a), 2.6, MZ + 2.2 * math.sin(a)), 0.12, COLS[(k + 3) % 8])
+    # the yard's wall, the church's own stone under a darker coping, from
+    # behind the yews round to the road side; the lychgate in it opposite
+    # the porch, two oak posts under a little slate roof
+    WX0, WX1, WZ, GZ, GW = -D / 2 - 8.0, D / 2 + 14.0, 13.5, 2.6, 2.4
+    def wall(a, b):
+        L, mx, mz = math.dist(a, b), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        yaw = math.atan2(b[0] - a[0], b[1] - a[1])
+        box((0.7, 1.5, L + 0.7), (mx, 0.55, mz), STONE, yaw=yaw)
+        rowed(box((0.95, 0.3, L + 0.95), (mx, 1.4, mz), 'grey', yaw=yaw), 14)
+    wall((WX0, -WZ), (WX0, WZ))
+    for sz in (-1, 1):
+        wall((WX0, sz * WZ), (WX1, sz * WZ))
+    wall((WX1, -WZ), (WX1, GZ - GW / 2 - 0.4))
+    wall((WX1, GZ + GW / 2 + 0.4), (WX1, WZ))
+    for sz in (-1, 1):
+        box((0.6, 3.6, 0.6), (WX1, 1.8, GZ + sz * (GW / 2 + 0.4)), 0x7a5a3a)
+    gable_roof(local(WX1, GZ, math.pi / 2), math.pi / 2, 0.0, 2.6, GW + 2.2, 3.4, SLATE, 0x7a5a3a, pitch_deg=45.0, t=0.3, over=0.3)
+    # the path: gravel from the gate to the porch, a hand over the yard (flat
+    # on it, the levelled lawn comes through), a bench beside it
+    box((WX1 - D / 2 - 2.6, 0.24, 1.9), ((WX1 + D / 2 + 3.0) / 2, 0.1, GZ), 'cream')
+    bench((MX + 2.5, 0, GZ + 3.2), yaw=math.pi)
     join_still('church')
 
 @piece(REAL)
@@ -11385,7 +11397,50 @@ def fete(lite):
         cyl(0.12, 4.6, (x, 0, z), WHITE, segs=6)
     if not lite:
         coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML)
+    fete_ground(lite, ((HX, HZ, TR + 3.0), (BX + 4.2, BZ, 2.4), (MX + MW / 2, MZ, 3.0), (CX, CZ, CR + 0.6),
+                       (6.6, 28.0, 7.5), (SX + 1.2, SZ, 3.0)))
     join_still('fete')
+
+def fete_ground(lite, stops):
+    """What makes the fete one fairground: a mown green under all of it, a
+    gravel walk down its road side with a spur to each attraction (`stops`:
+    where, and how wide a patch of gravel lies before it), the way in from
+    the road under a banner between two poles, and a post-and-rope fence
+    along the road and round both ends. The green and the gravel lie a hand
+    over the piece's level (flat on it, the levelled lawn comes through)."""
+    RED, WHITE = 0xcf534f, 0xf8f8fb
+    X0, X1, Z0, Z1 = -8.5, 15.5, -45.5, 49.5        # the green: back, road side, both ends
+    WALK, GY, PY = 13.0, 0.1, 0.14                  # the walk's line; the green's and the gravel's middles
+    n = 12                                          # mown in stripes, as a show field is
+    for q in range(n):
+        za, zb = Z0 + (Z1 - Z0) * q / n, Z0 + (Z1 - Z0) * (q + 1) / n
+        rowed(box((X1 - X0, 0.2, zb - za), ((X0 + X1) / 2, GY, (za + zb) / 2), 'leaf'), (22, 27)[q % 2])['chamfer'] = 0
+    box((2.4, 0.2, Z1 - Z0 - 4.0), (WALK, PY, (Z0 + Z1) / 2), 'cream')
+    for x, z, w in stops:
+        box((WALK - x + 1.0, 0.2, 1.8), ((WALK + x) / 2, PY, z), 'cream')          # the spur
+        box((2.2, 0.2, w), (x + 0.6, PY, z), 'cream')                              # the patch before it
+    # the way in, opposite the tea tent: gravel out to the verge, two tall
+    # poles and a striped banner between them
+    GZ, GW = 0.0, 5.0
+    box((X1 + 4.0 - WALK, 0.2, 3.0), ((X1 + 4.0 + WALK) / 2, PY, GZ), 'cream')
+    for sz in (-1, 1):
+        box((0.45, 5.6, 0.45), (X1, 2.8, GZ + sz * GW / 2), WHITE)
+        sphere(0.4, (X1, 5.8, GZ + sz * GW / 2), 0xffc044, subdiv=1)
+    for k in range(5):
+        box((0.2, 1.1, GW / 5), (X1, 4.7, GZ - GW / 2 + GW / 5 * (k + 0.5)), (RED, WHITE)[k % 2])
+    # the fence: white posts and a red rope, along the road and round the ends
+    def fence(a, b):
+        n = max(1, round(math.dist(a, b) / (8.0 if lite else 4.0)))
+        pts = [(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1)]
+        with plain_parts():
+            for x, z in pts:
+                box((0.4, 1.7, 0.4), (x, 0.85, z), WHITE)
+            for (xa, za), (xb, zb) in zip(pts, pts[1:]):
+                strut((xa, 1.35, za), (xb, 1.35, zb), 0.36, RED)
+    fence((X1, Z0), (X1, GZ - GW / 2))
+    fence((X1, GZ + GW / 2), (X1, Z1))
+    fence((X0, Z0), (X1, Z0))
+    fence((X0, Z1), (X1, Z1))
 
 def coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML):
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2

@@ -388,10 +388,6 @@ export const SET_GROUND = {
     { kind: 'plain', yaw: 7.96, x: 2.83, z: -2.83, len: 16.9, r: 1.6, w: 2.5 },
     { kind: 'plain', x: 3.58, z: 5.15, len: 0, r: 6.5, w: 5 }
   ],
-  // Ribbon's church on the churchyard's own level ground, cut into the
-  // terrace it stands on, the green before it: on the slope as it was, the
-  // tower stood a storey deep in the hill.
-  'set-village-church': [{ kind: 'fan', x: 0.5, len: 10, r: 12, h: 1.9, top: 0.6 }],
   // Pretzel's den camp on a bank of its own, the same shape.
   // Tidepool's knoll at the lap's waist, its rock standing on its road side.
   'set-tidepool-knoll': [{ kind: 'mound', x: -3, h: 4.5, r: 10, r1: 12, rz: 13, shape: 1.3 }],
@@ -1250,14 +1246,13 @@ export const TRACKS = {
     // under the flyover, their fold and its drystone walls up the north-east
     // hill where the loop turns under it, and the dairy farm stands inside
     // the west bend. The church is the village's tallest thing, a quarter
-    // over its real size like the cup's other heroes; nearer the road its
-    // terrace falls inside the reach of the road's own ground and the green
-    // before it floats. A
+    // over its real size like the cup's other heroes, in a walled yard by
+    // the road with its lychgate to it. A
     // piece's box holds the verge band down under it (bandHold), so nothing
     // here is one piece over a whole loop: every box keeps 2 u or more off
     // the kerbs, and the road keeps its verge.
     set: [
-      { model: 'set-village-church', u: 0.32107, lat: 22, yaw: 39.34, scale: 1.25 },
+      { model: 'set-village-church', u: 0.32107, lat: 13.5, yaw: 39.34, scale: 1.25 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
       { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
       { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
