@@ -542,7 +542,7 @@ export const TRACKS = {
   cove: {
     name: 'Cove', sand: BEACH_SAND, waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
-    // The pirates' island: a jungle island with black-sand coves. Its
+    // The pirates' island, jungle down to its coves. Its
     // peak, green with jungle, fills the middle of the lap, its foothills
     // coming down to the kerb of the east straight and the start straight,
     // tall groves of palms on them, and the crew's cave cut into a spur of
@@ -552,10 +552,10 @@ export const TRACKS = {
     // lookout watches the east beach from its tower, and the rope bridge
     // from the jungle to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
-    // the wharf along its black sand where the longboat sails out to the
+    // the wharf along its sand where the longboat sails out to the
     // ship riding at anchor and back; a little past her their stockade
     // stands on the sand, its jetty out into the bay. The old wreck lies in
-    // the surf of the west bay's black sand (the second `shore`), its ribs
+    // the surf of the west bay (the second `shore`), its ribs
     // out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
     // so the ship shows over it down the straight.
@@ -564,9 +564,10 @@ export const TRACKS = {
     // road's reach (native/renderer/CLAUDE.md).
     set: [
       { model: 'set-pirate-ship', u: 0.483, lat: 17.5, yaw: 230, y: 0.15, scale: 1.4 },
-      // set back up the island's flank: at lat -8 its palms' crowns hung over
-      // the road round the S's first bend
-      { model: 'set-jungle-grove', u: 0.56, lat: -10, yaw: 180 },
+      // the jungle down the island's west flank, along the S: one piece
+      // astride the road (set_prototypes.py COVE_ROAD: re-sample it if this u
+      // or the road moves)
+      { model: 'set-jungle-canopy', u: 0.65, lat: 0 },
       { model: 'set-jetty', u: 0.44, lat: 11.5 },
       // the crew's camp on the sand a little past the ship, on its rise
       { model: 'set-pirate-stockade', u: 0.54, lat: 12, y: 0.72 },
@@ -634,9 +635,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
       // no seeded crate on the island's face above the bend past Skull Rock
       { kind: 'clear', u: 0.69, lat: -10, len: 20, r: 6 },
-      // the coves' black sand, from the kerb's foot down into the surf
-      { kind: 'paint', u: 0.45, lat: 13, len: 60, r: 6, w: 4, tint: 0x34333a },
-      { kind: 'paint', u: 0.795, lat: 15, len: 34, r: 9, w: 4, tint: 0x34333a }
+      // the jungle's green carried on round the S's second bend, where the
+      // peak's own tint has faded out down its flank (bare sand facets showed
+      // between the canopy's crowns)
+      { kind: 'paint', u: 0.68, lat: -16, len: 30, r: 8, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f }
     ]
   },
   driftwood: {

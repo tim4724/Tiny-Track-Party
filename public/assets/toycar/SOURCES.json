@@ -198,6 +198,7 @@
     "set-headframe.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hoodoos.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jetty.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-jungle-canopy.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-jungle-grove.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-kite-flyers.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-lagoon-fleet.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
