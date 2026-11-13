@@ -569,6 +569,14 @@ private:
         // OPT-IN for a mesh buildMesh welds (see `weld`): each of its
         // renderables gets a far form simplified to kFarTol (mLods).
         bool simplify = false;
+        // Optional per-vertex BONE, in its own buffer slot: non-empty makes
+        // the mesh SKINNED, each vertex carried whole (weight 1) by bone
+        // idx[0] of `boneCount`, posed with setBones (the set pieces' moving
+        // parts, TtpRendererMotion.cpp). The weld keys on it like any other
+        // attribute, so two parts' coincident corners stay two.
+        struct Bone { uint16_t idx[4]; uint8_t w[4]; };
+        std::vector<Bone> bones;
+        uint32_t boneCount = 0;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -588,12 +596,13 @@ private:
         // keys Vulkan's vertex-input state, and any difference is a pipeline
         // compiled on first draw.
         struct Layout {
-            bool lit = false, uv = false, baked = false;
+            bool lit = false, uv = false, baked = false, skin = false;
             uint8_t uvSlot() const { return lit ? 2 : 1; }
             // custom0's slot; custom1 is the next one.
             uint8_t customSlot() const {
                 return (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
             }
+            uint8_t skinSlot() const { return (uint8_t) (customSlot() + (baked ? 2 : 0)); }
         };
         Layout layout;
     };
@@ -1591,6 +1600,7 @@ private:
         std::vector<filament::math::quatf> quats;
         std::vector<filament::math::float2> uvs;
         std::vector<filament::math::half4> custom0;
+        std::vector<Mesh::Bone> bones;
         // Frames still to survive. Counted DOWN on presented frames only: a
         // scene released while nothing is drawing (the lobby's fade, a
         // surface gone) must not have its buffers freed by a clock that keeps
@@ -2015,13 +2025,20 @@ private:
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;
     // THE SET PIECES' MOVING PARTS (TtpRendererMotion.cpp; the `anim_` grammar
-    // is ttp/set_motion.h's). Each part is ONE unlit mesh baked in its node's
-    // own frame, its light frozen at the rest pose, drawn through a
-    // MergedGroup in mMergedDress (so teardown, the feature tags and the GL
-    // priorities are the baked runs'), and posed each frame by one transform:
-    // rest * the verbs' closed form of the scene clock and the cars.
+    // is ttp/set_motion.h's). Each part is baked unlit, its light frozen at the
+    // rest pose, drawn through a MergedGroup in mMergedDress (so teardown, the
+    // feature tags and the GL priorities are the baked runs'), and posed each
+    // frame by one transform: rest * the verbs' closed form of the scene clock
+    // and the cars. In FULL that transform is the part's BONE of its
+    // placement's one skinned draw (SetSkin); in lite each part is a mesh of
+    // its own and the transform its renderable's.
     struct SetMover {
-        utils::Entity ent;                  // the baked mesh's renderable
+        utils::Entity ent;                  // lite: the part's own renderable
+        int skin = -1;                      // full: into mSetSkins...
+        uint32_t bone = 0;                  // ...and its bone there
+        // The frame its vertices were baked in, from world: the identity in
+        // lite (the node's own), the inverse of `rest` in full (world).
+        filament::math::mat4f toBake;
         filament::math::mat4f rest;         // the node's world transform at rest
         filament::math::mat3f restInv;      // its rotation's inverse, scale removed
         float scale = 1;                    // its uniform world scale
@@ -2030,11 +2047,25 @@ private:
         int parent = -1;                    // the mover it rides, built before it
         filament::math::mat4f onParent;     // its rest in the parent's rest frame
         // The path its far-form box sweeps (its own, or the traveller it
-        // rides), and where on it that traveller stood at rest; -1 in place.
+        // rides; -1 in place), and the point its poses turn about: that
+        // traveller's pivot at rest, or the outermost part's it rides.
         int lodPath = -1;
         filament::math::float3 lodOrigin{ 0 };
+        float lift = 0;                     // how high its verbs (and its ride's) raise it
         ttp::rt::SetMotion motion;
     };
+    // THE SKIN: a placement's moving parts as ONE draw in full, a bone a part,
+    // so a knot of penguins is one draw and each still waddles on its own.
+    // `bones` is each part's pose this frame (stepSetMovers), handed over with
+    // setBones. The box is every pose's (buildSetMovers), since Filament culls
+    // a skinned draw on the box it is given.
+    struct SetSkin {
+        utils::Entity ent;                  // the draw; null if its build failed
+        std::vector<filament::math::mat4f> bones;
+    };
+    std::vector<SetSkin> mSetSkins;
+    // Filament's bones per renderable; a placement with more opens another.
+    static constexpr size_t kSkinBones = 255;
     struct SetPath {                        // a closed polyline in world space
         std::vector<filament::math::float3> pts;
         std::vector<float> at;              // arclength at each point; at.back() = the loop
@@ -2300,9 +2331,12 @@ private:
     // (TtpRenderer.cpp has why).
     static ttp::rt::GlbMeshPrim weldPrimExact(const ttp::rt::GlbMeshPrim& p, bool reorder);
     // One range's simplified far form, appended to m.idx (buildMesh's own).
-    // `scale` is meshopt's for the whole vertex set; `lockBorder` keeps a
-    // range's open edges where a neighbouring range shares them.
-    static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder);
+    // `scale` is meshopt's for the vertices it is shown, [v0, v1) (v1 0:
+    // all); `lockBorder` keeps a range's open edges where a neighbouring range
+    // shares them. farFormByBone is a skinned range's, a part at a time.
+    static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder,
+            uint32_t v0 = 0, uint32_t v1 = 0);
+    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);

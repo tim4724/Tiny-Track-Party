@@ -3489,7 +3489,12 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) { restoreCuts(); destroyMergedGroups(mMergedDress); mSetMovers.clear(); }
+        if (mMergeOff) {
+            restoreCuts();
+            destroyMergedGroups(mMergedDress);
+            mSetMovers.clear();
+            mSetSkins.clear();
+        }
         else buildDressingMerge();
         if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;
