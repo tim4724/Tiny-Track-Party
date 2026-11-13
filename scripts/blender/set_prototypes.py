@@ -6683,24 +6683,32 @@ def glacier_climber(x, z, coat, sack, probe=False):
 def glacier_crevasses():
     # Glacier: the glacier's snout where it comes down to the roads beside
     # the raised straight (placed on the right, yaw 0: +X to the road, +Z the
-    # road's way), split by crevasses that run along it, the way the ice
-    # cracks across its flow; the expedition's route across them flagged with
-    # wands, red and orange, either side, and the roped team crossing the
-    # middle one on its snow bridge, three to the rope, the leader probing
-    # ahead (a one-way gesture and a rest, the one move a person makes). A
-    # crevasse is a dark blue slot between lips of snow, its wall the ice's
-    # deep blue (nothing may go under the ground, so it is drawn on it).
-    def crack(cx, half, w, seed):
-        """One crevasse along Z at x = cx, `half` long either way, `w` wide
-        at its widest, its line wandering a little: lips of snow either side,
-        the ice wall down, the dark slot in the middle."""
-        n = 16
+    # road's way), split by crevasses down the whole of the straight, from
+    # where the other leg comes in under it to the loop: long cracks along
+    # it (the way the ice cracks across its flow) in three lanes, the near
+    # two broken round the advanced camp (its own piece, standing in the
+    # field at CAMP). The expedition's route is flagged with a wand every few
+    # car lengths, red and orange in turn: from the camp down the corridor
+    # between the near lanes both ways, and north of it over the middle
+    # crevasse on its snow bridge, where the roped team is crossing, three
+    # to the rope, the leader probing ahead (a one-way gesture and a rest,
+    # the one move a person makes). A crevasse is a dark blue slot between
+    # lips of snow, its wall the ice's deep blue (nothing may go under the
+    # ground, so it is drawn on it).
+    def lane_x(cx, seed, z):
+        """Where a crevasse's line runs at z: its lane, wandering a little."""
+        return cx + 0.4 * math.sin(z * 0.33 + seed) + 0.15 * math.sin(z * 1.05 + seed * 2)
+    def crack(cx, seed, z0, z1, w):
+        """One crevasse along Z from z0 to z1 in lane cx, `w` wide at its
+        widest: lips of snow either side, the ice wall down, the dark slot
+        in the middle, a row of them every unit or so."""
+        n = max(16, int(round((z1 - z0) / 0.9)))
         rows = []
         for i in range(n + 1):
             t = -1.0 + 2.0 * i / n
-            z = t * half
-            x = cx + 0.35 * math.sin(t * 2.6 + seed) + 0.15 * math.sin(t * 7.0 + seed * 2)
-            ww = w * (1.0 - t * t) ** 0.6 * (0.8 + 0.2 * math.sin(t * 5.0 + seed)) + 0.04
+            z = z0 + (z1 - z0) * i / n
+            x = lane_x(cx, seed, z)
+            ww = w * (1.0 - t * t) ** 0.45 * (0.8 + 0.2 * math.sin(z * 0.6 + seed)) + 0.04
             prof = [(-ww - 0.45, -0.03), (-ww - 0.12, 0.14), (-ww, 0.1), (-ww * 0.45, 0.04),
                     (ww * 0.45, 0.04), (ww, 0.1), (ww + 0.12, 0.14), (ww + 0.45, -0.03)]
             rows.append([(x + dx, y, z) for dx, y in prof])
@@ -6718,32 +6726,50 @@ def glacier_crevasses():
                 rowed(o, 22)                     # dark: down the blue ramp, the sky ramp's deep end
             else:
                 snowy(o, 0.45)
-    BRIDGE = 0.0                                 # where the route crosses: z
+    # The lanes, nearest the road first, each (x, seed) and its cracks
+    # (z0, z1, widest), their ends staggered so the field reads as one
+    # (ends in step read as the same few cracks pasted twice). The far lanes
+    # go on past the camp.
+    A, B, C, D = (1.6, 4.2), (-2.8, 5.1), (-6.6, 3.7), (-10.0, 2.9)
+    LANES = ((A, ((-29.5, -13.0, 0.5), (-1.5, 9.0, 0.45))),
+             (B, ((-24.5, -10.0, 0.55), (-0.5, 12.5, 0.6))),
+             (C, ((-33.0, -4.0, 0.5), (-1.0, 14.0, 0.45))),
+             (D, ((-31.0, -9.0, 0.4),)))
+    CAMP = (-0.6, -6.3)                          # tracks.js set-advanced-camp, in this frame
+    BRIDGE = 4.0                                 # where the route crosses the middle lane: z
     def ice():
-        crack(1.0, 7.0, 0.42, 1.0)
-        crack(-2.6, 8.5, 0.55, 2.3)
-        crack(-6.2, 6.5, 0.4, 3.7)
+        for lane, cracks in LANES:
+            for z0, z1, w in cracks:
+                crack(*lane, z0, z1, w)
         # the snow bridge over the middle crevasse, where the route crosses it
-        snowy(box((1.6, 0.16, 1.5), (-2.6 + 0.35 * math.sin(2.3), 0.08, BRIDGE), 0xf3f7fb, yaw=0.1), 0.45)
+        bx = lane_x(*B, BRIDGE)
+        snowy(box((1.6, 0.16, 1.5), (bx, 0.08, BRIDGE), 0xf3f7fb, yaw=0.1), 0.45)
         # the wands: bamboo, a flag at the top of each, red and orange in
-        # turn, either side of the route from the road's side to the far one
-        for i, x in enumerate([3.4 - 1.5 * k for k in range(9)]):
-            for sd in (-1, 1):
-                z = BRIDGE + sd * 1.15 + 0.12 * math.sin(i * 1.7 + sd)
-                box((0.1, 1.35, 0.1), (x, 0.6, z), 0xd9b054)
-                c = 0xff5040 if (i + (sd > 0)) % 2 == 0 else 0xff7e44
-                box((0.05, 0.32, 0.46), (x, 1.12, z + 0.25), c, yaw=0.2)
-        # the rope between the three, sagging to the snow between them
-        for (xa, xb) in ((0.9, -0.7), (-0.7, -2.6)):
+        # turn, a few car lengths apart down the route, now one side of it,
+        # now the other: the corridor between the near lanes from the camp
+        # south, and north to the bridge, over it, and on up the corridor
+        # beyond
+        def mid(a, b, z):
+            return 0.5 * (lane_x(*a, z) + lane_x(*b, z)), z
+        route = [mid(A, B, CAMP[1] + dz) for dz in (-4.2, -8.7, -13.2, -17.7, -22.2, 4.3, 7.3)]
+        route += [(bx + 1.05, BRIDGE + 0.9), (bx - 1.05, BRIDGE - 0.9)]
+        route += [mid(B, C, z) for z in (8.5, 13.0)]
+        for i, (x, z) in enumerate(route):
+            x += 0.35 if i % 2 else -0.35
+            box((0.1, 1.35, 0.1), (x, 0.6, z), 0xd9b054)
+            box((0.05, 0.32, 0.46), (x, 1.12, z + 0.25), 0xff5040 if i % 2 == 0 else 0xff7e44, yaw=0.2)
+        # the two behind the leader in the corridor, stood braced, the rope
+        # paid out between the three, sagging to the snow
+        team = (0.2, -1.15, bx)
+        for xa, xb in zip(team, team[1:]):
             for f0, f1 in ((0.0, 0.5), (0.5, 1.0)):
                 ya = 0.4 - 0.32 * math.sin(math.pi * f0)
                 yb = 0.4 - 0.32 * math.sin(math.pi * f1)
                 strut((xa + (xb - xa) * f0, ya, BRIDGE), (xa + (xb - xa) * f1, yb, BRIDGE), 0.09, 0xff7e44)
-        # the two behind the leader, stood braced, the rope paid out between
-        for (x, coat, sack) in ((0.9, 0x3f7bd9, 0xffc044), (-0.7, 0x61cb8b, 0xff5040)):
+        for x, coat, sack in ((team[0], 0x3f7bd9, 0xffc044), (team[1], 0x61cb8b, 0xff5040)):
             glacier_climber(x, BRIDGE, coat, sack)
         # the leader on the bridge, probing the snow ahead with the axe
-        glacier_climber(-2.6, BRIDGE, 0xff5040, 0x3f7bd9, probe=True)
+        glacier_climber(bx, BRIDGE, 0xff5040, 0x3f7bd9, probe=True)
     draped('ice', ice)
 
 def frac(v):
