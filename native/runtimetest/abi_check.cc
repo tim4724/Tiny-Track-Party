@@ -1551,9 +1551,9 @@ void themeThroughAbi() {
   check(ttp_theme_boost_icon("no-such-biome") == ttp_theme_boost_icon("grass"),
         "an unknown biome yields grass's accent rather than 0");
 
-  check(ttp_theme_hill_color("playroom", 5) == 0xfdf4deu,
-        "the playroom's last furniture colour survives — a truncated hills list would lose it");
-  check(ttp_theme_hill_color("playroom", 6) == 0u, "an out-of-range hill index is 0");
+  check(ttp_theme_hill_color("playroom", 10) == 0x9a7b55u,
+        "the playroom's last room colour survives — a truncated hills list would lose it");
+  check(ttp_theme_hill_color("playroom", 11) == 0u, "an out-of-range hill index is 0");
   check(ttp_theme_hill_color("grass", -1) == 0u, "a negative hill index is 0");
 
   // Slot order is the contract: every tree family of the lawn in the order
