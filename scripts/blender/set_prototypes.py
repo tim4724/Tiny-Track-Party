@@ -5058,17 +5058,6 @@ def snow_person(x, y, z, coat, hat, yaw=0.0):
     box((0.09, 0.09, 0.09), at(0.01, 0.395), 0xf2bf99, yaw=yaw)
     box((0.1, 0.06, 0.1), at(0.0, 0.465), hat, yaw=yaw)
 
-def seated(x, y, z, coat, hat, yaw=0.0):
-    """Someone sitting (on a chair, a bucket), facing +X turned by `yaw`; `y`
-    is the seat."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy):
-        return (x + dx * c, y + dy, z - dx * s)
-    box((0.2, 0.07, 0.14), at(0.07, 0.035), 0x38383d, yaw=yaw)       # thighs
-    box((0.13, 0.17, 0.18), at(-0.02, 0.15), coat, yaw=yaw)
-    box((0.09, 0.09, 0.09), at(-0.01, 0.28), 0xf2bf99, yaw=yaw)
-    box((0.1, 0.06, 0.1), at(-0.02, 0.35), hat, yaw=yaw)
-
 def skier(x, y, z, coat, hat):
     """A skier running toward +X, crouched over the skis, at a person's size:
     the skis, bent legs, a coat leaning in, a head and hat. Joined into one
@@ -5682,19 +5671,6 @@ def skater(x, y, z, coat, hat, k=1.0):
     b((0.5, 0.5, 0.5), 0.2, 2.32, 0.0, SKIN)                            # the head
     b((0.56, 0.3, 0.56), 0.18, 2.64, 0.0, hat)                          # the hat
 
-def shanty(x, z, color, yaw=0.0, pipe=False):
-    """An ice-fishing shanty at its real size: a box hut on skids, a snowed
-    roof, a dark door to +X turned by `yaw`, maybe a stovepipe."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s, dy, z - dx * s + dz * c)
-    box((0.66, 0.06, 0.5), at(0, 0.03, 0), 0x6e4a32, yaw=yaw)
-    box((0.6, 0.48, 0.46), at(0, 0.3, 0), color, yaw=yaw)
-    snowy(box((0.7, 0.08, 0.56), at(0, 0.58, 0), 0xfff6eb, yaw=yaw, roll=0.12), 0.5)
-    box((0.06, 0.32, 0.2), at(0.31, 0.24, 0), 0x38383d, yaw=yaw)
-    if pipe:
-        box((0.07, 0.24, 0.07), at(-0.18, 0.72, 0.12), 0x555b66, yaw=yaw)
-
 def clip(pts, keep):
     """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
     `keep` linear (a half-plane)."""
@@ -5746,60 +5722,6 @@ def rounded(pts, times=2):
         pts = out
     return pts
 
-def ice_fisher(x, z, yaw, coat, hat, n, seat=0xcf534f, rod=True, screen=None, sledge=None, flag=False):
-    """Someone fishing through the ice at (x, z), sat facing +X turned by
-    `yaw` at their hole: bundled up and small (a seated figure a little over
-    a third of a unit, hood up, no face to read), on an upturned bucket or a
-    box, the dark hole in front in its ring of shaved ice, the short rod
-    held over it and jigged now and then (`rod`, a part of its own). Round
-    them what an ice fisher brings: a canvas windbreak at their back
-    (`screen`, its colour), a sledge with its box (`sledge`, its colour), a
-    tip-up's little flag over a second hole (`flag`), the catch laid on the
-    ice, the auger stood in the snow. Returns nothing: all of it stands on
-    the ice at y 0.07."""
-    Y = 0.07
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s2, Y + dy, z - dx * s2 + dz * c)
-    DARK = 0x38383d
-    cyl(0.3, 0.02, at(0.62, 0.0, 0.0), 0xfff6eb, segs=10)                       # the shaved ice round the hole
-    cyl(0.17, 0.03, at(0.62, 0.0, 0.0), 0x2f3a4a, segs=10)                      # the hole
-    box((0.2, 0.2, 0.2), at(0.0, 0.1, 0.0), seat, yaw=yaw)                       # what they sit on
-    box((0.3, 0.1, 0.2), at(0.12, 0.25, 0.0), DARK, yaw=yaw)                     # thighs
-    box((0.1, 0.24, 0.2), at(0.27, 0.12, 0.0), DARK, yaw=yaw)                    # shins and boots
-    box((0.22, 0.3, 0.26), at(-0.02, 0.42, 0.0), coat, yaw=yaw)                  # the coat, bundled
-    box((0.16, 0.14, 0.3), at(0.12, 0.4, 0.0), coat, yaw=yaw)                    # arms forward
-    box((0.17, 0.16, 0.18), at(0.0, 0.64, 0.0), hat, yaw=yaw)                    # the hood
-    box((0.06, 0.09, 0.12), at(0.085, 0.63, 0.0), 0xf2bf99, yaw=yaw)             # what shows of a face
-    if rod:
-        with animated('anim_sway:a=z:d=9:p=%.1f:r=%.2f#rod%d' % (1.6 + 0.3 * (n % 4), 0.45 + 0.08 * (n % 3), n),
-                      at(0.2, 0.42, 0.0), yaw):
-            box((0.5, 0.04, 0.04), at(0.44, 0.45, 0.0), 0x2a2735, yaw=yaw, roll=-0.12)
-            box((0.04, 0.4, 0.04), at(0.64, 0.28, 0.0), 0xfff6eb, yaw=yaw)        # the line down the hole
-    if screen is not None:
-        for sd in (-1, 1):
-            box((0.06, 0.7, 0.06), at(-0.45, 0.35, sd * 0.55), 0x7a5a3a, yaw=yaw)
-        box((0.06, 0.5, 1.1), at(-0.45, 0.42, 0.0), screen, yaw=yaw)
-        snowy(box((0.3, 0.12, 1.2), at(-0.62, 0.06, 0.0), 0xf3f7fb, yaw=yaw), 0.4)   # snow banked against it
-    if sledge is not None:
-        sx, sz = -0.15, 0.75
-        for sd in (-1, 1):
-            box((0.7, 0.05, 0.05), at(sx, 0.03, sz + sd * 0.13), 0x555b66, yaw=yaw)
-        box((0.6, 0.06, 0.34), at(sx - 0.03, 0.1, sz), sledge, yaw=yaw)
-        box((0.3, 0.2, 0.26), at(sx - 0.1, 0.23, sz), 0x9a7b55, yaw=yaw)         # its box
-        box((0.12, 0.12, 0.12), at(sx + 0.17, 0.19, sz), 0x3f7bd9, yaw=yaw)       # a flask
-    if flag:
-        cyl(0.13, 0.03, at(0.5, 0.0, -0.8), 0x2f3a4a, segs=8)                    # the tip-up's hole
-        box((0.34, 0.04, 0.04), at(0.5, 0.05, -0.8), 0x7a5a3a, yaw=yaw)
-        box((0.04, 0.4, 0.04), at(0.5, 0.2, -0.8), 0x7a5a3a, yaw=yaw)
-        box((0.16, 0.12, 0.04), at(0.58, 0.36, -0.8), 0xff7e44, yaw=yaw)
-    for k in range(1 + n % 3):                                                   # the catch
-        box((0.2, 0.05, 0.07), at(0.5 + 0.1 * k, 0.025, 0.42 + 0.11 * k), 0xa0a8c9, yaw=yaw + 0.4 * k)
-    if n % 2 == 0:                                                               # the auger, stood up
-        box((0.06, 0.6, 0.06), at(-0.1, 0.3, -0.5), 0x555b66, yaw=yaw)
-        box((0.3, 0.05, 0.05), at(-0.1, 0.6, -0.5), 0xff7e44, yaw=yaw)
-        box((0.14, 0.14, 0.14), at(-0.1, 0.07, -0.5), 0x868ba1, yaw=yaw)
-
 # Flurry's lake, placed at yaw 180 (u 0.3355, lat -11.4) so the piece's +X is
 # toward the road: the road comes down off the bridge beside it, running down
 # -Z at x ~12 on its stilts and then its berm, and bends away round to +X. The
@@ -5822,8 +5744,9 @@ def frozen_lake():
     # deeper blue in the middle where the ice is clear and thick, cracks
     # running across it from the shore and a ring of them where it has
     # heaved. On it the village's skaters glide round their rink (anim_path;
-    # carried by their skates, they hold their pose), the ice fishers sit by
-    # their shanties to the south, a snowman stands by the rink. (Two flat
+    # carried by their skates, they hold their pose), a snowman stands by the
+    # rink; the fishing huts at its south end are the hamlet's
+    # (set-lake-hamlet). (Two flat
     # sheets of jagged ice either side of the road read as nothing from the
     # seat: no bank, no depth, no line on them.)
     N = 48
@@ -5831,8 +5754,8 @@ def frozen_lake():
         return [(x, y, z) for x, z in (lake_rim(i / N * 2 * math.pi, inset) for i in range(N + 1))]
     # the ice, out from the middle: the clear deep blue, then paler to the shore
     rings = [[(LAKE_C[0], 0.05, LAKE_C[1])] * (N + 1), ring(5.0, 0.05), ring(2.6, 0.05), ring(0.0, 0.05)]
-    for j, row in ((0, 13), (1, 7), (2, 3)):
-        o = sheet([rings[j], rings[j + 1]], lambda i, jj, nn: 'sky', 'ice')[0]
+    for j, (sw, row) in enumerate((('blue', 3), ('sky', 17), ('sky', 8))):
+        o = sheet([rings[j], rings[j + 1]], (lambda sw: lambda i, jj, nn: sw)(sw), 'ice')[0]
         rowed(o, row)
     # the bank of snow round it: up from the ice to a crest over the shore and
     # down to the plain outside, wider and higher in turn round the lake
@@ -5886,15 +5809,6 @@ def frozen_lake():
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
         with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / 5, n), at):
             skater(at[0], at[1], at[2], coat, hat, k=0.24)
-    # the ice fishers to the south, by their shanties, facing every way
-    for n, (x, z, yw, c) in enumerate(((-6.5, -8.5, 0.4, 0xcf534f), (-1.0, -10.0, 2.2, 0x3f7bd9))):
-        shanty(x, z, c, yaw=yw, pipe=n == 0)
-    for n, (fx, fz, fyaw, coat, hat, screen, sledge, flag) in enumerate((
-            (-4.6, -8.0, 2.6, 0xcf534f, 0xcf534f, 0xffc044, 0x3f7bd9, True),
-            (0.6, -8.2, 1.2, 0x3f7bd9, 0xffc044, None, 0xcf534f, False),
-            (-3.0, -11.2, -2.4, 0xffc044, 0x38383d, 0xcf534f, None, True))):
-        ice_fisher(fx, fz, fyaw, coat, hat, n, seat=(0xcf534f, 0x3f7bd9, 0x9a7b55)[n % 3], screen=screen,
-                   sledge=sledge, flag=flag)
     # on the ice by the rink, a snowman in a hat
     snowman((-9.0, 0.07, 4.5), 0.2, hat=True)
 
@@ -6278,13 +6192,232 @@ def log_cabin():
     # a car: a log cabin two and a half units across and two smaller ones
     # either side of it, their chimneys smoking (the columns stand over the
     # kerb from far down the road, before the cabins do), the woodpile under its
-    # lean-to between them, a villager.
+    # lean-to between them, a sled by the door.
     log_cabin_at(0.0, 0.0, 0.58, smoke=1.5)
     log_cabin_at(-0.6, 3.0, 0.42, smoke=True)
     log_cabin_at(-0.4, -3.9, 0.48, smoke=True)
     woodpile(0.2, -2.2, 0.3)
-    snow_person(1.8, 0, -0.6, 0x3f7bd9, 0xcf534f, yaw=-0.4)
+    sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
     join_still('cabins')
+
+# ---- Flurry's lake hamlet ----------------------------------------------------
+# The ground drawn over the plain under the hamlet (u 0.375, lat -11, yaw 180:
+# +X to the road, +Z north to the lake), SAMPLED every two units from (-16, -20)
+# like a stand's (FORESTS): re-sample after moving the piece or the land.
+HAMLET_G = ((4.6, 5.6, 6.6, 6.7, 6.7, 5.5, 4.6, 5.1, 5.7, 5.9, 5.0, 3.9, 2.8),
+            (3.8, 4.8, 5.3, 5.3, 5.2, 4.4, 4.5, 5.1, 5.7, 6.1, 4.8, 3.5, 2.1),
+            (3.0, 3.9, 3.9, 3.8, 3.7, 3.8, 4.3, 4.7, 5.2, 5.0, 3.8, 2.4, 1.7),
+            (2.4, 2.5, 2.8, 3.0, 3.3, 3.2, 3.6, 4.1, 4.2, 3.7, 2.7, 1.8, 1.1),
+            (2.3, 2.4, 2.7, 2.9, 2.8, 2.5, 3.0, 3.4, 3.0, 2.5, 2.0, 1.1, 0.6),
+            (2.3, 2.3, 2.6, 2.7, 2.4, 2.0, 2.3, 2.2, 1.7, 1.2, 1.1, 0.6, 0.3),
+            (2.2, 2.2, 2.4, 2.2, 1.9, 1.6, 1.5, 1.0, 0.7, 0.4, 0.3, 0.2, 0.2),
+            (2.2, 2.1, 2.0, 1.7, 1.5, 1.3, 1.0, 0.7, 0.4, 0.2, 0.2, 0.2, 0.2),
+            (2.2, 2.1, 1.9, 1.7, 1.5, 1.2, 0.8, 0.5, 0.2, 0.2, 0.2, 0.2, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.5, 1.1, 0.6, 0.3, 0.1, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.4, 0.9, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.7, 1.2, 0.7, 0.2, 0.0, 0.0, 0.1, 0.1, 0.1, 0.1),
+            (2.2, 2.1, 1.9, 1.4, 0.9, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1),
+            (2.2, 2.1, 1.7, 1.1, 0.6, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            (2.3, 2.1, 1.4, 0.8, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+
+def flurry_hamlet_ground(x, z):
+    """The sampled ground under the hamlet at (x, z), between its samples."""
+    fx = min(max((x + 16.0) / 2.0, 0.0), 11.999)
+    fz = min(max((z + 20.0) / 2.0, 0.0), 13.999)
+    i, j = int(fx), int(fz)
+    a, b = fx - i, fz - j
+    g = HAMLET_G
+    return (g[j][i] * (1 - a) + g[j][i + 1] * a) * (1 - b) + (g[j + 1][i] * (1 - a) + g[j + 1][i + 1] * a) * b
+
+def flurry_stood(build, x, z, yaw=0.0, y=0.0, pivot=(0.0, 0.0)):
+    """Run `build` (which builds about `pivot` on y = 0) and stand what it
+    made at (x, y, z) turned by `yaw` (box()'s sense): a builder with no yaw
+    of its own, turned whole. Nothing that moves (a pivot would stay behind)."""
+    before = set(bpy.context.scene.objects)
+    build()
+    m = Matrix.Translation(P(x, y, z)) @ Matrix.Rotation(yaw, 4, 'Z') @ Matrix.Translation(-P(pivot[0], 0.0, pivot[1]))
+    bpy.context.view_layer.update()
+    for o in bpy.context.scene.objects:
+        if o not in before:
+            o.matrix_world = m @ o.matrix_world
+    bpy.context.view_layer.update()
+
+def flurry_ice_hut(color, pipe=False, window=0xffc044):
+    """An ice-fishing hut about the origin, its door to +X: a painted box a
+    unit across on two skids, a snowed roof pitched to the back, a lit window
+    in the side, maybe a stovepipe."""
+    for s in (-1, 1):
+        box((1.2, 0.1, 0.14), (0.0, 0.05, s * 0.32), 0x6e4a32)
+    box((0.95, 0.85, 0.85), (0.0, 0.52, 0.0), color)
+    box((1.0, 0.1, 0.9), (0.0, 0.14, 0.0), 0x6e4a32)
+    snowy(box((1.2, 0.16, 1.08), (-0.03, 1.02, 0.0), 0xf3f7fb, roll=-0.14), 0.5)
+    box((0.06, 0.62, 0.36), (0.48, 0.5, -0.12), 0x38383d)
+    box((0.3, 0.3, 0.06), (-0.05, 0.62, 0.43), 0xfff6eb)
+    box((0.2, 0.2, 0.06), (-0.05, 0.62, 0.45), window)
+    if pipe:
+        box((0.12, 0.42, 0.12), (-0.25, 1.25, -0.2), 0x555b66)
+
+def flurry_tip_up(x, z, y=0.06, yaw=0.0):
+    """A hole cut in the ice in its ring of shavings and a tip-up's flag over it."""
+    snowy(cyl(0.3, 0.04, (x, y, z), 0xf3f7fb, segs=8), 0.4)
+    cyl(0.17, 0.05, (x, y, z), 0x2f3a4a, segs=8)
+    box((0.07, 0.5, 0.07), (x + 0.28, y + 0.25, z), 0x7a5a3a)
+    box((0.06, 0.16, 0.24), (x + 0.28, y + 0.45, z + 0.14), 0xff7e44, yaw=yaw)
+
+def flurry_boat(color, upturned=True):
+    """A rowing boat about the origin along Z, keel up on the snow (or the
+    right way up): the hull a board cut to its sheer, a keel, two thwarts."""
+    L, W = 1.0, 0.62
+    if upturned:
+        prism([(-L, 0.0), (L * 0.85, 0.0), (L, 0.16), (L * 0.6, 0.36), (-L * 0.7, 0.38), (-L, 0.22)], 0.0, W, color)
+        box((0.1, 0.08, 1.7), (0.0, 0.41, -0.05), 0x6e4a32)
+        snowy(box((0.4, 0.07, 1.0), (0.0, 0.43, -0.1), 0xf3f7fb), 0.5)
+    else:
+        prism([(-L, 0.12), (-L * 0.7, 0.0), (L * 0.6, 0.0), (L, 0.2), (L, 0.42), (-L, 0.4)], 0.0, W, color)
+        snowy(box((W - 0.12, 0.08, 1.7), (0.0, 0.42, 0.0), 0xf3f7fb), 0.5)
+        for zz in (-0.4, 0.35):
+            box((W + 0.04, 0.07, 0.16), (0.0, 0.46, zz), 0x9a7b55)
+
+def flurry_boathouse():
+    """The boathouse about the origin, open to +X (the lake): plank walls on
+    three sides, a snowed roof falling to the back, a boat drawn up inside on
+    its trestles with its bow out of the door, oars racked on the side."""
+    W, D, H = 2.2, 2.6, 1.5
+    box((W, 0.16, D), (0.0, 0.08, 0.0), 0x868ba1)
+    box((0.16, H, D), (-W / 2 + 0.08, H / 2, 0.0), 0x8a5a3a)
+    for s in (-1, 1):
+        box((W, H, 0.16), (0.0, H / 2, s * (D / 2 - 0.08)), 0x9a5f3c)
+        box((0.2, H + 0.2, 0.2), (W / 2 - 0.1, (H + 0.2) / 2, s * (D / 2 - 0.1)), 0x6e4a32)
+    box((0.2, 0.2, D), (W / 2 - 0.1, H + 0.1, 0.0), 0x6e4a32)
+    snowy(box((W + 0.7, 0.24, D + 0.6), (0.0, H + 0.28, 0.0), 0xeef4f9, roll=0.16), 0.5)
+    box((W - 0.4, 0.5, D - 0.4), (-0.05, 0.75, 0.0), 0x38383d)                # the dark inside
+    flurry_stood(lambda: flurry_boat(0xcf534f, upturned=False), 0.75, 0.0, -math.pi / 2, 0.22)
+    for k in range(2):                                                         # oars on the side wall
+        box((1.9, 0.08, 0.08), (0.0, 0.7 + 0.3 * k, D / 2 + 0.06), 0xfff6eb)
+        box((0.4, 0.18, 0.08), (0.9, 0.7 + 0.3 * k, D / 2 + 0.06), 0xcf534f)
+
+def flurry_fish_rack():
+    """A drying rack about the origin along Z: two trestles, a beam, the catch
+    hung in a row."""
+    for s in (-1, 1):
+        for t in (-1, 1):
+            box((0.12, 1.5, 0.12), (t * 0.28, 0.72, s * 0.95), 0x7a5a3a, roll=t * 0.36)
+    box((0.12, 0.12, 2.3), (0.0, 1.4, 0.0), 0x7a5a3a)
+    for k in range(6):
+        box((0.07, 0.4, 0.2), (0.0, 1.12, -0.75 + 0.3 * k), (0xa0a8c9, 0x868ba1)[k % 2])
+    snowy(box((0.2, 0.07, 2.0), (0.0, 1.49, 0.0), 0xf3f7fb), 0.5)
+
+def flurry_jetty(a, b, y=0.62, w=1.1):
+    """A timber jetty from `a` on the shore to `b` out on the ice, its deck
+    `y` over the plain: planks on a pair of piles every unit and a half, snow
+    lying along one edge, a wider head at the end with its lantern post, a
+    bench and a ladder down to the ice."""
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    L = math.hypot(dx, dz)
+    yaw = math.atan2(dx, dz)
+    ux, uz = dx / L, dz / L
+    def at(t, l, yy):
+        return (a[0] + ux * t + uz * l, yy, a[1] + uz * t - ux * l)
+    n = int(L / 0.55)
+    for k in range(n):
+        box((w - 0.05 * (k % 2), 0.1, L / n - 0.05), at((k + 0.5) * L / n, 0.0, y), (0x9a7b55, 0x8a6a46)[k % 2], yaw=yaw)
+    for s in (-1, 1):
+        box((0.14, 0.14, L), at(L / 2, s * (w / 2 - 0.1), y - 0.11), 0x6e4a32, yaw=yaw)
+    snowy(box((0.3, 0.09, L * 0.8), at(L * 0.45, -(w / 2 - 0.2), y + 0.08), 0xf3f7fb, yaw=yaw), 0.5)
+    t = 0.3
+    while t < L:
+        for s in (-1, 1):
+            box((0.2, y + 0.75, 0.2), at(t, s * (w / 2 + 0.06), (y + 0.75) / 2 - 0.3), 0x6e4a32, yaw=yaw)
+            snowy(box((0.26, 0.09, 0.26), at(t, s * (w / 2 + 0.06), y + 0.5), 0xf3f7fb, yaw=yaw), 0.5)
+        t += 1.55
+    # the head: a square of deck, a bench, the lantern on its post
+    for k in range(4):
+        box((2.0, 0.1, 0.48), at(L + 0.24 + 0.5 * k, 0.0, y), (0x9a7b55, 0x8a6a46)[k % 2], yaw=yaw)
+    for s in (-1, 1):
+        for tt in (L + 0.1, L + 1.9):
+            box((0.22, y + 0.75, 0.22), at(tt, s * 0.95, (y + 0.75) / 2 - 0.3), 0x6e4a32, yaw=yaw)
+            snowy(box((0.28, 0.09, 0.28), at(tt, s * 0.95, y + 0.5), 0xf3f7fb, yaw=yaw), 0.5)
+    box((0.16, 1.7, 0.16), at(L + 1.85, -0.95, y + 0.85), 0x6e4a32, yaw=yaw)
+    box((0.34, 0.34, 0.34), at(L + 1.85, -0.95, y + 1.8), 0xffc044, yaw=yaw)
+    snowy(box((0.44, 0.1, 0.44), at(L + 1.85, -0.95, y + 2.02), 0xf3f7fb, yaw=yaw), 0.5)
+    box((0.9, 0.1, 0.3), at(L + 1.0, 0.75, y + 0.35), 0x9a7b55, yaw=yaw)
+    for tt in (-0.35, 0.35):
+        box((0.1, 0.3, 0.26), at(L + 1.0 + tt, 0.75, y + 0.2), 0x6e4a32, yaw=yaw)
+    for s in (-1, 1):                                                          # the ladder down to the ice
+        box((0.1, y + 0.3, 0.1), at(L + 2.12, 0.3 + s * 0.22, (y + 0.3) / 2), 0x7a5a3a, yaw=yaw)
+    for k in range(3):
+        box((0.5, 0.07, 0.07), at(L + 2.12, 0.3, 0.14 + 0.2 * k), 0x9a7b55, yaw=yaw)
+
+@piece(1.0)
+def lake_hamlet():
+    # Flurry: the fishing hamlet on the lake's south shore, straight ahead of
+    # a car coming down off the bridge and on the outside of the bend that
+    # follows: three log cabins of three sizes stepping up the foot of the
+    # hill, each turned its own way to the lake and the road, their chimneys
+    # smoking; the boathouse on the shore with a boat drawn up inside and
+    # another keel-up beside it, the catch on its drying rack, a woodpile,
+    # sleds and skis by the doors; from the boathouse a timber jetty out over
+    # the bank onto the ice, a lantern at its head; and off the jetty, on the
+    # ice beside the road, the village's painted fishing huts round their
+    # holes, tip-ups flagged, a sledge of gear. Nobody about: their things say
+    # who lives here. Built on the ground sampled under it (HAMLET_G), the
+    # trodden paths between the doors draped, so it levels nothing; the ice is
+    # the lake's (set-frozen-lake), a hand over the plain.
+    G = flurry_hamlet_ground
+    def foot(x, z, r):
+        return min(G(x + dx, z + dz) for dx in (-r, 0, r) for dz in (-r, 0, r)) - 0.08
+    cabins = ((3.4, -3.6, 0.7, -0.5, 1.5), (-2.8, -0.2, 0.56, -1.05, True), (-1.0, -7.6, 0.5, -0.2, True))
+    for n, (x, z, k, yaw, smoke) in enumerate(cabins):
+        flurry_stood((lambda k, smoke, n: lambda: log_cabin_at(0.0, 10.0 * n, k, smoke=smoke))(k, smoke, n),
+                     x, z, yaw, foot(x, z, 1.2 * k / 0.5), pivot=(0.0, 10.0 * n))
+    # the boathouse at the jetty's foot, open to the lake
+    bx, bz = -5.6, 3.3
+    flurry_stood(flurry_boathouse, bx, bz, -1.2, foot(bx, bz, 1.2))
+    flurry_stood(lambda: flurry_boat(0x3f7bd9), -2.2, 3.6, 0.9, G(-2.2, 3.6) - 0.04)
+    flurry_stood(flurry_fish_rack, 1.4, 1.6, -0.5, G(1.4, 1.6) - 0.05)
+    flurry_stood(lambda: woodpile(0.0, 0.0, 0.3), 5.4, -1.0, 0.4, G(5.4, -1.0) - 0.05)
+    # the jetty over the bank onto the ice, along the lake's own length
+    flurry_jetty((-4.5, 5.6), (-1.75, 12.7))
+    # the fishing huts on the ice off its head, toward the road
+    for x, z, yaw, color, pipe in ((1.6, 11.3, -0.9, 0xcf534f, True), (4.3, 12.6, -0.3, 0xffc044, False),
+                                   (1.2, 14.9, -1.5, 0x3f7bd9, True), (3.9, 15.9, 0.5, 0x61cb8b, False)):
+        flurry_stood((lambda color, pipe: lambda: flurry_ice_hut(color, pipe, 0xfff6eb if color == 0xffc044 else 0xffc044))(color, pipe),
+                     x, z, yaw, 0.06)
+    marker('anim_smoke:s=0.6#hut', (1.5, 1.5, 11.5))
+    for x, z in ((2.9, 10.9), (5.3, 14.0), (2.6, 16.4), (0.2, 12.9)):
+        flurry_tip_up(x, z, yaw=0.4 * x)
+    # a sledge of gear on the ice, the auger stood by it
+    sled(3.0, 0.06, 13.9, 0.6, color=0xcf534f, L=0.9)
+    box((0.42, 0.28, 0.3), (2.95, 0.3, 13.93), 0x9a7b55, yaw=0.6)
+    box((0.1, 0.8, 0.1), (3.7, 0.46, 14.4), 0x555b66)
+    box((0.4, 0.08, 0.08), (3.7, 0.86, 14.4), 0xff7e44)
+    # the forest's edge behind the cabins, up the hill the road bends away under
+    for n, (x, z, k) in enumerate(((-6.2, -4.2, 2.0), (-8.8, -1.2, 1.7), (-5.2, -9.6, 2.2), (-9.6, -7.4, 1.9),
+                                   (0.8, -11.2, 2.1), (4.2, -8.4, 1.7), (-2.6, -13.2, 2.3), (4.6, -13.4, 1.7),
+                                   (-11.5, -11.5, 2.1), (2.4, -15.6, 2.2), (-6.8, -15.2, 2.0), (-9.4, 4.6, 1.6),
+                                   (-12.6, -3.4, 1.9), (-13.6, 2.2, 1.6))):
+        g = G(x, z)
+        (spruce if n % 4 == 1 else pine)((x, g - 0.35 * k, z), k)
+        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    join_still('hamlet')
+    # what lies on the snow as drawn: the trodden paths, sleds and skis by the doors
+    def lying():
+        def path(p0, p1, w=0.7):
+            L = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+            n = max(2, int(L / 0.9))
+            for k in range(n):
+                t = (k + 0.5) / n
+                rowed(box((w, 0.07, L / n + 0.12), (p0[0] + (p1[0] - p0[0]) * t, 0.0, p0[1] + (p1[1] - p0[1]) * t), 'sky',
+                          yaw=math.atan2(p1[0] - p0[0], p1[1] - p0[1])), 1)
+        path((4.8, -2.4), (2.0, 2.6))
+        path((2.0, 2.6), (-3.6, 4.6))
+        path((-1.6, 1.2), (-0.6, 3.6))
+        path((0.2, -6.2), (2.2, -1.6), 0.6)
+        sled(5.4, 0.0, -4.8, 0.3, color=0xcf534f, L=0.9)
+        sled(-0.6, 0.0, 1.3, 2.0, color=0x3f7bd9, L=0.8)
+        for k in range(2):                           # a pair of skis stood in the snow by the big cabin's door
+            box((0.07, 1.1, 0.14), (5.4, 0.5, -2.3 + 0.2 * k), 0xcf534f, roll=0.12)
+    draped('lying', lying)
 
 def ramp(a, b, w, t, color):
     """A deck `w` wide and `t` thick under the line from glTF point a to b, its

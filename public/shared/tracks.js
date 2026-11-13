@@ -885,13 +885,14 @@ export const TRACKS = {
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
-      // the village round the lap, close by the road where a racer reads a
-      // cabin (see:landmarks): by the start, past the lake in the bend's
-      // inside, on the east loop, on the run in
+      // the fishing hamlet on the lake's south shore, dead ahead of the run
+      // down off the bridge and outside the bend after it: cabins up the
+      // hill's foot, the boathouse, the jetty out onto the ice, the fishing
+      // huts on it beside the road (built on the ground sampled under it,
+      // set_prototypes.py HAMLET_G: re-sample after moving it or the land)
+      { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: 180 },
+      // one more corner of the village by the start
       { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
-      { model: 'set-log-cabin', u: 0.392, lat: 8, yaw: 20 },
-      { model: 'set-log-cabin', u: 0.675, lat: -9, yaw: 150 },
-      { model: 'set-log-cabin', u: 0.875, lat: 11, yaw: 75 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
