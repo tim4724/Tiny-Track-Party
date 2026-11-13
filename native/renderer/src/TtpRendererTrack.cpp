@@ -4164,14 +4164,34 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
         if (spray) return surf(x, z);
         return 1.0f;
     };
+    std::vector<float> floorY((size_t) N * N);
+    for (int gz = 0; gz < N; gz++) {
+        for (int gx = 0; gx < N; gx++) {
+            const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
+            floorY[(size_t) gz * N + gx] = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
+        }
+    }
+    // A tumbleweed stays off a slope the grid cannot draw it on: between a
+    // cut's floor and its rim the bilinear floor is a ramp through the air,
+    // and one rolling there hangs in front of the wall.
+    const auto level = [&](int gx, int gz) {
+        const float h = floorY[(size_t) gz * N + gx];
+        float rise = 0;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                const int nx = std::clamp(gx + dx, 0, N - 1), nz = std::clamp(gz + dz, 0, N - 1);
+                rise = std::max(rise, std::fabs(floorY[(size_t) nz * N + nx] - h));
+            }
+        }
+        return 1.0f - smooth01((rise - 0.5f) / 0.7f);
+    };
     std::vector<math::half> texels((size_t) N * N * 2);
     for (int gz = 0; gz < N; gz++) {
         for (int gx = 0; gx < N; gx++) {
             const float x = -kAmbR + gx * cell, z = -kAmbR + gz * cell;
             const size_t i = (size_t) gz * N + gx;
-            const float floor = spray ? tb.groundY + kWaterLift - seaSink(x, z) : groundSurfaceY(tb, x, z);
-            texels[i * 2] = math::half(floor);
-            texels[i * 2 + 1] = math::half(a.kind == AMB_TUMBLE && a.near.empty() ? g[i] : lives(x, z));
+            texels[i * 2] = math::half(floorY[i]);
+            texels[i * 2 + 1] = math::half(a.kind == AMB_TUMBLE && a.near.empty() ? g[i] * level(gx, gz) : lives(x, z));
         }
     }
     mLifeTex = Texture::Builder()
