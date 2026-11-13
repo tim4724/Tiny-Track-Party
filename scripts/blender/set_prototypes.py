@@ -880,7 +880,10 @@ def rock_pool():
         a = i / N * 2 * math.pi
         c, sn = math.cos(a), math.sin(a)
         r0, w = rim(a), shelf(a)
-        top = LIP + 0.12 * max(0.0, -c) + 0.05 * math.sin(3 * a)
+        # the lip low on the road side (+X), full on the sea side: on its
+        # terrace at the road's height (tracks.js) the seat looks over the
+        # near lip onto the water
+        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.12 * max(0.0, -c) + 0.03 * math.sin(3 * a)
         prof = [(0.0, WY - 0.03), (0.35 * r0, WY - 0.03), (0.68 * r0, WY), (0.9 * r0, WY), (r0, WY + 0.01),   # the water
                 (r0 + 0.12, WY + 0.02),                                                                        # the foam
                 (r0 + 0.2, top), (r0 + 0.45 * w, top + 0.06), (r0 + 0.85 * w, top * 0.7), (r0 + w + 0.5, -0.06)]
@@ -915,7 +918,7 @@ def rock_pool():
         with plain_parts():
             # the windbreak on the pool's sea side, its stripes to the road,
             # low: along the road side or across the near end it stood in
-            # the west run's line to the sea arch and the crab boat
+            # the west run's line to the sea arch
             for k in range(5):
                 z = -4.4 + 0.9 * k
                 box((0.1, 0.95, 0.1), (-5.4 + 0.12 * math.sin(k * 1.7), 0.42, z), 0xfff6eb)
@@ -926,9 +929,9 @@ def rock_pool():
                 beam((x, -0.15, z), (x + lean, 1.15, z + 0.3 * lean), 0.09, 0xfff6eb)    # a dip net on its pole
                 box((0.36, 0.26, 0.36), (x + lean, 1.24, z + 0.3 * lean), c)
             for (x, z, c) in ((4.4, 0.6, 0xff5040), (4.9, -1.2, 0x339cf2), (3.6, 3.6, 0xffc044)):
-                cyl(0.2, 0.36, (x, 0.3, z), c, r2=0.25, segs=8)                          # a bucket
+                cyl(0.2, 0.5, (x, 0.02, z), c, r2=0.25, segs=8)                          # a bucket
     draped('things', things)
-    gull((math.cos(0.4) * 4.3, LIP, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
+    gull((math.cos(0.4) * 4.3, 0.12, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     ring = [(6.0 + 7.0 * math.cos(i * math.pi / 8), 3.6, 1.0 + 7.0 * math.sin(i * math.pi / 8)) for i in range(16)]
     for i, at in enumerate(ring):
         marker('path_soar_%d' % i, at)
@@ -1418,49 +1421,6 @@ def lifeboat_station():
     tidepool_surf([(SL1 - 1.0, -0.4, 3.0, 0.0)])
     join_still('station')
     on_a_rise()
-
-@piece(1.0)
-def crab_boat():
-    # Tidepool: the crab fishers' boat working the bay inside the headland,
-    # at a boat's size beside a car: a blue hull with a white wheelhouse and
-    # a tan lugsail, working its pots round the sea arch (at (-22.7, -15.4)
-    # of the headland's frame): in to the water between the rock pool and
-    # the arch, where the west run looks, out past the arch's north side
-    # and back (a longer round behind the arch kept it too far off to
-    # read), rising and falling on the
-    # swell, a wake at its stern. Placed on the headland's own spot (the
-    # west bend's centreline, -X its outside): out past the stacks, where it
-    # sailed before, the bend had turned the camera away (0.6 s a lap).
-    # (world units below: the piece is grown 1.5 where it stands, as the
-    # coble is, since at a boat's own size it stayed under the pixels a
-    # racer reads at that range)
-    loop = [(x / 1.5, 0.0, z / 1.5) for x, z in (
-        (-14.7, -24.7), (-19.9, -25.9), (-25.7, -26.1), (-31.0, -25.4), (-34.0, -22.6),
-        (-34.4, -26.4), (-29.9, -29.5), (-23.4, -30.2), (-17.5, -28.9), (-13.6, -27.0))]
-    for i, p in enumerate(loop):
-        marker('path_crab_%d' % i, p)
-    beach_sailing_boat('crab', 34.0, 0x339cf2, 0xf2bf99, loop[0])
-
-def beach_sailing_boat(chain, period, hull, sail, at):
-    """A beach boat under sail riding the closed path `chain` (bow along
-    its travel), at a boat's size beside a car: its hull, a white
-    wheelhouse, a lugsail on its mast, a wake at its stern, rising and
-    falling on the swell. A traveller is drawn where its path puts it, so
-    its rest spot is only where the GLB holds it: `at`, the path's first
-    point, so a reader of the bare GLB (the gallery's sight lines) finds
-    the boat on its water rather than on the road at the piece's anchor."""
-    ax, az = at[0], at[2]
-    with animated('anim_path:c=%s:p=%.0f:f=1+bob:h=0.12:p=2.6#boat' % (chain, period), (ax, 0.0, az)):
-        box((1.0, 0.45, 2.3), (ax, SEA + 0.1, az - 0.1), hull)
-        box((0.7, 0.45, 0.7), (ax, SEA + 0.1, az + 1.15), hull, yaw=math.pi / 4)
-        box((1.08, 0.12, 2.4), (ax, SEA + 0.38, az - 0.1), 0xfff6eb)
-        box((0.7, 0.6, 0.7), (ax, SEA + 0.72, az - 0.6), 0xfff6eb)                   # the wheelhouse
-        box((0.8, 0.1, 0.8), (ax, SEA + 1.06, az - 0.6), 0xcf534f)
-        box((0.12, 2.4, 0.12), (ax, SEA + 1.5, az + 0.35), 0x8a6a46)                  # the mast
-        prism([(az + 0.4, SEA + 0.85), (az + 0.5, SEA + 2.6), (az - 0.9, SEA + 2.2), (az - 0.7, SEA + 0.85)],
-              ax + 0.08, 0.06, sail)
-        for k in range(3):                                                         # the wake
-            box((0.5 + 0.3 * k, 0.04, 0.55), (ax, SEA + 0.02, az - 1.45 - 0.45 * k), 0xfff6eb)
 
 @piece(1.0)
 def tidepool_cottages():
@@ -3582,23 +3542,31 @@ def rock_poolers_park():
             (3.8, 'salmon', (), True))
     BUS = 9.6
     bays = [z for z, *_ in VANS] + [BUS]
-    path = [(4.0, -16.0), (2.4, -14.2), (-0.4, -11.6), (-0.9, -6.0), (-0.6, 0.0), (-1.0, 6.0), (-1.3, 11.0),
-            (-3.2, 14.6), (-6.8, 17.4)]
+    # (round 17, "the camper road starts and ends in nothing": it now leaves
+    # the main road in a flared mouth at the kerb's foot and ends in a
+    # turning circle round a turf island; its gravel is one colour and its
+    # edges smooth, where patches per quad had stepped like pixels)
+    # (its mouth stops at the margin every piece keeps from the deck, a
+    # stride short of the kerb's foot: tracks.js paints the sand between)
+    path = [(4.1, -10.8), (3.0, -11.0), (1.6, -10.8), (0.0, -9.6), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
+            (-1.3, 10.4), (-2.0, 12.5)]
+    CX, CZ, CR = -3.7, 14.9, 3.1                           # the turning circle
     for _ in range(3):                                    # Chaikin: its bends worn round
         path = [path[0]] + [q for a_, b_ in zip(path, path[1:])
                             for q in ((0.75 * a_[0] + 0.25 * b_[0], 0.75 * a_[1] + 0.25 * b_[1]),
                                       (0.25 * a_[0] + 0.75 * b_[0], 0.25 * a_[1] + 0.75 * b_[1]))] + [path[-1]]
-    # across it, from its sea side: the ragged edge, the gravel, the ruts a
-    # car's track apart with the hump between, the gravel, the edge; a bay on
-    # the sea side for each van
+    # across it, from its sea side: the edge, the gravel, the ruts a car's
+    # track apart with the hump between, the gravel, the edge; a bay on the
+    # sea side for each van; wider at the mouth
     RUT0, RUT1, Y = 0.3, 0.68, 0.05
     rows = []
     for i, (x, z) in enumerate(path):
         a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
         L = math.hypot(b_[0] - a_[0], b_[1] - a_[1]) or 1.0
         nx, nz = -(b_[1] - a_[1]) / L, (b_[0] - a_[0]) / L          # to the left of the way it runs
-        sea = 1.4 + 0.3 * noise2(0.5 * i, 1.5, 4.2) + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
-        road = 1.4 + 0.3 * noise2(0.5 * i, 3.5, 4.2)
+        flare = 1.0 + 0.6 * smooth01(1.0 - math.hypot(x - path[0][0], z - path[0][1]) / 3.0)
+        sea = 1.4 * flare + max(1.7 * smooth01(2.0 - abs(z - bz)) for bz in bays)
+        road = 1.4 * flare
         offs = (-sea, -0.5 * (sea + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (road + RUT1), road)
         rows.append([(x + nx * o, Y, z + nz * o) for o in offs])
     def lane():
@@ -3607,21 +3575,37 @@ def rock_poolers_park():
             for j in range(7):
                 if j in (2, 4):
                     key = ('bark', 12)                               # the ruts
-                elif j == 3 and noise2(0.35 * i, 0.5, 4.2) > 0.0:
+                elif j == 3 and 3 < i < len(rows) - 2:
                     key = ('leaf', 24)                               # turf on the hump
-                else:                                                # the gravel, worn darker in long patches
-                    key = ('bark', 2) if noise2(0.3 * i, 0.9 * j, 7.7) > 0.12 else ('gravel', 31)
+                else:
+                    key = ('gravel', 31)                             # the gravel
                 q = [rows[i][j], rows[i][j + 1], rows[i + 1][j + 1], rows[i + 1][j]]
+                if face_normal(q)[1] < 0:
+                    q = q[::-1]
+                groups.setdefault(key, []).append(q)
+        # the turning circle: turf island, gravel, the rut the vans wear round it, gravel
+        N = 24
+        for (r0, r1, key) in ((0.0, 1.0, ('leaf', 24)), (1.0, 1.5, ('gravel', 31)), (1.5, 1.95, ('bark', 12)),
+                              (1.95, CR, ('gravel', 31))):
+            for k in range(N):
+                a0, a1 = 2 * math.pi * k / N, 2 * math.pi * (k + 1) / N
+                q = [(CX + r0 * math.cos(a0), Y + 0.02, CZ + r0 * math.sin(a0)), (CX + r1 * math.cos(a0), Y + 0.02, CZ + r1 * math.sin(a0)),
+                     (CX + r1 * math.cos(a1), Y + 0.02, CZ + r1 * math.sin(a1)), (CX + r0 * math.cos(a1), Y + 0.02, CZ + r0 * math.sin(a1))]
+                if r0 == 0.0:
+                    q = q[:3]
                 if face_normal(q)[1] < 0:
                     q = q[::-1]
                 groups.setdefault(key, []).append(q)
         for (sw, row), qs in groups.items():
             for o in colored_faces([(sw, q) for q in qs], 'lane'):
                 rowed(o, row)
-        # marram and a few stones along both edges, every couple of units
+    # marram and a few stones along both edges, every couple of units: a
+    # part of their own, so the lane's skin alone (a print on the ground,
+    # which may run to the kerb) reaches the road's margin
+    def verge():
         with plain_parts():
             for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
-                for k in range(2, len(edge) - 2, 4):
+                for k in range(14, len(edge) - 2, 4):               # none at the mouth
                     x, _, z = edge[k]
                     if side < 0 and any(abs(z - bz) < 1.8 for bz in bays):
                         continue                                     # the bays' mouths kept open
@@ -3638,6 +3622,7 @@ def rock_poolers_park():
                         beam((cx, -0.05, cz), (cx + 0.32 * math.cos(aa), 0.3 + 0.1 * (t % 3), cz + 0.32 * math.sin(aa)),
                              0.1, 'olive' if t % 2 else 0x6faa62, d=0.04)
     draped('lane', lane)
+    draped('verge', verge)
     for (z, lower, boards, pop) in VANS:
         camper(-2.5, z, -math.pi / 2, lower, boards=boards, pop=pop)
     # the minibus in the last bay, longer and taller still
@@ -4009,66 +3994,82 @@ def lagoon_fleet():
     draped('mooring', stone_anchor)
 
 # Riptide's causeway, the road's centreline in the rail's own frame (placed
-# astride it, lat 0, yaw 0, at tracks.js's u 0.515): (x, z, nx, nz, deck) a
-# unit apart from t = RIP_T, (nx, nz) the road's left, the open sea's side,
-# `deck` the road's top over the plain. Re-sample if the road or the
-# placement moves (as DRIFT_ROAD).
-RIP_T = -32
+# astride it, lat 0, yaw 0, at tracks.js's u 0.515): (x, z, nx, nz, deck,
+# half) a unit apart from t = RIP_T, (nx, nz) the road's left, the open sea's
+# side, `deck` the road's top over the plain, `half` the road's half width
+# kerb to kerb (the causeway carries no sand: tracks.js sandOffFrom/To).
+# Re-sample if the road, its sand or the placement moves (as DRIFT_ROAD).
+RIP_T = -40
 RIP_ROAD = (
-    (-16.598, -23.938, 0.3648, -0.9311, 1.01), (-15.713, -23.572, 0.3994, -0.9168, 1.07), (-14.838, -23.171, 0.4334, -0.9012, 1.14), (-13.973, -22.735, 0.4663, -0.8847, 1.21),
-    (-13.120, -22.265, 0.4981, -0.8671, 1.30), (-12.283, -21.764, 0.5292, -0.8485, 1.39), (-11.465, -21.233, 0.5599, -0.8286, 1.48), (-10.671, -20.674, 0.5903, -0.8071, 1.56),
-    (-9.904, -20.090, 0.6208, -0.7840, 1.63), (-9.164, -19.480, 0.6510, -0.7591, 1.69), (-8.445, -18.838, 0.6793, -0.7339, 1.74), (-7.746, -18.167, 0.7059, -0.7083, 1.80),
-    (-7.070, -17.468, 0.7314, -0.6819, 1.84), (-6.420, -16.746, 0.7555, -0.6552, 1.88), (-5.798, -16.002, 0.7785, -0.6276, 1.91), (-5.207, -15.241, 0.8008, -0.5989, 1.92),
-    (-4.647, -14.463, 0.8224, -0.5689, 1.93), (-4.113, -13.661, 0.8426, -0.5385, 1.91), (-3.606, -12.835, 0.8615, -0.5078, 1.89), (-3.127, -11.988, 0.8791, -0.4766, 1.85),
-    (-2.678, -11.124, 0.8958, -0.4445, 1.81), (-2.262, -10.246, 0.9114, -0.4114, 1.76), (-1.880, -9.358, 0.9263, -0.3769, 1.70), (-1.536, -8.462, 0.9402, -0.3407, 1.65),
-    (-1.227, -7.553, 0.9526, -0.3042, 1.58), (-0.950, -6.627, 0.9633, -0.2683, 1.50), (-0.707, -5.687, 0.9725, -0.2327, 1.42), (-0.499, -4.738, 0.9804, -0.1972, 1.33),
-    (-0.325, -3.782, 0.9869, -0.1614, 1.24), (-0.186, -2.824, 0.9921, -0.1251, 1.16), (-0.083, -1.867, 0.9961, -0.0881, 1.09), (-0.020, -0.922, 0.9990, -0.0445, 1.03),
-    (0.000, 0.000, 1.0000, -0.0000, 0.97), (-0.019, 0.914, 0.9992, 0.0403, 0.93), (-0.072, 1.834, 0.9973, 0.0733, 0.88), (-0.153, 2.778, 0.9952, 0.0983, 0.85),
-    (-0.259, 3.761, 0.9934, 0.1148, 0.81), (-0.384, 4.799, 0.9924, 0.1233, 0.78), (-0.511, 5.792, 0.9913, 0.1316, 0.76), (-0.634, 6.675, 0.9893, 0.1457, 0.75),
-    (-0.780, 7.624, 0.9876, 0.1569, 0.74), (-0.944, 8.627, 0.9861, 0.1663, 0.73), (-1.125, 9.670, 0.9847, 0.1744, 0.73), (-1.318, 10.740, 0.9833, 0.1818, 0.73),
-    (-1.523, 11.824, 0.9821, 0.1886, 0.73), (-1.735, 12.907, 0.9808, 0.1952, 0.74), (-1.951, 13.977, 0.9794, 0.2018, 0.74), (-2.170, 15.021, 0.9780, 0.2087, 0.75),
-    (-2.388, 16.024, 0.9764, 0.2161, 0.76), (-2.603, 16.974, 0.9745, 0.2245, 0.76), (-2.811, 17.857, 0.9721, 0.2345, 0.76), (-3.010, 18.660, 0.9690, 0.2471, 0.77),
-    (-3.227, 19.483, 0.9655, 0.2603, 0.77), (-3.524, 20.561, 0.9614, 0.2752, 0.77), (-3.809, 21.490, 0.9490, 0.3153, 0.77), (-4.121, 22.341, 0.9262, 0.3770, 0.77),
-    (-4.502, 23.185, 0.8956, 0.4449, 0.77), (-4.969, 24.051, 0.8641, 0.5034, 0.77), (-5.500, 24.901, 0.8305, 0.5570, 0.77), (-6.086, 25.717, 0.7937, 0.6083, 0.77),
-    (-6.718, 26.490, 0.7526, 0.6585, 0.77),
+    (-24.082, -25.627, 0.0371, -0.9993, 0.75, 4.70), (-23.134, -25.566, 0.0937, -0.9956, 0.76, 4.70), (-22.188, -25.447, 0.1519, -0.9884, 0.78, 4.70), (-21.242, -25.284, 0.1895, -0.9819, 0.80, 4.70),
+    (-20.296, -25.083, 0.2258, -0.9742, 0.83, 4.70), (-19.356, -24.847, 0.2612, -0.9653, 0.87, 4.54), (-18.423, -24.577, 0.2960, -0.9552, 0.91, 4.37), (-17.503, -24.273, 0.3305, -0.9438, 0.96, 4.21),
+    (-16.598, -23.938, 0.3648, -0.9311, 1.01, 4.05), (-15.713, -23.572, 0.3994, -0.9168, 1.07, 3.89), (-14.838, -23.171, 0.4334, -0.9012, 1.14, 3.64), (-13.973, -22.735, 0.4663, -0.8847, 1.21, 3.48),
+    (-13.120, -22.265, 0.4981, -0.8671, 1.30, 3.31), (-12.283, -21.764, 0.5292, -0.8485, 1.39, 3.15), (-11.465, -21.233, 0.5599, -0.8286, 1.48, 2.99), (-10.671, -20.674, 0.5903, -0.8071, 1.56, 2.83),
+    (-9.904, -20.090, 0.6208, -0.7840, 1.63, 2.66), (-9.164, -19.480, 0.6510, -0.7591, 1.69, 2.50), (-8.445, -18.838, 0.6793, -0.7339, 1.74, 2.50), (-7.746, -18.167, 0.7059, -0.7083, 1.80, 2.50),
+    (-7.070, -17.468, 0.7314, -0.6819, 1.84, 2.50), (-6.420, -16.746, 0.7555, -0.6552, 1.88, 2.50), (-5.798, -16.002, 0.7785, -0.6276, 1.91, 2.50), (-5.207, -15.241, 0.8008, -0.5989, 1.92, 2.50),
+    (-4.647, -14.463, 0.8224, -0.5689, 1.93, 2.50), (-4.113, -13.661, 0.8426, -0.5385, 1.91, 2.50), (-3.606, -12.835, 0.8615, -0.5078, 1.89, 2.50), (-3.127, -11.988, 0.8791, -0.4766, 1.85, 2.50),
+    (-2.678, -11.124, 0.8958, -0.4445, 1.81, 2.50), (-2.262, -10.246, 0.9114, -0.4114, 1.76, 2.50), (-1.880, -9.358, 0.9263, -0.3769, 1.70, 2.50), (-1.536, -8.462, 0.9402, -0.3407, 1.65, 2.50),
+    (-1.227, -7.553, 0.9526, -0.3042, 1.58, 2.50), (-0.950, -6.627, 0.9633, -0.2683, 1.50, 2.50), (-0.707, -5.687, 0.9725, -0.2327, 1.42, 2.50), (-0.499, -4.738, 0.9804, -0.1972, 1.33, 2.50),
+    (-0.325, -3.782, 0.9869, -0.1614, 1.24, 2.50), (-0.186, -2.824, 0.9921, -0.1251, 1.16, 2.50), (-0.083, -1.867, 0.9961, -0.0881, 1.09, 2.50), (-0.020, -0.922, 0.9990, -0.0445, 1.03, 2.50),
+    (0.000, 0.000, 1.0000, -0.0000, 0.97, 2.50), (-0.019, 0.914, 0.9992, 0.0403, 0.93, 2.50), (-0.072, 1.834, 0.9973, 0.0733, 0.88, 2.50), (-0.153, 2.778, 0.9952, 0.0983, 0.85, 2.50),
+    (-0.259, 3.761, 0.9934, 0.1148, 0.81, 2.50), (-0.384, 4.799, 0.9924, 0.1233, 0.78, 2.50), (-0.511, 5.792, 0.9913, 0.1316, 0.76, 2.50), (-0.634, 6.675, 0.9893, 0.1457, 0.75, 2.50),
+    (-0.780, 7.624, 0.9876, 0.1569, 0.74, 2.50), (-0.944, 8.627, 0.9861, 0.1663, 0.73, 2.50), (-1.125, 9.670, 0.9847, 0.1744, 0.73, 2.50), (-1.318, 10.740, 0.9833, 0.1818, 0.73, 2.50),
+    (-1.523, 11.824, 0.9821, 0.1886, 0.73, 2.50), (-1.735, 12.907, 0.9808, 0.1952, 0.74, 2.50), (-1.951, 13.977, 0.9794, 0.2018, 0.74, 2.50), (-2.170, 15.021, 0.9780, 0.2087, 0.75, 2.50),
+    (-2.388, 16.024, 0.9764, 0.2161, 0.76, 2.50), (-2.603, 16.974, 0.9745, 0.2245, 0.76, 2.50), (-2.811, 17.857, 0.9721, 0.2345, 0.76, 2.50), (-3.010, 18.660, 0.9690, 0.2471, 0.77, 2.50),
+    (-3.227, 19.483, 0.9655, 0.2603, 0.77, 2.50), (-3.524, 20.561, 0.9614, 0.2752, 0.77, 2.50), (-3.809, 21.490, 0.9490, 0.3153, 0.77, 2.50), (-4.121, 22.341, 0.9262, 0.3770, 0.77, 2.50),
+    (-4.502, 23.185, 0.8956, 0.4449, 0.77, 2.50), (-4.969, 24.051, 0.8641, 0.5034, 0.77, 2.50), (-5.500, 24.901, 0.8305, 0.5570, 0.77, 2.50), (-6.086, 25.717, 0.7937, 0.6083, 0.77, 2.50),
+    (-6.718, 26.490, 0.7526, 0.6585, 0.77, 2.58), (-7.393, 27.211, 0.7062, 0.7080, 0.77, 2.74), (-8.118, 27.888, 0.6582, 0.7528, 0.77, 2.91), (-8.889, 28.521, 0.6095, 0.7928, 0.77, 3.07),
+    (-9.698, 29.104, 0.5592, 0.8290, 0.77, 3.31), (-10.534, 29.630, 0.5060, 0.8625, 0.77, 3.48), (-11.405, 30.104, 0.4507, 0.8927, 0.77, 3.64),
 )
 
-def riptide_rail_at(t, d):
-    """(x, deck, z) of the point `d` left of the causeway `t` along it."""
+def riptide_rail_at(t, d, out=0.0):
+    """(x, deck, z) of the point `d` left of the causeway `t` along it, or
+    with `out` that far past the kerb on the side of its sign."""
     f = min(max(t - RIP_T, 0.0), len(RIP_ROAD) - 1.001)
     i = int(f)
     a, b, k = RIP_ROAD[i], RIP_ROAD[i + 1], f - i
     nx, nz = a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k
     n = math.hypot(nx, nz)
+    if out:
+        d = (1 if out > 0 else -1) * (a[5] + (b[5] - a[5]) * k + 0.5 + abs(out))
     return a[0] + (b[0] - a[0]) * k + nx / n * d, a[4] + (b[4] - a[4]) * k, a[1] + (b[1] - a[1]) * k + nz / n * d
 
 @piece(1.0)
 def causeway_rail():
     # Riptide: what makes the road over the shallows a causeway from the
-    # seat (it read as one more beach road between its sand verges): timber
-    # piles standing out of the water a stride past each kerb, the hop's
-    # length and the causeway's, their heads a car's height over the deck,
-    # a heavy rope slung from head to head, a life ring on a pile here and
-    # there on the sea's side. One piece astride the road (RIP_ROAD); the
-    # sim never sees it, and it stands clear of both kerbs.
+    # seat: timber piles standing out of the water a hand past each kerb,
+    # the hop's length and the causeway's, their heads a car's height over
+    # the deck, a heavy rope slung from head to head, a life ring on a pile
+    # here and there on the sea's side. The causeway carries no sand
+    # (tracks.js), so the kerbs stand at the asphalt's edge and the piles
+    # and the water right beside them. Where the road leaves the land and
+    # where it comes back, a taller pair of piles with a lamp each: the
+    # gate onto the water. One piece astride the road (RIP_ROAD); the sim
+    # never sees it, and it stands clear of both kerbs.
     wood, dark, rope, red, white = 0x8a6a46, 0x6e5b3a, 0xfde4c7, 0xff5040, 0xfff6eb
-    STEP, D, HEAD, HANG = 3.4, 6.05, 1.05, 0.8
+    STEP, OUT, HEAD, HANG = 3.2, 0.45, 1.05, 0.8
+    T0, T1 = -28.0, 29.6
     with plain_parts():
         for side in (1, -1):
             prev = None
-            n = int((26.0 + 30.0) / STEP)
+            n = int(round((T1 - T0) / STEP))
             for i in range(n + 1):
-                t = -30.0 + STEP * i
-                x, deck, z = riptide_rail_at(t, side * D)
-                top = deck + HEAD + 0.08 * jitter(i, side + 2, 4.0)
-                box((0.34, top + 1.2, 0.34), (x, (top - 1.2) / 2, z), wood if (i + side) % 3 else dark, yaw=0.5 * i)
-                box((0.44, 0.12, 0.44), (x, top + 0.02, z), white, yaw=0.5 * i)          # its cap
+                t = T0 + STEP * i
+                x, deck, z = riptide_rail_at(t, 0.0, out=side * OUT)
+                gate = i in (0, n)
+                top = deck + (2.3 if gate else HEAD + 0.08 * jitter(i, side + 2, 4.0))
+                w = 0.42 if gate else 0.34
+                box((w, top + 1.4, w), (x, (top - 1.4) / 2, z), wood if (i + side) % 3 else dark, yaw=0.5 * i)
+                box((w + 0.1, 0.12, w + 0.1), (x, top + 0.02, z), white, yaw=0.5 * i)    # its cap
+                if gate:
+                    rowed(box((0.3, 0.34, 0.3), (x, top + 0.25, z), 'yellow', yaw=0.5 * i), 0)   # the lamp
+                    box((0.4, 0.1, 0.4), (x, top + 0.46, z), red, yaw=0.5 * i)
                 if prev:
                     mid = ((prev[0] + x) / 2, (prev[1] + deck) / 2 + HANG - 0.22, (prev[2] + z) / 2)
                     beam((prev[0], prev[1] + HANG, prev[2]), mid, 0.13, rope)
                     beam(mid, (x, deck + HANG, z), 0.13, rope)
                 if side > 0 and i % 5 == 2:
-                    ox, _, oz = riptide_rail_at(t, side * (D - 0.24))
+                    ox, _, oz = riptide_rail_at(t, 0.0, out=side * (OUT - 0.24))
                     torus(0.3, 0.1, (ox, deck + 0.45, oz), red, segs=8, axis='across', yaw=0.0)
                 prev = (x, deck, z)
     join_still('rail')
@@ -4389,6 +4390,7 @@ def strand_snags():
         rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'cream', r2=0.1, segs=7)
     gull((0.4 + math.cos(4.0) * 0.44, 4.38, -0.6 + math.sin(4.0) * 0.44), 1.0, 'anim_watch:r=26#snag')   # on its top
     join_still('snags')
+    on_a_rise()
 
 def dune_fence(name, seed, half, breaks):
     """A run of storm fence along a dune's foot, `half` either way along
@@ -4528,14 +4530,16 @@ def strand_groynes():
     with bleached():
         # round 10: on out past the waterline into the surf, the posts
         # standing lower as the beach shelves, the sea breaking along them
-        groyne(-5.5, 2.2, -19.0, 2.0, 0.9, 1.0)
-        groyne(5.5, 2.4, -17.5, 1.8, 0.85, 2.0, gaps=(5, 6, 10))
-    for (z, x, h, col) in ((-5.5, -19.9, 2.6, 0xff5040), (5.5, -18.4, 2.4, 0x22c46e)):   # the beacon posts, port and starboard
+        # (round 17: taller, 2.0/1.8 falling to 0.9 stood under the kerb's
+        # line from the road for most of their length)
+        groyne(-5.5, 2.2, -19.0, 2.7, 1.5, 1.0)
+        groyne(5.5, 2.4, -17.5, 2.5, 1.4, 2.0, gaps=(5, 6, 10))
+    for (z, x, h, col) in ((-5.5, -19.9, 3.2, 0xff5040), (5.5, -18.4, 3.0, 0x22c46e)):   # the beacon posts, port and starboard
         box((0.3, h + 0.5, 0.3), (x, (h - 0.5) / 2, z), 0xfff6eb)
         box((0.32, 0.6, 0.32), (x, h * 0.55, z), col)
         box((0.7, 0.6, 0.7), (x, h + 0.25, z), col)
         box((0.5, 0.12, 0.5), (x, h - 0.2, z), 0xfff6eb)
-    gull((-19.9, 3.08, -5.5), 2.0, 'anim_watch:r=26#beacon')
+    gull((-19.9, 3.68, -5.5), 2.0, 'anim_watch:r=26#beacon')
     for k, (x, z) in enumerate(((-15.0, -6.1), (-13.5, 4.9), (-18.5, -4.9))):
         with animated('anim_bob:h=0.3:p=%.1f:r=0.35#break%d' % (3.0 + 0.6 * k, k), (x, 0.0, z)):
             box((1.6, 0.3, 0.6), (x, SEA + 0.05, z), 0xfff6eb, yaw=0.2 * k)
@@ -5169,20 +5173,6 @@ def boat_huts():
     for i, c in enumerate(('green', 'sky', 'green')):
         box((0.06, 1.3, 0.5), (0.9, 1.45, -9.4 + 0.55 * i), c)
     join_still('huts')
-
-@piece(1.0)
-def drift_coble():
-    # Driftwood: a beach boat under its brown lugsail working in and out
-    # BETWEEN the groynes (placed on the groynes' spot, on the road's
-    # centreline, grown 1.5 there): in to the shallows a few strides off the
-    # kerb, where the racers passing the groynes look, and out past the
-    # beacon posts and back. Its old round out beyond the groynes' ends read
-    # 0.4 s a lap and ran through their posts. The sea's side is +X here.
-    loop = [(18.5 + 6.0 * math.cos(i / 14 * 2 * math.pi), 0.0, 1.5 * math.sin(i / 14 * 2 * math.pi))
-            for i in range(14)]
-    for i, p in enumerate(loop):
-        marker('path_coble_%d' % i, p)
-    beach_sailing_boat('coble', 30.0, 0xcf534f, 0xb06041, loop[0])
 
 @piece(1.0)
 def smokehouse():

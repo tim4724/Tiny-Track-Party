@@ -490,7 +490,6 @@ export const TRACKS = {
       // the kelp the tide left between them
       { model: 'set-tide-ledges', u: 0.395, lat: 10 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
-      { model: 'set-crab-boat', u: 0.72, lat: 0, scale: 1.5 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
@@ -521,6 +520,8 @@ export const TRACKS = {
       { kind: 'paint', u: 0.42, lat: -12, len: 30, r: 6, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.66, lat: -11, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
       { kind: 'paint', u: 0.9, lat: -12, len: 30, r: 5.5, w: 4, tint: 0x6faa62 },
+      // the camper lane's gravel carried on to the kerb's foot at its mouth
+      { kind: 'paint', u: 0.9405, lat: 5.9, len: 3, r: 0.8, w: 1.2, tint: 0xcbbfae },
       // the knoll at the waist (the piece brings it: SET_GROUND), green to
       // the kerb; and the downs across the road
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
@@ -528,6 +529,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
       // the lifeboat station's rock over the beach, at the road's height
       { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
+      // the reef terrace the rock pool lies in, at the road's height, so
+      // the seat looks onto its water (flat on the beach it was a sliver)
+      { kind: 'ridge', u: 0.675, lat: 20, len: 10, r: 13, h: 1.0, top: 0.55, near: 0.4, w: 5 },
       // the hard the crab fishers' landing stands on, at the hop's height
       { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
       // the sand the tide has just left, darker and cooler round the reef
@@ -668,7 +672,9 @@ export const TRACKS = {
     // posts running down into the surf, the beachcombers' fort on its jam
     // of logs. Up the pass, storm fence and marram hold the dunes' feet.
     set: [
-      { model: 'set-strand-snags', u: 0.15, lat: -9.5, yaw: 180 },
+      // on a beach rise: on the plain the dead trees' feet and the fallen
+      // ones stood under the kerb's line
+      { model: 'set-strand-snags', u: 0.15, lat: -9.5, yaw: 180, y: 0.7 },
       { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
       { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
       { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
@@ -687,8 +693,6 @@ export const TRACKS = {
       // that carries the road in its own frame (set_prototypes.py
       // DRIFT_ROAD: re-sample it if this u or the road moves)
       { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
-      // a beach boat working in and out between the groynes
-      { model: 'set-drift-coble', u: 0.389, lat: 0, scale: 1.5 },
       // the storm's wrack piled on the point where the road turns back
       { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
       // the smokehouse where the start straight bends away, which it points at
@@ -739,12 +743,17 @@ export const TRACKS = {
       { kind: 'clear', u: 0.18, lat: 14, len: 30, r: 9 },
       { kind: 'clear', u: 0.34, lat: 11, len: 26, r: 6 },
       { kind: 'clear', u: 0.41, lat: 11, len: 26, r: 6 },
+      { kind: 'ridge', u: 0.15, lat: -16, len: 14, r: 12, h: 0.72, top: 0.55, near: 0.4, w: 3 },
       // the storm sea comes up the beach to the strand line it left
       { kind: 'shore', u: 0.37, lat: -16.2, len: 110, r: 40 }
     ]
   },
   riptide: {
     name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
+    // no sand on the causeway: over the water the kerbs stand at the asphalt's edge
+    // (from past where the hop's piles begin: the strip easing out across that
+    // ring left the verge's apron inside the narrowing deck)
+    sandOffFrom: 0.452, sandOffTo: 0.585,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,

@@ -152,7 +152,7 @@ function bananaInit(f) {
 }
 
 // ---- descriptor ----
-const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
+const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'sandOffFrom', 'sandOffTo', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
 
 // ---- set pieces (renderer-only: the builder never reads them) ----
 // `model` names a GLB under public/assets/toycar that scripts/gen-set-pieces.mjs
@@ -305,7 +305,7 @@ for (const id of [...trackIds, ...devIds]) {
   const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
   perTrack.push(`  { ${JSON.stringify(id)}, ${JSON.stringify(desc.name || id)}, ${cup}, `
     + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
-    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${D(startU)}, `
+    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${D(desc.sandOffFrom ?? 0)}, ${D(desc.sandOffTo ?? 0)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
     + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet}, `
     + `${landRef}, ${lands.length} }`);

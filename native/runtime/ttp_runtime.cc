@@ -203,6 +203,8 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
   const double width = numOr(desc, "width", 0);
   p.def.width = width != 0 ? width : kRoadWidthFallback;
   p.def.sand = numOr(desc, "sand", 0);
+  p.def.sandOffFrom = numOr(desc, "sandOffFrom", 0);
+  p.def.sandOffTo = numOr(desc, "sandOffTo", 0);
   p.def.startU = numOr(desc, "startU", 0);
 
   if (isSpline) {
