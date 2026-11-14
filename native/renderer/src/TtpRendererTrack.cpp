@@ -1644,6 +1644,11 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // the skirt under it) out; the deck's points stay.
     // A point's lateral offset from its kerb at ring i: the gap's two edges
     // follow that ring's own gap (the sand, where there is some).
+    // Whether ring i carries sand in its gap. A sand track's stretch without
+    // any (a causeway: tracks.js sandOffFrom/To) keeps the gap every deck has
+    // (deckGap), and that is asphalt: sand-coloured, it drew a yellow hairline
+    // inside both kerbs the length of the bridge.
+    const auto sandOn = [&](uint32_t i) { return tb.sand > 0 && frames[i].sand > 0.03f; };
     const auto offAt = [&](uint32_t i, int j) {
         const float g = tb.gapOf(frames[i]);
         switch (j) {
@@ -1820,7 +1825,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                     break;
                 case K_DASH: cb = bare ? ASPHALT : (dashOn(i) ? DASHC : ASPHALT); break;
                 case K_LINE: cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER); break;
-                case K_GAP: cb = tb.sand > 0 ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
+                case K_GAP: cb = sandOn(i) || sandOn(ni) ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
                 default: cb = ASPHALT; break;
             }
             if (game >= 0 && st.kind != K_KERB && st.kind != K_SKIRT) cb = GAME[game][0];
@@ -1877,7 +1882,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // A sand strip's alpha is 0: vroad.mat reads it as "a tyre
                 // leaves a groove here, not rubber". The deck is opaque, so the
                 // alpha is free.
-                const float flag = (st.kind == K_GAP && tb.sand > 0) ? 0.0f : 1.0f;
+                const float flag = (st.kind == K_GAP && sandOn(ri)) ? 0.0f : 1.0f;
                 corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, ao, flag) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,

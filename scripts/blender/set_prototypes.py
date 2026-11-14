@@ -3555,8 +3555,7 @@ def rock_poolers_park():
     # no footprint: the verge's ground runs on under them at the kerb's
     # height and the mouth reaches the kerb's own foot)
     path = [(5.85, -11.4), (4.6, -11.7), (2.4, -11.4), (0.2, -10.0), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
-            (-1.3, 10.4), (-2.0, 12.5)]
-    CX, CZ, CR = -3.7, 14.9, 3.1                           # the turning circle
+            (-1.3, 10.4), (-1.5, 12.6), (-1.6, 14.2)]
     for _ in range(3):                                    # Chaikin: its bends worn round
         path = [path[0]] + [q for a_, b_ in zip(path, path[1:])
                             for q in ((0.75 * a_[0] + 0.25 * b_[0], 0.75 * a_[1] + 0.25 * b_[1]),
@@ -3565,6 +3564,16 @@ def rock_poolers_park():
     # track apart with the hump between, the gravel, the edge; a bay on the
     # sea side for each van; wider at the mouth
     RUT0, RUT1, Y = 0.3, 0.68, 0.05
+    # The turning loop (round 18, "the loop is not connected to the road": a
+    # closed ring of rut on a disc at the lane's end, the lane's own ruts
+    # stopping at its rim). The lane now runs INTO it: it meets the loop's
+    # line at a tangent, so its two ruts carry on as the loop's two, round
+    # the turf island and back into the lane. Its shoulders narrow away over
+    # its last strides, where the loop's gravel lies under it.
+    LOOP = 2.3                                             # the loop's radius, on the wheels' centreline
+    (ex, ez), (px_, pz_) = path[-1], path[-2]
+    eL = math.hypot(ex - px_, ez - pz_)
+    CX, CZ = ex - (ez - pz_) / eL * LOOP, ez + (ex - px_) / eL * LOOP      # to the lane's left, the sea's side
     rows = []
     for i, (x, z) in enumerate(path):
         a_, b_ = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
@@ -3576,6 +3585,8 @@ def rock_poolers_park():
         # (n points to the sea, -X, as the lane runs +Z: the bays go on the
         # positive side. They bulged toward the road until round 17, a
         # ragged apron on the wrong side with the vans beside bare sand.)
+        k = smooth01(math.hypot(x - ex, z - ez) / 3.2)     # the shoulders, gone at the loop
+        road, sea = RUT1 + 0.02 + (road - RUT1) * k, RUT1 + 0.02 + (sea - RUT1) * k
         offs = (-road, -0.5 * (road + RUT1), -RUT1, -RUT0, RUT0, RUT1, 0.5 * (sea + RUT1), sea)
         rows.append([(x + nx * o, Y, z + nz * o) for o in offs])
     def lane():
@@ -3584,7 +3595,7 @@ def rock_poolers_park():
             for j in range(7):
                 if j in (2, 4):
                     key = ('bark', 12)                               # the ruts
-                elif j == 3 and 6 < i < len(rows) - 2 and noise2(0.12 * i, 0.5, 4.2) > 0.1:
+                elif j == 3 and 6 < i < len(rows) - 12 and noise2(0.12 * i, 0.5, 4.2) > 0.1:
                     key = ('olive', 6)                               # a faint grass crown, in lengths
                 else:
                     key = ('gravel', 31)                             # the gravel
@@ -3592,14 +3603,20 @@ def rock_poolers_park():
                 if face_normal(q)[1] < 0:
                     q = q[::-1]
                 groups.setdefault(key, []).append(q)
-        # the turning circle: turf island, gravel, the rut the vans wear round it, gravel
-        N = 24
-        for (r0, r1, key) in ((0.0, 1.0, ('olive', 6)), (1.0, 1.5, ('gravel', 31)), (1.5, 1.95, ('bark', 12)),
-                              (1.95, CR, ('gravel', 31))):
+        # the turning loop, a hand under the lane's end: the turf island,
+        # gravel, the two ruts the lane's run on into, gravel
+        N = 28
+        for (r0, r1, key) in ((0.0, LOOP - 1.25, ('olive', 6)), (LOOP - 1.25, LOOP - RUT1, ('gravel', 31)),
+                              (LOOP - RUT1, LOOP - RUT0, ('bark', 12)), (LOOP - RUT0, LOOP + RUT0, ('gravel', 31)),
+                              (LOOP + RUT0, LOOP + RUT1, ('bark', 12)), (LOOP + RUT1, LOOP + 2.0, ('gravel', 31))):
             for k in range(N):
                 a0, a1 = 2 * math.pi * k / N, 2 * math.pi * (k + 1) / N
-                q = [(CX + r0 * math.cos(a0), Y + 0.02, CZ + r0 * math.sin(a0)), (CX + r1 * math.cos(a0), Y + 0.02, CZ + r1 * math.sin(a0)),
-                     (CX + r1 * math.cos(a1), Y + 0.02, CZ + r1 * math.sin(a1)), (CX + r0 * math.cos(a1), Y + 0.02, CZ + r0 * math.sin(a1))]
+                # its gravel a hand under the lane, its ruts a hand over: the
+                # lane's ruts show across the loop's gravel, the loop's across
+                # the lane's own bay beside it
+                yq = Y + (0.02 if key[0] == 'bark' else -0.02)
+                q = [(CX + r0 * math.cos(a0), yq, CZ + r0 * math.sin(a0)), (CX + r1 * math.cos(a0), yq, CZ + r1 * math.sin(a0)),
+                     (CX + r1 * math.cos(a1), yq, CZ + r1 * math.sin(a1)), (CX + r0 * math.cos(a1), yq, CZ + r0 * math.sin(a1))]
                 if r0 == 0.0:
                     q = q[:3]
                 if face_normal(q)[1] < 0:
@@ -3614,7 +3631,7 @@ def rock_poolers_park():
     def verge():
         with plain_parts():
             for side, edge in ((-1, [r[0] for r in rows]), (1, [r[-1] for r in rows])):
-                for k in range(14, len(edge) - 2, 4):               # none at the mouth
+                for k in range(14, len(edge) - 18, 4):              # none at the mouth, none in the loop
                     x, _, z = edge[k]
                     if side > 0 and any(abs(z - bz) < 1.8 for bz in bays):
                         continue                                     # the bays' mouths kept open
