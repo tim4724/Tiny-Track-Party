@@ -1315,8 +1315,8 @@ export const TRACKS = {
     // by the bends a picnic left out, a hay wain loaded, a trampoline, a
     // paddling pool;
     // the kite hill rising off the verge beyond the top loop, three kites
-    // flying low over its foot from stakes up the slope; the soapbox run
-    // staked out down the east down to the road. Nobody is about (children
+    // flying low over its foot from stakes up the slope; the soapbox
+    // race's start ramp and gate at the east down's foot. Nobody is about (children
     // that small read as specks). The other trees a racer passes are the
     // lawn's own scatter of the garden's broadleaf oaks.
     set: [
@@ -1332,7 +1332,7 @@ export const TRACKS = {
       { model: 'set-trampoline-oak', u: 0.115, lat: 7, yaw: 0, scale: 1.35 },
       { model: 'set-paddling-pool-oak', u: 0.34, lat: 7, yaw: 0, scale: 1.35 },
       { model: 'set-kite-flyers', u: 0.715, lat: -10, yaw: 180, scale: 1.4 },
-      { model: 'set-soapbox-run', u: 0.38, lat: 7.2, yaw: 0 }
+      { model: 'set-soapbox-start', u: 0.385, lat: 6.6, yaw: 0 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)
