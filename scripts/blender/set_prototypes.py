@@ -19667,8 +19667,8 @@ def games_card(cx, cy, cz, roll, back, red, flip=False, w=1.55, h=2.2, t=0.12):
     card, its pips on the +X side and its patterned back on the other
     (`flip` swaps them)."""
     box((t, h, w), (cx, cy, cz), 0xfdf4de, roll=roll)
-    def rect(side, y0, y1, z0, z1, color):
-        lx = side * (t / 2 + 0.012)
+    def rect(side, y0, y1, z0, z1, color, lift=0.012):
+        lx = side * (t / 2 + lift)
         pts = []
         for ly, lz in ((y0, z1), (y0, z0), (y1, z0), (y1, z1)):
             x, y = rollxy(lx, ly, roll)
@@ -19681,25 +19681,32 @@ def games_card(cx, cy, cz, roll, back, red, flip=False, w=1.55, h=2.2, t=0.12):
     for sy, sz in ((1, 1), (-1, -1)):
         rect(f, sy * (h / 2 - 0.42) - 0.14, sy * (h / 2 - 0.42) + 0.14, sz * (w / 2 - 0.3) - 0.09, sz * (w / 2 - 0.3) + 0.09, pip)
     rect(-f, -h / 2 + 0.16, h / 2 - 0.16, -w / 2 + 0.16, w / 2 - 0.16, back)
-    rect(-f, -0.3, 0.3, -0.22, 0.22, 0xfdf4de)
+    rect(-f, -0.3, 0.3, -0.22, 0.22, 0xfdf4de, lift=0.024)       # over the back's field, never in its plane
 
-def games_card_flat(x, y, z, yaw, back=None, red=True, w=1.55, h=2.2, t=0.07, pitch=0.0):
-    """A card lying on (x, y, z), long side along Z turned `yaw`: face up with
-    its pips, or its back up when `back` names the back's colour."""
+def games_card_flat(x, y, z, yaw, back=None, red=True, w=1.55, h=2.2):
+    """A card lying on the board at (x, z), long side along Z turned `yaw`:
+    face up with its pips, or its back up when `back` names the back's
+    colour. Its top lies CARD_LIE over the floor, clear above every print of
+    the board under it, and `y` higher for a card lying on another (a
+    card's own thickness at least: two faces a hair apart fight for the
+    depth buffer and flicker); its body runs down to the floor, so a
+    fanned pile is a stair of edges and nothing floats."""
+    top = CARD_LIE + y
     with transformed((x, 0, z), yaw):
-        box((w, t, h), (x, y + t / 2, z), 0xfdf4de, pitch=pitch)
-        if pitch:
-            return
-        ty = y + t + 0.012
+        box((w, top - 0.01, h), (x, 0.01 + (top - 0.01) / 2, z), 0xfdf4de)
+        ty = top + 0.012
         def rect(x0, x1, z0, z1, color):
             quad([(x + x0, ty, z + z0), (x + x0, ty, z + z1), (x + x1, ty, z + z1), (x + x1, ty, z + z0)], color)
         if back is not None:
             rect(-w / 2 + 0.16, w / 2 - 0.16, -h / 2 + 0.16, h / 2 - 0.16, back)
-            rect(-0.22, 0.22, -0.3, 0.3, 0xfdf4de)
+            quad([(x - 0.22, ty + 0.012, z - 0.3), (x - 0.22, ty + 0.012, z + 0.3), (x + 0.22, ty + 0.012, z + 0.3),
+                  (x + 0.22, ty + 0.012, z - 0.3)], 0xfdf4de)
         else:
             pip = CARD_RED if red else CARD_DARK
             for pz in (-0.55, 0.0, 0.55):
                 rect(-0.19, 0.19, pz - 0.19, pz + 0.19, pip)
+
+CARD_LIE = 0.26    # a lying card's top: the board's highest print is at 0.2
 
 @piece(1.0)
 def card_house():
@@ -19726,7 +19733,7 @@ def card_house():
     # the rest of the deck beside it: the pack and a few cards not yet built in
     box((1.8, 0.8, 2.5), (-1.2, 0.4, 2.6), 0x5a8fd8, yaw=0.5)
     games_card_flat(1.6, 0.0, 2.4, -0.4, back=0x5a8fd8)
-    games_card_flat(2.5, 0.07, 3.0, 0.5, red=False)
+    games_card_flat(2.5, 0.08, 3.0, 0.5, red=False)
     games_card_flat(-3.4, 0.0, 2.2, 1.1, red=True)
     merge_paint()
 
@@ -19795,7 +19802,7 @@ def game_pawns():
     box((0.06, 0.6, 1.3), (-0.84, 0.425, 6.62), 0xfdf4de, yaw=0.25)
     for k in range(7):                                                            # the spill, fanned out of its mouth
         a = -0.5 + 0.22 * k
-        games_card_flat(-2.3 - 0.75 * math.cos(a * 1.5) - 0.05 * k, 0.015 * k, 6.6 + 1.9 * math.sin(a * 1.5) + 0.25 * k,
+        games_card_flat(-2.3 - 0.75 * math.cos(a * 1.5) - 0.05 * k, 0.08 * k, 6.6 + 1.9 * math.sin(a * 1.5) + 0.25 * k,
                         math.pi / 2 + a, back=None if k % 3 else 0x5a8fd8, red=k % 2 == 0)
     H, A = 2.2, math.radians(20)
     D, HL = H * math.sin(A), H * math.cos(A)
@@ -19806,16 +19813,19 @@ def game_pawns():
 @piece(1.0)
 def snake_head():
     # Skysnake: the dive is the board's snake made road, and this is its
-    # head: a wooden toy snake's neck comes out from under the kerb at the
-    # dive's foot and coils twice on the board, the head resting on the
+    # head: a wooden toy snake coiled twice on the board at the dive's
+    # foot, clear of the kerb, its tail out along it, the head resting on the
     # coil at kerb height, turned back up the dive at the racers coming
     # down it, eyes up and its red tongue out. No taller than a pawn: a
     # rearing one over the deck was too big.
     G, Y = SNAKE
-    bar((5.05, 0.575, -5.05), (1.5, 0.575, -1.5), 2.0, 1.15, G)                    # the neck, one length from the kerb into the coil
-    for f in (0.3, 0.62):
-        x = 4.75 - 3.25 * f
-        bar((x + 0.15, 0.6, -x - 0.15), (x - 0.15, 0.6, -x + 0.15), 2.1, 1.22, Y)
+    # the tail, out of the coil and back along the kerb, tapering to its
+    # tip: nothing of the piece comes nearer the road than its tongue, a
+    # unit and more outside the kerb (it stands 7.9 off the centreline, the
+    # renderer's road ends at 3.7)
+    tail = ((1.3, -1.9, 1.6, 1.1), (1.75, -3.6, 1.35, 0.95), (1.7, -5.2, 1.0, 0.75), (1.3, -6.5, 0.65, 0.5), (0.8, -7.4, 0.3, 0.3))
+    for k, ((xa, za, wa, ha), (xb, zb, wb, hb)) in enumerate(zip(tail, tail[1:])):
+        bar((xa, ha / 2, za), (xb, ha / 2, zb), (wa + wb) / 2, ha, Y if k == 2 else G)
     torus(1.75, 0.62, (0.0, 0.62, 0.0), G, segs=14, minor=6)                       # the coil, two turns
     torus(1.55, 0.6, (0.0, 1.78, 0.0), G, segs=14, minor=6)
     for a in range(0, 360, 60):                                                    # the road's own yellow bands
