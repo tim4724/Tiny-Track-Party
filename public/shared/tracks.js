@@ -754,10 +754,9 @@ export const TRACKS = {
   },
   riptide: {
     name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
-    // no sand on the causeway: over the water the kerbs stand at the asphalt's edge
-    // (from past where the hop's piles begin: the strip easing out across that
-    // ring left the verge's apron inside the narrowing deck)
-    sandOffFrom: 0.452, sandOffTo: 0.585,
+    // no sand on the causeway: over the water the kerbs stand at the asphalt's edge.
+    // The strip has eased out on the land, by the ring where the hop's piles begin.
+    sandOffFrom: 0.413, sandOffTo: 0.585,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,
@@ -2155,5 +2154,6 @@ export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name,
   cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,
   segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints, startU: TRACKS[id].startU, sand: TRACKS[id].sand,
+  sandOffFrom: TRACKS[id].sandOffFrom, sandOffTo: TRACKS[id].sandOffTo,
   oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));
