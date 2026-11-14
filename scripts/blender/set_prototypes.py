@@ -7029,13 +7029,22 @@ def flurry_piste():
         for i in range(n + 1):
             x = X0 + (X1 - X0) * i / n
             w = W + 0.3 * math.sin(i * 0.5) + 1.2 * max(0.0, 1 - i / 6.0)
-            rows.append([(x, 0.03, -w), (x, 0.03, w)])
-        for o in sheet(rows, lambda i, j, nn: 'white', 'piste'):
-            rowed(o, 8)
-        # the corduroy, down the fall line, edge to edge
-        with plain_parts():
-            for k in range(-8, 9):
-                rowed(box((X0 - X1 - 0.6, 0.02, 0.16), ((X0 + X1) / 2, 0.05, k * 0.44), 'white'), 15)
+            # across it: the edge, then each line of corduroy's two sides, the far edge
+            zs = [-w] + [k * 0.44 + e for k in range(-8, 9) for e in (-0.08, 0.08)] + [w]
+            rows.append([(x, 0.03, z) for z in zs])
+        # The corduroy, down the fall line, edge to edge, is the piste's own
+        # sheet in a second shade: ONE surface, a vertex at every row and at
+        # both sides of every line, so the lines lie in the snow wherever it
+        # is laid. (As bars over the sheet, each draped at its two ends only,
+        # they were straight chords over the slope's hollow and stood over
+        # the gates, the skiers and the huts as lines drawn on top of
+        # everything; as strips laid over a sheet two vertices wide they sank
+        # under it wherever the slope is hollow across.)
+        for cord, row in ((0, 8), (1, 15)):
+            for o in sheet(rows, lambda i, j, nn: 'white', 'cord' if cord else 'piste',
+                           skip=(lambda cord: lambda i, j: (j % 2) != cord or (cord and not 0 < i < n - 1))(cord)
+                           if cord else (lambda i, j: j % 2 == 1 and 0 < i < n - 1)):
+                rowed(o, row)
         # the huts: the warming hut at the foot by the road, the top hut
         cabin_hut(2.4, 1.3, 1.9, (bx, 0.0, bz), 0x9a5f3c, 0xeef4f9, yaw=math.pi / 2)
         cabin_hut(2.0, 1.2, 1.6, (tx, 0.0, tz), 0xcf534f, 0xeef4f9, yaw=-math.pi / 2)
@@ -9728,19 +9737,16 @@ def works_wheel(at, yaw, k, r=0.3):
         cyl(r * 0.5 * k, w + 0.06 * k, (x - c * (w / 2 + 0.03 * k), y, z + s2 * (w / 2 + 0.03 * k)), 0x868ba1,
             axis='across', yaw=yaw, segs=8, stem=True)
 
-def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
+def rotary_plough(x, z, yaw, k=1.0, y=0.0):
     """A rotary snowplough (a snow blower on a works truck) facing +Z turned
     by `yaw`, `k` times a little over two and a half long, built from `y`:
     four wheels under dark arches, the engine deck behind with its grille
     and a capped exhaust stack, the orange cab glazed on three sides under a
     white roof with a beacon bar and two work lamps, mirrors out on stalks;
     on the nose the blower's wide intake box, hazard blocks along its top
-    edge and skids at its sides, the reel turning in its dark mouth
-    (`rotor`, a part riding on the piece, about the truck's own across), and
-    over it the chute, a square duct bent out to the side under a hood,
-    throwing its jet of snow onto the bank beside it (one arc of white
-    blocks from the hood to the heap it lands in, so none of it hangs in
-    the air)."""
+    edge and skids at its sides, the reel in its dark mouth, and over it
+    the chute, a square duct under a hood turned ahead. Parked: nothing on
+    it moves."""
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x + (dx * c + dz * s2) * k, y + dy * k, z + (-dx * s2 + dz * c) * k)
@@ -9787,44 +9793,16 @@ def rotary_plough(x, z, yaw, rotor, k=1.0, y=0.0):
     if not WORKS_LITE:
         for g in range(5):                                                                  # hazard blocks
             box(sz(0.4, 0.14, 0.08), at(-0.8 + 0.4 * g, 1.2, 1.87), AMBER if g % 2 == 0 else DARK, yaw=yaw)
-    with animated(rotor, at(0, 0.62, 1.58), yaw):
-        box(sz(1.76, 0.22, 0.22), at(0, 0.62, 1.58), GREY, yaw=yaw)                      # the reel's shaft
-        for i in range(4):
-            a = i * math.pi / 2
-            for sd in (-1, 1):                                                           # paddles
-                box(sz(0.8, 0.08, 0.3), at(sd * 0.44, 0.62 + 0.2 * math.cos(a), 1.58 + 0.2 * math.sin(a)),
-                    0xcf534f, yaw=yaw, pitch=-a)
-    # the chute and its jet, thrown AHEAD of the truck onto the foot of the
-    # cut it works toward: from the road the arc crosses the dark rock by the
-    # gallery's mouth (thrown up over the bank it was a pale column on pale
-    # sky and snowed firs)
+    box(sz(1.76, 0.22, 0.22), at(0, 0.62, 1.58), GREY, yaw=yaw)                          # the reel's shaft
+    for i in range(4):
+        a = i * math.pi / 2
+        for sd in (-1, 1):                                                               # paddles
+            box(sz(0.8, 0.08, 0.3), at(sd * 0.44, 0.62 + 0.2 * math.cos(a), 1.58 + 0.2 * math.sin(a)),
+                0xcf534f, yaw=yaw, pitch=-a)
+    # the chute, its hood turned ahead: parked, it throws nothing
     box(sz(0.34, 1.1, 0.34), at(0.3, 1.8, 1.4), ORANGE, yaw=yaw)
     box(sz(0.4, 0.34, 0.9), at(0.3, 2.3, 1.75), ORANGE, yaw=yaw)
     box(sz(0.46, 0.42, 0.1), at(0.3, 2.3, 2.2), DARK, yaw=yaw)
-    # The plume: an arc of thrown snow, chunky, white over the shadowed blue
-    # of a drift's lee along its whole underside, so it has an edge against
-    # snow and rock alike, and MOVING: it whips up and down about the chute's
-    # mouth, and its outer half again about its own root, out of step (a
-    # still arc read as nothing at racing speed).
-    jet = [(2.2, 2.32), (3.0, 2.85), (3.9, 3.05), (4.8, 2.9), (5.6, 2.45), (6.3, 1.8), (6.8, 1.05), (7.1, 0.3)]
-    def span(i):
-        (za, ya), (zb, yb) = jet[i], jet[i + 1]
-        w = 0.4 + 0.11 * i
-        L = math.hypot(zb - za, yb - ya) + 0.16
-        pitch = math.atan2(yb - ya, zb - za)
-        snowy(box(sz(w + 0.14, w, L), at(0.3, (ya + yb) / 2, (za + zb) / 2), 0xf3f7fb, yaw=yaw, pitch=pitch), 0.5)
-        rowed(box(sz(w + 0.2, w * 0.6, L * 0.92), at(0.3, (ya + yb) / 2 - 0.42 * w, (za + zb) / 2), 'sky', yaw=yaw,
-                  pitch=pitch), 14)
-        if i % 2:                                       # a clod flung off it
-            snowy(box(sz(0.48, 0.48, 0.48), at(0.3 + 0.36 * (1 if i % 4 == 1 else -1), (ya + yb) / 2 + 0.5 * w + 0.1,
-                                               (za + zb) / 2 + 0.1), 0xf3f7fb, yaw=yaw + 0.6), 0.5)
-    with animated('anim_sway:a=x:d=20:p=0.55#jet', at(0.3, jet[0][1], jet[0][0]), yaw):
-        for i in range(3):
-            span(i)
-        with animated('anim_sway:a=x:d=24:p=0.4#spray', at(0.3, jet[3][1], jet[3][0]), yaw):
-            for i in range(3, len(jet) - 1):
-                span(i)
-    snowy(sphere(0.9 * k, at(0.3, 0.0, 7.1), 0xf3f7fb, subdiv=1, scale=(1.4, 0.6, 1.3)), 0.5)
 
 def plough_truck(x, z, yaw, k=1.0, y=0.0):
     """A highway plough and gritter parked, facing +Z turned by `yaw`, `k`
@@ -9901,10 +9879,10 @@ def avalanche_gallery_loop():
     # churned snow is tracks.js `land`'s paint), let into the cut through
     # the mountainside's foot (land ridge u 0.3517, `near` the kerb, steep as
     # the cirque's). Built as the other two are (cut_face, gallery_shed) on
-    # ROAD_C / FACE_C. At its east mouth the plough at work: a rotary plough
-    # eating into the snow the path brought down onto the verge, its
-    # impeller turning, a plough truck parked behind it; orange and red on
-    # white. Placed at u 0.37, lat 0, yaw 0.
+    # ROAD_C / FACE_C. At its east mouth the road crew's machines, parked: a
+    # rotary plough nose to the snow the path brought down onto the verge, a
+    # plough truck behind it; orange and red on white. Placed at u 0.37,
+    # lat 0, yaw 0.
     cut_face(ROAD_C, FACE_C, 0, 32, 4, 28, seed=17.0, ledge=5.0,
              verge=lambda i: 6.5, inner=lambda i: 5.9)
     gallery_shed(ROAD_C, 4, 28, seed=17.0)
@@ -9912,13 +9890,13 @@ def avalanche_gallery_loop():
     # under its middle (anim_drape; draped vertex by vertex, as they were, a
     # truck leaned and sheared with the bank), sunk a little into a bed of
     # packed snow that does lie on the bank as drawn (drape_), so no wheel
-    # hangs over the low side. Each idles: a shiver of the engine, no more.
+    # hangs over the low side. Parked: nothing moves.
     yw = road_yaw(ROAD_C, 0)
     x, _, z = on_road(ROAD_C, 0, -5.6, 0)
     before = set(bpy.context.scene.objects)
     hx, _, hz = on_road(ROAD_C, 2, -5.4, 0)
     mound(0.75, hx, hz, 1.1, 1.1, 1.8, color=0xf3f7fb, rings=4, segs=12, sink=0.3, shape=1.2)
-    for (bx, bz, bl) in ((x, z - 0.7, 6.3), (x + 0.2, z - 7.0, 4.6)):
+    for (bx, bz, bl) in ((x, z - 0.9, 3.9), (x + 0.2, z - 6.2, 4.6)):
         mound(0.42, bx, bz, 2.3, 2.3, bl / 2 + 1.2, color=0xf3f7fb, rings=4, segs=12, sink=0.3, shape=0.7)
     # The depot's lane: how the machines get onto the road. A ploughed strip
     # from under them back along the verge and down to the kerb behind them
@@ -9962,18 +9940,16 @@ def avalanche_gallery_loop():
               (px_ + (ex_ - px_) * (f + 0.1), 0.9 + 2.1 * (f + 0.1), pz_ + (ez_ - pz_) * (f + 0.1)), 0.17, 0xfff6eb)
     group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH' and o.get('anim') is None],
           'drape_plough')
-    # The blower WORKS: it eats forward into the heap and backs off down its
-    # bed again and again, its rotor turning and its jet riding with it (a
-    # path it keeps its facing on, `f=0`, level on the ground sampled along
-    # it; draped, a path pitches its traveller to the bank): idling with a
-    # shiver, nobody at the wheel of a car saw it move.
-    g0, g1 = face_ground(FACE_C, 0, 5.6), face_ground(FACE_C, 1, 5.6)
-    for k, d in enumerate((1.4, 0.6, -0.2, -1.0, -0.2, 0.6)):
-        marker('path_blow_%d' % k, (x + tx * d, g0 + (g1 - g0) * (d - 0.9), z - 0.9 + tz * d))
-    with animated('anim_path:c=blow:p=2.5:f=0#blower', (x, 0.0, z - 0.9)):
-        rotary_plough(x, z - 0.9, yw, 'anim_spin:a=x:w=5#rotor', k=1.35, y=0.12)
-    with animated('anim_drape+bob:h=0.01:p=0.26#gritter', (x + 0.2, 0.0, z - 7.0)):
-        plough_truck(x + 0.2, z - 7.0, yw, k=1.3, y=0.12)
+    # Parked and still, a calm pair by the gallery's mouth (the owner's call:
+    # the blower at work, driving its bed and throwing a plume, was sent
+    # back). Nothing on them moves, so they are no `anim_` parts: each stands
+    # level at the ground sampled under it (FACE_C), a post under it down to
+    # the plain (set-check), its wheels in the draped bed of packed snow.
+    g = face_ground(FACE_C, 0, 5.6)
+    rotary_plough(x, z - 0.9, yw, k=1.35, y=g + 0.12)
+    plough_truck(x + 0.2, z - 6.2, yw, k=1.3, y=g + 0.12)
+    for bz in (z - 0.9, z - 6.2):
+        box((0.6, g + 0.9, 0.6), (x + 0.1, (g + 0.9) / 2 - 0.2, bz), 0x38383d)['chamfer'] = 0
 
 # ====================================================================================
 # BACKYARD
