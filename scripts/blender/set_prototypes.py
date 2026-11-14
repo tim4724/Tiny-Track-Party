@@ -10990,106 +10990,63 @@ def sheepfold():
                (-2.0, 4.0, 1.3), (-5.6, 3.0, 2.6), (-5.4, -3.2, 0.4), (-1.6, -4.0, -2.2)), 'p')
     draped('fold', still)
 
-# ---- PRETZEL: the soapbox run ---------------------------------------------------------
-# The children's cart race down the down to the road: a start ramp up the
-# slope under a banner between two poles, the course staked out with straw
-# bales and pennants down the hill, a chequered line on the grass at its
-# foot, and the two carts as the race left them, one past the line and the
-# other on its side in the bales. Nobody is about. World units, a cart two
-# thirds of a car; front (+X) to the road. All of it DRAPES.
-def pretzel_cart(x, z, yaw, color, tipped=False, y=0.0):
+# ---- PRETZEL: the soapbox start ------------------------------------------------------
+# The children's cart race, told by its START alone: a timber ramp at the
+# verge tipping toward the road, two bright carts side by side on its top,
+# a tall gate over them in red and white posts under a chequered board, and
+# bales stacked at its foot. One compact thing a car and a half wide and
+# three cars tall, at the kerb: a staked course down the hill, twice built,
+# did not read from the seat. Nobody is about. World units, front (+X) to
+# the road. Nothing drapes: the renderer levels it a clearing in the hill's foot.
+def pretzel_cart(x, z, yaw, color, y=0.0, k=1.0):
+    """A soapbox cart heading along its +Z turned by `yaw`: a box on four wheels."""
     F = local(x, z, yaw)
     def at(dx, dy, dz):
-        q = F(dx, dy, dz)
+        q = F(dx * k, dy * k, dz * k)
         return (q[0], q[1] + y, q[2])
-    if tipped:                                                         # on its side, wheels in the air
-        box((0.3, 0.5, 0.8), at(0, 0.26, 0), color, yaw=yaw)
-        for dz in (-0.24, 0.24):
-            cyl(0.15, 0.1, at(0.0, 0.5, dz), 0x2a2735, segs=8)
-            cyl(0.15, 0.1, at(0.0, -0.02, dz), 0x2a2735, segs=8)
-        return
-    box((0.46, 0.2, 0.7), at(0, 0.25, 0), color, yaw=yaw)             # the box
-    box((0.46, 0.22, 0.1), at(0, 0.43, -0.3), color, yaw=yaw)         # its back
-    box((0.3, 0.12, 0.3), at(0, 0.24, 0.48), 0x9a7b55, yaw=yaw)       # the nose plank
+    box((0.46 * k, 0.2 * k, 0.7 * k), at(0, 0.25, 0), color, yaw=yaw)               # the box
+    box((0.46 * k, 0.22 * k, 0.1 * k), at(0, 0.43, -0.3), color, yaw=yaw)           # its back
+    box((0.3 * k, 0.12 * k, 0.3 * k), at(0, 0.24, 0.48), 0x9a7b55, yaw=yaw)         # the nose plank
     for dx in (-0.3, 0.3):
         for dz in (-0.24, 0.42):
-            cyl(0.15, 0.1, at(dx - 0.05, 0.15, dz), 0x2a2735, segs=8, axis='across', yaw=yaw)
+            cyl(0.15 * k, 0.1 * k, at(dx - 0.05, 0.15, dz), 0x2a2735, segs=8, axis='across', yaw=yaw)
 
 @piece(1.0)
-def soapbox_run():
-    # A long gentle run: the course is laid ALONG the down, slanting across
-    # its face from the start ramp well up the slope at the piece's -Z end
-    # to the line by the verge at its +Z end, some twenty-four units of
-    # course for three and a half of fall (straight down the slope it was a
-    # third as long and as steep as the hill). It swings twice on the way, a
-    # chicane of bale stacks in the second swing.
-    RED, BLUE, YELLOW, WOOD = 0xcf534f, 0x339cf2, 0xffc044, 0x9a7b55
-    X0, Z0, X1, Z1, W = -7.6, -11.0, 1.3, 11.0, 1.3     # the start, the line, the course's half width
-    def mid(t):
-        return (X0 + (X1 - X0) * t + 0.9 * math.sin(2 * math.pi * t * 1.25) * math.sin(math.pi * t), Z0 + (Z1 - Z0) * t)
-    def frame(t):
-        (xa, za), (xb, zb) = mid(max(0.0, t - 0.01)), mid(min(1.0, t + 0.01))
-        d = math.hypot(xb - xa, zb - za)
-        tx, tz = (xb - xa) / d, (zb - za) / d
-        x, z = mid(t)
-        return x, z, tx, tz, tz, -tx                                  # the point, along, across (toward +X)
-    def gate(t, colors, n):
-        x, z, tx, tz, ax, az = frame(t)
-        a, b = (x - ax * (W + 0.3), z - az * (W + 0.3)), (x + ax * (W + 0.3), z + az * (W + 0.3))
-        for q in (a, b):
-            box((0.16, 2.3, 0.16), (q[0], 1.1, q[1]), 'white')
-        bunting((a[0], 2.2, a[1]), (b[0], 2.2, b[1]), colors, n=n)
-    def bale(x, z, yaw, y=0.2):
-        box((0.5, 0.4, 0.8), (x, y, z), 'yellow', yaw=yaw)['ramp'] = 0.25
-    def still():
-        # the start: a boarded ramp tipping onto the course, a banner over it
-        x, z, tx, tz, ax, az = frame(0.0)
-        yaw = math.atan2(tx, tz)
-        box((2.0, 0.16, 2.2), (x - tx * 1.0, 0.5, z - tz * 1.0), WOOD, yaw=yaw)
-        for sd in (-1, 1):
-            box((0.14, 0.5, 2.2), (x - tx * 1.0 + ax * sd * 0.95, 0.25, z - tz * 1.0 + az * sd * 0.95), 0x7a5a3a, yaw=yaw)
-        gate(0.03, (RED, YELLOW, BLUE, 0x22c46e, 'white'), 6)
-        # the course: bales down both sides, a pennant on a pole by every third
-        n = 15
-        for i in range(n):
-            t = 0.07 + 0.86 * i / (n - 1)
-            x, z, tx, tz, ax, az = frame(t)
-            yaw = math.atan2(tx, tz)
-            for sd in (-1, 1):
-                bx, bz = x + ax * sd * W, z + az * sd * W
-                bale(bx, bz, yaw + 0.25 * sd * (i % 3 - 1))
-                if (i + (sd > 0)) % 3 == 0:
-                    px, pz = bx + ax * sd * 0.45, bz + az * sd * 0.45
-                    box((0.1, 1.5, 0.1), (px, 0.75, pz), 'white')
-                    c = (RED, BLUE, YELLOW)[(i // 3 + (sd > 0)) % 3]
-                    poly([(px, 1.5, pz), (px, 1.1, pz), (px + tx * 0.6, 1.3, pz + tz * 0.6)], [(0, 1, 2)], c)
-        # the chicane: a stack of bales in from each side in turn
-        for t, sd in ((0.5, 1), (0.62, -1)):
-            x, z, tx, tz, ax, az = frame(t)
-            yaw = math.atan2(tx, tz)
-            for k in range(2):
-                bale(x + ax * sd * (W - 0.55 - 0.5 * k), z + az * sd * (W - 0.55 - 0.5 * k), yaw + math.pi / 2)
-            bale(x + ax * sd * (W - 0.8), z + az * sd * (W - 0.8), yaw + math.pi / 2, y=0.6)
-        # the line at the foot: chequers on the grass across the course, a banner over it
-        x, z, tx, tz, ax, az = frame(0.97)
-        Q = 6
+def soapbox_start():
+    RED, BLUE, WHITE, WOOD, DARK = 0xcf534f, 0x339cf2, 'white', 0x9a7b55, 0x7a5a3a
+    PH, W = 1.2, 2.6                                # the platform's height; the ramp's width
+    X0, X1, X2 = -2.2, -0.9, 1.3                    # the platform's back, the ramp's head, its foot
+    # the platform on its trestle, boarded, and the ramp down to the grass
+    box((X1 - X0, 0.16, W), ((X0 + X1) / 2, PH, 0), WOOD)
+    for x in (X0 + 0.15, X1 - 0.15):
+        for sz in (-1, 1):
+            box((0.2, PH, 0.2), (x, PH / 2, sz * (W / 2 - 0.15)), DARK)
+    box((0.14, 0.14, W), (X0 + 0.15, PH * 0.5, 0), DARK)
+    a = math.atan2(PH - 0.08, X2 - X1)
+    L = math.hypot(PH - 0.08, X2 - X1)
+    box((L, 0.16, W), ((X1 + X2) / 2, (PH + 0.08) / 2, 0), WOOD, roll=a)
+    for sz in (-1, 1):
+        box((L, 0.3, 0.14), ((X1 + X2) / 2, (PH + 0.08) / 2 + 0.2, sz * (W / 2 - 0.07)), DARK, roll=a)
+    # the two carts on the top, noses to the road
+    pretzel_cart((X0 + X1) / 2 - 0.05, -0.62, math.pi / 2, RED, y=PH + 0.08, k=1.25)
+    pretzel_cart((X0 + X1) / 2 - 0.05, 0.62, math.pi / 2, BLUE, y=PH + 0.08, k=1.25)
+    # the gate over the ramp's head: banded posts, the chequered board between them
+    GX, GH, GW = X1 + 0.1, 3.4, W + 0.5
+    for sz in (-1, 1):
+        for k in range(6):
+            box((0.3, GH / 6 + 0.01, 0.3), (GX, GH / 6 * (k + 0.5), sz * GW / 2), (RED, WHITE)[k % 2])
+        sphere(0.24, (GX, GH + 0.2, sz * GW / 2), 0xffc044, subdiv=1)
+    Q, BH = 8, 0.84
+    with plain_parts():
         for i in range(2):
             for j in range(Q):
-                def at(u, v):
-                    return (x + tx * u + ax * v, 0.05, z + tz * u + az * v)
-                u0, v0 = -0.4 + 0.4 * i, -W + 2 * W * j / Q
-                ground_poly([at(u0, v0), at(u0 + 0.4, v0), at(u0 + 0.4, v0 + 2 * W / Q), at(u0, v0 + 2 * W / Q)],
-                            [(0, 1, 2, 3)], (0x2a2735, 'white')[(i + j) % 2])
-        gate(0.97, (0x2a2735, 'white'), 8)
-        # the carts: the winner past the line, one over in the chicane's
-        # bales, a third waiting on the ramp
-        yaw = math.atan2(tx, tz)
-        pretzel_cart(x + tx * 1.5 + ax * 0.3, z + tz * 1.5 + az * 0.3, yaw + 0.3, RED)
-        x, z, tx, tz, ax, az = frame(0.66)
-        pretzel_cart(x - ax * (W - 0.3), z - az * (W - 0.3), math.atan2(tx, tz) + 0.7, BLUE, tipped=True)
-        x, z, tx, tz, ax, az = frame(0.0)
-        pretzel_cart(x - tx * 1.0, z - tz * 1.0, math.atan2(tx, tz), 0x22c46e, y=0.5)
-    draped('run', still)
+                box((0.14, BH / 2, GW / Q), (GX, GH - 0.2 - BH / 2 * (i + 0.5), -GW / 2 + GW / Q * (j + 0.5)),
+                    (0x2a2735, WHITE)[(i + j) % 2])
+    # bales at the ramp's foot, a stack each side
+    for sz in (-1, 1):
+        for k, (dx, dy) in enumerate(((0.0, 0.2), (0.75, 0.2), (0.35, 0.6))):
+            box((0.7, 0.4, 0.5), (X2 - 0.5 + dx, dy, sz * (W / 2 + 0.45)), 'yellow', yaw=0.15 * sz * (k - 1))['ramp'] = 0.25
+    join_still('start')
 
 # The village fete on the green beside the start straight, its right, on race
 # day: the helter-skelter at the near end, the tallest thing on the green and
