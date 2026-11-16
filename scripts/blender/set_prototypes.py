@@ -16997,6 +16997,10 @@ def block(size, at, color, yaw=0.0, roll=0.0, pitch=0.0, letters=None, faces=('+
     plates = {'+x': (off, 0, 0, t, pw, pw), '-x': (-off, 0, 0, t, pw, pw), '+z': (0, 0, off, pw, pw, t),
               '-z': (0, 0, -off, pw, pw, t), '+y': (0, off, 0, pw, t, pw)}
     for k in faces:
+        if LITE:                                  # a print where the full block has a raised panel
+            if k != '+y':
+                face_rect(o, k, size / 2 + t - 0.005, -pw / 2, pw / 2, -pw / 2, pw / 2, 0xfdf4de)
+            continue
         p = plates[k]
         bpy.ops.mesh.primitive_cube_add(size=1.0)
         f = bpy.context.active_object
@@ -18409,6 +18413,17 @@ def soldier(at, color):
 
 def _soldier(at, color):
     x, y, z = at
+    if LITE:                                      # the box's knight: hose, surcoat, helm, plume, spear and shield
+        box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
+        box((0.7, 1.0, 1.04), (x, y + 1.5, z), color)
+        box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4)
+        plate_x(x + 0.305, y + 2.36, y + 2.48, z - 0.2, z + 0.2, 0x2a2735)
+        box((0.12, 0.6, 0.46), (x, y + 3.0, z), color)
+        box((0.14, 2.9, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)
+        box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)
+        plate_x(x + 0.525, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
+        plate_x(x + 0.525, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
+        return
     box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
     box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)
     box((0.72, 0.14, 0.58), (x, y + 1.15, z), 0x9a7b55)
@@ -18688,14 +18703,22 @@ def pavilion(x, z, r, h, wall, roof, trim=0xfdf4de, flag=0xff5040):
     w = 2 * r * math.tan(math.pi / n) + 0.02
     for i in range(n):
         a = i * 2 * math.pi / n
+        if LITE:                                  # the box's tent: its panels a face each, no scallops
+            c, s_ = math.cos(a), math.sin(a)
+            e0 = (x + r * c + s_ * w / 2, z + r * s_ - c * w / 2)
+            e1 = (x + r * c - s_ * w / 2, z + r * s_ + c * w / 2)
+            skin([(e0[0], 0, e0[1]), (e1[0], 0, e1[1]), (e1[0], h, e1[1]), (e0[0], h, e0[1])], [(0, 1, 2, 3)],
+                 wall if i % 2 == 0 else trim, (c, 0, s_))
+            continue
         box((0.1, h, w), (x + r * math.cos(a), h / 2, z + r * math.sin(a)), wall if i % 2 == 0 else trim, yaw=-a + math.pi / 2)
     top = (x, h + r * 1.05, z)
     for i in range(n):
         a0, a1 = (i - 0.5) * 2 * math.pi / n, (i + 0.5) * 2 * math.pi / n
-        rim0 = (x + math.cos(a0) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a0) * (r + 0.25) / math.cos(math.pi / n))
-        rim1 = (x + math.cos(a1) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a1) * (r + 0.25) / math.cos(math.pi / n))
+        eave = r + (0.06 if LITE else 0.25)       # the box's roof sits on its wall's faces
+        rim0 = (x + math.cos(a0) * eave / math.cos(math.pi / n), h, z + math.sin(a0) * eave / math.cos(math.pi / n))
+        rim1 = (x + math.cos(a1) * eave / math.cos(math.pi / n), h, z + math.sin(a1) * eave / math.cos(math.pi / n))
         poly([top, rim0, rim1], [(0, 1, 2)], roof if i % 2 == 0 else trim)
-    for i in range(n):                                           # the scallops at the eaves
+    for i in range(0 if LITE else n):                            # the scallops at the eaves
         a = i * 2 * math.pi / n
         box((0.08, 0.28, w * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)), roof, yaw=-a + math.pi / 2)
     plate_x(x + r + 0.06, 0.0, h * 0.7, z - 0.3, z + 0.3, 0x3a2a22)          # the door
@@ -20014,11 +20037,16 @@ def windup_chicks():
     windup_parade([(windup_chick, 'bob:h=0.3:p=0.38:b=1'), (windup_chick, 'bob:h=0.3:p=0.42:b=1'),
                    (windup_chick, 'bob:h=0.3:p=0.36:b=1')], L=12.0)
 
-@piece(1.0)
+KNIGHT = 0.57      # the toy set's knights' size (knight(): 0.55 of a soldier), the wind-up ones too
+
+@piece(KNIGHT)
 def windup_knights():
-    # Gauntlet: a tin knight of each side wound up and marching the kerb.
+    # Gauntlet: a tin knight of each side wound up and marching the kerb,
+    # no bigger than the set's own knights on the walls and in the ranks
+    # (the walk is authored in the piece's grown units).
     windup_parade([(lambda x, z, t: windup_knight(x, z, 0xe66a5a, t), 'waddle:d=8:p=0.5'),
-                   (lambda x, z, t: windup_knight(x, z, 0x5a8fd8, t), 'waddle:d=8:p=0.5')])
+                   (lambda x, z, t: windup_knight(x, z, 0x5a8fd8, t), 'waddle:d=8:p=0.5')],
+                  L=14.0 / KNIGHT, w=1.8 / KNIGHT, speed=0.85 / KNIGHT)
 
 def windup_bus(x, z, body, tag, decks=2):
     """A tin town bus (two decks) or tram (one, a pantograph on its roof) a
@@ -20313,6 +20341,84 @@ def tourney_camp():
     for k, (z, c) in enumerate(((-10.4, B0), (-0.9, Y0), (11.9, B0))):
         gonfalon(-4.8, z, c, h=3.4, wave='anim_flutter:p=%.1f#camp%d' % (2.5 + 0.35 * k, k))
     merge_paint()
+
+# ---- round 19: Gauntlet's wooden horse and the besiegers' works ----
+
+@piece(0.8)
+def wooden_horse():
+    # Gauntlet: the besiegers' gift, a wooden pull-along horse on its
+    # wheeled board (the toy box's biggest horse, about 28 cm to its ears)
+    # left outside the last corner where the home straight points, side on
+    # to the racers coming down it: its head to -Z, a hatch in its flank
+    # toward the road (+X), its pull string lying on the floor before it.
+    WOODC, DARK, RED, GOLD = 0xc8955a, 0x7a5a3a, 0xe66a5a, 0xf2c14e
+    box((1.9, 0.3, 5.4), (0, 0.95, 0), RED)                                     # the board
+    for sx in (-1, 1):
+        for z in (-1.9, 1.9):
+            cyl(0.75, 0.3, (sx * 0.93 - (0.3 if sx < 0 else 0.0), 0.75, z), DARK, segs=10, axis='across')
+            cyl(0.28, 0.4, (sx * 0.93 - (0.4 if sx < 0 else 0.0), 0.75, z), GOLD, segs=6, axis='across')
+        for z in (-1.45, 1.45):
+            box((0.5, 2.0, 0.62), (sx * 0.48, 2.1, z), WOODC)                    # the legs
+    box((1.5, 1.6, 4.1), (0, 3.85, 0), WOODC)                                   # the barrel
+    bar((0, 4.1, -1.5), (0, 6.0, -2.7), 1.1, 1.3, WOODC)                        # the neck
+    box((0.95, 0.95, 2.0), (0, 6.3, -3.3), WOODC, pitch=-0.25)                  # the head
+    box((0.99, 0.3, 0.7), (0, 5.95, -4.0), DARK, pitch=-0.25)                   # its muzzle
+    for sx in (-1, 1):
+        box((0.22, 0.5, 0.3), (sx * 0.3, 7.0, -2.75), WOODC)                    # ears
+        box((0.08, 0.24, 0.24), (sx * 0.5, 6.55, -3.2), 0x2a2735)               # eyes
+    bar((0, 4.9, -1.3), (0, 6.75, -2.4), 0.3, 0.5, DARK)                        # the mane
+    bar((0, 4.4, 2.05), (0, 2.7, 2.6), 0.34, 0.34, DARK)                        # the tail
+    box((1.56, 0.9, 1.5), (0, 4.3, 0.2), RED)                                   # the saddle cloth
+    box((1.6, 0.16, 1.54), (0, 3.9, 0.2), GOLD)
+    plate_x(0.76, 3.3, 3.8, 1.15, 1.85, DARK)                                   # the hatch in its flank
+    plate_x(0.775, 3.36, 3.74, 1.21, 1.79, 0x2a2735)
+    tube([(0, 0.1, -2.7), (0.3, 0.1, -3.8), (-0.4, 0.1, -4.8), (0.2, 0.1, -5.8)], 0.06, 0xfdf4de, res=3, bevel_res=0)
+    box((0.36, 0.36, 0.36), (0.2, 0.18, -6.0), GOLD)
+    merge_paint()
+
+def stake_row(x, z0, z1, n, h, color):
+    """A palisade: `n` square stakes from z0 to z1, pointed, a rail behind."""
+    for i in range(n):
+        z = z0 + (z1 - z0) * (i + 0.5) / n
+        hh = h * (0.92, 1.0, 0.96)[i % 3]
+        box((0.42, hh, 0.42), (x, hh / 2, z), color)
+        cyl(0.3, 0.45, (x, hh, z), color, r2=0.02, segs=4, yaw=math.pi / 4)
+    box((0.16, 0.24, z1 - z0), (x - 0.28, h * 0.55, (z0 + z1) / 2), 0x7a5a3a)
+
+@piece(1.0)
+def siege_works():
+    # Gauntlet: the besiegers' works outside the east leg, across the road
+    # from their camp (+X to the road, +Z the way the racers drive): three
+    # lengths of pointed palisade with gaps between, their mangonel drawn
+    # up in the middle gap with its arm cocked back and its shot piled by
+    # it, powder kegs, and the red side's banners on tall poles behind the
+    # stakes, over the kerb from the seat.
+    WOODC, DARK, R0 = 0xc8955a, 0x7a5a3a, BESIEGERS
+    for z0, z1 in ((-13.0, -7.6), (3.4, 8.2), (9.6, 13.4)):
+        stake_row(0.0, z0, z1, round((z1 - z0) / 0.62), 1.9, WOODC)
+    # the mangonel, aimed over the road at the castle (+X)
+    MZ = -2.2
+    for sz in (-1, 1):
+        box((4.6, 0.36, 0.36), (-1.2, 0.7, MZ + sz * 1.05), DARK)                # the frame's rails
+        for x in (-2.9, 0.5):
+            cyl(0.6, 0.26, (x, 0.6, MZ + sz * 1.21 - (0.26 if sz < 0 else 0.0)), DARK, segs=10, axis='along')
+        bar((-0.2, 0.8, MZ + sz * 1.05), (-0.2, 3.1, MZ + sz * 1.05), 0.34, 0.34, WOODC)   # the uprights
+        bar((-2.4, 0.8, MZ + sz * 1.05), (-0.3, 2.6, MZ + sz * 1.05), 0.24, 0.24, WOODC)   # and their braces
+    box((0.4, 0.4, 2.5), (-0.2, 3.1, MZ), DARK)                                  # the stop bar
+    box((0.3, 0.3, 2.3), (-0.9, 0.9, MZ), DARK)                                  # the arm's axle
+    bar((-0.9, 0.9, MZ), (-3.9, 2.5, MZ), 0.34, 0.34, R0)                        # the arm, cocked back
+    box((0.9, 0.3, 0.9), (-4.1, 2.62, MZ), DARK)                                 # its cup
+    box((0.5, 0.5, 0.5), (-4.1, 3.0, MZ), 0x38383d)                              # and the shot in it
+    for x, y, z in ((-1.6, 0.0, 1.0), (-1.05, 0.0, 1.15), (-1.3, 0.0, 1.6), (-1.3, 0.45, 1.25)):
+        box((0.5, 0.5, 0.5), (x, y + 0.25, z), 0x38383d)                         # the pile
+    for x, z in ((-1.9, -5.4), (-2.6, -6.0), (-1.7, 10.4)):
+        cyl(0.42, 0.85, (x, 0.0, z), 0xf2bf99, r2=0.38, segs=8)
+        cyl(0.44, 0.12, (x, 0.34, z), DARK, segs=8)
+    for k, (z, c) in enumerate(((-10.2, R0), (5.8, 0xf2c14e), (11.6, R0))):
+        gonfalon(-1.5, z, c, h=4.4, wave='anim_flutter:p=%.1f#works%d' % (2.4 + 0.3 * k, k))
+    merge_paint()
+
+lite_too('block-fortress', 'siege-camp', 'tilt-yard', 'tourney-camp')
 
 # What lies about Gauntlet's floor (theme.cc playroomTrack: the scatter's
 # props, each under the lite tier's prop cap, square-edged).

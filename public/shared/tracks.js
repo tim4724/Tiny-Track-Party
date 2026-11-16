@@ -1988,9 +1988,12 @@ export const TRACKS = {
     // the bend before them. On the long home straight the siege goes on:
     // a red rank behind its mantlets and scaling ladders inside it (a rank
     // the lite tier leaves out), two blue ranks with their cannon outside, the castle's outer gatehouse astride the road (the
-    // racers drive through its arch, under the portcullis), a tin knight of
-    // each side wound up and marching the kerb, and the castle's dragon on
-    // guard where the straight points. The besiegers' ram,
+    // racers drive through its arch, under the portcullis) with the castle's
+    // dragon perched across its battlements, the biggest creature of the
+    // set, a tin knight of each side wound up and marching the kerb at the
+    // set's own knights' size, and the besiegers' wooden horse left where
+    // the straight points. Outside the east leg, across the road from their
+    // camp, stand their works: palisades, a mangonel and their banners. The besiegers' ram,
     // its log swinging, stands with their guns outside the corner after
     // them, aimed across at the castle, and the castle's corner towers fly
     // tall blue pennants. Between the fights the two sides hold a tourney:
@@ -2008,7 +2011,7 @@ export const TRACKS = {
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
       { model: 'set-siege-ram', u: 0.7241, lat: 8.5, yaw: -150.5 },
-      { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
+      { model: 'set-toy-dragon', u: 0.83, lat: 0.7, y: 7.8, yaw: 90, scale: 1.3 },
       { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
       { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
@@ -2019,6 +2022,8 @@ export const TRACKS = {
       { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
       { model: 'set-tourney-rug', u: 0.885, lat: 0, yaw: 90 },
       { model: 'set-supply-wagon', u: 0.64, lat: 8.4 },
+      { model: 'set-wooden-horse', u: 0.95, lat: 7.5 },
+      { model: 'set-siege-works', u: 0.15, lat: 7.2 },
       { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
