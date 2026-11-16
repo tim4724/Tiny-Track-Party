@@ -11334,7 +11334,7 @@ def field_wheat_lite():
 # it (bandHold), so one over the whole loop stood the road on a step. It
 # DRAPES: the trees stand on the land as drawn. The lite builds (the Android
 # TV's) keep each tree to one coarser lobe and no apples.
-def apple_tree(x, z, seed, lite, apples=6, top=True):
+def apple_tree(x, z, seed, lite, apples=6, top=True, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
     trunk = cyl(0.38 * k, 2.4 * k, (x, -0.3, z), 0x7a5a3a, r2=0.28 * k, segs=6, stem=True)
@@ -11342,8 +11342,26 @@ def apple_tree(x, z, seed, lite, apples=6, top=True):
     cx, cz, cy = x + lx * 3.4 * k, z + lz * 3.4 * k, 3.7 * k
     a = hash01(x, z, seed, 3) * 6.28
     # smooth-shaded, so even the small lobes' few faces read round
-    sphere(1.9 * k, (cx, cy, cz), 0x6cae55, subdiv=1 if lite else 2, flat=False, scale=(1.0, 0.84, 1.0))
+    crown = sphere(1.9 * k, (cx, cy, cz), 0x6cae55, subdiv=1 if lite else 2, flat=False, scale=(1.0, 0.84, 1.0))
     if lite:
+        # One coarse lobe, shaded ROUND (an icosphere this coarse turns its
+        # faces more than the smooth-by-angle limit, so it came out faceted:
+        # an oak beside the orchard's round trees), and for the scatter's
+        # tree a few apples on it, a corner apiece.
+        fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
+        dots = [box((0.6 * k, 0.6 * k, 0.6 * k), (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
+                                                   cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j)
+                for j in range(apples if lite_fruit else 0)]
+        for o in [crown] + dots:
+            o['chamfer'] = 0
+            for f in o.data.polygons:
+                f.use_smooth = True
+            for e in o.data.edges:
+                e.use_edge_sharp = False
+            if 'sharp_face' in o.data.attributes:
+                o.data.attributes.remove(o.data.attributes['sharp_face'])
+            if 'sharp_edge' in o.data.attributes:
+                o.data.attributes.remove(o.data.attributes['sharp_edge'])
         return
     # the crown in lobes round the middle one, each on a bough of its own
     # showing under it, so the tree is branched, not a ball on a stick
@@ -11515,9 +11533,9 @@ def cow_farm_build(lite):
         ribbon_fence(((BACK, Z0), (FX, Z0), (FX, GZ - 0.55)), rails=rails, step=step)
         ribbon_fence(((FX, GZ + 0.55), (FX, Z1), (BACK, Z1)), rails=rails, step=step)
         ribbon_gate((FX, GZ - 0.55), (FX, GZ + 0.55))
-        x, n = -0.8, 9
+        x, n = -0.8, 12                          # (out through the gate to the road's verge)
         for i in range(n):
-            x0, x1 = -0.8 + (FX + 1.3 + 0.8) * i / n, -0.8 + (FX + 1.3 + 0.8) * (i + 1) / n
+            x0, x1 = -0.8 + (FX + 3.0 + 0.8) * i / n, -0.8 + (FX + 3.0 + 0.8) * (i + 1) / n
             rowed(ground_poly([(x0, 0.05, GZ - 0.36), (x1, 0.05, GZ - 0.36), (x1, 0.05, GZ + 0.36), (x0, 0.05, GZ + 0.36)],
                               [(0, 3, 2, 1)], 'gravel'), 26)
     draped('farm', still)
@@ -11525,6 +11543,18 @@ def cow_farm_build(lite):
 @piece(1.0)
 def cow_farm():
     cow_farm_build(False)
+
+# The farm's boundary carried on round the west bend past it: a length of
+# its post-and-rail along the hill's foot, a field gate in it. Laid end to
+# end round the bend's outside (tracks.js), in the full tier only. +X to the
+# road, along Z; DRAPES.
+@piece(1.0)
+def farm_fence():
+    def still():
+        ribbon_fence(((0.0, -6.0), (0.0, 1.9)), step=1.5)
+        ribbon_gate((0.0, 1.9), (0.0, 3.0))
+        ribbon_fence(((0.0, 3.0), (0.0, 6.0)), step=1.5)
+    draped('fence', still)
 
 @piece(1.0)
 def cow_farm_lite():
@@ -12459,7 +12489,7 @@ def brook_piece(start, end, prev, nxt, pts, road, extra=None, lite=False):
         brook_channel(fr, start, end, near=road)
         brook_ends(fr, start, end)
         if extra:
-            extra[0](fr[extra[1] + (1 if start == 'culvert' else 0)])
+            extra[0](fr[extra[1] + (1 if start == 'culvert' else 0)], road)
     draped('brook', build)
 
 # What stands up off the brook along the start straight, where the road runs
@@ -12468,7 +12498,9 @@ def brook_piece(start, end, prev, nxt, pts, road, extra=None, lite=False):
 # and further up a sluice, a stone sill across the channel under a timber
 # frame with its gate wound up, the water white below it. Each at a frame of
 # its reach (x, z, half width, across); both DRAPE with the reach.
-def brook_footbridge(f):
+def brook_footbridge(f, road):
+    # (its path runs from the road's verge over the bridge and on in under the
+    # wood's first trees: as two stubs a few strides long it went nowhere)
     x, z, w, ax, az = f
     tx, tz = az, -ax                          # along the flow
     yaw = math.atan2(tx, tz)
@@ -12480,7 +12512,7 @@ def brook_footbridge(f):
         box((2 * S / n + 0.02, 0.1, DW), at(t * (S - S / n), 0.36 + (1 - t * t) * 0.2), TIMBER, yaw=yaw)
     for sd in (-1, 1):                        # a stone footing at each bank, and the gravel path off it
         rowed(box((0.5, 0.36, DW + 0.3), at(sd * S, 0.16), 'grey', yaw=yaw), SLATE_ROW)
-        for q in range(4):
+        for q in range(FOOTPATH[sd == road]):
             o0, o1 = sd * (S + 0.2 + 0.5 * q), sd * (S + 0.2 + 0.5 * (q + 1))
             rowed(ground_poly([at(o0, 0.04, -0.36), at(o1, 0.04, -0.36), at(o1, 0.04, 0.36), at(o0, 0.04, 0.36)],
                               [(0, 1, 2, 3)], 'gravel'), 26)
@@ -12493,7 +12525,7 @@ def brook_footbridge(f):
                 strut(at(t0 * (S - 0.15), 0.92 + (1 - t0 * t0) * 0.2, d), at(t1 * (S - 0.15), 0.92 + (1 - t1 * t1) * 0.2, d),
                       0.1, TIMBER)
 
-def brook_sluice(f):
+def brook_sluice(f, road):
     x, z, w, ax, az = f
     tx, tz = az, -ax
     yaw = math.atan2(tx, tz)
@@ -12510,6 +12542,7 @@ def brook_sluice(f):
         box((0.1, 0.5, 0.1), at(0.0, H + 0.3), 'dark', yaw=yaw)                            # its screw
         box((0.5, 0.08, 0.08), at(0.0, H + 0.55), 'dark', yaw=yaw)
 
+FOOTPATH = (9, 6)                             # the path's half-unit lengths: to the wood, to the road
 BROOK_EXTRA = {'brook-c': (brook_footbridge, 9), 'brook-b': (brook_sluice, 16)}
 
 for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
@@ -12830,30 +12863,37 @@ def boating_lake():
                                    (14.0, -18.0, 1.1))):                           # lily pads
         ground_poly([(x, WY + 0.02, z)] + [(x + r * math.cos(q * math.pi / 3), WY + 0.02, z + r * math.sin(q * math.pi / 3))
                                            for q in range(6)], [(0, 1 + (q + 1) % 6, 1 + q) for q in range(6)], 0x4f9a48)
-    # the far shore (+X), where the road that runs at the lake looks across
-    # it: a row of park lamps along the water's edge, white globes on dark
-    # posts, and big cherries behind them, the boathouse between (its own
-    # piece, tracks.js)
-    for z in (-33.0, -21.0, -9.0, 3.0, 25.0, 35.0):
-        x = 42.5 - 0.004 * z * z
-        box((0.3, 4.6, 0.3), (x, 2.3, z), 'dark')
-        box((1.0, 0.2, 0.3), (x, 4.5, z), 'dark')
-        for sx in (-1, 1):
-            box((0.6, 0.6, 0.6), (x + sx * 0.5, 5.0, z), 'white')
-    for i, (x, z, k) in enumerate(((50.0, -27.0, 1.4), (51.0, -12.0, 1.15), (49.0, 31.0, 1.3))):
-        lawn_cherry(x, z, k, ('pink', 'white', 'pink')[i], i + 5)
-        cherry_petals(x, z, k, i + 5)
     join_still('lake')
+
+# The lake's far shore (+X), where the road that runs at the lake looks
+# across it: a row of park lamps along the water's edge, white globes on dark
+# posts, and big cherries behind them. A piece of its own, laid on the lake's
+# anchor, and it DRAPES, so it levels nothing: as part of the lake, which
+# stands level, its box reached the hill behind and the clearing cut the
+# hill's foot to a wedge of bare earth.
+@piece(REAL)
+def lake_shore():
+    def still():
+        for z in (-33.0, -21.0, -9.0, 3.0, 15.0, 25.0, 35.0):
+            x = 42.5 - 0.004 * z * z
+            box((0.3, 4.8, 0.3), (x, 2.2, z), 'dark')
+            box((1.0, 0.2, 0.3), (x, 4.5, z), 'dark')
+            for sx in (-1, 1):
+                box((0.6, 0.6, 0.6), (x + sx * 0.5, 5.0, z), 'white')
+        for i, (x, z, k) in enumerate(((50.0, -27.0, 1.4), (51.0, -8.0, 1.15), (49.0, 26.0, 1.3))):
+            lawn_cherry(x, z, k, ('pink', 'white', 'pink')[i], i + 5)
+            cherry_petals(x, z, k, i + 5)
+    draped('shore', still)
 
 @piece(REAL)
 def boathouse():
-    # The lake's boathouse on its far shore, across the water from the road
-    # that runs at the lake, its lake side to that road (tracks.js turns it:
-    # -X here): a timber boat shed under a red tiled roof, white at its
-    # corners and eaves, the wide boat door open on the lake side with a
-    # rowing boat on the slip in it, the jetty out over the water and two
-    # swan pedalos tied up there, a flag over the ridge; the hire hatch under
-    # a plain canopy on its landward side (+X). It stands
+    # The lake's boathouse on its near shore (on the far one it read half as
+    # long, and its clearing cut the hill behind it to bare earth): a timber
+    # boat shed under a red tiled roof, white at its corners and eaves, the
+    # hire hatch under a plain canopy toward the road (+X), the wide boat door
+    # open on the lake side with a rowing boat on the slip in it, the jetty
+    # out over the water and two swan pedalos tied up there, a flag over the
+    # ridge. It stands
     # LEVEL on the bank (draped it leaned with the slope): the bank is the
     # pond's own flat floor here.
     RED, WHITE, BOARD = 0xcf534f, 0xf8f8fb, 0x9a7b55
@@ -13255,7 +13295,7 @@ def mill_yard_build(lite):
         # sawdust, and the cart track out to the road
         if not lite:
             sphere(1.8, (-0.2, 0.1, -0.5), 'tan', subdiv=1, scale=(1.3, 0.45, 1.0))
-        for q in range(14):
+        for q in range(22):                      # (to the road's verge)
             x0, x1 = -1.0 + 1.3 * q, -1.0 + 1.3 * (q + 1)
             rowed(ground_poly([(x0, 0.08, 0.0), (x1, 0.08, 0.0), (x1, 0.08, 2.6), (x0, 0.08, 2.6)], [(0, 3, 2, 1)], 'gravel'), 26)
     draped('yard', still)
@@ -13371,8 +13411,8 @@ def tree_apple():
 
 @piece(REAL)
 def tree_apple_lite():
-    # The lite tier's: the orchard's lite tree, one lobe.
-    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True))
+    # The lite tier's: the orchard's lite tree, one round lobe, three apples on it.
+    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True, apples=3, lite_fruit=True))
 
 @piece(REAL)
 def tree_poplar():
@@ -13470,7 +13510,7 @@ def summer_camp_build(lite):
     # lite (the Android TV's build): the flag still, in the camp's one part,
     # the bunting four pennants a line, no seats round the stones
     RED, BLUE, GREEN, YELLOW = 0xcf534f, 0x339cf2, 0x22c46e, 0xffc044
-    FX, FZ, FH = 1.0, 0.5, 9.0                      # the flagpole
+    FX, FZ, FH = 1.0, 0.5, 10.5                     # the flagpole
     def flag():
         box((0.2, 1.6, 1.7), (FX, FH - 0.55, FZ + 1.05), YELLOW)
         box((0.2, 1.5, 1.5), (FX + 0.15, FH - 0.6, FZ + 2.5), YELLOW, yaw=0.3)
@@ -13482,7 +13522,7 @@ def summer_camp_build(lite):
         for px, py, pz in peaks:
             bunting((FX, FH - 2.2, FZ), (px, py, pz), (RED, YELLOW, BLUE, 'white', GREEN), n=4 if lite else 6, drop=1.3, w=0.8)
         # the ring of stones and the log seats round it, on the road side
-        CX, CZ = 5.0, 0.5
+        CX, CZ = 3.4, 0.5
         for k in range(8):
             a = k * math.pi / 4
             rowed(box((0.7, 0.5, 0.7), (CX + 1.3 * math.cos(a), 0.15, CZ + 1.3 * math.sin(a)), 'grey', yaw=a), SLATE_ROW)
@@ -14218,26 +14258,28 @@ def bed_ring(r0, r1, color, row=None, y=0.08, segs=24, steps=1, pick=None):
 def floral_clock():
     RED, WHITE, YELLOW, PURPLE = 0xcf534f, 0xf8f8fb, 0xffc044, 0xa878e8
     def still():
-        bed_ring(0.0, 2.7, 'leaf', 22, steps=4)                  # the face, a clipped green
-        bed_ring(2.7, 3.3, RED)                                  # its border
-        bed_ring(3.3, 3.6, WHITE)                                # and a white edging
+        # (faces half a unit across at most, a hand and a half over the turf:
+        # at twice that the hill's own facets came up through the rim)
+        bed_ring(0.0, 2.4, 'leaf', 22, steps=5, y=0.12, segs=32)     # the face, a clipped green
+        bed_ring(2.4, 2.95, RED, y=0.12, segs=32)                    # its border
+        bed_ring(2.95, 3.2, WHITE, y=0.12, segs=32)                  # and a white edging
         for k in range(12):                                      # the hours, the quarters bigger
             a = k * math.pi / 6
             big = k % 3 == 0
-            w, l, r = (0.34, 0.7, 2.1) if big else (0.22, 0.4, 2.25)
+            w, l, r = (0.32, 0.62, 1.9) if big else (0.2, 0.36, 2.0)
             c, sn = math.cos(a), math.sin(a)
             bed_quad([(c * (r - l / 2) - sn * w / 2, sn * (r - l / 2) + c * w / 2), (c * (r + l / 2) - sn * w / 2, sn * (r + l / 2) + c * w / 2),
                       (c * (r + l / 2) + sn * w / 2, sn * (r + l / 2) - c * w / 2), (c * (r - l / 2) + sn * w / 2, sn * (r - l / 2) - c * w / 2)],
-                     YELLOW if big else WHITE, y=0.13)
+                     YELLOW if big else WHITE, y=0.17)
         # the hands, from the hub: twelve is up the slope (-X)
-        for ang, L, w in ((math.radians(-58), 1.35, 0.3), (math.radians(60), 2.0, 0.22)):
+        for ang, L, w in ((math.radians(-58), 1.2, 0.28), (math.radians(60), 1.75, 0.2)):
             ux, uz = -math.cos(ang), math.sin(ang)
             n = 4
             for q in range(n):
                 a, b = L * q / n, L * (q + 1) / n
                 bed_quad([(ux * a - uz * w / 2, uz * a + ux * w / 2), (ux * b - uz * w / 2, uz * b + ux * w / 2),
-                          (ux * b + uz * w / 2, uz * b - ux * w / 2), (ux * a + uz * w / 2, uz * a - ux * w / 2)], WHITE, y=0.13)
-        box((0.5, 0.3, 0.5), (0.0, 0.12, 0.0), YELLOW, yaw=0.6)  # the hub
+                          (ux * b + uz * w / 2, uz * b - ux * w / 2), (ux * a + uz * w / 2, uz * a - ux * w / 2)], WHITE, y=0.17)
+        box((0.5, 0.34, 0.5), (0.0, 0.14, 0.0), YELLOW, yaw=0.6) # the hub
     draped('bed', still)
 
 @piece()
