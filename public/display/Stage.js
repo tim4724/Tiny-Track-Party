@@ -432,6 +432,14 @@ export class Stage {
     return { w, h };
   }
 
+  // Name the buffer scale on a standing stage, as ?dpr= does at load, or hand
+  // it back to the adaptive rule with null (the landmark gallery's Res).
+  setScale(dpr) {
+    this._dprRequest = dpr > 0 ? dpr : null;
+    if (this._dprRequest == null && !this._automation) this.perf.instrument(true);
+    this._onResize();
+  }
+
   // The drawing buffer's height in lines: where the render scale stands.
   get bufferLines() { return this._canvas.height; }
 

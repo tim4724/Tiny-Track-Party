@@ -296,7 +296,6 @@ section.stage iframe {
 .lm-bar { display: flex; gap: 6px; margin: 10px 0 2px; }
 .lm-bar select { flex: 1; min-width: 0; }
 /* The race view's transport, and the note taken on a screenshot of it. */
-.lm-race { margin-bottom: 10px; }
 .lm-race[hidden] { display: none; }
 .lm-race__row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .lm-race__row input[type=range] { flex: 1; min-width: 0; }
@@ -330,9 +329,10 @@ section.stage iframe {
 .seg button.ctrl.is-on { background: #2a2a5a; color: #fff; border-color: #5060c0; }
 /* The landmark stage's key legend. A key is a LABEL (theme.css .pill): a
    tinted pill, never a solid fill, since it names a key rather than being one. */
-.keys { display: grid; gap: 3px; margin-bottom: 10px; }
-.keys > div { display: flex; align-items: center; gap: 8px; }
-.keys dt { flex: none; width: 64px; display: flex; gap: 3px; color: #6f7699; }
+.keys { display: grid; gap: 3px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.keys[hidden] { display: none; }
+.keys > div { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; }
+.keys dt { display: flex; gap: 3px; color: #6f7699; white-space: nowrap; }
 .keys dd { color: #b8bedc; }
 .legend kbd {
   display: inline-block; min-width: 1.9em; padding: 0 0.55em;
@@ -340,29 +340,45 @@ section.stage iframe {
   font: 700 10px/1.7 system-ui, -apple-system, sans-serif;
   color: #b9c3ff; background: rgba(80, 96, 192, 0.24);
 }
-.keys-off { display: none; }
-.legend.keys-hidden .keys { display: none; }
-.legend.keys-hidden .keys-off { display: block; }
-/* The landmark panel's fullscreen row, which holds the header's camera buttons
-   while the stage is fullscreen, and the review round over the keys. */
-.lm-fs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+/* THE LANDMARK PANEL: a head that stays (tabs, speed, the race's transport;
+   in fullscreen the header's camera buttons too) over a body that scrolls. */
+#lm-box { --legend-w: 300px; }
+.lm-panel { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.lm-panel[hidden] { display: none; }
+.lm-panel__head { flex: none; padding: 10px 12px 4px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.lm-panel__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; }
+.lm-gap { flex: 1; }
+.lm-tabs[hidden] { display: none; }
+.lm-fs { display: flex; flex-wrap: wrap; gap: 6px; }
+.lm-fs:not(:empty) { margin-bottom: 6px; }
 .lm-fs .seg { flex-wrap: wrap; }
-.lm-review { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+#lm-saved:empty { display: none; }
+.lm-card .lm-card__go { margin-top: 8px; }
+/* THE REVIEW ROUND: the items as a list, or one item open on its own with the
+   list a step away. A title wraps: it is the thing being judged. */
 .lm-review[hidden] { display: none; }
-.lm-review h2 { font-size: 13px; color: #fff; }
-.lm-review > .legend__note { margin: 0 0 4px; }
-.lm-review__item { margin: 4px 0 6px; padding: 8px; border-radius: 6px; background: #13132a; }
-.lm-review__item p { color: #d5d5ee; margin-bottom: 4px; }
-.lm-review__item ul { margin: 0 0 6px 1.2em; color: #b8bedc; }
-.lm-review__stops { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 6px; }
+.lm-review h2 { font-size: 13px; line-height: 1.35; color: #fff; margin-bottom: 4px; }
+.lm-review__bar { height: 3px; margin: 6px 0 8px; border-radius: 2px; background: rgba(255,255,255,0.1); }
+.lm-review__bar i { display: block; height: 100%; border-radius: 2px; background: #78dc96; }
+.lm-review__row { padding: 5px 6px; align-items: flex-start; }
+.lm-review__row .kit-row__name { white-space: normal; overflow: visible; }
+.lm-review__nav { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; color: #9aa3c7; }
+.lm-review__item p { color: #d5d5ee; margin-bottom: 8px; }
+.lm-review__item h3 { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;
+                      color: #9aa3c7; margin: 12px 0 4px; }
+.lm-review__item .lm-review__ask { color: #fff; margin-bottom: 4px; }
+.lm-review__stops { display: flex; flex-wrap: wrap; gap: 4px; }
 .lm-review__stops button.ctrl { text-align: left; }
-.lm-review__item textarea { width: 100%; background: #0c0c1c; color: #fff; font: inherit;
+.lm-review__say { display: flex; gap: 4px; }
+.lm-review__say button.ctrl { flex: 1; min-height: 34px; font-weight: 600; }
+.lm-review__say [data-decision=keep].is-on { background: rgba(120, 220, 150, 0.2); border-color: #78dc96; color: #fff; }
+.lm-review__say [data-decision=drop].is-on { background: rgba(255, 143, 143, 0.2); border-color: #ff8f8f; color: #fff; }
+.lm-review__item textarea { width: 100%; margin-bottom: 6px; background: #0c0c1c; color: #fff; font: inherit;
                             border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 8px; }
-.kit-row__tris.is-keep { color: #78dc96; }
-.kit-row__tris.is-rework { color: #b9c3ff; }
-.kit-row__tris.is-drop { color: #ff8f8f; }
-/* The other cells' landmarks while SPREAD is on: a step quieter than the focus. */
-.kit-row--also { background: #1b1b38; color: #c8c8f0; }
+.lm-review__badge { margin-left: 8px; font-size: 11px; font-weight: 600; }
+.is-keep { color: #78dc96; }
+.is-rework { color: #b9c3ff; }
+.is-drop { color: #ff8f8f; }
 /* The list stands BESIDE the scene, not over it: a split's top-right cell has
    its own place pill and view in that corner, and judging a landmark is
    judging the whole cell. Overlays again where the screen is too narrow. */

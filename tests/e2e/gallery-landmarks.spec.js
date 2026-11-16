@@ -123,9 +123,9 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
       for (const q of got) expect(!!q.car).toBe(view === 'driver' || view === 'glance');
     }
   }
-  // Leaving free hands the page back: no drag-through class left behind.
+  // The stage takes the pointer in every view: a drag is how the camera is taken.
   await page.evaluate(() => window.__landmarks.view('driver'));
-  expect(await page.evaluate(() => document.documentElement.classList.contains('cam-free'))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.classList.contains('cam-free'))).toBe(true);
 
   // The approach and the glance have their landmark in shot, and the framed
   // views stand somewhere else than the driver. Driver is the parked car's own
@@ -219,12 +219,17 @@ test('landmark gallery: layout, split and every view', async ({ page }) => {
   await frames(page, 3);
 });
 
-// The page pins the stage's render scale (Sharp, the default) so a rebuild's
-// missed frames cannot step the picture down, and Auto hands it back to the
-// game's adaptive rule; either is a reload of the stage, remembered.
-test('landmark gallery page: the Res toggle', async ({ page }) => {
+// The page names the stage's render scale (this screen's, the default) so a
+// rebuild's missed frames cannot step the picture down; a rung of the ladder is
+// that many lines on the standing stage, Auto hands the scale back to the
+// game's adaptive rule, and the choice is remembered. The tier, too, changes on
+// the standing stage: the scene is built again and the page is not.
+test('landmark gallery page: the resolution and the tier, with no reload', async ({ page }) => {
   await page.goto('/gallery-landmarks.html');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeAttached({ timeout: 30000 });
   const src = () => page.evaluate(() => new URL(document.getElementById('lm-stage').src).searchParams.get('dpr'));
+  const stage = (fn) => page.evaluate((f) => new Function('w', `return (${f})(w)`)(
+    document.getElementById('lm-stage').contentWindow), fn.toString());
   // The panel's own scale, under the stage's height cap.
   const sharp = await page.evaluate(async () => {
     const { MAX_BUFFER_H } = await import('/display/Stage.js');
@@ -232,12 +237,19 @@ test('landmark gallery page: the Res toggle', async ({ page }) => {
     return Math.min(window.devicePixelRatio || 1, MAX_BUFFER_H / h);
   });
   expect(Math.abs(Number(await src()) - sharp)).toBeLessThan(1e-3);
-  await expect(page.locator('#lm-res')).toHaveText('Res: Sharp');
-  await page.click('#lm-res');
-  await expect(page.locator('#lm-res')).toHaveText('Res: Auto');
-  expect(await src()).toBeNull();
+  await expect(page.locator('#lm-res')).toHaveValue('sharp');
+  await stage((w) => { w.__same = true; });
+  await page.selectOption('#lm-res', '540');
+  expect(Math.abs((await stage((w) => w.__landmarks.lines())) - 540)).toBeLessThanOrEqual(1);
+  await page.click('#lm-tier');
+  await expect(page.locator('#lm-tier')).toHaveText('Tier: Lite');
+  await expect.poll(() => stage((w) => w.__scene.detail)).toBe('lite');
+  await page.click('#lm-tier');
+  await expect.poll(() => stage((w) => w.__scene.detail)).toBe('full');
+  expect(await stage((w) => w.__same)).toBe(true);   // the same document throughout
+  await page.selectOption('#lm-res', 'auto');
   await page.reload();
-  await expect(page.locator('#lm-res')).toHaveText('Res: Auto');
+  await expect(page.locator('#lm-res')).toHaveValue('auto');
   expect(await src()).toBeNull();
 });
 

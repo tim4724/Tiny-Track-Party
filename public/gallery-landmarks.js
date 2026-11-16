@@ -12,7 +12,7 @@ import { MAX_BUFFER_H } from './display/Stage.js';
 // page, and a track or view picked here means nothing on the others.
 const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
-  const d = { track: '', players: 1, view: 'race', spread: false, res: 'sharp', slow: false, fast: false, keys: true,
+  const d = { track: '', players: 1, view: 'race', res: 'sharp', speed: 'normal', help: false, tab: 'review',
               tier: 'full', sort: 'size', item: '' };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
@@ -20,18 +20,14 @@ const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)
 
 const frame = document.getElementById('lm-stage');
 const trackSel = document.getElementById('lm-track');
-const playerBtns = [...document.querySelectorAll('#lm-players [data-players]')];
 const viewBtns = [...document.querySelectorAll('#lm-views [data-view]')];
-const spreadBox = document.getElementById('lm-spread');
 const list = document.getElementById('lm-list');
-const resBtn = document.getElementById('lm-res');
-const slowBtn = document.getElementById('lm-slow');
-const fastBtn = document.getElementById('lm-fast');
+const resSel = document.getElementById('lm-res');
+const speedBtns = [...document.querySelectorAll('#lm-speed [data-speed]')];
 const legend = document.getElementById('lm-legend');
 let lm = null;   // the hook, once the frame has built its first scene
 const linesOut = document.getElementById('lm-lines');
 const tierBtn = document.getElementById('lm-tier');
-const tourBtn = document.getElementById('lm-tour');
 const scoreBtn = document.getElementById('lm-score');
 const sortSel = document.getElementById('lm-sort');
 const card = document.getElementById('lm-card');
@@ -105,10 +101,33 @@ let seen = null;   // model -> { seen, lap, why }
 // RES. The game's render scale is adaptive (Stage._adaptScale): every scene
 // build misses frames, the rule steps the buffer down a rung and climbs back
 // only after a long clean stretch, so a gallery that rebuilds on every click
-// spends most of its time on a soft picture. Sharp names the scale (`dpr`, the
-// switch that turns the mechanism off) as this screen's own, under the stage's
-// own height cap (a named scale is a request that would pass it); Auto leaves
-// it out to show what the game does. Either is a fresh load of the stage.
+// spends most of its time on a soft picture. So the page NAMES the scale (the
+// stage's `dpr`, which turns the mechanism off): this screen's own by default,
+// or one rung of the game's ladder (render_scale.h's kScaleLadder, in lines) to
+// see the picture a TV holding that rung shows. Auto leaves it to the game.
+// All under the stage's own height cap, and re-fitted when the stage's box
+// changes, since a rung is lines and a scale is a share of the box.
+const RUNGS = [540, 720, 1080, 1620, 2160];
+for (const [v, t] of [['sharp', 'Res: screen'], ['auto', 'Res: auto'], ...RUNGS.map((n) => [String(n), `Res: ${n}`])]) {
+  const o = document.createElement('option');
+  o.value = v;
+  o.textContent = t;
+  resSel.appendChild(o);
+}
+if (![...resSel.options].some((o) => o.value === state.res)) state.res = 'sharp';
+function resScale() {
+  if (state.res === 'auto') return null;
+  const h = Math.max(frame.clientHeight, 1);
+  const want = state.res === 'sharp' ? (window.devicePixelRatio || 1) : +state.res / h;
+  return +Math.min(want, MAX_BUFFER_H / h).toFixed(3);
+}
+function setRes(v) {
+  state.res = v;
+  save();
+  if (lm) lm.scale(resScale());
+}
+new ResizeObserver(() => { if (lm && state.res !== 'auto') lm.scale(resScale()); }).observe(frame);
+
 let loads = 0;   // a newer load abandons the wait of the one before
 function load() {
   lm = null;
@@ -116,10 +135,7 @@ function load() {
   const q = new URLSearchParams({ scenario: 'landmarks', players: String(state.players) });
   if (state.track) q.set('track', state.track);
   if (state.tier === 'lite') q.set('detail', 'lite');
-  if (state.res === 'sharp') {
-    const cap = MAX_BUFFER_H / Math.max(frame.clientHeight, 1);
-    q.set('dpr', String(+Math.min(window.devicePixelRatio || 1, cap).toFixed(3)));
-  }
+  if (state.res !== 'auto') q.set('dpr', String(resScale()));
   frame.src = '/?' + q;
   whenReady(init);
 }
@@ -153,19 +169,26 @@ function whenReady(fn) {
   tick();
 }
 
-// The views that frame a landmark per cell, which SPREAD changes.
-const PER_PIECE = new Set(['driver', 'glance', 'high', 'orbit']);
-
+// The camera button that is lit. A race has three of its own: its free and top
+// cameras light Free and Top, and a looped stretch of it lights Drive past.
+function litView() {
+  if (!lm || state.view !== 'race' || lm.mode() !== 'race') return state.view;
+  const r = lm.race();
+  return r.cam !== 'chase' ? r.cam : r.loop ? 'past' : 'race';
+}
+// The race is offered at one, two and four players: the splits a racer sees.
+function paintViews() {
+  const lit = litView();
+  for (const b of viewBtns) {
+    b.classList.toggle('is-on', b.dataset.view === lit && (!b.dataset.players || +b.dataset.players === state.players));
+  }
+}
 function paintButtons() {
-  for (const b of playerBtns) b.classList.toggle('is-on', +b.dataset.players === state.players);
-  for (const b of viewBtns) b.classList.toggle('is-on', b.dataset.view === state.view);
-  spreadBox.checked = state.spread;
-  resBtn.textContent = state.res === 'sharp' ? 'Res: Sharp' : 'Res: Auto';
-  slowBtn.classList.toggle('is-on', state.slow);
-  fastBtn.classList.toggle('is-on', state.fast);
+  paintViews();
+  resSel.value = state.res;
+  for (const b of speedBtns) b.classList.toggle('is-on', b.dataset.speed === state.speed);
   tierBtn.classList.toggle('is-on', state.tier === 'lite');
   tierBtn.textContent = state.tier === 'lite' ? 'Tier: Lite' : 'Tier: Full';
-  tourBtn.classList.toggle('is-on', !!tour);
   sortSel.value = state.sort;
 }
 
@@ -200,13 +223,6 @@ function paintList() {
     return;
   }
   const at = lm.focused();
-  // With SPREAD each cell frames the next landmark on: say which cell has which.
-  const cellsOf = new Map();
-  const cells = state.spread && PER_PIECE.has(state.view) ? lm.seats() : 1;
-  for (let c = 0; c < cells; c++) {
-    const i = (at + c) % marks.length;
-    cellsOf.set(i, [...(cellsOf.get(i) || []), c + 1]);
-  }
   const rows = marks.map((m, i) => ({ m, i }));
   rows.sort(ORDERS[state.sort] || ORDERS.size);
   // Families in the order their first member sorts.
@@ -218,7 +234,7 @@ function paintList() {
   const rowOf = ({ m, i }, inFam) => {
     const row = document.createElement('button');
     row.className = 'kit-row' + (inFam ? ' kit-row--member' : '')
-      + (i === at ? ' kit-row--at' : cellsOf.has(i) ? ' kit-row--also' : '');
+      + (i === at ? ' kit-row--at' : '');
     const name = document.createElement('span');
     name.className = 'kit-row__name';
     name.textContent = m.label;
@@ -227,7 +243,6 @@ function paintList() {
     n.className = 'kit-row__tris';
     const c = info.get(m.model);
     const bits = [];
-    if (cells > 1 && cellsOf.has(i)) bits.push('cell ' + cellsOf.get(i).join(','));
     if (seen && seen.has(m.model)) bits.push(seen.get(m.model).seen.toFixed(1) + 's');
     if (c && c.full) bits.push(state.tier === 'lite' && c.liteOff ? 'off' : kilo(trisOf(m)));
     bits.push('×' + m.count);
@@ -286,7 +301,12 @@ function paintCard(m) {
   dl.append(line('lite', c.liteOff ? 'not drawn' : c.lite ? cost(c.lite) : c.full ? 'same as full' : '…'));
   const s = seen && seen.get(m.model);
   if (s) dl.append(line('read', `${s.seen.toFixed(1)} s of a ${Math.round(s.lap)} s lap${s.why ? ' · ' + s.why : ''}`, s.seen < POOR_S ? 'is-poor' : ''));
-  card.replaceChildren(h, dl);
+  const go = document.createElement('button');
+  go.className = 'ctrl lm-card__go';
+  go.textContent = '▶ Drive past';
+  go.title = 'The race through this piece, on a loop (P)';
+  go.addEventListener('click', () => { drivePast(); frame.focus(); });
+  card.replaceChildren(h, dl, go);
   if (m.count > 1) {
     const step = document.createElement('div');
     step.className = 'lm-card__step';
@@ -302,15 +322,23 @@ function paintCard(m) {
     card.appendChild(step);
   }
 }
+// A piece picked by hand is no longer the review stop's.
+function leaveStop() {
+  if (stopAt < 0) return;
+  stopAt = -1;
+  paintReview();
+}
 function place(d) {
   if (!lm) return;
   lm.place(lm.placed() + d);
+  leaveStop();
   paintList();
 }
 
 function focus(i) {
   if (!lm) return;
   lm.focus(i);
+  leaveStop();
   paintList();
 }
 const step = (d) => lm && focus(lm.focused() + d);
@@ -340,7 +368,16 @@ function setPlayers(n) {
   paintButtons();
   return rebuild(() => lm.players(n));
 }
+// The race keeps running (or stays paused) under its own free and top cameras,
+// so from a race Free and Top are those, and Race is the way back to the chase
+// rig. Leaving for a framed view parks the field on the grid again.
 function setView(v) {
+  if (v === 'past') { drivePast(); return; }
+  if (inRace() && (v === 'free' || v === 'top' || (v === 'race' && lm.race().cam !== 'chase'))) {
+    lm.raceCam(v === 'race' ? 'chase' : v);
+    paintRace();
+    return;
+  }
   state.view = v;
   save();
   paintButtons();
@@ -358,7 +395,6 @@ function setView(v) {
 const READ = { px: 800, h: 20, w: 960, lines: 540, every: 0.2 };
 async function scoreLap() {
   if (!lm || scoreBtn.disabled) return;
-  setTour(false);
   scoreBtn.disabled = true;
   scoreBtn.textContent = 'Driving…';
   try {
@@ -388,78 +424,59 @@ async function scoreLap() {
     scoreBtn.textContent = 'Score lap';
   }
 }
-// THE TOUR: every model on the track in the list's order, a few seconds each,
-// then the next track. For leaning back and watching the catalogue go by.
-const TOUR_MS = 6000;
-let tour = 0;
-function setTour(on) {
-  clearInterval(tour);
-  tour = on ? setInterval(async () => {
-    if (!lm) return;
-    const n = lm.landmarks().length;
-    if (lm.focused() + 1 < n) step(1);
-    else await stepTrack(1);
-  }, TOUR_MS) : 0;
-  paintButtons();
-}
+// The other tier on the standing stage: the scene is built again in it, where
+// it stood (the track, the view, the focused piece).
 function setTier() {
+  if (!lm) return;
   state.tier = state.tier === 'lite' ? 'full' : 'lite';
   save();
   paintButtons();
-  load();
+  const at = lm.focused(), n = lm.placed();
+  return rebuild(async () => {
+    await lm.detail(state.tier);
+    lm.focus(at);
+    lm.place(n);
+  });
 }
 // A remembered view this build no longer has falls back to the default.
 function restoreView() {
   try { lm.view(state.view); } catch (_) { state.view = 'race'; save(); paintButtons(); lm.view(state.view); }
   paintRace();
 }
-function setSpread(on) {
-  state.spread = on;
-  save();
-  spreadBox.checked = on;
-  if (lm) { lm.spread(on); paintList(); }
-}
-// Slow motion: the scene at a quarter of real time, to judge how a piece moves.
-const SLOW = 0.25, FAST = 2;
-const rate = () => (state.slow ? SLOW : state.fast ? FAST : 1);
-function setSlow(on) {
-  state.slow = on;
-  if (on) state.fast = false;
+// THE SCENE CLOCK'S RATE, one of three: a quarter of real time to judge how a
+// piece moves, real time, and double to get round a lap to the stretch worth
+// looking at. Always one of them lit, so the way back to real time shows.
+const SPEEDS = { slow: 0.25, normal: 1, fast: 2 };
+const rate = () => SPEEDS[state.speed] || 1;
+function setSpeed(v) {
+  state.speed = v;
   save();
   paintButtons();
   if (lm) lm.timeScale(rate());
 }
-// Double speed, to get round a lap to the stretch worth looking at.
-function setFast(on) {
-  state.fast = on;
-  if (on) state.slow = false;
-  save();
-  paintButtons();
-  if (lm) lm.timeScale(rate());
+function stepSpeed(d) {
+  const all = Object.keys(SPEEDS);
+  setSpeed(all[(all.indexOf(state.speed) + d + all.length) % all.length]);
 }
-function stepTrack(d) {
+// A race button names its split; the views that frame one piece want one cell.
+async function pickView(v, players) {
   if (!lm) return;
-  const opts = [...trackSel.options];
-  const i = opts.findIndex((o) => o.value === trackSel.value);
-  return setTrack(opts[(i + d + opts.length) % opts.length].value);
+  if (players && players !== state.players) {
+    if (state.view !== 'race') setView('race');
+    await setPlayers(players);
+    paintRace();
+    return;
+  }
+  setView(v);
+  if ((v === 'high' || v === 'orbit') && state.players > 1) await setPlayers(1);
 }
-
-for (const b of playerBtns) b.addEventListener('click', () => { setPlayers(+b.dataset.players); frame.focus(); });
-for (const b of viewBtns) b.addEventListener('click', () => { setView(b.dataset.view); frame.focus(); });
+for (const b of viewBtns) b.addEventListener('click', () => { pickView(b.dataset.view, +b.dataset.players || 0); frame.focus(); });
 trackSel.addEventListener('change', () => { setTrack(trackSel.value); frame.focus(); });
-spreadBox.addEventListener('change', () => { setSpread(spreadBox.checked); frame.focus(); });
-slowBtn.addEventListener('click', () => { setSlow(!state.slow); frame.focus(); });
-fastBtn.addEventListener('click', () => { setFast(!state.fast); frame.focus(); });
-tierBtn.addEventListener('click', setTier);
-tourBtn.addEventListener('click', () => { setTour(!tour); frame.focus(); });
+for (const b of speedBtns) b.addEventListener('click', () => { setSpeed(b.dataset.speed); frame.focus(); });
+tierBtn.addEventListener('click', () => { setTier(); frame.focus(); });
 scoreBtn.addEventListener('click', () => { scoreLap(); frame.focus(); });
 sortSel.addEventListener('change', () => { state.sort = sortSel.value; save(); if (lm) paintList(); frame.focus(); });
-resBtn.addEventListener('click', () => {
-  state.res = state.res === 'sharp' ? 'auto' : 'sharp';
-  save();
-  paintButtons();
-  load();
-});
+resSel.addEventListener('change', () => { setRes(resSel.value); frame.focus(); });
 // How many lines the stage is drawing right now, so a drop under Auto shows.
 setInterval(() => {
   linesOut.textContent = lm ? `${lm.lines()} lines` : '';
@@ -476,9 +493,16 @@ const timeIn = document.getElementById('lm-time');
 const clock = document.getElementById('lm-clock');
 const camBtn = document.getElementById('lm-cam');
 const savedOut = document.getElementById('lm-saved');
-const tierOut = document.getElementById('lm-tier-out');
+const loopBtn = document.getElementById('lm-loop');
 const inRace = () => !!lm && state.view === 'race' && lm.mode() === 'race';
 function paintRace() {
+  // A drag on the stage takes the free camera by itself (the stage's own doing).
+  if (lm && lm.mode() === 'free' && state.view !== 'free') {
+    viewBeforeFree = state.view;
+    state.view = 'free';
+    save();
+    paintButtons();
+  }
   raceBox.hidden = state.view !== 'race';
   if (!inRace()) return;
   const r = lm.race(), t = r.seconds;
@@ -488,7 +512,8 @@ function paintRace() {
   timeIn.max = String(r.max);
   if (document.activeElement !== timeIn) timeIn.value = String(r.step);
   clock.textContent = `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
-  tierOut.textContent = `${state.tier === 'lite' ? 'Lite tier (Android TV)' : 'Full tier (web, Apple TV)'}${state.fast ? ' · 2x' : state.slow ? ' · slow' : ''}`;
+  loopBtn.hidden = !r.loop;
+  paintViews();
 }
 setInterval(paintRace, 200);
 function pause(on) {
@@ -512,6 +537,19 @@ function stepCam(d) {
   lm.raceCam(cams[(cams.indexOf(lm.race().cam) + d + cams.length) % cams.length]);
   paintRace();
 }
+// DRIVE PAST: the race through a spot of the lap on a loop (the stage's
+// `drivePast`), which is how a piece is met. The spot is the review stop's when
+// that names one, otherwise the focused piece's placement.
+function drivePast() {
+  if (!lm) return;
+  const st = round && itemAt >= 0 && (round.items[itemAt].stops || [])[stopAt];
+  lm.drivePast(st && st.s != null ? st.s : undefined);
+  state.view = 'race';
+  save();
+  paintButtons();
+  paintRace();
+}
+loopBtn.addEventListener('click', () => { if (lm) lm.drivePast(false); paintRace(); frame.focus(); });
 pauseBtn.addEventListener('click', () => { pause(); frame.focus(); });
 camBtn.addEventListener('click', () => { if (inRace()) stepCam(1); frame.focus(); });
 timeIn.addEventListener('input', () => { if (inRace()) { lm.pause(true); lm.seek(+timeIn.value); } });
@@ -557,7 +595,6 @@ function paintPins() {
 }
 function openNote() {
   if (!lm || noteDlg.open) return;
-  setTour(false);
   if (inRace()) lm.pause(true);
   noteShot = lm.shot();
   pins = [];
@@ -665,7 +702,7 @@ function toggleFull() {
 document.addEventListener('fullscreenchange', () => {
   const on = document.fullscreenElement === box;
   if (on) document.getElementById('lm-fs').prepend(viewsGroup);
-  else document.getElementById('lm-players').after(viewsGroup);
+  else trackSel.closest('.group').after(viewsGroup);
   legend.hidden = false;
   fullBtn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
   fullBtn.classList.toggle('is-on', on);
@@ -684,27 +721,77 @@ fullBtn.addEventListener('click', () => { toggleFull(); frame.focus(); });
 // answers alone) is kept by the server in verdicts-<round>.json. Without a
 // round, as on a deployed preview, there is no panel.
 const reviewBox = document.getElementById('lm-review');
+const piecesBox = document.getElementById('lm-pieces');
+const tabsBox = document.getElementById('lm-tabs');
+const tabBtns = [...tabsBox.querySelectorAll('[data-tab]')];
+const helpBtn = document.getElementById('lm-help');
+const keysBox = document.getElementById('lm-keys');
 const DECISIONS = ['keep', 'rework', 'drop'];
 let round = null, itemAt = -1, stopAt = -1, reviewSaid = '';
-const drafts = new Map();   // item id -> a note typed and not yet saved with a verdict
-const answerDrafts = new Map();   // item id -> its answers typed and not yet saved
+let listOpen = false;   // the round's list rather than the picked item
+// WHAT WAS TYPED AND NOT YET SAVED WITH A VERDICT, per item: a note and the
+// answers. Kept in this browser under the round's name, so a reload (or a
+// crashed tab) loses nothing; a saved verdict takes its item out.
+const DRAFTS_KEY = 'tinytrack_gallery_review_drafts_v1';
+const drafts = new Map(), answerDrafts = new Map();
+function keepDrafts() {
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify({ round: round.round, notes: [...drafts], answers: [...answerDrafts] }));
+  } catch (_) { /* private mode */ }
+}
+function loadDrafts() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFTS_KEY) || 'null');
+    if (!d || d.round !== round.round) return;
+    for (const [k, v] of d.notes || []) drafts.set(k, v);
+    for (const [k, v] of d.answers || []) answerDrafts.set(k, v);
+  } catch (_) { /* unreadable: start clean */ }
+}
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 fetch('/api/review-round').then((r) => (r.ok ? r.json() : null)).then((j) => {
   if (!j || !Array.isArray(j.items)) return;
   round = { ...j, verdicts: j.verdicts || {} };
+  loadDrafts();
   itemAt = round.items.findIndex((it) => it.id === state.item);
   paintReview();
 }).catch(() => { /* no dev server: no panel */ });
 
-function stopLabel(st) {
+// THE PANEL'S TWO BODIES: the review round, where there is one, and the
+// track's pieces. And the keys, folded away until asked for.
+function paintTabs() {
+  const tab = round ? state.tab : 'pieces';
+  tabsBox.hidden = !round;
+  for (const b of tabBtns) b.classList.toggle('is-on', b.dataset.tab === tab);
+  reviewBox.hidden = tab !== 'review';
+  piecesBox.hidden = tab !== 'pieces';
+  keysBox.hidden = !state.help;
+  helpBtn.classList.toggle('is-on', state.help);
+}
+function setTab(t) {
+  state.tab = t;
+  save();
+  paintTabs();
+  if (t === 'pieces') list.querySelector('.kit-row--at')?.scrollIntoView({ block: 'nearest' });
+}
+function setHelp(on) {
+  state.help = on;
+  save();
+  paintTabs();
+}
+for (const b of tabBtns) b.addEventListener('click', () => { setTab(b.dataset.tab); frame.focus(); });
+helpBtn.addEventListener('click', () => { setHelp(!state.help); frame.focus(); });
+
+// A stop's name on its button. The track is said only where an item's stops
+// are on more than one.
+function stopLabel(st, withTrack) {
   const opt = [...trackSel.options].find((o) => o.value === st.track);
   const what = st.piece ? st.piece.replace(/^set-/, '').replace(/-/g, ' ') + (st.place ? ` #${st.place + 1}` : '')
     : st.s != null ? `s ${st.s}` : `step ${st.step}`;
-  const view = st.step != null ? 'race' + (st.cam ? ' ' + st.cam : '') : st.s != null ? 'driver' : st.view || 'orbit';
-  return `${opt ? opt.textContent : st.track} · ${what} · ${view}`;
+  const view = st.step != null ? 'race' + (st.cam ? ' ' + st.cam : '') : st.s != null ? 'parked' : st.view || 'orbit';
+  return `${withTrack ? (opt ? opt.textContent : st.track) + ' · ' : ''}${upper(what)} · ${view}`;
 }
 function paintReview() {
-  reviewBox.hidden = !round;
+  paintTabs();
   if (!round) return;
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -712,67 +799,102 @@ function paintReview() {
     if (text != null) n.textContent = text;
     return n;
   };
-  const judged = round.items.filter((it) => round.verdicts[it.id]).length;
-  const out = [el('h2', '', round.title || round.round),
-               el('p', 'legend__note', `${judged} of ${round.items.length} judged · [ ] item`)];
-  round.items.forEach((it, i) => {
-    const row = el('button', 'kit-row' + (i === itemAt ? ' kit-row--at' : ''));
-    const v = round.verdicts[it.id];
-    const badge = v ? (v.decision ? upper(v.decision) : 'Answered') : '';
-    row.append(el('span', 'kit-row__name', it.title || it.id),
-               el('span', 'kit-row__tris' + (v && v.decision ? ' is-' + v.decision : ''), badge));
-    row.addEventListener('click', () => { pickItem(i); frame.focus(); });
-    out.push(row);
-    if (i !== itemAt) return;
-    const open = el('div', 'lm-review__item');
-    if (it.text) open.append(el('p', '', it.text));
-    // Each question gets its own answer, saved with the verdict (or alone:
-    // an idea or a question needs no Keep / Rework / Drop).
-    const asks = it.ask || [];
-    const answers = answersOf(it);
-    asks.forEach((q, n) => {
-      const a = el('textarea', 'lm-review__answer');
-      a.rows = 2;
-      a.placeholder = 'Your answer';
-      a.setAttribute('aria-label', q);
-      a.value = answers[n] || '';
-      a.addEventListener('input', () => { answers[n] = a.value; answerDrafts.set(it.id, answers); });
-      open.append(el('p', 'lm-review__ask', q), a);
+  const badgeOf = (v) => (v ? (v.decision ? upper(v.decision) : 'Answered') : '');
+  const n = round.items.length;
+  const it = !listOpen && round.items[itemAt];
+  if (!it) {
+    const judged = round.items.filter((x) => round.verdicts[x.id]).length;
+    const bar = el('div', 'lm-review__bar');
+    bar.append(el('i'));
+    bar.firstChild.style.width = (n ? 100 * judged / n : 0) + '%';
+    const out = [el('h2', '', round.title || round.round), el('p', 'legend__note', `${judged} of ${n} judged`), bar];
+    round.items.forEach((x, i) => {
+      const v = round.verdicts[x.id];
+      const row = el('button', 'kit-row lm-review__row' + (i === itemAt ? ' kit-row--at' : ''));
+      row.append(el('span', 'kit-row__name', x.title || x.id),
+                 el('span', 'kit-row__tris' + (v && v.decision ? ' is-' + v.decision : ''),
+                    badgeOf(v) || (drafts.get(x.id) ? 'Draft' : '')));
+      row.addEventListener('click', () => { pickItem(i); frame.focus(); });
+      out.push(row);
     });
+    reviewBox.replaceChildren(...out);
+    return;
+  }
+  const v = round.verdicts[it.id];
+  const nav = el('div', 'lm-review__nav');
+  const prev = el('button', 'ctrl', '‹'), next = el('button', 'ctrl', '›'), all = el('button', 'ctrl', 'All items');
+  prev.title = 'Previous item ([)';
+  next.title = 'Next item (])';
+  prev.addEventListener('click', () => { stepItem(-1); frame.focus(); });
+  next.addEventListener('click', () => { stepItem(1); frame.focus(); });
+  all.addEventListener('click', () => { listOpen = true; paintReview(); frame.focus(); });
+  nav.append(prev, el('span', '', `${itemAt + 1} of ${n}`), next, el('span', 'lm-gap'), all);
+  const open = el('div', 'lm-review__item');
+  const head = el('h2', '', it.title || it.id);
+  if (v) head.append(el('span', 'lm-review__badge' + (v.decision ? ' is-' + v.decision : ''), badgeOf(v)));
+  open.append(head);
+  if (it.text) open.append(el('p', '', it.text));
+  // Where to judge it from, and the race through the stop that is lit.
+  const its = it.stops || [];
+  if (its.length) {
     const stops = el('div', 'lm-review__stops seg');
-    (it.stops || []).forEach((st, k) => {
-      const b = el('button', 'ctrl' + (k === stopAt ? ' is-on' : ''), stopLabel(st));
+    const tracks = new Set(its.map((st) => st.track)).size > 1;
+    its.forEach((st, k) => {
+      const b = el('button', 'ctrl' + (k === stopAt ? ' is-on' : ''), stopLabel(st, tracks));
       b.addEventListener('click', () => { goStop(k); frame.focus(); });
       stops.append(b);
     });
-    const say = el('div', 'lm-race__row seg');
-    for (const d of DECISIONS) {
-      const b = el('button', 'ctrl' + (v && v.decision === d ? ' is-on' : ''), upper(d));
-      b.dataset.decision = d;
-      b.addEventListener('click', () => { judge(d); frame.focus(); });
-      say.append(b);
-    }
-    if (asks.length) {
-      const b = el('button', 'ctrl', 'Save answers');
-      b.addEventListener('click', () => judge(v ? v.decision : null));
-      say.append(b);
-    }
-    const note = el('textarea', 'lm-review__note');
-    note.rows = 3;
-    note.placeholder = 'Why? What should change?';
-    note.value = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
-    note.addEventListener('input', () => drafts.set(it.id, note.value));
-    // A note edited after the verdict is saved with it again.
-    note.addEventListener('change', () => { if (round.verdicts[it.id]) judge(round.verdicts[it.id].decision); });
-    open.append(stops, say, note, el('p', 'legend__note', reviewSaid));
-    out.push(open);
+    const go = el('button', 'ctrl', '▶ Drive past');
+    go.dataset.go = 'past';
+    go.title = 'The race through this stop, on a loop (P)';
+    go.disabled = !!its[stopAt] && its[stopAt].step != null;   // a race moment is one already
+    go.addEventListener('click', () => { drivePast(); frame.focus(); });
+    stops.append(go);
+    open.append(el('h3', '', 'Look'), stops);
+  }
+  // Each question gets its own answer, saved with the verdict (or alone:
+  // an idea or a question needs no Keep / Rework / Drop).
+  const asks = it.ask || [];
+  const answers = answersOf(it);
+  if (asks.length) open.append(el('h3', '', asks.length > 1 ? 'Questions' : 'Question'));
+  asks.forEach((q, k) => {
+    const a = el('textarea', 'lm-review__answer');
+    a.rows = 2;
+    a.placeholder = 'Your answer';
+    a.setAttribute('aria-label', q);
+    a.value = answers[k] || '';
+    a.addEventListener('input', () => { answers[k] = a.value; answerDrafts.set(it.id, answers); keepDrafts(); });
+    open.append(el('p', 'lm-review__ask', q), a);
   });
-  reviewBox.replaceChildren(...out);
+  const say = el('div', 'lm-review__say seg');
+  for (const d of DECISIONS) {
+    const b = el('button', 'ctrl' + (v && v.decision === d ? ' is-on' : ''), upper(d));
+    b.dataset.decision = d;
+    b.addEventListener('click', () => { judge(d); frame.focus(); });
+    say.append(b);
+  }
+  const note = el('textarea', 'lm-review__note');
+  note.rows = 4;
+  note.placeholder = 'Why? What should change?';
+  note.value = drafts.has(it.id) ? drafts.get(it.id) : v ? v.note : '';
+  note.addEventListener('input', () => { drafts.set(it.id, note.value); keepDrafts(); });
+  // A note edited after the verdict is saved with it again.
+  note.addEventListener('change', () => { if (round.verdicts[it.id]) judge(round.verdicts[it.id].decision); });
+  open.append(el('h3', '', 'Verdict'), note, say);
+  if (asks.length) {
+    const b = el('button', 'ctrl', 'Save answers');
+    b.addEventListener('click', () => judge(v ? v.decision : null));
+    open.append(b);
+  }
+  const unsaved = drafts.has(it.id) || answerDrafts.has(it.id);
+  open.append(el('p', 'legend__note', reviewSaid || (unsaved ? 'Draft kept in this browser; a verdict saves it.' : '')));
+  reviewBox.replaceChildren(nav, open);
 }
 function pickItem(i) {
   if (!round || !round.items.length) return;
   itemAt = i;
   stopAt = -1;
+  listOpen = false;
   reviewSaid = '';
   state.item = round.items[i].id;
   save();
@@ -789,7 +911,6 @@ async function goStop(k) {
   if (!lm || !st) return;
   stopAt = k;
   paintReview();
-  setTour(false);
   if (st.track && st.track !== state.track) await setTrack(st.track);
   if (st.step != null) {
     setView('race');
@@ -809,8 +930,6 @@ async function goStop(k) {
     setView(st.view || 'orbit');
   }
   paintList();
-  // The list has scrolled the panel to the piece; the review is what is being read.
-  reviewBox.querySelector('.kit-row--at')?.scrollIntoView({ block: 'start' });
 }
 // Verdicts post in order, so a note saved on blur cannot land after the
 // decision clicked next.
@@ -834,6 +953,7 @@ function judge(decision) {
       round.verdicts[it.id] = j.verdict;
       drafts.delete(it.id);
       answerDrafts.delete(it.id);
+      keepDrafts();
       reviewSaid = `${decision ? upper(decision) : 'Answers'} saved in ${j.file}`;
     } catch (e) {
       reviewSaid = `Not saved (${e && e.message ? e.message : e})`;
@@ -903,6 +1023,9 @@ function onKey(e) {
   if (k === ' ') pause();
   else if (k === 'g') freeCam();
   else if (k === 'o') setView('orbit');
+  else if (k === 'p') drivePast();
+  else if (k === '?') setHelp(!state.help);
+  else if (k === 'm') stepSpeed(e.shiftKey ? -1 : 1);
   else if (race && k === 'c') stepCam(e.shiftKey ? -1 : 1);
   else if (race && (k === 'ArrowLeft' || k === 'ArrowRight')) seekBy((k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2));
   else if (race && (k === ',' || k === '.')) frameStep(k === ',' ? -1 : 1);
@@ -940,7 +1063,6 @@ function init(h) {
   state.track = lm.trackId();
   trackSel.value = state.track;
   save();
-  lm.spread(state.spread);
   lm.timeScale(rate());
   restoreView();
   // A link's piece, once: the model it names and which of its placements.
@@ -953,5 +1075,6 @@ function init(h) {
 }
 
 paintButtons();
+paintTabs();
 Gallery.initMobileOptionsToggle();
 load();

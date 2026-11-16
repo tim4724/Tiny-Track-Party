@@ -16,43 +16,24 @@
     <select id="lm-track" aria-label="Track"></select>
   </div>
 
-  <div class="group seg" role="group" aria-label="Players" id="lm-players">
-    <button class="ctrl" data-players="1">1P</button>
-    <button class="ctrl" data-players="2">2P</button>
-    <button class="ctrl" data-players="3">3P</button>
-    <button class="ctrl" data-players="4">4P</button>
-  </div>
-
   <div class="group seg" role="group" aria-label="Camera" id="lm-views">
-    <button class="ctrl" data-view="race" title="A live 1P race you can pause, rewind and annotate">Race</button>
-    <button class="ctrl" data-view="driver" title="The race's chase rig on the approach">Driver</button>
-    <button class="ctrl" data-view="glance" title="The approach, looking at the landmark">Glance</button>
+    <button class="ctrl" data-view="race" data-players="1" title="A live race you can pause, rewind and annotate: one player, the whole screen">Race 1</button>
+    <button class="ctrl" data-view="race" data-players="2" title="The same with two players: a two-way split">Race 2</button>
+    <button class="ctrl" data-view="race" data-players="4" title="The same with four players: a four-way split">Race 4</button>
+    <button class="ctrl" data-view="past" title="The race through the focused piece, on a loop (P)">Drive past</button>
     <button class="ctrl" data-view="high" title="From above, across the road">High</button>
     <button class="ctrl" data-view="orbit" title="A slow walk round the landmark">Orbit</button>
-    <button class="ctrl" data-view="top" title="Straight down over the whole lap">Top</button>
-    <button class="ctrl" data-view="free" title="Fly it yourself: drag, scroll, WASD, Q/E">Free</button>
+    <button class="ctrl" data-view="top" title="Straight down over the whole lap; in a race, the race from above">Top</button>
+    <button class="ctrl" data-view="free" title="Fly it yourself: drag, scroll, WASD, Q/E. In a race the camera lifts off the car and the race stays as it is (G)">Free</button>
   </div>
 
   <div class="group">
-    <label class="checkbox-label" for="lm-spread" title="Each cell frames the next landmark">
-      <input type="checkbox" id="lm-spread">
-      Spread
-    </label>
-  </div>
-
-  <div class="group seg">
-    <button class="ctrl" id="lm-slow" title="Slow motion: the scene at a quarter speed (M)">Slow</button>
-    <button class="ctrl" id="lm-fast" title="Double speed (Shift+M)">Fast</button>
-  </div>
-
-  <div class="group">
-    <button class="ctrl" id="lm-res" title="Sharp pins the render scale to this screen's; Auto is the game's adaptive scale">Res: Sharp</button>
+    <select id="lm-res" aria-label="Resolution" title="The stage's render resolution: this screen's, the game's adaptive rule, or one rung of its ladder"></select>
     <span class="lm-lines" id="lm-lines" title="The stage's drawing buffer height"></span>
   </div>
 
-  <div class="group seg">
-    <button class="ctrl" id="lm-tier" title="The detail tier drawn: Full is the web and the Apple TV, Lite the Android TV box (L)">Tier: Full</button>
-    <button class="ctrl" id="lm-tour" title="Step through every landmark, then the next track (T)">Tour</button>
+  <div class="group">
+    <button class="ctrl" id="lm-tier" title="The detail tier drawn: Full is the web and the Apple TV, Lite the Android TV box">Tier: Full</button>
   </div>
 
   <div class="group">
@@ -83,51 +64,78 @@
   <iframe id="lm-stage" title="Landmarks"></iframe>
   <div class="legend-grip" id="lm-grip" role="separator" aria-orientation="vertical"
        aria-label="Panel width" tabindex="0" title="Drag to resize the panel"></div>
-  <aside class="legend" id="lm-legend">
-    <!-- In fullscreen the header's camera buttons move in here (gallery-landmarks.js). -->
-    <div class="lm-fs" id="lm-fs">
-      <button class="ctrl" id="lm-full" title="The stage fullscreen, this panel and all (F); Esc leaves">Fullscreen</button>
-    </div>
-    <div class="lm-review" id="lm-review" hidden></div>
-    <dl class="keys" id="lm-keys">
-      <div><dt>Drag, wheel</dt><dd>look round, zoom</dd></div>
-      <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>fly (free camera)</dd></div>
-      <div><dt><kbd>E</kbd><kbd>Q</kbd> or <kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>up / down</dd></div>
-      <div><dt><kbd>G</kbd></dt><dd>free camera from here</dd></div>
-      <div><dt><kbd>O</kbd></dt><dd>orbit the piece</dd></div>
-      <div><dt><kbd>Space</kbd></dt><dd>pause the race</dd></div>
-      <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>2 s back / on (&#8679; 10 s)</dd></div>
-      <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>one frame back / on</dd></div>
-      <div><dt><kbd>C</kbd></dt><dd>race camera: chase, free, top</dd></div>
-      <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>review item</dd></div>
-      <div><dt><kbd>F</kbd></dt><dd>fullscreen (<kbd>H</kbd> hides this panel)</dd></div>
-      <div><dt><kbd>N</kbd></dt><dd>note on a screenshot</dd></div>
-    </dl>
-    <div class="lm-race" id="lm-race">
+  <!-- THE PANEL (gallery-landmarks.js): a head that stays put (the tabs, the
+       clock's rate, the race's transport) over a body that scrolls: the review
+       round's items, or the track's pieces. -->
+  <aside class="legend lm-panel" id="lm-legend">
+    <div class="lm-panel__head">
       <div class="lm-race__row">
-        <button class="ctrl" id="lm-pause" title="Pause or resume the race (Space)">Pause</button>
-        <input type="range" id="lm-time" min="0" max="0" step="1" value="0" aria-label="Race time">
-        <span class="lm-lines" id="lm-clock">0:00.0</span>
+        <div class="seg lm-tabs" id="lm-tabs" role="tablist" hidden>
+          <button class="ctrl" data-tab="review" role="tab">Review</button>
+          <button class="ctrl" data-tab="pieces" role="tab">Pieces</button>
+        </div>
+        <span class="lm-gap"></span>
+        <button class="ctrl" id="lm-help" title="The keys (?)" aria-controls="lm-keys">?</button>
+        <button class="ctrl" id="lm-full" title="The stage fullscreen, this panel and all (F); Esc leaves">Fullscreen</button>
       </div>
+      <!-- In fullscreen the header's camera buttons move in here. -->
+      <div class="lm-fs" id="lm-fs"></div>
       <div class="lm-race__row">
-        <button class="ctrl" id="lm-cam" title="Whose eye the race is seen through (C)">Cam: Chase</button>
+        <div class="seg" role="group" aria-label="Speed" id="lm-speed">
+          <button class="ctrl" data-speed="slow" title="Slow motion: the scene at a quarter speed (M steps the speed)">Slow</button>
+          <button class="ctrl" data-speed="normal" title="Real time">1x</button>
+          <button class="ctrl" data-speed="fast" title="Double speed">2x</button>
+        </div>
+        <span class="lm-gap"></span>
         <button class="ctrl" id="lm-note" title="Screenshot this moment and write a note on it (N)">Note</button>
       </div>
-      <p class="legend__note" id="lm-tier-out"></p>
+      <div class="lm-race" id="lm-race">
+        <div class="lm-race__row">
+          <button class="ctrl" id="lm-pause" title="Pause or resume the race (Space)">Pause</button>
+          <input type="range" id="lm-time" min="0" max="0" step="1" value="0" aria-label="Race time">
+          <span class="lm-lines" id="lm-clock">0:00.0</span>
+        </div>
+        <div class="lm-race__row">
+          <button class="ctrl" id="lm-cam" title="Whose eye the race is seen through (C)">Cam: Chase</button>
+          <button class="ctrl is-on" id="lm-loop" title="The drive past plays on a loop; this lets the race run on" hidden>Looping · stop</button>
+        </div>
+      </div>
       <p class="legend__note" id="lm-saved"></p>
     </div>
-    <div class="lm-card" id="lm-card"></div>
-    <div class="lm-bar">
-      <select id="lm-sort" aria-label="Order">
-        <option value="size">Biggest first</option>
-        <option value="lap">Lap order</option>
-        <option value="cost">Costliest first</option>
-        <option value="seen">Least read first</option>
-      </select>
-      <button class="ctrl" id="lm-score" title="Drive one autopiloted lap and say how long a racer reads each piece">Score lap</button>
+    <div class="lm-panel__body">
+      <dl class="keys" id="lm-keys" hidden>
+        <div><dt>Drag</dt><dd>take the camera (free), look round</dd></div>
+        <div><dt>Wheel</dt><dd>fly on / back, zoom the orbit</dd></div>
+        <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>fly (free camera)</dd></div>
+        <div><dt><kbd>E</kbd><kbd>Q</kbd> <kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>up / down</dd></div>
+        <div><dt><kbd>G</kbd></dt><dd>free camera from here</dd></div>
+        <div><dt><kbd>O</kbd></dt><dd>orbit the piece</dd></div>
+        <div><dt><kbd>P</kbd></dt><dd>drive past it, on a loop</dd></div>
+        <div><dt><kbd>Space</kbd></dt><dd>pause the race</dd></div>
+        <div><dt><kbd>&larr;</kbd><kbd>&rarr;</kbd></dt><dd>2 s back / on (&#8679; 10 s)</dd></div>
+        <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>one frame back / on</dd></div>
+        <div><dt><kbd>M</kbd></dt><dd>speed: slow, 1x, 2x</dd></div>
+        <div><dt><kbd>C</kbd></dt><dd>race camera: chase, free, top</dd></div>
+        <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>review item</dd></div>
+        <div><dt><kbd>F</kbd> <kbd>H</kbd></dt><dd>fullscreen, hide this panel</dd></div>
+        <div><dt><kbd>N</kbd></dt><dd>note on a screenshot</dd></div>
+      </dl>
+      <div class="lm-review" id="lm-review" hidden></div>
+      <div id="lm-pieces">
+        <div class="lm-card" id="lm-card"></div>
+        <div class="lm-bar">
+          <select id="lm-sort" aria-label="Order">
+            <option value="size">Biggest first</option>
+            <option value="lap">Lap order</option>
+            <option value="cost">Costliest first</option>
+            <option value="seen">Least read first</option>
+          </select>
+          <button class="ctrl" id="lm-score" title="Drive one autopiloted lap and say how long a racer reads each piece">Score lap</button>
+        </div>
+        <p class="legend__note" id="lm-sum"></p>
+        <div id="lm-list"></div>
+      </div>
     </div>
-    <p class="legend__note" id="lm-sum"></p>
-    <div id="lm-list"></div>
   </aside>
 </section>
 

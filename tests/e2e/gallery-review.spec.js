@@ -1,7 +1,9 @@
 // @ts-check
 // The landmark gallery's REVIEW MODE (/gallery-landmarks.html): a round served
-// by the dev server is listed beside the stage, each stop moves the stage to
-// what it names, a verdict and a note carry the item they were given on, and
+// by the dev server is listed beside the stage, an item opens on its own, each
+// stop moves the stage to what it names and the race drives past it on a loop,
+// a verdict and a note carry the item they were given on, what is typed
+// survives a reload, and
 // the camera can be taken in hand and the stage made fullscreen. The round and
 // the verdicts are mocked here: the real endpoints write the checkout.
 const { test, expect } = require('./helpers');
@@ -28,10 +30,11 @@ test('landmark gallery review: the round, its stops and verdicts', async ({ page
     await route.fulfill({ json: { verdict: { ...verdict, at: 'now', title: 'x' }, file: 'scratch/review/verdicts-t1.json' } });
   });
   await page.goto('/gallery-landmarks.html');
-  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('#lm-list .kit-row').first()).toBeAttached({ timeout: 30000 });
 
   // The items, and the verdict already given on one.
   const rows = page.locator('#lm-review > .kit-row');
+  const badge = page.locator('.lm-review__badge');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('Gulch: the stamp mill');
   await expect(rows.nth(1).locator('.kit-row__tris')).toHaveText('Keep');
@@ -47,19 +50,60 @@ test('landmark gallery review: the round, its stops and verdicts', async ({ page
   // A spot on the lap is the driver's view parked there.
   await page.locator('.lm-review__stops .ctrl').nth(1).click();
   expect(await L(page, (l) => l.mode())).toBe('driver');
-  await expect(page.locator('#lm-views [data-view="driver"]')).toHaveClass(/is-on/);
+  // The race drives past that spot on a loop, from before the car is abeam of
+  // it, until the loop is let go; and the clock's rate has a way back to 1x.
+  await page.locator('[data-go="past"]').click();
+  const loop = await L(page, (l) => l.race().loop);
+  expect(await L(page, (l) => l.mode())).toBe('race');
+  await expect(page.locator('#lm-views [data-view="past"]')).toHaveClass(/is-on/);
+  // The stretch is the race's clock, whatever the frame rate spends its updates at.
+  expect(loop.toMs - loop.atMs).toBeGreaterThan(1000);
+  expect(await L(page, (l) => l.race().step)).toBeGreaterThanOrEqual(loop.from);
+  const secs = await L(page, (l) => l.race().seconds);
+  expect(secs).toBeGreaterThan(loop.atMs / 1000 - 6.5);
+  expect(secs).toBeLessThanOrEqual(loop.toMs / 1000 + 0.2);
+  await page.locator('#lm-loop').click();
+  expect(await L(page, (l) => l.race().loop)).toBeNull();
+  // Free, from a paused race, is the race's own free camera: the race stays
+  // where it stood, and Race is the way back to the chase rig.
+  await page.keyboard.press(' ');
+  const stood = await L(page, (l) => l.race().step);
+  await page.locator('#lm-views [data-view="free"]').click();
+  expect(await L(page, (l) => l.race())).toMatchObject({ step: stood, paused: true, cam: 'free' });
+  await expect(page.locator('#lm-views [data-view="free"]')).toHaveClass(/is-on/);
+  await page.locator('#lm-views [data-view="race"][data-players="1"]').click();
+  expect(await L(page, (l) => l.race())).toMatchObject({ step: stood, cam: 'chase' });
+  // Race 2 is the same view as a two-way split, and a framed view is one cell again.
+  await page.locator('#lm-views [data-view="race"][data-players="2"]').click();
+  await expect.poll(() => L(page, (l) => [l.seats(), l.mode()])).toEqual([2, 'race']);
+  await expect(page.locator('#lm-views [data-players="2"]')).toHaveClass(/is-on/);
+  await page.locator('#lm-views [data-view="orbit"]').click();
+  await expect.poll(() => L(page, (l) => [l.seats(), l.mode()])).toEqual([1, 'orbit']);
+  await page.keyboard.press('m');
+  await expect(page.locator('#lm-speed [data-speed="fast"]')).toHaveClass(/is-on/);
+  await page.locator('#lm-speed [data-speed="normal"]').click();
+  await expect(page.locator('#lm-speed [data-speed="normal"]')).toHaveClass(/is-on/);
 
   // A question is answered on its own, with no decision...
   await page.locator('.lm-review__answer').first().fill('it does');
   await page.locator('.lm-review__item .ctrl', { hasText: 'Save answers' }).click();
-  await expect(rows.nth(0).locator('.kit-row__tris')).toHaveText('Answered');
+  await expect(badge).toHaveText('Answered');
   expect(verdict).toEqual({ round: 't1', id: 't1-mill', decision: null, note: '', answers: ['it does'] });
   // ...and a verdict posts the item it is given on, with the note and the answers.
   await page.locator('.lm-review__note').fill('taller');
   await page.locator('.lm-review__item [data-decision="rework"]').click();
-  await expect(rows.nth(0).locator('.kit-row__tris')).toHaveText('Rework');
+  await expect(badge).toHaveText('Rework');
   expect(verdict).toEqual({ round: 't1', id: 't1-mill', decision: 'rework', note: 'taller', answers: ['it does'] });
   await expect(page.locator('.lm-review__item')).toContainText('verdicts-t1.json');
+
+  // A note with no verdict yet is kept across a reload, as is the open item.
+  await page.locator('.lm-review__note').fill('taller still');
+  await page.reload();
+  await expect(page.locator('#lm-list .kit-row').first()).toBeAttached({ timeout: 30000 });
+  await expect(page.locator('.lm-review__note')).toHaveValue('taller still');
+  await page.locator('.lm-review__nav .ctrl', { hasText: 'All items' }).click();
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).click();
 
   // ] is the next item: a moment of the race, paused, through its cam.
   await page.keyboard.press(']');
@@ -112,6 +156,16 @@ test('landmark gallery review: the camera in hand, and fullscreen', async ({ pag
   expect(turned).not.toEqual(before);
   await page.waitForTimeout(300);
   expect(await eye()).toEqual(turned);   // held: the walk has stopped
+
+  // In any other view a drag takes the free camera, from where the picture stood.
+  await page.locator('#lm-views [data-view="high"]').click();
+  expect(await L(page, (l) => l.mode())).toBe('high');
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 60, y + 10, { steps: 4 });
+  await page.mouse.up();
+  expect(await L(page, (l) => l.mode())).toBe('free');
+  await expect(page.locator('#lm-views [data-view="free"]')).toHaveClass(/is-on/);
 
   await page.evaluate(() => {
     window.__asked = [];
