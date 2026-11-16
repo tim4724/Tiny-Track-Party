@@ -705,17 +705,21 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, trunk=0x9a7b55, sink=0.0):
     x, y, z = at
     k = h / 4.2
     dx, dz = math.cos(yaw), math.sin(yaw)
-    pts = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t) for t in (0, 0.36, 0.7, 1.0)]
+    # (the box's palm, LITE: its trunk in two lengths of five sides, five
+    # fronds, no coconuts)
+    ts, sides, fronds = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
+    pts = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t) for t in ts]
     if sink:
-        rod((x, y - sink, z), pts[0], 0.3 * k, trunk, segs=6)
-    for i in range(3):
-        rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
+        rod((x, y - sink, z), pts[0], 0.3 * k, trunk, segs=sides)
+    for i in range(len(ts) - 1):
+        rod(pts[i], pts[i + 1], (0.3 - 0.18 * ts[i]) * k, trunk, r2=(0.3 - 0.18 * ts[i + 1]) * k, segs=sides) if LITE else \
+            rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
     tx, ty, tz = pts[-1]
-    for i in range(6):                                  # each frond one blade, drooping
-        a = yaw + i * math.pi / 3 + 0.3
+    for i in range(fronds):                             # each frond one blade, drooping
+        a = yaw + i * 2 * math.pi / fronds + 0.3
         ca, sa = math.cos(a), math.sin(a)
         beam((tx, ty + 0.1 * k, tz), (tx + ca * 2.1 * k, ty - 0.45 * k, tz + sa * 2.1 * k), 0.5 * k, 0x61cb8b, d=0.06)
-    for sd in (-1, 1):
+    for sd in () if LITE else (-1, 1):
         box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
 
 class square:
@@ -955,9 +959,9 @@ def crab_pots():
     # blue net loft with its door to the road (+X) and floats hung on its
     # wall, the boat hauled up beside it with its pale sail hung up its mast to
     # dry (what a racer sees first, over the kerb; not the roof's red, which
-    # it stands in front of from the road), creels stacked high by the slip, a
-    # net drying on two poles, and the fisher in yellow oilskins sorting the
-    # catch, who turns to watch the cars go by.
+    # it stands in front of from the road), creels stacked high by the slip and
+    # a net drying on two poles. No one about: a small standing figure reads
+    # uncanny from the seat.
     gabled_house(-0.8, 0.0, 1.5, 1.7, 1.0, 0.6, 0x6794d9, 0xcf534f)
     box((0.06, 0.74, 0.5), (-0.03, 0.37, 0.0), 0xfff6eb)                       # the door, in its white frame
     box((0.06, 0.66, 0.4), (-0.01, 0.34, 0.0), 0x4f5260)
@@ -1006,8 +1010,6 @@ def crab_pots():
         box((0.03, drop, z1 - z0 + 0.02), (-0.2, (y0 + y1) / 2 - drop / 2, (z0 + z1) / 2), 'green' if i % 2 else 'sky')
         beam(line[i], line[i + 1], 0.04, 0x9a7b55)
         box((0.1, 0.1, 0.1), (-0.2, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2), 0xff7e44)
-    with animated('anim_watch:r=22:d=70#fisher', (1.25, 0, 0.1)):
-        figure((1.25, 0, 0.1), 0.0, shirt=0xffc044, legs=0x38383d, hair=0x38383d)
     join_still('landing')
     on_a_rise()
 
@@ -1037,6 +1039,9 @@ def tide_lump(polys, at, h, rx, rz, yaw, seed, base=0.0, sink=1.0, lean=(0.0, 0.
     c, s = math.cos(yaw), math.sin(yaw)
     T = (0.0, 0.17, 0.33, 0.48, 0.62, 0.74, 0.85, 0.93, 0.98, 1.07)
     ns = max(9, min(18, int(round(4 + 1.6 * max(rx, rz)))))
+    if LITE:                                          # the box's rock: half the rings, two thirds of the spokes
+        T = (0.0, 0.3, 0.55, 0.76, 0.93, 1.07)
+        ns = max(7, int(round(0.68 * ns)))
     ph2, ph3 = 6.28 * jitter(0, 3, seed), 6.28 * jitter(0, 4, seed)
     clefts = {int((jitter(k, 7, seed) + 0.5) * ns) % ns for k in range(max(1, ns // 6))}
     spokes = []
@@ -1101,7 +1106,7 @@ def tide_arch(polys, at, yaw, W, H, r, seed, base=0.0, top=None, wet=None):
     cx, cz = at
     c, s = math.cos(yaw), math.sin(yaw)
     A, B = W / 2 + r, H + r
-    K, M = 16, 10
+    K, M = (10, 7) if LITE else (16, 10)
     secs = []
     for k in range(K + 1):
         th = -0.22 + (math.pi + 0.44) * k / K
@@ -1375,7 +1380,7 @@ def lifeboat_station():
     # the line, at a building's real size beside a car: the boathouse,
     # white under the cottages' slate, its name board, its great doors to the sea
     # (-X) at the head of the slipway, which runs down over the reef's
-    # ledges into the surf; the lifeboat in its cradle at the top of the
+    # ledges onto the sand the tide has left; the lifeboat in its cradle at the top of the
     # slip, orange and navy, bow to the sea; the station's flag flying from
     # a tall staff by the road side, the coxswain's bell under a little roof.
     # Its back and gable stand over the kerb from the bend before it. On a
@@ -1423,7 +1428,6 @@ def lifeboat_station():
                                         (SL1 + 3.4, 2.2, 1.6, 0.45), (BX - 0.8, -3.4, 1.7, 0.5), (BX - 0.4, 3.6, 1.5, 0.45))):
         stone(x, z, sz, 0.9 * k, 260.0 + k, squat=sq, rock=('grey', WET), top='lavender', y=-0.15)
     reef_tone()
-    tidepool_surf([(SL1 - 1.0, -0.4, 3.0, 0.0)])
     join_still('station')
     on_a_rise()
 
@@ -1921,9 +1925,6 @@ def promenade():
     o.location = P(KX, deck_y + 1.0, KZ)
     o.rotation_euler = (math.pi, 0, 0)
     box((0.24, 0.2, 0.24), (KX, deck_y + 1.08, KZ), 0xfde4c7)                          # the scoop
-    with square():
-        figure((1.5, deck_y, KZ - 0.2), math.pi, shirt=0x339cf2, legs=0x4f5260, hair=0x38383d)
-        figure((1.8, deck_y, KZ + 0.25), math.pi, shirt=0xff7e44, legs=0x339cf2, hair=0xffc044)
     flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (red, white), 'anim_flutter:p=2.0#kiosk')
     # the pier: on from the boardwalk's end a step down (its root lies
     # under the boardwalk's end, and two decks at one level fight), out over
@@ -2298,7 +2299,7 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
     It runs on under the beach and its back into the dune."""
     a = road.yaw(zc)
     xf, zf = road.at(zc, front + dep / 2)
-    y = road.y(zc) + 0.05
+    y = road.y(zc) + RIP_PAVE
     c, s = math.cos(a), math.sin(a)
     def T(lx, ly, lz):
         return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
@@ -2328,7 +2329,8 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
                     continue
                 if bay and f < 2 and cz == cols[-1]:
                     continue
-                box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
+                if not LITE:                                                            # (the box's windows: no frames)
+                    box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
                 box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
         if bay:                                                                         # a bay window, two floors
             bz = cols[-1]
@@ -2340,9 +2342,16 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
             box((0.4, 0.1, w * 0.7), T(fx + 0.2, 0.98, 0.0), 0xfff6eb, yaw=a)
             box((0.08, 0.32, w * 0.7), T(fx + 0.38, 1.18, 0.0), 0xfff6eb, yaw=a)
 
+RIP_PAVE = 0.36   # the town pavement's top over the road's: a step over the racing kerb's
+
 def riptide_pavement(road, z0, z1):
-    """The pavement before the terrace, at the road's height past the beach strip."""
-    riptide_along(road, z0, z1, 5.1, 6.4, None, 0.05, 'grey', row=4, dy=-0.5)
+    """The pavement before the terrace, past the beach strip and its kerb:
+    raised a step over the kerb, its edge in paler stone, so the seat sees
+    the houses stand on paving (level with the road it lay hidden behind
+    the kerb, and the road's sand strip read as running to the doors)."""
+    step = 2.0 if LITE else 1.0
+    riptide_along(road, z0, z1, 5.3, 6.4, None, RIP_PAVE, 'grey', row=4, dy=-0.5, step=step)
+    riptide_along(road, z0, z1, 5.05, 5.3, None, RIP_PAVE + 0.03, 'lavender', row=6, dy=-0.5, step=step)
 
 @piece(1.0)
 def seafront_hotel():
@@ -2357,7 +2366,7 @@ def seafront_hotel():
     zc, w, dep, floors = -0.6, 4.6, 3.0, 4
     a = road.yaw(zc)
     xf, zf = road.at(zc, 6.3 + dep / 2)
-    y = road.y(zc) + 0.05
+    y = road.y(zc) + RIP_PAVE
     c, s = math.cos(a), math.sin(a)
     def T(lx, ly, lz):
         return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
@@ -2428,10 +2437,10 @@ def seafront_cafe():
     a = road.yaw(zc)
     for i in range(7):
         x, z = road.at(zc - 1.9 + i * 0.63, 5.95)
-        box((0.7, 0.08, 0.64), (x, road.y(zc) + 0.95, z), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.35)
+        box((0.7, 0.08, 0.64), (x, road.y(zc) + 0.9 + RIP_PAVE, z), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.35)
     for lz in (-1.2, 1.2):
         x, z = road.at(zc + lz, 5.6)
-        y = road.y(zc + lz) + 0.05
+        y = road.y(zc + lz) + RIP_PAVE
         box((0.5, 0.08, 0.5), (x, y + 0.5, z), 0xfff6eb)
         box((0.12, 0.5, 0.12), (x, y + 0.25, z), 0x38383d)
     riptide_house(road, 3.3, 2.2, 3, 0xd0e8ff, 0xcf534f, bay=True)
@@ -3067,8 +3076,8 @@ def pirate_stockade():
     # sand's fall and out into the bay, the small boat tied at its end and the
     # big one pulled up the sand beside it. In the sea wall a cannon run out to sea, in the
     # end wall toward the ship another trained along the shore on her
-    # anchorage, and the thatched lookout at that corner, the Jolly Roger
-    # over it and over the gate. The land side is a full wall with no way in
+    # anchorage, and a squat fighting platform at that corner, the Jolly
+    # Roger over it and over the gate. The land side is a full wall with no way in
     # (round 15 had low stakes and a gap there, which read as a wall too small
     # and broken); the yard holds the log hut, the cold fire ring and the
     # stores. Rounds 12 to 14 put a temple and then this fort on the
@@ -3081,8 +3090,19 @@ def pirate_stockade():
     X0, X1, Z0, Z1 = -3.6, 2.9, -4.4, 4.4            # the palisade's line
     GZ, GW = -1.4, 1.0                                 # the gate in the sea wall, its half width
     SEA_Y = SEA - 0.72                                 # the sea's surface, under the rise the camp stands on
+    # (the box's build, LITE: fatter logs further apart, each one tapered
+    # stake of five sides; the jetty's planks twice as broad and square-edged;
+    # no kegs by the gate or on the platform, a plain crate for the bottles)
+    LR, LSEG = (0.25, 5) if LITE else (0.18, 6)
+    def stake(x, y, z, h, log, r=None):
+        r = r or LR
+        if LITE:
+            cyl(r, h + 0.3, (x, y, z), log, r2=0.45 * r, segs=LSEG, stem=True)
+        else:
+            cyl(r, h, (x, y, z), log, segs=LSEG, stem=True)
+            cyl(r, 0.3, (x, y + h, z), log, r2=0.02, segs=LSEG, stem=True)
     def logs(a, b, gaps=(), tall=1.55):
-        n = max(1, int(round(math.dist(a, b) / 0.36)))
+        n = max(1, int(round(math.dist(a, b) / (2 * LR))))
         for i in range(n):
             t = (i + 0.5) / n
             x, z = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
@@ -3090,8 +3110,7 @@ def pirate_stockade():
                 continue
             h = tall + 0.18 * tall * jitter(i, int(x * 7 + z * 13), 3.3)
             log = 'bark' if i % 3 else dark                 # weathered grey-brown, a darker one now and then
-            cyl(0.18, h + 0.4, (x, -0.4, z), log, segs=6, stem=True)
-            cyl(0.18, 0.3, (x, h, z), log, r2=0.02, segs=6, stem=True)
+            stake(x, -0.4, z, h + 0.4, log)
     PORT = (X0 + 0.5, Z0)                              # the end wall's gun port, by the sea
     logs((X0, Z0), (X0, Z1), gaps=((X0, GZ, GW), (X0, 2.0, 0.42)))
     logs((X0, Z0), (X1, Z0), gaps=((PORT[0], PORT[1], 0.42),))
@@ -3114,28 +3133,29 @@ def pirate_stockade():
     # through the end wall toward the ship's anchorage
     kit('pirate', 'cannon', (X0 + 1.0, 0, 2.0), yaw=math.radians(-90), scale=0.6)
     kit('pirate', 'cannon', (PORT[0], 0, Z0 + 1.1), yaw=math.radians(180), scale=0.6)
-    # the lookout at that corner: four legs braced, a plank platform with a
-    # rail, a thatch over it, the flag on top
-    LX, LZ, P0 = X0 + 1.4, Z0 + 1.5, 3.4
+    # the corner toward the ship: a fighting platform a head over the wall,
+    # squat on four stout posts, a parapet of short sharpened logs on its
+    # two outer sides, powder kegs on it and the Jolly Roger on a staff at
+    # its corner. (Until round 19 a thatched lookout tower stood here, a
+    # twin of the lookout down the east straight, the two in one frame.)
+    LX, LZ, P0 = X0 + 1.5, Z0 + 1.5, 2.0
     for sx in (-1, 1):
         for sz in (-1, 1):
-            beam((LX + sx * 0.95, -0.4, LZ + sz * 0.95), (LX + sx * 0.7, P0, LZ + sz * 0.7), 0.22, wood)
-    for sx in (-1, 1):
-        beam((LX + sx * 0.9, 0.4, LZ - 0.9), (LX + sx * 0.75, P0 - 0.4, LZ + 0.75), 0.13, dark)
-        beam((LX - 0.9, 0.4, LZ + sx * 0.9), (LX + 0.75, P0 - 0.4, LZ + sx * 0.75), 0.13, dark)
-    box((1.9, 0.2, 1.9), (LX, P0 + 0.1, LZ), plank)
-    for k in range(4):
-        a = k * math.pi / 2 + math.pi / 4
-        box((0.14, 0.8, 0.14), (LX + 0.85 * math.cos(a), P0 + 0.6, LZ + 0.85 * math.sin(a)), wood)
-    for sx in (-1, 1):
-        beam((LX + sx * 0.85, P0 + 0.9, LZ - 0.85), (LX + sx * 0.85, P0 + 0.9, LZ + 0.85), 0.1, wood)
-    cyl(1.35, 0.8, (LX, P0 + 1.0, LZ), 0xd9b054, r2=0.1, segs=8)             # the thatch
-    for i in range(8):                                                       # the ladder up its yard side
-        t = (i + 0.5) / 8
-        box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.15 - 0.15 * t), dark)
+            cyl(0.22, P0 + 0.4, (LX + sx * 1.0, -0.4, LZ + sz * 1.0), dark, segs=6, stem=True)
+    box((2.6, 0.2, 2.6), (LX, P0 + 0.1, LZ), plank)
+    for k in range(6):
+        t = -1.1 + 0.44 * k
+        for (x, z) in ((LX - 1.2, LZ + t), (LX + t, LZ - 1.2)):
+            log = 'bark' if k % 2 else dark
+            stake(x, P0 + 0.2, z, 0.75, log, r=0.16)
+    for (dx, dz, yw) in () if LITE else ((-0.5, -0.4, 0.4), (0.2, -0.6, 1.2)):
+        kit('pirate', 'barrel', (LX + dx, P0 + 0.2, LZ + dz), yaw=yw, scale=0.5)
+    for i in range(5):                                                       # the ladder up its yard side
+        t = (i + 0.5) / 5
+        box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.45 - 0.15 * t), dark)
     for dx in (0.0, 0.6):
-        beam((LX + dx, -0.4, LZ + 1.15), (LX + dx, P0, LZ + 1.0), 0.1, wood)
-    kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_flutter:p=2.0#tower')
+        beam((LX + dx, -0.4, LZ + 1.45), (LX + dx, P0, LZ + 1.3), 0.1, wood)
+    kit_flag('flag-pirate-high', (LX + 1.0, P0 + 0.2, LZ - 1.0), math.radians(90), 0.6, 'anim_flutter:p=2.0#tower')
     # the log hut on the land side of the yard, its door to the yard
     BX, BZ, BW, BD, BH = 1.4, 2.0, 2.2, 2.8, 1.4
     box((BW - 0.2, BH + 0.4, BD - 0.2), (BX, (BH - 0.4) / 2, BZ), 0x6e4a32)
@@ -3166,22 +3186,24 @@ def pirate_stockade():
         rod((FX - 0.38 * math.cos(a), 0.08, FZ - 0.38 * math.sin(a)), (FX + 0.38 * math.cos(a), 0.12 + 0.03 * k,
             FZ + 0.38 * math.sin(a)), 0.07, 'dark')
     # the stores by the gate, inside
-    for (x, z, yw) in ((X0 + 0.9, GZ - 1.6, 0.3), (X0 + 1.5, GZ - 2.2, 1.1), (X0 + 1.0, GZ + 1.6, 0.6)):
+    for (x, z, yw) in () if LITE else ((X0 + 0.9, GZ - 1.6, 0.3), (X0 + 1.5, GZ - 2.2, 1.1), (X0 + 1.0, GZ + 1.6, 0.6)):
         kit('pirate', 'barrel', (x, 0, z), yaw=yw, scale=0.5)
     kit('pirate', 'crate', (X1 - 0.8, 0, -2.6), yaw=0.25, scale=0.7)
-    kit('pirate', 'crate-bottles', (X1 - 0.9, 0, -1.6), yaw=-0.3, scale=0.55)
+    kit('pirate', 'crate' if LITE else 'crate-bottles', (X1 - 0.9, 0, -1.6), yaw=-0.3, scale=0.55)
     # the jetty from the gate out over the sand's fall into the sea: planks
     # across on two stringers, piles down into the sea bed at both edges, a
     # bollard at its end, a coil of rope and a crate on it
     J0, J1, JW, D = X0 - 0.1, -17.6, 0.7, 0.12
-    n = int((J0 - J1) / 0.4)
-    for k in range(n):
-        box((0.36, 0.12, 2 * JW), (J0 - 0.2 - k * 0.4, D, GZ), plank if k % 3 else 0x9a6a46)
-    for sz in (-1, 1):
-        box((J0 - J1, 0.18, 0.18), ((J0 + J1) / 2, D - 0.15, GZ + sz * (JW - 0.1)), wood)
-        for k in range(8):
-            x = J0 - 0.6 - k * (J0 - J1 - 0.8) / 7
-            box((0.24, 2.6, 0.24), (x, D - 1.3, GZ + sz * (JW + 0.05)), dark)
+    PW = 0.8 if LITE else 0.4
+    n = int((J0 - J1) / PW)
+    with (plain_parts() if LITE else contextlib.nullcontext()):
+        for k in range(n):
+            box((PW - 0.04, 0.12, 2 * JW), (J0 - PW / 2 - k * PW, D, GZ), plank if k % 3 else 0x9a6a46)
+        for sz in (-1, 1):
+            box((J0 - J1, 0.18, 0.18), ((J0 + J1) / 2, D - 0.15, GZ + sz * (JW - 0.1)), wood)
+            for k in range(8):
+                x = J0 - 0.6 - k * (J0 - J1 - 0.8) / 7
+                box((0.24, 2.6, 0.24), (x, D - 1.3, GZ + sz * (JW + 0.05)), dark)
     box((0.3, 0.5, 0.3), (J1 + 0.25, D + 0.25, GZ + JW - 0.2), dark)
     torus(0.24, 0.07, (J1 + 2.2, D + 0.12, GZ - 0.25), 0xcbb794)
     kit('pirate', 'crate', (J1 + 0.9, D + 0.06, GZ - 0.25), yaw=0.4, scale=0.42)
@@ -3196,6 +3218,56 @@ def pirate_stockade():
     draped('boat', beached)
     on_a_rise()
 
+@piece(1.0)
+def treasure_dig():
+    # Cove: what the crew came ashore for, on the outside of the bend above
+    # the bay: the hole they have dug in the sand under a board marked with a
+    # red X, the chest hove half out of it on a rope from shear legs of three
+    # spars (the dig's tall thing, which shows over the kerb), heaps of dug
+    # sand round it with their spades stuck in, a keg and a crate of their
+    # stores. No one about. It stands on a beach rise (tracks.js); the hole
+    # is a print on the sand. +X is the road.
+    wood, dark, rope, red = 0x8a6a46, 0x6e5b3a, 0xcbb794, 0xcf534f
+    def hole():                                         # the pit's dark mouth, ragged
+        N = 10
+        rim = [(1.25 * (1.0 + 0.2 * jitter(i, 1, 9.0)) * math.cos(2 * math.pi * i / N), 0.04,
+                1.1 * (1.0 + 0.2 * jitter(i, 2, 9.0)) * math.sin(2 * math.pi * i / N)) for i in range(N)]
+        o = colored_faces([('bark', [(0.0, 0.04, 0.0), rim[i], rim[(i + 1) % N]]) for i in range(N)], 'hole')[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, 20)
+    # the dug sand, damp and darker than the beach, heaped round the hole
+    # (soft rounded heaps: faceted lumps read as boulders)
+    for k, (x, z, r, h) in enumerate(((-1.9, 0.6, 1.3, 0.75), (-0.7, -2.1, 1.1, 0.62), (-1.4, 2.2, 0.95, 0.5),
+                                      (1.5, 1.9, 0.8, 0.4))):
+        rowed(sphere(r, (x, -0.05, z), 'gravel', subdiv=2, scale=(1.15, h / r, 1.0), flat=False, yaw=1.1 * k), 31)
+    # the shear legs over the hole, the chest on their rope, canted, half out
+    APEX = (0.0, 3.3, 0.0)
+    for k in range(3):
+        a = 0.5 + k * 2 * math.pi / 3
+        beam((1.9 * math.cos(a), -0.3, 1.9 * math.sin(a)), (APEX[0] - 0.08 * math.cos(a), APEX[1] + 0.25, APEX[2] - 0.08 * math.sin(a)),
+             0.16, wood if k else dark)
+    box((0.3, 0.26, 0.3), (0.0, APEX[1] - 0.2, 0.0), dark)                             # the block
+    beam((0.0, APEX[1] - 0.2, 0.0), (0.05, 0.7, 0.0), 0.07, rope)
+    kit('pirate', 'chest', (0.05, 0.02, 0.0), yaw=0.5, scale=0.8, roll=0.28)
+    box((0.34, 0.16, 0.3), (0.95, 0.1, -0.55), 0xffc044, yaw=0.4)                      # what spilled from it
+    box((0.2, 0.12, 0.2), (1.2, 0.07, -0.25), 0xffc044, yaw=1.1)
+    # the board on its post, the X to the road and the cars coming
+    box((0.14, 1.9, 0.14), (2.3, 0.75, -2.2), wood)
+    box((0.1, 0.95, 1.05), (2.3, 1.55, -2.2), 0xfde4c7, yaw=-0.5)
+    c5, s5 = math.cos(-0.5), math.sin(-0.5)
+    for sgn in (-1, 1):
+        beam((2.3 + 0.07 * c5 - 0.36 * s5, 1.55 - sgn * 0.33, -2.2 - 0.07 * s5 - 0.36 * c5),
+             (2.3 + 0.07 * c5 + 0.36 * s5, 1.55 + sgn * 0.33, -2.2 - 0.07 * s5 + 0.36 * c5), 0.13, red, d=0.05)
+    # spades stuck in the heaps, their stores
+    kit('pirate', 'tool-shovel', (-1.7, 0.6, 0.5), yaw=0.6, scale=0.55, roll=0.2)
+    kit('pirate', 'tool-shovel', (-0.6, 0.5, -2.0), yaw=2.0, scale=0.55, pitch=0.25)
+    kit('pirate', 'barrel', (1.9, 0.0, 1.0), yaw=0.3, scale=0.5)
+    kit('pirate', 'crate', (2.4, 0.0, 0.2), yaw=0.7, scale=0.55)
+    join_still('dig')
+    draped('floor_hole', hole)
+    on_a_rise()
 
 # ---- round 6: Tidepool's Seal Rock and car park ----
 
@@ -3210,6 +3282,10 @@ def scenery_wheel(cx, cy, cz, r, w, yaw=0.0, hub=0xfde4c7):
     c, s = math.cos(yaw), math.sin(yaw)
     def at(d):                                           # a point `d` along the axle from the wheel's middle
         return (cx + d * c, cy, cz - d * s)
+    if LITE:                                             # the box's wheel: ten sides, no cap
+        cyl(r, w, at(-w / 2), 0x2a2735, segs=10, axis='across', yaw=yaw, smooth=True)
+        cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=8, axis='across', yaw=yaw)
+        return
     cyl(r, w, at(-w / 2), 0x2a2735, segs=16, axis='across', yaw=yaw, smooth=True)
     cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=12, axis='across', yaw=yaw)
     cyl(0.2 * r, w + 0.07, at(-w / 2 - 0.035), 0x9aa1b4, segs=8, axis='across', yaw=yaw, stem=True)
@@ -3446,55 +3522,46 @@ def seal_life(pose, coat, k):
 
 @piece(1.0)
 def seal_rock():
-    # Tidepool: the seals' rock off the east bend, a tidal island at its real
-    # size (some 20 u across, 5 u to its grassy top), low and broad in the
-    # open water the shore brings round it (tracks.js): its foot dark and wet
-    # with the weed band the tide leaves, grey rock above, a cap of grass.
-    # Built of a dozen lumps run together, so its faces break into buttresses
-    # and clefts (three lumps made a rock of a dozen flat sides). Six seals
-    # lie hauled out on the low skirts of rock that face the road
-    # (beach_seal: flat out, heads up, bowed, a pup); one bobs in the water
-    # off its seaward foot, and gulls wheel over the top. The east run points dead at it for five
-    # seconds: dark rock on blue sea.
-    rock = ('grey', WET)
-    for k, (x, z, s, sq, y) in enumerate(((0.0, 0.0, 12.0, 0.72, -0.6), (-3.8, 3.6, 9.0, 0.62, -0.4),
-                                          (3.4, -3.6, 7.0, 0.6, -0.3), (3.6, 2.6, 6.5, 0.7, -0.3),
-                                          (-2.6, -4.4, 7.5, 0.6, -0.4), (-6.2, -0.6, 6.0, 0.55, -0.3),
-                                          (0.6, 6.2, 6.0, 0.55, -0.3), (5.6, -0.4, 4.6, 0.6, -0.2),
-                                          (-0.8, -6.6, 5.0, 0.5, -0.3))):
-        stone(x, z, s, 0.4 + 1.3 * k, 31.0 + k, squat=sq, rock=rock, top='green' if k < 5 else 'grey', y=y)
-    # the wet foot and its weed band, round its seaward sides in the water
-    for k in range(10):
-        a = k / 10 * 2 * math.pi + 0.3
-        if math.cos(a) > 0.3:                           # not up the beach: there they lay on dry sand as flat tiles
-            continue
-        stone(9.6 * math.cos(a), 8.8 * math.sin(a), 5.0, a, 40.0 + k, squat=0.2,
-              rock=(WET, 'dark'), top=WEED if k % 2 else WET, y=-0.5)
-    # the skirts the seals lie on: low humps of the rock sloping into the
-    # sea on the road side (+X), and the seals on their backs
-    SKIRTS = ((7.6, -4.6, 6.0, 0.8), (8.0, 2.8, 5.4, 2.1), (2.2, 9.0, 5.0, 0.3))
-    for k, (x, z, s, yw) in enumerate(SKIRTS):
-        stone(x, z, s, yw, 35.0 + 7 * k, squat=0.22, rock=rock, top='grey', y=-0.35)
-    spots = ((7.0, -5.2, 2.2, 'up', 'brown', 1.1), (8.3, -3.8, 1.5, 'flat', 'grey', 1.0),
-             (7.4, 2.2, 0.5, 'arch', 'brown', 1.0), (8.4, 3.0, 1.2, 'flat', 'pup', 0.55),
-             (1.6, 8.6, 1.8, 'flat', 'brown', 1.05), (2.9, 9.5, 0.8, 'up', 'grey', 0.95))
-    ground = built_ground()                             # each lies on its skirt as built, not sunk in it
+    # Tidepool: the seals' rock off the east bend, where the east run points
+    # for five seconds: a tidal island of the reef's own rock (tide_lump: the
+    # headland's rounded grey lumps, wet and dark at the foot, the downs'
+    # muted turf on its crown), a dome some six units to its top with its
+    # shoulders run into it, its foot on the wet sand at the water's edge.
+    # Seals lie hauled out on the low backs of rock on its road side (+X),
+    # one bobs in the water off its seaward foot, the surf breaks there and
+    # gulls wheel over the top. (Until round 19 it was a heap of angular dark
+    # facets under a saturated green cap, out in open water: another rock
+    # language from the reef's, and a speck from the run.)
+    polys = []
+    for k, (x, z, h, rx, rz, yw, rd, lean) in enumerate((
+            (0.0, 0.0, 6.2, 6.4, 5.6, 0.5, 2.7, (0.1, -0.1)),        # the island's dome
+            (-3.6, 3.4, 4.3, 4.2, 4.0, -0.4, 2.5, (-0.1, 0.1)),      # its shoulders
+            (3.0, -3.8, 3.3, 3.8, 3.4, 0.9, 2.4, (0.1, 0.0)),
+            (-3.0, -4.2, 3.0, 3.6, 3.2, 0.2, 2.4, (0.0, 0.0)),
+            (2.6, 4.4, 2.6, 3.2, 3.4, 1.2, 2.3, (0.0, 0.1)))):
+        tide_lump(polys, (x, z), h, rx, rz, yw, 131.0 + 2.3 * k, top='leaf' if h > 3.5 else 'lavender', wet=0.5,
+                  roundness=rd, lean=lean)
+    # the low backs the seals lie on, toward the road
+    for k, (x, z, h) in enumerate(((6.6, -3.6, 1.5), (7.0, 1.8, 1.7), (4.4, 6.6, 1.4))):
+        tide_lump(polys, (x, z), h, 2.6, 3.0, 0.7 * k, 141.0 + 1.9 * k, wet=0.35, roundness=2.8)
+    # boulders round its foot
+    for k, (x, z, sz) in enumerate(((-7.6, -2.0, 1.2), (-6.8, 4.6, 1.0), (-1.0, -8.0, 1.1), (1.5, 8.8, 0.9),
+                                    (8.8, -6.4, 0.8))):
+        tide_lump(polys, (x, z), 1.1 * sz, 1.4 * sz, 1.2 * sz, 0.9 * k, 150.0 + k, wet=0.45)
+    tide_rock(polys)
+    spots = ((6.3, -4.0, 0.5, 'up', 'brown', 1.1), (7.3, -3.0, -0.4, 'flat', 'grey', 1.0),
+             (6.7, 1.4, 0.2, 'arch', 'brown', 1.05), (7.6, 2.4, 0.9, 'flat', 'pup', 0.55),
+             (4.2, 6.2, 1.2, 'flat', 'brown', 1.05), (5.0, 7.2, 0.4, 'up', 'grey', 0.95))
     for k, (x, z, yw, pose, coat, size) in enumerate(spots):
-        ys = [ground(x + dx, z + dz) for dx, dz in ((0, 0), (0.35, 0), (-0.35, 0), (0, 0.35), (0, -0.35))]
-        y = min((v for v in ys if v is not None), default=0.15) - 0.03
-        beach_seal(x, y, z, yw, 'r%d' % k, pose, coat, size, seal_life(pose, coat, k))
+        beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, yw, 'r%d' % k, pose, coat, size, seal_life(pose, coat, k))
     # one in the water off its seaward foot, its head up, bobbing on the swell
-    with animated('anim_bob:h=0.07:p=3.4#swimmer', (-13.5, 0.0, 2.0)):
-        beach_seal(-13.5, 0.1, 2.0, math.pi + 0.3, 'swimmer', 'swim', 'grey')
-    # gulls wheeling over the top on a slow loop
-    ring = [(5.0 * math.cos(t), 9.5 + 0.6 * math.sin(2 * t), 4.4 * math.sin(t)) for t in (i / 12 * 2 * math.pi for i in range(12))]
-    for i, p in enumerate(ring):
-        marker('path_gulls_%d' % i, p)
-    for m in range(2):
-        with animated('anim_path:c=gulls:p=16:f=1:o=%.2f#g%d' % (m * 0.5, m), (0.0, 0.0, 0.0)):
-            box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
-            box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
+    with animated('anim_bob:h=0.07:p=3.4#swimmer', (-10.5, 0.0, 2.0)):
+        beach_seal(-10.5, 0.1, 2.0, math.pi + 0.3, 'swimmer', 'swim', 'grey')
+    tidepool_surf([(-8.6, -1.0, 3.2, 0.1), (-6.4, 6.4, 2.6, 0.7), (-3.4, -8.2, 2.8, -0.9)])
+    tidepool_gulls([(5.0 * math.cos(t), 9.5 + 0.6 * math.sin(2 * t), 4.4 * math.sin(t))
+                    for t in (i / 12 * 2 * math.pi for i in range(12))], 16)
     join_still('rock')
+    tidepool_foot()
 
 @piece(1.0)
 def tide_ledges():
@@ -3524,7 +3591,98 @@ def tide_ledges():
                 rowed(o, 31)
                 if heap:
                     rowed(box((0.5, 0.2, 1.1), (x + 0.5, 0.08, z + 0.3), 'olive', yaw=1.1 + i), 24)
+    # the wet sand between the ribs, from a stride past the kerb down to the
+    # sea, its edges ragged: a print on the ground, like the small pools'
+    def wet():
+        def across(z, k):
+            x0, x1 = 3.4 + 0.9 * wobble(z, 2.0, 7.0), -12.0 + 1.6 * wobble(z, 9.0, 7.0)
+            return (x0 + (x1 - x0) * k / 3, 0.03, z)
+        quads = [('gravel', [across(z, k), across(z, k + 1), across(z + 3.0, k + 1), across(z + 3.0, k)])
+                 for z in (-13.0 + 3.0 * i for i in range(9)) for k in range(3)]
+        o = colored_faces(quads, 'wet')[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, 31)
+    draped('floor_wet', wet)
     draped('ledges', build)
+
+def reef_pool(seed, r, long_a, post):
+    """Tidepool: one of the smaller pools the tide left in the reef flats
+    (rock_pool() is the big one): its water `r` across in a rim of the
+    reef's rock, the rock's shelf reaching furthest toward the bearing
+    `long_a`, low on the road side (+X) so the seat looks over the lip onto
+    the water, knuckles of the reef standing round it. One polar mesh,
+    draped. `post` stands a tide marker in it, a banded post at the pool's
+    sea side."""
+    N, WY, LIP = 20, 0.06, 0.3
+    def rim(a):
+        return r * (1.0 + 0.14 * math.sin(2 * a + seed) + 0.08 * math.sin(3 * a + 1.9 * seed))
+    def shelf(a):
+        return (1.1 + 1.7 * max(0.0, math.cos(a - long_a)) ** 2 + 0.9 * max(0.0, -math.cos(a)) ** 1.5
+                + 0.3 * math.sin(4 * a + seed) + 0.25 * math.sin(5 * a + 2.1 * seed))
+    rows = []
+    for i in range(N + 1):
+        a = i / N * 2 * math.pi
+        c, sn = math.cos(a), math.sin(a)
+        r0, w = rim(a), shelf(a)
+        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.1 * max(0.0, -c) + 0.03 * math.sin(3 * a + seed)
+        prof = [(0.0, WY - 0.03), (0.6 * r0, WY - 0.03), (0.9 * r0, WY), (r0, WY + 0.01), (r0 + 0.1, WY + 0.02),
+                (r0 + 0.18, top), (r0 + 0.5 * w, top + 0.05), (r0 + w + 0.4, -0.06)]
+        rows.append([(c * q, y, sn * q) for q, y in prof])
+    kinds = ('deep', 'shallow', 'shallow', 'foam', 'lip', 'shelf', 'shelf')
+    def pool():
+        polys = {}
+        for i in range(N):
+            for j, kind in enumerate(kinds):
+                polys.setdefault(kind, []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
+        for kind, quads in polys.items():
+            sw = {'deep': 'blue', 'shallow': 'sky', 'foam': 'white', 'lip': 'grey', 'shelf': 'lavender'}[kind]
+            o = colored_faces([(sw, q) for q in quads], 'pool_' + kind)[0]
+            for pl in o.data.polygons:
+                if pl.normal.z < 0:
+                    pl.flip()
+            rowed(o, {'deep': 16, 'shallow': 24, 'foam': 2, 'lip': 26, 'shelf': 30}[kind])
+        # the reef's knuckles round it: big on its sea side and along the
+        # shelf's long reach, small where the road looks in
+        for k in range(7):
+            a = seed + 0.9 * k + 0.3 * jitter(k, 1, seed)
+            road = max(0.0, math.cos(a))
+            sz = (2.6 - 1.5 * road) * (0.85 + 0.3 * (jitter(k, 2, seed) + 0.5))
+            d = rim(a) + 0.5 + 0.5 * shelf(a)
+            stone(d * math.cos(a), d * math.sin(a), sz, 1.3 * k, seed * 50.0 + k, squat=0.45 + 0.2 * (1.0 - road),
+                  rock=('grey', WET), top='lavender', y=0.1)
+        reef_tone()
+        if post:
+            with plain_parts():
+                px, pz = -(rim(math.pi) + 0.7), 0.3
+                for k in range(5):                                   # the marker, banded red and white
+                    box((0.16, 0.42, 0.16), (px, 0.21 + 0.42 * k, pz), 0xcf534f if k % 2 else 0xfff6eb)
+                box((0.3, 0.08, 0.3), (px, 2.14, pz), 0x38383d)
+    # the sand the tide has just left round it, dark and wet, running off
+    # down the beach (-X): a print on the ground (a `paint` form's tint does
+    # not show on the beach's plain)
+    def wet():
+        M = 18
+        def reach(a, k):
+            out = 2.0 + 1.0 * math.sin(3 * a + seed) + 3.4 * max(0.0, -math.cos(a)) ** 2
+            return rim(a) + 0.6 * shelf(a) + k * out / 2
+        quads = []
+        for i in range(M):
+            a0, a1 = 2 * math.pi * i / M, 2 * math.pi * (i + 1) / M
+            for k in range(2):
+                quads.append(('gravel', [(math.cos(a) * reach(a, kk), 0.03, math.sin(a) * reach(a, kk))
+                                      for a, kk in ((a0, k), (a0, k + 1), (a1, k + 1), (a1, k))]))
+        o = colored_faces(quads, 'wet')[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, 31)
+    draped('floor_wet', wet)
+    draped('pool', pool)
+
+PIECES['reef-pool-a'], GROW['reef-pool-a'] = (lambda: reef_pool(1.7, 2.6, 1.2, True)), 1.0
+PIECES['reef-pool-b'], GROW['reef-pool-b'] = (lambda: reef_pool(4.3, 2.2, 2.3, False)), 1.0
 
 @piece(1.0)
 def rock_poolers_park():
@@ -3556,7 +3714,7 @@ def rock_poolers_park():
     # height and the mouth reaches the kerb's own foot)
     path = [(5.85, -11.4), (4.6, -11.7), (2.4, -11.4), (0.2, -10.0), (-0.8, -6.6), (-0.6, 0.0), (-1.0, 6.0),
             (-1.3, 10.4), (-1.5, 12.6), (-1.6, 14.2)]
-    for _ in range(3):                                    # Chaikin: its bends worn round
+    for _ in range(2 if LITE else 3):                     # Chaikin: its bends worn round (the box's lane a pass coarser)
         path = [path[0]] + [q for a_, b_ in zip(path, path[1:])
                             for q in ((0.75 * a_[0] + 0.25 * b_[0], 0.75 * a_[1] + 0.25 * b_[1]),
                                       (0.25 * a_[0] + 0.75 * b_[0], 0.25 * a_[1] + 0.75 * b_[1]))] + [path[-1]]
@@ -3605,7 +3763,7 @@ def rock_poolers_park():
                 groups.setdefault(key, []).append(q)
         # the turning loop, a hand under the lane's end: the turf island,
         # gravel, the two ruts the lane's run on into, gravel
-        N = 28
+        N = 16 if LITE else 28
         for (r0, r1, key) in ((0.0, LOOP - 1.25, ('olive', 6)), (LOOP - 1.25, LOOP - RUT1, ('gravel', 31)),
                               (LOOP - RUT1, LOOP - RUT0, ('bark', 12)), (LOOP - RUT0, LOOP + RUT0, ('gravel', 31)),
                               (LOOP + RUT0, LOOP + RUT1, ('bark', 12)), (LOOP + RUT1, LOOP + 2.0, ('gravel', 31))):
@@ -4072,12 +4230,17 @@ def causeway_rail():
     # seat: timber piles standing out of the water a hand past each kerb,
     # the hop's length and the causeway's, their heads a car's height over
     # the deck, a heavy rope slung from head to head, a life ring on a pile
-    # here and there on the sea's side. The causeway carries no sand
+    # here and there. The causeway carries no sand
     # (tracks.js), so the kerbs stand at the asphalt's edge and the piles
     # and the water right beside them. Where the road leaves the land and
     # where it comes back, a taller pair of piles with a lamp each: the
     # gate onto the water. One piece astride the road (RIP_ROAD); the sim
     # never sees it, and it stands clear of both kerbs.
+    # (round 19: on the open sea's side the piles are cut down to stubs a
+    # hand over the kerb, every other one, and carry no rope: a rail a car
+    # high on both sides fenced the water out of the seat's view, and the
+    # owner wants to feel above it. The rope rail, the life rings and the
+    # tall piles keep to the lagoon's side.)
     wood, dark, rope, red, white = 0x8a6a46, 0x6e5b3a, 0xfde4c7, 0xff5040, 0xfff6eb
     STEP, OUT, HEAD, HANG = 3.2, 0.45, 1.05, 0.8
     T0, T1 = -37.6, 29.6           # from the ring where the piles begin: the sand has gone by it
@@ -4089,18 +4252,21 @@ def causeway_rail():
                 t = T0 + STEP * i
                 x, deck, z = riptide_rail_at(t, 0.0, out=side * OUT)
                 gate = i in (0, n)
-                top = deck + (2.3 if gate else HEAD + 0.08 * jitter(i, side + 2, 4.0))
+                sea = side > 0 and not gate
+                if sea and i % 2:
+                    continue
+                top = deck + (2.3 if gate else 0.42 if sea else HEAD + 0.08 * jitter(i, side + 2, 4.0))
                 w = 0.42 if gate else 0.34
                 box((w, top + 1.4, w), (x, (top - 1.4) / 2, z), wood if (i + side) % 3 else dark, yaw=0.5 * i)
                 box((w + 0.1, 0.12, w + 0.1), (x, top + 0.02, z), white, yaw=0.5 * i)    # its cap
                 if gate:
                     rowed(box((0.3, 0.34, 0.3), (x, top + 0.25, z), 'yellow', yaw=0.5 * i), 0)   # the lamp
                     box((0.4, 0.1, 0.4), (x, top + 0.46, z), red, yaw=0.5 * i)
-                if prev:
+                if prev and side < 0:
                     mid = ((prev[0] + x) / 2, (prev[1] + deck) / 2 + HANG - 0.22, (prev[2] + z) / 2)
                     beam((prev[0], prev[1] + HANG, prev[2]), mid, 0.13, rope)
                     beam(mid, (x, deck + HANG, z), 0.13, rope)
-                if side > 0 and i % 5 == 2:
+                if side < 0 and i % 5 == 2:
                     ox, _, oz = riptide_rail_at(t, 0.0, out=side * (OUT - 0.24))
                     torus(0.3, 0.1, (ox, deck + 0.45, oz), red, segs=8, axis='across', yaw=0.0)
                 prev = (x, deck, z)
@@ -4333,9 +4499,9 @@ def driftwood_trunk():
     # begins: a forest giant lying along the verge, stripped and bleached,
     # its root plate reared up twice a car's height at one end, its broken
     # limbs standing up off the trunk, smaller logs washed up
-    # against it and a dead tree still standing in the sand behind its roots. A
-    # beachcomber sits on the trunk; the gull on the roots watches the cars
-    # and hops off as one goes by. +X is the road.
+    # against it and a dead tree still standing in the sand behind its roots.
+    # No one about; the gull on the roots watches the cars and hops off as
+    # one goes by. +X is the road.
     L = 9.0
     with bleached():
         spine = [(0.0, 1.05, -L / 2 + 0.3), (0.1, 0.8, -L / 4), (0.0, 0.52, 0), (-0.12, 0.34, L / 4), (0.05, 0.2, L / 2)]
@@ -4348,7 +4514,6 @@ def driftwood_trunk():
         rod((-1.0, 0.1, 1.5), (-1.6, 0.09, 3.2), 0.1, 'cream', r2=0.07)
         rod((0.9, 0.16, -3.6), (-1.1, 0.5, -2.4), 0.15, 'cream', r2=0.1)               # one thrown across the trunk's foot
         drift_snag(-1.6, -3.2, 3.6, 0.2, 2.2, 1.0)
-    figure((0.0, 0.84, -0.6), 0.0, shirt=0xff5040, legs=0xf2bf99, pose='sit')
     gull((0.0, 2.28, -L / 2), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     join_still('trunk')
 
@@ -4466,14 +4631,14 @@ def dune_fence(name, seed, half, breaks):
                     a0 = 2.4 * k + p
                     d = 0.25 + 0.55 * frac(k * 0.37 + p * 0.21)
                     x, z = px + d * math.cos(a0), pz + 1.5 * d * math.sin(a0)
-                    for j in range(5):                                # a tussock: blades fanned out of one foot
-                        a = 1.26 * j + k
+                    for j in range(3 if LITE else 5):                 # a tussock: blades fanned out of one foot
+                        a = (2.1 if LITE else 1.26) * j + k
                         hgt = 0.55 + 0.3 * frac(k * 0.29 + j * 0.4 + p * 0.13)
                         o = beam((x + 0.05 * math.cos(a), -0.05, z + 0.05 * math.sin(a)),
-                                 (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.1,
+                                 (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.15 if LITE else 0.1,
                                  ('green', 'cream', 'green', 'tan', 'green')[(j + k) % 5])
                         o['ramp'] = 0.15
-                if p % 3 == 0:
+                if p % 3 == 0 and not LITE:
                     for j in range(3):
                         fx, fz = px + 0.7 * math.cos(2.0 * j + p), pz + 0.9 * math.sin(2.0 * j + p)
                         box((0.03, 0.16, 0.03), (fx, 0.06, fz), 'green')
@@ -4511,11 +4676,11 @@ def dune_marram():
                     a0 = 2.4 * k + p
                     d = 0.4 + 0.8 * frac(k * 0.37 + p * 0.21)
                     x, z = px + d * math.cos(a0), pz + 1.4 * d * math.sin(a0)
-                    for j in range(5):
-                        a = 1.26 * j + k + p
+                    for j in range(3 if LITE else 5):                 # (the box's tussock: three broader blades)
+                        a = (2.1 if LITE else 1.26) * j + k + p
                         h = 0.8 + 0.55 * frac(k * 0.29 + j * 0.4 + p * 0.13)
                         o = beam((x + 0.07 * math.cos(a), -0.15, z + 0.07 * math.sin(a)),
-                                 (x + 0.45 * math.cos(a), h, z + 0.45 * math.sin(a)), 0.15,
+                                 (x + 0.45 * math.cos(a), h, z + 0.45 * math.sin(a)), 0.22 if LITE else 0.15,
                                  ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
                         o['ramp'] = 0.15
     draped('marram', build)
@@ -5266,6 +5431,51 @@ def point_wrack():
         drift_snag(-3.4, 0.4, 4.2, 0.2, 2.4, 13.0, limbs=4)
         drift_snag(-2.6, 3.6, 3.0, 0.3, 0.6, 14.0, limbs=3)
     join_still('wrack')
+
+@piece(1.0)
+def storm_buoy():
+    # Driftwood: a channel buoy the storm tore off its mooring and threw up
+    # on the point, where the road comes out of the tunnel facing it: a red
+    # steel float with a white band, its skirt dark with weed, the lattice
+    # tower over it carrying its lamp and topmark, the whole of it canted
+    # over in the sand it has sunk into, twice a car's height still; its
+    # chain trailing off down the beach, kelp heaped against it and bleached
+    # logs thrown up beside it, a gull on its lamp. +X is the road.
+    red, white = 0xcf534f, 0xfff6eb
+    LEAN = Matrix.Rotation(0.42, 4, 'Y') @ Matrix.Rotation(-0.16, 4, 'X')      # over toward the road and the cars coming
+    before = set(bpy.context.scene.objects)
+    rowed(cyl(0.55, 0.55, (0.0, -0.3, 0.0), 'olive', r2=0.98, segs=10), 28)     # the skirt, weeded
+    cyl(0.98, 0.95, (0.0, 0.25, 0.0), red, segs=10)                              # the float
+    cyl(1.0, 0.24, (0.0, 0.6, 0.0), white, segs=10)
+    cyl(0.98, 0.4, (0.0, 1.2, 0.0), red, r2=0.6, segs=10)
+    for k in range(4):                                                           # the tower's legs
+        a = math.pi / 4 + k * math.pi / 2
+        beam((0.52 * math.cos(a), 1.5, 0.52 * math.sin(a)), (0.2 * math.cos(a), 3.2, 0.2 * math.sin(a)), 0.13, red)
+    box((0.66, 0.1, 0.66), (0.0, 2.3, 0.0), red)
+    box((0.52, 0.12, 0.52), (0.0, 3.22, 0.0), red)
+    cyl(0.17, 0.3, (0.0, 3.28, 0.0), 0xffc044, segs=6)                           # the lamp
+    cyl(0.36, 0.5, (0.0, 3.62, 0.0), red, r2=0.03, segs=6)                       # the topmark
+    bpy.context.view_layer.update()
+    for o in bpy.context.scene.objects:
+        if o not in before:
+            o.matrix_world = LEAN @ o.matrix_world
+    tip = LEAN @ P(0.0, 3.6, 0.0)
+    gull((tip.x, tip.z + 0.2, -tip.y), 0.3, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
+    with bleached():
+        rod((-1.4, 0.3, -3.6), (-0.4, 0.5, 1.2), 0.32, 'tan', r2=0.24, segs=7)       # a trunk thrown up against it
+        rod((-2.4, 0.22, 0.6), (-0.9, 0.3, 3.8), 0.24, 'cream', r2=0.17, segs=7)
+        rod((0.8, 0.16, 1.6), (2.0, 0.14, 3.4), 0.16, 'tan', r2=0.1, segs=6)
+        drift_snag(-2.6, -2.2, 3.0, 0.25, 1.9, 21.0, limbs=3)
+    join_still('buoy')
+    def chain():
+        with plain_parts():
+            for k in range(9):                                                   # its chain, link by link down the beach
+                t = k / 8
+                x, z = -1.3 - 4.6 * t, 1.0 + 1.6 * math.sin(2.4 * t)
+                box((0.36, 0.16, 0.22), (x, 0.06, z), 'dark', yaw=0.9 * math.cos(2.4 * t) + (0.5 if k % 2 else 0.0))
+            for k, (x, z, yw) in enumerate(((1.2, -0.6, 0.4), (0.9, 0.9, 1.5), (-0.6, -1.4, 2.3), (1.7, 0.2, 0.9))):
+                rowed(box((0.6, 0.26, 1.5), (x, 0.08, z), 'olive' if k % 2 else 0x7a5a3a, yaw=yw), 30)     # kelp
+    draped('chain', chain)
 
 # ====================================================================================
 # SNOW
@@ -13705,6 +13915,15 @@ def lite_too(*names):
             finally:
                 LITE = False
         PIECES[n + '-lite'], GROW[n + '-lite'] = build, GROW[n]
+
+# The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
+# vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
+# of the groves and stands (palm()); Driftwood's marram in three-bladed
+# tussocks; Riptide's camp on the vans' plainer wheels and its town's windows
+# without their frames.
+lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
+         'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b',
+         'surf-campers', 'seafront-hotel', 'seafront-terrace', 'seafront-cafe')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals

@@ -479,16 +479,23 @@ export const TRACKS = {
     // read as grey specks): the east bend's with seals hauled out a stride
     // from the road, the west bend's taller, a headland with its sea arch and
     // a stack, gulls over them. The big rock pool lies beside the low west
-    // run that points at it, people at its edge, the crab fishers' landing
-    // just before it. Off the east bend, where the east run points, Seal Rock
-    // stands in open water, seals on its ledges. Inland, grassy downs fill
+    // run that points at it, the rock-poolers' nets and buckets left at its
+    // edge, the crab fishers' landing just before it, and two smaller pools
+    // lie in the reef flats beside the east run and the bend into the waist,
+    // the sand the tide has just left dark round them. Where the east run
+    // points, Seal Rock stands at the water's edge, the reef's own rock,
+    // seals on its low backs. Inland, grassy downs fill
     // both lobes of the lap, their flanks to the kerb, and at the lap's waist
     // a knoll with the same rock breaking out of it; the rock-poolers' vans
     // are parked along their gravel lane by the start straight.
     set: [
       { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
       { model: 'set-rock-pool', u: 0.675, lat: 13.5, yaw: 4 },
-      { model: 'set-seal-rock', u: 0.235, lat: 25 },
+      { model: 'set-seal-rock', u: 0.225, lat: 21 },
+      // the smaller pools (the west bend has no room for one: the sea comes
+      // in to a few strides off its kerb)
+      { model: 'set-reef-pool-a', u: 0.185, lat: 12.5 },
+      { model: 'set-reef-pool-b', u: 0.455, lat: 12, yaw: 30 },
       // the reef in three forms on the outsides of the bends, where the
       // camera swings to them: the seals' shelf round the east bend, the
       // headland and its sea arch where the west run points, the stacks at
@@ -497,9 +504,11 @@ export const TRACKS = {
       // ...and its ribs running down the beach along the top run after it,
       // the kelp the tide left between them
       { model: 'set-tide-ledges', u: 0.395, lat: 10 },
+      // ...and again down the beach beside the east run, which lay bare
+      { model: 'set-tide-ledges', u: 0.125, lat: 10, yaw: 6 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
-      { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
+      { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 1.8, scale: 1.3 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
@@ -533,8 +542,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
       { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      // the lifeboat station's rock over the beach, at the road's height
-      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
+      // the lifeboat station's swell of sand over the beach, at the height of
+      // the hop the road comes over beside it (lower, only its roof and flag
+      // showed over the crest's kerb)
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.8, top: 0.55, near: 0.4, w: 5 },
       // the reef terrace the rock pool lies in, at the road's height, so
       // the seat looks onto its water (flat on the beach it was a sliver)
       { kind: 'ridge', u: 0.675, lat: 20, len: 10, r: 13, h: 1.0, top: 0.55, near: 0.4, w: 5 },
@@ -542,6 +553,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
       // the sand the tide has just left, darker and cooler round the reef
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
+      // the east run's pool on a terrace of its own, like the big one's
+      { kind: 'ridge', u: 0.185, lat: 19, len: 8, r: 12, h: 1.0, top: 0.55, near: 0.4, w: 5 },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the camper lane (its gravel claims no footprint)
@@ -600,6 +613,17 @@ export const TRACKS = {
       // the lookout and its rope bridge stand on the road's own line, over it
       { model: 'set-pirate-lookout', u: 0.27, lat: 0 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
+      // the jungle down to the kerb on the island's side of the east
+      // straight, the last of them round the rope bridge's inland end, so
+      // the bridge comes out of the palms; and on the start straight's
+      // foothill past the cave
+      { model: 'set-jungle-grove', u: 0.185, lat: -10.5, yaw: 180 },
+      { model: 'set-jungle-grove', u: 0.272, lat: -13.5, yaw: 184 },
+      { model: 'set-jungle-grove', u: 0.035, lat: -10.5, yaw: 180 },
+      // the dig on the outside of the bend above the bay, where the east
+      // straight points, on a rise of its own at the height of the hill the
+      // road comes over there
+      { model: 'set-treasure-dig', u: 0.365, lat: 11, y: 2.5, scale: 1.4 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
       // palms on the beach outside the west bend, where the chase camera
@@ -649,6 +673,7 @@ export const TRACKS = {
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
+      { kind: 'ridge', u: 0.365, lat: 17.5, len: 8, r: 13, h: 2.5, top: 0.55, near: 0.4, w: 4 },
       // the foothill's face before the cave, green to the kerb (a facet of
       // it lay bare sand on the hillside)
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
@@ -658,7 +683,20 @@ export const TRACKS = {
       // peak's own tint has faded out down its flank (bare sand facets showed
       // between the canopy's crowns)
       { kind: 'paint', u: 0.68, lat: -16, len: 30, r: 8, w: 6, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f }
+      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f },
+      // ...and down the foothills to the kerb of the east straight, the bend
+      // into it and the start straight, which stood bare sand under a green
+      // crest (a dune, on an island called jungle)
+      { kind: 'paint', u: 0.215, lat: -13, len: 56, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.215, lat: -24, len: 56, r: 10, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.115, lat: -14, len: 16, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.025, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
+      // ...and round the bay, the peak's flank over the anchorage
+      { kind: 'paint', u: 0.315, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.385, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.45, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.515, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.222, lat: 15, len: 26, r: 6, w: 4, tint: 0x5f9f5f }
     ]
   },
   driftwood: {
@@ -705,6 +743,15 @@ export const TRACKS = {
       { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
       // the storm's wrack piled on the point where the road turns back
       { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
+      // ...and a channel buoy the storm threw up beside it, where the road
+      // out of the tunnel points; the strand line again along the sea side
+      // of the run back to the net huts, which lay bare
+      { model: 'set-storm-buoy', u: 0.87, lat: -10.5, yaw: 180 },
+      { model: 'set-strand-line', u: 0.912, lat: -9.6, yaw: 184 },
+      // storm fence and marram at the dunes' foot on the outside of the bend
+      // off the east side (the marram behind the fence is the full tier's)
+      { model: 'set-dune-fence-b', u: 0.215, lat: 9.6 },
+      { model: 'set-dune-marram', u: 0.225, lat: 14.5, lite: false },
       // the smokehouse where the start straight bends away, which it points at
       { model: 'set-smokehouse', u: 0.075, lat: -10.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
@@ -713,26 +760,27 @@ export const TRACKS = {
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
-      { kind: 'ridge', u: 0.53, lat: 23, yaw: 25, len: 14, r: 19, h: 4.0, top: 0.5 },
-      { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 4.0, top: 0.5 },
-      { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 3.8, top: 0.5 },
-      { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 3.6, top: 0.5 },
+      // (the inland line is spaced so its dunes run into one another without
+      // adding: ridge heights ADD, and where two crests overlap they stack
+      // into a peak. Ends a radius and a half apart, half-crested, keep one
+      // height along the line.)
+      { kind: 'ridge', u: 0.53, lat: 23, len: 6, r: 16.5, h: 4.0, top: 0.5 },
+      { kind: 'ridge', u: 0.62, lat: 28, len: 6, r: 16.5, h: 4.6, top: 0.5 },
+      { kind: 'ridge', u: 0.71, lat: 27, len: 6, r: 16, h: 3.6, top: 0.5 },
+      { kind: 'ridge', u: 0.79, lat: 22, len: 6, r: 14, h: 3.2, top: 0.5 },
       { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
       { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
       { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
-      // the great dune in the middle of the loop, over the rest
-      { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 5.5, top: 0.6 },
-      // dunes inside the start straight and the east side
-      { kind: 'ridge', u: 0.95, lat: 22, yaw: 20, len: 16, r: 16, h: 3.0, top: 0.5 },
-      { kind: 'ridge', u: 0.03, lat: 23, yaw: -25, len: 14, r: 16, h: 2.5, top: 0.5 },
-      { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 2.0, top: 0.5 },
-      // a low grassy line of dunes inland of the strand line, the sea side
-      // left open
-      // kept low: ridge heights add, so taller ones here stacked with the
-      // dune behind into a pale peak over the run down to the strand
-      { kind: 'ridge', u: 0.315, lat: 13, yaw: 20, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 8.5, h: 2.6, top: 0.3, near: 0.5, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
+      // one more dune inside the east side, clear of the pass's own. Until
+      // round 19 a great dune in the middle of the loop lay under three
+      // more, which summed into one sharp pyramid seventeen units high over
+      // the start straight; the pass's dunes are the loop's high ground now.
+      { kind: 'ridge', u: 0.15, lat: 19, len: 4, r: 15, h: 3.4, top: 0.5 },
+      // a low grassy dune inland of the strand line, the sea side left
+      // open: ONE broad form (three small ones run together here added up
+      // into a pale peak over the run down to the strand, and a form under
+      // a dozen units of radius is a pyramid on the ground's 9 u grid)
+      { kind: 'ridge', u: 0.37, lat: 15, len: 14, r: 13, h: 2.4, top: 0.6, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
       { kind: 'ridge', u: 0.975, lat: -18.5, len: 26, r: 6.5, h: 3, top: 0.3, near: 6.5, tint: 0xa8d090 },
       // marram at the dunes' feet along the pass, a green wash by the kerb
@@ -816,6 +864,8 @@ export const TRACKS = {
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
       // the seeded ones off), none on the marram dune
       { model: 'set-palm-stand', u: 0.95, lat: -9, yaw: 180 },
+      // marram in drifts up the great dune's face along the north run
+      { model: 'set-dune-marram', u: 0.835, lat: 13.5 },
       // the coastguard's lookout on the Point's flank over the start straight
       { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 }
     ],
@@ -837,6 +887,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.0, lat: -12, len: 50, r: 6, w: 4, tint: 0x5f9f5f },
       { kind: 'ridge', u: 0.85, lat: 35, r: 18, h: 9, top: 0.2, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.84, lat: 12, len: 40, r: 9, h: 4.5, top: 0.2, near: 0.5, tint: 0xa8d090 },
+      // its marram's green down the flank to the north run's kerb and up to
+      // the crest: under the ridges' own pale tint it stood a bare sand cone
+      { kind: 'paint', u: 0.84, lat: 12, len: 40, r: 7, w: 5, tint: 0x86b872 },
+      { kind: 'paint', u: 0.85, lat: 31, len: 10, r: 14, w: 8, tint: 0x86b872 },
       // the patrol's patch of sand where the cars land off the hop
       { kind: 'ridge', u: 0.19, lat: -17, len: 12, r: 13, h: 0.78, top: 0.55, near: 0.4, w: 6 },
       // the surf club's rise by the hop and the camp's by the hook, each at
