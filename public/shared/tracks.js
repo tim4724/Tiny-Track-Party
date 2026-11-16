@@ -1855,7 +1855,7 @@ export const TRACKS = {
     // sandstone in gullies and buttresses on a talus of one colour, never a
     // striped drum nor one long face), small spires of the same rock between
     // them, and the skyline all round is mesas and buttes of the land; a
-    // plank-and-rope footbridge hangs across the mesa's gap of sky. A
+    // balanced rock stands on the butte past the mesa's gap of sky. A
     // stand of saguaros marks the start straight. Out on the range the
     // ranch's windpump
     // turns over its stock tank near the road, its herds come in to it and
@@ -1871,16 +1871,11 @@ export const TRACKS = {
       // out on the range: the shipping pen and its loading chute by the
       // north straight, the one windpump past the bridge, a stock tank on
       // the outside of the S (three windpumps stood in one picture as one
-      // tower copied), each at the end of a length of the ranch's stock
-      // trail along the verge; the ranch's lane from the gateway in the
-      // start's fence up to its corral
+      // tower copied); the ranch's lane from the gateway in the start's
+      // fence up to its corral
       { model: 'set-loading-chute', u: 0.166, lat: 9.2 },
-      { model: 'set-stock-trail-end', u: 0.142, lat: 5.0 },
       { model: 'set-stock-tank', u: 0.58, lat: -12, yaw: 180 },
-      { model: 'set-stock-trail-end', u: 0.612, lat: -5.2, yaw: 180 },
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
-      { model: 'set-stock-trail-end', u: 0.425, lat: 5.0 },
-      { model: 'set-stock-trail', u: 0.46, lat: 5.0 },
       { model: 'set-ranch-lane', u: 0.032, lat: -5.4, yaw: 180 },
       { model: 'set-hoodoos', u: 0.32, lat: -12 },
       { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
@@ -2026,7 +2021,9 @@ export const TRACKS = {
       // down the start straight and under the mountain; round the outside
       // of the south loop and away under the S. Each span a thin footprint,
       // so the scatter round it stands. The detour behind the pumping wells
-      // is full-only: the wells and the deck hide it from the seat.
+      // is full-only (the wells and the deck hide it from the seat): in
+      // lite its first span is the line going under the ground
+      // (set-pipeline-8-under's lite build), up again at the south run.
       { model: 'set-pipeline-rise', u: 0.6270, lat: 6.50, yaw: -179.8 },
       { model: 'set-pipeline-8', u: 0.6270, lat: 6.50, yaw: 2.5 },
       { model: 'set-pipeline-8', u: 0.6430, lat: 6.47, yaw: 14.5 },
@@ -2035,14 +2032,14 @@ export const TRACKS = {
       { model: 'set-pipeline-8', u: 0.6791, lat: 6.35, yaw: 12.7 },
       { model: 'set-pipeline-12', u: 0.6907, lat: 6.33, yaw: 10.7 },
       { model: 'set-pipeline-16', u: 0.7139, lat: 6.48, yaw: 8.1 },
-      { model: 'set-pipeline-8', u: 0.7389, lat: 8.76, yaw: -31.9, lite: false },
+      { model: 'set-pipeline-8-under', u: 0.7389, lat: 8.76, yaw: -31.9 },
       { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3, lite: false },
       { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3, lite: false },
       { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9, lite: false },
       { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0, lite: false },
       { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4, lite: false },
       { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7, lite: false },
-      { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2 },
+      { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2, lite: false },
       { model: 'set-pipeline-rise', u: 0.9150, lat: 7.50, yaw: 179.9 },
       { model: 'set-pipeline-16', u: 0.9150, lat: 7.50, yaw: -1.2 },
       { model: 'set-pipeline-16', u: 0.9510, lat: 7.50, yaw: -0.4 },
