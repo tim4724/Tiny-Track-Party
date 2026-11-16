@@ -473,16 +473,23 @@ export const TRACKS = {
     // read as grey specks): the east bend's with seals hauled out a stride
     // from the road, the west bend's taller, a headland with its sea arch and
     // a stack, gulls over them. The big rock pool lies beside the low west
-    // run that points at it, people at its edge, the crab fishers' landing
-    // just before it. Off the east bend, where the east run points, Seal Rock
-    // stands in open water, seals on its ledges. Inland, grassy downs fill
+    // run that points at it, the rock-poolers' nets and buckets left at its
+    // edge, the crab fishers' landing just before it, and two smaller pools
+    // lie in the reef flats beside the east run and the bend into the waist,
+    // the sand the tide has just left dark round them. Where the east run
+    // points, Seal Rock stands at the water's edge, the reef's own rock,
+    // seals on its low backs. Inland, grassy downs fill
     // both lobes of the lap, their flanks to the kerb, and at the lap's waist
     // a knoll with the same rock breaking out of it; the rock-poolers' vans
     // are parked along their gravel lane by the start straight.
     set: [
       { model: 'set-tidepool-knoll', u: 0.5, lat: 13 },
       { model: 'set-rock-pool', u: 0.675, lat: 13.5, yaw: 4 },
-      { model: 'set-seal-rock', u: 0.235, lat: 25 },
+      { model: 'set-seal-rock', u: 0.225, lat: 21 },
+      // the smaller pools (the west bend has no room for one: the sea comes
+      // in to a few strides off its kerb)
+      { model: 'set-reef-pool-a', u: 0.185, lat: 12.5 },
+      { model: 'set-reef-pool-b', u: 0.455, lat: 12, yaw: 30 },
       // the reef in three forms on the outsides of the bends, where the
       // camera swings to them: the seals' shelf round the east bend, the
       // headland and its sea arch where the west run points, the stacks at
@@ -491,9 +498,11 @@ export const TRACKS = {
       // ...and its ribs running down the beach along the top run after it,
       // the kelp the tide left between them
       { model: 'set-tide-ledges', u: 0.395, lat: 10 },
+      // ...and again down the beach beside the east run, which lay bare
+      { model: 'set-tide-ledges', u: 0.125, lat: 10, yaw: 6 },
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
-      { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 0.9, scale: 1.2 },
+      { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 1.8, scale: 1.3 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
@@ -527,8 +536,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
       { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      // the lifeboat station's rock over the beach, at the road's height
-      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 5 },
+      // the lifeboat station's swell of sand over the beach, at the height of
+      // the hop the road comes over beside it (lower, only its roof and flag
+      // showed over the crest's kerb)
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.8, top: 0.55, near: 0.4, w: 5 },
       // the reef terrace the rock pool lies in, at the road's height, so
       // the seat looks onto its water (flat on the beach it was a sliver)
       { kind: 'ridge', u: 0.675, lat: 20, len: 10, r: 13, h: 1.0, top: 0.55, near: 0.4, w: 5 },
@@ -536,6 +547,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
       // the sand the tide has just left, darker and cooler round the reef
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
+      // the east run's pool on a terrace of its own, like the big one's
+      { kind: 'ridge', u: 0.185, lat: 19, len: 8, r: 12, h: 1.0, top: 0.55, near: 0.4, w: 5 },
       { kind: 'paint', u: 0.78, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the camper lane (its gravel claims no footprint)
