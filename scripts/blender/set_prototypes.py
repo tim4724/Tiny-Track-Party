@@ -5902,6 +5902,7 @@ FORESTS = {
     'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
     'avalanche-forest-l': ((4.0, -0.6, 0.37, 2.97, 0, 0), (3.3, 1.9, 0.34, 2.75, 1, 0), (5.3, -1.3, 0.36, 2.79, 0, 0), (5.2, -3.0, 0.37, 2.91, 0, 0), (-2.1, 0.1, 0.33, 2.62, 0, 0), (-4.0, 4.0, 0.22, 2.83, 0, 0), (-0.3, 4.1, 0.24, 2.71, 1, 0), (-6.8, -3.0, 0.52, 2.95, 0, 1), (-4.5, -3.7, 0.46, 2.82, 0, 0)),
+    'avalanche-forest-m': ((-16.0, 33.9, 5.34, 2.14, 0, 0), (4.4, 23.9, 7.57, 1.63, 1, 0), (-6.8, 29.6, 10.69, 1.84, 0, 0), (3.2, 26.5, 7.14, 2.03, 0, 0), (6.9, 16.3, 7.17, 2.24, 0, 0), (3.5, 11.4, 11.23, 1.84, 1, 0), (7.4, 18.6, 6.35, 1.58, 0, 0), (4.4, 32.8, 3.55, 1.70, 0, 0), (-0.3, 23.2, 12.86, 2.16, 0, 0), (9.5, 11.4, 4.59, 2.03, 1, 0), (9.4, 21.9, 4.28, 2.00, 0, 0), (-1.9, 27.9, 10.85, 1.93, 0, 0), (3.8, 16.5, 10.51, 1.71, 0, 0), (0.4, 19.1, 13.05, 1.78, 1, 0), (-12.9, 31.3, 9.10, 2.22, 0, 0), (-3.2, 25.4, 13.39, 1.51, 0, 0), (-12.1, 34.0, 6.54, 1.67, 0, 0), (-5.5, 33.3, 7.12, 2.02, 1, 0), (1.8, 34.0, 4.60, 2.14, 0, 0), (-12.3, 27.9, 12.48, 1.51, 0, 0), (5.4, 20.9, 8.25, 1.85, 0, 0), (2.5, 21.2, 10.78, 2.30, 1, 0), (2.9, 30.1, 5.76, 1.97, 0, 0), (-9.4, 34.0, 7.16, 1.59, 0, 0), (5.8, 29.9, 4.08, 2.05, 0, 0), (6.4, 12.7, 8.12, 2.36, 1, 0)),
 }
 
 # THE SNOW CUP'S ONE FIR is the Holiday Kit's (tree-snow-a/b/c), the scatter's
@@ -6351,11 +6352,10 @@ def avalanche_slide():
         x, z = x * G, z * G
         pine((x, H(x, z) - 0.6, z), k)
 
-def helicopter(x, y, z, w=14.0):
+def helicopter(x, y, z):
     """The mountain rescue's helicopter facing +X at its real size (some
-    twelve metres, nearly three cars long): a red cabin with a white band and
-    dark glass, the tail boom and fin, skids; its two rotors are parts of
-    their own that turn at `w` (anim_spin)."""
+    twelve metres, nearly three cars long), parked: a red cabin with a white
+    band and dark glass, the tail boom and fin, skids, its rotors still."""
     RED, GLASS = 0xcf534f, 0x2f3a4a
     box((1.3, 0.8, 0.85), (x, y + 0.55, z), RED)
     box((1.32, 0.16, 0.87), (x, y + 0.4, z), 0xfff6eb)
@@ -6367,11 +6367,9 @@ def helicopter(x, y, z, w=14.0):
         for dx in (-0.35, 0.4):
             box((0.06, 0.18, 0.06), (x + dx, y + 0.12, z + sd * 0.42), 0x555b66)
     box((0.14, 0.14, 0.14), (x, y + 1.02, z), 0x555b66)
-    with animated('anim_spin:a=y:w=%.1f#rotor' % w, (x, y + 1.12, z)):
-        box((3.0, 0.05, 0.16), (x, y + 1.12, z), 0x38383d)
-        box((0.16, 0.05, 3.0), (x, y + 1.12, z), 0x38383d)
-    with animated('anim_spin:a=z:w=%.1f#tail' % (w * 1.6), (x - 2.05, y + 1.0, z + 0.09)):
-        box((0.07, 0.62, 0.05), (x - 2.05, y + 1.0, z + 0.09), 0x38383d)
+    for a in (0.5, 0.5 + math.pi / 2):              # the blades at rest, off the cabin's axes
+        box((3.0, 0.05, 0.16), (x, y + 1.12, z), 0x38383d, yaw=a)
+    box((0.07, 0.62, 0.05), (x - 2.05, y + 1.0, z + 0.09), 0x38383d, roll=0.5)
 
 @piece(1.0)
 def windsock():
@@ -6379,23 +6377,34 @@ def windsock():
     # patrol's red hut, a windsock streaming on its mast (one and a half
     # units) and swinging round it as the wind veers off the mountain, a
     # slatted weather screen on legs, a snow stake banded to read the depth,
-    # a rescue sled, two of the patrol with their probes by the door, and on
-    # over its pad beside the post the rescue helicopter in the hover (the
-    # windsock is the pad's); the post's radio mast over it all, banded red
-    # and white, what reads of the post over the kerb and the verge.
+    # a rescue sled by the door, and beside the post the rescue helicopter
+    # parked, its rotors still, on a timber landing deck stood up on legs
+    # over the snow, steps down to the hut (the windsock is the pad's): on a
+    # pad at the snow's level it sat behind the road's bank to its roof, and
+    # in the hover over it, bobbing over two of the patrol, it was sent back
+    # as too busy. The post's radio mast over it all, banded red and white,
+    # what reads of the post over the kerb and the verge.
     cabin_hut(1.5, 0.85, 1.2, (-0.4, 0, -0.6), 0xcf534f, 0xeef4f9)
-    disc(1.7, (-1.0, 0, 3.6), 0x868ba1, segs=20, h=0.04)            # the pad, its H
-    for dz in (-0.35, 0.35):
-        box((0.9, 0.02, 0.14), (-1.0, 0.045, 3.6 + dz), 0xfff6eb)
-    box((0.14, 0.02, 0.56), (-1.0, 0.045, 3.6), 0xfff6eb)
-    # in the hover over its pad, coming in: on the pad it sat behind the road's
-    # bank to its roof, and a racer saw a rotor and a tail
-    with animated('anim_bob:h=0.22:p=4.6+sway:a=y:d=9:p=8.3#heli', (-1.0, 1.75, 3.6)):
-        helicopter(-1.0, 1.75, 3.6, w=16.0)
-        # the winch line down to the litter it is lifting off the pad
-        box((0.05, 1.9, 0.05), (-1.0, 1.05, 3.6), 0x2a2735)
-        box((0.6, 0.1, 0.24), (-1.0, 0.1, 3.6), 0xff7e44)
-        box((0.5, 0.08, 0.16), (-1.0, 0.18, 3.6), 0xfff6eb)
+    PX, PZ, PY = -1.0, 3.9, 1.15                                   # the landing deck, its top
+    box((3.6, 0.14, 3.6), (PX, PY - 0.07, PZ), 0x868ba1)
+    for sx in (-1, 1):
+        box((0.14, 0.1, 3.6), (PX + sx * 1.73, PY + 0.02, PZ), 0xff5040)        # its edge, marked
+        box((3.6, 0.1, 0.14), (PX, PY + 0.02, PZ + sx * 1.73), 0xff5040)
+        for sz in (-1, 1):
+            box((0.2, PY + 0.3, 0.2), (PX + sx * 1.5, (PY - 0.3) / 2 - 0.07, PZ + sz * 1.5), 0x8a6a46)
+        strut((PX + sx * 1.5, 0.05, PZ - 1.5), (PX + sx * 1.5, PY - 0.2, PZ + 1.5), 0.1, 0x8a6a46)
+    for dz in (-0.35, 0.35):                                       # the H
+        box((0.9, 0.02, 0.14), (PX, PY + 0.01, PZ + dz), 0xfff6eb)
+    box((0.14, 0.02, 0.56), (PX, PY + 0.01, PZ), 0xfff6eb)
+    for k in range(4):                                             # the steps down toward the hut
+        top = PY - 0.09 - 0.26 * k                                 # each a block down into the snow
+        box((0.9, top + 0.2, 0.3), (PX + 0.6, (top - 0.2) / 2, PZ - 1.95 - 0.3 * k), 0x8a6a46)
+    before = set(bpy.context.scene.objects)
+    helicopter(PX, PY, PZ)
+    for o in set(bpy.context.scene.objects) - before:              # side-on to the road, nose up the lap
+        v = o.location - P(PX, 0, PZ)
+        o.location = P(PX, 0, PZ) + Vector((-v.y, v.x, v.z))
+        o.rotation_euler.z += math.pi / 2
     box((0.08, 1.6, 0.08), (1.0, 0.8, 0.9), 0x555b66)
     with animated('anim_flutter:p=5.5#sock', (1.0, 1.55, 0.9)):
         box((0.06, 0.06, 0.06), (1.03, 1.55, 0.9), 0x2a2735)
@@ -6411,8 +6420,6 @@ def windsock():
     for k in range(5):                                             # the snow stake
         box((0.08, 0.2, 0.08), (0.3, 0.1 + k * 0.2, 1.4), 0xff5040 if k % 2 == 0 else 0xfff6eb)
     sled(0.2, 0, 0.6, 0.4, 0xff7e44, L=0.6)
-    snow_person(0.6, 0, -0.1, 0xff7e44, 0x38383d, yaw=0.4)
-    snow_person(0.75, 0, 0.3, 0xff7e44, 0xcf534f, yaw=-0.3)
     MX, MZ, MH = -1.3, -1.7, 3.2                                   # the radio mast behind the hut,
     for i in range(8):                                             # banded, guyed, its aerials
         box((0.1, MH / 8, 0.1), (MX, MH / 8 * (i + 0.5), MZ), 0xff5040 if i % 2 == 0 else 0xfff6eb)
@@ -6420,8 +6427,6 @@ def windsock():
     box((0.05, 0.05, 0.5), (MX, MH - 0.3, MZ), 0x555b66)
     for a in (0.9, 3.0, 5.1):
         strut((MX, MH * 0.7, MZ), (MX + 1.4 * math.cos(a), 0.02, MZ + 1.4 * math.sin(a)), 0.025, 0xc8cfdf)
-    for (x, z) in ((0.72, -0.18), (0.88, 0.22)):                   # their probes
-        box((0.04 + 0.02, 0.6, 0.04 + 0.02), (x, 0.3, z), 0x868ba1)
     snow_heap((-1.6, 0, 0.6), 0.6, yaw=0.2)
 
 def woodpile(x, z, k=0.3):
@@ -8723,6 +8728,10 @@ def cut_face(road, face, i0, i1, s0, s1, seed, ledge, verge, inner):
                        facet=lambda r, j: 2 <= j < CREST and j != LEDGE):
             if o['swatch'] == 'white':
                 snowy(o, 0.45)
+            elif o['swatch'] == SHADE:
+                # the turned facets in the grey ramp's lifted slate: the
+                # swatch's own slate under the bake's shade read near black
+                rowed(paint(o, ROCK), 26)
     return rows
 
 def cut_ice(rows, i0, seeps, firs, seed):
@@ -8900,7 +8909,7 @@ def fallen_rock(road, boulders):
                 stone(x, z, s * 1.5, road_yaw(road, i) + 1.3 * k, 3.1 * k + i)
     draped('scree', build)
 
-def crag(spine, peaks, seed, sink=2.5, top=None, rock=('lavender', ROCK), snow=0.68):
+def crag(spine, peaks, seed, sink=2.5, top=None, rock=('lavender', ROCK), snow=0.68, row=None):
     """A crest of the mountain's own rock breaking out of its snow, along
     `spine` ((x, z) points in the piece frame): sections across it about 2 u
     apart, each a foot either side sunk `sink` under the snow, a shoulder and
@@ -8912,7 +8921,8 @@ def crag(spine, peaks, seed, sink=2.5, top=None, rock=('lavender', ROCK), snow=0
     degrees out to where it sinks, so the rock grows out of the mountain's
     snow: a steep rock flank down to the snow read as a crown on the dome,
     on a hard dark line. `rock` is its (sunlit, turned) swatches, and snow
-    lies on a facet whose normal's rise is over `snow`. DRAPED, so y = 0 is
+    lies on a facet whose normal's rise is over `snow`; `row` holds the rock
+    at one row of its ramp (rowed()). DRAPED, so y = 0 is
     the snow as drawn: stand it on a crest, where the land under it lies near
     level, or the drape shears it."""
     pts = [spine[0]]
@@ -8971,6 +8981,8 @@ def crag(spine, peaks, seed, sink=2.5, top=None, rock=('lavender', ROCK), snow=0
     for o in sheet(rows, color, 'crag', facet=lambda i, j: True):
         if o['swatch'] == 'white':
             snowy(o, 0.45)
+        elif row is not None:
+            rowed(o, row)
 
 @piece(1.0)
 def snow_sapling():
@@ -9366,7 +9378,8 @@ def avalanche_crags():
     # is at (-5.5, 44).
     def build():
         crag([(2.0, -20.0), (-1.0, -8.0), (0.0, 4.0), (-2.0, 16.0), (-4.0, 28.0), (-5.0, 38.0)],
-             ((0.0, 5.0), (0.2, 11.0), (0.4, 14.0), (0.6, 9.0), (0.8, 10.0), (1.0, 5.0)), seed=33.0)
+             ((0.0, 5.0), (0.2, 11.0), (0.4, 14.0), (0.6, 9.0), (0.8, 10.0), (1.0, 5.0)), seed=33.0,
+             rock=(SHADE, SHADE), row=4)      # slate: crag()'s lavender stood on the skyline as pale battlements
     draped('crags', build)
 
 # Rock ribs down the cirque faces' fall lines (scratch/ribs.mjs, traced on the

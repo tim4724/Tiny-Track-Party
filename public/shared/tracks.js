@@ -1128,7 +1128,8 @@ export const TRACKS = {
       // ...and the first path's slide come down across the road, ploughed
       // through (the blocks stand at the ground sampled under them)
       { model: 'set-avalanche-debris-lobe', u: 0.276, lat: 0 },
-      { model: 'set-warning-sign', u: 0.317, lat: 4.4, yaw: 46 },
+      // (short of the road crew's machines at the gallery's mouth, not in front of them)
+      { model: 'set-warning-sign', u: 0.3, lat: 4.4, yaw: 30 },
       // and at the foot of the west slope's path, at the turn onto the crossing
       { model: 'set-warning-sign', u: 0.085, lat: -4.4, yaw: 115 },
       // forest down the mountainside, the S-bend's spur, the west slope and the
@@ -1178,7 +1179,11 @@ export const TRACKS = {
       { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
       { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
       // big old firs in the wedge inside the S-bend (sampled, set_prototypes.py FORESTS)
-      { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
+      { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 },
+      // firs up the north-west face of the cirque's south slope to a ragged
+      // treeline: the one bare dome the run to the last loop looked at (the
+      // full tier's: the box's cells barely see it)
+      { model: 'set-avalanche-forest-m', u: 0.87, lat: 30, lite: false }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
     // down into: a spur off the western massif runs down to the kerb, the

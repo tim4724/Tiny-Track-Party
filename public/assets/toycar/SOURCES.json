@@ -67,6 +67,8 @@
     "set-avalanche-forest-k.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-forest-l-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-forest-l.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-avalanche-forest-m-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-avalanche-forest-m.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-gallery-loop-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-gallery-loop.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-avalanche-gallery-short.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
