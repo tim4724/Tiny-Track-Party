@@ -11180,7 +11180,7 @@ def fete_ground(lite, stops):
     # as tall as the tea tent's ridge poles and a deep striped banner between
     # them under a yellow board, a pennant on each mast
     GZ, GW, GH = 0.0, 6.0, 8.6
-    box((X1 + 4.0 - WALK, 0.2, 3.4), ((X1 + 4.0 + WALK) / 2, PY, GZ), 'cream')
+    box((X1 + 3.0 - WALK, 0.2, 3.4), ((X1 + 3.0 + WALK) / 2, PY, GZ), 'cream')   # (short of the road's own margin)
     for sz in (-1, 1):
         box((0.6, GH, 0.6), (X1, GH / 2, GZ + sz * GW / 2), WHITE)
         box((0.9, 0.5, 0.9), (X1, 0.25, GZ + sz * GW / 2), RED)
@@ -12429,7 +12429,7 @@ def paddling_pool():
             a0, a1 = k * math.pi / 4, (k + 1) * math.pi / 4
             poly([(UX, 6.9, UZ), (UX + 3.4 * math.cos(a0), 5.7, UZ + 3.4 * math.sin(a0)),
                   (UX + 3.4 * math.cos(a1), 5.7, UZ + 3.4 * math.sin(a1))], [(0, 1, 2)], (0xcf534f, 'white')[k % 2])
-        for k, (dx, dz, c) in enumerate(((4.6, 2.4, 0xffc044), (4.9, -3.6, 0xa878e8))):
+        for k, (dx, dz, c) in enumerate(((3.9, 2.6, 0xffc044), (4.1, -3.4, 0xa878e8))):
             ground_poly([(PX + dx - 1.0, 0.06, PZ + dz - 0.6), (PX + dx + 1.0, 0.06, PZ + dz - 0.6),
                          (PX + dx + 1.0, 0.06, PZ + dz + 0.6), (PX + dx - 1.0, 0.06, PZ + dz + 0.6)], [(0, 3, 2, 1)], c)
     draped('pool', still)

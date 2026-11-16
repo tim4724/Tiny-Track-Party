@@ -166095,7 +166095,7 @@ inline const Model kModels[] = {
     { 1192823981614246810ull, 1u, k_set_orchard_block_lite },  // set-orchard-block-lite.glb
     { 12598271053177722169ull, 1u, k_set_orchard_block },  // set-orchard-block.glb
     { 15245073956857786344ull, 7u, k_set_ore_line },  // set-ore-line.glb
-    { 16063272136248542806ull, 1u, k_set_paddling_pool },  // set-paddling-pool.glb
+    { 14330173320393883859ull, 1u, k_set_paddling_pool },  // set-paddling-pool.glb
     { 7966580172549319539ull, 4u, k_set_palm_stand },  // set-palm-stand.glb
     { 18407285757263917512ull, 1u, k_set_park_halt },  // set-park-halt.glb
     { 9737973237849635833ull, 1u, k_set_park_kiosk },  // set-park-kiosk.glb
@@ -166290,8 +166290,8 @@ inline const Model kModels[] = {
     { 11862865606842000109ull, 4u, k_set_treehouse },  // set-treehouse.glb
     { 5633159946772570552ull, 8u, k_set_tunnel_foothills },  // set-tunnel-foothills.glb
     { 3988666310910792739ull, 7u, k_set_village_church },  // set-village-church.glb
-    { 17195000032637641434ull, 4u, k_set_village_fete_lite },  // set-village-fete-lite.glb
-    { 13986668595941255005ull, 4u, k_set_village_fete },  // set-village-fete.glb
+    { 9285548059489831991ull, 4u, k_set_village_fete_lite },  // set-village-fete-lite.glb
+    { 16108014461059495410ull, 4u, k_set_village_fete },  // set-village-fete.glb
     { 3002136672769451754ull, 1u, k_set_village_street_b },  // set-village-street-b.glb
     { 7793010520948350376ull, 1u, k_set_village_street_c },  // set-village-street-c.glb
     { 4602132469169596613ull, 1u, k_set_village_street_d },  // set-village-street-d.glb
