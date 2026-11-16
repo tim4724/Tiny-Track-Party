@@ -120,6 +120,7 @@ constexpr LandDef kLand_tidepool[] = {
   { 8, -1, 0x1p-1, 0x1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+3, 0x1.6p+3, 0x1.6p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.f9db22d0e5604p-2, -0x1.3p+4, -0x1.3cp+6, 0x0p+0, 0x0p+0, 0x1.8p+3, 0x1.6p+3, 0x1.6p+3, 0x0p+0, 0x0p+0, 0x1.2p+2, 0x1.2p+2, 0x1.999999999999ap-3, 0x1p+0, 0x6faa62u, 0x0p+0, 1 },
   { 0, -1, 0x1.ccccccccccccdp-1, 0x1.1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.ap+3, 0x1.ap+3, 0x1.4p+2, 0x0p+0, 0x1.ccccccccccccdp+0, 0x1.ccccccccccccdp+0, 0x1.199999999999ap-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
+  { 6, -1, 0x1.ccccccccccccdp-1, 0x1.6p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.cp+3, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.599999999999ap-1, 0x1.4p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+3, 0x1.ap+3, 0x1.ap+3, 0x1.4p+2, 0x0p+0, 0x1p+0, 0x1p+0, 0x1.199999999999ap-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
   { 0, -1, 0x1.47ae147ae147bp-1, 0x1.1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.ap+3, 0x1.ap+3, 0x1.4p+2, 0x0p+0, 0x1.2666666666666p+0, 0x1.2666666666666p+0, 0x1.199999999999ap-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
   { 5, -1, 0x1.3d70a3d70a3d7p-2, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.6p+5, 0x1.4p+2, 0x1.4p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0xc4bcaeu, 0x0p+0, 1 },
@@ -216,9 +217,8 @@ constexpr SetDef kSet_cove[] = {
   { "set-pirate-lookout", 0x1.147ae147ae148p-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-jungle-grove", 0x1.e147ae147ae14p-3, 0x1.6p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-jungle-grove", 0x1.7ae147ae147aep-3, -0x1.5p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-jungle-grove", 0x1.16872b020c49cp-2, -0x1.bp+3, 0x1.7p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-jungle-grove", 0x1.16872b020c49cp-2, -0x1.fp+3, 0x1.7p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-jungle-grove", 0x1.1eb851eb851ecp-5, -0x1.5p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-treasure-dig", 0x1.75c28f5c28f5cp-2, 0x1.6p+3, 0x0p+0, 0x1.4p+1, 0x1.6666666666666p+0, 1 },
   { "set-jungle-grove", 0x1.7d70a3d70a3d7p-1, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-jungle-grove", 0x1.8cccccccccccdp-1, 0x1.199999999999ap+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-palm-stand", 0x1.ae147ae147ae1p-1, 0x1.f333333333333p+2, 0x1.4p+4, 0x0p+0, 0x1p+0, 1 },
@@ -243,7 +243,6 @@ constexpr LandDef kLand_cove[] = {
   { 0, -1, 0x1.147ae147ae148p-1, 0x1.ap+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+3, 0x1p+4, 0x1p+4, 0x1p+0, 0x0p+0, 0x1.d70a3d70a3d71p-1, 0x1.d70a3d70a3d71p-1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
   { 6, -1, 0x1.147ae147ae148p-1, 0x1.38p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+4, 0x1.8p+4, 0x1.8p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.70a3d70a3d70ap-4, 0x1.1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+3, 0x1.ap+3, 0x1.ap+3, 0x1p+2, 0x0p+0, 0x1.d70a3d70a3d71p-1, 0x1.d70a3d70a3d71p-1, 0x1.199999999999ap-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
-  { 0, -1, 0x1.75c28f5c28f5cp-2, 0x1.18p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+3, 0x1.ap+3, 0x1.ap+3, 0x1p+2, 0x0p+0, 0x1.4p+1, 0x1.4p+1, 0x1.199999999999ap-1, 0x1p+0, 0x0u, 0x1.999999999999ap-2, 1 },
   { 5, -1, 0x1.e147ae147ae14p-1, -0x1.ap+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.cp+3, 0x1.4p+2, 0x1.4p+2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x7ab878u, 0x0p+0, 1 },
   { 8, -1, 0x1.6147ae147ae14p-1, -0x1.4p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.4p+4, 0x1.8p+2, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 5, -1, 0x1.5c28f5c28f5c3p-1, -0x1p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.ep+4, 0x1p+3, 0x1p+3, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x5f9f5fu, 0x0p+0, 1 },
@@ -356,7 +355,7 @@ constexpr SetDef kSet_driftwood[] = {
   { "set-net-huts", 0x1.f0a3d70a3d70ap-1, -0x1.1333333333333p+3, 0x1.68p+7, 0x1.2e147ae147ae1p-1, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_driftwood[] = {
-  { 0, -1, 0x1.0f5c28f5c28f6p-1, 0x1.7p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.08p+4, 0x1.08p+4, 0x0p+0, 0x0p+0, 0x1p+2, 0x1p+2, 0x1p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
+  { 0, -1, 0x1.0f5c28f5c28f6p-1, 0x1.7p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.ep+3, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x1.6666666666666p+1, 0x1.6666666666666p+1, 0x1.3333333333333p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.3d70a3d70a3d7p-1, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.08p+4, 0x1.08p+4, 0x0p+0, 0x0p+0, 0x1.2666666666666p+2, 0x1.2666666666666p+2, 0x1p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.6b851eb851eb8p-1, 0x1.bp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1p+4, 0x1p+4, 0x0p+0, 0x0p+0, 0x1.ccccccccccccdp+1, 0x1.ccccccccccccdp+1, 0x1p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 0, -1, 0x1.947ae147ae148p-1, 0x1.6p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.8p+2, 0x1.cp+3, 0x1.cp+3, 0x0p+0, 0x0p+0, 0x1.999999999999ap+1, 0x1.999999999999ap+1, 0x1p-1, 0x1p+0, 0x0u, 0x0p+0, 1 },
@@ -2027,12 +2026,8 @@ constexpr FurnDef kBoxes_crag[] = {
 constexpr SetDef kSet_crag[] = {
   { "set-ranch", 0x1.f8d4fdf3b645ap-1, -0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-loading-chute", 0x1.53f7ced916873p-3, 0x1.2666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-stock-trail-end", 0x1.22d0e56041893p-3, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-stock-tank", 0x1.28f5c28f5c28fp-1, -0x1.8p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-stock-trail-end", 0x1.395810624dd2fp-1, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-windpump", 0x1.eb851eb851eb8p-2, 0x1.3p+3, -0x1.12p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-stock-trail-end", 0x1.b333333333333p-2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-stock-trail", 0x1.d70a3d70a3d71p-2, 0x1.4p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-ranch-lane", 0x1.0624dd2f1a9fcp-5, -0x1.599999999999ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-hoodoos", 0x1.47ae147ae147bp-2, -0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-hoodoos", 0x1.3851eb851eb85p-1, 0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
@@ -2196,14 +2191,14 @@ constexpr SetDef kSet_sidewinder[] = {
   { "set-pipeline-8", 0x1.5bb2fec56d5dp-1, 0x1.9666666666666p+2, 0x1.9666666666666p+3, 0x0p+0, 0x1p+0, 1 },
   { "set-pipeline-12", 0x1.61a36e2eb1c43p-1, 0x1.951eb851eb852p+2, 0x1.5666666666666p+3, 0x0p+0, 0x1p+0, 1 },
   { "set-pipeline-16", 0x1.6d844d013a92ap-1, 0x1.9eb851eb851ecp+2, 0x1.0333333333333p+3, 0x0p+0, 0x1p+0, 1 },
-  { "set-pipeline-8", 0x1.7a5119ce075f7p-1, 0x1.1851eb851eb85p+3, -0x1.fe66666666666p+4, 0x0p+0, 0x1p+0, 0 },
+  { "set-pipeline-8-under", 0x1.7a5119ce075f7p-1, 0x1.1851eb851eb85p+3, -0x1.fe66666666666p+4, 0x0p+0, 0x1p+0, 1 },
   { "set-pipeline-8", 0x1.7de69ad42c3cap-1, 0x1.bc28f5c28f5c3p+3, -0x1.5333333333333p+2, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-8", 0x1.825aee631f8a1p-1, 0x1.fc28f5c28f5c3p+3, 0x1.099999999999ap+3, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-8", 0x1.86b50b0f27bb3p-1, 0x1.fae147ae147aep+3, 0x1.f99999999999ap+2, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-12", 0x1.8af4f0d844d01p-1, 0x1.ffae147ae147bp+3, 0x1.8p+2, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-8", 0x1.961e4f765fd8bp-1, 0x1.f428f5c28f5c3p+3, 0x1.7333333333333p+5, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-8", 0x1.998c7e28240b8p-1, 0x1.49eb851eb851fp+3, 0x1.559999999999ap+5, 0x0p+0, 0x1p+0, 0 },
-  { "set-pipeline-dive", 0x1.9e425aee631f9p-1, 0x1.a1eb851eb851fp+2, 0x1.4cccccccccccdp+2, 0x0p+0, 0x1p+0, 1 },
+  { "set-pipeline-dive", 0x1.9e425aee631f9p-1, 0x1.a1eb851eb851fp+2, 0x1.4cccccccccccdp+2, 0x0p+0, 0x1p+0, 0 },
   { "set-pipeline-rise", 0x1.d47ae147ae148p-1, 0x1.ep+2, 0x1.67ccccccccccdp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-pipeline-16", 0x1.d47ae147ae148p-1, 0x1.ep+2, -0x1.3333333333333p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-pipeline-16", 0x1.e6e978d4fdf3bp-1, 0x1.ep+2, -0x1.999999999999ap-2, 0x0p+0, 0x1p+0, 1 },
@@ -2663,8 +2658,8 @@ constexpr SegDef kS_drift[] = {
 };
 
 constexpr TrackDef TTP_TRACKS[] = {
-  { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tidepool, 16, kLand_tidepool, 30 },
-  { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 19, kLand_cove, 32 },
+  { "tidepool", "Tidepool", "beach", true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tidepool, 16, kLand_tidepool, 31 },
+  { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 18, kLand_cove, 31 },
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 19, kLand_driftwood, 25 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, 0x1.a6e978d4fdf3bp-2, 0x1.2b851eb851eb8p-1, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 20, kLand_riptide, 19 },
   { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 20, kLand_powder, 23 },
@@ -2677,7 +2672,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 27, kLand_cloverleaf, 9 },
   { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 29, kLand_wash, 28 },
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 16, kLand_gulch, 41 },
-  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 24, kLand_crag, 9 },
+  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 20, kLand_crag, 9 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 71, kLand_sidewinder, 20 },
   { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 21, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, kKickers_skysnake, 2, kSet_skysnake, 14, kLand_skysnake, 3 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 22, nullptr, 0 },
@@ -2695,8 +2690,8 @@ constexpr int TTP_TRACK_COUNT = 20;
 constexpr int TTP_TRACK_TOTAL = 25;
 
 // The models with a lite-tier build (<model>-lite.glb), sorted.
-constexpr const char* TTP_LITE_MODELS[] = { "set-alder-grove", "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-forest-m", "set-avalanche-gallery-loop", "set-block-fortress", "set-block-minster", "set-block-town", "set-blossom-grove-b", "set-boomtown-north", "set-boomtown-south", "set-brook-a", "set-brook-b", "set-brook-c", "set-brook-d", "set-brook-e", "set-brook-f", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-cherry-avenue", "set-cow-farm", "set-culvert", "set-culvert-b", "set-dune-fence-a", "set-dune-fence-b", "set-dune-marram", "set-field-wheat", "set-flurry-farm", "set-flurry-fields", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-flurry-forest-l", "set-flurry-forest-m", "set-flurry-forest-n", "set-flurry-stream", "set-football-pitch", "set-glacier-airstrip", "set-glacier-depot", "set-glacier-seracs-a", "set-glacier-seracs-b", "set-headframe", "set-jungle-grove", "set-kite-flyers", "set-lake-hamlet", "set-marble-run-climb", "set-marble-run-cross", "set-marble-run-dive", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wall", "set-marble-run-wheel", "set-marble-zigzag", "set-mill-wood", "set-mill-wood-b", "set-mill-wood-c", "set-mill-yard", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-ore-line", "set-palm-stand", "set-penguin-chute", "set-penguin-group", "set-pipe-yard", "set-pirate-stockade", "set-pond-ducks", "set-powder-chairlift", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-powder-resort", "set-powder-verge-a", "set-powder-verge-b", "set-ranch-herd", "set-ranch-herd-east", "set-reef-shelf", "set-reef-stacks", "set-rock-poolers-park", "set-room-train-skysnake", "set-seafront-cafe", "set-seafront-hotel", "set-seafront-terrace", "set-seal-rock", "set-sheep-flock", "set-sheep-meadow", "set-sheepfold", "set-siege-camp", "set-ski-lift", "set-snake-humps-blue", "set-snake-humps-purple", "set-snowman-field", "set-stamp-mill", "set-stock-trail", "set-stock-trail-end", "set-summer-camp", "set-surf-campers", "set-tailings-dump", "set-tank-line-a", "set-tank-line-b", "set-tank-line-c", "set-tank-line-d", "set-tank-line-e", "set-tank-line-f", "set-tank-line-g", "set-tank-line-h", "set-tank-line-i", "set-tank-line-j", "set-tank-line-k", "set-tank-line-l", "set-tank-line-m", "set-tank-line-n", "set-tank-line-o", "set-tank-line-p", "set-tank-line-q", "set-tank-line-r", "set-tank-rack", "set-tank-train-a", "set-tank-train-b", "set-tank-train-c", "set-tank-train-d", "set-tidepool-headland", "set-tilt-yard", "set-tourney-camp", "set-trampoline", "set-tree-apple", "set-village-fete", "set-wash-bed", "set-wash-bed-end", "set-wash-bed-ford", "set-wash-road-reach", "set-water-works", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
-constexpr int TTP_LITE_MODEL_COUNT = 165;
+constexpr const char* TTP_LITE_MODELS[] = { "set-alder-grove", "set-avalanche-forest-a", "set-avalanche-forest-b", "set-avalanche-forest-c", "set-avalanche-forest-d", "set-avalanche-forest-e", "set-avalanche-forest-f", "set-avalanche-forest-g", "set-avalanche-forest-h", "set-avalanche-forest-i", "set-avalanche-forest-j", "set-avalanche-forest-k", "set-avalanche-forest-l", "set-avalanche-forest-m", "set-avalanche-gallery-loop", "set-block-fortress", "set-block-minster", "set-block-town", "set-blossom-grove-b", "set-boomtown-north", "set-boomtown-south", "set-brook-a", "set-brook-b", "set-brook-c", "set-brook-d", "set-brook-e", "set-brook-f", "set-cactus-pear", "set-cactus-saguaro", "set-cactus-spear", "set-cherry-avenue", "set-cow-farm", "set-crag-saguaros", "set-culvert", "set-culvert-b", "set-dune-fence-a", "set-dune-fence-b", "set-dune-marram", "set-field-wheat", "set-flurry-farm", "set-flurry-fields", "set-flurry-forest-a", "set-flurry-forest-b", "set-flurry-forest-c", "set-flurry-forest-d", "set-flurry-forest-e", "set-flurry-forest-f", "set-flurry-forest-g", "set-flurry-forest-h", "set-flurry-forest-i", "set-flurry-forest-j", "set-flurry-forest-k", "set-flurry-forest-l", "set-flurry-forest-m", "set-flurry-forest-n", "set-flurry-stream", "set-football-pitch", "set-glacier-airstrip", "set-glacier-depot", "set-glacier-seracs-a", "set-glacier-seracs-b", "set-headframe", "set-jungle-grove", "set-kite-flyers", "set-lake-hamlet", "set-lifeboat-station", "set-loading-chute", "set-marble-run-climb", "set-marble-run-cross", "set-marble-run-dive", "set-marble-run-head", "set-marble-run-loop", "set-marble-run-racer", "set-marble-run-skyway", "set-marble-run-stair", "set-marble-run-summit", "set-marble-run-vortex", "set-marble-run-wall", "set-marble-run-wheel", "set-marble-zigzag", "set-mill-wood", "set-mill-wood-b", "set-mill-wood-c", "set-mill-yard", "set-miners-camp", "set-orchard-block", "set-orchard-block-b", "set-orchard-block-end", "set-ore-line", "set-palm-stand", "set-penguin-chute", "set-penguin-group", "set-pipe-yard", "set-pipeline-8-under", "set-pirate-stockade", "set-pond-ducks", "set-powder-chairlift", "set-powder-forest-a", "set-powder-forest-b", "set-powder-forest-c", "set-powder-forest-d", "set-powder-forest-e", "set-powder-forest-f", "set-powder-forest-g", "set-powder-forest-h", "set-powder-resort", "set-powder-verge-a", "set-powder-verge-b", "set-ranch-herd", "set-ranch-herd-east", "set-reef-shelf", "set-reef-stacks", "set-rock-poolers-park", "set-room-train-skysnake", "set-seafront-cafe", "set-seafront-hotel", "set-seafront-terrace", "set-seal-rock", "set-sheep-flock", "set-sheep-meadow", "set-sheepfold", "set-siege-camp", "set-ski-lift", "set-snake-humps-blue", "set-snake-humps-purple", "set-snowman-field", "set-stamp-mill", "set-summer-camp", "set-surf-campers", "set-tailings-dump", "set-tank-line-a", "set-tank-line-b", "set-tank-line-c", "set-tank-line-d", "set-tank-line-e", "set-tank-line-f", "set-tank-line-g", "set-tank-line-h", "set-tank-line-i", "set-tank-line-j", "set-tank-line-k", "set-tank-line-l", "set-tank-line-m", "set-tank-line-n", "set-tank-line-o", "set-tank-line-p", "set-tank-line-q", "set-tank-line-r", "set-tank-rack", "set-tank-train-a", "set-tank-train-b", "set-tank-train-c", "set-tank-train-d", "set-tidepool-headland", "set-tilt-yard", "set-tourney-camp", "set-trampoline", "set-tree-apple", "set-village-fete", "set-wash-bed", "set-wash-bed-end", "set-wash-bed-ford", "set-wash-road-reach", "set-water-works", "tree-snow-a", "tree-snow-b", "tree-snow-c" };
+constexpr int TTP_LITE_MODEL_COUNT = 167;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is authored, 1..4.
