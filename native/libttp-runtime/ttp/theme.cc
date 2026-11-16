@@ -360,10 +360,14 @@ void flurryLake(Theme& t) {
                  { "set-snow-boulder", 0.15f, 0.6f, 0.3f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
 }
 
-// Glacier is wild ice: no cabin and no village leavings, few trees (open
+// Glacier is wild ice: no cabin, no village leavings and no trees (open
 // snow, where the penguins read), rock the ice dropped.
 void penguinGlacier(Theme& t) {
   t.landmarks.clear();
+  // No tree grows on a glacier (the penguins' climate, not the pines'): no
+  // spot rolls one, and the snow biome has no boulder palette, so the seeded
+  // scenery places nothing here. Its rock and drifts are the props below.
+  t.scenery.mixTree = 0; t.scenery.mixBush = 0;
   t.scenery.density = 0.3f;
   t.fogTune = 1.2f;  // clear alpine air: the range a lap's length away must read from the opening
   ploughBanks(t);
@@ -387,12 +391,26 @@ void avalanchePass(Theme& t) {
 // Each playroom track is one game played on the floor at the toy cars' own
 // scale, and the finish gantry wears the track's colours (the snake's green
 // and yellow, the sky's blue, the marbles' purple, the castle's red).
+//
+// Each is also played in a ROOM OF ITS OWN: the wall is a third of most
+// frames, so one room made the four tracks one place. A room is its wall
+// over the rail, the deeper wall under it, its curtains and their rod
+// (playroomTheme's hills list, by index) and its floorboards (groundBase),
+// chosen to set off the orange deck and the blue rails.
+void room(Theme& t, uint32_t wall, uint32_t dado, uint32_t curtain, uint32_t rod, uint32_t boards) {
+  t.hills[5] = wall; t.hills[6] = dado; t.hills[7] = curtain; t.hills[10] = rod;
+  t.groundBase = boards;
+}
 void playroomTrack(Theme& t, const std::string& track) {
   if (track == "skysnake") {
+    // the board-game room: cream over terracotta, the snake's green at the window, pine boards
+    room(t, 0xf6e9cf, 0xb5584c, 0x4f9f5c, 0x9a7b55, 0xd6b07c);
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
     // each ladder's kicker is its top rung, the ladders' cream
     t.kicker = 0xfde4c7;
   } else if (track == "skyline") {
+    // a city-night nursery: dusk blue over navy, curtains the yellow of lit windows, pale ash boards
+    room(t, 0x7f93cf, 0x2a3c8c, 0xf2c14e, 0xfbf6ec, 0xc2b49c);
     t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
     // the skyway's U stands on stacked toy blocks in two of the rails' blues,
     // so under a town of coloured blocks they read as the track's own
@@ -403,6 +421,8 @@ void playroomTrack(Theme& t, const std::string& track) {
     t.props.scatter = { { 0, 1.0f, 3.5f, 0.5f, false, true } };
     t.props.scatterDensity = 0.14f;
   } else if (track == "helix") {
+    // the workshop: pale aqua over teal, the marbles' purple at the window, walnut boards
+    room(t, 0xc4e4dc, 0x2f8c88, 0xa878e8, 0x5b4a3a, 0xa87c54);
     t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
     // the skyway and both spirals stand on one plain connector blue: a
     // striped stack is a station of the marble run, and posts banded in two
@@ -413,6 +433,8 @@ void playroomTrack(Theme& t, const std::string& track) {
     t.scenery.density = 0.08f;
     t.scenery.clutterDensity = 0.05f;
   } else if (track == "gauntlet") {
+    // the castle's hall: pale stone over stone grey, heraldic red on a gold rod, grey oak boards
+    room(t, 0xd2cfc8, 0x868c98, 0xb8322f, 0xd9a441, 0xb5a288);
     t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
     // the bridge past the ring stands on the castle's stacked toy blocks
     t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
@@ -738,8 +760,8 @@ Theme playroomTheme() {
   // …and thick in the shaft of window light, wherever a track's sunbeam
   // falls (a set piece named so: the playroom's set-play-sunbeam).
   ambientKind(t.life, AMB_MOTE);
-  t.life.count = 2400; t.life.size = 0.15f; t.life.opacity = 0.9f; t.life.tint = 0xfff1c8;
-  t.life.near = "sunbeam"; t.life.reach = 4; t.life.band = 0.2f;
+  t.life.count = 500; t.life.size = 0.42f; t.life.opacity = 0.4f; t.life.tint = 0xfff1c8;
+  t.life.near = "sunbeam"; t.life.reach = 4; t.life.band = 0.5f;
   t.hasPlane = true;
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
