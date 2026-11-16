@@ -1364,7 +1364,8 @@ export const TRACKS = {
     // fences up the north-east hill where the loop turns under it, and the
     // dairy farm stands on its bank outside the west bend, straight ahead of
     // a racer coming out from under the flyover, its paddock fenced and its
-    // lane down to the road. The church is the village's tallest thing, a quarter
+    // lane down to the road. Its fence carries on round the bend past it
+    // along the hill's foot (set-farm-fence, two lengths). The church is the village's tallest thing, a quarter
     // over its real size like the cup's other heroes, in a walled yard by
     // the road with its lychgate to it. A
     // piece's box holds the verge band down under it (bandHold), so nothing
@@ -1393,6 +1394,8 @@ export const TRACKS = {
       { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
       { model: 'set-cow-farm', u: 0.855, lat: 11.5, yaw: 0, scale: 1.3 },
+      { model: 'set-farm-fence', u: 0.885, lat: 6.2, yaw: 0, scale: 1.3, lite: false },
+      { model: 'set-farm-fence', u: 0.9205, lat: 6.2, yaw: 0, scale: 1.3, lite: false },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
       { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
@@ -1449,7 +1452,7 @@ export const TRACKS = {
       { model: 'set-paddling-pool', u: 0.34, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
       { model: 'set-chalk-horse', u: 0.3749, lat: 12, yaw: 26 },
-      { model: 'set-summer-camp', u: 0.795, lat: -9.5, yaw: 180, scale: 1.4 }
+      { model: 'set-summer-camp', u: 0.776, lat: -7.7, yaw: 180, scale: 1.6 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)
@@ -1521,7 +1524,7 @@ export const TRACKS = {
       { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
       { model: 'set-alder-grove', u: 0.905, lat: 5.8, yaw: 0, scale: 0.9 },
-      { model: 'set-alder-grove', u: 0.935, lat: -5.3, yaw: 180 },
+      { model: 'set-alder-grove', u: 0.958, lat: -5.3, yaw: 180 },
       { model: 'set-alder-grove', u: 0.03, lat: 5.8, yaw: 0, scale: 1.1 }
     ],
     // the north lawn's hump and the pond under the first bridge; the valley's
@@ -1561,9 +1564,9 @@ export const TRACKS = {
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
-    // stone fountain with a tall jet, swan pedalos going round, and across
-    // the water on the far shore the boathouse, its jetty toward the road,
-    // between a row of lamps and big cherries. The park's kiosk and its
+    // stone fountain with a tall jet, swan pedalos going round, the
+    // boathouse on the near shore, and across the water on the far one a
+    // row of lamps and big cherries. The park's kiosk and its
     // terrace of parasols in the S between the two decks, a grove beside the
     // high deck's way down; a floral clock on the face of the hill outside
     // the top bend and a bed of carpet bedding along the foothill by the
@@ -1571,7 +1574,7 @@ export const TRACKS = {
     set: [
       { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
-      { model: 'set-floral-clock', u: 0.448, lat: -8.3, yaw: 180 },
+      { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
       { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
       { model: 'set-park-rails-a', u: 0.23569, lat: 6.061, yaw: 116.1 },
@@ -1583,7 +1586,8 @@ export const TRACKS = {
       { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
-      { model: 'set-boathouse', u: 0.8312, lat: 28.6, yaw: -170, scale: 1.6 },
+      { model: 'set-lake-shore', u: 0.8316, lat: 16.16, yaw: -170.59 },
+      { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
       { model: 'set-bandstand', u: 0.23, lat: -16, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
