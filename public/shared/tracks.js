@@ -1944,21 +1944,30 @@ export const TRACKS = {
     // Each ladder ends in a kicker: the racers kick up off its top rung onto
     // the next deck.
     kickers: [ { u: 0.336 }, { u: 0.523 } ],
-    // Snakes and ladders, raced across the board at the toy cars' own scale.
-    // The games shelf's other things stand where the floor cannot be seen:
-    // a house of cards and a stack of game boxes under a spinner outside the
-    // top deck, the snake's wooden head at the dive's foot, the game's big
-    // pawns and a spilled deck past the loop. The room's train runs over
-    // the board's edge, close enough to read.
+    // Snakes and ladders, raced across the board at the toy cars' own scale,
+    // and the board stood up where the racers look: two of its printed
+    // snakes are jointed wooden ones arching along the kerb (the grid
+    // straight, the last corner), wind-up dice hop the grid's kerb, and
+    // outside the first deck a ladder leans up a stack of dice with a snake
+    // hung down it, another game's board stood open past it. The games
+    // shelf's other things stand where the floor cannot be seen: a house of
+    // cards and a stack of game boxes under a spinner outside the top deck,
+    // the game's big pawns and a spilled deck past the loop. The dive ends
+    // through the snake's head, astride the road at its foot. The room's
+    // train runs over the board's edge, close enough to read.
     set: [
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
       { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
-      { model: 'set-windup-chicks', u: 0.12, lat: 3.9 },
+      { model: 'set-windup-dice', u: 0.12, lat: 3.9 },
+      { model: 'set-snake-humps-blue', u: 0.16, lat: 7.2 },
+      { model: 'set-ladder-stack', u: 0.452, lat: 8 },
+      { model: 'set-game-board', u: 0.497, lat: 8.5 },
       { model: 'set-card-house', u: 0.6054, lat: 7.25, yaw: -35 },
       { model: 'set-game-stack', u: 0.675, lat: 8 },
-      { model: 'set-snake-head', u: 0.775, lat: 7.9 },
+      { model: 'set-snake-jaws', u: 0.782, lat: 0 },
       { model: 'set-game-pawns', u: 0.932, lat: 5.6 },
+      { model: 'set-snake-humps-red', u: 0.975, lat: 7.5 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
