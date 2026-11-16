@@ -945,6 +945,10 @@ export const TRACKS = {
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
+      // firs across the gap the piste left between those two, so the
+      // foothill's forest is one ragged treeline again
+      // (the full tier's)
+      { model: 'set-flurry-forest-n', u: 0.684, lat: 14, lite: false },
       { model: 'set-flurry-forest-d', u: 0.1371, lat: 15.35 },
       { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39 },
       // the west gap the start straight looks into: a clump where the outrun
@@ -961,7 +965,16 @@ export const TRACKS = {
       // (the belt along the foot is the full tier's: the box keeps the hollows)
       { model: 'set-flurry-forest-l', u: 0.39, lat: -50, lite: false },
       { model: 'set-flurry-forest-m', u: 0.39, lat: -50, lite: false },
-      { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
+      { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 },
+      // the hamlet's valley on round the lap's second half: its fields and
+      // hay barn outside the bend north off the east loop, the frozen stream
+      // where it meets the road (the plain below is its bed) with the
+      // footbridge the fields' lane crosses on toward the lake, and a farm
+      // outside the last bend before the line (sampled: set_prototypes.py
+      // FIELDS_*, FARM_*, STREAM_*; the box keeps the farm and the bridge)
+      { model: 'set-flurry-fields', u: 0.765, lat: 12, lite: false },
+      { model: 'set-flurry-stream', u: 0.815, lat: 0 },
+      { model: 'set-flurry-farm', u: 0.905, lat: -10, yaw: 180 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
     // the lake. The village's ski jump is cut into the south shoulder of the
@@ -982,7 +995,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.5816, lat: 31, r: 28, h: 10, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6598, lat: 32.65, r: 30, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.7109, lat: 31.05, r: 28, h: 9, top: 0.2, near: 2 },
-      { kind: 'ridge', u: 0.6337, lat: 33.68, r: 34, h: 18, top: 0.12 },
+      // (the middle massif stands back: a form that is still high where the
+      // road's corridor ends, some 16 u out, steps up there in a hard crease,
+      // which showed as a slab between the stands)
+      { kind: 'ridge', u: 0.6337, lat: 39, r: 28.5, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.5903, lat: 42.93, r: 30, h: 15, top: 0.12 },
       { kind: 'ridge', u: 0.6848, lat: 49.96, r: 34, h: 18, top: 0.12 },
       // past the west loop: the same
