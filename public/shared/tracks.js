@@ -858,6 +858,8 @@ export const TRACKS = {
       // palms on the Point's lower flank, placed by hand (its `clear` keeps
       // the seeded ones off), none on the marram dune
       { model: 'set-palm-stand', u: 0.95, lat: -9, yaw: 180 },
+      // marram in drifts up the great dune's face along the north run
+      { model: 'set-dune-marram', u: 0.835, lat: 13.5 },
       // the coastguard's lookout on the Point's flank over the start straight
       { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 }
     ],
@@ -879,6 +881,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.0, lat: -12, len: 50, r: 6, w: 4, tint: 0x5f9f5f },
       { kind: 'ridge', u: 0.85, lat: 35, r: 18, h: 9, top: 0.2, tint: 0xa8d090 },
       { kind: 'ridge', u: 0.84, lat: 12, len: 40, r: 9, h: 4.5, top: 0.2, near: 0.5, tint: 0xa8d090 },
+      // its marram's green down the flank to the north run's kerb and up to
+      // the crest: under the ridges' own pale tint it stood a bare sand cone
+      { kind: 'paint', u: 0.84, lat: 12, len: 40, r: 7, w: 5, tint: 0x86b872 },
+      { kind: 'paint', u: 0.85, lat: 31, len: 10, r: 14, w: 8, tint: 0x86b872 },
       // the patrol's patch of sand where the cars land off the hop
       { kind: 'ridge', u: 0.19, lat: -17, len: 12, r: 13, h: 0.78, top: 0.55, near: 0.4, w: 6 },
       // the surf club's rise by the hop and the camp's by the hook, each at

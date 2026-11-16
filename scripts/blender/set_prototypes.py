@@ -1925,9 +1925,6 @@ def promenade():
     o.location = P(KX, deck_y + 1.0, KZ)
     o.rotation_euler = (math.pi, 0, 0)
     box((0.24, 0.2, 0.24), (KX, deck_y + 1.08, KZ), 0xfde4c7)                          # the scoop
-    with square():
-        figure((1.5, deck_y, KZ - 0.2), math.pi, shirt=0x339cf2, legs=0x4f5260, hair=0x38383d)
-        figure((1.8, deck_y, KZ + 0.25), math.pi, shirt=0xff7e44, legs=0x339cf2, hair=0xffc044)
     flag_on_pole((KX - 0.3, deck_y + 0.73, KZ + 0.5), 0.5, (red, white), 'anim_flutter:p=2.0#kiosk')
     # the pier: on from the boardwalk's end a step down (its root lies
     # under the boardwalk's end, and two decks at one level fight), out over
@@ -2302,7 +2299,7 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
     It runs on under the beach and its back into the dune."""
     a = road.yaw(zc)
     xf, zf = road.at(zc, front + dep / 2)
-    y = road.y(zc) + 0.05
+    y = road.y(zc) + RIP_PAVE
     c, s = math.cos(a), math.sin(a)
     def T(lx, ly, lz):
         return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
@@ -2332,7 +2329,8 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
                     continue
                 if bay and f < 2 and cz == cols[-1]:
                     continue
-                box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
+                if not LITE:                                                            # (the box's windows: no frames)
+                    box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
                 box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
         if bay:                                                                         # a bay window, two floors
             bz = cols[-1]
@@ -2344,9 +2342,16 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
             box((0.4, 0.1, w * 0.7), T(fx + 0.2, 0.98, 0.0), 0xfff6eb, yaw=a)
             box((0.08, 0.32, w * 0.7), T(fx + 0.38, 1.18, 0.0), 0xfff6eb, yaw=a)
 
+RIP_PAVE = 0.36   # the town pavement's top over the road's: a step over the racing kerb's
+
 def riptide_pavement(road, z0, z1):
-    """The pavement before the terrace, at the road's height past the beach strip."""
-    riptide_along(road, z0, z1, 5.1, 6.4, None, 0.05, 'grey', row=4, dy=-0.5)
+    """The pavement before the terrace, past the beach strip and its kerb:
+    raised a step over the kerb, its edge in paler stone, so the seat sees
+    the houses stand on paving (level with the road it lay hidden behind
+    the kerb, and the road's sand strip read as running to the doors)."""
+    step = 2.0 if LITE else 1.0
+    riptide_along(road, z0, z1, 5.3, 6.4, None, RIP_PAVE, 'grey', row=4, dy=-0.5, step=step)
+    riptide_along(road, z0, z1, 5.05, 5.3, None, RIP_PAVE + 0.03, 'lavender', row=6, dy=-0.5, step=step)
 
 @piece(1.0)
 def seafront_hotel():
@@ -2361,7 +2366,7 @@ def seafront_hotel():
     zc, w, dep, floors = -0.6, 4.6, 3.0, 4
     a = road.yaw(zc)
     xf, zf = road.at(zc, 6.3 + dep / 2)
-    y = road.y(zc) + 0.05
+    y = road.y(zc) + RIP_PAVE
     c, s = math.cos(a), math.sin(a)
     def T(lx, ly, lz):
         return (xf + lx * c + lz * s, y + ly, zf - lx * s + lz * c)
@@ -2432,10 +2437,10 @@ def seafront_cafe():
     a = road.yaw(zc)
     for i in range(7):
         x, z = road.at(zc - 1.9 + i * 0.63, 5.95)
-        box((0.7, 0.08, 0.64), (x, road.y(zc) + 0.95, z), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.35)
+        box((0.7, 0.08, 0.64), (x, road.y(zc) + 0.9 + RIP_PAVE, z), (0xff5040, 0xfff6eb)[i % 2], yaw=a, roll=0.35)
     for lz in (-1.2, 1.2):
         x, z = road.at(zc + lz, 5.6)
-        y = road.y(zc + lz) + 0.05
+        y = road.y(zc + lz) + RIP_PAVE
         box((0.5, 0.08, 0.5), (x, y + 0.5, z), 0xfff6eb)
         box((0.12, 0.5, 0.12), (x, y + 0.25, z), 0x38383d)
     riptide_house(road, 3.3, 2.2, 3, 0xd0e8ff, 0xcf534f, bay=True)
@@ -4225,12 +4230,17 @@ def causeway_rail():
     # seat: timber piles standing out of the water a hand past each kerb,
     # the hop's length and the causeway's, their heads a car's height over
     # the deck, a heavy rope slung from head to head, a life ring on a pile
-    # here and there on the sea's side. The causeway carries no sand
+    # here and there. The causeway carries no sand
     # (tracks.js), so the kerbs stand at the asphalt's edge and the piles
     # and the water right beside them. Where the road leaves the land and
     # where it comes back, a taller pair of piles with a lamp each: the
     # gate onto the water. One piece astride the road (RIP_ROAD); the sim
     # never sees it, and it stands clear of both kerbs.
+    # (round 19: on the open sea's side the piles are cut down to stubs a
+    # hand over the kerb, every other one, and carry no rope: a rail a car
+    # high on both sides fenced the water out of the seat's view, and the
+    # owner wants to feel above it. The rope rail, the life rings and the
+    # tall piles keep to the lagoon's side.)
     wood, dark, rope, red, white = 0x8a6a46, 0x6e5b3a, 0xfde4c7, 0xff5040, 0xfff6eb
     STEP, OUT, HEAD, HANG = 3.2, 0.45, 1.05, 0.8
     T0, T1 = -37.6, 29.6           # from the ring where the piles begin: the sand has gone by it
@@ -4242,18 +4252,21 @@ def causeway_rail():
                 t = T0 + STEP * i
                 x, deck, z = riptide_rail_at(t, 0.0, out=side * OUT)
                 gate = i in (0, n)
-                top = deck + (2.3 if gate else HEAD + 0.08 * jitter(i, side + 2, 4.0))
+                sea = side > 0 and not gate
+                if sea and i % 2:
+                    continue
+                top = deck + (2.3 if gate else 0.42 if sea else HEAD + 0.08 * jitter(i, side + 2, 4.0))
                 w = 0.42 if gate else 0.34
                 box((w, top + 1.4, w), (x, (top - 1.4) / 2, z), wood if (i + side) % 3 else dark, yaw=0.5 * i)
                 box((w + 0.1, 0.12, w + 0.1), (x, top + 0.02, z), white, yaw=0.5 * i)    # its cap
                 if gate:
                     rowed(box((0.3, 0.34, 0.3), (x, top + 0.25, z), 'yellow', yaw=0.5 * i), 0)   # the lamp
                     box((0.4, 0.1, 0.4), (x, top + 0.46, z), red, yaw=0.5 * i)
-                if prev:
+                if prev and side < 0:
                     mid = ((prev[0] + x) / 2, (prev[1] + deck) / 2 + HANG - 0.22, (prev[2] + z) / 2)
                     beam((prev[0], prev[1] + HANG, prev[2]), mid, 0.13, rope)
                     beam(mid, (x, deck + HANG, z), 0.13, rope)
-                if side > 0 and i % 5 == 2:
+                if side < 0 and i % 5 == 2:
                     ox, _, oz = riptide_rail_at(t, 0.0, out=side * (OUT - 0.24))
                     torus(0.3, 0.1, (ox, deck + 0.45, oz), red, segs=8, axis='across', yaw=0.0)
                 prev = (x, deck, z)
@@ -13818,9 +13831,11 @@ def lite_too(*names):
 # The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
 # vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
 # of the groves and stands (palm()); Driftwood's marram in three-bladed
-# tussocks.
+# tussocks; Riptide's camp on the vans' plainer wheels and its town's windows
+# without their frames.
 lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
-         'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b')
+         'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b',
+         'surf-campers', 'seafront-hotel', 'seafront-terrace', 'seafront-cafe')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals
