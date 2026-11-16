@@ -1448,12 +1448,18 @@ export const TRACKS = {
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
-    // stone fountain of a park's size, swan pedalos going round, the
-    // boathouse on the near shore. Another corner of the playground in the S
-    // between the two decks.
+    // stone fountain with a tall jet, swan pedalos going round, and across
+    // the water on the far shore the boathouse, its jetty toward the road,
+    // between a row of lamps and big cherries. The park's kiosk and its
+    // terrace of parasols in the S between the two decks, a grove beside the
+    // high deck's way down; a floral clock on the face of the hill outside
+    // the top bend and a bed of carpet bedding along the foothill by the
+    // west straight, both planted on slopes that face the road.
     set: [
       { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
-      { model: 'set-play-corner', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
+      { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
+      { model: 'set-floral-clock', u: 0.448, lat: -8.3, yaw: 180 },
+      { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
       { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
       { model: 'set-park-rails-a', u: 0.23569, lat: 6.061, yaw: 116.1 },
       { model: 'set-park-rails-b', u: 0.23452, lat: -8.196, yaw: 45.76 },
@@ -1464,13 +1470,14 @@ export const TRACKS = {
       { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
-      { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
+      { model: 'set-boathouse', u: 0.8312, lat: 28.44, yaw: -170, scale: 1.3 },
       { model: 'set-bandstand', u: 0.23, lat: -16, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
       { model: 'set-cherry-avenue', u: 0.89, lat: 6.5, yaw: 0 },
       { model: 'set-blossom-grove-b', u: 0.21, lat: -5.8, yaw: 180 },
+      { model: 'set-blossom-grove-b', u: 0.345, lat: 7.5, yaw: 0, scale: 1.25 },
       { model: 'set-blossom-grove-b', u: 0.38, lat: 6.4, yaw: 0 },
       { model: 'set-blossom-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-blossom-grove-b', u: 0.6, lat: -6, yaw: 180 },

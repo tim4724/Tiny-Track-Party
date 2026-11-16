@@ -12071,8 +12071,9 @@ def swan_pedalo(at, body):
 @piece(REAL)
 def boating_lake():
     # The lake beyond the finger lobe's end (the `pond`, 16 u across, 36 long
-    # here): four swan pedalos going slowly round and the fountain in the
-    # middle, the park's tallest thing, straight ahead down the lobe's run.
+    # here): three swan pedalos going slowly round and the fountain in the
+    # middle, the park's tallest thing, straight ahead down the lobe's run,
+    # lamps and cherries along the far shore behind it.
     WY = LAKE_Y
     n = 16
     for k in range(n):
@@ -12089,13 +12090,17 @@ def boating_lake():
     cyl(3.0, 0.2, (FX, 0.9, 0.0), 0x8ecae6, segs=12)
     cyl(0.5, 2.2, (FX, 0.9, 0.0), 'grey', segs=8)
     cyl(1.6, 0.35, (FX, 3.0, 0.0), 'grey', r2=1.9, segs=10)
-    cyl(0.6, 4.2, (FX, 3.3, 0.0), 'sky', r2=0.18, segs=8)                        # the jet
-    with animated('anim_bob:h=0.15:p=2.2', (FX, 6.0, 0.0)):
+    # (the jet three cars high: at half that the lake was a strip of water
+    # under the kerb's line from the road that runs at it, with nothing
+    # standing on it)
+    JT = 11.6                                     # the jet's top
+    cyl(0.75, JT - 3.3, (FX, 3.3, 0.0), 'sky', r2=0.22, segs=8)                  # the jet
+    with animated('anim_bob:h=0.15:p=2.2', (FX, JT - 1.4, 0.0)):
         for k in range(6):                       # its water falling back into the bowl
             a = k * math.pi / 3
             with plain_parts():
-                strut((FX, 7.4, 0.0), (FX + 1.5 * math.cos(a), 5.4, 1.5 * math.sin(a)), 0.2, 'white')
-            box((0.36, 0.5, 0.36), (FX + 1.5 * math.cos(a), 5.3, 1.5 * math.sin(a)), 'white', yaw=a)
+                strut((FX, JT, 0.0), (FX + 2.3 * math.cos(a), JT - 3.4, 2.3 * math.sin(a)), 0.3, 'white')
+            box((0.5, 0.7, 0.5), (FX + 2.3 * math.cos(a), JT - 3.5, 2.3 * math.sin(a)), 'white', yaw=a)
     # an islet off the far bank, a young cherry on it and reeds at its foot:
     # what breaks the water's outline, as a park lake's does
     IX, IZ = -3.0, 17.0
@@ -12110,15 +12115,30 @@ def boating_lake():
                                    (14.0, -18.0, 1.1))):                           # lily pads
         ground_poly([(x, WY + 0.02, z)] + [(x + r * math.cos(q * math.pi / 3), WY + 0.02, z + r * math.sin(q * math.pi / 3))
                                            for q in range(6)], [(0, 1 + (q + 1) % 6, 1 + q) for q in range(6)], 0x4f9a48)
+    # the far shore (+X), where the road that runs at the lake looks across
+    # it: a row of park lamps along the water's edge, white globes on dark
+    # posts, and big cherries behind them, the boathouse between (its own
+    # piece, tracks.js)
+    for z in (-33.0, -21.0, -9.0, 3.0, 25.0, 35.0):
+        x = 42.5 - 0.004 * z * z
+        box((0.3, 4.6, 0.3), (x, 2.3, z), 'dark')
+        box((1.0, 0.2, 0.3), (x, 4.5, z), 'dark')
+        for sx in (-1, 1):
+            box((0.6, 0.6, 0.6), (x + sx * 0.5, 5.0, z), 'white')
+    for i, (x, z, k) in enumerate(((50.0, -27.0, 1.4), (51.0, -12.0, 1.15), (49.0, 31.0, 1.3))):
+        lawn_cherry(x, z, k, ('pink', 'white', 'pink')[i], i + 5)
+        cherry_petals(x, z, k, i + 5)
     join_still('lake')
 
 @piece(REAL)
 def boathouse():
-    # The lake's boathouse on its near shore: a timber boat shed under a red
-    # tiled roof, white at its corners and eaves, the hire hatch under a
-    # plain canopy toward the road (+X), the wide boat door open on the lake
-    # side with a rowing boat on the slip in it, the jetty out over the water
-    # and two swan pedalos tied up there, a flag over the ridge. It stands
+    # The lake's boathouse on its far shore, across the water from the road
+    # that runs at the lake, its lake side to that road (tracks.js turns it:
+    # -X here): a timber boat shed under a red tiled roof, white at its
+    # corners and eaves, the wide boat door open on the lake side with a
+    # rowing boat on the slip in it, the jetty out over the water and two
+    # swan pedalos tied up there, a flag over the ridge; the hire hatch under
+    # a plain canopy on its landward side (+X). It stands
     # LEVEL on the bank (draped it leaned with the slope): the bank is the
     # pond's own flat floor here.
     RED, WHITE, BOARD = 0xcf534f, 0xf8f8fb, 0x9a7b55
@@ -12206,8 +12226,8 @@ def blossom_trees(trees, seat=None):
 # them. No path is laid: a gravel strip draped up a hillside read as a tan
 # stripe from across the lap. Along Z; front (+X) to the road, the near row's
 # crowns inside x 3.4. It DRAPES.
-@piece(REAL)
-def cherry_avenue():
+def cherry_avenue_build(lite):
+    # lite (the Android TV's build): three trees a row, not five
     PX, PW = -3.4, 1.7
     def still():
         row = (((0.2, -24.0, 1.15, 'pink'), (-0.2, -13.0, 0.8, 'white'), (0.3, -2.0, 1.25, 'pink'),
@@ -12217,12 +12237,21 @@ def cherry_avenue():
         i = 0
         for line in row:
             for x, z, k, c in line:
-                lawn_cherry(x, z, k, c, i)
-                cherry_petals(x, z, k, i)
+                if not lite or i % 2 == 0:
+                    lawn_cherry(x, z, k, c, i)
+                    cherry_petals(x, z, k, i)
                 i += 1
         bench((PX - PW - 0.7, 0, 3.0), yaw=math.pi / 2)
         bench((PX - PW - 0.7, 0, -20.0), yaw=math.pi / 2)
     draped('avenue', still)
+
+@piece(REAL)
+def cherry_avenue():
+    cherry_avenue_build(False)
+
+@piece(REAL)
+def cherry_avenue_lite():
+    cherry_avenue_build(True)
 
 @piece(REAL)
 def blossom_grove():
@@ -12231,6 +12260,11 @@ def blossom_grove():
 @piece(REAL)
 def blossom_grove_b():
     blossom_trees(((-0.5, 4.5, 1.1, 'white'), (-4.0, -4.0, 0.95, 'pink'), (-8.0, 3.0, 1.0, 'white'), (-1.0, -9.5, 0.8, 'pink')))
+
+@piece(REAL)
+def blossom_grove_b_lite():
+    # The Android TV's build: three of the four, the one at the back left out.
+    blossom_trees(((-0.5, 4.5, 1.1, 'white'), (-4.0, -4.0, 0.95, 'pink'), (-1.0, -9.5, 0.8, 'pink')))
 
 # The park's bandstand on the top of the mound beside the high road, level
 # with a racer up on the deck: an octagon of white posts on a stone base
@@ -13282,8 +13316,9 @@ def park_halt():
 # climbing frames built as chunky as the cars (posts and ropes a car's
 # bar thick), standing straight on the grass with a worn patch under each
 # slide's foot, no fence and no pad, and nobody on them (children that small
-# read as specks). Two corners of the same park: the playground by the
-# south-west hairpin, the play corner in the S between the two decks.
+# read as specks). By the south-west hairpin; a second corner of it stood in
+# the S between the two decks and read as the same thing twice (the kiosk
+# stands there now).
 
 def park_climber(x, z, yaw=0.0, color=0xffc044):
     """A climbing tower: a deck on four stout posts under a pointed red roof,
@@ -13347,17 +13382,127 @@ def playground():
         bench((-8.4, 0, z), yaw=math.pi / 2)
     join_still('playground')
 
+# The park's refreshment kiosk in the S between the two decks, where a second
+# corner of the playground stood and read as the playground again: an
+# eight-sided hut under a pointed blue roof with a striped awning all round
+# it, its hatch open to the road (+X), and its terrace out in front on a round
+# of gravel, three tables under red and white parasols, chairs pushed back, a
+# bench, a bin. Round canopies over a round hut: no other piece in the park
+# has that outline. Nobody about. Metres, front (+X) to the road; on the left
+# at yaw 180.
 @piece(REAL)
-def play_corner():
-    # Another corner of the same park on the flat by the road, so the
-    # playground reaches round the lap: the rope net standing over a
-    # climbing tower in the climbing frame's other colour, its slide toward
-    # the road (+X), a bench.
-    park_net(-3.0, 3.0, h=7.0, r=3.2)
-    park_worn(-3.0, 3.0, 2.4, 3)
-    park_climber(1.0, -4.0, color=0x339cf2)
-    bench((-5.2, 0, -5.0), yaw=math.pi / 2)
-    join_still('corner')
+def park_kiosk():
+    RED, WHITE, BLUE, YELLOW = 0xcf534f, 0xf8f8fb, 0x339cf2, 0xffc044
+    KX, KZ, KR, KH = -4.0, 0.0, 2.3, 2.9
+    cyl(KR + 0.25, 0.3, (KX, 0.0, KZ), 'grey', segs=8, yaw=math.pi / 8)
+    cyl(KR, KH, (KX, 0.3, KZ), WHITE, segs=8, yaw=math.pi / 8)
+    cyl(KR + 0.08, 0.9, (KX, 0.3, KZ), BLUE, segs=8, yaw=math.pi / 8)               # the counter's band
+    box((0.2, 1.3, 1.9), (KX + KR * 0.93, 2.05, KZ), 0x2a2735)                       # the hatch
+    box((0.6, 0.12, 2.1), (KX + KR + 0.15, 1.38, KZ), 'white')                       # its shelf
+    for k in range(8):                                                               # the awning, in gores
+        a0, a1 = k * math.pi / 4 + math.pi / 8, (k + 1) * math.pi / 4 + math.pi / 8
+        rim = lambda a, r, y: (KX + r * math.cos(a), y, KZ + r * math.sin(a))
+        poly([rim(a0, KR, KH + 0.5), rim(a1, KR, KH + 0.5), rim(a1, KR + 1.5, KH - 0.35), rim(a0, KR + 1.5, KH - 0.35)],
+             [(0, 1, 2, 3)], (RED, WHITE)[k % 2])
+    cyl(KR + 0.35, 2.6, (KX, KH + 0.3, KZ), BLUE, r2=0.25, segs=8, yaw=math.pi / 8)  # the roof
+    box((0.2, 0.9, 0.2), (KX, KH + 3.2, KZ), WHITE)
+    sphere(0.42, (KX, KH + 3.9, KZ), YELLOW, subdiv=1)
+    # the terrace: a round of gravel, the tables under their parasols
+    n, TR = 12, 7.0
+    rim = [(3.2 + TR * (0.9 + 0.12 * hash01(q, 4)) * math.cos(q * 2 * math.pi / n), 0.12,
+            TR * (0.9 + 0.12 * hash01(4, q)) * math.sin(q * 2 * math.pi / n)) for q in range(n)]
+    rowed(ground_poly([(3.2, 0.12, 0.0)] + rim, [(0, 1 + (q + 1) % n, 1 + q) for q in range(n)], 'gravel'), 26)
+    for i, (tx, tz) in enumerate(((3.0, -4.6), (5.6, 0.6), (2.4, 4.8))):
+        cyl(0.9, 0.12, (tx, 1.0, tz), WHITE, segs=8)                                 # the table
+        box((0.3, 1.0, 0.3), (tx, 0.5, tz), 'grey')
+        box((0.22, 4.0, 0.22), (tx, 2.0, tz), WHITE)                                  # the parasol's pole
+        for k in range(8):
+            a0, a1 = k * math.pi / 4, (k + 1) * math.pi / 4
+            poly([(tx, 4.3, tz), (tx + 2.2 * math.cos(a0), 3.5, tz + 2.2 * math.sin(a0)),
+                  (tx + 2.2 * math.cos(a1), 3.5, tz + 2.2 * math.sin(a1))], [(0, 1, 2)], ((RED, WHITE), (WHITE, RED), (RED, WHITE))[i][k % 2])
+        with plain_parts():
+            for j in range(2):                                                       # two chairs, pushed back
+                a = 0.9 + i + j * 2.6
+                cx, cz = tx + 1.5 * math.cos(a), tz + 1.5 * math.sin(a)
+                box((0.6, 0.55, 0.6), (cx, 0.28, cz), 0x9a7b55, yaw=-a)
+                box((0.12, 0.7, 0.6), (cx + 0.26 * math.cos(a), 0.85, cz + 0.26 * math.sin(a)), 0x9a7b55, yaw=-a)
+    bench((-0.5, 0, 5.6), yaw=math.pi / 2)
+    box((0.7, 1.0, 0.7), (-0.6, 0.5, -3.6), 0x22c46e)                                 # the bin
+    # bunting from the roof's finial out to a tall pole at each end of the
+    # terrace: the road here stands a unit over the lawn, and what is under
+    # that is under the kerb from the seat
+    for pz in (-8.0, 8.0):
+        box((0.3, 6.4, 0.3), (6.0, 3.2, pz), WHITE)
+        sphere(0.36, (6.0, 6.5, pz), YELLOW, subdiv=1)
+        bunting((KX, KH + 3.5, KZ), (6.0, 6.2, pz), (RED, YELLOW, BLUE, WHITE), n=7, drop=1.2, w=0.8)
+    join_still('kiosk')
+
+# ---- CLOVERLEAF: the park's bedding on the hills ------------------------------------
+# What a town park plants on a bank that faces its visitors: a floral clock
+# on the face of the hill outside the top bend, and a long bed of carpet
+# bedding along the face of the foothill beside the west straight (tracks.js
+# `land`; both rise off the verge toward the driver, and both show across the
+# lap from the high deck). Flowers planted flat on the slope in bands of
+# colour, each bed cut into small faces and DRAPED, so it lies on the hill as
+# drawn. The clock's hands stand at ten past ten and keep still. World units,
+# the foot of each bed toward the road (+X).
+def bed_quad(pts, color, row=None, y=0.08):
+    o = ground_poly([(x, y, z) for x, z in pts], [(0, 1, 2, 3)], color)
+    o['ramp'] = 0.2                              # flowers, not run down the ramp to the dark
+    return rowed(o, row) if row is not None else o
+
+def bed_ring(r0, r1, color, row=None, y=0.08, segs=24, steps=1, pick=None):
+    """A ring of bedding r0..r1 round the origin, in `steps` bands."""
+    for j in range(steps):
+        a, b = r0 + (r1 - r0) * j / steps, r0 + (r1 - r0) * (j + 1) / steps
+        for k in range(segs):
+            if pick and not pick(k):
+                continue
+            t0, t1 = k * 2 * math.pi / segs, (k + 1) * 2 * math.pi / segs
+            bed_quad([(a * math.cos(t0), a * math.sin(t0)), (b * math.cos(t0), b * math.sin(t0)),
+                      (b * math.cos(t1), b * math.sin(t1)), (a * math.cos(t1), a * math.sin(t1))], color, row, y)
+
+@piece()
+def floral_clock():
+    RED, WHITE, YELLOW, PURPLE = 0xcf534f, 0xf8f8fb, 0xffc044, 0xa878e8
+    def still():
+        bed_ring(0.0, 2.7, 'leaf', 22, steps=4)                  # the face, a clipped green
+        bed_ring(2.7, 3.3, RED)                                  # its border
+        bed_ring(3.3, 3.6, WHITE)                                # and a white edging
+        for k in range(12):                                      # the hours, the quarters bigger
+            a = k * math.pi / 6
+            big = k % 3 == 0
+            w, l, r = (0.34, 0.7, 2.1) if big else (0.22, 0.4, 2.25)
+            c, sn = math.cos(a), math.sin(a)
+            bed_quad([(c * (r - l / 2) - sn * w / 2, sn * (r - l / 2) + c * w / 2), (c * (r + l / 2) - sn * w / 2, sn * (r + l / 2) + c * w / 2),
+                      (c * (r + l / 2) + sn * w / 2, sn * (r + l / 2) - c * w / 2), (c * (r - l / 2) + sn * w / 2, sn * (r - l / 2) - c * w / 2)],
+                     YELLOW if big else WHITE, y=0.13)
+        # the hands, from the hub: twelve is up the slope (-X)
+        for ang, L, w in ((math.radians(-58), 1.35, 0.3), (math.radians(60), 2.0, 0.22)):
+            ux, uz = -math.cos(ang), math.sin(ang)
+            n = 4
+            for q in range(n):
+                a, b = L * q / n, L * (q + 1) / n
+                bed_quad([(ux * a - uz * w / 2, uz * a + ux * w / 2), (ux * b - uz * w / 2, uz * b + ux * w / 2),
+                          (ux * b + uz * w / 2, uz * b - ux * w / 2), (ux * a + uz * w / 2, uz * a - ux * w / 2)], WHITE, y=0.13)
+        box((0.5, 0.3, 0.5), (0.0, 0.12, 0.0), YELLOW, yaw=0.6)  # the hub
+    draped('bed', still)
+
+@piece()
+def carpet_bed():
+    RED, WHITE, YELLOW, PURPLE = 0xcf534f, 0xf8f8fb, 0xffc044, 0xa878e8
+    NX, NZ, C = 9, 22, 0.5                       # up the slope, along it; a plant's square
+    def still():
+        for i in range(NX):
+            for j in range(NZ):
+                x, z = (NX / 2 - i - 1) * C, (j - NZ / 2) * C
+                m, d = (j - 1) % 10, abs(i - (NX - 1) / 2)
+                edge = i in (0, NX - 1) or j in (0, NZ - 1)
+                lozenge = abs(m - 4.5) + d * 1.4
+                color, row = ((WHITE, None) if edge else (YELLOW, None) if lozenge < 1.6 else (RED, None) if lozenge < 3.6
+                              else (PURPLE, None) if lozenge > 6.6 else ('leaf', 22))
+                bed_quad([(x, z), (x + C, z), (x + C, z + C), (x, z + C)], color, row)
+    draped('bed', still)
 
 # ====================================================================================
 # CANYON
