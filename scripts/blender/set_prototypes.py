@@ -5566,8 +5566,174 @@ def snowcat(x, y, z, k=0.45):
     b((0.3, 1.0, 2.5), 1.95, 0.6, 0, 0xfff6eb)                 # the blade
     b((0.7, 0.36, 2.2), -1.95, 0.4, 0, DARK)                    # the tiller
 
+def piste_marker(x, g, z, color=0xff7e44, foot=None, board=True):
+    """A piste's edge marker standing in the snow at `g`: a stout pole and
+    its board, a size over a real one (a real one is a hairline from the
+    road, and a line of them down a run is what marks it as a run). The pole
+    runs down to `foot` (the plain under a hill the piece does not carry,
+    for set-check); the box's build leaves the board off."""
+    lo = g - 0.6 if foot is None else foot
+    box((0.22, g + 1.5 - lo, 0.22), (x, (g + 1.5 + lo) / 2, z), color)
+    if board:
+        box((0.6, 0.42, 0.14), (x, g + 1.5, z), 0xfff6eb)
+
+def snow_pole(x, z, h=1.5):
+    """A road's snow pole on the verge, orange under a white band, built on
+    y = 0 for a drape."""
+    box((0.16, h + 0.3, 0.16), (x, (h - 0.3) / 2, z), 0xff7e44)
+    box((0.2, 0.22, 0.2), (x, h - 0.32, z), 0xfff6eb)
+
+def drift_fence(x, z, yaw, panels=3, seed=0, drifts=True):
+    """A snow fence along +Z turned by `yaw` from (x, z): weathered posts and
+    three slats a panel, leaning a little from the wind, a drift piled in
+    its lee. Built on y = 0 for a drape, a post every three units so it
+    follows the land."""
+    at = local(x, z, yaw)
+    W = 0x8a6a46
+    for k in range(panels + 1):
+        px, _, pz = at(0.0, 0.0, 3.0 * k)
+        box((0.16, 1.5, 0.16), (px, 0.55, pz), W, yaw=yaw, roll=0.08)
+    for k in range(panels):
+        mx, _, mz = at(0.0, 0.0, 3.0 * k + 1.5)
+        for j, yy in enumerate((0.4, 0.75, 1.1)):
+            if (k * 3 + j + seed) % 7 == 5:
+                continue                                          # a slat gone
+            box((0.08, 0.22, 3.0), (mx + 0.08 * (yy - 0.7) * math.cos(yaw), yy, mz - 0.08 * (yy - 0.7) * math.sin(yaw)),
+                0x9a7b55, yaw=yaw)
+        if not drifts and k != 1:
+            continue
+        hx, _, hz = at(-0.9, 0.0, 3.0 * k + 1.3)
+        snowy(box((1.5, 0.5 + 0.12 * ((k + seed) % 2), 2.4), (hx, 0.2, hz), 0xf3f7fb, yaw=yaw + 0.12 * (k - 1)), 0.45)
+
+def powder_verge(kind, lite=False):
+    """A stretch of Powder's verge by the kerb, some ten units of it along
+    the road (+Z), +X to the road: `a` a snow fence and its drifts, `b` a
+    rail fence round a stack of logs with the piste's signpost; snow poles
+    at the road's edge of both. Draped: it lies on the verge as drawn."""
+    def build():
+        for z in ((-4.5, 0.5, 5.0) if kind == 'a' else (-5.0, 0.0, 4.5))[:2 if lite else 3]:
+            snow_pole(1.6, z)
+        if kind == 'a':
+            drift_fence(-0.6, -4.6, 0.06, 2 if lite else 3, seed=1, drifts=not lite)
+            return
+        W = 0x8a6a46
+        pts = [(-0.4, -4.5), (-0.7, -1.5), (-0.5, 1.5), (-1.0, 4.2), (-3.2, 5.0)]
+        for (ax, az), (bx, bz) in zip(pts, pts[1:]):
+            box((0.16, 0.9, 0.16), (ax, 0.35, az), W)
+            for yy in (0.3, 0.62):
+                strut((ax, yy, az), (bx, yy, bz), 0.1, 0x9a7b55)
+        box((0.16, 0.9, 0.16), (pts[-1][0], 0.35, pts[-1][1]), W)
+        if lite:
+            return
+        for k in range(3):                                         # logs stacked behind it
+            cyl(0.22, 2.2, (-2.0, 0.2, -3.2 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
+        for k in range(2):
+            cyl(0.22, 2.2, (-2.0, 0.58, -2.97 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
+        snowy(box((2.3, 0.1, 1.3), (-2.0, 0.84, -2.74), 0xf3f7fb), 0.45)
+        box((0.14, 2.0, 0.14), (-1.9, 0.9, 2.6), W)                # the signpost: two arrows
+        box((0.08, 0.3, 1.2), (-1.9, 1.7, 3.0), 0x339cf2, yaw=0.15)
+        box((0.08, 0.3, 1.0), (-1.9, 1.3, 2.2), 0xff5040, yaw=-0.1)
+        snow_heap((-2.6, 0, 0.6), 0.7, yaw=0.5)
+    draped('verge', build)
+
+for _k in ('a', 'b'):
+    for _lite in (False, True):
+        _n = 'powder-verge-%s%s' % (_k, '-lite' if _lite else '')
+        PIECES[_n] = (lambda k, lite: lambda: powder_verge(k, lite))(_k, _lite)
+        GROW[_n] = 1.0
+
+# Powder's resort village up the foothill's foot dead ahead of the long run
+# north, outside the bend onto the start straight: each building (x, z,
+# ground) in the piece's frame (the ski mountain's: u 0.9, lat -32.5, yaw
+# 180, +X to the road, -Z on up the lap), the ground the renderer draws there
+# over the plain, SAMPLED like a stand's (FORESTS): re-sample after moving the
+# piece or the land.
+RESORT_LODGE = (26.5, -37.5, 3.3)
+RESORT_CHALETS = ((33.0, -33.0, 1.66, 3.6, 2.7, 0x9a5f3c), (21.0, -44.5, 5.34, 3.4, 2.6, 0xcf534f),
+                  (31.5, -42.5, 4.92, 3.8, 2.8, 0x9a7b55), (15.0, -34.5, 0.99, 3.4, 2.6, 0x9a7b55))
+RESORT_FIRS = ((12.5, -37.5, 1.31, 1.9), (13.0, -41.0, 2.42, 2.1), (25.0, -45.0, 6.15, 1.8))
+RESORT_LANES = (((23.0, -27.0), (20.0, -31.0), (17.5, -32.6), (21.0, -34.6), (26.5, -34.8), (31.0, -34.4), (33.0, -31.2)),
+                ((31.0, -34.4), (33.4, -37.6), (31.6, -40.4), (26.0, -41.6), (21.2, -42.4)))
+
+def powder_resort(lite=False):
+    """Powder's resort village: the lodge, a long hall with a stone ground
+    floor, a balcony down its front and a broad snowed roof, chalets below
+    and above it up the slope, each on a footing let into the hill, all
+    facing down the road that drives at them; a trodden lane climbs from
+    the valley station's chalets past every door, lamps along it."""
+    lx, lz, lg = RESORT_LODGE
+    box((7.4, lg + 0.4, 3.8), (lx, lg / 2, lz), 0x868ba1)                  # its footing, down through the hill
+    cabin_hut(7.0, 2.4, 3.4, (lx, lg + 0.2, lz), 0x9a5f3c, 0xeef4f9)
+    box((7.06, 1.0, 3.46), (lx, lg + 0.7, lz), 0x868ba1)                   # the stone ground floor
+    if not lite:
+        box((0.6, 1.0, 0.6), (lx - 1.8, lg + 3.3, lz - 0.7), 0x868ba1)     # the chimney
+        snowy(box((0.7, 0.12, 0.7), (lx - 1.8, lg + 3.86, lz - 0.7), 0xf3f7fb), 0.5)
+    box((6.6, 0.1, 0.7), (lx, lg + 1.3, lz + 2.0), 0x8a6a46)               # the balcony down its front
+    for k in range(0 if lite else 4):
+        box((0.12, 1.3, 0.12), (lx - 3.1 + 2.07 * k, lg + 0.75, lz + 2.3), 0x8a6a46)
+    if not lite:
+        box((6.6, 0.3, 0.08), (lx, lg + 1.62, lz + 2.32), 0x8a6a46)
+    if not lite:
+        for k in range(4):                                                 # the upper floor's windows, shuttered red
+            wx = lx - 2.55 + 1.7 * k
+            box((0.6, 0.6, 0.06), (wx, lg + 1.95, lz + 1.73), 'slate')
+            for sd in (-1, 1):
+                box((0.2, 0.6, 0.07), (wx + sd * 0.42, lg + 1.95, lz + 1.73), 0xcf534f)
+        box((0.9, 0.9, 0.06), (lx - 1.6, lg + 0.75, lz + 1.76), 'slate')   # the ground floor's
+        box((0.9, 0.9, 0.06), (lx + 1.6, lg + 0.75, lz + 1.76), 'slate')
+    for n, (x, z, g, w, d, wall) in enumerate(RESORT_CHALETS):
+        if lite:
+            break                                                          # the box keeps the lodge and its lane
+        ry = -math.pi / 2 + (0.12, -0.1, 0.08, -0.14)[n]                    # doors down the road
+        box((d + 0.3, g + 0.4, w + 0.3), (x, g / 2, z), 0x868ba1, yaw=ry + math.pi / 2)
+        cabin_hut(w, 1.7, d, (x, g + 0.2, z), wall, 0xeef4f9, yaw=ry)
+        box((0.5, 1.2, 0.5), (x - 0.6, g + 2.6, z - 0.7), 0x868ba1)
+        snowy(box((0.6, 0.12, 0.6), (x - 0.6, g + 3.26, z - 0.7), 0xf3f7fb), 0.5)
+    if not lite:
+        for x, z, g, k in RESORT_FIRS:
+            pine((x, g - 0.35 * k, z), k)
+            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+    def lanes():
+        for n, pts in enumerate(RESORT_LANES[:1] if lite else RESORT_LANES):
+            rows = []
+            for (ax, az), (bx, bz) in zip(pts, pts[1:]):
+                m = math.hypot(bx - ax, bz - az)
+                nx, nz = (bz - az) / m, -(bx - ax) / m
+                steps = max(1, int(m / 1.2 + 0.5))
+                for i in range(steps + (1 if (bx, bz) == pts[-1] else 0)):
+                    f = i / steps
+                    x, z = ax + (bx - ax) * f, az + (bz - az) * f
+                    rows.append([(x - nx * 0.65, 0.05, z - nz * 0.65), (x + nx * 0.65, 0.05, z + nz * 0.65)])
+            for o in sheet(rows, lambda i, j, nn: 0xd0e8ff, 'lane'):
+                snowy(o, 0.3)
+        if lite:
+            return
+        for (x, z) in ((19.2, -30.2), (23.8, -33.9), (30.0, -33.6), (33.9, -36.2), (28.6, -40.4)):
+            box((0.1, 1.6, 0.1), (x, 0.8, z), 0x38383d)
+            box((0.44, 0.08, 0.08), (x - 0.18, 1.6, z), 0x38383d)
+            box((0.22, 0.22, 0.22), (x - 0.38, 1.47, z), 0xffc044)
+    draped('lanes', lanes)
+    if not lite:
+        marker('anim_smoke#lodge', (lx - 1.8, lg + 4.2, lz - 0.7))
+
 @piece(1.0)
-def ski_lift():
+def powder_resort_piece():
+    powder_resort(False)
+
+PIECES['powder-resort'] = PIECES.pop('powder-resort-piece')
+GROW['powder-resort'] = GROW.pop('powder-resort-piece')
+PIECES['powder-resort-lite'] = lambda: powder_resort(True)
+GROW['powder-resort-lite'] = 1.0
+
+@piece(1.0)
+def ski_lift_lite():
+    # the box's lift: no queue, racked skis or chimneys, two chairs in three,
+    # two skiers, no hut at the top station, the lite fir, every other pair
+    # of the run's markers and those bare poles
+    ski_lift(True)
+
+@piece(1.0)
+def ski_lift(lite=False):
     # Powder: a ski mountain standing along the road, its summit behind (-X)
     # and its long flank toward the road, so the lap drives past the whole of
     # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
@@ -5628,6 +5794,8 @@ def ski_lift():
         marker('path_lift_%d' % k, pt)
     COATS = (0xcf534f, 0x3f7bd9, 0x61cb8b, 0xffc044, 0xa878e8, 0xff7e44)
     for k in range(10):
+        if lite and k % 3 == 2:
+            continue
         f = (k + 1) / 11                               # clear of the wheels, where the rope curls
         at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
@@ -5638,10 +5806,10 @@ def ski_lift():
     station(V[0], V[1], y0, 0.0, yaw, k=1.8)
     hx, hz = turned(V[0], V[1], yaw, 0.0, -2.6)
     cabin_hut(2.4, 1.3, 1.8, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
-    for k in range(5):
+    for k in range(0 if lite else 5):
         px, pz = turned(V[0], V[1], yaw, 1.5, -0.6 + k * 0.16)
         box((0.06, 0.44, 0.07), (px, 0.22, pz), COATS[k], yaw=yaw, roll=0.15)
-    for k in range(3):
+    for k in range(0 if lite else 3):
         px, pz = turned(V[0], V[1], yaw, -0.25 + 0.3 * k, 1.3 + 0.12 * (k % 2))
         snow_person(px, 0, pz, COATS[k + 1], COATS[k + 3], yaw=yaw - math.pi / 2)
     # the resort's chalets by the valley station, out on the verge a few
@@ -5652,14 +5820,17 @@ def ski_lift():
                                      (4.6, 10.6, 3.4, 2.6, 0x9a7b55, 0.5)):
         box((w + 0.2, 0.5, d + 0.2), (V[0] + lx, 0.2, V[1] + lz), 0x868ba1, yaw=ry)
         cabin_hut(w, 1.7, d, (V[0] + lx, 0.4, V[1] + lz), wall, 0xeef4f9, yaw=ry)
+        if lite:
+            continue
         box((0.5, 1.3, 0.5), (V[0] + lx - 0.8, 2.9, V[1] + lz - 0.5), 0x868ba1)
         snowy(box((0.6, 0.12, 0.6), (V[0] + lx - 0.8, 3.6, V[1] + lz - 0.5), 0xf3f7fb), 0.5)
-    for k in range(2):
+    for k in range(0 if lite else 2):
         snow_person(V[0] + 3.2 + 0.5 * k, 0, V[1] - 0.6 + 0.9 * (k % 2), COATS[k], COATS[(k + 2) % 6], yaw=1.2 * k)
     # top station on the summit, its hut behind it
     station(T[0], T[1], y1, H(*T) - 0.3, yaw)
     tx, tz = turned(T[0], T[1], yaw, 0.0, 2.0)
-    cabin_hut(1.6, 0.9, 1.2, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
+    if not lite:
+        cabin_hut(1.6, 0.9, 1.2, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
     # the slalom down the other diagonal to the finish on the flat
     S0, F = (-6.0 * G, 5.0 * G), (12.0 * G, 21.0 * G)
     px_, pz_ = F[0] - S0[0], F[1] - S0[1]
@@ -5699,7 +5870,7 @@ def ski_lift():
     under = [(x, H(x, z) - 1.6, z) for (x, _, z) in reversed(surf[::3] + [surf[-1]])]
     for k, pt in enumerate(surf + under):
         marker('path_ski_%d' % k, pt)
-    for k in range(4):
+    for k in range(0, 4, 2 if lite else 1):
         x, y, z = surf[3 + k * 4]
         with animated('anim_path:c=ski:p=70:o=%.3f#%d' % (k / 4, k), (x, y, z)):
             skier(x, y, z, COATS[k], COATS[(k + 3) % 6])
@@ -5720,14 +5891,24 @@ def ski_lift():
     loop = along(-3.4, False) + along(3.4, True)
     for k, (x, z) in enumerate(loop):
         marker('path_groom_%d' % k, (x, H(x, z) + 0.02, z))
+    # the run's edge markers, a pair every third of the groomer's stations
+    # from the top station to the finish: orange down its right, blue (the
+    # run's grade) down its left
+    for off, c in ((-4.6, 0x339cf2), (4.6, 0xff7e44)):
+        for k, (x, z) in enumerate(along(off, False)):
+            if k % (4 if lite else 2) == 1:
+                piste_marker(x, H(x, z) + 0.2, z, c, board=not lite)
     x, z = loop[3]
     with animated('anim_path:c=groom:p=60:f=2#cat', (x, H(x, z) + 0.02, z)):
         snowcat(x, H(x, z) + 0.02, z)
     # pines on the flanks, clear of the lift line and the piste, the size of
     # the ambient ones
+    global FIR_LITE
+    FIR_LITE = lite
     for x, z, k in ((-50.0, -30.0, 1.9), (-12.0, 20.0, 1.8)):
         x, z = x * G, z * G
         pine((x, H(x, z) - 0.6, z), k)   # sunk past the grid's chords
+    FIR_LITE = False
 
 # Powder's second lift runs up the foothills over the start straight's
 # outside (tracks.js powder `land`, its forms `near` the kerb), so it stands
@@ -5740,6 +5921,9 @@ CHAIRLIFT_GROUND = ((-14.0, 1.0), (-12.0, 0.9), (-10.0, 0.7), (-8.0, 0.5), (-6.0
                     (16.0, 4.7), (18.0, 6.3), (20.0, 7.9), (22.0, 9.5), (24.0, 10.6), (26.0, 12.0), (28.0, 13.3),
                     (30.0, 14.6), (32.0, 15.2), (34.0, 15.3))
 
+RUN_GROUND = ((8.0, 1.3, 1.0), (12.0, 2.4, 1.9), (16.0, 5.0, 4.6), (20.0, 8.0, 7.8), (24.0, 10.8, 10.7),
+              (28.0, 13.2, 13.3), (31.5, 14.9, 15.0))
+
 def chairlift_ground(x):
     pts = CHAIRLIFT_GROUND
     if x <= pts[0][0]:
@@ -5750,7 +5934,14 @@ def chairlift_ground(x):
     return pts[-1][1]
 
 @piece(1.0)
-def powder_chairlift():
+def powder_chairlift_lite():
+    # the box's lift: the village without its lamps, garden gear, door paths,
+    # chimneys and queue, one rail to its fence, no hut at the top station,
+    # the run's markers bare poles
+    powder_chairlift(True)
+
+@piece(1.0)
+def powder_chairlift(lite=False):
     # Powder: the resort's second chairlift, from its base inside the north
     # loop over the start straight and up the foothills to their crest, the
     # chairs (skiers riding up, the odd one coming down empty) crossing over
@@ -5792,13 +5983,20 @@ def powder_chairlift():
     # the two stations, their legs down through the snow to the plain
     station(X0, 0.0, y0, 0.0, yaw)
     station(X1, 0.0, y1, 0.0, yaw)
+    # the run back down, west of the line (tracks.js powder `land`, its
+    # paint): its edge markers at the ground sampled under them (RUN_GROUND:
+    # x up the hill, the ground at the run's west and east edge)
+    for x, gw, ge in RUN_GROUND:
+        piste_marker(x, gw + 0.2, -10.5, 0x339cf2, foot=-0.1, board=not lite)
+        piste_marker(x, ge + 0.2, -3.5, 0xff7e44, foot=-0.1, board=not lite)
     # On the snow as drawn: the stations' huts, the resort's chalets either
     # side of the valley station along the straight's verge (doors to the
     # road), the queue at its gate, the racked skis. The towers stand
     # straight in the snow: a footing slab on the slope showed its side.
     def build():
         cabin_hut(1.6, 0.9, 1.2, (X0 - 2.0, -0.1, 0.0), 0x9a7b55, 0xeef4f9)
-        cabin_hut(1.6, 0.9, 1.2, (X1 + 2.0, -0.1, 0.0), 0x9a7b55, 0xeef4f9)
+        if not lite:
+            cabin_hut(1.6, 0.9, 1.2, (X1 + 2.0, -0.1, 0.0), 0x9a7b55, 0xeef4f9)
         # The resort's village, laid out as one: a lane of trodden snow runs
         # along the straight behind a rail fence, widening to a little square
         # at the lift's gate; the chalets stand in a row along its far side,
@@ -5821,6 +6019,8 @@ def powder_chairlift():
             hx = -11.9 - 0.3 * (n % 2)
             cabin_hut(w, 1.05, d, (hx, -0.15, z), wall, 0xeef4f9, yaw=ry)
             # its path to the lane
+            if lite:
+                continue
             x0, x1 = hx + w / 2, lane_x(z) - 0.6
             snowy(box((x1 - x0 + 0.2, 0.06, 0.6), ((x0 + x1) / 2, 0.03, z), LANE), 0.3)
             if smoke:                                                           # a chimney on the back slope
@@ -5833,10 +6033,12 @@ def powder_chairlift():
                 continue
             xa, xb = lane_x(za) + 1.25, lane_x(zb) + 1.25
             box((0.1, 0.55, 0.1), (xa, 0.27, za), 0x8a6a46)
-            for ry_ in (0.24, 0.46):
+            for ry_ in ((0.46,) if lite else (0.24, 0.46)):
                 strut((xa, ry_, za), (xb, ry_, zb), 0.07, 0x9a7b55)
             if abs(zb) < 2.6 + 1.5 or zb == fz[-1]:
                 box((0.1, 0.55, 0.1), (xb, 0.27, zb), 0x8a6a46)
+        if lite:
+            return
         # lamps along the fence
         for z in (-15.0, -9.0, -3.5, 3.5, 9.0, 15.0):
             lx = lane_x(z) + 1.25

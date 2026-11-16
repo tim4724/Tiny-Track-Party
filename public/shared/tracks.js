@@ -336,8 +336,8 @@ export const SET_GROUND = {
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
-    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xdde7f5 },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xdde7f5 }
+    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 6, w: 6, tint: 0xbdd0ee },
+    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 6, w: 6, tint: 0xbdd0ee }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
@@ -437,7 +437,8 @@ export const SET_GROUND = {
 // (set_prototypes.py set_ground(), which cannot import this).
 export function setGroundY(model, x, z) {
   let mounds = 0, fans = 0;
-  for (const f of SET_GROUND[model] || []) {
+  // (a lite build stands on its model's ground)
+  for (const f of SET_GROUND[model] || SET_GROUND[model.replace(/-lite$/, '')] || []) {
     if (f.kind !== 'mound' && f.kind !== 'fan') continue;
     const a = (f.yaw || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
     const lx = x * c - z * s - (f.x || 0), lz = x * s + z * c - (f.z || 0);
@@ -875,7 +876,22 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman family on the outside verge of the east bend, at road
       // height, ahead of a car coming over the hump off the start straight
-      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 },
+      // the resort's village up the foothill's foot, dead ahead of the long
+      // run north and outside the bend onto the start straight: the lodge
+      // and its chalets (in the ski mountain's frame, sampled:
+      // set_prototypes.py RESORT_*)
+      { model: 'set-powder-resort', u: 0.9, lat: -32.5, yaw: 180 },
+      // the verge at road level where the valley's hills stand back: snow
+      // fences and their drifts, rail fences, the road's snow poles, along
+      // the run west from the east bend and round the south-west bend (the
+      // box keeps a snow fence on each)
+      { model: 'set-powder-verge-a', u: 0.178, lat: -6.2, yaw: 180 },
+      { model: 'set-powder-verge-b', u: 0.205, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-a', u: 0.232, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-b', u: 0.577, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-a', u: 0.603, lat: -6.2, yaw: 180 },
+      { model: 'set-powder-verge-b', u: 0.629, lat: -6.2, yaw: 180, lite: false }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -899,6 +915,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.4248, lat: -31.52, r: 28, h: 14, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.4855, lat: -29.42, r: 26, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6274, lat: -25.74, r: 22, h: 7, top: 0.25, near: 2 },
+      // the second lift's run back down the foothill, west of its line: a
+      // groomed wash, its edge markers the lift piece's (RUN_GROUND)
+      { kind: 'paint', u: 0.0163, lat: -19, yaw: 90, len: 22, r: 5, w: 5, tint: 0xbdd0ee },
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
