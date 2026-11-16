@@ -705,17 +705,21 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, trunk=0x9a7b55, sink=0.0):
     x, y, z = at
     k = h / 4.2
     dx, dz = math.cos(yaw), math.sin(yaw)
-    pts = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t) for t in (0, 0.36, 0.7, 1.0)]
+    # (the box's palm, LITE: its trunk in two lengths of five sides, five
+    # fronds, no coconuts)
+    ts, sides, fronds = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
+    pts = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t) for t in ts]
     if sink:
-        rod((x, y - sink, z), pts[0], 0.3 * k, trunk, segs=6)
-    for i in range(3):
-        rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
+        rod((x, y - sink, z), pts[0], 0.3 * k, trunk, segs=sides)
+    for i in range(len(ts) - 1):
+        rod(pts[i], pts[i + 1], (0.3 - 0.18 * ts[i]) * k, trunk, r2=(0.3 - 0.18 * ts[i + 1]) * k, segs=sides) if LITE else \
+            rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
     tx, ty, tz = pts[-1]
-    for i in range(6):                                  # each frond one blade, drooping
-        a = yaw + i * math.pi / 3 + 0.3
+    for i in range(fronds):                             # each frond one blade, drooping
+        a = yaw + i * 2 * math.pi / fronds + 0.3
         ca, sa = math.cos(a), math.sin(a)
         beam((tx, ty + 0.1 * k, tz), (tx + ca * 2.1 * k, ty - 0.45 * k, tz + sa * 2.1 * k), 0.5 * k, 0x61cb8b, d=0.06)
-    for sd in (-1, 1):
+    for sd in () if LITE else (-1, 1):
         box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
 
 class square:
@@ -3067,8 +3071,8 @@ def pirate_stockade():
     # sand's fall and out into the bay, the small boat tied at its end and the
     # big one pulled up the sand beside it. In the sea wall a cannon run out to sea, in the
     # end wall toward the ship another trained along the shore on her
-    # anchorage, and the thatched lookout at that corner, the Jolly Roger
-    # over it and over the gate. The land side is a full wall with no way in
+    # anchorage, and a squat fighting platform at that corner, the Jolly
+    # Roger over it and over the gate. The land side is a full wall with no way in
     # (round 15 had low stakes and a gap there, which read as a wall too small
     # and broken); the yard holds the log hut, the cold fire ring and the
     # stores. Rounds 12 to 14 put a temple and then this fort on the
@@ -3081,8 +3085,19 @@ def pirate_stockade():
     X0, X1, Z0, Z1 = -3.6, 2.9, -4.4, 4.4            # the palisade's line
     GZ, GW = -1.4, 1.0                                 # the gate in the sea wall, its half width
     SEA_Y = SEA - 0.72                                 # the sea's surface, under the rise the camp stands on
+    # (the box's build, LITE: fatter logs further apart, each one tapered
+    # stake of five sides; the jetty's planks twice as broad and square-edged;
+    # no kegs by the gate or on the platform, a plain crate for the bottles)
+    LR, LSEG = (0.25, 5) if LITE else (0.18, 6)
+    def stake(x, y, z, h, log, r=None):
+        r = r or LR
+        if LITE:
+            cyl(r, h + 0.3, (x, y, z), log, r2=0.45 * r, segs=LSEG, stem=True)
+        else:
+            cyl(r, h, (x, y, z), log, segs=LSEG, stem=True)
+            cyl(r, 0.3, (x, y + h, z), log, r2=0.02, segs=LSEG, stem=True)
     def logs(a, b, gaps=(), tall=1.55):
-        n = max(1, int(round(math.dist(a, b) / 0.36)))
+        n = max(1, int(round(math.dist(a, b) / (2 * LR))))
         for i in range(n):
             t = (i + 0.5) / n
             x, z = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
@@ -3090,8 +3105,7 @@ def pirate_stockade():
                 continue
             h = tall + 0.18 * tall * jitter(i, int(x * 7 + z * 13), 3.3)
             log = 'bark' if i % 3 else dark                 # weathered grey-brown, a darker one now and then
-            cyl(0.18, h + 0.4, (x, -0.4, z), log, segs=6, stem=True)
-            cyl(0.18, 0.3, (x, h, z), log, r2=0.02, segs=6, stem=True)
+            stake(x, -0.4, z, h + 0.4, log)
     PORT = (X0 + 0.5, Z0)                              # the end wall's gun port, by the sea
     logs((X0, Z0), (X0, Z1), gaps=((X0, GZ, GW), (X0, 2.0, 0.42)))
     logs((X0, Z0), (X1, Z0), gaps=((PORT[0], PORT[1], 0.42),))
@@ -3114,28 +3128,29 @@ def pirate_stockade():
     # through the end wall toward the ship's anchorage
     kit('pirate', 'cannon', (X0 + 1.0, 0, 2.0), yaw=math.radians(-90), scale=0.6)
     kit('pirate', 'cannon', (PORT[0], 0, Z0 + 1.1), yaw=math.radians(180), scale=0.6)
-    # the lookout at that corner: four legs braced, a plank platform with a
-    # rail, a thatch over it, the flag on top
-    LX, LZ, P0 = X0 + 1.4, Z0 + 1.5, 3.4
+    # the corner toward the ship: a fighting platform a head over the wall,
+    # squat on four stout posts, a parapet of short sharpened logs on its
+    # two outer sides, powder kegs on it and the Jolly Roger on a staff at
+    # its corner. (Until round 19 a thatched lookout tower stood here, a
+    # twin of the lookout down the east straight, the two in one frame.)
+    LX, LZ, P0 = X0 + 1.5, Z0 + 1.5, 2.0
     for sx in (-1, 1):
         for sz in (-1, 1):
-            beam((LX + sx * 0.95, -0.4, LZ + sz * 0.95), (LX + sx * 0.7, P0, LZ + sz * 0.7), 0.22, wood)
-    for sx in (-1, 1):
-        beam((LX + sx * 0.9, 0.4, LZ - 0.9), (LX + sx * 0.75, P0 - 0.4, LZ + 0.75), 0.13, dark)
-        beam((LX - 0.9, 0.4, LZ + sx * 0.9), (LX + 0.75, P0 - 0.4, LZ + sx * 0.75), 0.13, dark)
-    box((1.9, 0.2, 1.9), (LX, P0 + 0.1, LZ), plank)
-    for k in range(4):
-        a = k * math.pi / 2 + math.pi / 4
-        box((0.14, 0.8, 0.14), (LX + 0.85 * math.cos(a), P0 + 0.6, LZ + 0.85 * math.sin(a)), wood)
-    for sx in (-1, 1):
-        beam((LX + sx * 0.85, P0 + 0.9, LZ - 0.85), (LX + sx * 0.85, P0 + 0.9, LZ + 0.85), 0.1, wood)
-    cyl(1.35, 0.8, (LX, P0 + 1.0, LZ), 0xd9b054, r2=0.1, segs=8)             # the thatch
-    for i in range(8):                                                       # the ladder up its yard side
-        t = (i + 0.5) / 8
-        box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.15 - 0.15 * t), dark)
+            cyl(0.22, P0 + 0.4, (LX + sx * 1.0, -0.4, LZ + sz * 1.0), dark, segs=6, stem=True)
+    box((2.6, 0.2, 2.6), (LX, P0 + 0.1, LZ), plank)
+    for k in range(6):
+        t = -1.1 + 0.44 * k
+        for (x, z) in ((LX - 1.2, LZ + t), (LX + t, LZ - 1.2)):
+            log = 'bark' if k % 2 else dark
+            stake(x, P0 + 0.2, z, 0.75, log, r=0.16)
+    for (dx, dz, yw) in () if LITE else ((-0.5, -0.4, 0.4), (0.2, -0.6, 1.2)):
+        kit('pirate', 'barrel', (LX + dx, P0 + 0.2, LZ + dz), yaw=yw, scale=0.5)
+    for i in range(5):                                                       # the ladder up its yard side
+        t = (i + 0.5) / 5
+        box((0.7, 0.08, 0.08), (LX + 0.3, -0.4 + (P0 + 0.4) * t, LZ + 1.45 - 0.15 * t), dark)
     for dx in (0.0, 0.6):
-        beam((LX + dx, -0.4, LZ + 1.15), (LX + dx, P0, LZ + 1.0), 0.1, wood)
-    kit_flag('flag-pirate-high', (LX, P0 + 1.6, LZ), math.radians(90), 0.6, 'anim_flutter:p=2.0#tower')
+        beam((LX + dx, -0.4, LZ + 1.45), (LX + dx, P0, LZ + 1.3), 0.1, wood)
+    kit_flag('flag-pirate-high', (LX + 1.0, P0 + 0.2, LZ - 1.0), math.radians(90), 0.6, 'anim_flutter:p=2.0#tower')
     # the log hut on the land side of the yard, its door to the yard
     BX, BZ, BW, BD, BH = 1.4, 2.0, 2.2, 2.8, 1.4
     box((BW - 0.2, BH + 0.4, BD - 0.2), (BX, (BH - 0.4) / 2, BZ), 0x6e4a32)
@@ -3166,22 +3181,24 @@ def pirate_stockade():
         rod((FX - 0.38 * math.cos(a), 0.08, FZ - 0.38 * math.sin(a)), (FX + 0.38 * math.cos(a), 0.12 + 0.03 * k,
             FZ + 0.38 * math.sin(a)), 0.07, 'dark')
     # the stores by the gate, inside
-    for (x, z, yw) in ((X0 + 0.9, GZ - 1.6, 0.3), (X0 + 1.5, GZ - 2.2, 1.1), (X0 + 1.0, GZ + 1.6, 0.6)):
+    for (x, z, yw) in () if LITE else ((X0 + 0.9, GZ - 1.6, 0.3), (X0 + 1.5, GZ - 2.2, 1.1), (X0 + 1.0, GZ + 1.6, 0.6)):
         kit('pirate', 'barrel', (x, 0, z), yaw=yw, scale=0.5)
     kit('pirate', 'crate', (X1 - 0.8, 0, -2.6), yaw=0.25, scale=0.7)
-    kit('pirate', 'crate-bottles', (X1 - 0.9, 0, -1.6), yaw=-0.3, scale=0.55)
+    kit('pirate', 'crate' if LITE else 'crate-bottles', (X1 - 0.9, 0, -1.6), yaw=-0.3, scale=0.55)
     # the jetty from the gate out over the sand's fall into the sea: planks
     # across on two stringers, piles down into the sea bed at both edges, a
     # bollard at its end, a coil of rope and a crate on it
     J0, J1, JW, D = X0 - 0.1, -17.6, 0.7, 0.12
-    n = int((J0 - J1) / 0.4)
-    for k in range(n):
-        box((0.36, 0.12, 2 * JW), (J0 - 0.2 - k * 0.4, D, GZ), plank if k % 3 else 0x9a6a46)
-    for sz in (-1, 1):
-        box((J0 - J1, 0.18, 0.18), ((J0 + J1) / 2, D - 0.15, GZ + sz * (JW - 0.1)), wood)
-        for k in range(8):
-            x = J0 - 0.6 - k * (J0 - J1 - 0.8) / 7
-            box((0.24, 2.6, 0.24), (x, D - 1.3, GZ + sz * (JW + 0.05)), dark)
+    PW = 0.8 if LITE else 0.4
+    n = int((J0 - J1) / PW)
+    with (plain_parts() if LITE else contextlib.nullcontext()):
+        for k in range(n):
+            box((PW - 0.04, 0.12, 2 * JW), (J0 - PW / 2 - k * PW, D, GZ), plank if k % 3 else 0x9a6a46)
+        for sz in (-1, 1):
+            box((J0 - J1, 0.18, 0.18), ((J0 + J1) / 2, D - 0.15, GZ + sz * (JW - 0.1)), wood)
+            for k in range(8):
+                x = J0 - 0.6 - k * (J0 - J1 - 0.8) / 7
+                box((0.24, 2.6, 0.24), (x, D - 1.3, GZ + sz * (JW + 0.05)), dark)
     box((0.3, 0.5, 0.3), (J1 + 0.25, D + 0.25, GZ + JW - 0.2), dark)
     torus(0.24, 0.07, (J1 + 2.2, D + 0.12, GZ - 0.25), 0xcbb794)
     kit('pirate', 'crate', (J1 + 0.9, D + 0.06, GZ - 0.25), yaw=0.4, scale=0.42)
@@ -3196,6 +3213,56 @@ def pirate_stockade():
     draped('boat', beached)
     on_a_rise()
 
+@piece(1.0)
+def treasure_dig():
+    # Cove: what the crew came ashore for, on the outside of the bend above
+    # the bay: the hole they have dug in the sand under a board marked with a
+    # red X, the chest hove half out of it on a rope from shear legs of three
+    # spars (the dig's tall thing, which shows over the kerb), heaps of dug
+    # sand round it with their spades stuck in, a keg and a crate of their
+    # stores. No one about. It stands on a beach rise (tracks.js); the hole
+    # is a print on the sand. +X is the road.
+    wood, dark, rope, red = 0x8a6a46, 0x6e5b3a, 0xcbb794, 0xcf534f
+    def hole():                                         # the pit's dark mouth, ragged
+        N = 10
+        rim = [(1.25 * (1.0 + 0.2 * jitter(i, 1, 9.0)) * math.cos(2 * math.pi * i / N), 0.04,
+                1.1 * (1.0 + 0.2 * jitter(i, 2, 9.0)) * math.sin(2 * math.pi * i / N)) for i in range(N)]
+        o = colored_faces([('bark', [(0.0, 0.04, 0.0), rim[i], rim[(i + 1) % N]]) for i in range(N)], 'hole')[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, 20)
+    # the dug sand, damp and darker than the beach, heaped round the hole
+    # (soft rounded heaps: faceted lumps read as boulders)
+    for k, (x, z, r, h) in enumerate(((-1.9, 0.6, 1.3, 0.75), (-0.7, -2.1, 1.1, 0.62), (-1.4, 2.2, 0.95, 0.5),
+                                      (1.5, 1.9, 0.8, 0.4))):
+        rowed(sphere(r, (x, -0.05, z), 'gravel', subdiv=2, scale=(1.15, h / r, 1.0), flat=False, yaw=1.1 * k), 31)
+    # the shear legs over the hole, the chest on their rope, canted, half out
+    APEX = (0.0, 3.3, 0.0)
+    for k in range(3):
+        a = 0.5 + k * 2 * math.pi / 3
+        beam((1.9 * math.cos(a), -0.3, 1.9 * math.sin(a)), (APEX[0] - 0.08 * math.cos(a), APEX[1] + 0.25, APEX[2] - 0.08 * math.sin(a)),
+             0.16, wood if k else dark)
+    box((0.3, 0.26, 0.3), (0.0, APEX[1] - 0.2, 0.0), dark)                             # the block
+    beam((0.0, APEX[1] - 0.2, 0.0), (0.05, 0.7, 0.0), 0.07, rope)
+    kit('pirate', 'chest', (0.05, 0.02, 0.0), yaw=0.5, scale=0.8, roll=0.28)
+    box((0.34, 0.16, 0.3), (0.95, 0.1, -0.55), 0xffc044, yaw=0.4)                      # what spilled from it
+    box((0.2, 0.12, 0.2), (1.2, 0.07, -0.25), 0xffc044, yaw=1.1)
+    # the board on its post, the X to the road and the cars coming
+    box((0.14, 1.9, 0.14), (2.3, 0.75, -2.2), wood)
+    box((0.1, 0.95, 1.05), (2.3, 1.55, -2.2), 0xfde4c7, yaw=-0.5)
+    c5, s5 = math.cos(-0.5), math.sin(-0.5)
+    for sgn in (-1, 1):
+        beam((2.3 + 0.07 * c5 - 0.36 * s5, 1.55 - sgn * 0.33, -2.2 - 0.07 * s5 - 0.36 * c5),
+             (2.3 + 0.07 * c5 + 0.36 * s5, 1.55 + sgn * 0.33, -2.2 - 0.07 * s5 + 0.36 * c5), 0.13, red, d=0.05)
+    # spades stuck in the heaps, their stores
+    kit('pirate', 'tool-shovel', (-1.7, 0.6, 0.5), yaw=0.6, scale=0.55, roll=0.2)
+    kit('pirate', 'tool-shovel', (-0.6, 0.5, -2.0), yaw=2.0, scale=0.55, pitch=0.25)
+    kit('pirate', 'barrel', (1.9, 0.0, 1.0), yaw=0.3, scale=0.5)
+    kit('pirate', 'crate', (2.4, 0.0, 0.2), yaw=0.7, scale=0.55)
+    join_still('dig')
+    draped('floor_hole', hole)
+    on_a_rise()
 
 # ---- round 6: Tidepool's Seal Rock and car park ----
 
@@ -13705,8 +13772,10 @@ def lite_too(*names):
         PIECES[n + '-lite'], GROW[n + '-lite'] = build, GROW[n]
 
 # The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
-# vans on plainer wheels.
-lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park')
+# vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
+# of the groves and stands (palm()).
+lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
+         'jungle-grove', 'palm-stand')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals

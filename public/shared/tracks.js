@@ -607,6 +607,17 @@ export const TRACKS = {
       // the lookout and its rope bridge stand on the road's own line, over it
       { model: 'set-pirate-lookout', u: 0.27, lat: 0 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
+      // the jungle down to the kerb on the island's side of the east
+      // straight, the last of them round the rope bridge's inland end, so
+      // the bridge comes out of the palms; and on the start straight's
+      // foothill past the cave
+      { model: 'set-jungle-grove', u: 0.185, lat: -10.5, yaw: 180 },
+      { model: 'set-jungle-grove', u: 0.272, lat: -13.5, yaw: 184 },
+      { model: 'set-jungle-grove', u: 0.035, lat: -10.5, yaw: 180 },
+      // the dig on the outside of the bend above the bay, where the east
+      // straight points, on a rise of its own at the height of the hill the
+      // road comes over there
+      { model: 'set-treasure-dig', u: 0.365, lat: 11, y: 2.1, scale: 1.25 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
       // palms on the beach outside the west bend, where the chase camera
@@ -656,6 +667,7 @@ export const TRACKS = {
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
+      { kind: 'ridge', u: 0.365, lat: 17.5, len: 8, r: 13, h: 2.1, top: 0.55, near: 0.4, w: 4 },
       // the foothill's face before the cave, green to the kerb (a facet of
       // it lay bare sand on the hillside)
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
@@ -665,7 +677,20 @@ export const TRACKS = {
       // peak's own tint has faded out down its flank (bare sand facets showed
       // between the canopy's crowns)
       { kind: 'paint', u: 0.68, lat: -16, len: 30, r: 8, w: 6, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f }
+      { kind: 'paint', u: 0.725, lat: -15, len: 12, r: 6, w: 5, tint: 0x5f9f5f },
+      // ...and down the foothills to the kerb of the east straight, the bend
+      // into it and the start straight, which stood bare sand under a green
+      // crest (a dune, on an island called jungle)
+      { kind: 'paint', u: 0.215, lat: -13, len: 56, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.215, lat: -24, len: 56, r: 10, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.115, lat: -14, len: 16, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.025, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
+      // ...and round the bay, the peak's flank over the anchorage
+      { kind: 'paint', u: 0.315, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.385, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.45, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.515, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.222, lat: 15, len: 26, r: 6, w: 4, tint: 0x5f9f5f }
     ]
   },
   driftwood: {
