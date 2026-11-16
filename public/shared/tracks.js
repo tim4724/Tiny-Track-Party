@@ -1312,11 +1312,14 @@ export const TRACKS = {
     // north-west bend, straight ahead down the avenue of oaks the diagonal
     // ends in; the pitch beside the diagonal, greener than the downs, bunting
     // down its road-side touchline; the children's blanket den under its oak
-    // where the racer comes off the diagonal's top; under four great oaks out
-    // by the bends a picnic left out, a hay wain loaded, a trampoline, a
-    // paddling pool;
+    // where the racer comes off the diagonal's top; under great oaks out
+    // by the bends a picnic left out and a hay wain loaded; out on the open
+    // down, with no oak over them, a trampoline in its net and a paddling
+    // pool under its parasol; a white horse cut in chalk into the face of the
+    // down the road heads at before the bottom bend;
     // the kite hill rising off the verge beyond the top loop, three kites
-    // flying low over its foot from stakes up the slope. Nobody is about (children
+    // flying low over its foot from stakes up the slope, and a camp of bell
+    // tents up the next down's face past it. Nobody is about (children
     // that small read as specks). The other trees a racer passes are the
     // lawn's own scatter of the garden's broadleaf oaks.
     set: [
@@ -1329,9 +1332,11 @@ export const TRACKS = {
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
       { model: 'set-picnic-oak', u: 0.86, lat: 7.5, yaw: 0, scale: 1.35 },
       { model: 'set-hay-wain-oak', u: 0.52, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-trampoline-oak', u: 0.115, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-paddling-pool-oak', u: 0.34, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -10, yaw: 180, scale: 1.4 }
+      { model: 'set-trampoline', u: 0.115, lat: 7, yaw: 0, scale: 1.35 },
+      { model: 'set-paddling-pool', u: 0.34, lat: 7, yaw: 0, scale: 1.35 },
+      { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
+      { model: 'set-chalk-horse', u: 0.3749, lat: 12, yaw: 26 },
+      { model: 'set-summer-camp', u: 0.795, lat: -9.5, yaw: 180, scale: 1.4 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)

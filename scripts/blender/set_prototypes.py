@@ -12168,11 +12168,12 @@ def picnic_oak():
     draped('picnic', still)
 
 # ---- PRETZEL: the hay wain and the paddling pool ------------------------------------
-# Three more of the downs' great oaks, each with its own summer under it, so
-# no two oaks by the road tell the same thing: the hay wain left loaded in the
-# shade with two big bales beside it, a trampoline, and a paddling pool with its slide,
-# its water a hand below the blown-up rim (the water family's grammar).
-# Front (+X) to the road. Each DRAPES.
+# Another of the downs' great oaks with its own summer under it, the hay wain
+# left loaded in the shade with two big bales beside it; and two things out on
+# the open down with no oak over them, so the lap's pieces are not all one
+# outline: a trampoline in its safety net, and a paddling pool under a parasol
+# with its slide tower, its water a hand below the blown-up rim (the water
+# family's grammar). Front (+X) to the road. Each DRAPES.
 @piece(REAL)
 def hay_wain_oak():
     def still():
@@ -12200,9 +12201,11 @@ def hay_wain_oak():
     draped('wain', still)
 
 @piece(REAL)
-def paddling_pool_oak():
+def paddling_pool():
+    # No oak: the pool stands out on the open
+    # down under a big striped parasol, its slide a tower with a ladder, so
+    # its outline from the road is a parasol and a slide, not one more oak.
     def still():
-        lawn_oak(-5.0, 3.0, 1.3)
         PX, PZ, R = 2.6, -1.0, 3.3                      # the pool: centre, rim radius
         torus(R, 0.7, (PX, 0.7, PZ), 0x339cf2, segs=16)                              # its blown-up rings
         torus(R, 0.62, (PX, 1.95, PZ), 'white', segs=16)
@@ -12210,26 +12213,55 @@ def paddling_pool_oak():
         rowed(cyl(R - 0.4, 0.1, (PX, 1.55, PZ), 'sky', segs=16), 26)                 # the water, below the rim
         rowed(cyl(R - 1.6, 0.1, (PX, 1.58, PZ), 'blue', segs=12), 6)
         sphere(0.7, (PX + 0.8, 2.0, PZ - 0.9), 0xffc044)                              # a ball floating
-        # the slide into it from the oak's side, a little ladder up its back
-        SX, SZ = PX - R - 2.6, PZ
-        a = math.atan2(2.6, 3.0)
-        box((3.4, 0.3, 1.4), (SX + 1.4, 1.6, SZ), 0xff7e44, roll=-a)
+        # the slide into it from behind: a tower a car and a half tall, its
+        # chute down over the rim, a ladder up its back
+        TH, RUN = 4.6, 5.0                              # the tower's deck; the chute's run
+        SX, SZ = PX - R - RUN + 1.2, PZ
+        a = math.atan2(TH - 2.4, RUN)
+        L = math.hypot(TH - 2.4, RUN)
+        box((L, 0.3, 1.6), (SX + RUN / 2, (TH + 2.4) / 2, SZ), 0xff7e44, roll=-a)
         for sz in (-1, 1):
-            box((3.4, 0.5, 0.25), (SX + 1.4, 1.85, SZ + sz * 0.65), 0xff7e44, roll=-a)
-            box((0.35, 3.2, 0.35), (SX - 0.3, 1.6, SZ + sz * 0.65), 0x22c46e)
-        box((0.9, 0.3, 1.6), (SX - 0.1, 3.1, SZ), 0x22c46e)
-        for k in range(3):
-            box((0.3, 0.2, 1.3), (SX - 0.4, 0.8 + 0.8 * k, SZ), 0x22c46e)
+            box((L, 0.6, 0.3), (SX + RUN / 2, (TH + 2.4) / 2 + 0.3, SZ + sz * 0.8), 0xff7e44, roll=-a)
+            for dx in (-1.6, 0.0):
+                box((0.4, TH + 1.3, 0.4), (SX + dx, (TH + 1.3) / 2 - 0.1, SZ + sz * 0.8), 0x22c46e)
+            box((1.6, 0.25, 0.25), (SX - 0.8, TH + 1.1, SZ + sz * 0.8), 0x22c46e)       # the deck's rails
+        box((2.0, 0.3, 1.9), (SX - 0.8, TH, SZ), 0x22c46e)                               # its deck
+        for k in range(5):
+            box((0.3, 0.2, 1.3), (SX - 1.9, 0.7 + 0.8 * k, SZ), 0x22c46e)
+        # the parasol over the pool's far side, and towels on the grass
+        UX, UZ = PX - 0.6, PZ + R + 1.6
+        box((0.3, 7.0, 0.3), (UX, 3.5, UZ), 'white')
+        for k in range(8):
+            a0, a1 = k * math.pi / 4, (k + 1) * math.pi / 4
+            poly([(UX, 6.9, UZ), (UX + 3.4 * math.cos(a0), 5.7, UZ + 3.4 * math.sin(a0)),
+                  (UX + 3.4 * math.cos(a1), 5.7, UZ + 3.4 * math.sin(a1))], [(0, 1, 2)], (0xcf534f, 'white')[k % 2])
+        for k, (dx, dz, c) in enumerate(((4.6, 2.4, 0xffc044), (4.9, -3.6, 0xa878e8))):
+            ground_poly([(PX + dx - 1.0, 0.06, PZ + dz - 0.6), (PX + dx + 1.0, 0.06, PZ + dz - 0.6),
+                         (PX + dx + 1.0, 0.06, PZ + dz + 0.6), (PX + dx - 1.0, 0.06, PZ + dz + 0.6)], [(0, 3, 2, 1)], c)
     draped('pool', still)
 
 @piece(REAL)
-def trampoline_oak():
-    # A fourth great oak's summer: the garden trampoline set out in its
-    # shade, its pad blue round a black mat, a ball left on it, a ladder
-    # hooked on its edge.
+def trampoline():
+    # No oak: the garden trampoline out on the
+    # open down inside its safety net, a cage of padded poles a car and a
+    # half tall with rope rings round them, its pad blue round a black mat,
+    # a ball left on it, a ladder hooked on its edge.
     def still():
-        lawn_oak(-5.5, -1.0, 1.4)
-        TX, TZ, R, Y = 3.0, 1.5, 4.4, 1.6               # the trampoline: centre, radius, its mat's height
+        TX, TZ, R, Y = 1.0, 0.5, 4.4, 1.6               # the trampoline: centre, radius, its mat's height
+        NH = 4.2                                        # the net's height over the mat
+        for k in range(8):
+            a = k * math.pi / 4 + 0.3
+            px, pz = TX + (R - 0.25) * math.cos(a), TZ + (R - 0.25) * math.sin(a)
+            box((0.45, NH, 0.45), (px, Y + NH / 2, pz), (0x339cf2, 0x22c46e)[k % 2], yaw=-a)
+            box((0.6, 0.5, 0.6), (px, Y + NH + 0.2, pz), 0xffc044, yaw=-a)
+        with plain_parts():
+            for y in (Y + 1.4, Y + 2.8, Y + NH - 0.1):
+                for k in range(8):
+                    a0, a1 = k * math.pi / 4 + 0.3, (k + 1) * math.pi / 4 + 0.3
+                    if k == 7 and y < Y + NH - 0.2:          # the way in, toward the road
+                        continue
+                    strut((TX + (R - 0.25) * math.cos(a0), y, TZ + (R - 0.25) * math.sin(a0)),
+                          (TX + (R - 0.25) * math.cos(a1), y, TZ + (R - 0.25) * math.sin(a1)), 0.2, 'white')
         for k in range(6):
             a = k * math.pi / 3 + 0.3
             box((0.5, Y + 0.2, 0.5), (TX + (R - 0.2) * math.cos(a), (Y + 0.2) / 2 - 0.1, TZ + (R - 0.2) * math.sin(a)), 0x555b66)
@@ -12361,6 +12393,111 @@ def lawn_shrub():
             sphere(r, (x, y, z), 0x5f9f4a, subdiv=1, scale=(1.1, 0.8, 1.0))
     scatter_tree(build)
 
+# ---- PRETZEL: the chalk horse -----------------------------------------------------
+# A white horse cut into the turf of the down the road heads at before the
+# bottom bend (tracks.js `land`): chalk showing through, as the downs' hill
+# figures are, a galloping horse drawn in a few bold strokes, its body one
+# thick sweep from tail to head. Flat on the slope, a slope that faces the
+# driver, the one flat thing a chase camera reads; drawn half as tall again
+# up the slope as it should look, as the real ones are, since a hillside is
+# seen foreshortened. Each stroke is a strip cut into short lengths and the
+# piece DRAPES, so it lies on the hill as drawn. World units; the foot of
+# the figure toward the road (+X), its length along Z.
+def chalk_smooth(pts, ws, rounds=2):
+    """A stroke's points and widths, its corners cut (Chaikin), ends kept."""
+    for _ in range(rounds):
+        p2, w2 = [pts[0]], [ws[0]]
+        for (a, b), (wa, wb) in zip(zip(pts, pts[1:]), zip(ws, ws[1:])):
+            p2 += [(a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25), (a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75)]
+            w2 += [wa * 0.75 + wb * 0.25, wa * 0.25 + wb * 0.75]
+        pts, ws = p2 + [pts[-1]], w2 + [ws[-1]]
+    return pts, ws
+
+def chalk_stroke(pts, ws, place_, step=0.45, y=0.09):
+    """One stroke of a hill figure: `pts` (h, v) in the picture's frame with
+    its width at each, laid through `place_` (h, v) -> (x, z)."""
+    pts, ws = chalk_smooth(list(pts), list(ws))
+    out, wout = [pts[0]], [ws[0]]                   # resampled, a vertex every `step`
+    for (a, b), (wa, wb) in zip(zip(pts, pts[1:]), zip(ws, ws[1:])):
+        n = max(1, int(math.ceil(math.dist(a, b) / step)))
+        for i in range(1, n + 1):
+            t = i / n
+            out.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+            wout.append(wa + (wb - wa) * t)
+    verts = []
+    for i, ((h, v), w) in enumerate(zip(out, wout)):
+        a, b = out[max(0, i - 1)], out[min(len(out) - 1, i + 1)]
+        tx, ty = b[0] - a[0], b[1] - a[1]
+        d = math.hypot(tx, ty) or 1.0
+        nx, ny = -ty / d * w / 2, tx / d * w / 2
+        for sgn in (1, -1):
+            x, z = place_(h + sgn * nx, v + sgn * ny)
+            verts.append((x, y, z))
+    faces = [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(len(out) - 1)]
+    return rowed(ground_poly(verts, faces, 'white'), 1)
+
+@piece()
+def chalk_horse():
+    W, RISE = 13.0, 1.55                            # the picture's width; how far up the slope a unit of its height lies
+    place_ = lambda h, v: (5.6 - v * RISE, h - W / 2)
+    def still():
+        # the back, tail tip to muzzle: thin at the tail, thick through the body
+        chalk_stroke(((0.3, 3.0), (1.2, 3.7), (2.4, 4.3), (3.8, 4.6), (5.5, 4.5), (7.2, 4.5), (8.6, 4.9), (9.7, 5.6),
+                      (10.6, 6.2), (11.5, 6.5), (12.3, 6.3)),
+                     (0.3, 0.45, 0.7, 1.2, 1.5, 1.5, 1.3, 0.95, 0.8, 0.8, 0.7), place_)
+        chalk_stroke(((12.3, 6.3), (13.0, 5.9)), (0.45, 0.25), place_)                    # the beak, as Uffington's
+        chalk_stroke(((12.0, 6.0), (12.5, 5.3)), (0.4, 0.2), place_)
+        chalk_stroke(((10.9, 6.6), (11.2, 7.3)), (0.4, 0.15), place_)                     # an ear
+        chalk_stroke(((8.9, 4.4), (9.9, 3.2), (11.0, 2.5), (11.9, 1.5)), (0.75, 0.55, 0.45, 0.3), place_)   # the fore legs
+        chalk_stroke(((8.0, 3.9), (8.5, 2.5), (8.2, 1.2), (8.7, 0.4)), (0.75, 0.5, 0.4, 0.3), place_)
+        chalk_stroke(((4.2, 4.1), (3.3, 2.9), (3.7, 1.7), (2.9, 0.5)), (0.85, 0.55, 0.45, 0.3), place_)     # the hind legs
+        chalk_stroke(((5.6, 3.9), (6.1, 2.6), (5.5, 1.4), (5.9, 0.3)), (0.75, 0.5, 0.4, 0.3), place_)
+    draped('chalk', still)
+
+# ---- PRETZEL: the summer camp ------------------------------------------------------
+# A camp pitched up the face of the down outside the east loop's last bend
+# (tracks.js `land`): three white bell tents, each its own size under a
+# coloured cap, a tall flagpole among them with the camp's flag and bunting
+# strung from it down to the tents' peaks, log seats round a ring of stones
+# (no fire lit). Round tents under a pole and its lines: an outline nothing
+# else on the lap has, where every other piece is an oak. Nobody is about.
+# Front (+X) to the road, metres; on the left at yaw 180. It DRAPES, the
+# tents standing up the slope one over another as the hill is drawn.
+def bell_tent(x, z, r, cap):
+    """A bell tent `r` round: a low wall, a cone of canvas over it, the door
+    on +X, a cap in its colour at the peak. Returns the peak."""
+    WALL, H = 1.3, 1.3 + 1.25 * r
+    cyl(r, WALL + 0.4, (x, -0.4, z), 'white', segs=10)
+    cyl(r + 0.35, H - WALL, (x, WALL, z), 'cream', r2=0.3, segs=10)
+    cyl(r * 0.42, (H - WALL) * 0.36, (x, WALL + (H - WALL) * 0.64, z), cap, r2=0.3, segs=10)
+    box((0.3, 1.9, 1.3), (x + r * 0.93, 0.95, z), 0x2a2735)                          # the door, dark
+    box((0.9, 0.2, 2.2), (x + r + 0.2, 2.0, z), cap, roll=-0.45)                      # its little awning
+    return (x, H + 0.1, z)
+
+@piece(REAL)
+def summer_camp():
+    RED, BLUE, GREEN, YELLOW = 0xcf534f, 0x339cf2, 0x22c46e, 0xffc044
+    FX, FZ, FH = 1.0, 0.5, 9.0                      # the flagpole
+    def still():
+        peaks = [bell_tent(-1.5, -9.5, 2.7, RED), bell_tent(-7.0, 0.5, 3.2, BLUE), bell_tent(-0.5, 10.0, 2.5, GREEN)]
+        box((0.5, FH + 0.6, 0.5), (FX, FH / 2 - 0.3, FZ), 'white')
+        box((0.9, 0.6, 0.9), (FX, 0.2, FZ), RED)
+        for px, py, pz in peaks:
+            bunting((FX, FH - 2.2, FZ), (px, py, pz), (RED, YELLOW, BLUE, 'white', GREEN), n=6, drop=1.3, w=0.8)
+        # the ring of stones and the log seats round it, on the road side
+        CX, CZ = 5.0, 0.5
+        for k in range(8):
+            a = k * math.pi / 4
+            rowed(box((0.7, 0.5, 0.7), (CX + 1.3 * math.cos(a), 0.15, CZ + 1.3 * math.sin(a)), 'grey', yaw=a), SLATE_ROW)
+        for a in (1.2, 3.1, 5.0):
+            cyl(0.5, 2.6, (CX + 3.2 * math.cos(a) - 1.3 * math.sin(a), 0.45, CZ + 3.2 * math.sin(a) + 1.3 * math.cos(a)),
+                0x7a5a3a, segs=7, axis='along', yaw=-a, stem=True)
+    draped('camp', still)
+    with animated('anim_drape+flutter:p=2.3#camp', (FX, FH + 0.3, FZ)):
+        box((0.2, 1.6, 1.7), (FX, FH - 0.55, FZ + 1.05), YELLOW)
+        box((0.2, 1.5, 1.5), (FX + 0.15, FH - 0.6, FZ + 2.5), YELLOW, yaw=0.3)
+        box((0.24, 0.5, 3.0), (FX + 0.05, FH - 0.55, FZ + 1.7), RED)
+
 # ---- PRETZEL: the kite hill --------------------------------------------------------
 # Three kites flying over the face of the hill beyond the top loop (tracks.js
 # `land`), each on its line from a stout striped stake driven into the slope
@@ -12406,10 +12543,12 @@ def kite_flyers():
     # The stakes up the slope, the kites out over the hill's foot by the
     # verge and low: the seat's camera looks down the road here, and a kite
     # flown high up the hill is over the top of its frame.
+    # No higher than this, either: a third higher they were cut off by the
+    # top of the picture from the bend's entry on.
     STAKES = ((3.0, -10.0, BLUE), (4.0, 6.0, RED), (3.5, 18.0, GREEN))
-    DRAGON = (12.0, 6.5, -16.0)                  # the dragon's head, its body trailing along +Z
-    DIAMOND = (13.0, 8.5, 9.0)
-    BOX = (11.5, 6.5, 26.0)
+    DRAGON = (12.0, 4.4, -16.0)                  # the dragon's head, its body trailing along +Z
+    DIAMOND = (13.0, 5.6, 9.0)
+    BOX = (11.5, 4.6, 26.0)
     def still():
         for (x, z, c), k in zip(STAKES, (DRAGON, DIAMOND, BOX)):
             kite_stake(x, z, c)
@@ -12431,15 +12570,15 @@ def kite_flyers():
             rim = (hx, y + r, z)
             strut(prev, rim, KITE_CORD, 'white')
             prev = rim
-    S = 1.6
+    S = 1.3
     kx, ky, kz = DIAMOND
     with animated('anim_drape+sway:a=x:d=3.5:p=4.4#diamond', DIAMOND):
         poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
              [(0, 1, 2), (0, 2, 3)], BLUE)
         poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
              [(0, 1, 2)], YELLOW)
-        kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=8)
-    S = 1.5
+        kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=4)
+    S = 1.3
     kx, ky, kz = BOX
     with animated('anim_drape+sway:a=x:d=3.5:p=4.8#box', BOX):
         for s in (-1, 1):
@@ -12447,7 +12586,7 @@ def kite_flyers():
         for sx in (-1, 1):
             for sz in (-1, 1):
                 box((0.3, 3.4 * S, 0.3), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
-        kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=7)
+        kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=5)
 
 # ---- TANGLE: the springhouse the stream rises under -------------------------------
 # The stream's source, at the foot of the hill beyond the north loop's top
