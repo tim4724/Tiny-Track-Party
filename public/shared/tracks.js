@@ -336,8 +336,8 @@ export const SET_GROUND = {
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
-    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 4, w: 5, tint: 0xdde7f5 },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 4, w: 5, tint: 0xdde7f5 }
+    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 6, w: 6, tint: 0xbdd0ee },
+    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 6, w: 6, tint: 0xbdd0ee }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
@@ -443,7 +443,8 @@ export const SET_GROUND = {
 // (set_prototypes.py set_ground(), which cannot import this).
 export function setGroundY(model, x, z) {
   let mounds = 0, fans = 0;
-  for (const f of SET_GROUND[model] || []) {
+  // (a lite build stands on its model's ground)
+  for (const f of SET_GROUND[model] || SET_GROUND[model.replace(/-lite$/, '')] || []) {
     if (f.kind !== 'mound' && f.kind !== 'fan') continue;
     const a = (f.yaw || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
     const lx = x * c - z * s - (f.x || 0), lz = x * s + z * c - (f.z || 0);
@@ -935,7 +936,22 @@ export const TRACKS = {
       { model: 'set-powder-forest-h', u: 0.4816, lat: -11.2 },
       // the snowman family on the outside verge of the east bend, at road
       // height, ahead of a car coming over the hump off the start straight
-      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 }
+      { model: 'set-snowman-field', u: 0.15, lat: -7, yaw: 180 },
+      // the resort's village up the foothill's foot, dead ahead of the long
+      // run north and outside the bend onto the start straight: the lodge
+      // and its chalets (in the ski mountain's frame, sampled:
+      // set_prototypes.py RESORT_*)
+      { model: 'set-powder-resort', u: 0.9, lat: -32.5, yaw: 180 },
+      // the verge at road level where the valley's hills stand back: snow
+      // fences and their drifts, rail fences, the road's snow poles, along
+      // the run west from the east bend and round the south-west bend (the
+      // box keeps a snow fence on each)
+      { model: 'set-powder-verge-a', u: 0.178, lat: -6.2, yaw: 180 },
+      { model: 'set-powder-verge-b', u: 0.205, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-a', u: 0.232, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-b', u: 0.577, lat: -6.2, yaw: 180, lite: false },
+      { model: 'set-powder-verge-a', u: 0.603, lat: -6.2, yaw: 180 },
+      { model: 'set-powder-verge-b', u: 0.629, lat: -6.2, yaw: 180, lite: false }
     ],
     land: [
       // the foothills at the start straight's and the east bend's kerb
@@ -959,6 +975,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.4248, lat: -31.52, r: 28, h: 14, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.4855, lat: -29.42, r: 26, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6274, lat: -25.74, r: 22, h: 7, top: 0.25, near: 2 },
+      // the second lift's run back down the foothill, west of its line: a
+      // groomed wash, its edge markers the lift piece's (RUN_GROUND)
+      { kind: 'paint', u: 0.0163, lat: -19, yaw: 90, len: 22, r: 5, w: 5, tint: 0xbdd0ee },
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
@@ -986,6 +1005,10 @@ export const TRACKS = {
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
+      // firs across the gap the piste left between those two, so the
+      // foothill's forest is one ragged treeline again
+      // (the full tier's)
+      { model: 'set-flurry-forest-n', u: 0.684, lat: 14, lite: false },
       { model: 'set-flurry-forest-d', u: 0.1371, lat: 15.35 },
       { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39 },
       // the west gap the start straight looks into: a clump where the outrun
@@ -1002,7 +1025,16 @@ export const TRACKS = {
       // (the belt along the foot is the full tier's: the box keeps the hollows)
       { model: 'set-flurry-forest-l', u: 0.39, lat: -50, lite: false },
       { model: 'set-flurry-forest-m', u: 0.39, lat: -50, lite: false },
-      { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 }
+      { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 },
+      // the hamlet's valley on round the lap's second half: its fields and
+      // hay barn outside the bend north off the east loop, the frozen stream
+      // where it meets the road (the plain below is its bed) with the
+      // footbridge the fields' lane crosses on toward the lake, and a farm
+      // outside the last bend before the line (sampled: set_prototypes.py
+      // FIELDS_*, FARM_*, STREAM_*; the box keeps the farm and the bridge)
+      { model: 'set-flurry-fields', u: 0.765, lat: 12, lite: false },
+      { model: 'set-flurry-stream', u: 0.815, lat: 0 },
+      { model: 'set-flurry-farm', u: 0.905, lat: -10, yaw: 180 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
     // the lake. The village's ski jump is cut into the south shoulder of the
@@ -1023,7 +1055,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.5816, lat: 31, r: 28, h: 10, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6598, lat: 32.65, r: 30, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.7109, lat: 31.05, r: 28, h: 9, top: 0.2, near: 2 },
-      { kind: 'ridge', u: 0.6337, lat: 33.68, r: 34, h: 18, top: 0.12 },
+      // (the middle massif stands back: a form that is still high where the
+      // road's corridor ends, some 16 u out, steps up there in a hard crease,
+      // which showed as a slab between the stands)
+      { kind: 'ridge', u: 0.6337, lat: 39, r: 28.5, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.5903, lat: 42.93, r: 30, h: 15, top: 0.12 },
       { kind: 'ridge', u: 0.6848, lat: 49.96, r: 34, h: 18, top: 0.12 },
       // past the west loop: the same
@@ -1060,7 +1095,9 @@ export const TRACKS = {
       // each rookery turned so its white fronts face the road and the car
       // coming at it: one on the moraine outside the bottom loop, dead ahead
       // of the long raised straight, one below the NE bend's crest
-      { model: 'set-penguin-group', u: 0.645, lat: -10, yaw: 145 },
+      // (the first as near the kerb as its slope's foot lets it stand; the
+      // second stays up its slope, where it shows over the hump's kerb)
+      { model: 'set-penguin-group', u: 0.645, lat: -7.5, yaw: 145 },
       { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
       // the terminal moraine either side of that rookery, on the loop's
       // outside verge: slate erratics and stranded blocks of blue ice (built
@@ -1093,7 +1130,14 @@ export const TRACKS = {
       // the expedition's fuel depot just past the line, and its flagged
       // route on along the start straight's outside verge
       { model: 'set-glacier-depot', u: 0.012, lat: -8.5, yaw: 180 },
-      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 }
+      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 },
+      // serac fields where the ice breaks up on the outside verge of a bend:
+      // dead ahead of the start straight, outside the bend down to the east
+      // leg, and at the nunatak's foot on the bend back to the line (a wash
+      // of the glacier's blue under each, `land`)
+      { model: 'set-glacier-seracs-a', u: 0.135, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-seracs-b', u: 0.3, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-seracs-a', u: 0.815, lat: 8.5, yaw: 20 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -1140,6 +1184,10 @@ export const TRACKS = {
       // stand into the picture however close they pass
       { kind: 'ridge', u: 0.185, lat: 0, z: -35, yaw: 30, len: 12, r: 7, h: 1.6 },
       { kind: 'ridge', u: 0.185, lat: -18, z: 9, len: 18, r: 7, h: 1.8 },
+      // the ice showing blue through the snow under each serac field
+      { kind: 'paint', u: 0.135, lat: -10, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
+      { kind: 'paint', u: 0.3, lat: -10, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
+      { kind: 'paint', u: 0.815, lat: 10, yaw: 20, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
       // nothing seeded on the verge in front of the penguin chute's pool: a
       // boulder there stood between the run to the line and the pool
       { kind: 'clear', u: 0.955, lat: -9.5, len: 30, r: 5 },
@@ -1188,7 +1236,8 @@ export const TRACKS = {
       // ...and the first path's slide come down across the road, ploughed
       // through (the blocks stand at the ground sampled under them)
       { model: 'set-avalanche-debris-lobe', u: 0.276, lat: 0 },
-      { model: 'set-warning-sign', u: 0.317, lat: 4.4, yaw: 46 },
+      // (short of the road crew's machines at the gallery's mouth, not in front of them)
+      { model: 'set-warning-sign', u: 0.3, lat: 4.4, yaw: 30 },
       // and at the foot of the west slope's path, at the turn onto the crossing
       { model: 'set-warning-sign', u: 0.085, lat: -4.4, yaw: 115 },
       // forest down the mountainside, the S-bend's spur, the west slope and the
@@ -1238,7 +1287,11 @@ export const TRACKS = {
       { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
       { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
       // big old firs in the wedge inside the S-bend (sampled, set_prototypes.py FORESTS)
-      { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 }
+      { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 },
+      // firs up the north-west face of the cirque's south slope to a ragged
+      // treeline: the one bare dome the run to the last loop looked at (the
+      // full tier's: the box's cells barely see it)
+      { model: 'set-avalanche-forest-m', u: 0.87, lat: 30, lite: false }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
     // down into: a spur off the western massif runs down to the kerb, the
