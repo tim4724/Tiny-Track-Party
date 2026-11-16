@@ -17217,11 +17217,12 @@ def spinning_top_body(x, z, k):
 @piece(0.7)
 def toy_dragon():
     # Gauntlet: the castle's toy dragon (a moulded one from the knights' set,
-    # about 25 cm to its wing tips and 40 cm nose to tail) standing guard
-    # before the castle, side on to the road (+X), its head toward the cars
-    # coming at it (-Z). It flaps its wings, slowly, both in step, and now
-    # and then turns its head to the road and back. Its tail curls down to
-    # the floor behind it.
+    # about 25 cm to its wing tips, the set's biggest creature) perched
+    # along the outer gatehouse's battlements over the road (tracks.js
+    # turns it across the road and lifts it there), side on to the cars
+    # coming at it, its tail lying along the wall walk behind it. It flaps
+    # its wings, slowly, both in step, and now and then turns its head to
+    # the cars (+X) and back.
     GREEN, BELLY, WING, HORN = 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xfdf4de
     for z in (-1.1, 1.1):                                                     # the legs, claws forward
         for sx in (-1, 1):
@@ -17233,7 +17234,7 @@ def toy_dragon():
     bar((0, 2.9, -2.1), (0, 4.6, -3.0), 1.0, 1.0, GREEN)                      # the neck
     for z in (-1.4, -0.5, 0.4, 1.3):                                          # spines down the back
         cyl(0.32, 0.6, (0, 3.0, z), BELLY, r2=0.02, segs=4)
-    # the tail, thick to thin, down to the floor and curling off behind
+    # the tail, thick to thin, down to its perch and curling off behind
     tube([(0, 2.2, 1.5), (0.2, 1.7, 3.0), (0.8, 0.9, 4.2), (0.9, 0.5, 5.0)], 0.5, GREEN, res=3, bevel_res=1)
     tube([(0.9, 0.5, 5.0), (0.6, 0.32, 5.8), (-0.4, 0.32, 6.3)], 0.3, GREEN, res=3, bevel_res=0)
     box((0.9, 0.16, 0.9), (-0.85, 0.08, 6.45), BELLY, yaw=math.pi / 4)        # its spade
@@ -17455,6 +17456,12 @@ def mini_car(x, z, color, along_x=False):
             px, pz = P2(sa * 0.25, sb * 0.3)
             toy_wheel(px, pz, 0.13, 0.1, along_x)
 
+def glass_on(body):
+    """A window's colour on a block painted `body`: the town's pale glass,
+    a deeper blue on a block that is the glass's own colour (on it the
+    windows vanished and the block read as a blank slab)."""
+    return 0x5a8fd8 if body == 0x8ecae6 else 0x8ecae6
+
 def house(x, z, w, d, h, body, roof, kind='gable'):
     """A wooden toy house: a painted block, a door and windows to the road
     (+X), a gable roof block (running along X), a flat roof slab or a
@@ -17463,7 +17470,7 @@ def house(x, z, w, d, h, body, roof, kind='gable'):
     plate_x(x + w / 2 + 0.01, 0, min(0.75, h * 0.45), z - 0.22, z + 0.22, 0x3a2a22)
     if h > 1.3:
         for s in (-1, 1):
-            plate_x(x + w / 2 + 0.01, h - 0.75, h - 0.35, z + s * d * 0.28 - 0.18, z + s * d * 0.28 + 0.18, 0x8ecae6)
+            plate_x(x + w / 2 + 0.01, h - 0.75, h - 0.35, z + s * d * 0.28 - 0.18, z + s * d * 0.28 + 0.18, glass_on(body))
     if kind == 'gable':
         rh = min(w, d) * 0.55
         prism([(z - d / 2 - 0.15, h), (z + d / 2 + 0.15, h), (z, h + rh)], x, w + 0.2, roof)
@@ -17762,7 +17769,7 @@ TOWER_RIM = (0.4 + 13.4 + 0.3 + 1.1) * 0.62      # its cup's rim over the floor 
 RUN_D2 = (6.4, 5.4, 57.3)                        # the head's inner post, where the wheel's leg takes over
 RUN_ORIGIN = {'head': (-7.0, 50.0), 'wheel': (25.0, 57.4), 'summit': (52.0, 57.4), 'skyway': (75.7, 30.0),
               'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0),
-              'climb': (54.9, 44.4), 'dive': (74.0, 20.0)}
+              'climb': (54.9, 44.4), 'dive': (74.0, 20.0), 'wall': (54.9, 71.4), 'cross': (68.7, 16.0)}
 
 def fillet(pts, r=1.5, n=6):
     """A polyline of marble centres [(x, h, z)] with each corner rounded."""
@@ -17776,8 +17783,25 @@ def fillet(pts, r=1.5, n=6):
                 for s in (k / n for k in range(n + 1))]
     return out + [pts[-1]]
 
+def thin(pts, tol=0.04):
+    """`pts` without the points that lie within `tol` of the line through
+    the ones kept (Douglas-Peucker): a straight run is its two ends."""
+    if len(pts) < 3:
+        return list(pts)
+    a, b = pts[0], pts[-1]
+    ab = [b[j] - a[j] for j in range(3)]
+    l2 = sum(c * c for c in ab) or 1.0
+    def off(p):
+        t = max(0.0, min(1.0, sum((p[j] - a[j]) * ab[j] for j in range(3)) / l2))
+        return math.dist(p, [a[j] + ab[j] * t for j in range(3)])
+    k = max(range(1, len(pts) - 1), key=lambda i: off(pts[i]))
+    if off(pts[k]) <= tol:
+        return [a, b]
+    return thin(pts[:k + 1], tol)[:-1] + thin(pts[k:], tol)
+
 def run_chute(pts, color):
-    chute(pts, color, RUN_MR, half=RUN_HALF, wall=RUN_WALL, inner=CREAM)
+    # the box's chute keeps only the points that bend it
+    chute(thin(pts) if RUN_LITE else pts, color, RUN_MR, half=RUN_HALF, wall=RUN_WALL, inner=CREAM)
 
 def toward(a, b, d=0.55):
     """The point `d` from a toward b (a chute's end beside a joint's cup)."""
@@ -17788,6 +17812,11 @@ def on(line, x, z):
     """The point of `line` nearest (x, z)."""
     return min(line, key=lambda p: math.hypot(p[0] - x, p[2] - z))
 
+RUN_LITE = False     # run_section(): the box's run turns its posts and drums on fewer sides
+
+def run_segs(n):
+    return max(5, n * 5 // 8) if RUN_LITE else n
+
 def trestle(p):
     """A plain beech connector post up to the chute whose marbles ride at p
     (x, h, z), a brown collar at its head and foot (concrete grey read as a
@@ -17795,9 +17824,9 @@ def trestle(p):
     x, h, z = p
     top = h - RUN_MR - 0.05 - 0.06               # into the chute's wall, never on a face
     r = 0.16 if top < 3.5 else 0.27
-    cyl(r + 0.16, 0.12, (x, 0, z), POST_COLLAR, segs=8)
-    cyl(r, top, (x, 0, z), POST_WOOD, segs=8)
-    cyl(r + 0.14, 0.22, (x, top - 0.26, z), POST_COLLAR, segs=8)   # under the post's top: level with it, the two caps flickered
+    cyl(r + 0.16, 0.12, (x, 0, z), POST_COLLAR, segs=run_segs(8))
+    cyl(r, top, (x, 0, z), POST_WOOD, segs=run_segs(8))
+    cyl(r + 0.14, 0.22, (x, top - 0.26, z), POST_COLLAR, segs=run_segs(8))   # under the post's top: level with it, the two caps flickered
 
 def joint(x, z, h, toward=(), color=0x5a8fd8):
     """A STATION, where one section hands its marbles to the next: a closed
@@ -17810,14 +17839,14 @@ def joint(x, z, h, toward=(), color=0x5a8fd8):
     vanishes in sight."""
     lo = max(0.0, h - 0.8)
     if lo > 0.9:
-        cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=10)
-        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=10)
-        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=10)
+        cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=run_segs(10))
+        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=run_segs(10))
+        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=run_segs(10))
     else:
         lo = 0.0
-    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=12)
-    cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=12)
-    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=8)
+    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=run_segs(12))
+    cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=run_segs(12))
+    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=run_segs(8))
     for tx, tz in toward:
         dx, dz = tx - x, tz - z
         l = math.hypot(dx, dz)
@@ -17832,12 +17861,12 @@ def mouth(at, toward, w=1.3, h=1.0):
 def run_station(x, z, top, c0, r=0.8):
     """One of the run's stations: the kit's stacked toy cylinders, a band to
     about each 1.6 u, up to a cream cap at `top`."""
-    cyl(r + 0.5, 0.25, (x, 0, z), GREY, segs=12)
+    cyl(r + 0.5, 0.25, (x, 0, z), GREY, segs=run_segs(12))
     n = max(2, round((top - 0.55) / 1.6))
     h = (top - 0.55) / n
     for k in range(n):
-        cyl(r, h, (x, 0.25 + k * h, z), TOY[(k + c0) % 4], segs=10)
-    cyl(r + 0.15, 0.3, (x, top - 0.3, z), CREAM, segs=10)
+        cyl(r, h, (x, 0.25 + k * h, z), TOY[(k + c0) % 4], segs=run_segs(10))
+    cyl(r + 0.15, 0.3, (x, top - 0.3, z), CREAM, segs=run_segs(10))
 
 def rails(pts, color, out=None):
     """Twin rails the marbles ride on through the line `pts`, open so they
@@ -17855,12 +17884,19 @@ def rails(pts, color, out=None):
         left.append(tuple(p[j] + 0.38 * d[j] + 0.26 * s[j] for j in range(3)))
         right.append(tuple(p[j] + 0.38 * d[j] - 0.26 * s[j] for j in range(3)))
         ties.append((tuple(p[j] + 0.46 * d[j] + 0.4 * s[j] for j in range(3)), tuple(p[j] + 0.46 * d[j] - 0.4 * s[j] for j in range(3))))
-    tube(left, 0.1, color, res=2, bevel_res=0)
-    tube(right, 0.1, color, res=2, bevel_res=0)
+    if RUN_LITE:                                 # the box's rails: only the points that bend them, a tie every other one
+        for side in (left, right):
+            few = thin(side)
+            if len(few) < 4:                     # a straight span: a curve of two points sweeps nothing
+                few = [tuple(few[0][j] + (few[-1][j] - few[0][j]) * i / 3 for j in range(3)) for i in range(4)]
+            tube(few, 0.1, color, res=1, bevel_res=0)
+    else:
+        tube(left, 0.1, color, res=2, bevel_res=0)
+        tube(right, 0.1, color, res=2, bevel_res=0)
     run = 0.0
     for i in range(1, n):
         run += math.dist(pts[i], pts[i - 1])
-        if run >= 0.9 or i == n - 1:
+        if run >= (1.8 if RUN_LITE else 0.9) or i == n - 1:
             bar(*ties[i], 0.16, 0.12, CREAM)
             run = 0.0
 
@@ -17919,7 +17955,12 @@ def run_marbles(chain, seen, lite, after=None, lane=None):
 
 def run_section(name, lite):
     """Build section `name` in world coordinates, then move it to its origin."""
-    RUN_BUILD[name](lite)
+    global RUN_LITE
+    RUN_LITE = lite
+    try:
+        RUN_BUILD[name](lite)
+    finally:
+        RUN_LITE = False
     ox, oz = RUN_ORIGIN[name]
     for o in bpy.context.scene.objects:
         if o.parent is None:
@@ -18386,14 +18427,89 @@ def run_dive(lite):
     # end and overhead from the turns below it
     run_ring('dive', 60.3, 0.0, 14.0, 8.0, -112.0, 7.4, 6.0, 0x6cbf6c, lite)
 
+def run_wall(lite):
+    # outside the climb on the room's side, from beside the top leg's end
+    # round north and east to the skyway's start: its chute over the kerb
+    # where the climb's upper turn looks at the walls, and every other
+    # support one of the kit's striped columns, so the turn below it looks
+    # at more than posts
+    cx, cz, R, a0, a1, y0, y1 = 60.3, 56.0, 14.0, 100.0, -12.0, 8.6, 6.6
+    n = int(abs(a1 - a0) / (12 if lite else 6))
+    pts = []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        pts.append((cx + R * math.cos(a), y0 + (y1 - y0) * i / n, cz + R * math.sin(a)))
+    run_chute(pts, 0xf2c14e)
+    step = 2 if lite else 3
+    for k, i in enumerate(range(step - 1, n - 1, step)):
+        if k % 2 == 0:
+            run_station(pts[i][0], pts[i][2], pts[i][1] - RUN_MR - 0.09, k)
+        else:
+            trestle(pts[i])
+    joint(pts[0][0], pts[0][2], pts[0][1], toward=((pts[1][0], pts[1][2]),), color=0xf2c14e)
+    joint(pts[-1][0], pts[-1][2], pts[-1][1], toward=((pts[-2][0], pts[-2][2]),), color=0xf2c14e)
+    run_marbles('wall', pts, lite)
+
+def run_cross(lite):
+    # a second crossing where the racers see it coming: over the skyway's
+    # far end on twin rails, from a station outside it down to one in the
+    # infield, as far over the deck as the first (run_skyway), the whole
+    # length of the skyway ahead of it
+    S, N = (77.2, 11.7, 16.0), (62.2, 10.5, 16.0)
+    span = resample([(S[0] - 0.55, S[1] - 0.05, S[2]), (N[0] + 0.55, N[1] + 0.05, N[2])])
+    rails(span, 0xe66a5a)
+    joint(S[0], S[2], S[1], toward=((S[0] - 1.0, S[2]),), color=0xe66a5a)
+    joint(N[0], N[2], N[1], toward=((N[0] + 1.0, N[2]),), color=0x6cbf6c)
+    run_marbles('cross', [S] + span + [N], lite)
+
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
              'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer,
-             'climb': run_climb, 'dive': run_dive}
+             'climb': run_climb, 'dive': run_dive, 'wall': run_wall, 'cross': run_cross}
 for _n in RUN_BUILD:
     for _lite in (False, True):
         _name = 'marble-run-%s%s' % (_n, '-lite' if _lite else '')
         PIECES[_name] = (lambda n, lite: lambda: run_section(n, lite))(_n, _lite)
         GROW[_name] = 1.0
+
+@piece(1.0)
+def marble_zigzag():
+    # Helix: a click-clack marble board outside the skyway where the
+    # descent's lower turn looks at the wall, its face to the road (+X): six
+    # sloped rails one over another on a cream board between two posts, the
+    # marbles rolling down them side to side, dropping from each rail's end
+    # to the next, and going back up out of sight inside the striped lift
+    # column at its end.
+    W, R = 3.4, RUN_MR
+    N, TOP, STEP, FALL = 6, 7.3, 1.12, 0.5
+    box((0.14, TOP + 0.5, 2 * W + 1.0), (-0.45, (TOP + 0.5) / 2, 0), CREAM)                 # the board
+    box((0.9, 0.3, 2 * W + 2.6), (-0.1, 0.15, -0.6), 0x9a7b55)                              # its foot
+    box((0.5, TOP + 0.9, 0.5), (-0.2, (TOP + 0.9) / 2, W + 0.75), 0x9a7b55)                 # the far post
+    CZ = -W - 1.3                                                                           # the lift column
+    n = 5
+    for k in range(n):
+        box((1.1, (TOP + 1.2) / n, 1.1), (-0.1, (k + 0.5) * (TOP + 1.2) / n, CZ), TOY[(k + 1) % 4])
+    box((1.3, 0.3, 1.3), (-0.1, TOP + 1.35, CZ), CREAM)
+    seen = [(0.0, TOP + 0.75, CZ), (0.0, TOP + R + 0.1, -W + 0.2)]
+    for k in range(N):
+        d = 1 if k % 2 == 0 else -1
+        y = TOP - k * STEP
+        a, b = (0.0, y, -d * W), (0.0, y - FALL, d * (W - 0.9))
+        bar((a[0], a[1] - 0.09, a[2]), (b[0], b[1] - 0.09, b[2]), 0.8, 0.18, TOY[k % 4])     # the rail
+        bar((0.36, a[1] + 0.08, a[2]), (0.36, b[1] + 0.08, b[2]), 0.1, 0.34, CREAM)          # its lip
+        box((0.8, 0.5, 0.16), (0.0, y + 0.1, -d * (W + 0.08)), TOY[k % 4])                   # its end stop
+        seen += [(0.0, a[1] + R, a[2] + d * 0.4), (0.0, b[1] + R, b[2]), (0.0, b[1] + R - 0.5, b[2] + d * 0.45)]
+    seen += [(0.0, 0.55, -W - 0.4), (0.0, 0.55, CZ)]
+    box((0.8, 0.2, 1.6), (0.0, 0.4, -W - 0.2), TOY[2])                                      # the tray into the column's foot
+    mouth((0.0, 0.75, CZ + 0.5), (0.0, 0.0), w=0.8, h=0.8)
+    mouth((0.0, TOP + 0.7, CZ + 0.5), (0.0, 0.0), w=0.8, h=0.8)
+    for k, q in enumerate(seen):
+        marker('path_zig_%d' % k, q)
+    L = sum(math.dist(a, b) for a, b in zip(seen, seen[1:] + seen[:1]))
+    cnt = 2 if LITE else 5
+    for j in range(cnt):
+        with animated('anim_path:c=zig:p=%.2f:o=%.4f:f=0#%d' % (L / 2.6, j / cnt, j), seen[1]):
+            sphere(R, seen[1], RUN_COLORS[j % 4], subdiv=1 if LITE else 2, flat=False)
+            bpy.ops.object.shade_smooth()
 
 # ---- Gauntlet: the besiegers ----
 
@@ -18805,7 +18921,7 @@ def facing_house(x, z, w, d, h, body, roof, kind, yaw):
             for y in rows:
                 for dx in (-w * 0.25, w * 0.25):
                     pts = [(x + dx - 0.2, y - 0.2, zf), (x + dx + 0.2, y - 0.2, zf), (x + dx + 0.2, y + 0.2, zf), (x + dx - 0.2, y + 0.2, zf)]
-                    quad(pts if sz > 0 else pts[::-1], 0x8ecae6)
+                    quad(pts if sz > 0 else pts[::-1], glass_on(body))
 
 def windows(o, face, half, w, h, cols, rows, y0, glass=0x8ecae6):
     """Rows of windows on `face` of box `o` (its scale applied), `half` out
@@ -18827,7 +18943,7 @@ def skyscraper(x, z, w, d, h, body, roof, faces, top='slab'):
     for f in faces:
         span = d if f in ('+x', '-x') else w
         half = w / 2 if f in ('+x', '-x') else d / 2
-        windows(o, f, half, span * 0.86, h - 0.9, max(2, round(span / 0.7)), rows, -h / 2 + 0.35)
+        windows(o, f, half, span * 0.86, h - 0.9, max(2, round(span / 0.7)), rows, -h / 2 + 0.35, glass=glass_on(body))
     if top == 'slab':
         box((w + 0.2, 0.3, d + 0.2), (x, h + 0.15, z), roof)
     elif top == 'crown':
@@ -18838,8 +18954,8 @@ def skyscraper(x, z, w, d, h, body, roof, faces, top='slab'):
         cyl(min(w, d) * 0.3, 1.6, (x, h + 0.3, z), roof, r2=0.04, segs=4, yaw=math.pi / 4)
 
 def wooden_tree(x, z, k=1.0):
-    cyl(0.14 * k, 0.7 * k, (x, 0, z), 0x9a7b55, segs=6)
-    cyl(0.6 * k, 1.5 * k, (x, 0.6 * k, z), 0x6cbf6c, r2=0.05, segs=8)
+    cyl(0.14 * k, 0.7 * k, (x, 0, z), 0x9a7b55, segs=4 if LITE else 6)
+    cyl(0.6 * k, 1.5 * k, (x, 0.6 * k, z), 0x6cbf6c, r2=0.05, segs=5 if LITE else 8)
 
 def traffic_light(x, z, yaw):
     """A toy traffic light on its post, its lamps to (cos yaw, -sin yaw)."""
@@ -18858,6 +18974,8 @@ def rug(x0, x1, z0, z1, streets, parks, name):
          floor_quad([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], 0.035, 0xfdf4de)]
     for a0, a1, b0, b1 in streets:
         q.append(floor_quad([(a0, b0), (a1, b0), (a1, b1), (a0, b1)], 0.045, 0x868ba1))
+        if LITE:                                         # the box's rug: no dashes (a few pixels of crawl at its lines)
+            continue
         if a1 - a0 > b1 - b0:                            # dashes down its middle
             m = (b0 + b1) / 2
             for k in range(int((a1 - a0) / 2.2)):
@@ -19025,8 +19143,8 @@ def block_town():
     toy_van(0.0, 10.6, NEUTRAL[1])
     # the toy train's oval along the south edge, the station on its far side
     X0, X1, ZC, R = -13.6, 11.8, -13.8, 3.4
-    ring = oval(X0, X1, ZC, R)
-    wooden_track(ring, 0.9, 0.12)
+    ring = oval(X0, X1, ZC, R, step=1.0 if LITE else 0.5)
+    wooden_track(ring, 0.9, 0.12, grooves=not LITE)
     box((8.0, 0.4, 1.4), (-1.0, 0.2, ZC + R + 1.25), 0xb0b6c8)                            # the platform
     facing_house(-1.0, ZC + R + 3.3, 2.0, 4.4, 2.2, 0xe66a5a, 0x5a8fd8, 'gable', math.pi / 2)
     for dx in (-4.2, 2.2):
@@ -19425,6 +19543,93 @@ def block_uptown():
     keep_light(0.1)
 
 @piece(1.0)
+def block_minster():
+    # Skyline: the old town's square outside the skyway's U, where the
+    # racers up on it looked at floorboards (+X the road; placed at the U's
+    # apex and running on west round its outside, so it is authored off its
+    # own middle): the minster, a cream nave under a red roof behind two
+    # towers with blue spires, a rose window between them; the town hall,
+    # a yellow block with a red clock tower rising out of it, a clock on
+    # three faces under a green roof; and a stepped block of flats, three
+    # blocks one on another. All three stand over the U's deck. Trees and a
+    # bus on the street before them.
+    ZC = -4.6
+    rug(-5.4, 3.8, ZC - 10.0, ZC + 10.0, [(1.6, 3.8, ZC - 10.0, ZC + 10.0)], [(-5.4, -3.0, ZC - 0.6, ZC + 0.6)], 'floor_minster')
+    CR, RED, BLUE, YEL, GRN = 0xfdf4de, 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c
+    mz = ZC - 5.4                                                                   # the minster
+    box((5.4, 4.4, 3.2), (-2.5, 2.2, mz), CR)
+    prism([(mz - 1.75, 4.4), (mz + 1.75, 4.4), (mz, 6.5)], -2.5, 5.6, RED)
+    for sz in (-1, 1):
+        for k in range(0 if LITE and sz < 0 else 4):                               # the box's: only the side the racers come along
+            x = -4.6 + k * 1.15
+            pts = [(x - 0.22, 1.5, mz + sz * 1.612), (x + 0.22, 1.5, mz + sz * 1.612), (x + 0.22, 3.5, mz + sz * 1.612), (x - 0.22, 3.5, mz + sz * 1.612)]
+            quad(pts if sz > 0 else pts[::-1], 0x8ecae6)
+        z = mz + sz * 1.75                                                          # a tower
+        box((1.7, 8.8, 1.7), (0.9, 4.4, z), CR)
+        box((1.95, 0.26, 1.95), (0.9, 8.93, z), RED)
+        cyl(1.2, 2.7, (0.9, 9.06, z), BLUE, r2=0.04, segs=4, yaw=math.pi / 4)
+        plate_x(1.762, 6.5, 8.1, z - 0.32, z + 0.32, 0x3a2a22)                      # the belfry's openings
+        plate_x(1.762, 2.0, 3.4, z - 0.2, z + 0.2, 0x8ecae6)
+        pts = [(0.9 - 0.32, 6.5, z + sz * 0.862), (0.9 + 0.32, 6.5, z + sz * 0.862), (0.9 + 0.32, 8.1, z + sz * 0.862), (0.9 - 0.32, 8.1, z + sz * 0.862)]
+        quad(pts if sz > 0 else pts[::-1], 0x3a2a22)
+    box((0.6, 5.6, 1.9), (0.75, 2.8, mz), CR)                                       # the front between them
+    plate_x(1.062, 0.0, 1.8, mz - 0.5, mz + 0.5, 0x3a2a22)
+    cyl(0.8, 0.1, (1.0, 3.9, mz), 0x8ecae6, segs=10, axis='across')                 # the rose window
+    cyl(0.3, 0.14, (1.0, 3.9, mz), YEL, segs=6, axis='across')
+    def tier(x, z, w, d, y, h, body, cols):
+        box((w, h, d), (x, y + h / 2, z), body)
+        o = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        for f, half, span in (('+x', w / 2, d), ('+z', d / 2, w)) + (() if LITE else (('-z', d / 2, w),)):
+            windows(o, f, half, span * 0.84, h - 0.7, cols if f == '+x' else max(2, cols - 1), max(1, int(h / 1.0)), -h / 2 + 0.3, glass=glass_on(body))
+        return y + h
+    tz = ZC + 1.6                                                                   # the town hall
+    top = tier(-1.4, tz, 3.2, 4.6, 0.0, 4.0, YEL, 5)
+    box((3.4, 0.3, 4.8), (-1.4, top + 0.15, tz), RED)
+    top = tier(-1.0, tz, 1.9, 1.9, top + 0.3, 3.4, RED, 2)
+    box((1.9, 1.9, 1.9), (-1.0, top + 0.95, tz), CR)                                # the clock's storey
+    cy = top + 0.95
+    cyl(0.7, 0.06, (-0.05, cy, tz), YEL, segs=12, axis='across')
+    box((0.05, 0.5, 0.09), (0.04, cy + 0.18, tz), 0x2a2735)
+    box((0.05, 0.09, 0.36), (0.04, cy, tz + 0.14), 0x2a2735)
+    for sz in (-1, 1):
+        cyl(0.7, 0.06, (-1.0, cy, tz + sz * 0.95 - (0.06 if sz < 0 else 0.0)), YEL, segs=12, axis='along')
+    box((2.2, 0.26, 2.2), (-1.0, top + 2.03, tz), RED)
+    cyl(1.35, 2.2, (-1.0, top + 2.16, tz), GRN, r2=0.04, segs=4, yaw=math.pi / 4)
+    fz = ZC + 7.4                                                                   # the flats, stepped
+    top = tier(-1.4, fz, 3.4, 3.4, 0.0, 3.4, BLUE, 4)
+    top = tier(-1.6, fz + 0.2, 2.6, 2.6, top, 2.8, CR, 3)
+    top = tier(-1.8, fz - 0.1, 1.9, 1.9, top, 2.4, RED, 2)
+    box((2.1, 0.3, 2.1), (-1.8, top + 0.15, fz - 0.1), YEL)
+    for x, z in ((2.6, ZC - 9.0), (-4.2, ZC - 0.1), (-4.4, ZC + 4.6), (2.7, ZC + 4.4), (2.7, ZC + 9.2)):
+        wooden_tree(x, z)
+    toy_bus(2.6, ZC - 1.6, NEUTRAL[1])
+    merge_paint()
+    keep_light(0.1)
+
+@piece(1.0)
+def block_terrace():
+    # Skyline: a terrace of tall narrow town houses outside the U's second
+    # half, beside the ramp down off the skyway (+X the road, the racers
+    # driving toward -Z when it stands on their left): five painted fronts
+    # under gable roofs stepping down with the deck, so each stands a storey
+    # over it as the racers come down past.
+    rug(-2.6, 2.6, -6.6, 6.6, [(1.0, 2.6, -6.6, 6.6)], [], 'floor_terrace')
+    for k, (h, body, roof) in enumerate(((8.4, 0xe66a5a, 0x5a8fd8), (7.4, 0xfdf4de, 0xe66a5a), (6.2, 0xf2c14e, 0x6cbf6c),
+                                         (5.0, 0x5a8fd8, 0xfdf4de), (3.8, 0x6cbf6c, 0xe66a5a))):
+        z, w, d = 4.9 - k * 2.45, 2.6, 2.3
+        box((w, h, d), (-1.0, h / 2, z), body)
+        o = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        windows(o, '+x', w / 2, d * 0.8, h - 1.6, 2, max(1, int((h - 1.6) / 1.1)), -h / 2 + 1.3, glass=glass_on(body))
+        plate_x(-1.0 + w / 2 + 0.012, 0.0, 0.95, z - 0.25, z + 0.25, 0x3a2a22)
+        prism([(z - d / 2 - 0.1, h), (z + d / 2 + 0.1, h), (z, h + 1.3)], -1.0, w + 0.2, roof)
+    for z in (-5.6, 5.9):
+        wooden_tree(1.8, z)
+    merge_paint()
+    keep_light(0.1)
+
+@piece(1.0)
 def block_midtown():
     # Skyline: uptown's neighbours outside the U, on the same rug's print
     # but their own blocks, so the skyway's second downtown is not the
@@ -19642,16 +19847,17 @@ def game_pawns():
 
 # ---- round 19: Skysnake's board stood up ----
 
-def wood_snake(pts, w, h, body, band, every=3, taper=4):
+def wood_snake(pts, w, h, body, band, every=3, taper=4, over=0.12):
     """A jointed wooden toy snake through glTF `pts`: a block per joint,
     every `every`th one the band's colour, the last `taper` thinning to the
-    tail's tip. Each block runs a little past its joint so no bend opens."""
+    tail's tip. Each block runs `over` past its joint so no bend opens (less
+    where the joints are short: the corners poke out of a gentle bend)."""
     n = len(pts) - 1
     for k, (a, b) in enumerate(zip(pts, pts[1:])):
         f = min(1.0, (n - k) / taper) if taper else 1.0
         d = [b[i] - a[i] for i in range(3)]
         l = math.sqrt(sum(c * c for c in d)) or 1.0
-        e = [c / l * 0.05 for c in d]
+        e = [c / l * over for c in d]
         bar((a[0] - e[0], a[1] - e[1], a[2] - e[2]), (b[0] + e[0], b[1] + e[1], b[2] + e[2]),
             w * (0.45 + 0.55 * f), h * (0.45 + 0.55 * f), band if k % every == every - 1 else body)
 
@@ -19674,12 +19880,12 @@ def snake_humps(body):
     # height and its head lifted at the end the racers come from, turning
     # to the road now and then.
     L, LAM, H = 15.0, 5.0, 2.1
-    n = 32
+    n = 20 if LITE else 32
     pts = []
     for i in range(n + 1):
         d = L * i / n
         pts.append((0.45 * math.sin(math.pi * d / LAM), 0.5 + H * (0.5 - 0.5 * math.cos(2 * math.pi * d / LAM)), -L / 2 + d))
-    wood_snake(pts, 1.0, 0.9, body, SNAKE[1], every=4, taper=6)
+    wood_snake(pts, 1.0, 0.9, body, SNAKE[1], every=3 if LITE else 4, taper=4 if LITE else 6, over=0.12 if LITE else 0.05)
     neck = [pts[0], (-0.1, 1.2, -L / 2 - 0.8), (-0.15, 2.1, -L / 2 - 1.3)]
     wood_snake(neck, 1.0, 0.9, body, SNAKE[1], every=9, taper=0)
     with animated('anim_sway:a=y:d=-28:p=8:r=0.65#head', neck[-1]):
@@ -19946,13 +20152,14 @@ def snake_board():
 # (its line at u 0, heading +z, so the frame is the world's moved there), the
 # centreline's box (x0, x1, z0, z1), whether the race runs up the box's
 # west side (+1, turning east) or its east side (-1, turning west), and the
-# margin on its west, east, south and north sides. Not every
+# margin (nearer rails were tried on both and read no better from the seat:
+# the lap's own pieces stand between). Not every
 # room has one: Skyline's town runs its own train, and on Gauntlet everything
 # belongs to the tourney.
 ROOM_TRAIN_GROW, ROOM_TRAIN_SPEED = 1.5, 6.0
 ROOM_TRAIN = {
-    'skysnake': ((0.0, 9.02), (0.0, 81.6, -14.4, 80.04), 1, (10.5, 12.0, 9.0, 12.0)),
-    'helix': ((0.0, 8.50), (0.0, 68.7, -14.4, 64.4), 1, (22.0, 22.0, 22.0, 22.0)),
+    'skysnake': ((0.0, 9.02), (0.0, 81.6, -14.4, 80.04), 1, 12.0),
+    'helix': ((0.0, 8.50), (0.0, 68.7, -14.4, 64.4), 1, 22.0),
 }
 
 def room_loop(x0, x1, z0, z1, r, step):
@@ -19980,9 +20187,9 @@ def room_train(track, lite=False):
     # the same set), in the world's frame moved to the track's line. Its
     # rails are in every cell's frame, so the lite build lays them coarser
     # and without their grooves, and runs a shorter train.
-    (ox, oz), (x0, x1, z0, z1), sense, (mw, me, ms, mn) = ROOM_TRAIN[track]
+    (ox, oz), (x0, x1, z0, z1), sense, m = ROOM_TRAIN[track]
     k = ROOM_TRAIN_GROW
-    world = room_loop(x0 - mw, x1 + me, z0 - ms, z1 + mn, 10.0, 2.0 if lite else 0.75)
+    world = room_loop(x0 - m, x1 + m, z0 - m, z1 + m, 10.0, 2.0 if lite else 0.75)
     if sense < 0:
         world = world[::-1]
     ring = [((x - ox) / k, (z - oz) / k) for x, z in world]
@@ -20001,6 +20208,8 @@ def room_train(track, lite=False):
 
 for _track in ROOM_TRAIN:
     for _lite in (False, True):
+        if _lite and _track == 'helix':          # Helix leaves its train out of the lite tier (tracks.js)
+            continue
         _name = 'room-train-' + _track + ('-lite' if _lite else '')
         PIECES[_name] = (lambda t, l: lambda: room_train(t, l))(_track, _lite)
         GROW[_name] = ROOM_TRAIN_GROW
@@ -20520,7 +20729,8 @@ def siege_works():
         gonfalon(-1.5, z, c, h=4.4, wave='anim_flutter:p=%.1f#works%d' % (2.4 + 0.3 * k, k))
     merge_paint()
 
-lite_too('block-fortress', 'siege-camp', 'tilt-yard', 'tourney-camp')
+lite_too('block-fortress', 'siege-camp', 'tilt-yard', 'tourney-camp', 'marble-zigzag', 'block-town',
+         'block-minster', 'snake-humps-blue', 'snake-humps-red')
 
 # What lies about Gauntlet's floor (theme.cc playroomTrack: the scatter's
 # props, each under the lite tier's prop cap, square-edged).
