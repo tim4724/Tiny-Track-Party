@@ -11514,9 +11514,10 @@ def den_camp():
 
 # ---- TANGLE: the brook ------------------------------------------------------------------
 # Tangle's brook rises at the springhouse beyond the north loop's top straight,
-# goes under that straight and down the loop to a culvert under the start
-# straight, runs down the straight's left kerb to a second culvert, back
-# under it and round the outside of the first bend, through the watermill's
+# goes under that straight and down the loop, under the start straight, down
+# the straight's left kerb, back under it (at each crossing the road's
+# parapets and the reach's last length, set-brook-parapet and set-culvert
+# below) and round the outside of the first bend, through the watermill's
 # race under its wheel, and over a sill into the duck pond under the first
 # bridge. The water lies BELOW its banks: a channel walled in slate, the
 # lawn rolling up to its coping a hand over the water, darker down the
@@ -11696,13 +11697,9 @@ def brook_ends(fr, start, end):
         yaw = math.atan2(tx, tz)
         span = 2 * (w + C) + 0.2
         if kind == 'outfall':
-            # where the spring's water comes back out from under the road: a
-            # headwall across the head of the channel, a dark pipe mouth low in
-            # it and a white tongue of water falling out of it
-            hx, hz = x - tx * 0.18, z - tz * 0.18
-            box((span + 0.3, 0.75, 0.32), (hx, 0.36, hz), 'grey', yaw=yaw)
-            rowed(box((span + 0.45, 0.12, 0.42), (hx, 0.78, hz), 'grey', yaw=yaw), 16)
-            box((0.62, 0.42, 0.06), (x - tx * 0.0, 0.3, z - tz * 0.0), 0x2a2735, yaw=yaw)
+            # where the spring's water comes back out from under the road, at
+            # the foot of the road's parapet (set-brook-parapet, its arch over
+            # the channel's head): a white tongue of water running out of it
             rowed(ground_poly([(x + ax * 0.3, BROOK_WY + 0.03, z + az * 0.3), (x - ax * 0.3, BROOK_WY + 0.03, z - az * 0.3),
                                (x - ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z - az * 0.2 + tz * 0.9),
                                (x + ax * 0.2 + tx * 0.9, BROOK_WY + 0.03, z + az * 0.2 + tz * 0.9)], [(0, 1, 2, 3)], 'white'), 2)
@@ -11723,13 +11720,18 @@ def brook_ends(fr, start, end):
                                (x + ax * w * 0.35 + tx * 0.6, 0.12, z + az * w * 0.35 + tz * 0.6)],
                               [(0, 1, 2, 3)], 'white'), 3)
 
-def brook_piece(start, end, prev, nxt, pts, road):
+def brook_piece(start, end, prev, nxt, pts, road, extra=None, lite=False):
     # A reach that meets a culvert runs on INTO it: half a unit past the
     # headwall's face along its own line (the wall's own thickness), so however the two are turned to
     # each other its water goes into the arch and both walls into the stone
     # (cut square at the face, a reach met it at one corner and left a wedge
     # of lawn between the water and the mouth).
+    # lite (the Android TV's build): every other station of the reach, so
+    # its water, walls and banks are half the faces, laid on the same bed.
     pts = list(pts)
+    if lite:
+        pts = pts[:-1:2] + [pts[-1]]
+        extra = extra and (extra[0], extra[1] // 2)
     def on(a, b):
         d = math.hypot(a[0] - b[0], a[1] - b[1])
         return (a[0] + (a[0] - b[0]) / d * 0.5, a[1] + (a[1] - b[1]) / d * 0.5, a[2])
@@ -11738,11 +11740,69 @@ def brook_piece(start, end, prev, nxt, pts, road):
     if end == 'culvert':
         pts.append(on(pts[-1], pts[-2]))
     fr = brook_frames(pts, prev, nxt)
-    draped('brook', lambda: (brook_channel(fr, start, end, near=road), brook_ends(fr, start, end)))
+    def build():
+        brook_channel(fr, start, end, near=road)
+        brook_ends(fr, start, end)
+        if extra:
+            extra[0](fr[extra[1] + (1 if start == 'culvert' else 0)])
+    draped('brook', build)
+
+# What stands up off the brook along the start straight, where the road runs
+# beside it for a tenth of the lap and the water alone is a thin blue line
+# from the seat: a timber footbridge over it with a gravel path off each end,
+# and further up a sluice, a stone sill across the channel under a timber
+# frame with its gate wound up, the water white below it. Each at a frame of
+# its reach (x, z, half width, across); both DRAPE with the reach.
+def brook_footbridge(f):
+    x, z, w, ax, az = f
+    tx, tz = az, -ax                          # along the flow
+    yaw = math.atan2(tx, tz)
+    S, DW = w + BROOK_COPE + 0.5, 0.95        # the half span; the deck's width
+    at = lambda o, y, d=0.0: (x + ax * o + tx * d, y, z + az * o + tz * d)
+    n = 7
+    for k in range(n):                        # the deck, a low hump of planks
+        t = (k - (n - 1) / 2) / ((n - 1) / 2)
+        box((2 * S / n + 0.02, 0.1, DW), at(t * (S - S / n), 0.36 + (1 - t * t) * 0.2), TIMBER, yaw=yaw)
+    for sd in (-1, 1):                        # a stone footing at each bank, and the gravel path off it
+        rowed(box((0.5, 0.36, DW + 0.3), at(sd * S, 0.16), 'grey', yaw=yaw), SLATE_ROW)
+        for q in range(4):
+            o0, o1 = sd * (S + 0.2 + 0.5 * q), sd * (S + 0.2 + 0.5 * (q + 1))
+            rowed(ground_poly([at(o0, 0.04, -0.36), at(o1, 0.04, -0.36), at(o1, 0.04, 0.36), at(o0, 0.04, 0.36)],
+                              [(0, 1, 2, 3)], 'gravel'), 26)
+    with plain_parts():
+        for d in (-DW / 2 + 0.06, DW / 2 - 0.06):     # the handrails: three posts and a rail a side
+            for t in (-1, 0, 1):
+                y = 0.36 + (1 - t * t) * 0.2
+                box((0.12, 0.62, 0.12), at(t * (S - 0.15), y + 0.3, d), TIMBER, yaw=yaw)
+            for t0, t1 in ((-1, 0), (0, 1)):
+                strut(at(t0 * (S - 0.15), 0.92 + (1 - t0 * t0) * 0.2, d), at(t1 * (S - 0.15), 0.92 + (1 - t1 * t1) * 0.2, d),
+                      0.1, TIMBER)
+
+def brook_sluice(f):
+    x, z, w, ax, az = f
+    tx, tz = az, -ax
+    yaw = math.atan2(tx, tz)
+    at = lambda o, y, d=0.0: (x + ax * o + tx * d, y, z + az * o + tz * d)
+    rowed(box((2 * w + 0.1, 0.3, 0.34), at(0.0, 0.06), 'grey', yaw=yaw), SLATE_ROW)        # the sill, a hand over the water
+    rowed(ground_poly([at(-w * 0.9, BROOK_WY + 0.03, 0.17), at(w * 0.9, BROOK_WY + 0.03, 0.17),
+                       at(w * 0.6, BROOK_WY + 0.03, 0.95), at(-w * 0.6, BROOK_WY + 0.03, 0.95)], [(0, 1, 2, 3)], 'white'), 3)
+    H = 1.15
+    for sd in (-1, 1):                        # the frame: a post in each bank, a beam over
+        box((0.2, H + 0.3, 0.2), at(sd * (w + 0.12), H / 2 - 0.15), TIMBER, yaw=yaw)
+    box((2 * w + 0.7, 0.18, 0.24), at(0.0, H), TIMBER, yaw=yaw)
+    box((2 * w - 0.1, 0.46, 0.08), at(0.0, 0.66), 0x7a5a3a, yaw=yaw)                       # the gate, wound up
+    with plain_parts():
+        box((0.1, 0.5, 0.1), at(0.0, H + 0.3), 'dark', yaw=yaw)                            # its screw
+        box((0.5, 0.08, 0.08), at(0.0, H + 0.55), 'dark', yaw=yaw)
+
+BROOK_EXTRA = {'brook-c': (brook_footbridge, 9), 'brook-b': (brook_sluice, 16)}
 
 for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
-    PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts, _r))
+    PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts, _r, BROOK_EXTRA.get(_name)))
     GROW[_name] = 1.0
+    if _e != 'pond':                           # (the pond's reach keeps its stations: its mouth is cut by their count)
+        PIECES[_name + '-lite'] = (lambda a: lambda: brook_piece(*a, lite=True))((_s, _e, _p, _n, _pts, _r, BROOK_EXTRA.get(_name)))
+        GROW[_name + '-lite'] = 1.0
 
 
 def willow(at):
@@ -11823,8 +11883,9 @@ def watermill():
     willow((-8.0, 0, 9.5))
     join_still('mill')
 
-@piece(REAL)
-def pond_ducks():
+def pond_ducks_build(lite):
+    # lite (the Android TV's build): the reed beds thinner, the jetty's deck
+    # one board, the ducks at rest.
     # Life on Tangle's pond and its shore, on the half of it clear of the
     # bridge (+X toward the bridge, whose deck and spotIssue's margin start
     # 5.7 u out): two ducks going round, lily pads, reeds in the shallows of
@@ -11833,11 +11894,15 @@ def pond_ducks():
     # its water and its slate coping, TtpRenderer::buildPonds); its sheet
     # lies 0.09 u over the plain, so the ducks float at 0.1 u (0.4 here).
     WY, R = 0.4, 21.6                        # the water; the shore's line, 5.4 u
-    n = 10
+    n = 0 if lite else 10
     for k in range(n):
         a = -k * 2 * math.pi / n
         marker('path_pduck_%d' % k, (10.0 * math.cos(a), WY, 12.0 * math.sin(a)))
     for j in range(2):
+        if lite:                             # at rest on the water, in the pond's one part (a block down to the bed under each)
+            duck(((10.0, -6.0)[j], WY, (0.0, 9.0)[j]), (0xf8f8fb, 0x9a7b55)[j])
+            box((0.5, WY + 0.2, 0.3), ((10.0, -6.0)[j], WY / 2 - 0.05, (0.0, 9.0)[j]), 0x2a2735)
+            continue
         with animated('anim_path:c=pduck:p=40:o=%.3f:f=1+bob:h=0.015:p=1.6#%d' % (j / 2 + 0.07, j), (10.0, WY, 0.0)):
             duck((10.0, WY, 0.0), (0xf8f8fb, 0x9a7b55)[j])
     for k, deg in enumerate((168, 212)):     # reeds in the far bank's shallows
@@ -11849,60 +11914,138 @@ def pond_ducks():
     for k, (x, z, r) in enumerate(((-12.0, -2.0, 1.0), (-13.5, 3.0, 0.8))):   # lily pads, flat on the water
         ground_poly([(x, WY, z)] + [(x + r * math.cos(a * math.pi / 3), WY, z + r * math.sin(a * math.pi / 3))
                                          for a in range(6)], [(0, 1 + a, 1 + (a + 1) % 6) for a in range(6)], 0x4f9a48)
+        if lite:                             # its stalk down to the bed (set-check: nothing left floating)
+            box((0.2, WY + 0.1, 0.2), (x, WY / 2 - 0.06, z), 0x4f9a48)
     # What stands up off the water, so the pond reads from the roads round
-    # it: a reed bed along the far bank's shallows, bulrushes among it, a
-    # willow over it, and a plank jetty off the side bank with a rowing boat
-    # tied up at its end.
-    for k in range(9):
-        d = math.radians(140 + 13.5 * k)
-        x0, z0 = (R - 1.4) * math.cos(d), (R - 1.4) * math.sin(d)
-        for j in range(5):
-            a = j * 2 * math.pi / 5 + k
-            h = 2.4 + 0.7 * ((j + k) % 3)
-            cyl(0.0, h, (x0 + 0.7 * math.cos(a), WY - 0.2, z0 + 0.7 * math.sin(a)),
-                (0x4f9a48, 0x22c46e)[(j + k) % 2], r2=0.3, segs=3, yaw=a)
-        if k % 3 == 1:
-            box((0.26, 0.8, 0.26), (x0, WY + 2.7, z0), 0x7a5a3a)
+    # it. The low road comes out from under the bridge along the pond's east
+    # shore (-Z here) and everything on the pond lies half a unit under its
+    # kerb, so what a racer there sees is what is tall and on that shore: a
+    # reed bed along the far bank's shallows with bulrushes among it and a
+    # willow over it, as before; and on the east shore a second willow, a
+    # plank jetty with tall mooring posts and a rowing boat tied up at its
+    # end, more reeds beside it, and out on the water a duck house on a post,
+    # a little red-roofed hut with a ramp down to the water.
+    def reeds(deg0, n, step):
+        for k in range(0, n, 2 if lite else 1):
+            d = math.radians(deg0 + step * k)
+            x0, z0 = (R - 1.4) * math.cos(d), (R - 1.4) * math.sin(d)
+            for j in range(3 if lite else 5):
+                a = j * 2 * math.pi / 5 + k
+                h = 2.6 + 0.8 * ((j + k) % 3)
+                cyl(0.0, h, (x0 + 0.7 * math.cos(a), WY - 0.2, z0 + 0.7 * math.sin(a)),
+                    (0x4f9a48, 0x22c46e)[(j + k) % 2], r2=0.3, segs=3, yaw=a)
+            if k % 3 == 1:
+                box((0.3, 0.9, 0.3), (x0, WY + 3.1, z0), 0x7a5a3a)
+                box((0.14, 3.2, 0.14), (x0, WY + 1.5, z0), 0x4f9a48)
+    reeds(140, 9, 13.5)
+    reeds(292, 3, 12.0)
     willow((1.14 * R * math.cos(math.radians(205)), 0, 1.14 * R * math.sin(math.radians(205))))
-    JX, JY = 3.0, 1.75                       # its deck clear of the pond's coping (buildPonds)
-    for i in range(9):
-        box((2.2, 0.16, 1.0), (JX, JY, R + 1.5 - i * 1.05), 0x8a5f3e)
-    for i in (0, 4, 8):
+    willow((1.16 * R * math.cos(math.radians(246)), 0, 1.16 * R * math.sin(math.radians(246))))
+    JX, JY, JN = -1.0, 1.75, 10              # the jetty off the east shore; its deck clear of the pond's coping (buildPonds)
+    if lite:
+        box((2.2, 0.16, JN * 1.05), (JX, JY, -R - 1.5 + (JN - 1) * 1.05 / 2), 0x8a5f3e)
+    for i in (() if lite else range(JN)):
+        box((2.2, 0.16, 1.0), (JX, JY, -R - 1.5 + i * 1.05), 0x8a5f3e)
+    for i in (0, 4, JN - 1):
+        tall = i == JN - 1                   # the mooring posts at its end stand over the kerb's line
         for sx in (-1, 1):
-            box((0.24, JY + 0.5, 0.24), (JX + sx * 1.0, (JY + 0.5) / 2 - 0.4, R + 1.5 - i * 1.05), 0x7a5a3a)
-    BX, BZ = JX + 2.3, R - 5.2
+            h = JY + (3.0 if tall else 0.5)
+            box((0.3 if tall else 0.24, h, 0.3 if tall else 0.24), (JX + sx * 1.0, h / 2 - 0.4, -R - 1.5 + i * 1.05), 0x7a5a3a)
+            if tall:
+                box((0.4, 0.3, 0.4), (JX + sx * 1.0, h - 0.3, -R - 1.5 + i * 1.05), 'white')
+    BX, BZ = JX - 2.3, -R + 6.2
     box((1.6, 0.6, 3.6), (BX, WY + 0.3, BZ), 0xcf534f)
-    box((1.15, 0.6, 1.15), (BX, WY + 0.3, BZ - 1.9), 0xcf534f, yaw=math.pi / 4)
+    box((1.15, 0.6, 1.15), (BX, WY + 0.3, BZ + 1.9), 0xcf534f, yaw=math.pi / 4)
     box((1.75, 0.12, 3.7), (BX, WY + 0.62, BZ), 'white')
-    box((1.4, 0.14, 0.4), (BX, WY + 0.66, BZ + 0.4), 0x9a7b55)
+    box((1.4, 0.14, 0.4), (BX, WY + 0.66, BZ - 0.4), 0x9a7b55)
+    DX, DZ, DY = -14.5, -7.0, 2.6            # the duck house, out on the water, clear of the ducks' round
+    box((0.5, DY + 0.6, 0.5), (DX, DY / 2 - 0.3, DZ), 0x7a5a3a)
+    box((3.0, 0.2, 3.0), (DX, DY, DZ), 0x9a7b55)
+    box((2.0, 1.4, 2.0), (DX, DY + 0.8, DZ), 'white')
+    gable_roof(local(DX, DZ, 0.0), 0.0, DY + 0.1, 2.0, 2.0, 1.4, 0xcf534f, 'white', t=0.2, over=0.3, cap=False)
+    box((0.1, 0.8, 0.7), (DX + 1.02, DY + 0.55, DZ), 0x2a2735)
+    strut((DX + 1.4, DY, DZ), (DX + 4.2, WY, DZ), 0.5, 0x9a7b55)
     join_still('pond')
 
-# ---- TANGLE: the culverts where the brook goes under the low road ---------------------
+@piece(REAL)
+def pond_ducks():
+    pond_ducks_build(False)
+
+@piece(REAL)
+def pond_ducks_lite():
+    pond_ducks_build(True)
+
+# ---- TANGLE: where the brook goes under the low road ----------------------------------
+# The road CROSSES the brook: on each side of it the water runs on from its
+# reach's end to the foot of a low stone parapet standing along the kerb
+# (set-brook-parapet), an arch in the parapet's brook side over the channel,
+# so the driver sees a bridge's two walls and the brook coming to one and
+# leaving the other. (The brook used to stop at a headwall a few units out,
+# its arch turned away from the road: four blank slabs from the seat.) A
+# stone slab lies across the channel where this length takes over from the
+# reach, a clapper bridge a stride wide. The brook comes to the road on the
+# skew, so the length is cut off along the road, not square: two models, one
+# for each way the brook leans (`turn`). World units, +X along the brook
+# toward the road; it DRAPES, as the reaches do.
+def culvert_build(turn, lite=False):
+    # lite (the Android TV's build): no grass bank of its own (a second part,
+    # a second draw, for a few strides of turf the lawn already is)
+    W = 0.85
+    skew = math.tan(math.radians(33.0)) * turn
+    fr = [(x, 0.0, W, 0.0, 1.0) for x in (-2.45, -1.85, -1.25, -0.65)] + [(0.15, 0.0, W, skew, 1.0)]
+    def still():
+        brook_channel(fr, 'join', 'join')
+        for sd in (-1, 1):                     # the clapper: a slab on a stone in each bank
+            rowed(box((0.6, 0.4, 0.5), (-2.3, 0.14, sd * (W + 0.25)), 'grey'), SLATE_ROW)
+        rowed(box((0.7, 0.12, 2 * W + 1.0), (-2.3, 0.38, 0.0), 'grey'), 20)
+        if lite:
+            for o in [o for o in bpy.context.scene.objects if o.get('turf')]:
+                bpy.data.objects.remove(o, do_unlink=True)
+    draped('brook', still)
 
 @piece()
 def culvert():
-    # Where the brook goes under the low road: a stone headwall across it a
-    # few units out from the kerb (set-brook: its water and walls run on
-    # into the headwall's face, 2.7 u out), a dark arched mouth over the
-    # water, its coping the brook's own slate, wing walls splayed along the
-    # banks; from there the pipe lies under the lawn to the road. No barrel
-    # over the ground between: as a slab from the
-    # headwall to the road, stepped down to pass the road's margin, it read
-    # from the seat as a stone ramp beside the kerb. World units, +X toward
-    # the road.
-    L, W = 2.4, 2.6                         # the headwall's distance out; the pipe's width
-    T, WH, HH, R = 0.8, 4.2, 0.95, 0.72     # the headwall: thickness, width, height; the mouth's radius
-    x = -L - 0.3 + T / 2
-    rowed(box((T, HH, WH), (x, HH / 2, 0), 'grey'), 20)
-    rowed(box((T + 0.16, 0.14, WH + 0.2), (x, HH + 0.04, 0), 'grey'), 12)        # its coping
-    face = -L - 0.3 - 0.02
-    def mouth(fx, r):
-        arc = [(fx, r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
-        poly([(fx, 0.0, 0.0)] + arc, [(0, k + 1, k + 2) for k in range(8)], 0x2a2735)
-    mouth(face, R)                           # where the brook goes in
-    for sd in (-1, 1):                       # wing walls, short and splayed along the banks
-        rowed(box((0.9, 0.5, 0.42), (face - 0.35, 0.25, sd * (WH / 2 + 0.05)), 'grey', yaw=sd * 0.45), SLATE_ROW)
-    join_still('culvert')
+    culvert_build(-1)
+
+@piece()
+def culvert_lite():
+    culvert_build(-1, True)
+
+@piece()
+def culvert_b():
+    culvert_build(1)
+
+@piece()
+def culvert_b_lite():
+    culvert_build(1, True)
+
+@piece()
+def brook_parapet():
+    # One side of the bridge: a low wall of slate blocks along the kerb, two
+    # greys in turn under a paler coping, a pier at each end, and on its
+    # brook side (-X) the arch the water goes under, dark inside a ring of
+    # paler stones. It stands on the verge beside the low road, whose deck
+    # lies under half a unit over the land: the wall is built from under the
+    # land up to a car's bonnet over the road, low enough to see the brook
+    # over it (a plain wall half as high again read from the seat as the
+    # blank slab the headwalls were). World units, +X to the road; on the
+    # left at yaw 180.
+    L, T, Y0, Y1, N = 3.3, 0.42, -0.4, 0.74, 6
+    for k in range(N):
+        h = Y1 - Y0 - (0.05 if k % 2 else 0.0)
+        rowed(box((T, h, L / N), (-T / 2, Y0 + h / 2, -L / 2 + L / N * (k + 0.5)), 'grey'), (14, 22)[k % 2])
+    rowed(box((T + 0.14, 0.1, L + 0.08), (-T / 2, Y1 + 0.04, 0.0), 'grey'), 6)
+    for sz in (-1, 1):
+        rowed(box((0.58, Y1 - Y0 + 0.16, 0.5), (-T / 2, (Y0 + Y1 + 0.16) / 2, sz * (L / 2 + 0.22)), 'grey'), 20)
+        rowed(box((0.68, 0.1, 0.6), (-T / 2, Y1 + 0.2, sz * (L / 2 + 0.22)), 'grey'), 6)
+    def arch(fx, r, y0, color, row=None):
+        pts = [(fx, y0 + r * math.sin(math.pi * k / 8), r * math.cos(math.pi * k / 8)) for k in range(9)]
+        o = poly([(fx, y0, 0.0)] + pts + [(fx, Y0, -r), (fx, Y0, r)],
+                 [(0, k + 1, k + 2) for k in range(8)] + [(9, 10, 11), (9, 11, 1)], color)
+        return rowed(o, row) if row is not None else o
+    arch(-T - 0.02, 0.84, -0.12, 'grey', 6)       # the ring of arch stones
+    arch(-T - 0.04, 0.7, -0.12, 0x2a2735)         # the dark under it
+    join_still('parapet')
 
 # ---- CLOVERLEAF: the boating lake ----------------------------------------------------
 # The park's boating lake in the finger lobe, the track's `pond` landform (its
@@ -12019,10 +12162,19 @@ def alder_grove():
     # A clump of the valley's alders by the road on Tangle's lawns, a willow
     # at its end: the wood's own trees where no hillside stands. Front (+X)
     # to the road, the crowns inside x 3.4. It DRAPES.
+    alder_grove_build(False)
+
+@piece(REAL)
+def alder_grove_lite():
+    alder_grove_build(True)
+
+def alder_grove_build(lite):
+    # lite (the Android TV's build): three of the four
     def still():
         lawn_alder(0.0, -4.5, 1.0, 0.4)
         lawn_alder(-3.2, 2.0, 1.2, 2.1)
-        lawn_alder(-7.5, -2.5, 1.1, 3.6)
+        if not lite:
+            lawn_alder(-7.5, -2.5, 1.1, 3.6)
         lawn_alder(-1.0, 8.0, 0.85, 5.0)
     draped('grove', still)
 
@@ -12275,6 +12427,89 @@ def trampoline():
             t = (k + 1) / 3
             box((0.3, 0.2, 1.4), (TX + R + 1.1 - 1.2 * t, (Y + 0.2) * t, TZ), 0x22c46e)
     draped('tramp', still)
+
+# ---- TANGLE: the mill's timber yard -------------------------------------------------
+# The valley's woods are worked: on a low bank outside the south loop's
+# apex (tracks.js `land`), where the loop's driver looks, the mill's timber
+# yard. An open saw shed under the mill's red tiles, a log on its bench under
+# the big saw; alder logs stacked in pyramids, sawn planks in piles drying,
+# sheer legs standing over the stacks with a log slung from them, a timber
+# wagon loaded, a heap of sawdust; a cart track through it to the road.
+# Nobody about and nothing moves. The mill's scale (MILL_GROW), metres,
+# front (+X) to the road; on the left at yaw 180. It DRAPES on the bank's top.
+def log_stack(x, z, L, rows=(4, 3, 2), r=0.55, lite=False):
+    """Logs lying along Z in a pyramid, their sawn ends pale."""
+    for j, n in enumerate(rows):
+        for i in range(n):
+            cx, cy = x + (i - (n - 1) / 2) * 2 * r, r + j * r * 1.72
+            cyl(r, L, (cx, cy, z - L / 2), 0x5a3a2a, segs=5 if lite else 7, axis='along', stem=True)
+            if not lite:
+                with plain_parts():
+                    box((r * 1.1, r * 1.1, 0.1), (cx, cy, z + L / 2 + 0.03), 0xd9b054)
+
+def mill_yard_build(lite):
+    # lite (the Android TV's build): the logs five-sided with no pale ends,
+    # each pile of planks one block, no sawdust.
+    TILE, POST, PLANK = 0xcf534f, 0x7a5a3a, 0xd9b054
+    def still():
+        # the saw shed: six posts under a tiled roof, open all round
+        SX, SZ, D, L, H = -4.0, -6.5, 6.0, 9.5, 4.0
+        F = local(SX, SZ, 0.0)
+        for sx in (-1, 1):
+            for sz in (-1, 0, 1):
+                box((0.45, H + 0.6, 0.45), F(sx * (D / 2 - 0.3), H / 2 - 0.3, sz * (L / 2 - 0.4)), POST)
+        box((D, 0.35, L), F(0, H - 0.1, 0), POST)                                   # the wall plate and ties, one slab
+        gable_roof(F, 0.0, 0.0, D, L, H, TILE, POST, t=0.35, over=0.6)
+        box((1.6, 1.0, 6.5), F(0, 0.5, 0), 0x9a7b55)                                 # the saw bench
+        cyl(0.6, 6.0, F(0, 1.6, -3.0), 0x5a3a2a, segs=7, axis='along', stem=True)    # a log on it
+        cyl(1.5, 0.14, F(-0.07, 1.3, 1.6), 'grey', segs=12, axis='across')           # the saw
+        # the logs waiting, and the planks sawn and stacked to dry
+        log_stack(4.5, -7.0, 8.0, lite=lite)
+        log_stack(4.0, 4.5, 7.0, rows=(3, 2), lite=lite)
+        for k, (x, z, n) in enumerate(((-5.5, 5.0, 5), (-2.0, 8.5, 3), (-6.0, 10.5, 4))):
+            if lite:
+                box((2.2, 0.44 * n, 5.4), (x, 0.22 * n + 0.05, z), PLANK)
+                continue
+            for j in range(n):
+                box((2.2, 0.32, 5.4), (x, 0.24 + 0.44 * j, z), PLANK, yaw=0.06 * ((j + k) % 3 - 1))
+                with plain_parts():
+                    if j < n - 1:
+                        for dz in (-1.8, 1.8):
+                            box((2.2, 0.12, 0.2), (x, 0.46 + 0.44 * j, z + dz), POST)
+        # sheer legs over the second stack, a log slung from their head
+        AX, AZ, AH = 4.0, 4.5, 9.0
+        for sz in (-1, 1):
+            strut((AX - 0.6, -0.2, AZ + sz * 4.6), (AX, AH, AZ), 0.4, POST)
+        strut((AX - 6.0, -0.2, AZ), (AX, AH, AZ), 0.3, POST)                          # the back stay
+        box((0.7, 0.5, 0.7), (AX, AH, AZ), 'dark')
+        strut((AX, AH, AZ), (AX, 5.4, AZ), 0.16, 'dark')
+        cyl(0.5, 6.0, (AX, 4.9, AZ - 3.0), 0x5a3a2a, segs=7, axis='along', stem=True)
+        # the timber wagon out front, loaded
+        WX, WZ = 9.0, -1.0
+        box((2.4, 0.3, 6.4), (WX, 1.35, WZ), 0x9a7b55)
+        with plain_parts():
+            for sx in (-1, 1):
+                for sz in (-1, 1):
+                    cyl(0.95, 0.36, (WX + sx * 1.25 - (0.36 if sx > 0 else 0.0), 0.95, WZ + sz * 2.1), 0x2a2735, segs=10, axis='across')
+                    box((0.2, 1.5, 0.2), (WX + sx * 1.1, 2.2, WZ + sz * 2.6), POST)
+        for i, (dx, dy) in enumerate(((-0.55, 0.0), (0.55, 0.0), (0.0, 0.9))):
+            cyl(0.5, 7.0, (WX + dx, 2.0 + dy, WZ - 3.5), 0x5a3a2a, segs=7, axis='along', stem=True)
+        strut((WX, 1.3, WZ + 3.2), (WX, 0.3, WZ + 6.4), 0.3, 0x9a7b55)                 # its pole, down on the ground
+        # sawdust, and the cart track out to the road
+        if not lite:
+            sphere(1.8, (-0.2, 0.1, -0.5), 'tan', subdiv=1, scale=(1.3, 0.45, 1.0))
+        for q in range(14):
+            x0, x1 = -1.0 + 1.3 * q, -1.0 + 1.3 * (q + 1)
+            rowed(ground_poly([(x0, 0.08, 0.0), (x1, 0.08, 0.0), (x1, 0.08, 2.6), (x0, 0.08, 2.6)], [(0, 3, 2, 1)], 'gravel'), 26)
+    draped('yard', still)
+
+@piece(MILL_GROW)
+def mill_yard():
+    mill_yard_build(False)
+
+@piece(MILL_GROW)
+def mill_yard_lite():
+    mill_yard_build(True)
 
 # ---- TANGLE: the valley's woods ----------------------------------------------------------
 # The mill valley's sides are wooded: stands of its alders up the hillsides,
@@ -12596,9 +12831,9 @@ def kite_flyers():
 # the slope itself the pool lay tilted and the hill buried the house). The
 # spring spills white out of a dark arch under its front, down a short stone
 # channel into a pool banded as a pond is, its water below its coping, a
-# heron on the pool's road side; from the pool it runs level into a pipe
-# under a headwall by the kerb and comes out beyond the road as the brook's
-# head (set-brook-a). Metres, front (+X) to the road; on the left at yaw 180.
+# heron on the pool's road side; from the pool it runs level down an open
+# rill to the road's parapet by the kerb, under its arch, and comes out
+# beyond the road as the brook's head (set-brook-a). Metres, front (+X) to the road; on the left at yaw 180.
 SPRING_GROW = REAL * 1.6
 
 @piece(SPRING_GROW)
@@ -12645,19 +12880,19 @@ def springhouse():
         # the pool, reeds round its far side, the heron on its road side
         spring_pool(PX, PZ, PR, deep=(-1.0, 0.0), gap=1.3, stones=False, k=SPRING_GROW)   # nothing in front of the arch
         pool_heron(PX, PZ, PR, -40)                # grass behind it from the road, not the wall
-        # the outlet: the pool's water on toward the kerb in a short reach of
-        # the brook's channel, into a pipe under a low headwall; it comes out
-        # beyond the road as the brook's head (set-brook-a)
-        OX0, OX1 = PX + PR - 0.3, 7.5
+        # the outlet: the pool's water on to the road in an open rill, a
+        # length of the brook's channel half its width, to the foot of the
+        # road's parapet there (set-brook-parapet, tracks.js), under whose
+        # arch it goes; it comes out beyond the road as the brook's head
+        # (set-brook-a). It leaves the pool at its rim: begun further in,
+        # under the pool's own water, the two sheets lay a finger apart
+        # over half a metre and flickered through each other from far off.
+        OX0, OX1 = PX + PR * 1.1, 9.0
         before = set(bpy.context.scene.objects)
-        brook_channel(brook_frames([(OX0 + (OX1 - OX0) * t / 4, PZ, 1.1) for t in range(5)], None, None),
+        brook_channel(brook_frames([(OX0 + (OX1 - OX0) * t / 6, PZ, 1.35) for t in range(7)], None, None),
                       'join', 'culvert', k=SPRING_GROW)
-        for o in set(bpy.context.scene.objects) - before:   # a finger under the pool's water and coping,
-            o.location.z -= 0.06                            # which it starts under: level with them, they flickered
-        hx = OX1 + 0.4
-        rowed(box((0.8, 1.15, 3.6), (hx, 0.5, PZ), 'grey'), 20)          # a low headwall, no block at the kerb
-        rowed(box((1.0, 0.22, 3.9), (hx, 1.12, PZ), 'grey'), 12)
-        box((0.06, 0.75, 1.4), (hx - 0.42, 0.42, PZ), 0x2a2735)
+        for o in set(bpy.context.scene.objects) - before:   # a finger under the pool's coping, which it starts under
+            o.location.z -= 0.06
         for k, a_ in enumerate((100, 235, 260)):
             r = PR * 1.12
             cx, cz_ = PX + r * math.cos(math.radians(a_)), PZ + r * math.sin(math.radians(a_))
@@ -12668,11 +12903,16 @@ def springhouse():
     lot()
     for o in [o for o in bpy.context.scene.objects if o.get('turf')]:
         bpy.data.objects.remove(o, do_unlink=True)
+    # (the pool's white flecks lie still on it: six of them going round and
+    # round, each a few pixels from the road, were a twinkle in the corner of
+    # the eye, the flicker this piece was sent back for)
+    for k in range(4):
+        a = 0.5 + k * 1.7
+        c, sn = math.cos(a), math.sin(a)
+        fx, fz, y = PX + (1.0 + 0.3 * (k % 2)) * c, PZ + (1.0 + 0.3 * (k % 2)) * sn, BROOK_WY / SPRING_GROW + 0.05
+        quad = [(fx + (dx * c - dz * sn), y, fz + (dx * sn + dz * c)) for dx, dz in ((-0.12, -0.28), (0.12, -0.28), (0.1, 0.28), (-0.1, 0.28))]
+        rowed(skin(quad, [(0, 1, 2, 3)], 'white', (0, 1, 0)), 2)
     join_still('springhouse')
-    with animated('anim_spin:a=y:w=0.3#flecks', (PX, 0.2, PZ)):
-        for k in range(6):
-            a = k * 2 * math.pi / 6
-            box((0.55, 0.08, 0.25), (PX + 1.5 * math.cos(a), 0.2, PZ + 1.5 * math.sin(a)), 'white', yaw=a)
     # the weathervane on the ridge: a post, and an arrow with a cockerel turning on it
     vx = HX
     with animated('anim_spin:a=y:w=0.35#vane', (vx, RIDGE + 1.4, 1.6)):

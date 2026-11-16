@@ -1356,15 +1356,22 @@ export const TRACKS = {
     // The mill valley: wooded sides (set-mill-wood, -b, -c: three woods on the hills in `land`)
     // and the brook down its floor, set below its slate walls (set-brook-*,
     // laid in the world and cut into lengths). It rises at the springhouse
-    // beyond the north loop's top straight, goes under it in a pipe, comes
-    // out by the kerb and down the north loop to a stone culvert under the
-    // start straight, runs down that straight's left kerb to the line, under
-    // the second bridge with it, back under the road through a second
-    // culvert and round the outside of the first bend through the
-    // watermill's race, straight ahead of the grid, its wheel turning in the
-    // water to the oncoming cars, and over a sill into the duck pond under
-    // the first bridge's west span (`pond`; reeds, a willow and a jetty on
-    // its open half).
+    // beyond the north loop's top straight, runs down an open rill to the
+    // road and under it, comes out by the kerb and down the north loop,
+    // under the start straight, down that straight's left kerb to the line
+    // (a sluice and a timber footbridge on it there), under the second
+    // bridge with it, back under the road and round the outside of the
+    // first bend through the watermill's race, straight ahead of the grid,
+    // its wheel turning in the water to the oncoming cars, and over a sill
+    // into the duck pond under the first bridge's west span (`pond`; reeds
+    // and a willow on its far bank, a jetty, a second willow and a duck
+    // house by the shore the low road passes). The road CROSSES the brook
+    // three times, and at each a low stone parapet stands along the kerb on
+    // both sides (set-brook-parapet, its arch to the water), the brook
+    // running to the foot of one and away from the other (set-culvert, -b:
+    // the reach's last length, cut off along the road). The valley's timber
+    // is worked at the mill's yard on a bank outside the south loop
+    // (set-mill-yard).
     set: [
       { model: 'set-watermill', u: 0.0935, lat: 10.8, yaw: 0 },
       { model: 'set-mill-wood', u: 0.885, lat: -12, yaw: 180 },
@@ -1379,8 +1386,15 @@ export const TRACKS = {
       { model: 'set-mill-wood', u: 0.0959, lat: 22.37, yaw: 17.86 },
       { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
       { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
-      { model: 'set-culvert', u: 0.024, lat: -4.5, yaw: -147 },
-      { model: 'set-culvert', u: 0.0375, lat: 4.42, yaw: 33 },
+      { model: 'set-culvert-b', u: 0.024, lat: -4.5, yaw: -147 },
+      { model: 'set-culvert-b', u: 0.0375, lat: 4.42, yaw: 33 },
+      { model: 'set-brook-parapet', u: 0.84819, lat: 3.9, yaw: 0, y: 0.26 },
+      { model: 'set-brook-parapet', u: 0.86152, lat: -3.9, yaw: 180, y: 0.2 },
+      { model: 'set-brook-parapet', u: 0.024, lat: -3.9, yaw: 180 },
+      { model: 'set-brook-parapet', u: 0.0375, lat: 3.9, yaw: 0 },
+      { model: 'set-brook-parapet', u: 0.7324, lat: -3.9, yaw: 180, y: -0.19 },
+      { model: 'set-brook-parapet', u: 0.7334, lat: 3.9, yaw: 0 },
+      { model: 'set-mill-yard', u: 0.325, lat: -12.5, yaw: 180 },
       { model: 'set-brook-a', u: 0.74132, lat: 11.904, yaw: -76.76 },
       { model: 'set-brook-b', u: 0.89099, lat: -8.088, yaw: 4.96 },
       { model: 'set-brook-c', u: 0.94478, lat: -8.554, yaw: 2.15 },
@@ -1402,8 +1416,11 @@ export const TRACKS = {
     // standing far enough off both strands that its flank is low where it
     // meets the stream (nearer, it stood as a cliff and tipped the reach),
     // the mill's hill behind it, the spring's hill along the north loop's
-    // top straight, and hills outside the east loop and the north-east bend
+    // top straight, and hills outside the east loop and the north-east bend;
+    // the timber yard's bank outside the south loop's apex, low and flat on
+    // top, rising off the verge
     land: [
+      { kind: 'ridge', u: 0.325, lat: -16, len: 8, r: 15, h: 1.8, top: 0.35, near: 0.6 },
       { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 },
       { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 },
       { kind: 'ridge', u: 0.0538, lat: 32.83, yaw: 8.07, len: 23, r: 26, h: 9, top: 0.1, near: 10.5 },
