@@ -19062,12 +19062,11 @@ def spinning_top_body(x, z, k):
 @piece(0.7)
 def toy_dragon():
     # Gauntlet: the castle's toy dragon (a moulded one from the knights' set,
-    # about 25 cm to its wing tips, the set's biggest creature) perched
-    # along the outer gatehouse's battlements over the road (tracks.js
-    # turns it across the road and lifts it there), side on to the cars
-    # coming at it, its tail lying along the wall walk behind it. It flaps
-    # its wings, slowly, both in step, and now and then turns its head to
-    # the cars (+X) and back.
+    # the set's biggest creature) standing guard where the home straight
+    # points, side on to the road (+X), its head toward the cars coming at
+    # it (-Z). It flaps its wings, slowly, both in step, and now and then
+    # turns its head to the road and back. Its tail curls down to the floor
+    # behind it.
     GREEN, BELLY, WING, HORN = 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xfdf4de
     for z in (-1.1, 1.1):                                                     # the legs, claws forward
         for sx in (-1, 1):
@@ -19079,7 +19078,7 @@ def toy_dragon():
     bar((0, 2.9, -2.1), (0, 4.6, -3.0), 1.0, 1.0, GREEN)                      # the neck
     for z in (-1.4, -0.5, 0.4, 1.3):                                          # spines down the back
         cyl(0.32, 0.6, (0, 3.0, z), BELLY, r2=0.02, segs=4)
-    # the tail, thick to thin, down to its perch and curling off behind
+    # the tail, thick to thin, down to the floor and curling off behind
     tube([(0, 2.2, 1.5), (0.2, 1.7, 3.0), (0.8, 0.9, 4.2), (0.9, 0.5, 5.0)], 0.5, GREEN, res=3, bevel_res=1)
     tube([(0.9, 0.5, 5.0), (0.6, 0.32, 5.8), (-0.4, 0.32, 6.3)], 0.3, GREEN, res=3, bevel_res=0)
     box((0.9, 0.16, 0.9), (-0.85, 0.08, 6.45), BELLY, yaw=math.pi / 4)        # its spade
@@ -19767,6 +19766,11 @@ def run_arc(chain, value=None):
             f.write('\n')
     return arcs[chain]
 
+# The box draws a marble as a draw of its own, so its run keeps every marble
+# only where the racers sit beside it longest (the grid's racer, the span the
+# grid straight points at) and every third on these chains.
+RUN_SPARSE = ('wheel', 'summit', 'sky', 'vortex', 'loop', 'stair', 'home', 'climb', 'dive', 'wall', 'cross')
+
 def run_marbles(chain, seen, lite, after=None, lane=None):
     """A section's marbles: along `seen` (their centres, from the station or
     housing they come out of to the one they go into), then down, back under
@@ -19778,9 +19782,10 @@ def run_marbles(chain, seen, lite, after=None, lane=None):
     out of sight and the one coming on are the same marble: same place, same
     moment, same colour. For that every loop is a whole number of colour
     cycles long (padded under the floor) and every chain runs at one speed.
-    The lite build draws every third marble of the same conveyor. A `lane`
+    Every marble is round in both tiers (coarse ones read as gems). The
+    lite build draws every third marble on the RUN_SPARSE chains. A `lane`
     (0-3) takes only its own colour's marbles: the racer's sorter."""
-    mult = 3 if lite else 1
+    mult = 3 if lite and chain in RUN_SPARSE else 1
     s0 = run_arc(after) if after else 0.0
     vis = sum(math.dist(a, b) for a, b in zip(seen, seen[1:]))
     run_arc(chain, s0 + vis)
@@ -19791,11 +19796,11 @@ def run_marbles(chain, seen, lite, after=None, lane=None):
     deep = RUN_UNDER - (length - raw) / 2
     for k, q in enumerate(list(seen) + [(ex, deep, ez), (sx, deep, sz)]):
         marker('path_%s_%d' % (chain, k), q)
-    first, step = (0, mult) if lane is None else ((9 * lane) % 12 if lite else lane, 4 * mult)
+    first, step = (0, mult) if lane is None else ((9 * lane) % 12 if mult == 3 else lane, 4 * mult)
     for j in range(round(length / (step * RUN_GAP))):
         i = first + j * step
         with animated('anim_path:c=%s:p=%.4f:o=%.5f:f=0#%d' % (chain, length / RUN_SPEED, ((-s0 - i * RUN_GAP) / length) % 1.0, j), seen[1]):
-            sphere(RUN_MR, seen[1], RUN_COLORS[i % 4], subdiv=1 if lite else 2, flat=False)
+            sphere(RUN_MR, seen[1], RUN_COLORS[i % 4], subdiv=2, flat=False)
             bpy.ops.object.shade_smooth()
 
 def run_section(name, lite):
@@ -19806,6 +19811,8 @@ def run_section(name, lite):
         RUN_BUILD[name](lite)
     finally:
         RUN_LITE = False
+    if lite:                                     # the box's section stands as one part: a draw, not one a tile
+        join_still('run')
     ox, oz = RUN_ORIGIN[name]
     for o in bpy.context.scene.objects:
         if o.parent is None:
@@ -19923,7 +19930,7 @@ def screw_lift(cx, cz, H, RP, lite):
         step = 6 if lite else 3                    # a marble every so many turns of the flight
         for j in range(N // step):
             with animated('anim_path:c=lift%d:p=%.4f:o=%.5f:f=0#%d' % (k, N * 2 * math.pi / W, (j * step + k) / N, j), loop[1]):
-                sphere(RUN_MR, loop[1], RUN_COLORS[(j + k) % 4], subdiv=1 if lite else 2, flat=False)
+                sphere(RUN_MR, loop[1], RUN_COLORS[(j + k) % 4], subdiv=2, flat=False)
                 bpy.ops.object.shade_smooth()
     return HEAD
 
@@ -20350,10 +20357,10 @@ def marble_zigzag():
     for k, q in enumerate(seen):
         marker('path_zig_%d' % k, q)
     L = sum(math.dist(a, b) for a, b in zip(seen, seen[1:] + seen[:1]))
-    cnt = 2 if LITE else 5
+    cnt = 3 if LITE else 5
     for j in range(cnt):
         with animated('anim_path:c=zig:p=%.2f:o=%.4f:f=0#%d' % (L / 2.6, j / cnt, j), seen[1]):
-            sphere(R, seen[1], RUN_COLORS[j % 4], subdiv=1 if LITE else 2, flat=False)
+            sphere(R, seen[1], RUN_COLORS[j % 4], subdiv=2, flat=False)
             bpy.ops.object.shade_smooth()
 
 # ---- Gauntlet: the besiegers ----
@@ -21676,7 +21683,7 @@ def game_pawns():
     # past the loop, waiting their turn, and the card deck spilled beside
     # them: its pack on its side, the cards fanned out of it over the
     # board and two already stood up into a tent.
-    for i, c in enumerate(TOY):
+    for i, c in enumerate((0xa878e8,) + tuple(TOY[1:])):       # purple for the set's red: the room's wall is red
         pawn((0.35 * (i % 2), 0.0, -4.4 + 2.5 * i), c, k=1.3)
     box((2.5, 0.85, 1.8), (0.4, 0.425, 6.3), 0xe66a5a, yaw=0.25)                  # the pack, on its side
     box((0.06, 0.6, 1.3), (-0.84, 0.425, 6.62), 0xfdf4de, yaw=0.25)
@@ -21736,7 +21743,7 @@ def snake_humps(body):
     with animated('anim_sway:a=y:d=-28:p=8:r=0.65#head', neck[-1]):
         snake_face(neck[-1][0], neck[-1][1] + 0.35, neck[-1][2] + 0.3, body)
 
-for _c, _col in (('blue', 0x5a8fd8), ('red', 0xe66a5a)):
+for _c, _col in (('blue', 0x5a8fd8), ('purple', 0xa878e8)):
     PIECES['snake-humps-' + _c] = (lambda c: lambda: snake_humps(c))(_col)
     GROW['snake-humps-' + _c] = 1.0
 
@@ -21769,9 +21776,6 @@ def snake_jaws():
     box((2 * OX - 0.94, 0.3, 2.86), (0, top - 1.1, -D - 1.4), Y)                          # its lip
     box((2 * OX - 4.4, 1.0, 1.2), (0, top - 0.5, -D - 3.4), G)
     box((2 * OX - 4.34, 0.3, 1.26), (0, top - 0.85, -D - 3.4), Y)
-    box((2 * OX - 2.0, 2.2, 1.4), (0, top - 1.1 + 0.0, D + 0.7), G)                       # the back of the head, stepped in
-    for sx in (-1, 1):
-        box((OX - JX - 0.5, J, 1.4), (sx * (JX + OX) / 2, J / 2, D + 0.7), G)
 
 @piece(1.0)
 def ladder_stack():
@@ -22500,13 +22504,13 @@ def tourney_camp():
 
 # ---- round 19: Gauntlet's wooden horse and the besiegers' works ----
 
-@piece(0.8)
+@piece(0.5)
 def wooden_horse():
     # Gauntlet: the besiegers' gift, a wooden pull-along horse on its
-    # wheeled board (the toy box's biggest horse, about 28 cm to its ears)
-    # left outside the last corner where the home straight points, side on
-    # to the racers coming down it: its head to -Z, a hatch in its flank
-    # toward the road (+X), its pull string lying on the floor before it.
+    # wheeled board (under two of the set's knights tall to its ears) left
+    # inside the last corner before the castle, side on to the racers coming
+    # along the road south of it: its head to -Z, a hatch in its flank
+    # (+X), its pull string lying on the floor before it.
     WOODC, DARK, RED, GOLD = 0xc8955a, 0x7a5a3a, 0xe66a5a, 0xf2c14e
     box((1.9, 0.3, 5.4), (0, 0.95, 0), RED)                                     # the board
     for sx in (-1, 1):
@@ -22575,7 +22579,7 @@ def siege_works():
     merge_paint()
 
 lite_too('block-fortress', 'siege-camp', 'tilt-yard', 'tourney-camp', 'marble-zigzag', 'block-town',
-         'block-minster', 'snake-humps-blue', 'snake-humps-red')
+         'block-minster', 'snake-humps-blue', 'snake-humps-purple')
 
 # What lies about Gauntlet's floor (theme.cc playroomTrack: the scatter's
 # props, each under the lite tier's prop cap, square-edged).
