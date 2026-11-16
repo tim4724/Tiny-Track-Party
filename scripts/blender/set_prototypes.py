@@ -14419,7 +14419,7 @@ def sandstone_rock(at, k=1.0, yaw=0.0, color=0xc07a55):
     rock_lump(0.42 * k, (x + 0.7 * k * math.cos(yaw + 0.9), y + 0.1 * k, z - 0.7 * k * math.sin(yaw + 0.9)), 0xd39a70,
               (1.1, 0.6, 1.0), yaw + 0.6, seed=x - z)
 
-def canyon_wash_channel(pts, half, lip=0.36, seed=0.0, banked=lambda i: True, prof=None, tones=None):
+def canyon_wash_channel(pts, half, lip=0.36, seed=0.0, banked=lambda i: True, prof=None, tones=None, broken=None):
     """A dry wash's channel along the glTF (x, z) points `pts` (`half(i)` the
     gravel bed's half-width at each, 0 at a reach's end): the bed of
     grey-khaki gravel on the floor, and each side a bank cut down to it,
@@ -14427,7 +14427,9 @@ def canyon_wash_channel(pts, half, lip=0.36, seed=0.0, banked=lambda i: True, pr
     falling away to the sand a car's length out, sunk at the foot so no
     edge stands on the ground (`prof` is another section for the bank, as
     PROF below, the bed's edge first, and `tones` the (swatch, row) of each
-    strip of it); where `banked(i)` is false (a road fords
+    strip of it; `broken(i, side)` scales a row's bank, its height and how
+    far its face stands back, so a tall bank's edge is notched and slumped
+    and not one ruled slab); where `banked(i)` is false (a road fords
     the wash there) the banks die away to the bed. One sheet per colour.
     Returns the banks' tops [(x, z, side)] for what grows along them."""
     n = len(pts)
@@ -14447,7 +14449,9 @@ def canyon_wash_channel(pts, half, lip=0.36, seed=0.0, banked=lambda i: True, pr
         w *= sum(1.0 for j in (i - 1, i, i + 1) if 0 <= j < n and banked(j)) / 3.0
         rows_bed.append([(x - nx * h, 0.03, z - nz * h), (x + nx * h, 0.03, z + nz * h)])
         for sd in (-1, 1):
-            rows_bank[sd].append([(x + sd * nx * (h + o * w), y * w, z + sd * nz * (h + o * w)) for o, y in PROF])
+            bk, bo = broken(i, sd) if broken else (1.0, 0.0)
+            rows_bank[sd].append([(x + sd * nx * (h + (o + (bo if k else 0.0)) * w), y * w * (bk if k else 1.0),
+                                   z + sd * nz * (h + (o + (bo if k else 0.0)) * w)) for k, (o, y) in enumerate(PROF)])
             if i % 3 == 1 and h > 0.6 and banked(i):
                 tops.append((x + sd * nx * (h + 1.2), z + sd * nz * (h + 1.2), sd))
     for o in sheet(rows_bed, lambda i, j, nn: 'gravel', 'bed'):
@@ -14763,8 +14767,13 @@ def wash_road_reach():
         return 6.4 + 0.15 * math.sin(z * 0.6) + 0.1 * math.sin(z * 1.7 + 1.0)
     zs_ = [-L / 2 + L * i / N for i in range(N + 1)]
     LIP = 1.7
+    def broken(i, sd):                                           # a slump every fifth row, the rest in a slow swell
+        notch = (i + sd) % 5 == 0                                # (row to row up and down, it stood as a row of teeth)
+        return (1.0 + 0.09 * math.sin(0.6 * i + 1.1 * sd) - (0.2 if notch else 0.0),
+                0.25 * math.sin(0.5 * i + 2.0 * sd) + (0.35 if notch else 0.0))
     tops = canyon_wash_channel([(0.0, z) for z in zs_], lambda i: half(zs_[i]), lip=LIP, seed=5.0,
                                banked=lambda i: 1 < i < N - 1,
+                               broken=broken,
                                prof=((0.0, 0.03), (0.16, LIP * 0.55), (0.34, LIP), (1.1, LIP + 0.06), (3.0, LIP * 0.62), (6.0, -0.1)),
                                tones=(('brown', 22), ('salmon', 22), ('salmon', 12), ('salmon', 8), ('salmon', 6)))
     for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
@@ -14775,7 +14784,7 @@ def wash_road_reach():
             rock_lump(q, (x, q * 0.35, z), (0xd39a70, 'tan', 0xc07a55)[i % 3], (1.25, 0.6, 1.0), 0.9 * i, seed=11.0 + i)
         for i, (x, z, sd) in enumerate(tops):
             if abs(z) < L / 2 - 2.0 and not (LITE and i % 2):
-                brush((x, LIP - 0.12, z), 0.6 + 0.12 * (i % 3), yaw=i)
+                brush((x, LIP * broken(4 + 3 * (i // 2), sd)[0] - 0.14, z), 0.6 + 0.12 * (i % 3), yaw=i)
     group([o for o in bpy.context.scene.objects if o.type == 'MESH'], 'bed')
 
 @piece(1.0)
@@ -16349,7 +16358,7 @@ def stock_tank():
 @plain
 def loading_chute():
     # Crag: the ranch's shipping pen by the north straight (+X the road, Z
-    # along it): a post-and-rail pen, its gate on the stock trail, and out
+    # along it): a post-and-rail pen, and out
     # of its road side the loading chute, a plank ramp between railed sides
     # climbing to a wagon bed's height on its posts; a couple of head
     # waiting in the pen, hay by the fence.
@@ -16364,13 +16373,13 @@ def loading_chute():
         if a[0] == X1 and b[0] == X1 and -0.1 <= min(a[1], b[1]) and max(a[1], b[1]) <= 1.4:
             continue                                                             # the chute's mouth
         L = math.dist(a, b)
-        for y in (0.24, 0.5):
+        for y in ((0.5,) if LITE else (0.24, 0.5)):              # (the box's pen: one rail, no cleats on the ramp)
             box((0.06, 0.08, L), ((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2), RAIL, yaw=math.atan2(b[0] - a[0], b[1] - a[1]))
     # the chute: its floor climbing toward the road, cleats across it, a
     # railed side each hand, the head on two tall posts
     CZ, CW, CL, CH = 0.65, 0.5, 2.6, 0.75
     beam((X1, 0.0, CZ), (X1 + CL, CH, CZ), 2 * CW, RAIL, d=0.08)
-    for i in range(1, 5):
+    for i in (() if LITE else range(1, 5)):
         box((0.08, 0.06, 2 * CW), (X1 + CL * i / 5, CH * i / 5 + 0.06, CZ), TIMBER)
     for sz in (-1, 1):
         for i in range(3):
@@ -16386,41 +16395,6 @@ def loading_chute():
     cow((-1.6, 0, -1.0), yaw=0.5, life='anim_sway:a=z:d=30:p=7.6:r=0.74#a')
     cow((-2.3, 0, 1.2), yaw=-2.4, coat=0x5a3a28, life='anim_sway:a=z:d=28:p=9.1:r=0.78#b')
     join_still('chute')
-
-def stock_trail_build(end):
-    # Crag: a length of the ranch's stock trail beside the road (+X the
-    # road, Z along it), 16 units: two wheel ruts worn pale into the range
-    # and the range fence along their far side, post and two rails as the
-    # start's is. Laid end to end along a verge (each a chord of the road's
-    # curve) it leads to a watering place or the shipping pen; an END
-    # length is the trail's last, its ruts thinning out to nothing and its
-    # fence stopping at a braced post (-Z). Draped: ruts and posts lie on
-    # the ground as drawn. The lite build keeps one rail and every other post.
-    L, STEP = 16.0, 2.0
-    zs = [-L / 2 + STEP * i for i in range(int(L / STEP) + 1)]
-    def fade(z):
-        return max(0.0, min(1.0, (z + L / 2 - 1.0) / 6.0)) if end else 1.0
-    def trail():
-        for rx in (-0.42, 0.42):
-            rows = [[(rx - 0.17 * fade(z), 0.03, z), (rx + 0.17 * fade(z), 0.03, z)] for z in zs[1 if end else 0:]]
-            for o in sheet(rows, lambda i, j, nn: 0xe3cfa4, 'rut'):
-                rowed(o, 8)
-        FXC = -1.5
-        fz = [z for z in zs if not end or z >= -2.0]
-        for i, z in enumerate(fz):
-            if LITE and i % 2 and 0 < i < len(fz) - 1:
-                continue
-            box((0.1, 0.56, 0.1), (FXC, 0.28, z), TIMBER)
-        for a, b in zip(fz, fz[1:]):
-            for y in ((0.46,) if LITE else (0.22, 0.46)):
-                box((0.05, 0.07, b - a), (FXC, y, (a + b) / 2), 0x9a7b55)
-        if end:
-            strut((FXC, 0.5, fz[0]), (FXC, 0.0, fz[0] - 0.8), 0.08, TIMBER)      # the end post's brace
-    with plain_parts():
-        draped('trail', trail)
-
-PIECES['stock-trail'], GROW['stock-trail'] = (lambda: stock_trail_build(False)), 1.0
-PIECES['stock-trail-end'], GROW['stock-trail-end'] = (lambda: stock_trail_build(True)), 1.0
 
 @piece(1.0)
 def ranch_lane():
@@ -16674,9 +16648,10 @@ def crag_saguaros():
     # sky (the stand that stood here before the rim came to the verge read as
     # the start's landmark). They drape, so they stand on the ground as drawn.
     def stand():
-        saguaro((0.0, 0, 0.0), 4.6, arms=((0.3, 0.36, 0.42), (3.5, 0.48, 0.36), (1.9, 0.6, 0.26)), bloom=True)
-        saguaro((1.3, 0, -1.6), 3.3, arms=((2.2, 0.45, 0.36),))
-        saguaro((-1.2, 0, 2.0), 2.6, arms=((4.6, 0.5, 0.34),))
+        ribs = (3, 2) if LITE else (5, 4)                        # the box's stand in the scatter's few ribs
+        saguaro((0.0, 0, 0.0), 4.6, arms=((0.3, 0.36, 0.42), (3.5, 0.48, 0.36), (1.9, 0.6, 0.26)), bloom=not LITE, ribs=ribs)
+        saguaro((1.3, 0, -1.6), 3.3, arms=((2.2, 0.45, 0.36),), ribs=ribs)
+        saguaro((-1.2, 0, 2.0), 2.6, arms=((4.6, 0.5, 0.34),), ribs=ribs)
         ocotillo((1.6, 0, 1.4), 1.8, seed=2)
         brush((-1.4, 0, -1.1), 0.9)
         brush((2.4, 0, 0.3), 0.7, yaw=1.1)
@@ -17537,31 +17512,38 @@ def crag_butte(tiers, talus, reach, extent, seed, pale=0, jag=0.07, wrap=None):
             bands.append((y0 + (y1 - y0) * i / n, y0 + (y1 - y0) * (i + 1) / n, CRAG_CLIFF if dark else CRAG_PALE, 1.0))
     bands.append((c1, top, CRAG_CLIFF, 0.08))
     strata_massif(M, -extent, extent, -extent, extent, bands, step=2.2, tol=0.3, jitter=0.35, summits=False)
-    # stones fallen off the cliff lying on the talus, in its colour (dark
-    # ones read as holes), each dropped onto the strata as built
+    # Rock fallen off the cliff, where it comes to rest: a few fans of it at
+    # the talus's foot, each a block and what broke off it, tumbled every
+    # way and a third bedded in the slope, in the cliff's own rock (a row of
+    # its ramp, a light one: shaded by height, a stone at the foot of a tall
+    # piece went near black, a hole in the slope from the road). Lumps, never boxes: a box on the smooth slope read as a
+    # dark brick stuck to it, and sunk to its top as a shard.
     import random
     ground = built_ground()
     rnd = random.Random(seed)
     with plain_parts():
-        n = 0
+        fans = 0
         for _ in range(4000):
-            if n >= int(extent * 0.8):
+            if fans >= max(1, int(extent * 0.07)):
                 break
             x, z = rnd.uniform(-extent, extent), rnd.uniform(-extent, extent)
-            if not 0.6 < M(x, z) < c0 - 0.6:
+            if not 0.15 < M(x, z) < 0.8 * k:                    # the talus's very foot (higher, one sat alone on the smooth face)
                 continue
-            q = rnd.uniform(0.35, 0.8)
-            ys = [ground(x + dx, z + dz) for dx in (-0.6 * q, 0.6 * q) for dz in (-0.5 * q, 0.5 * q)]
-            if None in ys or max(ys) - min(ys) > 0.25 * q:
-                continue                                        # astride a step or on a steep pitch: it would hang
-            # bedded: its foot under the slope's lowest point below it (laid on
-            # that point, its downhill edge hung over the slope as a floating
-            # slab), its top two thirds standing clear of the highest (sunk to
-            # its top, all that showed of a stone was a sliver of its shaded
-            # face, a dark shard in the smooth slope)
-            box((q * 1.5, q * 0.7, q * 1.1), (x, max(ys) + 0.1 * q, z), CRAG_TALUS, yaw=rnd.uniform(0, 3.1),
-                roll=rnd.uniform(-0.15, 0.15), pitch=rnd.uniform(-0.1, 0.1))
-            n += 1
+            placed = 0
+            for j in range(rnd.randint(2, 4)):
+                q = rnd.uniform(0.3, 0.4) if j == 0 else rnd.uniform(0.18, 0.3)   # small: a big one seen from its shaded side is a dark patch
+                a, d = rnd.uniform(0, 6.28), 0.0 if j == 0 else rnd.uniform(0.6, 1.5)
+                sx, sz = x + d * math.cos(a), z + d * math.sin(a)
+                ys = [ground(sx + dx, sz + dz) for dx in (-0.5 * q, 0.5 * q) for dz in (-0.5 * q, 0.5 * q)]
+                if None in ys or max(ys) - min(ys) > 0.5 * q:
+                    continue
+                o = rock_lump(q, (sx, min(ys) + 0.22 * q, sz), CRAG_CLIFF,
+                              (rnd.uniform(0.9, 1.4), rnd.uniform(0.55, 0.85), rnd.uniform(0.8, 1.2)), rnd.uniform(0, 3.1),
+                              seed=seed + 7.0 * fans + j)
+                o.rotation_euler = (rnd.uniform(-0.4, 0.4), rnd.uniform(-0.4, 0.4), o.rotation_euler.z)
+                rowed(o, 2 + 2 * (j % 3))
+                placed += 1
+            fans += placed > 0
 
 def built_ground():
     """The height of the meshes built so far at (x, z) (None off them): what
@@ -17604,40 +17586,17 @@ def rimrock_mesa():
     # (no blocks on the apron: its stepped slope buries all but their shaded
     # faces, which read as holes torn in the sand)
     crag_rubble(((-16.0, -32.0, 0.8), (-22.0, 26.0, 0.9)))           # on the east side, off both roads
-    # The gap of sky between the table and the butte that broke away, and
-    # across it a plank-and-rope footbridge, sagging: the track's one image
-    # of someone having been up there. Its ends are found on the rock as
-    # built (the rims weather in and out), each a pair of posts set back
-    # from the edge.
+    # On the butte that broke away, past the gap of sky, a balanced rock: a
+    # boulder three units across left standing on a neck of softer
+    # stone at the butte's edge toward the S, the mesa's one mark from the
+    # seat. Stood on the rock as built.
     ground = built_ground()
-    C1, C2 = (-5.0, 9.0), (12.5, -24.0)
-    D = math.dist(C1, C2)
-    ux, uz = (C2[0] - C1[0]) / D, (C2[1] - C1[1]) / D
-    hs = [(t, ground(C1[0] + ux * t, C1[1] + uz * t) or -9.0) for t in [0.25 * i for i in range(int(D / 0.25) + 1)]]
-    ta = max(t for t, h in hs if h > 12.3 and t < D * 0.5) - 0.7              # the table's rim, a step in from it
-    tb = min(t for t, h in hs if h > 13.3 and t > D * 0.5) + 0.7              # the butte's
-    ya = next(h for t, h in hs if t >= ta)
-    yb = next(h for t, h in hs if t >= tb)
-    span = tb - ta
-    yaw = math.atan2(ux, uz)
-    def at(t, dy=0.0, side=0.0):
-        f = (t - ta) / span
-        return (C1[0] + ux * t + uz * side, ya + (yb - ya) * f - 1.6 * 4 * f * (1 - f) + dy, C1[1] + uz * t - ux * side)
+    bx, bz = 13.5, -22.0
+    by = ground(bx, bz)
     before = set(bpy.context.scene.objects)
-    n = max(8, int(round(span / 1.1)))
-    ts = [ta + span * i / n for i in range(n + 1)]
-    for a, b in zip(ts, ts[1:]):                                                 # the planks, a gap between each
-        m = (a + b) / 2
-        box((0.9, 0.12, 0.62 * (b - a)), at(m), 0x9a7b55, yaw=yaw, pitch=math.atan2(at(b)[1] - at(a)[1], b - a))
-    for sd in (-0.5, 0.5):
-        for a, b in zip(ts[::3], ts[3::3] + ([ts[-1]] if n % 3 else [])):        # the hand ropes and the bearers
-            strut(at(a, 0.8, sd), at(b, 0.8, sd), 0.09, ROPE)
-            strut(at(a, -0.05, sd * 0.8), at(b, -0.05, sd * 0.8), 0.09, ROPE)
-        for t in ts[3:-1:3]:                                                     # the hangers
-            strut(at(t, -0.05, sd * 0.8), at(t, 0.8, sd), 0.07, ROPE)
-        for t, y0 in ((ta, ya), (tb, yb)):                                       # the posts, sunk in the rock
-            box((0.2, 1.7, 0.2), (at(t, 0, sd)[0], y0 + 0.35, at(t, 0, sd)[2]), TIMBER, yaw=yaw)
-    group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'bridge')
+    rowed(rock_lump(0.6, (bx, by + 0.5, bz), CRAG_PALE, (0.9, 1.6, 0.9), 0.4, seed=5.0), 10)
+    rowed(rock_lump(1.4, (bx + 0.1, by + 2.2, bz - 0.05), CRAG_CLIFF, (1.25, 0.85, 1.05), 0.9, seed=9.0), 8)
+    group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'balanced')
     # a hawk riding the air off the north end, where the loop rounds it
     hawk_circle((2.0, 27.0), 9.0, 6.0, 17.0)
 
@@ -18237,6 +18196,12 @@ def sidewinder_dive(support):
     draped('dive', build)
 
 PIECES['pipeline-dive'], GROW['pipeline-dive'] = (lambda: sidewinder_dive(True)), 1.0
+# The span that turns out behind the pumping wells: in the lite tier, which
+# leaves that detour out, the trunk line goes under the ground here instead
+# (its lite build is the dive, on the span's own anchor and heading), and
+# comes up again where the south run does.
+PIECES['pipeline-8-under'], GROW['pipeline-8-under'] = (lambda: sidewinder_span(8.0)), 1.0
+PIECES['pipeline-8-under-lite'], GROW['pipeline-8-under-lite'] = (lambda: sidewinder_dive(True)), 1.0
 PIECES['pipeline-rise'], GROW['pipeline-rise'] = (lambda: sidewinder_dive(False)), 1.0
 
 @piece(1.0)
@@ -18308,8 +18273,7 @@ def pipe_yard():
     for dz in (-0.55, 0.55):
         box((0.12, 2.3, 0.12), (SX, 1.15, SZ + dz), 'white')
     box((0.08, 1.0, 1.5), (SX, 1.95, SZ), 'white')
-    if not LITE:
-        emblem((SX - 0.06, 1.95, SZ), math.pi / 2 + 1.2, 0.36)
+    emblem((SX - 0.06, 1.95, SZ), math.pi / 2 + 1.2, 0.36)
     join_still('yard')
 
 @piece(1.0)
@@ -18765,7 +18729,7 @@ def headframe():
 
 lite_too('boomtown-north', 'boomtown-south', 'miners-camp', 'stamp-mill', 'headframe', 'tailings-dump',
          'ranch-herd', 'ranch-herd-east', 'wash-bed', 'wash-bed-ford', 'wash-bed-end', 'wash-road-reach',
-         'pipe-yard', 'ore-line', 'water-works', 'stock-trail', 'stock-trail-end')
+         'pipe-yard', 'ore-line', 'water-works', 'loading-chute', 'crag-saguaros')
 
 # ====================================================================================
 # PLAYROOM
