@@ -1000,7 +1000,9 @@ export const TRACKS = {
       // each rookery turned so its white fronts face the road and the car
       // coming at it: one on the moraine outside the bottom loop, dead ahead
       // of the long raised straight, one below the NE bend's crest
-      { model: 'set-penguin-group', u: 0.645, lat: -10, yaw: 145 },
+      // (the first as near the kerb as its slope's foot lets it stand; the
+      // second stays up its slope, where it shows over the hump's kerb)
+      { model: 'set-penguin-group', u: 0.645, lat: -7.5, yaw: 145 },
       { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
       // the terminal moraine either side of that rookery, on the loop's
       // outside verge: slate erratics and stranded blocks of blue ice (built
@@ -1033,7 +1035,14 @@ export const TRACKS = {
       // the expedition's fuel depot just past the line, and its flagged
       // route on along the start straight's outside verge
       { model: 'set-glacier-depot', u: 0.012, lat: -8.5, yaw: 180 },
-      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 }
+      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 },
+      // serac fields where the ice breaks up on the outside verge of a bend:
+      // dead ahead of the start straight, outside the bend down to the east
+      // leg, and at the nunatak's foot on the bend back to the line (a wash
+      // of the glacier's blue under each, `land`)
+      { model: 'set-glacier-seracs-a', u: 0.135, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-seracs-b', u: 0.3, lat: -8.5, yaw: 180 },
+      { model: 'set-glacier-seracs-a', u: 0.815, lat: 8.5, yaw: 20 }
     ],
     // Each piece stands where a racer reads it from the chase camera (the
     // see:landmarks probe), not where the old sight-line score put it: the
@@ -1080,6 +1089,10 @@ export const TRACKS = {
       // stand into the picture however close they pass
       { kind: 'ridge', u: 0.185, lat: 0, z: -35, yaw: 30, len: 12, r: 7, h: 1.6 },
       { kind: 'ridge', u: 0.185, lat: -18, z: 9, len: 18, r: 7, h: 1.8 },
+      // the ice showing blue through the snow under each serac field
+      { kind: 'paint', u: 0.135, lat: -10, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
+      { kind: 'paint', u: 0.3, lat: -10, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
+      { kind: 'paint', u: 0.815, lat: 10, yaw: 20, len: 10, r: 4, w: 5, tint: 0x9cc6f4 },
       // nothing seeded on the verge in front of the penguin chute's pool: a
       // boulder there stood between the run to the line and the pool
       { kind: 'clear', u: 0.955, lat: -9.5, len: 30, r: 5 },

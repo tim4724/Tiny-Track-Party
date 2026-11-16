@@ -7426,7 +7426,7 @@ def penguin_group_build(apart):
     # Each placement's yaw turns +X to the racer where the lap reads it best.
     H = set_ground('penguin-group')
     S = 1.45                                                       # the crowd's size over a real penguin's
-    CX, RX, RZ, K = -2.6, 5.0, 5.0, 7
+    CX, RX, RZ, K = -2.0, 3.8, 4.0, 7                              # close: spread wider, the knots read as stray pegs
     for i in range(K):
         # a sunflower spread over an oval, so the knots are even without a grid
         r, a = math.sqrt((i + 0.5) / K), i * 2.39996 + 0.4
@@ -7796,7 +7796,12 @@ def cargo_sledge(x, z, load):
             box((0.3, 0.05, 0.3), (x + dx, 0.87, z + dz), DARK)
 
 @piece(1.0)
-def glacier_airstrip():
+def glacier_airstrip_lite():
+    # the box's airstrip: each edge marker one red block, no corduroy
+    glacier_airstrip(True)
+
+@piece(1.0)
+def glacier_airstrip(lite=False):
     # Glacier: the expedition's airstrip on the snow inside the top loop,
     # beside the top straight under the range, at its real size beside a car:
     # a runway of packed snow, groomed into corduroy (a pale-blue strip read
@@ -7814,7 +7819,7 @@ def glacier_airstrip():
     # (the white ramp's), its corduroy the groomer's tiller left down it
     rowed(snowy(box((Wd, 0.06, L), (0.0, 0.03, 0.0), 'white')), 11)
     with plain_parts():
-        for k in range(5):
+        for k in range(0 if lite else 5):
             rowed(box((0.16, 0.02, L - 0.6), ((k - 2) * 0.6, 0.065, 0.0), 'white'), 17)
     # the snow the groomer pushed off it, banked low along both edges
     for sd in (-1, 1):
@@ -7830,6 +7835,9 @@ def glacier_airstrip():
             if sd > 0 and k % 2:                # the road's side: every other, not a fence
                 continue
             x = sd * (Wd / 2 + 0.45)
+            if lite:
+                box((0.34, 0.52, 0.34), (x, 0.26, zz), 0xff5040)
+                continue
             box((0.34, 0.2, 0.34), (x, 0.1, zz), 0xff5040)
             box((0.34, 0.16, 0.34), (x, 0.28, zz), 0xfff6eb)
             box((0.34, 0.16, 0.34), (x, 0.44, zz), 0xff5040)
@@ -9011,7 +9019,7 @@ def snow_boulder():
         stone(x, z, s, yaw, seed, squat=0.8, rock=('lavender', 'lavender'))
     join_still('boulder')
 
-def alp(cx, cz, h, r, seed, stretch=1.0, turn=0.0, lean=(0.0, 0.0), sun=(0.0, 1.0, 0.0), sink=2.0):
+def alp(cx, cz, h, r, seed, stretch=1.0, turn=0.0, lean=(0.0, 0.0), sun=(0.0, 1.0, 0.0), sink=2.0, shade_row=None):
     """One alpine peak of a range running along Z, standing `h` over the land
     it drapes on, its foot `r` across (cx, cz) and `stretch` times that along
     the range. Four aretes fall from the summit: two along the range, which
@@ -9023,7 +9031,10 @@ def alp(cx, cz, h, r, seed, stretch=1.0, turn=0.0, lean=(0.0, 0.0), sun=(0.0, 1.
     r) off the foot's centre; the foot sinks `sink` under the snow. Every
     quad breaks into two facets painted alike, by the quad's normal (paint_of
     below); the foot's are snow whatever their slope, so the peak stands in
-    the land's snow, not on a dark rim. DRAPED, so y = 0 is the land as
+    the land's snow, not on a dark rim. `shade_row` paints the faces turned
+    from the sun in the grey ramp's lifted slate at that row (rowed()), where
+    the swatch's own slate under the bake's shade reads near black (Glacier,
+    whose range stands against bare snow). DRAPED, so y = 0 is the land as
     drawn."""
     NS = 16
     T = (0.0, 0.1, 0.2, 0.32, 0.46, 0.62, 0.78, 0.9, 1.0)
@@ -9094,6 +9105,10 @@ def alp(cx, cz, h, r, seed, stretch=1.0, turn=0.0, lean=(0.0, 0.0), sun=(0.0, 1.
                 polys.append((col, list(t)))
     for o in colored_faces(polys, 'alp'):
         snowy(o, 0.12 if o['swatch'] == 'white' else 0.35)
+        if shade_row is not None and o['swatch'] == SHADE:
+            rowed(paint(o, ROCK), shade_row)
+
+GLACIER_SHADE = 28   # the row Glacier's turned rock is held at (alp(): shade_row)
 
 @piece(1.0)
 def glacier_peaks():
@@ -9119,12 +9134,12 @@ def glacier_peaks():
         # side or the other, so its skyline breaks in two teeth, not one cone.
         side = 1.0 if k % 2 else -1.0
         def build():
-            alp(cx, cz, h, r, seed, stretch, turn, lean, sun)
+            alp(cx, cz, h, r, seed, stretch, turn, lean, sun, shade_row=GLACIER_SHADE)
             alp(cx + 0.15 * r, cz + side * 0.5 * r * stretch, 0.66 * h, 0.6 * r, seed + 50.0, stretch, turn + 0.5,
-                (0.0, 0.0), sun)
+                (0.0, 0.0), sun, shade_row=GLACIER_SHADE)
         draped('peak%d' % k, build)
 
-def peak_range(sun, peaks):
+def peak_range(sun, peaks, shade_row=None):
     """A range of alp() peaks, one part each, every one with a lesser summit
     on its shoulder along the range, to one side or the other, so its skyline
     breaks in two teeth, not one cone (Glacier's range, glacier_peaks). Each
@@ -9133,9 +9148,9 @@ def peak_range(sun, peaks):
     for k, (cx, cz, h, r, stretch, seed, turn, lean) in enumerate(peaks):
         side = 1.0 if k % 2 else -1.0
         def build():
-            alp(cx, cz, h, r, seed, stretch, turn, lean, sun)
+            alp(cx, cz, h, r, seed, stretch, turn, lean, sun, shade_row=shade_row)
             alp(cx + 0.15 * r, cz + side * 0.5 * r * stretch, 0.62 * h, 0.6 * r, seed + 50.0, stretch, turn + 0.5,
-                (0.0, 0.0), sun)
+                (0.0, 0.0), sun, shade_row=shade_row)
         draped('peak%d' % k, build)
 
 # ---- Glacier's terminal moraine, depot and marked route ---------------------------
@@ -9178,6 +9193,8 @@ def glacier_moraine(rows, seed):
     for o in set(bpy.context.scene.objects) - before:
         if o.get('swatch') in ('sky', 'blue'):     # the ice keeps its blue down the ramp
             snowy(o, 0.35)
+        elif o.get('swatch') == SHADE:             # the erratics' turned side, as the range's
+            rowed(paint(o, ROCK), GLACIER_SHADE)
     join_still('moraine')
     x, z = rows[0][:2]
     draped('patch', lambda: box((0.6, 0.1, 0.6), (x, -0.06, z), 0xf3f7fb))
@@ -9211,7 +9228,109 @@ def glacier_nunatak():
     # range's: +X east, away from the road, so it takes the range's sun.
     peak_range((0.140, 0.979, 0.148), (
         (0.0, 2.0, 7.5, 9.5, 1.5, 211.0, 0.2, (0.05, 0.05)),
-        (2.5, -14.0, 4.6, 7.0, 1.4, 213.0, -0.2, (0.0, 0.05))))
+        (2.5, -14.0, 4.6, 7.0, 1.4, 213.0, -0.2, (0.0, 0.05))), shade_row=GLACIER_SHADE)
+
+def serac(x, z, s, h, yaw, seed):
+    """A serac: a tower of blue ice `h` tall on a foot `s` across, broken off
+    the glacier and left standing: five-sided, twisting and leaning a little
+    as it rises to a broken top, its foot sunk in the snow. Blue where a
+    facet catches the light, deep blue where it turns from it, snow on what
+    faces the sky."""
+    N = 5
+    la = 2.1 * seed
+    lx, lz = 0.2 * s * math.cos(la), 0.2 * s * math.sin(la)
+    def ring(r, y, turn, f, jag):
+        return [(x + lx * f + r * (1 + 0.3 * jitter(k, int(turn * 10), seed)) * math.cos(yaw + turn + 2 * math.pi * k / N),
+                 y * (1 + jag * jitter(k, 7, seed)),
+                 z + lz * f + 0.85 * r * (1 + 0.3 * jitter(k, int(turn * 10) + 3, seed)) * math.sin(yaw + turn + 2 * math.pi * k / N))
+                for k in range(N)]
+    rings = [ring(0.72 * s, -0.35, 0.0, 0.0, 0.0), ring(0.64 * s, 0.5 * h, 0.15, 0.5, 0.2), ring(0.5 * s, 0.88 * h, 0.3, 1.0, 0.25)]
+    top = (x + lx * 1.1, 0.93 * h, z + lz * 1.1)
+    tris = []
+    for a, b in zip(rings, rings[1:]):
+        for k in range(N):
+            k1 = (k + 1) % N
+            tris += [(a[k], a[k1], b[k]), (a[k1], b[k1], b[k])]
+    tris += [(rings[-1][k], rings[-1][(k + 1) % N], top) for k in range(N)]
+    polys = []
+    for t in tris:
+        n = face_normal(t)
+        out = [sum(q[m] for q in t) / 3 - o for m, o in enumerate((x + lx * 0.5, 0.45 * h, z + lz * 0.5))]
+        if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0:
+            t, n = t[::-1], tuple(-v for v in n)
+        if n[1] > 0.7:
+            col = SNOW
+        else:
+            col = 'sky' if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.2 else 'blue'
+        polys.append((col, list(t)))
+    for o in colored_faces(polys, 'serac'):
+        snowy(o, 0.45 if o['swatch'] == 'white' else 0.35)
+
+def ice_crack(pts, w):
+    """A short crevasse through the (x, z) points, `w` wide at its middle:
+    lips of snow, the ice's wall, the dark slot (glacier_crevasses' crack,
+    a row a point)."""
+    rows = []
+    for i, (x, z) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        m = math.hypot(tx, tz) or 1.0
+        nx, nz = tz / m, -tx / m
+        ww = w * math.sin(math.pi * i / (len(pts) - 1)) ** 0.5 + 0.04
+        prof = ((-ww - 0.45, -0.03), (-ww, 0.12), (-ww * 0.45, 0.04), (ww * 0.45, 0.04), (ww, 0.12), (ww + 0.45, -0.03))
+        rows.append([(x + nx * d, y, z + nz * d) for d, y in prof])
+    for o in sheet(rows, lambda i, j, n: (SNOW, 'sky', 'blue', 'sky', SNOW)[j], 'crack'):
+        if o['swatch'] == 'white':
+            snowy(o, 0.45)
+        else:
+            rowed(o, 22)
+
+# Glacier's serac fields, on the outside verge of a bend where the ice breaks
+# up as it turns: each (seed, the towers (x, z, foot, height), the stranded
+# blocks (x, z, size), the cracks ((points), widest)) in the piece's frame,
+# +X to the road. The tallest stand at the back, so the near ones hide none.
+SERACS = {
+    'a': (5.0,
+          ((-3.4, -5.6, 1.5, 3.0), (-1.2, -3.6, 1.2, 2.0), (-4.2, -1.4, 1.7, 3.3), (-1.8, 0.9, 1.1, 1.7),
+           (-3.2, 3.3, 1.5, 2.7), (-0.6, 5.0, 1.0, 1.4), (-4.6, 6.3, 1.3, 2.2), (0.6, -6.8, 0.9, 1.2)),
+          ((1.3, -1.8, 1.1), (0.8, 2.9, 0.9), (-2.4, 7.9, 1.2)),
+          ((((0.9, -5.0), (0.2, -3.2), (0.0, -1.2), (0.3, 0.8), (-0.1, 2.6)), 0.34),
+           (((-6.0, -7.5), (-6.4, -5.0), (-6.3, -2.5), (-6.6, 0.0), (-6.2, 2.5), (-6.5, 5.0)), 0.4))),
+    'b': (23.0,
+          ((-2.8, -6.4, 1.3, 2.3), (-4.4, -3.8, 1.6, 3.2), (-1.4, -1.6, 1.0, 1.5), (-3.6, 0.6, 1.4, 2.6),
+           (-0.9, 2.6, 1.2, 1.9), (-4.0, 4.6, 1.7, 3.1), (-1.6, 6.6, 1.1, 1.6)),
+          ((1.0, -4.2, 1.0), (0.9, 0.4, 1.2), (0.7, 5.2, 0.9), (-5.6, 7.4, 1.3)),
+          ((((0.6, -2.6), (0.1, -1.0), (0.4, 0.9), (0.0, 2.6), (0.3, 4.0)), 0.3),
+           (((-6.2, -6.0), (-5.9, -3.5), (-6.3, -1.0), (-6.0, 1.5), (-6.4, 4.0)), 0.42))),
+}
+
+def glacier_seracs(key, lite=False):
+    """One of Glacier's serac fields (SERACS): towers of blue ice at a car's
+    scale, two or three cars tall at most, stranded blocks between them and
+    the road, and the cracks the ice opens in round them. Draped: it lies on
+    the verge as drawn. The box's build is the towers alone, every other one."""
+    seed, towers, blocks, cracks = SERACS[key]
+    def build():
+        for i, (x, z, s, h) in enumerate(towers):
+            if lite and i % 2:
+                continue
+            serac(x, z, s, 0.85 * h, 1.3 * i + seed, seed + 0.61 * i)
+        if lite:
+            return
+        for i, (x, z, s) in enumerate(blocks):
+            stone(x, z, s, 0.9 * i + seed, seed + 3.3 + 0.37 * i, squat=1.25, rock=('sky', 'blue'), y=-0.1 * s)
+        for o in bpy.context.scene.objects:
+            if o.name.startswith('stone') and o.get('swatch') in ('sky', 'blue'):
+                snowy(o, 0.35)
+        for pts, w in cracks:
+            ice_crack(pts, w)
+    draped('seracs', build)
+
+for _k in SERACS:
+    for _lite in (False, True):
+        _n = 'glacier-seracs-%s%s' % (_k, '-lite' if _lite else '')
+        PIECES[_n] = (lambda k, lite: lambda: glacier_seracs(k, lite))(_k, _lite)
+        GROW[_n] = 1.0
 
 def glacier_wand(x, z, color, tag, h=2.1):
     """A route marker: a bamboo wand and its flag flying to +X (toward the
@@ -9237,7 +9356,12 @@ def glacier_route_flags():
     draped('trail', trail)
 
 @piece(1.0)
-def glacier_depot():
+def glacier_depot_lite():
+    # the box's depot: six-sided drums without their lids, no jerrycans
+    glacier_depot(True)
+
+@piece(1.0)
+def glacier_depot(lite=False):
     # Glacier: the expedition's fuel depot on the outside verge just past the
     # line, where its marked route sets out: drums stood two deep on their pallets, red and blue, more lying
     # on a rack beside them, a loaded cargo sledge and one of drums at the
@@ -9252,14 +9376,16 @@ def glacier_depot():
             for i in range(5 - row):
                 c = (0xcf534f, 0xcf534f, 0x3f7bd9)[(i + row) % 3]
                 for j in range(2):
-                    cyl(0.26, 0.66, (-1.6 + 1.25 * row + 0.56 * j, 0.12, -1.7 + 0.64 * i), c, segs=10, stem=True)
-                    box((0.36, 0.05, 0.36), (-1.6 + 1.25 * row + 0.56 * j, 0.8, -1.7 + 0.64 * i), DARK)
+                    cyl(0.26, 0.66, (-1.6 + 1.25 * row + 0.56 * j, 0.12, -1.7 + 0.64 * i), c, segs=6 if lite else 10, stem=True)
+                    if not lite:
+                        box((0.36, 0.05, 0.36), (-1.6 + 1.25 * row + 0.56 * j, 0.8, -1.7 + 0.64 * i), DARK)
         for i in range(3):                                              # a second tier lying on the back row
-            cyl(0.26, 0.66, (-1.65, 1.1, -1.4 + 0.75 * i), (0x3f7bd9, 0xcf534f, 0x3f7bd9)[i], segs=10, axis='across', stem=True)
+            cyl(0.26, 0.66, (-1.65, 1.1, -1.4 + 0.75 * i), (0x3f7bd9, 0xcf534f, 0x3f7bd9)[i], segs=6 if lite else 10,
+                axis='across', stem=True)
         box((1.0, 0.6, 0.9), (-1.2, 0.3, 2.4), 0xfde4c7)                   # stores under their tarp
         box((0.7, 0.5, 0.7), (-0.2, 0.25, 2.7), 0x9a7b55)
         box((1.1, 0.1, 1.0), (-1.2, 0.65, 2.4), 0x61cb8b)
-        for k in range(3):                                              # jerrycans by the sledge
+        for k in range(0 if lite else 3):                               # jerrycans by the sledge
             box((0.24, 0.36, 0.16), (1.3, 0.18, 1.5 + 0.26 * k), 0xcf534f)
         cargo_sledge(1.5, -2.6, ('drums',))
         cargo_sledge(1.3, 3.6, ('crates',))
@@ -9280,7 +9406,7 @@ def glacier_peaks_south():
         (-15.1, -54.2, 13.0, 14.0, 1.7, 71.0, 0.2, (0.05, 0.1)),
         (-5.8, -16.4, 17.0, 17.0, 1.8, 73.0, -0.1, (-0.05, 0.05)),
         (-16.5, 20.9, 14.5, 15.0, 1.8, 75.0, 0.15, (0.08, -0.05)),
-        (-30.8, 51.9, 11.0, 13.0, 1.6, 77.0, 0.3, (0.0, 0.08))))
+        (-30.8, 51.9, 11.0, 13.0, 1.6, 77.0, 0.3, (0.0, 0.08))), shade_row=GLACIER_SHADE)
 
 @piece(1.0)
 def glacier_peaks_east():
@@ -9291,7 +9417,7 @@ def glacier_peaks_east():
     peak_range((0.140, 0.979, 0.148), (
         (11.4, -46.0, 10.0, 12.0, 1.6, 81.0, 0.25, (0.05, 0.05)),
         (-0.4, 10.8, 11.0, 13.0, 1.7, 83.0, -0.15, (-0.05, 0.08)),
-        (-14.5, 63.2, 9.0, 11.0, 1.6, 85.0, 0.1, (0.06, 0.0))))
+        (-14.5, 63.2, 9.0, 11.0, 1.6, 85.0, 0.1, (0.06, 0.0))), shade_row=GLACIER_SHADE)
 
 @piece(1.0)
 def avalanche_peaks_east():
