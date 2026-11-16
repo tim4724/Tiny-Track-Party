@@ -617,7 +617,7 @@ export const TRACKS = {
       // the dig on the outside of the bend above the bay, where the east
       // straight points, on a rise of its own at the height of the hill the
       // road comes over there
-      { model: 'set-treasure-dig', u: 0.365, lat: 11, y: 2.1, scale: 1.25 },
+      { model: 'set-treasure-dig', u: 0.365, lat: 11, y: 2.5, scale: 1.4 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
       // palms on the beach outside the west bend, where the chase camera
@@ -667,7 +667,7 @@ export const TRACKS = {
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
-      { kind: 'ridge', u: 0.365, lat: 17.5, len: 8, r: 13, h: 2.1, top: 0.55, near: 0.4, w: 4 },
+      { kind: 'ridge', u: 0.365, lat: 17.5, len: 8, r: 13, h: 2.5, top: 0.55, near: 0.4, w: 4 },
       // the foothill's face before the cave, green to the kerb (a facet of
       // it lay bare sand on the hillside)
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
