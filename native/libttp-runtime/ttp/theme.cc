@@ -483,8 +483,8 @@ void backyardTrack(Theme& t, const std::string& track) {
     t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
     t.scenery.clutterDensity = 0.12f;
     t.scenery.density = 0.55f;
-    // The orchard's round trees and poplars of the same make.
-    lawnTrees(t, { { "set-tree-apple", 0.5f }, { "set-tree-poplar", 0.5f } });
+    // One tree family: the orchard's round apple trees, no poplar among them.
+    lawnTrees(t, { { "set-tree-apple", 1.0f } });
     t.road.kerbA = 0x339cf2;
     t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
     t.pier.cap = 0x339cf2;
