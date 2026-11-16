@@ -547,6 +547,8 @@ export const TRACKS = {
       // the hop the road comes over beside it (lower, only its roof and flag
       // showed over the crest's kerb)
       { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.8, top: 0.55, near: 0.4, w: 5 },
+      // ...and the sea brought in to the foot of its slip
+      { kind: 'shore', u: 0.9, lat: 22, len: 10, r: 14 },
       // the reef terrace the rock pool lies in, at the road's height, so
       // the seat looks onto its water (flat on the beach it was a sliver)
       { kind: 'ridge', u: 0.675, lat: 20, len: 10, r: 13, h: 1.0, top: 0.55, near: 0.4, w: 5 },
@@ -619,12 +621,8 @@ export const TRACKS = {
       // the bridge comes out of the palms; and on the start straight's
       // foothill past the cave
       { model: 'set-jungle-grove', u: 0.185, lat: -10.5, yaw: 180 },
-      { model: 'set-jungle-grove', u: 0.272, lat: -13.5, yaw: 184 },
+      { model: 'set-jungle-grove', u: 0.272, lat: -15.5, yaw: 184 },
       { model: 'set-jungle-grove', u: 0.035, lat: -10.5, yaw: 180 },
-      // the dig on the outside of the bend above the bay, where the east
-      // straight points, on a rise of its own at the height of the hill the
-      // road comes over there
-      { model: 'set-treasure-dig', u: 0.365, lat: 11, y: 2.5, scale: 1.4 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
       // palms on the beach outside the west bend, where the chase camera
@@ -674,7 +672,6 @@ export const TRACKS = {
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
-      { kind: 'ridge', u: 0.365, lat: 17.5, len: 8, r: 13, h: 2.5, top: 0.55, near: 0.4, w: 4 },
       // the foothill's face before the cave, green to the kerb (a facet of
       // it lay bare sand on the hillside)
       { kind: 'paint', u: 0.94, lat: -13, len: 14, r: 5, w: 5, tint: 0x7ab878 },
@@ -765,7 +762,7 @@ export const TRACKS = {
       // adding: ridge heights ADD, and where two crests overlap they stack
       // into a peak. Ends a radius and a half apart, half-crested, keep one
       // height along the line.)
-      { kind: 'ridge', u: 0.53, lat: 23, len: 6, r: 16.5, h: 4.0, top: 0.5 },
+      { kind: 'ridge', u: 0.53, lat: 23, len: 6, r: 15, h: 2.8, top: 0.6 },
       { kind: 'ridge', u: 0.62, lat: 28, len: 6, r: 16.5, h: 4.6, top: 0.5 },
       { kind: 'ridge', u: 0.71, lat: 27, len: 6, r: 16, h: 3.6, top: 0.5 },
       { kind: 'ridge', u: 0.79, lat: 22, len: 6, r: 14, h: 3.2, top: 0.5 },

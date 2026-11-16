@@ -715,7 +715,20 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, trunk=0x9a7b55, sink=0.0):
         rod(pts[i], pts[i + 1], (0.3 - 0.18 * ts[i]) * k, trunk, r2=(0.3 - 0.18 * ts[i + 1]) * k, segs=sides) if LITE else \
             rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
     tx, ty, tz = pts[-1]
-    for i in range(fronds):                             # each frond one blade, drooping
+    if LITE:
+        # The box's crown is ONE surface, a star of five fronds joined at
+        # the trunk's head. Lite's far form keeps no small shape whole
+        # (TtpRenderer::farForm, kFarWhole is the full tier's): it folded
+        # each separate blade of a short palm away along its own width, and
+        # a stand stood as bare trunks from eighty units off.
+        rim = []
+        for i in range(2 * fronds):
+            a = yaw + i * math.pi / fronds + 0.3
+            r, y = (2.1 * k, ty - 0.45 * k) if i % 2 == 0 else (0.75 * k, ty - 0.1 * k)
+            rim.append((tx + r * math.cos(a), y, tz + r * math.sin(a)))
+        top = (tx, ty - 0.02 * k, tz)
+        poly([top] + rim, [(0, 1 + i, 1 + (i + 1) % (2 * fronds)) for i in range(2 * fronds)], 0x61cb8b)
+    for i in range(0 if LITE else fronds):              # each frond one blade, drooping
         a = yaw + i * 2 * math.pi / fronds + 0.3
         ca, sa = math.cos(a), math.sin(a)
         beam((tx, ty + 0.1 * k, tz), (tx + ca * 2.1 * k, ty - 0.45 * k, tz + sa * 2.1 * k), 0.5 * k, 0x61cb8b, d=0.06)
@@ -801,7 +814,11 @@ def flag_on_pole(at, h, colors, wave, w=0.32, fh=0.2):
     with animated(wave, (x, y + h, z)):
         n = len(colors)
         for i, c in enumerate(colors):
-            box((w, fh / n, 0.03), (x + w / 2 + 0.02, y + h - fh * (i + 0.5) / n, z), c)
+            if LITE:    # the box's cloth: bands of one sheet, edge to edge (its far form folds a band on its own away)
+                y0, y1 = y + h - fh * (i + 1) / n, y + h - fh * i / n
+                poly([(x + 0.02, y0, z), (x + 0.02 + w, y0, z), (x + 0.02 + w, y1, z), (x + 0.02, y1, z)], [(0, 1, 2, 3)], c)
+            else:
+                box((w, fh / n, 0.03), (x + w / 2 + 0.02, y + h - fh * (i + 0.5) / n, z), c)
 
 def on_a_rise():
     """For a piece tracks.js stands on a beach rise: a stone buried under its
@@ -857,6 +874,71 @@ def gravel_yard(rects):
 # ---- Tidepool ----
 # ---- Tidepool ----
 
+def pool_rings(N, rim, shelf, WY, LIP):
+    """A reef pool's water and rock as rings of quads by kind, on `N`
+    spokes: the water out to `rim(a)`, deep in the middle and pale over the
+    ledges at its edge, a ring of foam, the rock's lip and its shelf
+    `shelf(a)` past the water. The lip is low on the road side (+X), full on
+    the sea side: on its terrace at the road's height (tracks.js) the seat
+    looks over the near lip onto the water."""
+    rows = []
+    for i in range(N + 1):
+        a = i / N * 2 * math.pi
+        c, sn = math.cos(a), math.sin(a)
+        r0, w = rim(a), shelf(a)
+        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.12 * max(0.0, -c) + 0.03 * math.sin(3 * a)
+        prof = [(0.0, WY - 0.03), (0.35 * r0, WY - 0.03), (0.68 * r0, WY), (0.9 * r0, WY), (r0, WY + 0.01),   # the water
+                (r0 + 0.12, WY + 0.02),                                                                        # the foam
+                (r0 + 0.2, top), (r0 + 0.45 * w, top + 0.06), (r0 + 0.85 * w, top * 0.7), (r0 + w + 0.5, -0.06)]
+        rows.append([(c * r, y, sn * r) for r, y in prof])
+    kinds = ('deep', 'deep', 'mid', 'shallow', 'shallow', 'foam', 'lip', 'shelf', 'shelf')
+    polys = {}
+    for i in range(N):
+        for j, kind in enumerate(kinds):
+            polys.setdefault(kind, []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
+    return polys
+
+def pool_skin(polys):
+    """pool_rings()' quads as parts, a kind each at its own shade."""
+    for kind, quads in polys.items():
+        sw = {'deep': 'blue', 'mid': 'blue', 'shallow': 'sky', 'foam': 'white', 'lip': 'grey', 'shelf': 'lavender'}[kind]
+        o = colored_faces([(sw, q) for q in quads], 'pool_' + kind)[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, {'deep': 16, 'mid': 6, 'shallow': 24, 'foam': 2, 'lip': 26, 'shelf': 30}[kind])
+
+def wet_sand(cx, cz, reach, hole=0.3, M=30, seed=1.0):
+    """The sand the tide has just left, dark and wet, round (cx, cz) out to
+    `reach(a)`: a print on the ground (a `paint` form's tint does not show
+    on the beach's plain). Its edge is broken, spoke by spoke, and a paler
+    damp fringe runs out past it in tongues, with a few damp patches lying
+    off it: one hard-edged darker polygon read as a mat laid on the beach.
+    Rings inside it give the drape vertices to lie on the land with."""
+    def edge(i):
+        a = 2 * math.pi * (i % M) / M
+        return a, reach(a) * (1.0 + 0.22 * jitter(i % M, 1, seed) + 0.1 * math.sin(5 * a + seed))
+    def at(i, r):
+        a = 2 * math.pi * (i % M) / M
+        return (cx + r * math.cos(a), 0.03, cz + r * math.sin(a))
+    dark, damp = [], []
+    for i in range(M):
+        (_, e0), (_, e1) = edge(i), edge(i + 1)
+        for f0, f1 in ((hole, 0.65), (0.65, 1.0)):
+            dark.append(('gravel', [at(i, f0 * e0), at(i, f1 * e0), at(i + 1, f1 * e1), at(i + 1, f0 * e1)]))
+        t0 = e0 + 0.5 + 1.5 * (jitter(i % M, 2, seed) + 0.5) ** 2
+        t1 = e1 + 0.5 + 1.5 * (jitter((i + 1) % M, 2, seed) + 0.5) ** 2
+        damp.append(('gravel', [at(i, e0), at(i, t0), at(i + 1, t1), at(i + 1, e1)]))
+        if i % 4 == 1:                                   # a damp patch lying off the edge
+            r0 = t0 + 0.5 + 0.8 * (jitter(i, 3, seed) + 0.5)
+            damp.append(('gravel', [at(i, r0), at(i, r0 + 0.9), at(i + 0.6, r0 + 1.1), at(i + 0.8, r0 + 0.2)]))
+    for quads, row, y in ((damp, 12, 0.0), (dark, 31, 0.012)):
+        o = colored_faces([(c, [(px, py + y, pz) for px, py, pz in q]) for c, q in quads], 'wet')[0]
+        for pl in o.data.polygons:
+            if pl.normal.z < 0:
+                pl.flip()
+        rowed(o, row)
+
 @piece(1.0)
 def rock_pool():
     # Tidepool: the big pool the tide left in the reef, sunk in a low shelf
@@ -879,32 +961,9 @@ def rock_pool():
         # rim read from above as a grey disc laid on the sand)
         return (1.6 + 5.5 * along + 1.8 * sea + 0.35 * math.sin(4 * a + 1.3)
                 + 0.8 * math.sin(2 * a + 0.7) + 0.55 * math.sin(5 * a + 2.1) + 0.4 * math.sin(7 * a + 0.3))
-    rows = []
-    for i in range(N + 1):
-        a = i / N * 2 * math.pi
-        c, sn = math.cos(a), math.sin(a)
-        r0, w = rim(a), shelf(a)
-        # the lip low on the road side (+X), full on the sea side: on its
-        # terrace at the road's height (tracks.js) the seat looks over the
-        # near lip onto the water
-        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.12 * max(0.0, -c) + 0.03 * math.sin(3 * a)
-        prof = [(0.0, WY - 0.03), (0.35 * r0, WY - 0.03), (0.68 * r0, WY), (0.9 * r0, WY), (r0, WY + 0.01),   # the water
-                (r0 + 0.12, WY + 0.02),                                                                        # the foam
-                (r0 + 0.2, top), (r0 + 0.45 * w, top + 0.06), (r0 + 0.85 * w, top * 0.7), (r0 + w + 0.5, -0.06)]
-        rows.append([(c * r, y, sn * r) for r, y in prof])
-    kinds = ('deep', 'deep', 'mid', 'shallow', 'shallow', 'foam', 'lip', 'shelf', 'shelf')
-    polys = {}
-    for i in range(N):
-        for j, kind in enumerate(kinds):
-            polys.setdefault(kind, []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
+    polys = pool_rings(N, rim, shelf, WY, LIP)
     def pool():
-        for kind, quads in polys.items():
-            sw = {'deep': 'blue', 'mid': 'blue', 'shallow': 'sky', 'foam': 'white', 'lip': 'grey', 'shelf': 'lavender'}[kind]
-            o = colored_faces([(sw, q) for q in quads], 'pool_' + kind)[0]
-            for pl in o.data.polygons:
-                if pl.normal.z < 0:
-                    pl.flip()
-            rowed(o, {'deep': 16, 'mid': 6, 'shallow': 24, 'foam': 2, 'lip': 26, 'shelf': 30}[kind])
+        pool_skin(polys)
         # knuckles of the reef standing up out of the shelf on its sea side
         # and along toward the headland, so the shelf reads as rock, not a rim
         # ...and boulders straddling its edge on the road side and at its
@@ -1380,7 +1439,7 @@ def lifeboat_station():
     # the line, at a building's real size beside a car: the boathouse,
     # white under the cottages' slate, its name board, its great doors to the sea
     # (-X) at the head of the slipway, which runs down over the reef's
-    # ledges onto the sand the tide has left; the lifeboat in its cradle at the top of the
+    # ledges into the sea; the lifeboat in its cradle at the top of the
     # slip, orange and navy, bow to the sea; the station's flag flying from
     # a tall staff by the road side, the coxswain's bell under a little roof.
     # Its back and gable stand over the kerb from the bend before it. On a
@@ -1394,20 +1453,9 @@ def lifeboat_station():
     box((0.06, 1.5, 0.06), (BX - W / 2 - 0.07, 0.75, BZ), white)
     for dz in (-1.4, 1.4):
         box((0.08, 0.6, 0.5), (BX - W / 2 - 0.03, 1.3, BZ + dz), 'slate')            # its windows
-    # the slipway: timber on the reef's rock, from the doors down to the sea
-    SL0, SL1 = BX - W / 2, BX - W / 2 - 7.5
-    with plain_parts():
-        for k in range(12):
-            t = k / 11
-            x = SL0 + (SL1 - SL0) * t
-            box((0.66, 0.12, 1.5), (x, 0.32 - 0.62 * t, BZ), 0x9a6a46 if k % 2 else 0x8a6a46, roll=0.08)
-        for dz in (-0.55, 0.55):
-            beam((SL0, 0.42, BZ + dz), (SL1, -0.28, BZ + dz), 0.12, 'grey')
-        for k in range(5):
-            x = SL0 + (SL1 - SL0) * (k + 0.5) / 5
-            box((0.3, 0.9, 1.7), (x, -0.2 - 0.12 * k, BZ), 'grey')
     # the lifeboat in its cradle at the top of the slip, bow to the sea
-    LX, LY = SL0 - 1.6, 0.62
+    SL0, SL1 = BX - W / 2, BX - W / 2 - 12.0
+    LX, LY = SL0 - 1.6, 0.4
     box((2.4, 0.5, 0.95), (LX, LY + 0.25, BZ), navy)
     box((0.7, 0.5, 0.7), (LX - 1.35, LY + 0.25, BZ), navy, yaw=math.pi / 4)
     box((2.5, 0.22, 1.02), (LX, LY + 0.58, BZ), orange)
@@ -1415,7 +1463,7 @@ def lifeboat_station():
     box((0.95, 0.08, 0.75), (LX + 0.35, LY + 1.2, BZ), orange)
     box((0.06, 0.55, 0.06), (LX + 0.35, LY + 1.5, BZ), white)
     for dz in (-0.35, 0.35):
-        box((1.8, 0.24, 0.12), (LX, LY - 0.08, BZ + dz), 0x8a6a46)
+        box((1.8, 0.4, 0.12), (LX, LY - 0.16, BZ + dz), 0x8a6a46)
     # the flagstaff at the road side of the station, its flag flying along it
     flag_on_pole((0.2, 0.0, -2.8), 4.2, (red, white, red), 'anim_flutter:p=1.9#flag', w=1.0, fh=0.6)
     # the bell under its little roof, by the doors
@@ -1423,12 +1471,26 @@ def lifeboat_station():
         box((0.1, 1.2, 0.1), (BX + 1.9, 0.6, BZ + 2.9 + dz), 0x8a6a46)
     box((0.5, 0.1, 0.9), (BX + 1.9, 1.25, BZ + 2.9), red)
     cyl(0.16, 0.24, (BX + 1.9, 0.86, BZ + 2.9), 0xffc044, r2=0.1, segs=8)
-    # the reef the station stands on, its ledges round the slip's foot
-    for k, (x, z, sz, sq) in enumerate(((SL1 + 1.2, -2.3, 2.6, 0.5), (SL1 + 0.6, 2.4, 2.4, 0.55), (SL1 + 3.6, -2.0, 1.8, 0.5),
-                                        (SL1 + 3.4, 2.2, 1.6, 0.45), (BX - 0.8, -3.4, 1.7, 0.5), (BX - 0.4, 3.6, 1.5, 0.45))):
-        stone(x, z, sz, 0.9 * k, 260.0 + k, squat=sq, rock=('grey', WET), top='lavender', y=-0.15)
-    reef_tone()
     join_still('station')
+    # the slipway: timber and its two rails from the doors down the sand's
+    # fall and into the sea the track's `shore` brings in to its foot, the
+    # reef's ledges either side of it. DRAPED, plank by plank, so it lies on
+    # the swell the station stands on and goes down with it under the water
+    # (round 19 raised the station and left a level slip ending on dry sand).
+    def slip():
+        with plain_parts():
+            n = 20
+            for k in range(n):
+                x = SL0 - (k + 0.5) * (SL0 - SL1) / n
+                box(((SL0 - SL1) / n - 0.05, 0.12, 1.5), (x, 0.08, BZ), 0x9a6a46 if k % 2 else 0x8a6a46)
+                for dz in (-0.55, 0.55):
+                    box(((SL0 - SL1) / n + 0.02, 0.14, 0.12), (x, 0.2, BZ + dz), 'grey')
+        for k, (x, z, sz, sq) in enumerate(((SL1 + 1.6, -2.3, 2.6, 0.5), (SL1 + 1.0, 2.4, 2.4, 0.55), (SL1 + 5.0, -2.0, 1.8, 0.5),
+                                            (SL1 + 4.6, 2.2, 1.6, 0.45), (SL1 + 8.2, -2.1, 1.3, 0.45), (BX - 0.8, -3.4, 1.7, 0.5),
+                                            (BX - 0.4, 3.6, 1.5, 0.45))):
+            stone(x, z, sz, 0.9 * k, 260.0 + k, squat=sq, rock=('grey', WET), top='lavender', y=-0.15)
+        reef_tone()
+    draped('slip', slip)
     on_a_rise()
 
 @piece(1.0)
@@ -3218,57 +3280,6 @@ def pirate_stockade():
     draped('boat', beached)
     on_a_rise()
 
-@piece(1.0)
-def treasure_dig():
-    # Cove: what the crew came ashore for, on the outside of the bend above
-    # the bay: the hole they have dug in the sand under a board marked with a
-    # red X, the chest hove half out of it on a rope from shear legs of three
-    # spars (the dig's tall thing, which shows over the kerb), heaps of dug
-    # sand round it with their spades stuck in, a keg and a crate of their
-    # stores. No one about. It stands on a beach rise (tracks.js); the hole
-    # is a print on the sand. +X is the road.
-    wood, dark, rope, red = 0x8a6a46, 0x6e5b3a, 0xcbb794, 0xcf534f
-    def hole():                                         # the pit's dark mouth, ragged
-        N = 10
-        rim = [(1.25 * (1.0 + 0.2 * jitter(i, 1, 9.0)) * math.cos(2 * math.pi * i / N), 0.04,
-                1.1 * (1.0 + 0.2 * jitter(i, 2, 9.0)) * math.sin(2 * math.pi * i / N)) for i in range(N)]
-        o = colored_faces([('bark', [(0.0, 0.04, 0.0), rim[i], rim[(i + 1) % N]]) for i in range(N)], 'hole')[0]
-        for pl in o.data.polygons:
-            if pl.normal.z < 0:
-                pl.flip()
-        rowed(o, 20)
-    # the dug sand, damp and darker than the beach, heaped round the hole
-    # (soft rounded heaps: faceted lumps read as boulders)
-    for k, (x, z, r, h) in enumerate(((-1.9, 0.6, 1.3, 0.75), (-0.7, -2.1, 1.1, 0.62), (-1.4, 2.2, 0.95, 0.5),
-                                      (1.5, 1.9, 0.8, 0.4))):
-        rowed(sphere(r, (x, -0.05, z), 'gravel', subdiv=2, scale=(1.15, h / r, 1.0), flat=False, yaw=1.1 * k), 31)
-    # the shear legs over the hole, the chest on their rope, canted, half out
-    APEX = (0.0, 3.3, 0.0)
-    for k in range(3):
-        a = 0.5 + k * 2 * math.pi / 3
-        beam((1.9 * math.cos(a), -0.3, 1.9 * math.sin(a)), (APEX[0] - 0.08 * math.cos(a), APEX[1] + 0.25, APEX[2] - 0.08 * math.sin(a)),
-             0.16, wood if k else dark)
-    box((0.3, 0.26, 0.3), (0.0, APEX[1] - 0.2, 0.0), dark)                             # the block
-    beam((0.0, APEX[1] - 0.2, 0.0), (0.05, 0.7, 0.0), 0.07, rope)
-    kit('pirate', 'chest', (0.05, 0.02, 0.0), yaw=0.5, scale=0.8, roll=0.28)
-    box((0.34, 0.16, 0.3), (0.95, 0.1, -0.55), 0xffc044, yaw=0.4)                      # what spilled from it
-    box((0.2, 0.12, 0.2), (1.2, 0.07, -0.25), 0xffc044, yaw=1.1)
-    # the board on its post, the X to the road and the cars coming
-    box((0.14, 1.9, 0.14), (2.3, 0.75, -2.2), wood)
-    box((0.1, 0.95, 1.05), (2.3, 1.55, -2.2), 0xfde4c7, yaw=-0.5)
-    c5, s5 = math.cos(-0.5), math.sin(-0.5)
-    for sgn in (-1, 1):
-        beam((2.3 + 0.07 * c5 - 0.36 * s5, 1.55 - sgn * 0.33, -2.2 - 0.07 * s5 - 0.36 * c5),
-             (2.3 + 0.07 * c5 + 0.36 * s5, 1.55 + sgn * 0.33, -2.2 - 0.07 * s5 + 0.36 * c5), 0.13, red, d=0.05)
-    # spades stuck in the heaps, their stores
-    kit('pirate', 'tool-shovel', (-1.7, 0.6, 0.5), yaw=0.6, scale=0.55, roll=0.2)
-    kit('pirate', 'tool-shovel', (-0.6, 0.5, -2.0), yaw=2.0, scale=0.55, pitch=0.25)
-    kit('pirate', 'barrel', (1.9, 0.0, 1.0), yaw=0.3, scale=0.5)
-    kit('pirate', 'crate', (2.4, 0.0, 0.2), yaw=0.7, scale=0.55)
-    join_still('dig')
-    draped('floor_hole', hole)
-    on_a_rise()
-
 # ---- round 6: Tidepool's Seal Rock and car park ----
 
 WET, WEED = 'slate', 'green'      # rock the tide leaves wet, the weed band at its foot
@@ -3528,8 +3539,9 @@ def seal_rock():
     # muted turf on its crown), a dome some six units to its top with its
     # shoulders run into it, its foot on the wet sand at the water's edge.
     # Seals lie hauled out on the low backs of rock on its road side (+X),
-    # one bobs in the water off its seaward foot, the surf breaks there and
-    # gulls wheel over the top. (Until round 19 it was a heap of angular dark
+    # one bobs in the water off its seaward foot and gulls wheel over the
+    # top (no surf: its foot stands on the tide's wet sand, where a crest
+    # of foam lay as white slabs). (Until round 19 it was a heap of angular dark
     # facets under a saturated green cap, out in open water: another rock
     # language from the reef's, and a speck from the run.)
     polys = []
@@ -3557,7 +3569,6 @@ def seal_rock():
     # one in the water off its seaward foot, its head up, bobbing on the swell
     with animated('anim_bob:h=0.07:p=3.4#swimmer', (-10.5, 0.0, 2.0)):
         beach_seal(-10.5, 0.1, 2.0, math.pi + 0.3, 'swimmer', 'swim', 'grey')
-    tidepool_surf([(-8.6, -1.0, 3.2, 0.1), (-6.4, 6.4, 2.6, 0.7), (-3.4, -8.2, 2.8, -0.9)])
     tidepool_gulls([(5.0 * math.cos(t), 9.5 + 0.6 * math.sin(2 * t), 4.4 * math.sin(t))
                     for t in (i / 12 * 2 * math.pi for i in range(12))], 16)
     join_still('rock')
@@ -3592,93 +3603,46 @@ def tide_ledges():
                 if heap:
                     rowed(box((0.5, 0.2, 1.1), (x + 0.5, 0.08, z + 0.3), 'olive', yaw=1.1 + i), 24)
     # the wet sand between the ribs, from a stride past the kerb down to the
-    # sea, its edges ragged: a print on the ground, like the small pools'
-    def wet():
-        def across(z, k):
-            x0, x1 = 3.4 + 0.9 * wobble(z, 2.0, 7.0), -12.0 + 1.6 * wobble(z, 9.0, 7.0)
-            return (x0 + (x1 - x0) * k / 3, 0.03, z)
-        quads = [('gravel', [across(z, k), across(z, k + 1), across(z + 3.0, k + 1), across(z + 3.0, k)])
-                 for z in (-13.0 + 3.0 * i for i in range(9)) for k in range(3)]
-        o = colored_faces(quads, 'wet')[0]
-        for pl in o.data.polygons:
-            if pl.normal.z < 0:
-                pl.flip()
-        rowed(o, 31)
-    draped('floor_wet', wet)
+    # sea (wet_sand)
+    def reach(a):
+        return 1.0 / math.hypot(math.cos(a) / 7.0, math.sin(a) / 13.0)
+    draped('floor_wet', lambda: wet_sand(-4.2, 0.0, reach, hole=0.0, M=36, seed=7.0))
     draped('ledges', build)
 
 def reef_pool(seed, r, long_a, post):
-    """Tidepool: one of the smaller pools the tide left in the reef flats
-    (rock_pool() is the big one): its water `r` across in a rim of the
-    reef's rock, the rock's shelf reaching furthest toward the bearing
-    `long_a`, low on the road side (+X) so the seat looks over the lip onto
-    the water, knuckles of the reef standing round it. One polar mesh,
-    draped. `post` stands a tide marker in it, a banded post at the pool's
-    sea side."""
-    N, WY, LIP = 20, 0.06, 0.3
+    """Tidepool: one of the smaller pools the tide left in the reef flats,
+    rock_pool()'s own water and rock at a third of its size (pool_rings):
+    its water `r` across in the reef's shelf, the shelf reaching furthest
+    toward the bearing `long_a` and broad on its sea side, knuckles of the
+    reef standing round it and across its edge. Draped. `post` stands a
+    tide marker at the pool's sea side."""
     def rim(a):
         return r * (1.0 + 0.14 * math.sin(2 * a + seed) + 0.08 * math.sin(3 * a + 1.9 * seed))
     def shelf(a):
-        return (1.1 + 1.7 * max(0.0, math.cos(a - long_a)) ** 2 + 0.9 * max(0.0, -math.cos(a)) ** 1.5
-                + 0.3 * math.sin(4 * a + seed) + 0.25 * math.sin(5 * a + 2.1 * seed))
-    rows = []
-    for i in range(N + 1):
-        a = i / N * 2 * math.pi
-        c, sn = math.cos(a), math.sin(a)
-        r0, w = rim(a), shelf(a)
-        top = LIP * (0.3 + 0.7 * (0.5 - 0.5 * c)) + 0.1 * max(0.0, -c) + 0.03 * math.sin(3 * a + seed)
-        prof = [(0.0, WY - 0.03), (0.6 * r0, WY - 0.03), (0.9 * r0, WY), (r0, WY + 0.01), (r0 + 0.1, WY + 0.02),
-                (r0 + 0.18, top), (r0 + 0.5 * w, top + 0.05), (r0 + w + 0.4, -0.06)]
-        rows.append([(c * q, y, sn * q) for q, y in prof])
-    kinds = ('deep', 'shallow', 'shallow', 'foam', 'lip', 'shelf', 'shelf')
+        return (1.3 + 2.4 * max(0.0, math.cos(a - long_a)) ** 2 + 1.4 * max(0.0, -math.cos(a)) ** 1.5
+                + 0.3 * math.sin(4 * a + seed) + 0.45 * math.sin(2 * a + 0.7 * seed) + 0.3 * math.sin(5 * a + 2.1 * seed))
+    polys = pool_rings(24, rim, shelf, 0.1, 0.32)
     def pool():
-        polys = {}
-        for i in range(N):
-            for j, kind in enumerate(kinds):
-                polys.setdefault(kind, []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
-        for kind, quads in polys.items():
-            sw = {'deep': 'blue', 'shallow': 'sky', 'foam': 'white', 'lip': 'grey', 'shelf': 'lavender'}[kind]
-            o = colored_faces([(sw, q) for q in quads], 'pool_' + kind)[0]
-            for pl in o.data.polygons:
-                if pl.normal.z < 0:
-                    pl.flip()
-            rowed(o, {'deep': 16, 'shallow': 24, 'foam': 2, 'lip': 26, 'shelf': 30}[kind])
+        pool_skin(polys)
         # the reef's knuckles round it: big on its sea side and along the
-        # shelf's long reach, small where the road looks in
-        for k in range(7):
-            a = seed + 0.9 * k + 0.3 * jitter(k, 1, seed)
+        # shelf's long reach, small where the road looks in, some astride
+        # the shelf's edge so no clean rim runs round it
+        for k in range(9):
+            a = seed + 0.72 * k + 0.3 * jitter(k, 1, seed)
             road = max(0.0, math.cos(a))
-            sz = (2.6 - 1.5 * road) * (0.85 + 0.3 * (jitter(k, 2, seed) + 0.5))
-            d = rim(a) + 0.5 + 0.5 * shelf(a)
+            sz = (3.0 - 1.7 * road) * (0.8 + 0.35 * (jitter(k, 2, seed) + 0.5))
+            d = rim(a) + 0.5 + (0.5 if k % 3 else 0.95) * shelf(a)
             stone(d * math.cos(a), d * math.sin(a), sz, 1.3 * k, seed * 50.0 + k, squat=0.45 + 0.2 * (1.0 - road),
                   rock=('grey', WET), top='lavender', y=0.1)
         reef_tone()
         if post:
             with plain_parts():
-                px, pz = -(rim(math.pi) + 0.7), 0.3
+                px, pz = -(rim(math.pi) + 0.9), 0.3
                 for k in range(5):                                   # the marker, banded red and white
                     box((0.16, 0.42, 0.16), (px, 0.21 + 0.42 * k, pz), 0xcf534f if k % 2 else 0xfff6eb)
                 box((0.3, 0.08, 0.3), (px, 2.14, pz), 0x38383d)
-    # the sand the tide has just left round it, dark and wet, running off
-    # down the beach (-X): a print on the ground (a `paint` form's tint does
-    # not show on the beach's plain)
-    def wet():
-        M = 18
-        def reach(a, k):
-            out = 2.0 + 1.0 * math.sin(3 * a + seed) + 3.4 * max(0.0, -math.cos(a)) ** 2
-            return rim(a) + 0.6 * shelf(a) + k * out / 2
-        quads = []
-        for i in range(M):
-            a0, a1 = 2 * math.pi * i / M, 2 * math.pi * (i + 1) / M
-            for k in range(2):
-                quads.append(('gravel', [(math.cos(a) * reach(a, kk), 0.03, math.sin(a) * reach(a, kk))
-                                      for a, kk in ((a0, k), (a0, k + 1), (a1, k + 1), (a1, k))]))
-        o = colored_faces(quads, 'wet')[0]
-        for pl in o.data.polygons:
-            if pl.normal.z < 0:
-                pl.flip()
-        rowed(o, 31)
-    draped('floor_wet', wet)
+    draped('floor_wet', lambda: wet_sand(0.0, 0.0, lambda a: rim(a) + shelf(a) + 1.2 + 2.2 * max(0.0, -math.cos(a)) ** 2,
+                                         hole=0.35, seed=seed))
     draped('pool', pool)
 
 PIECES['reef-pool-a'], GROW['reef-pool-a'] = (lambda: reef_pool(1.7, 2.6, 1.2, True)), 1.0
@@ -15118,7 +15082,7 @@ def lite_too(*names):
 # without their frames.
 lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
          'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b',
-         'surf-campers', 'seafront-hotel', 'seafront-terrace', 'seafront-cafe')
+         'surf-campers', 'seafront-hotel', 'seafront-terrace', 'seafront-cafe', 'lifeboat-station')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals
