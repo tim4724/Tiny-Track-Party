@@ -10546,7 +10546,10 @@ def lawn_poplar(x, z, k=1.0):
 # and ragged at their ends where the harvest has not reached; the far end
 # already cut, the stubble with round bales on it and the tractor going round
 # them, the combine cutting its way round the standing crop, along the
-# road's side close by the kerb; two poplars left standing in it by its east edge. A
+# road's side close by the kerb. No tree stands in the crop (two poplars did,
+# and read as trees growing out of the wheat). The lite build (the Android
+# TV's) lays the crop in rows twice as broad and three times as long a
+# length, and parks the tractor. A
 # rectangle kept 2.4 u inside every kerb (the largest that fits, scratch
 # geometry): a piece's box holds the verge band down under it (bandHold), so
 # one piece over the whole loop stood the road on a step. It DRAPES, lying on
@@ -10558,14 +10561,11 @@ def round_rect(hx, hz, r):
         return abs(x) <= hx and abs(z) <= hz and dx * dx + dz * dz <= r * r
     return inside
 
-@piece(REAL)
-def field_wheat():
+def field_wheat_build(lite):
     HX, HZ, R, CUT = 18.5, 44.0, 12.0, 20.0
     field = round_rect(HX, HZ, R)
-    PINES = ((13.5, -14.0, 17.0), (13.0, 4.0, 14.5))         # standing in the crop by its east edge
     def standing(x, z):                    # each row's ends ragged by up to 3.5
-        return (field(x, z) and -HZ + 3.5 * hash01(x, 1) < z < CUT - 3.5 * hash01(x, 2)
-                and all(math.hypot(x - px, z - pz) > 5.0 for px, pz, _ in PINES))
+        return field(x, z) and -HZ + 3.5 * hash01(x, 1) < z < CUT - 3.5 * hash01(x, 2)
     def cut(x, z):
         return field(x, z) and z > CUT + 3.0
     def h(x, z):
@@ -10574,10 +10574,11 @@ def field_wheat():
     for k in range(14):
         a = -k * 2 * math.pi / 14
         pts.append((11.0 * math.cos(a), 33.0 + 6.0 * math.sin(a)))
-    for k, (x, z) in enumerate(pts):
-        marker('path_drapetractor_%d' % k, (x, 0.0, z))
-    with animated('anim_path:c=drapetractor:p=46:f=1', (pts[0][0], 0.0, pts[0][1])):
-        tractor((pts[0][0], 0.0, pts[0][1]))
+    if not lite:
+        for k, (x, z) in enumerate(pts):
+            marker('path_drapetractor_%d' % k, (x, 0.0, z))
+        with animated('anim_path:c=drapetractor:p=46:f=1', (pts[0][0], 0.0, pts[0][1])):
+            tractor((pts[0][0], 0.0, pts[0][1]))
     # the combine at work round the standing crop, anticlockwise from the
     # road's side (+X), cutting its outer swath: its header in the edge of
     # the wheat, the cab and tank over it, close by the kerb on that side
@@ -10593,16 +10594,25 @@ def field_wheat():
 
     def still():
         before = set(bpy.context.scene.objects)
-        crop_rows(standing, -HX, HX, 2.4, h, 2.05, 'yellow', z0=-HZ, z1=HZ, seg=5.0, end=0.75)
-        crop_rows(cut, -HX, HX, 2.4, 0.3, 1.6, 'yellow', z0=-HZ, z1=HZ)
+        pitch, seg = (4.8, 15.0) if lite else (2.4, 5.0)
+        crop_rows(standing, -HX, HX, pitch, h, pitch - 0.35, 'yellow', z0=-HZ, z1=HZ, seg=seg, end=0.75)
+        crop_rows(cut, -HX, HX, pitch, 0.3, pitch - 0.8, 'yellow', z0=-HZ, z1=HZ, seg=16.0 if lite else 8.0)
         for o in bpy.context.scene.objects:   # the crop golden, not run down the ramp to orange
             if o not in before:
                 o['ramp'] = 0.25
         for k, (x, z) in enumerate(((-15.0, 28.0), (15.0, 40.0), (-2.0, 33.0), (8.0, 27.0), (-9.0, 41.0))):
             round_bale((x, 0.2, z), yaw=0.6 * k, color=('yellow', 'tan')[k % 2])
-        for px, pz, k in PINES:
-            lawn_poplar(px, pz, k / 16.0)
+        if lite:
+            tractor((pts[3][0], 0.0, pts[3][1]))
     draped('wheat', still)
+
+@piece(REAL)
+def field_wheat():
+    field_wheat_build(False)
+
+@piece(REAL)
+def field_wheat_lite():
+    field_wheat_build(True)
 
 # The orchard round the outside of the south loop, at the foot of the south
 # hill, where a racer going round the loop looks: blocks of apple trees, three
@@ -10703,8 +10713,8 @@ def orchard_block_end_lite():
 # The hay made on the bank past the village street's end (tracks.js `land`):
 # round bales in two straight rows along the slope where the baler dropped
 # them, all one straw yellow and lying one way, and the tractor going slowly
-# round the far row with its trailer, two bales already on it; two of the
-# village's poplars left standing at the back. Scattered at odd angles in two
+# round the far row with its trailer, two bales already on it; three of the
+# orchard's apple trees at the back (the lap keeps to that one tree). Scattered at odd angles in two
 # colours the bales read as speckle from the road; in rows they read as a
 # field. It DRAPES on the bank as drawn. Front (+X) to the road, metres; on
 # the left at yaw 180.
@@ -10742,18 +10752,24 @@ def hay_meadow():
         for o in bpy.context.scene.objects:      # straw yellow, not run down the ramp to orange
             if o not in before:
                 o['ramp'] = 0.25
-        lawn_poplar(-8.0, -11.0, 1.0)
-        lawn_poplar(-9.5, 9.0, 0.9)
+        apple_tree(-8.0, -11.0, 5, False)
+        apple_tree(-9.5, 9.0, 6, False)
+        apple_tree(-10.5, -1.0, 7, False)
     draped('hay', still)
 
-# The dairy farm on the lawn inside the west bend, where the bend's driver
-# looks across it: the red barn with its silo, the herd grazing out in front
-# of it, side on to the road and a body length or more apart so each reads as
-# a cow, each lifting its head now and then (Crag's cows, the same gesture),
-# the water trough, churns waiting at the barn door. World units (a cow is a
-# car long): barn, silo and herd read as one scene, where a cow alone is a
-# speck. Front (+X) to the road; on the left, yaw 180. It DRAPES, the heads
-# too (`drape`), on the lawn as drawn.
+# The dairy farm on its bank outside the west bend (tracks.js `land`), where
+# a racer coming out from under the flyover looks straight at it: the red
+# barn with its silo up on the bank's top, the herd grazing down its face in
+# front of it, side on to the road and a body length or more apart so each
+# reads as a cow, each lifting its head now and then (Crag's cows, the same
+# gesture), the water trough, churns waiting at the barn door. Its paddock is
+# fenced on the road's side and both ends in the sheepfold's timber, a field
+# gate in it, and the farm lane runs from the barn door down through the gate
+# toward the road. World units (a cow is a car long): barn, silo and herd read
+# as one scene, where a cow alone is a speck. Front (+X) to the road; on the
+# right at yaw 0. It DRAPES, the heads too (`drape`), on the bank as drawn.
+# The lite build (the Android TV's) keeps the heads still, in the one draped
+# part, and the fence a post every other stride under one rail.
 def red_barn(x, z):
     RED, ROOF = 0xcf534f, 0x4f5260
     F = local(x, z, 0.0)
@@ -10769,22 +10785,43 @@ def red_barn(x, z):
     cyl(0.4, 1.9, (x - 0.2, 0, z - 1.75), 'white', segs=10)                 # the silo
     sphere(0.42, (x - 0.2, 1.9, z - 1.75), 0x6794d9, scale=(1.0, 0.7, 1.0))
 
-@piece(1.0)
-def cow_farm():
+def cow_farm_build(lite):
+    FX, Z0, Z1, BACK = 2.7, -4.6, 4.8, -2.9         # the paddock: its road-side fence, both ends, how far back they run
+    GZ = 0.4                                        # the gate and the lane, on the barn door's line
     def still():
-        red_barn(-1.6, 0.4)
+        red_barn(-1.6, GZ)
         box((0.4, 0.3, 1.4), (0.9, 0.15, -3.0), 0x9a7b55)                   # the trough
         box((0.32, 0.04, 1.3), (0.9, 0.3, -3.0), 0x62d3c8)
         with plain_parts():
             for k in range(3):                                              # churns at the door
-                cyl(0.09, 0.26, (-0.6, 0, 0.1 + 0.22 * k), 'white', segs=8)
-            hay_bale((-0.4, 0, 1.6), yaw=0.3)
+                cyl(0.09, 0.26, (-0.6, 0, GZ - 0.75 - 0.22 * k), 'white', segs=8)
+            hay_bale((-0.4, 0, 1.9), yaw=0.3)
         H = math.pi / 2
-        HERD = ((1.6, -1.6, H, 0x8a5a3c), (1.5, 0.6, -H, 0xf8f8fb), (1.6, 2.8, H, 0x2a2735),
-                (0.2, -0.6, -H, 0xf8f8fb), (0.3, 1.7, H + 0.3, 0x5a3a28), (-0.4, 3.5, -H, 0x2a2735))
+        HERD = ((1.6, -1.6, H, 0x8a5a3c), (1.5, 1.5, -H, 0xf8f8fb), (1.7, 3.3, H, 0x2a2735),
+                (0.2, -1.0, -H, 0xf8f8fb), (0.3, 2.3, H + 0.3, 0x5a3a28), (-0.4, 3.8, -H, 0x2a2735))
         for k, (x, z, yaw, coat) in enumerate(HERD):
-            cow((x, 0, z), yaw=yaw, coat=coat, life='anim_drape+sway:a=z:d=30:p=%.1f:r=0.75#c%d' % (6.6 + 0.9 * k, k))
+            cow((x, 0, z), yaw=yaw, coat=coat,
+                life=None if lite else 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.75#c%d' % (6.6 + 0.9 * k, k))
+        # the paddock's fence and its gate, the lane through it in short
+        # lengths so it lies on the bank as drawn
+        step, rails = (3.0, (0.42,)) if lite else (1.5, (0.24, 0.48))
+        ribbon_fence(((BACK, Z0), (FX, Z0), (FX, GZ - 0.55)), rails=rails, step=step)
+        ribbon_fence(((FX, GZ + 0.55), (FX, Z1), (BACK, Z1)), rails=rails, step=step)
+        ribbon_gate((FX, GZ - 0.55), (FX, GZ + 0.55))
+        x, n = -0.8, 9
+        for i in range(n):
+            x0, x1 = -0.8 + (FX + 1.3 + 0.8) * i / n, -0.8 + (FX + 1.3 + 0.8) * (i + 1) / n
+            rowed(ground_poly([(x0, 0.05, GZ - 0.36), (x1, 0.05, GZ - 0.36), (x1, 0.05, GZ + 0.36), (x0, 0.05, GZ + 0.36)],
+                              [(0, 3, 2, 1)], 'gravel'), 26)
     draped('farm', still)
+
+@piece(1.0)
+def cow_farm():
+    cow_farm_build(False)
+
+@piece(1.0)
+def cow_farm_lite():
+    cow_farm_build(True)
 
 # A flock on the meadow at the foot of the north-east hill, round the outside
 # of the north loop's bend, where a racer going round it looks: the shepherd's
@@ -10802,15 +10839,21 @@ def sheep(at, yaw, life):
             box((0.07, 0.18, 0.2), p(lx, 0.09, 0), 0x2a2735, yaw=yaw)
     box((0.48, 0.28, 0.34), p(0, 0.31, 0), 0xf8f8fb, yaw=yaw)              # the fleece
     box((0.4, 0.08, 0.28), p(0, 0.48, 0), 0xf8f8fb, yaw=yaw)
-    with animated(life, p(0.22, 0.36, 0), yaw):
+    def head():
         box((0.16, 0.15, 0.13), p(0.3, 0.28, 0), 0x2a2735, yaw=yaw, roll=-0.6)
+    if life:
+        with animated(life, p(0.22, 0.36, 0), yaw):
+            head()
+    else:
+        head()
 
-def flock(spots, tag):
+def flock(spots, tag, lite=False):
+    # lite (the Android TV's build): the heads keep still, so the whole flock
+    # is in its piece's one draped part instead of a draw a sheep
     for k, (x, z, yaw) in enumerate(spots):
-        sheep((x, 0, z), yaw, 'anim_drape+sway:a=z:d=28:p=%.1f:r=0.72#%s%d' % (5.8 + 0.7 * k, tag, k))
+        sheep((x, 0, z), yaw, None if lite else 'anim_drape+sway:a=z:d=28:p=%.1f:r=0.72#%s%d' % (5.8 + 0.7 * k, tag, k))
 
-@piece(1.0)
-def sheep_meadow():
+def sheep_meadow_build(lite):
     def still():
         # the shepherd's hut, its door and steps on +X
         HX, HZ = -1.6, 1.2
@@ -10825,15 +10868,22 @@ def sheep_meadow():
         box((0.04, 0.16, 0.18), (HX + 0.41, 0.62, HZ - 0.36), 'sky')
         # the old apple tree beside it, the orchard's make: round smooth lobes
         cyl(0.16, 1.0, (HX - 0.4, 0, HZ - 1.7), 0x7a5a3a, r2=0.11, segs=7, stem=True)
-        sphere(0.95, (HX - 0.4, 1.6, HZ - 1.7), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 0.84, 1.0))
+        sphere(0.95, (HX - 0.4, 1.6, HZ - 1.7), 0x6cae55, subdiv=1 if lite else 2, flat=False, scale=(1.0, 0.84, 1.0))
         sphere(0.6, (HX - 0.95, 1.3, HZ - 1.15), 0x5f9f4a, subdiv=1, flat=False)
         sphere(0.55, (HX + 0.2, 1.4, HZ - 2.2), 0x5f9f4a, subdiv=1, flat=False)
         flock(((0.6, -1.2, 0.4), (1.4, -0.3, 2.6), (0.9, 0.9, -0.7), (2.0, 1.6, 1.2), (1.8, -1.9, -2.4),
-               (0.2, 2.3, 3.1), (2.6, 0.2, 0.9), (-0.2, -2.6, 1.8), (1.2, 3.0, -1.5)), 's')
+               (0.2, 2.3, 3.1), (2.6, 0.2, 0.9), (-0.2, -2.6, 1.8), (1.2, 3.0, -1.5)), 's', lite)
     draped('meadow', still)
 
 @piece(1.0)
-def sheep_flock():
+def sheep_meadow():
+    sheep_meadow_build(False)
+
+@piece(1.0)
+def sheep_meadow_lite():
+    sheep_meadow_build(True)
+
+def sheep_flock_build(lite):
     def still():
         # their trough and the hay rack, a post-and-slat crib with hay in it
         box((0.3, 0.24, 1.1), (-0.6, 0.12, -0.4), 0x9a7b55)
@@ -10843,8 +10893,16 @@ def sheep_flock():
         box((0.5, 0.36, 1.0), (-0.9, 0.5, 1.3), 'yellow')
         box((0.1, 0.06, 1.1), (-0.9, 0.7, 1.3), 0x7a5a3a)
         flock(((0.5, -1.6, 0.6), (1.3, -0.4, 2.4), (0.2, 0.5, -0.9), (1.6, 1.4, 1.5), (0.4, 2.2, 2.9),
-               (-0.3, 0.2, 1.9), (1.0, -2.6, -2.0)), 'f')
+               (-0.3, 0.2, 1.9), (1.0, -2.6, -2.0)), 'f', lite)
     draped('flock', still)
+
+@piece(1.0)
+def sheep_flock():
+    sheep_flock_build(False)
+
+@piece(1.0)
+def sheep_flock_lite():
+    sheep_flock_build(True)
 
 # ---- RIBBON: the sheepfold and the fences up the hill --------------------------------
 # The sheep's hill beyond the north loop, farmed: a round timber fold by the
@@ -10879,38 +10937,54 @@ def ribbon_gate(a, b, h=0.62):
         strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0xf8f8fb)
     strut((a[0], 0.14, a[1]), (b[0], 0.6, b[1]), 0.09, 0xf8f8fb)
 
-@piece(1.0)
-def sheepfold():
+def sheepfold_build(lite):
+    # lite (the Android TV's build): the fold's hurdles two rails, the field
+    # fences a post every two units under one rail, the sheep still
     FX, FZ, R = 1.4, 0.0, 1.5                       # the fold: centre, radius
     N = 10
     ring = [(FX + R * math.cos(2 * math.pi * k / N), FZ + R * math.sin(2 * math.pi * k / N)) for k in range(N + 1)]
+    def fence(pts):
+        if lite:
+            ribbon_fence(pts, rails=(0.44,), step=2.0)
+        else:
+            ribbon_fence(pts)
     def still():
-        ribbon_fence(ring[3:] + ring[:3], rails=(0.18, 0.36, 0.54))    # hurdles, open toward +Z: the gate
+        ribbon_fence(ring[3:] + ring[:3], rails=(0.24, 0.5) if lite else (0.18, 0.36, 0.54))    # hurdles, open toward +Z: the gate
         ribbon_gate(ring[2], ring[3])
         # the fences from the fold: up the hill, and along its foot both ways
         # (short toward -Z: the sheep meadow is the next thing down the road)
-        ribbon_fence(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
-        ribbon_fence(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
-        ribbon_fence(((-7.4, 0.2), (-8.0, -5.5)))
-        ribbon_fence((ring[1], (1.1, 4.6)))
+        fence(((FX - R, 0.0), (-3.6, -0.6), (-7.4, 0.2), (-11.5, -0.8)))
+        fence(((-3.6, -0.6), (-4.3, 4.6), (-3.6, 9.5)))
+        fence(((-7.4, 0.2), (-8.0, -5.5)))
+        fence((ring[1], (1.1, 4.6)))
         ribbon_gate((1.1, 4.6), (1.0, 5.7))
-        ribbon_fence(((1.0, 5.7), (0.6, 10.0), (-3.6, 9.5)))             # and back up to the cross fence: one closed paddock
-        ribbon_fence((ring[9], (1.0, -5.5)))
+        fence(((1.0, 5.7), (0.6, 10.0), (-3.6, 9.5)))                    # and back up to the cross fence: one closed paddock
+        fence((ring[9], (1.0, -5.5)))
         # a hay rack in the fold, a trough outside it
         for sz in (-1, 1):
             box((0.1, 0.6, 0.1), (FX - 0.6, 0.3, FZ - 0.5 + sz * 0.4), 0x7a5a3a)
         box((0.45, 0.34, 0.9), (FX - 0.6, 0.5, FZ - 0.5), 'yellow')['ramp'] = 0.25
         box((0.3, 0.24, 1.0), (-1.4, 0.12, 3.2), 0x9a7b55)
         flock(((FX + 0.4, FZ + 0.5, 0.6), (FX + 0.5, FZ - 0.6, 2.5), (FX - 0.3, FZ + 0.7, -1.0),
-               (-2.0, 4.0, 1.3), (-5.6, 3.0, 2.6), (-5.4, -3.2, 0.4), (-1.6, -4.0, -2.2)), 'p')
+               (-2.0, 4.0, 1.3), (-5.6, 3.0, 2.6), (-5.4, -3.2, 0.4), (-1.6, -4.0, -2.2)), 'p', lite)
     draped('fold', still)
+
+@piece(1.0)
+def sheepfold():
+    sheepfold_build(False)
+
+@piece(1.0)
+def sheepfold_lite():
+    sheepfold_build(True)
 
 # The village fete on the green beside the start straight, its right, on race
 # day: the helter-skelter at the near end, the tallest thing on the green and
 # striped like a stick of rock, a child going round and down it on a mat (up
 # again inside the tower); the bouncy castle; the tea tent; the carousel
 # turning slowly, a child riding; the stalls under their striped awnings; the
-# coconut shy; bunting strung between them. Real size (the tea tent is a
+# coconut shy; bunting strung between them, and down the road side on tall
+# poles either side of the way in. Nobody stands about on the green (a
+# person that small reads as uncanny): only the two riders. Real size (the tea tent is a
 # cottage and a half long, the helter-skelter as tall as the church's nave
 # roof), all of it within a few units of the kerb, nothing on the verge
 # itself. Front (+X) to the road, metres, on the right at yaw 0; the line is
@@ -10942,22 +11016,24 @@ def stall(at, yaw, colors, goods):
         for k in range(4 if goods else 0):
             box((0.4, 0.3, 0.4), F(0.6, y + 1.15, -1.1 + 0.73 * k), goods[k % len(goods)], yaw=yaw)
 
-def bunting(a, b, colors, n=None):
-    """A string of pennants between two points, sagging a little."""
+def bunting(a, b, colors, n=None, drop=0.55, w=1.0):
+    """A string of pennants between two points, sagging a little; each
+    hangs `drop` deep and takes `w` of its length of cord."""
     L = math.dist(a, b)
     n = n or max(3, int(L / 0.9))
     pts = sag(a, b, 0.25 + 0.02 * L, n + 1)
     with plain_parts():
         for i in range(n):
             p, q = pts[i], pts[i + 1]
-            strut(p, q, 0.06, 'white')
+            strut(p, q, 0.06 if drop < 1.0 else 0.14, 'white')
             m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2)
-            poly([p, q, (m[0], m[1] - 0.55, m[2])], [(0, 1, 2)], colors[i % len(colors)])
+            pa, qa = [tuple(m[j] + (e[j] - m[j]) * w for j in range(3)) for e in (p, q)]
+            poly([pa, qa, (m[0], m[1] - drop, m[2])], [(0, 1, 2)], colors[i % len(colors)])
 
 def fete(lite):
     # lite (the Android TV's build): what a racer at speed does not read off
-    # the green goes (the bunting, the stalls' goods, the tea tables, the
-    # coconut shy, the stallholders), and the slide is cut coarser
+    # the green goes (the bunting between the attractions, the stalls' goods,
+    # the tea tables, the coconut shy), and the slide is cut coarser
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
     # ---- the helter-skelter, at the near end
     # (no taller than this: at its ten metres it stood over the church, the
@@ -11019,9 +11095,6 @@ def fete(lite):
             sphere(0.4, (BX + sx * 3.0, 5.95, BZ + sz * 3.0), YELLOW, subdiv=1, flat=False)
     cyl(0.55, 6.0, (BX + 3.0, 4.2, BZ - 3.0), YELLOW, segs=10, axis='along', smooth=True)    # the roll over the door
     box((1.8, 0.5, 4.2), (BX + 4.2, 0.25, BZ), BLUE)['round'] = 0.25                          # the step in
-    # a child in it, arms up: still, since a body moves only riding something
-    # (set_motion.h), and the castle does not
-    person((BX, 0.8, BZ), 0.0, 0x22c46e, k=0.65, hair=3, arm=2.6)
     # ---- the tea tent, along the green behind
     MX, MZ, MW, ML, MH = -3.0, -6.0, 6.0, 12.0, 2.8
     box((MW, MH, ML), (MX, MH / 2, MZ), WHITE)
@@ -11062,14 +11135,13 @@ def fete(lite):
             horse((px, 0.7, pz), -a - math.pi / 2, COATS[k], (RED, BLUE, YELLOW)[k % 3])
             if k == 1:
                 person((px, 2.1, pz), -a - math.pi / 2, 0x22c46e, k=0.65, hair=3, sit=True, arm=0.3)
-    # ---- the stalls, under their striped awnings, someone at each
-    for k, (cols, goods, shirt) in enumerate((((RED, WHITE), (YELLOW, 0xff7e44, 0xcf534f), 0xa878e8),
-                                             ((BLUE, WHITE), (0x61cb8b, WHITE, YELLOW), 0xffc044),
-                                             ((0x22c46e, WHITE), (0xa878e8, 0xff7e44), 0x339cf2))):
+    # ---- the stalls, under their striped awnings (nobody standing at them:
+    # a person that small on the green reads as uncanny)
+    for k, (cols, goods) in enumerate((((RED, WHITE), (YELLOW, 0xff7e44, 0xcf534f)),
+                                      ((BLUE, WHITE), (0x61cb8b, WHITE, YELLOW)),
+                                      ((0x22c46e, WHITE), (0xa878e8, 0xff7e44)))):
         z = 22.0 + 6.0 * k
         stall((4.0, 0, z), 0.0, cols, () if lite else goods)
-        if not lite:
-            person((6.4, 0, z + 0.4 - 0.8 * k), math.pi, shirt, k=(1.0, 0.7, 0.7)[k], hair=k)
     # the coconut shy at the far end: its frame, the coconuts on posts
     SX, SZ = 6.0, 43.0
     for sz in (-1, 1):
@@ -11087,10 +11159,13 @@ def fete_ground(lite, stops):
     """What makes the fete one fairground: a mown green under all of it, a
     gravel walk down its road side with a spur to each attraction (`stops`:
     where, and how wide a patch of gravel lies before it), the way in from
-    the road under a banner between two poles, and a post-and-rope fence
-    along the road and round both ends. The green and the gravel lie a hand
-    over the piece's level (flat on it, the levelled lawn comes through)."""
-    RED, WHITE = 0xcf534f, 0xf8f8fb
+    the road under a tall striped banner between two masts, a post-and-rope
+    fence along the road and round both ends, and bunting down the whole
+    road side on tall white poles: the walk and the green lie under the kerb
+    from the seat, so what stands over it is what joins the fete into one
+    place. The green and the gravel lie a hand over the piece's level (flat
+    on it, the levelled lawn comes through)."""
+    RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
     X0, X1, Z0, Z1 = -8.5, 15.5, -45.5, 49.5        # the green: back, road side, both ends
     WALK, GY, PY = 13.0, 0.1, 0.14                  # the walk's line; the green's and the gravel's middles
     n = 12                                          # mown in stripes, as a show field is
@@ -11101,15 +11176,33 @@ def fete_ground(lite, stops):
     for x, z, w in stops:
         box((WALK - x + 1.0, 0.2, 1.8), ((WALK + x) / 2, PY, z), 'cream')          # the spur
         box((2.2, 0.2, w), (x + 0.6, PY, z), 'cream')                              # the patch before it
-    # the way in, opposite the tea tent: gravel out to the verge, two tall
-    # poles and a striped banner between them
-    GZ, GW = 0.0, 5.0
-    box((X1 + 4.0 - WALK, 0.2, 3.0), ((X1 + 4.0 + WALK) / 2, PY, GZ), 'cream')
+    # the way in, opposite the tea tent: gravel out to the verge, two masts
+    # as tall as the tea tent's ridge poles and a deep striped banner between
+    # them under a yellow board, a pennant on each mast
+    GZ, GW, GH = 0.0, 6.0, 8.6
+    box((X1 + 4.0 - WALK, 0.2, 3.4), ((X1 + 4.0 + WALK) / 2, PY, GZ), 'cream')
     for sz in (-1, 1):
-        box((0.45, 5.6, 0.45), (X1, 2.8, GZ + sz * GW / 2), WHITE)
-        sphere(0.4, (X1, 5.8, GZ + sz * GW / 2), 0xffc044, subdiv=1)
-    for k in range(5):
-        box((0.2, 1.1, GW / 5), (X1, 4.7, GZ - GW / 2 + GW / 5 * (k + 0.5)), (RED, WHITE)[k % 2])
+        box((0.6, GH, 0.6), (X1, GH / 2, GZ + sz * GW / 2), WHITE)
+        box((0.9, 0.5, 0.9), (X1, 0.25, GZ + sz * GW / 2), RED)
+        with plain_parts():
+            poly([(X1, GH + 1.5, GZ + sz * GW / 2), (X1, GH + 0.5, GZ + sz * GW / 2), (X1, GH + 1.0, GZ + sz * (GW / 2 + 1.6))],
+                 [(0, 1, 2)], (RED, BLUE)[sz > 0])
+        box((0.3, 1.7, 0.3), (X1, GH + 0.7, GZ + sz * GW / 2), WHITE)
+    for k in range(6):
+        box((0.24, 1.9, GW / 6), (X1, GH - 1.6, GZ - GW / 2 + GW / 6 * (k + 0.5)), (RED, WHITE)[k % 2])
+    box((0.36, 0.6, GW + 0.9), (X1, GH - 0.4, GZ), YELLOW)
+    # bunting down the road side, pole to pole over the fence, the masts its
+    # middle pair
+    BH = 6.4
+    zs = [Z0 + (GZ - GW / 2 - Z0) * k / 3 for k in range(3)] + [GZ - GW / 2, GZ + GW / 2] \
+        + [GZ + GW / 2 + (Z1 - GZ - GW / 2) * k / 3 for k in range(1, 4)]
+    for z in zs:
+        if abs(z - GZ) > GW / 2 + 0.1:
+            box((0.45, BH + 0.3, 0.45), (X1, (BH + 0.3) / 2, z), WHITE)
+    for za, zb in zip(zs, zs[1:]):
+        if za == GZ - GW / 2:
+            continue
+        bunting((X1, BH, za), (X1, BH, zb), (RED, YELLOW, BLUE, WHITE, 0x22c46e), n=5 if lite else 8, drop=1.5, w=0.75)
     # the fence: white posts and a red rope, along the road and round the ends
     def fence(a, b):
         n = max(1, round(math.dist(a, b) / (8.0 if lite else 4.0)))
@@ -11119,8 +11212,8 @@ def fete_ground(lite, stops):
                 box((0.4, 1.7, 0.4), (x, 0.85, z), WHITE)
             for (xa, za), (xb, zb) in zip(pts, pts[1:]):
                 strut((xa, 1.35, za), (xb, 1.35, zb), 0.36, RED)
-    fence((X1, Z0), (X1, GZ - GW / 2))
-    fence((X1, GZ + GW / 2), (X1, Z1))
+    fence((X1, Z0), (X1, GZ - GW / 2 - 0.6))
+    fence((X1, GZ + GW / 2 + 0.6), (X1, Z1))
     fence((X0, Z0), (X1, Z0))
     fence((X0, Z1), (X1, Z1))
 

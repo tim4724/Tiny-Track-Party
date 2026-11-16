@@ -1243,12 +1243,15 @@ export const TRACKS = {
     // is on beside the grid straight. The orchard at the south hill's foot
     // rings the south loop, a block of trees laid along the road at each spot,
     // turned either way round, two tall poplars at the band's far end (at its
-    // near end they stood in the view of the church). The
+    // near end they stood in the view of the church): the lap's only poplars,
+    // every other tree the orchard's. The
     // windmill turns in the north loop beside its wheat field, a rectangle
     // well inside the kerbs; the sheep graze round the loop's outside and
-    // under the flyover, their fold and its drystone walls up the north-east
-    // hill where the loop turns under it, and the dairy farm stands inside
-    // the west bend. The church is the village's tallest thing, a quarter
+    // under the flyover, their fold of timber hurdles and its post-and-rail
+    // fences up the north-east hill where the loop turns under it, and the
+    // dairy farm stands on its bank outside the west bend, straight ahead of
+    // a racer coming out from under the flyover, its paddock fenced and its
+    // lane down to the road. The church is the village's tallest thing, a quarter
     // over its real size like the cup's other heroes, in a walled yard by
     // the road with its lychgate to it. A
     // piece's box holds the verge band down under it (bandHold), so nothing
@@ -1276,7 +1279,7 @@ export const TRACKS = {
       { model: 'set-orchard-block', u: 0.239, lat: -8.6 },
       { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
-      { model: 'set-cow-farm', u: 0.892, lat: -9.4, yaw: 180, scale: 1.3 },
+      { model: 'set-cow-farm', u: 0.855, lat: 11.5, yaw: 0, scale: 1.3 },
       { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
       { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
@@ -1286,7 +1289,9 @@ export const TRACKS = {
     // bend's verge (`near`) to a terrace above it, the east terraces climb
     // behind the street, the south hill stands behind the orchard and the
     // north-east hill behind the sheep; past the street's end the west side
-    // comes down to the verge as a hay bank
+    // comes down to the verge as a hay bank, and outside the west bend's
+    // entry the farm's bank rises off the verge the same way, its face to the
+    // road so the herd shows up it
     land: [
       { kind: 'ridge', u: 0.915, lat: 23.1, yaw: -4, len: 44, r: 20, h: 7, top: 0.25, near: 0.6 },
       { kind: 'ridge', u: 0.92746, lat: 29.818, yaw: 2.68, len: 100, r: 9, h: 3, top: 0.45 },
@@ -1295,6 +1300,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.2, lat: -36, len: 60, r: 24, h: 8, top: 0.35 },
       { kind: 'ridge', u: 0.66022, lat: -22, r: 24, h: 9, top: 0.15 },
       { kind: 'ridge', u: 0.458, lat: -13.3, len: 10, r: 10, h: 3, top: 0.4, near: 0.6 },
+      { kind: 'ridge', u: 0.855, lat: 17, len: 8, r: 14, h: 3.2, top: 0.25, near: 0.6 },
       { kind: 'street', u: 0.39565, len: 32 }
     ]
   },
