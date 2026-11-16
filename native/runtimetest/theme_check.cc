@@ -37,6 +37,7 @@
 #include "corpus_diff.h"
 #include "corpus_record.h"
 #include "generated/track_defs.h"
+#include "ttp/detail.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
@@ -486,5 +487,33 @@ int main(int argc, char** argv) {
   }
   std::printf("tracks stamping their biome's prop slots: %d/%d\n", propAgree, propTracks);
 
-  return (passed == cases && tinted == tintable && propAgree == propTracks) ? 0 : 1;
+  // ---- Beyond the corpus: a tree names a model its scenery list holds ------
+  //
+  // The renderer draws a tree by its model's slot in scenery.models, and a
+  // name the list does not hold draws slot 0. The lite tier renames the list
+  // to the lite builds, and left the trees naming the full ones: Ribbon's
+  // apples stood as oaks on the box, every cactus as the saguaro.
+  int treeTracks = 0, treeAgree = 0;
+  for (const rt::Detail d : { rt::Detail::Full, rt::Detail::Lite }) {
+    rt::detail_in_force() = d;
+    for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+      const char* id = TTP_TRACKS[i].id;
+      const rt::ScenerySpec s = rt::resolve_theme(rt::biome_for_track(id), id).scenery;
+      const auto held = [&](const std::string& m) {
+        for (const std::string& have : s.models) if (have == m) return true;
+        return false;
+      };
+      bool ok = !s.hasBush || held(s.bush.model);
+      for (const rt::TreeSpec& t : s.trees) ok = ok && held(t.model);
+      treeTracks++;
+      if (ok) treeAgree++;
+      else std::fprintf(stderr, "FAIL trees %s (%s): a tree names a model not in scenery.models\n",
+                        id, rt::detail_name(d));
+    }
+  }
+  rt::detail_in_force() = rt::Detail::Full;
+  std::printf("tracks whose trees name a scenery slot, both tiers: %d/%d\n", treeAgree, treeTracks);
+
+  return (passed == cases && tinted == tintable && propAgree == propTracks
+          && treeAgree == treeTracks) ? 0 : 1;
 }
