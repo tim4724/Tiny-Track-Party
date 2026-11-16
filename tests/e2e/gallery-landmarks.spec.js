@@ -64,6 +64,9 @@ const finite = (q) => [q.eye.x, q.eye.y, q.eye.z, q.target.x, q.target.y, q.targ
   .every(Number.isFinite) && q.fov > 0;
 
 test('landmark gallery: layout, split and every view', async ({ page }) => {
+  // It walks every view of every piece on several tracks, so it grows with the
+  // world; beside the suite's other workers it outruns the default limit.
+  test.slow();
   // A named scale, as the gallery page passes one: the buffer is the stage's
   // own height at that scale, whatever the adaptive rule would have done.
   await page.goto('/?scenario=landmarks&track=tidepool&players=2&dpr=0.5');
