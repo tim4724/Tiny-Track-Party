@@ -2700,6 +2700,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                            srgbChannel(std::min(1.0f, (base & 0xff) / 255.0f * fb)) };
         };
         const GroundPalette& pal = groundPalette(tb.groundKind);
+        const uint32_t groundBase = tb.groundBase ? tb.groundBase : pal.base;
         if (tb.groundKind == 4) {
             // wood — each band IS a plank, with a dark seam between
             const float bw = 1.0f / pal.bands, seam = 2.0f / 256; // 2px of the 256px tile
@@ -2711,18 +2712,18 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     // painted solid — the raw seam colour reads as a black gap
                     // between boards. 0.45f is its paired complement, a literal
                     // on purpose (never derived as 1 - alpha).
-                    const float3 board = shade(pal.base, f[0], f[1], f[2]);
+                    const float3 board = shade(groundBase, f[0], f[1], f[2]);
                     const float3 ink = shade(kWoodSeamInk, 1, 1, 1);
                     bands.push_back({ seam, board * 0.45f + ink * kWoodSeamAlpha });
                 }
-                bands.push_back({ bw - (i ? seam : 0), shade(pal.base, f[0], f[1], f[2]) });
+                bands.push_back({ bw - (i ? seam : 0), shade(groundBase, f[0], f[1], f[2]) });
             }
         } else {
             for (int i = 0; i < pal.bands; i++) {
                 float f[3];
                 pal.factor(i, f);
                 bands.push_back({ 1.0f / pal.bands,
-                        shade(tb.groundBase ? tb.groundBase : pal.base, f[0], f[1], f[2]) });
+                        shade(groundBase, f[0], f[1], f[2]) });
             }
         }
         // The bands stay — the berms sample them by world x (groundColorAt),
