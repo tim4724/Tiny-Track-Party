@@ -11371,8 +11371,8 @@ def avenue_oaks():
             sphere(r, (x, y, z + dz * (1, -1)[i % 2]), 0x5f9f4a if r > 4.0 else 0x6cae55, subdiv=1)
     join_still('avenue')
 
-@piece(REAL)
-def football_pitch():
+def football_pitch_build(lite):
+    # lite (the Android TV's build): the touchline's bunting four pennants a span
     # Pretzel: the village pitch laid along the road, greener than the
     # sun-yellowed downs round it (watered, mown in stripes), flush with the
     # lawn: its lines painted on the grass, chunky white goals at the ends,
@@ -11445,7 +11445,7 @@ def football_pitch():
     for z in zs:
         box((0.45, BH, 0.45), (BX, BH / 2, z), 'white')
     for z0, z1 in zip(zs, zs[1:]):
-        bunting((BX, BH - 0.15, z0), (BX, BH - 0.15, z1), (0xff5040, 0xffc044, 0x339cf2, 0x22c46e, 'white'), n=9)
+        bunting((BX, BH - 0.15, z0), (BX, BH - 0.15, z1), (0xff5040, 0xffc044, 0x339cf2, 0x22c46e, 'white'), n=4 if lite else 9)
     for sx in (-1, 1):
         for sz in (-1, 1):
             x, z = sx * PW / 2, sz * PL / 2
@@ -11453,6 +11453,14 @@ def football_pitch():
             with plain_parts():
                 poly([(x, 2.2, z), (x, 1.5, z), (x, 1.85, z - sz * 0.9)], [(0, 1, 2)], 0xff5040)
     join_still('pitch')
+
+@piece(REAL)
+def football_pitch():
+    football_pitch_build(False)
+
+@piece(REAL)
+def football_pitch_lite():
+    football_pitch_build(True)
 
 @piece(REAL)
 def den_camp():
@@ -12426,8 +12434,8 @@ def paddling_pool():
                          (PX + dx + 1.0, 0.06, PZ + dz + 0.6), (PX + dx - 1.0, 0.06, PZ + dz + 0.6)], [(0, 3, 2, 1)], c)
     draped('pool', still)
 
-@piece(REAL)
-def trampoline():
+def trampoline_build(lite):
+    # lite (the Android TV's build): one rope ring round the poles' heads.
     # No oak: the garden trampoline out on the
     # open down inside its safety net, a cage of padded poles a car and a
     # half tall with rope rings round them, its pad blue round a black mat,
@@ -12441,7 +12449,7 @@ def trampoline():
             box((0.45, NH, 0.45), (px, Y + NH / 2, pz), (0x339cf2, 0x22c46e)[k % 2], yaw=-a)
             box((0.6, 0.5, 0.6), (px, Y + NH + 0.2, pz), 0xffc044, yaw=-a)
         with plain_parts():
-            for y in (Y + 1.4, Y + 2.8, Y + NH - 0.1):
+            for y in ((Y + NH - 0.1,) if lite else (Y + 1.4, Y + 2.8, Y + NH - 0.1)):
                 for k in range(8):
                     a0, a1 = k * math.pi / 4 + 0.3, (k + 1) * math.pi / 4 + 0.3
                     if k == 7 and y < Y + NH - 0.2:          # the way in, toward the road
@@ -12461,6 +12469,14 @@ def trampoline():
             t = (k + 1) / 3
             box((0.3, 0.2, 1.4), (TX + R + 1.1 - 1.2 * t, (Y + 0.2) * t, TZ), 0x22c46e)
     draped('tramp', still)
+
+@piece(REAL)
+def trampoline():
+    trampoline_build(False)
+
+@piece(REAL)
+def trampoline_lite():
+    trampoline_build(True)
 
 # ---- TANGLE: the mill's timber yard -------------------------------------------------
 # The valley's woods are worked: on a low bank outside the south loop's
@@ -12743,29 +12759,43 @@ def bell_tent(x, z, r, cap):
     box((0.9, 0.2, 2.2), (x + r + 0.2, 2.0, z), cap, roll=-0.45)                      # its little awning
     return (x, H + 0.1, z)
 
-@piece(REAL)
-def summer_camp():
+def summer_camp_build(lite):
+    # lite (the Android TV's build): the flag still, in the camp's one part,
+    # the bunting four pennants a line, no seats round the stones
     RED, BLUE, GREEN, YELLOW = 0xcf534f, 0x339cf2, 0x22c46e, 0xffc044
     FX, FZ, FH = 1.0, 0.5, 9.0                      # the flagpole
+    def flag():
+        box((0.2, 1.6, 1.7), (FX, FH - 0.55, FZ + 1.05), YELLOW)
+        box((0.2, 1.5, 1.5), (FX + 0.15, FH - 0.6, FZ + 2.5), YELLOW, yaw=0.3)
+        box((0.24, 0.5, 3.0), (FX + 0.05, FH - 0.55, FZ + 1.7), RED)
     def still():
         peaks = [bell_tent(-1.5, -9.5, 2.7, RED), bell_tent(-7.0, 0.5, 3.2, BLUE), bell_tent(-0.5, 10.0, 2.5, GREEN)]
         box((0.5, FH + 0.6, 0.5), (FX, FH / 2 - 0.3, FZ), 'white')
         box((0.9, 0.6, 0.9), (FX, 0.2, FZ), RED)
         for px, py, pz in peaks:
-            bunting((FX, FH - 2.2, FZ), (px, py, pz), (RED, YELLOW, BLUE, 'white', GREEN), n=6, drop=1.3, w=0.8)
+            bunting((FX, FH - 2.2, FZ), (px, py, pz), (RED, YELLOW, BLUE, 'white', GREEN), n=4 if lite else 6, drop=1.3, w=0.8)
         # the ring of stones and the log seats round it, on the road side
         CX, CZ = 5.0, 0.5
         for k in range(8):
             a = k * math.pi / 4
             rowed(box((0.7, 0.5, 0.7), (CX + 1.3 * math.cos(a), 0.15, CZ + 1.3 * math.sin(a)), 'grey', yaw=a), SLATE_ROW)
-        for a in (1.2, 3.1, 5.0):
+        for a in (() if lite else (1.2, 3.1, 5.0)):
             cyl(0.5, 2.6, (CX + 3.2 * math.cos(a) - 1.3 * math.sin(a), 0.45, CZ + 3.2 * math.sin(a) + 1.3 * math.cos(a)),
                 0x7a5a3a, segs=7, axis='along', yaw=-a, stem=True)
+        if lite:
+            flag()
     draped('camp', still)
-    with animated('anim_drape+flutter:p=2.3#camp', (FX, FH + 0.3, FZ)):
-        box((0.2, 1.6, 1.7), (FX, FH - 0.55, FZ + 1.05), YELLOW)
-        box((0.2, 1.5, 1.5), (FX + 0.15, FH - 0.6, FZ + 2.5), YELLOW, yaw=0.3)
-        box((0.24, 0.5, 3.0), (FX + 0.05, FH - 0.55, FZ + 1.7), RED)
+    if not lite:
+        with animated('anim_drape+flutter:p=2.3#camp', (FX, FH + 0.3, FZ)):
+            flag()
+
+@piece(REAL)
+def summer_camp():
+    summer_camp_build(False)
+
+@piece(REAL)
+def summer_camp_lite():
+    summer_camp_build(True)
 
 # ---- PRETZEL: the kite hill --------------------------------------------------------
 # Three kites flying over the face of the hill beyond the top loop (tracks.js
@@ -12803,8 +12833,9 @@ def kite_stake(x, z, color):
         box((0.7, 1.0, 0.7), (x, 0.5 + 1.0 * k, z), (color, 'white')[k % 2])
     cyl(0.6, 0.5, (x, 3.0, z), 0x9a7b55, segs=8, axis='along')
 
-@piece(REAL)
-def kite_flyers():
+def kite_flyers_build(lite):
+    # lite (the Android TV's build): the kites hang still, in the piece's one
+    # draped part with their stakes, on lines of four lengths
     # Three kites up over the hill's face: a real kite's size, high over the
     # hill on long lines from their stakes, nodding gently. Front (+X) to the
     # road; the stakes and lines DRAPE.
@@ -12821,41 +12852,55 @@ def kite_flyers():
     def still():
         for (x, z, c), k in zip(STAKES, (DRAGON, DIAMOND, BOX)):
             kite_stake(x, z, c)
-            kite_string((x, 3.2, z), k, n=8)
-    draped('stakes', still)
-    hx, hy, hz = DRAGON
-    with animated('anim_drape+sway:a=x:d=3:p=5.2#dragon', DRAGON):
-        box((1.1, 1.9, 2.0), (hx, hy, hz), RED)                                 # the head
-        for s in (-1, 1):
-            box((0.2, 0.4, 0.4), (hx + 0.5, hy + 0.3, hz + s * 0.45), YELLOW)   # its eyes
-        COLS = (YELLOW, GREEN, BLUE, RED)
-        prev = (hx, hy + 0.5, hz + 0.8)
-        for i in range(6):
-            t = (i + 1) / 6
-            z = hz + 1.9 + 1.9 * i
-            y = hy - 1.0 * math.sin(math.pi * t) + 0.3 * math.sin(2.5 * t * math.pi)
-            r = 1.25 - 0.07 * i
-            cyl(r, 0.2, (hx - 0.1, y, z), COLS[i % 4], segs=10, axis='across')
-            rim = (hx, y + r, z)
-            strut(prev, rim, KITE_CORD, 'white')
-            prev = rim
-    S = 1.3
-    kx, ky, kz = DIAMOND
-    with animated('anim_drape+sway:a=x:d=3.5:p=4.4#diamond', DIAMOND):
-        poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
-             [(0, 1, 2), (0, 2, 3)], BLUE)
-        poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
-             [(0, 1, 2)], YELLOW)
-        kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=4)
-    S = 1.3
-    kx, ky, kz = BOX
-    with animated('anim_drape+sway:a=x:d=3.5:p=4.8#box', BOX):
-        for s in (-1, 1):
-            box((1.4 * S, 1.2 * S, 1.4 * S), (kx, ky + s * 1.0 * S, kz), (RED, PURPLE)[s > 0])
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                box((0.3, 3.4 * S, 0.3), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
-        kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=5)
+            kite_string((x, 3.2, z), k, n=4 if lite else 8)
+    flown = (lambda name, pivot: contextlib.nullcontext()) if lite else animated
+    def kites():
+        hx, hy, hz = DRAGON
+        with flown('anim_drape+sway:a=x:d=3:p=5.2#dragon', DRAGON):
+            box((1.1, 1.9, 2.0), (hx, hy, hz), RED)                                 # the head
+            for s in (-1, 1):
+                box((0.2, 0.4, 0.4), (hx + 0.5, hy + 0.3, hz + s * 0.45), YELLOW)   # its eyes
+            COLS = (YELLOW, GREEN, BLUE, RED)
+            prev = (hx, hy + 0.5, hz + 0.8)
+            for i in range(6):
+                t = (i + 1) / 6
+                z = hz + 1.9 + 1.9 * i
+                y = hy - 1.0 * math.sin(math.pi * t) + 0.3 * math.sin(2.5 * t * math.pi)
+                r = 1.25 - 0.07 * i
+                cyl(r, 0.2, (hx - 0.1, y, z), COLS[i % 4], segs=10, axis='across')
+                rim = (hx, y + r, z)
+                strut(prev, rim, KITE_CORD, 'white')
+                prev = rim
+        S = 1.3
+        kx, ky, kz = DIAMOND
+        with flown('anim_drape+sway:a=x:d=3.5:p=4.4#diamond', DIAMOND):
+            poly([(kx, ky + 2.4 * S, kz), (kx, ky, kz - 1.5 * S), (kx, ky - 3.0 * S, kz), (kx, ky, kz + 1.5 * S)],
+                 [(0, 1, 2), (0, 2, 3)], BLUE)
+            poly([(kx + 0.05, ky + 2.4 * S, kz), (kx + 0.05, ky, kz + 1.5 * S), (kx + 0.05, ky - 3.0 * S, kz)],
+                 [(0, 1, 2)], YELLOW)
+            kite_tail((kx, ky - 3.0 * S, kz), (RED, YELLOW, GREEN), n=4)
+        S = 1.3
+        kx, ky, kz = BOX
+        with flown('anim_drape+sway:a=x:d=3.5:p=4.8#box', BOX):
+            for s in (-1, 1):
+                box((1.4 * S, 1.2 * S, 1.4 * S), (kx, ky + s * 1.0 * S, kz), (RED, PURPLE)[s > 0])
+            for sx in (-1, 1):
+                for sz in (-1, 1):
+                    box((0.3, 3.4 * S, 0.3), (kx + sx * 0.65 * S, ky, kz + sz * 0.65 * S), 'white')
+            kite_tail((kx, ky - 1.7 * S, kz), (YELLOW, BLUE), n=5)
+    if lite:
+        draped('stakes', lambda: (still(), kites()))
+    else:
+        draped('stakes', still)
+        kites()
+
+@piece(REAL)
+def kite_flyers():
+    kite_flyers_build(False)
+
+@piece(REAL)
+def kite_flyers_lite():
+    kite_flyers_build(True)
 
 # ---- TANGLE: the springhouse the stream rises under -------------------------------
 # The stream's source, at the foot of the hill beyond the north loop's top
