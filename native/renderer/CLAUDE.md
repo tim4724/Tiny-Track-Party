@@ -929,7 +929,11 @@ So:
   down its cone for free. `npm run see:pops` counts what swaps per frame;
   hold a change to the gate or the forms to it. Full's forms also keep a
   small closed shape whole (`kFarWhole`: a post, a rail, a ring), which the
-  simplifier otherwise folds away for no error. **No full-tier platform keeps lite's gate in a split, the
+  simplifier otherwise folds away for no error. In both tiers a shape the
+  simplifier left nothing of (thinner than `kFarTol`: a cable, a frond, a
+  flag) goes back in at a quarter of its triangles if it is longer than a
+  small thing is at the swap; kept whole, those were a tenth to a fifth of
+  lite's vertices, and left out, a lift stood with no cable. **No full-tier platform keeps lite's gate in a split, the
   Apple TV included** (`split_keeps_lite_gate`, `ttp/detail.h`, is the one
   switch): its 4P 4K frame was tuned on the far forms' saving and could not
   be measured when full's gate was tightened, but lite's gate in a 540-line

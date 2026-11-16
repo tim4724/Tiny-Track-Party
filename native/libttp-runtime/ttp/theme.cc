@@ -985,6 +985,14 @@ std::vector<std::string> biomeProps(const BiomeEntry* b) {
 
 }  // namespace
 
+namespace {
+void lite_model(std::string& m) {
+  for (int i = 0; i < TTP_LITE_MODEL_COUNT; i++) {
+    if (m == TTP_LITE_MODELS[i]) { m += "-lite"; return; }
+  }
+}
+}  // namespace
+
 Theme resolve_theme(const char* biomeName, const char* trackId) {
   const BiomeEntry* b = findBiome(biomeName);
   Theme t = (b ? b->build : grassTheme)();
@@ -1039,6 +1047,11 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
     // The life is the corner of the eye's, and every millisecond on the box
     // is the race's: none until it has been priced there.
     t.life = AmbientSpec{};
+    // The trees and the bush name their models, and the renderer finds each
+    // one's slot in scenery.models by that name: renamed with the list, or
+    // every tree with a lite build draws slot 0 (apples as oaks).
+    for (TreeSpec& tr : t.scenery.trees) lite_model(tr.model);
+    lite_model(t.scenery.bush.model);
     lite_models(t.scenery.models);
     lite_models(t.props.models);
     lite_models(t.set.models);
@@ -1047,11 +1060,7 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 }
 
 void lite_models(std::vector<std::string>& models) {
-  for (std::string& m : models) {
-    for (int i = 0; i < TTP_LITE_MODEL_COUNT; i++) {
-      if (m == TTP_LITE_MODELS[i]) { m += "-lite"; break; }
-    }
-  }
+  for (std::string& m : models) lite_model(m);
 }
 
 std::vector<MatTint> resolve_model_tints(const std::string& model,

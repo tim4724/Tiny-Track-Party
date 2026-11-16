@@ -663,9 +663,10 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
     // far form simply had no post, and it stood up out of nothing as the car
     // came on. So the range's triangles are grouped into the shapes they
     // close (corners joined by position), and a shape of kFarWhole triangles
-    // or fewer stays as it is.
+    // or fewer stays as it is. The shapes are found in both tiers: what the
+    // simplifier leaves nothing of is judged by them below.
     std::vector<uint32_t> shape, count;
-    if (keepShades) {
+    {
         std::vector<uint32_t> order;
         for (size_t i = 0; i < idxN; i++) order.push_back(src[i]);
         std::sort(order.begin(), order.end());
@@ -726,6 +727,48 @@ TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
                 v1 - v0, stride, 0, kFarTol / scale,
                 lockBorder || keepShades || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
         for (uint32_t& k : dst) k += v0;
+        // NOTHING BIG IS SIMPLIFIED AWAY (both tiers). Lite does not keep
+        // the small shapes whole, and a shape thinner than the tolerance (a
+        // lift's cable, a palm's fronds, a flag) folded to no triangles at
+        // all, which the simplifier counts as no error: pylons with no
+        // cable, trunks with no crown, until the near form came back. So a
+        // shape the simplifier left nothing of is simplified again on its
+        // own, to a quarter of its triangles and no further, if it is longer
+        // than lite's own small thing is at the swap (kCutPx pixels where
+        // kFarTol covers kLodPx); a shorter one stays out, and whole ones
+        // would hand back most of what a far form saves the box.
+        const float small = kFarTol * kCutPx / kLodPx / scale;
+        std::vector<bool> left(m.verts.size(), false);
+        for (const uint32_t k : dst) left[shape[k]] = true;
+        for (const uint32_t k : keep) left[shape[k]] = true;
+        std::vector<float3> lo(m.verts.size(), float3{ 1e30f }), hi(m.verts.size(), float3{ -1e30f });
+        for (const uint32_t k : pool) {
+            const Vertex& v = m.verts[k + v0];
+            const float3 p{ v.px, v.py, v.pz };
+            lo[shape[k + v0]] = min(lo[shape[k + v0]], p);
+            hi[shape[k + v0]] = max(hi[shape[k + v0]], p);
+        }
+        std::vector<std::pair<uint32_t, uint32_t>> gone;   // (shape, its triangle in the pool)
+        for (size_t i = 0; i < pool.size(); i += 3) {
+            const uint32_t sh = shape[pool[i] + v0];
+            const float3 box = hi[sh] - lo[sh];
+            if (!left[sh] && std::max(box.x, std::max(box.y, box.z)) > small) gone.push_back({ sh, (uint32_t) i });
+        }
+        std::sort(gone.begin(), gone.end());
+        std::vector<uint32_t> one, less;
+        for (size_t a = 0, b = 0; a < gone.size(); a = b) {
+            one.clear();
+            for (; b < gone.size() && gone[b].first == gone[a].first; b++) {
+                one.insert(one.end(), pool.begin() + gone[b].second, pool.begin() + gone[b].second + 3);
+            }
+            less.resize(one.size());
+            float e = 0;
+            less.resize(meshopt_simplify(less.data(), one.data(), one.size(), at, v1 - v0, stride,
+                    std::max<size_t>(12, one.size() / 12 * 3), kFarTol / scale, 0, &e));
+            if (less.empty()) less = one;
+            err = std::max(err, e);
+            for (const uint32_t k : less) dst.push_back(k + v0);
+        }
     }
     dst.insert(dst.end(), keep.begin(), keep.end());
     if (dst.empty() || dst.size() * 5 > idxN * 4) return r;
