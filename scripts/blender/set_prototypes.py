@@ -18842,6 +18842,10 @@ def block(size, at, color, yaw=0.0, roll=0.0, pitch=0.0, letters=None, faces=('+
     plates = {'+x': (off, 0, 0, t, pw, pw), '-x': (-off, 0, 0, t, pw, pw), '+z': (0, 0, off, pw, pw, t),
               '-z': (0, 0, -off, pw, pw, t), '+y': (0, off, 0, pw, t, pw)}
     for k in faces:
+        if LITE:                                  # a print where the full block has a raised panel
+            if k != '+y':
+                face_rect(o, k, size / 2 + t - 0.005, -pw / 2, pw / 2, -pw / 2, pw / 2, 0xfdf4de)
+            continue
         p = plates[k]
         bpy.ops.mesh.primitive_cube_add(size=1.0)
         f = bpy.context.active_object
@@ -19058,11 +19062,12 @@ def spinning_top_body(x, z, k):
 @piece(0.7)
 def toy_dragon():
     # Gauntlet: the castle's toy dragon (a moulded one from the knights' set,
-    # about 25 cm to its wing tips and 40 cm nose to tail) standing guard
-    # before the castle, side on to the road (+X), its head toward the cars
-    # coming at it (-Z). It flaps its wings, slowly, both in step, and now
-    # and then turns its head to the road and back. Its tail curls down to
-    # the floor behind it.
+    # about 25 cm to its wing tips, the set's biggest creature) perched
+    # along the outer gatehouse's battlements over the road (tracks.js
+    # turns it across the road and lifts it there), side on to the cars
+    # coming at it, its tail lying along the wall walk behind it. It flaps
+    # its wings, slowly, both in step, and now and then turns its head to
+    # the cars (+X) and back.
     GREEN, BELLY, WING, HORN = 0x6cbf6c, 0xf2c14e, 0xa878e8, 0xfdf4de
     for z in (-1.1, 1.1):                                                     # the legs, claws forward
         for sx in (-1, 1):
@@ -19074,7 +19079,7 @@ def toy_dragon():
     bar((0, 2.9, -2.1), (0, 4.6, -3.0), 1.0, 1.0, GREEN)                      # the neck
     for z in (-1.4, -0.5, 0.4, 1.3):                                          # spines down the back
         cyl(0.32, 0.6, (0, 3.0, z), BELLY, r2=0.02, segs=4)
-    # the tail, thick to thin, down to the floor and curling off behind
+    # the tail, thick to thin, down to its perch and curling off behind
     tube([(0, 2.2, 1.5), (0.2, 1.7, 3.0), (0.8, 0.9, 4.2), (0.9, 0.5, 5.0)], 0.5, GREEN, res=3, bevel_res=1)
     tube([(0.9, 0.5, 5.0), (0.6, 0.32, 5.8), (-0.4, 0.32, 6.3)], 0.3, GREEN, res=3, bevel_res=0)
     box((0.9, 0.16, 0.9), (-0.85, 0.08, 6.45), BELLY, yaw=math.pi / 4)        # its spade
@@ -19296,6 +19301,12 @@ def mini_car(x, z, color, along_x=False):
             px, pz = P2(sa * 0.25, sb * 0.3)
             toy_wheel(px, pz, 0.13, 0.1, along_x)
 
+def glass_on(body):
+    """A window's colour on a block painted `body`: the town's pale glass,
+    a deeper blue on a block that is the glass's own colour (on it the
+    windows vanished and the block read as a blank slab)."""
+    return 0x5a8fd8 if body == 0x8ecae6 else 0x8ecae6
+
 def house(x, z, w, d, h, body, roof, kind='gable'):
     """A wooden toy house: a painted block, a door and windows to the road
     (+X), a gable roof block (running along X), a flat roof slab or a
@@ -19304,7 +19315,7 @@ def house(x, z, w, d, h, body, roof, kind='gable'):
     plate_x(x + w / 2 + 0.01, 0, min(0.75, h * 0.45), z - 0.22, z + 0.22, 0x3a2a22)
     if h > 1.3:
         for s in (-1, 1):
-            plate_x(x + w / 2 + 0.01, h - 0.75, h - 0.35, z + s * d * 0.28 - 0.18, z + s * d * 0.28 + 0.18, 0x8ecae6)
+            plate_x(x + w / 2 + 0.01, h - 0.75, h - 0.35, z + s * d * 0.28 - 0.18, z + s * d * 0.28 + 0.18, glass_on(body))
     if kind == 'gable':
         rh = min(w, d) * 0.55
         prism([(z - d / 2 - 0.15, h), (z + d / 2 + 0.15, h), (z, h + rh)], x, w + 0.2, roof)
@@ -19603,7 +19614,7 @@ TOWER_RIM = (0.4 + 13.4 + 0.3 + 1.1) * 0.62      # its cup's rim over the floor 
 RUN_D2 = (6.4, 5.4, 57.3)                        # the head's inner post, where the wheel's leg takes over
 RUN_ORIGIN = {'head': (-7.0, 50.0), 'wheel': (25.0, 57.4), 'summit': (52.0, 57.4), 'skyway': (75.7, 30.0),
               'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0),
-              'climb': (54.9, 44.4), 'dive': (74.0, 20.0)}
+              'climb': (54.9, 44.4), 'dive': (74.0, 20.0), 'wall': (54.9, 71.4), 'cross': (68.7, 16.0)}
 
 def fillet(pts, r=1.5, n=6):
     """A polyline of marble centres [(x, h, z)] with each corner rounded."""
@@ -19617,8 +19628,25 @@ def fillet(pts, r=1.5, n=6):
                 for s in (k / n for k in range(n + 1))]
     return out + [pts[-1]]
 
+def thin(pts, tol=0.04):
+    """`pts` without the points that lie within `tol` of the line through
+    the ones kept (Douglas-Peucker): a straight run is its two ends."""
+    if len(pts) < 3:
+        return list(pts)
+    a, b = pts[0], pts[-1]
+    ab = [b[j] - a[j] for j in range(3)]
+    l2 = sum(c * c for c in ab) or 1.0
+    def off(p):
+        t = max(0.0, min(1.0, sum((p[j] - a[j]) * ab[j] for j in range(3)) / l2))
+        return math.dist(p, [a[j] + ab[j] * t for j in range(3)])
+    k = max(range(1, len(pts) - 1), key=lambda i: off(pts[i]))
+    if off(pts[k]) <= tol:
+        return [a, b]
+    return thin(pts[:k + 1], tol)[:-1] + thin(pts[k:], tol)
+
 def run_chute(pts, color):
-    chute(pts, color, RUN_MR, half=RUN_HALF, wall=RUN_WALL, inner=CREAM)
+    # the box's chute keeps only the points that bend it
+    chute(thin(pts) if RUN_LITE else pts, color, RUN_MR, half=RUN_HALF, wall=RUN_WALL, inner=CREAM)
 
 def toward(a, b, d=0.55):
     """The point `d` from a toward b (a chute's end beside a joint's cup)."""
@@ -19629,6 +19657,11 @@ def on(line, x, z):
     """The point of `line` nearest (x, z)."""
     return min(line, key=lambda p: math.hypot(p[0] - x, p[2] - z))
 
+RUN_LITE = False     # run_section(): the box's run turns its posts and drums on fewer sides
+
+def run_segs(n):
+    return max(5, n * 5 // 8) if RUN_LITE else n
+
 def trestle(p):
     """A plain beech connector post up to the chute whose marbles ride at p
     (x, h, z), a brown collar at its head and foot (concrete grey read as a
@@ -19636,9 +19669,9 @@ def trestle(p):
     x, h, z = p
     top = h - RUN_MR - 0.05 - 0.06               # into the chute's wall, never on a face
     r = 0.16 if top < 3.5 else 0.27
-    cyl(r + 0.16, 0.12, (x, 0, z), POST_COLLAR, segs=8)
-    cyl(r, top, (x, 0, z), POST_WOOD, segs=8)
-    cyl(r + 0.14, 0.22, (x, top - 0.26, z), POST_COLLAR, segs=8)   # under the post's top: level with it, the two caps flickered
+    cyl(r + 0.16, 0.12, (x, 0, z), POST_COLLAR, segs=run_segs(8))
+    cyl(r, top, (x, 0, z), POST_WOOD, segs=run_segs(8))
+    cyl(r + 0.14, 0.22, (x, top - 0.26, z), POST_COLLAR, segs=run_segs(8))   # under the post's top: level with it, the two caps flickered
 
 def joint(x, z, h, toward=(), color=0x5a8fd8):
     """A STATION, where one section hands its marbles to the next: a closed
@@ -19651,14 +19684,14 @@ def joint(x, z, h, toward=(), color=0x5a8fd8):
     vanishes in sight."""
     lo = max(0.0, h - 0.8)
     if lo > 0.9:
-        cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=10)
-        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=10)
-        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=10)
+        cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=run_segs(10))
+        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=run_segs(10))
+        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=run_segs(10))
     else:
         lo = 0.0
-    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=12)
-    cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=12)
-    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=8)
+    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=run_segs(12))
+    cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=run_segs(12))
+    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=run_segs(8))
     for tx, tz in toward:
         dx, dz = tx - x, tz - z
         l = math.hypot(dx, dz)
@@ -19673,12 +19706,12 @@ def mouth(at, toward, w=1.3, h=1.0):
 def run_station(x, z, top, c0, r=0.8):
     """One of the run's stations: the kit's stacked toy cylinders, a band to
     about each 1.6 u, up to a cream cap at `top`."""
-    cyl(r + 0.5, 0.25, (x, 0, z), GREY, segs=12)
+    cyl(r + 0.5, 0.25, (x, 0, z), GREY, segs=run_segs(12))
     n = max(2, round((top - 0.55) / 1.6))
     h = (top - 0.55) / n
     for k in range(n):
-        cyl(r, h, (x, 0.25 + k * h, z), TOY[(k + c0) % 4], segs=10)
-    cyl(r + 0.15, 0.3, (x, top - 0.3, z), CREAM, segs=10)
+        cyl(r, h, (x, 0.25 + k * h, z), TOY[(k + c0) % 4], segs=run_segs(10))
+    cyl(r + 0.15, 0.3, (x, top - 0.3, z), CREAM, segs=run_segs(10))
 
 def rails(pts, color, out=None):
     """Twin rails the marbles ride on through the line `pts`, open so they
@@ -19696,12 +19729,19 @@ def rails(pts, color, out=None):
         left.append(tuple(p[j] + 0.38 * d[j] + 0.26 * s[j] for j in range(3)))
         right.append(tuple(p[j] + 0.38 * d[j] - 0.26 * s[j] for j in range(3)))
         ties.append((tuple(p[j] + 0.46 * d[j] + 0.4 * s[j] for j in range(3)), tuple(p[j] + 0.46 * d[j] - 0.4 * s[j] for j in range(3))))
-    tube(left, 0.1, color, res=2, bevel_res=0)
-    tube(right, 0.1, color, res=2, bevel_res=0)
+    if RUN_LITE:                                 # the box's rails: only the points that bend them, a tie every other one
+        for side in (left, right):
+            few = thin(side)
+            if len(few) < 4:                     # a straight span: a curve of two points sweeps nothing
+                few = [tuple(few[0][j] + (few[-1][j] - few[0][j]) * i / 3 for j in range(3)) for i in range(4)]
+            tube(few, 0.1, color, res=1, bevel_res=0)
+    else:
+        tube(left, 0.1, color, res=2, bevel_res=0)
+        tube(right, 0.1, color, res=2, bevel_res=0)
     run = 0.0
     for i in range(1, n):
         run += math.dist(pts[i], pts[i - 1])
-        if run >= 0.9 or i == n - 1:
+        if run >= (1.8 if RUN_LITE else 0.9) or i == n - 1:
             bar(*ties[i], 0.16, 0.12, CREAM)
             run = 0.0
 
@@ -19760,7 +19800,12 @@ def run_marbles(chain, seen, lite, after=None, lane=None):
 
 def run_section(name, lite):
     """Build section `name` in world coordinates, then move it to its origin."""
-    RUN_BUILD[name](lite)
+    global RUN_LITE
+    RUN_LITE = lite
+    try:
+        RUN_BUILD[name](lite)
+    finally:
+        RUN_LITE = False
     ox, oz = RUN_ORIGIN[name]
     for o in bpy.context.scene.objects:
         if o.parent is None:
@@ -20227,14 +20272,89 @@ def run_dive(lite):
     # end and overhead from the turns below it
     run_ring('dive', 60.3, 0.0, 14.0, 8.0, -112.0, 7.4, 6.0, 0x6cbf6c, lite)
 
+def run_wall(lite):
+    # outside the climb on the room's side, from beside the top leg's end
+    # round north and east to the skyway's start: its chute over the kerb
+    # where the climb's upper turn looks at the walls, and every other
+    # support one of the kit's striped columns, so the turn below it looks
+    # at more than posts
+    cx, cz, R, a0, a1, y0, y1 = 60.3, 56.0, 14.0, 100.0, -12.0, 8.6, 6.6
+    n = int(abs(a1 - a0) / (12 if lite else 6))
+    pts = []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        pts.append((cx + R * math.cos(a), y0 + (y1 - y0) * i / n, cz + R * math.sin(a)))
+    run_chute(pts, 0xf2c14e)
+    step = 2 if lite else 3
+    for k, i in enumerate(range(step - 1, n - 1, step)):
+        if k % 2 == 0:
+            run_station(pts[i][0], pts[i][2], pts[i][1] - RUN_MR - 0.09, k)
+        else:
+            trestle(pts[i])
+    joint(pts[0][0], pts[0][2], pts[0][1], toward=((pts[1][0], pts[1][2]),), color=0xf2c14e)
+    joint(pts[-1][0], pts[-1][2], pts[-1][1], toward=((pts[-2][0], pts[-2][2]),), color=0xf2c14e)
+    run_marbles('wall', pts, lite)
+
+def run_cross(lite):
+    # a second crossing where the racers see it coming: over the skyway's
+    # far end on twin rails, from a station outside it down to one in the
+    # infield, as far over the deck as the first (run_skyway), the whole
+    # length of the skyway ahead of it
+    S, N = (77.2, 11.7, 16.0), (62.2, 10.5, 16.0)
+    span = resample([(S[0] - 0.55, S[1] - 0.05, S[2]), (N[0] + 0.55, N[1] + 0.05, N[2])])
+    rails(span, 0xe66a5a)
+    joint(S[0], S[2], S[1], toward=((S[0] - 1.0, S[2]),), color=0xe66a5a)
+    joint(N[0], N[2], N[1], toward=((N[0] + 1.0, N[2]),), color=0x6cbf6c)
+    run_marbles('cross', [S] + span + [N], lite)
+
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
              'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer,
-             'climb': run_climb, 'dive': run_dive}
+             'climb': run_climb, 'dive': run_dive, 'wall': run_wall, 'cross': run_cross}
 for _n in RUN_BUILD:
     for _lite in (False, True):
         _name = 'marble-run-%s%s' % (_n, '-lite' if _lite else '')
         PIECES[_name] = (lambda n, lite: lambda: run_section(n, lite))(_n, _lite)
         GROW[_name] = 1.0
+
+@piece(1.0)
+def marble_zigzag():
+    # Helix: a click-clack marble board outside the skyway where the
+    # descent's lower turn looks at the wall, its face to the road (+X): six
+    # sloped rails one over another on a cream board between two posts, the
+    # marbles rolling down them side to side, dropping from each rail's end
+    # to the next, and going back up out of sight inside the striped lift
+    # column at its end.
+    W, R = 3.4, RUN_MR
+    N, TOP, STEP, FALL = 6, 7.3, 1.12, 0.5
+    box((0.14, TOP + 0.5, 2 * W + 1.0), (-0.45, (TOP + 0.5) / 2, 0), CREAM)                 # the board
+    box((0.9, 0.3, 2 * W + 2.6), (-0.1, 0.15, -0.6), 0x9a7b55)                              # its foot
+    box((0.5, TOP + 0.9, 0.5), (-0.2, (TOP + 0.9) / 2, W + 0.75), 0x9a7b55)                 # the far post
+    CZ = -W - 1.3                                                                           # the lift column
+    n = 5
+    for k in range(n):
+        box((1.1, (TOP + 1.2) / n, 1.1), (-0.1, (k + 0.5) * (TOP + 1.2) / n, CZ), TOY[(k + 1) % 4])
+    box((1.3, 0.3, 1.3), (-0.1, TOP + 1.35, CZ), CREAM)
+    seen = [(0.0, TOP + 0.75, CZ), (0.0, TOP + R + 0.1, -W + 0.2)]
+    for k in range(N):
+        d = 1 if k % 2 == 0 else -1
+        y = TOP - k * STEP
+        a, b = (0.0, y, -d * W), (0.0, y - FALL, d * (W - 0.9))
+        bar((a[0], a[1] - 0.09, a[2]), (b[0], b[1] - 0.09, b[2]), 0.8, 0.18, TOY[k % 4])     # the rail
+        bar((0.36, a[1] + 0.08, a[2]), (0.36, b[1] + 0.08, b[2]), 0.1, 0.34, CREAM)          # its lip
+        box((0.8, 0.5, 0.16), (0.0, y + 0.1, -d * (W + 0.08)), TOY[k % 4])                   # its end stop
+        seen += [(0.0, a[1] + R, a[2] + d * 0.4), (0.0, b[1] + R, b[2]), (0.0, b[1] + R - 0.5, b[2] + d * 0.45)]
+    seen += [(0.0, 0.55, -W - 0.4), (0.0, 0.55, CZ)]
+    box((0.8, 0.2, 1.6), (0.0, 0.4, -W - 0.2), TOY[2])                                      # the tray into the column's foot
+    mouth((0.0, 0.75, CZ + 0.5), (0.0, 0.0), w=0.8, h=0.8)
+    mouth((0.0, TOP + 0.7, CZ + 0.5), (0.0, 0.0), w=0.8, h=0.8)
+    for k, q in enumerate(seen):
+        marker('path_zig_%d' % k, q)
+    L = sum(math.dist(a, b) for a, b in zip(seen, seen[1:] + seen[:1]))
+    cnt = 2 if LITE else 5
+    for j in range(cnt):
+        with animated('anim_path:c=zig:p=%.2f:o=%.4f:f=0#%d' % (L / 2.6, j / cnt, j), seen[1]):
+            sphere(R, seen[1], RUN_COLORS[j % 4], subdiv=1 if LITE else 2, flat=False)
+            bpy.ops.object.shade_smooth()
 
 # ---- Gauntlet: the besiegers ----
 
@@ -20254,6 +20374,17 @@ def soldier(at, color):
 
 def _soldier(at, color):
     x, y, z = at
+    if LITE:                                      # the box's knight: hose, surcoat, helm, plume, spear and shield
+        box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
+        box((0.7, 1.0, 1.04), (x, y + 1.5, z), color)
+        box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4)
+        plate_x(x + 0.305, y + 2.36, y + 2.48, z - 0.2, z + 0.2, 0x2a2735)
+        box((0.12, 0.6, 0.46), (x, y + 3.0, z), color)
+        box((0.14, 2.9, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)
+        box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)
+        plate_x(x + 0.525, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
+        plate_x(x + 0.525, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
+        return
     box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
     box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)
     box((0.72, 0.14, 0.58), (x, y + 1.15, z), 0x9a7b55)
@@ -20533,14 +20664,22 @@ def pavilion(x, z, r, h, wall, roof, trim=0xfdf4de, flag=0xff5040):
     w = 2 * r * math.tan(math.pi / n) + 0.02
     for i in range(n):
         a = i * 2 * math.pi / n
+        if LITE:                                  # the box's tent: its panels a face each, no scallops
+            c, s_ = math.cos(a), math.sin(a)
+            e0 = (x + r * c + s_ * w / 2, z + r * s_ - c * w / 2)
+            e1 = (x + r * c - s_ * w / 2, z + r * s_ + c * w / 2)
+            skin([(e0[0], 0, e0[1]), (e1[0], 0, e1[1]), (e1[0], h, e1[1]), (e0[0], h, e0[1])], [(0, 1, 2, 3)],
+                 wall if i % 2 == 0 else trim, (c, 0, s_))
+            continue
         box((0.1, h, w), (x + r * math.cos(a), h / 2, z + r * math.sin(a)), wall if i % 2 == 0 else trim, yaw=-a + math.pi / 2)
     top = (x, h + r * 1.05, z)
     for i in range(n):
         a0, a1 = (i - 0.5) * 2 * math.pi / n, (i + 0.5) * 2 * math.pi / n
-        rim0 = (x + math.cos(a0) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a0) * (r + 0.25) / math.cos(math.pi / n))
-        rim1 = (x + math.cos(a1) * (r + 0.25) / math.cos(math.pi / n), h, z + math.sin(a1) * (r + 0.25) / math.cos(math.pi / n))
+        eave = r + (0.06 if LITE else 0.25)       # the box's roof sits on its wall's faces
+        rim0 = (x + math.cos(a0) * eave / math.cos(math.pi / n), h, z + math.sin(a0) * eave / math.cos(math.pi / n))
+        rim1 = (x + math.cos(a1) * eave / math.cos(math.pi / n), h, z + math.sin(a1) * eave / math.cos(math.pi / n))
         poly([top, rim0, rim1], [(0, 1, 2)], roof if i % 2 == 0 else trim)
-    for i in range(n):                                           # the scallops at the eaves
+    for i in range(0 if LITE else n):                            # the scallops at the eaves
         a = i * 2 * math.pi / n
         box((0.08, 0.28, w * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)), roof, yaw=-a + math.pi / 2)
     plate_x(x + r + 0.06, 0.0, h * 0.7, z - 0.3, z + 0.3, 0x3a2a22)          # the door
@@ -20627,7 +20766,7 @@ def facing_house(x, z, w, d, h, body, roof, kind, yaw):
             for y in rows:
                 for dx in (-w * 0.25, w * 0.25):
                     pts = [(x + dx - 0.2, y - 0.2, zf), (x + dx + 0.2, y - 0.2, zf), (x + dx + 0.2, y + 0.2, zf), (x + dx - 0.2, y + 0.2, zf)]
-                    quad(pts if sz > 0 else pts[::-1], 0x8ecae6)
+                    quad(pts if sz > 0 else pts[::-1], glass_on(body))
 
 def windows(o, face, half, w, h, cols, rows, y0, glass=0x8ecae6):
     """Rows of windows on `face` of box `o` (its scale applied), `half` out
@@ -20649,7 +20788,7 @@ def skyscraper(x, z, w, d, h, body, roof, faces, top='slab'):
     for f in faces:
         span = d if f in ('+x', '-x') else w
         half = w / 2 if f in ('+x', '-x') else d / 2
-        windows(o, f, half, span * 0.86, h - 0.9, max(2, round(span / 0.7)), rows, -h / 2 + 0.35)
+        windows(o, f, half, span * 0.86, h - 0.9, max(2, round(span / 0.7)), rows, -h / 2 + 0.35, glass=glass_on(body))
     if top == 'slab':
         box((w + 0.2, 0.3, d + 0.2), (x, h + 0.15, z), roof)
     elif top == 'crown':
@@ -20660,8 +20799,8 @@ def skyscraper(x, z, w, d, h, body, roof, faces, top='slab'):
         cyl(min(w, d) * 0.3, 1.6, (x, h + 0.3, z), roof, r2=0.04, segs=4, yaw=math.pi / 4)
 
 def wooden_tree(x, z, k=1.0):
-    cyl(0.14 * k, 0.7 * k, (x, 0, z), 0x9a7b55, segs=6)
-    cyl(0.6 * k, 1.5 * k, (x, 0.6 * k, z), 0x6cbf6c, r2=0.05, segs=8)
+    cyl(0.14 * k, 0.7 * k, (x, 0, z), 0x9a7b55, segs=4 if LITE else 6)
+    cyl(0.6 * k, 1.5 * k, (x, 0.6 * k, z), 0x6cbf6c, r2=0.05, segs=5 if LITE else 8)
 
 def traffic_light(x, z, yaw):
     """A toy traffic light on its post, its lamps to (cos yaw, -sin yaw)."""
@@ -20680,6 +20819,8 @@ def rug(x0, x1, z0, z1, streets, parks, name):
          floor_quad([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], 0.035, 0xfdf4de)]
     for a0, a1, b0, b1 in streets:
         q.append(floor_quad([(a0, b0), (a1, b0), (a1, b1), (a0, b1)], 0.045, 0x868ba1))
+        if LITE:                                         # the box's rug: no dashes (a few pixels of crawl at its lines)
+            continue
         if a1 - a0 > b1 - b0:                            # dashes down its middle
             m = (b0 + b1) / 2
             for k in range(int((a1 - a0) / 2.2)):
@@ -20847,8 +20988,8 @@ def block_town():
     toy_van(0.0, 10.6, NEUTRAL[1])
     # the toy train's oval along the south edge, the station on its far side
     X0, X1, ZC, R = -13.6, 11.8, -13.8, 3.4
-    ring = oval(X0, X1, ZC, R)
-    wooden_track(ring, 0.9, 0.12)
+    ring = oval(X0, X1, ZC, R, step=1.0 if LITE else 0.5)
+    wooden_track(ring, 0.9, 0.12, grooves=not LITE)
     box((8.0, 0.4, 1.4), (-1.0, 0.2, ZC + R + 1.25), 0xb0b6c8)                            # the platform
     facing_house(-1.0, ZC + R + 3.3, 2.0, 4.4, 2.2, 0xe66a5a, 0x5a8fd8, 'gable', math.pi / 2)
     for dx in (-4.2, 2.2):
@@ -21247,6 +21388,93 @@ def block_uptown():
     keep_light(0.1)
 
 @piece(1.0)
+def block_minster():
+    # Skyline: the old town's square outside the skyway's U, where the
+    # racers up on it looked at floorboards (+X the road; placed at the U's
+    # apex and running on west round its outside, so it is authored off its
+    # own middle): the minster, a cream nave under a red roof behind two
+    # towers with blue spires, a rose window between them; the town hall,
+    # a yellow block with a red clock tower rising out of it, a clock on
+    # three faces under a green roof; and a stepped block of flats, three
+    # blocks one on another. All three stand over the U's deck. Trees and a
+    # bus on the street before them.
+    ZC = -4.6
+    rug(-5.4, 3.8, ZC - 10.0, ZC + 10.0, [(1.6, 3.8, ZC - 10.0, ZC + 10.0)], [(-5.4, -3.0, ZC - 0.6, ZC + 0.6)], 'floor_minster')
+    CR, RED, BLUE, YEL, GRN = 0xfdf4de, 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c
+    mz = ZC - 5.4                                                                   # the minster
+    box((5.4, 4.4, 3.2), (-2.5, 2.2, mz), CR)
+    prism([(mz - 1.75, 4.4), (mz + 1.75, 4.4), (mz, 6.5)], -2.5, 5.6, RED)
+    for sz in (-1, 1):
+        for k in range(0 if LITE and sz < 0 else 4):                               # the box's: only the side the racers come along
+            x = -4.6 + k * 1.15
+            pts = [(x - 0.22, 1.5, mz + sz * 1.612), (x + 0.22, 1.5, mz + sz * 1.612), (x + 0.22, 3.5, mz + sz * 1.612), (x - 0.22, 3.5, mz + sz * 1.612)]
+            quad(pts if sz > 0 else pts[::-1], 0x8ecae6)
+        z = mz + sz * 1.75                                                          # a tower
+        box((1.7, 8.8, 1.7), (0.9, 4.4, z), CR)
+        box((1.95, 0.26, 1.95), (0.9, 8.93, z), RED)
+        cyl(1.2, 2.7, (0.9, 9.06, z), BLUE, r2=0.04, segs=4, yaw=math.pi / 4)
+        plate_x(1.762, 6.5, 8.1, z - 0.32, z + 0.32, 0x3a2a22)                      # the belfry's openings
+        plate_x(1.762, 2.0, 3.4, z - 0.2, z + 0.2, 0x8ecae6)
+        pts = [(0.9 - 0.32, 6.5, z + sz * 0.862), (0.9 + 0.32, 6.5, z + sz * 0.862), (0.9 + 0.32, 8.1, z + sz * 0.862), (0.9 - 0.32, 8.1, z + sz * 0.862)]
+        quad(pts if sz > 0 else pts[::-1], 0x3a2a22)
+    box((0.6, 5.6, 1.9), (0.75, 2.8, mz), CR)                                       # the front between them
+    plate_x(1.062, 0.0, 1.8, mz - 0.5, mz + 0.5, 0x3a2a22)
+    cyl(0.8, 0.1, (1.0, 3.9, mz), 0x8ecae6, segs=10, axis='across')                 # the rose window
+    cyl(0.3, 0.14, (1.0, 3.9, mz), YEL, segs=6, axis='across')
+    def tier(x, z, w, d, y, h, body, cols):
+        box((w, h, d), (x, y + h / 2, z), body)
+        o = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        for f, half, span in (('+x', w / 2, d), ('+z', d / 2, w)) + (() if LITE else (('-z', d / 2, w),)):
+            windows(o, f, half, span * 0.84, h - 0.7, cols if f == '+x' else max(2, cols - 1), max(1, int(h / 1.0)), -h / 2 + 0.3, glass=glass_on(body))
+        return y + h
+    tz = ZC + 1.6                                                                   # the town hall
+    top = tier(-1.4, tz, 3.2, 4.6, 0.0, 4.0, YEL, 5)
+    box((3.4, 0.3, 4.8), (-1.4, top + 0.15, tz), RED)
+    top = tier(-1.0, tz, 1.9, 1.9, top + 0.3, 3.4, RED, 2)
+    box((1.9, 1.9, 1.9), (-1.0, top + 0.95, tz), CR)                                # the clock's storey
+    cy = top + 0.95
+    cyl(0.7, 0.06, (-0.05, cy, tz), YEL, segs=12, axis='across')
+    box((0.05, 0.5, 0.09), (0.04, cy + 0.18, tz), 0x2a2735)
+    box((0.05, 0.09, 0.36), (0.04, cy, tz + 0.14), 0x2a2735)
+    for sz in (-1, 1):
+        cyl(0.7, 0.06, (-1.0, cy, tz + sz * 0.95 - (0.06 if sz < 0 else 0.0)), YEL, segs=12, axis='along')
+    box((2.2, 0.26, 2.2), (-1.0, top + 2.03, tz), RED)
+    cyl(1.35, 2.2, (-1.0, top + 2.16, tz), GRN, r2=0.04, segs=4, yaw=math.pi / 4)
+    fz = ZC + 7.4                                                                   # the flats, stepped
+    top = tier(-1.4, fz, 3.4, 3.4, 0.0, 3.4, BLUE, 4)
+    top = tier(-1.6, fz + 0.2, 2.6, 2.6, top, 2.8, CR, 3)
+    top = tier(-1.8, fz - 0.1, 1.9, 1.9, top, 2.4, RED, 2)
+    box((2.1, 0.3, 2.1), (-1.8, top + 0.15, fz - 0.1), YEL)
+    for x, z in ((2.6, ZC - 9.0), (-4.2, ZC - 0.1), (-4.4, ZC + 4.6), (2.7, ZC + 4.4), (2.7, ZC + 9.2)):
+        wooden_tree(x, z)
+    toy_bus(2.6, ZC - 1.6, NEUTRAL[1])
+    merge_paint()
+    keep_light(0.1)
+
+@piece(1.0)
+def block_terrace():
+    # Skyline: a terrace of tall narrow town houses outside the U's second
+    # half, beside the ramp down off the skyway (+X the road, the racers
+    # driving toward -Z when it stands on their left): five painted fronts
+    # under gable roofs stepping down with the deck, so each stands a storey
+    # over it as the racers come down past.
+    rug(-2.6, 2.6, -6.6, 6.6, [(1.0, 2.6, -6.6, 6.6)], [], 'floor_terrace')
+    for k, (h, body, roof) in enumerate(((8.4, 0xe66a5a, 0x5a8fd8), (7.4, 0xfdf4de, 0xe66a5a), (6.2, 0xf2c14e, 0x6cbf6c),
+                                         (5.0, 0x5a8fd8, 0xfdf4de), (3.8, 0x6cbf6c, 0xe66a5a))):
+        z, w, d = 4.9 - k * 2.45, 2.6, 2.3
+        box((w, h, d), (-1.0, h / 2, z), body)
+        o = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        windows(o, '+x', w / 2, d * 0.8, h - 1.6, 2, max(1, int((h - 1.6) / 1.1)), -h / 2 + 1.3, glass=glass_on(body))
+        plate_x(-1.0 + w / 2 + 0.012, 0.0, 0.95, z - 0.25, z + 0.25, 0x3a2a22)
+        prism([(z - d / 2 - 0.1, h), (z + d / 2 + 0.1, h), (z, h + 1.3)], -1.0, w + 0.2, roof)
+    for z in (-5.6, 5.9):
+        wooden_tree(1.8, z)
+    merge_paint()
+    keep_light(0.1)
+
+@piece(1.0)
 def block_midtown():
     # Skyline: uptown's neighbours outside the U, on the same rug's print
     # but their own blocks, so the skyway's second downtown is not the
@@ -21462,41 +21690,153 @@ def game_pawns():
     games_card(0.2 + D / 2 + 0.06, HL / 2, 10.2, -A, 0x5a8fd8, False, flip=True)
     merge_paint()
 
+# ---- round 19: Skysnake's board stood up ----
+
+def wood_snake(pts, w, h, body, band, every=3, taper=4, over=0.12):
+    """A jointed wooden toy snake through glTF `pts`: a block per joint,
+    every `every`th one the band's colour, the last `taper` thinning to the
+    tail's tip. Each block runs `over` past its joint so no bend opens (less
+    where the joints are short: the corners poke out of a gentle bend)."""
+    n = len(pts) - 1
+    for k, (a, b) in enumerate(zip(pts, pts[1:])):
+        f = min(1.0, (n - k) / taper) if taper else 1.0
+        d = [b[i] - a[i] for i in range(3)]
+        l = math.sqrt(sum(c * c for c in d)) or 1.0
+        e = [c / l * over for c in d]
+        bar((a[0] - e[0], a[1] - e[1], a[2] - e[2]), (b[0] + e[0], b[1] + e[1], b[2] + e[2]),
+            w * (0.45 + 0.55 * f), h * (0.45 + 0.55 * f), band if k % every == every - 1 else body)
+
+def snake_face(x, y, z, body, k=1.0):
+    """A wooden snake's head at the end of its neck, looking -Z: eyes up on
+    it, the band's yellow lip, a red forked tongue."""
+    box((1.5 * k, 1.0 * k, 1.9 * k), (x, y, z - 0.7 * k), body)
+    box((1.2 * k, 0.7 * k, 0.8 * k), (x, y - 0.12 * k, z - 1.9 * k), body)
+    box((1.24 * k, 0.2 * k, 0.84 * k), (x, y - 0.4 * k, z - 1.9 * k), SNAKE[1])
+    for sd in (-1, 1):
+        box((0.5 * k, 0.45 * k, 0.5 * k), (x + sd * 0.5 * k, y + 0.62 * k, z - 0.5 * k), 0xfdf4de)
+        box((0.3 * k, 0.3 * k, 0.2 * k), (x + sd * 0.5 * k, y + 0.66 * k, z - 0.78 * k), CARD_DARK)
+        bar((x + sd * 0.04 * k, y - 0.3 * k, z - 2.6 * k), (x + sd * 0.34 * k, y - 0.3 * k, z - 3.1 * k), 0.2 * k, 0.1 * k, 0xe66a5a)
+    bar((x, y - 0.3 * k, z - 2.2 * k), (x, y - 0.3 * k, z - 2.65 * k), 0.26 * k, 0.1 * k, 0xe66a5a)
+
+def snake_humps(body):
+    # Skysnake: one of the board's printed snakes stood up off it, a
+    # jointed wooden toy snake lying along the kerb (+X the road, +Z the way
+    # the racers drive), its body arching in three humps over the kerb's
+    # height and its head lifted at the end the racers come from, turning
+    # to the road now and then.
+    L, LAM, H = 15.0, 5.0, 2.1
+    n = 20 if LITE else 32
+    pts = []
+    for i in range(n + 1):
+        d = L * i / n
+        pts.append((0.45 * math.sin(math.pi * d / LAM), 0.5 + H * (0.5 - 0.5 * math.cos(2 * math.pi * d / LAM)), -L / 2 + d))
+    wood_snake(pts, 1.0, 0.9, body, SNAKE[1], every=3 if LITE else 4, taper=4 if LITE else 6, over=0.12 if LITE else 0.05)
+    neck = [pts[0], (-0.1, 1.2, -L / 2 - 0.8), (-0.15, 2.1, -L / 2 - 1.3)]
+    wood_snake(neck, 1.0, 0.9, body, SNAKE[1], every=9, taper=0)
+    with animated('anim_sway:a=y:d=-28:p=8:r=0.65#head', neck[-1]):
+        snake_face(neck[-1][0], neck[-1][1] + 0.35, neck[-1][2] + 0.3, body)
+
+for _c, _col in (('blue', 0x5a8fd8), ('red', 0xe66a5a)):
+    PIECES['snake-humps-' + _c] = (lambda c: lambda: snake_humps(c))(_col)
+    GROW['snake-humps-' + _c] = 1.0
+
 @piece(1.0)
-def snake_head():
-    # Skysnake: the dive is the board's snake made road, and this is its
-    # head: a wooden toy snake coiled twice on the board at the dive's
-    # foot, clear of the kerb, its tail out along it, the head resting on the
-    # coil at kerb height, turned back up the dive at the racers coming
-    # down it, eyes up and its red tongue out. No taller than a pawn: a
-    # rearing one over the deck was too big.
+def snake_jaws():
+    # Skysnake: the dive is the board's snake made road, and it ends
+    # through this, the snake's wooden head astride the road at the dive's
+    # foot (placed at lat 0: x = 0 the centreline, the racers coming from
+    # -Z): they drive in at its open mouth, under the red roof of it,
+    # between its cheeks. Its snout and yellow lip reach out over the road
+    # toward them, eyes up on the head, a cream fang hanging outside each
+    # kerb and its lower lip on the board either side. The way through is
+    # the castle gate's (castle_gate): 5.3 over the floor at the kerbs, 6.9
+    # at the crown, the cheeks' inner faces outside the road's own edge.
     G, Y = SNAKE
-    # the tail, out of the coil and back along the kerb, tapering to its
-    # tip: nothing of the piece comes nearer the road than its tongue, a
-    # unit and more outside the kerb (it stands 7.9 off the centreline, the
-    # renderer's road ends at 3.7)
-    tail = ((1.3, -1.9, 1.6, 1.1), (1.75, -3.6, 1.35, 0.95), (1.7, -5.2, 1.0, 0.75), (1.3, -6.5, 0.65, 0.5), (0.8, -7.4, 0.3, 0.3))
-    for k, ((xa, za, wa, ha), (xb, zb, wb, hb)) in enumerate(zip(tail, tail[1:])):
-        bar((xa, ha / 2, za), (xb, ha / 2, zb), (wa + wb) / 2, ha, Y if k == 2 else G)
-    torus(1.75, 0.62, (0.0, 0.62, 0.0), G, segs=14, minor=6)                       # the coil, two turns
-    torus(1.55, 0.6, (0.0, 1.78, 0.0), G, segs=14, minor=6)
-    for a in range(0, 360, 60):                                                    # the road's own yellow bands
-        ar = math.radians(a)
-        box((0.42, 1.34, 1.3), (1.75 * math.cos(ar), 0.62, 1.75 * math.sin(ar)), Y, yaw=-ar)
-        box((0.4, 1.3, 1.26), (1.55 * math.cos(ar + 0.5), 1.78, 1.55 * math.sin(ar + 0.5)), Y, yaw=-ar - 0.5)
-    HY = 2.3                                                                       # the head lies on the coil
-    with transformed((0.0, 0.0, 0.0), 2.55):
-        box((2.6, 1.25, 2.6), (0.0, HY + 0.625, 0.4), G)
-        box((2.1, 1.0, 1.1), (0.0, HY + 0.5, 2.2), G)                              # its snout, stepped in
-        box((1.6, 0.8, 0.7), (0.0, HY + 0.4, 3.0), G)
-        box((2.14, 0.24, 1.14), (0.0, HY + 0.2, 2.2), Y)                           # the jaw's yellow lip
-        box((1.64, 0.24, 0.74), (0.0, HY + 0.2, 3.0), Y)
-        for sd in (-1, 1):
-            box((0.85, 0.7, 0.9), (sd * 0.9, HY + 1.4, 0.9), 0xfdf4de)             # eyes up on the head
-            box((0.5, 0.48, 0.5), (sd * 1.02, HY + 1.52, 1.2), CARD_DARK)
-            box((0.2, 0.12, 0.2), (sd * 0.45, HY + 0.82, 3.1), CARD_DARK)          # nostrils
-            bar((sd * 0.06, HY + 0.3, 3.9), (sd * 0.5, HY + 0.3, 4.7), 0.28, 0.14, 0xe66a5a)    # the tongue's fork
-        bar((0.0, HY + 0.3, 3.2), (0.0, HY + 0.3, 4.0), 0.36, 0.14, 0xe66a5a)
+    JX, OX, J, D = 3.6, 5.8, 3.3, 2.4
+    top = J + JX + 1.2
+    for sx in (-1, 1):
+        box((OX - JX, J, 2 * D), (sx * (JX + OX) / 2, J / 2, 0), G)
+        box((OX - JX + 0.06, 0.6, 2 * D + 0.06), (sx * (JX + OX) / 2, 1.1, 0), Y)       # the road's own yellow band
+        box((OX - JX, 0.7, 2.6), (sx * (JX + OX) / 2, 0.35, -D - 1.3), Y)                 # the lower lip
+        for z in (-D - 0.7, -D - 1.9):
+            box((0.5, 0.5, 0.5), (sx * (JX + OX) / 2, 0.95, z), 0xfdf4de)                 # and its teeth
+        cyl(0.05, 2.1, (sx * (JX + 1.1), top - 1.25 - 2.1, -D - 1.5), 0xfdf4de, r2=0.55, segs=4)   # a fang
+        box((2.1, 1.7, 1.8), (sx * 2.9, top + 0.85, -0.3), 0xfdf4de)                      # the eyes, up on the head
+        box((1.3, 1.1, 0.3), (sx * 2.9, top + 0.95, -1.35), CARD_DARK)
+        box((0.5, 0.3, 0.3), (sx * 1.3, top - 0.55, -D - 4.05), CARD_DARK)                # nostrils
+    gate_arch(-OX, OX, J, top, JX, -D, D, G, 0xe66a5a)
+    box((2 * OX - 1.0, 1.25, 2.8), (0, top - 0.625, -D - 1.4), G)                         # the snout, over the road
+    box((2 * OX - 0.94, 0.3, 2.86), (0, top - 1.1, -D - 1.4), Y)                          # its lip
+    box((2 * OX - 4.4, 1.0, 1.2), (0, top - 0.5, -D - 3.4), G)
+    box((2 * OX - 4.34, 0.3, 1.26), (0, top - 0.85, -D - 3.4), Y)
+    box((2 * OX - 2.0, 2.2, 1.4), (0, top - 1.1 + 0.0, D + 0.7), G)                       # the back of the head, stepped in
+    for sx in (-1, 1):
+        box((OX - JX - 0.5, J, 1.4), (sx * (JX + OX) / 2, J / 2, D + 0.7), G)
+
+@piece(1.0)
+def ladder_stack():
+    # Skysnake: the game played in the round, outside the top deck's first
+    # leg where its floor cannot be seen (+X the road, the racers coming
+    # from -Z): three of the mat's big foam dice stacked, a wooden ladder
+    # leant up the stack's face toward the racers and a pawn at its top, one
+    # more at its foot waiting its throw, and a wooden snake hung down the
+    # road side from the top die to the board.
+    S = 2.4
+    y = 0.0
+    for k, (yaw, p) in enumerate(((0.1, 0xe66a5a), (-0.18, 0x5a8fd8), (0.22, 0x6cbf6c))):
+        die((0, y, 0), S, yaw, faces=(('+x', (4, 6, 2)[k]), ('-z', (5, 3, 6)[k]), ('+z', (1, 2, 4)[k]), ('-x', (3, 5, 1)[k])),
+            color=0xfdf4de, pip=p)
+        y += S
+    pawn((-0.2, y, 0.2), 0xe66a5a, k=0.8)
+    BROWN = 0xb06041
+    foot, head = (-0.3, 0.0, -5.0), (-0.3, y + 0.5, -S / 2 - 0.2)
+    for sd in (-1, 1):
+        bar((foot[0] + sd * 0.8, foot[1], foot[2]), (head[0] + sd * 0.8, head[1], head[2]), 0.26, 0.26, BROWN)
+    for k in range(1, 9):
+        f = k / 9
+        box((1.6, 0.2, 0.22), (foot[0], foot[1] + (head[1] - foot[1]) * f, foot[2] + (head[2] - foot[2]) * f), BROWN)
+    pawn((1.5, 0.0, -4.2), 0x5a8fd8, k=0.8)
+    X = S / 2 + 0.5
+    drop = [(0.2, y + 0.45, 0.7), (X - 0.1, y + 0.45, 0.6)]
+    drop += [(X, y - 0.4 - 0.85 * i, 0.5 + 0.55 * math.sin(i * 1.1)) for i in range(8)]
+    drop += [(X + 0.3, 0.45, 0.2), (X + 1.0, 0.45, -0.5), (X + 1.4, 0.45, -1.4), (X + 1.2, 0.9, -2.2)]
+    wood_snake(drop[::-1], 0.9, 0.9, 0xa878e8, SNAKE[1], taper=3)
+    snake_face(X + 1.2, 1.25, -2.0, 0xa878e8, k=0.9)
+    merge_paint()
+
+@piece(1.0)
+def game_board():
+    # Skysnake: another game's folded board stood up on its edge like an
+    # open book outside the second ladder, its face to the road (+X): a
+    # race game's cross of squares between four coloured yards, taller than
+    # the deck the ladder climbs from, with a red die on the board before it.
+    B = 3.7
+    box((2 * B, 0.16, 2 * B), (0, 0.08, 0), 0x5a8fd8)
+    y = 0.172
+    def sq(x0, x1, z0, z1, color, lift=0.0):
+        quad([(x0, y + lift, z0), (x0, y + lift, z1), (x1, y + lift, z1), (x1, y + lift, z0)], color)
+    sq(-B + 0.25, B - 0.25, -B + 0.25, B - 0.25, 0xfdf4de)
+    C = (2 * B - 0.5) / 11
+    def cell(i, j, color, lift=0.012):
+        sq(-B + 0.25 + i * C + 0.05, -B + 0.25 + (i + 1) * C - 0.05, -B + 0.25 + j * C + 0.05, -B + 0.25 + (j + 1) * C - 0.05, color, lift)
+    for k, (i, j) in enumerate(((0, 0), (7, 0), (7, 7), (0, 7))):                # the four yards
+        sq(-B + 0.25 + i * C + 0.1, -B + 0.25 + (i + 4) * C - 0.1, -B + 0.25 + j * C + 0.1, -B + 0.25 + (j + 4) * C - 0.1, TOY[k], 0.012)
+        sq(-B + 0.25 + (i + 1) * C, -B + 0.25 + (i + 3) * C, -B + 0.25 + (j + 1) * C, -B + 0.25 + (j + 3) * C, 0xfdf4de, 0.024)
+    for a in range(11):                                                           # the cross of squares
+        for b in (4, 5, 6):
+            home = b == 5 and a not in (0, 5, 10)
+            for i, j in ((a, b), (b, a)):
+                if 4 <= a <= 6 and (i, j) != (a, b):
+                    continue
+                col = (TOY[3 if a < 5 else 1] if i == a else TOY[0 if a < 5 else 2]) if home else 0xf2bf99
+                cell(i, j, col)
+    sq(-C * 0.9, C * 0.9, -C * 0.9, C * 0.9, 0x2a2735, 0.036)
+    stand_open(B, math.radians(16))
+    for o in bpy.context.scene.objects:                                            # a print keeps its colour up the board
+        if o.type == 'MESH' and o.name.startswith('quad'):
+            o['ramp'] = 0.3
+    die((2.6, 0.0, 1.2), 1.5, 0.5, color=0xe66a5a, pip=0xfdf4de)
+    merge_paint()
 
 # ---- Round 10: the Playroom's board, its room and its wind-up toys ---------------
 
@@ -21657,7 +21997,8 @@ def snake_board():
 # (its line at u 0, heading +z, so the frame is the world's moved there), the
 # centreline's box (x0, x1, z0, z1), whether the race runs up the box's
 # west side (+1, turning east) or its east side (-1, turning west), and the
-# margin. Not every
+# margin (nearer rails were tried on both and read no better from the seat:
+# the lap's own pieces stand between). Not every
 # room has one: Skyline's town runs its own train, and on Gauntlet everything
 # belongs to the tourney.
 ROOM_TRAIN_GROW, ROOM_TRAIN_SPEED = 1.5, 6.0
@@ -21712,6 +22053,8 @@ def room_train(track, lite=False):
 
 for _track in ROOM_TRAIN:
     for _lite in (False, True):
+        if _lite and _track == 'helix':          # Helix leaves its train out of the lite tier (tracks.js)
+            continue
         _name = 'room-train-' + _track + ('-lite' if _lite else '')
         PIECES[_name] = (lambda t, l: lambda: room_train(t, l))(_track, _lite)
         GROW[_name] = ROOM_TRAIN_GROW
@@ -21786,21 +22129,10 @@ def windup_robot(x, z, body, tag):
     box((0.26, 0.26, 0.26), (x, 3.18, z), 0xe66a5a)
     windup_key(x - 0.45, 1.4, z, tag)
 
-def windup_chick(x, z, tag):
-    """A wind-up chick a little over a toy car tall, facing +X, in blocks as
-    the cars are: its body, its head on it, an orange beak and feet, its
-    wings at its sides and its key in its back; it hops as it goes."""
-    for sd in (-1, 1):
-        box((0.42, 0.12, 0.22), (x + 0.12, 0.06, z + sd * 0.26), 0xff7e44)
-        box((0.12, 0.3, 0.12), (x, 0.24, z + sd * 0.26), 0xff7e44)
-        box((0.6, 0.42, 0.12), (x - 0.05, 0.85, z + sd * 0.5), 0xffc044, pitch=0.2)
-    box((1.0, 0.85, 0.9), (x, 0.82, z), 0xf2c14e)
-    box((0.66, 0.6, 0.66), (x + 0.3, 1.5, z), 0xf2c14e)
-    box((0.32, 0.18, 0.3), (x + 0.75, 1.45, z), 0xff7e44)
-    for sd in (-1, 1):
-        box((0.06, 0.14, 0.14), (x + 0.64, 1.62, z + sd * 0.18), 0x2a2735)
-    box((0.16, 0.22, 0.1), (x + 0.2, 1.88, z), 0xff7e44)
-    windup_key(x - 0.5, 0.85, z, tag)
+def windup_die(x, z, pip, tag):
+    """A wind-up die a toy car tall, its key in its back (-X); it hops."""
+    die((x, 0.0, z), 1.15, 0.0, color=0xfdf4de, pip=pip)
+    windup_key(x - 0.575, 0.62, z, tag)
 
 def windup_knight(x, z, tabard, tag):
     """A tin knight two toy cars tall, facing +X, marching: his helmet with
@@ -21854,16 +22186,23 @@ def windup_robots():
                    (lambda x, z, t: windup_robot(x, z, 0x5a8fd8, t), 'waddle:d=9:p=0.55')])
 
 @piece(1.0)
-def windup_chicks():
-    # Skysnake: three wind-up chicks hopping along the kerb of the board.
-    windup_parade([(windup_chick, 'bob:h=0.3:p=0.38:b=1'), (windup_chick, 'bob:h=0.3:p=0.42:b=1'),
-                   (windup_chick, 'bob:h=0.3:p=0.36:b=1')], L=12.0)
+def windup_dice():
+    # Skysnake: the game's own wind-up toys, three dice hopping slowly
+    # along the kerb of the board, their keys turning.
+    windup_parade([(lambda x, z, t: windup_die(x, z, 0xe66a5a, t), 'bob:h=0.4:p=1.3:b=1'),
+                   (lambda x, z, t: windup_die(x, z, 0x5a8fd8, t), 'bob:h=0.4:p=1.45:b=1'),
+                   (lambda x, z, t: windup_die(x, z, 0x2a2735, t), 'bob:h=0.4:p=1.2:b=1')], L=12.0, speed=0.5)
 
-@piece(1.0)
+KNIGHT = 0.57      # the toy set's knights' size (knight(): 0.55 of a soldier), the wind-up ones too
+
+@piece(KNIGHT)
 def windup_knights():
-    # Gauntlet: a tin knight of each side wound up and marching the kerb.
+    # Gauntlet: a tin knight of each side wound up and marching the kerb,
+    # no bigger than the set's own knights on the walls and in the ranks
+    # (the walk is authored in the piece's grown units).
     windup_parade([(lambda x, z, t: windup_knight(x, z, 0xe66a5a, t), 'waddle:d=8:p=0.5'),
-                   (lambda x, z, t: windup_knight(x, z, 0x5a8fd8, t), 'waddle:d=8:p=0.5')])
+                   (lambda x, z, t: windup_knight(x, z, 0x5a8fd8, t), 'waddle:d=8:p=0.5')],
+                  L=14.0 / KNIGHT, w=1.8 / KNIGHT, speed=0.85 / KNIGHT)
 
 def windup_bus(x, z, body, tag, decks=2):
     """A tin town bus (two decks) or tram (one, a pantograph on its roof) a
@@ -22158,6 +22497,85 @@ def tourney_camp():
     for k, (z, c) in enumerate(((-10.4, B0), (-0.9, Y0), (11.9, B0))):
         gonfalon(-4.8, z, c, h=3.4, wave='anim_flutter:p=%.1f#camp%d' % (2.5 + 0.35 * k, k))
     merge_paint()
+
+# ---- round 19: Gauntlet's wooden horse and the besiegers' works ----
+
+@piece(0.8)
+def wooden_horse():
+    # Gauntlet: the besiegers' gift, a wooden pull-along horse on its
+    # wheeled board (the toy box's biggest horse, about 28 cm to its ears)
+    # left outside the last corner where the home straight points, side on
+    # to the racers coming down it: its head to -Z, a hatch in its flank
+    # toward the road (+X), its pull string lying on the floor before it.
+    WOODC, DARK, RED, GOLD = 0xc8955a, 0x7a5a3a, 0xe66a5a, 0xf2c14e
+    box((1.9, 0.3, 5.4), (0, 0.95, 0), RED)                                     # the board
+    for sx in (-1, 1):
+        for z in (-1.9, 1.9):
+            cyl(0.75, 0.3, (sx * 0.93 - (0.3 if sx < 0 else 0.0), 0.75, z), DARK, segs=10, axis='across')
+            cyl(0.28, 0.4, (sx * 0.93 - (0.4 if sx < 0 else 0.0), 0.75, z), GOLD, segs=6, axis='across')
+        for z in (-1.45, 1.45):
+            box((0.5, 2.0, 0.62), (sx * 0.48, 2.1, z), WOODC)                    # the legs
+    box((1.5, 1.6, 4.1), (0, 3.85, 0), WOODC)                                   # the barrel
+    bar((0, 4.1, -1.5), (0, 6.0, -2.7), 1.1, 1.3, WOODC)                        # the neck
+    box((0.95, 0.95, 2.0), (0, 6.3, -3.3), WOODC, pitch=-0.25)                  # the head
+    box((0.99, 0.3, 0.7), (0, 5.95, -4.0), DARK, pitch=-0.25)                   # its muzzle
+    for sx in (-1, 1):
+        box((0.22, 0.5, 0.3), (sx * 0.3, 7.0, -2.75), WOODC)                    # ears
+        box((0.08, 0.24, 0.24), (sx * 0.5, 6.55, -3.2), 0x2a2735)               # eyes
+    bar((0, 4.9, -1.3), (0, 6.75, -2.4), 0.3, 0.5, DARK)                        # the mane
+    bar((0, 4.4, 2.05), (0, 2.7, 2.6), 0.34, 0.34, DARK)                        # the tail
+    box((1.56, 0.9, 1.5), (0, 4.3, 0.2), RED)                                   # the saddle cloth
+    box((1.6, 0.16, 1.54), (0, 3.9, 0.2), GOLD)
+    plate_x(0.76, 3.3, 3.8, 1.15, 1.85, DARK)                                   # the hatch in its flank
+    plate_x(0.775, 3.36, 3.74, 1.21, 1.79, 0x2a2735)
+    tube([(0, 0.1, -2.7), (0.3, 0.1, -3.8), (-0.4, 0.1, -4.8), (0.2, 0.1, -5.8)], 0.06, 0xfdf4de, res=3, bevel_res=0)
+    box((0.36, 0.36, 0.36), (0.2, 0.18, -6.0), GOLD)
+    merge_paint()
+
+def stake_row(x, z0, z1, n, h, color):
+    """A palisade: `n` square stakes from z0 to z1, pointed, a rail behind."""
+    for i in range(n):
+        z = z0 + (z1 - z0) * (i + 0.5) / n
+        hh = h * (0.92, 1.0, 0.96)[i % 3]
+        box((0.42, hh, 0.42), (x, hh / 2, z), color)
+        cyl(0.3, 0.45, (x, hh, z), color, r2=0.02, segs=4, yaw=math.pi / 4)
+    box((0.16, 0.24, z1 - z0), (x - 0.28, h * 0.55, (z0 + z1) / 2), 0x7a5a3a)
+
+@piece(1.0)
+def siege_works():
+    # Gauntlet: the besiegers' works outside the east leg, across the road
+    # from their camp (+X to the road, +Z the way the racers drive): three
+    # lengths of pointed palisade with gaps between, their mangonel drawn
+    # up in the middle gap with its arm cocked back and its shot piled by
+    # it, powder kegs, and the red side's banners on tall poles behind the
+    # stakes, over the kerb from the seat.
+    WOODC, DARK, R0 = 0xc8955a, 0x7a5a3a, BESIEGERS
+    for z0, z1 in ((-13.0, -7.6), (3.4, 8.2), (9.6, 13.4)):
+        stake_row(0.0, z0, z1, round((z1 - z0) / 0.62), 1.9, WOODC)
+    # the mangonel, aimed over the road at the castle (+X)
+    MZ = -2.2
+    for sz in (-1, 1):
+        box((4.6, 0.36, 0.36), (-1.2, 0.7, MZ + sz * 1.05), DARK)                # the frame's rails
+        for x in (-2.9, 0.5):
+            cyl(0.6, 0.26, (x, 0.6, MZ + sz * 1.21 - (0.26 if sz < 0 else 0.0)), DARK, segs=10, axis='along')
+        bar((-0.2, 0.8, MZ + sz * 1.05), (-0.2, 3.1, MZ + sz * 1.05), 0.34, 0.34, WOODC)   # the uprights
+        bar((-2.4, 0.8, MZ + sz * 1.05), (-0.3, 2.6, MZ + sz * 1.05), 0.24, 0.24, WOODC)   # and their braces
+    box((0.4, 0.4, 2.5), (-0.2, 3.1, MZ), DARK)                                  # the stop bar
+    box((0.3, 0.3, 2.3), (-0.9, 0.9, MZ), DARK)                                  # the arm's axle
+    bar((-0.9, 0.9, MZ), (-3.9, 2.5, MZ), 0.34, 0.34, R0)                        # the arm, cocked back
+    box((0.9, 0.3, 0.9), (-4.1, 2.62, MZ), DARK)                                 # its cup
+    box((0.5, 0.5, 0.5), (-4.1, 3.0, MZ), 0x38383d)                              # and the shot in it
+    for x, y, z in ((-1.6, 0.0, 1.0), (-1.05, 0.0, 1.15), (-1.3, 0.0, 1.6), (-1.3, 0.45, 1.25)):
+        box((0.5, 0.5, 0.5), (x, y + 0.25, z), 0x38383d)                         # the pile
+    for x, z in ((-1.9, -5.4), (-2.6, -6.0), (-1.7, 10.4)):
+        cyl(0.42, 0.85, (x, 0.0, z), 0xf2bf99, r2=0.38, segs=8)
+        cyl(0.44, 0.12, (x, 0.34, z), DARK, segs=8)
+    for k, (z, c) in enumerate(((-10.2, R0), (5.8, 0xf2c14e), (11.6, R0))):
+        gonfalon(-1.5, z, c, h=4.4, wave='anim_flutter:p=%.1f#works%d' % (2.4 + 0.3 * k, k))
+    merge_paint()
+
+lite_too('block-fortress', 'siege-camp', 'tilt-yard', 'tourney-camp', 'marble-zigzag', 'block-town',
+         'block-minster', 'snake-humps-blue', 'snake-humps-red')
 
 # What lies about Gauntlet's floor (theme.cc playroomTrack: the scatter's
 # props, each under the lite tier's prop cap, square-edged).

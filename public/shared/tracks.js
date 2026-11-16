@@ -2123,21 +2123,30 @@ export const TRACKS = {
     // Each ladder ends in a kicker: the racers kick up off its top rung onto
     // the next deck.
     kickers: [ { u: 0.336 }, { u: 0.523 } ],
-    // Snakes and ladders, raced across the board at the toy cars' own scale.
-    // The games shelf's other things stand where the floor cannot be seen:
-    // a house of cards and a stack of game boxes under a spinner outside the
-    // top deck, the snake's wooden head at the dive's foot, the game's big
-    // pawns and a spilled deck past the loop. The room's train runs over
-    // the board's edge, close enough to read.
+    // Snakes and ladders, raced across the board at the toy cars' own scale,
+    // and the board stood up where the racers look: two of its printed
+    // snakes are jointed wooden ones arching along the kerb (the grid
+    // straight, the last corner), wind-up dice hop the grid's kerb, and
+    // outside the first deck a ladder leans up a stack of dice with a snake
+    // hung down it, another game's board stood open past it. The games
+    // shelf's other things stand where the floor cannot be seen: a house of
+    // cards and a stack of game boxes under a spinner outside the top deck,
+    // the game's big pawns and a spilled deck past the loop. The dive ends
+    // through the snake's head, astride the road at its foot. The room's
+    // train runs over the board's edge.
     set: [
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
       { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
-      { model: 'set-windup-chicks', u: 0.12, lat: 3.9 },
+      { model: 'set-windup-dice', u: 0.12, lat: 4.5 },
+      { model: 'set-snake-humps-blue', u: 0.16, lat: 7.2 },
+      { model: 'set-ladder-stack', u: 0.452, lat: 8 },
+      { model: 'set-game-board', u: 0.497, lat: 8.5 },
       { model: 'set-card-house', u: 0.6054, lat: 7.25, yaw: -35 },
       { model: 'set-game-stack', u: 0.675, lat: 8 },
-      { model: 'set-snake-head', u: 0.775, lat: 7.9 },
+      { model: 'set-snake-jaws', u: 0.782, lat: 0 },
       { model: 'set-game-pawns', u: 0.932, lat: 5.6 },
+      { model: 'set-snake-humps-red', u: 0.975, lat: 7.5 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
@@ -2167,9 +2176,12 @@ export const TRACKS = {
     // the bend before them. On the long home straight the siege goes on:
     // a red rank behind its mantlets and scaling ladders inside it (a rank
     // the lite tier leaves out), two blue ranks with their cannon outside, the castle's outer gatehouse astride the road (the
-    // racers drive through its arch, under the portcullis), a tin knight of
-    // each side wound up and marching the kerb, and the castle's dragon on
-    // guard where the straight points. The besiegers' ram,
+    // racers drive through its arch, under the portcullis) with the castle's
+    // dragon perched along its battlements over the road, the biggest creature of the
+    // set, a tin knight of each side wound up and marching the kerb at the
+    // set's own knights' size, and the besiegers' wooden horse left where
+    // the straight points. Outside the east leg, across the road from their
+    // camp, stand their works: palisades, a mangonel and their banners. The besiegers' ram,
     // its log swinging, stands with their guns outside the corner after
     // them, aimed across at the castle, and the castle's corner towers fly
     // tall blue pennants. Between the fights the two sides hold a tourney:
@@ -2187,7 +2199,7 @@ export const TRACKS = {
       { model: 'set-barbican', u: 0.6106, lat: 0 },
       { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
       { model: 'set-siege-ram', u: 0.7241, lat: 8.5, yaw: -150.5 },
-      { model: 'set-toy-dragon', u: 0.95, lat: 6.8 },
+      { model: 'set-toy-dragon', u: 0.83, lat: 0.7, y: 7.8, yaw: 90, scale: 1.3 },
       { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
       { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
       { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
@@ -2195,9 +2207,11 @@ export const TRACKS = {
       { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 },
       { model: 'set-tilt-yard', u: 0.027, lat: 8.5 },
       { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
-      { model: 'set-windup-knights', u: 0.92, lat: 3.9 },
+      { model: 'set-windup-knights', u: 0.92, lat: 4.3 },
       { model: 'set-tourney-rug', u: 0.885, lat: 0, yaw: 90 },
       { model: 'set-supply-wagon', u: 0.64, lat: 8.4 },
+      { model: 'set-wooden-horse', u: 0.95, lat: 7.5 },
+      { model: 'set-siege-works', u: 0.15, lat: 7.2 },
       { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
     ]
   },
@@ -2219,8 +2233,12 @@ export const TRACKS = {
     // marble racer of two stepped boards beside the grid straight, and from
     // its foot back into the tower's. Where the lap climbs and comes down
     // its spirals the run's sections lie on the floor under the decks, so a
-    // side run of its own stands round the outside of each at deck height.
-    // Each section is built in the world's
+    // side run of its own stands round the outside of each at deck height,
+    // and another round the climb's wall side; a click-clack board faces the
+    // descent's lower turn from outside the skyway, and a second span of
+    // twin rails crosses the skyway's far end, seen coming its whole length.
+    // The lite tier leaves the room's train out, to pay for the run's new
+    // sections. Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
     set: [
@@ -2236,9 +2254,12 @@ export const TRACKS = {
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
       { model: 'set-marble-run-climb', u: 0.25, lat: -20, yaw: -90 },
       { model: 'set-marble-run-dive', u: 0.5, lat: 5.26, yaw: 180 },
-      { model: 'set-windup-robots', u: 0.06, lat: -3.9, yaw: 180 },
+      { model: 'set-marble-run-wall', u: 0.25, lat: 7, yaw: -90 },
+      { model: 'set-marble-run-cross', u: 0.5093, lat: 0, yaw: 180 },
+      { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
+      { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
-      { model: 'set-room-train-helix', u: 0, lat: 0 },
+      { model: 'set-room-train-helix', u: 0, lat: 0, lite: false },
       { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
     ]
   },
@@ -2258,9 +2279,12 @@ export const TRACKS = {
     // and the fire station outside the south edge, and past the top
     // straight the old town, a crane turning on its building site. The
     // town's tallest blocks stand beside the skyway where it turns for the
-    // U and others of their own outside it, its TV tower in the U's eye,
-    // and towers a child stacked stand outside the corner the south-bound
-    // leg turns. A tin bus and tram, wound up, run the grid's kerb.
+    // U and others of their own outside it, its TV tower in the U's eye;
+    // round the U's outside the old town's square, a minster, the town hall
+    // and its clock, a stepped block of flats, all over the deck, and a
+    // terrace of tall houses stepping down beside the ramp off it; and
+    // towers a child stacked of the small blocks stand outside the corner
+    // the south-bound leg turns. A tin bus and tram, wound up, run the grid's kerb.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -2269,9 +2293,11 @@ export const TRACKS = {
       { model: 'set-block-high-street', u: 0.8655, lat: -9.63, yaw: 180 },
       { model: 'set-block-uptown', u: 0.4534, lat: -6.64 },
       { model: 'set-block-midtown', u: 0.485, lat: -9, yaw: 90 },
+      { model: 'set-block-minster', u: 0.5, lat: -8.6, yaw: 180 },
+      { model: 'set-block-terrace', u: 0.547, lat: -7.2, yaw: 180 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
-      { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180 },
-      { model: 'set-windup-trams', u: 0.06, lat: -3.9, yaw: 180 },
+      { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180, scale: 0.62 },
+      { model: 'set-windup-trams', u: 0.06, lat: -4.4, yaw: 180 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }
