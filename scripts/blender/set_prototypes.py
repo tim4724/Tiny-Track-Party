@@ -4486,9 +4486,9 @@ def driftwood_trunk():
     # begins: a forest giant lying along the verge, stripped and bleached,
     # its root plate reared up twice a car's height at one end, its broken
     # limbs standing up off the trunk, smaller logs washed up
-    # against it and a dead tree still standing in the sand behind its roots. A
-    # beachcomber sits on the trunk; the gull on the roots watches the cars
-    # and hops off as one goes by. +X is the road.
+    # against it and a dead tree still standing in the sand behind its roots.
+    # No one about; the gull on the roots watches the cars and hops off as
+    # one goes by. +X is the road.
     L = 9.0
     with bleached():
         spine = [(0.0, 1.05, -L / 2 + 0.3), (0.1, 0.8, -L / 4), (0.0, 0.52, 0), (-0.12, 0.34, L / 4), (0.05, 0.2, L / 2)]
@@ -4501,7 +4501,6 @@ def driftwood_trunk():
         rod((-1.0, 0.1, 1.5), (-1.6, 0.09, 3.2), 0.1, 'cream', r2=0.07)
         rod((0.9, 0.16, -3.6), (-1.1, 0.5, -2.4), 0.15, 'cream', r2=0.1)               # one thrown across the trunk's foot
         drift_snag(-1.6, -3.2, 3.6, 0.2, 2.2, 1.0)
-    figure((0.0, 0.84, -0.6), 0.0, shirt=0xff5040, legs=0xf2bf99, pose='sit')
     gull((0.0, 2.28, -L / 2), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     join_still('trunk')
 
@@ -4619,14 +4618,14 @@ def dune_fence(name, seed, half, breaks):
                     a0 = 2.4 * k + p
                     d = 0.25 + 0.55 * frac(k * 0.37 + p * 0.21)
                     x, z = px + d * math.cos(a0), pz + 1.5 * d * math.sin(a0)
-                    for j in range(5):                                # a tussock: blades fanned out of one foot
-                        a = 1.26 * j + k
+                    for j in range(3 if LITE else 5):                 # a tussock: blades fanned out of one foot
+                        a = (2.1 if LITE else 1.26) * j + k
                         hgt = 0.55 + 0.3 * frac(k * 0.29 + j * 0.4 + p * 0.13)
                         o = beam((x + 0.05 * math.cos(a), -0.05, z + 0.05 * math.sin(a)),
-                                 (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.1,
+                                 (x + 0.3 * math.cos(a), hgt, z + 0.3 * math.sin(a)), 0.15 if LITE else 0.1,
                                  ('green', 'cream', 'green', 'tan', 'green')[(j + k) % 5])
                         o['ramp'] = 0.15
-                if p % 3 == 0:
+                if p % 3 == 0 and not LITE:
                     for j in range(3):
                         fx, fz = px + 0.7 * math.cos(2.0 * j + p), pz + 0.9 * math.sin(2.0 * j + p)
                         box((0.03, 0.16, 0.03), (fx, 0.06, fz), 'green')
@@ -4664,11 +4663,11 @@ def dune_marram():
                     a0 = 2.4 * k + p
                     d = 0.4 + 0.8 * frac(k * 0.37 + p * 0.21)
                     x, z = px + d * math.cos(a0), pz + 1.4 * d * math.sin(a0)
-                    for j in range(5):
-                        a = 1.26 * j + k + p
+                    for j in range(3 if LITE else 5):                 # (the box's tussock: three broader blades)
+                        a = (2.1 if LITE else 1.26) * j + k + p
                         h = 0.8 + 0.55 * frac(k * 0.29 + j * 0.4 + p * 0.13)
                         o = beam((x + 0.07 * math.cos(a), -0.15, z + 0.07 * math.sin(a)),
-                                 (x + 0.45 * math.cos(a), h, z + 0.45 * math.sin(a)), 0.15,
+                                 (x + 0.45 * math.cos(a), h, z + 0.45 * math.sin(a)), 0.22 if LITE else 0.15,
                                  ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
                         o['ramp'] = 0.15
     draped('marram', build)
@@ -5419,6 +5418,51 @@ def point_wrack():
         drift_snag(-3.4, 0.4, 4.2, 0.2, 2.4, 13.0, limbs=4)
         drift_snag(-2.6, 3.6, 3.0, 0.3, 0.6, 14.0, limbs=3)
     join_still('wrack')
+
+@piece(1.0)
+def storm_buoy():
+    # Driftwood: a channel buoy the storm tore off its mooring and threw up
+    # on the point, where the road comes out of the tunnel facing it: a red
+    # steel float with a white band, its skirt dark with weed, the lattice
+    # tower over it carrying its lamp and topmark, the whole of it canted
+    # over in the sand it has sunk into, twice a car's height still; its
+    # chain trailing off down the beach, kelp heaped against it and bleached
+    # logs thrown up beside it, a gull on its lamp. +X is the road.
+    red, white = 0xcf534f, 0xfff6eb
+    LEAN = Matrix.Rotation(0.42, 4, 'Y') @ Matrix.Rotation(-0.16, 4, 'X')      # over toward the road and the cars coming
+    before = set(bpy.context.scene.objects)
+    rowed(cyl(0.55, 0.55, (0.0, -0.3, 0.0), 'olive', r2=0.98, segs=10), 28)     # the skirt, weeded
+    cyl(0.98, 0.95, (0.0, 0.25, 0.0), red, segs=10)                              # the float
+    cyl(1.0, 0.24, (0.0, 0.6, 0.0), white, segs=10)
+    cyl(0.98, 0.4, (0.0, 1.2, 0.0), red, r2=0.6, segs=10)
+    for k in range(4):                                                           # the tower's legs
+        a = math.pi / 4 + k * math.pi / 2
+        beam((0.52 * math.cos(a), 1.5, 0.52 * math.sin(a)), (0.2 * math.cos(a), 3.2, 0.2 * math.sin(a)), 0.13, red)
+    box((0.66, 0.1, 0.66), (0.0, 2.3, 0.0), red)
+    box((0.52, 0.12, 0.52), (0.0, 3.22, 0.0), red)
+    cyl(0.17, 0.3, (0.0, 3.28, 0.0), 0xffc044, segs=6)                           # the lamp
+    cyl(0.36, 0.5, (0.0, 3.62, 0.0), red, r2=0.03, segs=6)                       # the topmark
+    bpy.context.view_layer.update()
+    for o in bpy.context.scene.objects:
+        if o not in before:
+            o.matrix_world = LEAN @ o.matrix_world
+    tip = LEAN @ P(0.0, 3.6, 0.0)
+    gull((tip.x, tip.z + 0.2, -tip.y), 0.3, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
+    with bleached():
+        rod((-1.4, 0.3, -3.6), (-0.4, 0.5, 1.2), 0.32, 'tan', r2=0.24, segs=7)       # a trunk thrown up against it
+        rod((-2.4, 0.22, 0.6), (-0.9, 0.3, 3.8), 0.24, 'cream', r2=0.17, segs=7)
+        rod((0.8, 0.16, 1.6), (2.0, 0.14, 3.4), 0.16, 'tan', r2=0.1, segs=6)
+        drift_snag(-2.6, -2.2, 3.0, 0.25, 1.9, 21.0, limbs=3)
+    join_still('buoy')
+    def chain():
+        with plain_parts():
+            for k in range(9):                                                   # its chain, link by link down the beach
+                t = k / 8
+                x, z = -1.3 - 4.6 * t, 1.0 + 1.6 * math.sin(2.4 * t)
+                box((0.36, 0.16, 0.22), (x, 0.06, z), 'dark', yaw=0.9 * math.cos(2.4 * t) + (0.5 if k % 2 else 0.0))
+            for k, (x, z, yw) in enumerate(((1.2, -0.6, 0.4), (0.9, 0.9, 1.5), (-0.6, -1.4, 2.3), (1.7, 0.2, 0.9))):
+                rowed(box((0.6, 0.26, 1.5), (x, 0.08, z), 'olive' if k % 2 else 0x7a5a3a, yaw=yw), 30)     # kelp
+    draped('chain', chain)
 
 # ====================================================================================
 # SNOW
@@ -13773,9 +13817,10 @@ def lite_too(*names):
 
 # The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
 # vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
-# of the groves and stands (palm()).
+# of the groves and stands (palm()); Driftwood's marram in three-bladed
+# tussocks.
 lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
-         'jungle-grove', 'palm-stand')
+         'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals

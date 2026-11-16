@@ -737,6 +737,15 @@ export const TRACKS = {
       { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
       // the storm's wrack piled on the point where the road turns back
       { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
+      // ...and a channel buoy the storm threw up beside it, where the road
+      // out of the tunnel points; the strand line again along the sea side
+      // of the run back to the net huts, which lay bare
+      { model: 'set-storm-buoy', u: 0.87, lat: -10.5, yaw: 180 },
+      { model: 'set-strand-line', u: 0.912, lat: -9.6, yaw: 184 },
+      // storm fence and marram at the dunes' foot on the outside of the bend
+      // off the east side (the marram behind the fence is the full tier's)
+      { model: 'set-dune-fence-b', u: 0.215, lat: 9.6 },
+      { model: 'set-dune-marram', u: 0.225, lat: 14.5, lite: false },
       // the smokehouse where the start straight bends away, which it points at
       { model: 'set-smokehouse', u: 0.075, lat: -10.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
@@ -745,26 +754,27 @@ export const TRACKS = {
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
-      { kind: 'ridge', u: 0.53, lat: 23, yaw: 25, len: 14, r: 19, h: 4.0, top: 0.5 },
-      { kind: 'ridge', u: 0.62, lat: 28, yaw: -12, len: 18, r: 23, h: 4.0, top: 0.5 },
-      { kind: 'ridge', u: 0.71, lat: 27, yaw: 25, len: 16, r: 22, h: 3.8, top: 0.5 },
-      { kind: 'ridge', u: 0.79, lat: 22, yaw: -15, len: 12, r: 17, h: 3.6, top: 0.5 },
+      // (the inland line is spaced so its dunes run into one another without
+      // adding: ridge heights ADD, and where two crests overlap they stack
+      // into a peak. Ends a radius and a half apart, half-crested, keep one
+      // height along the line.)
+      { kind: 'ridge', u: 0.53, lat: 23, len: 6, r: 16.5, h: 4.0, top: 0.5 },
+      { kind: 'ridge', u: 0.62, lat: 28, len: 6, r: 16.5, h: 4.6, top: 0.5 },
+      { kind: 'ridge', u: 0.71, lat: 27, len: 6, r: 16, h: 3.6, top: 0.5 },
+      { kind: 'ridge', u: 0.79, lat: 22, len: 6, r: 14, h: 3.2, top: 0.5 },
       { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
       { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
       { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
-      // the great dune in the middle of the loop, over the rest
-      { kind: 'ridge', u: 0.62, lat: 50, yaw: 20, len: 30, r: 22, h: 5.5, top: 0.6 },
-      // dunes inside the start straight and the east side
-      { kind: 'ridge', u: 0.95, lat: 22, yaw: 20, len: 16, r: 16, h: 3.0, top: 0.5 },
-      { kind: 'ridge', u: 0.03, lat: 23, yaw: -25, len: 14, r: 16, h: 2.5, top: 0.5 },
-      { kind: 'ridge', u: 0.18, lat: 21, yaw: 20, len: 14, r: 15, h: 2.0, top: 0.5 },
-      // a low grassy line of dunes inland of the strand line, the sea side
-      // left open
-      // kept low: ridge heights add, so taller ones here stacked with the
-      // dune behind into a pale peak over the run down to the strand
-      { kind: 'ridge', u: 0.315, lat: 13, yaw: 20, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.37, lat: 13.5, len: 16, r: 8.5, h: 2.6, top: 0.3, near: 0.5, tint: 0xa8d090 },
-      { kind: 'ridge', u: 0.425, lat: 13, yaw: -25, len: 12, r: 8, h: 2.2, top: 0.3, near: 0.5, tint: 0xa8d090 },
+      // one more dune inside the east side, clear of the pass's own. Until
+      // round 19 a great dune in the middle of the loop lay under three
+      // more, which summed into one sharp pyramid seventeen units high over
+      // the start straight; the pass's dunes are the loop's high ground now.
+      { kind: 'ridge', u: 0.15, lat: 19, len: 4, r: 15, h: 3.4, top: 0.5 },
+      // a low grassy dune inland of the strand line, the sea side left
+      // open: ONE broad form (three small ones run together here added up
+      // into a pale peak over the run down to the strand, and a form under
+      // a dozen units of radius is a pyramid on the ground's 9 u grid)
+      { kind: 'ridge', u: 0.37, lat: 15, len: 14, r: 13, h: 2.4, top: 0.6, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
       { kind: 'ridge', u: 0.975, lat: -18.5, len: 26, r: 6.5, h: 3, top: 0.3, near: 6.5, tint: 0xa8d090 },
       // marram at the dunes' feet along the pass, a green wash by the kerb
