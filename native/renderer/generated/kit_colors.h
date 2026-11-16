@@ -119235,8 +119235,8 @@ inline const Prim k_set_powder_chairlift_lite_m29[] = {
     { 24u, k_set_powder_chairlift_lite_m29_p0 }
 };
 inline const uint8_t k_set_powder_chairlift_lite_m30_p0[] = {
-    63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,61,61,67,61,61,67,61,61,67,63,63,70,63,63,70,63,63,70,63,63,70,
-    63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,61,61,67,61,61,67,61,61,67
+    63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,63,63,70,63,63,70,63,63,70,63,63,70,
+    63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67
 };
 inline const Prim k_set_powder_chairlift_lite_m30[] = {
     { 24u, k_set_powder_chairlift_lite_m30_p0 }
@@ -119270,8 +119270,8 @@ inline const Prim k_set_powder_chairlift_lite_m34[] = {
     { 24u, k_set_powder_chairlift_lite_m34_p0 }
 };
 inline const uint8_t k_set_powder_chairlift_lite_m35_p0[] = {
-    63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,61,61,67,61,61,67,61,61,67,63,63,70,63,63,70,63,63,70,63,63,70,
-    63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,61,61,67,61,61,67,61,61,67
+    63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,63,63,70,63,63,70,63,63,70,63,63,70,
+    63,63,70,63,63,70,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67,60,60,67
 };
 inline const Prim k_set_powder_chairlift_lite_m35[] = {
     { 24u, k_set_powder_chairlift_lite_m35_p0 }
@@ -152559,8 +152559,8 @@ inline const Prim k_set_ski_lift_lite_m37[] = {
     { 24u, k_set_ski_lift_lite_m37_p0 }
 };
 inline const uint8_t k_set_ski_lift_lite_m38_p0[] = {
-    63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,62,62,68,61,61,68,61,61,68,63,63,71,63,63,71,63,63,71,63,63,71,
-    63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,62,62,68,61,61,68,61,61,68
+    63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,63,63,71,63,63,71,63,63,71,63,63,71,
+    63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68
 };
 inline const Prim k_set_ski_lift_lite_m38[] = {
     { 24u, k_set_ski_lift_lite_m38_p0 }
@@ -152594,8 +152594,8 @@ inline const Prim k_set_ski_lift_lite_m42[] = {
     { 24u, k_set_ski_lift_lite_m42_p0 }
 };
 inline const uint8_t k_set_ski_lift_lite_m43_p0[] = {
-    63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,62,62,68,61,61,68,61,61,68,63,63,71,63,63,71,63,63,71,63,63,71,
-    63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,62,62,68,61,61,68,61,61,68
+    63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,63,63,71,63,63,71,63,63,71,63,63,71,
+    63,63,71,63,63,71,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68,61,61,68
 };
 inline const Prim k_set_ski_lift_lite_m43[] = {
     { 24u, k_set_ski_lift_lite_m43_p0 }
@@ -189848,7 +189848,7 @@ inline const Model kModels[] = {
     { 4369049965712510227ull, 1u, k_set_point_wrack },  // set-point-wrack.glb
     { 1082229969323480563ull, 1u, k_set_pond_ducks_lite },  // set-pond-ducks-lite.glb
     { 16567363913820407827ull, 3u, k_set_pond_ducks },  // set-pond-ducks.glb
-    { 9788038961665321411ull, 72u, k_set_powder_chairlift_lite },  // set-powder-chairlift-lite.glb
+    { 9967463505921686547ull, 72u, k_set_powder_chairlift_lite },  // set-powder-chairlift-lite.glb
     { 17731751504926617935ull, 86u, k_set_powder_chairlift },  // set-powder-chairlift.glb
     { 2112756386747288056ull, 2u, k_set_powder_forest_a_lite },  // set-powder-forest-a-lite.glb
     { 153668918990451305ull, 2u, k_set_powder_forest_a },  // set-powder-forest-a.glb
@@ -189926,7 +189926,7 @@ inline const Model kModels[] = {
     { 7639738012045800611ull, 89u, k_set_siege_tower },  // set-siege-tower.glb
     { 14532936675099708910ull, 86u, k_set_siege_works },  // set-siege-works.glb
     { 11808336615504090049ull, 158u, k_set_ski_jump },  // set-ski-jump.glb
-    { 799181016828488922ull, 134u, k_set_ski_lift_lite },  // set-ski-lift-lite.glb
+    { 17899509899184936914ull, 134u, k_set_ski_lift_lite },  // set-ski-lift-lite.glb
     { 10811836167451021905ull, 267u, k_set_ski_lift },  // set-ski-lift.glb
     { 5875745121016649170ull, 25u, k_set_ski_school },  // set-ski-school.glb
     { 2040235025276406324ull, 22u, k_set_skull_rock },  // set-skull-rock.glb

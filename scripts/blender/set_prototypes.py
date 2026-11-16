@@ -5704,11 +5704,6 @@ def pylon(at, h, yaw, ground=0.0):
     box((0.6, 0.6, 0.6), (x, ground - 0.2, z), 0x868ba1, yaw=yaw)
 
 GAUGE = 0.55   # half the lift's gauge: the haul rope either side of the towers
-# A lite lift's rope: lite's far form folds a closed shape thinner than its
-# tolerance away along its own length (TtpRenderer farForm: only full keeps a
-# small shape whole), and the towers stood with no rope and the chairs in the
-# air from sixty units. This thick it survives the fold.
-LITE_ROPE = 0.26
 
 def powder_lift_tower(at, h, yaw, ground=0.0):
     """Powder's ski-mountain lift tower standing on `ground`, its crossarm at
@@ -5787,9 +5782,7 @@ def piste_edge(pts, lite=False, foot=None):
     and a stout red pole at every point. Loose marker sticks down a slope
     read as a scatter; a continuous line each side is what says "run". The
     poles run down to `foot` (the plain under a hill the piece does not
-    carry, for set-check). The box's build is the netting alone: each span's
-    face is big enough that lite's far form keeps it (TtpRenderer farForm,
-    kFarFace), where a pole folds away."""
+    carry, for set-check). The box's build is the netting alone."""
     for (ax, ag, az), (bx, bg, bz) in zip(pts, pts[1:]):
         dx, dy, dz = bx - ax, bg - ag, bz - az
         h = math.hypot(dx, dz)
@@ -5965,8 +5958,7 @@ GROW['powder-resort-lite'] = 1.0
 def ski_lift_lite():
     # the box's lift: no queue, racked skis or chimneys, every other chair, two
     # of the three chalets, one skier, no hut at the top station or the
-    # finish, bare slalom gates, the lite fir, a thicker rope (LITE_ROPE), the
-    # run's netting alone
+    # finish, bare slalom gates, the lite fir, the run's netting alone
     ski_lift(True)
 
 @piece(1.0)
@@ -6022,7 +6014,7 @@ def ski_lift(lite=False):
     for s in (-GAUGE, GAUGE):
         for (fa, ya), (fb, yb) in zip(line[:-1], line[1:]):
             strut((V[0] + dx * fa + nx * s, ya, V[1] + dz * fa + nz * s),
-                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), LITE_ROPE if lite else 0.15, 0x2a2735)
+                  (V[0] + dx * fb + nx * s, yb, V[1] + dz * fb + nz * s), 0.15, 0x2a2735)
     # the haul rope's loop: up one side, round the top wheel, down the other;
     # the renderer carries the chairs round it (anim_path), facing their way
     up = [(V[0] + dx * f + nx * GAUGE, y, V[1] + dz * f + nz * GAUGE) for f, y in line]
@@ -6176,7 +6168,7 @@ def chairlift_ground(x):
 def powder_chairlift_lite():
     # the box's lift: the village without its lamps, garden gear, door paths,
     # chimneys and queue, one rail to its fence, no hut at the top station,
-    # a thicker rope (LITE_ROPE), the run's netting on a pole at each end
+    # the run's netting on a pole at each end
     powder_chairlift(True)
 
 @piece(1.0)
@@ -6207,7 +6199,7 @@ def powder_chairlift(lite=False):
         pylon((x, 0, 0.0), h, yaw)                    # its foot in the hill, down to the plain
     for s in (-GAUGE, GAUGE):
         for (xa, ya), (xb, yb) in zip(line, line[1:]):
-            strut((xa, ya, s), (xb, yb, s), LITE_ROPE if lite else 0.07, 0x2a2735)
+            strut((xa, ya, s), (xb, yb, s), 0.07, 0x2a2735)
     up = [(x, y, GAUGE) for x, y in line]
     down = [(x, y, -GAUGE) for x, y in reversed(line)]
     for k, pt in enumerate(up + down):
