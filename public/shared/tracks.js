@@ -336,8 +336,8 @@ export const SET_GROUND = {
   'set-ski-lift': [
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
-    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 6, w: 6, tint: 0xbdd0ee },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 6, w: 6, tint: 0xbdd0ee }
+    { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 5.5, w: 8, tint: 0xb1c7ec },
+    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 5.5, w: 8, tint: 0xb1c7ec }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
@@ -976,8 +976,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.4855, lat: -29.42, r: 26, h: 11, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.6274, lat: -25.74, r: 22, h: 7, top: 0.25, near: 2 },
       // the second lift's run back down the foothill, west of its line: a
-      // groomed wash, its edge markers the lift piece's (RUN_GROUND)
-      { kind: 'paint', u: 0.0163, lat: -19, yaw: 90, len: 22, r: 5, w: 5, tint: 0xbdd0ee },
+      // groomed wash, its netting and poles the lift piece's (RUN_GROUND)
+      { kind: 'paint', u: 0.0163, lat: -19, yaw: 90, len: 22, r: 4.5, w: 7, tint: 0xb1c7ec },
       // nothing seeded on the east verge of the run down from the crossings:
       // a pine the east hill raised there stood with its crown behind the
       // deck from the road below
@@ -1031,8 +1031,8 @@ export const TRACKS = {
       // where it meets the road (the plain below is its bed) with the
       // footbridge the fields' lane crosses on toward the lake, and a farm
       // outside the last bend before the line (sampled: set_prototypes.py
-      // FIELDS_*, FARM_*, STREAM_*; the box keeps the farm and the bridge)
-      { model: 'set-flurry-fields', u: 0.765, lat: 12, lite: false },
+      // FIELDS_*, FARM_*, STREAM_*; the box keeps each one's bones)
+      { model: 'set-flurry-fields', u: 0.765, lat: 12 },
       { model: 'set-flurry-stream', u: 0.815, lat: 0 },
       { model: 'set-flurry-farm', u: 0.905, lat: -10, yaw: 180 }
     ],
