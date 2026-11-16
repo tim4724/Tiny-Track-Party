@@ -396,6 +396,12 @@ export const SET_GROUND = {
   // from both ends (turned 90 so the spine runs along the creek's X).
   'set-dry-creek': [{ kind: 'plain', yaw: 90, len: 76, r: 6, w: 8, h: 1.5 }],
   'set-wash-bed': [{ kind: 'plain', len: 38, r: 7, w: 8, h: 1.5 }],
+  // ...an arm's last reach: the channel stops at the reach's middle and a
+  // narrow low mouth lets the bed out through its bank onto the plain
+  'set-wash-bed-end': [
+    { kind: 'plain', z: -9, len: 20, r: 7, w: 8, h: 1.5 },
+    { kind: 'plain', z: 8, len: 12, r: 3, w: 4, h: 0.5 }
+  ],
   // ...and a reach the road runs down: the floor from bank to bank
   'set-wash-road-reach': [{ kind: 'plain', len: 10, r: 9, w: 6, h: 1.4 }],
   // Gulch's mine: the rock spur rising behind the adit's rock face (-X; its
@@ -1483,37 +1489,39 @@ export const TRACKS = {
     // hero's stretch by the north straight,
     // across the north strand, which fords it at the bed's level, into the
     // east loop, where the road itself runs down the bed from ford to ford
-    // (set-wash-road-reach: gravel from bank to bank, a cut bank past each
-    // kerb, the last flood's log jam on the bar), and out under the east bend's low trestle (gen-tracks SEEDS
+    // (set-wash-road-reach: gravel from bank to bank, a cut bank a car's
+    // roof high past each kerb, the last flood's log jam on the bar, and a
+    // flood gauge where the road goes down to the first ford), and out under the east bend's low trestle (gen-tracks SEEDS
     // `trestle`: the bend's hill stands on pillars over the bed, not on an
     // embankment across it); a side wash comes in from the south across the
     // south strand, another ford. The bed is a shallow
     // channel, so what a racer sees of the wash where the road leaves it is
     // what grows along it: saguaros, ocotillo and
-    // brush on its banks (each reach brings a stand on each side), and two
-    // dead cottonwoods standing bare over the start's bends, a vulture on
-    // each. The high road runs along a sandstone bench over the two low
+    // brush on its banks (each reach brings a stand on each side), and a
+    // dead cottonwood standing bare over the start's bends, a vulture on
+    // it, a second one fallen beside it. The high road runs along a sandstone bench over the two low
     // strands, a butte of the strata stands in the knot of strands, and
-    // wild burros drink at a tinaja past the east loop. A desert of rock,
+    // mustangs drink at a tinaja past the east loop. A desert of rock,
     // sand and cactus: nothing green but cactus.
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
       { model: 'set-dead-cottonwood', u: 0.302, lat: 9.5 },   // (nearer, its rocks lay on the start straight below)
-      { model: 'set-dead-cottonwood', u: 0.95, lat: -7, yaw: -180 },
+      { model: 'set-fallen-cottonwood', u: 0.95, lat: -7, yaw: -150 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
       { model: 'set-wash-bed-ford', u: 0.5941, lat: -19, yaw: 87 },
-      { model: 'set-wash-bed', u: 0.5933, lat: -48.9, yaw: 95 },
-      { model: 'set-wash-bed', u: 0.5397, lat: -44.4, yaw: -102 },
+      // (the east and south arms' last reaches run out into the plain)
+      { model: 'set-wash-bed-end', u: 0.5933, lat: -48.9, yaw: 95 },
+      { model: 'set-wash-bed-end', u: 0.5397, lat: -44.4, yaw: 78 },
       { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
       { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
       // between the east loop's two fords the road runs down the bed itself,
       // a cut bank past each kerb, and the last flood's log jam on the bar
       { model: 'set-wash-road-reach', u: 0.537, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.553, lat: 0 },
-      { model: 'set-flood-jam', u: 0.558, lat: -6.8, yaw: 180 },
+      { model: 'set-flood-jam', u: 0.558, lat: -5.6, yaw: 180 },
       { model: 'set-wash-road-reach', u: 0.612, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.628, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.644, lat: 0 },
@@ -1533,7 +1541,11 @@ export const TRACKS = {
       // the side wash meets the road past the east loop, burros at it
       { model: 'set-wash-butte', u: 0.85, lat: -10, scale: 0.75 },
       { model: 'set-bench-ledge', u: 0.318, lat: -9, yaw: 180 },
-      { model: 'set-tinaja', u: 0.715, lat: -6, yaw: 180, scale: 1.5 }
+      // (at its own size: grown, its mustangs stood twice a car's length)
+      { model: 'set-tinaja', u: 0.715, lat: -5.5, yaw: 180 },
+      // the flood gauge where the road goes down to the first ford, the
+      // last flood's wrack stranded at its foot
+      { model: 'set-flood-gauge', u: 0.507, lat: 4.4 }
     ],
     // the range the canyon's mountainsides belong to, rising behind them
     land: [
@@ -1543,7 +1555,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.044, lat: 18, len: 18, r: 11, h: 6, top: 0.4, tint: 0xc8846a },
       { kind: 'ridge', u: 0.15, lat: 18, len: 12, r: 11, h: 5.5, top: 0.4, tint: 0xc8846a },
       // the wash's far reaches north-west of the creek, its channel only
-      { kind: 'plain', u: 0.9863, lat: -74.2, yaw: -112, len: 38, r: 7, w: 8, h: 1.5 },
+      { kind: 'plain', u: 0.9863, lat: -74.2, yaw: -112, len: 38, r: 5, w: 8, h: 0.7 },   // (the last: lower, narrower)
       { kind: 'plain', u: 0.9728, lat: -54.7, yaw: 66, len: 38, r: 7, w: 8, h: 1.5 },
       // the sandstone bench the high road runs along, its top just under the
       // deck's slab (the road stood on a ribbon 2.8 u over the sand; any
@@ -1630,7 +1642,10 @@ export const TRACKS = {
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
       { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 },
       // the powder magazine past the town, dug into the hill's foot
-      { model: 'set-powder-magazine', u: 0.405, lat: 8.2 }
+      { model: 'set-powder-magazine', u: 0.405, lat: 8.2 },
+      // the mine's water on the outside of the back loop: a windlass well,
+      // a tank on its stand and a flume along the verge toward the mill
+      { model: 'set-water-works', u: 0.672, lat: 8.0 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
     // than the land), and the range
@@ -1700,11 +1715,13 @@ export const TRACKS = {
     // height, set_prototypes.py crag_butte: a cliff of the one hard
     // sandstone in gullies and buttresses on a talus of one colour, never a
     // striped drum nor one long face), small spires of the same rock between
-    // them, and the skyline all round is mesas and buttes of the land. A
+    // them, and the skyline all round is mesas and buttes of the land; a
+    // plank-and-rope footbridge hangs across the mesa's gap of sky. A
     // stand of saguaros marks the start straight. Out on the range the
-    // ranch's windpumps
-    // turn over their stock tanks near the road, its herds come in to them
-    // (a cow alone is a speck from the road; tower, tank and herd read as
+    // ranch's windpump
+    // turns over its stock tank near the road, its herds come in to it and
+    // to a second tank on the S (a cow alone is a speck from the road;
+    // tower, tank and herd read as
     // one). Every wheel, the ranch's included, faces the one wind: the west
     // wind that blows the sand and the clouds east (+X) across the map, its
     // tail vane downwind. Each yaw turns its pump's wheel to the world's -X;
@@ -1712,9 +1729,20 @@ export const TRACKS = {
     // RANCH_WIND_YAW, for the ranch as it stands here).
     set: [
       { model: 'set-ranch', u: 0.986, lat: -13, yaw: 180 },
-      { model: 'set-windpump', u: 0.175, lat: 10, yaw: 90 },
-      { model: 'set-windpump', u: 0.58, lat: -13, yaw: 154 },
+      // out on the range: the shipping pen and its loading chute by the
+      // north straight, the one windpump past the bridge, a stock tank on
+      // the outside of the S (three windpumps stood in one picture as one
+      // tower copied), each at the end of a length of the ranch's stock
+      // trail along the verge; the ranch's lane from the gateway in the
+      // start's fence up to its corral
+      { model: 'set-loading-chute', u: 0.166, lat: 9.2 },
+      { model: 'set-stock-trail-end', u: 0.142, lat: 5.0 },
+      { model: 'set-stock-tank', u: 0.58, lat: -12, yaw: 180 },
+      { model: 'set-stock-trail-end', u: 0.612, lat: -5.2, yaw: 180 },
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
+      { model: 'set-stock-trail-end', u: 0.425, lat: 5.0 },
+      { model: 'set-stock-trail', u: 0.46, lat: 5.0 },
+      { model: 'set-ranch-lane', u: 0.032, lat: -5.4, yaw: 180 },
       { model: 'set-hoodoos', u: 0.32, lat: -12 },
       { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16 },
@@ -1755,8 +1783,9 @@ export const TRACKS = {
       // of the box's dear rock pixels): past the north-east spires, before
       // the bend beyond them, and on the S's outside, joining the mesa's
       // broken-off butte's talus (each short of every other strand: a flank
-      // reaching one is cut into a cliff there, a crease and a flap)
-      { kind: 'ridge', u: 0.392, lat: 15, len: 8, r: 9, h: 4.5, top: 0.3, near: 2 },
+      // reaching one is cut into a cliff there, a crease and a flap; and
+      // none over a rock piece's own talus: one lay on the north-east
+      // spires' and the two slopes cut each other in dark shards)
       { kind: 'ridge', u: 0.618, lat: -15, len: 12, r: 10, h: 1.8, top: 0.3, near: 3 },
       // the skyline: mesas and buttes standing apart on the plain, 55 to 95
       // units out (a ring of them read as the walls of a box), each broad
@@ -1789,7 +1818,7 @@ export const TRACKS = {
     // corner; and at the line the field's own
     // filling station, its sign turning and a hawk over it. All round the
     // field, on the rim of the basin the circuit lies in, runs the company's
-    // railway, its tank trains walking round and round it the way the race
+    // railway, its tank trains rolling round and round it the way the race
     // goes, filled at the rack behind the tank farm: on the ground the whole
     // way, past the mountain through the pass between the massif and its
     // range, and across no road. The telegraph line comes in across the open
@@ -1814,12 +1843,17 @@ export const TRACKS = {
       { model: 'set-flare-stack', u: 0.662, lat: 11 },
       // a dust devil wandering the flats inside the north loop
       { model: 'set-dust-devil', u: 0.7, lat: -12 },
+      // the field's pipe yard on the outside of the south loop, past where
+      // the trunk line dives under the S: racked pipe, drums, a mud pit
+      { model: 'set-pipe-yard', u: 0.297, lat: 11.5 },
       // the railway round the field, length by length on the rim (laid in
       // the world by scratch geometry, set_prototypes.py SW_RING, each
       // length placed on its own chord): the rack behind the tank farm, the
       // open line (the lengths behind the south loop's ridge, h to m, never
       // seen from the seat, are full-only), and four trains, each built on a
-      // length of its own a quarter of the way round from the next; the rack fed from the farm
+      // length of its own a quarter of the way round from the next (two of
+      // them full-only: at the trains' pace two pass every part of the line
+      // a racer sees, and c stands on the full-only lengths); the rack fed from the farm
       // through a pipe that comes up at the farm's edge
       { model: 'set-tank-rack', u: 0.63973, lat: 37.034, yaw: -1.586 },
       { model: 'set-tank-line-a', u: 0.652316, lat: 33.785, yaw: 6.158 },
@@ -1830,12 +1864,12 @@ export const TRACKS = {
       { model: 'set-tank-line-e', u: 0.749814, lat: 33.838, yaw: 0.118 },
       { model: 'set-tank-line-f', u: 0.764304, lat: 41.239, yaw: -32.089 },
       { model: 'set-tank-line-g', u: 0.052027, lat: 38.927, yaw: 5.107 },
-      { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959 },
+      { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959, lite: false },
       { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553, lite: false },
       { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165, lite: false },
       { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059, lite: false },
       { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931, lite: false },
-      { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488 },
+      { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488, lite: false },
       { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786, lite: false },
       { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96, lite: false },
       { model: 'set-tank-line-n', u: 0.408735, lat: 31.764, yaw: 32.096 },
@@ -1852,7 +1886,8 @@ export const TRACKS = {
       // the pumping wells to their tank battery and back, under the knot;
       // down the start straight and under the mountain; round the outside
       // of the south loop and away under the S. Each span a thin footprint,
-      // so the scatter round it stands.
+      // so the scatter round it stands. The detour behind the pumping wells
+      // is full-only: the wells and the deck hide it from the seat.
       { model: 'set-pipeline-rise', u: 0.6270, lat: 6.50, yaw: -179.8 },
       { model: 'set-pipeline-8', u: 0.6270, lat: 6.50, yaw: 2.5 },
       { model: 'set-pipeline-8', u: 0.6430, lat: 6.47, yaw: 14.5 },
@@ -1861,13 +1896,13 @@ export const TRACKS = {
       { model: 'set-pipeline-8', u: 0.6791, lat: 6.35, yaw: 12.7 },
       { model: 'set-pipeline-12', u: 0.6907, lat: 6.33, yaw: 10.7 },
       { model: 'set-pipeline-16', u: 0.7139, lat: 6.48, yaw: 8.1 },
-      { model: 'set-pipeline-8', u: 0.7389, lat: 8.76, yaw: -31.9 },
-      { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3 },
-      { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3 },
-      { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9 },
-      { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0 },
-      { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4 },
-      { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7 },
+      { model: 'set-pipeline-8', u: 0.7389, lat: 8.76, yaw: -31.9, lite: false },
+      { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3, lite: false },
+      { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3, lite: false },
+      { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9, lite: false },
+      { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0, lite: false },
+      { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4, lite: false },
+      { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7, lite: false },
       { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2 },
       { model: 'set-pipeline-rise', u: 0.9150, lat: 7.50, yaw: 179.9 },
       { model: 'set-pipeline-16', u: 0.9150, lat: 7.50, yaw: -1.2 },
@@ -1923,6 +1958,8 @@ export const TRACKS = {
       { kind: 'clear', u: 0.72, lat: 11.5, len: 26, r: 1 },
       { kind: 'clear', u: 0.78, lat: -14.8, len: 17, r: 1 },
       { kind: 'clear', u: 0.81, lat: 11.5, len: 6, r: 1 },
+      // ...nor on the outside of the bend back to the start straight
+      { kind: 'clear', u: 0.875, lat: -11.5, len: 26, r: 1 },
       // ...nor at the kerb before the tank farm, towering over its tanks
       { kind: 'clear', u: 0.535, lat: 11.5, len: 16, r: 1 },
       { kind: 'clear', u: 0.575, lat: 11.5, len: 22, r: 1 },
