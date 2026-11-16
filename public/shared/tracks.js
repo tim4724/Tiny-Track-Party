@@ -923,10 +923,6 @@ export const TRACKS = {
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
-      // the village piste down the foothill outside the east loop, cut
-      // through the forest between stands b and c, the groomer working it,
-      // skiers coming down it to the verge
-      { model: 'set-flurry-piste', u: 0.684, lat: 12, yaw: 0 },
       { model: 'set-flurry-forest-a', u: 0.5849, lat: 9.11 },
       { model: 'set-flurry-forest-b', u: 0.6598, lat: 13.14 },
       { model: 'set-flurry-forest-c', u: 0.7086, lat: 11.15 },
@@ -1314,8 +1310,7 @@ export const TRACKS = {
     // by the bends a picnic left out, a hay wain loaded, a trampoline, a
     // paddling pool;
     // the kite hill rising off the verge beyond the top loop, three kites
-    // flying low over its foot from stakes up the slope; the soapbox
-    // race's start ramp and gate at the east down's foot. Nobody is about (children
+    // flying low over its foot from stakes up the slope. Nobody is about (children
     // that small read as specks). The other trees a racer passes are the
     // lawn's own scatter of the garden's broadleaf oaks.
     set: [
@@ -1330,8 +1325,7 @@ export const TRACKS = {
       { model: 'set-hay-wain-oak', u: 0.52, lat: 7, yaw: 0, scale: 1.35 },
       { model: 'set-trampoline-oak', u: 0.115, lat: 7, yaw: 0, scale: 1.35 },
       { model: 'set-paddling-pool-oak', u: 0.34, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -10, yaw: 180, scale: 1.4 },
-      { model: 'set-soapbox-start', u: 0.385, lat: 6.6, yaw: 0 }
+      { model: 'set-kite-flyers', u: 0.715, lat: -10, yaw: 180, scale: 1.4 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)
