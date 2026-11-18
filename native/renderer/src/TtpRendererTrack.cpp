@@ -562,6 +562,7 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
     mNearRise = 0;
     mBeachRise = 0;
     mBeachDrawn = 0;
+    mBeachTop = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -602,7 +603,8 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
         const float sea = smooth01((shoreDist(mShoreLine, x, z, mBeachKeep + kBeachRamp) - mBeachKeep) / kBeachRamp);
         // It fills the sand UP TO its height and adds nothing where the land
         // already stands there (the raised ground under a hop beside it).
-        beach = std::max(0.0f, mBeachRise * std::min(wet, sea) - land * shore);
+        mBeachTop = mBeachRise * std::min(wet, sea);
+        beach = std::max(0.0f, mBeachTop - land * shore);
         mBeachDrawn = beach;
         mNearRise += beach;   // the band stands that much over the grid, as for a `near` form
     }
@@ -1015,7 +1017,14 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const float o = std::min(kApronRef, e.reach);
             const float rx = e.E.x + e.l.x * o, rz = e.E.z + e.l.y * o;
             float edge;
-            const float natural = terrainField(tb, rx, rz, true) - roadLift(tb, rx, rz, edge);
+            // A beach rise that high beside it is land it lies in too (the
+            // sand brought up to a hop), though only the band lays it: read
+            // where the apron has come down to the land, past the rise's own
+            // ramp off the kerb.
+            const float os = std::min(kApronLevel + kApronRun, e.reach);
+            terrainField(tb, e.E.x + e.l.x * os, e.E.z + e.l.y * os, true, nullptr, nullptr, 1e30f, true);
+            const float sand = tb.groundY + mBeachTop;
+            const float natural = std::max(sand, terrainField(tb, rx, rz, true) - roadLift(tb, rx, rz, edge));
             const float low = 1.0f - smooth01((e.lev - tb.groundY - kApronFull) / (kApronNone - kApronFull));
             const float cut = 1.0f - smooth01((e.lev - natural - kApronCut) / (kApronNone - kApronFull));
             e.fill = std::max(low, cut) * (1.0f - street) * (1.0f - stilts);
@@ -1038,11 +1047,12 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         std::vector<float> want(wide.size(), 0.0f);
         for (size_t q = 0; q < edges.size(); q++) {
             const Edge& e = edges[q];
-            if (e.fill <= 0 || e.reach < O) continue;
+            if (e.reach < O) continue;
             const float px = e.E.x + e.l.x * O, pz = e.E.z + e.l.y * O;
             const float field = landAt(e, px, pz, O, nullptr, nullptr), grid = mGroundGrid.gridAt(px, pz);
-            // A beach rise is the band's alone to draw, however low.
-            want[q] = std::min(field, grid + kBandOver + mNearRise) - grid > kBandWide
+            // A beach rise is the band's alone to draw, however low and
+            // beside raised road too.
+            want[q] = (e.fill > 0 && std::min(field, grid + kBandOver + mNearRise) - grid > kBandWide)
                     || mBeachDrawn > kBandFlat ? 1.0f : 0.0f;
         }
         for (size_t q = 0; q < want.size(); q++) {
@@ -1082,7 +1092,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 const float field = landAt(e, px, pz, o, &dellV[v], &bedV[v]);
                 // landAt's walk left the samples in reach of (px, pz) in
                 // mTsiNear, and what the `near` forms raise there in mNearRise.
-                const float nearRise = mNearRise;
+                const float nearRise = mNearRise, sand = mBeachDrawn;
                 const float grid = mGroundGrid.gridAt(px, pz);
                 // Row 0 stands kApronKerb over the deck's top inside the kerb,
                 // so no sliver of the slab's side shows at the kerb's outer
@@ -1100,8 +1110,12 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
                 }
                 // Raised road keeps the ground the grid lays under it (fill 0).
                 float y = lerp(grid + kBandLift, a, e.fill);
+                // ...but a beach rise beside it is the band's alone to lay:
+                // it stands there as the sand it is, short of the deck, and
+                // comes down along the road by its own flank.
+                if (sand > 0) y = std::max(y, std::min(field, grid + kBandOver + nearRise));
                 y = lerp(y, grid + kBandLift, smooth01((o - b0) / (b1 - b0)));
-                bool mine = o < b1 - 0.01f && e.fill > 0;
+                bool mine = o < b1 - 0.01f && (e.fill > 0 || sand > 0);
                 const float own = o + cw;
                 for (const auto& [i, d] : mTsiNear) {
                     const TrackBin::Sample& sm = tb.samples[i];

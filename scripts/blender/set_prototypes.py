@@ -16553,6 +16553,326 @@ lite_too('lido', 'seafront-bandstand')
 # Glacier's dog team on four-sided limbs (glacier_husky).
 lite_too('glacier-dog-trail')
 
+# ---- round 23: the beach brought up beside the hops ----
+# Where a beach road climbs over a hop its sea side lay two or three units
+# under the kerb, and nothing stood there that the seat could see. tracks.js
+# brings the sand up to the road there (a beach rise as high as the hop) and
+# these stand on it. Each brings its own ground: a walk from the road, what
+# was dragged or left lying. All lie on the land as drawn.
+
+def heel(a, x0=0.0, lift=0.0):
+    """A hull's own upright frame (x across, y up from the keel, z along)
+    heeled `a` radians about its keel line and set down at `x0`, `lift`
+    over the sand: positive lays her masts over toward -X."""
+    c, s = math.cos(a), math.sin(a)
+    return lambda x, y, z: (x0 + x * c - y * s, lift + x * s + y * c, z)
+
+def heeled_hull(R, secs, low, high):
+    """A hull between sections (z, keel half-breadth, its y, waterline
+    half-breadth, its y, deck half-breadth, its y), in two strakes a length:
+    below the waterline `low[i]`, above it `high[i]`."""
+    def q(z, h0, y0, h1, y1):
+        return [R(-h0, y0, z), R(h0, y0, z), R(h1, y1, z), R(-h1, y1, z)]
+    for i in range(len(secs) - 1):
+        (z0, k0, a0, w0, b0, d0, c0), (z1, k1, a1, w1, b1, d1, c1) = secs[i], secs[i + 1]
+        hexa(q(z0, k0, a0, w0, b0), q(z1, k1, a1, w1, b1), low[i])
+        hexa(q(z0, w0, b0, d0, c0), q(z1, w1, b1, d1, c1), high[i])
+
+def sand_print(cells, row, y=0.03):
+    """Trodden or dragged sand, pebbles laid: quads [(x, z) * 4] a stride
+    across as a print on the ground, one shade (`row` of the gravel ramp)."""
+    o = colored_faces([('gravel', [(x, y, z) for x, z in c]) for c in cells], 'print')[0]
+    for pl in o.data.polygons:
+        if pl.normal.z < 0:
+            pl.flip()
+    return rowed(o, row)
+
+@piece(1.0)
+def careened_sloop():
+    # Cove: the crew's sloop hove down on the dune above the anchorage to
+    # have her bottom cleaned: hauled up from the bay over log rollers, which
+    # still lie in her track, and laid over on her bilge with a tackle from
+    # her masthead to a post in the sand, her keel to the road. The after
+    # half of her bottom is scraped and tarred black, the fore half still
+    # green with weed; the staging along her, the tar pot on its fire, the
+    # tar kegs and the spare strakes. No one about. +X is the road; she lies
+    # along it, bow to +Z, toward the bay.
+    wood, tar, cream = 0x8a6a46, 0x38383d, 0xfde4c7
+    R = heel(math.radians(42), 0.5, 0.34)
+    secs = ((-2.5, 0.16, 0.34, 0.5, 0.6, 0.62, 1.15), (-1.0, 0.24, 0.05, 0.68, 0.52, 0.78, 1.05),
+            (0.6, 0.24, 0.0, 0.72, 0.5, 0.8, 1.05), (2.5, 0.05, 0.3, 0.08, 0.66, 0.1, 1.42))
+    heeled_hull(R, secs, (tar, tar, 'olive'), (0xb06041, 0xb06041, 0xb06041))
+    beam(R(0.0, -0.08, -2.5), R(0.0, -0.08, 2.2), 0.16, wood)                    # her keel
+    beam(R(0.0, 0.25, -2.55), R(0.0, 1.3, -2.7), 0.14, wood)                     # sternpost and rudder
+    poly([R(0.0, 0.3, -2.62), R(0.0, 0.3, -3.15), R(0.0, 0.95, -3.1), R(0.0, 1.05, -2.68)], [(0, 1, 2, 3)], wood)
+    beam(R(0.0, 1.38, 2.2), R(0.0, 1.8, 3.9), 0.12, wood)                        # the bowsprit
+    beam(R(0.0, 1.0, 0.6), R(0.0, 4.6, 0.5), 0.15, wood)                         # her mast, laid over
+    beam(R(0.0, 1.55, 0.45), R(0.0, 1.6, -2.3), 0.1, wood)                       # the boom, its sail furled on it
+    rod(R(0.0, 1.72, 0.3), R(0.0, 1.76, -2.1), 0.15, cream, segs=6)
+    tip = R(0.0, 4.6, 0.5)
+    with plain_parts():
+        box((0.22, 1.1, 0.22), (-4.4, 0.3, 0.5), wood)                           # the careening tackle and its post
+        beam(tip, (-4.4, 0.75, 0.5), 0.06, cream)
+        box((0.2, 0.24, 0.16), ((tip[0] - 4.4) / 2, (tip[1] + 0.75) / 2, 0.5), tar)
+        for z in (-1.5, 1.1):                                                    # shores under her bilge
+            beam((1.55, -0.15, z), R(0.74, 0.55, z), 0.12, wood)
+        if not LITE:
+            box((0.5, 0.07, 3.0), (1.35, 0.66, -0.9), wood)                      # the staging on its trestles
+            for z in (-2.1, 0.3):
+                for dx in (-0.3, 0.3):
+                    beam((1.35 + dx, -0.1, z), (1.35, 0.64, z), 0.08, wood)
+            for k in range(3):                                                   # spare strakes
+                box((0.34, 0.06, 2.6), (2.7 + 0.05 * k, 0.05 + 0.07 * k, 1.5), ('tan', wood, 'tan')[k], yaw=0.12 + 0.05 * k)
+        # the tar pot on its fire, under a tripod
+        PX, PZ = 2.6, -1.9
+        for k in range(3):
+            a = 0.4 + k * 2 * math.pi / 3
+            beam((PX + 0.7 * math.cos(a), -0.1, PZ + 0.7 * math.sin(a)), (PX, 1.35, PZ), 0.07, wood)
+            rod((PX + 0.4 * math.cos(a + 1), 0.07, PZ + 0.4 * math.sin(a + 1)),
+                (PX - 0.3 * math.cos(a + 1), 0.07, PZ - 0.3 * math.sin(a + 1)), 0.07, 0x7a5a3a, segs=5)
+        box((0.05, 0.6, 0.05), (PX, 1.05, PZ), tar)
+    cyl(0.24, 0.32, (PX, 0.42, PZ), tar, r2=0.3, segs=8)
+    flames(((0.1, 0.05, 0.08, 0.3, 0.06, 0.5), (-0.08, -0.06, 0.07, 0.24, 0.05, 0.7)),
+           (0.0, 0.0, 0.06, 0.18, 0.04, 0.6), at=(PX, 0.1, PZ))
+    keg((3.1, 0.0, -0.7), r=0.22, h=0.5, color=0x4f5260)
+    if not LITE:
+        keg((3.45, 0.0, -1.15), r=0.22, h=0.5, color=0x4f5260)
+    sand_heap(1.0, -0.2, 0.8, 0.4, stretch=3.2)                                  # the sand banked against her keel
+    join_still('sloop')
+    def slip():
+        # the rollers she came up on, and the furrow her keel cut, off toward the bay
+        way = [(0.5 - 0.11 * k * k, 3.3 + 0.95 * k) for k in range(6)]
+        with bleached():
+            for k, (x, z) in enumerate(way[:5]):
+                rod((x - 0.95, 0.13, z - 0.1 * k), (x + 0.95, 0.13, z + 0.1 * k), 0.13, 'tan', segs=6)
+        cells = []
+        for (x0, z0), (x1, z1) in zip(way[:-1], way[1:]):
+            cells.append([(x0 - 0.3, z0), (x0 + 0.3, z0), (x1 + 0.3, z1), (x1 - 0.3, z1)])
+        sand_print(cells, 14)
+    draped('slip', slip)
+    lie_on_land()
+
+@piece(1.0)
+def bay_battery():
+    # Cove: the crew's guns over the anchorage, on the dune where the road
+    # tops its rise before the bay: two ship's cannon on their trucks, on a
+    # platform of planks behind a breastwork of sand-filled baskets and palm
+    # logs, trained on the bay's mouth; powder, shot, a rammer, the spyglass
+    # on its stand and the black flag over it all; a plank walk in from the
+    # road. No one about. +X is the road; the guns point on along it and to
+    # seaward (+Z, -X).
+    wood, iron, wicker = 0x8a6a46, 0x38383d, 0xb8a686
+    YAW = -0.5
+    def T(lx, lz):
+        return turned(0.0, 0.0, YAW, lx, lz)
+    def at(lx, y, lz):
+        x, z = T(lx, lz)
+        return (x, y, z)
+    def platform():
+        with plain_parts():
+            for k in range(6):                                                   # the gun platform
+                box((3.3, 0.06, 0.4), at(0.0, 0.04, -0.95 + 0.43 * k), ('tan', wood)[k % 2], yaw=YAW)
+            for k in range(6):                                                   # the walk in from the road
+                box((0.42, 0.05, 1.0), (1.9 + 0.5 * k, 0.03, -1.3 + 0.06 * math.sin(2.0 * k)), (wood, 'tan')[k % 2],
+                    yaw=0.1 * math.sin(3.1 * k))
+    draped('floor', platform)
+    for lx in (-0.85, 0.85):                                                     # the guns
+        box((0.62, 0.3, 1.05), at(lx, 0.36, -0.1), 0xb06041, yaw=YAW)
+        rod(at(lx, 0.66, -0.75), at(lx, 0.76, 1.15), 0.19, iron, r2=0.13, segs=8)
+        with plain_parts():
+            box((0.3, 0.3, 0.14), at(lx, 0.69, -0.82), iron, yaw=YAW)            # the breech
+            box((0.34, 0.34, 0.1), at(lx, 0.76, 1.12), iron, yaw=YAW)            # the muzzle's swell
+            for dz in (-0.42, 0.25):
+                for sx in (-1, 1):
+                    if LITE:
+                        box((0.1, 0.3, 0.3), at(lx + sx * 0.36, 0.17, dz), iron, yaw=YAW)
+                    else:
+                        cyl(0.17, 0.1, at(lx + sx * 0.36 - 0.05, 0.17, dz), iron, segs=8, axis='across', yaw=YAW)
+    for lx, lz, r in ((-2.1, 1.35, 0.44), (0.0, 1.75, 0.46), (2.1, 1.35, 0.44)):  # the breastwork
+        cyl(r, 0.72, at(lx, -0.08, lz), wicker, r2=r * 0.92, segs=8)
+        with plain_parts():
+            cyl(r * 0.84, 0.08, at(lx, 0.62, lz), 'tan', segs=8)
+    with bleached():
+        for (a, b) in (((-1.6, 1.5), (-0.5, 1.72)), ((0.5, 1.72), (1.6, 1.5))):
+            for y, r in ((0.16, 0.17), (0.46, 0.15)):
+                rod(at(a[0], y, a[1]), at(b[0], y, b[1]), r, 'tan', segs=6)
+    sand_heap(*T(0.0, 2.25), 1.0, 0.42, stretch=2.4)
+    # powder, shot, the rammer
+    keg(at(-2.3, 0.0, -0.9), r=0.2, h=0.46)
+    keg(at(-1.95, 0.0, -1.45), r=0.2, h=0.46)
+    if not LITE:
+        keg(at(-2.6, 0.0, -1.5), r=0.2, h=0.46)
+    with plain_parts():
+        for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
+            box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4)
+        beam(at(1.5, 0.05, -1.2), at(1.2, 0.95, -0.2), 0.07, wood)
+        box((0.16, 0.16, 0.2), at(1.2, 0.95, -0.2), 0xfde4c7, yaw=YAW)
+        # the spyglass on its stand
+        sx, sz = T(2.5, 0.6)
+        for k in range(3):
+            a = 0.3 + k * 2 * math.pi / 3
+            beam((sx + 0.4 * math.cos(a), -0.1, sz + 0.4 * math.sin(a)), (sx, 1.0, sz), 0.06, wood)
+        rod(at(2.5, 1.02, 0.25), at(2.5, 1.1, 1.05), 0.09, 0xffc044, r2=0.06, segs=6)
+    # the black flag
+    fx, fz = T(2.9, -0.9)
+    box((0.12, 3.9, 0.12), (fx, 1.75, fz), wood)
+    cloth_along((fx, 3.62, fz), 1.15, 0.72, (iron,), 'anim_flutter:p=2.6#colours', patch=(0xfff6eb, 0.36, 0.3))
+    join_still('battery')
+    lie_on_land()
+
+@piece(1.0)
+def whalebone_arch():
+    # Tidepool: the whalebone arch on the dune by the lifeboat station, where
+    # the road tops the hop over the west bend and the whole reef lies below:
+    # two great jaw bones stood in the sand and met at their tips, bleached
+    # white, twice a car's height and more; under it a round of beach pebbles
+    # and the pebbled walk in from the road, a bench that looks out over the
+    # reef, the coin telescope, a lifebuoy on its post and a rope fence along
+    # the seaward edge. +X is the road; the arch spans across it, so a car
+    # coming up the hop looks through it.
+    bone, stone, wood = 0xfff6eb, 0x868ba1, 0x8a6a46
+    pts = ((1.38, -0.25), (1.34, 1.15), (1.08, 2.25), (0.52, 3.05), (0.0, 3.42))
+    rad = (0.25, 0.21, 0.17, 0.13, 0.1)
+    for sx in (-1, 1):
+        for i in range(4):
+            o = rod((sx * pts[i][0], pts[i][1], 0.0), (sx * pts[i + 1][0], pts[i + 1][1], 0.0), rad[i], bone,
+                    r2=rad[i + 1], segs=5 if LITE else 6)
+            o['ramp'] = 0.25
+        box((0.7, 0.3, 0.7), (sx * 1.38, 0.1, 0.0), stone)                       # each foot in its stone
+    def round_():
+        M = 12
+        cells = []
+        for i in range(M):
+            a0, a1 = 2 * math.pi * i / M, 2 * math.pi * (i + 1) / M
+            r0, r1 = 2.5 + 0.2 * jitter(i, 1, 4.0), 2.5 + 0.2 * jitter((i + 1) % M, 1, 4.0)
+            for f0, f1 in ((0.0, 0.5), (0.5, 1.0)):
+                cells.append([(f0 * r0 * math.cos(a0), f0 * r0 * math.sin(a0)), (f1 * r0 * math.cos(a0), f1 * r0 * math.sin(a0)),
+                              (f1 * r1 * math.cos(a1), f1 * r1 * math.sin(a1)), (f0 * r1 * math.cos(a1), f0 * r1 * math.sin(a1))])
+        for k in range(4):                                                       # the walk in from the road
+            x0, x1 = 2.3 + 0.75 * k, 2.3 + 0.75 * (k + 1)
+            w0, w1 = 0.6 - 0.03 * k, 0.6 - 0.03 * (k + 1)
+            cells.append([(x0, 0.2 - w0), (x0, 0.2 + w0), (x1, 0.2 + w1), (x1, 0.2 - w1)])
+        sand_print(cells, 9)
+    draped('floor', round_)
+    # the bench, its back to the road
+    box((0.5, 0.08, 1.6), (-1.55, 0.46, 2.3), wood)
+    box((0.08, 0.5, 1.6), (-1.28, 0.78, 2.3), wood)
+    with plain_parts():
+        for dz in (-0.6, 0.6):
+            box((0.44, 0.44, 0.2), (-1.5, 0.2, 2.3 + dz), stone)
+        # the telescope
+        box((0.16, 1.0, 0.16), (-2.0, 0.5, -1.7), stone)
+        box((0.12, 0.2, 0.12), (-1.82, 0.75, -1.7), 0xffc044)
+    rod((-1.75, 1.12, -1.7), (-2.4, 1.2, -1.7), 0.15, 'blue', r2=0.12, segs=6)
+    # the lifebuoy on its post, by the walk
+    box((0.14, 1.3, 0.14), (2.6, 0.65, 1.2), bone)
+    torus(0.26, 0.09, (2.7, 1.05, 1.2), 0xff7e44, segs=10, axis='across')
+    with plain_parts():
+        # the rope fence along the seaward edge
+        posts = [(2.95 * math.cos(a), 2.95 * math.sin(a)) for a in (2.0, 2.5, 3.0, 3.5, 4.0, 4.45)]
+        for i, (x, z) in enumerate(posts):
+            box((0.13, 0.75, 0.13), (x, 0.3, z), wood)
+            if i:
+                beam((posts[i - 1][0], 0.55, posts[i - 1][1]), (x, 0.55, z), 0.06, 0xfde4c7)
+    join_still('arch')
+    lie_on_land()
+
+@piece(1.0)
+def reef_beacon():
+    # Tidepool: the reef's daymark at the seaward edge of the dune over the
+    # west bend, where the stacks begin: a cairn of the reef's own rock and
+    # on it an iron perch in red and white bands with its basket topmark
+    # against the sky, stayed to the rock, rungs up its landward side; a
+    # tide board at the cairn's foot and stepping stones in from the road.
+    # A gull on the basket. +X is the road.
+    red, white, iron = 0xcf534f, 0xfff6eb, 0x38383d
+    polys = []
+    tide_lump(polys, (0.0, 0.0), 1.5, 1.9, 2.2, 0.3, 71.0, wet=0.25, sink=0.6)
+    tide_lump(polys, (1.25, 1.0), 0.8, 1.1, 1.25, 1.1, 72.0, wet=0.25, sink=0.5)
+    tide_lump(polys, (-1.2, -1.2), 0.95, 1.3, 1.1, 2.0, 73.0, wet=0.25, sink=0.5)
+    if not LITE:
+        tide_lump(polys, (0.6, -1.7), 0.55, 0.8, 0.9, 0.6, 74.0, wet=0.25, sink=0.4)
+    tide_rock(polys)
+    Y0, H = 1.2, 0.64
+    for i in range(5):
+        box((0.24, H + 0.02, 0.24), (0.0, Y0 + H * (i + 0.5), 0.0), (red, white)[i % 2])
+    TOP = Y0 + 5 * H
+    cyl(0.2, 0.5, (0.0, TOP, 0.0), red, r2=0.48, segs=8)                         # the basket
+    with plain_parts():
+        cyl(0.5, 0.06, (0.0, TOP + 0.5, 0.0), iron, segs=8)
+        for k in range(3):                                                       # the stays
+            a = 0.9 + k * 2 * math.pi / 3
+            beam((0.0, Y0 + 3.2 * H, 0.0), (1.5 * math.cos(a), 0.55, 1.5 * math.sin(a)), 0.05, iron)
+        for k in range(0 if LITE else 6):                                        # the rungs
+            box((0.14, 0.05, 0.36), (0.17, Y0 + 0.3 + 0.42 * k, 0.0), iron)
+        box((0.08, 1.1, 0.34), (1.75, 0.5, -0.2), white)                         # the tide board
+        for k in range(4):
+            box((0.1, 0.06, 0.36), (1.76, 0.2 + 0.26 * k, -0.2), (iron, red)[k % 2])
+    gull((0.1, TOP + 0.56, 0.0), 0.5, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
+    join_still('beacon')
+    def stones():
+        with plain_parts():
+            for k in range(5):
+                box((0.62, 0.1, 0.5), (2.5 + 0.72 * k, 0.03, -0.3 + 0.22 * math.sin(1.7 * k)), 'grey', yaw=0.5 * math.sin(2.3 * k))
+    draped('stones', stones)
+    lie_on_land()
+
+@piece(1.0)
+def storm_wreck():
+    # Driftwood: the fore half of a coaster the great storm broke on the bar
+    # and threw up the dune where the road climbs to the pass: she lies over
+    # toward the road, her white topsides and red sheer above a dark bottom,
+    # the deck open to the cars, her mast a stump with the boom fallen from
+    # it; aft of the break her frames stand bare out of the sand that has
+    # filled her, the keel running on under it. Sand is drifted along her
+    # low side with marram rooted in it, and her planking lies strewn down
+    # the dune toward the sea. +X is the road; her bow points to -Z.
+    wood, dark, cream, red = 0x8a6a46, 0x7a5a3a, 0xfde4c7, 0xcf534f
+    R0 = heel(math.radians(-22), -0.2, 0.18)
+    R = lambda x, y, z: R0(x, y, -z)                     # her own z runs from the break (0) to the stem
+    secs = ((0.0, 0.28, 0.0, 0.95, 0.7, 1.05, 1.5), (2.1, 0.26, 0.0, 0.86, 0.7, 1.0, 1.55),
+            (4.3, 0.05, 0.4, 0.08, 0.95, 0.1, 2.05))
+    with bleached():
+        heeled_hull(R, secs, (dark, dark), (cream, cream))
+    with plain_parts():
+        for sx in (-1, 1):                                                       # the sheer strake
+            beam(R(sx * 1.07, 1.44, 0.0), R(sx * 1.02, 1.49, 2.1), 0.1, red)
+            beam(R(sx * 1.02, 1.49, 2.1), R(sx * 0.12, 1.98, 4.3), 0.1, red)
+        hexa([R(-0.5, 1.5, 0.5), R(0.5, 1.5, 0.5), R(0.5, 1.72, 0.5), R(-0.5, 1.72, 0.5)],
+             [R(-0.5, 1.5, 1.5), R(0.5, 1.5, 1.5), R(0.5, 1.72, 1.5), R(-0.5, 1.72, 1.5)], 0x38383d)   # the hatch
+    beam(R(0.0, 1.5, 2.3), R(0.15, 3.3, 2.2), 0.22, wood)                        # the mast's stump
+    beam(R(0.3, 1.7, 2.0), (2.7, 0.1, 0.6), 0.14, wood)                          # the boom, fallen to the sand
+    beam(R(0.0, 2.0, 4.1), R(0.0, 2.75, 5.7), 0.16, wood)                        # the bowsprit
+    beam(R(0.0, -0.05, 0.4), R(0.0, -0.1, -3.7), 0.24, wood)                     # the keel, on under the sand
+    with plain_parts(), bleached():
+        frames = ((-0.7, 1.0, 1.0), (-1.5, 0.9, 0.75), (-2.3, 0.75, 0.5), (-3.1, 0.5, 0.0))
+        for k, (z, fs, fp) in enumerate(frames[::2] if LITE else frames):        # her frames: starboard, port
+            for sx, f in ((1, fs), (-1, fp)):
+                if f <= 0:
+                    continue
+                beam(R(sx * 0.28, -0.1, z), R(sx * 0.92, 0.62, z), 0.16, 'tan')
+                beam(R(sx * 0.92, 0.62, z), R(sx * (1.0 + 0.05 * k), 0.62 + 0.85 * f, z), 0.14, 'tan')
+        beam(R(0.95, 0.7, 0.0), R(0.94, 0.66, -1.7), 0.07, cream, d=0.3)        # a strake still hanging on them
+    sand_heap(1.5, -1.6, 1.0, 0.5, stretch=2.6)                                  # the sand drifted along her low side
+    sand_heap(-0.2, 1.9, 0.95, 0.5, stretch=1.7)                                 # ...and filling her
+    join_still('wreck')
+    def strewn():
+        with plain_parts(), bleached():
+            for k, (x, z, yw, L) in enumerate(((-2.2, 0.6, 0.5, 1.8), (-3.4, -0.8, 1.3, 1.5), (-4.3, 1.4, 0.2, 2.0),
+                                               (-5.4, 0.2, 2.2, 1.3), (-2.9, 2.8, 1.0, 1.6))[:3 if LITE else 5]):
+                box((0.3, 0.07, L), (x, 0.05, z), ('tan', 'cream')[k % 2], yaw=yw)
+            for p, (px, pz) in enumerate(((1.9, -2.6), (2.1, -0.6), (1.3, 1.2))):   # marram in the drift
+                for j in range(3 if LITE else 5):
+                    a = (2.1 if LITE else 1.26) * j + p
+                    o = beam((px + 0.05 * math.cos(a), -0.05, pz + 0.05 * math.sin(a)),
+                             (px + 0.3 * math.cos(a), 0.6 + 0.2 * frac(0.4 * j + 0.3 * p), pz + 0.3 * math.sin(a)),
+                             0.15 if LITE else 0.1, ('leaf', 'cream', 'leaf', 'olive', 'leaf')[(j + p) % 5])
+                    o['ramp'] = 0.15
+    draped('strewn', strewn)
+    lie_on_land()
+
+lite_too('careened-sloop', 'bay-battery', 'whalebone-arch', 'reef-beacon', 'storm-wreck')
+
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals
     turned outward: a gabled wall, a tub, a wedge of canvas."""

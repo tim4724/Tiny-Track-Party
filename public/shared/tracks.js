@@ -303,7 +303,10 @@ const BOXES = {
 // (the damp sand and the sea are flat sheets: no land stands in them), and
 // fills the sand up to it, adding nothing where raised ground already stands,
 // low and broad with a flat `top`, so the piece on it stands at the road's
-// height. Only the road's verge band draws it (the 9 u grid laid it as
+// height. Beside a hop it may be as high as the hop (`h` to `h1` along it
+// follows the climb): the road then lies in the sand as low road does.
+// Rises ADD where they overlap, so one stretch is one rise. Only the road's
+// verge band draws it (the 9 u grid laid it as
 // blocks), so it reaches as far from the kerb as the band does and no
 // further. The piece must level nothing, or its clearing cuts down to the
 // rise's foot by the kerb. No rise is flat, so what stands on one LIES ON IT
@@ -534,12 +537,20 @@ export const TRACKS = {
       // under the kerb, and at the hop's foot she stood out of sight)
       { model: 'set-kayak-rack', u: 0.775, lat: 9.5 },
       { model: 'set-shellfish-shack', u: 0.81, lat: -10.5, yaw: 180 },
-      { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 }
+      { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 },
+      // on the dune beside the hop over the west bend (round 23: its sea
+      // side lay under the kerb, the tide at the berm's foot): the reef's
+      // daymark where the stacks begin, and the whalebone arch by the
+      // lifeboat station, where a car topping the hop looks
+      { model: 'set-reef-beacon', u: 0.857, lat: 12.5 },
+      { model: 'set-whalebone-arch', u: 0.882, lat: 9.8, yaw: 25 }
     ],
     land: [
       // the sea round Seal Rock and up to the reef on the east bend
       { kind: 'shore', u: 0.27, lat: 14.7, len: 100, r: 30 },
-      { kind: 'shore', u: 0.79, lat: 9.7, len: 80, r: 30 },
+      // (the west bend's ends where the hop begins: past it the beach is the
+      // dune the lifeboat station stands on)
+      { kind: 'shore', u: 0.7615, lat: 9.7, len: 57.5, r: 30 },
       // the downs filling the east lobe, their flanks to the kerb of the east
       // run and the top run; a lower grassy rise in the west lobe
       { kind: 'ridge', u: 0.25, lat: -32, len: 30, r: 22, h: 11, top: 0.2, tint: 0x6faa62 },
@@ -560,10 +571,11 @@ export const TRACKS = {
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
       { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      // the lifeboat station's swell of sand over the beach, at the height of
-      // the hop the road comes over beside it (lower, only its roof and flag
-      // showed over the crest's kerb)
-      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.2, top: 0.55, near: 0.4, w: 5 },
+      // the dune beside the hop over the west bend, as high as the road
+      // from its crest down to the lifeboat station (lower, only the
+      // station's roof and flag showed over the crest's kerb, and nothing
+      // before it)
+      { kind: 'ridge', u: 0.8825, lat: 15, len: 23.9, r: 13, h: 2.6, h1: 1.4, top: 0.55, near: 0.4, w: 5 },
       // ...and the sea brought in to the foot of its slip
       { kind: 'shore', u: 0.9, lat: 22, len: 10, r: 14 },
       // the reef terrace the rock pool lies in, at the road's height, so
@@ -658,7 +670,12 @@ export const TRACKS = {
       // read as a prop put down; the green under the trail is `land`'s)
       { model: 'set-treasure-dig', u: 0.045, lat: 10.5 },
       { model: 'set-sail-yard', u: 0.125, lat: 10.5 },
-      { model: 'set-skull-trail', u: 0.587, lat: 10.5 }
+      { model: 'set-skull-trail', u: 0.587, lat: 10.5 },
+      // on the dune beside the climb to the bay (round 23: the east beach
+      // lay three units under the kerb there): the crew's sloop hove down
+      // to have her bottom tarred, and their guns over the anchorage
+      { model: 'set-careened-sloop', u: 0.303, lat: 12.5 },
+      { model: 'set-bay-battery', u: 0.327, lat: 11.5 }
     ],
     // The peak and the headland are green with the scrub and jungle that
     // hold them (bare and peaked, a hill that size is a desert dune; the
@@ -695,6 +712,10 @@ export const TRACKS = {
       // brought in past it, so its jetty reaches the water
       { kind: 'ridge', u: 0.54, lat: 13, len: 14, r: 16, h: 0.92, top: 0.6, near: 0.4, w: 1 },
       { kind: 'shore', u: 0.54, lat: 19.5, len: 20, r: 24 },
+      // the dune beside the climb to the bay, a little over the road all
+      // the way up, so what stands on it stands over the kerb; it is down
+      // again before the bay's damp sand and short of the lookout's legs
+      { kind: 'ridge', u: 0.310, lat: 13.5, len: 9, r: 10, h: 3.0, h1: 3.7, top: 0.5, near: 0.4, w: 3 },
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
@@ -802,7 +823,10 @@ export const TRACKS = {
       // ...and more of them (round 23), where the east run comes down to
       // the strand and, still coming ashore, in the surf past the groynes
       { model: 'set-storm-containers-b', u: 0.245, lat: -10.5, yaw: 180 },
-      { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 }
+      { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 },
+      // ...and, on the dune beside the climb to the pass (round 23), the
+      // fore half of a coaster the storm broke
+      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
@@ -834,8 +858,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.61, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
       { kind: 'paint', u: 0.73, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
       // the fort's and the fire's rise on the strand, at the road's height
-      // (a beach rise)
-      { kind: 'ridge', u: 0.452, lat: -16, len: 16, r: 12, h: 0.85, top: 0.55, near: 0.4, w: 2 },
+      // (a beach rise), running on as a dune beside the climb to the pass,
+      // as high as the road until the pass's own dunes take over: ONE rise,
+      // since two side by side add where they overlap
+      { kind: 'ridge', u: 0.4765, lat: -15, len: 34.3, r: 12, h: 0.85, h1: 2.75, top: 0.55, near: 0.4, w: 2 },
       // nothing seeded on the dunes' faces
       { kind: 'clear', u: 0.56, lat: 14, len: 40, r: 9.5 },
       { kind: 'clear', u: 0.67, lat: 14, len: 40, r: 9.5 },
