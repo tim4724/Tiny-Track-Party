@@ -587,7 +587,7 @@
     "set-windmill.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windpump.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windsock.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-windup-dice.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-windup-ducks.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windup-knights.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windup-robots.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-windup-trams.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

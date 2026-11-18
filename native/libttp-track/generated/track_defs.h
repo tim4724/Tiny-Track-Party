@@ -2292,7 +2292,7 @@ constexpr SetDef kSet_skysnake[] = {
   { "set-snake-board", 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-dice-tower", 0x1.916872b020c4ap-3, 0x1.6p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-game-box", 0x1.8f5c28f5c28f6p-2, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0, 1 },
-  { "set-windup-dice", 0x1.eb851eb851eb8p-4, 0x1.2p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-windup-ducks", 0x1.a9fbe76c8b439p-4, 0x1.2p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-snake-humps-blue", 0x1.47ae147ae147bp-3, 0x1.ccccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-ladder-stack", 0x1.ced916872b021p-2, 0x1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-game-board", 0x1.fced916872b02p-2, 0x1.1p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -2305,8 +2305,6 @@ constexpr SetDef kSet_skysnake[] = {
   { "set-play-sunbeam", 0x1.a7ef9db22d0e5p-3, 0x1.e2b851eb851ecp+4, -0x1.23d70a3d70a3dp+6, 0x0p+0, 0x1p+0, 1 },
 };
 constexpr LandDef kLand_skysnake[] = {
-  { 11, -1, 0x1.3c9eecbfb15b5p-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.7p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
-  { 11, -1, 0x1.f886594af4f0ep-2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.7p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
   { 10, -1, 0x1.7ced916872b02p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.fp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 0x0u, 0x0p+0, 1 },
 };
 
@@ -2479,7 +2477,7 @@ constexpr SetDef kSet_skyline[] = {
   { "set-block-terrace", 0x1.1810624dd2f1bp-1, -0x1.ccccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-block-street-west", 0x1.6b851eb851eb8p-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-block-towers", 0x1.89374bc6a7efap-1, -0x1.ep+2, 0x1.68p+7, 0x0p+0, 0x1.3d70a3d70a3d7p-1, 1 },
-  { "set-windup-trams", 0x1.eb851eb851eb8p-5, -0x1.199999999999ap+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-windup-trams", 0x1.18fc504816fp-4, -0x1.1dc28f5c28f5cp+3, 0x1.0033333333333p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-play-sunbeam", 0x1.6666666666666p-4, -0x1.863d70a3d70a4p+5, 0x1.523d70a3d70a4p+6, 0x0p+0, 0x1p+0, 1 },
 };
 
@@ -2676,7 +2674,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 16, kLand_gulch, 41 },
   { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 20, kLand_crag, 9 },
   { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 69, kLand_sidewinder, 20 },
-  { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 21, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, kKickers_skysnake, 2, kSet_skysnake, 14, kLand_skysnake, 3 },
+  { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 21, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, kKickers_skysnake, 2, kSet_skysnake, 14, kLand_skysnake, 1 },
   { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 22, nullptr, 0 },
   { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 19, nullptr, 0 },
   { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 13, nullptr, 0 },
