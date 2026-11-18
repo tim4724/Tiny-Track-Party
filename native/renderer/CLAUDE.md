@@ -804,7 +804,10 @@ to do both:
   nothing where the land already stands that high (the raised ground beside
   a hop). ONLY THE VERGE BAND DRAWS IT (`fine`): its ramps are shorter than
   a grid cell, so the grid laid it as blocks on its own axes with the damp
-  sand cut along them. The band runs wide for it and hands over to the flat
+  sand cut along them. That holds beside RAISED road too, where the band
+  otherwise yields to the grid: a rise as high as a hop counts as land the
+  road lies in (the apron's `cut`), and a lower one still stands there as
+  sand against the berm. The band runs wide for it and hands over to the flat
   grid at its end, so a rise reaches as far as the band does. The piece on
   it must level nothing, or its clearing cuts back down to the rise's foot,
   and it DRAPES whole (`set_prototypes.py lie_on_land()`): no rise is flat,

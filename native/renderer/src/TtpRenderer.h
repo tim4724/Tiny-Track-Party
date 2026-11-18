@@ -1278,8 +1278,9 @@ private:
     mutable float mNearRise = 0;
     // What the last landforms() call found of beach rises (a `near` ridge
     // carrying a `w`): terrainField lays it under its own, tighter shore
-    // mask, and mBeachDrawn is what it came to there.
-    mutable float mBeachRise = 0, mBeachKeep = 0, mBeachDrawn = 0;
+    // mask: mBeachTop is how high it stands over the plain there, and
+    // mBeachDrawn what that added to the land.
+    mutable float mBeachRise = 0, mBeachKeep = 0, mBeachDrawn = 0, mBeachTop = 0;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
