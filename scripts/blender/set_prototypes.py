@@ -654,24 +654,46 @@ def figure(at, yaw=0.0, shirt=0xff5040, legs=0x339cf2, skin=0xf2bf99, hair=0x7a5
 
 def gull(at, yaw=0.0, life=None):
     """A gull standing on its feet, facing +X turned by `yaw`, 0.16 tall
-    (twice a gull beside a car, so it reads at all): white body and head, a
-    grey back, a yellow bill. `life` names its motion (set_motion.h),
-    pivoting between its feet: watching the cars, hopping off as one passes."""
+    (twice a gull beside a car, so it reads at all), a gull in outline: a
+    white body drawn out to the tail, the grey wings folded along its back
+    to their black tips, a round head, a yellow bill, two legs. `life`
+    names its motion (set_motion.h), pivoting between its feet: watching
+    the cars, hopping off as one passes."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
-    def b(size, dx, dy, dz, color):
-        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw)
+    side = (s, 0.0, c)
+    def p(dx, dy, dz=0.0):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
     def build():
-        b((0.06, 0.06, 0.06), 0, 0.03, 0, 0xff7e44)                          # legs
-        b((0.16, 0.07, 0.09), -0.01, 0.09, 0, 0xf8f8fb)                      # body
-        b((0.13, 0.03, 0.1), -0.04, 0.13, 0, 0x9aa1b4)                       # wings
-        b((0.07, 0.07, 0.065), 0.07, 0.145, 0, 0xf8f8fb)                     # head
-        b((0.06, 0.06, 0.06), 0.12, 0.14, 0, 0xffc044)                       # bill
+        for sd in (-1, 1):
+            loft([p(0.0, 0.07, sd * 0.02), p(0.005, 0.0, sd * 0.02)], [(0.011, 0.011), (0.014, 0.018)], 0xff7e44, side, 4)
+        loft([p(-0.1, 0.09), p(-0.04, 0.09), p(0.03, 0.098), p(0.075, 0.115)],
+             [(0.014, 0.012), (0.04, 0.034), (0.046, 0.04), (0.028, 0.03)], 0xf8f8fb, side, 6)
+        loft([p(-0.12, 0.103), p(-0.04, 0.118), p(0.045, 0.128)], [(0.022, 0.01), (0.045, 0.02), (0.04, 0.018)], 0x9aa1b4, side, 4)
+        loft([p(-0.175, 0.093), p(-0.115, 0.104)], [(0.007, 0.006), (0.022, 0.011)], 0x2a2735, side, 4)
+        loft([p(0.05, 0.128), p(0.085, 0.152), p(0.112, 0.146)], [(0.027, 0.027), (0.034, 0.032), (0.022, 0.02)], 0xf8f8fb, side, 6)
+        loft([p(0.106, 0.146), p(0.165, 0.132)], [(0.013, 0.013), (0.006, 0.007)], 0xffc044, side, 4)
     if life:
         with animated(life, (x, y, z), yaw):
             build()
     else:
         build()
+
+def gull_wing(span):
+    """A gull on the wing at the origin, heading +Z, `span` from tip to tip:
+    the white body and head, a yellow bill, and a gull's wings, up from the
+    shoulder to the wrist and down and back to the black tips."""
+    k = span / 0.8
+    def r(*pairs):
+        return [(a * k, b * k) for a, b in pairs]
+    X = (1.0, 0.0, 0.0)
+    loft([(0, 0.0, -0.2 * k), (0, 0.0, -0.08 * k), (0, 0.0, 0.07 * k), (0, 0.01 * k, 0.16 * k)],
+         r((0.045, 0.012), (0.05, 0.042), (0.05, 0.045), (0.03, 0.03)), 0xf8f8fb, X, 6)
+    loft([(0, 0.01 * k, 0.15 * k), (0, 0.0, 0.22 * k)], r((0.014, 0.014), (0.006, 0.006)), 0xffc044, X, 4)
+    for sd in (-1, 1):
+        wing = [(sd * 0.03 * k, 0.03 * k, 0.02 * k), (sd * 0.2 * k, 0.1 * k, 0.04 * k), (sd * 0.33 * k, 0.07 * k, -0.02 * k)]
+        loft(wing, r((0.075, 0.014), (0.065, 0.012), (0.045, 0.01)), 0x9aa1b4, (0.0, 0.0, 1.0), 4)
+        loft([wing[2], (sd * 0.4 * k, 0.04 * k, -0.07 * k)], r((0.045, 0.01), (0.014, 0.006)), 0x2a2735, (0.0, 0.0, 1.0), 4)
 
 def boat(at, yaw, hull, trim=0xfff6eb, L=0.95):
     """A small open boat pulled up the sand, bow to +Z turned by `yaw`: a hull
@@ -1260,8 +1282,7 @@ def tidepool_gulls(ring, period):
         marker('path_gulls_%d' % i, p)
     for m in range(2):
         with animated('anim_path:c=gulls:p=%d:f=1:o=%.2f#g%d' % (period, m * 0.5, m), (0.0, 0.0, 0.0)):
-            box((0.16, 0.1, 0.32), (0.0, 0.0, 0.0), 0xf8f8fb)
-            box((0.8, 0.04, 0.16), (0.0, 0.04, -0.02), 0x9aa1b4)
+            gull_wing(0.8)
 
 def tidepool_foot():
     """A speck draped out of sight under the sand: a piece with a draped part
@@ -2097,8 +2118,7 @@ def promenade():
         marker('path_gulls_%d' % i, q)
     for m in range(2):
         with animated('anim_path:c=gulls:p=18:f=1:o=%.2f#g%d' % (m * 0.5, m), (0.0, 0.0, 0.0)):
-            box((0.12, 0.08, 0.26), (0.0, 0.0, 0.0), 0xf8f8fb)
-            box((0.62, 0.03, 0.12), (0.0, 0.03, -0.02), 0x9aa1b4)
+            gull_wing(0.62)
     # an umbrella on the sand between the boardwalk and the sea, as it lies
     def sand():
         with square():
@@ -6010,13 +6030,23 @@ def treasure_dig():
         chest(0.0, 0.7, 0.0, yaw=0.3)
         with square():
             box((0.05, TOP - 1.8, 0.05), (0.0, 1.1 + (TOP - 1.8) / 2, 0.0), 0xfde4c7)
+    # the parrot, a scarlet macaw facing +X: its red body and round head,
+    # the white cheek with its eye, a hooked bill, blue wings folded and a
+    # long green tail out over the block's edge, its feet on the block
     with animated('anim_watch:r=24+hop:r=10:h=0.2#parrot', (0.0, TOP + 0.08, 0.0)):
-        with square():
-            box((0.16, 0.2, 0.12), (0.0, TOP + 0.2, 0.0), red)
-            box((0.1, 0.1, 0.1), (0.06, TOP + 0.34, 0.0), red)
-            box((0.07, 0.06, 0.06), (0.14, TOP + 0.32, 0.0), gold)
-            box((0.14, 0.14, 0.15), (-0.03, TOP + 0.2, 0.0), 0x339cf2)
-            box((0.2, 0.05, 0.08), (-0.14, TOP + 0.1, 0.0), 0x22c46e)
+        Z, X = (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
+        def q(dx, dy, dz=0.0):
+            return (dx, TOP + 0.08 + dy, dz)
+        loft([q(-0.035, 0.04), q(-0.005, 0.13), q(0.03, 0.23)], [(0.05, 0.05), (0.075, 0.072), (0.058, 0.058)], red, Z, 6)
+        loft([q(0.005, 0.24), q(0.045, 0.3), q(0.06, 0.365)], [(0.058, 0.06), (0.066, 0.064), (0.03, 0.03)], red, Z, 6)
+        loft([q(0.085, 0.325), q(0.15, 0.31), q(0.158, 0.245)], [(0.03, 0.036), (0.026, 0.028), (0.006, 0.007)], gold, Z, 4)
+        loft([q(0.07, 0.315, -0.062), q(0.07, 0.315, 0.062)], [(0.022, 0.022), (0.022, 0.022)], 0xf8f8fb, X, 4)
+        loft([q(0.074, 0.32, -0.066), q(0.074, 0.32, 0.066)], [(0.009, 0.009), (0.009, 0.009)], 0x2a2735, X, 4)
+        for sd in (-1, 1):
+            loft([q(0.015, 0.22, sd * 0.07), q(-0.03, 0.12, sd * 0.082), q(-0.085, 0.02, sd * 0.06)],
+                 [(0.045, 0.016), (0.05, 0.016), (0.02, 0.01)], 0x339cf2, X, 4)
+            loft([q(0.02, 0.05, sd * 0.03), q(0.035, 0.0, sd * 0.03)], [(0.013, 0.013), (0.016, 0.02)], 0x38383d, Z, 4)
+        loft([q(-0.03, 0.08), q(-0.17, 0.045), q(-0.34, -0.04)], [(0.034, 0.022), (0.028, 0.016), (0.012, 0.008)], 0x22c46e, Z, 4)
     # the spoil, the spades
     for (x, z, r) in ((-1.6, 1.1, 0.95), (-1.9, -0.9, 0.8), (0.3, -2.0, 0.85), (1.5, 1.7, 0.7)):
         sand_heap(x, z, r, 0.55)
@@ -9067,26 +9097,29 @@ def snowman_field():
 
 def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
     """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall:
-    a penguin beside a car is under half a unit. Feet, a dark body with its
-    white front, the head and beak, the flippers. A live one is joined into
-    one moving part by its caller."""
+    a penguin beside a car is under half a unit. Feet, a dark body full at
+    the belly and narrower at the shoulders with its white front, the head
+    with its eyes, the gold at its ears and the beak, the flippers. A live
+    one is joined into one moving part by its caller."""
     u = k / 0.47
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy, dz):
         return (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c)
-    box((0.22 * u, 0.29 * u, 0.2 * u), at(0, 0.2 * u, 0), 0x2a2735, yaw=yaw)             # body
+    box((0.23 * u, 0.2 * u, 0.21 * u), at(0, 0.14 * u, 0), 0x2a2735, yaw=yaw)            # belly
+    box((0.2 * u, 0.16 * u, 0.18 * u), at(0, 0.29 * u, 0), 0x2a2735, yaw=yaw)            # shoulders
     box((0.16 * u, 0.13 * u, 0.15 * u), at(0.01 * u, 0.405 * u, 0), 0x2a2735, yaw=yaw)   # head
     # the white front wraps round the front half of the body, so a car beside
     # it sees white as well as one coming at it (a plate on the front alone
     # read as a black peg from every side but one)
-    snowy(box((0.14 * u, 0.25 * u, 0.23 * u), at(0.05 * u, 0.19 * u, 0), 0xfff6eb, yaw=yaw), 0.15)   # white at any height
+    snowy(box((0.14 * u, 0.25 * u, 0.235 * u), at(0.055 * u, 0.19 * u, 0), 0xfff6eb, yaw=yaw), 0.15)   # white at any height
     with plain_parts():                                  # too thin for a chamfer to show
         box((0.18 * u, 0.06, 0.16 * u), at(0.03 * u, 0.03, 0), 0xff7e44, yaw=yaw)        # feet
-        box((0.06 * u, 0.06 * u, 0.165 * u), at(0.02 * u, 0.38 * u, 0), 0xffc044, yaw=yaw)  # the gold at its ears
-        box((0.08 * u, 0.06, 0.06), at(0.11 * u, 0.39 * u, 0), 0xff7e44, yaw=yaw)        # beak
+        box((0.06 * u, 0.06 * u, 0.165 * u), at(0.01 * u, 0.385 * u, 0), 0xffc044, yaw=yaw)  # the gold at its ears
+        snowy(box((0.04 * u, 0.04 * u, 0.158 * u), at(0.065 * u, 0.425 * u, 0), 0xfff6eb, yaw=yaw), 0.15)   # the eyes
+        box((0.08 * u, 0.06, 0.06), at(0.11 * u, 0.385 * u, 0), 0xff7e44, yaw=yaw)       # beak
         if flippers:
             for sd in (-1, 1):
-                box((0.12 * u, 0.18 * u, 0.06), at(0, 0.22 * u, sd * 0.12 * u), 0x2a2735, yaw=yaw,
+                box((0.12 * u, 0.18 * u, 0.06), at(0, 0.22 * u, sd * 0.125 * u), 0x2a2735, yaw=yaw,
                     pitch=sd * 0.25)
 
 def slider_penguin(x, y, z, k=0.45, yaw=0.0):
@@ -9113,10 +9146,10 @@ def slider_penguin(x, y, z, k=0.45, yaw=0.0):
 PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.12#%d'
 
 def stood_penguin(x, z, k, yaw, y=0.0):
-    """A penguin of a crowd: four blocks (the dark body with its head, the
-    white front wrapped round the front half of it, so the white reads from
-    the side as well as head on, the gold at its ears, the beak), which is
-    what reads of one among many."""
+    """A penguin of the lite build's crowd: four blocks (the dark body with
+    its head, the white front wrapped round the front half of it, so the
+    white reads from the side as well as head on, the gold at its ears, the
+    beak), which is what reads of one among many on the box."""
     u = k / 0.47
     c, s2 = math.cos(yaw), math.sin(yaw)
     def at(dx, dy):
@@ -9164,10 +9197,12 @@ def penguin_knot(tag, cx, cz, yaw, n, H, seed, lying=False, file=False, apart=Tr
         f = (seed * 3 + j * 7) % 11 / 10.0
         if lying and j == n - 1:
             slider_penguin(x, y, z, 0.4 * size, yaw)
-        elif (seed + 2 * j) % 7 == 3:
-            stood_penguin(x, z, 0.34 * size, yaw + (f - 0.5) * 0.5, y)   # a chick
-        else:
-            stood_penguin(x, z, (0.42 + 0.06 * f) * size, yaw + (f - 0.5) * 0.5, y)
+        else:                                                            # (every seventh a chick)
+            h = (0.34 if (seed + 2 * j) % 7 == 3 else 0.42 + 0.06 * f) * size
+            if apart:
+                penguin(x, y, z, h, yaw + (f - 0.5) * 0.5)
+            else:
+                stood_penguin(x, z, h, yaw + (f - 0.5) * 0.5, y)
     if not apart:
         h0 = H(cx, cz)
         d, p = 6 + seed * 5 % 4, 1.15 + 0.12 * (seed * 3 % 7)
@@ -9684,23 +9719,59 @@ def glacier_husky(x, y, z, coat, k=1.0, stride=1):
     real husky at the world's chunkiness, as its penguins are): a coat over a
     white chest and muzzle, pricked ears, the tail curled up over its back, a
     red harness, legs stretched out front and back (`stride` -1 swaps them,
-    so a pair runs out of step)."""
-    W = 0xfff6eb
-    def b(size, dx, dy, dz, color, roll=0.0):
-        return box(tuple(e * k for e in size), (x + dx * k, y + dy * k, z + dz * k), color, roll=roll)
-    b((0.46, 0.18, 0.18), 0.0, 0.33, 0.0, coat)                          # body
-    snowy(b((0.2, 0.14, 0.185), 0.13, 0.28, 0.0, W), 0.15)               # chest, white at any height
-    b((0.17, 0.16, 0.15), 0.29, 0.44, 0.0, coat)                         # head
-    snowy(b((0.12, 0.08, 0.11), 0.4, 0.4, 0.0, W), 0.15)                 # muzzle
-    b((0.06, 0.08, 0.05), 0.27, 0.54, -0.045, coat)                      # ears
-    b((0.06, 0.08, 0.05), 0.27, 0.54, 0.045, coat)
-    b((0.07, 0.2, 0.07), -0.26, 0.47, 0.0, W, roll=0.6)                  # the tail curled up
-    b((0.07, 0.2, 0.2), 0.1, 0.34, 0.0, 0xff5040)                        # harness
+    so a pair runs out of step). The farm animals' faceted build: a barrel
+    deep at the chest, legs in white socks, eyes; the lite build is the same
+    dog on four-sided limbs, without the socks and the eyes."""
+    W, DARK = 0xfff6eb, 0x2a2735
+    side = (0.0, 0.0, 1.0)
+    def p(dx, dy, dz=0.0):
+        return (x + dx * k, y + dy * k, z + dz * k)
+    def r(*pairs):
+        return [(a * k, b * k) for a, b in pairs]
+    def white(o):
+        return snowy(o, 0.15)                                                # white at any height
+    n = 4 if LITE else 6
+    tq = math.pi / 4
+    # the barrel, deep at the chest and tucked up at the loins; the white of
+    # its chest and belly under it; the harness round its shoulders
+    if LITE:
+        loft([p(-0.25, 0.35), p(-0.12, 0.345), p(0.15, 0.335), p(0.24, 0.36)],
+             r((0.06, 0.07), (0.1, 0.1), (0.11, 0.125), (0.07, 0.09)), coat, side, 4, turn=tq)
+    else:
+        loft([p(-0.25, 0.35), p(-0.15, 0.345), p(0.02, 0.33), p(0.15, 0.335), p(0.24, 0.36)],
+             r((0.05, 0.06), (0.08, 0.085), (0.085, 0.095), (0.09, 0.105), (0.06, 0.075)), coat, side, 6)
+        white(loft([p(0.0, 0.285), p(0.15, 0.295), p(0.255, 0.33)], r((0.06, 0.055), (0.08, 0.085), (0.055, 0.07)), W, side, 6))
+    loft([p(0.06, 0.335), p(0.115, 0.335)], r((0.125, 0.14), (0.125, 0.14)) if LITE else r((0.097, 0.108), (0.1, 0.114)),
+         0xff5040, side, n, turn=tq if LITE else 0.0)
+    # the legs, stretched out front and back, in white socks
+    for sx, sd in ((0.15, 1), (-0.15, -1)):
+        for sz in (-0.055, 0.055):
+            d = sd * stride
+            top, mid, foot = p(sx, 0.3, sz), p(sx + 0.06 * d, 0.14, sz), p(sx + 0.15 * d, 0.0, sz)
+            if LITE:
+                loft([top, foot], r((0.045, 0.05), (0.03, 0.032)), coat, side, 4, turn=tq)
+                continue
+            loft([top, mid], r((0.042, 0.048), (0.03, 0.032)), coat, side, 4, turn=tq)
+            white(loft([mid, foot], r((0.03, 0.032), (0.03, 0.034)), W, side, 4, turn=tq))
+    # the tail curled up over its back
+    tail = [p(-0.24, 0.38), p(-0.31, 0.5), p(-0.25, 0.59), p(-0.16, 0.57)]
+    girth = r((0.03, 0.03), (0.042, 0.042), (0.042, 0.042), (0.02, 0.02))
+    if LITE:
+        tail, girth = tail[::3], [girth[1], girth[3]]
+    white(loft(tail, girth, W, side, 4, turn=tq))
+    # the neck and head: a white muzzle and nose, eyes, pricked ears
+    if LITE:
+        loft([p(0.17, 0.39), p(0.385, 0.45)], r((0.1, 0.11), (0.07, 0.065)), coat, side, 4, turn=tq)
+    else:
+        loft([p(0.19, 0.37), p(0.27, 0.45)], r((0.07, 0.08), (0.06, 0.07)), coat, side, 6)
+        loft([p(0.2, 0.455), p(0.31, 0.475), p(0.385, 0.45)], r((0.07, 0.07), (0.082, 0.078), (0.06, 0.055)), coat, side, 6)
+    white(loft([p(0.365, 0.44), p(0.47, 0.415)], r((0.05, 0.045), (0.036, 0.032)), W, side, n, turn=tq if LITE else 0.0))
+    for sz in (-0.045, 0.045):
+        loft([p(0.265, 0.52, sz), p(0.27, 0.61, sz * 1.15)], r((0.032, 0.026), (0.008, 0.008)), coat, side, 4, turn=tq)
     with plain_parts():
-        b((0.04, 0.04, 0.04), 0.47, 0.42, 0.0, 0x2a2735)                 # nose
-        for sx, sd in ((0.15, 1), (-0.15, -1)):
-            for sz in (-0.055, 0.055):
-                b((0.065, 0.24, 0.065), sx + 0.04 * sd * stride, 0.12, sz, coat, roll=-0.45 * sd * stride)
+        box((0.045 * k, 0.045 * k, 0.045 * k), p(0.475, 0.428), DARK)        # nose
+        if not LITE:
+            box((0.03 * k, 0.03 * k, 0.163 * k), p(0.335, 0.5), DARK)        # eyes
 
 def glacier_musher(x, y, z, coat, k=1.0):
     """The musher stood on the sled's runners, facing +X, hands to the
@@ -12070,11 +12141,29 @@ def kennel(at, yaw):
     box((1.1, 0.8, 1.0), F(0, y0 + 0.4, 0), 0xd94f3d, yaw=yaw)
     gable_roof(F, yaw, y0, 1.1, 1.0, 0.8, 0x7a5a3a, 0xd94f3d, t=0.12, over=0.12)
     box((0.12, 0.5, 0.4), F(0.56, y0 + 0.27, 0), 0x2a2735, yaw=yaw)
-    # the dog: body, sitting haunch, head, ears, tail
-    box((0.7, 0.42, 0.34), F(1.0, y0 + 0.3, 0.1), 0xb06041, yaw=yaw)
-    box((0.36, 0.36, 0.3), F(1.4, y0 + 0.62, 0.1), 0xb06041, yaw=yaw)
-    box((0.2, 0.16, 0.16), F(1.62, y0 + 0.56, 0.1), 0x2a2735, yaw=yaw)
-    box((0.3, 0.14, 0.1), F(0.62, y0 + 0.5, 0.1), 0xb06041, yaw=yaw, roll=0.5)
+    # the dog, sat up before its door in the farm animals' faceted build:
+    # haunches on the grass, the chest up over straight forelegs, a cream
+    # bib and muzzle, drop ears, a blue collar, the tail out behind
+    COAT, BIB, EAR, DARK = 0xb06041, 0xfde4c7, 0x7a4a32, 0x2a2735
+    side = (math.sin(yaw), 0.0, math.cos(yaw))
+    def p(dx, dy, dz=0.0):
+        return F(1.0 + dx, y0 + dy, 0.1 + dz)
+    loft([p(-0.14, 0.2), p(0.06, 0.36), p(0.24, 0.56), p(0.3, 0.72)],
+         [(0.2, 0.2), (0.18, 0.2), (0.15, 0.16), (0.12, 0.12)], COAT, side, 6)
+    loft([p(0.2, 0.3), p(0.33, 0.5), p(0.36, 0.66)], [(0.11, 0.1), (0.11, 0.1), (0.09, 0.07)], BIB, side, 4, turn=math.pi / 4)
+    loft([p(0.27, 0.64), p(0.31, 0.7)], [(0.15, 0.15), (0.135, 0.135)], 0x339cf2, side, 6)              # the collar
+    for sd in (-1, 1):
+        loft([p(-0.04, 0.12, sd * 0.19), p(0.24, 0.06, sd * 0.2)], [(0.07, 0.12), (0.055, 0.06)], COAT, side, 4, turn=math.pi / 4)
+        loft([p(0.3, 0.5, sd * 0.1), p(0.36, 0.0, sd * 0.1)], [(0.06, 0.065), (0.05, 0.055)], COAT, side, 4, turn=math.pi / 4)
+    loft([p(-0.26, 0.12), p(-0.5, 0.16), p(-0.62, 0.32)], [(0.055, 0.055), (0.045, 0.045), (0.025, 0.025)], COAT, side, 4,
+         turn=math.pi / 4)
+    loft([p(0.2, 0.84), p(0.38, 0.88), p(0.5, 0.83)], [(0.13, 0.13), (0.145, 0.135), (0.11, 0.1)], COAT, side, 6)
+    loft([p(0.48, 0.8), p(0.68, 0.76)], [(0.085, 0.075), (0.07, 0.06)], BIB, side, 6)                  # the muzzle
+    with plain_parts():
+        box((0.07, 0.07, 0.09), p(0.7, 0.79), DARK, yaw=yaw)                                          # its nose
+        box((0.05, 0.05, 0.29), p(0.44, 0.9), DARK, yaw=yaw)                                          # the eyes
+        for sd in (-1, 1):
+            box((0.13, 0.24, 0.06), p(0.28, 0.83, sd * 0.155), EAR, yaw=yaw)
 
 # ---- RIBBON: the village -------------------------------------------------------------
 # Ribbon is a village in the hills: cottages up the terraces either side of
@@ -12700,7 +12789,7 @@ def hay_meadow():
 # barn with its silo up on the bank's top, the herd grazing down its face in
 # front of it, side on to the road and a body length or more apart so each
 # reads as a cow, each lifting its head now and then (Crag's cows, the same
-# gesture), the water trough, churns waiting at the barn door. Its paddock is
+# animal and gesture), the water trough, churns waiting at the barn door. Its paddock is
 # fenced on the road's side and both ends in the sheepfold's timber, a field
 # gate in it, and the farm lane runs from the barn door down through the gate
 # toward the road. World units (a cow is a car long): barn, silo and herd read
@@ -12734,12 +12823,16 @@ def cow_farm_build(lite):
             for k in range(3):                                              # churns at the door
                 cyl(0.09, 0.26, (-0.6, 0, GZ - 0.75 - 0.22 * k), 'white', segs=8)
             hay_bale((-0.4, 0, 1.9), yaw=0.3)
-        H = math.pi / 2
-        HERD = ((1.6, -1.6, H, 0x8a5a3c), (1.5, 1.5, -H, 0xf8f8fb), (1.7, 3.3, H, 0x2a2735),
-                (0.2, -1.0, -H, 0xf8f8fb), (0.3, 2.3, H + 0.3, 0x5a3a28), (-0.4, 3.8, -H, 0x2a2735))
-        for k, (x, z, yaw, coat) in enumerate(HERD):
-            cow((x, 0, z), yaw=yaw, coat=coat,
-                life=None if lite else 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.75#c%d' % (6.6 + 0.9 * k, k))
+        # the herd, the ranch's build (range_cow) in a dairy's colours:
+        # black-and-white, brown; (x, z, yaw, coat, patch, face, pose)
+        H, PIED, WHITE, JERSEY = math.pi / 2, 0x2a2735, 0xf8f8fb, 0x8a5a3c
+        HERD = ((1.6, -1.6, H, JERSEY, None, JERSEY, 'graze'), (1.5, 1.5, -H, WHITE, PIED, WHITE, 'up'),
+                (1.7, 3.3, H, PIED, WHITE, WHITE, 'graze'), (0.2, -1.0, -H, WHITE, PIED, PIED, 'graze'),
+                (0.6, 2.4, H + 0.3, 'bark', None, WHITE, 'up'), (-0.4, 3.8, -H, PIED, WHITE, PIED, 'graze'))
+        with lite_parts(lite):
+            for k, (x, z, yaw, coat, patch, face, pose) in enumerate(HERD):
+                range_cow((x, 0, z), yaw, coat, patch, face, pose=pose, udder=True,
+                          life=None if lite else 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.75#c%d' % (6.6 + 0.9 * k, k))
         # the paddock's fence and its gate, the lane through it in short
         # lengths so it lies on the bank as drawn
         step, rails = (3.0, (0.42,)) if lite else (1.5, (0.24, 0.48))
@@ -12779,29 +12872,60 @@ def cow_farm_lite():
 # now and then; and more of the flock on the lawn under the flyover, round
 # their trough and hay rack. World units; front (+X) to the road, on the left
 # at yaw 180.
-def sheep(at, yaw, life):
+def sheep(at, yaw, life, pose='graze'):
+    """A sheep at its own size beside a car (half a car long), facing +X
+    turned by `yaw`, in the cattle's faceted build: a round fleece on four
+    dark legs, a woolly neck, a black face with its pink nose, ears out to
+    the sides and a topknot of wool, a stub of a tail. `pose`: `graze` or
+    `up`; `life` hinges the head and neck. The lite build is a three-ring
+    fleece, the head one limb with its ears."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
-    def p(dx, dy, dz):
+    side = (s, 0.0, c)
+    WOOL, FACE = 0xf8f8fb, 0x2a2735
+    def p(dx, dy, dz=0.0):
         return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
-    with plain_parts():
-        for lx in (-0.14, 0.13):
-            box((0.07, 0.18, 0.2), p(lx, 0.09, 0), 0x2a2735, yaw=yaw)
-    box((0.48, 0.28, 0.34), p(0, 0.31, 0), 0xf8f8fb, yaw=yaw)              # the fleece
-    box((0.4, 0.08, 0.28), p(0, 0.48, 0), 0xf8f8fb, yaw=yaw)
+    for lx, lz in ((0.14, -0.08), (0.14, 0.08), (-0.15, -0.08), (-0.15, 0.08)):
+        loft([p(lx, 0.22, lz), p(lx, 0.0, lz)], [(0.038, 0.038), (0.03, 0.03)], FACE, side, 4, turn=math.pi / 4)
+    if LITE:
+        loft([p(-0.27, 0.33), p(0.0, 0.345), p(0.25, 0.33)], [(0.1, 0.1), (0.2, 0.19), (0.11, 0.11)], WOOL, side, 6)
+    else:
+        loft([p(-0.27, 0.33), p(-0.2, 0.34), p(0.0, 0.345), p(0.17, 0.34), p(0.25, 0.33)],
+             [(0.09, 0.09), (0.17, 0.16), (0.185, 0.175), (0.17, 0.16), (0.1, 0.1)], WOOL, side, 6)
+        loft([p(-0.25, 0.39), p(-0.33, 0.27)], [(0.045, 0.045), (0.028, 0.028)], WOOL, side, 4, turn=math.pi / 4)
+    HX, HY = 0.2, 0.33
+    dip = -1.1 if pose == 'graze' else 0.1
+    cd, sd = math.cos(dip), math.sin(dip)
+    def q(dx, dy, dz=0.0):
+        ax, ay = dx - HX, dy - HY
+        return p(HX + ax * cd - ay * sd, HY + ax * sd + ay * cd, dz)
     def head():
-        box((0.16, 0.15, 0.13), p(0.3, 0.28, 0), 0x2a2735, yaw=yaw, roll=-0.6)
+        if LITE:
+            loft([q(0.18, 0.36), q(0.46, 0.41)], [(0.1, 0.1), (0.05, 0.05)], FACE, side, 4, turn=math.pi / 4)
+        else:
+            loft([q(0.16, 0.36), q(0.3, 0.42)], [(0.105, 0.11), (0.075, 0.08)], WOOL, side, 6)             # the neck's wool
+            loft([q(0.27, 0.43), q(0.36, 0.435), q(0.45, 0.41)], [(0.064, 0.068), (0.058, 0.062), (0.042, 0.042)], FACE, side, 6)
+            loft([q(0.44, 0.412), q(0.48, 0.4)], [(0.04, 0.038), (0.033, 0.03)], 0xf2bf99, side, 4, turn=math.pi / 4)   # the nose
+        with plain_parts():
+            box((0.04, 0.045, 0.21), q(0.3, 0.465), FACE, yaw=yaw)                                          # the ears
+            if not LITE:
+                box((0.09, 0.05, 0.1), q(0.28, 0.505), WOOL, yaw=yaw, roll=dip)                             # the topknot
     if life:
-        with animated(life, p(0.22, 0.36, 0), yaw):
+        with animated(life, p(HX, HY), yaw):
             head()
     else:
         head()
 
 def flock(spots, tag, lite=False):
     # lite (the Android TV's build): the heads keep still, so the whole flock
-    # is in its piece's one draped part instead of a draw a sheep
-    for k, (x, z, yaw) in enumerate(spots):
-        sheep((x, 0, z), yaw, None if lite else 'anim_drape+sway:a=z:d=28:p=%.1f:r=0.72#%s%d' % (5.8 + 0.7 * k, tag, k))
+    # is in its piece's one draped part instead of a draw a sheep, and every
+    # third one stands looking up
+    with lite_parts(lite):
+        for k, (x, z, yaw) in enumerate(spots):
+            if lite:
+                sheep((x, 0, z), yaw, None, 'up' if k % 3 == 1 else 'graze')
+            else:
+                sheep((x, 0, z), yaw, 'anim_drape+sway:a=z:d=28:p=%.1f:r=0.72#%s%d' % (5.8 + 0.7 * k, tag, k))
 
 def sheep_meadow_build(lite):
     def still():
@@ -12939,19 +13063,6 @@ def sheepfold_lite():
 # roof), all of it within a few units of the kerb, nothing on the verge
 # itself. Front (+X) to the road, metres, on the right at yaw 0; the line is
 # at z -22.
-def horse(at, yaw, coat, saddle):
-    """A carousel horse facing +X turned by `yaw`, its hooves at `at`'s level."""
-    F = local(at[0], at[2], yaw)
-    y = at[1]
-    box((1.5, 0.6, 0.5), F(0, y + 1.0, 0), coat, yaw=yaw)
-    box((0.5, 0.75, 0.36), F(0.75, y + 1.45, 0), coat, yaw=yaw, roll=-0.5)
-    box((0.6, 0.32, 0.34), F(1.05, y + 1.75, 0), coat, yaw=yaw)
-    box((0.5, 0.14, 0.54), F(-0.05, y + 1.36, 0), saddle, yaw=yaw)
-    with plain_parts():
-        for sx, kick in ((-0.55, 0.5), (0.55, -0.5)):
-            for sz in (-0.16, 0.16):
-                box((0.16, 0.6, 0.16), F(sx + 0.1 * kick, y + 0.5, sz), coat, yaw=yaw, roll=kick)
-
 def stall(at, yaw, colors, goods):
     """A market stall, its counter on +X under a striped awning."""
     F = local(at[0], at[2], yaw)
@@ -13077,12 +13188,17 @@ def fete(lite):
             poly([top, r0, r1], [(0, 1, 2)], (RED, WHITE)[k % 2])
             box((0.12, 0.7, 2 * (CR + 0.4) * math.sin(math.pi / 12)), (CX + math.cos((a0 + a1) / 2) * (CR + 0.36), 4.75,
                 CZ + math.sin((a0 + a1) / 2) * (CR + 0.42)), (BLUE, YELLOW)[k % 2], yaw=-(a0 + a1) / 2)
+        # the horses: the canyon's build (equine) in a gallopers' paint, a
+        # gold mane on the greys, each under its saddle cloth, stepping out
         COATS = (WHITE, 0x9a7b55, WHITE, 0x2a2735, WHITE, 0xb06041)
         for k in range(6):
             a = k * 2 * math.pi / 6
             px, pz = CX + 2.9 * math.cos(a), CZ + 2.9 * math.sin(a)
             box((0.12, 5.0, 0.12), (px, 3.2, pz), YELLOW)
-            horse((px, 0.7, pz), -a - math.pi / 2, COATS[k], (RED, BLUE, YELLOW)[k % 3])
+            with lite_parts(lite):
+                equine((px, 0.7, pz), -a - math.pi / 2, COATS[k], L=1.5, mane=YELLOW if COATS[k] == WHITE else 0xfde4c7,
+                       muzzle=0xf2bf99 if COATS[k] == WHITE else 0x5a4632, tack=((RED, BLUE, YELLOW)[k % 3], 0x7a5a3a),
+                       stance=(1, -1)[k % 2])
             if k == 1:
                 person((px, 2.1, pz), -a - math.pi / 2, 0x22c46e, k=0.65, hair=3, sit=True, arm=0.3)
     # ---- the stalls, under their striped awnings (nobody standing at them:
@@ -13805,12 +13921,30 @@ def willow(at):
             tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
 
 def duck(at, color=0xf8f8fb):
-    """A duck on the water facing +X: body, tail, head, bill (twice life size)."""
+    """A duck on the water facing +X (twice life size), in the farm
+    animals' faceted build: a full body low in the water, drawn up to the
+    tail, its wings folded on its back, the neck and a round head, a flat
+    orange bill, an eye each side. Brown, it is a mallard drake: a green
+    head over a white collar, grey wings, a dark stern."""
     x, y, z = at
-    box((0.9, 0.38, 0.5), (x, y + 0.19, z), color)
-    box((0.3, 0.3, 0.36), (x - 0.5, y + 0.3, z), color, roll=0.5)
-    box((0.3, 0.42, 0.3), (x + 0.36, y + 0.55, z), 0x22c46e if color != 0xf8f8fb else color)
-    box((0.26, 0.1, 0.18), (x + 0.6, y + 0.62, z), 0xff7e44)
+    side = (0.0, 0.0, 1.0)
+    drake = color != 0xf8f8fb
+    def p(dx, dy, dz=0.0):
+        return (x + dx, y + dy - 0.08, z + dz)                    # its keel under the sheet
+    loft([p(-0.52, 0.3), p(-0.3, 0.24), p(0.05, 0.22), p(0.36, 0.26), p(0.46, 0.3)],
+         [(0.1, 0.08), (0.24, 0.2), (0.27, 0.22), (0.18, 0.17), (0.08, 0.08)], color, side, 6)
+    loft([p(-0.44, 0.32), p(-0.72, 0.5)], [(0.13, 0.06), (0.05, 0.025)], 0x2a2735 if drake else color, side, 4)    # the tail, cocked
+    for sd in (-1, 1):
+        loft([p(0.22, 0.36, sd * 0.25), p(-0.1, 0.4, sd * 0.27), p(-0.46, 0.4, sd * 0.16)],
+             [(0.1, 0.03), (0.14, 0.035), (0.05, 0.02)], 0x868ba1 if drake else 0xfde4c7, (0.0, 1.0, 0.0), 4)
+    head = 0x22c46e if drake else color
+    loft([p(0.3, 0.32), p(0.37, 0.5), p(0.38, 0.6)], [(0.12, 0.12), (0.1, 0.1), (0.1, 0.1)], head, side, 6)
+    if drake:
+        loft([p(0.33, 0.42), p(0.36, 0.49)], [(0.118, 0.118), (0.108, 0.108)], 0xf8f8fb, side, 6)                  # his collar
+    loft([p(0.26, 0.68), p(0.4, 0.71), p(0.54, 0.66)], [(0.1, 0.1), (0.135, 0.125), (0.09, 0.08)], head, side, 6)
+    loft([p(0.5, 0.65), p(0.76, 0.6)], [(0.075, 0.04), (0.065, 0.022)], 0xff7e44, side, 4)                          # the bill
+    with plain_parts():
+        box((0.05, 0.05, 0.27), p(0.46, 0.75), 0x2a2735)                                                            # the eyes
 
 # The mill's race runs along its local Z at x = MILL_RACE, a set-brook piece
 # laid through here (the route BROOK_ROUTE holds was laid through them),
@@ -14002,14 +14136,29 @@ def brook_parapet():
 LAKE_Y = 0.36
 
 def swan_pedalo(at, body):
-    """A swan pedalo facing +X: the white hull, the seat's blue back, the
-    swan's neck and head at the bow."""
+    """A swan pedalo facing +X: the hull a swan's body, low in the water
+    and drawn up to the tail, its wings raised either side of the blue
+    seat, the neck up in its S to the head: an orange bill under its black
+    knob, an eye each side."""
     x, y, z = at
-    box((2.6, 0.7, 1.6), (x, y + 0.35, z), body)
-    box((1.6, 0.5, 1.4), (x - 0.4, y + 0.85, z), 0x339cf2)                      # the seat back
-    strut((x + 1.0, y + 0.6, z), (x + 1.5, y + 2.0, z), 0.4, body)               # the neck
-    box((0.7, 0.45, 0.4), (x + 1.75, y + 2.1, z), body)                          # the head
-    box((0.4, 0.15, 0.2), (x + 2.2, y + 2.05, z), 0xff7e44)                      # the beak
+    Z = (0.0, 0.0, 1.0)
+    def p(dx, dy, dz=0.0):
+        return (x + dx, y + dy, z + dz)
+    loft([p(-1.5, 0.42), p(-1.0, 0.38), p(0.0, 0.36), p(0.9, 0.4), p(1.3, 0.48)],
+         [(0.3, 0.26), (0.75, 0.37), (0.82, 0.38), (0.62, 0.37), (0.26, 0.26)], body, Z, 6)
+    loft([p(-1.35, 0.6), p(-1.8, 1.05)], [(0.32, 0.13), (0.08, 0.04)], body, Z, 4)                     # the tail
+    for sd in (-1, 1):                                                                              # the wings
+        loft([p(0.55, 0.62, sd * 0.78), p(-0.5, 1.0, sd * 0.86), p(-1.45, 1.2, sd * 0.62)],
+             [(0.3, 0.09), (0.5, 0.09), (0.2, 0.06)], body, (0.0, 1.0, 0.0), 4)
+    box((1.0, 0.2, 1.4), p(-0.25, 0.74), 0x339cf2)                                                  # the seat
+    box((0.3, 0.6, 1.4), p(-0.8, 1.0), 0x339cf2)                                                    # and its back
+    loft([p(1.05, 0.6), p(1.5, 1.05), p(1.36, 1.65), p(1.5, 2.1)], [(0.21, 0.21), (0.16, 0.16), (0.135, 0.135), (0.14, 0.14)],
+         body, Z, 6)                                                                                # the neck
+    loft([p(1.38, 2.16), p(1.66, 2.22), p(1.92, 2.1)], [(0.16, 0.16), (0.175, 0.165), (0.1, 0.09)], body, Z, 6)
+    loft([p(1.86, 2.1), p(2.28, 1.97)], [(0.09, 0.065), (0.05, 0.03)], 0xff7e44, Z, 4)                 # the bill
+    with plain_parts():
+        box((0.14, 0.12, 0.2), p(1.9, 2.2), 0x2a2735)                                               # its knob
+        box((0.07, 0.07, 0.345), p(1.7, 2.28), 0x2a2735)                                            # the eyes
 
 @piece(REAL)
 def boating_lake():
@@ -15013,20 +15162,25 @@ def heron(x, z, yaw=0.0):
     dagger of a bill. Side-on, that outline is a heron's and nothing else's.
     One gesture: now and then the neck dips toward the water and comes back up."""
     F = local(x, z, yaw)
-    with plain_parts():
-        for s in (-1, 1):
-            strut(F(0.0, 0.0, 0.14 * s), F(0.05, 1.3, 0.1 * s), 0.12, 'dark')
-        cyl(0.44, 1.45, F(0.75, 1.52, 0.0), 'grey', r2=0.14, segs=6, axis='across', yaw=yaw + math.pi)
-        for s in (-1, 1):
-            rowed(box((1.15, 0.34, 0.1), F(-0.1, 1.58, 0.36 * s), 'grey', yaw=yaw, roll=0.12), 22)
-        with animated('anim_drape+sway:a=z:d=-24:p=7:r=0.8#heron', F(0.6, 1.7, 0.0), yaw=yaw):
-            pts = ((0.6, 1.7), (0.92, 2.0), (0.66, 2.34), (0.84, 2.66))
-            for (ax, ay), (bx, by) in zip(pts, pts[1:]):
-                strut(F(ax, ay, 0.0), F(bx, by, 0.0), 0.15, 'white')
-            box((0.42, 0.26, 0.22), F(0.96, 2.7, 0.0), 'white', yaw=yaw)
-            box((0.36, 0.08, 0.24), F(0.88, 2.85, 0.0), 'dark', yaw=yaw)
-            strut(F(0.75, 2.84, 0.0), F(0.3, 2.74, 0.0), 0.07, 'dark')             # the plume
-            strut(F(1.12, 2.7, 0.0), F(2.0, 2.62, 0.0), 0.1, 'yellow')            # the bill
+    side = (math.sin(yaw), 0.0, math.cos(yaw))
+    for s in (-1, 1):                                                          # the legs, a knee in each, on their toes
+        loft([F(0.1, 1.25, 0.12 * s), F(0.0, 0.64, 0.12 * s), F(0.05, 0.0, 0.12 * s)],
+             [(0.065, 0.065), (0.05, 0.05), (0.055, 0.055)], 'dark', side, 4, turn=math.pi / 4)
+        with plain_parts():
+            box((0.34, 0.06, 0.12), F(0.16, 0.03, 0.12 * s), 'dark', yaw=yaw)
+    loft([F(-0.9, 1.34, 0.0), F(-0.4, 1.46, 0.0), F(0.2, 1.57, 0.0), F(0.62, 1.68, 0.0), F(0.8, 1.76, 0.0)],
+         [(0.08, 0.07), (0.26, 0.22), (0.36, 0.32), (0.3, 0.3), (0.16, 0.18)], 'grey', side, 6)
+    for s in (-1, 1):                                                          # the wings, folded on it
+        rowed(loft([F(0.52, 1.74, 0.34 * s), F(-0.1, 1.62, 0.4 * s), F(-0.8, 1.4, 0.2 * s)],
+                   [(0.2, 0.06), (0.25, 0.06), (0.08, 0.04)], 'grey', (0.0, 1.0, 0.0), 4), 22)
+    with animated('anim_drape+sway:a=z:d=-24:p=7:r=0.8#heron', F(0.6, 1.7, 0.0), yaw=yaw):
+        loft([F(0.66, 1.72, 0.0), F(0.96, 2.02, 0.0), F(0.7, 2.36, 0.0), F(0.86, 2.68, 0.0)],
+             [(0.14, 0.15), (0.09, 0.09), (0.08, 0.08), (0.09, 0.09)], 'white', side, 6)
+        loft([F(0.72, 2.7, 0.0), F(0.95, 2.75, 0.0), F(1.16, 2.7, 0.0)], [(0.11, 0.11), (0.13, 0.12), (0.08, 0.07)], 'white', side, 6)
+        loft([F(1.0, 2.85, 0.0), F(0.74, 2.87, 0.0), F(0.3, 2.72, 0.0)], [(0.1, 0.03), (0.09, 0.035), (0.03, 0.02)], 'dark', side, 4)   # the crest and its plume
+        loft([F(1.12, 2.7, 0.0), F(2.0, 2.6, 0.0)], [(0.07, 0.06), (0.014, 0.014)], 'yellow', side, 4)                            # the bill
+        with plain_parts():
+            box((0.06, 0.06, 0.27), F(1.0, 2.76, 0.0), 'dark', yaw=yaw)                                                # the eyes
 
 def pool_heron(px, pz, R, deg):
     """The heron at a spring pool's edge, `deg` round from its road side
@@ -16358,6 +16512,17 @@ def ore_line():
 # show (trim, glazing bars, corner boards, hooves, guy ropes).
 LITE = False
 
+@contextlib.contextmanager
+def lite_parts(on):
+    """The LITE helpers' coarser build for a block, in a builder that takes
+    its tier as an argument (the backyard's `lite`)."""
+    global LITE
+    was, LITE = LITE, on
+    try:
+        yield
+    finally:
+        LITE = was
+
 def lite_too(*names):
     for n in names:
         def build(fn=PIECES[n]):
@@ -16384,6 +16549,9 @@ lite_too('skull-trail')
 lite_too('storm-containers', 'storm-containers-b', 'storm-containers-c')
 # ...and Riptide's baths on two lane ropes and plainer huts, no rail to the road, its bandstand's audience in one row.
 lite_too('lido', 'seafront-bandstand')
+
+# Glacier's dog team on four-sided limbs (glacier_husky).
+lite_too('glacier-dog-trail')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals
@@ -17466,20 +17634,28 @@ def dead_cottonwood():
     dead_tree((0, 0, 0), h=9.5, color=0x8a6a46)
     o = cyl(0.2, 3.6, (1.2, 0.2, 1.0), 0x8a6a46, r2=0.1, segs=5, axis='along', smooth=False)
     o.rotation_euler.z = 0.6
-    vy, k = 9.5, 0.47 / GROW['dead-cottonwood']                                 # the vulture, turning
-    def v(size, d, color, pitch=0.0):                                            # on its perch to watch
-        box([s * k for s in size], (d[0] * k, vy + d[1] * k, d[2] * k), color, pitch=pitch)   # the cars go by
+    vy, k = 9.5, 0.47 / GROW['dead-cottonwood']                                 # the vulture, turning on its perch to watch the cars go by
+    Z, X = (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
+    def q(dx, dy, dz=0.0):
+        return (dx * k, vy + dy * k, dz * k)
+    def r(*pairs):
+        return [(a * k, b * k) for a, b in pairs]
+    # hunched on the limb, facing +X: its dark body and the wings folded
+    # down its sides to the tail, a white ruff, the bare red neck and head,
+    # a pale hooked bill, an eye each side, its feet on the wood
     with animated('anim_watch:r=24:d=75#v', (0, vy, 0)):
-        v((0.7, 0.6, 0.55), (0, 0.42, 0), 'dark')
+        loft([q(-0.2, 0.14), q(-0.08, 0.36), q(0.06, 0.62), q(0.16, 0.76)], r((0.2, 0.2), (0.3, 0.33), (0.27, 0.3), (0.16, 0.18)),
+             'dark', Z, 6)
         for sd in (-1, 1):
-            v((0.8, 0.5, 0.12), (-0.08, 0.48, sd * 0.33), 'slate')
-        v((0.5, 0.12, 0.4), (-0.5, 0.25, 0), 'dark')
-        v((0.36, 0.16, 0.46), (0.22, 0.74, 0), 'white')
-        v((0.16, 0.26, 0.16), (0.3, 0.92, 0), 'salmon')
-        v((0.32, 0.24, 0.26), (0.4, 1.1, 0), 'red')
-        v((0.2, 0.1, 0.12), (0.62, 1.06, 0), 'cream')
-        for sd in (-1, 1):
-            v((0.12, 0.12, 0.08), (0.48, 1.16, sd * 0.13), 'dark')
+            loft([q(0.14, 0.72, sd * 0.3), q(-0.1, 0.42, sd * 0.37), q(-0.5, 0.06, sd * 0.2)],
+                 r((0.2, 0.07), (0.28, 0.07), (0.1, 0.04)), 'slate', X, 4)
+            loft([q(0.06, 0.12, sd * 0.13), q(0.12, 0.0, sd * 0.13)], r((0.05, 0.05), (0.06, 0.09)), 'cream', Z, 4)
+        loft([q(-0.22, 0.2), q(-0.6, 0.04)], r((0.2, 0.06), (0.16, 0.04)), 'dark', Z, 4)              # the tail
+        loft([q(0.13, 0.72), q(0.2, 0.82)], r((0.23, 0.24), (0.15, 0.16)), 'white', Z, 6)               # the ruff
+        loft([q(0.2, 0.8), q(0.3, 0.98), q(0.34, 1.06)], r((0.09, 0.09), (0.08, 0.08), (0.09, 0.09)), 'salmon', Z, 6)
+        loft([q(0.26, 1.1), q(0.42, 1.14), q(0.54, 1.08)], r((0.13, 0.12), (0.14, 0.13), (0.1, 0.09)), 'red', Z, 6)
+        loft([q(0.5, 1.09), q(0.68, 1.06), q(0.72, 0.94)], r((0.07, 0.07), (0.06, 0.06), (0.012, 0.014)), 'cream', Z, 4)
+        loft([q(0.45, 1.16, -0.135), q(0.45, 1.16, 0.135)], r((0.035, 0.035), (0.035, 0.035)), 'dark', X, 4)   # the eyes
     sandstone_rock((-2.6, 0, -1.6), 1.1, yaw=1.2)
     sandstone_rock((2.8, 0, -2.6), 0.8, yaw=0.2)
     join_still('tree')
@@ -17556,30 +17732,6 @@ def windpump():
     range_cow((2.9, 0, 2.6), 2.4, ROAN, CREAM_HIDE, k=1.1, pose='up', life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
     range_cow((-1.4, 0, -1.5), -0.9, BLACK, k=1.1, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('pump')
-
-def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
-    """A cow the size of one beside a car (about a car long), facing +X
-    turned by `yaw`: a block of a body on its legs, a white patch, a white
-    face lowered to graze, short horns. `life` names the head's motion,
-    hinged at the neck: a gesture (a sway with a rest) lifts it from the
-    grass to look about now and then and lowers it again."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    def p(dx, dy, dz):
-        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
-    for lx in (-0.27, 0.24):                                                    # the legs, a pair to a block
-        box((0.1, 0.28, 0.3), p(lx, 0.14, 0), 0x5a4632, yaw=yaw)
-    box((0.78, 0.34, 0.38), p(-0.02, 0.44, 0), coat, yaw=yaw)                    # the body
-    box((0.3, 0.24, 0.4), p(-0.12, 0.47, 0), 0xf8f8fb, yaw=yaw)                 # a white patch
-    def head():
-        box((0.3, 0.22, 0.22), p(0.5, 0.4, 0), 0xf8f8fb, yaw=yaw, roll=-0.5)    # the face, lowered to graze
-        box((0.12, 0.12, 0.17), p(0.68, 0.28, 0), 0xf2bf99, yaw=yaw)            # the muzzle
-        box((0.08, 0.06, 0.4), p(0.46, 0.53, 0), 0xfde4c7, yaw=yaw)             # the horns
-    if life:
-        with animated(life, p(0.36, 0.5, 0), yaw):
-            head()
-    else:
-        head()
 
 def hay_bale(at, yaw=0.0):
     x, y, z = at
@@ -17815,7 +17967,7 @@ def loft(path, radii, color, side=(0.0, 0.0, 1.0), n=6, turn=0.0):
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
-def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose='graze', life=None):
+def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose='graze', life=None, udder=False):
     """One of the ranch's cattle at its own size (about a car long at k 1; a
     calf at 0.55), facing +X turned by `yaw`, the horses' faceted build: a
     deep square barrel, short legs, a broad face (`face`: a Hereford's
@@ -17823,7 +17975,9 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     saddles it with a second colour. `pose`: `graze` (head at the grass),
     `up` (looking about), `drink` (the muzzle over a tank's rim) or `lie`
     (legs folded under, chewing). `life`
-    hinges the head and neck."""
+    hinges the head and neck. The lite build is the same animal on fewer
+    facets: a four-sided barrel and head, each leg one limb, no hooves.
+    `udder` (a dairy cow's) hangs one under the flank."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
     side = (s, 0.0, c)
@@ -17833,19 +17987,35 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
         return (x + (dx * c + dz * s) * k, y + (dy - drop) * k, z + (-dx * s + dz * c) * k)
     def r(*pairs):
         return [(a * k, b * k) for a, b in pairs]
-    loft([p(-0.4, 0.46), p(-0.3, 0.47), p(0.0, 0.44), p(0.24, 0.45), p(0.34, 0.47)],
-         r((0.1, 0.1), (0.17, 0.17), (0.18, 0.19), (0.165, 0.18), (0.1, 0.11)), coat, side, 6)
-    if patch:
+    n = 4 if LITE else 6
+    f = 1.2 if LITE else 1.0                             # (a four-sided limb's corners stand where six sides' flats did)
+    if LITE:
+        loft([p(-0.4, 0.46), p(-0.24, 0.47), p(0.2, 0.45), p(0.34, 0.47)],
+             r((0.1, 0.1), (0.2, 0.2), (0.2, 0.22), (0.1, 0.11)), coat, side, 4, turn=math.pi / 4)
+    else:
+        loft([p(-0.4, 0.46), p(-0.3, 0.47), p(0.0, 0.44), p(0.24, 0.45), p(0.34, 0.47)],
+             r((0.1, 0.1), (0.17, 0.17), (0.18, 0.19), (0.165, 0.18), (0.1, 0.11)), coat, side, 6)
+    if patch and LITE:
+        loft([p(-0.16, 0.47), p(0.12, 0.46)], r((0.215, 0.215), (0.215, 0.23)), patch, side, 4, turn=math.pi / 4)
+    elif patch:
         loft([p(-0.16, 0.47), p(0.0, 0.455), p(0.12, 0.46)], r((0.176, 0.176), (0.186, 0.196), (0.176, 0.19)), patch, side, 6)
+    if udder and not lie:
+        box((0.13 * k, 0.09 * k, 0.13 * k), p(-0.2, 0.27), 0xf2bf99, yaw=yaw)
     for lx, lz in ((0.24, -0.1), (0.24, 0.1), (-0.3, -0.1), (-0.3, 0.1)):
         if lie:                                                                  # folded under
             loft([p(lx, 0.3, lz * 1.3), p(lx + 0.16, 0.235, lz * 1.5)], r((0.045, 0.05), (0.035, 0.035)), coat, side, 4)
             continue
+        if LITE:
+            loft([p(lx, 0.36, lz), p(lx, 0.0, lz)], r((0.06, 0.07), (0.04, 0.042)), coat, side, 4, turn=math.pi / 4)
+            continue
         loft([p(lx, 0.36, lz), p(lx + (0.0 if lx > 0 else -0.03), 0.19, lz), p(lx, 0.05, lz)],
              r((0.055, 0.065), (0.038, 0.04), (0.032, 0.034)), coat, side, 4, turn=math.pi / 4)
         loft([p(lx, 0.05, lz), p(lx + 0.01, 0.0, lz)], r((0.036, 0.038), (0.042, 0.046)), 0x38383d, side, 4, turn=math.pi / 4)
-    loft([p(-0.4, 0.55), p(-0.45, 0.5), p(-0.46, 0.28), p(-0.45, 0.14)],
-         r((0.018, 0.02), (0.02, 0.022), (0.016, 0.018), (0.03, 0.034)), 0x5a4632, side, 4, turn=math.pi / 4)
+    tail = [p(-0.4, 0.55), p(-0.45, 0.5), p(-0.46, 0.28), p(-0.45, 0.14)]
+    girth = r((0.018, 0.02), (0.02, 0.022), (0.016, 0.018), (0.03, 0.034))
+    if LITE:
+        tail, girth = tail[1::2], girth[1::2]
+    loft(tail, girth, 0x5a4632, side, 4, turn=math.pi / 4)
     HX, HY = 0.3, 0.5
     dip = {'graze': -0.95, 'drink': -0.1, 'up': 0.15, 'lie': 0.1}[pose]
     cd, sd = math.cos(dip), math.sin(dip)
@@ -17853,9 +18023,14 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
         ax, ay = dx - HX, dy - HY
         return p(HX + ax * cd - ay * sd, HY + ax * sd + ay * cd, dz)
     def head():
-        loft([q(0.28, 0.5), q(0.42, 0.55), q(0.5, 0.58)], r((0.1, 0.13), (0.075, 0.1), (0.07, 0.085)), coat, side, 6)
-        loft([q(0.47, 0.6), q(0.58, 0.55), q(0.66, 0.5)], r((0.085, 0.085), (0.07, 0.075), (0.055, 0.055)), face, side, 6)
-        loft([q(0.64, 0.51), q(0.7, 0.475)], r((0.055, 0.052), (0.05, 0.045)), 0xf2bf99, side, 6)
+        tq = math.pi / 4 if LITE else 0.0
+        def rf(*pairs):
+            return [(a * k * f, b * k * f) for a, b in pairs]
+        loft([q(0.28, 0.5), q(0.42, 0.55), q(0.5, 0.58)][::2 if LITE else 1],
+             rf((0.1, 0.13), (0.075, 0.1), (0.07, 0.085))[::2 if LITE else 1], coat, side, n, turn=tq)
+        loft([q(0.47, 0.6), q(0.58, 0.55), q(0.66, 0.5)][::2 if LITE else 1],
+             rf((0.085, 0.085), (0.07, 0.075), (0.055, 0.055))[::2 if LITE else 1], face, side, n, turn=tq)
+        loft([q(0.64, 0.51), q(0.7, 0.475)], rf((0.055, 0.052), (0.05, 0.045)), 0xf2bf99, side, n, turn=tq)
         with plain_parts():
             box((0.05 * k, 0.045 * k, 0.3 * k), q(0.47, 0.67), 0xfde4c7, yaw=yaw)             # the horns
             box((0.05 * k, 0.07 * k, 0.26 * k), q(0.44, 0.61), coat, yaw=yaw)                 # the ears
