@@ -652,11 +652,13 @@ export const TRACKS = {
       // round 22, where the beach lay bare at the road's own height (the
       // road to the bay runs two units over its sand, and what stood there
       // stood out of sight): the crew's dig for what they buried, beside
-      // the start straight, their sailmaker past the camp, and the island's
-      // old stone idol on the west shore before Skull Rock
+      // the start straight, their sailmaker past the camp, and on the west
+      // shore their torchlit way from the stockade to Skull Rock, under
+      // palms (round 23: a stone idol stood there alone on bare sand, which
+      // read as a prop put down; the green under the trail is `land`'s)
       { model: 'set-treasure-dig', u: 0.045, lat: 10.5 },
       { model: 'set-sail-yard', u: 0.125, lat: 10.5 },
-      { model: 'set-jungle-idol', u: 0.585, lat: 10.5 }
+      { model: 'set-skull-trail', u: 0.587, lat: 10.5 }
     ],
     // The peak and the headland are green with the scrub and jungle that
     // hold them (bare and peaked, a hill that size is a desert dune; the
@@ -718,7 +720,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.385, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
       { kind: 'paint', u: 0.45, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
       { kind: 'paint', u: 0.515, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.222, lat: 15, len: 26, r: 6, w: 4, tint: 0x5f9f5f }
+      { kind: 'paint', u: 0.222, lat: 15, len: 26, r: 6, w: 4, tint: 0x5f9f5f },
+      // the headland's jungle brought down along the shore from Skull Rock
+      // to the stockade, under the crew's trail
+      { kind: 'paint', u: 0.592, lat: 13.5, len: 26, r: 6, w: 4, tint: 0x5f9f5f }
     ]
   },
   driftwood: {
@@ -793,7 +798,11 @@ export const TRACKS = {
       // road climbs off it)
       { model: 'set-storm-mast', u: 0.10, lat: 10.5 },
       { model: 'set-storm-armour', u: 0.364, lat: -10.5, yaw: 180 },
-      { model: 'set-storm-containers', u: 0.951, lat: -10.5, yaw: 180 }
+      { model: 'set-storm-containers', u: 0.951, lat: -10.5, yaw: 180 },
+      // ...and more of them (round 23), where the east run comes down to
+      // the strand and, still coming ashore, in the surf past the groynes
+      { model: 'set-storm-containers-b', u: 0.245, lat: -10.5, yaw: 180 },
+      { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
@@ -909,10 +918,11 @@ export const TRACKS = {
       { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 },
       // round 22: the town band's stand on the north shore between the
       // club and the camp, and across the road from the camp the open-air
-      // baths on their terrace by the lagoon, both of which lay bare (the
-      // baths are the full tier's: the box's town vista is at its ceiling)
+      // baths by the lagoon, both of which lay bare. The baths are let into
+      // a beach rise of their own (`land`), at the road's height (round 23:
+      // they stood on a built terrace, a plinth)
       { model: 'set-seafront-bandstand', u: 0.655, lat: -11.5, yaw: 180 },
-      { model: 'set-lido', u: 0.725, lat: 10, lite: false }
+      { model: 'set-lido', u: 0.725, lat: 11.8 }
     ],
     land: [
       { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
@@ -943,6 +953,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.09, lat: -18, len: 10, r: 13, h: 0.8, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.715, lat: -17, len: 22, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.905, lat: -17, len: 14, r: 13, h: 0.88, top: 0.55, near: 0.4, w: 6 },
+      // ...and the baths' (the sand lay most of a unit under the kerb there)
+      { kind: 'ridge', u: 0.725, lat: 17.5, len: 14, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
       { kind: 'clear', u: 0.85, lat: 35, r: 18 },
