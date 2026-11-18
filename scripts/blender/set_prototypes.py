@@ -16450,10 +16450,12 @@ def windpump():
     box((0.3, 0.24, 0.3), (-0.9, 0.12, 1.4), 'white')                           # the salt lick
     def toward(x, z, tx, tz):
         return math.atan2(-(tz - z), tx - x)
-    cow((3.4, 0, 0.0), yaw=toward(3.4, 0.0, TX, TZ), life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')   # drinking
-    cow((0.2, 0, 2.1), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
-    cow((2.8, 0, 2.3), yaw=2.4, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    cow((-1.4, 0, -1.5), yaw=-0.9, coat=0x5a3a28, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
+    # (the range herd's own build, range_cow: the block cows that stood here
+    # were a plainer animal than the herd by the start)
+    range_cow((3.23, 0, 0.12), toward(3.23, 0.12, TX, TZ), RED, k=1.1, pose='drink', life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')
+    range_cow((0.2, 0, 2.1), 0.3, RED, 0xf8f8fb, k=1.1, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
+    range_cow((2.9, 0, 2.6), 2.4, ROAN, CREAM_HIDE, k=1.1, pose='up', life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
+    range_cow((-1.4, 0, -1.5), -0.9, BLACK, k=1.1, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('pump')
 
 def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
@@ -16506,9 +16508,9 @@ def stock_tank():
     box((0.3, 0.24, 0.3), (TX - 1.5, 0.6, TZ - 1.9), 'white')
     def toward(x, z):
         return math.atan2(-(TZ - z), TX - x)
-    cow((2.05, 0, -0.5), yaw=toward(2.05, -0.5), life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')   # drinking
-    cow((0.9, 0, 3.0), yaw=toward(0.9, 3.0) + 0.5, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    cow((-0.6, 0, -2.6), yaw=-0.9, coat=0x5a3a28, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
+    range_cow((1.86, 0, -0.45), toward(1.86, -0.45), RED, k=1.1, pose='drink', life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')
+    range_cow((0.9, 0, 3.2), toward(0.9, 3.2) + 0.5, ROAN, CREAM_HIDE, k=1.1, pose='up', life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
+    range_cow((-0.6, 0, -2.6), -0.9, BLACK, k=1.1, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('tank')
 
 @piece(1.0)
@@ -16549,8 +16551,8 @@ def loading_chute():
     hay_bale((X0 + 0.5, 0, Z0 + 1.0), -0.1)
     box((0.4, 0.22, 1.2), (X0 + 0.45, 0.11, Z1 - 0.9), 'grey')                    # a trough
     box((0.3, 0.03, 1.1), (X0 + 0.45, 0.22, Z1 - 0.9), 0x62d3c8)
-    cow((-1.6, 0, -1.0), yaw=0.5, life='anim_sway:a=z:d=30:p=7.6:r=0.74#a')
-    cow((-2.3, 0, 1.2), yaw=-2.4, coat=0x5a3a28, life='anim_sway:a=z:d=28:p=9.1:r=0.78#b')
+    range_cow((-1.6, 0, -1.0), 0.5, RED, k=1.1, pose='up', life='anim_sway:a=z:d=30:p=7.6:r=0.74#a')
+    range_cow((-2.3, 0, 1.2), -2.4, BLACK, k=1.1, life='anim_sway:a=z:d=28:p=9.1:r=0.78#b')
     join_still('chute')
 
 @piece(1.0)
@@ -16648,9 +16650,10 @@ def ranch():
     box((0.5, 0.25, 1.1), (X0 + 0.5, 0.12, -1.2), 'grey')                         # a trough, a hay feeder
     box((0.4, 0.03, 1.0), (X0 + 0.5, 0.25, -1.2), 0x62d3c8)
     hay_bale((X0 + 0.6, 0, 1.2), 0.3)
-    cow((0.4, 0, -0.6), yaw=0.4, life='anim_sway:a=z:d=30:p=7.1:r=0.72#d')
-    cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
-    cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
+    # (the range herd's own build: block cows stood here, plainer than the herd outside the fence)
+    range_cow((0.4, 0, -0.6), 0.4, RED, k=1.1, life='anim_sway:a=z:d=30:p=7.1:r=0.72#d')
+    range_cow((1.7, 0, 0.9), 2.6, BLACK, 0xf8f8fb, k=1.1, pose='up', life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
+    range_cow((2.2, 0, -1.2), -1.2, ROAN, CREAM_HIDE, k=1.1, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
     join_still('ranch')
 
 @piece(1.0)
@@ -16719,7 +16722,8 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     deep square barrel, short legs, a broad face (`face`: a Hereford's
     white, or the coat's), stub horns, a tail with its switch. `patch`
     saddles it with a second colour. `pose`: `graze` (head at the grass),
-    `up` (looking about) or `lie` (legs folded under, chewing). `life`
+    `up` (looking about), `drink` (the muzzle over a tank's rim) or `lie`
+    (legs folded under, chewing). `life`
     hinges the head and neck."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
@@ -16744,7 +16748,7 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     loft([p(-0.4, 0.55), p(-0.45, 0.5), p(-0.46, 0.28), p(-0.45, 0.14)],
          r((0.018, 0.02), (0.02, 0.022), (0.016, 0.018), (0.03, 0.034)), 0x5a4632, side, 4, turn=math.pi / 4)
     HX, HY = 0.3, 0.5
-    dip = {'graze': -0.95, 'up': 0.15, 'lie': 0.1}[pose]
+    dip = {'graze': -0.95, 'drink': -0.1, 'up': 0.15, 'lie': 0.1}[pose]
     cd, sd = math.cos(dip), math.sin(dip)
     def q(dx, dy, dz=0.0):
         ax, ay = dx - HX, dy - HY
@@ -17011,8 +17015,7 @@ def gulch_flume(L, at, foot, turn):
     down it to the mill, pinned along the face of the long left-hander on
     trestle bents that stand on the talus and the first bench, out of a
     header box at a notch in the cliff and down to a sluice at the verge;
-    prospect adits in the face under it, each with its fan of grey spoil,
-    and a crib of logs holding the talus where the flume comes down."""
+    prospect adits in the face under it, each with its fan of grey spoil."""
     ground = built_ground()
     X = 0.95                                                   # the trough's line, clear of every buttress
     s0, s1 = -L / 2 + 3.5, L / 2 - 7.0
@@ -17038,17 +17041,27 @@ def gulch_flume(L, at, foot, turn):
     # it ends in: three boxes stepping down the talus to a heap of tailings
     box((1.3, 0.9, 1.5), at(X - 0.25, y(s0) + 0.1, s0 - 0.6), BOARD, yaw=turn(s0))
     box((1.45, 0.14, 1.65), at(X - 0.25, y(s0) + 0.6, s0 - 0.6), TIMBER, yaw=turn(s0))
-    for k in range(3):
-        sk, yk = s1 + 0.9 + 1.5 * k, y(s1) - 0.75 * (k + 1)
-        rowed(beam(at(X, yk + 0.3, sk - 0.8), at(X, yk - 0.3, sk + 0.8), 0.7, 'grey', d=0.36), 10)
-        g = ground(*at(X, 0.0, sk)[::2]) or 0.0
-        box((0.24, max(0.3, yk - g + 0.3), 0.24), at(X, (yk + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+    # (one trough straight down from a drop box at the flume's end to the
+    # tailings, on two bents of its own: three stepped boxes read as a broken
+    # chute, and the crib of logs that stood here stood through it)
+    S2, Y2 = s1 + 4.9, 0.62
+    yy = lambda s: y(s1) + (Y2 - y(s1)) * (s - s1) / (S2 - s1)
+    cuts = (s1, (s1 + S2) / 2, S2)
+    for sa, sb in zip(cuts, cuts[1:]):
+        rowed(beam(at(X, yy(sa), sa), at(X, yy(sb), sb), 0.62, 'grey', d=0.4), 10)
+        beam(at(X, yy(sa) + 0.24, sa), at(X, yy(sb) + 0.24, sb), 0.34, 'blue', d=0.04)
+    box((0.86, 0.66, 0.6), at(X, y(s1) - 0.02, s1 + 0.1), BOARD, yaw=turn(s1))    # the drop box over the joint
+    for sk in (s1 + 1.7, s1 + 3.4):
+        top = yy(sk) - 0.31
+        for dx in (-0.3, 0.3):
+            g = ground(*at(X + dx, 0.0, sk)[::2]) or 0.0
+            box((0.2, top - g + 0.3, 0.2), at(X + dx, (top + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+        box((1.0, 0.22, 0.22), at(X, top, sk), 'bark', yaw=turn(sk))
     rowed(rock_lump(0.9, at(X - 0.1, 0.1, s1 + 5.6), 'grey', (0.9, 0.6, 1.5), turn(s1), seed=4.0), 5)
     # the adits, each where the face's foot stands back (so its spoil keeps
     # off the kerb), a few bays apart
     for k, s in enumerate(gulch_sites(foot, s0 + 3.0, s1 - 3.0, 3)):
         gulch_adit(at, turn, foot, ground, s, cart=(k == 1))
-    gulch_crib(at, turn, foot, ground, s1 + 3.2)
 
 def gulch_sites(foot, s0, s1, n):
     """`n` spots along a face's foot, 7 u apart or more, where it stands
@@ -17939,8 +17952,8 @@ def pickup(x, z, color, yaw=0.0):
 # where it is (TtpRendererMotion.cpp), and rides the whole of SW_RING, a
 # `drape` chain: on the ground too.
 SW_RAIL = 0.34                                  # the rails' top over the ground
-SW_PACE = 2.2                                   # the trains' pace, units a second: a fifth of a car's, a slow freight
-                                                # that still crosses a racer's picture (at 0.65 it stood parked all race)
+SW_PACE = 4.5                                   # the trains' pace, units a second: under half a car's, a freight
+                                                # rolling, not crawling (at 2.2 it read as barely moving from the seat)
 SW_FEED = (4.0, 0.6)                            # where the pipe from the farm meets the rack, in its frame
 SW_STEP = 1.000318
 SW_PIECE = {
@@ -18495,6 +18508,22 @@ def tank_farm():
         mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
         box((0.1, 0.34, 0.1), (mx, 0.17, mz), 'grey')
         cyl(0.12, 0.08, (mx + ux * 0.4, 0.52, mz + uz * 0.4), 'red', segs=8)    # a valve wheel
+    # The trunk line leaves the farm from the middle tank: a flanged nozzle in
+    # its wall, the red main valve under its hand wheel, and the pipe out to
+    # OUT, where tracks.js stands the trunk's first span (its support and
+    # collar the joint's). The line came up out of the ground inside the big
+    # tank before, and its first span ran through this one.
+    OUT = (5.78, 6.55)
+    x, z, r, h = M
+    d = math.hypot(OUT[0] - x, OUT[1] - z)
+    ux, uz = (OUT[0] - x) / d, (OUT[1] - z) / d
+    yaw = math.atan2(ux, uz)
+    sidewinder_pipe([(x + ux * t, PIPE_H, z + uz * t) for t in (r - 0.15, (r + d) / 2, d)])
+    cyl(PIPE_R * 1.5, 0.18, (x + ux * (r - 0.08), PIPE_H, z + uz * (r - 0.08)), 'grey', segs=10, axis='along', yaw=yaw)
+    vx, vz = x + ux * (r + 0.75), z + uz * (r + 0.75)
+    box((0.56, 0.56, 0.5), (vx, PIPE_H, vz), 'red', yaw=yaw)
+    box((0.12, 0.22, 0.12), (vx, PIPE_H + 0.36, vz), 'slate', yaw=yaw)
+    cyl(0.26, 0.06, (vx, PIPE_H + 0.44, vz), 'white', segs=12)
     join_still('tanks')
 
 # Which way a positive anim_sway (or spin) about a node's z turns it, seen with
@@ -18772,20 +18801,29 @@ def wellhead():
     # flush dirt pad (+X is the road).
     ground_poly([(-1.5, 0.03, -1.5), (1.5, 0.03, -1.5), (1.5, 0.03, 1.5), (-1.5, 0.03, 1.5)],
                 [(0, 1, 2, 3)], 0xb8a686)
+    # Every part ends INSIDE the next (a flange into its valve, an arm into
+    # the cross): faces sharing a plane flickered, the spool's square bar
+    # exactly the cross's width.
     cyl(0.45, 0.14, (0, 0, 0), 'slate', segs=12)                                # the cellar's collar
     cyl(0.32, 0.3, (0, 0.14, 0), 'grey', segs=12)                               # the casing head
-    cyl(0.14, 1.1, (0, 0.44, 0), 'grey', segs=10)                               # the spool through
-    for y in (0.44, 0.84):                                                      # the master valves
-        box((0.36, 0.32, 0.36), (0, y + 0.16, 0), 'red')
-        cyl(0.2, 0.05, (0.18, y + 0.16, 0), 'white', segs=12, axis='across')    # a hand wheel
-    box((0.28, 0.28, 1.3), (0, 1.38, 0), 'red')                                 # the cross
+    for y in (0.5, 0.96):                                                       # the master valves, flanged
+        cyl(0.24, 0.1, (0, y - 0.08, 0), 'grey', segs=10)
+        box((0.36, 0.34, 0.36), (0, y + 0.17, 0), 'red')
+        box((0.16, 0.1, 0.1), (0.24, y + 0.17, 0), 'slate')                     # a stem out of its bonnet
+        cyl(0.22, 0.06, (0.3, y + 0.17, 0), 'white', segs=12, axis='across')    # and its hand wheel, toward the road
+    cyl(0.24, 0.1, (0, 1.22, 0), 'grey', segs=10)
+    box((0.42, 0.4, 0.42), (0, 1.5, 0), 'red')                                  # the cross
     for sz in (-1, 1):
-        box((0.36, 0.34, 0.3), (0, 1.38, sz * 0.8), 'red')                      # its wing valves
-        cyl(0.18, 0.05, (0, 1.55, sz * 0.8), 'white', segs=12)                  # their wheels, on top
-    strut((0, 1.38, 0.95), (0, 0.03, 1.4), 0.14, 'slate')                       # the flowline, down
-    cyl(0.2, 0.3, (0, 1.52, 0), 'white', segs=12)                               # the cap
-    cyl(0.05, 0.2, (0.0, 1.82, 0), 'slate', segs=10)                            # the gauge's stem
-    cyl(0.16, 0.06, (0.0, 2.05, -0.03), 'white', segs=12, axis='along')         # the gauge
+        box((0.22, 0.22, 0.5), (0, 1.5, sz * 0.4), 'red')                       # its arms
+        cyl(0.2, 0.08, (0, 1.5, sz * 0.62 - 0.04), 'grey', segs=10, axis='along')   # a flange
+        box((0.34, 0.36, 0.3), (0, 1.5, sz * 0.8), 'red')                       # the wing valves
+        box((0.1, 0.14, 0.1), (0, 1.73, sz * 0.8), 'slate')                     # their stems, up
+        cyl(0.2, 0.06, (0, 1.78, sz * 0.8), 'white', segs=12)                   # and wheels
+    strut((0, 1.5, 0.88), (0, -0.05, 1.4), 0.16, 'slate')                       # the flowline, down into the ground
+    cyl(0.18, 0.08, (0, 1.5, -0.97), 'grey', segs=10, axis='along')             # the other wing blanked off
+    cyl(0.18, 0.2, (0, 1.68, 0), 'white', segs=12)                              # the cap
+    box((0.08, 0.2, 0.08), (0.0, 1.96, 0), 'slate')                             # the gauge's stem
+    cyl(0.16, 0.06, (0.0, 2.14, -0.03), 'white', segs=12, axis='along')         # the gauge
     join_still('wellhead')
 
 @piece(1.0)

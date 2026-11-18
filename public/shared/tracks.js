@@ -2032,7 +2032,10 @@ export const TRACKS = {
       { model: 'set-pipeline-16', u: 0.634694, lat: 17.544, yaw: -74.319 },
       // the trunk line on its stilts, span by span along the right-hand
       // verge, each span a chord of the road's curve with a support at every
-      // joint: from the tank farm round the north loop, swinging out behind
+      // joint (each span's anchor is the last one's end as the game stands
+      // it, in the plan: a step there is a gap in the pipe): from the valve
+      // on the tank farm's middle tank (set_prototypes.py tank_farm, OUT)
+      // round the north loop, swinging out behind
       // the pumping wells to their tank battery and back, under the knot;
       // down the start straight and under the mountain; round the outside
       // of the south loop and away under the S. Each span a thin footprint,
@@ -2040,40 +2043,38 @@ export const TRACKS = {
       // is full-only (the wells and the deck hide it from the seat): in
       // lite its first span is the line going under the ground
       // (set-pipeline-8-under's lite build), up again at the south run.
-      { model: 'set-pipeline-rise', u: 0.6270, lat: 6.50, yaw: -179.8 },
-      { model: 'set-pipeline-8', u: 0.6270, lat: 6.50, yaw: 2.5 },
-      { model: 'set-pipeline-8', u: 0.6430, lat: 6.47, yaw: 14.5 },
-      { model: 'set-pipeline-8', u: 0.6550, lat: 6.38, yaw: 12.8 },
-      { model: 'set-pipeline-8', u: 0.6667, lat: 6.33, yaw: 13.2 },
-      { model: 'set-pipeline-8', u: 0.6791, lat: 6.35, yaw: 12.7 },
-      { model: 'set-pipeline-12', u: 0.6907, lat: 6.33, yaw: 10.7 },
-      { model: 'set-pipeline-16', u: 0.7139, lat: 6.48, yaw: 8.1 },
-      { model: 'set-pipeline-8-under', u: 0.7389, lat: 8.76, yaw: -31.9 },
-      { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3, lite: false },
-      { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3, lite: false },
-      { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9, lite: false },
-      { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0, lite: false },
-      { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4, lite: false },
-      { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7, lite: false },
-      { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2, lite: false },
-      { model: 'set-pipeline-rise', u: 0.9150, lat: 7.50, yaw: 179.9 },
-      { model: 'set-pipeline-16', u: 0.9150, lat: 7.50, yaw: -1.2 },
-      { model: 'set-pipeline-16', u: 0.9510, lat: 7.50, yaw: -0.4 },
-      { model: 'set-pipeline-16', u: 0.9866, lat: 7.50, yaw: -0.1 },
-      { model: 'set-pipeline-16', u: 0.0220, lat: 7.50, yaw: 0.1 },
-      { model: 'set-pipeline-dive', u: 0.0573, lat: 7.50, yaw: 0.0 },
-      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.50, yaw: 179.8 },
-      { model: 'set-pipeline-8', u: 0.1421, lat: 6.50, yaw: 2.4 },
-      { model: 'set-pipeline-8', u: 0.1578, lat: 6.39, yaw: 13.4 },
-      { model: 'set-pipeline-8', u: 0.1689, lat: 6.27, yaw: 26.9 },
-      { model: 'set-pipeline-8', u: 0.1768, lat: 6.07, yaw: 20.4 },
-      { model: 'set-pipeline-8', u: 0.1857, lat: 6.14, yaw: 14.7 },
-      { model: 'set-pipeline-16', u: 0.1975, lat: 6.29, yaw: 5.0 },
-      { model: 'set-pipeline-8', u: 0.2305, lat: 6.34, yaw: 7.0 },
-      { model: 'set-pipeline-8', u: 0.2446, lat: 6.40, yaw: 7.4 },
-      { model: 'set-pipeline-8', u: 0.2590, lat: 6.43, yaw: 7.3 },
-      { model: 'set-pipeline-8', u: 0.2733, lat: 6.38, yaw: 6.9 },
-      { model: 'set-pipeline-dive', u: 0.2877, lat: 6.49, yaw: 1.7 }
+      { model: 'set-pipeline-8', u: 0.643008, lat: 6.470, yaw: 14.485 },
+      { model: 'set-pipeline-8', u: 0.654964, lat: 6.234, yaw: 11.040 },
+      { model: 'set-pipeline-8', u: 0.666829, lat: 6.350, yaw: 11.701 },
+      { model: 'set-pipeline-8', u: 0.679031, lat: 6.345, yaw: 12.072 },
+      { model: 'set-pipeline-12', u: 0.690927, lat: 6.365, yaw: 9.265 },
+      { model: 'set-pipeline-16', u: 0.713930, lat: 6.485, yaw: 8.091 },
+      { model: 'set-pipeline-8-under', u: 0.738772, lat: 8.706, yaw: -35.271 },
+      { model: 'set-pipeline-8', u: 0.746143, lat: 14.121, yaw: -3.976, lite: false },
+      { model: 'set-pipeline-8', u: 0.754355, lat: 15.778, yaw: 8.209, lite: false },
+      { model: 'set-pipeline-8', u: 0.762468, lat: 15.733, yaw: 6.602, lite: false },
+      { model: 'set-pipeline-12', u: 0.771206, lat: 15.965, yaw: 5.724, lite: false },
+      { model: 'set-pipeline-8', u: 0.792834, lat: 15.615, yaw: 47.579, lite: false },
+      { model: 'set-pipeline-8', u: 0.800125, lat: 10.155, yaw: 37.135, lite: false },
+      { model: 'set-pipeline-dive', u: 0.808887, lat: 6.588, yaw: 5.926, lite: false },
+      { model: 'set-pipeline-rise', u: 0.915, lat: 7.5, yaw: 179.9 },
+      { model: 'set-pipeline-16', u: 0.915000, lat: 7.500, yaw: -1.200 },
+      { model: 'set-pipeline-16', u: 0.950978, lat: 7.510, yaw: -0.359 },
+      { model: 'set-pipeline-16', u: 0.986573, lat: 7.494, yaw: -0.061 },
+      { model: 'set-pipeline-16', u: 0.021973, lat: 7.494, yaw: 0.108 },
+      { model: 'set-pipeline-dive', u: 0.057270, lat: 7.500, yaw: 0.001 },
+      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.5, yaw: 179.8 },
+      { model: 'set-pipeline-8', u: 0.142100, lat: 6.498, yaw: 2.400 },
+      { model: 'set-pipeline-8', u: 0.157804, lat: 6.497, yaw: 14.325 },
+      { model: 'set-pipeline-8', u: 0.168967, lat: 6.280, yaw: 23.767 },
+      { model: 'set-pipeline-8', u: 0.176702, lat: 6.034, yaw: 19.672 },
+      { model: 'set-pipeline-8', u: 0.185589, lat: 6.112, yaw: 12.420 },
+      { model: 'set-pipeline-16', u: 0.197911, lat: 6.334, yaw: 4.520 },
+      { model: 'set-pipeline-8', u: 0.230999, lat: 6.371, yaw: 6.868 },
+      { model: 'set-pipeline-8', u: 0.245070, lat: 6.446, yaw: 6.583 },
+      { model: 'set-pipeline-8', u: 0.259503, lat: 6.471, yaw: 7.112 },
+      { model: 'set-pipeline-8', u: 0.273948, lat: 6.422, yaw: 6.006 },
+      { model: 'set-pipeline-dive', u: 0.288269, lat: 6.536, yaw: 1.169 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
