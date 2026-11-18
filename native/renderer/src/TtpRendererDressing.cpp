@@ -1857,7 +1857,9 @@ const char* TtpRenderer::spotIssue(float x, float z, float lo, float hi, int ski
 }
 
 bool TtpRenderer::inSea(float x, float z, float margin) const {
-    return (mShoreFn && std::hypot(x, z) > mShoreFn(std::atan2(z, x)) - margin) || inPond(x, z, margin);
+    // The waterline as drawn (mShoreLine), not the curve it was sampled from.
+    return (!mShoreLine.empty() && shoreDist(mShoreLine, x, z, std::fabs(margin) + 1.0f) < margin)
+            || inPond(x, z, margin);
 }
 
 bool TtpRenderer::inPond(float x, float z, float margin) const {
@@ -2052,17 +2054,17 @@ TtpRenderer::Shoreline TtpRenderer::shoreline(const TrackBin& tb) {
 
 // How much of a bay's shore holds at bearing a: 1 along its `half`, easing
 // back to 0 over its `fade`.
-float TtpRenderer::Shoreline::bayWeight(const Bay& b, float a) const {
+float TtpRenderer::Shoreline::bayWeight(const Bay& b, float a, float fade) const {
     const float d = std::fabs(std::remainder(a - b.a, 2.0f * (float) M_PI)) * b.r;
-    if (d >= b.half + b.fade) return 0.0f;
-    const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / b.fade));
+    if (d >= b.half + fade) return 0.0f;
+    const float t = std::min(1.0f, std::max(0.0f, (d - b.half) / fade));
     return 1.0f - t * t * (3.0f - 2.0f * t);
 }
 
 float TtpRenderer::Shoreline::sunk(float a) const {
     float k = 0;
     for (const Bay& b : bays) {
-        if (b.sunk) k = std::max(k, bayWeight(b, a));
+        if (b.sunk) k = std::max(k, bayWeight(b, a, std::max(b.fade, kSinkFade)));
     }
     return k;
 }
@@ -2088,7 +2090,7 @@ float TtpRenderer::Shoreline::at(float a) const {
     const float crinkle = SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
     float r = sup + SHORE_MARGIN + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a)) + crinkle;
     for (const Bay& b : bays) {
-        const float w = bayWeight(b, a);
+        const float w = bayWeight(b, a, b.fade);
         if (w > 0) r = std::min(r, r + (sup + b.gap + 0.3f * crinkle - r) * w);
     }
     return r;
@@ -2104,23 +2106,19 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     if (!tb.hasWater || !mBlendMaterial) return;
     constexpr float WATER_INNER = 135.0f;
     constexpr float WATER_SHADE = 1.0f; // the flat sheet's constant Lambert term
-    // 144 spokes = 2.5° steps: chord sag at the shore radius is ~0.03u and the
-    // sharpest crinkle harmonic (29·a) still gets ~5 samples per cycle.
-    constexpr int SEG = 144;
-    constexpr float SHORE_FADE = 220, SWASH_RANGE = 0.62f, SWASH_ZONE = 20;
-    // Where a band lies behind a causeway (a sunk bay, kSeaSink): the shore's
-    // own bands reach kSinkInset in under the beach, the next two stand where
-    // the sunk sea holds and where it is back at the plain's level, the open
-    // sea's stay put. Moving rings costs nothing; adding them costs every
+    constexpr float SHORE_FADE = 220;
+    // Where a band lies behind a causeway (a sunk bay, kSeaSink): two stand
+    // where the sunk sea holds and where it is back at the plain's level,
+    // the rest stay put. Moving rings costs nothing; adding them costs every
     // spoke round the island.
-    enum Sunk { INSET, HOLD, OPEN, KEEP };
+    enum Sunk { HOLD, OPEN, KEEP };
     struct Band { float r, colour, alpha; Sunk sunk; };
     // colour 0..2 = foam→shallow→deep
     static const Band BANDS[9] = {
-        { WATER_INNER,        0,     0,     INSET },
-        { WATER_INNER + 1.2f, 0,     0.9f,  INSET },
-        { WATER_INNER + 4.0f, 0,     0.92f, INSET },
-        { WATER_INNER + 4.4f, 0.8f,  0.88f, INSET },
+        { WATER_INNER,        0,     0,     KEEP },
+        { WATER_INNER + 1.2f, 0,     0.9f,  KEEP },
+        { WATER_INNER + 4.0f, 0,     0.92f, KEEP },
+        { WATER_INNER + 4.4f, 0.8f,  0.88f, KEEP },
         { WATER_INNER + 9,    0.9f,  0.86f, HOLD },
         { WATER_INNER + 20,   1,     0.95f, OPEN },
         { WATER_INNER + 60,   1.55f, 1,     KEEP },
@@ -2129,38 +2127,19 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     };
     static const float WET[5][2] = { // [radius, alpha]
         { WATER_INNER - 13,   0 },
-        { WATER_INNER - 8.5f, 0.10f },
-        { WATER_INNER - 8.0f, 0.24f },
+        { WATER_INNER + kWetEdge, 0.08f },   // the shelf's edge: the land stands from here (mWetLine)
+        { WATER_INNER - 7.5f, 0.24f },       // the tide line, soft enough to hide the spokes' chords
         { WATER_INNER - 2,    0.42f },
         { WATER_INNER + 2.5f, 0.5f },
     };
-    static const float SWASH_H[3][2] = { { 3, 1 }, { 7, 0.55f }, { 13, 0.3f } };
     // The sailboat anchors off the same curve, from buildLandmarks after this
     // stack is gone, so the stored copy owns its Shoreline.
     const Shoreline shore = shoreline(tb);
     mShoreFn = [shore](float a) { return shore.at(a); };
-    const auto harm = Shoreline::harm;
-    const float* swashPh = shore.swashPh;
-    std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1), landK(SEG + 1);
-    std::vector<float> sup(SEG + 1), calm(SEG + 1);
-    float outer = 0;
-    for (int si = 0; si <= SEG; si++) {
-        const float a = (float) (si % SEG) / SEG * 2.0f * (float) M_PI;
-        cosA[si] = std::cos(a); sinA[si] = std::sin(a);
-        shoreR[si] = shore.at(a);
-        swashF[si] = 1 + SWASH_RANGE * harm(SWASH_H, 3, swashPh, a);
-        outer = std::max(outer, shoreR[si]);
-        // Where a bay brings the sea in to the road, the damp sand narrows
-        // with the beach, so the strip between them is not all wet. The open
-        // shore stands well past WET_FULL, so it keeps its band whole.
-        constexpr float WET_FULL = 20.0f;
-        sup[si] = shore.bays.empty() ? 0.0f : shore.support(a);
-        landK[si] = shore.bays.empty() ? 1.0f
-                : std::min(1.0f, std::max(0.35f, (shoreR[si] - sup[si]) / WET_FULL));
-        // Behind a causeway the water is a lagoon: no surf breaks on its
-        // shore, and the foam band read as a white line painted along the road.
-        calm[si] = shore.sunk(a);
-    }
+    // The spokes are setupTerrain's: the land was laid against these very rings.
+    const ShoreSpokes& sp = mSpokes;
+    constexpr int SEG = kShoreSeg;
+    const std::vector<float>& cosA = sp.cosA, & sinA = sp.sinA, & sup = sp.sup, & calm = sp.calm;
     const float gy = tb.groundY;
     const float3 foam = srgbToLinear(tb.waterFoam);
     const float3 shallow = srgbToLinear(tb.waterShallow);
@@ -2176,14 +2155,10 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
             // The outline relaxes back to a circle as the water deepens — out
             // past the fog the far rings only need to reach the sky.
             const float t = fade ? std::min(1.0f, std::fabs(off) / SHORE_FADE) : 0.0f;
-            const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
             for (int si = 0; si <= SEG; si++) {
-                const float o = off < 0 ? off * landK[si] : off;
-                float r = shoreR[si] * (1 - t) + outer * t
-                        + o * (1 + (swashF[si] - 1) * sw);
+                float r = sp.at(si, off) + (sp.outer - sp.r[si]) * t;
                 if (sunk && calm[si] > 0) {
-                    const float to = sunk[ri] == INSET ? r - kSinkInset * sw
-                                   : sunk[ri] == HOLD ? sup[si] + kSinkHold
+                    const float to = sunk[ri] == HOLD ? sup[si] + kSinkHold
                                    : sunk[ri] == OPEN ? sup[si] + kSinkOpen : r;
                     r += (to - r) * calm[si];
                 }
@@ -3061,7 +3036,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         const ttp::rt::GlbMeshNode* node;
         const ttp::kitcolors::Mesh* colors;
         std::vector<float3> factor;
-        bool drape, wall, turf;
+        bool drape, wall, turf, grade;
     };
     std::vector<Part> parts;
     for (const auto& [slot, mesh] : still) {
@@ -3072,8 +3047,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         }
         if (!node) return false;
         const bool drape = mTrack && isDrapeName(node->name.c_str());
+        const bool grade = drape && isGradeName(node->name.c_str());
         Part p{ slot, node, &colors.meshes[mesh], {}, drape, drape && node->name.compare(0, 10, "drape_wall") == 0,
-                drape && node->name.compare(0, 10, "drape_turf") == 0 };
+                drape && (node->name.compare(0, 10, "drape_turf") == 0
+                        || node->name.compare(0, 16, "drape_grade_turf") == 0), grade };
         if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
             return false;
         }
@@ -3107,7 +3084,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
                     p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot,
-                    p.wall ? &wallAt : nullptr, p.turf);
+                    p.wall ? &wallAt : nullptr, p.turf, p.grade);
             g.sources.push_back(src);
         }
         const auto row = mSetRowOf.find(inst);

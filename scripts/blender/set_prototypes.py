@@ -6460,25 +6460,52 @@ def sled(x, y, z, yaw, color=0xcf534f, L=0.6):
     for sd in (-1, 1):
         box((L, 0.06, 0.06), (x + sd * 0.09 * s, y + 0.03, z + sd * 0.09 * c), 0x555b66, yaw=yaw)
 
-def cabin_hut(w, h, d, at, wall, roof, yaw=0.0):
-    """A small gabled hut at its real size (one or two units across), door on
-    +X turned by `yaw`, trimmed as hut() is at the size of its parts: a grey
-    plinth, a dark door in a white frame, a window either side, a chunky roof
-    under a grey ridge."""
+def cabin_hut(w, h, d, at, wall, roof, yaw=0.0, sunk=0.3, chimney=False):
+    """A small gabled hut at its real size (one to a few units across), door
+    in the gable on +X turned by `yaw`, a window in each eave wall: the walls
+    and both gables one solid, `h` to the eaves, running `sunk` under `at` so
+    it stands in the snow of a slope with no footing (give `at` the ground at
+    its door and let the hill bury its back); a low roof of dark boards lying
+    on the gables, oversailing them all round, and the snow (`roof`) lying on
+    the boards a little inside their edge, closed over the ridge. `chimney`
+    stands a stone stack through the roof behind the ridge's middle. Returns
+    the stack's top, for its smoke."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
-    def part(dx, dy, dz, size, color, pitch=0.0):
-        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw, pitch=pitch)
-    part(0, h / 2, 0, (w, h, d), wall)
-    part(0, 0.04, 0, (w + 0.08, 0.08, d + 0.08), 'grey')
+    def spot(dx, dy, dz):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
+    def part(dx, dy, dz, size, color):
+        return box(size, spot(dx, dy, dz), color, yaw=yaw)
+    gy = yaw + math.pi / 2                       # the roof's frame: its ridge along Z
+    G = local(x, z, gy)
+    rise = 0.3 * d
+    gabled(G, y - sunk, d, w, h + sunk, rise, wall)
+    a = math.atan2(rise, d / 2)
+    ov = min(0.2, max(0.08, 0.07 * d))
+    tb, ts = 0.06, 0.08 + 0.025 * d
+    sl = math.hypot(d / 2, rise) + ov
+    for k in (-1, 1):
+        for run, off, t, color in ((sl, tb / 2, tb, 0x6e4a32), (sl - 0.04, tb + ts / 2, ts, roof)):
+            o = box((run, t, w + 2 * ov - (0.0 if t == tb else 0.08)),
+                    G(k * (run / 2 * math.cos(a) + off * math.sin(a)), y + h + rise - run / 2 * math.sin(a) + off * math.cos(a), 0),
+                    color, yaw=gy, roll=k * a)
+            if t != tb:
+                snowy(o, 0.5)
+    up = (tb + ts) * math.cos(a)                 # the snow closed over the ridge
+    snowy(box((2 * (tb + ts) * math.sin(a) + 0.02, up, w + 2 * ov - 0.08), G(0, y + h + rise + up / 2 + 0.01, 0), roof, yaw=gy), 0.5)
     dw = d * 0.34
     part(w / 2 + 0.02, h * 0.37, 0, (0.06, h * 0.74 + 0.06, dw + 0.08), 'white')
     part(w / 2 + 0.045, h * 0.34, 0, (0.06, h * 0.68, dw), 'slate')
     for k in (-1, 1):
         part(0, h * 0.58, k * (d / 2 + 0.02), (w * 0.4 + 0.08, h * 0.3 + 0.08, 0.06), 'white')
         part(0, h * 0.58, k * (d / 2 + 0.045), (w * 0.4, h * 0.3, 0.06), 'slate')
-        part(0, h + 0.1, k * (d + 0.2) / 4, (w + 0.2, 0.1, (d + 0.2) * 0.55), roof, pitch=-k * 0.6)
-    part(0, h + 0.13 + 0.155 * (d + 0.2), 0, (w + 0.24, 0.09, 0.14), 'grey')
+    if not chimney:
+        return None
+    cw = max(0.2, 0.1 * d)
+    lo, top = h + 0.5 * rise, h + rise + up + 0.22
+    part(-0.25 * w, (lo + top) / 2, -0.22 * d, (cw, top - lo, cw), 0x868ba1)
+    snowy(part(-0.25 * w, top + 0.035, -0.22 * d, (cw + 0.06, 0.07, cw + 0.06), 0xf3f7fb), 0.5)
+    return spot(-0.25 * w, top + 0.1, -0.22 * d)
 
 def pylon(at, h, yaw, ground=0.0):
     """A lift tower standing on `ground`, its crossarm at `h` across the line
@@ -6666,52 +6693,51 @@ for _k in ('a', 'b'):
         GROW[_n] = 1.0
 
 # Powder's resort village up the foothill's foot dead ahead of the long run
-# north, outside the bend onto the start straight: each building (x, z,
-# ground) in the piece's frame (the ski mountain's: u 0.9, lat -32.5, yaw
-# 180, +X to the road, -Z on up the lap), the ground the renderer draws there
-# over the plain, SAMPLED like a stand's (FORESTS): re-sample after moving the
-# piece or the land.
-RESORT_LODGE = (26.5, -37.5, 3.3)
-RESORT_CHALETS = ((33.0, -33.0, 1.66, 3.6, 2.7, 0x9a5f3c), (21.0, -44.5, 5.34, 3.4, 2.6, 0xcf534f),
-                  (31.5, -42.5, 4.92, 3.8, 2.8, 0x9a7b55), (15.0, -34.5, 0.99, 3.4, 2.6, 0x9a7b55))
+# north, outside the bend onto the start straight, in the piece's frame (the
+# ski mountain's: u 0.9, lat -32.5, yaw 180, +X to the road, -Z on up the lap
+# and up the hill). The hill falls toward +Z some 0.4 a unit, so every
+# building stands IN it: its floor (x, z, floor) a step over the ground the
+# renderer draws at its downhill wall, SAMPLED like a stand's (FORESTS), its
+# walls running on under the snow and the hill burying its back. Re-sample
+# after moving the piece or the land.
+RESORT_LODGE = (26.5, -37.5, 3.0)
+RESORT_CHALETS = ((33.0, -33.0, 1.55, 0x9a5f3c), (20.0, -39.5, 2.9, 0xcf534f),
+                  (31.5, -42.5, 4.5, 0x9a7b55), (15.0, -34.5, 0.9, 0x9a7b55))
 RESORT_FIRS = ((12.5, -37.5, 1.31, 1.9), (13.0, -41.0, 2.42, 2.1), (25.0, -45.0, 6.15, 1.8))
 RESORT_LANES = (((23.0, -27.0), (20.0, -31.0), (17.5, -32.6), (21.0, -34.6), (26.5, -34.8), (31.0, -34.4), (33.0, -31.2)),
-                ((31.0, -34.4), (33.4, -37.6), (31.6, -40.4), (26.0, -41.6), (21.2, -42.4)))
+                ((31.0, -34.4), (33.4, -37.6), (31.6, -40.4), (26.0, -41.6), (22.6, -39.4), (20.0, -37.6)))
 
 def powder_resort(lite=False):
-    """Powder's resort village: the lodge, a long hall with a stone ground
-    floor, a balcony down its front and a broad snowed roof, chalets below
-    and above it up the slope, each on a footing let into the hill, all
-    facing down the road that drives at them; a trodden lane climbs from
-    the valley station's chalets past every door, lamps along it."""
-    lx, lz, lg = RESORT_LODGE
-    box((7.4, lg + 0.4, 3.8), (lx, lg / 2, lz), 0x868ba1)                  # its footing, down through the hill
-    cabin_hut(7.0, 2.4, 3.4, (lx, lg + 0.2, lz), 0x9a5f3c, 0xeef4f9)
-    box((7.06, 1.0, 3.46), (lx, lg + 0.7, lz), 0x868ba1)                   # the stone ground floor
+    """Powder's resort village: the lodge, a long hall across the slope, its
+    stone ground floor let into the hill under the timber one, a balcony
+    down its front and a broad snowed roof; chalets below and above it, each
+    a broad low gable facing down the hill to the road that drives at them,
+    a stone step at its door; a trodden lane climbs from the valley
+    station's chalets past every door, lamps along it."""
+    lx, lz, b = RESORT_LODGE
+    top = cabin_hut(7.0, 2.4, 3.4, (lx, b, lz), 0x9a5f3c, 0xeef4f9, sunk=0.1, chimney=not lite)
+    box((7.06, b + 1.2, 3.46), (lx, (b + 1.0 - 0.2) / 2, lz), 0x868ba1)    # the stone ground floor, on down through the hill
+    box((6.6, 0.1, 0.7), (lx, b + 1.1, lz + 2.0), 0x8a6a46)                # the balcony down its front
+    for k in range(0 if lite else 4):                                      # its posts, down into the snow
+        box((0.12, b + 1.4, 0.12), (lx - 3.1 + 2.07 * k, (b + 1.2 - 0.2) / 2, lz + 2.3), 0x8a6a46)
     if not lite:
-        box((0.6, 1.0, 0.6), (lx - 1.8, lg + 3.3, lz - 0.7), 0x868ba1)     # the chimney
-        snowy(box((0.7, 0.12, 0.7), (lx - 1.8, lg + 3.86, lz - 0.7), 0xf3f7fb), 0.5)
-    box((6.6, 0.1, 0.7), (lx, lg + 1.3, lz + 2.0), 0x8a6a46)               # the balcony down its front
-    for k in range(0 if lite else 4):
-        box((0.12, 1.3, 0.12), (lx - 3.1 + 2.07 * k, lg + 0.75, lz + 2.3), 0x8a6a46)
-    if not lite:
-        box((6.6, 0.3, 0.08), (lx, lg + 1.62, lz + 2.32), 0x8a6a46)
+        box((6.6, 0.3, 0.08), (lx, b + 1.42, lz + 2.32), 0x8a6a46)
     if not lite:
         for k in range(4):                                                 # the upper floor's windows, shuttered red
             wx = lx - 2.55 + 1.7 * k
-            box((0.6, 0.6, 0.06), (wx, lg + 1.95, lz + 1.73), 'slate')
+            box((0.6, 0.6, 0.06), (wx, b + 1.75, lz + 1.73), 'slate')
             for sd in (-1, 1):
-                box((0.2, 0.6, 0.07), (wx + sd * 0.42, lg + 1.95, lz + 1.73), 0xcf534f)
-        box((0.9, 0.9, 0.06), (lx - 1.6, lg + 0.75, lz + 1.76), 'slate')   # the ground floor's
-        box((0.9, 0.9, 0.06), (lx + 1.6, lg + 0.75, lz + 1.76), 'slate')
-    for n, (x, z, g, w, d, wall) in enumerate(RESORT_CHALETS):
+                box((0.2, 0.6, 0.07), (wx + sd * 0.42, b + 1.75, lz + 1.73), 0xcf534f)
+        box((0.9, 0.9, 0.06), (lx - 1.6, b + 0.4, lz + 1.76), 'slate')     # the ground floor's
+        box((0.9, 0.9, 0.06), (lx + 1.6, b + 0.4, lz + 1.76), 'slate')
+    for n, (x, z, f, wall) in enumerate(RESORT_CHALETS):
         if lite:
             break                                                          # the box keeps the lodge and its lane
-        ry = -math.pi / 2 + (0.12, -0.1, 0.08, -0.14)[n]                    # doors down the road
-        box((d + 0.3, g + 0.4, w + 0.3), (x, g / 2, z), 0x868ba1, yaw=ry + math.pi / 2)
-        cabin_hut(w, 1.7, d, (x, g + 0.2, z), wall, 0xeef4f9, yaw=ry)
-        box((0.5, 1.2, 0.5), (x - 0.6, g + 2.6, z - 0.7), 0x868ba1)
-        snowy(box((0.6, 0.12, 0.6), (x - 0.6, g + 3.26, z - 0.7), 0xf3f7fb), 0.5)
+        ry = -math.pi / 2 + (0.12, -0.1, 0.08, -0.14)[n]                    # doors down the hill
+        w, d = (2.7, 2.6, 2.8, 2.6)[n], (3.6, 3.4, 3.8, 3.4)[n]
+        cabin_hut(w, 1.7, d, (x, f, z), wall, 0xeef4f9, yaw=ry, sunk=f + 0.2, chimney=True)   # (its walls down to the plain: set-check)
+        sx, sz = turned(x, z, ry, w / 2 + 0.17, 0.0)
+        box((0.34, f + 0.18, d * 0.34 + 0.16), (sx, (f - 0.02 - 0.2) / 2, sz), 0x868ba1, yaw=ry)   # the step at its door
     if not lite:
         for x, z, g, k in RESORT_FIRS:
             pine((x, g - 0.35 * k, z), k)
@@ -6736,8 +6762,8 @@ def powder_resort(lite=False):
             box((0.44, 0.08, 0.08), (x - 0.18, 1.6, z), 0x38383d)
             box((0.22, 0.22, 0.22), (x - 0.38, 1.47, z), 0xffc044)
     draped('lanes', lanes)
-    if not lite:
-        marker('anim_smoke#lodge', (lx - 1.8, lg + 4.2, lz - 0.7))
+    if top:
+        marker('anim_smoke#lodge', top)
 
 @piece(1.0)
 def powder_resort_piece():
@@ -6838,15 +6864,12 @@ def ski_lift(lite=False):
     # the resort's chalets by the valley station, out on the verge a few
     # units from the kerb and a few car-lengths long each, so they read from
     # the seat (round the station at a real cabin's size they were specks
-    # behind the kerb); each on its footing, on the verge as it is drawn
-    for (lx, lz, w, d, wall, ry) in ((8.2, 1.4, 3.8, 2.8, 0x9a5f3c, 0.3), (8.8, 6.8, 3.2, 2.5, 0xcf534f, -0.2),
-                                     (4.6, 10.6, 3.4, 2.6, 0x9a7b55, 0.5))[:2 if lite else 3]:
-        box((w + 0.2, 0.5, d + 0.2), (V[0] + lx, 0.2, V[1] + lz), 0x868ba1, yaw=ry)
-        cabin_hut(w, 1.7, d, (V[0] + lx, 0.4, V[1] + lz), wall, 0xeef4f9, yaw=ry)
-        if lite:
-            continue
-        box((0.5, 1.3, 0.5), (V[0] + lx - 0.8, 2.9, V[1] + lz - 0.5), 0x868ba1)
-        snowy(box((0.6, 0.12, 0.6), (V[0] + lx - 0.8, 3.6, V[1] + lz - 0.5), 0xf3f7fb), 0.5)
+    # behind the kerb); each standing in the verge's snow as it is drawn
+    # (each floor a step over the ground drawn at its door, sampled; the
+    # walls run on under the snow)
+    for (lx, lz, f, w, d, wall, ry) in ((8.2, 1.4, 0.6, 3.8, 2.8, 0x9a5f3c, 0.3), (8.8, 6.8, 0.38, 3.2, 2.5, 0xcf534f, -0.2),
+                                        (4.6, 10.6, 0.14, 3.4, 2.6, 0x9a7b55, 0.5))[:2 if lite else 3]:
+        cabin_hut(w, 1.7, d, (V[0] + lx, f, V[1] + lz), wall, 0xeef4f9, yaw=ry, sunk=0.7, chimney=not lite)
     for k in range(0 if lite else 2):
         snow_person(V[0] + 3.2 + 0.5 * k, 0, V[1] - 0.6 + 0.9 * (k % 2), COATS[k], COATS[(k + 2) % 6], yaw=1.2 * k)
     # top station on the summit, its hut behind it
@@ -7042,15 +7065,12 @@ def powder_chairlift(lite=False):
                   (12.4, 2.0, 1.6, 0x61cb8b, 0.06, False), (16.2, 2.3, 1.7, 0xcf534f, -0.05, True))
         for n, (z, w, d, wall, ry, smoke) in enumerate(HOUSES):
             hx = -11.9 - 0.3 * (n % 2)
-            cabin_hut(w, 1.05, d, (hx, -0.15, z), wall, 0xeef4f9, yaw=ry)
+            cabin_hut(w, 1.05, d, (hx, -0.15, z), wall, 0xeef4f9, yaw=ry, chimney=smoke and not lite)
             # its path to the lane
             if lite:
                 continue
             x0, x1 = hx + w / 2, lane_x(z) - 0.6
             snowy(box((x1 - x0 + 0.2, 0.06, 0.6), ((x0 + x1) / 2, 0.03, z), LANE), 0.3)
-            if smoke:                                                           # a chimney on the back slope
-                box((0.3, 0.6, 0.3), (hx - w * 0.25, 1.35, z - d * 0.2), 0x868ba1)
-                snowy(box((0.38, 0.08, 0.38), (hx - w * 0.25, 1.68, z - d * 0.2), 0xeef4f9), 0.4)
         # the rail fence between the lane and the road, open at the square
         fz = [-18.0 + 1.5 * i for i in range(25)]
         for za, zb in zip(fz, fz[1:]):
@@ -7125,7 +7145,7 @@ FORESTS = {
     'avalanche-forest-e': ((-6.4, -5.8, 11.28, 2.05, 0, 0), (-2.9, -10.2, 11.08, 1.40, 0, 0), (-6.2, -8.0, 12.37, 2.17, 0, 0), (-2.9, -8.6, 10.59, 1.96, 0, 0), (-0.9, -7.3, 8.93, 1.68, 1, 0), (-5.3, -10.0, 12.41, 2.01, 0, 0), (-3.4, -6.1, 10.01, 2.10, 1, 0), (-3.3, -3.3, 9.07, 1.45, 1, 0), (-6.0, -3.6, 9.98, 1.59, 0, 0), (-2.4, -4.6, 8.92, 1.58, 1, 0), (-4.5, -8.7, 11.56, 1.87, 0, 0), (9.4, 0.5, 1.14, 1.59, 0, 1), (6.4, 2.0, 1.94, 1.87, 1, 1), (6.5, 0.2, 2.30, 2.11, 0, 1), (6.0, 4.1, 1.64, 2.68, 1, 0), (4.7, -0.5, 3.28, 1.99, 1, 0), (3.5, 2.4, 3.12, 1.82, 0, 0), (3.5, 0.6, 3.59, 1.60, 0, 0), (7.3, 3.3, 1.37, 1.53, 1, 1), (9.9, 1.8, 0.70, 1.40, 0, 1), (2.0, -0.2, 4.72, 1.68, 1, 0), (0.6, -0.3, 5.63, 2.09, 0, 0), (-1.1, -0.8, 6.86, 1.59, 1, 0), (2.1, 2.5, 3.81, 2.11, 0, 0), (-0.8, 1.2, 6.06, 1.56, 0, 0), (1.3, -2.0, 5.73, 2.13, 1, 0), (0.5, 2.0, 4.98, 1.43, 0, 0), (-2.9, 4.5, 4.85, 1.78, 0, 0), (1.3, 4.1, 3.80, 2.06, 1, 0), (-3.9, 2.8, 5.97, 1.45, 1, 0), (-2.5, 2.6, 5.77, 2.11, 0, 0), (-0.4, 5.8, 3.51, 1.61, 0, 0), (-3.7, 1.3, 6.74, 2.09, 1, 0), (-0.2, -2.0, 6.68, 1.87, 1, 0), (-1.4, 3.9, 4.77, 1.84, 0, 0), (-3.1, -0.9, 7.76, 2.14, 0, 0), (0.9, 5.4, 3.37, 1.50, 0, 0), (-5.3, 8.5, 3.32, 1.76, 1, 0), (3.9, 9.9, 1.30, 1.89, 0, 0), (8.5, 7.4, 0.41, 1.64, 0, 1), (-10.0, 8.5, 4.71, 1.65, 1, 0)),
     'avalanche-forest-f': ((-9.3, 12.6, 0.18, 1.68, 0, 1), (-7.7, 12.6, 0.33, 1.75, 0, 1), (-6.4, 11.9, 0.41, 1.40, 0, 1), (-4.9, 11.5, 0.52, 1.82, 1, 1), (-3.4, 11.2, 0.65, 1.59, 0, 0), (-4.1, 5.7, 0.49, 1.19, 2, 1), (-4.6, 2.4, 0.24, 1.04, 1, 1), (-2.1, 10.4, 1.07, 1.74, 0, 0), (-3.9, 7.1, 0.54, 1.39, 3, 1), (-3.2, 1.9, 1.31, 2.06, 0, 1), (-0.6, 10.1, 1.88, 1.42, 1, 0), (-1.3, 7.9, 1.97, 1.29, 3, 0), (-1.6, 1.8, 2.94, 1.82, 0, 1), (0.8, 9.5, 3.15, 2.11, 0, 0), (0.1, 8.1, 2.93, 1.33, 2, 0), (-0.2, 1.3, 4.70, 2.14, 0, 1), (2.2, 9.2, 4.99, 1.51, 1, 0), (0.6, 3.2, 5.15, 1.13, 3, 0), (1.2, 0.6, 6.52, 1.74, 1, 0), (3.7, 8.9, 7.20, 1.57, 1, 0), (3.1, 4.1, 7.79, 1.29, 2, 0), (2.6, 0.1, 8.37, 2.04, 0, 0), (5.1, 8.4, 9.27, 1.99, 0, 0), (3.7, 3.3, 8.82, 1.06, 2, 0), (4.0, -0.4, 10.24, 2.11, 1, 0), (6.6, 8.0, 10.50, 2.06, 0, 0), (5.9, 2.6, 11.66, 0.77, 0, 0), (5.4, -0.8, 12.21, 1.41, 0, 0), (8.0, 7.6, 11.80, 1.78, 0, 0), (7.0, -0.9, 13.93, 1.55, 0, 0), (9.4, 7.0, 13.17, 1.64, 0, 0), (8.3, -1.7, 16.36, 1.81, 0, 0), (10.8, 6.6, 14.39, 1.80, 1, 0), (9.8, -2.0, 18.21, 1.84, 1, 0), (12.3, 6.4, 15.54, 2.07, 0, 0), (11.5, 2.9, 17.26, 0.97, 0, 0), (11.2, -2.4, 19.44, 2.12, 1, 0), (12.7, -2.6, 20.61, 1.51, 1, 0), (1.2, 11.7, 3.87, 2.19, 1, 0), (4.9, 9.8, 7.99, 2.95, 0, 0), (2.8, 11.3, 5.39, 1.78, 1, 0), (3.1, 13.0, 4.19, 1.76, 1, 0), (-0.5, 11.7, 1.92, 2.19, 1, 0), (-6.8, -13.6, 1.04, 1.72, 0, 1), (-5.2, -13.3, 2.22, 1.62, 1, 1), (-4.0, -17.9, 4.70, 1.98, 0, 0), (-7.0, -16.5, 1.94, 1.49, 0, 1), (-4.4, -15.1, 3.59, 1.63, 1, 1), (-5.2, -19.4, 4.21, 1.70, 1, 0), (-7.3, -19.7, 2.68, 1.87, 0, 1), (-7.8, -18.0, 1.69, 2.19, 0, 1), (-5.1, -16.7, 3.62, 3.00, 0, 1), (-7.5, -15.2, 1.10, 2.12, 0, 1), (-3.6, -16.2, 4.66, 1.76, 0, 0), (-5.8, -15.0, 2.42, 1.54, 0, 1), (3.3, -17.8, 10.08, 1.99, 0, 0), (1.3, -20.0, 8.75, 2.94, 0, 0), (-0.4, -17.2, 7.08, 1.59, 0, 0), (1.7, -17.3, 8.61, 2.04, 0, 0), (1.8, -15.4, 8.46, 1.53, 0, 0), (0.6, -18.7, 7.99, 1.73, 0, 0), (4.1, -16.7, 10.57, 2.12, 0, 0), (3.1, -19.6, 10.18, 2.05, 0, 0), (-7.7, 18.7, 1.17, 1.71, 0, 0), (-3.7, 16.2, 1.28, 1.80, 1, 0), (-3.6, 19.5, 1.45, 1.57, 1, 0), (-2.1, 18.0, 1.42, 2.02, 0, 0), (-5.1, 17.9, 1.32, 1.94, 0, 0), (-7.9, 16.8, 0.90, 1.62, 0, 0), (-5.5, 19.4, 1.38, 2.13, 1, 0), (-6.6, 15.3, 0.83, 1.54, 1, 0), (-6.0, 16.8, 1.11, 1.71, 0, 0), (-3.2, -2.8, 1.73, 1.86, 0, 1), (-2.7, -0.7, 1.93, 1.82, 1, 1), (-3.9, -4.4, 1.30, 1.79, 0, 1), (-1.5, -3.6, 3.95, 1.82, 1, 1), (-1.4, -2.0, 3.72, 2.12, 0, 1), (-4.3, -1.0, 0.28, 1.17, 0, 1), (1.2, -10.7, 7.72, 1.71, 1, 0), (-1.4, -11.2, 5.32, 2.90, 1, 0), (-2.8, -14.5, 4.69, 2.76, 1, 0), (4.2, -12.9, 10.97, 2.01, 0, 0), (-3.8, -13.3, 3.46, 2.08, 0, 1), (0.4, -12.2, 6.92, 2.13, 0, 0), (-0.9, -14.1, 5.95, 1.85, 0, 0), (3.4, -11.5, 10.30, 1.50, 0, 0), (9.1, 11.0, 9.68, 1.90, 1, 0), (9.6, -5.5, 18.73, 1.62, 0, 0), (4.0, 16.1, 4.32, 2.14, 0, 0), (5.7, -10.0, 13.15, 2.09, 0, 0), (7.8, 14.1, 6.44, 1.61, 0, 0), (-8.4, -11.7, 0.23, 1.50, 1, 1), (-6.9, -9.5, 0.22, 1.18, 0, 1), (-4.4, 0.7, 0.28, 1.33, 1, 1)),
     'avalanche-forest-g': ((7.3, 0.9, 11.51, 1.41, 0, 0), (7.3, 3.3, 11.29, 1.82, 0, 0), (9.5, 2.7, 12.82, 2.03, 0, 0), (9.7, 0.1, 12.92, 2.06, 1, 0), (8.4, 5.0, 11.96, 1.42, 0, 0), (5.3, 1.4, 10.18, 1.52, 0, 0), (7.8, -0.9, 11.42, 1.91, 0, 0), (0.4, -15.2, 1.63, 2.17, 0, 0), (-3.6, -11.2, 1.49, 1.57, 0, 0), (-1.0, -9.6, 3.51, 1.78, 0, 0), (-2.9, -15.3, 0.86, 1.61, 0, 0), (-0.9, -12.8, 2.06, 1.78, 0, 0), (-1.4, -14.7, 1.05, 1.88, 1, 0), (1.5, -12.7, 3.29, 1.66, 1, 0), (8.7, 1.4, 12.38, 2.10, 1, 0), (8.7, 6.3, 12.11, 1.79, 0, 0), (6.9, 5.5, 10.93, 1.41, 1, 0), (10.0, 5.0, 12.93, 1.61, 1, 0), (4.0, -1.7, 8.83, 1.68, 0, 0), (2.6, 2.2, 8.40, 1.52, 0, 0), (-1.1, -0.6, 5.67, 1.67, 1, 0), (2.2, -2.4, 7.49, 1.79, 0, 0), (-1.8, 1.1, 5.31, 2.03, 1, 0), (0.8, -1.0, 7.03, 2.11, 0, 0), (-8.8, 7.6, 0.37, 1.18, 0, 1), (-1.5, -18.3, 0.90, 1.88, 0, 0), (1.9, -18.6, 1.20, 1.43, 0, 0), (1.5, -16.2, 1.73, 1.89, 1, 0), (-3.3, -19.0, 0.59, 2.01, 0, 0), (0.4, -17.6, 1.19, 1.83, 0, 0), (-2.4, -16.6, 0.88, 1.70, 1, 0), (-6.3, 19.9, 1.67, 1.41, 0, 0), (2.8, -6.9, 6.40, 1.93, 0, 0), (-7.4, 0.0, 0.76, 1.31, 0, 1), (-7.7, 2.9, 0.66, 0.98, 1, 1)),
-    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
+    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
     'avalanche-forest-i': ((-11.0, 15.3, 13.77, 2.62, 0, 0), (-8.6, 12.2, 17.03, 2.74, 0, 0), (-10.1, 13.9, 15.40, 1.64, 0, 0), (-6.3, 17.0, 11.97, 1.55, 0, 0), (-4.0, 15.9, 10.65, 2.01, 0, 0), (-7.0, 19.8, 13.63, 1.57, 1, 0), (-3.5, 18.0, 11.23, 2.12, 0, 0), (-8.5, 19.5, 14.26, 2.09, 1, 0), (-13.7, 15.8, 15.18, 1.70, 1, 0), (-10.2, 17.9, 13.48, 2.09, 0, 0), (-11.2, 16.7, 12.81, 2.05, 0, 0), (-16.4, 17.1, 15.57, 1.50, 0, 0), (-13.5, 18.3, 14.18, 2.85, 0, 0), (-21.2, 18.8, 18.02, 2.06, 1, 0), (11.3, -5.2, 13.12, 2.08, 0, 0), (12.4, -8.8, 10.07, 2.06, 1, 0), (10.0, -9.6, 12.63, 1.78, 1, 0), (10.1, -4.3, 14.57, 1.74, 0, 0), (13.9, -6.7, 10.19, 1.95, 0, 0), (9.6, -11.2, 12.27, 1.91, 0, 0), (9.7, -7.2, 13.90, 1.66, 0, 0), (7.2, -10.8, 15.98, 1.97, 0, 0), (-3.9, -24.5, 15.86, 1.95, 0, 0), (-5.1, -23.4, 17.80, 2.09, 1, 0), (-1.5, -24.3, 13.34, 2.85, 0, 0), (-0.8, -21.7, 15.63, 2.95, 1, 0), (-2.4, -20.9, 18.08, 2.07, 1, 0), (10.9, -21.5, 3.60, 2.01, 1, 2), (5.0, -30.8, 5.77, 1.42, 0, 2), (7.8, 8.4, 10.02, 1.86, 0, 0), (4.9, 5.3, 14.99, 2.13, 0, 0), (16.3, -17.6, 2.89, 1.98, 0, 2), (5.4, 12.3, 7.57, 1.42, 0, 0), (9.4, -19.3, 6.25, 1.69, 1, 2)),
     'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
@@ -7676,6 +7696,51 @@ def woodpile(x, z, k=0.3):
     snowy(box((3.4 * k, 0.2 * k, 3.5 * k), (x, 2.2 * k, z), 0xeef4f9, roll=-0.2))
     cyl(0.5 * k, 0.6 * k, (x + 2.4 * k, 0, z + 1.6 * k), 0x8a6a46, segs=8)
 
+def snowed_roof(cx, cz, eave, half, length, over, a, tb, ts):
+    """A snowed gable roof, its ridge along X over (cx, cz): dark boards whose
+    underside lies on the wall heads (`eave` high, `half` either side of the
+    ridge) at pitch `a`, oversailing them by `over` and `length` long, `tb`
+    thick; the snow lying on the boards `ts` deep, a little inside their
+    edge and closed over the ridge. Returns the ridge's height. (Two slabs
+    of snow crossing under a grey ridge beam read as planks.)"""
+    ridge = eave + half * math.tan(a)
+    run = half + over
+    for s in (-1, 1):
+        for t, up, trim, color in ((tb, tb / 2, 0.0, 0x6e4a32), (ts, tb + ts / 2, 0.4 * ts, 0xeef4f9)):
+            o = box((length - trim, t, run / math.cos(a) - trim / 2),
+                    (cx, ridge - (run / 2) * math.tan(a) + up / math.cos(a), cz + s * run / 2), color, pitch=-s * a)
+            if trim:
+                snowy(o, 0.5)
+    T = tb + ts
+    snowy(box((length - 0.4 * ts, T * math.cos(a), 2 * T * math.sin(a) + 0.15 * ts), (cx, ridge + T * math.cos(a) / 2 + 0.05 * ts, cz),
+              0xeef4f9), 0.5)
+    return ridge
+
+def lean_shed(sx, sz, W, D, HB, HF, t=0.18, back=0x8a5a3a, side=0x9a5f3c, post=0x6e4a32):
+    """An open shed about (sx, sz), W deep and D wide, open to +X: three
+    walls under a lean-to roof falling to the back (HF at the door, HB at
+    the back wall). The side walls are cut to the roof's fall, the boards
+    lie on them and on the lintel and oversail all round, the snow lies on
+    the boards (a level box under a tilted slab of snow left a wedge of air
+    along its top)."""
+    x0, x1 = sx - W / 2, sx + W / 2
+    a = math.atan2(HF - HB, W)
+    p = 1.45 * t
+    box((t, HB + 0.2, D), (x0 + t / 2, (HB - 0.2) / 2, sz), back)
+    for s in (-1, 1):
+        z0, z1 = sz + s * (D / 2 - t), sz + s * D / 2
+        solid([(x0, -0.2, z0), (x1, -0.2, z0), (x1, HF, z0), (x0, HB, z0), (x0, -0.2, z1), (x1, -0.2, z1), (x1, HF, z1), (x0, HB, z1)],
+              [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], side)
+        box((p, HF - 0.05, p), (x1 - p / 2, (HF - 0.05) / 2, sz + s * (D / 2 - p / 2)), post)
+    box((p, 1.15 * p, D), (x1 - p / 2, HF - 0.6 * p - 0.03, sz), post)   # the lintel over the door
+    over = 2.0 * t
+    sl = (W + 2 * over) / math.cos(a)
+    tb, ts = 0.55 * t, 1.3 * t
+    for th, up, trim, color in ((tb, tb / 2, 0.0, 0x6e4a32), (ts, tb + ts / 2, 0.5 * t, 0xeef4f9)):
+        o = box((sl - trim, th, D + 2 * over - trim), (sx - up * math.sin(a), (HB + HF) / 2 + up * math.cos(a), sz), color, roll=-a)
+        if trim:
+            snowy(o, 0.5)
+
 def log_cabin_at(cx, cz, k=1.0, smoke=False):
     """A log cabin at (cx, cz), door on +X, built at `k` of the old 4.2 unit
     cabin (0.55: a real cabin, two and a half units across): each wall its
@@ -7694,19 +7759,13 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
     for s in (-1, 1):
         prism([(cz + D / 2 - 0.05 * k, H + 0.1 * k), (cz - D / 2 + 0.05 * k, H + 0.1 * k),
                (cz, H + 0.1 * k + (D / 2) * math.tan(0.6))], cx + s * (W / 2 - 0.1 * k), 0.2 * k, 0x8a5a3a)
-    ridge = H + 0.1 * k + (D / 2) * math.tan(0.6)
-    run = D / 2 + 0.45 * k
-    for s in (-1, 1):
-        snowy(box((W + 0.8 * k, 0.26 * k, run / math.cos(0.6) + 0.1 * k),
-                  (cx, ridge - (run / 2) * math.tan(0.6) + 0.16 * k, cz + s * run / 2),
-                  0xeef4f9, pitch=-s * 0.6), 0.5)
-    box((W + 0.9 * k, 0.22 * k, 0.36 * k), (cx, ridge + 0.3 * k, cz), 0x868ba1)
-    box((0.7 * k, 1.9 * k, 0.7 * k), (cx - 1.1 * k, ridge - 0.2 * k, cz - 0.75 * k), 0x868ba1)
-    snowy(box((0.82 * k, 0.14 * k, 0.82 * k), (cx - 1.1 * k, ridge + 0.8 * k, cz - 0.75 * k), 0xeef4f9))
+    ridge = snowed_roof(cx, cz, H + 0.1 * k, D / 2, W + 0.8 * k, 0.45 * k, 0.6, 0.07 * k, 0.2 * k)
+    box((0.5 * k, 1.25 * k, 0.5 * k), (cx - 1.1 * k, ridge - 0.1 * k, cz - 0.75 * k), 0x868ba1)
+    snowy(box((0.6 * k, 0.1 * k, 0.6 * k), (cx - 1.1 * k, ridge + 0.57 * k, cz - 0.75 * k), 0xeef4f9))
     if smoke:                                      # True, or the puffs' size (anim_smoke:s=)
         name = 'anim_smoke' if smoke is True else 'anim_smoke:s=%g' % smoke
         # each cabin's marker its own name: Blender would suffix a repeat
-        marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.9 * k, cz - 0.75 * k))
+        marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.7 * k, cz - 0.75 * k))
     box((0.1 * k, 1.55 * k, 1.1 * k), (cx + W / 2 + 0.06 * k, 0.9 * k, cz - 0.55 * k), 0xfff6eb)
     box((0.1 * k, 1.35 * k, 0.85 * k), (cx + W / 2 + 0.12 * k, 0.82 * k, cz - 0.55 * k), 0x38383d)
     box((0.1 * k, 0.8 * k, 0.8 * k), (cx + W / 2 + 0.06 * k, 1.3 * k, cz + 0.95 * k), 0xfff6eb)
@@ -7714,17 +7773,24 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
 
 @piece(1.0)
 def log_cabin():
-    # Flurry: a corner of the village below the lake at its real size beside
-    # a car: a log cabin two and a half units across and two smaller ones
-    # either side of it, their chimneys smoking (the columns stand over the
-    # kerb from far down the road, before the cabins do), the woodpile under its
-    # lean-to between them, a sled by the door.
-    log_cabin_at(0.0, 0.0, 0.58, smoke=1.5)
-    log_cabin_at(-0.6, 3.0, 0.42, smoke=True)
-    log_cabin_at(-0.4, -3.9, 0.48, smoke=True)
-    woodpile(0.2, -2.2, 0.3)
-    sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
+    # Flurry: a corner of the village by the line at its real size beside a
+    # car: a log cabin two and a half units across and two smaller ones
+    # either side of it, their chimneys smoking, the woodpile under its
+    # lean-to between them, a sled by the door. On the bench the track's
+    # land raises off the start straight's verge for it (tracks.js flurry
+    # `land`; on the plain they stood under the road's own height, behind
+    # its bank to the eaves): each cabin level at the lowest ground drawn
+    # under it there, SAMPLED like a stand's (FORESTS: re-sample after moving
+    # the piece or the land), the bench burying its uphill side a little;
+    # the woodpile and the sled drape, so the piece levels nothing.
+    for cx, cz, floor, k, smoke in ((0.0, 0.0, 1.65, 0.58, 1.5), (-1.2, 2.6, 1.38, 0.42, True), (-0.4, -3.9, 2.1, 0.48, True)):
+        flurry_stood((lambda cx, cz, k, smoke: lambda: log_cabin_at(cx, cz, k, smoke=smoke))(cx, cz, k, smoke),
+                     cx, cz, 0.0, stood_post(cx, cz, floor), pivot=(cx, cz))
     join_still('cabins')
+    def lying():
+        woodpile(0.2, -2.2, 0.3)
+        sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
+    draped('yard', lying)
 
 # ---- Flurry's lake hamlet ----------------------------------------------------
 # The ground drawn over the plain under the hamlet (u 0.375, lat -11, yaw 180:
@@ -7774,9 +7840,17 @@ def flurry_ice_hut(color, pipe=False, window=0xffc044):
     in the side, maybe a stovepipe."""
     for s in (-1, 1):
         box((1.2, 0.1, 0.14), (0.0, 0.05, s * 0.32), 0x6e4a32)
-    box((0.95, 0.85, 0.85), (0.0, 0.52, 0.0), color)
+    # (its top cut to the roof's fall: a level box under the tilted roof
+    # left a wedge of air at the door)
+    x0, x1, y0, yb, yf, hz = -0.475, 0.475, 0.095, 0.88, 1.02, 0.425
+    solid([(x0, y0, -hz), (x1, y0, -hz), (x1, yf, -hz), (x0, yb, -hz), (x0, y0, hz), (x1, y0, hz), (x1, yf, hz), (x0, yb, hz)],
+          [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], color)
     box((1.0, 0.1, 0.9), (0.0, 0.14, 0.0), 0x6e4a32)
-    snowy(box((1.2, 0.16, 1.08), (-0.03, 1.02, 0.0), 0xf3f7fb, roll=-0.14), 0.5)
+    a = math.atan2(yf - yb, x1 - x0)
+    for t, up, trim, c in ((0.06, 0.03, 0.0, 0x6e4a32), (0.13, 0.125, 0.06, 0xf3f7fb)):
+        o = box((1.2 - trim, t, 1.08 - trim), (-up * math.sin(a), (yb + yf) / 2 + up * math.cos(a), 0.0), c, roll=-a)
+        if trim:
+            snowy(o, 0.5)
     box((0.06, 0.62, 0.36), (0.48, 0.5, -0.12), 0x38383d)
     box((0.3, 0.3, 0.06), (-0.05, 0.62, 0.43), 0xfff6eb)
     box((0.2, 0.2, 0.06), (-0.05, 0.62, 0.45), window)
@@ -7806,16 +7880,10 @@ def flurry_boat(color, upturned=True):
 
 def flurry_boathouse():
     """The boathouse about the origin, open to +X (the lake): plank walls on
-    three sides, a snowed roof falling to the back, a boat drawn up inside on
+    three sides, a snowed lean-to roof falling to the back, a boat drawn up inside on
     its trestles with its bow out of the door, oars racked on the side."""
     W, D, H = 2.2, 2.6, 1.5
-    box((W, 0.16, D), (0.0, 0.08, 0.0), 0x868ba1)
-    box((0.16, H, D), (-W / 2 + 0.08, H / 2, 0.0), 0x8a5a3a)
-    for s in (-1, 1):
-        box((W, H, 0.16), (0.0, H / 2, s * (D / 2 - 0.08)), 0x9a5f3c)
-        box((0.2, H + 0.2, 0.2), (W / 2 - 0.1, (H + 0.2) / 2, s * (D / 2 - 0.1)), 0x6e4a32)
-    box((0.2, 0.2, D), (W / 2 - 0.1, H + 0.1, 0.0), 0x6e4a32)
-    snowy(box((W + 0.7, 0.24, D + 0.6), (0.0, H + 0.28, 0.0), 0xeef4f9, roll=0.16), 0.5)
+    lean_shed(0.0, 0.0, W, D, H - 0.2, H + 0.2, t=0.14)
     box((W - 0.4, 0.5, D - 0.4), (-0.05, 0.75, 0.0), 0x38383d)                # the dark inside
     flurry_stood(lambda: flurry_boat(0xcf534f, upturned=False), 0.75, 0.0, -math.pi / 2, 0.22)
     for k in range(2):                                                         # oars on the side wall
@@ -8004,13 +8072,9 @@ def hay_barn(g):
             box((0.24, H + g + 0.3, 0.24), (sx * (W / 2 - 0.15), (H - g - 0.3) / 2, sz * (D / 2 - 0.15)), 0x8a6a46)
     box((W - 0.5, 1.15, D - 0.6), (0.0, 0.58, 0.0), 0xd9b054)                 # the hay
     box((W - 1.4, 0.45, D - 1.1), (-0.3, 1.35, 0.0), 0xd9b054)
-    run = D / 2 + 0.5
     for sz in (-1, 1):
-        snowy(box((W + 0.7, 0.24, run / math.cos(0.55) + 0.1), (0.0, H + 0.2 + (run / 2) * math.tan(0.55), sz * run / 2),
-                  0xeef4f9, pitch=-sz * 0.55), 0.5)                              # (a ridge: with the other sign the slabs met in a valley)
         box((W, 0.16, 0.16), (0.0, H, sz * (D / 2 - 0.15)), 0x6e4a32)
-    top = H + 0.34 + run * math.tan(0.55)
-    box((W + 0.8, 0.2, 0.3), (0.0, top, 0.0), 0x868ba1)
+    top = snowed_roof(0.0, 0.0, H + 0.08, D / 2 - 0.15, W + 0.7, 0.65, 0.55, 0.07, 0.2)
     for sx in (-1, 1):                                                         # the king posts, up through the hay
         box((0.24, top, 0.24), (sx * (W / 2 - 0.15), top / 2, 0.0), 0x8a6a46)
 
@@ -8420,8 +8484,7 @@ def ski_jump():
         marker('path_jump_%d' % k, p)
     # the timing hut on the outrun's side, on the ground drawn there
     # (sampled), its walls run down to the plain
-    box((1.5, hy + 0.2, 1.3), (hx, hy / 2 - 0.1, hz), 0x9a7b55)
-    cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2)
+    cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2, sunk=hy + 0.2)
     for k in range(2):
         x, y, z = pts[3]
         with animated('anim_path:c=jump:p=20:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
@@ -8551,11 +8614,11 @@ def ski_school():
         snow_person(1.8, 0, 2.6, 0xcf534f, 0xfff6eb, yaw=math.pi)         # the instructor, watching
         snow_heap((-0.2, 0, -4.4), 0.5, yaw=0.6)
     draped('school', static)
-    # the hut level on the slope, its floor at the slope's top corner and a
-    # stone footing under its front: draped, a house leaned with the hill
-    hy = max(H(1.4 + dx, -3.4 + dz) for dx in (-0.7, 0.7) for dz in (-0.55, 0.55))
-    box((1.5, 1.2, 1.2), (1.4, hy - 0.6, -3.4), 'grey')
-    cabin_hut(1.4, 0.8, 1.1, (1.4, hy, -3.4), 0xcf534f, 0xeef4f9)
+    # the hut level on the slope, its floor at the snow by its door (+X,
+    # downhill), its walls on under the snow and the hill burying its back:
+    # draped, a house leaned with the hill
+    hy = H(2.2, -3.4) + 0.06
+    cabin_hut(1.4, 0.8, 1.1, (1.4, hy, -3.4), 0xcf534f, 0xeef4f9, sunk=1.0)
     # the feather flags' cloth, swinging round its pole as the wind shifts
     for n, (fz, c) in enumerate(((-0.9, 0xff5040), (4.2, 0x3f7bd9))):
         with animated('anim_drape+flutter:a=y:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
@@ -11533,21 +11596,13 @@ def road_keeper():
     # Front to +X.
     RED, TIMBER_, DARK = 0xcf534f, 0x8a5a3a, 0x38383d
     # the hut
-    cabin_hut(2.3, 1.7, 2.6, (-0.6, 0.0, -3.4), RED, 0xeef4f9)
-    box((0.5, 1.5, 0.5), (-1.3, 2.4, -4.0), 0x868ba1)
-    snowy(box((0.62, 0.12, 0.62), (-1.3, 3.2, -4.0), 0xf3f7fb), 0.5)
-    marker('anim_smoke#keeper', (-1.3, 3.3, -4.0))
+    marker('anim_smoke#keeper', cabin_hut(2.3, 1.7, 2.6, (-0.6, 0.0, -3.4), RED, 0xeef4f9, chimney=True))
     for s in (-1, 1):                                               # red shutters by the door
         box((0.06, 0.6, 0.22), (0.58, 0.95, -3.4 + s * 0.78), 0xfff6eb)
-    # the plough shed: three walls, a roof falling to the back, open to +X
-    W, D, H = 4.2, 3.6, 2.6
+    # the plough shed, open to +X
+    W, D = 4.2, 3.6
     sx, szc = -0.8, 1.6
-    box((0.18, H, D), (sx - W / 2 + 0.09, H / 2, szc), TIMBER_)
-    for s in (-1, 1):
-        box((W, H, 0.18), (sx, H / 2, szc + s * (D / 2 - 0.09)), 0x9a5f3c)
-        box((0.26, H + 0.3, 0.26), (sx + W / 2 - 0.13, (H + 0.3) / 2, szc + s * (D / 2 - 0.13)), 0x6e4a32)
-    box((0.26, 0.3, D), (sx + W / 2 - 0.13, H + 0.2, szc), 0x6e4a32)
-    snowy(box((W + 0.9, 0.3, D + 0.7), (sx, H + 0.5, szc), 0xeef4f9, roll=0.12), 0.5)
+    lean_shed(sx, szc, W, D, 2.2, 2.9, back=TIMBER_)
     box((W - 0.5, 0.3, D - 0.5), (sx - 0.1, 0.16, szc), DARK)       # the oiled floor
     plough_truck(sx - 0.2, szc, math.pi / 2, k=1.05, y=0.1)
     # grit, poles, fuel
@@ -12670,12 +12725,12 @@ def fete(lite):
     # the child going down on a mat, and back up inside the tower
     for i in range(0, N + 1, 2):
         x, y, z = helix[i]
-        marker('path_hskid_%d' % (i // 2), (x, y + 0.2, z))
+        marker('path_drapehskid_%d' % (i // 2), (x, y + 0.2, z))
     up = N // 2 + 1
     for j, y in enumerate((0.8, TH * 0.5, TH - 0.6)):
-        marker('path_hskid_%d' % (up + j), (HX, y, HZ))
+        marker('path_drapehskid_%d' % (up + j), (HX, y, HZ))
     x, y, z = helix[0]
-    with animated('anim_path:c=hskid:p=14:f=1', (x, y + 0.2, z)):
+    with animated('anim_path:c=drapehskid:p=14:f=1', (x, y + 0.2, z)):
         box((1.2, 0.12, 0.8), (x, y + 0.26, z), 0x9a7b55)
         person((x, y + 0.36, z), 0.0, BLUE, k=0.65, hair=2, sit=True, arm=0.4)
     # ---- the bouncy castle, a child bouncing in it
@@ -12754,36 +12809,55 @@ def fete(lite):
         cyl(0.12, 4.6, (x, 0, z), WHITE, segs=6)
     if not lite:
         coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML)
-    fete_ground(lite, ((HX, HZ, TR + 3.0), (BX + 4.2, BZ, 2.4), (MX + MW / 2, MZ, 3.0), (CX, CZ, CR + 0.6),
-                       (6.6, 28.0, 7.5), (SX + 1.2, SZ, 3.0)))
+    # the walk runs from the helter-skelter to the coconut shy; the castle's
+    # step and the carousel's deck stand on its edge, and a spur leaves it for
+    # each of the three that stand back from it, to a forecourt before them:
+    # the tea tent's doors and tables, the stalls' counters, the shy's throw
+    fete_ground(lite, (HZ - 3.0, SZ + 2.8), ((MZ, MX + MW / 2 + 0.1, MX + MW / 2 + 5.2, MZ - 5.6, MZ + 5.6),
+                                             (28.0, 5.6, 8.2, 19.6, 36.4), (SZ, SX + 1.2, SX + 3.4, SZ - 2.8, SZ + 2.8)))
     join_still('fete')
+    lie_on_land()
 
-def fete_ground(lite, stops):
+def fete_print(x0, x1, z0, z1, y, color, cell=4.0):
+    """A flat print on the fete's lawn (its mown green, its gravel), cut into
+    cells so it lies on the land as drawn when the piece drapes: one quad
+    across a crease of the lawn went under it and came up clipped."""
+    nx, nz = max(1, math.ceil((x1 - x0) / cell)), max(1, math.ceil((z1 - z0) / cell))
+    verts = [(x0 + (x1 - x0) * i / nx, y, z0 + (z1 - z0) * j / nz) for j in range(nz + 1) for i in range(nx + 1)]
+    faces = [(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i)
+             for j in range(nz) for i in range(nx)]
+    return ground_poly(verts, faces, color)
+
+def fete_ground(lite, walk, stops):
     """What makes the fete one fairground: a mown green under all of it, a
-    gravel walk down its road side with a spur to each attraction (`stops`:
-    where, and how wide a patch of gravel lies before it), the way in from
-    the road under a tall striped banner between two masts, a post-and-rope
-    fence along the road and round both ends, and bunting down the whole
-    road side on tall white poles: the walk and the green lie under the kerb
-    from the seat, so what stands over it is what joins the fete into one
-    place. The green and the gravel lie a hand over the piece's level (flat
-    on it, the levelled lawn comes through)."""
+    gravel walk down its road side between `walk`'s two ends, a spur off it
+    to each of `stops` (its line, then its forecourt's near and far edge and
+    its two ends) and the way in from the road under a tall striped banner
+    between two masts, a post-and-rope fence along the road and round both
+    ends, and bunting down the whole road side on tall white poles: the walk
+    and the green lie under the kerb from the seat, so what stands over it
+    is what joins the fete into one place. Every length of gravel ends at
+    the walk, a forecourt or the gate, inside the fence, and none lies over
+    another (two prints draped at one height fight). The green and the
+    gravel are prints a hand over the lawn, and the whole fete lies on the
+    land as drawn (lie_on_land): standing level on a clearing, the lawn's
+    creases came up through them and cut them into arrowheads."""
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
     X0, X1, Z0, Z1 = -8.5, 15.5, -45.5, 49.5        # the green: back, road side, both ends
-    WALK, GY, PY = 13.0, 0.1, 0.14                  # the walk's line; the green's and the gravel's middles
+    WALK, WW, GY, PY = 13.0, 1.2, 0.1, 0.2          # the walk's line and half width; the green's and the gravel's tops
     n = 12                                          # mown in stripes, as a show field is
     for q in range(n):
         za, zb = Z0 + (Z1 - Z0) * q / n, Z0 + (Z1 - Z0) * (q + 1) / n
-        rowed(box((X1 - X0, 0.2, zb - za), ((X0 + X1) / 2, GY, (za + zb) / 2), 'leaf'), (22, 27)[q % 2])['chamfer'] = 0
-    box((2.4, 0.2, Z1 - Z0 - 4.0), (WALK, PY, (Z0 + Z1) / 2), 'cream')
-    for x, z, w in stops:
-        box((WALK - x + 1.0, 0.2, 1.8), ((WALK + x) / 2, PY, z), 'cream')          # the spur
-        box((2.2, 0.2, w), (x + 0.6, PY, z), 'cream')                              # the patch before it
-    # the way in, opposite the tea tent: gravel out to the verge, two masts
+        rowed(fete_print(X0, X1 - 0.2, za, zb, GY, 'leaf', cell=8.0 if lite else 4.0), (22, 27)[q % 2])
+    fete_print(WALK - WW, WALK + WW, walk[0], walk[1], PY, 'cream')
+    for z, xa, xb, za, zb in stops:
+        fete_print(xb, WALK - WW, z - 1.0, z + 1.0, PY, 'cream')                   # the spur
+        fete_print(xa, xb, za, zb, PY, 'cream')                                    # the forecourt
+    # the way in, opposite the tea tent: gravel to the gate, two masts
     # as tall as the tea tent's ridge poles and a deep striped banner between
     # them under a yellow board, a pennant on each mast
     GZ, GW, GH = 0.0, 6.0, 8.6
-    box((X1 + 3.0 - WALK, 0.2, 3.4), ((X1 + 3.0 + WALK) / 2, PY, GZ), 'cream')   # (short of the road's own margin)
+    fete_print(WALK + WW, X1 + 0.5, GZ - 1.7, GZ + 1.7, PY, 'cream')             # the walk's gravel to the gate's line
     for sz in (-1, 1):
         box((0.6, GH, 0.6), (X1, GH / 2, GZ + sz * GW / 2), WHITE)
         box((0.9, 0.5, 0.9), (X1, 0.25, GZ + sz * GW / 2), RED)
@@ -13765,7 +13839,7 @@ def boathouse():
     RED, WHITE, BOARD = 0xcf534f, 0xf8f8fb, 0x9a7b55
     F = local(0.0, 0.0, 0.0)
     D, L, H = 5.0, 7.0, 3.0
-    box((D + 0.6, 1.1, L + 0.6), (0.0, -0.25, 0.0), 'grey')                   # the stone footing, down into the bank (its landward corner hung over the lawn)
+    box((D + 0.6, 2.4, L + 0.6), (0.0, -0.9, 0.0), 'grey')                    # the stone footing, deep into the bank (its landward corner hung over the lawn, the lawn lower than the lake's lip there)
     box((D, H, L), (0.0, 0.3 + H / 2, 0.0), BOARD)
     ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45)
     for sx in (-1, 1):
@@ -14718,86 +14792,90 @@ def pool_heron(px, pz, R, deg):
 # `drape` chain, so the train rides the lawn as drawn, and the ballast and
 # rails drape with it.
 # The park railway's line: from a balloon loop by the start straight, under
-# the high road between two of its pillars, round the bandstand's mound and
-# along the finger lobe's return leg to a second loop by the lake; the train
-# runs out and back along it, turning on the loops. Laid in the WORLD
-# (scratch geometry; it clears every kerb by 2.7 u and crosses no road at
-# grade) and cut into lengths, each its own piece in its own frame along its
-# chord, so each piece's box hugs its rails: a piece's box keeps the scatter
-# out and holds the verge band down under it, and one box round the whole
-# line would do both to half the park. PARK_PATH is the whole circuit in the
+# the high road between two of its pillars, along the foot of the bandstand's
+# mound (over its shoulder the line climbed one unit in two, no train's
+# grade) and along the finger lobe's return leg to a second loop by the lake;
+# the train runs out and back along it, turning on the loops. ONE line laid in
+# the WORLD (scratch geometry; it clears every kerb by three units and crosses
+# no road at grade) and cut into lengths, each its own piece in its own frame
+# along its chord, so each piece's box hugs its rails: a piece's box keeps the
+# scatter out and holds the verge band down under it, and one box round the
+# whole line would do both to half the park. Neighbours share their end
+# point, and PARK_ENDS gives each length the point past each end, so a joint
+# is one cross-section on both sides. PARK_PATH is the whole circuit in the
 # train piece's frame (tracks.js places every one of them).
 PARK_ROUTE = {
     'park-rails-a': (
-        (-0.461, -7.557), (-0.862, -6.639), (-1.162, -5.684), (-1.342, -4.7), (-1.382, -3.7), (-1.222, -2.715), (-0.836, -1.793), (-0.362, -0.911),
-        (0.112, -0.028), (0.496, 0.895), (0.661, 1.88), (0.628, 2.88), (0.469, 3.868), (0.235, 4.841), (-0.025, 5.809), (-0.262, 6.781),
-        (-0.46, 7.763),
+        (-0.23, -7.083), (-0.178, -6.086), (-0.136, -5.088), (-0.1, -4.09), (-0.069, -3.091), (-0.042, -2.093), (-0.02, -1.094), (-0.002, -0.096),
+        (0.016, 0.903), (0.028, 1.902), (0.028, 2.9), (0.006, 3.899), (-0.048, 4.896), (-0.124, 5.892), (-0.231, 6.885),
     ),
     'park-rails-b': (
-        (-3.288, -6.471), (-2.451, -5.921), (-1.661, -5.307), (-0.98, -4.575), (-0.51, -3.694), (-0.231, -2.734), (-0.09, -1.743), (-0.059, -0.743),
-        (-0.122, 0.257), (-0.274, 1.246), (-0.552, 2.207), (-0.945, 3.128), (-1.4, 4.02), (-1.881, 4.898), (-2.36, 5.777), (-2.811, 6.671),
-        (-3.288, 7.552),
+        (0.716, -7.019), (0.795, -6.023), (0.809, -5.025), (0.736, -4.029), (0.565, -3.045), (0.355, -2.069), (0.161, -1.089), (0.035, -0.099),
+        (-0.048, 0.896), (-0.12, 1.893), (-0.145, 2.891), (-0.091, 3.888), (0.076, 4.872), (0.355, 5.831), (0.714, 6.762),
     ),
     'park-rails-c': (
-        (3.066, -6.948), (2.402, -6.199), (1.731, -5.456), (1.089, -4.687), (0.521, -3.863), (0.102, -2.956), (-0.102, -1.978), (-0.11, -0.978),
-        (0.008, 0.016), (0.217, 0.995), (0.491, 1.958), (0.812, 2.907), (1.165, 3.844), (1.543, 4.771), (1.986, 5.669), (2.505, 6.525),
-        (3.067, 7.354),
+        (0.173, -6.975), (0.007, -5.99), (-0.105, -4.998), (-0.172, -4.001), (-0.197, -3.003), (-0.16, -2.005), (-0.085, -1.009), (0.011, -0.015),
+        (0.12, 0.978), (0.231, 1.971), (0.325, 2.965), (0.281, 3.965), (0.258, 4.966), (0.231, 5.967), (0.174, 6.967),
     ),
     'park-rails-d': (
-        (-1.004, -7.878), (-0.731, -6.915), (-0.463, -5.95), (-0.224, -4.978), (-0.036, -3.994), (0.079, -3), (0.11, -1.999), (0.083, -0.998),
-        (0.011, 0.001), (-0.089, 0.997), (-0.211, 1.991), (-0.347, 2.983), (-0.489, 3.974), (-0.631, 4.966), (-0.764, 5.958), (-0.881, 6.953),
-        (-1.004, 7.947),
+        (-0.459, -6.986), (-0.207, -6.017), (-0.027, -5.033), (0.071, -4.036), (0.11, -3.036), (0.104, -2.034), (0.07, -1.034), (0.015, -0.033),
+        (-0.056, 0.966), (-0.133, 1.963), (-0.209, 2.962), (-0.276, 3.961), (-0.326, 4.962), (-0.383, 5.961), (-0.459, 6.96),
     ),
     'park-rails-e': (
-        (1.182, -6.007), (0.97, -5.028), (0.749, -4.052), (0.531, -3.074), (0.327, -2.094), (0.158, -1.107), (0.049, -0.112), (0.057, 0.889),
-        (0.213, 1.877), (0.485, 2.84), (0.834, 3.779), (1.182, 4.717),
+        (1.081, -5.011), (0.839, -4.04), (0.598, -3.067), (0.374, -2.091), (0.183, -1.108), (0.052, -0.116), (0.038, 0.884), (0.172, 1.876),
+        (0.424, 2.845), (0.752, 3.791), (1.08, 4.736),
     ),
     'park-rails-loop-a': (
-        (-0.03, -5.516), (-0.473, -4.637), (-0.916, -3.757), (-1.359, -2.878), (-1.802, -1.999), (-2.245, -1.119), (-2.688, -0.24), (-3.069, 0.666),
-        (-3.183, 1.638), (-2.998, 2.6), (-2.531, 3.461), (-1.826, 4.14), (-0.947, 4.575), (0.023, 4.724), (0.991, 4.565), (1.865, 4.121),
-        (2.564, 3.434), (3.022, 2.569), (3.197, 1.605), (3.072, 0.634), (2.683, -0.268), (2.231, -1.142), (1.778, -2.017), (1.326, -2.892),
-        (0.874, -3.767), (0.422, -4.641), (-0.03, -5.516),
+        (-0.027, -5.516), (-0.47, -4.636), (-0.913, -3.757), (-1.355, -2.877), (-1.798, -1.998), (-2.241, -1.118), (-2.684, -0.239), (-3.063, 0.667),
+        (-3.178, 1.64), (-2.993, 2.601), (-2.525, 3.462), (-1.82, 4.142), (-0.941, 4.576), (0.029, 4.724), (0.997, 4.565), (1.871, 4.121),
+        (2.57, 3.434), (3.027, 2.568), (3.202, 1.605), (3.078, 0.634), (2.687, -0.268), (2.235, -1.142), (1.783, -2.018), (1.33, -2.892),
+        (0.878, -3.767), (0.426, -4.641), (-0.027, -5.516),
     ),
     'park-rails-loop-b': (
-        (4.818, 5.584), (4.558, 4.63), (4.298, 3.676), (4.039, 2.723), (3.779, 1.769), (3.52, 0.815), (3.26, -0.138), (3.001, -1.092),
-        (2.741, -2.046), (2.428, -2.982), (1.915, -3.823), (1.224, -4.525), (0.391, -5.052), (-0.546, -5.356), (-1.526, -5.447), (-2.501, -5.299),
-        (-3.412, -4.927), (-4.221, -4.363), (-4.86, -3.612), (-5.317, -2.74), (-5.557, -1.784), (-5.561, -0.799), (-5.347, 0.162), (-4.901, 1.042),
-        (-4.269, 1.796), (-3.481, 2.388), (-2.579, 2.788), (-1.654, 3.138), (-0.73, 3.487), (0.195, 3.837), (1.119, 4.186), (2.044, 4.535),
-        (2.969, 4.885), (3.893, 5.234), (4.818, 5.584),
+        (4.829, 5.564), (4.563, 4.611), (4.298, 3.66), (4.032, 2.707), (3.766, 1.756), (3.5, 0.803), (3.235, -0.148), (2.969, -1.101),
+        (2.703, -2.052), (2.384, -2.986), (1.865, -3.824), (1.17, -4.521), (0.334, -5.043), (-0.606, -5.341), (-1.587, -5.425), (-2.56, -5.271),
+        (-3.469, -4.893), (-4.274, -4.324), (-4.908, -3.569), (-5.359, -2.694), (-5.593, -1.737), (-5.59, -0.751), (-5.371, 0.209), (-4.919, 1.085),
+        (-4.282, 1.835), (-3.489, 2.421), (-2.584, 2.816), (-1.658, 3.16), (-0.731, 3.503), (0.195, 3.846), (1.122, 4.19), (2.05, 4.533),
+        (2.976, 4.877), (3.903, 5.22), (4.829, 5.564),
     ),
+}
+PARK_ENDS = {
+    'home': (None, (0.476, 8.926)),
+    'park-rails-a': ((-0.471, -8.054), (-0.387, 7.871)),
+    'park-rails-b': ((0.586, -8.009), (1.137, 7.667)),
+    'park-rails-c': ((0.408, -7.945), (0.064, 7.963)),
+    'park-rails-d': ((-0.762, -7.941), (-0.543, 7.958)),
+    'park-rails-e': ((1.315, -5.985), None),
 }
 PARK_PATH = (
         (0.388, -8.032), (0.334, -7.032), (0.279, -6.032), (0.226, -5.032), (0.176, -4.032), (0.132, -3.031), (0.087, -2.031), (0.041, -1.031),
         (0, -0.03), (-0.03, 0.971), (-0.041, 1.972), (-0.04, 2.974), (-0.057, 3.975), (-0.064, 4.977), (-0.023, 5.977), (0.113, 6.969),
-        (0.388, 7.931), (0.767, 8.857), (1.243, 9.737), (1.824, 10.552), (2.513, 11.277), (3.331, 11.849), (4.262, 12.215), (5.225, 12.489),
-        (6.188, 12.764), (7.118, 13.132), (7.94, 13.699), (8.634, 14.419), (9.232, 15.222), (9.767, 16.068), (10.28, 16.928), (10.813, 17.776),
-        (11.379, 18.602), (11.933, 19.436), (12.419, 20.311), (12.758, 21.251), (12.845, 22.246), (12.726, 23.239), (12.466, 24.205), (12.103, 25.138),
-        (11.654, 26.032), (11.126, 26.883), (10.494, 27.658), (9.771, 28.351), (9.003, 28.993), (8.215, 29.612), (7.43, 30.234), (6.665, 30.879),
-        (5.881, 31.502), (5.06, 32.076), (4.234, 32.641), (3.431, 33.239), (2.686, 33.908), (2.067, 34.692), (1.64, 35.595), (1.399, 36.566),
-        (1.282, 37.56), (1.256, 38.561), (1.298, 39.561), (1.388, 40.558), (1.513, 41.552), (1.664, 42.542), (1.885, 43.518), (2.19, 44.472),
-        (2.543, 45.409), (2.916, 46.338), (3.285, 47.269), (3.626, 48.211), (3.917, 49.169), (4.136, 50.145), (4.274, 51.137), (4.353, 52.135),
-        (4.387, 53.136), (4.393, 54.137), (4.378, 55.139), (4.348, 56.14), (4.311, 57.14), (4.275, 58.141), (4.248, 59.142), (4.238, 60.144),
-        (4.221, 61.145), (4.185, 62.146), (4.141, 63.146), (4.098, 64.147), (4.072, 65.148), (4.08, 66.149), (4.149, 67.148), (4.334, 68.131),
-        (4.662, 69.076), (5.101, 69.976), (5.611, 70.838), (6.12, 71.699), (6.181, 72.686), (6.242, 73.672), (6.303, 74.659), (6.364, 75.645),
-        (6.425, 76.632), (6.486, 77.618), (6.547, 78.605), (6.608, 79.591), (6.725, 80.571), (7.057, 81.499), (7.591, 82.326), (8.3, 83.011),
-        (9.156, 83.499), (10.098, 83.786), (11.082, 83.839), (12.05, 83.659), (12.956, 83.271), (13.734, 82.665), (14.358, 81.903), (14.787, 81.016),
-        (14.99, 80.052), (14.976, 79.067), (14.717, 78.116), (14.251, 77.249), (13.598, 76.51), (12.796, 75.935), (11.962, 75.405), (11.127, 74.876),
-        (10.293, 74.347), (9.458, 73.817), (8.623, 73.288), (7.789, 72.758), (6.954, 72.229), (6.12, 71.699), (5.611, 70.838), (5.101, 69.976),
-        (4.662, 69.076), (4.334, 68.131), (4.149, 67.148), (4.08, 66.149), (4.072, 65.148), (4.098, 64.147), (4.141, 63.146), (4.185, 62.146),
-        (4.221, 61.145), (4.238, 60.144), (4.248, 59.142), (4.275, 58.141), (4.311, 57.14), (4.348, 56.14), (4.378, 55.139), (4.393, 54.137),
-        (4.387, 53.136), (4.353, 52.135), (4.274, 51.137), (4.136, 50.145), (3.917, 49.169), (3.626, 48.211), (3.285, 47.269), (2.916, 46.338),
-        (2.543, 45.409), (2.19, 44.472), (1.885, 43.518), (1.664, 42.542), (1.513, 41.552), (1.388, 40.558), (1.298, 39.561), (1.256, 38.561),
-        (1.282, 37.56), (1.399, 36.566), (1.64, 35.595), (2.067, 34.692), (2.686, 33.908), (3.431, 33.239), (4.234, 32.641), (5.06, 32.076),
-        (5.881, 31.502), (6.665, 30.879), (7.43, 30.234), (8.215, 29.612), (9.003, 28.993), (9.771, 28.351), (10.494, 27.658), (11.126, 26.883),
-        (11.654, 26.032), (12.103, 25.138), (12.466, 24.205), (12.726, 23.239), (12.845, 22.246), (12.758, 21.251), (12.419, 20.311), (11.933, 19.436),
-        (11.379, 18.602), (10.813, 17.776), (10.28, 16.928), (9.767, 16.068), (9.232, 15.222), (8.634, 14.419), (7.94, 13.699), (7.118, 13.132),
-        (6.188, 12.764), (5.225, 12.489), (4.262, 12.215), (3.331, 11.849), (2.513, 11.277), (1.824, 10.552), (1.243, 9.737), (0.767, 8.857),
-        (0.388, 7.931), (0.113, 6.969), (-0.023, 5.977), (-0.064, 4.977), (-0.057, 3.975), (-0.04, 2.974), (-0.041, 1.972), (-0.03, 0.971),
-        (0, -0.03), (0.041, -1.031), (0.087, -2.031), (0.132, -3.031), (0.176, -4.032), (0.226, -5.032), (0.279, -6.032), (0.334, -7.032),
-        (0.388, -8.032), (0.882, -8.884), (1.377, -9.735), (1.871, -10.587), (2.366, -11.438), (2.86, -12.29), (3.355, -13.141), (3.788, -14.022),
-        (3.961, -14.987), (3.833, -15.957), (3.418, -16.844), (2.754, -17.565), (1.903, -18.051), (0.944, -18.257), (-0.032, -18.156), (-0.931, -17.765),
-        (-1.67, -17.121), (-2.178, -16.284), (-2.41, -15.333), (-2.344, -14.356), (-2.008, -13.433), (-1.609, -12.533), (-1.21, -11.632), (-0.81, -10.732),
-        (-0.411, -9.832), (-0.012, -8.932),
+        (0.388, 7.931), (0.476, 8.926), (0.554, 9.922), (0.626, 10.918), (0.693, 11.914), (0.756, 12.911), (0.813, 13.908), (0.867, 14.906),
+        (0.921, 15.903), (0.969, 16.901), (1.004, 17.899), (1.018, 18.897), (1, 19.896), (0.96, 20.894), (0.889, 21.89), (0.768, 22.881),
+        (0.583, 23.863), (0.313, 24.824), (-0.05, 25.754), (-0.451, 26.669), (-0.837, 27.59), (-1.158, 28.535), (-1.438, 29.494), (-1.706, 30.456),
+        (-1.931, 31.429), (-2.076, 32.417), (-2.108, 33.414), (-2.027, 34.409), (-1.861, 35.394), (-1.626, 36.365), (-1.338, 37.321), (-1.008, 38.264),
+        (-0.638, 39.191), (-0.211, 40.094), (0.249, 40.98), (0.729, 41.856), (1.22, 42.726), (1.713, 43.595), (2.19, 44.472), (2.543, 45.409),
+        (2.916, 46.338), (3.285, 47.269), (3.626, 48.211), (3.917, 49.169), (4.136, 50.145), (4.274, 51.137), (4.353, 52.135), (4.387, 53.136),
+        (4.393, 54.137), (4.378, 55.139), (4.348, 56.14), (4.311, 57.14), (4.275, 58.141), (4.248, 59.142), (4.238, 60.144), (4.221, 61.145),
+        (4.185, 62.146), (4.141, 63.146), (4.098, 64.147), (4.072, 65.148), (4.08, 66.149), (4.149, 67.148), (4.334, 68.131), (4.662, 69.076),
+        (5.101, 69.976), (5.611, 70.838), (6.12, 71.699), (6.181, 72.686), (6.242, 73.672), (6.303, 74.659), (6.364, 75.645), (6.425, 76.632),
+        (6.486, 77.618), (6.547, 78.605), (6.608, 79.591), (6.725, 80.571), (7.057, 81.499), (7.591, 82.326), (8.3, 83.011), (9.156, 83.499),
+        (10.098, 83.786), (11.082, 83.839), (12.05, 83.659), (12.956, 83.271), (13.734, 82.665), (14.358, 81.903), (14.787, 81.016), (14.99, 80.052),
+        (14.976, 79.067), (14.717, 78.116), (14.251, 77.249), (13.598, 76.51), (12.796, 75.935), (11.962, 75.405), (11.127, 74.876), (10.293, 74.347),
+        (9.458, 73.817), (8.623, 73.288), (7.789, 72.758), (6.954, 72.229), (6.12, 71.699), (5.611, 70.838), (5.101, 69.976), (4.662, 69.076),
+        (4.334, 68.131), (4.149, 67.148), (4.08, 66.149), (4.072, 65.148), (4.098, 64.147), (4.141, 63.146), (4.185, 62.146), (4.221, 61.145),
+        (4.238, 60.144), (4.248, 59.142), (4.275, 58.141), (4.311, 57.14), (4.348, 56.14), (4.378, 55.139), (4.393, 54.137), (4.387, 53.136),
+        (4.353, 52.135), (4.274, 51.137), (4.136, 50.145), (3.917, 49.169), (3.626, 48.211), (3.285, 47.269), (2.916, 46.338), (2.543, 45.409),
+        (2.19, 44.472), (1.713, 43.595), (1.22, 42.726), (0.729, 41.856), (0.249, 40.98), (-0.211, 40.094), (-0.638, 39.191), (-1.008, 38.264),
+        (-1.338, 37.321), (-1.626, 36.365), (-1.861, 35.394), (-2.027, 34.409), (-2.108, 33.414), (-2.076, 32.417), (-1.931, 31.429), (-1.706, 30.456),
+        (-1.438, 29.494), (-1.158, 28.535), (-0.837, 27.59), (-0.451, 26.669), (-0.05, 25.754), (0.313, 24.824), (0.583, 23.863), (0.768, 22.881),
+        (0.889, 21.89), (0.96, 20.894), (1, 19.896), (1.018, 18.897), (1.004, 17.899), (0.969, 16.901), (0.921, 15.903), (0.867, 14.906),
+        (0.813, 13.908), (0.756, 12.911), (0.693, 11.914), (0.626, 10.918), (0.554, 9.922), (0.476, 8.926), (0.388, 7.931), (0.113, 6.969),
+        (-0.023, 5.977), (-0.064, 4.977), (-0.057, 3.975), (-0.04, 2.974), (-0.041, 1.972), (-0.03, 0.971), (0, -0.03), (0.041, -1.031),
+        (0.087, -2.031), (0.132, -3.031), (0.176, -4.032), (0.226, -5.032), (0.279, -6.032), (0.334, -7.032), (0.388, -8.032), (0.882, -8.884),
+        (1.377, -9.735), (1.871, -10.587), (2.366, -11.438), (2.86, -12.29), (3.355, -13.141), (3.788, -14.022), (3.961, -14.987), (3.833, -15.957),
+        (3.418, -16.844), (2.754, -17.565), (1.903, -18.051), (0.944, -18.257), (-0.032, -18.156), (-0.931, -17.765), (-1.67, -17.121), (-2.178, -16.284),
+        (-2.41, -15.333), (-2.344, -14.356), (-2.008, -13.433), (-1.609, -12.533), (-1.21, -11.632), (-0.81, -10.732), (-0.411, -9.832), (-0.012, -8.932),
 )
 PARK_HOME = (
         (0.388, -8.032), (0.334, -7.032), (0.279, -6.032), (0.226, -5.032), (0.176, -4.032), (0.132, -3.031), (0.087, -2.031), (0.041, -1.031),
@@ -14850,32 +14928,33 @@ def park_coach(at, color, riders, k=1.0):
         box((0.2 * k, 0.24 * k, 0.24 * k), (x + dx, y + 0.72 * k, z), shirt)
         box((0.15 * k, 0.15 * k, 0.15 * k), (x + dx, y + 0.92 * k, z), 0xf2bf99)
 
-def park_track(pts):
-    """The line along `pts` on a low grass embankment (turf, the field's own
-    colour), so it stands up off the lawn where a racer sees it: a ballast
-    bank on top, a sleeper every unit and two rails, each one band (a dozen
-    vertices a unit of track)."""
+def park_track(pts, ends=(None, None)):
+    """The line along `pts` on its graded bed: a turf bank falling away each
+    side, deep enough to meet the land wherever the bed stands over it, a
+    ballast bank on top, a sleeper every unit and two rails, each one band (a
+    dozen vertices a unit of track). `ends`: the next length's point past each
+    end (PARK_ENDS), so both sides of a joint take one frame there and the
+    ballast, the rails and the sleeper rhythm run through it; the length
+    after a joint leaves the shared sleeper to the one before."""
     n = len(pts)
-    closed = math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 0.01
-    if closed:
-        pts, n = pts[:-1], n - 1
+    # a balloon loop: out of its apex and back into it. Each leg leaves the
+    # apex square to the stem (the way from the apex to between the legs), so
+    # both begin in the stem's own cross-section and part as a turnout's
+    # roads do (one frame for both legs there stood across the stem, and the
+    # bank pinched to a notch)
+    loop = math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 0.01
+    if loop:
+        sx, sz = (pts[1][0] + pts[-2][0]) / 2 - pts[0][0], (pts[1][1] + pts[-2][1]) / 2 - pts[0][1]
+        d = math.hypot(sx, sz)
+        stem = (sx / d, sz / d)
     def frame(i):
-        a = pts[(i - 1) % n] if closed else pts[max(0, i - 1)]
-        b = pts[(i + 1) % n] if closed else pts[min(n - 1, i + 1)]
+        if loop and i in (0, n - 1):
+            return stem if i == 0 else (-stem[0], -stem[1])
+        a = pts[i - 1] if i else ends[0] or pts[0]
+        b = pts[i + 1] if i < n - 1 else ends[1] or pts[i]
         tx, tz = b[0] - a[0], b[1] - a[1]
         d = math.hypot(tx, tz)
-        tx, tz = tx / d, tz / d
-        if not closed and n > 2 and i in (0, n - 1):
-            # an open length's end: its one-sided chord turned on by what the
-            # line bends in a step, the curve's own tangent there, so the next
-            # length's end (cut from the same line) squares up to it (round
-            # 20: each end square to its own last chord left a notch in the
-            # bank and a sleeper askew at every joint on a bend)
-            nx, nz = frame(1 if i == 0 else n - 2)
-            tx, tz = 2 * tx - nx, 2 * tz - nz
-            d = math.hypot(tx, tz)
-            tx, tz = tx / d, tz / d
-        return tx, tz
+        return tx / d, tz / d
     def band(profile, color):
         m = len(profile)
         verts, faces = [], []
@@ -14883,38 +14962,62 @@ def park_track(pts):
             tx, tz = frame(i)
             for o, y in profile:
                 verts.append((x + tz * o, y, z - tx * o))
-        for i in range(n if closed else n - 1):
-            j = (i + 1) % n
+        for i in range(n - 1):
             for c in range(m - 1):
-                faces.append((m * i + c, m * j + c, m * j + c + 1, m * i + c + 1))
+                faces.append((m * i + c, m * (i + 1) + c, m * (i + 1) + c + 1, m * i + c + 1))
         o = ground_poly(verts, faces, color)
         for f in o.data.polygons:                              # one normal a corner: no seam per face
             f.use_smooth = True
         return o
-    B = PARK_BANK
-    band(((1.75, -0.04), (1.0, B), (-1.0, B), (-1.75, -0.04)), 'green')['turf'] = 1   # the embankment
-    # the ballast on it, with a corner under each rail's edge: the line DRAPES,
-    # every vertex lifted by the land under it, and a ballast that spanned the
-    # rails in one quad stood through them wherever the lawn creased across
-    # the line (round 20: rails that tapered away and came back)
-    band(((0.85, B), (0.55, B + 0.15), (0.32, B + 0.15), (0.22, B + 0.15), (-0.22, B + 0.15), (-0.32, B + 0.15),
-          (-0.55, B + 0.15), (-0.85, B)), 'lavender')
+    B, D = PARK_BANK, PARK_SKIRT
+    # the bank: its crest under the ballast and a skirt each side going down
+    # into the land, so it shows as much bank as the bed stands over the lawn
+    band(((1.0 + B + D, -D), (1.0, B), (-1.0, B), (-1.0 - B - D, -D)), 'green')['turf'] = 1
+    # each at one row of its ramp: shade() runs a ramp over the whole piece's
+    # height, and the home stretch's ballast, under its halt and its train,
+    # came out a shade darker than the next length's at their joint
+    rowed(band(((0.85, B), (0.55, B + 0.15), (-0.55, B + 0.15), (-0.85, B)), 'lavender'), 2)
     verts, faces = [], []
-    for i, (x, z) in enumerate(pts):
-        tx, tz = frame(i)
-        for a, o in ((-0.11, 0.48), (0.11, 0.48), (0.11, -0.48), (-0.11, -0.48)):
+    def sleeper(x, z, tx, tz, half=0.48):
+        k = len(verts)
+        for a, o in ((-0.11, half), (0.11, half), (0.11, -half), (-0.11, -half)):
             verts.append((x + tx * a + tz * o, B + 0.19, z + tz * a - tx * o))
-        faces.append(tuple(range(4 * i, 4 * i + 4)))
-    ground_poly(verts, faces, 'brown')
+        faces.append(tuple(range(k, k + 4)))
+    for i, (x, z) in enumerate(pts):
+        if i == 0 and (ends[0] or loop):
+            continue                       # the length before lays the joint's; a loop's stem lays its apex's
+        if loop and i in (1, n - 2, n - 1):
+            continue
+        sleeper(x, z, *frame(i))
+    if loop:
+        # a loop's two legs a unit from its apex are still half over each
+        # other: one long timber under both, square to the stem, as a
+        # turnout has (a sleeper each crossed in an X there)
+        (ax, az), (bx, bz) = pts[1], pts[n - 2]
+        sleeper((ax + bx) / 2, (az + bz) / 2, *stem, math.hypot(ax - bx, az - bz) / 2 + 0.48)
+    rowed(ground_poly(verts, faces, 'brown'), 1)
     for sd in (-1, 1):
-        band(((sd * 0.27 + 0.05, PARK_RAIL_Y), (sd * 0.27 - 0.05, PARK_RAIL_Y)), 'slate')
+        rowed(band(((sd * 0.27 + 0.05, PARK_RAIL_Y), (sd * 0.27 - 0.05, PARK_RAIL_Y)), 'slate'), 0)
 
-PARK_BANK = 0.4                                                   # the embankment's crest
+PARK_BANK = 0.4                                                   # the bank's crest over the graded land
+PARK_SKIRT = 1.2                                                  # how far under it the bank's skirts go
 PARK_RAIL_Y = PARK_BANK + 0.2                                     # the rails' top
 
 for _name, _pts in PARK_ROUTE.items():
-    PIECES[_name] = (lambda pts: lambda: (park_track(pts), join_still('drape_line')))(_pts)
+    PIECES[_name] = (lambda pts, ends: lambda: (park_track(pts, ends), park_join('line')))(_pts, PARK_ENDS.get(_name, (None, None)))
     GROW[_name] = 1.0
+
+def park_join(name):
+    """The piece's still parts as its graded parts: `drape_grade_<name>` and
+    the bank's turf, `drape_grade_turf`. The renderer lifts each vertex of
+    such a part by the land GRADED round it (TtpRenderer gradeSurfaceY: the
+    drawn ground's highest within a bed's half width, averaged over a few
+    units), one smooth surface over the whole park that never dips under the
+    lawn, so every length cut from the line meets the next at one height
+    and the line rides up a rise in a vertical curve, not facet by facet."""
+    still = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None]
+    group([o for o in still if o.get('turf')], 'drape_grade_turf')
+    return group([o for o in still if not o.get('turf')], 'drape_grade_' + name)
 
 def park_platform(side):
     """A halt beside the line through the origin along Z, on its `side`: a
@@ -14924,7 +15027,8 @@ def park_platform(side):
     RED, BLUE, WOOD = 0xcf534f, 0x339cf2, 0x9a7b55
     PX, B = side * 1.55, PARK_BANK
     T = B + 0.3                                                    # the platform's top
-    box((1.1, T, 4.6), (PX, T / 2, 0.0), 'cream')
+    D = PARK_SKIRT                                                 # built down into the land, as the bank is
+    box((1.1, T + D, 4.6), (PX, (T - D) / 2, 0.0), 'cream')
     box((0.14, 0.05, 4.6), (PX - side * 0.47, T + 0.01, 0.0), 'white')         # its edge by the line
     CZ, CL, CH = -0.7, 2.4, 1.25                                   # the canopy: middle, length, post height
     for sx in (-1, 1):
@@ -14945,7 +15049,7 @@ def park_platform(side):
     box((0.1, 1.1, 0.1), (PX + side * 0.3, T + 0.55, 1.9), 'dark')             # the lamp
     box((0.18, 0.18, 0.18), (PX + side * 0.3, T + 1.15, 1.9), 'white')
     SZ = 3.1                                                                   # the signal, past the platform's end
-    box((0.14, 2.3, 0.14), (PX, 1.15, SZ), 'white')
+    box((0.14, 2.3 + D, 0.14), (PX, (2.3 - D) / 2, SZ), 'white')
     box((0.26, 0.12, 0.26), (PX, 2.34, SZ), 'dark')
     box((0.8, 0.2, 0.08), (PX - side * 0.38, 2.0, SZ + 0.1), RED, roll=side * 0.5)
     box((0.12, 0.22, 0.09), (PX - side * 0.55, 2.0 + 0.08, SZ + 0.1), 'white', roll=side * 0.5)
@@ -14958,11 +15062,11 @@ def park_railway():
     # carries the path the train rides (the whole circuit, draped onto the
     # land).
     pts, n = PARK_PATH, len(PARK_PATH)
-    park_track(PARK_HOME)                # the home stretch, the train standing on its end
+    park_track(PARK_HOME, PARK_ENDS['home'])   # the home stretch, the train standing on its end
     park_platform(1)
     Y = PARK_RAIL_Y
     for i, (x, z) in enumerate(pts):
-        marker('path_drapetrain_%d' % i, (x, Y, z))
+        marker('path_drapegradetrain_%d' % i, (x, Y, z))
     span = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) for i in range(n))
     period = span / 3.0                                           # 3 u a second
     K = 1.4                                                       # a little chunky
@@ -14975,15 +15079,15 @@ def park_railway():
     for c, (L, build) in enumerate(cars):
         if c:
             behind += (cars[c - 1][0] + L) / 2 + 0.15 * K
-        with animated('anim_path:c=drapetrain:p=%.2f:o=%.4f:f=1#%d' % (period, (1.0 - behind / span) % 1.0, c), (x0, Y, z0)):
+        with animated('anim_path:c=drapegradetrain:p=%.2f:o=%.4f:f=2#%d' % (period, (1.0 - behind / span) % 1.0, c), (x0, Y, z0)):
             build((x0, Y, z0))
-    join_still('drape_line')
+    park_join('line')
 
 @piece()
 def park_halt():
     # The lake halt, beside the line where it comes to the lake. It DRAPES.
     park_platform(-1)
-    join_still('drape_halt')
+    park_join('halt')
 
 # ---- CLOVERLEAF: the playground ------------------------------------------------------
 # Cloverleaf's playground at the size of a real one, on the lawn: a few big
@@ -17184,10 +17288,12 @@ def windpump():
     box((0.3, 0.24, 0.3), (-0.9, 0.12, 1.4), 'white')                           # the salt lick
     def toward(x, z, tx, tz):
         return math.atan2(-(tz - z), tx - x)
-    cow((3.4, 0, 0.0), yaw=toward(3.4, 0.0, TX, TZ), life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')   # drinking
-    cow((0.2, 0, 2.1), yaw=0.3, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
-    cow((2.8, 0, 2.3), yaw=2.4, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    cow((-1.4, 0, -1.5), yaw=-0.9, coat=0x5a3a28, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
+    # (the range herd's own build, range_cow: the block cows that stood here
+    # were a plainer animal than the herd by the start)
+    range_cow((3.23, 0, 0.12), toward(3.23, 0.12, TX, TZ), RED, k=1.1, pose='drink', life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')
+    range_cow((0.2, 0, 2.1), 0.3, RED, 0xf8f8fb, k=1.1, life='anim_sway:a=z:d=32:p=7.4:r=0.74#a')
+    range_cow((2.9, 0, 2.6), 2.4, ROAN, CREAM_HIDE, k=1.1, pose='up', life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
+    range_cow((-1.4, 0, -1.5), -0.9, BLACK, k=1.1, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('pump')
 
 def cow(at, yaw=0.0, coat=0x8a5a3c, life=None):
@@ -17240,9 +17346,9 @@ def stock_tank():
     box((0.3, 0.24, 0.3), (TX - 1.5, 0.6, TZ - 1.9), 'white')
     def toward(x, z):
         return math.atan2(-(TZ - z), TX - x)
-    cow((2.05, 0, -0.5), yaw=toward(2.05, -0.5), life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')   # drinking
-    cow((0.9, 0, 3.0), yaw=toward(0.9, 3.0) + 0.5, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
-    cow((-0.6, 0, -2.6), yaw=-0.9, coat=0x5a3a28, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
+    range_cow((1.86, 0, -0.45), toward(1.86, -0.45), RED, k=1.1, pose='drink', life='anim_sway:a=z:d=30:p=8.3:r=0.76#d')
+    range_cow((0.9, 0, 3.2), toward(0.9, 3.2) + 0.5, ROAN, CREAM_HIDE, k=1.1, pose='up', life='anim_sway:a=z:d=28:p=9.2:r=0.78#b')
+    range_cow((-0.6, 0, -2.6), -0.9, BLACK, k=1.1, life='anim_sway:a=z:d=30:p=6.7:r=0.72#e')
     join_still('tank')
 
 @piece(1.0)
@@ -17283,8 +17389,8 @@ def loading_chute():
     hay_bale((X0 + 0.5, 0, Z0 + 1.0), -0.1)
     box((0.4, 0.22, 1.2), (X0 + 0.45, 0.11, Z1 - 0.9), 'grey')                    # a trough
     box((0.3, 0.03, 1.1), (X0 + 0.45, 0.22, Z1 - 0.9), 0x62d3c8)
-    cow((-1.6, 0, -1.0), yaw=0.5, life='anim_sway:a=z:d=30:p=7.6:r=0.74#a')
-    cow((-2.3, 0, 1.2), yaw=-2.4, coat=0x5a3a28, life='anim_sway:a=z:d=28:p=9.1:r=0.78#b')
+    range_cow((-1.6, 0, -1.0), 0.5, RED, k=1.1, pose='up', life='anim_sway:a=z:d=30:p=7.6:r=0.74#a')
+    range_cow((-2.3, 0, 1.2), -2.4, BLACK, k=1.1, life='anim_sway:a=z:d=28:p=9.1:r=0.78#b')
     join_still('chute')
 
 @piece(1.0)
@@ -17382,9 +17488,10 @@ def ranch():
     box((0.5, 0.25, 1.1), (X0 + 0.5, 0.12, -1.2), 'grey')                         # a trough, a hay feeder
     box((0.4, 0.03, 1.0), (X0 + 0.5, 0.25, -1.2), 0x62d3c8)
     hay_bale((X0 + 0.6, 0, 1.2), 0.3)
-    cow((0.4, 0, -0.6), yaw=0.4, life='anim_sway:a=z:d=30:p=7.1:r=0.72#d')
-    cow((1.7, 0, 0.9), yaw=2.6, coat=0x5a3a28, life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
-    cow((2.2, 0, -1.2), yaw=-1.2, coat=0xf8f8fb, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
+    # (the range herd's own build: block cows stood here, plainer than the herd outside the fence)
+    range_cow((0.4, 0, -0.6), 0.4, RED, k=1.1, life='anim_sway:a=z:d=30:p=7.1:r=0.72#d')
+    range_cow((1.7, 0, 0.9), 2.6, BLACK, 0xf8f8fb, k=1.1, pose='up', life='anim_sway:a=z:d=32:p=8.6:r=0.74#c')
+    range_cow((2.2, 0, -1.2), -1.2, ROAN, CREAM_HIDE, k=1.1, life='anim_sway:a=z:d=28:p=9.7:r=0.78#e')
     join_still('ranch')
 
 @piece(1.0)
@@ -17453,7 +17560,8 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     deep square barrel, short legs, a broad face (`face`: a Hereford's
     white, or the coat's), stub horns, a tail with its switch. `patch`
     saddles it with a second colour. `pose`: `graze` (head at the grass),
-    `up` (looking about) or `lie` (legs folded under, chewing). `life`
+    `up` (looking about), `drink` (the muzzle over a tank's rim) or `lie`
+    (legs folded under, chewing). `life`
     hinges the head and neck."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
@@ -17478,7 +17586,7 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     loft([p(-0.4, 0.55), p(-0.45, 0.5), p(-0.46, 0.28), p(-0.45, 0.14)],
          r((0.018, 0.02), (0.02, 0.022), (0.016, 0.018), (0.03, 0.034)), 0x5a4632, side, 4, turn=math.pi / 4)
     HX, HY = 0.3, 0.5
-    dip = {'graze': -0.95, 'up': 0.15, 'lie': 0.1}[pose]
+    dip = {'graze': -0.95, 'drink': -0.1, 'up': 0.15, 'lie': 0.1}[pose]
     cd, sd = math.cos(dip), math.sin(dip)
     def q(dx, dy, dz=0.0):
         ax, ay = dx - HX, dy - HY
@@ -17745,8 +17853,7 @@ def gulch_flume(L, at, foot, turn):
     down it to the mill, pinned along the face of the long left-hander on
     trestle bents that stand on the talus and the first bench, out of a
     header box at a notch in the cliff and down to a sluice at the verge;
-    prospect adits in the face under it, each with its fan of grey spoil,
-    and a crib of logs holding the talus where the flume comes down."""
+    prospect adits in the face under it, each with its fan of grey spoil."""
     ground = built_ground()
     X = 0.95                                                   # the trough's line, clear of every buttress
     s0, s1 = -L / 2 + 3.5, L / 2 - 7.0
@@ -17772,17 +17879,27 @@ def gulch_flume(L, at, foot, turn):
     # it ends in: three boxes stepping down the talus to a heap of tailings
     box((1.3, 0.9, 1.5), at(X - 0.25, y(s0) + 0.1, s0 - 0.6), BOARD, yaw=turn(s0))
     box((1.45, 0.14, 1.65), at(X - 0.25, y(s0) + 0.6, s0 - 0.6), TIMBER, yaw=turn(s0))
-    for k in range(3):
-        sk, yk = s1 + 0.9 + 1.5 * k, y(s1) - 0.75 * (k + 1)
-        rowed(beam(at(X, yk + 0.3, sk - 0.8), at(X, yk - 0.3, sk + 0.8), 0.7, 'grey', d=0.36), 10)
-        g = ground(*at(X, 0.0, sk)[::2]) or 0.0
-        box((0.24, max(0.3, yk - g + 0.3), 0.24), at(X, (yk + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+    # (one trough straight down from a drop box at the flume's end to the
+    # tailings, on two bents of its own: three stepped boxes read as a broken
+    # chute, and the crib of logs that stood here stood through it)
+    S2, Y2 = s1 + 4.9, 0.62
+    yy = lambda s: y(s1) + (Y2 - y(s1)) * (s - s1) / (S2 - s1)
+    cuts = (s1, (s1 + S2) / 2, S2)
+    for sa, sb in zip(cuts, cuts[1:]):
+        rowed(beam(at(X, yy(sa), sa), at(X, yy(sb), sb), 0.62, 'grey', d=0.4), 10)
+        beam(at(X, yy(sa) + 0.24, sa), at(X, yy(sb) + 0.24, sb), 0.34, 'blue', d=0.04)
+    box((0.86, 0.66, 0.6), at(X, y(s1) - 0.02, s1 + 0.1), BOARD, yaw=turn(s1))    # the drop box over the joint
+    for sk in (s1 + 1.7, s1 + 3.4):
+        top = yy(sk) - 0.31
+        for dx in (-0.3, 0.3):
+            g = ground(*at(X + dx, 0.0, sk)[::2]) or 0.0
+            box((0.2, top - g + 0.3, 0.2), at(X + dx, (top + g - 0.3) / 2, sk), 'bark', yaw=turn(sk))
+        box((1.0, 0.22, 0.22), at(X, top, sk), 'bark', yaw=turn(sk))
     rowed(rock_lump(0.9, at(X - 0.1, 0.1, s1 + 5.6), 'grey', (0.9, 0.6, 1.5), turn(s1), seed=4.0), 5)
     # the adits, each where the face's foot stands back (so its spoil keeps
     # off the kerb), a few bays apart
     for k, s in enumerate(gulch_sites(foot, s0 + 3.0, s1 - 3.0, 3)):
         gulch_adit(at, turn, foot, ground, s, cart=(k == 1))
-    gulch_crib(at, turn, foot, ground, s1 + 3.2)
 
 def gulch_sites(foot, s0, s1, n):
     """`n` spots along a face's foot, 7 u apart or more, where it stands
@@ -18673,8 +18790,8 @@ def pickup(x, z, color, yaw=0.0):
 # where it is (TtpRendererMotion.cpp), and rides the whole of SW_RING, a
 # `drape` chain: on the ground too.
 SW_RAIL = 0.34                                  # the rails' top over the ground
-SW_PACE = 2.2                                   # the trains' pace, units a second: a fifth of a car's, a slow freight
-                                                # that still crosses a racer's picture (at 0.65 it stood parked all race)
+SW_PACE = 4.5                                   # the trains' pace, units a second: under half a car's, a freight
+                                                # rolling, not crawling (at 2.2 it read as barely moving from the seat)
 SW_FEED = (4.0, 0.6)                            # where the pipe from the farm meets the rack, in its frame
 SW_STEP = 1.000318
 SW_PIECE = {
@@ -19229,6 +19346,22 @@ def tank_farm():
         mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
         box((0.1, 0.34, 0.1), (mx, 0.17, mz), 'grey')
         cyl(0.12, 0.08, (mx + ux * 0.4, 0.52, mz + uz * 0.4), 'red', segs=8)    # a valve wheel
+    # The trunk line leaves the farm from the middle tank: a flanged nozzle in
+    # its wall, the red main valve under its hand wheel, and the pipe out to
+    # OUT, where tracks.js stands the trunk's first span (its support and
+    # collar the joint's). The line came up out of the ground inside the big
+    # tank before, and its first span ran through this one.
+    OUT = (5.78, 6.55)
+    x, z, r, h = M
+    d = math.hypot(OUT[0] - x, OUT[1] - z)
+    ux, uz = (OUT[0] - x) / d, (OUT[1] - z) / d
+    yaw = math.atan2(ux, uz)
+    sidewinder_pipe([(x + ux * t, PIPE_H, z + uz * t) for t in (r - 0.15, (r + d) / 2, d)])
+    cyl(PIPE_R * 1.5, 0.18, (x + ux * (r - 0.08), PIPE_H, z + uz * (r - 0.08)), 'grey', segs=10, axis='along', yaw=yaw)
+    vx, vz = x + ux * (r + 0.75), z + uz * (r + 0.75)
+    box((0.56, 0.56, 0.5), (vx, PIPE_H, vz), 'red', yaw=yaw)
+    box((0.12, 0.22, 0.12), (vx, PIPE_H + 0.36, vz), 'slate', yaw=yaw)
+    cyl(0.26, 0.06, (vx, PIPE_H + 0.44, vz), 'white', segs=12)
     join_still('tanks')
 
 # Which way a positive anim_sway (or spin) about a node's z turns it, seen with
@@ -19506,20 +19639,29 @@ def wellhead():
     # flush dirt pad (+X is the road).
     ground_poly([(-1.5, 0.03, -1.5), (1.5, 0.03, -1.5), (1.5, 0.03, 1.5), (-1.5, 0.03, 1.5)],
                 [(0, 1, 2, 3)], 0xb8a686)
+    # Every part ends INSIDE the next (a flange into its valve, an arm into
+    # the cross): faces sharing a plane flickered, the spool's square bar
+    # exactly the cross's width.
     cyl(0.45, 0.14, (0, 0, 0), 'slate', segs=12)                                # the cellar's collar
     cyl(0.32, 0.3, (0, 0.14, 0), 'grey', segs=12)                               # the casing head
-    cyl(0.14, 1.1, (0, 0.44, 0), 'grey', segs=10)                               # the spool through
-    for y in (0.44, 0.84):                                                      # the master valves
-        box((0.36, 0.32, 0.36), (0, y + 0.16, 0), 'red')
-        cyl(0.2, 0.05, (0.18, y + 0.16, 0), 'white', segs=12, axis='across')    # a hand wheel
-    box((0.28, 0.28, 1.3), (0, 1.38, 0), 'red')                                 # the cross
+    for y in (0.5, 0.96):                                                       # the master valves, flanged
+        cyl(0.24, 0.1, (0, y - 0.08, 0), 'grey', segs=10)
+        box((0.36, 0.34, 0.36), (0, y + 0.17, 0), 'red')
+        box((0.16, 0.1, 0.1), (0.24, y + 0.17, 0), 'slate')                     # a stem out of its bonnet
+        cyl(0.22, 0.06, (0.3, y + 0.17, 0), 'white', segs=12, axis='across')    # and its hand wheel, toward the road
+    cyl(0.24, 0.1, (0, 1.22, 0), 'grey', segs=10)
+    box((0.42, 0.4, 0.42), (0, 1.5, 0), 'red')                                  # the cross
     for sz in (-1, 1):
-        box((0.36, 0.34, 0.3), (0, 1.38, sz * 0.8), 'red')                      # its wing valves
-        cyl(0.18, 0.05, (0, 1.55, sz * 0.8), 'white', segs=12)                  # their wheels, on top
-    strut((0, 1.38, 0.95), (0, 0.03, 1.4), 0.14, 'slate')                       # the flowline, down
-    cyl(0.2, 0.3, (0, 1.52, 0), 'white', segs=12)                               # the cap
-    cyl(0.05, 0.2, (0.0, 1.82, 0), 'slate', segs=10)                            # the gauge's stem
-    cyl(0.16, 0.06, (0.0, 2.05, -0.03), 'white', segs=12, axis='along')         # the gauge
+        box((0.22, 0.22, 0.5), (0, 1.5, sz * 0.4), 'red')                       # its arms
+        cyl(0.2, 0.08, (0, 1.5, sz * 0.62 - 0.04), 'grey', segs=10, axis='along')   # a flange
+        box((0.34, 0.36, 0.3), (0, 1.5, sz * 0.8), 'red')                       # the wing valves
+        box((0.1, 0.14, 0.1), (0, 1.73, sz * 0.8), 'slate')                     # their stems, up
+        cyl(0.2, 0.06, (0, 1.78, sz * 0.8), 'white', segs=12)                   # and wheels
+    strut((0, 1.5, 0.88), (0, -0.05, 1.4), 0.16, 'slate')                       # the flowline, down into the ground
+    cyl(0.18, 0.08, (0, 1.5, -0.97), 'grey', segs=10, axis='along')             # the other wing blanked off
+    cyl(0.18, 0.2, (0, 1.68, 0), 'white', segs=12)                              # the cap
+    box((0.08, 0.2, 0.08), (0.0, 1.96, 0), 'slate')                             # the gauge's stem
+    cyl(0.16, 0.06, (0.0, 2.14, -0.03), 'white', segs=12, axis='along')         # the gauge
     join_still('wellhead')
 
 @piece(1.0)
@@ -21523,32 +21665,36 @@ def block_fortress():
     merge_paint()
 
 def pavilion(x, z, r, h, wall, roof, trim=0xfdf4de, flag=0xff5040):
-    """A knight's pavilion: a round striped wall (eight panels, the wall's
-    colour and cream by turns), a gored cone roof over it, a scalloped trim
-    at the eaves, the dark door to +X and a pennant on its pole."""
+    """A knight's pavilion: a closed round wall of striped cloth (eight
+    panels edge to edge, the wall's colour and cream by turns), a gored cone
+    roof over it, a scalloped trim at the eaves, its door flaps drawn back
+    to +X and a pennant on its pole."""
     n = 8
-    w = 2 * r * math.tan(math.pi / n) + 0.02
+    R = r / math.cos(math.pi / n)                 # the wall's corners: the panels meet there, no gap
+    def rim(i, rad, y):
+        a = (i - 0.5) * 2 * math.pi / n
+        return (x + rad * math.cos(a), y, z + rad * math.sin(a))
     for i in range(n):
         a = i * 2 * math.pi / n
-        if LITE:                                  # the box's tent: its panels a face each, no scallops
-            c, s_ = math.cos(a), math.sin(a)
-            e0 = (x + r * c + s_ * w / 2, z + r * s_ - c * w / 2)
-            e1 = (x + r * c - s_ * w / 2, z + r * s_ + c * w / 2)
-            skin([(e0[0], 0, e0[1]), (e1[0], 0, e1[1]), (e1[0], h, e1[1]), (e0[0], h, e0[1])], [(0, 1, 2, 3)],
-                 wall if i % 2 == 0 else trim, (c, 0, s_))
-            continue
-        box((0.1, h, w), (x + r * math.cos(a), h / 2, z + r * math.sin(a)), wall if i % 2 == 0 else trim, yaw=-a + math.pi / 2)
+        skin([rim(i, R, 0), rim(i + 1, R, 0), rim(i + 1, R, h), rim(i, R, h)], [(0, 1, 2, 3)],
+             wall if i % 2 == 0 else trim, (math.cos(a), 0, math.sin(a)))
     top = (x, h + r * 1.05, z)
+    eave = R + (0.06 if LITE else 0.25)           # the box's roof sits on its wall's faces
     for i in range(n):
-        a0, a1 = (i - 0.5) * 2 * math.pi / n, (i + 0.5) * 2 * math.pi / n
-        eave = r + (0.06 if LITE else 0.25)       # the box's roof sits on its wall's faces
-        rim0 = (x + math.cos(a0) * eave / math.cos(math.pi / n), h, z + math.sin(a0) * eave / math.cos(math.pi / n))
-        rim1 = (x + math.cos(a1) * eave / math.cos(math.pi / n), h, z + math.sin(a1) * eave / math.cos(math.pi / n))
-        poly([top, rim0, rim1], [(0, 1, 2)], roof if i % 2 == 0 else trim)
-    for i in range(0 if LITE else n):                            # the scallops at the eaves
+        poly([top, rim(i, eave, h), rim(i + 1, eave, h)], [(0, 1, 2)], roof if i % 2 == 0 else trim)
+        if not LITE:                              # the overhang closed underneath, wall to eave
+            skin([rim(i, R, h), rim(i + 1, R, h), rim(i + 1, eave, h), rim(i, eave, h)], [(0, 1, 2, 3)],
+                 roof if i % 2 == 0 else trim, (0, -1, 0))
+    for i in range(0 if LITE else n):                            # the scallops at the eaves, hung from the roof's edge
         a = i * 2 * math.pi / n
-        box((0.08, 0.28, w * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)), roof, yaw=-a + math.pi / 2)
-    plate_x(x + r + 0.06, 0.0, h * 0.7, z - 0.3, z + 0.3, 0x3a2a22)          # the door
+        box((0.08, 0.28, 2 * r * math.tan(math.pi / n) * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)),
+            roof, yaw=-a)
+    # the door: the cloth parted from its top and drawn back to both sides,
+    # the dark of the tent between the flaps
+    dw, dh = 0.36 * r, h * 0.78
+    skin([(x + r + 0.03, 0.0, z - dw), (x + r + 0.03, 0.0, z + dw), (x + r + 0.03, dh, z)], [(0, 1, 2)], 0x3a2a22, (1, 0, 0))
+    for sd in (-1, 1):                                           # the flaps' rolled edges
+        bar((x + r + 0.06, 0.0, z + sd * dw), (x + r + 0.06, dh, z), 0.1, 0.1, trim)
     box((BAR, 1.0, BAR), (x, top[1] + 0.4, z), 0x2a2735)
     box((0.08, 0.36, 0.7), (x, top[1] + 0.72, z + 0.36), flag)
 
@@ -22992,10 +23138,21 @@ def windup_robot(x, z, body, tag):
     box((0.26, 0.26, 0.26), (x, 3.18, z), 0xe66a5a)
     windup_key(x - 0.45, 1.4, z, tag)
 
-def windup_die(x, z, pip, tag):
-    """A wind-up die a toy car tall, its key in its back (-X); it hops."""
-    die((x, 0.0, z), 1.15, 0.0, color=0xfdf4de, pip=pip)
-    windup_key(x - 0.575, 0.62, z, tag)
+def windup_duck(x, z, tag):
+    """A wind-up duck a little over a toy car tall, facing +X, in blocks as
+    the cars are: its body, its head on it, an orange bill and feet, its
+    wings at its sides and its key in its back; it hops as it goes."""
+    for sd in (-1, 1):
+        box((0.42, 0.12, 0.22), (x + 0.12, 0.06, z + sd * 0.26), 0xff7e44)
+        box((0.12, 0.3, 0.12), (x, 0.24, z + sd * 0.26), 0xff7e44)
+        box((0.6, 0.42, 0.12), (x - 0.05, 0.85, z + sd * 0.5), 0xffc044, pitch=0.2)
+    box((1.0, 0.85, 0.9), (x, 0.82, z), 0xf2c14e)
+    box((0.66, 0.6, 0.66), (x + 0.3, 1.5, z), 0xf2c14e)
+    box((0.32, 0.18, 0.3), (x + 0.75, 1.45, z), 0xff7e44)
+    for sd in (-1, 1):
+        box((0.06, 0.14, 0.14), (x + 0.64, 1.62, z + sd * 0.18), 0x2a2735)
+    box((0.16, 0.22, 0.1), (x + 0.2, 1.88, z), 0xff7e44)
+    windup_key(x - 0.5, 0.85, z, tag)
 
 def windup_knight(x, z, tabard, tag):
     """A tin knight two toy cars tall, facing +X, marching: his helmet with
@@ -23049,12 +23206,11 @@ def windup_robots():
                    (lambda x, z, t: windup_robot(x, z, 0x5a8fd8, t), 'waddle:d=9:p=0.55')])
 
 @piece(1.0)
-def windup_dice():
-    # Skysnake: the game's own wind-up toys, three dice hopping slowly
-    # along the kerb of the board, their keys turning.
-    windup_parade([(lambda x, z, t: windup_die(x, z, 0xe66a5a, t), 'bob:h=0.4:p=1.3:b=1'),
-                   (lambda x, z, t: windup_die(x, z, 0x5a8fd8, t), 'bob:h=0.4:p=1.45:b=1'),
-                   (lambda x, z, t: windup_die(x, z, 0x2a2735, t), 'bob:h=0.4:p=1.2:b=1')], L=12.0, speed=0.5)
+def windup_ducks():
+    # Skysnake: three wind-up ducks hopping along the kerb of the board
+    # (wind-up dice stood in for a round; the ducks read better).
+    windup_parade([(windup_duck, 'bob:h=0.3:p=0.38:b=1'), (windup_duck, 'bob:h=0.3:p=0.42:b=1'),
+                   (windup_duck, 'bob:h=0.3:p=0.36:b=1')], L=12.0)
 
 KNIGHT = 0.57      # the toy set's knights' size (knight(): 0.55 of a soldier), the wind-up ones too
 
@@ -23092,13 +23248,18 @@ def windup_bus(x, z, body, tag, decks=2):
         box((0.14, 0.14, 0.9), (x + 0.5, y + 0.75, z), 0x38383d)
     windup_key(x - 1.2, 0.75, z, tag)
 
-@piece(1.0)
+TRAM = 1.25        # the tin bus and tram's size: seen across a corner, a quarter bigger than the kerb walkers
+
+@piece(TRAM)
 def windup_trams():
-    # Skyline: the town's own wind-up toys running the kerb by the grid, a
-    # red tin double-decker and a green tin tram behind it, rocking as
-    # they go, their keys turning (Helix keeps the robots).
+    # Skyline: the town's own wind-up toys running to and fro on the bare
+    # floor past the first corner (tracks.js stands the walk across the grid
+    # straight's line, off every rug), a red tin double-decker and a green
+    # tin tram behind it, rocking as they go, their keys turning (Helix
+    # keeps the robots). The walk is authored in the piece's grown units.
     windup_parade([(lambda x, z, t: windup_bus(x, z, 0xe66a5a, t), 'waddle:d=4:p=0.45'),
-                   (lambda x, z, t: windup_bus(x, z, 0x6cbf6c, t, decks=1), 'waddle:d=4:p=0.5')])
+                   (lambda x, z, t: windup_bus(x, z, 0x6cbf6c, t, decks=1), 'waddle:d=4:p=0.5')],
+                  L=12.0 / TRAM, w=2.4 / TRAM, speed=1.0 / TRAM)
 
 @piece(1.0)
 def tourney_rug():
@@ -23256,20 +23417,37 @@ def gonfalon(x, z, color, h=3.2, yaw=0.0, wave=None):
             box((0.08, 0.3, 0.3), (x, h - 1.38, z + 0.3), color)
 
 def toy_horse(x, z, coat, cloth, yaw=0.0, rider=None, lance=True):
-    """A toy horse from the knights' set, about a racer and a half long, in
-    its caparison of the side's colour, its head to (cos yaw, -sin yaw); a
-    knight in the saddle, his lance couched over the horse's head."""
+    """A wooden toy horse from the knights' set, about a racer and a half
+    long, its head to (cos yaw, -sin yaw): a barrel between a deeper chest
+    and rump, an arched neck, a long head with its muzzle, eyes and pricked
+    ears, a dark mane, forelock and tail, four legs on dark hooves, and its
+    caparison of the side's colour to the knees, a saddle on it; a knight
+    in the saddle, his lance couched over the horse's head."""
+    DARK, MUZZLE = 0x2a2735, 0x7a5a3a
     with transformed((x, 0, z), yaw):
-        for dx in (-0.55, 0.5):
+        for dx in (-0.55, 0.52):
             for dz in (-0.2, 0.2):
-                box((0.18, 0.7, 0.18), (x + dx, 0.35, z + dz), coat)
-        box((1.6, 0.6, 0.6), (x, 0.95, z), coat)                                 # the barrel
-        box((1.3, 0.62, 0.7), (x - 0.02, 0.78, z), cloth)                        # the caparison, to the knees
-        box((1.34, 0.12, 0.74), (x - 0.02, 0.5, z), 0xfdf4de)                    # its hem
-        box((0.36, 0.9, 0.4), (x + 0.82, 1.45, z), coat, roll=-0.5)              # the neck
-        box((0.62, 0.34, 0.36), (x + 1.2, 1.78, z), coat, roll=0.35)             # the head
-        box((0.1, 0.5, 0.12), (x + 0.72, 1.75, z), 0x2a2735, roll=-0.5)          # the mane
-        box((0.14, 0.7, 0.16), (x - 0.86, 0.9, z), 0x2a2735, roll=0.3)           # the tail
+                box((0.2, 0.62, 0.2), (x + dx, 0.43, z + dz), coat)              # the legs
+                box((0.26, 0.14, 0.26), (x + dx + 0.02, 0.07, z + dz), DARK)     # on their hooves
+        box((1.2, 0.56, 0.58), (x, 0.97, z), coat)                               # the barrel
+        box((0.5, 0.68, 0.64), (x - 0.55, 0.97, z), coat)                        # the rump
+        box((0.46, 0.72, 0.62), (x + 0.55, 1.0, z), coat)                        # the chest
+        box((1.02, 0.6, 0.72), (x - 0.02, 0.8, z), cloth)                        # the caparison, to the knees
+        box((1.06, 0.12, 0.76), (x - 0.02, 0.52, z), 0xfdf4de)                   # its hem
+        box((0.2, 0.5, 0.68), (x + 0.72, 0.92, z), cloth)                        # and its breast cloth
+        box((0.46, 0.1, 0.5), (x - 0.08, 1.3, z), MUZZLE)                        # the saddle
+        box((0.1, 0.2, 0.42), (x + 0.16, 1.37, z), MUZZLE)                       # its pommel
+        box((0.1, 0.26, 0.46), (x - 0.32, 1.4, z), MUZZLE)                       # and cantle
+        bar((x + 0.62, 1.12, z), (x + 0.98, 1.74, z), 0.36, 0.46, coat)          # the neck, arched forward
+        bar((x + 0.88, 1.86, z), (x + 1.32, 1.6, z), 0.32, 0.36, coat)           # the head, nose down
+        bar((x + 1.27, 1.6, z), (x + 1.5, 1.46, z), 0.27, 0.27, MUZZLE)          # the muzzle
+        bar((x + 0.43, 1.25, z), (x + 0.76, 1.82, z), 0.14, 0.18, DARK)          # the mane, down the crest
+        box((0.2, 0.12, 0.12), (x + 0.98, 2.03, z), DARK, roll=-0.5)             # the forelock
+        bar((x - 0.78, 1.2, z), (x - 0.98, 0.55, z), 0.14, 0.16, DARK)           # the tail
+        for sd in (-1, 1):
+            box((0.1, 0.22, 0.08), (x + 0.86, 2.1, z + sd * 0.11), coat)         # ears, pricked
+            if not LITE:
+                box((0.08, 0.08, 0.06), (x + 1.08, 1.8, z + sd * 0.15), DARK)    # eyes
     if rider is not None:
         c, s_ = math.cos(yaw), math.sin(yaw)
         knight((x - 0.1 * c, 0.75, z + 0.1 * s_), rider, yaw)

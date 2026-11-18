@@ -164,11 +164,17 @@ void TtpRenderer::buildSetMovers() {
                 // does (appendBaked): lifted by the land under each point over
                 // the placement's foot, so a slide down a terrain hill follows
                 // the grid's chords instead of the curve they cut across.
+                // A `drapegrade` chain lies on the graded land, as the bed
+                // its traveller rides does (gradeSurfaceY).
                 const bool drape = mTrack && name.compare(0, 5, "drape") == 0;
+                const bool grade = drape && name.compare(0, 10, "drapegrade") == 0;
                 SetPath sp;
                 for (const auto& [i, p] : pts) {
                     sp.pts.push_back(p);
-                    if (drape) sp.pts.back().y += groundSurfaceY(*mTrack, p.x, p.z) - baseY;
+                    if (drape) {
+                        sp.pts.back().y += (grade ? gradeSurfaceY(*mTrack, p.x, p.z)
+                                : groundSurfaceY(*mTrack, p.x, p.z)) - baseY;
+                    }
                 }
                 sp.at.push_back(0);
                 for (size_t i = 1; i <= sp.pts.size(); i++) {

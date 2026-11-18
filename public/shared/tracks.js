@@ -274,7 +274,11 @@ const BOXES = {
 //          lat, r or yaw, like a street
 //   ladder the same for one of the board's ladders: its kerbs the wooden
 //          rails, its rungs across the deck
-// Any but a mound, a clear, a street, a snake or a ladder may carry a `tint`, 0xRRGGBB, a
+//   shed   `len` of road centred on `u` under a roof (an avalanche gallery):
+//          no snow lies there, so the kerb is a concrete kerbstone and
+//          paving out to the gallery's columns and back wall instead of the
+//          snow cup's plough bank. No lat, r or yaw, like a street
+// Any but a mound, a clear, a street, a snake, a ladder or a shed may carry a `tint`, 0xRRGGBB, a
 // multiplier over the ground's colour where the form lies (fading with its
 // flank, or a plain's or paint's `w`); the ground's grid is 9 u, so a tint is
 // a broad wash.
@@ -294,13 +298,15 @@ const BOXES = {
 // A BEACH RISE is a ridge carrying both `near` and `w`: the sand's own swell
 // under a piece on the sea side of a beach road. Past a `shore` the beach is
 // the plain and the road stands most of a unit over it, so what stands there
-// is under the kerb from the seat; a rise keeps its height to `w` units
-// inside the waterline (every other form is flat long before) and fills the
-// sand up to it, adding nothing where raised ground already stands, low and broad
-// (a dozen units of radius: the ground's 9 u grid cannot draw less) with a
-// flat `top`, so the piece on it stands at the road's height. The piece must
-// level nothing, or its clearing cuts down to the rise's foot by the kerb.
-// The 9 u grid draws no rise flat, so what stands on one LIES ON IT
+// is under the kerb from the seat; a rise stands from the damp sand's inner
+// edge, or from `w` units inside the waterline where that is further in
+// (the damp sand and the sea are flat sheets: no land stands in them), and
+// fills the sand up to it, adding nothing where raised ground already stands,
+// low and broad with a flat `top`, so the piece on it stands at the road's
+// height. Only the road's verge band draws it (the 9 u grid laid it as
+// blocks), so it reaches as far from the kerb as the band does and no
+// further. The piece must level nothing, or its clearing cuts down to the
+// rise's foot by the kerb. No rise is flat, so what stands on one LIES ON IT
 // (set_prototypes.py lie_on_land(): every part drapes, and the row's `y`
 // only places what cannot, a chimney's smoke); a piece that stands rigid at
 // a typed `y` hangs over the sand's fall. on_a_rise() is for what stands in
@@ -515,7 +521,7 @@ export const TRACKS = {
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 1.8, scale: 1.3 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
-      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
+      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.47 },
       // palms on the downs' near flanks below the crests, placed by hand:
       // the `clear`s that keep seeded crates off the hilltops keep its
       // seeded palms off too
@@ -684,8 +690,7 @@ export const TRACKS = {
       { kind: 'shore', u: 0.795, lat: 17, len: 24, r: 18 },
       // the stockade's rise on the anchorage's sand, so the camp stands at
       // the road's height (on the plain it hid behind the kerb), and the bay
-      // brought in past it, so its jetty reaches the water: a rise falls to
-      // the sea over the last five units short of it (kBeachRamp)
+      // brought in past it, so its jetty reaches the water
       { kind: 'ridge', u: 0.54, lat: 13, len: 14, r: 16, h: 0.92, top: 0.6, near: 0.4, w: 1 },
       { kind: 'shore', u: 0.54, lat: 19.5, len: 20, r: 24 },
       // the camp's own rise on the east beach: its shelter, its fire and its
@@ -878,8 +883,8 @@ export const TRACKS = {
       // lengths, and across the road the hotel and the guest houses
       { model: 'set-seafront-wall-a', u: 0.2614, lat: -9.5, yaw: 180 },
       { model: 'set-seafront-wall-b', u: 0.2921, lat: -9.5, yaw: 180 },
-      { model: 'set-seafront-wall-c', u: 0.3229, lat: -9.5, yaw: 180 },
-      { model: 'set-seafront-wall-d', u: 0.3536, lat: -9.5, yaw: 180 },
+      { model: 'set-seafront-wall-c', u: 0.3229, lat: -9.5, yaw: 180, y: -0.25 },
+      { model: 'set-seafront-wall-d', u: 0.3536, lat: -9.5, yaw: 180, y: -0.3 },
       { model: 'set-seafront-hotel', u: 0.2941, lat: 9 },
       { model: 'set-seafront-terrace', u: 0.3316, lat: 9 },
       { model: 'set-seafront-cafe', u: 0.369, lat: 9 },
@@ -1037,7 +1042,7 @@ export const TRACKS = {
       // set_prototypes.py HAMLET_G: re-sample after moving it or the land)
       { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: 180 },
       // one more corner of the village by the start
-      { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
+      { model: 'set-log-cabin', u: 0.05, lat: 12, yaw: 30 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
@@ -1109,6 +1114,10 @@ export const TRACKS = {
       // off, under the frame's top from the grid and short of the terrain's
       // west edge, pines on its near face (forest-g)
       { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
+      // a low bench off the start straight's verge under the cabins by the
+      // line (set-log-cabin, built on it as sampled): on the plain they
+      // stood under the road's own height, their walls behind its bank
+      { kind: 'ridge', u: 0.045, lat: 12.5, r: 10, h: 1.4, top: 0.65, near: 2 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
       { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
@@ -1378,7 +1387,13 @@ export const TRACKS = {
       { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.3334, lat: 19.81, yaw: 99.3, x: 0.51, len: 32, r: 3, w: 3, tint: 0xc8cfdf },
-      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf }
+      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf },
+      // under each gallery's roof no snow: the road's kerb a concrete
+      // kerbstone and paving there, from a little outside one mouth to a
+      // little outside the other (set_prototypes.py gallery_shed's samples)
+      { kind: 'shed', u: 0.7243, len: 12.6 },
+      { kind: 'shed', u: 0.8276, len: 31.6 },
+      { kind: 'shed', u: 0.37, len: 27.6 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
@@ -1398,7 +1413,9 @@ export const TRACKS = {
     // near end they stood in the view of the church): the lap's only poplars,
     // every other tree the orchard's. The
     // windmill turns in the north loop beside its wheat field, a rectangle
-    // well inside the kerbs; the sheep graze round the loop's outside and
+    // well inside the kerbs, its sails and door turned to the flyover's way
+    // down, where a racer comes at it (square to the loop's top it showed
+    // them its back); the sheep graze round the loop's outside and
     // under the flyover, their fold of timber hurdles and its post-and-rail
     // fences up the north-east hill where the loop turns under it, and the
     // dairy farm stands on its bank outside the west bend, straight ahead of
@@ -1417,7 +1434,7 @@ export const TRACKS = {
       { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
       { model: 'set-village-street-d', u: 0.4145, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
+      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 163 },
       { model: 'set-field-wheat', u: 0.6977, lat: 12, yaw: 7.7 },
       { model: 'set-village-fete', u: 0.0125, lat: 8.6, yaw: 0 },
       { model: 'set-orchard-block', u: 0.126, lat: -7.5 },
@@ -1593,11 +1610,11 @@ export const TRACKS = {
     // A spring park: cherries in pale blossom, planted as a park plants them,
     // in avenues beside the straights (set-cherry-avenue) and in groves at the
     // bends, few alone on the lawn. The park's miniature railway runs from a
-    // loop by the start straight, under the high road, past the bandstand's
-    // knoll and along the finger lobe to a loop by the lake, a halt at each
-    // end, its one train going out and back (set-park-rails-*, laid by
-    // scratch geometry in set_prototypes.py PARK_ROUTE; it crosses no road at
-    // grade). The playground on the flat outside the south-west hairpin,
+    // loop by the start straight, under the high road, along the foot of the
+    // bandstand's knoll and along the finger lobe to a loop by the lake, a
+    // halt at each end, its one train going out and back (set-park-rails-*,
+    // one line cut into lengths in set_prototypes.py PARK_ROUTE; it crosses
+    // no road at grade and lies on a graded bed, never facet by facet). The playground on the flat outside the south-west hairpin,
     // where the start straight points: big climbing frames standing on the
     // grass, its hill behind it. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
@@ -1616,11 +1633,11 @@ export const TRACKS = {
       { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
       { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
-      { model: 'set-park-rails-a', u: 0.23569, lat: 6.061, yaw: 116.1 },
-      { model: 'set-park-rails-b', u: 0.23452, lat: -8.196, yaw: 45.76 },
-      { model: 'set-park-rails-c', u: 0.92932, lat: 9.073, yaw: 165.75 },
-      { model: 'set-park-rails-d', u: 0.89364, lat: 12.196, yaw: -172.87 },
-      { model: 'set-park-rails-e', u: 0.86206, lat: 12.513, yaw: -165.87 },
+      { model: 'set-park-rails-a', u: 0.25382, lat: 4.735, yaw: 94.22 },
+      { model: 'set-park-rails-b', u: 0.6714, lat: -6.567, yaw: -10.08 },
+      { model: 'set-park-rails-c', u: 0.91938, lat: 8.495, yaw: -157.05 },
+      { model: 'set-park-rails-d', u: 0.88896, lat: 12.244, yaw: -176.47 },
+      { model: 'set-park-rails-e', u: 0.86206, lat: 12.536, yaw: -164.54 },
       { model: 'set-park-rails-loop-a', u: 0.0503, lat: 8.47, yaw: 0 },
       { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
@@ -2062,7 +2079,10 @@ export const TRACKS = {
       { model: 'set-pipeline-16', u: 0.634694, lat: 17.544, yaw: -74.319 },
       // the trunk line on its stilts, span by span along the right-hand
       // verge, each span a chord of the road's curve with a support at every
-      // joint: from the tank farm round the north loop, swinging out behind
+      // joint (each span's anchor is the last one's end as the game stands
+      // it, in the plan: a step there is a gap in the pipe): from the valve
+      // on the tank farm's middle tank (set_prototypes.py tank_farm, OUT)
+      // round the north loop, swinging out behind
       // the pumping wells to their tank battery and back, under the knot;
       // down the start straight and under the mountain; round the outside
       // of the south loop and away under the S. Each span a thin footprint,
@@ -2070,40 +2090,38 @@ export const TRACKS = {
       // is full-only (the wells and the deck hide it from the seat): in
       // lite its first span is the line going under the ground
       // (set-pipeline-8-under's lite build), up again at the south run.
-      { model: 'set-pipeline-rise', u: 0.6270, lat: 6.50, yaw: -179.8 },
-      { model: 'set-pipeline-8', u: 0.6270, lat: 6.50, yaw: 2.5 },
-      { model: 'set-pipeline-8', u: 0.6430, lat: 6.47, yaw: 14.5 },
-      { model: 'set-pipeline-8', u: 0.6550, lat: 6.38, yaw: 12.8 },
-      { model: 'set-pipeline-8', u: 0.6667, lat: 6.33, yaw: 13.2 },
-      { model: 'set-pipeline-8', u: 0.6791, lat: 6.35, yaw: 12.7 },
-      { model: 'set-pipeline-12', u: 0.6907, lat: 6.33, yaw: 10.7 },
-      { model: 'set-pipeline-16', u: 0.7139, lat: 6.48, yaw: 8.1 },
-      { model: 'set-pipeline-8-under', u: 0.7389, lat: 8.76, yaw: -31.9 },
-      { model: 'set-pipeline-8', u: 0.7459, lat: 13.88, yaw: -5.3, lite: false },
-      { model: 'set-pipeline-8', u: 0.7546, lat: 15.88, yaw: 8.3, lite: false },
-      { model: 'set-pipeline-8', u: 0.7631, lat: 15.84, yaw: 7.9, lite: false },
-      { model: 'set-pipeline-12', u: 0.7714, lat: 15.99, yaw: 6.0, lite: false },
-      { model: 'set-pipeline-8', u: 0.7932, lat: 15.63, yaw: 46.4, lite: false },
-      { model: 'set-pipeline-8', u: 0.7999, lat: 10.31, yaw: 42.7, lite: false },
-      { model: 'set-pipeline-dive', u: 0.8091, lat: 6.53, yaw: 5.2, lite: false },
-      { model: 'set-pipeline-rise', u: 0.9150, lat: 7.50, yaw: 179.9 },
-      { model: 'set-pipeline-16', u: 0.9150, lat: 7.50, yaw: -1.2 },
-      { model: 'set-pipeline-16', u: 0.9510, lat: 7.50, yaw: -0.4 },
-      { model: 'set-pipeline-16', u: 0.9866, lat: 7.50, yaw: -0.1 },
-      { model: 'set-pipeline-16', u: 0.0220, lat: 7.50, yaw: 0.1 },
-      { model: 'set-pipeline-dive', u: 0.0573, lat: 7.50, yaw: 0.0 },
-      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.50, yaw: 179.8 },
-      { model: 'set-pipeline-8', u: 0.1421, lat: 6.50, yaw: 2.4 },
-      { model: 'set-pipeline-8', u: 0.1578, lat: 6.39, yaw: 13.4 },
-      { model: 'set-pipeline-8', u: 0.1689, lat: 6.27, yaw: 26.9 },
-      { model: 'set-pipeline-8', u: 0.1768, lat: 6.07, yaw: 20.4 },
-      { model: 'set-pipeline-8', u: 0.1857, lat: 6.14, yaw: 14.7 },
-      { model: 'set-pipeline-16', u: 0.1975, lat: 6.29, yaw: 5.0 },
-      { model: 'set-pipeline-8', u: 0.2305, lat: 6.34, yaw: 7.0 },
-      { model: 'set-pipeline-8', u: 0.2446, lat: 6.40, yaw: 7.4 },
-      { model: 'set-pipeline-8', u: 0.2590, lat: 6.43, yaw: 7.3 },
-      { model: 'set-pipeline-8', u: 0.2733, lat: 6.38, yaw: 6.9 },
-      { model: 'set-pipeline-dive', u: 0.2877, lat: 6.49, yaw: 1.7 }
+      { model: 'set-pipeline-8', u: 0.643008, lat: 6.470, yaw: 14.485 },
+      { model: 'set-pipeline-8', u: 0.654964, lat: 6.234, yaw: 11.040 },
+      { model: 'set-pipeline-8', u: 0.666829, lat: 6.350, yaw: 11.701 },
+      { model: 'set-pipeline-8', u: 0.679031, lat: 6.345, yaw: 12.072 },
+      { model: 'set-pipeline-12', u: 0.690927, lat: 6.365, yaw: 9.265 },
+      { model: 'set-pipeline-16', u: 0.713930, lat: 6.485, yaw: 8.091 },
+      { model: 'set-pipeline-8-under', u: 0.738772, lat: 8.706, yaw: -35.271 },
+      { model: 'set-pipeline-8', u: 0.746143, lat: 14.121, yaw: -3.976, lite: false },
+      { model: 'set-pipeline-8', u: 0.754355, lat: 15.778, yaw: 8.209, lite: false },
+      { model: 'set-pipeline-8', u: 0.762468, lat: 15.733, yaw: 6.602, lite: false },
+      { model: 'set-pipeline-12', u: 0.771206, lat: 15.965, yaw: 5.724, lite: false },
+      { model: 'set-pipeline-8', u: 0.792834, lat: 15.615, yaw: 47.579, lite: false },
+      { model: 'set-pipeline-8', u: 0.800125, lat: 10.155, yaw: 37.135, lite: false },
+      { model: 'set-pipeline-dive', u: 0.808887, lat: 6.588, yaw: 5.926, lite: false },
+      { model: 'set-pipeline-rise', u: 0.915, lat: 7.5, yaw: 179.9 },
+      { model: 'set-pipeline-16', u: 0.915000, lat: 7.500, yaw: -1.200 },
+      { model: 'set-pipeline-16', u: 0.950978, lat: 7.510, yaw: -0.359 },
+      { model: 'set-pipeline-16', u: 0.986573, lat: 7.494, yaw: -0.061 },
+      { model: 'set-pipeline-16', u: 0.021973, lat: 7.494, yaw: 0.108 },
+      { model: 'set-pipeline-dive', u: 0.057270, lat: 7.500, yaw: 0.001 },
+      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.5, yaw: 179.8 },
+      { model: 'set-pipeline-8', u: 0.142100, lat: 6.498, yaw: 2.400 },
+      { model: 'set-pipeline-8', u: 0.157804, lat: 6.497, yaw: 14.325 },
+      { model: 'set-pipeline-8', u: 0.168967, lat: 6.280, yaw: 23.767 },
+      { model: 'set-pipeline-8', u: 0.176702, lat: 6.034, yaw: 19.672 },
+      { model: 'set-pipeline-8', u: 0.185589, lat: 6.112, yaw: 12.420 },
+      { model: 'set-pipeline-16', u: 0.197911, lat: 6.334, yaw: 4.520 },
+      { model: 'set-pipeline-8', u: 0.230999, lat: 6.371, yaw: 6.868 },
+      { model: 'set-pipeline-8', u: 0.245070, lat: 6.446, yaw: 6.583 },
+      { model: 'set-pipeline-8', u: 0.259503, lat: 6.471, yaw: 7.112 },
+      { model: 'set-pipeline-8', u: 0.273948, lat: 6.422, yaw: 6.006 },
+      { model: 'set-pipeline-dive', u: 0.288269, lat: 6.536, yaw: 1.169 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
@@ -2160,13 +2178,13 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Each ladder ends in a kicker: the racers kick up off its top rung onto
-    // the next deck.
+    // Each climb ends in a kicker: the racers kick up off its top onto the
+    // next deck.
     kickers: [ { u: 0.336 }, { u: 0.523 } ],
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
     // snakes are jointed wooden ones arching along the kerb (the grid
-    // straight, the last corner), wind-up dice hop the grid's kerb, and
+    // straight, the last corner), wind-up ducks hop the grid's kerb, and
     // outside the first deck a ladder leans up a stack of dice with a snake
     // hung down it, another game's board stood open past it. The games
     // shelf's other things stand where the floor cannot be seen: a house of
@@ -2178,7 +2196,7 @@ export const TRACKS = {
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
       { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
-      { model: 'set-windup-dice', u: 0.12, lat: 4.5 },
+      { model: 'set-windup-ducks', u: 0.104, lat: 4.5 },
       { model: 'set-snake-humps-blue', u: 0.16, lat: 7.2 },
       { model: 'set-ladder-stack', u: 0.452, lat: 8 },
       { model: 'set-game-board', u: 0.497, lat: 8.5 },
@@ -2190,11 +2208,10 @@ export const TRACKS = {
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
-    // The climbs are the board's ladders, the dive its snake, from the top
-    // deck down to the board.
+    // The dive is the board's snake, from the top deck down to the board.
+    // The climbs stay plain road: painted as the board's ladders, their
+    // rungs read as stripes across the lane.
     land: [
-      { kind: 'ladder', u: 0.3092, len: 23 },
-      { kind: 'ladder', u: 0.4927, len: 23 },
       { kind: 'snake', u: 0.744, len: 31 }
     ]
   },
@@ -2327,7 +2344,9 @@ export const TRACKS = {
     // and its clock, a stepped block of flats, all over the deck, and a
     // terrace of tall houses stepping down beside the ramp off it; and
     // towers a child stacked of the small blocks stand outside the corner
-    // the south-bound leg turns. A tin bus and tram, wound up, run the grid's kerb.
+    // the south-bound leg turns. A tin bus and tram, wound up, run to and fro
+    // across the bare floor outside the first corner, where the grid straight
+    // points: side on to the racers the whole straight, and clear of every rug.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -2340,7 +2359,7 @@ export const TRACKS = {
       { model: 'set-block-terrace', u: 0.547, lat: -7.2, yaw: 180 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180, scale: 0.62 },
-      { model: 'set-windup-trams', u: 0.06, lat: -4.4, yaw: 180 },
+      { model: 'set-windup-trams', u: 0.0686, lat: -8.93, yaw: 128.1 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }

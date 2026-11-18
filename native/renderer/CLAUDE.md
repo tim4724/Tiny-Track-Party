@@ -618,6 +618,11 @@ to do both:
   reach the kerb (the cap, spotIssue's margin), so a `street` landform turns
   the kerb along its stretch into a kerbstone's step and paving out to that
   margin (`kStreetKerbW`), and the street's piece carries on at its height.
+- **A SHED'S FLOOR IS THE ROAD'S TOO.** Under a gallery's roof (a `shed`
+  landform) the snow cup's plough bank gives way to the plain kerb's section
+  as a concrete kerbstone and paving (`kShedKerbW`), out past the gallery's
+  columns and to the foot of its back wall: snow lying under a roof read as a
+  fault, and no piece can lay a floor at the kerb.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
   ground drawn under it over the placement's foot (`bakePlacements`), so a
@@ -633,6 +638,17 @@ to do both:
   (the face's foot). A summit stays a summit over a short rise in the land,
   and a tail over a massif's flank sinks into it instead of standing on it
   as a needle.
+- **A `drape_grade…` PART LIES ON THE GRADED LAND** (a railway's bed), and
+  so does a `drapegrade…` path (its train): `gradeSurfaceY`, the drawn
+  ground's highest across a bed's width averaged over a few units, one
+  smooth surface in world XZ. A line draped vertex by vertex kinks on every
+  crease of the 9 u grid and rolls with every facet; on the graded land it
+  takes a rise in a vertical curve, lengths cut from one line meet at one
+  height, and what rides it pitches with the grade (`f=2`). The surface
+  stands OVER the land on a side slope and in a dip, so the piece brings its
+  own bank down to the ground (a skirt built under its foot,
+  `drape_grade_turf` in the field's colour). It smooths what is there and
+  cannot make a grade: route the line where the land is gentle.
 - **A `drape_floor…` PART CLAIMS NO GROUND** (a gravel lane, the stones along
   it): it drapes like any other, but the piece's footprint is taken without it
   (`mSetBox`), so the verge band does not come down at it and it may run on to
@@ -739,16 +755,28 @@ to do both:
   undefined.
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
-  glacier's ice, a piste); a `paint` is a tint with no shape. On a convex slope the grid's chords run under the curve the
+  glacier's ice, a piste); a `paint` is a tint with no shape. The band
+  samples it at its own step but comes to the grid's over its last rows, or
+  its end shows as a ragged patch of another colour. On a convex slope the grid's chords run under the curve the
   parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
   chord misses; a part floats only if that is bypassed.
 - **The beach rolls inland only** (`beachMask`): its dunes stand inside the
   lap's loop, never on the beach between the road and the sea (a ring of
-  dunes read as a wall and hid it), and everything, the authored landforms
-  included, sinks to exactly the plain short of the waterline, where the sea
-  and the wet sand lie flat on it. The sea and the dunes read one shoreline
-  (`shoreline()`), and so does every keep-out (`inSea`: scatter, props,
-  clutter, `spotIssue`). A `shore` landform brings that one curve in to a
+  dunes read as a wall and hid it).
+- **THE SHELF: no land in the damp sand or the sea.** Both are FLAT sheets,
+  so ground rising under them cuts them along its own facets (sand wedges in
+  the water, the damp band ending on a triangle's edge). From the damp
+  sand's visible inner edge out, the ground is the shelf, `kWaterLift` under
+  the sheet, and every grid triangle touching it lies in it: the grid's land
+  (paints too) starts a cell's diagonal inland of that edge (`mShelfReach`),
+  the verge band's at the edge itself. It is measured as DRAWN, the true
+  distance to the polylines `buildWater` lays (`shoreDist`, one set of
+  spokes for both), never the polar radius: along a bay's flank that is many
+  times the distance to the water, and a hill stood out over it. The same
+  drawn waterline is every keep-out's (`inSea`: scatter, props, clutter,
+  `spotIssue`), and it is rounded over a few spokes, since a spit between
+  two bays turns within one and drew as a spike.
+- **The sea comes to the track.** A `shore` landform brings the curve in to a
   stretch of road (Riptide's surf beach): the track never moves to meet the
   sea, the sea moves to meet the track. It stops short of the road unless
   the shore carries a `w`, which lets the waterline in that far inside the
@@ -757,23 +785,31 @@ to do both:
   road's slab bottoms out a few cm over the plain, so on a sea at its usual
   level it lies on the water. The sunk sea stands clear under the deck, the
   deck stands on timber bents the renderer adds wherever it clears the water
-  (nothing collides with them), the beach slopes down to it, and its lagoon
-  wears no surf. The 9 u grid's chords decide where that slope meets the
-  water, so the sheet reaches in under the beach and the drawn sand sets the
-  edge. The curve is polar about the world origin, so a shore can only
+  (nothing collides with them), and its lagoon wears no surf. The shelf goes
+  down with it, so the sheet's own feathered edge is the waterline there as
+  on the open shore, and the beach comes back up to the plain inland of the
+  shelf. Never let the sand's slope meet the water instead: the grid's
+  chords set that edge, as angular wedges. The sea goes down along the shore
+  over `kSinkFade` at least, or the grid and the sheet disagree on its level.
+  A piece standing rigid within the shelf's reach of a sunk bay stands over
+  sand that low. The curve is polar about the world origin, so a shore can only
   reach a stretch of road that is the outermost on its bearing; anchored
   anywhere else it lands far off.
 - **A BEACH RISE is the one form that stands on that beach**: a ridge with
   both `near` and `w`. The road stands most of a unit over the plain, so a
   piece on the sea side of it is under the kerb from the seat. `landforms`
   keeps such a ridge out of the hills and `terrainField` lays it under its
-  own mask (full to `w` inside the waterline, gone `kBeachRamp` further out)
-  as a FILL: the sand comes up to it and it adds nothing where the land
-  already stands that high (the raised ground beside a hop). The piece on it
-  must level nothing, or its clearing cuts back down to the rise's foot, and
-  it DRAPES whole (`set_prototypes.py lie_on_land()`): the 9 u grid draws no
-  rise flat, so a piece standing rigid at a typed `y` hangs over the sand's
-  fall. The authoring side is in `tracks.js`'s landform header.
+  own mask (from the shelf's edge, or its `w` inside the waterline, full
+  `kBeachRamp` further in) as a FILL: the sand comes up to it and it adds
+  nothing where the land already stands that high (the raised ground beside
+  a hop). ONLY THE VERGE BAND DRAWS IT (`fine`): its ramps are shorter than
+  a grid cell, so the grid laid it as blocks on its own axes with the damp
+  sand cut along them. The band runs wide for it and hands over to the flat
+  grid at its end, so a rise reaches as far as the band does. The piece on
+  it must level nothing, or its clearing cuts back down to the rise's foot,
+  and it DRAPES whole (`set_prototypes.py lie_on_land()`): no rise is flat,
+  so a piece standing rigid at a typed `y` hangs over the sand's fall. The
+  authoring side is in `tracks.js`'s landform header.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

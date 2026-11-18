@@ -1644,7 +1644,7 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
-        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf) {
+        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf, bool grade) {
     const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
     // How many points of the way from a wall's vertex to its foot are read,
     // and how far along the wall (each way, kWallAlong apart) its lift may
@@ -1662,7 +1662,8 @@ void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
             float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
                     sp.pos[i * 3 + 2], 1.0f }).xyz;
             if (drapeOn) {
-                float lift = groundSurfaceY(*drapeOn, pw.x, pw.z) - foot;
+                float lift = (grade ? gradeSurfaceY(*drapeOn, pw.x, pw.z)
+                        : groundSurfaceY(*drapeOn, pw.x, pw.z)) - foot;
                 if (wallAt) {
                     float low = lift;
                     for (int k = 1; k <= kWallSteps; k++) {
@@ -2615,6 +2616,8 @@ void TtpRenderer::releaseStatic() {
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;
+    mShoreLine.clear();
+    mWetLine.clear();
     mTrack.reset();
     mHillSf = 1;
     mRoom = { 0, 0, -1, -1 };

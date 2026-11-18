@@ -83,7 +83,9 @@ struct LandDef {
                       // 8 clear (no seeded scatter within r of its spine),
                       // 9 street (len of road centred on u: its kerb a kerbstone),
                       // 10 snake, 11 ladder (len of road centred on u: the
-                      // deck one of the board's snakes or ladders)
+                      // deck one of the board's snakes or ladders),
+                      // 12 shed (len of road centred on u under a roof: no
+                      // snow, its kerb a kerbstone and concrete paving)
   int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
   double u, lat, yaw; // the anchor when piece is -1, like a set piece's; on a
                       // piece, yaw alone turns the form in the piece's frame
