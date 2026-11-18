@@ -1213,6 +1213,13 @@ private:
     static constexpr float kStreetKerbW = 1.5f;
     static constexpr uint32_t kStreetKerb = 0xeedcc0u;
     static constexpr float kStreetEase = 1.5f;
+    // A shed's kerb (buildRoadMesh): road under a gallery's roof, its
+    // kerbstone and concrete paving where the plough bank and the snow would
+    // lie, wide enough to carry the gallery's columns and reach the foot of
+    // its back wall (set_prototypes.py gallery_shed, cut_face).
+    static constexpr float kShedKerbH = 0.12f;
+    static constexpr float kShedKerbW = 3.0f;
+    static constexpr uint32_t kShedKerb = 0x868ba1u;
     // The board's pieces made road (buildRoadMesh). A snake's back: the
     // jointed toy snake's green and yellow (set_prototypes.py SNAKE), its
     // slab side a shade under the green, and how long a green block and a

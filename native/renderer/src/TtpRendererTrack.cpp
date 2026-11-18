@@ -93,7 +93,7 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     if (mTerrainAmp > 0) {
         for (const ttp::rt::Landform& l : tb.land) {
             if (l.kind == 6) continue;   // a shore moves the sea, not the land (shoreline())
-            if (l.kind == 9 || l.kind == 10 || l.kind == 11) continue;   // the road's own (buildRoadMesh)
+            if (l.kind >= 9 && l.kind <= 12) continue;   // the road's own (buildRoadMesh)
             float u = l.u, lat = l.lat, yaw = l.yaw, k = 1.0f;
             if (l.piece >= 0) {
                 if ((size_t) l.piece >= tb.setPieces.size()) continue;
@@ -1489,6 +1489,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // profile is the low bank; the per-ring one only moves points off the
     // deck.
     constexpr float kBankToe = 0.35f, kBankRun = 1.2f, kBankSpread = 0.9f, kBankSheer = 1.3f;
+    const std::vector<PPoint> KERB(P, P + kPts);   // the plain kerb's section, which a bank keeps under a roof (a shed)
     if (tb.kerbBank) {
         const float bankP[7][2] = { { -(cw + kBankToe), -deck }, { -(cw + 0.1f), 0.15f * ch },
                                     { -0.85f * cw, 0.62f * ch }, { -0.6f * cw, 0.95f * ch },
@@ -1638,6 +1639,23 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         }
     }
     const float3 KERB_STREET = srgbToLinear(kStreetKerb);
+    // A SHED (a `shed` landform): road under a roof, an avalanche gallery's.
+    // No snow lies there, so the biome's plough bank gives way to the plain
+    // kerb's section, a concrete kerbstone kShedKerbH tall with paving
+    // kShedKerbW wide: out past the gallery's columns on one side and to the
+    // foot of its back wall on the other, which stand on it. Per ring like a
+    // street's, easing in at each mouth, so the bank runs down into the
+    // kerbstone there.
+    std::vector<float> shed(N, 0.0f);
+    for (const ttp::rt::Landform& l : tb.land) {
+        if (l.kind != 12) continue;
+        for (uint32_t i = 0; i < N; i++) {
+            float d = std::fabs(((float) i / N) * L - l.u * L);
+            d = std::min(d, L - d);
+            shed[i] = std::max(shed[i], 1.0f - smooth01((d - 0.5f * l.len + kStreetEase) / kStreetEase));
+        }
+    }
+    const float3 KERB_SHED = srgbToLinear(kShedKerb);
     // THE BOARD'S PIECES (Skysnake's `snake` and `ladder` landforms): a
     // stretch of road that is one of the game's snakes or ladders made
     // track. A snake's back is the jointed toy snake's (set_prototypes.py
@@ -1689,8 +1707,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     std::vector<float3> ringPts((size_t) N * kPts);
     for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
-        const float kerbK = 1.0f + street[i] * (kStreetKerbH / ch - 1.0f);
-        const float wider = street[i] * (kStreetKerbW - cw);
+        const float kerbK = 1.0f + street[i] * (kStreetKerbH / ch - 1.0f) + shed[i] * (kShedKerbH / ch - 1.0f);
+        const float wider = street[i] * (kStreetKerbW - cw) + shed[i] * (kShedKerbW - cw);
         float hs[2] = { 1, 1 }, ws[2] = { 1, 1 }, slush[2] = { 1, 1 };
         if (tb.kerbBank) {
             const float sArc = ((float) i / N) * L;
@@ -1705,6 +1723,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 bankPoint(b, bankDepth[2 * i + k], off, y);
                 off *= (k ? -1.0f : 1.0f) * ws[k];
                 if (y > 0) y *= hs[k] * (b == 5 ? slush[k] : 1.0f);
+                off += (KERB[j].off - off) * shed[i];   // under a roof: the plain kerb's section
+                y += (KERB[j].y - y) * shed[i];
             }
             const bool outer = P[j].off * P[j].sign > cw * 0.5f;   // the kerb's outer face and the skirt
             if (y > 0) y *= kerbK;
@@ -1825,8 +1845,10 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
         const int game = piece[i];
-        const float3 colL = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbL, i);
-        const float3 colR = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbR, i);
+        float3 colL = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbL, i);
+        float3 colR = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbR, i);
+        colL += (KERB_SHED - colL) * shed[i];   // the snow thins out to the concrete at a shed's mouth
+        colR += (KERB_SHED - colR) * shed[i];
         const bool bare = bareAsphalt(i);
         for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];
@@ -1837,7 +1859,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                     cb = st.side > 0 ? colR : colL;
                     // the bank's road face, splashed with slush (how high
                     // the splash reaches wanders: bankAt)
-                    if (tb.kerbBank && ((st.a == 5 && st.b == 6) || (st.a == 13 && st.b == 14))) cb = SLUSH;
+                    if (tb.kerbBank && shed[i] == 0 && ((st.a == 5 && st.b == 6) || (st.a == 13 && st.b == 14))) cb = SLUSH;
                     break;
                 case K_SKIRT:
                     // a bank's outer slope is snow down to its toe, turning to

@@ -618,6 +618,11 @@ to do both:
   reach the kerb (the cap, spotIssue's margin), so a `street` landform turns
   the kerb along its stretch into a kerbstone's step and paving out to that
   margin (`kStreetKerbW`), and the street's piece carries on at its height.
+- **A SHED'S FLOOR IS THE ROAD'S TOO.** Under a gallery's roof (a `shed`
+  landform) the snow cup's plough bank gives way to the plain kerb's section
+  as a concrete kerbstone and paving (`kShedKerbW`), out past the gallery's
+  columns and to the foot of its back wall: snow lying under a roof read as a
+  fault, and no piece can lay a floor at the kerb.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
   ground drawn under it over the placement's foot (`bakePlacements`), so a
