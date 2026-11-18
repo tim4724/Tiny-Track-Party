@@ -61,7 +61,10 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
         default: mTerrainAmp = 0; break;    // wood
     }
     mInland.clear();
-    mShoreR.clear();
+    mShoreLine.clear();
+    mWetLine.clear();
+    mShelfReach = 0;
+    if (tb.hasWater) buildShoreSpokes(tb);
     mShoreSup.clear();
     mShoreSink.clear();
     mGroundGrid = {};
@@ -168,6 +171,8 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     mGroundGrid.z0 = mTerrainZ0;
     mGroundGrid.sx = (mTerrainX1 - mTerrainX0) / mGroundGrid.cols;
     mGroundGrid.sz = (mTerrainZ1 - mTerrainZ0) / mGroundGrid.rows;
+    // A grid triangle reaches a cell's diagonal at most (the shelf, TtpRenderer.h).
+    mShelfReach = std::hypot(mGroundGrid.sx, mGroundGrid.sz) + kShelfFine;
     buildTerrainSampleIndex(tb);
     buildTerrainCap(tb);
     // A piece whose ground is a mound or a fan stands where the land is
@@ -211,8 +216,6 @@ void TtpRenderer::setupBeachMask(const TrackBin& tb) {
     }
     if (!tb.hasWater) return;
     const Shoreline shore = shoreline(tb);
-    mShoreR.resize(kShoreSpokes);
-    for (int k = 0; k < kShoreSpokes; k++) mShoreR[k] = shore.at(k * 2.0f * (float) M_PI / kShoreSpokes);
     if (std::none_of(shore.bays.begin(), shore.bays.end(), [](const Shoreline::Bay& b) { return b.sunk; })) return;
     mShoreSup.resize(kShoreSpokes);
     mShoreSink.resize(kShoreSpokes);
@@ -221,6 +224,85 @@ void TtpRenderer::setupBeachMask(const TrackBin& tb) {
         mShoreSup[k] = shore.support(a);
         mShoreSink[k] = shore.sunk(a);
     }
+}
+
+// The shore as buildWater draws it: its spokes (2.5 degree steps: chord sag
+// at the shore radius is ~0.03u and the sharpest crinkle harmonic, 29·a,
+// still gets ~5 samples per cycle), and the two polylines the land is
+// measured against.
+void TtpRenderer::buildShoreSpokes(const TrackBin& tb) {
+    const Shoreline shore = shoreline(tb);
+    ShoreSpokes& sp = mSpokes;
+    sp = {};
+    for (auto* v : { &sp.cosA, &sp.sinA, &sp.r, &sp.swash, &sp.landK, &sp.sup, &sp.calm }) v->resize(kShoreSeg + 1);
+    constexpr float SWASH_RANGE = 0.62f, WET_FULL = 20.0f;
+    static const float SWASH_H[3][2] = { { 3, 1 }, { 7, 0.55f }, { 13, 0.3f } };
+    for (int si = 0; si <= kShoreSeg; si++) {
+        const float a = (float) (si % kShoreSeg) / kShoreSeg * 2.0f * (float) M_PI;
+        sp.cosA[si] = std::cos(a); sp.sinA[si] = std::sin(a);
+        sp.r[si] = shore.at(a);
+        sp.swash[si] = 1 + SWASH_RANGE * Shoreline::harm(SWASH_H, 3, shore.swashPh, a);
+        // Where a bay brings the sea in to the road, the damp sand narrows
+        // with the beach, so the strip between them is not all wet. The open
+        // shore stands well past WET_FULL, so it keeps its band whole.
+        sp.sup[si] = shore.bays.empty() ? 0.0f : shore.support(a);
+        // Behind a causeway the water is a lagoon: no surf breaks on its
+        // shore, and the foam band read as a white line painted along the road.
+        sp.calm[si] = shore.sunk(a);
+    }
+    // The waterline, rounded: where two bays leave a spit between them, or a
+    // bay's flank meets the open shore, the curve turns within a spoke or two
+    // and the chords drew it as a spike.
+    for (int pass = 0; pass < 2; pass++) {
+        std::vector<float> r(sp.r);
+        for (int si = 0; si <= kShoreSeg; si++) {
+            const int a = (si + kShoreSeg - 1) % kShoreSeg, b = (si + 1) % kShoreSeg;
+            sp.r[si] = 0.25f * r[a] + 0.5f * r[si % kShoreSeg] + 0.25f * r[b];
+        }
+    }
+    sp.outer = *std::max_element(sp.r.begin(), sp.r.end());
+    for (int si = 0; si <= kShoreSeg; si++) {
+        sp.landK[si] = shore.bays.empty() ? 1.0f
+                : std::min(1.0f, std::max(0.35f, (sp.r[si] - sp.sup[si]) / WET_FULL));
+    }
+    mShoreLine.resize(kShoreSeg);
+    mWetLine.resize(kShoreSeg);
+    for (int si = 0; si < kShoreSeg; si++) {
+        mShoreLine[si] = float2{ sp.cosA[si], sp.sinA[si] } * sp.r[si];
+        mWetLine[si] = float2{ sp.cosA[si], sp.sinA[si] } * sp.at(si, kWetEdge);
+    }
+}
+
+float TtpRenderer::ShoreSpokes::at(int si, float off) const {
+    constexpr float SWASH_ZONE = 20;
+    const float sw = std::max(0.0f, 1 - std::fabs(off) / SWASH_ZONE);
+    return r[si] + (off < 0 ? off * landK[si] : off) * (1 + (swash[si] - 1) * sw);
+}
+
+// Both lines carry one point per spoke, so the segment a bearing falls in
+// says which side (x, z) lies on, and only the segments within `reach` of it
+// by bearing can be nearer than that.
+float TtpRenderer::shoreDist(const std::vector<float2>& line, float x, float z, float reach) const {
+    const int n = (int) line.size();
+    if (n < 3) return reach;
+    const float2 p{ x, z };
+    const float r = length(p);
+    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * n;
+    if (f < 0) f += n;
+    const int k = std::min(n - 1, (int) f);
+    const auto cr = [](float2 u, float2 v) { return u.x * v.y - u.y * v.x; };
+    const float2 a = line[(size_t) k], b = line[(size_t) ((k + 1) % n)];
+    const bool inland = cr(b - a, p - a) * cr(b - a, -a) >= 0;
+    const int span = r > reach ? std::min(n / 2, (int) std::ceil(std::asin(reach / r) * n / (2.0f * (float) M_PI)) + 1) : n / 2;
+    float best = reach * reach;
+    for (int d = -span; d <= span; d++) {
+        const float2 u = line[(size_t) ((k + d + n) % n)], v = line[(size_t) ((k + d + 1 + n) % n)];
+        const float2 e = v - u;
+        const float t = std::min(1.0f, std::max(0.0f, dot(p - u, e) / std::max(1e-9f, dot(e, e))));
+        const float2 q = p - (u + e * t);
+        best = std::min(best, dot(q, q));
+    }
+    return (inland ? 1.0f : -1.0f) * std::sqrt(best);
 }
 
 // The sunk sea (TtpRenderer.h, kSeaSink): read off the spoke tables by
@@ -239,41 +321,30 @@ float TtpRenderer::seaSink(float x, float z) const {
     return kSeaSink * sink * (1.0f - std::min(1.0f, std::max(0.0f, (out - kSinkHold) / (kSinkOpen - kSinkHold))));
 }
 
-// The ground under a sunk sea: down from the plain to the water's level over
-// kSinkBeach, reaching it kSinkShore inside the waterline, then kSinkBed
-// further under the water. The 9 u grid's chords decide where the drawn sand
-// actually meets the water, so the sheet reaches in under the beach there
-// (kSinkInset, buildWater) and the drawn ground sets the edge. All of it
-// scales with how far the sea has sunk, so where the bay eases out the
-// beach does too.
+// The ground under a sunk sea: the shelf goes down with the sheet, flat in
+// every grid triangle that touches the damp sand or the water (mShelfReach),
+// so the sheet's own edge is the waterline; inland of it the beach comes
+// back up to the plain over kSinkBeach, and out under the water the bed
+// lies kSinkBed lower. All of it scales with how far the sea has sunk, so
+// where the bay eases out the beach does too.
 float TtpRenderer::bedSink(float x, float z) const {
     const float sink = seaSink(x, z);
     if (sink <= 0) return 0.0f;
-    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
-    if (f < 0) f += kShoreSpokes;
-    const int k = std::min(kShoreSpokes - 1, (int) f);
-    const float t = f - k;
-    const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * t;
-    const float d = std::sqrt(x * x + z * z) - R + kSinkShore;   // past the water's edge
-    const float share = sink / kSeaSink;
-    return share * ((kSeaSink - kWaterLift) * smooth01((d + kSinkBeach) / kSinkBeach)
-                    + (kWaterLift + kSinkBed) * smooth01(d / 3.0f));
+    const float wet = shoreDist(mWetLine, x, z, mShelfReach + kSinkBeach);
+    const float sea = shoreDist(mShoreLine, x, z, 6.0f);
+    return sink * (1.0f - smooth01((wet - mShelfReach) / kSinkBeach))
+            + sink / kSeaSink * kSinkBed * smooth01((-sea - 1.0f) / 4.0f);
 }
 
-float TtpRenderer::beachMask(float x, float z, float& inland) const {
+float TtpRenderer::beachMask(float x, float z, float shelf, float& inland) const {
     inland = 1.0f;
     if (mInland.empty()) return 1.0f;
     const int c = (int) std::floor((x - mTerrainX0) / kInlandCell);
     const int r = (int) std::floor((z - mTerrainZ0) / kInlandCell);
     inland = c >= 0 && r >= 0 && c < mInlandCols && r < mInlandRows
             && mInland[(size_t) r * mInlandCols + c] ? 1.0f : 0.0f;
-    if (mShoreR.empty()) return 1.0f;
-    float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
-    if (f < 0) f += kShoreSpokes;
-    const int k = std::min(kShoreSpokes - 1, (int) f);
-    const float t = f - k;
-    const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * t;
-    return smooth01((R - kShoreKeep - std::sqrt(x * x + z * z)) / kShoreRamp);
+    if (mWetLine.empty()) return 1.0f;
+    return smooth01((shoreDist(mWetLine, x, z, shelf + kShoreRamp) - shelf) / kShoreRamp);
 }
 
 // A bucket index over the track samples in XZ, so terrainY can ask "how far to
@@ -485,11 +556,12 @@ float TtpRenderer::roadLift(const TrackBin& tb, float x, float z, float& edge) c
 // buildTerrainGrid): the pillars, posts and berms stand on groundY, and
 // ground below it would leave them hanging.
 float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-        float* dell, float* bed, float liftCap) const {
+        float* dell, float* bed, float liftCap, bool fine) const {
     if (dell) *dell = 0;
     if (bed) *bed = 0;
     mNearRise = 0;
     mBeachRise = 0;
+    mBeachDrawn = 0;
     if (mTerrainAmp <= 0 || mTsiCells.empty()) return tb.groundY;
     // Fade to the flat plane at the region border, so the outer sheet joins
     // without a step.
@@ -517,22 +589,22 @@ float TtpRenderer::terrainField(const TrackBin& tb, float x, float z, bool withF
     }
     // The beach rolls inland only, and nothing stands at the water.
     float inland;
-    const float shore = beachMask(x, z, inland);
+    const float shore = beachMask(x, z, fine ? kShelfFine : mShelfReach, inland);
     hill *= inland;
     if (dell) *dell *= inland * shore;
     const float land = mLand.empty() ? lift + hill : landforms(x, z, edge, lift, hill, dell, bed);
-    // A beach rise keeps its own, tighter distance from the water (its `w`,
-    // which landforms() folded into mBeachRise as the smallest among them).
+    // A beach rise stands from the shelf's edge, or its `w` inside the
+    // waterline (landforms() folded the smallest among them into mBeachKeep),
+    // and only as the band lays it: the grid cannot draw it (TtpRenderer.h).
     float beach = 0;
-    if (mBeachRise > 0 && !mShoreR.empty()) {
-        float f = std::atan2(z, x) / (2.0f * (float) M_PI) * kShoreSpokes;
-        if (f < 0) f += kShoreSpokes;
-        const int k = std::min(kShoreSpokes - 1, (int) f);
-        const float R = mShoreR[k] + (mShoreR[(k + 1) % kShoreSpokes] - mShoreR[k]) * (f - k);
+    if (fine && mBeachRise > 0 && !mWetLine.empty()) {
+        const float wet = smooth01((shoreDist(mWetLine, x, z, kShelfFine + kBeachRamp) - kShelfFine) / kBeachRamp);
+        const float sea = smooth01((shoreDist(mShoreLine, x, z, mBeachKeep + kBeachRamp) - mBeachKeep) / kBeachRamp);
         // It fills the sand UP TO its height and adds nothing where the land
         // already stands there (the raised ground under a hop beside it).
-        beach = std::max(0.0f, mBeachRise * smooth01((R - mBeachKeep - std::sqrt(x * x + z * z)) / kBeachRamp) - land * shore);
-        mNearRise += beach;   // the verge band draws it at its own resolution, as it does a `near` form
+        beach = std::max(0.0f, mBeachRise * std::min(wet, sea) - land * shore);
+        mBeachDrawn = beach;
+        mNearRise += beach;   // the band stands that much over the grid, as for a `near` form
     }
     float y = tb.groundY + (land * shore + beach) * smooth01(border / kRampR) - bedSink(x, z);
     if (withFlats) {
@@ -786,9 +858,16 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     std::vector<float> h(nv);
     mGroundDell.assign(nv, 0.0f);
     mGroundBed.assign(nv, 0.0f);
+    mGroundTint.assign(nv, float3{ 1.0f });
     for (int r = 0; r <= rows; r++) {
         for (int c = 0; c <= cols; c++) {
             const size_t v = vi(c, r);
+            // A paint ends short of the shelf: no grass on the damp sand.
+            mGroundTint[v] = landTint(mTerrainX0 + c * sx, mTerrainZ0 + r * sz);
+            if (!mWetLine.empty()) {
+                mGroundTint[v] = mix(float3{ 1.0f }, mGroundTint[v], smooth01((shoreDist(mWetLine,
+                        mTerrainX0 + c * sx, mTerrainZ0 + r * sz, 1.0f + kBeachRamp) - 1.0f) / kBeachRamp));
+            }
             h[v] = terrainField(tb, mTerrainX0 + c * sx, mTerrainZ0 + r * sz, true, &mGroundDell[v],
                     &mGroundBed[v]);
         }
@@ -818,10 +897,8 @@ void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
 
 float TtpRenderer::bandHold(float x, float z, float nearRise, float& rise) const {
     float hold = 1.0f;
-    if (mShoreFn) {
-        const float d = mShoreFn(std::atan2(z, x)) - std::hypot(x, z);
-        hold = std::min(hold, smooth01((d - 1.0f) / 2.0f));
-    }
+    // Under at the shelf: the damp sand and the sea lie on the grid's flat.
+    if (!mWetLine.empty()) hold = std::min(hold, smooth01((shoreDist(mWetLine, x, z, 2.0f) + 1.0f) / 2.0f));
     for (const LandShape& s : mLand) {
         if (s.kind != 7) continue;
         const float dx = x - s.x, dz = z - s.z;
@@ -950,7 +1027,7 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         const float h = e.lev - tb.groundY;
         const float liftOwn = std::max(0.0f, std::min(h - kVergeDrop, std::max(kVergeLow - kVergeDrop, h - kRaiseDrop)))
                 * (1.0f - smooth01((o + cw - kRaiseFlatR) / kRaiseRampR));
-        return std::max(tb.groundY - bedSink(px, pz), terrainField(tb, px, pz, true, dell, bed, liftOwn));
+        return std::max(tb.groundY - bedSink(px, pz), terrainField(tb, px, pz, true, dell, bed, liftOwn, true));
     };
     // WIDE where the grid cannot draw what stands at the band's usual end (a
     // mountain's flank the deck cap pulls down): the band runs on to its last
@@ -964,7 +1041,9 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             if (e.fill <= 0 || e.reach < O) continue;
             const float px = e.E.x + e.l.x * O, pz = e.E.z + e.l.y * O;
             const float field = landAt(e, px, pz, O, nullptr, nullptr), grid = mGroundGrid.gridAt(px, pz);
-            want[q] = std::min(field, grid + kBandOver + mNearRise) - grid > kBandWide ? 1.0f : 0.0f;
+            // A beach rise is the band's alone to draw, however low.
+            want[q] = std::min(field, grid + kBandOver + mNearRise) - grid > kBandWide
+                    || mBeachDrawn > kBandFlat ? 1.0f : 0.0f;
         }
         for (size_t q = 0; q < want.size(); q++) {
             const int k = (int) (q / 2), side = (int) (q % 2);
@@ -1103,7 +1182,18 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         if (low > 1e29f) continue;
         for (size_t k = 0; k < 3; k++) {
             float3& p = P[mBandIdx[t + k]];
-            if (!live[mBandIdx[t + k]]) p.y = std::min(p.y, low - kBandTuck);
+            if (live[mBandIdx[t + k]]) continue;
+            p.y = std::min(p.y, low - kBandTuck);
+            // And, from a corner that only copies the grid, is under the grid
+            // by halfway there, or over a hollow in the land (a slope's
+            // concave foot) the face hangs in the air as a loose triangle. A
+            // corner standing well over the grid keeps its face: that one is
+            // the land's own flank coming down.
+            for (size_t j = 0; j < 3; j++) {
+                const float3& l = P[mBandIdx[t + j]];
+                if (!live[mBandIdx[t + j]] || lift[mBandIdx[t + j]] > kBandOver) continue;
+                p.y = std::min(p.y, 2.0f * mGroundGrid.gridAt(0.5f * (p.x + l.x), 0.5f * (p.z + l.z)) - l.y - kBandTuck);
+            }
         }
     }
     // Compact to the vertices the quads use.
@@ -1125,6 +1215,25 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         return normalize(float3{ (mGroundGrid.gridAt(x - sx, z) - mGroundGrid.gridAt(x + sx, z)) / (2 * sx), 1.0f,
                                  (mGroundGrid.gridAt(x, z - sz) - mGroundGrid.gridAt(x, z + sz)) / (2 * sz) });
     };
+    // The landforms' tint is the band's own (a paint's edge along the kerb,
+    // a hill's green crest, at its finer step) but over its last rows, where
+    // it comes to the grid's, read between its vertices: a paint sampled at
+    // the band's step is another colour than the ground the band ends on,
+    // and its end showed as a ragged patch.
+    const auto gridTint = [&](float x, float z) {
+        const int cols = mGroundGrid.cols, rows = mGroundGrid.rows;
+        const float u = std::min((float) cols, std::max(0.0f, (x - mTerrainX0) / mGroundGrid.sx));
+        const float w = std::min((float) rows, std::max(0.0f, (z - mTerrainZ0) / mGroundGrid.sz));
+        const int c = std::min(cols - 1, (int) u), r = std::min(rows - 1, (int) w);
+        const float fu = u - c, fv = w - r;
+        const auto at = [&](int cc, int rr) { return mGroundTint[(size_t) rr * (cols + 1) + cc]; };
+        if (fu + fv <= 1.0f) return at(c, r) + (at(c + 1, r) - at(c, r)) * fu + (at(c, r + 1) - at(c, r)) * fv;
+        return at(c + 1, r + 1) + (at(c, r + 1) - at(c + 1, r + 1)) * (1.0f - fu) + (at(c + 1, r) - at(c + 1, r + 1)) * (1.0f - fv);
+    };
+    std::vector<int> last((size_t) K * 2, 0);
+    for (size_t v = 0; v < P.size(); v++) {
+        if (live[v]) last[v / R] = std::max(last[v / R], (int) (v % R));
+    }
     std::vector<uint32_t> remap(P.size(), UINT32_MAX);
     for (uint32_t& q : mBandIdx) {
         if (remap[q] == UINT32_MAX) {
@@ -1136,7 +1245,8 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
             const float dell = lerp(dellV[q], gridTerm(mGroundDell, p.x, p.z), over[q]);
             const float bed = lerp(bedV[q], gridTerm(mGroundBed, p.x, p.z), over[q]);
             mBandVerts.push_back({ p.x, p.y, p.z,
-                    packAlbedo(groundTint(tb.groundKind, dell, bed, n.y) * landTint(p.x, p.z), 1.0f) });
+                    packAlbedo(groundTint(tb.groundKind, dell, bed, n.y) * mix(landTint(p.x, p.z), gridTint(p.x, p.z),
+                            live[q] ? std::min(1.0f, std::max(0.0f, 0.5f * (float) ((int) (q % R) - last[q / R] + 2))) : 1.0f), 1.0f) });
             mBandNormals.push_back(n);
             mGroundGrid.bandP.insert(mGroundGrid.bandP.end(), { p.x, p.y, p.z });
         }
@@ -3124,7 +3234,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     const size_t gv = (size_t) r * (cols + 1) + c;
                     mGround.verts.push_back({ x, hAt(c, r), z,
                             packAlbedo(groundTint(tb.groundKind, mGroundDell[gv], mGroundBed[gv], n.y)
-                                       * landTint(x, z), 1.0f) });
+                                       * mGroundTint[gv], 1.0f) });
                     mGround.uvs.push_back({ x / TILE, z / TILE });
                     mGround.normals.push_back(n);
                 }

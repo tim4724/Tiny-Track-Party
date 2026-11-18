@@ -294,13 +294,15 @@ const BOXES = {
 // A BEACH RISE is a ridge carrying both `near` and `w`: the sand's own swell
 // under a piece on the sea side of a beach road. Past a `shore` the beach is
 // the plain and the road stands most of a unit over it, so what stands there
-// is under the kerb from the seat; a rise keeps its height to `w` units
-// inside the waterline (every other form is flat long before) and fills the
-// sand up to it, adding nothing where raised ground already stands, low and broad
-// (a dozen units of radius: the ground's 9 u grid cannot draw less) with a
-// flat `top`, so the piece on it stands at the road's height. The piece must
-// level nothing, or its clearing cuts down to the rise's foot by the kerb.
-// The 9 u grid draws no rise flat, so what stands on one LIES ON IT
+// is under the kerb from the seat; a rise stands from the damp sand's inner
+// edge, or from `w` units inside the waterline where that is further in
+// (the damp sand and the sea are flat sheets: no land stands in them), and
+// fills the sand up to it, adding nothing where raised ground already stands,
+// low and broad with a flat `top`, so the piece on it stands at the road's
+// height. Only the road's verge band draws it (the 9 u grid laid it as
+// blocks), so it reaches as far from the kerb as the band does and no
+// further. The piece must level nothing, or its clearing cuts down to the
+// rise's foot by the kerb. No rise is flat, so what stands on one LIES ON IT
 // (set_prototypes.py lie_on_land(): every part drapes, and the row's `y`
 // only places what cannot, a chimney's smoke); a piece that stands rigid at
 // a typed `y` hangs over the sand's fall. on_a_rise() is for what stands in
@@ -515,7 +517,7 @@ export const TRACKS = {
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 1.8, scale: 1.3 },
       { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
-      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.68 },
+      { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.47 },
       // palms on the downs' near flanks below the crests, placed by hand:
       // the `clear`s that keep seeded crates off the hilltops keep its
       // seeded palms off too
@@ -668,8 +670,7 @@ export const TRACKS = {
       { kind: 'shore', u: 0.795, lat: 17, len: 24, r: 18 },
       // the stockade's rise on the anchorage's sand, so the camp stands at
       // the road's height (on the plain it hid behind the kerb), and the bay
-      // brought in past it, so its jetty reaches the water: a rise falls to
-      // the sea over the last five units short of it (kBeachRamp)
+      // brought in past it, so its jetty reaches the water
       { kind: 'ridge', u: 0.54, lat: 13, len: 14, r: 16, h: 0.92, top: 0.6, near: 0.4, w: 1 },
       { kind: 'shore', u: 0.54, lat: 19.5, len: 20, r: 24 },
       // the camp's own rise on the east beach: its shelter, its fire and its
@@ -854,8 +855,8 @@ export const TRACKS = {
       // lengths, and across the road the hotel and the guest houses
       { model: 'set-seafront-wall-a', u: 0.2614, lat: -9.5, yaw: 180 },
       { model: 'set-seafront-wall-b', u: 0.2921, lat: -9.5, yaw: 180 },
-      { model: 'set-seafront-wall-c', u: 0.3229, lat: -9.5, yaw: 180 },
-      { model: 'set-seafront-wall-d', u: 0.3536, lat: -9.5, yaw: 180 },
+      { model: 'set-seafront-wall-c', u: 0.3229, lat: -9.5, yaw: 180, y: -0.25 },
+      { model: 'set-seafront-wall-d', u: 0.3536, lat: -9.5, yaw: 180, y: -0.3 },
       { model: 'set-seafront-hotel', u: 0.2941, lat: 9 },
       { model: 'set-seafront-terrace', u: 0.3316, lat: 9 },
       { model: 'set-seafront-cafe', u: 0.369, lat: 9 },

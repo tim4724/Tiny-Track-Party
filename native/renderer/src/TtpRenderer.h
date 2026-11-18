@@ -1078,8 +1078,10 @@ private:
     // `dell`, if asked: how far down a swell the point lies, 0 near the road;
     // `bed`: how far inside a `plain` landform's floor (1 on it, 0 clear of it).
     // `liftCap` holds the road's raised ground under it (the verge band's own road).
+    // `fine`: as the verge band lays it, down to the shelf's very edge and
+    // with the beach rises (the grid's is the default, and every lookup's).
     float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
-            float* dell = nullptr, float* bed = nullptr, float liftCap = 1e30f) const;
+            float* dell = nullptr, float* bed = nullptr, float liftCap = 1e30f, bool fine = false) const;
     // The track's landforms (TrackBin::land), resolved by setupTerrain into the
     // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
     // own lengths and heights already scaled, and the box it can reach.
@@ -1113,51 +1115,81 @@ private:
     // LAND side of the road: inside the lap's loop (mInland, a raster of the
     // centreline polygon), never on the beach between the road and the sea, so
     // the sea shows from every stretch of road (a ring of dunes round the
-    // island read as a wall and hid it). Everything, the authored landforms
-    // included, sinks to exactly the plain short of the waterline (mShoreR),
-    // where the water sheet and the wet sand lie flat on it.
+    // island read as a wall and hid it).
     std::vector<uint8_t> mInland;
     int mInlandCols = 0, mInlandRows = 0;
     static constexpr float kInlandCell = 2.0f;
-    std::vector<float> mShoreR;   // the shoreline's radius, kShoreSpokes bearings round
     static constexpr int kShoreSpokes = 360;
-    // The plain is kept kShoreKeep inside the waterline (past the wet sand's
-    // inner edge) and the land is back to full kShoreRamp further in.
-    static constexpr float kShoreKeep = 15.0f, kShoreRamp = 18.0f;
+    // THE SHELF. The sea and the damp sand are FLAT sheets, so the ground
+    // under them is flat too, or it cuts them along its own facets (sand
+    // wedges standing out of the water, the damp band ending on a grid
+    // triangle's edge). The shelf is the ground from the damp sand's visible
+    // inner edge (mWetLine) out under the sea, at the sheet's level less
+    // kWaterLift, and it is measured as DRAWN: the true distance to the very
+    // polylines buildWater lays (shoreDist), never the polar radius, which
+    // along the side of a bay is many times the distance to the water. Every
+    // grid triangle that touches the shelf lies in it: the grid's land stays
+    // down to a cell's diagonal past it (mShelfReach) and is back to full
+    // kShoreRamp further in. The verge band's rows are fine enough to come
+    // down at the shelf's edge itself (kShelfFine), so by the road the land
+    // is drawn that much closer to the water than the grid can lay it.
+    static constexpr int kShoreSeg = 144;   // 2.5 degree spokes: buildWater's own
+    struct ShoreSpokes {
+        std::vector<float> cosA, sinA, r, swash, landK, sup, calm;
+        float outer = 0;
+        // The radius of the ring `off` past the waterline on spoke si (inside
+        // it the damp sand narrows with the beach, and both breathe with the
+        // swash).
+        float at(int si, float off) const;
+    };
+    ShoreSpokes mSpokes;
+    void buildShoreSpokes(const TrackBin& tb);
+    static constexpr float kWetEdge = -9.5f;   // the damp sand's visible inner edge (buildWater's WET)
+    std::vector<filament::math::float2> mShoreLine, mWetLine;   // one point per spoke
+    // How far inland of `line` (x, z) lies (negative: seaward), the true
+    // distance to it as drawn, no further than `reach` either way.
+    float shoreDist(const std::vector<filament::math::float2>& line, float x, float z, float reach) const;
+    float mShelfReach = 0;
+    static constexpr float kShelfFine = 0.5f, kShoreRamp = 18.0f;
     // A beach rise (a ridge with `near` and `w`) is the sand's own swell under
-    // a piece by the road: it keeps its height to its `w` inside the waterline
-    // and is down to the plain kBeachRamp further out, where every other form
-    // has long gone flat. Without it the beach by a `shore` is the plain, the
-    // road stands most of a unit over it, and what stands there is under the kerb.
-    static constexpr float kBeachRamp = 5.0f;
+    // a piece by the road: it stands from the shelf's edge, or its `w` inside
+    // the waterline where that is further in, reaching its height kBeachRamp
+    // past that. Without it the beach by a `shore` is the plain, the road
+    // stands most of a unit over it, and what stands there is under the kerb.
+    // ONLY THE VERGE BAND DRAWS IT: its ramps are shorter than a grid cell, so
+    // the grid laid it as blocks on its own axes.
+    static constexpr float kBeachRamp = 6.0f;
     // THE SUNK SEA. Where a `shore` lets the water in under the road (its
     // `w`), the sea there lies kSeaSink under the plain, so the deck, whose
     // slab bottoms out a few cm over the plain, stands clear of it on legs
     // (buildStructures) instead of lying on it. Out to kSinkHold past the
     // road's support the sea holds that level and it is back at the plain's
     // by kSinkOpen, inside the beach region's border, so the flat sheet
-    // beyond the grid never shows through. The beach goes down to it over
-    // kSinkBeach, meeting it kSinkShore inside the waterline, and the bed lies
-    // kSinkBed under the water; the sheet reaches kSinkInset in under the
-    // beach, so wherever the grid's chords put the edge, there is water to
-    // meet it (bedSink). It is the one place the ground goes under groundY,
-    // so the bake's floor proxy goes down with it.
+    // beyond the grid never shows through. The SHELF goes down with the sea
+    // (bedSink), so the sunk shore is the open shore's recipe a step lower:
+    // flat sand kWaterLift under the sheet, whose own feathered edge is the
+    // waterline, and the beach comes down to the shelf over kSinkBeach
+    // inland of it; the bed lies kSinkBed lower out under the water. The sea
+    // goes down along the shore no faster than over kSinkFade, whatever the
+    // bay's own fade, so the grid's chords and the sheet's agree on its level.
+    // It is the one place the ground goes under groundY, so the bake's floor
+    // proxy goes down with it.
     static constexpr float kSeaSink = 0.8f, kSinkHold = 6.0f, kSinkOpen = 24.0f;
-    static constexpr float kSinkBeach = 10.0f, kSinkShore = 1.0f, kSinkBed = 0.3f;
-    static constexpr float kSinkInset = 11.0f;
+    static constexpr float kSinkBeach = 10.0f, kSinkBed = 0.3f, kSinkFade = 18.0f;
     // The sea sheet's height over the plain (buildWater), where nothing sinks it.
     static constexpr float kWaterLift = 0.12f;
-    // Per spoke, with mShoreR: the track's support and the sunk bays' weight.
-    // Empty when no shore sinks the sea.
+    // Per spoke: the track's support and the sunk bays' weight. Empty when no
+    // shore sinks the sea.
     std::vector<float> mShoreSup, mShoreSink;
     // How far the sea stands under its usual level at (x, z), and how far the
     // ground lies under the plain there. 0 off a sunk bay.
     float seaSink(float x, float z) const;
     float bedSink(float x, float z) const;
     void setupBeachMask(const TrackBin& tb);
-    // The share of the land that stands at (x, z), and through `inland`
-    // whether that is inside the loop. 1 and 1 off the beach.
-    float beachMask(float x, float z, float& inland) const;
+    // The share of the land that stands at (x, z), `shelf` past the shelf's
+    // edge, and through `inland` whether that is inside the loop. 1 and 1
+    // off the beach.
+    float beachMask(float x, float z, float shelf, float& inland) const;
     // The lowest the land lies under a clearing's footprint (sampled at most
     // the grid's step apart), before any clearing: what it is levelled to.
     float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
@@ -1238,8 +1270,9 @@ private:
     // much over the grid).
     mutable float mNearRise = 0;
     // What the last landforms() call found of beach rises (a `near` ridge
-    // carrying a `w`): terrainY lays it under its own, tighter shore mask.
-    mutable float mBeachRise = 0, mBeachKeep = 0;
+    // carrying a `w`): terrainField lays it under its own, tighter shore
+    // mask, and mBeachDrawn is what it came to there.
+    mutable float mBeachRise = 0, mBeachKeep = 0, mBeachDrawn = 0;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
@@ -1322,8 +1355,11 @@ private:
     std::vector<Vertex> mBandVerts;
     std::vector<filament::math::float3> mBandNormals;
     std::vector<uint32_t> mBandIdx;
-    // Per grid vertex, terrainField's dell and bed terms, for the ground's colour.
+    // Per grid vertex, terrainField's dell and bed terms, for the ground's colour,
+    // and the landforms' tint (landTint). The band reads its tint off these
+    // too, so its colour is the grid's wherever it ends.
     std::vector<float> mGroundDell, mGroundBed;
+    std::vector<filament::math::float3> mGroundTint;
     // The ground colour at a grid vertex: a low-contrast tint off the shape of
     // the land (its dells, its steep faces, a creek's floor), multiplied over
     // the biome's texture. Never per-vertex noise: a speckle reads as a texture
@@ -1374,7 +1410,7 @@ private:
         float support(float a) const;   // the track's reach at bearing a
         float at(float a) const;   // the radius at bearing a
         float sunk(float a) const;   // the sunk bays' weight at bearing a, 0..1
-        float bayWeight(const Bay& b, float a) const;
+        float bayWeight(const Bay& b, float a, float fade) const;
         static float harm(const float (*h)[2], int n, const float* ph, float a);
     };
     static Shoreline shoreline(const TrackBin& tb);
