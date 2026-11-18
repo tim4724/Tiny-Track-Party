@@ -245,6 +245,7 @@
     "set-glacier-crevasses.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-depot-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-depot.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-dog-trail-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-dog-trail.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-moraine-a.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-moraine-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
