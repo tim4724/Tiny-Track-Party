@@ -274,7 +274,11 @@ const BOXES = {
 //          lat, r or yaw, like a street
 //   ladder the same for one of the board's ladders: its kerbs the wooden
 //          rails, its rungs across the deck
-// Any but a mound, a clear, a street, a snake or a ladder may carry a `tint`, 0xRRGGBB, a
+//   shed   `len` of road centred on `u` under a roof (an avalanche gallery):
+//          no snow lies there, so the kerb is a concrete kerbstone and
+//          paving out to the gallery's columns and back wall instead of the
+//          snow cup's plough bank. No lat, r or yaw, like a street
+// Any but a mound, a clear, a street, a snake, a ladder or a shed may carry a `tint`, 0xRRGGBB, a
 // multiplier over the ground's colour where the form lies (fading with its
 // flank, or a plain's or paint's `w`); the ground's grid is 9 u, so a tint is
 // a broad wash.
@@ -1007,7 +1011,7 @@ export const TRACKS = {
       // set_prototypes.py HAMLET_G: re-sample after moving it or the land)
       { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: 180 },
       // one more corner of the village by the start
-      { model: 'set-log-cabin', u: 0.05, lat: 9, yaw: 30 },
+      { model: 'set-log-cabin', u: 0.05, lat: 12, yaw: 30 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
       { model: 'set-flurry-peaks-sw', u: 0.12, lat: 45 },
       { model: 'set-ski-jump', u: 0.5413, lat: 19.59, yaw: 101.7 },
@@ -1079,6 +1083,10 @@ export const TRACKS = {
       // off, under the frame's top from the grid and short of the terrain's
       // west edge, pines on its near face (forest-g)
       { kind: 'ridge', u: 0.09, lat: 57.5, len: 20, r: 20, h: 10, top: 0.15 },
+      // a low bench off the start straight's verge under the cabins by the
+      // line (set-log-cabin, built on it as sampled): on the plain they
+      // stood under the road's own height, their walls behind its bank
+      { kind: 'ridge', u: 0.045, lat: 12.5, r: 10, h: 1.4, top: 0.65, near: 2 },
       // the far ridges along the long sides
       { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
       { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
@@ -1348,7 +1356,13 @@ export const TRACKS = {
       { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.3334, lat: 19.81, yaw: 99.3, x: 0.51, len: 32, r: 3, w: 3, tint: 0xc8cfdf },
-      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf }
+      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf },
+      // under each gallery's roof no snow: the road's kerb a concrete
+      // kerbstone and paving there, from a little outside one mouth to a
+      // little outside the other (set_prototypes.py gallery_shed's samples)
+      { kind: 'shed', u: 0.7243, len: 12.6 },
+      { kind: 'shed', u: 0.8276, len: 31.6 },
+      { kind: 'shed', u: 0.37, len: 27.6 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,

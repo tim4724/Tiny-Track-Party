@@ -5726,25 +5726,52 @@ def sled(x, y, z, yaw, color=0xcf534f, L=0.6):
     for sd in (-1, 1):
         box((L, 0.06, 0.06), (x + sd * 0.09 * s, y + 0.03, z + sd * 0.09 * c), 0x555b66, yaw=yaw)
 
-def cabin_hut(w, h, d, at, wall, roof, yaw=0.0):
-    """A small gabled hut at its real size (one or two units across), door on
-    +X turned by `yaw`, trimmed as hut() is at the size of its parts: a grey
-    plinth, a dark door in a white frame, a window either side, a chunky roof
-    under a grey ridge."""
+def cabin_hut(w, h, d, at, wall, roof, yaw=0.0, sunk=0.3, chimney=False):
+    """A small gabled hut at its real size (one to a few units across), door
+    in the gable on +X turned by `yaw`, a window in each eave wall: the walls
+    and both gables one solid, `h` to the eaves, running `sunk` under `at` so
+    it stands in the snow of a slope with no footing (give `at` the ground at
+    its door and let the hill bury its back); a low roof of dark boards lying
+    on the gables, oversailing them all round, and the snow (`roof`) lying on
+    the boards a little inside their edge, closed over the ridge. `chimney`
+    stands a stone stack through the roof behind the ridge's middle. Returns
+    the stack's top, for its smoke."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
-    def part(dx, dy, dz, size, color, pitch=0.0):
-        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw, pitch=pitch)
-    part(0, h / 2, 0, (w, h, d), wall)
-    part(0, 0.04, 0, (w + 0.08, 0.08, d + 0.08), 'grey')
+    def spot(dx, dy, dz):
+        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
+    def part(dx, dy, dz, size, color):
+        return box(size, spot(dx, dy, dz), color, yaw=yaw)
+    gy = yaw + math.pi / 2                       # the roof's frame: its ridge along Z
+    G = local(x, z, gy)
+    rise = 0.3 * d
+    gabled(G, y - sunk, d, w, h + sunk, rise, wall)
+    a = math.atan2(rise, d / 2)
+    ov = min(0.2, max(0.08, 0.07 * d))
+    tb, ts = 0.06, 0.08 + 0.025 * d
+    sl = math.hypot(d / 2, rise) + ov
+    for k in (-1, 1):
+        for run, off, t, color in ((sl, tb / 2, tb, 0x6e4a32), (sl - 0.04, tb + ts / 2, ts, roof)):
+            o = box((run, t, w + 2 * ov - (0.0 if t == tb else 0.08)),
+                    G(k * (run / 2 * math.cos(a) + off * math.sin(a)), y + h + rise - run / 2 * math.sin(a) + off * math.cos(a), 0),
+                    color, yaw=gy, roll=k * a)
+            if t != tb:
+                snowy(o, 0.5)
+    up = (tb + ts) * math.cos(a)                 # the snow closed over the ridge
+    snowy(box((2 * (tb + ts) * math.sin(a) + 0.02, up, w + 2 * ov - 0.08), G(0, y + h + rise + up / 2 + 0.01, 0), roof, yaw=gy), 0.5)
     dw = d * 0.34
     part(w / 2 + 0.02, h * 0.37, 0, (0.06, h * 0.74 + 0.06, dw + 0.08), 'white')
     part(w / 2 + 0.045, h * 0.34, 0, (0.06, h * 0.68, dw), 'slate')
     for k in (-1, 1):
         part(0, h * 0.58, k * (d / 2 + 0.02), (w * 0.4 + 0.08, h * 0.3 + 0.08, 0.06), 'white')
         part(0, h * 0.58, k * (d / 2 + 0.045), (w * 0.4, h * 0.3, 0.06), 'slate')
-        part(0, h + 0.1, k * (d + 0.2) / 4, (w + 0.2, 0.1, (d + 0.2) * 0.55), roof, pitch=-k * 0.6)
-    part(0, h + 0.13 + 0.155 * (d + 0.2), 0, (w + 0.24, 0.09, 0.14), 'grey')
+    if not chimney:
+        return None
+    cw = max(0.2, 0.1 * d)
+    lo, top = h + 0.5 * rise, h + rise + up + 0.22
+    part(-0.25 * w, (lo + top) / 2, -0.22 * d, (cw, top - lo, cw), 0x868ba1)
+    snowy(part(-0.25 * w, top + 0.035, -0.22 * d, (cw + 0.06, 0.07, cw + 0.06), 0xf3f7fb), 0.5)
+    return spot(-0.25 * w, top + 0.1, -0.22 * d)
 
 def pylon(at, h, yaw, ground=0.0):
     """A lift tower standing on `ground`, its crossarm at `h` across the line
@@ -5932,52 +5959,51 @@ for _k in ('a', 'b'):
         GROW[_n] = 1.0
 
 # Powder's resort village up the foothill's foot dead ahead of the long run
-# north, outside the bend onto the start straight: each building (x, z,
-# ground) in the piece's frame (the ski mountain's: u 0.9, lat -32.5, yaw
-# 180, +X to the road, -Z on up the lap), the ground the renderer draws there
-# over the plain, SAMPLED like a stand's (FORESTS): re-sample after moving the
-# piece or the land.
-RESORT_LODGE = (26.5, -37.5, 3.3)
-RESORT_CHALETS = ((33.0, -33.0, 1.66, 3.6, 2.7, 0x9a5f3c), (21.0, -44.5, 5.34, 3.4, 2.6, 0xcf534f),
-                  (31.5, -42.5, 4.92, 3.8, 2.8, 0x9a7b55), (15.0, -34.5, 0.99, 3.4, 2.6, 0x9a7b55))
+# north, outside the bend onto the start straight, in the piece's frame (the
+# ski mountain's: u 0.9, lat -32.5, yaw 180, +X to the road, -Z on up the lap
+# and up the hill). The hill falls toward +Z some 0.4 a unit, so every
+# building stands IN it: its floor (x, z, floor) a step over the ground the
+# renderer draws at its downhill wall, SAMPLED like a stand's (FORESTS), its
+# walls running on under the snow and the hill burying its back. Re-sample
+# after moving the piece or the land.
+RESORT_LODGE = (26.5, -37.5, 3.0)
+RESORT_CHALETS = ((33.0, -33.0, 1.55, 0x9a5f3c), (20.0, -39.5, 2.9, 0xcf534f),
+                  (31.5, -42.5, 4.5, 0x9a7b55), (15.0, -34.5, 0.9, 0x9a7b55))
 RESORT_FIRS = ((12.5, -37.5, 1.31, 1.9), (13.0, -41.0, 2.42, 2.1), (25.0, -45.0, 6.15, 1.8))
 RESORT_LANES = (((23.0, -27.0), (20.0, -31.0), (17.5, -32.6), (21.0, -34.6), (26.5, -34.8), (31.0, -34.4), (33.0, -31.2)),
-                ((31.0, -34.4), (33.4, -37.6), (31.6, -40.4), (26.0, -41.6), (21.2, -42.4)))
+                ((31.0, -34.4), (33.4, -37.6), (31.6, -40.4), (26.0, -41.6), (22.6, -39.4), (20.0, -37.6)))
 
 def powder_resort(lite=False):
-    """Powder's resort village: the lodge, a long hall with a stone ground
-    floor, a balcony down its front and a broad snowed roof, chalets below
-    and above it up the slope, each on a footing let into the hill, all
-    facing down the road that drives at them; a trodden lane climbs from
-    the valley station's chalets past every door, lamps along it."""
-    lx, lz, lg = RESORT_LODGE
-    box((7.4, lg + 0.4, 3.8), (lx, lg / 2, lz), 0x868ba1)                  # its footing, down through the hill
-    cabin_hut(7.0, 2.4, 3.4, (lx, lg + 0.2, lz), 0x9a5f3c, 0xeef4f9)
-    box((7.06, 1.0, 3.46), (lx, lg + 0.7, lz), 0x868ba1)                   # the stone ground floor
+    """Powder's resort village: the lodge, a long hall across the slope, its
+    stone ground floor let into the hill under the timber one, a balcony
+    down its front and a broad snowed roof; chalets below and above it, each
+    a broad low gable facing down the hill to the road that drives at them,
+    a stone step at its door; a trodden lane climbs from the valley
+    station's chalets past every door, lamps along it."""
+    lx, lz, b = RESORT_LODGE
+    top = cabin_hut(7.0, 2.4, 3.4, (lx, b, lz), 0x9a5f3c, 0xeef4f9, sunk=0.1, chimney=not lite)
+    box((7.06, b + 1.2, 3.46), (lx, (b + 1.0 - 0.2) / 2, lz), 0x868ba1)    # the stone ground floor, on down through the hill
+    box((6.6, 0.1, 0.7), (lx, b + 1.1, lz + 2.0), 0x8a6a46)                # the balcony down its front
+    for k in range(0 if lite else 4):                                      # its posts, down into the snow
+        box((0.12, b + 1.4, 0.12), (lx - 3.1 + 2.07 * k, (b + 1.2 - 0.2) / 2, lz + 2.3), 0x8a6a46)
     if not lite:
-        box((0.6, 1.0, 0.6), (lx - 1.8, lg + 3.3, lz - 0.7), 0x868ba1)     # the chimney
-        snowy(box((0.7, 0.12, 0.7), (lx - 1.8, lg + 3.86, lz - 0.7), 0xf3f7fb), 0.5)
-    box((6.6, 0.1, 0.7), (lx, lg + 1.3, lz + 2.0), 0x8a6a46)               # the balcony down its front
-    for k in range(0 if lite else 4):
-        box((0.12, 1.3, 0.12), (lx - 3.1 + 2.07 * k, lg + 0.75, lz + 2.3), 0x8a6a46)
-    if not lite:
-        box((6.6, 0.3, 0.08), (lx, lg + 1.62, lz + 2.32), 0x8a6a46)
+        box((6.6, 0.3, 0.08), (lx, b + 1.42, lz + 2.32), 0x8a6a46)
     if not lite:
         for k in range(4):                                                 # the upper floor's windows, shuttered red
             wx = lx - 2.55 + 1.7 * k
-            box((0.6, 0.6, 0.06), (wx, lg + 1.95, lz + 1.73), 'slate')
+            box((0.6, 0.6, 0.06), (wx, b + 1.75, lz + 1.73), 'slate')
             for sd in (-1, 1):
-                box((0.2, 0.6, 0.07), (wx + sd * 0.42, lg + 1.95, lz + 1.73), 0xcf534f)
-        box((0.9, 0.9, 0.06), (lx - 1.6, lg + 0.75, lz + 1.76), 'slate')   # the ground floor's
-        box((0.9, 0.9, 0.06), (lx + 1.6, lg + 0.75, lz + 1.76), 'slate')
-    for n, (x, z, g, w, d, wall) in enumerate(RESORT_CHALETS):
+                box((0.2, 0.6, 0.07), (wx + sd * 0.42, b + 1.75, lz + 1.73), 0xcf534f)
+        box((0.9, 0.9, 0.06), (lx - 1.6, b + 0.4, lz + 1.76), 'slate')     # the ground floor's
+        box((0.9, 0.9, 0.06), (lx + 1.6, b + 0.4, lz + 1.76), 'slate')
+    for n, (x, z, f, wall) in enumerate(RESORT_CHALETS):
         if lite:
             break                                                          # the box keeps the lodge and its lane
-        ry = -math.pi / 2 + (0.12, -0.1, 0.08, -0.14)[n]                    # doors down the road
-        box((d + 0.3, g + 0.4, w + 0.3), (x, g / 2, z), 0x868ba1, yaw=ry + math.pi / 2)
-        cabin_hut(w, 1.7, d, (x, g + 0.2, z), wall, 0xeef4f9, yaw=ry)
-        box((0.5, 1.2, 0.5), (x - 0.6, g + 2.6, z - 0.7), 0x868ba1)
-        snowy(box((0.6, 0.12, 0.6), (x - 0.6, g + 3.26, z - 0.7), 0xf3f7fb), 0.5)
+        ry = -math.pi / 2 + (0.12, -0.1, 0.08, -0.14)[n]                    # doors down the hill
+        w, d = (2.7, 2.6, 2.8, 2.6)[n], (3.6, 3.4, 3.8, 3.4)[n]
+        cabin_hut(w, 1.7, d, (x, f, z), wall, 0xeef4f9, yaw=ry, sunk=f + 0.2, chimney=True)   # (its walls down to the plain: set-check)
+        sx, sz = turned(x, z, ry, w / 2 + 0.17, 0.0)
+        box((0.34, f + 0.18, d * 0.34 + 0.16), (sx, (f - 0.02 - 0.2) / 2, sz), 0x868ba1, yaw=ry)   # the step at its door
     if not lite:
         for x, z, g, k in RESORT_FIRS:
             pine((x, g - 0.35 * k, z), k)
@@ -6002,8 +6028,8 @@ def powder_resort(lite=False):
             box((0.44, 0.08, 0.08), (x - 0.18, 1.6, z), 0x38383d)
             box((0.22, 0.22, 0.22), (x - 0.38, 1.47, z), 0xffc044)
     draped('lanes', lanes)
-    if not lite:
-        marker('anim_smoke#lodge', (lx - 1.8, lg + 4.2, lz - 0.7))
+    if top:
+        marker('anim_smoke#lodge', top)
 
 @piece(1.0)
 def powder_resort_piece():
@@ -6104,15 +6130,12 @@ def ski_lift(lite=False):
     # the resort's chalets by the valley station, out on the verge a few
     # units from the kerb and a few car-lengths long each, so they read from
     # the seat (round the station at a real cabin's size they were specks
-    # behind the kerb); each on its footing, on the verge as it is drawn
-    for (lx, lz, w, d, wall, ry) in ((8.2, 1.4, 3.8, 2.8, 0x9a5f3c, 0.3), (8.8, 6.8, 3.2, 2.5, 0xcf534f, -0.2),
-                                     (4.6, 10.6, 3.4, 2.6, 0x9a7b55, 0.5))[:2 if lite else 3]:
-        box((w + 0.2, 0.5, d + 0.2), (V[0] + lx, 0.2, V[1] + lz), 0x868ba1, yaw=ry)
-        cabin_hut(w, 1.7, d, (V[0] + lx, 0.4, V[1] + lz), wall, 0xeef4f9, yaw=ry)
-        if lite:
-            continue
-        box((0.5, 1.3, 0.5), (V[0] + lx - 0.8, 2.9, V[1] + lz - 0.5), 0x868ba1)
-        snowy(box((0.6, 0.12, 0.6), (V[0] + lx - 0.8, 3.6, V[1] + lz - 0.5), 0xf3f7fb), 0.5)
+    # behind the kerb); each standing in the verge's snow as it is drawn
+    # (each floor a step over the ground drawn at its door, sampled; the
+    # walls run on under the snow)
+    for (lx, lz, f, w, d, wall, ry) in ((8.2, 1.4, 0.6, 3.8, 2.8, 0x9a5f3c, 0.3), (8.8, 6.8, 0.38, 3.2, 2.5, 0xcf534f, -0.2),
+                                        (4.6, 10.6, 0.14, 3.4, 2.6, 0x9a7b55, 0.5))[:2 if lite else 3]:
+        cabin_hut(w, 1.7, d, (V[0] + lx, f, V[1] + lz), wall, 0xeef4f9, yaw=ry, sunk=0.7, chimney=not lite)
     for k in range(0 if lite else 2):
         snow_person(V[0] + 3.2 + 0.5 * k, 0, V[1] - 0.6 + 0.9 * (k % 2), COATS[k], COATS[(k + 2) % 6], yaw=1.2 * k)
     # top station on the summit, its hut behind it
@@ -6308,15 +6331,12 @@ def powder_chairlift(lite=False):
                   (12.4, 2.0, 1.6, 0x61cb8b, 0.06, False), (16.2, 2.3, 1.7, 0xcf534f, -0.05, True))
         for n, (z, w, d, wall, ry, smoke) in enumerate(HOUSES):
             hx = -11.9 - 0.3 * (n % 2)
-            cabin_hut(w, 1.05, d, (hx, -0.15, z), wall, 0xeef4f9, yaw=ry)
+            cabin_hut(w, 1.05, d, (hx, -0.15, z), wall, 0xeef4f9, yaw=ry, chimney=smoke and not lite)
             # its path to the lane
             if lite:
                 continue
             x0, x1 = hx + w / 2, lane_x(z) - 0.6
             snowy(box((x1 - x0 + 0.2, 0.06, 0.6), ((x0 + x1) / 2, 0.03, z), LANE), 0.3)
-            if smoke:                                                           # a chimney on the back slope
-                box((0.3, 0.6, 0.3), (hx - w * 0.25, 1.35, z - d * 0.2), 0x868ba1)
-                snowy(box((0.38, 0.08, 0.38), (hx - w * 0.25, 1.68, z - d * 0.2), 0xeef4f9), 0.4)
         # the rail fence between the lane and the road, open at the square
         fz = [-18.0 + 1.5 * i for i in range(25)]
         for za, zb in zip(fz, fz[1:]):
@@ -6391,7 +6411,7 @@ FORESTS = {
     'avalanche-forest-e': ((-6.4, -5.8, 11.28, 2.05, 0, 0), (-2.9, -10.2, 11.08, 1.40, 0, 0), (-6.2, -8.0, 12.37, 2.17, 0, 0), (-2.9, -8.6, 10.59, 1.96, 0, 0), (-0.9, -7.3, 8.93, 1.68, 1, 0), (-5.3, -10.0, 12.41, 2.01, 0, 0), (-3.4, -6.1, 10.01, 2.10, 1, 0), (-3.3, -3.3, 9.07, 1.45, 1, 0), (-6.0, -3.6, 9.98, 1.59, 0, 0), (-2.4, -4.6, 8.92, 1.58, 1, 0), (-4.5, -8.7, 11.56, 1.87, 0, 0), (9.4, 0.5, 1.14, 1.59, 0, 1), (6.4, 2.0, 1.94, 1.87, 1, 1), (6.5, 0.2, 2.30, 2.11, 0, 1), (6.0, 4.1, 1.64, 2.68, 1, 0), (4.7, -0.5, 3.28, 1.99, 1, 0), (3.5, 2.4, 3.12, 1.82, 0, 0), (3.5, 0.6, 3.59, 1.60, 0, 0), (7.3, 3.3, 1.37, 1.53, 1, 1), (9.9, 1.8, 0.70, 1.40, 0, 1), (2.0, -0.2, 4.72, 1.68, 1, 0), (0.6, -0.3, 5.63, 2.09, 0, 0), (-1.1, -0.8, 6.86, 1.59, 1, 0), (2.1, 2.5, 3.81, 2.11, 0, 0), (-0.8, 1.2, 6.06, 1.56, 0, 0), (1.3, -2.0, 5.73, 2.13, 1, 0), (0.5, 2.0, 4.98, 1.43, 0, 0), (-2.9, 4.5, 4.85, 1.78, 0, 0), (1.3, 4.1, 3.80, 2.06, 1, 0), (-3.9, 2.8, 5.97, 1.45, 1, 0), (-2.5, 2.6, 5.77, 2.11, 0, 0), (-0.4, 5.8, 3.51, 1.61, 0, 0), (-3.7, 1.3, 6.74, 2.09, 1, 0), (-0.2, -2.0, 6.68, 1.87, 1, 0), (-1.4, 3.9, 4.77, 1.84, 0, 0), (-3.1, -0.9, 7.76, 2.14, 0, 0), (0.9, 5.4, 3.37, 1.50, 0, 0), (-5.3, 8.5, 3.32, 1.76, 1, 0), (3.9, 9.9, 1.30, 1.89, 0, 0), (8.5, 7.4, 0.41, 1.64, 0, 1), (-10.0, 8.5, 4.71, 1.65, 1, 0)),
     'avalanche-forest-f': ((-9.3, 12.6, 0.18, 1.68, 0, 1), (-7.7, 12.6, 0.33, 1.75, 0, 1), (-6.4, 11.9, 0.41, 1.40, 0, 1), (-4.9, 11.5, 0.52, 1.82, 1, 1), (-3.4, 11.2, 0.65, 1.59, 0, 0), (-4.1, 5.7, 0.49, 1.19, 2, 1), (-4.6, 2.4, 0.24, 1.04, 1, 1), (-2.1, 10.4, 1.07, 1.74, 0, 0), (-3.9, 7.1, 0.54, 1.39, 3, 1), (-3.2, 1.9, 1.31, 2.06, 0, 1), (-0.6, 10.1, 1.88, 1.42, 1, 0), (-1.3, 7.9, 1.97, 1.29, 3, 0), (-1.6, 1.8, 2.94, 1.82, 0, 1), (0.8, 9.5, 3.15, 2.11, 0, 0), (0.1, 8.1, 2.93, 1.33, 2, 0), (-0.2, 1.3, 4.70, 2.14, 0, 1), (2.2, 9.2, 4.99, 1.51, 1, 0), (0.6, 3.2, 5.15, 1.13, 3, 0), (1.2, 0.6, 6.52, 1.74, 1, 0), (3.7, 8.9, 7.20, 1.57, 1, 0), (3.1, 4.1, 7.79, 1.29, 2, 0), (2.6, 0.1, 8.37, 2.04, 0, 0), (5.1, 8.4, 9.27, 1.99, 0, 0), (3.7, 3.3, 8.82, 1.06, 2, 0), (4.0, -0.4, 10.24, 2.11, 1, 0), (6.6, 8.0, 10.50, 2.06, 0, 0), (5.9, 2.6, 11.66, 0.77, 0, 0), (5.4, -0.8, 12.21, 1.41, 0, 0), (8.0, 7.6, 11.80, 1.78, 0, 0), (7.0, -0.9, 13.93, 1.55, 0, 0), (9.4, 7.0, 13.17, 1.64, 0, 0), (8.3, -1.7, 16.36, 1.81, 0, 0), (10.8, 6.6, 14.39, 1.80, 1, 0), (9.8, -2.0, 18.21, 1.84, 1, 0), (12.3, 6.4, 15.54, 2.07, 0, 0), (11.5, 2.9, 17.26, 0.97, 0, 0), (11.2, -2.4, 19.44, 2.12, 1, 0), (12.7, -2.6, 20.61, 1.51, 1, 0), (1.2, 11.7, 3.87, 2.19, 1, 0), (4.9, 9.8, 7.99, 2.95, 0, 0), (2.8, 11.3, 5.39, 1.78, 1, 0), (3.1, 13.0, 4.19, 1.76, 1, 0), (-0.5, 11.7, 1.92, 2.19, 1, 0), (-6.8, -13.6, 1.04, 1.72, 0, 1), (-5.2, -13.3, 2.22, 1.62, 1, 1), (-4.0, -17.9, 4.70, 1.98, 0, 0), (-7.0, -16.5, 1.94, 1.49, 0, 1), (-4.4, -15.1, 3.59, 1.63, 1, 1), (-5.2, -19.4, 4.21, 1.70, 1, 0), (-7.3, -19.7, 2.68, 1.87, 0, 1), (-7.8, -18.0, 1.69, 2.19, 0, 1), (-5.1, -16.7, 3.62, 3.00, 0, 1), (-7.5, -15.2, 1.10, 2.12, 0, 1), (-3.6, -16.2, 4.66, 1.76, 0, 0), (-5.8, -15.0, 2.42, 1.54, 0, 1), (3.3, -17.8, 10.08, 1.99, 0, 0), (1.3, -20.0, 8.75, 2.94, 0, 0), (-0.4, -17.2, 7.08, 1.59, 0, 0), (1.7, -17.3, 8.61, 2.04, 0, 0), (1.8, -15.4, 8.46, 1.53, 0, 0), (0.6, -18.7, 7.99, 1.73, 0, 0), (4.1, -16.7, 10.57, 2.12, 0, 0), (3.1, -19.6, 10.18, 2.05, 0, 0), (-7.7, 18.7, 1.17, 1.71, 0, 0), (-3.7, 16.2, 1.28, 1.80, 1, 0), (-3.6, 19.5, 1.45, 1.57, 1, 0), (-2.1, 18.0, 1.42, 2.02, 0, 0), (-5.1, 17.9, 1.32, 1.94, 0, 0), (-7.9, 16.8, 0.90, 1.62, 0, 0), (-5.5, 19.4, 1.38, 2.13, 1, 0), (-6.6, 15.3, 0.83, 1.54, 1, 0), (-6.0, 16.8, 1.11, 1.71, 0, 0), (-3.2, -2.8, 1.73, 1.86, 0, 1), (-2.7, -0.7, 1.93, 1.82, 1, 1), (-3.9, -4.4, 1.30, 1.79, 0, 1), (-1.5, -3.6, 3.95, 1.82, 1, 1), (-1.4, -2.0, 3.72, 2.12, 0, 1), (-4.3, -1.0, 0.28, 1.17, 0, 1), (1.2, -10.7, 7.72, 1.71, 1, 0), (-1.4, -11.2, 5.32, 2.90, 1, 0), (-2.8, -14.5, 4.69, 2.76, 1, 0), (4.2, -12.9, 10.97, 2.01, 0, 0), (-3.8, -13.3, 3.46, 2.08, 0, 1), (0.4, -12.2, 6.92, 2.13, 0, 0), (-0.9, -14.1, 5.95, 1.85, 0, 0), (3.4, -11.5, 10.30, 1.50, 0, 0), (9.1, 11.0, 9.68, 1.90, 1, 0), (9.6, -5.5, 18.73, 1.62, 0, 0), (4.0, 16.1, 4.32, 2.14, 0, 0), (5.7, -10.0, 13.15, 2.09, 0, 0), (7.8, 14.1, 6.44, 1.61, 0, 0), (-8.4, -11.7, 0.23, 1.50, 1, 1), (-6.9, -9.5, 0.22, 1.18, 0, 1), (-4.4, 0.7, 0.28, 1.33, 1, 1)),
     'avalanche-forest-g': ((7.3, 0.9, 11.51, 1.41, 0, 0), (7.3, 3.3, 11.29, 1.82, 0, 0), (9.5, 2.7, 12.82, 2.03, 0, 0), (9.7, 0.1, 12.92, 2.06, 1, 0), (8.4, 5.0, 11.96, 1.42, 0, 0), (5.3, 1.4, 10.18, 1.52, 0, 0), (7.8, -0.9, 11.42, 1.91, 0, 0), (0.4, -15.2, 1.63, 2.17, 0, 0), (-3.6, -11.2, 1.49, 1.57, 0, 0), (-1.0, -9.6, 3.51, 1.78, 0, 0), (-2.9, -15.3, 0.86, 1.61, 0, 0), (-0.9, -12.8, 2.06, 1.78, 0, 0), (-1.4, -14.7, 1.05, 1.88, 1, 0), (1.5, -12.7, 3.29, 1.66, 1, 0), (8.7, 1.4, 12.38, 2.10, 1, 0), (8.7, 6.3, 12.11, 1.79, 0, 0), (6.9, 5.5, 10.93, 1.41, 1, 0), (10.0, 5.0, 12.93, 1.61, 1, 0), (4.0, -1.7, 8.83, 1.68, 0, 0), (2.6, 2.2, 8.40, 1.52, 0, 0), (-1.1, -0.6, 5.67, 1.67, 1, 0), (2.2, -2.4, 7.49, 1.79, 0, 0), (-1.8, 1.1, 5.31, 2.03, 1, 0), (0.8, -1.0, 7.03, 2.11, 0, 0), (-8.8, 7.6, 0.37, 1.18, 0, 1), (-1.5, -18.3, 0.90, 1.88, 0, 0), (1.9, -18.6, 1.20, 1.43, 0, 0), (1.5, -16.2, 1.73, 1.89, 1, 0), (-3.3, -19.0, 0.59, 2.01, 0, 0), (0.4, -17.6, 1.19, 1.83, 0, 0), (-2.4, -16.6, 0.88, 1.70, 1, 0), (-6.3, 19.9, 1.67, 1.41, 0, 0), (2.8, -6.9, 6.40, 1.93, 0, 0), (-7.4, 0.0, 0.76, 1.31, 0, 1), (-7.7, 2.9, 0.66, 0.98, 1, 1)),
-    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
+    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
     'avalanche-forest-i': ((-11.0, 15.3, 13.77, 2.62, 0, 0), (-8.6, 12.2, 17.03, 2.74, 0, 0), (-10.1, 13.9, 15.40, 1.64, 0, 0), (-6.3, 17.0, 11.97, 1.55, 0, 0), (-4.0, 15.9, 10.65, 2.01, 0, 0), (-7.0, 19.8, 13.63, 1.57, 1, 0), (-3.5, 18.0, 11.23, 2.12, 0, 0), (-8.5, 19.5, 14.26, 2.09, 1, 0), (-13.7, 15.8, 15.18, 1.70, 1, 0), (-10.2, 17.9, 13.48, 2.09, 0, 0), (-11.2, 16.7, 12.81, 2.05, 0, 0), (-16.4, 17.1, 15.57, 1.50, 0, 0), (-13.5, 18.3, 14.18, 2.85, 0, 0), (-21.2, 18.8, 18.02, 2.06, 1, 0), (11.3, -5.2, 13.12, 2.08, 0, 0), (12.4, -8.8, 10.07, 2.06, 1, 0), (10.0, -9.6, 12.63, 1.78, 1, 0), (10.1, -4.3, 14.57, 1.74, 0, 0), (13.9, -6.7, 10.19, 1.95, 0, 0), (9.6, -11.2, 12.27, 1.91, 0, 0), (9.7, -7.2, 13.90, 1.66, 0, 0), (7.2, -10.8, 15.98, 1.97, 0, 0), (-3.9, -24.5, 15.86, 1.95, 0, 0), (-5.1, -23.4, 17.80, 2.09, 1, 0), (-1.5, -24.3, 13.34, 2.85, 0, 0), (-0.8, -21.7, 15.63, 2.95, 1, 0), (-2.4, -20.9, 18.08, 2.07, 1, 0), (10.9, -21.5, 3.60, 2.01, 1, 2), (5.0, -30.8, 5.77, 1.42, 0, 2), (7.8, 8.4, 10.02, 1.86, 0, 0), (4.9, 5.3, 14.99, 2.13, 0, 0), (16.3, -17.6, 2.89, 1.98, 0, 2), (5.4, 12.3, 7.57, 1.42, 0, 0), (9.4, -19.3, 6.25, 1.69, 1, 2)),
     'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
@@ -6942,6 +6962,51 @@ def woodpile(x, z, k=0.3):
     snowy(box((3.4 * k, 0.2 * k, 3.5 * k), (x, 2.2 * k, z), 0xeef4f9, roll=-0.2))
     cyl(0.5 * k, 0.6 * k, (x + 2.4 * k, 0, z + 1.6 * k), 0x8a6a46, segs=8)
 
+def snowed_roof(cx, cz, eave, half, length, over, a, tb, ts):
+    """A snowed gable roof, its ridge along X over (cx, cz): dark boards whose
+    underside lies on the wall heads (`eave` high, `half` either side of the
+    ridge) at pitch `a`, oversailing them by `over` and `length` long, `tb`
+    thick; the snow lying on the boards `ts` deep, a little inside their
+    edge and closed over the ridge. Returns the ridge's height. (Two slabs
+    of snow crossing under a grey ridge beam read as planks.)"""
+    ridge = eave + half * math.tan(a)
+    run = half + over
+    for s in (-1, 1):
+        for t, up, trim, color in ((tb, tb / 2, 0.0, 0x6e4a32), (ts, tb + ts / 2, 0.4 * ts, 0xeef4f9)):
+            o = box((length - trim, t, run / math.cos(a) - trim / 2),
+                    (cx, ridge - (run / 2) * math.tan(a) + up / math.cos(a), cz + s * run / 2), color, pitch=-s * a)
+            if trim:
+                snowy(o, 0.5)
+    T = tb + ts
+    snowy(box((length - 0.4 * ts, T * math.cos(a), 2 * T * math.sin(a) + 0.15 * ts), (cx, ridge + T * math.cos(a) / 2 + 0.05 * ts, cz),
+              0xeef4f9), 0.5)
+    return ridge
+
+def lean_shed(sx, sz, W, D, HB, HF, t=0.18, back=0x8a5a3a, side=0x9a5f3c, post=0x6e4a32):
+    """An open shed about (sx, sz), W deep and D wide, open to +X: three
+    walls under a lean-to roof falling to the back (HF at the door, HB at
+    the back wall). The side walls are cut to the roof's fall, the boards
+    lie on them and on the lintel and oversail all round, the snow lies on
+    the boards (a level box under a tilted slab of snow left a wedge of air
+    along its top)."""
+    x0, x1 = sx - W / 2, sx + W / 2
+    a = math.atan2(HF - HB, W)
+    p = 1.45 * t
+    box((t, HB + 0.2, D), (x0 + t / 2, (HB - 0.2) / 2, sz), back)
+    for s in (-1, 1):
+        z0, z1 = sz + s * (D / 2 - t), sz + s * D / 2
+        solid([(x0, -0.2, z0), (x1, -0.2, z0), (x1, HF, z0), (x0, HB, z0), (x0, -0.2, z1), (x1, -0.2, z1), (x1, HF, z1), (x0, HB, z1)],
+              [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], side)
+        box((p, HF - 0.05, p), (x1 - p / 2, (HF - 0.05) / 2, sz + s * (D / 2 - p / 2)), post)
+    box((p, 1.15 * p, D), (x1 - p / 2, HF - 0.6 * p - 0.03, sz), post)   # the lintel over the door
+    over = 2.0 * t
+    sl = (W + 2 * over) / math.cos(a)
+    tb, ts = 0.55 * t, 1.3 * t
+    for th, up, trim, color in ((tb, tb / 2, 0.0, 0x6e4a32), (ts, tb + ts / 2, 0.5 * t, 0xeef4f9)):
+        o = box((sl - trim, th, D + 2 * over - trim), (sx - up * math.sin(a), (HB + HF) / 2 + up * math.cos(a), sz), color, roll=-a)
+        if trim:
+            snowy(o, 0.5)
+
 def log_cabin_at(cx, cz, k=1.0, smoke=False):
     """A log cabin at (cx, cz), door on +X, built at `k` of the old 4.2 unit
     cabin (0.55: a real cabin, two and a half units across): each wall its
@@ -6960,19 +7025,13 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
     for s in (-1, 1):
         prism([(cz + D / 2 - 0.05 * k, H + 0.1 * k), (cz - D / 2 + 0.05 * k, H + 0.1 * k),
                (cz, H + 0.1 * k + (D / 2) * math.tan(0.6))], cx + s * (W / 2 - 0.1 * k), 0.2 * k, 0x8a5a3a)
-    ridge = H + 0.1 * k + (D / 2) * math.tan(0.6)
-    run = D / 2 + 0.45 * k
-    for s in (-1, 1):
-        snowy(box((W + 0.8 * k, 0.26 * k, run / math.cos(0.6) + 0.1 * k),
-                  (cx, ridge - (run / 2) * math.tan(0.6) + 0.16 * k, cz + s * run / 2),
-                  0xeef4f9, pitch=-s * 0.6), 0.5)
-    box((W + 0.9 * k, 0.22 * k, 0.36 * k), (cx, ridge + 0.3 * k, cz), 0x868ba1)
-    box((0.7 * k, 1.9 * k, 0.7 * k), (cx - 1.1 * k, ridge - 0.2 * k, cz - 0.75 * k), 0x868ba1)
-    snowy(box((0.82 * k, 0.14 * k, 0.82 * k), (cx - 1.1 * k, ridge + 0.8 * k, cz - 0.75 * k), 0xeef4f9))
+    ridge = snowed_roof(cx, cz, H + 0.1 * k, D / 2, W + 0.8 * k, 0.45 * k, 0.6, 0.07 * k, 0.2 * k)
+    box((0.5 * k, 1.25 * k, 0.5 * k), (cx - 1.1 * k, ridge - 0.1 * k, cz - 0.75 * k), 0x868ba1)
+    snowy(box((0.6 * k, 0.1 * k, 0.6 * k), (cx - 1.1 * k, ridge + 0.57 * k, cz - 0.75 * k), 0xeef4f9))
     if smoke:                                      # True, or the puffs' size (anim_smoke:s=)
         name = 'anim_smoke' if smoke is True else 'anim_smoke:s=%g' % smoke
         # each cabin's marker its own name: Blender would suffix a repeat
-        marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.9 * k, cz - 0.75 * k))
+        marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.7 * k, cz - 0.75 * k))
     box((0.1 * k, 1.55 * k, 1.1 * k), (cx + W / 2 + 0.06 * k, 0.9 * k, cz - 0.55 * k), 0xfff6eb)
     box((0.1 * k, 1.35 * k, 0.85 * k), (cx + W / 2 + 0.12 * k, 0.82 * k, cz - 0.55 * k), 0x38383d)
     box((0.1 * k, 0.8 * k, 0.8 * k), (cx + W / 2 + 0.06 * k, 1.3 * k, cz + 0.95 * k), 0xfff6eb)
@@ -6980,17 +7039,24 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
 
 @piece(1.0)
 def log_cabin():
-    # Flurry: a corner of the village below the lake at its real size beside
-    # a car: a log cabin two and a half units across and two smaller ones
-    # either side of it, their chimneys smoking (the columns stand over the
-    # kerb from far down the road, before the cabins do), the woodpile under its
-    # lean-to between them, a sled by the door.
-    log_cabin_at(0.0, 0.0, 0.58, smoke=1.5)
-    log_cabin_at(-0.6, 3.0, 0.42, smoke=True)
-    log_cabin_at(-0.4, -3.9, 0.48, smoke=True)
-    woodpile(0.2, -2.2, 0.3)
-    sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
+    # Flurry: a corner of the village by the line at its real size beside a
+    # car: a log cabin two and a half units across and two smaller ones
+    # either side of it, their chimneys smoking, the woodpile under its
+    # lean-to between them, a sled by the door. On the bench the track's
+    # land raises off the start straight's verge for it (tracks.js flurry
+    # `land`; on the plain they stood under the road's own height, behind
+    # its bank to the eaves): each cabin level at the lowest ground drawn
+    # under it there, SAMPLED like a stand's (FORESTS: re-sample after moving
+    # the piece or the land), the bench burying its uphill side a little;
+    # the woodpile and the sled drape, so the piece levels nothing.
+    for cx, cz, floor, k, smoke in ((0.0, 0.0, 1.65, 0.58, 1.5), (-1.2, 2.6, 1.38, 0.42, True), (-0.4, -3.9, 2.1, 0.48, True)):
+        flurry_stood((lambda cx, cz, k, smoke: lambda: log_cabin_at(cx, cz, k, smoke=smoke))(cx, cz, k, smoke),
+                     cx, cz, 0.0, stood_post(cx, cz, floor), pivot=(cx, cz))
     join_still('cabins')
+    def lying():
+        woodpile(0.2, -2.2, 0.3)
+        sled(2.0, 0.0, -0.9, 0.5, color=0xcf534f, L=0.8)
+    draped('yard', lying)
 
 # ---- Flurry's lake hamlet ----------------------------------------------------
 # The ground drawn over the plain under the hamlet (u 0.375, lat -11, yaw 180:
@@ -7040,9 +7106,17 @@ def flurry_ice_hut(color, pipe=False, window=0xffc044):
     in the side, maybe a stovepipe."""
     for s in (-1, 1):
         box((1.2, 0.1, 0.14), (0.0, 0.05, s * 0.32), 0x6e4a32)
-    box((0.95, 0.85, 0.85), (0.0, 0.52, 0.0), color)
+    # (its top cut to the roof's fall: a level box under the tilted roof
+    # left a wedge of air at the door)
+    x0, x1, y0, yb, yf, hz = -0.475, 0.475, 0.095, 0.88, 1.02, 0.425
+    solid([(x0, y0, -hz), (x1, y0, -hz), (x1, yf, -hz), (x0, yb, -hz), (x0, y0, hz), (x1, y0, hz), (x1, yf, hz), (x0, yb, hz)],
+          [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], color)
     box((1.0, 0.1, 0.9), (0.0, 0.14, 0.0), 0x6e4a32)
-    snowy(box((1.2, 0.16, 1.08), (-0.03, 1.02, 0.0), 0xf3f7fb, roll=-0.14), 0.5)
+    a = math.atan2(yf - yb, x1 - x0)
+    for t, up, trim, c in ((0.06, 0.03, 0.0, 0x6e4a32), (0.13, 0.125, 0.06, 0xf3f7fb)):
+        o = box((1.2 - trim, t, 1.08 - trim), (-up * math.sin(a), (yb + yf) / 2 + up * math.cos(a), 0.0), c, roll=-a)
+        if trim:
+            snowy(o, 0.5)
     box((0.06, 0.62, 0.36), (0.48, 0.5, -0.12), 0x38383d)
     box((0.3, 0.3, 0.06), (-0.05, 0.62, 0.43), 0xfff6eb)
     box((0.2, 0.2, 0.06), (-0.05, 0.62, 0.45), window)
@@ -7072,16 +7146,10 @@ def flurry_boat(color, upturned=True):
 
 def flurry_boathouse():
     """The boathouse about the origin, open to +X (the lake): plank walls on
-    three sides, a snowed roof falling to the back, a boat drawn up inside on
+    three sides, a snowed lean-to roof falling to the back, a boat drawn up inside on
     its trestles with its bow out of the door, oars racked on the side."""
     W, D, H = 2.2, 2.6, 1.5
-    box((W, 0.16, D), (0.0, 0.08, 0.0), 0x868ba1)
-    box((0.16, H, D), (-W / 2 + 0.08, H / 2, 0.0), 0x8a5a3a)
-    for s in (-1, 1):
-        box((W, H, 0.16), (0.0, H / 2, s * (D / 2 - 0.08)), 0x9a5f3c)
-        box((0.2, H + 0.2, 0.2), (W / 2 - 0.1, (H + 0.2) / 2, s * (D / 2 - 0.1)), 0x6e4a32)
-    box((0.2, 0.2, D), (W / 2 - 0.1, H + 0.1, 0.0), 0x6e4a32)
-    snowy(box((W + 0.7, 0.24, D + 0.6), (0.0, H + 0.28, 0.0), 0xeef4f9, roll=0.16), 0.5)
+    lean_shed(0.0, 0.0, W, D, H - 0.2, H + 0.2, t=0.14)
     box((W - 0.4, 0.5, D - 0.4), (-0.05, 0.75, 0.0), 0x38383d)                # the dark inside
     flurry_stood(lambda: flurry_boat(0xcf534f, upturned=False), 0.75, 0.0, -math.pi / 2, 0.22)
     for k in range(2):                                                         # oars on the side wall
@@ -7270,13 +7338,9 @@ def hay_barn(g):
             box((0.24, H + g + 0.3, 0.24), (sx * (W / 2 - 0.15), (H - g - 0.3) / 2, sz * (D / 2 - 0.15)), 0x8a6a46)
     box((W - 0.5, 1.15, D - 0.6), (0.0, 0.58, 0.0), 0xd9b054)                 # the hay
     box((W - 1.4, 0.45, D - 1.1), (-0.3, 1.35, 0.0), 0xd9b054)
-    run = D / 2 + 0.5
     for sz in (-1, 1):
-        snowy(box((W + 0.7, 0.24, run / math.cos(0.55) + 0.1), (0.0, H + 0.2 + (run / 2) * math.tan(0.55), sz * run / 2),
-                  0xeef4f9, pitch=-sz * 0.55), 0.5)                              # (a ridge: with the other sign the slabs met in a valley)
         box((W, 0.16, 0.16), (0.0, H, sz * (D / 2 - 0.15)), 0x6e4a32)
-    top = H + 0.34 + run * math.tan(0.55)
-    box((W + 0.8, 0.2, 0.3), (0.0, top, 0.0), 0x868ba1)
+    top = snowed_roof(0.0, 0.0, H + 0.08, D / 2 - 0.15, W + 0.7, 0.65, 0.55, 0.07, 0.2)
     for sx in (-1, 1):                                                         # the king posts, up through the hay
         box((0.24, top, 0.24), (sx * (W / 2 - 0.15), top / 2, 0.0), 0x8a6a46)
 
@@ -7686,8 +7750,7 @@ def ski_jump():
         marker('path_jump_%d' % k, p)
     # the timing hut on the outrun's side, on the ground drawn there
     # (sampled), its walls run down to the plain
-    box((1.5, hy + 0.2, 1.3), (hx, hy / 2 - 0.1, hz), 0x9a7b55)
-    cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2)
+    cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2, sunk=hy + 0.2)
     for k in range(2):
         x, y, z = pts[3]
         with animated('anim_path:c=jump:p=20:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
@@ -7817,11 +7880,11 @@ def ski_school():
         snow_person(1.8, 0, 2.6, 0xcf534f, 0xfff6eb, yaw=math.pi)         # the instructor, watching
         snow_heap((-0.2, 0, -4.4), 0.5, yaw=0.6)
     draped('school', static)
-    # the hut level on the slope, its floor at the slope's top corner and a
-    # stone footing under its front: draped, a house leaned with the hill
-    hy = max(H(1.4 + dx, -3.4 + dz) for dx in (-0.7, 0.7) for dz in (-0.55, 0.55))
-    box((1.5, 1.2, 1.2), (1.4, hy - 0.6, -3.4), 'grey')
-    cabin_hut(1.4, 0.8, 1.1, (1.4, hy, -3.4), 0xcf534f, 0xeef4f9)
+    # the hut level on the slope, its floor at the snow by its door (+X,
+    # downhill), its walls on under the snow and the hill burying its back:
+    # draped, a house leaned with the hill
+    hy = H(2.2, -3.4) + 0.06
+    cabin_hut(1.4, 0.8, 1.1, (1.4, hy, -3.4), 0xcf534f, 0xeef4f9, sunk=1.0)
     # the feather flags' cloth, swinging round its pole as the wind shifts
     for n, (fz, c) in enumerate(((-0.9, 0xff5040), (4.2, 0x3f7bd9))):
         with animated('anim_drape+flutter:a=y:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
@@ -10799,21 +10862,13 @@ def road_keeper():
     # Front to +X.
     RED, TIMBER_, DARK = 0xcf534f, 0x8a5a3a, 0x38383d
     # the hut
-    cabin_hut(2.3, 1.7, 2.6, (-0.6, 0.0, -3.4), RED, 0xeef4f9)
-    box((0.5, 1.5, 0.5), (-1.3, 2.4, -4.0), 0x868ba1)
-    snowy(box((0.62, 0.12, 0.62), (-1.3, 3.2, -4.0), 0xf3f7fb), 0.5)
-    marker('anim_smoke#keeper', (-1.3, 3.3, -4.0))
+    marker('anim_smoke#keeper', cabin_hut(2.3, 1.7, 2.6, (-0.6, 0.0, -3.4), RED, 0xeef4f9, chimney=True))
     for s in (-1, 1):                                               # red shutters by the door
         box((0.06, 0.6, 0.22), (0.58, 0.95, -3.4 + s * 0.78), 0xfff6eb)
-    # the plough shed: three walls, a roof falling to the back, open to +X
-    W, D, H = 4.2, 3.6, 2.6
+    # the plough shed, open to +X
+    W, D = 4.2, 3.6
     sx, szc = -0.8, 1.6
-    box((0.18, H, D), (sx - W / 2 + 0.09, H / 2, szc), TIMBER_)
-    for s in (-1, 1):
-        box((W, H, 0.18), (sx, H / 2, szc + s * (D / 2 - 0.09)), 0x9a5f3c)
-        box((0.26, H + 0.3, 0.26), (sx + W / 2 - 0.13, (H + 0.3) / 2, szc + s * (D / 2 - 0.13)), 0x6e4a32)
-    box((0.26, 0.3, D), (sx + W / 2 - 0.13, H + 0.2, szc), 0x6e4a32)
-    snowy(box((W + 0.9, 0.3, D + 0.7), (sx, H + 0.5, szc), 0xeef4f9, roll=0.12), 0.5)
+    lean_shed(sx, szc, W, D, 2.2, 2.9, back=TIMBER_)
     box((W - 0.5, 0.3, D - 0.5), (sx - 0.1, 0.16, szc), DARK)       # the oiled floor
     plough_truck(sx - 0.2, szc, math.pi / 2, k=1.05, y=0.1)
     # grit, poles, fuel
