@@ -520,7 +520,15 @@ export const TRACKS = {
       // the `clear`s that keep seeded crates off the hilltops keep its
       // seeded palms off too
       { model: 'set-palm-stand', u: 0.15, lat: -9, yaw: 180 },
-      { model: 'set-palm-stand', u: 0.42, lat: -9, yaw: 180 }
+      { model: 'set-palm-stand', u: 0.42, lat: -9, yaw: 180 },
+      // the west bend, which lay bare (round 22): the sea-kayak hire past
+      // the headland and the shellfish shack inside the bend; and on the
+      // hard past the start, where the verge stands at the road's height, a
+      // fishing boat hauled out on her legs (the beach lies most of a unit
+      // under the kerb, and at the hop's foot she stood out of sight)
+      { model: 'set-kayak-rack', u: 0.775, lat: 9.5 },
+      { model: 'set-shellfish-shack', u: 0.81, lat: -10.5, yaw: 180 },
+      { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 }
     ],
     land: [
       // the sea round Seal Rock and up to the reef on the east bend
@@ -634,7 +642,15 @@ export const TRACKS = {
       { model: 'set-palm-stand', u: 0.84, lat: 7.8, yaw: 20 },
       // ...and a low green rise past the bend's exit, south of the start
       // straight's head, palms on it: what the camera looks at coming out
-      { model: 'set-palm-stand', u: 0.88, lat: 9, yaw: 10 }
+      { model: 'set-palm-stand', u: 0.88, lat: 9, yaw: 10 },
+      // round 22, where the beach lay bare at the road's own height (the
+      // road to the bay runs two units over its sand, and what stood there
+      // stood out of sight): the crew's dig for what they buried, beside
+      // the start straight, their sailmaker past the camp, and the island's
+      // old stone idol on the west shore before Skull Rock
+      { model: 'set-treasure-dig', u: 0.045, lat: 10.5 },
+      { model: 'set-sail-yard', u: 0.125, lat: 10.5 },
+      { model: 'set-jungle-idol', u: 0.585, lat: 10.5 }
     ],
     // The peak and the headland are green with the scrub and jungle that
     // hold them (bare and peaked, a hill that size is a desert dune; the
@@ -764,7 +780,15 @@ export const TRACKS = {
       // and the salt killed beside the east run
       { model: 'set-fish-racks', u: 0.012, lat: 11.5 },
       { model: 'set-chapel-ruin', u: 0.15, lat: 19 },
-      { model: 'set-ghost-wood', u: 0.31, lat: 14 }
+      { model: 'set-ghost-wood', u: 0.31, lat: 14 },
+      // round 22: the storm-signal station inside the first bend, the sea
+      // defence where the tide comes nearest the east run, and the ship's
+      // boxes the storm threw up the strand on the run back to the net huts
+      // (there the sand stands at the road's height; before the pass the
+      // road climbs off it)
+      { model: 'set-storm-mast', u: 0.10, lat: 10.5 },
+      { model: 'set-storm-armour', u: 0.364, lat: -10.5, yaw: 180 },
+      { model: 'set-storm-containers', u: 0.938, lat: -10.5, yaw: 180 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
@@ -877,7 +901,13 @@ export const TRACKS = {
       // marram in drifts up the great dune's face along the north run
       { model: 'set-dune-marram', u: 0.835, lat: 13.5 },
       // the coastguard's lookout on the Point's flank over the start straight
-      { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 }
+      { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 },
+      // round 22: the town band's stand on the north shore between the
+      // club and the camp, and across the road from the camp the open-air
+      // baths on their terrace by the lagoon, both of which lay bare (the
+      // baths are the full tier's: the box's town vista is at its ceiling)
+      { model: 'set-seafront-bandstand', u: 0.655, lat: -11.5, yaw: 180 },
+      { model: 'set-lido', u: 0.725, lat: 10, lite: false }
     ],
     land: [
       { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
