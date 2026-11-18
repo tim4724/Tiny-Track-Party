@@ -1344,6 +1344,33 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
     return mGroundGrid.at(x, z);
 }
 
+float TtpRenderer::gradeSurfaceY(const TrackBin& tb, float x, float z) const {
+    // A ring of six and the middle for the highest; the middle, six at half
+    // the run and twelve at the whole of it for the average.
+    const auto ring = [](int k, int n, float r) {
+        const float a = (float) k * (2.0f * (float) M_PI / (float) n);
+        return float2{ r * std::cos(a), r * std::sin(a) };
+    };
+    const auto over = [&](float px, float pz) {
+        float y = groundSurfaceY(tb, px, pz);
+        for (int k = 0; k < 6; k++) {
+            const float2 o = ring(k, 6, kGradeOver);
+            y = std::max(y, groundSurfaceY(tb, px + o.x, pz + o.y));
+        }
+        return y;
+    };
+    float sum = over(x, z);
+    for (int k = 0; k < 6; k++) {
+        const float2 o = ring(k, 6, kGradeRun * 0.5f);
+        sum += over(x + o.x, z + o.y);
+    }
+    for (int k = 0; k < 12; k++) {
+        const float2 o = ring(k, 12, kGradeRun);
+        sum += over(x + o.x, z + o.y);
+    }
+    return sum / 19.0f;
+}
+
 // A berm is the hill a raised stretch of road stands on, and it is drawn over
 // the ground rather than folded into it, so a sight line has to meet both.
 float TtpRenderer::groundY(float x, float z) const {

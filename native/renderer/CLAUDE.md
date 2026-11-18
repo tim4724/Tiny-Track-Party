@@ -633,6 +633,17 @@ to do both:
   (the face's foot). A summit stays a summit over a short rise in the land,
   and a tail over a massif's flank sinks into it instead of standing on it
   as a needle.
+- **A `drape_grade…` PART LIES ON THE GRADED LAND** (a railway's bed), and
+  so does a `drapegrade…` path (its train): `gradeSurfaceY`, the drawn
+  ground's highest across a bed's width averaged over a few units, one
+  smooth surface in world XZ. A line draped vertex by vertex kinks on every
+  crease of the 9 u grid and rolls with every facet; on the graded land it
+  takes a rise in a vertical curve, lengths cut from one line meet at one
+  height, and what rides it pitches with the grade (`f=2`). The surface
+  stands OVER the land on a side slope and in a dip, so the piece brings its
+  own bank down to the ground (a skirt built under its foot,
+  `drape_grade_turf` in the field's colour). It smooths what is there and
+  cannot make a grade: route the line where the land is gentle.
 - **A `drape_floor…` PART CLAIMS NO GROUND** (a gravel lane, the stones along
   it): it drapes like any other, but the piece's footprint is taken without it
   (`mSetBox`), so the verge band does not come down at it and it may run on to
