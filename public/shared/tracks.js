@@ -2130,13 +2130,13 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Each ladder ends in a kicker: the racers kick up off its top rung onto
-    // the next deck.
+    // Each climb ends in a kicker: the racers kick up off its top onto the
+    // next deck.
     kickers: [ { u: 0.336 }, { u: 0.523 } ],
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
     // snakes are jointed wooden ones arching along the kerb (the grid
-    // straight, the last corner), wind-up dice hop the grid's kerb, and
+    // straight, the last corner), wind-up ducks hop the grid's kerb, and
     // outside the first deck a ladder leans up a stack of dice with a snake
     // hung down it, another game's board stood open past it. The games
     // shelf's other things stand where the floor cannot be seen: a house of
@@ -2148,7 +2148,7 @@ export const TRACKS = {
       { model: 'set-snake-board', u: 0, lat: 0 },
       { model: 'set-dice-tower', u: 0.196, lat: 11 },
       { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
-      { model: 'set-windup-dice', u: 0.12, lat: 4.5 },
+      { model: 'set-windup-ducks', u: 0.104, lat: 4.5 },
       { model: 'set-snake-humps-blue', u: 0.16, lat: 7.2 },
       { model: 'set-ladder-stack', u: 0.452, lat: 8 },
       { model: 'set-game-board', u: 0.497, lat: 8.5 },
@@ -2160,11 +2160,10 @@ export const TRACKS = {
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
     ],
-    // The climbs are the board's ladders, the dive its snake, from the top
-    // deck down to the board.
+    // The dive is the board's snake, from the top deck down to the board.
+    // The climbs stay plain road: painted as the board's ladders, their
+    // rungs read as stripes across the lane.
     land: [
-      { kind: 'ladder', u: 0.3092, len: 23 },
-      { kind: 'ladder', u: 0.4927, len: 23 },
       { kind: 'snake', u: 0.744, len: 31 }
     ]
   },
@@ -2297,7 +2296,9 @@ export const TRACKS = {
     // and its clock, a stepped block of flats, all over the deck, and a
     // terrace of tall houses stepping down beside the ramp off it; and
     // towers a child stacked of the small blocks stand outside the corner
-    // the south-bound leg turns. A tin bus and tram, wound up, run the grid's kerb.
+    // the south-bound leg turns. A tin bus and tram, wound up, run to and fro
+    // across the bare floor outside the first corner, where the grid straight
+    // points: side on to the racers the whole straight, and clear of every rug.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -2310,7 +2311,7 @@ export const TRACKS = {
       { model: 'set-block-terrace', u: 0.547, lat: -7.2, yaw: 180 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180, scale: 0.62 },
-      { model: 'set-windup-trams', u: 0.06, lat: -4.4, yaw: 180 },
+      { model: 'set-windup-trams', u: 0.0686, lat: -8.93, yaw: 128.1 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }

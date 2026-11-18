@@ -20789,32 +20789,36 @@ def block_fortress():
     merge_paint()
 
 def pavilion(x, z, r, h, wall, roof, trim=0xfdf4de, flag=0xff5040):
-    """A knight's pavilion: a round striped wall (eight panels, the wall's
-    colour and cream by turns), a gored cone roof over it, a scalloped trim
-    at the eaves, the dark door to +X and a pennant on its pole."""
+    """A knight's pavilion: a closed round wall of striped cloth (eight
+    panels edge to edge, the wall's colour and cream by turns), a gored cone
+    roof over it, a scalloped trim at the eaves, its door flaps drawn back
+    to +X and a pennant on its pole."""
     n = 8
-    w = 2 * r * math.tan(math.pi / n) + 0.02
+    R = r / math.cos(math.pi / n)                 # the wall's corners: the panels meet there, no gap
+    def rim(i, rad, y):
+        a = (i - 0.5) * 2 * math.pi / n
+        return (x + rad * math.cos(a), y, z + rad * math.sin(a))
     for i in range(n):
         a = i * 2 * math.pi / n
-        if LITE:                                  # the box's tent: its panels a face each, no scallops
-            c, s_ = math.cos(a), math.sin(a)
-            e0 = (x + r * c + s_ * w / 2, z + r * s_ - c * w / 2)
-            e1 = (x + r * c - s_ * w / 2, z + r * s_ + c * w / 2)
-            skin([(e0[0], 0, e0[1]), (e1[0], 0, e1[1]), (e1[0], h, e1[1]), (e0[0], h, e0[1])], [(0, 1, 2, 3)],
-                 wall if i % 2 == 0 else trim, (c, 0, s_))
-            continue
-        box((0.1, h, w), (x + r * math.cos(a), h / 2, z + r * math.sin(a)), wall if i % 2 == 0 else trim, yaw=-a + math.pi / 2)
+        skin([rim(i, R, 0), rim(i + 1, R, 0), rim(i + 1, R, h), rim(i, R, h)], [(0, 1, 2, 3)],
+             wall if i % 2 == 0 else trim, (math.cos(a), 0, math.sin(a)))
     top = (x, h + r * 1.05, z)
+    eave = R + (0.06 if LITE else 0.25)           # the box's roof sits on its wall's faces
     for i in range(n):
-        a0, a1 = (i - 0.5) * 2 * math.pi / n, (i + 0.5) * 2 * math.pi / n
-        eave = r + (0.06 if LITE else 0.25)       # the box's roof sits on its wall's faces
-        rim0 = (x + math.cos(a0) * eave / math.cos(math.pi / n), h, z + math.sin(a0) * eave / math.cos(math.pi / n))
-        rim1 = (x + math.cos(a1) * eave / math.cos(math.pi / n), h, z + math.sin(a1) * eave / math.cos(math.pi / n))
-        poly([top, rim0, rim1], [(0, 1, 2)], roof if i % 2 == 0 else trim)
-    for i in range(0 if LITE else n):                            # the scallops at the eaves
+        poly([top, rim(i, eave, h), rim(i + 1, eave, h)], [(0, 1, 2)], roof if i % 2 == 0 else trim)
+        if not LITE:                              # the overhang closed underneath, wall to eave
+            skin([rim(i, R, h), rim(i + 1, R, h), rim(i + 1, eave, h), rim(i, eave, h)], [(0, 1, 2, 3)],
+                 roof if i % 2 == 0 else trim, (0, -1, 0))
+    for i in range(0 if LITE else n):                            # the scallops at the eaves, hung from the roof's edge
         a = i * 2 * math.pi / n
-        box((0.08, 0.28, w * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)), roof, yaw=-a + math.pi / 2)
-    plate_x(x + r + 0.06, 0.0, h * 0.7, z - 0.3, z + 0.3, 0x3a2a22)          # the door
+        box((0.08, 0.28, 2 * r * math.tan(math.pi / n) * 0.7), (x + (r + 0.22) * math.cos(a), h - 0.12, z + (r + 0.22) * math.sin(a)),
+            roof, yaw=-a)
+    # the door: the cloth parted from its top and drawn back to both sides,
+    # the dark of the tent between the flaps
+    dw, dh = 0.36 * r, h * 0.78
+    skin([(x + r + 0.03, 0.0, z - dw), (x + r + 0.03, 0.0, z + dw), (x + r + 0.03, dh, z)], [(0, 1, 2)], 0x3a2a22, (1, 0, 0))
+    for sd in (-1, 1):                                           # the flaps' rolled edges
+        bar((x + r + 0.06, 0.0, z + sd * dw), (x + r + 0.06, dh, z), 0.1, 0.1, trim)
     box((BAR, 1.0, BAR), (x, top[1] + 0.4, z), 0x2a2735)
     box((0.08, 0.36, 0.7), (x, top[1] + 0.72, z + 0.36), flag)
 
@@ -22258,10 +22262,21 @@ def windup_robot(x, z, body, tag):
     box((0.26, 0.26, 0.26), (x, 3.18, z), 0xe66a5a)
     windup_key(x - 0.45, 1.4, z, tag)
 
-def windup_die(x, z, pip, tag):
-    """A wind-up die a toy car tall, its key in its back (-X); it hops."""
-    die((x, 0.0, z), 1.15, 0.0, color=0xfdf4de, pip=pip)
-    windup_key(x - 0.575, 0.62, z, tag)
+def windup_duck(x, z, tag):
+    """A wind-up duck a little over a toy car tall, facing +X, in blocks as
+    the cars are: its body, its head on it, an orange bill and feet, its
+    wings at its sides and its key in its back; it hops as it goes."""
+    for sd in (-1, 1):
+        box((0.42, 0.12, 0.22), (x + 0.12, 0.06, z + sd * 0.26), 0xff7e44)
+        box((0.12, 0.3, 0.12), (x, 0.24, z + sd * 0.26), 0xff7e44)
+        box((0.6, 0.42, 0.12), (x - 0.05, 0.85, z + sd * 0.5), 0xffc044, pitch=0.2)
+    box((1.0, 0.85, 0.9), (x, 0.82, z), 0xf2c14e)
+    box((0.66, 0.6, 0.66), (x + 0.3, 1.5, z), 0xf2c14e)
+    box((0.32, 0.18, 0.3), (x + 0.75, 1.45, z), 0xff7e44)
+    for sd in (-1, 1):
+        box((0.06, 0.14, 0.14), (x + 0.64, 1.62, z + sd * 0.18), 0x2a2735)
+    box((0.16, 0.22, 0.1), (x + 0.2, 1.88, z), 0xff7e44)
+    windup_key(x - 0.5, 0.85, z, tag)
 
 def windup_knight(x, z, tabard, tag):
     """A tin knight two toy cars tall, facing +X, marching: his helmet with
@@ -22315,12 +22330,11 @@ def windup_robots():
                    (lambda x, z, t: windup_robot(x, z, 0x5a8fd8, t), 'waddle:d=9:p=0.55')])
 
 @piece(1.0)
-def windup_dice():
-    # Skysnake: the game's own wind-up toys, three dice hopping slowly
-    # along the kerb of the board, their keys turning.
-    windup_parade([(lambda x, z, t: windup_die(x, z, 0xe66a5a, t), 'bob:h=0.4:p=1.3:b=1'),
-                   (lambda x, z, t: windup_die(x, z, 0x5a8fd8, t), 'bob:h=0.4:p=1.45:b=1'),
-                   (lambda x, z, t: windup_die(x, z, 0x2a2735, t), 'bob:h=0.4:p=1.2:b=1')], L=12.0, speed=0.5)
+def windup_ducks():
+    # Skysnake: three wind-up ducks hopping along the kerb of the board
+    # (wind-up dice stood in for a round; the ducks read better).
+    windup_parade([(windup_duck, 'bob:h=0.3:p=0.38:b=1'), (windup_duck, 'bob:h=0.3:p=0.42:b=1'),
+                   (windup_duck, 'bob:h=0.3:p=0.36:b=1')], L=12.0)
 
 KNIGHT = 0.57      # the toy set's knights' size (knight(): 0.55 of a soldier), the wind-up ones too
 
@@ -22358,13 +22372,18 @@ def windup_bus(x, z, body, tag, decks=2):
         box((0.14, 0.14, 0.9), (x + 0.5, y + 0.75, z), 0x38383d)
     windup_key(x - 1.2, 0.75, z, tag)
 
-@piece(1.0)
+TRAM = 1.25        # the tin bus and tram's size: seen across a corner, a quarter bigger than the kerb walkers
+
+@piece(TRAM)
 def windup_trams():
-    # Skyline: the town's own wind-up toys running the kerb by the grid, a
-    # red tin double-decker and a green tin tram behind it, rocking as
-    # they go, their keys turning (Helix keeps the robots).
+    # Skyline: the town's own wind-up toys running to and fro on the bare
+    # floor past the first corner (tracks.js stands the walk across the grid
+    # straight's line, off every rug), a red tin double-decker and a green
+    # tin tram behind it, rocking as they go, their keys turning (Helix
+    # keeps the robots). The walk is authored in the piece's grown units.
     windup_parade([(lambda x, z, t: windup_bus(x, z, 0xe66a5a, t), 'waddle:d=4:p=0.45'),
-                   (lambda x, z, t: windup_bus(x, z, 0x6cbf6c, t, decks=1), 'waddle:d=4:p=0.5')])
+                   (lambda x, z, t: windup_bus(x, z, 0x6cbf6c, t, decks=1), 'waddle:d=4:p=0.5')],
+                  L=12.0 / TRAM, w=2.4 / TRAM, speed=1.0 / TRAM)
 
 @piece(1.0)
 def tourney_rug():
@@ -22522,20 +22541,37 @@ def gonfalon(x, z, color, h=3.2, yaw=0.0, wave=None):
             box((0.08, 0.3, 0.3), (x, h - 1.38, z + 0.3), color)
 
 def toy_horse(x, z, coat, cloth, yaw=0.0, rider=None, lance=True):
-    """A toy horse from the knights' set, about a racer and a half long, in
-    its caparison of the side's colour, its head to (cos yaw, -sin yaw); a
-    knight in the saddle, his lance couched over the horse's head."""
+    """A wooden toy horse from the knights' set, about a racer and a half
+    long, its head to (cos yaw, -sin yaw): a barrel between a deeper chest
+    and rump, an arched neck, a long head with its muzzle, eyes and pricked
+    ears, a dark mane, forelock and tail, four legs on dark hooves, and its
+    caparison of the side's colour to the knees, a saddle on it; a knight
+    in the saddle, his lance couched over the horse's head."""
+    DARK, MUZZLE = 0x2a2735, 0x7a5a3a
     with transformed((x, 0, z), yaw):
-        for dx in (-0.55, 0.5):
+        for dx in (-0.55, 0.52):
             for dz in (-0.2, 0.2):
-                box((0.18, 0.7, 0.18), (x + dx, 0.35, z + dz), coat)
-        box((1.6, 0.6, 0.6), (x, 0.95, z), coat)                                 # the barrel
-        box((1.3, 0.62, 0.7), (x - 0.02, 0.78, z), cloth)                        # the caparison, to the knees
-        box((1.34, 0.12, 0.74), (x - 0.02, 0.5, z), 0xfdf4de)                    # its hem
-        box((0.36, 0.9, 0.4), (x + 0.82, 1.45, z), coat, roll=-0.5)              # the neck
-        box((0.62, 0.34, 0.36), (x + 1.2, 1.78, z), coat, roll=0.35)             # the head
-        box((0.1, 0.5, 0.12), (x + 0.72, 1.75, z), 0x2a2735, roll=-0.5)          # the mane
-        box((0.14, 0.7, 0.16), (x - 0.86, 0.9, z), 0x2a2735, roll=0.3)           # the tail
+                box((0.2, 0.62, 0.2), (x + dx, 0.43, z + dz), coat)              # the legs
+                box((0.26, 0.14, 0.26), (x + dx + 0.02, 0.07, z + dz), DARK)     # on their hooves
+        box((1.2, 0.56, 0.58), (x, 0.97, z), coat)                               # the barrel
+        box((0.5, 0.68, 0.64), (x - 0.55, 0.97, z), coat)                        # the rump
+        box((0.46, 0.72, 0.62), (x + 0.55, 1.0, z), coat)                        # the chest
+        box((1.02, 0.6, 0.72), (x - 0.02, 0.8, z), cloth)                        # the caparison, to the knees
+        box((1.06, 0.12, 0.76), (x - 0.02, 0.52, z), 0xfdf4de)                   # its hem
+        box((0.2, 0.5, 0.68), (x + 0.72, 0.92, z), cloth)                        # and its breast cloth
+        box((0.46, 0.1, 0.5), (x - 0.08, 1.3, z), MUZZLE)                        # the saddle
+        box((0.1, 0.2, 0.42), (x + 0.16, 1.37, z), MUZZLE)                       # its pommel
+        box((0.1, 0.26, 0.46), (x - 0.32, 1.4, z), MUZZLE)                       # and cantle
+        bar((x + 0.62, 1.12, z), (x + 0.98, 1.74, z), 0.36, 0.46, coat)          # the neck, arched forward
+        bar((x + 0.88, 1.86, z), (x + 1.32, 1.6, z), 0.32, 0.36, coat)           # the head, nose down
+        bar((x + 1.27, 1.6, z), (x + 1.5, 1.46, z), 0.27, 0.27, MUZZLE)          # the muzzle
+        bar((x + 0.43, 1.25, z), (x + 0.76, 1.82, z), 0.14, 0.18, DARK)          # the mane, down the crest
+        box((0.2, 0.12, 0.12), (x + 0.98, 2.03, z), DARK, roll=-0.5)             # the forelock
+        bar((x - 0.78, 1.2, z), (x - 0.98, 0.55, z), 0.14, 0.16, DARK)           # the tail
+        for sd in (-1, 1):
+            box((0.1, 0.22, 0.08), (x + 0.86, 2.1, z + sd * 0.11), coat)         # ears, pricked
+            if not LITE:
+                box((0.08, 0.08, 0.06), (x + 1.08, 1.8, z + sd * 0.15), DARK)    # eyes
     if rider is not None:
         c, s_ = math.cos(yaw), math.sin(yaw)
         knight((x - 0.1 * c, 0.75, z + 0.1 * s_), rider, yaw)
