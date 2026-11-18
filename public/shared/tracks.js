@@ -1540,8 +1540,8 @@ export const TRACKS = {
     // house by the shore the low road passes). The road CROSSES the brook
     // three times, and at each a low stone parapet stands along the kerb on
     // both sides (set-brook-parapet, its arch to the water), the brook
-    // running to the foot of one and away from the other (set-culvert, -b:
-    // the reach's last length, cut off along the road). The valley's timber
+    // running to the foot of one and away from the other (each reach ends
+    // inside the wall, cut off along it). The valley's timber
     // is worked at the mill's yard on a bank outside the south loop
     // (set-mill-yard).
     set: [
@@ -1556,10 +1556,6 @@ export const TRACKS = {
       { model: 'set-mill-wood-b', u: 0.285, lat: -9, yaw: 180 },
       { model: 'set-mill-wood-c', u: 0.79, lat: -9, yaw: 180 },
       { model: 'set-mill-wood', u: 0.0959, lat: 22.37, yaw: 17.86 },
-      { model: 'set-culvert', u: 0.84819, lat: 4.42, yaw: -33.13 },
-      { model: 'set-culvert', u: 0.86152, lat: -4.515, yaw: 148 },
-      { model: 'set-culvert-b', u: 0.024, lat: -4.5, yaw: -147 },
-      { model: 'set-culvert-b', u: 0.0375, lat: 4.42, yaw: 33 },
       { model: 'set-brook-parapet', u: 0.84819, lat: 3.9, yaw: 0, y: 0.26 },
       { model: 'set-brook-parapet', u: 0.86152, lat: -3.9, yaw: 180, y: 0.2 },
       { model: 'set-brook-parapet', u: 0.024, lat: -3.9, yaw: 180 },

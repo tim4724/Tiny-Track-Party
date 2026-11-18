@@ -13206,8 +13206,7 @@ def den_camp():
 # Tangle's brook rises at the springhouse beyond the north loop's top straight,
 # goes under that straight and down the loop, under the start straight, down
 # the straight's left kerb, back under it (at each crossing the road's
-# parapets and the reach's last length, set-brook-parapet and set-culvert
-# below) and round the outside of the first bend, through the watermill's
+# parapets, set-brook-parapet below) and round the outside of the first bend, through the watermill's
 # race under its wheel, and over a sill into the duck pond under the first
 # bridge. The water lies BELOW its banks: a channel walled in slate, the
 # lawn rolling up to its coping a hand over the water, darker down the
@@ -13225,18 +13224,20 @@ BROOK_BANDS = (((-1.0, -0.55), ('sky', 28)), ((-0.55, -0.2), ('blue', 6)), ((-0.
                ((0.2, 0.55), ('blue', 6)), ((0.55, 1.0), ('sky', 28)))
 BROOK_STONE = (('grey', 20), ('grey', SLATE_ROW))           # the coping's two stones
 BROOK_ROUTE = {
-    'brook-a': ("outfall", "culvert", None, None, (
+    'brook-a': ("outfall", "culvert", None, (-1.028, 0.647), (
         (-1.377, -8.085, 0.8), (-1.578, -7.329, 0.82), (-1.802, -6.579, 0.85), (-1.965, -5.815, 0.87), (-2, -5.035, 0.9), (-1.859, -4.267, 0.92),
         (-1.587, -3.535, 0.94), (-1.254, -2.827, 0.95), (-0.9, -2.129, 0.97), (-0.549, -1.43, 0.98), (-0.222, -0.72, 0.99), (0.054, 0.012, 1),
         (0.244, 0.77, 1), (0.305, 1.549, 1), (0.248, 2.329, 0.98), (0.115, 3.099, 0.96), (-0.068, 3.86, 0.94), (-0.283, 4.612, 0.92),
-        (-0.518, 5.358, 0.89), (-0.762, 6.101, 0.86), (-1.002, 6.846, 0.84), (-1.22, 7.597, 0.82), (-1.377, 8.363, 0.8),
+        (-0.518, 5.358, 0.89), (-0.762, 6.101, 0.86), (-0.984, 6.929, 0.86), (-1.128, 7.775, 0.86), (-1.212, 8.634, 0.85), (-1.258, 9.501, 0.85),
+        (-1.285, 10.368, 0.85), (-1.313, 11.231, 0.85),
     ), -1),
-    'brook-b': ("culvert", "join", None, (-0.42, 12.406), (
-        (-0.427, -11.456, 0.8), (-0.143, -10.713, 0.83), (-0.023, -9.925, 0.88), (0.021, -9.129, 0.92), (0.039, -8.331, 0.96), (0.058, -7.533, 0.99),
-        (0.087, -6.736, 1.01), (0.102, -5.938, 1.02), (0.104, -5.14, 1.03), (0.097, -4.342, 1.04), (0.084, -3.544, 1.04), (0.066, -2.746, 1.04),
-        (0.044, -1.949, 1.04), (0.019, -1.151, 1.04), (-0.009, -0.354, 1.04), (-0.039, 0.444, 1.04), (-0.07, 1.241, 1.04), (-0.102, 2.039, 1.03),
-        (-0.135, 2.836, 1.03), (-0.169, 3.633, 1.03), (-0.203, 4.43, 1.02), (-0.237, 5.228, 1.02), (-0.27, 6.025, 1.02), (-0.302, 6.822, 1.01),
-        (-0.333, 7.62, 1.01), (-0.362, 8.417, 1.01), (-0.388, 9.215, 1), (-0.41, 10.012, 1), (-0.424, 10.81, 1), (-0.426, 11.608, 0.99),
+    'brook-b': ("culvert", "join", (-0.068, 1.196), (-0.42, 12.406), (
+        (-2.924, -13.031, 0.85), (-2.294, -12.519, 0.87), (-1.695, -11.939, 0.88), (-1.148, -11.3, 0.9), (-0.678, -10.61, 0.91), (-0.308, -9.879, 0.93),
+        (-0.061, -9.116, 0.94), (0.039, -8.331, 0.96), (0.058, -7.533, 0.99), (0.087, -6.736, 1.01), (0.102, -5.938, 1.02), (0.104, -5.14, 1.03),
+        (0.097, -4.342, 1.04), (0.084, -3.544, 1.04), (0.066, -2.746, 1.04), (0.044, -1.949, 1.04), (0.019, -1.151, 1.04), (-0.009, -0.354, 1.04),
+        (-0.039, 0.444, 1.04), (-0.07, 1.241, 1.04), (-0.102, 2.039, 1.03), (-0.135, 2.836, 1.03), (-0.169, 3.633, 1.03), (-0.203, 4.43, 1.02),
+        (-0.237, 5.228, 1.02), (-0.27, 6.025, 1.02), (-0.302, 6.822, 1.01), (-0.333, 7.62, 1.01), (-0.362, 8.417, 1.01), (-0.388, 9.215, 1),
+        (-0.41, 10.012, 1), (-0.424, 10.81, 1), (-0.426, 11.608, 0.99),
     ), 1),
     'brook-c': ("join", "join", (0.54, -12.294), (0.744, 12.097), (
         (0.587, -11.497, 0.99), (0.643, -10.701, 0.99), (0.705, -9.906, 0.99), (0.768, -9.11, 0.98), (0.83, -8.315, 0.97), (0.883, -7.519, 0.97),
@@ -13245,19 +13246,21 @@ BROOK_ROUTE = {
         (-0.55, 2.69, 0.97), (-0.662, 3.48, 0.96), (-0.722, 4.276, 0.95), (-0.715, 5.073, 0.94), (-0.639, 5.867, 0.91), (-0.515, 6.656, 0.88),
         (-0.358, 7.438, 0.85), (-0.179, 8.216, 0.82), (0.013, 8.99, 0.78), (0.21, 9.763, 0.74), (0.404, 10.537, 0.71), (0.586, 11.314, 0.68),
     ), 1),
-    'brook-d': ("join", "culvert", (0.682, -11.493), None, (
+    'brook-d': ("join", "culvert", (0.682, -11.493), (-0.196, -1.204), (
         (0.979, -10.753, 0.68), (1.254, -10.004, 0.65), (1.49, -9.241, 0.62), (1.659, -8.462, 0.61), (1.71, -7.667, 0.62), (1.56, -6.887, 0.66),
         (1.203, -6.175, 0.73), (0.753, -5.516, 0.81), (0.341, -4.834, 0.89), (0.073, -4.084, 0.95), (-0.045, -3.296, 0.97), (-0.09, -2.499, 0.99),
         (-0.091, -1.701, 1), (-0.063, -0.904, 1.01), (-0.014, -0.108, 1.01), (0.049, 0.688, 1), (0.124, 1.482, 1), (0.206, 2.276, 0.99),
         (0.291, 3.07, 0.98), (0.377, 3.863, 0.97), (0.458, 4.657, 0.96), (0.528, 5.452, 0.95), (0.613, 6.245, 0.94), (0.743, 7.032, 0.91),
-        (0.892, 7.816, 0.88), (1.028, 8.602, 0.85), (1.098, 9.396, 0.82), (0.98, 10.181, 0.8),
+        (0.79, 7.804, 0.9), (0.693, 8.583, 0.89), (0.471, 9.355, 0.88), (0.141, 10.103, 0.88), (-0.276, 10.81, 0.87), (-0.761, 11.462, 0.86),
+        (-1.297, 12.042, 0.85),
     ), 1),
-    'brook-e': ("culvert", "join", None, (2.029, 11.461), (
-        (1.806, -11.323, 0.8), (1.377, -10.643, 0.81), (1.034, -9.916, 0.82), (0.749, -9.163, 0.84), (0.51, -8.395, 0.85), (0.311, -7.615, 0.87),
-        (0.148, -6.828, 0.88), (0.019, -6.033, 0.89), (-0.074, -5.234, 0.9), (-0.133, -4.432, 0.9), (-0.155, -3.627, 0.9), (-0.15, -2.823, 0.9),
-        (-0.124, -2.018, 0.89), (-0.083, -1.215, 0.89), (-0.028, -0.412, 0.88), (0.038, 0.39, 0.88), (0.115, 1.191, 0.87), (0.202, 1.991, 0.86),
-        (0.298, 2.79, 0.85), (0.404, 3.588, 0.85), (0.518, 4.384, 0.84), (0.642, 5.179, 0.83), (0.774, 5.973, 0.82), (0.917, 6.765, 0.81),
-        (1.069, 7.555, 0.8), (1.233, 8.343, 0.79), (1.409, 9.128, 0.78), (1.598, 9.91, 0.77), (1.804, 10.688, 0.76),
+    'brook-e': ("culvert", "join", (0.045, -1.202), (2.029, 11.461), (
+        (4.326, -12.7, 0.85), (3.6, -12.244, 0.85), (2.875, -11.748, 0.85), (2.189, -11.202, 0.84), (1.581, -10.596, 0.84), (1.088, -9.92, 0.84),
+        (0.749, -9.163, 0.84), (0.51, -8.395, 0.85), (0.311, -7.615, 0.87), (0.148, -6.828, 0.88), (0.019, -6.033, 0.89), (-0.074, -5.234, 0.9),
+        (-0.133, -4.432, 0.9), (-0.155, -3.627, 0.9), (-0.15, -2.823, 0.9), (-0.124, -2.018, 0.89), (-0.083, -1.215, 0.89), (-0.028, -0.412, 0.88),
+        (0.038, 0.39, 0.88), (0.115, 1.191, 0.87), (0.202, 1.991, 0.86), (0.298, 2.79, 0.85), (0.404, 3.588, 0.85), (0.518, 4.384, 0.84),
+        (0.642, 5.179, 0.83), (0.774, 5.973, 0.82), (0.917, 6.765, 0.81), (1.069, 7.555, 0.8), (1.233, 8.343, 0.79), (1.409, 9.128, 0.78),
+        (1.598, 9.91, 0.77), (1.804, 10.688, 0.76),
     ), -1),
     'brook-f': ("join", "join", (5.223, -10.951), (5.117, 9.848), (
         (4.606, -10.435, 0.76), (4.001, -9.903, 0.75), (3.413, -9.354, 0.73), (2.848, -8.782, 0.72), (2.316, -8.178, 0.71), (1.841, -7.529, 0.7),
@@ -13411,30 +13414,29 @@ def brook_ends(fr, start, end):
                               [(0, 1, 2, 3)], 'white'), 3)
 
 def brook_piece(start, end, prev, nxt, pts, road, extra=None, lite=False):
-    # A reach that meets a culvert runs on INTO it: half a unit past the
-    # headwall's face along its own line (the wall's own thickness), so however the two are turned to
-    # each other its water goes into the arch and both walls into the stone
-    # (cut square at the face, a reach met it at one corner and left a wedge
-    # of lawn between the water and the mouth).
+    # A reach that goes under the road turns onto the line of the crossing
+    # and ends INSIDE the parapet's wall, cut off along it (the mouth's
+    # across vector, in the neighbour's place in BROOK_ROUTE): its water runs
+    # full width into the arch and both walls into the stone. (That last
+    # length was a piece of its own once, straight down the crossing's line
+    # with a fixed skew: the reaches came to it up to forty degrees off, and
+    # the join cut the water on a diagonal with lawn.)
     # lite (the Android TV's build): every other station of the reach, so
     # its water, walls and banks are half the faces, laid on the same bed.
     pts = list(pts)
     if lite:
         pts = pts[:-1:2] + [pts[-1]]
         extra = extra and (extra[0], extra[1] // 2)
-    def on(a, b):
-        d = math.hypot(a[0] - b[0], a[1] - b[1])
-        return (a[0] + (a[0] - b[0]) / d * 0.5, a[1] + (a[1] - b[1]) / d * 0.5, a[2])
+    fr = brook_frames(pts, None if start == 'culvert' else prev, None if end == 'culvert' else nxt)
     if start == 'culvert':
-        pts.insert(0, on(pts[0], pts[1]))
+        fr[0] = fr[0][:3] + prev
     if end == 'culvert':
-        pts.append(on(pts[-1], pts[-2]))
-    fr = brook_frames(pts, prev, nxt)
+        fr[-1] = fr[-1][:3] + nxt
     def build():
         brook_channel(fr, start, end, near=road)
         brook_ends(fr, start, end)
         if extra:
-            extra[0](fr[extra[1] + (1 if start == 'culvert' else 0)], road)
+            extra[0](fr[extra[1]], road)
     draped('brook', build)
 
 # What stands up off the brook along the start straight, where the road runs
@@ -13488,7 +13490,7 @@ def brook_sluice(f, road):
         box((0.5, 0.08, 0.08), at(0.0, H + 0.55), 'dark', yaw=yaw)
 
 FOOTPATH = (9, 6)                             # the path's half-unit lengths: to the wood, to the road
-BROOK_EXTRA = {'brook-c': (brook_footbridge, 9), 'brook-b': (brook_sluice, 16)}
+BROOK_EXTRA = {'brook-c': (brook_footbridge, 9), 'brook-b': (brook_sluice, 19)}
 
 for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
     PIECES[_name] = (lambda a: lambda: brook_piece(*a))((_s, _e, _p, _n, _pts, _r, BROOK_EXTRA.get(_name)))
@@ -13669,49 +13671,10 @@ def pond_ducks_lite():
     pond_ducks_build(True)
 
 # ---- TANGLE: where the brook goes under the low road ----------------------------------
-# The road CROSSES the brook: on each side of it the water runs on from its
-# reach's end to the foot of a low stone parapet standing along the kerb
-# (set-brook-parapet), an arch in the parapet's brook side over the channel,
-# so the driver sees a bridge's two walls and the brook coming to one and
-# leaving the other. (The brook used to stop at a headwall a few units out,
-# its arch turned away from the road: four blank slabs from the seat.) A
-# stone slab lies across the channel where this length takes over from the
-# reach, a clapper bridge a stride wide. The brook comes to the road on the
-# skew, so the length is cut off along the road, not square: two models, one
-# for each way the brook leans (`turn`). World units, +X along the brook
-# toward the road; it DRAPES, as the reaches do.
-def culvert_build(turn, lite=False):
-    # lite (the Android TV's build): no grass bank of its own (a second part,
-    # a second draw, for a few strides of turf the lawn already is)
-    W = 0.85
-    skew = -math.tan(math.radians(33.0)) * turn
-    fr = [(x, 0.0, W, 0.0, 1.0) for x in (-2.45, -1.85, -1.25, -0.65)] + [(0.15, 0.0, W, skew, 1.0)]
-    def still():
-        brook_channel(fr, 'join', 'join')
-        for sd in (-1, 1):                     # the clapper: a slab on a stone in each bank
-            rowed(box((0.6, 0.4, 0.5), (-2.3, 0.14, sd * (W + 0.25)), 'grey'), SLATE_ROW)
-        rowed(box((0.7, 0.12, 2 * W + 1.0), (-2.3, 0.38, 0.0), 'grey'), 20)
-        if lite:
-            for o in [o for o in bpy.context.scene.objects if o.get('turf')]:
-                bpy.data.objects.remove(o, do_unlink=True)
-    draped('brook', still)
-
-@piece()
-def culvert():
-    culvert_build(-1)
-
-@piece()
-def culvert_lite():
-    culvert_build(-1, True)
-
-@piece()
-def culvert_b():
-    culvert_build(1)
-
-@piece()
-def culvert_b_lite():
-    culvert_build(1, True)
-
+# The road CROSSES the brook: on each side of it a low stone parapet stands
+# along the kerb (set-brook-parapet), an arch in its brook side over the
+# channel, and the reach runs to its foot (brook_piece), so the driver sees
+# a bridge's two walls and the brook coming to one and leaving the other.
 @piece()
 def brook_parapet():
     # One side of the bridge: a low wall of slate blocks along the kerb, two
