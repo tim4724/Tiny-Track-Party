@@ -1368,7 +1368,9 @@ export const TRACKS = {
     // near end they stood in the view of the church): the lap's only poplars,
     // every other tree the orchard's. The
     // windmill turns in the north loop beside its wheat field, a rectangle
-    // well inside the kerbs; the sheep graze round the loop's outside and
+    // well inside the kerbs, its sails and door turned to the flyover's way
+    // down, where a racer comes at it (square to the loop's top it showed
+    // them its back); the sheep graze round the loop's outside and
     // under the flyover, their fold of timber hurdles and its post-and-rail
     // fences up the north-east hill where the loop turns under it, and the
     // dairy farm stands on its bank outside the west bend, straight ahead of
@@ -1387,7 +1389,7 @@ export const TRACKS = {
       { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
       { model: 'set-village-street-d', u: 0.4145, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 0 },
+      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 163 },
       { model: 'set-field-wheat', u: 0.6977, lat: 12, yaw: 7.7 },
       { model: 'set-village-fete', u: 0.0125, lat: 8.6, yaw: 0 },
       { model: 'set-orchard-block', u: 0.126, lat: -7.5 },
@@ -1563,11 +1565,11 @@ export const TRACKS = {
     // A spring park: cherries in pale blossom, planted as a park plants them,
     // in avenues beside the straights (set-cherry-avenue) and in groves at the
     // bends, few alone on the lawn. The park's miniature railway runs from a
-    // loop by the start straight, under the high road, past the bandstand's
-    // knoll and along the finger lobe to a loop by the lake, a halt at each
-    // end, its one train going out and back (set-park-rails-*, laid by
-    // scratch geometry in set_prototypes.py PARK_ROUTE; it crosses no road at
-    // grade). The playground on the flat outside the south-west hairpin,
+    // loop by the start straight, under the high road, along the foot of the
+    // bandstand's knoll and along the finger lobe to a loop by the lake, a
+    // halt at each end, its one train going out and back (set-park-rails-*,
+    // one line cut into lengths in set_prototypes.py PARK_ROUTE; it crosses
+    // no road at grade and lies on a graded bed, never facet by facet). The playground on the flat outside the south-west hairpin,
     // where the start straight points: big climbing frames standing on the
     // grass, its hill behind it. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
@@ -1586,11 +1588,11 @@ export const TRACKS = {
       { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
       { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
-      { model: 'set-park-rails-a', u: 0.23569, lat: 6.061, yaw: 116.1 },
-      { model: 'set-park-rails-b', u: 0.23452, lat: -8.196, yaw: 45.76 },
-      { model: 'set-park-rails-c', u: 0.92932, lat: 9.073, yaw: 165.75 },
-      { model: 'set-park-rails-d', u: 0.89364, lat: 12.196, yaw: -172.87 },
-      { model: 'set-park-rails-e', u: 0.86206, lat: 12.513, yaw: -165.87 },
+      { model: 'set-park-rails-a', u: 0.25382, lat: 4.735, yaw: 94.22 },
+      { model: 'set-park-rails-b', u: 0.6714, lat: -6.567, yaw: -10.08 },
+      { model: 'set-park-rails-c', u: 0.91938, lat: 8.495, yaw: -157.05 },
+      { model: 'set-park-rails-d', u: 0.88896, lat: 12.244, yaw: -176.47 },
+      { model: 'set-park-rails-e', u: 0.86206, lat: 12.536, yaw: -164.54 },
       { model: 'set-park-rails-loop-a', u: 0.0503, lat: 8.47, yaw: 0 },
       { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
       { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },

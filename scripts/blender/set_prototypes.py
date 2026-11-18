@@ -11936,12 +11936,12 @@ def fete(lite):
     # the child going down on a mat, and back up inside the tower
     for i in range(0, N + 1, 2):
         x, y, z = helix[i]
-        marker('path_hskid_%d' % (i // 2), (x, y + 0.2, z))
+        marker('path_drapehskid_%d' % (i // 2), (x, y + 0.2, z))
     up = N // 2 + 1
     for j, y in enumerate((0.8, TH * 0.5, TH - 0.6)):
-        marker('path_hskid_%d' % (up + j), (HX, y, HZ))
+        marker('path_drapehskid_%d' % (up + j), (HX, y, HZ))
     x, y, z = helix[0]
-    with animated('anim_path:c=hskid:p=14:f=1', (x, y + 0.2, z)):
+    with animated('anim_path:c=drapehskid:p=14:f=1', (x, y + 0.2, z)):
         box((1.2, 0.12, 0.8), (x, y + 0.26, z), 0x9a7b55)
         person((x, y + 0.36, z), 0.0, BLUE, k=0.65, hair=2, sit=True, arm=0.4)
     # ---- the bouncy castle, a child bouncing in it
@@ -12020,36 +12020,55 @@ def fete(lite):
         cyl(0.12, 4.6, (x, 0, z), WHITE, segs=6)
     if not lite:
         coconuts_and_bunting(SX, SZ, HX, HZ, TH, MX, MZ, ML)
-    fete_ground(lite, ((HX, HZ, TR + 3.0), (BX + 4.2, BZ, 2.4), (MX + MW / 2, MZ, 3.0), (CX, CZ, CR + 0.6),
-                       (6.6, 28.0, 7.5), (SX + 1.2, SZ, 3.0)))
+    # the walk runs from the helter-skelter to the coconut shy; the castle's
+    # step and the carousel's deck stand on its edge, and a spur leaves it for
+    # each of the three that stand back from it, to a forecourt before them:
+    # the tea tent's doors and tables, the stalls' counters, the shy's throw
+    fete_ground(lite, (HZ - 3.0, SZ + 2.8), ((MZ, MX + MW / 2 + 0.1, MX + MW / 2 + 5.2, MZ - 5.6, MZ + 5.6),
+                                             (28.0, 5.6, 8.2, 19.6, 36.4), (SZ, SX + 1.2, SX + 3.4, SZ - 2.8, SZ + 2.8)))
     join_still('fete')
+    lie_on_land()
 
-def fete_ground(lite, stops):
+def fete_print(x0, x1, z0, z1, y, color, cell=4.0):
+    """A flat print on the fete's lawn (its mown green, its gravel), cut into
+    cells so it lies on the land as drawn when the piece drapes: one quad
+    across a crease of the lawn went under it and came up clipped."""
+    nx, nz = max(1, math.ceil((x1 - x0) / cell)), max(1, math.ceil((z1 - z0) / cell))
+    verts = [(x0 + (x1 - x0) * i / nx, y, z0 + (z1 - z0) * j / nz) for j in range(nz + 1) for i in range(nx + 1)]
+    faces = [(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i)
+             for j in range(nz) for i in range(nx)]
+    return ground_poly(verts, faces, color)
+
+def fete_ground(lite, walk, stops):
     """What makes the fete one fairground: a mown green under all of it, a
-    gravel walk down its road side with a spur to each attraction (`stops`:
-    where, and how wide a patch of gravel lies before it), the way in from
-    the road under a tall striped banner between two masts, a post-and-rope
-    fence along the road and round both ends, and bunting down the whole
-    road side on tall white poles: the walk and the green lie under the kerb
-    from the seat, so what stands over it is what joins the fete into one
-    place. The green and the gravel lie a hand over the piece's level (flat
-    on it, the levelled lawn comes through)."""
+    gravel walk down its road side between `walk`'s two ends, a spur off it
+    to each of `stops` (its line, then its forecourt's near and far edge and
+    its two ends) and the way in from the road under a tall striped banner
+    between two masts, a post-and-rope fence along the road and round both
+    ends, and bunting down the whole road side on tall white poles: the walk
+    and the green lie under the kerb from the seat, so what stands over it
+    is what joins the fete into one place. Every length of gravel ends at
+    the walk, a forecourt or the gate, inside the fence, and none lies over
+    another (two prints draped at one height fight). The green and the
+    gravel are prints a hand over the lawn, and the whole fete lies on the
+    land as drawn (lie_on_land): standing level on a clearing, the lawn's
+    creases came up through them and cut them into arrowheads."""
     RED, WHITE, YELLOW, BLUE = 0xcf534f, 0xf8f8fb, 0xffc044, 0x339cf2
     X0, X1, Z0, Z1 = -8.5, 15.5, -45.5, 49.5        # the green: back, road side, both ends
-    WALK, GY, PY = 13.0, 0.1, 0.14                  # the walk's line; the green's and the gravel's middles
+    WALK, WW, GY, PY = 13.0, 1.2, 0.1, 0.2          # the walk's line and half width; the green's and the gravel's tops
     n = 12                                          # mown in stripes, as a show field is
     for q in range(n):
         za, zb = Z0 + (Z1 - Z0) * q / n, Z0 + (Z1 - Z0) * (q + 1) / n
-        rowed(box((X1 - X0, 0.2, zb - za), ((X0 + X1) / 2, GY, (za + zb) / 2), 'leaf'), (22, 27)[q % 2])['chamfer'] = 0
-    box((2.4, 0.2, Z1 - Z0 - 4.0), (WALK, PY, (Z0 + Z1) / 2), 'cream')
-    for x, z, w in stops:
-        box((WALK - x + 1.0, 0.2, 1.8), ((WALK + x) / 2, PY, z), 'cream')          # the spur
-        box((2.2, 0.2, w), (x + 0.6, PY, z), 'cream')                              # the patch before it
-    # the way in, opposite the tea tent: gravel out to the verge, two masts
+        rowed(fete_print(X0, X1 - 0.2, za, zb, GY, 'leaf', cell=8.0 if lite else 4.0), (22, 27)[q % 2])
+    fete_print(WALK - WW, WALK + WW, walk[0], walk[1], PY, 'cream')
+    for z, xa, xb, za, zb in stops:
+        fete_print(xb, WALK - WW, z - 1.0, z + 1.0, PY, 'cream')                   # the spur
+        fete_print(xa, xb, za, zb, PY, 'cream')                                    # the forecourt
+    # the way in, opposite the tea tent: gravel to the gate, two masts
     # as tall as the tea tent's ridge poles and a deep striped banner between
     # them under a yellow board, a pennant on each mast
     GZ, GW, GH = 0.0, 6.0, 8.6
-    box((X1 + 3.0 - WALK, 0.2, 3.4), ((X1 + 3.0 + WALK) / 2, PY, GZ), 'cream')   # (short of the road's own margin)
+    fete_print(WALK + WW, X1 + 0.5, GZ - 1.7, GZ + 1.7, PY, 'cream')             # the walk's gravel to the gate's line
     for sz in (-1, 1):
         box((0.6, GH, 0.6), (X1, GH / 2, GZ + sz * GW / 2), WHITE)
         box((0.9, 0.5, 0.9), (X1, 0.25, GZ + sz * GW / 2), RED)
@@ -13031,7 +13050,7 @@ def boathouse():
     RED, WHITE, BOARD = 0xcf534f, 0xf8f8fb, 0x9a7b55
     F = local(0.0, 0.0, 0.0)
     D, L, H = 5.0, 7.0, 3.0
-    box((D + 0.6, 1.1, L + 0.6), (0.0, -0.25, 0.0), 'grey')                   # the stone footing, down into the bank (its landward corner hung over the lawn)
+    box((D + 0.6, 2.4, L + 0.6), (0.0, -0.9, 0.0), 'grey')                    # the stone footing, deep into the bank (its landward corner hung over the lawn, the lawn lower than the lake's lip there)
     box((D, H, L), (0.0, 0.3 + H / 2, 0.0), BOARD)
     ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45)
     for sx in (-1, 1):
@@ -13984,86 +14003,90 @@ def pool_heron(px, pz, R, deg):
 # `drape` chain, so the train rides the lawn as drawn, and the ballast and
 # rails drape with it.
 # The park railway's line: from a balloon loop by the start straight, under
-# the high road between two of its pillars, round the bandstand's mound and
-# along the finger lobe's return leg to a second loop by the lake; the train
-# runs out and back along it, turning on the loops. Laid in the WORLD
-# (scratch geometry; it clears every kerb by 2.7 u and crosses no road at
-# grade) and cut into lengths, each its own piece in its own frame along its
-# chord, so each piece's box hugs its rails: a piece's box keeps the scatter
-# out and holds the verge band down under it, and one box round the whole
-# line would do both to half the park. PARK_PATH is the whole circuit in the
+# the high road between two of its pillars, along the foot of the bandstand's
+# mound (over its shoulder the line climbed one unit in two, no train's
+# grade) and along the finger lobe's return leg to a second loop by the lake;
+# the train runs out and back along it, turning on the loops. ONE line laid in
+# the WORLD (scratch geometry; it clears every kerb by three units and crosses
+# no road at grade) and cut into lengths, each its own piece in its own frame
+# along its chord, so each piece's box hugs its rails: a piece's box keeps the
+# scatter out and holds the verge band down under it, and one box round the
+# whole line would do both to half the park. Neighbours share their end
+# point, and PARK_ENDS gives each length the point past each end, so a joint
+# is one cross-section on both sides. PARK_PATH is the whole circuit in the
 # train piece's frame (tracks.js places every one of them).
 PARK_ROUTE = {
     'park-rails-a': (
-        (-0.461, -7.557), (-0.862, -6.639), (-1.162, -5.684), (-1.342, -4.7), (-1.382, -3.7), (-1.222, -2.715), (-0.836, -1.793), (-0.362, -0.911),
-        (0.112, -0.028), (0.496, 0.895), (0.661, 1.88), (0.628, 2.88), (0.469, 3.868), (0.235, 4.841), (-0.025, 5.809), (-0.262, 6.781),
-        (-0.46, 7.763),
+        (-0.23, -7.083), (-0.178, -6.086), (-0.136, -5.088), (-0.1, -4.09), (-0.069, -3.091), (-0.042, -2.093), (-0.02, -1.094), (-0.002, -0.096),
+        (0.016, 0.903), (0.028, 1.902), (0.028, 2.9), (0.006, 3.899), (-0.048, 4.896), (-0.124, 5.892), (-0.231, 6.885),
     ),
     'park-rails-b': (
-        (-3.288, -6.471), (-2.451, -5.921), (-1.661, -5.307), (-0.98, -4.575), (-0.51, -3.694), (-0.231, -2.734), (-0.09, -1.743), (-0.059, -0.743),
-        (-0.122, 0.257), (-0.274, 1.246), (-0.552, 2.207), (-0.945, 3.128), (-1.4, 4.02), (-1.881, 4.898), (-2.36, 5.777), (-2.811, 6.671),
-        (-3.288, 7.552),
+        (0.716, -7.019), (0.795, -6.023), (0.809, -5.025), (0.736, -4.029), (0.565, -3.045), (0.355, -2.069), (0.161, -1.089), (0.035, -0.099),
+        (-0.048, 0.896), (-0.12, 1.893), (-0.145, 2.891), (-0.091, 3.888), (0.076, 4.872), (0.355, 5.831), (0.714, 6.762),
     ),
     'park-rails-c': (
-        (3.066, -6.948), (2.402, -6.199), (1.731, -5.456), (1.089, -4.687), (0.521, -3.863), (0.102, -2.956), (-0.102, -1.978), (-0.11, -0.978),
-        (0.008, 0.016), (0.217, 0.995), (0.491, 1.958), (0.812, 2.907), (1.165, 3.844), (1.543, 4.771), (1.986, 5.669), (2.505, 6.525),
-        (3.067, 7.354),
+        (0.173, -6.975), (0.007, -5.99), (-0.105, -4.998), (-0.172, -4.001), (-0.197, -3.003), (-0.16, -2.005), (-0.085, -1.009), (0.011, -0.015),
+        (0.12, 0.978), (0.231, 1.971), (0.325, 2.965), (0.281, 3.965), (0.258, 4.966), (0.231, 5.967), (0.174, 6.967),
     ),
     'park-rails-d': (
-        (-1.004, -7.878), (-0.731, -6.915), (-0.463, -5.95), (-0.224, -4.978), (-0.036, -3.994), (0.079, -3), (0.11, -1.999), (0.083, -0.998),
-        (0.011, 0.001), (-0.089, 0.997), (-0.211, 1.991), (-0.347, 2.983), (-0.489, 3.974), (-0.631, 4.966), (-0.764, 5.958), (-0.881, 6.953),
-        (-1.004, 7.947),
+        (-0.459, -6.986), (-0.207, -6.017), (-0.027, -5.033), (0.071, -4.036), (0.11, -3.036), (0.104, -2.034), (0.07, -1.034), (0.015, -0.033),
+        (-0.056, 0.966), (-0.133, 1.963), (-0.209, 2.962), (-0.276, 3.961), (-0.326, 4.962), (-0.383, 5.961), (-0.459, 6.96),
     ),
     'park-rails-e': (
-        (1.182, -6.007), (0.97, -5.028), (0.749, -4.052), (0.531, -3.074), (0.327, -2.094), (0.158, -1.107), (0.049, -0.112), (0.057, 0.889),
-        (0.213, 1.877), (0.485, 2.84), (0.834, 3.779), (1.182, 4.717),
+        (1.081, -5.011), (0.839, -4.04), (0.598, -3.067), (0.374, -2.091), (0.183, -1.108), (0.052, -0.116), (0.038, 0.884), (0.172, 1.876),
+        (0.424, 2.845), (0.752, 3.791), (1.08, 4.736),
     ),
     'park-rails-loop-a': (
-        (-0.03, -5.516), (-0.473, -4.637), (-0.916, -3.757), (-1.359, -2.878), (-1.802, -1.999), (-2.245, -1.119), (-2.688, -0.24), (-3.069, 0.666),
-        (-3.183, 1.638), (-2.998, 2.6), (-2.531, 3.461), (-1.826, 4.14), (-0.947, 4.575), (0.023, 4.724), (0.991, 4.565), (1.865, 4.121),
-        (2.564, 3.434), (3.022, 2.569), (3.197, 1.605), (3.072, 0.634), (2.683, -0.268), (2.231, -1.142), (1.778, -2.017), (1.326, -2.892),
-        (0.874, -3.767), (0.422, -4.641), (-0.03, -5.516),
+        (-0.027, -5.516), (-0.47, -4.636), (-0.913, -3.757), (-1.355, -2.877), (-1.798, -1.998), (-2.241, -1.118), (-2.684, -0.239), (-3.063, 0.667),
+        (-3.178, 1.64), (-2.993, 2.601), (-2.525, 3.462), (-1.82, 4.142), (-0.941, 4.576), (0.029, 4.724), (0.997, 4.565), (1.871, 4.121),
+        (2.57, 3.434), (3.027, 2.568), (3.202, 1.605), (3.078, 0.634), (2.687, -0.268), (2.235, -1.142), (1.783, -2.018), (1.33, -2.892),
+        (0.878, -3.767), (0.426, -4.641), (-0.027, -5.516),
     ),
     'park-rails-loop-b': (
-        (4.818, 5.584), (4.558, 4.63), (4.298, 3.676), (4.039, 2.723), (3.779, 1.769), (3.52, 0.815), (3.26, -0.138), (3.001, -1.092),
-        (2.741, -2.046), (2.428, -2.982), (1.915, -3.823), (1.224, -4.525), (0.391, -5.052), (-0.546, -5.356), (-1.526, -5.447), (-2.501, -5.299),
-        (-3.412, -4.927), (-4.221, -4.363), (-4.86, -3.612), (-5.317, -2.74), (-5.557, -1.784), (-5.561, -0.799), (-5.347, 0.162), (-4.901, 1.042),
-        (-4.269, 1.796), (-3.481, 2.388), (-2.579, 2.788), (-1.654, 3.138), (-0.73, 3.487), (0.195, 3.837), (1.119, 4.186), (2.044, 4.535),
-        (2.969, 4.885), (3.893, 5.234), (4.818, 5.584),
+        (4.829, 5.564), (4.563, 4.611), (4.298, 3.66), (4.032, 2.707), (3.766, 1.756), (3.5, 0.803), (3.235, -0.148), (2.969, -1.101),
+        (2.703, -2.052), (2.384, -2.986), (1.865, -3.824), (1.17, -4.521), (0.334, -5.043), (-0.606, -5.341), (-1.587, -5.425), (-2.56, -5.271),
+        (-3.469, -4.893), (-4.274, -4.324), (-4.908, -3.569), (-5.359, -2.694), (-5.593, -1.737), (-5.59, -0.751), (-5.371, 0.209), (-4.919, 1.085),
+        (-4.282, 1.835), (-3.489, 2.421), (-2.584, 2.816), (-1.658, 3.16), (-0.731, 3.503), (0.195, 3.846), (1.122, 4.19), (2.05, 4.533),
+        (2.976, 4.877), (3.903, 5.22), (4.829, 5.564),
     ),
+}
+PARK_ENDS = {
+    'home': (None, (0.476, 8.926)),
+    'park-rails-a': ((-0.471, -8.054), (-0.387, 7.871)),
+    'park-rails-b': ((0.586, -8.009), (1.137, 7.667)),
+    'park-rails-c': ((0.408, -7.945), (0.064, 7.963)),
+    'park-rails-d': ((-0.762, -7.941), (-0.543, 7.958)),
+    'park-rails-e': ((1.315, -5.985), None),
 }
 PARK_PATH = (
         (0.388, -8.032), (0.334, -7.032), (0.279, -6.032), (0.226, -5.032), (0.176, -4.032), (0.132, -3.031), (0.087, -2.031), (0.041, -1.031),
         (0, -0.03), (-0.03, 0.971), (-0.041, 1.972), (-0.04, 2.974), (-0.057, 3.975), (-0.064, 4.977), (-0.023, 5.977), (0.113, 6.969),
-        (0.388, 7.931), (0.767, 8.857), (1.243, 9.737), (1.824, 10.552), (2.513, 11.277), (3.331, 11.849), (4.262, 12.215), (5.225, 12.489),
-        (6.188, 12.764), (7.118, 13.132), (7.94, 13.699), (8.634, 14.419), (9.232, 15.222), (9.767, 16.068), (10.28, 16.928), (10.813, 17.776),
-        (11.379, 18.602), (11.933, 19.436), (12.419, 20.311), (12.758, 21.251), (12.845, 22.246), (12.726, 23.239), (12.466, 24.205), (12.103, 25.138),
-        (11.654, 26.032), (11.126, 26.883), (10.494, 27.658), (9.771, 28.351), (9.003, 28.993), (8.215, 29.612), (7.43, 30.234), (6.665, 30.879),
-        (5.881, 31.502), (5.06, 32.076), (4.234, 32.641), (3.431, 33.239), (2.686, 33.908), (2.067, 34.692), (1.64, 35.595), (1.399, 36.566),
-        (1.282, 37.56), (1.256, 38.561), (1.298, 39.561), (1.388, 40.558), (1.513, 41.552), (1.664, 42.542), (1.885, 43.518), (2.19, 44.472),
-        (2.543, 45.409), (2.916, 46.338), (3.285, 47.269), (3.626, 48.211), (3.917, 49.169), (4.136, 50.145), (4.274, 51.137), (4.353, 52.135),
-        (4.387, 53.136), (4.393, 54.137), (4.378, 55.139), (4.348, 56.14), (4.311, 57.14), (4.275, 58.141), (4.248, 59.142), (4.238, 60.144),
-        (4.221, 61.145), (4.185, 62.146), (4.141, 63.146), (4.098, 64.147), (4.072, 65.148), (4.08, 66.149), (4.149, 67.148), (4.334, 68.131),
-        (4.662, 69.076), (5.101, 69.976), (5.611, 70.838), (6.12, 71.699), (6.181, 72.686), (6.242, 73.672), (6.303, 74.659), (6.364, 75.645),
-        (6.425, 76.632), (6.486, 77.618), (6.547, 78.605), (6.608, 79.591), (6.725, 80.571), (7.057, 81.499), (7.591, 82.326), (8.3, 83.011),
-        (9.156, 83.499), (10.098, 83.786), (11.082, 83.839), (12.05, 83.659), (12.956, 83.271), (13.734, 82.665), (14.358, 81.903), (14.787, 81.016),
-        (14.99, 80.052), (14.976, 79.067), (14.717, 78.116), (14.251, 77.249), (13.598, 76.51), (12.796, 75.935), (11.962, 75.405), (11.127, 74.876),
-        (10.293, 74.347), (9.458, 73.817), (8.623, 73.288), (7.789, 72.758), (6.954, 72.229), (6.12, 71.699), (5.611, 70.838), (5.101, 69.976),
-        (4.662, 69.076), (4.334, 68.131), (4.149, 67.148), (4.08, 66.149), (4.072, 65.148), (4.098, 64.147), (4.141, 63.146), (4.185, 62.146),
-        (4.221, 61.145), (4.238, 60.144), (4.248, 59.142), (4.275, 58.141), (4.311, 57.14), (4.348, 56.14), (4.378, 55.139), (4.393, 54.137),
-        (4.387, 53.136), (4.353, 52.135), (4.274, 51.137), (4.136, 50.145), (3.917, 49.169), (3.626, 48.211), (3.285, 47.269), (2.916, 46.338),
-        (2.543, 45.409), (2.19, 44.472), (1.885, 43.518), (1.664, 42.542), (1.513, 41.552), (1.388, 40.558), (1.298, 39.561), (1.256, 38.561),
-        (1.282, 37.56), (1.399, 36.566), (1.64, 35.595), (2.067, 34.692), (2.686, 33.908), (3.431, 33.239), (4.234, 32.641), (5.06, 32.076),
-        (5.881, 31.502), (6.665, 30.879), (7.43, 30.234), (8.215, 29.612), (9.003, 28.993), (9.771, 28.351), (10.494, 27.658), (11.126, 26.883),
-        (11.654, 26.032), (12.103, 25.138), (12.466, 24.205), (12.726, 23.239), (12.845, 22.246), (12.758, 21.251), (12.419, 20.311), (11.933, 19.436),
-        (11.379, 18.602), (10.813, 17.776), (10.28, 16.928), (9.767, 16.068), (9.232, 15.222), (8.634, 14.419), (7.94, 13.699), (7.118, 13.132),
-        (6.188, 12.764), (5.225, 12.489), (4.262, 12.215), (3.331, 11.849), (2.513, 11.277), (1.824, 10.552), (1.243, 9.737), (0.767, 8.857),
-        (0.388, 7.931), (0.113, 6.969), (-0.023, 5.977), (-0.064, 4.977), (-0.057, 3.975), (-0.04, 2.974), (-0.041, 1.972), (-0.03, 0.971),
-        (0, -0.03), (0.041, -1.031), (0.087, -2.031), (0.132, -3.031), (0.176, -4.032), (0.226, -5.032), (0.279, -6.032), (0.334, -7.032),
-        (0.388, -8.032), (0.882, -8.884), (1.377, -9.735), (1.871, -10.587), (2.366, -11.438), (2.86, -12.29), (3.355, -13.141), (3.788, -14.022),
-        (3.961, -14.987), (3.833, -15.957), (3.418, -16.844), (2.754, -17.565), (1.903, -18.051), (0.944, -18.257), (-0.032, -18.156), (-0.931, -17.765),
-        (-1.67, -17.121), (-2.178, -16.284), (-2.41, -15.333), (-2.344, -14.356), (-2.008, -13.433), (-1.609, -12.533), (-1.21, -11.632), (-0.81, -10.732),
-        (-0.411, -9.832), (-0.012, -8.932),
+        (0.388, 7.931), (0.476, 8.926), (0.554, 9.922), (0.626, 10.918), (0.693, 11.914), (0.756, 12.911), (0.813, 13.908), (0.867, 14.906),
+        (0.921, 15.903), (0.969, 16.901), (1.004, 17.899), (1.018, 18.897), (1, 19.896), (0.96, 20.894), (0.889, 21.89), (0.768, 22.881),
+        (0.583, 23.863), (0.313, 24.824), (-0.05, 25.754), (-0.451, 26.669), (-0.837, 27.59), (-1.158, 28.535), (-1.438, 29.494), (-1.706, 30.456),
+        (-1.931, 31.429), (-2.076, 32.417), (-2.108, 33.414), (-2.027, 34.409), (-1.861, 35.394), (-1.626, 36.365), (-1.338, 37.321), (-1.008, 38.264),
+        (-0.638, 39.191), (-0.211, 40.094), (0.249, 40.98), (0.729, 41.856), (1.22, 42.726), (1.713, 43.595), (2.19, 44.472), (2.543, 45.409),
+        (2.916, 46.338), (3.285, 47.269), (3.626, 48.211), (3.917, 49.169), (4.136, 50.145), (4.274, 51.137), (4.353, 52.135), (4.387, 53.136),
+        (4.393, 54.137), (4.378, 55.139), (4.348, 56.14), (4.311, 57.14), (4.275, 58.141), (4.248, 59.142), (4.238, 60.144), (4.221, 61.145),
+        (4.185, 62.146), (4.141, 63.146), (4.098, 64.147), (4.072, 65.148), (4.08, 66.149), (4.149, 67.148), (4.334, 68.131), (4.662, 69.076),
+        (5.101, 69.976), (5.611, 70.838), (6.12, 71.699), (6.181, 72.686), (6.242, 73.672), (6.303, 74.659), (6.364, 75.645), (6.425, 76.632),
+        (6.486, 77.618), (6.547, 78.605), (6.608, 79.591), (6.725, 80.571), (7.057, 81.499), (7.591, 82.326), (8.3, 83.011), (9.156, 83.499),
+        (10.098, 83.786), (11.082, 83.839), (12.05, 83.659), (12.956, 83.271), (13.734, 82.665), (14.358, 81.903), (14.787, 81.016), (14.99, 80.052),
+        (14.976, 79.067), (14.717, 78.116), (14.251, 77.249), (13.598, 76.51), (12.796, 75.935), (11.962, 75.405), (11.127, 74.876), (10.293, 74.347),
+        (9.458, 73.817), (8.623, 73.288), (7.789, 72.758), (6.954, 72.229), (6.12, 71.699), (5.611, 70.838), (5.101, 69.976), (4.662, 69.076),
+        (4.334, 68.131), (4.149, 67.148), (4.08, 66.149), (4.072, 65.148), (4.098, 64.147), (4.141, 63.146), (4.185, 62.146), (4.221, 61.145),
+        (4.238, 60.144), (4.248, 59.142), (4.275, 58.141), (4.311, 57.14), (4.348, 56.14), (4.378, 55.139), (4.393, 54.137), (4.387, 53.136),
+        (4.353, 52.135), (4.274, 51.137), (4.136, 50.145), (3.917, 49.169), (3.626, 48.211), (3.285, 47.269), (2.916, 46.338), (2.543, 45.409),
+        (2.19, 44.472), (1.713, 43.595), (1.22, 42.726), (0.729, 41.856), (0.249, 40.98), (-0.211, 40.094), (-0.638, 39.191), (-1.008, 38.264),
+        (-1.338, 37.321), (-1.626, 36.365), (-1.861, 35.394), (-2.027, 34.409), (-2.108, 33.414), (-2.076, 32.417), (-1.931, 31.429), (-1.706, 30.456),
+        (-1.438, 29.494), (-1.158, 28.535), (-0.837, 27.59), (-0.451, 26.669), (-0.05, 25.754), (0.313, 24.824), (0.583, 23.863), (0.768, 22.881),
+        (0.889, 21.89), (0.96, 20.894), (1, 19.896), (1.018, 18.897), (1.004, 17.899), (0.969, 16.901), (0.921, 15.903), (0.867, 14.906),
+        (0.813, 13.908), (0.756, 12.911), (0.693, 11.914), (0.626, 10.918), (0.554, 9.922), (0.476, 8.926), (0.388, 7.931), (0.113, 6.969),
+        (-0.023, 5.977), (-0.064, 4.977), (-0.057, 3.975), (-0.04, 2.974), (-0.041, 1.972), (-0.03, 0.971), (0, -0.03), (0.041, -1.031),
+        (0.087, -2.031), (0.132, -3.031), (0.176, -4.032), (0.226, -5.032), (0.279, -6.032), (0.334, -7.032), (0.388, -8.032), (0.882, -8.884),
+        (1.377, -9.735), (1.871, -10.587), (2.366, -11.438), (2.86, -12.29), (3.355, -13.141), (3.788, -14.022), (3.961, -14.987), (3.833, -15.957),
+        (3.418, -16.844), (2.754, -17.565), (1.903, -18.051), (0.944, -18.257), (-0.032, -18.156), (-0.931, -17.765), (-1.67, -17.121), (-2.178, -16.284),
+        (-2.41, -15.333), (-2.344, -14.356), (-2.008, -13.433), (-1.609, -12.533), (-1.21, -11.632), (-0.81, -10.732), (-0.411, -9.832), (-0.012, -8.932),
 )
 PARK_HOME = (
         (0.388, -8.032), (0.334, -7.032), (0.279, -6.032), (0.226, -5.032), (0.176, -4.032), (0.132, -3.031), (0.087, -2.031), (0.041, -1.031),
@@ -14116,32 +14139,33 @@ def park_coach(at, color, riders, k=1.0):
         box((0.2 * k, 0.24 * k, 0.24 * k), (x + dx, y + 0.72 * k, z), shirt)
         box((0.15 * k, 0.15 * k, 0.15 * k), (x + dx, y + 0.92 * k, z), 0xf2bf99)
 
-def park_track(pts):
-    """The line along `pts` on a low grass embankment (turf, the field's own
-    colour), so it stands up off the lawn where a racer sees it: a ballast
-    bank on top, a sleeper every unit and two rails, each one band (a dozen
-    vertices a unit of track)."""
+def park_track(pts, ends=(None, None)):
+    """The line along `pts` on its graded bed: a turf bank falling away each
+    side, deep enough to meet the land wherever the bed stands over it, a
+    ballast bank on top, a sleeper every unit and two rails, each one band (a
+    dozen vertices a unit of track). `ends`: the next length's point past each
+    end (PARK_ENDS), so both sides of a joint take one frame there and the
+    ballast, the rails and the sleeper rhythm run through it; the length
+    after a joint leaves the shared sleeper to the one before."""
     n = len(pts)
-    closed = math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 0.01
-    if closed:
-        pts, n = pts[:-1], n - 1
+    # a balloon loop: out of its apex and back into it. Each leg leaves the
+    # apex square to the stem (the way from the apex to between the legs), so
+    # both begin in the stem's own cross-section and part as a turnout's
+    # roads do (one frame for both legs there stood across the stem, and the
+    # bank pinched to a notch)
+    loop = math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 0.01
+    if loop:
+        sx, sz = (pts[1][0] + pts[-2][0]) / 2 - pts[0][0], (pts[1][1] + pts[-2][1]) / 2 - pts[0][1]
+        d = math.hypot(sx, sz)
+        stem = (sx / d, sz / d)
     def frame(i):
-        a = pts[(i - 1) % n] if closed else pts[max(0, i - 1)]
-        b = pts[(i + 1) % n] if closed else pts[min(n - 1, i + 1)]
+        if loop and i in (0, n - 1):
+            return stem if i == 0 else (-stem[0], -stem[1])
+        a = pts[i - 1] if i else ends[0] or pts[0]
+        b = pts[i + 1] if i < n - 1 else ends[1] or pts[i]
         tx, tz = b[0] - a[0], b[1] - a[1]
         d = math.hypot(tx, tz)
-        tx, tz = tx / d, tz / d
-        if not closed and n > 2 and i in (0, n - 1):
-            # an open length's end: its one-sided chord turned on by what the
-            # line bends in a step, the curve's own tangent there, so the next
-            # length's end (cut from the same line) squares up to it (round
-            # 20: each end square to its own last chord left a notch in the
-            # bank and a sleeper askew at every joint on a bend)
-            nx, nz = frame(1 if i == 0 else n - 2)
-            tx, tz = 2 * tx - nx, 2 * tz - nz
-            d = math.hypot(tx, tz)
-            tx, tz = tx / d, tz / d
-        return tx, tz
+        return tx / d, tz / d
     def band(profile, color):
         m = len(profile)
         verts, faces = [], []
@@ -14149,38 +14173,62 @@ def park_track(pts):
             tx, tz = frame(i)
             for o, y in profile:
                 verts.append((x + tz * o, y, z - tx * o))
-        for i in range(n if closed else n - 1):
-            j = (i + 1) % n
+        for i in range(n - 1):
             for c in range(m - 1):
-                faces.append((m * i + c, m * j + c, m * j + c + 1, m * i + c + 1))
+                faces.append((m * i + c, m * (i + 1) + c, m * (i + 1) + c + 1, m * i + c + 1))
         o = ground_poly(verts, faces, color)
         for f in o.data.polygons:                              # one normal a corner: no seam per face
             f.use_smooth = True
         return o
-    B = PARK_BANK
-    band(((1.75, -0.04), (1.0, B), (-1.0, B), (-1.75, -0.04)), 'green')['turf'] = 1   # the embankment
-    # the ballast on it, with a corner under each rail's edge: the line DRAPES,
-    # every vertex lifted by the land under it, and a ballast that spanned the
-    # rails in one quad stood through them wherever the lawn creased across
-    # the line (round 20: rails that tapered away and came back)
-    band(((0.85, B), (0.55, B + 0.15), (0.32, B + 0.15), (0.22, B + 0.15), (-0.22, B + 0.15), (-0.32, B + 0.15),
-          (-0.55, B + 0.15), (-0.85, B)), 'lavender')
+    B, D = PARK_BANK, PARK_SKIRT
+    # the bank: its crest under the ballast and a skirt each side going down
+    # into the land, so it shows as much bank as the bed stands over the lawn
+    band(((1.0 + B + D, -D), (1.0, B), (-1.0, B), (-1.0 - B - D, -D)), 'green')['turf'] = 1
+    # each at one row of its ramp: shade() runs a ramp over the whole piece's
+    # height, and the home stretch's ballast, under its halt and its train,
+    # came out a shade darker than the next length's at their joint
+    rowed(band(((0.85, B), (0.55, B + 0.15), (-0.55, B + 0.15), (-0.85, B)), 'lavender'), 2)
     verts, faces = [], []
-    for i, (x, z) in enumerate(pts):
-        tx, tz = frame(i)
-        for a, o in ((-0.11, 0.48), (0.11, 0.48), (0.11, -0.48), (-0.11, -0.48)):
+    def sleeper(x, z, tx, tz, half=0.48):
+        k = len(verts)
+        for a, o in ((-0.11, half), (0.11, half), (0.11, -half), (-0.11, -half)):
             verts.append((x + tx * a + tz * o, B + 0.19, z + tz * a - tx * o))
-        faces.append(tuple(range(4 * i, 4 * i + 4)))
-    ground_poly(verts, faces, 'brown')
+        faces.append(tuple(range(k, k + 4)))
+    for i, (x, z) in enumerate(pts):
+        if i == 0 and (ends[0] or loop):
+            continue                       # the length before lays the joint's; a loop's stem lays its apex's
+        if loop and i in (1, n - 2, n - 1):
+            continue
+        sleeper(x, z, *frame(i))
+    if loop:
+        # a loop's two legs a unit from its apex are still half over each
+        # other: one long timber under both, square to the stem, as a
+        # turnout has (a sleeper each crossed in an X there)
+        (ax, az), (bx, bz) = pts[1], pts[n - 2]
+        sleeper((ax + bx) / 2, (az + bz) / 2, *stem, math.hypot(ax - bx, az - bz) / 2 + 0.48)
+    rowed(ground_poly(verts, faces, 'brown'), 1)
     for sd in (-1, 1):
-        band(((sd * 0.27 + 0.05, PARK_RAIL_Y), (sd * 0.27 - 0.05, PARK_RAIL_Y)), 'slate')
+        rowed(band(((sd * 0.27 + 0.05, PARK_RAIL_Y), (sd * 0.27 - 0.05, PARK_RAIL_Y)), 'slate'), 0)
 
-PARK_BANK = 0.4                                                   # the embankment's crest
+PARK_BANK = 0.4                                                   # the bank's crest over the graded land
+PARK_SKIRT = 1.2                                                  # how far under it the bank's skirts go
 PARK_RAIL_Y = PARK_BANK + 0.2                                     # the rails' top
 
 for _name, _pts in PARK_ROUTE.items():
-    PIECES[_name] = (lambda pts: lambda: (park_track(pts), join_still('drape_line')))(_pts)
+    PIECES[_name] = (lambda pts, ends: lambda: (park_track(pts, ends), park_join('line')))(_pts, PARK_ENDS.get(_name, (None, None)))
     GROW[_name] = 1.0
+
+def park_join(name):
+    """The piece's still parts as its graded parts: `drape_grade_<name>` and
+    the bank's turf, `drape_grade_turf`. The renderer lifts each vertex of
+    such a part by the land GRADED round it (TtpRenderer gradeSurfaceY: the
+    drawn ground's highest within a bed's half width, averaged over a few
+    units), one smooth surface over the whole park that never dips under the
+    lawn, so every length cut from the line meets the next at one height
+    and the line rides up a rise in a vertical curve, not facet by facet."""
+    still = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None]
+    group([o for o in still if o.get('turf')], 'drape_grade_turf')
+    return group([o for o in still if not o.get('turf')], 'drape_grade_' + name)
 
 def park_platform(side):
     """A halt beside the line through the origin along Z, on its `side`: a
@@ -14190,7 +14238,8 @@ def park_platform(side):
     RED, BLUE, WOOD = 0xcf534f, 0x339cf2, 0x9a7b55
     PX, B = side * 1.55, PARK_BANK
     T = B + 0.3                                                    # the platform's top
-    box((1.1, T, 4.6), (PX, T / 2, 0.0), 'cream')
+    D = PARK_SKIRT                                                 # built down into the land, as the bank is
+    box((1.1, T + D, 4.6), (PX, (T - D) / 2, 0.0), 'cream')
     box((0.14, 0.05, 4.6), (PX - side * 0.47, T + 0.01, 0.0), 'white')         # its edge by the line
     CZ, CL, CH = -0.7, 2.4, 1.25                                   # the canopy: middle, length, post height
     for sx in (-1, 1):
@@ -14211,7 +14260,7 @@ def park_platform(side):
     box((0.1, 1.1, 0.1), (PX + side * 0.3, T + 0.55, 1.9), 'dark')             # the lamp
     box((0.18, 0.18, 0.18), (PX + side * 0.3, T + 1.15, 1.9), 'white')
     SZ = 3.1                                                                   # the signal, past the platform's end
-    box((0.14, 2.3, 0.14), (PX, 1.15, SZ), 'white')
+    box((0.14, 2.3 + D, 0.14), (PX, (2.3 - D) / 2, SZ), 'white')
     box((0.26, 0.12, 0.26), (PX, 2.34, SZ), 'dark')
     box((0.8, 0.2, 0.08), (PX - side * 0.38, 2.0, SZ + 0.1), RED, roll=side * 0.5)
     box((0.12, 0.22, 0.09), (PX - side * 0.55, 2.0 + 0.08, SZ + 0.1), 'white', roll=side * 0.5)
@@ -14224,11 +14273,11 @@ def park_railway():
     # carries the path the train rides (the whole circuit, draped onto the
     # land).
     pts, n = PARK_PATH, len(PARK_PATH)
-    park_track(PARK_HOME)                # the home stretch, the train standing on its end
+    park_track(PARK_HOME, PARK_ENDS['home'])   # the home stretch, the train standing on its end
     park_platform(1)
     Y = PARK_RAIL_Y
     for i, (x, z) in enumerate(pts):
-        marker('path_drapetrain_%d' % i, (x, Y, z))
+        marker('path_drapegradetrain_%d' % i, (x, Y, z))
     span = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) for i in range(n))
     period = span / 3.0                                           # 3 u a second
     K = 1.4                                                       # a little chunky
@@ -14241,15 +14290,15 @@ def park_railway():
     for c, (L, build) in enumerate(cars):
         if c:
             behind += (cars[c - 1][0] + L) / 2 + 0.15 * K
-        with animated('anim_path:c=drapetrain:p=%.2f:o=%.4f:f=1#%d' % (period, (1.0 - behind / span) % 1.0, c), (x0, Y, z0)):
+        with animated('anim_path:c=drapegradetrain:p=%.2f:o=%.4f:f=2#%d' % (period, (1.0 - behind / span) % 1.0, c), (x0, Y, z0)):
             build((x0, Y, z0))
-    join_still('drape_line')
+    park_join('line')
 
 @piece()
 def park_halt():
     # The lake halt, beside the line where it comes to the lake. It DRAPES.
     park_platform(-1)
-    join_still('drape_halt')
+    park_join('halt')
 
 # ---- CLOVERLEAF: the playground ------------------------------------------------------
 # Cloverleaf's playground at the size of a real one, on the lawn: a few big

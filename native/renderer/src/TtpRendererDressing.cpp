@@ -3061,7 +3061,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         const ttp::rt::GlbMeshNode* node;
         const ttp::kitcolors::Mesh* colors;
         std::vector<float3> factor;
-        bool drape, wall, turf;
+        bool drape, wall, turf, grade;
     };
     std::vector<Part> parts;
     for (const auto& [slot, mesh] : still) {
@@ -3072,8 +3072,10 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
         }
         if (!node) return false;
         const bool drape = mTrack && isDrapeName(node->name.c_str());
+        const bool grade = drape && isGradeName(node->name.c_str());
         Part p{ slot, node, &colors.meshes[mesh], {}, drape, drape && node->name.compare(0, 10, "drape_wall") == 0,
-                drape && node->name.compare(0, 10, "drape_turf") == 0 };
+                drape && (node->name.compare(0, 10, "drape_turf") == 0
+                        || node->name.compare(0, 16, "drape_grade_turf") == 0), grade };
         if (!bakeFactors(insts[0]->getEntities()[slot], node->prims, *p.colors, p.factor)) {
             return false;
         }
@@ -3107,7 +3109,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             MergedGroup& g = tiles[key];
             appendBaked(g.baked, tcm.getWorldTransform(tcm.getInstance(src)),
                     p.node->prims, *p.colors, p.factor, p.drape ? mTrack.get() : nullptr, foot,
-                    p.wall ? &wallAt : nullptr, p.turf);
+                    p.wall ? &wallAt : nullptr, p.turf, p.grade);
             g.sources.push_back(src);
         }
         const auto row = mSetRowOf.find(inst);
