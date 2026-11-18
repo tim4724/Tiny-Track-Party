@@ -181,7 +181,6 @@
     "set-dune-fence-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dune-marram-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dune-marram.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
-    "set-dust-devil.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-expedition-camp.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-fallen-cottonwood.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-farm-fence.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

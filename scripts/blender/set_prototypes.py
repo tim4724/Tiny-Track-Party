@@ -19100,62 +19100,6 @@ for _name in [n for n in SW_PIECE if n.startswith('tank-train-')]:
     PIECES[_name], GROW[_name] = (lambda n=_name: tank_train(n)), 1.0
     lite_too(_name)
 
-@piece(1.0)
-def dust_devil():
-    # Sidewinder: a dust devil wandering the flats inside the north loop,
-    # coming to within a few units of the kerb on its round: a whirl of
-    # dust some four cars tall, spinning as it drifts (anim_path+spin on a
-    # draped loop, so it keeps to the land as drawn). ONE funnel, a faceted
-    # skin from a narrow foot leaning out to a ragged open top, in the sand's
-    # own colour paling up it (the piece's one gradient), over a low skirt
-    # kicked up off the sand; three streaks wind up it and grit rides round
-    # it. Never rings: eleven stacked tori read as a stack of plates, for
-    # four times the vertices.
-    N = 14
-    loop = []
-    for i in range(N):
-        a = 2 * math.pi * i / N
-        loop.append((3.0 + 4.0 * math.cos(a) + 1.0 * math.sin(3 * a + 0.5), 0.0, 9.0 * math.sin(a) + 1.5 * math.sin(2 * a + 1.0)))
-    for i, p in enumerate(loop):
-        marker('path_drapedevil_%d' % i, p)
-    span = sum(math.dist(a, b) for a, b in zip(loop, loop[1:] + loop[:1]))
-    x0, _, z0 = loop[0]
-    def ring(t):
-        R, lean = 0.26 + 1.2 * t ** 1.5, 0.55 * t * t
-        return x0 + lean * math.cos(4.0 * t), 0.2 + 4.1 * t, z0 + lean * math.sin(4.0 * t), R
-    with animated('anim_path:c=drapedevil:p=%.1f:f=0+spin:a=y:w=4.5#devil' % (span / 1.1), (x0, 0.0, z0)):
-        with plain_parts():
-            cyl(1.2, 0.3, (x0, -0.05, z0), 'tan', r2=0.5, segs=7)                   # the skirt off the sand
-            # the funnel's skin: seven sides, each level turned a little on
-            # the one under it and its rim uneven, the top left open
-            S, T = 7, (0.0, 0.16, 0.36, 0.58, 0.8, 1.0)
-            rows = []
-            for j, t in enumerate(T):
-                cx, cy, cz, R = ring(t)
-                rows.append([(cx + R * (1.0 + 0.14 * math.sin(2.3 * i + 1.7 * j)) * math.cos(2 * math.pi * i / S + 0.35 * j),
-                              cy + (0.22 * math.sin(1.9 * i + j) if j == len(T) - 1 else 0.0),
-                              cz + R * (1.0 + 0.14 * math.sin(2.3 * i + 1.7 * j)) * math.sin(2 * math.pi * i / S + 0.35 * j))
-                             for i in range(S)])
-            verts = [p for r in rows for p in r]
-            faces = [(j * S + i, j * S + (i + 1) % S, (j + 1) * S + (i + 1) % S, (j + 1) * S + i)
-                     for j in range(len(T) - 1) for i in range(S)]
-            poly(verts, faces, 'cream')                                              # both sides: the open top shows its inside
-                                                                                     # (paler than the sand it stands against)
-            for k in range(3):                                                       # the streaks winding up it
-                pts = [(x0 + 0.3 * math.cos(2.1 * k), 0.05, z0 + 0.3 * math.sin(2.1 * k))]
-                for j in range(9):
-                    t = j / 8
-                    cx, cy, cz, R = ring(t)
-                    a = 2 * math.pi * (1.1 * t) + 2.1 * k
-                    pts.append((cx + (R + 0.1) * math.cos(a), cy, cz + (R + 0.1) * math.sin(a)))
-                rowed(tube(pts, 0.07, 'tan', res=2, smooth=True), (2, 14, 8)[k])
-            for i in range(6):                                                       # grit caught in the streaks
-                t = 0.15 + 0.14 * i
-                cx, cy, cz, R = ring(t)
-                a = 2 * math.pi * (1.1 * t) + 2.1 * (i % 3)
-                q = 0.14 + 0.05 * (i % 2)
-                box((q, q, q), (cx + (R + 0.14) * math.cos(a), cy, cz + (R + 0.14) * math.sin(a)), (0xc07a55, 'tan')[i % 2], yaw=a)
-
 # Sidewinder's trunk line: the field's crude on its way out, a pipeline on
 # stilts beside the road for half the lap (tracks.js places it span by span
 # along the verge, each a chord of the road's curve, so every piece's

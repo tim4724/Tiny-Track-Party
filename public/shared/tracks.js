@@ -2038,8 +2038,6 @@ export const TRACKS = {
       { model: 'set-tunnel-foothills', u: 0.1039, lat: 0 },
       // the field's flare past the tank farm, its flame small
       { model: 'set-flare-stack', u: 0.662, lat: 11 },
-      // a dust devil wandering the flats inside the north loop
-      { model: 'set-dust-devil', u: 0.7, lat: -12 },
       // the field's pipe yard on the outside of the south loop, past where
       // the trunk line dives under the S: racked pipe, drums, a mud pit
       { model: 'set-pipe-yard', u: 0.297, lat: 11.5 },
