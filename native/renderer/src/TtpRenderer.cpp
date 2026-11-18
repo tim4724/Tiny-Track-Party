@@ -2616,6 +2616,8 @@ void TtpRenderer::releaseStatic() {
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;
+    mShoreLine.clear();
+    mWetLine.clear();
     mTrack.reset();
     mHillSf = 1;
     mRoom = { 0, 0, -1, -1 };
