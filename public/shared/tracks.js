@@ -536,7 +536,7 @@ export const TRACKS = {
       // fishing boat hauled out on her legs (the beach lies most of a unit
       // under the kerb, and at the hop's foot she stood out of sight)
       { model: 'set-kayak-rack', u: 0.775, lat: 9.5 },
-      { model: 'set-shellfish-shack', u: 0.81, lat: -10.5, yaw: 180 },
+      { model: 'set-shellfish-shack', u: 0.798, lat: -10, yaw: 180 },
       { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 },
       // on the dune beside the hop over the west bend (round 23: its sea
       // side lay under the kerb, the tide at the berm's foot): the reef's
