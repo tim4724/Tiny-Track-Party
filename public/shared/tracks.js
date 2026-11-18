@@ -793,7 +793,7 @@ export const TRACKS = {
       // road climbs off it)
       { model: 'set-storm-mast', u: 0.10, lat: 10.5 },
       { model: 'set-storm-armour', u: 0.364, lat: -10.5, yaw: 180 },
-      { model: 'set-storm-containers', u: 0.938, lat: -10.5, yaw: 180 }
+      { model: 'set-storm-containers', u: 0.951, lat: -10.5, yaw: 180 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side

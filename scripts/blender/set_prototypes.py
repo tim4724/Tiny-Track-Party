@@ -5063,7 +5063,12 @@ def drift_dune_body(x, z):
           + 0.3 * math.sin(0.93 * x - 0.4 * z + 2.1) * math.sin(0.81 * z + 0.9 * x + 0.3)) * min(1.0, m / 3.0)
     lx, lz, ly = DUNE_LIGHT
     k = drift_ease(DUNE_FLAT, DUNE_FLAT + 3.5, math.hypot(x - lx, z - lz))
-    return ly + (m - ly) * k - 0.45 * k
+    v = ly + (m - ly) * k - 0.45 * k
+    # its foot dives: the last unit and a bit of its height falls two and a
+    # half times as steeply, to well under the plain. The beach round the
+    # point lies under the plain, and tails that ran out level a hand over
+    # it stood clear of that sand as broad pale slabs (round 22).
+    return v - 1.5 * max(0.0, 1.2 - v)
 
 
 def drift_wall_line(t):
