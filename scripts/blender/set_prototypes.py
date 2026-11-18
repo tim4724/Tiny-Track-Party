@@ -832,6 +832,25 @@ def on_a_rise():
             box((0.3, 0.3, 0.3), (0.0, -0.6, 0.0), 'slate')
     draped('foot', foot)
 
+def lie_on_land():
+    """For a piece of things standing about on sand that is not level (a camp,
+    a tower among its umbrellas, a hut on a beach rise): EVERY still part
+    drapes, vertex by vertex, and every moving part takes the `drape` verb, so
+    each thing stands on the ground drawn under it wherever the row puts the
+    piece and whatever the land does there later. A row's `y` no longer
+    matters to it. Round 20: such pieces stood rigid at a hand-typed `y` and
+    hung over the sand's fall by up to a unit and a half. Call it last,
+    instead of on_a_rise()."""
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH' and o.get('anim') is None:
+            g = o.get('group') or 'still'
+            if not g.startswith('drape'):
+                o['group'] = 'drape_' + g
+    for gid, (name, pivot, yaw, parent, tilt) in enumerate(ANIMS):
+        verbs = name[5:].split('#')[0].split('+')
+        if parent is None and not any(v.split(':')[0] in ('drape', 'path') for v in verbs):
+            ANIMS[gid] = ('anim_drape+' + name[5:], pivot, yaw, parent, tilt)
+
 def gabled_house(cx, cz, w, d, h, rh, wall, roof, eave=0.16):
     """A house as one solid: walls `w` across (X) and `d` along (Z), `h` to
     the eaves, running on under the ground; a plain gabled roof over them,
@@ -980,8 +999,8 @@ def rock_pool():
     draped('pool', pool)
     # the rock-poolers' things at its road side (round 16: flat on the beach
     # the pool is a sliver of blue from the seat, so what says "rock pool"
-    # is what stands at it): a striped windbreak, dip nets stood in the
-    # rock, buckets on the lip. No people.
+    # is what stands at it): a striped windbreak. No buckets, nets or people
+    # (round 21: buckets and spades on the lip had no reason to be there).
     def things():
         with plain_parts():
             # the windbreak on the pool's sea side, its stripes to the road,
@@ -993,11 +1012,6 @@ def rock_pool():
                 if k < 4:
                     box((0.05, 0.62, 0.9), (-5.4 + 0.06 * (math.sin(k * 1.7) + math.sin((k + 1) * 1.7)), 0.52, z + 0.45),
                         (0xff5040, 0xfff6eb, 0x339cf2, 0xffc044)[k])
-            for (x, z, lean, c) in ((4.6, 1.9, 0.25, 0x22c46e), (4.3, 2.7, -0.2, 0xff5040), (3.3, -3.4, 0.15, 0xffc044)):
-                beam((x, -0.15, z), (x + lean, 1.15, z + 0.3 * lean), 0.09, 0xfff6eb)    # a dip net on its pole
-                box((0.36, 0.26, 0.36), (x + lean, 1.24, z + 0.3 * lean), c)
-            for (x, z, c) in ((4.4, 0.6, 0xff5040), (4.9, -1.2, 0x339cf2), (3.6, 3.6, 0xffc044)):
-                cyl(0.2, 0.5, (x, 0.02, z), c, r2=0.25, segs=8)                          # a bucket
     draped('things', things)
     gull((math.cos(0.4) * 4.3, 0.12, math.sin(0.4) * 4.3), 0.0, 'anim_watch:r=24+hop:r=10:h=0.2#gull')
     ring = [(6.0 + 7.0 * math.cos(i * math.pi / 8), 3.6, 1.0 + 7.0 * math.sin(i * math.pi / 8)) for i in range(16)]
@@ -1070,7 +1084,7 @@ def crab_pots():
         beam(line[i], line[i + 1], 0.04, 0x9a7b55)
         box((0.1, 0.1, 0.1), (-0.2, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2), 0xff7e44)
     join_still('landing')
-    on_a_rise()
+    lie_on_land()
 
 # Tidepool's rock: the reef, the headland and the knoll are weathered coastal
 # rock, rounded lumps run together into boulders and outcrops, their tops
@@ -1234,19 +1248,6 @@ def tidepool_on_bend(R, rho, th):
     road's left), `th` radians along it from the placement."""
     return (R - rho * math.cos(th), rho * math.sin(th))
 
-def tidepool_surf(spots):
-    """Surf breaking on the rock: a white crest of foam at each (x, z, len,
-    yaw) that heaves up out of the sea and sinks back, each on its own beat,
-    so the reef's foot is always somewhere breaking."""
-    for k, (x, z, ln, yw) in enumerate(spots):
-        with animated('anim_bob:h=0.32:p=%.1f:r=0.35#surf%d' % (3.1 + 0.55 * (k % 4), k), (x, 0.0, z)):
-            c, s = math.cos(yw), math.sin(yw)
-            for j in range(3):
-                dz = (j - 1) * ln / 3
-                h = 0.32 - 0.1 * abs(j - 1)
-                box((0.7, h, ln / 3 + 0.1), (x + dz * s, SEA + h / 2 - 0.12, z + dz * c), 0xfff6eb,
-                    yaw=yw + 0.12 * (j - 1))
-
 def tidepool_gulls(ring, period):
     """Two gulls wheeling round `ring` (glTF points), half a lap apart."""
     for i, p in enumerate(ring):
@@ -1340,23 +1341,24 @@ def reef_shelf():
         cx, cz = tidepool_on_bend(R, spine + d, th)
         return max(((cx + 0.3 * i, cz + 0.3 * j) for i in range(-6, 7) for j in range(-6, 7)),
                    key=lambda p: tide_height(polys, *p) or -9.0)
-    spots = ((tidepool_on_bend(R, spine - 5.2, -0.53), 'up', 'brown', 1.2, 0.0),
-             (crown(-0.5, 0.2), 'arch', 'grey', 1.15, 0.2),
-             (tidepool_on_bend(R, spine - 5.2, -0.08), 'flat', 'brown', 1.2, 0.0),
-             (tidepool_on_bend(R, spine - 5.2, 0.07), 'up', 'brown', 1.15, 0.0),
-             (crown(0.45, 0.0), 'arch', 'brown', 1.2, -0.3),
-             (tidepool_on_bend(R, spine - 3.0, 0.54), 'flat', 'grey', 1.2, math.pi))
+    # (round 20: half as big again; at a seal's size beside a car they read
+    # from the road as stones on the rock)
+    spots = ((tidepool_on_bend(R, spine - 5.2, -0.53), 'up', 'brown', 1.8, 0.0),
+             (crown(-0.5, 0.2), 'arch', 'grey', 1.7, 0.2),
+             (tidepool_on_bend(R, spine - 5.2, -0.08), 'flat', 'brown', 1.8, 0.0),
+             (tidepool_on_bend(R, spine - 5.2, 0.07), 'up', 'brown', 1.7, 0.0),
+             (crown(0.45, 0.0), 'arch', 'brown', 1.8, -0.3),
+             (tidepool_on_bend(R, spine - 3.0, 0.54), 'flat', 'grey', 1.8, math.pi))
     for k, ((x, z), pose, coat, size, turn_) in enumerate(spots):
         th = math.atan2(z, R - x)                       # facing the bend's middle: the road
         beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, th + turn_ + 0.25 * jitter(k, 1, 7.0), 's%d' % k,
                    pose, coat, size, seal_life(pose, coat, k))
     x, z = tidepool_on_bend(R, spine - 4.6, 0.11)       # the pup, at its mother's flank
-    beach_seal(x, tide_seat(polys, x, z, 0.3) - 0.02, z, -0.4, 'pup', 'flat', 'pup', 0.6)
+    beach_seal(x, tide_seat(polys, x, z, 0.3) - 0.02, z, -0.4, 'pup', 'flat', 'pup', 0.9)
     ring = [(R - (R + 13) * math.cos(t), 6.0 + 0.6 * math.sin(3 * t), (R + 13) * math.sin(t))
             for t in (i / 12 * 1.2 - 0.6 for i in range(12))]
     ring += [(R - (R + 16) * math.cos(t), 7.0, (R + 16) * math.sin(t)) for t in (0.6 - i / 6 * 1.2 for i in range(1, 6))]
     tidepool_gulls(ring, 18)
-    tidepool_surf([(*tidepool_on_bend(R, R + 18.8, th), 3.2, th) for th in (-0.62, -0.38, -0.15, 0.08, 0.32, 0.56)])
     join_still('shelf')
     tidepool_foot()
 
@@ -1399,8 +1401,6 @@ def tidepool_headland():
     tide_rock(polys)
     kx, kz = tidepool_on_bend(R, R + 17.5, -0.12)
     sx, sz = tidepool_on_bend(R, R + 22.0, 0.02)
-    tidepool_surf([(ax - 1.6, az + 0.4, 3.0, AY + 1.57), (ax - 2.6, az - 3.6, 2.6, AY + 1.3),
-                   (kx - 7.8, kz - 1.0, 3.4, 0.3), (sx - 4.2, sz + 2.5, 3.0, 0.9)])
     tidepool_gulls([(ax + 5.0 * math.cos(t), 8.5 + 0.5 * math.sin(2 * t), az + 4.0 * math.sin(t))
                     for t in (i / 12 * 2 * math.pi for i in range(12))], 15)
     join_still('headland')
@@ -1429,21 +1429,18 @@ def reef_stacks():
     tide_rock(polys)
     for k, (dx, dz, yw) in enumerate(((0.4, -0.5, 0.0), (-0.6, 0.3, 2.1))):
         gull((ax + dx, tide_seat(polys, ax + dx, az + dz, 0.12) - 0.02, az + dz), yw, 'anim_watch:r=24#gull%d' % k)
-    tidepool_surf([(ax - 3.6, az - 1.0, 3.0, 0.2), (bx - 2.6, bz + 0.6, 2.4, -0.4), (cx - 3.2, cz - 1.5, 2.8, 0.6)])
     join_still('stacks')
     tidepool_foot()
 
 @piece(1.0)
 def lifeboat_station():
-    # Tidepool: the lifeboat station on the rocks outside the bend before
+    # Tidepool: the lifeboat station on the sand outside the bend before
     # the line, at a building's real size beside a car: the boathouse,
-    # white under the cottages' slate, its name board, its great doors to the sea
-    # (-X) at the head of the slipway, which runs down over the reef's
-    # ledges into the sea; the lifeboat in its cradle at the top of the
-    # slip, orange and navy, bow to the sea; the station's flag flying from
-    # a tall staff by the road side, the coxswain's bell under a little roof.
-    # Its back and gable stand over the kerb from the bend before it. On a
-    # beach rise (tracks.js), so it stands at the road's height.
+    # white under the cottages' slate, its name board, its great doors to
+    # the sea (-X), the station's flag flying from a tall staff by the road
+    # side, the coxswain's bell under a little roof. Its back and gable
+    # stand over the kerb from the bend before it. On a beach rise
+    # (tracks.js), lying on it as it is drawn (lie_on_land()).
     white, red, navy, orange = 0xfff6eb, 0xcf534f, 0x38383d, 0xff7e44
     BX, BZ, W, D, H = -1.6, 0.0, 2.6, 4.2, 1.9
     gabled_house(BX, BZ, W, D, H, 1.25, white, 0x868ba1)
@@ -1453,17 +1450,7 @@ def lifeboat_station():
     box((0.06, 1.5, 0.06), (BX - W / 2 - 0.07, 0.75, BZ), white)
     for dz in (-1.4, 1.4):
         box((0.08, 0.6, 0.5), (BX - W / 2 - 0.03, 1.3, BZ + dz), 'slate')            # its windows
-    # the lifeboat in its cradle at the top of the slip, bow to the sea
     SL0, SL1 = BX - W / 2, BX - W / 2 - 12.0
-    LX, LY = SL0 - 1.6, 0.4
-    box((2.4, 0.5, 0.95), (LX, LY + 0.25, BZ), navy)
-    box((0.7, 0.5, 0.7), (LX - 1.35, LY + 0.25, BZ), navy, yaw=math.pi / 4)
-    box((2.5, 0.22, 1.02), (LX, LY + 0.58, BZ), orange)
-    box((0.9, 0.5, 0.7), (LX + 0.35, LY + 0.92, BZ), white)
-    box((0.95, 0.08, 0.75), (LX + 0.35, LY + 1.2, BZ), orange)
-    box((0.06, 0.55, 0.06), (LX + 0.35, LY + 1.5, BZ), white)
-    for dz in (-0.35, 0.35):
-        box((1.8, 0.4, 0.12), (LX, LY - 0.16, BZ + dz), 0x8a6a46)
     # the flagstaff at the road side of the station, its flag flying along it
     flag_on_pole((0.2, 0.0, -2.8), 4.2, (red, white, red), 'anim_flutter:p=1.9#flag', w=1.0, fh=0.6)
     # the bell under its little roof, by the doors
@@ -1472,26 +1459,17 @@ def lifeboat_station():
     box((0.5, 0.1, 0.9), (BX + 1.9, 1.25, BZ + 2.9), red)
     cyl(0.16, 0.24, (BX + 1.9, 0.86, BZ + 2.9), 0xffc044, r2=0.1, segs=8)
     join_still('station')
-    # the slipway: timber and its two rails from the doors down the sand's
-    # fall and into the sea the track's `shore` brings in to its foot, the
-    # reef's ledges either side of it. DRAPED, plank by plank, so it lies on
-    # the swell the station stands on and goes down with it under the water
-    # (round 19 raised the station and left a level slip ending on dry sand).
+    # the reef's ledges on the sand below it, toward the sea. (Round 20: the
+    # lifeboat and its slipway went; a racer never saw them, and the boat
+    # stood rigid over a slip that fell away with the sand.)
     def slip():
-        with plain_parts():
-            n = 20
-            for k in range(n):
-                x = SL0 - (k + 0.5) * (SL0 - SL1) / n
-                box(((SL0 - SL1) / n - 0.05, 0.12, 1.5), (x, 0.08, BZ), 0x9a6a46 if k % 2 else 0x8a6a46)
-                for dz in (-0.55, 0.55):
-                    box(((SL0 - SL1) / n + 0.02, 0.14, 0.12), (x, 0.2, BZ + dz), 'grey')
         for k, (x, z, sz, sq) in enumerate(((SL1 + 1.6, -2.3, 2.6, 0.5), (SL1 + 1.0, 2.4, 2.4, 0.55), (SL1 + 5.0, -2.0, 1.8, 0.5),
                                             (SL1 + 4.6, 2.2, 1.6, 0.45), (SL1 + 8.2, -2.1, 1.3, 0.45), (BX - 0.8, -3.4, 1.7, 0.5),
                                             (BX - 0.4, 3.6, 1.5, 0.45))):
             stone(x, z, sz, 0.9 * k, 260.0 + k, squat=sq, rock=('grey', WET), top='lavender', y=-0.15)
         reef_tone()
     draped('slip', slip)
-    on_a_rise()
+    lie_on_land()
 
 @piece(1.0)
 def tidepool_cottages():
@@ -1605,8 +1583,8 @@ def pirate_camp():
            (0.02, -0.02, 0.15, 0.7, 0.09, 0.24), at=(FX, 0.0, FZ))
     for k in range(3):
         a = k / 3 * 2 * math.pi + 0.4
-        beam((FX + math.cos(a) * 0.75, 0.0, FZ + math.sin(a) * 0.75), (FX, 1.45, FZ), 0.1, wood)
-    beam((FX, 1.45, FZ), (FX, 1.0, FZ), 0.08, 0x38383d)
+        beam((FX + math.cos(a) * 1.05, 0.0, FZ + math.sin(a) * 1.05), (FX, 1.8, FZ), 0.1, wood)
+    beam((FX, 1.8, FZ), (FX, 1.0, FZ), 0.08, 0x38383d)
     cyl(0.32, 0.36, (FX, 0.72, FZ), 0x38383d, r2=0.26, segs=10, stem=True)              # the pot
     # the cannon on its carriage, run out to the sea
     kit('pirate', 'cannon-mobile', (-1.7, 0, TZ - 2.7), yaw=math.radians(-90), scale=0.65)
@@ -1619,7 +1597,7 @@ def pirate_camp():
     for i in range(4):
         beam(sl[i], sl[i + 1], 0.4, 0xfde4c7, d=0.08)
     join_still('camp')
-    on_a_rise()
+    lie_on_land()
 
 @piece(1.0)
 def shipwreck_ribs():
@@ -1706,7 +1684,7 @@ def jetty():
     SZ, SW, SD, SH = Z0 + 1.6, 1.6, 2.6, 1.4
     box((SW, SH, SD), (-QW / 2, D + SH / 2, SZ), 0x9a7b55)
     for sx in (-1, 1):
-        box((SW / 2 + 0.35, 0.12, SD + 0.3), (-QW / 2 + sx * SW / 4, D + SH + 0.28, SZ), 0xcf534f, roll=-sx * 0.6)
+        box((SW / 2 + 0.35, 0.12, SD + 0.3), (-QW / 2 + sx * SW / 4, D + SH + 0.28, SZ), 0xcf534f, roll=sx * 0.6)
     for sz in (-1, 1):
         poly([(-QW / 2 - SW / 2, D + SH, SZ + sz * SD / 2), (-QW / 2 + SW / 2, D + SH, SZ + sz * SD / 2),
               (-QW / 2, D + SH + 0.55, SZ + sz * SD / 2)], [(0, 1, 2)], 0x9a7b55)
@@ -1821,7 +1799,7 @@ def bonfire():
         box((0.06, 1.0, 0.06), (-1.15 + 0.8 * i, 0.5, -2.0), 0x9a6a46)
     marker('anim_smoke', (0.0, 0.9, 0.0))
     join_still('fire')
-    on_a_rise()
+    lie_on_land()
 
 # ---- Riptide ----
 
@@ -1913,7 +1891,7 @@ def lifeguard_tower():
             box((0.05, 0.28, 0.6), (3.2, 1.72, z - 0.33), red)
             box((0.05, 0.28, 0.6), (3.2, 1.44, z - 0.33), yellow)
     join_still('tower')
-    on_a_rise()
+    lie_on_land()
 
 # ---- Riptide's promenade ----
 
@@ -3561,9 +3539,9 @@ def seal_rock():
                                     (8.8, -6.4, 0.8))):
         tide_lump(polys, (x, z), 1.1 * sz, 1.4 * sz, 1.2 * sz, 0.9 * k, 150.0 + k, wet=0.45)
     tide_rock(polys)
-    spots = ((6.3, -4.0, 0.5, 'up', 'brown', 1.1), (7.3, -3.0, -0.4, 'flat', 'grey', 1.0),
-             (6.7, 1.4, 0.2, 'arch', 'brown', 1.05), (7.6, 2.4, 0.9, 'flat', 'pup', 0.55),
-             (4.2, 6.2, 1.2, 'flat', 'brown', 1.05), (5.0, 7.2, 0.4, 'up', 'grey', 0.95))
+    spots = ((6.3, -4.0, 0.5, 'up', 'brown', 1.65), (7.3, -2.6, -0.4, 'flat', 'grey', 1.5),
+             (6.7, 1.4, 0.2, 'arch', 'brown', 1.6), (7.6, 2.8, 0.9, 'flat', 'pup', 0.85),
+             (4.2, 6.2, 1.2, 'flat', 'brown', 1.6), (5.2, 7.4, 0.4, 'up', 'grey', 1.45))
     for k, (x, z, yw, pose, coat, size) in enumerate(spots):
         beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, yw, 'r%d' % k, pose, coat, size, seal_life(pose, coat, k))
     # one in the water off its seaward foot, its head up, bobbing on the swell
@@ -3918,7 +3896,7 @@ def surf_club():
     for k, z in enumerate((-9.0, -6.6, -4.4, 5.0, 7.2)):
         pennant((1.4, 0.0, z), 2.1, ((red, yellow), (yellow, red))[k % 2], 'club%d' % k)
     join_still('club')
-    on_a_rise()
+    lie_on_land()
 
 @piece(1.0)
 def surf_campers():
@@ -3983,7 +3961,7 @@ def surf_campers():
     for i in range(4):
         beam(ham[i], ham[i + 1], 0.26, 0xfde4c7, d=0.05)
     join_still('camp')
-    on_a_rise()
+    lie_on_land()
 
 @piece(1.0)
 def surf_contest():
@@ -4088,7 +4066,7 @@ def beach_day():
     box((0.62, 0.1, 0.92), (0.7, 0.72, 9.6), 0xf378f0)
     umbrella((0.7, 0.7, 9.6), 0.7, 0.9, (0xf378f0, white), gores=8)
     join_still('beach')
-    on_a_rise()
+    lie_on_land()
 
 def riptide_dinghy(hull, sail, trim=0xfff6eb):
     """A sailing dinghy under sail, built bow to +X at the origin (a path
@@ -4551,7 +4529,122 @@ def strand_snags():
         rod((1.4, 0.16, 2.0), (0.4, 0.2, 6.6), 0.18, 'cream', r2=0.1, segs=7)
     gull((0.4 + math.cos(4.0) * 0.44, 4.38, -0.6 + math.sin(4.0) * 0.44), 1.0, 'anim_watch:r=26#snag')   # on its top
     join_still('snags')
-    on_a_rise()
+    lie_on_land()
+
+@piece(1.0)
+def chapel_ruin():
+    # Driftwood: the fishers' chapel the storms unroofed, on the dune inside
+    # the first bend, which the start straight looks across the sand at: a
+    # stone nave open to the sky, its west gable standing whole with its
+    # empty lancet and its cross, the east gable down to a stump, the side
+    # walls broken in steps, the graveyard's leaning stones and its
+    # dry-stone wall. At a chapel's size beside a car. The nave runs along
+    # X; the standing gable is at -X. It lies on the dune as it is drawn.
+    stone_c, cap = 'lavender', 'grey'       # pale masonry, the reef's grey for the yard's wall and stones
+    L, Wd, T = 6.4, 3.4, 0.5
+    GX = -L / 2
+    for sz in (-1, 1):                                                 # the west gable: two piers, the lancet between
+        box((T, 3.7, 1.1), (GX, 1.35, sz * 1.15), stone_c)
+    box((T, 1.3, 1.2), (GX, 0.15, 0.0), stone_c)                       # its sill
+    box((T, 0.5, 1.2), (GX, 2.95, 0.0), stone_c)                       # its head
+    prism([(-Wd / 2, 3.2), (Wd / 2, 3.2), (0.0, 5.3)], GX, T, stone_c)
+    box((0.16, 0.8, 0.16), (GX, 5.6, 0.0), cap)                        # the cross on the gable
+    box((0.16, 0.16, 0.56), (GX, 5.72, 0.0), cap)
+    for sz in (-1, 1):                                                 # the east gable, down to a stump
+        box((T, 1.9 + 0.5 * sz, 1.1), (-GX, 0.45 + 0.25 * sz, sz * 1.15), stone_c)
+    box((T, 1.2, 1.2), (-GX, 0.1, 0.0), stone_c)
+    heights = ((2.7, 2.7, 2.2, 2.6, 1.3, 0.7), (2.5, 2.7, 1.1, 1.7, 2.2, 0.6))
+    for i, sz in enumerate((-1, 1)):                                   # the side walls, broken in steps
+        for k, h in enumerate(heights[i]):
+            x = GX + T / 2 + (k + 0.5) * (L - T) / 6
+            box(((L - T) / 6 + 0.02, h + 0.5, T * 0.9), (x, (h - 0.5) / 2, sz * (Wd / 2 - T / 2)), stone_c)
+            if h > 2.0 and k in (1, 3, 4):                             # a window's slit where the wall still stands
+                box((0.4, 0.9, T * 0.9 + 0.04), (x, 1.5, sz * (Wd / 2 - T / 2)), 'slate')
+    with plain_parts():
+        # fallen stone in the nave and off the broken end
+        for k, (x, z, sc) in enumerate(((1.2, 0.3, 0.6), (2.0, -0.6, 0.45), (3.9, 0.8, 0.5), (4.3, -1.0, 0.4), (0.2, -0.5, 0.35))):
+            box((sc, sc * 0.6, sc * 0.8), (x, sc * 0.2, z), stone_c, yaw=0.7 * k)
+        # the graveyard on the south side: leaning stones, two crosses
+        for k, (x, z, lean) in enumerate(((-1.8, 3.4, 0.12), (-0.4, 3.9, -0.1), (1.0, 3.3, 0.2), (2.2, 4.2, -0.16),
+                                          (-2.6, 4.6, 0.08), (0.2, 5.0, -0.2))):
+            if k in (1, 4):
+                box((0.14, 1.0, 0.14), (x, 0.35, z), cap, roll=lean)
+                box((0.5, 0.14, 0.14), (x, 0.6, z), cap, roll=lean)
+            else:
+                box((0.16, 0.9, 0.55), (x, 0.3, z), cap, roll=lean)
+        # the yard's dry-stone wall, a gate's gap to the road (+X)
+        X0, X1, Z0, Z1 = -5.0, 5.2, -3.2, 6.4
+        for (ax, az, bx, bz) in ((X0, Z0, X1, Z0), (X0, Z1, X1, Z1), (X0, Z0, X0, Z1), (X1, Z0, X1, 0.4), (X1, 2.2, X1, Z1)):
+            n = max(1, int(round(math.hypot(bx - ax, bz - az) / 1.7)))
+            for k in range(n):
+                t0, t1 = k / n, (k + 1) / n
+                cx, cz = ax + (bx - ax) * (t0 + t1) / 2, az + (bz - az) * (t0 + t1) / 2
+                ln = math.hypot(bx - ax, bz - az) / n + 0.04
+                h = 0.5 + 0.12 * frac(k * 0.37 + ax * 0.13 + az * 0.29)
+                if frac(k * 0.61 + ax * 0.07 + bz * 0.11) < 0.14:
+                    continue                                           # a breach
+                size = (ln, h + 0.4, 0.34) if az == bz else (0.34, h + 0.4, ln)
+                box(size, (cx, (h - 0.4) / 2, cz), cap)
+    join_still('chapel')
+    lie_on_land()
+
+@piece(1.0)
+def ghost_wood():
+    # Driftwood: a wood the blown sand and the salt killed, standing in the
+    # infield beside the east run: the coast's one tree, the bleached snag,
+    # a dozen of them tall and close, their bare limbs up, three thrown
+    # among their feet. Each stands on the sand drawn under it. Along the
+    # road (+Z), +X the road.
+    with bleached():
+        for k, (x, z, h, lean, yw, limbs) in enumerate((
+                (0.6, -8.4, 3.2, 0.22, 0.4, 3), (-2.4, -6.6, 4.6, 0.1, 2.0, 5), (-0.6, -4.0, 5.4, 0.08, 4.1, 5),
+                (-4.6, -3.2, 3.8, 0.2, 1.1, 4), (1.2, -1.2, 3.0, 0.3, 5.2, 3), (-2.8, 0.4, 5.8, 0.06, 3.0, 5),
+                (-6.0, 1.6, 4.2, 0.16, 0.2, 4), (0.2, 2.8, 4.4, 0.14, 2.6, 4), (-3.6, 4.4, 3.4, 0.26, 4.6, 4),
+                (-1.2, 6.2, 5.0, 0.1, 1.6, 5), (1.0, 8.0, 2.8, 0.32, 3.6, 3), (-5.2, 7.4, 3.6, 0.18, 5.6, 4))):
+            drift_snag(x, z, h, lean, yw, 40.0 + k, limbs=3 if LITE else limbs)
+        rod((1.8, 0.22, -6.0), (-1.6, 0.26, -5.0), 0.24, 'tan', r2=0.14, segs=7)
+        rod((-4.4, 0.2, -0.6), (-6.8, 0.22, 3.6), 0.2, 'cream', r2=0.1, segs=7)
+        rod((1.6, 0.18, 4.6), (-1.0, 0.22, 3.6), 0.2, 'tan', r2=0.12, segs=7)
+    join_still('wood')
+    lie_on_land()
+
+@piece(1.0)
+def fish_racks():
+    # Driftwood: the fishers' drying racks on the sand inside the start
+    # straight, across the road from their net huts: three long timber
+    # racks, A-frames a stride apart under a ridge pole, the split fish
+    # hung in rows from the rails to dry in the wind, a handcart and
+    # baskets at the foot. At a rack's real size beside a car, twice its
+    # height. The racks run along the road (+Z); +X is the road.
+    wood, fish = 0x8a6a46, ('cream', 'tan', 0xfde4c7)
+    for r, (x, z0, n, top) in enumerate(((-0.6, -8.0, 4, 2.7), (-3.6, -4.5, 5, 3.0), (-0.9, 3.0, 3, 2.5))):
+        span = 2.2
+        for k in range(n + 1):
+            z = z0 + k * span
+            for sx in (-1, 1):
+                beam((x + sx * 0.95, -0.3, z), (x, top, z), 0.14, wood)
+        beam((x, top, z0 - 0.3), (x, top, z0 + n * span + 0.3), 0.14, wood)                # the ridge pole
+        for sx in (-1, 1):
+            for (t, c) in ((0.42, 0), (0.7, 1)):                                           # two rails a side
+                rx, ry = x + sx * 0.95 * (1 - t), top * t - 0.3 * (1 - t)
+                beam((rx, ry, z0 - 0.2), (rx, ry, z0 + n * span + 0.2), 0.1, wood)
+                with plain_parts():                                                         # the fish, hung in pairs
+                    m = int(n * span / (0.9 if LITE else 0.45))
+                    for j in range(m):
+                        if frac(j * 0.37 + r * 0.21 + t) < 0.18:
+                            continue
+                        fz = z0 + (j + 0.5) * n * span / m
+                        box((0.06, 0.5, 0.32 if LITE else 0.2), (rx, ry - 0.3, fz), fish[(j + c + r) % 3])
+    # the handcart and the baskets
+    box((1.3, 0.14, 0.8), (1.6, 0.5, 0.2), wood)
+    for sz in (-1, 1):
+        cyl(0.32, 0.1, (1.6, 0.32, 0.2 + sz * 0.46), 'slate', segs=10, axis='along')
+        beam((2.2, 0.5, 0.2 + sz * 0.3), (3.1, 0.75, 0.2 + sz * 0.3), 0.08, wood)
+    box((1.1, 0.3, 0.6), (1.6, 0.72, 0.2), 'cream')
+    for (x, z, c) in ((1.9, 1.6, 'tan'), (2.4, 1.1, 'cream'), (1.5, -1.2, 'tan')):
+        cyl(0.34, 0.4, (x, 0.0, z), c, r2=0.42, segs=9)
+    join_still('racks')
+    lie_on_land()
 
 def dune_fence(name, seed, half, breaks):
     """A run of storm fence along a dune's foot, `half` either way along
@@ -4783,6 +4876,7 @@ def driftwood_forts():
                 a = i / 7 * 2 * math.pi
                 box((0.12, 0.08, 0.1), (0.5 + 0.28 * math.cos(a), 0.04, 0.0 + 0.28 * math.sin(a)), 'grey', yaw=-a)
     draped('ring', ring)
+    lie_on_land()
 
 # ---- Driftwood: the lighthouse dune and the road's tunnel through it ----
 #
@@ -5344,15 +5438,16 @@ def smokehouse():
     # the capstan that winched it up the shingle, fish boxes stacked. At a
     # building's real size beside a car. +X is the road; along it (+Z).
     tar, trim = 0x8d5741, 0xfde4c7
-    box((2.6, 3.4, 3.2), (-1.8, 1.4, 0.0), 'brown')                          # the house, its feet in the sand
+    # the house, its feet in the sand, under a plain gabled roof (round 20:
+    # two slabs that stopped short of each other and of the walls, over
+    # open gables, read as a roof half built)
+    gabled_house(-1.8, 0.0, 2.6, 3.2, 3.1, 1.3, 'brown', 'grey')
     for y in (1.0, 2.0):                                                     # the boards' laps
         box((2.66, 0.07, 3.26), (-1.8, y, 0.0), 'tan')
-    for sz in (-1, 1):                                                       # its roof, steep
-        box((1.75, 0.14, 3.6), (-1.8 + sz * 0.72, 3.62, 0.0), 'grey', roll=sz * 0.95)
-    box((0.9, 0.5, 3.0), (-1.8, 4.35, 0.0), tar)                              # the louvred vent along the ridge
-    box((1.1, 0.12, 3.2), (-1.8, 4.66, 0.0), 'grey')
+    box((0.7, 0.5, 2.6), (-1.8, 4.4, 0.0), tar)                               # the louvred vent astride the ridge
+    box((0.95, 0.12, 2.9), (-1.8, 4.7, 0.0), 'grey')
     for k in range(4):
-        box((0.95, 0.08, 0.1), (-1.8, 4.3, -1.2 + 0.8 * k), 'slate')
+        box((0.76, 0.08, 0.1), (-1.8, 4.45, -0.9 + 0.6 * k), 'slate')
     box((0.07, 1.3, 1.0), (-0.47, 0.65, -0.6), trim)                         # the door to the road
     box((0.07, 1.2, 0.86), (-0.45, 0.6, -0.6), 0xcf534f)
     box((0.07, 0.5, 0.6), (-0.47, 2.2, 0.8), 'slate')
@@ -5819,10 +5914,11 @@ def powder_verge(kind, lite=False):
         if lite:
             return
         for k in range(3):                                         # logs stacked behind it
-            cyl(0.22, 2.2, (-2.0, 0.2, -3.2 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
+            cyl(0.22, 2.2, (-3.3, 0.2, -3.2 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
         for k in range(2):
-            cyl(0.22, 2.2, (-2.0, 0.58, -2.97 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
-        snowy(box((2.3, 0.1, 1.3), (-2.0, 0.84, -2.74), 0xf3f7fb), 0.45)
+            cyl(0.22, 2.2, (-3.3, 0.58, -2.97 + 0.46 * k), 0x7a5a3a, segs=6, axis='across', stem=True)
+        # (the logs run from their end at x: the cap lies over their middle, and the stack stands clear behind the fence)
+        snowy(box((2.3, 0.1, 1.3), (-2.2, 0.84, -2.74), 0xf3f7fb), 0.45)
         box((0.14, 2.0, 0.14), (-1.9, 0.9, 2.6), W)                # the signpost: two arrows
         box((0.08, 0.3, 1.2), (-1.9, 1.7, 3.0), 0x339cf2, yaw=0.15)
         box((0.08, 0.3, 1.0), (-1.9, 1.3, 2.2), 0xff5040, yaw=-0.1)
@@ -5998,7 +6094,7 @@ def ski_lift(lite=False):
     # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw, k=1.8)
     hx, hz = turned(V[0], V[1], yaw, 0.0, -2.6)
-    cabin_hut(2.4, 1.3, 1.8, (hx, 0, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)
+    cabin_hut(2.4, 1.3, 1.8, (hx, H(hx, hz) - 0.1, hz), 0x9a7b55, 0xeef4f9, yaw=yaw + math.pi / 2)   # on the mound's toe as it lies (at 0 the toe buried it to the eaves)
     for k in range(0 if lite else 5):
         px, pz = turned(V[0], V[1], yaw, 1.5, -0.6 + k * 0.16)
         box((0.06, 0.44, 0.07), (px, 0.22, pz), COATS[k], yaw=yaw, roll=0.15)
@@ -6295,7 +6391,7 @@ FORESTS = {
     'avalanche-forest-e': ((-6.4, -5.8, 11.28, 2.05, 0, 0), (-2.9, -10.2, 11.08, 1.40, 0, 0), (-6.2, -8.0, 12.37, 2.17, 0, 0), (-2.9, -8.6, 10.59, 1.96, 0, 0), (-0.9, -7.3, 8.93, 1.68, 1, 0), (-5.3, -10.0, 12.41, 2.01, 0, 0), (-3.4, -6.1, 10.01, 2.10, 1, 0), (-3.3, -3.3, 9.07, 1.45, 1, 0), (-6.0, -3.6, 9.98, 1.59, 0, 0), (-2.4, -4.6, 8.92, 1.58, 1, 0), (-4.5, -8.7, 11.56, 1.87, 0, 0), (9.4, 0.5, 1.14, 1.59, 0, 1), (6.4, 2.0, 1.94, 1.87, 1, 1), (6.5, 0.2, 2.30, 2.11, 0, 1), (6.0, 4.1, 1.64, 2.68, 1, 0), (4.7, -0.5, 3.28, 1.99, 1, 0), (3.5, 2.4, 3.12, 1.82, 0, 0), (3.5, 0.6, 3.59, 1.60, 0, 0), (7.3, 3.3, 1.37, 1.53, 1, 1), (9.9, 1.8, 0.70, 1.40, 0, 1), (2.0, -0.2, 4.72, 1.68, 1, 0), (0.6, -0.3, 5.63, 2.09, 0, 0), (-1.1, -0.8, 6.86, 1.59, 1, 0), (2.1, 2.5, 3.81, 2.11, 0, 0), (-0.8, 1.2, 6.06, 1.56, 0, 0), (1.3, -2.0, 5.73, 2.13, 1, 0), (0.5, 2.0, 4.98, 1.43, 0, 0), (-2.9, 4.5, 4.85, 1.78, 0, 0), (1.3, 4.1, 3.80, 2.06, 1, 0), (-3.9, 2.8, 5.97, 1.45, 1, 0), (-2.5, 2.6, 5.77, 2.11, 0, 0), (-0.4, 5.8, 3.51, 1.61, 0, 0), (-3.7, 1.3, 6.74, 2.09, 1, 0), (-0.2, -2.0, 6.68, 1.87, 1, 0), (-1.4, 3.9, 4.77, 1.84, 0, 0), (-3.1, -0.9, 7.76, 2.14, 0, 0), (0.9, 5.4, 3.37, 1.50, 0, 0), (-5.3, 8.5, 3.32, 1.76, 1, 0), (3.9, 9.9, 1.30, 1.89, 0, 0), (8.5, 7.4, 0.41, 1.64, 0, 1), (-10.0, 8.5, 4.71, 1.65, 1, 0)),
     'avalanche-forest-f': ((-9.3, 12.6, 0.18, 1.68, 0, 1), (-7.7, 12.6, 0.33, 1.75, 0, 1), (-6.4, 11.9, 0.41, 1.40, 0, 1), (-4.9, 11.5, 0.52, 1.82, 1, 1), (-3.4, 11.2, 0.65, 1.59, 0, 0), (-4.1, 5.7, 0.49, 1.19, 2, 1), (-4.6, 2.4, 0.24, 1.04, 1, 1), (-2.1, 10.4, 1.07, 1.74, 0, 0), (-3.9, 7.1, 0.54, 1.39, 3, 1), (-3.2, 1.9, 1.31, 2.06, 0, 1), (-0.6, 10.1, 1.88, 1.42, 1, 0), (-1.3, 7.9, 1.97, 1.29, 3, 0), (-1.6, 1.8, 2.94, 1.82, 0, 1), (0.8, 9.5, 3.15, 2.11, 0, 0), (0.1, 8.1, 2.93, 1.33, 2, 0), (-0.2, 1.3, 4.70, 2.14, 0, 1), (2.2, 9.2, 4.99, 1.51, 1, 0), (0.6, 3.2, 5.15, 1.13, 3, 0), (1.2, 0.6, 6.52, 1.74, 1, 0), (3.7, 8.9, 7.20, 1.57, 1, 0), (3.1, 4.1, 7.79, 1.29, 2, 0), (2.6, 0.1, 8.37, 2.04, 0, 0), (5.1, 8.4, 9.27, 1.99, 0, 0), (3.7, 3.3, 8.82, 1.06, 2, 0), (4.0, -0.4, 10.24, 2.11, 1, 0), (6.6, 8.0, 10.50, 2.06, 0, 0), (5.9, 2.6, 11.66, 0.77, 0, 0), (5.4, -0.8, 12.21, 1.41, 0, 0), (8.0, 7.6, 11.80, 1.78, 0, 0), (7.0, -0.9, 13.93, 1.55, 0, 0), (9.4, 7.0, 13.17, 1.64, 0, 0), (8.3, -1.7, 16.36, 1.81, 0, 0), (10.8, 6.6, 14.39, 1.80, 1, 0), (9.8, -2.0, 18.21, 1.84, 1, 0), (12.3, 6.4, 15.54, 2.07, 0, 0), (11.5, 2.9, 17.26, 0.97, 0, 0), (11.2, -2.4, 19.44, 2.12, 1, 0), (12.7, -2.6, 20.61, 1.51, 1, 0), (1.2, 11.7, 3.87, 2.19, 1, 0), (4.9, 9.8, 7.99, 2.95, 0, 0), (2.8, 11.3, 5.39, 1.78, 1, 0), (3.1, 13.0, 4.19, 1.76, 1, 0), (-0.5, 11.7, 1.92, 2.19, 1, 0), (-6.8, -13.6, 1.04, 1.72, 0, 1), (-5.2, -13.3, 2.22, 1.62, 1, 1), (-4.0, -17.9, 4.70, 1.98, 0, 0), (-7.0, -16.5, 1.94, 1.49, 0, 1), (-4.4, -15.1, 3.59, 1.63, 1, 1), (-5.2, -19.4, 4.21, 1.70, 1, 0), (-7.3, -19.7, 2.68, 1.87, 0, 1), (-7.8, -18.0, 1.69, 2.19, 0, 1), (-5.1, -16.7, 3.62, 3.00, 0, 1), (-7.5, -15.2, 1.10, 2.12, 0, 1), (-3.6, -16.2, 4.66, 1.76, 0, 0), (-5.8, -15.0, 2.42, 1.54, 0, 1), (3.3, -17.8, 10.08, 1.99, 0, 0), (1.3, -20.0, 8.75, 2.94, 0, 0), (-0.4, -17.2, 7.08, 1.59, 0, 0), (1.7, -17.3, 8.61, 2.04, 0, 0), (1.8, -15.4, 8.46, 1.53, 0, 0), (0.6, -18.7, 7.99, 1.73, 0, 0), (4.1, -16.7, 10.57, 2.12, 0, 0), (3.1, -19.6, 10.18, 2.05, 0, 0), (-7.7, 18.7, 1.17, 1.71, 0, 0), (-3.7, 16.2, 1.28, 1.80, 1, 0), (-3.6, 19.5, 1.45, 1.57, 1, 0), (-2.1, 18.0, 1.42, 2.02, 0, 0), (-5.1, 17.9, 1.32, 1.94, 0, 0), (-7.9, 16.8, 0.90, 1.62, 0, 0), (-5.5, 19.4, 1.38, 2.13, 1, 0), (-6.6, 15.3, 0.83, 1.54, 1, 0), (-6.0, 16.8, 1.11, 1.71, 0, 0), (-3.2, -2.8, 1.73, 1.86, 0, 1), (-2.7, -0.7, 1.93, 1.82, 1, 1), (-3.9, -4.4, 1.30, 1.79, 0, 1), (-1.5, -3.6, 3.95, 1.82, 1, 1), (-1.4, -2.0, 3.72, 2.12, 0, 1), (-4.3, -1.0, 0.28, 1.17, 0, 1), (1.2, -10.7, 7.72, 1.71, 1, 0), (-1.4, -11.2, 5.32, 2.90, 1, 0), (-2.8, -14.5, 4.69, 2.76, 1, 0), (4.2, -12.9, 10.97, 2.01, 0, 0), (-3.8, -13.3, 3.46, 2.08, 0, 1), (0.4, -12.2, 6.92, 2.13, 0, 0), (-0.9, -14.1, 5.95, 1.85, 0, 0), (3.4, -11.5, 10.30, 1.50, 0, 0), (9.1, 11.0, 9.68, 1.90, 1, 0), (9.6, -5.5, 18.73, 1.62, 0, 0), (4.0, 16.1, 4.32, 2.14, 0, 0), (5.7, -10.0, 13.15, 2.09, 0, 0), (7.8, 14.1, 6.44, 1.61, 0, 0), (-8.4, -11.7, 0.23, 1.50, 1, 1), (-6.9, -9.5, 0.22, 1.18, 0, 1), (-4.4, 0.7, 0.28, 1.33, 1, 1)),
     'avalanche-forest-g': ((7.3, 0.9, 11.51, 1.41, 0, 0), (7.3, 3.3, 11.29, 1.82, 0, 0), (9.5, 2.7, 12.82, 2.03, 0, 0), (9.7, 0.1, 12.92, 2.06, 1, 0), (8.4, 5.0, 11.96, 1.42, 0, 0), (5.3, 1.4, 10.18, 1.52, 0, 0), (7.8, -0.9, 11.42, 1.91, 0, 0), (0.4, -15.2, 1.63, 2.17, 0, 0), (-3.6, -11.2, 1.49, 1.57, 0, 0), (-1.0, -9.6, 3.51, 1.78, 0, 0), (-2.9, -15.3, 0.86, 1.61, 0, 0), (-0.9, -12.8, 2.06, 1.78, 0, 0), (-1.4, -14.7, 1.05, 1.88, 1, 0), (1.5, -12.7, 3.29, 1.66, 1, 0), (8.7, 1.4, 12.38, 2.10, 1, 0), (8.7, 6.3, 12.11, 1.79, 0, 0), (6.9, 5.5, 10.93, 1.41, 1, 0), (10.0, 5.0, 12.93, 1.61, 1, 0), (4.0, -1.7, 8.83, 1.68, 0, 0), (2.6, 2.2, 8.40, 1.52, 0, 0), (-1.1, -0.6, 5.67, 1.67, 1, 0), (2.2, -2.4, 7.49, 1.79, 0, 0), (-1.8, 1.1, 5.31, 2.03, 1, 0), (0.8, -1.0, 7.03, 2.11, 0, 0), (-8.8, 7.6, 0.37, 1.18, 0, 1), (-1.5, -18.3, 0.90, 1.88, 0, 0), (1.9, -18.6, 1.20, 1.43, 0, 0), (1.5, -16.2, 1.73, 1.89, 1, 0), (-3.3, -19.0, 0.59, 2.01, 0, 0), (0.4, -17.6, 1.19, 1.83, 0, 0), (-2.4, -16.6, 0.88, 1.70, 1, 0), (-6.3, 19.9, 1.67, 1.41, 0, 0), (2.8, -6.9, 6.40, 1.93, 0, 0), (-7.4, 0.0, 0.76, 1.31, 0, 1), (-7.7, 2.9, 0.66, 0.98, 1, 1)),
-    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (-2.2, 1.6, 0.21, 1.84, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (-2.1, 3.0, 0.18, 2.81, 1, 0), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
+    'avalanche-forest-h': ((-1.1, -0.1, 0.26, 1.73, 1, 0), (-2.0, -2.7, 0.31, 1.90, 0, 0), (-0.1, 1.9, 0.22, 1.72, 1, 0), (0.7, -0.2, 0.28, 2.10, 0, 0), (-3.6, -0.8, 0.25, 2.11, 0, 0), (2.2, 1.5, 0.24, 1.73, 0, 1), (2.2, -2.2, 0.33, 1.93, 0, 1), (3.0, -1.0, 0.31, 2.13, 0, 1), (0.3, -3.1, 0.35, 1.99, 1, 0), (-5.6, -2.2, 0.24, 1.51, 0, 0), (-4.1, -4.8, 0.25, 1.49, 1, 0), (-3.9, -2.5, 0.28, 1.65, 0, 0), (-4.2, -6.8, 0.22, 1.48, 0, 0), (-5.3, -4.0, 0.23, 2.06, 0, 0), (-2.5, -4.2, 0.29, 2.10, 0, 0), (-2.6, -5.6, 0.27, 1.93, 0, 0), (0.8, -7.0, 0.31, 1.59, 1, 0), (-6.0, 5.0, 0.14, 1.52, 1, 1), (5.5, -0.0, 0.30, 1.36, 0, 1), (5.6, 2.3, 0.26, 1.14, 0, 1), (6.7, 4.6, 0.25, 0.97, 0, 1), (5.4, 5.7, 0.23, 1.24, 1, 1), (6.7, 7.9, 0.22, 1.34, 0, 1), (5.8, 10.1, 0.22, 0.97, 0, 1)),
     'avalanche-forest-i': ((-11.0, 15.3, 13.77, 2.62, 0, 0), (-8.6, 12.2, 17.03, 2.74, 0, 0), (-10.1, 13.9, 15.40, 1.64, 0, 0), (-6.3, 17.0, 11.97, 1.55, 0, 0), (-4.0, 15.9, 10.65, 2.01, 0, 0), (-7.0, 19.8, 13.63, 1.57, 1, 0), (-3.5, 18.0, 11.23, 2.12, 0, 0), (-8.5, 19.5, 14.26, 2.09, 1, 0), (-13.7, 15.8, 15.18, 1.70, 1, 0), (-10.2, 17.9, 13.48, 2.09, 0, 0), (-11.2, 16.7, 12.81, 2.05, 0, 0), (-16.4, 17.1, 15.57, 1.50, 0, 0), (-13.5, 18.3, 14.18, 2.85, 0, 0), (-21.2, 18.8, 18.02, 2.06, 1, 0), (11.3, -5.2, 13.12, 2.08, 0, 0), (12.4, -8.8, 10.07, 2.06, 1, 0), (10.0, -9.6, 12.63, 1.78, 1, 0), (10.1, -4.3, 14.57, 1.74, 0, 0), (13.9, -6.7, 10.19, 1.95, 0, 0), (9.6, -11.2, 12.27, 1.91, 0, 0), (9.7, -7.2, 13.90, 1.66, 0, 0), (7.2, -10.8, 15.98, 1.97, 0, 0), (-3.9, -24.5, 15.86, 1.95, 0, 0), (-5.1, -23.4, 17.80, 2.09, 1, 0), (-1.5, -24.3, 13.34, 2.85, 0, 0), (-0.8, -21.7, 15.63, 2.95, 1, 0), (-2.4, -20.9, 18.08, 2.07, 1, 0), (10.9, -21.5, 3.60, 2.01, 1, 2), (5.0, -30.8, 5.77, 1.42, 0, 2), (7.8, 8.4, 10.02, 1.86, 0, 0), (4.9, 5.3, 14.99, 2.13, 0, 0), (16.3, -17.6, 2.89, 1.98, 0, 2), (5.4, 12.3, 7.57, 1.42, 0, 0), (9.4, -19.3, 6.25, 1.69, 1, 2)),
     'avalanche-forest-j': ((9.2, -9.5, 5.60, 2.06, 1, 2), (7.7, -9.9, 6.62, 2.14, 0, 2), (6.4, -10.6, 7.70, 1.87, 0, 0), (5.0, -11.2, 8.91, 2.03, 0, 0), (10.0, -25.0, 10.29, 1.78, 0, 0), (1.0, -13.4, 12.71, 1.46, 0, 0), (7.4, -26.4, 12.92, 1.75, 0, 0), (6.0, -26.9, 14.26, 2.16, 1, 0), (-1.7, -14.5, 15.12, 1.40, 1, 0), (4.6, -27.6, 15.54, 1.92, 1, 0), (-3.0, -15.3, 16.44, 1.54, 0, 0), (-22.0, 16.0, 13.67, 1.92, 0, 0), (-23.7, 16.5, 13.56, 1.52, 1, 0), (-23.6, 14.2, 13.19, 2.15, 0, 0), (-25.6, 14.8, 13.76, 1.85, 0, 0), (-5.7, 17.8, 17.47, 1.86, 0, 0), (-3.4, 16.8, 16.62, 1.98, 0, 0), (7.1, 2.8, 5.35, 2.05, 0, 2), (2.5, 1.5, 6.89, 1.49, 0, 2), (4.2, 7.6, 9.13, 1.99, 0, 0), (4.0, 4.6, 6.42, 1.88, 1, 2), (0.6, 4.7, 8.02, 1.83, 0, 0), (1.9, 3.9, 7.51, 1.87, 0, 0), (2.2, 5.5, 7.97, 2.08, 0, 0), (5.7, 1.8, 5.32, 2.12, 0, 2), (6.7, 7.4, 8.34, 1.63, 0, 0), (5.9, 5.5, 6.96, 2.00, 1, 2), (8.0, 5.2, 6.60, 1.46, 0, 2), (1.0, 6.7, 8.97, 1.81, 0, 0), (-4.6, -10.7, 14.87, 2.01, 1, 0), (-6.3, -10.5, 15.86, 1.76, 0, 0), (-6.3, -8.8, 14.94, 2.65, 0, 0), (-6.4, 6.6, 10.47, 1.85, 0, 0), (-2.8, 6.9, 9.87, 1.55, 0, 0), (-4.8, 6.4, 10.00, 1.50, 1, 0), (-3.6, 9.4, 11.56, 1.60, 1, 0), (-5.2, 4.3, 9.11, 1.44, 1, 0), (-6.8, 5.2, 9.67, 2.06, 0, 0), (-25.6, 4.8, 17.00, 1.44, 0, 0), (-27.5, 9.4, 14.60, 2.62, 1, 0), (-27.5, 7.6, 15.77, 1.88, 0, 0), (-26.4, 6.6, 16.05, 1.79, 0, 0), (-13.7, 16.2, 15.96, 2.13, 0, 0), (-18.3, 13.7, 13.04, 1.55, 0, 0), (-16.4, 12.8, 12.88, 2.00, 0, 0), (-19.8, 15.1, 13.58, 2.13, 0, 0), (-17.3, 17.6, 16.05, 1.73, 0, 0), (3.9, 15.6, 14.99, 1.97, 0, 0), (5.8, 14.9, 14.06, 1.56, 0, 0), (3.1, 12.6, 12.87, 2.69, 1, 0), (5.2, 13.0, 12.80, 1.91, 1, 0), (4.1, 13.7, 13.50, 1.75, 0, 0), (5.7, 16.4, 15.08, 1.86, 0, 0), (8.4, -27.7, 12.19, 1.63, 0, 0), (-4.0, 12.0, 13.43, 1.72, 1, 0), (-3.7, 13.8, 14.65, 1.89, 0, 0), (-6.2, 15.0, 15.58, 1.96, 0, 0), (-5.4, 16.2, 16.31, 2.13, 0, 0), (-21.2, 5.5, 15.10, 2.97, 1, 0), (14.8, 2.0, 3.65, 1.84, 0, 2), (-1.6, 11.7, 12.87, 1.75, 1, 0), (7.4, -6.9, 5.38, 2.14, 0, 2), (11.0, 11.8, 9.24, 1.97, 0, 0), (1.0, -8.0, 9.66, 1.59, 0, 0)),
     'avalanche-forest-k': ((-6.2, 19.5, 16.86, 1.79, 0, 0), (-1.4, -8.7, 16.81, 2.08, 1, 0), (-3.0, -8.5, 18.18, 2.18, 1, 0), (0.6, 16.3, 12.61, 2.17, 1, 0), (-1.7, 17.8, 14.16, 2.16, 1, 0), (1.8, 19.4, 11.05, 1.58, 0, 0), (1.9, -11.0, 12.87, 1.93, 0, 0), (-2.5, -10.8, 17.82, 1.58, 0, 0), (-0.3, 4.5, 14.96, 1.89, 0, 0), (1.5, 3.4, 13.68, 2.17, 1, 0), (-1.2, 6.4, 15.55, 1.77, 0, 0), (0.7, 0.6, 13.93, 1.66, 1, 0), (-1.2, 1.3, 16.17, 2.09, 0, 0), (-0.9, -17.3, 16.70, 1.90, 0, 0), (-2.6, 10.8, 16.10, 1.67, 0, 0), (8.7, -26.3, 7.52, 1.66, 0, 0), (4.3, -24.9, 10.30, 2.02, 0, 0)),
@@ -7177,7 +7273,7 @@ def hay_barn(g):
     run = D / 2 + 0.5
     for sz in (-1, 1):
         snowy(box((W + 0.7, 0.24, run / math.cos(0.55) + 0.1), (0.0, H + 0.2 + (run / 2) * math.tan(0.55), sz * run / 2),
-                  0xeef4f9, pitch=sz * 0.55), 0.5)
+                  0xeef4f9, pitch=-sz * 0.55), 0.5)                              # (a ridge: with the other sign the slabs met in a valley)
         box((W, 0.16, 0.16), (0.0, H, sz * (D / 2 - 0.15)), 0x6e4a32)
     top = H + 0.34 + run * math.tan(0.55)
     box((W + 0.8, 0.2, 0.3), (0.0, top, 0.0), 0x868ba1)
@@ -7218,8 +7314,9 @@ def flurry_fields(lite=False):
         lane_sheet([(5.6, -2.8), (1.5, -3.0), (1.3, 6.0), (1.3, 14.2)])
         lane_sheet([(1.5, -3.0), (-3.6, -6.4)], 1.1)
         for k, (x, z) in enumerate(((-3.0, 6.6), (-5.4, 8.6), (-2.4, 10.0), (-6.6, 11.6))):
-            cyl(0.55, 1.1, (x - 0.55, 0.5, z), 0xd9b054, segs=8, axis='across', yaw=0.5 * k, stem=True)
-            snowy(box((1.0, 0.14, 0.7), (x, 1.05, z), 0xf3f7fb, yaw=0.5 * k), 0.5)
+            # (each lies along X under its cap: turned about its own end, the bale swung out from under it)
+            cyl(0.55, 1.1, (x - 0.55, 0.5, z), 0xd9b054, segs=8, axis='across', stem=True)
+            snowy(box((1.0, 0.14, 0.7), (x, 1.05, z), 0xf3f7fb), 0.5)
     draped('fields', lying)
 
 FARM_CABINS = ((-5.0, -2.0, 1.08, 0.62, 0.15, 1.2), (-6.5, 6.5, 1.3, 0.46, -0.2, False))
@@ -8248,8 +8345,9 @@ def radio_mast(MX, MZ, MH, bands, flag):
     box((0.7, 0.05, 0.05), (MX, MH - 0.1, MZ), 0x555b66)              # its aerials
     box((0.05, 0.05, 0.5), (MX, MH - 0.3, MZ), 0x555b66)
     for a in (0.6, 2.7, 4.8):
-        gx, gz = MX + 1.5 * math.cos(a), MZ + 1.5 * math.sin(a)
-        strut((MX, MH * 0.7, MZ), (gx, 0.02, gz), 0.025, 0xc8cfdf)
+        # pegged close in: at a stride and a half out they came down on the tents' ridges
+        gx, gz = MX + 0.8 * math.cos(a), MZ + 0.8 * math.sin(a)
+        strut((MX, MH * 0.6, MZ), (gx, 0.02, gz), 0.025, 0xc8cfdf)
     flag_across((MX, MH, MZ), 0.45, 0xff5040, flag, w=0.62, fh=0.38, pole=0x555b66)
 
 @piece(1.0)
@@ -9784,8 +9882,8 @@ def glacier_moraine(rows, seed):
         y0 = g - (0.26 if kind == 0 else 0.15) * s
         sd = seed + 0.37 * i
         lx, lz = 0.12 * s * math.cos(0.7 * sd), 0.8 * 0.12 * s * math.sin(0.7 * sd)
-        top = y0 + sq * s * (0.62 + 0.08 * jitter(0, 5, sd)) - 0.04
-        box((0.16, top + 0.3, 0.16), (x + lx * math.cos(yaw) + lz * math.sin(yaw), (top - 0.3) / 2,
+        top = y0 + sq * s * (0.62 + 0.08 * jitter(0, 5, sd)) - 0.11   # (at -0.04 it came through the top as a white fleck)
+        box((0.1, top + 0.3, 0.1), (x + lx * math.cos(yaw) + lz * math.sin(yaw), (top - 0.3) / 2,
                                       z - lx * math.sin(yaw) + lz * math.cos(yaw)), SNOW)['chamfer'] = 0
     for o in set(bpy.context.scene.objects) - before:
         if o.get('swatch') in ('sky', 'blue'):     # the ice keeps its blue down the ramp
@@ -12773,7 +12871,7 @@ def culvert_build(turn, lite=False):
     # lite (the Android TV's build): no grass bank of its own (a second part,
     # a second draw, for a few strides of turf the lawn already is)
     W = 0.85
-    skew = math.tan(math.radians(33.0)) * turn
+    skew = -math.tan(math.radians(33.0)) * turn
     fr = [(x, 0.0, W, 0.0, 1.0) for x in (-2.45, -1.85, -1.25, -0.65)] + [(0.15, 0.0, W, skew, 1.0)]
     def still():
         brook_channel(fr, 'join', 'join')
@@ -12812,7 +12910,7 @@ def brook_parapet():
     # over it (a plain wall half as high again read from the seat as the
     # blank slab the headwalls were). World units, +X to the road; on the
     # left at yaw 180.
-    L, T, Y0, Y1, N = 3.3, 0.42, -0.4, 0.74, 6
+    L, T, Y0, Y1, N = 3.3, 0.42, -1.3, 0.74, 6          # (footed deep: from -0.4 its downhill end hung over the grass)
     for k in range(N):
         h = Y1 - Y0 - (0.05 if k % 2 else 0.0)
         rowed(box((T, h, L / N), (-T / 2, Y0 + h / 2, -L / 2 + L / N * (k + 0.5)), 'grey'), (14, 22)[k % 2])
@@ -12933,7 +13031,7 @@ def boathouse():
     RED, WHITE, BOARD = 0xcf534f, 0xf8f8fb, 0x9a7b55
     F = local(0.0, 0.0, 0.0)
     D, L, H = 5.0, 7.0, 3.0
-    box((D + 0.6, 0.3, L + 0.6), (0.0, 0.15, 0.0), 'grey')                    # the stone footing
+    box((D + 0.6, 1.1, L + 0.6), (0.0, -0.25, 0.0), 'grey')                   # the stone footing, down into the bank (its landward corner hung over the lawn)
     box((D, H, L), (0.0, 0.3 + H / 2, 0.0), BOARD)
     ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45)
     for sx in (-1, 1):
@@ -14032,7 +14130,18 @@ def park_track(pts):
         b = pts[(i + 1) % n] if closed else pts[min(n - 1, i + 1)]
         tx, tz = b[0] - a[0], b[1] - a[1]
         d = math.hypot(tx, tz)
-        return tx / d, tz / d
+        tx, tz = tx / d, tz / d
+        if not closed and n > 2 and i in (0, n - 1):
+            # an open length's end: its one-sided chord turned on by what the
+            # line bends in a step, the curve's own tangent there, so the next
+            # length's end (cut from the same line) squares up to it (round
+            # 20: each end square to its own last chord left a notch in the
+            # bank and a sleeper askew at every joint on a bend)
+            nx, nz = frame(1 if i == 0 else n - 2)
+            tx, tz = 2 * tx - nx, 2 * tz - nz
+            d = math.hypot(tx, tz)
+            tx, tz = tx / d, tz / d
+        return tx, tz
     def band(profile, color):
         m = len(profile)
         verts, faces = [], []
@@ -14050,12 +14159,17 @@ def park_track(pts):
         return o
     B = PARK_BANK
     band(((1.75, -0.04), (1.0, B), (-1.0, B), (-1.75, -0.04)), 'green')['turf'] = 1   # the embankment
-    band(((0.85, B), (0.55, B + 0.15), (-0.55, B + 0.15), (-0.85, B)), 'lavender')   # the ballast on it
+    # the ballast on it, with a corner under each rail's edge: the line DRAPES,
+    # every vertex lifted by the land under it, and a ballast that spanned the
+    # rails in one quad stood through them wherever the lawn creased across
+    # the line (round 20: rails that tapered away and came back)
+    band(((0.85, B), (0.55, B + 0.15), (0.32, B + 0.15), (0.22, B + 0.15), (-0.22, B + 0.15), (-0.32, B + 0.15),
+          (-0.55, B + 0.15), (-0.85, B)), 'lavender')
     verts, faces = [], []
     for i, (x, z) in enumerate(pts):
         tx, tz = frame(i)
         for a, o in ((-0.11, 0.48), (0.11, 0.48), (0.11, -0.48), (-0.11, -0.48)):
-            verts.append((x + tx * a + tz * o, B + 0.17, z + tz * a - tx * o))
+            verts.append((x + tx * a + tz * o, B + 0.19, z + tz * a - tx * o))
         faces.append(tuple(range(4 * i, 4 * i + 4)))
     ground_poly(verts, faces, 'brown')
     for sd in (-1, 1):
@@ -14170,7 +14284,7 @@ def park_climber(x, z, yaw=0.0, color=0xffc044):
     # the climbing wall up the back, its holds in the park's colours
     box((0.5, H + 0.4, D), F(-D / 2 - 0.3, (H + 0.4) / 2, 0), 0x22c46e, yaw=yaw)
     for k in range(6):
-        box((0.5, 0.45, 0.6), F(-D / 2 - 0.65, 0.5 + 0.4 * k, -1.6 + 0.65 * k * (1 if k % 2 else -0.5)),
+        box((0.5, 0.45, 0.6), F(-D / 2 - 0.65, 0.5 + 0.4 * k, (-1.5, 0.9, -0.5, 1.7, -1.3, 0.3)[k]),    # all on the wall (one hung past its edge)
             (0xffc044, 0xcf534f, 0xa878e8)[k % 3], yaw=yaw)
 
 def park_net(x, z, h=8.0, r=3.6):
@@ -14965,11 +15079,13 @@ def mine_portal():
         for k, (x, z) in enumerate(((8.6, 2.2), (9.4, 2.8), (8.9, 3.4))):            # gold ore spilled by the tipple
             rock_lump(0.34, (x, 0.14, z), 'yellow' if k % 2 == 0 else 0xa8623f, (1.1, 0.7, 1.0), 0.6 * k, seed=k)
     # the powder shed, set back from the line, crates of powder by the door
-    hut(2.6, 2.0, 2.4, (1.4, 0, -6.8), TIMBER, 'slate')
-    for k, (x, z, y) in enumerate(((3.4, -5.5, 0), (3.4, -6.5, 0), (3.4, -6.0, 0.8))):
+    # (on the yard's far side from the stamp mill's ore gallery, which comes
+    # over this yard on trestle legs: at x 1.4 a leg came down through it)
+    hut(2.6, 2.0, 2.4, (-3.0, 0, -6.8), TIMBER, 'slate')
+    for k, (x, z, y) in enumerate(((-1.0, -5.5, 0), (-1.0, -6.5, 0), (-1.0, -6.0, 0.8))):
         box((0.9, 0.8, 0.9), (x, y + 0.4, z), 0x9a7b55, yaw=0.1 * k)
     for k in range(4):
-        box((0.16, 0.16, 0.6), (3.2 + k * 0.16, 1.7, -6.0), 'red')
+        box((0.16, 0.16, 0.6), (-1.2 + k * 0.16, 1.7, -6.0), 'red')
     flagpole((-0.4, 0, -8.8), 3.4, 'red', w=1.0, fh=0.6, wave='anim_flutter:p=2.0#1')
     group([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') is None and not o.get('group')], 'yard')
 
@@ -15163,9 +15279,10 @@ def lite_too(*names):
 # The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
 # vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
 # of the groves and stands (palm()); Driftwood's marram in three-bladed
-# tussocks; Riptide's camp on the vans' plainer wheels and its town's windows
-# without their frames.
-lite_too('reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
+# tussocks, its ghost wood on three limbs a tree and its drying racks with
+# half the fish, each twice as broad; Riptide's camp on the vans' plainer
+# wheels and its town's windows without their frames.
+lite_too('ghost-wood', 'fish-racks', 'reef-shelf', 'tidepool-headland', 'reef-stacks', 'seal-rock', 'rock-poolers-park', 'pirate-stockade',
          'jungle-grove', 'palm-stand', 'dune-marram', 'dune-fence-a', 'dune-fence-b',
          'surf-campers', 'seafront-hotel', 'seafront-terrace', 'seafront-cafe', 'lifeboat-station')
 
@@ -15526,8 +15643,8 @@ def boomtown_south():
     false_front(2.2, 2.0, 2.0, 1.4, 0xf2bf99, 0xcf534f)                           # the barber's
     false_front(-1.2, 2.6, 2.4, 1.6, 0x868ba1, 0xfde4c7)                          # the bank
     boardwalk(-2.6, 7.2)
-    wagon((0.6, 0, -0.6), math.pi / 2)
-    equine((0.6, 0, 0.75), math.pi / 2, 'brown', mane='dark', legs='dark',
+    wagon((1.7, 0, -0.6), math.pi / 2)                 # in the street, off the boardwalk (x 0 to 0.8)
+    equine((1.7, 0, 0.75), math.pi / 2, 'brown', mane='dark', legs='dark',
            life='anim_sway:a=z:d=18:p=7.4:r=0.72#b')                             # a bay
     WHITE, SHINGLE = 0xfdf4de, 0x6e5b3a
     CZ = -6.6
@@ -16872,7 +16989,7 @@ def gulch_adit(at, turn, foot, ground, s, cart=False):
     x = min(foot(s) + 0.3, 0.55)
     g = ground(*at(x, 0.0, s)[::2]) or 0.9
     yaw = turn(s)
-    box((1.2, 1.5, 1.1), at(x - 0.4, g + 0.6, s), ROPE, yaw=yaw)                    # the dark of it
+    box((0.24, 1.5, 1.1), at(x + 0.14, g + 0.6, s), ROPE, yaw=yaw)                  # the dark of it, inside its frame (a box behind the frame stood free of the cliff)
     for dz in (-0.68, 0.68):
         rowed(box((0.34, 1.8, 0.28), at(x + 0.2, g + 0.75, s + dz), 'tan', yaw=yaw), 15)   # timber sets (cream, a stone doorway)
     rowed(box((0.4, 0.3, 1.9), at(x + 0.2, g + 1.7, s), 'tan', yaw=yaw), 15)
@@ -18313,7 +18430,7 @@ def pipe_yard():
     for dz in (-0.55, 0.55):
         box((0.12, 2.3, 0.12), (SX, 1.15, SZ + dz), 'white')
     box((0.08, 1.0, 1.5), (SX, 1.95, SZ), 'white')
-    emblem((SX - 0.06, 1.95, SZ), math.pi / 2 + 1.2, 0.36)
+    emblem((SX - 0.06, 1.95, SZ), math.pi, 0.36)                                # flat on the board's road face
     join_still('yard')
 
 @piece(1.0)
@@ -20276,12 +20393,16 @@ def run_ring(chain, cx, cz, R, a0, a1, y0, y1, color, lite):
 def run_climb(lite):
     # outside the climb's first turn, on the infield side: seen ahead over
     # the kerb from where the spiral starts to where it comes round north
-    run_ring('climb', 60.3, 56.0, 14.0, 172.0, 282.0, 5.6, 3.6, 0xa878e8, lite)
+    # (it ends short of the summit's screw lift: carried on round to 282
+    # degrees it ran through the lift's cage and the summit's trestle)
+    run_ring('climb', 60.3, 56.0, 14.0, 172.0, 222.0, 5.6, 4.7, 0xa878e8, lite)
 
 def run_dive(lite):
     # outside the descent, on the room's side: seen ahead from the top leg's
     # end and overhead from the turns below it
-    run_ring('dive', 60.3, 0.0, 14.0, 8.0, -112.0, 7.4, 6.0, 0x6cbf6c, lite)
+    # (it starts past the vortex: from 8 degrees its drum stood in the
+    # vortex's inlet and its chute ran through the bowl)
+    run_ring('dive', 60.3, 0.0, 14.0, -52.0, -112.0, 6.7, 6.0, 0x6cbf6c, lite)
 
 def run_wall(lite):
     # outside the climb on the room's side, from beside the top leg's end
@@ -21377,7 +21498,7 @@ def castle_watchtower():
         block_run((0.0, sz * (T / 2)), (0.0, sz * (T / 2 + 3.9)), 0.0, 1 if sz > 0 else 3, faces=('+x', '+y'), crenels=True)
     for z in (-2.8, 2.8):
         knight((1.4, 0.0, z), DEFENDERS, 0.0)
-    toy_cannon(2.2, 0.2, 0x5a8fd8)
+    toy_cannon(2.8, 0.2, 0x5a8fd8)                        # its trail clear of the tower's foot
     merge_paint()
 
 

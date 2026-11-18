@@ -275,12 +275,13 @@ void lowTideReef(Theme& t) {
 }
 
 // Driftwood is a storm beach: the gulls more of them and harder at it in the
-// wind, no kites, no parasol or sandcastle (and no sailboat out in that sea);
-// the lighthouse stays, it is a storm coast. Driftwood lies thick along the
+// wind, no kites and none of the postcard: the track's own light station on
+// its dune is the coast's one lighthouse (a second on an islet offshore read
+// as a mistake). Driftwood lies thick along the
 // tide line, the freight the sea brought in is crates, and the gantry is
 // timber, like the trunk. No palms: the trees here are dead.
 void stormBeach(Theme& t) {
-  t.landmarks = { LM_LIGHTHOUSE };
+  t.landmarks.clear();
   t.kites.count = 0;
   t.kites.tints.clear();
   t.birds.count = 6; t.birds.speed = 0.34f; t.birds.flapHz = 2.8f;

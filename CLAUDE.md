@@ -48,6 +48,9 @@ npm run see:landmarks [-- --track id] [--out dir] [--four]
 npm run see:pops [-- --track id] [--lines 540] [--out dir]
                                   # what swaps form in a racer's picture per frame over a
                                   # lap (far forms, cull boxes, the fog's cutoff), in pixels
+npm run check:floating [-- --track id] [--detail lite]
+                                  # every set piece's standing parts against the ground DRAWN
+                                  # under them where they are placed: what hangs over the land
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)

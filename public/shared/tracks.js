@@ -299,9 +299,12 @@ const BOXES = {
 // sand up to it, adding nothing where raised ground already stands, low and broad
 // (a dozen units of radius: the ground's 9 u grid cannot draw less) with a
 // flat `top`, so the piece on it stands at the road's height. The piece must
-// level nothing (set_prototypes.py on_a_rise()), or its clearing cuts down to
-// the rise's foot by the kerb: it stands on the plain, and takes the rise's
-// height as its `y`.
+// level nothing, or its clearing cuts down to the rise's foot by the kerb.
+// The 9 u grid draws no rise flat, so what stands on one LIES ON IT
+// (set_prototypes.py lie_on_land(): every part drapes, and the row's `y`
+// only places what cannot, a chimney's smoke); a piece that stands rigid at
+// a typed `y` hangs over the sand's fall. on_a_rise() is for what stands in
+// the sea or on the plain and only has to level nothing.
 // `lite: false` keeps a form off the lite tier (the Android TV box), like a set
 // piece's: land behind other land that the box's frame cannot carry.
 // Ground never rises through a deck (the renderer caps it under every road),
@@ -546,7 +549,7 @@ export const TRACKS = {
       // the lifeboat station's swell of sand over the beach, at the height of
       // the hop the road comes over beside it (lower, only its roof and flag
       // showed over the crest's kerb)
-      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.8, top: 0.55, near: 0.4, w: 5 },
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.2, top: 0.55, near: 0.4, w: 5 },
       // ...and the sea brought in to the foot of its slip
       { kind: 'shore', u: 0.9, lat: 22, len: 10, r: 14 },
       // the reef terrace the rock pool lies in, at the road's height, so
@@ -611,7 +614,7 @@ export const TRACKS = {
       { model: 'set-skull-rock', u: 0.64, lat: 20, yaw: 30 },
       // the cave levels nothing (its floor drapes) and the land's 9 u chords
       // rise under it, so it is lifted onto them
-      { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.9 },
+      { model: 'set-smugglers-cave', u: 0.975, lat: -7.4, yaw: 180, y: 0.6 },
       { model: 'set-jungle-grove', u: 0.93, lat: 9.5 },
       // the lookout and its rope bridge stand on the road's own line, over it
       { model: 'set-pirate-lookout', u: 0.27, lat: 0 },
@@ -724,7 +727,7 @@ export const TRACKS = {
       { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
       { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
       { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
-      { model: 'set-bonfire', u: 0.468, lat: -10.2, yaw: 160, y: 0.87 },
+      { model: 'set-bonfire', u: 0.468, lat: -10.2, yaw: 160, y: 0.7 },
       { model: 'set-driftwood-forts', u: 0.438, lat: -11.0, y: 0.86 },
       // the fishers' upturned-boat stores where the pass leaves the beach
       { model: 'set-boat-huts', u: 0.575, lat: 10.5 },
@@ -754,7 +757,14 @@ export const TRACKS = {
       { model: 'set-smokehouse', u: 0.075, lat: -10.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
       // them; lifted to the verge they stand on
-      { model: 'set-net-huts', u: 0.97, lat: -8.6, yaw: 180, y: 0.59 }
+      { model: 'set-net-huts', u: 0.97, lat: -8.6, yaw: 180, y: 0.59 },
+      // the infield, which lay bare (round 20): the fishers' drying racks
+      // across the start straight from their huts, the chapel the storms
+      // unroofed on the dune inside the first bend, and a wood the sand
+      // and the salt killed beside the east run
+      { model: 'set-fish-racks', u: 0.012, lat: 11.5 },
+      { model: 'set-chapel-ruin', u: 0.15, lat: 19 },
+      { model: 'set-ghost-wood', u: 0.31, lat: 14 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
@@ -800,6 +810,8 @@ export const TRACKS = {
       { kind: 'clear', u: 0.34, lat: 11, len: 26, r: 6 },
       { kind: 'clear', u: 0.41, lat: 11, len: 26, r: 6 },
       { kind: 'ridge', u: 0.15, lat: -16, len: 14, r: 12, h: 0.72, top: 0.55, near: 0.4, w: 3 },
+      // the chapel's yard, grass among the stones
+      { kind: 'paint', u: 0.15, lat: 19, len: 4, r: 7, w: 4, tint: 0xa8d090 },
       // the storm sea comes up the beach to the strand line it left
       { kind: 'shore', u: 0.37, lat: -16.2, len: 110, r: 40 }
     ]
@@ -849,7 +861,7 @@ export const TRACKS = {
       { model: 'set-seafront-cafe', u: 0.369, lat: 9 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
       { model: 'set-surf-club', u: 0.09, lat: -11, yaw: 180, y: 0.8 },
-      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180, y: 0.8 },
+      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180, y: 0.55 },
       { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
       { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180, y: 0.85 },
       { model: 'set-channel-beacon', u: 0.458, lat: -9.5 },

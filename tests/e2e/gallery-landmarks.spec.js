@@ -63,6 +63,12 @@ const parking = (page) => page.evaluate(() => {
 const finite = (q) => [q.eye.x, q.eye.y, q.eye.z, q.target.x, q.target.y, q.target.z, q.fov]
   .every(Number.isFinite) && q.fov > 0;
 
+// No review round: the real endpoint answers with whatever round this checkout
+// has in scratch/review, and a round opens the panel on its Review tab.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/review-round', (route) => route.fulfill({ status: 404, json: { error: 'none' } }));
+});
+
 test('landmark gallery: layout, split and every view', async ({ page }) => {
   // It walks every view of every piece on several tracks, so it grows with the
   // world; beside the suite's other workers it outruns the default limit.

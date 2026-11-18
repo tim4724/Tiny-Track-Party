@@ -770,8 +770,10 @@ to do both:
   own mask (full to `w` inside the waterline, gone `kBeachRamp` further out)
   as a FILL: the sand comes up to it and it adds nothing where the land
   already stands that high (the raised ground beside a hop). The piece on it
-  must level nothing, or its clearing cuts back down to the rise's foot; the
-  authoring side is in `tracks.js`'s landform header.
+  must level nothing, or its clearing cuts back down to the rise's foot, and
+  it DRAPES whole (`set_prototypes.py lie_on_land()`): the 9 u grid draws no
+  rise flat, so a piece standing rigid at a typed `y` hangs over the sand's
+  fall. The authoring side is in `tracks.js`'s landform header.
 - **The road ahead stays visible**: a tree or prop that would cut the chase
   camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
   raised verge would otherwise stand it over the camera.

@@ -124,7 +124,7 @@ export default [
       'scripts/bake-cues.mjs', 'scripts/perf-features.mjs', 'scripts/perf-race.mjs',
       'scripts/lobby-fit-check.mjs', 'scripts/scene-budget.mjs', 'scripts/landmark-score.mjs',
       'scripts/landmark-place.mjs', 'scripts/landmark-see.mjs', 'scripts/pop-see.mjs', 'scripts/film-laps.mjs',
-      'scripts/score-verge.mjs',
+      'scripts/score-verge.mjs', 'scripts/set-float.mjs',
     ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
