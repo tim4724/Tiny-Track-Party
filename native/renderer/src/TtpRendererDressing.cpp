@@ -2737,12 +2737,11 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     // Kicker ramps: a wedge across the road from its foot on the deck to its
     // lip KICKER_RISE up, swept along the deck so it follows whatever the road
-    // does under it. The slope wears the boost pad's colour (or the theme's
-    // kicker: Skysnake's is a ladder's top rung), the flanks and the lip face
-    // the structures'. Every face keeps its own vertices so the
-    // normals stay flat, and is wound to face out (slope up, lip forward).
-    const uint32_t slopeC = packAlbedo(srgbToLinear(tb.kickerCol ? tb.kickerCol
-            : ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
+    // does under it. The slope wears the boost pad's colour (a ramp is a
+    // launch), the flanks and the lip face the structures'. Every face keeps
+    // its own vertices so the normals stay flat, and is wound to face out
+    // (slope up, lip forward).
+    const uint32_t slopeC = packAlbedo(srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk), 1.0f);
     const auto face = [&](const float3& a, const float3& b, const float3& c,
             const float3& d, uint32_t col) {
         const uint32_t base = (uint32_t) mStructures.verts.size();

@@ -145,8 +145,9 @@ export const GAUNTLET = [
 ];
 
 // ---- Skysnake (Hard): snakes and ladders, raced across the board. Up two LADDERS
-// (straight climbs, each cresting in a hop) to the top deck at 5.2 world, the S-S
-// weave in the sky, round the top corner and down the SNAKE (one long dive) to the
+// (straight climbs, each with a hump for its top rung that a car raced flat out
+// hops off: a hill, launched by its crest as the other cups' are) to the top deck
+// at 5.2 world, the S-S weave in the sky, round the top corner and down the SNAKE (one long dive) to the
 // board, then home past a toy loop. Composed by scripts/compose-stunt.mjs (solved
 // grid and first legs + the loop's probe-measured roll trim).
 export const SKYSNAKE = [
@@ -154,11 +155,15 @@ export const SKYSNAKE = [
   arc(RL, -90),                                                      // east
   straight(12),                                                      // (closure-solved)
   straight(10, { rise: 1.3, pillars: true }),                        // LADDER 1 → 2.6 world
-  straight(8, { pillars: true }),                                    // the mid deck
+  straight(2, { rise: 0.4, pillars: true }),                         // its top rung: a hump the racers hop off
+  straight(2, { rise: -0.4, pillars: true }),                        //  and land down the far side of, onto
+  straight(4, { pillars: true }),                                    // the mid deck
   arc(RL, -90, { pillars: true }),                                   // south
-  straight(8, { pillars: true }),
+  straight(6, { pillars: true }),
   straight(10, { rise: 1.3, pillars: true }),                        // LADDER 2 → 5.2 world
-  straight(6, { pillars: true }),                                    // (its kicker's landing)
+  straight(2, { rise: 0.4, pillars: true }),                         // its top rung, as the first (the climb starts
+  straight(2, { rise: -0.4, pillars: true }),                        //  2 sooner, so the car is down before the weave)
+  straight(4, { pillars: true }),                                    // the top deck
   arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
   arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
   straight(3, { pillars: true }),
@@ -2210,9 +2215,6 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Each climb ends in a kicker: the racers kick up off its top onto the
-    // next deck.
-    kickers: [ { u: 0.336 }, { u: 0.523 } ],
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
     // snakes are jointed wooden ones arching along the kerb (the grid
@@ -2323,14 +2325,13 @@ export const TRACKS = {
     // the south leg's outside and round a loop of its own beside the mid
     // leg's; on the floor to a stair lift at the corner home, onto a wooden
     // marble racer of two stepped boards beside the grid straight, and from
-    // its foot back into the tower's. Where the lap climbs and comes down
-    // its spirals the run's sections lie on the floor under the decks, so a
-    // side run of its own stands round the outside of each at deck height,
-    // and another round the climb's wall side; a click-clack board faces the
-    // descent's lower turn from outside the skyway, and a second span of
-    // twin rails crosses the skyway's far end, seen coming its whole length.
-    // The lite tier leaves the room's train out, to pay for the run's new
-    // sections. Each section is built in the world's
+    // its foot back into the tower's. Where the lap comes down its spiral
+    // the run's sections lie on the floor under the decks, so a side run of
+    // its own stands round the outside of the descent at deck height; a
+    // click-clack board faces the descent's lower turn from outside the
+    // skyway, and a second span of twin rails crosses the skyway's far end,
+    // seen coming its whole length. The run is the room's one mover: this
+    // room has no train. Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
     set: [
@@ -2344,14 +2345,11 @@ export const TRACKS = {
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
-      { model: 'set-marble-run-climb', u: 0.25, lat: -20, yaw: -90 },
       { model: 'set-marble-run-dive', u: 0.5, lat: 5.26, yaw: 180 },
-      { model: 'set-marble-run-wall', u: 0.25, lat: 7, yaw: -90 },
       { model: 'set-marble-run-cross', u: 0.5093, lat: 0, yaw: 180 },
       { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
       { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
-      { model: 'set-room-train-helix', u: 0, lat: 0, lite: false },
       { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
     ]
   },

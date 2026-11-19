@@ -407,8 +407,6 @@ void playroomTrack(Theme& t, const std::string& track) {
     // the board-game room: cream over terracotta, the snake's green at the window, pine boards
     room(t, 0xf6e9cf, 0xb5584c, 0x4f9f5c, 0x9a7b55, 0xd6b07c);
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
-    // each ladder's kicker is its top rung, the ladders' cream
-    t.kicker = 0xfde4c7;
   } else if (track == "skyline") {
     // a city-night nursery: dusk blue over navy, curtains the yellow of lit windows, pale ash boards
     room(t, 0x7f93cf, 0x2a3c8c, 0xf2c14e, 0xfbf6ec, 0xc2b49c);

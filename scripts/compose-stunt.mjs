@@ -339,11 +339,15 @@ export function designSkysnake() {
     arc(RL, -90),                                                     // east
     straight(5, { _leg: true }),
     straight(10, { rise: 1.3, pillars: true }),                       // LADDER 1 → 2.6 world
-    straight(8, { pillars: true }),                                   // the mid deck
+    straight(2, { rise: 0.4, pillars: true }),                        // its top rung: a hump the racers hop off
+    straight(2, { rise: -0.4, pillars: true }),
+    straight(4, { pillars: true }),                                   // the mid deck
     arc(RL, -90, { pillars: true }),                                  // south, on the mid deck
-    straight(8, { pillars: true }),
+    straight(6, { pillars: true }),
     straight(10, { rise: 1.3, pillars: true }),                       // LADDER 2 → 5.2 world
-    straight(6, { pillars: true }),                                   // (its kicker's landing)
+    straight(2, { rise: 0.4, pillars: true }),                        // its top rung
+    straight(2, { rise: -0.4, pillars: true }),
+    straight(4, { pillars: true }),                                   // the top deck
     arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),  // THE SKY WEAVE (net 0)
     arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
     straight(3, { pillars: true }),

@@ -280,9 +280,6 @@ struct Theme {
   uint32_t gate = 0xffffff;       // near-white grade over the start/finish gate
   GantrySpec gantry;
   uint32_t boost = 0x22c9b6;      // the biome's ONE speed-accent identity colour
-  // A kicker ramp's slope; 0 wears the boost disk's (a ramp is a launch).
-  // Post-corpus (theme_check does not serialize it).
-  uint32_t kicker = 0;
   bool hasWater = false;
   WaterSpec water;
   HazeSpec haze;
