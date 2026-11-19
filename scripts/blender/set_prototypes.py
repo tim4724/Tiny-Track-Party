@@ -4297,74 +4297,71 @@ def tidepool_kelp(strands, mats, seed):
                 pl.flip()
         rowed(o, row)
 
-def tidepool_rib(polys, spine, seed):
+def tidepool_rib(polys, x0, x1, z0, slant, lumps, seed):
     """A rib of the reef the tide left standing out of the sand, appended to
-    `polys`: one low back of rock along `spine` [(x, z, half width, height),
-    ...], its crest wandering off the middle and its flanks falling to feet
-    sunk in the sand, run out to nothing at both ends. One continuous form
-    (round 25: a row of same-size boulders read as stepping stones). Faces
-    painted as stone() paints the reef's (reef_tone)."""
-    N = len(spine)
-    secs = []
-    for i, (x, z, w, h) in enumerate(spine):
-        (ax, az), (bx, bz) = spine[max(0, i - 1)][:2], spine[min(N - 1, i + 1)][:2]
-        L = math.hypot(bx - ax, bz - az) or 1.0
-        nx, nz = (bz - az) / L, -(bx - ax) / L           # across the rib
-        off = 0.2 * w * jitter(i, 1, seed)
-        sh = 0.6 + 0.15 * jitter(i, 2, seed)
-        sec = []
-        for (d, y) in ((-w, -0.2), (-0.78 * w, sh * h), (-0.3 * w + off, h), (0.34 * w + off, 0.94 * h),
-                       (0.8 * w, (sh - 0.08) * h), (w, -0.2)):
-            sec.append((x + nx * d, y, z + nz * d))
-        secs.append(sec)
-    for i in range(N - 1):
-        for j in range(5):
-            q = [secs[i][j], secs[i][j + 1], secs[i + 1][j + 1], secs[i + 1][j]]
-            for t in ((q[0], q[1], q[2]), (q[0], q[2], q[3])) if (i + j) % 2 else ((q[0], q[1], q[3]), (q[1], q[2], q[3])):
-                nrm = face_normal(t)
-                if nrm[1] < 0:
-                    t, nrm = t[::-1], tuple(-v for v in nrm)
-                if nrm[1] > 0.8:
-                    col = 'lavender'
-                else:
-                    col = 'grey' if nrm[0] * SUN[0] + nrm[1] * SUN[1] + nrm[2] * SUN[2] > 0.25 else WET
-                polys.append((col, list(t)))
+    `polys`: a chain of the reef's own lumps (tide_lump, in the box's coarser
+    cut in both tiers: a rib is a dozen of them) from x0 by the kerb down
+    the beach to x1, along a line that wanders, each lump (its length along
+    the rib, its breadth, its height) run into the next, no two a size, their
+    feet sunk and wet-dark, the taller ones pale on top. Round 25: a row of
+    same-size boulders read as stepping stones, then one extruded back as a
+    plank of stone."""
+    total = sum(l for l, _, _ in lumps)
+    run = 0.0
+    with lite_parts(True):
+        for i, (l, w, h) in enumerate(lumps):
+            t = (run + l / 2) / total
+            run += l
+            x = x0 + (x1 - x0) * t
+            z = z0 + slant * (x0 - x) + 0.6 * wobble(x, seed, 7.0) + 0.35 * jitter(i, 1, seed)
+            tide_lump(polys, (x, z), h, 0.68 * l * abs(x1 - x0) / total, w, slant + 0.5 * jitter(i, 2, seed), seed + 1.7 * i,
+                      sink=0.3, lean=(0.25 * jitter(i, 3, seed), 0.25 * jitter(i, 4, seed)), roundness=2.4 + jitter(i, 5, seed),
+                      top='lavender' if h > 0.75 else None, wet=0.2)
 
 @piece(1.0)
 def tide_ledges():
     # Tidepool: the top run after the seals' bend, where the beach lay bare
     # to the water: ribs of the reef the tide has left standing, running
-    # from a stride past the kerb down the beach to the sea (-X), each one
-    # low back of rock of its own length and height (tidepool_rib), a few
-    # boulders broken off them, and the kelp the tide dropped between them
-    # in dark straps and flat heaps (tidepool_kelp). Draped whole. +X is the
+    # from a stride past the kerb down the beach to the sea (-X), each a
+    # chain of the reef's rounded lumps low in the sand (tidepool_rib), the
+    # puddles the tide left between them, and the kelp it dropped there in
+    # dark straps and flat heaps (tidepool_kelp). Draped whole. +X is the
     # road; it runs along it (+Z).
     def build():
         polys = []
-        ribs = ((-9.5, 0.28, 2.4, -11.5, 1.9, 0.6), (-5.2, 0.1, 0.6, -6.5, 1.2, 0.34), (-1.5, -0.18, 2.6, -13.0, 2.2, 0.75),
-                (3.4, 0.05, -1.5, -9.0, 1.3, 0.4), (7.5, 0.22, 2.2, -10.0, 1.7, 0.55))
-        for k, (z0, slant, x0, x1, w, h) in enumerate(ribs[::2] if LITE else ribs):
-            n = 5 if LITE else 6
-            spine = []
-            for i in range(n):
-                t = i / (n - 1)
-                x = x0 + (x1 - x0) * t
-                env = math.sin(math.pi * (0.06 + 0.9 * t)) ** 0.6           # run out at both ends
-                bulge = 1.0 + 0.3 * jitter(i, 5, z0)
-                spine.append((x, z0 + slant * (x0 - x) + 0.35 * wobble(x, z0, 6.0), w * env * bulge,
-                              h * env * (1.0 + 0.3 * jitter(i, 6, z0)) * (1.0 - 0.35 * t)))
-            tidepool_rib(polys, spine, 300.0 + k)
-        for o in colored_faces(polys, 'stone'):
-            pass
-        for k, (x, z, sz) in enumerate(((1.0, -6.8, 1.5), (-6.5, -3.6, 1.1), (-3.0, 5.4, 1.7), (-10.5, 4.6, 1.2), (0.5, 10.2, 1.0))):
-            stone(x, z, sz, 0.9 * k, 320.0 + k, squat=0.5, rock=('grey', WET), top='lavender', y=0.02)
-        reef_tone()
+        ribs = ((2.2, -10.5, -9.0, 0.26, ((1.0, 1.1, 0.55), (1.5, 1.6, 1.0), (0.8, 0.9, 0.4), (1.3, 1.4, 0.8), (0.9, 0.8, 0.35))),
+                (2.4, -12.5, -1.8, -0.16, ((0.8, 0.9, 0.45), (1.2, 1.3, 0.7), (1.6, 1.8, 1.2), (1.0, 1.0, 0.5), (1.3, 1.2, 0.65))),
+                (-1.0, -8.5, 3.6, 0.05, ((1.0, 0.9, 0.4), (1.2, 1.1, 0.6))),
+                (2.0, -9.5, 8.0, 0.2, ((1.3, 1.4, 0.9), (0.9, 1.0, 0.45), (1.4, 1.2, 0.7), (0.8, 0.8, 0.35))))
+        for k, (x0, x1, z0, slant, lumps) in enumerate(ribs):
+            if LITE:
+                lumps = lumps[:3]
+                x1 = x0 + (x1 - x0) * 0.7
+            tidepool_rib(polys, x0, x1, z0, slant, lumps, 300.0 + 11.0 * k)
+        tide_rock(polys)
+        # the puddles between the ribs: still water a hand deep, pale at its edge
+        water = []
+        for k, (x, z, r) in enumerate(((-3.2, -5.6, 1.3), (-5.6, 5.4, 1.0))):
+            M = 8
+            rim = [(r * (0.75 + 0.5 * (jitter(i, k, 9.0) + 0.5)), 2 * math.pi * i / M) for i in range(M)]
+            for i in range(M):
+                (r0, a0), (r1, a1) = rim[i], rim[(i + 1) % M]
+                o0, o1 = (x + r0 * math.cos(a0), 0.0605, z + 1.3 * r0 * math.sin(a0)), (x + r1 * math.cos(a1), 0.0605, z + 1.3 * r1 * math.sin(a1))
+                i0, i1 = (x + 0.6 * r0 * math.cos(a0), 0.0635, z + 0.78 * r0 * math.sin(a0)), (x + 0.6 * r1 * math.cos(a1), 0.0635, z + 0.78 * r1 * math.sin(a1))
+                water.append((('sky', 24), [o0, i0, i1, o1]))
+                water.append((('blue', 6), [i0, (x, 0.066, z), i1]))
+        for key in sorted({k for k, _ in water}):
+            o = colored_faces([(key[0], q) for k, q in water if k == key], 'puddle')[0]
+            for pl in o.data.polygons:
+                if pl.normal.z < 0:
+                    pl.flip()
+            rowed(o, key[1])
         strands = []
-        for i in range(6 if LITE else 10):
+        for i in range(5 if LITE else 8):
             z = -11.0 + 22.0 * frac(0.618 * i + 0.1)
             strands.append((-1.6 + 1.3 * wobble(z, 3.0, 7.0) + 0.8 * jitter(i, 1, 4.0), z, 1.4 + 1.2 * (jitter(i, 2, 4.0) + 0.5),
                             1.2 * jitter(i, 3, 4.0) + (1.5 if i % 4 == 0 else 0.0)))
-        tidepool_kelp(strands, ((-0.9, -7.6, 0.8), (0.2, 0.6, 1.0), (-2.2, 5.6, 0.7)), 7.0)
+        tidepool_kelp(strands, ((-0.9, -7.0, 0.8), (0.4, 1.2, 1.0), (-2.2, 6.4, 0.7))[:2 if LITE else 3], 7.0)
     # the wet sand between the ribs, from a stride past the kerb down to the
     # sea (wet_sand)
     def reach(a):

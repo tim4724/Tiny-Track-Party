@@ -553,14 +553,14 @@ export const TRACKS = {
       // the west run and the bend, a few pixels of her). And the last
       // tide's wrack along the beach where it lay bare and stands near the
       // road's height (a print: it claims no ground; on the low beach the
-      // kerb hides it). Beside the knoll it lies on the strip of sand
-      // between the kerb and the knoll's grass.
+      // kerb hides it). One row past the knoll, on the sand between its
+      // grass and the crab fishers' landing (a second beside it lay on the
+      // knoll's green, which is painted to the kerb).
       { model: 'set-headland-arch', u: 0.705, lat: 0 },
       { model: 'set-seal-skerry', u: 0.755, lat: 17.6 },
       { model: 'set-fishing-boat', u: 0.79, lat: 35.1, scale: 1.5 },
       { model: 'set-lobster-buoys', u: 0.789, lat: 19.6 },
-      { model: 'set-kelp-line', u: 0.565, lat: 8.3 },
-      { model: 'set-kelp-line', u: 0.602, lat: 9, yaw: 180 },
+      { model: 'set-kelp-line', u: 0.611, lat: 9.5, yaw: 180 },
       { model: 'set-kelp-line', u: 0.025, lat: 11.5 },
       { model: 'set-kelp-line', u: 0.925, lat: 12, yaw: 180 }
     ],
@@ -607,9 +607,9 @@ export const TRACKS = {
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the camper lane (its gravel claims no footprint)
       { kind: 'clear', u: 0.973, lat: 10, len: 26, r: 5 },
-      // ...nor on the wrack beside the knoll (a print, likewise: a seeded
+      // ...nor on the wrack past the knoll (a print, likewise: a seeded
       // boulder sat on the kelp)
-      { kind: 'clear', u: 0.584, lat: 8.6, len: 26, r: 2.5 },
+      { kind: 'clear', u: 0.611, lat: 9.5, len: 14, r: 2.5 },
       // nothing seeded on the downs: a crate on a crest read as a prop
       // dropped on a hilltop
       { kind: 'clear', u: 0.25, lat: -32, len: 30, r: 22 },
