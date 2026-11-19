@@ -1823,7 +1823,7 @@ def bonfire():
     for i in range(6):
         box((0.4, 0.75, 0.04), (-0.95 + 0.4 * i, 0.5, -2.0), (0xff5040, 0xfff6eb)[i % 2])
     for i in range(4):
-        box((0.06, 1.0, 0.06), (-1.15 + 0.8 * i, 0.5, -2.0), 0x9a6a46)
+        box((0.06, 1.0, 0.12), (-1.15 + 0.8 * i, 0.5, -2.0), 0x9a6a46)     # (proud of the cloth both sides)
     marker('anim_smoke', (0.0, 0.9, 0.0))
     join_still('fire')
     lie_on_land()
@@ -4522,7 +4522,8 @@ def root_plate(at, r, face=1):
     cy = y + 0.9 * r
     cyl(r, 0.24, (x, cy, z - 0.12), 'tan', segs=10, axis='along')
     for rr, c in ((0.72 * r, 0x9a6a46), (0.46 * r, 'tan'), (0.22 * r, 0x9a6a46)):
-        cyl(rr, 0.3 + (r - rr) * 0.05, (x, cy, z - 0.15), c, segs=10, axis='along')
+        d = (r - rr) * 0.05                              # each ring proud of the last on BOTH faces (one shared back plane flickered)
+        cyl(rr, 0.3 + 2 * d, (x, cy, z - 0.15 - d), c, segs=10, axis='along')
     for a in (-0.9, -0.2, 0.5, 1.2, 1.9, 2.6, 3.4, 4.2):
         rod((x + 0.7 * r * math.cos(a), cy + 0.7 * r * math.sin(a), z),
             (x + 1.4 * r * math.cos(a), max(0.05, cy + 1.4 * r * math.sin(a) - 0.2), z + face * 0.5),
@@ -4751,8 +4752,8 @@ def fish_racks():
         cyl(0.32, 0.1, (1.6, 0.32, 0.2 + sz * 0.46), 'slate', segs=10, axis='along')
         beam((2.2, 0.5, 0.2 + sz * 0.3), (3.1, 0.75, 0.2 + sz * 0.3), 0.08, wood)
     box((1.1, 0.3, 0.6), (1.6, 0.72, 0.2), 'cream')
-    for (x, z, c) in ((1.9, 1.6, 'tan'), (2.4, 1.1, 'cream'), (1.5, -1.2, 'tan')):
-        cyl(0.34, 0.4, (x, 0.0, z), c, r2=0.42, segs=9)
+    for (x, z, c, h) in ((1.9, 1.6, 'tan', 0.4), (2.4, 1.1, 'cream', 0.33), (1.5, -1.2, 'tan', 0.4)):   # (the two that touch, not level)
+        cyl(0.34, h, (x, 0.0, z), c, r2=0.42, segs=9)
     join_still('racks')
     lie_on_land()
 
@@ -5384,7 +5385,9 @@ def drift_portal(t, out):
         box((1.0, 0.3, 0.8), (cx, DUNE_HW + 0.15, cz), DUNE_COPE, yaw=yaw)
     cx, _, cz = at(0.0, 0.0, E - 0.15)
     box((2 * DUNE_WC + 0.3, 0.35, 1.4), (cx, DUNE_HW + 0.12, cz), DUNE_COPE, yaw=yaw)
-    box((2 * DUNE_WC - 1.2, 0.25, 0.3), (at(0, 0, E + 0.1)[0], DUNE_HW - 0.7, at(0, 0, E + 0.1)[2]), DUNE_DRESSED, yaw=yaw)
+    # (this band and the courses below stand less proud than the voussoirs:
+    # in one plane with their faces, they flickered)
+    box((2 * DUNE_WC - 1.2, 0.25, 0.24), (at(0, 0, E)[0], DUNE_HW - 0.7, at(0, 0, E)[2]), DUNE_DRESSED, yaw=yaw)
     # the headwall laid in courses (a band proud of the face either side of
     # the ring) on a plinth of dressed stone at the piers' feet
     rise = DUNE_CROWN - DUNE_SPRING
@@ -5394,11 +5397,11 @@ def drift_portal(t, out):
             a0, a1 = ring, DUNE_WC - 0.7
             if a1 - a0 < 0.3:
                 continue
-            cx, _, cz = at(s * (a0 + a1) / 2, 0.0, E + 0.05)
-            rowed(box((a1 - a0, 0.16, 0.2), (cx, y, cz), DUNE_STONE, yaw=yaw), 22)
+            cx, _, cz = at(s * (a0 + a1) / 2, 0.0, E)
+            rowed(box((a1 - a0, 0.16, 0.16), (cx, y, cz), DUNE_STONE, yaw=yaw), 22)
     for s in (-1, 1):
         cx, _, cz = at(s * (DUNE_WV + DUNE_WC - 0.6) / 2, 0.0, E + 0.08)
-        box((DUNE_WC - DUNE_WV - 0.6, 1.3, 0.3), (cx, 0.25, cz), DUNE_DRESSED, yaw=yaw)
+        box((DUNE_WC - DUNE_WV - 0.52, 1.3, 0.3), (cx, 0.25, cz), DUNE_DRESSED, yaw=yaw)
     # the wingwalls along the cutting: a face to the road, its top falling
     # with the sand behind it to the cutting's floor, coped, a pier at the end
     lw = 8.0 if out < 0 else 4.5
@@ -5676,7 +5679,7 @@ def storm_buoy():
                 x, z = -1.3 - 4.6 * t, 1.0 + 1.6 * math.sin(2.4 * t)
                 box((0.36, 0.16, 0.22), (x, 0.06, z), 'dark', yaw=0.9 * math.cos(2.4 * t) + (0.5 if k % 2 else 0.0))
             for k, (x, z, yw) in enumerate(((1.2, -0.6, 0.4), (0.9, 0.9, 1.5), (-0.6, -1.4, 2.3), (1.7, 0.2, 0.9))):
-                rowed(box((0.6, 0.26, 1.5), (x, 0.08, z), 'olive' if k % 2 else 0x7a5a3a, yaw=yw), 30)     # kelp
+                rowed(box((0.6, 0.26 - 0.03 * k, 1.5), (x, 0.08, z), 'olive' if k % 2 else 0x7a5a3a, yaw=yw), 30)     # kelp (no two tops level)
     draped('chain', chain)
 
 # ---- round 22: what the beach's bare stretches got ----
@@ -16909,63 +16912,105 @@ HULL_FOOT, HULL_HEAD = 6.4, 6.7
 @piece(1.0)
 def hull_arch():
     # Driftwood: an old wooden ship the dunes buried and the last storm blew
-    # bare, lying along the pass: the road was laid between her frames. Her
-    # ribs stand out of the sand either side of the kerbs and curve in over
-    # the road, two deck beams still across them and a shelf timber along
-    # their heads; one rib is snapped off above the turn of the bilge and
-    # its head lies on the sand, two have lost their tops. Her bottom
-    # timbers lie along the verges at the ribs' feet, a few strakes hang on
-    # the frames low down, and sand is drifted against her. Astride the
-    # road (lat 0, yaw 0), her length along it (+Z, the way the cars go).
-    # The ribs are built from under the plain up and stand rigid; what lies
-    # on the sand is draped.
-    wood, dark = 0x8a6a46, 0x7a5a3a
-    n = 5 if LITE else 7
-    zs = [-6.9 + 13.8 * k / (n - 1) for k in range(n)]
+    # bare, lying along the pass: the road was laid between her frames. A
+    # WRECK, not a row of hoops: bleached driftwood (the snags' and the
+    # strand line's timber), no two ribs alike in height, lean or spacing.
+    # Her landward side (-X) still stands, ribs curving in over the road,
+    # their shelf timber along the heads and her planking clinging to them
+    # low down; her seaward side (+X) is broken: stumps, two frames gone,
+    # their heads lying on the sand. Two deck beams still cross her and the
+    # stub of a third juts from the standing side. Her end frames are
+    # short, so she rises to midships as a hull does, her bottom timbers
+    # lie along the verges at the ribs' feet, and her bow, broken off,
+    # lies past her on the seaward side: the stem post reared, its cant
+    # frames and a few strakes on them. Astride the road (lat 0, yaw 0),
+    # her length along it (+Z, the way the cars go). The ribs are built
+    # from under the plain up and stand rigid; what lies on the sand is
+    # draped.
+    keel = 0x9a7b55
     F, H = HULL_FOOT, HULL_HEAD
-    def rib(sx, z, top=1.0, cut=6, lean=0.0, color=wood):
-        """One frame on the sx side at z: `top` scales its head's height,
-        `cut` keeps that many of its six points (a snapped one), `lean`
-        carries its head along the hull."""
+    # per station: z, then (points kept, head's height, lean along her, splay out) for -X and +X; 0 points = gone
+    stations = ((-7.3, (4, 1.0, 0.5, 0.2), (3, 1.0, -0.3, 0.3)),
+                (-5.0, (6, 0.97, -0.4, 0.0), (6, 1.02, 0.6, 0.1)),
+                (-3.3, (6, 1.03, 0.3, 0.1), (3, 1.0, 0.2, 0.5)),
+                (-0.9, (6, 1.0, -0.2, 0.0), (0, 1.0, 0.0, 0.0)),
+                (1.1, (6, 1.04, 0.5, 0.05), (6, 0.96, -0.7, 0.2)),
+                (3.3, (6, 0.98, -0.6, 0.1), (4, 1.0, 0.9, 0.4)),
+                (5.0, (5, 1.0, 0.2, 0.15), (2, 1.0, 0.0, 0.3)),
+                (7.2, (4, 1.0, -0.5, 0.3), (0, 1.0, 0.0, 0.0)))
+    if LITE:
+        stations = stations[:3] + stations[4:6] + stations[7:]
+    def rib(sx, z, cut, top, lean, splay, r, color):
+        """One frame on the sx side at z: `cut` of its six points (a snapped
+        one), `top` its head's height, `lean` its head along the hull,
+        `splay` its head outward."""
         pts = [(F, -1.2), (F + 0.5, 1.0), (F + 0.7, 2.9), (F + 0.1, 4.6), (F - 1.4, H - 0.8), (F - 3.2, H)]
-        line = [(sx * x, y * (top if i > 2 else 1.0), z + lean * (i / 5.0) ** 2) for i, (x, y) in enumerate(pts[:cut])]
-        return tube(line, 0.24, color, res=2 if LITE else 3)
-    broken = 1 if LITE else 2                        # the snapped rib (+X side), a third of the way along
-    short = {(1, n - 2): 5, (-1, 1): 4}              # two with their heads gone
-    for k, z in enumerate(zs):
-        for sx in (-1, 1):
-            if sx > 0 and k == broken:
-                rib(sx, z, cut=3)
-                continue
-            rib(sx, z, top=1.0 + 0.06 * jitter(k, sx, 3.0), cut=short.get((sx, k), 6),
-                lean=0.5 * jitter(k, sx, 5.0), color=(wood, dark)[(k + (sx > 0)) % 2])
-    # the deck beams still across, head to head, and the shelf along the
-    # heads of each side where it kept them
-    for k in ((n - 3,) if LITE else (0, n - 3)):
-        beam((-(F - 3.0), H - 0.08, zs[k]), (F - 3.0, H - 0.08, zs[k]), 0.3, dark)
-    beam((-(F - 1.5), H - 0.75, zs[2] - 0.6), (-(F - 1.5), H - 0.75, zs[-1] + 0.5), 0.26, wood)
-    beam((F - 1.5, H - 0.75, zs[broken + 1] - 0.5), (F - 1.5, H - 0.75, zs[n - 3] + 0.6), 0.26, wood)
-    # strakes still on the frames, low on one side and a length on the other
-    with plain_parts():
-        for (sx, y, x, k0, k1) in ((-1, 0.95, F + 0.72, 0, 3), (-1, 1.45, F + 0.82, 0, 2), (1, 0.95, F + 0.72, n - 3, n - 1),
-                                   (-1, 1.95, F + 0.9, 1, 2), (1, 1.45, F + 0.82, n - 2, n - 1))[:3 if LITE else 5]:
-            beam((sx * x, y, zs[k0] - 0.5), (sx * x, y, zs[k1] + 0.5), 0.16, (dark, wood)[int(y * 2) % 2], d=0.4)
+        line = [(sx * (x + splay * (i / 5.0) ** 2), y * (top if i > 2 else 1.0), z + lean * (i / 5.0) ** 2)
+                for i, (x, y) in enumerate(pts[:cut])]
+        return tube(line, r, color, res=2 if LITE else 3)
+    def head(sx, st):
+        """Where a whole rib's head stands."""
+        z, (_, top, lean, splay) = st[0], st[1 if sx < 0 else 2]
+        return (sx * (F - 3.2 + splay), H * top, z + lean)
+    with bleached():
+        for k, st in enumerate(stations):
+            for sx, (cut, top, lean, splay) in ((-1, st[1]), (1, st[2])):
+                if cut:
+                    rib(sx, st[0], cut, top, lean, splay, 0.2 + 0.05 * frac(k * 0.37 + 0.3 * sx), ('tan', 'cream')[(k + (sx > 0)) % 3 == 0])
+        whole = [st for st in stations if st[1][0] == 6 and st[2][0] == 6]
+        for st in whole:                                                           # the deck beams still across
+            a_, b_ = head(-1, st), head(1, st)
+            beam((a_[0] + 0.2, a_[1] - 0.08, a_[2]), (b_[0] - 0.2, b_[1] - 0.08, b_[2]), 0.3, 'tan')
+        left = [st for st in stations if st[1][0] == 6]
+        stub = [st for st in left if st[2][0] != 6][-1]                            # ...and the stub of one, its far rib gone
+        a_ = head(-1, stub)
+        beam((a_[0] + 0.2, a_[1] - 0.08, a_[2]), (a_[0] + 2.3, a_[1] - 0.2, a_[2] + 0.3), 0.3, 'tan')
+        # the shelf along the standing side's heads
+        beam((-(F - 1.5), (H - 0.8) * 0.99, left[0][0] - 0.8), (-(F - 1.55), (H - 0.8) * 1.0, left[-1][0] + 0.6), 0.26, 'cream')
+        # her planking clinging low on that flank: strakes of unequal length, one sprung at its end
+        with plain_parts():
+            zs = [st[0] for st in stations]
+            for j, (y, x, z0, z1, sag) in enumerate(((0.5, F + 0.5, zs[0] - 0.9, zs[-1] + 0.4, 0.0), (1.0, F + 0.72, zs[0] - 0.6, zs[-2] + 0.7, 0.0),
+                                                     (1.5, F + 0.84, zs[0] - 0.3, zs[4] + 0.5, 0.0), (2.0, F + 0.92, zs[1] - 0.6, zs[3] + 0.8, -0.25),
+                                                     (2.5, F + 0.95, zs[1] - 0.3, zs[2] + 0.6, 0.0))[:3 if LITE else 5]):
+                beam((-x, y, z0), (-x, y + sag, z1), 0.14, ('tan', 'cream')[j % 2], d=0.46)
     join_still('ribs')
     def lying():
-        with plain_parts():
+        with plain_parts(), bleached():
             # her bottom timbers along the verges, at the ribs' feet
-            for (sx, z0, z1, dx) in ((-1, -8.2, -0.6, 0.0), (-1, 0.2, 7.6, 0.12), (1, -7.4, 2.2, 0.05), (1, 3.4, 8.4, -0.1)):
-                beam((sx * (F - 0.5 + dx), 0.2, z0), (sx * (F - 0.5 - dx), 0.2, z1), 0.42, dark, d=0.4)
-            # the snapped rib's head, fallen outside her, and planks off her side
-            beam((F + 1.3, 0.2, zs[broken] - 0.4), (F + 3.9, 0.24, zs[broken] + 1.3), 0.4, wood)
-            for k, (x, z, yw, L) in enumerate(((-F - 2.0, -4.0, 0.3, 2.2), (-F - 2.9, -1.2, 1.1, 1.7), (F + 2.1, 4.6, 0.5, 2.0),
-                                               (-F - 1.9, 4.4, -0.2, 1.8), (F + 2.6, -4.8, 1.3, 1.6))[:3 if LITE else 5]):
-                box((0.4, 0.08, L), (x, 0.05, z), (wood, 'tan')[k % 2], yaw=yw)
-            for p, (px, pz) in enumerate(((-F - 1.3, -6.0), (-F - 1.6, 1.6), (F + 1.4, -1.8), (F + 1.2, 6.2))):
-                storm_tussock(px, pz, p)                           # marram rooted in the sand along her
-        for (x, z, r, st) in ((-F - 1.2, -3.4, 1.1, 2.4), (-F - 1.1, 3.6, 1.0, 2.2), (F + 1.0, 5.4, 0.9, 1.8), (F + 1.1, -5.6, 0.8, 1.5)):
+            for (sx, z0, z1, dx) in ((-1, -8.4, -0.6, 0.0), (-1, 0.2, 8.0, 0.12), (1, -7.6, 2.2, 0.05), (1, 3.4, 6.4, -0.2)):
+                beam((sx * (F - 0.5 + dx), 0.2, z0), (sx * (F - 0.5 - dx), 0.2, z1), 0.42, keel, d=0.4)
+            # the broken side's rib heads, fallen outside her, and planks off her
+            beam((F + 1.3, 0.2, -3.7), (F + 3.9, 0.24, -2.0), 0.4, 'tan')
+            beam((F + 1.6, 0.2, 4.2), (F + 3.4, 0.22, 6.3), 0.36, 'cream')
+            for k, (x, z, yw, L) in enumerate(((F + 2.0, -0.6, 0.3, 2.2), (F + 2.9, 1.4, 1.1, 1.7), (-F - 2.1, 4.6, 0.5, 2.0),
+                                               (F + 1.9, -6.0, -0.2, 1.8), (-F - 2.6, -4.8, 1.3, 1.6))[:3 if LITE else 5]):
+                box((0.4, 0.08, L), (x, 0.05, z), ('tan', 'cream')[k % 2], yaw=yw)
+        with plain_parts():
+            for q, (px, pz) in enumerate(((-F - 1.5, -6.0), (-F - 1.8, 1.6), (F + 1.4, -1.8), (F + 1.2, 7.4))):
+                storm_tussock(px, pz, q)                           # marram rooted in the sand along her
+        for (x, z, r, st) in ((-F - 1.3, -3.4, 1.1, 2.4), (-F - 1.2, 3.6, 1.0, 2.2), (F + 1.0, 5.4, 0.9, 1.8), (F + 1.1, -5.6, 0.8, 1.5)):
             sand_heap(x, z, r, 0.45, st)                           # the sand drifted against her
     draped('floor', lying)
+    def bow():
+        # her bow, broken off and thrown down past her seaward side: the stem
+        # post reared out of the sand, raking forward, the keel's end under
+        # it, three cant frames a side closing to it and strakes on them
+        BX, BZ = F + 3.0, 11.0
+        with bleached():
+            tube([(BX, -0.4, BZ - 2.6), (BX, 0.3, BZ - 0.4), (BX + 0.1, 2.2, BZ + 1.0), (BX + 0.2, 4.4, BZ + 1.5)], 0.26, 'tan', res=2 if LITE else 3)
+            beam((BX, 0.15, BZ - 4.4), (BX, 0.2, BZ - 0.3), 0.4, keel)
+            for i, (dz, w, h) in enumerate(((-3.6, 1.7, 2.6), (-2.3, 1.3, 2.9), (-1.1, 0.75, 3.1))[:2 if LITE else 3]):
+                for sx in (-1, 1):
+                    if sx < 0 and i == 0:
+                        continue                                   # one gone
+                    tube([(BX, -0.2, BZ + dz), (BX + sx * w * 0.8, 0.5, BZ + dz), (BX + sx * w, h * 0.6, BZ + dz + 0.1),
+                          (BX + sx * w * 0.95, h, BZ + dz + 0.2)], 0.17, ('tan', 'cream')[i % 2], res=2)
+            with plain_parts():
+                for j, (y, w0, w1) in enumerate(((0.7, 1.6, 0.5), (1.3, 1.75, 0.6))):
+                    beam((BX + w0 + 0.1, y, BZ - 3.7), (BX + w1 + 0.1, y + 0.15, BZ - 0.6), 0.12, ('cream', 'tan')[j], d=0.44)
+        sand_heap(BX - 0.6, BZ - 2.0, 1.2, 0.45, 1.8)
+    draped('bow', bow)
 
 def storm_tussock(x, z, k, h=0.75):
     """One tussock of marram at (x, z): blades fanned from one foot, pale
