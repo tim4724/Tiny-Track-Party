@@ -19,7 +19,7 @@
 //   anim_flutter:a=y:p=2.4       ... a feather banner, held all the way up its pole
 //   anim_drape+flutter           ... on a pole that stands on terrain
 //   anim_smoke:s=2.5             ... puffs two and a half times a chimney's (a stack)
-//   anim_drape+smoke:s=0.6:p=11  a GUN's smoke: one burst every 11 s, rolling out
+//   anim_drape+smoke:s=0.6:p=11  a GUN's smoke: a flash and one pale burst every 11 s, out
 //                                along the node's own x and thinning; with `drape`
 //                                it starts over the ground drawn under the node
 //

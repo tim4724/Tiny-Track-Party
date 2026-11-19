@@ -756,6 +756,11 @@ void TtpRenderer::buildSmokePuffs(const float3& origin, float scale, float perio
     // field, so every gradient still gets a sample.
     constexpr int NX = 8, NY = 8;
     for (Mesh& m : mSmoke) {
+        // Wood-smoke grey: every chimney is on the snow cup, where a white
+        // puff is one more snowflake. A gun's burst is powder smoke, pale,
+        // and its first puff is the muzzle's flash (renderWorld shows it for
+        // an instant): chimney grey, it hung over a beach as dark blots.
+        const uint32_t tint = period <= 0 ? 0x8d949e : &m == &mSmoke[0] ? 0xffd684 : 0xf1ede2;
         for (int j = 0; j <= NY; j++) {
             for (int k = 0; k <= NX; k++) {
                 const float px = (float) k / NX * 64.0f;
@@ -764,10 +769,8 @@ void TtpRenderer::buildSmokePuffs(const float3& origin, float scale, float perio
                     const float dx = bx - 32, dy = by - 32;
                     return dx * dx + dy * dy <= 18 * 18;
                 });
-                // Wood-smoke grey: every chimney is on the snow cup, where a
-                // white puff is one more snowflake.
                 m.verts.push_back({ (float) k / NX - 0.5f, 0.5f - (float) j / NY, 0,
-                                    packShown(srgbToLinear(0x8d949e), 1.0f, cov) });
+                                    packShown(srgbToLinear(tint), 1.0f, cov) });
             }
         }
         for (int j = 0; j < NY; j++) {
