@@ -275,6 +275,7 @@
     "set-headframe.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-headland-arch-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-headland-arch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-helix-run-box.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hoodoos.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hull-arch-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hull-arch.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

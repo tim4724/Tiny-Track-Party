@@ -38,7 +38,8 @@ const BEACH_SAND = 1.1;
 //                                holonomy per loop — cancel it with a matching
 //                                `roll` (probe it) or the stretch after the loop
 //                                rides visibly rolled.
-// opts (any segment): rise (Δelevation over the segment, eased), bank (peak roll°,
+// opts (any segment): rise (Δelevation over the segment, eased; a straight's
+//   `grade: [in, out]` gives the slopes it starts and ends at instead), bank (peak roll°,
 //   eased — corners only in practice), roll (heartline twist about the centerline,
 //   eased over the segment and CUMULATIVE downstream — small rolls trim the geometric
 //   holonomy of climbing/tilted elements like the spiral and the drift loops; a full
@@ -145,25 +146,32 @@ export const GAUNTLET = [
 ];
 
 // ---- Skysnake (Hard): snakes and ladders, raced across the board. Up two LADDERS
-// (straight climbs, each with a hump for its top rung that a car raced flat out
-// hops off: a hill, launched by its crest as the other cups' are) to the top deck
+// (straight climbs, each cresting above its deck so a car raced flat out hops off
+// the top: a hill, launched by its crest as the other cups' are) to the top deck
 // at 5.2 world, the S-S weave in the sky, round the top corner and down the SNAKE (one long dive) to the
 // board, then home past a toy loop. Composed by scripts/compose-stunt.mjs (solved
 // grid and first legs + the loop's probe-measured roll trim).
+// A ladder: the climb runs straight on into its crest, with no flat before it
+// (a hump after a flat stood across the view as a wall, and swung the chase
+// camera 40 degrees), rounds over it tightly enough to throw a car raced flat
+// out (game.cc's crest lift), and comes down a long shallow slope to the deck,
+// 1.3 above where it began.
+const LADDER_UP = 0.24, LADDER_DOWN = 0.14, LADDER_CREST = 0.75, LADDER_LAND = 5;
+const LADDER = [
+  straight(10, { rise: 1.3 + (LADDER_DOWN * LADDER_LAND - (LADDER_UP - LADDER_DOWN) * LADDER_CREST) / 2, grade: [0, LADDER_UP], pillars: true }),
+  straight(LADDER_CREST, { rise: (LADDER_UP - LADDER_DOWN) * LADDER_CREST / 2, grade: [LADDER_UP, -LADDER_DOWN], pillars: true }),
+  straight(LADDER_LAND, { rise: -LADDER_DOWN * LADDER_LAND / 2, grade: [-LADDER_DOWN, 0], pillars: true })
+];
 export const SKYSNAKE = [
   straight(35.837),                                                  // grid straight (closure-solved)
   arc(RL, -90),                                                      // east
   straight(12),                                                      // (closure-solved)
-  straight(10, { rise: 1.3, pillars: true }),                        // LADDER 1 → 2.6 world
-  straight(2, { rise: 0.4, pillars: true }),                         // its top rung: a hump the racers hop off
-  straight(2, { rise: -0.4, pillars: true }),                        //  and land down the far side of, onto
-  straight(4, { pillars: true }),                                    // the mid deck
+  ...LADDER,                                                         // LADDER 1 → 2.6 world
+  straight(2.25, { pillars: true }),                                 // the mid deck
   arc(RL, -90, { pillars: true }),                                   // south
   straight(6, { pillars: true }),
-  straight(10, { rise: 1.3, pillars: true }),                        // LADDER 2 → 5.2 world
-  straight(2, { rise: 0.4, pillars: true }),                         // its top rung, as the first (the climb starts
-  straight(2, { rise: -0.4, pillars: true }),                        //  2 sooner, so the car is down before the weave)
-  straight(4, { pillars: true }),                                    // the top deck
+  ...LADDER,                                                         // LADDER 2 → 5.2 world
+  straight(2.25, { pillars: true }),                                 // the top deck
   arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
   arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
   straight(3, { pillars: true }),
@@ -2422,8 +2430,10 @@ export const TRACKS = {
     // leg's; on the floor to a stair lift at the corner home, onto a wooden
     // marble racer of two stepped boards beside the grid straight, and from
     // its foot back into the tower's. A click-clack board faces the
-    // descent's lower turn from outside the skyway. Nothing of the run
-    // stands apart from its one loop. The run is the room's one mover: this
+    // descent's lower turn from outside the skyway, and the run's own box
+    // lies open on the floor past the skyway, its spare pieces in it and a
+    // column begun beside it. Nothing of the run stands apart from its one
+    // loop. The run is the room's one mover: this
     // room has no train. Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
@@ -2439,6 +2449,7 @@ export const TRACKS = {
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
       { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
+      { model: 'set-helix-run-box', u: 0.505, lat: 17.3 },
       { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
       { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
@@ -2465,9 +2476,10 @@ export const TRACKS = {
     // and its clock, a stepped block of flats, all over the deck, and a
     // terrace of tall houses stepping down beside the ramp off it; and
     // towers a child stacked of the small blocks stand outside the corner
-    // the south-bound leg turns. A tin bus and tram, wound up, run to and fro
-    // across the bare floor outside the first corner, where the grid straight
-    // points: side on to the racers the whole straight, and clear of every rug.
+    // the south-bound leg turns. A tin bus and tram, wound up, drive round
+    // a street on a mat of their own laid against the end of the grid
+    // straight's street rug, outside the first corner, where the straight
+    // points: the town's traffic, past its bus stop.
     set: [
       { model: 'set-block-city', u: 0.125, lat: -15, yaw: 180 },
       { model: 'set-block-town', u: 0.0147, lat: 24.35 },
@@ -2480,7 +2492,7 @@ export const TRACKS = {
       { model: 'set-block-terrace', u: 0.547, lat: -7.2, yaw: 180 },
       { model: 'set-block-street-west', u: 0.71, lat: 0 },
       { model: 'set-block-towers', u: 0.768, lat: -7.5, yaw: 180, scale: 0.62 },
-      { model: 'set-windup-trams', u: 0.0686, lat: -8.93, yaw: 128.1 },
+      { model: 'set-windup-trams', u: 0.018, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.0875, lat: -48.78, yaw: 84.56 }
     ]
   }

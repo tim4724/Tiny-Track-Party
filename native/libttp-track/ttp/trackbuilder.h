@@ -38,6 +38,11 @@ struct SegDef {
   int widthKind;   // 0 none (track default), 1 scalar w0, 2 taper [w0,w1]
   double w0, w1;
   bool pillars;
+  // A straight's `grade: [in, out]`: the slopes (rise per length) it starts
+  // and ends at, a cubic between them in place of the ease, so a climb can
+  // run on into a crest and a landing slope without flattening in between.
+  bool graded;
+  double g0, g1;
 };
 
 struct WptDef {

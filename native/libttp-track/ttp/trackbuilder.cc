@@ -443,7 +443,11 @@ RaceTrack buildTrackSegments(const TrackDef& def) {
       double x0 = X, z0 = Z, y0 = elev;
       for (int i = 1; i <= N; i++) {
         double f = (double)i / (double)N;
-        worldPts.push_back(Vec3(x0 + dx * len * f, y0 + rise * smootherstep(f), z0 + dz * len * f));
+        // graded: the cubic Hermite from (0, slope g0) to (rise, slope g1)
+        double y = seg.graded
+            ? rise * (f * f * (3 - 2 * f)) + len * (seg.g0 * (f * (f - 1) * (f - 1)) + seg.g1 * (f * f * (f - 1)))
+            : rise * smootherstep(f);
+        worldPts.push_back(Vec3(x0 + dx * len * f, y0 + y, z0 + dz * len * f));
         widths.push_back(segWidth(seg, f));
         banks.push_back(segTwist(seg, f));
         pillarFlags.push_back(seg.pillars ? 1 : 0);
