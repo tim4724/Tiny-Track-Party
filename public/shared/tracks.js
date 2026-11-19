@@ -1721,9 +1721,13 @@ export const TRACKS = {
     // halt at each end, its one train going out and back (set-park-rails-*,
     // one line cut into lengths in set_prototypes.py PARK_ROUTE; it crosses
     // no road at grade and lies on a graded bed, never facet by facet). The playground on the flat outside the south-west hairpin,
-    // where the start straight points: a fenced yard of climbing frames,
-    // swings, a roundabout and a sandpit, its gate and path toward the road,
-    // its hill behind it. The bandstand on its mound close under the
+    // where the start straight points, between the bend and the foot of its
+    // hill: the fenced yard (set-playground: the big frames, a slide down the
+    // hill itself, swings, the toddlers' corner, a forecourt to the kerb),
+    // the park round it (set-playground-lawn: hedge and cherries behind, a
+    // picnic lawn, flower beds, and the paths, one round the bend into the
+    // cherry avenue's walk) and its ball court beside the straight
+    // (set-playground-court), three pieces on one anchor. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
@@ -1736,6 +1740,8 @@ export const TRACKS = {
     // west straight, both planted on slopes that face the road.
     set: [
       { model: 'set-playground', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
+      { model: 'set-playground-lawn', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
+      { model: 'set-playground-court', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
@@ -1764,7 +1770,7 @@ export const TRACKS = {
       { model: 'set-blossom-grove', u: 0.845, lat: 8.5, yaw: 0 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west,
-    // the playground's hill, the lake and the hill behind it, the bandstand's
+    // the playground's hill (its slide lies on it), the lake and the hill behind it, the bandstand's
     // mound (clear of the raised road's stilts), foothills at the S's west
     // leg and beyond the top bend
     land: [
