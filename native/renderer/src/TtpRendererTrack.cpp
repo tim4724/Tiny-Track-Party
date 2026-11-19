@@ -1469,8 +1469,9 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
 }
 
 float TtpRenderer::gradeSurfaceY(const TrackBin& tb, float x, float z) const {
-    // A ring of six and the middle for the highest; the middle, six at half
-    // the run and twelve at the whole of it for the average.
+    // A ring of six and the middle for the highest; the middle and three
+    // rings out to the run (six, twelve, eighteen: an even disc) for the
+    // average.
     const auto ring = [](int k, int n, float r) {
         const float a = (float) k * (2.0f * (float) M_PI / (float) n);
         return float2{ r * std::cos(a), r * std::sin(a) };
@@ -1483,16 +1484,16 @@ float TtpRenderer::gradeSurfaceY(const TrackBin& tb, float x, float z) const {
         }
         return y;
     };
+    constexpr int kRings = 3;
     float sum = over(x, z);
-    for (int k = 0; k < 6; k++) {
-        const float2 o = ring(k, 6, kGradeRun * 0.5f);
-        sum += over(x + o.x, z + o.y);
+    int n = 1;
+    for (int j = 1; j <= kRings; j++) {
+        for (int k = 0; k < 6 * j; k++, n++) {
+            const float2 o = ring(k, 6 * j, kGradeRun * (float) j / kRings);
+            sum += over(x + o.x, z + o.y);
+        }
     }
-    for (int k = 0; k < 12; k++) {
-        const float2 o = ring(k, 12, kGradeRun);
-        sum += over(x + o.x, z + o.y);
-    }
-    return sum / 19.0f;
+    return sum / (float) n;
 }
 
 // A berm is the hill a raised stretch of road stands on, and it is drawn over

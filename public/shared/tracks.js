@@ -1600,9 +1600,8 @@ export const TRACKS = {
     // ends in; the pitch beside the diagonal, greener than the downs, bunting
     // down its road-side touchline; the children's blanket den under its oak
     // where the racer comes off the diagonal's top; under great oaks out
-    // by the bends a picnic left out and a hay wain loaded; out on the open
-    // down, with no oak over them, a trampoline in its net and a paddling
-    // pool under its parasol; a copse of the downs' oaks on the face of the
+    // by the bends a picnic left out and a hay wain loaded; a copse of the
+    // downs' oaks on the face of the
     // down the road heads at before the bottom bend;
     // the kite hill rising off the verge beyond the top loop, three kites
     // flying low over its foot from stakes up the slope, and a camp of bell
@@ -1619,8 +1618,6 @@ export const TRACKS = {
       { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
       { model: 'set-picnic-oak', u: 0.86, lat: 7.5, yaw: 0, scale: 1.35 },
       { model: 'set-hay-wain-oak', u: 0.52, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-trampoline', u: 0.115, lat: 7, yaw: 0, scale: 1.6 },
-      { model: 'set-paddling-pool', u: 0.34, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
       { model: 'set-oak-copse', u: 0.3749, lat: 12, yaw: 26, scale: 1.3 },
       { model: 'set-summer-camp', u: 0.776, lat: -7.7, yaw: 180, scale: 1.6 }
@@ -1731,8 +1728,9 @@ export const TRACKS = {
     // hill itself, swings, the toddlers' corner, a forecourt to the kerb),
     // the park round it (set-playground-lawn: hedge and cherries behind, a
     // picnic lawn, flower beds, and the paths, one round the bend into the
-    // cherry avenue's walk) and its ball court beside the straight
-    // (set-playground-court), three pieces on one anchor. The bandstand on its mound close under the
+    // cherry avenue's walk), its ball court across the front path
+    // (set-playground-court) and the walk round its back under more cherries
+    // (set-playground-grove), four pieces on one anchor. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
@@ -1747,8 +1745,9 @@ export const TRACKS = {
       { model: 'set-playground', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-playground-lawn', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-playground-court', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
+      { model: 'set-playground-grove', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
-      { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
+      { model: 'set-floral-clock', u: 0.448, lat: -8.5, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
       { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
       { model: 'set-park-rails-a', u: 0.25382, lat: 4.735, yaw: 94.22 },
