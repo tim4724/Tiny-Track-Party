@@ -1926,9 +1926,11 @@ export const TRACKS = {
       // straight and round the tight bend into the mine yard, one on the
       // inside round the left-hander. It is the mine's canyon: a timber
       // flume on trestles pinned along the left-hander's face, from a header
-      // box in the cliff down to a sluice at the verge, and prospect adits
-      // in every face's foot, each with its grey spoil (the lengths bring
-      // them: set_prototypes.py gulch_flume, gulch_workings).
+      // box in the cliff down to a sluice at the verge, and in the faces'
+      // feet the workings, no two alike: an adit given up and boarded, the
+      // one being worked, a ladder way to a ledge, pit props stacked, rock
+      // come down (the lengths bring them: set_prototypes.py gulch_flume,
+      // gulch_workings).
       // The crest's left-hander has no face: its shoulder is the land's own
       // (a face there stood as pyramids on the sand from across the map,
       // where the shoulder reads as one banded mountain). The run-in's face
@@ -1956,10 +1958,11 @@ export const TRACKS = {
       { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
       { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 },
-      // the powder magazine past the town, dug into the hill's foot
+      // the powder magazine past the town, vaulted and banked with earth
       { model: 'set-powder-magazine', u: 0.405, lat: 8.2 },
-      // the mine's water on the outside of the back loop: a windlass well,
-      // a tank on its stand and a flume along the verge toward the mill
+      // the mine's water on the outside of the back loop: a wind engine
+      // over its well, a tank on its stand and a flume along the verge to
+      // the cistern it fills
       { model: 'set-water-works', u: 0.672, lat: 8.0 }
     ],
     // the ridge the mine is in, the shaft's spoil heaps (waste rock, greyer
@@ -2053,9 +2056,11 @@ export const TRACKS = {
       { model: 'set-stock-tank', u: 0.58, lat: -12, yaw: 180 },
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
       { model: 'set-ranch-lane', u: 0.032, lat: -5.4, yaw: 180 },
+      // (two stands, the third the first turned and a size down: one trio
+      // at all three read as one piece copied)
       { model: 'set-hoodoos', u: 0.32, lat: -12 },
-      { model: 'set-hoodoos', u: 0.61, lat: 13, yaw: 180 },
-      { model: 'set-hoodoos', u: 0.9, lat: 16 },
+      { model: 'set-crag-hoodoos-b', u: 0.61, lat: 13, yaw: 180 },
+      { model: 'set-hoodoos', u: 0.9, lat: 16, yaw: 105, scale: 0.85 },
       { model: 'set-crag-saguaros', u: 0.05, lat: 10 },
       // the start is the ranch's open range, fenced along both verges, its
       // gateway on the ranch's side (the cup's other starts are a canyon, a
