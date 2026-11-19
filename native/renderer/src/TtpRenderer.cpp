@@ -1643,8 +1643,39 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
-        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf, bool grade) {
+        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf, bool grade,
+        bool plane) {
     const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+    // A `drape_plane` part: the least-squares plane through the ground under
+    // its vertices (about the part's own origin, in doubles: the sums are of
+    // world coordinates), raised until it clears the ground under every one.
+    float pl[3] = { 0.0f, 0.0f, 0.0f };
+    const float3 po = xf[3].xyz;
+    if (drapeOn && plane) {
+        double sx = 0, sz = 0, sy = 0, sxx = 0, szz = 0, sxz = 0, sxy = 0, szy = 0, n = 0;
+        const auto each = [&](const auto& fn) {
+            for (const ttp::rt::GlbMeshPrim& sp : prims) {
+                for (size_t i = 0; i + 2 < sp.pos.size(); i += 3) {
+                    const float3 pw = (xf * float4{ sp.pos[i], sp.pos[i + 1], sp.pos[i + 2], 1.0f }).xyz;
+                    fn(pw.x - po.x, pw.z - po.z, groundSurfaceY(*drapeOn, pw.x, pw.z) - foot);
+                }
+            }
+        };
+        each([&](double x, double z, double y) {
+            sx += x; sz += z; sy += y; sxx += x * x; szz += z * z; sxz += x * z; sxy += x * y; szy += z * y; n += 1;
+        });
+        if (n > 0) {
+            const double mx = sx / n, mz = sz / n, my = sy / n;
+            const double cxx = sxx - n * mx * mx, czz = szz - n * mz * mz, cxz = sxz - n * mx * mz;
+            const double cxy = sxy - n * mx * my, czy = szy - n * mz * my;
+            const double det = cxx * czz - cxz * cxz;
+            const double b = det > 1e-9 ? (cxy * czz - czy * cxz) / det : 0.0;
+            const double c = det > 1e-9 ? (czy * cxx - cxy * cxz) / det : 0.0;
+            double a = my - b * mx - c * mz, up = -1e30;
+            each([&](double x, double z, double y) { up = std::max(up, y - (a + b * x + c * z)); });
+            pl[0] = (float) (a + up); pl[1] = (float) b; pl[2] = (float) c;
+        }
+    }
     // How many points of the way from a wall's vertex to its foot are read,
     // and how far along the wall (each way, kWallAlong apart) its lift may
     // dip: a wall rides the lowest land along that much of its own length,
@@ -1661,7 +1692,8 @@ void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
             float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
                     sp.pos[i * 3 + 2], 1.0f }).xyz;
             if (drapeOn) {
-                float lift = (grade ? gradeSurfaceY(*drapeOn, pw.x, pw.z)
+                float lift = plane ? pl[0] + pl[1] * (pw.x - po.x) + pl[2] * (pw.z - po.z)
+                        : (grade ? gradeSurfaceY(*drapeOn, pw.x, pw.z)
                         : groundSurfaceY(*drapeOn, pw.x, pw.z)) - foot;
                 if (wallAt) {
                     float low = lift;

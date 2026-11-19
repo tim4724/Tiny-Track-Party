@@ -1382,13 +1382,16 @@ private:
     // path lie on (a railway's bed, its train): the drawn ground's highest
     // within kGradeOver (a bed's half width, so the bed clears the land
     // across itself on a side slope), averaged over kGradeRun round the
-    // point. One smooth surface in world XZ: a line laid on it rides a crease
+    // point: a train's length and more, so a train sees only long gradients
+    // (over 2.5 u the bed still rolled in waves a few units long, each swell
+    // of the lawn and each row of the verge band, and the train pitched over
+    // them like a rollercoaster). One smooth surface in world XZ: a line laid on it rides a crease
     // of the 9 u grid in a vertical curve instead of kinking on it, lengths
     // cut from one line meet at one height, and it stands under the drawn
     // ground only by what a sharp crest loses to the average, which the
     // bed's own bank (set_prototypes.py PARK_BANK) covers.
     float gradeSurfaceY(const TrackBin& tb, float x, float z) const;
-    static constexpr float kGradeOver = 1.0f, kGradeRun = 2.5f;
+    static constexpr float kGradeOver = 1.0f, kGradeRun = 6.0f;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.
     filament::math::float2 footprintSpan(const TrackBin& tb, float x, float z, float r) const;
@@ -2064,6 +2067,9 @@ private:
     }
     static bool isGradeName(const char* name) {
         return name && std::strncmp(name, "drape_grade", 11) == 0;
+    }
+    static bool isPlaneName(const char* name) {
+        return name && std::strncmp(name, "drape_plane", 11) == 0;
     }
     static bool isDrapeName(const char* name) {
         return name && std::strncmp(name, "drape", 5) == 0;
@@ -2761,14 +2767,20 @@ private:
     // ground's own colour where each vertex lands (groundColorAt, landTint),
     // so it reads as the field it lies in, not a tile laid on it. `grade`,
     // for a `drape_grade` part (a railway's bed): lifted by the GRADED land
-    // (gradeSurfaceY), not the facet under each vertex.
+    // (gradeSurfaceY), not the facet under each vertex. `plane`, for a
+    // `drape_plane` part (a floral clock's dial): the whole part lies on ONE
+    // plane, the best fit to the ground under its vertices raised to clear
+    // it everywhere, so a figure drawn on it keeps its shape on a slope (a
+    // circle draped facet by facet over a crease came out a bean). It stands
+    // off the ground by what the land is not flat, so the part brings its
+    // own edge down (a skirt), and it wants a spot on one even slope.
     void appendBaked(Mesh& m, const filament::math::mat4f& xf,
             const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             const std::vector<filament::math::float3>& factor,
             const TrackBin* drapeOn = nullptr, float foot = 0.0f,
             const filament::math::float2* wallAt = nullptr, bool turf = false,
-            bool grade = false);
+            bool grade = false, bool plane = false);
     // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
     // comment): `still` is each (entity slot, parsed mesh) that stands still.
     bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,

@@ -473,8 +473,7 @@ void playroomTrack(Theme& t, const std::string& track) {
 // scale, where a car is a car: Ribbon's village, Pretzel's treehouse,
 // Tangle's mill stream, Cloverleaf's playground (their set pieces and land
 // carry it). The grass biome's gnome, kennel and picnic are giants at that
-// scale, so no garden keeps them; its hay bales stand at their real size
-// (a third of a car) and what is smaller than that is left out. Each garden wears its idea on the kerbs and the gantry.
+// scale, so no garden keeps them; and no bale or crate is scattered on their verges. Each garden wears its idea on the kerbs and the gantry.
 // A track's tree family: the scatter's weights by model, the rest at none.
 void lawnTrees(Theme& t, std::initializer_list<std::pair<const char*, float>> mix) {
   for (TreeSpec& tr : t.scenery.trees) {
@@ -488,10 +487,12 @@ void backyardTrack(Theme& t, const std::string& track) {
   t.landmarks.clear();
   // The balloon is the fete's: one sky per track (Pretzel's is its kites).
   if (track != "ribbon") t.balloon.panels.clear();
-  // Hay bales on the verge and nothing else: a tent half a car long pitched
-  // alone on the lawn belonged to no camp.
+  // Nothing scattered on the verge: a hay bale alone on the lawn belonged to
+  // no farm, as a tent pitched alone belonged to no camp. The hay is the
+  // farms' (Ribbon's hay meadow, Pretzel's wain).
   t.props.models = { "prop-hay" };
   t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
+  t.props.scatterDensity = 0.0f;
   if (track == "ribbon") {
     // The village: fewer wildflowers (a patch costs more vertices than a
     // cottage) and a few fewer trees, so the village fits the frame the
@@ -507,8 +508,7 @@ void backyardTrack(Theme& t, const std::string& track) {
   } else if (track == "pretzel") {
     // The children's summer. Timber kerbs and gantry, the treehouse's.
     // Fewer wildflowers: the road lies on the lawn, so its whole verge is
-    // open to them. As few bales as when tents shared their spots.
-    t.props.scatterDensity *= 0.4f;
+    // open to them.
     t.scenery.clutterDensity = 0.15f;
     t.road.kerbA = 0xb08a5a;
     t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
@@ -541,8 +541,6 @@ void backyardTrack(Theme& t, const std::string& track) {
     // as on Pretzel: the road lies on the grass, its verge open to them.
     t.scenery.clutterDensity = 0.15f;
     // The park's trees are its cherries, in blossom.
-    // No hay bales on a town park's lawn.
-    t.props.scatterDensity = 0.0f;
     // Thin on the open lawn: a park plants its trees in avenues and groves
     // (the set).
     lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });

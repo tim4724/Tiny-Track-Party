@@ -647,7 +647,9 @@ to do both:
   as a needle.
 - **A `drape_grade…` PART LIES ON THE GRADED LAND** (a railway's bed), and
   so does a `drapegrade…` path (its train): `gradeSurfaceY`, the drawn
-  ground's highest across a bed's width averaged over a few units, one
+  ground's highest across a bed's width averaged over a train's length round
+  the point (`kGradeRun`: over less, the bed rolled in short waves and the
+  train pitched over them), one
   smooth surface in world XZ. A line draped vertex by vertex kinks on every
   crease of the 9 u grid and rolls with every facet; on the graded land it
   takes a rise in a vertical curve, lengths cut from one line meet at one
@@ -656,6 +658,12 @@ to do both:
   own bank down to the ground (a skirt built under its foot,
   `drape_grade_turf` in the field's colour). It smooths what is there and
   cannot make a grade: route the line where the land is gentle.
+- **A `drape_plane…` PART LIES ON ONE PLANE** (a floral clock's dial): the
+  best fit to the ground under its vertices, raised to clear it everywhere
+  (`appendBaked`), so a figure drawn on it keeps its shape on a slope; draped
+  facet by facet over a crease a circle came out a bean. It stands off the
+  land by what the land is not flat, so the part brings its own edge down
+  into the turf and wants a spot on one even slope, off a crest.
 - **A `drape_floor…` PART CLAIMS NO GROUND** (a gravel lane, the stones along
   it): it drapes like any other, but the piece's footprint is taken without it
   (`mSetBox`), so the verge band does not come down at it and it may run on to
