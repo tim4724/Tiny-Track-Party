@@ -543,19 +543,27 @@ export const TRACKS = {
       { model: 'set-kayak-rack', u: 0.775, lat: 9.5 },
       { model: 'set-shellfish-shack', u: 0.798, lat: -10, yaw: 180 },
       { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 },
-      // on the dune beside the hop over the west bend (round 23: its sea
-      // side lay under the kerb, the tide at the berm's foot): the reef's
-      // daymark where the stacks begin, and the whalebone arch by the
-      // lifeboat station, where a car topping the hop looks
-      { model: 'set-reef-beacon', u: 0.857, lat: 12.5 },
-      { model: 'set-whalebone-arch', u: 0.882, lat: 9.8, yaw: 25 }
+      // round 24. The rock arch over the road where the west run meets the
+      // headland (built astride the road: lat 0), its hole along it. Out
+      // where that run looks: the seals' skerry a few lengths off the beach
+      // and, outside it, the boat working her loop with the gulls behind
+      // her; the crab fishers' pot buoys along the reef's edge toward the
+      // stacks. And the last tide's wrack along the beach where it lay bare
+      // and stands near the road's height (a print: it claims no ground;
+      // nearer the kerb, or on the low beach, the kerb hides it).
+      { model: 'set-headland-arch', u: 0.705, lat: 0 },
+      { model: 'set-seal-skerry', u: 0.755, lat: 17.6 },
+      { model: 'set-fishing-boat', u: 0.757, lat: 37 },
+      { model: 'set-lobster-buoys', u: 0.789, lat: 16.2 },
+      { model: 'set-kelp-line', u: 0.565, lat: 11.5 },
+      { model: 'set-kelp-line', u: 0.602, lat: 11.8, yaw: 180 },
+      { model: 'set-kelp-line', u: 0.025, lat: 11.5 },
+      { model: 'set-kelp-line', u: 0.925, lat: 12, yaw: 180 }
     ],
     land: [
       // the sea round Seal Rock and up to the reef on the east bend
       { kind: 'shore', u: 0.27, lat: 14.7, len: 100, r: 30 },
-      // (the west bend's ends where the hop begins: past it the beach is the
-      // dune the lifeboat station stands on)
-      { kind: 'shore', u: 0.7615, lat: 9.7, len: 57.5, r: 30 },
+      { kind: 'shore', u: 0.79, lat: 9.7, len: 80, r: 30 },
       // the downs filling the east lobe, their flanks to the kerb of the east
       // run and the top run; a lower grassy rise in the west lobe
       { kind: 'ridge', u: 0.25, lat: -32, len: 30, r: 22, h: 11, top: 0.2, tint: 0x6faa62 },
@@ -576,11 +584,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
       { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      // the dune beside the hop over the west bend, as high as the road
-      // from its crest down to the lifeboat station (lower, only the
-      // station's roof and flag showed over the crest's kerb, and nothing
-      // before it)
-      { kind: 'ridge', u: 0.8825, lat: 15, len: 23.9, r: 13, h: 2.6, h1: 1.4, top: 0.55, near: 0.4, w: 5 },
+      // the lifeboat station's swell of sand over the beach, at the height of
+      // the hop the road comes over beside it (lower, only its roof and flag
+      // showed over the crest's kerb)
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.2, top: 0.55, near: 0.4, w: 5 },
       // ...and the sea brought in to the foot of its slip
       { kind: 'shore', u: 0.9, lat: 22, len: 10, r: 14 },
       // the reef terrace the rock pool lies in, at the road's height, so
