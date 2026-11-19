@@ -50,6 +50,12 @@
 //   - `flutter` turns a sprite edge-on and back, a petal tumbling.
 // A sprite left with no alpha is collapsed to a point, so the cloud's masked
 // majority rasterizes nothing.
+//
+// RAIN is the same cloud with `streak` set: the sprite is drawn out that many
+// of its widths along its own velocity (the wind and its fall), turned about
+// that line to face the camera, so the circle the fragment cuts comes out a
+// thin tapering stroke that leans with the wind, faded out near the lens.
+// Same vertices, same draw.
 material {
     name : TtpVpoint,
     // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
@@ -82,7 +88,8 @@ material {
         { type : sampler2d, name : floorTex },
         { type : float, name : mask },
         { type : float, name : tile, precision : high },
-        { type : float, name : flutter }
+        { type : float, name : flutter },
+        { type : float, name : streak }
     ]
 }
 
@@ -134,6 +141,9 @@ vertex {
         // only, the vertex is never repositioned — instead of clipping it.
         float edge = 1.0 - smoothstep(0.8, 1.0, max(abs(rel.x), abs(rel.y)) / (0.5 * bx));
         material.color.a *= edge;
+        // A streak a few units from the lens is a bar across the picture:
+        // rain fades out toward the camera.
+        if (materialParams.streak > 0.0) material.color.a *= smoothstep(2.0, 7.0, length(posU - camU));
         material.fog = vec4(0.0);
         highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
         if (materialParams.mask > 0.5) {
@@ -149,8 +159,16 @@ vertex {
         float wide = 1.0;
         if (materialParams.flutter > 0.0) wide = 0.2 + 0.8 * abs(cos(t * 2.6 + h1 * 40.0));
         float hs = materialParams.halfSize * step(0.004, material.color.a);
+        highp vec3 right = w[0].xyz * wide;
+        highp vec3 up = w[1].xyz;
+        if (materialParams.streak > 0.0) {
+            highp vec3 vel = normalize(vec3(materialParams.wind, -speed * materialParams.fall, 0.0));
+            highp vec3 side = cross(vel, posU - camU);
+            right = side / max(length(side), 1e-4);
+            up = vel * materialParams.streak;
+        }
         material.worldPosition.xyz = posU - off
-                + (w[0].xyz * (material.uv0.x * wide) + w[1].xyz * material.uv0.y) * hs;
+                + (right * material.uv0.x + up * material.uv0.y) * hs;
         // LAST: this stage moves worldPosition, and the fog factor has to be
         // measured from where the vertex actually ends up.
         if (materialParams.lite < 0.5) material.fog.x = ttpFogFactor(material.worldPosition.xyz);

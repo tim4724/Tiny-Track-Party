@@ -2661,9 +2661,9 @@ def drift_light_station():
         for s in (-1, 1):
             beam((MX, 3.0, MZ), (MX, 0.0, MZ + s * 1.2), 0.04, 0x9aa1b4)
     with animated('anim_flutter:p=1.6#pennant', (MX, 3.95, MZ)):
-        box((0.05, 0.6, 0.55), (MX, 3.62, MZ + 0.33), red)
+        box((0.05, 0.6, 0.52), (MX, 3.62, MZ + 0.31), red)             # (ends where the white begins: no overlap)
         box((0.05, 0.6, 0.5), (MX, 3.6, MZ + 0.82), white, yaw=0.1)
-        box((0.05, 0.22, 0.24), (MX, 3.6, MZ + 0.82), red, yaw=0.1)
+        box((0.09, 0.22, 0.24), (MX, 3.6, MZ + 0.82), red, yaw=0.1)     # proud of the cloth: coplanar, it flickered
     # rocks bedded in the sand round the foot
     for (x, z, k, yw) in ((TX + 1.3, TZ - 0.9, 0.42, 0.4), (TX - 1.1, TZ - 1.0, 0.5, 1.3),
                           (TX + 1.2, TZ + 0.9, 0.3, 2.1), (MX + 0.5, MZ + 0.9, 0.28, 0.7)):
@@ -5031,6 +5031,14 @@ DUNE_WC, DUNE_HW = 6.9, 7.2
 # for DUNE_FLAT round it, the station's parts within 5.3 of its middle
 DUNE_LIGHT, DUNE_FLAT = (13.0, -8.5, 8.0), 7.0
 DUNE_STONE, DUNE_DRESSED, DUNE_COPE = 'gravel', 'grey', 'lavender'
+# The road's run back past the dune (round the point and along the start
+# straight), in the dune's frame, 4 u apart from DRIFT_ROAD's end: the dune's
+# inland lobe reaches it, and its foot stands DUNE_BACK off that centreline
+# (the kerb is at 4.7), rising from the verge's height there no steeper than
+# the cuttings' sand. Re-sample with DRIFT_ROAD.
+DRIFT_BACK = ((-4.3, 23.3), (-6.8, 25.7), (-9.6, 26.4), (-13.0, 25.6), (-16.0, 23.8), (-19.3, 21.3), (-22.5, 18.8),
+              (-25.6, 16.4), (-29.0, 13.7), (-32.1, 11.3), (-35.2, 8.9), (-38.7, 6.1), (-41.8, 3.7), (-44.9, 1.3))
+DUNE_BACK = 8.0
 
 
 def drift_road_at(t):
@@ -5090,6 +5098,16 @@ def drift_dune_body(x, z):
     return v - 1.5 * max(0.0, 1.2 - v)
 
 
+def drift_back_off(x, z):
+    """How far (x, z) lies from the centreline of the road's run back."""
+    best = 1e9
+    for (ax, az), (bx, bz) in zip(DRIFT_BACK, DRIFT_BACK[1:]):
+        ux, uz = bx - ax, bz - az
+        k = min(1.0, max(0.0, ((x - ax) * ux + (z - az) * uz) / (ux * ux + uz * uz)))
+        best = min(best, math.hypot(x - ax - ux * k, z - az - uz * k))
+    return best
+
+
 def drift_wall_line(t):
     """How far either side of the road the wingwalls (the cutting's foot)
     stand, at t outside the tunnel: splayed out from the headwall's ends."""
@@ -5116,6 +5134,9 @@ def drift_dune_height(d, t, inside):
     wl = DUNE_WC if inside else drift_wall_line(t)
     # the sheet's rim sinks under the plain wherever the dune runs to it
     h = min(h, min(1.6 * min(t + 32.0, 20.0 - t), 0.9 * (DUNE_OUT[-1] + wl - a)) - 0.45)
+    # ...and under the verge of the road's run back: its foot came down over
+    # the start straight's kerb (round 24)
+    h = min(h, 0.45 + 0.8 * (drift_back_off(x, z) - DUNE_BACK))
     if inside:
         cut = DUNE_HW + 0.85 * min(t - DUNE_T0, DUNE_T1 - t) + 0.9 * max(0.0, a - DUNE_WC)
         h = min(h, cut)
@@ -16872,6 +16893,206 @@ def storm_wreck():
     lie_on_land()
 
 lite_too('careened-sloop', 'bay-battery', 'whalebone-arch', 'reef-beacon', 'storm-wreck')
+
+# ---- round 24: Driftwood, the storm track ----
+# The old wreck the road runs through, what is still afloat off the strand,
+# and the marram and the wrack that were missing along the dunes' feet and
+# the tide line. The small dressing is DRAPED and claims no ground (a
+# `drape_floor` part), so a length of it lies wherever a row puts it.
+
+# The hull the road runs through: its frames' feet HULL_FOOT either side of
+# the centreline (the kerb stands at 4.7), and their heads and the beams
+# across them HULL_HEAD over the plain (the deck lies under a unit over the
+# plain there, and a chase camera rides 0.7 over the deck).
+HULL_FOOT, HULL_HEAD = 6.4, 6.7
+
+@piece(1.0)
+def hull_arch():
+    # Driftwood: an old wooden ship the dunes buried and the last storm blew
+    # bare, lying along the pass: the road was laid between her frames. Her
+    # ribs stand out of the sand either side of the kerbs and curve in over
+    # the road, two deck beams still across them and a shelf timber along
+    # their heads; one rib is snapped off above the turn of the bilge and
+    # its head lies on the sand, two have lost their tops. Her bottom
+    # timbers lie along the verges at the ribs' feet, a few strakes hang on
+    # the frames low down, and sand is drifted against her. Astride the
+    # road (lat 0, yaw 0), her length along it (+Z, the way the cars go).
+    # The ribs are built from under the plain up and stand rigid; what lies
+    # on the sand is draped.
+    wood, dark = 0x8a6a46, 0x7a5a3a
+    n = 5 if LITE else 7
+    zs = [-6.9 + 13.8 * k / (n - 1) for k in range(n)]
+    F, H = HULL_FOOT, HULL_HEAD
+    def rib(sx, z, top=1.0, cut=6, lean=0.0, color=wood):
+        """One frame on the sx side at z: `top` scales its head's height,
+        `cut` keeps that many of its six points (a snapped one), `lean`
+        carries its head along the hull."""
+        pts = [(F, -1.2), (F + 0.5, 1.0), (F + 0.7, 2.9), (F + 0.1, 4.6), (F - 1.4, H - 0.8), (F - 3.2, H)]
+        line = [(sx * x, y * (top if i > 2 else 1.0), z + lean * (i / 5.0) ** 2) for i, (x, y) in enumerate(pts[:cut])]
+        return tube(line, 0.24, color, res=2 if LITE else 3)
+    broken = 1 if LITE else 2                        # the snapped rib (+X side), a third of the way along
+    short = {(1, n - 2): 5, (-1, 1): 4}              # two with their heads gone
+    for k, z in enumerate(zs):
+        for sx in (-1, 1):
+            if sx > 0 and k == broken:
+                rib(sx, z, cut=3)
+                continue
+            rib(sx, z, top=1.0 + 0.06 * jitter(k, sx, 3.0), cut=short.get((sx, k), 6),
+                lean=0.5 * jitter(k, sx, 5.0), color=(wood, dark)[(k + (sx > 0)) % 2])
+    # the deck beams still across, head to head, and the shelf along the
+    # heads of each side where it kept them
+    for k in ((n - 3,) if LITE else (0, n - 3)):
+        beam((-(F - 3.0), H - 0.08, zs[k]), (F - 3.0, H - 0.08, zs[k]), 0.3, dark)
+    beam((-(F - 1.5), H - 0.75, zs[2] - 0.6), (-(F - 1.5), H - 0.75, zs[-1] + 0.5), 0.26, wood)
+    beam((F - 1.5, H - 0.75, zs[broken + 1] - 0.5), (F - 1.5, H - 0.75, zs[n - 3] + 0.6), 0.26, wood)
+    # strakes still on the frames, low on one side and a length on the other
+    with plain_parts():
+        for (sx, y, x, k0, k1) in ((-1, 0.95, F + 0.72, 0, 3), (-1, 1.45, F + 0.82, 0, 2), (1, 0.95, F + 0.72, n - 3, n - 1),
+                                   (-1, 1.95, F + 0.9, 1, 2), (1, 1.45, F + 0.82, n - 2, n - 1))[:3 if LITE else 5]:
+            beam((sx * x, y, zs[k0] - 0.5), (sx * x, y, zs[k1] + 0.5), 0.16, (dark, wood)[int(y * 2) % 2], d=0.4)
+    join_still('ribs')
+    def lying():
+        with plain_parts():
+            # her bottom timbers along the verges, at the ribs' feet
+            for (sx, z0, z1, dx) in ((-1, -8.2, -0.6, 0.0), (-1, 0.2, 7.6, 0.12), (1, -7.4, 2.2, 0.05), (1, 3.4, 8.4, -0.1)):
+                beam((sx * (F - 0.5 + dx), 0.2, z0), (sx * (F - 0.5 - dx), 0.2, z1), 0.42, dark, d=0.4)
+            # the snapped rib's head, fallen outside her, and planks off her side
+            beam((F + 1.3, 0.2, zs[broken] - 0.4), (F + 3.9, 0.24, zs[broken] + 1.3), 0.4, wood)
+            for k, (x, z, yw, L) in enumerate(((-F - 2.0, -4.0, 0.3, 2.2), (-F - 2.9, -1.2, 1.1, 1.7), (F + 2.1, 4.6, 0.5, 2.0),
+                                               (-F - 1.9, 4.4, -0.2, 1.8), (F + 2.6, -4.8, 1.3, 1.6))[:3 if LITE else 5]):
+                box((0.4, 0.08, L), (x, 0.05, z), (wood, 'tan')[k % 2], yaw=yw)
+            for p, (px, pz) in enumerate(((-F - 1.3, -6.0), (-F - 1.6, 1.6), (F + 1.4, -1.8), (F + 1.2, 6.2))):
+                storm_tussock(px, pz, p)                           # marram rooted in the sand along her
+        for (x, z, r, st) in ((-F - 1.2, -3.4, 1.1, 2.4), (-F - 1.1, 3.6, 1.0, 2.2), (F + 1.0, 5.4, 0.9, 1.8), (F + 1.1, -5.6, 0.8, 1.5)):
+            sand_heap(x, z, r, 0.45, st)                           # the sand drifted against her
+    draped('floor', lying)
+
+def storm_tussock(x, z, k, h=0.75):
+    """One tussock of marram at (x, z): blades fanned from one foot, pale
+    green going to straw (three broader ones, LITE)."""
+    for j in range(3 if LITE else 4):
+        a = (2.1 if LITE else 1.57) * j + k
+        o = beam((x + 0.06 * math.cos(a), -0.1, z + 0.06 * math.sin(a)),
+                 (x + 0.36 * math.cos(a), h * (0.8 + 0.4 * frac(k * 0.29 + j * 0.4)), z + 0.36 * math.sin(a)),
+                 0.18 if LITE else 0.12, ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
+        o['ramp'] = 0.15
+
+@piece(1.0)
+def dune_foot():
+    # Driftwood: marram along a dune's foot, where the sand ran down bare to
+    # the verge: tussocks in clumps along a wandering line, thick where the
+    # dune begins (-X) and thinning out toward the road (+X), bare sand
+    # between the clumps. It runs along the road (+Z), 18 u; DRAPED whole,
+    # and it claims no ground.
+    def build():
+        n = 5 if LITE else 6
+        with plain_parts():
+            for p in range(n):
+                pz = -8.0 + 16.0 * (p + 0.6 * frac(p * 0.41 + 0.3)) / n
+                px = 0.8 * wobble(pz, 21.0, 9.0)
+                for k in range(2 + p % 2):
+                    a0 = 2.4 * k + 1.7 * p
+                    d = 0.35 + 0.75 * frac(k * 0.37 + p * 0.21)
+                    storm_tussock(px - 0.5 + d * math.cos(a0), pz + 1.5 * d * math.sin(a0), 3 * p + k)
+                if p % 2 == 0:                                     # one out toward the road, smaller
+                    storm_tussock(px + 1.5 + 0.5 * frac(p * 0.7), pz + 0.9, 40 + p, h=0.5)
+    draped('floor', build)
+
+@piece(1.0)
+def tide_wrack():
+    # Driftwood: the wrack along the tide line, a length of it: weed in a
+    # dark wandering band, the storm's timber in it (logs rolled together,
+    # planks, two spars driven into the sand and left leaning, a ship's
+    # hatch board), a float and a length of hawser. It runs along the road
+    # (+Z), 16 u; DRAPED whole, and it claims no ground.
+    def build():
+        def x_at(z):
+            return 0.9 * wobble(z, 33.0, 8.0)
+        with plain_parts():
+            n = 7 if LITE else 12
+            for k in range(n):                                     # the weed, heaped
+                z = -7.6 + 15.2 * (k + 0.5 * frac(k * 0.37)) / n
+                rowed(box((0.7 + 0.3 * frac(k * 0.61), 0.2 + 0.1 * (k % 3), 1.5), (x_at(z) + 0.25 * jitter(k, 1, 4.0), 0.07, z),
+                          'olive' if k % 3 else 0x7a5a3a, yaw=0.5 * jitter(k, 2, 4.0)), 30)
+            for k, (z, dx, yw, L) in enumerate(((-6.2, 0.7, 0.3, 1.9), (-2.4, -0.6, 1.2, 1.5), (1.0, 0.8, -0.4, 2.2),
+                                               (4.6, -0.5, 0.8, 1.6), (6.8, 0.6, 1.5, 1.3))[:3 if LITE else 5]):
+                box((0.34, 0.08, L), (x_at(z) + dx, 0.2, z), ('tan', 0x9a6a46)[k % 2], yaw=yw, roll=0.15)   # planks on the weed
+            box((0.9, 0.1, 1.1), (x_at(3.0) - 0.9, 0.12, 3.0), 0x9a6a46, yaw=0.6, roll=0.2)                 # a hatch board
+            box((0.3, 0.26, 0.3), (x_at(-4.4) + 0.5, 0.2, -4.4), 0xff7e44, yaw=0.5)                         # a float
+            line = [(x_at(-1.0) + 0.6, 0.1, -1.0), (x_at(-0.2) + 1.2, 0.08, -0.2), (x_at(0.6) + 0.9, 0.08, 0.9), (x_at(1.2) + 1.6, 0.08, 1.6)]
+            for a_, b_ in zip(line, line[1:]):
+                beam(a_, b_, 0.1, 0xcbb794)                                                                  # a hawser
+        with bleached():
+            for k, (z0, z1, dx0, dx1, r, y) in enumerate(((-7.4, -4.6, 0.2, -0.3, 0.2, 0.2), (-0.8, 2.6, -0.2, 0.3, 0.22, 0.22),
+                                                         (4.0, 7.2, 0.3, -0.2, 0.18, 0.2), (-5.6, -3.4, -0.5, 0.1, 0.16, 0.46),
+                                                         (5.0, 6.6, -0.4, 0.4, 0.14, 0.5))[:3 if LITE else 5]):
+                rod((x_at(z0) + dx0, y, z0), (x_at(z1) + dx1, y * 0.9, z1), r, ('tan', 'cream')[k % 2], r2=r * 0.75, segs=6)
+            # the spars: what stands up over the kerb's line
+            rod((x_at(-2.6) - 0.3, -0.2, -2.6), (x_at(-2.6) + 0.3, 1.5, -2.2), 0.13, 'tan', r2=0.09, segs=6)
+            rod((x_at(5.6) + 0.2, -0.2, 5.6), (x_at(5.6) - 0.5, 1.2, 5.9), 0.12, 'cream', r2=0.08, segs=6)
+    draped('floor', build)
+
+@piece(1.0)
+def wreck_buoy():
+    # Driftwood: the wreck buoy on the bar off the east strand, where the
+    # after half of the coaster went down (her fore half is on the dune by
+    # the climb to the pass, storm_wreck): a black float banded red, its
+    # lattice tower with the lamp and the two balls of a danger mark, riding
+    # the swell (it rolls and heaves on its mooring, each on a beat of its
+    # own); beside it her mainmast stands out of the water, canted, the gaff
+    # hanging from it, a gull on its truck. Twice a car's height, as the
+    # buoy thrown up on the point is (storm_buoy). +X is the road.
+    red, black = 0xcf534f, 0x38383d
+    segs = 8 if LITE else 10
+    with animated('anim_drape+bob:h=0.14:p=3.4+sway:a=z:d=10:p=4.7#buoy', (0.0, SEA, 0.0)):
+        cyl(0.98, 1.1, (0.0, -0.7, 0.0), black, segs=segs)                           # the float, awash
+        cyl(1.0, 0.26, (0.0, 0.4, 0.0), red, segs=segs)
+        cyl(0.98, 0.42, (0.0, 0.66, 0.0), black, r2=0.6, segs=segs)
+        with plain_parts():
+            for k in range(4):                                                       # the tower's legs
+                a = math.pi / 4 + k * math.pi / 2
+                beam((0.52 * math.cos(a), 1.0, 0.52 * math.sin(a)), (0.2 * math.cos(a), 2.7, 0.2 * math.sin(a)), 0.13, black)
+            box((0.66, 0.1, 0.66), (0.0, 1.8, 0.0), black)
+        box((0.52, 0.12, 0.52), (0.0, 2.72, 0.0), black)
+        cyl(0.17, 0.3, (0.0, 2.78, 0.0), 0xffc044, segs=6)                           # the lamp
+        box((0.07, 1.0, 0.07), (0.0, 3.5, 0.0), black)                               # the danger mark: two balls
+        for y in (3.3, 3.85):
+            sphere(0.26, (0.0, y, 0.0), black)
+    # her mainmast out of the water, canted, the gaff hanging
+    with bleached():
+        rod((-3.2, -1.0, 2.4), (-2.3, 3.4, 3.0), 0.2, 'tan', r2=0.13, segs=6)
+        rod((-2.5, 2.3, 2.9), (-3.9, 0.2, 4.0), 0.1, 'cream', r2=0.07, segs=6)
+    with plain_parts():
+        beam((-2.42, 2.9, 2.92), (-2.3, 2.9, 2.2), 0.09, 0x8a6a46)                  # a crosstree
+        beam((-2.42, 2.9, 2.92), (-2.54, 2.9, 3.6), 0.09, 0x8a6a46)
+    gull((-2.3, 3.42, 3.0), 0.6, 'anim_watch:r=30#mast')
+    join_still('mast')
+    lie_on_land()
+
+@piece(1.0)
+def storm_adrift():
+    # Driftwood: the ship's boxes still afloat, drifting in off the strand
+    # where the last of them come ashore (storm_containers_c): a blue one
+    # low in the water and level, a yellow one down by its doors with a
+    # corner high, a green one all but gone, one end standing out of the
+    # sea; each rides the swell on its own beat. The ducks out of the burst
+    # one drift in between them in a raft. +X is the road; they lie along
+    # it (+Z).
+    cans = (((0.6, SEA + 0.02, -4.6), 'blue', 0.35, 0.1, 0.06, 'anim_drape+bob:h=0.12:p=3.6+sway:a=z:d=7:p=5.2#can0'),
+            ((-2.4, SEA + 0.12, 0.4), 0xffc044, -0.5, -0.16, 0.34, 'anim_drape+bob:h=0.1:p=4.1+sway:a=x:d=8:p=4.4#can1'),
+            ((1.0, SEA - 0.1, 4.8), 0x61cb8b, 1.1, 0.2, 0.95, 'anim_drape+bob:h=0.08:p=4.8+sway:a=z:d=6:p=6.1#can2'))
+    for at, color, yaw, roll, pitch, wave in cans:
+        with animated(wave, (at[0], SEA, at[2])):
+            ship_can(at, color, yaw, roll=roll, pitch=pitch)
+    with animated('anim_drape+bob:h=0.06:p=2.3#ducks', (2.6, SEA, 0.6)):
+        for k in range(4 if LITE else 7):
+            toy_duck(2.6 + 1.3 * math.sin(2.3 * k), SEA - 0.04, 0.6 + 1.6 * math.cos(1.7 * k + 0.4), 0.9 * k)
+    def foot():
+        with plain_parts():
+            box((0.3, 0.3, 0.3), (0.0, -0.8, 0.0), 'slate')
+    draped('foot', foot)
+
+lite_too('hull-arch', 'dune-foot', 'tide-wrack', 'wreck-buoy', 'storm-adrift')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals

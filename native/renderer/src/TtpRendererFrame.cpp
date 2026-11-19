@@ -2602,9 +2602,13 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
     // the three side ever loses the quirk, this collapses to a constant.
     if (mPollenMat) {
         const uint32_t vc = input.viewCount;
+        // (Rain grows by the root of that: a streak doubled for a split's
+        // cell is a bar across a picture a quarter the size, and one left at
+        // its solo size is under a pixel there.)
         const uint32_t rows = gridDims(vc ? vc : 1).rows;
+        const float grow = mAmbStreak > 0 ? std::sqrt((float) rows) : (float) rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
-        mAmbHalfSize = mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f);
+        mAmbHalfSize = mAmbSize * grow * std::tan(fov * (float) M_PI / 360.0f);
         mAmbTime = mTime;
         mPollenMat->setParameter("halfSize", mAmbHalfSize);
         mPollenMat->setParameter("time", mAmbTime); // drives the shader-side drift
@@ -2882,8 +2886,8 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
         std::memcpy(&wf, views[i].world, sizeof(wf));
         // The uniforms exactly as renderAmbient and buildStatic set them.
         AmbCullCell c;
-        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
-                mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
+        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob,
+                mAmbHalfSize * std::max(1.0f, mAmbStreak), mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
 
         mAmbCellOff[i] = (uint32_t) out->size();
         for (uint32_t k = 0; k < per; k++) {

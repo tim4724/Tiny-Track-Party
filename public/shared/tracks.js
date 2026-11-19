@@ -826,7 +826,41 @@ export const TRACKS = {
       { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 },
       // ...and, on the dune beside the climb to the pass (round 23), the
       // fore half of a coaster the storm broke
-      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 }
+      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 },
+      // round 24, the storm track. An old wooden hull the dunes buried and
+      // the storm blew bare lies along the pass, and the road runs between
+      // her ribs: astride it, where the pass is level and straight and the
+      // light station stands in the frame she makes
+      { model: 'set-hull-arch', u: 0.612, lat: 0 },
+      // what is still afloat: the wreck buoy over the coaster's after half
+      // off the east strand, and more of the ship's boxes drifting in where
+      // the last ones come ashore (both past the surf line, some 23 out)
+      { model: 'set-wreck-buoy', u: 0.335, lat: -31, yaw: 180 },
+      { model: 'set-storm-adrift', u: 0.418, lat: -25.5, yaw: 180 },
+      // the wrack along the tide line, between what already lies there
+      { model: 'set-tide-wrack', u: 0.268, lat: -16.5, yaw: 180 },
+      { model: 'set-tide-wrack', u: 0.322, lat: -14.5, yaw: 184 },
+      { model: 'set-tide-wrack', u: 0.352, lat: -15, yaw: 176, lite: false },
+      { model: 'set-tide-wrack', u: 0.405, lat: -14.5, yaw: 180 },
+      { model: 'set-tide-wrack', u: 0.428, lat: -15, yaw: 186, lite: false },
+      { model: 'set-tide-wrack', u: 0.452, lat: -14.5, yaw: 180 },
+      // marram along the dunes' feet, which ran down bare to the verge: the
+      // start straight's infield and the first bend's, the bank along the
+      // east run, both sides of the pass, and the lighthouse dune's foot
+      // where the lap comes back past it
+      { model: 'set-dune-foot', u: 0.975, lat: 12.6 },
+      { model: 'set-dune-foot', u: 0.045, lat: 12.6 },
+      { model: 'set-dune-foot', u: 0.135, lat: 12, lite: false },
+      { model: 'set-dune-foot', u: 0.30, lat: 7.4 },
+      { model: 'set-dune-foot', u: 0.355, lat: 7.4, lite: false },
+      { model: 'set-dune-foot', u: 0.41, lat: 7.4 },
+      { model: 'set-dune-foot', u: 0.572, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.648, lat: -9.4, yaw: 180, lite: false },
+      { model: 'set-dune-foot', u: 0.748, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.60, lat: 12.8, lite: false },
+      { model: 'set-dune-foot', u: 0.715, lat: 14 },
+      { model: 'set-dune-foot', u: 0.915, lat: 9.2 },
+      { model: 'set-dune-foot', u: 0.945, lat: 13.2 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
