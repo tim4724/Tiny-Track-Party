@@ -2388,17 +2388,16 @@ export const TRACKS = {
     // the top leg's infield through a marble wheel, behind a tin humming top
     // and a wooden one spinning short of it, into a catch tray and up the
     // summit screw lift outside the climb, the tallest thing in the room;
-    // over the skyway and south along its outside, ticking down a stair of
-    // tone bars, into a vortex bowl and a helix outside the descent; along
+    // over the skyway three times, weaving out, back to the infield and out
+    // again on twin rails the racers drive under, each span lower than the
+    // last; south along its outside, ticking down a stair of tone bars, into
+    // a vortex bowl and a helix outside the descent; along
     // the south leg's outside and round a loop of its own beside the mid
     // leg's; on the floor to a stair lift at the corner home, onto a wooden
     // marble racer of two stepped boards beside the grid straight, and from
-    // its foot back into the tower's. Where the lap comes down its spiral
-    // the run's sections lie on the floor under the decks, so a side run of
-    // its own stands round the outside of the descent at deck height; a
-    // click-clack board faces the descent's lower turn from outside the
-    // skyway, and a second span of twin rails crosses the skyway's far end,
-    // seen coming its whole length. The run is the room's one mover: this
+    // its foot back into the tower's. A click-clack board faces the
+    // descent's lower turn from outside the skyway. Nothing of the run
+    // stands apart from its one loop. The run is the room's one mover: this
     // room has no train. Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
@@ -2413,8 +2412,6 @@ export const TRACKS = {
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
-      { model: 'set-marble-run-dive', u: 0.5, lat: 5.26, yaw: 180 },
-      { model: 'set-marble-run-cross', u: 0.5093, lat: 0, yaw: 180 },
       { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
       { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },

@@ -2103,7 +2103,7 @@ export function runDisplayScenario(opts, ctx) {
       function drivePast(s) {
         if (s === false || !layout.length) { race.loop = null; return null; }
         const piece = s == null && layout.pieces[indexFor(0)];
-        const spot = piece ? { x: piece.x, z: piece.z } : v3(frameAt(s || 0).pos);
+        const spot = piece ? { x: piece.x, z: piece.z } : frameAt(s || 0).pos;
         if (mode !== 'race') setView('race');
         const me = field.find((f) => !f.ai).peerIndex;
         const L = layout.length, hz = 1000 / SEE_STEP_MS;

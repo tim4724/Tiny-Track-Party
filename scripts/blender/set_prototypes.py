@@ -22906,7 +22906,8 @@ def marble_tower():
 # stair lift. Its order: the tower's cup (set-marble-tower, untouched) ->
 # over the corner after the grid straight -> along the top leg's infield
 # through a marble wheel -> a catch tray -> the summit screw lift -> over the
-# skyway -> south along its outside, down a stair of tone bars -> a vortex
+# skyway and twice more across it, weaving south -> down a stair of tone bars
+# outside it -> a vortex
 # bowl and a helix -> along the south leg's outside, round a loop beside the
 # mid leg -> on the floor to the stair lift -> the marble racer beside the
 # grid straight -> back into the tower's foot. Striped stacked cylinders are
@@ -22924,8 +22925,7 @@ TOWER = (-1.66, 72.11)                           # set-marble-tower's column (u 
 TOWER_RIM = (0.4 + 13.4 + 0.3 + 1.1) * 0.62      # its cup's rim over the floor (marble_tower at its grow)
 RUN_D2 = (6.4, 5.4, 57.3)                        # the head's inner post, where the wheel's leg takes over
 RUN_ORIGIN = {'head': (-7.0, 50.0), 'wheel': (25.0, 57.4), 'summit': (52.0, 57.4), 'skyway': (75.7, 30.0),
-              'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0),
-              'dive': (74.0, 20.0), 'cross': (68.7, 16.0)}
+              'vortex': (75.7, 10.0), 'loop': (40.0, -21.4), 'stair': (15.0, -15.4), 'racer': (-7.0, 24.0)}
 
 def fillet(pts, r=1.5, n=6):
     """A polyline of marble centres [(x, h, z)] with each corner rounded."""
@@ -23080,8 +23080,9 @@ def run_arc(chain, value=None):
 
 # The box draws a marble as a draw of its own, so its run keeps every marble
 # only where the racers sit beside it longest (the grid's racer, the span the
-# grid straight points at) and every third on these chains.
-RUN_SPARSE = ('wheel', 'summit', 'sky', 'vortex', 'loop', 'stair', 'home', 'dive', 'cross')
+# grid straight points at, the three spans they drive under on the skyway)
+# and every third on these chains.
+RUN_SPARSE = ('wheel', 'summit', 'vortex', 'loop', 'stair', 'home')
 
 def run_marbles(chain, seen, lite, after=None, lane=None):
     """A section's marbles: along `seen` (their centres, from the station or
@@ -23195,6 +23196,9 @@ def run_wheel(lite):
     run_marbles('wheel', [D2] + top + ride + low + [(LIFT[0], 0.6, LIFT[1])], lite, after='head')
 
 LIFT = (52.8, 42.7)                              # the summit screw lift's axis
+LIFT_H = 12.2                                    # its height: what the skyway's three crossings fall from
+RUN_J = (63.7, LIFT_H - 0.25, 42.25)             # the station inside the skyway, where the summit's chute hands over
+SKY_END = (75.2, 7.8, 1.0)                       # the station outside the skyway's end, where the vortex's leg takes over
 LIFT_PORT = (50.75, 0.6, 44.2)                   # where the floor chute meets its foot drum's wall
 
 def screw_lift(cx, cz, H, RP, lite):
@@ -23252,13 +23256,12 @@ def run_summit(lite):
     # lift takes the marbles up into its head drum, and a chute leaves that
     # east on one trestle for the station by the skyway.
     LX, LZ = LIFT
-    H = 11.0
-    head = screw_lift(LX, LZ, H, 2.0, lite)
+    head = screw_lift(LX, LZ, LIFT_H, 2.0, lite)
     px, py, pz = LIFT_PORT
     mouth((px, py + 0.1, pz), (40.0, 55.4))
-    J = (63.7, 10.75, 42.25)
+    J = RUN_J
     y0 = head + 1.0                               # the marbles' line inside the head drum
-    line = [(LX + 1.2, y0, LZ - 0.05), (58.5, 10.9, 42.5), (J[0] - 0.55, J[1] + 0.05, J[2])]
+    line = [(LX + 1.2, y0, LZ - 0.05), (58.5, y0 - 0.1, 42.5), (J[0] - 0.55, J[1] + 0.05, J[2])]
     run_chute(line, 0x6cbf6c)
     mouth((LX + 1.75, y0 + 0.07, LZ - 0.05), (58.5, 42.5))
     trestle(line[1])
@@ -23266,34 +23269,54 @@ def run_summit(lite):
     run_marbles('summit', [(LX, y0, LZ)] + line + [J], lite)
 
 def run_skyway(lite):
-    # H + J: over the skyway on twin rails, about 5 u over its deck, to a
-    # station outside it, then south along its outside a few units over the
-    # racers' eyes, the marbles ticking down a stair of five tone bars, still
-    # over their eyes at its foot (lower, the deck's kerb hides the run).
-    LOW = 7.8                                     # the run's height at the vortex's post
-    J0, X = (63.7, 10.75, 42.25), 75.2
-    span = resample([(J0[0] + 0.5, 10.7, J0[2]), (X - 1.4, 10.45, J0[2])])
+    # H + J: the run WEAVES over the skyway, three spans of twin rails the
+    # racers drive under, the marbles rolling overhead: straight across from
+    # the summit's station to a station outside it, back over it on a slant
+    # to a station in the infield, and out over it again on the other slant,
+    # each span lower than the last and the lowest still 4.7 u over the deck.
+    # Every span stands on a post each side, 4 u off the road's middle. Then
+    # south along the skyway's outside, ticking down a stair of five tone
+    # bars, to the station before the vortex.
+    J0, X, XI = RUN_J, 75.2, 62.2
+    y = J0[1]
+    span = resample([(J0[0] + 0.5, y - 0.05, J0[2]), (X - 1.4, y - 0.3, J0[2])])
     rails(span, 0x5a8fd8)
-    run_station(X, J0[2], 10.4 - RUN_MR - 0.09, 1)   # its cap inside the chute's floor over it
-    bend = fillet([(X - 1.4, 10.45, J0[2]), (X, 10.4, J0[2]), (X, 10.25, J0[2] - 1.6), (X, LOW + 1.55, 20.6)], r=1.2)
-    run_chute(bend, 0x5a8fd8)
+    run_station(X, J0[2], y - 0.35 - RUN_MR - 0.09, 1)   # its cap inside the chute's floor over it
+    T, ZT = y - 1.75, 11.9                        # the tone stair's head
+    line = fillet([(X - 1.4, y - 0.3, J0[2]), (X, y - 0.35, J0[2]), (X, y - 0.5, 37.5), (XI, y - 1.0, 28.0),
+                   (XI, y - 1.15, 24.0), (X, y - 1.65, 14.5), (X, T, ZT)], r=1.6)
+    pts = resample(line, 0.3)
+    over = [XI + 2.3 < p[0] < X - 2.3 for p in pts]   # between a span's two posts: rails, a chute round each turn
+    i = 0
+    while i < len(pts) - 1:
+        j = i + 1
+        while j < len(pts) - 1 and over[j] == over[i + 1]:
+            j += 1
+        if over[i + 1]:
+            rails(pts[i:j + 1:2] + ([pts[j]] if (j - i) % 2 else []), 0x5a8fd8)
+            trestle(pts[i])
+            trestle(pts[j])
+        else:
+            run_chute(thin(pts[i:j + 1], 0.01), 0x5a8fd8)
+        i = j
+    mid = on(pts, XI, 26.0)
+    run_station(XI, 26.0, mid[1] - RUN_MR - 0.09, 3)     # the infield's station, under the turn
     bars = []                                                                  # the stair: five tone bars, each a step down
     for k, c in enumerate((0xe66a5a, 0xff7e44, 0xf2c14e, 0x6cbf6c, 0x5a8fd8)):
-        z0 = 20.3 - 0.5 * k
-        y = LOW + 1.55 - RUN_MR - 0.05 - 0.26 * (k + 1)
-        box((1.1, 0.14, 0.44), (X, y - 0.07, z0 - 0.22), c)
-        bars += [(X, y + RUN_MR, z0), (X, y + RUN_MR, z0 - 0.44)]
+        z0 = ZT - 0.3 - 0.5 * k
+        yb = T - RUN_MR - 0.05 - 0.26 * (k + 1)
+        box((1.1, 0.14, 0.44), (X, yb - 0.07, z0 - 0.22), c)
+        bars += [(X, yb + RUN_MR, z0), (X, yb + RUN_MR, z0 - 0.44)]
     for s in (-1, 1):                                                          # the stair's two cheeks
-        bar((X + s * 0.62, LOW + 1.2, 20.5), (X + s * 0.62, LOW - 0.1, 17.7), 0.12, 0.3, CREAM)
-    end = (X, LOW, 9.0)
-    tail = [(X, bars[-1][1] - 0.02, 17.5), (X, LOW + 0.05, end[2] + 0.55)]
+        bar((X + s * 0.62, T - 0.35, ZT - 0.1), (X + s * 0.62, T - 1.65, ZT - 2.9), 0.12, 0.3, CREAM)
+    end = SKY_END
+    tail = [(X, bars[-1][1] - 0.02, ZT - 3.1), (X, end[1] + 0.05, end[2] + 0.55)]
     run_chute(tail, 0x5a8fd8)
-    for z in (34.0, 27.0, 21.2):
-        trestle(on(resample(bend, 0.3), X, z))    # resampled: the bend's long straight is one segment, and three posts stood at its ends
-    for z in (17.0, 13.0):
+    trestle(on(pts, X, ZT + 0.5))
+    for z in (ZT - 3.5, ZT - 7.2):
         trestle(on(resample(tail, 0.3), X, z))
     joint(X, end[2], end[1], toward=((X, end[2] + 1.0), (X, end[2] - 1.0)), color=0xf2c14e)
-    run_marbles('sky', [J0] + span + bend + bars + tail + [end], lite, after='summit')
+    run_marbles('sky', [J0] + span + line + bars + tail + [end], lite, after='summit')
 
 def bowl(cx, cz, r0, y0, r1, y1, outside, inside, segs=20):
     """A vortex bowl: open, round, its floor curving from the hole (r0, at
@@ -23333,11 +23356,11 @@ def run_vortex(lite):
     # outer kerb hid it); the marbles circle down it, drop through it and its
     # column to a spout, and wind down a helix round a grey column to the
     # south leg's outside.
-    X, J0 = 75.2, (75.2, 7.8, 9.0)
+    X, J0 = 75.2, SKY_END
     BX, BZ, R0, Y0, R1, Y1 = 73.2, -8.4, 0.42, 6.1, 2.3, 7.1
     in_ = [(X, 7.75, J0[2] - 0.55), (X, 7.6, -6.3)]      # its end clear of the bowl's rim, the marbles over it
     run_chute(in_, 0xa878e8)
-    trestle(on(resample(in_, 0.3), X, 1.0))
+    trestle(on(resample(in_, 0.3), X, -2.6))
     run_station(BX, BZ, Y0 - 0.05, 2, r=0.55)         # its cap inside the bowl's shell
     bowl(BX, BZ, R0, Y0, R1, Y1, 0xa878e8, 0xf2c14e)
     def floor(r):
@@ -23563,46 +23586,8 @@ def run_racer(lite):
     mouth((tx - 0.7, 0.65, tz - 0.26), (-13.0, 64.0), w=1.25, h=1.3)   # down to the floor: the column is the tower's own piece
     run_marbles('home', [(xo, by + R, zf)] + floor + [(tx, 0.66, tz)], lite)
 
-def run_ring(chain, cx, cz, R, a0, a1, y0, y1, color, lite):
-    """A side run round the outside of the road's descending spiral, at the
-    deck's own height where the floor's sections are under it: marbles out
-    of a station at (a0, y0), down a chute on beech posts round the arc to
-    a station at (a1, y1) (angles in degrees about the spiral's centre),
-    and back under the floor as every section's do."""
-    n = max(4, int(abs(a1 - a0) / (12 if lite else 6)))
-    pts = []
-    for i in range(n + 1):
-        a = math.radians(a0 + (a1 - a0) * i / n)
-        pts.append((cx + R * math.cos(a), y0 + (y1 - y0) * i / n, cz + R * math.sin(a)))
-    run_chute(pts, color)
-    for i in range(2, n - 1, 2 if lite else 3):
-        trestle(pts[i])
-    joint(pts[0][0], pts[0][2], pts[0][1], toward=((pts[1][0], pts[1][2]),), color=color)
-    joint(pts[-1][0], pts[-1][2], pts[-1][1], toward=((pts[-2][0], pts[-2][2]),), color=color)
-    run_marbles(chain, pts, lite)
-
-def run_dive(lite):
-    # outside the descent, on the room's side: seen ahead from the top leg's
-    # end and overhead from the turns below it
-    # (it starts past the vortex: from 8 degrees its drum stood in the
-    # vortex's inlet and its chute ran through the bowl)
-    run_ring('dive', 60.3, 0.0, 14.0, -52.0, -112.0, 6.7, 6.0, 0x6cbf6c, lite)
-
-def run_cross(lite):
-    # a second crossing where the racers see it coming: over the skyway's
-    # far end on twin rails, from a station outside it down to one in the
-    # infield, as far over the deck as the first (run_skyway), the whole
-    # length of the skyway ahead of it
-    S, N = (77.2, 11.7, 16.0), (62.2, 10.5, 16.0)
-    span = resample([(S[0] - 0.55, S[1] - 0.05, S[2]), (N[0] + 0.55, N[1] + 0.05, N[2])])
-    rails(span, 0xe66a5a)
-    joint(S[0], S[2], S[1], toward=((S[0] - 1.0, S[2]),), color=0xe66a5a)
-    joint(N[0], N[2], N[1], toward=((N[0] + 1.0, N[2]),), color=0x6cbf6c)
-    run_marbles('cross', [S] + span + [N], lite)
-
 RUN_BUILD = {'head': run_head, 'wheel': run_wheel, 'summit': run_summit, 'skyway': run_skyway,
-             'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer,
-             'dive': run_dive, 'cross': run_cross}
+             'vortex': run_vortex, 'loop': run_loop, 'stair': run_stair, 'racer': run_racer}
 for _n in RUN_BUILD:
     for _lite in (False, True):
         _name = 'marble-run-%s%s' % (_n, '-lite' if _lite else '')
