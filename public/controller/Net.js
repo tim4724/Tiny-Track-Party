@@ -231,6 +231,17 @@ export class ControllerNet extends GameNet {
     if (this._suspended) this.connect();   // connect() clears _suspended
   }
 
+  // The OS says the network is back. A link that is down but still ours to
+  // rebuild (a backoff timer pending, or the budget spent: 'lost') dials now,
+  // exactly as the Try again button does, rather than waiting out the timer or
+  // a tap. A dial already in flight is replaced: it began on the old network.
+  // True when it dialled, so the caller can show the overlay.
+  redialIfDown() {
+    if (!this.party || this._terminal || this.party.connected) return false;
+    this.connect();
+    return true;
+  }
+
   // Live rename: adopt the new name and re-introduce ourselves to the display so
   // it updates our seat and re-broadcasts the roster (LOBBY_UPDATE) to everyone —
   // the same HELLO path used on join and on display-return, so a fresh display
