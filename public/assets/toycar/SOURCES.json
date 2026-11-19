@@ -169,6 +169,7 @@
     "set-cow-farm-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-cow-farm.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crab-pots.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-crag-hoodoos-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crag-saguaros-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-crag-saguaros.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-dead-cottonwood.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
