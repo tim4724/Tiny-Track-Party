@@ -29,6 +29,7 @@ import contextlib
 import json
 import math
 import os
+import re
 import sys
 
 import bpy
@@ -1800,8 +1801,8 @@ def bonfire():
     # Driftwood: the beach fire at the end of the strand line, at a car's
     # scale: driftwood stood up in a cone in its ring of stones, the flames
     # flickering up out of it, its smoke going up over the beach; two logs
-    # drawn up as seats round it, and a lean-to of driftwood poles behind
-    # them out of the wind. No one about (round 10: three people half a car
+    # drawn up as seats round it, and a lean-to behind them out of the wind,
+    # driftwood poles under an olive tarpaulin. No one about (round 10: three people half a car
     # long read as specks): a fire the size a beach party builds, its
     # flames as tall as a car, is what a racer sees of it.
     for k in range(9):
@@ -1827,12 +1828,25 @@ def bonfire():
         for z in (-H + 0.1, H - 0.1):                    # the uprights and ridge grey: white, they framed a goal
             rod((-1.25, 0, z), (-1.25, R, z), 0.06, 'tan', segs=5)
         rod((-1.25, R, -H), (-1.25, R, H), 0.06, 'tan', segs=5)
-        for i in range(11):
-            z = -H + 0.1 + i * (2 * H - 0.2) / 10
+        for i in range(5):
+            z = -H + 0.1 + i * (2 * H - 0.2) / 4
             rod((-1.25, R, z), (-1.25 - B, 0.0, z + 0.05 * (i % 2)), 0.06, 'tan' if i % 2 else 'cream', segs=5)
-    # an old sail over the poles: without it the frame reads as a swing
-    box((math.hypot(R, B) - 0.05, 0.03, 2 * H), (-1.25 - B / 2 - 0.03, R / 2 + 0.03, 0.0), 'cream',
-        roll=math.atan2(R, B))
+    # a tarpaulin over the poles (without a cloth the frame reads as a swing;
+    # round 25: a sand-coloured slab on eleven poles read as a board fence):
+    # olive, lying ON the poles from the ridge to the sand and run out flat
+    # there, a flap turned down over the ridge, its hem held on the sand by
+    # stones and its ridge ends guyed to pegs
+    TARP, T = 'olive', 2 * H - 0.3
+    sl = [(-1.21, R + 0.08), (-1.25 - B - 0.08, 0.1), (-1.25 - B - 0.42, 0.04)]
+    with plain_parts():
+        for (x0, y0), (x1, y1) in zip(sl, sl[1:]):
+            poly([(x0, y0, -T / 2), (x0, y0, T / 2), (x1, y1, T / 2), (x1, y1, -T / 2)], [(0, 1, 2, 3)], TARP)
+        poly([(-1.21, R + 0.08, -T / 2), (-1.21, R + 0.08, T / 2), (-1.13, R - 0.26, T / 2), (-1.13, R - 0.26, -T / 2)], [(0, 1, 2, 3)], TARP)
+        for z in (-T / 2 + 0.3, 0.1, T / 2 - 0.4):                                # the stones on its hem
+            box((0.24, 0.18, 0.22), (-1.25 - B - 0.3, 0.1, z), 'grey', yaw=z)
+        for sz in (-1, 1):                                                        # the guys, ridge end to peg
+            beam((-1.25, R, sz * H), (-1.0, 0.0, sz * (H + 0.75)), 0.04, 0xfde4c7)
+            box((0.07, 0.22, 0.07), (-1.0, 0.08, sz * (H + 0.75)), 0x9a6a46)
     # past the lean-to's end, a driftwood teepee the beachcombers stood up,
     # as they do on a beach the storms fill with wood: poles leant together
     # round a ring, crossing at the top, a person's height and a half
@@ -2383,8 +2397,11 @@ def lagoon_launch():
     # causeway and back along the baths' shore, round and round. (The idea
     # was a jet ski; a jet ski with no rider reads as a fault and a rider at
     # this size as a speck, where a launch under its top asks for no one.)
-    # Launch, tow rope and banana are one part on the path, held at the
-    # rope's middle, so the banana swings wide on the turns. The lagoon is
+    # Launch and banana are two parts on the one path, the banana (and the
+    # rope from its nose) a rope's length behind, so it follows the launch
+    # round the turns (round 25: as one rigid part they spun about the
+    # rope's middle on a turn, the banana out through the causeway's piles).
+    # The lagoon is
     # the bay the causeway's shore lets down (riptide_water). Placed on the
     # causeway's right; the course is laid out in WORLD coordinates (RIP_AT).
     white, red, yellow, blue, orange = 0xfff6eb, 0xff5040, 0xffc044, 0x339cf2, 0xff7e44
@@ -2399,32 +2416,39 @@ def lagoon_launch():
         tx, tz = frame(i)
         return (mid[i][0] - tz * H * across + tx * H * along, mid[i][1] + tx * H * across + tz * H * along)
     n = len(mid)
-    turn = [math.pi * q for q in (0.25, 0.5, 0.75)]
+    turn = [math.pi * q / 6 for q in range(1, 6)]
     course = ([off(i, 1, 0) for i in range(n)] + [off(n - 1, math.cos(a), math.sin(a)) for a in turn]
               + [off(i, -1, 0) for i in range(n - 1, -1, -1)] + [off(0, -math.cos(a), -math.sin(a)) for a in turn])
     for k, (x, z) in enumerate(course):
         marker('path_tow_%d' % k, (x, y, z))
-    with animated('anim_path:c=tow:p=17:f=1+bob:h=0.04:p=0.8#tow', (0.0, 0.0, 0.0)):
+    lap = sum(math.dist(p, q) for p, q in zip(course, course[1:] + course[:1]))
+    GAP = 2.2                                             # launch's middle to the banana's
+    with animated('anim_path:c=tow:p=22:f=1+bob:h=0.04:p=0.8#tow', (0.0, 0.0, 0.0)):
         with plain_parts():
-            box((1.25, 0.3, 0.56), (1.0, 0.1, 0.0), white)                   # the launch's hull
-            box((0.4, 0.3, 0.4), (1.63, 0.1, 0.0), white, yaw=math.pi / 4)   # its bow
-            box((1.29, 0.08, 0.6), (1.0, 0.17, 0.0), red)                    # the band
-            box((0.08, 0.2, 0.5), (1.35, 0.36, 0.0), 0x8ecae6, roll=0.4)     # the screen
-            box((0.3, 0.14, 0.44), (0.85, 0.3, 0.0), blue)                   # the seat
-            box((0.2, 0.3, 0.2), (0.33, 0.28, 0.0), 0x38383d)                # the outboard
-            for sx in () if LITE else (0.6, 1.25):
+            box((1.25, 0.3, 0.56), (0.0, 0.1, 0.0), white)                   # the launch's hull
+            box((0.4, 0.3, 0.4), (0.63, 0.1, 0.0), white, yaw=math.pi / 4)   # its bow
+            box((1.29, 0.08, 0.6), (0.0, 0.17, 0.0), red)                    # the band
+            box((0.08, 0.2, 0.5), (0.35, 0.36, 0.0), 0x8ecae6, roll=0.4)     # the screen
+            box((0.3, 0.14, 0.44), (-0.15, 0.3, 0.0), blue)                  # the seat
+            box((0.2, 0.3, 0.2), (-0.67, 0.28, 0.0), 0x38383d)               # the outboard
+            for sx in () if LITE else (-0.4, 0.25):
                 for sz in (-0.24, 0.24):
                     box((0.05, 0.5, 0.05), (sx, 0.5, sz), white)
             if LITE:
-                box((0.06, 0.5, 0.06), (0.93, 0.5, 0.0), white)
-            box((0.9, 0.05, 0.6), (0.93, 0.76, 0.0), blue)                   # the sun top
-            beam((0.3, 0.3, 0.0), (-0.3, 0.24, 0.0), 0.05, 0xfde4c7)      # the tow
-            for sz in (-0.27, 0.27):                                             # the banana's floats
-                box((0.9, 0.14, 0.14), (-1.1, 0.04, sz), yellow)
-            for k in range(3):                                                   # its seats' grips
-                box((0.12, 0.1, 0.2), (-1.4 + 0.3 * k, 0.42, 0.0), blue)
-        rod((-1.7, 0.2, 0.0), (-0.6, 0.2, 0.0), 0.2, yellow, segs=6)      # the banana
-        rod((-0.6, 0.2, 0.0), (-0.32, 0.34, 0.0), 0.2, yellow, r2=0.07, segs=6)
+                box((0.06, 0.5, 0.06), (-0.07, 0.5, 0.0), white)
+            box((0.9, 0.05, 0.6), (-0.07, 0.76, 0.0), blue)                  # the sun top
+    # the banana: one fat yellow tube, both ends tapered and turned up, two
+    # thin outriggers low at its sides, the riders' grips along its back
+    with animated('anim_path:c=tow:p=22:f=1:o=%.4f+bob:h=0.05:p=0.7#banana' % (1.0 - GAP / lap), (0.0, 0.0, 0.0)):
+        with plain_parts():
+            beam((0.92, 0.3, 0.0), (GAP - 0.72, 0.3, 0.0), 0.05, 0xfde4c7)   # the tow, from its nose to the launch's stern
+            for sz in (-0.3, 0.3):
+                box((1.0, 0.1, 0.1), (-0.05, 0.03, sz), yellow)
+            for k in range(3):
+                box((0.1, 0.1, 0.16), (-0.4 + 0.35 * k, 0.46, 0.0), blue)
+        rod((-0.55, 0.2, 0.0), (0.5, 0.2, 0.0), 0.22, yellow, segs=6)
+        rod((0.5, 0.2, 0.0), (0.95, 0.36, 0.0), 0.22, yellow, r2=0.07, segs=6)
+        rod((-0.55, 0.2, 0.0), (-0.9, 0.32, 0.0), 0.22, yellow, r2=0.09, segs=6)
     with plain_parts():                                   # the course's buoys, down its middle
         for (x, z) in mid:
             cyl(0.24, 0.5, (x, y - 0.2, z), orange, r2=0.16, segs=8)
@@ -4314,6 +4338,17 @@ def reef_tone():
 # (ttp_display_set_layout's `heading`, read off the built track). Re-read it
 # if a row's u or yaw moves; a few degrees off does not show.
 RIP_WIND = (0.7071, -0.7071)   # where it blows to, world (x, z): off the open sea and up the lap
+# A LIGHT wind (round 25: "way way too intense movement"). Riptide has more
+# cloth in one picture than any other lap, so each cloth moves less than a
+# lone flag elsewhere does: a flag's joints bend half the verb's default and
+# take RIP_SLOW times its beat, bunting barely stirs, kites drift.
+RIP_FLAG_DEG = 7
+RIP_SLOW = 1.7
+
+def rip_calm(wave):
+    """A flutter name slowed and flattened to Riptide's light wind."""
+    wave = re.sub(r'p=([0-9.]+)', lambda m: 'p=%.1f' % (float(m.group(1)) * RIP_SLOW), wave, count=1)
+    return wave.replace('anim_flutter', 'anim_flutter:d=%d' % RIP_FLAG_DEG, 1)
 RIP_HEADING = {
     'lifeguard-tower': -0.715, 'seafront-wall-c': 2.269, 'seafront-hotel': -1.236, 'promenade': 3.016,
     'surf-club': 4.174, 'surf-campers': 4.672, 'surf-contest': 0.088, 'beach-day': 5.999, 'sailing-club': 6.19,
@@ -4334,7 +4369,7 @@ def wind_cloth(top, w, fh, bands, wave, wind):
     x, y, z = top
     wx, wz = wind
     n = len(bands)
-    with animated(wave, (x, y, z)):
+    with animated(rip_calm(wave), (x, y, z)):
         with plain_parts():
             for i, c in enumerate(bands):
                 y0, y1 = y - fh * (i + 1) / n, y - fh * i / n
@@ -4354,9 +4389,9 @@ def wind_flag(at, h, bands, wave, wind, w=0.5, fh=0.3, t=0.07, pole=0xfff6eb):
 
 def wind_bunting(a, b, colors, tag, wind, n=None, drop=0.3, cord=0x9a7b55):
     """A string of pennants from a to b on a sagging cord, each blown a little
-    downwind and fluttering about the cord: every other pennant is one cloth
-    (the box's string, LITE, is one), hung from the cord's higher end, so
-    neighbours flap a beat apart."""
+    downwind and barely stirring about the cord, the whole string as one
+    cloth hung from the cord's higher end: a string of pennants each
+    whipping on its own read as noise (round 25)."""
     L = math.dist(a, b)
     n = n or max(3, int(L / 0.5))
     pts = sag(a, b, 0.04 * L + 0.05, n + 1)
@@ -4366,22 +4401,19 @@ def wind_bunting(a, b, colors, tag, wind, n=None, drop=0.3, cord=0x9a7b55):
     run = math.hypot(b[0] - a[0], b[2] - a[2]) or 1.0
     ux, uz = (b[0] - a[0]) / run, (b[2] - a[2]) / run
     blown = 0.5 * drop * (wind[0] * -uz + wind[1] * ux)      # the wind across the cord leans them
-    groups = 1 if LITE else 2
-    for g in range(groups):
-        with animated('anim_flutter:a=z:d=22:n=2:p=%.1f#%s%d' % (1.5 + 0.4 * g, tag, g), a if a[1] >= b[1] else b,
-                      yaw=math.atan2(ux, uz)):
-            for i in range(g, n, groups):
-                p, q = pts[i], pts[i + 1]
-                m = [(p[j] + q[j]) / 2 for j in range(3)]
-                pa, qa = [tuple(m[j] + (e[j] - m[j]) * 0.84 for j in range(3)) for e in (p, q)]
-                poly([pa, qa, (m[0] - uz * blown, m[1] - drop, m[2] + ux * blown)], [(0, 1, 2)], colors[i % len(colors)])
+    with animated('anim_flutter:a=z:d=4:n=2:p=4.6#%s' % tag, a if a[1] >= b[1] else b, yaw=math.atan2(ux, uz)):
+        for i in range(n):
+            p, q = pts[i], pts[i + 1]
+            m = [(p[j] + q[j]) / 2 for j in range(3)]
+            pa, qa = [tuple(m[j] + (e[j] - m[j]) * 0.84 for j in range(3)) for e in (p, q)]
+            poly([pa, qa, (m[0] - uz * blown, m[1] - drop, m[2] + ux * blown)], [(0, 1, 2)], colors[i % len(colors)])
 
 def wind_kite(stake, reach, height, span, colors, tag, p, wind, side=0.0):
     """A big diamond kite flown from `stake` (its line's foot): `reach`
     downwind and `height` up, `side` off the wind's line, its face across the
     wind and tipped back with the line, a tail of fat bows streaming on; the
-    line a bar a racer can see, never a hairline. Kite, line and tail swing
-    together about the stake, side to side across the wind."""
+    line a bar a racer can see, never a hairline. Kite, line and tail drift
+    together about the stake, slowly side to side across the wind."""
     sx, sy, sz = stake
     wx, wz = wind
     ax, az = -wz, wx                                       # across the wind
@@ -4391,7 +4423,7 @@ def wind_kite(stake, reach, height, span, colors, tag, p, wind, side=0.0):
     top, bot = (kx + wx * tip * h, ky + h, kz + wz * tip * h), (kx - wx * tip * 1.3 * h, ky - 1.3 * h, kz - wz * tip * 1.3 * h)
     lft, rgt = (kx - ax * span / 2, ky, kz - az * span / 2), (kx + ax * span / 2, ky, kz + az * span / 2)
     mid = (kx, ky, kz)
-    with animated('anim_sway:a=z:d=8:p=%.1f#kite%s' % (p, tag), stake, yaw=math.atan2(wx, wz)):
+    with animated('anim_sway:a=z:d=3.5:p=%.1f#kite%s' % (p * 2, tag), stake, yaw=math.atan2(wx, wz)):
         poly([top, lft, mid], [(0, 1, 2)], colors[0])
         poly([top, mid, rgt], [(0, 1, 2)], colors[1])
         poly([lft, bot, mid], [(0, 1, 2)], colors[1])
@@ -4416,7 +4448,7 @@ def pennant(at, h, colors, tag, lean=0.0, wind=(-1.0, 0.0)):
     w = 0.26 * h
     def at_(k, yy):
         return (x + wind[0] * k, yy, z + wind[1] * k)
-    with animated('anim_flutter:a=y:p=%.1f#%s' % (2.2 + 0.2 * (ord(tag[-1]) % 4), tag), (x, y, z)):
+    with animated(rip_calm('anim_flutter:a=y:p=%.1f#%s' % (2.2 + 0.2 * (ord(tag[-1]) % 4), tag)), (x, y, z)):
         poly([at_(0.03, y + 0.24 * h), at_(w, y + 0.3 * h), at_(1.1 * w, y + 0.62 * h), at_(0.03, y + 0.62 * h)],
              [(0, 1, 2, 3)], colors[0])
         poly([at_(0.03, y + 0.62 * h), at_(1.1 * w, y + 0.62 * h), at_(0.75 * w, y + 0.92 * h), at_(0.03, y + h)],
@@ -5437,12 +5469,12 @@ def driftwood_forts():
     # and a teepee stood in the heap read as parts clipping): the storm's
     # big logs stacked three, two and one along the road, a tall teepee of
     # poles on the sand at one end of the stack with a red flag at its top
-    # and a blue tarpaulin on its weather side, a smaller teepee at the
+    # and a blue tarpaulin lashed round its weather side, a smaller teepee at the
     # other end, a string of round floats from one to the other, and two
     # dead trees standing behind, well back from the stack. Static but for
     # the flag; no one about. The road is on -X here (tracks.js places it
     # unturned on the track's left); it runs along it (+Z).
-    DRIFT, END = 0x9a6a46, 'tan'
+    DRIFT, END, TARP = 0x9a6a46, 'tan', 0x3f7bd9
     def teepee(tx, tz, TH, R, n, seed, tarp=None):
         feet = []
         for i in range(n):
@@ -5454,11 +5486,23 @@ def driftwood_forts():
             rod(cut, tip, 0.055, END, r2=0.045, segs=5)
             feet.append(foot)
         if tarp is not None:
-            top = (tx, TH - 0.15, tz)
-            for i in tarp:                              # cloth laid on the poles, from the sand to near the top
-                a, b = feet[i], feet[(i + 1) % n]
-                out = lambda p: (tx + (p[0] - tx) * 1.06, 0.0, tz + (p[2] - tz) * 1.06)
-                poly([top, out(a), out(b)], [(0, 1, 2)], 0x339cf2)
+            # a tarpaulin wrapped round the poles' weather side: from a hem
+            # just clear of the sand, weighted with stones, up to a lashing
+            # under the poles' crossing, lying ON the poles all the way
+            # (round 25: three blue triangles run to a point read as a flag
+            # leant on the heap)
+            Y0, Y1 = 0.12, 0.72 * TH
+            def on(i, y, k=1.0):                        # on pole i (of the ring, wrapped) at height y, a cloth's thickness out
+                a = i / n * 2 * math.pi + seed
+                r = (R * (1 - (y + 0.3) / (TH + 0.3)) + 0.1) * k
+                return (tx + math.cos(a) * r, y, tz + math.sin(a) * r)
+            with plain_parts():
+                for i in tarp:
+                    poly([on(i, Y0, 1.03), on(i + 1, Y0, 1.03), on(i + 1, Y1), on(i, Y1)], [(0, 1, 2, 3)], TARP)
+                for i in tarp:                          # the lashing round its head
+                    beam(on(i, Y1 - 0.06, 1.1), on(i + 1, Y1 - 0.06, 1.1), 0.05, 0xfde4c7)
+                for i in (tarp[0] + 0.3, tarp[len(tarp) // 2] + 0.5, tarp[-1] + 0.7):   # the stones on its hem
+                    box((0.22, 0.16, 0.2), on(i, 0.06, 1.1), 'grey', yaw=1.3 * i)
     with bleached():
         # the stack: three on the sand, two in their laps, one on top
         for k, (x, y, z0, z1, r) in enumerate(((-2.3, 0.3, -2.7, 2.5, 0.3), (-1.68, 0.29, -2.4, 2.8, 0.29),
@@ -5467,7 +5511,7 @@ def driftwood_forts():
             rod((x, y, z0), (x, y, z1), r, DRIFT, r2=r * 0.92, segs=8)
             for (ez, sgn) in ((z0, -1), (z1, 1)):
                 rod((x, y, ez), (x, y, ez + sgn * 0.04), r * 0.86, END, segs=8)
-        teepee(-1.4, 4.9, 2.1, 1.0, 11, 0.2, tarp=(3, 4, 5))
+        teepee(-1.4, 4.9, 2.1, 1.0, 11, 0.2, tarp=(2, 3, 4, 5, 6))
         teepee(-1.2, -4.7, 1.4, 0.75, 9, 0.9)
         box((0.07, 0.8, 0.07), (-1.4, 2.55, 4.9), END)
     with animated('anim_flutter:p=2.4#fort', (-1.4, 2.9, 4.9)):
@@ -17936,8 +17980,8 @@ lite_too('headland-arch', 'seal-skerry', 'fishing-boat', 'kelp-line')
 # `drape_floor` part), so a length of it lies wherever a row puts it.
 
 # The hull the road runs through: its frames' feet HULL_FOOT either side of
-# the centreline (the kerb stands at 4.7), and their heads and the beams
-# across them HULL_HEAD over the plain (the deck lies under a unit over the
+# the centreline (the kerb stands at 4.7), and their heads HULL_HEAD over
+# the plain (the deck lies under a unit over the
 # plain there, and a chase camera rides 0.7 over the deck).
 HULL_FOOT, HULL_HEAD = 6.4, 6.7
 
@@ -17948,10 +17992,10 @@ def hull_arch():
     # WRECK, not a row of hoops: bleached driftwood (the snags' and the
     # strand line's timber), no two ribs alike in height, lean or spacing.
     # Her landward side (-X) still stands, ribs curving in over the road,
-    # their shelf timber along the heads and her planking clinging to them
-    # low down; her seaward side (+X) is broken: stumps, two frames gone,
-    # their heads lying on the sand. Two deck beams still cross her and the
-    # stub of a third juts from the standing side. Her end frames are
+    # her planking clinging to them low down; her seaward side (+X) is
+    # broken: stumps, two frames gone, their heads lying on the sand.
+    # Nothing joins the rib heads (round 25: deck beams across the road and
+    # a shelf along the heads read as planks hung in the air). Her end frames are
     # short, so she rises to midships as a hull does, her bottom timbers
     # lie along the verges at the ribs' feet, and her bow, broken off,
     # lies past her on the seaward side: the stem post reared, its cant
@@ -17980,25 +18024,11 @@ def hull_arch():
         line = [(sx * (x + splay * (i / 5.0) ** 2), y * (top if i > 2 else 1.0), z + lean * (i / 5.0) ** 2)
                 for i, (x, y) in enumerate(pts[:cut])]
         return tube(line, r, color, res=2 if LITE else 3)
-    def head(sx, st):
-        """Where a whole rib's head stands."""
-        z, (_, top, lean, splay) = st[0], st[1 if sx < 0 else 2]
-        return (sx * (F - 3.2 + splay), H * top, z + lean)
     with bleached():
         for k, st in enumerate(stations):
             for sx, (cut, top, lean, splay) in ((-1, st[1]), (1, st[2])):
                 if cut:
                     rib(sx, st[0], cut, top, lean, splay, 0.2 + 0.05 * frac(k * 0.37 + 0.3 * sx), ('tan', 'cream')[(k + (sx > 0)) % 3 == 0])
-        whole = [st for st in stations if st[1][0] == 6 and st[2][0] == 6]
-        for st in whole:                                                           # the deck beams still across
-            a_, b_ = head(-1, st), head(1, st)
-            beam((a_[0] + 0.2, a_[1] - 0.08, a_[2]), (b_[0] - 0.2, b_[1] - 0.08, b_[2]), 0.3, 'tan')
-        left = [st for st in stations if st[1][0] == 6]
-        stub = [st for st in left if st[2][0] != 6][-1]                            # ...and the stub of one, its far rib gone
-        a_ = head(-1, stub)
-        beam((a_[0] + 0.2, a_[1] - 0.08, a_[2]), (a_[0] + 2.3, a_[1] - 0.2, a_[2] + 0.3), 0.3, 'tan')
-        # the shelf along the standing side's heads
-        beam((-(F - 1.5), (H - 0.8) * 0.99, left[0][0] - 0.8), (-(F - 1.55), (H - 0.8) * 1.0, left[-1][0] + 0.6), 0.26, 'cream')
         # her planking clinging low on that flank: strakes of unequal length, one sprung at its end
         with plain_parts():
             zs = [st[0] for st in stations]
@@ -18380,8 +18410,10 @@ def prize_at_anchor():
     # yards, her hull in a trader's blue where the pirates' own ship is bare
     # timber under black sails, a striped pennant at her main where theirs
     # flies the skull. She rolls a little on her cable. Her boat plies
-    # between her side and the head of the stockade's jetty, the oars
-    # pulling, laden with what they are taking off her. No one about. She
+    # between her side and the head of the stockade's jetty under a small
+    # spritsail in her own blue and white, laden with what they are taking
+    # off her (round 25: oars that pulled with no one at them looked odd; a
+    # sail asks for no one, and the wharf's longboat's is red). No one about. She
     # stands in the sea; +X is the shore.
     S, YAW = 0.6, math.radians(-20)
     wood, cream = 0x8a6a46, 0xfde4c7
@@ -18401,22 +18433,25 @@ def prize_at_anchor():
                 rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6)
         flag_on_pole(K(0.0, 9.6, 0.68), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
         beam(K(0.3, 2.5, 5.0), K(1.3, -0.6, 8.8), 0.07, cream)                     # her cable, from the bow
-    # her boat, bow to local +X (the way its path faces it), the oars each on its rowlock
+    # her boat, bow to local +X (the way its path faces it), under her sail
     for i, (x, z) in enumerate(COVE_TENDER):
         marker('path_tender_%d' % i, (x, SEA, z))
     bx, bz = COVE_TENDER[0]
     BS, BOW = 0.5, math.radians(90)
     with animated('anim_path:c=tender:p=46:f=1+bob:h=0.04:p=2.6#tender', (bx, SEA, bz)):
         boat = kit_nodes('pirate', 'boat-row-large', (bx, SEA - 0.1, bz), yaw=BOW, scale=BS)
-        oars = boat['paddles']
-        if LITE:
-            pass                                         # the box's: the oars shipped, one part
-        else:
-            right = split_off(oars, lambda c: c.x > 0)
-            for o, sd in ((oars, -1), (right, 1)):
-                px, pz = turned(bx, bz, BOW, sd * 0.62 * BS, -0.42 * BS)
-                with animated('anim_sway:a=y:d=22:p=1.8:o=%g#oar%d' % (0.25 * (1 - sd), sd + 1), (px, SEA - 0.1 + 0.5 * BS, pz)) as part:
-                    o['anim'] = part.gid
+        bpy.data.objects.remove(boat['paddles'], do_unlink=True)
+        MX, MH = bx + 0.28, 1.5                              # the mast, stepped forward, and its height over the water
+        with plain_parts():
+            box((0.07, MH, 0.07), (MX, SEA + MH / 2, bz), wood)
+            c, sn = math.cos(0.45), math.sin(0.45)              # the sail, sheeted out to leeward
+            def sl(u, v):
+                return (MX - u * c, SEA + v, bz + u * sn)
+            beam(sl(0.0, 0.42), sl(0.95, 1.5), 0.04, wood)      # the sprit
+            for k in range(4):                                  # four cloths, blue and white, peak high aft
+                u0, u1 = 0.03 + 0.23 * k, 0.03 + 0.23 * (k + 1)
+                top = lambda u: 1.38 + 0.12 * (u / 0.95)
+                poly([sl(u0, 0.4), sl(u1, 0.4), sl(u1, top(u1)), sl(u0, top(u0))], [(0, 1, 2, 3)], (0x339cf2, 0xfff6eb)[k % 2])
         kit('pirate', 'chest', (bx - 0.3, SEA + 0.06, bz), yaw=0.4, scale=0.2)   # what she carries
         keg((bx + 0.05, SEA + 0.06, bz + 0.05), r=0.09, h=0.2)
 
