@@ -1564,7 +1564,7 @@ export const TRACKS = {
     // where the racer comes off the diagonal's top; under great oaks out
     // by the bends a picnic left out and a hay wain loaded; out on the open
     // down, with no oak over them, a trampoline in its net and a paddling
-    // pool under its parasol; a white horse cut in chalk into the face of the
+    // pool under its parasol; a copse of the downs' oaks on the face of the
     // down the road heads at before the bottom bend;
     // the kite hill rising off the verge beyond the top loop, three kites
     // flying low over its foot from stakes up the slope, and a camp of bell
@@ -1584,7 +1584,7 @@ export const TRACKS = {
       { model: 'set-trampoline', u: 0.115, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-paddling-pool', u: 0.34, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
-      { model: 'set-chalk-horse', u: 0.3749, lat: 12, yaw: 26 },
+      { model: 'set-oak-copse', u: 0.3749, lat: 12, yaw: 26, scale: 1.3 },
       { model: 'set-summer-camp', u: 0.776, lat: -7.7, yaw: 180, scale: 1.6 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
@@ -1648,7 +1648,7 @@ export const TRACKS = {
       { model: 'set-brook-f', u: 0.09588, lat: 9.104, yaw: -1.23 },
       { model: 'set-brook-g', u: 0.12394, lat: 10.621, yaw: -15.75 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-springhouse', u: 0.7335, lat: -7.8, yaw: 180 },
+      { model: 'set-springhouse', u: 0.7328, lat: -7.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
@@ -1688,8 +1688,9 @@ export const TRACKS = {
     // halt at each end, its one train going out and back (set-park-rails-*,
     // one line cut into lengths in set_prototypes.py PARK_ROUTE; it crosses
     // no road at grade and lies on a graded bed, never facet by facet). The playground on the flat outside the south-west hairpin,
-    // where the start straight points: big climbing frames standing on the
-    // grass, its hill behind it. The bandstand on its mound close under the
+    // where the start straight points: a fenced yard of climbing frames,
+    // swings, a roundabout and a sandpit, its gate and path toward the road,
+    // its hill behind it. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
@@ -1701,7 +1702,7 @@ export const TRACKS = {
     // the top bend and a bed of carpet bedding along the foothill by the
     // west straight, both planted on slopes that face the road.
     set: [
-      { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
+      { model: 'set-playground', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
