@@ -1007,7 +1007,20 @@ export const TRACKS = {
       // a beach rise of their own (`land`), at the road's height (round 23:
       // they stood on a built terrace, a plinth)
       { model: 'set-seafront-bandstand', u: 0.655, lat: -11.5, yaw: 180 },
-      { model: 'set-lido', u: 0.725, lat: 11.8 }
+      { model: 'set-lido', u: 0.725, lat: 11.8 },
+      // round 24: the pier's walk carried over the road where the pier sets
+      // out, astride it (the promenade's stair meets it: set_prototypes.py
+      // PIER_STAIR, re-read if either row moves), its far stair coming down
+      // by the baths; and what moves off the road, each laid out against
+      // the shore it floats by (set_prototypes.py RIP_AT, RIP_HEADING):
+      // hire pedalos off the patrol's beach, a launch towing a banana boat
+      // round the lagoon, the ferry on the horizon, kites over the bathers'
+      // beach. Every flag, banner and kite on the lap flies one way (RIP_WIND).
+      { model: 'set-pier-bridge', u: 0.4018, lat: 0, yaw: 180 },
+      { model: 'set-pedalos', u: 0.21, lat: -22, yaw: 180 },
+      { model: 'set-lagoon-launch', u: 0.53, lat: 9 },
+      { model: 'set-ferry', u: 0.52, lat: -52, yaw: 180 },
+      { model: 'set-beach-kites', u: 0.905, lat: -17.5, yaw: 180 }
     ],
     land: [
       { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
@@ -1039,7 +1052,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.715, lat: -17, len: 22, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.905, lat: -17, len: 14, r: 13, h: 0.88, top: 0.55, near: 0.4, w: 6 },
       // ...and the baths' (the sand lay most of a unit under the kerb there)
-      { kind: 'ridge', u: 0.725, lat: 17.5, len: 14, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
+      { kind: 'ridge', u: 0.718, lat: 17.5, len: 26, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
       { kind: 'clear', u: 0.85, lat: 35, r: 18 },
