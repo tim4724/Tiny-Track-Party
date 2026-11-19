@@ -3092,6 +3092,7 @@ bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& i
             g.setRow = row != mSetRowOf.end() ? row->second : -1;
             g.baked.weld = true;
             g.baked.simplify = true;
+            noteAmbientRoof(g.baked);
             if (!buildMesh(g.baked)) {
                 // Not reachable for parts that passed the checks above; if it
                 // ever is, the originals keep drawing live-lit and the scene
@@ -3166,6 +3167,7 @@ void TtpRenderer::paintSetIds() {
 void TtpRenderer::buildDressingMerge() {
     restoreCuts();
     destroyMergedGroups(mMergedDress);
+    mAmbRoof.clear();
     if (!mScene) return;
     for (size_t m = 0; m < mSceneryAssets.size() && m < mSceneryInstances.size(); m++) {
         mergeInstancedSet(mSceneryAssets[m], mSceneryInstances[m], false);
@@ -3190,6 +3192,7 @@ void TtpRenderer::buildDressingMerge() {
     }
     buildSetMovers();
     mergeInstancedSet(mConeAsset, mConeInstances, true);
+    layAmbientRoofs();
 }
 
 void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {

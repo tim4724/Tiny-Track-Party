@@ -2611,6 +2611,9 @@ void TtpRenderer::releaseStatic() {
     mLifeMat = nullptr;
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
+    mAmbFloorY.clear();
+    mAmbFloorBase.clear();
+    mAmbRoof.clear();
     if (mLifeTex) { mEngine->destroy(mLifeTex); mLifeTex = nullptr; }
     mGroundBands.clear();
     mHillAnchors.clear();

@@ -6878,7 +6878,7 @@ def powder_lift_tower(at, h, yaw, ground=0.0):
     trains at the gauge, a footing sunk under the slope."""
     x, _, z = at
     mid = ground + (h - ground) * 0.55
-    box((0.8, mid - ground + 0.6, 0.8), (x, (mid + ground - 0.6) / 2, z), 0xcf534f, yaw=yaw)
+    box((0.8, mid - ground + 0.5, 0.8), (x, (mid + ground - 0.5) / 2, z), 0xcf534f, yaw=yaw)   # (ends inside the footing, not on its underside's plane)
     box((0.6, h - mid, 0.6), (x, (h + mid) / 2 - 0.15, z), 0xcf534f, yaw=yaw)
     box((0.64, 0.34, 0.64), (x, h - 0.5, z), 0xfff6eb, yaw=yaw)
     box((0.32, 0.3, 2.0), (x, h + 0.12, z), 0x555b66, yaw=yaw + math.pi / 2)
@@ -7223,25 +7223,28 @@ def ski_lift(lite=False):
     tx, tz = turned(T[0], T[1], yaw, 0.0, 2.0)
     if not lite:
         cabin_hut(1.6, 0.9, 1.2, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
-    # the slalom down the other diagonal to the finish on the flat
-    S0, F = (-6.0 * G, 5.0 * G), (12.0 * G, 21.0 * G)
+    # the slalom down the other diagonal to the finish on the valley floor by
+    # the village (the diagonal toward +Z ran into the foothill the track's
+    # land raises there: its lower half, the finish and the skiers on it were
+    # under that hill's snow)
+    S0, F = (-6.0 * G, 5.0 * G), (14.0, -14.0)
+    TOP = (-32.0 * G, 12.0 * G)
     px_, pz_ = F[0] - S0[0], F[1] - S0[1]
     pl = math.hypot(px_, pz_)
     pyaw = math.atan2(px_, pz_)
     qx, qz = pz_ / pl, -px_ / pl
-    gates = []
-    for k in range(6):
-        f = 0.08 + k * 0.155
-        s2 = 0.9 if k % 2 else -0.9
-        x, z = S0[0] + px_ * f + qx * s2, S0[1] + pz_ * f + qz * s2
-        gates.append((x - qx * s2 * 0.3, z - qz * s2 * 0.3))     # the skier's line, inside each gate
-        c = 0xff5040 if k % 2 == 0 else 0x339cf2
-        g = H(x, z)
-        for e in (-0.22, 0.22):
-            ex, ez = turned(x, z, pyaw, e, 0)
-            box((0.06, 0.8, 0.06), (ex, g + 0.12, ez), c, yaw=pyaw)    # sunk past the grid's chords
-        if not lite:
-            box((0.44, 0.24, 0.06), (x, g + 0.4, z), c, yaw=pyaw)
+    GATE, NGATES = 4.2, 6                     # a gate every so far down the slalom, on alternate sides
+    def gates():
+        for k in range(NGATES):
+            f = (k + 0.5) * GATE / pl
+            s2 = 1.0 if k % 2 == 0 else -1.0
+            x, z = S0[0] + px_ * f + qx * s2, S0[1] + pz_ * f + qz * s2
+            c = 0xff5040 if k % 2 == 0 else 0x339cf2
+            for e in (-0.22, 0.22):
+                ex, ez = turned(x, z, pyaw, e, 0)
+                box((0.08, 1.1, 0.08), (ex, 0.4, ez), c, yaw=pyaw)
+            if not lite:
+                box((0.44, 0.3, 0.06), (x, 0.75, z), c, yaw=pyaw)
     for e in (-1.6, 1.6):
         ex, ez = turned(F[0], F[1], pyaw, e, 0)
         box((0.14, 1.5, 0.14), (ex, H(ex, ez) + 0.55, ez), 0x555b66, yaw=pyaw)
@@ -7250,51 +7253,92 @@ def ski_lift(lite=False):
     fx, fz = turned(F[0], F[1], pyaw, 2.4, 1.2)                          # the timing hut
     if not lite:
         cabin_hut(1.1, 0.8, 1.0, (fx, H(fx, fz) - 0.05, fz), 0x9a7b55, 0xeef4f9, yaw=pyaw - math.pi / 2)
-    # the skiers' loop: out of the top hut, over the summit to the start, the
-    # gates down the slalom, through the finish and into the timing hut, then
-    # back up out of sight, under the snow, to the top hut
-    run = [(tx, tz), (-32.0 * G, 12.0 * G)] + gates + [F, (fx, fz)]
-    surf = []
-    for (ax, az), (bx, bz) in zip(run[:-1], run[1:]):
-        n = max(1, int(math.hypot(bx - ax, bz - az) / 2.5))
+    # the skiers' loop: out of the top hut, over the summit to the piste's
+    # head, down it in linked turns from one side of the run to the other
+    # (straight down the fall line they read as sliding on rails), round the
+    # outside of each slalom gate, through the finish and into the timing
+    # hut, then back up out of sight, under the snow, to the top hut. The
+    # loop lies on the ground as the renderer draws it (a `drape` chain: on
+    # the mound's own curve the skiers sank where the grid's chords and the
+    # track's land stood over it), a hand over it.
+    def carve(a, b, amp, half, lead=0.0, tail=0.0):
+        """The line from a to b swung `amp` either side every `half`, eased
+        in over `lead` and out over `tail`, a point every 1.2 or so."""
+        l = math.hypot(b[0] - a[0], b[1] - a[1])
+        ux, uz = (b[0] - a[0]) / l, (b[1] - a[1]) / l
+        n = max(2, int(l / 1.2))
+        out = []
         for i in range(n):
-            x, z = ax + (bx - ax) * i / n, az + (bz - az) * i / n
-            surf.append((x, H(x, z) + 0.02, z))
-    surf.append((fx, H(fx, fz) + 0.02, fz))
-    under = [(x, H(x, z) - 1.6, z) for (x, _, z) in reversed(surf[::3] + [surf[-1]])]
+            d = l * i / n
+            k = amp * math.sin(math.pi * d / half)
+            if lead:
+                k *= smooth01(d / lead)
+            if tail:
+                k *= smooth01((l - d) / tail)
+            out.append((a[0] + ux * d + uz * k, a[1] + uz * d - ux * k))
+        return out
+    upper = math.hypot(S0[0] - TOP[0], S0[1] - TOP[1])
+    turns = carve(TOP, S0, 2.6, upper / 6, lead=6.0) + carve(S0, F, 1.7, GATE, tail=pl - NGATES * GATE) + [F]
+    for _ in range(2):                                   # the corner at the slalom's head rounded off
+        turns = [turns[0]] + [((a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4)
+                              for a, b, c in zip(turns, turns[1:], turns[2:])] + [turns[-1]]
+    surf = [(tx, 0.05, tz), ((tx + TOP[0]) / 2, 0.05, (tz + TOP[1]) / 2)] + [(x, 0.05, z) for x, z in turns] + [(fx, 0.05, fz)]
+    under = [(x, -1.6, z) for (x, _, z) in reversed(surf[::6] + [surf[-1]])]
     for k, pt in enumerate(surf + under):
-        marker('path_ski_%d' % k, pt)
+        marker('path_drapeski_%d' % k, pt)
     for k in range(0, 4, 4 if lite else 1):
         x, y, z = surf[3 + k * 4]
-        with animated('anim_path:c=ski:p=70:o=%.3f#%d' % (k / 4, k), (x, y, z)):
-            skier(x, y, z, COATS[k], COATS[(k + 3) % 6])
+        with animated('anim_path:c=drapeski:p=80:o=%.3f#%d' % (k / 4, k), (x, H(x, z), z)):
+            skier(x, H(x, z), z, COATS[k], COATS[(k + 3) % 6])
     # the piste runs on up from the slalom to the top station (its blue wash
-    # is the terrain's, SET_GROUND's `paint`); a groomer works it, crawling up
-    # one side and back down the other (anim_path, pitched to the slope)
-    groom = [(-32.0 * G, 12.0 * G), S0, F]
+    # is the terrain's, SET_GROUND's `paint`)
+    piste = [TOP, S0, F]
     def along(off, back):
         pts = []
-        for (ax, az), (bx, bz) in zip(groom[:-1], groom[1:]):
+        for (ax, az), (bx, bz) in zip(piste[:-1], piste[1:]):
             l = math.hypot(bx - ax, bz - az)
             nx_, nz_ = -(bz - az) / l, (bx - ax) / l
-            for i in range(8):
-                f = i / 8
+            for i in range(12):
+                f = i / 12
                 pts.append((ax + (bx - ax) * f + nx_ * off, az + (bz - az) * f + nz_ * off))
-        pts.append((groom[-1][0] + nx_ * off, groom[-1][1] + nz_ * off))
+        pts.append((piste[-1][0] + nx_ * off, piste[-1][1] + nz_ * off))
         return list(reversed(pts)) if back else pts
-    loop = along(-3.4, False) + along(3.4, True)
-    for k, (x, z) in enumerate(loop):
-        marker('path_groom_%d' % k, (x, H(x, z) + 0.02, z))
     # the run's edges from the top station to the finish, netting and poles
-    # down both (the box: the netting, a span every other station), and the
-    # piste's signboard at its foot, toward the road
-    for off in (-4.6, 4.6):
-        edge = [(x, H(x, z), z) for x, z in along(off, False)]
-        piste_edge(edge[::2] if lite else edge, lite)
-    piste_sign(F[0] + 4.2, H(F[0] + 4.2, F[1] - 5.0), F[1] - 5.0, yaw=0.3, lite=lite)
-    x, z = loop[3]
-    with animated('anim_path:c=groom:p=60:f=2#cat', (x, H(x, z) + 0.02, z)):
-        snowcat(x, H(x, z) + 0.02, z)
+    # down both (the box: the netting alone, a pole at each end), and the
+    # piste's signboard at its foot, toward the road. The netting and the
+    # gates lie on the ground as drawn (a drape part): built on the mound's
+    # own curve, lengths of net and the lower gates stood under the snow
+    # where the grid's chords and the track's land stand over it.
+    def edges():
+        with plain_parts():                              # thin and far: no chamfer to pay for
+            for off in (-4.6, 4.6):
+                piste_edge([(x, 0.0, z) for x, z in along(off, False)], lite)
+            gates()
+    draped('piste', edges)
+    piste_sign(F[0] + 4.6, H(F[0] + 4.6, F[1] + 5.2), F[1] + 5.2, yaw=0.15, lite=lite)
+    # The groomer works the valley floor beside the run's foot, off the
+    # piste (up and down the run among the skiers it crawled the fall line
+    # under the snow): round and round a level oval, the corduroy it has
+    # combed lying inside it. Loop and corduroy lie on the ground as drawn.
+    CX, Z0, Z1, R = 17.2, -3.0, 9.0, 2.3
+    oval = [(CX + R, Z0 + (Z1 - Z0) * i / 8) for i in range(8)]
+    oval += [(CX + R * math.cos(a), Z1 + R * math.sin(a)) for a in (math.pi * i / 6 for i in range(6))]
+    oval += [(CX - R, Z1 - (Z1 - Z0) * i / 8) for i in range(8)]
+    oval += [(CX - R * math.cos(a), Z0 - R * math.sin(a)) for a in (math.pi * i / 6 for i in range(6))]
+    for k, (x, z) in enumerate(oval):
+        marker('path_drapegroom_%d' % k, (x, 0.03, z))
+    if not lite:
+        def corduroy():
+            for i in range(8):
+                x = CX - R - 0.5 + (2 * R + 1.0) * i / 7
+                for k in range(4):
+                    o = box((0.3, 0.06, 3.1), (x, 0.03, Z0 - 0.2 + 3.1 * (k + 0.5)), 0xd0e8ff)
+                    o['chamfer'] = 0
+                    snowy(o, 0.3)
+        draped('corduroy', corduroy)
+    x, z = oval[2]
+    with animated('anim_path:c=drapegroom:p=50:f=2#cat', (x, H(x, z), z)):
+        snowcat(x, H(x, z), z)
     # pines on the flanks, clear of the lift line and the piste, the size of
     # the ambient ones
     global FIR_LITE
@@ -8072,13 +8116,20 @@ def lean_shed(sx, sz, W, D, HB, HF, t=0.18, back=0x8a5a3a, side=0x9a5f3c, post=0
     x0, x1 = sx - W / 2, sx + W / 2
     a = math.atan2(HF - HB, W)
     p = 1.45 * t
-    box((t, HB + 0.2, D), (x0 + t / 2, (HB - 0.2) / 2, sz), back)
+    # No two colours share a plane: the back wall stands between the side
+    # walls and a little inside their ends, the door's posts and lintel
+    # stand proud of the side walls' faces and their front ends (flush, the
+    # dark posts fought the brown walls frame by frame).
+    PROUD = 0.04
+    box((t, HB + 0.2, D - 2 * t), (x0 + t / 2 + PROUD, (HB - 0.2) / 2, sz), back)
+    xe = x1 - p / 2                                         # the side walls end behind the posts' fronts
+    he = HB + (HF - HB) * (xe - x0) / W
     for s in (-1, 1):
         z0, z1 = sz + s * (D / 2 - t), sz + s * D / 2
-        solid([(x0, -0.2, z0), (x1, -0.2, z0), (x1, HF, z0), (x0, HB, z0), (x0, -0.2, z1), (x1, -0.2, z1), (x1, HF, z1), (x0, HB, z1)],
+        solid([(x0, -0.2, z0), (xe, -0.2, z0), (xe, he, z0), (x0, HB, z0), (x0, -0.2, z1), (xe, -0.2, z1), (xe, he, z1), (x0, HB, z1)],
               [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], side)
-        box((p, HF - 0.05, p), (x1 - p / 2, (HF - 0.05) / 2, sz + s * (D / 2 - p / 2)), post)
-    box((p, 1.15 * p, D), (x1 - p / 2, HF - 0.6 * p - 0.03, sz), post)   # the lintel over the door
+        box((p, HF - 0.05, p), (x1 - p / 2 + PROUD, (HF - 0.05) / 2, sz + s * (D / 2 - p / 2 + PROUD)), post)
+    box((p, 1.15 * p, D + 2 * PROUD), (x1 - p / 2 + PROUD, HF - 0.6 * p - 0.03, sz), post)   # the lintel over the door
     over = 2.0 * t
     sl = (W + 2 * over) / math.cos(a)
     tb, ts = 0.55 * t, 1.3 * t
@@ -8206,7 +8257,7 @@ def flurry_ice_hut(color, pipe=False, window=0xffc044):
 def flurry_tip_up(x, z, y=0.06, yaw=0.0):
     """A hole cut in the ice in its ring of shavings and a tip-up's flag over it."""
     snowy(cyl(0.3, 0.04, (x, y, z), 0xf3f7fb, segs=8), 0.4)
-    cyl(0.17, 0.05, (x, y, z), 0x2f3a4a, segs=8)
+    cyl(0.17, 0.045, (x, y + 0.01, z), 0x2f3a4a, segs=8)     # (its foot off the ring's: no two colours in one plane)
     box((0.07, 0.5, 0.07), (x + 0.28, y + 0.25, z), 0x7a5a3a)
     box((0.06, 0.16, 0.24), (x + 0.28, y + 0.45, z + 0.14), 0xff7e44, yaw=yaw)
 
@@ -8234,7 +8285,7 @@ def flurry_boathouse():
     flurry_stood(lambda: flurry_boat(0xcf534f, upturned=False), 0.75, 0.0, -math.pi / 2, 0.22)
     for k in range(2):                                                         # oars on the side wall
         box((1.9, 0.08, 0.08), (0.0, 0.7 + 0.3 * k, D / 2 + 0.06), 0xfff6eb)
-        box((0.4, 0.18, 0.08), (0.9, 0.7 + 0.3 * k, D / 2 + 0.06), 0xcf534f)
+        box((0.4, 0.18, 0.13), (0.9, 0.7 + 0.3 * k, D / 2 + 0.06), 0xcf534f)    # (thicker than the shaft: flush, they fought)
 
 def flurry_fish_rack():
     """A drying rack about the origin along Z: two trestles, a beam, the catch
@@ -8386,22 +8437,69 @@ def rail_fence(pts, step=3.2):
         box((0.17, 1.0, 0.17), (x, 0.4, z), 0x8a6a46)
         snowy(box((0.24, 0.08, 0.24), (x, 0.93, z), 0xf3f7fb), 0.5)
 
-def lane_sheet(pts, w=1.3):
+def lane_sheet(pts, w=1.3, fork=None):
     """A trodden lane through the (x, z) points, a row every unit or so, a
     hand over y = 0 for a drape: packed snow a shade greyer than what lies
     round it, two ruts worn through to the grit (the ice's pale blue made a
-    second stream of it)."""
-    rows = []
+    second stream of it). A bend is mitred: its row lies on the bend's
+    bisector. `fork` is its first row where it leaves a junction
+    (lane_fork), cut to its neighbours there."""
+    prof = ((-w / 2, 0.04), (-0.42, 0.06), (-0.2, 0.06), (0.0, 0.06), (0.2, 0.06), (0.42, 0.06), (w / 2, 0.04))
+    stops = []
     for k, ((ax, az), (bx, bz)) in enumerate(zip(pts, pts[1:])):
-        m = math.hypot(bx - ax, bz - az)
-        nx, nz = (bz - az) / m, -(bx - ax) / m
-        steps = max(1, int(m / 1.2 + 0.5))
-        for i in range(steps + (1 if k == len(pts) - 2 else 0)):
-            x, z = ax + (bx - ax) * i / steps, az + (bz - az) * i / steps
-            rows.append([(x + nx * d, y, z + nz * d) for d, y in
-                         ((-w / 2, 0.04), (-0.42, 0.06), (-0.2, 0.06), (0.2, 0.06), (0.42, 0.06), (w / 2, 0.04))])
-    for o in sheet(rows, lambda i, j, nn: 'gravel' if j in (1, 3) else 'white', 'lane'):
+        steps = max(1, int(math.hypot(bx - ax, bz - az) / 1.2 + 0.5))
+        stops += [(ax + (bx - ax) * i / steps, az + (bz - az) * i / steps) for i in range(steps)]
+    stops.append(pts[-1])
+    rows = []
+    for k, (x, z) in enumerate(stops):
+        if k == 0 and fork:
+            rows.append(fork)
+            continue
+        (ax, az), (bx, bz) = stops[max(0, k - 1)], stops[min(len(stops) - 1, k + 1)]
+        ta, tb = unit2(x - ax, z - az) if k else None, unit2(bx - x, bz - z) if k < len(stops) - 1 else None
+        ta, tb = ta or tb, tb or ta
+        tx, tz = unit2(ta[0] + tb[0], ta[1] + tb[1])
+        m = 1.0 / max(0.5, tx * ta[0] + tz * ta[1])              # the mitre's stretch across a bend
+        rows.append([(x + tz * d * m, y, z - tx * d * m) for d, y in prof])
+    for o in sheet(rows, lambda i, j, nn: 'gravel' if j in (1, 4) else 'white', 'lane'):
         rowed(o, 20 if o['swatch'] == 'gravel' else 27)
+
+def unit2(x, z):
+    m = math.hypot(x, z)
+    return (x / m, z / m)
+
+def lane_fork(c, arms, w=1.3):
+    """Lanes of one width meeting at `c`, each arm its (x, z) points going
+    away from there: every arm's first row is cut along the bisectors to
+    its two neighbours and comes to a point at `c`, so the arms close the
+    junction between them with no gap and no overlap, and each rut runs on
+    round the corner into its neighbour's (three lane_sheets laid over one
+    another left wedges of bare snow between them and two colours fighting
+    in one plane)."""
+    dirs = [unit2(a[0][0] - c[0], a[0][1] - c[1]) for a in arms]
+    for n, arm in enumerate(arms):
+        tx, tz = dirs[n]
+        def cut(d):
+            if d == 0.0:
+                return (c[0], c[1], 0.0)
+            # the neighbour on d's side: the least turn from this arm toward it
+            sgn = 1.0 if d > 0 else -1.0
+            best = None
+            for k, (ux, uz) in enumerate(dirs):
+                if k == n:
+                    continue
+                turn = math.atan2(sgn * (ux * tz - uz * tx), ux * tx + uz * tz) % (2 * math.pi)
+                if best is None or turn < best[0]:
+                    best = (turn, ux, uz)
+            turn = best[0]
+            bx, bz = math.cos(turn / 2), sgn * math.sin(turn / 2)      # the bisector, in the arm's (along, across) frame
+            r = abs(d) / max(0.2, math.sin(turn / 2))
+            return (c[0] + (tx * bx + tz * bz) * r, c[1] + (tz * bx - tx * bz) * r, r * bx)
+        prof = ((-w / 2, 0.04), (-0.42, 0.06), (-0.2, 0.06), (0.0, 0.06), (0.2, 0.06), (0.42, 0.06), (w / 2, 0.04))
+        row = [cut(d) for d, _ in prof]
+        reach = max(q[2] for q in row) + 0.4                           # the first square row, clear of the cut
+        fork = [(q[0], y, q[1]) for q, (_, y) in zip(row, prof)]
+        lane_sheet([(c[0] + tx * reach, c[1] + tz * reach)] + list(arm), w, fork=fork)
 
 def stood_post(x, z, y):
     """A post under a floor at `y`, down to the plain (set-check)."""
@@ -8451,12 +8549,11 @@ def flurry_fields(lite=False):
             box((0.26, 1.5, 0.26), (5.0, 0.6, z), 0x6e4a32)
         if lite:
             return
-        rail_fence([(5.0, -4.6), (3.0, -2.6)], step=9.0)                       # the gate, swung open
+        rail_fence([(5.0, -4.6), (2.2, -4.2)], step=9.0)                       # the gate, swung right open along the lane's side
         rail_fence([(5.0, -15.0), (-4.0, -15.6)])
         rail_fence([(0.2, 13.4), (-9.0, 14.6)])
         rail_fence([(0.0, 3.0), (-9.5, 3.9)])                                  # between the two fields
-        lane_sheet([(5.6, -2.8), (1.5, -3.0), (1.3, 6.0), (1.3, 14.2)])
-        lane_sheet([(1.5, -3.0), (-3.6, -6.4)], 1.1)
+        lane_fork((1.5, -2.8), [[(5.6, -2.8)], [(1.3, 6.0), (1.3, 14.2)], [(-3.6, -6.4)]])
         for k, (x, z) in enumerate(((-3.0, 6.6), (-5.4, 8.6), (-2.4, 10.0), (-6.6, 11.6))):
             # (each lies along X under its cap: turned about its own end, the bale swung out from under it)
             cyl(0.55, 1.1, (x - 0.55, 0.5, z), 0xd9b054, segs=8, axis='across', stem=True)
@@ -8493,8 +8590,7 @@ def flurry_farm(lite=False):
             return
         rail_fence([(3.2, 12.0), (-3.0, 12.6)])
         rail_fence([(3.2, -12.0), (-3.0, -12.6)])
-        lane_sheet([(3.8, -2.2), (-0.5, -2.3), (-3.4, -2.6)], 1.1)
-        lane_sheet([(-0.5, -2.3), (-2.4, 2.0), (-5.0, 4.4)], 0.9)
+        lane_fork((-0.5, -2.3), [[(3.8, -2.2)], [(-3.4, -2.6)], [(-2.4, 2.0), (-5.0, 4.4)]], 1.1)
         sled(-1.6, 0.0, -4.2, 0.5, color=0xcf534f, L=0.8)
     draped('yard', lying)
 
@@ -8723,6 +8819,8 @@ def ski_jump():
         a, b = g + (top - g) * i / n, g + (top - g) * (i + 1) / n
         if i == 0:
             a = 0.0
+        if i == n - 1:
+            b -= 0.2                                   # up into the platform, short of its deck (flush, the red top fought the grey deck)
         box((2.8, b - a, 2.8), (T0, (a + b) / 2, 0.0), RED if (n - 1 - i) % 2 == 0 else WHITE)
     # the start hut on its platform, a window down the in-run
     box((3.4, 0.36, 3.4), (T0, top - 0.18, 0.0), STEEL)
@@ -8840,11 +8938,16 @@ def ski_jump():
     # and levels nothing
     def lines():
         box((0.6, 0.1, 0.6), (4.0, -0.25, 0.0), SNOWT)
-        box((0.3, 0.06, 5.6), (-15.0, 0.03, 0.0), RED)                       # the K line
-        box((0.3, 0.06, 5.6), (-12.0, 0.03, 0.0), BLUE)
+        # the K line and the blue line, each in short lengths so every one
+        # lies on the land as drawn (one board across the landing draped at
+        # its ends alone, and the snow between them buried it), broad and
+        # proud enough of the snow to read from the road
+        for x, c in ((-15.0, RED), (-12.0, BLUE)):
+            sheet([[(x - 0.28, 0.08, -2.8 + 0.7 * k), (x + 0.28, 0.08, -2.8 + 0.7 * k)] for k in range(9)],
+                  lambda i, j, nn, c=c: c, 'line')
         for s in (-1, 1):                                                   # fir sprigs down the landing's edges
             for k in range(11):
-                box((0.5, 0.06, 0.14), (-25.0 + 1.6 * k, 0.03, s * 3.0), 0x61cb8b)
+                box((0.7, 0.14, 0.22), (-25.0 + 1.6 * k, 0.05, s * 3.0), 0x339c75)
     draped('patch', lines)
 
 def flurry_skier(x, y, z, coat, hat, k=1.4):
@@ -9614,7 +9717,7 @@ def arched_tent(x, z, W, D, H, color, yaw=0.0):
             p0 = (k * D, H * math.sin(a0) + 0.03, -W / 2 * math.cos(a0))
             p1 = (k * D, H * math.sin(a1) + 0.03, -W / 2 * math.cos(a1))
             strut((x + p0[0] * c + p0[2] * s2, p0[1], z - p0[0] * s2 + p0[2] * c),
-                  (x + p1[0] * c + p1[2] * s2, p1[1], z - p1[0] * s2 + p1[2] * c), 0.06, 0x555b66)
+                  (x + p1[0] * c + p1[2] * s2, p1[1], z - p1[0] * s2 + p1[2] * c), 0.1, 0x555b66)   # (through the canvas: lying on it, its underside fought the canvas from inside)
 
 def cargo_sledge(x, z, load):
     """An expedition's cargo sledge at (x, z), its nose to +X: two steel
@@ -10872,15 +10975,10 @@ def crag(spine, peaks, seed, sink=2.5, top=None, rock=('lavender', ROCK), snow=0
             rowed(o, row)
 
 @piece(1.0)
-def snow_sapling():
-    # Avalanche's verge scatter (theme.cc avalanchePass): a young spruce
-    # growing back by the road, snow-laden, its real size beside a car.
-    spruce((0.0, -0.1, 0.0), 0.85)
-
-@piece(1.0)
 def snow_log():
-    # ...and, rarely, a trunk a slide snapped and the plough pushed to the
-    # verge, snow lying along its top.
+    # Avalanche's verge scatter (theme.cc avalanchePass): rarely, a trunk a
+    # slide snapped and the plough pushed to the verge, snow lying along
+    # its top.
     snapped_trunk(-1.0, 0.0, 0.0, 1.0, 0.0)
     snowy(box((1.8, 0.08, 0.16), (0.0, 0.17, 0.0), 0xf3f7fb), 0.45)
 

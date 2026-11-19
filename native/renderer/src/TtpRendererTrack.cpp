@@ -3481,54 +3481,46 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             s74 = s74 * 1664525u + 1013904223u;
             return (double) s74 / 4294967296.0;
         };
-        // Flake floor: terrain sampled at the grid corners, then the road
-        // ribbon's own CPU verts rasterized in as a cell max — each vert bumps
-        // its four surrounding corners, so the bilinear tap never
-        // underestimates under the deck. Uploaded as an R16F texture for the
-        // shader's fade; the other kinds get a floor far below everything.
-        int floorN = 1;
-        std::vector<math::half> floorTexels{ math::half(-1000.0f) };
-        if (tb.ambKind == ttp::rt::AMB_FLAKE) {
+        // The floor every particle fades onto (vpoint.mat). FLAKES settle:
+        // terrain sampled at the grid corners, then the road ribbon's own CPU
+        // verts rasterized in as a cell max (each vert bumps its four
+        // surrounding corners, so the bilinear tap never underestimates
+        // under the deck). The other kinds get a floor under the whole band
+        // (kAmbNoFloor): canyon sand BLOWS across the deck at ground height.
+        // Either way the roofs over the road are laid onto it once the set
+        // pieces are baked (layAmbientRoofs), so nothing falls under one.
+        {
             constexpr int N = kAmbFloorN;
             const float cell = 2 * kAmbR / (N - 1);
-            std::vector<float> floorY((size_t) N * N);
-            for (int gz = 0; gz < N; gz++) {
-                for (int gx = 0; gx < N; gx++) {
-                    floorY[(size_t) gz * N + gx] =
-                            groundSurfaceY(tb, -kAmbR + gx * cell, -kAmbR + gz * cell);
+            mAmbFloorBase.assign((size_t) N * N, kAmbNoFloor);
+            if (tb.ambKind == ttp::rt::AMB_FLAKE) {
+                for (int gz = 0; gz < N; gz++) {
+                    for (int gx = 0; gx < N; gx++) {
+                        mAmbFloorBase[(size_t) gz * N + gx] =
+                                groundSurfaceY(tb, -kAmbR + gx * cell, -kAmbR + gz * cell);
+                    }
                 }
-            }
-            for (const Vertex& rv : mRoad.verts) {
-                const int gx = (int) std::floor((rv.px + kAmbR) / cell);
-                const int gz = (int) std::floor((rv.pz + kAmbR) / cell);
-                for (int dz = 0; dz <= 1; dz++) {
-                    for (int dx = 0; dx <= 1; dx++) {
-                        const int cx = gx + dx, cz = gz + dz;
-                        if (cx < 0 || cx >= N || cz < 0 || cz >= N) continue;
-                        float& h = floorY[(size_t) cz * N + cx];
-                        h = std::max(h, rv.py);
+                for (const Vertex& rv : mRoad.verts) {
+                    const int gx = (int) std::floor((rv.px + kAmbR) / cell);
+                    const int gz = (int) std::floor((rv.pz + kAmbR) / cell);
+                    for (int dz = 0; dz <= 1; dz++) {
+                        for (int dx = 0; dx <= 1; dx++) {
+                            const int cx = gx + dx, cz = gz + dz;
+                            if (cx < 0 || cx >= N || cz < 0 || cz >= N) continue;
+                            float& h = mAmbFloorBase[(size_t) cz * N + cx];
+                            h = std::max(h, rv.py);
+                        }
                     }
                 }
             }
-            floorN = N;
-            floorTexels.assign(floorY.begin(), floorY.end());
+            mAmbFloorY = mAmbFloorBase;
         }
         mAmbFloorTex = Texture::Builder()
-                .width((uint32_t) floorN).height((uint32_t) floorN).levels(1)
+                .width((uint32_t) kAmbFloorN).height((uint32_t) kAmbFloorN).levels(1)
                 .sampler(Texture::Sampler::SAMPLER_2D)
                 .format(Texture::InternalFormat::R16F)
                 .build(*mEngine);
-        {
-            // The upload is asynchronous — heap-owned pixels with a release
-            // callback, the same rule as the ground tile above.
-            auto* px = new std::vector<math::half>(std::move(floorTexels));
-            mAmbFloorTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
-                    px->data(), px->size() * sizeof(math::half),
-                    Texture::Format::R, Texture::Type::HALF,
-                    [](void*, size_t, void* user) {
-                        delete (std::vector<math::half>*) user;
-                    }, px));
-        }
+        uploadAmbientFloor();
         const uint32_t tint = packShown(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
         // THREE vertices per particle, all carrying the SAME seed: the corner
         // in uv0 is what vpoint.mat spreads along the camera's right/up, so the
@@ -4476,6 +4468,87 @@ bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
     releaseField();
     resetRace();
     return buildField(roster);
+}
+
+void TtpRenderer::uploadAmbientFloor() {
+    if (!mAmbFloorTex || mAmbFloorY.empty()) return;
+    // The upload is asynchronous: heap-owned pixels with a release callback,
+    // the same rule as the ground tile.
+    auto* px = new std::vector<math::half>(mAmbFloorY.begin(), mAmbFloorY.end());
+    mAmbFloorTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+            px->data(), px->size() * sizeof(math::half),
+            Texture::Format::R, Texture::Type::HALF,
+            [](void*, size_t, void* user) {
+                delete (std::vector<math::half>*) user;
+            }, px));
+}
+
+// A ROOF OVER THE ROAD IS A FLOOR TOO: no snow, rain or dust falls inside an
+// avalanche gallery, a tunnel or under a hull laid over the road. Nothing is
+// authored for it: every baked set piece notes what of it faces the sky
+// (noteAmbientRoof, a unit grid of the highest such face), and a road vertex
+// with roof over it and over the unit all round it (a cable, a banner or a
+// footbridge's width is no shelter) lifts the floor's four corners about it
+// to that roof, which eases the weather out over a cell at each mouth.
+void TtpRenderer::noteAmbientRoof(const Mesh& m) {
+    if (mAmbFloorBase.empty() || !mTrack) return;
+    constexpr int R = kAmbRoofN;
+    if (mAmbRoof.empty()) mAmbRoof.assign((size_t) R * R, kAmbNoFloor);
+    const float lowest = mTrack->groundY + kAmbRoofClear;
+    for (size_t t = 0; t + 2 < m.idx.size(); t += 3) {
+        const Vertex& a = m.verts[m.idx[t]];
+        const Vertex& b = m.verts[m.idx[t + 1]];
+        const Vertex& c = m.verts[m.idx[t + 2]];
+        if (std::max(a.py, std::max(b.py, c.py)) < lowest) continue;
+        const float ux = b.px - a.px, uy = b.py - a.py, uz = b.pz - a.pz;
+        const float vx = c.px - a.px, vy = c.py - a.py, vz = c.pz - a.pz;
+        const float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        // Faces the sky, whichever way it is wound (a sheet is two-sided).
+        if (ny * ny < 0.09f * (nx * nx + ny * ny + nz * nz)) continue;
+        const float edge = std::sqrt(std::max(ux * ux + uz * uz, vx * vx + vz * vz));
+        const int n = std::min(64, std::max(1, (int) std::ceil(edge / 0.5f)));
+        for (int i = 0; i <= n; i++) {
+            for (int j = 0; i + j <= n; j++) {
+                const float fi = (float) i / n, fj = (float) j / n;
+                const int gx = (int) std::floor(a.px + ux * fi + vx * fj + kAmbR);
+                const int gz = (int) std::floor(a.pz + uz * fi + vz * fj + kAmbR);
+                if (gx < 0 || gx >= R || gz < 0 || gz >= R) continue;
+                float& h = mAmbRoof[(size_t) gz * R + gx];
+                h = std::max(h, a.py + uy * fi + vy * fj);
+            }
+        }
+    }
+}
+
+void TtpRenderer::layAmbientRoofs() {
+    if (mAmbFloorBase.empty()) return;
+    mAmbFloorY = mAmbFloorBase;
+    if (!mAmbRoof.empty()) {
+        constexpr int N = kAmbFloorN, R = kAmbRoofN;
+        const float cell = 2 * kAmbR / (N - 1);
+        for (const Vertex& rv : mRoad.verts) {
+            const int rx = (int) std::floor(rv.px + kAmbR), rz = (int) std::floor(rv.pz + kAmbR);
+            if (rx < 1 || rx >= R - 1 || rz < 1 || rz >= R - 1) continue;
+            float roof = 1e30f;
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    roof = std::min(roof, mAmbRoof[(size_t) (rz + dz) * R + rx + dx]);
+                }
+            }
+            if (roof < rv.py + kAmbRoofClear) continue;
+            const int gx = (int) std::floor((rv.px + kAmbR) / cell);
+            const int gz = (int) std::floor((rv.pz + kAmbR) / cell);
+            for (int dz = 0; dz <= 1; dz++) {
+                for (int dx = 0; dx <= 1; dx++) {
+                    const int cx = gx + dx, cz = gz + dz;
+                    if (cx < 0 || cx >= N || cz < 0 || cz >= N) continue;
+                    float& h = mAmbFloorY[(size_t) cz * N + cx];
+                    h = std::max(h, roof);
+                }
+            }
+        }
+    }
+    uploadAmbientFloor();
 }
 
 // THE CUP'S AMBIENT LIFE (theme.life; TtpRenderer.h, mLife). Its texture

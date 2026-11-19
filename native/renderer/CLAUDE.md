@@ -623,6 +623,13 @@ to do both:
   as a concrete kerbstone and paving (`kShedKerbW`), out past the gallery's
   columns and to the foot of its back wall: snow lying under a roof read as a
   fault, and no piece can lay a floor at the kerb.
+- **NOTHING FALLS UNDER A ROOF.** Snow, rain and dust stop at any roof a set
+  piece puts over the road (a gallery, a tunnel, a hull): nothing is authored
+  for it. The baked pieces' sky-facing faces are noted on a unit grid, and a
+  road vertex with roof all round it lifts the particles' floor to that roof
+  (`layAmbientRoofs`); a split's lite cells, which skip the floor's tap, thin
+  their own cloud when their camera is under it (`cullAmbientCells`). A cable
+  or a banner across the road is narrower than the test and shelters nothing.
 - **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
   (a hose across a lawn, a post's pad) has each baked vertex lifted by the
   ground drawn under it over the placement's foot (`bakePlacements`), so a

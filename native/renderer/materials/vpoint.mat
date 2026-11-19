@@ -26,8 +26,10 @@
 // Two alpha fades ride along: a rim fade at the wrap boundary so a particle
 // dissolves instead of popping in, and the flake-floor fade — a max-height
 // grid of terrain + road deck, sampled as a texture — so snow settles onto an
-// elevated deck instead of depth-slicing through it. Other kinds bind a 1x1
-// "floor at -1000" texel and are untouched by it. `lite` skips that tap and
+// elevated deck instead of depth-slicing through it. Other kinds' floor lies
+// under their whole band, so they are untouched by it; every kind's carries
+// the roofs over the road (a gallery, a tunnel), under which nothing falls
+// (TtpRenderer::layAmbientRoofs). `lite` skips that tap and
 // the fog term: the renderer sets it for a split's quarter-size cells, where
 // the box is shrunk to well inside the fog's onset and a flake failing to
 // settle is under the size the eye resolves (TtpRenderer::renderAmbient).

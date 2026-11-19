@@ -2361,13 +2361,28 @@ private:
     uint32_t mAmbCullCap = 0;   // indices each slot buffer holds
     uint32_t mAmbCullFrames = 0;
     bool mAmbSubset = false;    // the renderable is on a subset range right now
-    // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
-    // ribbon over the whole track, uploaded as an R16F texture the vertex
-    // shader taps so a falling flake fades out ONTO the surface instead of
-    // depth-slicing through an elevated deck. The other kinds bind a 1x1
-    // "-1000" texel — canyon sand BLOWS across the deck at ground height, and
-    // flooring it would dim the streaks over the road.
+    // The particles' floor: a coarse max-height grid over the whole track,
+    // uploaded as an R16F texture the vertex shader taps. For FLAKES it is
+    // the terrain and the road ribbon, so a falling flake fades out ONTO the
+    // surface instead of depth-slicing through an elevated deck; the other
+    // kinds have none (kAmbNoFloor: canyon sand BLOWS across the deck at
+    // ground height, and flooring it would dim the streaks over the road).
+    // For every kind it carries the roofs over the road (layAmbientRoofs).
     filament::Texture* mAmbFloorTex = nullptr;
+    // The same grid on the CPU, for a split's lite cells, whose particles
+    // skip the shader's tap: a cell whose camera is under the floor (in a
+    // gallery, a tunnel, under a bridge) thins its own by how far under
+    // (cullAmbientCells). mAmbFloorBase is the floor as buildStatic laid it;
+    // mAmbFloorY has the roofs over the road on it too (layAmbientRoofs,
+    // TtpRendererTrack.cpp), found off the baked set pieces: mAmbRoof, the
+    // highest sky-facing face of any in each unit of the floor's span.
+    std::vector<float> mAmbFloorBase, mAmbFloorY, mAmbRoof;
+    static constexpr int kAmbRoofN = 340;            // 2 kAmbR, a unit a cell
+    static constexpr float kAmbNoFloor = -3.0f;      // under every kind's band (it starts at y 0.5)
+    static constexpr float kAmbRoofClear = 2.0f;     // a roof stands this far over the deck at least
+    void uploadAmbientFloor();
+    void noteAmbientRoof(const Mesh& m);
+    void layAmbientRoofs();
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
