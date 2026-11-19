@@ -62,6 +62,9 @@ SWATCH = {
     # and the canyon's plants, the same way: a saguaro's dusty grey-green and
     # the dry olive of creosote (the kit's `green` is a lawn's)
     'sage': (96, 32), 'olive': (112, 32),
+    # and the beach's trodden sand, an ochre in the atlas's unused top-left
+    # cell (the tan ramp's worn shades are salmon on sand)
+    'ochre': (0, 0),
 }
 SWATCH_RGB = {
     'cream': 0xfde4c7, 'green': 0x61cb8b, 'yellow': 0xffc044, 'orange': 0xff7e44,
@@ -1614,7 +1617,7 @@ def pirate_camp():
     beam((FX, 1.8, FZ), (FX, 1.0, FZ), 0.08, 0x38383d)
     cyl(0.32, 0.36, (FX, 0.72, FZ), 0x38383d, r2=0.26, segs=10, stem=True)              # the pot
     # the cannon on its carriage, run out to the sea
-    kit('pirate', 'cannon-mobile', (-1.7, 0, TZ - 2.7), yaw=math.radians(-90), scale=0.65)
+    cove_cannon((-1.7, 0, TZ - 2.7), yaw=math.radians(-90), k=0.85)
     # the boat pulled up the sand past the stores
     kit('pirate', 'boat-row-small', (-2.4, -0.05, TZ + 5.0), yaw=math.radians(170), scale=0.7)
     # the hammock between two palms behind the tent
@@ -3149,43 +3152,45 @@ def pirate_lookout():
     box((0.8, 0.5, 0.06), (LX, P0 + 1.05, -0.96), 0x38383d)
     cyl(1.55, 0.9, (LX, P0 + 1.5, 0.0), 0xd9b054, r2=0.12, segs=8)                    # the thatch
     kit_flag('flag-pirate-high', (LX, P0 + 1.9, 0.0), math.radians(90), 0.7, 'anim_flutter:p=2.0')
-    # the island's platform among the palms
-    IX = 8.6
-    tower(IX, 1.2, 0.85)
-    for k in range(4):                                         # its rail of posts round three sides
-        a = k * math.pi / 2
-        box((0.16, 0.9, 0.16), (IX + 1.15 * math.cos(a + math.pi / 4) * 1.414, P0 + 0.6,
-                                1.15 * math.sin(a + math.pi / 4) * 1.414), wood)
-    palm((IX + 2.4, 0, 1.6), h=5.6, lean=0.18, yaw=math.radians(20), sink=1.0)
-    palm((IX + 1.8, 0, -2.4), h=4.6, lean=0.25, yaw=math.radians(300), sink=1.0)
-    # the rope bridge between the platforms, sagging over the road: planks
-    # across it on two rope rails, the rails on posts at both ends
-    A, B = LX + 1.3, IX - 1.1
-    n = 24
-    drop = 0.5
+    # the bridge from its platform over the road to the island's foothill,
+    # which reaches the deck's height 15 u past the road (tracks.js, the
+    # ridge at lat -21): planks slung on two rope rails, sagging, with the
+    # height of a gantry under it where the road goes through; it lands in
+    # the slope between two stout posts the rails are made fast to. (Until
+    # round 24 it ended on a second tower by the kerb, the lookout's twin.)
+    HX = 15.6
+    A, B = LX + 1.3, HX + 0.6
+    n = 34
+    drop = 0.6
     def deck_y(t):
         return P0 + 0.12 - drop * 4 * t * (1 - t)
     for i in range(n):
         t = (i + 0.5) / n
-        x = A + (B - A) * t
-        box(((B - A) / n - 0.06, 0.12, 1.4), (x, deck_y(t), 0.0), plank if i % 4 else 0x9a6a46)
-        for sz in (-0.72, 0.72):                               # the side boards: a band seen from the road
-            box(((B - A) / n + 0.02, 0.36, 0.1), (x, deck_y(t) + 0.12, sz), wood)
+        box(((B - A) / n - 0.06, 0.12, 1.4), (A + (B - A) * t, deck_y(t), 0.0), plank if i % 4 else 0x9a6a46)
+    R = 12
     for sz in (-0.72, 0.72):
-        rail = [(A + (B - A) * t, deck_y(t) + 1.0 + 0.15 * 4 * t * (1 - t), sz) for t in [i / 8 for i in range(9)]]
+        with plain_parts():
+            for i in range(R):                                 # the side boards: a band seen from the road
+                t0, t1 = i / R, (i + 1) / R
+                beam((A + (B - A) * t0, deck_y(t0) + 0.12, sz), (A + (B - A) * t1, deck_y(t1) + 0.12, sz), 0.1, wood, d=0.36)
+        rail = [(A + (B - A) * t, deck_y(t) + 1.0 + 0.15 * 4 * t * (1 - t), sz) for t in [i / R for i in range(R + 1)]]
         tube(rail, 0.07, rope, res=3)
-        foot = [(A + (B - A) * t, deck_y(t) - 0.06, sz) for t in [i / 8 for i in range(9)]]
+        foot = [(A + (B - A) * t, deck_y(t) - 0.06, sz) for t in [i / R for i in range(R + 1)]]
         tube(foot, 0.07, rope, res=3)
-        for i in range(1, 8):                                  # the hangers from rail to foot
-            t = i / 8
+        for i in range(1, R):                                  # the hangers from rail to foot
+            t = i / R
             x = A + (B - A) * t
             beam((x, deck_y(t) - 0.06, sz), (x, deck_y(t) + 1.0 + 0.15 * 4 * t * (1 - t), sz), 0.09, rope)
-        for x in (A, B):                                       # the posts the rails hang from
-            box((0.2, 1.4, 0.2), (x, P0 + 0.8, sz), wood)
+        box((0.2, 1.4, 0.2), (A, P0 + 0.8, sz), wood)          # the posts the rails hang from: on the platform,
+        box((0.34, 3.6, 0.34), (HX, P0 + 0.1, sz), dark)       # and set in the hill
+    beam((HX, P0 + 1.55, -0.95), (HX, P0 + 1.55, 0.95), 0.2, wood)
     join_still('lookout')
     def shot():
         with plain_parts():
-            kit('pirate', 'cannon-mobile', (LX - 2.6, 0, 1.6), yaw=math.radians(-90), scale=0.65)
+            for k in range(3):                                 # the planks laid up the slope from the bridge's end
+                box((0.6, 0.1, 1.5), (HX + 1.1 + 0.75 * k, 0.05, 0.1 * math.sin(2.0 * k)), plank if k % 2 else 0x9a6a46)
+        cove_cannon((LX - 2.6, 0, 1.6), yaw=math.radians(-90), k=0.85)
+        with plain_parts():
             for (dx, dz) in ((0.0, 0.0), (0.42, 0.0), (0.2, 0.36)):
                 sphere(0.2, (LX - 1.6 + dx, 0.2, 2.6 + dz), 0x38383d, subdiv=1)
     draped('shot', shot)
@@ -3254,8 +3259,8 @@ def pirate_stockade():
     kit_flag('flag-pirate-high', (X0 - 0.05, 2.45, GZ), math.radians(90), 0.55, 'anim_flutter:p=2.2#gate')
     # the guns: one run out through the sea wall, one along the shore
     # through the end wall toward the ship's anchorage
-    kit('pirate', 'cannon', (X0 + 1.0, 0, 2.0), yaw=math.radians(-90), scale=0.6)
-    kit('pirate', 'cannon', (PORT[0], 0, Z0 + 1.1), yaw=math.radians(180), scale=0.6)
+    cove_cannon((X0 + 1.0, 0, 2.0), yaw=math.radians(-90), k=0.85)
+    cove_cannon((PORT[0], 0, Z0 + 1.1), yaw=math.radians(180), k=0.85)
     # the corner toward the ship: a fighting platform a head over the wall,
     # squat on four stout posts, a parapet of short sharpened logs on its
     # two outer sides, powder kegs on it and the Jolly Roger on a staff at
@@ -5745,7 +5750,7 @@ def beach_walk(pts, w=0.7, color=0x9a7b55, step=0.34):
                           yaw=math.atan2(x1 - x0, z1 - z0)), 6 + 5 * (k % 3))
                 k += 1
 
-def trodden(pts, w=0.9, color='tan', row=14):
+def trodden(pts, w=0.9, color='ochre', row=12):
     """A way worn into the ground along the (x, z) line `pts`: a ribbon in
     lengths under a stride, a skin a finger over the land (build it inside
     a draped('floor', ...), as beach_walk())."""
@@ -5992,19 +5997,26 @@ def sail_yard():
     box((0.5, 0.09, 0.09), (-0.05, 1.2, 4.05), 0x38383d, yaw=0.5)
     join_still('yard')
     def way():
-        trodden([(1.5, -2.6), (1.0, -5.5), (1.6, -8.5), (1.1, -11.0)], w=0.9, color='tan', row=17)
+        trodden([(1.5, -2.6), (1.0, -5.5), (1.6, -8.5), (1.1, -11.0)], w=0.9)
     draped('floor', way)
-    palm_clump('a', -2.8, -4.6, ((0.4, -0.6, 3.4, 0.3, 200), (-1.2, 0.9, 2.6, 0.15, 340)), ())
+    # (round 24: at z -4.6 a frond lay through the yard's end and its stay)
+    palm_clump('a', -3.4, -6.6, ((0.4, -0.6, 3.4, 0.3, 200), (-1.2, 0.9, 2.6, 0.15, 340)), ())
     lie_on_land()
 
 @piece(1.0)
 def treasure_dig():
-    # Cove: where the crew are digging for what they buried, by the bay:
-    # sheer-legs of three spars over the pit, a sea chest swaying on the
-    # fall, the spoil thrown up in heaps round it with the spades left in
-    # them, a second chest open on the sand with its gold showing, the
-    # crossed boards that mark the spot on their post, a parrot on the
-    # sheers' head. No one about. +X is the road.
+    # Cove: where the crew dug up what they buried, by the bay: sheer-legs
+    # of three spars over the pit, the fall hanging slack with its hook, and
+    # on the road side of the pit what came out of it: the great sea chest
+    # thrown open and heaped with gold, more gold shovelled out on the sand
+    # with the goblets stood in it, a second chest still shut, two sacks, one
+    # fallen over and spilling coin. The spoil lies in heaps round the pit
+    # with the spades left in them, the crossed boards that marked the spot
+    # on their post, a parrot on the sheers' head. From it the furrow of a
+    # third chest dragged off to the camp (+Z), a line of boot prints either
+    # side. Nothing here moves but the parrot's head (round 24: the chest
+    # swung on the fall, and there was one small box of gold). No one about.
+    # +X is the road.
     wood, gold, red = 0x8a6a46, 0xffc044, 0xcf534f
     TOP = 3.1
     rowed(cyl(1.15, 0.05, (0.0, 0.0, 0.0), 'brown', segs=10), 30)               # the pit's mouth, dark
@@ -6013,27 +6025,13 @@ def treasure_dig():
         beam((1.7 * math.cos(a), -0.2, 1.7 * math.sin(a)), (0.0, TOP, 0.0), 0.13, wood)
     box((0.3, 0.26, 0.3), (0.0, TOP - 0.05, 0.0), 0x38383d)
     with square():
-        box((0.05, 0.9, 0.05), (0.0, TOP - 0.6, 0.0), 0xfde4c7)                  # the fall, standing part
-    def chest(x, y, z, yaw=0.0, lid=0.0):
-        box((0.7, 0.36, 0.48), (x, y + 0.18, z), 0xb06041, yaw=yaw)
-        with plain_parts():
-            for d in (-0.22, 0.22):
-                c, s = math.cos(yaw), math.sin(yaw)
-                box((0.08, 0.38, 0.5), (x + d * c, y + 0.18, z - d * s), gold, yaw=yaw)
-            if lid:
-                box((0.56, 0.1, 0.36), (x, y + 0.38, z), gold, yaw=yaw)          # what is in it
-                c, s = math.cos(yaw), math.sin(yaw)
-                box((0.7, 0.42, 0.08), (x - 0.26 * s, y + 0.5, z - 0.26 * c), 0xb06041, yaw=yaw, pitch=-0.25)
-            else:
-                box((0.72, 0.1, 0.5), (x, y + 0.4, z), 0xb06041, yaw=yaw)
-    with animated('anim_bob:h=0.22:p=4.5#chest', (0.0, 0.7, 0.0)):
-        chest(0.0, 0.7, 0.0, yaw=0.3)
-        with square():
-            box((0.05, TOP - 1.8, 0.05), (0.0, 1.1 + (TOP - 1.8) / 2, 0.0), 0xfde4c7)
+        box((0.05, 1.7, 0.05), (0.0, TOP - 1.0, 0.0), 0xfde4c7)                  # the fall, hanging slack
+    with plain_parts():
+        box((0.16, 0.2, 0.12), (0.0, TOP - 1.9, 0.0), 0x38383d)                  # its hook
     # the parrot, a scarlet macaw facing +X: its red body and round head,
     # the white cheek with its eye, a hooked bill, blue wings folded and a
     # long green tail out over the block's edge, its feet on the block
-    with animated('anim_watch:r=24+hop:r=10:h=0.2#parrot', (0.0, TOP + 0.08, 0.0)):
+    with animated('anim_watch:r=24#parrot', (0.0, TOP + 0.08, 0.0)):
         Z, X = (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
         def q(dx, dy, dz=0.0):
             return (dx, TOP + 0.08 + dy, dz)
@@ -6047,20 +6045,43 @@ def treasure_dig():
                  [(0.045, 0.016), (0.05, 0.016), (0.02, 0.01)], 0x339cf2, X, 4)
             loft([q(0.02, 0.05, sd * 0.03), q(0.035, 0.0, sd * 0.03)], [(0.013, 0.013), (0.016, 0.02)], 0x38383d, Z, 4)
         loft([q(-0.03, 0.08), q(-0.17, 0.045), q(-0.34, -0.04)], [(0.034, 0.022), (0.028, 0.016), (0.012, 0.008)], 0x22c46e, Z, 4)
+    # the treasure, on the road side of the pit
+    cove_chest((1.85, 0.0, 0.25), yaw=math.radians(78), k=1.2, lid='open')
+    cove_chest((1.05, 0.0, -2.25), yaw=math.radians(120), k=0.95)
+    cyl(0.62, 0.3, (2.15, -0.04, -1.1), gold, r2=0.2, segs=8)                    # the gold shovelled out on the sand
+    with plain_parts():
+        cyl(0.24, 0.16, (2.2, 0.2, -1.05), gold, r2=0.08, segs=6)
+        for k in range(9):                                                       # coins strewn from it
+            a = 0.7 * k
+            cyl(0.085, 0.035, (2.15 + (0.75 + 0.07 * (k % 3)) * math.cos(a), 0.0, -1.1 + (0.75 + 0.07 * (k % 3)) * math.sin(a)),
+                gold, segs=6)
+        for (x, z) in ((2.85, -0.35), (2.5, -1.75)):                             # goblets stood in it
+            cyl(0.09, 0.03, (x, 0.0, z), gold, segs=6)
+            box((0.05, 0.14, 0.05), (x, 0.1, z), gold)
+            cyl(0.06, 0.16, (x, 0.17, z), gold, r2=0.12, segs=6)
+        for i, (x, z, yw) in enumerate(((2.65, -0.9, 0.3), (2.35, -0.4, 1.2))):   # bars of it
+            box((0.3, 0.1, 0.14), (x, 0.3 - 0.12 * i, z), gold, yaw=yw)
+    # the sacks: one stood and tied at the neck, one fallen over, its coin spilt
+    sack = 'gravel'
+    cyl(0.36, 0.52, (1.95, -0.04, -2.5), sack, r2=0.2, segs=7)
+    cyl(0.13, 0.12, (1.95, 0.52, -2.5), sack, r2=0.2, segs=7)
+    rod((2.6, 0.24, -2.75), (3.2, 0.2, -2.45), 0.3, sack, r2=0.18, segs=7)
+    with plain_parts():
+        box((0.22, 0.07, 0.22), (1.95, 0.48, -2.5), 'brown')
+        cyl(0.24, 0.12, (3.42, 0.0, -2.33), gold, r2=0.1, segs=6)
+        for k in range(5):
+            cyl(0.085, 0.035, (3.55 + 0.17 * (k % 3), 0.0, -2.75 + 0.2 * k), gold, segs=6)
     # the spoil, the spades
-    for (x, z, r) in ((-1.6, 1.1, 0.95), (-1.9, -0.9, 0.8), (0.3, -2.0, 0.85), (1.5, 1.7, 0.7)):
+    for (x, z, r) in ((-1.6, 1.1, 0.95), (-1.9, -0.9, 0.8), (-0.5, -2.3, 0.8), (0.2, 2.15, 0.7)):
         sand_heap(x, z, r, 0.55)
     with plain_parts():
-        for (x, z, lean) in ((-1.6, 1.1, 0.25), (0.3, -2.0, -0.3)):
+        for (x, z, lean) in ((-1.6, 1.1, 0.25), (-0.5, -2.3, -0.3)):
             beam((x, 0.3, z), (x + lean, 1.25, z + 0.1), 0.06, wood)
             box((0.2, 0.28, 0.06), (x - 0.02, 0.36, z), 0x868ba1)
         # X marks the spot
-        box((0.1, 1.5, 0.1), (1.5, 0.75, -1.7), wood)
+        box((0.1, 1.5, 0.1), (0.7, 0.75, 3.3), wood)
         for r in (-1, 1):
-            box((0.07, 0.16, 1.0), (1.56, 1.45, -1.7), red, pitch=r * math.pi / 4)
-        for k in range(6):                                                       # coins spilt
-            box((0.09, 0.04, 0.09), (1.2 + 0.25 * math.cos(2.1 * k), 0.02, 0.2 + 0.3 * math.sin(1.3 * k)), gold)
-    chest(1.6, 0.0, 0.3, yaw=-0.4, lid=1.0)
+            box((0.07, 0.16, 1.0), (0.76, 1.45, 3.3), red, pitch=r * math.pi / 4)
     # where they tried first, along their way from the camp (+Z)
     for (x, z, r) in ((-0.9, 5.6, 0.55), (0.2, 9.4, 0.45)):
         rowed(cyl(r, 0.05, (x, 0.0, z), 'brown', segs=8), 30)
@@ -6068,14 +6089,37 @@ def treasure_dig():
     with plain_parts():
         beam((-1.9, 0.25, 5.9), (-1.7, 1.2, 6.0), 0.06, wood)
         box((0.2, 0.28, 0.06), (-1.92, 0.3, 5.9), 0x868ba1)
-    cove_fern(-2.6, 2.6, 0.8, turn=0.7, n=5)
-    cove_fern(-2.9, -2.4, 0.7, turn=1.9, n=5)
+    # the palms behind it, and ferns that stand clear of them and of the spoil
+    clumps = (('a', -3.6, 3.9, ((0.4, -0.6, 3.6, 0.3, 200), (-1.2, 0.9, 2.8, 0.15, 340))),
+              ('b', -3.4, -3.4, ((0.5, -0.4, 3.0, 0.25, 60), (-0.9, 1.3, 2.4, 0.35, 250))))
+    feet = cove_feet(clumps)
+    for (x, z, k, turn) in ((-4.7, 0.5, 0.8, 0.7), (-4.6, 7.0, 0.7, 1.9)):
+        assert cove_clear(feet, x, z, 1.25 * k), 'a fern in a palm'
+        cove_fern(x, z, k, turn=turn, n=5)
     join_still('dig')
     def way():
-        trodden([(1.0, 1.6), (0.9, 4.5), (1.3, 7.5), (0.8, 10.5), (1.2, 13.0)], w=0.9, color='tan', row=17)
+        # the chest's furrow to the camp, between its gun and its fire
+        # (tracks.js stands the camp 17 u on), and the boots beside it
+        line = [(1.7, 1.5), (2.1, 4.0), (2.5, 8.0), (2.9, 12.0), (3.25, 15.5), (3.45, 18.3), (4.1, 19.7)]
+        trodden(line, w=0.55, row=20)
+        cells = []
+        n = 0
+        for (x0, z0), (x1, z1) in zip(line, line[1:]):
+            L = math.hypot(x1 - x0, z1 - z0)
+            ux, uz = (x1 - x0) / L, (z1 - z0) / L
+            d = 0.3
+            while d < L:
+                sd = 1 if n % 2 else -1
+                cx, cz = x0 + ux * d - uz * sd * (0.62 + 0.08 * math.sin(2.3 * n)), z0 + uz * d + ux * sd * (0.62 + 0.08 * math.sin(2.3 * n))
+                hx, hz, wx, wz = ux * 0.17, uz * 0.17, -uz * 0.085, ux * 0.085
+                cells.append([(cx - hx - wx, cz - hz - wz), (cx - hx + wx, cz - hz + wz), (cx + hx + wx, cz + hz + wz), (cx + hx - wx, cz + hz - wz)])
+                n += 1
+                d += 0.5
+        rowed(skin([(x, 0.035, z) for c in cells for (x, z) in c], [tuple(range(4 * i, 4 * i + 4)) for i in range(len(cells))],
+                   'ochre', (0.0, 1.0, 0.0)), 27)
     draped('floor', way)
-    palm_clump('a', -3.2, 3.6, ((0.4, -0.6, 3.6, 0.3, 200), (-1.2, 0.9, 2.8, 0.15, 340)), ())
-    palm_clump('b', -3.0, -3.2, ((0.5, -0.4, 3.0, 0.25, 60), (-0.9, 1.3, 2.4, 0.35, 250)), ())
+    for tag, cx, cz, palms in clumps:
+        palm_clump(tag, cx, cz, palms, ())
     lie_on_land()
 
 @piece(1.0)
@@ -6108,7 +6152,7 @@ def skull_trail():
     skull(-0.3, 1.5, GZ, 1.5)
     with plain_parts():
         for r in (-1, 1):                                                        # its crossed bones
-            box((0.08, 0.1, 0.9), (-0.26, 1.72, GZ), bone, pitch=r * 0.6)
+            box((0.08, 0.1, 0.9), (-0.19, 1.72, GZ), bone, pitch=r * 0.6)   # proud of the spars: in their plane it flickered
     # the rope on its posts along the sea side
     posts = [(x - 1.0, z) for (x, z) in path[1:-1]]
     with plain_parts():
@@ -6132,23 +6176,32 @@ def skull_trail():
     kit('pirate', 'chest', (-1.5, 0.0, 3.4), yaw=1.9, scale=0.26)
     kit('pirate', 'barrel', (-1.7, 0.0, 4.3), yaw=0.4, scale=0.26)
     kit('pirate', 'barrel', (-2.2, 0.0, 3.7), yaw=1.1, scale=0.26)
-    # ferns and scrub at the palms' feet
+    # scrub and ferns between the palms and behind them, each clear of every
+    # trunk, of the rope and of each other (round 24: they grew through the
+    # palms)
+    clumps = (('a', -3.0, -11.0, ((0.4, -0.6, 3.4, 0.3, 200), (-1.2, 0.9, 4.6, 0.15, 340))),
+              ('b', -3.6, -5.6, ((0.5, -0.4, 4.2, 0.25, 60), (-0.9, 1.3, 3.2, 0.35, 250), (1.1, 1.6, 2.6, 0.2, 130))),
+              ('c', -3.2, 1.6, ((-0.6, -0.5, 4.8, 0.2, 290), (0.8, 0.9, 3.3, 0.3, 20))),
+              ('d', -4.2, 7.4, ((0.3, 0.2, 4.0, 0.3, 160), (-0.8, -1.2, 3.0, 0.25, 80))))
+    feet = cove_feet(clumps)
+    bushes = ((-3.2, -8.2, 1.0, 0.9, 14), (-3.4, -1.9, 1.2, 1.1, 20), (-3.7, 4.3, 1.1, 0.9, 10), (-5.9, -6.6, 1.3, 1.2, 17),
+              (1.3, 4.6, 0.7, 0.5, 12), (1.2, -4.4, 0.8, 0.6, 22))
+    ferns = ((-5.6, -9.4, 0.9, 0.4), (-5.3, -0.2, 1.0, 1.1), (-5.9, 5.0, 0.9, 2.0), (1.4, -11.0, 0.7, 0.2), (1.2, 10.6, 0.7, 2.6))
     with plain_parts():
-        for (x, z, r, h, row) in ((-2.6, -9.6, 1.2, 1.0, 14), (-3.4, -4.4, 1.5, 1.3, 20), (-2.4, 0.4, 1.0, 0.8, 10),
-                                  (-3.6, 6.4, 1.4, 1.2, 17), (1.3, 4.6, 0.7, 0.5, 12), (1.2, -4.4, 0.8, 0.6, 22)):
+        for (x, z, r, h, row) in bushes:
+            assert cove_clear(feet, x, z, r), 'scrub in a palm'
             cove_bush(x, z, r, h, row, turn=x + z)
-        ferns = ((-1.9, -7.2, 0.9, 0.4), (-2.9, -1.8, 1.0, 1.1), (-2.2, 7.6, 0.9, 2.0), (1.4, -11.0, 0.7, 0.2), (1.2, 10.6, 0.7, 2.6))
         for (x, z, k, turn) in ferns[:3] if LITE else ferns:
+            assert cove_clear(feet, x, z, 1.25 * k), 'a fern in a palm'
+            assert all(math.hypot(x - bx, z - bz) >= 1.1 * k + r for (bx, bz, r, _h, _row) in bushes), 'a fern in the scrub'
             cove_fern(x, z, k, turn=turn, n=5)
     join_still('trail')
     def way():
-        trodden(path, w=1.1, color='tan', row=17)
+        trodden(path, w=1.1)
     draped('floor', way)
     # the palms over it, the jungle's own (palm_clump), behind the path
-    palm_clump('a', -3.0, -11.0, ((0.4, -0.6, 3.4, 0.3, 200), (-1.2, 0.9, 4.6, 0.15, 340)), ())
-    palm_clump('b', -3.6, -5.6, ((0.5, -0.4, 4.2, 0.25, 60), (-0.9, 1.3, 3.2, 0.35, 250), (1.1, 1.6, 2.6, 0.2, 130)), ())
-    palm_clump('c', -3.2, 1.6, ((-0.6, -0.5, 4.8, 0.2, 290), (0.8, 0.9, 3.3, 0.3, 20)), ())
-    palm_clump('d', -4.2, 7.4, ((0.3, 0.2, 4.0, 0.3, 160), (-0.8, -1.2, 3.0, 0.25, 80)), ())
+    for tag, cx, cz, palms in clumps:
+        palm_clump(tag, cx, cz, palms, ())
     lie_on_land()
 
 def ship_can(at, color, yaw=0.0, roll=0.0, pitch=0.0, L=2.7):
@@ -16677,17 +16730,11 @@ def bay_battery():
                     yaw=0.1 * math.sin(3.1 * k))
     draped('floor', platform)
     for lx in (-0.85, 0.85):                                                     # the guns
-        box((0.62, 0.3, 1.05), at(lx, 0.36, -0.1), 0xb06041, yaw=YAW)
-        rod(at(lx, 0.66, -0.75), at(lx, 0.76, 1.15), 0.19, iron, r2=0.13, segs=8)
-        with plain_parts():
-            box((0.3, 0.3, 0.14), at(lx, 0.69, -0.82), iron, yaw=YAW)            # the breech
-            box((0.34, 0.34, 0.1), at(lx, 0.76, 1.12), iron, yaw=YAW)            # the muzzle's swell
-            for dz in (-0.42, 0.25):
-                for sx in (-1, 1):
-                    if LITE:
-                        box((0.1, 0.3, 0.3), at(lx + sx * 0.36, 0.17, dz), iron, yaw=YAW)
-                    else:
-                        cyl(0.17, 0.1, at(lx + sx * 0.36 - 0.05, 0.17, dz), iron, segs=8, axis='across', yaw=YAW)
+        cove_cannon(at(lx, 0.07, 0.3), yaw=YAW, k=1.0)
+    # the seaward gun has just fired: its smoke rolls out over the breastwork
+    # every so often (set_motion.h: a burst, out along the marker's own x)
+    puff = marker('anim_drape+smoke:s=1.2:p=13', at(-0.85, 0.78, 1.25))
+    puff.rotation_euler = (0.0, 0.0, math.atan2(-math.cos(YAW), math.sin(YAW)))
     for lx, lz, r in ((-2.1, 1.35, 0.44), (0.0, 1.75, 0.46), (2.1, 1.35, 0.44)):  # the breastwork
         cyl(r, 0.72, at(lx, -0.08, lz), wicker, r2=r * 0.92, segs=8)
         with plain_parts():
@@ -16705,8 +16752,8 @@ def bay_battery():
     with plain_parts():
         for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
             box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4)
-        beam(at(1.5, 0.05, -1.2), at(1.2, 0.95, -0.2), 0.07, wood)
-        box((0.16, 0.16, 0.2), at(1.2, 0.95, -0.2), 0xfde4c7, yaw=YAW)
+        beam(at(2.05, 0.05, -1.3), at(1.8, 0.95, -0.4), 0.07, wood)
+        box((0.16, 0.16, 0.2), at(1.8, 0.95, -0.4), 0xfde4c7, yaw=YAW)
         # the spyglass on its stand
         sx, sz = T(2.5, 0.6)
         for k in range(3):
@@ -16872,6 +16919,319 @@ def storm_wreck():
     lie_on_land()
 
 lite_too('careened-sloop', 'bay-battery', 'whalebone-arch', 'reef-beacon', 'storm-wreck')
+
+# ---- round 24: Cove's own gun, its treasure, a gate, a prize, parrots ----
+
+def cove_cannon(at, yaw=0.0, k=1.0):
+    """Cove's gun, the one model wherever the crew have one (round 24: the
+    kit's two cannon and a third of ours stood on one lap): a ship's gun on
+    its truck, the muzzle to local +Z turned by `yaw` (box()'s sense). An
+    iron barrel tapering from the breech ring to the muzzle's swell, two
+    bands round it and the cascabel behind; a timber truck of a bed and two
+    stepped cheeks the trunnions lie on, on four small wheels. A car and a
+    half long at k = 1, its wheels on the ground at `at`."""
+    x0, y0, z0 = at
+    iron, band, wood = 0x38383d, 0x4f5260, 0xb06041
+    segs = 6 if LITE else 8
+    def W(lx, ly, lz):
+        x, z = turned(x0, z0, yaw, lx * k, lz * k)
+        return (x, y0 + ly * k, z)
+    def b(size, lx, ly, lz, color):
+        return box([s * k for s in size], W(lx, ly, lz), color, yaw=yaw)
+    b((0.46, 0.08, 0.98), 0.0, 0.2, -0.05, wood)                                  # the truck's bed
+    for sx in (-1, 1):
+        b((0.11, 0.2, 1.02), sx * 0.235, 0.32, -0.05, wood)                       # a cheek, and its step up under the trunnion
+        b((0.11, 0.14, 0.52), sx * 0.235, 0.47, 0.19, wood)
+    with plain_parts():
+        for lz in (-0.4, 0.3):
+            b((0.7, 0.07, 0.07), 0.0, 0.18, lz, iron)                            # an axle
+            for sx in (-1, 1):
+                rowed(cyl(0.18 * k, 0.11 * k, W(sx * 0.375 - 0.055, 0.18, lz), 'bark', segs=6 if LITE else 10, axis='across', yaw=yaw), 6)
+                if not LITE:
+                    b((0.14, 0.08, 0.08), sx * 0.375, 0.18, lz, iron)
+        b((0.64, 0.09, 0.09), 0.0, 0.6, 0.1, iron)                               # the trunnions
+        b((0.12, 0.12, 0.12), 0.0, 0.62, -0.68, iron)                            # the cascabel
+    Z0, Z1, Y0, Y1 = -0.56, 0.8, 0.62, 0.71
+    def bore(lz):
+        return Y0 + (Y1 - Y0) * (lz - Z0) / (Z1 - Z0)
+    rod(W(0.0, Y0, Z0), W(0.0, Y1, Z1), 0.19 * k, iron, r2=0.13 * k, segs=segs)
+    def ring(lz, r, w, color):
+        rod(W(0.0, bore(lz - w / 2), lz - w / 2), W(0.0, bore(lz + w / 2), lz + w / 2), r * k, color, segs=segs)
+    ring(0.77, 0.18, 0.14, iron)                                                 # the muzzle's swell
+    ring(-0.5, 0.22, 0.12, iron)                                                 # the breech ring
+    for lz, r in () if LITE else ((-0.14, 0.2), (0.3, 0.175)):
+        ring(lz, r, 0.07, band)
+
+def cove_chest(at, yaw=0.0, k=1.0, lid='shut'):
+    """A sea chest, its front to local +Z turned by `yaw`: a plank body in
+    two iron bands, a brass lock; `shut` under its stepped lid, or `open`,
+    the lid stood back on its hinges and the chest heaped over its brim
+    with gold."""
+    x0, y0, z0 = at
+    wood, iron, gold = 0xb06041, 0x38383d, 0xffc044
+    def W(lx, ly, lz):
+        x, z = turned(x0, z0, yaw, lx * k, lz * k)
+        return (x, y0 + ly * k, z)
+    def b(size, lx, ly, lz, color):
+        return box([s * k for s in size], W(lx, ly, lz), color, yaw=yaw)
+    b((0.9, 0.42, 0.56), 0.0, 0.21, 0.0, wood)
+    with plain_parts():
+        for lx in (-0.29, 0.29):
+            b((0.09, 0.44, 0.59), lx, 0.21, 0.0, iron)
+        b((0.15, 0.15, 0.05), 0.0, 0.3, 0.29, gold)                              # the lock
+    if lid == 'shut':
+        b((0.92, 0.12, 0.58), 0.0, 0.48, 0.0, wood)
+        b((0.92, 0.09, 0.4), 0.0, 0.58, 0.0, wood)
+        with plain_parts():
+            for lx in (-0.29, 0.29):
+                b((0.09, 0.14, 0.6), lx, 0.49, 0.0, iron)
+                b((0.09, 0.1, 0.42), lx, 0.59, 0.0, iron)
+        return
+    # the lid stood back past upright on its hinges
+    a = [W(-0.46, 0.42, -0.24), W(0.46, 0.42, -0.24), W(0.46, 0.98, -0.42), W(-0.46, 0.98, -0.42)]
+    c = [W(-0.46, 0.39, -0.36), W(0.46, 0.39, -0.36), W(0.46, 0.95, -0.54), W(-0.46, 0.95, -0.54)]
+    hexa(a, c, wood)
+    with plain_parts():
+        b((0.82, 0.1, 0.48), 0.0, 0.4, 0.0, gold)                                # gold to the brim
+        cyl(0.26 * k, 0.24 * k, W(-0.05, 0.42, 0.0), gold, r2=0.08 * k, segs=6)  # and heaped over it
+        cyl(0.17 * k, 0.16 * k, W(0.24, 0.42, 0.06), gold, r2=0.05 * k, segs=6)
+        b((0.26, 0.09, 0.12), -0.27, 0.48, 0.1, gold)                            # a bar, a cup
+        cyl(0.05 * k, 0.15 * k, W(0.3, 0.52, -0.12), gold, r2=0.1 * k, segs=6)
+        for lx, lz in ((-0.2, 0.45), (0.1, 0.52), (0.36, 0.42), (-0.52, 0.34)):  # coin fallen before it
+            cyl(0.085 * k, 0.035, W(lx, 0.0, lz), gold, segs=6)
+
+def cove_feet(clumps):
+    """Where the palms of `clumps` [(tag, cx, cz, palms), ...] stand (palm_clump)."""
+    return [(cx + 0.5 * dx, cz + 0.5 * dz) for (_, cx, cz, palms) in clumps for (dx, dz, _h, _lean, _yaw) in palms]
+
+def cove_clear(feet, x, z, r):
+    """Whether a plant `r` round at (x, z) stands clear of every trunk in
+    `feet` (round 24: ferns and scrub grew through the palms' trunks)."""
+    return all(math.hypot(x - px, z - pz) >= r + 0.3 for px, pz in feet)
+
+def cove_palisade(a, b, tall=1.55, tall1=None):
+    """Sharpened logs stood side by side from (x, z) `a` to `b`, the
+    stockade's own (pirate_stockade's logs()), `tall` at a to `tall1` at b:
+    built from under the plain, to drape."""
+    LR, LSEG = (0.25, 5) if LITE else (0.18, 6)
+    tall1 = tall if tall1 is None else tall1
+    n = max(1, int(round(math.dist(a, b) / (2 * LR))))
+    for i in range(n):
+        t = (i + 0.5) / n
+        x, z = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+        h = (tall + (tall1 - tall) * t) * (1 + 0.14 * jitter(i, int(x * 7 + z * 13), 3.3))
+        log = 'bark' if i % 3 else 0x6e5b3a
+        if LITE:
+            cyl(LR, h + 0.7, (x, -0.4, z), log, r2=0.45 * LR, segs=LSEG, stem=True)
+        else:
+            cyl(LR, h + 0.4, (x, -0.4, z), log, segs=LSEG, stem=True)
+            cyl(LR, 0.3, (x, h, z), log, r2=0.02, segs=LSEG, stem=True)
+
+@piece(1.0)
+def stockade_gate():
+    # Cove: the stockade's landward gate, astride the road (tracks.js, lat
+    # 0) at the camp's near corner: its palisade runs on from that corner
+    # across the road's line and up into the island's flank, and the road
+    # goes through it under a gateway, two great posts and a pair of logs
+    # across them, the Jolly Roger over the middle, the gate's leaf swung
+    # open toward the cars coming. Its posts stand a stride and more
+    # off the kerbs and the lintel as high as the lookout's bridge, so
+    # nothing of it is in a car's or a camera's way (the sim knows no set
+    # piece). It levels nothing: the posts run on under the plain, the walls
+    # and the leaf drape. +X is the island (the road's left), -X the
+    # stockade; the cars come from -Z.
+    wood, dark, plank = 0x8a6a46, 0x6e5b3a, 0xb06041
+    GX, UNDER = 6.8, 4.3                               # the posts off the road's middle; the lintel's underside over the plain
+    segs = 5 if LITE else 7
+    for sx in (-1, 1):
+        cyl(0.36, UNDER + 2.1, (sx * GX, -1.0, 0.0), dark, segs=segs, stem=True)
+        cyl(0.36, 0.5, (sx * GX, UNDER + 1.1, 0.0), dark, r2=0.04, segs=segs, stem=True)
+        beam((sx * GX, UNDER - 1.5, 0.0), (sx * (GX - 1.5), UNDER + 0.2, 0.0), 0.22, wood)       # a knee under the lintel
+    rod((-GX - 0.9, UNDER + 0.3, 0.0), (GX + 0.9, UNDER + 0.3, 0.0), 0.3, wood, segs=segs)
+    rod((-GX - 0.6, UNDER + 0.82, 0.0), (GX + 0.6, UNDER + 0.82, 0.0), 0.24, dark, segs=segs)
+    kit_flag('flag-pirate-high', (0.0, UNDER + 0.95, 0.0), 0.0, 0.8, 'anim_flutter:p=2.1#gate')
+    join_still('gate')
+    def walls():
+        cove_palisade((-9.0, 0.95), (-GX - 0.5, 0.1), 1.7, 2.5)
+        cove_palisade((GX + 0.5, 0.0), (12.4, 0.5), 2.5, 1.5)
+        # the gate's leaf, swung open on the beach side's post (the island's
+        # slope rises from the kerb: a leaf there stood out of the hillside)
+        yw, cx, cz = 0.14, -(GX + 0.36), -2.4
+        box((0.16, 3.1, 4.1), (cx, 1.15, cz), plank, yaw=yw)
+        with plain_parts():
+            for y in (0.5, 2.1):
+                box((0.1, 0.24, 4.1), (cx + 0.12, y, cz), dark, yaw=yw)
+            box((0.1, 0.2, 4.2), (cx + 0.12, 1.3, cz), dark, yaw=yw, pitch=0.38)
+    draped('wall', walls)
+
+lite_too('stockade-gate')
+
+def kit_nodes(kit_id, model, at, yaw=0.0, scale=1.0):
+    """Import one kit model and keep its nodes apart, {node name: object},
+    each placed as kit() places the whole: a ship without her sails, a boat
+    whose oars move by themselves."""
+    before = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(KIT_CACHE, kit_id, 'models', model + '.glb'))
+    new = [o for o in bpy.context.scene.objects if o not in before]
+    meshes = [o for o in new if o.type == 'MESH']
+    empties = [o for o in new if o.type != 'MESH']
+    for o in meshes:
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+    for e in empties:
+        bpy.data.objects.remove(e, do_unlink=True)
+    out = {}
+    for o in meshes:
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        for m in o.data.materials:
+            if m.node_tree and any(n.type == 'TEX_IMAGE' for n in m.node_tree.nodes):
+                name = 'tex:' + kit_id
+                if name in bpy.data.materials:
+                    o.data.materials[list(o.data.materials).index(m)] = bpy.data.materials[name]
+                else:
+                    m.name = name
+        out[o.name.split('.')[0]] = o
+        o.scale = (scale, scale, scale)
+        o.rotation_mode = 'XYZ'
+        place(o, at, yaw)
+    return out
+
+def kit_swatch(o, src, dst, below=1e9):
+    """Repaint a kit part's sides: every face that is not a deck (it does
+    not look up) in the atlas swatch `src` (its column, its row, of the
+    palette's 8 by 4 cells) takes `dst`'s, shade for shade, up to the
+    model's own height `below` (a hull, not the masts over it)."""
+    me = o.data
+    uv = me.uv_layers[0].data
+    for pl in me.polygons:
+        if pl.normal.z > 0.7 or pl.center.z >= below:
+            continue
+        for li in pl.loop_indices:
+            l = uv[li]
+            if int(l.uv[0] * 8) == src[0] and int((1 - l.uv[1]) * 4) == src[1]:
+                l.uv = (l.uv[0] + (dst[0] - src[0]) / 8, l.uv[1] - (dst[1] - src[1]) / 4)
+
+# The tender's way in the prize's frame: from her side to the head of the
+# stockade's jetty and back (tracks.js stands her 30 u out from the stockade
+# at the same u, so the jetty's head lies at x 12.4, z -1.4).
+COVE_TENDER = ((2.6, 1.3), (3.0, -0.1), (5.6, -0.8), (9.0, -0.5), (11.0, -0.3), (11.7, 0.5), (11.0, 1.5),
+               (8.5, 2.2), (5.5, 2.4), (3.4, 2.2))
+
+@piece(1.0)
+def prize_at_anchor():
+    # Cove: the crew's prize, a merchantman they took, riding at anchor off
+    # the stockade with a prize crew's work done: her sails furled on their
+    # yards, her hull in a trader's blue where the pirates' own ship is bare
+    # timber under black sails, a striped pennant at her main where theirs
+    # flies the skull. She rolls a little on her cable. Her boat plies
+    # between her side and the head of the stockade's jetty, the oars
+    # pulling, laden with what they are taking off her. No one about. She
+    # stands in the sea; +X is the shore.
+    S, YAW = 0.6, math.radians(-20)
+    wood, cream = 0x8a6a46, 0xfde4c7
+    def K(x, y, z):                                      # the kit ship's own frame
+        px, pz = turned(0.0, 0.0, YAW, x * S, z * S)
+        return (px, y * S - 0.08, pz)
+    with animated('anim_sway:a=z:d=4:p=8.5+bob:h=0.1:p=5.6#prize', (0.0, 0.0, 0.0), yaw=YAW):
+        nodes = kit_nodes('pirate', 'ship-medium', (0.0, -0.08, 0.0), yaw=YAW, scale=S)
+        for n in ('sail-a', 'sail-b', 'flag-a', 'flag-b', 'flag-c'):
+            bpy.data.objects.remove(nodes[n], do_unlink=True)
+        kit_swatch(nodes['ship-medium'], (5, 3), (5, 2), below=4.3)             # her topsides blue, to the rail
+        for (y, z, w) in ((7.7, 0.67, 2.1), (8.0, -4.01, 1.9)):                   # each yard, its sail furled along it
+            rod(K(-w - 0.1, y, z), K(w + 0.1, y, z), 0.12 * S, wood, segs=6)
+            rod(K(-w + 0.2, y - 0.36, z + 0.1), K(w - 0.2, y - 0.36, z + 0.1), 0.3 * S, cream, segs=6)
+            for i in () if LITE else range(4):
+                gx = -w + 0.6 + i * (2 * w - 1.2) / 3
+                rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6)
+        flag_on_pole(K(0.0, 9.6, 0.68), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
+        beam(K(0.3, 2.5, 5.0), K(1.3, -0.6, 8.8), 0.07, cream)                     # her cable, from the bow
+    # her boat, bow to local +X (the way its path faces it), the oars each on its rowlock
+    for i, (x, z) in enumerate(COVE_TENDER):
+        marker('path_tender_%d' % i, (x, SEA, z))
+    bx, bz = COVE_TENDER[0]
+    BS, BOW = 0.5, math.radians(90)
+    with animated('anim_path:c=tender:p=46:f=1+bob:h=0.04:p=2.6#tender', (bx, SEA, bz)):
+        boat = kit_nodes('pirate', 'boat-row-large', (bx, SEA - 0.1, bz), yaw=BOW, scale=BS)
+        oars = boat['paddles']
+        if LITE:
+            pass                                         # the box's: the oars shipped, one part
+        else:
+            right = split_off(oars, lambda c: c.x > 0)
+            for o, sd in ((oars, -1), (right, 1)):
+                px, pz = turned(bx, bz, BOW, sd * 0.62 * BS, -0.42 * BS)
+                with animated('anim_sway:a=y:d=22:p=1.8:o=%g#oar%d' % (0.25 * (1 - sd), sd + 1), (px, SEA - 0.1 + 0.5 * BS, pz)) as part:
+                    o['anim'] = part.gid
+        kit('pirate', 'chest', (bx - 0.3, SEA + 0.06, bz), yaw=0.4, scale=0.2)   # what she carries
+        keg((bx + 0.05, SEA + 0.06, bz + 0.05), r=0.09, h=0.2)
+
+lite_too('prize-at-anchor')
+
+def macaw_on_the_wing(at, k=1.0, tag='m', beat=0.0):
+    """The dig's scarlet macaw flying, heading +X at `at`, 0.6 u from tip
+    to tip at k = 1 (a bird that size is a speck from the seat; Cove's fly
+    at 1.3): red body and head,
+    the white cheek, a hooked yellow bill, a long tail of red run out to
+    blue, and a macaw's wings, red at the shoulder, a yellow band, blue
+    flight feathers. The wings beat about the body's own line (each a part
+    riding the bird, `beat` of a stroke out of step with the next bird's);
+    on the box (LITE) they are held spread, one part with the body."""
+    x, y, z = at
+    red, gold, blue, white = 0xcf534f, 0xffc044, 0x339cf2, 0xf8f8fb
+    Z, X = (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
+    def q(dx, dy, dz=0.0):
+        return (x + dx * k, y + dy * k, z + dz * k)
+    def r(*pairs):
+        return [(a * k, b * k) for a, b in pairs]
+    loft([q(-0.12, 0.0), q(0.0, 0.0), q(0.1, 0.01), q(0.16, 0.02)], r((0.03, 0.03), (0.055, 0.05), (0.05, 0.048), (0.036, 0.036)), red, Z, 6)
+    loft([q(0.15, 0.025), q(0.2, 0.03), q(0.235, 0.02)], r((0.036, 0.036), (0.045, 0.044), (0.026, 0.026)), red, Z, 6)
+    loft([q(0.225, 0.02), q(0.275, 0.0), q(0.28, -0.045)], r((0.024, 0.026), (0.02, 0.02), (0.005, 0.006)), gold, Z, 4)
+    loft([q(0.21, 0.022, -0.042), q(0.21, 0.022, 0.042)], r((0.016, 0.016), (0.016, 0.016)), white, X, 4)
+    loft([q(-0.1, 0.0), q(-0.28, -0.005), q(-0.44, -0.02)], r((0.03, 0.016), (0.022, 0.012), (0.01, 0.006)), red, Z, 4)
+    loft([q(-0.4, -0.016), q(-0.52, -0.03)], r((0.014, 0.008), (0.006, 0.005)), blue, Z, 4)
+    def wing(sd):
+        root, mid, tip = q(0.04, 0.02, sd * 0.03), q(0.02, 0.05, sd * 0.15), q(-0.03, 0.03, sd * 0.3)
+        loft([root, q(0.03, 0.04, sd * 0.09)], r((0.07, 0.014), (0.075, 0.012)), red, X, 4)
+        loft([q(0.03, 0.04, sd * 0.09), mid], r((0.075, 0.012), (0.07, 0.011)), gold, X, 4)
+        loft([mid, tip], r((0.07, 0.011), (0.03, 0.008)), blue, X, 4)
+    for sd in (-1, 1):
+        if LITE:
+            wing(sd)
+        else:
+            with animated('anim_sway:a=x:d=26:p=0.46:o=%g#%s%d' % ((beat + 0.25 * (1 - sd)) % 1.0, tag, sd + 1), q(0.04, 0.02, sd * 0.03)):
+                wing(sd)
+
+# The parrots' way in their piece's frame (tracks.js stands it astride the
+# road where two of the island's groves face each other over it): out of the
+# palms on the island's side, over the road well clear of a car and its
+# camera, into the palms on the beach's, and back a little further on.
+# (x, y over the plain, z), a closed loop.
+COVE_PARROTS = ((11.4, 8.6, -2.0), (7.5, 7.6, -1.0), (2.0, 6.4, 1.0), (-3.5, 5.8, 3.4), (-7.6, 5.6, 5.6), (-9.2, 5.7, 7.6),
+                (-8.0, 5.8, 9.2), (-4.0, 6.0, 7.4), (1.5, 6.6, 4.4), (7.0, 7.7, 1.6), (11.0, 8.6, 0.8), (12.6, 8.8, -0.8))
+
+@piece(1.0)
+def parrot_crossing():
+    # Cove: the island's parrots, scarlet macaws, crossing the road between
+    # two of its palm groves and back, three of them, two together. They are
+    # the piece: nothing of it stands on the ground but a speck that tells
+    # the renderer it levels nothing (tidepool_foot's). A flier is built on
+    # the floor under its loop and drawn only on its way (hawk_circle()).
+    for i, p in enumerate(COVE_PARROTS):
+        marker('path_parrots_%d' % i, p)
+    x0, _, z0 = COVE_PARROTS[0]
+    for n, o in enumerate((0.0, 0.5) if LITE else (0.0, 0.045, 0.5)):
+        with animated('anim_path:c=parrots:p=17:f=1:o=%.3f#p%d' % (o, n), (x0, 0.07, z0)):
+            macaw_on_the_wing((x0, 0.07, z0), k=1.3, tag='w%d' % n, beat=0.37 * n)
+    def foot():
+        with plain_parts():
+            box((0.3, 0.3, 0.3), (x0, -0.6, z0), 'slate')
+    draped('foot', foot)
+
+lite_too('parrot-crossing')
 
 def solid(verts, faces, color):
     """A closed faceted solid from glTF `verts` and `faces`, its normals

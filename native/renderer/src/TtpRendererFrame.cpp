@@ -1466,15 +1466,32 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         const float3 camP{ v0.world[12], v0.world[13], v0.world[14] };
         for (size_t i = 0; i < mSmoke.size(); i++) {
             if (mSmoke[i].entity.isNull()) continue;
-            const float u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
             const float k = mSmokeScale;
-            const float3 p{ mSmokeOrigin.x + (u * 0.6f
+            float u, w, fade;
+            float3 p;
+            if (mSmokePeriod > 0) {
+                // A gun's smoke: every period the puffs burst from the muzzle
+                // together, each thrown a different way out along the bore,
+                // slow to a stop, swell, lift a little and thin over 3 s; then
+                // nothing until the next shot.
+                constexpr float kBurst = 3.0f;
+                u = std::min(1.0f, std::fmod(mTime, mSmokePeriod) / kBurst);
+                const float far = (float) (i + 1) / mSmoke.size();
+                const float out = 1 - (1 - u) * (1 - u) * (1 - u);
+                p = mSmokeOrigin + mSmokeDir * (out * (0.5f + 2.2f * far) * k);
+                p.y += (u * (0.35f + 0.5f * far) + std::sin(i * 2.1f) * 0.12f * out) * k;
+                w = (0.45f + 0.35f * far + u * 0.9f) * k;
+                fade = std::min(1.0f, u * 12) * std::sqrt(1 - u);
+            } else {
+                u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
+                p = float3{ mSmokeOrigin.x + (u * 0.6f
                                     + std::sin(mTime * 0.8f + i * 2.1f) * 0.06f) * k,
                             mSmokeOrigin.y + u * 2.0f * k, mSmokeOrigin.z };
-            const float w = (0.5f + u * 1.0f) * k;
-            // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
-            // so shrink to nothing at the ends instead (same read at this size).
-            const float fade = std::min(1.0f, u * 5) * std::sqrt(1 - u);
+                w = (0.5f + u * 1.0f) * k;
+                // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
+                // so shrink to nothing at the ends instead (same read at this size).
+                fade = std::min(1.0f, u * 5) * std::sqrt(1 - u);
+            }
             const float yaw = std::atan2(camP.x - p.x, camP.z - p.z);
             tcm.setTransform(tcm.getInstance(mSmoke[i].entity),
                     mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })

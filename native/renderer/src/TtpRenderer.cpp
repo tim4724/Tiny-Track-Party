@@ -2607,6 +2607,7 @@ void TtpRenderer::releaseStatic() {
     mSmoke.clear();
     mSmokeIdSaved.clear();
     mSmokeRow = -1;
+    mSmokeDrape = false;
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
     mLifeMat = nullptr;

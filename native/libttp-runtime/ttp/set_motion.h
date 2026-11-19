@@ -19,6 +19,9 @@
 //   anim_flutter:a=y:p=2.4       ... a feather banner, held all the way up its pole
 //   anim_drape+flutter           ... on a pole that stands on terrain
 //   anim_smoke:s=2.5             ... puffs two and a half times a chimney's (a stack)
+//   anim_drape+smoke:s=0.6:p=11  a GUN's smoke: one burst every 11 s, rolling out
+//                                along the node's own x and thinning; with `drape`
+//                                it starts over the ground drawn under the node
 //
 // An `anim_` node inside another rides on it: it moves in its parent's moving
 // frame (a wind-up key turning in a walking robot's back). A path rides
@@ -112,6 +115,7 @@ struct SetMotion {
   bool inStep = false;   // `o` on an in-place verb: phase = the placement's + `step`
   float step = 0.0f;
   float smokeScale = 1.0f;                   // the puffs' size and rise, a chimney's at 1
+  float smokePeriod = 0.0f;                  // > 0: one burst every so many seconds; 0 a steady column
   float flutterDeg = 14.0f, flutterPeriod = 2.0f;   // a joint's bend, the cloth's slow beat
   int flutterJoints = 4;                     // segments along the fly (kFlutterMax at most)
   char flutterHoist = 0;                     // `a`: the hoist's axis; 0 reads it off the cloth
@@ -195,7 +199,8 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
         else if (key == 'o') m.pathOffset = f; else if (key == 'f') m.pathFace = (int) f;
         else known = false;
       } else if (v == "smoke") {
-        if (key == 's' && f > 0) m.smokeScale = f; else known = false;
+        if (key == 's' && f > 0) m.smokeScale = f;
+        else if (key == 'p' && f > 0) m.smokePeriod = f; else known = false;
       } else if (v == "flutter") {
         if (key == 'd') m.flutterDeg = f; else if (key == 'p' && f > 0) m.flutterPeriod = f;
         else if (key == 'a' && (axis == 'x' || axis == 'y' || axis == 'z')) m.flutterHoist = axis;

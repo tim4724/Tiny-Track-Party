@@ -612,11 +612,13 @@ export const TRACKS = {
     // the cars coming down the straight. Past the first
     // bend the crew's camp stands on the sand; down the east straight their
     // lookout watches the east beach from its tower, and the rope bridge
-    // from the jungle to it spans the road, which the straight drives at
+    // from the foothill to it spans the road, which the straight drives at
     // and under. The sea comes in to the road round the bay (its `shore`),
     // the wharf along its sand where the longboat sails out to the
     // ship riding at anchor and back; a little past her their stockade
-    // stands on the sand, its jetty out into the bay. The old wreck lies in
+    // stands on the sand, its jetty out into the bay where their prize
+    // rides and her boat plies, and the road goes in through the
+    // stockade's landward gate. The old wreck lies in
     // the surf of the west bay (the second `shore`), its ribs
     // out of the water, palms along the bay past it. The
     // east foothill falls away toward its north end and carries no grove,
@@ -646,11 +648,11 @@ export const TRACKS = {
       { model: 'set-pirate-lookout', u: 0.27, lat: 0 },
       { model: 'set-jungle-grove', u: 0.235, lat: 11 },
       // the jungle down to the kerb on the island's side of the east
-      // straight, the last of them round the rope bridge's inland end, so
-      // the bridge comes out of the palms; and on the start straight's
-      // foothill past the cave
+      // straight, the last of them up the foothill behind the posts the
+      // rope bridge lands between, so the bridge comes out of the palms;
+      // and on the start straight's foothill past the cave
       { model: 'set-jungle-grove', u: 0.185, lat: -10.5, yaw: 180 },
-      { model: 'set-jungle-grove', u: 0.272, lat: -15.5, yaw: 184 },
+      { model: 'set-jungle-grove', u: 0.272, lat: -18.5, yaw: 184 },
       { model: 'set-jungle-grove', u: 0.035, lat: -10.5, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
@@ -675,7 +677,18 @@ export const TRACKS = {
       // lay three units under the kerb there): the crew's sloop hove down
       // to have her bottom tarred, and their guns over the anchorage
       { model: 'set-careened-sloop', u: 0.303, lat: 12.5 },
-      { model: 'set-bay-battery', u: 0.327, lat: 11.5 }
+      { model: 'set-bay-battery', u: 0.327, lat: 11.5 },
+      // round 24. The stockade's landward gate, astride the road at the
+      // camp's near corner (set_prototypes.py stockade_gate: its wall meets
+      // that corner, so it moves with the stockade's row)...
+      { model: 'set-stockade-gate', u: 0.5283, lat: 0 },
+      // ...the crew's prize at anchor off the stockade, 30 u out from it at
+      // its own u, so her boat's way ends at the head of its jetty
+      // (COVE_TENDER)...
+      { model: 'set-prize-at-anchor', u: 0.54, lat: 42 },
+      // ...and the parrots that cross the road between the groves at u
+      // 0.745 and 0.775 (COVE_PARROTS: their way is laid over those palms)
+      { model: 'set-parrot-crossing', u: 0.76, lat: 0 }
     ],
     // The peak and the headland are green with the scrub and jungle that
     // hold them (bare and peaked, a hill that size is a desert dune; the

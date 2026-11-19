@@ -130,6 +130,10 @@ void TtpRenderer::buildSetMovers() {
     mSetMovers.clear();
     mSetPaths.clear();
     mSetSkins.clear();
+    if (mSmokeDrape && mTrack) {
+        mSmokeOrigin.y += groundSurfaceY(*mTrack, mSmokeOrigin.x, mSmokeOrigin.z) - mSmokeFootY;
+        mSmokeDrape = false;
+    }
     if (!mScene || !mBakeRig.valid) return;
     auto& rcm = mEngine->getRenderableManager();
     auto& tcm = mEngine->getTransformManager();
@@ -740,9 +744,11 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
 // Six soft puffs rising, growing and fading on a staggered loop, close
 // enough to overlap into a column (the JS sprites, as blend quads billboarded
 // per cell); renderWorld moves them.
-void TtpRenderer::buildSmokePuffs(const float3& origin, float scale) {
+void TtpRenderer::buildSmokePuffs(const float3& origin, float scale, float period, const float3& dir) {
     mSmokeOrigin = origin;
     mSmokeScale = scale;
+    mSmokePeriod = period;
+    mSmokeDir = dir;
     if (!mBlendMaterial) return;
     mSmoke.resize(6);
     const BlurKernel blur(6.0f);

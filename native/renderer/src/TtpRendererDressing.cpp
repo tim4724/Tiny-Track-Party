@@ -1731,8 +1731,8 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
     mSetLayout = ttp::canonical_stringify(layout);
     // Placed: what travels leaves the sun bake, and ONE chimney smokes: the
     // one nearest the road, which the racers pass closest.
-    float smokeOff = 1e30f, smokeScale = 1.0f;
-    float3 smokeAt{};
+    float smokeOff = 1e30f, smokeScale = 1.0f, smokePeriod = 0.0f;
+    float3 smokeAt{}, smokeDir{ 1, 0, 0 };
     for (size_t m = 0; m < mSetAssets.size(); m++) {
         if (!mSetAssets[m]) continue;
         for (size_t i = 0; i < mSetInstances[m].size(); i++) {
@@ -1745,13 +1745,22 @@ void TtpRenderer::buildSetPieces(const TrackBin& tb) {
                 if (ttp::rt::parse_set_motion(mSetAssets[m]->getName(e), mo) && mo.smoke) {
                     smokeOff = off;
                     mSmokeRow = mSetRowOf[inst];
-                    smokeAt = tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
+                    const mat4f world = tcm.getWorldTransform(tcm.getInstance(e));
+                    smokeAt = world[3].xyz;
+                    // on a piece that lies on the land the smoke starts over the
+                    // ground drawn under it: buildSetMovers lifts it, once the
+                    // terrain it reads is laid
+                    mSmokeDrape = mo.drape;
+                    mSmokeFootY = tcm.getWorldTransform(tcm.getInstance(inst->getRoot()))[3].y;
                     smokeScale = mo.smokeScale;
+                    smokePeriod = mo.smokePeriod;
+                    const float3 x{ world[0].x, 0.0f, world[0].z };
+                    smokeDir = length(x) > 1e-4f ? normalize(x) : float3{ 1, 0, 0 };
                 }
             }
         }
     }
-    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt, smokeScale);
+    if (smokeOff < 1e30f) buildSmokePuffs(smokeAt, smokeScale, smokePeriod, smokeDir);
 }
 
 // THE ROAD AHEAD STAYS IN VIEW. The chase camera rides under a unit over the

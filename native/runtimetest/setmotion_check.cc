@@ -153,6 +153,9 @@ int main(int argc, char** argv) {
   check(near(m.smokeScale, 1), "a chimney's smoke by default");
   check(ttp::rt::parse_set_motion("anim_smoke:s=2.5", m) && m.smoke && near(m.smokeScale, 2.5f) && !m.any(),
         "a stack's smoke, bigger");
+  check(near(m.smokePeriod, 0), "a steady column by default");
+  check(ttp::rt::parse_set_motion("anim_drape+smoke:s=0.6:p=11", m) && m.smoke && m.drape && near(m.smokePeriod, 11)
+        && !m.any(), "a gun's smoke, a burst now and then");
   check(ttp::rt::parse_set_motion("anim_sway:a=y:d=9:p=2:o=0.25#t3", m)
             && m.sway && m.inStep && near(m.step, 0.25f) && near(m.swayPeriod, 2), "a sway in step");
   check(ttp::rt::parse_set_motion("anim_path:c=x:o=0.5", m) && !m.inStep && near(m.pathOffset, 0.5f),
