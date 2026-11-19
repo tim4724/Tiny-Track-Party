@@ -3510,8 +3510,35 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                     }
                 }
             }
+            // A SHED'S ROOF IS A FLOOR TOO (a `shed` landform, an avalanche
+            // gallery): the floor under it stands at the roof slab's top, so
+            // no flake falls inside the gallery, and the grid's own cell
+            // eases the snow out at each mouth. From the rock (the side the
+            // land stands higher) to the columns' line.
+            for (const ttp::rt::Landform& l : tb.land) {
+                if (l.kind != 12) continue;
+                for (float d = -0.5f * l.len; d <= 0.5f * l.len; d += 1.0f) {
+                    const TrackBin::Sample f = tb.frameAt(l.u * tb.length + d);
+                    const float hill = groundSurfaceY(tb, f.pos.x + f.lat.x * 7.0f, f.pos.z + f.lat.z * 7.0f)
+                            >= groundSurfaceY(tb, f.pos.x - f.lat.x * 7.0f, f.pos.z - f.lat.z * 7.0f) ? 1.0f : -1.0f;
+                    for (float a = -kShedRoofValley; a <= kShedRoofHill; a += 1.0f) {
+                        const float px = f.pos.x + f.lat.x * a * hill, pz = f.pos.z + f.lat.z * a * hill;
+                        const int gx = (int) std::floor((px + kAmbR) / cell);
+                        const int gz = (int) std::floor((pz + kAmbR) / cell);
+                        for (int dz = 0; dz <= 1; dz++) {
+                            for (int dx = 0; dx <= 1; dx++) {
+                                const int cx = gx + dx, cz = gz + dz;
+                                if (cx < 0 || cx >= N || cz < 0 || cz >= N) continue;
+                                float& h = floorY[(size_t) cz * N + cx];
+                                h = std::max(h, tb.groundY + kShedRoofTop);
+                            }
+                        }
+                    }
+                }
+            }
             floorN = N;
             floorTexels.assign(floorY.begin(), floorY.end());
+            mAmbFloorY = floorY;
         }
         mAmbFloorTex = Texture::Builder()
                 .width((uint32_t) floorN).height((uint32_t) floorN).levels(1)

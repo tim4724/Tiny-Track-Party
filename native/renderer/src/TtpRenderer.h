@@ -2363,6 +2363,16 @@ private:
     // "-1000" texel — canyon sand BLOWS across the deck at ground height, and
     // flooring it would dim the streaks over the road.
     filament::Texture* mAmbFloorTex = nullptr;
+    // The same grid on the CPU, for a split's lite cells, whose flakes skip
+    // the shader's tap: a cell whose camera is under the floor (in a gallery,
+    // under a bridge) thins its own flakes by how far under (cullAmbientCells).
+    std::vector<float> mAmbFloorY;
+    // A gallery's roof as the flake floor sees it (set_prototypes.py
+    // gallery_shed): the slab's top over the plain, and how far it reaches
+    // from the road's middle toward the rock and toward the columns.
+    static constexpr float kShedRoofTop = 4.78f;
+    static constexpr float kShedRoofHill = 8.6f;
+    static constexpr float kShedRoofValley = 4.0f;
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent

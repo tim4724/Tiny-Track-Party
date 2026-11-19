@@ -349,7 +349,7 @@ export const SET_GROUND = {
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
     { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 5.5, w: 8, tint: 0xb1c7ec },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 5.5, w: 8, tint: 0xb1c7ec }
+    { kind: 'paint', yaw: 133.20, x: 0.62, z: 4.63, len: 30.31, r: 5.5, w: 8, tint: 0xb1c7ec }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },

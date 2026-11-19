@@ -2885,10 +2885,30 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
         ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
                 mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
 
+        // A lite cell's flakes do not tap the flake floor (vpoint.mat), so
+        // one whose camera is under it (in a gallery, under a bridge) drops
+        // its own: the share it keeps falls to nothing over the first unit
+        // under, a thinning as the car runs in at a mouth, not a blink.
+        float share = 1.0f;
+        if (vc >= 3 && !mAmbFloorY.empty()) {
+            constexpr int N = kAmbFloorN;
+            const float cell = 2 * kAmbR / (N - 1);
+            const float fx = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].x + kAmbR) / cell));
+            const float fz = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].z + kAmbR) / cell));
+            const int gx = (int) fx, gz = (int) fz;
+            const float tx = fx - gx, tz = fz - gz;
+            const float* r0 = &mAmbFloorY[(size_t) gz * N + gx];
+            const float* r1 = r0 + N;
+            const float floorY = (r0[0] * (1 - tx) + r0[1] * tx) * (1 - tz) + (r1[0] * (1 - tx) + r1[1] * tx) * tz;
+            share = 1.0f - std::min(1.0f, std::max(0.0f, floorY - wf[3].y));
+        }
         mAmbCellOff[i] = (uint32_t) out->size();
         for (uint32_t k = 0; k < per; k++) {
             const Vertex& s = mPollen.verts[(size_t) k * 3];
-            const bool keep = ambSpriteMayReach(c, s.px, s.py, s.pz, k);
+            // (which flakes go is a hash of their own: 1 / the plastic number)
+            const float pick = (float) k * 0.7548777f;
+            const bool keep = (share >= 1.0f || pick - (float) (int32_t) pick < share)
+                    && ambSpriteMayReach(c, s.px, s.py, s.pz, k);
             if (keep) {
                 out->push_back((uint16_t) (k * 3));
                 out->push_back((uint16_t) (k * 3 + 1));
