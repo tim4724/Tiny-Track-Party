@@ -145,8 +145,9 @@ export const GAUNTLET = [
 ];
 
 // ---- Skysnake (Hard): snakes and ladders, raced across the board. Up two LADDERS
-// (straight climbs, each cresting in a hop) to the top deck at 5.2 world, the S-S
-// weave in the sky, round the top corner and down the SNAKE (one long dive) to the
+// (straight climbs, each with a hump for its top rung that a car raced flat out
+// hops off: a hill, launched by its crest as the other cups' are) to the top deck
+// at 5.2 world, the S-S weave in the sky, round the top corner and down the SNAKE (one long dive) to the
 // board, then home past a toy loop. Composed by scripts/compose-stunt.mjs (solved
 // grid and first legs + the loop's probe-measured roll trim).
 export const SKYSNAKE = [
@@ -154,11 +155,15 @@ export const SKYSNAKE = [
   arc(RL, -90),                                                      // east
   straight(12),                                                      // (closure-solved)
   straight(10, { rise: 1.3, pillars: true }),                        // LADDER 1 → 2.6 world
-  straight(8, { pillars: true }),                                    // the mid deck
+  straight(2, { rise: 0.4, pillars: true }),                         // its top rung: a hump the racers hop off
+  straight(2, { rise: -0.4, pillars: true }),                        //  and land down the far side of, onto
+  straight(4, { pillars: true }),                                    // the mid deck
   arc(RL, -90, { pillars: true }),                                   // south
-  straight(8, { pillars: true }),
+  straight(6, { pillars: true }),
   straight(10, { rise: 1.3, pillars: true }),                        // LADDER 2 → 5.2 world
-  straight(6, { pillars: true }),                                    // (its kicker's landing)
+  straight(2, { rise: 0.4, pillars: true }),                         // its top rung, as the first (the climb starts
+  straight(2, { rise: -0.4, pillars: true }),                        //  2 sooner, so the car is down before the weave)
+  straight(4, { pillars: true }),                                    // the top deck
   arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
   arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
   straight(3, { pillars: true }),
@@ -349,7 +354,7 @@ export const SET_GROUND = {
     { kind: 'mound', x: -54, h: 40.5, r: 62, r1: 60.75, rz: 101.25, shape: 1.15 },
     { kind: 'plain', x: 17, len: 66, r: 4, w: 5 },
     { kind: 'paint', yaw: 105.07, x: -4.41, z: -27.75, len: 36.35, r: 5.5, w: 8, tint: 0xb1c7ec },
-    { kind: 'paint', yaw: 48.37, x: -10.43, z: 14.69, len: 32.51, r: 5.5, w: 8, tint: 0xb1c7ec }
+    { kind: 'paint', yaw: 133.20, x: 0.62, z: 4.63, len: 30.31, r: 5.5, w: 8, tint: 0xb1c7ec }
   ],
   'set-avalanche-slide': [
     { kind: 'mound', x: -58, h: 40.6, r: 66.7, r1: 58, rz: 87, shape: 1.6 },
@@ -538,19 +543,27 @@ export const TRACKS = {
       { model: 'set-kayak-rack', u: 0.775, lat: 9.5 },
       { model: 'set-shellfish-shack', u: 0.798, lat: -10, yaw: 180 },
       { model: 'set-grounded-trawler', u: 0.06, lat: 10.5 },
-      // on the dune beside the hop over the west bend (round 23: its sea
-      // side lay under the kerb, the tide at the berm's foot): the reef's
-      // daymark where the stacks begin, and the whalebone arch by the
-      // lifeboat station, where a car topping the hop looks
-      { model: 'set-reef-beacon', u: 0.857, lat: 12.5 },
-      { model: 'set-whalebone-arch', u: 0.882, lat: 9.8, yaw: 25 }
+      // round 24. The rock arch over the road where the west run meets the
+      // headland (built astride the road: lat 0), its hole along it. Out
+      // where that run looks: the seals' skerry a few lengths off the beach
+      // and, outside it, the boat working her loop with the gulls behind
+      // her; the crab fishers' pot buoys along the reef's edge toward the
+      // stacks. And the last tide's wrack along the beach where it lay bare
+      // and stands near the road's height (a print: it claims no ground;
+      // nearer the kerb, or on the low beach, the kerb hides it).
+      { model: 'set-headland-arch', u: 0.705, lat: 0 },
+      { model: 'set-seal-skerry', u: 0.755, lat: 17.6 },
+      { model: 'set-fishing-boat', u: 0.757, lat: 37 },
+      { model: 'set-lobster-buoys', u: 0.789, lat: 16.2 },
+      { model: 'set-kelp-line', u: 0.565, lat: 11.5 },
+      { model: 'set-kelp-line', u: 0.602, lat: 11.8, yaw: 180 },
+      { model: 'set-kelp-line', u: 0.025, lat: 11.5 },
+      { model: 'set-kelp-line', u: 0.925, lat: 12, yaw: 180 }
     ],
     land: [
       // the sea round Seal Rock and up to the reef on the east bend
       { kind: 'shore', u: 0.27, lat: 14.7, len: 100, r: 30 },
-      // (the west bend's ends where the hop begins: past it the beach is the
-      // dune the lifeboat station stands on)
-      { kind: 'shore', u: 0.7615, lat: 9.7, len: 57.5, r: 30 },
+      { kind: 'shore', u: 0.79, lat: 9.7, len: 80, r: 30 },
       // the downs filling the east lobe, their flanks to the kerb of the east
       // run and the top run; a lower grassy rise in the west lobe
       { kind: 'ridge', u: 0.25, lat: -32, len: 30, r: 22, h: 11, top: 0.2, tint: 0x6faa62 },
@@ -571,11 +584,10 @@ export const TRACKS = {
       { kind: 'paint', u: 0.5, lat: 16, len: 14, r: 9, w: 5, tint: 0x6faa62 },
       { kind: 'clear', u: 0.5, lat: 16, len: 14, r: 11 },
       { kind: 'ridge', u: 0.494, lat: -19, yaw: -79, len: 12, r: 11, h: 4.5, top: 0.2, tint: 0x6faa62 },
-      // the dune beside the hop over the west bend, as high as the road
-      // from its crest down to the lifeboat station (lower, only the
-      // station's roof and flag showed over the crest's kerb, and nothing
-      // before it)
-      { kind: 'ridge', u: 0.8825, lat: 15, len: 23.9, r: 13, h: 2.6, h1: 1.4, top: 0.55, near: 0.4, w: 5 },
+      // the lifeboat station's swell of sand over the beach, at the height of
+      // the hop the road comes over beside it (lower, only its roof and flag
+      // showed over the crest's kerb)
+      { kind: 'ridge', u: 0.9, lat: 17, len: 10, r: 13, h: 1.2, top: 0.55, near: 0.4, w: 5 },
       // ...and the sea brought in to the foot of its slip
       { kind: 'shore', u: 0.9, lat: 22, len: 10, r: 14 },
       // the reef terrace the rock pool lies in, at the road's height, so
@@ -839,7 +851,41 @@ export const TRACKS = {
       { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 },
       // ...and, on the dune beside the climb to the pass (round 23), the
       // fore half of a coaster the storm broke
-      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 }
+      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 },
+      // round 24, the storm track. An old wooden hull the dunes buried and
+      // the storm blew bare lies along the pass, and the road runs between
+      // her ribs: astride it, where the pass is level and straight and the
+      // light station stands in the frame she makes
+      { model: 'set-hull-arch', u: 0.612, lat: 0 },
+      // what is still afloat: the wreck buoy over the coaster's after half
+      // off the east strand, and more of the ship's boxes drifting in where
+      // the last ones come ashore (both past the surf line, some 23 out)
+      { model: 'set-wreck-buoy', u: 0.335, lat: -31, yaw: 180 },
+      { model: 'set-storm-adrift', u: 0.418, lat: -25.5, yaw: 180 },
+      // the wrack along the tide line, between what already lies there
+      { model: 'set-tide-wrack', u: 0.268, lat: -16.5, yaw: 180 },
+      { model: 'set-tide-wrack', u: 0.322, lat: -14.5, yaw: 184 },
+      { model: 'set-tide-wrack', u: 0.352, lat: -15, yaw: 176, lite: false },
+      { model: 'set-tide-wrack', u: 0.405, lat: -14.5, yaw: 180 },
+      { model: 'set-tide-wrack', u: 0.428, lat: -15, yaw: 186, lite: false },
+      { model: 'set-tide-wrack', u: 0.452, lat: -14.5, yaw: 180 },
+      // marram along the dunes' feet, which ran down bare to the verge: the
+      // start straight's infield and the first bend's, the bank along the
+      // east run, both sides of the pass, and the lighthouse dune's foot
+      // where the lap comes back past it
+      { model: 'set-dune-foot', u: 0.975, lat: 12.6 },
+      { model: 'set-dune-foot', u: 0.045, lat: 12.6 },
+      { model: 'set-dune-foot', u: 0.135, lat: 12, lite: false },
+      { model: 'set-dune-foot', u: 0.30, lat: 7.4 },
+      { model: 'set-dune-foot', u: 0.355, lat: 7.4, lite: false },
+      { model: 'set-dune-foot', u: 0.41, lat: 7.4 },
+      { model: 'set-dune-foot', u: 0.572, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.648, lat: -9.4, yaw: 180, lite: false },
+      { model: 'set-dune-foot', u: 0.748, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.60, lat: 12.8, lite: false },
+      { model: 'set-dune-foot', u: 0.715, lat: 14 },
+      { model: 'set-dune-foot', u: 0.915, lat: 9.2 },
+      { model: 'set-dune-foot', u: 0.945, lat: 13.2 }
     ],
     land: [
       // the dune pass: the long diagonal runs between dunes either side
@@ -1538,7 +1584,7 @@ export const TRACKS = {
     // where the racer comes off the diagonal's top; under great oaks out
     // by the bends a picnic left out and a hay wain loaded; out on the open
     // down, with no oak over them, a trampoline in its net and a paddling
-    // pool under its parasol; a white horse cut in chalk into the face of the
+    // pool under its parasol; a copse of the downs' oaks on the face of the
     // down the road heads at before the bottom bend;
     // the kite hill rising off the verge beyond the top loop, three kites
     // flying low over its foot from stakes up the slope, and a camp of bell
@@ -1558,7 +1604,7 @@ export const TRACKS = {
       { model: 'set-trampoline', u: 0.115, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-paddling-pool', u: 0.34, lat: 7, yaw: 0, scale: 1.6 },
       { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
-      { model: 'set-chalk-horse', u: 0.3749, lat: 12, yaw: 26 },
+      { model: 'set-oak-copse', u: 0.3749, lat: 12, yaw: 26, scale: 1.3 },
       { model: 'set-summer-camp', u: 0.776, lat: -7.7, yaw: 180, scale: 1.6 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
@@ -1622,7 +1668,7 @@ export const TRACKS = {
       { model: 'set-brook-f', u: 0.09588, lat: 9.104, yaw: -1.23 },
       { model: 'set-brook-g', u: 0.12394, lat: 10.621, yaw: -15.75 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
-      { model: 'set-springhouse', u: 0.7335, lat: -7.8, yaw: 180 },
+      { model: 'set-springhouse', u: 0.7328, lat: -7.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
       { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
@@ -1662,8 +1708,9 @@ export const TRACKS = {
     // halt at each end, its one train going out and back (set-park-rails-*,
     // one line cut into lengths in set_prototypes.py PARK_ROUTE; it crosses
     // no road at grade and lies on a graded bed, never facet by facet). The playground on the flat outside the south-west hairpin,
-    // where the start straight points: big climbing frames standing on the
-    // grass, its hill behind it. The bandstand on its mound close under the
+    // where the start straight points: a fenced yard of climbing frames,
+    // swings, a roundabout and a sandpit, its gate and path toward the road,
+    // its hill behind it. The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
@@ -1675,7 +1722,7 @@ export const TRACKS = {
     // the top bend and a bed of carpet bedding along the foothill by the
     // west straight, both planted on slopes that face the road.
     set: [
-      { model: 'set-playground', u: 0.086, lat: -8.6, yaw: 150, scale: 1.5 },
+      { model: 'set-playground', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-floral-clock', u: 0.448, lat: -10, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
@@ -2223,9 +2270,6 @@ export const TRACKS = {
   skysnake: {
     name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
-    // Each climb ends in a kicker: the racers kick up off its top onto the
-    // next deck.
-    kickers: [ { u: 0.336 }, { u: 0.523 } ],
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
     // snakes are jointed wooden ones arching along the kerb (the grid
@@ -2336,14 +2380,13 @@ export const TRACKS = {
     // the south leg's outside and round a loop of its own beside the mid
     // leg's; on the floor to a stair lift at the corner home, onto a wooden
     // marble racer of two stepped boards beside the grid straight, and from
-    // its foot back into the tower's. Where the lap climbs and comes down
-    // its spirals the run's sections lie on the floor under the decks, so a
-    // side run of its own stands round the outside of each at deck height,
-    // and another round the climb's wall side; a click-clack board faces the
-    // descent's lower turn from outside the skyway, and a second span of
-    // twin rails crosses the skyway's far end, seen coming its whole length.
-    // The lite tier leaves the room's train out, to pay for the run's new
-    // sections. Each section is built in the world's
+    // its foot back into the tower's. Where the lap comes down its spiral
+    // the run's sections lie on the floor under the decks, so a side run of
+    // its own stands round the outside of the descent at deck height; a
+    // click-clack board faces the descent's lower turn from outside the
+    // skyway, and a second span of twin rails crosses the skyway's far end,
+    // seen coming its whole length. The run is the room's one mover: this
+    // room has no train. Each section is built in the world's
     // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
     // the heading's opposite.
     set: [
@@ -2357,14 +2400,11 @@ export const TRACKS = {
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
       { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
-      { model: 'set-marble-run-climb', u: 0.25, lat: -20, yaw: -90 },
       { model: 'set-marble-run-dive', u: 0.5, lat: 5.26, yaw: 180 },
-      { model: 'set-marble-run-wall', u: 0.25, lat: 7, yaw: -90 },
       { model: 'set-marble-run-cross', u: 0.5093, lat: 0, yaw: 180 },
       { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
       { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
       { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
-      { model: 'set-room-train-helix', u: 0, lat: 0, lite: false },
       { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
     ]
   },

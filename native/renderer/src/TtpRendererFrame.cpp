@@ -2619,9 +2619,13 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
     // the three side ever loses the quirk, this collapses to a constant.
     if (mPollenMat) {
         const uint32_t vc = input.viewCount;
+        // (Rain grows by the root of that: a streak doubled for a split's
+        // cell is a bar across a picture a quarter the size, and one left at
+        // its solo size is under a pixel there.)
         const uint32_t rows = gridDims(vc ? vc : 1).rows;
+        const float grow = mAmbStreak > 0 ? std::sqrt((float) rows) : (float) rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
-        mAmbHalfSize = mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f);
+        mAmbHalfSize = mAmbSize * grow * std::tan(fov * (float) M_PI / 360.0f);
         mAmbTime = mTime;
         mPollenMat->setParameter("halfSize", mAmbHalfSize);
         mPollenMat->setParameter("time", mAmbTime); // drives the shader-side drift
@@ -2899,13 +2903,33 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
         std::memcpy(&wf, views[i].world, sizeof(wf));
         // The uniforms exactly as renderAmbient and buildStatic set them.
         AmbCullCell c;
-        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
-                mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
+        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob,
+                mAmbHalfSize * std::max(1.0f, mAmbStreak), mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
 
+        // A lite cell's particles do not tap the floor (vpoint.mat), so one
+        // whose camera is under it (in a gallery, a tunnel, under a bridge)
+        // drops its own: the share it keeps falls to nothing over the first
+        // unit under, a thinning as the car runs in at a mouth, not a blink.
+        float share = 1.0f;
+        if (vc >= 3 && !mAmbFloorY.empty()) {
+            constexpr int N = kAmbFloorN;
+            const float cell = 2 * kAmbR / (N - 1);
+            const float fx = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].x + kAmbR) / cell));
+            const float fz = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].z + kAmbR) / cell));
+            const int gx = (int) fx, gz = (int) fz;
+            const float tx = fx - gx, tz = fz - gz;
+            const float* r0 = &mAmbFloorY[(size_t) gz * N + gx];
+            const float* r1 = r0 + N;
+            const float floorY = (r0[0] * (1 - tx) + r0[1] * tx) * (1 - tz) + (r1[0] * (1 - tx) + r1[1] * tx) * tz;
+            share = 1.0f - std::min(1.0f, std::max(0.0f, floorY - wf[3].y));
+        }
         mAmbCellOff[i] = (uint32_t) out->size();
         for (uint32_t k = 0; k < per; k++) {
             const Vertex& s = mPollen.verts[(size_t) k * 3];
-            const bool keep = ambSpriteMayReach(c, s.px, s.py, s.pz, k);
+            // (which flakes go is a hash of their own: 1 / the plastic number)
+            const float pick = (float) k * 0.7548777f;
+            const bool keep = (share >= 1.0f || pick - (float) (int32_t) pick < share)
+                    && ambSpriteMayReach(c, s.px, s.py, s.pz, k);
             if (keep) {
                 out->push_back((uint16_t) (k * 3));
                 out->push_back((uint16_t) (k * 3 + 1));

@@ -1152,7 +1152,6 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.gantryHasRings = th.gantry.hasRings;
     out.gantryRings = th.gantry.rings;
     out.boostCol = th.boost;
-    out.kickerCol = th.kicker;
     out.hasWater = th.hasWater;
     if (th.hasWater) {
         out.waterFoam = th.water.foam;
@@ -2613,6 +2612,9 @@ void TtpRenderer::releaseStatic() {
     mLifeMat = nullptr;
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
+    mAmbFloorY.clear();
+    mAmbFloorBase.clear();
+    mAmbRoof.clear();
     if (mLifeTex) { mEngine->destroy(mLifeTex); mLifeTex = nullptr; }
     mGroundBands.clear();
     mHillAnchors.clear();
