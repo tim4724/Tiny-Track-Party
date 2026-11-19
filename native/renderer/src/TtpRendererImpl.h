@@ -426,14 +426,13 @@ struct TtpRenderer::TrackBin {
     bool gantryHasRings = false;         // rings → the pylon wears lighthouse bands
     uint32_t gantryRings = 0xff5040;
     uint32_t boostCol = 0x22c9b6;
-    uint32_t kickerCol = 0;              // 0: the boost disk's
     bool hasWater = false;
     uint32_t waterFoam = 0xffffff, waterShallow = 0x62d3c8;
     uint32_t waterDeep = 0x2596c8, waterWet = 0x7d5f34;
     uint32_t shoreSeed = 0;              // shorelineFn's FNV-1a over the track id
     uint32_t hazeCount = 0, hazeTint = 0xffffff;
     float hazeOpacity = 0.16f, hazeScale = 1;
-    uint32_t ambKind = 0;                // 0 none 1 pollen 2 mote 3 sand 4 flake
+    uint32_t ambKind = 0;                // ttp::rt::AmbKind
     uint32_t ambCount = 0, ambTint = 0xffffff;
     float ambSize = 0.3f, ambOpacity = 0.85f;
     float ambFall = 1, ambWind = 0.7f, ambBob = 0, ambBand = 1;

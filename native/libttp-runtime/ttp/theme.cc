@@ -30,6 +30,10 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
     // The life's own: a petal sinks slowly and sways, low.
     case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
+    // Rain: thin, fast and driven, from the whole height of the air. `fall`
+    // and `wind` are exact in a half (the per-cell cull's slack grows with
+    // what a mediump load could round off them, times the race's seconds).
+    case AMB_RAIN:   a.size = 0.08f; a.opacity = 0.4f;  a.fall = 8;     a.wind = 4;    a.bob = 0;     a.band = 1;     break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }
@@ -280,7 +284,20 @@ void lowTideReef(Theme& t) {
 // as a mistake). Driftwood lies thick along the
 // tide line, the freight the sea brought in is crates, and the gantry is
 // timber, like the trunk. No palms: the trees here are dead.
+// The storm is still on (round 24): a slate overcast over a grey-green sea,
+// the sun a weak one behind it, and rain driven across the lap. The light
+// comes down by a sixth, no more, and the fog keeps the beach's reach: the
+// road and the cars read as they did, and no corner is hidden. The rain is
+// the snow cup's cloud (vpoint.mat) drawn as streaks, at under its lightest
+// day's count.
 void stormBeach(Theme& t) {
+  t.sky[0] = 0x55657a; t.sky[1] = 0x9db0bc; t.sky[2] = 0xb3c2c8;
+  t.fog = 0x9db0bc;
+  t.hemi = { 0xe9eff4, 0xc9b78a, 2.1f };
+  t.key = { 0xf4f1e6, 1.3f };
+  t.clouds = { 9, 0.75f, 1.5f, 0.3f, 0x8d98a4 };  // low, heavy, grey
+  t.water.shallow = 0x5fb3ab; t.water.deep = 0x2c7391;
+  ambientKind(t.ambient, AMB_RAIN); t.ambient.count = 2000; t.ambient.tint = 0xe4ecf2;
   t.landmarks.clear();
   t.kites.count = 0;
   t.kites.tints.clear();
@@ -408,8 +425,6 @@ void playroomTrack(Theme& t, const std::string& track) {
     // the board-game room: cream over terracotta, the snake's green at the window, pine boards
     room(t, 0xf6e9cf, 0xb5584c, 0x4f9f5c, 0x9a7b55, 0xd6b07c);
     t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
-    // each ladder's kicker is its top rung, the ladders' cream
-    t.kicker = 0xfde4c7;
   } else if (track == "skyline") {
     // a city-night nursery: dusk blue over navy, curtains the yellow of lit windows, pale ash boards
     room(t, 0x7f93cf, 0x2a3c8c, 0xf2c14e, 0xfbf6ec, 0xc2b49c);
