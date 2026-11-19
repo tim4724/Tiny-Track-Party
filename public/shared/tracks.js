@@ -859,9 +859,11 @@ export const TRACKS = {
       { model: 'set-hull-arch', u: 0.612, lat: 0 },
       // what is still afloat: the wreck buoy over the coaster's after half
       // off the east strand, and more of the ship's boxes drifting in where
-      // the last ones come ashore (both past the surf line, some 23 out)
+      // the last ones come ashore, just past the surf where the east run
+      // points before it turns (further out and along the strand they never
+      // came into a racer's picture), half as big again so they read there
       { model: 'set-wreck-buoy', u: 0.335, lat: -31, yaw: 180 },
-      { model: 'set-storm-adrift', u: 0.418, lat: -25.5, yaw: 180 },
+      { model: 'set-storm-adrift', u: 0.422, lat: -20.5, yaw: 180, scale: 1.4 },
       // the wrack along the tide line, between what already lies there
       { model: 'set-tide-wrack', u: 0.268, lat: -16.5, yaw: 180 },
       { model: 'set-tide-wrack', u: 0.322, lat: -14.5, yaw: 184 },
@@ -1014,11 +1016,12 @@ export const TRACKS = {
       // by the baths; and what moves off the road, each laid out against
       // the shore it floats by (set_prototypes.py RIP_AT, RIP_HEADING):
       // hire pedalos off the patrol's beach, a launch towing a banana boat
-      // round the lagoon, the ferry on the horizon, kites over the bathers'
+      // in a wide circle on the open water off the hop (the lagoon was too
+      // narrow to turn it in), the ferry on the horizon, kites over the bathers'
       // beach. Every flag, banner and kite on the lap flies one way (RIP_WIND).
       { model: 'set-pier-bridge', u: 0.4018, lat: 0, yaw: 180 },
       { model: 'set-pedalos', u: 0.21, lat: -22, yaw: 180 },
-      { model: 'set-lagoon-launch', u: 0.53, lat: 9 },
+      { model: 'set-lagoon-launch', u: 0.47, lat: -17 },
       { model: 'set-ferry', u: 0.52, lat: -52, yaw: 180 },
       { model: 'set-beach-kites', u: 0.905, lat: -17.5, yaw: 180 }
     ],
@@ -1051,8 +1054,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.09, lat: -18, len: 10, r: 13, h: 0.8, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.715, lat: -17, len: 22, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.905, lat: -17, len: 14, r: 13, h: 0.88, top: 0.55, near: 0.4, w: 6 },
-      // ...and the baths' (the sand lay most of a unit under the kerb there)
-      { kind: 'ridge', u: 0.718, lat: 17.5, len: 26, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
+      // ...and the baths' (the sand lay most of a unit under the kerb there;
+      // higher than the others and nearer the lagoon's edge, so the whole
+      // yard lies at the kerb's height and a racer sees the pool's water)
+      { kind: 'ridge', u: 0.718, lat: 17.5, len: 26, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 4 },
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
       { kind: 'clear', u: 0.85, lat: 35, r: 18 },
