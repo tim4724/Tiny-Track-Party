@@ -7763,9 +7763,9 @@ def snow_person(x, y, z, coat, hat, yaw=0.0):
 
 def skier(x, y, z, coat, hat, k=1.0):
     """A skier running toward +X, crouched over the skis, at a person's size
-    times `k` (a mover seen from the road across a piste is a toy figure,
-    chunkier than the people standing by it): the skis, bent legs, a coat
-    leaning in, a head and hat. Joined into one moving part by its caller."""
+    (`k` 1: as tall as snow_person, who stands beside a car): the skis, bent
+    legs, a coat leaning in, a head and hat. Joined into one moving part by
+    its caller."""
     box((0.5 * k, 0.06 * k, 0.13 * k), (x + 0.03 * k, y + 0.03 * k, z), 0x2a2735)                 # the pair of skis
     box((0.1 * k, 0.17 * k, 0.13 * k), (x - 0.01 * k, y + 0.14 * k, z), 0x38383d, roll=-0.35)    # bent legs
     box((0.14 * k, 0.17 * k, 0.17 * k), (x + 0.03 * k, y + 0.29 * k, z), coat, roll=-0.45)       # leaning in
@@ -8134,7 +8134,7 @@ GROW['powder-resort-lite'] = 1.0
 @piece(1.0)
 def ski_lift_lite():
     # the box's lift: no queue, racked skis or chimneys, every other chair, two
-    # of the three chalets, two skiers, bare slalom gates, the lite fir, the run's netting alone
+    # of the three chalets, three skiers, bare slalom gates, the lite fir, the run's netting alone
     ski_lift(True)
 
 @piece(1.0)
@@ -8144,8 +8144,8 @@ def ski_lift(lite=False):
     # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
     # what stands on it: a chairlift's four towers, stout red columns with a
     # broad crossarm, march up that flank on the diagonal from a valley
-    # station by the road to the top station on the summit, the chairs (a
-    # little over real size, skiers sat in most going up) riding up one side
+    # station by the road to the top station on the summit, the chairs (at
+    # their real size, skiers sat in most going up) riding up one side
     # and down the other round the haul rope's loop (anim_path), the rope a
     # bar thick enough to read (seven thin towers and a hairline cable read as
     # a dotted line up the hill from the road); skiers run down the
@@ -8205,7 +8205,7 @@ def ski_lift(lite=False):
         at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
         with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 10, k), at):
-            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, k=1.5)   # faces +X, the way it rides
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders)   # faces +X, the way it rides
     # valley station on the flat by the road, its hut behind it, skis racked,
     # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw, k=1.8)
@@ -8232,7 +8232,7 @@ def ski_lift(lite=False):
     station(T[0], T[1], y1, H(*T) - 0.3, yaw)
     tx, tz = turned(T[0], T[1], yaw, 0.0, 2.0)
     if True:
-        cabin_hut(2.0, 1.2, 1.6, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
+        cabin_hut(1.6, 0.9, 1.2, (tx, H(tx, tz) - 0.1, tz), 0x9a7b55, 0xeef4f9, yaw=yaw)
     # the slalom down the other diagonal to the finish on the valley floor by
     # the village (the diagonal toward +Z ran into the foothill the track's
     # land raises there: its lower half, the finish and the skiers on it were
@@ -8256,9 +8256,9 @@ def ski_lift(lite=False):
             c = 0xff5040 if k % 2 == 0 else 0x339cf2
             for e in (-0.25, 0.25):
                 ex, ez = turned(x, z, pyaw, e, 0)
-                box((0.1, 1.5, 0.1), (ex, 0.6, ez), c, yaw=pyaw)
+                box((0.08, 0.95, 0.08), (ex, 0.2, ez), c, yaw=pyaw)       # a head over a skier, as a slalom gate stands
             if not lite:
-                box((0.5, 0.36, 0.06), (x, 1.1, z), c, yaw=pyaw)
+                box((0.5, 0.26, 0.06), (x, 0.5, z), c, yaw=pyaw)
     for e in (-1.6, 1.6):
         ex, ez = turned(F[0], F[1], pyaw, e, 0)
         box((0.14, 1.5, 0.14), (ex, H(ex, ez) + 0.55, ez), 0x555b66, yaw=pyaw)
@@ -8266,7 +8266,7 @@ def ski_lift(lite=False):
     box((1.4, 0.24, 0.1), (F[0], H(*F) + 1.15, F[1]), 0xfff6eb, yaw=pyaw)
     fx, fz = turned(F[0], F[1], pyaw, 3.0, 2.2)                          # the timing hut, clear of the banner's post
     if True:                                                             # (the box too: its skiers come and go through it)
-        cabin_hut(1.8, 1.2, 1.6, (fx, H(fx, fz) - 0.05, fz), 0x9a7b55, 0xeef4f9, yaw=math.atan2(fz - F[1], F[0] - fx))   # its door to the finish, where the skiers come from
+        cabin_hut(1.4, 0.9, 1.2, (fx, H(fx, fz) - 0.05, fz), 0x9a7b55, 0xeef4f9, yaw=math.atan2(fz - F[1], F[0] - fx))   # its door to the finish, where the skiers come from
     # the skiers' loop: out of the top hut, over the summit to the piste's
     # head, down it in linked turns from one side of the run to the other
     # (straight down the fall line they read as sliding on rails), round the
@@ -8303,12 +8303,13 @@ def ski_lift(lite=False):
     under = [(x, -3.0, z) for (x, _, z) in reversed(surf[::2] + [surf[-1]])]
     for k, pt in enumerate(surf + under):
         marker('path_drapeski_%d' % k, pt)
-    # eight of them, at a toy figure's size (four at a person's were specks
-    # from the road, and the piste stood empty half the time)
-    for k in range(0, 8, 4 if lite else 1):
-        x, y, z = surf[3 + k * 4]
-        with animated('anim_path:c=drapeski:p=64:o=%.3f#%d' % (k / 8, k), (x, H(x, z), z)):
-            skier(x, H(x, z), z, COATS[k % 6], COATS[(k + 3) % 6], k=1.8)
+    # twelve of them at a person's size, the size of the queue at the lift
+    # and of whoever fits the huts' doors: the piste reads by how many are
+    # on it, not by how big each is (at 1.8 they stood over the huts' eaves)
+    for k in range(0, 12, 4 if lite else 1):
+        x, y, z = surf[3 + k * 2]
+        with animated('anim_path:c=drapeski:p=64:o=%.3f#%d' % (k / 12, k), (x, H(x, z), z)):
+            skier(x, H(x, z), z, COATS[k % 6], COATS[(k + 3) % 6])
     # the piste runs on up from the slalom to the top station (its blue wash
     # is the terrain's, SET_GROUND's `paint`)
     piste = [TOP, S0, F]
@@ -9980,11 +9981,11 @@ def ski_jump():
         marker('path_jump_%d' % k, p)
     # the timing hut on the outrun's side, on the ground drawn there
     # (sampled), its walls run down to the plain
-    cabin_hut(2.4, 1.6, 2.0, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2, sunk=hy + 0.2)
+    cabin_hut(1.5, 1.0, 1.3, (hx, hy, hz), 0x9a7b55, 0xeef4f9, yaw=math.pi / 2, sunk=hy + 0.2)
     for k in range(2):
         x, y, z = pts[3]
         with animated('anim_path:c=jump:p=20:o=%.2f:f=2#j%d' % (0.5 * k, k), (x, y, z)):
-            flurry_skier(x, y - 0.18, z, (RED, BLUE)[k], WHITE, k=2.8)   # a toy figure: at 2.0 a speck from the road
+            flurry_skier(x, y - 0.18, z, (RED, BLUE)[k], 0xffc044)   # a person's size: the jump is big, its jumper small on it
     # a patch of snow at the outrun's end laid under the land as drawn (out
     # of sight, clear of the ground's depth), so the jump stands on the plain
     # and levels nothing
@@ -10002,9 +10003,9 @@ def ski_jump():
                 box((0.7, 0.14, 0.22), (-25.0 + 1.6 * k, 0.05, s * 3.0), 0x339c75)
     draped('patch', lines)
 
-def flurry_skier(x, y, z, coat, hat, k=1.4):
-    """A skier running toward +X at `k` times a person's size beside a car
-    (chunky, so it reads at speed: blocks, no face to read): the skis, boots
+def flurry_skier(x, y, z, coat, hat, k=0.92):
+    """A skier running toward +X, as tall as snow_person at the default `k`
+    (blocks, no face to read): the skis, boots
     and bent legs, a coat leaning into the turn, arms out with the poles, a
     helmet and dark goggles. Joined into one moving part by its caller."""
     def b(size, dx, dy, dz, color, roll=0.0):
@@ -10021,9 +10022,10 @@ def flurry_skier(x, y, z, coat, hat, k=1.4):
 
 # ---- snow companions: small scenes that carry a track's story round its lap ----
 
-def kid_skier(x, y, z, coat, hat, k=0.8):
+def kid_skier(x, y, z, coat, hat, k=0.65):
     """A child on skis toward +X, ski tips together in a snowplough: the
-    skis, legs, a coat, a head in a helmet, `k` of a grown skier's size.
+    skis, legs, a coat, a head in a helmet, at the default `k` two thirds
+    as tall as snow_person (the instructor beside them).
     Joined into one moving part by its caller."""
     def b(size, dx, dy, dz, color, yaw=0.0):
         box([q * k for q in size], (x + dx * k, y + dy * k, z + dz * k), color, yaw=yaw)
@@ -10138,7 +10140,7 @@ def ski_school():
     for n in range(10):
         at = loop[n]
         with animated('anim_path:c=drapekids:p=100:o=%.3f:f=1#%d' % (n / 10, n), at), plain_parts():
-            kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6], k=1.1)
+            kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6])
 
 def snowman(at, k=1.0, hat=False):
     """Three blocks of snow, coal eyes and buttons, a carrot facing +X, stick
