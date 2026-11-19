@@ -176,13 +176,21 @@ function exitRoom() {
   if (currentScreen !== 'name') history.back();
 }
 
+const showRedialing = () => showConn({ title: 'Reconnecting…', msg: '', retry: false, leave: false });
+
 initLinkStatus({
   onRetry: () => {
     buzz('tap');
-    showConn({ title: 'Reconnecting…', msg: '', retry: false, leave: false });
+    showRedialing();
     net.connect(myName);
   },
   onLeave: exitRoom
+});
+
+// The network came back (Wi-Fi rejoined, airplane mode off): redial a dropped
+// link now instead of waiting out the backoff, or for a tap once it gave up.
+window.addEventListener('online', () => {
+  if (net.redialIfDown() && currentScreen && currentScreen !== 'name') showRedialing();
 });
 initCloseButton(exitRoom);
 
