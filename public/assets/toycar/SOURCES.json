@@ -451,6 +451,8 @@
     "set-rimrock-mesa.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-rimrock-mitten.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-rimrock-spires.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-riptide-lagoon-beach-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-riptide-lagoon-beach.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-road-keeper.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-rock-pool.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-rock-poolers-park-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

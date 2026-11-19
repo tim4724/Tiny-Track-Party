@@ -2333,7 +2333,7 @@ def pier_bridge():
     # white rails; bunting strung under the deck from bent to bent, in
     # Riptide's wind. The stair from the pier is the promenade's (its
     # PIER_STAIR); the town's comes down along the deck's line toward the
-    # baths, a walk of boards on from its foot. Placed astride the road (lat
+    # lagoon beach, a walk of boards on from its foot. Placed astride the road (lat
     # 0, yaw 180: +X the town's side, +Z the cars coming) where the pier
     # sets out; it stands on the plain and levels nothing (its walk drapes),
     # so its legs and the stair run on under the ground they meet.
@@ -4615,8 +4615,8 @@ def rip_calm(wave):
 RIP_HEADING = {
     'lifeguard-tower': -0.715, 'seafront-wall-c': 2.269, 'seafront-hotel': -1.236, 'promenade': 3.016,
     'surf-club': 4.174, 'surf-campers': 4.672, 'surf-contest': 0.088, 'beach-day': 5.999, 'sailing-club': 6.19,
-    'coastguard-lookout': 4.716, 'seafront-bandstand': 5.348, 'lido': 1.68, 'beach-kites': 5.998, 'pier-bridge': 3.045,
-    'lagoon-launch': -1.087, 'ferry': 1.335,
+    'coastguard-lookout': 4.716, 'seafront-bandstand': 5.348, 'lido': 3.094, 'beach-kites': 5.998, 'pier-bridge': 3.045,
+    'lagoon-launch': -1.087, 'ferry': 1.335, 'riptide-lagoon-beach': 1.68,
 }
 
 def rip_wind(name):
@@ -7332,12 +7332,19 @@ def lido_sheet(rects, color, row, y, cell):
 
 @piece(1.0)
 def lido():
-    # Riptide: the town's open-air baths along the north shore road, on the
-    # beach rise tracks.js lays for them, let into the ground (round 22's
-    # stood on a white terrace of their own, "too much of a platform"; round
-    # 23's were let in but a third this size, and the verdict was "even
-    # larger"). A paved yard from a stride off the kerb back to the lagoon's
-    # sand, some fifteen units deep and twenty-seven along the road: the
+    # Riptide: the town's open-air baths on the low beach beside the hop's
+    # landing, let into the sand (round 22's stood on a white terrace of
+    # their own, "too much of a platform"; round 23's were let in but a third
+    # this size, and the verdict was "even larger"). They stand THERE for the
+    # water: the chase eye rides 0.69 over the road, so a pool at the kerb's
+    # height is a sliver from any flat road, and one sunk beside it hides
+    # behind the road's own edge. Only an eye coming DOWN on it sees a sheet
+    # of water, and the hop is the lap's one high place over land: off its
+    # crest the cars look down into the pool, some four units below, dead
+    # ahead (round 26; along the north shore road no racer saw it). On the
+    # plain, so under the kerb once landed: no rise, which would give back a
+    # unit of that height. A paved yard clear of the hop's bank,
+    # some fifteen units deep and twenty-seven along the road: the
     # long pool of sea water in its white coping, lanes roped; at its west
     # end (-Z) the diving tower, four stages of white frame and blue boards,
     # at its east end the red slide tower under its pointed roof and the
@@ -7355,12 +7362,13 @@ def lido():
     wind = rip_wind('lido')
     YX0, YX1, YZ0, YZ1 = -8.1, 6.3, -10.8, 10.8           # the yard
     WX0, WZ0 = -2.7, -16.2                                # the children's court off its west end, nearer the road
-    X0, X1, Z0, Z1 = -1.6, 4.4, -5.6, 7.6                # the pool, by the road (the fix pass: behind the sun deck no racer saw its water)
+    X0, X1, Z0, Z1 = -1.6, 4.4, -7.6, 5.6                # the pool, by the road and toward the yard's far end from the hop, ahead of the cars coming down
     PX = (X0 + X1) / 2
     cell = 1.8 if LITE else 0.9
+    POOL_ROW = 3                                          # the kit's blue at its lightest: a pool's, well off the sea's turquoise beside it (the sky ramp's water was near white from the seat)
     lido_sheet(((YX0, YX1, YZ0, YZ1), (WX0, YX1, WZ0, YZ0)), 'cream', 8, 0.04, cell)
     with plain_parts():
-        paved(X0, X1, Z0, Z1, 'sky', 20, y=0.1, cell=cell)                       # the water
+        paved(X0, X1, Z0, Z1, 'blue', POOL_ROW, y=0.1, cell=cell)                # the water
         n = 3 if LITE else 10                                                    # the coping, in lengths
         for i in range(n):
             z = Z0 + (Z1 - Z0) * (i + 0.5) / n
@@ -7492,7 +7500,7 @@ def lido():
     N = 8 if LITE else 12
     ring = [(CX + CR * math.cos(2 * math.pi * i / N), 0.1, CZ + CR * math.sin(2 * math.pi * i / N)) for i in range(N)]
     with plain_parts():
-        rowed(skin([(CX, 0.1, CZ)] + ring, [(0, 1 + i, 1 + (i + 1) % N) for i in range(N)], 'sky', (0.0, 1.0, 0.0)), 20)
+        rowed(skin([(CX, 0.1, CZ)] + ring, [(0, 1 + i, 1 + (i + 1) % N) for i in range(N)], 'blue', (0.0, 1.0, 0.0)), POOL_ROW)
         for i in range(N):                                                       # its coping
             a = 2 * math.pi * (i + 0.5) / N
             box((0.3, 0.2, 2 * (CR + 0.15) * math.tan(math.pi / N) + 0.02), (CX + (CR + 0.12) * math.cos(a), 0.1, CZ + (CR + 0.12) * math.sin(a)), white, yaw=-a)
@@ -7518,8 +7526,38 @@ def lido():
             sun_lounger((x + 0.3, 0.04, z + 0.7), math.pi, cols[k + 2])
     join_still('lido')
     def way():
-        lido_sheet(((YX1, YX1 + 1.35, -0.9, 0.9),), 'cream', 8, 0.03, 0.45)        # the gate's, to the kerb
+        lido_sheet(((YX1, YX1 + 4.05, -0.9, 0.9),), 'cream', 8, 0.03, 0.45)        # the gate's, up the bank to the kerb
     draped('floor', way)
+    lie_on_land()
+
+@piece(1.0)
+@lite_plain
+def riptide_lagoon_beach():
+    # Riptide: the lagoon's bathing beach on the north shore road, where the
+    # baths stood until round 26 (they went to the hop for a view of their
+    # water) and the walk from the pier's bridge still comes in: bathing huts
+    # along the back in the seaside's colours, loungers under umbrellas
+    # before them, a striped windbreak and the beach's flag. No one about.
+    # On the beach rise tracks.js keeps there; everything lies on the land
+    # as drawn. +X is the road; it runs along it (+Z).
+    white, red, yellow, blue, green, orange = 0xfff6eb, 0xff5040, 0xffc044, 0x339cf2, 0x22c46e, 0xff7e44
+    wind = rip_wind('riptide-lagoon-beach')
+    for i, c in enumerate((blue, yellow, red, green, orange, blue)):
+        beach_hut(-4.6, 0.0, 1.2 + 1.5 * i, 0.0, c)
+    cols = ((red, white), (blue, white), (yellow, white), (green, white))
+    spots = ((0.4, -7.0), (-2.2, -5.4), (0.8, -2.8), (-1.8, -0.6), (0.6, 2.4), (-1.6, 5.2))
+    for k, (x, z) in enumerate(spots[:4] if LITE else spots):
+        umbrella((x, 0.0, z), 0.85, 1.3, cols[k % 4], gores=6 if LITE else 8)
+        sun_lounger((x + 0.5, 0.0, z + 0.3), math.pi, cols[(k + 1) % 4][0])
+        if not LITE:
+            sun_lounger((x + 0.5, 0.0, z - 0.5), math.pi, cols[(k + 2) % 4][0])
+    with plain_parts():
+        for i in range(7):                                                       # the windbreak
+            box((0.04, 0.8, 0.42), (-3.6, 0.48, -6.8 + 0.42 * i), (red, white)[i % 2])
+        for i in range(4):
+            box((0.1, 1.0, 0.1), (-3.6, 0.5, -7.0 + 0.98 * i), 0x9a6a46)
+    wind_flag((-4.6, 0.0, 0.0), 3.0, (blue, white, blue), 'anim_flutter:p=2.0#lagoon', wind, w=0.6, fh=0.36)
+    join_still('lagoon-beach')
     lie_on_land()
 
 @piece(1.0)
@@ -18328,7 +18366,7 @@ lite_too('skull-trail')
 # ...and Driftwood's ship's boxes without their corrugation, half the cargo.
 lite_too('storm-containers', 'storm-containers-b', 'storm-containers-c')
 # ...and Riptide's baths on two lane ropes and plainer huts, no rail to the road, its bandstand's audience in one row.
-lite_too('lido', 'seafront-bandstand')
+lite_too('lido', 'seafront-bandstand', 'riptide-lagoon-beach')
 # Round 24: the seafront is the lap's heaviest vista on the box, so what stands
 # along it is square all through there (lite_plain) and thinner where it has
 # its own cuts: the promenade and its bridge, the sea wall, the patrol's
