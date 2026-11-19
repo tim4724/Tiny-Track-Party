@@ -168846,7 +168846,7 @@ inline const Prim k_set_storm_mast_m1[] = {
     { 144u, k_set_storm_mast_m1_p0 }
 };
 inline const uint8_t k_set_storm_mast_m2_p0[] = {
-    219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118,219,157,118
+    206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75,206,159,75
 };
 inline const Prim k_set_storm_mast_m2[] = {
     { 12u, k_set_storm_mast_m2_p0 }
@@ -200491,7 +200491,7 @@ inline const Model kModels[] = {
     { 1794037504348351475ull, 2u, k_set_storm_containers_c },  // set-storm-containers-c.glb
     { 6881883011887916983ull, 2u, k_set_storm_containers_lite },  // set-storm-containers-lite.glb
     { 10181017186611873194ull, 2u, k_set_storm_containers },  // set-storm-containers.glb
-    { 9959130519224654937ull, 4u, k_set_storm_mast },  // set-storm-mast.glb
+    { 13758402892244479545ull, 4u, k_set_storm_mast },  // set-storm-mast.glb
     { 2421044752351368540ull, 3u, k_set_storm_wreck_lite },  // set-storm-wreck-lite.glb
     { 13213480254069148730ull, 3u, k_set_storm_wreck },  // set-storm-wreck.glb
     { 12768309433506520741ull, 5u, k_set_strand_groynes },  // set-strand-groynes.glb

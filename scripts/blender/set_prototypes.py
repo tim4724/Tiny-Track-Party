@@ -6452,7 +6452,7 @@ def storm_mast():
                 beam((x, 0.5, z), (x1, 0.5, z1), 0.05, 0xfde4c7)
     join_still('station')
     def way():
-        trodden([(3.2, -3.7), (1.3, -3.9), (-0.5, -3.3), (-1.0, -2.1)], w=0.8, color='tan', row=17)
+        trodden([(3.2, -3.7), (1.3, -3.9), (-0.5, -3.3), (-1.0, -2.1)], w=0.8)
     draped('floor', way)
     lie_on_land()
 
