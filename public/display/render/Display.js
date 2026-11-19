@@ -621,7 +621,17 @@ export class Display {
     await Promise.all(want.map(async (w) => {
       if (w.from || !w.tag || !need.has(w.name)) return;
       const bytes = await assets.glb(w.tag);
-      if (!bytes) return;
+      if (!bytes) {
+        // A model that could not be fetched EMPTIES its slot. Slots are reused
+        // from scene to scene (set3.glb is one track's rock and the next one's
+        // marble run), so providing nothing left the PREVIOUS track's model
+        // standing in the new one, at this piece's placement: a page kept open
+        // across a deploy that removed a model drew a beach headland in the
+        // playroom. An empty asset draws nothing, and is asked for again.
+        console.error(`[display] no bytes for ${w.tag} (${w.name}); the slot is emptied`);
+        this.provide(w.name, new Uint8Array(0));
+        return;
+      }
       fetched.set(w.name, bytes);
       this.provide(w.name, bytes);
     }));
