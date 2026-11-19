@@ -432,7 +432,7 @@ struct TtpRenderer::TrackBin {
     uint32_t shoreSeed = 0;              // shorelineFn's FNV-1a over the track id
     uint32_t hazeCount = 0, hazeTint = 0xffffff;
     float hazeOpacity = 0.16f, hazeScale = 1;
-    uint32_t ambKind = 0;                // 0 none 1 pollen 2 mote 3 sand 4 flake
+    uint32_t ambKind = 0;                // ttp::rt::AmbKind
     uint32_t ambCount = 0, ambTint = 0xffffff;
     float ambSize = 0.3f, ambOpacity = 0.85f;
     float ambFall = 1, ambWind = 0.7f, ambBob = 0, ambBand = 1;

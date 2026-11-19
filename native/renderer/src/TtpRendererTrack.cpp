@@ -3574,6 +3574,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         for (const char* k : { "mask", "tile", "flutter" }) {
             mPollenMat->setParameter(k, 0.0f);
         }
+        mAmbStreak = tb.ambKind == ttp::rt::AMB_RAIN ? kRainStreak : 0.0f;
+        mPollenMat->setParameter("streak", mAmbStreak);
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
         // The drawn positions follow the cameras, so no authored-time AABB can
         // bound them: make the box world-sized instead of culling on a lie.
@@ -4594,6 +4596,7 @@ void TtpRenderer::buildLife(const TrackBin& tb) {
     mLifeMat->setParameter("mask", 1.0f);
     mLifeMat->setParameter("tile", kLifeTile);
     mLifeMat->setParameter("flutter", a.kind == AMB_PETAL ? 1.0f : 0.0f);
+    mLifeMat->setParameter("streak", 0.0f);
     if (!buildMesh(mLife, true, mLifeMat)) return;
     auto& rcm = mEngine->getRenderableManager();
     // A block's seeds bound its sprites but for their drift out to the tile's

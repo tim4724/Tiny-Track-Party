@@ -46,9 +46,10 @@ enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUN
 // features.
 enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
 // Ambient particle motion presets (trackPayload.js AMB_KINDS), and the one
-// the cups' ambient life added (Theme::life): a petal tumbling down.
+// the cups' ambient life added (Theme::life): a petal tumbling down. Rain is
+// the one kind drawn as a STREAK (vpoint.mat `streak`): `size` is its width.
 enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE,
-                          AMB_PETAL };
+                          AMB_PETAL, AMB_RAIN };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.

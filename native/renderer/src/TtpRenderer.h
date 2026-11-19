@@ -2344,6 +2344,11 @@ private:
     float mAmbTime = 0;
     float mAmbBandH = 0;        // the `bandH` uniform, set once at build
     float mAmbFall = 0, mAmbWind = 0;   // the `fall` and `wind` uniforms, set at build
+    // Rain's `streak` uniform: how many of its widths a sprite is drawn out
+    // along its fall (0: a round sprite). The per-cell cull bounds a sprite
+    // by its long half.
+    static constexpr float kRainStreak = 24.0f;
+    float mAmbStreak = 0;
     // Per-cell subset of the cloud: each cell draws only the sprites that can
     // reach ITS frustum, as indices into the same vertex buffer in ascending
     // order (cullAmbientCells). One index buffer per ring slot, written once a
