@@ -23,6 +23,17 @@ const enc = encodeURIComponent;
 const PING_INTERVAL_MS = LIVENESS.PING_INTERVAL_MS;
 const PONG_TIMEOUT_MS = LIVENESS.PONG_TIMEOUT_MS;
 
+// Reopening the fastlane after its channel dies while the relay stays up: 2 s,
+// doubling to 30 s. Where ICE always ends in `failed` (client isolation on a
+// guest Wi-Fi, two networks with no route between them) a fixed delay rebuilt a
+// peer connection, gathered STUN and signalled an offer every few seconds for the
+// whole session. The delay resets only once a channel has STAYED up for
+// FASTLANE_STABLE_MS: a channel that opens and is then killed by the kit's
+// watchdog would otherwise reset it every cycle and flap at the floor.
+const FASTLANE_RETRY_MIN_MS = 2000;
+const FASTLANE_RETRY_MAX_MS = 30000;
+const FASTLANE_STABLE_MS = 10000;
+
 function deriveRoomCode() {
   const seg = (location.pathname || '/').split('/').filter(Boolean)[0];
   return seg || '';
@@ -82,6 +93,9 @@ export class ControllerNet extends GameNet {
     // already hold (see InputGate).
     this.gate = new InputGate();
     this._srtt = 0;
+    this._fastlaneRetryTimer = null;
+    this._fastlaneRetryMs = 0;
+    this._fastlaneStableTimer = null;
     // §7 lifecycle state. _suspended: the link was dropped by suspend() and is
     // ours to rebuild on return. _terminal: the relay finished this session for
     // good (4000/4001) — redialling would only bounce, so suspend/resume stay out
@@ -97,6 +111,7 @@ export class ControllerNet extends GameNet {
     this._terminal = false;   // a fresh dial: whatever finished the last socket no longer applies
     if (this.party) this.party.close();
     if (this.fastlane) this.fastlane.closeAll();
+    this._cancelFastlaneReopen();   // closeAll fired onPeerClosed, which armed one
     const url = RELAY_URL + '/' + enc(this.roomCode) + (this.instance ? '?instance=' + enc(this.instance) : '');
     this.party = new PartyConnection(url, { clientId: this.clientId });
 
@@ -121,6 +136,12 @@ export class ControllerNet extends GameNet {
         if (this.peerIndex != null && msg.message === 'Target peer not found') this.onStatus('display_gone');
         else this.onStatus('error', msg.message);
       } else if (type === 'peer_left' && msg.index === 0) {
+        // Offers to an empty slot go nowhere, and an unanswered one is worse
+        // than none: its peer sits in have-local-offer, so the open(0) on
+        // peer_joined(0) would find it and send nothing. Drop the peer now, and
+        // with it any retry its teardown armed.
+        if (this.fastlane) this.fastlane.close(0);
+        this._cancelFastlaneReopen();
         this.onStatus('display_gone');
       } else if (type === 'peer_joined' && msg.index === 0) {
         // The display came back (reconnect — or a RELOAD that wiped its
@@ -129,6 +150,7 @@ export class ControllerNet extends GameNet {
         // for the retry tick. The snapshot it republishes clears any
         // "waiting for the big screen" overlay.
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+        this._cancelFastlaneReopen();   // a fresh display starts the backoff over
         if (this.fastlane) this.fastlane.open(0);
       }
     };
@@ -177,6 +199,7 @@ export class ControllerNet extends GameNet {
   _dropLink() {
     this._stopPing();
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
+    this._cancelFastlaneReopen();
     if (this.party) { this.party.close(); this.party = null; }
     this.peerIndex = null;
   }
@@ -257,6 +280,7 @@ export class ControllerNet extends GameNet {
     // so nothing previously confirmed still counts.
     this.gate.reset();
     this._initFastlane(this.peerIndex, {
+      onPeerReady: (peerIdx) => { if (peerIdx === 0) this._noteFastlaneOpen(); },
       emitIdleHeartbeat: true,
       // Latest-only: CONTROL is absolute state ({s,b,u}) resampled at sensor rate,
       // not a stream of discrete events, so the kit's resend window can't help.
@@ -279,15 +303,51 @@ export class ControllerNet extends GameNet {
       // it actually holds, and what the gate compares against.
       onAcked: (peerIdx, ev) => { if (peerIdx === 0) this.gate.markAcked(ev); },
       onPeerClosed: () => {
-        // Display-side fastlane closed (watchdog or display reconnect); retry.
-        // Its state is now unknowable, so drop the gate's confirmed value: the
-        // next sample re-establishes ground truth instead of being filtered
-        // against a belief formed before the channel died.
+        // Channel gone (watchdog, ICE failed, display reconnect); retry with
+        // backoff. Its state is now unknowable, so drop the gate's confirmed
+        // value: the next sample re-establishes ground truth instead of being
+        // filtered against a belief formed before the channel died.
         this.gate.reset();
-        setTimeout(() => { if (this.fastlane && this.peerIndex != null) this.fastlane.open(0); }, 2000);
+        this._scheduleFastlaneReopen();
       },
     });
+    // A fresh (re)join starts the backoff over; closing the previous fastlane
+    // above fired its onPeerClosed, which armed a retry at the old delay.
+    this._cancelFastlaneReopen();
     if (this.fastlane) this.fastlane.open(0); // null with no WebRTC: relay only
+  }
+
+  _scheduleFastlaneReopen() {
+    clearTimeout(this._fastlaneStableTimer);   // it died before it proved stable
+    this._fastlaneStableTimer = null;
+    if (this._fastlaneRetryTimer) return;
+    this._fastlaneRetryMs = this._fastlaneRetryMs
+      ? Math.min(this._fastlaneRetryMs * 2, FASTLANE_RETRY_MAX_MS)
+      : FASTLANE_RETRY_MIN_MS;
+    this._fastlaneRetryTimer = setTimeout(() => {
+      this._fastlaneRetryTimer = null;
+      if (this.fastlane && this.peerIndex != null) this.fastlane.open(0);
+    }, this._fastlaneRetryMs);
+  }
+
+  // The channel opened: stop any pending retry, but hold the backoff until the
+  // channel has proved itself.
+  _noteFastlaneOpen() {
+    clearTimeout(this._fastlaneRetryTimer);
+    this._fastlaneRetryTimer = null;
+    clearTimeout(this._fastlaneStableTimer);
+    this._fastlaneStableTimer = setTimeout(() => {
+      this._fastlaneStableTimer = null;
+      this._fastlaneRetryMs = 0;
+    }, FASTLANE_STABLE_MS);
+  }
+
+  _cancelFastlaneReopen() {
+    clearTimeout(this._fastlaneRetryTimer);
+    clearTimeout(this._fastlaneStableTimer);
+    this._fastlaneRetryTimer = null;
+    this._fastlaneStableTimer = null;
+    this._fastlaneRetryMs = 0;
   }
 
   // ---- ping / pong (relay keepalive + WS-path latency) ----

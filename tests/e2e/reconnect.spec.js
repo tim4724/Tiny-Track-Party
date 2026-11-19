@@ -140,6 +140,28 @@ test('a silent phone keeps its seat: only the socket closing drops one', async (
   await expect(page.locator('.cell-reconnect')).toBeVisible();
 });
 
+test('the fastlane reopens when a crashed display comes back', async ({ page, browser }) => {
+  // While the display is away its relay slot is empty, so an offer sent then is
+  // never answered — and a peer left waiting on one makes the phone's open(0)
+  // on peer_joined(0) a no-op. The phone drops its peer on peer_left(0) so the
+  // display's return gets a fresh offer.
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  const fastlaneUp = () => window.__net.fastlane && window.__net.fastlane.isOpen(0);
+  await alice.waitForFunction(fastlaneUp, null, { timeout: 15000 });
+
+  await page.evaluate(() => { window.__net.shutdown = () => {}; });   // crash, as below
+  await page.goto('about:blank');
+  // Away for longer than the phone's watchdog (3 s) plus its first reopen (2 s),
+  // so an offer sent in that window reaches nobody. A plain reload is back in
+  // time to answer it, which is how this went unseen.
+  await alice.waitForTimeout(6000);
+  await page.goto('/');   // same tab: sessionStorage rejoins the room
+  await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
+  await expect(page.locator('#players')).toContainText('Alice', { timeout: 15000 });
+  await alice.waitForFunction(fastlaneUp, null, { timeout: 15000 });
+});
+
 test('a crashed display rejoins its own room and regathers the party', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
