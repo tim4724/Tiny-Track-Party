@@ -1470,18 +1470,26 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             float u, w, fade;
             float3 p;
             if (mSmokePeriod > 0) {
-                // A gun's smoke: every period the puffs burst from the muzzle
-                // together, each thrown a different way out along the bore,
-                // slow to a stop, swell, lift a little and thin over 3 s; then
-                // nothing until the next shot.
-                constexpr float kBurst = 3.0f;
-                u = std::min(1.0f, std::fmod(mTime, mSmokePeriod) / kBurst);
-                const float far = (float) (i + 1) / mSmoke.size();
+                // A gun's smoke: every period a flash at the muzzle (the
+                // first puff, there for a tenth of a second) and the rest
+                // burst from it together, each thrown a different way out
+                // along the bore a stride or two, slow to a stop, swell, lift
+                // a little and thin over two seconds; then nothing until the
+                // next shot.
+                constexpr float kBurst = 2.0f, kFlash = 0.1f;
+                const float since = std::fmod(mTime, mSmokePeriod);
+                u = std::min(1.0f, since / kBurst);
+                const float far = (float) i / (mSmoke.size() - 1);
                 const float out = 1 - (1 - u) * (1 - u) * (1 - u);
-                p = mSmokeOrigin + mSmokeDir * (out * (0.5f + 2.2f * far) * k);
-                p.y += (u * (0.35f + 0.5f * far) + std::sin(i * 2.1f) * 0.12f * out) * k;
-                w = (0.45f + 0.35f * far + u * 0.9f) * k;
+                p = mSmokeOrigin + mSmokeDir * (out * (0.25f + 1.3f * far) * k);
+                p.y += (u * (0.3f + 0.4f * far) + std::sin(i * 2.1f) * 0.1f * out) * k;
+                w = (0.4f + 0.25f * far + u * 0.7f) * k;
                 fade = std::min(1.0f, u * 12) * std::sqrt(1 - u);
+                if (i == 0) {
+                    p = mSmokeOrigin + mSmokeDir * (0.2f * k);
+                    w = 1.1f * k;
+                    fade = since < kFlash ? 1.0f : 0.0f;
+                }
             } else {
                 u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
                 p = float3{ mSmokeOrigin.x + (u * 0.6f
