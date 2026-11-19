@@ -1023,16 +1023,21 @@ export const TRACKS = {
       // the coastguard's lookout on the Point's flank over the start straight
       { model: 'set-coastguard-lookout', u: 0.03, lat: -12, yaw: 180, y: 4.5 },
       // round 22: the town band's stand on the north shore between the
-      // club and the camp, and across the road from the camp the open-air
-      // baths by the lagoon, both of which lay bare. The baths are let into
-      // a beach rise of their own (`land`), at the road's height (round 23:
-      // they stood on a built terrace, a plinth)
+      // club and the camp, and across the road from the camp the lagoon's
+      // bathing beach on a beach rise (`land`), at the road's height. The
+      // open-air baths stood there until round 26: from a flat road the
+      // chase eye never saw their water. They lie on the low beach beside
+      // the hop's landing now, on the plain with no rise, so the cars look
+      // down into the pool off the crest (set_prototypes.py lido() has the
+      // geometry; RIP_HEADING, re-read if the row moves). The first two
+      // `shore` rows give them that beach
       { model: 'set-seafront-bandstand', u: 0.655, lat: -11.5, yaw: 180 },
-      { model: 'set-lido', u: 0.725, lat: 11.8 },
+      { model: 'set-riptide-lagoon-beach', u: 0.725, lat: 12.5 },
+      { model: 'set-lido', u: 0.158, lat: -15.3, yaw: 180 },
       // round 24: the pier's walk carried over the road where the pier sets
       // out, astride it (the promenade's stair meets it: set_prototypes.py
       // PIER_STAIR, re-read if either row moves), its far stair coming down
-      // by the baths; and what moves off the road, each laid out against
+      // by the lagoon beach; and what moves off the road, each laid out against
       // the shore it floats by (set_prototypes.py RIP_AT, RIP_HEADING):
       // hire pedalos off the patrol's beach, a launch towing a banana boat
       // in a wide circle on the open water off the hop (the lagoon was too
@@ -1045,7 +1050,13 @@ export const TRACKS = {
       { model: 'set-beach-kites', u: 0.905, lat: -17.5, yaw: 180 }
     ],
     land: [
-      { kind: 'shore', u: 0.23, lat: -12.2, len: 90, r: 30 },
+      // the sea at the road from the patrol's tower round the bend and along
+      // the seafront, in two rows: the first ends short beside the tower, so
+      // the beach north of it, beside the hop, is wide enough for the baths;
+      // the second eases the bay's far end out past the pier as gently as
+      // one long row did
+      { kind: 'shore', u: 0.252, lat: -20.43, len: 64.88, r: 8 },
+      { kind: 'shore', u: 0.411, lat: -25.6, len: 17.52, r: 35.27 },
       { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 17 },
       // the sea under the pier: its `w` lets the bay in past the causeway's
       // reach on that bearing (the polar shore keeps 5 u past it otherwise),
@@ -1073,9 +1084,8 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.09, lat: -18, len: 10, r: 13, h: 0.8, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.715, lat: -17, len: 22, r: 13, h: 0.9, top: 0.55, near: 0.4, w: 6 },
       { kind: 'ridge', u: 0.905, lat: -17, len: 14, r: 13, h: 0.88, top: 0.55, near: 0.4, w: 6 },
-      // ...and the baths' (the sand lay most of a unit under the kerb there;
-      // higher than the others and nearer the lagoon's edge, so the whole
-      // yard lies at the kerb's height and a racer sees the pool's water)
+      // ...and the lagoon beach's (the sand lay most of a unit under the
+      // kerb there; higher than the others and nearer the lagoon's edge)
       { kind: 'ridge', u: 0.718, lat: 17.5, len: 26, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 4 },
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
