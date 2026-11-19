@@ -130,6 +130,14 @@ static bool parseSeg(const Value& s, SegDef& out) {
   out.drift = numOr(s, "drift", 0);
   out.over = boolOr(s, "over", true);
   out.pillars = boolOr(s, "pillars", false);
+  out.graded = false;
+  out.g0 = 0;
+  out.g1 = 0;
+  if (const Value* g = s.find("grade")) {
+    if (g->type != Value::ARR || g->arr.size() != 2 || g->arr[0].type != Value::NUM
+        || g->arr[1].type != Value::NUM) return false;
+    out.graded = true; out.g0 = g->arr[0].num; out.g1 = g->arr[1].num;
+  }
   out.widthKind = 0;
   out.w0 = 0;
   out.w1 = 0;

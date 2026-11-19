@@ -257,7 +257,8 @@ TTP_ABI const char* ttp_track_json(const char* trackId, int laps, uint32_t seed)
 //   { "id"?, "name"?, "width"?, "sand"? (waypoint tracks only), "startU"?,
 //     "segments": [ { "kind": "straight"|"arc"|"loop", "length"?, "radius"?,
 //                     "angle"?, "rise"?, "bank"?, "roll"?, "drift"?,
-//                     "width"?: n | [a,b], "pillars"?, "over"? } ]
+//                     "width"?: n | [a,b], "pillars"?, "over"?,
+//                     "grade"?: [in,out] } ]
 //     | "waypoints": [ { "x", "z", "y"?, "w"?, "bank"?, "bridge"? } ],
 //     "oils"?/"pads"?/"boxes"?/"poles"?: [ { "u", "lat"?, "radius"? } ],
 //     "bananas"?: [ { "u", "lat"? } ] }

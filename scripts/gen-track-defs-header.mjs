@@ -96,7 +96,7 @@ const checkKeys = (obj, allowed, what) => {
 };
 
 // ---- segments ----
-const SEG_KEYS = ['kind', 'length', 'radius', 'angle', 'rise', 'bank', 'roll', 'width', 'pillars', 'over', 'drift'];
+const SEG_KEYS = ['kind', 'length', 'radius', 'angle', 'rise', 'bank', 'roll', 'width', 'pillars', 'over', 'drift', 'grade'];
 function segInit(seg) {
   checkKeys(seg, SEG_KEYS, 'segment');
   let kindEnum;
@@ -113,11 +113,13 @@ function segInit(seg) {
     } else if (typeof seg.width === 'number') { widthKind = 1; w0 = seg.width; }
     else fail(`segment width must be a number or [a,b], got ${typeof seg.width}`);
   }
+  if (seg.grade && !(seg.kind === 'straight' && Array.isArray(seg.grade) && seg.grade.length === 2)) fail('segment grade must be [in, out] on a straight');
   const over = !(seg.over === false); // over===false -> vert -1; default up
   // Field order MUST match SegDef in trackbuilder.h.
   return `{ ${kindEnum}, ${D(seg.length || 0)}, ${D(seg.radius || 0)}, ${D(seg.angle || 0)}, `
     + `${D(seg.rise || 0)}, ${D(seg.bank || 0)}, ${D(seg.roll || 0)}, ${D(seg.drift || 0)}, `
-    + `${B(over)}, ${widthKind}, ${D(w0)}, ${D(w1)}, ${B(!!seg.pillars)} }`;
+    + `${B(over)}, ${widthKind}, ${D(w0)}, ${D(w1)}, ${B(!!seg.pillars)}, `
+    + `${B(!!seg.grade)}, ${D(seg.grade ? seg.grade[0] : 0)}, ${D(seg.grade ? seg.grade[1] : 0)} }`;
 }
 
 // ---- waypoints ----
