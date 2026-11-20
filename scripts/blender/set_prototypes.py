@@ -165,9 +165,10 @@ def box(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
 # What is round in life is turned on 6 to 10 sides, and on 12 only as a big
 # drum or wheel (three quarters of a unit or more in radius once the piece is
 # grown: a tank, a windpump's wheel): a tank beside eight-sided barrels on
-# forty read as another make of toy. The box's tier (BOX_TIER: a `-lite`
-# piece) stops at 10. Every round primitive asks here, so a builder cannot
-# overrule it.
+# forty read as another make of toy. A drum wider than half the road (1.25 u
+# in radius: the tank farm's) may have 16, or its rim shows every side from
+# the road. The box's tier (BOX_TIER: a `-lite` piece) stops at 10. Every
+# round primitive asks here, so a builder cannot overrule it.
 BOX_TIER = False
 
 def bld_grow():
@@ -176,7 +177,8 @@ def bld_grow():
     return GROW.get(name, 1.0) * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0)
 
 def ring_sides(segs, r):
-    return min(segs, 12 if r * bld_grow() >= 0.75 and not BOX_TIER else 10)
+    g = r * bld_grow()
+    return min(segs, 10 if BOX_TIER or g < 0.75 else 12 if g < 1.25 else 16)
 
 def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem=False, caps=True):
     """A cylinder (or cone when r2 differs) whose base centre is `at`, standing
@@ -694,15 +696,24 @@ def bld_gate(a, b, kind='field', h=None, color=0xf8f8fb, post=0x8a6a46, y0=0.0):
             beam((a[0], y0 + f * h, a[1]), (b[0], y0 + f * h, b[1]), 0.045 * k, color, d=0.065 * k)
         beam((a[0], y0 + 0.25 * h, a[1]), (b[0], y0 + 0.9 * h, b[1]), 0.045 * k, color, d=0.06 * k)
 
-def bld_lamp(at, h=None, color='slate', glow=0xfde4c7, arm=0.0, row=0):
+def bld_lamp(at, h=None, color='slate', glow=0xfde4c7, arm=0.0, row=0, globes=False, yaw=0.0):
     """THE street lamp, `h` tall: a square post on a foot, a lantern and its
     cap. `arm`: a gooseneck instead, the post's head bent that far toward
     -X and the lantern hung under its end (a lantern on a post's top with a
     dark cap over it read as a signpost in the snow). `row` the lantern's
-    shade of `glow`'s ramp (0 its palest)."""
+    shade of `glow`'s ramp (0 its palest). `globes` (a park's): two globes
+    on a cross arm along X turned by `yaw`."""
     h = h or BLD_LAMP * bld_u()
     k = h / BLD_LAMP
     x, y, z = at
+    if globes:
+        F = local(x, z, yaw)
+        with plain_parts():
+            box((0.075 * k, h - 0.12 * k, 0.075 * k), (x, y + (h - 0.12 * k) / 2, z), color, yaw=yaw)
+            box((0.24 * k, 0.05 * k, 0.075 * k), (x, y + h - 0.17 * k, z), color, yaw=yaw)
+        for s in (-1, 1):
+            box((0.145 * k, 0.145 * k, 0.145 * k), F(s * 0.12 * k, y + h - 0.0725 * k, 0.0), glow, yaw=yaw)
+        return
     if arm:
         with plain_parts():
             box((0.13 * k, 0.14 * k, 0.13 * k), (x, y + 0.07 * k, z), color)
@@ -718,16 +729,16 @@ def bld_lamp(at, h=None, color='slate', glow=0xfde4c7, arm=0.0, row=0):
 
 def bld_bench(at, yaw=0.0, color=0x9a7b55, seat=None, legs=0x4f5260):
     """THE bench, its seat `seat` up and three times that long, a back to
-    twice it; whoever sits on it faces +Z turned by `yaw`."""
+    twice it over a gap; whoever sits on it faces +Z turned by `yaw`."""
     seat = seat or BLD_SEAT * bld_u()
     k = seat / BLD_SEAT
     F = local(at[0], at[2], yaw)
     y = at[1]
     with plain_parts():
-        box((0.5 * k, 0.04 * k, 0.17 * k), F(0, y + seat - 0.02 * k, 0), color, yaw=yaw)
-        box((0.5 * k, 0.17 * k, 0.04 * k), F(0, y + seat + 0.085 * k, -0.105 * k), color, yaw=yaw)
+        box((0.5 * k, 0.026 * k, 0.17 * k), F(0, y + seat - 0.013 * k, 0), color, yaw=yaw)
+        box((0.5 * k, 0.15 * k, 0.026 * k), F(0, y + seat + 0.1 * k, -0.07 * k), color, yaw=yaw)
         for s in (-1, 1):
-            box((0.045 * k, seat - 0.04 * k, 0.15 * k), F(s * 0.19 * k, y + (seat - 0.04 * k) / 2, 0), legs, yaw=yaw)
+            box((0.026 * k, seat - 0.026 * k, 0.16 * k), F(s * 0.208 * k, y + (seat - 0.026 * k) / 2, 0), legs, yaw=yaw)
 
 def bld_hedge(a, b, h=None, t=None, y0=0.0, color=0x4f9a48, sunk=0.0):
     """THE clipped hedge, `h` high and `t` thick, from (x, z) a to b."""
@@ -13931,7 +13942,7 @@ def windmill():
             # the sail on the leading side of its stock: a white board, its laths
             py, pz = math.cos(a), -math.sin(a)
             cy, cz = HY + dy * 7.2 + py * 1.15, dz * 7.2 + pz * 1.15
-            box((0.12, 2.0, 8.4), (HX + 1.05, cy, cz), 'white', pitch=a)
+            box((0.12, 2.0, 8.4), (HX + 1.08, cy, cz), 'white', pitch=a)     # (its face clear of the stock's: flush, the box's flickered)
             for j in (-1, 1):
                 box((0.14, 0.16, 8.4), (HX + 1.12, cy + py * j * 0.9, cz + pz * j * 0.9), 0x9a7b55, pitch=a)
     join_still('mill')
@@ -14063,13 +14074,17 @@ def hash01(*v):
 # pine).
 #
 # ONE construction under all of them, so the species read as one hand's work:
-# a trunk of six flat sides in `bark`, tapering, open at both ends (its foot
-# is in the ground and its head in the crown: trees_trunk), under a crown of
-# a few faceted lobes (trees_lobe), each shaded by its height in the piece,
-# light on top. The orchard's lobes alone are shaded round (apple_tree). The
-# box's build of any of them (trees_lite: a `-lite` piece, or LITE) keeps the
-# same lobes and shades them round over shared corners, a fifth of the
-# vertices, and its trunk has five sides.
+# a trunk of six flat sides in one warm brown (TREES_BARK; the cherry's
+# grey-brown and the alder's dark are their own), tapering, open at both
+# ends (its foot is in the ground and its head in the crown: trees_trunk),
+# under a crown of a few faceted lobes (trees_lobe), each shaded by its
+# height in the piece, light on top. The box's build (trees_lite: a `-lite`
+# piece, or LITE) is faceted the same (shaded round over shared corners, its
+# lobes melted into one blob). It cuts lobes or streamers only where that
+# saves a quarter of the tree's vertices (the alder, the willow, the
+# orchard's); the oak, the cherry and the shrub are drawn whole.
+TREES_BARK = 0x7a5a3a
+
 def trees_lite():
     return LITE or (BLD_NOW[0] or '').endswith('-lite')
 
@@ -14087,24 +14102,17 @@ def trees_round(o):
             o.data.attributes.remove(o.data.attributes[name])
     return o
 
-def trees_trunk(at, r, h, r2, color='bark'):
+def trees_trunk(at, r, h, r2, color=TREES_BARK):
     """A tree's trunk from `at` up: see the lawn's trees."""
-    lite = trees_lite()
-    o = cyl(r, h, at, color, r2=r2, segs=5 if lite else 6, stem=True, caps=False)
-    return trees_round(o) if lite else o
+    return cyl(r, h, at, color, r2=r2, segs=6, stem=True, caps=False)
 
-def trees_bough(at, r, h, r2, a, tip, color='bark'):
+def trees_bough(at, r, h, r2, a, tip, color=TREES_BARK):
     """A bough out of the trunk at `at`, tipped `tip` over toward bearing `a`."""
-    lite = trees_lite()
-    o = cyl(r, h, at, color, r2=r2, segs=4 if lite else 5, stem=True, caps=False)
-    tilted(o, math.cos(a) * tip, math.sin(a) * tip)
-    return trees_round(o) if lite else o
+    return tilted(cyl(r, h, at, color, r2=r2, segs=5, stem=True, caps=False), math.cos(a) * tip, math.sin(a) * tip)
 
 def trees_lobe(r, at, color, scale=(1, 1, 1), yaw=0.0):
-    """A lobe of a crown: an icosphere of one split, flat-faced (the box's:
-    shaded round)."""
-    o = sphere(r, at, color, subdiv=1, scale=scale, yaw=yaw)
-    return trees_round(o) if trees_lite() and len(o.data.polygons) == 20 else o
+    """A lobe of a crown: an icosphere of one split, flat-faced."""
+    return sphere(r, at, color, subdiv=1, scale=scale, yaw=yaw)
 
 def lawn_oak(x, z, k=1.0):
     """Pretzel's oak: a stout trunk under four faceted lobes."""
@@ -14119,37 +14127,40 @@ CHERRY_CROWN = (((0.0, 7.2, 0.0), 2.9, 0), ((-2.2, 6.2, 1.3), 2.2, 0), ((1.9, 6.
 def lawn_cherry(x, z, k, c, i=0):
     """Cloverleaf's cherry in blossom, `c` 'pink' or 'white': a forked trunk
     under four lobes of pale blossom (one of the other shade) and a low one
-    in young leaf. `i` turns the crown, so no two in a row are one tree."""
+    in young leaf, its bark grey-brown. `i` turns the crown, so no two in a
+    row are one tree."""
     main, other = ('blossom', 'petal') if c == 'pink' else ('petal', 'blossom')
-    trees_trunk((x, -0.5, z), 0.5 * k, 5.0 * k, 0.32 * k)
-    trees_bough((x, 3.6 * k, z), 0.3 * k, 3.2 * k, 0.14 * k, 0.6 + 2.1 * i, 0.8)
+    trees_trunk((x, -0.5, z), 0.5 * k, 5.0 * k, 0.32 * k, 'bark')
+    trees_bough((x, 3.6 * k, z), 0.3 * k, 3.2 * k, 0.14 * k, 0.6 + 2.1 * i, 0.8, 'bark')
     t = 1.3 * i
     ct, st = math.cos(t), math.sin(t)
     for (dx, y, dz), r, kind in CHERRY_CROWN:
         trees_lobe(r * k, (x + (dx * ct + dz * st) * k, y * k, z + (dz * ct - dx * st) * k),
                    (main, other, 'leaf')[kind], yaw=t)['ramp'] = 0.75
 
-# Tangle's wood is dark: its alders and willows wear the same rows far down
-# the green swatch's ramp, whatever height they stand at.
+# Tangle's wood is dark: its alders wear rows far down the green swatch's
+# ramp, whatever height they stand at (the willows by the water are light).
 TANGLE_ROWS = (17, 21, 25)
 
 def lawn_alder(x, z, k=1.0, turn=0.0):
-    """Tangle's alder: tall and narrow, three lobes stood one over another,
-    the valley's dark green, so a stand of them is a dark wood."""
-    trees_trunk((x, -0.5, z), 0.5 * k, 8.0 * k, 0.32 * k)
+    """Tangle's alder: tall and narrow, a dark trunk under three lobes stood
+    one over another (the box's: two), the valley's dark green, so a stand
+    of them is a dark wood."""
+    trees_trunk((x, -0.5, z), 0.5 * k, 8.0 * k, 0.32 * k, 0x5a3a2a)
     c, s = math.cos(turn), math.sin(turn)
     for (dx, y, dz), r, sy, row in (((0.0, 7.4, 0.0), 3.3, 1.35, TANGLE_ROWS[1]), ((0.6, 11.8, -0.4), 2.5, 1.45, TANGLE_ROWS[0]),
-                                    ((-1.6, 5.8, 1.0), 2.5, 1.15, TANGLE_ROWS[2])):
+                                    ((-1.6, 5.8, 1.0), 2.5, 1.15, TANGLE_ROWS[2]))[:2 if trees_lite() else 3]:
         rowed(trees_lobe(r * k, (x + (dx * c + dz * s) * k, y * k, z + (dz * c - dx * s) * k), 0x5f9f4a,
                          scale=(1.0, sy, 1.0), yaw=turn), row)
 
 def lawn_poplar(x, z, k=1.0):
     """Ribbon's poplar: the tall shape among its orchards, a slim column of
-    round lobes stepped up a bare trunk, the apple trees' make."""
+    lobes stepped up a bare trunk, the apple trees' make."""
     trees_trunk((x, -0.3, z), 0.4 * k, 5.0 * k, 0.26 * k)
-    sphere(2.0 * k, (x, 6.6 * k, z), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 1.9, 1.0))
-    sphere(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 2.0, 1.0))
-    sphere(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 1.5, 1.0))
+    trees_lobe(2.0 * k, (x, 6.6 * k, z), 0x6cae55, scale=(1.0, 1.9, 1.0))
+    trees_lobe(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, scale=(1.0, 2.0, 1.0))
+    if not trees_lite():
+        trees_lobe(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, scale=(1.0, 1.5, 1.0))
 
 # The windmill's field, in the north loop's east side: the wheat standing
 # golden, a crop that comes up over the kerb's height, its rows packed close
@@ -14236,45 +14247,41 @@ def field_wheat_lite():
 # not one piece round the loop: a piece's box holds the verge band down under
 # it (bandHold), so one over the whole loop stood the road on a step. It
 # DRAPES: the trees stand on the land as drawn. The lite builds (the Android
-# TV's) keep each tree to one coarser lobe and no apples.
-def apple_tree(x, z, seed, lite, apples=6, top=True, lite_fruit=False):
+# TV's) keep each tree to one lobe and no apples.
+def apple_tree(x, z, seed, lite, apples=6, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
     trunk = trees_trunk((x, -0.3, z), 0.38 * k, 2.4 * k, 0.28 * k)
     tilted(trunk, math.atan(lz), math.atan(lx))
     cx, cz, cy = x + lx * 3.4 * k, z + lz * 3.4 * k, 3.7 * k
     a = hash01(x, z, seed, 3) * 6.28
-    # smooth-shaded, so even the small lobes' few faces read round
-    crown = sphere(1.9 * k, (cx, cy, cz), 0x6cae55, subdiv=1 if lite else 2, flat=False, scale=(1.0, 0.84, 1.0))
+    # faceted, as every lawn tree is, and four lobes as the oak has (shaded
+    # round, the orchard was another make of tree; a fifth on top, faceted,
+    # made it a heap of crystals)
+    trees_lobe(1.9 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.84, 1.0))
     if lite:
-        # One coarse lobe, shaded ROUND (an icosphere this coarse turns its
-        # faces more than the smooth-by-angle limit, so it came out faceted:
-        # an oak beside the orchard's round trees), and for the scatter's
-        # tree a few apples on it, a corner apiece.
+        # One lobe, and for the scatter's tree a few apples on it, a corner apiece.
         fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
-        dots = [box((0.6 * k, 0.6 * k, 0.6 * k), (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
-                                                   cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j)
-                for j in range(apples if lite_fruit else 0)]
-        for o in [crown] + dots:
-            trees_round(o)
+        for j in range(apples if lite_fruit else 0):
+            trees_round(box((0.6 * k, 0.6 * k, 0.6 * k), (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
+                                                           cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j))
         return
     # the crown in lobes round the middle one, each on a bough of its own
     # showing under it, so the tree is branched, not a ball on a stick
     for j, (da, r, dy, c) in enumerate(((0.0, 1.5, -0.55, 0x5f9f4a), (2.2, 1.35, 0.35, 0x6cae55), (4.1, 1.25, -0.25, 0x5f9f4a))):
         b = a + da
         px, pz = cx + 1.55 * k * math.cos(b), cz + 1.55 * k * math.sin(b)
-        sphere(r * k, (px, cy + dy * k, pz), c, subdiv=2, flat=False, scale=(1.0, 0.86, 1.0))
+        trees_lobe(r * k, (px, cy + dy * k, pz), c, scale=(1.0, 0.86, 1.0))
         if j < 2:
             with plain_parts():
-                strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, 'bark')
-    if top:
-        sphere(1.1 * k, (cx - 0.2 * k, cy + 1.3 * k, cz + 0.2 * k), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 0.8, 1.0))
-    # apples a racer can count, out on the crown's skin
+                strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, TREES_BARK)
+    # apples a racer can count, out on the crown's skin (its flat faces lie
+    # inside the lobes' round: an apple further out hung clear of them)
     fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
     with plain_parts():
         for j in range(apples):
             c = a + 0.6 + j * 6.28 / apples
-            rr = (2.0, 2.5, 2.15)[j % 3] * k
+            rr = (1.95, 2.2, 2.1)[j % 3] * k
             box((0.56 * k, 0.56 * k, 0.56 * k), (cx + rr * math.cos(c), cy + (-0.75, 0.35, -0.1)[j % 3] * k, cz + rr * math.sin(c)),
                 fruit, yaw=c)
 
@@ -14709,7 +14716,16 @@ def fete(lite):
     box((1.8, 0.5, 4.2), (BX + 4.2, 0.25, BZ), BLUE)['round'] = 0.25                          # the step in
     # ---- the tea tent, along the green behind
     MX, MZ, MW, ML, MH = -3.0, -6.0, 6.0, 12.0, 2.8
-    gable_roof(local(MX, MZ, 0.0), 0.0, 0.0, MW, ML, MH, RED, WHITE, pitch_deg=35.0, t=0.2, over=0.4, cap=False)
+    # a marquee: white canvas over white walls, a red valance down the lower
+    # third of each slope, over the canvas's edges (a red roof on gabled
+    # walls read as a shed)
+    gable_roof(local(MX, MZ, 0.0), 0.0, 0.0, MW, ML, MH, WHITE, WHITE, pitch_deg=35.0, t=0.2, over=0.4, cap=False)
+    ma = math.radians(35.0)
+    msl = MW / 2 / math.cos(ma) + 0.4                               # the slab's length down the slope
+    for s in (-1, 1):
+        d = msl - 0.63                                              # along the slope from the ridge, to the band's middle
+        box((1.3, 0.26, ML + 0.7), (MX + s * (d * math.cos(ma) + 0.1 * math.sin(ma)),
+                                     MH + MW / 2 * math.tan(ma) - d * math.sin(ma) + 0.1 * math.cos(ma), MZ), RED, roll=s * ma)
     for k in range(3):
         box((0.14, 2.2, 1.6), (MX + MW / 2 + 0.05, 1.1, MZ - 4.0 + 4.0 * k), 0x2a2735)  # the open doorways
     for sz in (-1, 1):
@@ -14891,7 +14907,7 @@ def treehouse():
     H = lambda x, z: 0.0
     s0 = H(0.0, 0.0)
     G = lambda x, z: H(x, z) - s0
-    BARK, WOOD = 'bark', 0xb08a5a
+    BARK, WOOD = TREES_BARK, 0xb08a5a
     cyl(1.4, 15.0, (0, -2.0, 0), BARK, r2=0.9, segs=8, caps=False)
     for a, r, h in ((1.6, 0.6, 5.0), (3.4, 0.55, 4.6), (5.0, 0.5, 4.4)):  # boughs away from the hut
         trees_bough((0, 9.0, 0), r, h, 0.25, a, 0.9)
@@ -14961,7 +14977,7 @@ def swing_oak():
     # bough. The same tree
     # as the treehouse's, a little smaller, so the summer reaches round the
     # lap without a second den.
-    BARK = 'bark'
+    BARK = TREES_BARK
     cyl(1.2, 12.0, (0, -0.5, 0), BARK, r2=0.8, segs=8, caps=False)
     for a, r, h in ((2.2, 0.5, 4.4), (4.4, 0.45, 4.0)):
         trees_bough((0, 7.5, 0), r, h, 0.22, a, 0.9)
@@ -14986,7 +15002,7 @@ def avenue_oaks():
     # clear of the deck's margin. Laid either side of the road, right at yaw 0,
     # left at yaw 180. The scatter is kept off the avenue's verge by a `clear`
     # landform in the track's `land`, not by this footprint.
-    BARK, STEP, N = 'bark', 20.0, 5
+    BARK, STEP, N = TREES_BARK, 20.0, 5
     for i in range(N):
         z = STEP * (i - (N - 1) / 2)
         trees_trunk((-0.6, -0.5, z), 0.95, 10.0, 0.65)
@@ -15096,7 +15112,7 @@ def den_camp():
     # on the oak's bough going in the breeze. One shape a racer reads at
     # speed, the size of a garden shed; nobody in it (people that small read
     # as specks).
-    BARK, ROPE, WOOD = 0x7a5a3a, 0xd9b054, 0x9a7b55
+    BARK, ROPE, WOOD = TREES_BARK, 0xd9b054, 0x9a7b55
     TX, TZ = -2.0, -6.0                                  # the oak, at the den's back end
     lawn_oak(TX - 1.2, TZ - 0.8, 1.1)
     RZ0, RZ1, Y0, Y1, HW = TZ + 1.4, 5.0, 4.6, 4.0, 3.3  # the ridge: from the trunk to the post; its half span
@@ -15449,24 +15465,23 @@ for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
 
 def willow(at):
     """Tangle's weeping willow by the water, about as tall as a garden oak
-    (three cars), the alders' make and their dark green: a short trunk, a
-    low round lobe for a crown and the streamers of its hanging branches, a
+    (three cars): a short trunk, a broad low lobe of light green for a crown
+    and the chunky streamers of its hanging branches round its edge, a
     ragged fringe with the trunk showing between them, down to a car's
-    height off the ground (one solid curtain read as a green drum)."""
+    height off the ground (one solid curtain read as a green drum). The
+    box's has eight streamers, each broader."""
     x, y, z = at
     lite = trees_lite()
     trees_trunk((x, y, z), 0.8, 8.0, 0.5)
-    rowed(trees_lobe(4.6, (x, y + 9.6, z), 0x5f9f4a, scale=(1.0, 0.62, 1.0)), TANGLE_ROWS[0])
-    N = 8 if lite else 12
-    for k in range(N):                      # each a streamer narrowing to its tip, flared out
-        a = (k + 0.5) * 2 * math.pi / N
-        h = (5.8, 6.8, 5.1, 6.3)[k % 4]
-        o = cyl(0.0, h, (x + 3.6 * math.cos(a), y + 9.9 - h, z + 3.6 * math.sin(a)),
-                0x5f9f4a, r2=1.7 if lite else 1.15, segs=3, yaw=a + math.pi / 3, stem=True, caps=False)
-        tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
-        rowed(o, TANGLE_ROWS[1 + k % 2])
-        if lite:
-            trees_round(o)
+    trees_lobe(4.6, (x, y + 9.6, z), 0x6cae55, scale=(1.0, 0.62, 1.0))
+    with plain_parts():
+        N = 8 if lite else 12
+        for k in range(N):                      # each a streamer narrowing to its tip, flared out
+            a = (k + 0.5) * 2 * math.pi / N
+            h = (5.8, 6.8, 5.1, 6.3)[k % 4]
+            o = cyl(0.0, h, (x + 4.8 * math.cos(a), y + 9.9 - h, z + 4.8 * math.sin(a)),
+                    (0x61cb8b, 0x6cae55)[k % 2], r2=1.6 if lite else 1.15, segs=3, yaw=a + math.pi / 3)
+            tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
 
 def duck(at, color=0xf8f8fb):
     """A duck on the water facing +X (fig_bird). Brown, it is a mallard
@@ -15790,7 +15805,8 @@ def boathouse():
     F = local(0.0, 0.0, 0.0)
     D, L, H = 5.0, 7.0, 3.0
     box((D + 0.6, 2.4, L + 0.6), (0.0, -0.9, 0.0), 'grey')                    # the stone footing, deep into the bank (its landward corner hung over the lawn, the lawn lower than the lake's lip there)
-    ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45)
+    ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45, cap=False)
+    box((0.54, 0.5, L + 0.81), (0.0, ridge + 0.215, 0.0), RED)                # the ridge board, down over the slabs' meeting (bld_roofed's stands a notch over the gable's apex)
     for sx in (-1, 1):
         for sz in (-1, 1):
             box((0.3, H, 0.3), (sx * D / 2, 0.3 + H / 2, sz * L / 2), WHITE)  # the corner boards
@@ -16213,11 +16229,11 @@ def tree_willow():
 
 @piece(REAL)
 def tree_apple():
-    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, False, apples=3, top=False))
+    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, False, apples=3))
 
 @piece(REAL)
 def tree_apple_lite():
-    # The lite tier's: the orchard's lite tree, one round lobe, three apples on it.
+    # The lite tier's: the orchard's lite tree, one lobe, three apples on it.
     scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True, apples=3, lite_fruit=True))
 
 @piece(REAL)
@@ -16227,9 +16243,9 @@ def lawn_shrub():
             trees_lobe(r, (x, y, z), 0x5f9f4a, scale=(1.1, 0.8, 1.0))
     scatter_tree(build)
 
-# The box's builds of the scatter's trees and shrub (trees_lite: the same
-# builder under a `-lite` name; the apple has its own above).
-for _n in ('tree-oak', 'tree-cherry', 'tree-cherry-white', 'tree-alder', 'tree-willow', 'lawn-shrub'):
+# The box's builds of the scatter's trees that have one (trees_lite: the
+# same builder under a `-lite` name; the apple has its own above).
+for _n in ('tree-alder', 'tree-willow'):
     PIECES[_n + '-lite'], GROW[_n + '-lite'] = PIECES[_n], GROW[_n]
 
 # ---- PRETZEL: a copse on the down ----------------------------------------------------
@@ -16910,13 +16926,13 @@ def park_platform(side):
     for sz in (-1, 1):                                                         # a white valance at each end
         box((1.0, 0.16, 0.06), (PX, T + CH - 0.02, CZ + sz * (CL / 2 + 0.15)), 'white')
     box((0.06, 0.34, CL - 0.1), (PX + side * 0.4, T + 0.82, CZ), 'white')      # the name board between the back posts,
-    box((0.08, 0.12, CL - 0.1), (PX + side * 0.4, T + 0.82, CZ), BLUE)         # a blue band on it
+    box((0.08, 0.12, CL - 0.2), (PX + side * 0.4, T + 0.82, CZ), BLUE)         # a blue band on it, short of its ends
     box((0.3, 0.1, 1.1), (PX + side * 0.18, T + 0.3, CZ), WOOD)                # the seat
     for sz in (-1, 1):
         box((0.26, 0.3, 0.1), (PX + side * 0.18, T + 0.15, CZ + sz * 0.45), WOOD)
     bld_fence([(PX + side * 0.48, 0.75), (PX + side * 0.48, 2.25)], 'garden', h=0.5, step=0.3, rails=(0.42,), y0=T, sunk=0.0,
               span=True)                                                       # along the open end's back
-    bld_lamp((PX + side * 0.3, T, 1.9), 1.24, color='dark', glow='white')       # the lamp
+    bld_lamp((PX + side * 0.3, T, 1.9), 1.24, color='dark', glow='white', globes=True)   # the lamp
     SZ = 3.1                                                                   # the signal, past the platform's end
     box((0.14, 2.3 + D, 0.14), (PX, (2.3 - D) / 2, SZ), 'white')
     box((0.26, 0.12, 0.26), (PX, 2.34, SZ), 'dark')
@@ -17099,7 +17115,7 @@ def playground_blob(x, z, r, seed, color, row, y, n=10, stretch=1.0):
 
 def playground_lamp(x, z, yaw=0.0):
     """The park's lamp (bld_lamp), dark with a white lantern."""
-    bld_lamp((x, -0.2, z), 3.8, color='dark', glow='white')
+    bld_lamp((x, -0.2, z), 3.8, color='dark', glow='white', globes=True, yaw=yaw)
 
 def playground_bin(x, z):
     box((0.7, 1.0, 0.7), (x, 0.5, z), PLAY_GREEN)
@@ -17533,7 +17549,7 @@ def playground_court_build(lite):
         box((0.34, 0.5, ZG - Z0 - 4.6), (X0, 0.1, (Z0 + ZG - 4.6) / 2), PLAY_TIMBER)
     mz = (Z0 + Z1) / 2
     playground_hoop(X0 + 0.2, mz, 1)
-    playground_hoop(X1 - 0.2, mz, -1)
+    playground_hoop(X1 - 0.5, mz, -1)                       # (clear of the fence's post: their faces lay in one plane)
     # the shelter in the court's corner by the path: four white posts, a
     # boarded back and sides, a pointed blue roof oversailing them, a bench
     # inside facing the court
@@ -22754,13 +22770,14 @@ def tank_farm():
         for k in range(1, int(h / 0.3) + 1):
             box((0.04, 0.04, 0.26), (x + r + 0.1, 0.3 * k, z), 'slate')
     for (x, z, r, h), col in ((B, 'white'), (M, 'white'), (S, 0xc0392b)):
-        cyl(r, h, (x, 0, z), col, segs=12)
-        cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=12)   # its roof
-        cyl(r + 0.06, 0.1, (x, h - 0.04, z), 'slate', segs=12)                  # the roof's rim
-        cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red' if col == 'white' else 'white', segs=12)   # the band
+        # (sixteen sides, the most a drum has (ring_sides), shaded round: the road sees them close)
+        cyl(r, h, (x, 0, z), col, segs=16, smooth=True)
+        cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=16, smooth=True)   # its roof
+        cyl(r + 0.06, 0.1, (x, h - 0.04, z), 'slate', segs=16, smooth=True)     # the roof's rim
+        cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red' if col == 'white' else 'white', segs=16, smooth=True)   # the band
         if col == 'white':
             for y in (h / 3, 2 * h / 3):
-                cyl(r + 0.02, 0.05, (x, y, z), 'grey', segs=12)                 # its courses' seams
+                cyl(r + 0.02, 0.05, (x, y, z), 'grey', segs=16, smooth=True)    # its courses' seams
     x, z, r, h = B
     emblem((x + (r - 0.16) * math.cos(YAW), 2.0, z - (r - 0.16) * math.sin(YAW)), YAW, 0.75, d=0.24)
     n = int((h - 0.3) / 0.27) + 1
