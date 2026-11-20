@@ -23,7 +23,9 @@ jobs:
   deploy:
     runs-on: [self-hosted, k8s]
     needs: build
-    if: github.actor != 'dependabot[bot]'
+    # Bot branches build (their PR's check) but never deploy. Renovate's runs
+    # get the repo secrets, unlike Dependabot's.
+    if: github.actor != 'dependabot[bot]' && !startsWith(github.ref_name, 'renovate/')
     environment: preview
     steps:
       - name: Checkout
