@@ -571,28 +571,28 @@ def bld_plate(at, face, out, up, along, color):
     return bld_open(verts, [(4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)], color,
                     q(-out, up / 2, 0))
 
-def bld_door(at, face, color=0x339cf2, trim='white', w=None, h=None):
+def bld_door(at, face, color=0x339cf2, trim='white', w=None, h=None, lite_trim=False):
     """THE door on a wall whose outward normal is `face`; `at` the middle of
     its threshold on the wall, `w` by `h` its leaf. The leaf in `color`
     stands proud of a frame in `trim` (no frame at `trim` None, or in the
-    lite build)."""
+    lite build unless `lite_trim`: a dark door in a timber wall is lost without it)."""
     u = bld_u()
     w, h = w or BLD_DOOR_W * u, h or BLD_DOOR_H * u
     k = h / BLD_DOOR_H
     x, y, z = at
-    if trim is not None and not LITE:                    # (its foot a hair under the leaf's: no two colours in one plane)
+    if trim is not None and (lite_trim or not LITE):     # (its foot a hair under the leaf's: no two colours in one plane)
         bld_plate((x, y - 0.012 * k, z), face, 0.03 * k, h + 0.057 * k, w + 0.09 * k, trim)
     return bld_plate(at, face, 0.055 * k, h, w, color)
 
-def bld_window(at, face, w=None, h=None, glass='slate', trim='white'):
+def bld_window(at, face, w=None, h=None, glass='slate', trim='white', lite_trim=False):
     """THE window: `at` its middle on the wall, `w` by `h` its glass. The
     glass stands proud of a frame in `trim` that is deeper under it, its
-    sill (no frame at `trim` None, or in the lite build)."""
+    sill (no frame at `trim` None, or in the lite build unless `lite_trim`)."""
     u = bld_u()
     w, h = w or BLD_WINDOW * u, h or BLD_WINDOW * u
     k = min(w, h) / BLD_WINDOW
     x, y, z = at
-    if trim is not None and not LITE:
+    if trim is not None and (lite_trim or not LITE):
         bld_plate((x, y - h / 2 - 0.06 * k, z), face, 0.03 * k, h + 0.095 * k, w + 0.08 * k, trim)
     return bld_plate((x, y - h / 2, z), face, 0.055 * k, h, w, glass)
 
@@ -694,11 +694,22 @@ def bld_gate(a, b, kind='field', h=None, color=0xf8f8fb, post=0x8a6a46, y0=0.0):
             beam((a[0], y0 + f * h, a[1]), (b[0], y0 + f * h, b[1]), 0.045 * k, color, d=0.065 * k)
         beam((a[0], y0 + 0.25 * h, a[1]), (b[0], y0 + 0.9 * h, b[1]), 0.045 * k, color, d=0.06 * k)
 
-def bld_lamp(at, h=None, color='slate', glow=0xfde4c7):
-    """THE street lamp, `h` tall: a square post on a foot, a lantern and its cap."""
+def bld_lamp(at, h=None, color='slate', glow=0xfde4c7, arm=0.0, row=0):
+    """THE street lamp, `h` tall: a square post on a foot, a lantern and its
+    cap. `arm`: a gooseneck instead, the post's head bent that far toward
+    -X and the lantern hung under its end (a lantern on a post's top with a
+    dark cap over it read as a signpost in the snow). `row` the lantern's
+    shade of `glow`'s ramp (0 its palest)."""
     h = h or BLD_LAMP * bld_u()
     k = h / BLD_LAMP
     x, y, z = at
+    if arm:
+        with plain_parts():
+            box((0.13 * k, 0.14 * k, 0.13 * k), (x, y + 0.07 * k, z), color)
+            box((0.07 * k, h - 0.1 * k, 0.07 * k), (x, y + (h - 0.1 * k) / 2 + 0.1 * k, z), color)
+            box((arm + 0.07 * k, 0.06 * k, 0.06 * k), (x - arm / 2, y + h - 0.03 * k, z), color)
+        rowed(box((0.19 * k, 0.19 * k, 0.19 * k), (x - arm, y + h - 0.06 * k - 0.095 * k, z), glow), row)
+        return
     with plain_parts():
         box((0.13 * k, 0.14 * k, 0.13 * k), (x, y + 0.07 * k, z), color)
         box((0.07 * k, h - 0.3 * k, 0.07 * k), (x, y + (h - 0.3 * k) / 2 + 0.1 * k, z), color)
@@ -936,7 +947,8 @@ def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=No
             arms()
     else:
         arms()
-    b((0.1, 0.1, 0.1), *body(0.0, 0.21), 0.0, FIG_SKIN, tip=lean)
+    # (the box's head stands ON the shoulders: sunk in them, square, its face lay a hair off the chest's in one strip)
+    b((0.1, 0.1, 0.1), *body(0.0, 0.2155 if fig_lite() else 0.21), 0.0, FIG_SKIN, tip=lean)
     if hat is not None:
         b((0.118, 0.055, 0.118), *body(0.0, 0.2675), 0.0, hat, tip=lean)
     else:
@@ -1005,8 +1017,9 @@ def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='
     elif hat == 'bucket':
         cyl(hr * 0.8, hr * 0.95, p(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True)
     elif hat == 'bobble':
-        cyl(hr * 0.9, hr * 0.8, p(0.0, hy + 0.35 * hr, hz), hat_c, r2=hr * 0.45, segs=8, stem=True)   # (pulled down over the ears)
-        b((0.34 * hr, 0.34 * hr, 0.34 * hr), (0.0, hy + 1.28 * hr, hz), 0xfff6eb)
+        # the bobble alone, white on the white head, half the head's size: under
+        # a cap in `hat_c` it read as a cap, not as this snowman
+        snowy(sphere(0.48 * hr, p(0.0, hy + 1.3 * hr, hz), 0xfff6eb, subdiv=1 if fig_lite() else 2, flat=False), 0.15)
     elif hat == 'cone':
         cyl(hr * 0.7, hr * 1.5, p(0.0, top - 0.06 * k, hz), hat_c, r2=0.03 * k, segs=6, stem=True)
 
@@ -1253,16 +1266,25 @@ FIG_BIRD = {
         tail=((-0.16, 0.0, 0.035, 0.012), (-0.32, 0.0, 0.085, 0.012)), tail_c='tail',
         spread=((0.02, 0.02, 0.05, 0.11, 0.016), (0.03, 0.045, 0.3, 0.1, 0.014), (0.0, 0.06, 0.48, 0.075, 0.012)),
         spread_tip=((0.0, 0.06, 0.48, 0.075, 0.012), (-0.03, 0.08, 0.63, 0.035, 0.008))),
+    # a toy's penguin: square in section (`sides`), a chunky body barely
+    # narrower at the shoulders, the white front a broad flat plate wrapped
+    # round its sides, both feet one orange slab under it (`feet`: size, where)
     'penguin': dict(
         colors=dict(body=0x2a2735, wing=0x2a2735, bill=0xff7e44, leg=0xff7e44, belly=0xfff6eb, ear=0xffc044),
-        body=((0.0, 0.0, 0.2, 0.18), (0.0, 0.32, 0.27, 0.25), (0.0, 0.74, 0.16, 0.16)),
-        whole=((0.0, 0.0, 0.2, 0.18), (0.0, 0.32, 0.27, 0.25), (0.01, 0.84, 0.18, 0.17), (0.01, 1.0, 0.1, 0.1)),
-        belly=((0.1, 0.08, 0.2, 0.2), (0.11, 0.32, 0.3, 0.27), (0.09, 0.62, 0.2, 0.2)),
-        head=((0.0, 0.7, 0.15, 0.15), (0.02, 0.86, 0.185, 0.18), (0.01, 1.0, 0.09, 0.09)), nape=(0.0, 0.74),
-        bill=((0.16, 0.86, 0.05, 0.045), (0.37, 0.83, 0.016, 0.016)),
-        folded=((0.0, 0.64, 0.23, 0.09, 0.03), (-0.03, 0.3, 0.31, 0.07, 0.025)), folded_side='x',
+        sides=4,
+        body=((0.0, 0.06, 0.215, 0.235), (0.0, 0.48, 0.23, 0.25), (0.0, 0.78, 0.175, 0.2)),
+        belly=((0.13, 0.12, 0.235, 0.135), (0.135, 0.36, 0.25, 0.14), (0.12, 0.68, 0.205, 0.12)),
+        # the box's: a straight column under the shoulders, the white plate
+        # straight up its front and proud of it all the way (a waist that the
+        # plate's two rings cut across showed black bars through the white)
+        whole=((0.0, 0.06, 0.22, 0.24), (0.0, 0.62, 0.22, 0.24), (0.005, 0.82, 0.175, 0.195), (0.01, 1.0, 0.13, 0.14)),
+        whole_belly=((0.13, 0.12, 0.235, 0.135), (0.13, 0.64, 0.235, 0.135)),
+        head=((0.01, 0.72, 0.165, 0.18), (0.015, 0.9, 0.17, 0.185), (0.01, 1.0, 0.125, 0.14)), nape=(0.0, 0.74),
+        bill=((0.17, 0.85, 0.06, 0.05), (0.37, 0.83, 0.025, 0.02)),
+        feet=((0.4, 0.1, 0.38), (0.07, 0.05)),
+        folded=((0.0, 0.64, 0.25, 0.1, 0.035), (-0.03, 0.28, 0.33, 0.08, 0.03)), folded_side='x',
         out=((0.0, 0.62, 0.22, 0.09, 0.03), (-0.04, 0.5, 0.5, 0.06, 0.025)),
-        blocks=(((0.14, 0.13, 0.345), (0.03, 0.85), 'ear', True),)),
+        blocks=(((0.14, 0.13, 0.37), (0.03, 0.86), 'ear', True),)),
     # a bath toy: the duck in a toy's few blocks
     'bathduck': dict(
         colors=dict(body=0xffc044, bill=0xff7e44),
@@ -1291,10 +1313,15 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
                   white=0xfff6eb if kind == 'penguin' else None)
     whole = fig_lite() and 'whole' in A                        # the box's penguin: body and head one limb
     def build():
-        F.limb(A['whole'] if whole else A['body'], C['body'], keep=True, n=4 if kind == 'bathduck' else 6,
+        sides = A.get('sides', 4 if kind == 'bathduck' else 6)
+        sq = math.sqrt(2) if 'sides' in A else 1.0             # (its rings are a square's half sides, not its corners)
+        F.limb(A['whole'] if whole else A['body'], C['body'], keep=True, n=sides, f=sq,
                bury=2 if kind == 'penguin' and not whole else 0)
+        if 'feet' in A and pose in ('stand', 'slide'):
+            F.block(A['feet'][0], A['feet'][1], C['leg'])
         if 'belly' in A:
-            F.limb(A['belly'], C['belly'], n=4, keep=not fig_lite())
+            F.limb(A['whole_belly'] if whole and 'whole_belly' in A else A['belly'], C['belly'], n=4,
+                   keep=not fig_lite(), f=sq)
         if 'tail' in A and (pose != 'fly' or kind == 'hawk'):   # (a gull's body is drawn out to its tail)
             F.limb(A['tail'], C[A['tail_c']], n=4)
         if pose == 'fly':
@@ -1315,7 +1342,7 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
             if C.get('collar'):
                 F.limb(A['collar'], C['collar'], fine=True, bury=3)
         if not whole:
-            F.limb(A['head'], C['head'], keep=True, n=4 if kind == 'bathduck' else 6, bury=0 if 'neck' in A else 1)
+            F.limb(A['head'], C['head'], keep=True, n=sides, f=sq, bury=0 if 'neck' in A else 1)
         F.limb(A['bill'], C['bill'], n=4, bury=1)
         for size, pos, key, fine in A.get('blocks', ()):
             F.block(size, pos, C[key], fine=fine)
@@ -8390,9 +8417,9 @@ def snow_person(x, y, z, coat, hat, yaw=0.0):
 def skier(x, y, z, coat, hat):
     """A skier running toward +X, tucked over the skis (fig_person). Joined
     into one moving part by its caller."""
-    u = fig_u()
+    u = 1.3 * fig_u()                                # (tucked, as tall as the lift's queue stands)
     box((0.5 * u, 0.04 * u, 0.13 * u), (x + 0.03 * u, y + 0.02 * u, z), 0x2a2735)   # the pair of skis
-    fig_person((x, y + 0.035 * u, z), 0.0, 'crouch', shirt=coat, hat=hat, legs=0x38383d, arm=0.7)
+    fig_person((x, y + 0.035 * u, z), 0.0, 'crouch', shirt=coat, hat=hat, legs=0x38383d, arm=0.7, k=1.3)
 
 def sled(x, y, z, yaw, color=0xcf534f, L=0.6):
     """A sled `L` long along +X turned by `yaw`, its deck on two runners
@@ -8435,9 +8462,9 @@ def cabin_hut(w, h, d, at, wall, roof, yaw=0.0, sunk=0.3, chimney=False):
                 snowy(o, 0.5)
     up = (tb + ts) * math.cos(a)                 # the snow closed over the ridge
     snowy(box((2 * (tb + ts) * math.sin(a) + 0.02, up, w + 2 * ov - 0.08), G(0, y + h + rise + up / 2 + 0.01, 0), roof, yaw=gy), 0.5)
-    bld_door(spot(w / 2, 0, 0), yaw, 'slate', w=d * 0.34, h=h * 0.68)
+    bld_door(spot(w / 2, 0, 0), yaw, 'slate', w=d * 0.34, h=h * 0.68, lite_trim=True)
     for k in (-1, 1):
-        bld_window(spot(0, h * 0.58, k * d / 2), yaw - k * math.pi / 2, w=w * 0.4, h=h * 0.3)
+        bld_window(spot(0, h * 0.58, k * d / 2), yaw - k * math.pi / 2, w=w * 0.4, h=h * 0.3, lite_trim=True)
     if not chimney:
         return None
     cw = max(0.2, 0.1 * d)
@@ -8726,7 +8753,7 @@ def powder_resort(lite=False):
         if lite:
             return
         for (x, z) in ((19.2, -30.2), (23.8, -33.9), (30.0, -33.6), (33.9, -36.2), (28.6, -40.4)):
-            bld_lamp((x, 0.0, z), 1.6, color=0x38383d, glow=0xffc044)
+            bld_lamp((x, 0.0, z), 1.6, color=0x38383d, glow=0xffc044, arm=0.36, row=14)
     draped('lanes', lanes)
     if top:
         marker('anim_smoke#lodge', top)
@@ -9127,7 +9154,7 @@ def powder_chairlift(lite=False):
         # lamps along the fence
         for z in (-15.0, -9.0, -3.5, 3.5, 9.0, 15.0):
             lx = lane_x(z) + 1.25
-            bld_lamp((lx, 0.0, z), 1.5, color=0x38383d, glow=0xffc044)
+            bld_lamp((lx, 0.0, z), 1.5, color=0x38383d, glow=0xffc044, arm=0.34, row=14)
         # what stands in the gardens
         woodpile(-13.6, -10.5, 0.26)
         woodpile(-13.8, 6.8, 0.26)
@@ -9313,7 +9340,7 @@ def skater(x, y, z, coat, hat):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
     arms straight out for balance (fig_person), the pivot at the skate.
     Joined into one moving part by its caller."""
-    fig_person((x, y, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, kick=-0.9, lean=0.25, out=True)
+    fig_person((x, y, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, kick=-0.9, lean=0.25, out=True, k=1.28)   # (0.64: at a person's 0.5 the rink read empty from the road)
 
 def clip(pts, keep):
     """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
@@ -9393,7 +9420,7 @@ def frozen_lake():
     # (set-lake-hamlet). (Two flat
     # sheets of jagged ice either side of the road read as nothing from the
     # seat: no bank, no depth, no line on them.)
-    N = 48
+    N = 32 if LITE else 48                             # (the box's lake: two thirds of the shore's spokes, three skaters)
     def ring(inset, y):
         return [(x, y, z) for x, z in (lake_rim(i / N * 2 * math.pi, inset) for i in range(N + 1))]
     # the ice, out from the middle: the clear deep blue, then paler to the shore
@@ -9447,11 +9474,12 @@ def frozen_lake():
     for j in range(M):
         a = j / M * 2 * math.pi
         marker('path_rink_%d' % j, (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz))
-    for n, (coat, hat) in enumerate(((0xcf534f, 0x3f7bd9), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f),
-                                     (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9))):
-        a = n / 5 * 2 * math.pi
+    skaters = ((0xcf534f, 0x3f7bd9), (0x3f7bd9, 0xffc044), (0x61cb8b, 0xcf534f), (0xa878e8, 0xfff6eb), (0xff7e44, 0x3f7bd9))
+    skaters = skaters[:3] if LITE else skaters
+    for n, (coat, hat) in enumerate(skaters):
+        a = n / len(skaters) * 2 * math.pi
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
-        with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / 5, n), at):
+        with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / len(skaters), n), at):
             skater(at[0], at[1], at[2], coat, hat)
     # on the ice by the rink, a snowman in a hat
     snowman((-9.0, 0.07, 4.5), hat=True)
@@ -9776,8 +9804,8 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
         name = 'anim_smoke' if smoke is True else 'anim_smoke:s=%g' % smoke
         # each cabin's marker its own name: Blender would suffix a repeat
         marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.7 * k, cz - 0.75 * k))
-    bld_door((cx + W / 2 + 0.02 * k, 0.145 * k, cz - 0.55 * k), 0.0, 0x38383d, trim=0xfff6eb, w=0.85 * k, h=1.35 * k)
-    bld_window((cx + W / 2 + 0.02 * k, 1.3 * k, cz + 0.95 * k), 0.0, w=0.6 * k, h=0.6 * k, glass=0xffc044, trim=0xfff6eb)
+    bld_door((cx + W / 2 + 0.02 * k, 0.145 * k, cz - 0.55 * k), 0.0, 0x38383d, trim=0xfff6eb, w=0.85 * k, h=1.35 * k, lite_trim=True)
+    bld_window((cx + W / 2 + 0.02 * k, 1.3 * k, cz + 0.95 * k), 0.0, w=0.6 * k, h=0.6 * k, glass=0xffc044, trim=0xfff6eb, lite_trim=True)
 
 @piece(1.0)
 def log_cabin():
@@ -9868,7 +9896,7 @@ def flurry_ice_hut(color, pipe=False, window=0xffc044):
         if trim:
             snowy(o, 0.5)
     bld_door((0.475, 0.19, -0.12), 0.0, 0x38383d, trim=None, w=0.36, h=0.62)
-    bld_window((-0.05, 0.62, 0.425), -math.pi / 2, w=0.2, h=0.2, glass=window, trim=0xfff6eb)
+    bld_window((-0.05, 0.62, 0.425), -math.pi / 2, w=0.2, h=0.2, glass=window, trim=0xfff6eb, lite_trim=True)
     if pipe:
         box((0.12, 0.42, 0.12), (-0.25, 1.25, -0.2), 0x555b66)
 
@@ -10580,10 +10608,11 @@ def kid_skier(x, y, z, coat, hat):
     """A child on skis toward +X, ski tips together in a snowplough
     (fig_person at a child's size, leaning in, hands forward). Joined into
     one moving part by its caller."""
-    u = fig_u() * FIG_KID
+    K = 0.9                                          # big children (0.45): smaller, the line of them was specks from the road; under their instructor still
+    u = fig_u() * K
     for sd in (-1, 1):
         box((0.42 * u, 0.04 * u, 0.07 * u), (x + 0.02 * u, y + 0.02 * u, z + sd * 0.07 * u), 0x2a2735, yaw=sd * 0.28)   # the plough
-    fig_person((x, y + 0.035 * u, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, k=FIG_KID, lean=0.2, arm=0.6)
+    fig_person((x, y + 0.035 * u, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, k=K, lean=0.2, arm=0.6)
 
 @piece(1.0)
 def ski_school():
@@ -10657,7 +10686,7 @@ def ski_school():
         # poles along the outside of the slalom, and a mogul or two to hop
         for i in range(14):
             x = -19.3 + 1.45 * i
-            box((0.06, 0.5, 0.06), (x, 0.25, 4.6), 0x555b66)
+            box((0.06, 0.5, 0.09), (x, 0.25, 4.6), 0x555b66)       # (broader than the rope through it: no face of the two in one plane)
             if i < 13:
                 box((0.04, 0.16, 0.16), (x + 0.5, 0.42, 4.6), (0xff5040, 0xffc044, 0x3f7bd9, 0x61cb8b)[i % 4])
                 box((1.45, 0.04, 0.04), (x + 0.72, 0.48, 4.6), 0xfff6eb)
@@ -10677,7 +10706,7 @@ def ski_school():
     for n, (fz, c) in enumerate(((-0.9, 0xff5040), (4.2, 0x3f7bd9))):
         with animated('anim_drape+flutter:a=y:p=%.1f#flag%d' % (2.3 + 0.4 * n, n), (3.0, 0.95, fz)):
             box((0.04, 1.0, 0.36), (3.0, 0.95, fz + 0.2), c)
-            box((0.05, 0.12, 0.2), (3.0, 0.75, fz + 0.2), 0xfff6eb)
+            box((0.08, 0.12, 0.2), (3.0, 0.75, fz + 0.2), 0xfff6eb)          # (proud of the cloth both sides: flush, the two flickered)
     # the children's loop: up the carpet inside its gallery, off at the head,
     # down through the gates, under the arch, round the face of the slope
     # (each point a little further from the summit than the last, so a
@@ -10887,8 +10916,10 @@ def penguin_group():
 
 @piece(1.0)
 def penguin_group_lite():
-    # the box's rookery: the knots rock as one part each
-    penguin_group_build(False)
+    # the box's rookery: the knots rock as one part each, and every penguin
+    # of it is the plainer one (a walker in flippers past a crowd without read as two kinds)
+    with fig_plain():
+        penguin_group_build(False)
 
 def penguin_chute_build(apart):
     # Glacier: the colony's toboggan hill. The hill is the track's terrain
@@ -11042,7 +11073,7 @@ def penguin_chute_build(apart):
     for n in range(3):
         at = climb[2 + n]
         with animated('anim_path:c=drapeclimb:p=90:o=%.3f:f=1+waddle:d=12:p=0.46#%d' % (n / 3, n), at), plain_parts():
-            stood_penguin(at[0], at[2], 0.66, 0.0)
+            penguin(at[0], 0.0, at[2], 0.66, 0.0)          # (the watchers' make: the box's build is all plain)
 
 @piece(1.0)
 def penguin_chute():
@@ -11050,8 +11081,9 @@ def penguin_chute():
 
 @piece(1.0)
 def penguin_chute_lite():
-    # the box's toboggan hill: the watchers' knots rock as one part each
-    penguin_chute_build(False)
+    # the box's toboggan hill: the watchers' knots rock as one part each, every penguin the plainer one
+    with fig_plain():
+        penguin_chute_build(False)
 
 def ridge_tent(x, z, color, k=0.27, yaw=0.0, L=3.2):
     """A ridge tent at (x, z), its door to +X turned by `yaw`; `k` sizes it
@@ -11103,7 +11135,7 @@ def expedition_camp():
         a = -1.25 + k * 0.42
         # round the back of the mess tent, a clear half unit behind its gable
         snowy(box((0.2, 0.34, 0.6), (-0.3 - 2.55 * math.cos(a * 0.62), 0.17, 2.55 * math.sin(a * 0.62)), 0xf3f7fb,
-                  yaw=a * 0.62), 0.4)
+                  yaw=a * 0.62), 0.4)['lite_chamfer'] = 1
     sled(1.4, 0, 0.9, 0.3, 0x9a7b55, L=0.7)
     box((0.22, 0.12, 0.3), (1.42, 0.2, 0.9), 0x3f7bd9, yaw=0.3)     # its load
     for (x, z, c) in ((1.25, -0.35, 0xcf534f), (1.35, -0.15, 0x61cb8b)):
@@ -11134,7 +11166,7 @@ def advanced_camp():
         ridge_tent(0.3, z, c, k=0.4)
     ridge_tent(-1.7, 0.0, 0x61cb8b, k=0.52, yaw=math.pi / 2)        # the store tent, behind
     for k in range(5):                                              # the wind wall behind them
-        snowy(box((0.26, 0.45, 0.8), (-3.1, 0.22, -2.0 + k * 1.0), 0xf3f7fb, yaw=0.1 * (k - 2)), 0.4)
+        snowy(box((0.26, 0.45, 0.8), (-3.1, 0.22, -2.0 + k * 1.0), 0xf3f7fb, yaw=0.1 * (k - 2)), 0.4)['lite_chamfer'] = 1
     for (x, z) in ((1.5, -0.2), (1.55, 0.05)):                      # ice axes stood in the snow
         box((0.04, 0.32, 0.04), (x, 0.16, z), 0x555b66)
         box((0.16, 0.04, 0.04), (x, 0.32, z), 0x2a2735)
@@ -11334,10 +11366,12 @@ def glacier_husky(x, y, z, coat, k=1.0, stride=1):
     F = fig_quad('dog', (x, y, z), 0.0, coat, k=k, step=(d, d, -d, -d))
     F.limb(((0.06, 0.335, 0.097, 0.108), (0.115, 0.335, 0.1, 0.114)), 0xff5040)
 
+DOG_TEAM = 1.25       # the team over a person's size: read from the road it was a dark smudge at the people's
+
 def glacier_musher(x, y, z, coat):
     """The musher stood on the sled's runners, facing +X, hands to the
-    handlebar (fig_person): a parka with its hood up."""
-    fig_person((x, y, z), 0.0, shirt=coat, hat=coat, legs=0x38383d, arm=1.2)
+    handlebar (fig_person, at the team's size): a parka with its hood up."""
+    fig_person((x, y, z), 0.0, shirt=coat, hat=coat, legs=0x38383d, arm=1.2, k=DOG_TEAM)
 
 def glacier_dog_sled(x, z):
     """A basket sled facing +X with its musher on the runners, at the
@@ -11345,9 +11379,11 @@ def glacier_dog_sled(x, z):
     load lashed under a tarp, the stanchions and the handlebar at the back,
     at the musher's hands."""
     DARK, WOOD = 0x38383d, 0x9a7b55
-    k = 0.6 * fig_u()
+    k = 0.6 * DOG_TEAM * fig_u()
+    LX = 1.4                                             # a long sled behind three pairs: its length over its height
     def b(size, dx, dy, dz, color, roll=0.0):
-        return box(tuple(e * k for e in size), (x + dx * k, dy * k, z + dz * k), color, roll=roll)
+        return box((size[0] * k * (LX if size[0] > 0.3 else 1.0), size[1] * k, size[2] * k),
+                   (x + dx * k * LX, dy * k, z + dz * k), color, roll=roll)
     for sz in (-0.2, 0.2):
         b((1.0, 0.06, 0.08), 0.0, 0.03, sz, DARK)                        # runners
         b((0.22, 0.06, 0.08), 0.56, 0.1, sz, DARK, roll=-0.7)            # their curl
@@ -11357,7 +11393,7 @@ def glacier_dog_sled(x, z):
     b((0.7, 0.06, 0.44), 0.1, 0.18, 0.0, WOOD)                           # the bed
     b((0.5, 0.2, 0.36), 0.12, 0.31, 0.0, 0x3f7bd9)                       # the load under its tarp
     b((0.08, 0.08, 0.5), -0.42, 0.52, 0.0, WOOD)                         # the handlebar
-    glacier_musher(x - 0.62 * k, 0.06 * k, z, 0xff5040)
+    glacier_musher(x - 0.62 * k * LX, 0.06 * k, z, 0xff5040)
 
 # The deck over the plain along the dog trail's drift, by z in its frame
 # (u 0.432, lat -8.5, yaw 180: z runs against the road's way), sampled from
@@ -11467,7 +11503,7 @@ def glacier_dog_trail():
     # kerb: the lead pair at the head, the sled 3.1 u behind it, the whole
     # loop in 20 s (a team's lope beside cars at speed)
     L = sum(math.hypot(loop[(i + 1) % m][0] - loop[i][0], loop[(i + 1) % m][1] - loop[i][1]) for i in range(m))
-    P, O, K, GAP, SLED = 20.0, 0.08, 0.62, 0.46, 1.6      # (the dogs to their musher's hip: a person is 0.5)
+    P, O, K, GAP, SLED = 20.0, 0.08, 1.25, 0.86, 3.1      # (a dog 0.7 at the ears, its musher 0.62)
     COATS = (0x868ba1, 0x38383d, 0x9a7b55)
     for j in range(3):
         o = O - j * GAP / L
@@ -11476,26 +11512,28 @@ def glacier_dog_trail():
         with animated('anim_path:c=trail:p=%.0f:o=%.4f:f=1+bob:h=0.05:p=0.34:b=1#pair%d' % (P, o % 1.0, j),
                       (x, y, z)):
             for sd, st in ((-1, 1), (1, -1)):
-                glacier_husky(x, y, z + sd * 0.11, COATS[(j + (sd > 0)) % 3], k=K, stride=st)
-            box((GAP, 0.06, 0.06), (x - GAP / 2, y + 0.2, z), 0x2a2735)   # the gangline back to the next pair
+                glacier_husky(x, y, z + sd * 0.2, COATS[(j + (sd > 0)) % 3], k=K, stride=st)
+            box((GAP, 0.06, 0.06), (x - GAP / 2, y + 0.38, z), 0x2a2735)   # the gangline back to the next pair
     o = O - SLED / L
     x, z = loop[2][0], loop[2][1] + SLED
     y = crest(z) + 0.03
     with animated('anim_path:c=trail:p=%.0f:o=%.4f:f=1+bob:h=0.025:p=0.5#sled' % (P, o % 1.0), (x, y, z)):
         before = set(bpy.context.scene.objects)
         glacier_dog_sled(x, z)
-        box((0.5, 0.06, 0.06), (x + 0.58, 0.1, z), 0x2a2735)             # the line up to the wheel pair
+        box((0.56, 0.06, 0.06), (x + 0.92, 0.16, z), 0x2a2735)            # the line up to the wheel pair
         for ob in set(bpy.context.scene.objects) - before:
             ob.location.z += y
+
+GLACIER_CLIMBER = 1.55    # the roped team over a person's size (0.78): at a person's it was lost on the ice from the seat
 
 def glacier_climber(x, z, coat, sack, probe=False):
     """A climber facing -X (away from the road, across the ice)
     (fig_person): a rucksack in a second colour on the back (toward the
     road), a helmet; an ice axe held out ahead, its shaft down to the snow
     when `probe`."""
-    u = fig_u()
+    u = GLACIER_CLIMBER * fig_u()
     fig_person((x, 0.0, z), math.pi, shirt=coat, hat=0xffc044 if coat != 0xffc044 else 0xfff6eb, legs=0x38383d,
-               arm=(0.0, 1.2))
+               arm=(0.0, 1.2), k=GLACIER_CLIMBER)
     box((0.09 * u, 0.17 * u, 0.13 * u), (x + 0.095 * u, 0.3 * u, z), sack)       # the rucksack
     hx, hy, hz = x - 0.12 * u, 0.31 * u, z + 0.096 * u                        # the reaching hand
     if probe:                                                            # the axe's shaft down to the snow
@@ -11589,8 +11627,8 @@ def glacier_crevasses():
         team = (0.2, -1.15, bx)
         for xa, xb in zip(team, team[1:]):
             for f0, f1 in ((0.0, 0.5), (0.5, 1.0)):
-                ya = 0.26 - 0.2 * math.sin(math.pi * f0)
-                yb = 0.26 - 0.2 * math.sin(math.pi * f1)
+                ya = (0.26 - 0.2 * math.sin(math.pi * f0)) * GLACIER_CLIMBER
+                yb = (0.26 - 0.2 * math.sin(math.pi * f1)) * GLACIER_CLIMBER
                 strut((xa + (xb - xa) * f0, ya, BRIDGE), (xa + (xb - xa) * f1, yb, BRIDGE), 0.06, 0xff7e44)
         for x, coat, sack in ((team[0], 0x3f7bd9, 0xffc044), (team[1], 0x61cb8b, 0xff5040)):
             glacier_climber(x, BRIDGE, coat, sack)
@@ -27308,15 +27346,21 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # snow lying above it, on a short fat trunk the colour of a toy's wood: a
 # fir two units tall is a few dozen pixels there, and the stepped outline
 # and the green-white-green banding are all of it that arrives. So it is
-# eight flat sides turned about the trunk, each skirt one straight slope
-# from its rim in under the next skirt, which overhangs it by a hand, and
-# every tier runs its own ramp, light at its top and dark at the rim. The
-# snow keeps to the top third of its ramp and the green of a skirt to its
-# middle: on a wooded slope seen from the road below, snow run down to its
-# blue and green run down to its dark made the stand a wall of stripes.
-# Three snowfalls: `a` with snow lying on each tier down to a line that
-# sags in the middle of each side; `b` with a fat roll of it along each rim
-# and a white tip; `c` snowed right over, the green left only under the rims.
+# flat sides turned about the trunk, each skirt one straight slope from its
+# rim in under the next skirt, which overhangs it by a hand, and every tier
+# runs its own ramp, light at its top and dark at the rim.
+# A STAND of them has to read as dark wood with snow on it: the undersides
+# are the ramp's dark end, and one fir of the three is nearly all green.
+# With every kind mostly snow and its green from the ramp's light half, a
+# wooded slope across the valley was a pale mint wash.
+# Three snowfalls: `a` with snow lying on each tier down to a toothed
+# line; `b` the dark one, green all but a thin roll of snow along each rim
+# and a cap on its point; `c` snowed right over, the green left only under
+# the rims.
+# The box's build (lite) is five sides, flat as well: a face owns its
+# corners, so the light breaks at each edge as it does on the full one
+# (shared corners round it into a banded cone). Its snow line is a saw, one
+# slant to a side, which costs no corner; its point has no shoulder.
 # (the underside's y and its outer r, the rim's r and y); the last row is the point's shoulder and tip
 OWN_FIR_TIERS = ((0.34, 0.54, 0.60, 0.41), (0.83, 0.41, 0.46, 0.885), (1.27, 0.32, 0.36, 1.315))
 OWN_FIR_POINT = ((0.15, 1.70), (0.0, 1.92))
@@ -27324,50 +27368,81 @@ OWN_FIR_TALL = 1.92
 OWN_FIR_SLOPE = 0.6          # how far a skirt draws in for each unit it climbs
 
 def own_fir_faces(kind, lite):
-    n = 6 if lite else 8
+    n = 5 if lite else 8
     G, S, T = 'green', 'snow', 'salmon'
     out = []
+    def band(swatch, lo, hi, g):
+        """A band about the trunk; the box's has a group to each side, so no two faces share a corner."""
+        fs = own_band(swatch, lo, hi, n, g)
+        return [(s, pts, '%s:%d' % (grp, i)) for i, (s, pts, grp) in enumerate(fs)] if lite else fs
     # the trunk: light at its foot, dark up under the skirt
     out += own_band(T, (0.2, 0.0, 4), (0.13, 0.36, 28), 4 if lite else 6, 'trunk', phase=0.4)
     inner = 0.1
     for t, (yu, ru, rl, yl) in enumerate(OWN_FIR_TIERS):
         last = t == len(OWN_FIR_TIERS) - 1
         g = 'tier%d' % t
-        out += own_band(G, (inner, yu, 27), (ru, yu, 23), n, g + 'under')       # the underside, in to the skirt below
-        out += own_band(G, (ru, yu, 23), (rl, yl, 15), n, g + 'under')          # under the rim
+        rim = not lite or kind != 'a'                                            # (the box's `a` shows green enough above its rim)
+        # (the box's `a`: a shallow cone straight to the rim, through the top of the skirt below so the tiers touch)
+        y0 = yu if rim else yu - (yl - yu) * inner / (rl - inner)
+        out += own_band(G, (0.0 if lite else inner, y0, 31 if lite else 29), (ru, yu, 31 if lite else 29) if rim else (rl, yl, 31), n, g + 'under')   # the underside, in to the skirt below
+        if rim:
+            out += own_band(G, (ru, yu, 31 if lite else 29), (rl, yl, 29 if lite else 25), n, g + 'under')      # under the rim
         if last:
             (rt, yt), tip = OWN_FIR_POINT
+            if lite:
+                (rt, yt) = tip
         else:
             yt = OWN_FIR_TIERS[t + 1][0]
             rt = inner = rl - OWN_FIR_SLOPE * (yt - yl)
         at = lambda f: (rl + (rt - rl) * f, yl + (yt - yl) * f)                   # a point up the skirt
+        up = (lambda f: f * 0.72) if last and lite else (lambda f: f)             # (the box's top skirt runs on to the tip)
         if kind == 'b':
-            # the roll of snow along the rim: out a little, then a shelf in to the skirt
-            (r1, y1) = at(0.2 / (yt - yl))
-            out += own_band(S, (rl, yl, 16), (rl + 0.035, yl + 0.11, 8), n, g + 'roll')
-            out += own_band(S, (rl + 0.035, yl + 0.11, 8), (r1, y1, 2), n, g + 'roll')
-            if last:
-                (r2, y2) = at(0.4)
-                out += own_band(G, (r1, y1, 15), (r2, y2, 10), n, g + 'skirt')
-                out += own_band(S, (r2, y2, 16), (r2 + 0.04, y2, 16), n, g + 'tipunder')
-                out += own_band(S, (r2 + 0.04, y2, 12), (rt, yt, 5), n, g + 'tip')
+            gb = 25 if lite else 23
+            # a thin roll of snow along the rim: out a little, then a shelf in to the skirt
+            (r1, y1) = at(up(0.13 / (yt - yl) if not last else 0.2))
+            if lite:
+                # the box's: the snow a band on the skirt's own slope, so each
+                # tier stays a cone (a roll stood out from the rim, the skirt
+                # flat off its top, made a stand of them a pile of drums)
+                (r1, y1) = at(up(0.3))
+                out += band(S, (rl, yl, 12), (r1, y1, 3), g + 'roll')
             else:
-                out += own_band(G, (r1, y1, 15), (rt, yt, 7), n, g + 'skirt')
+                out += band(S, (rl, yl, 16), (rl + 0.03, yl + 0.075, 6), g + 'roll')
+                out += band(S, (rl + 0.03, yl + 0.075, 6), (r1, y1, 2), g + 'roll')
+            if last:
+                (r2, y2) = at(0.38 if lite else 0.5)                             # (the box's: a bigger cap of snow)
+                out += band(G, (r1, y1, gb), (r2, y2, gb - 11), g + 'skirt')
+                if not lite:
+                    out += band(S, (r2, y2, 16), (r2 + 0.03, y2, 16), g + 'tipunder')
+                    out += band(S, (r2 + 0.03, y2, 12), (rt, yt, 5), g + 'tip')
+                else:
+                    out += band(S, (r2, y2, 10), (rt, yt, 1), g + 'tip')
+            else:
+                out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
         elif kind == 'c':
-            out += own_band(S, (rl, yl, 15), (rt, yt, 2), n, g + 'snow')
+            out += band(S, (rl, yl, 26), (rt, yt, 6), g + 'snow')
         else:
-            # the snow line a third of the way up the skirt, sagging at the middle of each side
-            f, sag = (0.3, 0.0) if lite else (0.37, 0.09)
-            (rs, ys), (rg, yg) = at(f), at(f - sag / (yt - yl))
-            lo, mid, low, hi = own_ring(rl, yl, n), own_ring(rs, ys, n), own_ring(rg, yg, n), own_ring(rt, yt, n)
+            lo, hi = own_ring(rl, yl, n), own_ring(rt, yt, n)
             for i in range(n):
                 j = (i + 1) % n
                 rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
-                m = [tuple((low[i][k] + low[j][k]) / 2 for k in range(3))] if sag else []
-                out.append((G, own_facing([lo[j] + (15,), lo[i] + (15,), mid[i] + (8,)] + [q + (9,) for q in m] + [mid[j] + (8,)], rad), g + 'skirt'))
-                out.append((S, own_facing([mid[j] + (14,)] + [q + (15,) for q in m] + [mid[i] + (14,), hi[i] + (2,), hi[j] + (2,)], rad), g + 'snow'))
-        if last:
-            out += own_band(S, (rt, yt, 5 if kind == 'b' else 6), (tip[0], tip[1], 1), n, g + ('tip' if kind == 'b' else 'snow'))
+                grp = (':%d' % i) if lite else ''
+                if lite:
+                    # the saw: the snow line high at one corner of the side, low at the next
+                    (ra, ya), (rb, yb) = at(up(0.6)), at(up(0.36))
+                    A, B = own_ring(ra, ya, n)[i], own_ring(rb, yb, n)[j]
+                    out.append((G, own_facing([lo[j] + (31,), lo[i] + (31,), A + (23,), B + (25,)], rad), g + 'skirt' + grp))
+                    out.append((S, own_facing([B + (13,), A + (11,)] + ([hi[i] + (2,), hi[j] + (2,)] if rt > 1e-6 else [hi[i] + (1,)]), rad), g + 'snow' + grp))
+                else:
+                    # the snow line low on the skirt, a tooth of green up into it at the middle of each side
+                    f, sag = 0.22, 0.13
+                    (rs, ys), (rg, yg) = at(f), at(f + sag / (yt - yl))
+                    mid, peak = own_ring(rs, ys, n), own_ring(rg, yg, n)
+                    m = tuple((peak[i][k] + peak[j][k]) / 2 for k in range(3))
+                    out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), mid[i] + (15,), m + (11,), mid[j] + (15,)], rad), g + 'skirt'))
+                    out.append((S, own_facing([m + (13,), mid[i] + (15,), hi[i] + (2,), hi[j] + (2,), mid[j] + (15,)], rad), g + 'snow'))
+        if last and not lite:
+            out += band(S, (rt, yt, 5 if kind == 'b' else 6), (tip[0], tip[1], 1), g + ('tip' if kind == 'b' else 'snow'))
     return out
 
 def own_fir(kind, lite=False):
@@ -28083,7 +28158,7 @@ def lite_unflush(grow):
         if dim.min() < 1e-6:
             continue
         w = np.array([[sx, sy, sz, 1.0] for sx in (-0.5, 0.5) for sy in (-0.5, 0.5) for sz in (-0.5, 0.5)]) @ m.T
-        plain = bool(o.get('chamfer')) and dim.min() * grow < LITE_CHAMFER
+        plain = bool(o.get('chamfer')) and not o.get('lite_chamfer') and dim.min() * grow < LITE_CHAMFER
         cubes.append((o, m[:3, :3] / dim, dim, m[:3, 3], w[:, :3].min(axis=0), w[:, :3].max(axis=0), plain,
                       (o.get('anim'), (o.get('group') or '').startswith('drape'))))
     if not cubes:
@@ -28127,7 +28202,10 @@ AS_BUILT = {'barbican', 'marble-zigzag'}
 # LITE_CHAMFER world units through (grown, at its row's scale) the cut is a
 # pixel of a four-way split's cell from the kerb, and almost four times the
 # block's triangles. The piece's big blocks keep theirs, which is also what
-# its far form is cut from (plain_parts()).
+# its far form is cut from (plain_parts()). A block marked `lite_chamfer`
+# keeps its own whatever its size: a white block on snow (a wind wall's) is
+# drawn by the shade its cut edges catch, and square its sunlit top is the
+# snow's white, the block an open shell from above.
 LITE_CHAMFER = 0.35
 
 def chamfer(lite=False, grow=1.0):
@@ -28144,7 +28222,7 @@ def chamfer(lite=False, grow=1.0):
     for o in bpy.context.scene.objects:
         if o.type != 'MESH' or not o.get('chamfer'):
             continue
-        if lite and min(o.dimensions) * grow < LITE_CHAMFER:
+        if lite and not o.get('lite_chamfer') and min(o.dimensions) * grow < LITE_CHAMFER:
             continue
         bpy.ops.object.select_all(action='DESELECT')
         o.select_set(True)
