@@ -8,6 +8,8 @@ on:
 
 jobs:
   comment:
+    # Renovate's branches get no preview (preview.yml).
+    if: ${{ !startsWith(github.head_ref, 'renovate/') }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
