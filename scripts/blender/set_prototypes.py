@@ -162,6 +162,22 @@ def box(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     place(o, at, yaw, pitch, roll)
     return paint(o, color)
 
+# What is round in life is turned on 6 to 10 sides, and on 12 only as a big
+# drum or wheel (three quarters of a unit or more in radius once the piece is
+# grown: a tank, a windpump's wheel): a tank beside eight-sided barrels on
+# forty read as another make of toy. The box's tier (BOX_TIER: a `-lite`
+# piece) stops at 10. Every round primitive asks here, so a builder cannot
+# overrule it.
+BOX_TIER = False
+
+def bld_grow():
+    """What the piece being built is grown by in the game: GROW, times its row's scale."""
+    name = BLD_NOW[0] or ''
+    return GROW.get(name, 1.0) * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0)
+
+def ring_sides(segs, r):
+    return min(segs, 12 if r * bld_grow() >= 0.75 and not BOX_TIER else 10)
+
 def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem=False, caps=True):
     """A cylinder (or cone when r2 differs) whose base centre is `at`, standing
     along `axis` (up | along | across). Faceted, like a Kenney barrel; a thin
@@ -173,6 +189,8 @@ def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem
         r = max(r, BAR / 2) * math.sqrt(2)
         r2 = None if r2 is None else max(r2, BAR / 3) * math.sqrt(2)
         segs, smooth = 4, False
+    else:
+        segs = ring_sides(segs, max(r, r2 or 0.0))
     bpy.ops.mesh.primitive_cone_add(vertices=segs, radius1=r, radius2=r if r2 is None else r2,
                                     depth=h, end_fill_type='NGON' if caps else 'NOTHING')
     o = bpy.context.active_object
@@ -204,7 +222,7 @@ def sphere(r, at, color, subdiv=1, scale=(1, 1, 1), flat=True, yaw=0.0):
     # a car's lamp is.
     if flat and r * max(scale) < 0.35:
         return box([1.6 * r * k for k in scale], at, color, yaw=yaw)
-    if flat:
+    if flat or (BOX_TIER and r * max(scale) * bld_grow() < 0.2):     # (the box's marble: twenty faces, smooth)
         subdiv = min(subdiv, 1)
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=subdiv, radius=r)
     o = bpy.context.active_object
@@ -221,6 +239,7 @@ def torus(R, r, at, color, segs=12, minor=6, axis='up', yaw=0.0):
     """A ring; a thin one is the cars' square bar bent round."""
     if r <= 0.25:
         r, minor = max(r, BAR / 2) * math.sqrt(2), 4
+    segs = ring_sides(segs, R)
     bpy.ops.mesh.primitive_torus_add(major_radius=R, minor_radius=r, major_segments=segs, minor_segments=minor)
     o = bpy.context.active_object
     if axis == 'along':
@@ -232,7 +251,7 @@ def torus(R, r, at, color, segs=12, minor=6, axis='up', yaw=0.0):
     bpy.ops.object.shade_flat()
     return paint(o, color)
 
-def disc(r, at, color, segs=24, h=0.04):
+def disc(r, at, color, segs=12, h=0.04):
     return cyl(r, h, at, color, segs=segs, smooth=False)
 
 def terrain(height, x0, x1, nx, z0, z1, nz, color):
@@ -312,7 +331,7 @@ def tube(points, r, color, res=4, bevel_res=1, closed=False, smooth=False, wire=
         r, bevel_res = r * math.sqrt(2), 0
     curve = bpy.data.curves.new('tube', 'CURVE')
     curve.dimensions = '3D'
-    curve.resolution_u = res
+    curve.resolution_u = max(1, res // 2) if BOX_TIER else res
     curve.bevel_depth = r
     curve.bevel_resolution = bevel_res
     curve.use_fill_caps = True
@@ -521,8 +540,7 @@ BLD_SEAT = 0.16
 
 def bld_u():
     """Build units to one game unit in the piece being built."""
-    name = BLD_NOW[0] or ''
-    return 1.0 / (GROW.get(name, 1.0) * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0))
+    return 1.0 / bld_grow()
 
 def bld_open(verts, faces, color, inside):
     """Flat faces from glTF `verts`, each turned away from the point `inside`:
@@ -731,6 +749,7 @@ def rod(a, b, r, color, r2=None, segs=7):
     """A round log from glTF point a to b, tapering to r2."""
     pa, pb = P(*a), P(*b)
     v = pb - pa
+    segs = ring_sides(segs, max(r, r2 or 0.0))
     bpy.ops.mesh.primitive_cone_add(vertices=segs, radius1=r, radius2=r if r2 is None else r2,
                                     depth=v.length, end_fill_type='NGON')
     o = bpy.context.active_object
@@ -781,6 +800,7 @@ class Pieces(dict):
 
 PIECES = Pieces()
 GROW = {}
+FILE = {}                   # the GLB a piece is written to where that is not set-<name>.glb (own_model)
 def piece(grow=1.0):
     def wrap(fn):
         name = fn.__name__.replace('_', '-')
@@ -4532,7 +4552,7 @@ def scenery_wheel(cx, cy, cz, r, w, yaw=0.0, hub=0xfde4c7):
         cyl(r, w, at(-w / 2), 0x2a2735, segs=10, axis='across', yaw=yaw, smooth=True)
         cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=8, axis='across', yaw=yaw)
         return
-    cyl(r, w, at(-w / 2), 0x2a2735, segs=16, axis='across', yaw=yaw, smooth=True)
+    cyl(r, w, at(-w / 2), 0x2a2735, segs=12, axis='across', yaw=yaw, smooth=True)
     cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=12, axis='across', yaw=yaw)
     cyl(0.2 * r, w + 0.07, at(-w / 2 - 0.035), 0x9aa1b4, segs=8, axis='across', yaw=yaw, stem=True)
 
@@ -4953,13 +4973,13 @@ def reef_pool(seed, r, long_a, post):
     def shelf(a):
         return (1.3 + 2.4 * max(0.0, math.cos(a - long_a)) ** 2 + 1.4 * max(0.0, -math.cos(a)) ** 1.5
                 + 0.3 * math.sin(4 * a + seed) + 0.45 * math.sin(2 * a + 0.7 * seed) + 0.3 * math.sin(5 * a + 2.1 * seed))
-    polys = pool_rings(24, rim, shelf, 0.1, 0.32)
+    polys = pool_rings(16 if LITE else 24, rim, shelf, 0.1, 0.32)       # (the box's pool: two thirds of the spokes, six knuckles)
     def pool():
         pool_skin(polys)
         # the reef's knuckles round it: big on its sea side and along the
         # shelf's long reach, small where the road looks in, some astride
         # the shelf's edge so no clean rim runs round it
-        for k in range(9):
+        for k in range(6 if LITE else 9):
             a = seed + 0.72 * k + 0.3 * jitter(k, 1, seed)
             road = max(0.0, math.cos(a))
             sz = (3.0 - 1.7 * road) * (0.8 + 0.35 * (jitter(k, 2, seed) + 0.5))
@@ -6807,11 +6827,11 @@ def drift_marram(spots, seed):
     foot, pale green going to straw, at (x, y, z) spots on the dune."""
     with plain_parts():
         for k, (x, y, z) in enumerate(spots):
-            for j in range(6):
-                a = 1.05 * j + 0.9 * k + seed
+            for j in range(3 if LITE else 6):             # (the box's tussock: three broader blades)
+                a = (2.1 if LITE else 1.05) * j + 0.9 * k + seed
                 h = 0.7 + 0.35 * frac(k * 0.31 + j * 0.43 + seed)
                 o = beam((x + 0.06 * math.cos(a), y - 0.1, z + 0.06 * math.sin(a)),
-                         (x + 0.38 * math.cos(a), y + h, z + 0.38 * math.sin(a)), 0.11,
+                         (x + 0.38 * math.cos(a), y + h, z + 0.38 * math.sin(a)), 0.17 if LITE else 0.11,
                          ('leaf', 'cream', 'leaf', 'olive', 'leaf', 'tan')[(j + k) % 6])
                 o['ramp'] = 0.15
 
@@ -7851,7 +7871,7 @@ def storm_armour():
     # a life ring on its own post. +X is the road; the bank runs along it.
     # (three courses: the strand lies most of a unit under the road behind
     # its kerb, and a bank two deep stood wholly under the kerb's line)
-    n = 6 if LITE else 9
+    n = 9
     for c in range(3):
         m = n - 2 * c
         for k in range(m):
@@ -9069,7 +9089,7 @@ def powder_chairlift(lite=False):
         rows = [[(lane_x(z) - 0.75, 0.05, z), (lane_x(z) + 0.75, 0.05, z)] for z in zs]
         for o in sheet(rows, lambda i, j, nn: LANE, 'lane'):
             snowy(o, 0.3)
-        snowy(cyl(2.1, 0.05, (-9.4, 0.0, 0.0), LANE, segs=14), 0.3)             # the square at the gate
+        snowy(cyl(2.1, 0.05, (-9.4, 0.0, 0.0), LANE, segs=12), 0.3)             # the square at the gate
         HOUSES = ((-16.2, 2.3, 1.7, 0x9a5f3c, 0.06, True), (-12.4, 2.0, 1.6, 0xcf534f, -0.05, False),
                   (-8.6, 2.5, 1.8, 0x9a7b55, 0.04, True), (-4.9, 1.9, 1.5, 0x3f7bd9, -0.06, False),
                   (4.9, 2.1, 1.6, 0xffc044, 0.05, False), (8.6, 2.5, 1.8, 0x9a5f3c, -0.04, True),
@@ -9449,6 +9469,8 @@ def glacier_igloo(cx, cz, R, yaw, rows=4, upto=None):
                     (cx + math.cos(a) * rr * 0.97, R * math.sin(phi), cz + math.sin(a) * rr * 0.97),
                     ICE if (k + row) % 2 == 0 else ICE2, yaw=-a, roll=-phi * 0.85)
             snowy(o, 0.35)
+            if LITE:                                  # the box's courses: square-cut blocks
+                o['chamfer'] = 0
     if upto is None:
         o = snowy(cyl(R * 0.42, R * 0.2, (cx, R * 0.86, cz), SNOW_, r2=R * 0.2, segs=8), 0.4)
     c, s = math.cos(yaw), math.sin(yaw)
@@ -10597,6 +10619,8 @@ def ski_school():
         # open at both ends, tall enough for a child on skis, a span a panel
         # so it lies on the slope as drawn
         RT, PANELS = 0.62, 4
+        if LITE:                                                      # (the box's gallery: half the spans)
+            n = 12
         ts = [C0 - 0.05 + (C1 - C0 + 0.1) * i / n for i in range(n + 1)]
         half = math.pi / PANELS / 2
         chord, rm = 2 * RT * math.sin(half), RT * math.cos(half)
@@ -12136,11 +12160,14 @@ def cut_ice(rows, i0, seeps, firs, seed):
         def curtain(j, f0, f1, n, reach, tag):
             """`n` icicles hanging from row j's lip between f0 and f1, the
             middle ones `reach` long, each bedded in the lip above it."""
+            fat = 1.0
+            if LITE:                                                       # the box's curtain: half the icicles, each fatter
+                n, fat = (n + 1) // 2, 1.5
             for k in range(n):
                 f = f0 + (f1 - f0) * (k + 0.5 + 0.35 * jitter(k, tag, seed + n_)) / n
                 mid = 1.0 - abs(2.0 * (k + 0.5) / n - 1.0)                 # 0 at the edges, 1 in the middle
                 L = reach * (0.35 + 0.65 * mid) * (0.75 + 0.5 * (0.5 + jitter(k, tag + 1, seed + n_)))
-                rad = 0.17 + 0.16 * mid + 0.05 * jitter(k, tag + 2, seed + n_)
+                rad = fat * (0.17 + 0.16 * mid + 0.05 * jitter(k, tag + 2, seed + n_))
                 top = lip(j, f, 0.12 + 0.1 * (0.5 + jitter(k, tag + 3, seed + n_)))
                 o = rod((top[0], top[1] + 0.12, top[2]), (top[0] + out[0] * 0.05, top[1] - L, top[2] + out[2] * 0.05),
                         rad, SNOW if k % 3 != 1 else 'sky', r2=0.025, segs=5)
@@ -12231,7 +12258,7 @@ def gallery_shed(road, s0, s1, seed):
         snowy(o, 0.4)
     # icicles off the cornice's lip, on the snow's own rows
     with plain_parts():
-        for i in range(s0 + 2, s1 - 1, 4):
+        for i in range(s0 + 2, s1 - 1, 8 if LITE else 4):
             over = 1.0 + 0.25 * wobble(i, seed + 7, 3.0)
             ln = 0.35 + 0.35 * (jitter(i, 3, seed) + 0.5)
             x, _, z = on_road(road, i, 5.9 + 0.25 * over, 0)
@@ -13321,10 +13348,11 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
 
 @piece(1.0)
 def avalanche_gallery_loop_lite():
-    global WORKS_LITE
-    WORKS_LITE = True
-    avalanche_gallery_loop()
-    WORKS_LITE = False
+    global WORKS_LITE, FIR_LITE
+    WORKS_LITE = FIR_LITE = True
+    with lite_parts(True):
+        avalanche_gallery_loop()
+    WORKS_LITE = FIR_LITE = False
 
 @piece(1.0)
 def avalanche_gallery_loop():
@@ -15458,7 +15486,7 @@ def watermill():
     with animated('anim_spin:a=x:w=-0.9', (WX, AY, WZ)):
         cyl(0.5, WX + 0.9 - D / 2, (D / 2, AY, WZ), 0x2a2735, segs=8, axis='across')
         for s in (-1, 1):
-            torus(R, 0.22, (WX + s * 0.6, AY, WZ), 0x7a5a3a, segs=16, axis='across')
+            torus(R, 0.22, (WX + s * 0.6, AY, WZ), 0x7a5a3a, segs=12, axis='across')
         for k in range(12):
             a = k * 2 * math.pi / 12
             dy, dz = math.sin(a), math.cos(a)
@@ -17592,7 +17620,9 @@ def bed_quad(pts, color, row=None, y=0.08):
     return rowed(o, row) if row is not None else o
 
 def bed_ring(r0, r1, color, row=None, y=0.08, segs=24, steps=1, pick=None):
-    """A ring of bedding r0..r1 round the origin, in `steps` bands."""
+    """A ring of bedding r0..r1 round the origin, in `steps` bands. A print
+    draped on the land, not a round part: its faces stay small enough to lie
+    on a hill (ring_sides is not asked)."""
     for j in range(steps):
         a, b = r0 + (r1 - r0) * j / steps, r0 + (r1 - r0) * (j + 1) / steps
         for k in range(segs):
@@ -18515,13 +18545,15 @@ def lite_parts(on):
 def lite_too(*names):
     for n in names:
         def build(fn=PIECES[n]):
-            global LITE
-            LITE = True
+            global LITE, FIR_LITE
+            LITE = FIR_LITE = True              # (and the fir the box's scatter draws: snow_fir)
             try:
                 fn()
             finally:
-                LITE = False
+                LITE = FIR_LITE = False
         PIECES[n + '-lite'], GROW[n + '-lite'] = build, GROW[n]
+        if n in FILE:
+            FILE[n + '-lite'] = FILE[n] + '-lite'
 
 # The beach's: Tidepool's rock in coarser lumps (tide_lump) and its parked
 # vans on plainer wheels; Cove's stockade in fewer, fatter logs; the palms
@@ -20183,7 +20215,7 @@ def stamp_mill():
     for s in (-1, 1):                                                                      # its roof, the ridge along X
         box((TX1 - TX0 + 1.2, 0.3, sl), ((TX0 + TX1) / 2, TE + RR - sl / 2 * math.sin(a) + 0.15 * math.cos(a),
                                          s * (sl / 2 * math.cos(a) + 0.15 * math.sin(a))), RUST, pitch=-s * a)
-    cyl(GAP + 0.3, 0.5, (T0, ROPE_Y - 0.25, 0.0), IRON, segs=14)                          # the bull wheel
+    cyl(GAP + 0.3, 0.5, (T0, ROPE_Y - 0.25, 0.0), IRON, segs=12)                          # the bull wheel
     box((0.7, ROPE_Y - 0.25 - FL - 0.5, 0.7), (T0, (FL + 0.5 + ROPE_Y - 0.25) / 2, 0.0), TIMBER)   # on its post
     # THE CRUSHER at the bin's foot, under a lean-to of its own; a covered
     # chute on into the battery house's feed bins
@@ -20460,10 +20492,10 @@ def tailings_dump():
     VZ, VR, VH = -82.0, 4.4, 2.4
     for vx in (-9.0, 1.0, 11.0):
         box((2 * VR + 0.6, 0.5, 2 * VR + 0.6), (vx, 0.15, VZ), TIMBER)
-        cyl(VR, VH, (vx, 0.4, VZ), 0x8a6a46, segs=16)
-        cyl(VR - 0.3, 0.12, (vx, 0.4 + VH, VZ), 'gravel', segs=16)
+        cyl(VR, VH, (vx, 0.4, VZ), 0x8a6a46, segs=12)
+        cyl(VR - 0.3, 0.12, (vx, 0.4 + VH, VZ), 'gravel', segs=12)
         if not LITE:
-            cyl(VR + 0.08, 0.25, (vx, 0.4 + VH * 0.45, VZ), IRON, segs=16)
+            cyl(VR + 0.08, 0.25, (vx, 0.4 + VH * 0.45, VZ), IRON, segs=12)
     box((2 * 10.0 + 2 * VR, 0.3, 1.1), (1.0, 0.4 + VH + 0.27, VZ), TIMBER)              # the walk along their tops
     join_still('dump')
 
@@ -20659,11 +20691,11 @@ def stock_tank():
     # salt lick on a post, and cattle come in to it, one drinking, each
     # lifting its head now and then (+X the road).
     TX, TZ = 0.0, 0.0
-    cyl(1.25, 0.42, (TX, 0, TZ), 'grey', segs=14)
+    cyl(1.25, 0.42, (TX, 0, TZ), 'grey', segs=12)
     # (its water blue, dark under the rim: the pale sky swatch, flush with
     # the rim, read from the road as a concrete lid)
-    rowed(cyl(1.15, 0.03, (TX, 0.41, TZ), 'slate', segs=14), 20)
-    rowed(cyl(0.98, 0.03, (TX, 0.435, TZ), 'blue', segs=14), 14)
+    rowed(cyl(1.15, 0.03, (TX, 0.41, TZ), 'slate', segs=12), 20)
+    rowed(cyl(0.98, 0.03, (TX, 0.435, TZ), 'blue', segs=12), 14)
     box((0.14, 0.75, 0.14), (TX - 1.36, 0.37, TZ), 'slate')                     # the riser
     box((0.34, 0.2, 0.34), (TX - 1.2, 0.7, TZ), 'slate')                        # its float box
     box((2.4, 0.3, 0.5), (TX + 0.4, 0.15, TZ + 2.0), 0x8a6a46)                  # the trough off the overflow
@@ -22109,8 +22141,8 @@ def emblem(at, yaw, r, d=0.04):
     fx, fz = math.cos(yaw), -math.sin(yaw)
     def out(k):
         return (at[0] + k * fx, at[1], at[2] + k * fz)
-    cyl(r * 1.15, d, at, 'red', segs=16, axis='across', yaw=yaw)
-    cyl(r, 0.04, out(d - 0.01), 'white', segs=16, axis='across', yaw=yaw)
+    cyl(r * 1.15, d, at, 'red', segs=12, axis='across', yaw=yaw)
+    cyl(r, 0.04, out(d - 0.01), 'white', segs=12, axis='across', yaw=yaw)
     # the drop: a round belly under a point, a board cut to shape
     a, c = 0.42 * r, -0.18 * r
     rim = [(-a * math.cos(math.radians(f)), c + a * math.sin(math.radians(f))) for f in range(130, 411, 35)]
@@ -22674,13 +22706,13 @@ def tank_farm():
         for k in range(1, int(h / 0.3) + 1):
             box((0.04, 0.04, 0.26), (x + r + 0.1, 0.3 * k, z), 'slate')
     for (x, z, r, h), col in ((B, 'white'), (M, 'white'), (S, 0xc0392b)):
-        cyl(r, h, (x, 0, z), col, segs=16)
-        cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=16)   # its roof
-        cyl(r + 0.06, 0.1, (x, h - 0.04, z), 'slate', segs=16)                  # the roof's rim
-        cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red' if col == 'white' else 'white', segs=16)   # the band
+        cyl(r, h, (x, 0, z), col, segs=12)
+        cyl(r + 0.04, 0.3, (x, h, z), 'white' if col == 'white' else 'grey', r2=0.35 * r, segs=12)   # its roof
+        cyl(r + 0.06, 0.1, (x, h - 0.04, z), 'slate', segs=12)                  # the roof's rim
+        cyl(r + 0.03, 0.3, (x, h - 0.32, z), 'red' if col == 'white' else 'white', segs=12)   # the band
         if col == 'white':
             for y in (h / 3, 2 * h / 3):
-                cyl(r + 0.02, 0.05, (x, y, z), 'grey', segs=16)                 # its courses' seams
+                cyl(r + 0.02, 0.05, (x, y, z), 'grey', segs=12)                 # its courses' seams
     x, z, r, h = B
     emblem((x + (r - 0.16) * math.cos(YAW), 2.0, z - (r - 0.16) * math.sin(YAW)), YAW, 0.75, d=0.24)
     n = int((h - 0.3) / 0.27) + 1
@@ -22862,9 +22894,9 @@ def oil_field():
         ground_poly([(TKX - 1.6, 0.03, TKZ - 3.0), (TKX + 2.2, 0.03, TKZ - 3.0), (TKX + 2.2, 0.03, TKZ + 3.0),
                      (TKX - 1.6, 0.03, TKZ + 3.0)], [(0, 1, 2, 3)], 0xb8a686)
         for k, z in enumerate((TKZ - 1.3, TKZ + 1.3)):                          # the lease tanks
-            cyl(1.0, 1.5, (TKX, 0, z), 'white' if k else 'red', segs=14)
-            cyl(1.04, 0.1, (TKX, 1.5, z), 'slate', segs=14)
-            cyl(1.02, 0.18, (TKX, 1.1, z), 'red' if k else 'white', segs=14)
+            cyl(1.0, 1.5, (TKX, 0, z), 'white' if k else 'red', segs=12)
+            cyl(1.04, 0.1, (TKX, 1.5, z), 'slate', segs=12)
+            cyl(1.02, 0.18, (TKX, 1.1, z), 'red' if k else 'white', segs=12)
         box((0.5, 0.05, 3.2), (TKX + 0.9, 1.62, TKZ), 'grey')                   # the catwalk over them
         for z in (TKZ - 1.55, TKZ, TKZ + 1.55):
             box((0.04, 0.3, 0.04), (TKX + 1.13, 1.78, z), 'slate')
@@ -22988,8 +23020,8 @@ def well_pad():
     pumpjack(0.0, 0.0, JAW, 'lone', 6.0, paint=('red', 'white', 'slate'))
     TR = 0.72
     TX, TZ = 2.6 * c, -2.6 * s_
-    cyl(TR, 1.12, (TX, 0, TZ), 'white', segs=14)
-    cyl(TR + 0.03, 0.08, (TX, 1.12, TZ), 'slate', segs=14)
+    cyl(TR, 1.12, (TX, 0, TZ), 'white', segs=12)
+    cyl(TR + 0.03, 0.08, (TX, 1.12, TZ), 'slate', segs=12)
     emblem((TX + (TR - 0.1) * math.cos(SEEN), 0.62, TZ - (TR - 0.1) * math.sin(SEEN)), SEEN, 0.3, d=0.14)
     join_still('wellpad')
 
@@ -23073,7 +23105,7 @@ def headframe():
         box((0.22, 1.2, 0.22), (WX, H + 0.95, ZC + sz), TIMBER)
     box((0.2, 0.2, 1.4), (WX, cy, ZC), 'slate')
     with animated('anim_spin:a=z:w=-1.5', (WX, cy, ZC)):                        # the wheel turns, in the cable's plane
-        torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=16, axis='along')
+        torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=12, axis='along')
         for k in range(4):
             box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
         box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
@@ -24289,10 +24321,10 @@ def marble_wheel(cx, cy, cz, R):
         cyl(0.3, 0.2, (cx, cy - 0.1, z - 0.1), COLLAR, segs=8, axis='along')   # the bearing
     cyl(0.14, 2.3, (cx, cy, cz - 1.15), COLLAR, segs=8, axis='along')           # the axle
     with animated('anim_spin:a=z:w=-0.8#wheel', (cx, cy, cz)):
-        cyl(0.77, 1.64, (cx, cy, cz - 0.82), 0xf2c14e, segs=16, axis='along')  # the drum the marbles ride on, past the paddles' faces (on its caps they fought)
+        cyl(0.77, 1.64, (cx, cy, cz - 0.82), 0xf2c14e, segs=12, axis='along')  # the drum the marbles ride on, past the paddles' faces (on its caps they fought)
         for s in (-1, 1):                         # each wheel: a broad rim, the paddles inside it
             zp, zr = cz + s * 0.59, cz + s * 0.8
-            torus(R - 0.22, 0.2, (cx, cy, zr), 0x5a8fd8, segs=20, axis='along')
+            torus(R - 0.22, 0.2, (cx, cy, zr), 0x5a8fd8, segs=12, axis='along')
             for k in range(8):
                 a = math.pi / 8 + k * math.pi / 4
                 bar((cx + 0.4 * math.cos(a), cy + 0.4 * math.sin(a), zp), (cx + (R - 0.1) * math.cos(a), cy + (R - 0.1) * math.sin(a), zp),
@@ -24334,8 +24366,8 @@ def screw_lift(cx, cz, H, RP, lite):
     a marble is in sight on the chute, on the screw and on the next chute,
     and changes hands only inside a drum."""
     FOOT, HEAD = 1.3, H - 1.0                     # the foot drum's top, the head drum's underside
-    cyl(RP + 0.45, FOOT, (cx, 0, cz), GREY, segs=16)
-    cyl(1.55, 0.04, (cx, FOOT, cz), 0x2a2735, segs=16)                          # the well the screw comes up out of
+    cyl(RP + 0.45, FOOT, (cx, 0, cz), GREY, segs=12)
+    cyl(1.55, 0.04, (cx, FOOT, cz), 0x2a2735, segs=12)                          # the well the screw comes up out of
     for k in range(6):
         a = math.pi / 6 + k * math.pi / 3
         x, z = cx + RP * math.cos(a), cz + RP * math.sin(a)
@@ -24343,9 +24375,9 @@ def screw_lift(cx, cz, H, RP, lite):
         for j in range(n):
             cyl(0.28, (H - FOOT) / n, (x, FOOT + j * (H - FOOT) / n, z), TOY[(j + k) % 4], segs=8)
     for y in (H * 0.4, H * 0.68):
-        torus(RP, 0.13, (cx, y, cz), CREAM, segs=18)
-    cyl(RP - 0.2, 1.6, (cx, HEAD, cz), 0xa878e8, segs=16)                       # the head drum
-    cyl(RP + 0.1, 0.22, (cx, HEAD + 1.6, cz), CREAM, segs=16)
+        torus(RP, 0.13, (cx, y, cz), CREAM, segs=12)
+    cyl(RP - 0.2, 1.6, (cx, HEAD, cz), 0xa878e8, segs=12)                       # the head drum
+    cyl(RP + 0.1, 0.22, (cx, HEAD + 1.6, cz), CREAM, segs=12)
     cyl(0.4, 0.3, (cx, HEAD + 1.82, cz), 0xa878e8, segs=8)
     # `o=0` pins the screw's turn to the clock, so the flight is under every
     # marble: at a column's side A it stands at Y0 + C * (A + w t) and one
@@ -24441,11 +24473,12 @@ def run_skyway(lite):
     joint(X, end[2], end[1], toward=((X, end[2] + 1.0), (X, end[2] - 1.0)), color=0xf2c14e)
     run_marbles('sky', [J0] + span + line + bars + tail + [end], lite, after='summit')
 
-def bowl(cx, cz, r0, y0, r1, y1, outside, inside, segs=20):
+def bowl(cx, cz, r0, y0, r1, y1, outside, inside, segs=12):
     """A vortex bowl: open, round, its floor curving from the hole (r0, at
     y0) up to the rim (r1, y1), a closed shell 0.1 thick so no face lies on
     another."""
     prof = [(r0 + (r1 - r0) * i / 6, y0 + (y1 - y0) * (i / 6) ** 1.7) for i in range(7)]
+    segs = ring_sides(segs, r1)
     def ring(r, y):
         return [(cx + r * math.cos(2 * math.pi * k / segs), y, cz + r * math.sin(2 * math.pi * k / segs)) for k in range(segs)]
     def mesh(rings, color, up):
@@ -26123,7 +26156,7 @@ def game_stack():
     # the spinner: a card disc stood up on its edge against its box, face to +X
     R, SX = 1.7, 0.2
     box((0.9, 1.6, 2.2), (SX - 0.6, y + 0.8, 0.0), 0xe66a5a)
-    cyl(R, 0.2, (SX - 0.14, y + R - 0.05, 0.0), 0xfdf4de, segs=16, axis='across')
+    cyl(R, 0.2, (SX - 0.14, y + R - 0.05, 0.0), 0xfdf4de, segs=12, axis='across')
     fx, yc = SX + 0.06 + 0.012, y + R - 0.05
     for k in range(8):
         a0, a1 = 2 * math.pi * k / 8, 2 * math.pi * (k + 1) / 8
@@ -27177,9 +27210,7 @@ def tourney_banner():
 # ---- the models that are not set pieces (round 27) -----------------------------
 # The scatter's trees and props, the race's items: each stood in a Kenney kit
 # model's place under that model's file name, at its size and about its
-# origin, so every placement, collider and scatter row kept working. FILE
-# names the GLB a piece is written to where that is not set-<name>.glb.
-FILE = {}
+# origin, so every placement, collider and scatter row kept working.
 
 def own_model(file, grow=1.0):
     """A piece written as <file>.glb."""
@@ -27875,7 +27906,153 @@ def own_plunder(kind, at, yaw=0.0, scale=1.0):
 
 # ---- build + export ----------------------------------------------------------------
 
-def chamfer():
+def cull_hidden(grounded):
+    """Cut the faces no camera reaches, before the chamfer (which then leaves
+    their edges square too): in a `grounded` piece (one that stands where it
+    is placed; a prop is kicked over and an item hangs in the air) a still
+    part's underside lying on the ground or
+    under it with nothing of the piece below (a wall's foot, a sunk post's
+    end; a culvert's soffit has its bed under it and stays), and any face
+    whose every corner is inside ONE block of the same part of the piece (a
+    post's end in its rail, a beam's in the wall), measured to that block's
+    chamfered faces. A block left with no face goes altogether."""
+    import bmesh
+    import numpy as np
+    bpy.context.view_layer.update()
+    parts = [o for o in bpy.context.scene.objects if o.type == 'MESH' and 0 < len(o.data.polygons) <= 2000]
+    def moves_with(o):                                # what moves or drapes together
+        return (o.get('anim'), (o.get('group') or '').startswith('drape'))
+    world = {}
+    for o in parts:
+        m = np.array(o.matrix_world)
+        v = np.empty(len(o.data.vertices) * 3)
+        o.data.vertices.foreach_get('co', v)
+        world[o] = v.reshape(-1, 3) @ m[:3, :3].T + m[:3, 3]
+    blocks = []                                       # an untouched cube: (inverse matrix, sizes, chamfer, lo, hi, key, obj)
+    for o in parts:
+        me = o.data
+        if len(me.vertices) != 8 or len(me.polygons) != 6 or any(abs(abs(c) - 0.5) > 1e-5 for v in me.vertices for c in v.co):
+            continue
+        m = np.array(o.matrix_world)
+        dim = np.linalg.norm(m[:3, :3], axis=0)
+        if dim.min() < 1e-6:
+            continue
+        r = o.get('round')
+        c = 0.0 if not o.get('chamfer') else min(r, 0.33 * dim.min()) if r else min(CHAMFER, 0.2 * dim.min())
+        blocks.append((np.linalg.inv(m), dim, c, world[o].min(axis=0), world[o].max(axis=0), moves_with(o), o))
+    lo = np.array([b[3] for b in blocks]).reshape(-1, 3)
+    hi = np.array([b[4] for b in blocks]).reshape(-1, 3)
+    still = np.concatenate([world[o] for o in parts if o.get('anim') is None] or [np.zeros((0, 3))])
+    IN = 0.004                                        # how far inside counts: a face in another's plane is not hidden, it flickers
+    cut = 0
+    for o in parts:
+        w, me = world[o], o.data
+        faces = [list(f.vertices) for f in me.polygons]
+        dead = set()
+        if grounded and o.get('anim') is None:        # undersides on or under the ground
+            for i, f in enumerate(me.polygons):
+                n = o.matrix_world.to_3x3() @ f.normal
+                if n.z > -0.999 * n.length:
+                    continue
+                q = w[faces[i]]
+                if q[:, 2].max() > 0.02:
+                    continue
+                a, b = q.min(axis=0) - 1.0, q.max(axis=0) + 1.0
+                under = (still[:, 2] < q[:, 2].min() - 0.05) & (still[:, 0] > a[0]) & (still[:, 0] < b[0]) \
+                    & (still[:, 1] > a[1]) & (still[:, 1] < b[1])
+                if not under.any():
+                    dead.add(i)
+        a, b, key = w.min(axis=0), w.max(axis=0), moves_with(o)
+        for j in np.nonzero((lo < b).all(axis=1) & (hi > a).all(axis=1))[0] if len(blocks) else ():
+            inv, dim, c, _, _, bkey, bo = blocks[j]
+            if bo is o or bkey != key:
+                continue
+            d = (np.abs(w @ inv[:3, :3].T + inv[:3, 3]) - 0.5) * dim       # each corner's depth past the block's faces (inside < 0)
+            d.sort(axis=1)                                                 # d[:, 2] the shallowest
+            inside = (d[:, 2] < -IN) & (d[:, 2] + d[:, 1] < -c - 1.5 * IN) & (d.sum(axis=1) < -2 * c - 2 * IN)
+            for i, f in enumerate(faces):
+                if i not in dead and inside[f].all():
+                    dead.add(i)
+        if not dead:
+            continue
+        cut += len(dead)
+        if len(dead) == len(faces):
+            bpy.data.objects.remove(o)
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in dead], context='FACES')
+        bm.to_mesh(me)
+        bm.free()
+    return cut
+
+def lite_unflush(grow):
+    """Two blocks of different colours whose faces lie in one plane only meet
+    there in the chamfer's margin (a band sunk a finger into the next, a rail
+    let into its post): with the chamfer the faces stop short of each other,
+    without it (the box's small blocks, LITE_CHAMFER) they overlap in a strip
+    and flicker. So where a block that loses its chamfer shares a face's
+    plane with another, the later-built one's face stands a hair proud."""
+    import numpy as np
+    bpy.context.view_layer.update()
+    cubes = []
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH' or len(o.data.vertices) != 8 or any(abs(abs(c) - 0.5) > 1e-5 for v in o.data.vertices for c in v.co):
+            continue
+        m = np.array(o.matrix_world)
+        dim = np.linalg.norm(m[:3, :3], axis=0)
+        if dim.min() < 1e-6:
+            continue
+        w = np.array([[sx, sy, sz, 1.0] for sx in (-0.5, 0.5) for sy in (-0.5, 0.5) for sz in (-0.5, 0.5)]) @ m.T
+        plain = bool(o.get('chamfer')) and dim.min() * grow < LITE_CHAMFER
+        cubes.append((o, m[:3, :3] / dim, dim, m[:3, 3], w[:, :3].min(axis=0), w[:, :3].max(axis=0), plain,
+                      (o.get('anim'), (o.get('group') or '').startswith('drape'))))
+    if not cubes:
+        return
+    lo, hi = np.array([c[4] for c in cubes]), np.array([c[5] for c in cubes])
+    proud = set()
+    for j, (oj, Rj, dj, cj, loj, hij, pj, kj) in enumerate(cubes):
+        for i in np.nonzero((lo[:j] < hij + 1e-3).all(axis=1) & (hi[:j] > loj - 1e-3).all(axis=1))[0]:
+            oi, Ri, di, ci, _, _, pi, ki = cubes[i]
+            if not (pi or pj) or ki != kj or oi.get('swatch') == oj.get('swatch'):
+                continue
+            match = np.abs(Ri.T @ Rj)                 # which of j's axes runs along each of i's
+            if (match.max(axis=1) < 0.9999).any():
+                continue
+            ax = match.argmax(axis=1)
+            for a in range(3):
+                b = int(ax[a])
+                for sgn in (-1.0, 1.0):
+                    n = sgn * Ri[:, a]
+                    t = 1.0 if float(n @ Rj[:, b]) > 0 else -1.0
+                    if abs((n @ ci + di[a] / 2) - (n @ cj + dj[b] / 2)) > 0.004 or (j, b, t) in proud:
+                        continue
+                    over = True                       # do the two faces overlap in their plane?
+                    for a2 in range(3):
+                        if a2 != a:
+                            u = Ri[:, a2]
+                            over = over and abs(float(u @ (cj - ci))) < (di[a2] + dj[int(ax[a2])]) / 2 - 1e-4
+                    if over:
+                        proud.add((j, b, t))
+    for j, b, t in proud:
+        o, dim = cubes[j][0], cubes[j][2]
+        for v in o.data.vertices:
+            if v.co[b] * t > 0:
+                v.co[b] += t * 0.006 / dim[b]
+
+# Pieces left as built in the full tier: cut, each gained a far form whose
+# swap shows from the road (npm run see:pops counts it); whole, it has none.
+AS_BUILT = {'barbican', 'marble-zigzag'}
+
+# The box's tier keeps the chamfer only on a block it can show one on: under
+# LITE_CHAMFER world units through (grown, at its row's scale) the cut is a
+# pixel of a four-way split's cell from the kerb, and almost four times the
+# block's triangles. The piece's big blocks keep theirs, which is also what
+# its far form is cut from (plain_parts()).
+LITE_CHAMFER = 0.35
+
+def chamfer(lite=False, grow=1.0):
     """The cars' chamfer: every edge of a block or a bar cut at 45 degrees, one
     segment, a fifth of its thinnest side and never past CHAMFER. Hardened
     normals keep the faces flat and run the cut smooth between them, so a
@@ -27889,6 +28066,8 @@ def chamfer():
     for o in bpy.context.scene.objects:
         if o.type != 'MESH' or not o.get('chamfer'):
             continue
+        if lite and min(o.dimensions) * grow < LITE_CHAMFER:
+            continue
         bpy.ops.object.select_all(action='DESELECT')
         o.select_set(True)
         bpy.context.view_layer.objects.active = o
@@ -27896,7 +28075,7 @@ def chamfer():
         b = o.modifiers.new('chamfer', 'BEVEL')
         r = o.get('round')
         b.width = min(r, 0.33 * min(o.dimensions)) if r else min(CHAMFER, 0.2 * min(o.dimensions))
-        b.segments = 3 if r else 1
+        b.segments = 3 if r and not lite else 1
         b.limit_method = 'ANGLE'
         b.angle_limit = math.radians(40)
         b.use_clamp_overlap = True
@@ -27931,7 +28110,10 @@ def join_groups():
 def finalize_and_export(name):
     k = GROW.get(name, 1.0)
     shade()
-    chamfer()
+    cut = 0 if name in AS_BUILT else cull_hidden(name not in FILE)
+    if BOX_TIER:
+        lite_unflush(k * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0))
+    chamfer(BOX_TIER, k * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0))
     join_groups()
     for o in bpy.context.scene.objects:
         if o.type == 'MESH' and not o.data.uv_layers:
@@ -27948,7 +28130,29 @@ def finalize_and_export(name):
                               export_cameras=False, export_lights=False, export_extras=False,
                               export_vertex_color='NONE')
     tris = sum(len(o.data.polygons) for o in bpy.context.scene.objects if o.type == 'MESH')
-    print('PIECE %s %s faces=%d grow=%.2f' % (name, out, tris, k))
+    print('PIECE %s %s faces=%d grow=%.2f hidden=%d' % (name, out, tris, k, cut))
+
+# Round 27: every built piece the general cuts of the box's tier take a quarter
+# off (BOX_TIER: coarser rings, square small blocks, plus what its builder
+# leaves out under LITE) has a box's build. What is left without one is land
+# (peaks, canyon walls, dunes, a floor's print) and pieces already square.
+lite_too(
+    'advanced-camp', 'avalanche-fences', 'avalanche-gallery', 'avalanche-gallery-short', 'avalanche-slide',
+    'bandstand', 'barbican', 'block-city', 'block-high-street',
+    'block-street', 'block-street-west', 'boat-huts', 'boathouse', 'boating-lake', 'cannon-battery',
+    'card-house', 'castle-gate', 'castle-watchtower', 'channel-beacon', 'cottage-row', 'crab-pots',
+    'den-camp', 'driftwood-forts', 'expedition-camp', 'filling-station', 'frozen-lake', 'game-box',
+    'glacier-crevasses', 'glacier-route-flags', 'grounded-trawler', 'hay-wain-oak',
+    'helix-run-box', 'igloo-camp', 'jetty', 'kayak-rack', 'ladder-stack', 'lagoon-fleet', 'lake-shore', 'lighthouse-dune',
+    'log-cabin', 'mine-portal', 'net-huts', 'oil-field', 'own-construction-light', 'own-pirate-cannon',
+    'own-skateboard', 'own-sled', 'park-halt', 'park-railway', 'picnic-oak', 'pirate-camp', 'pirate-lookout',
+    'pirate-ship', 'powder-magazine', 'ranch', 'road-keeper', 'sail-yard', 'shellfish-shack',
+    'shipwreck-ribs', 'siege-mantlets', 'siege-ram', 'siege-tower', 'siege-works', 'ski-jump', 'ski-school',
+    'smokehouse', 'smugglers-cave', 'spinning-top', 'springhouse', 'stock-tank', 'storm-mast',
+    'strand-line', 'supply-wagon', 'swing-oak', 'telegraph-line', 'tidepool-cottages', 'tidepool-knoll',
+    'toy-dragon', 'toy-soldiers', 'treasure-dig', 'trebuchet', 'treehouse', 'village-church', 'warning-sign',
+    'watermill', 'windmill', 'windpump', 'windsock', 'windup-ducks', 'windup-knights', 'windup-robots',
+    'windup-trams', 'wooden-horse')
 
 os.makedirs(OUT_DIR, exist_ok=True)
 for name, fn in PIECES.items():
@@ -27956,5 +28160,6 @@ for name, fn in PIECES.items():
         continue
     bpy.ops.wm.read_factory_settings(use_empty=True)
     BUILDING = name
+    BOX_TIER = name.endswith('-lite')
     fn()
     finalize_and_export(name)
