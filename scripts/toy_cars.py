@@ -238,7 +238,7 @@ class Car:
         exported as a child node of its own: the kit's wheel carries smooth
         normals, and joined into the body they kept the body off the
         renderer's flat weld (ttp/flat_weld.h)."""
-        me = wheel_mesh(False, r, w)
+        me = wheel_mesh(False, r, w, spare=True)
         me.transform(Matrix.Translation(loc) @ Matrix.Rotation(math.radians(90), 4, 'Z'))
         o = bpy.data.objects.new(name, me)
         self.col.objects.link(o)
@@ -295,7 +295,8 @@ class Car:
 
 
 # The wheel every car rides on: a slate tyre with a chamfered shoulder, its
-# outer face dished in to a white hub. Turned about its axle in WHEEL_SIDES
+# outer face a white rim dished in to the hub, a six-sided nut standing out
+# of it (WHEEL_NUT). Turned about its axle in WHEEL_SIDES
 # flats and shaded round (the one round thing on a car), each ring of the
 # section its own vertices where the surface breaks, so the shoulder and the
 # dish keep their edges. The ramp runs down the wheel as it does the body.
@@ -303,18 +304,28 @@ WHEEL_SIDES = 16
 # the section, hub face to back face: (x across as a share of the half width, r as a share of the radius, cell)
 WHEEL_SECTION = (
     ((-0.6, 0.0), (-0.6, 0.3), WHITE),       # the hub
-    ((-0.6, 0.3), (-1.0, 0.48), TYRE),      # the dish, out to the rim
+    ((-0.6, 0.3), (-1.0, 0.48), WHITE),     # the dish, out to the rim
     ((-1.0, 0.48), (-1.0, 0.8), TYRE),      # the side wall
     ((-1.0, 0.8), (-0.6, 1.0), TYRE),       # the shoulder
-    ((-0.6, 1.0), (0.6, 1.0), TYRE),        # the tread
-    ((0.6, 1.0), (1.0, 0.8), TYRE),
-    ((1.0, 0.8), (1.0, 0.0), TYRE),         # the back face
+    ((-0.6, 1.0), (1.0, 1.0), TYRE),        # the tread, square to the back face: no one sees that edge
+    ((1.0, 1.0), (1.0, 0.0), TYRE),         # the back face
 )
 
 
-def wheel_mesh(left, r, w):
+# The spare on a tail shows its back: the tyre under a pale cover (its hub side is against the car, and left open).
+SPARE_SECTION = (
+    ((-1.0, 1.0), (0.3, 1.0), TYRE),
+    ((0.3, 1.0), (0.7, 0.8), TYRE),
+    ((0.7, 0.8), (0.7, 0.56), TYRE),
+    ((0.7, 0.56), (1.0, 0.47), LIGHTSLATE),  # the cover's edge
+    ((1.0, 0.47), (1.0, 0.0), LIGHTSLATE),   # its face
+)
+WHEEL_NUT = (0.17, -0.6, -0.85)   # its radius as a share of the wheel's, from x to x (shares of the half width)
+
+
+def wheel_mesh(left, r, w, spare=False):
     """The wheel at radius r and width w, about the origin, hub facing out."""
-    key = ('l' if left else 'r', r, w)
+    key = ('l' if left else 'r', r, w, spare)
     try:
         return _wheel_src[key].copy()
     except (KeyError, ReferenceError):
@@ -333,7 +344,7 @@ def wheel_mesh(left, r, w):
             f.normal_flip()
         f.smooth = smooth
         cells.append(cell)
-    for (x0, r0), (x1, r1), cell in WHEEL_SECTION:
+    for (x0, r0), (x1, r1), cell in SPARE_SECTION if spare else WHEEL_SECTION:
         # the outside is to the left of the way along the section
         nx, nr = -(r1 - r0) * r, (x1 - x0) * w / 2
         if r0 == 0.0 or r1 == 0.0:
@@ -344,6 +355,15 @@ def wheel_mesh(left, r, w):
             j = (i + 1) % n
             am = 2 * math.pi * (i + 0.5) / n
             face((lo[i], lo[j], hi[j], hi[i]), (side * nx, nr * math.cos(am), nr * math.sin(am)), cell, True)
+    nr, nx0, nx1 = WHEEL_NUT
+    hexa = lambda x: [bm.verts.new((side * x * w / 2, nr * r * math.cos(math.pi * i / 3), nr * r * math.sin(math.pi * i / 3)))
+                      for i in range(6)]
+    lo, hi = ([], []) if spare else (hexa(nx0), hexa(nx1))
+    for i in range(len(lo)):
+        am = math.pi * (i + 0.5) / 3
+        face((lo[i], lo[(i + 1) % 6], hi[(i + 1) % 6], hi[i]), (0, math.cos(am), math.sin(am)), LIGHTSLATE, True)
+    if not spare:
+        face(hexa(nx1), (-side, 0, 0), LIGHTSLATE, False)
     me = bpy.data.meshes.new('wheel-' + key[0])
     smooth = [f.smooth for f in bm.faces]
     bm.to_mesh(me)
@@ -548,9 +568,13 @@ def monster(c):
     c.bumper(-0.3, 0.4375, front=False, hw=0.2, h=0.035)
     cab = list(c.parts)
     c.parts = []
-    # THE TRIM (dropped with it): an arch over each wheel, a roll bar behind the cab
+    # THE TRIM (dropped with it): an arch over each wheel, let into the bed's side, a roll bar behind the cab
     for sy in (-1, 1):
-        c.pair(c.box, 'arch' + 'RF'[(sy + 1) // 2], 0.14, 0.3, (0, sy * Y - 0.13, 0.4), (0, sy * Y + 0.13, 0.44), 'paint', 0.012)
+        for o in c.pair(c.box, 'arch' + 'RF'[(sy + 1) // 2], 0.18, 0.3, (0, sy * Y - 0.15, 0.445), (0, sy * Y + 0.15, 0.53), 'paint', 0.02):
+            for v in o.data.vertices:          # drawn in at the top: a flare over the wheel, not a shelf
+                if v.co.z > 0.5:
+                    v.co.y = sy * Y + (v.co.y - sy * Y) * 0.55
+                    v.co.x *= 0.87
     c.pair(c.box, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.74), SLATE, 0)
     c.box('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74), SLATE, 0)
     trim = list(c.parts)

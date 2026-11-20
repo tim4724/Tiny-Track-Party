@@ -96,7 +96,9 @@ export function entries(platformOnly) {
   }
   const out = [];
   for (const group of groups) {
-    const kept = group.entries.filter((e) => !WEB_ONLY.some((p) => e.title.startsWith(p)));
+    // A credit with no license covers no shipped file (credits.js): a board's
+    // row opens a text, and that one has none to open.
+    const kept = group.entries.filter((e) => e.license && !WEB_ONLY.some((p) => e.title.startsWith(p)));
     const mine = platformOnly.filter((e) => e.section === group.section);
     for (const e of [...kept, ...mine]) {
       out.push({

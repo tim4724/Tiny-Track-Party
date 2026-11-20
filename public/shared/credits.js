@@ -74,12 +74,12 @@ export function licenseInfo(id) {
 export const ASSET_CREDITS = [
   // No Kenney model ships any more: every model is built by this repo's own
   // scripts (public/assets/toycar/SOURCES.json). The credit stays for what they
-  // are built AFTER, so it covers no path.
+  // are built AFTER: it covers no path, so it names no license either (a chip
+  // there read as "these files are Kenney's").
   {
     section: '3D models',
-    title: 'Kenney game asset kits (the models follow their style and palette)',
+    title: 'Model style after Kenney\'s asset kits',
     author: 'Kenney',
-    license: 'CC0 1.0',
     url: 'https://kenney.nl/assets',
   },
   {
@@ -213,7 +213,8 @@ export const ASSET_CREDITS = [
 
 // Flatten a RACE_MUSIC map (audio/musicCatalogue.js) + the static entries into
 // the page's shape: [{ section, entries: [{title, author, license, url,
-// notice?, obligation, required}] }], sections in SECTION_ORDER. Songs dedup by
+// notice?, obligation, required}] }], sections in SECTION_ORDER. An entry with
+// no `license` credits no shipped file (a courtesy), and the page shows no chip. Songs dedup by
 // title (a song may sit in several biome pools) and sort alphabetically.
 // `obligation` and `required` are stamped from the license here, so no entry
 // carries its own claim.
@@ -231,7 +232,7 @@ export function creditsFor(raceMusic) {
 
   const bySection = new Map();
   for (const e of [...music, ...ASSET_CREDITS]) {
-    const { obligation } = licenseInfo(e.license);
+    const obligation = e.license ? licenseInfo(e.license).obligation : 'courtesy';
     if (!bySection.has(e.section)) bySection.set(e.section, []);
     bySection.get(e.section).push({ ...e, obligation, required: obligation === 'attribution' });
   }

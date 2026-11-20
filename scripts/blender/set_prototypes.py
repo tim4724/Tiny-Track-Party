@@ -24817,7 +24817,8 @@ def _soldier(at, color):
         box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4)
         plate_x(x + 0.305, y + 2.36, y + 2.48, z - 0.2, z + 0.2, 0x2a2735)
         box((0.12, 0.6, 0.46), (x, y + 3.0, z), color)
-        box((0.14, 2.9, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)
+        box((0.14, 2.5, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)
+        cyl(0.16, 0.45, (x + 0.06, y + 3.0, z + 0.59), 0x9aa1b4, r2=0.0, segs=4, caps=False)   # the spear's point: four faces
         box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)
         plate_x(x + 0.525, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
         plate_x(x + 0.525, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
@@ -24974,9 +24975,13 @@ def block_run(a, b, y, color0, courses=1, faces=('+x',), letters=True, crenels=F
             x, z = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
             lt = {faces[0]: ABC[(i * 3 + c * 5) % 8]} if letters and (i + c) % 2 == 0 else None
             block(s, (x, y + s / 2 + c * s, z), TOY[(i + c + color0) % 4], faces=faces, letters=lt)
-            if crenels and c == courses - 1 and i % 2 == 0:
-                box((s * 0.55 if along_x else s * 0.6, s * 0.45, s * 0.6 if along_x else s * 0.55),
-                    (x, y + courses * s + s * 0.22, z), 0xf2c14e)
+            crenel = crenels and c == courses - 1 and i % 2 == 0
+            if crenel:                            # its foot let well into the block: in the top panel's own plane the two undersides fought
+                box((s * 0.55 if along_x else s * 0.6, s * 0.5, s * 0.6 if along_x else s * 0.55),
+                    (x, y + courses * s + s * 0.2, z), 0xf2c14e)
+            elif LITE and '+y' in faces and c == courses - 1:      # the box's wall walk keeps its cream top as a print (block())
+                h, yt = s * 0.36, y + courses * s + 0.055
+                quad([(x - h, yt, z + h), (x + h, yt, z + h), (x + h, yt, z - h), (x - h, yt, z - h)], 0xfdf4de)
     return y + courses * s
 
 def block_tower(x, z, T, n, color0, roof, face, pennant=None, fly=1):
@@ -25190,7 +25195,7 @@ def ram(x, z, swing=None):
             cyl(0.6, 0.3, (x + sx * 1.15, 0.6, z + sz * 1.3), DARK, segs=10, axis='across')
         box((0.3, 0.3, 3.6), (x + sx * 1.0, 0.75, z), DARK)                       # the bed's rails
         for sz in (-1, 1):
-            box((0.25, 2.0, 0.25), (x + sx * 1.0, 1.9, z + sz * 1.5), WOODC)       # its posts
+            box((0.25, 1.92, 0.25), (x + sx * 1.0, 1.86, z + sz * 1.5), WOODC)     # its posts, their heads inside the roof's boards
     for s in (-1, 1):                                                           # the gabled roof
         box((1.5, 0.14, 3.9), (x + s * 0.62, 3.25, z), 0xe66a5a, roll=s * 0.75)
     box((0.3, 0.3, 4.0), (x, 3.75, z), DARK)                                    # the ridge
@@ -25724,7 +25729,8 @@ def barbican():
     LZ = ZS[-1] - ZS[0] + S + 1.0
     RY = H * S + 0.5
     for i in range(4):                                                               # the roof's planks
-        box((2.6, 0.3, LZ), (-3.9 + i * 2.6, RY + 0.15, 0), (WOOD, 0xe8b48a)[i % 2])
+        # (the box's planks lose their chamfer, and with it the lines between them: every other one lies a finger lower)
+        box((2.6, 0.3, LZ), (-3.9 + i * 2.6, RY + 0.15 - (0.07 * (i % 2) if LITE else 0.0), 0), (WOOD, 0xe8b48a)[i % 2])
     for sx in (-1, 1):                                                               # crenels down its edges
         for i in range(6):
             box((0.6, 0.55, 0.6), (sx * (XI + 0.5), RY + 0.3 + 0.27, -LZ / 2 + 0.6 + i * (LZ - 1.2) / 5), 0xf2c14e)
@@ -25937,11 +25943,11 @@ def block_minster():
     top = tier(-1.0, tz, 1.9, 1.9, top + 0.3, 3.4, RED, 2)
     box((1.9, 1.9, 1.9), (-1.0, top + 0.95, tz), CR)                                # the clock's storey
     cy = top + 0.95
-    cyl(0.7, 0.06, (-0.05, cy, tz), YEL, segs=12, axis='across')
-    box((0.05, 0.5, 0.09), (0.04, cy + 0.18, tz), 0x2a2735)
-    box((0.05, 0.09, 0.36), (0.04, cy, tz + 0.14), 0x2a2735)
+    cyl(0.7, 0.14, (-0.05, cy, tz), YEL, segs=12, axis='across')                     # a dial thick enough to show its rim
+    box((0.05, 0.5, 0.09), (0.12, cy + 0.18, tz), 0x2a2735)
+    box((0.05, 0.09, 0.36), (0.12, cy, tz + 0.14), 0x2a2735)
     for sz in (-1, 1):
-        cyl(0.7, 0.06, (-1.0, cy, tz + sz * 0.95 - (0.06 if sz < 0 else 0.0)), YEL, segs=12, axis='along')
+        cyl(0.7, 0.14, (-1.0, cy, tz + sz * 0.95 - (0.14 if sz < 0 else 0.0)), YEL, segs=12, axis='along')
     box((2.2, 0.26, 2.2), (-1.0, top + 2.03, tz), RED)
     cyl(1.35, 2.2, (-1.0, top + 2.16, tz), GRN, r2=0.04, segs=4, yaw=math.pi / 4)
     fz = ZC + 7.4                                                                   # the flats, stepped
@@ -27468,16 +27474,30 @@ def own_item_cone():
 
 @own_model('construction-light', grow=0.25)
 def own_road_lamp():
-    # Road works' beacon: a dark foot, a board banded orange and white on a
-    # grey post, an amber lamp under a grey cap.
-    box((0.3, 0.1, 0.3), (0.0, 0.05, 0.0), 'dark')
-    box((0.12, 0.26, 0.12), (0.0, 0.2, 0.0), 'grey')
-    with plain_parts():
-        for i, c in enumerate(('orange', 'white', 'orange')):
-            box((0.26, 0.13, 0.1), (0.0, 0.365 + 0.13 * i, 0.0), c)
-    box((0.12, 0.08, 0.12), (0.0, 0.71, 0.0), 'grey')
-    box((0.18, 0.15, 0.16), (0.0, 0.79, 0.0), 'yellow')
-    box((0.22, 0.05, 0.2), (0.0, 0.89, 0.0), 'grey')
+    # Road works' beacon: a broad board striped orange and white on the slant,
+    # stood on a dark foot, a round amber lamp on its head. The board is what
+    # a racer reads, so it is most of the piece.
+    box((0.3, 0.08, 0.3), (0.0, 0.04, 0.0), 'dark')
+    box((0.12, 0.1, 0.1), (0.0, 0.12, 0.0), 'grey')
+    w, t, y0, y1 = 0.16, 0.05, 0.16, 0.68
+    row = lambda y: 20 * (1 - y / 0.9)
+    L, R = (0.24, 0.42), (0.42, 0.6)                 # the white stripe's foot and head on the left edge, on the right
+    cuts = lambda e: (y0, e[0], e[1], y1)
+    faces = []
+    for i, c in enumerate(('orange', 'white', 'orange')):
+        l0, l1, r0, r1 = cuts(L)[i], cuts(L)[i + 1], cuts(R)[i], cuts(R)[i + 1]
+        for sz in (-1, 1):                               # the stripe runs through the board: both faces, both edges
+            q = [(-w, l0, sz * t), (w, r0, sz * t), (w, r1, sz * t), (-w, l1, sz * t)]
+            faces.append((c, own_facing([v + (row(v[1]),) for v in q], (0, 0, sz)), 'board'))
+        for sx in (-1, 1):
+            ya, yb = (l0, l1) if sx < 0 else (r0, r1)
+            q = [(sx * w, ya, -t), (sx * w, ya, t), (sx * w, yb, t), (sx * w, yb, -t)]
+            faces.append((c, own_facing([v + (row(v[1]) + 3,) for v in q], (sx, 0, 0)), 'board'))
+    for y, n in ((y0, -1), (y1, 1)):
+        q = [(-w, y, -t), (w, y, -t), (w, y, t), (-w, y, t)]
+        faces.append(('orange', own_facing([v + (row(y),) for v in q], (0, n, 0)), 'board'))
+    own_shell('board', faces)
+    cyl(0.11, 0.14, (0.0, 0.79, -0.07), 'yellow', segs=8, axis='along')
     join_still('construction-light')
 
 def own_cask(at, k=1.0, yaw=0.0):
@@ -27610,53 +27630,68 @@ def own_stone_heap():
 
 @own_model('skateboard', grow=1.0 / 3)
 def own_skateboard():
-    # A toy skateboard: a wooden deck under black grip, turned up a little at
-    # nose and tail, two grey trucks, four pale wheels.
-    box((0.92, 0.08, 1.5), (0.0, 0.4, 0.0), 'brown')
-    own_shell('grip', [('dark', own_facing([(-0.4, 0.458, -0.72, 6), (0.4, 0.458, -0.72, 6), (0.4, 0.458, 0.72, 6), (-0.4, 0.458, 0.72, 6)], (0, 1, 0)), 'grip')])
+    # A toy skateboard: a wooden deck kicked up at nose and tail, black grip
+    # over the whole of its top, two grey trucks and four pale wheels tucked
+    # under it.
+    hw, th = 0.46, 0.08
+    prof = ((-1.04, 0.47), (-0.74, 0.36), (0.74, 0.36), (1.04, 0.47))          # (z, the underside's y)
+    faces = []
+    for (z0, y0), (z1, y1) in zip(prof, prof[1:]):
+        faces.append(('dark', own_facing([(-hw, y0 + th, z0, 5), (hw, y0 + th, z0, 5), (hw, y1 + th, z1, 5), (-hw, y1 + th, z1, 5)], (0, 1, 0)), 'deck'))
+        faces.append(('brown', own_facing([(-hw, y0, z0, 24), (hw, y0, z0, 24), (hw, y1, z1, 24), (-hw, y1, z1, 24)], (0, -1, 0)), 'deck'))
+        for sx in (-1, 1):
+            q = [(sx * hw, y0, z0, 14), (sx * hw, y1, z1, 14), (sx * hw, y1 + th, z1, 10), (sx * hw, y0 + th, z0, 10)]
+            faces.append(('brown', own_facing(q, (sx, 0, 0)), 'deck'))
+    for sz, (z, y) in ((-1, prof[0]), (1, prof[-1])):
+        faces.append(('brown', own_facing([(-hw, y, z, 14), (hw, y, z, 14), (hw, y + th, z, 10), (-hw, y + th, z, 10)], (0, 0, sz)), 'deck'))
+    own_shell('deck', faces)
     wheels = []
     for sz in (-1, 1):
-        box((0.9, 0.08, 0.36), (0.0, 0.445, sz * 0.88), 'dark', pitch=-sz * 0.3)
-        box((0.6, 0.12, 0.2), (0.0, 0.3, sz * 0.62), 'grey')
+        box((0.44, 0.2, 0.16), (0.0, 0.27, sz * 0.6), 'grey')
         for sx in (-1, 1):
-            rim = own_band('cream', (0.15, -0.09, 10), (0.15, 0.09, 10), 6, 'rim%d%d' % (sx, sz))
-            rim.append(('cream', own_facing([q + (4,) for q in own_ring(0.15, sx * 0.09, 6)], (0, sx, 0)), 'hub%d%d' % (sx, sz)))
+            rim = own_band('cream', (0.15, -0.09, 12), (0.15, 0.09, 12), 8, 'rim%d%d' % (sx, sz))
+            rim.append(('cream', own_facing([q + (6,) for q in own_ring(0.15, sx * 0.09, 8)], (0, sx, 0)), 'hub%d%d' % (sx, sz)))
             # turned onto its side: the ring's axis (y) across the board (x)
-            wheels += [(c, [(sx * 0.4 + y, 0.15 + x, sz * 0.62 + z, w) for (x, y, z, w) in pts][::-1], g) for c, pts, g in rim]
+            wheels += [(c, [(sx * 0.3 + y, 0.15 + x, sz * 0.6 + z, w) for (x, y, z, w) in pts][::-1], g) for c, pts, g in rim]
     own_shell('wheels', wheels, smooth=True)
     join_still('skateboard')
 
 @own_model('sled', grow=0.5)
 def own_sled():
-    # A wooden sled, its nose to +Z: three slats on two cross bars, four
-    # struts down to two runners that curl up in front.
-    wood, iron = 'brown', 'slate'
+    # A wooden sled, its nose to +Z: two plank runners that curl up in front
+    # into tall horns, three slats low between the horns on four struts.
+    wood = 'brown'
+    horn = [(-1.0, 0.0), (0.4, 0.0), (0.76, 0.1), (0.98, 0.36), (1.0, 0.78), (0.8, 0.78), (0.78, 0.46), (0.64, 0.28),
+            (0.38, 0.16), (-1.0, 0.16)]
     for sx in (-1, 1):
         x = sx * 0.5
-        beam((x, 0.05, -1.0), (x, 0.05, 0.55), 0.1, iron)
+        prism(horn, x, 0.11, wood)
         with plain_parts():
-            beam((x, 0.03, 0.5), (x, 0.52, 0.95), 0.1, iron)
-            for z in (-0.7, 0.2):
-                box((0.1, 0.42, 0.12), (x, 0.3, z), wood)
-    for z in (-0.7, 0.2):
-        box((1.16, 0.1, 0.14), (0.0, 0.54, z), wood)
+            for z in (-0.72, 0.12):
+                box((0.1, 0.34, 0.14), (x, 0.31, z), wood)
     for sx in (-1, 0, 1):
-        box((0.3, 0.08, 1.62), (sx * 0.36, 0.63, -0.2), wood)
+        box((0.3, 0.08, 1.5), (sx * 0.36, 0.52, -0.26), 'salmon')
     join_still('sled')
 
 @own_model('snow-bunker')
 def own_snow_bunker():
-    # A snow fort's wall, the children's: blocks of packed snow in a shallow
-    # arc, a second course begun, snowballs piled behind it.
-    S = 'snow'
-    for i, (x, z, w, h, yaw) in enumerate(((-0.72, 0.1, 0.52, 0.3, 0.35), (-0.24, -0.06, 0.5, 0.33, 0.1), (0.24, -0.06, 0.5, 0.3, -0.1),
-                                           (0.7, 0.1, 0.5, 0.32, -0.35))):
-        snowy(box((w, h, 0.36), (x, h / 2 - 0.02, z), S, yaw=yaw), 0.6)
-    snowy(box((0.46, 0.14, 0.32), (0.0, 0.34, -0.06), S, yaw=0.03), 0.4)
-    with plain_parts():
-        for (x, z, r) in ((-0.12, 0.42, 0.18),):
-            snowy(box((r, r, r), (x, r / 2 - 0.01, z), S, yaw=x * 9), 0.6)
-    join_still('bunker')
+    # A snow fort's wall, the children's: flat-topped mounds of packed snow
+    # run into one another in a shallow arc, the middle one the tallest, a
+    # low one before them.
+    faces = []
+    for (cx, cz, R, H, n, seed) in ((0.0, -0.08, 0.5, 0.41, 6, 2.0), (-0.56, 0.1, 0.46, 0.28, 5, 4.0), (0.52, 0.02, 0.44, 0.26, 5, 6.0),
+                                    (-0.16, 0.42, 0.3, 0.16, 5, 8.0)):
+        ring = lambda f, y, w, cx=cx, cz=cz, R=R, n=n, seed=seed: [
+            (cx + 1.1 * R * f * (1 + 0.2 * jitter(i, 1, seed)) * math.cos(2 * math.pi * i / n + seed),
+             y, cz + R * f * (1 + 0.2 * jitter(i, 2, seed)) * math.sin(2 * math.pi * i / n + seed), w) for i in range(n)]
+        tiers = [ring(1.0, 0.0, 20), ring(0.74, 0.78 * H, 9), ring(0.56, H, 2)] if H > 0.2 else [ring(1.0, 0.0, 20), ring(0.6, H, 8)]
+        for lo, hi in zip(tiers, tiers[1:]):
+            for i in range(n):
+                j = (i + 1) % n
+                out = (lo[i][0] + lo[j][0] - 2 * cx, 0.6, lo[i][2] + lo[j][2] - 2 * cz)
+                faces.append(('snow', own_facing([lo[i], lo[j], hi[j], hi[i]], out), 'bank'))
+        faces.append(('snow', own_facing(tiers[-1], (0, 1, 0)), 'bank'))
+    own_shell('bunker', faces)
 
 @own_model('snow-pile')
 def own_snow_pile():

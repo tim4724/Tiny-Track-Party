@@ -92,7 +92,10 @@ test('creditsFor() lists every unique song exactly once, as required credits', (
 // author: it names no single one, and each text inside carries its own.
 test('static asset credits are complete', () => {
   for (const e of ASSET_CREDITS) {
-    const fields = ['section', 'title', 'license', 'url'];
+    const fields = ['section', 'title', 'url'];
+    // A license belongs to shipped files: the one credit without one (a style
+    // followed, no file taken) may cover nothing and serve no notice.
+    if (e.covers || e.notice) fields.push('license');
     if (e.license !== 'Mixed permissive') fields.push('author');
     for (const field of fields) {
       assert.ok(e[field], `'${e.title || '?'}' is missing '${field}'`);
@@ -109,6 +112,7 @@ test('every credit rides a known license, and its obligation is that license’s
   const all = creditsFor(RACE_MUSIC).flatMap((s) => s.entries);
   const known = new Set(OBLIGATION_IDS);
   for (const e of all) {
+    if (!e.license) { assert.equal(e.obligation, 'courtesy'); assert.equal(e.required, false); continue; }
     const info = LICENSES[e.license];
     assert.ok(info, `'${e.title}' is under '${e.license}', which is not in LICENSES`);
     assert.ok(known.has(info.obligation), `license '${e.license}' claims '${info.obligation}'`);
@@ -161,7 +165,7 @@ test('every license notice resolves to a file the server actually serves', () =>
   // The whole point of the 'notice' tier: shipping under one of those licenses
   // means shipping its text. No exceptions — a new dependency without a served
   // copy fails here rather than going live with a link where a notice belongs.
-  const noNotice = ASSET_CREDITS.filter((e) => LICENSES[e.license].obligation === 'notice' && !e.notice);
+  const noNotice = ASSET_CREDITS.filter((e) => LICENSES[e.license]?.obligation === 'notice' && !e.notice);
   assert.deepEqual(noNotice.map((e) => e.title), [],
     'these need their license text served — add it under public/assets/licenses/ ' +
     'and record where it came from in that directory\'s SOURCES.md');
@@ -170,7 +174,7 @@ test('every license notice resolves to a file the server actually serves', () =>
   // thing. A notice on an entry that owes none used to appear or not purely on
   // whether a file happened to exist, so two CC0 works sat under the same
   // license showing different links.
-  const owesNone = ASSET_CREDITS.filter((e) => LICENSES[e.license].obligation !== 'notice' && e.notice);
+  const owesNone = ASSET_CREDITS.filter((e) => LICENSES[e.license]?.obligation !== 'notice' && e.notice);
   assert.deepEqual(owesNone.map((e) => e.title), [],
     'these licenses demand no notice, so the chip should link the canonical text');
 });

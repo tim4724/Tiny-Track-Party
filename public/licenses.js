@@ -42,7 +42,8 @@ function entryRow(entry) {
   // A bundle of many works names no one author (credits.js), so the row shows none.
   if (entry.author) what.appendChild(el('span', 'entry__author', entry.author));
   row.appendChild(what);
-  row.appendChild(licenseChip(entry));
+  // A credit for no shipped file (credits.js) has no terms to link.
+  if (entry.license) row.appendChild(licenseChip(entry));
   return row;
 }
 
