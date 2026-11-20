@@ -48,8 +48,13 @@ const SET_SCALE = {};
 for (const t of Object.values(TRACKS)) for (const r of t.set || []) (SET_SCALE[r.model] ||= new Set()).add(r.scale ?? 1);
 for (const [m, s] of Object.entries(SET_SCALE)) { if (s.size === 1 && !s.has(1)) SET_SCALE[m] = [...s][0]; else delete SET_SCALE[m]; }
 if (process.argv.includes('--scales')) { console.log(SET_SCALE); process.exit(0); }
+// A row's `scale` sizes everything in the piece, its people and animals too:
+// the builders divide by it (fig_u), so a person is one size on every track.
+const ROW_SCALE = {};
+for (const t of Object.values(TRACKS)) for (const r of t.set || []) (ROW_SCALE[r.model] ??= new Set()).add(r.scale ?? 1);
+for (const k of Object.keys(ROW_SCALE)) ROW_SCALE[k] = [...ROW_SCALE[k]];
 execFileSync(BLENDER, ['-b', '--python-exit-code', '1', '-P', SCRIPT, '--', tmp, ...process.argv.slice(2)],
-  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND), TTP_SET_SCALE: JSON.stringify(SET_SCALE) } });
+  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND), TTP_SET_SCALE: JSON.stringify(SET_SCALE), TTP_SET_ROW_SCALE: JSON.stringify(ROW_SCALE) } });
 
 const sources = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
 for (const file of fs.readdirSync(tmp).filter((f) => f.endsWith('.glb')).sort()) {

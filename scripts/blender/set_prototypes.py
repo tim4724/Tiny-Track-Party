@@ -803,6 +803,510 @@ def lite_plain(fn):
     build.__name__ = fn.__name__
     return build
 
+# ---- figures: the one person, the one snowman, the one quadruped, the one bird ----
+# Every person and animal in the world is built here, one construction a
+# kind. A PERSON is one size in the game whatever its piece's GROW and its
+# row's `scale` in tracks.js (TTP_SET_ROW_SCALE, handed over by
+# gen-set-prototypes.mjs): fig_u() is one world unit in the units of the
+# piece being built. An ANIMAL or a snowman is sized by its piece, as big as
+# it has to be to read from the road (the toy look: not to scale with the
+# people, only never absurd beside one in the same scene).
+
+ROW_SCALE = json.loads(os.environ.get('TTP_SET_ROW_SCALE', '{}'))
+BUILDING = ''
+
+def row_k():
+    """1 / the `scale` of the rows that place the piece being built: what a
+    toy that keeps its own size is multiplied by."""
+    name = BUILDING[:-5] if BUILDING.endswith('-lite') else BUILDING
+    scales = ROW_SCALE.get('set-' + name, [1.0])
+    if len(scales) > 1:
+        raise SystemExit('set-%s holds a figure and is placed at several scales %s' % (name, scales))
+    return 1.0 / scales[0]
+
+def fig_u():
+    """One world unit in the builder's units (1 / GROW / the row's scale)."""
+    return row_k() / GROW.get(BUILDING, 1.0)
+
+FIG_PLAIN = False
+
+def fig_lite():
+    """The box's plainer figures: the lite build (LITE), or a builder that
+    takes its tier as an argument (fig_plain)."""
+    return LITE or FIG_PLAIN
+
+@contextlib.contextmanager
+def fig_plain(on=True):
+    global FIG_PLAIN
+    was, FIG_PLAIN = FIG_PLAIN, on
+    try:
+        yield
+    finally:
+        FIG_PLAIN = was
+
+FIG_ADULT, FIG_CHILD = 0.50, 0.36                     # standing, in the game
+FIG_KID = FIG_CHILD / FIG_ADULT
+FIG_SKIN = 0xf2bf99
+FIG_HAIR = (0x7a5a3a, 0x2a2735, 0xffc044, 0xb06041)
+
+def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=None, hat=None, k=1.0,
+               arm=0.0, out=False, lean=None, kick=0.0, gesture=None):
+    """THE person: facing +X turned by `yaw`, FIG_ADULT tall standing at
+    `k` 1 (a child is FIG_KID), in six blocks, the cars' way: legs, a torso,
+    two arms, a head, and hair or a hat (`hat` a colour: a cap, a helmet, a
+    hood). No face. The lite build (LITE) leaves out an arm hanging at the
+    side. `pose`: `stand`; `sit` (on the ground at `at`, legs out);
+    `ride` (on a seat whose top is `at`, shins down off its edge); `crouch`
+    (a skier's tuck); `lie` (on the back, head to -X). `legs` None leaves
+    them out (hidden in a coach's body). `arm` lifts the arms forward
+    (radians), a pair lifts left and right apart (one reaching). `out`
+    holds them straight out to the sides. `lean` tips the body forward from
+    the hips. `kick` swings the right leg forward that far (negative: lifted
+    behind, a skater's). `gesture` names the arms' motion about the
+    shoulders (set_motion.h). Returns its parts."""
+    u = k * fig_u()
+    x, y, z = at
+    c, s = math.cos(yaw), math.sin(yaw)
+    parts = []
+    def b(size, fx, fy, fz, color, tip=0.0):
+        o = box([e * u for e in size], (x + (fx * c + fz * s) * u, y + fy * u, z + (-fx * s + fz * c) * u), color,
+                yaw=yaw, roll=tip)
+        parts.append(o)
+        return o
+    LEG, HIP = 0.215, 0.21
+    if pose == 'sit':
+        hx, hy, lean = 0.0, 0.07, -0.12 if lean is None else lean
+        if legs is not None:
+            b((0.23, 0.075, 0.12), 0.115, 0.0375, 0.0, legs)
+    elif pose == 'ride':
+        hx, hy, lean = 0.0, 0.065, 0.0 if lean is None else lean
+        if legs is not None:
+            b((0.17, 0.07, 0.12), 0.065, 0.035, 0.0, legs)
+            b((0.07, 0.15, 0.118), 0.115, -0.07, 0.0, legs)
+    elif pose == 'crouch':
+        hx, hy, lean = -0.035, 0.15, 0.5 if lean is None else lean
+        b((0.1, 0.17, 0.12), -0.01, 0.08, 0.0, legs, tip=-0.3)
+    elif pose == 'lie':
+        hx, hy, lean = 0.0, 0.055, -math.pi / 2
+        b((0.215, 0.085, 0.12), 0.105, 0.0425, 0.0, legs)
+    else:
+        hx, hy, lean = 0.0, HIP, lean or 0.0
+        if kick:
+            b((0.085, LEG, 0.058), 0.0, LEG / 2, 0.031, legs)
+            b((0.085, LEG, 0.058), LEG / 2 * math.sin(kick), HIP - LEG / 2 * math.cos(kick), -0.031, legs, tip=-kick)
+        elif legs is not None:
+            b((0.085, LEG, 0.12), 0.0, LEG / 2, 0.0, legs)
+    cl, sl = math.cos(lean), math.sin(lean)
+    def body(fx, fy):                                    # a point of the torso's frame, up from the hips
+        return hx + fx * cl + fy * sl, hy - fx * sl + fy * cl
+    b((0.105, 0.17, 0.145), *body(0.0, 0.08), 0.0, shirt, tip=lean)
+    sx, sy = body(0.0, 0.15)                             # the shoulders
+    lift = arm if isinstance(arm, (tuple, list)) else (arm, arm)
+    def arms():
+        for sd, a in zip((1, -1), lift):
+            if fig_lite() and not out and not a and not gesture:   # the box's: an arm at the side is the torso's
+                continue
+            if out:
+                b((0.06, 0.055, 0.15), sx, sy, sd * 0.14, shirt, tip=lean)
+            else:
+                t = a - lean                             # the hand's way off straight down
+                b((0.06, 0.15, 0.055), sx + 0.065 * math.sin(t), sy - 0.065 * math.cos(t), sd * 0.096, shirt, tip=-t)
+    if gesture:
+        with animated(gesture, (x + sx * c * u, y + sy * u, z - sx * s * u), yaw=yaw):
+            arms()
+    else:
+        arms()
+    b((0.1, 0.1, 0.1), *body(0.0, 0.21), 0.0, FIG_SKIN, tip=lean)
+    if hat is not None:
+        b((0.118, 0.055, 0.118), *body(0.0, 0.2675), 0.0, hat, tip=lean)
+    else:
+        b((0.112, 0.045, 0.108), *body(-0.012, 0.2675), 0.0, FIG_HAIR[0] if hair is None else hair, tip=lean)
+    return parts
+
+def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
+    """A square-edged block at exactly `size`: an ear, an eye, a horn at an
+    animal's own size is under box()'s MIN_T, and a chamfer there is only
+    triangles."""
+    o = box(size, at, color, yaw=yaw, pitch=pitch, roll=roll)
+    o.scale = (size[0], size[2], size[1])
+    o['chamfer'] = 0
+    return o
+
+def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='out', balls=3, lean=0.0, broom=False,
+                buttons=0x38383d):
+    """THE snowman, `h` tall in the game, its carrot to +X turned by `yaw`:
+    `balls` rolled balls of snow (two for a child's), round as they are in
+    life, a carrot, coal eyes and buttons, stick arms (`arms`: out, up, down
+    or none), a scarf and a hat of its own kind (`hat`: top, bucket, bobble,
+    cone or None); `lean` tips the head off its body, `broom` stands one in
+    its hand."""
+    x, y0, z = at
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def p(dx, dy, dz):
+        return (x + dx * c + dz * s2, y0 + dy, z - dx * s2 + dz * c)
+    H = h * fig_u()
+    rs = (0.3, 0.22, 0.16) if balls == 3 else (0.3, 0.19)
+    k = H / (1.62 * sum(rs))
+    rs = [r * k for r in rs]
+    y, cy = -0.06 * k, []
+    for r in rs:
+        cy.append(y + r * 0.86)
+        y += r * 1.62
+    big = h > 1.5                                        # one that size shows a twice-split ball's facets
+    for i, r in enumerate(rs):
+        off = lean * k if i == len(rs) - 1 else 0.0
+        snowy(sphere(r, p(0.0, cy[i], off), 0xf3f7fb, subdiv=3 if big else 2, scale=(1.0, 0.9, 1.0), flat=False), 0.35)
+    hr, hy, hz = rs[-1], cy[-1], lean * k
+    cyl(0.3 * hr, 0.62 * hr, p(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.1 * hr, segs=6, axis='across', yaw=yaw, stem=True)
+    def b(size, pos, color, **kw):
+        return fig_block(size, p(*pos), color, yaw=yaw, **kw)
+    for sd in (-1, 1):
+        b((0.04 * k, 0.05 * k, 0.05 * k), (hr * 0.9, hy + 0.3 * hr, hz + sd * 0.38 * hr), 0x2a2735)
+    for i in range(2 if balls == 3 else 1):
+        b((0.04 * k, 0.055 * k, 0.055 * k), (rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons)
+    ny = cy[-1] - hr * 0.82                              # the scarf: a band round the neck, an end down the front
+    cyl(hr * 0.9, 0.11 * k, p(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=8, stem=True)
+    b((0.05 * k, 0.26 * k, 0.1 * k), (hr * 0.9, ny - 0.12 * k, hz * 0.6 + 0.3 * hr), scarf)
+    ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
+    L, stick = 0.42 * k, 0.045 * k
+    if arms != 'none':
+        tip = {'out': 0.25, 'up': 0.95, 'down': -0.5}[arms]
+        for sd in (-1, 1):
+            b((stick, stick, L), (0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
+                                  sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, pitch=sd * tip)
+    if broom:
+        bz = ar * 0.9 + L * 0.9
+        b((stick, 0.95 * H, stick), (0.0, 0.47 * H, bz), 0x8a6a46)
+        b((0.1 * k, 0.22 * k, 0.26 * k), (0.0, 0.95 * H, bz), 0xffc044)
+    top = hy + hr * 0.78
+    if hat == 'top':
+        cyl(hr * 1.0, 0.07 * k, p(0.0, top - 0.035 * k, hz), hat_c, segs=8, stem=True)
+        cyl(hr * 0.65, hr * 1.1, p(0.0, top, hz), hat_c, segs=8, stem=True)
+    elif hat == 'bucket':
+        cyl(hr * 0.8, hr * 0.95, p(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True)
+    elif hat == 'bobble':
+        cyl(hr * 0.9, hr * 0.8, p(0.0, hy + 0.35 * hr, hz), hat_c, r2=hr * 0.45, segs=8, stem=True)   # (pulled down over the ears)
+        b((0.34 * hr, 0.34 * hr, 0.34 * hr), (0.0, hy + 1.28 * hr, hz), 0xfff6eb)
+    elif hat == 'cone':
+        cyl(hr * 0.7, hr * 1.5, p(0.0, top - 0.06 * k, hz), hat_c, r2=0.03 * k, segs=6, stem=True)
+
+# ---- the animals: faceted limbs (loft) on one frame ----
+
+class fig_frame:
+    """An animal's own frame at `at`, facing +X turned by `yaw`, `u` units to
+    one of its own: p() a point (forward, up, to its side), limb() a faceted
+    limb through such points, block() a square block. `pitch` tips the
+    whole of it nose-down about its side (a penguin on its belly) and `bank`
+    rolls it about its nose (a hawk in its turn); `drop` lowers it (lying
+    down). `hinge` ((x, y), angle), while set, turns what is built nose-up
+    about that point of its side view: a head on its neck. The lite build
+    (LITE) draws a limb on four facets, a long one through four of its
+    rings and a short one through its ends alone (unless `keep`), and
+    leaves out what is marked `fine`. A part in `white` stays white at any height."""
+    def __init__(self, at, yaw, u, pitch=0.0, bank=0.0, drop=0.0, white=None):
+        self.at, self.yaw, self.u = at, yaw, u
+        self.c, self.s = math.cos(yaw), math.sin(yaw)
+        self.pitch, self.bank, self.drop, self.white = pitch, bank, drop, white
+        self.hinge = None
+    def p(self, dx, dy, dz=0.0, hinged=True):
+        if self.hinge and hinged:
+            (hx, hy), a = self.hinge
+            ax, ay = dx - hx, dy - hy
+            dx, dy = hx + ax * math.cos(a) - ay * math.sin(a), hy + ax * math.sin(a) + ay * math.cos(a)
+        if self.bank:
+            cb, sb = math.cos(self.bank), math.sin(self.bank)
+            dy, dz = dy * cb + dz * sb, -dy * sb + dz * cb
+        if self.pitch:
+            cp, sp = math.cos(self.pitch), math.sin(self.pitch)
+            dx, dy = dx * cp + dy * sp, -dx * sp + dy * cp
+        x, y, z = self.at
+        u = self.u
+        return (x + (dx * self.c + dz * self.s) * u, y + (dy - self.drop) * u, z + (-dx * self.s + dz * self.c) * u)
+    def limb(self, rings, color, n=6, fine=False, side='z', keep=False, bury=0, f=1.0):
+        """`rings`: (forward, up[, side], half width, half depth) each, the
+        width lying along the frame's `side` axis (z: across the body; x:
+        along it, a wing held out; y: upright, a wing folded on a flank).
+        `bury`: loft()'s, an end inside another part left open. `f` fattens it."""
+        if fig_lite():
+            if fine:
+                return None
+            if len(rings) > 4:
+                rings = [rings[0], rings[1], rings[-2], rings[-1]]
+            elif len(rings) > 2 and not keep:
+                rings = [rings[0], rings[-1]]
+            if n > 4:
+                f, n = f * 1.2, 4
+        pts = [self.p(*q[:-2]) for q in rings]
+        rr = [(q[-2] * self.u * f, q[-1] * self.u * f) for q in rings]
+        o0, o1 = self.p(0, 0, 0, hinged=False), self.p(*{'x': (1, 0, 0), 'y': (0, 1, 0), 'z': (0, 0, 1)}[side], hinged=False)
+        o = loft(pts, rr, color, tuple(a - b for a, b in zip(o1, o0)), n, turn=math.pi / 4 if n == 4 else 0.0, bury=bury)
+        if self.white is not None and color == self.white:
+            snowy(o, 0.15)
+        return o
+    def pair(self, rings, color, **kw):
+        """A limb each side: `rings` with their side offsets, mirrored."""
+        return [self.limb([(q[0], q[1], sd * q[2]) + tuple(q[3:]) for q in rings], color, **kw) for sd in (-1, 1)]
+    def block(self, size, pos, color, roll=0.0, fine=False):
+        if fig_lite() and fine:
+            return None
+        turn = self.hinge[1] if self.hinge else 0.0
+        o = fig_block([e * self.u for e in size], self.p(*pos), color, yaw=self.yaw, roll=roll - turn + self.pitch,
+                      pitch=self.bank)
+        if self.white is not None and color == self.white:
+            snowy(o, 0.15)
+        return o
+
+# What a quadruped is, in units of the piece it stands in at `k` 1 (a cow
+# 0.7 at the head, a horse 0.7, a sheep 0.5, a dog 0.55: sized to read from
+# the road, not to a person): the barrel's rings rump to chest, where the legs stand (fore x, hind x, half the track), each leg's
+# joints down from the body (x off the leg's line, y, half width, half
+# depth), the hoof under it, the tail, the shoulder the neck hinges on and
+# how far the head dips in each pose, the neck and head's limbs and blocks
+# (size, where, colour, roll, fine).
+FIG_QUAD = {
+    'cow': dict(
+        barrel=((-0.4, 0.46, 0.1, 0.1), (-0.3, 0.47, 0.17, 0.17), (0.0, 0.44, 0.18, 0.19), (0.24, 0.45, 0.165, 0.18),
+                (0.34, 0.47, 0.1, 0.11)),
+        patch=((-0.16, 0.47, 0.176, 0.176), (0.0, 0.455, 0.186, 0.196), (0.12, 0.46, 0.176, 0.19)),
+        stand=(0.24, -0.3, 0.1),
+        fore=((0.0, 0.36, 0.055, 0.065), (0.0, 0.19, 0.038, 0.04), (0.0, 0.05, 0.032, 0.034)),
+        hind=((0.0, 0.36, 0.055, 0.065), (-0.03, 0.19, 0.038, 0.04), (0.0, 0.05, 0.032, 0.034)),
+        hoof=((0.0, 0.05, 0.036, 0.038), (0.01, 0.0, 0.042, 0.046)),
+        tail=((-0.4, 0.55, 0.018, 0.02), (-0.45, 0.5, 0.02, 0.022), (-0.46, 0.28, 0.016, 0.018), (-0.45, 0.14, 0.03, 0.034)),
+        hinge=(0.3, 0.5), dip=dict(graze=-0.95, drink=-0.1, up=0.15, lie=0.1),
+        head=((((0.28, 0.5, 0.1, 0.13), (0.42, 0.55, 0.075, 0.1), (0.5, 0.58, 0.07, 0.085)), 'coat', dict(bury=3)),
+              (((0.47, 0.6, 0.085, 0.085), (0.58, 0.55, 0.07, 0.075), (0.66, 0.5, 0.055, 0.055)), 'face', dict(bury=2)),
+              (((0.64, 0.51, 0.055, 0.052), (0.7, 0.475, 0.05, 0.045)), 'muzzle', dict(bury=1))),
+        blocks=(((0.05, 0.045, 0.3), (0.47, 0.67), 'horn', 0.0, False), ((0.05, 0.07, 0.26), (0.44, 0.61), 'coat', 0.0, False)),
+        look=dict(mane=0x5a4632, muzzle=0xf2bf99, horn=0xfde4c7, hoof=0x38383d)),
+    'sheep': dict(
+        barrel=((-0.27, 0.33, 0.09, 0.09), (-0.2, 0.34, 0.17, 0.16), (0.0, 0.345, 0.185, 0.175), (0.17, 0.34, 0.17, 0.16),
+                (0.25, 0.33, 0.1, 0.1)),
+        stand=(0.14, -0.15, 0.08),
+        fore=((0.0, 0.22, 0.038, 0.038), (0.0, 0.0, 0.03, 0.03)), hind=((0.0, 0.22, 0.038, 0.038), (0.0, 0.0, 0.03, 0.03)),
+        tail=((-0.25, 0.39, 0.045, 0.045), (-0.33, 0.27, 0.028, 0.028)),
+        hinge=(0.2, 0.33), dip=dict(graze=-1.1, up=0.1),
+        head=((((0.16, 0.36, 0.105, 0.11), (0.3, 0.42, 0.075, 0.08)), 'coat', dict(fine=True, bury=1)),
+              (((0.27, 0.43, 0.064, 0.068), (0.36, 0.435, 0.058, 0.062), (0.45, 0.41, 0.042, 0.042)), 'face', {}),
+              (((0.44, 0.412, 0.04, 0.038), (0.48, 0.4, 0.033, 0.03)), 'muzzle', dict(n=4, fine=True, bury=1))),
+        blocks=(((0.04, 0.045, 0.21), (0.3, 0.465), 'face', 0.0, False), ((0.09, 0.05, 0.1), (0.28, 0.505), 'coat', 0.0, True)),
+        look=dict(coat=0xf8f8fb, face=0x2a2735, legs=0x2a2735, mane=0xf8f8fb, muzzle=0xf2bf99)),
+    # a toy's horse, built like the cattle and the cars: short thick legs
+    # under a deep barrel (on a real horse's long thin ones it read as an
+    # antelope at speed)
+    'horse': dict(
+        barrel=((-0.29, 0.415, 0.084, 0.084), (-0.2, 0.415, 0.138, 0.15), (-0.02, 0.385, 0.126, 0.138),
+                (0.15, 0.39, 0.132, 0.162), (0.25, 0.415, 0.084, 0.108)),
+        belly=((-0.14, 0.275, 0.072, 0.036), (0.0, 0.26, 0.102, 0.048), (0.14, 0.275, 0.072, 0.036)),
+        stand=(0.19, -0.2, 0.068),
+        fore=((0.0, 0.355, 0.075, 0.083), (0.01, 0.172, 0.045, 0.048), (0.0, 0.05, 0.033, 0.036)),
+        hind=((0.0, 0.375, 0.098, 0.128), (0.02, 0.245, 0.068, 0.09), (-0.06, 0.165, 0.045, 0.051), (-0.02, 0.05, 0.033, 0.036)),
+        hoof=((0.0, 0.05, 0.042, 0.045), (0.012, 0.0, 0.054, 0.06)),
+        tail=((-0.29, 0.475, 0.022, 0.024), (-0.36, 0.435, 0.032, 0.036), (-0.385, 0.275, 0.036, 0.04), (-0.37, 0.122, 0.012, 0.014)),
+        hinge=(0.2, 0.415), dip=dict(up=0.0, graze=-1.25),
+        head=((((0.16, 0.415, 0.098, 0.138), (0.26, 0.515, 0.069, 0.098), (0.33, 0.6, 0.055, 0.071), (0.365, 0.645, 0.046, 0.052)),
+               'coat', dict(keep=True, bury=3)),
+              (((0.335, 0.66, 0.05, 0.055), (0.425, 0.615, 0.045, 0.05), (0.51, 0.545, 0.036, 0.038)), 'coat', dict(bury=2)),
+              (((0.49, 0.563, 0.036, 0.037), (0.57, 0.5, 0.032, 0.03)), 'muzzle', dict(bury=1)),
+              (((0.18, 0.535, 0.016, 0.02), (0.25, 0.61, 0.018, 0.03), (0.31, 0.675, 0.018, 0.03), (0.345, 0.71, 0.016, 0.02)),
+               'mane', dict(n=4))),
+        blocks=(((0.03, 0.03, 0.105), (0.41, 0.64), 'eye', 0.6, True), ((0.05, 0.03, 0.04), (0.385, 0.69), 'mane', 0.5, True)),
+        look=dict(mane=0x5a4632, muzzle=0xf2bf99, hoof=0x38383d, eye=0x2a2735)),
+    'dog': dict(
+        barrel=((-0.25, 0.35, 0.05, 0.06), (-0.15, 0.345, 0.08, 0.085), (0.02, 0.33, 0.085, 0.095), (0.15, 0.335, 0.09, 0.105),
+                (0.24, 0.36, 0.06, 0.075)),
+        belly=((0.0, 0.285, 0.06, 0.055), (0.15, 0.295, 0.08, 0.085), (0.255, 0.33, 0.055, 0.07)),
+        stand=(0.15, -0.15, 0.055),
+        fore=((0.0, 0.3, 0.042, 0.048), (0.0, 0.14, 0.03, 0.032), (0.0, 0.0, 0.03, 0.034)),
+        hind=((0.0, 0.3, 0.042, 0.048), (0.0, 0.14, 0.03, 0.032), (0.0, 0.0, 0.03, 0.034)),
+        tail=((-0.24, 0.38, 0.03, 0.03), (-0.31, 0.5, 0.042, 0.042), (-0.25, 0.59, 0.042, 0.042), (-0.16, 0.57, 0.02, 0.02)),
+        hinge=(0.19, 0.37), dip=dict(up=0.0),
+        head=((((0.19, 0.37, 0.07, 0.08), (0.27, 0.45, 0.06, 0.07)), 'coat', dict(bury=3)),
+              (((0.2, 0.455, 0.07, 0.07), (0.31, 0.475, 0.082, 0.078), (0.385, 0.45, 0.06, 0.055)), 'coat', {}),
+              (((0.365, 0.44, 0.05, 0.045), (0.47, 0.415, 0.036, 0.032)), 'muzzle', dict(bury=1))),
+        ears=((0.265, 0.52, 0.045, 0.032, 0.026), (0.27, 0.61, 0.052, 0.008, 0.008)),
+        blocks=(((0.045, 0.045, 0.045), (0.475, 0.428), 'eye', 0.0, False), ((0.03, 0.03, 0.163), (0.335, 0.5), 'eye', 0.0, True)),
+        look=dict(mane=0xfff6eb, muzzle=0xfff6eb, belly=0xfff6eb, sock=0xfff6eb, eye=0x2a2735)),
+}
+
+def fig_quad(kind, at, yaw=0.0, coat=0x8a5a3c, k=1.0, pose='up', dip=None, life=None, step=(0, 0, 0, 0), ears=None, **look):
+    """THE four-legged animal, `kind` of FIG_QUAD, `k` sizing it (a calf, a
+    burro less than 1), facing +X turned by `yaw`: a faceted
+    barrel, four jointed legs on their hooves, a tail, and the neck and
+    head hinged at the shoulder with its face, ears and horns. `pose` is
+    how far the head dips (the kind's `dip`; a number in `dip` instead),
+    `lie` folding the legs under; `life` names the head's motion
+    (set_motion.h), about the shoulder. `step` moves each foot fore or aft
+    (fore right, fore left, hind right, hind left). `ears` stands a pair of
+    that length on the poll (a horse's, a burro's longer). `look`
+    recolours: face, muzzle, mane, legs (the whole leg), sock (below the
+    knee), belly, patch (a saddle of a second colour), hoof. Returns its
+    frame, for what its piece hangs on it (a saddle, a harness)."""
+    A = FIG_QUAD[kind]
+    C = dict(A['look'], **{q: v for q, v in look.items() if v is not None})
+    coat = C.get('coat', coat)
+    C.setdefault('face', coat)
+    C['coat'] = coat
+    lie = pose == 'lie'
+    F = fig_frame(at, yaw, k, drop=0.2 if lie else 0.0, white=0xfff6eb if kind == 'dog' else None)
+    F.limb(A['barrel'], coat)
+    if C.get('patch'):
+        F.limb(A['patch'], C['patch'], f=1.07 if fig_lite() else 1.0)   # (clear of the lite barrel's flats)
+    if C.get('belly') and 'belly' in A:
+        F.limb(A['belly'], C['belly'], fine=True)
+    fx, hx, hz = A['stand']
+    leg = C.get('legs') or coat
+    for i, (lx, lz) in enumerate(((fx, -hz), (fx, hz), (hx, -hz), (hx, hz))):
+        if lie:                                          # folded under
+            top = A['fore'][0][1]
+            F.limb(((lx, top - 0.06, lz * 1.3, 0.045, 0.05), (lx + 0.16, top - 0.125, lz * 1.5, 0.035, 0.035)), leg, n=4)
+            continue
+        J = A['fore'] if i < 2 else A['hind']
+        J = [(lx + q[0] + step[i] * (1.0 if j == len(J) - 1 else 0.4 if j == len(J) - 2 else 0.0), q[1], lz, q[2], q[3])
+             for j, q in enumerate(J)]
+        if fig_lite():                                         # one limb to the ground, no hoof
+            F.limb([J[0], (J[-1][0], 0.0, lz, J[-1][3] * 1.25, J[-1][4] * 1.25)], leg, n=4, bury=3)
+            continue
+        # (an end inside the barrel, the next joint or the hoof, and the sole on the ground, are left open)
+        if C.get('sock'):
+            F.limb(J[:-1], leg, n=4, bury=1)
+            F.limb(J[-2:], C['sock'], n=4, bury=2)
+        else:
+            F.limb(J, leg, n=4, bury=3)
+        if 'hoof' in A:
+            F.limb([(J[-1][0] + q[0], q[1], lz, q[2], q[3]) for q in A['hoof']], C['hoof'], n=4, bury=2)
+    F.limb(A['tail'], C['mane'], n=4, fine=kind == 'sheep')
+    a = A['dip'][pose] if dip is None else dip
+    def head():
+        F.hinge = (A['hinge'], a)
+        for rings, key, kw in A['head']:
+            F.limb(rings, C[key], **kw)
+        if 'ears' in A:                                  # pricked: a pointed limb each side
+            F.pair(A['ears'], coat, n=4, bury=1)
+        for size, pos, key, roll, fine in A['blocks']:
+            F.block(size, pos, C[key], roll=roll, fine=fine)
+        if ears:
+            for ez in (-0.035, 0.035):
+                F.block((0.028, ears, 0.022), (0.335 - 0.2 * ears, 0.7 + ears * 0.45, ez), coat, roll=0.35)
+        F.hinge = None
+    if life:
+        with animated(life, F.p(*A['hinge']), yaw):
+            head()
+    else:
+        head()
+    return F
+
+# What a bird is, in units of the piece it is in at `k` 1 (a gull 0.18
+# tall, a hawk 1.26 across, a penguin 1 tall, the ducks 0.75 over the
+# water): the body's rings tail to breast, the head, the bill, the tail, the
+# wings folded (`back`, one saddle; `folded`, one a flank), spread (`spread`
+# and its `spread_tip`) or held `out`, a leg, and its blocks (size, where,
+# colour, fine). `nape` is where the head hinges, lifted again, when the body
+# is tipped onto its belly.
+FIG_BIRD = {
+    'gull': dict(
+        colors=dict(body=0xf8f8fb, wing=0x9aa1b4, tip=0x2a2735, bill=0xffc044, leg=0xff7e44),
+        body=((-0.1, 0.09, 0.014, 0.012), (-0.04, 0.09, 0.04, 0.034), (0.03, 0.098, 0.046, 0.04), (0.075, 0.115, 0.028, 0.03)),
+        head=((0.05, 0.128, 0.027, 0.027), (0.085, 0.152, 0.034, 0.032), (0.112, 0.146, 0.022, 0.02)),
+        bill=((0.106, 0.146, 0.013, 0.013), (0.165, 0.132, 0.006, 0.007)),
+        back=((-0.12, 0.103, 0.022, 0.01), (-0.04, 0.118, 0.045, 0.02), (0.045, 0.128, 0.04, 0.018)),
+        tail=((-0.175, 0.093, 0.007, 0.006), (-0.115, 0.104, 0.022, 0.011)), tail_c='tip',
+        leg=((0.0, 0.07, 0.02, 0.011, 0.011), (0.005, 0.0, 0.02, 0.014, 0.018)),
+        spread=((0.013, 0.12, 0.02, 0.049, 0.009), (0.026, 0.165, 0.13, 0.042, 0.008), (-0.013, 0.145, 0.215, 0.029, 0.0065)),
+        spread_tip=((-0.013, 0.145, 0.215, 0.029, 0.0065), (-0.045, 0.126, 0.26, 0.009, 0.004))),
+    'duck': dict(
+        colors=dict(body=0xf8f8fb, wing=0xfde4c7, tip=0xf8f8fb, bill=0xff7e44, eye=0x2a2735),
+        body=((-0.52, 0.22, 0.1, 0.08), (-0.3, 0.16, 0.24, 0.2), (0.05, 0.14, 0.27, 0.22), (0.36, 0.18, 0.18, 0.17),
+              (0.46, 0.22, 0.08, 0.08)),
+        neck=((0.3, 0.24, 0.12, 0.12), (0.37, 0.42, 0.1, 0.1), (0.38, 0.52, 0.1, 0.1)),
+        collar=((0.33, 0.34, 0.118, 0.118), (0.36, 0.41, 0.108, 0.108)),
+        head=((0.26, 0.6, 0.1, 0.1), (0.4, 0.63, 0.135, 0.125), (0.54, 0.58, 0.09, 0.08)),
+        bill=((0.5, 0.57, 0.075, 0.04), (0.76, 0.52, 0.065, 0.022)),
+        tail=((-0.44, 0.24, 0.13, 0.06), (-0.72, 0.42, 0.05, 0.025)), tail_c='tip',
+        folded=((0.22, 0.28, 0.25, 0.1, 0.03), (-0.1, 0.32, 0.27, 0.14, 0.035), (-0.46, 0.32, 0.16, 0.05, 0.02)), folded_side='y',
+        blocks=(((0.05, 0.05, 0.27), (0.46, 0.67), 'eye', True),)),
+    'hawk': dict(
+        colors=dict(body=0x38383d, wing=0x38383d, tip=0x4f5260, bill=0xffc044, tail=0xf1976c),
+        body=((-0.2, 0.0, 0.03, 0.03), (-0.08, 0.0, 0.06, 0.05), (0.08, 0.0, 0.065, 0.055), (0.17, 0.01, 0.04, 0.04)),
+        head=((0.14, 0.02, 0.04, 0.04), (0.21, 0.035, 0.05, 0.045), (0.26, 0.03, 0.03, 0.028)),
+        bill=((0.25, 0.03, 0.022, 0.022), (0.31, 0.01, 0.008, 0.008)),
+        tail=((-0.16, 0.0, 0.035, 0.012), (-0.32, 0.0, 0.085, 0.012)), tail_c='tail',
+        spread=((0.02, 0.02, 0.05, 0.11, 0.016), (0.03, 0.045, 0.3, 0.1, 0.014), (0.0, 0.06, 0.48, 0.075, 0.012)),
+        spread_tip=((0.0, 0.06, 0.48, 0.075, 0.012), (-0.03, 0.08, 0.63, 0.035, 0.008))),
+    'penguin': dict(
+        colors=dict(body=0x2a2735, wing=0x2a2735, bill=0xff7e44, leg=0xff7e44, belly=0xfff6eb, ear=0xffc044),
+        body=((0.0, 0.0, 0.2, 0.18), (0.0, 0.32, 0.27, 0.25), (0.0, 0.74, 0.16, 0.16)),
+        whole=((0.0, 0.0, 0.2, 0.18), (0.0, 0.32, 0.27, 0.25), (0.01, 0.84, 0.18, 0.17), (0.01, 1.0, 0.1, 0.1)),
+        belly=((0.1, 0.08, 0.2, 0.2), (0.11, 0.32, 0.3, 0.27), (0.09, 0.62, 0.2, 0.2)),
+        head=((0.0, 0.7, 0.15, 0.15), (0.02, 0.86, 0.185, 0.18), (0.01, 1.0, 0.09, 0.09)), nape=(0.0, 0.74),
+        bill=((0.16, 0.86, 0.05, 0.045), (0.37, 0.83, 0.016, 0.016)),
+        folded=((0.0, 0.64, 0.23, 0.09, 0.03), (-0.03, 0.3, 0.31, 0.07, 0.025)), folded_side='x',
+        out=((0.0, 0.62, 0.22, 0.09, 0.03), (-0.04, 0.5, 0.5, 0.06, 0.025)),
+        blocks=(((0.14, 0.13, 0.345), (0.03, 0.85), 'ear', True),)),
+    # a bath toy: the duck in a toy's few blocks
+    'bathduck': dict(
+        colors=dict(body=0xffc044, bill=0xff7e44),
+        body=((-0.6, 0.36, 0.1, 0.06), (-0.3, 0.16, 0.26, 0.2), (0.3, 0.16, 0.26, 0.2), (0.46, 0.3, 0.12, 0.1)),
+        head=((0.3, 0.3, 0.19, 0.19), (0.36, 0.74, 0.17, 0.17)),
+        bill=((0.48, 0.55, 0.11, 0.05), (0.76, 0.52, 0.09, 0.03))),
+}
+
+def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colors):
+    """THE bird, `kind` of FIG_BIRD, `k` sizing it, its bill to +X turned by
+    `yaw`, in the animals' faceted build: a body drawn out to the
+    tail, a head and its bill, wings, legs. `pose`: `stand` (on its feet at
+    `at`), `swim` (on the water at `at`: no legs), `slide` (a penguin on its
+    belly, the middle of it over `at`, flippers out) or `fly` (wings
+    spread, `bank` rolling it into its turn). `life` names its motion
+    (set_motion.h), pivoting at `at`. `colors` recolour it (a mallard
+    drake, a bath duck)."""
+    A = FIG_BIRD[kind]
+    C = dict(A['colors'], **colors)
+    C.setdefault('head', C['body'])
+    u = k
+    slide = pose == 'slide'
+    c, s = math.cos(yaw), math.sin(yaw)
+    F = fig_frame((at[0] - 0.45 * u * c, at[1], at[2] + 0.45 * u * s) if slide else at, yaw, u,
+                  pitch=1.35 if slide else 0.0, bank=bank, drop=-0.2 if slide else 0.0,
+                  white=0xfff6eb if kind == 'penguin' else None)
+    whole = fig_lite() and 'whole' in A                        # the box's penguin: body and head one limb
+    def build():
+        F.limb(A['whole'] if whole else A['body'], C['body'], keep=True, n=4 if kind == 'bathduck' else 6,
+               bury=2 if kind == 'penguin' and not whole else 0)
+        if 'belly' in A:
+            F.limb(A['belly'], C['belly'], n=4, keep=not fig_lite())
+        if 'tail' in A and (pose != 'fly' or kind == 'hawk'):   # (a gull's body is drawn out to its tail)
+            F.limb(A['tail'], C[A['tail_c']], n=4)
+        if pose == 'fly':
+            F.pair(A['spread'], C['wing'], n=4, side='x')
+            F.pair(A['spread_tip'], C['tip'], n=4, side='x')
+        elif slide:
+            F.pair(A['out'], C['wing'], n=4, side='x', bury=1)
+        elif 'folded' in A:
+            F.pair(A['folded'], C['wing'], n=4, side=A['folded_side'], fine=True, bury=1 if kind == 'penguin' else 0)
+        elif 'back' in A:
+            F.limb(A['back'], C['wing'], n=4)
+        if pose == 'stand' and 'leg' in A:
+            F.pair(A['leg'], C['leg'], n=4, fine=True, bury=1)
+        if slide:
+            F.hinge = (A['nape'], 0.9)                   # the head up, to see where it is going
+        if 'neck' in A:
+            F.limb(A['neck'], C['head'], bury=3)
+            if C.get('collar'):
+                F.limb(A['collar'], C['collar'], fine=True, bury=3)
+        if not whole:
+            F.limb(A['head'], C['head'], keep=True, n=4 if kind == 'bathduck' else 6, bury=0 if 'neck' in A else 1)
+        F.limb(A['bill'], C['bill'], n=4, bury=1)
+        for size, pos, key, fine in A.get('blocks', ()):
+            F.block(size, pos, C[key], fine=fine)
+        F.hinge = None
+    if life:
+        with animated(life, tuple(at), yaw):
+            build()
+    else:
+        build()
+    return F
+
 # ====================================================================================
 # BEACH
 # ====================================================================================
@@ -815,74 +1319,20 @@ def lite_plain(fn):
 
 # ---- the beach's people, birds and gear ----
 
-def figure(at, yaw=0.0, shirt=0xff5040, legs=0x339cf2, skin=0xf2bf99, hair=0x7a5a3a, pose='stand'):
-    """A person half a car long, facing +X turned by `yaw`, in blocks as the
-    cars' drivers are: `stand`, `sit` (on the sand, legs out to +X), `crouch`
-    or `lie` (on the back, head to -X)."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    def b(size, dx, dy, dz, color):
-        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw)
-    if pose == 'stand':
-        b((0.08, 0.2, 0.16), 0, 0.1, 0, legs)
-        b((0.1, 0.17, 0.24), 0, 0.285, 0, shirt)                          # shoulders and arms
-        b((0.11, 0.11, 0.11), 0, 0.43, 0, skin)
-        b((0.12, 0.04, 0.12), -0.01, 0.5, 0, hair)
-    elif pose in ('sit', 'crouch'):
-        if pose == 'sit':
-            b((0.22, 0.07, 0.15), 0.08, 0.035, 0, legs)                    # legs out
-        else:
-            b((0.12, 0.14, 0.15), 0.05, 0.07, 0, legs)                     # knees up
-        b((0.1, 0.17, 0.2), -0.05, 0.155, 0, shirt)
-        b((0.11, 0.11, 0.11), -0.03, 0.3, 0, skin)
-        b((0.12, 0.04, 0.12), -0.04, 0.37, 0, hair)
-    else:
-        b((0.22, 0.06, 0.15), 0.17, 0.03, 0, legs)
-        b((0.17, 0.08, 0.2), -0.03, 0.04, 0, shirt)
-        b((0.1, 0.09, 0.1), -0.17, 0.045, 0, skin)
+def figure(at, yaw=0.0, shirt=0xff5040, legs=0x339cf2, hair=0x7a5a3a, pose='stand'):
+    """One of the beach's people (fig_person)."""
+    fig_person(at, yaw, pose, shirt=shirt, legs=legs, hair=hair)
 
 def gull(at, yaw=0.0, life=None):
-    """A gull standing on its feet, facing +X turned by `yaw`, 0.16 tall
-    (twice a gull beside a car, so it reads at all), a gull in outline: a
-    white body drawn out to the tail, the grey wings folded along its back
-    to their black tips, a round head, a yellow bill, two legs. `life`
-    names its motion (set_motion.h), pivoting between its feet: watching
-    the cars, hopping off as one passes."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    side = (s, 0.0, c)
-    def p(dx, dy, dz=0.0):
-        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
-    def build():
-        for sd in (-1, 1):
-            loft([p(0.0, 0.07, sd * 0.02), p(0.005, 0.0, sd * 0.02)], [(0.011, 0.011), (0.014, 0.018)], 0xff7e44, side, 4)
-        loft([p(-0.1, 0.09), p(-0.04, 0.09), p(0.03, 0.098), p(0.075, 0.115)],
-             [(0.014, 0.012), (0.04, 0.034), (0.046, 0.04), (0.028, 0.03)], 0xf8f8fb, side, 6)
-        loft([p(-0.12, 0.103), p(-0.04, 0.118), p(0.045, 0.128)], [(0.022, 0.01), (0.045, 0.02), (0.04, 0.018)], 0x9aa1b4, side, 4)
-        loft([p(-0.175, 0.093), p(-0.115, 0.104)], [(0.007, 0.006), (0.022, 0.011)], 0x2a2735, side, 4)
-        loft([p(0.05, 0.128), p(0.085, 0.152), p(0.112, 0.146)], [(0.027, 0.027), (0.034, 0.032), (0.022, 0.02)], 0xf8f8fb, side, 6)
-        loft([p(0.106, 0.146), p(0.165, 0.132)], [(0.013, 0.013), (0.006, 0.007)], 0xffc044, side, 4)
-    if life:
-        with animated(life, (x, y, z), yaw):
-            build()
-    else:
-        build()
+    """A gull standing on its feet, facing +X turned by `yaw` (fig_bird).
+    `life` names its motion (set_motion.h), pivoting between its feet:
+    watching the cars, hopping off as one passes."""
+    fig_bird('gull', at, yaw, life=life)
 
 def gull_wing(span):
-    """A gull on the wing at the origin, heading +Z, `span` from tip to tip:
-    the white body and head, a yellow bill, and a gull's wings, up from the
-    shoulder to the wrist and down and back to the black tips."""
-    k = span / 0.8
-    def r(*pairs):
-        return [(a * k, b * k) for a, b in pairs]
-    X = (1.0, 0.0, 0.0)
-    loft([(0, 0.0, -0.2 * k), (0, 0.0, -0.08 * k), (0, 0.0, 0.07 * k), (0, 0.01 * k, 0.16 * k)],
-         r((0.045, 0.012), (0.05, 0.042), (0.05, 0.045), (0.03, 0.03)), 0xf8f8fb, X, 6)
-    loft([(0, 0.01 * k, 0.15 * k), (0, 0.0, 0.22 * k)], r((0.014, 0.014), (0.006, 0.006)), 0xffc044, X, 4)
-    for sd in (-1, 1):
-        wing = [(sd * 0.03 * k, 0.03 * k, 0.02 * k), (sd * 0.2 * k, 0.1 * k, 0.04 * k), (sd * 0.33 * k, 0.07 * k, -0.02 * k)]
-        loft(wing, r((0.075, 0.014), (0.065, 0.012), (0.045, 0.01)), 0x9aa1b4, (0.0, 0.0, 1.0), 4)
-        loft([wing[2], (sd * 0.4 * k, 0.04 * k, -0.07 * k)], r((0.045, 0.01), (0.014, 0.006)), 0x2a2735, (0.0, 0.0, 1.0), 4)
+    """A gull on the wing at the origin, heading +Z, `span` from tip to tip
+    (fig_bird)."""
+    fig_bird('gull', (0.0, 0.0, 0.0), -math.pi / 2, 'fly', k=span / 0.52)
 
 def boat(at, yaw, hull, trim=0xfff6eb, L=0.95):
     """A small open boat pulled up the sand, bow to +Z turned by `yaw`: a hull
@@ -2205,9 +2655,13 @@ def beach_hut(x, y, z, yaw, body, trim=0xfff6eb):
             beam(T(end * (e + 0.02), y + h, side * o), T(end * (e + 0.02), y + h + peak, 0.0), 0.05, 0xfff6eb)
 
 def angler(x, y, z, yaw, shirt, rod_to):
-    """A fisher sitting on the pier's edge, legs over it, rod out to sea."""
-    figure((x, y, z), yaw, shirt=shirt, legs=0x4f5260, hair=0x7a5a3a, pose='sit')
-    beam((x - 0.02 * math.cos(yaw), y + 0.22, z + 0.02 * math.sin(yaw)), rod_to, 0.04, 0x38383d)
+    """A fisher sitting on the pier's deck, rod out toward `rod_to`, a
+    person and a half long."""
+    fig_person((x, y, z), yaw, 'sit', shirt=shirt, legs=0x4f5260, arm=1.0)
+    a = (x + 0.1 * math.cos(yaw), y + 0.2, z - 0.1 * math.sin(yaw))
+    d = [q - e for q, e in zip(rod_to, a)]
+    f = 0.75 / math.sqrt(sum(e * e for e in d))
+    beam(a, tuple(e + q * f for e, q in zip(a, d)), 0.04, 0x38383d)
 
 @piece(1.0)
 @lite_plain
@@ -7169,12 +7623,9 @@ def ship_can(at, color, yaw=0.0, roll=0.0, pitch=0.0, L=2.7):
     return part
 
 def toy_duck(x, y, z, yaw):
-    """A yellow bath duck, a ship's lost cargo: body, head, bill, in blocks."""
-    cc, ss = math.cos(yaw), math.sin(yaw)
-    with square():
-        box((0.2, 0.14, 0.26), (x, y + 0.07, z), 0xffc044, yaw=yaw)
-        box((0.14, 0.13, 0.14), (x + 0.07 * ss, y + 0.2, z + 0.07 * cc), 0xffc044, yaw=yaw)
-        box((0.08, 0.04, 0.08), (x + 0.17 * ss, y + 0.19, z + 0.17 * cc), 0xff7e44, yaw=yaw)
+    """A yellow bath duck, a ship's lost cargo, its bill to +Z turned by
+    `yaw` (fig_bird's bath toy), one size wherever its piece is placed."""
+    fig_bird('bathduck', (x, y + 0.01, z), yaw - math.pi / 2, 'swim', k=0.36 * row_k())
 
 def storm_wrack(rows):
     """Kelp and planks the sea left against something: flat dark lengths,
@@ -7867,26 +8318,16 @@ def flag_across(at, h, color, wave, w=0.8, fh=0.5, pole=0xfff6eb):
         box((0.06, fh * 0.9, w * 0.5), (x + 0.06, y + h - fh / 2 - 0.08, z + w * 0.76), color, yaw=0.3)
 
 def snow_person(x, y, z, coat, hat, yaw=0.0):
-    """Someone standing, facing +X turned by `yaw`, at a person's size beside a
-    car (0.48 tall): boots and legs, a coat, a head in a hat."""
-    c, s = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy):
-        return (x + dx * c, y + dy, z - dx * s)
-    box((0.1, 0.18, 0.14), at(0, 0.09), 0x38383d, yaw=yaw)
-    box((0.13, 0.17, 0.18), at(0, 0.265), coat, yaw=yaw)
-    box((0.09, 0.09, 0.09), at(0.01, 0.395), 0xf2bf99, yaw=yaw)
-    box((0.1, 0.06, 0.1), at(0.0, 0.465), hat, yaw=yaw)
+    """Someone standing in the snow, facing +X turned by `yaw` (fig_person):
+    dark trousers, a coat, a hat."""
+    fig_person((x, y, z), yaw, shirt=coat, hat=hat, legs=0x38383d)
 
-def skier(x, y, z, coat, hat, k=1.0):
-    """A skier running toward +X, crouched over the skis, at a person's size
-    (`k` 1: as tall as snow_person, who stands beside a car): the skis, bent
-    legs, a coat leaning in, a head and hat. Joined into one moving part by
-    its caller."""
-    box((0.5 * k, 0.06 * k, 0.13 * k), (x + 0.03 * k, y + 0.03 * k, z), 0x2a2735)                 # the pair of skis
-    box((0.1 * k, 0.17 * k, 0.13 * k), (x - 0.01 * k, y + 0.14 * k, z), 0x38383d, roll=-0.35)    # bent legs
-    box((0.14 * k, 0.17 * k, 0.17 * k), (x + 0.03 * k, y + 0.29 * k, z), coat, roll=-0.45)       # leaning in
-    box((0.09 * k, 0.09 * k, 0.09 * k), (x + 0.09 * k, y + 0.4 * k, z), 0xf2bf99)
-    box((0.1 * k, 0.06 * k, 0.1 * k), (x + 0.09 * k, y + 0.47 * k, z), hat)
+def skier(x, y, z, coat, hat):
+    """A skier running toward +X, tucked over the skis (fig_person). Joined
+    into one moving part by its caller."""
+    u = fig_u()
+    box((0.5 * u, 0.04 * u, 0.13 * u), (x + 0.03 * u, y + 0.02 * u, z), 0x2a2735)   # the pair of skis
+    fig_person((x, y + 0.035 * u, z), 0.0, 'crouch', shirt=coat, hat=hat, legs=0x38383d, arm=0.7)
 
 def sled(x, y, z, yaw, color=0xcf534f, L=0.6):
     """A sled `L` long along +X turned by `yaw`, its deck on two runners
@@ -7974,23 +8415,24 @@ def powder_lift_tower(at, h, yaw, ground=0.0):
         box((0.22, 0.2, 0.9), (gx, h, gz), 0x2a2735, yaw=yaw)
     box((1.0, 0.7, 1.0), (x, ground - 0.25, z), 0x868ba1, yaw=yaw)
 
-def chair(at, yaw, color=0x3f7bd9, riders=(), k=1.0):
+def chair(at, yaw, color=0x3f7bd9, riders=(), k=1.0, lite=False):
     """A two-seat chair hanging under the cable at `at`, facing down the line,
-    half a unit across (`k` sizes it); `riders` are the coats of whoever sits
-    in it. Returns its parts."""
+    wide enough for two (`k` sizes it); `riders` are the coats of whoever
+    sits in it (fig_person). Returns its parts."""
     x, y, z = at
     # the hanger runs up past the rope to its grip: the rope is a smooth curve
     # through the towers, so between them it sits a little off the line
     parts = [box((0.06 * k, 0.72 * k, 0.06 * k), (x, y - 0.06 * k, z), 0x2a2735, yaw=yaw)]
-    for (lx, ly, lz, size, c) in ((0, -0.45, 0.04, (0.52, 0.06, 0.2), color),
-                                  (0, -0.35, -0.07, (0.52, 0.2, 0.06), color)):
+    for (lx, ly, lz, size, c) in ((0, -0.45, 0.04, (0.64, 0.06, 0.2), color),
+                                  (0, -0.35, -0.07, (0.64, 0.2, 0.06), color)):
         px, pz = turned(x, z, yaw, lx * k, lz * k)
         parts.append(box(tuple(e * k for e in size), (px, y + ly * k, pz), c, yaw=yaw))
     for i, coat in enumerate(riders):
-        lx = (-0.13, 0.13)[i]
-        px, pz = turned(x, z, yaw, lx * k, -0.01 * k)
-        parts.append(box((0.13 * k, 0.16 * k, 0.12 * k), (px, y - 0.34 * k, pz), coat, yaw=yaw))
-        parts.append(box((0.09 * k, 0.09 * k, 0.09 * k), (px, y - 0.21 * k, pz), 0xf2bf99, yaw=yaw))
+        px, pz = turned(x, z, yaw, (-0.17, 0.17)[i] * k, -0.02 * k)
+        with fig_plain():                                # (many and small on the rope: an arm at the side is left out)
+            parts += fig_person((px, y - 0.42 * k, pz), yaw - math.pi / 2, 'sit', shirt=coat, lean=0.0,
+                                legs=None if lite else 0x38383d,     # (the box's riders: what shows over the chair)
+                                hat=(0x3f7bd9, 0xffc044)[i])
     return parts
 
 def station(x, z, y, ground, yaw, roof=0xff5040, k=1.0):
@@ -8237,7 +8679,8 @@ GROW['powder-resort-lite'] = 1.0
 def ski_lift_lite():
     # the box's lift: no queue, racked skis or chimneys, every other chair, two
     # of the three chalets, three skiers, bare slalom gates, the lite fir, the run's netting alone
-    ski_lift(True)
+    with fig_plain():
+        ski_lift(True)
 
 @piece(1.0)
 def ski_lift(lite=False):
@@ -8307,7 +8750,7 @@ def ski_lift(lite=False):
         at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
         with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 10, k), at):
-            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders)   # faces +X, the way it rides
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, lite=lite)   # faces +X, the way it rides
     # valley station on the flat by the road, its hut behind it, skis racked,
     # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw, k=1.8)
@@ -8517,7 +8960,8 @@ def powder_chairlift_lite():
     # the box's lift: the village without its lamps, garden gear, door paths,
     # chimneys and queue, one rail to its fence, no hut at the top station,
     # the run's netting on a pole at each end
-    powder_chairlift(True)
+    with fig_plain():
+        powder_chairlift(True)
 
 @piece(1.0)
 def powder_chairlift(lite=False):
@@ -8558,7 +9002,7 @@ def powder_chairlift(lite=False):
         at = (x, cy(x), GAUGE)
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
         with animated('anim_path:c=plift:p=42:o=%.3f:f=1#%d' % (k / 8, k), at):
-            chair(at, yaw, (0xff5040, 0x3f7bd9)[k % 2], riders)
+            chair(at, yaw, (0xff5040, 0x3f7bd9)[k % 2], riders, lite=lite)
     # the two stations, their legs down through the snow to the plain
     station(X0, 0.0, y0, 0.0, yaw)
     station(X1, 0.0, y1, 0.0, yaw)
@@ -8800,21 +9244,11 @@ for _name, _trees in FORESTS.items():
         PIECES[_n] = (lambda trees, lite: lambda: forest(trees, lite))(_t, _n.endswith('-lite') or _name in FAR_STANDS)
         GROW[_n] = 1.0
 
-def skater(x, y, z, coat, hat, k=1.0):
+def skater(x, y, z, coat, hat):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
-    arms straight out for balance, a hat and a scarf in a second colour: nine
-    chunky blocks, the pivot at the skate. Joined into one moving part by its
-    caller."""
-    def b(size, dx, dy, dz, color, roll=0.0):
-        box([s * k for s in size], (x + dx * k, y + dy * k, z + dz * k), color, roll=roll)
-    TROUSERS, SKIN, BOOT = 0x38383d, 0xf2bf99, 0xfff6eb
-    b((0.56, 0.32, 0.28), 0.05, 0.16, 0.15, BOOT)                      # the gliding skate
-    b((0.26, 0.8, 0.26), 0.0, 0.7, 0.15, TROUSERS, roll=-0.12)          # the standing leg
-    b((0.26, 0.74, 0.26), -0.42, 0.88, -0.15, TROUSERS, roll=0.9)       # the lifted leg, behind
-    b((0.6, 0.85, 0.7), 0.05, 1.55, 0.0, coat, roll=-0.25)             # the coat, leaning in
-    b((0.3, 0.3, 2.3), 0.05, 1.72, 0.0, coat)                           # arms out
-    b((0.5, 0.5, 0.5), 0.2, 2.32, 0.0, SKIN)                            # the head
-    b((0.56, 0.3, 0.56), 0.18, 2.64, 0.0, hat)                          # the hat
+    arms straight out for balance (fig_person), the pivot at the skate.
+    Joined into one moving part by its caller."""
+    fig_person((x, y, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, kick=-0.9, lean=0.25, out=True)
 
 def clip(pts, keep):
     """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
@@ -8953,9 +9387,9 @@ def frozen_lake():
         a = n / 5 * 2 * math.pi
         at = (rc[0] + math.cos(a) * rx, 0.07, rc[1] + math.sin(a) * rz)
         with animated('anim_path:c=rink:p=24:o=%.3f:f=1#%d' % (n / 5, n), at):
-            skater(at[0], at[1], at[2], coat, hat, k=0.24)
+            skater(at[0], at[1], at[2], coat, hat)
     # on the ice by the rink, a snowman in a hat
-    snowman((-9.0, 0.07, 4.5), 0.2, hat=True)
+    snowman((-9.0, 0.07, 4.5), hat=True)
 
 def glacier_igloo(cx, cz, R, yaw, rows=4, upto=None):
     """An igloo at (cx, cz), `R` its radius: courses of blocks cut from the
@@ -10065,38 +10499,24 @@ def ski_jump():
                 box((0.7, 0.14, 0.22), (-25.0 + 1.6 * k, 0.05, s * 3.0), 0x339c75)
     draped('patch', lines)
 
-def flurry_skier(x, y, z, coat, hat, k=0.92):
-    """A skier running toward +X, as tall as snow_person at the default `k`
-    (blocks, no face to read): the skis, boots
-    and bent legs, a coat leaning into the turn, arms out with the poles, a
-    helmet and dark goggles. Joined into one moving part by its caller."""
-    def b(size, dx, dy, dz, color, roll=0.0):
-        return box([q * k for q in size], (x + dx * k, y + dy * k, z + dz * k), color, roll=roll)
+def flurry_skier(x, y, z, coat, hat):
+    """A ski jumper running toward +X (fig_person, tucked): the skis, the
+    poles trailing, a helmet. Joined into one moving part by its caller."""
+    u = fig_u()
     for sd in (-1, 1):
-        b((0.56, 0.04, 0.07), 0.04, 0.02, sd * 0.07, 0x2a2735)                   # the skis
-        b((0.04, 0.3, 0.04), -0.1, 0.24, sd * 0.2, 0x555b66, roll=0.5)          # the poles, trailing
-    b((0.12, 0.17, 0.17), 0.0, 0.13, 0.0, 0x38383d, roll=-0.35)                 # bent legs
-    b((0.16, 0.19, 0.2), 0.04, 0.3, 0.0, coat, roll=-0.4)                       # the coat, leaning in
-    b((0.08, 0.06, 0.38), 0.07, 0.33, 0.0, coat)                                # arms out
-    b((0.11, 0.1, 0.11), 0.1, 0.44, 0.0, 0xf2bf99)                              # the head
-    b((0.13, 0.07, 0.13), 0.09, 0.51, 0.0, hat)                                 # the helmet
-    b((0.03, 0.035, 0.1), 0.16, 0.45, 0.0, 0x2a2735)                            # the goggles
+        box((0.56 * u, 0.04 * u, 0.07 * u), (x + 0.04 * u, y + 0.02 * u, z + sd * 0.045 * u), 0x2a2735)   # the skis
+    fig_person((x, y + 0.035 * u, z), 0.0, 'crouch', shirt=coat, hat=hat, legs=0x38383d, arm=-0.5)
 
 # ---- snow companions: small scenes that carry a track's story round its lap ----
 
-def kid_skier(x, y, z, coat, hat, k=0.65):
-    """A child on skis toward +X, ski tips together in a snowplough: the
-    skis, legs, a coat, a head in a helmet, at the default `k` two thirds
-    as tall as snow_person (the instructor beside them).
-    Joined into one moving part by its caller."""
-    def b(size, dx, dy, dz, color, yaw=0.0):
-        box([q * k for q in size], (x + dx * k, y + dy * k, z + dz * k), color, yaw=yaw)
+def kid_skier(x, y, z, coat, hat):
+    """A child on skis toward +X, ski tips together in a snowplough
+    (fig_person at a child's size, leaning in, hands forward). Joined into
+    one moving part by its caller."""
+    u = fig_u() * FIG_KID
     for sd in (-1, 1):
-        b((0.42, 0.04, 0.07), 0.02, 0.02, sd * 0.09, 0x2a2735, yaw=sd * 0.28)   # the plough
-    b((0.1, 0.16, 0.16), 0.0, 0.12, 0, 0x38383d)
-    b((0.14, 0.17, 0.18), 0.01, 0.28, 0, coat)
-    b((0.1, 0.1, 0.1), 0.02, 0.42, 0, 0xf2bf99)
-    b((0.12, 0.07, 0.12), 0.01, 0.5, 0, hat)
+        box((0.42 * u, 0.04 * u, 0.07 * u), (x + 0.02 * u, y + 0.02 * u, z + sd * 0.07 * u), 0x2a2735, yaw=sd * 0.28)   # the plough
+    fig_person((x, y + 0.035 * u, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, k=FIG_KID, lean=0.2, arm=0.6)
 
 @piece(1.0)
 def ski_school():
@@ -10204,100 +10624,18 @@ def ski_school():
         with animated('anim_path:c=drapekids:p=100:o=%.3f:f=1#%d' % (n / 10, n), at), plain_parts():
             kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6])
 
-def snowman(at, k=1.0, hat=False):
-    """Three blocks of snow, coal eyes and buttons, a carrot facing +X, stick
-    arms, a scarf: built the way the cars are, in chunky blocks, `k` sizing
-    all of it (0.15: a real snowman, half a unit tall)."""
-    x, y, z = at
-    snowy(box((1.4 * k, 1.2 * k, 1.4 * k), (x, y + 0.6 * k, z), 0xf3f7fb, yaw=0.2), 0.5)
-    snowy(box((1.05 * k, 0.9 * k, 1.05 * k), (x, y + 1.65 * k, z), 0xf3f7fb, yaw=-0.1), 0.5)
-    snowy(box((0.8 * k, 0.75 * k, 0.8 * k), (x, y + 2.5 * k, z), 0xf3f7fb), 0.5)
-    box((1.15 * k, 0.2 * k, 1.15 * k), (x, y + 2.12 * k, z), 0xff5040)
-    box((0.45 * k, 0.16 * k, 0.16 * k), (x + 0.6 * k, y + 2.45 * k, z), 0xff7e44)
-    for s2 in (-1, 1):
-        box((0.14 * k, 0.14 * k, 1.0 * k), (x, y + 1.85 * k, z + s2 * 0.95 * k), 0x7a5a3a, pitch=s2 * 0.45)
-    if hat:
-        box((0.95 * k, 0.1 * k, 0.95 * k), (x, y + 2.92 * k, z), 0x2a2735)
-        box((0.6 * k, 0.55 * k, 0.6 * k), (x, y + 3.25 * k, z), 0x2a2735)
+def snowman(at, hat=False):
+    """The snowman by the rink (fig_snowman)."""
+    fig_snowman(at, 0.58, hat='top' if hat else None)
 
 def snow_ball(r, at, squash=0.9, subdiv=1):
     """A rolled ball of snow, round (a block at this size read as a crate);
     `subdiv` 3 for one big enough that a once-split ball shows its facets."""
     return snowy(sphere(r, at, 0xf3f7fb, subdiv=subdiv, scale=(1.0, squash, 1.0), flat=False), 0.35)
 
-def snowfolk(x, z, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='out', balls=3, lean=0.0,
-             broom=False, buttons=0x38383d, subdiv=1):
-    """One of the snowman field's crowd at (x, z), `h` tall, its carrot to +X
-    turned by `yaw`: `balls` rolled balls (two for a child's), coal eyes and
-    buttons, a carrot, stick arms (`arms`: out, up, down or none), a scarf
-    in its own colour and a hat of its own kind (`hat`: top, bucket, bobble,
-    cone or none); `lean` tips the head off its body, `broom` stands one in
-    its hand. No two of the crowd are the same build. `subdiv` over 1 makes
-    a big one round: its balls (snow_ball), and its scarf, hats and carrot
-    turned on twice the facets."""
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s2, dy, z - dx * s2 + dz * c)
-    rnd = subdiv > 1
-    segs = 16 if rnd else 8
-    rs = (0.3, 0.22, 0.16) if balls == 3 else (0.3, 0.19)
-    k = h / (1.62 * sum(rs))
-    rs = [r * k for r in rs]
-    y, cy = -0.06 * k, []
-    for r in rs:
-        cy.append(y + r * 0.86)
-        y += r * 1.62
-    for i, r in enumerate(rs):
-        off = lean * k if i == len(rs) - 1 else 0.0
-        snow_ball(r, at(0.0, cy[i], off), subdiv=subdiv)
-    hr, hy, hz = rs[-1], cy[-1], lean * k
-    # the carrot: a short cone out of the middle of the face, its root in the
-    # head (a bar as long as the head, square at the tip, read as a stick
-    # through it from the road)
-    cyl(0.3 * hr, 0.62 * hr, at(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.03, segs=10 if rnd else 6,
-        axis='across', yaw=yaw, stem=True)
-    for sd in (-1, 1):
-        box((0.06, 0.07 * k, 0.07 * k), at(hr * 0.88, hy + 0.3 * hr, hz + sd * 0.38 * hr), 0x2a2735, yaw=yaw)
-    for i in range(2 if balls == 3 else 1):
-        box((0.06, 0.08 * k, 0.08 * k), at(rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons, yaw=yaw)
-    # the scarf: a band round the neck and an end hanging down the front
-    ny = cy[-1] - hr * 0.82
-    if rnd:
-        cyl(hr * 0.9, 0.11 * k, at(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=segs, stem=True)
-    else:
-        box((hr * 1.7, 0.11 * k, hr * 1.7), at(0.0, ny, hz * 0.6), scarf, yaw=yaw)
-    box((0.07, 0.3 * k, 0.12 * k), at(hr * 0.86, ny - 0.14 * k, hz * 0.6 + 0.3 * hr), scarf, yaw=yaw)
-    ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
-    L = 0.42 * k
-    stick = 0.04 * k                              # MIN_T on a small one; no hairline on a big one
-    if arms != 'none':
-        tip = {'out': 0.25, 'up': 0.95, 'down': -0.5}[arms]
-        for sd in (-1, 1):
-            box((stick, stick, L), at(0.0, ay + math.sin(tip) * L / 2 * (1 if sd == 1 or arms != 'out' else 0.4),
-                                      sd * (ar * 0.9 + math.cos(tip) * L / 2)), 0x7a5a3a, yaw=yaw, pitch=sd * tip)
-    if broom:
-        bz = ar * 0.9 + L * 0.9
-        box((stick, 0.95 * h, stick), at(0.0, 0.47 * h, bz), 0x8a6a46, yaw=yaw)
-        box((0.1, 0.22 * k, 0.26 * k), at(0.0, 0.95 * h, bz), 0xffc044, yaw=yaw)
-    top = hy + hr * 0.78
-    if hat == 'top' and rnd:
-        cyl(hr * 1.0, 0.06, at(0.0, top - 0.03, hz), hat_c, segs=segs, stem=True)
-        cyl(hr * 0.62, hr * 1.1, at(0.0, top, hz), hat_c, segs=segs, stem=True)
-        cyl(hr * 0.65, 0.16 * hr, at(0.0, top + hr * 0.12, hz), 0xff5040, segs=segs, stem=True)
-    elif hat == 'top':
-        box((hr * 2.0, 0.06, hr * 2.0), at(0.0, top, hz), hat_c, yaw=yaw)
-        box((hr * 1.25, hr * 1.1, hr * 1.25), at(0.0, top + hr * 0.55, hz), hat_c, yaw=yaw)
-        box((hr * 1.3, 0.06, hr * 1.3), at(0.0, top + hr * 0.2, hz), 0xff5040, yaw=yaw)
-    elif hat == 'bucket':
-        cyl(hr * 0.8, hr * 0.95, at(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=segs, stem=True)
-    elif hat == 'bobble':
-        cyl(hr * 0.95, hr * 0.7, at(0.0, top - 0.12 * k, hz), hat_c, r2=hr * 0.5, segs=segs, stem=True)
-        if rnd:
-            sphere(0.08 * k, at(0.0, top + hr * 0.62, hz), 0xfff6eb, subdiv=2, flat=False)
-        else:
-            box((0.14 * k, 0.14 * k, 0.14 * k), at(0.0, top + hr * 0.62, hz), 0xfff6eb, yaw=yaw)
-    elif hat == 'cone':
-        cyl(hr * 0.7, hr * 1.5, at(0.0, top - 0.06 * k, hz), hat_c, r2=0.03, segs=segs - 2 if rnd else 6, stem=True)
+def snowfolk(x, z, h, **kw):
+    """One of the snowman field's crowd at (x, z), `h` tall (fig_snowman)."""
+    fig_snowman((x, 0.0, z), h, **kw)
 
 @piece(1.0)
 def snowman_field():
@@ -10320,17 +10658,16 @@ def snowman_field():
             (0.5, 5.1, 1.3, -0.3, 'cone', O, B, 'up', 2, 0.07, False),
         )
         for (fx, fz, h, yw, hat, hc, sc, arms, balls, lean, broom) in F:
-            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom,
-                     subdiv=3)
+            snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom)
         # the snow dog at the father's feet, a red collar on
         ax_, az_, k = 0.6, -6.4, 2.8
-        snow_ball(0.2 * k, (ax_, 0.15 * k, az_), subdiv=3)
-        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_), subdiv=3)
-        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_), subdiv=3)
+        snow_ball(0.2 * k, (ax_, 0.15 * k, az_), subdiv=2)
+        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_), subdiv=2)
+        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_), subdiv=2)
         for sd in (-1, 1):
             snowy(box((0.07 * k, 0.12 * k, 0.07 * k), (ax_ + 0.22 * k, 0.52 * k, az_ + sd * 0.08 * k), 0xf3f7fb), 0.5)
         box((0.1 * k, 0.06 * k, 0.06 * k), (ax_ + 0.38 * k, 0.35 * k, az_), D)
-        cyl(0.15 * k, 0.06 * k, (ax_ + 0.12 * k, 0.24 * k, az_), R, segs=16, stem=True)
+        cyl(0.15 * k, 0.06 * k, (ax_ + 0.12 * k, 0.24 * k, az_), R, segs=10, stem=True)
         snowy(box((0.3 * k, 0.07 * k, 0.07 * k), (ax_ - 0.55 * k, 0.2 * k, az_), 0xf3f7fb, roll=-0.5), 0.5)
         # what the children left: the sled, the spare snowballs
         sled(1.2, 0, 7.4, 0.4, R, L=1.3)
@@ -10338,50 +10675,15 @@ def snowman_field():
             snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)), subdiv=2)
     draped('field', build)
 
-def penguin(x, y, z, k=0.46, yaw=0.0, flippers=True):
-    """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall:
-    a penguin beside a car is under half a unit. Feet, a dark body full at
-    the belly and narrower at the shoulders with its white front, the head
-    with its eyes, the gold at its ears and the beak, the flippers. A live
-    one is joined into one moving part by its caller."""
-    u = k / 0.47
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy, dz):
-        return (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c)
-    box((0.23 * u, 0.2 * u, 0.21 * u), at(0, 0.14 * u, 0), 0x2a2735, yaw=yaw)            # belly
-    box((0.2 * u, 0.16 * u, 0.18 * u), at(0, 0.29 * u, 0), 0x2a2735, yaw=yaw)            # shoulders
-    box((0.16 * u, 0.13 * u, 0.15 * u), at(0.01 * u, 0.405 * u, 0), 0x2a2735, yaw=yaw)   # head
-    # the white front wraps round the front half of the body, so a car beside
-    # it sees white as well as one coming at it (a plate on the front alone
-    # read as a black peg from every side but one)
-    snowy(box((0.14 * u, 0.25 * u, 0.235 * u), at(0.055 * u, 0.19 * u, 0), 0xfff6eb, yaw=yaw), 0.15)   # white at any height
-    with plain_parts():                                  # too thin for a chamfer to show
-        box((0.18 * u, 0.06, 0.16 * u), at(0.03 * u, 0.03, 0), 0xff7e44, yaw=yaw)        # feet
-        box((0.06 * u, 0.06 * u, 0.165 * u), at(0.01 * u, 0.385 * u, 0), 0xffc044, yaw=yaw)  # the gold at its ears
-        snowy(box((0.04 * u, 0.04 * u, 0.158 * u), at(0.065 * u, 0.425 * u, 0), 0xfff6eb, yaw=yaw), 0.15)   # the eyes
-        box((0.08 * u, 0.06, 0.06), at(0.11 * u, 0.385 * u, 0), 0xff7e44, yaw=yaw)       # beak
-        if flippers:
-            for sd in (-1, 1):
-                box((0.12 * u, 0.18 * u, 0.06), at(0, 0.22 * u, sd * 0.125 * u), 0x2a2735, yaw=yaw,
-                    pitch=sd * 0.25)
+def penguin(x, y, z, k=0.46, yaw=0.0):
+    """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall
+    (fig_bird). A live one is joined into one moving part by its caller."""
+    fig_bird('penguin', (x, y, z), yaw, k=k)
 
 def slider_penguin(x, y, z, k=0.45, yaw=0.0):
-    """A penguin on its belly toward +X turned by `yaw`, `k` long, the pivot
-    under the middle of its belly: the body flat, the head up to see where it
-    is going (the beak and the white face say "penguin" from above), flippers
-    out."""
-    u = k / 0.45
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def b(size, dx, dy, dz, color):
-        return box(size, (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c), color, yaw=yaw)
-    b((0.36 * u, 0.13 * u, 0.2 * u), 0, 0.075 * u, 0, 0x2a2735)                   # body
-    snowy(b((0.26 * u, 0.06, 0.17 * u), 0.02 * u, 0.035, 0, 0xfff6eb), 0.15)       # belly
-    b((0.15 * u, 0.14 * u, 0.15 * u), 0.2 * u, 0.17 * u, 0, 0x2a2735)              # head, up
-    snowy(b((0.06, 0.1 * u, 0.12 * u), 0.28 * u, 0.16 * u, 0, 0xfff6eb), 0.15)     # face
-    b((0.08 * u, 0.06, 0.06), 0.32 * u, 0.15 * u, 0, 0xff7e44)                     # beak
-    for sd in (-1, 1):
-        b((0.14 * u, 0.06, 0.1 * u), -0.02 * u, 0.07 * u, sd * 0.15 * u, 0x2a2735)  # flipper out
-    b((0.08 * u, 0.06, 0.12 * u), -0.21 * u, 0.03, 0, 0xff7e44)                    # feet behind
+    """A penguin on its belly toward +X turned by `yaw`, `k` long
+    (fig_bird), the pivot under the middle of its belly."""
+    fig_bird('penguin', (x, y, z), yaw, 'slide', k=0.9 * k)
 
 # The standing penguins' life (set_motion.h): rock on their feet out of step,
 # turn to watch a car coming (radii in world units), a little hop as one
@@ -10389,19 +10691,10 @@ def slider_penguin(x, y, z, k=0.45, yaw=0.0):
 PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.12#%d'
 
 def stood_penguin(x, z, k, yaw, y=0.0):
-    """A penguin of the lite build's crowd: four blocks (the dark body with
-    its head, the white front wrapped round the front half of it, so the
-    white reads from the side as well as head on, the gold at its ears, the
-    beak), which is what reads of one among many on the box."""
-    u = k / 0.47
-    c, s2 = math.cos(yaw), math.sin(yaw)
-    def at(dx, dy):
-        return (x + dx * c, y + dy, z - dx * s2)
-    box((0.22 * u, 0.44 * u, 0.2 * u), at(0, 0.22 * u), 0x2a2735, yaw=yaw)
-    snowy(box((0.14 * u, 0.27 * u, 0.23 * u), at(0.05 * u, 0.17 * u), 0xfff6eb, yaw=yaw), 0.15)   # white at any height
-    with plain_parts():                                  # too small for a chamfer to show
-        box((0.06 * u, 0.06 * u, 0.21 * u), at(0.03 * u, 0.355 * u), 0xffc044, yaw=yaw)
-        box((0.08 * u, 0.06, 0.06), at(0.13 * u, 0.36 * u), 0xff7e44, yaw=yaw)
+    """A penguin of the lite build's crowd: penguin() on the box's plainer
+    limbs, body and head one."""
+    with fig_plain():
+        penguin(x, y, z, k, yaw)
 
 # A CROWD of penguins, every one of them alive, at the cost of a few moving
 # parts: it stands in KNOTS of a few close together, each knot one part
@@ -10964,98 +11257,38 @@ def glacier_airstrip(lite=False):
 # down to the roads, the crevasses the expedition has flagged its way across.
 
 def glacier_husky(x, y, z, coat, k=1.0, stride=1):
-    """A sled dog running toward +X, `k` sizing it (1: half a unit long, a
-    real husky at the world's chunkiness, as its penguins are): a coat over a
-    white chest and muzzle, pricked ears, the tail curled up over its back, a
-    red harness, legs stretched out front and back (`stride` -1 swaps them,
-    so a pair runs out of step). The farm animals' faceted build: a barrel
-    deep at the chest, legs in white socks, eyes; the lite build is the same
-    dog on four-sided limbs, without the socks and the eyes."""
-    W, DARK = 0xfff6eb, 0x2a2735
-    side = (0.0, 0.0, 1.0)
-    def p(dx, dy, dz=0.0):
-        return (x + dx * k, y + dy * k, z + dz * k)
-    def r(*pairs):
-        return [(a * k, b * k) for a, b in pairs]
-    def white(o):
-        return snowy(o, 0.15)                                                # white at any height
-    n = 4 if LITE else 6
-    tq = math.pi / 4
-    # the barrel, deep at the chest and tucked up at the loins; the white of
-    # its chest and belly under it; the harness round its shoulders
-    if LITE:
-        loft([p(-0.25, 0.35), p(-0.12, 0.345), p(0.15, 0.335), p(0.24, 0.36)],
-             r((0.06, 0.07), (0.1, 0.1), (0.11, 0.125), (0.07, 0.09)), coat, side, 4, turn=tq)
-    else:
-        loft([p(-0.25, 0.35), p(-0.15, 0.345), p(0.02, 0.33), p(0.15, 0.335), p(0.24, 0.36)],
-             r((0.05, 0.06), (0.08, 0.085), (0.085, 0.095), (0.09, 0.105), (0.06, 0.075)), coat, side, 6)
-        white(loft([p(0.0, 0.285), p(0.15, 0.295), p(0.255, 0.33)], r((0.06, 0.055), (0.08, 0.085), (0.055, 0.07)), W, side, 6))
-    loft([p(0.06, 0.335), p(0.115, 0.335)], r((0.125, 0.14), (0.125, 0.14)) if LITE else r((0.097, 0.108), (0.1, 0.114)),
-         0xff5040, side, n, turn=tq if LITE else 0.0)
-    # the legs, stretched out front and back, in white socks
-    for sx, sd in ((0.15, 1), (-0.15, -1)):
-        for sz in (-0.055, 0.055):
-            d = sd * stride
-            top, mid, foot = p(sx, 0.3, sz), p(sx + 0.06 * d, 0.14, sz), p(sx + 0.15 * d, 0.0, sz)
-            if LITE:
-                loft([top, foot], r((0.045, 0.05), (0.03, 0.032)), coat, side, 4, turn=tq)
-                continue
-            loft([top, mid], r((0.042, 0.048), (0.03, 0.032)), coat, side, 4, turn=tq)
-            white(loft([mid, foot], r((0.03, 0.032), (0.03, 0.034)), W, side, 4, turn=tq))
-    # the tail curled up over its back
-    tail = [p(-0.24, 0.38), p(-0.31, 0.5), p(-0.25, 0.59), p(-0.16, 0.57)]
-    girth = r((0.03, 0.03), (0.042, 0.042), (0.042, 0.042), (0.02, 0.02))
-    if LITE:
-        tail, girth = tail[::3], [girth[1], girth[3]]
-    white(loft(tail, girth, W, side, 4, turn=tq))
-    # the neck and head: a white muzzle and nose, eyes, pricked ears
-    if LITE:
-        loft([p(0.17, 0.39), p(0.385, 0.45)], r((0.1, 0.11), (0.07, 0.065)), coat, side, 4, turn=tq)
-    else:
-        loft([p(0.19, 0.37), p(0.27, 0.45)], r((0.07, 0.08), (0.06, 0.07)), coat, side, 6)
-        loft([p(0.2, 0.455), p(0.31, 0.475), p(0.385, 0.45)], r((0.07, 0.07), (0.082, 0.078), (0.06, 0.055)), coat, side, 6)
-    white(loft([p(0.365, 0.44), p(0.47, 0.415)], r((0.05, 0.045), (0.036, 0.032)), W, side, n, turn=tq if LITE else 0.0))
-    for sz in (-0.045, 0.045):
-        loft([p(0.265, 0.52, sz), p(0.27, 0.61, sz * 1.15)], r((0.032, 0.026), (0.008, 0.008)), coat, side, 4, turn=tq)
-    with plain_parts():
-        box((0.045 * k, 0.045 * k, 0.045 * k), p(0.475, 0.428), DARK)        # nose
-        if not LITE:
-            box((0.03 * k, 0.03 * k, 0.163 * k), p(0.335, 0.5), DARK)        # eyes
+    """A sled dog running toward +X, `k` sizing it (fig_quad): a coat over a white chest,
+    muzzle and socks, pricked ears, the tail curled up over its back, a red
+    harness, legs stretched out front and back (`stride` -1 swaps them, so
+    a pair runs out of step)."""
+    d = 0.15 * stride
+    F = fig_quad('dog', (x, y, z), 0.0, coat, k=k, step=(d, d, -d, -d))
+    F.limb(((0.06, 0.335, 0.097, 0.108), (0.115, 0.335, 0.1, 0.114)), 0xff5040)
 
-def glacier_musher(x, y, z, coat, k=1.0):
+def glacier_musher(x, y, z, coat):
     """The musher stood on the sled's runners, facing +X, hands to the
-    handlebar: boots, legs, a parka with its hood up and a ruff of fur round
-    the face, mitts; `k` 1 is two thirds of a unit, a person at the world's
-    chunkiness (blocks, no face to read)."""
-    def b(size, dx, dy, dz, color):
-        return box(tuple(e * k for e in size), (x + dx * k, y + dy * k, z + dz * k), color)
-    for sz in (-0.07, 0.07):
-        b((0.12, 0.26, 0.1), 0.0, 0.13, sz, 0x38383d)                    # legs
-    b((0.2, 0.26, 0.28), 0.0, 0.39, 0.0, coat)                           # the parka
-    b((0.22, 0.06, 0.3), 0.0, 0.26, 0.0, 0x2a2735)                       # its belt
-    b((0.2, 0.08, 0.12), 0.12, 0.42, -0.12, coat)                        # arms forward to the bar
-    b((0.2, 0.08, 0.12), 0.12, 0.42, 0.12, coat)
-    b((0.17, 0.17, 0.17), 0.0, 0.6, 0.0, coat)                           # the hood
-    b((0.06, 0.15, 0.19), 0.08, 0.59, 0.0, 0xfff6eb)                     # its ruff
-    b((0.03, 0.08, 0.09), 0.105, 0.585, 0.0, 0xf2bf99)                   # what shows of a face
+    handlebar (fig_person): a parka with its hood up."""
+    fig_person((x, y, z), 0.0, shirt=coat, hat=coat, legs=0x38383d, arm=1.2)
 
-def glacier_dog_sled(x, z, k=1.0):
-    """A basket sled facing +X with its musher on the runners: the runners
-    curling up at the front, the bed with the load lashed under a tarp, the
-    stanchions and the handlebar at the back."""
+def glacier_dog_sled(x, z):
+    """A basket sled facing +X with its musher on the runners, at the
+    musher's size: the runners curling up at the front, the bed with the
+    load lashed under a tarp, the stanchions and the handlebar at the back,
+    at the musher's hands."""
     DARK, WOOD = 0x38383d, 0x9a7b55
+    k = 0.6 * fig_u()
     def b(size, dx, dy, dz, color, roll=0.0):
         return box(tuple(e * k for e in size), (x + dx * k, dy * k, z + dz * k), color, roll=roll)
     for sz in (-0.2, 0.2):
-        b((1.0, 0.05, 0.06), 0.0, 0.03, sz, DARK)                        # runners
-        b((0.22, 0.05, 0.06), 0.56, 0.1, sz, DARK, roll=-0.7)            # their curl
-        b((0.06, 0.62, 0.06), -0.42, 0.33, sz, WOOD)                     # the stanchions
+        b((1.0, 0.06, 0.08), 0.0, 0.03, sz, DARK)                        # runners
+        b((0.22, 0.06, 0.08), 0.56, 0.1, sz, DARK, roll=-0.7)            # their curl
+        b((0.08, 0.5, 0.08), -0.42, 0.27, sz, WOOD)                      # the stanchions
         for sx in (-0.15, 0.35):
-            b((0.06, 0.14, 0.06), sx, 0.1, sz, WOOD)                     # the bed's posts
+            b((0.08, 0.14, 0.08), sx, 0.1, sz, WOOD)                     # the bed's posts
     b((0.7, 0.06, 0.44), 0.1, 0.18, 0.0, WOOD)                           # the bed
     b((0.5, 0.2, 0.36), 0.12, 0.31, 0.0, 0x3f7bd9)                       # the load under its tarp
-    b((0.06, 0.06, 0.5), -0.42, 0.62, 0.0, WOOD)                         # the handlebar
-    glacier_musher(x - 0.58 * k, 0.06 * k, z, 0xff5040, k)
+    b((0.08, 0.08, 0.5), -0.42, 0.52, 0.0, WOOD)                         # the handlebar
+    glacier_musher(x - 0.62 * k, 0.06 * k, z, 0xff5040)
 
 # The deck over the plain along the dog trail's drift, by z in its frame
 # (u 0.432, lat -8.5, yaw 180: z runs against the road's way), sampled from
@@ -11165,7 +11398,7 @@ def glacier_dog_trail():
     # kerb: the lead pair at the head, the sled 3.1 u behind it, the whole
     # loop in 20 s (a team's lope beside cars at speed)
     L = sum(math.hypot(loop[(i + 1) % m][0] - loop[i][0], loop[(i + 1) % m][1] - loop[i][1]) for i in range(m))
-    P, O, K, GAP = 20.0, 0.08, 1.2, 0.86
+    P, O, K, GAP, SLED = 20.0, 0.08, 0.62, 0.46, 1.6      # (the dogs to their musher's hip: a person is 0.5)
     COATS = (0x868ba1, 0x38383d, 0x9a7b55)
     for j in range(3):
         o = O - j * GAP / L
@@ -11174,39 +11407,34 @@ def glacier_dog_trail():
         with animated('anim_path:c=trail:p=%.0f:o=%.4f:f=1+bob:h=0.05:p=0.34:b=1#pair%d' % (P, o % 1.0, j),
                       (x, y, z)):
             for sd, st in ((-1, 1), (1, -1)):
-                glacier_husky(x, y, z + sd * 0.2, COATS[(j + (sd > 0)) % 3], k=K, stride=st)
-            box((GAP, 0.06, 0.06), (x - GAP / 2, y + 0.36, z), 0x2a2735)   # the gangline back to the next pair
-    o = O - 3.1 / L
-    x, z = loop[2][0], loop[2][1] + 3.1
+                glacier_husky(x, y, z + sd * 0.11, COATS[(j + (sd > 0)) % 3], k=K, stride=st)
+            box((GAP, 0.06, 0.06), (x - GAP / 2, y + 0.2, z), 0x2a2735)   # the gangline back to the next pair
+    o = O - SLED / L
+    x, z = loop[2][0], loop[2][1] + SLED
     y = crest(z) + 0.03
     with animated('anim_path:c=trail:p=%.0f:o=%.4f:f=1+bob:h=0.025:p=0.5#sled' % (P, o % 1.0), (x, y, z)):
         before = set(bpy.context.scene.objects)
-        glacier_dog_sled(x, z, k=K)
-        box((0.9, 0.06, 0.06), (x + 1.05, 0.13, z), 0x2a2735)             # the line up to the wheel pair
+        glacier_dog_sled(x, z)
+        box((0.5, 0.06, 0.06), (x + 0.58, 0.1, z), 0x2a2735)             # the line up to the wheel pair
         for ob in set(bpy.context.scene.objects) - before:
             ob.location.z += y
 
 def glacier_climber(x, z, coat, sack, probe=False):
-    """A climber facing -X (away from the road, across the ice) at two thirds
-    of a unit: boots, legs, the coat, a big rucksack in a second colour on
-    the back (toward the road), a helmet; an ice axe held out ahead, its
-    shaft down to the snow when `probe`. Blocks, no face to read."""
-    def b(size, dx, dy, dz, color, roll=0.0):
-        return box(size, (x + dx, dy, z + dz), color, roll=roll)
-    for sz in (-0.08, 0.08):
-        b((0.13, 0.28, 0.11), 0.0, 0.14, sz, 0x38383d)
-    b((0.22, 0.3, 0.32), 0.0, 0.42, 0.0, coat)
-    b((0.2, 0.32, 0.28), 0.2, 0.46, 0.0, sack)                           # the rucksack
-    b((0.08, 0.1, 0.3), 0.2, 0.66, 0.0, 0xff7e44)                        # a coil of rope on top of it
-    b((0.18, 0.17, 0.18), 0.0, 0.66, 0.0, 0xf2bf99)                      # the head
-    b((0.22, 0.09, 0.22), 0.0, 0.77, 0.0, 0xffc044 if coat != 0xffc044 else 0xfff6eb)   # the helmet
-    b((0.24, 0.09, 0.1), -0.14, 0.46, 0.15, coat)                        # an arm out ahead
+    """A climber facing -X (away from the road, across the ice)
+    (fig_person): a rucksack in a second colour on the back (toward the
+    road), a helmet; an ice axe held out ahead, its shaft down to the snow
+    when `probe`."""
+    u = fig_u()
+    fig_person((x, 0.0, z), math.pi, shirt=coat, hat=0xffc044 if coat != 0xffc044 else 0xfff6eb, legs=0x38383d,
+               arm=(0.0, 1.2))
+    box((0.09 * u, 0.17 * u, 0.13 * u), (x + 0.095 * u, 0.3 * u, z), sack)       # the rucksack
+    hx, hy, hz = x - 0.12 * u, 0.31 * u, z + 0.096 * u                        # the reaching hand
     if probe:                                                            # the axe's shaft down to the snow
-        with animated('anim_drape+sway:a=z:d=18:p=5.5:r=0.55#probe', (x - 0.26, 0.46, z + 0.15)):
-            b((0.08, 0.6, 0.08), -0.36, 0.2, 0.15, 0x555b66, roll=0.35)
-            b((0.24, 0.06, 0.06), -0.28, 0.48, 0.15, 0x2a2735)
+        with animated('anim_drape+sway:a=z:d=18:p=5.5:r=0.55#probe', (hx, hy, hz)):
+            box((0.06 * u, 0.36 * u, 0.06 * u), (hx - 0.06 * u, hy - 0.15 * u, hz), 0x555b66, roll=0.35)
+            box((0.15 * u, 0.06 * u, 0.06 * u), (hx - 0.01 * u, hy + 0.03 * u, hz), 0x2a2735)
     else:
-        b((0.08, 0.42, 0.08), -0.1, 0.32, -0.2, 0x555b66)                # the axe held at the side
+        box((0.06 * u, 0.26 * u, 0.06 * u), (hx - 0.03 * u, hy - 0.08 * u, hz), 0x555b66)   # the axe held ahead
 
 @piece(1.0)
 def glacier_crevasses():
@@ -11292,9 +11520,9 @@ def glacier_crevasses():
         team = (0.2, -1.15, bx)
         for xa, xb in zip(team, team[1:]):
             for f0, f1 in ((0.0, 0.5), (0.5, 1.0)):
-                ya = 0.4 - 0.32 * math.sin(math.pi * f0)
-                yb = 0.4 - 0.32 * math.sin(math.pi * f1)
-                strut((xa + (xb - xa) * f0, ya, BRIDGE), (xa + (xb - xa) * f1, yb, BRIDGE), 0.09, 0xff7e44)
+                ya = 0.26 - 0.2 * math.sin(math.pi * f0)
+                yb = 0.26 - 0.2 * math.sin(math.pi * f1)
+                strut((xa + (xb - xa) * f0, ya, BRIDGE), (xa + (xb - xa) * f1, yb, BRIDGE), 0.06, 0xff7e44)
         for x, coat, sack in ((team[0], 0x3f7bd9, 0xffc044), (team[1], 0x61cb8b, 0xff5040)):
             glacier_climber(x, BRIDGE, coat, sack)
         # the leader on the bridge, probing the snow ahead with the axe
@@ -13290,44 +13518,14 @@ def local(cx, cz, yaw):
     c, s = math.cos(yaw), math.sin(yaw)
     return lambda dx, dy, dz: (cx + dx * c + dz * s, dy, cz - dx * s + dz * c)
 
-SKIN = 0xf2bf99
-HAIR = (0x7a5a3a, 0x2a2735, 0xffc044, 0xb06041)
 
 def person(at, yaw, shirt, k=1.0, hair=0, legs=0x4f5260, sit=False, arm=0.0, kick=0.0, gesture=None):
-    """Someone facing +X turned by `yaw`, 1.9 tall at k 1 (a child is about
-    0.7): blocks, the cars' way, about twice life size across so they read.
-    Sitting, the seat is at `at` and the legs reach forward off it. `arm`
-    lifts the arms forward (radians), to hold a rope or a ribbon. `kick`
-    stands them on the left leg with the right swung forward that far
-    (radians), a ball just struck. `gesture` names the arms' motion
-    (a one-way `anim_sway...:r=` with a rest), turning about the shoulders: the one movement a
-    person here makes of their own (set_motion.h)."""
-    L = local(at[0], at[2], yaw)
-    y = at[1]
-    if sit:
-        box((0.6 * k, 0.24 * k, 0.44 * k), L(0.2 * k, y + 0.12 * k, 0), legs, yaw=yaw)
-        box((0.22 * k, 0.5 * k, 0.44 * k), L(0.42 * k, y - 0.12 * k, 0), legs, yaw=yaw)
-        b = y + 0.22 * k
-    elif kick:
-        box((0.32 * k, 0.86 * k, 0.21 * k), L(0, y + 0.43 * k, 0.11 * k), legs, yaw=yaw)
-        box((0.3 * k, 0.86 * k, 0.2 * k), L(0.43 * k * math.sin(kick), y + 0.86 * k - 0.43 * k * math.cos(kick), -0.11 * k),
-            legs, yaw=yaw, roll=-kick)
-        b = y + 0.84 * k
-    else:
-        box((0.32 * k, 0.86 * k, 0.44 * k), L(0, y + 0.43 * k, 0), legs, yaw=yaw)
-        b = y + 0.84 * k
-    box((0.4 * k, 0.64 * k, 0.54 * k), L(0, b + 0.32 * k, 0), shirt, yaw=yaw)
-    def arms():
-        for s in (-1, 1):
-            box((0.2 * k, 0.56 * k, 0.17 * k), L(0.05 * k + 0.28 * k * math.sin(arm), b + 0.58 * k - 0.28 * k * math.cos(arm), s * 0.35 * k),
-                shirt, yaw=yaw, roll=-arm)
-    if gesture:
-        with animated(gesture, L(0.05 * k, b + 0.58 * k, 0), yaw=yaw):
-            arms()
-    else:
-        arms()
-    box((0.4 * k, 0.4 * k, 0.38 * k), L(0, b + 0.84 * k, 0), SKIN, yaw=yaw)
-    box((0.44 * k, 0.14 * k, 0.42 * k), L(-0.03 * k, b + 1.08 * k, 0), HAIR[hair % 4], yaw=yaw)
+    """One of the backyard's people facing +X turned by `yaw` (fig_person):
+    an adult at `k` 1, a child under 0.9. Sitting, the seat is at `at` and
+    the shins hang off it. `arm` lifts the arms forward (radians), `kick`
+    swings the right leg forward, `gesture` names the arms' motion."""
+    fig_person(at, yaw, 'ride' if sit else 'stand', shirt=shirt, legs=legs, hair=FIG_HAIR[hair % 4],
+               k=1.0 if k >= 0.9 else FIG_KID, arm=arm, kick=kick, gesture=gesture)
 
 def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5, cap=True, walls=True, sunk=0.0):
     """A gabled house's shell (bld_roofed): walls D across (X) and L along
@@ -14135,48 +14333,9 @@ def cow_farm_lite():
 # their trough and hay rack. World units; front (+X) to the road, on the left
 # at yaw 180.
 def sheep(at, yaw, life, pose='graze'):
-    """A sheep at its own size beside a car (half a car long), facing +X
-    turned by `yaw`, in the cattle's faceted build: a round fleece on four
-    dark legs, a woolly neck, a black face with its pink nose, ears out to
-    the sides and a topknot of wool, a stub of a tail. `pose`: `graze` or
-    `up`; `life` hinges the head and neck. The lite build is a three-ring
-    fleece, the head one limb with its ears."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    side = (s, 0.0, c)
-    WOOL, FACE = 0xf8f8fb, 0x2a2735
-    def p(dx, dy, dz=0.0):
-        return (x + dx * c + dz * s, y + dy, z - dx * s + dz * c)
-    for lx, lz in ((0.14, -0.08), (0.14, 0.08), (-0.15, -0.08), (-0.15, 0.08)):
-        loft([p(lx, 0.22, lz), p(lx, 0.0, lz)], [(0.038, 0.038), (0.03, 0.03)], FACE, side, 4, turn=math.pi / 4)
-    if LITE:
-        loft([p(-0.27, 0.33), p(0.0, 0.345), p(0.25, 0.33)], [(0.1, 0.1), (0.2, 0.19), (0.11, 0.11)], WOOL, side, 6)
-    else:
-        loft([p(-0.27, 0.33), p(-0.2, 0.34), p(0.0, 0.345), p(0.17, 0.34), p(0.25, 0.33)],
-             [(0.09, 0.09), (0.17, 0.16), (0.185, 0.175), (0.17, 0.16), (0.1, 0.1)], WOOL, side, 6)
-        loft([p(-0.25, 0.39), p(-0.33, 0.27)], [(0.045, 0.045), (0.028, 0.028)], WOOL, side, 4, turn=math.pi / 4)
-    HX, HY = 0.2, 0.33
-    dip = -1.1 if pose == 'graze' else 0.1
-    cd, sd = math.cos(dip), math.sin(dip)
-    def q(dx, dy, dz=0.0):
-        ax, ay = dx - HX, dy - HY
-        return p(HX + ax * cd - ay * sd, HY + ax * sd + ay * cd, dz)
-    def head():
-        if LITE:
-            loft([q(0.18, 0.36), q(0.46, 0.41)], [(0.1, 0.1), (0.05, 0.05)], FACE, side, 4, turn=math.pi / 4)
-        else:
-            loft([q(0.16, 0.36), q(0.3, 0.42)], [(0.105, 0.11), (0.075, 0.08)], WOOL, side, 6)             # the neck's wool
-            loft([q(0.27, 0.43), q(0.36, 0.435), q(0.45, 0.41)], [(0.064, 0.068), (0.058, 0.062), (0.042, 0.042)], FACE, side, 6)
-            loft([q(0.44, 0.412), q(0.48, 0.4)], [(0.04, 0.038), (0.033, 0.03)], 0xf2bf99, side, 4, turn=math.pi / 4)   # the nose
-        with plain_parts():
-            box((0.04, 0.045, 0.21), q(0.3, 0.465), FACE, yaw=yaw)                                          # the ears
-            if not LITE:
-                box((0.09, 0.05, 0.1), q(0.28, 0.505), WOOL, yaw=yaw, roll=dip)                             # the topknot
-    if life:
-        with animated(life, p(HX, HY), yaw):
-            head()
-    else:
-        head()
+    """A sheep half a car long, facing +X turned by `yaw` (fig_quad): `pose` graze or up;
+    `life` hinges the head and neck."""
+    fig_quad('sheep', at, yaw, pose=pose, life=life)
 
 def flock(spots, tag, lite=False):
     # lite (the Android TV's build): the heads keep still, so the whole flock
@@ -14443,7 +14602,7 @@ def fete(lite):
             px, pz = CX + 2.9 * math.cos(a), CZ + 2.9 * math.sin(a)
             box((0.12, 5.0, 0.12), (px, 3.2, pz), YELLOW)
             with lite_parts(lite):
-                equine((px, 0.7, pz), -a - math.pi / 2, COATS[k], L=1.5, mane=YELLOW if COATS[k] == WHITE else 0xfde4c7,
+                equine((px, 0.7, pz), -a - math.pi / 2, COATS[k], L=1.75,   # (a hand over the meadow's sheep) mane=YELLOW if COATS[k] == WHITE else 0xfde4c7,
                        muzzle=0xf2bf99 if COATS[k] == WHITE else 0x5a4632, tack=((RED, BLUE, YELLOW)[k % 3], 0x7a5a3a),
                        stance=(1, -1)[k % 2])
             if k == 1:
@@ -15165,30 +15324,12 @@ def willow(at):
             tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
 
 def duck(at, color=0xf8f8fb):
-    """A duck on the water facing +X (twice life size), in the farm
-    animals' faceted build: a full body low in the water, drawn up to the
-    tail, its wings folded on its back, the neck and a round head, a flat
-    orange bill, an eye each side. Brown, it is a mallard drake: a green
-    head over a white collar, grey wings, a dark stern."""
-    x, y, z = at
-    side = (0.0, 0.0, 1.0)
-    drake = color != 0xf8f8fb
-    def p(dx, dy, dz=0.0):
-        return (x + dx, y + dy - 0.08, z + dz)                    # its keel under the sheet
-    loft([p(-0.52, 0.3), p(-0.3, 0.24), p(0.05, 0.22), p(0.36, 0.26), p(0.46, 0.3)],
-         [(0.1, 0.08), (0.24, 0.2), (0.27, 0.22), (0.18, 0.17), (0.08, 0.08)], color, side, 6)
-    loft([p(-0.44, 0.32), p(-0.72, 0.5)], [(0.13, 0.06), (0.05, 0.025)], 0x2a2735 if drake else color, side, 4)    # the tail, cocked
-    for sd in (-1, 1):
-        loft([p(0.22, 0.36, sd * 0.25), p(-0.1, 0.4, sd * 0.27), p(-0.46, 0.4, sd * 0.16)],
-             [(0.1, 0.03), (0.14, 0.035), (0.05, 0.02)], 0x868ba1 if drake else 0xfde4c7, (0.0, 1.0, 0.0), 4)
-    head = 0x22c46e if drake else color
-    loft([p(0.3, 0.32), p(0.37, 0.5), p(0.38, 0.6)], [(0.12, 0.12), (0.1, 0.1), (0.1, 0.1)], head, side, 6)
-    if drake:
-        loft([p(0.33, 0.42), p(0.36, 0.49)], [(0.118, 0.118), (0.108, 0.108)], 0xf8f8fb, side, 6)                  # his collar
-    loft([p(0.26, 0.68), p(0.4, 0.71), p(0.54, 0.66)], [(0.1, 0.1), (0.135, 0.125), (0.09, 0.08)], head, side, 6)
-    loft([p(0.5, 0.65), p(0.76, 0.6)], [(0.075, 0.04), (0.065, 0.022)], 0xff7e44, side, 4)                          # the bill
-    with plain_parts():
-        box((0.05, 0.05, 0.27), p(0.46, 0.75), 0x2a2735)                                                            # the eyes
+    """A duck on the water facing +X (fig_bird). Brown, it is a mallard
+    drake: a green head over a white collar, grey wings, a dark stern."""
+    if color == 0xf8f8fb:
+        fig_bird('duck', at, 0.0, 'swim')
+    else:
+        fig_bird('duck', at, 0.0, 'swim', body=color, head=0x22c46e, collar=0xf8f8fb, wing=0x868ba1, tip=0x2a2735)
 
 # The mill's race runs along its local Z at x = MILL_RACE, a set-brook piece
 # laid through here (the route BROOK_ROUTE holds was laid through them),
@@ -16327,33 +16468,29 @@ def spring_pool(cx, cz, R, deep=(-1.0, 0.0), gap=1.5, stones=True, k=1.0):
                          scale=(1.2, 0.65, 1.0), yaw=0.7 * j), SLATE_ROW)
     return rim[-1], rim[1]                      # the mouth's two ends, the flow's right and left
 
+
 def heron(x, z, yaw=0.0):
     """A grey heron standing facing +X turned by `yaw` (REAL metres, its
-    feet at y 0, for a DRAPED group): long dark legs, a body full at the
-    breast and tapering to the tail with darker wings folded on it, an
-    S-curved white neck, a black crest with a plume and a long yellow
-    dagger of a bill. Side-on, that outline is a heron's and nothing else's.
-    One gesture: now and then the neck dips toward the water and comes back up."""
-    F = local(x, z, yaw)
-    side = (math.sin(yaw), 0.0, math.cos(yaw))
-    for s in (-1, 1):                                                          # the legs, a knee in each, on their toes
-        loft([F(0.1, 1.25, 0.12 * s), F(0.0, 0.64, 0.12 * s), F(0.05, 0.0, 0.12 * s)],
-             [(0.065, 0.065), (0.05, 0.05), (0.055, 0.055)], 'dark', side, 4, turn=math.pi / 4)
-        with plain_parts():
-            box((0.34, 0.06, 0.12), F(0.16, 0.03, 0.12 * s), 'dark', yaw=yaw)
-    loft([F(-0.9, 1.34, 0.0), F(-0.4, 1.46, 0.0), F(0.2, 1.57, 0.0), F(0.62, 1.68, 0.0), F(0.8, 1.76, 0.0)],
-         [(0.08, 0.07), (0.26, 0.22), (0.36, 0.32), (0.3, 0.3), (0.16, 0.18)], 'grey', side, 6)
-    for s in (-1, 1):                                                          # the wings, folded on it
-        rowed(loft([F(0.52, 1.74, 0.34 * s), F(-0.1, 1.62, 0.4 * s), F(-0.8, 1.4, 0.2 * s)],
-                   [(0.2, 0.06), (0.25, 0.06), (0.08, 0.04)], 'grey', (0.0, 1.0, 0.0), 4), 22)
-    with animated('anim_drape+sway:a=z:d=-24:p=7:r=0.8#heron', F(0.6, 1.7, 0.0), yaw=yaw):
-        loft([F(0.66, 1.72, 0.0), F(0.96, 2.02, 0.0), F(0.7, 2.36, 0.0), F(0.86, 2.68, 0.0)],
-             [(0.14, 0.15), (0.09, 0.09), (0.08, 0.08), (0.09, 0.09)], 'white', side, 6)
-        loft([F(0.72, 2.7, 0.0), F(0.95, 2.75, 0.0), F(1.16, 2.7, 0.0)], [(0.11, 0.11), (0.13, 0.12), (0.08, 0.07)], 'white', side, 6)
-        loft([F(1.0, 2.85, 0.0), F(0.74, 2.87, 0.0), F(0.3, 2.72, 0.0)], [(0.1, 0.03), (0.09, 0.035), (0.03, 0.02)], 'dark', side, 4)   # the crest and its plume
-        loft([F(1.12, 2.7, 0.0), F(2.0, 2.6, 0.0)], [(0.07, 0.06), (0.014, 0.014)], 'yellow', side, 4)                            # the bill
-        with plain_parts():
-            box((0.06, 0.06, 0.27), F(1.0, 2.76, 0.0), 'dark', yaw=yaw)                                                # the eyes
+    feet at y 0, for a DRAPED group), on the animals' frame (fig_frame): long dark legs, a body full at the breast and
+    tapering to the tail with darker wings folded on it, an S-curved white
+    neck, a black crest with a plume and a long yellow dagger of a bill.
+    Side-on, that outline is a heron's and nothing else's. One gesture: now
+    and then the neck dips toward the water and comes back up."""
+    F = fig_frame((x, 0.0, z), yaw, 1.0)
+    F.pair(((0.1, 1.25, 0.12, 0.065, 0.065), (0.0, 0.64, 0.12, 0.05, 0.05), (0.05, 0.0, 0.12, 0.055, 0.055)), 'dark', n=4)
+    for s in (-1, 1):                                                          # on their toes
+        F.block((0.34, 0.06, 0.12), (0.16, 0.03, 0.12 * s), 'dark', fine=True)
+    F.limb(((-0.9, 1.34, 0.08, 0.07), (-0.4, 1.46, 0.26, 0.22), (0.2, 1.57, 0.36, 0.32), (0.62, 1.68, 0.3, 0.3),
+            (0.8, 1.76, 0.16, 0.18)), 'grey')
+    for o in F.pair(((0.52, 1.74, 0.34, 0.2, 0.06), (-0.1, 1.62, 0.4, 0.25, 0.06), (-0.8, 1.4, 0.2, 0.08, 0.04)), 'grey',
+                    n=4, side='y'):                                            # the wings, folded on it
+        rowed(o, 22)
+    with animated('anim_drape+sway:a=z:d=-24:p=7:r=0.8#heron', F.p(0.6, 1.7), yaw=yaw):
+        F.limb(((0.66, 1.72, 0.14, 0.15), (0.96, 2.02, 0.09, 0.09), (0.7, 2.36, 0.08, 0.08), (0.86, 2.68, 0.09, 0.09)), 'white')
+        F.limb(((0.72, 2.7, 0.11, 0.11), (0.95, 2.75, 0.13, 0.12), (1.16, 2.7, 0.08, 0.07)), 'white')
+        F.limb(((1.0, 2.85, 0.1, 0.03), (0.74, 2.87, 0.09, 0.035), (0.3, 2.72, 0.03, 0.02)), 'dark', n=4)   # the crest and its plume
+        F.limb(((1.12, 2.7, 0.07, 0.06), (2.0, 2.6, 0.014, 0.014)), 'yellow', n=4)                         # the bill
+        F.block((0.06, 0.06, 0.27), (1.0, 2.76), 'dark', fine=True)                                         # the eyes
 
 def pool_heron(px, pz, R, deg):
     """The heron at a spring pool's edge, `deg` round from its road side
@@ -16507,8 +16644,7 @@ def park_coach(at, color, riders, k=1.0):
     for n, shirt in enumerate(riders):
         dx = (0.33 - 0.66 * n) * k
         box((0.05 * k, 0.3 * k, 0.5 * k), (x + dx - 0.16 * k, y + 0.72 * k, z), 0x9a7b55)      # the seat's back
-        box((0.2 * k, 0.24 * k, 0.24 * k), (x + dx, y + 0.72 * k, z), shirt)
-        box((0.15 * k, 0.15 * k, 0.15 * k), (x + dx, y + 0.92 * k, z), 0xf2bf99)
+        fig_person((x + dx, y + 0.56 * k, z), 0.0, 'ride', shirt=shirt, legs=None, hair=FIG_HAIR[n % 4])
 
 def park_track(pts, ends=(None, None)):
     """The line along `pts` on its graded bed: a turf bank falling away each
@@ -17537,37 +17673,26 @@ def ground_poly(verts, faces, color):
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
+
 def hawk_circle(c, y, R, period, k=1.0, tag='hawk'):
     """A hawk circling over the piece: a closed loop of `path_<tag>_<n>`
     empties `R` round (cx, cz) at height `y`, and the bird riding it
-    (anim_path facing its way), wings spread and banked into the turn, 0.55
-    u from tip to tip: twice a real hawk's span, the scale rule's most for a
-    small living thing, flying low enough to read against the sky. `k` is the world's size in the builder's units (1 / the piece's
+    (anim_path facing its way; fig_bird), wings spread and banked into the
+    turn, 0.55 u from tip to tip, flying low enough to read against the
+    sky; `k` is the world's size in the builder's units (1 / the piece's
     grow). The bird is BUILT on the ground under the circle, its low wing
     tip on the floor: a traveller is drawn only on its path, so where it is
     built is just its pivot, and a bird built up in the air would stand in
     the piece's box, its sight points and the floating check as a part 5 u
     up that nothing holds."""
     cx, cz = c
-    k *= 0.44                                            # the parts below are a 1.26 span's
     N = 24
     for n in range(N):                                   # angle up: +Z first, the centre on its right
         a = 2 * math.pi * n / N
         marker('path_%s_%d' % (tag, n), (cx + R * math.cos(a), y, cz + R * math.sin(a)))
-    x0, y0, z0 = cx + R, 0.16 * k, cz
-    bank = -0.38                                         # right wing (+Z) down, into the turn
-    cb, sb = math.cos(bank), math.sin(bank)
-    def b(size, dx, dy, dz, color):                      # a part of the bird, its frame tipped by the bank
-        box([s * k for s in size], (x0 + dx * k, y0 + (dy * cb + dz * sb) * k, z0 + (-dy * sb + dz * cb) * k),
-            color, pitch=bank)
-    with animated('anim_path:c=%s:p=%.1f:f=1#%s' % (tag, period, tag), (x0, y0, z0)):
-        b((0.34, 0.09, 0.11), 0, 0, 0, 'dark')                                   # the body
-        b((0.09, 0.08, 0.09), 0.2, 0.03, 0, 'dark')                              # the head
-        b((0.06, 0.04, 0.05), 0.26, 0.02, 0, 'yellow')                           # the bill
-        b((0.14, 0.03, 0.16), -0.22, 0.0, 0, 'salmon')                           # the red tail, fanned
-        for sd in (-1, 1):                                                       # the wings, a little raised
-            b((0.2, 0.03, 0.42), 0.02, 0.03, sd * 0.26, 'dark')
-            b((0.12, 0.03, 0.2), -0.02, 0.06, sd * 0.53, 'slate')               # the fingered tips
+    k *= 0.44
+    fig_bird('hawk', (cx + R, 0.2 * k, cz), 0.0, 'fly', k=k, bank=-0.38,   # right wing (+Z) down, into the turn
+             life='anim_path:c=%s:p=%.1f:f=1#%s' % (tag, period, tag))
 
 def sandstone_rock(at, k=1.0, yaw=0.0, color=0xc07a55):
     """A red-rock boulder bedded in the sand, a smaller one against it."""
@@ -19443,98 +19568,21 @@ def canyon_rock(M, x0, x1, z0, z1, bands, name, **kw):
 
 def equine(at, yaw, coat, L=0.62, ears=0.07, life=None, mane=0x5a4632, muzzle=0xf2bf99, legs=None, belly=None,
            tack=None, stripe=None, head=0.0, stance=0):
-    """A horse or a burro at its own size beside a car (a horse some 0.6
-    long, a burro less, its ears longer), facing +X turned by `yaw`,
-    faceted as the canyon's rock is but a horse in outline: a barrel deep
-    at the chest and round over the rump, slim legs with knee and hock
-    over dark hooves (`legs` their stockings), a neck arching up out of the
-    shoulder under its mane, a long head sloping to the muzzle, small
-    pricked ears, a tail falling from the dock. `head` lowers the neck (1
-    grazing), `stance` steps the legs. `belly` pales the underside,
-    `stripe` draws a burro's dorsal stripe, `tack` (blanket, saddle)
-    saddles it. The head and neck hinge for `life` (a calm dip and lift)."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    k = L / 0.62
-    side = (s, 0.0, c)
-    # A toy's horse, built like the ranch's cattle and the cars: everything
-    # over the knees sits DROP lower (the legs that much shorter, the hooves
-    # squashed with them) on legs half as thick again under a deeper barrel.
-    # On a real horse's long thin legs it read as an antelope at speed.
-    DROP, LEG, BODY = 0.085, 1.5, 1.2
-    def lo(dy):
-        return dy - DROP if dy >= 0.3 else dy * (0.3 - DROP) / 0.3
-    def p(dx, dy, dz=0.0):
-        return (x + (dx * c + dz * s) * k, y + lo(dy) * k, z + (-dx * s + dz * c) * k)
-    def r(*pairs, f=1.0):
-        return [(a * k * f, b * k * f) for a, b in pairs]
-    n = 4 if LITE else 6
-    sock = legs or coat
-    # the barrel, rump to chest
-    loft([p(-0.29, 0.5), p(-0.2, 0.5), p(-0.02, 0.47), p(0.15, 0.475), p(0.25, 0.5)],
-         r((0.07, 0.07), (0.115, 0.125), (0.105, 0.115), (0.11, 0.135), (0.07, 0.09), f=BODY), coat, side, n)
-    if belly and not LITE:                                                       # (the deeper barrel's underside)
-        loft([p(-0.14, 0.36), p(0.0, 0.345), p(0.14, 0.36)], r((0.06, 0.03), (0.085, 0.04), (0.06, 0.03), f=BODY), belly,
-             side, 4)
-    if stripe and not LITE:
-        box((0.44 * k, 0.02 * k, 0.035 * k), p(-0.04, 0.64), stripe, yaw=yaw)
-    for i, (lx, lz) in enumerate(((0.19, -0.065), (0.19, 0.065), (-0.2, -0.07), (-0.2, 0.07))):
-        d = (0.035, -0.02, -0.03, 0.03)[i] * stance                              # a step fore or aft
-        if i < 2:                                                                # the forelegs: straight, a knee
-            pts = [p(lx, 0.44, lz), p(lx + 0.01 + d * 0.4, 0.24, lz), p(lx + d, 0.07, lz)]
-            rr = r((0.05, 0.055), (0.03, 0.032), (0.022, 0.024), f=LEG)
-        else:                                                                    # the hind legs: stifle, hock, cannon
-            pts = [p(lx, 0.46, lz), p(lx + 0.02, 0.33, lz), p(lx - 0.06 + d * 0.4, 0.23, lz), p(lx - 0.02 + d, 0.07, lz)]
-            rr = r((0.065, 0.085), (0.045, 0.06), (0.03, 0.034), (0.022, 0.024), f=LEG)
-        if LITE:
-            pts, rr = [pts[0], pts[-2], pts[-1]], [rr[0], rr[-2], rr[-1]]
-        loft(pts, rr, coat, side, 4, turn=math.pi / 4)
-        hx = lx + d + (-0.02 if i >= 2 else 0.0)
-        if sock != coat and not LITE:
-            loft([p(hx - 0.005, 0.15, lz), p(hx, 0.06, lz)], r((0.027, 0.029), (0.024, 0.026), f=LEG), sock, side, 4,
-                 turn=math.pi / 4)
-        loft([p(hx, 0.07, lz), p(hx + 0.012, 0.0, lz)], r((0.028, 0.03), (0.036, 0.04), f=LEG), sock if LITE else 0x38383d,
-             side, 4, turn=math.pi / 4)
-    # the tail, falling from the dock
-    tail = [p(-0.29, 0.56), p(-0.36, 0.52), p(-0.385, 0.36), p(-0.37, 0.17)]
-    loft(tail[1:] if LITE else tail, r((0.022, 0.024), (0.032, 0.036), (0.036, 0.04), (0.012, 0.014))[1 if LITE else 0:], mane, side,
-         4, turn=math.pi / 4)
+    """A horse or a burro `L` long (a horse some 0.6, a burro less, its
+    `ears` longer), facing +X turned by `yaw` (fig_quad). `legs` are its stockings, `belly`
+    pales the underside, `stripe` draws a burro's dorsal stripe, `tack`
+    (blanket, saddle) saddles it. `head` lowers the neck (1 grazing),
+    `stance` steps the legs; the head and neck hinge for `life`."""
+    F = fig_quad('horse', at, yaw, coat, k=L / 0.62, dip=-1.25 * head, life=life,
+                 step=tuple(d * stance for d in (0.035, -0.02, -0.03, 0.03)), ears=ears,
+                 mane=mane, muzzle=muzzle, sock=legs, belly=belly)
+    if stripe:
+        F.block((0.44, 0.02, 0.035), (-0.04, 0.555), stripe, fine=True)
     if tack:
         blanket, saddle = tack
-        with plain_parts():
-            box((0.2 * k, 0.03 * k, 0.25 * k), p(-0.01, 0.625), blanket, yaw=yaw)
-            box((0.15 * k, 0.05 * k, 0.19 * k), p(-0.01, 0.66), saddle, yaw=yaw)
-            box((0.035 * k, 0.07 * k, 0.07 * k), p(0.06, 0.7), saddle, yaw=yaw)
-    # the neck and head, turned down about the shoulder by `head`
-    HX, HY = 0.2, 0.5
-    dip = -1.25 * head
-    cd, sd = math.cos(dip), math.sin(dip)
-    def q(dx, dy, dz=0.0):
-        ax, ay = dx - HX, dy - HY
-        return p(HX + ax * cd - ay * sd, HY + ax * sd + ay * cd, dz)
-    def neck_head():
-        loft([q(0.16, 0.5), q(0.26, 0.6), q(0.33, 0.685), q(0.365, 0.73)],
-             r((0.085, 0.12), (0.06, 0.085), (0.048, 0.062), (0.04, 0.045), f=1.15), coat, side, n)
-        loft([q(0.335, 0.745), q(0.425, 0.7), q(0.51, 0.63)],
-             r((0.05, 0.055), (0.045, 0.05), (0.036, 0.038)), coat, side, n)                    # the long head
-        loft([q(0.49, 0.648), q(0.57, 0.585)], r((0.036, 0.037), (0.032, 0.03)), muzzle, side, n)   # its muzzle
-        if LITE:
-            box((0.03 * k, 0.24 * k, 0.03 * k), q(0.24, 0.66), mane, yaw=yaw, roll=-0.75 - dip)
-        else:
-            loft([q(0.18, 0.62), q(0.25, 0.695), q(0.31, 0.76), q(0.345, 0.795)],
-                 r((0.016, 0.02), (0.018, 0.03), (0.018, 0.03), (0.016, 0.02)), mane, side, 4, turn=math.pi / 4)   # the mane
-        with plain_parts():
-            if not LITE:
-                box((0.03 * k, 0.03 * k, 0.105 * k), q(0.41, 0.725), 0x2a2735, yaw=yaw, roll=0.6 - dip)   # the eyes
-                box((0.05 * k, 0.03 * k, 0.04 * k), q(0.385, 0.775), mane, yaw=yaw, roll=0.5 - dip)       # the forelock
-            for ez in (-0.035, 0.035):
-                box((0.028 * k, ears * k, 0.022 * k), q(0.335 - 0.2 * ears, 0.785 + ears * 0.45, ez), coat, yaw=yaw,
-                    roll=0.35 - dip)
-    if life:
-        with animated(life, p(HX, HY), yaw):
-            neck_head()
-    else:
-        neck_head()
+        F.block((0.2, 0.03, 0.25), (-0.01, 0.54), blanket)
+        F.block((0.15, 0.05, 0.19), (-0.01, 0.575), saddle)
+        F.block((0.035, 0.07, 0.07), (0.06, 0.615), saddle)
 
 def wagon(at, yaw, body=0x9a7b55, cover=None):
     """A buckboard (or, with a `cover`, a chuck wagon under its canvas), a
@@ -20725,12 +20773,13 @@ def ranch_fence():
     with plain_parts():
         draped('fence', fence)
 
-def loft(path, radii, color, side=(0.0, 0.0, 1.0), n=6, turn=0.0):
+def loft(path, radii, color, side=(0.0, 0.0, 1.0), n=6, turn=0.0, bury=0):
     """A faceted limb through glTF `path`, an ellipse in section at each
     point (`radii`: half its width along `side`, half its depth across it),
     `n` facets round, closed at both ends: a barrel, a neck, a leg with its
     joints. `turn` turns the facets about the limb (half a facet stands a
-    four-sided leg square on)."""
+    four-sided leg square on). `bury` leaves an end open where it is
+    buried in another part (1 the first, 2 the last, 3 both)."""
     import bmesh
     u = Vector(side).normalized()
     pts = [Vector(p) for p in path]
@@ -20745,8 +20794,10 @@ def loft(path, radii, color, side=(0.0, 0.0, 1.0), n=6, turn=0.0):
     for a, b in zip(rings, rings[1:]):
         for k in range(n):
             bm.faces.new((a[k], a[(k + 1) % n], b[(k + 1) % n], b[k]))
-    bm.faces.new(rings[0][::-1])
-    bm.faces.new(rings[-1])
+    if not bury & 1:
+        bm.faces.new(rings[0][::-1])
+    if not bury & 2:
+        bm.faces.new(rings[-1])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new('loft')
     bm.to_mesh(me)
@@ -20756,77 +20807,14 @@ def loft(path, radii, color, side=(0.0, 0.0, 1.0), n=6, turn=0.0):
     return paint(o, color)
 
 def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose='graze', life=None, udder=False):
-    """One of the ranch's cattle at its own size (about a car long at k 1; a
-    calf at 0.55), facing +X turned by `yaw`, the horses' faceted build: a
-    deep square barrel, short legs, a broad face (`face`: a Hereford's
-    white, or the coat's), stub horns, a tail with its switch. `patch`
-    saddles it with a second colour. `pose`: `graze` (head at the grass),
-    `up` (looking about), `drink` (the muzzle over a tank's rim) or `lie`
-    (legs folded under, chewing). `life`
-    hinges the head and neck. The lite build is the same animal on fewer
-    facets: a four-sided barrel and head, each leg one limb, no hooves.
-    `udder` (a dairy cow's) hangs one under the flank."""
-    x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    side = (s, 0.0, c)
-    lie = pose == 'lie'
-    drop = 0.2 if lie else 0.0
-    def p(dx, dy, dz=0.0):
-        return (x + (dx * c + dz * s) * k, y + (dy - drop) * k, z + (-dx * s + dz * c) * k)
-    def r(*pairs):
-        return [(a * k, b * k) for a, b in pairs]
-    n = 4 if LITE else 6
-    f = 1.2 if LITE else 1.0                             # (a four-sided limb's corners stand where six sides' flats did)
-    if LITE:
-        loft([p(-0.4, 0.46), p(-0.24, 0.47), p(0.2, 0.45), p(0.34, 0.47)],
-             r((0.1, 0.1), (0.2, 0.2), (0.2, 0.22), (0.1, 0.11)), coat, side, 4, turn=math.pi / 4)
-    else:
-        loft([p(-0.4, 0.46), p(-0.3, 0.47), p(0.0, 0.44), p(0.24, 0.45), p(0.34, 0.47)],
-             r((0.1, 0.1), (0.17, 0.17), (0.18, 0.19), (0.165, 0.18), (0.1, 0.11)), coat, side, 6)
-    if patch and LITE:
-        loft([p(-0.16, 0.47), p(0.12, 0.46)], r((0.215, 0.215), (0.215, 0.23)), patch, side, 4, turn=math.pi / 4)
-    elif patch:
-        loft([p(-0.16, 0.47), p(0.0, 0.455), p(0.12, 0.46)], r((0.176, 0.176), (0.186, 0.196), (0.176, 0.19)), patch, side, 6)
-    if udder and not lie:
-        box((0.13 * k, 0.09 * k, 0.13 * k), p(-0.2, 0.27), 0xf2bf99, yaw=yaw)
-    for lx, lz in ((0.24, -0.1), (0.24, 0.1), (-0.3, -0.1), (-0.3, 0.1)):
-        if lie:                                                                  # folded under
-            loft([p(lx, 0.3, lz * 1.3), p(lx + 0.16, 0.235, lz * 1.5)], r((0.045, 0.05), (0.035, 0.035)), coat, side, 4)
-            continue
-        if LITE:
-            loft([p(lx, 0.36, lz), p(lx, 0.0, lz)], r((0.06, 0.07), (0.04, 0.042)), coat, side, 4, turn=math.pi / 4)
-            continue
-        loft([p(lx, 0.36, lz), p(lx + (0.0 if lx > 0 else -0.03), 0.19, lz), p(lx, 0.05, lz)],
-             r((0.055, 0.065), (0.038, 0.04), (0.032, 0.034)), coat, side, 4, turn=math.pi / 4)
-        loft([p(lx, 0.05, lz), p(lx + 0.01, 0.0, lz)], r((0.036, 0.038), (0.042, 0.046)), 0x38383d, side, 4, turn=math.pi / 4)
-    tail = [p(-0.4, 0.55), p(-0.45, 0.5), p(-0.46, 0.28), p(-0.45, 0.14)]
-    girth = r((0.018, 0.02), (0.02, 0.022), (0.016, 0.018), (0.03, 0.034))
-    if LITE:
-        tail, girth = tail[1::2], girth[1::2]
-    loft(tail, girth, 0x5a4632, side, 4, turn=math.pi / 4)
-    HX, HY = 0.3, 0.5
-    dip = {'graze': -0.95, 'drink': -0.1, 'up': 0.15, 'lie': 0.1}[pose]
-    cd, sd = math.cos(dip), math.sin(dip)
-    def q(dx, dy, dz=0.0):
-        ax, ay = dx - HX, dy - HY
-        return p(HX + ax * cd - ay * sd, HY + ax * sd + ay * cd, dz)
-    def head():
-        tq = math.pi / 4 if LITE else 0.0
-        def rf(*pairs):
-            return [(a * k * f, b * k * f) for a, b in pairs]
-        loft([q(0.28, 0.5), q(0.42, 0.55), q(0.5, 0.58)][::2 if LITE else 1],
-             rf((0.1, 0.13), (0.075, 0.1), (0.07, 0.085))[::2 if LITE else 1], coat, side, n, turn=tq)
-        loft([q(0.47, 0.6), q(0.58, 0.55), q(0.66, 0.5)][::2 if LITE else 1],
-             rf((0.085, 0.085), (0.07, 0.075), (0.055, 0.055))[::2 if LITE else 1], face, side, n, turn=tq)
-        loft([q(0.64, 0.51), q(0.7, 0.475)], rf((0.055, 0.052), (0.05, 0.045)), 0xf2bf99, side, n, turn=tq)
-        with plain_parts():
-            box((0.05 * k, 0.045 * k, 0.3 * k), q(0.47, 0.67), 0xfde4c7, yaw=yaw)             # the horns
-            box((0.05 * k, 0.07 * k, 0.26 * k), q(0.44, 0.61), coat, yaw=yaw)                 # the ears
-    if life:
-        with animated(life, p(HX, HY), yaw):
-            head()
-    else:
-        head()
+    """One of the cattle, about a car long at `k` 1 (a calf 0.6), facing +X
+    turned by `yaw` (fig_quad). `face`: a Hereford's white, or
+    the coat's; `patch` saddles it with a second colour. `pose`: `graze`,
+    `up`, `drink` (the muzzle over a tank's rim) or `lie`; `life` hinges
+    the head and neck. `udder` (a dairy cow's) hangs one under the flank."""
+    F = fig_quad('cow', at, yaw, coat, k=k, pose=pose, life=life, patch=patch, face=face)
+    if udder and pose != 'lie':
+        F.block((0.13, 0.09, 0.13), (-0.2, 0.27), 0xf2bf99)
 
 # The ranch's herd on the range by the start (Crag): a dozen head and their
 # calves in loose bunches, each (x, z, yaw, coat, patch, face, size, pose);
@@ -24849,7 +24837,7 @@ class transformed:
 def knight(at, color, yaw):
     """One of the toy knights (soldier()) at the toy set's size, facing (cos
     yaw, -sin yaw)."""
-    with transformed(at, yaw, 0.55):
+    with transformed(at, yaw, 0.55 * row_k()):
         soldier(at, color)
 
 def block_run(a, b, y, color0, courses=1, faces=('+x',), letters=True, crenels=False):
@@ -27911,5 +27899,6 @@ for name, fn in PIECES.items():
     if ONLY and name not in ONLY:
         continue
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    BUILDING = name
     fn()
     finalize_and_export(name)
