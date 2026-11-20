@@ -37,7 +37,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { encodeGlb, readGlb } from './lib/glb-compose.mjs';
-import { SET_GROUND } from '../public/shared/tracks.js';
+import { SET_GROUND, TRACKS } from '../public/shared/tracks.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'public/assets/toycar');
@@ -58,8 +58,14 @@ if (!fs.existsSync(KIT_CACHE)) throw new Error('no kit cache — run `npm run fe
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ttp-set-protos-'));
 // A piece modelled on terrain (SET_GROUND) is built against the very numbers
 // the renderer lays as the track's ground, so the two cannot drift.
+// A row's `scale` sizes everything in the piece, its people and animals too:
+// the builders divide by it (fig_u), so a person is one size on every track.
+const ROW_SCALE = {};
+for (const t of Object.values(TRACKS)) for (const r of t.set || []) (ROW_SCALE[r.model] ??= new Set()).add(r.scale ?? 1);
+for (const k of Object.keys(ROW_SCALE)) ROW_SCALE[k] = [...ROW_SCALE[k]];
 execFileSync(BLENDER, ['-b', '--python-exit-code', '1', '-P', SCRIPT, '--', KIT_CACHE, tmp, ...process.argv.slice(2)],
-  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND) } });
+  { stdio: ['ignore', 'inherit', 'inherit'],
+    env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND), TTP_SET_ROW_SCALE: JSON.stringify(ROW_SCALE) } });
 
 const sources = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
 for (const file of fs.readdirSync(tmp).filter((f) => f.endsWith('.glb')).sort()) {
