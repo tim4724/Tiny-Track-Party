@@ -544,26 +544,28 @@ def monster(c):
     # THE CHASSIS, all the rig keeps (TtpRendererCars: the car's own body is
     # seated on it, its floor at 0.4375 less the mount's 0.07): two axles,
     # a ladder frame slung between them, a drive block, four struts raked up
-    # to the deck the body stands on, bumper bars.
+    # to the deck the body stands on, bumper bars. Every bar chamfered as the
+    # roster's are (round 28: square, the truck read harder than the cars).
     for y in (-Y, Y):
-        c.box('axle', (-X + W / 2 - 0.02, y - 0.035, R - 0.035), (X - W / 2 + 0.02, y + 0.035, R + 0.035), SLATE, 0)
+        c.bar('axle', (-X + W / 2 - 0.02, y - 0.035, R - 0.035), (X - W / 2 + 0.02, y + 0.035, R + 0.035))
         c.box('diff', (-0.05, y - 0.06, R - 0.06), (0.05, y + 0.06, R + 0.06), LIGHTSLATE, 0.015)
-    c.pair(c.box, 'rail', 0.06, 0.1, (0, -0.3, 0.24), (0, 0.3, 0.29), SLATE, 0)
+    c.pair(c.bar, 'rail', 0.06, 0.1, (0, -0.3, 0.24), (0, 0.3, 0.29))
     c.box('drive', (-0.07, -0.12, 0.2), (0.07, 0.1, 0.31), LIGHTSLATE)
     c.box('deck', (-0.15, -0.3, 0.325), (0.15, 0.3, 0.365), SLATE, 0.01)
     for sy in (-1, 1):
         for sx in (-1, 1):
-            c.strut(f'strut{sx}{sy}', (sx * 0.09, sy * Y, R + 0.02), (sx * 0.12, sy * 0.13, 0.33), 0.045, LIGHTSLATE).modifiers.clear()
-        c.box('bar' + 'RF'[(sy + 1) // 2], (-0.13, sy * 0.33 - 0.02, 0.24), (0.13, sy * 0.33 + 0.02, 0.29), LIGHTSLATE, 0)
+            c.strut(f'strut{sx}{sy}', (sx * 0.09, sy * Y, R + 0.02), (sx * 0.12, sy * 0.13, 0.33), 0.045, LIGHTSLATE)
+        c.bar('bar' + 'RF'[(sy + 1) // 2], (-0.13, sy * 0.33 - 0.02, 0.24), (0.13, sy * 0.33 + 0.02, 0.29), LIGHTSLATE)
     chassis = list(c.parts)
     c.parts = []
     # THE CAB (the rig drops it for the car's own body): a pick-up, the roster's dress
     c.box('bed', (-0.2, -0.3, 0.4375), (0.2, 0.3, 0.56))
     c.windows(c.loft('glass', [(0.13, 0.17, 0.56, 0.58), (0.06, 0.17, 0.56, 0.72), (-0.1, 0.17, 0.56, 0.72),
                                (-0.14, 0.17, 0.56, 0.6)]))
-    c.box('load', (-0.16, -0.27, 0.54), (0.16, -0.15, 0.575), SLATE, 0)
-    for o in [c.grille(0.3, 0.46, 0.53, 0.09)] + c.lamps(0.29, 0.48, 0.11, 0.17, 0.045) + c.tails(-0.3, 0.48, 0.12, 0.18):
-        o.modifiers.clear()
+    c.bar('load', (-0.16, -0.27, 0.54), (0.16, -0.15, 0.575))
+    c.grille(0.3, 0.46, 0.53, 0.09)
+    c.lamps(0.29, 0.48, 0.11, 0.17, 0.045)
+    c.tails(-0.3, 0.48, 0.12, 0.18)
     c.bumper(0.3, 0.4375, hw=0.2, h=0.035)
     c.bumper(-0.3, 0.4375, front=False, hw=0.2, h=0.035)
     cab = list(c.parts)
@@ -575,8 +577,8 @@ def monster(c):
                 if v.co.z > 0.5:
                     v.co.y = sy * Y + (v.co.y - sy * Y) * 0.55
                     v.co.x *= 0.87
-    c.pair(c.box, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.74), SLATE, 0)
-    c.box('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74), SLATE, 0)
+    c.pair(c.bar, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.7))
+    c.bar('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74))
     trim = list(c.parts)
     c.parts = chassis
     return [('cab', cab), ('chassis-trim', trim)]
